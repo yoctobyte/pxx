@@ -2887,6 +2887,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_variant26)" = "$$(printf '42\n-7\nQ\n3.14\nTrue\n100')"
 	./$(COMPILER) test/test_variant_ops.pas /tmp/test_variant_ops26
 	test "$$(/tmp/test_variant_ops26)" = "$$(printf '8\n2\n15\n7.5\n12.5\nTRUE\nFALSE\nFALSE\nTRUE\nTRUE\n11\nTRUE')"
+	./$(COMPILER) test/test_variant_byvalue_param.pas /tmp/test_variant_byvalue_param26
+	test "$$(/tmp/test_variant_byvalue_param26)" = "$$(printf 'byval: 2\nafter write: clobbered\nconst: 2\nbyval: 42\nafter write: clobbered\nconst: 42\nbyval: hi\nafter write: clobbered\nconst: hi\ncaller intact: hi\nafter byref: written\nthree: 1 str 7\nthree: 5 lit 8\nroundtrip: rt\nbyval: 3.5\nafter write: clobbered\nfloat intact: 3.5')"
 	./$(COMPILER) test/test_variant_div.pas /tmp/test_variant_div26
 	test "$$(/tmp/test_variant_div26)" = "$$(printf '3\n2\n3.4\n2.5')"
 	./$(COMPILER) test/test_variant_string.pas /tmp/test_variant_string26

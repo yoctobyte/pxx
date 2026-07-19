@@ -129,9 +129,10 @@ begin
   end
   else if (Syms[idx].Kind = skParam) and
           (Syms[idx].IsRef or Syms[idx].IsArray or
-           TypeIsFrozenString(Syms[idx].TypeKind) or (Syms[idx].TypeKind = tySet)) then
+           TypeIsFrozenString(Syms[idx].TypeKind) or (Syms[idx].TypeKind = tySet) or
+           (Syms[idx].TypeKind = tyVariant)) then
   begin
-    { By-ref, open-array, fixed-string, or set param: the slot holds a pointer
+    { By-ref, open-array, fixed-string, set, or Variant param: the slot holds a pointer
       the caller passed (the array data / buffer / forwarded slot), so load the
       pointer itself, not the slot address. Mirrors i386 EmitLoadVarAddr386. }
     EmitLoadImmArm32(9, Syms[idx].Offset);

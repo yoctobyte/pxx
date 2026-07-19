@@ -2615,7 +2615,8 @@ begin
              ((Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray) or
              ((Syms[symIdx].Kind = skParam) and
               (Syms[symIdx].IsRef or Syms[symIdx].IsArray or
-               TypeIsFrozenString(Syms[symIdx].TypeKind) or (Syms[symIdx].TypeKind = tySet))) then
+               TypeIsFrozenString(Syms[symIdx].TypeKind) or (Syms[symIdx].TypeKind = tySet) or
+               (Syms[symIdx].TypeKind = tyVariant))) then
           begin
             if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef and
                Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1) then

@@ -1771,11 +1771,19 @@ begin
   if (cpi >= 0) and (pathIdx >= 0) and
      (pathIdx < Procs[cpi].ParamCount) and
      (Procs[cpi].Params[pathIdx].TypeKind = tyVariant) and
-     (IntToTypeKind(ASTTk[argAST]) <> tyVariant) then
+     ((IntToTypeKind(ASTTk[argAST]) <> tyVariant) or
+      (not Procs[cpi].Params[pathIdx].IsRef)) then
   begin
     { Fires for const/by-value Variant params alike: a genuine `var Variant`
       given a non-variant arg is already type-invalid, so losing its
-      write-back through the temp is not a supported case. }
+      write-back through the temp is not a supported case.
+      A VARIANT arg to a BY-VALUE Variant param comes through here too: the
+      temp is what gives it value semantics. `const v: Variant` is marked
+      IsRef by the parser and keeps passing the caller's own address (no
+      copy, FPC-style), and `var v: Variant` likewise — only the plain
+      by-value form copies (bug-pascal-byvalue-variant-param). The synthesized
+      `tmp := arg` lowers to the ARC-correct 16-byte IR_VAR_STORE, and tmp is
+      an ordinary variant local, so the epilogue's PXXVarClear releases it. }
     tmpSym := AllocVar('', tyVariant);
     caIdent := AllocNode(AN_IDENT);
     ASTIVal[caIdent] := tmpSym;

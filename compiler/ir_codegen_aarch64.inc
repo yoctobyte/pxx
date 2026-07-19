@@ -1409,9 +1409,10 @@ begin
         end
         else if (Syms[si].Kind = skParam) and
                 (Syms[si].IsRef or Syms[si].IsArray or
-                 TypeIsFrozenString(Syms[si].TypeKind) or (Syms[si].TypeKind = tySet)) then
+                 TypeIsFrozenString(Syms[si].TypeKind) or (Syms[si].TypeKind = tySet) or
+                 (Syms[si].TypeKind = tyVariant)) then
         begin
-          { By-ref, open-array, fixed-string, or set param: the slot holds a
+          { By-ref, open-array, fixed-string, set, or Variant param: the slot holds a
             pointer the caller passed (the array data / buffer / forwarded slot),
             so load the pointer itself, not the slot address. Mirrors i386. }
           if Syms[si].IsRef then

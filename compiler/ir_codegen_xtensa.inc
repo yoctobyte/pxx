@@ -1068,6 +1068,11 @@ begin
           scalar path. Arrays/strings keep their handling above. }
         else if (Syms[si].Kind = skParam) and Syms[si].IsRef and
                 not Syms[si].IsArray and (Syms[si].TypeKind <> tyAnsiString) then
+          xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0)
+        { By-VALUE Variant param: the slot is pointer-sized and holds the
+          address of the caller's 16-byte variant temp, never the value itself
+          (bug-pascal-byvalue-variant-param). Mirrors the x86-64/i386 catch-all. }
+        else if (Syms[si].Kind = skParam) and (Syms[si].TypeKind = tyVariant) then
           xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
       end;
 
