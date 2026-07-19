@@ -1797,6 +1797,8 @@ test-core: $(COMPILER)
 	/tmp/cbitfield_mixed_type_pack_b37326; test "$$?" = "42"
 	./$(COMPILER) test/cswitch_unsigned_negative_case_b374.c /tmp/cswitch_unsigned_negative_case_b37426
 	/tmp/cswitch_unsigned_negative_case_b37426; test "$$?" = "42"
+	./$(COMPILER) test/cdesignated_enum_index_unsized_b375.c /tmp/cdesignated_enum_index_unsized_b37526
+	/tmp/cdesignated_enum_index_unsized_b37526; test "$$?" = "42"
 	./$(COMPILER) test/cstruct_field_case_sensitive_b231.c /tmp/cstruct_field_case_sensitive_b23126
 	/tmp/cstruct_field_case_sensitive_b23126; test "$$?" = "42"
 	./$(COMPILER) test/cfloat_nan_compare_b232.c /tmp/cfloat_nan_compare_b23226

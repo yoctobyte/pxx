@@ -4927,8 +4927,21 @@ end;
   pre-main crash). So only a flat all-integer struct is materialised; anything
   richer zero-inits + balanced skips. Non-consuming (scans Tokens from the inner
   token). }
+function CBraceDesignatorConstIdx(tokIdx: Integer): Integer;
+{ Resolve a single-identifier `[Name]` designator index: an skConst symbol
+  (enum enumerator) with a non-negative value, else -1. Non-consuming. }
+var idx: Integer; nm: AnsiString;
+begin
+  Result := -1;
+  nm := GetTokenStr(tokIdx);
+  idx := FindSym(nm);
+  if (idx >= 0) and (Syms[idx].Kind = skConst) and (Syms[idx].ConstVal >= 0) and
+     (Syms[idx].ConstVal < $10000) then
+    Result := Integer(Syms[idx].ConstVal);
+end;
+
 function CBraceFlatIntInitCountAt(openIdx: Integer; allowFloat: Boolean): Integer;
-var j, depth, ei, maxSeen: Integer; sawValue: Boolean;
+var j, depth, ei, maxSeen, dIdx: Integer; sawValue: Boolean;
 begin
   { Returns the element COUNT of a flat integer brace init = max index + 1,
     honouring `[k] =` array designators (C 6.7.8) so `{5, [2]=2, 3}` counts as
@@ -4962,6 +4975,19 @@ begin
           begin
             ei := Tokens[j + 5].IVal;   { hi — the highest index the range touches }
             Inc(j, 6);
+          end
+          else if (depth = 1) and (Tokens[j + 1].Kind = tkIdent) and
+                  (Tokens[j + 2].Kind = tkRBrack) then
+          begin
+            { `[EnumConst] =` designator — quickjs's
+              `func_kind_to_class_id[] = { [JS_FUNC_NORMAL] = ..., }`. The
+              enumerators are already registered as skConst symbols by the
+              enum body parse, so a single-identifier index folds here; an
+              unresolvable name still bails to the skip path. }
+            dIdx := CBraceDesignatorConstIdx(j + 1);
+            if dIdx < 0 then begin Result := -1; Exit; end;
+            ei := dIdx;
+            Inc(j, 2);   { land on ']'; the loop's Inc(j) steps past it }
           end
           else begin Result := -1; Exit; end;
         end;
