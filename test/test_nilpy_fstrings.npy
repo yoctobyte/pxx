@@ -1,0 +1,52 @@
+# f-strings. Oracle: CPython — running this file with python3 must produce
+# byte-identical output to the compiled binary.
+#
+# v1 is a plain {expr} hole plus the {{ }} escapes. A conversion ({x!r}) or a
+# format spec ({x:04d}) is a deliberate clean error rather than a silent
+# approximation: both change what is PRINTED, so guessing would produce wrong
+# output instead of an honest missing feature.
+
+b = True
+n = 42
+d = 1.5
+s = "hi"
+
+print(f"v={n}!")
+print(f"{s} has {n} apples")
+print(f"no holes here")
+print(f"")
+print(f"{{literal braces}}")
+print(f"{n}")
+print(f"a{n}b{s}c")
+
+# every scalar spelling Python uses, including the two the shared str()
+# intrinsic gets wrong (a string prints its pointer, a bool prints 1)
+print(f"{b} {n} {d} {s}")
+print(f"{not b}")
+
+# expressions, not just names
+print(f"{n + 1} and {n * 2}")
+
+
+def twice(a: int) -> int:
+    return a * 2
+
+
+print(f"call {twice(3)} done")
+
+xs = [1, 2, 3]
+print(f"len {len(xs)}")
+
+
+class P:
+    def __init__(self) -> None:
+        self.name = "zed"
+        self.n = 3
+
+
+p = P()
+print(f"{p.name}/{p.n}")
+
+# a dict subscript inside a hole arrives as a Variant
+q = {"k": 9}
+print(f"{q['k']}")

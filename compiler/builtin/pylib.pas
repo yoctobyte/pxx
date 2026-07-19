@@ -95,6 +95,18 @@ type
     property Items[const k: Variant]: Variant read fetch write store; default;
   end;
 
+{ Python's str() for an f-string hole. Overloaded so ARGUMENT TYPE picks the
+  spelling, which is the whole point: the shared str() intrinsic lowers every
+  argument through StrInt/FloatToStr/VariantToStr and therefore prints a
+  string's POINTER and a bool's 1 (bug-a-nilpy-str-of-string-and-bool). An
+  f-string cannot wait for that — its entire job is producing text — so the
+  expander emits pystr_of and gets Python's spelling per type. }
+function pystr_of(const s: AnsiString): AnsiString;
+function pystr_of(b: Boolean): AnsiString; overload;
+function pystr_of(i: Int64): AnsiString; overload;
+function pystr_of(d: Double): AnsiString; overload;
+function pystr_of(c: Char): AnsiString; overload;
+function pystr_of(const v: Variant): AnsiString; overload;
 function len(l: TPyList): Integer;
 function len(d: TPyDict): Integer; overload;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
@@ -819,6 +831,45 @@ end;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
 begin
   Result := d.indexof(k) >= 0;
+end;
+
+function pystr_of(const s: AnsiString): AnsiString;
+begin
+  Result := s;
+end;
+
+function pystr_of(b: Boolean): AnsiString; overload;
+begin
+  { Python capitalises them; Pascal's own conversion yields 0/1 }
+  if b then Result := 'True' else Result := 'False';
+end;
+
+function pystr_of(i: Int64): AnsiString; overload;
+begin
+  Result := StrInt(i, 0);
+end;
+
+function pystr_of(d: Double): AnsiString; overload;
+begin
+  Result := FloatToStr(d);
+end;
+
+function pystr_of(c: Char): AnsiString; overload;
+begin
+  Result := c;
+end;
+
+{ A container element arrives as a Variant. Booleans still have to come out
+  Python-spelled, which VariantToStr does not do, so the tag is checked first
+  (VT_BOOL = 4). }
+function pystr_of(const v: Variant): AnsiString; overload;
+begin
+  if pyvartag(v) = 4 then
+  begin
+    if PPyVarRec(@v)^.Payload <> 0 then Result := 'True' else Result := 'False';
+    Exit;
+  end;
+  Result := VariantToStr(v);
 end;
 
 end.

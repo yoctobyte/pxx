@@ -87,6 +87,195 @@ begin
   Inc(TokCount); EnsureTokCapacity(TokCount+1);
 end;
 
+{ ===== f-string expansion =====
+
+  Rewrites the SOURCE before lexing: f"a{x}b" becomes ("a" + str(x) + "b").
+  A source-level rewrite, not a lexer mode, for one reason — the text inside a
+  hole is ordinary Python source, and the only thing that can tokenise it
+  correctly is the ordinary lexer. Anything else re-implements the expression
+  grammar a second time, which is the exact duplication this frontend keeps
+  paying for elsewhere.
+
+  Line count is PRESERVED: the rewrite never adds or removes a newline, so
+  every later line number is unaffected. A hole containing a newline is
+  therefore refused rather than silently shifting the whole file.
+
+  v1 covers a plain hole. A conversion or a format spec is a clean error
+  naming the construct: both change what is PRINTED, so emitting str() for
+  them would be quietly wrong OUTPUT rather than an honest missing feature. }
+
+const
+  QuoteCh = #39;   { a single quote, spelled by code point to keep this
+                     source readable inside a Pascal string }
+
+function PyFStrIsQuote(c: Char): Boolean;
+begin
+  Result := (c = '"') or (c = QuoteCh);
+end;
+
+procedure PyFStrFlush(var outS, lit: AnsiString; var wroteAny: Boolean);
+begin
+  if Length(lit) = 0 then Exit;
+  if wroteAny then outS := outS + ' + ';
+  outS := outS + '"' + lit + '"';
+  lit := '';
+  wroteAny := True;
+end;
+
+procedure PyExpandFStrings;
+var
+  outS, lit: AnsiString;
+  i, n, depth: Integer;
+  q, c, hq: Char;
+  inHole, wroteAny, sawTriple: Boolean;
+begin
+  n := Length(Source);
+  outS := '';
+  i := 1;
+  while i <= n do
+  begin
+    c := Source[i];
+    { a comment runs to end of line, copied verbatim }
+    if c = '#' then
+    begin
+      while (i <= n) and (Source[i] <> #10) do
+      begin outS := outS + Source[i]; Inc(i); end;
+      continue;
+    end;
+    { an ORDINARY string literal is copied verbatim, escapes and all, so a
+      brace inside one is never mistaken for a hole }
+    if PyFStrIsQuote(c) then
+    begin
+      q := c;
+      sawTriple := (i + 2 <= n) and (Source[i + 1] = q) and (Source[i + 2] = q);
+      if sawTriple then
+      begin
+        outS := outS + q + q + q;
+        Inc(i, 3);
+        while i <= n do
+        begin
+          if (Source[i] = q) and (i + 2 <= n) and (Source[i + 1] = q) and
+             (Source[i + 2] = q) then
+          begin
+            outS := outS + q + q + q;
+            Inc(i, 3);
+            break;
+          end;
+          outS := outS + Source[i];
+          Inc(i);
+        end;
+      end
+      else
+      begin
+        outS := outS + q;
+        Inc(i);
+        while i <= n do
+        begin
+          if Source[i] = '\' then
+          begin
+            outS := outS + Source[i];
+            Inc(i);
+            if i <= n then begin outS := outS + Source[i]; Inc(i); end;
+            continue;
+          end;
+          if Source[i] = q then begin outS := outS + q; Inc(i); break; end;
+          if Source[i] = #10 then break;
+          outS := outS + Source[i];
+          Inc(i);
+        end;
+      end;
+      continue;
+    end;
+    { f"..." — the prefix must not be the tail of a longer identifier }
+    if ((c = 'f') or (c = 'F')) and (i + 1 <= n) and PyFStrIsQuote(Source[i + 1]) and
+       ((i = 1) or (not (Source[i - 1] in ['A'..'Z', 'a'..'z', '0'..'9', '_']))) then
+    begin
+      q := Source[i + 1];
+      if (i + 3 <= n) and (Source[i + 2] = q) and (Source[i + 3] = q) then
+        Error('Nil Python: a triple-quoted f-string is not supported yet');
+      i := i + 2;
+      outS := outS + '(';
+      lit := '';
+      wroteAny := False;
+      inHole := False;
+      depth := 0;
+      while i <= n do
+      begin
+        c := Source[i];
+        if not inHole then
+        begin
+          if c = q then begin Inc(i); break; end;
+          if c = #10 then Error('Nil Python: an unterminated f-string');
+          if c = '\' then
+          begin
+            lit := lit + c;
+            Inc(i);
+            if i <= n then begin lit := lit + Source[i]; Inc(i); end;
+            continue;
+          end;
+          if (c = '{') and (i + 1 <= n) and (Source[i + 1] = '{') then
+          begin lit := lit + '{'; Inc(i, 2); continue; end;
+          if (c = '}') and (i + 1 <= n) and (Source[i + 1] = '}') then
+          begin lit := lit + '}'; Inc(i, 2); continue; end;
+          if c = '{' then
+          begin
+            PyFStrFlush(outS, lit, wroteAny);
+            if wroteAny then outS := outS + ' + ';
+            outS := outS + 'pystr_of(';
+            wroteAny := True;
+            inHole := True;
+            depth := 0;
+            Inc(i);
+            continue;
+          end;
+          lit := lit + c;
+          Inc(i);
+          continue;
+        end;
+        { inside a hole }
+        if PyFStrIsQuote(c) then
+        begin
+          hq := c;
+          outS := outS + c;
+          Inc(i);
+          while (i <= n) and (Source[i] <> hq) do
+          begin outS := outS + Source[i]; Inc(i); end;
+          if i <= n then begin outS := outS + Source[i]; Inc(i); end;
+          continue;
+        end;
+        if (c = '(') or (c = '[') or (c = '{') then Inc(depth)
+        else if (c = ')') or (c = ']') or (c = '}') then
+        begin
+          if (c = '}') and (depth = 0) then
+          begin
+            outS := outS + ')';
+            inHole := False;
+            Inc(i);
+            continue;
+          end;
+          Dec(depth);
+        end
+        else if (depth = 0) and (c = '!') then
+          Error('Nil Python: an f-string conversion (!r / !s) is not supported yet')
+        else if (depth = 0) and (c = ':') then
+          Error('Nil Python: an f-string format spec is not supported yet');
+        if c = #10 then
+          Error('Nil Python: a newline inside an f-string hole is not supported');
+        outS := outS + c;
+        Inc(i);
+      end;
+      if inHole then Error('Nil Python: an unterminated f-string hole');
+      PyFStrFlush(outS, lit, wroteAny);
+      if not wroteAny then outS := outS + '""';
+      outS := outS + ')';
+      continue;
+    end;
+    outS := outS + c;
+    Inc(i);
+  end;
+  Source := outS;
+end;
+
 procedure PyLexAll(SupportLineNumbers: Boolean);
 var
   P: Integer;

@@ -760,6 +760,7 @@ begin
 
   if isNilPy then
   begin
+    PyExpandFStrings;
     PyLexAll(False);
     MainProgramTokCount := TokCount;
     TokPos := 0;
