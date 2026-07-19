@@ -54,7 +54,46 @@ type
     property Items[i: Integer]: Variant read get write put; default;
   end;
 
+  { TPyDict is Python's dict: insertion-ordered key/value pairs, both held as
+    16-byte variant slots, so `Dict[str, Word]` and `Dict[int, Any]` are the
+    SAME runtime type. That is what the uforth census needs — VM.dict is keyed
+    by str and VM.xt_table by int, side by side in one class.
+
+    v1 is a LINEAR SCAN. VM.dict reaches a few hundred entries and every Forth
+    word lookup hits it, so this will want a hash — but a wrong hash is worse
+    than a slow scan, and a hash drops in behind these same methods with no
+    frontend change at all. Tracked in feature-nilpy-dict.
+
+    Deletion SHIFTS the tail down rather than swapping the last entry into the
+    hole: Python dicts preserve insertion order and uforth iterates them. }
+  TPyDict = class
+  public
+    FLen: Integer;
+    FCap: Integer;
+    FKeys: Pointer;
+    FVals: Pointer;
+    constructor Create;
+    function count: Integer;
+    function indexof(const k: Variant): Integer;
+    function fetch(const k: Variant): Variant;
+    procedure store(const k: Variant; const v: Variant);
+    { chainable store, for the `{k: v, ...}` literal desugar — same shape as
+      TPyList.append, which is what lets a literal be ONE expression }
+    function setitem(const k: Variant; const v: Variant): TPyDict;
+    { Python spells both arities `.get`. Declared as overloads so the
+      ordinary method-call path resolves them by argument count — no frontend
+      hook needed. }
+    function get(const k: Variant): Variant; overload;
+    function get(const k: Variant; const d: Variant): Variant; overload;
+    procedure remove(const k: Variant);
+    function keylist: TPyList;
+    function vallist: TPyList;
+    property Items[const k: Variant]: Variant read fetch write store; default;
+  end;
+
 function len(l: TPyList): Integer;
+function len(d: TPyDict): Integer; overload;
+function pydictcontains(d: TPyDict; const k: Variant): Boolean;
 function len(const s: AnsiString): Integer; overload;
 function next(c: TPyCounter): Int64;
 function pycontains(l: TPyList; const v: Variant): Boolean;
@@ -520,43 +559,256 @@ end;
   chars by payload, floats by bits, strings by CONTENT (payload is the char
   pointer, length at ptr-8). Cross-tag numeric equality (1 == 1.0) is not
   modelled — the censused corpus uses string membership. }
-function pycontains(l: TPyList; const v: Variant): Boolean;
+{ Variant equality, shared by list membership and dict key lookup. Strings
+  compare by CONTENT — a dict keyed by str is keyed by the TEXT, not by which
+  copy of it you happen to be holding — and everything else compares tag and
+  payload. }
+function PyVarEq(p, q: PPyVarRec): Boolean;
 var
-  i, k: Integer;
-  p, q: PPyVarRec;
+  k: Integer;
   la, lb: Int64;
   a, b: PChar;
-  same: Boolean;
+begin
+  Result := False;
+  if p^.VType <> q^.VType then Exit;
+  if p^.VType = 6 then
+  begin
+    a := PChar(p^.Payload);
+    b := PChar(q^.Payload);
+    if (a = nil) or (b = nil) then
+    begin
+      Result := a = b;
+      Exit;
+    end;
+    la := PInt64(NativeInt(p^.Payload) - 8)^;
+    lb := PInt64(NativeInt(q^.Payload) - 8)^;
+    if la <> lb then Exit;
+    for k := 0 to Integer(la) - 1 do
+      if a[k] <> b[k] then Exit;
+    Result := True;
+  end
+  else
+    Result := p^.Payload = q^.Payload;
+end;
+
+function pycontains(l: TPyList; const v: Variant): Boolean;
+var
+  i: Integer;
+  q: PPyVarRec;
 begin
   Result := False;
   q := PPyVarRec(@v);
   for i := 0 to l.FLen - 1 do
-  begin
-    p := PPyVarRec(NativeInt(l.FItems) + i * 16);
-    if p^.VType <> q^.VType then continue;
-    if p^.VType = 6 then
-    begin
-      a := PChar(p^.Payload);
-      b := PChar(q^.Payload);
-      if (a = nil) or (b = nil) then
-      begin
-        if a = b then begin Result := True; Exit; end;
-        continue;
-      end;
-      la := PInt64(NativeInt(p^.Payload) - 8)^;
-      lb := PInt64(NativeInt(q^.Payload) - 8)^;
-      if la <> lb then continue;
-      same := True;
-      for k := 0 to Integer(la) - 1 do
-        if a[k] <> b[k] then begin same := False; break; end;
-      if same then begin Result := True; Exit; end;
-    end
-    else if p^.Payload = q^.Payload then
+    if PyVarEq(PPyVarRec(NativeInt(l.FItems) + i * 16), q) then
     begin
       Result := True;
       Exit;
     end;
+end;
+
+procedure PyKeyError;
+begin
+  WriteLn('KeyError');
+  Halt(1);
+end;
+
+constructor TPyDict.Create;
+begin
+  FLen := 0;
+  FCap := 0;
+  FKeys := nil;
+  FVals := nil;
+end;
+
+function TPyDict.count: Integer;
+begin
+  Result := FLen;
+end;
+
+function len(d: TPyDict): Integer; overload;
+begin
+  Result := d.FLen;
+end;
+
+procedure PyDictGrow(d: TPyDict; need: Integer);
+var
+  newCap, k: Integer;
+  newKeys, newVals: Pointer;
+  src, dst: PPyVarRec;
+begin
+  if need <= d.FCap then Exit;
+  newCap := d.FCap * 2;
+  if newCap < 8 then newCap := 8;
+  if newCap < need then newCap := need;
+  GetMem(newKeys, newCap * 16);
+  GetMem(newVals, newCap * 16);
+  for k := 0 to d.FLen - 1 do
+  begin
+    src := PPyVarRec(NativeInt(d.FKeys) + k * 16);
+    dst := PPyVarRec(NativeInt(newKeys) + k * 16);
+    dst^.VType := src^.VType;
+    dst^.Payload := src^.Payload;
+    src := PPyVarRec(NativeInt(d.FVals) + k * 16);
+    dst := PPyVarRec(NativeInt(newVals) + k * 16);
+    dst^.VType := src^.VType;
+    dst^.Payload := src^.Payload;
   end;
+  d.FKeys := newKeys;
+  d.FVals := newVals;
+  d.FCap := newCap;
+end;
+
+function TPyDict.indexof(const k: Variant): Integer;
+var
+  i: Integer;
+  q: PPyVarRec;
+begin
+  Result := -1;
+  q := PPyVarRec(@k);
+  for i := 0 to FLen - 1 do
+    if PyVarEq(PPyVarRec(NativeInt(FKeys) + i * 16), q) then
+    begin
+      Result := i;
+      Exit;
+    end;
+end;
+
+function TPyDict.fetch(const k: Variant): Variant;
+var
+  i: Integer;
+  src, dst: PPyVarRec;
+begin
+  i := indexof(k);
+  if i < 0 then PyKeyError;
+  src := PPyVarRec(NativeInt(FVals) + i * 16);
+  dst := PPyVarRec(@Result);
+  dst^.VType := src^.VType;
+  dst^.Payload := src^.Payload;
+end;
+
+procedure TPyDict.store(const k: Variant; const v: Variant);
+var
+  i: Integer;
+  src, dst: PPyVarRec;
+begin
+  i := indexof(k);
+  if i < 0 then
+  begin
+    PyDictGrow(Self, FLen + 1);
+    i := FLen;
+    src := PPyVarRec(@k);
+    dst := PPyVarRec(NativeInt(FKeys) + i * 16);
+    dst^.VType := src^.VType;
+    dst^.Payload := src^.Payload;
+    FLen := FLen + 1;
+  end;
+  src := PPyVarRec(@v);
+  dst := PPyVarRec(NativeInt(FVals) + i * 16);
+  dst^.VType := src^.VType;
+  dst^.Payload := src^.Payload;
+end;
+
+function TPyDict.setitem(const k: Variant; const v: Variant): TPyDict;
+begin
+  store(k, v);
+  Result := Self;
+end;
+
+{ .get(k) with no default. A MISSING key yields VT_EMPTY, which is the
+  runtime's None — but None is not wired into the language yet
+  (feature-nilpy-none-variant), so `x is None` on the result is not usable
+  until that lands. Present keys are exact today. }
+function TPyDict.get(const k: Variant): Variant; overload;
+var
+  i: Integer;
+  src, dst: PPyVarRec;
+begin
+  i := indexof(k);
+  dst := PPyVarRec(@Result);
+  if i < 0 then
+  begin
+    dst^.VType := 0;
+    dst^.Payload := 0;
+    Exit;
+  end;
+  src := PPyVarRec(NativeInt(FVals) + i * 16);
+  dst^.VType := src^.VType;
+  dst^.Payload := src^.Payload;
+end;
+
+function TPyDict.get(const k: Variant; const d: Variant): Variant; overload;
+var
+  i: Integer;
+  src, dst: PPyVarRec;
+begin
+  i := indexof(k);
+  dst := PPyVarRec(@Result);
+  if i < 0 then
+    src := PPyVarRec(@d)
+  else
+    src := PPyVarRec(NativeInt(FVals) + i * 16);
+  dst^.VType := src^.VType;
+  dst^.Payload := src^.Payload;
+end;
+
+procedure TPyDict.remove(const k: Variant);
+var
+  i, j: Integer;
+  src, dst: PPyVarRec;
+begin
+  i := indexof(k);
+  if i < 0 then PyKeyError;
+  for j := i to FLen - 2 do
+  begin
+    src := PPyVarRec(NativeInt(FKeys) + (j + 1) * 16);
+    dst := PPyVarRec(NativeInt(FKeys) + j * 16);
+    dst^.VType := src^.VType;
+    dst^.Payload := src^.Payload;
+    src := PPyVarRec(NativeInt(FVals) + (j + 1) * 16);
+    dst := PPyVarRec(NativeInt(FVals) + j * 16);
+    dst^.VType := src^.VType;
+    dst^.Payload := src^.Payload;
+  end;
+  FLen := FLen - 1;
+end;
+
+function TPyDict.keylist: TPyList;
+var
+  i: Integer;
+  src, dst: PPyVarRec;
+  tmp: Variant;
+begin
+  Result := TPyList.Create;
+  for i := 0 to FLen - 1 do
+  begin
+    src := PPyVarRec(NativeInt(FKeys) + i * 16);
+    dst := PPyVarRec(@tmp);
+    dst^.VType := src^.VType;
+    dst^.Payload := src^.Payload;
+    Result.append(tmp);
+  end;
+end;
+
+function TPyDict.vallist: TPyList;
+var
+  i: Integer;
+  src, dst: PPyVarRec;
+  tmp: Variant;
+begin
+  Result := TPyList.Create;
+  for i := 0 to FLen - 1 do
+  begin
+    src := PPyVarRec(NativeInt(FVals) + i * 16);
+    dst := PPyVarRec(@tmp);
+    dst^.VType := src^.VType;
+    dst^.Payload := src^.Payload;
+    Result.append(tmp);
+  end;
+end;
+
+function pydictcontains(d: TPyDict; const k: Variant): Boolean;
+begin
+  Result := d.indexof(k) >= 0;
 end;
 
 end.

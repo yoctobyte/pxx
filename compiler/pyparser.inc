@@ -123,6 +123,47 @@ begin
   end;
 end;
 
+(* An open brace starts a set OR a dict, and Python decides on the punctuation
+   inside: comma-separated is a set, colon-separated is a dict, and an EMPTY
+   pair of braces is a DICT (Python has no empty-set literal). Look for a ':'
+   at bracket depth 1 relative to the opening brace at index i — depth counts
+   parens, brackets and braces alike, so a ':' inside a nested call, slice or
+   literal does not vote.
+   Braces are spelled out in prose here on purpose: a literal brace inside a
+   brace-delimited comment desyncs the self-host lexer
+   (project_nested_comment_brace_selfhost_landmine). *)
+function PyDictLiteralAt(i: Integer): Boolean;
+var depth: Integer;
+begin
+  Result := False;
+  if (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkEnd) then
+  begin
+    Result := True;             (* empty braces = empty dict, not empty set *)
+    Exit;
+  end;
+  depth := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkBegin, tkLBrack, tkLParen] then Inc(depth)
+    else if Tokens[i].Kind in [tkEnd, tkRBrack, tkRParen] then
+    begin
+      Dec(depth);
+      if depth = 0 then Exit;
+    end
+    else if (depth = 1) and (Tokens[i].Kind = tkColon) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
+function PyDictLiteralAhead: Boolean;
+begin
+  Result := PyDictLiteralAt(TokPos - 1);   (* TokPos-1 = the opening brace *)
+end;
+
 var
   PyLastTypeCi: Integer;  { class index when PyParseType returned tyClass }
   PyAnnLastCi: Integer;   { class index when PyAnnTypeAt returned tyClass }
@@ -205,13 +246,30 @@ begin
     PyAnnLastCi := FindUClass('TPyList');
     Exit;
   end;
-  if (lo = 'dict') or (lo = 'tuple') or (lo = 'set') then
+  if lo = 'dict' then
+  begin
+    Inc(i);
+    if (i < MainProgramTokCount) and (Tokens[i].Kind = tkLBrack) then
+    begin
+      depth := 1; Inc(i);
+      while (i < MainProgramTokCount) and (depth > 0) do
+      begin
+        if Tokens[i].Kind = tkLBrack then Inc(depth)
+        else if Tokens[i].Kind = tkRBrack then Dec(depth);
+        Inc(i);
+      end;
+    end;
+    Result := tyClass;   { TPyDict; key and value types are dynamic (variant slots) }
+    PyAnnLastCi := FindUClass('TPyDict');
+    Exit;
+  end;
+  if (lo = 'tuple') or (lo = 'set') then
     { ErrorAt, not Error: this runs in a TOKEN-INDEX pre-pass with no parser
       cursor, so plain Error reports whatever line the cursor happens to sit
       on — for uforth that was line 26, ~180 lines from the actual
       annotation. The token we are looking at knows its own line. }
     ErrorAt(Tokens[i].Line,
-            'Nil Python: dict/tuple/set types are not supported yet (' + lo + ')');
+            'Nil Python: tuple/set types are not supported yet (' + lo + ')');
   if IsClassType(GetTokenStr(i)) then
   begin
     Result := tyClass;
@@ -570,7 +628,13 @@ begin
       Expect(tkIn, 'in');
       PyParseBitOr;
       right := CurASTNode;
-      node := FindProc('pycontains');
+      { `k in d` on a DICT asks about KEYS, not values, so it cannot go through
+        the list helper — pycontains would scan a TPyDict's header words as if
+        they were variant slots. Dispatch on the container's class. }
+      if ResolveNodeRec(right) = REC_UCLASS_BASE + FindUClass('TPyDict') then
+        node := FindProc('pydictcontains')
+      else
+        node := FindProc('pycontains');
       if node < 0 then Error('Nil Python: pylib (pycontains) not loaded');
       i := AllocNode(AN_ARG);            { the container, arg 0 }
       ASTLeft[i] := right;
@@ -785,8 +849,11 @@ begin
   if (startIdx < endIdx) and
      ((Tokens[startIdx].Kind = tkLBrack) or (Tokens[startIdx].Kind = tkBegin)) then
   begin
-    Result := tyClass;   { list / set-as-list literal }
-    PyInferLastCi := FindUClass('TPyList');
+    Result := tyClass;   { list / set-as-list / dict literal }
+    if (Tokens[startIdx].Kind = tkBegin) and PyDictLiteralAt(startIdx) then
+      PyInferLastCi := FindUClass('TPyDict')
+    else
+      PyInferLastCi := FindUClass('TPyList');
     Exit;
   end;
   if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkIdent) and
@@ -1470,9 +1537,60 @@ end;
 { `{a, b}` set literal — desugared to a TPyList (the corpus uses sets only
   for string membership via `in`; TPySet with real set semantics is a later
   rung). Dict literals will be distinguished by a ':' after the first key. }
+(* A brace-delimited key/value literal lowers to
+   TPyDict.Create.setitem(k, v).setitem(...) — the chained shape TPyList
+   literals already use, so the whole literal is ONE expression node and needs
+   no statement context. *)
+procedure PyParseDictLiteral;
+var ci, recId, node, argNode, sizeNode, callNode, selfArg, keyArg, valArg,
+    mmi, mpi, keyNode: Integer;
+begin
+  Expect(tkBegin, 'open brace');
+  ci := FindUClass('TPyDict');
+  if ci < 0 then Error('Nil Python: pylib (TPyDict) not loaded');
+  recId := REC_UCLASS_BASE + ci;
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := -Ord(tkGetMem);
+  ASTTk[node] := Ord(tyClass);
+  ASTRight[node] := recId;
+  sizeNode := AllocNode(AN_INT_LIT);
+  ASTIVal[sizeNode] := RecSize(recId);
+  ASTTk[sizeNode] := Ord(tyInteger);
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := sizeNode;
+  ASTLeft[node] := argNode;
+  mmi := FindUMeth(ci, 'setitem');
+  if mmi < 0 then Error('Nil Python: TPyDict.setitem not found');
+  mpi := UMthProc_[mmi];
+  while CurTok.Kind <> tkEnd do
+  begin
+    PyParseBoolExpr;
+    keyNode := CurASTNode;
+    Expect(tkColon, ':');
+    PyParseBoolExpr;
+    valArg := AllocNode(AN_ARG);
+    ASTLeft[valArg] := CurASTNode;
+    keyArg := AllocNode(AN_ARG);
+    ASTLeft[keyArg] := keyNode;
+    ASTRight[keyArg] := valArg;
+    selfArg := AllocNode(AN_ARG);
+    ASTLeft[selfArg] := node;
+    ASTRight[selfArg] := keyArg;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := mpi;
+    ASTTk[callNode] := Ord(tyClass);
+    ASTLeft[callNode] := selfArg;
+    node := callNode;
+    if not Eat(tkComma) then break;
+  end;
+  Expect(tkEnd, 'close brace');
+  CurASTNode := node;
+end;
+
 procedure PyParseSetLiteral;
 begin
-  PyParseListLiteralT(tkBegin, tkEnd);
+  if PyDictLiteralAhead then PyParseDictLiteral
+  else PyParseListLiteralT(tkBegin, tkEnd);
 end;
 
 procedure PyCoerceAssignmentRHS(lhsTk: TTypeKind; rhsNode: Integer);
@@ -1715,7 +1833,7 @@ begin
 end;
 
 function PyParseStatement: Integer;
-var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx: Integer; tk: TTypeKind;
+var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integer; tk: TTypeKind;
     augTk: TTokenKind;
 begin
   Result := -1;
@@ -1723,6 +1841,33 @@ begin
   if CurTok.Kind = tkWhile then begin Result := PyParseWhile; Exit; end;
   if (CurTok.Kind = tkFor) or PyIsIdent('for') then begin Result := PyParseFor; Exit; end;
   if PyIsIdent('pass') then begin Next; Exit; end;
+  { `del d[k]` -> d.remove(k). Only the dict-subscript form is supported; the
+    other censused use is `del lst[a:]`, which needs slices and is not this
+    ticket. Parsed as a statement rather than through the expression grammar
+    because `d[k]` on its own would compile to a subscript READ. }
+  if PyIsIdent('del') then
+  begin
+    Next;
+    { Parse the whole `d[k]` normally — it lowers to TPyDict.fetch(d, k) via
+      the default indexed property — then REWRITE that call to .remove(d, k).
+      Parsing the base and the subscript separately would mean re-implementing
+      the postfix grammar (`del vm.file_handles[fid]` has a field base), which
+      is exactly the duplication this frontend keeps getting bitten by. }
+    PyParseBoolExpr;
+    delBase := CurASTNode;
+    ci := FindUClass('TPyDict');
+    symIdx := -1;
+    if ci >= 0 then symIdx := FindUMeth(ci, 'fetch');
+    if (symIdx < 0) or (ASTKind[delBase] <> AN_CALL) or
+       (ASTIVal[delBase] <> UMthProc_[symIdx]) then
+      Error('Nil Python: del is supported on a dict subscript only (del d[k])');
+    symIdx := FindUMeth(ci, 'remove');
+    if symIdx < 0 then Error('Nil Python: TPyDict.remove not found');
+    ASTIVal[delBase] := UMthProc_[symIdx];
+    ASTTk[delBase] := Ord(Procs[UMthProc_[symIdx]].RetType);
+    Result := delBase;
+    Exit;
+  end;
   if CurTok.Kind = tkExit then
   begin
     Next;
@@ -2630,7 +2775,15 @@ begin
     if not Eat(tkComma) then break;
   end;
   Expect(tkRParen, ')'); Expect(tkMinus, '- in ->'); Expect(tkGt, '> in ->');
-  if isCtor then begin Expect(tkNil, 'None'); end else PyParseType;
+  { `-> None` on a NON-ctor method: accept it. Only the ctor was allowed to
+    say None, so an ordinary `def m(self) -> None:` died in PyParseType with
+    "expected type annotation" — while the identical top-level def has worked
+    since day one (PyParseDef's isProc path). PyMethodRetType already maps the
+    None annotation to tyInteger for registration, so nothing downstream
+    changes; the header parse was simply stricter than the pre-pass. }
+  if isCtor then Expect(tkNil, 'None')
+  else if CurTok.Kind = tkNil then Next
+  else PyParseType;
   Expect(tkColon, ':'); Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
   bodyStart := TokPos - 1;
   fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]); AppendChar(fullName, '.');

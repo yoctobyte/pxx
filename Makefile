@@ -208,6 +208,8 @@ test-nilpy: $(COMPILER)
 	grep -q "mixing tabs and spaces for indentation" /tmp/test_nilpy_mixed_indent_fail.log
 	./$(COMPILER) test/test_nilpy_str_param.npy /tmp/test_nilpy_str_param26
 	test "$$(/tmp/test_nilpy_str_param26)" = "$$(printf '2\nb\ncd\nok!')"
+	./$(COMPILER) test/test_nilpy_dict.npy /tmp/test_nilpy_dict26
+	test "$$(/tmp/test_nilpy_dict26)" = "$$(printf '2\n3\n2\nTrue\nFalse\n3\n-1\n2\n200\n1\nFalse\n2\n2\n7\n8\n2\n1\n2')"
 	./$(COMPILER) test/test_nilpy_literals.npy /tmp/test_nilpy_literals26
 	test "$$(/tmp/test_nilpy_literals26)" = "$$(printf '65536\n15\n10\n1000000\ntri\nple')"
 	./$(COMPILER) test/test_nilpy_operators.npy /tmp/test_nilpy_operators26

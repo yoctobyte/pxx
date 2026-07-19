@@ -1,0 +1,67 @@
+# dict v1 (feature-nilpy-dict). Oracle: CPython — running this file with
+# python3 must produce byte-identical output to the compiled binary.
+#
+# Covers the mapping core of the uforth census: str keys and int keys in one
+# program, .get with and without a default, `in`, len(), del, overwrite, and
+# dict literals with entries.
+#
+# NOT covered here: .keys()/.values()/.items(). CPython returns view objects
+# that are not subscriptable, so they cannot be diffed against an oracle until
+# `for k in d` lands — see the sequencing note in the ticket.
+
+# NilPy has the typing names built in and consumes this import; CPython needs
+# it, and the point of the file is that ONE source runs under both.
+from typing import Dict
+
+d = {}
+d["a"] = 1
+d["b"] = 2
+d["a"] = 3          # overwrite
+
+print(len(d))
+print(d["a"])
+print(d["b"])
+
+print("a" in d)
+print("z" in d)
+
+print(d.get("a"))
+print(d.get("z", -1))
+
+# int keys live in the same dict type as str keys
+n = {}
+n[10] = 100
+n[20] = 200
+print(len(n))
+print(n[20])
+
+del d["a"]
+print(len(d))
+print("a" in d)
+print(d["b"])
+
+# literal with entries
+lit = {"x": 7, "y": 8}
+print(len(lit))
+print(lit["x"])
+print(lit["y"])
+
+# A dict-typed FIELD, the shape VM.dict uses. Read back INSIDE the method:
+# a str boxed into a variant currently has FRAME lifetime, so keys stored in a
+# method and read after it returns collide once they are the same length
+# (bug-a-str-boxed-into-variant-does-not-own-bytes, Track A). Widen this case
+# to a cross-frame read when that lands.
+class Holder:
+    def __init__(self) -> None:
+        self.m: Dict[str, int] = {}
+
+    def fill(self) -> None:
+        self.m["one"] = 1
+        self.m["two"] = 2
+        print(len(self.m))
+        print(self.m["one"])
+        print(self.m["two"])
+
+
+h = Holder()
+h.fill()
