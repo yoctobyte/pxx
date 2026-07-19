@@ -1,0 +1,16 @@
+from dataclasses import dataclass
+from typing import Callable, Optional
+
+@dataclass
+class W:
+    name: str
+    native: Optional[Callable[["W"], None]] = None
+    addr: Optional[int] = None
+    imm: bool = False
+
+w = W("dup")
+print(w.name)
+print(w.addr)
+print(w.imm)
+w.addr = 65536
+print(w.addr)

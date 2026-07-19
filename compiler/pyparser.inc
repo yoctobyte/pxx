@@ -30,6 +30,7 @@ const
   PYDC_FLOAT = 2;
   PYDC_STR   = 3;
   PYDC_BOOL  = 4;
+  PYDC_NIL   = 5;  { None default: 0/nil for pointer-like and Optional[int] fields }
 
 var
   PyLocals: array[0..PY_MAX_LOCALS-1] of TPyLocalConstraint;
@@ -113,6 +114,69 @@ end;
 
 var
   PyLastTypeCi: Integer;  { class index when PyParseType returned tyClass }
+
+{ Token-index annotation parser for the richer grammar dataclass fields use:
+    NAME | NAME '[' ann {',' ann} ']' | "ForwardRef" | None
+  v1 mapping (uforth rung): Optional[X] -> X with nil/0 for None (an
+  Optional[int] whose legit value could be 0 would alias the sentinel — noted
+  in the ticket; honest variant-tagged fields come later), Callable[...] ->
+  tyPointer, Any -> tyVariant, container types (List/Dict/Tuple/Set) remain a
+  clean unsupported error. Advances i past the annotation. }
+function PyAnnTypeAt(var i: Integer): TTypeKind;
+var lo: AnsiString; depth: Integer;
+begin
+  Result := tyUnknown;
+  if i >= MainProgramTokCount then Exit;
+  if Tokens[i].Kind = tkString then
+  begin
+    { forward reference: "VM" }
+    if FindUClass(GetTokenStr(i)) >= 0 then Result := tyClass;
+    Inc(i);
+    Exit;
+  end;
+  if Tokens[i].Kind = tkNil then begin Inc(i); Exit; end;
+  if Tokens[i].Kind <> tkIdent then Exit;
+  lo := LowerCase(GetTokenStr(i));
+  if lo = 'int' then begin Result := tyInteger; Inc(i); Exit; end;
+  if lo = 'float' then begin Result := tyDouble; Inc(i); Exit; end;
+  if lo = 'bool' then begin Result := tyBoolean; Inc(i); Exit; end;
+  if lo = 'str' then begin Result := tyString; Inc(i); Exit; end;
+  if lo = 'any' then begin Result := tyVariant; Inc(i); Exit; end;
+  if lo = 'optional' then
+  begin
+    Inc(i);
+    if (i < MainProgramTokCount) and (Tokens[i].Kind = tkLBrack) then
+    begin
+      Inc(i);
+      Result := PyAnnTypeAt(i);
+      if (i < MainProgramTokCount) and (Tokens[i].Kind = tkRBrack) then Inc(i);
+      { Optional[int]: None maps to 0 (see header note) — widen to 64-bit so
+        the sentinel space is the full address range }
+      if Result = tyInteger then Result := tyInt64;
+      if Result = tyString then Result := tyAnsiString;
+    end;
+    Exit;
+  end;
+  if lo = 'callable' then
+  begin
+    Inc(i);
+    if (i < MainProgramTokCount) and (Tokens[i].Kind = tkLBrack) then
+    begin
+      depth := 1; Inc(i);
+      while (i < MainProgramTokCount) and (depth > 0) do
+      begin
+        if Tokens[i].Kind = tkLBrack then Inc(depth)
+        else if Tokens[i].Kind = tkRBrack then Dec(depth);
+        Inc(i);
+      end;
+    end;
+    Result := tyPointer;
+    Exit;
+  end;
+  if (lo = 'list') or (lo = 'dict') or (lo = 'tuple') or (lo = 'set') then
+    Error('Nil Python: list/dict/tuple/set types are not supported yet');
+  if IsClassType(GetTokenStr(i)) then begin Result := tyClass; Inc(i); Exit; end;
+end;
 
 function PyParseType: TTypeKind;
 begin
@@ -688,7 +752,7 @@ end;
 
 function PyClassCreate: Integer;
 var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
-    nArgs, i, k, dcBase, valNode: Integer;
+    nArgs, i, k, dcBase, valNode: Integer; tkF: TTypeKind;
 begin
   name := CurTok.SVal;
   ci := FindUClass(name);
@@ -751,6 +815,15 @@ begin
             ASTSOffset[valNode] := PyDcSOff[i];
             ASTSLen[valNode] := PyDcSLen[i];
             ASTTk[valNode] := Ord(tyString);
+          end;
+          PYDC_NIL:
+          begin
+            tkF := IntToTypeKind(UFldTk[UClsFBase[ci] + (i - dcBase)]);
+            if tkF = tyAnsiString then
+              Error('Nil Python: None default for a str field is not supported yet');
+            valNode := AllocNode(AN_INT_LIT);
+            ASTIVal[valNode] := 0;
+            ASTTk[valNode] := Ord(tkF);
           end;
           else { PYDC_BOOL }
           begin
@@ -1295,8 +1368,9 @@ begin
         Inc(i);
         continue;
       end;
-      { @dataclass field: name : type [= literal-default] }
-      tk := PyTypeFromTokenIndex(i + 2);
+      { @dataclass field: name : annotation [= literal-default] }
+      j := i + 2;
+      tk := PyAnnTypeAt(j);
       if tk = tyUnknown then
         Error('Nil Python: unsupported dataclass field type for ' +
               GetTokenStr(i));
@@ -1305,7 +1379,6 @@ begin
         class fields hold managed strings instead. }
       if tk = tyString then tk := tyAnsiString;
       defKind := PYDC_NONE; defIVal := 0; defSOff := 0; defSLen := 0;
-      j := i + 3;
       if (j < bodyEnd) and (Tokens[j].Kind = tkAssign) then
       begin
         Inc(j);
@@ -1317,6 +1390,7 @@ begin
                            defSLen := Tokens[j].SLen; end;
           tkTrue:    begin defKind := PYDC_BOOL; defIVal := 1; end;
           tkFalse:   begin defKind := PYDC_BOOL; defIVal := 0; end;
+          tkNil:     begin defKind := PYDC_NIL; defIVal := 0; end;
           tkMinus:
           begin
             Inc(j);
@@ -1732,7 +1806,15 @@ begin
       Next;
       while CurTok.Kind = tkIdent do
       begin
-        ParseUsesUnit(CurTok.SVal);
+        { Python stdlib modules without a shim yet: consume-and-defer, use
+          sites wall visibly (same policy as itertools above). Everything
+          else goes through the unit resolver (sqlite3, C headers, ...). }
+        if CaseEqual(CurTok.SVal, 'sys') or CaseEqual(CurTok.SVal, 'os') or
+           CaseEqual(CurTok.SVal, 'textwrap') or CaseEqual(CurTok.SVal, 'select') or
+           CaseEqual(CurTok.SVal, 'itertools') then
+          { skip }
+        else
+          ParseUsesUnit(CurTok.SVal);
         Next;
         if not Eat(tkComma) then Break;
       end;
