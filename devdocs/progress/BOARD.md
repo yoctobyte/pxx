@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| feature-nilpy-operators | N | 55 | feature | NilPy: bitwise operators + augmented assignment | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
 ## unfinished (0)
@@ -203,7 +204,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (839)
+## done (840)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -706,6 +707,7 @@ _none_
 | feature-const-eval-typecast-int64 | A | 50 | feature | ConstEval: typed casts + 64-bit folding in const initializers | — |
 | feature-const-set-literal | A | 50 | feature | Set literal in a `const` declaration (`const S = [1,2,3]`) | — |
 | feature-copy-intrinsic | B | 50 | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
+| feature-core-pyexprmode-shl-xor-suppression | A | 55 | feature | Shared parser: extend PyExprMode suppression to tkShl/tkXor | — |
 | feature-cross-bootstrap-selfhost | A | 50 | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32, feature-cross-selfhost-i386 |
 | feature-cross-bootstrap | A | 50 | feature | Cross-architecture compiler bootstrap (AArch64/ARM32 → byte-identical self-compile) | — |
 | feature-cross-codegen-gaps | A | 50 | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
