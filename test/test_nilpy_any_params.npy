@@ -1,0 +1,11 @@
+def describe(t: Any) -> str:
+    return "got"
+
+def second(xs: List[Any]) -> Any:
+    return xs[1]
+
+print(describe(5))
+print(describe("hi"))
+ys = [10, 20, 30]
+print(second(ys))
+print(len(ys))

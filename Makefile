@@ -222,6 +222,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_classvar_counter26)" = "$$(printf 'dup 1\nswap 2\ndrop 3')"
 	./$(COMPILER) test/test_nilpy_membership.npy /tmp/test_nilpy_membership26
 	test "$$(/tmp/test_nilpy_membership26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue')"
+	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
+	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_optional.npy /tmp/test_nilpy_optional26
 	test "$$(/tmp/test_nilpy_optional26)" = "$$(printf 'dup\n0\nFalse\n65536')"
 	./$(COMPILER) test/test_nilpy_dataclass.npy /tmp/test_nilpy_dataclass26

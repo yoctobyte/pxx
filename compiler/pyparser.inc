@@ -210,12 +210,16 @@ begin
 end;
 
 function PyParseType: TTypeKind;
+var i: Integer;
 begin
-  Result := PyTypeFromTokenIndex(TokPos - 1);
+  { full annotation grammar (Optional/Callable/Any/List/forward refs) via the
+    token-index parser, then resync the stream }
+  i := TokPos - 1;
+  Result := PyAnnTypeAt(i);
   if Result = tyUnknown then
-    Error('Nil Python: expected type annotation (int, float, bool, str, or a class name)');
-  if Result = tyClass then PyLastTypeCi := FindUClass(GetTokenStr(TokPos - 1))
-  else PyLastTypeCi := -1;
+    Error('Nil Python: expected type annotation (int, float, bool, str, Any, Optional/Callable/List[...], or a class name)');
+  PyLastTypeCi := PyAnnLastCi;
+  TokPos := i;
   Next;
 end;
 
@@ -1575,8 +1579,13 @@ begin
   Procs[procIdx].ScopeBase := SymCount;
   for i := 0 to nparams - 1 do
   begin
-    idx := AllocParam(pnames[i], ptypes[i], False, False);
+    { Any/variant params are const-by-ref (the internal convention passes a
+      variant's ADDRESS), so the 8-byte slot holds the pointer }
+    idx := AllocParam(pnames[i], ptypes[i], ptypes[i] = tyVariant, False);
     Procs[procIdx].Params[i].SymIdx := idx;
+    Procs[procIdx].Params[i].IsRef := ptypes[i] = tyVariant;
+    if i < MAX_PROC_PARAMS then
+      ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := ptypes[i] = tyVariant;
     if (ptypes[i] = tyClass) and (pcis[i] >= 0) then
       Syms[idx].RecName := REC_UCLASS_BASE + pcis[i];
   end;
@@ -1586,6 +1595,12 @@ begin
     Procs[procIdx].RetSymIdx := idx;
     if (retType = tyClass) and (retCi >= 0) then
       Syms[idx].RecName := REC_UCLASS_BASE + retCi;
+    if RetViaHiddenDest(retType) then
+    begin
+      { variant (Any) results ride the hidden-destination convention }
+      idx := AllocVar('', tyPointer);
+      ProcAggregateDestSym[procIdx] := idx;
+    end;
   end;
   PyCollectLocals(bodyStart, bodyEnd);
   for i := 0 to PyLocalCount - 1 do
@@ -1593,6 +1608,7 @@ begin
 
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
+  EmitAggregateDestStash(procIdx);
   PyEmitParamSpills(procIdx, nparams);
   PyInitVariantLocals(Procs[procIdx].ScopeBase);
   bodyNode := PyParseBlock;
@@ -1936,14 +1952,27 @@ begin
   Procs[procIdx].ScopeBase := SymCount;
   for i := 0 to nparams - 1 do
   begin
-    idx := AllocParam(pnames[i], ptypes[i], False, False);
+    idx := AllocParam(pnames[i], ptypes[i], ptypes[i] = tyVariant, False);
     Procs[procIdx].Params[i].SymIdx := idx;
+    Procs[procIdx].Params[i].IsRef := ptypes[i] = tyVariant;
+    if i < MAX_PROC_PARAMS then
+      ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := ptypes[i] = tyVariant;
     if (ptypes[i] = tyClass) and (pcis[i] >= 0) then
       Syms[idx].RecName := REC_UCLASS_BASE + pcis[i];
   end;
-  if not isCtor then begin idx := AllocVar('Result', Procs[procIdx].RetType); Procs[procIdx].RetSymIdx := idx; end;
+  if not isCtor then
+  begin
+    idx := AllocVar('Result', Procs[procIdx].RetType);
+    Procs[procIdx].RetSymIdx := idx;
+    if RetViaHiddenDest(Procs[procIdx].RetType) then
+    begin
+      idx := AllocVar('', tyPointer);
+      ProcAggregateDestSym[procIdx] := idx;
+    end;
+  end;
   Procs[procIdx].BodyAddr := CodeLen;
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
+  EmitAggregateDestStash(procIdx);
   PyEmitParamSpills(procIdx, nparams);
   PyInitVariantLocals(Procs[procIdx].ScopeBase);
   bodyNode := PyParseBlock; Expect(tkDedent, 'dedent');
