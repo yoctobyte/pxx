@@ -25,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (109)
+## backlog (111)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -109,6 +109,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
+| feature-rtl-math-on-crtl-dd-kernels | B | 10 | feature | RTL math.pas on the crtl dd kernels — correct rounding for Pascal too | — |
 | feature-rtl-optout-for-lcl | A+B | 45 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
@@ -127,6 +128,7 @@ _none_
 | feature-writeln-as-library | B | 45 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-xtensa-stack-args-over-6-words | A | 45 | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | idea-c-realworld-test-targets | C | 25 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
+| idea-cross-namespace-ambiguity-warning | A | 10 | idea | Warn when a call name matches in BOTH the Pascal and C namespaces | — |
 | idea-public-status-page | D | 30 | idea | Publish a live compatibility/corpus status report on the website — the static docs/reference/status.md page exists; wire it to the already-generated tstate reports (twatch_web conformance.html/bench.html/dashboard.html) so public numbers stay current instead of hand-maintained | — |
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
@@ -2577,6 +2579,8 @@ _none_
 - [p 15] [B] feature-crtl-trig-payne-hanek
 - [p 15] [P] feature-pascal-corpus-expansion
 - [p 12] [P] task-pascal-conformance-long-tail
+- [p 10] [B] feature-rtl-math-on-crtl-dd-kernels
+- [p 10] [A] idea-cross-namespace-ambiguity-warning
 
 ## Leverage (tickets each one unblocks)
 
