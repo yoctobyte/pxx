@@ -157,3 +157,11 @@ Track C/A ticket with a minimal repro, same as zlib/tcc.
   formatting; sqrt/sin/tan already exact. Next milestone: `make
   test-quickjs` gate + a curated JS smoke vs the gcc-built oracle
   (duktape shape), accepting or fixing the transcendental ulps first.
+
+- 2026-07-19 (fable-A, gate wired): `make test-quickjs` landed (2296b29c) —
+  30-case curated smoke byte-exact vs the gcc-built oracle (JSValue returns,
+  exact dtoa, closures/classes/GC/JSON/regex/spread). Transcendental ulps
+  excluded, now filed: [[feature-crtl-libm-correctly-rounded-transcendentals]]
+  (Track B, prio 40). REMAINING for this ticket's full bar ("runs real
+  pure-compute JS libraries"): pick one real pure-JS library (md5/sha/json5
+  class), run it under the compiled qjs, oracle-diff — then resolve.
