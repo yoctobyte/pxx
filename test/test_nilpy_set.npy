@@ -1,0 +1,51 @@
+# set v1. Oracle: CPython — running this file with python3 must produce
+# byte-identical output to the compiled binary.
+#
+# A NilPy set IS a TPyList: the brace literal already lowered that way, `in`
+# already scans it, and `add` appends only when the value is absent. Ordering
+# is therefore INSERTION order rather than Python's arbitrary order — which is
+# why nothing here prints a set or iterates one expecting a particular order.
+# Python's set order is unspecified, so no correct program can depend on it.
+from typing import Set
+
+
+s = {"seed"}
+print(len(s))
+
+s.add("a")
+s.add("a")
+s.add("b")
+print(len(s))
+print("a" in s)
+print("b" in s)
+print("z" in s)
+print("z" not in s)
+
+# set() is the only way to write an EMPTY set: empty braces are a dict
+e = set()
+print(len(e))
+e.add(1)
+e.add(1)
+e.add(2)
+print(len(e))
+print(1 in e)
+print(3 in e)
+
+
+class V:
+    def __init__(self) -> None:
+        self.req: set[str] = set()
+        self.tags: Set[str] = {"t"}
+
+    def need(self) -> None:
+        self.req.add("one")
+        self.req.add("one")
+        self.req.add("two")
+        print(len(self.req))
+        print("one" in self.req)
+        print("nope" in self.req)
+        print(len(self.tags))
+
+
+v = V()
+v.need()

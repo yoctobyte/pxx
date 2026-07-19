@@ -220,6 +220,8 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_fstrings26 | diff -u test/test_nilpy_fstrings.expected -
 	./$(COMPILER) test/test_nilpy_defaults.npy /tmp/test_nilpy_defaults26
 	test "$$(/tmp/test_nilpy_defaults26)" = "$$(printf '3\n6\nhi bob\nhi bob!\nend...\nend!\n7\n103\n106\n3\n-3\n206')"
+	./$(COMPILER) test/test_nilpy_set.npy /tmp/test_nilpy_set26
+	test "$$(/tmp/test_nilpy_set26)" = "$$(printf '1\n3\nTrue\nTrue\nFalse\nTrue\n0\n2\nTrue\nFalse\n2\nTrue\nFalse\n1')"
 	./$(COMPILER) test/test_nilpy_dict.npy /tmp/test_nilpy_dict26
 	test "$$(/tmp/test_nilpy_dict26)" = "$$(printf '2\n3\n2\nTrue\nFalse\n3\n-1\n2\n200\n1\nFalse\n2\n2\n7\n8\n2\n1\n2\n0\n1\n3\nFalse\n0\nFalse\n9')"
 	./$(COMPILER) test/test_nilpy_literals.npy /tmp/test_nilpy_literals26
