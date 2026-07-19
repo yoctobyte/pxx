@@ -37,9 +37,9 @@ _none_
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
 | decide-1-0-scope-promise | A | 55 | decide | DECIDE: first release is 0.1-BETA — a 1.0-grade bar under a modest number | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
-| decide-crtl-libm-glibc-bit-parity | A | 20 | decide | decide: crtl libm — correct rounding (current) vs glibc bug-parity | — |
+| decide-crtl-libm-glibc-bit-parity | U | 20 | decide | decide: crtl libm — correct rounding (current) vs glibc bug-parity | — |
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
-| decide-nilpy-bigint-vs-64bit-cells | A | 40 | decide | decide: NilPy integer semantics — arbitrary precision vs 64-bit (uforth needs one) | — |
+| decide-nilpy-bigint-vs-64bit-cells | U | 40 | decide | decide: NilPy integer semantics — arbitrary precision vs 64-bit (uforth needs one) | — |
 | decide-nilpy-parallel-capture-semantics | A | 45 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-rtti-none-semantics | A | 40 | decide | decide: `--rtti=none` semantics — what happens to the FUNCTIONAL parts of the RTTI blob? | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
@@ -78,7 +78,7 @@ _none_
 | feature-networking | B | 45 | feature | Networking runtime | — |
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
-| feature-nilpy-corpus-uforth | B | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
+| feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nilpy-parallel-for-in | A | 45 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
 | feature-nilpy-tk-binding | B | 45 | feature | Thin Tcl/Tk embed for pxx (lib/pcl/tk.pas) + a tkinter-shaped NilPy surface — v1 landed | — |
@@ -2497,7 +2497,7 @@ _none_
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [E] feature-demo-portable-userland
-- [p 55] [B] feature-nilpy-corpus-uforth
+- [p 55] [N] feature-nilpy-corpus-uforth
 - [p 55] [P] feature-pascal-corpus-generics
 - [p 55] [A] feature-pascal-type-helpers
 - [p 55] [T] feature-pasmith-multi-unit-programs
@@ -2556,7 +2556,7 @@ _none_
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
-- [p 40] [A] decide-nilpy-bigint-vs-64bit-cells
+- [p 40] [U] decide-nilpy-bigint-vs-64bit-cells
 - [p 40] [A] decide-rtti-none-semantics
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [E] feature-demo-mandelbrot-asm-autozoom
@@ -2579,7 +2579,7 @@ _none_
 - [p 25] [C] bug-c-float-literal-subnormal-parses-zero
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 20] [P] compat-pascal-method-impl-without-declaration
-- [p 20] [A] decide-crtl-libm-glibc-bit-parity
+- [p 20] [U] decide-crtl-libm-glibc-bit-parity
 - [p 20] [O] feature-opt-float-register-temporaries
 - [p 20] [B] feature-parallel-load-sampler-refine
 - [p 20] [T] feature-t-gcc-torture-runner

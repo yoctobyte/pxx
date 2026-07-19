@@ -61,14 +61,15 @@ def normalize_track(value: str) -> str:
     t = t.replace("TRACK", "")
     # full track names people actually write on Track: lines
     for name, letter in (("PASCAL", "P"), ("RUST", "R"), ("ZIG", "Z"),
-                         ("DOCS", "D"), ("TESTING", "T")):
+                         ("DOCS", "D"), ("TESTING", "T"),
+                         ("NILPY", "N"), ("NIL-PYTHON", "N"), ("USER", "U")):
         if name in t:
             return letter
-    t = re.sub(r"[^ABCDEOPRTZ+/]", "", t)
+    t = re.sub(r"[^ABCDENOPRTUZ+/]", "", t)
     t = t.replace("/", "+")
     # strict: only clean single-letter combos survive; anything else (e.g.
     # letter-soup from a prose value) falls through to the Type-line detection
-    if not re.fullmatch(r"[ABCDEOPRTZ](\+[ABCDEOPRTZ])*", t):
+    if not re.fullmatch(r"[ABCDENOPRTUZ](\+[ABCDENOPRTUZ])*", t):
         return ""
     return t
 
@@ -918,13 +919,13 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="progress.sh",
-        usage="%(prog)s [next|ready|leverage|autorate|board|board-md|check|all] [--track A|B|C|D|E|O|P|R|T|Z]\n"
+        usage="%(prog)s [next|ready|leverage|autorate|board|board-md|check|all] [--track A|B|C|D|E|N|O|P|R|T|U|Z]\n"
         "       %(prog)s autorate [--write] | claim <slug> <owner> | resolve <slug> <commit>",
     )
     sub = p.add_subparsers(dest="cmd")
     for name in ["next", "ready", "leverage", "autorate", "board", "board-md", "check", "all"]:
         sp = sub.add_parser(name)
-        sp.add_argument("--track", choices=["A", "B", "C", "D", "E", "O", "P", "R", "T", "Z"], default="")
+        sp.add_argument("--track", choices=["A", "B", "C", "D", "E", "N", "O", "P", "R", "T", "U", "Z"], default="")
         sp.add_argument("--strict", action="store_true")
         sp.add_argument("--write", action="store_true")
     sp = sub.add_parser("claim")
