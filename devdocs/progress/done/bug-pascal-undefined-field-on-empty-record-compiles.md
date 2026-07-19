@@ -41,3 +41,6 @@ Field lookup (FindUField / record member resolution in parser.inc/symtab.inc)
 — the not-found branch. Gate: `make test` + self-host + the fuzz reducer's
 candidates now FAILING to compile (they became the accidental conformance
 probe).
+
+## Log
+- 2026-07-19 — resolved, commit 4d46a7ad.
