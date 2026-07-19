@@ -92,3 +92,10 @@ one = [7]
 for e in one:
     count = count + 1
 print(count)
+
+# Python LEAKS the loop variable — it is a normal local that outlives the
+# loop, not a scoped binding. The desugar has to give it the name the user
+# wrote rather than a hidden one.
+for tail in [1, 2, 3]:
+    pass
+print(tail)
