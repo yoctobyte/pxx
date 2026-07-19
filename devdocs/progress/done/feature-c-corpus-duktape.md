@@ -5,7 +5,7 @@ prio: 55
 # C corpus: Duktape — JS engine (GC + IEEE-754 corners)
 
 - **Type:** feature (C frontend validation) — Track A/C.
-- **Status:** backlog — planned 2026-07-09. Do AFTER [[feature-c-corpus-chess]].
+- **Status:** done
   **COMPILES + RUNS JS 2026-07-09** (pinned v192). Four bring-up walls + the runtime
   segfault (32-bit pointer truncation, commit b30ccf88) all fixed. duktape now runs:
   integers/strings/arrays/JSON/closures/regex/recursion all correct. Remaining: JS number
@@ -97,3 +97,6 @@ Regressions for the cfront fixes: `test/cpreproc_macro_arg_string_paren_b227.c`,
 [[feature-c-corpus-expansion]] · [[feature-c-corpus-chess]] · [[bug-c-preproc-missing-stdc-version-predefine]] · [[bug-c-preproc-macro-arg-string-literal-paren]] · [[bug-c-duktape-double-formatting]] · [[feature-c-compiler-dynarrays]] · [[feature-c-cmdline-define-flag]]
 
 - 2026-07-19 (backlog sweep note) Substance done (duktape compiles + runs JS, 3db99287; blocking double-formatting bug resolved 6b16cb85/024de68a). Remaining to close: duktape fetcher in tools/install_lib_candidates.sh + a make test-duktape gate — cheap wiring, presumably green now.
+
+## Log
+- 2026-07-19 — resolved, commit 0e1abca9.
