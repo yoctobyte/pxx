@@ -40,7 +40,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
 .PHONY: fuzz-csmith
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -4681,6 +4681,34 @@ test-duktape: $(COMPILER)
 	  echo "test-duktape: PASS — curated JS smoke byte-exact"; \
 	else \
 	  echo "test-duktape: FAIL — output mismatch"; head -12 "$$wd/diff.txt"; exit 1; \
+	fi
+
+# QuickJS-ng (real JS engine, ~85k lines plain C99) curated smoke — the
+# feature-c-corpus-quickjs gate. Unity build (test/quickjs/runner.c: EMSCRIPTEN
+# switch-dispatch profile + __TINYC__ 32-bit limbs); evals test/quickjs/smoke.js
+# and byte-compares stdout against smoke.expected (verified byte-identical to a
+# gcc-built runner's output). Exercises JSValue struct returns through
+# fn-pointer tables, exact number->string, closures/prototypes/GC/JSON/regex.
+# Skips if the gitignored tree is absent (tools/install_lib_candidates.sh quickjs).
+# NOT in `make test` (3rd-party).
+QUICKJS_SRC ?= library_candidates/quickjs
+test-quickjs: $(COMPILER)
+	@if [ ! -f "$(QUICKJS_SRC)/quickjs.c" ]; then \
+	  echo "test-quickjs: SKIP — no quickjs tree at $(QUICKJS_SRC) (tools/install_lib_candidates.sh quickjs)"; \
+	  exit 0; \
+	fi; \
+	echo "compiling quickjs runner ..."; \
+	wd="$$(mktemp -d)"; trap 'rm -rf "$$wd"' EXIT; \
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src -I$(QUICKJS_SRC) \
+	  test/quickjs/runner.c "$$wd/qjs" > /dev/null || exit 1; \
+	"$$wd/qjs" "$$(cat test/quickjs/smoke.js)" > "$$wd/got.txt" 2>&1; rc=$$?; \
+	if [ "$$rc" != "0" ]; then \
+	  echo "test-quickjs: FAIL — exit $$rc"; tail -5 "$$wd/got.txt"; exit 1; \
+	fi; \
+	if diff -u test/quickjs/smoke.expected "$$wd/got.txt" > "$$wd/diff.txt"; then \
+	  echo "test-quickjs: PASS — curated JS smoke byte-exact"; \
+	else \
+	  echo "test-quickjs: FAIL — output mismatch"; head -12 "$$wd/diff.txt"; exit 1; \
 	fi
 
 # fcl-json's own 203-case suite (fpjson + fpcunit, FPC release_3_2_2 sources)
