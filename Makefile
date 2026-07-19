@@ -211,7 +211,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_forin.npy /tmp/test_nilpy_forin26
 	/tmp/test_nilpy_forin26 | diff -u test/test_nilpy_forin.expected -
 	./$(COMPILER) test/test_nilpy_class_return.npy /tmp/test_nilpy_class_return26
-	test "$$(/tmp/test_nilpy_class_return26)" = "$$(printf 'a\nb\nsolo\ninner')"
+	test "$$(/tmp/test_nilpy_class_return26)" = "$$(printf 'a\nb\nsolo\ninner\n41\nlate')"
 	./$(COMPILER) test/test_nilpy_fstrings.npy /tmp/test_nilpy_fstrings26
 	# .expected file, not an inline printf: the !r cases contain single quotes,
 	# which a printf '...' literal cannot carry without unreadable escaping.

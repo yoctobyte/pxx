@@ -35,3 +35,29 @@ print(y.name)
 # the same shape one call deeper, so the identity has to survive a local
 z = make(make("inner").name)
 print(z.name)
+
+
+# FORWARD CALLS: `first` calls `second`, which is defined after it. Ordinary
+# Python, and it works because top-level def signatures are registered before
+# any body is parsed (PyRegisterDefShells). Before that it was an error.
+def first(n: int) -> int:
+    return second(n) + 1
+
+
+def second(n: int) -> int:
+    return n * 10
+
+
+print(first(4))
+
+
+# a forward call that also has to carry a CLASS result across the same edge
+def build_later() -> P:
+    return named_p()
+
+
+def named_p() -> P:
+    return make("late")
+
+
+print(build_later().name)
