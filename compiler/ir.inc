@@ -1279,7 +1279,7 @@ begin
     if ASTTk[baseNode] = Ord(tyClass) then
       baseAddr := IRLowerAST(baseNode)
     else if ((ASTKind[baseNode] = AN_CALL) or (ASTKind[baseNode] = AN_VIRTUAL_CALL))
-            and (ASTTk[baseNode] = Ord(tyRecord)) then
+            and ((ASTTk[baseNode] = Ord(tyRecord)) or (ASTTk[baseNode] = Ord(tyVariant))) then
       { Record-returning call result used as a field base (f(args).field): the
         call's IR value is the address of its hidden aggregate-result temp
         (aggregates are returned by-reference), so use it directly rather than
@@ -1313,6 +1313,11 @@ begin
     { `obj as IFoo` is an interface lvalue: the address of its fat-pointer temp. }
     Result := IRAppend(IR_LEA, IRMaterializeIntfCast(node, True), -1, -1, 0, Ord(tyPointer));
   end
+  else if ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL)) and
+          ((ASTTk[node] = Ord(tyRecord)) or (ASTTk[node] = Ord(tyVariant))) then
+    { Aggregate/variant-returning call in an address position: its IR value IS
+      the hidden-destination address (RetViaHiddenDest), so lower the call. }
+    Result := IRLowerAST(node)
   else
     Result := IRAppend(IR_UNSUPPORTED, ASTKind[node], ASTLeft[node], ASTRight[node], ASTIVal[node], ASTTk[node]);
 end;
@@ -1755,6 +1760,31 @@ begin
     ASTRight[caSlCall] := argAST;
     IRLowerAST(caSlCall);
     Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(Procs[cpi].Params[pathIdx].TypeKind));
+    Exit;
+  end;
+  { Scalar -> Variant boxing at a call boundary: a literal/scalar value passed
+    to a Variant parameter goes through a hidden variant temp via the ordinary
+    assignment path (IR_VAR_STORE owns the tagging), and the temp's ADDRESS is
+    the argument — a variant arg is always passed by address (see the
+    VariantToStr marshalling). Without this an `l.append(1)` hit
+    IR_UNSUPPORTED on the raw AN_INT_LIT (feature-core-variant-arg-boxing). }
+  if (cpi >= 0) and (pathIdx >= 0) and
+     (pathIdx < Procs[cpi].ParamCount) and
+     (Procs[cpi].Params[pathIdx].TypeKind = tyVariant) and
+     (IntToTypeKind(ASTTk[argAST]) <> tyVariant) then
+  begin
+    { Fires for const/by-value Variant params alike: a genuine `var Variant`
+      given a non-variant arg is already type-invalid, so losing its
+      write-back through the temp is not a supported case. }
+    tmpSym := AllocVar('', tyVariant);
+    caIdent := AllocNode(AN_IDENT);
+    ASTIVal[caIdent] := tmpSym;
+    ASTTk[caIdent] := Ord(tyVariant);
+    caSlCall := AllocNode(AN_ASSIGN);
+    ASTLeft[caSlCall] := caIdent;
+    ASTRight[caSlCall] := argAST;
+    IRLowerAST(caSlCall);
+    Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyVariant));
     Exit;
   end;
   { `@obj.Method` given directly to a method-pointer parameter (`of object`

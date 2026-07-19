@@ -1190,7 +1190,8 @@ procedure EmitWriteVariant;
 { On entry rax = address of a 16-byte variant slot: [tag:8][payload:8].
   Reads the tag and dispatches to the matching scalar writer. Clobbers the
   caller-saved set like the other write helpers; balances its own stack. }
-var pInt, pInt64, pBool, pDbl, pChar, pStr, pNil, jmpDefault, pEnd1, pEnd2, pEnd3: Integer;
+var pInt, pInt64, pBool, pDbl, pChar, pStr, pNil, jmpDefault, pEnd1, pEnd2, pEnd3,
+    pBoolF, pEnd4, trueOff, falseOff: Integer;
 begin
   EmitAsmX64(['push rax', 'mov rax, [rax]']);  { [rsp]=addr; rax=tag }
 
@@ -1208,13 +1209,39 @@ begin
   EmitB($0F); EmitB($84); pStr := CodeLen; EmitI32(0);
   EmitB($E9); jmpDefault := CodeLen; EmitI32(0);   { default (empty/object): nothing }
 
-  { integer/bool: payload as signed int64 }
+  { integer: payload as signed int64 }
   Patch32(pInt,   CodeLen - (pInt   + 4));
   Patch32(pInt64, CodeLen - (pInt64 + 4));
-  Patch32(pBool,  CodeLen - (pBool  + 4));
   EmitAsmX64(['mov rax, [rsp]', 'mov rax, [rax+8]']);   { addr; payload }
   EmitwriteInt;
   EmitB($E9); pEnd1 := CodeLen; EmitI32(0);
+
+  { bool: 0/1 -> False/True (Python spelling — the .npy print path; a Pascal
+    writeln of a Variant-held bool matches FPC's True/False rendering) }
+  trueOff := DataLen;
+  Data[DataLen] := Ord('T'); Inc(DataLen);
+  Data[DataLen] := Ord('r'); Inc(DataLen);
+  Data[DataLen] := Ord('u'); Inc(DataLen);
+  Data[DataLen] := Ord('e'); Inc(DataLen);
+  falseOff := DataLen;
+  Data[DataLen] := Ord('F'); Inc(DataLen);
+  Data[DataLen] := Ord('a'); Inc(DataLen);
+  Data[DataLen] := Ord('l'); Inc(DataLen);
+  Data[DataLen] := Ord('s'); Inc(DataLen);
+  Data[DataLen] := Ord('e'); Inc(DataLen);
+  Patch32(pBool, CodeLen - (pBool + 4));
+  EmitAsmX64(['mov rax, [rsp]', 'mov rax, [rax+8]', 'test rax, rax']);
+  EmitB($0F); EmitB($84); pBoolF := CodeLen; EmitI32(0);  { jz -> False }
+  EmitB($48); EmitB($BE); EmitDataRef(trueOff);           { mov rsi, &'True' }
+  EmitAsmX64(['mov rdx, %', 4]);
+  MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
+  EmitB($E9); pEnd4 := CodeLen; EmitI32(0);
+  Patch32(pBoolF, CodeLen - (pBoolF + 4));
+  EmitB($48); EmitB($BE); EmitDataRef(falseOff);          { mov rsi, &'False' }
+  EmitAsmX64(['mov rdx, %', 5]);
+  MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
+  Patch32(pEnd4, CodeLen - (pEnd4 + 4));
+  EmitB($E9); pEnd4 := CodeLen; EmitI32(0);
 
   { double: payload bits -> xmm0 }
   Patch32(pDbl, CodeLen - (pDbl + 4));
@@ -1245,6 +1272,7 @@ begin
   Patch32(pEnd1, CodeLen - (pEnd1 + 4));
   Patch32(pEnd2, CodeLen - (pEnd2 + 4));
   Patch32(pEnd3, CodeLen - (pEnd3 + 4));
+  Patch32(pEnd4, CodeLen - (pEnd4 + 4));
   EmitAsmX64(['add rsp, %', 8]);   { discard addr }
 end;
 

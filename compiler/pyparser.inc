@@ -20,6 +20,7 @@ type
   TPyLocalConstraint = record
     Name: AnsiString;
     TypeKind: TTypeKind;
+    RecCi: Integer;   { class index when TypeKind = tyClass, else -1 }
   end;
 
 const
@@ -114,6 +115,7 @@ end;
 
 var
   PyLastTypeCi: Integer;  { class index when PyParseType returned tyClass }
+  PyAnnLastCi: Integer;   { class index when PyAnnTypeAt returned tyClass }
 
 { Token-index annotation parser for the richer grammar dataclass fields use:
     NAME | NAME '[' ann {',' ann} ']' | "ForwardRef" | None
@@ -126,11 +128,13 @@ function PyAnnTypeAt(var i: Integer): TTypeKind;
 var lo: AnsiString; depth: Integer;
 begin
   Result := tyUnknown;
+  PyAnnLastCi := -1;
   if i >= MainProgramTokCount then Exit;
   if Tokens[i].Kind = tkString then
   begin
     { forward reference: "VM" }
-    if FindUClass(GetTokenStr(i)) >= 0 then Result := tyClass;
+    PyAnnLastCi := FindUClass(GetTokenStr(i));
+    if PyAnnLastCi >= 0 then Result := tyClass;
     Inc(i);
     Exit;
   end;
@@ -173,9 +177,32 @@ begin
     Result := tyPointer;
     Exit;
   end;
-  if (lo = 'list') or (lo = 'dict') or (lo = 'tuple') or (lo = 'set') then
-    Error('Nil Python: list/dict/tuple/set types are not supported yet');
-  if IsClassType(GetTokenStr(i)) then begin Result := tyClass; Inc(i); Exit; end;
+  if lo = 'list' then
+  begin
+    Inc(i);
+    if (i < MainProgramTokCount) and (Tokens[i].Kind = tkLBrack) then
+    begin
+      depth := 1; Inc(i);
+      while (i < MainProgramTokCount) and (depth > 0) do
+      begin
+        if Tokens[i].Kind = tkLBrack then Inc(depth)
+        else if Tokens[i].Kind = tkRBrack then Dec(depth);
+        Inc(i);
+      end;
+    end;
+    Result := tyClass;   { TPyList; element types are dynamic (variant slots) }
+    PyAnnLastCi := FindUClass('TPyList');
+    Exit;
+  end;
+  if (lo = 'dict') or (lo = 'tuple') or (lo = 'set') then
+    Error('Nil Python: dict/tuple/set types are not supported yet');
+  if IsClassType(GetTokenStr(i)) then
+  begin
+    Result := tyClass;
+    PyAnnLastCi := FindUClass(GetTokenStr(i));
+    Inc(i);
+    Exit;
+  end;
 end;
 
 function PyParseType: TTypeKind;
@@ -202,6 +229,7 @@ end;
 
 var
   PyInferName: AnsiString;  { name under type inference, for diagnostics }
+  PyInferLastCi: Integer;   { class index of the last tyClass inference result }
 
 function PyWidenErr: AnsiString;
 begin
@@ -475,11 +503,19 @@ function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth: Integer; tk: TTypeKind; name, lo: AnsiString;
 begin
   Result := tyUnknown;
+  PyInferLastCi := -1;
+  if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkLBrack) then
+  begin
+    Result := tyClass;   { list literal }
+    PyInferLastCi := FindUClass('TPyList');
+    Exit;
+  end;
   if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkIdent) and
      IsClassType(GetTokenStr(startIdx)) and (startIdx + 1 < endIdx) and
      (Tokens[startIdx + 1].Kind = tkLParen) then
   begin
     Result := tyClass;
+    PyInferLastCi := FindUClass(GetTokenStr(startIdx));
     Exit;
   end;
   i := startIdx;
@@ -532,6 +568,33 @@ begin
         begin
           si := FindSym(name);
           if si >= 0 then tk := Syms[si].TypeKind;
+        end;
+        { obj.method(...) on a class-typed name: the expression's type is the
+          METHOD's return type; skip the whole postfix chain. }
+        if (tk = tyClass) and (ci >= 0) and (PyLocals[ci].RecCi >= 0) and
+           (i + 3 < endIdx) and (Tokens[i + 1].Kind = tkDot) and
+           (Tokens[i + 2].Kind = tkIdent) and (Tokens[i + 3].Kind = tkLParen) then
+        begin
+          si := FindUMeth(PyLocals[ci].RecCi, GetTokenStr(i + 2));
+          if si >= 0 then
+          begin
+            tk := Procs[UMthProc_[si]].RetType;
+            if tk = tyClass then PyInferLastCi := ProcRetRecId[UMthProc_[si]];
+            i := i + 3; depth := 0;
+            while i < endIdx do
+            begin
+              if Tokens[i].Kind = tkLParen then Inc(depth)
+              else if Tokens[i].Kind = tkRParen then
+              begin
+                Dec(depth);
+                if depth = 0 then Break;
+              end;
+              Inc(i);
+            end;
+            Result := PyWiden(Result, tk);
+            Inc(i);
+            Continue;
+          end;
         end;
         { Subscript form `name[...]` on a string yields a char; skip the
           bracket group so the index expression's int does not widen the
@@ -592,6 +655,7 @@ begin
         if PyLocalCount >= PY_MAX_LOCALS then Error('Nil Python: too many inferred locals');
         PyLocals[PyLocalCount].Name := name;
         PyLocals[PyLocalCount].TypeKind := tk;
+        PyLocals[PyLocalCount].RecCi := PyInferLastCi;
         Inc(PyLocalCount);
       end
       else
@@ -646,6 +710,7 @@ begin
         if PyLocalCount >= PY_MAX_LOCALS then Error('Nil Python: too many inferred module locals');
         PyLocals[PyLocalCount].Name := name;
         PyLocals[PyLocalCount].TypeKind := tk;
+        PyLocals[PyLocalCount].RecCi := PyInferLastCi;
         Inc(PyLocalCount);
       end
       else
@@ -671,6 +736,7 @@ begin
         if PyLocalCount >= PY_MAX_LOCALS then Error('Nil Python: too many inferred module locals');
         PyLocals[PyLocalCount].Name := name;
         PyLocals[PyLocalCount].TypeKind := tk;
+        PyLocals[PyLocalCount].RecCi := PyInferLastCi;
         Inc(PyLocalCount);
       end
       else
@@ -840,6 +906,50 @@ begin
       end;
   end;
   Result := node;
+end;
+
+{ List literal [a, b, c] -> TPyList create + chained .append() calls, one
+  expression tree (append returns Self). Reached from ParseFactor's PyExprMode
+  tkLBrack branch, so nested literals in argument positions work too. }
+procedure PyParseListLiteral;
+var ci, recId, node, argNode, sizeNode, callNode, selfArg, valArg, mmi, mpi: Integer;
+begin
+  Expect(tkLBrack, '[');
+  ci := FindUClass('TPyList');
+  if ci < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  recId := REC_UCLASS_BASE + ci;
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := -Ord(tkGetMem);
+  ASTTk[node] := Ord(tyClass);
+  ASTRight[node] := recId;
+  sizeNode := AllocNode(AN_INT_LIT);
+  ASTIVal[sizeNode] := RecSize(recId);
+  ASTTk[sizeNode] := Ord(tyInteger);
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := sizeNode;
+  ASTLeft[node] := argNode;
+  mmi := FindUMeth(ci, 'append');
+  if mmi < 0 then Error('Nil Python: TPyList.append not found');
+  mpi := UMthProc_[mmi];
+  while CurTok.Kind <> tkRBrack do
+  begin
+    PyParseBoolExpr;
+    valArg := AllocNode(AN_ARG);
+    ASTLeft[valArg] := CurASTNode;
+    selfArg := AllocNode(AN_ARG);
+    ASTLeft[selfArg] := node;
+    ASTRight[selfArg] := valArg;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := mpi;
+    ASTTk[callNode] := Ord(tyClass);
+    ASTLeft[callNode] := selfArg;
+    node := callNode;
+    if not Eat(tkComma) then break;
+  end;
+  Expect(tkRBrack, ']');
+  { mark the outermost node so assignment RecName wiring sees a list; a
+    chained append is an ordinary AN_CALL whose result class is TPyList }
+  CurASTNode := node;
 end;
 
 procedure PyCoerceAssignmentRHS(lhsTk: TTypeKind; rhsNode: Integer);
@@ -1209,7 +1319,12 @@ begin
       symIdx := AllocVar(name, tk);
     end;
     if (ASTKind[rhsNode] = AN_CALL) and (ASTIVal[rhsNode] = -Ord(tkGetMem)) then
-      Syms[symIdx].RecName := ASTRight[rhsNode];
+      Syms[symIdx].RecName := ASTRight[rhsNode]
+    else if (ASTKind[rhsNode] = AN_CALL) and (ASTIVal[rhsNode] >= 0) and
+            (Procs[ASTIVal[rhsNode]].RetType = tyClass) then
+      { class-returning call (e.g. a chained list-literal append): carry the
+        result class so methods/subscripts on the variable resolve }
+      Syms[symIdx].RecName := ProcRetRecId[ASTIVal[rhsNode]];
     lhsNode := PyMakeIdent(symIdx);
     PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, rhsNode);
     node := AllocNode(AN_ASSIGN);
@@ -1415,7 +1530,11 @@ begin
         Error('Nil Python: duplicate dataclass field ' + GetTokenStr(i));
       sz := TypeSize(tk);
       curOff := AlignTo(curOff, TypeAlign(tk));
-      AddUField(ci, Tokens[i].SOffset, Tokens[i].SLen, curOff, Ord(tk), REC_NONE);
+      if (tk = tyClass) and (PyAnnLastCi >= 0) then
+        AddUField(ci, Tokens[i].SOffset, Tokens[i].SLen, curOff, Ord(tk),
+                  REC_UCLASS_BASE + PyAnnLastCi)
+      else
+        AddUField(ci, Tokens[i].SOffset, Tokens[i].SLen, curOff, Ord(tk), REC_NONE);
       Inc(curOff, sz);
       if PyDcCount >= PY_MAX_DC_FIELDS then
         Error('Nil Python: too many dataclass fields');
@@ -1626,7 +1745,9 @@ begin
                            UFldNLen[UClsFBase[ci] + i - 1]);
     idx := AllocParam(name, Procs[procIdx].Params[i].TypeKind, False, False);
     Procs[procIdx].Params[i].SymIdx := idx;
-    if i = 0 then Syms[idx].RecName := REC_UCLASS_BASE + ci;
+    if i = 0 then Syms[idx].RecName := REC_UCLASS_BASE + ci
+    else if Procs[procIdx].Params[i].TypeKind = tyClass then
+      Syms[idx].RecName := UFldRec_[UClsFBase[ci] + i - 1];
   end;
   Procs[procIdx].BodyAddr := CodeLen;
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
@@ -1702,7 +1823,6 @@ begin
   PyDcCount := 0;
   for i := 0 to PY_MAX_DC_FIELDS - 1 do PyDcClassIsDc[i] := False;
   PyRegisterClassShells;
-  PyCollectModuleLocals;
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
   BSS_HEAP_PTR    := BSSSize; Inc(BSSSize, 8);
   BSS_HEAP_END    := BSSSize; Inc(BSSSize, 8);
@@ -1754,6 +1874,7 @@ begin
   RegisterBuiltinTObject;
   ParseUsesUnit('builtinheap');
   if needsBuiltin then ParseUsesUnit('builtin');
+  ParseUsesUnit('pylib');
   PySkipNewlines;
   { A leading module docstring may precede the imports; consume it. }
   if (CurTok.Kind = tkString) and (TokPos < TokCount) and
@@ -1821,6 +1942,9 @@ begin
       PySkipNewlines;
     end;
   end;
+  { Module-local type collection runs AFTER the units above so proc return
+    types (len, VariantToStr, pylib methods) resolve during inference. }
+  PyCollectModuleLocals;
   PyExprMode := True;   { Pascal RTL units are loaded; from here on, .npy expression
                           parsing uses Python and/or/not precedence }
   mainNode := -1;

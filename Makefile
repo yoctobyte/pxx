@@ -179,11 +179,11 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_sqlite_crud.npy /tmp/test_nilpy_sqlite_crud26
 	test "$$(/tmp/test_nilpy_sqlite_crud26)" = "$$(printf '1 alice\n2 bob')"
 	./$(COMPILER) test/test_nilpy_variant.npy /tmp/test_nilpy_variant26
-	test "$$(/tmp/test_nilpy_variant26)" = "$$(printf '5\n3.14\n1')"
+	test "$$(/tmp/test_nilpy_variant26)" = "$$(printf '5\n3.14\nTrue')"
 	./$(COMPILER) test/test_nilpy_control.npy /tmp/test_nilpy_control26
 	test "$$(/tmp/test_nilpy_control26)" = "$$(printf '10\n20\n30\n6\n15\n6\n3')"
 	./$(COMPILER) test/test_nilpy_local_variant.npy /tmp/test_nilpy_local_variant26
-	test "$$(/tmp/test_nilpy_local_variant26)" = "$$(printf '5\n3.14\n1\n7')"
+	test "$$(/tmp/test_nilpy_local_variant26)" = "$$(printf '5\n3.14\nTrue\n7')"
 	./$(COMPILER) test/test_nilpy_numeric_widen.npy /tmp/test_nilpy_numeric_widen26
 	test "$$(/tmp/test_nilpy_numeric_widen26)" = "$$(printf '3.14')"
 	./$(COMPILER) test/test_nilpy_convert.npy /tmp/test_nilpy_convert26
@@ -214,6 +214,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_operators26)" = "$$(printf '61440\n65535\n3855\n1024\n256\n255\n32\n240\n15\n12\n24\n4\n1\n8\n9\n6\n96\n24\n142\n140\n2.5\n2.0\n3')"
 	./$(COMPILER) test/test_nilpy_annotated.npy /tmp/test_nilpy_annotated26
 	test "$$(/tmp/test_nilpy_annotated26)" = "$$(printf 'True\n42\n1.5\nhi')"
+	./$(COMPILER) test/test_nilpy_list.npy /tmp/test_nilpy_list26
+	test "$$(/tmp/test_nilpy_list26)" = "$$(printf '3\n1\n2\n3\n3\n4\n10\n42\n10\n3\n0\nhello\n2.5\nTrue')"
 	./$(COMPILER) test/test_nilpy_optional.npy /tmp/test_nilpy_optional26
 	test "$$(/tmp/test_nilpy_optional26)" = "$$(printf 'dup\n0\nFalse\n65536')"
 	./$(COMPILER) test/test_nilpy_dataclass.npy /tmp/test_nilpy_dataclass26
@@ -2872,7 +2874,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_nested_cow.pas /tmp/test_nested_cow26
 	test "$$(/tmp/test_nested_cow26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_variant.pas /tmp/test_variant26
-	test "$$(/tmp/test_variant26)" = "$$(printf '42\n-7\nQ\n3.14\n1\n100')"
+	test "$$(/tmp/test_variant26)" = "$$(printf '42\n-7\nQ\n3.14\nTrue\n100')"
 	./$(COMPILER) test/test_variant_ops.pas /tmp/test_variant_ops26
 	test "$$(/tmp/test_variant_ops26)" = "$$(printf '8\n2\n15\n7.5\n12.5\nTRUE\nFALSE\nFALSE\nTRUE\nTRUE\n11\nTRUE')"
 	./$(COMPILER) test/test_variant_div.pas /tmp/test_variant_div26
@@ -2886,7 +2888,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_nil_python_core.npy /tmp/test_nil_python_core26
 	test "$$(/tmp/test_nil_python_core26)" = "$$(printf '0\n1\n1\n2\n3\n5\n10')"
 	./$(COMPILER) test/test_nilpy_variant.npy /tmp/test_nilpy_variant26
-	test "$$(/tmp/test_nilpy_variant26)" = "$$(printf '5\n3.14\n1')"
+	test "$$(/tmp/test_nilpy_variant26)" = "$$(printf '5\n3.14\nTrue')"
 	./$(COMPILER) test/test_nilpy_class.npy /tmp/test_nilpy_class26
 	test "$$(/tmp/test_nilpy_class26)" = "25"
 	./$(COMPILER) test/test_nilpy_widen_fix.npy /tmp/test_nilpy_widen_fix26

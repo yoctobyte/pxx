@@ -713,6 +713,7 @@ end;
 
 procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
+procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 
 { Read/Write/Readln/Writeln are intrinsics resolved by context at the call site,
   not true reserved words — FPC lets a user declaration shadow them. Accept them
@@ -6975,8 +6976,16 @@ begin
     end;
     tkLBrack:
     begin
-      CurASTNode := ParseSetLiteralAST;
-      LastExprTk := tySet;
+      if PyExprMode then
+      begin
+        PyParseListLiteral;
+        LastExprTk := tyClass;
+      end
+      else
+      begin
+        CurASTNode := ParseSetLiteralAST;
+        LastExprTk := tySet;
+      end;
     end;
     tkNil:
     begin
@@ -10228,9 +10237,14 @@ begin
                 open-array temp. `@obj.Method` is materialised into a method-pointer
                 record temp at IR lowering, so it too is a valid non-lvalue record
                 argument. }
-              if not ((IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
+              { A `const Variant` param likewise accepts a non-lvalue: the
+                scalar is boxed into a hidden variant temp at IR lowering
+                (IRLowerCallArg) and the temp's address is passed. }
+              if not (((IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
                       (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
-                       not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) then
+                       not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) or
+                      ((Procs[procIdx].Params[i].TypeKind = tyVariant) and
+                       ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i])) then
   Error('by-reference argument must be a variable');
             end;
           end;
@@ -15915,9 +15929,12 @@ begin
                   temporary (>8-byte records are by-ref only for ABI; the callee
                   copies). Only a genuine `var`/`out` record needs a true lvalue.
                   `@obj.Method` is materialised into a method-pointer record temp. }
-                if not ((IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
+                { const Variant: non-lvalue boxed at IR lowering (see above) }
+                if not (((IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
                         (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
-                         not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) then
+                         not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) or
+                        ((Procs[procIdx].Params[i].TypeKind = tyVariant) and
+                         ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i])) then
                   Error('by-reference argument must be a variable');
               end;
             end;
@@ -19107,6 +19124,7 @@ var
   fldNLens: array[0..MAX_PROC_PARAMS-1] of Integer;
   nFldNames, fni: Integer;
   mPByRef: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  mPConst: array[0..MAX_PROC_PARAMS-1] of Boolean;
   mPUntyped: array[0..MAX_PROC_PARAMS-1] of Boolean;
   mPDefault: array[0..MAX_PROC_PARAMS-1] of Boolean;
   mPDefaultVal: array[0..MAX_PROC_PARAMS-1] of Int64;
@@ -19349,7 +19367,7 @@ begin
               if mSawConst and ((mTk = tyRecord) or (mTk = tyVariant)) and not mIsArr then
                 mIsByRef := True;
               for i := mStartIdx to mNParams-1 do
-              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; mPDefault[i] := mHasDefault; mPDefaultVal[i] := mDefaultVal; mPDefaultIsStr[i] := mDefaultIsStr; mPDefaultIsSet[i] := mDefaultIsSet; mPDefaultSOff[i] := mDefaultSOff; mPDefaultSLen[i] := mDefaultSLen; end;
+              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; mPConst[i] := mSawConst; mPDefault[i] := mHasDefault; mPDefaultVal[i] := mDefaultVal; mPDefaultIsStr[i] := mDefaultIsStr; mPDefaultIsSet[i] := mDefaultIsSet; mPDefaultSOff[i] := mDefaultSOff; mPDefaultSLen[i] := mDefaultSLen; end;
               if not Eat(tkSemicolon) then mDoneArgs := True;
             end;
             Expect(tkRParen, ')');
@@ -19364,8 +19382,8 @@ begin
           Eat(tkSemicolon);
           { inject implicit Self (the instance) at param 0, like a class method }
           for i := mNParams downto 1 do
-          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
-          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPArr[0] := False; mPByRef[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultIsSet[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
+          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPConst[i] := mPConst[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
+          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPArr[0] := False; mPByRef[0] := False; mPConst[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultIsSet[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
           mNParams := mNParams + 1;
           mFullName := tname; AppendChar(mFullName, '.');
           for i := 1 to Length(mname) do AppendChar(mFullName, mname[i]);
@@ -19382,6 +19400,7 @@ begin
           for i := 0 to mNParams-1 do
           begin
             Procs[mpi].Params[i].IsArray := mPArr[i]; Procs[mpi].Params[i].IsRef := mPByRef[i];
+            if i < MAX_PROC_PARAMS then ProcParamIsConst[mpi * MAX_PROC_PARAMS + i] := mPConst[i];
             if (i < MAX_PROC_PARAMS) and mPDefault[i] then
             begin
               ProcParamHasDefault[mpi * MAX_PROC_PARAMS + i] := True;
@@ -19817,6 +19836,7 @@ begin
                   mPTypesRec[i] := LastTypeRecId;
                   mPArr[i] := mIsArr;
                   mPByRef[i] := mIsByRef;
+                  mPConst[i] := mSawConst;
                   mPUntyped[i] := mIsUntyped;
                   mPDefault[i] := mHasDefault;
                   mPDefaultVal[i] := mDefaultVal;
@@ -19852,6 +19872,7 @@ begin
                 mPTypesRec[i] := mPTypesRec[i-1];
                 mPArr[i]   := mPArr[i-1];
                 mPByRef[i] := mPByRef[i-1];
+                mPConst[i] := mPConst[i-1];
                 mPUntyped[i] := mPUntyped[i-1];
                 mPDefault[i] := mPDefault[i-1];
                 mPDefaultVal[i] := mPDefaultVal[i-1];
@@ -19866,6 +19887,7 @@ begin
               mPTypesRec[0] := REC_NONE;   { must agree with the impl side's Self }
               mPArr[0]   := False;
               mPByRef[0] := False;
+              mPConst[0] := False;
               mPUntyped[0] := False;
               mPDefault[0] := False;
               mPDefaultVal[0] := 0;
@@ -19911,6 +19933,7 @@ begin
                 end;
                 Procs[mpi].Params[i].IsArray := mPArr[i];
                 Procs[mpi].Params[i].IsRef := mPByRef[i];
+                if i < MAX_PROC_PARAMS then ProcParamIsConst[mpi * MAX_PROC_PARAMS + i] := mPConst[i];
                 if (mPTypes[i] = tyClass) or (mPTypes[i] = tyRecord) then
                   Procs[mpi].Params[i].SymIdx := -1;
               end;

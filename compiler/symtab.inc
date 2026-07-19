@@ -1738,7 +1738,10 @@ function RetViaHiddenDest(tk: TTypeKind): Boolean;
   address (not reentrant, bug-frozen-string-result-global). A default frozen
   `string` result is capped at LOCAL_STR_CAP (256, the ShortString norm). }
 begin
-  Result := TypeIsAggregate(tk) or TypeIsFrozenString(tk);
+  { tyVariant added for Variant-returning functions (pylib TPyList.get/pop —
+    the first in the codebase): 16-byte result via the same caller-owned
+    hidden destination as records (feature-core-variant-function-return). }
+  Result := TypeIsAggregate(tk) or TypeIsFrozenString(tk) or (tk = tyVariant);
 end;
 
 function AggRetCopySize(retSymIdx: Integer): Integer;

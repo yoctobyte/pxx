@@ -1,0 +1,22 @@
+xs = [1, 2, 3]
+print(len(xs))
+print(xs[0])
+print(xs[1])
+print(xs[2])
+print(xs[-1])
+xs.append(10)
+print(len(xs))
+print(xs[3])
+xs[1] = 42
+print(xs[1])
+v = xs.pop()
+print(v)
+print(len(xs))
+ys = []
+print(len(ys))
+ys.append("hello")
+ys.append(2.5)
+ys.append(True)
+print(ys[0])
+print(ys[1])
+print(ys[2])
