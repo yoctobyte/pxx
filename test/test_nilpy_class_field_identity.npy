@@ -1,0 +1,29 @@
+# A class-typed FIELD must keep its class identity, so a second-level member
+# access through it resolves (bug-nilpy-class-typed-field-loses-identity).
+#
+# Before the fix the field was registered with REC_NONE, so `o.inner.name`
+# fell back to Integer and printed the raw object pointer — silently. This is
+# the uforth.py:190 shape (`t.word.name`).
+
+class Inner:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+class Mid:
+    def __init__(self, inner: Inner) -> None:
+        self.inner = inner
+
+class Outer:
+    def __init__(self, mid: Mid) -> None:
+        self.mid = mid
+
+o = Outer(Mid(Inner("dup")))
+
+# two levels
+print(o.mid.inner.name)
+# one level
+m = Mid(Inner("swap"))
+print(m.inner.name)
+# the str-method chain on top of a field chain — the literal uforth shape
+print(o.mid.inner.name.upper())
+print(m.inner.name.upper())

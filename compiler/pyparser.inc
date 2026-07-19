@@ -1957,9 +1957,49 @@ begin
     end;
 end;
 
+{ The CLASS a type-annotation token names, as a rec id (REC_NONE if it is not a
+  user class). PyTypeFromTokenIndex reports tyClass but throws the identity
+  away, and a tyClass field stored with REC_NONE cannot resolve its own members —
+  `o.inner.name` fell back to Integer and printed the raw object pointer,
+  silently (bug-nilpy-class-typed-field-loses-identity). The dataclass path
+  already did this via PyAnnLastCi; these two give the __init__-annotation path
+  the same.
+
+  Fixes the direct chain only, which is the parser path. Two siblings are STILL
+  broken and tracked in that ticket, both blocked on the same ordering problem:
+  PyCollectModuleLocals runs BEFORE any class member is registered
+  (PyRegisterClassShells registers names only), so at module-local inference
+  time every class has zero fields —
+    x = o.inner   (local hop)   the local cannot learn the field's class
+    o.inner.m()   (method call) returns garbage
+  Do not "fix" those by walking fields during inference; there is nothing to
+  walk yet. }
+function PyRecFromTokenIndex(i: Integer): Integer;
+var ci: Integer;
+begin
+  Result := REC_NONE;
+  if (i < 0) or (i >= TokCount) then Exit;
+  if Tokens[i].Kind <> tkIdent then Exit;
+  ci := FindUClass(GetTokenStr(i));
+  if ci >= 0 then Result := REC_UCLASS_BASE + ci;
+end;
+
+function PyHeaderParamRec(methodStart, stopIdx: Integer; const name: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := REC_NONE;
+  for i := methodStart to stopIdx - 2 do
+    if (Tokens[i].Kind = tkIdent) and (GetTokenStr(i) = name) and
+       (Tokens[i + 1].Kind = tkColon) then
+    begin
+      Result := PyRecFromTokenIndex(i + 2);
+      Exit;
+    end;
+end;
+
 procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean);
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, slot, curOff, align, sz: Integer;
-    origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
+    origName, name, fullName, rhsName: AnsiString; isCtor: Boolean; fldRec: Integer;
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
     tk: TTypeKind; defKind: Integer; defIVal: Int64; defSOff, defSLen: Integer;
 begin
@@ -2166,19 +2206,22 @@ begin
              (Tokens[j + 3].Kind = tkAssign) then
           begin
             tk := PyTypeFromTokenIndex(j + 4);
+            fldRec := PyRecFromTokenIndex(j + 4);
             if (tk = tyUnknown) and (Tokens[j + 4].Kind = tkIdent) then
             begin
               rhsName := GetTokenStr(j + 4);
               tk := PyHeaderParamType(methodStart, j, rhsName);
+              fldRec := PyHeaderParamRec(methodStart, j, rhsName);
             end;
             if tk = tyUnknown then Error('Nil Python: cannot infer class field type');
             { see the dataclass branch: str fields are managed, not string[N] }
             if tk = tyString then tk := tyAnsiString;
+            if tk <> tyClass then fldRec := REC_NONE;
             if FindUField(ci, GetTokenStr(j + 2)) < 0 then
             begin
               sz := TypeSize(tk);
               curOff := AlignTo(curOff, TypeAlign(tk));
-              AddUField(ci, Tokens[j + 2].SOffset, Tokens[j + 2].SLen, curOff, Ord(tk), REC_NONE);
+              AddUField(ci, Tokens[j + 2].SOffset, Tokens[j + 2].SLen, curOff, Ord(tk), fldRec);
               Inc(curOff, sz);
             end;
           end;
