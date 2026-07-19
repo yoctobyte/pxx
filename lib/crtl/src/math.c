@@ -774,6 +774,29 @@ double asinh(double x) {
   return x < 0.0 ? -r : r;
 }
 
+/* Correctly-rounded hypot: scale by the larger magnitude's exponent, sum
+   the exact squared dds, dd sqrt, scale back. NOT named hypot: Pascal
+   Hypot (overloaded) collides — math.h maps it (the b377 landmine). */
+double __crtl_hypot(double x, double y) {
+  double ax = fabs(x), ay = fabs(y), t;
+  unsigned long long b;
+  int e;
+  crtl_dd p, s;
+  if (isinf(x) || isinf(y)) return crtl_bits2d(0x7FF0000000000000ull);
+  if (x != x || y != y) return x + y;              /* NaN (after inf rule) */
+  if (ax < ay) { t = ax; ax = ay; ay = t; }
+  if (ay == 0.0) return ax;
+  if (ay < ax * crtl_bits2d(0x3C30000000000000ull))  /* ay/ax < 2^-60 */
+    return ax;                                       /* offset < 2^-121 rel */
+  b = *(unsigned long long *)&ax;
+  if ((b >> 52) == 0ull) e = -1022; else e = (int)(b >> 52) - 1023;
+  ax = ldexp(ax, -e);                              /* exact, [1,2) or subnormal-lifted */
+  ay = ldexp(ay, -e);                              /* >= 2^-61: exact */
+  p = crtl_dd_add(crtl_2prod(ax, ax), crtl_2prod(ay, ay));
+  s = crtl_dd_sqrt(p);
+  return crtl_dd_scale(s, e);
+}
+
 double atanh(double x) {
   double ax = fabs(x), r;
   crtl_dd num, den, w, w2, one;

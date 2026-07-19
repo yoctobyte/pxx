@@ -54,6 +54,8 @@ extern double __crtl_tanh(double x);
 #define sinh(x) __crtl_sinh(x)
 #define cosh(x) __crtl_cosh(x)
 #define tanh(x) __crtl_tanh(x)
+extern double __crtl_hypot(double x, double y);
+#define hypot(x, y) __crtl_hypot(x, y)
 extern double pow(double x, double y);
 extern double fmod(double x, double y);
 extern double frexp(double x, int *e);
