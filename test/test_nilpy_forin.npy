@@ -69,3 +69,26 @@ acc = ""
 for ch in "xyz":
     acc = acc + ch
 print(acc)
+
+# EMPTY containers run the body zero times. Worth its own case: the index
+# starts at -1 and the condition tests i+1, so an empty container is exactly
+# where an off-by-one would show.
+count = 0
+empty_list = []
+for e in empty_list:
+    count = count + 1
+print(count)
+
+empty_dict = {}
+for e in empty_dict:
+    count = count + 1
+print(count)
+
+for e in "":
+    count = count + 1
+print(count)
+
+one = [7]
+for e in one:
+    count = count + 1
+print(count)
