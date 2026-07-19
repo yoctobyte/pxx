@@ -1,0 +1,43 @@
+# NilPy str methods: .upper() / .lower() (feature-nilpy-str-methods).
+#
+# Covers every BASE form, because they take different parse routes: an ident
+# and a field access are lvalues and go through the shared parser's postfix
+# path, while a literal and a call result are not and are picked up by
+# PyParseBitOperand's tail. uforth's two real shapes are str(t).upper() and
+# t.word.name.upper(), one of each.
+#
+# ASCII-only case mapping for now: the non-ASCII bytes below must pass through
+# UNCHANGED rather than be mangled, which is what makes the emoji-bearing
+# uforth word names safe.
+
+def name_of(n: int) -> str:
+    return "word" + str(n)
+
+class W:
+    def __init__(self, nm: str) -> None:
+        self.nm = nm
+
+s = "Hello, World! 123"
+
+print(s.upper())
+print(s.lower())
+
+print("MiXeD".upper())
+print("MiXeD".lower())
+
+print(str(42).upper())
+print(name_of(7).upper())
+
+print(s.upper().lower())
+print(s.lower().upper())
+
+w = W("forth")
+print(w.nm.upper())
+
+print("".upper())
+print("already upper".upper())
+print("ALREADY LOWER".lower())
+print("digits 0123 and !@# stay".upper())
+print("emoji stays >>> ok".upper())
+
+print(s)

@@ -417,8 +417,10 @@ begin
 end;
 
 { Bitwise-not / comparison+arithmetic atom. `~` binds like a unary op. }
+function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward;
+
 procedure PyParseBitOperand;
-var node: Integer;
+var node: Integer; smName: AnsiString;
 begin
   if PyIsIdent('isinstance') and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkLParen) then
@@ -437,7 +439,26 @@ begin
     CurASTNode := node;
   end
   else
+  begin
     ParseExpr;   { comparison + arithmetic atom }
+    { str methods on a NON-LVALUE base. The shared parser's postfix `.member`
+      path (parser.inc) catches ident/field bases, because those go through
+      ParseLValueAST — but a string LITERAL and a CALL RESULT are not lvalues,
+      so `"x".upper()` and uforth's `str(t).upper()` come back here with CurTok
+      still on the '.'. Same desugar either way, so both routes share
+      PyParseStrMethod. Loops for chains like `str(t).upper().lower()`. }
+    while (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
+          (Tokens[TokPos].Kind = tkIdent) and
+          (Tokens[TokPos + 1].Kind = tkLParen) and
+          ((IntToTypeKind(ASTTk[CurASTNode]) = tyString) or
+           (IntToTypeKind(ASTTk[CurASTNode]) = tyAnsiString)) do
+    begin
+      Next;                      { consume '.'; CurTok = the method name }
+      smName := GetTokenStr(TokPos - 1);
+      Next;                      { consume the name; CurTok = '(' }
+      CurASTNode := PyParseStrMethod(CurASTNode, smName);
+    end;
+  end;
 end;
 
 procedure PyParseShift;
@@ -767,6 +788,35 @@ begin
             Inc(i);
             Continue;
           end;
+        end;
+        { Method form `name.upper(...)` on a string: the expression's type is
+          the str method's result, and the whole postfix chain is skipped so the
+          method name (a bare ident to this scanner) does not widen the result
+          to variant — which would make an inferred local a variant and then
+          scalar-load its TAG on return. Kept in step with PyParseStrMethod's
+          table; anything not listed there Errors at parse time, so an unknown
+          name never reaches here. }
+        if ((tk = tyString) or (tk = tyAnsiString)) and (i + 3 < endIdx) and
+           (Tokens[i + 1].Kind = tkDot) and (Tokens[i + 2].Kind = tkIdent) and
+           (Tokens[i + 3].Kind = tkLParen) and
+           (CaseEqual(GetTokenStr(i + 2), 'upper') or
+            CaseEqual(GetTokenStr(i + 2), 'lower')) then
+        begin
+          tk := tyAnsiString;
+          i := i + 3; depth := 0;
+          while i < endIdx do
+          begin
+            if Tokens[i].Kind = tkLParen then Inc(depth)
+            else if Tokens[i].Kind = tkRParen then
+            begin
+              Dec(depth);
+              if depth = 0 then Break;
+            end;
+            Inc(i);
+          end;
+          Result := PyWiden(Result, tk);
+          Inc(i);
+          Continue;
         end;
         { Subscript form `name[...]` on a string yields a char; skip the
           bracket group so the index expression's int does not widen the
@@ -1147,6 +1197,65 @@ begin
       end;
   end;
   Result := node;
+end;
+
+{ Nil Python str methods: `s.upper()` -> pylib pystr_upper(s).
+
+  Reached from the shared parser's postfix `.member` branch (parser.inc) once
+  the base expression is known to be string-typed and PyExprMode is on; the
+  method name is already consumed, CurTok is the '('. Returns the AN_CALL node
+  with ASTTk set to the method's result type, which the caller feeds back into
+  its suffix loop so chains keep parsing.
+
+  Adding a method = one row here plus the pylib function. Keep the two in step:
+  an unknown name must Error, never fall through to the record-field path,
+  which would build a bogus field access on a string (the tarrconstr8 class of
+  silent breakage the array guard above this site exists to prevent). }
+function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer;
+var pname: AnsiString;
+    retTk: TTypeKind;
+    procIdx, callNode, argNode, lastArg, i: Integer;
+begin
+  retTk := tyAnsiString;
+  if CaseEqual(mname, 'upper') then pname := 'pystr_upper'
+  else if CaseEqual(mname, 'lower') then pname := 'pystr_lower'
+  else
+  begin
+    pname := '';
+    Error('Nil Python: unsupported str method .' + mname + '() (have: upper, lower)');
+  end;
+
+  procIdx := FindProc(pname);
+  if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+
+  { the string itself is argument 0 — the receiver }
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := baseNode;
+  lastArg := argNode;
+
+  Expect(tkLParen, '(');
+  i := 0;
+  while CurTok.Kind <> tkRParen do
+  begin
+    PyParseBoolExpr;
+    callNode := AllocNode(AN_ARG);
+    ASTLeft[callNode] := CurASTNode;
+    ASTRight[lastArg] := callNode;
+    lastArg := callNode;
+    Inc(i);
+    if CurTok.Kind = tkComma then Next
+    else Break;
+  end;
+  Expect(tkRParen, ')');
+  if i <> 0 then
+    Error('Nil Python: str method .' + mname + '() takes no arguments');
+
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := procIdx;
+  ASTTk[callNode] := Ord(retTk);
+  ASTLeft[callNode] := argNode;
+  LastExprTk := retTk;
+  Result := callNode;
 end;
 
 { List literal [a, b, c] -> TPyList create + chained .append() calls, one

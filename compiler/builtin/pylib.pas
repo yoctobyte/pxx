@@ -60,7 +60,44 @@ function pycontains(l: TPyList; const v: Variant): Boolean;
 function pyvartag(const v: Variant): Int64;
 function pyvarobj(const v: Variant): Pointer;
 
+{ str methods. The frontend desugars `s.upper()` into pystr_upper(s) — see
+  PyParseStrMethod. ASCII-only for now: CPython's str.upper() is full-Unicode
+  (and locale-independent), which needs a case-mapping table this unit does not
+  carry yet. uforth's word names are ASCII plus emoji, and emoji are
+  case-stable, so the corpus is unaffected; a non-ASCII byte passes through
+  untouched rather than being mangled. Tracked in feature-nilpy-str-methods. }
+function pystr_upper(const s: AnsiString): AnsiString;
+function pystr_lower(const s: AnsiString): AnsiString;
+
 implementation
+
+function pystr_upper(const s: AnsiString): AnsiString;
+var i: Integer;
+    c: Char;
+begin
+  Result := '';
+  for i := 1 to Length(s) do
+  begin
+    c := s[i];
+    if (c >= 'a') and (c <= 'z') then
+      c := Chr(Ord(c) - 32);
+    Result := Result + c;
+  end;
+end;
+
+function pystr_lower(const s: AnsiString): AnsiString;
+var i: Integer;
+    c: Char;
+begin
+  Result := '';
+  for i := 1 to Length(s) do
+  begin
+    c := s[i];
+    if (c >= 'A') and (c <= 'Z') then
+      c := Chr(Ord(c) + 32);
+    Result := Result + c;
+  end;
+end;
 
 function pyvartag(const v: Variant): Int64;
 begin

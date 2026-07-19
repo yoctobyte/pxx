@@ -714,6 +714,7 @@ end;
 procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
+function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 procedure PyParseSetLiteral; forward;  { Nil Python {a, b} literal (pyparser.inc) }
 function PyClassCreateExpr: Integer; forward; { Nil Python ClassName(args) ctor (pyparser.inc) }
 
@@ -4420,6 +4421,23 @@ begin
           tk := tyRecord;
           recName := peRec;
         end;
+      end;
+
+      { Nil Python str methods: `s.upper()` on a string-typed base desugars to a
+        pylib call (pystr_upper(s)). Gated on PyExprMode so the Pascal dialect,
+        where a string has no members, keeps its existing diagnostics. Delegated
+        to pyparser.inc like PyParseListLiteral — the shared parser only needs to
+        know WHERE the form is legal, not what the method set is. `tk` is updated
+        from the call's return type so the suffix loop keeps chaining
+        (`s.strip().upper()`). }
+      if PyExprMode and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+         ((tk = tyString) or (tk = tyAnsiString)) then
+      begin
+        Next;   { consume the method name; CurTok is now the '(' }
+        node := PyParseStrMethod(node, fieldName);
+        tk := IntToTypeKind(ASTTk[node]);
+        recName := REC_NONE;
+        Continue;
       end;
 
       { Metaclass-dispatched construction `classRef.Create(args)`: the base is a

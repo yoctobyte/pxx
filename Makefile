@@ -224,6 +224,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_membership26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue')"
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
+	./$(COMPILER) test/test_nilpy_str_methods.npy /tmp/test_nilpy_str_methods26
+	test "$$(/tmp/test_nilpy_str_methods26)" = "$$(printf 'HELLO, WORLD! 123\nhello, world! 123\nMIXED\nmixed\n42\nWORD7\nhello, world! 123\nHELLO, WORLD! 123\nFORTH\n\nALREADY UPPER\nalready lower\nDIGITS 0123 AND !@# STAY\nEMOJI STAYS >>> OK\nHello, World! 123')"
 	./$(COMPILER) test/test_nilpy_isinstance.npy /tmp/test_nilpy_isinstance26
 	test "$$(/tmp/test_nilpy_isinstance26)" = "$$(printf 'num\nnum\ntext\nword\ncall\nnum')"
 	./$(COMPILER) test/test_nilpy_optional.npy /tmp/test_nilpy_optional26
