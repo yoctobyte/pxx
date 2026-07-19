@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-18T06:21:40Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "4e380fda9a3dd5e76c35969b1edf71967d63babf",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-18T06:32:15Z",
    "fixed": [],
    "new_red": [
@@ -5365,6 +5357,14 @@
    "sha": "e6701a685348d51a5c80c90bba3ca7c4acbedf2c",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-19T11:58:21Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "e6701a685348d51a5c80c90bba3ca7c4acbedf2c",
+   "tier": "full",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -6894,11 +6894,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-19T11:50:17Z",
+  "date": "2026-07-19T11:58:21Z",
   "sha": "e6701a685348d51a5c80c90bba3ca7c4acbedf2c",
-  "tier": "native",
+  "tier": "full",
   "verdict": "GREEN",
-  "wall": 332.4
+  "wall": 475.7
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6908,11 +6908,11 @@
   "sha": "bce307bbfb008e3a71bbb4cc23a3522b0397b46e"
  },
  "last_full": {
-  "date": "2026-07-19T11:28:17Z",
-  "sha": "bce307bbfb008e3a71bbb4cc23a3522b0397b46e",
+  "date": "2026-07-19T11:58:21Z",
+  "sha": "e6701a685348d51a5c80c90bba3ca7c4acbedf2c",
   "tier": "full",
   "verdict": "GREEN",
-  "wall": 415.0
+  "wall": 475.7
  },
  "last_opt": {
   "date": "2026-07-19T11:32:59Z",
