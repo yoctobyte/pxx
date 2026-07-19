@@ -67,3 +67,6 @@ return a TPyList of keys and grow later.
 `test-nilpy` green (with new `.npy` cases diffed against CPython as the
 oracle) + `--tier quick` + self-host byte-identical + `make fpc-check`
 (see [[feedback_fpc_bootstrap_advisory_invisible_to_local_gate]]).
+
+## Log
+- 2026-07-19 — resolved, commit 77a39b40.
