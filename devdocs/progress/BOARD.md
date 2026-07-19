@@ -30,10 +30,11 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (127)
+## backlog (128)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-nilpy-and-or-in-unavailable-in-call-arguments | A | 65 | bug | NilPy `and` / `or` / `in` / `is` do not work in a CALL ARGUMENT | — |
 | bug-a-nilpy-str-of-string-and-bool | A | 60 | bug | NilPy `str()` prints a string's POINTER and a bool's 1 | — |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
@@ -2524,6 +2525,7 @@ _none_
 - [urgent p 75] [N] bug-nilpy-method-returning-str-garbage
 - [p 70] [T] regression-optdiff-shard0-6
 - [p 70] [T] regression-optdiff-shard5-6
+- [p 65] [A] bug-a-nilpy-and-or-in-unavailable-in-call-arguments
 - [p 65] [A] feature-a-typeref-handle
 - [p 60] [A] bug-a-nilpy-str-of-string-and-bool
 - [p 60] [U] decide-abi-portable-vs-target-split
