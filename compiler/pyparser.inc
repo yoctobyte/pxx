@@ -714,7 +714,7 @@ begin
 end;
 
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
-var i, ci, si, procIdx, depth, smArgs: Integer; tk: TTypeKind;
+var i, ci, si, procIdx, depth, smArgs, fci, fi: Integer; tk: TTypeKind;
     name, lo, smPName: AnsiString;
 begin
   Result := tyUnknown;
@@ -838,6 +838,36 @@ begin
             Inc(i);
             Continue;
           end;
+        end;
+        { Plain `.field` chain on a class-typed name (no call parens): follow it
+          so the inferred type AND class identity are the FINAL field's.
+          Without it `x = o.inner` left x as tyClass with no identity and the
+          later `x.name` mis-resolved to Integer, printing a raw pointer.
+          Depends on PyRegisterClassFieldsPrepass having run — before that,
+          every class had zero fields at this point and there was nothing to
+          walk. The method form below handles the `(`-terminated case. }
+        if (tk = tyClass) and (ci >= 0) and (PyLocals[ci].RecCi >= 0) and
+           (i + 2 < endIdx) and (Tokens[i + 1].Kind = tkDot) and
+           (Tokens[i + 2].Kind = tkIdent) and
+           not ((i + 3 < endIdx) and (Tokens[i + 3].Kind = tkLParen)) then
+        begin
+          fci := PyLocals[ci].RecCi;
+          Inc(i);
+          while (i + 1 < endIdx) and (Tokens[i].Kind = tkDot) and
+                (Tokens[i + 1].Kind = tkIdent) and (fci >= 0) do
+          begin
+            fi := FindUField(fci, GetTokenStr(i + 1));
+            if fi < 0 then Break;
+            tk := IntToTypeKind(UFldTk[fi]);
+            if (tk = tyClass) and (UFldRec_[fi] >= REC_UCLASS_BASE) then
+              fci := UFldRec_[fi] - REC_UCLASS_BASE
+            else
+              fci := -1;
+            i := i + 2;
+          end;
+          if tk = tyClass then PyInferLastCi := fci;
+          Result := PyWiden(Result, tk);
+          Continue;
         end;
         { Method form `name.upper(...)` on a string: the expression's type is
           the str method's result, and the whole postfix chain is skipped so the
@@ -1818,7 +1848,14 @@ begin
             (Procs[ASTIVal[rhsNode]].RetType = tyClass) then
       { class-returning call (e.g. a chained list-literal append): carry the
         result class so methods/subscripts on the variable resolve }
-      Syms[symIdx].RecName := ProcRetRecId[ASTIVal[rhsNode]];
+      Syms[symIdx].RecName := ProcRetRecId[ASTIVal[rhsNode]]
+    else if (Syms[symIdx].TypeKind = tyClass) and
+            (ResolveNodeRec(rhsNode) >= REC_UCLASS_BASE) then
+      { any other class-valued RHS — notably a FIELD access, `x = o.inner`.
+        Without this the local was declared tyClass with no RecName, so the
+        later `x.name` had no class to resolve against and read the object
+        pointer as the field (bug-nilpy-class-typed-field-loses-identity). }
+      Syms[symIdx].RecName := ResolveNodeRec(rhsNode);
     lhsNode := PyMakeIdent(symIdx);
     PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, rhsNode);
     node := AllocNode(AN_ASSIGN);
@@ -1997,7 +2034,17 @@ begin
     end;
 end;
 
-procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean);
+{ fieldsOnly = the PRE-PASS: register this class's FIELDS and nothing else.
+  PyCollectModuleLocals runs before the main loop that parses classes, so
+  without a pre-pass every class has zero fields during module-local inference
+  and `x = o.inner` cannot learn the field's class
+  (bug-nilpy-class-typed-field-loses-identity). Sharing one procedure keeps the
+  field rules in ONE place instead of a drifting copy.
+  The later real call resets UClsFBase/UClsFCount on entry, so it rebuilds the
+  window from scratch and the pre-pass entries are simply orphaned — which also
+  means the dataclass duplicate-field check cannot see them and mis-fire. }
+procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
+                                 fieldsOnly: Boolean);
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, slot, curOff, align, sz: Integer;
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean; fldRec: Integer;
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
@@ -2140,6 +2187,8 @@ begin
       else
         AddUField(ci, Tokens[i].SOffset, Tokens[i].SLen, curOff, Ord(tk), REC_NONE);
       Inc(curOff, sz);
+      if not fieldsOnly then
+      begin
       if PyDcCount >= PY_MAX_DC_FIELDS then
         Error('Nil Python: too many dataclass fields');
       PyDcCi[PyDcCount] := ci;
@@ -2148,6 +2197,7 @@ begin
       PyDcSOff[PyDcCount] := defSOff;
       PyDcSLen[PyDcCount] := defSLen;
       Inc(PyDcCount);
+      end;
       i := j;
       while (i < bodyEnd) and (Tokens[i].Kind <> tkNewline) do Inc(i);
     end
@@ -2179,20 +2229,27 @@ begin
       fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
       AppendChar(fullName, '.');
       for k := 1 to Length(name) do AppendChar(fullName, name[k]);
-      procIdx := RegisterProc(fullName, not isCtor, tyInteger, nparams, pnames, ptypes);
-      if isCtor then
+      if fieldsOnly then procIdx := -1
+      else procIdx := RegisterProc(fullName, not isCtor, tyInteger, nparams, pnames, ptypes);
+      if fieldsOnly then
+        { skip method/property registration entirely; fall through to the ctor
+          field scan below, which is the only thing the pre-pass wants }
+      else if isCtor then
       begin
         k := PyStoredName('create');
         AddUMeth(ci, k, 6, procIdx);
       end
       else
         AddUMeth(ci, Tokens[i + 1].SOffset, Tokens[i + 1].SLen, procIdx);
-      mmi := UMthCount - 1;
-      if not isCtor then
+      if not fieldsOnly then
       begin
-        slot := UClsVirtCount[ci];
-        UClsVirtCount[ci] := UClsVirtCount[ci] + 1;
-        UMthVirSlot[mmi] := slot;
+        mmi := UMthCount - 1;
+        if not isCtor then
+        begin
+          slot := UClsVirtCount[ci];
+          UClsVirtCount[ci] := UClsVirtCount[ci] + 1;
+          UMthVirSlot[mmi] := slot;
+        end;
       end;
       { Constructor assignments define fields: self.name = annotated_param. }
       if isCtor then
@@ -2231,7 +2288,7 @@ begin
     end;
     Inc(i);
   end;
-  if isDC then
+  if isDC and not fieldsOnly then
   begin
     { Synthesize the create ctor: self + one param per field, in order. }
     if UClsFCount[ci] > 15 then
@@ -2396,6 +2453,62 @@ begin
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
 end;
 
+{ FIELD pre-pass. PyRegisterClassShells registers class NAMES only, and
+  PyCollectModuleLocals runs before the main loop that parses class bodies — so
+  without this every class has zero fields during module-local inference and a
+  module-level `x = o.inner` cannot learn the field's class
+  (bug-nilpy-class-typed-field-loses-identity).
+
+  Walks the raw token stream for `class NAME ...:` headers, locates each body
+  the same way PyParseClass does (the tkIndent after the header, then
+  PyFindBodyEnd) and registers that class's FIELDS via the shared
+  PyRegisterClassMembers in fieldsOnly mode — so the field rules live in one
+  place. isDC is read off a preceding @dataclass decorator.
+
+  The real pass later resets each class's field window and rebuilds it, so
+  these entries are orphaned rather than duplicated. }
+procedure PyRegisterClassFieldsPrepass;
+var i, j, ci, bs, be, depth: Integer;
+    isDC: Boolean;
+begin
+  i := 0;
+  while i < MainProgramTokCount - 2 do
+  begin
+    if (Tokens[i].Kind = tkClass) and (Tokens[i + 1].Kind = tkIdent) then
+    begin
+      ci := FindUClass(GetTokenStr(i + 1));
+      if ci >= 0 then
+      begin
+        { @dataclass on the line(s) before the header }
+        isDC := False;
+        j := i - 1;
+        while (j >= 1) and (Tokens[j].Kind in [tkNewline, tkIndent, tkDedent]) do Dec(j);
+        if (j >= 1) and (Tokens[j].Kind = tkIdent) and
+           CaseEqual(GetTokenStr(j), 'dataclass') and (Tokens[j - 1].Kind = tkAt) then
+          isDC := True;
+        { skip the header to its tkIndent, honouring a parenthesised base list }
+        j := i + 2;
+        depth := 0;
+        while j < MainProgramTokCount do
+        begin
+          if Tokens[j].Kind = tkLParen then Inc(depth)
+          else if Tokens[j].Kind = tkRParen then Dec(depth)
+          else if (Tokens[j].Kind = tkIndent) and (depth = 0) then Break;
+          Inc(j);
+        end;
+        if j < MainProgramTokCount then
+        begin
+          bs := j + 1;   { first BODY token, matching PyParseClass's bodyStart
+                           (it takes TokPos-1 after Expect(tkIndent)) }
+          be := PyFindBodyEnd(bs);
+          PyRegisterClassMembers(ci, bs, be, isDC, True);
+        end;
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
 procedure PyParseClass(isDC: Boolean);
 var ci, bodyStart, bodyEnd, baseCi, k: Integer;
 begin
@@ -2422,7 +2535,7 @@ begin
   end;
   Expect(tkColon, ':'); Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
   bodyStart := TokPos - 1; bodyEnd := PyFindBodyEnd(bodyStart);
-  PyRegisterClassMembers(ci, bodyStart, bodyEnd, isDC);
+  PyRegisterClassMembers(ci, bodyStart, bodyEnd, isDC, False);
   if isDC and (ci < PY_MAX_DC_FIELDS) then PyDcClassIsDc[ci] := True;
   PySkipNewlines;
   while CurTok.Kind <> tkDedent do
@@ -2597,6 +2710,7 @@ begin
   end;
   { Module-local type collection runs AFTER the units above so proc return
     types (len, VariantToStr, pylib methods) resolve during inference. }
+  PyRegisterClassFieldsPrepass;   { fields must exist before local inference }
   PyCollectModuleLocals;
   PyExprMode := True;   { Pascal RTL units are loaded; from here on, .npy expression
                           parsing uses Python and/or/not precedence }

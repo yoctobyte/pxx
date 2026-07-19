@@ -32,7 +32,12 @@ and printed the pointer. The dataclass path already got this right via
 `__init__`-annotation path the same. Covered by
 `test/test_nilpy_class_field_identity.npy`, diffed against CPython.
 
-## Part 2 — STILL BROKEN, and it is an ORDERING problem
+## Part 2 — FIXED (see the "resolved" section at the end)
+
+Kept for the diagnosis trail; the ordering problem described below was real and
+is now solved.
+
+### (historical) the ORDERING problem
 
 Two siblings remain, both silent:
 
@@ -78,3 +83,38 @@ uforth is built on object graphs (12 `@dataclass`, `Word`/`WordCall` chains).
 `t.word.name` is the `uforth.py:190` wall itself. Part 1 unblocks the direct
 chain; the local hop and method-on-field still silently yield garbage, so any
 corpus run touching them is untrustworthy.
+
+
+## RESOLVED 2026-07-19
+
+Part 2's local hop is fixed. Two changes, both needed:
+
+1. **`PyRegisterClassFieldsPrepass`** — walks the token stream for class
+   headers and registers each class's FIELDS via `PyRegisterClassMembers` in a
+   new `fieldsOnly` mode, BEFORE `PyCollectModuleLocals`. Sharing the one
+   procedure keeps the field rules in a single place instead of a drifting
+   copy; `fieldsOnly` skips `RegisterProc`/`AddUMeth`/virtual-slot assignment/
+   the `PyDc*` bookkeeping/dataclass ctor synthesis. The later real pass resets
+   each class's field window and rebuilds it, so the pre-pass entries are
+   orphaned rather than duplicated — which also keeps the dataclass
+   duplicate-field check from mis-firing.
+2. **`RecName` propagation at the module-level assignment** — the site set
+   `Syms[symIdx].RecName` for a ctor call and a class-returning call but not
+   for any other class-valued RHS, so `x = o.inner` declared the local with no
+   class. Now falls back to `ResolveNodeRec(rhsNode)`.
+
+With the pre-pass in place the inference-time field-chain walk became viable
+and is restored (it is what gives the local its class identity during
+`PyCollectModuleLocals`).
+
+**The third symptom was a DIFFERENT BUG.** `o.inner.shout()` is not a field
+problem at all: a method returning `str` yields garbage even on a plain local
+with no field involved, and it reproduces on the PINNED compiler. Split out as
+[[bug-nilpy-method-returning-str-garbage]].
+
+Note for whoever touches this file next: FPC needs declaration-before-use, so
+the pre-pass must stay BELOW `PyFindBodyEnd` and `PyRegisterClassMembers`. pxx
+does not care; FPC bootstrap does ([[feedback_fpc_bootstrap_advisory_invisible_to_local_gate]]).
+
+Gate: `test-nilpy` GREEN, `--tier quick` GREEN, self-host byte-identical, FPC
+bootstrap clean with a byte-identical fixedpoint, test file diffed against CPython.

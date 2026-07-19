@@ -27,3 +27,13 @@ print(m.inner.name)
 # the str-method chain on top of a field chain — the literal uforth shape
 print(o.mid.inner.name.upper())
 print(m.inner.name.upper())
+
+# LOCAL HOP: a local assigned from a class-typed field must carry the field's
+# class, so a member access through it resolves. Needs the field pre-pass
+# (fields did not exist yet at module-local inference time) AND the RecName
+# propagation at the assignment.
+x = o.mid
+print(x.inner.name)
+y = x.inner
+print(y.name)
+print(y.name.upper())
