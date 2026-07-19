@@ -100,3 +100,26 @@ Track C/A ticket with a minimal repro, same as zlib/tcc.
   token-paste in that position (Track C/B, crtl header).
 
 - 2026-07-19 (backlog sweep note) Stale NEXT-WALL note: UINT64_C/stdint macros landed (25a0499c) and all prereq walls are clear (cquickjs_prereq smoke green). Actual qjs bring-up (make test-quickjs, runner) still not started.
+
+- 2026-07-19 (fable-A, wave 1 — COMPILES + LINKS, runtime bring-up next):
+  runner config settled: `#define EMSCRIPTEN 1` (switch dispatch, no
+  pthread/js_once, no C11 atomics — upstream-maintained plain-C profile) +
+  `#define __TINYC__ 1` (32-bit libbf limbs; the 64-bit config needs
+  unsigned __int128, which pxx lacks). gcc oracle green with the SAME
+  runner (both defines live in runner.c, so oracle and pxx get one config).
+  Six walls fixed (commit 2b5ad9b9, regressions b368-b372): scalar compound
+  literal, cdecl indirect-call stack args (>6 int/>8 float), cpreproc ##
+  operands no longer pre-expanded (JS_ATOM_true→JS_ATOM_1 killer), param
+  substitution inside body string literals, PendingInit/CAggInit tables
+  dynamic (fixed caps silently dropped C global initializers — the
+  native_error_name all-NULL JS_NewContext segfault), crtl rint family +
+  SIZE_MAX/limits + fenv.h with MXCSR fesetround stubs.
+  **STATE: JS_NewRuntime + JS_NewContextRaw OK; segfault inside
+  JS_AddIntrinsicBaseObjects** before the first JS_SetPropertyFunctionList —
+  crash reads a byte at a page boundary through a bad `const char *name`
+  (JS_NewAtom arg pointing at zeroed data-ish memory 0x79f940). NOT the
+  UFld pool (loud check added, doesn't fire), NOT JSCFunctionListEntry
+  union layout (standalone repro of the exact entry/union/designated-init
+  shape is correct). Next: bisect which global table feeds the bad name —
+  instrument JS_NewAtom callers per-table (vendored tree is scratch,
+  printf-instrument freely; FORCE=1 refetch resets).
