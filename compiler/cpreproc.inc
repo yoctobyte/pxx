@@ -953,13 +953,32 @@ end;
 procedure CPExpandFunction(mi: Integer; const src: AnsiString;
   argCount, level: Integer; var dst: AnsiString);
 var p, last, a, b, ai, argBase, argP, k, savedSlot, q: Integer;
+    pasteNext: Boolean;   { previous body token was `##` — next operand is pasted }
 begin
+  pasteNext := False;
   if DebugTrace then writeln('C preprocessor: expand function #', mi, ' level=', level);
   argBase := level * 16;
   p := CPMValueOff[mi];
   last := p + CPMValueLen[mi] - 1;
   while p <= last do
   begin
+    { A string/char literal in the body is ONE token: copy it wholesale
+      (honoring `\` escapes) so a parameter name that happens to appear inside
+      — `n` in "a\n" for a macro with parameter n — is NOT substituted. }
+    if (CPrepChars[p] = '"') or (CPrepChars[p] = '''') then
+    begin
+      pasteNext := False;
+      k := Ord(CPrepChars[p]);   { quote char }
+      AppendChar(dst, CPrepChars[p]); Inc(p);
+      while (p <= last) and (Ord(CPrepChars[p]) <> k) do
+      begin
+        if (CPrepChars[p] = '\') and (p < last) then
+        begin AppendChar(dst, CPrepChars[p]); Inc(p); end;
+        AppendChar(dst, CPrepChars[p]); Inc(p);
+      end;
+      if p <= last then begin AppendChar(dst, CPrepChars[p]); Inc(p); end;
+      Continue;
+    end;
     { Token-paste operator `a ## b`: drop the `##` (and whitespace around it) so the
       left operand's last token abuts the right operand's first token. The pasted
       result is re-scanned by the caller, so `DBL_ ## n` -> `DBL_MANT_DIG` then
@@ -988,6 +1007,7 @@ begin
           p := q;
         end;
       end;
+      pasteNext := True;
       Continue;
     end;
     { Stringize `#param` -> a string literal of the parameter's RAW (unexpanded)
@@ -1030,9 +1050,30 @@ begin
         if argCount > CPMParamCount[mi] then
           for k := CPArgStart[argBase + CPMParamCount[mi]] to CPArgEnd[argBase + argCount - 1] do
             AppendChar(dst, src[k]);
+        pasteNext := False;
         Continue;
       end;
       ai := CPParamIndex(mi, a, b - a + 1);
+      { A parameter that is an operand of `##` (right: previous token was ##;
+        left: the next body token is ##) substitutes its RAW argument — C99
+        6.10.3.1 exempts ##/# operands from argument pre-expansion. Without
+        this, `#define DEF(name) JS_ATOM_ ## name` + `DEF(true)` under
+        stdbool's `#define true 1` pasted JS_ATOM_1 (quickjs atom enum). }
+      if (ai >= 0) and (ai < argCount) and (not pasteNext) then
+      begin
+        q := p;
+        while (q < last) and (CPrepChars[q] in [' ', #9]) do Inc(q);
+        if (q < last) and (CPrepChars[q] = '#') and (CPrepChars[q + 1] = '#') then
+          pasteNext := True;   { left operand of a following ## }
+      end;
+      if (ai >= 0) and (ai < argCount) and pasteNext then
+      begin
+        for k := CPArgStart[argBase + ai] to CPArgEnd[argBase + ai] do
+          if src[k] <> #1 then AppendChar(dst, src[k]);   { raw, paint stripped }
+        pasteNext := False;
+        Continue;
+      end;
+      pasteNext := False;
       if (ai >= 0) and (ai < argCount) then
       begin
         CPSetExpandedArgLength(level, 0);
@@ -1050,6 +1091,7 @@ begin
       end
       else
       begin
+        pasteNext := False;
         while a <= b do
         begin
           AppendChar(dst, CPrepChars[a]);
@@ -1059,6 +1101,7 @@ begin
     end
     else
     begin
+      if not (CPrepChars[p] in [' ', #9]) then pasteNext := False;
       AppendChar(dst, CPrepChars[p]);
       Inc(p);
     end;

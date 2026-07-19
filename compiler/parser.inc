@@ -17344,7 +17344,7 @@ begin
 	          else if CurTok.Kind = tkComma then Next
 	          else
 	          begin
-	            if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+	            EnsurePendingInitCapacity(PendingInitCount);
 	            if initElem > (arrHi - arrLo) then Error('too many array initializer elements');
 	            if elemTk in [tyString, tyAnsiString, tyFixedString, tyShortString] then
 	            begin
@@ -17403,7 +17403,7 @@ begin
 	      else
 	      begin
 	        if isArr then Error('array initializer must be parenthesised');
-	        if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+	        EnsurePendingInitCapacity(PendingInitCount);
 	        if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
 	           (FindSym(CurTok.SVal) < 0) then
 	        begin
@@ -17792,7 +17792,7 @@ begin
               end
               else
               begin
-                if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+                EnsurePendingInitCapacity(PendingInitCount);
                 PendingInitSym[PendingInitCount]  := cIdx;
                 PendingInitElem[PendingInitCount] := cLo + cElem;
                 PendingInitFOff[PendingInitCount] := fNameOff;
@@ -17856,7 +17856,7 @@ begin
               end
               else
               begin
-                if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+                EnsurePendingInitCapacity(PendingInitCount);
                 PendingInitSym[PendingInitCount]    := cIdx;
                 PendingInitElem[PendingInitCount]   := cLo + cElem;
                 PendingInitFOff[PendingInitCount]   := -1;
@@ -17909,7 +17909,7 @@ begin
               end
               else
               begin
-                if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+                EnsurePendingInitCapacity(PendingInitCount);
                 PendingInitSym[PendingInitCount]  := cIdx;
                 PendingInitElem[PendingInitCount] := cLo + cElem;
                 PendingInitFOff[PendingInitCount] := -1;
@@ -17931,7 +17931,7 @@ begin
             end
             else
             begin
-              if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+              EnsurePendingInitCapacity(PendingInitCount);
               PendingInitSym[PendingInitCount]  := cIdx;
               PendingInitElem[PendingInitCount] := cLo + cElem;
               PendingInitFOff[PendingInitCount] := -1;
@@ -18045,7 +18045,7 @@ begin
           end
           else
           begin
-            if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+            EnsurePendingInitCapacity(PendingInitCount);
             PendingInitSym[PendingInitCount]  := cIdx;
             PendingInitElem[PendingInitCount] := -1;
             PendingInitFOff[PendingInitCount] := -1;
@@ -18083,7 +18083,7 @@ begin
               cElem := 0;
               while CurTok.Kind <> tkRParen do
               begin
-                if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+                EnsurePendingInitCapacity(PendingInitCount);
                 PendingInitSym[PendingInitCount]  := cIdx;
                 PendingInitElem[PendingInitCount] := -1;
                 PendingInitFOff[PendingInitCount] := fNameOff;
@@ -18112,7 +18112,7 @@ begin
             end
             else
             begin
-              if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+              EnsurePendingInitCapacity(PendingInitCount);
               PendingInitSym[PendingInitCount]  := cIdx;
               PendingInitElem[PendingInitCount] := -1;
               PendingInitFOff[PendingInitCount] := fNameOff;
@@ -18140,7 +18140,7 @@ begin
         end
         else
         begin
-          if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+          EnsurePendingInitCapacity(PendingInitCount);
           PendingInitSym[PendingInitCount]  := cIdx;
           PendingInitElem[PendingInitCount] := -1;
           PendingInitFOff[PendingInitCount] := -1;

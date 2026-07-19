@@ -10,6 +10,17 @@
 
    First bar (ticket): evaluate `1+2` -> prints 3. */
 
+/* Portable single-thread engine profile: EMSCRIPTEN selects switch dispatch
+   (no computed goto), no pthread/js_once, no C11 atomics — the plain-C build
+   quickjs-ng already maintains. The gcc oracle builds this same file, so both
+   compilers get the identical configuration. */
+#define EMSCRIPTEN 1
+/* 32-bit bignum limbs: __TINYC__ steers libbf.h away from the 64-bit-limb
+   config whose dlimb_t is unsigned __int128 (pxx has no int128). Upstream
+   maintains this exact profile for tcc; its only other effect (quickjs.c
+   atomics guard) is already off under EMSCRIPTEN. */
+#define __TINYC__ 1
+
 #include "cutils.c"
 #include "libunicode.c"
 #include "libregexp.c"

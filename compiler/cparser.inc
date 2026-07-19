@@ -2094,7 +2094,20 @@ begin
       Result := ParseCPostfixTail(CParseCompoundLiteralRec(clRecId));
       Exit;
     end;
-    operand := ParseCUnary();   { recurses — clobbers the CType* globals, so castProcSig was captured above }
+    if CurTok.Kind = tkBegin then
+    begin
+      { C99 6.5.2.5 SCALAR compound literal `(T){expr}` — enum/int/float/
+        pointer target (record/array targets took their branches above).
+        quickjs: `return (JSAtomKindEnum){-1};`. The value is expr converted
+        to T, exactly a cast's conversion — so parse the braced expression
+        and fall through to the shared cast-conversion path below. }
+      Next;
+      operand := ParseCExpr;
+      if CurTok.Kind = tkComma then Next;   { trailing comma allowed }
+      Expect(tkEnd, '}');
+    end
+    else
+      operand := ParseCUnary();   { recurses — clobbers the CType* globals, so castProcSig was captured above }
     { A struct-to-struct cast `(struct S)x` (record target, depth 0) is an IDENTITY:
       the operand already IS the aggregate value. Retagging it as an AN_PTR_CAST
       (records are carried BY ADDRESS in this IR) yielded a value where an address
@@ -5191,19 +5204,48 @@ var
     initializer compiles in declaration order with the rest of the body. }
   CInitChainMode: Boolean;
   CInitChainHead, CInitChainTail: Integer;
+  { Dynamic (array of + EnsureCAggInitCapacity at the append chokepoints):
+    quickjs has thousands of global aggregate initializers — the old fixed 512
+    cap silently DROPPED the excess, leaving those globals BSS-zero
+    (native_error_name all-NULL, first JS_NewContext segfault). }
   CAggInitCount: Integer;
-  CAggInitSym: array[0..MAX_C_AGG_INITS-1] of Integer;
-  CAggInitTok: array[0..MAX_C_AGG_INITS-1] of Integer;   { token index of the opening brace }
-  CAggInitRec: array[0..MAX_C_AGG_INITS-1] of Integer;
-  CAggInitLen: array[0..MAX_C_AGG_INITS-1] of Integer;   { array length (elements) }
-  CAggInitIsArr: array[0..MAX_C_AGG_INITS-1] of Boolean;
+  CAggInitSym: array of Integer;
+  CAggInitTok: array of Integer;   { token index of the opening brace }
+  CAggInitRec: array of Integer;
+  CAggInitLen: array of Integer;   { array length (elements) }
+  CAggInitIsArr: array of Boolean;
   { Deferred SCALAR pointer-global initializers, replayed at main next to the
     aggregates: any init expression the fast paths in ParseCGlobalVarDecl can't
     fold — `(char*)&g`, `&st.field`, `arr + 1` — used to be silently SKIPPED,
     leaving the pointer null (csmith seed 3's crash family, b351). }
   CScalInitCount: Integer;
-  CScalInitSym: array[0..MAX_C_AGG_INITS-1] of Integer;
-  CScalInitTok: array[0..MAX_C_AGG_INITS-1] of Integer;  { first token of the init expression }
+  CScalInitSym: array of Integer;
+  CScalInitTok: array of Integer;  { first token of the init expression }
+
+procedure EnsureCAggInitCapacity(n: Integer);
+var cap: Integer;
+begin
+  cap := Length(CAggInitSym);
+  if n < cap then Exit;
+  if cap = 0 then cap := MAX_C_AGG_INITS;
+  while cap <= n do cap := cap * 2;
+  SetLength(CAggInitSym, cap);
+  SetLength(CAggInitTok, cap);
+  SetLength(CAggInitRec, cap);
+  SetLength(CAggInitLen, cap);
+  SetLength(CAggInitIsArr, cap);
+end;
+
+procedure EnsureCScalInitCapacity(n: Integer);
+var cap: Integer;
+begin
+  cap := Length(CScalInitSym);
+  if n < cap then Exit;
+  if cap = 0 then cap := MAX_C_AGG_INITS;
+  while cap <= n do cap := cap * 2;
+  SetLength(CScalInitSym, cap);
+  SetLength(CScalInitTok, cap);
+end;
 
 procedure CInitWalkRecord(ci: Integer; braced, emit: Boolean); forward;
 procedure CInitWalkArray(elemTkOrd, elemRec, symIdx, fldIdx, dimLevel, nDims,
@@ -5770,8 +5812,9 @@ end;
 procedure CDeferScalarPtrInitSkip(symIdx, startTok: Integer);
 var d: Integer;
 begin
-  if (symIdx >= 0) and (CScalInitCount < MAX_C_AGG_INITS) then
+  if symIdx >= 0 then
   begin
+    EnsureCScalInitCapacity(CScalInitCount);
     CScalInitSym[CScalInitCount] := symIdx;
     CScalInitTok[CScalInitCount] := startTok;
     Inc(CScalInitCount);
@@ -6104,7 +6147,7 @@ begin
     end;
     for ei := 0 to nArrElems - 1 do
     begin
-      if (idx >= 0) and (PendingInitCount < MAX_PENDING_INITS) then
+      if (idx >= 0) and (PendingInitHasRoom(PendingInitCount)) then
       begin
         PendingInitSym[PendingInitCount]  := idx;
         if not wasArr then PendingInitElem[PendingInitCount] := -1
@@ -6386,8 +6429,8 @@ begin
       now. }
     if (ptrArrDeferTok >= 0) and (idx >= 0) then
     begin
-      if CAggInitCount < MAX_C_AGG_INITS then
       begin
+        EnsureCAggInitCapacity(CAggInitCount);
         CAggInitSym[CAggInitCount] := idx;
         CAggInitTok[CAggInitCount] := ptrArrDeferTok;
         CAggInitRec[CAggInitCount] := REC_NONE;
@@ -6398,7 +6441,7 @@ begin
     end;
     for ei := 0 to nArrElems - 1 do
     begin
-      if PendingInitCount < MAX_PENDING_INITS then
+      if PendingInitHasRoom(PendingInitCount) then
       begin
         PendingInitSym[PendingInitCount]  := idx;
         PendingInitElem[PendingInitCount] := ei;
@@ -6471,8 +6514,8 @@ begin
           CEmitDeferredCAggInits with the sym's dim shape. The walker's leaf store
           handles float element types (same path the fixed LOCAL multidim-float
           case uses). Globals are BSS-zeroed, so unlisted tail elements stay 0. }
-        if CAggInitCount < MAX_C_AGG_INITS then
         begin
+          EnsureCAggInitCapacity(CAggInitCount);
           CAggInitSym[CAggInitCount] := idx;
           CAggInitTok[CAggInitCount] := TokPos - 1;   { the opening brace }
           CAggInitRec[CAggInitCount] := REC_NONE;
@@ -6509,7 +6552,7 @@ begin
           if rangeHiG >= ei then
           begin
             for gk := ei to rangeHiG do
-              if (gk >= 0) and (gk < arrLen) and (PendingInitCount < MAX_PENDING_INITS) then
+              if (gk >= 0) and (gk < arrLen) and (PendingInitHasRoom(PendingInitCount)) then
               begin
                 PendingInitSym[PendingInitCount]  := idx;
                 PendingInitElem[PendingInitCount] := gk;
@@ -6523,7 +6566,7 @@ begin
           end
           else
           begin
-            if (ei >= 0) and (ei < arrLen) and (PendingInitCount < MAX_PENDING_INITS) then
+            if (ei >= 0) and (ei < arrLen) and (PendingInitHasRoom(PendingInitCount)) then
             begin
               PendingInitSym[PendingInitCount]  := idx;
               PendingInitElem[PendingInitCount] := ei;
@@ -6582,7 +6625,7 @@ begin
             if negFloat then initV := -initV;
             dvv := initV; Move(dvv, initV, 8);
           end;
-          if (ei >= 0) and (ei < arrLen) and (PendingInitCount < MAX_PENDING_INITS) then
+          if (ei >= 0) and (ei < arrLen) and (PendingInitHasRoom(PendingInitCount)) then
           begin
             PendingInitSym[PendingInitCount]  := idx;
             PendingInitElem[PendingInitCount] := ei;
@@ -6606,8 +6649,8 @@ begin
           brace-elision walker, replayed at `main` compile time by
           CEmitDeferredCAggInits — handles nested braces, elided flat lists,
           designators, anonymous unions and nested subarrays. }
-        if CAggInitCount < MAX_C_AGG_INITS then
         begin
+          EnsureCAggInitCapacity(CAggInitCount);
           CAggInitSym[CAggInitCount] := idx;
           CAggInitTok[CAggInitCount] := TokPos - 1;
           CAggInitRec[CAggInitCount] := recId;
@@ -6623,8 +6666,8 @@ begin
       begin
         { Non-array struct/union global initializer: same deferred recursive
           walker (see above). }
-        if CAggInitCount < MAX_C_AGG_INITS then
         begin
+          EnsureCAggInitCapacity(CAggInitCount);
           CAggInitSym[CAggInitCount] := idx;
           CAggInitTok[CAggInitCount] := TokPos - 1;
           CAggInitRec[CAggInitCount] := recId;
@@ -6649,7 +6692,7 @@ begin
       else if (not wasArr) and (idx >= 0) and (baseTk <> tyRecord) and
               (baseTk <> tyPointer) and TypeIsOrdinal(baseTk) and
               (CurTok.Kind = tkInteger) and (Tokens[TokPos].Kind in [tkComma, tkSemicolon]) and
-              (PendingInitCount < MAX_PENDING_INITS) then
+              (PendingInitHasRoom(PendingInitCount)) then
       begin
         { Scalar ordinal global `T x = <int literal>;` -> a direct PendingInit
           assign (no field offset, so the by-name emission path is unaffected),
@@ -6667,7 +6710,7 @@ begin
               ((CurTok.Kind = tkFloat) or
                ((CurTok.Kind = tkMinus) and (Tokens[TokPos].Kind = tkFloat)) or
                ((CurTok.Kind = tkPlus) and (Tokens[TokPos].Kind = tkFloat))) and
-              (PendingInitCount < MAX_PENDING_INITS) then
+              (PendingInitHasRoom(PendingInitCount)) then
       begin
         { Scalar float global `double x = 3.14;` / `float y = -1.5;`.
           Float tokens carry IEEE-754 double bits; replay as AN_FLOAT_LIT at
@@ -6713,7 +6756,7 @@ begin
       end
       else if (not wasArr) and (idx >= 0) and (baseTk <> tyRecord) and
               (baseTk <> tyPointer) and (TypeIsOrdinal(baseTk) or TypeIsFloat(baseTk)) and
-              (PendingInitCount < MAX_PENDING_INITS) then
+              (PendingInitHasRoom(PendingInitCount)) then
       begin
         { Scalar ordinal/float global with a constant-expression initializer the
           bare-literal fast paths above did not catch: a cast `(int)7`, an
@@ -6742,7 +6785,7 @@ begin
       end
       else if (not wasArr) and (idx >= 0) and (baseTk = tyPointer) and
               (CurTok.Kind = tkString) and
-              (PendingInitCount < MAX_PENDING_INITS) then
+              (PendingInitHasRoom(PendingInitCount)) then
       begin
         { Scalar `char *p = "literal";` (e.g. lua's `const char *const CLIBS =
           "_CLIBS"`). Store the string-literal address into p at main entry
@@ -6781,7 +6824,7 @@ begin
               initV := Ord(initStr[ei + 1])
             else
               initV := 0;
-            if PendingInitCount < MAX_PENDING_INITS then
+            if PendingInitHasRoom(PendingInitCount) then
             begin
               PendingInitSym[PendingInitCount]  := idx;
               PendingInitElem[PendingInitCount] := ei;
@@ -6822,8 +6865,8 @@ begin
             LastTypeRecId := clRecId;
             anonIdx := AllocVar(anonName, tyRecord);
           end;
-          if CAggInitCount < MAX_C_AGG_INITS then
           begin
+            EnsureCAggInitCapacity(CAggInitCount);
             CAggInitSym[CAggInitCount] := anonIdx;
             CAggInitTok[CAggInitCount] := TokPos - 1;   { the opening brace }
             CAggInitRec[CAggInitCount] := clRecId;
@@ -6832,7 +6875,7 @@ begin
             Inc(CAggInitCount);
           end;
           SkipBraceBlock;
-          if PendingInitCount < MAX_PENDING_INITS then
+          if PendingInitHasRoom(PendingInitCount) then
           begin
             PendingInitSym[PendingInitCount]    := idx;
             PendingInitElem[PendingInitCount]   := -2;   { address-of-sym }
@@ -6850,7 +6893,7 @@ begin
       end
       else if (not wasArr) and (idx >= 0) and (baseTk = tyPointer) and
               (CurTok.Kind = tkAmp) and (Tokens[TokPos].Kind = tkIdent) and
-              (PendingInitCount < MAX_PENDING_INITS) then
+              (PendingInitHasRoom(PendingInitCount)) then
       begin
         { Pointer global initialised to the address of another global or an
           interior element: `T *p = &g;` or `T *p = &arr[const_expr];`.
@@ -6995,6 +7038,79 @@ end;
   address into env; setjmp returns 0 first and the longjmp value (mapped 0->1)
   when jumped to. Implemented for every hosted target (x86-64 desktop + the four
   cross targets that build lua/sqlite: i386, aarch64, arm32, riscv32). }
+{ C99 fenv rounding-mode primitives as raw stubs: __pxx_fesetround(mode) /
+  __pxx_fegetround() with the glibc x86 FE_* encoding (TONEAREST=0,
+  DOWNWARD=0x400, UPWARD=0x800, TOWARDZERO=0xC00 — crtl fenv.h). x86-64 flips
+  the MXCSR RC bits [14:13] (= FE value << 3): pxx does ALL double arithmetic
+  in SSE, so MXCSR is the only rounding state that matters (no x87 use).
+  quickjs's js_dtoa ties handling rides fesetround. Other targets: accepted
+  no-op returning 0 — hosted-x86-64 bring-up scope, same stance as alloca. }
+procedure EmitCReturnZeroStub;
+{ Per-target `return 0` machine stub body (the non-x86-64 fenv fallback). }
+begin
+  case TargetArch of
+  TARGET_X86_64, TARGET_I386:
+  begin
+    EmitB($31); EmitB($C0);   { xor eax, eax }
+    EmitB($C3);               { ret }
+  end;
+  TARGET_AARCH64:
+  begin
+    EmitI32($52800000);       { mov w0, #0 }
+    EmitI32($D65F03C0);       { ret }
+  end;
+  TARGET_ARM32:
+  begin
+    EmitI32($E3A00000);       { mov r0, #0 }
+    EmitI32($E12FFF1E);       { bx lr }
+  end;
+  TARGET_RISCV32:
+  begin
+    EmitI32($00000513);       { li a0, 0 }
+    EmitI32($00008067);       { ret }
+  end;
+  else
+    Error('EmitCReturnZeroStub: unsupported target');
+  end;
+end;
+
+procedure EmitCFenvStubs;
+var fsIdx, fgIdx: Integer;
+    pn: array[0..1] of AnsiString; pt: array[0..1] of TTypeKind;
+begin
+  pn[0] := 'mode'; pt[0] := tyInteger;
+  fsIdx := RegisterProc('__pxx_fesetround', True, tyInteger, 1, pn, pt);
+  Procs[fsIdx].BodyAddr := CodeLen;
+  if TargetArch = TARGET_X86_64 then
+  begin
+    EmitB($0F); EmitB($AE); EmitB($5C); EmitB($24); EmitB($FC);  { stmxcsr [rsp-4] }
+    EmitB($8B); EmitB($44); EmitB($24); EmitB($FC);              { mov eax, [rsp-4] }
+    EmitB($25); EmitB($FF); EmitB($9F); EmitB($FF); EmitB($FF);  { and eax, ~0x6000 }
+    EmitB($89); EmitB($F9);                                      { mov ecx, edi }
+    EmitB($C1); EmitB($E1); EmitB($03);                          { shl ecx, 3 }
+    EmitB($81); EmitB($E1); EmitB($00); EmitB($60); EmitB($00); EmitB($00); { and ecx, 0x6000 }
+    EmitB($09); EmitB($C8);                                      { or eax, ecx }
+    EmitB($89); EmitB($44); EmitB($24); EmitB($FC);              { mov [rsp-4], eax }
+    EmitB($0F); EmitB($AE); EmitB($54); EmitB($24); EmitB($FC);  { ldmxcsr [rsp-4] }
+    EmitB($31); EmitB($C0);                                      { xor eax, eax }
+    EmitB($C3);                                                  { ret }
+  end
+  else
+    EmitCReturnZeroStub;
+  fgIdx := RegisterProc('__pxx_fegetround', True, tyInteger, 0, pn, pt);
+  Procs[fgIdx].BodyAddr := CodeLen;
+  if TargetArch = TARGET_X86_64 then
+  begin
+    EmitB($0F); EmitB($AE); EmitB($5C); EmitB($24); EmitB($FC);  { stmxcsr [rsp-4] }
+    EmitB($8B); EmitB($44); EmitB($24); EmitB($FC);              { mov eax, [rsp-4] }
+    EmitB($25); EmitB($00); EmitB($60); EmitB($00); EmitB($00);  { and eax, 0x6000 }
+    EmitB($C1); EmitB($E8); EmitB($03);                          { shr eax, 3 }
+    EmitB($C3);                                                  { ret }
+  end
+  else
+    EmitCReturnZeroStub;
+end;
+
 procedure EmitCSetjmpStubs;
 var sjIdx, ljIdx: Integer;
     pn: array[0..1] of AnsiString; pt: array[0..1] of TTypeKind;
@@ -7470,6 +7586,7 @@ begin
   { setjmp/longjmp primitives (lua's error model). After the entry stub, before
     any C body, so __pxx_setjmp/__pxx_longjmp resolve as bodied procs. }
   EmitCSetjmpStubs;
+  EmitCFenvStubs;
 
   firstIdx := TokPos - 1;
   CProgramMode := True;
@@ -9732,7 +9849,8 @@ begin
   UClsFBase[ci] := UFldCount;
   for k := 0 to bfCount - 1 do
   begin
-    if UFldCount >= MAX_UFIELD - 1 then Break;   { pool nearly full: drop the rest }
+    if UFldCount >= MAX_UFIELD - 1 then
+      Error('C struct field pool exhausted (MAX_UFIELD) — raise the cap');   { was a SILENT drop }
     LastTypePointerElemTk := IntToTypeKind(bfElemTk[k]);
     LastTypePointerElemRec := bfElemRec[k];
     LastTypePointerAlias := -1;   { C struct fields carry their pointee directly; never re-read from the Pascal alias table }

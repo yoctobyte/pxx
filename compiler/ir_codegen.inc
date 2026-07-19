@@ -2185,65 +2185,94 @@ begin
               out of bounds. C default-argument-promotion carries variadic floats
               as double, so no single-precision narrowing applies to them. }
             if (i >= IRC[node]) and ((i - IRC[node]) < Procs[cpi].ParamCount) then
-            begin
-              if TypeIsFloat(Procs[cpi].Params[i - IRC[node]].TypeKind) then
-              begin argIsSse[i] := True; Inc(sseIdx); end
-              else begin argIsSse[i] := False; Inc(intIdx); end;
-            end
-            else if (i >= IRC[node]) and TypeIsFloat(IntToTypeKind(IRTk[argNodeArr[i]])) then
-            begin argIsSse[i] := True; Inc(sseIdx); end
-            else begin argIsSse[i] := False; Inc(intIdx); end;
+              argIsSse[i] := TypeIsFloat(Procs[cpi].Params[i - IRC[node]].TypeKind)
+            else
+              argIsSse[i] := (i >= IRC[node]) and TypeIsFloat(IntToTypeKind(IRTk[argNodeArr[i]]));
             argNode := IRB[argNode]; Inc(i);
           end;
           { Actual argument count — for a variadic callee this exceeds
             ParamCount+IRC (the extra `...` args), so use the walked count, not
             the declared-parameter count, or the trailing args are dropped. }
           nArgs := i;
-          if intIdx > 6 then Error('cdecl indirect call: more than 6 integer args not supported yet');
-          if sseIdx > 8 then Error('cdecl indirect call: more than 8 float args not supported yet');
-          IREmitNode(IRA[node]); EmitB($50);       { push callee (deepest) }
-          for i := nArgs - 1 downto 0 do
-          begin
-            IREmitNode(argNodeArr[i]); EmitB($50); { push arg }
-          end;
-          intIdx := 0; sseIdx := 0;
+          { Register/stack split, the two classes counted independently — same
+            scheme as the direct C call above; args past rdi..r9 / xmm0..7
+            spill to the outgoing stack area (quickjs's 8-arg fn pointers). }
+          mStack := 0;
           for i := 0 to nArgs - 1 do
             if argIsSse[i] then
             begin
-              EmitB($58);                          { pop rax }
-              EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0 + sseIdx * 8); { movq xmm[n], rax }
-              if (i >= IRC[node]) and ((i - IRC[node]) < Procs[cpi].ParamCount) and
-                 (Procs[cpi].Params[i - IRC[node]].TypeKind = tySingle) then
-                begin EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0 + sseIdx * 9); end; { cvtsd2ss xmm,xmm }
-              Inc(sseIdx);
+              if sseIdx < 8 then
+              begin argIsStack[i] := False; argRegIdx[i] := sseIdx; Inc(sseIdx); end
+              else begin argIsStack[i] := True; Inc(mStack); end;
             end
             else
             begin
-              case intIdx of
-                0: EmitB($5F);                      { pop rdi }
-                1: EmitB($5E);                      { pop rsi }
-                2: EmitB($5A);                      { pop rdx }
-                3: EmitB($59);                      { pop rcx }
-                4: begin EmitB($41); EmitB($58); end; { pop r8 }
-                5: begin EmitB($41); EmitB($59); end; { pop r9 }
-              end;
-              Inc(intIdx);
+              if intIdx < 6 then
+              begin argIsStack[i] := False; argRegIdx[i] := intIdx; Inc(intIdx); end
+              else begin argIsStack[i] := True; Inc(mStack); end;
             end;
-          { rsp now points at the callee. Align and call through it; the saved rsp
-            (P, where [P]=callee) lives in the slot pushed below. }
+          IREmitNode(IRA[node]); EmitB($50);       { push callee; P = &this slot }
+          { Align + reserve, saving P (= rsp, pointing at the callee slot) below
+            the arg area: after `push r11` rsp = aligned-8, so the saved-P slot
+            plus mStack 8-byte args needs 8 more pad when mStack is even for the
+            call-site 16-alignment. }
           EmitB($49); EmitB($89); EmitB($E3);       { mov r11, rsp  (r11 = P) }
           EmitB($48); EmitB($83); EmitB($E4); EmitB($F0); { and rsp, -16 }
           EmitB($41); EmitB($53);                   { push r11  ([rsp]=P) }
-          EmitB($48); EmitB($83); EmitB($EC); EmitB($08); { sub rsp, 8  (16-align) }
+          if (mStack and 1) = 0 then
+          begin
+            padBytes := 8;
+            EmitB($48); EmitB($83); EmitB($EC); EmitB($08); { sub rsp, 8 }
+          end
+          else
+            padBytes := 0;
+          { Stack args, right-to-left (leftmost ends at the lowest address, at
+            rsp when the call happens — SysV). }
+          for i := nArgs - 1 downto 0 do
+            if argIsStack[i] then
+            begin
+              IREmitNode(argNodeArr[i]);
+              EmitB($50);                           { push arg }
+            end;
+          { Register args: push right-to-left, pop left-to-right into the ABI
+            registers (each arg evaluated once, no register clobber). }
+          for i := nArgs - 1 downto 0 do
+            if not argIsStack[i] then
+            begin
+              IREmitNode(argNodeArr[i]);
+              EmitB($50);                           { push arg }
+            end;
+          for i := 0 to nArgs - 1 do
+            if not argIsStack[i] then
+            begin
+              if argIsSse[i] then
+              begin
+                EmitB($58);                          { pop rax }
+                EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0 + argRegIdx[i] * 8); { movq xmm[n], rax }
+                if (i >= IRC[node]) and ((i - IRC[node]) < Procs[cpi].ParamCount) and
+                   (Procs[cpi].Params[i - IRC[node]].TypeKind = tySingle) then
+                  begin EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0 + argRegIdx[i] * 9); end; { cvtsd2ss xmm,xmm }
+              end
+              else
+                case argRegIdx[i] of
+                  0: EmitB($5F);                      { pop rdi }
+                  1: EmitB($5E);                      { pop rsi }
+                  2: EmitB($5A);                      { pop rdx }
+                  3: EmitB($59);                      { pop rcx }
+                  4: begin EmitB($41); EmitB($58); end; { pop r8 }
+                  5: begin EmitB($41); EmitB($59); end; { pop r9 }
+                end;
+            end;
           EmitB($B8); EmitI32(sseIdx);              { mov eax, #vector-regs (vararg ABI) }
-          EmitB($4C); EmitB($8B); EmitB($5C); EmitB($24); EmitB($08); { mov r11, [rsp+8] = P }
+          { Callee: the saved-P slot sits above the pad + stack args. }
+          EmitB($4C); EmitB($8B); EmitB($9C); EmitB($24); EmitI32(mStack * 8 + padBytes); { mov r11, [rsp+off] = P }
           EmitB($4D); EmitB($8B); EmitB($1B);       { mov r11, [r11] = callee }
           { pxx internal ABI: cdecl target runs under SysV (all XMM volatile) —
             save the callee-saved xmm8..13 pool around the call. }
           FloatPoolSave;
           EmitB($41); EmitB($FF); EmitB($D3);       { call r11 }
           FloatPoolRestore;
-          EmitB($48); EmitB($8B); EmitB($64); EmitB($24); EmitB($08); { mov rsp, [rsp+8] = P }
+          EmitB($48); EmitB($8B); EmitB($A4); EmitB($24); EmitI32(mStack * 8 + padBytes); { mov rsp, [rsp+off] = P }
           EmitB($48); EmitB($83); EmitB($C4); EmitB($08); { add rsp, 8  (pop callee) }
           if TypeIsFloat(Procs[cpi].RetType) then
           begin

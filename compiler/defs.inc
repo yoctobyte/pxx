@@ -1885,16 +1885,20 @@ var
   { Constant global-var initializers (`var x: T = v;` / `= (e0,e1,...)`). Each
     entry is one assignment `sym` or `sym[elem] := value`, compiled into the
     program entry just before `main begin`. }
-  PendingInitSym  : array[0..MAX_PENDING_INITS-1] of Integer;  { target symbol }
-  PendingInitElem : array[0..MAX_PENDING_INITS-1] of Integer;  { array index, or -1 for a scalar }
-  PendingInitVal  : array[0..MAX_PENDING_INITS-1] of Int64;    { constant value }
-  PendingInitValAux: array[0..MAX_PENDING_INITS-1] of Integer; { string length / spare }
-  PendingInitKind : array[0..MAX_PENDING_INITS-1] of Integer;  { 0=int, 1=string literal, 2=proc addr }
-  PendingInitTk   : array[0..MAX_PENDING_INITS-1] of Integer;  { value type kind }
+  { DYNAMIC (grown at the append chokepoint via EnsurePendingInitCapacity):
+    quickjs blows any fixed cap — and the C-side writers used to check the cap
+    with `if count < MAX` and silently DROP the excess, leaving those globals
+    zero at runtime (native_error_name all-NULL). }
+  PendingInitSym  : array of Integer;  { target symbol }
+  PendingInitElem : array of Integer;  { array index, or -1 for a scalar }
+  PendingInitVal  : array of Int64;    { constant value }
+  PendingInitValAux: array of Integer; { string length / spare }
+  PendingInitKind : array of Integer;  { 0=int, 1=string literal, 2=proc addr }
+  PendingInitTk   : array of Integer;  { value type kind }
   { Record typed-const field: source span of the field name, so the emitter builds
     `sym.field := value` instead of `sym[elem]`. SOff = -1 when not a field. }
-  PendingInitFOff : array[0..MAX_PENDING_INITS-1] of Integer;
-  PendingInitFLen : array[0..MAX_PENDING_INITS-1] of Integer;
+  PendingInitFOff : array of Integer;
+  PendingInitFLen : array of Integer;
   PendingInitCount: Integer;
 
   { Routine-LOCAL typed-const initializers (`const T: array[..] of X = (..)`

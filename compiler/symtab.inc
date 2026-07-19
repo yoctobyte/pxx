@@ -2947,6 +2947,32 @@ end;
   is safe between argument marshalling and the call, and between the call and
   its return-value bridging. No-op unless FxSaveOn (-O3 x86-64 non-asm bodies
   only), so -O0/-O2 stay byte-identical. }
+procedure EnsurePendingInitCapacity(n: Integer);
+{ Grow the PendingInit* tables to hold index n (see defs.inc — dynamic since
+  quickjs; the old fixed cap silently dropped C global initializers). }
+var cap: Integer;
+begin
+  cap := Length(PendingInitSym);
+  if n < cap then Exit;
+  if cap = 0 then cap := MAX_PENDING_INITS;
+  while cap <= n do cap := cap * 2;
+  SetLength(PendingInitSym, cap);
+  SetLength(PendingInitElem, cap);
+  SetLength(PendingInitVal, cap);
+  SetLength(PendingInitValAux, cap);
+  SetLength(PendingInitKind, cap);
+  SetLength(PendingInitTk, cap);
+  SetLength(PendingInitFOff, cap);
+  SetLength(PendingInitFLen, cap);
+end;
+
+function PendingInitHasRoom(n: Integer): Boolean;
+{ Boolean wrapper for use inside compound `if` conditions: grows, never full. }
+begin
+  EnsurePendingInitCapacity(n);
+  Result := True;
+end;
+
 procedure FloatPoolSave;
 var k: Integer;
 begin

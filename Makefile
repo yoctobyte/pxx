@@ -1783,6 +1783,16 @@ test-core: $(COMPILER)
 	/tmp/cpreproc_macro_comment_continuation_b22926; test "$$?" = "42"
 	./$(COMPILER) test/cfield_ptrcast_index_b230.c /tmp/cfield_ptrcast_index_b23026
 	/tmp/cfield_ptrcast_index_b23026; test "$$?" = "42"
+	./$(COMPILER) test/ccompound_literal_scalar_b368.c /tmp/ccompound_literal_scalar_b36826
+	/tmp/ccompound_literal_scalar_b36826; test "$$?" = "42"
+	./$(COMPILER) test/cindirect_call_stackargs_b369.c /tmp/cindirect_call_stackargs_b36926
+	/tmp/cindirect_call_stackargs_b36926; test "$$?" = "42"
+	./$(COMPILER) test/cpreproc_paste_no_arg_expand_b370.c /tmp/cpreproc_paste_no_arg_expand_b37026
+	/tmp/cpreproc_paste_no_arg_expand_b37026; test "$$?" = "42"
+	./$(COMPILER) test/cpreproc_body_string_param_b371.c /tmp/cpreproc_body_string_param_b37126
+	/tmp/cpreproc_body_string_param_b37126; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_rint_lrint_b372.c /tmp/cmath_rint_lrint_b37226
+	/tmp/cmath_rint_lrint_b37226; test "$$?" = "42"
 	./$(COMPILER) test/cstruct_field_case_sensitive_b231.c /tmp/cstruct_field_case_sensitive_b23126
 	/tmp/cstruct_field_case_sensitive_b23126; test "$$?" = "42"
 	./$(COMPILER) test/cfloat_nan_compare_b232.c /tmp/cfloat_nan_compare_b23226

@@ -52,6 +52,24 @@ typedef unsigned long long uint_fast64_t;
 #define INTMAX_MAX INT64_MAX
 #define UINTMAX_MAX UINT64_MAX
 
+/* size_t / ptrdiff_t / intptr_t limits — pointer-width (long = native model;
+   the compiler predefines __LP64__ / __ILP32__ per target). */
+#ifdef __LP64__
+#define SIZE_MAX     UINT64_MAX
+#define PTRDIFF_MIN  INT64_MIN
+#define PTRDIFF_MAX  INT64_MAX
+#define INTPTR_MIN   INT64_MIN
+#define INTPTR_MAX   INT64_MAX
+#define UINTPTR_MAX  UINT64_MAX
+#else
+#define SIZE_MAX     UINT32_MAX
+#define PTRDIFF_MIN  INT32_MIN
+#define PTRDIFF_MAX  INT32_MAX
+#define INTPTR_MIN   INT32_MIN
+#define INTPTR_MAX   INT32_MAX
+#define UINTPTR_MAX  UINT32_MAX
+#endif
+
 /* C99 7.18.4 integer constant macros: expand an integer constant to one of the
    corresponding type. The narrow ones are no-ops (the value already has at least
    int rank); the 64-bit / max ones append the width+signedness suffix via `##`. */

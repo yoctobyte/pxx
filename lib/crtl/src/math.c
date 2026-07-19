@@ -64,6 +64,20 @@ double round(double x) {
   if (x >= 0.0) return (double)(long long)(x + 0.5);
   return (double)(long long)(x - 0.5);
 }
+/* rint family: round to nearest, ties to EVEN (the default FE_TONEAREST mode —
+   crtl has no fenv, the mode is fixed). quickjs's js_math needs lrint. */
+double rint(double x) {
+  double f, d;
+  f = floor(x);
+  d = x - f;
+  if (d > 0.5) return f + 1.0;
+  if (d < 0.5) return f;
+  if (fmod(f, 2.0) == 0.0) return f;   /* tie: pick the even neighbour */
+  return f + 1.0;
+}
+double nearbyint(double x) { return rint(x); }
+long lrint(double x) { return (long)rint(x); }
+long long llrint(double x) { return (long long)rint(x); }
 
 /* frexp: x = m * 2^e with 0.5 <= |m| < 1. Loop form (no bit reinterpret — the C
    `*(unsigned long*)&double` punning path is unreliable here). */
