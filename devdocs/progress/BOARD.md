@@ -28,7 +28,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (124)
+## backlog (126)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -91,7 +91,9 @@ _none_
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
+| feature-nilpy-dict | N | 60 | feature | NilPy: dict v1 — TPyDict | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
+| feature-nilpy-none-variant | N | 50 | feature | NilPy: `None` as a first-class variant value (VT_EMPTY) | — |
 | feature-nilpy-parallel-for-in | A | 45 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
 | feature-nilpy-tk-binding | B | 45 | feature | Thin Tcl/Tk embed for pxx (lib/pcl/tk.pas) + a tkinter-shaped NilPy surface — v1 landed | — |
 | feature-opt-complex-packed-double | O | 35 | feature | Complex as a packed-double XMM value (SSE2/SSE3) | — |
@@ -2522,6 +2524,7 @@ _none_
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
 - [p 60] [A] feature-inline-asm-xtensa
+- [p 60] [N] feature-nilpy-dict
 - [p 60] [O] feature-opt-store-reload-elimination
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
 - [p 60] [P] feature-pascal-corpus-oop
@@ -2545,6 +2548,7 @@ _none_
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile
 - [p 50] [A] feature-nilpy-collections-and-string-methods
+- [p 50] [N] feature-nilpy-none-variant
 - [p 50] [A] feature-pascal-asmmode-directive-tolerance
 - [p 50] [A] feature-pascal-initialize-finalize-intrinsics
 - [p 50] [A] feature-release-checksums-repro
