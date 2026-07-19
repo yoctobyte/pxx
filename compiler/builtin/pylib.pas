@@ -55,6 +55,7 @@ type
   end;
 
 function len(l: TPyList): Integer;
+function len(const s: AnsiString): Integer; overload;
 function next(c: TPyCounter): Int64;
 function pycontains(l: TPyList; const v: Variant): Boolean;
 function pyvartag(const v: Variant): Int64;
@@ -77,6 +78,10 @@ function pystr_find(const s: AnsiString; const sub: AnsiString): Integer;
 function pystr_isspace(const s: AnsiString): Boolean;
 function pystr_ofchar(c: Char): AnsiString;
 function pystr_at(const s: AnsiString; i: Integer): Char;
+function pystr_join(const sep: AnsiString; l: TPyList): AnsiString;
+function pystr_split_ws(const s: AnsiString): TPyList;
+function pystr_split_sep(const s: AnsiString; const sep: AnsiString): TPyList;
+function pystr_splitlines(const s: AnsiString): TPyList;
 
 implementation
 
@@ -226,6 +231,122 @@ begin
   Result := PPyVarRec(@v)^.VType;
 end;
 
+{ s.split() with NO argument: split on RUNS of whitespace, with leading and
+  trailing whitespace ignored — so "".split() and "   ".split() are both [],
+  and " a  b ".split() is ["a","b"]. This is a GENUINELY DIFFERENT algorithm
+  from split(sep) below, not a default argument, which is why they are separate
+  functions rather than one with an optional sep. }
+{ s.split() with NO argument: split on RUNS of whitespace, with leading and
+  trailing whitespace ignored — so "".split() and "   ".split() are both [],
+  and " a  b ".split() is ["a","b"]. A GENUINELY DIFFERENT algorithm from
+  split(sep), not a default argument, hence two functions.
+
+  Every element is a FRESH Copy() of the source rather than an accumulated
+  local: a list slot stores the variant's string PAYLOAD POINTER, so appending
+  a reused accumulator made all three elements alias its final contents. }
+function pystr_split_ws(const s: AnsiString): TPyList;
+var i, n, st: Integer;
+begin
+  Result := TPyList.Create;
+  n := Length(s);
+  i := 1;
+  while i <= n do
+  begin
+    while (i <= n) and PyIsSpaceCh(s[i]) do Inc(i);
+    if i > n then Break;
+    st := i;
+    while (i <= n) and not PyIsSpaceCh(s[i]) do Inc(i);
+    Result.append(Copy(s, st, i - st));
+  end;
+end;
+
+{ s.split(sep): split on an exact separator, KEEPING empty fields —
+  "a,,b".split(",") is ["a","","b"] and "".split(",") is [""]. Contrast
+  split() above, which drops them. An empty separator is a ValueError in
+  CPython. }
+function pystr_split_sep(const s: AnsiString; const sep: AnsiString): TPyList;
+var i, j, n, m, st: Integer;
+    hit: Boolean;
+begin
+  Result := TPyList.Create;
+  n := Length(s);
+  m := Length(sep);
+  if m = 0 then
+  begin
+    writeln('ValueError: empty separator');
+    Halt(1);
+  end;
+  st := 1;
+  i := 1;
+  while i <= n do
+  begin
+    hit := False;
+    if i + m - 1 <= n then
+    begin
+      hit := True;
+      for j := 1 to m do
+        if s[i + j - 1] <> sep[j] then begin hit := False; Break; end;
+    end;
+    if hit then
+    begin
+      Result.append(Copy(s, st, i - st));
+      i := i + m;
+      st := i;
+    end
+    else
+      Inc(i);
+  end;
+  Result.append(Copy(s, st, n - st + 1));
+end;
+
+{ s.splitlines(): split on newlines, and a TRAILING newline does not produce a
+  final empty field — "a\n".splitlines() is ["a"], not ["a",""]. "" is []. That
+  trailing rule is what separates it from split("\n"). }
+function pystr_splitlines(const s: AnsiString): TPyList;
+var i, n, st: Integer;
+begin
+  Result := TPyList.Create;
+  n := Length(s);
+  st := 1;
+  i := 1;
+  while i <= n do
+  begin
+    if s[i] = Chr(10) then
+    begin
+      Result.append(Copy(s, st, i - st));
+      st := i + 1;
+    end;
+    Inc(i);
+  end;
+  if st <= n then Result.append(Copy(s, st, n - st + 1));
+end;
+
+{ sep.join(list). CPython requires every item to BE a str and raises TypeError
+  otherwise — it does not stringify. Matched here rather than quietly calling
+  VariantToStr on an int, which would turn a real type error into plausible
+  wrong output. Variant tags: 5 = char, 6 = ansistring; a char is a 1-length
+  str in Python terms, so both are accepted.
+  Python's join takes any iterable; only TPyList is supported for now. }
+function pystr_join(const sep: AnsiString; l: TPyList): AnsiString;
+var i: Integer;
+    v: Variant;
+    tag: Int64;
+begin
+  Result := '';
+  for i := 0 to l.count - 1 do
+  begin
+    v := l.get(i);
+    tag := pyvartag(v);
+    if (tag <> 6) and (tag <> 5) then
+    begin
+      writeln('TypeError: sequence item ', i, ': expected str instance');
+      Halt(1);
+    end;
+    if i > 0 then Result := Result + sep;
+    Result := Result + VariantToStr(v);
+  end;
+end;
+
 function pyvarobj(const v: Variant): Pointer;
 begin
   Result := Pointer(PPyVarRec(@v)^.Payload);
@@ -263,6 +384,14 @@ end;
 function TPyList.count: Integer;
 begin
   Result := FLen;
+end;
+
+{ len() on a str. Same name as the list one — plain overloading inside a single
+  unit, so argument type picks it; the used-unit shadowing hazard in
+  project_builtin_overload_shadows_used_unit does not apply here. }
+function len(const s: AnsiString): Integer; overload;
+begin
+  Result := Length(s);
 end;
 
 function len(l: TPyList): Integer;

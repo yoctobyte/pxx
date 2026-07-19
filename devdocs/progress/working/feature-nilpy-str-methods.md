@@ -108,3 +108,47 @@ would freeze the wrong answer.
 
 Gate: `test-nilpy` GREEN, `--tier quick` GREEN, self-host byte-identical,
 whole test file diffed against CPython.
+
+## Unit 3 — join / split / splitlines (+ len on str) — DONE
+
+The list-interop trio, plus [[feature-nilpy-len-of-str]] which they need to be
+useful.
+
+CPython semantics that are NOT interchangeable and are each encoded:
+
+- `split()` (no arg) splits on RUNS of whitespace and DROPS empty fields:
+  `"".split()` and `"   ".split()` are `[]`. `split(sep)` splits on an exact
+  separator and KEEPS them: `"a,,b".split(",")` is `["a","","b"]`,
+  `"".split(",")` is `[""]`. Two different algorithms, so two pylib functions
+  chosen by argument count — not one with a default.
+- `splitlines()` drops the field a TRAILING newline would produce:
+  `"a\n".splitlines()` is `["a"]`, unlike `"a\n".split("\n")`.
+- `join` raises TypeError on a non-str item rather than stringifying it.
+  Matched, so a real type error stays an error instead of becoming plausible
+  wrong output.
+
+### Three bugs this unit surfaced
+
+1. **Aliasing (silent, wrong values).** The split functions first built each
+   field in a reused `cur` accumulator and appended that. A list slot stores
+   the variant's string PAYLOAD POINTER, so all three elements ended up
+   aliasing the accumulator's final contents — `parts[0]` returned `"c"`.
+   Every element is now a fresh `Copy()` of the source, which also removes the
+   O(n^2) concatenation.
+2. **Class identity in inference (segfault).** A str method returning tyClass
+   needs `PyInferLastCi` set to TPyList, else the inferred local carries
+   tyClass with no identity, `len()` picks the AnsiString overload over the
+   TPyList one, and reads a class pointer as a string handle.
+3. **Literal bases were invisible to inference.** `PyInferExprType`'s scan only
+   inspects IDENT tokens, so `"a,b".split(",")` never reached the str-method
+   case and produced an untyped local — same segfault as (2), different cause.
+   A literal-base branch now runs before the ident dispatch.
+
+Gate: `test-nilpy` GREEN, `--tier quick` GREEN, self-host byte-identical,
+**FPC bootstrap clean + byte-identical fixedpoint** (added to this unit's gate
+after unit 1 broke it invisibly), whole test file diffed against CPython.
+
+## Remaining
+
+`.encode()`/`.decode()` stay OUT (bytes model, filed separately when needed).
+Open: [[bug-nilpy-subscript-on-literal]].

@@ -698,6 +698,14 @@ begin
     begin pname := 'pystr_find'; retTk := tyInteger; wantArgs := 1; end
   else if CaseEqual(mname, 'isspace') then
     begin pname := 'pystr_isspace'; retTk := tyBoolean; end
+  else if CaseEqual(mname, 'join') then
+    begin pname := 'pystr_join'; wantArgs := 1; end
+  else if CaseEqual(mname, 'split') then
+    { 0 or 1 args, and the two forms are DIFFERENT algorithms — see pylib.
+      PyParseStrMethod picks the concrete function from the arg count. }
+    begin pname := 'pystr_split_sep'; retTk := tyClass; wantArgs := -1; end
+  else if CaseEqual(mname, 'splitlines') then
+    begin pname := 'pystr_splitlines'; retTk := tyClass; end
   else
   begin
     pname := '';
@@ -729,6 +737,33 @@ begin
   i := startIdx;
   while i < endIdx do
   begin
+    { A str method called on a string LITERAL — `"a,b".split(",")`. The scan
+      below only inspects IDENT tokens, so a literal base never reached the
+      str-method case and the result fell through untyped: a local assigned
+      from "a,b".split(",") carried no class identity, len() picked the
+      AnsiString overload over the TPyList one and read a class pointer as a
+      string handle. Handled here, before the ident dispatch. }
+    if (Tokens[i].Kind = tkString) and (i + 3 < endIdx) and
+       (Tokens[i + 1].Kind = tkDot) and (Tokens[i + 2].Kind = tkIdent) and
+       (Tokens[i + 3].Kind = tkLParen) and
+       PyStrMethodInfo(GetTokenStr(i + 2), smPName, tk, smArgs) then
+    begin
+      if tk = tyClass then PyInferLastCi := FindUClass('TPyList');
+      i := i + 3; depth := 0;
+      while i < endIdx do
+      begin
+        if Tokens[i].Kind = tkLParen then Inc(depth)
+        else if Tokens[i].Kind = tkRParen then
+        begin
+          Dec(depth);
+          if depth = 0 then Break;
+        end;
+        Inc(i);
+      end;
+      Result := PyWiden(Result, tk);
+      Inc(i);
+      Continue;
+    end;
     tk := PyTypeFromTokenIndex(i);
     if tk = tyUnknown then
     begin
@@ -816,6 +851,12 @@ begin
            (Tokens[i + 3].Kind = tkLParen) and
            PyStrMethodInfo(GetTokenStr(i + 2), smPName, tk, smArgs) then
         begin
+          { A str method returning a CLASS returns a TPyList (split /
+            splitlines). Record which class, or the inferred local carries
+            tyClass with no identity and overload resolution mis-picks — len()
+            on it chose the AnsiString overload and read a class pointer as a
+            string handle, segfaulting. }
+          if tk = tyClass then PyInferLastCi := FindUClass('TPyList');
           i := i + 3; depth := 0;
           while i < endIdx do
           begin
@@ -1252,7 +1293,8 @@ var pname: AnsiString;
 begin
   if not PyStrMethodInfo(mname, pname, retTk, wantArgs) then
     Error('Nil Python: unsupported str method .' + mname + '() (have: upper, '
-      + 'lower, strip, lstrip, rstrip, startswith, endswith, find, isspace)');
+      + 'lower, strip, lstrip, rstrip, startswith, endswith, find, isspace, '
+      + 'join, split, splitlines)');
 
   procIdx := FindProc(pname);
   if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
@@ -1289,7 +1331,16 @@ begin
     else Break;
   end;
   Expect(tkRParen, ')');
-  if i <> wantArgs then
+  if wantArgs < 0 then
+  begin
+    { optional-argument form: split() and split(sep) are separate functions }
+    if i = 0 then pname := 'pystr_split_ws'
+    else if i <> 1 then
+      Error('Nil Python: str method .' + mname + '() takes at most one argument');
+    procIdx := FindProc(pname);
+    if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  end
+  else if i <> wantArgs then
   begin
     if wantArgs = 0 then
       Error('Nil Python: str method .' + mname + '() takes no arguments')

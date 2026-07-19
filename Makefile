@@ -225,7 +225,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_str_methods.npy /tmp/test_nilpy_str_methods26
-	test "$$(/tmp/test_nilpy_str_methods26)" = "$$(printf 'HELLO, WORLD! 123\nhello, world! 123\nMIXED\nmixed\n42\nWORD7\nhello, world! 123\nHELLO, WORLD! 123\nFORTH\n\nALREADY UPPER\nalready lower\nDIGITS 0123 AND !@# STAY\nEMOJI STAYS >>> OK\nHello, World! 123\naB\nxyz\nB\nTrue\n[padded]\n[padded  ]\n[  padded]\n[]\n[]\n[tabbed]\nTrue\nFalse\nTrue\nFalse\nTrue\nTrue\nFalse\n2\n0\n-1\n0\n1\n2\nTrue\nFalse\nFalse\nTrue\nMIXED\nmixed\nTrue\nH\ne\n3\nH\n3')"
+	test "$$(/tmp/test_nilpy_str_methods26)" = "$$(printf 'HELLO, WORLD! 123\nhello, world! 123\nMIXED\nmixed\n42\nWORD7\nhello, world! 123\nHELLO, WORLD! 123\nFORTH\n\nALREADY UPPER\nalready lower\nDIGITS 0123 AND !@# STAY\nEMOJI STAYS >>> OK\nHello, World! 123\naB\nxyz\nB\nTrue\n[padded]\n[padded  ]\n[  padded]\n[]\n[]\n[tabbed]\nTrue\nFalse\nTrue\nFalse\nTrue\nTrue\nFalse\n2\n0\n-1\n0\n1\n2\nTrue\nFalse\nFalse\nTrue\nMIXED\nmixed\nTrue\nH\ne\n3\nH\n3\n5\n0\n2\na,b,c\nabc\nsolo\n[]\na|b|c\na||b\n1\nFORTH|is|fun\n0\n0\none|two|three\n1\n0\n2\n3\nDUP|SWAP|DROP\n2\n12')"
 	./$(COMPILER) test/test_nilpy_isinstance.npy /tmp/test_nilpy_isinstance26
 	test "$$(/tmp/test_nilpy_isinstance26)" = "$$(printf 'num\nnum\ntext\nword\ncall\nnum')"
 	./$(COMPILER) test/test_nilpy_optional.npy /tmp/test_nilpy_optional26

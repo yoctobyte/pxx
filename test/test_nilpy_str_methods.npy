@@ -98,3 +98,40 @@ print(s[0].upper())
 print(s[-1].upper())
 # "abc"[1] — subscripting a LITERAL is a separate gap
 # (bug-nilpy-subscript-on-literal), not covered here.
+
+# --- len() on a str as well as a list (feature-nilpy-len-of-str)
+print(len("Hello"))
+print(len(""))
+print(len(["a", "b"]))
+
+# --- join
+print(",".join(["a", "b", "c"]))
+print("".join(["a", "b", "c"]))
+print(" - ".join(["solo"]))
+print("[" + ",".join([]) + "]")
+
+# --- split(sep) KEEPS empty fields; split() on whitespace DROPS them.
+# Two different algorithms, not a default argument.
+print("|".join("a,b,c".split(",")))
+print("|".join("a,,b".split(",")))
+print(len("".split(",")))
+print("|".join("  FORTH  is   fun  ".split()))
+print(len("".split()))
+print(len("   ".split()))
+
+# --- splitlines: a TRAILING newline yields no final empty field
+print("|".join("one\ntwo\nthree".splitlines()))
+print(len("a\n".splitlines()))
+print(len("".splitlines()))
+print(len("a\nb\n".splitlines()))
+
+# --- the uforth scanning idiom, end to end
+line = "  DUP SWAP  DROP "
+toks = line.split()
+print(len(toks))
+print("|".join(toks).upper())
+i = 0
+while i < len(line):
+    if line[i] == "D":
+        print(i)
+    i = i + 1

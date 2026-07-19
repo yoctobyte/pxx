@@ -30,3 +30,13 @@ with a used-unit routine and argument width steers the pick, so verify both
 Note the error also dumps the compiler's raw MatchProcCall candidate table
 (`arg[0] = ...` / `param[0] = ...`) to stdout, which reads like stray debug
 output in a user-facing diagnostic. Possibly worth its own cleanup ticket.
+
+## Fixed 2026-07-19
+
+`function len(const s: AnsiString): Integer; overload;` added beside the
+TPyList one. Both live in pylib, so this is plain same-unit overloading picked
+by argument type — the used-unit shadowing hazard in
+`project_builtin_overload_shadows_used_unit` does not apply. `len(list)` and
+`len(str)` both verified, including the `while i < len(s)` scanning idiom.
+
+Landed with the join/split unit of [[feature-nilpy-str-methods]].
