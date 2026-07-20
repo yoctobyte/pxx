@@ -87,3 +87,27 @@ for (BigFromInt/BigToStr/BigAdd/BigSub/BigMul/BigDivMod/BigCompare), so the
 slow path is a binding job, not a from-scratch implementation. Its `TBigInt` is
 a record holding a managed dynamic array, which is relevant to the lifetime
 decision.
+
+## DECIDED 2026-07-20 — Option A, slot-address rvalue
+
+**User's call: A.** A promo rvalue is the ADDRESS of a 2-word slot; every op is
+a runtime helper taking slot addresses — the `tyVariant` model already proven
+in this codebase.
+
+Accepted trade: every arithmetic op becomes a call, a real slowdown versus
+stage 2's inline checked op, including for values that never leave the inline
+tier. Taken deliberately, because:
+
+- it is the model already working here, so all six backends land at once with
+  no backend changes;
+- correctness before optimization is the project's stated order;
+- stage 4 (check elision + range analysis) is *already scheduled* to restore
+  the fast path, so "stage 3 partly undoes stage 2" is really "stage 4 does
+  what stage 4 was for".
+
+B and C were rejected as new value models: guessing wrong there means throwing
+away the work, and A cannot be wrong — only slow, and slow is scheduled to be
+fixed. Implementation continues under [[feature-a-promotable-int]].
+
+## Log
+- 2026-07-20 — DECIDED by the user; see the DECISION section above. Implementation follows in its own tickets.

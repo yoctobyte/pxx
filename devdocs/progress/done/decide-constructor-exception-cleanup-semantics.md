@@ -5,7 +5,7 @@ prio: 60  # auto
 # DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?)
 
 - **Type:** decision (language semantics / FPC-compat) — Track A
-- **Status:** backlog — no implementation yet; capturing the design
+- **Status:** done
   discussion so whoever implements constructor codegen starts from the
   recorded trade-off instead of silently picking one.
 - **Opened:** 2026-07-04, from a user discussion on `class of` / metaclasses
@@ -52,3 +52,21 @@ every free/dispose with `if Assigned(...)`.
 A written choice (2, almost certainly, per the discussion) recorded here;
 if anything ever surfaces requiring FPC-parity cleanup semantics, revisit
 before implementing rather than assuming option 2 forever.
+
+## DECIDED 2026-07-20 — Option 2, no wrapper
+
+**User's call: 2.** A constructor that raises propagates the exception raw.
+No implicit try/except, no auto-`Destroy`, no reraise.
+
+Matches the project's no-implicit-safety-net stance and keeps constructor
+codegen free of a wrapper nobody asked for. The compat cost is real but narrow:
+upstream Pascal code doing multi-stage resource allocation across a single
+constructor and leaning on FPC's cleanup contract will leak instead of being
+destroyed. That is rare, and it is loud rather than silent.
+
+Option 3 (opt-in directive) stays available if a corpus program ever actually
+needs FPC parity here — it can be added later without breaking anything decided
+now, since the default would remain off.
+
+## Log
+- 2026-07-20 — DECIDED by the user; see the DECISION section above. Implementation follows in its own tickets.

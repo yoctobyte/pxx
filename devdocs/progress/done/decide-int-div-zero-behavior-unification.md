@@ -5,7 +5,7 @@ prio: 43  # auto
 # DECIDE: unify integer div/mod-by-zero behavior across targets
 
 - **Type:** decision (low priority) — Track A
-- **Status:** backlog — parked by design; revisit when cross-target work or
+- **Status:** done
   the signal/exception stack ([[feature-signal-handlers]]) matures.
 - **Opened:** 2026-07-02, capturing the user design discussion so the eventual
   decision starts from the recorded trade-offs.
@@ -62,3 +62,28 @@ prio: 43  # auto
 A written choice among the options (or a hybrid), with default + switch
 polarity + FPC-emulation story fixed; implementation tickets then follow
 per target.
+
+## DECIDED 2026-07-20 — Option 1, RE 200 everywhere
+
+**User's call: 1.** Integer division by zero raises RE 200 on every target.
+Extend the existing x86 pre-check to the other five backends (~9 sites,
+including the 64-bit soft-div helpers on 32-bit targets).
+
+This kills the divergence that made the current state indefensible: x86 raises,
+ARM silently yields 0, riscv yields -1. A silent wrong answer that differs per
+target is exactly the bug class this project exists to hunt, and it is also
+FPC-parity, so it costs nothing in compatibility.
+
+**Fold in the unguarded overflow case:** `Low(Int64) div -1` / `mod -1` still
+SIGFPEs on x86 (overflow trap, not zero divisor); FPC raises RE 215. Handle it
+in the same pass — either a second compare in the check or via the signal
+handler — rather than leaving a second silent divergence behind.
+
+Rejected: 2 (defined result) diverges from FPC for no gain now that the check
+is being written anyway; 3 (switchable) is surface to test per target for a
+question with one right answer; 4 (catchable) needs an exception-class home
+outside sysutils and can be layered on later — the hook mechanism already
+exists.
+
+## Log
+- 2026-07-20 — DECIDED by the user; see the DECISION section above. Implementation follows in its own tickets.

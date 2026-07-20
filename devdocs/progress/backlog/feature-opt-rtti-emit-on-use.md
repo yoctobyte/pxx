@@ -78,3 +78,12 @@ debugging, reflection, and advanced software (streaming, fpcunit, dynamic dispat
   [VMT-16], ClassName backlink at [VMT-8]), so `--rtti=none` semantics need a
   user call. Filed [[decide-rtti-none-semantics]] (options + recommendation).
   Unclaimed; back to backlog until decided.
+
+## Elevated 2026-07-20 — this IS the `--rtti=none` answer
+
+[[decide-rtti-none-semantics]] resolved as option C: usage-driven emission, and
+**no `--rtti=none` flag ships at all**. So this ticket is no longer an
+optimization sitting alongside a user-facing switch — it is the entire
+mechanism by which RTTI shrinks, and the ESP/size-constrained audience has
+nothing else to reach for. Any remaining text describing `--rtti=none` as a
+planned switch is superseded.

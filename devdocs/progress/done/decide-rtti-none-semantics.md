@@ -52,3 +52,26 @@ The classless quick win (bare program still ships a TObject name remnant) is
 uncontroversial under ANY option — can land independently: skip ALL RTTI when
 no user class exists AND no reflection op appears (builtin TObject row alone
 does not count).
+
+## DECIDED 2026-07-20 — Option C, usage-driven; no `--rtti=none` flag
+
+**User's call: C.** Emit per-class RTTI only where it is actually used. The
+flag is not implemented at all.
+
+Safe by construction — functional RTTI (finalize layouts, the data the RTL
+genuinely needs) is never at risk, because nothing is stripped on the user's
+say-so. It also removes a build-time decision users would have had to make
+correctly, and a footgun class (B's error-on-managed-fields) aimed squarely at
+the ESP audience the flag was for.
+
+A (reflection-only strip, shippable sooner) was available as an interim and is
+NOT being taken: C is the destination and there is no pressure forcing an
+earlier partial step.
+
+**Consequence:** [[feature-opt-rtti-emit-on-use]] IS this decision's
+implementation — it is no longer "an optimization alongside a flag", it is the
+whole mechanism. Anything in the tree referring to `--rtti=none` as a planned
+user-facing switch should be read as superseded.
+
+## Log
+- 2026-07-20 — DECIDED by the user; see the DECISION section above. Implementation follows in its own tickets.
