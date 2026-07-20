@@ -65,3 +65,43 @@ Secondary, environmental: borg's 4 GB swap has been fully consumed by
 long-lived desktop processes all day, so there is no cushion at all for a job
 this size. Freeing swap makes the flake less likely but does not address the
 job composition.
+
+## Failure rate and what has been RULED OUT (Track T, 2026-07-20)
+
+Observed outcomes for this job, same box, same day:
+
+```
+FAIL   33.5s
+FAIL   92.0s
+PASS  177.8s     <- the only pass; ran alone in degraded/serial mode
+FAIL  100.4s
+```
+
+It needs ~178s uninterrupted and is killed before finishing most runs. The
+job log always ends the same way — three `ok:` compiles, then a bare
+`Terminated` (SIGTERM), at the point the recipe moves on to the 12000-proc
+token-growth test.
+
+**Ruled out** (checked, not assumed):
+- **Not the OOM killer.** `memory.events` on the user slice reports
+  `oom_kill 0`, `oom_group_kill 0`. Nothing has been OOM-killed.
+- **Not testmgr's memory watchdog.** It has never fired on this box
+  (0 occurrences in the daemon log), and it returns early when
+  `len(self.running) <= 1`, so a job running alone can never be its victim.
+- **Not a timeout.** The job's class is `corpus` (1200s) and it has no
+  learned `exp_dur` yet, so the class timeout applies. Failures at 33–100s
+  are nowhere near it, and no "timed out" line is ever logged.
+- **Not a `/tmp` collision between checkouts.** `RUN_TMP` is
+  `/tmp/testmgr-scratch-<pid>`, and recipes' literal `/tmp/` paths are
+  rewritten into it per run, so concurrent runs cannot share those files.
+
+**Relevant context:** this box runs at least two testmgr instances
+concurrently — the Track T watcher out of `~/trackt-watch`, and a second
+clone of this repo at `~/frankonpiler` (Track N/NilPy work) running
+`--tier quick` gates. Plus a desktop session holding ~4 GB of swap. So real
+concurrent memory pressure exists even though nothing is OOM-killing.
+
+**Still unexplained:** what actually sends the SIGTERM. Whoever picks this
+up should start there rather than re-deriving the above. Splitting the
+stress tests into their own job (main suggestion) very likely makes the
+question moot, since the job would stop being a 6.8 GB / 178s outlier.
