@@ -136,6 +136,9 @@ MEM_FLOOR = 1500 << 20          # never admit below this MemAvailable
 SWAP_FLOOR = 1000 << 20         # never admit with less free swap than this...
 SWAP_FLOOR_FRAC = 0.10          # ...but never demand more than this much of SwapTotal
 PSI_ADMIT = 20.0                # never admit above this memory PSI (some avg10)
+PSI_QUIET = 1.0                 # below this the box is demonstrably not stalling
+SWAP_GATE_AVAIL = 3 * MEM_FLOOR  # ...and with this much MemAvailable, free swap
+                                # is stale desktop pages, not memory pressure
 PSI_KILL = 45.0                 # kill+requeue the newest job above this PSI
 SCOPE_MAX_FRAC = 0.60           # cgroup MemoryMax = min(8G, this * MemTotal)
 SCOPE_MAX_ABS = 8 << 30
@@ -1123,11 +1126,29 @@ class Manager:
         # gate stayed shut forever and every run crawled in degraded serial mode.
         # min() keeps this NO LESS conservative than before on big-swap boxes.
         floor = min(SWAP_FLOOR, int(mi.get("SwapTotal", 0) * SWAP_FLOOR_FRAC))
-        if mi.get("SwapTotal", 0) and mi.get("SwapFree", 0) < floor:
-            self.note_stall("swap critically low (%d MB free, floor %d MB)"
-                            % (mi["SwapFree"] >> 20, floor >> 20))
-            return False
         psi = mem_pressure()
+        # Scaling the floor was not enough: free swap is not a pressure signal
+        # at all on a desktop box, where swap fills with stale anon pages from
+        # long-lived processes (browser tabs) that are never handed back. The
+        # floor then latches shut permanently and admit_forced drips the run
+        # through one job at a time in degraded serial mode -- 1011 jobs
+        # serially, which reads as "the watcher isn't running anything".
+        # Observed on borg 2026-07-20: 233 MB free swap under a 409 MB floor
+        # while MemAvailable was 8.6 GB and memory PSI was flat 0.00 across
+        # avg10/60/300. Low free swap only matters if the box is ACTUALLY
+        # struggling, and PSI and MemAvailable measure that directly -- so
+        # require one of them to corroborate before holding admission.
+        # The PSI_ADMIT / MEM_FLOOR / PSI_KILL guards below are unchanged, so
+        # a box that genuinely starts thrashing is still caught.
+        swap_low = (mi.get("SwapTotal", 0)
+                    and mi.get("SwapFree", 0) < floor)
+        if swap_low and (psi > PSI_QUIET
+                         or mi.get("MemAvailable", 0) < SWAP_GATE_AVAIL):
+            self.note_stall("swap critically low (%d MB free, floor %d MB) "
+                            "with PSI %.1f%% / MemAvailable %d MB"
+                            % (mi["SwapFree"] >> 20, floor >> 20, psi,
+                               mi.get("MemAvailable", 0) >> 20))
+            return False
         if psi > PSI_ADMIT:
             self.note_stall("memory pressure (PSI some avg10 %.1f%%)" % psi)
             return False
