@@ -17259,6 +17259,24 @@ begin
         Result := tyPointer;
       end
       else if (not tnHasAlias) and (CaseEqual(lo, 'variant')) then Result := tyVariant
+      { PROMOTABLE INT (feature-a-promotable-int). Opt-in and explicitly typed,
+        so no existing Pascal program changes behaviour by naming nothing.
+        `PromoInt` picks the target's default storage class; the numbered names
+        pin a class explicitly, and the number IS the usable inline width. }
+      else if (not tnHasAlias) and (CaseEqual(lo, 'promoint') or CaseEqual(lo, 'promoint32')
+                                    or CaseEqual(lo, 'promoint64')) then
+      begin
+        { Storage and arithmetic are stage 2. Reject the declaration outright
+          rather than let a promo-typed symbol reach codegen: every integer path
+          would treat the {tag, payload} struct as a machine word and silently
+          compute on the tag. An error here costs a diagnostic; the alternative
+          costs a silent wrong answer. }
+        Error('promotable int is not implemented yet: the type name is reserved '
+              + '(feature-a-promotable-int stage 2 adds storage and arithmetic)');
+        if CaseEqual(lo, 'promoint32') then Result := tyPromoInt32
+        else if CaseEqual(lo, 'promoint64') then Result := tyPromoInt64
+        else Result := PromoIntDefaultKind;
+      end
       else if (not tnHasAlias) and (EnableAutoVar and CaseEqual(lo, 'auto')) then Result := tyAuto
       else
       begin
