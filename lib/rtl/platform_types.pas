@@ -18,6 +18,14 @@ type
     BlkSize: Integer;
   end;
 
+  { An IPv6 address as its 16 wire-order bytes. Deliberately a byte array rather
+    than four LongWords: an IPv6 address IS a byte string on the wire, and every
+    LongWord view invites a byte-swap that should not happen. Lives here, beside
+    TPalFileStat, so both the PAL facade and each backend can name it. }
+  TPalIn6Addr = record
+    Bytes: array[0..15] of Byte;
+  end;
+
 implementation
 
 end.

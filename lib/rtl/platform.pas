@@ -19,6 +19,7 @@ const
   PAL_PLATFORM_ESP_IDF = 2;
 
   PAL_NET_AF_INET = 2;
+  PAL_NET_AF_INET6 = 10;      { Linux AF_INET6 }
   PAL_NET_SOCK_STREAM = 1;
   PAL_NET_SOCK_DGRAM = 2;
 
@@ -126,6 +127,22 @@ function PalSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; valLen:
 function PalSetSocketNonBlocking(handle, enabled: Integer): Integer;
 function PalBindIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 function PalConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
+
+{ IPv6 bind/connect. `addr` is the 16 address bytes in WIRE order — an IPv6
+  address is already a byte string, so unlike the IPv4 LongWord there is nothing
+  to byte-swap. `scopeId` is the interface index a link-local address (fe80::/10)
+  needs to be routable; pass 0 for global and loopback addresses, where the
+  kernel ignores it. }
+function PalBindIpv6(handle: Integer; const addr: TPalIn6Addr;
+                     port, scopeId: Integer): Integer;
+function PalConnectIpv6(handle: Integer; const addr: TPalIn6Addr;
+                        port, scopeId: Integer): Integer;
+
+{ The IPv6 loopback, ::1 — the IPv6 counterpart of PAL_NET_IP_LOOPBACK. }
+function PalIn6Loopback: TPalIn6Addr;
+
+{ The unspecified address, :: — bind to it to accept on every interface. }
+function PalIn6Any: TPalIn6Addr;
 function PalListen(handle, backlog: Integer): Integer;
 function PalAccept(handle: Integer): Integer;
 function PalRecv(handle: Integer; buf: Pointer; len: Integer): Int64;
@@ -388,6 +405,31 @@ end;
 function PalConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 begin
   Result := PalBackendConnectIpv4(handle, hostAddr, port);
+end;
+
+function PalBindIpv6(handle: Integer; const addr: TPalIn6Addr;
+                     port, scopeId: Integer): Integer;
+begin
+  Result := PalBackendBindIpv6(handle, addr, port, scopeId);
+end;
+
+function PalConnectIpv6(handle: Integer; const addr: TPalIn6Addr;
+                        port, scopeId: Integer): Integer;
+begin
+  Result := PalBackendConnectIpv6(handle, addr, port, scopeId);
+end;
+
+function PalIn6Loopback: TPalIn6Addr;
+var i: Integer;
+begin
+  for i := 0 to 15 do Result.Bytes[i] := 0;
+  Result.Bytes[15] := 1;                      { ::1 }
+end;
+
+function PalIn6Any: TPalIn6Addr;
+var i: Integer;
+begin
+  for i := 0 to 15 do Result.Bytes[i] := 0;   { :: }
 end;
 
 function PalListen(handle, backlog: Integer): Integer;

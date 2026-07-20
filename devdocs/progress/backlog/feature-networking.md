@@ -186,3 +186,37 @@ DNS deferred to `feature-dns-resolver-library`.
   unification.
 
 - 2026-07-19 (backlog sweep note) Milestone note: lib_synapse smoke in make lib-test compiles real Synapse under --mimic-fpc and runs b64/md5/sha1/crc32 + TCP ping/pong — the Synapse milestone is effectively achieved (see resolved feature-synapse-compile-check). Remaining here: IPv6, async/blocking facade unification; DNS split to its own ticket.
+
+## Log
+- 2026-07-20 (Track B) — **IPv6 reaches the PAL.** `TPalIn6Addr` (16 wire-order
+  bytes) in `platform_types.pas`; `PalBindIpv6` / `PalConnectIpv6` /
+  `PalIn6Loopback` / `PalIn6Any` on the facade; a real posix backend building
+  `sockaddr_in6` (28 bytes: family, port, flowinfo, 16 address bytes, scope id).
+  Gated by `test/lib_ipv6.pas` in `make lib-test` — binds `::`, connects to
+  `::1`, moves a payload.
+
+  Two deliberate choices worth keeping:
+
+  - `TPalIn6Addr` is a **byte array**, not four LongWords. An IPv6 address is a
+    byte string on the wire; every LongWord view invites a byte-swap that must
+    not happen. The IPv4 path takes a host-order LongWord and swaps; the v6 path
+    copies. Conflating the two is the classic way to ship an address that looks
+    right in a debugger and is wrong on the wire.
+  - The **ESP backend returns `PAL_ERR_UNSUPPORTED`** rather than attempting it.
+    lwIP can do IPv6, but only when the IDF build has `LWIP_IPV6` on, and the
+    backend cannot ask. Emitting a `sockaddr_in6` at a v4-only lwIP would fail
+    with a confusing errno; refusing honestly is better until someone runs it on
+    a device with IPv6 enabled.
+
+  The test SKIPs (exit 0) when `socket(AF_INET6)` fails, since a host with IPv6
+  disabled in the kernel is not a code defect. What it is really guarding is the
+  `sockaddr_in6` byte layout — get a field offset wrong and `bind` fails or,
+  worse, silently binds the wrong address.
+
+  **Not done:** `scopeId` is plumbed through but untested — a link-local
+  (`fe80::/10`) connection is the only thing that exercises it and that needs a
+  real interface index. `TNetAddress` / `net.pas` and `asyncnet` still speak
+  IPv4 only; surfacing v6 there (and dual-stack listeners, and AAAA in the
+  resolver) is the next slice. So this is the PAL floor, not IPv6 support in the
+  networking library.
+

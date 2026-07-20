@@ -58,6 +58,10 @@ function PalBackendSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; 
 function PalBackendSetSocketNonBlocking(handle, enabled: Integer): Integer;
 function PalBackendBindIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 function PalBackendConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
+function PalBackendBindIpv6(handle: Integer; const addr: TPalIn6Addr;
+                            port, scopeId: Integer): Integer;
+function PalBackendConnectIpv6(handle: Integer; const addr: TPalIn6Addr;
+                               port, scopeId: Integer): Integer;
 function PalBackendListen(handle, backlog: Integer): Integer;
 function PalBackendAccept(handle: Integer): Integer;
 function PalBackendRecv(handle: Integer; buf: Pointer; len: Integer): Int64;
@@ -178,6 +182,7 @@ const
   PAL_S_IFDIR = $4000;
   PAL_S_IFREG = $8000;
   PAL_NET_AF_INET = 2;
+  PAL_NET_AF_INET6 = 10;
   SOL_SOCKET = 1;
   SO_REUSEADDR = 2;
   SO_ERROR = 4;
@@ -621,6 +626,54 @@ begin
   Result := Integer(SockCall(SC_CONNECT, handle, Int64(@sa[0]), 16, 0, 0));
 {$else}
   Result := Integer(__pxxrawsyscall(SYS_connect, handle, Int64(@sa[0]), 16, 0, 0, 0));
+{$endif}
+end;
+
+{ sockaddr_in6 is 28 bytes:
+    0..1   sin6_family (AF_INET6, host order — the kernel reads it as a short)
+    2..3   sin6_port      (network order)
+    4..7   sin6_flowinfo  (unused here, zero)
+    8..23  sin6_addr      (16 bytes, network order = the address as written)
+    24..27 sin6_scope_id  (link-local interface index; 0 for global and loopback)
+  Note the address bytes are NOT byte-swapped: unlike the IPv4 case, where the
+  caller hands us a host-order LongWord, an IPv6 address is already a byte
+  string in wire order. }
+procedure FillSockAddrIpv6(sa: Pointer; const addr: TPalIn6Addr; port, scopeId: Integer);
+var i: Integer;
+begin
+  for i := 0 to 27 do PB(Pointer(Int64(sa) + i))^ := 0;
+  PB(Pointer(Int64(sa) + 0))^ := PAL_NET_AF_INET6 and $FF;
+  PB(Pointer(Int64(sa) + 1))^ := (PAL_NET_AF_INET6 shr 8) and $FF;
+  PB(Pointer(Int64(sa) + 2))^ := (port shr 8) and $FF;
+  PB(Pointer(Int64(sa) + 3))^ := port and $FF;
+  for i := 0 to 15 do PB(Pointer(Int64(sa) + 8 + i))^ := addr.Bytes[i];
+  PB(Pointer(Int64(sa) + 24))^ := scopeId and $FF;
+  PB(Pointer(Int64(sa) + 25))^ := (scopeId shr 8) and $FF;
+  PB(Pointer(Int64(sa) + 26))^ := (scopeId shr 16) and $FF;
+  PB(Pointer(Int64(sa) + 27))^ := (scopeId shr 24) and $FF;
+end;
+
+function PalBackendBindIpv6(handle: Integer; const addr: TPalIn6Addr;
+                            port, scopeId: Integer): Integer;
+var sa: array[0..27] of Byte;
+begin
+  FillSockAddrIpv6(@sa[0], addr, port, scopeId);
+{$ifdef CPU_I386}
+  Result := Integer(SockCall(SC_BIND, handle, Int64(@sa[0]), 28, 0, 0));
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_bind, handle, Int64(@sa[0]), 28, 0, 0, 0));
+{$endif}
+end;
+
+function PalBackendConnectIpv6(handle: Integer; const addr: TPalIn6Addr;
+                               port, scopeId: Integer): Integer;
+var sa: array[0..27] of Byte;
+begin
+  FillSockAddrIpv6(@sa[0], addr, port, scopeId);
+{$ifdef CPU_I386}
+  Result := Integer(SockCall(SC_CONNECT, handle, Int64(@sa[0]), 28, 0, 0));
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_connect, handle, Int64(@sa[0]), 28, 0, 0, 0));
 {$endif}
 end;
 

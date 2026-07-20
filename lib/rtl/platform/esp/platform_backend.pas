@@ -53,6 +53,10 @@ function PalBackendSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; 
 function PalBackendSetSocketNonBlocking(handle, enabled: Integer): Integer;
 function PalBackendBindIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 function PalBackendConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
+function PalBackendBindIpv6(handle: Integer; const addr: TPalIn6Addr;
+                            port, scopeId: Integer): Integer;
+function PalBackendConnectIpv6(handle: Integer; const addr: TPalIn6Addr;
+                               port, scopeId: Integer): Integer;
 function PalBackendListen(handle, backlog: Integer): Integer;
 function PalBackendAccept(handle: Integer): Integer;
 function PalBackendRecv(handle: Integer; buf: Pointer; len: Integer): Int64;
@@ -571,6 +575,25 @@ begin
 {$else}
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
+end;
+
+{ IPv6 on ESP: lwIP can do it, but only when the IDF build has LWIP_IPV6
+  enabled, and this backend has no way to ask. Rather than emit a sockaddr_in6
+  that a v4-only lwIP would reject with a confusing errno, both entry points
+  report PAL_ERR_UNSUPPORTED until someone builds and runs it on a device with
+  IPv6 turned on. Refusing honestly beats a plausible-looking failure — see
+  feature-pal-esp-posix-fd-semantics for the same discipline elsewhere in this
+  backend. }
+function PalBackendBindIpv6(handle: Integer; const addr: TPalIn6Addr;
+                            port, scopeId: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendConnectIpv6(handle: Integer; const addr: TPalIn6Addr;
+                               port, scopeId: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
 end;
 
 function PalBackendListen(handle, backlog: Integer): Integer;
