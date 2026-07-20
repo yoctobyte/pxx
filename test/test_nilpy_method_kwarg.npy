@@ -1,0 +1,6 @@
+b = bytearray(3)
+b[0] = 72
+b[1] = 105
+s = bytes(b).decode("latin-1", errors="replace")
+print(s[0])
+print(s[1])

@@ -6384,6 +6384,12 @@ begin
           end;
           while mai <= Procs[mpi].ParamCount - 1 do
           begin
+            { NilPy keyword argument on a method — `.decode(enc, errors="x")`.
+              The censused uses pass keywords in declaration order, so the
+              `name=` prefix is consumed and the value binds positionally. }
+            if PyExprMode and (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+               (Tokens[TokPos].Kind = tkAssign) then
+            begin Next; Next; end;
             if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(mpi, mai) then
             begin
               { `[...]` array-of-const literal to a method reached through a
