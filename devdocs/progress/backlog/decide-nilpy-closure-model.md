@@ -1,70 +1,70 @@
 ---
 track: U
-prio: 70
+prio: 20
 type: idea
 ---
 
-# DECIDE: which closure model for NilPy?
+# DECIDE (DEFERRED): which closure model for NilPy?
 
-Blocks [[feature-nilpy-nested-def-as-value]], which is the uforth blocker (52
-inline calls vs ~197 value uses of inner defs). Nested defs already parse, nest,
-and read enclosing locals when CALLED in place (5fd3762c, c02d2c98) — that
-slice appends the captured values as extra ARGUMENTS at each call site, which
-works only because every call is lexically inside the parent. A def that escapes
-as a value has no such call site, so the captured state must travel with it.
-Three ways to do that, and the choice is not mine to make: they differ in
-observable SEMANTICS, not just in cost.
+**Status 2026-07-20: deferred with evidence, not answered — and it does not
+block anything.** Filed earlier the same day claiming closures-as-values was the
+uforth blocker. That claim was WRONG and is corrected below; the fork is real
+but nothing in the corpus can observe it, so building for it now would be
+speculative.
 
-## Option A — closure record, capture by VALUE at definition time
+## What the corpus actually does
 
-A heap record `{code ptr, captured values}`; `f = inner` copies the current
-values. Cheapest, no change to how the parent's locals are stored, and it
-composes with the existing call path (call through pointer, captured slots
-appended as trailing args).
+Measured over `/home/rene/projects/uforth/uforth.py` (214 inner defs):
 
-**Wrong on late binding.** Python reads a closed-over name at CALL time:
+| fact | number |
+| --- | --- |
+| inner defs capturing NOTHING from the enclosing scope | 162 / 205 |
+| inner defs defined inside a loop | **0** |
+| inner defs whose capture is written explicitly as a default arg | the rest |
+
+The natives are uniform: `def w_x(vm: VM) -> None`, all inside one
+`build_base_vm(...)`, registered as `vm.define_word("+", native=w_plus)`.
+
+Where uforth genuinely closes over something, it already spells the capture
+by-value at definition time, using Python's own idiom:
 
 ```python
-fs = []
-for i in range(3):
-    def g() -> int:
-        return i
-    fs.append(g)
-print([f() for f in fs])     # CPython [2, 2, 2] — every closure sees the LAST i
+def _field(v, _offset=offset):     # the `i=i` trick
 ```
 
-Option A prints `[0, 1, 2]`. That is the famous Python surprise; code in the
-wild sometimes RELIES on it (and the `i=i` default-argument idiom exists
-precisely to opt out).
+So the author wrote around late binding. **By-value at definition IS what the
+source asks for**, and no site exists where A and B differ.
 
-## Option B — cells (CPython's model)
+## Correction to the earlier filing
 
-A captured local is boxed into a heap cell at parent entry; parent and closure
-both go through the cell. Correct late binding, and `nonlocal` writes fall out
-for free. Costs: every access to a captured local in the PARENT becomes an
-indirection, and the parent's local slots for captured names must be rewritten
-at parse time — invasive in a frontend that types locals with a trial-parse
-pre-pass, though the pre-pass does mean we know the capture set before laying
-out the frame.
+The earlier note said "52 inline calls vs ~197 value uses ⇒ closures are the
+blocker". The ~197 are `native=w_x` KEYWORD ARGUMENTS — real value uses, but of
+functions that capture nothing. A second scanner bug inflated the capture count:
+free-name analysis that did not treat a nested `for i, v in ...` target as the
+inner def's OWN local, so `w_dot_s` looked like it captured `i` and `v` when
+both are its own loop variables.
 
-## Option C — A now, B later, behind the corpus
+## Recommendation when this is picked up
 
-Ship A, get uforth running, and revisit if a corpus actually depends on late
-binding. Risk: A's answer is SILENTLY different — a wrong number, not an error —
-and "revisit later" on a semantics choice is how a dialect quietly diverges.
-Mitigation: make the loop case a hard ERROR under A (a def that escapes AND
-captures a name assigned in an enclosing loop), so the divergence is loud and
-the corpus tells us whether B is needed.
+Unchanged in substance, and still cells:
 
-## Recommendation
+- **cells (option B)** remain the right end state — correct late binding, and
+  `nonlocal` falls out free.
+- The cheap path is still hybrid: a def whose name is only ever CALLED keeps
+  today's trailing by-value parameters (shipped, gated, zero heap); a def used
+  as a VALUE gets a closure record. Cells then change only WHERE the captured
+  value lives, not the call path, so B is an increment on that representation.
+- NilPy computes its capture set before frame layout (`PyCollectLocalsAST` trial
+  parse, `PyQueueNestedDef` free-name scan), which is the part that makes cells
+  expensive in most compilers. That cost is already paid here.
 
-**C with the error, converging on B.** A alone is a semantics fork we would be
-stuck with; B alone is a large change to land before knowing whether uforth even
-needs it. C gets the corpus moving while keeping the divergence loud, and every
-piece of A's machinery (the closure record, calling through it) is machinery B
-needs too — the cell is a change to WHERE the value lives, not to the call path.
+## What to do INSTEAD, now
 
-What I need from Track U: pick A, B, or C — and if C, confirm the
-"escaping capture of a loop-assigned name is an error" rule is acceptable, since
-it will reject some real Python that the by-value model would otherwise silently
-mis-answer.
+Implicit capture by an ESCAPING def stays a hard error — zero corpus sites, so
+it costs nothing and keeps this fork open with no silent divergence. The real
+corpus needs are, in order:
+
+1. [[feature-nilpy-function-values]] — a def as a VALUE (procedure pointer).
+2. [[feature-nilpy-keyword-args]] — `f(x, native=g)`, 196 sites.
+3. [[feature-nilpy-default-args-on-nested-defs]] — `def _f(v, _off=offset)`,
+   which is explicit by-value capture and needs no closure machinery.

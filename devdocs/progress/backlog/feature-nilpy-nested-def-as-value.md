@@ -1,10 +1,19 @@
 ---
 track: N
-prio: 70
+prio: 15
 type: feature
 ---
 
-# NilPy: a nested def used as a VALUE (stored, passed, returned)
+> **Superseded 2026-07-20 by [[feature-nilpy-function-values]].** This ticket was
+> written on the belief that uforth's stored natives are CLOSURES. They are not:
+> 162 of 205 capture nothing, none is defined in a loop, and the few that do
+> capture use Python's explicit `_x=x` default-argument idiom. The measurement
+> and the correction are in [[decide-nilpy-closure-model]]. Kept for the
+> reasoning about closure records vs cells, which stays valid for whenever real
+> closures are wanted.
+
+
+# SUPERSEDED: nested def as a VALUE (stored, passed, returned)
 
 Split out of [[feature-nilpy-nested-defs]] when its two slices landed
 2026-07-20. Nested defs now parse, nest to any depth, and READ enclosing locals
