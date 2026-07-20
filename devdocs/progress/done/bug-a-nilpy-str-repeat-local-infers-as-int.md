@@ -43,3 +43,6 @@ before the error line — that part is
 `test-nilpy` green + `--tier quick` + self-host byte-identical, with
 `s = "x" * 300`, `s = 3 * "x"`, `xs = [0] * 4` and their `len()` matching
 CPython.
+
+## Log
+- 2026-07-20 — resolved, commit 702ffc6e.

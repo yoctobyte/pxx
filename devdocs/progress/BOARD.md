@@ -30,7 +30,6 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-nilpy-str-repeat-local-infers-as-int | A | 55 | bug | NilPy: `s = "x" * 300` infers s as INT, then no overload of len matches | — |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
 | bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
@@ -98,6 +97,7 @@ _none_
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-exceptions | N | 60 | feature | NilPy: `raise` and `try` / `except` | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
+| feature-nilpy-list-repeat | N | 40 | feature | NilPy: `[0] * 4` (list repeat) is not lowered | — |
 | feature-nilpy-missing-builtins | N | 45 | feature | NilPy: the remaining missing builtins — min/max, list(), reversed(), enumerate(), hex() | — |
 | feature-nilpy-nested-defs | N | 70 | feature | NilPy: nested `def` | — |
 | feature-nilpy-none-variant | N | 50 | feature | NilPy: `None` as a first-class variant value (VT_EMPTY) | — |
@@ -227,7 +227,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (875)
+## done (876)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -253,6 +253,7 @@ _none_
 | bug-a-nilpy-one-char-string-literal-is-a-char | A | 70 | bug | NilPy: a 1-character string literal was a char, and segfaulted as an argument | — |
 | bug-a-nilpy-print-of-a-list-prints-a-pointer | A | 55 | bug | NilPy: print() of a list prints the handle, not the elements | — |
 | bug-a-nilpy-str-of-string-and-bool | A | 60 | bug | NilPy `str()` prints a string's POINTER and a bool's 1 | — |
+| bug-a-nilpy-str-repeat-local-infers-as-int | A | 55 | bug | NilPy: `s = "x" * 300` infers s as INT, then no overload of len matches | — |
 | bug-a-nilpy-string-repeat-returns-a-pointer | A | 60 | bug | NilPy: `s * n` on a string returns a POINTER, silently | — |
 | bug-a-nilpy-subclass-overlays-parent-layout | A | 70 | bug | NilPy: a subclass overlaid the parent's fields and VMT slots | — |
 | bug-a-nilpy-unary-minus-precedence-vs-floordiv | A | 70 | bug | NilPy: unary minus binds LOOSER than `//` and `%` — `-7 // 2` is -3, not -4 | — |
@@ -2569,7 +2570,6 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
-- [p 55] [A] bug-a-nilpy-str-repeat-local-infers-as-int
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
@@ -2648,6 +2648,7 @@ _none_
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [E] feature-demo-mandelbrot-asm-autozoom
 - [p 40] [B] feature-dns-backends-selection
+- [p 40] [N] feature-nilpy-list-repeat
 - [p 40] [O] feature-opt-rtti-emit-on-use
 - [p 40] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 40] [T] feature-twatch-full-tier-coverage-age
