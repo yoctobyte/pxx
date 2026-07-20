@@ -1,0 +1,27 @@
+from typing import Any, Optional
+
+class Word:
+    def __init__(self) -> None:
+        self.n = 1
+    def is_native(self) -> bool:
+        return True
+
+class VM:
+    def __init__(self) -> None:
+        self.w = Word()
+    def look(self, k: Any) -> Optional[Word]:
+        return self.w
+    def any_val(self) -> Any:
+        return 7
+    def run(self, key: Any) -> None:
+        word = self.look(key)
+        if word is not None:
+            if word.is_native():
+                print("native")
+        w2 = self.look(key) if isinstance(key, str) else None
+        if w2 is not None:
+            print("ternary ok")
+
+v = VM()
+v.run("a")
+print(v.any_val())

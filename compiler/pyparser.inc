@@ -1128,11 +1128,30 @@ begin
 end;
 
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
-var i, ci, si, procIdx, depth, smArgs, fci, fi: Integer; tk: TTypeKind;
+var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     name, lo, smPName: AnsiString;
 begin
   Result := tyUnknown;
   PyInferLastCi := -1;
+  { A CONDITIONAL EXPRESSION types as its THEN arm, so infer from the part
+    before the `if` and stop. Without this the scanner walked straight through
+    `x if c else y`, widening across the condition and the else-arm, and a
+    class-valued conditional lost its identity — the next `.method()` on the
+    local then failed to resolve, surfacing as a misleading "expected :" at the
+    following line (bug-nilpy-conditional-expression-loses-its-type). }
+  k2 := startIdx;
+  depth := 0;
+  while k2 < endIdx do
+  begin
+    if Tokens[k2].Kind in [tkBegin, tkLBrack, tkLParen] then Inc(depth)
+    else if Tokens[k2].Kind in [tkEnd, tkRBrack, tkRParen] then Dec(depth)
+    else if (depth = 0) and (Tokens[k2].Kind = tkIf) and (k2 > startIdx) then
+    begin
+      Result := PyInferExprType(startIdx, k2);
+      Exit;
+    end;
+    Inc(k2);
+  end;
   { A parenthesised TUPLE is built as a TPyList, so it must INFER as one too —
     otherwise an unannotated `return (a, b)` typed itself Integer and handed
     back the list pointer truncated. }
@@ -1252,11 +1271,21 @@ begin
         end;
         { obj.method(...) on a class-typed name: the expression's type is the
           METHOD's return type; skip the whole postfix chain. }
-        if (tk = tyClass) and (ci >= 0) and (PyLocals[ci].RecCi >= 0) and
+        { The receiver's class: a constrained local, or `self`, which never
+          appears in PyLocals — so `w = self.lookup(k)` inferred nothing and the
+          local lost the method's return class. The next `w.method()` then had
+          no class to resolve against and the parse stopped before the '(' with
+          a misleading "expected :" on the FOLLOWING line
+          (bug-nilpy-self-method-call-loses-return-class). }
+        rcvCi := -1;
+        if (ci >= 0) and (PyLocals[ci].RecCi >= 0) then rcvCi := PyLocals[ci].RecCi
+        else if (name = 'self') and (CurSelfClass >= REC_UCLASS_BASE) then
+          rcvCi := CurSelfClass - REC_UCLASS_BASE;
+        if (rcvCi >= 0) and
            (i + 3 < endIdx) and (Tokens[i + 1].Kind = tkDot) and
            (Tokens[i + 2].Kind = tkIdent) and (Tokens[i + 3].Kind = tkLParen) then
         begin
-          si := FindUMeth(PyLocals[ci].RecCi, GetTokenStr(i + 2));
+          si := FindUMeth(rcvCi, GetTokenStr(i + 2));
           if si >= 0 then
           begin
             tk := Procs[UMthProc_[si]].RetType;
@@ -5119,7 +5148,7 @@ begin
 end;
 
 function PyMethodRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
-var j, pdepth: Integer;
+var j, pdepth, k: Integer;
 begin
   Result := tyUnknown;
   retRec := REC_NONE;
@@ -5138,8 +5167,20 @@ begin
   if (j + 3 < TokCount) and (Tokens[j + 1].Kind = tkMinus) and
      (Tokens[j + 2].Kind = tkGt) then
   begin
-    Result := PyTypeFromTokenIndex(j + 3);
-    retRec := PyRecFromTokenIndex(j + 3);
+    { The FULL annotation grammar, not the single-token reader: a return type
+      may be `Optional[Word]` / `List[T]` / `Callable[...]` exactly as a
+      parameter may. PyTypeFromTokenIndex saw only the leading `Optional` and
+      dropped the class, so a local assigned from the call lost its identity
+      and the next `.method()` on it did not resolve. Same "two readers for one
+      grammar, and the narrow one wins wherever it is still wired up" bug the
+      parameter path already carries a note about
+      (bug-nilpy-optional-return-annotation-loses-the-class). }
+    k := j + 3;
+    Result := PyAnnTypeAt(k);
+    if (Result = tyClass) and (PyAnnLastCi >= 0) then
+      retRec := REC_UCLASS_BASE + PyAnnLastCi
+    else
+      retRec := REC_NONE;
   end
   else
     { no annotation: infer from the body rather than defaulting to Integer }
@@ -5397,8 +5438,12 @@ begin
         honour their annotation, which is what fixed `-> bool` printing 1 and
         `-> float` returning 0. A top-level `def` returning str works; only
         methods are limited. }
+      { tyVariant is NO LONGER in this restriction: variant-returning routines
+        got the record-style hidden-dest treatment, so a method can return Any
+        the same way a top-level def already could. The guard still stands for
+        the string/record kinds it was written for. }
       if (not fieldsOnly) and (not isCtor) and
-         (RetViaHiddenDest(mRet)) then
+         (RetViaHiddenDest(mRet)) and (mRet <> tyVariant) then
         { ErrorAt with the DEF's own line: plain Error here printed the line of
           whatever the parser cursor was on, which for a class pre-pass is the
           `class` header — so every one of a class's offending methods reported
