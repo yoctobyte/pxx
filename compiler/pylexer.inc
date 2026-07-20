@@ -310,6 +310,31 @@ begin
       if PyFsAdjacentStringAt(Source, i, n, pdepth) then PyFsPut(' + ');
       continue;
     end;
+    { b"..." / b'...' — a BYTES literal, rewritten to bytes("...") so it lands
+      on the pylib bytes(str) overload. Same not-tail-of-an-ident guard as f. }
+    if ((c = 'b') or (c = 'B')) and (i + 1 <= n) and PyFStrIsQuote(Source[i + 1]) and
+       ((i = 1) or (not (Source[i - 1] in ['A'..'Z', 'a'..'z', '0'..'9', '_']))) then
+    begin
+      q := Source[i + 1];
+      PyFsPut('bytes(');
+      PyFsPutCh(q);
+      Inc(i, 2);
+      while i <= n do
+      begin
+        if Source[i] = '\' then
+        begin
+          PyFsPutCh(Source[i]); Inc(i);
+          if i <= n then begin PyFsPutCh(Source[i]); Inc(i); end;
+          continue;
+        end;
+        if Source[i] = q then begin PyFsPutCh(q); Inc(i); break; end;
+        if Source[i] = #10 then break;
+        PyFsPutCh(Source[i]); Inc(i);
+      end;
+      PyFsPutCh(')');
+      if PyFsAdjacentStringAt(Source, i, n, pdepth) then PyFsPut(' + ');
+      continue;
+    end;
     { f"..." — the prefix must not be the tail of a longer identifier }
     if ((c = 'f') or (c = 'F')) and (i + 1 <= n) and PyFStrIsQuote(Source[i + 1]) and
        ((i = 1) or (not (Source[i - 1] in ['A'..'Z', 'a'..'z', '0'..'9', '_']))) then

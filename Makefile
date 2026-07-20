@@ -271,6 +271,8 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_encode.npy /tmp/test_nilpy_encode26
 	test "$$(/tmp/test_nilpy_encode26)" = "$$(printf '%b' '3\n65\n67\n2\nhi\nhi\n4\n90\n2\nb')"
 	./$(COMPILER) test/test_nilpy_bytes_ann.npy /tmp/test_nilpy_bytes_ann26
+	./$(COMPILER) test/test_nilpy_bytes_literal.npy /tmp/test_nilpy_bytes_literal26
+	test "$$(/tmp/test_nilpy_bytes_literal26)" = "$$(printf '%b' '5\n104\n1\n-1\n4')"
 	test "$$(/tmp/test_nilpy_bytes_ann26)" = "$$(printf '%b' '3\n65\n0')"
 	./$(COMPILER) test/test_nilpy_tuples.npy /tmp/test_nilpy_tuples26
 	test "$$(/tmp/test_nilpy_tuples26)" = "$$(printf '%b' 'ab\ncd\nef\n6\np\nq\n3\n5\n6')"

@@ -1,0 +1,7 @@
+x = b"hello"
+print(len(x))
+print(x[0])
+s = b"world"
+print(s.find(b"or", 0))
+print(s.find(b"z", 0))
+print(s.find(b"d", 2))

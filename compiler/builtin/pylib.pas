@@ -176,6 +176,8 @@ type
       dispatch on the receiver's class, not another method on this class.
       (filed as feature-nilpy-runtime-method-dispatch-on-variant) }
     procedure append(v: Integer);
+    { bytes.find(sub, start) — index of the sub-bytes at/after start, or -1. }
+    function find(sub: TPyBytes; start: Integer): Integer;
     { bytes.decode(encoding [, errors]). Our strings ARE byte strings, so
       latin-1 is an exact identity mapping; the `errors` argument is accepted
       and ignored because latin-1 cannot fail. Named `errors` so the keyword
@@ -227,6 +229,8 @@ function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; over
 function bytearray: TPyBytes; overload;   { bytearray() — an EMPTY buffer }
 function bytearray(n: Integer): TPyBytes; overload;
 function bytes(b: TPyBytes): TPyBytes;
+function bytes(const s: AnsiString): TPyBytes; overload;
+function pybytes_find(b: TPyBytes; sub: TPyBytes; start: Integer): Integer;
 function len(b: TPyBytes): Integer; overload;
 { SLICES. `b[lo:hi]` desugars to one of these calls in the frontend, with an
   OMITTED bound passed as PY_SLICE_OMIT. That sentinel needs no disambiguation:
@@ -2439,6 +2443,47 @@ begin
     src := PByte(NativeInt(b.FData) + k);
     dst := PByte(NativeInt(Result.FData) + k);
     dst^ := src^;
+  end;
+end;
+
+function TPyBytes.find(sub: TPyBytes; start: Integer): Integer;
+begin
+  Result := pybytes_find(Self, sub, start);
+end;
+
+{ bytes("...") — the bytes of a string, one per character. This is also where a
+  `b"..."` literal lands (the frontend rewrites it to bytes("...")). }
+function bytes(const s: AnsiString): TPyBytes; overload;
+var k: Integer; p: PByte;
+begin
+  Result := TPyBytes.Create(Length(s));
+  for k := 1 to Length(s) do
+  begin
+    p := PByte(NativeInt(Result.FData) + (k - 1));
+    p^ := Ord(s[k]);
+  end;
+end;
+
+{ bytes.find(sub, start): first index at/after `start` where `sub`'s bytes match,
+  or -1. `sub` is a TPyBytes (a `b"..."` literal). }
+function pybytes_find(b: TPyBytes; sub: TPyBytes; start: Integer): Integer;
+var i, j: Integer; match: Boolean; pb, ps: PByte;
+begin
+  Result := -1;
+  if sub.FLen = 0 then begin Result := start; Exit; end;
+  if start < 0 then start := 0;
+  i := start;
+  while i + sub.FLen <= b.FLen do
+  begin
+    match := True;
+    for j := 0 to sub.FLen - 1 do
+    begin
+      pb := PByte(NativeInt(b.FData) + i + j);
+      ps := PByte(NativeInt(sub.FData) + j);
+      if pb^ <> ps^ then begin match := False; Break; end;
+    end;
+    if match then begin Result := i; Exit; end;
+    Inc(i);
   end;
 end;
 
