@@ -1,0 +1,16 @@
+for p in ("ab", "cd", "ef"):
+    print(p)
+n = 0
+for q in (1, 2, 3):
+    n = n + q
+print(n)
+t = ("p", "q")
+print(t[0])
+print(t[1])
+z = (1 + 2)
+print(z)
+def pair(a: int):
+    return (a, a + 1)
+r = pair(5)
+print(r[0])
+print(r[1])

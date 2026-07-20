@@ -211,7 +211,30 @@ end;
    comma — rather than a plain parenthesised expression? Only the `in` RHS
    needs to know: `x in ("a", "b")` is membership over a tuple, while `(a)` is
    just grouping. Same depth-1 scan as PyDictLiteralAt. *)
-procedure PyParseListLiteralT(opener, closer: TTokenKind); forward; { the `in` tuple RHS builds a list literal; defined further down }
+{ Index-based twin of PyTupleParenAhead, for the token scanners that work off
+  an index rather than the cursor. }
+function PyTupleParenAt(i: Integer): Boolean;
+var depth: Integer;
+begin
+  Result := False;
+  if (i >= TokCount) or (Tokens[i].Kind <> tkLParen) then Exit;
+  depth := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkBegin, tkLBrack, tkLParen] then Inc(depth)
+    else if Tokens[i].Kind in [tkEnd, tkRBrack, tkRParen] then
+    begin
+      Dec(depth);
+      if depth = 0 then Exit;
+    end
+    else if (depth = 1) and (Tokens[i].Kind = tkComma) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
 
 function PyTupleParenAhead: Boolean;
 var i, depth: Integer;
@@ -1097,6 +1120,16 @@ var i, ci, si, procIdx, depth, smArgs, fci, fi: Integer; tk: TTypeKind;
 begin
   Result := tyUnknown;
   PyInferLastCi := -1;
+  { A parenthesised TUPLE is built as a TPyList, so it must INFER as one too —
+    otherwise an unannotated `return (a, b)` typed itself Integer and handed
+    back the list pointer truncated. }
+  if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkLParen) and
+     PyTupleParenAt(startIdx) then
+  begin
+    Result := tyClass;
+    PyInferLastCi := FindUClass('TPyList');
+    Exit;
+  end;
   if (startIdx < endIdx) and
      ((Tokens[startIdx].Kind = tkLBrack) or (Tokens[startIdx].Kind = tkBegin)) then
   begin
@@ -3352,7 +3385,12 @@ begin
   itemsDot := -1;
   if (name2 <> '') and not enumMode then itemsDot := PyItemsSuffixAhead;
   if itemsDot >= 0 then Tokens[itemsDot].Kind := tkColon;
-  PyParseBoolExpr;
+  { `for pfx in ("a", "b"):` — a TUPLE to iterate, built as the same TPyList a
+    `[...]` literal produces, exactly as the `in` OPERATOR does. }
+  if PyTupleParenAhead then
+    PyParseListLiteralT(tkLParen, tkRParen)
+  else
+    PyParseBoolExpr;
   if itemsDot >= 0 then
   begin
     Tokens[itemsDot].Kind := tkDot;
@@ -4578,10 +4616,13 @@ end;
 { Parse one `def` header into the PyHdr* globals, leaving the cursor just
   past the `:` NEWLINE INDENT that opens the body. The single implementation
   of the header grammar — see the PyHdr* declaration for why that matters. }
+function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind; forward; { defined with the pre-pass helpers below }
+
 procedure PyParseDefHeader;
-var annIdx: Integer;
+var annIdx, hdrDefIdx, hdrRetRec: Integer;
 begin
   if CurTok.Kind <> tkFunction then Error('Nil Python: expected def');
+  hdrDefIdx := TokPos - 1;          { the `def` token, for return inference }
   Next;
   if CurTok.Kind <> tkIdent then Error('Nil Python: expected function name');
   PyHdrName := CurTok.SVal;
@@ -4633,7 +4674,9 @@ begin
       decides the frame, and a disagreement is a silent ABI mismatch. Kept a
       FUNCTION rather than a proc so `return <value>` still has a Result. }
     PyHdrIsProc := False;
-    PyHdrRetType := tyInteger;
+    PyHdrRetType := PyInferDefRetType(hdrDefIdx, hdrRetRec);
+    if PyHdrRetType = tyClass then
+      PyHdrRetCi := hdrRetRec - REC_UCLASS_BASE;
   end
   else
   begin
@@ -4966,6 +5009,61 @@ end;
   defs only (it scans at depth 0), which is why methods were missed.
   Returns tyUnknown for `-> None` and for an unannotated method; the caller
   keeps tyInteger there, preserving today's behaviour for those. }
+{ The return type of a def with NO `-> ret`, inferred from the FIRST
+  `return <expr>` in its body. Defaulting such a def to tyInteger — which is
+  what the pre-pass did while the annotation was still mandatory — silently
+  truncates anything else: `return (a, b)` builds a TPyList and handed back its
+  pointer as an integer, printing garbage. A def with no value-returning
+  `return` is tyInteger, which is the harmless case.
+
+  Shared by PyMethodRetType and PyParseDefHeader on purpose: the pre-pass
+  decides the registered signature and the header decides the frame, so the two
+  must reach the same answer or the mismatch is a silent ABI bug. }
+function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
+var j, pdepth, bdepth, e: Integer;
+begin
+  Result := tyInteger;
+  retRec := REC_NONE;
+  j := methodStart + 2;
+  pdepth := 0;
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind = tkLParen then Inc(pdepth)
+    else if Tokens[j].Kind = tkRParen then
+    begin
+      Dec(pdepth);
+      if pdepth = 0 then begin Inc(j); Break; end;
+    end;
+    Inc(j);
+  end;
+  bdepth := 0;
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind = tkIndent then Inc(bdepth)
+    else if Tokens[j].Kind = tkDedent then
+    begin
+      Dec(bdepth);
+      if bdepth <= 0 then Exit;              { end of this def's body }
+    end
+    else if Tokens[j].Kind = tkFunction then Exit   { a nested def: stop }
+    else if (Tokens[j].Kind = tkExit) and (bdepth >= 1) then
+    begin
+      if (j + 1 >= TokCount) or
+         (Tokens[j + 1].Kind in [tkNewline, tkDedent, tkEOF]) then Exit;
+      e := j + 1;
+      while (e < TokCount) and not (Tokens[e].Kind in [tkNewline, tkDedent, tkEOF]) do
+        Inc(e);
+      Result := PyInferExprType(j + 1, e);
+      if Result = tyUnknown then Result := tyInteger;
+      if Result = tyString then Result := tyAnsiString;
+      if (Result = tyClass) and (PyInferLastCi >= 0) then
+        retRec := REC_UCLASS_BASE + PyInferLastCi;
+      Exit;
+    end;
+    Inc(j);
+  end;
+end;
+
 function PyMethodRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
 var j, pdepth: Integer;
 begin
@@ -4988,7 +5086,10 @@ begin
   begin
     Result := PyTypeFromTokenIndex(j + 3);
     retRec := PyRecFromTokenIndex(j + 3);
-  end;
+  end
+  else
+    { no annotation: infer from the body rather than defaulting to Integer }
+    Result := PyInferDefRetType(methodStart, retRec);
 end;
 
 { fieldsOnly = the PRE-PASS: register this class's FIELDS and nothing else.

@@ -731,6 +731,8 @@ function PyIsFromBytesAhead: Boolean; forward; { Nil Python: at `int.from_bytes(
 function PyStoredName(const s: AnsiString): Integer; forward; { Nil Python: intern a name into TokChars (pyparser.inc) }
 function PyAttrFieldIdx(recvNode: Integer; const attr: AnsiString): Integer; forward; { Nil Python hasattr/getattr field lookup (pyparser.inc) }
 function PyParseAttrName: AnsiString; forward; { Nil Python: the literal attr name in hasattr/getattr (pyparser.inc) }
+function PyTupleParenAhead: Boolean; forward; { Nil Python: is this '(' a tuple? (pyparser.inc) }
+procedure PyParseListLiteralT(opener, closer: TTokenKind); forward; { Nil Python list/tuple literal (pyparser.inc) }
 function PyIsSysStreamAhead: Boolean; forward; { Nil Python: at `sys.stdout`/`sys.stderr`? (pyparser.inc) }
 function PyStdlibCallAhead(var pname: AnsiString; var nTok: Integer): Boolean; forward; { Nil Python: at a mapped os./sys. call? (pyparser.inc) }
 function PyParseStdlibCall(const pname: AnsiString; nTok: Integer): Integer; forward; { Nil Python os./sys. call -> pylib shim (pyparser.inc) }
@@ -10954,6 +10956,12 @@ begin
   else if PyExprMode and PyStdlibCallAhead(sdName, sdTok) then
     { `os.path.join(...)`, `sys.exit(...)` — mapped by name onto a pylib shim. }
     CurASTNode := PyParseStdlibCall(sdName, sdTok)
+  else if PyExprMode and PyTupleParenAhead then
+    { A parenthesised TUPLE as a value — `return (pfx, rest)`, `x = (a, b)`.
+      Built as the same TPyList a `[...]` literal produces, which is what makes
+      the existing tuple-unpack assignment consume it. A plain `(expr)` has no
+      top-level comma and still parses as grouping. }
+    PyParseListLiteralT(tkLParen, tkRParen)
   else if PyExprMode and PyIsSysStreamAhead then
   begin
     { `sys.stderr` is a VALUE (its fd), not a member access on a variable —
