@@ -17305,10 +17305,20 @@ begin
         if CaseEqual(lo, 'promoint32') then Result := tyPromoInt32
         else if CaseEqual(lo, 'promoint64') then Result := tyPromoInt64
         else Result := PromoIntDefaultKind;
-        if Result = tyPromoInt32 then
-          Error('PromoInt32 is not available yet: its overflow trap needs the '
-                + '32-bit {$Q+} check (bug-a-qplus-misses-32bit-overflow). '
-                + 'Use PromoInt64.');
+        { The numbered spellings ASSERT the target's native width rather than
+          offering a narrower class on a wider host: the slot is two machine
+          words by definition, so PromoInt32 on a 64-bit target is not a thing
+          that exists. PromoInt is the portable spelling. }
+        if Result <> PromoIntDefaultKind then
+          Error('this target''s promotable int is native-word sized; the other '
+                + 'numbered spelling does not exist here — write PromoInt');
+        { 32-bit natives compile and run the INLINE tier correctly but crash in
+          the heap tier (feature-a-promoint-32bit-bringup). Refuse rather than
+          ship a type that segfaults the moment a value gets large — which is
+          exactly when the user reached for it. }
+        if Result <> tyPromoInt64 then
+          Error('promotable int is 64-bit-native targets only for now: the heap '
+                + 'tier faults on 32-bit natives (feature-a-promoint-32bit-bringup)');
       end
       else if (not tnHasAlias) and (EnableAutoVar and CaseEqual(lo, 'auto')) then Result := tyAuto
       else

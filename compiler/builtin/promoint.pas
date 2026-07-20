@@ -527,6 +527,8 @@ end;
 
 { ---- stores ------------------------------------------------------------ }
 
+procedure StoreBig(dst: Pointer; const r: TBig); forward;
+
 procedure PXXPromoClear(dst: Pointer);
 var sp: PPromoStr;
     w: PPromoWord;
@@ -545,6 +547,16 @@ end;
 procedure PXXPromoFromInt(dst: Pointer; v: Int64);
 var w: PPromoWord;
 begin
+  { The inline tier is ONE NATIVE WORD. On a 32-bit target that is narrower than
+    the Int64 this routine accepts, so a value that does not fit must spill to
+    the heap rather than truncate — which is also what makes the 32-bit inline
+    tier correct for free, since every arithmetic fast path funnels its result
+    through here. }
+  if (SizeOf(NativeInt) < 8) and ((v > 2147483647) or (v < -2147483648)) then
+  begin
+    StoreBig(dst, BFromInt(v));
+    Exit;
+  end;
   PXXPromoClear(dst);
   w := PPromoWord(SlotPayloadAddr(dst));
   w^ := NativeInt(v);
