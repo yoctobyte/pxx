@@ -472,6 +472,20 @@ def job_key(j):
     return j.get("sel") or j["name"]
 
 
+def reg_open(r, fixed, now):
+    """Is this ledger entry still an open regression after the latest run?
+
+    A per-job entry closes when its job is in `fixed`.  A CASCADE entry names
+    no single job (its "job" is a synthetic cascade@<sha> key that can never
+    appear in `fixed`), so it closes only once every job it swept up is
+    passing again — otherwise it would pin itself open forever.  Jobs absent
+    from `now` weren't run this tier and stay open (unknown != fixed).
+    """
+    if r.get("cascade"):
+        return any(now.get(j, "red") != "pass" for j in r["cascade"])
+    return r["job"] not in fixed
+
+
 def diff_jobs(prev_jobs, report):
     # "skip" (corpus tree absent on this box) is pass-equivalent: the job is
     # not applicable here, and mapping it to pass closes any open regression
@@ -548,6 +562,18 @@ def regen_index(clone):
                      last.get("tier", "?"), last.get("wall", ""),
                      (lf.get("sha") or "")[:12], lf.get("verdict", "")))
         for r in st.get("open_regressions", []):
+            if r.get("cascade"):
+                # one event, one line — the job list goes in a fold so the
+                # index stays readable when a whole cross matrix goes red
+                regs.append(
+                    "- **CASCADE %d jobs** (%s): bad `%s`, last good `%s`, "
+                    "%d commit(s) in range\n"
+                    "  <details><summary>jobs</summary>\n\n%s\n  </details>"
+                    % (len(r["cascade"]), st["host"], r["bad"][:12],
+                       (r.get("good") or "unknown")[:12],
+                       len(r.get("range", [])),
+                       "\n".join("  - `%s`" % j for j in r["cascade"])))
+                continue
             regs.append("- **%s**%s (%s): bad `%s`, last good `%s`, %d commit(s) in range"
                         % (r["job"],
                            " — %s" % r["src"] if r.get("src") else "",
@@ -586,18 +612,46 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     parent = (st["last"] or {}).get("sha")
     now, new_red, fixed, still_red = diff_jobs(st["jobs"], report)
 
-    # open-regression bookkeeping
-    regs = [r for r in st["open_regressions"] if r["job"] not in fixed]
+    # open-regression bookkeeping.  Two invariants keep this ledger a list of
+    # REAL, actionable regressions instead of a dump of every red job:
+    #
+    #  1. EMPTY RANGE.  When the last tested sha IS this sha (the two-phase
+    #     watcher re-testing one commit at a widening tier: native, then the
+    #     full backfill), commits_between() is empty.  Such a "regression"
+    #     names no commit that could have caused it — unbisectable and
+    #     unfalsifiable.  It is a tier/harness event, not a code change.
+    #  2. CASCADE.  A sweep above CASCADE_THRESHOLD is ONE event (broken
+    #     build, or a red root job dragging every dependent down), so it gets
+    #     ONE entry — the rule file_stub_tickets already applies to ticket
+    #     filing.  Applying it only there is why 2026-07-20 a single
+    #     cross-target collapse produced 1 ticket but 461 ledger rows, all
+    #     with 0 commits in range.
+    #
+    # Neither case is dropped silently: the per-job red still lands in
+    # st["jobs"] and in the written report, so the signal survives without the
+    # ledger claiming N independent bisectable regressions that don't exist.
+    regs = [r for r in st["open_regressions"] if reg_open(r, fixed, now)]
     srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
     namemap = {job_key(j): j["name"] for j in report["jobs"]}
-    for name in new_red:
-        rng = clone.commits_between(parent, sha) if parent else [sha]
-        # "job" is the stable selector; "name" is the positional name it had at
-        # this sha — kept ONLY as the bisect fallback for older commits, never
-        # as identity (see job_key).
-        regs.append({"job": name, "name": namemap.get(name, ""),
-                     "src": srcmap.get(name, ""), "bad": sha,
-                     "good": parent, "range": rng, "opened": utcnow()})
+    rng = clone.commits_between(parent, sha) if parent else [sha]
+    if new_red and not rng:
+        print("twatch: %d new red at %s but 0 commits since the last tested "
+              "sha — not localizable; recording job status only"
+              % (len(new_red), sha[:12]), flush=True)
+    elif len(new_red) > CASCADE_THRESHOLD:
+        print("twatch: %d new red at %s — cascade, one ledger entry"
+              % (len(new_red), sha[:12]), flush=True)
+        regs.append({"job": "cascade@" + sha[:12], "name": "", "src": "",
+                     "cascade": sorted(new_red), "bad": sha, "good": parent,
+                     "range": rng, "opened": utcnow()})
+    else:
+        for name in new_red:
+            # "job" is the stable selector; "name" is the positional name it
+            # had at this sha — kept ONLY as the bisect fallback for older
+            # commits, never as identity (see job_key).
+            regs.append({"job": name, "name": namemap.get(name, ""),
+                         "src": srcmap.get(name, ""), "bad": sha,
+                         "good": parent, "range": rng, "opened": utcnow()})
     st["open_regressions"] = regs
 
     changed = bool(new_red or fixed)
@@ -653,6 +707,10 @@ PROGRESS_BUCKETS = ("urgent", "working", "unfinished", "backlog",
 # forward produced 939 tickets.  Above the threshold, file ONE cascade
 # ticket naming the whole set instead.
 CASCADE_THRESHOLD = 10
+
+# How many open-regression lines `--status` prints before summarizing. It is a
+# pre-push liveness check: the UP/DOWN verdict must stay visible.
+STATUS_REG_CAP = 12
 
 # Jobs whose red predictably drags a whole dependent class down — listed in
 # the cascade ticket as root-cause suspects when present in the red set.
@@ -1153,6 +1211,11 @@ def bisect_step(clone, host, st, tier):
         rng = reg.get("range", [])
         if len(rng) <= 1:
             continue
+        if reg.get("cascade"):
+            # "cascade@<sha>" is a synthetic key matching no job, so a
+            # midpoint gate would select nothing and read as a pass. A
+            # cascade needs root-cause triage (face 2), not a bisect.
+            continue
         mid = rng[len(rng) // 2 - 1] if len(rng) > 2 else rng[0]
         # skip the known-bad tip
         if mid == reg["bad"] and len(rng) > 1:
@@ -1270,9 +1333,22 @@ def status(repo, grace_min, tdir=None, ref="HEAD"):
                last.get("date", ""),
                "; full through %s %s" % (lf["sha"][:12], lf["verdict"])
                if lf.get("sha") else ""))
-        for r in st.get("open_regressions", []):
-            print("tstate:   open regression: %s bad=%s (%d in range)"
-                  % (r["job"], r["bad"][:12], len(r.get("range", []))))
+        # --status is a liveness check read before a push, not a report: cap
+        # the ledger dump so one bad sweep can never bury the verdict line
+        # (2026-07-20 it printed 467 entries / 49KB above the UP/DOWN answer).
+        regs = st.get("open_regressions", [])
+        for r in regs[:STATUS_REG_CAP]:
+            if r.get("cascade"):
+                print("tstate:   open CASCADE: %d jobs bad=%s (%d in range)"
+                      % (len(r["cascade"]), r["bad"][:12],
+                         len(r.get("range", []))))
+            else:
+                print("tstate:   open regression: %s bad=%s (%d in range)"
+                      % (r["job"], r["bad"][:12], len(r.get("range", []))))
+        if len(regs) > STATUS_REG_CAP:
+            print("tstate:   ... and %d more open regression(s) — see "
+                  "devdocs/progress/tstate/TSTATE.md"
+                  % (len(regs) - STATUS_REG_CAP))
     if untested_old:
         age = int((now - untested_old[1]) / 60)
         print("tstate: DOWN — %s untested for %d min (> %d min grace); "
