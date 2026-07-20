@@ -2096,6 +2096,36 @@ begin
             (Tokens[TokPos + 1].Kind = tkLParen);
 end;
 
+{ `sys.stdout` / `sys.stderr` as an ORDINARY EXPRESSION yielding the stream's
+  fd. Done at the factor level, not inside print's file= handling, because
+  `sys` is a deferred stdlib import and therefore not a symbol: every pass that
+  parses the expression — including the typing pre-pass, which runs BEFORE
+  statement parsing and was the one actually rejecting it — has to agree that
+  `sys.stderr` resolves. Modelling it as an fd integer is what lets
+  AN_WRITE/AN_WRITELN pick it up through their existing ival slot. }
+function PyIsSysStreamAhead: Boolean;
+var nm: AnsiString;
+begin
+  Result := False;
+  if (TokPos < 1) or (TokPos + 1 >= TokCount) then Exit;
+  if LowerCase(GetTokenStr(TokPos - 1)) <> 'sys' then Exit;
+  if Tokens[TokPos].Kind <> tkDot then Exit;
+  nm := LowerCase(GetTokenStr(TokPos + 1));
+  Result := (nm = 'stdout') or (nm = 'stderr');
+end;
+
+function PyParseSysStream: Integer;
+var nm: AnsiString;
+begin
+  nm := LowerCase(GetTokenStr(TokPos + 1));
+  Next; Next; Next;              { 'sys', '.', the stream name }
+  Result := AllocNode(AN_INT_LIT);
+  if nm = 'stderr' then ASTIVal[Result] := 2 else ASTIVal[Result] := 1;
+  ASTTk[Result] := Ord(tyInteger);
+  ASTRight[Result] := -1;
+  LastExprTk := tyInteger;
+end;
+
 { Is the token stream at `int.from_bytes(` ? CurTok is the `int` ident. }
 function PyIsFromBytesAhead: Boolean;
 begin
@@ -2578,15 +2608,86 @@ begin
   Result := callNode;
 end;
 
+{ Which print KEYWORD ARGUMENT is at CurTok, or '' for a positional one.
+  `print` is a builtin, not a def, so it never goes through the parameter-name
+  matching that def/method keyword arguments use — it needs its own fixed set.
+  (`end` is safe to spell: the NilPy lexer maps only a fixed keyword list and
+  `end` is not on it, so it arrives as a plain tkIdent.) }
+function PyPrintKwargAt: AnsiString;
+var nm: AnsiString;
+begin
+  Result := '';
+  { Keyed on the token TEXT, not its kind: `file` lexes as Pascal's tkFile
+    keyword, and `end`/`sep` are only tkIdent by luck of the keyword list.
+    Reading the text is robust to all of that. }
+  if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign) and (TokPos >= 1) then
+  begin
+    nm := LowerCase(GetTokenStr(TokPos - 1));
+    if (nm = 'sep') or (nm = 'end') or (nm = 'file') or (nm = 'flush') then
+      Result := nm;
+  end;
+end;
+
+{ `file=sys.stderr` -> the fd threaded into AN_WRITE/AN_WRITELN's ival slot,
+  which is the same mechanism Pascal's `writeln(StdErr, ..)` already uses.
+  Only the two standard streams are accepted; a real file object would need a
+  file model NilPy does not have yet, and silently writing it to stdout would
+  be worse than refusing. }
+function PyParsePrintFile: Integer;
+begin
+  { sys.stdout / sys.stderr resolve to their fd as an ordinary expression (see
+    PyParseSysStream), so this just parses one and reads the constant back.
+    Only the two standard streams are accepted: a real file object needs a file
+    model NilPy does not have, and quietly writing it to stdout would be worse
+    than refusing. }
+  PyParseBoolExpr;
+  if (CurASTNode < 0) or (ASTKind[CurASTNode] <> AN_INT_LIT) or
+     ((ASTIVal[CurASTNode] <> 1) and (ASTIVal[CurASTNode] <> 2)) then
+    Error('Nil Python: print file= expects sys.stdout or sys.stderr');
+  Result := ASTIVal[CurASTNode];
+end;
+
 function PyParsePrint: Integer;
-var node, argNode, lastArg, sepLit, noneLit: Integer;
+var node, argNode, lastArg, sepLit, noneLit, endLit, writeFd: Integer;
+    kw, endText: AnsiString;
+    haveEnd: Boolean;
 begin
   Next;
   Expect(tkLParen, '(');
   node := AllocNode(AN_WRITELN);
   lastArg := -1;
+  writeFd := 0;                { 0 = the default, which lowering reads as stdout }
+  haveEnd := False;
+  endText := '';
   if CurTok.Kind <> tkRParen then
     repeat
+      kw := PyPrintKwargAt;
+      if kw <> '' then
+      begin
+        Next;                  { the keyword name }
+        Expect(tkAssign, '=');
+        if kw = 'flush' then
+          { Accepted and IGNORED, deliberately: output is already emitted per
+            statement, so there is nothing to flush. Consumed as an expression
+            so the argument parses; the value is unused. }
+          PyParseBoolExpr
+        else if kw = 'file' then
+          writeFd := PyParsePrintFile
+        else if kw = 'sep' then
+          { No censused use, and it cannot be done honestly here: separators are
+            injected DURING the argument loop, while a keyword argument is only
+            seen after it. Refused rather than silently ignored. }
+          Error('Nil Python: print sep= is not supported yet')
+        else
+        begin
+          if CurTok.Kind <> tkString then
+            Error('Nil Python: print end= needs a literal string');
+          endText := CurTok.SVal;
+          haveEnd := True;
+          Next;
+        end;
+        Continue;              { a keyword argument prints nothing itself }
+      end;
       { Python print separates successive arguments with a single space.
         Inject a synthetic space char arg before every argument after the
         first (a tyChar AN_INT_LIT writes the byte, not a number). This is the
@@ -2634,6 +2735,32 @@ begin
       lastArg := argNode;
     until not Eat(tkComma);
   Expect(tkRParen, ')');
+  { `end=` decides the STATEMENT KIND, not an argument: AN_WRITELN already
+    appends the newline, so any other terminator means AN_WRITE (no newline)
+    plus, when the terminator is non-empty, one more argument carrying it.
+    end="\n" is exactly the default and stays a writeln. This matters for
+    output correctness in uforth, not just tidiness: a Forth EMIT that appends
+    a newline produces the wrong transcript against the CPython oracle. }
+  if haveEnd and (endText <> #10) then
+  begin
+    ASTKind[node] := AN_WRITE;
+    if endText <> '' then
+    begin
+      endLit := AllocNode(AN_STR_LIT);
+      ASTSOffset[endLit] := PyStoredName(endText);
+      ASTSLen[endLit] := Length(endText);
+      ASTTk[endLit] := Ord(tyString);
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := endLit;
+      ASTRight[argNode] := -1;
+      ASTIVal[argNode] := 0;
+      ASTSOffset[argNode] := -2;
+      if lastArg < 0 then ASTLeft[node] := argNode
+      else ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+    end;
+  end;
+  ASTIVal[node] := writeFd;
   Result := node;
 end;
 

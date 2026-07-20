@@ -728,6 +728,8 @@ function PyIsIntBaseTk(tk: TTypeKind): Boolean; forward; { Nil Python: is this a
 function PyParseToBytes(baseNode: Integer): Integer; forward; { Nil Python <int>.to_bytes(...) intrinsic (pyparser.inc) }
 function PyParseFromBytes: Integer; forward; { Nil Python int.from_bytes(...) intrinsic (pyparser.inc) }
 function PyIsFromBytesAhead: Boolean; forward; { Nil Python: at `int.from_bytes(`? (pyparser.inc) }
+function PyIsSysStreamAhead: Boolean; forward; { Nil Python: at `sys.stdout`/`sys.stderr`? (pyparser.inc) }
+function PyParseSysStream: Integer; forward; { Nil Python sys.stdout/sys.stderr -> its fd (pyparser.inc) }
 function PyIsToBytesSuffixAhead: Boolean; forward; { Nil Python: at a `.to_bytes(` suffix? (pyparser.inc) }
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python obj.meth() on a VARIANT receiver (pyparser.inc) }
 function PyMakeVariantField(baseNode: Integer; const fname: AnsiString; var tk: TTypeKind; var recName: Integer): Integer; forward; { Nil Python obj.field on a VARIANT receiver (pyparser.inc) }
@@ -10798,6 +10800,13 @@ begin
   begin
     Next; Next; Next;           { 'int', '.', 'from_bytes'; CurTok = '(' }
     CurASTNode := PyParseFromBytes;
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+  end
+  else if PyExprMode and PyIsSysStreamAhead then
+  begin
+    { `sys.stderr` is a VALUE (its fd), not a member access on a variable —
+      `sys` is a deferred import and never becomes a symbol. }
+    CurASTNode := PyParseSysStream;
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
   end
   else

@@ -54,3 +54,6 @@ builtins.
 `end=""` and stderr routing separately, since stderr does not show in a stdout
 diff) + `--tier quick` + self-host byte-identical + `make fpc-check` clean
 relative to HEAD.
+
+## Log
+- 2026-07-20 — resolved, commit HEAD.
