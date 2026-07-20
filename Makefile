@@ -252,6 +252,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_isinstance26)" = "$$(printf 'num\nnum\ntext\nword\ncall\nnum')"
 	./$(COMPILER) test/test_nilpy_optional.npy /tmp/test_nilpy_optional26
 	test "$$(/tmp/test_nilpy_optional26)" = "$$(printf 'dup\n0\nFalse\n65536')"
+	./$(COMPILER) test/test_nilpy_variant_str_ownership.npy /tmp/test_nilpy_variant_str_ownership26
+	test "$$(/tmp/test_nilpy_variant_str_ownership26)" = "$$(printf '1\n2\none\ntwo\n2\n1\n2\n3 4\n9 2 3\naaa 9\nbbb 2\nccc 3\naaa 9')"
 	./$(COMPILER) test/test_nilpy_variant_unbox.npy /tmp/test_nilpy_variant_unbox26
 	test "$$(/tmp/test_nilpy_variant_unbox26)" = "$$(printf '7 -3 0\n2.5 -0.5\nab z\nTrue False\n8 6 14 3 1 -7\n4 -21\n3.5 5.0\nabc\nTrue True True\n4\nabz\n2.0')"
 	./$(COMPILER) test/test_nilpy_dataclass.npy /tmp/test_nilpy_dataclass26

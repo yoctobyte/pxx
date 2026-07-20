@@ -1,0 +1,44 @@
+from typing import Dict
+
+xs = []
+
+def add(k: str) -> int:
+    xs.append(k)
+    return len(xs)
+
+print(add("one"))
+print(add("two"))
+print(xs[0])
+print(xs[1])
+
+class G2:
+    def __init__(self) -> None:
+        self.m: Dict[str, int] = {}
+    def fill(self) -> None:
+        self.m["one"] = 1
+        self.m["two"] = 2
+
+g = G2()
+g.fill()
+print(len(g.m))
+print(g.m["one"])
+print(g.m["two"])
+
+class B:
+    def __init__(self) -> None:
+        self.d = {}
+        self.l = []
+    def put(self, k: str, v: int) -> None:
+        self.d[k] = v
+        self.l.append(k)
+
+b = B()
+b.put("aaa", 1)
+b.put("bbb", 2)
+b.put("ccc", 3)
+b.put("aaa", 9)
+print(len(b.d), len(b.l))
+print(b.d["aaa"], b.d["bbb"], b.d["ccc"])
+for k in b.l:
+    print(k, b.d[k])
+ks = []

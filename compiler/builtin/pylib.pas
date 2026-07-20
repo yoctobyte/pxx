@@ -7,9 +7,12 @@ unit pylib;
   TPyList is Python's list: a growable array of 16-byte variant slots with
   reference semantics (a class value IS the heap pointer). The slot layout is
   builtin.pas's TVariantRecord model: {VType: Int64; Payload: Int64}, VType 0
-  meaning None. Slots are copied raw — correct under the default frozen-string
-  model where string payloads are never freed; the managed-string build needs
-  refcounting here (noted in feature-nilpy-list).
+  meaning None. A slot that OWNS its contents is written through PyVarSlotSet/
+  PyVarSlotInit, which refcount a VT_STRING payload. (This unit once copied
+  slots raw on the assumption that string payloads are never freed — untrue:
+  boxing a str into a variant materialises a MANAGED copy, so a raw slot copy
+  borrowed a pointer that the caller then released. See the comment on those
+  helpers; bug-a-str-boxed-into-variant-does-not-own-bytes.)
 
   append returns Self so the frontend can desugar a list literal [a, b, c]
   into one chained expression: TPyList.Create.append(a).append(b).append(c).
@@ -26,6 +29,7 @@ type
   end;
   PPyVarRec = ^TPyVarRec;
   PInt64 = ^Int64;
+  PPyAnsiString = ^AnsiString;
 
   { itertools.count shim: uforth allocates xt ids via
     next(Word._xt_counter). Generators come much later; a bare int counter
@@ -530,6 +534,53 @@ begin
   Result := i;
 end;
 
+{ ---- ARC-correct variant-slot copies -------------------------------------
+  A container slot is 16 raw bytes {VType, Payload}, and for VT_STRING (6) the
+  payload IS a managed AnsiString reference. Copying the two fields directly
+  therefore stored a BORROWED pointer: the caller's boxing temp released the
+  string at scope exit and the slot was left dangling, so the next allocation
+  reused the buffer and every same-length key/element read back as the LAST
+  one stored. Silent, and the reason "assign to a local first" never helped
+  (bug-a-str-boxed-into-variant-does-not-own-bytes).
+
+  Use these for anything that makes a slot an OWNER. A pure MOVE within one
+  array (the grow migrations and the insert/remove shift loops) keeps the raw
+  field copy on purpose: ownership transfers, so retain/release would be
+  wasted work and, for the shifts, wrong. }
+
+procedure PyVarSlotClear(dst: PPyVarRec);
+begin
+  if dst^.VType = 6 then PPyAnsiString(@dst^.Payload)^ := '';
+  dst^.VType := 0;
+  dst^.Payload := 0;
+end;
+
+procedure PyVarSlotSet(dst: PPyVarRec; src: PPyVarRec);
+{ dst must already be a valid (owned or cleared) slot. Retains BEFORE it
+  releases, so slot := itself and aliasing slots are safe. }
+var
+  s: AnsiString;
+begin
+  if dst = src then Exit;
+  s := '';
+  if src^.VType = 6 then s := PPyAnsiString(@src^.Payload)^;
+  PyVarSlotClear(dst);
+  dst^.VType := src^.VType;
+  if src^.VType = 6 then
+    PPyAnsiString(@dst^.Payload)^ := s
+  else
+    dst^.Payload := src^.Payload;
+end;
+
+procedure PyVarSlotInit(dst: PPyVarRec; src: PPyVarRec);
+{ dst is fresh/uninitialised (a function Result, a loop temp on its first
+  pass): zero it first so the release half never frees garbage. }
+begin
+  dst^.VType := 0;
+  dst^.Payload := 0;
+  PyVarSlotSet(dst, src);
+end;
+
 procedure PyListGrow(l: TPyList; need: Integer);
 var
   newCap, k: Integer;
@@ -550,6 +601,14 @@ begin
   end;
   { the old block is unreachable the moment FItems moves — nothing else ever
     holds it, so it is freed here rather than leaked on every growth }
+  { slots past FLen are fresh GetMem garbage; zero them so the ARC release in
+    PyVarSlotSet never frees a wild pointer }
+  for k := l.FLen to newCap - 1 do
+  begin
+    dst := PPyVarRec(NativeInt(newItems) + k * 16);
+    dst^.VType := 0;
+    dst^.Payload := 0;
+  end;
   if l.FItems <> nil then FreeMem(l.FItems);
   l.FItems := newItems;
   l.FCap := newCap;
@@ -562,8 +621,7 @@ begin
   PyListGrow(Self, FLen + 1);
   src := PPyVarRec(@v);
   dst := PPyVarRec(NativeInt(FItems) + FLen * 16);
-  dst^.VType := src^.VType;
-  dst^.Payload := src^.Payload;
+  PyVarSlotSet(dst, src);
   FLen := FLen + 1;
   Result := Self;
 end;
@@ -581,8 +639,7 @@ begin
   i := PyListFix(Self, i);
   src := PPyVarRec(NativeInt(FItems) + i * 16);
   dst := PPyVarRec(@Result);
-  dst^.VType := src^.VType;
-  dst^.Payload := src^.Payload;
+  PyVarSlotInit(dst, src);
 end;
 
 procedure TPyList.put(i: Integer; const v: Variant);
@@ -592,8 +649,7 @@ begin
   i := PyListFix(Self, i);
   src := PPyVarRec(@v);
   dst := PPyVarRec(NativeInt(FItems) + i * 16);
-  dst^.VType := src^.VType;
-  dst^.Payload := src^.Payload;
+  PyVarSlotSet(dst, src);
 end;
 
 function TPyList.pop: Variant;
@@ -638,8 +694,10 @@ begin
   end;
   src := PPyVarRec(@v);
   dst := PPyVarRec(NativeInt(FItems) + i * 16);
-  dst^.VType := src^.VType;
-  dst^.Payload := src^.Payload;
+  { the shift loop above left a DUPLICATE of the old slot i one place up, so
+    this slot is a borrowed alias, not an owner -- init rather than set, or the
+    release would kill the string the shifted copy now owns }
+  PyVarSlotInit(dst, src);
   FLen := FLen + 1;
 end;
 
@@ -746,6 +804,13 @@ begin
     dst^.VType := src^.VType;
     dst^.Payload := src^.Payload;
   end;
+  for k := d.FLen to newCap - 1 do
+  begin
+    dst := PPyVarRec(NativeInt(newKeys) + k * 16);
+    dst^.VType := 0; dst^.Payload := 0;
+    dst := PPyVarRec(NativeInt(newVals) + k * 16);
+    dst^.VType := 0; dst^.Payload := 0;
+  end;
   if d.FKeys <> nil then FreeMem(d.FKeys);
   if d.FVals <> nil then FreeMem(d.FVals);
   d.FKeys := newKeys;
@@ -777,8 +842,7 @@ begin
   if i < 0 then PyKeyError;
   src := PPyVarRec(NativeInt(FVals) + i * 16);
   dst := PPyVarRec(@Result);
-  dst^.VType := src^.VType;
-  dst^.Payload := src^.Payload;
+  PyVarSlotInit(dst, src);
 end;
 
 procedure TPyDict.store(const k: Variant; const v: Variant);
@@ -793,14 +857,12 @@ begin
     i := FLen;
     src := PPyVarRec(@k);
     dst := PPyVarRec(NativeInt(FKeys) + i * 16);
-    dst^.VType := src^.VType;
-    dst^.Payload := src^.Payload;
+    PyVarSlotSet(dst, src);
     FLen := FLen + 1;
   end;
   src := PPyVarRec(@v);
   dst := PPyVarRec(NativeInt(FVals) + i * 16);
-  dst^.VType := src^.VType;
-  dst^.Payload := src^.Payload;
+  PyVarSlotSet(dst, src);
 end;
 
 function TPyDict.setitem(const k: Variant; const v: Variant): TPyDict;
@@ -827,8 +889,7 @@ begin
     Exit;
   end;
   src := PPyVarRec(NativeInt(FVals) + i * 16);
-  dst^.VType := src^.VType;
-  dst^.Payload := src^.Payload;
+  PyVarSlotInit(dst, src);
 end;
 
 function TPyDict.get(const k: Variant; const d: Variant): Variant; overload;
@@ -842,8 +903,7 @@ begin
     src := PPyVarRec(@d)
   else
     src := PPyVarRec(NativeInt(FVals) + i * 16);
-  dst^.VType := src^.VType;
-  dst^.Payload := src^.Payload;
+  PyVarSlotInit(dst, src);
 end;
 
 procedure TPyDict.remove(const k: Variant);
@@ -878,9 +938,9 @@ begin
   begin
     src := PPyVarRec(NativeInt(FKeys) + i * 16);
     dst := PPyVarRec(@tmp);
-    dst^.VType := src^.VType;
-    dst^.Payload := src^.Payload;
+    PyVarSlotInit(dst, src);
     Result.append(tmp);
+    PyVarSlotClear(dst);   { tmp is reused next pass -- drop this retain }
   end;
 end;
 
@@ -895,9 +955,9 @@ begin
   begin
     src := PPyVarRec(NativeInt(FVals) + i * 16);
     dst := PPyVarRec(@tmp);
-    dst^.VType := src^.VType;
-    dst^.Payload := src^.Payload;
+    PyVarSlotInit(dst, src);
     Result.append(tmp);
+    PyVarSlotClear(dst);   { tmp is reused next pass -- drop this retain }
   end;
 end;
 
