@@ -728,6 +728,7 @@ function PyIsIntBaseTk(tk: TTypeKind): Boolean; forward; { Nil Python: is this a
 function PyParseToBytes(baseNode: Integer): Integer; forward; { Nil Python <int>.to_bytes(...) intrinsic (pyparser.inc) }
 function PyParseFromBytes: Integer; forward; { Nil Python int.from_bytes(...) intrinsic (pyparser.inc) }
 function PyIsFromBytesAhead: Boolean; forward; { Nil Python: at `int.from_bytes(`? (pyparser.inc) }
+function PyStoredName(const s: AnsiString): Integer; forward; { Nil Python: intern a name into TokChars (pyparser.inc) }
 function PyAttrFieldIdx(recvNode: Integer; const attr: AnsiString): Integer; forward; { Nil Python hasattr/getattr field lookup (pyparser.inc) }
 function PyParseAttrName: AnsiString; forward; { Nil Python: the literal attr name in hasattr/getattr (pyparser.inc) }
 function PyIsSysStreamAhead: Boolean; forward; { Nil Python: at `sys.stdout`/`sys.stderr`? (pyparser.inc) }
