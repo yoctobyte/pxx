@@ -51,3 +51,25 @@ the nested body the way it already skips a def at module scope.
 `test-nilpy` green with a `.npy` case diffed against CPython — nested call,
 reading an enclosing local, and two siblings — + `--tier quick` + self-host
 byte-identical + `make fpc-check`.
+
+## Log
+
+- 2026-07-20 — landed in two slices, both green against CPython:
+  - 5fd3762c **structure**: a nested def registers a shell from its header (so
+    the enclosing body's calls resolve), its body is skipped and queued, and
+    PyParseDef compiles the queue after its own epilogue. The proc is registered
+    QUALIFIED (`outer.inner`) and unqualified calls inside the parent are
+    rewritten to it, walking outwards — without that, two parents each defining
+    a `helper` would both bind to the first registered, since FindProc's hash
+    chain is registration-ordered. Nesting is recursive to any depth.
+  - c02d2c98 **capture (read)**: enclosing locals/params the body mentions become
+    trailing by-value parameters filled in at each call site.
+- Regression tests: `test/test_nilpy_nested_def.npy`,
+  `test/test_nilpy_nested_def_capture.npy`, both in `make test-nilpy`.
+- **Still open, deliberately:** `nonlocal` (a nested def WRITING an enclosing
+  local — the write lands in the by-value copy and is lost) and taking a nested
+  def as a VALUE (storing it, passing it, returning it). uforth registers its
+  natives, so if that registration stores the inner function rather than calling
+  it, this slice is not enough on its own — filed as
+  [[feature-nilpy-nested-def-as-value]].
+- 2026-07-20 — resolved, commit c02d2c98.
