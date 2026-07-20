@@ -268,6 +268,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_variant_polymorphic_builtins26)" = "$$(printf '2 abab abab\n0  \n3 xyzxyz xyzxyz\n1 qq qq\n9 9\n-6 -6\n0 0\n3.0 3.0\n-1.0 -1.0\n97 1 aaa\n122 1 zzz\n3\n2')"
 	./$(COMPILER) test/test_nilpy_list_repeat.npy /tmp/test_nilpy_list_repeat26
 	test "$$(/tmp/test_nilpy_list_repeat26)" = "$$(printf '[0, 0, 0, 0] 4\n['"'"'a'"'"', '"'"'a'"'"', '"'"'a'"'"'] 3\n[1, 2, 1, 2]\n[] []\n[[0], [0]]\n[[0, 9], [0, 9]]\n[0, 1, 2]')"
+	./$(COMPILER) test/test_nilpy_none.npy /tmp/test_nilpy_none26
+	test "$$(/tmp/test_nilpy_none26)" = "$$(printf '1 text None\nTrue False\nFalse True\nNone None 1\n1 False\nNone True\nx False\n[1, None, '"'"'x'"'"']\nmissing\nfalsy ok\nFalse True')"
 	./$(COMPILER) test/test_nilpy_variant_arith_nested.npy /tmp/test_nilpy_variant_arith_nested26
 	test "$$(/tmp/test_nilpy_variant_arith_nested26)" = "$$(printf '66\n509\n72\n8.0\na-b-')"
 	./$(COMPILER) test/test_nilpy_builtins_list_enum.npy /tmp/test_nilpy_builtins_list_enum26

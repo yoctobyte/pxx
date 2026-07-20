@@ -1,0 +1,26 @@
+# None as a VALUE. The runtime representation already existed — VT_EMPTY, the
+# unassigned-slot tag — it just was not reachable from the language, so a
+# missing d.get() printed a BLANK line and `x is None` was a payload compare
+# that answered True for a slot holding integer 0. The last two lines pin that
+# distinction: 0 is not None (feature-nilpy-none-variant).
+# Output must match CPython running this same file.
+
+d = {}
+d["a"] = 1
+d["s"] = "text"
+print(d.get("a"), d.get("s"), d.get("zz"))
+print(d.get("zz") is None, d.get("a") is None)
+print(d.get("zz") is not None, d.get("a") is not None)
+print(None, None, 1)
+xs = [1, None, "x"]
+for v in xs:
+    print(v, v is None)
+print(xs)
+if d.get("zz") is None:
+    print("missing")
+n = d.get("zz")
+if not n:
+    print("falsy ok")
+zero = 0
+ys = [zero, None]
+print(ys[0] is None, ys[1] is None)

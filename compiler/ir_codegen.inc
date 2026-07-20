@@ -1192,6 +1192,7 @@ procedure EmitWriteVariant;
   caller-saved set like the other write helpers; balances its own stack. }
 var pInt, pInt64, pBool, pDbl, pChar, pStr, pNil, jmpDefault, pEnd1, pEnd2, pEnd3,
     pBoolF, pEnd4, trueOff, falseOff: Integer;
+    pNone, pObj, pEnd5, pEnd6, noneOff, objOff: Integer;
 begin
   EmitAsmX64(['push rax', 'mov rax, [rax]']);  { [rsp]=addr; rax=tag }
 
@@ -1207,7 +1208,11 @@ begin
   EmitB($0F); EmitB($84); pChar := CodeLen; EmitI32(0);
   EmitAsmX64(['cmp rax, %', VT_STRING]);
   EmitB($0F); EmitB($84); pStr := CodeLen; EmitI32(0);
-  EmitB($E9); jmpDefault := CodeLen; EmitI32(0);   { default (empty/object): nothing }
+  EmitAsmX64(['cmp rax, %', VT_EMPTY]);
+  EmitB($0F); EmitB($84); pNone := CodeLen; EmitI32(0);
+  EmitAsmX64(['cmp rax, %', VT_OBJECT]);
+  EmitB($0F); EmitB($84); pObj := CodeLen; EmitI32(0);
+  EmitB($E9); jmpDefault := CodeLen; EmitI32(0);   { default: nothing }
 
   { integer: payload as signed int64 }
   Patch32(pInt,   CodeLen - (pInt   + 4));
@@ -1266,7 +1271,42 @@ begin
   EmitAsmX64(['mov rsi, rax', 'mov rdx, [rax-8]']);
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
 
+  EmitB($E9); pEnd5 := CodeLen; EmitI32(0);
+
+  { empty slot: Python spells it None — an unassigned variant used to print
+    NOTHING, so `print(d.get(missing))` produced a blank line where CPython
+    prints None (feature-nilpy-none-variant). }
+  noneOff := DataLen;
+  Data[DataLen] := Ord('N'); Inc(DataLen);
+  Data[DataLen] := Ord('o'); Inc(DataLen);
+  Data[DataLen] := Ord('n'); Inc(DataLen);
+  Data[DataLen] := Ord('e'); Inc(DataLen);
+  Patch32(pNone, CodeLen - (pNone + 4));
+  EmitB($48); EmitB($BE); EmitDataRef(noneOff);
+  EmitAsmX64(['mov rdx, %', 4]);
+  MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
+  EmitB($E9); pEnd6 := CodeLen; EmitI32(0);
+
+  { object slot: CPython prints `<__main__.C object at 0x…>`, whose address
+    cannot be diffed against an oracle — but a BLANK line is worse than a
+    visible placeholder for anyone debugging. }
+  objOff := DataLen;
+  Data[DataLen] := Ord('<'); Inc(DataLen);
+  Data[DataLen] := Ord('o'); Inc(DataLen);
+  Data[DataLen] := Ord('b'); Inc(DataLen);
+  Data[DataLen] := Ord('j'); Inc(DataLen);
+  Data[DataLen] := Ord('e'); Inc(DataLen);
+  Data[DataLen] := Ord('c'); Inc(DataLen);
+  Data[DataLen] := Ord('t'); Inc(DataLen);
+  Data[DataLen] := Ord('>'); Inc(DataLen);
+  Patch32(pObj, CodeLen - (pObj + 4));
+  EmitB($48); EmitB($BE); EmitDataRef(objOff);
+  EmitAsmX64(['mov rdx, %', 8]);
+  MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
+
   { Lend }
+  Patch32(pEnd5, CodeLen - (pEnd5 + 4));
+  Patch32(pEnd6, CodeLen - (pEnd6 + 4));
   Patch32(pNil, CodeLen - (pNil + 4));
   Patch32(jmpDefault, CodeLen - (jmpDefault + 4));
   Patch32(pEnd1, CodeLen - (pEnd1 + 4));

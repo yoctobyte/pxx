@@ -226,6 +226,11 @@ function pystr_repeat_v(const v: Variant; n: Int64): AnsiString;
   Python copies REFERENCES, not elements — `[[0]] * 3` gives three aliases of the
   same inner list — so the variant slots are copied as they stand
   (feature-nilpy-list-repeat). n <= 0 yields an empty list. }
+{ Python's None as a VALUE. The runtime representation already existed —
+  VT_EMPTY, the unassigned-slot tag — it was simply not reachable from the
+  language, so a None stored in a container arrived as integer 0
+  (feature-nilpy-none-variant). }
+function pynone: Variant;
 function pylist_repeat(l: TPyList; n: Int64): TPyList;
 { `s.rjust(w)` / `s.rjust(w, fill)` — right-align in a field of w characters.
   Python returns the string UNCHANGED when it is already at least that long
@@ -1743,6 +1748,14 @@ begin
   Result := pystr_of(v);
 end;
 
+function pynone: Variant;
+var p: PPyVarRec;
+begin
+  p := PPyVarRec(@Result);
+  p^.VType := 0;      { VT_EMPTY }
+  p^.Payload := 0;
+end;
+
 function pystr_rjust_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
 var pad: Char; i, need: Integer;
 begin
@@ -1832,6 +1845,7 @@ end;
 function pyvar_repr(const v: Variant): AnsiString;
 var o: TObject;
 begin
+  if pyvartag(v) = 0 then begin Result := 'None'; Exit; end;   { VT_EMPTY }
   if pyvartag(v) = 7 then
   begin
     o := TObject(pyvarobj(v));
@@ -1871,6 +1885,8 @@ end;
 
 function pystr_of(const v: Variant): AnsiString; overload;
 begin
+  { VT_EMPTY is Python's None, not an empty string }
+  if pyvartag(v) = 0 then begin Result := 'None'; Exit; end;
   if pyvartag(v) = 4 then
   begin
     if PPyVarRec(@v)^.Payload <> 0 then Result := 'True' else Result := 'False';

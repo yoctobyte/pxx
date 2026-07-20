@@ -642,6 +642,28 @@ end;
   correct for the None checks uforth uses (class refs and pointer fields
   compare against nil; Optional[int] fields compare against the 0 sentinel,
   consistent with that documented mapping). }
+{ `pyvartag(v) = tag` (or <>), as a Boolean node. }
+function PyMakeTagTest(xNode, tag: Integer; negate: Boolean): Integer;
+var procIdx, argN, callN, litN: Integer;
+begin
+  procIdx := FindProc('pyvartag');
+  if procIdx < 0 then Error('Nil Python: pylib (pyvartag) not loaded');
+  argN := AllocNode(AN_ARG);
+  ASTLeft[argN] := xNode;
+  callN := AllocNode(AN_CALL);
+  ASTIVal[callN] := procIdx;
+  ASTTk[callN] := Ord(tyInt64);
+  ASTLeft[callN] := argN;
+  litN := AllocNode(AN_INT_LIT);
+  ASTIVal[litN] := tag;
+  ASTTk[litN] := Ord(tyInt64);
+  Result := AllocNode(AN_BINOP);
+  if negate then ASTIVal[Result] := Ord(tkNeq) else ASTIVal[Result] := Ord(tkEq);
+  ASTLeft[Result] := callN;
+  ASTRight[Result] := litN;
+  ASTTk[Result] := Ord(tyBoolean);
+end;
+
 procedure PyParseIsCmp;
 var left, right, node, i, j: Integer; neg: Boolean; rTk: TTypeKind;
 begin
@@ -656,6 +678,16 @@ begin
       Next;
       neg := False;
       if CurTok.Kind = tkNot then begin neg := True; Next; end;
+      { `x is None` on a VARIANT is a TAG test, not a payload compare. As a
+        payload compare it answered True for a slot holding integer 0 —
+        silently, since 0 is an ordinary value (feature-nilpy-none-variant). }
+      if (CurTok.Kind = tkNil) and (IntToTypeKind(ASTTk[left]) = tyVariant) then
+      begin
+        Next;
+        node := PyMakeTagTest(left, 0, neg);
+        left := node;
+        Continue;
+      end;
       PyParseBitOr;
       right := CurASTNode;
       node := AllocNode(AN_BINOP);
@@ -1705,6 +1737,18 @@ begin
   Result := callNode;
 end;
 
+{ A None VALUE: pylib's pynone() yields a variant tagged VT_EMPTY. }
+function PyMakeNone: Integer;
+var procIdx: Integer;
+begin
+  procIdx := FindProc('pynone');
+  if procIdx < 0 then Error('Nil Python: pylib (pynone) not loaded');
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyVariant);
+  ASTLeft[Result] := -1;
+end;
+
 { List literal [a, b, c] -> TPyList create + chained .append() calls, one
   expression tree (append returns Self). Reached from ParseFactor's PyExprMode
   tkLBrack branch, so nested literals in argument positions work too. }
@@ -1730,7 +1774,16 @@ begin
   mpi := UMthProc_[mmi];
   while CurTok.Kind <> closer do
   begin
-    PyParseBoolExpr;
+    { `None` as an ELEMENT is a real value in Python, and the slot can hold it —
+      VT_EMPTY. Parsed as a nil literal everywhere else, it would box as integer
+      0 (feature-nilpy-none-variant). }
+    if CurTok.Kind = tkNil then
+    begin
+      Next;
+      CurASTNode := PyMakeNone;
+    end
+    else
+      PyParseBoolExpr;
     valArg := AllocNode(AN_ARG);
     ASTLeft[valArg] := CurASTNode;
     selfArg := AllocNode(AN_ARG);
@@ -1938,7 +1991,7 @@ begin
 end;
 
 function PyParsePrint: Integer;
-var node, argNode, lastArg, sepLit: Integer;
+var node, argNode, lastArg, sepLit, noneLit: Integer;
 begin
   Next;
   Expect(tkLParen, '(');
@@ -1963,7 +2016,21 @@ begin
         ASTRight[lastArg] := argNode;
         lastArg := argNode;
       end;
-      PyParseBoolExpr;
+      { A bare `None` prints as None, like CPython — the literal is a nil/zero
+        value everywhere else, which printed as 0 (feature-nilpy-none-variant).
+        A None-VALUED VARIANT is handled in the writer instead, since its tag is
+        only known at run time. }
+      if CurTok.Kind = tkNil then
+      begin
+        Next;
+        noneLit := AllocNode(AN_STR_LIT);
+        ASTSOffset[noneLit] := PyStoredName('None');
+        ASTSLen[noneLit] := 4;
+        ASTTk[noneLit] := Ord(tyString);
+        CurASTNode := noneLit;
+      end
+      else
+        PyParseBoolExpr;
       { A container argument prints its ELEMENTS (`['a', 'b']`), like Python.
         Without this it fell through to the integer path and printed the
         TPyList/TPyDict instance pointer — silently, in the single most natural
@@ -2807,7 +2874,15 @@ begin
     else
     begin
       Expect(tkAssign, '=');
-      if PyIsEmptySetCall then
+      { `d[k] = None` / `o.f = None` stores a real None (VT_EMPTY), not the
+        integer 0 the nil literal lowers to elsewhere
+        (feature-nilpy-none-variant). }
+      if CurTok.Kind = tkNil then
+      begin
+        Next;
+        rhsNode := PyMakeNone;
+      end
+      else if PyIsEmptySetCall then
         rhsNode := PyParseEmptySet
       else if PyIsCountCall then
         rhsNode := PyParseCountCreate
