@@ -53,3 +53,4 @@ Collatz where the cost is erratic. Optionally also time `pdOnDemand` to show it'
 ## Log
 - 2026-07-17 — Filed as a parallel-demo candidate (even-load integer foil to
   Collatz; segmented-sieve extension for the memory angle).
+- 2026-07-20 — resolved, commit HEAD.

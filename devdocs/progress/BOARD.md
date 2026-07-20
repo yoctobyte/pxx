@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| feature-demo-mandelbrot-asm-autozoom | E | 40 | feature | Demo — real-time auto-zoom Mandelbrot with a per-target ASM iteration kernel | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
 ## unfinished (0)
@@ -25,7 +26,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (128)
+## backlog (126)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -55,11 +56,8 @@ _none_
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
 | feature-crtl-implement-libc-assumptions | B | 45 | feature | crtl: implement the libc assumptions real-world C leans on | — |
 | feature-crtl-trig-payne-hanek | B | 15 | feature | crtl libm: Payne-Hanek reduction for \|x\| >= 1e8 trig (sin/cos/tan) | — |
-| feature-demo-mandelbrot-asm-autozoom | E | 40 | feature | Demo — real-time auto-zoom Mandelbrot with a per-target ASM iteration kernel | — |
 | feature-demo-mandelbrot-gui-threaded | E | 45 | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
 | feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | feature-nilpy-break-continue, feature-nilpy-tk-binding |
-| feature-demo-parallel-hashing-pow | E | 30 | feature | Demo — parallel hashing / mini proof-of-work | — |
-| feature-demo-parallel-prime-count | E | 30 | feature | Demo — parallel prime count / find | — |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-dns-backends-selection | B | 40 | feature | DNS backends beyond dns_wire: dns_libc / dns_resolved / dns_esp + selection | — |
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
@@ -96,6 +94,7 @@ _none_
 | feature-nilpy-tk-binding | B | 45 | feature | Thin Tcl/Tk embed for pxx (lib/pcl/tk.pas) + a tkinter-shaped NilPy surface — v1 landed | — |
 | feature-opt-complex-packed-double | O | 35 | feature | Complex as a packed-double XMM value (SSE2/SSE3) | — |
 | feature-opt-float-register-temporaries | O | 20 | feature | float kernels: -O3 now 1.97x vs FPC (was 4.2x); residual = the rax value model — multi-session xmm-resident rewrite | — |
+| feature-opt-heap-per-thread-cache | O | 55 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-opt-rtti-emit-on-use | O | 40 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | — |
@@ -216,7 +215,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (901)
+## done (903)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -799,6 +798,8 @@ _none_
 | feature-demo-lisp | E | 50 | feature | Demo — Lisp / Scheme interpreter | — |
 | feature-demo-mandelbrot | E | 50 | feature | Demo — zoomable Mandelbrot explorer | — |
 | feature-demo-maze | E | 50 | feature | Demo — maze generator + solver | — |
+| feature-demo-parallel-hashing-pow | E | 30 | feature | Demo — parallel hashing / mini proof-of-work | — |
+| feature-demo-parallel-prime-count | E | 30 | feature | Demo — parallel prime count / find | — |
 | feature-demo-raytracer | E | 50 | feature | Demo — CPU ray tracer | — |
 | feature-demo-solitaire | E | 50 | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
 | feature-demo-sudoku | E | 50 | feature | Demo — Sudoku (solver + generator + interactive play) | — |
@@ -2587,6 +2588,7 @@ _none_
 - [p 55] [N] feature-nilpy-corpus-uforth
 - [p 55] [N] feature-nilpy-default-args-on-nested-defs
 - [p 55] [N] feature-nilpy-optional-return-annotation
+- [p 55] [O] feature-opt-heap-per-thread-cache
 - [p 55] [P] feature-pascal-corpus-generics
 - [p 55] [A] feature-pascal-type-helpers
 - [p 55] [T] feature-pasmith-multi-unit-programs
@@ -2651,7 +2653,6 @@ _none_
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
 - [p 40] [A] bug-a-param-pointer-rule-divergence
 - [p 40] [A] feature-c-package-namespace-decision
-- [p 40] [E] feature-demo-mandelbrot-asm-autozoom
 - [p 40] [B] feature-dns-backends-selection
 - [p 40] [O] feature-opt-rtti-emit-on-use
 - [p 40] [T] feature-t-nilpy-cpython-differential-fuzzer
@@ -2663,8 +2664,6 @@ _none_
 - [p 35] [O] feature-opt-complex-packed-double
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
 - [p 30] [C] bug-c-compound-literal-address-of
-- [p 30] [E] feature-demo-parallel-hashing-pow
-- [p 30] [E] feature-demo-parallel-prime-count
 - [p 30] [B] feature-pal-esp-posix-fd-semantics
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
 - [p 30] [D] idea-public-status-page

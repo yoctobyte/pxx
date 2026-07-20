@@ -65,3 +65,4 @@ end;
 - 2026-07-17 — Filed as a parallel-demo candidate (compute-bound counterpoint to
   the memory-bound membw demo; fast integer hash default, sha256 optional; two
   reductions +/max; note the no-cancellation limitation for early-exit).
+- 2026-07-20 — resolved, commit HEAD.
