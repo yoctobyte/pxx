@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-len-of-variant-picks-wrong-overload | A | 55 | bug | `len(v)` on a Variant segfaults — a polymorphic builtin cannot pick an overload statically | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
 ## unfinished (0)
@@ -29,7 +30,6 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-len-of-variant-picks-wrong-overload | A | 70 | bug | `len(v)` on a Variant segfaults — a polymorphic builtin cannot pick an overload statically | — |
 | bug-a-nilpy-method-call-on-variant-receiver | A | 70 | bug | NilPy: calling a method on a VARIANT receiver is a parse error | — |
 | bug-a-nilpy-one-char-literal-through-ctor-str-param | A | 70 | bug | NilPy: a ONE-character literal through a ctor `str` param becomes a char — silent, then segfaults | — |
 | bug-a-nilpy-unary-minus-precedence-vs-floordiv | A | 70 | bug | NilPy: unary minus binds LOOSER than `//` and `%` — `-7 // 2` is -3, not -4 | — |
@@ -40,6 +40,7 @@ _none_
 | bug-nilpy-subscript-on-literal | N | 35 | bug | NilPy: cannot subscript a string LITERAL — `"abc"[1]` | — |
 | bug-overload-mismatch-dumps-internals-to-stdout | A | 30 | bug | Overload-resolution failure dumps compiler internals to stdout | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
+| bug-test-core-oversized-job-6gb-flaky | A | 60 | bug | One test-core job needs ~6.8 GB and flakes under load (the recurring `Terminated`) | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -2541,7 +2542,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [A] bug-a-len-of-variant-picks-wrong-overload
 - [p 70] [A] bug-a-nilpy-method-call-on-variant-receiver
 - [p 70] [A] bug-a-nilpy-one-char-literal-through-ctor-str-param
 - [p 70] [A] bug-a-nilpy-unary-minus-precedence-vs-floordiv
@@ -2550,6 +2550,7 @@ _none_
 - [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
 - [p 65] [N] bug-nilpy-string-local-truncates-at-255
 - [p 65] [A] feature-a-typeref-handle
+- [p 60] [A] bug-test-core-oversized-job-6gb-flaky
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [U] decide-variant-tag-mismatch-policy

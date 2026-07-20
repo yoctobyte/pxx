@@ -217,3 +217,18 @@ replacing the dev-side quick gate.
     bare `Terminated` under load. The metrics-key bug is a plausible mechanism
     for those kills (same test, same box) but this is NOT established — flagged
     in c110ad26 as speculative. Revisit if they recur.
+  - **CORRECTION (same day, 5db3c5b6).** The "blended metrics" diagnosis above
+    was WRONG for the job it was based on. After the rekey, that job re-learned
+    under the new stable key and measured `dur=80.56s mem=6.8GB` again — freshly
+    sampled, no blending possible. The recipe genuinely needs it: job #120
+    bundles the 36-line interface test with >340k-IR-node, 20000-symbol,
+    20000-field and 12000-proc stress tests. `extract_src()` names a job after
+    its FIRST source, which is the only reason 6.8 GB looked absurd. So the
+    STARVED/degraded storm was the scheduler CORRECTLY refusing a job that does
+    not fit — not a bug — and the purge discarded 1501 accurate entries on a
+    false premise. Filed the real finding as
+    `bug-test-core-oversized-job-6gb-flaky` (Track A: split the stress tests out
+    of that job). The `job.sel` rekey itself still stands as a latent-bug fix
+    (renumbering does blend), but it was not the cause of anything observed
+    here. **Lesson: verify the mechanism before asserting it in a commit
+    message — the numbers were re-measurable in one command and I did not.**
