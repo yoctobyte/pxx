@@ -10,8 +10,10 @@
  */
 
 #include <stddef.h>
+#include <inttypes.h>
 #include <string.h>
 #include <stdlib.h>
+#include <inttypes.h>
 
 extern void *__pxx_malloc(long n);
 extern void  __pxx_free(void *p);
@@ -106,6 +108,29 @@ long strtol(const char *s, char **end, int base) {
 
 unsigned long strtoul(const char *s, char **end, int base) {
   return (unsigned long)strtol(s, end, base);
+}
+
+/* ---- <inttypes.h> greatest-width conversions ------------------------------
+   LP64, so intmax_t is long and these are one-line forwards. They exist as
+   real symbols rather than macros because <inttypes.h> declares them as
+   functions and portable C takes their address. Declaring without defining is
+   how you get a link error a long way from the header that promised them. */
+
+intmax_t imaxabs(intmax_t j) { return j < 0 ? -j : j; }
+
+imaxdiv_t imaxdiv(intmax_t numer, intmax_t denom) {
+  imaxdiv_t r;
+  r.quot = numer / denom;
+  r.rem  = numer - r.quot * denom;
+  return r;
+}
+
+intmax_t strtoimax(const char *nptr, char **endptr, int base) {
+  return (intmax_t)strtol(nptr, endptr, base);
+}
+
+uintmax_t strtoumax(const char *nptr, char **endptr, int base) {
+  return (uintmax_t)strtoul(nptr, endptr, base);
 }
 
 /* 10^k for 0 <= k <= 22: every value is exactly representable in a double,

@@ -41,3 +41,51 @@ off. Keep gcc's libc as the oracle for behaviour.
 ## Gate
 Per-item: the crtl addition compiles + the consuming project advances; `make
 lib-test` stays green. Ongoing ticket — never "done", pruned as the corpus grows.
+
+## Collected gap: `<inttypes.h>` (2026-07-20, Track B — CLOSED)
+
+**Was:** 15 PRI macros and **zero SCN macros**, so any `scanf("%" SCNd64, &v)`
+failed — and failed confusingly, because a missing PRI/SCN macro is not an error
+at its definition, it is an undefined identifier inside string concatenation,
+which surfaces as a syntax error some distance from the cause. Also declared
+`strtoimax`/`strtoumax` with **no implementation anywhere in `lib/crtl/src`** —
+exactly the "declared-but-unimplemented" category this ticket lists first.
+
+**Now:** the full C99 set — PRI and SCN, for d/i/u/o/x/X, across
+8/16/32/64/LEAST/FAST/PTR/MAX — plus `imaxdiv_t`, `imaxabs`, `imaxdiv`, and real
+bodies for `strtoimax`/`strtoumax` in `lib/crtl/src/stdlib.c`.
+
+**The part worth remembering:** the first draft was written from glibc's table
+and was WRONG in two groups, because our `<stdint.h>` is not glibc's:
+
+| type | glibc LP64 | ours | consequence |
+| --- | --- | --- | --- |
+| `intmax_t` | `long` | `long long` | MAX group is `"ll*"`, not `"l*"` |
+| `int_fast16_t` / `int_fast32_t` | `long` | `long` | FAST16/32 are `"l*"`, not plain |
+| `int64_t` | `long` | `long long` | 64-bit group is `"ll*"` |
+
+None of these warn at the call site — they are varargs, so a wrong modifier
+reads the wrong number of bytes off the stack and prints garbage. The header now
+says this at the top so the next editor re-derives rather than assumes.
+
+Gated by `test/crtl_inttypes.c` in `make lib-test` (exit 42 on success, like the
+other `crtl_*.c` tests). It is deliberately **printf-free**: a wrong length
+modifier IS a varargs bug, so a printf-based check would be testing the bug with
+the bug — it compares the macro strings instead. Note gcc returns 1, not 42, on
+this file and must not be "fixed" to agree: it asserts our ABI, and only the
+8/16/32-bit and LEAST groups are common ground with glibc.
+
+### Separate finding, NOT fixed here
+
+Any crtl C program that calls `printf` dies at runtime under the current pin:
+
+```
+/tmp/p: symbol lookup error: /tmp/p: undefined symbol: __pxx_fegetround
+```
+
+Reproduces with a bare `printf("hi %d\n", 42)`, so it is nothing to do with
+inttypes. `__pxx_fegetround` is registered by `compiler/cparser.inc` (~line 7148),
+so this is pin lag — the pinned v222 predates it — not a live defect in HEAD.
+Worth confirming after the next `make pin`; it is also why the existing
+`crtl_*.c` tests are all exit-code based rather than printing anything.
+
