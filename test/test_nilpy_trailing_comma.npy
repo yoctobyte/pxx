@@ -9,7 +9,7 @@ class VM:
     def go(self, token: str) -> None:
         self.log(
             "exec",
-            f"mode={'compile' if self.compiling else 'interpret'} token={token!r}",
+            f"mode={'compile' if self.compiling else 'interpret'} token={token!s}",
         )
 
 def top(a: int, b: int) -> int:
