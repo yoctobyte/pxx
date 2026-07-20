@@ -396,6 +396,9 @@ function pystr_rstrip(const s: AnsiString): AnsiString;
 function pystr_startswith(const s: AnsiString; const pre: AnsiString): Boolean;
 function pystr_endswith(const s: AnsiString; const suf: AnsiString): Boolean;
 function pystr_find(const s: AnsiString; const sub: AnsiString): Integer;
+{ str.find(sub, start): searches from `start` but reports the index in the
+  ORIGINAL string, as Python does. }
+function pystr_find_from(const s: AnsiString; const sub: AnsiString; start: Integer): Integer;
 function pystr_isspace(const s: AnsiString): Boolean;
 function pystr_ofchar(c: Char): AnsiString;
 function pystr_at(const s: AnsiString; i: Integer): Char;
@@ -555,6 +558,17 @@ begin
     if hit then begin Result := i - 1; Exit; end;
   end;
   Result := -1;
+end;
+
+function pystr_find_from(const s: AnsiString; const sub: AnsiString; start: Integer): Integer;
+var tail: AnsiString; r: Integer;
+begin
+  if start < 0 then start := start + Length(s);
+  if start < 0 then start := 0;
+  if start > Length(s) then begin Result := -1; Exit; end;
+  tail := Copy(s, start + 1, Length(s) - start);
+  r := pystr_find(tail, sub);
+  if r < 0 then Result := -1 else Result := r + start;
 end;
 
 { CPython: "".isspace() is FALSE — an empty string has no characters to be

@@ -207,6 +207,36 @@ begin
   end;
 end;
 
+(* Is CurTok the '(' of a TUPLE — a parenthesised group with a top-level
+   comma — rather than a plain parenthesised expression? Only the `in` RHS
+   needs to know: `x in ("a", "b")` is membership over a tuple, while `(a)` is
+   just grouping. Same depth-1 scan as PyDictLiteralAt. *)
+procedure PyParseListLiteralT(opener, closer: TTokenKind); forward; { the `in` tuple RHS builds a list literal; defined further down }
+
+function PyTupleParenAhead: Boolean;
+var i, depth: Integer;
+begin
+  Result := False;
+  if CurTok.Kind <> tkLParen then Exit;
+  i := TokPos - 1;
+  depth := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkBegin, tkLBrack, tkLParen] then Inc(depth)
+    else if Tokens[i].Kind in [tkEnd, tkRBrack, tkRParen] then
+    begin
+      Dec(depth);
+      if depth = 0 then Exit;
+    end
+    else if (depth = 1) and (Tokens[i].Kind = tkComma) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 function PyDictLiteralAhead: Boolean;
 begin
   Result := PyDictLiteralAt(TokPos - 1);   (* TokPos-1 = the opening brace *)
@@ -777,7 +807,14 @@ begin
       neg := CurTok.Kind = tkNot;
       if neg then Next;
       Expect(tkIn, 'in');
-      PyParseBitOr;
+      { `x in ("a", "b")` — a TUPLE on the right. Built as the same TPyList a
+        `[...]` literal produces, so membership, evaluation order and the
+        container dispatch below are all shared rather than special-cased.
+        A plain `(expr)` has no top-level comma and still parses as grouping. }
+      if PyTupleParenAhead then
+        PyParseListLiteralT(tkLParen, tkRParen)
+      else
+        PyParseBitOr;
       right := CurASTNode;
       { The container decides the helper, and getting it wrong is not a type
         error but a CRASH: pycontains would scan a TPyDict's or a string's
@@ -1030,7 +1067,8 @@ begin
   else if CaseEqual(mname, 'endswith') then
     begin pname := 'pystr_endswith'; retTk := tyBoolean; wantArgs := 1; end
   else if CaseEqual(mname, 'find') then
-    begin pname := 'pystr_find'; retTk := tyInteger; wantArgs := 1; end
+    { .find(sub) and .find(sub, start) — see the -3 case in PyParseStrMethod }
+    begin pname := 'pystr_find'; retTk := tyInteger; wantArgs := -3; end
   else if CaseEqual(mname, 'isspace') then
     begin pname := 'pystr_isspace'; retTk := tyBoolean; end
   else if CaseEqual(mname, 'join') then
@@ -1916,6 +1954,15 @@ begin
     if i = 0 then pname := 'pystr_split_ws'
     else if i <> 1 then
       Error('Nil Python: str method .' + mname + '() takes at most one argument');
+    procIdx := FindProc(pname);
+    if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  end
+  else if wantArgs = -3 then
+  begin
+    { substring plus an OPTIONAL start offset — find }
+    if i = 2 then pname := pname + '_from'
+    else if i <> 1 then
+      Error('Nil Python: str method .' + mname + '() takes one or two arguments');
     procIdx := FindProc(pname);
     if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   end

@@ -1,0 +1,12 @@
+x = "a"
+print(x in ("a", "b"))
+print(x not in ("c", "d"))
+print("z" in ("c", "d"))
+y = (1 + 2)
+print(y)
+s = "abcabc"
+print(s.find("b"))
+print(s.find("b", 2))
+print(s.find("z"))
+print(s.find("a", 1))
+print(s.find("c", 10))
