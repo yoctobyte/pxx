@@ -1,6 +1,6 @@
 ---
 prio: 55
-keep-open: REOPENED 2026-07-20 — the version scheme is undecided again (pin-count proposal supersedes 0.1-beta), and this still gates feature-promo-launch-plan's loud launch
+keep-open: scheme DECIDED 2026-07-20 (pin/1000 + LTS), but one detail is open (pins vs stabilizes) and this still gates feature-promo-launch-plan's loud launch — releases are not wanted yet
 ---
 
 # DECIDE: version scheme — pin count / N, not semver
@@ -15,68 +15,60 @@ moved; the blocked-by edge from feature-promo-launch-plan is why the slug stays.
 - **Owner:** — (user)
 - **Unblocks:** [[feature-promo-launch-plan]]
 
-## SUPERSEDED 2026-07-20 — the number changes, the bar does not
+## DECIDED 2026-07-20 — version = pin count / 1000; the promise lives in LTS
 
-The user's new take: **drop semver entirely.** Version = the pin counter,
-divided down. We are already at pin 222, so `/100000` reads **0.00222** — we
-"passed beta 0.001" around pin 100 and are monotonically approaching 1.0.
-Releases, if any, are just odd-numbered checkpoints ("pxx 3727"), not marketing
-versions.
+**Premise correction first, because it drives everything.** A version number's
+real job is a COMPATIBILITY CONTRACT — "use this, and some compatibility is
+granted", the LTS shape. That is what 1.0 or 0.1 actually buys anyone.
 
-*"sod off with this old fashioned naming convention. happy to make releases,
-but not yet, and if, they'd be just some odd number checkpoint (3727) or so."*
+*"for now, we just dont do that. latest is almost always better and we check
+for regressions ... there are no major breaks planned. instead, more
+compatibility is the goal."*
 
-**What survives from the 2026-07-12 decision:** the maturity BAR below (stage 1
-criteria) is unchanged and still the gate — feature complete, gates green,
-targets hit, actually usable, no big structural churn. The modesty was always
-in the number; this proposal simply stops pretending the number means anything
-else. **What dies:** "0.1 beta" as the label, and with it the whole semver
-framing of stage 2.
+So there is nothing for semver to signal: no breaks are planned, the direction
+is MORE compatibility (FPC, gcc, CPython), and the regression matrix means
+latest is normally the best build available. A number that exists to warn about
+breakage is dead weight when breakage is not the plan. Freed from that, the
+number can just be an honest monotonic counter.
 
-### Measured, 2026-07-20
+**The call: divisor 1000.** Version = pin counter / 1000.
 
 ```
-VERSION            222      incremented per stabilize
-pin.log entries    213      pins are a SUBSET of stabilizes — already diverged by 9
-first pin  v9      2026-06-19
-last  pin  v222    2026-07-17        ~7.6 pins/day over 28 days
+now          pin  222  ->  0.222
+0.960 LTS    pin  960  ->   97 days   (~3.2 months)
+1.000        pin 1000  ->  102 days   (~3.4 months)
+1.024        pin 1024  ->  105 days   (~3.5 months)
 ```
+*(measured rate 7.6 pins/day: v9 2026-06-19 -> v222 2026-07-17)*
 
-| divisor | 1.0 at | at 7.6 pins/day |
-| --- | --- | --- |
-| 1,000,000 | 1M pins | ~360 years |
-| **100,000** | 100k pins | **~36 years** |
-| 10,000 | 10k pins | ~3.6 years |
+*"if 1.000 happens to suck, so be it. maybe 1.024 will work better for you."*
+1.0 lands somewhere reasonable — about a quarter out — rather than
+asymptotically never (the /100000 idea, ~36 years) or next week. The exact pin
+is arbitrary and expected to be: once more people work on this the counter
+rises faster and lands on odd numbers. That is fine; the number is a count, not
+a promise. 1.024 = 2^10 if a round one is wanted.
 
-Precedent: Knuth's TeX asymptotically approaches π, METAFONT approaches e —
-never arriving is the point, and it is an honest way to say "this is not
-finished and will not claim to be".
+**Where the compatibility promise actually lives: LTS.** Decoupled from the
+version entirely. A chosen pin gets designated LTS with a stated window —
+*"0.960 is LTS (3 month)"* — and THAT carries the "some compatibility is
+granted" contract. Everything else is just latest-is-best. This is the honest
+split: the counter says WHEN, the LTS tag says WHAT IS PROMISED, and neither
+pretends to be the other.
 
-### OPEN — three things this needs settled
+### Resolved as a side effect
 
-1. **Divisor.** `/100000` puts 1.0 ~36 years out at the measured rate, i.e.
-   effectively asymptotic. That is coherent IF never-arriving is intended. If
-   "working to 1.0" means actually arriving in this project's lifetime,
-   `/10000` (~3.6 years) is the honest divisor. The number is a promise either
-   way — pick which promise.
-2. **Canonical counter.** `VERSION` counts *stabilizes* (222); `pin.log` counts
-   *pins* (213). Already 9 apart and drifting. "Pin #" says count pins, but the
-   machinery increments on stabilize. Pick one; make the other stop pretending
-   to be a version.
-3. **Release identity.** Recommendation: the INTEGER leads — tarball and
-   `--version` say `pxx 3727`; the fraction `0.03727` is cosmetic progress. The
-   integer is the truth (a binary that reproduced itself and was blessed); the
-   fraction is the story.
+The "never ship 0.1 first" trap (semver would sort a later `0.03727` above
+`0.1`) is moot under /1000: the scheme starts at 0.222, already past 0.1, and
+only ever increases. No mixed-scheme ordering hazard exists.
 
-### One hard constraint — do NOT ship a 0.1 first
+### Still open — one detail
 
-`0.03727` parsed as semver is minor=3727; `0.1` is minor=1. So a later
-`0.03727` sorts ABOVE `0.1` in semver but BELOW it numerically. Mixing the two
-schemes breaks ordering in package managers permanently, and irreversibly —
-you cannot unpublish a version. Nothing has shipped yet, so adopting the pin
-scheme directly costs nothing; shipping "0.1" first poisons it forever.
-
----
+**Which counter is canonical.** `VERSION` counts *stabilizes* (222); `pin.log`
+counts *pins* (213). They have already diverged by 9 and will keep drifting.
+"Pin count / 1000" says pins, but the machinery increments VERSION on
+stabilize. Pick one and make the other stop looking like a version — a
+9-and-growing ambiguity in the thing we are about to call the release number is
+worth ten minutes now.
 
 ## HISTORICAL — USER DECISION 2026-07-12: first official release = **0.1 beta**
 *(superseded above; kept because the stage-1 bar it specifies is still live)*
