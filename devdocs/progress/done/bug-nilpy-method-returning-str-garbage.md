@@ -84,3 +84,6 @@ uforth needs `-> str` methods heavily, so this stays urgent.
 uforth is full of `-> str` methods (word names, token text, the whole
 tokenizer surface). Any of them silently yields an integer today, so a corpus
 run cannot be trusted. Blocks [[feature-nilpy-corpus-uforth]] milestone 1.
+
+## Log
+- 2026-07-20 — resolved, commit 0e4d81fb.
