@@ -1,0 +1,8 @@
+d = {}
+d["a"] = 1
+d["b"] = 2
+print(d.pop("a", 0))
+print(d.pop("z", 99))
+print(len(d))
+d.pop("b", None)
+print(len(d))

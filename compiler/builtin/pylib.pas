@@ -108,6 +108,9 @@ type
     function get(const k: Variant): Variant; overload;
     function get(const k: Variant; const d: Variant): Variant; overload;
     procedure remove(const k: Variant);
+    { dict.pop(key, default): remove the key and return its value, or return
+      `default` if absent (never raises in the two-argument form uforth uses). }
+    function pop(const k: Variant; const d: Variant): Variant;
     { Python's dict.setdefault: return the existing value, or insert the
       default and return THAT — the returned slot is the one now in the dict,
       which is what makes `d.setdefault(k, ...)[k2] = v` mutate the dict rather
@@ -1254,6 +1257,23 @@ begin
     dst^.Payload := src^.Payload;
   end;
   FLen := FLen - 1;
+end;
+
+function TPyDict.pop(const k: Variant; const d: Variant): Variant;
+var i: Integer; src, dst: PPyVarRec;
+begin
+  i := indexof(k);
+  if i < 0 then
+  begin
+    dst := PPyVarRec(@Result);
+    src := PPyVarRec(@d);
+    PyVarSlotInit(dst, src);
+    Exit;
+  end;
+  src := PPyVarRec(NativeInt(FVals) + i * 16);
+  dst := PPyVarRec(@Result);
+  PyVarSlotInit(dst, src);
+  remove(k);
 end;
 
 function TPyDict.keylist: TPyList;
