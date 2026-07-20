@@ -25,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (130)
+## backlog (128)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -41,9 +41,7 @@ _none_
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
 | compat-pascal-binop-operand-eval-order | A | 15 | compat | pxx evaluates binary-operator operands left-to-right; FPC evaluates right-to-left | — |
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
-| decide-abi-portable-vs-target-split | U | 60 | decide | Where is the portable/per-target line drawn in the IR? | — |
-| decide-crtl-libm-glibc-bit-parity | U | 20 | decide | decide: crtl libm — correct rounding (current) vs glibc bug-parity | — |
-| decide-nilpy-closure-model | U | 20 | decide | DECIDE (DEFERRED): which closure model for NilPy? | — |
+| decide-abi-portable-vs-target-split | A | 50 | decide |  | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
@@ -218,7 +216,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (897)
+## done (899)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -684,9 +682,11 @@ _none_
 | compat-pascal-copy-of-char-literal | P | 55 | compat | Copy('a', i, n) — FPC promotes a char to a string, pxx rejects the program | — |
 | decide-1-0-scope-promise | A | 55 | decide | DECIDE: version scheme — pin count / N, not semver | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
+| decide-crtl-libm-glibc-bit-parity | A | 50 | decide |  | — |
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | decide-nilpy-and-or-return-operand-or-bool | U | 40 | decide | decide: should NilPy's `and` / `or` return an OPERAND, as Python does? | — |
 | decide-nilpy-bigint-vs-64bit-cells | U | 40 | decide | decide: NilPy integer semantics — arbitrary precision vs 64-bit (uforth needs one) | — |
+| decide-nilpy-closure-model | A | 50 | decide |  | — |
 | decide-promoint-rvalue-representation | U | 85 | decide | Promotable int: what IS an rvalue once heap bignums exist? | — |
 | decide-rtti-none-semantics | A | 40 | decide | decide: `--rtti=none` semantics — what happens to the FUNCTIONAL parts of the RTTI blob? | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
@@ -2567,7 +2567,6 @@ _none_
 - [p 65] [A] feature-a-typeref-handle
 - [p 60] [A] bug-a-qplus-misses-32bit-overflow
 - [p 60] [A] bug-test-core-oversized-job-6gb-flaky
-- [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
@@ -2594,6 +2593,7 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
+- [p 50] [A] decide-abi-portable-vs-target-split
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile
 - [p 50] [A] feature-nilpy-collections-and-string-methods
@@ -2671,8 +2671,6 @@ _none_
 - [p 25] [A] feature-promo-launch-plan
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 20] [P] compat-pascal-method-impl-without-declaration
-- [p 20] [U] decide-crtl-libm-glibc-bit-parity
-- [p 20] [U] decide-nilpy-closure-model
 - [p 20] [O] feature-opt-float-register-temporaries
 - [p 20] [B] feature-parallel-load-sampler-refine
 - [p 20] [T] feature-t-gcc-torture-runner

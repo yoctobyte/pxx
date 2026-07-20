@@ -1,39 +1,12 @@
----
-track: U
-prio: 60
-type: decide
----
 
-# Where is the portable/per-target line drawn in the IR?
 
-The one genuinely open fork in `devdocs/dev/type-identity-as-substrate.md`.
-Blocks [[feature-a-abi-oracle]].
+## Status 2026-07-20 — deliberately left unshaped
 
-**The fork.** The IR must carry enough that backends stop reading `Syms[]`, but
-NOT so much that per-target decisions get frozen into it and cross-compilation
-breaks.
+Reviewed with the user during the decide- sweep. It has no options table, and
+unlike the others it is not yet a fork you can answer — it needs design work
+before it becomes a decision. The user's call: **leave it open, shape it
+later**, at prio 60 unchanged.
 
-- **Option A — thin IR, fat oracle.** IR carries portable identity only
-  (`TypeRef`). Every size/register/convention question is asked per-target at
-  emit time. Maximum cross-target safety; the oracle is called a lot and
-  backends get chattier.
-- **Option B — lowered IR.** A per-target lowering pass rewrites the IR before
-  emission, so decisions are already baked when a backend sees it. Backends get
-  very simple; but the IR is then target-specific after that pass, which is a
-  real change to what "the IR" means, and `optdiff`/cross-target differential
-  testing would need rethinking.
-- **Option C — hybrid.** Portable identity in the IR plus a small set of
-  resolved FLAGS the middle can compute target-independently (e.g. "this is
-  managed", "this needs finalisation"), leaving only genuinely ABI-shaped
-  questions to the oracle.
-
-**Recommendation: C.** It matches how `RetViaHiddenDest` already works
-(one central predicate, consulted by every backend) which is the part of the
-current design that did NOT rot — the return convention is the one rule with a
-single authoritative site, and it has stayed consistent across all six backends
-while the param rule drifted into 8 copies. Extending the thing that worked
-beats inventing a new lowering stage.
-
-Needs a human call because it decides what "the IR" means for every future
-target, and `ir-as-substrate.md` is the north star it has to stay consistent
-with.
+Not an oversight, and not stalled on anyone: whoever next has the context for
+where the portable/per-target line should sit in the IR should write the
+options table first, then it can be decided like the rest.
