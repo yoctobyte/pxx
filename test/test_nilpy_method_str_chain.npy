@@ -1,0 +1,5 @@
+b = bytearray(3)
+b[0] = 104
+b[1] = 105
+s = bytes(b).decode("latin-1").upper()
+print(s)

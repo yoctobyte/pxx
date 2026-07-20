@@ -6455,6 +6455,22 @@ begin
         if (tk = tyClass) or (tk = tyRecord) then recId := ProcRetRecId[mpi]
         else recId := REC_NONE;
         node := callN;
+        { A method whose result is a STRING (e.g. bytes.decode) may be followed
+          by str methods — `bytes(b).decode("latin-1").upper()`. The generic
+          selector loop cannot resolve `.upper` (the result is not a class), so
+          chain them here, exactly as ParseFactor does for a call result. }
+        while isNilPy and PyIsStrBaseTk(tk) and (CurTok.Kind = tkDot) and
+              (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+              (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkLParen) do
+        begin
+          Next;                          { consume '.'; CurTok = method name }
+          prevTok := TokPos - 1;
+          Next;                          { consume the name; CurTok = '(' }
+          node := PyParseStrMethod(node, GetTokenStr(prevTok));
+          tk := IntToTypeKind(ASTTk[node]);
+          recId := REC_NONE;
+        end;
+        outTk := tk;
         Continue;
       end;
 
