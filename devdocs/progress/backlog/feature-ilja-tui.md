@@ -1,5 +1,6 @@
 ---
 prio: 45  # auto
+blocked-by: [decide-ilja-tui-render-model]
 ---
 
 # Ilja — TUI (ANSI) face
@@ -40,3 +41,10 @@ designer usable. garin needed no GUI-specific change.
 
 ## Log
 - 2026-06-22 — filed (depends on M1; reuses garin).
+- 2026-07-20 (Track B sweep) — Blocked on [[decide-ilja-tui-render-model]]. The
+  four "resolve at start" questions (canvas seam, resize input, colour depth,
+  px->cell rounding) were sitting unanswered inside this implementation ticket
+  while it ranked as available Track B work. They are genuine forks — the canvas
+  one in particular decides whether this ticket still tests what it exists to
+  test — so they are filed as a Track U decision with a recommendation each.
+

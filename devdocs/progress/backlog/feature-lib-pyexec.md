@@ -2,6 +2,7 @@
 track: B
 prio: 45
 type: feature
+blocked-by: [feature-rtti-field-reflection]
 ---
 
 # lib pyexec: a real exec() for Python-subset source (library, two engines)
@@ -47,3 +48,18 @@ either way so consumers don't care.
 
 Gate: standalone test suite driving the extracted 134-block corpus against
 recorded CPython results (no uforth needed); make lib-test green.
+
+## Track B note (2026-07-20 sweep)
+
+Blocked-by edge added for [[feature-rtti-field-reflection]], which the ticket's
+own header lists as a dependency ("Depends on feature-rtti-field-reflection for
+the host bridge") — the tree-walker resolves `vm.here` / `vm.memory[i]` /
+`push(x)` through field and method RTTI, so there is no engine without it.
+
+Also worth flagging for whoever ranks this: it is a **large** umbrella (a
+tokenizer + parser + AST cache, then a tree-walking engine, then a JIT), not a
+single slice. The one piece that is genuinely startable today and independent of
+the RTTI dependency is extracting uforth's 134 PYTHON blocks with their CPython
+results into a fixture corpus under `test/` — that is worth doing on its own,
+because it pins the contract before any engine exists to argue with.
+
