@@ -55,3 +55,37 @@ Scaling curve recorded before/after, `make test` green, self-host byte-identical
 - That reframes the fix: a per-proc allocation that never shrinks (~180 KB per
   EMPTY procedure) rather than only a quadratic scan. Look at what is reserved
   per Proc entry and whether the per-body arrays are sized per procedure.
+
+## Measurements 2026-07-20 (narrowing, not yet root-caused)
+
+Scaling curve, `procedure qN; begin end;` × n, HEAD:
+
+| n | wall | peak RSS |
+| --- | --- | --- |
+| 1500 | 0.58s | 103 MB |
+| 3000 | 2.55s | 436 MB |
+| 6000 | 13.0s | 1743 MB |
+| 12000 | 67.6s | 4484 MB |
+
+RSS is **quadratic in the number of PROCEDURES** (4x per doubling); wall is
+slightly worse than quadratic. What that rules out:
+
+- **Not the bodies.** 3000 procs × 10 statements = 516 MB vs 3000 empty procs
+  = 436 MB. Body content barely matters; proc COUNT is the whole curve.
+- **Not registration.** 6000 forward declarations alone: 0.95s / 44 MB. The
+  cost is entirely in compiling bodies.
+- **Not the optimizer.** `-O0` and `-O2` are identical (11.7s / 1740 MB).
+- **Not globals.** 6000 global vars: 0.18s / 34 MB.
+- **Not inline retention specifically** — bodies made non-inlinable (a `for`
+  loop over a global) cost the same 1795 MB.
+
+RSS climbs steadily (~120 MB/s) throughout, so it is accumulation during body
+compilation, not a spike at emit. Arithmetic: ~100 bytes allocated per
+ALREADY-REGISTERED proc, per body compiled. That shape says a per-body pass
+walks all procs so far and allocates something small per entry (a temporary
+string per candidate name is the classic one — see
+`project_pxx_string_concat_in_loop_is_quadratic`).
+
+Next step for whoever picks this up: instrument the allocator (or run a build
+with symbols under a heap profiler — `perf` is blocked in this sandbox and the
+self-hosted binary carries no symtab, which is why this stopped here).
