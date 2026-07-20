@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 50
+prio: 45
 type: feature
 ---
 
@@ -89,3 +89,9 @@ then re-drive.
 - Also noted while testing: a def with NO return annotation (`def f(k: str):`)
   does not parse. Separate gap, not filed yet — mention it if it blocks a
   corpus drive.
+
+- 2026-07-20 — moved back to `backlog/` rather than parked in `unfinished/`:
+  everything that landed is green and gated, and what is left is one
+  well-scoped item (the general "None is a variant in PyExprMode" rule above),
+  not a half-applied change. Priority lowered to 45 to match the smaller
+  remaining scope.
