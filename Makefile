@@ -226,6 +226,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_defaults26)" = "$$(printf '3\n6\nhi bob\nhi bob!\nend...\nend!\n7\n103\n106\n3\n-3\n206')"
 	./$(COMPILER) test/test_nilpy_bytes.npy /tmp/test_nilpy_bytes26
 	test "$$(/tmp/test_nilpy_bytes26)" = "$$(printf '4\n0\n0\n65\n66\n0\n255\n255\n65\n65\n1\n4\n1024\n0')"
+	./$(COMPILER) test/test_nilpy_variant_bitwise.npy /tmp/test_nilpy_variant_bitwise26
+	test "$$(/tmp/test_nilpy_variant_bitwise26)" = "$$(printf '%b' '44\n255\n240\n256\n16\n-4\n255\n1\n3\ncaught RuntimeError\ncaught via Exception base')"
 	./$(COMPILER) test/test_nilpy_property.npy /tmp/test_nilpy_property26
 	test "$$(/tmp/test_nilpy_property26)" = "$$(printf '%b' 'False\n10\nTrue\n16\n2')"
 	./$(COMPILER) test/test_nilpy_float_conv.npy /tmp/test_nilpy_float_conv26

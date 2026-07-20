@@ -1664,6 +1664,18 @@ begin
     else if opTk = Ord(tkDiv)   then begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9); end                       { cqo; idiv rcx -> quotient in rax }
     else if opTk = Ord(tkMod)   then begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9); EmitB($48); EmitB($89); EmitB($D0); end  { cqo; idiv rcx; mov rax,rdx (remainder) }
     else if opTk = Ord(tkSlash) then { dead code: '/' is force-jumped to the double path above }
+    { Bitwise ops on variant ints. Python leans on these for machine-word
+      masking (`v & 0xFFFFFFFFFFFFFFFF` normalising a cell to 64 bits), and a
+      soft-typed stack means the operand is a variant, not a static int.
+      The shift count is already in rcx, so cl is the low byte. `shr` is
+      ARITHMETIC (sar): Python's >> on a negative int sign-extends. A float
+      operand never reaches here — it is diverted to the double path above,
+      where a bitwise op is correctly rejected, as in Python. }
+    else if opTk = Ord(tkAnd)   then begin EmitB($48); EmitB($21); EmitB($C8); end             { and  rax,rcx }
+    else if opTk = Ord(tkOr)    then begin EmitB($48); EmitB($09); EmitB($C8); end             { or   rax,rcx }
+    else if opTk = Ord(tkXor)   then begin EmitB($48); EmitB($31); EmitB($C8); end             { xor  rax,rcx }
+    else if opTk = Ord(tkShl)   then begin EmitB($48); EmitB($D3); EmitB($E0); end             { shl  rax,cl }
+    else if opTk = Ord(tkShr)   then begin EmitB($48); EmitB($D3); EmitB($F8); end             { sar  rax,cl }
     else Error('Variant arithmetic: unsupported operator (string pending)');
     EmitB($48); EmitB($8D); EmitB($14); EmitB($25); EmitGlobRef(resultOff);       { lea rdx,[result] }
     EmitB($48); EmitB($C7); EmitB($02); EmitI32(VT_INT64);                        { mov qword[rdx],VT_INT64 }
@@ -1697,14 +1709,29 @@ begin
     EmitB($66); EmitB($0F); EmitB($2F); EmitB($C1);          { comisd xmm0,xmm1 }
     EmitSetccFloat(opTk);
   end
-  else if (opTk = Ord(tkDiv)) or (opTk = Ord(tkMod)) then
+  else if (opTk = Ord(tkDiv)) or (opTk = Ord(tkMod)) or
+          (opTk = Ord(tkAnd)) or (opTk = Ord(tkOr)) or (opTk = Ord(tkXor)) or
+          (opTk = Ord(tkShl)) or (opTk = Ord(tkShr)) then
   begin
-    { div/mod are integer operators: truncate the double operands to int64,
-      integer-divide, store VT_INT64. (Pascal div/mod semantics.) }
+    { div/mod and the BITWISE ops are integer operators: truncate the double
+      operands to int64, apply, store VT_INT64. (Pascal div/mod semantics.)
+
+      DEVIATION, filed as bug-nilpy-bitwise-on-float-variant-truncates: Python
+      raises TypeError for `1.5 & 2` rather than truncating. Emitting a runtime
+      type error needs machinery this routine does not have, and truncation is
+      at least consistent with how div/mod already treat a double operand here.
+      Unreachable from the corpus, which masks ints behind isinstance guards. }
     EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);                  { cvttsd2si rax, xmm0 }
     EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C9);                  { cvttsd2si rcx, xmm1 }
+    if      opTk = Ord(tkAnd) then begin EmitB($48); EmitB($21); EmitB($C8); end { and rax,rcx }
+    else if opTk = Ord(tkOr)  then begin EmitB($48); EmitB($09); EmitB($C8); end { or  rax,rcx }
+    else if opTk = Ord(tkXor) then begin EmitB($48); EmitB($31); EmitB($C8); end { xor rax,rcx }
+    else if opTk = Ord(tkShl) then begin EmitB($48); EmitB($D3); EmitB($E0); end { shl rax,cl }
+    else if opTk = Ord(tkShr) then begin EmitB($48); EmitB($D3); EmitB($F8); end { sar rax,cl }
+    else begin
     EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9);                  { cqo; idiv rcx }
     if opTk = Ord(tkMod) then begin EmitB($48); EmitB($89); EmitB($D0); end;     { mov rax,rdx (remainder) }
+    end;
     EmitB($48); EmitB($8D); EmitB($14); EmitB($25); EmitGlobRef(resultOff);      { lea rdx,[result] }
     EmitB($48); EmitB($C7); EmitB($02); EmitI32(VT_INT64);                       { mov qword[rdx],VT_INT64 }
     EmitB($48); EmitB($89); EmitB($42); EmitB($08);                              { mov [rdx+8],rax }

@@ -1,0 +1,28 @@
+from typing import Any
+def f(v: Any) -> Any:
+    return v
+print(f(300) & 0xFF)
+print(f(0xF0) | 0x0F)
+print(f(0xFF) ^ 0x0F)
+print(f(1) << 8)
+print(f(256) >> 4)
+print(f(-16) >> 2)
+v = f(0xFFFFFFFFFFFFFFF)
+print(v & 0xFF)
+x = f(5)
+x = x & 3
+print(x)
+
+def boom(n: int) -> int:
+    if n < 0:
+        raise RuntimeError("negative")
+    return n
+try:
+    print(boom(3))
+    print(boom(-1))
+except RuntimeError:
+    print("caught RuntimeError")
+try:
+    raise RuntimeError("again")
+except Exception:
+    print("caught via Exception base")

@@ -141,6 +141,10 @@ type
   EOFError          = class(Exception) end;
   KeyboardInterrupt = class(Exception) end;
   ZeroDivisionError = class(Exception) end;
+  RuntimeError      = class(Exception) end;
+  NotImplementedError = class(RuntimeError) end;
+  StopIteration     = class(Exception) end;
+  OverflowError     = class(Exception) end;
 
   TPyBytes = class
   public
