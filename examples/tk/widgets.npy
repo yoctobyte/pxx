@@ -1,0 +1,48 @@
+# widgets.npy — the tkinter-shaped helpers over the Tcl/Tk embed.
+#
+# Every call below is ONE TkEval underneath (see lib/pcl/tk.pas): a name->command
+# mapping, not a widget layer. Familiar Python-ish tkinter shape, no widget
+# objects, nothing that can drift out of sync with Tk.
+#
+# Build + run headless:
+#   pxx -Fulib/pcl examples/tk/widgets.npy widgets  &&  xvfb-run -a ./widgets
+import tk
+
+def main() -> None:
+    if not TkInit():
+        print("TkInit failed")
+        return
+
+    TkTitle("pxx tk widgets")
+
+    # ttk where it exists — the classic widget set looks like 1994 and ttk
+    # closes most of that gap for the cost of a prefix.
+    names = TkThemeNames()
+    print("themes: " + names)
+    if names != "":
+        TkThemeUse("clam")
+
+    TtkLabel(".title", "widgets, one TkEval each")
+    TkPack(".title", "-padx 12 -pady 6")
+
+    TtkEntry(".e", "-width 24")
+    TkPack(".e", "-padx 12")
+    TkSetText(".e", "typed into an entry")
+
+    TkText(".t", "-width 32 -height 3")
+    TkPack(".t", "-padx 12 -pady 6")
+    TkSetText(".t", "and into a text widget")
+
+    TtkButton(".b", "ok", "destroy .")
+    TkPack(".b", "-pady 6")
+
+    # TkGetText reads both widget kinds without the caller branching
+    print("entry = " + TkGetText(".e"))
+    print("text  = " + TkGetText(".t"))
+    print("label = " + TkGetText(".title"))
+
+    TkAfter(400, "destroy .")     # auto-close so a headless run terminates
+    TkMainLoop()
+    print("ok: nilpy tk widgets shown and closed")
+
+main()

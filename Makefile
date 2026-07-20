@@ -5444,6 +5444,8 @@ lib-test: pxx-stable-check
 	@if command -v xvfb-run >/dev/null 2>&1 && [ -e /usr/lib/$$(uname -m)-linux-gnu/libtk8.6.so.0 ]; then \
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/hello.npy /tmp/lib_tk_hello >/dev/null && \
 	  test "$$(xvfb-run -a /tmp/lib_tk_hello)" = "ok: nilpy tk window shown and closed" && \
+	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/widgets.npy /tmp/lib_tk_widgets >/dev/null && \
+	  test "$$(xvfb-run -a /tmp/lib_tk_widgets | tail -n 4)" = "$$(printf 'entry = typed into an entry\ntext  = and into a text widget\nlabel = widgets, one TkEval each\nok: nilpy tk widgets shown and closed')" && \
 	  echo "  tk-nilpy: ok"; \
 	else \
 	  echo "  tk-nilpy: SKIP (no xvfb-run or no libtk8.6)"; \

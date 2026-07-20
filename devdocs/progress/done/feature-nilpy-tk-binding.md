@@ -8,7 +8,7 @@ prio: 45
 
 - **Type:** feature (Track B — library; `lib/pcl/tk.pas`). Enables the NilPy IDE demo
   ([[feature-demo-nilpy-ide]], Track E).
-- **Status:** backlog — **v1 (embed core) LANDED**, surface work remains.
+- **Status:** done
 - **Opened:** 2026-07-17.
 
 ## Approach
@@ -70,4 +70,33 @@ construction: Tk does all widget/layout/event work.
   Items 1 (tkinter-shaped convenience surface) and 2 (`ttk` themed widgets)
   remain open; both are additive wrapper work on top of `TkEval` with no
   blocker.
+- 2026-07-20 (Track B) — **Items 1 and 2 landed; the ticket is complete.**
 
+  Item 1, tkinter-shaped surface (`lib/pcl/tk.pas`): `TkTitle`, `TkLabel`,
+  `TkButton`, `TkEntry`, `TkText`, `TkFrame`, `TkPack`, `TkGrid`, `TkBind`,
+  `TkDestroy`, `TkAfter`, plus `TkGetText`/`TkSetText`. Each is exactly one
+  `TkEval` with arguments interpolated — a name-to-command mapping, no widget
+  objects, no state that can drift out of sync with Tk. Where a helper is
+  missing, `TkEval` still does the job in one more line, and that escape hatch is
+  what keeps the wrapper from growing into a widget layer.
+
+  `TkGetText`/`TkSetText` are the one place with logic: they read `winfo class`
+  and pick `entry get` vs `text get 1.0 end-1c` vs `cget -text`, so callers do
+  not branch on widget kind. That is convenience, not abstraction — it maps to
+  the same three commands a human would type.
+
+  Item 2, ttk: `TkThemeUse`, `TkThemeNames`, `TtkLabel`, `TtkButton`,
+  `TtkEntry`, `TtkFrame`. As predicted, one command prefix.
+
+  Values are interpolated in Tcl `{braces}`, so a caption containing spaces or
+  brackets stays a single argument. **Known limit:** a caption containing an
+  unbalanced brace still breaks. That is inherent to a thin string-passing
+  wrapper, and it is documented at the declaration rather than papered over —
+  starting to escape Tcl here would be the first step toward the widget layer
+  this deliberately is not.
+
+  `examples/tk/widgets.npy` demonstrates the surface and is gated headless
+  alongside `hello.npy` in `make lib-test`, asserting the round-tripped text of
+  an entry, a text widget and a label (all three read back through `TkGetText`).
+
+- 2026-07-20 — resolved, commit HEAD.
