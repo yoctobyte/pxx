@@ -1,5 +1,6 @@
 ---
 prio: 45  # auto
+track: A
 ---
 
 # write/writeln as a library function (via `array of const` + variadic sugar)
@@ -108,3 +109,6 @@ Left in backlog rather than blocked/, since it is not externally blocked — it
 just needs the owning lane to be A/P for the first two phases. Whoever ranks
 this should treat it as a Track A ticket with a Track B tail.
 
+## Lane correction (2026-07-20)
+
+Track re-labelled B -> A on 2026-07-20: phases 1 (variadic bracket-elision) and 2 (expr:w:p formatting) are parser work in compiler/**. Phase 3, the library write/writeln over array of const, is the only Track B part and in isolation is a strictly worse writeln nobody would call — the value is in the sugar, and the sugar is the compiler's.

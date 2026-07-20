@@ -86,7 +86,7 @@ _none_
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-lib-pyexec | B | 45 | feature | lib pyexec: a real exec() for Python-subset source (library, two engines) | feature-rtti-field-reflection |
 | feature-mimic-fpc-compiler-define-profile | A | 50 | feature | FPC-compiler define profile (`fpcdefs.inc` build-config gates) | — |
-| feature-move-fillchar-intrinsics | B | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
+| feature-move-fillchar-intrinsics | A | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-n-nilpy-ast-typing-module-scope | N | 55 | feature | NilPy: type MODULE locals from the AST too | — |
 | feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
 | feature-networking | B | 45 | feature | Networking runtime | — |
@@ -136,7 +136,7 @@ _none_
 | feature-t-nilpy-cpython-differential-fuzzer | T | 40 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-windows-wine-harness | T | 45 | feature | Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
-| feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
+| feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | feature-tls13-from-scratch |
 | feature-toolchain-cli-ux | A | 45 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-twatch-full-tier-coverage-age | T | 40 | feature | No signal distinguishes "full tier is lagging" from "full tier never completes" | — |
 | feature-typeinfo-all-types | A | 50 | feature | `TypeInfo(T)` for every type, not just enums | — |
@@ -144,7 +144,7 @@ _none_
 | feature-unicodestring-model | A | 40 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 | feature-web-track-w-bootstrap | A | 40→45 | feature | Track W (website) — bootstrap the lane: two repos, one board | — |
 | feature-web-tracker-and-host-portability | A | 45 | feature | Public tracker on GitHub + host-portability rule (nothing lives only in a service) | feature-web-track-w-bootstrap |
-| feature-writeln-as-library | B | 45 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
+| feature-writeln-as-library | A | 45 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-xtensa-stack-args-over-6-words | A | 45 | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | idea-c-realworld-test-targets | C | 25 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
 | idea-cross-namespace-ambiguity-warning | A | 10 | idea | Warn when a call name matches in BOTH the Pascal and C namespaces | — |
@@ -222,7 +222,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (917)
+## done (918)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -531,6 +531,7 @@ _none_
 | bug-nilpy-method-returning-str-garbage | N | 75 | bug | NilPy: a method returning `str` returns garbage | — |
 | bug-nilpy-not-on-string-always-true | N | 60 | bug | NilPy: `not s` on a string was ALWAYS True (silent wrong branch) | — |
 | bug-nilpy-param-spill-width | N | 60 | bug | NilPy: bool/char param spill wrote 4 bytes into a 1-byte slot (SILENT, then SIGSEGV) | — |
+| bug-nilpy-statement-after-for-in-a-def | N | 60 | bug | NilPy: any statement after a `for` inside a def failed to parse | — |
 | bug-nilpy-str-index-off-by-one | N | 75 | bug | NilPy string subscripts are 1-BASED — silently off by one vs CPython | — |
 | bug-nilpy-str-param-length-index | A | 55 | bug | NilPy: `str` parameter breaks Length / indexing / codegen | — |
 | bug-nilpy-string-class-field | N | 60 | bug | NilPy: str class field registered as tyString = inline string[N] semantics (garbage reads) | — |
@@ -2619,7 +2620,6 @@ _none_
 - [p 55] [T] feature-pasmith-multi-unit-programs
 - [p 55] [A] feature-signal-siginfo-ucontext
 - [p 53] [A] feature-threadsafe-heap-optimize
-- [p 53] [B] feature-tls-provider-abstraction
 - [p 50] [A] bug-cdecl-indirect-over-6-integer-args (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [A] bug-parallel-for-captured-boolean-loses-type
@@ -2651,7 +2651,7 @@ _none_
 - [p 45] [A] feature-emission-size-dce
 - [p 45] [A] feature-esp-hardware-flash-validation
 - [p 45] [O] feature-inline-nonleaf-and-branch-locals
-- [p 45] [B] feature-move-fillchar-intrinsics
+- [p 45] [A] feature-move-fillchar-intrinsics
 - [p 45] [B] feature-networking
 - [p 45] [N] feature-nilpy-exception-message
 - [p 45] [A] feature-nilpy-idf-import
@@ -2661,7 +2661,7 @@ _none_
 - [p 45] [B] feature-random-library
 - [p 45] [T] feature-t-windows-wine-harness
 - [p 45] [A] feature-toolchain-cli-ux
-- [p 45] [B] feature-writeln-as-library
+- [p 45] [A] feature-writeln-as-library
 - [p 45] [A] feature-xtensa-stack-args-over-6-words
 - [p 45] [A] refactor-centralize-managed-string-pchar-conversion
 - [p 45] [T] task-t-enroll-libtest-demos-watcher
@@ -2714,4 +2714,5 @@ _none_
 - **1** — feature-port-freebsd-native
 - **1** — feature-port-windows-pe
 - **1** — feature-rtti-field-reflection
+- **1** — feature-tls13-from-scratch
 - **1** — feature-typeinfo-all-types

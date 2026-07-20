@@ -1,5 +1,6 @@
 ---
 prio: 53  # auto
+blocked-by: [feature-tls13-from-scratch]
 ---
 
 # TLS provider abstraction — pluggable backends (OpenSSL + handrolled)
@@ -208,3 +209,24 @@ can run one library on OpenSSL and another on native in the same process; the
 4-cell client×server interop matrix passes in `make lib-test`. OpenSSL backend is
 the default; native is selectable. Security caveat for the native stack stays
 documented ([[feature-tls13-from-scratch]]).
+
+## Track B sweep (2026-07-20)
+
+The OpenSSL half is functionally complete through slice 6. The **only** remaining
+umbrella item is the native backend, and that is
+[[feature-tls13-from-scratch]]'s deliverable — which the user deferred
+("start alongside BSD support, not now") and which has now been moved to
+`rainy-day/` to match. So a `blocked-by` edge, not available Track B work: this
+ticket cannot close until that one is un-deferred.
+
+Nothing stops someone pulling a single named slice out of the deferred ticket if
+it becomes urgent (RSA-PSS scheme dispatch, kTLS RX). That does not require
+un-deferring the umbrella, and it does not change this ticket's state.
+
+Cross-reference to avoid confusion: slice 5 above ("certificate verification +
+trust store") is the **OpenSSL** backend's trust, via
+`SSL_CTX_load_verify_locations`. The separate `lib/rtl/truststore.pas` landed
+2026-07-20 under [[feature-tls-system-trust-store]] anchors the **from-scratch**
+client's chain against `/etc/ssl/certs`. Two different backends, two different
+trust paths; neither supersedes the other.
+

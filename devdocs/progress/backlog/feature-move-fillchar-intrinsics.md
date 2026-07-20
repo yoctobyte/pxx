@@ -1,5 +1,6 @@
 ---
 prio: 45  # auto
+track: A
 ---
 
 # Move / FillChar as compiler intrinsics (future optimization)
@@ -90,3 +91,6 @@ split out as `task-remove-sysutils-move-fillchar-copies` and **completed
 So there is no Track B work left here at all; the lane label is what is stale,
 not the ticket. Whoever picks this up: it is Track A.
 
+## Lane correction (2026-07-20)
+
+Track re-labelled B -> A on 2026-07-20: part 1 landed in v145, the Track B tail (task-remove-sysutils-move-fillchar-copies) completed 2026-07-04, and the only remaining half is intrinsic emission in compiler/**. It was surfacing in the Track B ready queue with nothing a Track B agent could do.
