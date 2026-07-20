@@ -57,3 +57,6 @@ sensible.
 
 `test-nilpy` green with both the string and list forms diffed against
 CPython + `--tier quick` + self-host byte-identical + `make fpc-check`.
+
+## Log
+- 2026-07-20 — resolved, commit 40758683.

@@ -58,3 +58,6 @@ Python has both.
 `test-nilpy` green with equal-contents-different-objects cases for both
 containers, plus an `is` case to pin that identity still means identity +
 `--tier quick` + self-host byte-identical + `make fpc-check`.
+
+## Log
+- 2026-07-20 — resolved, commit 40758683.

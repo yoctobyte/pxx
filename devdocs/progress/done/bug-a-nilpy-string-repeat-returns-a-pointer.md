@@ -59,3 +59,6 @@ than a note.
 
 `test-nilpy` green with the three lines above diffed against CPython +
 `--tier quick` + self-host byte-identical + `make fpc-check`.
+
+## Log
+- 2026-07-20 — resolved, commit 40758683.
