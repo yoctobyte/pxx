@@ -169,3 +169,6 @@ under [[feature-nilpy-bytes-and-slices]], not here.
 does not parse — needs the shared ParseFactor hook, so Track A-adjacent).
 [[bug-nilpy-string-local-truncates-at-255]] limits what any of these methods
 can build.
+
+## Log
+- 2026-07-20 — resolved, commit 31eb8f59.
