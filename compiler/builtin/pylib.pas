@@ -206,7 +206,8 @@ function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; over
   recognised by the frontend: neither name is a Pascal keyword, so both
   resolve through the normal call path with no parser hook. (`set()` needed a
   hook only because `set` IS a keyword.) }
-function bytearray(n: Integer): TPyBytes;
+function bytearray: TPyBytes; overload;   { bytearray() — an EMPTY buffer }
+function bytearray(n: Integer): TPyBytes; overload;
 function bytes(b: TPyBytes): TPyBytes;
 function len(b: TPyBytes): Integer; overload;
 { SLICES. `b[lo:hi]` desugars to one of these calls in the frontend, with an
@@ -1630,7 +1631,12 @@ begin
   p^ := v;
 end;
 
-function bytearray(n: Integer): TPyBytes;
+function bytearray: TPyBytes; overload;
+begin
+  Result := TPyBytes.Create(0);
+end;
+
+function bytearray(n: Integer): TPyBytes; overload;
 begin
   Result := TPyBytes.Create(n);
 end;

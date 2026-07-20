@@ -309,6 +309,15 @@ begin
   if lo = 'bool' then begin Result := tyBoolean; Inc(i); Exit; end;
   if lo = 'str' then begin Result := tyString; Inc(i); Exit; end;
   if lo = 'any' then begin Result := tyVariant; Inc(i); Exit; end;
+  { `bytes` / `bytearray` annotate the pylib TPyBytes class — the same object
+    bytearray(n) returns, so an annotated parameter and an inferred local agree. }
+  if (lo = 'bytes') or (lo = 'bytearray') then
+  begin
+    PyAnnLastCi := FindUClass('TPyBytes');
+    if PyAnnLastCi >= 0 then Result := tyClass else Result := tyUnknown;
+    Inc(i);
+    Exit;
+  end;
   if lo = 'optional' then
   begin
     Inc(i);
