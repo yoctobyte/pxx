@@ -49,7 +49,7 @@ _none_
 | decide-nilpy-and-or-return-operand-or-bool | U | 40 | decide | decide: should NilPy's `and` / `or` return an OPERAND, as Python does? | — |
 | decide-nilpy-bigint-vs-64bit-cells | U | 40 | decide | decide: NilPy integer semantics — arbitrary precision vs 64-bit (uforth needs one) | — |
 | decide-nilpy-closure-model | U | 20 | decide | DECIDE (DEFERRED): which closure model for NilPy? | — |
-| decide-nilpy-parallel-capture-semantics | A | 45 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
+| decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-rtti-none-semantics | A | 40 | decide | decide: `--rtti=none` semantics — what happens to the FUNCTIONAL parts of the RTTI blob? | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
@@ -100,7 +100,7 @@ _none_
 | feature-nilpy-nested-def-as-value | N | 15 | feature | SUPERSEDED: nested def as a VALUE (stored, passed, returned) | — |
 | feature-nilpy-none-variant | N | 45 | feature | NilPy: `None` as a first-class variant value (VT_EMPTY) | — |
 | feature-nilpy-optional-return-annotation | N | 55 | feature | NilPy: `-> ret` is MANDATORY on every def; Python makes it optional | — |
-| feature-nilpy-parallel-for-in | A | 45 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
+| feature-nilpy-parallel-for-in | A | 5 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
 | feature-nilpy-tk-binding | B | 45 | feature | Thin Tcl/Tk embed for pxx (lib/pcl/tk.pas) + a tkinter-shaped NilPy surface — v1 landed | — |
 | feature-opt-complex-packed-double | O | 35 | feature | Complex as a packed-double XMM value (SSE2/SSE3) | — |
 | feature-opt-float-register-temporaries | O | 20 | feature | float kernels: -O3 now 1.97x vs FPC (was 4.2x); residual = the rax value model — multi-session xmm-resident rewrite | — |
@@ -2602,7 +2602,6 @@ _none_
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [A] decide-nilpy-parallel-capture-semantics (unblocks 1)
 - [p 45] [B] feature-nilpy-tk-binding (unblocks 1)
 - [p 45] [A] bug-a-token-growth-test-is-slow-and-times-out
 - [p 45] [T] bug-t-watcher-dev-contention-false-newred
@@ -2685,6 +2684,7 @@ _none_
 - [p 12] [P] task-pascal-conformance-long-tail
 - [p 10] [B] feature-rtl-math-on-crtl-dd-kernels
 - [p 10] [A] idea-cross-namespace-ambiguity-warning
+- [p  5] [A] decide-nilpy-parallel-capture-semantics (unblocks 1)
 
 ## Leverage (tickets each one unblocks)
 

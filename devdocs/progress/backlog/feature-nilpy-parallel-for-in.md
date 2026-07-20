@@ -1,7 +1,7 @@
 ---
 summary: "NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime"
 type: feature
-prio: 45
+prio: 5
 blocked-by: [decide-nilpy-parallel-capture-semantics]
 ---
 
@@ -52,3 +52,22 @@ done; `...managed-string-race` rejected). No Track A / shared-internals change i
 - Not new runtime capability — reuse `palparallel` as-is.
 - Capture/reduction *semantics* are decided in [[decide-nilpy-parallel-capture-semantics]],
   not here.
+
+## PARKED — deliberately last (user, 2026-07-20)
+
+Not blocked on any one ticket, and intentionally not given a `blocked-by` edge:
+this waits on the whole substrate settling (int/bigint and the object model are
+in flux as of this date), and there is no single commit that will say "now".
+Revisit when the dust has settled and the picture is clearer — a vague later,
+on purpose.
+
+**Do not read the low prio as "small and easy to grab".** The user's framing:
+the feature is *trivial to implement* and expensive to live with — it "would
+spark bugs under our ass at every clock cycle". The cost is not building it,
+it is every latent race it legitimises afterwards, across a language whose
+users have never had to think about them (CPython's GIL made `list.append` and
+`d[k] = v` effectively atomic; true parallelism removes that, so correct
+CPython code silently races). Cheap to add, permanent to own.
+
+Whoever picks this up later: re-read the fork above before writing any code,
+and confirm with the user that the substrate is actually settled.
