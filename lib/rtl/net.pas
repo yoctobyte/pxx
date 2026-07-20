@@ -18,9 +18,20 @@ uses platform;
 
 type
   TNetSocket = Integer;
+
+  { An address is IPv4 or IPv6 depending on Family.
+
+    Family is NOT optional: a record built by hand rather than through
+    NetAddress/NetAddress6 has an indeterminate Family, and the difference
+    decides which socket family gets created. Always construct through the
+    helpers below — that is why they exist. NetTcpAccept and NetUdpRecvFrom set
+    Family on the peer they fill in, so an out-parameter is always well formed. }
   TNetAddress = record
+    Family: Integer;  { PAL_NET_AF_INET or PAL_NET_AF_INET6 }
     Host: LongWord;   { IPv4 address, host byte order (e.g. PAL_NET_IP_LOOPBACK) }
     Port: Integer;
+    V6: TPalIn6Addr;  { IPv6 address, wire order; meaningful when Family = INET6 }
+    ScopeId: Integer; { interface index for link-local (fe80::/10); 0 otherwise }
   end;
 
 const
@@ -29,11 +40,24 @@ const
 function NetAddress(host: LongWord; port: Integer): TNetAddress;
 function NetLoopback(port: Integer): TNetAddress;
 
+{ IPv6 counterparts. `addr` is the 16 wire-order bytes; scopeId is the interface
+  index a link-local address needs and 0 everywhere else. }
+function NetAddress6(const addr: TPalIn6Addr; port, scopeId: Integer): TNetAddress;
+function NetLoopback6(port: Integer): TNetAddress;   { ::1 }
+function NetAny6(port: Integer): TNetAddress;        { ::, all interfaces }
+
+{ True when the address is IPv6 — for callers that must branch (logging,
+  formatting) rather than just pass it along. }
+function NetIsV6(const addr: TNetAddress): Boolean;
+
 { TCP (blocking). On loopback a blocking connect to a listening socket
   completes via the kernel backlog before Accept is called, so a single
   thread can drive both sides. }
 function NetTcpListen(const addr: TNetAddress; backlog: Integer): TNetSocket;
 function NetTcpAccept(listener: TNetSocket; var peer: TNetAddress): TNetSocket;
+{ Accept on an IPv6 listener. Same caveat as NetTcpAccept: the peer address is
+  not filled in (no PalAcceptIpv6 yet), only its Family. }
+function NetTcpAccept6(listener: TNetSocket; var peer: TNetAddress): TNetSocket;
 function NetTcpConnect(const addr: TNetAddress): TNetSocket;
 { Connect with a deadline. Returns a connected (blocking) socket >= 0, or a
   negative PAL error: PAL_NET_ETIMEDOUT on deadline, or the SO_ERROR/connect
@@ -62,27 +86,56 @@ implementation
 
 function NetAddress(host: LongWord; port: Integer): TNetAddress;
 begin
+  Result.Family := PAL_NET_AF_INET;
   Result.Host := host;
   Result.Port := port;
+  Result.V6 := PalIn6Any;
+  Result.ScopeId := 0;
 end;
 
 function NetLoopback(port: Integer): TNetAddress;
 begin
-  Result.Host := PAL_NET_IP_LOOPBACK;
+  Result := NetAddress(PAL_NET_IP_LOOPBACK, port);
+end;
+
+function NetAddress6(const addr: TPalIn6Addr; port, scopeId: Integer): TNetAddress;
+begin
+  Result.Family := PAL_NET_AF_INET6;
+  Result.Host := 0;
   Result.Port := port;
+  Result.V6 := addr;
+  Result.ScopeId := scopeId;
+end;
+
+function NetLoopback6(port: Integer): TNetAddress;
+begin
+  Result := NetAddress6(PalIn6Loopback, port, 0);
+end;
+
+function NetAny6(port: Integer): TNetAddress;
+begin
+  Result := NetAddress6(PalIn6Any, port, 0);
+end;
+
+function NetIsV6(const addr: TNetAddress): Boolean;
+begin
+  NetIsV6 := addr.Family = PAL_NET_AF_INET6;
 end;
 
 function NetTcpListen(const addr: TNetAddress; backlog: Integer): TNetSocket;
 var fd, rc: Integer;
 begin
-  fd := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_STREAM, 0);
+  fd := PalSocket(addr.Family, PAL_NET_SOCK_STREAM, 0);
   if fd < 0 then
   begin
     Result := fd;
     Exit;
   end;
   rc := PalSetSocketReuseAddr(fd, 1);
-  rc := PalBindIpv4(fd, addr.Host, addr.Port);
+  if NetIsV6(addr) then
+    rc := PalBindIpv6(fd, addr.V6, addr.Port, addr.ScopeId)
+  else
+    rc := PalBindIpv4(fd, addr.Host, addr.Port);
   if rc < 0 then
   begin
     PalSocketClose(fd);
@@ -99,21 +152,36 @@ begin
   Result := fd;
 end;
 
+{ The peer address is reported as IPv4 shape: the PAL has no accept() that fills
+  a sockaddr_in6 yet, so on a v6 listener the peer's Host/Port are not
+  meaningful. Family is still set honestly to INET6 so a caller can SEE that
+  rather than read a zero as a real address. Filling it properly needs a
+  PalAcceptIpv6 — noted on feature-networking. }
 function NetTcpAccept(listener: TNetSocket; var peer: TNetAddress): TNetSocket;
 begin
+  peer := NetAddress(0, 0);
   Result := PalAcceptIpv4(listener, peer.Host, peer.Port);
+end;
+
+function NetTcpAccept6(listener: TNetSocket; var peer: TNetAddress): TNetSocket;
+begin
+  peer := NetAddress6(PalIn6Any, 0, 0);
+  Result := PalAccept(listener);
 end;
 
 function NetTcpConnect(const addr: TNetAddress): TNetSocket;
 var fd, rc: Integer;
 begin
-  fd := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_STREAM, 0);
+  fd := PalSocket(addr.Family, PAL_NET_SOCK_STREAM, 0);
   if fd < 0 then
   begin
     Result := fd;
     Exit;
   end;
-  rc := PalConnectIpv4(fd, addr.Host, addr.Port);
+  if NetIsV6(addr) then
+    rc := PalConnectIpv6(fd, addr.V6, addr.Port, addr.ScopeId)
+  else
+    rc := PalConnectIpv4(fd, addr.Host, addr.Port);
   if rc < 0 then
   begin
     PalSocketClose(fd);

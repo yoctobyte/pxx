@@ -219,4 +219,27 @@ DNS deferred to `feature-dns-resolver-library`.
   IPv4 only; surfacing v6 there (and dual-stack listeners, and AAAA in the
   resolver) is the next slice. So this is the PAL floor, not IPv6 support in the
   networking library.
+- 2026-07-20 (Track B) — **IPv6 surfaced in `net.pas`.** `TNetAddress` gained
+  `Family`, `V6` and `ScopeId`; `NetAddress6` / `NetLoopback6` / `NetAny6` /
+  `NetIsV6` / `NetTcpAccept6` added; `NetTcpListen` and `NetTcpConnect` now
+  branch on `Family`. Gated by `test/lib_net6.pas` (v6 round trip **and** proof
+  the v4 path is unchanged — with a new field in a shared record, "does v4 still
+  work" is the more important half).
+
+  `Family` is set by the constructors, never left to chance. A `TNetAddress`
+  built by hand has an indeterminate `Family`, and that field now decides which
+  socket family gets created — so `NetTcpAccept`/`NetUdpRecvFrom` initialise the
+  peer they fill in, and the record's declaration says to construct through the
+  helpers. Only two sites in the tree built one by hand, both in tests.
+
+  **Known gap, stated rather than hidden:** `NetTcpAccept6` does not fill in the
+  peer address, only its `Family`. There is no `PalAcceptIpv6` yet — the PAL's
+  accept fills an IPv4 sockaddr — so reporting a zeroed v6 peer as if it were
+  real would be worse than reporting nothing. Adding `PalAcceptIpv6` is the next
+  slice.
+
+  Also still IPv4-only: UDP (`NetUdpBind`/`SendTo`/`RecvFrom`), `asyncnet`, and
+  AAAA lookups in the resolver. Dual-stack listeners (`IPV6_V6ONLY`) are
+  untouched. So TCP client and server now speak IPv6; the rest of the library
+  does not yet.
 
