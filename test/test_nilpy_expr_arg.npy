@@ -1,0 +1,24 @@
+class Box:
+    def __init__(self) -> None:
+        self.q = "|"
+        self.n = 3
+
+b = Box()
+xs = []
+a = "x"
+c = "y"
+xs.append(a + c)
+xs.append(b.q + a + b.q)
+xs.append(
+    b.q
+    + c
+    + b.q
+)
+ns = []
+ns.append(b.n + 1)
+ns.append(b.n * 2)
+print(xs[0])
+print(xs[1])
+print(xs[2])
+print(ns[0])
+print(ns[1])

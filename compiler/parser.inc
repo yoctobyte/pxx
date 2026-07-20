@@ -3251,6 +3251,7 @@ begin
 end;
 
 function ByRefArgStartsExpression: Boolean;
+var bx, bd: Integer;
 { True when the next by-ref/array argument cannot be a bare variable lvalue:
   not an ident at all, or an ident that names no symbol and is followed by
   '(' — a type-cast lvalue like `PChar(s)^` / `Pointer(p)^` passed to a
@@ -3258,6 +3259,52 @@ function ByRefArgStartsExpression: Boolean;
   through ParseExpr, whose cast/deref path yields an addressable node. }
 begin
   if CurTok.Kind <> tkIdent then begin Result := True; Exit; end;
+  { NilPy: a `const` parameter is by-ref, so a Python argument that merely
+    STARTS with a name — `xs.append(a + b)` — was parsed as a bare lvalue and
+    the parser stopped at the operator ("unexpected token" on the second
+    operand). An ident followed by anything that continues an EXPRESSION rather
+    than an lvalue is therefore an expression. The lvalue continuations are
+    '.', '[' and '^'; ',' and ')' end a bare-variable argument.
+
+    Gated on PyExprMode: Pascal's var-parameter binding must keep passing a
+    bare variable by reference, and that path is under the self-host gate.
+    Literal operands already worked, which is what hid this — only two NAMED
+    operands hit it (bug-nilpy-expression-arg-to-a-const-param). }
+  if PyExprMode then
+  begin
+    { Skip the whole lvalue CHAIN — `self._tok_quote_char`, `a.b[i].c` — and
+      judge by what FOLLOWS it. One-token lookahead is not enough: uforth's
+      operand is a field chain, so the next token is '.' either way. }
+    bx := TokPos;
+    while bx < TokCount do
+    begin
+      if (Tokens[bx].Kind = tkDot) and (bx + 1 < TokCount) and
+         (Tokens[bx + 1].Kind = tkIdent) then
+        bx := bx + 2
+      else if Tokens[bx].Kind = tkCaret then
+        Inc(bx)
+      else if Tokens[bx].Kind = tkLBrack then
+      begin
+        bd := 0;
+        while bx < TokCount do
+        begin
+          if Tokens[bx].Kind = tkLBrack then Inc(bd)
+          else if Tokens[bx].Kind = tkRBrack then
+          begin
+            Dec(bd);
+            if bd = 0 then begin Inc(bx); Break; end;
+          end;
+          Inc(bx);
+        end;
+      end
+      else Break;
+    end;
+    if (bx < TokCount) and not (Tokens[bx].Kind in [tkComma, tkRParen]) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
   Result := (FindSym(CurTok.SVal) < 0) and (TokPos < TokCount) and
             (Tokens[TokPos].Kind = tkLParen);
 end;
