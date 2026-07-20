@@ -70,3 +70,6 @@ through to integer codegen.
 `--tier quick` + self-host byte-identical, plus a Pascal test that declares,
 assigns, reads back and prints a `PromoInt`, and one that asserts overflow
 RAISES rather than wrapping.
+
+## Log
+- 2026-07-20 — resolved, commit a2b88243.
