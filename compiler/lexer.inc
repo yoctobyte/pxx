@@ -6,7 +6,13 @@ procedure WriteTokenContext; forward;   { body sits after GetTokenStrFromRaw, wh
 
 procedure Error(const msg: AnsiString);
 begin
-  writeln('pascal26:', CurTok.Line, ': error: ', msg, ' (', ErrorIdent, ')');
+  { ErrorIdent names the symbol the diagnostic is about; when there is none, the
+    old unconditional parens printed a bare "()" that reads like an empty format
+    slot (bug-overload-mismatch-dumps-internals-to-stdout). }
+  if ErrorIdent <> '' then
+    writeln('pascal26:', CurTok.Line, ': error: ', msg, ' (', ErrorIdent, ')')
+  else
+    writeln('pascal26:', CurTok.Line, ': error: ', msg);
   WriteTokenContext;
   Halt(1);
 end;
@@ -17,7 +23,10 @@ end;
   mislead. Takes the line from the AST node instead, and prints no window. }
 procedure ErrorAt(line: Integer; const msg: AnsiString);
 begin
-  writeln('pascal26:', line, ': error: ', msg, ' (', ErrorIdent, ')');
+  if ErrorIdent <> '' then
+    writeln('pascal26:', line, ': error: ', msg, ' (', ErrorIdent, ')')
+  else
+    writeln('pascal26:', line, ': error: ', msg);
   Halt(1);
 end;
 

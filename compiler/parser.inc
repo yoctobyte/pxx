@@ -10328,7 +10328,7 @@ begin
             CurASTNode := node;
             Exit;
           end;
-          Error('no overload of ' + name + ' matches these arguments');
+          Error('no overload of ' + name + ' matches these arguments' + OverloadReport);
         end;
 
         isLiftedCall := (procIdx >= 0) and (Procs[procIdx].ParamCount > nArgs) and
@@ -16163,7 +16163,7 @@ begin
 
           procIdx := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, argTypes);
           if procIdx < 0 then
-            Error('no overload of ' + name + ' matches these arguments');
+            Error('no overload of ' + name + ' matches these arguments' + OverloadReport);
 
           currArg := argsHead;
           for i := 0 to nArgs - 1 do

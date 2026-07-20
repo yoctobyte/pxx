@@ -1425,6 +1425,11 @@ var
   LastTypePointerBaseRec : Integer;
   LastTypeProcSig : Integer;  { set by ParseTypeKind when a name resolves to a procedural type: signature proc index, else -1 }
   ErrorIdent : AnsiString;
+  { Candidate list built by MatchProcCall when overload resolution fails, so the
+    caller can append it AFTER its own error line instead of MatchProcCall
+    writing raw internals to stdout ahead of the diagnostic
+    (bug-overload-mismatch-dumps-internals-to-stdout). }
+  OverloadReport : AnsiString;
   WarnCount : Integer;     { number of non-fatal warnings emitted via Warn }
   WarnAsError : Boolean;   { -Werror: promote the next Warn to a fatal Error }
   { Label fixup scratch for the machine-code emit pass. One shared set: only the

@@ -4303,8 +4303,45 @@ begin
   Result := ProcNameMatches(idx, name) and not (demote and (ProcUnitIdx[idx] = bIdx));
 end;
 
+{ Human-readable spelling of a type kind, for diagnostics. A raw TTypeKind
+  ORDINAL in an error message is unactionable — nobody can read "param[0] = 23"
+  (bug-overload-mismatch-dumps-internals-to-stdout). }
+function TypeKindSpelling(tk: TTypeKind): AnsiString;
+begin
+  case tk of
+    tyUnknown:     Result := 'unknown';
+    tyInteger:     Result := 'Integer';
+    tyBoolean:     Result := 'Boolean';
+    tyChar:        Result := 'Char';
+    tyString:      Result := 'ShortString';
+    tyRecord:      Result := 'record';
+    tyClass:       Result := 'class';
+    tyInt8:        Result := 'ShortInt';
+    tyUInt8:       Result := 'Byte';
+    tyInt16:       Result := 'SmallInt';
+    tyUInt16:      Result := 'Word';
+    tyInt32:       Result := 'LongInt';
+    tyUInt32:      Result := 'Cardinal';
+    tyInt64:       Result := 'Int64';
+    tyUInt64:      Result := 'QWord';
+    tyNativeInt:   Result := 'NativeInt';
+    tyNativeUInt:  Result := 'NativeUInt';
+    tyPointer:     Result := 'Pointer';
+    tySingle:      Result := 'Single';
+    tyDouble:      Result := 'Double';
+    tyExtended:    Result := 'Extended';
+    tySet:         Result := 'set';
+    tyVariant:     Result := 'Variant';
+    tyAnsiString:  Result := 'AnsiString';
+    tyAuto:        Result := 'auto';
+    tyShortString: Result := 'ShortString';
+    tyFixedString: Result := 'string[N]';
+    else           Result := 'type';
+  end;
+end;
+
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind; suppressBuiltin: Boolean): Integer;
-var i, j: Integer; match: Boolean; cn: AnsiString; demote: Boolean; bIdx: Integer;
+var i, j: Integer; match: Boolean; cn, nl: AnsiString; demote: Boolean; bIdx: Integer;
 begin
   { LAZYCASING: rebind a wrong-case C-import call to its exact declared spelling
     once, then match normally (the exact-name phases below then find it). }
@@ -4493,19 +4530,35 @@ begin
     i := ProcHashNext[i];
   end;
 
+  { Record the candidate set for the caller's diagnostic rather than writing it
+    to stdout here: this used to print symbol indices and raw TTypeKind ORDINALS
+    ahead of the actual error line, which read as leaked debug output and told a
+    user nothing actionable (bug-overload-mismatch-dumps-internals-to-stdout).
+    Type names, and the caller appends it after its own message. }
+  OverloadReport := '';
   if not MatchQuiet then
   begin
-    writeln('Mismatch in MatchProcCall: name = ', name, ', nArgs = ', nArgs);
+    nl := '';
+    AppendChar(nl, Chr(10));
+    OverloadReport := nl + '  argument types: (';
     for j := 0 to nArgs-1 do
-      writeln('  arg[', j, '] = ', Ord(argTypes[j]));
+    begin
+      if j > 0 then OverloadReport := OverloadReport + ', ';
+      OverloadReport := OverloadReport + TypeKindSpelling(argTypes[j]);
+    end;
+    OverloadReport := OverloadReport + ')' + nl + '  candidates:';
     i := ProcChainHead(name);
     while i >= 0 do
     begin
       if MatchElig(i, name, demote, bIdx) then
       begin
-        writeln('  Candidate idx ', i, ': paramCount = ', Procs[i].ParamCount);
+        OverloadReport := OverloadReport + nl + '    ' + name + '(';
         for j := 0 to Procs[i].ParamCount-1 do
-          writeln('    param[', j, '] = ', Ord(Procs[i].Params[j].TypeKind));
+        begin
+          if j > 0 then OverloadReport := OverloadReport + ', ';
+          OverloadReport := OverloadReport + TypeKindSpelling(Procs[i].Params[j].TypeKind);
+        end;
+        OverloadReport := OverloadReport + ')';
       end;
       i := ProcHashNext[i];
     end;

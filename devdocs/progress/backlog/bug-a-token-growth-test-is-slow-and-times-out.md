@@ -43,3 +43,15 @@ the cause is here.
 ## Gate
 
 Scaling curve recorded before/after, `make test` green, self-host byte-identical.
+
+## Log
+
+- 2026-07-20 — measured the RSS, and TIME is the smaller half: the compile of
+  `/tmp/test_token_growth.pas` (12000 empty procs) climbs past **2.2 GB RSS**
+  and is then SIGTERMed under memory pressure, which is what "Terminated"
+  in the log means — not a timeout. Standalone on an idle box it completes in
+  77s; concurrently with Track T's own testmgr run it dies. So the phantom
+  NEW-REDs appear exactly when two runs overlap.
+- That reframes the fix: a per-proc allocation that never shrinks (~180 KB per
+  EMPTY procedure) rather than only a quadratic scan. Look at what is reserved
+  per Proc entry and whether the per-body arrays are sized per procedure.
