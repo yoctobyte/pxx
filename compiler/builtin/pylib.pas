@@ -240,6 +240,19 @@ function min(a: Int64; b: Int64): Int64;
 function min(a: Double; b: Double): Double; overload;
 function max(a: Int64; b: Int64): Int64; overload;
 function max(a: Double; b: Double): Double; overload;
+{ `list(x)` — a shallow COPY, as Python's list() constructor makes. Overloads
+  rather than one variant-taking function so the ordinary call path resolves
+  them by argument type, like min/max (feature-nilpy-missing-builtins). }
+function list(l: TPyList): TPyList;
+function list(const s: AnsiString): TPyList; overload;
+{ `reversed(x)` — Python returns a lazy iterator; NilPy's `for` is a counted-loop
+  desugar with no iterator concept, so this is the reversed COPY, which behaves
+  identically for `for x in reversed(xs)` and `list(reversed(xs))`. }
+function reversed(l: TPyList): TPyList;
+function reversed(const s: AnsiString): TPyList; overload;
+{ `hex(n)` — Python spells it with the 0x prefix and lower-case digits, and
+  spells a negative as -0x… rather than in two's complement. }
+function hex(n: Int64): AnsiString;
 function len(l: TPyList): Integer;
 function len(d: TPyDict): Integer; overload;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
@@ -1745,6 +1758,62 @@ end;
 function pystr_rjust(const s: AnsiString; w: Int64): AnsiString;
 begin
   Result := pystr_rjust_c(s, w, ' ');
+end;
+
+{ One lower-case hexadecimal digit. }
+function HexDigitChar(v: Int64): AnsiString;
+begin
+  if v < 10 then Result := Chr(Ord('0') + v)
+  else Result := Chr(Ord('a') + (v - 10));
+end;
+
+function list(l: TPyList): TPyList;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  if l <> nil then
+    for i := 0 to l.count - 1 do r.append(l.get(i));
+  Result := r;
+end;
+
+function list(const s: AnsiString): TPyList; overload;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  for i := 1 to Length(s) do r.append(pystr_ofchar(s[i]));
+  Result := r;
+end;
+
+function reversed(l: TPyList): TPyList;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  if l <> nil then
+    for i := l.count - 1 downto 0 do r.append(l.get(i));
+  Result := r;
+end;
+
+function reversed(const s: AnsiString): TPyList; overload;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  for i := Length(s) downto 1 do r.append(pystr_ofchar(s[i]));
+  Result := r;
+end;
+
+function hex(n: Int64): AnsiString;
+var m: Int64; d: AnsiString;
+begin
+  if n = 0 then begin Result := '0x0'; Exit; end;
+  m := n;
+  if m < 0 then m := -m;
+  d := '';
+  while m > 0 do
+  begin
+    d := HexDigitChar(m mod 16) + d;
+    m := m div 16;
+  end;
+  if n < 0 then Result := '-0x' + d else Result := '0x' + d;
 end;
 
 function pylist_repeat(l: TPyList; n: Int64): TPyList;

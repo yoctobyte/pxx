@@ -2125,7 +2125,7 @@ begin
   end;
 end;
 
-function PyParseForIn(const name: AnsiString; const name2: AnsiString): Integer;
+function PyParseForIn(const name: AnsiString; const name2: AnsiString; enumMode: Boolean): Integer;
 var contNode, ci, dictCi, listCi, symIdx, cSym, iSym, nSym: Integer;
     sym2, vSym, vListNode, itemsDot: Integer;   { two-name target: `for k, v in d.items()` }
     elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
@@ -2134,7 +2134,7 @@ begin
   { `d.items()`: hide the suffix behind a fake ':' so the expression parser stops
     at the dict, then step over the four suffix tokens and restore. }
   itemsDot := -1;
-  if name2 <> '' then itemsDot := PyItemsSuffixAhead;
+  if (name2 <> '') and not enumMode then itemsDot := PyItemsSuffixAhead;
   if itemsDot >= 0 then Tokens[itemsDot].Kind := tkColon;
   PyParseBoolExpr;
   if itemsDot >= 0 then
@@ -2143,7 +2143,16 @@ begin
     TokPos := itemsDot + 4;
     Next;
   end;
+  if enumMode then Expect(tkRParen, ')');
   contNode := CurASTNode;
+  { enumerate() over a STRING trips an inline-placeholder leak in the element
+    tree (AN_INLINE_PARAM reaching IRLowerAST) — filed separately rather than
+    worked around here, since a wrong lowering is worse than a clear refusal
+    (bug-a-nilpy-enumerate-over-str-inline-param-leak). }
+  if enumMode and ((IntToTypeKind(ASTTk[contNode]) = tyString) or
+                   (IntToTypeKind(ASTTk[contNode]) = tyAnsiString)) then
+    Error('Nil Python: enumerate() over a str is not supported yet — ' +
+          'enumerate(list(s)) works');
   contTk := IntToTypeKind(ASTTk[contNode]);
   isStr := (contTk = tyString) or (contTk = tyAnsiString);
   listCi := FindUClass('TPyList');
@@ -2170,11 +2179,11 @@ begin
       if contNode < 0 then Error('Nil Python: pylib (TPyDict.keylist) not loaded');
       ci := listCi;
     end
-    else if name2 <> '' then
-      Error('Nil Python: a two-name for target needs a dict (.items())');
+    else if (name2 <> '') and not enumMode then
+      Error('Nil Python: a two-name for target needs a dict (.items()) or enumerate()');
   end
-  else if name2 <> '' then
-    Error('Nil Python: a two-name for target needs a dict (.items())');
+  else if (name2 <> '') and not enumMode then
+    Error('Nil Python: a two-name for target needs a dict (.items()) or enumerate()');
 
   Expect(tkColon, ':');
   Expect(tkNewline, 'newline');
@@ -2189,14 +2198,21 @@ begin
   symIdx := FindSym(name);
   if symIdx < 0 then
   begin
-    if isStr then symIdx := AllocVar(name, tyAnsiString)
+    if enumMode then symIdx := AllocVar(name, tyInteger)
+    else if isStr then symIdx := AllocVar(name, tyAnsiString)
     else symIdx := AllocVar(name, tyVariant);
   end;
   sym2 := -1;
   if name2 <> '' then
   begin
     sym2 := FindSym(name2);
-    if sym2 < 0 then sym2 := AllocVar(name2, tyVariant);
+    if sym2 < 0 then
+    begin
+      { enumerate over a STRING yields 1-character strs, like the single-name
+        str loop; a container yields variant slots }
+      if isStr then sym2 := AllocVar(name2, tyAnsiString)
+      else sym2 := AllocVar(name2, tyVariant);
+    end;
   end;
 
   { __py_c := container }
@@ -2205,7 +2221,11 @@ begin
   ASTLeft[node] := PyMakeIdent(cSym);
   ASTRight[node] := contNode;
   seq := PySeqAppend(seq, node);
-  if sym2 >= 0 then
+  { the dict form's parallel VALUE list — enumerate has no second container, and
+    reading vSym/vListNode there took an UNINITIALISED node index, which landed
+    in the retained-inline AST region and surfaced as "could not lower AST node
+    (kind 78)" at the end of the program }
+  if (sym2 >= 0) and not enumMode then
   begin
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := PyMakeIdent(vSym);
@@ -2278,13 +2298,28 @@ begin
     elemNode := PyCallMeth1(ci, 'get', PyMakeIdent(cSym), PyMakeIdent(iSym));
     if elemNode < 0 then Error('Nil Python: pylib (get) not loaded');
   end;
-  node := AllocNode(AN_ASSIGN);
-  ASTLeft[node] := PyMakeIdent(symIdx);
-  ASTRight[node] := elemNode;
-  bodyNode := PySeqAppend(bodyNode, node);
+  if enumMode then
+  begin
+    { i := __py_i ; v := __py_c[__py_i] }
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(symIdx);
+    ASTRight[node] := PyMakeIdent(iSym);
+    bodyNode := PySeqAppend(bodyNode, node);
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(sym2);
+    ASTRight[node] := elemNode;
+    bodyNode := PySeqAppend(bodyNode, node);
+  end
+  else
+  begin
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(symIdx);
+    ASTRight[node] := elemNode;
+    bodyNode := PySeqAppend(bodyNode, node);
+  end;
 
   { the value name reads the parallel list at the same index }
-  if sym2 >= 0 then
+  if (sym2 >= 0) and not enumMode then
   begin
     elemNode := PyCallMeth1(listCi, 'get', PyMakeIdent(vSym), PyMakeIdent(iSym));
     if elemNode < 0 then Error('Nil Python: pylib (get) not loaded');
@@ -2319,7 +2354,8 @@ begin
 end;
 
 function PyParseFor: Integer;
-var name, name2: AnsiString; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
+var name, name2: AnsiString;
+    enumMode: Boolean; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
     pair1, pair2, pair3, bodyNode, oneNode, limitNode: Integer;
 begin
   Next;
@@ -2343,7 +2379,18 @@ begin
   if not (PyIsIdent('range') and (TokPos < TokCount) and
           (Tokens[TokPos].Kind = tkLParen)) then
   begin
-    Result := PyParseForIn(name, name2);
+    { `for i, v in enumerate(xs):` — the first name is the INDEX the counted-loop
+      desugar already keeps, so enumerate needs no iterator and no tuple; it is
+      recognised here and its argument becomes the container. }
+      enumMode := False;
+      if PyIsIdent('enumerate') and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        if name2 = '' then Error('Nil Python: enumerate() needs two loop variables');
+        enumMode := True;
+        Next; Expect(tkLParen, '(');
+      end;
+    Result := PyParseForIn(name, name2, enumMode);
     Exit;
   end;
   if name2 <> '' then Error('Nil Python: a two-name for target needs a dict (.items())');

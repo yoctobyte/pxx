@@ -1,0 +1,24 @@
+# list(), reversed(), hex(), enumerate(). reversed() returns a lazy iterator in
+# CPython, so every use here is wrapped in list() — that is also exactly how
+# NilPy models it: the reversed COPY, since the `for` desugar is a counted loop
+# with no iterator concept. enumerate() needs no iterator and no tuple either:
+# its index IS the counted loop's own index (feature-nilpy-missing-builtins).
+# Output must match CPython running this same file.
+
+xs = [3, 1, 2]
+ys = list(xs)
+ys.append(9)
+print(xs, ys)
+print(list("abc"))
+print(list(reversed(xs)))
+print(list(reversed("xy")))
+print(hex(255), hex(0), hex(-16), hex(4095))
+for c in reversed(xs):
+    print(c)
+for i, v in enumerate(["a", "b", "c"]):
+    print(i, v)
+for i, v in enumerate(list("hi")):
+    print(i, v)
+names = ["x", "y"]
+for i, n in enumerate(names):
+    print(i, n, len(n))
