@@ -31,7 +31,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (131)
+## backlog (132)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -100,6 +100,7 @@ _none_
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-exceptions | N | 60 | feature | NilPy: `raise` and `try` / `except` | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
+| feature-nilpy-missing-builtins | N | 45 | feature | NilPy: the remaining missing builtins — min/max, list(), reversed(), enumerate(), hex() | — |
 | feature-nilpy-none-variant | N | 50 | feature | NilPy: `None` as a first-class variant value (VT_EMPTY) | — |
 | feature-nilpy-parallel-for-in | A | 45 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
 | feature-nilpy-tk-binding | B | 45 | feature | Thin Tcl/Tk embed for pxx (lib/pcl/tk.pas) + a tkinter-shaped NilPy surface — v1 landed | — |
@@ -2598,6 +2599,7 @@ _none_
 - [p 45] [B] feature-move-fillchar-intrinsics
 - [p 45] [B] feature-networking
 - [p 45] [A] feature-nilpy-idf-import
+- [p 45] [N] feature-nilpy-missing-builtins
 - [p 45] [P] feature-pascal-corpus-passrc
 - [p 45] [A] feature-pascal-exitcode-finalization-halt
 - [p 45] [B] feature-random-library
