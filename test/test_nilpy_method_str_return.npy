@@ -1,0 +1,36 @@
+class W:
+    def __init__(self, n: str, v: int) -> None:
+        self.n = n
+        self.v = v
+    def name(self) -> str:
+        return self.n
+    def num(self) -> int:
+        return self.v
+    def flag(self) -> bool:
+        return self.v > 0
+    def ratio(self) -> float:
+        return 2.5
+    def shout(self) -> str:
+        return self.n + "!"
+    def pick(self, other: str) -> str:
+        if self.v > 0:
+            return self.n
+        return other
+    def lit(self) -> str:
+        return "literal"
+
+a = W("alpha", 1)
+b = W("beta", -2)
+print(a.name(), a.num(), a.flag(), a.ratio())
+print(a.shout(), a.pick("fallback"), a.lit())
+print(b.name(), b.num(), b.flag(), b.pick("fallback"))
+s = a.name()
+t = a.shout()
+print(s, t, len(s), len(t))
+print(a.name() + a.shout())
+
+class NoCtor:
+    def get(self) -> str:
+        return "nc"
+nc = NoCtor()
+print(nc.get())

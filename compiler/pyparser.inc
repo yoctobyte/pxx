@@ -2897,6 +2897,7 @@ begin
   begin
     idx := AllocVar('Result', retType);
     Procs[procIdx].RetSymIdx := idx;
+    Syms[idx].Kind := skLocal;   { gates prologue zero-init -- see the method path }
     if (retType = tyClass) and (PyHdrRetCi >= 0) then
       Syms[idx].RecName := REC_UCLASS_BASE + PyHdrRetCi;
     if RetViaHiddenDest(retType) then
@@ -3266,7 +3267,7 @@ begin
         `-> float` returning 0. A top-level `def` returning str works; only
         methods are limited. }
       if (not fieldsOnly) and (not isCtor) and
-         (RetViaHiddenDest(mRet) or (mRet = tyAnsiString)) then
+         (RetViaHiddenDest(mRet)) then
         { ErrorAt with the DEF's own line: plain Error here printed the line of
           whatever the parser cursor was on, which for a class pre-pass is the
           `class` header — so every one of a class's offending methods reported
@@ -3513,6 +3514,13 @@ begin
   begin
     idx := AllocVar('Result', Procs[procIdx].RetType);
     Procs[procIdx].RetSymIdx := idx;
+    { skLocal is what gates the prologue zero-init (IR_ZERO_SYM checks it), and
+      the Pascal path sets it. Without it a MANAGED Result slot held stack
+      garbage, so the first `Result := ...` released a wild handle -- a method
+      returning str segfaulted, and only when the layout happened to leave
+      non-zero there, which is why it needed a ctor to reproduce
+      (bug-nilpy-method-returning-str-garbage). }
+    Syms[idx].Kind := skLocal;
     if RetViaHiddenDest(Procs[procIdx].RetType) then
     begin
       idx := AllocVar('', tyPointer);
@@ -3538,12 +3546,46 @@ begin
   PyEmitParamSpills(procIdx, nparams);
   PyInitVariantLocals(Procs[procIdx].ScopeBase);
   bodyNode := PyParseBlock; Expect(tkDedent, 'dedent');
+  bodyNode := PyPrependResultZero(procIdx, bodyNode);
   CompileAST(bodyNode); EmitProcEpilog(Procs[procIdx].RetSymIdx); PatchProcPrologue(patchPos, FrameSize);
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
 end;
 
 { Emit the synthesized @dataclass ctor body: spill params, then
   self.field_i := param_i for every field, via the ordinary AST path. }
+{ Zero a MANAGED Result slot at body entry.
+
+  A method's Result is allocated by the class-member pre-pass, where CurProc is
+  not yet set, so AllocVar marks it skGlobal -- and IR_ZERO_SYM's codegen only
+  zeroes skLocal. The slot therefore kept stale stack bytes, and the first
+  `Result := <str>` released that garbage as if it were a string handle:
+  `decq -0x10(%rax)` on a wild pointer. It only reproduced when the frame
+  happened to hold something non-zero there, which is why a class needed a
+  constructor before `-> str` crashed (bug-nilpy-method-returning-str-garbage).
+
+  Emitting an ordinary AN_VAR_DECL at the head of the body reuses the normal
+  local zero-init path rather than adding a second mechanism. Managed kinds
+  only: an integer Result reading stale bytes is harmless and zeroing it would
+  change existing output. }
+function PyPrependResultZero(procIdx, bodyNode: Integer): Integer;
+var rs, declNode, seqNode, rtk: Integer;
+begin
+  PyPrependResultZero := bodyNode;
+  rs := Procs[procIdx].RetSymIdx;
+  if rs < 0 then Exit;
+  rtk := Ord(Syms[rs].TypeKind);
+  if (rtk <> Ord(tyAnsiString)) and (rtk <> Ord(tyVariant)) then Exit;
+  Syms[rs].Kind := skLocal;      { it IS a frame slot; the pre-pass mislabelled it }
+  declNode := AllocNode(AN_VAR_DECL);
+  ASTIVal[declNode] := rs;
+  ASTLeft[declNode] := -1;
+  seqNode := AllocNode(AN_SEQ);
+  ASTLeft[seqNode] := declNode;
+  ASTRight[seqNode] := AllocNode(AN_SEQ);
+  ASTLeft[ASTRight[seqNode]] := bodyNode;
+  PyPrependResultZero := seqNode;
+end;
+
 procedure PyEmitDataclassCtor(ci: Integer);
 var fullName, name: AnsiString;
     procIdx, i, k, idx, nparams, savedSC, savedFS, savedSelf, patchPos: Integer;
