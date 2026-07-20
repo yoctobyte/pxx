@@ -1,6 +1,5 @@
 ---
-prio: 45
-blocked-by: [decide-1-0-scope-promise]
+prio: 25
 ---
 
 # Promo & launch plan — visibility now, 0.1 beta next, the loud moment last
@@ -9,9 +8,11 @@ blocked-by: [decide-1-0-scope-promise]
 - **Track:** W (website) — with Track D (docs) touchpoints
 - **Status:** backlog — designed 2026-07-12.
 - **Owner:** —
-- **Blocked-by:** decide-1-0-scope-promise
-- **Note:** the *launch* is what that blocker gates. The *visibility* work below is NOT blocked
-  — start it now.
+- **Note:** the *visibility* work below is NOT gated — start it now. **The loud moment is
+  USER-TRIGGERED ONLY.** Its blocker was decide-1-0-scope-promise, now resolved, so nothing
+  mechanical holds it back any more — this note and the low prio are the whole guard. Do not
+  execute the coordinated blast (step 6) without the user saying go: it is one-shot, and there
+  is roughly one first impression with the compiler crowd.
 - **Related:** [[docs-devnotes-ai-assisted-build]], [[feature-web-track-w-bootstrap]]
 
 ## The core distinction — THREE things, not two

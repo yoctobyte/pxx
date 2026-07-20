@@ -25,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (135)
+## backlog (134)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -41,7 +41,6 @@ _none_
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
 | compat-pascal-binop-operand-eval-order | A | 15 | compat | pxx evaluates binary-operator operands left-to-right; FPC evaluates right-to-left | — |
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
-| decide-1-0-scope-promise | A | 55 | decide | DECIDE: version scheme — pin count / N, not semver | — |
 | decide-abi-portable-vs-target-split | U | 60 | decide | Where is the portable/per-target line drawn in the IR? | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
 | decide-crtl-libm-glibc-bit-parity | U | 20 | decide | decide: crtl libm — correct rounding (current) vs glibc bug-parity | — |
@@ -127,7 +126,7 @@ _none_
 | feature-port-openbsd-libc | A | 50 | feature | OpenBSD/amd64 target — route RTL through libc.so; pinsyscalls satisfied by construction | feature-port-rtl-over-libc |
 | feature-port-rtl-over-libc | A | 55 | feature | RTL-over-libc lowering mode — route runtime primitives through a system C library instead of raw syscalls | — |
 | feature-port-windows-pe | A | 45→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
-| feature-promo-launch-plan | A | 45 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | decide-1-0-scope-promise |
+| feature-promo-launch-plan | A | 25 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
@@ -223,7 +222,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (892)
+## done (893)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -687,6 +686,7 @@ _none_
 | chore-stable-binary-single-file-no-version-churn | A | 50 | chore | Stable binary: fixed-name overwrite (kill `vN` churn + the dangling-symlink trap) | — |
 | chore-twatch-run-from-clone | T | 50 | chore | The watcher daemon executes the DEV CHECKOUT's twatch.py while testing the clone | — |
 | compat-pascal-copy-of-char-literal | P | 55 | compat | Copy('a', i, n) — FPC promotes a char to a string, pxx rejects the program | — |
+| decide-1-0-scope-promise | A | 55 | decide | DECIDE: version scheme — pin count / N, not semver | — |
 | decide-nilpy-and-or-return-operand-or-bool | U | 40 | decide | decide: should NilPy's `and` / `or` return an OPERAND, as Python does? | — |
 | decide-nilpy-bigint-vs-64bit-cells | U | 40 | decide | decide: NilPy integer semantics — arbitrary precision vs 64-bit (uforth needs one) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
@@ -2580,7 +2580,6 @@ _none_
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
-- [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
@@ -2673,6 +2672,7 @@ _none_
 - [p 30] [D] idea-public-status-page
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [C] bug-c-float-literal-subnormal-parses-zero
+- [p 25] [A] feature-promo-launch-plan
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 20] [P] compat-pascal-method-impl-without-declaration
 - [p 20] [U] decide-crtl-libm-glibc-bit-parity
@@ -2693,7 +2693,6 @@ _none_
 
 - **3** — feature-port-rtl-over-libc
 - **2** — feature-web-track-w-bootstrap
-- **1** — decide-1-0-scope-promise
 - **1** — decide-nilpy-parallel-capture-semantics
 - **1** — feature-nilpy-break-continue
 - **1** — feature-nilpy-tk-binding

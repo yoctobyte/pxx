@@ -1,6 +1,5 @@
 ---
 prio: 55
-keep-open: scheme fully DECIDED 2026-07-20 (VERSION/1000 + LTS); stays open only because it gates feature-promo-launch-plan's loud launch — releases are not wanted yet
 ---
 
 # DECIDE: version scheme — pin count / N, not semver
@@ -10,7 +9,7 @@ moved; the blocked-by edge from feature-promo-launch-plan is why the slug stays.
 
 - **Type:** decide (user call — nobody else can make this one)
 - **Track:** A (core owns the gate a release certifies)
-- **Status:** backlog — opened 2026-07-12. **Reframed same day (user call): the first official
+- **Status:** done
   release is a 0.1 beta, not 1.0.**
 - **Owner:** — (user)
 - **Unblocks:** [[feature-promo-launch-plan]]
@@ -199,3 +198,4 @@ early — its own note says "the *launch* is what that blocker gates. The
 So resolving this would release exactly the work the decision parks. It closes
 when 0.1 has actually shipped, at which point the deferred question (what 1.0
 promises forever — stage 2) is re-filed as its own decide.
+- 2026-07-20 — resolved, commit b8cdc9d3.
