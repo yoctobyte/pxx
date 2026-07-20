@@ -17312,13 +17312,7 @@ begin
         if Result <> PromoIntDefaultKind then
           Error('this target''s promotable int is native-word sized; the other '
                 + 'numbered spelling does not exist here — write PromoInt');
-        { 32-bit natives compile and run the INLINE tier correctly but crash in
-          the heap tier (feature-a-promoint-32bit-bringup). Refuse rather than
-          ship a type that segfaults the moment a value gets large — which is
-          exactly when the user reached for it. }
-        if Result <> tyPromoInt64 then
-          Error('promotable int is 64-bit-native targets only for now: the heap '
-                + 'tier faults on 32-bit natives (feature-a-promoint-32bit-bringup)');
+
       end
       else if (not tnHasAlias) and (EnableAutoVar and CaseEqual(lo, 'auto')) then Result := tyAuto
       else

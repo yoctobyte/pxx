@@ -46,6 +46,11 @@ const
 type
   PPromoWord = ^NativeInt;
   PPromoStr  = ^AnsiString;
+  { A VARIANT slot is 8-byte tag + 8-byte payload on EVERY target, including
+    32-bit ones — unlike a promo slot, which is two NATIVE words. Reading a
+    variant through PPromoWord worked on x86-64 by coincidence and read the
+    wrong halves on i386. }
+  PVarWord = ^Int64;
 
 procedure PXXPromoFromInt(dst: Pointer; v: Int64);
 procedure PXXPromoFromStr(dst: Pointer; const s: AnsiString);
@@ -593,18 +598,46 @@ end;
 { Store a bignum result, demoting back to the inline tier whenever it fits.
   Demotion is not an optimization detail — without it a value that grew and then
   shrank would stay boxed forever, and every later op would pay the unpack. }
+{ Can this bignum live in the INLINE tier — i.e. does it fit one NATIVE word?
+  Not "does it fit an Int64": on a 32-bit target the inline payload is 32 bits,
+  and demoting an Int64-sized value there sent StoreBig back into
+  PXXPromoFromInt, which had called StoreBig precisely because the value did not
+  fit — infinite recursion, stack overflow, segfault. It could not happen on
+  x86-64, where NativeInt is already 8 bytes, which is why it only ever showed
+  up on i386. }
+function BToNative(const r: TBig; var v: Int64): Boolean;
+var i: Integer;
+    acc: Int64;
+begin
+  BToNative := False;
+  if Length(r.limbs) > 3 then Exit;         { >= 1e27, far past any native word }
+  acc := 0;
+  for i := Length(r.limbs) - 1 downto 0 do
+  begin
+    if acc > (High(Int64) - r.limbs[i]) div BIG_BASE then Exit;
+    acc := acc * BIG_BASE + r.limbs[i];
+  end;
+  if r.neg then acc := -acc;
+  if SizeOf(NativeInt) < 8 then
+    if (acc > 2147483647) or (acc < -2147483648) then Exit;
+  v := acc;
+  BToNative := True;
+end;
+
 procedure StoreBig(dst: Pointer; const r: TBig);
 var sp: PPromoStr;
     w: PPromoWord;
-    txt: AnsiString;
     small: Int64;
-    code: Integer;
 begin
-  txt := BToStr(r);
-  Val(txt, small, code);
-  if (code = 0) and (BCmp(r, BFromInt(small)) = 0) then
+  { Demote whenever the value fits the inline tier. Writing the payload DIRECTLY
+    rather than calling PXXPromoFromInt keeps this free of the recursion above
+    by construction, and skips a decimal round trip that used to cost a
+    BToStr + Val on every stored result. }
+  if BToNative(r, small) then
   begin
-    PXXPromoFromInt(dst, small);
+    PXXPromoClear(dst);
+    w := PPromoWord(SlotPayloadAddr(dst));
+    w^ := NativeInt(small);
     Exit;
   end;
   PXXPromoClear(dst);
@@ -634,7 +667,10 @@ begin
   end;
   while i <= Length(s) do
   begin
-    if not (s[i] in ['0'..'9']) then Break;
+    { explicit range rather than `in ['0'..'9']`: set membership is a standard
+      builtin the riscv32 bare-metal path cannot lower, and this unit has to
+      build on every target }
+    if (s[i] < '0') or (s[i] > '9') then Break;
     r := BAddSigned(BMul(r, ten), BFromInt(Ord(s[i]) - 48));
     Inc(i);
   end;
@@ -791,62 +827,67 @@ end;
   whatever was there — an integer, say — as an AnsiString ref and release
   garbage, which is exactly how the first version segfaulted. }
 procedure ClearVariantSlot(dstVar: Pointer);
-var tagW, payW: PPromoWord;
+var tagW, payW: PVarWord;
     sp: PPromoStr;
 begin
-  tagW := PPromoWord(dstVar);
+  tagW := PVarWord(dstVar);
   if (tagW^ = VT_STRING_TAG) or (tagW^ = VT_PROMO_INT64_TAG) then
   begin
-    sp := PPromoStr(SlotPayloadAddr(dstVar));
+    sp := PPromoStr(VarPayloadAddr(dstVar));
     sp^ := '';                       { managed release }
   end;
-  payW := PPromoWord(SlotPayloadAddr(dstVar));
+  payW := PVarWord(VarPayloadAddr(dstVar));
   payW^ := 0;
   tagW^ := VT_EMPTY_TAG;
 end;
 
 procedure PXXPromoToVariant(dstVar, src: Pointer);
-var tagW, payW: PPromoWord;
+var tagW, payW: PVarWord;
     sp: PPromoStr;
     txt: AnsiString;
+    inlineVal: Int64;
+    wasInline: Boolean;
 begin
-  { render BEFORE clearing: src and dstVar may be the same slot }
-  if SlotTag(src) <> PROMO_TAG_INLINE then txt := BToStr(SlotBig(src)) else txt := '';
+  { render/read BEFORE clearing: src and dstVar may be the same slot }
+  wasInline := SlotTag(src) = PROMO_TAG_INLINE;
+  inlineVal := 0;
+  txt := '';
+  if wasInline then inlineVal := SlotInt(src) else txt := BToStr(SlotBig(src));
   ClearVariantSlot(dstVar);
-  tagW := PPromoWord(dstVar);
-  if SlotTag(src) = PROMO_TAG_INLINE then
+  tagW := PVarWord(dstVar);
+  if wasInline then
   begin
-    payW := PPromoWord(SlotPayloadAddr(dstVar));
+    payW := PVarWord(VarPayloadAddr(dstVar));
     tagW^ := VT_INT64_TAG;
-    payW^ := NativeInt(SlotInt(src));
+    payW^ := inlineVal;
     Exit;
   end;
   tagW^ := VT_PROMO_INT64_TAG;
-  sp := PPromoStr(SlotPayloadAddr(dstVar));
+  sp := PPromoStr(VarPayloadAddr(dstVar));
   sp^ := txt;
 end;
 
 procedure PXXPromoFromVariant(dst, srcVar: Pointer);
-var tag: NativeInt;
+var tag: Int64;
     sp: PPromoStr;
-    w: PPromoWord;
+    w: PVarWord;
 begin
-  tag := SlotTag(srcVar);
+  tag := VarTag(srcVar);
   if tag = VT_PROMO_INT64_TAG then
   begin
-    sp := PPromoStr(SlotPayloadAddr(srcVar));
+    sp := PPromoStr(VarPayloadAddr(srcVar));
     PXXPromoFromStr(dst, sp^);
     Exit;
   end;
   if (tag = VT_INT_TAG) or (tag = VT_INT64_TAG) or (tag = VT_BOOL_TAG) then
   begin
-    w := PPromoWord(SlotPayloadAddr(srcVar));
-    PXXPromoFromInt(dst, Int64(w^));
+    w := PVarWord(VarPayloadAddr(srcVar));
+    PXXPromoFromInt(dst, w^);
     Exit;
   end;
   if tag = VT_STRING_TAG then
   begin
-    sp := PPromoStr(SlotPayloadAddr(srcVar));
+    sp := PPromoStr(VarPayloadAddr(srcVar));
     PXXPromoFromStr(dst, sp^);
     Exit;
   end;
@@ -873,10 +914,22 @@ end;
   `op` is a small normalised code, not a token ordinal — TTokenKind is a
   compiler type and is not visible from a builtin unit. }
 
+function VarTag(v: Pointer): Int64;
+var w: PVarWord;
+begin
+  w := PVarWord(v);
+  VarTag := w^;
+end;
+
+function VarPayloadAddr(v: Pointer): Pointer;
+begin
+  VarPayloadAddr := Pointer(NativeInt(v) + 8);
+end;
+
 function EitherPromoTagged(a, b: Pointer): Boolean;
 begin
-  EitherPromoTagged := (SlotTag(a) = VT_PROMO_INT64_TAG) or
-                       (SlotTag(b) = VT_PROMO_INT64_TAG);
+  EitherPromoTagged := (VarTag(a) = VT_PROMO_INT64_TAG) or
+                       (VarTag(b) = VT_PROMO_INT64_TAG);
 end;
 
 function PXXPromoVarArithTry(dst, a, b: Pointer; op: Integer): Integer;
