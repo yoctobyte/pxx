@@ -119,3 +119,57 @@ replacing the dev-side quick gate.
     alive-but-livelocked on a conflict now shows a rising drop streak instead
     of silence. Restarted the borg watcher on the new build; the drop-fix had
     already unjammed prod (fd5b5326 published GREEN, tstate back to UP).
+- **2026-07-20 (opus-trackT):** ledger flood + "watcher isn't running" —
+  one root, three bugs.
+  - **The flood was in the LEDGER, not the tickets.** tstate held 467 open
+    regressions; the cascade suppressor had correctly filed only ONE ticket
+    for the event. All 467 had `0 commit(s) in range` and 461 shared one bad
+    sha across all four cross targets — a borg cross/qemu collapse recorded
+    as 461 independent regressions.
+  - **Root cause 1 — empty range.** `parent` in `test_sha` is the last
+    TESTED sha, not the last DIFFERENT one, so the two-phase watcher (fast
+    native at X, full backfill at the same X) records new_red with
+    parent == sha and an empty `commits_between()`. Such an entry names no
+    commit that could have caused it: unbisectable, unfalsifiable.
+  - **Root cause 2 — suppression applied in the wrong place.** Cascade
+    collapsing lived only in `file_stub_tickets`, so it capped tickets but
+    never the ledger. Hence 1 ticket / 461 rows.
+  - **Fix (ed6063f5).** `test_sha` drops empty-range sweeps (per-job red
+    still lands in `st["jobs"]` and the report, so no signal is lost) and
+    collapses `> CASCADE_THRESHOLD` sweeps into one `cascade@<sha>` entry
+    carrying the job list. New `reg_open()` closes a cascade only once every
+    job it swept is green (its synthetic key can never appear in `fixed`);
+    `idle_bisect` skips cascades; TSTATE.md folds the job list; `--status`
+    caps the dump at STATUS_REG_CAP (469 lines -> 14). Scratch-harness
+    tested, 6 invariants (scratchpad/test_ledger.py). Purged the 467 stale
+    rows in e0f60ec3 — the 461-job list survives in the cascade ticket.
+  - **`--status` was reading HEAD (3a66b455).** The default CLI path
+    measured coverage over `git log HEAD`, so this checkout — 226 commits
+    behind — reported UP while the daemon had been stopped for hours. It is
+    the exact stale-source trap `status()`'s own docstring documents, but
+    only the tdir/ref callers mitigated it. Default now resolves the
+    already-fetched `origin/master` (still no network) and prints how far
+    behind the checkout is; both stale sources now fail toward DOWN.
+  - **Root cause 3 — why it "wasn't running" (edf2291e).** The swap floor
+    held admission at 233 MB free swap under a 409 MB floor while
+    MemAvailable was 8.6 GB and memory PSI was flat 0.00 across
+    avg10/60/300. Free swap is not a pressure signal on a desktop box: it
+    fills with stale anon pages that are never handed back, so the gate
+    latches shut and `admit_forced` drips the run through serially — 1011
+    jobs one at a time. Scaling the floor (SWAP_FLOOR_FRAC) had treated the
+    symptom; the floor now requires corroboration from PSI > PSI_QUIET or
+    MemAvailable < SWAP_GATE_AVAIL, and the stall line reports all three
+    numbers. PSI_ADMIT / MEM_FLOOR / PSI_KILL untouched.
+  - **Tickets.** Consolidated `regression-optdiff-shard0-6` +
+    `-shard5-6` into `regression-optdiff-o3-stack-frame-intrinsics`
+    (61b8e58b): both named a shard rather than the failing program, and both
+    point at `test/test_stack_frame_intrinsics_b270.pas` diffing -O0 vs -O3
+    with rc 0 vs 0. Shard0 recurred at four shas, every sighting with 0 in
+    range — a persistent differential for Track O/A, not a bisectable
+    regression. NOT reconfirmed at HEAD (see below); the ticket says so.
+  - **Open / handed on:** this checkout cannot build the compiler
+    (`selfhost-fixedpoint`: stale seed vs post-pull sources), so no full-tier
+    gate ran locally for these tooling changes and the optdiff finding could
+    not be reproduced. Pre-existing and unrelated to the above, but it is
+    the same failure class as the flood — a box that cannot build turns
+    everything red — and it wants a Track A look.
