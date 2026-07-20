@@ -3315,13 +3315,31 @@ var vuProc, vuAddr, vuArg: Integer;
     vuName: string;
     vuRet: TTypeKind;
 begin
-  if TypeIsFloat(target) then
+  { The helper SET is chosen here, at the lowering seam -- the helpers
+    themselves stay pure. Python and Pascal disagree about a Variant in a
+    scalar context (Python raises TypeError for a string or object in a
+    numeric slot; Pascal's Variant is historically coercive), and no single
+    helper can hold both specs, so NilPy has its own in pylib. }
+  if PyProgramMode and (target <> tyString) and (target <> tyAnsiString) then
+  begin
+    if TypeIsFloat(target) then
+    begin vuName := 'pyvar_to_float'; vuRet := tyDouble; end
+    else if target = tyBoolean then
+    begin vuName := 'pyvar_to_bool'; vuRet := tyBoolean; end
+    else if target = tyChar then
+    begin vuName := 'pyvar_to_char'; vuRet := tyChar; end
+    else
+    begin vuName := 'pyvar_to_int'; vuRet := tyInt64; end;
+  end
+  else if TypeIsFloat(target) then
   begin vuName := 'VariantToDouble'; vuRet := tyDouble; end
   else if target = tyBoolean then
   begin vuName := 'VariantToBool'; vuRet := tyBoolean; end
   else if target = tyChar then
   begin vuName := 'VariantToChar'; vuRet := tyChar; end
   else if (target = tyString) or (target = tyAnsiString) then
+  { str() under NilPy is routed to pylib pystr_of by the -201 lowering before
+    it reaches here; this is the Pascal path. }
   begin vuName := 'VariantToStr'; vuRet := tyAnsiString; end
   else
   begin vuName := 'VariantToInt64'; vuRet := tyInt64; end;

@@ -193,6 +193,15 @@ function pystr_repeat(const s: AnsiString; n: Int64): AnsiString;
   these the most ordinary Python loop (`for a in xs: a // 2`) silently kept
   Pascal's truncating semantics. Tag dispatch at RUNTIME is the only correct
   answer -- the payload's type is not known when lowering. }
+{ Variant -> scalar with PYTHON's rules. Deliberately NOT builtin.pas's
+  VariantTo* -- those serve Pascal, whose Variant is historically coercive,
+  and one helper cannot hold both specs. Python raises TypeError for a string
+  or object in a numeric context, and its truthiness makes ''/0/0.0/None
+  false. ir.inc picks this set when PyProgramMode. }
+function pyvar_to_int(const v: Variant): Int64;
+function pyvar_to_float(const v: Variant): Double;
+function pyvar_to_bool(const v: Variant): Boolean;
+function pyvar_to_char(const v: Variant): Char;
 function pyfloordiv_v(const a: Variant; const b: Variant): Variant;
 function pyfloormod_v(const a: Variant; const b: Variant): Variant;
 function pystr_repeat_v(const v: Variant; n: Int64): AnsiString;
@@ -1050,6 +1059,94 @@ function PyVarAsFloat(p: PPyVarRec): Double;
 begin
   if p^.VType = 3 then PyVarAsFloat := PPyDouble(@p^.Payload)^
   else PyVarAsFloat := p^.Payload;
+end;
+
+function PyVarTypeName(t: Int64): AnsiString;
+begin
+  if t = 0 then Result := 'NoneType'
+  else if (t = 1) or (t = 2) then Result := 'int'
+  else if t = 3 then Result := 'float'
+  else if t = 4 then Result := 'bool'
+  else if (t = 5) or (t = 6) then Result := 'str'
+  else if t = 7 then Result := 'object'
+  else Result := '<unknown>';
+end;
+
+procedure PyTypeError(t: Int64; const want: AnsiString);
+begin
+  writeln('TypeError: expected ', want, ', got ', PyVarTypeName(t));
+  Halt(219);
+end;
+
+function pyvar_to_int(const v: Variant): Int64;
+var
+  p: PPyVarRec;
+begin
+  p := PPyVarRec(@v);
+  if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
+    Result := p^.Payload
+  else if p^.VType = 3 then
+    Result := Trunc(PPyDouble(@p^.Payload)^)   { Python int(float) truncates }
+  else
+  begin
+    { str/object/None: Python will not silently produce a number here.
+      int("42") is a DIFFERENT operation (pystr_to_int) and stays explicit. }
+    PyTypeError(p^.VType, 'a number');
+    Result := 0;
+  end;
+end;
+
+function pyvar_to_float(const v: Variant): Double;
+var
+  p: PPyVarRec;
+begin
+  p := PPyVarRec(@v);
+  if p^.VType = 3 then
+    Result := PPyDouble(@p^.Payload)^
+  else if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
+    Result := p^.Payload
+  else
+  begin
+    PyTypeError(p^.VType, 'a number');
+    Result := 0.0;
+  end;
+end;
+
+function pyvar_to_bool(const v: Variant): Boolean;
+var
+  p: PPyVarRec;
+begin
+  { Python truthiness -- TOTAL, never an error: 0, 0.0, '', None are false. }
+  p := PPyVarRec(@v);
+  if p^.VType = 3 then
+    Result := PPyDouble(@p^.Payload)^ <> 0.0
+  else if p^.VType = 6 then
+    Result := PPyAnsiString(@p^.Payload)^ <> ''
+  else if p^.VType = 0 then
+    Result := False
+  else
+    Result := p^.Payload <> 0;
+end;
+
+function pyvar_to_char(const v: Variant): Char;
+var
+  p: PPyVarRec;
+  t: AnsiString;
+begin
+  p := PPyVarRec(@v);
+  if p^.VType = 5 then
+    Result := Chr(p^.Payload and $FF)
+  else if p^.VType = 6 then
+  begin
+    t := PPyAnsiString(@p^.Payload)^;
+    if t = '' then begin PyTypeError(p^.VType, 'a non-empty str'); Result := #0; end
+    else Result := t[1];
+  end
+  else
+  begin
+    PyTypeError(p^.VType, 'a str');
+    Result := #0;
+  end;
 end;
 
 function pyfloordiv_v(const a: Variant; const b: Variant): Variant;
