@@ -174,6 +174,10 @@ def metrics_key(job):
     return job.sel or job.name
 
 
+METRICS_VERSION = 2             # 2: keyed by job.sel, not recipe position
+METRICS_VERSION_KEY = "_version"
+
+
 def _positional(k):
     """Legacy key: `<target>#<digits>`, i.e. keyed by recipe position."""
     _, _, tail = k.rpartition("#")
@@ -186,25 +190,38 @@ def load_metrics():
             m = json.load(f)
     except (OSError, ValueError):
         return {}
-    # Drop legacy positional entries rather than migrating them: there is no
-    # way to tell WHICH tests a blended average came from, so the data is not
-    # merely mis-keyed, it is unattributable. Re-learning from scratch costs a
-    # few runs of class-default estimates; keeping it costs mis-scheduling that
-    # is invisible until a run starves.
+    if m.pop(METRICS_VERSION_KEY, 1) >= METRICS_VERSION:
+        return m
+    # ONE-TIME migration off position-keyed metrics. Drop rather than convert:
+    # a blended average cannot be attributed back to the tests that produced
+    # it, so the data is unusable, not merely mis-keyed.
+    #
+    # Gated on the version marker, NOT on key shape, because shape alone
+    # cannot tell the two cases apart: job_selector() legitimately falls back
+    # to the positional name for jobs that compile no source (test-core#00,
+    # lib-fpc-clean#00), so for THOSE jobs the positional key IS the stable
+    # selector. Purging by shape every load deleted their metrics forever --
+    # they could never reach METRICS_MIN_RUNS and were stuck on class
+    # defaults, which is the churn this replaces.
     stale = [k for k in m if _positional(k)]
     for k in stale:
         del m[k]
     if stale:
-        print("testmgr: dropped %d positionally-keyed metric entries "
-              "(re-learning per stable selector)" % len(stale), flush=True)
+        print("testmgr: migrated metrics to v%d — dropped %d position-keyed "
+              "entries (re-learning per stable selector)"
+              % (METRICS_VERSION, len(stale)), flush=True)
     return m
 
 
 def save_metrics(m):
     os.makedirs(os.path.dirname(METRICS_PATH), exist_ok=True)
     tmp = METRICS_PATH + ".tmp"
+    # stamp the schema version so the v1->v2 purge runs exactly once; without
+    # it every load would re-purge and the position-keyed-by-design jobs
+    # (test-core#00 et al) could never accumulate runs
     with open(tmp, "w") as f:
-        json.dump(m, f, indent=1, sort_keys=True)
+        json.dump(dict(m, **{METRICS_VERSION_KEY: METRICS_VERSION}), f,
+                  indent=1, sort_keys=True)
     os.replace(tmp, METRICS_PATH)
 
 
