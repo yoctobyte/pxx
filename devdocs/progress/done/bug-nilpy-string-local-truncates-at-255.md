@@ -72,3 +72,6 @@ three outcomes.
 
 `test-nilpy` green with the 300-character case above diffed against CPython +
 `--tier quick` + self-host byte-identical + `make fpc-check`.
+
+## Log
+- 2026-07-20 — resolved, commit a42c0c9a.
