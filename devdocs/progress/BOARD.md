@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-demo-mandelbrot-asm-autozoom | E | 40 | feature | Demo — real-time auto-zoom Mandelbrot with a per-target ASM iteration kernel | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
 ## unfinished (0)
@@ -35,6 +34,8 @@ _none_
 | bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
+| bug-parallel-for-captured-boolean-loses-type | A | 50 | bug | Captured Boolean loses its type inside a parallel-for body (overload resolution fails) | — |
+| bug-parallel-for-captured-dynarray-var-arg-segfault | A | 60 | bug | Passing a captured dynamic array by `var` from a parallel-for body segfaults | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | bug-test-core-oversized-job-6gb-flaky | A | 60 | bug | One test-core job needs ~6.8 GB and flakes under load (the recurring `Terminated`) | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
@@ -75,6 +76,7 @@ _none_
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-float-exception-mask-control | A | 60 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
 | feature-ilja-tui | B | 45 | feature | Ilja — TUI (ANSI) face | — |
+| feature-inline-asm-xmm-operands | A | 45 | feature | Pascal inline asm cannot name XMM registers (no float asm kernels) | — |
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-lib-pyexec | B | 45 | feature | lib pyexec: a real exec() for Python-subset source (library, two engines) | — |
@@ -218,7 +220,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (903)
+## done (904)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -799,6 +801,7 @@ _none_
 | feature-demo-gui-solitaire | E | 50 | feature | Demo — GUI Patience / Solitaire | — |
 | feature-demo-life | E | 50 | feature | Demo — Conway's Game of Life | — |
 | feature-demo-lisp | E | 50 | feature | Demo — Lisp / Scheme interpreter | — |
+| feature-demo-mandelbrot-asm-autozoom | E | 40 | feature | Demo — real-time auto-zoom Mandelbrot with a per-target ASM iteration kernel | — |
 | feature-demo-mandelbrot | E | 50 | feature | Demo — zoomable Mandelbrot explorer | — |
 | feature-demo-maze | E | 50 | feature | Demo — maze generator + solver | — |
 | feature-demo-parallel-hashing-pow | E | 30 | feature | Demo — parallel hashing / mini proof-of-work | — |
@@ -2572,6 +2575,7 @@ _none_
 - [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
 - [p 65] [A] feature-a-typeref-handle
 - [p 60] [A] bug-a-qplus-misses-32bit-overflow
+- [p 60] [A] bug-parallel-for-captured-dynarray-var-arg-segfault
 - [p 60] [A] bug-test-core-oversized-job-6gb-flaky
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [A] feature-a-promoint-variant-integration
@@ -2602,6 +2606,7 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
+- [p 50] [A] bug-parallel-for-captured-boolean-loses-type
 - [p 50] [A] decide-abi-portable-vs-target-split
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [A] feature-a-promoint-check-elision
@@ -2633,6 +2638,7 @@ _none_
 - [p 45] [A] feature-emission-size-dce
 - [p 45] [A] feature-esp-hardware-flash-validation
 - [p 45] [B] feature-ilja-tui
+- [p 45] [A] feature-inline-asm-xmm-operands
 - [p 45] [O] feature-inline-nonleaf-and-branch-locals
 - [p 45] [B] feature-lib-pyexec
 - [p 45] [B] feature-move-fillchar-intrinsics

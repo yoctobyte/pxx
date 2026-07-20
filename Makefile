@@ -5675,6 +5675,8 @@ gui-test: pxx-stable-check
 demos: pxx-stable-check
 	@echo "=== demos: build ALL examples/* against $(PXX_STABLE) into $(DEMO_OUT)/ ==="
 	@mkdir -p $(DEMO_OUT)
+	@# A demo that uses palparallel needs --threadsafe (the compiler rejects
+	@# `parallel for` without it), so the flag is derived per source.
 	@# Discover every example PROGRAM (skip esp32 — cross-only, needs the IDF
 	@# toolchain, not $(PXX_STABLE)). Unit search path = each demo's own dir, every
 	@# example dir that holds a `unit` (so a cross-dir engine like klondike resolves),
@@ -5685,7 +5687,8 @@ demos: pxx-stable-check
 	 fail=0; n=0; ok=0; \
 	 for src in `grep -rlE '^[[:space:]]*program[[:space:]]' examples --include='*.pas' | grep -v '/esp32/' | sort`; do \
 	   dir=`dirname $$src`; base=`basename $$src .pas`; n=$$((n+1)); \
-	   if $(PXX_STABLE) -Fu$$dir $$fu -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix "$$src" "$(DEMO_OUT)/$$base" >$(DEMO_OUT)/.build.log 2>&1; then \
+	   ts=; grep -qE '^[[:space:]]*uses.*palparallel|\bpalparallel\b' "$$src" && ts=--threadsafe; \
+	   if $(PXX_STABLE) $$ts -Fu$$dir $$fu -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix "$$src" "$(DEMO_OUT)/$$base" >$(DEMO_OUT)/.build.log 2>&1; then \
 	     printf '  OK    %s\n' "$$src"; ok=$$((ok+1)); \
 	   else \
 	     printf '  FAIL  %s  -- %s\n' "$$src" "`tail -1 $(DEMO_OUT)/.build.log`"; fail=1; \

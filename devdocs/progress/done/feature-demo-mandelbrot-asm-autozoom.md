@@ -88,3 +88,4 @@ overhead) is a nice extension once per-pixel works.
   known points, double-buffer swap, palette + image rotation, per-target asm
   iteration kernel (also a showcase of the asm frontend), parallel scanlines via
   the shipped policy surface. TUI-first, GUI later.
+- 2026-07-20 — resolved, commit HEAD.
