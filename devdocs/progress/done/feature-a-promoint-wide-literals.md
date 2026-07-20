@@ -48,3 +48,6 @@ not only in a direct assignment.
 Round-trip: a wide literal in, `Writeln` out, byte-equal to CPython's rendering
 of the same integer; plus arithmetic starting from a wide literal. `--tier
 quick` + self-host byte-identical.
+
+## Log
+- 2026-07-20 — resolved, commit cb119351.

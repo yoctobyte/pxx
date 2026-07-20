@@ -55,3 +55,6 @@ than a flat range check.
 `{%FAIL}`-style tests for decimal and hex over-range literals, the UInt64-range
 case still accepted where FPC accepts it, `--tier quick` + self-host
 byte-identical.
+
+## Log
+- 2026-07-20 — resolved, commit cb119351.
