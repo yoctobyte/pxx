@@ -94,7 +94,7 @@ _none_
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-default-args-on-nested-defs | N | 55 | feature | NilPy: default arguments as explicit by-value capture | — |
-| feature-nilpy-exceptions | N | 60 | feature | NilPy: `raise` and `try` / `except` | — |
+| feature-nilpy-exception-message | N | 45 | feature | NilPy: `Exception(msg)` — the root class takes no arguments | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nilpy-nested-def-as-value | N | 15 | feature | SUPERSEDED: nested def as a VALUE (stored, passed, returned) | — |
 | feature-nilpy-none-variant | N | 45 | feature | NilPy: `None` as a first-class variant value (VT_EMPTY) | — |
@@ -223,7 +223,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (887)
+## done (888)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -898,6 +898,7 @@ _none_
 | feature-nilpy-decorators-dataclass | N | 55 | feature | NilPy: @dataclass v1 (decorator syntax, annotated scalar fields, defaults) | — |
 | feature-nilpy-def-params | N | 55 | feature | NilPy: raise def/method parameter limit past 4 | — |
 | feature-nilpy-dict | N | 60 | feature | NilPy: dict v1 — TPyDict | — |
+| feature-nilpy-exceptions | N | 60 | feature | NilPy: `raise` and `try` / `except` | — |
 | feature-nilpy-fstrings | N | 55 | feature | NilPy: f-strings | — |
 | feature-nilpy-function-values | N | 70 | feature | NilPy: a def as a VALUE (procedure pointer) | — |
 | feature-nilpy-keyword-args | N | 65 | feature | NilPy: keyword arguments at call sites | — |
@@ -2567,7 +2568,6 @@ _none_
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
 - [p 60] [A] feature-inline-asm-xtensa
-- [p 60] [N] feature-nilpy-exceptions
 - [p 60] [O] feature-opt-store-reload-elimination
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
 - [p 60] [P] feature-pascal-corpus-oop
@@ -2625,6 +2625,7 @@ _none_
 - [p 45] [B] feature-lib-pyexec
 - [p 45] [B] feature-move-fillchar-intrinsics
 - [p 45] [B] feature-networking
+- [p 45] [N] feature-nilpy-exception-message
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [N] feature-nilpy-none-variant
 - [p 45] [P] feature-pascal-corpus-passrc

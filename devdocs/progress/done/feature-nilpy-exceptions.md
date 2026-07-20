@@ -56,3 +56,6 @@ to work, so field registration on that subclass is part of the job.
 
 `test-nilpy` green with a `.npy` case diffed against CPython + `--tier quick`
 + self-host byte-identical + `make fpc-check`.
+
+## Log
+- 2026-07-20 — resolved, commit cc833c2d.
