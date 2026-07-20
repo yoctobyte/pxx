@@ -1293,6 +1293,23 @@ def status(repo, grace_min, tdir=None, ref="HEAD"):
     is what the daemon actually publishes to. Reported DOWN while the daemon was
     demonstrably mid-run (2026-07-14).
     """
+    # origin/master is truth. A dev checkout drifts behind it constantly, and
+    # `git log HEAD` then measures coverage over history this checkout cannot
+    # see: 2026-07-20 a checkout 226 commits behind reported UP while the
+    # daemon had been stopped for hours. Prefer the already-fetched remote ref
+    # (still no network) and say so when it disagrees with HEAD.
+    if ref == "HEAD":
+        remote = sh(["git", "rev-parse", "--verify", "-q",
+                     "origin/master"], cwd=repo, check=False).strip()
+        if remote:
+            behind = sh(["git", "rev-list", "--count", "HEAD..origin/master"],
+                        cwd=repo, check=False).strip()
+            if behind and behind != "0":
+                print("tstate: note — checkout is %s commit(s) behind "
+                      "origin/master; measuring coverage against "
+                      "origin/master (run `git pull --rebase` to refresh it)"
+                      % behind)
+            ref = "origin/master"
     tdir = tdir or os.path.join(repo, TSTATE_REL)
     tested = set()
     hosts = []
