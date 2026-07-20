@@ -1,9 +1,12 @@
 ---
 prio: 55
-keep-open: the 0.1-vs-1.0 call is made, but this deliberately gates feature-promo-launch-plan's loud launch until 0.1 has shipped and been used
+keep-open: REOPENED 2026-07-20 — the version scheme is undecided again (pin-count proposal supersedes 0.1-beta), and this still gates feature-promo-launch-plan's loud launch
 ---
 
-# DECIDE: first release is 0.1-BETA — a 1.0-grade bar under a modest number
+# DECIDE: version scheme — pin count / N, not semver
+
+*(slug is historical: this began as "what does 1.0 promise". The question has
+moved; the blocked-by edge from feature-promo-launch-plan is why the slug stays.)*
 
 - **Type:** decide (user call — nobody else can make this one)
 - **Track:** A (core owns the gate a release certifies)
@@ -12,7 +15,71 @@ keep-open: the 0.1-vs-1.0 call is made, but this deliberately gates feature-prom
 - **Owner:** — (user)
 - **Unblocks:** [[feature-promo-launch-plan]]
 
-## USER DECISION 2026-07-12: first official release = **0.1 beta**
+## SUPERSEDED 2026-07-20 — the number changes, the bar does not
+
+The user's new take: **drop semver entirely.** Version = the pin counter,
+divided down. We are already at pin 222, so `/100000` reads **0.00222** — we
+"passed beta 0.001" around pin 100 and are monotonically approaching 1.0.
+Releases, if any, are just odd-numbered checkpoints ("pxx 3727"), not marketing
+versions.
+
+*"sod off with this old fashioned naming convention. happy to make releases,
+but not yet, and if, they'd be just some odd number checkpoint (3727) or so."*
+
+**What survives from the 2026-07-12 decision:** the maturity BAR below (stage 1
+criteria) is unchanged and still the gate — feature complete, gates green,
+targets hit, actually usable, no big structural churn. The modesty was always
+in the number; this proposal simply stops pretending the number means anything
+else. **What dies:** "0.1 beta" as the label, and with it the whole semver
+framing of stage 2.
+
+### Measured, 2026-07-20
+
+```
+VERSION            222      incremented per stabilize
+pin.log entries    213      pins are a SUBSET of stabilizes — already diverged by 9
+first pin  v9      2026-06-19
+last  pin  v222    2026-07-17        ~7.6 pins/day over 28 days
+```
+
+| divisor | 1.0 at | at 7.6 pins/day |
+| --- | --- | --- |
+| 1,000,000 | 1M pins | ~360 years |
+| **100,000** | 100k pins | **~36 years** |
+| 10,000 | 10k pins | ~3.6 years |
+
+Precedent: Knuth's TeX asymptotically approaches π, METAFONT approaches e —
+never arriving is the point, and it is an honest way to say "this is not
+finished and will not claim to be".
+
+### OPEN — three things this needs settled
+
+1. **Divisor.** `/100000` puts 1.0 ~36 years out at the measured rate, i.e.
+   effectively asymptotic. That is coherent IF never-arriving is intended. If
+   "working to 1.0" means actually arriving in this project's lifetime,
+   `/10000` (~3.6 years) is the honest divisor. The number is a promise either
+   way — pick which promise.
+2. **Canonical counter.** `VERSION` counts *stabilizes* (222); `pin.log` counts
+   *pins* (213). Already 9 apart and drifting. "Pin #" says count pins, but the
+   machinery increments on stabilize. Pick one; make the other stop pretending
+   to be a version.
+3. **Release identity.** Recommendation: the INTEGER leads — tarball and
+   `--version` say `pxx 3727`; the fraction `0.03727` is cosmetic progress. The
+   integer is the truth (a binary that reproduced itself and was blessed); the
+   fraction is the story.
+
+### One hard constraint — do NOT ship a 0.1 first
+
+`0.03727` parsed as semver is minor=3727; `0.1` is minor=1. So a later
+`0.03727` sorts ABOVE `0.1` in semver but BELOW it numerically. Mixing the two
+schemes breaks ordering in package managers permanently, and irreversibly —
+you cannot unpublish a version. Nothing has shipped yet, so adopting the pin
+scheme directly costs nothing; shipping "0.1" first poisons it forever.
+
+---
+
+## HISTORICAL — USER DECISION 2026-07-12: first official release = **0.1 beta**
+*(superseded above; kept because the stage-1 bar it specifies is still live)*
 **A 0.x beta carries no compatibility promise**, so the hard question (what does 1.0 guarantee
 *forever*) is **deferred**, not answered now. But note what the user did NOT do: he did not lower
 the *bar*. The 0.1 criteria (stage 1) are a maturity bar most projects would call 1.0. **The
@@ -122,9 +189,16 @@ claiming. So: scope 0.1 → ship it → learn from real users → *then* the lou
 
 `check`'s DECIDED-NOT-MOVED rule flags a decide- ticket that records a decision
 and has not moved. This one is an intentional exception, declared via
-`keep-open:` in the frontmatter.
+`keep-open:` in the frontmatter — for TWO reasons now.
 
-The decision here IS "defer, and keep gating": first release is 0.1 beta, and
+**First: it is genuinely undecided again.** The 2026-07-12 "0.1 beta" call was
+superseded the same week by the pin-count proposal at the top of this ticket,
+which has three open questions of its own. The `## USER DECISION` heading
+survives only as history, which is exactly the shape `check` cannot tell apart
+from a live decision — hence the explicit opt-out.
+
+**Second, and unchanged: it deliberately gates.** The decision here also IS
+"defer, and keep gating": first release is 0.1 beta, and
 **the loud moment stays in the pocket** until strangers have run 0.1 and we
 have fixed what they broke. `feature-promo-launch-plan` is blocked-by this
 ticket precisely so that launch work cannot be picked off the ready queue

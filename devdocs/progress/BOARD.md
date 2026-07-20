@@ -41,7 +41,7 @@ _none_
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
 | compat-pascal-binop-operand-eval-order | A | 15 | compat | pxx evaluates binary-operator operands left-to-right; FPC evaluates right-to-left | — |
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
-| decide-1-0-scope-promise | A | 55 | decide | DECIDE: first release is 0.1-BETA — a 1.0-grade bar under a modest number | — |
+| decide-1-0-scope-promise | A | 55 | decide | DECIDE: version scheme — pin count / N, not semver | — |
 | decide-abi-portable-vs-target-split | U | 60 | decide | Where is the portable/per-target line drawn in the IR? | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
 | decide-crtl-libm-glibc-bit-parity | U | 20 | decide | decide: crtl libm — correct rounding (current) vs glibc bug-parity | — |
