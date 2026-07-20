@@ -18,17 +18,21 @@ blocked-by: [decide-1-0-scope-promise]
 **Visibility ≠ release ≠ launch.** Different resources; do not conflate.
 - **Visibility** is continuous, cheap, compounding: devlog, a legible repo, occasional posts.
   Start NOW. Staying invisible until a release throws away years of compounding.
-- **A release** is a working artifact, honestly labeled. **First one = 0.1 beta** (user call
-  2026-07-12 — see [[decide-1-0-scope-promise]]). Announce it *quietly*: devlog, Pascal forums,
-  own channels. Purpose = **rehearsal with real strangers**, to find out that `curl | sh` breaks
+- **A release** is a working artifact, honestly labeled. **Versioning settled 2026-07-20**
+  (see [[decide-1-0-scope-promise]]): the version is the stabilize counter over 1000 — today
+  **0.222** — and there is no semver compatibility promise, because none is offered. The
+  promise, when it exists, is an **LTS designation** on a chosen build. So the "0.1 beta"
+  framing below is superseded: a release is just a blessed checkpoint, honestly numbered.
+  Announce it *quietly*: devlog, Pascal forums, own channels. Purpose = **rehearsal with real strangers**, to find out that `curl | sh` breaks
   on a distro we never tested.
 - **The launch** is **one-shot** — the coordinated blast. There is roughly one first impression
   with the compiler crowd. The scarce thing is **the moment, not the version number**: a 0.1 that
   gets front-paged and then 404s on install burns it exactly as thoroughly as a bad 1.0 would.
   So keep it in the pocket until a release has met real users.
 
-Sequence: **visibility now → 0.1 beta (quiet) → real feedback → fix the embarrassing stuff →
-the loud moment** (at 0.2, at 1.0, whenever it is earned). HN is perfectly happy with 0.x when
+Sequence: **visibility now → a quiet checkpoint release → real feedback → fix the embarrassing
+stuff → the loud moment** (whenever it is earned — 1.000 lands ~3.4 months out at the measured
+pin rate, and 1.024 is available if a round number is wanted). HN is perfectly happy with 0.x when
 you are honest about it; the risk was never the version number, it is the overclaim and the
 broken install.
 
@@ -82,7 +86,9 @@ within the hour). The honest answers, which are good ones:
 ### At the loud moment (the one shot — NOT necessarily 1.0)
 5. **Working install first.** A launch where `curl | sh` fails is a launch you do not get back.
 6. Coordinated, same day, midweek morning US time: Show HN + lobste.rs + r/programming +
-   r/compilers (+ Pascal forums as secondary). **Be present in the comments all day** — for the
+   r/compilers (+ Pascal forums as secondary). **Also the user's own channels: socials and a
+   Slashdot journal** — low-ceremony, already-owned surfaces that cost nothing to post to and
+   reach exactly the greybeard-compiler audience this project's story lands with. **Be present in the comments all day** — for the
    first 24 hours the comment thread *is* the product.
 
 ## Three things not to do
