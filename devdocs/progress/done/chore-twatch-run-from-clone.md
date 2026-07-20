@@ -55,3 +55,6 @@ an explicit `--local-code` flag for deliberate testing.
 ## Non-goal
 Not about `trackt run`, which already never touches the clone and is meant to
 test the checkout.
+
+## Log
+- 2026-07-20 — resolved, commit PENDING.

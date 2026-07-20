@@ -119,7 +119,7 @@ def cmd_up(clone, a):
             return 1
     preexisting, _ = daemon_pid(clone)
     if not a.no_daemon and not preexisting:
-        if cmd_start(clone, a.remote):
+        if cmd_start(clone, a.remote, local_code=a.local_code):
             return 1
     conf = twatch.load_conf(clone)
     if not a.no_web and conf.get("web", True):
@@ -396,7 +396,34 @@ def cmd_watch(clone, show_sha=True):
 
 
 # ------------------------------------------------------------- lifecycle ---
-def cmd_start(clone, remote=None, web=True):
+def daemon_script(clone, local_code=False):
+    """WHICH twatch.py the daemon runs.
+
+    The clone's own copy, not this checkout's. Launching from HERE means the
+    daemon's code comes from a working tree that agents edit live, while the
+    code under test comes from the clone -- so an uncommitted edit silently
+    decides what the watcher executes on its next start. That is the code-side
+    twin of the 2026-07-07 dirty-clone incident, which is why the watcher got a
+    dedicated clone in the first place; the clone fixed the DATA side only.
+
+    Running the clone's copy makes "restart to pick up a fix" mean "pull, then
+    restart" -- the watcher runs committed code that arrived through git like
+    everything else. --local-code opts back into this checkout's copy for
+    deliberately testing an uncommitted change.
+    """
+    if local_code:
+        return os.path.join(HERE, "twatch.py")
+    inclone = os.path.join(clone, "tools", "twatch.py")
+    if os.path.exists(inclone):
+        return inclone
+    # a clone too old (or mid-setup) to carry it: fall back rather than refuse
+    # to start, but say so -- a silent fallback would defeat the whole point.
+    print("%swarning%s: %s has no tools/twatch.py — falling back to this "
+          "checkout's copy (uncommitted edits WILL be live)" % (RED, OFF, clone))
+    return os.path.join(HERE, "twatch.py")
+
+
+def cmd_start(clone, remote=None, web=True, local_code=False):
     if not os.path.isdir(clone):
         if not remote:
             print("no clone at %s — trackt setup, or: trackt start --remote <url>"
@@ -407,7 +434,10 @@ def cmd_start(clone, remote=None, web=True):
         print("daemon already running (pid %d)" % pid)
         return 0
     lg = open(logpath(clone), "a")
-    cmd = [sys.executable, os.path.join(HERE, "twatch.py"), "--clone", clone]
+    script = daemon_script(clone, local_code)
+    if local_code:
+        print("running THIS checkout's twatch.py (--local-code): %s" % script)
+    cmd = [sys.executable, script, "--clone", clone]
     if remote:
         cmd += ["--remote", remote]
     p = subprocess.Popen(cmd, stdout=lg, stderr=subprocess.STDOUT,
@@ -559,6 +589,10 @@ def main():
     ap.add_argument("arg", nargs="*")
     ap.add_argument("--clone", help="watcher clone dir")
     ap.add_argument("--remote", help="start: clone URL if dir missing")
+    ap.add_argument("--local-code", action="store_true",
+                    help="start/restart/up: run THIS checkout's twatch.py "
+                         "instead of the clone's committed copy (for "
+                         "deliberately testing an uncommitted change)")
     ap.add_argument("--fetch-corpus", action="store_true",
                     help="setup: also fetch gitignored corpus trees")
     ap.add_argument("--no-web", action="store_true", help="up: skip web UI")
@@ -577,13 +611,13 @@ def main():
     if a.cmd == "status":
         return cmd_status(clone, attach_ok=False)
     if a.cmd == "start":
-        return cmd_start(clone, a.remote)
+        return cmd_start(clone, a.remote, local_code=a.local_code)
     if a.cmd == "stop":
         return cmd_stop(clone)
     if a.cmd == "restart":
         cmd_stop(clone)
         subprocess.run(["git", "-C", clone, "pull", "--rebase", "--quiet"])
-        return cmd_start(clone)
+        return cmd_start(clone, local_code=a.local_code)
     if a.cmd == "watch":
         return cmd_watch(clone, show_sha=not a.no_sha)
     if a.cmd == "run":
