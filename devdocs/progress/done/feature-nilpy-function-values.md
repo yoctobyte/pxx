@@ -53,3 +53,6 @@ Explicit by-value capture is [[feature-nilpy-default-args-on-nested-defs]].
 a field and in a dict, pass as an argument, call through it, and two different
 functions through the same slot — plus `--tier quick` + self-host
 byte-identical.
+
+## Log
+- 2026-07-20 — resolved, commit b67724d7.

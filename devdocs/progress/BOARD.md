@@ -25,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (136)
+## backlog (135)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -95,7 +95,6 @@ _none_
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-default-args-on-nested-defs | N | 55 | feature | NilPy: default arguments as explicit by-value capture | — |
 | feature-nilpy-exceptions | N | 60 | feature | NilPy: `raise` and `try` / `except` | — |
-| feature-nilpy-function-values | N | 70 | feature | NilPy: a def as a VALUE (procedure pointer) | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nilpy-keyword-args | N | 65 | feature | NilPy: keyword arguments at call sites | — |
 | feature-nilpy-nested-def-as-value | N | 15 | feature | SUPERSEDED: nested def as a VALUE (stored, passed, returned) | — |
@@ -224,7 +223,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (885)
+## done (886)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -900,6 +899,7 @@ _none_
 | feature-nilpy-def-params | N | 55 | feature | NilPy: raise def/method parameter limit past 4 | — |
 | feature-nilpy-dict | N | 60 | feature | NilPy: dict v1 — TPyDict | — |
 | feature-nilpy-fstrings | N | 55 | feature | NilPy: f-strings | — |
+| feature-nilpy-function-values | N | 70 | feature | NilPy: a def as a VALUE (procedure pointer) | — |
 | feature-nilpy-len-of-str | N | 50 | feature | NilPy: len() on a str (only TPyList is accepted today) | — |
 | feature-nilpy-lexer-literals | N | 55 | feature | NilPy lexer: hex/octal/binary int literals, triple-quoted strings, string line counting | — |
 | feature-nilpy-list-repeat | N | 40 | feature | NilPy: `[0] * 4` (list repeat) is not lowered | — |
@@ -2555,7 +2555,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [N] feature-nilpy-function-values
 - [p 70] [T] regression-cascade-3d46e52fc733
 - [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
 - [p 65] [A] feature-a-typeref-handle
