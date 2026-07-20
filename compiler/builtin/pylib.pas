@@ -164,6 +164,21 @@ type
     { see TPyList.at — bytearrays have no Python .get either }
     function at(i: Integer): Integer;
     procedure put(i: Integer; v: Integer);
+    { bytearray.extend / .append — uforth builds output buffers byte by byte }
+    procedure extend(src: TPyBytes);
+    { NO .append here on purpose: TPyList.append already exists, and a second
+      class declaring the name makes EVERY `.append(...)` on a dynamically
+      typed receiver ambiguous — the same collision TPyList.get caused. Python
+      does have bytearray.append, so if a corpus needs it the answer is runtime
+      dispatch on the receiver's class, not another method on this class.
+      (filed as feature-nilpy-runtime-method-dispatch-on-variant) }
+    procedure append(v: Integer);
+    { bytes.decode(encoding [, errors]). Our strings ARE byte strings, so
+      latin-1 is an exact identity mapping; the `errors` argument is accepted
+      and ignored because latin-1 cannot fail. Named `errors` so the keyword
+      form binds through the ordinary method keyword-argument path. }
+    function decode(const encoding: AnsiString): AnsiString; overload;
+    function decode(const encoding: AnsiString; const errors: AnsiString): AnsiString; overload;
     property Items[i: Integer]: Integer read at write put; default;
   end;
 
@@ -219,6 +234,10 @@ function len(b: TPyBytes): Integer; overload;
   three element types: a negative bound counts from the end, both bounds clamp
   into [0, n], and an inverted or empty range yields an EMPTY result rather
   than an error. This is deliberately unlike INDEXING, which raises. }
+{ str.encode(encoding [, errors]) -> bytes. Our strings ARE byte strings, so
+  this is a byte-for-byte copy: exact for latin-1, and for utf-8 exact only
+  while every character is ASCII (see the ticket noted at the call site). }
+function pystr_encode(const s: AnsiString): TPyBytes;
 function pystr_slice(const s: AnsiString; lo, hi: Integer): AnsiString;
 function pybytes_slice(b: TPyBytes; lo, hi: Integer): TPyBytes;
 function pylist_slice(l: TPyList; lo, hi: Integer): TPyList;
@@ -1631,6 +1650,69 @@ begin
   p^ := v;
 end;
 
+procedure PyBytesEnsure(b: TPyBytes; need: Integer);
+var np: Pointer; k: Integer; src, dst: PByte;
+begin
+  if need <= b.FLen then Exit;
+  GetMem(np, need);
+  for k := 0 to need - 1 do
+  begin
+    dst := PByte(NativeInt(np) + k);
+    if k < b.FLen then
+    begin
+      src := PByte(NativeInt(b.FData) + k);
+      dst^ := src^;
+    end
+    else
+      dst^ := 0;
+  end;
+  b.FData := np;
+  b.FLen := need;
+end;
+
+procedure TPyBytes.extend(src: TPyBytes);
+var k, base: Integer; sp, dp: PByte;
+begin
+  if src = nil then Exit;
+  base := FLen;
+  PyBytesEnsure(Self, FLen + src.FLen);
+  for k := 0 to src.FLen - 1 do
+  begin
+    sp := PByte(NativeInt(src.FData) + k);
+    dp := PByte(NativeInt(FData) + base + k);
+    dp^ := sp^;
+  end;
+end;
+
+procedure TPyBytes.append(v: Integer);
+var p: PByte;
+begin
+  if (v < 0) or (v > 255) then
+  begin
+    WriteLn('ValueError: byte must be in range(0, 256)');
+    Halt(1);
+  end;
+  PyBytesEnsure(Self, FLen + 1);
+  p := PByte(NativeInt(FData) + (FLen - 1));
+  p^ := v;
+end;
+
+function TPyBytes.decode(const encoding: AnsiString): AnsiString; overload;
+var k: Integer; p: PByte;
+begin
+  Result := '';
+  for k := 0 to FLen - 1 do
+  begin
+    p := PByte(NativeInt(FData) + k);
+    Result := Result + Chr(p^);
+  end;
+end;
+
+function TPyBytes.decode(const encoding: AnsiString; const errors: AnsiString): AnsiString; overload;
+begin
+  Result := decode(encoding);
+end;
+
 function bytearray: TPyBytes; overload;
 begin
   Result := TPyBytes.Create(0);
@@ -1659,6 +1741,17 @@ begin
   if hi > n then hi := n;
   { an inverted range is empty, not negative-length }
   if hi < lo then hi := lo;
+end;
+
+function pystr_encode(const s: AnsiString): TPyBytes;
+var k: Integer; p: PByte;
+begin
+  Result := TPyBytes.Create(Length(s));
+  for k := 1 to Length(s) do
+  begin
+    p := PByte(NativeInt(Result.FData) + (k - 1));
+    p^ := Ord(s[k]);
+  end;
 end;
 
 function pystr_slice(const s: AnsiString; lo, hi: Integer): AnsiString;

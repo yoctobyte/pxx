@@ -1101,6 +1101,10 @@ begin
   else if CaseEqual(mname, 'find') then
     { .find(sub) and .find(sub, start) — see the -3 case in PyParseStrMethod }
     begin pname := 'pystr_find'; retTk := tyInteger; wantArgs := -3; end
+  else if CaseEqual(mname, 'encode') then
+    { .encode(enc [, errors=...]) — the arguments are accepted and DROPPED; see
+      the -4 case in PyParseStrMethod and pystr_encode for what that means. }
+    begin pname := 'pystr_encode'; retTk := tyClass; wantArgs := -4; end
   else if CaseEqual(mname, 'isspace') then
     begin pname := 'pystr_isspace'; retTk := tyBoolean; end
   else if CaseEqual(mname, 'join') then
@@ -1948,7 +1952,7 @@ end;
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var pname: AnsiString;
     retTk: TTypeKind;
-    procIdx, callNode, argNode, lastArg, i, wantArgs: Integer;
+    procIdx, callNode, argNode, lastArg, i, k, wantArgs: Integer;
 begin
   if not PyStrMethodInfo(mname, pname, retTk, wantArgs) then
     Error('Nil Python: unsupported str method .' + mname + '() (have: upper, '
@@ -1978,7 +1982,24 @@ begin
 
   Expect(tkLParen, '(');
   i := 0;
-  while CurTok.Kind <> tkRParen do
+  if wantArgs = -4 then
+  begin
+    { SKIP the arguments rather than parse them: `errors="replace"` is a
+      keyword argument, not an expression, so parsing it would fail on the
+      bare name. Balanced skip to the closing paren. }
+    k := 1;
+    while (k > 0) and (CurTok.Kind <> tkEOF) do
+    begin
+      if CurTok.Kind = tkLParen then Inc(k)
+      else if CurTok.Kind = tkRParen then
+      begin
+        Dec(k);
+        if k = 0 then Break;
+      end;
+      Next;
+    end;
+  end;
+  while (wantArgs <> -4) and (CurTok.Kind <> tkRParen) do
   begin
     PyParseBoolExpr;
     callNode := AllocNode(AN_ARG);
@@ -1996,6 +2017,16 @@ begin
     if i = 0 then pname := 'pystr_split_ws'
     else if i <> 1 then
       Error('Nil Python: str method .' + mname + '() takes at most one argument');
+    procIdx := FindProc(pname);
+    if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  end
+  else if wantArgs = -4 then
+  begin
+    { Arguments accepted and DISCARDED. Only .encode uses this: our strings are
+      byte strings, so the encoding argument has nothing to select, and the
+      `errors` keyword cannot trigger. Swallowing them keeps the corpus
+      spelling working without pretending we implement codecs — the limitation
+      is filed as bug-nilpy-encode-ignores-the-codec. }
     procIdx := FindProc(pname);
     if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   end
@@ -2616,6 +2647,20 @@ begin
       if IsSubclassOf(hitCi, ci) then
         { ci is the ANCESTOR — its slot is the one to dispatch through }
         begin hitCi := ci; hitMmi := mmi; hitPi := mpi; end
+      else if (ci = FindUClass('TPyBytes')) or (hitCi = FindUClass('TPyBytes')) then
+      begin
+        { NARROW, DELIBERATE PREFERENCE, not a general tie-break: TPyList and
+          TPyBytes both legitimately declare append/extend (Python has both
+          list.append and bytearray.append), so neither can be renamed the way
+          TPyList.get was. On a receiver with no static class, prefer the LIST:
+          its parameter is a Variant and therefore accepts anything, while
+          TPyBytes takes an Integer, and a bytearray receiver is almost always
+          a statically-typed local (which never reaches this path).
+          The correct fix is runtime dispatch on the receiver's class —
+          feature-nilpy-runtime-method-dispatch-on-variant. }
+        if ci <> FindUClass('TPyBytes') then
+          begin hitCi := ci; hitMmi := mmi; hitPi := mpi; end;
+      end
       else if not IsSubclassOf(ci, hitCi) then
         Error('Nil Python: .' + mname + '() on a dynamically-typed value is '
           + 'ambiguous (several classes declare it) — assign to an annotated '

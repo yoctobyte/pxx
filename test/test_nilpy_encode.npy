@@ -1,0 +1,20 @@
+out = bytearray()
+for ch in "AbC":
+    out.extend(ch.encode("latin-1", errors="replace"))
+print(len(out))
+print(out[0])
+print(out[2])
+b = "hi".encode("latin-1")
+print(len(b))
+print(b.decode("latin-1"))
+print(b.decode("latin-1", errors="replace"))
+out.append(90)
+print(len(out))
+print(out[3])
+xs = []
+xs.append("a")
+xs.append("b")
+ys = []
+ys.extend(xs)
+print(len(ys))
+print(ys[1])
