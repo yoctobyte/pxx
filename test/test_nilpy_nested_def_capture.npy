@@ -1,0 +1,50 @@
+# A nested def READING an enclosing local. The captured names become trailing
+# by-value parameters that each call site fills in — Python reads a closed-over
+# name at CALL time, and a nested def is only callable from inside its parent
+# here, so the value at the call site is the right one
+# (feature-nilpy-nested-defs). A name the inner def ASSIGNS is its own local in
+# Python; capturing it and overwriting the copy lands on the same answer, which
+# `shadow` below pins.
+# Output must match CPython running this same file.
+
+def acc(n: int) -> int:
+    total = 0
+    def add(k: int) -> int:
+        return k + total
+    i = 0
+    while i < 4:
+        total = total + add(i)
+        i = i + 1
+    return total
+
+def strs(p: str) -> str:
+    def deco(s: str) -> str:
+        return p + s + p
+    return deco("x") + deco("y")
+
+def shadow(n: int) -> int:
+    v = 5
+    def inner(m: int) -> int:
+        v = m * 2
+        return v
+    return inner(3) + v
+
+def multi(a: int, b: int) -> int:
+    def f(k: int) -> int:
+        return k + a + b
+    return f(1) + f(2)
+
+def deep2(n: int) -> int:
+    x = n
+    def mid(m: int) -> int:
+        y = m + x
+        def bot(k: int) -> int:
+            return k + y + x
+        return bot(1)
+    return mid(2)
+
+print(acc(0))
+print(strs("|"))
+print(shadow(1))
+print(multi(10, 100))
+print(deep2(5))

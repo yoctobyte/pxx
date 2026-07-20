@@ -7085,6 +7085,7 @@ var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, pre
     castTk2: TTypeKind;   { postfix tail on a record-factory result }
     helperPi, wrapperArg, wrapperCall, sci: Integer;
     isLiftedCall, isCStringCall: Boolean;
+    capSym: Integer;   { NilPy nested-def capture actual (feature-nilpy-nested-defs) }
     bitNot, opIsArith: Boolean; notOp: Integer; notOrdTk: TTypeKind;
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec: Integer; szElemTk: TTypeKind;
     seEtid, seOrd: Integer;
@@ -10339,6 +10340,31 @@ begin
           end;
           Error('no overload of ' + name + ' matches these arguments' + OverloadReport);
         end;
+
+        { NilPy nested def: fill the trailing parameters that stand for the
+          enclosing locals it reads. The call is written with only the declared
+          arguments; each captured name is resolved HERE, in the enclosing body
+          where it is in scope, and appended as a by-value actual — Python reads
+          a closed-over name at call time, so its value at the call site is the
+          right one (feature-nilpy-nested-defs). }
+        if PyExprMode and (procIdx >= 0) and (PyCapCount[procIdx] > 0) and
+           (nArgs < Procs[procIdx].ParamCount) then
+          for i := 0 to PyCapCount[procIdx] - 1 do
+          begin
+            capSym := FindSym(PyCapName[procIdx * PY_MAX_CAPS + i]);
+            if capSym < 0 then
+              Error('nested def captures ' + PyCapName[procIdx * PY_MAX_CAPS + i]
+                    + ', which is not in scope at this call');
+            identNode := AllocNode(AN_IDENT);
+            ASTIVal[identNode] := capSym;
+            ASTTk[identNode] := Ord(Syms[capSym].TypeKind);
+            argSeq := AllocNode(AN_ARG);
+            ASTLeft[argSeq] := identNode;
+            if argsHead = -1 then begin argsHead := argSeq; lastArg := argSeq; end
+            else begin ASTRight[lastArg] := argSeq; lastArg := argSeq; end;
+            argTypes[nArgs] := Syms[capSym].TypeKind;
+            Inc(nArgs);
+          end;
 
         isLiftedCall := (procIdx >= 0) and (Procs[procIdx].ParamCount > nArgs) and
                         (ProcParamPtrDepth[procIdx * MAX_PROC_PARAMS + nArgs] = 2);

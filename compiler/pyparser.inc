@@ -2322,23 +2322,80 @@ begin
 end;
 
 function PyQueueNestedDef: Integer;
-var defTok, procIdx, bodyStart, bodyEnd: Integer; qname: AnsiString;
+var defTok, procIdx, bodyStart, bodyEnd, i, j, nCaps, nOwn, csym: Integer;
+    qname, cname: AnsiString; already: Boolean;
+    capNames: array[0..PY_MAX_CAPS-1] of AnsiString;
+    capTypes: array[0..PY_MAX_CAPS-1] of TTypeKind;
 begin
   defTok := TokPos - 1;
   PyParseDefHeader;
   qname := PyHdrName;
   if PyNestPrefix <> '' then qname := PyNestPrefix + '.' + qname;
+  bodyStart := TokPos - 1;
+  bodyEnd := PyFindBodyEnd(bodyStart);
+  { CAPTURE: every enclosing local/parameter the body mentions becomes a
+    trailing by-value parameter, filled in at each call site. Scanned from the
+    body's tokens because the body itself is not parsed until later — a name is
+    captured when it resolves to a local or parameter of the ENCLOSING scope and
+    is not one of this def's own parameters. A name the body ASSIGNS before
+    reading is captured too and simply overwritten, which lands on Python's
+    answer anyway (there it would be a plain local). }
+  nCaps := 0;
+  if PyNestPrefix <> '' then
+    for i := bodyStart to bodyEnd - 1 do
+      if Tokens[i].Kind = tkIdent then
+      begin
+        cname := GetTokenStr(i);
+        already := False;
+        for j := 0 to PyHdrNParams - 1 do
+          if PyHdrPNames[j] = cname then already := True;
+        for j := 0 to nCaps - 1 do
+          if capNames[j] = cname then already := True;
+        if not already then
+        begin
+          csym := FindSym(cname);
+          if (csym >= 0) and (Syms[csym].Kind in [skLocal, skParam]) and
+             not Syms[csym].IsArray and
+             (Syms[csym].TypeKind <> tyRecord) then
+          begin
+            if nCaps >= PY_MAX_CAPS then
+              Error('Nil Python: a nested def may capture at most 8 enclosing names');
+            capNames[nCaps] := cname;
+            capTypes[nCaps] := Syms[csym].TypeKind;
+            Inc(nCaps);
+          end;
+        end;
+      end;
   procIdx := FindProc(qname);
   if procIdx < 0 then
   begin
+    nOwn := PyHdrNParams;
+    for j := 0 to nCaps - 1 do
+    begin
+      if PyHdrNParams >= 16 then Error('Nil Python: too many parameters after capture');
+      PyHdrPNames[PyHdrNParams] := capNames[j];
+      PyHdrPTypes[PyHdrNParams] := capTypes[j];
+      PyHdrPCis[PyHdrNParams] := -1;
+      PyHdrDefHas[PyHdrNParams] := False;
+      Inc(PyHdrNParams);
+    end;
     procIdx := RegisterProc(qname, not PyHdrIsProc, PyHdrRetType, PyHdrNParams,
                             PyHdrPNames, PyHdrPTypes);
     PyApplyDefSignature(procIdx);
     Procs[procIdx].BodyAddr := -1;
+    { A captured parameter is never written at the call site by the user, so
+      overload matching must accept a call that supplies only the declared
+      arguments — the same "trailing params may be omitted" rule defaults use.
+      The call site then appends the captured actuals. }
+    PyCapCount[procIdx] := nCaps;
+    for j := 0 to nCaps - 1 do
+    begin
+      PyCapName[procIdx * PY_MAX_CAPS + j] := capNames[j];
+      if nOwn + j < MAX_PROC_PARAMS then
+        ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + nOwn + j] := True;
+    end;
   end;
   { skip the body: PyParseDefHeader stopped on the INDENT that opens it }
-  bodyStart := TokPos - 1;
-  bodyEnd := PyFindBodyEnd(bodyStart);
   { land ON the DEDENT that closes the nested body, then consume it, so the
     enclosing block resumes at the statement after the def }
   TokPos := bodyEnd;
@@ -3134,6 +3191,20 @@ begin
     procIdx := RegisterProc(name, not isProc, retType, nparams,
                             PyHdrPNames, PyHdrPTypes);
     PyApplyDefSignature(procIdx);
+  end;
+  { A nested def's shell carries MORE parameters than its header: the trailing
+    ones stand for the enclosing locals it captures. Take the count from the
+    Proc, or the captured names get no frame slot and the body reports them as
+    undefined variables (feature-nilpy-nested-defs). }
+  if Procs[procIdx].ParamCount > nparams then
+  begin
+    for i := nparams to Procs[procIdx].ParamCount - 1 do
+    begin
+      PyHdrPNames[i] := Procs[procIdx].Params[i].Name;
+      PyHdrPTypes[i] := Procs[procIdx].Params[i].TypeKind;
+      PyHdrPCis[i] := -1;
+    end;
+    nparams := Procs[procIdx].ParamCount;
   end;
   Procs[procIdx].BodyAddr := CodeLen;
   { Defs nested in THIS body qualify with this def's own (already qualified)

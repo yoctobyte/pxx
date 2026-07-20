@@ -11,6 +11,7 @@ const
   MAX_SYMS    = 131072;
   MAX_PROCS   = 16384;
   PY_MAX_NESTED = 64;   { queued nested defs per enclosing body (feature-nilpy-nested-defs) }
+  PY_MAX_CAPS = 8;      { enclosing locals one nested def may capture }
   PROC_HASH_SIZE = 16384;  { FindProc hash buckets; power of two (mask below) }
   SYM_HASH_SIZE  = 65536;  { FindSym hash buckets; power of two }
   MAX_PROC_PARAMS = 32;
@@ -1442,6 +1443,13 @@ var
   PyPendNestPfx: array[0..PY_MAX_NESTED-1] of AnsiString;{ the qualifier it must register under }
   PyPendNestCount: Integer;
   PyStmtAteBlock: Boolean;   { last statement consumed its own indented block AND the DEDENT (nested def) }
+  { Enclosing locals a nested def READS, lifted to trailing by-value parameters
+    the call site fills in (feature-nilpy-nested-defs). Python reads a closed-over
+    name at CALL time, and a nested def is only callable from inside its parent
+    here, so passing the value at each call site is exactly Python's answer for
+    reads. Writes need `nonlocal` and are not this. }
+  PyCapCount : array[0..MAX_PROCS-1] of Integer;
+  PyCapName  : array[0..MAX_PROCS*PY_MAX_CAPS-1] of AnsiString;
 
   { Candidate list built by MatchProcCall when overload resolution fails, so the
     caller can append it AFTER its own error line instead of MatchProcCall
