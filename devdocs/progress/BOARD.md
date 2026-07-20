@@ -27,7 +27,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (128)
+## backlog (129)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -68,7 +68,7 @@ _none_
 | feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
 | feature-c-package-namespace-decision | A | 40 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
-| feature-crtl-implement-libc-assumptions | B | 45 | feature | crtl: implement the libc assumptions real-world C leans on | — |
+| feature-crtl-implement-libc-assumptions | B | 10 | feature | crtl: implement the libc assumptions real-world C leans on | — |
 | feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | feature-nilpy-break-continue, feature-nilpy-tk-binding |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-dns-backends-selection | B | 40 | feature | DNS backends beyond dns_wire: dns_libc / dns_resolved / dns_esp + selection | decide-dns-libc-backend-shape |
@@ -85,12 +85,13 @@ _none_
 | feature-inline-asm-xmm-operands | A | 55 | feature | Inline asm cannot express float or vector code (no xmm operands, no packed SSE, no VEX, no cpuid) | — |
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
+| feature-ipv6-complete-surface | B | 40 | feature | Finish IPv6: PalAcceptIpv6, UDP v6, asyncnet, AAAA lookups, dual-stack listeners | — |
 | feature-lib-pyexec | B | 45 | feature | lib pyexec: a real exec() for Python-subset source (library, two engines) | feature-rtti-field-reflection |
 | feature-mimic-fpc-compiler-define-profile | A | 50 | feature | FPC-compiler define profile (`fpcdefs.inc` build-config gates) | — |
 | feature-move-fillchar-intrinsics | A | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-n-nilpy-ast-typing-module-scope | N | 55 | feature | NilPy: type MODULE locals from the AST too | — |
 | feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
-| feature-networking | B | 45 | feature | Networking runtime | — |
+| feature-networking | B | 20 | feature | Networking runtime | — |
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
@@ -2643,7 +2644,6 @@ _none_
 - [p 45] [P] compat-pascal-const-expr-ord-chr-succ
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [A] feature-cross-frontend-interop-contract
-- [p 45] [B] feature-crtl-implement-libc-assumptions
 - [p 45] [A] feature-dynamic-compiler-tables
 - [p 45] [A] feature-dynamic-include-paths-config
 - [p 45] [A] feature-dynamic-soname-discovery
@@ -2654,7 +2654,6 @@ _none_
 - [p 45] [A] feature-esp-hardware-flash-validation
 - [p 45] [O] feature-inline-nonleaf-and-branch-locals
 - [p 45] [A] feature-move-fillchar-intrinsics
-- [p 45] [B] feature-networking
 - [p 45] [N] feature-nilpy-exception-message
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [N] feature-nilpy-none-variant
@@ -2673,6 +2672,7 @@ _none_
 - [p 40] [A] bug-a-param-pointer-rule-divergence
 - [p 40] [A] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision
+- [p 40] [B] feature-ipv6-complete-surface
 - [p 40] [O] feature-opt-rtti-emit-on-use
 - [p 40] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 40] [T] feature-twatch-full-tier-coverage-age
@@ -2692,12 +2692,14 @@ _none_
 - [p 25] [A] feature-promo-launch-plan
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 20] [P] compat-pascal-method-impl-without-declaration
+- [p 20] [B] feature-networking
 - [p 20] [O] feature-opt-float-register-temporaries
 - [p 20] [T] feature-t-gcc-torture-runner
 - [p 15] [A] compat-pascal-binop-operand-eval-order
 - [p 15] [N] feature-nilpy-nested-def-as-value
 - [p 15] [P] feature-pascal-corpus-expansion
 - [p 12] [P] task-pascal-conformance-long-tail
+- [p 10] [B] feature-crtl-implement-libc-assumptions
 - [p 10] [A] idea-cross-namespace-ambiguity-warning
 - [p  5] [A] decide-nilpy-parallel-capture-semantics (unblocks 1)
 

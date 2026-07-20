@@ -1,5 +1,5 @@
 ---
-prio: 45  # auto
+prio: 20  # umbrella: milestones tracked by children, not a unit of work
 ---
 
 # Networking runtime
@@ -242,4 +242,17 @@ DNS deferred to `feature-dns-resolver-library`.
   AAAA lookups in the resolver. Dual-stack listeners (`IPV6_V6ONLY`) are
   untouched. So TCP client and server now speak IPv6; the rest of the library
   does not yet.
+
+## Umbrella status (2026-07-20, Track B sweep)
+
+This is a **strategy umbrella** spanning years of milestones (own syscall socket
+layer, PAL backends, Synapse compatibility via the `Posix.*` path, cross/ESP
+targets), not a unit of work that can be finished in one pass. Its named
+milestones are done — `net.pas`, `asyncnet`, the PAL, and per the 2026-07-19
+sweep note the Synapse milestone is "effectively achieved".
+
+Its concrete open remainder is now [[feature-ipv6-complete-surface]] (accept
+peer address, UDP v6, asyncnet v6, AAAA, dual-stack, scopeId). Prio dropped to
+20 to reflect that: rank the children, not the umbrella, so it stops presenting
+as available work while its actual tasks live elsewhere.
 

@@ -1,5 +1,5 @@
 ---
-prio: 45  # auto
+prio: 10  # standing collector: rank the batch you file, not this
 ---
 
 # crtl: implement the libc assumptions real-world C leans on
