@@ -4166,6 +4166,7 @@ function PyParseFor: Integer;
 var name, name2: AnsiString;
     enumMode: Boolean; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
     pair1, pair2, pair3, bodyNode, oneNode, limitNode, compSaved: Integer;
+    rngStep, cmpNode, incNode, whileNode: Integer;
 begin
   Next;
   if CurTok.Kind <> tkIdent then Error('Nil Python: expected loop variable after for');
@@ -4223,12 +4224,11 @@ begin
     ASTIVal[startNode] := 0;
     ASTTk[startNode] := Ord(tyInteger);
   end;
+  rngStep := -1;                       { -1 = no explicit step (i.e. step 1) }
   if Eat(tkComma) then
   begin
     PyParseBoolExpr;
-    stepNode := CurASTNode;
-    if (ASTKind[stepNode] <> AN_INT_LIT) or (ASTIVal[stepNode] <> 1) then
-      Error('Nil Python: range step other than 1 is not supported in v1');
+    rngStep := CurASTNode;
   end;
   Expect(tkRParen, ')');
   if PyCompTarget >= 0 then
@@ -4251,6 +4251,52 @@ begin
     Expect(tkIndent, 'indent');
     bodyNode := PyParseBlock;
     Expect(tkDedent, 'dedent');
+  end;
+
+  if rngStep >= 0 then
+  begin
+    { An explicit step -> a while-loop desugar (general, handles a negative
+      step): `i = start; while i </> stop: body; i = i + step`. The direction
+      of the guard depends on the step's SIGN, known for a literal step (every
+      censused use, e.g. range(n-1, -1, -1)); a non-literal step assumes
+      ascending. }
+    node := AllocNode(AN_ASSIGN);                { i = start }
+    ASTLeft[node] := PyMakeIdent(symIdx);
+    ASTRight[node] := startNode;
+    Result := PySeqAppend(-1, node);
+
+    cmpNode := AllocNode(AN_BINOP);              { i < stop  or  i > stop }
+    { a negative step (`-1` is AN_NEG over a literal; a bare negative literal is
+      AN_INT_LIT<0) counts DOWN, so the guard flips to `>` }
+    if (ASTKind[rngStep] = AN_NEG) or
+       ((ASTKind[rngStep] = AN_INT_LIT) and (ASTIVal[rngStep] < 0)) then
+      ASTIVal[cmpNode] := Ord(tkGt)
+    else
+      ASTIVal[cmpNode] := Ord(tkLt);
+    ASTLeft[cmpNode] := PyMakeIdent(symIdx);
+    ASTRight[cmpNode] := stopNode;
+    ASTTk[cmpNode] := Ord(tyBoolean);
+
+    incNode := AllocNode(AN_BINOP);              { i + step }
+    ASTIVal[incNode] := Ord(tkPlus);
+    ASTLeft[incNode] := PyMakeIdent(symIdx);
+    ASTRight[incNode] := rngStep;
+    ASTTk[incNode] := Ord(tyInteger);
+    node := AllocNode(AN_ASSIGN);                { i = i + step }
+    ASTLeft[node] := PyMakeIdent(symIdx);
+    ASTRight[node] := incNode;
+    { append the increment as the last statement of the body. The parsed block
+      is already an AN_SEQ chain; a comprehension body is a single node that
+      must be wrapped into a chain first, or PySeqAppend walks a non-sequence. }
+    if ASTKind[bodyNode] <> AN_SEQ then bodyNode := PySeqAppend(-1, bodyNode);
+    bodyNode := PySeqAppend(bodyNode, node);
+
+    whileNode := AllocNode(AN_WHILE);
+    ASTLeft[whileNode] := cmpNode;
+    ASTRight[whileNode] := bodyNode;
+    Result := PySeqAppend(Result, whileNode);
+    PyStmtAteBlock := True;
+    Exit;
   end;
 
   oneNode := AllocNode(AN_INT_LIT);

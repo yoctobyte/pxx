@@ -1,0 +1,10 @@
+for i in range(5, 0, -1):
+    print(i)
+for i in range(0, 10, 2):
+    print(i)
+r = []
+for i in range(3, -1, -1):
+    r.append(i)
+print(len(r))
+print(r[0])
+print(r[3])

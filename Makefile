@@ -198,8 +198,8 @@ test-nilpy: $(COMPILER)
 	grep -q "unexpected token" /tmp/test_nilpy_missing_param_annotation_fail.log
 	./$(COMPILER) test/test_nilpy_no_return_annotation.npy /tmp/test_nilpy_no_return_annotation26
 	test "$$(/tmp/test_nilpy_no_return_annotation26)" = "$$(printf '%b' '4\ng ran\n10\nn=5')"
-	! ./$(COMPILER) test/test_nilpy_range_step_fail.npy /tmp/test_nilpy_range_step_fail26 > /tmp/test_nilpy_range_step_fail.log 2>&1
-	grep -q "range step other than 1 is not supported in v1" /tmp/test_nilpy_range_step_fail.log
+	./$(COMPILER) test/test_nilpy_range_step.npy /tmp/test_nilpy_range_step26
+	test "$$(/tmp/test_nilpy_range_step26)" = "$$(printf '%b' '5\n4\n3\n2\n1\n0\n2\n4\n6\n8\n4\n3\n0')"
 	./$(COMPILER) test/test_nilpy_many_params.npy /tmp/test_nilpy_many_params26
 	test "$$(/tmp/test_nilpy_many_params26)" = "$$(printf '55\n65\n36\n204\n80')"
 	! ./$(COMPILER) test/test_nilpy_inconsistent_dedent_fail.npy /tmp/test_nilpy_inconsistent_dedent_fail26 > /tmp/test_nilpy_inconsistent_dedent_fail.log 2>&1
