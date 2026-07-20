@@ -3356,6 +3356,8 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
     vuExitUnboxed: Boolean;         { `return <variant>` unboxed to a scalar result }
     fdName: string;                 { NilPy floor-div/mod helper being called }
+    pvName: string;                 { NilPy variant-dispatch builtin }
+    pvTk: TTypeKind;
     fdTk: TTypeKind;
     intfCallCi, intfSelfSym, intfImtSym: Integer;   { single-pointer interface call }
     frameNode, slotNode, bpAddr, addrAddr, bpVal, selfVal: Integer;
@@ -4900,6 +4902,25 @@ begin
         string's HANDLE was multiplied as an integer and the result printed as
         a pointer (bug-a-nilpy-string-repeat-returns-a-pointer). Either operand
         order. }
+      { `v * n` with a VARIANT operand: a string payload REPEATS and a numeric
+        one MULTIPLIES, which cannot be decided here -- pymul_v dispatches on
+        the tag. (An earlier attempt guessed "variant operand of * is a string"
+        and was reverted; it miscompiled v * 2 on an int.) }
+      if PyProgramMode and (Integer(ASTIVal[node]) = Ord(tkStar)) and
+         ((IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant) or
+          (IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant)) then
+      begin
+        cpi := FindProc('pymul_v');
+        if cpi < 0 then Error('Nil Python: pymul_v (pylib) not loaded');
+        left := IRLowerCallArg(cpi, 0, ASTLeft[node], Procs[cpi].Params[0].IsRef);
+        first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyVariant));
+        right := IRLowerCallArg(cpi, 1, ASTRight[node], Procs[cpi].Params[1].IsRef);
+        last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyVariant));
+        IRB[first] := last;
+        ASTTk[node] := Ord(tyVariant);
+        Result := IRAppendCall(cpi, first, -1, Ord(tyVariant));
+        Exit;
+      end;
       if PyProgramMode and (Integer(ASTIVal[node]) = Ord(tkStar)) and
          (IRNodeIsPyStr(ASTLeft[node]) <> IRNodeIsPyStr(ASTRight[node])) then
       begin
@@ -5954,6 +5975,21 @@ begin
           Exit;
         end;
       end;
+      { Ord()/Chr() are INTRINSICS (AN_CALL with a negative ASTIVal), dispatched
+        before the proc-name hook further down, so a variant argument never
+        reached it: `ord(v)` read the variant's first 8 bytes and returned the
+        TAG -- ord("q") was 5, not 113. Silent. }
+      if PyProgramMode and (cpi = -Ord(tkOrd)) and (ASTLeft[node] <> -1) and
+         (IntToTypeKind(ASTTk[ASTLeft[ASTLeft[node]]]) = tyVariant) then
+      begin
+        procIdx := FindProc('pyord_v');
+        if procIdx < 0 then Error('Nil Python: pyord_v (pylib) not loaded');
+        value := IRVariantAddr(ASTLeft[ASTLeft[node]]);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyVariant));
+        ASTTk[node] := Ord(tyInt64);
+        Result := IRAppendCall(procIdx, argNode, -1, Ord(tyInt64));
+        Exit;
+      end;
       if cpi = -200 then
       begin
         { Nil Python int(). There was no lowering at all, so every argument fell
@@ -6069,6 +6105,34 @@ begin
 
         Result := IRAppendCall(procIdx, first, -1, Ord(Procs[procIdx].RetType));
         Exit;
+      end;
+      { `len(v)` on a VARIANT: len is an OVERLOAD SET (list/dict/bytes/str) and
+        a variant matches none, so resolution picked one and dereferenced e.g.
+        a string as a list -- a segfault on the most ordinary Python loop,
+        since a for-in variable is always a variant. pylen_v dispatches on the
+        tag (and, for VT_OBJECT, on the class via `is`).
+        (bug-a-len-of-variant-picks-wrong-overload) }
+      if PyProgramMode and (cpi >= 0) and
+         (ASTLeft[node] <> -1) and (ASTRight[ASTLeft[node]] = -1) and
+         (IntToTypeKind(ASTTk[ASTLeft[ASTLeft[node]]]) = tyVariant) then
+      begin
+        pvName := '';
+        pvTk := tyInt64;
+        if Procs[cpi].Name = 'len' then pvName := 'pylen_v'
+;
+        if pvName <> '' then
+        begin
+          procIdx := FindProc(pvName);
+          if procIdx < 0 then Error('Nil Python: ' + pvName + ' (pylib) not loaded');
+          { IRLowerCallArg, not IRVariantAddr: a helper that RETURNS a Variant
+            needs the call-argument marshalling (hidden destination), which is
+            what lets two such calls coexist in one statement. }
+          value := IRLowerCallArg(procIdx, 0, ASTLeft[ASTLeft[node]], Procs[procIdx].Params[0].IsRef);
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyVariant));
+          ASTTk[node] := Ord(pvTk);
+          Result := IRAppendCall(procIdx, argNode, -1, Ord(pvTk));
+          Exit;
+        end;
       end;
       pathIdx := 0;
       classIdx := -1;

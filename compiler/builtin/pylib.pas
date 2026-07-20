@@ -199,6 +199,14 @@ function pystr_repeat(const s: AnsiString; n: Int64): AnsiString;
   or object in a numeric context, and its truthiness makes ''/0/0.0/None
   false. ir.inc picks this set when PyProgramMode. }
 function pyvar_to_int(const v: Variant): Int64;
+{ Polymorphic operations over a VARIANT operand -- which a for-in loop
+  variable always is. Python dispatches these on the RUNTIME type, so they
+  cannot be resolved when lowering: `len(v)` picked an overload by static
+  type and dereferenced a string as a list, and `v * 2` cannot know whether
+  to repeat or multiply (bug-a-len-of-variant-picks-wrong-overload). }
+function pylen_v(const v: Variant): Int64;
+function pyord_v(const v: Variant): Int64;
+function pymul_v(const a: Variant; const b: Variant): Variant;
 function pyvar_to_float(const v: Variant): Double;
 function pyvar_to_bool(const v: Variant): Boolean;
 function pyvar_to_char(const v: Variant): Char;
@@ -1146,6 +1154,96 @@ begin
   begin
     PyTypeError(p^.VType, 'a str');
     Result := #0;
+  end;
+end;
+
+function pyord_v(const v: Variant): Int64;
+var
+  p: PPyVarRec;
+  t: AnsiString;
+begin
+  p := PPyVarRec(@v);
+  if p^.VType = 5 then
+    Result := p^.Payload and $FF
+  else if p^.VType = 6 then
+  begin
+    t := PPyAnsiString(@p^.Payload)^;
+    if Length(t) <> 1 then
+    begin
+      PyTypeError(p^.VType, 'a str of length 1');
+      Result := 0;
+    end
+    else
+      Result := Ord(t[1]);
+  end
+  else
+  begin
+    PyTypeError(p^.VType, 'a str of length 1');
+    Result := 0;
+  end;
+end;
+
+function pylen_v(const v: Variant): Int64;
+var
+  p: PPyVarRec;
+  o: TObject;
+begin
+  p := PPyVarRec(@v);
+  if p^.VType = 6 then
+    Result := Length(PPyAnsiString(@p^.Payload)^)
+  else if p^.VType = 5 then
+    Result := 1                    { a one-char literal is a str of length 1 }
+  else if p^.VType = 7 then
+  begin
+    o := TObject(Pointer(p^.Payload));
+    if o is TPyList then Result := TPyList(o).count
+    else if o is TPyDict then Result := TPyDict(o).count
+    else if o is TPyBytes then Result := TPyBytes(o).count
+    else
+    begin
+      PyTypeError(p^.VType, 'an object with a length');
+      Result := 0;
+    end;
+  end
+  else
+  begin
+    PyTypeError(p^.VType, 'a str, list, dict or bytes');
+    Result := 0;
+  end;
+end;
+
+function pymul_v(const a: Variant; const b: Variant): Variant;
+{ `v * n`. A STRING payload repeats, a numeric one multiplies -- the whole
+  reason this cannot be decided when lowering. Either operand order. }
+var
+  pa, pb, sp, np, r: PPyVarRec;
+  txt: AnsiString;
+begin
+  pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
+  r^.VType := 0; r^.Payload := 0;
+  sp := nil; np := nil;
+  if (pa^.VType = 6) or (pa^.VType = 5) then begin sp := pa; np := pb; end
+  else if (pb^.VType = 6) or (pb^.VType = 5) then begin sp := pb; np := pa; end;
+  if sp <> nil then
+  begin
+    if (np^.VType <> 1) and (np^.VType <> 2) and (np^.VType <> 4) then
+      PyTypeError(np^.VType, 'an integer to repeat a str by');
+    if sp^.VType = 5 then txt := pystr_ofchar(Chr(sp^.Payload and $FF))
+    else txt := PPyAnsiString(@sp^.Payload)^;
+    txt := pystr_repeat(txt, np^.Payload);
+    r^.VType := 6;
+    PPyAnsiString(@r^.Payload)^ := txt;
+    Exit;
+  end;
+  if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
+  begin
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := PyVarAsFloat(pa) * PyVarAsFloat(pb);
+  end
+  else
+  begin
+    r^.VType := 2;
+    r^.Payload := pa^.Payload * pb^.Payload;
   end;
 end;
 

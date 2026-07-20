@@ -1,0 +1,20 @@
+strs = ["ab", "", "xyz", "q"]
+for s in strs:
+    print(len(s), s * 2, 2 * s)
+nums = [3, -2, 0]
+for n in nums:
+    print(n * 3, 3 * n)
+flts = [1.5, -0.5]
+for f in flts:
+    print(f * 2, 2 * f)
+chars = ["a", "z"]
+for c in chars:
+    print(ord(c), len(c), c * 3)
+inner = [1, 2, 3]
+box = [inner]
+for it in box:
+    print(len(it))
+d = {"k": 1, "j": 2}
+db = [d]
+for it in db:
+    print(len(it))

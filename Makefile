@@ -264,6 +264,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_variant_operator_sweep26)" = "$$(printf '7 -7 8 6 14\n-7 7 -6 -8 -14\n0 0 1 -1 0\n3 1 3.5\n-4 1 -3.5\n0 0 0.0\n2.5 -2.5 3.5 5.0\n-2.5 2.5 -1.5 -5.0\nab ab!\n !\nTrue False True\nFalse True False\n2 3\nTrue False\nTrue False\n1 1.5 z True\n5 5 5 -5\nTrue False True\n1 2 1.5 2.5\n97 b\nTrue False True False True False\nFalse True')"
 	./$(COMPILER) test/test_nilpy_method_str_return.npy /tmp/test_nilpy_method_str_return26
 	test "$$(/tmp/test_nilpy_method_str_return26)" = "$$(printf 'alpha 1 True 2.5\nalpha! alpha literal\nbeta -2 False fallback\nalpha alpha! 5 6\nalphaalpha!\nnc')"
+	./$(COMPILER) test/test_nilpy_variant_polymorphic_builtins.npy /tmp/test_nilpy_variant_polymorphic_builtins26
+	test "$$(/tmp/test_nilpy_variant_polymorphic_builtins26)" = "$$(printf '2 abab abab\n0  \n3 xyzxyz xyzxyz\n1 qq qq\n9 9\n-6 -6\n0 0\n3.0 3.0\n-1.0 -1.0\n97 1 aaa\n122 1 zzz\n3\n2')"
 	./$(COMPILER) test/test_nilpy_variant_unbox.npy /tmp/test_nilpy_variant_unbox26
 	test "$$(/tmp/test_nilpy_variant_unbox26)" = "$$(printf '7 -3 0\n2.5 -0.5\nab z\nTrue False\n8 6 14 3 1 -7\n4 -21\n3.5 5.0\nabc\nTrue True True\n4\nabz\n2.0')"
 	./$(COMPILER) test/test_nilpy_dataclass.npy /tmp/test_nilpy_dataclass26
