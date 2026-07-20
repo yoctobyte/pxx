@@ -402,18 +402,18 @@ begin
     + c` sees both; without this the pair fell through to the variant rule and
     the local was scalar-loaded as a tagged value.
 
-    tyString wins, deliberately. The token scanner typed EVERY string
-    expression tyString by construction, so that is the storage model NilPy
-    locals have always had and the one the RTL paths are exercised against;
-    picking tyAnsiString here instead silently converted every inferred string
-    local to a managed one and produced heap corruption in test_nilpy_str_param
-    (a `-> str` def returning a char, followed by a def with managed locals).
-    Moving NilPy to managed strings is its own ticket, not a side effect of
-    changing where the type comes from. }
+    tyAnsiString (MANAGED) wins. tyString is the frozen, length-prefixed kind
+    with a 255-character ceiling, so an inferred local silently STOPPED GROWING
+    at 255 while a str FIELD — mapped to tyAnsiString explicitly — did not:
+    the same expression meant two different things depending on where its
+    result was stored, and only one of them was Python
+    (bug-nilpy-string-local-truncates-at-255). The earlier attempt at this
+    corrupted the heap through the scalar->Variant boxing bug
+    (bug-a-str-boxed-into-variant-does-not-own-bytes), which is now fixed. }
   if ((a = tyString) or (a = tyAnsiString)) and
      ((b = tyString) or (b = tyAnsiString)) then
   begin
-    Result := tyString;
+    Result := tyAnsiString;
     Exit;
   end;
   if PyVariantScalar(a) and PyVariantScalar(b) then
@@ -2497,6 +2497,11 @@ begin
       symIdx := FindSym(name);
       if symIdx < 0 then
       begin
+        { `s: str` means an UNBOUNDED Python string, so the local is managed —
+          tyString is the frozen kind and truncated at 255 characters, silently
+          (bug-nilpy-string-local-truncates-at-255). Class FIELDS have mapped
+          str this way all along; locals now agree with them. }
+        if tk = tyString then tk := tyAnsiString;
         symIdx := AllocVar(name, tk);
         if (tk = tyClass) and (ci >= 0) then
           Syms[symIdx].RecName := REC_UCLASS_BASE + ci;
@@ -2537,6 +2542,8 @@ begin
         ci := PyFindModuleConstraint(name);
         if ci >= 0 then tk := PyModuleLocals[ci].TypeKind;
       end;
+      { see the annotated branch above: a NilPy string variable is managed }
+      if tk = tyString then tk := tyAnsiString;
       symIdx := AllocVar(name, tk);
     end;
     if (ASTKind[rhsNode] = AN_CALL) and (ASTIVal[rhsNode] = -Ord(tkGetMem)) then
@@ -2938,6 +2945,11 @@ begin
   PyHdrRetCi := -1;
   if PyHdrIsProc then begin PyHdrRetType := tyInteger; Next; end
   else begin PyHdrRetType := PyParseType; PyHdrRetCi := PyLastTypeCi; end;
+  { `-> str` is an unbounded Python string, so the Result var is MANAGED — the
+    method path has mapped it this way all along, and a def returning a string
+    built past 255 characters truncated silently without it
+    (bug-nilpy-string-local-truncates-at-255). }
+  if PyHdrRetType = tyString then PyHdrRetType := tyAnsiString;
   Expect(tkColon, ':');
   Expect(tkNewline, 'newline');
   Expect(tkIndent, 'indent');
@@ -3085,6 +3097,10 @@ begin
   EmitAggregateDestStash(procIdx);
   PyEmitParamSpills(procIdx, nparams);
   PyInitVariantLocals(Procs[procIdx].ScopeBase);
+  { Managed locals must start nil, exactly as in the Pascal routine body — a
+    NilPy string local is a MANAGED AnsiString now, and without this the first
+    assignment released stale stack bytes (`decq -0x10(%rax)` on garbage). }
+  EmitManagedLocalsZeroInit(Procs[procIdx].ScopeBase);
   bodyNode := PyParseBlock;
   Expect(tkDedent, 'dedent');
   CompileAST(bodyNode);
@@ -3758,6 +3774,10 @@ begin
   EmitAggregateDestStash(procIdx);
   PyEmitParamSpills(procIdx, nparams);
   PyInitVariantLocals(Procs[procIdx].ScopeBase);
+  { Managed locals must start nil, exactly as in the Pascal routine body — a
+    NilPy string local is a MANAGED AnsiString now, and without this the first
+    assignment released stale stack bytes (`decq -0x10(%rax)` on garbage). }
+  EmitManagedLocalsZeroInit(Procs[procIdx].ScopeBase);
   bodyNode := PyParseBlock; Expect(tkDedent, 'dedent');
   bodyNode := PyPrependResultZero(procIdx, bodyNode);
   CompileAST(bodyNode); EmitProcEpilog(Procs[procIdx].RetSymIdx); PatchProcPrologue(patchPos, FrameSize);

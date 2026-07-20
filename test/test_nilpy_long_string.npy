@@ -1,0 +1,52 @@
+# A Python string is unbounded. An inferred NilPy string local used to be
+# tyString — the FROZEN, length-prefixed kind, capped at 255 characters — so a
+# string built in a loop silently stopped growing at 255 while the same
+# expression stored in a class FIELD (mapped to a managed string all along) did
+# not (bug-nilpy-string-local-truncates-at-255).
+# Output must match CPython running this same file.
+
+def build(n: int) -> str:
+    s = ""
+    i = 0
+    while i < n:
+        s = s + "x"
+        i = i + 1
+    return s
+
+class Buf:
+    def __init__(self) -> None:
+        self.buf = ""
+    def add(self, c: str) -> int:
+        self.buf = self.buf + c
+        return len(self.buf)
+
+# function local
+print(len(build(300)))
+print(len(build(1000)))
+print(build(300)[299])
+
+# module local, inferred and annotated
+m = ""
+k = 0
+while k < 400:
+    m = m + "y"
+    k = k + 1
+print(len(m), m[399])
+
+a: str = ""
+j = 0
+while j < 300:
+    a = a + "z"
+    j = j + 1
+print(len(a))
+
+# field, which was already unbounded — must stay so
+b = Buf()
+p = 0
+while p < 300:
+    b.add("q")
+    p = p + 1
+print(len(b.buf))
+
+# short strings still behave
+print(len(build(0)), len(build(1)), build(3))

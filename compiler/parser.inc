@@ -7021,6 +7021,56 @@ procedure ParseFactor; forward;
   suffix uniformly — this body has 67 Exit points, so a suffix loop written at
   its tail would silently miss most of them (it missed str(t).upper(), the exact
   uforth shape). }
+{ Zero every managed local in [fromSym, SymCount) — see the zero-init contract
+  above EmitZeroFrameSlot. Extracted from the Pascal routine-body path so the
+  NilPy def/method paths get the SAME guarantee: they build their locals through
+  their own pre-pass and never ran this loop, which was invisible while an
+  inferred NilPy string local was a FROZEN string (nothing to release) and
+  became a release of stale stack bytes the moment those locals turned managed
+  (bug-nilpy-string-local-truncates-at-255). }
+procedure EmitManagedLocalsZeroInit(fromSym: Integer);
+var i, zeroBytes: Integer;
+begin
+  { Managed locals (dynamic arrays, AnsiStrings, and records/arrays containing
+    them) hold managed pointer slots. Zero their full extent before the body so
+    a first SetLength / assignment sees nil rather than stale stack bytes — and
+    so an ARC-correct whole-record copy can safely release the (nil) old fields. }
+  for i := fromSym to SymCount - 1 do
+    if Syms[i].Kind = skLocal then
+    begin
+      { Fixed array whose elements are dynamic-array handles (`array[..] of TA`):
+        nil every pointer-sized slot so SetLength on an element does not release
+        a garbage "old" handle. }
+      zeroBytes := 0;
+      if Syms[i].IsArray and (Syms[i].ArrLen <> -1) and (SymElemDynDepth[i] > 0) then
+        zeroBytes := Syms[i].ArrLen * TARGET_PTR_SIZE
+      else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+        zeroBytes := TARGET_PTR_SIZE                          { dyn-array handle }
+      else if Syms[i].TypeKind = tyAnsiString then
+      begin
+        if Syms[i].IsArray then
+          zeroBytes := Syms[i].ArrLen * TARGET_PTR_SIZE       { static array of AnsiString }
+        else
+          zeroBytes := TARGET_PTR_SIZE;                       { scalar AnsiString }
+      end
+      else if Syms[i].TypeKind = tyVariant then
+        zeroBytes := TypeSize(tyVariant)
+      else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+              RecordHasManagedFields(Syms[i].RecName) then
+        zeroBytes := RecSize(Syms[i].RecName)
+      else if (Syms[i].TypeKind = tyRecord) and Syms[i].IsArray and
+              RecordHasManagedFields(Syms[i].ElemRecName) then
+        zeroBytes := Syms[i].ArrLen * RecSize(Syms[i].ElemRecName)
+      else if SymIsComInterface(i) then
+        { COM/ARC interface fat pointer: must start nil so the ARC release at
+          first overwrite / scope exit sees an empty slot, not stale stack bytes
+          (a garbage IMT would dispatch _Release into nowhere). }
+        zeroBytes := RecSize(Syms[i].RecName);
+      { One owner for the guarantee, every target, every size. }
+      EmitZeroFrameSlot(Syms[i].Offset, zeroBytes);
+    end;
+end;
+
 procedure ParseFactorCore;
 var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
@@ -23478,44 +23528,7 @@ begin
       tkType:  ParseTypeSection;
       tkProcedure, tkFunction: ParseNestedRoutine;
     end;
-  { Managed locals (dynamic arrays, AnsiStrings, and records/arrays containing
-    them) hold managed pointer slots. Zero their full extent before the body so
-    a first SetLength / assignment sees nil rather than stale stack bytes — and
-    so an ARC-correct whole-record copy can safely release the (nil) old fields. }
-  for i := savedSC to SymCount - 1 do
-    if Syms[i].Kind = skLocal then
-    begin
-      { Fixed array whose elements are dynamic-array handles (`array[..] of TA`):
-        nil every pointer-sized slot so SetLength on an element does not release
-        a garbage "old" handle. }
-      zeroBytes := 0;
-      if Syms[i].IsArray and (Syms[i].ArrLen <> -1) and (SymElemDynDepth[i] > 0) then
-        zeroBytes := Syms[i].ArrLen * TARGET_PTR_SIZE
-      else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
-        zeroBytes := TARGET_PTR_SIZE                          { dyn-array handle }
-      else if Syms[i].TypeKind = tyAnsiString then
-      begin
-        if Syms[i].IsArray then
-          zeroBytes := Syms[i].ArrLen * TARGET_PTR_SIZE       { static array of AnsiString }
-        else
-          zeroBytes := TARGET_PTR_SIZE;                       { scalar AnsiString }
-      end
-      else if Syms[i].TypeKind = tyVariant then
-        zeroBytes := TypeSize(tyVariant)
-      else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-              RecordHasManagedFields(Syms[i].RecName) then
-        zeroBytes := RecSize(Syms[i].RecName)
-      else if (Syms[i].TypeKind = tyRecord) and Syms[i].IsArray and
-              RecordHasManagedFields(Syms[i].ElemRecName) then
-        zeroBytes := Syms[i].ArrLen * RecSize(Syms[i].ElemRecName)
-      else if SymIsComInterface(i) then
-        { COM/ARC interface fat pointer: must start nil so the ARC release at
-          first overwrite / scope exit sees an empty slot, not stale stack bytes
-          (a garbage IMT would dispatch _Release into nowhere). }
-        zeroBytes := RecSize(Syms[i].RecName);
-      { One owner for the guarantee, every target, every size. }
-      EmitZeroFrameSlot(Syms[i].Offset, zeroBytes);
-    end;
+  EmitManagedLocalsZeroInit(savedSC);
   { Routine-local typed constants: now that storage is allocated and managed
     locals are nil'd, emit the recorded initializer assignments into the
     prologue (re-run on each call). }
