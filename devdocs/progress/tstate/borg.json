@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-19T10:30:04Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "36af35fbb6bbfdba02db26ed0c53466a9a01e75d",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-07-19T10:35:17Z",
    "fixed": [],
    "new_red": [],
@@ -3362,6 +3354,16 @@
    "sha": "c110ad2624372063b84d032e31880c14df64b1e2",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-20T09:10:31Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_interface_mainbody_ascast_temp.pas"
+   ],
+   "sha": "67e8862259aae0c817dbc60dc12507c0958631ab",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -4267,7 +4269,7 @@
   "test-core#src:test/test_interface_com_default.pas": "pass",
   "test-core#src:test/test_interface_com_value_param.pas": "pass",
   "test-core#src:test/test_interface_constref_cdecl_b249.pas": "pass",
-  "test-core#src:test/test_interface_mainbody_ascast_temp.pas": "pass",
+  "test-core#src:test/test_interface_mainbody_ascast_temp.pas": "fail",
   "test-core#src:test/test_interface_single_pointer_abi_b337.pas": "pass",
   "test-core#src:test/test_interfaces.pas": "pass",
   "test-core#src:test/test_interfaces_as.pas": "pass",
@@ -4903,11 +4905,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-20T08:59:57Z",
-  "sha": "c110ad2624372063b84d032e31880c14df64b1e2",
+  "date": "2026-07-20T09:10:31Z",
+  "sha": "67e8862259aae0c817dbc60dc12507c0958631ab",
   "tier": "native",
-  "verdict": "GREEN",
-  "wall": 379.2
+  "verdict": "RED",
+  "wall": 386.9
  },
  "last_bench": {
   "conf_rows": 550,
@@ -4948,6 +4950,22 @@
     "c110ad2624372063b84d032e31880c14df64b1e2"
    ],
    "src": "compiler/compiler.pas"
+  },
+  {
+   "bad": "67e8862259aae0c817dbc60dc12507c0958631ab",
+   "good": "c110ad2624372063b84d032e31880c14df64b1e2",
+   "job": "test-core#src:test/test_interface_mainbody_ascast_temp.pas",
+   "name": "test-core#120",
+   "opened": "2026-07-20T09:10:31Z",
+   "range": [
+    "b50c9f035cfbf5b697c9cbcd60b7606ce4ec1231",
+    "7ad512493fe76aa3550f378e21b2fc9b24e2552a",
+    "220adb1c29d77b74cb026c60ecbed6721bafac30",
+    "b8a833bcd7cc9fe1486cbcc0c4290b6809fc397b",
+    "6316247efb2c5967c32c8c2f7b4917a3ec479aed",
+    "67e8862259aae0c817dbc60dc12507c0958631ab"
+   ],
+   "src": "test/test_interface_mainbody_ascast_temp.pas"
   }
  ]
 }
