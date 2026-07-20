@@ -1,5 +1,5 @@
 ---
-track: N
+track: A
 prio: 75
 type: bug
 ---
@@ -25,6 +25,20 @@ the sign of the DIVISOR, with the identity `a == (a // b) * b + (a % b)`
 holding for every sign combination. Pascal's `div` truncates toward zero and
 its `mod` takes the sign of the DIVIDEND. NilPy lowers straight onto the
 Pascal pair.
+
+## Why Track A, not N
+
+Checked before filing the fix: `//` lexes to `tkDiv` and `%` to Pascal's
+`mod` in `pylexer.inc` (Track N), but the ARITHMETIC layer is the shared
+parser's `ParseExpr` — pyparser.inc owns only the bitwise and boolean layers
+above it. So the node is built, and its semantics chosen, outside Track N's
+files. The fix belongs in the shared lowering, gated on `PyExprMode` the way
+other NilPy-specific behaviour already is.
+
+A source-level rewrite in the lexer (the trick f-strings use) is NOT a way
+around this: finding the two operands of a binary operator in raw text means
+parsing the expression, which is the duplication that keeps costing this
+frontend.
 
 ## Shape
 

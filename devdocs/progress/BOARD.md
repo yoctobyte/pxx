@@ -8,10 +8,10 @@ lives in git, not in a timestamp._
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-nilpy-floordiv-and-modulo-wrong-for-negatives | A | 75 | bug | NilPy: `//` and `%` are WRONG for negative operands, silently | — |
 | bug-a-nilpy-int-of-string-returns-a-pointer | A | 80 | bug | NilPy `int("42")` returns a POINTER, silently — and `float()` does not exist | — |
 | bug-a-nilpy-variant-element-not-usable-as-scalar | A | 85 | bug | NilPy: a list/dict ELEMENT cannot be used as a scalar — silent garbage or IR_UNSUPPORTED | — |
 | bug-a-str-boxed-into-variant-does-not-own-bytes | A | 80 | bug | A `str` boxed into a Variant does not OWN its bytes — silent wrong values | — |
-| bug-nilpy-floordiv-and-modulo-wrong-for-negatives | N | 75 | bug | NilPy: `//` and `%` are WRONG for negative operands, silently | — |
 | bug-nilpy-method-returning-str-garbage | N | 75 | bug | NilPy: a method returning `str` returns garbage | — |
 
 ## working (2)
@@ -2537,7 +2537,7 @@ _none_
 - [urgent p 85] [A] bug-a-nilpy-variant-element-not-usable-as-scalar
 - [urgent p 80] [A] bug-a-nilpy-int-of-string-returns-a-pointer
 - [urgent p 80] [A] bug-a-str-boxed-into-variant-does-not-own-bytes
-- [urgent p 75] [N] bug-nilpy-floordiv-and-modulo-wrong-for-negatives
+- [urgent p 75] [A] bug-a-nilpy-floordiv-and-modulo-wrong-for-negatives
 - [urgent p 75] [N] bug-nilpy-method-returning-str-garbage
 - [p 70] [N] feature-nilpy-nested-defs
 - [p 70] [T] regression-optdiff-shard0-6
