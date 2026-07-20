@@ -46,3 +46,6 @@ immediately.
 
 `make test` + self-host byte-identical, `test-nilpy` green, the repro matching
 CPython, plus the dict variant (`for k in d: d[k].method()`).
+
+## Log
+- 2026-07-20 — resolved, commit 31eff39b.
