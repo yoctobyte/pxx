@@ -105,3 +105,39 @@ concurrent memory pressure exists even though nothing is OOM-killing.
 up should start there rather than re-deriving the above. Splitting the
 stress tests into their own job (main suggestion) very likely makes the
 question moot, since the job would stop being a 6.8 GB / 178s outlier.
+
+## ROOT CAUSE FOUND — it is a compiler bug, not "big by design" (2026-07-20)
+
+`bug-a-token-growth-test-is-slow-and-times-out` measured the token-growth
+test's scaling curve and found **peak RSS quadratic in PROCEDURE COUNT**:
+
+| n procs | wall | peak RSS |
+| --- | --- | --- |
+| 1500 | 0.58s | 103 MB |
+| 3000 | 2.55s | 436 MB |
+| 6000 | 13.0s | 1743 MB |
+| 12000 | 67.6s | 4484 MB |
+
+The recipe's token-growth step uses **12000 procedures** — so ~4.5 GB and ~68s
+of this job's ~6.8 GB / ~178s is that one step, and it is a genuine defect
+(~100 bytes allocated per already-registered proc, per body compiled), not the
+test being legitimately large.
+
+**This supersedes the framing above.** The chain is:
+
+```
+quadratic per-body allocation (compiler bug)
+  -> 12000-proc token-growth step costs 4.5 GB / 68s
+  -> the whole job costs 6.8 GB / 178s (est_mem 9.7 GB with the 1.4x factor)
+  -> cannot pass admission on a 16 GB box -> 90s starvation tax every run
+  -> forced through serially, killed before finishing -> intermittent RED
+```
+
+So fixing `bug-a-token-growth-test-is-slow-and-times-out` very likely dissolves
+this ticket entirely: the flake, the per-run starvation tax, and the
+unexplained SIGTERM together. **Fix that first; splitting the job is the
+fallback if the quadratic behaviour turns out to be hard to remove.**
+
+Splitting still has independent merit (a job should not be named after an
+unrelated 36-line test — see the `extract_src` note above), but it is no longer
+the primary recommendation.
