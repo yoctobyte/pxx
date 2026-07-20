@@ -13,10 +13,11 @@ lives in git, not in a timestamp._
 | bug-a-str-boxed-into-variant-does-not-own-bytes | A | 80 | bug | A `str` boxed into a Variant does not OWN its bytes — silent wrong values | — |
 | bug-nilpy-method-returning-str-garbage | N | 75 | bug | NilPy: a method returning `str` returns garbage | — |
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-nilpy-in-on-a-string-segfaults | N | 70 | bug | NilPy: `sub in s` on a STRING segfaults | — |
 | feature-nilpy-str-methods | N | 55 | feature | NilPy: string methods (.upper/.lower/.strip/.split/.join/.startswith...) | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
