@@ -264,6 +264,13 @@ appears as a literal.
 This strengthens "land this first": the cliff is shallow enough to hit in
 ordinary programs, not just in bignum-flavoured ones.
 
+### Stage 2 split out
+
+Stage 2 (storage, checked arithmetic, Write) is now its own ticket:
+[[feature-a-promoint-stage2-storage-arith]], prio 85. This umbrella stays open
+for stages 3-5 (promotion to heap bignum, check elision, variant integration,
+Pascal dialect exposure).
+
 ### Next step — stage 2
 
 Storage and arithmetic. Order that keeps every increment green:

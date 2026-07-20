@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-a-promotable-int | A | 85 | feature | Promotable int — a new arbitrary-precision integer type (fixnum + heap bignum) | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
 ## unfinished (0)
@@ -26,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (135)
+## backlog (137)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -55,6 +54,8 @@ _none_
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
+| feature-a-promoint-stage2-storage-arith | A | 85 | feature | Promotable int stage 2 — storage, checked arithmetic, Write | — |
+| feature-a-promotable-int | A | 85 | feature | Promotable int — a new arbitrary-precision integer type (fixnum + heap bignum) | — |
 | feature-a-typeref-handle | A | 65 | feature | TypeRef: one type handle, carried — not ten parallel tuples | — |
 | feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-esp-conformance-coverage | C | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
@@ -2558,6 +2559,8 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 85] [A] feature-a-promoint-stage2-storage-arith
+- [p 85] [A] feature-a-promotable-int
 - [p 70] [T] regression-cascade-3d46e52fc733
 - [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
 - [p 65] [A] feature-a-typeref-handle
