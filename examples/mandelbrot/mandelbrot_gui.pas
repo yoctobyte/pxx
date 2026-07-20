@@ -49,7 +49,7 @@ program MandelbrotGUI;
 {$define PXX_MANAGED_STRING}
 
 uses gtk3, controls, stdctrls, forms, extctrls, graphics, math, sysutils, baseunix,
-     palparallel;
+     palparallel, mandelkernel;
 
 const
   INIT_W    = 900;
@@ -62,26 +62,6 @@ const
 type
   TPixels = array of Integer;
 
-{ ---------------- kernel ---------------- }
-
-{ Portable Double escape-time loop — the same recurrence as mandelbrot.pas. }
-function EscapeCount(cre, cim: Double; max_it: Integer): Integer;
-var zre, zim, zr2, zi2, tmp: Double; i: Integer;
-begin
-  zre := 0.0; zim := 0.0; zr2 := 0.0; zi2 := 0.0;
-  i := 0;
-  while (i < max_it) and (zr2 + zi2 <= 4.0) do
-  begin
-    tmp := zr2 - zi2 + cre;
-    zim := 2.0 * zre * zim + cim;
-    zre := tmp;
-    zr2 := zre * zre;
-    zi2 := zim * zim;
-    i := i + 1;
-  end;
-  EscapeCount := i;
-end;
-
 { ---------------- render state (read by workers, see the header note) -------- }
 
 var
@@ -89,32 +69,49 @@ var
   gW, gH, gMaxIt, gStep: Integer;
   gCx, gCy, gSpanRe, gSpanIm: Double;
 
-{ One tile-row of the frame: computes every gStep-th pixel of row `y0` and
-  replicates it over the gStep x gStep block, so a coarse pass costs
-  1/gStep^2 of a full one. Writes only rows [y0 .. y0+gStep-1]. }
+{ One tile-row of the frame. The pixels of a row are handed to mandelkernel as a
+  RUN, not one at a time: that is what lets the SSE2/AVX rungs keep 2 or 4 pixels
+  in flight per iteration.
+
+  The samples land in the FRONT of the row's own slice of fb and are then
+  expanded in place, right to left (sample sx moves out to sx*gStep, which is
+  never left of where it started, so nothing is overwritten before it is read).
+  No temporary buffer: a per-row allocation here would put every worker through
+  the one global heap spinlock, and on this shape that made the parallel render
+  slower than the serial one — see feature-opt-heap-per-thread-cache.
+
+  Writes only rows [y0 .. y0+gStep-1], so workers never overlap. }
 procedure RenderTileRow(band: Integer);
-var y0, y, x, x0, n, dx, dy: Integer; cre, cim: Double;
+var y0, y, x, sx, n, dx, dy, samples, base: Integer; cim: Double;
 begin
   y0 := band * gStep;
   if y0 >= gH then Exit;
+  base := y0 * gW;
   cim := gCy + ((y0 / (gH - 1)) - 0.5) * gSpanIm;
-  x0 := 0;
-  while x0 < gW do
+
+  samples := (gW + gStep - 1) div gStep;
+  EscapeRow(fb, base, samples,
+            gCx - 0.5 * gSpanRe,                 { first sample's real part }
+            (gSpanRe / (gW - 1)) * gStep,        { step between samples }
+            cim, gMaxIt);
+
+  { expand the samples across the row, right to left }
+  for sx := samples - 1 downto 0 do
   begin
-    cre := gCx + ((x0 / (gW - 1)) - 0.5) * gSpanRe;
-    n := EscapeCount(cre, cim, gMaxIt);
-    for dy := 0 to gStep - 1 do
+    n := fb[base + sx];
+    for dx := gStep - 1 downto 0 do
     begin
-      y := y0 + dy;
-      if y >= gH then Break;
-      for dx := 0 to gStep - 1 do
-      begin
-        x := x0 + dx;
-        if x >= gW then Break;
-        fb[y * gW + x] := n;
-      end;
+      x := sx * gStep + dx;
+      if x < gW then fb[base + x] := n;
     end;
-    x0 := x0 + gStep;
+  end;
+
+  { replicate the finished row down over the rest of its block }
+  for dy := 1 to gStep - 1 do
+  begin
+    y := y0 + dy;
+    if y >= gH then Break;
+    for x := 0 to gW - 1 do fb[y * gW + x] := fb[base + x];
   end;
 end;
 
@@ -260,6 +257,7 @@ begin
     '   it ' + IntToStr(FMaxIt) +
     '   1/' + IntToStr(FStep) + ' res' +
     '   ' + IntToStr(PXXParForWorkers) + ' workers' +
+    '   ' + ISAName(ActiveISA) +
     '   ' + IntToStr(FLastUs div 1000) + ' ms (' + IntToStr(fps) + ' fps)' +
     '   [drag pan, click zoom, r reset, q quit]';
 end;
@@ -410,6 +408,7 @@ end;
 procedure RunSmoke;
 var t0, usPar, usSer, sumPar, sumSer: Int64; i: Integer;
 begin
+  InitMandelKernel;
   BuildPalette;
   SetLength(fb, SMOKE_W * SMOKE_H);
   gW := SMOKE_W; gH := SMOKE_H; gMaxIt := MAXIT_DEF; gStep := 1;
@@ -431,6 +430,8 @@ begin
   if usSer <= 0 then usSer := 1;
 
   writeln('mandelbrot_gui smoke  ', SMOKE_W, 'x', SMOKE_H, '  it=', MAXIT_DEF);
+  writeln('  cpu can do : ', ISAName(DetectISA));
+  writeln('  build uses : ', ISAName(ActiveISA));
   writeln('  workers    : ', PXXParForWorkers);
   writeln('  serial     : ', usSer, ' us');
   writeln('  parallel   : ', usPar, ' us   speedup ', (usSer * 100) div usPar, ' /100x');
@@ -462,6 +463,7 @@ begin
     else begin writeln('usage: mandelbrot_gui [--smoke | --gui-smoke]'); Halt(2); end;
   end;
 
+  InitMandelKernel;
   BuildPalette;
 
   Application.Initialize;

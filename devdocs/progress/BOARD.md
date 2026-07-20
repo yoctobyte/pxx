@@ -25,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (132)
+## backlog (133)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -36,6 +36,7 @@ _none_
 | bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
+| bug-file-io-silently-fails-in-unit-init | B | 55 | bug | Text file I/O silently fails in a unit's initialization section | — |
 | bug-parallel-for-captured-boolean-loses-type | A | 50 | bug | Captured Boolean loses its type inside a parallel-for body (overload resolution fails) | — |
 | bug-parallel-for-captured-dynarray-var-arg-segfault | A | 60 | bug | Passing a captured dynamic array by `var` from a parallel-for body segfaults | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
@@ -76,7 +77,7 @@ _none_
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-float-exception-mask-control | A | 60 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
 | feature-ilja-tui | B | 45 | feature | Ilja — TUI (ANSI) face | — |
-| feature-inline-asm-xmm-operands | A | 45 | feature | Pascal inline asm cannot name XMM registers (no float asm kernels) | — |
+| feature-inline-asm-xmm-operands | A | 55 | feature | Inline asm cannot express float or vector code (no xmm operands, no packed SSE, no VEX, no cpuid) | — |
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-lib-pyexec | B | 45 | feature | lib pyexec: a real exec() for Python-subset source (library, two engines) | — |
@@ -2594,8 +2595,10 @@ _none_
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
+- [p 55] [B] bug-file-io-silently-fails-in-unit-init
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
+- [p 55] [A] feature-inline-asm-xmm-operands
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
 - [p 55] [N] feature-nilpy-bytes-and-slices
 - [p 55] [N] feature-nilpy-corpus-uforth
@@ -2641,7 +2644,6 @@ _none_
 - [p 45] [A] feature-emission-size-dce
 - [p 45] [A] feature-esp-hardware-flash-validation
 - [p 45] [B] feature-ilja-tui
-- [p 45] [A] feature-inline-asm-xmm-operands
 - [p 45] [O] feature-inline-nonleaf-and-branch-locals
 - [p 45] [B] feature-lib-pyexec
 - [p 45] [B] feature-move-fillchar-intrinsics

@@ -1,87 +1,118 @@
 ---
-prio: 45  # auto — blocks every float asm kernel; the encoder work is already done, only the operand parser is missing
+prio: 55  # auto — blocks all float and vector asm; gates the per-ISA optimization story
 track: A
 ---
 
-# Pascal inline asm cannot name XMM registers (no float asm kernels)
+# Inline asm cannot express float or vector code (no xmm operands, no packed SSE, no VEX, no cpuid)
 
-- **Type:** feature — **Track A** (`compiler/asmfront.inc`; the asm frontend).
-- **Status:** backlog — filed 2026-07-20.
-- **Found by:** Track E, building
-  [[feature-demo-mandelbrot-asm-autozoom]] — the ticket asks for an SSE2
-  double-precision escape kernel in inline asm; it cannot be written today.
+- **Type:** feature — **Track A** (`compiler/asmfront.inc`, `compiler/asmtext.inc`,
+  `compiler/asmtext_386.inc`; the asm frontend).
+- **Status:** backlog — filed 2026-07-20, **rescoped the same day** (the first
+  version of this ticket said "plausibly a small change" — that was wrong, see
+  Correction below).
+- **Found by:** Track E, building the Mandelbrot demos
+  ([[feature-demo-mandelbrot-asm-autozoom]],
+  [[feature-demo-mandelbrot-gui-threaded]]) — the goal there is a per-target,
+  per-ISA-level optimized iteration kernel, which is not expressible today.
 
-## Symptom
+## Correction to the original scope
 
-```pascal
-function EscapeAsm(cre, cim: Double; maxit: Integer): Integer;
-begin
-  asm
-    xorpd xmm0, xmm0
-    movsd xmm6, cre
-  end;
-end;
+The first version of this ticket claimed only `AsmRegLookup` was missing xmm
+names and everything downstream was ready. That is true for **scalar** SSE and
+false for everything else. A survey of `asmtext.inc` (104 mnemonics total):
+
+| group | status |
+| --- | --- |
+| scalar SSE: `movsd movss addsd subsd mulsd divsd addss subss mulss divss comisd ucomisd cvtsd2ss cvtss2sd xorps xorpd pxor` | **encoded** |
+| `movq` xmm↔gp/mem bridge, `cvtsi2sd`, `cvttsd2si` | **encoded** |
+| packed SSE2: `movapd movupd mulpd addpd subpd divpd cmppd andpd andnpd orpd sqrtpd movmskpd unpcklpd unpckhpd shufpd` | **all missing** |
+| AVX / VEX encoding of any of the above (`vmulpd vaddpd vcmppd vmovapd vbroadcastsd`) | **all missing** — no VEX prefix emitter at all |
+| FMA (`vfmadd231pd` …) | **missing** |
+| CPU feature discovery: `cpuid`, `xgetbv` | **missing** |
+| `rdtsc` | missing (minor, but the obvious companion) |
+| xmm register OPERANDS in inline asm (`AsmRegLookup` in `asmfront.inc`) | **missing** |
+
+So the work is: operand naming (small) + a packed-SSE2 encoder arm (moderate) +
+a VEX prefix emitter and the AVX mnemonic set (the real chunk) + `cpuid`/`xgetbv`
+(small, but they gate any runtime dispatch).
+
+## Symptoms
+
 ```
+pascal26: error: asm: unknown instruction: xorpd ()      { operands failed to parse }
+pascal26: error: asm: unknown instruction: cpuid ()      { not in the mnemonic table }
 ```
-pascal26:9: error: asm: unknown instruction: xorpd ()
-  near:  asm xorpd xmm0  xmm0 >>> xorpd xmm1
-```
-The instruction is reported as unknown *with empty operands* — the mnemonic
-table is fine, the operands failed to parse, so the instruction reaches the
-encoder with zero operands and falls off the end of the form dispatch.
 
-## Cause
+## What already exists and should be reused
 
-`AsmRegLookup` in `compiler/asmfront.inc` recognises GP registers only:
-`rax..r15` (size 8) and `eax..r15d` (size 4). There is no `xmm0..xmm15` arm.
-Every float mnemonic therefore fails at operand-parse time.
-
-Note this is *only* the frontend gap — the rest of the chain already handles SSE:
-
-- `compiler/asmenc.inc` (~line 119) already resolves `xmm0..xmm15`, flagging
-  them with **size 16**, which is exactly the convention the encoders expect.
-- `compiler/asmtext.inc` (~line 596ff) already encodes `movsd movss addsd subsd
-  mulsd divsd addss subss mulss divss comisd ucomisd cvtsd2ss cvtss2sd xorps
-  xorpd pxor`, plus `movq` xmm<->gp/mem and `cvtsi2sd` / `cvttsd2si`, in
-  reg-reg, reg-mem and mem-reg forms.
+- `compiler/asmenc.inc` (~line 119) already resolves `xmm0..xmm15`, flagging them
+  **size 16** — the convention the encoders expect. `asmfront.inc`'s
+  `AsmRegLookup` is a second, GP-only table; the two should converge.
+- `compiler/asmtext.inc` (~line 596ff) already has the scalar SSE prefix/opcode
+  dispatch (`ssePfx` / `sseOp`, with `x64_sse_rr` / `x64_sse_rm`). Packed ops are
+  the same encoders with prefix `$66` and no `F2/F3`, so that arm is largely
+  parameter changes, not new machinery.
 - `compiler/asmtext_386.inc` has the 32-bit counterpart.
-- `compiler/asmdisasm_x64.inc` already disassembles them.
+- `compiler/asmdisasm_x64.inc` already disassembles the scalar forms; extend
+  alongside so `--disasm` output stays useful.
 
-So this is plausibly a small change: give `AsmRegLookup` an `xmm0..xmm15` arm
-returning `size = 16` (mirror asmenc.inc's loop, which builds the name by
-`AppendChar` rather than string `+` — deliberate, for self-compile), and make
-sure the size-16 kind flows through the frontend's operand-kind classification
-into the existing `k0/k1` dispatch rather than being treated as a GP width.
+## Suggested phasing
 
-## Scope to check while doing it
+1. **xmm operands** in `asmfront.inc` (size 16), so the ALREADY-ENCODED scalar
+   SSE becomes reachable from Pascal inline asm. Unblocks a scalar-double
+   escape kernel on its own — immediate, visible payoff.
+2. **`cpuid` + `xgetbv`.** Small, and they unblock runtime ISA dispatch even
+   before any vector op exists (a program can then pick between a GP kernel and
+   a scalar-SSE kernel).
+3. **Packed SSE2** (`$66` prefix over the existing scalar dispatch) —
+   `movapd/movupd/addpd/subpd/mulpd/divpd/cmppd/andpd/movmskpd/unpcklpd/shufpd`.
+   2-wide double kernels become writable.
+4. **VEX prefix emitter + AVX/AVX2** (`v*pd`, `vbroadcastsd`), then FMA. 4-wide.
+   This is the largest piece and is where a real design decision lives (2-byte vs
+   3-byte VEX selection, and how much of the operand model needs a third source
+   operand for the non-destructive `v` forms).
 
-- Named Pascal locals/params as the memory operand (`movsd xmm6, cre`) — the GP
-  path already resolves a local to `[rbp+disp]`; the SSE reg-mem forms take the
-  same `mb/md` pair, so it should fall out, but verify.
-- aarch64 / arm32 / i386 frontends have the same question for their float
-  registers (`d0..d31`, `s0..s31`, x87) — file or fix per target as appropriate;
-  x86-64 is the one this ticket blocks.
-- The `xmm8–15` caller-save discipline in
-  `devdocs/dev/optimization-architecture.md` ("hand-written asm that writes
-  xmm8–15 must save them") applies to whatever a user then writes; a test that
-  exercises it would be worthwhile.
+Phases 1–3 are worth landing on their own; phase 4 can wait.
+
+## Cross-target note
+
+The same question exists for the other backends' vector units — aarch64 NEON
+(`fmul.2d`, `fcmgt`), arm32 VFP/NEON, and their register files (`d0..d31`,
+`v0..v31`, `q0..q15`) are equally unreachable from inline asm. Per Track O's
+rule, per-backend effort is x86-64 + aarch64 only; the others can stay
+portable-fallback indefinitely. Worth deciding whether NEON rides along with
+phase 3/4 or gets its own ticket.
+
+## Consumers waiting on this
+
+- `examples/mandelbrot/mandelkernel.pas` — the per-ISA kernel unit. Its SSE2 and
+  AVX2 arms are written and committed but compiled out behind `PXX_ASM_SIMD`;
+  the define exists ONLY because of this ticket and should be deleted (not
+  redefined) once phases 1–4 land. That unit is the acceptance test that matters.
+- [[feature-demo-mandelbrot-asm-autozoom]] shipped an Int64 Q4.28 GP-register
+  kernel instead of the SSE2 double kernel it wanted.
 
 ## Acceptance
 
-- A Pascal function with an `asm` block that uses `xmm` registers compiles and
-  runs — e.g. an SSE2 double escape-time loop whose results are identical to the
-  portable Pascal kernel over a test grid.
-- A `test/test_asm_sse.pas` covering reg-reg, reg-mem (named local), mem-reg
-  store, and `ucomisd` + `ja` as a loop condition.
+- `examples/mandelbrot/mandelkernel.pas` compiles with `PXX_ASM_SIMD` defined,
+  its SSE2 and AVX2 kernels produce escape counts identical to the portable
+  kernel over a grid, and `mandelbrot_gui`'s status line reports the dispatched
+  ISA.
+- Regression tests per phase (`test/test_asm_sse_scalar.pas`,
+  `test/test_asm_cpuid.pas`, `test/test_asm_sse_packed.pas`,
+  `test/test_asm_avx.pas`), each asserting encodings against `llvm-mc` the way
+  `test_asm_emit_x64.pas` already does.
+- The `xmm8–15` caller-save discipline in
+  `devdocs/dev/optimization-architecture.md` holds for hand-written blocks.
 - Track A gate: `make test` + self-host byte-identical.
 
 ## Links
-[[feature-demo-mandelbrot-asm-autozoom]] (the blocked consumer) ·
-`compiler/asmfront.inc` (`AsmRegLookup`) · `compiler/asmenc.inc` (already has the
-names) · `compiler/asmtext.inc` (already has the encodings).
+[[feature-demo-mandelbrot-gui-threaded]] · [[feature-demo-mandelbrot-asm-autozoom]] ·
+`compiler/asmfront.inc` (`AsmRegLookup`) · `compiler/asmtext.inc` (scalar SSE
+dispatch to extend) · `compiler/asmenc.inc` (has the xmm names already).
 
 ## Log
-- 2026-07-20 — Filed from Track E. The demo ships with an Int64 Q4.28
-  **integer** asm kernel instead (GP registers, works today) and falls back to
-  the portable Double kernel past fixed-point depth; the SSE kernel the ticket
-  originally wanted waits on this.
+- 2026-07-20 — Filed from Track E as "xmm operands missing".
+- 2026-07-20 — **Rescoped** after surveying the mnemonic table: packed SSE, all
+  of AVX/VEX, and `cpuid` are absent too, so this is a phased project rather
+  than a small fix. Original estimate withdrawn.
