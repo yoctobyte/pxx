@@ -15,6 +15,17 @@ UM/MOD-family paths (uforth.py:2944, 2986), unmasked intermediates with
 selective 64-bit masking after the fact. Under 64-bit NilPy ints these go
 SILENTLY wrong.
 
+Measured 2026-07-20, so the "silently" above is not an assumption:
+
+```python
+c = 9223372036854775807
+print(c + 1)     # CPython 9223372036854775808   pxx -9223372036854775808
+```
+
+It WRAPS — no overflow trap, no diagnostic. Everything up to that boundary is
+exact, including the 2^31 crossing and large products, so the failure is a
+cliff rather than a gradient.
+
 Options:
 1. **NilPy bigint type** — a real `int` = arbitrary precision (heap,
    Track A runtime + N lowering). Faithful Python semantics, biggest win
