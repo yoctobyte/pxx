@@ -122,3 +122,6 @@ against.
 Remaining untested against a variant argument: `min`, `max`, `bool`, `list`,
 `chr`. Sweep them the same way before closing.
 
+
+## Log
+- 2026-07-20 — resolved, commit 67ba4c19.
