@@ -5,7 +5,21 @@ Nil-Python — one binary, commands are built-in applet functions dispatched by
 name, no fork/exec, so the same source can run as a Linux process, Linux PID 1,
 or an ESP32/FreeRTOS task set (swap the PAL backend, not the app).
 
-## Status: BLOCKED (deliberately committed non-compiling)
+## Status: BLOCKED — compiles now, but needs a re-pin to run
+
+**Update 2026-07-20.** The hard blocker below is fixed and `shell0.npy` now
+COMPILES. It still does not produce the right output under `$(PXX_STABLE)`,
+and that is a pin-lag artifact rather than a new bug: the pinned stable is v222
+(2026-07-17), the 0-based string-subscript fix landed 2026-07-19, and this file
+was ported to the new 0-based convention by that fix. Against the older pin
+every token comes out shifted one character (`unknown applet:  hel`). Once
+Track A re-pins past that fix, this should print the canned session unchanged
+with no edit here. Do not "fix" the indexing in this file — it is already
+correct for HEAD.
+
+The original note follows.
+
+## Status when filed: BLOCKED (deliberately committed non-compiling)
 
 `shell0.npy` is the phase-0 skeleton: tokenizer → dispatch → applets
 (`echo wc upper rev help`) over a canned session. It is idiomatic NilPy with no

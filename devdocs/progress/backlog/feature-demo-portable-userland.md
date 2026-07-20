@@ -95,3 +95,23 @@ byte-identical) since they touch shared frontend/RTL.
   surface, `import sysutils` trips "array of const requires builtinheap", and
   1-based string indexing (dialect decision needed). PAL imports from NilPy
   work (`import platform` → PalRead callable). See examples/shell/README.md.
+- 2026-07-20 — Track E re-checked phase 1. `bug-nilpy-str-param-length-index`
+  (the hard blocker) is RESOLVED, and `shell0.npy` now COMPILES under
+  `$(PXX_STABLE)`. It does not yet RUN correctly, and the reason is not a new
+  bug: the pinned stable binary is v222 (2026-07-17) but the 0-based-subscript
+  fix ([[bug-nilpy-str-index-off-by-one]]) landed 2026-07-19, and shell0.npy was
+  ported to the NEW 0-based convention as part of that fix. So the demo is
+  correct for HEAD and wrong for the pin — it prints `unknown applet:  hel`
+  (every token shifted one character) because the pin still indexes 1-based.
+
+  **Phase 1 is therefore gated on a Track A re-pin**, not on any Track E work.
+  Track E cannot rebuild the compiler, so there is nothing to do here until
+  `make pin` moves past c6505149. After the re-pin, re-run
+  `$(PXX_STABLE) examples/shell/shell0.npy` — it should print the canned session
+  unchanged — and only then continue phase 1 (stdin loop, more applets, pipes).
+
+  The other listed gaps are unchanged and still real:
+  [[feature-nilpy-collections-and-string-methods]] (list/dict/split — still the
+  blocker for argv, the job table and `a | b`), no stdin/readline surface, and
+  `import sysutils` tripping "array of const requires builtinheap".
+
