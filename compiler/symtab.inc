@@ -1909,6 +1909,15 @@ end;
 
 function TypeDivideResult(dividend: TTypeKind): TTypeKind;
 begin
+  { `div`/`mod` on a promotable int stay promotable. This sits ahead of the
+    signedness rule because the tkDiv/tkMod arms in the binop typing sites run
+    BEFORE the promo arm — without it `a div 1000000` typed as Int64, the promo
+    lowering never fired, and the generated code divided two slot ADDRESSES. }
+  if TypeIsPromoInt(dividend) then
+  begin
+    Result := dividend;
+    Exit;
+  end;
   if TypeDivideUnsigned(dividend) then
     Result := tyUInt64
   else

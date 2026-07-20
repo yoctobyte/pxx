@@ -550,12 +550,12 @@ test-asm: $(COMPILER)
 	! grep -q "^    db " /tmp/test_asm_dis_self26.s
 
 test-core: $(COMPILER)
-	# promotable int: storage, checked arithmetic, signed Write (feature-a-promotable-int)
+	# promotable int: arbitrary precision, exact against CPython (feature-a-promotable-int)
 	./$(COMPILER) test/test_promoint.pas /tmp/test_promoint26
-	test "$$(/tmp/test_promoint26)" = "$$(printf '0\n5\n12\n60\n7\n2\n2\n-5\n25\n7\n2432902008176640000\ngt\nneg\n0')"
-	# ...and it TRAPS on overflow rather than wrapping: RE 215, not exit 0
+	test "$$(/tmp/test_promoint26)" = "$$(printf '0\n12\n60\n7\n2\n2\n-5\n25\n7\nlt\ngt\neq\nsame\n265252859812191058636308480000000\n0\n265252859812191058636308480\n109361473\n-15511210043330985984000000\n15511210043330985984000000\n9223372036854775808\n18446744073709551614\n1')"
+	# ...and it is ARBITRARY PRECISION: 25! is exact, not 25! mod 2^64
 	./$(COMPILER) test/test_promoint_overflow.pas /tmp/test_promoint_overflow26
-	/tmp/test_promoint_overflow26 > /dev/null 2>&1; test $$? -eq 215
+	test "$$(/tmp/test_promoint_overflow26)" = "15511210043330985984000000"
 	# nested variant part + tagged discriminant + const case labels (TVarSin, bug-pascal-nested-variant-record-tagged)
 	./$(COMPILER) test/test_nested_variant_record.pas /tmp/test_nested_variant_record26
 	test "$$(/tmp/test_nested_variant_record26)" = "$$(printf '28\n2\n8080\nTRUE\n7')"

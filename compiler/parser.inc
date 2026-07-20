@@ -25283,7 +25283,8 @@ begin
 end;
 
 procedure ParseProgram;
-var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
+var jmpPatch, i, j: Integer; needsPromoInt: Boolean;
+    doneUses, doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime, needsDivStub, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
     usesTextfile: Boolean; tnm: AnsiString;
     savedUnitIdx, afterDeclTok: Integer;
@@ -25346,6 +25347,7 @@ begin
   hasCoroutine := False;
   needsBuiltin := False;
   needsTextfile := False;
+  needsPromoInt := False;
   { Default standard surface: textfile (classic Text/Assign/Reset/WriteLn) is
     loaded by default on every non-ESP program, so `var f: Text` resolves
     uniformly in programs, units, methods, and nested scopes — no token-scan
@@ -25526,6 +25528,14 @@ begin
   while i < TokCount do
   begin
     if Tokens[i].Kind in [tkTry, tkRaise] then hasExceptions := True;
+    { A program naming the promotable-int type pulls its runtime (and, through
+      it, bignum). Nothing else references those entry points, so a Pascal or C
+      program that never names the type keeps them unreachable and DCE drops
+      them — the "no size growth" half of the feature's own gate. }
+    if (Tokens[i].Kind = tkIdent) and
+       (CaseEqual(GetTokenStr(i), 'promoint') or CaseEqual(GetTokenStr(i), 'promoint64')
+        or CaseEqual(GetTokenStr(i), 'promoint32')) then
+      needsPromoInt := True;
     { The coroutine context-switch stub must be emitted before the main body
       (it is reached only by `call`), so detect any use of the low-level
       __pxxcoswitch intrinsic up front. }
@@ -25807,8 +25817,17 @@ begin
   if ((((TargetArch = TARGET_RISCV32) and (not EspBareBoot))) or (TargetArch = TARGET_ARM32)) and
      (needHeapUnit or needsBuiltin) then
     ParseUsesUnit('softfloat');
+  { The promotable-int runtime is written in ordinary Pascal over managed
+    strings and bignum, so it needs the heap allocator and the Str/Val
+    conversions regardless of what the user program itself uses. }
+  if needsPromoInt then
+  begin
+    needHeapUnit := True;
+    needsBuiltin := True;
+  end;
   if needHeapUnit then ParseUsesUnit('builtinheap');
   if needsBuiltin then ParseUsesUnit('builtin');
+  if needsPromoInt then ParseUsesUnit('promoint');
   { Implicit text-file unit (classic `Text`/Assign/Reset/... surface), loaded
     like an explicit `uses textfile` would be — before user declarations, so the
     Text record + its procedures resolve and proc-local `var f: Text` gets normal

@@ -824,62 +824,102 @@ begin
   Result := IRAppend(IR_STORE_MEM, addr, newBits, -1, 0, Ord(storageTk));
 end;
 
-{ ===== PROMOTABLE INT slot access (feature-a-promotable-int stage 2) =====
+{ ===== PROMOTABLE INT lowering (feature-a-promotable-int stage 3) =====
 
-  A promotable-int slot is two native machine words: the storage tag at
-  PROMO_TAG_OFFSET, the inline payload one word after it. The whole design here
-  is that a promo RVALUE lowers to its payload as a plain native int — so every
-  downstream consumer (arithmetic, comparison, Write) needs no promo knowledge
-  at all. Only the STORE side boxes, and only these two helpers know the layout.
+  A promotable-int slot is two native machine words: the storage tag, then the
+  inline payload (a machine int) or a managed AnsiString ref holding the
+  serialized bignum. compiler/builtin/promoint.pas owns that layout and every
+  operation on it.
 
-  Nothing produces PROMO_TAG_HEAP yet, so the load does not branch on the tag;
-  the heap tier (stage 3) adds that check here and nowhere else. }
+  An rvalue is the slot ADDRESS, not the payload. Stage 2 used the payload —
+  which is why stage 2 was small — but that model cannot survive a value that
+  may be a bignum: the payload is then a pointer and any integer op on it
+  computes garbage. So this follows the tyVariant model instead
+  (decide-promoint-rvalue-representation, Option A): every operation is a
+  runtime helper taking slot addresses, which also means all six backends work
+  with no backend changes. The inline fast path lives INSIDE the helpers, so a
+  value that never leaves int64 never touches the heap.
+
+  Stage 4 (check elision) is what inlines the fast path back into the caller. }
+
 function PromoPayloadOffset(tk: TTypeKind): Integer;
 begin
   PromoPayloadOffset := TypeSize(tk) div 2;
 end;
 
-{ Address of the payload word inside the slot of promo-typed symbol symIdx. }
-function IRPromoPayloadAddr(symIdx: Integer; tk: TTypeKind): Integer;
-var slotAddr, offNode: Integer;
-begin
-  slotAddr := IRAppend(IR_SLOTADDR, symIdx, -1, -1, 0, Ord(tyPointer));
-  offNode  := IRAppend(IR_CONST_INT, -1, -1, -1, PromoPayloadOffset(tk), Ord(tyNativeInt));
-  IRPromoPayloadAddr := IRAppend(IR_BINOP, slotAddr, offNode, Ord(tkPlus), 0, Ord(tyPointer));
-end;
+{ Call a promoint runtime routine, given already-lowered argument nodes.
 
-{ Address of the storage tag word (offset 0 today, named so stage 3 can move it). }
-function IRPromoTagAddr(symIdx: Integer): Integer;
-var slotAddr, offNode: Integer;
+  IR_ARG nodes form a LINKED chain: IRB points at the next argument. Building
+  them without that link produced a call that read its second argument from
+  garbage and segfaulted with a perfectly plausible-looking IR dump — the arg
+  nodes are all there, just not joined. }
+function IRPromoCall(const fname: AnsiString; a0, a1, a2: Integer; retTk: TTypeKind): Integer;
+var cpi, arg0, arg1, arg2: Integer;
 begin
-  slotAddr := IRAppend(IR_SLOTADDR, symIdx, -1, -1, 0, Ord(tyPointer));
-  if PROMO_TAG_OFFSET = 0 then
-    IRPromoTagAddr := slotAddr
-  else
+  cpi := FindProc(fname);
+  if cpi < 0 then
+    Error('promotable int: runtime helper ' + fname + ' not found (promoint unit not loaded)');
+  arg0 := IRAppend(IR_ARG, a0, -1, -1, 0, Ord(tyPointer));
+  arg1 := -1;
+  arg2 := -1;
+  if a1 >= 0 then
   begin
-    offNode := IRAppend(IR_CONST_INT, -1, -1, -1, PROMO_TAG_OFFSET, Ord(tyNativeInt));
-    IRPromoTagAddr := IRAppend(IR_BINOP, slotAddr, offNode, Ord(tkPlus), 0, Ord(tyPointer));
+    arg1 := IRAppend(IR_ARG, a1, -1, -1, 0, IRTk[a1]);
+    IRB[arg0] := arg1;
   end;
+  if a2 >= 0 then
+  begin
+    arg2 := IRAppend(IR_ARG, a2, -1, -1, 0, IRTk[a2]);
+    IRB[arg1] := arg2;
+  end;
+  IRPromoCall := IRAppendCall(cpi, arg0, -1, Ord(retTk));
 end;
 
-{ Load promo symbol symIdx as a native int (its inline payload). }
-function IRPromoLoad(symIdx: Integer; tk: TTypeKind): Integer;
+{ A fresh promo temp slot, zeroed so its tag starts INLINE. }
+function IRPromoTempSlot(var symOut: Integer): Integer;
+var tmpSym: Integer;
 begin
-  IRPromoLoad := IRAppend(IR_LOAD_MEM, IRPromoPayloadAddr(symIdx, tk), -1, -1, 0,
-                          Ord(PromoNativeTk(tk)));
+  tmpSym := AllocVar('', tyPromoInt64);
+  { The zeroing is a SIDE EFFECT, so it has to join the emitted statement
+    chain. Codegen walks statements and emits each one's subtree; a node that
+    is only referenced as an operand of a later node never gets emitted. }
+  IRMarkStatementNode(IRAppend(IR_ZERO_SYM, tmpSym, -1, -1, 0, Ord(tyPromoInt64)));
+  symOut := tmpSym;
+  IRPromoTempSlot := IRAppend(IR_SLOTADDR, tmpSym, -1, -1, 0, Ord(tyPointer));
 end;
 
-{ Store a native-int value into promo symbol symIdx, stamping the INLINE tag.
-  The tag store is unconditional rather than "only when it might have changed":
-  it is one word, and an un-stamped slot is the failure mode that would only
-  show up once the heap tier exists, in whatever code ran first. }
-function IRPromoStore(symIdx: Integer; tk: TTypeKind; value: Integer): Integer;
-var tagConst: Integer;
+{ The slot ADDRESS of an expression usable as a promotable int. A promo-typed
+  expression already IS a slot; an ordinary integer expression is boxed into a
+  fresh temp slot first, which is what makes `p + 1` and `p + n` work without
+  any special case at the operator. }
+function IRPromoAddrOf(node: Integer): Integer;
+var tmpSym, addr, value: Integer;
 begin
-  tagConst := IRAppend(IR_CONST_INT, -1, -1, -1, PROMO_TAG_INLINE, Ord(PromoNativeTk(tk)));
-  IRAppend(IR_STORE_MEM, IRPromoTagAddr(symIdx), tagConst, -1, 0, Ord(PromoNativeTk(tk)));
-  IRPromoStore := IRAppend(IR_STORE_MEM, IRPromoPayloadAddr(symIdx, tk), value, -1, 0,
-                           Ord(PromoNativeTk(tk)));
+  if TypeIsPromoInt(IntToTypeKind(ASTTk[node])) then
+  begin
+    if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+       TypeIsPromoInt(Syms[ASTIVal[node]].TypeKind) then
+      IRPromoAddrOf := IRAppend(IR_SLOTADDR, ASTIVal[node], -1, -1, 0, Ord(tyPointer))
+    else
+      { already lowered to a slot address by the binop path }
+      IRPromoAddrOf := IRLowerAST(node);
+    Exit;
+  end;
+  value := IRLowerAST(node);
+  addr := IRPromoTempSlot(tmpSym);
+  IRMarkStatementNode(IRPromoCall('PXXPromoFromInt', addr, value, -1, tyUnknown));
+  IRPromoAddrOf := IRAppend(IR_SLOTADDR, tmpSym, -1, -1, 0, Ord(tyPointer));
+end;
+
+{ Which promoint helper implements this operator token. }
+function PromoOpHelper(op: TTokenKind): AnsiString;
+begin
+  PromoOpHelper := '';
+  if op = tkPlus then PromoOpHelper := 'PXXPromoAdd'
+  else if op = tkMinus then PromoOpHelper := 'PXXPromoSub'
+  else if op = tkStar then PromoOpHelper := 'PXXPromoMul'
+  else if op = tkDiv then PromoOpHelper := 'PXXPromoDiv'
+  else if op = tkMod then PromoOpHelper := 'PXXPromoMod';
 end;
 
 function IRLowerAddress(node: Integer): Integer;
@@ -3426,6 +3466,7 @@ end;
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
+    promoLhs, promoRhs, promoDst, promoSym: Integer;   { promotable-int slot lowering }
     vuExitUnboxed: Boolean;         { `return <variant>` unboxed to a scalar result }
     fdName: string;                 { NilPy floor-div/mod helper being called }
     pvName: string;                 { NilPy variant-dispatch builtin }
@@ -4261,9 +4302,10 @@ begin
       if TypeIsFrozenString(Syms[varIdx].TypeKind) or (Syms[varIdx].TypeKind = tySet) or Syms[varIdx].IsArray then
         Result := IRAppend(IR_LEA, varIdx, -1, -1, 0, ASTTk[node])
       else if TypeIsPromoInt(Syms[varIdx].TypeKind) and not Syms[varIdx].IsRef then
-        { A promotable int READS as its inline payload, a plain native int, so
-          every consumer downstream stays promo-unaware. }
-        Result := IRPromoLoad(varIdx, Syms[varIdx].TypeKind)
+        { A promotable int IS its slot: the value may be a bignum, so an rvalue
+          is the slot address, not a machine int (Option A, the tyVariant
+          model). }
+        Result := IRAppend(IR_SLOTADDR, varIdx, -1, -1, 0, Ord(tyPointer))
       else
         Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, ASTTk[node]);
     end;
@@ -5259,6 +5301,35 @@ begin
           end;
           Result := IRAppend(IR_BINOP, left, right, Ord(tkPlus), 0, Ord(tyPointer));
         end
+        else if (TTokenKind(ASTIVal[node]) in [tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe]) and
+                (TypeIsPromoInt(IntToTypeKind(ASTTk[ASTLeft[node]])) or
+                 TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]]))) then
+        begin
+          { PROMOTABLE INT comparison. The operands are slot ADDRESSES, so the
+            ordinary integer compare would compare POINTERS — which silently
+            "worked" for < and > by accident of stack layout and got = wrong.
+            Route through the runtime and compare its -1/0/1 against zero. }
+          promoLhs := IRPromoAddrOf(ASTLeft[node]);
+          promoRhs := IRPromoAddrOf(ASTRight[node]);
+          promoDst := IRPromoCall('PXXPromoCmp', promoLhs, promoRhs, -1, tyInteger);
+          Result := IRAppend(IR_BINOP, promoDst,
+                             IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyInteger)),
+                             Integer(ASTIVal[node]), 0, Ord(tyBoolean));
+        end
+        else if TypeIsPromoInt(IntToTypeKind(ASTTk[node])) and
+                (PromoOpHelper(TTokenKind(ASTIVal[node])) <> '') then
+        begin
+          { PROMOTABLE INT arithmetic: materialise both sides as slots and call
+            the runtime, whose inline fast path keeps int64-sized values off the
+            heap. The result IS the temp slot's address, so it composes — a
+            nested `a*b + c` feeds this path again. }
+          promoLhs := IRPromoAddrOf(ASTLeft[node]);
+          promoRhs := IRPromoAddrOf(ASTRight[node]);
+          promoDst := IRPromoTempSlot(promoSym);
+          IRMarkStatementNode(IRPromoCall(PromoOpHelper(TTokenKind(ASTIVal[node])),
+                                          promoDst, promoLhs, promoRhs, tyUnknown));
+          Result := IRAppend(IR_SLOTADDR, promoSym, -1, -1, 0, Ord(tyPointer));
+        end
         else
         begin
           left := IRLowerAST(ASTLeft[node]);
@@ -5281,15 +5352,7 @@ begin
           { {$Q+} arithmetic: ival=1 marks the op overflow-checked; codegen
             traps a wrapped result into PXXOverflow (RE 215 / EIntOverflow).
             Only ordinal +,-,* carry the tag (parser sets ASTQChk). }
-          if TypeIsPromoInt(IntToTypeKind(ASTTk[node])) then
-            { A promotable int traps on overflow ALWAYS, not only under {$Q+}:
-              silent wrap is the entire defect this type exists to remove. The
-              operands are already native ints (the AN_IDENT load unboxed them),
-              so this is an ordinary checked native-int op; stage 3 turns the
-              trap into a promotion to the heap bignum. }
-            Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 1,
-                               Ord(PromoNativeTk(IntToTypeKind(ASTTk[node]))))
-          else if ASTQChk[node] and TypeIsOrdinal(IntToTypeKind(ASTTk[node])) then
+          if ASTQChk[node] and TypeIsOrdinal(IntToTypeKind(ASTTk[node])) then
             Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 1, ASTTk[node])
           else
             Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, ASTTk[node]);
@@ -5332,16 +5395,22 @@ begin
                                  EnumTypeNLen[NodeEnumIdOf(ASTLeft[node])]));
 
       { PROMOTABLE INT store. Handled before every other assignment shape so no
-        integer path ever sees the {tag, payload} slot: the right-hand side is
-        lowered as an ordinary native int (a promo rvalue already unboxes to
-        one), then boxed with the INLINE tag stamped. Only IRPromoStore knows
-        the layout. }
+        integer path ever sees the {tag, payload} slot. A promo source is COPIED
+        (which retains its managed heap payload); an ordinary integer source is
+        boxed. Both go through promoint.pas, the only place that knows the
+        layout. }
       if (ASTKind[ASTLeft[node]] = AN_IDENT) and (ASTIVal[ASTLeft[node]] >= 0) and
          TypeIsPromoInt(Syms[ASTIVal[ASTLeft[node]]].TypeKind) and
          not Syms[ASTIVal[ASTLeft[node]]].IsRef then
       begin
         varIdx := ASTIVal[ASTLeft[node]];
-        Result := IRPromoStore(varIdx, Syms[varIdx].TypeKind, IRLowerAST(ASTRight[node]));
+        leftAddr := IRAppend(IR_SLOTADDR, varIdx, -1, -1, 0, Ord(tyPointer));
+        if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]])) then
+          Result := IRPromoCall('PXXPromoCopy', leftAddr,
+                                IRPromoAddrOf(ASTRight[node]), -1, tyUnknown)
+        else
+          Result := IRPromoCall('PXXPromoFromInt', leftAddr,
+                                IRLowerAST(ASTRight[node]), -1, tyUnknown);
         Exit;
       end;
 
@@ -7386,12 +7455,12 @@ begin
               printing the pointer value. }
             outNode := IRAppend(IR_WRITE, value, ASTIVal[item], -3, writeFd, Ord(tyPointer))
           else if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTLeft[item]])) then
-            { A promotable int PRINTS as its inline payload — the load already
-              unboxed it to a native int, so tag the write with that native type.
-              Without this the write dispatched on the promo kind, hit no arm and
-              printed the value UNSIGNED (-5 came out as 18446744073709551611). }
-            outNode := IRAppend(IR_WRITE, value, ASTIVal[item], ASTSOffset[item], writeFd,
-                                Ord(PromoNativeTk(IntToTypeKind(ASTTk[ASTLeft[item]]))))
+            { A promotable int PRINTS via the runtime, which renders whichever
+              tier it is in — a bignum has no machine-int form to hand the
+              integer writer. `value` is already the slot address. }
+            outNode := IRAppend(IR_WRITE,
+                                IRPromoCall('PXXPromoToStr', value, -1, -1, tyAnsiString),
+                                ASTIVal[item], ASTSOffset[item], writeFd, Ord(tyAnsiString))
           else
             outNode := IRAppend(IR_WRITE, value, ASTIVal[item], ASTSOffset[item], writeFd, Ord(IntToTypeKind(ASTTk[ASTLeft[item]])));
         end
