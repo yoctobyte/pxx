@@ -1,0 +1,22 @@
+def f() -> int:
+    y = 0
+    for s in [1, 2]:
+        y = y + s
+    print(y)
+    return y
+print(f())
+
+def g() -> int:
+    for s in [1, 2, 3]:
+        if s == 2:
+            return s
+    return 0
+print(g())
+
+def h() -> int:
+    n = 0
+    for a in [1, 2]:
+        for b in [10, 20]:
+            n = n + a * b
+    return n
+print(h())

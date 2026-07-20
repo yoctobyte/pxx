@@ -3485,6 +3485,13 @@ begin
   whileNode := AllocNode(AN_WHILE);
   ASTLeft[whileNode] := cmpNode;
   ASTRight[whileNode] := bodyNode;
+  { A desugared `for` returns an AN_SEQ (init statements + the while), not an
+    AN_WHILE, so PyParseBlock's "this statement consumed its own indented
+    block" check — which matches on node KIND — did not recognise it, and any
+    statement following a for inside a def died with "expected newline after
+    statement". Reuse the flag nested defs already use to say the same thing.
+    (bug-nilpy-statement-after-for-in-a-def) }
+  PyStmtAteBlock := True;
   Result := PySeqAppend(seq, whileNode);
 end;
 
