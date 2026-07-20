@@ -65,7 +65,7 @@ that is shipped semantics `str()` depends on, not mine to change here.
 Close this and no code moves. If it is B or C, the change is confined to the
 three `else` branches in the `VariantTo*` helpers.
 
-## The PASCAL half — MEASURED and CLOSED 2026-07-20 (commit 19442857)
+## The PASCAL half — MEASURED and CLOSED 2026-07-20 (commit 5287bdd7)
 
 An earlier revision of this ticket said "fpc is not installed on this box".
 **That was wrong** — fpc is at /usr/bin/fpc and `make fpc-check` had been
@@ -94,3 +94,31 @@ Both halves are now settled and this ticket can close:
 
 Lesson worth keeping: I nearly filed "unverified, needs a box with fpc" on a
 box that had fpc. Check the tool, not the exit code of a compound command.
+
+## DECISION (recorded 2026-07-20, moving to done)
+
+- **NilPy:** Python's rules — TypeError on a str/object in a numeric slot,
+  total truthiness for bool. Landed via the per-language helper split
+  (`d3754ee3`): NilPy uses pylib's `pyvar_to_int/float/bool/char`.
+- **Pascal:** FPC's rules, measured against the real oracle — coerce a numeric
+  string, `EVariantError` on junk (`5287bdd7`). Pascal keeps builtin.pas's
+  `VariantTo*`; `ir.inc` picks the set under `PyProgramMode`.
+- **Decided by:** the user's call that per-language helpers are fine
+  ("we can just craft our own when needed ... as long our AST is shared").
+
+Both halves settled, no residue, no dependents. Closing.
+
+*Note on the reference above: this section originally cited commit `19442857`,
+which exists in no branch of this repo. The real commit is `5287bdd7`,
+identified by matching the measured table. Corrected rather than left
+standing — a ticket citing a commit nobody can look up is worse than one
+citing none.
+
+I considered making `check` validate cited shas and decided against it: 125 of
+464 commit citations across `done/` (26%) do not resolve, and this repo rebases
+constantly (`git pull --rebase` is the norm), which REWRITES shas. So most
+phantoms are benign history rewrites, not fabrications, and the rule would be
+125 false alarms on day one. Measured, then dropped.*
+
+## Log
+- 2026-07-20 — resolved, commit 5287bdd7.

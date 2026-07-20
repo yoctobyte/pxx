@@ -804,6 +804,55 @@ pre code{background:none;padding:0}
                     )
                     problems = 1
 
+        # --- decide-* lifecycle -------------------------------------------
+        # A `decide-` ticket is answered in PROSE, so nothing mechanical
+        # notices when the answer lands: it keeps its prio and stays in the
+        # ready queue as if still open. 2026-07-20:
+        # decide-variant-tag-mismatch-policy sat in backlog at prio 60 with
+        # both halves settled inside it, ranking above real work.
+        decision_re = re.compile(r"^##\s+(DECISION|RESOLVED)\b", re.I | re.M)
+        for st in ("backlog", "urgent"):
+            for t in self.by_status[st]:
+                if t.slug.startswith("decide-") and decision_re.search(t.text):
+                    lines.append(
+                        f"DECIDED-NOT-MOVED: {t.slug} records a decision but is still in {st}/ — "
+                        f"resolve it so its dependents unblock"
+                    )
+                    problems = 1
+
+        # The mirror: moved without writing DOWN the answer. Dependents reach
+        # the decision by following their blocked-by slug into done/, so a
+        # decide- ticket that closes without recording the call leaves them
+        # pointing at nothing.
+        for t in self.by_status["done"]:
+            if t.slug.startswith("decide-") and not decision_re.search(t.text):
+                warning_count += 1
+                if strict:
+                    lines.append(
+                        f"WARN-NO-DECISION: {t.slug} is a decide- ticket in done/ with no "
+                        f"'## DECISION' section — dependents cannot learn what was decided"
+                    )
+                    problems = 1
+
+        # A REJECTED blocker never unblocks anything: ready_tickets() gates on
+        # done_slugs (done only), while effective_prio() treats {done,rejected}
+        # as terminal. So a dependent of a rejected ticket is invisible in
+        # every queue, forever, with nothing reporting it. Deliberately NOT
+        # auto-unblocked: rejecting a decision often moots the dependent too,
+        # and silently promoting it to ready would resurrect dead work. Flag it
+        # and let a human choose.
+        rejected = {t.slug for t in self.by_status["rejected"]}
+        for t in self.tickets:
+            if t.status in ("done", "rejected"):
+                continue
+            for b in t.blockers:
+                if b in rejected:
+                    lines.append(
+                        f"BLOCKED-BY-REJECTED: {t.slug} is blocked by '{b}' which was rejected — "
+                        f"it can never become ready; re-file it or drop the blocker"
+                    )
+                    problems = 1
+
         commit_re = re.compile(r"commit|[0-9a-f]{7,40}", re.I)
         for t in self.by_status["done"]:
             if not commit_re.search(t.text):

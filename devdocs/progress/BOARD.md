@@ -25,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (137)
+## backlog (136)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -50,7 +50,6 @@ _none_
 | decide-nilpy-closure-model | U | 20 | decide | DECIDE (DEFERRED): which closure model for NilPy? | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-rtti-none-semantics | A | 40 | decide | decide: `--rtti=none` semantics — what happens to the FUNCTIONAL parts of the RTTI blob? | — |
-| decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
@@ -225,7 +224,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (888)
+## done (889)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -689,6 +688,7 @@ _none_
 | chore-stable-binary-single-file-no-version-churn | A | 50 | chore | Stable binary: fixed-name overwrite (kill `vN` churn + the dangling-symlink trap) | — |
 | chore-twatch-run-from-clone | T | 50 | chore | The watcher daemon executes the DEV CHECKOUT's twatch.py while testing the clone | — |
 | compat-pascal-copy-of-char-literal | P | 55 | compat | Copy('a', i, n) — FPC promotes a char to a string, pxx rejects the program | — |
+| decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | doc-licensing-split-mpl-zlib | D | 45 | doc | Document the licensing split (MPL 2.0 compiler / Zlib RTL) | — |
 | docs-fpc-compatibility-overstates-subset | D | 30 | docs | Track D: fpc-compatibility.md understates the language aim ("useful subset") | — |
 | docs-reference-cli-modes-directives | D | 40 | docs | Reference docs incomplete: cli.md lists ~26 of the compiler's 37 --flags, there is no compiler-modes/strictness page (lax -> --strict -> granular -> --mimic-fpc), and no {$...} directive reference — three linked reference gaps | — |
@@ -2567,7 +2567,6 @@ _none_
 - [p 60] [A] bug-test-core-oversized-job-6gb-flaky
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
-- [p 60] [U] decide-variant-tag-mismatch-policy
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
