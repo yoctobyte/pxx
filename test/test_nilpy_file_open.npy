@@ -1,0 +1,8 @@
+with open("test/nilpy_data.txt", "r", encoding="utf-8") as f:
+    lines = [raw.rstrip("\n") for raw in f]
+for ln in lines:
+    print(ln)
+print(len(lines))
+with open("test/nilpy_data.txt") as f2:
+    n = [x for x in f2]
+print(len(n))

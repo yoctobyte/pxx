@@ -280,6 +280,14 @@ function pyos_path_exists(const p: AnsiString): Boolean;
 function pyos_path_abspath(const p: AnsiString): AnsiString;
 function pyos_getcwd: AnsiString;
 procedure pysys_exit(code: Integer);
+{ open(path[, mode, encoding=...]) in READ mode -> a TPyList of the file's
+  lines, each keeping its trailing '\n' exactly as Python's `for line in f`
+  yields them. The whole file is read eagerly, so the file object IS just the
+  line list — iteration and .read() need no live fd, and `with open(...)` can
+  treat close as a no-op. Mode/encoding are accepted and ignored (our strings
+  are byte strings; latin-1/utf-8 of ASCII is identity). }
+function pyopen(const path: AnsiString): TPyList;
+function pyfile_read(l: TPyList): AnsiString;
 { Python's two-argument min/max. Spelled as ordinary pylib FUNCTIONS, the
   same way bytearray/bytes are: neither name is a Pascal keyword, so both
   resolve through the normal call path with no frontend hook.
@@ -413,6 +421,9 @@ function pystr_lower(const s: AnsiString): AnsiString;
 function pystr_strip(const s: AnsiString): AnsiString;
 function pystr_lstrip(const s: AnsiString): AnsiString;
 function pystr_rstrip(const s: AnsiString): AnsiString;
+function pystr_strip_chars(const s: AnsiString; const chars: AnsiString): AnsiString;
+function pystr_lstrip_chars(const s: AnsiString; const chars: AnsiString): AnsiString;
+function pystr_rstrip_chars(const s: AnsiString; const chars: AnsiString): AnsiString;
 function pystr_startswith(const s: AnsiString; const pre: AnsiString): Boolean;
 function pystr_endswith(const s: AnsiString; const suf: AnsiString): Boolean;
 function pystr_find(const s: AnsiString; const sub: AnsiString): Integer;
@@ -536,6 +547,39 @@ end;
 function pystr_strip(const s: AnsiString): AnsiString;
 begin
   Result := pystr_lstrip(pystr_rstrip(s));
+end;
+
+{ strip/lstrip/rstrip with an explicit CHARS argument: remove any leading or
+  trailing character that appears in `chars` (Python's set semantics), rather
+  than whitespace. `raw.rstrip("\n")` in uforth is the driving case. }
+function PyInCharSet(c: Char; const chars: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 1 to Length(chars) do
+    if chars[i] = c then begin Result := True; Exit; end;
+end;
+
+function pystr_lstrip_chars(const s: AnsiString; const chars: AnsiString): AnsiString;
+var i, n: Integer;
+begin
+  n := Length(s);
+  i := 1;
+  while (i <= n) and PyInCharSet(s[i], chars) do Inc(i);
+  Result := Copy(s, i, n - i + 1);
+end;
+
+function pystr_rstrip_chars(const s: AnsiString; const chars: AnsiString): AnsiString;
+var n: Integer;
+begin
+  n := Length(s);
+  while (n >= 1) and PyInCharSet(s[n], chars) do Dec(n);
+  Result := Copy(s, 1, n);
+end;
+
+function pystr_strip_chars(const s: AnsiString; const chars: AnsiString): AnsiString;
+begin
+  Result := pystr_lstrip_chars(pystr_rstrip_chars(s, chars), chars);
 end;
 
 function pystr_startswith(const s: AnsiString; const pre: AnsiString): Boolean;
@@ -2125,6 +2169,88 @@ end;
 procedure pysys_exit(code: Integer);
 begin
   Halt(code);
+end;
+
+{ openat(AT_FDCWD, path, O_RDONLY) + read to EOF + close, per-arch like
+  pyos_path_exists. aarch64/riscv have only openat, so openat(AT_FDCWD=-100)
+  is used everywhere for portability. }
+function pyfile_slurp(const path: AnsiString; var ok: Boolean): AnsiString;
+var cs: AnsiString; fd, nread: Int64; buf: array[0..8191] of Char; i: Integer;
+    nrOpenat, nrRead, nrClose: Integer;
+begin
+  Result := '';
+  ok := False;
+  { syscall numbers resolved once, so the read loop below has no ifdefs in it.
+    openat(AT_FDCWD) everywhere for portability (aarch64/riscv lack open). }
+  nrOpenat := 0; nrRead := 0; nrClose := 0;
+{$ifdef CPUX86_64}
+  nrOpenat := 257; nrRead := 0; nrClose := 3;
+{$endif}
+{$ifdef CPUAARCH64}
+  nrOpenat := 56; nrRead := 63; nrClose := 57;
+{$endif}
+{$ifdef CPU_ARM32}
+  nrOpenat := 322; nrRead := 3; nrClose := 6;
+{$endif}
+{$ifdef CPU_I386}
+  nrOpenat := 295; nrRead := 3; nrClose := 6;
+{$endif}
+{$ifdef CPU_RISCV32}
+{$ifndef PXX_ESP}
+  nrOpenat := 56; nrRead := 63; nrClose := 57;
+{$endif}
+{$endif}
+  if nrOpenat = 0 then Exit;   { unsupported target }
+  cs := path + #0;
+  fd := __pxxrawsyscall(nrOpenat, -100, Int64(@cs[1]), 0, 0, 0, 0);
+  if fd < 0 then Exit;
+  nread := 8192;
+  while nread = 8192 do
+  begin
+    nread := __pxxrawsyscall(nrRead, fd, Int64(@buf[0]), 8192, 0, 0, 0);
+    if nread > 0 then
+      for i := 0 to nread - 1 do Result := Result + buf[i];
+  end;
+  nread := __pxxrawsyscall(nrClose, fd, 0, 0, 0, 0, 0);  { result discarded }
+  ok := True;
+end;
+
+function pyopen(const path: AnsiString): TPyList;
+var content, line: AnsiString; ok: Boolean; i, n: Integer;
+begin
+  Result := TPyList.Create;
+  content := pyfile_slurp(path, ok);
+  if not ok then
+  begin
+    WriteLn('FileNotFoundError: ', path);
+    Halt(1);
+  end;
+  { split into lines, each KEEPING its trailing newline — Python's file
+    iteration yields lines that way, and uforth strips the '\n' itself }
+  i := 1; n := Length(content); line := '';
+  while i <= n do
+  begin
+    line := line + content[i];
+    if content[i] = #10 then
+    begin
+      Result.append(line);
+      line := '';
+    end;
+    Inc(i);
+  end;
+  if Length(line) > 0 then Result.append(line);   { last line, no trailing NL }
+end;
+
+function pyfile_read(l: TPyList): AnsiString;
+var i: Integer; v: Variant;
+begin
+  Result := '';
+  if l = nil then Exit;
+  for i := 0 to l.count - 1 do
+  begin
+    v := l.at(i);
+    Result := Result + pystr_of(v);
+  end;
 end;
 
 function bytes(b: TPyBytes): TPyBytes;

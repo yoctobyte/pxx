@@ -1,0 +1,10 @@
+s = "  abc  "
+print(s.strip())
+print(s.rstrip())
+print(s.lstrip())
+t = "xxhelloxx"
+print(t.strip("x"))
+print(t.rstrip("x"))
+print(t.lstrip("x"))
+u = "line\n"
+print(u.rstrip("\n"))

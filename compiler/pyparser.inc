@@ -1104,9 +1104,11 @@ begin
   Result := True;
   if CaseEqual(mname, 'upper') then pname := 'pystr_upper'
   else if CaseEqual(mname, 'lower') then pname := 'pystr_lower'
-  else if CaseEqual(mname, 'strip') then pname := 'pystr_strip'
-  else if CaseEqual(mname, 'lstrip') then pname := 'pystr_lstrip'
-  else if CaseEqual(mname, 'rstrip') then pname := 'pystr_rstrip'
+  { strip family: 0 args (whitespace) or 1 arg (a CHARS set) — see the -5 case
+    in PyParseStrMethod, which appends _chars for the one-argument form. }
+  else if CaseEqual(mname, 'strip') then begin pname := 'pystr_strip'; wantArgs := -5; end
+  else if CaseEqual(mname, 'lstrip') then begin pname := 'pystr_lstrip'; wantArgs := -5; end
+  else if CaseEqual(mname, 'rstrip') then begin pname := 'pystr_rstrip'; wantArgs := -5; end
   else if CaseEqual(mname, 'startswith') then
     begin pname := 'pystr_startswith'; retTk := tyBoolean; wantArgs := 1; end
   else if CaseEqual(mname, 'endswith') then
@@ -2078,6 +2080,15 @@ begin
     if i = 2 then pname := pname + '_from'
     else if i <> 1 then
       Error('Nil Python: str method .' + mname + '() takes one or two arguments');
+    procIdx := FindProc(pname);
+    if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  end
+  else if wantArgs = -5 then
+  begin
+    { strip family: no arg (whitespace) or one CHARS-set arg }
+    if i = 1 then pname := pname + '_chars'
+    else if i <> 0 then
+      Error('Nil Python: str method .' + mname + '() takes at most one argument');
     procIdx := FindProc(pname);
     if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   end
@@ -3374,6 +3385,41 @@ begin
   Result := node;
 end;
 
+{ `with EXPR as VAR:` — desugared to `VAR = EXPR` followed by the body. The
+  context-manager protocol (__enter__/__exit__) is not modelled: the only
+  censused use is `with open(...) as f`, and pyopen reads the whole file
+  eagerly, so there is nothing to close. A `with` without `as` runs the body
+  after evaluating EXPR for its effect. }
+function PyParseWith: Integer;
+var exprNode, node, seq, symIdx: Integer; varName: AnsiString;
+begin
+  Next;                                  { consume `with` }
+  PyParseBoolExpr;
+  exprNode := CurASTNode;
+  seq := -1;
+  if PyIsIdent('as') then
+  begin
+    Next;
+    if CurTok.Kind <> tkIdent then Error('Nil Python: with ... as: expected a name');
+    varName := CurTok.SVal;
+    Next;
+    symIdx := FindSym(varName);
+    if symIdx < 0 then symIdx := AllocVar(varName, IntToTypeKind(ASTTk[exprNode]));
+    if IntToTypeKind(ASTTk[exprNode]) = tyClass then
+      Syms[symIdx].RecName := ResolveNodeRec(exprNode);
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(symIdx);
+    ASTRight[node] := exprNode;
+    seq := PySeqAppend(seq, node);
+  end
+  else
+    seq := PySeqAppend(seq, exprNode);   { evaluate for effect }
+  Expect(tkColon, ':');
+  seq := PySeqAppend(seq, PyParseSuite);
+  PyStmtAteBlock := True;                 { consumed our own body block }
+  Result := seq;
+end;
+
 { A distinct name per hidden loop temp, so nested for-in loops do not share
   an index or a container slot. }
 function PyHiddenName(const stem: AnsiString): AnsiString;
@@ -4216,6 +4262,7 @@ begin
   if CurTok.Kind = tkIf then begin Result := PyParseIf; Exit; end;
   if CurTok.Kind = tkWhile then begin Result := PyParseWhile; Exit; end;
   if CurTok.Kind = tkTry then begin Result := PyParseTry; Exit; end;
+  if PyIsIdent('with') then begin Result := PyParseWith; Exit; end;
   { `raise <expr>` and bare `raise` (re-raise inside a handler). }
   if CurTok.Kind = tkRaise then
   begin

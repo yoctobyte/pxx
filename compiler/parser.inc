@@ -8359,6 +8359,40 @@ begin
         LastExprTk := IntToTypeKind(ASTTk[atDflt]);
         Exit;
       end
+      else if isNilPy and (name = 'open') then
+      begin
+        { open(path[, mode, encoding=...]) -> pyopen(path), a TPyList of lines.
+          Only the path is used; the remaining positional/keyword args are
+          skipped (read mode is assumed — see pyopen). }
+        Next; Expect(tkLParen, '(');
+        ParseExpr;
+        atRecv := CurASTNode;
+        while CurTok.Kind = tkComma do
+        begin
+          Next;
+          { skip one argument, balanced across nested parens }
+          atFld := 0;
+          while (CurTok.Kind <> tkEOF) and
+                not ((atFld = 0) and (CurTok.Kind in [tkComma, tkRParen])) do
+          begin
+            if CurTok.Kind = tkLParen then Inc(atFld)
+            else if CurTok.Kind = tkRParen then Dec(atFld);
+            Next;
+          end;
+        end;
+        Expect(tkRParen, ')');
+        node := AllocNode(AN_CALL);
+        idx := FindProc('pyopen');
+        if idx < 0 then Error('Nil Python: pylib (pyopen) not loaded');
+        ASTIVal[node] := idx;
+        ASTTk[node] := Ord(tyClass);
+        ASTRight[node] := REC_UCLASS_BASE + FindUClass('TPyList');
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := atRecv;
+        ASTLeft[node] := argSeq;
+        CurASTNode := node;
+        LastExprTk := tyClass;
+        Exit;
+      end
       else if isNilPy and (name = 'float') then
       begin
         Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
