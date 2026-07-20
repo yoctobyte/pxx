@@ -192,19 +192,52 @@ benchmark it shouldn't be entered in.
 Pascal-only expressions keep current semantics untouched; only expressions
 *touching the new tag* use the new rules.
 
-## Staged plan
+## Staged plan — RENUMBERED 2026-07-20 (read this, not the old numbering)
 
-1. **Type + trapping overflow.** Promotable int exists, arithmetic is checked,
-   overflow raises a clear error (never silent wrap). Fast, honest, ships early;
-   fixes the current correctness cliff immediately.
-2. **Promotion.** Overflow allocates and promotes to the heap bignum via the
-   narrow interface. Semantics now Python-correct.
-3. **Check elision.** Range/induction analysis strips checks where values are
-   provably bounded — restores full native speed in ordinary loops.
-4. **Variant integration** (new tag, coercions, `VarClear`/`VarCopy`).
-5. **Pascal dialect exposure** — opt-in, explicitly typed, so no existing Pascal
-   program changes behaviour. Genuinely attractive on its own: real bigints
-   without external-library ceremony.
+**The numbers shifted once and the drift caused confusion.** Splitting storage
++arithmetic into its own ticket inserted a stage, so everything after it moved
+up by one. The progress log below already uses the NEW numbers; this section
+did not, and listed four items under "stages 3-5". Now they agree. If you see
+a stage number anywhere else in the tree, check it against this table.
+
+| # | stage | status |
+| --- | --- | --- |
+| 1 | Type exists; names/kinds reserved; declaration guarded; overflow traps, never wraps | **DONE** (`f053b2ed`, `bf86b54e`) |
+| 2 | Storage, checked arithmetic, `Write` — inline tier only | **DONE** (`a2b88243`, split to [[feature-a-promoint-stage2-storage-arith]]) |
+| 3 | Promotion to heap bignum; demotion when it fits again | **DONE** (`2296b874`) |
+| 4 | **Check elision** — range/induction analysis strips checks where values are provably bounded | **NEXT — open** |
+| 5 | Variant integration (new tag, coercions, `VarClear`/`VarCopy`) + NilPy adoption | open |
+| 6 | Pascal dialect exposure — opt-in, explicitly typed, no existing program changes behaviour | open |
+
+**Where the work is now: stage 4.** Every promo op is currently a runtime call
+(that is Option A of [[decide-promoint-rvalue-representation]], accepted
+deliberately — see below). Stage 4 is what restores native speed for values
+that never leave the inline tier. It is not an optimisation afterthought; it is
+the other half of the stage-3 bargain.
+
+### The stage-3 representation decision — settled, do not relitigate
+
+[[decide-promoint-rvalue-representation]] resolved as **Option A: a promo
+rvalue is the ADDRESS of a 2-word slot**, and every op is a runtime helper
+taking slot addresses — the `tyVariant` model already proven in this codebase,
+so all six backends work with no backend changes.
+
+The slowdown is known and was accepted on purpose: correctness before
+optimisation, and stage 4 was already scheduled to restore the fast path.
+Options B (inline payload + guarded fast path) and C (16-byte by-value record)
+were rejected as new value models — guessing wrong there means throwing the
+work away, whereas A can only be slow, and slow is scheduled to be fixed.
+
+**So: do not re-open the representation question as part of stage 4.** Stage 4
+elides *checks* on top of A; it does not replace A.
+
+### Blocked / filed separately (not stage-4 work)
+
+- [[feature-a-promoint-wide-literals]] — a value cannot be WRITTEN past Int64
+  yet (the lexer folds the literal first); blocked on
+  [[bug-a-integer-literal-out-of-range-wraps-silently]].
+- [[bug-a-qplus-misses-32bit-overflow]] — blocks `PromoInt32`, which stays
+  declaration-blocked until its own-width trap is possible.
 
 ## Testing
 
@@ -268,8 +301,9 @@ ordinary programs, not just in bignum-flavoured ones.
 
 Stage 2 (storage, checked arithmetic, Write) is now its own ticket:
 [[feature-a-promoint-stage2-storage-arith]], prio 85. This umbrella stays open
-for stages 3-5 (promotion to heap bignum, check elision, variant integration,
-Pascal dialect exposure).
+for stages 3-6 — see the renumbered table above, which is authoritative. (This
+line originally said "stages 3-5" and then listed four things; that off-by-one
+is what the renumbering fixed.)
 
 ### Next step — stage 2
 
