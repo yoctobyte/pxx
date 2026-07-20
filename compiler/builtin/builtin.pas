@@ -25,6 +25,7 @@ procedure Val(const s: AnsiString; var v: Int64; var code: Integer);
 procedure ValQWord(const s: AnsiString; var v: QWord; var code: Integer);
 procedure ValFloat(const s: AnsiString; var v: Double; var code: Integer);
 function VariantToStr(const v: Variant): AnsiString;
+function VariantTagName(t: Int64): AnsiString;
 { Variant -> SCALAR unboxing, the counterpart of IR_VAR_STORE/IR_VAR_BOX.
   Without these a variant reaching a scalar context (assignment, return,
   argument) was read as a raw 8-byte load and yielded the TAG, silently
@@ -406,6 +407,18 @@ begin
 end;
 
 
+function VariantTagName(t: Int64): AnsiString;
+begin
+  if t = 0 then Result := 'None'
+  else if (t = 1) or (t = 2) then Result := 'an integer'
+  else if t = 3 then Result := 'a float'
+  else if t = 4 then Result := 'a boolean'
+  else if t = 5 then Result := 'a character'
+  else if t = 6 then Result := 'a string'
+  else if t = 7 then Result := 'an object'
+  else Result := 'an unknown tag';
+end;
+
 function VariantToInt64(const v: Variant): Int64;
 var
   p: PVariantRecord;
@@ -419,10 +432,12 @@ begin
     Result := 0
   else
   begin
-    { VT_STRING (6). CPython raises TypeError here; parsing the text would
-      turn a type error into a plausible number, which is exactly the failure
-      mode this whole fix exists to remove. }
-    writeln('Runtime error: variant holds a string, an integer was required');
+    { VT_STRING (6) or VT_OBJECT (7). CPython raises TypeError here; parsing a
+      string's text would turn a type error into a plausible number, which is
+      exactly the failure mode this whole fix exists to remove. Name the tag
+      actually found -- an earlier version said "string" for both. }
+    writeln('Runtime error: variant holds ', VariantTagName(p^.VType),
+            ', an integer was required');
     Halt(219);
   end;
 end;
@@ -440,7 +455,8 @@ begin
     Result := 0.0
   else
   begin
-    writeln('Runtime error: variant holds a string, a float was required');
+    writeln('Runtime error: variant holds ', VariantTagName(p^.VType),
+            ', a float was required');
     Halt(219);
   end;
 end;
