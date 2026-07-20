@@ -1005,6 +1005,9 @@ begin
     PyParseIsCmp;   { is/is-not over the bitwise chain over ParseExpr }
 end;
 
+function PyBoolOpReturnsOperand(a, b: Integer): Boolean; forward;
+function PyMakeBoolOpValue(a, b: Integer; isOr: Boolean): Integer; forward;
+
 procedure PyParseBoolAnd;
 var left, right, node: Integer;
 begin
@@ -1015,11 +1018,66 @@ begin
     Next;
     PyParseBoolNot;
     right := CurASTNode;
-    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkAnd);
-    ASTLeft[node] := left; ASTRight[node] := right; ASTTk[node] := Ord(tyBoolean);
+    if PyBoolOpReturnsOperand(left, right) then
+      node := PyMakeBoolOpValue(left, right, False)
+    else
+    begin
+      node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkAnd);
+      ASTLeft[node] := left; ASTRight[node] := right; ASTTk[node] := Ord(tyBoolean);
+    end;
     left := node;
   end;
   CurASTNode := left;
+end;
+
+{ A truthiness condition for `n`: a variant is tested with pylib bool() (its raw
+  scalar would be the tag), everything else tests naturally in a condition. }
+function PyMakeTruthy(n: Integer): Integer;
+var procIdx, argNode: Integer;
+begin
+  if IntToTypeKind(ASTTk[n]) <> tyVariant then begin Result := n; Exit; end;
+  procIdx := FindProc('bool');
+  if procIdx < 0 then begin Result := n; Exit; end;
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := n; ASTRight[argNode] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyBoolean);
+  ASTLeft[Result] := argNode;
+end;
+
+{ True when `a or b` / `a and b` must return an OPERAND (Python semantics) rather
+  than a Boolean — i.e. it is a VALUE, not pure control flow. Triggered when an
+  operand is a variant or a class (a container/object); pure ordinal/boolean
+  operands keep the cheap boolean form, which every condition context uses. }
+function PyBoolOpReturnsOperand(a, b: Integer): Boolean;
+var ta, tb: TTypeKind;
+begin
+  ta := IntToTypeKind(ASTTk[a]); tb := IntToTypeKind(ASTTk[b]);
+  Result := (ta = tyVariant) or (tb = tyVariant) or (ta = tyClass) or (tb = tyClass);
+end;
+
+{ `a or b` as a value -> `a if truthy(a) else b`; `a and b` -> `b if truthy(a)
+  else a`. Reuses AN_TERNARY (only the selected arm evaluates). `a` appears in
+  both the condition and an arm — fine for the side-effect-free operands the
+  corpus uses; a call with side effects would double-evaluate (noted). }
+function PyMakeBoolOpValue(a, b: Integer; isOr: Boolean): Integer;
+var procIdx, a0, a1: Integer; pname: AnsiString;
+begin
+  { A pylib call rather than a ternary, so the normal call path boxes each
+    operand into a variant (a ternary arm that is a raw class/scalar would be
+    mislabelled variant and read as garbage). Loses short-circuit — see the
+    pylib note. }
+  if isOr then pname := 'pyor_v' else pname := 'pyand_v';
+  procIdx := FindProc(pname);
+  if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := a;
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := b;
+  ASTRight[a0] := a1; ASTRight[a1] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyVariant);
+  ASTLeft[Result] := a0;
 end;
 
 procedure PyParseBoolExpr;
@@ -1032,8 +1090,13 @@ begin
     Next;
     PyParseBoolAnd;
     right := CurASTNode;
-    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkOr);
-    ASTLeft[node] := left; ASTRight[node] := right; ASTTk[node] := Ord(tyBoolean);
+    if PyBoolOpReturnsOperand(left, right) then
+      node := PyMakeBoolOpValue(left, right, True)
+    else
+    begin
+      node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkOr);
+      ASTLeft[node] := left; ASTRight[node] := right; ASTTk[node] := Ord(tyBoolean);
+    end;
     left := node;
   end;
   { Python's CONDITIONAL EXPRESSION, `A if C else B` — the value comes first

@@ -1,0 +1,15 @@
+from typing import Any
+def f(x: Any) -> Any:
+    return x or "default"
+print(f("hello"))
+print(f(None))
+print(f(""))
+def g(x: Any, y: Any) -> Any:
+    return x and y
+print(g(1, 2))
+print(g(0, 2))
+n = 5
+if n > 0 and n < 10:
+    print("in range")
+if n < 0 or n > 3:
+    print("out")

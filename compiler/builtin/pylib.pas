@@ -355,6 +355,13 @@ function pymul_v(const a: Variant; const b: Variant): Variant;
 function pyvar_to_float(const v: Variant): Double;
 function pyvar_to_bool(const v: Variant): Boolean;
 function pyvar_to_char(const v: Variant): Char;
+{ Python's `a or b` / `a and b` as VALUES: `or` yields a if truthy else b; `and`
+  yields b if a is truthy else a. Both operands are already evaluated (the
+  caller boxed them into variants), so short-circuit side effects are lost — a
+  documented deviation, harmless for the value idioms this serves (`x or []`,
+  `given or "anon"`). Returns the chosen operand. }
+function pyor_v(const a: Variant; const b: Variant): Variant;
+function pyand_v(const a: Variant; const b: Variant): Variant;
 function pyfloordiv_v(const a: Variant; const b: Variant): Variant;
 function pyfloormod_v(const a: Variant; const b: Variant): Variant;
 function pystr_repeat_v(const v: Variant; n: Int64): AnsiString;
@@ -398,6 +405,7 @@ function max(a: Double; b: Double): Double; overload;
   them by argument type, like min/max (feature-nilpy-missing-builtins). }
 function list(l: TPyList): TPyList;
 function list(const s: AnsiString): TPyList; overload;
+function list(const v: Variant): TPyList; overload;
 { `reversed(x)` — Python returns a lazy iterator; NilPy's `for` is a counted-loop
   desugar with no iterator concept, so this is the reversed COPY, which behaves
   identically for `for x in reversed(xs)` and `list(reversed(xs))`. }
@@ -1570,6 +1578,22 @@ begin
   end;
 end;
 
+function pyor_v(const a: Variant; const b: Variant): Variant;
+var src, dst: PPyVarRec;
+begin
+  if pyvar_to_bool(a) then src := PPyVarRec(@a) else src := PPyVarRec(@b);
+  dst := PPyVarRec(@Result);
+  PyVarSlotInit(dst, src);
+end;
+
+function pyand_v(const a: Variant; const b: Variant): Variant;
+var src, dst: PPyVarRec;
+begin
+  if pyvar_to_bool(a) then src := PPyVarRec(@b) else src := PPyVarRec(@a);
+  dst := PPyVarRec(@Result);
+  PyVarSlotInit(dst, src);
+end;
+
 function pyfloordiv_v(const a: Variant; const b: Variant): Variant;
 var
   pa, pb, r: PPyVarRec;
@@ -2729,6 +2753,21 @@ begin
   if l <> nil then
     for i := 0 to l.count - 1 do r.append(l.at(i));
   Result := r;
+end;
+
+{ list(v) where v is a VARIANT — copy the list/str it holds. `list(fb or [])`
+  reaches this once `or` returns its operand as a variant. }
+function list(const v: Variant): TPyList; overload;
+var o: TObject; i: Integer;
+begin
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then begin Result := list(TPyList(o)); Exit; end;
+    if o is TPyDict then begin Result := TPyDict(o).keylist; Exit; end;
+  end;
+  if pyvartag(v) = 6 then begin Result := list(pystr_of(v)); Exit; end;
+  Result := TPyList.Create;   { None / empty }
 end;
 
 function list(const s: AnsiString): TPyList; overload;
