@@ -6,8 +6,8 @@ prio: 45  # auto
 
 - **Type:** feature
 - **Track:** B
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** trackE
 - **Opened:** 2026-06-22
 - **Relation:** Builds on `feature-demo-mandelbrot` (compute kernel + native-asm
   path) and the existing `examples/mandelbrot/mandelbrot.pas` (portable Double
@@ -68,3 +68,4 @@ interactive pan/zoom). The multithreading is the point of the ticket.
 - 2026-06-22 — Opened on user suggestion: GUI, fast interactive tiled zoom,
   multithreaded as the core feature; phased mono → threads → language parallelism;
   explicit no-automated-multithread-tests-without-permission guardrail.
+- 2026-07-20 — resolved, commit HEAD.

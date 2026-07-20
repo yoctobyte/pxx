@@ -46,7 +46,7 @@ program MandelZoom;
 
   Track B/E (example app). Build --threadsafe. }
 
-uses sysutils, baseunix, ansiterm, palparallel;
+uses sysutils, baseunix, math, ansiterm, palparallel;
 
 const
   FRAC     = 28;
@@ -247,8 +247,7 @@ var u, v: Integer;
 begin
   u := (t + phase) mod PALSIZE;
   if u < PALSIZE div 2 then v := u * 2 else v := (PALSIZE - u) * 2 - 1;
-  { v in [0..255]; square it for a gentler dark end }
-  Lobe := (v * v) div 255;
+  Lobe := v;
 end;
 
 procedure BuildPalette;
@@ -322,7 +321,9 @@ procedure ColorOf(n, maxIt, shift: Integer; var r, g, b: Integer);
 var idx: Integer;
 begin
   if n >= maxIt then begin r := 0; g := 0; b := 0; Exit; end;
-  idx := ((n * 3) + shift) mod PALSIZE;
+  { sqrt-scaled index: most pixels escape in a handful of iterations, so a linear
+    index would crush the whole outer region into one palette band. }
+  idx := (Trunc(Sqrt(n * 1.0) * 40.0) + shift) mod PALSIZE;
   r := palR[idx]; g := palG[idx]; b := palB[idx];
 end;
 
