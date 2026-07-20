@@ -30,3 +30,6 @@ slots as-is, not deep-copy them.
 `test-nilpy` green + `--tier quick` + self-host byte-identical, with `[0] * 4`,
 `4 * [0]`, `[] * 3`, `[0] * 0` and a nested `[[0]] * 2` (mutate the inner list
 and observe the aliasing) matching CPython.
+
+## Log
+- 2026-07-20 — resolved, commit 8297ae82.
