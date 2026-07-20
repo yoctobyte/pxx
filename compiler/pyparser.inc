@@ -1822,6 +1822,32 @@ begin
   end;
 end;
 
+{ Wrap a TPyList / TPyDict expression in the pylib repr call, so it prints as
+  Python spells a container. Anything else is returned unchanged. }
+function PyReprContainer(n: Integer): Integer;
+var rec, listCi, dictCi, procIdx, argNode, callNode: Integer; pname: AnsiString;
+begin
+  Result := n;
+  if n < 0 then Exit;
+  if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
+  rec := ResolveNodeRec(n);
+  if rec < REC_UCLASS_BASE then Exit;
+  listCi := FindUClass('TPyList');
+  dictCi := FindUClass('TPyDict');
+  if (listCi >= 0) and (rec = REC_UCLASS_BASE + listCi) then pname := 'pylist_repr'
+  else if (dictCi >= 0) and (rec = REC_UCLASS_BASE + dictCi) then pname := 'pydict_repr'
+  else Exit;
+  procIdx := FindProc(pname);
+  if procIdx < 0 then Exit;   { pylib not loaded — leave the old behaviour }
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := n;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := procIdx;
+  ASTTk[callNode] := Ord(tyAnsiString);
+  ASTLeft[callNode] := argNode;
+  Result := callNode;
+end;
+
 function PyParsePrint: Integer;
 var node, argNode, lastArg, sepLit: Integer;
 begin
@@ -1849,6 +1875,11 @@ begin
         lastArg := argNode;
       end;
       PyParseBoolExpr;
+      { A container argument prints its ELEMENTS (`['a', 'b']`), like Python.
+        Without this it fell through to the integer path and printed the
+        TPyList/TPyDict instance pointer — silently, in the single most natural
+        debugging line there is (bug-a-nilpy-print-of-a-list-prints-a-pointer). }
+      CurASTNode := PyReprContainer(CurASTNode);
       argNode := AllocNode(AN_ARG);
       ASTLeft[argNode] := CurASTNode;
       ASTRight[argNode] := -1;

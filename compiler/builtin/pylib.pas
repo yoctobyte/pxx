@@ -144,6 +144,14 @@ function pyrepr_of(i: Int64): AnsiString; overload;
 function pyrepr_of(d: Double): AnsiString; overload;
 function pyrepr_of(c: Char): AnsiString; overload;
 function pyrepr_of(const v: Variant): AnsiString; overload;
+{ Python's repr() of a CONTAINER. print(xs) is the most natural debugging line
+  in Python, and it used to print the TPyList instance POINTER — the container
+  fell through to the integer path (bug-a-nilpy-print-of-a-list-prints-a-pointer).
+  Recursive: a nested list/dict element is reprd as a container, not as its
+  object tag. }
+function pylist_repr(l: TPyList): AnsiString;
+function pydict_repr(d: TPyDict): AnsiString;
+function pyvar_repr(const v: Variant): AnsiString;
 { Python's format() for an f-string hole with a spec. The spec arrives as the
   literal text between ':' and the closing brace; this unit is the ONE place
   that interprets it, so the lexer never has to know what "05x" means. }
@@ -1710,6 +1718,48 @@ begin
     Exit;
   end;
   Result := pystr_of(v);
+end;
+
+{ repr() dispatching on the RUNTIME tag, so a container element nested inside a
+  container is spelled out rather than printed as its object handle. }
+function pyvar_repr(const v: Variant): AnsiString;
+var o: TObject;
+begin
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then begin Result := pylist_repr(TPyList(o)); Exit; end;
+    if o is TPyDict then begin Result := pydict_repr(TPyDict(o)); Exit; end;
+  end;
+  Result := pyrepr_of(v);
+end;
+
+function pylist_repr(l: TPyList): AnsiString;
+var i: Integer;
+begin
+  if l = nil then begin Result := '[]'; Exit; end;
+  Result := '[';
+  for i := 0 to l.count - 1 do
+  begin
+    if i > 0 then Result := Result + ', ';
+    Result := Result + pyvar_repr(l.get(i));
+  end;
+  Result := Result + ']';
+end;
+
+function pydict_repr(d: TPyDict): AnsiString;
+var i: Integer; ks: TPyList; k: Variant;
+begin
+  if d = nil then begin Result := '{}'; Exit; end;
+  Result := '{';
+  ks := d.keylist;
+  for i := 0 to ks.count - 1 do
+  begin
+    if i > 0 then Result := Result + ', ';
+    k := ks.get(i);
+    Result := Result + pyvar_repr(k) + ': ' + pyvar_repr(d.fetch(k));
+  end;
+  Result := Result + '}';
 end;
 
 function pystr_of(const v: Variant): AnsiString; overload;

@@ -1,0 +1,17 @@
+# print() of a container prints its ELEMENTS, like Python. It used to print the
+# TPyList/TPyDict instance POINTER: a container argument fell through to the
+# integer path (bug-a-nilpy-print-of-a-list-prints-a-pointer). Silent, in the
+# most natural debugging line Python has.
+# Output must match CPython running this same file.
+
+xs = ["a", "bb"]
+print(xs)
+print([1, 2, 3])
+print([])
+print([1.5, True, "x"])
+print("a,b".split(","))
+d = {}
+d["k"] = "v"
+d["n"] = 2
+print(d)
+print([[1, 2], ["a"]])
