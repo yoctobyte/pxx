@@ -97,3 +97,6 @@ with `def put(self, k: str, v: int)`) when this is fixed.
 
 `make test` + self-host byte-identical (Track A), plus `test-nilpy` green and
 the repro above matching CPython.
+
+## Log
+- 2026-07-20 — resolved, commit 21559842.
