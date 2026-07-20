@@ -27,7 +27,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (138)
+## backlog (137)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -162,8 +162,7 @@ _none_
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | regression-cascade-3d46e52fc733 | T | 70 | regression | regression CASCADE: 1471 jobs newly red at 3d46e52fc733 (auto-filed by twatch) | — |
-| regression-optdiff-shard0-6 | T | 70 | regression | regression: optdiff#shard0/6 red at 110835ca0693 (auto-filed by twatch) | — |
-| regression-optdiff-shard5-6 | T | 70 | regression | regression: optdiff#shard5/6 red at a3f6e70a728f (auto-filed by twatch) | — |
+| regression-optdiff-o3-stack-frame-intrinsics | O | 70 | regression | -O3 differential: test_stack_frame_intrinsics_b270.pas (optdiff, persistent) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
 | task-t-enroll-pascal-conformance-tier | T | 45 | task | Enroll test-pascal-conformance in testmgr tiers (sharded, like the C battery) | — |
@@ -2543,8 +2542,7 @@ _none_
 - [p 70] [A] bug-a-nilpy-unary-minus-precedence-vs-floordiv
 - [p 70] [N] feature-nilpy-nested-defs
 - [p 70] [T] regression-cascade-3d46e52fc733
-- [p 70] [T] regression-optdiff-shard0-6
-- [p 70] [T] regression-optdiff-shard5-6
+- [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
 - [p 65] [N] bug-nilpy-string-local-truncates-at-255
 - [p 65] [A] feature-a-typeref-handle
 - [p 60] [U] decide-abi-portable-vs-target-split
