@@ -63,13 +63,45 @@ the gate). What follows is what that commit covered:
 - `b[i]` read/write and `len(b)`, via a default indexed property, exactly as
   TPyDict does.
 
-**STILL OPEN — needs a shared-parser (Track A) hook:**
-- **Slice syntax** `b[a:c]`, read and assign. The subscript grammar lives in
-  `parser.inc`'s index path, which Track N must not edit.
-- **`int.to_bytes(n, "little", signed=True)`** — a method call on an int, with
-  a KEYWORD argument. NilPy has no keyword arguments at all. Recommend
-  recognising these two as intrinsics with a fixed argument shape rather than
-  taking on keyword arguments for 36 sites.
+**SLICE SYNTAX — LANDED 2026-07-20.** Read and assign, for str, bytes and
+list, diffed against CPython in `test/test_nilpy_slices.npy` (now in the
+`test-nilpy` gate).
+
+- pylib: `pystr_slice` / `pybytes_slice` / `pylist_slice` / `pybytes_setslice`,
+  all sharing one `PySliceBounds` so the three element types cannot drift.
+  Python semantics: negative bounds count from the end, bounds CLAMP, an
+  inverted range is empty (unlike indexing, which raises). An omitted bound is
+  compiled to the `PY_SLICE_OMIT` sentinel — safe precisely because slices
+  clamp, so a literal MaxInt already means "the end".
+- Bytes slice ASSIGN rejects a length change loudly rather than splicing: a
+  quiet resize would move every address above the write and corrupt uforth's
+  data space.
+- Track A hooks — three sites, all gated on `PyExprMode`, all deciding by the
+  same depth-1-colon lookahead (`PySliceBracketAt`), because the default
+  indexed-property path consumes the bracket itself: the `ParseFactor` suffix
+  wrapper (non-lvalue bases), `ParseLValueAST`'s suffix loop, and
+  `ParseClassRecordSelectors` (the `self.memory[a:b]` route). A plain `[i]` is
+  untouched on all three. **No grammar conflict:** nothing in the Pascal
+  dialect puts a `:` inside brackets (set ranges use `..`).
+- A slice is not an lvalue, so assignment is handled by REWRITING the already
+  built read call into `pybytes_setslice` — no new AST node. Two statement
+  routes needed it: `self.buf[a:b] = x` and the plain-local `buf[a:b] = x`.
+- **LANDMINE (cost most of the debugging):** the hooks silently did not fire
+  because the bytearray FIELD had no class identity — a separate, pre-existing
+  bug where any call returning a class dropped which class. Filed and fixed as
+  [[bug-nilpy-call-returning-class-loses-identity]]; it was also segfaulting
+  `len(self.memory)` on its own.
+- **LANDMINE:** pxx self-host was byte-identical while FPC could not resolve
+  the three new pyparser routines called from `parser.inc` — they need
+  `forward` declarations there. Invisible to the local gate; caught only by
+  `make fpc-check`.
+
+**STILL OPEN — the other half of this ticket:**
+- **`int.to_bytes(n, "little", signed=True)` / `int.from_bytes(...)`** — a
+  method call on an int, with a KEYWORD argument. NilPy has no keyword
+  arguments at all. Recommend recognising these two as intrinsics with a fixed
+  argument shape rather than taking on keyword arguments for 36 sites.
+  **This is now uforth's wall** (uforth.py:271 parses; it stops on `to_bytes`).
 
 Same shape as [[bug-a-nilpy-and-or-in-unavailable-in-call-arguments]]: the
 frontend can own the meaning, but the shared parser has to know where the form

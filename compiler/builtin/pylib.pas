@@ -22,6 +22,11 @@ unit pylib;
 
 interface
 
+const
+  { An omitted slice bound, as emitted by the frontend for `b[:hi]` / `b[lo:]`.
+    See the slice functions below for why a sentinel is safe here. }
+  PY_SLICE_OMIT = 2147483647;
+
 type
   TPyVarRec = record
     VType: Int64;
@@ -165,6 +170,23 @@ function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; over
 function bytearray(n: Integer): TPyBytes;
 function bytes(b: TPyBytes): TPyBytes;
 function len(b: TPyBytes): Integer; overload;
+{ SLICES. `b[lo:hi]` desugars to one of these calls in the frontend, with an
+  OMITTED bound passed as PY_SLICE_OMIT. That sentinel needs no disambiguation:
+  Python CLAMPS slice bounds instead of raising, so a literal index of MaxInt
+  already means "the end" and collides harmlessly.
+
+  Python slice semantics, implemented once in PySliceBounds and shared by all
+  three element types: a negative bound counts from the end, both bounds clamp
+  into [0, n], and an inverted or empty range yields an EMPTY result rather
+  than an error. This is deliberately unlike INDEXING, which raises. }
+function pystr_slice(const s: AnsiString; lo, hi: Integer): AnsiString;
+function pybytes_slice(b: TPyBytes; lo, hi: Integer): TPyBytes;
+function pylist_slice(l: TPyList; lo, hi: Integer): TPyList;
+{ `b[lo:hi] = src`. uforth assigns a slice of the SAME length everywhere (it is
+  emulating fixed-width cells in Forth data space), so a length CHANGE is
+  rejected loudly rather than silently splicing: a quiet resize would move
+  every address above the write and corrupt the data space. }
+procedure pybytes_setslice(b: TPyBytes; lo, hi: Integer; src: TPyBytes);
 { Python's two-argument min/max. Spelled as ordinary pylib FUNCTIONS, the
   same way bytearray/bytes are: neither name is a Pascal keyword, so both
   resolve through the normal call path with no frontend hook.
@@ -1510,6 +1532,64 @@ begin
   Result := TPyBytes.Create(n);
 end;
 
+{ Python's slice bound normalisation, shared by str, bytes and list so the
+  three cannot drift apart. Order matters: PY_SLICE_OMIT is resolved FIRST
+  (an omitted low bound is 0 and an omitted high bound is n), then a negative
+  bound counts from the end, and only then does the clamp run. Clamping last
+  is what makes an out-of-range or inverted range yield an EMPTY slice rather
+  than an error, which is the documented Python behaviour. }
+procedure PySliceBounds(n: Integer; var lo, hi: Integer);
+begin
+  if lo = PY_SLICE_OMIT then lo := 0;
+  if hi = PY_SLICE_OMIT then hi := n;
+  if lo < 0 then lo := lo + n;
+  if hi < 0 then hi := hi + n;
+  if lo < 0 then lo := 0;
+  if hi < 0 then hi := 0;
+  if lo > n then lo := n;
+  if hi > n then hi := n;
+  { an inverted range is empty, not negative-length }
+  if hi < lo then hi := lo;
+end;
+
+function pystr_slice(const s: AnsiString; lo, hi: Integer): AnsiString;
+begin
+  PySliceBounds(Length(s), lo, hi);
+  { Copy is 1-based and takes a COUNT; Python's bounds are 0-based }
+  Result := Copy(s, lo + 1, hi - lo);
+end;
+
+function pybytes_slice(b: TPyBytes; lo, hi: Integer): TPyBytes;
+var k: Integer; src, dst: PByte;
+begin
+  PySliceBounds(b.FLen, lo, hi);
+  Result := TPyBytes.Create(hi - lo);
+  for k := 0 to (hi - lo) - 1 do
+  begin
+    src := PByte(NativeInt(b.FData) + lo + k);
+    dst := PByte(NativeInt(Result.FData) + k);
+    dst^ := src^;
+  end;
+end;
+
+procedure pybytes_setslice(b: TPyBytes; lo, hi: Integer; src: TPyBytes);
+var k: Integer; sp, dp: PByte;
+begin
+  PySliceBounds(b.FLen, lo, hi);
+  if src.FLen <> (hi - lo) then
+  begin
+    WriteLn('ValueError: byte slice assignment length mismatch (expected ',
+            hi - lo, ', got ', src.FLen, ')');
+    Halt(1);
+  end;
+  for k := 0 to src.FLen - 1 do
+  begin
+    sp := PByte(NativeInt(src.FData) + k);
+    dp := PByte(NativeInt(b.FData) + lo + k);
+    dp^ := sp^;
+  end;
+end;
+
 function bytes(b: TPyBytes): TPyBytes;
 var k: Integer; src, dst: PByte;
 begin
@@ -1901,6 +1981,22 @@ begin
     m := m div 16;
   end;
   if n < 0 then Result := '-0x' + d else Result := '0x' + d;
+end;
+
+{ A list slice is a SHALLOW copy, as in Python: the new list holds the same
+  element values (`xs[:]` is the idiomatic shallow copy), so the slots are
+  copied through append and a contained object stays shared. }
+function pylist_slice(l: TPyList; lo, hi: Integer): TPyList;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  if l <> nil then
+  begin
+    PySliceBounds(l.count, lo, hi);
+    for i := lo to hi - 1 do
+      r.append(l.get(i));
+  end;
+  Result := r;
 end;
 
 function pylist_repeat(l: TPyList; n: Int64): TPyList;

@@ -1,0 +1,44 @@
+# NilPy slices: str, bytes and list, read and assign.
+# Diffed against CPython — this file must run unmodified under python3.
+
+s = "abcdefgh"
+print(s[2:5])
+print(s[:3])
+print(s[5:])
+print(s[:])
+print(s[-3:])
+print(s[:-6])
+print(s[-5:-2])
+# clamped and inverted ranges are EMPTY, not errors
+print(s[3:2])
+print(s[100:200])
+print(s[-100:2])
+print(len(s[2:5]))
+
+b = bytearray(8)
+b[0] = 65
+b[1] = 66
+b[2] = 67
+b[7] = 90
+c = b[0:3]
+print(len(c))
+print(c[0])
+print(c[2])
+print(len(b[6:]))
+print(b[:2][1])
+print(b[-1:][0])
+
+# slice assignment of the same length
+d = bytearray(4)
+d[0:2] = bytes(c[0:2])
+print(d[0])
+print(d[1])
+print(d[2])
+
+xs = [10, 20, 30, 40, 50]
+print(len(xs[1:4]))
+print(xs[1:3][0])
+print(xs[:2][1])
+print(xs[3:][0])
+print(xs[-2:][1])
+print(len(xs[:]))

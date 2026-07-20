@@ -180,6 +180,33 @@ begin
   end;
 end;
 
+(* Is the bracket group opening at token index i a SLICE rather than a plain
+   subscript? Same depth-1 colon scan as PyDictLiteralAt: a ':' belonging to a
+   nested call, dict literal or inner slice does not vote. The lvalue subscript
+   path has to know BEFORE it commits, because the default-indexed-property
+   machinery consumes the bracket itself. *)
+function PySliceBracketAt(i: Integer): Boolean;
+var depth: Integer;
+begin
+  Result := False;
+  depth := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkBegin, tkLBrack, tkLParen] then Inc(depth)
+    else if Tokens[i].Kind in [tkEnd, tkRBrack, tkRParen] then
+    begin
+      Dec(depth);
+      if depth = 0 then Exit;
+    end
+    else if (depth = 1) and (Tokens[i].Kind = tkColon) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 function PyDictLiteralAhead: Boolean;
 begin
   Result := PyDictLiteralAt(TokPos - 1);   (* TokPos-1 = the opening brace *)
@@ -1043,6 +1070,15 @@ begin
               PyDefReturnType token scan that stood in for it is gone. }
             procIdx := FindProc(name);
             if procIdx >= 0 then tk := Procs[procIdx].RetType;
+            { A call returning a CLASS has to record WHICH class, or the
+              inferred local/field carries tyClass with no identity and
+              overload resolution mis-picks — `len(bytearray(n))` chose the
+              AnsiString overload and read a class pointer as a string handle,
+              segfaulting. Same failure the str-method branches above document.
+              ProcRetRecId is a REC ID; PyInferLastCi is a CLASS INDEX. }
+            if (procIdx >= 0) and (tk = tyClass) and
+               (ProcRetRecId[procIdx] >= REC_UCLASS_BASE) then
+              PyInferLastCi := ProcRetRecId[procIdx] - REC_UCLASS_BASE;
             if tk = tyUnknown then tk := tyVariant;
           end;
           i := i + 1; depth := 0;
@@ -1078,7 +1114,10 @@ begin
           if si >= 0 then
           begin
             tk := Procs[UMthProc_[si]].RetType;
-            if tk = tyClass then PyInferLastCi := ProcRetRecId[UMthProc_[si]];
+            { REC ID -> CLASS INDEX. Assigning the rec id straight across left
+              every consumer to add REC_UCLASS_BASE a second time. }
+            if (tk = tyClass) and (ProcRetRecId[UMthProc_[si]] >= REC_UCLASS_BASE) then
+              PyInferLastCi := ProcRetRecId[UMthProc_[si]] - REC_UCLASS_BASE;
             i := i + 3; depth := 0;
             while i < endIdx do
             begin
@@ -1802,6 +1841,159 @@ begin
   else
     Result := -1;
   if Result < 0 then Error('Nil Python: this value cannot be subscripted');
+end;
+
+{ ---- SLICES  `b[lo:hi]` ----------------------------------------------------
+  Python slices reach the parser as a subscript whose index expression is
+  followed by ':'. Nothing in the Pascal dialect puts a ':' inside brackets
+  (set ranges use '..'), so the form is unambiguous and the shared parser can
+  hand the whole tail here the moment it sees the colon.
+
+  A slice on a str/list PRODUCES a value; a slice on bytes is also an
+  assignment TARGET. Rather than invent an lvalue node for the second case,
+  the read call is built first and rewritten into pybytes_setslice by
+  PyRewriteSliceAssign when an '=' turns out to follow — the read call
+  already carries base, lo and hi in its argument chain. }
+
+function PyBytesCi: Integer;
+begin
+  PyBytesCi := FindUClass('TPyBytes');
+end;
+
+{ Is this node sliceable? str, bytes and list are; a dict is NOT (Python has
+  no dict slice), which is why this is not PySubscriptableSuffix. }
+function PyIsSliceBase(n: Integer): Boolean;
+var rec, listCi, bytesCi: Integer;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  if PyIsStrBaseTk(IntToTypeKind(ASTTk[n])) then begin Result := True; Exit; end;
+  if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
+  rec := ResolveNodeRec(n);
+  if rec < REC_UCLASS_BASE then Exit;
+  listCi  := FindUClass('TPyList');
+  bytesCi := PyBytesCi;
+  Result := ((listCi >= 0) and (rec = REC_UCLASS_BASE + listCi)) or
+            ((bytesCi >= 0) and (rec = REC_UCLASS_BASE + bytesCi));
+end;
+
+{ The sentinel an omitted bound is compiled to; pylib's PySliceBounds turns it
+  back into 0 or len. Kept in sync with PY_SLICE_OMIT in pylib.pas. }
+function PySliceOmitNode: Integer;
+begin
+  Result := AllocNode(AN_INT_LIT);
+  ASTIVal[Result] := 2147483647;
+  ASTTk[Result] := Ord(tyInteger);
+end;
+
+{ base[lo:hi] as a VALUE. Picks the pylib function by element type so each
+  container keeps its own result type: str -> str, bytes -> bytes, list ->
+  list. }
+function PyMakeSlice(baseNode, loNode, hiNode: Integer): Integer;
+var procIdx, callNode, a0, a1, a2, rec, listCi, bytesCi: Integer;
+    pname: AnsiString;
+    retTk: TTypeKind;
+begin
+  pname := '';
+  retTk := tyInteger;
+  if PyIsStrBaseTk(IntToTypeKind(ASTTk[baseNode])) then
+  begin
+    pname := 'pystr_slice';
+    retTk := tyAnsiString;
+  end
+  else
+  begin
+    rec := ResolveNodeRec(baseNode);
+    listCi  := FindUClass('TPyList');
+    bytesCi := PyBytesCi;
+    if (bytesCi >= 0) and (rec = REC_UCLASS_BASE + bytesCi) then
+    begin
+      pname := 'pybytes_slice';
+      retTk := tyClass;
+    end
+    else if (listCi >= 0) and (rec = REC_UCLASS_BASE + listCi) then
+    begin
+      pname := 'pylist_slice';
+      retTk := tyClass;
+    end;
+  end;
+  if pname = '' then Error('Nil Python: this value cannot be sliced');
+  procIdx := FindProc(pname);
+  if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := baseNode;
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := loNode;
+  a2 := AllocNode(AN_ARG); ASTLeft[a2] := hiNode;
+  { the ARG chain must be LINKED, not just allocated in order }
+  ASTRight[a0] := a1;
+  ASTRight[a1] := a2;
+  ASTRight[a2] := -1;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := procIdx;
+  ASTTk[callNode] := Ord(retTk);
+  ASTLeft[callNode] := a0;
+  { a class-typed result must carry its record id or `.` and `[` on the slice
+    would not resolve; a str slice must carry NO record id, set explicitly
+    rather than trusting the allocator }
+  if retTk = tyClass then
+    ASTRight[callNode] := ResolveNodeRec(baseNode)
+  else
+    ASTRight[callNode] := -1;
+  LastExprTk := retTk;
+  Result := callNode;
+end;
+
+{ Parse the tail of a slice: CurTok is the ':' , `loNode` is the low bound
+  already parsed (-1 when omitted, as in `b[:n]`). Consumes through ']'. }
+function PyParseSliceTail(baseNode, loNode: Integer): Integer;
+var hiNode: Integer;
+begin
+  Next;                              { consume ':' }
+  if loNode < 0 then loNode := PySliceOmitNode;
+  if CurTok.Kind = tkRBrack then
+    hiNode := PySliceOmitNode        { `b[lo:]` }
+  else
+  begin
+    PyParseBoolExpr;
+    hiNode := CurASTNode;
+  end;
+  Expect(tkRBrack, ']');
+  Result := PyMakeSlice(baseNode, loNode, hiNode);
+  CurASTNode := Result;
+end;
+
+{ True when `n` is the pybytes_slice call built above, i.e. a slice that is
+  being used as an assignment TARGET rather than a value. }
+function PyIsBytesSliceCall(n: Integer): Boolean;
+var procIdx: Integer;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  if ASTKind[n] <> AN_CALL then Exit;
+  procIdx := FindProc('pybytes_slice');
+  Result := (procIdx >= 0) and (ASTIVal[n] = procIdx);
+end;
+
+{ `b[lo:hi] = src` — turn the already-built read into the setter call by
+  swapping the target proc and appending the source as a fourth argument. The
+  whole statement IS this call. }
+function PyRewriteSliceAssign(sliceNode, rhsNode: Integer): Integer;
+var procIdx, a3, a: Integer;
+begin
+  procIdx := FindProc('pybytes_setslice');
+  if procIdx < 0 then Error('Nil Python: pylib (pybytes_setslice) not loaded');
+  a3 := AllocNode(AN_ARG);
+  ASTLeft[a3] := rhsNode;
+  ASTRight[a3] := -1;
+  a := ASTLeft[sliceNode];
+  while ASTRight[a] >= 0 do a := ASTRight[a];
+  ASTRight[a] := a3;
+  ASTIVal[sliceNode] := procIdx;
+  { pybytes_setslice is a PROCEDURE: no result type, and the record id the read
+    call carried has to go or the statement looks class-typed }
+  ASTTk[sliceNode] := Ord(tyUnknown);
+  ASTRight[sliceNode] := -1;
+  Result := sliceNode;
 end;
 
 { `v.field` (READ) where `v` is a VARIANT: unbox to the class that declares the
@@ -3315,6 +3507,13 @@ begin
         rhsNode := CurASTNode;
       end;
     end;
+    { `self.memory[a:b] = src` — the lhs parsed as a pybytes_slice READ; turn
+      it into the setter call, which IS the whole statement. }
+    if PyIsBytesSliceCall(lhsNode) then
+    begin
+      Result := PyRewriteSliceAssign(lhsNode, rhsNode);
+      Exit;
+    end;
     { `Word._xt_counter = _count(1)`: a class-static (AN_IDENT of the
       backing global) learns its class from a class-typed rhs. }
     if (ASTKind[lhsNode] = AN_IDENT) and
@@ -3459,6 +3658,17 @@ begin
     Exit;
   end;
   PyParseBoolExpr;
+  { `buf[a:b] = src` on a plain local. Unlike `self.buf[a:b] = src` this never
+    reaches an assignment route: a slice is not an ordinary lvalue, so the
+    expression path returned the READ call and left the '=' sitting there. }
+  if PyIsBytesSliceCall(CurASTNode) and (CurTok.Kind = tkAssign) then
+  begin
+    lhsNode := CurASTNode;
+    Next;
+    PyParseBoolExpr;
+    Result := PyRewriteSliceAssign(lhsNode, CurASTNode);
+    Exit;
+  end;
   Result := CurASTNode;
 end;
 

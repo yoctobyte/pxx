@@ -721,6 +721,9 @@ function PyListRepeatPair(a, b: Integer): Boolean; forward;              { Nil P
 function PyMakeListRepeat(a, b: Integer): Integer; forward;              { Nil Python `xs * n` (pyparser.inc) }
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
+function PyIsSliceBase(n: Integer): Boolean; forward; { Nil Python: may this value be sliced? (pyparser.inc) }
+function PySliceBracketAt(i: Integer): Boolean; forward; { Nil Python: is the bracket group at i a SLICE? (pyparser.inc) }
+function PyParseSliceTail(baseNode, loNode: Integer): Integer; forward; { Nil Python x[a:b], from the ':' (pyparser.inc) }
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python obj.meth() on a VARIANT receiver (pyparser.inc) }
 function PyMakeVariantField(baseNode: Integer; const fname: AnsiString; var tk: TTypeKind; var recName: Integer): Integer; forward; { Nil Python obj.field on a VARIANT receiver (pyparser.inc) }
 function PyKwArgIndex(mpi, firstParam: Integer): Integer; forward; { Nil Python `name=expr` call argument (pyparser.inc) }
@@ -4183,6 +4186,26 @@ begin
     end
     else if CurTok.Kind = tkLBrack then
     begin
+      { NilPy SLICE on an lvalue base, e.g. `self.memory[a:b]`. Diverted here,
+        before the default-indexed-property path below, because that path
+        consumes the bracket itself — so the decision has to be made by
+        lookahead (a depth-1 ':' in the group). A plain `[i]` still falls
+        through to the property machinery unchanged. }
+      if PyExprMode and PyIsSliceBase(node) and PySliceBracketAt(TokPos - 1) then
+      begin
+        Next;                     { consume '[' }
+        if CurTok.Kind = tkColon then
+          node := PyParseSliceTail(node, -1)
+        else
+        begin
+          PyParseBoolExpr;
+          node := PyParseSliceTail(node, CurASTNode);
+        end;
+        tk := IntToTypeKind(ASTTk[node]);
+        recName := ASTRight[node];
+        CurASTNode := node;
+        continue;                 { a slice result can take further postfix }
+      end;
       { Default indexed property: `obj[i]` → obj.<default>[i] getter/setter. }
       if (tk = tyClass) and (recName >= REC_UCLASS_BASE) then
       begin
@@ -6324,6 +6347,25 @@ begin
         over it left the base (an as-cast, say) with no address to take, which surfaced as
         "IR_UNSUPPORTED: could not lower AST node". ParseLValueAST's suffix loop has always
         dispatched this; the chained loop never did. }
+      { NilPy SLICE on a SELECTED member, e.g. `self.memory[a:b]`. This is the
+        chained-selector twin of the divert in ParseLValueAST: same reason
+        (ParsePropIndexArgs below consumes the bracket), same lookahead. A
+        plain `[i]` is untouched and still becomes the getter call. }
+      if PyExprMode and PyIsSliceBase(node) and PySliceBracketAt(TokPos - 1) then
+      begin
+        Next;                     { consume '[' }
+        if CurTok.Kind = tkColon then
+          node := PyParseSliceTail(node, -1)
+        else
+        begin
+          PyParseBoolExpr;
+          node := PyParseSliceTail(node, CurASTNode);
+        end;
+        tk := IntToTypeKind(ASTTk[node]);
+        recId := ASTRight[node];
+        CurASTNode := node;
+        continue;
+      end;
       dfCi := -1;
       if (tk = tyClass) and (recId >= REC_UCLASS_BASE) then dfCi := recId - REC_UCLASS_BASE;
       dfPri := -1;
@@ -10746,13 +10788,25 @@ begin
     else claimed the bracket. Looped, and with the str-method suffix re-applied
     inside, so `"abc"[1].upper()` and longer chains keep composing. }
   while PyExprMode and (CurTok.Kind = tkLBrack) and
-        PySubscriptableSuffix(CurASTNode) do
+        (PySubscriptableSuffix(CurASTNode) or PyIsSliceBase(CurASTNode)) do
   begin
     smBase := CurASTNode;
     Next;                       { consume '[' }
-    PyParseBoolExpr;
-    Expect(tkRBrack, ']');
-    CurASTNode := PyMakeSuffixIndex(smBase, CurASTNode);
+    { A SLICE is a subscript whose index is followed by ':' — and `b[:n]` has
+      no low bound at all, so the colon can also be the very first token. }
+    if CurTok.Kind = tkColon then
+      CurASTNode := PyParseSliceTail(smBase, -1)
+    else
+    begin
+      PyParseBoolExpr;
+      if CurTok.Kind = tkColon then
+        CurASTNode := PyParseSliceTail(smBase, CurASTNode)
+      else
+      begin
+        Expect(tkRBrack, ']');
+        CurASTNode := PyMakeSuffixIndex(smBase, CurASTNode);
+      end;
+    end;
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
     while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
           (Tokens[TokPos].Kind = tkIdent) and
