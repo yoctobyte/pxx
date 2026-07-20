@@ -55,3 +55,6 @@ Check `VarCopy`/retain for the mirror of the same hole before building.
 A `.pas` case putting a bignum-valued promo through a Variant and back, printing
 it, and doing variant arithmetic on it; a leak check (the same value in a loop
 must not grow RSS); `--tier quick` + self-host byte-identical + cross.
+
+## Log
+- 2026-07-20 — resolved, commit 11f8b672.

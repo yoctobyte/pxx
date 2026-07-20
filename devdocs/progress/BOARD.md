@@ -29,6 +29,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-aarch64-managed-string-concat-leak | A | 70 | bug | aarch64: repeated string concat inside a function LEAKS | — |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
 | bug-a-qplus-misses-32bit-overflow | A | 60 | bug | `{$Q+}` does not trap 32-bit overflow — only 64-bit ops are checked | — |
 | bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
@@ -51,7 +52,6 @@ _none_
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
 | feature-a-promoint-32bit-bringup | A | 55 | feature | Promotable int: heap tier faults on 32-bit native targets | — |
 | feature-a-promoint-check-elision | A | 50 | feature | Promotable int: inline the fast path (check elision) | — |
-| feature-a-promoint-variant-integration | A | 60 | feature | Promotable int inside a Variant | — |
 | feature-a-promotable-int | A | 85 | feature | Promotable int — a new arbitrary-precision integer type (fixnum + heap bignum) | — |
 | feature-a-typeref-handle | A | 65 | feature | TypeRef: one type handle, carried — not ten parallel tuples | — |
 | feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
@@ -220,7 +220,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (905)
+## done (906)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -701,6 +701,7 @@ _none_
 | docs-user-documentation-site-structure | D | 50 | docs | User documentation site structure and first content pass | — |
 | feature-a-nilpy-str-method-parser-hook | A | 50 | feature | Shared-parser hook for NilPy str methods (filed for traceability) | — |
 | feature-a-promoint-stage2-storage-arith | A | 85 | feature | Promotable int stage 2 — storage, checked arithmetic, Write | — |
+| feature-a-promoint-variant-integration | A | 60 | feature | Promotable int inside a Variant | — |
 | feature-a-promoint-wide-literals | A | 60 | feature | PromoInt cannot be initialised from a literal wider than Int64 | — |
 | feature-aarch64-asm-emitter | A | 50 | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
 | feature-abs-sqr-intrinsics | A | 50 | feature | `Abs` / `Sqr` System intrinsics missing | — |
@@ -2572,6 +2573,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 85] [A] feature-a-promotable-int
+- [p 70] [A] bug-a-aarch64-managed-string-concat-leak
 - [p 70] [T] regression-cascade-3d46e52fc733
 - [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
 - [p 65] [A] feature-a-typeref-handle
@@ -2579,7 +2581,6 @@ _none_
 - [p 60] [A] bug-parallel-for-captured-dynarray-var-arg-segfault
 - [p 60] [A] bug-test-core-oversized-job-6gb-flaky
 - [p 60] [A] feature-a-abi-oracle
-- [p 60] [A] feature-a-promoint-variant-integration
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
 - [p 60] [A] feature-inline-asm-xtensa

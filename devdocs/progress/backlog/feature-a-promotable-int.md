@@ -369,3 +369,26 @@ literals used to WRAP silently (`bug-a-integer-literal-out-of-range-wraps-silent
   the type is refused there rather than shipped faulting.
 - NilPy adopting it as its `int` — the original motivation, deliberately after
   the NilPy refactor.
+
+
+### Variant integration landed 2026-07-20 — `11f8b672`
+
+Stage 4 done. Promo round-trips through a Variant, prints, and does not leak
+(200k-iteration boxing loop holds at 264 KB). Inline values box as ordinary
+`VT_INT64`; only heap values take `VT_PROMO_INT64` with a managed-AnsiString
+decimal payload, which is what keeps `VarClear`/`VarRetain` a range test over
+the reserved block instead of a switch in six emitters.
+
+Now works on **aarch64** as well as x86-64, byte-identical output. That needed
+dropping `IR_ZERO_SYM` for promo temps (aarch64 rejects it) in favour of a
+`PXXPromoInit` runtime call — routing init like every other promo operation, so
+the feature stays backend-free.
+
+**Remaining:** [[feature-a-promoint-check-elision]] (perf — every op is still a
+runtime call), [[feature-a-promoint-32bit-bringup]], and NilPy adoption after
+the NilPy refactor. Variant ARITHMETIC where both operands are runtime-tagged
+promos (no static type) is not wired — the compiler routes on static types
+today; NilPy will need that and it belongs with the adoption work.
+
+Filed on the way: [[bug-a-aarch64-managed-string-concat-leak]] — ordinary
+Pascal, not promo, but it is what a promo bignum loop on aarch64 hits.
