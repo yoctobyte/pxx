@@ -171,3 +171,46 @@ slices, f-strings, raise, isinstance, augassign.
   intentional and stays. N grows to meet it, not vice versa.
 - No full CPython emulation in pyexec — the censused block subset is the
   contract.
+
+## Wall progression — session 2026-07-20 (session 3)
+
+uforth.py's first parse error, tracked as each gap closed. Each step is a
+landed, gated, pushed commit with a CPython-diffed test in `test-nilpy`:
+
+| wall | what blocked | resolved by |
+| --- | --- | --- |
+| 267 | `bytearray` | (session 2) |
+| 271 | slice assign `mem[a:b] = ...` | [[feature-nilpy-bytes-and-slices]] |
+| 271 | `to_bytes` keyword arg | same ticket, second half |
+| 308 | `print(..., file=sys.stderr, flush=True)` | [[feature-nilpy-print-kwargs]] |
+| 311 | `os.path.*` | os/sys shim table |
+| 331 | one-line suite `if not t: return None` | `PyParseSuite` |
+| 359 | `int(s, base)` + `except ValueError` | [[feature-nilpy-builtin-exceptions]] (OPEN) |
+
+Bugs found UNDER this work, all silent-wrong-behaviour rather than parse
+errors, all filed and fixed: [[bug-nilpy-call-returning-class-loses-identity]]
+(a call returning a class dropped which class — `len()` on a bytearray field
+segfaulted) and [[bug-nilpy-not-on-string-always-true]] (`not s` was True for
+every string; `if s:` and `bool(s)` were both correct, which hid it).
+
+## Measured remaining scope (2026-07-20)
+
+Counted in uforth.py, so this is the real distance to milestone 2, not an
+estimate. Roughly in wall order:
+
+| construct | sites | note |
+| --- | --- | --- |
+| f-strings | 42 | expander exists; needs verifying against these |
+| decorators | 15 | `@property`/setters beyond the landed `@dataclass` |
+| `getattr(o, "n", default)` | 16 | needs [[feature-rtti-field-reflection]] |
+| comprehensions | 4 | list comprehensions |
+| `lambda` | 4 | |
+| `del` | 4 | |
+| `select.select` on stdin | 2 | needs a PAL primitive AND a stdin file object |
+| `with` | 1 | |
+| `nonlocal` | 1 | |
+| builtin exception classes | 6 | the current wall |
+
+`sys.stdin` is the awkward one: 8 sites needing `.isatty()`, `.readline()`,
+`.read(1)` and membership in `select.select([...])` — i.e. a real file-object
+model, not another shim function. Worth its own ticket when reached.
