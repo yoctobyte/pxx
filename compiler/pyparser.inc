@@ -54,6 +54,14 @@ var
     than `:`. See PyParseListComp. }
   PyCompTarget: Integer;
   PyCompExprStart: Integer;
+  { Statement HOISTING, for expression-position comprehensions/genexprs. A
+    comprehension used inside an expression (`"\n".join(x for x in it)`, or a
+    bracketed one as a call argument) cannot be an expression on its own — the
+    single-pass AST has no statement-in-expression node. So it desugars into a
+    hidden temp filled by a loop, PUSHES those setup statements here, and yields
+    the temp. Each statement-sequence builder flushes this before the statement
+    it just parsed, so the setup runs first. }
+  PyHoistHead: Integer;
   PyTypingChanged: Boolean;
   PyHiddenSeq: Integer;   { serial for hidden for-in loop temps }
   { One parsed `def` header, filled by PyParseDefHeader and read by both its
@@ -103,6 +111,35 @@ end;
 procedure PySkipNewlines;
 begin
   while CurTok.Kind = tkNewline do Next;
+end;
+
+function PySeqAppend(head, stmt: Integer): Integer; forward;
+function PyBuildComp(targetSym, exprStart: Integer): Integer; forward; { comprehension core (pyparser.inc) }
+function PyMakeIdent(symIdx: Integer): Integer; forward; { (pyparser.inc) }
+function PyParseFor: Integer; forward;
+function PyBareGenExprAhead: Boolean; forward; { bare genexpr as a call arg (pyparser.inc) }
+
+{ Queue a setup statement to run before the current one — see PyHoistHead. }
+procedure PyHoistStmt(node: Integer);
+begin
+  PyHoistHead := PySeqAppend(PyHoistHead, node);
+end;
+
+{ Prepend any hoisted setup statements to `seq`, then clear. Called by each
+  statement-sequence builder right after it parses one statement, so the
+  expression-comprehension setup lands before the statement that uses it. }
+function PyFlushHoist(seq: Integer): Integer;
+var h, node: Integer;
+begin
+  Result := seq;
+  h := PyHoistHead;
+  PyHoistHead := -1;
+  while h >= 0 do
+  begin
+    node := ASTLeft[h];
+    if node >= 0 then Result := PySeqAppend(Result, node);
+    h := ASTRight[h];
+  end;
 end;
 
 function PySeqAppend(head, stmt: Integer): Integer;
@@ -2045,7 +2082,15 @@ begin
   end;
   while (wantArgs <> -4) and (CurTok.Kind <> tkRParen) do
   begin
-    PyParseBoolExpr;
+    { A bare generator expression as an argument — `"\n".join(x for x in it)`.
+      Detected BEFORE the EXPR is parsed, because the EXPR references the loop
+      variable, which is not in scope until the `for`. PyParseCompExprValue
+      desugars it to a hoisted hidden list and yields that list, so join sees an
+      ordinary iterable. }
+    if PyBareGenExprAhead then
+      CurASTNode := PyParseCompExprValue(False)
+    else
+      PyParseBoolExpr;
     callNode := AllocNode(AN_ARG);
     ASTLeft[callNode] := CurASTNode;
     ASTRight[lastArg] := callNode;
@@ -3223,6 +3268,7 @@ begin
   seq := -1;
   repeat
     stmt := PyParseStatement;
+    seq := PyFlushHoist(seq);
     seq := PySeqAppend(seq, stmt);
   until not Eat(tkSemicolon);
   if CurTok.Kind = tkNewline then Next;
@@ -3520,6 +3566,35 @@ end;
 { Is the token stream at `[ EXPR for VAR in ...` — a list comprehension?
   CurTok is the '['. Scans at bracket depth 1 for a `for` keyword, the same
   disambiguation PyDictLiteralAt uses for ':'. }
+{ Is the argument starting at CurTok a BARE generator expression — an EXPR
+  followed by `for` before the argument ends (a depth-0 ',' or ')')? Used to
+  divert to the comprehension desugar BEFORE the EXPR is parsed, because the
+  EXPR references the loop variable, which is not in scope until the `for`. }
+function PyBareGenExprAhead: Boolean;
+var i, depth: Integer;
+begin
+  Result := False;
+  i := TokPos - 1;                 { CurTok's index — first arg token }
+  depth := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkLBrack, tkLParen, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRBrack, tkRParen, tkEnd] then
+    begin
+      if depth = 0 then Exit;      { end of the call arg list }
+      Dec(depth);
+    end
+    else if (depth = 0) and (Tokens[i].Kind = tkComma) then Exit
+    else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
+            (LowerCase(GetTokenStr(i)) = 'for') then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 function PyIsListCompAhead: Boolean;
 var i, depth: Integer;
 begin
@@ -3837,15 +3912,17 @@ end;
   come free) via PyCompTarget/PyCompExprStart; see those globals. CurTok is the
   '[' and `targetSym` is the already-declared destination local. Returns the
   statement sequence; PyStmtAteBlock is left set by PyParseForIn. }
-function PyParseFor: Integer; forward;
 
-function PyParseListComp(targetSym: Integer): Integer;
-var seq, node, sizeNode, createNode, aSeq: Integer;
-    savedTarget, savedStart, listCiN: Integer;
+{ Shared comprehension core: emit `targetSym := TPyList.Create` then the
+  appending loop. CurTok must be AT the `for` (an ident); `exprStart` is the
+  token index of the element EXPR (which sits before the `for`). Returns the
+  statement sequence. Does NOT consume a trailing `]` — the caller does that
+  for a bracketed comprehension; a bare genexpr has none. }
+function PyBuildComp(targetSym, exprStart: Integer): Integer;
+var seq, node, sizeNode, createNode, aSeq, savedTarget, listCiN: Integer;
 begin
   listCiN := FindUClass('TPyList');
   if listCiN < 0 then Error('Nil Python: pylib (TPyList) not loaded');
-  { target := TPyList.Create — the same GetMem+size shape a `[]` literal uses }
   createNode := AllocNode(AN_CALL);
   ASTIVal[createNode] := -Ord(tkGetMem);
   ASTTk[createNode] := Ord(tyClass);
@@ -3862,27 +3939,53 @@ begin
   ASTRight[node] := createNode;
   seq := PySeqAppend(-1, node);
 
-  Next;                                { consume '[' — CurTok = first EXPR token }
-  savedStart := TokPos - 1;            { index of the first EXPR token }
-  { skip the EXPR to leave the cursor AT `for` (an IDENT here, not tkFor — see
-    PyIsListCompAhead); no nested `for` in the censused comprehensions }
-  while not (PyIsIdent('for') or (CurTok.Kind = tkEOF)) do Next;
-  if not PyIsIdent('for') then Error('Nil Python: malformed list comprehension');
-
   savedTarget := PyCompTarget;
   PyCompTarget := targetSym;
-  PyCompExprStart := savedStart;
-  { PyParseFor handles `for VAR in ITER`, dispatching range vs container; both
-    paths honour PyCompTarget by appending EXPR instead of parsing a suite. }
-  node := PyParseFor;
+  PyCompExprStart := exprStart;
+  node := PyParseFor;               { range/container both honour PyCompTarget }
   PyCompTarget := savedTarget;
-  Expect(tkRBrack, ']');
   seq := PySeqAppend(seq, node);
-  { PyParseFor sets PyStmtAteBlock (it normally consumes an indented block); a
-    comprehension is an expression on one line, so clear it or the enclosing
-    statement loop skips its newline check. }
+  { PyParseFor sets PyStmtAteBlock (it normally eats an indented block); a
+    comprehension is a one-line expression, so clear it. }
   PyStmtAteBlock := False;
   Result := seq;
+end;
+
+{ Statement-level `target = [EXPR for VAR in ITER]`. CurTok is the '['. }
+function PyParseListComp(targetSym: Integer): Integer;
+var exprStart: Integer;
+begin
+  Next;                                { consume '[' — CurTok = first EXPR token }
+  exprStart := TokPos - 1;
+  while not (PyIsIdent('for') or (CurTok.Kind = tkEOF)) do Next;
+  if not PyIsIdent('for') then Error('Nil Python: malformed list comprehension');
+  Result := PyBuildComp(targetSym, exprStart);
+  Expect(tkRBrack, ']');
+end;
+
+{ Expression-position comprehension/genexpr — `[EXPR for x in it]` as a call
+  argument, or a bare `EXPR for x in it` genexpr. Allocates a hidden temp,
+  HOISTS the build loop to run before the enclosing statement, and yields the
+  temp. `bracketed` says whether a '[' (and closing ']') delimits it; a bare
+  genexpr has neither. CurTok is the '[' (bracketed) or the first EXPR token
+  (bare). Returns the temp's ident node. }
+function PyParseCompExprValue(bracketed: Boolean): Integer;
+var tmpSym, exprStart, seq: Integer;
+begin
+  tmpSym := AllocVar(PyHiddenName('gx'), tyClass);
+  if bracketed then Next;              { consume '[' }
+  exprStart := TokPos - 1;             { first EXPR token }
+  while not (PyIsIdent('for') or (CurTok.Kind = tkEOF)) do Next;
+  if not PyIsIdent('for') then Error('Nil Python: malformed comprehension');
+  seq := PyBuildComp(tmpSym, exprStart);
+  if bracketed then Expect(tkRBrack, ']');
+  { each build statement runs before the current one }
+  while seq >= 0 do
+  begin
+    PyHoistStmt(ASTLeft[seq]);
+    seq := ASTRight[seq];
+  end;
+  Result := PyMakeIdent(tmpSym);
 end;
 
 function PyParseFor: Integer;
@@ -4621,6 +4724,7 @@ begin
   while not (CurTok.Kind in [tkDedent, tkEOF]) do
   begin
     stmt := PyParseStatement;
+    Result := PyFlushHoist(Result);
     Result := PySeqAppend(Result, stmt);
     { `u = int(vm.pop()); addr = int(vm.pop())` — Python allows several simple
       statements on one line, separated by ';'. Consumed here so the newline
@@ -4630,6 +4734,7 @@ begin
       Next;
       if CurTok.Kind in [tkNewline, tkDedent, tkEOF] then Break;  { trailing ';' }
       stmt := PyParseStatement;
+      Result := PyFlushHoist(Result);
       Result := PySeqAppend(Result, stmt);
     end;
     if CurTok.Kind = tkNewline then PySkipNewlines
@@ -6402,6 +6507,7 @@ begin
     `a div b` into a call to the helper being defined. }
   PyProgramMode := True;
   PyCompTarget := -1;   { no comprehension in progress by default }
+  PyHoistHead := -1;    { no pending hoisted statements }
   PySkipNewlines;
   { A leading module docstring may precede the imports; consume it. }
   if (CurTok.Kind = tkString) and (TokPos < TokCount) and
@@ -6505,6 +6611,7 @@ begin
     else
     begin
       stmt := PyParseStatement;
+      mainNode := PyFlushHoist(mainNode);
       mainNode := PySeqAppend(mainNode, stmt);
       { several simple statements on one line, as in PyParseBlock }
       while CurTok.Kind = tkSemicolon do
@@ -6512,6 +6619,7 @@ begin
         Next;
         if CurTok.Kind in [tkNewline, tkDedent, tkEOF] then Break;
         stmt := PyParseStatement;
+        mainNode := PyFlushHoist(mainNode);
         mainNode := PySeqAppend(mainNode, stmt);
       end;
     end;

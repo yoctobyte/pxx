@@ -733,6 +733,8 @@ function PyAttrFieldIdx(recvNode: Integer; const attr: AnsiString): Integer; for
 function PyParseAttrName: AnsiString; forward; { Nil Python: the literal attr name in hasattr/getattr (pyparser.inc) }
 function PyTupleParenAhead: Boolean; forward; { Nil Python: is this '(' a tuple? (pyparser.inc) }
 procedure PyParseListLiteralT(opener, closer: TTokenKind); forward; { Nil Python list/tuple literal (pyparser.inc) }
+function PyIsListCompAhead: Boolean; forward; { Nil Python: is `[ ... for ... ]` a comprehension? (pyparser.inc) }
+function PyParseCompExprValue(bracketed: Boolean): Integer; forward; { Nil Python expression-position comprehension (pyparser.inc) }
 function PyIsSysStreamAhead: Boolean; forward; { Nil Python: at `sys.stdout`/`sys.stderr`? (pyparser.inc) }
 function PyStdlibCallAhead(var pname: AnsiString; var nTok: Integer): Boolean; forward; { Nil Python: at a mapped os./sys. call? (pyparser.inc) }
 function PyParseStdlibCall(const pname: AnsiString; nTok: Integer): Integer; forward; { Nil Python os./sys. call -> pylib shim (pyparser.inc) }
@@ -7304,7 +7306,13 @@ begin
     end;
     tkLBrack:
     begin
-      if PyExprMode then
+      if PyExprMode and PyIsListCompAhead then
+      begin
+        { `[EXPR for x in it]` in an EXPRESSION position — a hoisted temp. }
+        CurASTNode := PyParseCompExprValue(True);
+        LastExprTk := tyClass;
+      end
+      else if PyExprMode then
       begin
         PyParseListLiteral;
         LastExprTk := tyClass;

@@ -1,0 +1,8 @@
+xs = [1, 2, 3]
+print("-".join(str(x) for x in xs))
+words = ["a", "b", "c"]
+print(", ".join(w.upper() for w in words))
+print(len([x + 1 for x in xs]))
+ys = [x for x in xs]
+zs = [y * 2 for y in ys]
+print(zs[2])
