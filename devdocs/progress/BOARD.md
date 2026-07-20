@@ -36,6 +36,7 @@ _none_
 | bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
+| bug-open-array-param-length-high-zero | P | 65 | bug | `Length()` / `High()` on an open-array parameter return 0 / -1 | — |
 | bug-parallel-for-captured-boolean-loses-type | A | 50 | bug | Captured Boolean loses its type inside a parallel-for body (overload resolution fails) | — |
 | bug-parallel-for-captured-dynarray-var-arg-segfault | A | 60 | bug | Passing a captured dynamic array by `var` from a parallel-for body segfaults | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
@@ -137,7 +138,6 @@ _none_
 | feature-t-windows-wine-harness | T | 45 | feature | Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
-| feature-tls-system-trust-store | B | 45 | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
 | feature-tls13-from-scratch | B | 53 | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
 | feature-toolchain-cli-ux | A | 45 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-twatch-full-tier-coverage-age | T | 40 | feature | No signal distinguishes "full tier is lagging" from "full tier never completes" | — |
@@ -220,7 +220,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (911)
+## done (912)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1034,6 +1034,7 @@ _none_
 | feature-threadsafe-heap-contract | B | 50 | feature | Threadsafe heap contract by memory-management mode | — |
 | feature-threadsafe-io-lock-cross | A | 30 | feature | Port the statement-atomic I/O lock to i386/aarch64/arm32 | — |
 | feature-threadsafe-io-serialization | A | 50 | feature | Statement-level I/O serialization under threads | — |
+| feature-tls-system-trust-store | B | 45 | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
 | feature-tobject-getinterface-guid-table | A | 50 | feature | TObject.GetInterface(IID, out obj) — needs an interface GUID table | — |
 | feature-track-t-watcher | T | 70 | feature | Track T face 1: standalone test watcher (twatch) — continuous offloaded gate | — |
 | feature-trackt-watch-completion-line | T | 55 | feature | trackt watch: print timestamped completion line per finished suite run | — |
@@ -2581,6 +2582,7 @@ _none_
 - [p 70] [A] bug-a-aarch64-variant-string-compare-always-false
 - [p 70] [T] regression-cascade-3d46e52fc733
 - [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
+- [p 65] [P] bug-open-array-param-length-high-zero
 - [p 65] [A] feature-a-typeref-handle
 - [p 60] [A] bug-a-qplus-misses-32bit-overflow
 - [p 60] [A] bug-parallel-for-captured-dynarray-var-arg-segfault
@@ -2659,7 +2661,6 @@ _none_
 - [p 45] [A+B] feature-rtl-optout-for-lcl
 - [p 45] [A] feature-rtti-field-reflection
 - [p 45] [T] feature-t-windows-wine-harness
-- [p 45] [B] feature-tls-system-trust-store
 - [p 45] [A] feature-toolchain-cli-ux
 - [p 45] [B] feature-writeln-as-library
 - [p 45] [A] feature-xtensa-stack-args-over-6-words

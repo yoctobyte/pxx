@@ -42,7 +42,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
 .PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
-        pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
+        pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
 
 all: $(COMPILER)
@@ -5711,6 +5711,13 @@ c-interop-devtest: pxx-stable-check
 # is NOT in the default lib-test gate; skips cleanly when prereqs are absent.
 tls-openssl-devtest: pxx-stable-check
 	tools/tls_openssl_devtest.sh
+
+# Chain validation against a system-style trust store (feature-tls-system-trust-store).
+# Generates a root->intermediate->leaf chain with the openssl CLI and asserts the
+# accept/reject matrix. Hermetic (no network) but needs openssl, so it is opt-in
+# and not in the lib-test gate; skips cleanly when openssl is absent.
+truststore-devtest: pxx-stable-check
+	tools/truststore_devtest.sh
 
 # From-scratch TLS 1.3 client handshake (phase 1) vs openssl s_server. Opt-in /
 # non-hermetic; not in the lib-test gate.

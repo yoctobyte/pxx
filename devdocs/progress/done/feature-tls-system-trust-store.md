@@ -5,7 +5,7 @@ prio: 45  # auto
 # Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client
 
 - **Type:** feature (library) — TLS trust anchoring
-- **Status:** backlog
+- **Status:** done
 - **Track:** B (`lib/rtl`)
 - **Opened:** 2026-06-25
 - **Parent / depends-on:** [[feature-tls13-from-scratch]] (M5 X.509 + M6 handshake,
@@ -79,3 +79,35 @@ M5 ("trust store") and the difference between "verifies a CA I passed" and
   wrong-host / tampered chains are rejected.
 - Wired into `test/devtest_tls13_handshake.pas` (replace the hand-passed CA with
   the system store, or a `--store <file>` for the test root).
+
+## Log
+- 2026-07-20 — Landed (Track B). `lib/rtl/truststore.pas` + `make truststore-devtest`.
+  Loads `/etc/ssl/certs/ca-certificates.crt` (then the Fedora/RHEL and Alpine/BSD
+  bundle paths); verified against the real host store — 121 anchors parse. Chain
+  walk accepts leaf+intermediate to a trusted root, tolerates an out-of-order
+  certificate_list (real servers send these wrong), and rejects hostname
+  mismatch, missing intermediate, expired, tampered signature, untrusted root,
+  and an empty store.
+
+  **Fails closed by construction:** an unreadable bundle yields an empty store
+  and an empty store validates nothing. This matters more than it looks — the
+  loader was silently returning 0 anchors during development (see the bug below)
+  and the only reason that was safe is that "no roots" refuses everything. Code
+  written the other way round would have failed open.
+
+  **Deferred, and still open:** basicConstraints CA flag, keyUsage, and
+  path-length are NOT enforced, so a leaf a trusted CA signed could itself act
+  as an intermediate. Documented at the top of the unit. That is the next
+  hardening slice and should be filed as its own ticket before this is relied on
+  for anything real.
+
+  Not done here: wiring `VerifyServerChain` into
+  `test/devtest_tls13_handshake.pas` in place of the hand-passed CA. The unit
+  and its devtest stand alone; the handshake swap is a separate, small slice.
+
+  Found on the way, filed rather than absorbed:
+  [[bug-open-array-param-length-high-zero]] — `Length()`/`High()` on an
+  open-array parameter return 0/-1, so `PemSplit` silently found no certificates
+  in a 121-cert bundle. `PemSplit` takes an explicit `cap` until that is fixed.
+
+- 2026-07-20 — resolved, commit HEAD.
