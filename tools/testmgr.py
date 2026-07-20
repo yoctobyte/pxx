@@ -156,12 +156,48 @@ METRICS_MIN_RUNS = 2            # trust a job's metrics from its Nth pass
 METRICS_ALPHA = 0.4             # EWMA weight of the newest observation
 
 
+def metrics_key(job):
+    """Identity of a job's learned metrics ACROSS commits.
+
+    job.sel, never job.name -- for the same reason twatch's job_key() exists:
+    `test-core#120` is a POSITIONAL index into the target's recipe lines, so
+    inserting one test renumbers every job after it. Keyed positionally, the
+    EWMA silently blends measurements from whatever different tests have
+    occupied that slot over time.
+
+    Observed 2026-07-20: test-core#120 (a 36-line interface test whose binary
+    is 36 KB) carried dur=88.65s / mem=6.77GB over n=861 -- inherited from
+    heavier tests that previously held slot #120. The scheduler then refused
+    to admit it (avail - est_mem fell under MEM_FLOOR), starved, and forced
+    the whole run through serially in degraded mode.
+    """
+    return job.sel or job.name
+
+
+def _positional(k):
+    """Legacy key: `<target>#<digits>`, i.e. keyed by recipe position."""
+    _, _, tail = k.rpartition("#")
+    return tail.isdigit()
+
+
 def load_metrics():
     try:
         with open(METRICS_PATH) as f:
-            return json.load(f)
+            m = json.load(f)
     except (OSError, ValueError):
         return {}
+    # Drop legacy positional entries rather than migrating them: there is no
+    # way to tell WHICH tests a blended average came from, so the data is not
+    # merely mis-keyed, it is unattributable. Re-learning from scratch costs a
+    # few runs of class-default estimates; keeping it costs mis-scheduling that
+    # is invisible until a run starves.
+    stale = [k for k in m if _positional(k)]
+    for k in stale:
+        del m[k]
+    if stale:
+        print("testmgr: dropped %d positionally-keyed metric entries "
+              "(re-learning per stable selector)" % len(stale), flush=True)
+    return m
 
 
 def save_metrics(m):
@@ -921,7 +957,7 @@ class Manager:
         self.metrics = load_metrics()
         for j in jobs:
             cls_to = CLASSES[j.cls]["timeout"]
-            m = self.metrics.get(j.name)
+            m = self.metrics.get(metrics_key(j))
             if m and m.get("n", 0) >= METRICS_MIN_RUNS:
                 j.exp_dur = m["dur"] * scale
                 j.exp_cores = min(float(self.nproc), max(0.1, m.get("cpu", 1.0)))
@@ -1088,10 +1124,11 @@ class Manager:
         # hundreds of MB, all pass admission at once.  Fall back to the class
         # estimate, which is honest about the pascal26 BSS.
         mem = job.peak_rss if job.peak_rss > 0 else CLASSES[job.cls]["est_mem"]
-        m = self.metrics.get(job.name)
+        key = metrics_key(job)
+        m = self.metrics.get(key)
         if not m:
-            self.metrics[job.name] = {"dur": round(dur, 2), "mem": mem,
-                                      "cpu": round(cores, 2), "n": 1}
+            self.metrics[key] = {"dur": round(dur, 2), "mem": mem,
+                                 "cpu": round(cores, 2), "n": 1}
             return
         a = METRICS_ALPHA
         m["dur"] = round((1 - a) * m["dur"] + a * dur, 2)
