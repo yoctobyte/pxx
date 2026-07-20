@@ -3500,6 +3500,25 @@ begin
   isStr := (contTk = tyString) or (contTk = tyAnsiString);
   listCi := FindUClass('TPyList');
   dictCi := FindUClass('TPyDict');
+  { A VARIANT container — `for n in num` where num is Any — is unboxed to
+    TPyList via pylib pylist_v. The corpus reaches this only under an
+    `isinstance(num, list)` guard, so the value really is a list at run time;
+    pylist_v raises if it is not. Without this the loop refused an untyped
+    container (bug-nilpy-for-in-over-variant). }
+  if (not isStr) and (contTk = tyVariant) then
+  begin
+    vSym := FindProc('pylist_v');
+    if vSym < 0 then Error('Nil Python: pylib (pylist_v) not loaded');
+    vListNode := AllocNode(AN_ARG);
+    ASTLeft[vListNode] := contNode;
+    ASTRight[vListNode] := -1;
+    contNode := AllocNode(AN_CALL);
+    ASTIVal[contNode] := vSym;
+    ASTTk[contNode] := Ord(tyClass);
+    ASTLeft[contNode] := vListNode;
+    ASTRight[contNode] := REC_UCLASS_BASE + listCi;
+    contTk := tyClass;
+  end;
   ci := -1;
   if not isStr then
   begin

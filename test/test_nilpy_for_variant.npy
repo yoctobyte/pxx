@@ -1,0 +1,10 @@
+from typing import Any
+def get(flag: int) -> Any:
+    if flag == 0:
+        return [10, 20, 30]
+    return None
+num = get(0)
+if num is not None:
+    if isinstance(num, list):
+        for n in num:
+            print(n)
