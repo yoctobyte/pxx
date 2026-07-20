@@ -57,4 +57,7 @@ Not about `trackt run`, which already never touches the clone and is meant to
 test the checkout.
 
 ## Log
-- 2026-07-20 — resolved, commit PENDING.
+- 2026-07-20 — resolved in 4e8674ac (option 1 + option 2: clone's copy by
+  default, `--local-code` to opt back into the checkout's copy). The running
+  daemon was deliberately NOT restarted for it — mid-cycle and healthy — so it
+  takes effect at the next natural restart.
