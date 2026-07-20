@@ -26,10 +26,11 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (137)
+## backlog (138)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-nilpy-str-repeat-local-infers-as-int | A | 55 | bug | NilPy: `s = "x" * 300` infers s as INT, then no overload of len matches | — |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
 | bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
@@ -2568,6 +2569,7 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
+- [p 55] [A] bug-a-nilpy-str-repeat-local-infers-as-int
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
