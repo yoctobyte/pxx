@@ -58,7 +58,11 @@ type
       NilPy backs `set` with TPyList (see PyAnnTypeAt), and this is the whole
       set contract the corpus uses — `s.add(x)` then `x in s`. }
     function add(const v: Variant): TPyList;
-    function get(i: Integer): Variant;
+    { NOT spelled `get`: Python lists have no .get, and sharing the name with
+      TPyDict.get made every `.get(...)` on a dynamically-typed receiver
+      ambiguous across classes. Internal accessor only — indexing goes through
+      the default property below. }
+    function at(i: Integer): Variant;
     procedure put(i: Integer; const v: Variant);
     function count: Integer;
     function pop: Variant;
@@ -69,7 +73,7 @@ type
       (bug-a-nilpy-list-augmented-add-segfaults). }
     function extend(other: TPyList): TPyList;
     procedure clear;
-    property Items[i: Integer]: Variant read get write put; default;
+    property Items[i: Integer]: Variant read at write put; default;
   end;
 
   { TPyDict is Python's dict: insertion-ordered key/value pairs, both held as
@@ -104,6 +108,11 @@ type
     function get(const k: Variant): Variant; overload;
     function get(const k: Variant; const d: Variant): Variant; overload;
     procedure remove(const k: Variant);
+    { Python's dict.setdefault: return the existing value, or insert the
+      default and return THAT — the returned slot is the one now in the dict,
+      which is what makes `d.setdefault(k, ...)[k2] = v` mutate the dict rather
+      than a throwaway copy. }
+    function setdefault(const k: Variant; const d: Variant): Variant;
     function keylist: TPyList;
     function vallist: TPyList;
     property Items[const k: Variant]: Variant read fetch write store; default;
@@ -152,9 +161,10 @@ type
     FData: Pointer;
     constructor Create(n: Integer);
     function count: Integer;
-    function get(i: Integer): Integer;
+    { see TPyList.at — bytearrays have no Python .get either }
+    function at(i: Integer): Integer;
     procedure put(i: Integer; v: Integer);
-    property Items[i: Integer]: Integer read get write put; default;
+    property Items[i: Integer]: Integer read at write put; default;
   end;
 
 { Python's str() for an f-string hole. Overloaded so ARGUMENT TYPE picks the
@@ -667,7 +677,7 @@ begin
   Result := '';
   for i := 0 to l.count - 1 do
   begin
-    v := l.get(i);
+    v := l.at(i);
     tag := pyvartag(v);
     if (tag <> 6) and (tag <> 5) then
     begin
@@ -857,7 +867,7 @@ begin
   Result := Self;
 end;
 
-function TPyList.get(i: Integer): Variant;
+function TPyList.at(i: Integer): Variant;
 var
   src, dst: PPyVarRec;
 begin
@@ -879,7 +889,7 @@ end;
 
 function TPyList.pop: Variant;
 begin
-  Result := get(FLen - 1);
+  Result := at(FLen - 1);
   FLen := FLen - 1;
 end;
 
@@ -889,7 +899,7 @@ var
   src, dst: PPyVarRec;
 begin
   i := PyListFix(Self, i);
-  Result := get(i);
+  Result := at(i);
   for k := i to FLen - 2 do
   begin
     src := PPyVarRec(NativeInt(FItems) + (k + 1) * 16);
@@ -1065,6 +1075,22 @@ var
 begin
   i := indexof(k);
   if i < 0 then PyKeyError;
+  src := PPyVarRec(NativeInt(FVals) + i * 16);
+  dst := PPyVarRec(@Result);
+  PyVarSlotInit(dst, src);
+end;
+
+function TPyDict.setdefault(const k: Variant; const d: Variant): Variant;
+var
+  i: Integer;
+  src, dst: PPyVarRec;
+begin
+  i := indexof(k);
+  if i < 0 then
+  begin
+    store(k, d);
+    i := indexof(k);
+  end;
   src := PPyVarRec(NativeInt(FVals) + i * 16);
   dst := PPyVarRec(@Result);
   PyVarSlotInit(dst, src);
@@ -1567,7 +1593,7 @@ begin
   Result := i;
 end;
 
-function TPyBytes.get(i: Integer): Integer;
+function TPyBytes.at(i: Integer): Integer;
 var p: PByte;
 begin
   i := PyBytesFix(Self, i);
@@ -2337,7 +2363,7 @@ var r: TPyList; i: Integer;
 begin
   r := TPyList.Create;
   if l <> nil then
-    for i := 0 to l.count - 1 do r.append(l.get(i));
+    for i := 0 to l.count - 1 do r.append(l.at(i));
   Result := r;
 end;
 
@@ -2354,7 +2380,7 @@ var r: TPyList; i: Integer;
 begin
   r := TPyList.Create;
   if l <> nil then
-    for i := l.count - 1 downto 0 do r.append(l.get(i));
+    for i := l.count - 1 downto 0 do r.append(l.at(i));
   Result := r;
 end;
 
@@ -2392,7 +2418,7 @@ begin
   begin
     PySliceBounds(l.count, lo, hi);
     for i := lo to hi - 1 do
-      r.append(l.get(i));
+      r.append(l.at(i));
   end;
   Result := r;
 end;
@@ -2404,7 +2430,7 @@ begin
   if (l <> nil) and (n > 0) then
     for k := 1 to n do
       for i := 0 to l.count - 1 do
-        r.append(l.get(i));
+        r.append(l.at(i));
   Result := r;
 end;
 
@@ -2431,7 +2457,7 @@ begin
   for i := 0 to l.count - 1 do
   begin
     if i > 0 then Result := Result + ', ';
-    Result := Result + pyvar_repr(l.get(i));
+    Result := Result + pyvar_repr(l.at(i));
   end;
   Result := Result + ']';
 end;
@@ -2445,7 +2471,7 @@ begin
   for i := 0 to ks.count - 1 do
   begin
     if i > 0 then Result := Result + ', ';
-    k := ks.get(i);
+    k := ks.at(i);
     Result := Result + pyvar_repr(k) + ': ' + pyvar_repr(d.fetch(k));
   end;
   Result := Result + '}';

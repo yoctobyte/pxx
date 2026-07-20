@@ -1977,7 +1977,7 @@ begin
   listCi := FindUClass('TPyList');
   dictCi := FindUClass('TPyDict');
   if (listCi >= 0) and (rec = REC_UCLASS_BASE + listCi) then
-    Result := PyCallMeth1(listCi, 'get', baseNode, idxNode)
+    Result := PyCallMeth1(listCi, 'at', baseNode, idxNode)
   else if (dictCi >= 0) and (rec = REC_UCLASS_BASE + dictCi) then
     Result := PyCallMeth1(dictCi, 'fetch', baseNode, idxNode)
   else
@@ -3430,7 +3430,7 @@ begin
   end
   else
   begin
-    elemNode := PyCallMeth1(ci, 'get', PyMakeIdent(cSym), PyMakeIdent(iSym));
+    elemNode := PyCallMeth1(ci, 'at', PyMakeIdent(cSym), PyMakeIdent(iSym));
     if elemNode < 0 then Error('Nil Python: pylib (get) not loaded');
   end;
   if enumMode then
@@ -3456,7 +3456,7 @@ begin
   { the value name reads the parallel list at the same index }
   if (sym2 >= 0) and not enumMode then
   begin
-    elemNode := PyCallMeth1(listCi, 'get', PyMakeIdent(vSym), PyMakeIdent(iSym));
+    elemNode := PyCallMeth1(listCi, 'at', PyMakeIdent(vSym), PyMakeIdent(iSym));
     if elemNode < 0 then Error('Nil Python: pylib (get) not loaded');
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := PyMakeIdent(sym2);
