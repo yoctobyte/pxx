@@ -96,6 +96,24 @@ procedure PXXParallelForN(lo, hi: NativeInt; body: TParForBody; ctx: Pointer;
   each call deltas against the previous call's snapshot. }
 function PXXQueryFreeCores: Integer;
 
+{ As above, EMA-smoothed (alpha 1/4). The raw 50 ms delta is jittery enough to
+  make a worker target twitch every tick; the pwLoadCont monitor uses this.
+  A raw 0 ("no reading") passes through and does not enter the average. }
+function PXXQueryFreeCoresSmoothed: Integer;
+
+{ Clear the EMA so one region's load history does not bias the next one. }
+procedure PXXResetLoadEma;
+
+{ cgroup v2 CPU quota as a whole-core budget (rounded up), or 0 for
+  no-limit / not-in-a-cgroup / unreadable. /proc/stat reports HOST cpus and
+  cannot see a container's quota, so pwLoad* would otherwise over-parallelize
+  inside one and simply eat throttle. }
+function PXXQueryCgroupCores: Integer;
+
+{ Parse a cgroup v2 `cpu.max` payload ("<quota> <period>", or "max <period>").
+  Exposed for testing: a host outside a cgroup cannot exercise the real file. }
+function PXXParseCgroupCpuMax(var buf: array of Byte; n: Integer): Integer;
+
 { Global combine lock for `reduction(op: v)`: each worker folds its private
   partial into the shared reduction variable ONCE, under this lock. Taken
   once-per-worker-per-region (not per iteration), so a plain spinlock is fine and
@@ -237,9 +255,15 @@ end;
 const
   PROC_STAT_PATH: array[0..10] of Char =
     ('/', 'p', 'r', 'o', 'c', '/', 's', 't', 'a', 't', #0);   { NUL-terminated }
+  CGROUP_CPUMAX_PATH: array[0..24] of Char =
+    ('/', 's', 'y', 's', '/', 'f', 's', '/', 'c', 'g', 'r', 'o', 'u', 'p', '/',
+     'c', 'p', 'u', '.', 'm', 'a', 'x', #0, #0, #0);          { NUL-terminated }
 var
   gLastIdle:  Int64 = 0;
   gLastTotal: Int64 = 0;
+  { EMA of the free-core sample, in 1/256 cores. Used ONLY by the pwLoadCont
+    monitor: pwLoadOnce takes a single sample and must keep seeing it raw. }
+  gFreeEma:   Int64 = -1;   { -1 = not seeded }
 
 { Parse the aggregate `cpu  u n s idle iowait ...` line. total = sum of all
   fields; idleAll = idle (field 3) + iowait (field 4). Returns False if the line
@@ -281,6 +305,56 @@ begin
   ReadProcStat := ParseProcStat(buf, Integer(n), idleAll, total);
 end;
 
+{ cgroup v2 CPU quota, as a whole-core budget.
+
+  /proc/stat reports the HOST's CPUs and knows nothing about a container's quota,
+  so inside a cgroup-limited container the load sampler happily reports eight free
+  cores while the cgroup will only ever let us run two — pwLoad* then
+  over-parallelizes and every worker just eats throttle. cgroup v2 publishes the
+  limit as "<quota> <period>" (or "max <period>" when unlimited) in cpu.max.
+
+  Returns the quota in whole cores, rounded UP so a 1.5-core quota yields 2 rather
+  than starving to 1. Returns 0 for "no limit / not in a cgroup / unreadable",
+  which every caller treats as "do not cap" — the same fail-safe direction as the
+  rest of the sampler. }
+function PXXParseCgroupCpuMax(var buf: array of Byte; n: Integer): Integer;
+var i: Integer; quota, period, v: Int64; started: Boolean;
+begin
+  PXXParseCgroupCpuMax := 0;
+  if n <= 0 then Exit;
+  { "max ..." = no quota }
+  if (n >= 3) and (buf[0] = Ord('m')) and (buf[1] = Ord('a')) and (buf[2] = Ord('x')) then Exit;
+  i := 0;
+  { field 0: quota }
+  quota := 0; started := False;
+  while (i < n) and (buf[i] >= Ord('0')) and (buf[i] <= Ord('9')) do
+  begin quota := quota * 10 + (buf[i] - Ord('0')); Inc(i); started := True; end;
+  if not started then Exit;
+  while (i < n) and (buf[i] = Ord(' ')) do Inc(i);
+  { field 1: period }
+  period := 0; started := False;
+  while (i < n) and (buf[i] >= Ord('0')) and (buf[i] <= Ord('9')) do
+  begin period := period * 10 + (buf[i] - Ord('0')); Inc(i); started := True; end;
+  if (not started) or (period <= 0) or (quota <= 0) then Exit;
+  v := (quota + period - 1) div period;            { round up }
+  if v < 1 then v := 1;
+  if v > 4096 then v := 0;                          { implausible: treat as no limit }
+  PXXParseCgroupCpuMax := Integer(v);
+end;
+
+function PXXQueryCgroupCores: Integer;
+var fd, n, ig: NativeInt; buf: array[0..63] of Byte;
+begin
+  PXXQueryCgroupCores := 0;
+  fd := NativeInt(__pxxrawsyscall(SYS_openat, -100, NativeInt(@CGROUP_CPUMAX_PATH[0]), 0, 0, 0, 0));
+  if fd < 0 then Exit;
+  n := NativeInt(__pxxrawsyscall(SYS_read, fd, NativeInt(@buf[0]), 64, 0, 0, 0));
+  ig := NativeInt(__pxxrawsyscall(SYS_close, fd, 0, 0, 0, 0, 0));
+  if ig = 0 then ;
+  if n <= 0 then Exit;
+  PXXQueryCgroupCores := PXXParseCgroupCpuMax(buf, Integer(n));
+end;
+
 function PXXQueryFreeCores: Integer;
 var idleNow, totalNow, dIdle, dTotal: Int64; cores: Int64;
 begin
@@ -299,15 +373,53 @@ begin
   cores := PXXParForWorkers;
   PXXQueryFreeCores := Integer((dIdle * cores) div dTotal);   { idleFrac * cores }
 end;
+
+{ Free cores, EMA-smoothed. The raw 50 ms /proc/stat delta is jittery enough that
+  feeding it straight into the worker target makes the count twitch every tick;
+  the monitor uses this instead. alpha = 1/4, kept in 1/256-core fixed point so a
+  sub-core change is not rounded away before it can accumulate.
+
+  Seeded on the first call so the sampler does not have to climb from zero. A
+  raw sample of 0 means "no reading" (fail-safe), not "no free cores", so it is
+  passed through untouched rather than dragging the average down. }
+function PXXQueryFreeCoresSmoothed: Integer;
+var raw: Integer; r256: Int64;
+begin
+  raw := PXXQueryFreeCores;
+  if raw <= 0 then
+  begin
+    PXXQueryFreeCoresSmoothed := raw;
+    Exit;
+  end;
+  r256 := Int64(raw) * 256;
+  if gFreeEma < 0 then gFreeEma := r256
+  else gFreeEma := gFreeEma + ((r256 - gFreeEma) div 4);
+  PXXQueryFreeCoresSmoothed := Integer((gFreeEma + 128) div 256);
+end;
+
+{ Reset the EMA between regions so one region's load history does not bias the
+  next one's first few ticks. }
+procedure PXXResetLoadEma;
+begin
+  gFreeEma := -1;
+end;
 {$else}
 function PXXQueryFreeCores: Integer;
 begin PXXQueryFreeCores := 0; end;   { no sampler on this target }
+function PXXQueryFreeCoresSmoothed: Integer;
+begin PXXQueryFreeCoresSmoothed := 0; end;
+function PXXQueryCgroupCores: Integer;
+begin PXXQueryCgroupCores := 0; end;
+function PXXParseCgroupCpuMax(var buf: array of Byte; n: Integer): Integer;
+begin PXXParseCgroupCpuMax := 0; end;
+procedure PXXResetLoadEma;
+begin end;
 {$endif}
 
 { Resolve the worker count for a policy. Fail-safe: a missing/failed load sample
   yields all cores (still capped by capPct). }
 function ResolveWorkers(const pol: TParPolicy): Integer;
-var cores, cap, maxN, free, n: Integer;
+var cores, cap, maxN, free, n, quota: Integer;
 begin
   cores := PXXParForWorkers;
   case pol.workers of
@@ -316,6 +428,10 @@ begin
     pwLoadOnce, pwLoadCont:                         { pwLoadCont == pwLoadOnce for now }
       begin
         cap := pol.capPct; if cap <= 0 then cap := 90;
+        { A container's CPU quota bounds us before capPct does: /proc/stat counts
+          host CPUs and cannot see the quota at all. 0 = no limit. }
+        quota := PXXQueryCgroupCores;
+        if (quota > 0) and (quota < cores) then cores := quota;
         maxN := (cores * cap) div 100; if maxN < 1 then maxN := 1;
         free := PXXQueryFreeCores;
         if free <= 0 then n := cores else n := free;
@@ -482,20 +598,43 @@ begin
 end;
 
 procedure MonitorThread(arg: Pointer);
-var d: PLoadCtx; free, cores, cap, maxN, nt, ig: Integer;
+var d: PLoadCtx; free, cores, cap, maxN, nt, cur, step, quota, ig: Integer;
 begin
   d := PLoadCtx(arg);
   cores := d^.NW;
   cap := d^.CapPct; if cap <= 0 then cap := 90;
+  { Container quota bounds the region before capPct does — see PXXQueryCgroupCores. }
+  quota := PXXQueryCgroupCores;
+  if (quota > 0) and (quota < cores) then cores := quota;
   maxN := (cores * cap) div 100; if maxN < 1 then maxN := 1;
+  PXXResetLoadEma;
   repeat
     ig := PalFutexWaitTimeout(@d^.MonWord, 0, 50000000);   { ~50 ms tick }
     if ig = 0 then ;
     if d^.Counter >= d^.Total then Break;
-    free := PXXQueryFreeCores;
+    free := PXXQueryFreeCoresSmoothed;
     if free <= 0 then nt := maxN
     else begin nt := free; if nt > maxN then nt := maxN; end;
     if nt < 1 then nt := 1;
+
+    { RAMP, rather than jumping straight to the headroom. Two of these regions
+      running side by side would otherwise both see the same free cores, both
+      claim all of them, collide, both back off, and oscillate forever. Moving
+      half the distance per tick means two competing jobs converge on a split
+      instead of fighting over it, and it costs at most a few ticks to reach a
+      genuinely idle machine's full width.
+
+      Shrinking is NOT ramped: when the load sample says the CPU is gone, the
+      polite thing is to yield it immediately rather than over several ticks. }
+    cur := d^.ActiveTarget;
+    if nt > cur then
+    begin
+      step := (nt - cur + 1) div 2;                { ceil(half the gap) }
+      if step < 1 then step := 1;
+      nt := cur + step;
+    end;
+    if nt < 1 then nt := 1;
+    if nt > maxN then nt := maxN;
     d^.ActiveTarget := nt;
     ig := PalFutexWake(@d^.ParkWord, PAR_MAX_WORKERS);      { let parked workers re-check }
   until False;

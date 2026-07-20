@@ -52,3 +52,39 @@ fails safe to the fixed worker count; results are always exact).
 ## Log
 - 2026-07-17 — Filed as the optional-refinements follow-up; core load-aware
   feature is functionally complete (ramp/EMA, BSD, cgroup, macOS samplers).
+- 2026-07-20 — **Items 1 and 3 landed** (Track B, `lib/rtl/palparallel.pas`).
+  Items 2 (BSD) and 4 (macOS) stay open: neither OS is available to test on, and
+  a sampler written blind is worse than none — it would fail in the direction of
+  over-parallelizing. They should be picked up with
+  [[feature-os-targets-bsd-mac]], not before.
+
+  **1 — ramp + EMA.** `PXXQueryFreeCoresSmoothed` (alpha 1/4, 1/256-core fixed
+  point) feeds the monitor; `PXXQueryFreeCores` is untouched so `pwLoadOnce`
+  still sees a raw single sample. The monitor now moves half the gap per tick
+  when GROWING, so two competing regions converge on a split instead of both
+  claiming the whole headroom and oscillating. Shrinking is deliberately NOT
+  ramped — when the sample says the CPU is gone, yielding it immediately is the
+  polite behaviour.
+
+  Measured on an 8-core host with background load, 12 ticks at 50 ms:
+  `raw: 7 6 6 1 2 1 0 2 5 7 7 5` (5 jumps of >=2) vs
+  `smoothed: 3 4 4 4 4 4 0 0 3 4 4 5` (2 jumps). Second run: 4 vs 1.
+
+  **3 — cgroup v2 quota.** `PXXQueryCgroupCores` reads `/sys/fs/cgroup/cpu.max`
+  and caps the core budget in both `ResolveWorkers` and the monitor. Rounds the
+  quota UP (1.5 cores -> 2, not 1) and returns 0 for no-limit / not-in-a-cgroup /
+  unreadable, which every caller reads as "do not cap". The parser is exported as
+  `PXXParseCgroupCpuMax` because a host outside a cgroup cannot exercise the real
+  file — verified against `max 100000`, exact/fractional/multi-core quotas, zero
+  quota, zero period, empty, garbage, and an implausible ratio.
+
+## Follow-up worth its own ticket: 0 is ambiguous
+
+`PXXQueryFreeCores` returns 0 both for "no sample available" and for "the machine
+is completely busy", and every caller maps `free <= 0` to *use the full worker
+cap*. That is the right fail-safe for the first meaning and precisely backwards
+for the second: on a saturated box, `ParPolite` — the mode whose entire purpose
+is to be polite — takes maximum width. This is pre-existing behaviour and not
+touched here, but it deserves a distinct sentinel (say -1 for "no reading", 0 for
+"genuinely nothing free") so the two cases can diverge.
+
