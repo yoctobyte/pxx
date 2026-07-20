@@ -431,3 +431,6 @@ no size growth (35 KB vs 92 KB).
   riscv32/xtensa (their gaps, not promo's; the promo core works there).
 - NilPy adopting it as its `int` — the original motivation, deliberately after
   the NilPy refactor.
+
+## Log
+- 2026-07-20 — resolved, commit 933a8764.
