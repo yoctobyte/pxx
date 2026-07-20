@@ -345,3 +345,27 @@ one that declares a `PromoInt` is 92 KB.
 - Stage 4 (check elision), stage 5 (variant integration + NilPy adoption) still
   open. Every op is currently a runtime call; stage 4 is what restores native
   speed for values that never leave the inline tier.
+
+
+### Session close 2026-07-20 — what is done and what is left
+
+**Done and green** (stages 1, 2 and "promotion" of the staged plan):
+`bf86b54e`, `f053b2ed`, `d0f2bed8`, `a2b88243`, `2296b874`, `cb119351`,
+`0adbb80d`. On 64-bit native targets `PromoInt` is a working arbitrary-precision
+integer: declare, assign, `+ - * div mod`, compare, `Write`, wide literals past
+Int64, negation, promotion to a heap bignum and demotion back. Verified by a
+50-case randomized differential against CPython with literals up to 10^40.
+
+Also fixed on the way, and a real bug for ordinary Pascal: over-range decimal
+literals used to WRAP silently (`bug-a-integer-literal-out-of-range-wraps-silently`).
+
+**Left, each with its own ticket:**
+- [[feature-a-promoint-variant-integration]] — stage 4. Needed by the NilPy
+  adoption. Design and the one per-backend hazard (`EmitVariantClear` only
+  releases `VT_STRING`) are written up.
+- [[feature-a-promoint-check-elision]] — stage 5, performance. Every promo op is
+  a runtime call today.
+- [[feature-a-promoint-32bit-bringup]] — the heap tier faults on 32-bit natives;
+  the type is refused there rather than shipped faulting.
+- NilPy adopting it as its `int` — the original motivation, deliberately after
+  the NilPy refactor.

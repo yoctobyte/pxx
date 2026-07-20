@@ -35,12 +35,12 @@ ignoring it for `Integer` is worse than not having it: the program looks
 guarded and is not. Integer is also the DEFAULT integer type, so the unchecked
 case is the common one.
 
-It also blocks a feature. `PromoInt32` — the promotable int's 32-bit storage
-class, and the one that matters for ESP/riscv32/xtensa where NilPy on ESP is a
-project subgoal — cannot trap in its own width without this. It is currently
-declaration-blocked with a diagnostic pointing here, and promo arithmetic is
-forced to the 64-bit class as a result. Landing this unblocks the honest
-per-target storage class.
+**Correction 2026-07-20:** this was originally filed as blocking `PromoInt32`.
+It does not. Promotable-int arithmetic goes through runtime helpers that detect
+overflow in ordinary Pascal (sign tests plus a division oracle), never via
+`{$Q+}`. The 32-bit promo blocker turned out to be
+[[feature-a-promoint-32bit-bringup]] instead. This ticket stands on its own
+merits — it is a silent wrong answer in ordinary Pascal — but unblocks nothing.
 
 ## Shape
 

@@ -26,7 +26,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (126)
+## backlog (129)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -47,6 +47,9 @@ _none_
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
+| feature-a-promoint-32bit-bringup | A | 55 | feature | Promotable int: heap tier faults on 32-bit native targets | — |
+| feature-a-promoint-check-elision | A | 50 | feature | Promotable int: inline the fast path (check elision) | — |
+| feature-a-promoint-variant-integration | A | 60 | feature | Promotable int inside a Variant | — |
 | feature-a-promotable-int | A | 85 | feature | Promotable int — a new arbitrary-precision integer type (fixnum + heap bignum) | — |
 | feature-a-typeref-handle | A | 65 | feature | TypeRef: one type handle, carried — not ten parallel tuples | — |
 | feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
@@ -2571,6 +2574,7 @@ _none_
 - [p 60] [A] bug-a-qplus-misses-32bit-overflow
 - [p 60] [A] bug-test-core-oversized-job-6gb-flaky
 - [p 60] [A] feature-a-abi-oracle
+- [p 60] [A] feature-a-promoint-variant-integration
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
 - [p 60] [A] feature-inline-asm-xtensa
@@ -2582,6 +2586,7 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] feature-a-declaration-phase
+- [p 55] [A] feature-a-promoint-32bit-bringup
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
 - [p 55] [N] feature-nilpy-bytes-and-slices
@@ -2599,6 +2604,7 @@ _none_
 - [p 53] [B] feature-tls13-from-scratch
 - [p 50] [A] decide-abi-portable-vs-target-split
 - [p 50] [D] docs-devnotes-ai-assisted-build
+- [p 50] [A] feature-a-promoint-check-elision
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [A] feature-pascal-asmmode-directive-tolerance
