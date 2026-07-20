@@ -1,0 +1,19 @@
+def f(x: int):
+    return x + 1
+
+def g():
+    print("g ran")
+
+class C:
+    def __init__(self) -> None:
+        self.n = 5
+    def double(self):
+        return self.n * 2
+    def show(self):
+        print("n=" + str(self.n))
+
+print(f(3))
+g()
+c = C()
+print(c.double())
+c.show()

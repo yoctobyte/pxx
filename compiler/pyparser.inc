@@ -4623,13 +4623,27 @@ begin
     if not Eat(tkComma) then break;
   end;
   Expect(tkRParen, ')');
-  Expect(tkMinus, '- in ->');
-  Expect(tkGt, '> in ->');
-  { `-> None` declares a procedure (no Result). }
-  PyHdrIsProc := CurTok.Kind = tkNil;
   PyHdrRetCi := -1;
-  if PyHdrIsProc then begin PyHdrRetType := tyInteger; Next; end
-  else begin PyHdrRetType := PyParseType; PyHdrRetCi := PyLastTypeCi; end;
+  if CurTok.Kind <> tkMinus then
+  begin
+    { NO return annotation. Python does not require one, and 15 of uforth's
+      defs omit it. Registered exactly as the member PRE-PASS already does for
+      this case (PyMethodRetType yields tyUnknown, which it maps to tyInteger)
+      — the two MUST agree, since the pre-pass decides the signature and this
+      decides the frame, and a disagreement is a silent ABI mismatch. Kept a
+      FUNCTION rather than a proc so `return <value>` still has a Result. }
+    PyHdrIsProc := False;
+    PyHdrRetType := tyInteger;
+  end
+  else
+  begin
+    Expect(tkMinus, '- in ->');
+    Expect(tkGt, '> in ->');
+    { `-> None` declares a procedure (no Result). }
+    PyHdrIsProc := CurTok.Kind = tkNil;
+    if PyHdrIsProc then begin PyHdrRetType := tyInteger; Next; end
+    else begin PyHdrRetType := PyParseType; PyHdrRetCi := PyLastTypeCi; end;
+  end;
   { `-> str` is an unbounded Python string, so the Result var is MANAGED — the
     method path has mapped it this way all along, and a def returning a string
     built past 255 characters truncated silently without it
@@ -5530,16 +5544,24 @@ begin
     Inc(nparams);
     if not Eat(tkComma) then break;
   end;
-  Expect(tkRParen, ')'); Expect(tkMinus, '- in ->'); Expect(tkGt, '> in ->');
+  Expect(tkRParen, ')');
+  { the annotation is OPTIONAL — see PyParseDefHeader for why the default here
+    has to match the pre-pass exactly }
+  if CurTok.Kind = tkMinus then
+  begin
+    Expect(tkMinus, '- in ->'); Expect(tkGt, '> in ->');
   { `-> None` on a NON-ctor method: accept it. Only the ctor was allowed to
     say None, so an ordinary `def m(self) -> None:` died in PyParseType with
     "expected type annotation" — while the identical top-level def has worked
     since day one (PyParseDef's isProc path). PyMethodRetType already maps the
     None annotation to tyInteger for registration, so nothing downstream
     changes; the header parse was simply stricter than the pre-pass. }
-  if isCtor then Expect(tkNil, 'None')
-  else if CurTok.Kind = tkNil then Next
-  else PyParseType;
+    if isCtor then Expect(tkNil, 'None')
+    else if CurTok.Kind = tkNil then Next
+    else PyParseType;
+  end
+  else if isCtor then
+    Error('Nil Python: __init__ must be annotated -> None');
   Expect(tkColon, ':'); Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
   bodyStart := TokPos - 1;
   fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]); AppendChar(fullName, '.');

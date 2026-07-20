@@ -47,3 +47,6 @@ line.
 `test-nilpy` green with a `.npy` case (unannotated def, unannotated method,
 unannotated `__init__`) diffed against CPython, plus `--tier quick` and
 self-host byte-identical.
+
+## Log
+- 2026-07-20 — resolved, commit HEAD.

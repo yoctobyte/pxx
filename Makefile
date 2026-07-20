@@ -196,8 +196,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_string_variant26)" = "$$(printf '5\napple\nTrue\nFalse\nFalse\nTrue\nTrue\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nFalse\nFalse\nhello world\nhello potato\ngreen world')"
 	! ./$(COMPILER) test/test_nilpy_missing_param_annotation_fail.npy /tmp/test_nilpy_missing_param_annotation_fail26 > /tmp/test_nilpy_missing_param_annotation_fail.log 2>&1
 	grep -q "unexpected token" /tmp/test_nilpy_missing_param_annotation_fail.log
-	! ./$(COMPILER) test/test_nilpy_missing_result_annotation_fail.npy /tmp/test_nilpy_missing_result_annotation_fail26 > /tmp/test_nilpy_missing_result_annotation_fail.log 2>&1
-	grep -q "unexpected token" /tmp/test_nilpy_missing_result_annotation_fail.log
+	./$(COMPILER) test/test_nilpy_no_return_annotation.npy /tmp/test_nilpy_no_return_annotation26
+	test "$$(/tmp/test_nilpy_no_return_annotation26)" = "$$(printf '%b' '4\ng ran\n10\nn=5')"
 	! ./$(COMPILER) test/test_nilpy_range_step_fail.npy /tmp/test_nilpy_range_step_fail26 > /tmp/test_nilpy_range_step_fail.log 2>&1
 	grep -q "range step other than 1 is not supported in v1" /tmp/test_nilpy_range_step_fail.log
 	./$(COMPILER) test/test_nilpy_many_params.npy /tmp/test_nilpy_many_params26
