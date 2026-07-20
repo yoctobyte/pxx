@@ -45,3 +45,6 @@ comparison (`1 == 1.0` is True) all match CPython.
 `test-nilpy` green with a `.npy` case diffed against CPython — including a
 chain whose middle operand is a CALL, which is where a repeat-the-text
 lowering breaks + `--tier quick` + self-host byte-identical + `make fpc-check`.
+
+## Log
+- 2026-07-20 — resolved, commit c4d5ce4e.
