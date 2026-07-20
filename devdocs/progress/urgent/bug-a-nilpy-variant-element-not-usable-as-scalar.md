@@ -41,6 +41,29 @@ error: IR_UNSUPPORTED: frontend could not lower AST node (kind 5)
 ```
 (kind 5 = AN_BINOP.)
 
+## The worst manifestation, found 2026-07-20 after for-in landed
+
+Concatenating a loop variable — a variant — onto a string produces GARBAGE
+BYTES, not a wrong number:
+
+```python
+xs = ["a", "b"]
+acc = ""
+for v in xs:
+    acc = acc + v
+print(acc)          # CPython: ab      pxx: \0\001\340\341,~
+```
+
+With a string on the left the binop lowers as string concatenation and reads
+the variant's 16 bytes as a string handle. This is the same missing unbox as
+below, but it is the shape a corpus hits FIRST, because "iterate a list of
+strings and build a string" is the most ordinary loop there is. The dict
+variant of it (`for k in d: ks = ks + k`) is identical.
+
+Note this got easier to hit, not newly broken, when for-in landed: before
+that there was no way to get a variant into a loop variable without an
+explicit subscript.
+
 ## What works, and why that hid it
 
 `print(xs[0])` is CORRECT — the writeln path has its own variant handling
