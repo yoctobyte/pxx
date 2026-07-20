@@ -74,3 +74,6 @@ own decision about whether NilPy matches CPython's repr exactly.
 `test-nilpy` green with every sign combination of `//` and `%` diffed against
 CPython, plus the round-trip identity + `--tier quick` + self-host
 byte-identical + `make fpc-check`.
+
+## Log
+- 2026-07-20 — resolved, commit 62c4e457.

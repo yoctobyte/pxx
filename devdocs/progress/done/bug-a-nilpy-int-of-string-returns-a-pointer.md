@@ -53,3 +53,6 @@ Both files are Track A, which is why this is filed rather than fixed under N.
 
 `make test` + self-host byte-identical, `test-nilpy` green, and all five
 lines above matching CPython.
+
+## Log
+- 2026-07-20 — resolved, commit 62c4e457.

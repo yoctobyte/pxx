@@ -54,3 +54,6 @@ today. Bare `str()` in user code is still wrong, which is this ticket.
 
 `make test` + self-host byte-identical, `test-nilpy` green, and the four
 lines above matching CPython.
+
+## Log
+- 2026-07-20 — resolved, commit 62c4e457.
