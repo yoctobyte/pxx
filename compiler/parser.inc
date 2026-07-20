@@ -723,6 +723,8 @@ function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may 
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python obj.meth() on a VARIANT receiver (pyparser.inc) }
 function PyMakeVariantField(baseNode: Integer; const fname: AnsiString; var tk: TTypeKind; var recName: Integer): Integer; forward; { Nil Python obj.field on a VARIANT receiver (pyparser.inc) }
+function PyKwArgIndex(mpi, firstParam: Integer): Integer; forward; { Nil Python `name=expr` call argument (pyparser.inc) }
+procedure PyBindKwArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer); forward; { Nil Python keyword-argument reorder (pyparser.inc) }
 
 procedure ParseArgExpr;
 { A call ARGUMENT under NilPy must be parsed by the Python precedence chain
@@ -2352,36 +2354,46 @@ end;
   (a call that omitted trailing defaulted args — mirrors the ctor fill at the
   TFoo.Create arity check). Errors if a remaining param has no default. The
   caller links head into the call node when lastArg starts at -1. }
+{ The AST node for parameter k's declared default value. Errors when k has no
+  default. Shared by the trailing-arg fill below and the Nil Python
+  keyword-argument bind, which needs the same node for a HOLE in the middle. }
+function DefaultArgValueNode(mpi, k: Integer): Integer;
+var exprNode: Integer;
+begin
+  if (k >= MAX_PROC_PARAMS) or (not ProcParamHasDefault[mpi * MAX_PROC_PARAMS + k]) then
+    Error('not enough arguments to ' + Procs[mpi].Name +
+          ' (parameter ' + Procs[mpi].Params[k].Name + ' has no default)');
+  if ProcParamDefaultIsStr[mpi * MAX_PROC_PARAMS + k] then
+  begin
+    exprNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[exprNode] := ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + k];
+    ASTSLen[exprNode] := ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + k];
+    ASTTk[exprNode] := Ord(tyString);
+  end
+  else if ProcParamDefaultIsSet[mpi * MAX_PROC_PARAMS + k] then
+  begin
+    { a SET default: the value is the Data[] offset of the mask baked at the
+      declaration, so the call site just references it }
+    exprNode := AllocNode(AN_SET_CONST_REF);
+    ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k];
+    ASTTk[exprNode] := Ord(tySet);
+  end
+  else
+  begin
+    exprNode := AllocNode(AN_INT_LIT);
+    ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k];
+    ASTTk[exprNode] := Ord(Procs[mpi].Params[k].TypeKind);
+  end;
+  DefaultArgValueNode := exprNode;
+end;
+
 procedure FillDefaultArgs(mpi, fromIdx, callNode: Integer; var lastArg: Integer);
 var exprNode, argSeq, k: Integer;
 begin
   k := fromIdx;
   while k <= Procs[mpi].ParamCount - 1 do
   begin
-    if (k >= MAX_PROC_PARAMS) or (not ProcParamHasDefault[mpi * MAX_PROC_PARAMS + k]) then
-      Error('not enough arguments to ' + Procs[mpi].Name +
-            ' (parameter ' + Procs[mpi].Params[k].Name + ' has no default)');
-    if ProcParamDefaultIsStr[mpi * MAX_PROC_PARAMS + k] then
-    begin
-      exprNode := AllocNode(AN_STR_LIT);
-      ASTSOffset[exprNode] := ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + k];
-      ASTSLen[exprNode] := ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + k];
-      ASTTk[exprNode] := Ord(tyString);
-    end
-    else if ProcParamDefaultIsSet[mpi * MAX_PROC_PARAMS + k] then
-    begin
-      { a SET default: the value is the Data[] offset of the mask baked at the
-        declaration, so the call site just references it }
-      exprNode := AllocNode(AN_SET_CONST_REF);
-      ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k];
-      ASTTk[exprNode] := Ord(tySet);
-    end
-    else
-    begin
-      exprNode := AllocNode(AN_INT_LIT);
-      ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k];
-      ASTTk[exprNode] := Ord(Procs[mpi].Params[k].TypeKind);
-    end;
+    exprNode := DefaultArgValueNode(mpi, k);
     argSeq := AllocNode(AN_ARG);
     ASTLeft[argSeq] := exprNode;
     if lastArg = -1 then ASTLeft[callNode] := argSeq
@@ -3239,6 +3251,7 @@ function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   viaProp: Boolean;   { fieldName was rewritten from a PROPERTY's backing field — visibility is the property's, skip the field check }
   mblobNode, cpPri, cpMmi, cpMpi: Integer;
+  mkw, mslot, mnArgs: Integer;   { NilPy keyword argument: binding+1, target param, rebound count }
   cpIsAssign: Boolean;
   cpName: AnsiString;
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
@@ -5007,14 +5020,19 @@ begin
             end;
             while mai <= Procs[mpi].ParamCount-1 do
             begin
-              if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(mpi, mai) then
+              { NilPy `key=expr` on the METHOD path. Params[0] is Self, so names
+                resolve from 1 up; mslot is the parameter this argument actually
+                fills, which drives the by-ref / open-array decisions below. }
+              mkw := PyKwArgIndex(mpi, 1);
+              if mkw > 0 then mslot := mkw - 1 else mslot := mai;
+              if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(mpi, mslot) then
                 mexprNode := ParseVarRecLiteralAST
-              else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(mpi, mai) then
+              else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(mpi, mslot) then
                 { `[...]` open-array literal to an instance/record method
                   (r.SumAll([10,20])) — was parsed as a SET literal (b334) }
-                mexprNode := ParseArrayCtorAST(Procs[mpi].Params[mai].TypeKind,
-                  ProcParamElemRowLen[mpi * MAX_PROC_PARAMS + mai], ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + mai])
-              else if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+                mexprNode := ParseArrayCtorAST(Procs[mpi].Params[mslot].TypeKind,
+                  ProcParamElemRowLen[mpi * MAX_PROC_PARAMS + mslot], ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + mslot])
+              else if Procs[mpi].Params[mslot].IsRef or Procs[mpi].Params[mslot].IsArray then
               begin
                 if ByRefArgStartsExpression then
                 begin
@@ -5033,7 +5051,17 @@ begin
                 ParseExpr; mexprNode := CurASTNode;
               end;
               margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
+              ASTIVal[margSeq] := mkw;
               ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
+              if mkw > 0 then
+              begin
+                { a keyword argument decouples arity from position: stop at `)`
+                  and let PyBindKwArgs order the chain and fill the holes }
+                if CurTok.Kind = tkRParen then Break;
+                Expect(tkComma, ',');
+                Inc(mai);
+                Continue;
+              end;
               if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then
               begin
                 FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
@@ -5043,6 +5071,9 @@ begin
               Inc(mai);
             end;
             Expect(tkRParen, ')');
+            mnArgs := 0;
+            PyBindKwArgs(mpi, mselfArg, mlastArg, mnArgs);
+            ASTLeft[mcallNode] := mselfArg;
           end;
           { Continue the selector loop (not Exit) so trailing `.field` / `[i]` on
             the method result are parsed: obj.M(args).field, obj.M.field, chained
@@ -7095,6 +7126,7 @@ var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, pre
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     mcCtorNm: AnsiString;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+    kwIdx, slotIdx: Integer;   { NilPy keyword argument: binding+1, and the param it fills }
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
     aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri, qUnit: Integer;
     fieldName, methName: AnsiString; isAssign: Boolean; castTk: TTypeKind;
@@ -10319,11 +10351,14 @@ begin
         nArgs := 0;
         while CurTok.Kind <> tkRParen do
         begin
-          if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(procIdx, nArgs) then
+          { NilPy `key=expr`: consumes the name, yields paramIndex+1 (0 = positional) }
+          kwIdx := PyKwArgIndex(procIdx, 0);
+          if kwIdx > 0 then slotIdx := kwIdx - 1 else slotIdx := nArgs;
+          if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(procIdx, slotIdx) then
             CurASTNode := ParseVarRecLiteralAST
-          else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(procIdx, nArgs) then
-            CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[nArgs].TypeKind,
-              ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + nArgs], ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + nArgs])
+          else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(procIdx, slotIdx) then
+            CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[slotIdx].TypeKind,
+              ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + slotIdx], ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + slotIdx])
           else
           begin
             node := TryDelphiBareProcArg;
@@ -10331,6 +10366,7 @@ begin
           end;
           argSeq := AllocNode(AN_ARG);
           ASTLeft[argSeq] := CurASTNode;
+          ASTIVal[argSeq] := kwIdx;
           if argsHead = -1 then
             argsHead := argSeq
           else
@@ -10344,6 +10380,7 @@ begin
             Error('expected comma or close parenthesis');
         end;
         Expect(tkRParen, ')');
+        PyBindKwArgs(procIdx, argsHead, lastArg, nArgs);
 
         currArg := argsHead;
         for i := 0 to nArgs - 1 do
@@ -15026,6 +15063,7 @@ var
   name: AnsiString;
    idx, procIdx, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg, identTokIdx: Integer;
   nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  kwIdx, slotIdx: Integer;   { NilPy keyword argument: binding+1, and the param it fills }
   isLn, slIsArrTarget, slIsDynArr, frDot: Boolean;
   smci, smmii, smpii, smcallNode, smselfArg, smLastArg, smArgSeq, smMai, smSelfIdx: Integer;
   aliasIdx, fieldNode, indexNode, castPrevTok, qUnit: Integer;
@@ -16271,11 +16309,13 @@ begin
           nArgs := 0;
           while CurTok.Kind <> tkRParen do
           begin
-            if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(procIdx, nArgs) then
+            kwIdx := PyKwArgIndex(procIdx, 0);
+            if kwIdx > 0 then slotIdx := kwIdx - 1 else slotIdx := nArgs;
+            if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(procIdx, slotIdx) then
               CurASTNode := ParseVarRecLiteralAST
-            else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(procIdx, nArgs) then
-              CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[nArgs].TypeKind,
-              ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + nArgs], ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + nArgs])
+            else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(procIdx, slotIdx) then
+              CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[slotIdx].TypeKind,
+              ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + slotIdx], ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + slotIdx])
             else
             begin
               node := TryDelphiBareProcArg;
@@ -16283,6 +16323,7 @@ begin
             end;
             argSeq := AllocNode(AN_ARG);
             ASTLeft[argSeq] := CurASTNode;
+            ASTIVal[argSeq] := kwIdx;
             if argsHead = -1 then
               argsHead := argSeq
             else
@@ -16296,6 +16337,7 @@ begin
               Error('expected comma or close parenthesis');
           end;
           Expect(tkRParen, ')');
+          PyBindKwArgs(procIdx, argsHead, lastArg, nArgs);
 
           currArg := argsHead;
           for i := 0 to nArgs - 1 do

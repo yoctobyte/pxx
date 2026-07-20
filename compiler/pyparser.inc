@@ -1556,6 +1556,117 @@ end;
   negative indices; Pascal's are 1-based with neither. Doing the fixup in the
   RUNTIME helper rather than as index arithmetic here keeps the negative case
   (which needs Length(s)) correct without evaluating the base twice. }
+{ Nil Python KEYWORD ARGUMENTS — `f(a, key=expr)`.
+
+  Two halves. This one runs at the point an argument would be parsed: if the
+  next two tokens are `ident =` (NOT `==` — the lexer already split those into
+  tkEq), consume them and resolve the name against the callee's declared
+  parameters, returning paramIndex+1. 0 means "ordinary positional argument",
+  so a zero-initialised AN_ARG node reads as positional and every Pascal path
+  is unaffected. firstParam is 1 on the method path, where Params[0] is Self
+  and `self=` must not be bindable by name.
+
+  The callee-side defaults (ProcParamDefault*) already existed; all that was
+  missing was binding by name at the call site. }
+function PyKwArgIndex(mpi, firstParam: Integer): Integer;
+var nm: AnsiString;
+    i: Integer;
+begin
+  PyKwArgIndex := 0;
+  if not isNilPy then Exit;
+  if CurTok.Kind <> tkIdent then Exit;
+  if Tokens[TokPos].Kind <> tkAssign then Exit;
+  nm := CurTok.SVal;
+  Next;              { the name }
+  Next;              { the '=' }
+  for i := firstParam to Procs[mpi].ParamCount - 1 do
+    if CaseEqual(Procs[mpi].Params[i].Name, nm) then
+    begin
+      PyKwArgIndex := i + 1;
+      Exit;
+    end;
+  Error('Nil Python: ' + Procs[mpi].Name + ' has no parameter named ''' + nm + '''');
+end;
+
+{ The second half: once the whole argument list is parsed, reorder the AN_ARG
+  chain into declaration order. Each node carries its binding in ASTIVal
+  (paramIndex+1 from PyKwArgIndex, 0 = positional, consumed here so IR lowering
+  sees an ordinary chain). Holes BELOW the highest bound parameter are filled
+  from the declared defaults; trailing holes are left alone so the existing
+  FillDefaultArgs / IR default path keeps handling them.
+
+  No-op — chain untouched, not even walked twice — when no argument was a
+  keyword, which is every Pascal call and most NilPy ones. }
+procedure PyBindKwArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer);
+var slot: array[0..MAX_PROC_PARAMS-1] of Integer;
+    n, k, pos, maxIdx, i: Integer;
+    anyKw, sawKw: Boolean;
+begin
+  anyKw := False;
+  n := argsHead;
+  while n >= 0 do
+  begin
+    if ASTIVal[n] <> 0 then anyKw := True;
+    n := ASTRight[n];
+  end;
+  if not anyKw then Exit;
+
+  for i := 0 to MAX_PROC_PARAMS - 1 do slot[i] := -1;
+  pos := 0; maxIdx := -1; sawKw := False;
+  n := argsHead;
+  while n >= 0 do
+  begin
+    if ASTIVal[n] <> 0 then
+    begin
+      k := ASTIVal[n] - 1;
+      ASTIVal[n] := 0;
+      sawKw := True;
+    end
+    else
+    begin
+      if sawKw then
+        Error('Nil Python: positional argument after keyword argument in call to '
+              + Procs[mpi].Name);
+      k := pos;
+      Inc(pos);
+    end;
+    if (k < 0) or (k >= MAX_PROC_PARAMS) then
+      Error('Nil Python: too many arguments to ' + Procs[mpi].Name);
+    if slot[k] >= 0 then
+      Error('Nil Python: ' + Procs[mpi].Name + ' got multiple values for parameter '''
+            + Procs[mpi].Params[k].Name + '''');
+    slot[k] := n;
+    if k > maxIdx then maxIdx := k;
+    n := ASTRight[n];
+  end;
+
+  { Trailing defaulted params too, not only the holes below maxIdx: a keyword
+    call decouples arity from position, so the loops that normally stop at `)`
+    and hand the tail to FillDefaultArgs have already been broken out of. }
+  i := maxIdx + 1;
+  while (i <= Procs[mpi].ParamCount - 1) and (i < MAX_PROC_PARAMS) and
+        ProcParamHasDefault[mpi * MAX_PROC_PARAMS + i] do
+  begin
+    slot[i] := -1;
+    maxIdx := i;
+    Inc(i);
+  end;
+
+  for i := 0 to maxIdx do
+    if slot[i] < 0 then
+    begin
+      k := AllocNode(AN_ARG);
+      ASTLeft[k] := DefaultArgValueNode(mpi, i);
+      slot[i] := k;
+    end;
+
+  for i := 0 to maxIdx - 1 do ASTRight[slot[i]] := slot[i + 1];
+  ASTRight[slot[maxIdx]] := -1;
+  argsHead := slot[0];
+  lastArg := slot[maxIdx];
+  nArgs := maxIdx + 1;
+end;
+
 function PyMakeStrIndex(baseNode, idxNode: Integer): Integer;
 var procIdx, callNode, a0, a1: Integer;
 begin

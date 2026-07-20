@@ -1,0 +1,24 @@
+def greet(name: str, greeting: str = "Hello", punct: str = "!") -> None:
+    print(greeting + ", " + name + punct)
+
+class Box:
+    def __init__(self) -> None:
+        self.total = 0
+
+    def add(self, a: int, b: int = 10, c: int = 100) -> None:
+        self.total = self.total + a + b + c
+        print(self.total)
+
+greet("Ann")
+greet("Bob", "Hi")
+greet("Cid", punct="?")
+greet("Dee", greeting="Yo", punct="?!")
+greet("Eve", punct="?", greeting="Hey")
+greet(name="Fay")
+greet(punct=".", name="Gus")
+
+bx = Box()
+bx.add(1)
+bx.add(1, c=2)
+bx.add(1, c=2, b=3)
+bx.add(a=5)
