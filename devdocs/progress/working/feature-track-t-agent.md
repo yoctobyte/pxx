@@ -173,3 +173,47 @@ replacing the dev-side quick gate.
     not be reproduced. Pre-existing and unrelated to the above, but it is
     the same failure class as the flood — a box that cannot build turns
     everything red — and it wants a Track A look.
+- **2026-07-20 (opus-trackT, session 2 — watch shift):** three more fixes, one
+  self-inflicted outage.
+  - **Learned metrics were keyed by RECIPE POSITION (c110ad26).** `self.metrics`
+    used `job.name` (`test-core#120`) — the same positional-index defect
+    `twatch.job_key()` was written to fix, quoted in its own docstring
+    ("inserting one test renumbers every job after it"). The ledger got the
+    stable-selector treatment; the scheduler never did. So the EWMA blended
+    duration/RSS/cpu across whatever different tests held a slot over time.
+    Live example: `test-core#120` carried `dur=88.65s mem=6.77GB n=861` for
+    `test/test_interface_mainbody_ascast_temp.pas` — a 36-line interface test
+    whose binary is 36 KB. Admission then correctly refused a "6.8 GB" job
+    (`avail - est_mem` under `MEM_FLOOR`), found nothing else runnable, and
+    forced whole runs through serially in degraded mode — the STARVED/forcing
+    storm visible all morning. Now keyed by `job.sel` via `metrics_key()`;
+    legacy positional entries are DROPPED on load (a blended average cannot be
+    attributed back to its sources, so it is unusable, not merely mis-keyed).
+    Scale: 1163 entries dropped in the dev checkout, **1501 in the watcher**.
+    Post-fix: zero STARVED/forcing events, and #120 runs concurrently again.
+  - **Daemon now runs the CLONE's twatch.py (4e8674ac).** `trackt start`
+    launched from the invoking checkout, so uncommitted edits in a dev tree
+    decided what the watcher executed next start — code-side twin of the
+    2026-07-07 dirty-clone incident. `--local-code` opts back in deliberately.
+    Verified live: the running daemon's argv is now
+    `/home/rene/trackt-watch/tools/twatch.py`.
+  - **SELF-INFLICTED OUTAGE + fix (b50c9f03).** `daemon_pid()` tested
+    `"twatch.py" in /proc/<pid>/cmdline`, which matches anything that merely
+    MENTIONS the daemon. A health-check loop I started (its own command line
+    contained `twatch.py --clone <clone>`) was mistaken for the daemon, so
+    `trackt restart` said "daemon already running" and started nothing. The
+    watcher sat DOWN while `trackt status` reported RUNNING against the
+    monitor's pid — a silent outage caused by the liveness check itself.
+    `is_daemon()` now parses argv and requires the real invocation shape
+    (argv[0] a python, argv[1] the script, clone as a real argument). Tested
+    against the live daemon and a decoy bash process embedding the string.
+    Lesson for future watch shifts: a monitor that greps for a process must
+    not put the pattern in its own command line.
+  - **Ticket hygiene:** filed `chore-makefile-selfhost-iterate-to-convergence`
+    (A), `chore-twatch-run-from-clone` (T, since resolved),
+    `feature-twatch-full-tier-coverage-age` (T) in 296a0cc7.
+  - **Note on a closed ticket:** `regression-test-core-test-interface-mainbody-
+    ascast-temp` was resolved 2026-07-19 as "harness race" on the strength of a
+    bare `Terminated` under load. The metrics-key bug is a plausible mechanism
+    for those kills (same test, same box) but this is NOT established — flagged
+    in c110ad26 as speculative. Revisit if they recur.
