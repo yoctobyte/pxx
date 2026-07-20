@@ -3997,7 +3997,18 @@ begin
     symIdx := FindSym(name);
     Next;
     Expect(tkAssign, '=');
-    if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
+    { `res = None` stores a real None (VT_EMPTY), exactly as the `self.x = None`
+      and `d[k] = None` routes already did. Without it the nil literal lowered
+      to a plain zero, so the local was born non-variant and the very next
+      `res = <int>` failed to widen — "annotate the type / too dynamic" on the
+      ordinary Python idiom of seeding a result with None
+      (bug-nilpy-none-assign-to-plain-local). Sibling branches again. }
+    if CurTok.Kind = tkNil then
+    begin
+      Next;
+      rhsNode := PyMakeNone;
+    end
+    else if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
        (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       rhsNode := PyClassCreate
     else if PyIsEmptySetCall then

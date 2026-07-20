@@ -8256,6 +8256,33 @@ begin
         LastExprTk := tyInteger;
         Exit;
       end
+      else if isNilPy and (name = 'float') then
+      begin
+        Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        { Dispatched on the ARGUMENT type, not by overload: a string is PARSED
+          (and raises ValueError on failure, which uforth catches), an integer
+          is widened, and a float is already the answer. }
+        if TypeIsFloat(LastExprTk) then
+        begin
+          CurASTNode := CurASTNode;   { already a Double — nothing to convert }
+          LastExprTk := tyDouble;
+          Exit;
+        end;
+        node := AllocNode(AN_CALL);
+        if (LastExprTk = tyString) or (LastExprTk = tyAnsiString) or
+           (LastExprTk = tyChar) then
+          ASTIVal[node] := FindProc('pyfloat_parse')
+        else
+          ASTIVal[node] := FindProc('pyfloat_ofint');
+        if ASTIVal[node] < 0 then Error('Nil Python: pylib (pyfloat_*) not loaded');
+        ASTTk[node] := Ord(tyDouble);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+        ASTRight[argSeq] := -1;
+        ASTLeft[node] := argSeq;
+        CurASTNode := node;
+        LastExprTk := tyDouble;
+        Exit;
+      end
       else if isNilPy and (name = 'str') then
       begin
         Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');

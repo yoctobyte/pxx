@@ -226,6 +226,12 @@ function pyint_from_bytes(b: TPyBytes; signed: Boolean): Int64;
   word as a number, so a non-numeric token is the ordinary case and a fatal
   error there would kill the interpreter on its first word. }
 function pyint_parse(const s: AnsiString; base: Integer): Int64;
+{ Python's float(). Split by ARGUMENT TYPE at the call site rather than
+  overloaded on one name, because the frontend builds these calls directly and
+  has no overload resolution there. pyfloat_parse RAISES ValueError on a bad
+  parse, for the same reason pyint_parse does. }
+function pyfloat_parse(const s: AnsiString): Double;
+function pyfloat_ofint(v: Int64): Double;
 { os.path / os / sys shims. Reached by NAME from the frontend's stdlib table
   (`os.path.join(...)` -> pyos_path_join), because `os` and `sys` are deferred
   imports and never become symbols.
@@ -1700,6 +1706,86 @@ begin
       acc := acc - (Int64(1) shl (8 * b.FLen));
   end;
   Result := acc;
+end;
+
+function pyfloat_ofint(v: Int64): Double;
+begin
+  Result := v;
+end;
+
+function pyfloat_parse(const s: AnsiString): Double;
+var i, n, digits: Integer; neg, seenDot, seenExp: Boolean; body: AnsiString;
+    intPart, frac, scale, expSign, expVal: Double;
+begin
+  body := s;
+  i := 1; n := Length(body);
+  while (i <= n) and ((body[i] = ' ') or (body[i] = #9)) do Inc(i);
+  while (n >= i) and ((body[n] = ' ') or (body[n] = #9)) do Dec(n);
+  body := Copy(body, i, n - i + 1);
+  if Length(body) = 0 then
+    raise ValueError.Create('could not convert string to float');
+
+  neg := False;
+  i := 1;
+  if (body[i] = '-') or (body[i] = '+') then
+  begin
+    neg := body[i] = '-';
+    Inc(i);
+  end;
+
+  intPart := 0; frac := 0; scale := 1;
+  seenDot := False; seenExp := False; digits := 0;
+  expSign := 1; expVal := 0;
+  while i <= Length(body) do
+  begin
+    if body[i] = '_' then begin Inc(i); Continue; end;
+    if (body[i] = '.') and not seenDot and not seenExp then
+    begin
+      seenDot := True;
+      Inc(i);
+      Continue;
+    end;
+    if ((body[i] = 'e') or (body[i] = 'E')) and not seenExp and (digits > 0) then
+    begin
+      seenExp := True;
+      Inc(i);
+      if (i <= Length(body)) and ((body[i] = '-') or (body[i] = '+')) then
+      begin
+        if body[i] = '-' then expSign := -1;
+        Inc(i);
+      end;
+      if (i > Length(body)) or (body[i] < '0') or (body[i] > '9') then
+        raise ValueError.Create('could not convert string to float');
+      while (i <= Length(body)) and (body[i] >= '0') and (body[i] <= '9') do
+      begin
+        expVal := expVal * 10 + (Ord(body[i]) - Ord('0'));
+        Inc(i);
+      end;
+      Continue;
+    end;
+    if (body[i] < '0') or (body[i] > '9') then
+      raise ValueError.Create('could not convert string to float');
+    Inc(digits);
+    if seenDot then
+    begin
+      scale := scale * 10;
+      frac := frac + (Ord(body[i]) - Ord('0')) / scale;
+    end
+    else
+      intPart := intPart * 10 + (Ord(body[i]) - Ord('0'));
+    Inc(i);
+  end;
+  if digits = 0 then
+    raise ValueError.Create('could not convert string to float');
+
+  Result := intPart + frac;
+  if seenExp then
+    while expVal > 0 do
+    begin
+      if expSign > 0 then Result := Result * 10 else Result := Result / 10;
+      expVal := expVal - 1;
+    end;
+  if neg then Result := -Result;
 end;
 
 function PyDigitVal(c: Char): Integer;

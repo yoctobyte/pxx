@@ -1,0 +1,16 @@
+print(float("3.5"))
+print(float("-2.25"))
+print(float("10"))
+print(float("1e3"))
+print(float("2.5e-2"))
+print(float(7))
+print(float(3.5))
+try:
+    print(float("abc"))
+except ValueError:
+    print("caught float ValueError")
+try:
+    print(float(""))
+except ValueError:
+    print("caught empty float")
+print("done")

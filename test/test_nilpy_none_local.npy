@@ -1,0 +1,9 @@
+def f(token: str) -> int:
+    res = None
+    if len(token) == 3:
+        res = ord(token[1])
+    if res is None:
+        return -1
+    return res
+print(f("'a'"))
+print(f("ab"))
