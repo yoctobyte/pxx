@@ -60,6 +60,9 @@ procedure PXXPromoInit(dst: Pointer);
 procedure PXXPromoAdd(dst, a, b: Pointer);
 procedure PXXPromoSub(dst, a, b: Pointer);
 procedure PXXPromoMul(dst, a, b: Pointer);
+procedure PXXPromoAddInt(dst, a: Pointer; b: Int64);
+procedure PXXPromoSubInt(dst, a: Pointer; b: Int64);
+procedure PXXPromoMulInt(dst, a: Pointer; b: Int64);
 procedure PXXPromoDiv(dst, a, b: Pointer);
 procedure PXXPromoMod(dst, a, b: Pointer);
 function  PXXPromoCmp(a, b: Pointer): Integer;
@@ -548,6 +551,14 @@ end;
 
 procedure StoreBig(dst: Pointer; const r: TBig); forward;
 
+{ Does this Int64 fit the target's native inline word? Always on a 64-bit
+  target; on a 32-bit one it gates the mixed fast forms below. }
+function NativeFits(v: Int64): Boolean;
+begin
+  if SizeOf(NativeInt) >= 8 then NativeFits := True
+  else NativeFits := (v <= 2147483647) and (v >= -2147483648);
+end;
+
 procedure PXXPromoClear(dst: Pointer);
 var sp: PPromoStr;
     w: PPromoWord;
@@ -577,6 +588,18 @@ begin
   w^ := 0;
 end;
 
+{ The spill half of PXXPromoFromInt, kept in its OWN routine on purpose.
+
+  A function that so much as mentions a TBig pays managed prologue/epilogue on
+  EVERY call — the record holds a dynamic array, so its temps are zero-inited
+  and finalized whether or not the branch that uses them runs. Measured: with
+  the slow path inline, one PXXPromoAddInt cost ~344 ns; split out, the fast
+  path is a handful of instructions. Keep every hot routine free of TBig. }
+procedure FromIntSpill(dst: Pointer; v: Int64);
+begin
+  StoreBig(dst, BFromInt(v));
+end;
+
 procedure PXXPromoFromInt(dst: Pointer; v: Int64);
 var w: PPromoWord;
 begin
@@ -587,10 +610,12 @@ begin
     through here. }
   if (SizeOf(NativeInt) < 8) and ((v > 2147483647) or (v < -2147483648)) then
   begin
-    StoreBig(dst, BFromInt(v));
+    FromIntSpill(dst, v);
     Exit;
   end;
-  PXXPromoClear(dst);
+  if SlotTag(dst) <> PROMO_TAG_INLINE then PXXPromoClear(dst);
+  w := PPromoWord(dst);
+  w^ := PROMO_TAG_INLINE;
   w := PPromoWord(SlotPayloadAddr(dst));
   w^ := NativeInt(v);
 end;
@@ -756,6 +781,85 @@ begin
     Exit;
   end;
   StoreBig(dst, BMul(SlotBig(a), SlotBig(b)));
+end;
+
+{ ---- mixed promo-with-machine-int fast forms ----------------------------
+
+  `p + n` where n is an ordinary integer used to cost FIVE runtime calls: init a
+  temp, box n into it, init a result temp, add, copy back. These collapse it to
+  one by taking the machine int directly — the common shape in real code (loop
+  accumulators, counters, small constants).
+
+  Aliasing dst = a is safe and intended (`p := p + n` writes straight into p):
+  every operand is read into a local before anything is stored. }
+
+procedure AddIntSlow(dst, a: Pointer; b: Int64);
+begin
+  StoreBig(dst, BAddSigned(SlotBig(a), BFromInt(b)));
+end;
+
+procedure PXXPromoAddInt(dst, a: Pointer; b: Int64);
+var x, r: Int64;
+begin
+  if (SlotTag(a) = PROMO_TAG_INLINE) and NativeFits(b) then
+  begin
+    x := SlotInt(a);
+    r := x + b;
+    if ((x >= 0) = (b >= 0)) and ((r >= 0) <> (x >= 0)) then
+      AddIntSlow(dst, a, b)
+    else
+      PXXPromoFromInt(dst, r);
+    Exit;
+  end;
+  AddIntSlow(dst, a, b);
+end;
+
+procedure SubIntSlow(dst, a: Pointer; b: Int64);
+begin
+  StoreBig(dst, BSubSigned(SlotBig(a), BFromInt(b)));
+end;
+
+procedure PXXPromoSubInt(dst, a: Pointer; b: Int64);
+var x, r: Int64;
+begin
+  if (SlotTag(a) = PROMO_TAG_INLINE) and NativeFits(b) then
+  begin
+    x := SlotInt(a);
+    r := x - b;
+    if ((x >= 0) <> (b >= 0)) and ((r >= 0) <> (x >= 0)) then
+      SubIntSlow(dst, a, b)
+    else
+      PXXPromoFromInt(dst, r);
+    Exit;
+  end;
+  SubIntSlow(dst, a, b);
+end;
+
+procedure MulIntSlow(dst, a: Pointer; b: Int64);
+begin
+  StoreBig(dst, BMul(SlotBig(a), BFromInt(b)));
+end;
+
+procedure PXXPromoMulInt(dst, a: Pointer; b: Int64);
+var x, r: Int64;
+begin
+  if (SlotTag(a) = PROMO_TAG_INLINE) and NativeFits(b) then
+  begin
+    x := SlotInt(a);
+    if (x = 0) or (b = 0) then
+    begin
+      PXXPromoFromInt(dst, 0);
+      Exit;
+    end;
+    r := x * b;
+    if (r div b = x) and not ((x = -1) and (b = Low(Int64)))
+                    and not ((b = -1) and (x = Low(Int64))) then
+      PXXPromoFromInt(dst, r)
+    else
+      MulIntSlow(dst, a, b);
+    Exit;
+  end;
+  MulIntSlow(dst, a, b);
 end;
 
 procedure PXXPromoDiv(dst, a, b: Pointer);

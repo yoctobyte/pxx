@@ -961,6 +961,14 @@ begin
   IRPromoInitFromLiteral := True;
 end;
 
+{ Emit a promotable-int binop writing its result into dstAddr.
+
+  Factored out so an ASSIGNMENT can hand it the TARGET's slot directly instead
+  of computing into a temp and copying: `p := p + n` then costs one runtime call
+  rather than three (init temp, add, copy). Aliasing dst with an operand is safe
+  — every helper reads its operands into locals before storing. }
+procedure IRPromoEmitBinop(dstAddr, node: Integer); forward;
+
 { The slot ADDRESS of an expression usable as a promotable int. A promo-typed
   expression already IS a slot; an ordinary integer expression is boxed into a
   fresh temp slot first, which is what makes `p + 1` and `p + n` work without
@@ -987,6 +995,17 @@ begin
   IRPromoAddrOf := IRAppend(IR_SLOTADDR, tmpSym, -1, -1, 0, Ord(tyPointer));
 end;
 
+{ The mixed promo-with-machine-int form of this operator, if it has one. Only
+  the operators where the right operand can stay a machine int; div/mod are
+  excluded because their sign rules are worth keeping in ONE place. }
+function PromoMixedHelper(op: TTokenKind): AnsiString;
+begin
+  PromoMixedHelper := '';
+  if op = tkPlus then PromoMixedHelper := 'PXXPromoAddInt'
+  else if op = tkMinus then PromoMixedHelper := 'PXXPromoSubInt'
+  else if op = tkStar then PromoMixedHelper := 'PXXPromoMulInt';
+end;
+
 { Which promoint helper implements this operator token. }
 function PromoOpHelper(op: TTokenKind): AnsiString;
 begin
@@ -996,6 +1015,28 @@ begin
   else if op = tkStar then PromoOpHelper := 'PXXPromoMul'
   else if op = tkDiv then PromoOpHelper := 'PXXPromoDiv'
   else if op = tkMod then PromoOpHelper := 'PXXPromoMod';
+end;
+
+procedure IRPromoEmitBinop(dstAddr, node: Integer);
+var lhsAddr, rhsAddr: Integer;
+begin
+  lhsAddr := IRPromoAddrOf(ASTLeft[node]);
+  { RIGHT operand an ordinary integer and the operator has a mixed form: take
+    the machine int directly instead of boxing it into a slot first. That is the
+    shape almost all real code has — accumulators, counters, small constants. }
+  if (not TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]]))) and
+     (not IsWideIntLit(ASTRight[node])) and
+     (not IsWideNegLit(ASTRight[node])) and
+     (PromoMixedHelper(TTokenKind(ASTIVal[node])) <> '') then
+    IRMarkStatementNode(IRPromoCall(PromoMixedHelper(TTokenKind(ASTIVal[node])),
+                                    dstAddr, lhsAddr,
+                                    IRLowerAST(ASTRight[node]), tyUnknown))
+  else
+  begin
+    rhsAddr := IRPromoAddrOf(ASTRight[node]);
+    IRMarkStatementNode(IRPromoCall(PromoOpHelper(TTokenKind(ASTIVal[node])),
+                                    dstAddr, lhsAddr, rhsAddr, tyUnknown));
+  end;
 end;
 
 function IRLowerAddress(node: Integer): Integer;
@@ -5507,15 +5548,16 @@ begin
         else if TypeIsPromoInt(IntToTypeKind(ASTTk[node])) and
                 (PromoOpHelper(TTokenKind(ASTIVal[node])) <> '') then
         begin
-          { PROMOTABLE INT arithmetic: materialise both sides as slots and call
-            the runtime, whose inline fast path keeps int64-sized values off the
-            heap. The result IS the temp slot's address, so it composes — a
-            nested `a*b + c` feeds this path again. }
-          promoLhs := IRPromoAddrOf(ASTLeft[node]);
-          promoRhs := IRPromoAddrOf(ASTRight[node]);
+          { PROMOTABLE INT arithmetic. The result IS a slot address, so it
+            composes — a nested `a*b + c` feeds this path again.
+
+            When the RIGHT operand is an ordinary integer and the operator has a
+            mixed form, call that instead of boxing it: `p + n` otherwise cost
+            FIVE runtime calls (init temp, box n, init result, add, copy) and
+            this collapses it to one. That is the shape almost all real code
+            has — accumulators, counters, small constants. }
           promoDst := IRPromoTempSlot(promoSym);
-          IRMarkStatementNode(IRPromoCall(PromoOpHelper(TTokenKind(ASTIVal[node])),
-                                          promoDst, promoLhs, promoRhs, tyUnknown));
+          IRPromoEmitBinop(promoDst, node);
           Result := IRAppend(IR_SLOTADDR, promoSym, -1, -1, 0, Ord(tyPointer));
         end
         else
@@ -5598,6 +5640,14 @@ begin
             variant holds (VT_INT64 inline, VT_PROMO_INT64 heap) }
           Result := IRPromoCall('PXXPromoFromVariant', leftAddr,
                                 IRVariantAddr(ASTRight[node]), -1, tyUnknown)
+        else if (ASTKind[ASTRight[node]] = AN_BINOP) and
+                TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]])) and
+                (PromoOpHelper(TTokenKind(ASTIVal[ASTRight[node]])) <> '') then
+        begin
+          { compute straight into the target — no temp, no copy }
+          IRPromoEmitBinop(leftAddr, ASTRight[node]);
+          Result := leftAddr;
+        end
         else if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]])) then
           Result := IRPromoCall('PXXPromoCopy', leftAddr,
                                 IRPromoAddrOf(ASTRight[node]), -1, tyUnknown)
