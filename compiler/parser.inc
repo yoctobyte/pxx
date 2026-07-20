@@ -715,6 +715,7 @@ procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
+function PyMakeDynCall(baseNode: Integer): Integer; forward; { Nil Python: call a callable stored in a variant (pyparser.inc) }
 function PyMakeStrIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python s[i] (pyparser.inc) }
 function PyQualifyNested(const name: AnsiString): AnsiString; forward; { Nil Python nested-def name lookup (pyparser.inc) }
 function PyListRepeatPair(a, b: Integer): Boolean; forward;              { Nil Python `xs * n` (pyparser.inc) }
@@ -11112,6 +11113,16 @@ begin
       CurASTNode := PyParseStrMethod(CurASTNode, GetTokenStr(smNameTok));
       LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
     end;
+  end;
+  { A VARIANT value followed by '(' is a DYNAMIC call through a callable stored
+    in it — `ns["__body__"]()`, the function exec() built. Nothing else claimed
+    the '(', so a call is the only reading. Looped so a returned callable can be
+    called again. }
+  while PyExprMode and (CurTok.Kind = tkLParen) and
+        (IntToTypeKind(ASTTk[CurASTNode]) = tyVariant) do
+  begin
+    CurASTNode := PyMakeDynCall(CurASTNode);
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
   end;
 end;
 

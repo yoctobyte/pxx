@@ -1,0 +1,7 @@
+from typing import Any
+def make() -> Any:
+    return 42
+d = {}
+d["f"] = make
+r = d["f"]()
+print(r)

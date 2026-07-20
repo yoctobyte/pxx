@@ -2646,6 +2646,65 @@ begin
   recName := UFldRec_[hitFi];
 end;
 
+{ A synthetic call signature: nArgs Variant params, Variant result, no body.
+  Used for a DYNAMIC call through a value whose callable type is not known
+  statically — `ns["__body__"]()`, where the dict holds a callable. Registered
+  once per arity and reused. }
+function PyDynCallSig(nArgs: Integer): Integer;
+var pNames: array[0..15] of AnsiString; pTypes: array[0..15] of TTypeKind;
+    i: Integer;
+begin
+  if nArgs > 15 then Error('Nil Python: too many arguments in a dynamic call');
+  for i := 0 to nArgs - 1 do
+  begin
+    pNames[i] := '$dynarg';   { param names are irrelevant to a call signature }
+    pTypes[i] := tyVariant;
+  end;
+  Result := RegisterProc('$pydyn', True, tyVariant, nArgs, pNames, pTypes);
+  Procs[Result].BodyAddr := -1;
+end;
+
+{ `<value>(args)` where the value is a VARIANT holding a callable — the function
+  `exec()` stored in a namespace dict, called as `ns["__body__"]()`. Unbox the
+  variant to its payload (the code pointer) and emit an indirect call with a
+  synthetic all-variant signature. CurTok is the '('. }
+function PyMakeDynCall(baseNode: Integer): Integer;
+var unboxArg, unboxCall, argsHead, lastArg, argNode, n, sigPi: Integer;
+begin
+  { the callee code address = the variant's payload as a pointer }
+  unboxArg := AllocNode(AN_ARG);
+  ASTLeft[unboxArg] := baseNode;
+  ASTRight[unboxArg] := -1;
+  unboxCall := AllocNode(AN_CALL);
+  ASTIVal[unboxCall] := FindProc('pyvarobj');
+  if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+  ASTTk[unboxCall] := Ord(tyPointer);
+  ASTLeft[unboxCall] := unboxArg;
+
+  Expect(tkLParen, '(');
+  argsHead := -1; lastArg := -1; n := 0;
+  while CurTok.Kind <> tkRParen do
+  begin
+    PyParseBoolExpr;
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := CurASTNode;
+    ASTRight[argNode] := -1;
+    if argsHead = -1 then argsHead := argNode else ASTRight[lastArg] := argNode;
+    lastArg := argNode;
+    Inc(n);
+    if CurTok.Kind = tkComma then Next else Break;
+  end;
+  Expect(tkRParen, ')');
+
+  sigPi := PyDynCallSig(n);
+  Result := AllocNode(AN_CALL_IND);
+  ASTLeft[Result]  := argsHead;
+  ASTRight[Result] := unboxCall;         { code address }
+  ASTIVal[Result]  := sigPi;
+  ASTTk[Result]    := Ord(tyVariant);
+  ASTSLen[Result]  := 0;                 { plain proc pointer, no Self }
+end;
+
 { `v.field(args)` where `v` is a VARIANT and `field` holds a function value:
   unbox to the owning class, read the field, call through it. }
 function PyMakeVariantFieldCall(baseNode, ci: Integer; const fname: AnsiString;
