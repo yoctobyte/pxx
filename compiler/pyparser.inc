@@ -2253,6 +2253,36 @@ end;
   for a list (`get`) or a dict (`fetch`) — the same methods the lvalue path
   reaches, just built here because a non-lvalue never gets there. }
 { `v[key]` on a variant -> pyvar_getitem(v, key); yields a variant. }
+{ Consume a `lambda [p1, p2, ...]: <expr>` and reduce it to a None value. The
+  body is SKIPPED at the token level (balanced to the enclosing `,` or `)`), so
+  its parameters need no scope — full lambda support is filed separately
+  (feature-nilpy-lambda); this keeps a program that stores a lambda compiling. }
+function PyMakeNone: Integer; forward;
+
+procedure PyParseLambdaStub;
+var depth: Integer;
+begin
+  Next;                                { consume `lambda` }
+  { parameters up to ':' }
+  while (CurTok.Kind <> tkColon) and (CurTok.Kind <> tkEOF) do Next;
+  Expect(tkColon, ':');
+  { skip the body expression, balanced, up to a depth-0 ',' or ')' or line end }
+  depth := 0;
+  while CurTok.Kind <> tkEOF do
+  begin
+    if CurTok.Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if CurTok.Kind in [tkRParen, tkRBrack, tkEnd] then
+    begin
+      if depth = 0 then Break;
+      Dec(depth);
+    end
+    else if (depth = 0) and (CurTok.Kind in [tkComma, tkNewline, tkDedent]) then Break;
+    Next;
+  end;
+  CurASTNode := PyMakeNone;
+  LastExprTk := tyVariant;
+end;
+
 function PyMakeVariantGetItem(baseNode, idxNode: Integer): Integer;
 var procIdx, a0, a1: Integer;
 begin

@@ -1,0 +1,6 @@
+from typing import Any
+def reg(name: str, fn: Any) -> None:
+    print(name)
+reg("A", lambda vm: vm + 1)
+reg("B", lambda x: None)
+print("ok")

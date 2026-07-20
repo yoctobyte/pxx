@@ -716,6 +716,8 @@ procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pypa
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 function PyMakeDynCall(baseNode: Integer): Integer; forward; { Nil Python: call a callable stored in a variant (pyparser.inc) }
+procedure PyParseLambdaStub; forward; { Nil Python: consume a lambda -> None (pyparser.inc) }
+function PyIsIdent(const s: AnsiString): Boolean; forward; { (pyparser.inc) }
 function PyMakeVariantGetItem(baseNode, idxNode: Integer): Integer; forward; { Nil Python v[key] on a variant (pyparser.inc) }
 function PyMakeVariantSetItem(baseNode, idxNode, valNode: Integer): Integer; forward; { Nil Python v[key]=val on a variant (pyparser.inc) }
 function PyMakeStrIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python s[i] (pyparser.inc) }
@@ -11070,6 +11072,16 @@ procedure ParseFactor;
 var smNameTok, smBase, sdTok: Integer;
     sdName: AnsiString;
 begin
+  { A `lambda` expression. Consumed and reduced to a placeholder None value:
+    full lambda support is function-value synthesis (like nested defs), and the
+    body would only run through exec()/native dispatch, which is stubbed
+    (feature-lib-pyexec). So a lambda parses and yields None, keeping the file
+    compiling; its body does not execute yet (feature-nilpy-lambda). }
+  if PyExprMode and PyIsIdent('lambda') then
+  begin
+    PyParseLambdaStub;
+    Exit;
+  end;
   { `int.from_bytes(...)` is an INTRINSIC, not a call on a value: `int` is a
     type name, so the ordinary factor path would try to resolve it as a
     variable and fail. Recognised before the core for that reason. }
