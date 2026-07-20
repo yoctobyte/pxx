@@ -2918,6 +2918,14 @@ end;
   declared once and INHERITED is not ambiguous — the candidates then agree on one
   proc index, and a virtual method still dispatches through the VMT at runtime,
   so a subclass instance in the slot runs its own override. }
+{ Is `ci` one of pylib's built-in container classes (list/dict/bytes)? Used to
+  break a variant-method tie toward a USER class. }
+function PyIsPylibContainerCi(ci: Integer): Boolean;
+begin
+  Result := (ci = FindUClass('TPyList')) or (ci = FindUClass('TPyDict')) or
+            (ci = FindUClass('TPyBytes'));
+end;
+
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var ci, mmi, mpi, i, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
@@ -2971,6 +2979,14 @@ begin
         if ci <> FindUClass('TPyBytes') then
           begin hitCi := ci; hitMmi := mmi; hitPi := mpi; end;
       end
+      else if PyIsPylibContainerCi(hitCi) and not PyIsPylibContainerCi(ci) then
+        { the other candidate is a pylib container (list/dict/bytes), this one a
+          USER class — prefer the user class. `vm.pop()` on an unannotated (so
+          variant) `vm` param means VM.pop, not TPyList.pop/TPyDict.pop. Same
+          workaround family; the real fix is runtime dispatch. }
+        begin hitCi := ci; hitMmi := mmi; hitPi := mpi; end
+      else if PyIsPylibContainerCi(ci) and not PyIsPylibContainerCi(hitCi) then
+        { keep the user-class candidate already held }
       else if not IsSubclassOf(ci, hitCi) then
         Error('Nil Python: .' + mname + '() on a dynamically-typed value is '
           + 'ambiguous (several classes declare it) — assign to an annotated '
