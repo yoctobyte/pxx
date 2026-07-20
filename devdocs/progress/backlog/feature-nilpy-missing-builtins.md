@@ -13,7 +13,7 @@ several: none of them can produce a wrong answer, unlike
 
 | builtin | uforth sites | shape |
 | --- | --- | --- |
-| `min` / `max` | 7 + 7 | two-argument only; trivial |
+| ~~`min` / `max`~~ | 7 + 7 | **DONE c49064af** — two-argument only |
 | `list(x)` | 21 | copy an iterable into a new TPyList |
 | `reversed(x)` | 7 | needs an iterator, or a reversed copy |
 | `enumerate(x)` | 4 | needs [[feature-nilpy-tuple-unpack]] to be useful |

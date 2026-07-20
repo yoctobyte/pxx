@@ -39,3 +39,6 @@ why the three cases are now written out together with that noted.
 
 `test-nilpy` green with the cases added to `test_nilpy_membership.npy` +
 `--tier quick` + self-host byte-identical + `make fpc-check`.
+
+## Log
+- 2026-07-20 — resolved, commit c49064af.
