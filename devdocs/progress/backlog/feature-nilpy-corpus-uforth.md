@@ -205,9 +205,11 @@ landed, gated, pushed commit with a CPython-diffed test in `test-nilpy`:
 | 774 | `return (a, b)` | tuples as values + return-type inference |
 | 777 | `bytes` annotation | maps to TPyBytes |
 | 778 | `bytearray()` | zero-arg overload |
-| 783 | `out.extend(ch.encode(...))` | **CURRENT** — needs TPyBytes.extend AND str.encode |
+| 783 | `out.extend(ch.encode(...))` | TPyBytes.extend + str.encode |
+| 789 | `out.append(ord(ch))` | TPyBytes.append (+ the list/bytes name collision) |
+| 840 | (tokenizer) | **CURRENT** |
 
-Wall moved 267 -> 783 on 2026-07-20 (session 3), across ~20 landed commits.
+Wall moved 267 -> 840 on 2026-07-20 (session 3), across ~22 landed commits.
 
 Bugs found UNDER this work, all silent-wrong-behaviour rather than parse
 errors, all filed and fixed: [[bug-nilpy-call-returning-class-loses-identity]]
