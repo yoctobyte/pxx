@@ -34,3 +34,6 @@ work on the method path too, not only plain defs.
 positional, keyword filling a defaulted parameter, keyword out of declaration
 order, on both a def and a method, and the error cases (unknown name, duplicate)
 — plus `--tier quick` + self-host byte-identical.
+
+## Log
+- 2026-07-20 — resolved, commit 66685acc.
