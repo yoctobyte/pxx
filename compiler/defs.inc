@@ -536,6 +536,20 @@ const
   VT_STRING  = 6;   { payload = managed AnsiString ref }
   VT_OBJECT  = 7;   { payload = class instance pointer (NilPy Any/list slots; isinstance) }
 
+  { PROMOTABLE INT tag block (feature-a-promotable-int). Variant tags can never
+    be renumbered — Pascal code compares VarType() against documented constants
+    and variants are serialized — so the whole family claims a CONTIGUOUS block
+    up front, while it is free, rather than being scattered into whatever gaps
+    exist when each class lands. Only the first two are implemented; the rest
+    are reserved for the pointer-tagged family the ticket keeps in reserve.
+    Base is far above FPC's varXxx range (which tops out in the hundreds) so a
+    future FPC addition cannot collide. }
+  VT_PROMO_BASE     = 8192;
+  VT_PROMO_INT32    = 8192;  { payload = inline Int32, or a bignum ref when the spill bit is set }
+  VT_PROMO_INT64    = 8193;  { payload = inline Int64, or a bignum ref }
+  VT_PROMO_RESERVED = 8194;  { 8194..8199 reserved: tagged classes (promoint31/63) and wider inline }
+  VT_PROMO_LAST     = 8199;
+
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
   EXC_FRAME_SIZE_386 = 32;
@@ -767,7 +781,19 @@ type
       overloaded tyString). Appended at the tail so bootstrap-stable low ordinals
       do not shift. tyString stays a legacy frozen alias during migration. }
     tyShortString, { 25: classic Pascal shortstring — byte length prefix, cap 255, 256B total }
-    tyFixedString  { 26: string[N] — NativeInt length word prefix, capacity N (SymStrCap) }
+    tyFixedString, { 26: string[N] — NativeInt length word prefix, capacity N (SymStrCap) }
+    { Ordinals 27+: the PROMOTABLE INT family (feature-a-promotable-int). ONE
+      semantic type — arbitrary precision — in two storage classes that differ
+      only in how wide the inline payload is before it spills to a heap bignum.
+      The number in the name is the usable inline width, so a future
+      pointer-tagged pair would be tyPromoInt31/tyPromoInt63 and needs no
+      "tagged" suffix. Semantics are written ONCE against TypeIsPromoInt and
+      parameterised by width — never fork them per class. The promotion
+      boundary is semantically unobservable (the type is arbitrary precision
+      either way), which is what makes a per-target default safe under
+      differential testing against x86-64. }
+    tyPromoInt32,  { 27: promotable int, 32-bit inline payload — {tag, payload}, 8 bytes }
+    tyPromoInt64   { 28: promotable int, 64-bit inline payload — {tag, payload}, 16 bytes }
   );
 
   TSymKind  = (skLocal, skGlobal, skParam, skConst);
