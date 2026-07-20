@@ -48,3 +48,6 @@ unpacking does.
 `test-nilpy` green with a `.npy` case diffed against CPython (including the
 swap, which is where a naive lowering breaks) + `--tier quick` + self-host
 byte-identical + `make fpc-check`.
+
+## Log
+- 2026-07-20 — resolved, commit 527e658b.

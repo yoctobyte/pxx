@@ -26,7 +26,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (136)
+## backlog (135)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -102,7 +102,6 @@ _none_
 | feature-nilpy-parallel-for-in | A | 45 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
 | feature-nilpy-str-methods | N | 55 | feature | NilPy: string methods (.upper/.lower/.strip/.split/.join/.startswith...) | — |
 | feature-nilpy-tk-binding | B | 45 | feature | Thin Tcl/Tk embed for pxx (lib/pcl/tk.pas) + a tkinter-shaped NilPy surface — v1 landed | — |
-| feature-nilpy-tuple-unpack | N | 55 | feature | NilPy: sequence unpacking (`a, b = ...`, `for k, v in ...`) | — |
 | feature-opt-complex-packed-double | O | 35 | feature | Complex as a packed-double XMM value (SSE2/SSE3) | — |
 | feature-opt-float-register-temporaries | O | 20 | feature | float kernels: -O3 now 1.97x vs FPC (was 4.2x); residual = the rax value model — multi-session xmm-resident rewrite | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
@@ -225,7 +224,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (880)
+## done (881)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -905,6 +904,7 @@ _none_
 | feature-nilpy-list | N | 60 | feature | NilPy: list type v1 (pylib TPyList, literals, subscripts, methods, len) | — |
 | feature-nilpy-nested-defs | N | 70 | feature | NilPy: nested `def` | — |
 | feature-nilpy-operators | N | 55 | feature | NilPy: bitwise operators + augmented assignment | — |
+| feature-nilpy-tuple-unpack | N | 55 | feature | NilPy: sequence unpacking (`a, b = ...`, `for k, v in ...`) | — |
 | feature-object-reference-type | A | 50 | feature | `object` — a rooted object-reference type | — |
 | feature-open-array-constructor-arg | A | 50 | feature | feature: array constructor `[...]` as an open-array argument | — |
 | feature-opt-div0-stub-on-use | O | 25 | feature | x86-64 div-by-zero abort stub is emitted unconditionally, even for division-free programs | — |
@@ -2579,7 +2579,6 @@ _none_
 - [p 55] [N] feature-nilpy-bytes-and-slices
 - [p 55] [N] feature-nilpy-corpus-uforth
 - [p 55] [N] feature-nilpy-str-methods
-- [p 55] [N] feature-nilpy-tuple-unpack
 - [p 55] [P] feature-pascal-corpus-generics
 - [p 55] [A] feature-pascal-type-helpers
 - [p 55] [T] feature-pasmith-multi-unit-programs
