@@ -4,3 +4,24 @@ print(not 0)
 print(not 2 > 1)
 print(1 < 2 and 2 < 3 and 3 < 4)
 print((2 > 1 and 1 > 2) or 5 > 3)
+
+# `not` is TRUTHINESS, and every non-zero integer is truthy. AN_NOT on a
+# non-boolean operand is Pascal's BITWISE complement, so `not 5` used to
+# produce -6 — non-zero, therefore True — and `not 2` in an if-condition took
+# the wrong branch. Only 0 and 1 came out right, and 0 only by luck.
+a = 5
+b = 0
+c = True
+print(not a)
+print(not b)
+print(not 5)
+print(not 0)
+print(not 1)
+print(not c)
+print(not -3)
+if not b:
+    print("zero is falsy")
+if not a:
+    print("WRONG")
+else:
+    print("five is truthy")

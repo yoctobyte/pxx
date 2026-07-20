@@ -710,15 +710,41 @@ begin
 end;
 
 procedure PyParseBoolNot;
-var node: Integer;
+var node, zeroNode, operand: Integer; opTk: TTypeKind;
 begin
   if CurTok.Kind = tkNot then
   begin
     Next;
     PyParseBoolNot;
-    node := AllocNode(AN_NOT);
-    ASTLeft[node] := CurASTNode;
-    ASTTk[node] := Ord(tyBoolean);
+    operand := CurASTNode;
+    opTk := IntToTypeKind(ASTTk[operand]);
+    { Python's `not` is TRUTHINESS, and every non-zero integer is truthy.
+      AN_NOT on a non-boolean operand is Pascal's BITWISE complement — so
+      `not 5` produced -6, which is non-zero and therefore printed True, and
+      `not 2` in an if-condition took the wrong branch. Silently: only 0 and 1
+      came out right, and 0 only by luck (-1 is also truthy).
+
+      For an ordinal operand the answer is `operand = 0` instead. Booleans
+      keep AN_NOT, where it is already logical. Non-ordinals (a string, a
+      class, a variant) still go through AN_NOT unchanged — `not <container>`
+      is its own question, filed separately rather than guessed at here. }
+    if (opTk = tyBoolean) or not PyNumeric(opTk) then
+    begin
+      node := AllocNode(AN_NOT);
+      ASTLeft[node] := operand;
+      ASTTk[node] := Ord(tyBoolean);
+    end
+    else
+    begin
+      zeroNode := AllocNode(AN_INT_LIT);
+      ASTIVal[zeroNode] := 0;
+      ASTTk[zeroNode] := Ord(opTk);
+      node := AllocNode(AN_BINOP);
+      ASTIVal[node] := Ord(tkEq);
+      ASTLeft[node] := operand;
+      ASTRight[node] := zeroNode;
+      ASTTk[node] := Ord(tyBoolean);
+    end;
     CurASTNode := node;
   end
   else
