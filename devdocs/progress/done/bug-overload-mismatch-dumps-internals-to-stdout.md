@@ -40,3 +40,6 @@ which looks like an empty format slot.
 Low priority: cosmetic, no wrong behaviour. Worth doing before any 1.0-facing
 polish pass — a leaked-debug-looking dump is the kind of thing that reads as
 unfinished to a first-time user.
+
+## Log
+- 2026-07-20 — resolved, commit 36fb2a55.
