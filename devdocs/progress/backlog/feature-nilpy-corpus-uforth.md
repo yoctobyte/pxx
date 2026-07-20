@@ -207,9 +207,10 @@ landed, gated, pushed commit with a CPython-diffed test in `test-nilpy`:
 | 778 | `bytearray()` | zero-arg overload |
 | 783 | `out.extend(ch.encode(...))` | TPyBytes.extend + str.encode |
 | 789 | `out.append(ord(ch))` | TPyBytes.append (+ the list/bytes name collision) |
-| 840 | (tokenizer) | **CURRENT** |
+| 840 | `word.is_native()` after `Optional[Word]` | full annotation grammar for RETURN types |
+| 841 | `word.native(self)` — call through a procedural FIELD on a class local | **CURRENT** |
 
-Wall moved 267 -> 840 on 2026-07-20 (session 3), across ~22 landed commits.
+Wall moved 267 -> 841 on 2026-07-20 (session 3), across ~24 landed commits.
 
 Bugs found UNDER this work, all silent-wrong-behaviour rather than parse
 errors, all filed and fixed: [[bug-nilpy-call-returning-class-loses-identity]]
