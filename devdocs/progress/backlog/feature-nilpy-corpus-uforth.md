@@ -214,7 +214,19 @@ landed, gated, pushed commit with a CPython-diffed test in `test-nilpy`:
 | 884 | `for n in num` (num is Any) | unbox variant to TPyList |
 | 1039 | multi-line `self.trace_log(...,)` | trailing comma in a method call |
 | 1079 | four adjacent f-strings | implicit string concatenation |
-| 1228 | `with open(...)` + comprehension + dict-arg | [[feature-nilpy-file-io-and-comprehensions]] (OPEN — a CLUSTER) |
+| 1228 | `with open(...)` + file iteration | with/open + pyopen + list comprehensions |
+| 1263 | `raise X(...) from e` | exception chaining (from-clause dropped) |
+| 1272 | `dict.pop(k, default)` | pylib |
+| 1284 | `textwrap.dedent` | stdlib shim |
+| 1286 | `join(EXPR for x in it)` genexpr arg | [[feature-nilpy-generator-expression-arg]] (OPEN) |
+| 1289 | `exec(wrapper, env, ns)` | [[feature-lib-pyexec]] (OPEN — the runtime Python evaluator, the largest remaining piece) |
+
+Wall moved 267 -> 1286 on 2026-07-20/21 (session 3), across ~36 landed commits —
+roughly the first 30% of the 4357-line file, and past every class definition,
+the VM core, the dictionary, number parsing, the tokenizer, and file I/O
+(with/open, comprehensions, strip(chars), raise-from, dict.pop, dedent). The
+next wall is `exec()` — the pyexec interpreter library, a genuine multi-session
+subsystem.
 
 Wall moved 267 -> 1228 on 2026-07-20 (session 3), across ~30 landed commits —
 roughly the first quarter of the 4357-line file, and past every class
