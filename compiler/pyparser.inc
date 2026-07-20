@@ -2343,6 +2343,8 @@ begin
   Result := False;
   if n < 0 then Exit;
   if PyIsStrBaseTk(IntToTypeKind(ASTTk[n])) then begin Result := True; Exit; end;
+  { a variant may hold a sliceable container — dispatched at run time }
+  if IntToTypeKind(ASTTk[n]) = tyVariant then begin Result := True; Exit; end;
   if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
   rec := ResolveNodeRec(n);
   if rec < REC_UCLASS_BASE then Exit;
@@ -2371,7 +2373,12 @@ var procIdx, callNode, a0, a1, a2, rec, listCi, bytesCi: Integer;
 begin
   pname := '';
   retTk := tyInteger;
-  if PyIsStrBaseTk(IntToTypeKind(ASTTk[baseNode])) then
+  if IntToTypeKind(ASTTk[baseNode]) = tyVariant then
+  begin
+    pname := 'pyvar_slice';       { unbox and slice at run time; yields a variant }
+    retTk := tyVariant;
+  end
+  else if PyIsStrBaseTk(IntToTypeKind(ASTTk[baseNode])) then
   begin
     pname := 'pystr_slice';
     retTk := tyAnsiString;

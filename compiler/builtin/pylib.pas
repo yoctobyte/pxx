@@ -436,6 +436,9 @@ function pyvarobj(const v: Variant): Pointer;
   by an integer key. }
 function pyvar_getitem(const v: Variant; const key: Variant): Variant;
 procedure pyvar_setitem(const v: Variant; const key: Variant; const val: Variant);
+{ `v[lo:hi]` where v is a VARIANT — slice the str/list/bytes it holds, at run
+  time. Returns a variant of the same kind. }
+function pyvar_slice(const v: Variant; lo, hi: Integer): Variant;
 
 { str methods. The frontend desugars `s.upper()` into pystr_upper(s) — see
   PyParseStrMethod. ASCII-only for now: CPython's str.upper() is full-Unicode
@@ -809,6 +812,29 @@ begin
   begin
     ki := PPyVarRec(@key)^.Payload;      { list index is an integer key }
     Result := TPyList(o).at(ki);
+  end
+  else
+  begin
+    WriteLn('TypeError: object is not subscriptable');
+    Halt(1);
+  end;
+end;
+
+function pyvar_slice(const v: Variant; lo, hi: Integer): Variant;
+var o: TObject;
+begin
+  if pyvartag(v) = 6 then
+    Result := pystr_slice(pystr_of(v), lo, hi)     { str -> boxes to VT_STRING }
+  else if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then Result := pylist_slice(TPyList(o), lo, hi)
+    else if o is TPyBytes then Result := pybytes_slice(TPyBytes(o), lo, hi)
+    else
+    begin
+      WriteLn('TypeError: object is not subscriptable');
+      Halt(1);
+    end;
   end
   else
   begin

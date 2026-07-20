@@ -1,0 +1,9 @@
+from typing import Any
+def f(t: Any) -> Any:
+    return t[:2]
+print(f("abcd"))
+def g(t: Any, n: int) -> int:
+    part = t[:n]
+    return len(part)
+print(g("hello", 3))
+print(g([1, 2, 3, 4], 2))

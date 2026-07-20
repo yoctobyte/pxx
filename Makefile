@@ -243,6 +243,8 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_method_kwarg.npy /tmp/test_nilpy_method_kwarg26
 	test "$$(/tmp/test_nilpy_method_kwarg26)" = "$$(printf '%b' 'H\ni')"
 	./$(COMPILER) test/test_nilpy_variant_subscript.npy /tmp/test_nilpy_variant_subscript26
+	./$(COMPILER) test/test_nilpy_variant_slice.npy /tmp/test_nilpy_variant_slice26
+	test "$$(/tmp/test_nilpy_variant_slice26)" = "$$(printf '%b' 'ab\n3\n2')"
 	test "$$(/tmp/test_nilpy_variant_subscript26)" = "$$(printf '%b' '1\n2\n20\n99')"
 	./$(COMPILER) test/test_nilpy_dyncall.npy /tmp/test_nilpy_dyncall26
 	test "$$(/tmp/test_nilpy_dyncall26)" = "42"

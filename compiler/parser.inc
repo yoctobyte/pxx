@@ -4258,8 +4258,23 @@ begin
       if PyExprMode and (tk = tyVariant) then
       begin
         Next;                     { consume '[' }
+        { a `:` in the group makes it a SLICE — `token[:n]` on a variant. }
+        if CurTok.Kind = tkColon then
+        begin
+          node := PyParseSliceTail(node, -1);
+          tk := IntToTypeKind(ASTTk[node]); recName := ASTRight[node];
+          CurASTNode := node;
+          Continue;
+        end;
         PyParseBoolExpr;
         indexNode := CurASTNode;
+        if CurTok.Kind = tkColon then
+        begin
+          node := PyParseSliceTail(node, indexNode);
+          tk := IntToTypeKind(ASTTk[node]); recName := ASTRight[node];
+          CurASTNode := node;
+          Continue;
+        end;
         Expect(tkRBrack, ']');
         if CurTok.Kind = tkAssign then
         begin
