@@ -65,20 +65,32 @@ that is shipped semantics `str()` depends on, not mine to change here.
 Close this and no code moves. If it is B or C, the change is confined to the
 three `else` branches in the `VariantTo*` helpers.
 
-## What is actually left: the PASCAL half (compat)
+## The PASCAL half — MEASURED and CLOSED 2026-07-20 (commit 19442857)
 
-`VariantToInt64`/`ToDouble` currently HALT on a string payload. That is not a
-regression — before the unbox landed, Pascal's `i := v` returned the TAG, so
-halting is strictly better than what shipped. But Delphi/FPC's Variant is
-historically COERCIVE (`i := v` on `'42'` yields 42), so FPC parity probably
-wants B for Pascal.
+An earlier revision of this ticket said "fpc is not installed on this box".
+**That was wrong** — fpc is at /usr/bin/fpc and `make fpc-check` had been
+passing all session. My probe program used `Exception` without `uses SysUtils`,
+so it failed to compile, and a `|| echo "fpc absent"` reported that as a
+missing toolchain. Corrected here rather than left standing.
 
-**Unverified: fpc is not installed on this box**, so there is no oracle for
-the exact FPC behaviour and the claim above is from recollection, not a
-measurement. Do not implement Pascal-side coercion on it — run FPC first.
-Re-file as `compat-pascal-variant-coercion` when a box with fpc is available.
+With the actual oracle run:
 
-Note also that `VariantToBool` was written with PYTHON truthiness ('' and 0.0
-false) while Pascal was still routed through it; that is fixed by the split,
-but the Pascal helper's semantics were never separately specified and should
-be checked against FPC at the same time.
+| expression | FPC | pxx before | pxx now |
+| --- | --- | --- | --- |
+| `i := v`, v='42' | 42 | halt | 42 |
+| `i := v`, v='abc' | EVariantError | halt | error |
+| `d := v`, v='2.5' | 2.50 | halt | 2.50 |
+| `b := v`, v='' | EVariantError | False (!) | error |
+| `b := v`, v=0.0 | FALSE | False | False |
+
+So Pascal wanted **B** (coerce, error on junk) — the opposite of what NilPy
+wants, which is precisely why the helper split had to come first. Note row 4:
+`VariantToBool` was returning Python truthiness for Pascal, a divergence that
+was invisible while one helper served both languages.
+
+Both halves are now settled and this ticket can close:
+- **NilPy** — Python's rules, TypeError on str/object in a numeric slot.
+- **Pascal** — FPC's rules, measured.
+
+Lesson worth keeping: I nearly filed "unverified, needs a box with fpc" on a
+box that had fpc. Check the tool, not the exit code of a compound command.
