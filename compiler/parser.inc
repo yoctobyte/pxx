@@ -5071,7 +5071,7 @@ begin
                 begin
                   { non-ident by-ref/array arg (@obj.Method to a method-pointer
                     param, [..] literals, casts): parse as an expression }
-                  ParseExpr; mexprNode := CurASTNode;
+                  ParseArgExpr; mexprNode := CurASTNode;
                 end
                 else
                 begin
@@ -5079,7 +5079,7 @@ begin
                   mexprNode := ParseLValueAST(margIdx, TokPos - 2);
                 end;
               end
-              else begin ParseExpr; mexprNode := CurASTNode; end;
+              else begin ParseArgExpr; mexprNode := CurASTNode; end;
               margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
               if mlastArg = -1 then ASTLeft[mcallNode] := margSeq
               else ASTRight[mlastArg] := margSeq;
@@ -5165,7 +5165,7 @@ begin
                 begin
                   { non-ident by-ref/array arg (@obj.Method to a method-pointer
                     param, [..] literals, casts): parse as an expression }
-                  ParseExpr; mexprNode := CurASTNode;
+                  ParseArgExpr; mexprNode := CurASTNode;
                 end
                 else
                 begin
@@ -5175,7 +5175,7 @@ begin
               end
               else
               begin
-                ParseExpr; mexprNode := CurASTNode;
+                ParseArgExpr; mexprNode := CurASTNode;
               end;
               margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
               ASTIVal[margSeq] := mkw;
@@ -5356,7 +5356,7 @@ begin
         else if ByRefArgStartsExpression then
         begin
           { non-ident / cast-lvalue by-ref arg (PChar(s)^): full expression }
-          ParseExpr; mexprNode := CurASTNode;
+          ParseArgExpr; mexprNode := CurASTNode;
         end
         else
         begin
@@ -5367,7 +5367,7 @@ begin
       end
       else
       begin
-        ParseExpr; mexprNode := CurASTNode;
+        ParseArgExpr; mexprNode := CurASTNode;
       end;
       margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
       if mlastArg = -1 then ASTLeft[mcallNode] := margSeq
@@ -6337,7 +6337,7 @@ begin
             mai := 1;   { param 0 = Self, supplied by the interface value }
             while CurTok.Kind <> tkRParen do
             begin
-              ParseExpr; aNode := CurASTNode;
+              ParseArgExpr; aNode := CurASTNode;
               aSeq := AllocNode(AN_ARG); ASTLeft[aSeq] := aNode;
               if lastA = -1 then ASTLeft[callN] := aSeq else ASTRight[lastA] := aSeq;
               lastA := aSeq;
@@ -6409,7 +6409,7 @@ begin
               begin
                 { non-ident by-ref/array arg (@obj.Method to a method-pointer
                   param, [..] literals, casts): parse as an expression }
-                ParseExpr; aNode := CurASTNode;
+                ParseArgExpr; aNode := CurASTNode;
               end
               else
               begin
@@ -6419,7 +6419,7 @@ begin
             end
             else
             begin
-              ParseExpr; aNode := CurASTNode;
+              ParseArgExpr; aNode := CurASTNode;
             end;
             aSeq := AllocNode(AN_ARG); ASTLeft[aSeq] := aNode;
             ASTRight[lastA] := aSeq; lastA := aSeq;
@@ -7736,7 +7736,7 @@ begin
                   begin
                     { non-ident by-ref/array arg (@obj.Method to a method-pointer
                       param, [..] literals, casts): parse as an expression }
-                    ParseExpr; mexprNode := CurASTNode;
+                    ParseArgExpr; mexprNode := CurASTNode;
                   end
                   else
                   begin
@@ -7744,7 +7744,7 @@ begin
                     mexprNode := ParseLValueAST(margIdx, TokPos - 2);
                   end;
                 end
-                else begin ParseExpr; mexprNode := CurASTNode; end;
+                else begin ParseArgExpr; mexprNode := CurASTNode; end;
                 margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
                 if mlastArg = -1 then ASTLeft[mcallNode] := margSeq
                 else ASTRight[mlastArg] := margSeq;
@@ -7805,7 +7805,7 @@ begin
                   begin
                     { non-ident by-ref/array arg (@obj.Method to a method-pointer
                       param, [..] literals, casts): parse as an expression }
-                    ParseExpr; mexprNode := CurASTNode;
+                    ParseArgExpr; mexprNode := CurASTNode;
                   end
                   else
                   begin
@@ -7813,7 +7813,7 @@ begin
                     mexprNode := ParseLValueAST(margIdx, TokPos - 2);
                   end;
                 end
-                else begin ParseExpr; mexprNode := CurASTNode; end;
+                else begin ParseArgExpr; mexprNode := CurASTNode; end;
                 margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
                 ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
                 if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then

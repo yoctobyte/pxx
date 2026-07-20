@@ -1,0 +1,11 @@
+class C:
+    def g(self, s: str) -> str:
+        return s
+    def h(self, x: int) -> str:
+        return self.g("pos" if x > 0 else "neg")
+c = C()
+print(c.h(1))
+print(c.h(-1))
+def f(a: int, b: int) -> int:
+    return a + b
+print(f(1 if True else 2, 3))
