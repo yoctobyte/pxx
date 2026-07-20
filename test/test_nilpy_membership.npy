@@ -7,3 +7,23 @@ print("nope" not in IF_TOKENS)
 print(2 in xs)
 print(9 in xs)
 print(9 not in xs)
+
+# `in` on a STRING is SUBSTRING containment in Python, not element membership.
+# It used to reach the list helper, which read the string handle as a TPyList
+# and scanned its header words as variant slots — a segfault, not a wrong
+# answer.
+s = "hello"
+print("ell" in s)
+print("zzz" in s)
+print("ell" not in s)
+print("" in s)
+print("hello" in s)
+print("helloo" in s)
+
+# min / max, two-argument form
+print(min(3, 7))
+print(max(3, 7))
+print(min(7, 3))
+print(max(7, 3))
+print(min(-1, 1))
+print(max(2.5, 1.5))

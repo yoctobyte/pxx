@@ -239,7 +239,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_classvar_counter.npy /tmp/test_nilpy_classvar_counter26
 	test "$$(/tmp/test_nilpy_classvar_counter26)" = "$$(printf 'dup 1\nswap 2\ndrop 3')"
 	./$(COMPILER) test/test_nilpy_membership.npy /tmp/test_nilpy_membership26
-	test "$$(/tmp/test_nilpy_membership26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue')"
+	test "$$(/tmp/test_nilpy_membership26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\n3\n7\n3\n7\n-1\n2.5')"
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

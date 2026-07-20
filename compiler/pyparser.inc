@@ -643,7 +643,7 @@ end;
   compare against nil; Optional[int] fields compare against the 0 sentinel,
   consistent with that documented mapping). }
 procedure PyParseIsCmp;
-var left, right, node, i, j: Integer; neg: Boolean;
+var left, right, node, i, j: Integer; neg: Boolean; rTk: TTypeKind;
 begin
   PyParseBitOr;
   left := CurASTNode;
@@ -672,10 +672,16 @@ begin
       Expect(tkIn, 'in');
       PyParseBitOr;
       right := CurASTNode;
-      { `k in d` on a DICT asks about KEYS, not values, so it cannot go through
-        the list helper — pycontains would scan a TPyDict's header words as if
-        they were variant slots. Dispatch on the container's class. }
-      if ResolveNodeRec(right) = REC_UCLASS_BASE + FindUClass('TPyDict') then
+      { The container decides the helper, and getting it wrong is not a type
+        error but a CRASH: pycontains would scan a TPyDict's or a string's
+        header words as if they were variant slots.
+          dict   -> key membership
+          str    -> SUBSTRING containment, which is what `in` means in Python
+          else   -> list element membership }
+      rTk := IntToTypeKind(ASTTk[right]);
+      if (rTk = tyString) or (rTk = tyAnsiString) then
+        node := FindProc('pystr_contains')
+      else if ResolveNodeRec(right) = REC_UCLASS_BASE + FindUClass('TPyDict') then
         node := FindProc('pydictcontains')
       else
         node := FindProc('pycontains');

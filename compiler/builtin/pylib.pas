@@ -148,12 +148,31 @@ function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; over
 function bytearray(n: Integer): TPyBytes;
 function bytes(b: TPyBytes): TPyBytes;
 function len(b: TPyBytes): Integer; overload;
+{ Python's two-argument min/max. Spelled as ordinary pylib FUNCTIONS, the
+  same way bytearray/bytes are: neither name is a Pascal keyword, so both
+  resolve through the normal call path with no frontend hook.
+
+  Two arguments only — Python's min/max are also variadic and also take an
+  ITERABLE, and every censused use in uforth is the two-argument form (7 min,
+  7 max). The other forms are absent rather than wrong: calling them is an
+  unknown-arity error, not a silent answer. lib/rtl/math.pas has capitalised
+  Min/Max, but NilPy programs do not load it, and Python spells them lower
+  case. }
+function min(a: Int64; b: Int64): Int64;
+function min(a: Double; b: Double): Double; overload;
+function max(a: Int64; b: Int64): Int64; overload;
+function max(a: Double; b: Double): Double; overload;
 function len(l: TPyList): Integer;
 function len(d: TPyDict): Integer; overload;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
 function len(const s: AnsiString): Integer; overload;
 function next(c: TPyCounter): Int64;
 function pycontains(l: TPyList; const v: Variant): Boolean;
+{ `sub in s` on a STRING is SUBSTRING containment in Python, not element
+  membership. Without a case of its own it reached pycontains, which read the
+  string handle as a TPyList and scanned its header words as variant slots —
+  a segfault. }
+function pystr_contains(const s: AnsiString; const sub: AnsiString): Boolean;
 function pyvartag(const v: Variant): Int64;
 function pyvarobj(const v: Variant): Pointer;
 
@@ -885,6 +904,33 @@ end;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
 begin
   Result := d.indexof(k) >= 0;
+end;
+
+function min(a: Int64; b: Int64): Int64;
+begin
+  if a < b then Result := a else Result := b;
+end;
+
+function min(a: Double; b: Double): Double; overload;
+begin
+  if a < b then Result := a else Result := b;
+end;
+
+function max(a: Int64; b: Int64): Int64; overload;
+begin
+  if a > b then Result := a else Result := b;
+end;
+
+function max(a: Double; b: Double): Double; overload;
+begin
+  if a > b then Result := a else Result := b;
+end;
+
+
+function pystr_contains(const s: AnsiString; const sub: AnsiString): Boolean;
+begin
+  { the empty string is contained in everything, as in Python }
+  Result := (Length(sub) = 0) or (pystr_find(s, sub) >= 0);
 end;
 
 procedure PyBytesIndexError;
