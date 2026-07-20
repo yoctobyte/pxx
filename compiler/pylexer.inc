@@ -203,13 +203,49 @@ begin
     end;
 end;
 
+{ Python concatenates adjacent string/f-string literals: `"a" "b"` and, across
+  lines inside parentheses, `f"a"\n f"b"`. After a literal is emitted, peek past
+  the whitespace that follows; if another string literal begins (optionally
+  prefixed f/r/b), splice in a ` + `. Newlines only count as "still adjacent"
+  inside brackets — at statement level a newline separates a docstring from the
+  next string, so pdepth guards that. `src`/`ln` are threaded so line counting
+  and the comment skip stay correct. Returns the index of the first char NOT
+  consumed (the whitespace is left for the main loop to copy/count). }
+function PyFsAdjacentStringAt(src: AnsiString; from, srcLen, pdepth: Integer): Boolean;
+var j: Integer; ch: Char;
+begin
+  Result := False;
+  j := from;
+  while j <= srcLen do
+  begin
+    ch := src[j];
+    if (ch = ' ') or (ch = #9) or (ch = #13) then Inc(j)
+    else if ch = #10 then
+    begin
+      if pdepth <= 0 then Exit;   { statement-level newline: not adjacent }
+      Inc(j);
+    end
+    else break;
+  end;
+  if j > srcLen then Exit;
+  ch := src[j];
+  { an optional string prefix letter directly before the quote }
+  if (ch = 'f') or (ch = 'F') or (ch = 'r') or (ch = 'R') or
+     (ch = 'b') or (ch = 'B') then
+  begin
+    if (j + 1 <= srcLen) and PyFStrIsQuote(src[j + 1]) then Result := True;
+  end
+  else if PyFStrIsQuote(ch) then Result := True;
+end;
+
 procedure PyExpandFStrings;
 var
   lit: AnsiString;
-  i, n, depth, ln: Integer;
+  i, n, depth, ln, pdepth: Integer;
   q, c, hq: Char;
   inHole, wroteAny, sawTriple: Boolean;
 begin
+  pdepth := 0;
   n := Length(Source);
   PyFsReset(n);
   i := 1;
@@ -269,6 +305,9 @@ begin
           Inc(i);
         end;
       end;
+      { adjacent literal after this plain string -> implicit concatenation, so
+        `"a" "b"` and a plain string followed by an f-string both join }
+      if PyFsAdjacentStringAt(Source, i, n, pdepth) then PyFsPut(' + ');
       continue;
     end;
     { f"..." — the prefix must not be the tail of a longer identifier }
@@ -402,9 +441,13 @@ begin
       PyFStrFlush(lit, wroteAny);
       if not wroteAny then PyFsPut('""');
       PyFsPutCh(')');
+      { adjacent literal after this f-string -> implicit concatenation }
+      if PyFsAdjacentStringAt(Source, i, n, pdepth) then PyFsPut(' + ');
       continue;
     end;
     if c = #10 then Inc(ln);
+    if (c = '(') or (c = '[') then Inc(pdepth)
+    else if (c = ')') or (c = ']') then begin if pdepth > 0 then Dec(pdepth); end;
     PyFsPutCh(c);
     Inc(i);
   end;

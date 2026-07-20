@@ -1,0 +1,21 @@
+a = "ab" "cd"
+print(a)
+b = (
+    "ef"
+    "gh"
+)
+print(b)
+x = 5
+t = "hi"
+c = (
+    f"x={x} "
+    f"t={t} "
+    f"end"
+)
+print(c)
+d = "plain " f"and {x}"
+print(d)
+def show(m: str) -> None:
+    print(m)
+show("first line "
+    "second line")
