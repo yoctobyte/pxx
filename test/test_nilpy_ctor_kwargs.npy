@@ -1,0 +1,23 @@
+from dataclasses import dataclass
+from typing import Any
+
+@dataclass
+class Word:
+    name: str = ""
+    wid: int = 0
+    immediate: bool = False
+
+w = Word(name="dup", wid=3, immediate=True)
+print(w.name)
+print(w.wid)
+print(w.immediate)
+w2 = Word(wid=7, name="swap")
+print(w2.name)
+print(w2.wid)
+print(w2.immediate)
+w3 = Word("over", 9)
+print(w3.name)
+print(w3.wid)
+w4 = Word()
+print(w4.name)
+print(w4.wid)

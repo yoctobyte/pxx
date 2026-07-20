@@ -1487,9 +1487,94 @@ begin
   Result := PyClassCreate;
 end;
 
+{ The default VALUE node for dataclass field `fidx` of class ci, where dcBase
+  is the class's first entry in the PyDc* default table. Extracted so BOTH the
+  trailing-argument fill and the keyword-argument hole fill use ONE
+  construction: a factory default is re-parsed per construction site, so a
+  second copy would quietly diverge. }
+const
+  { widest dataclass argument list the keyword binder handles; the ctor
+    synthesiser already caps a dataclass at 15 fields }
+  PY_MAX_DC_KW = 32;
+
+function PyDcDefaultNode(ci, dcBase, fidx: Integer): Integer;
+var i, k, valNode, tkNode: Integer; tkF: TTypeKind;
+begin
+  i := dcBase + fidx;
+  if (i >= PyDcCount) or (PyDcCi[i] <> ci) or (PyDcKind[i] = PYDC_NONE) then
+    Error('Nil Python: missing argument for dataclass field without default');
+case PyDcKind[i] of
+    PYDC_INT:
+    begin
+      valNode := AllocNode(AN_INT_LIT);
+      ASTIVal[valNode] := PyDcIVal[i];
+      ASTTk[valNode] := Ord(tyInteger);
+    end;
+    PYDC_FLOAT:
+    begin
+      valNode := AllocNode(AN_FLOAT_LIT);
+      ASTIVal[valNode] := PyDcIVal[i];
+      ASTTk[valNode] := Ord(tyDouble);
+    end;
+    PYDC_STR:
+    begin
+      valNode := AllocNode(AN_STR_LIT);
+      ASTSOffset[valNode] := PyDcSOff[i];
+      ASTSLen[valNode] := PyDcSLen[i];
+      ASTTk[valNode] := Ord(tyString);
+    end;
+    PYDC_NIL:
+    begin
+      tkF := IntToTypeKind(UFldTk[UClsFBase[ci] + (i - dcBase)]);
+      if tkF = tyAnsiString then
+        Error('Nil Python: None default for a str field is not supported yet');
+      valNode := AllocNode(AN_INT_LIT);
+      ASTIVal[valNode] := 0;
+      ASTTk[valNode] := Ord(tkF);
+    end;
+    PYDC_FACTORY_EXPR:
+    begin
+      { re-parse the captured lambda-body span at this construction
+        site: evaluated per construction, like CPython's factory }
+      k := TokPos - 1;              { restore point (CurTok's index) }
+      TokPos := PyDcIVal[i];
+      Next;
+      PyParseBoolExpr;
+      valNode := CurASTNode;
+      TokPos := k;
+      Next;
+    end;
+    PYDC_FACTORY_LIST:
+    begin
+      { fresh empty TPyList (same GetMem+ctor shape as a [] literal) }
+      k := FindUClass('TPyList');
+      if k < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+      valNode := AllocNode(AN_CALL);
+      ASTIVal[valNode] := -Ord(tkGetMem);
+      ASTTk[valNode] := Ord(tyClass);
+      ASTRight[valNode] := REC_UCLASS_BASE + k;
+      tkNode := AllocNode(AN_INT_LIT);
+      ASTIVal[tkNode] := RecSize(REC_UCLASS_BASE + k);
+      ASTTk[tkNode] := Ord(tyInteger);
+      k := AllocNode(AN_ARG);
+      ASTLeft[k] := tkNode;
+      ASTLeft[valNode] := k;
+    end;
+    else { PYDC_BOOL }
+    begin
+      valNode := AllocNode(AN_INT_LIT);
+      ASTIVal[valNode] := PyDcIVal[i];
+      ASTTk[valNode] := Ord(tyBoolean);
+    end;
+  end;
+  Result := valNode;
+end;
+
 function PyClassCreate: Integer;
 var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     nArgs, i, k, dcBase, valNode, tkNode, ctorMi, ctorPi: Integer; tkF: TTypeKind;
+    kwI, kwJ, kwFld, kwMax, kwPos, kwDcBase: Integer; kwName: AnsiString;
+    kwAny: Boolean; kwSlot: array[0..PY_MAX_DC_KW - 1] of Integer;
 begin
   name := CurTok.SVal;
   ci := FindUClass(name);
@@ -1509,17 +1594,78 @@ begin
   ASTLeft[node] := argNode;
   lastArg := argNode;
   nArgs := 0;
+  { `Word(name=n, wid=w)` — keyword arguments. A @dataclass has no ctor METHOD
+    (its arguments map straight onto the fields, in declaration order), so a
+    keyword binds to a FIELD index rather than to a proc parameter. Collected
+    into kwSlot here and re-emitted in field order below. }
+  for kwI := 0 to PY_MAX_DC_KW - 1 do kwSlot[kwI] := -1;
+  kwAny := False;
+  kwMax := -1;
+  kwPos := 0;
   while CurTok.Kind <> tkRParen do
   begin
+    kwFld := -1;
+    if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkAssign) then
+    begin
+      kwName := CurTok.SVal;
+      kwFld := FindUField(ci, kwName);
+      if kwFld < 0 then
+        Error('Nil Python: ' + name + ' has no field named ''' + kwName + '''');
+      kwFld := kwFld - UClsFBase[ci];      { absolute -> field INDEX }
+      Next; Next;                          { the name and the '=' }
+      kwAny := True;
+    end;
     PyParseBoolExpr;
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := CurASTNode;
-    ASTRight[lastArg] := argNode;
-    lastArg := argNode;
+    ASTRight[argNode] := -1;
+    if kwFld < 0 then
+    begin
+      if kwAny then
+        Error('Nil Python: positional argument after keyword argument in ' + name + '()');
+      kwFld := kwPos;
+      Inc(kwPos);
+    end;
+    if (kwFld < 0) or (kwFld >= PY_MAX_DC_KW) then
+      Error('Nil Python: too many arguments to ' + name + '()');
+    if kwSlot[kwFld] >= 0 then
+      Error('Nil Python: ' + name + '() got multiple values for field ''' + kwName + '''');
+    kwSlot[kwFld] := argNode;
+    if kwFld > kwMax then kwMax := kwFld;
     Inc(nArgs);
     if not Eat(tkComma) then break;
   end;
   Expect(tkRParen, ')');
+  { Re-emit in FIELD order. A hole below the highest supplied field is filled
+    from the declared default — uforth's Word(...) skips data_addr between
+    immediate and wid, so interior holes are the normal case, not an edge one.
+    Trailing fields are left to the existing fill below. }
+  { Unconditional: with no keyword at all this simply re-links the chain in the
+    order it was parsed, so the positional path is unchanged. Skipping it left
+    every AN_ARG with ASTRight = -1 and the call ran off a one-element chain. }
+  begin
+    lastArg := ASTLeft[node];              { the GetMem size arg }
+    for kwI := 0 to kwMax do
+    begin
+      if kwSlot[kwI] >= 0 then
+        argNode := kwSlot[kwI]
+      else
+      begin
+        kwDcBase := -1;
+        for kwJ := 0 to PyDcCount - 1 do
+          if PyDcCi[kwJ] = ci then begin kwDcBase := kwJ; break; end;
+        if kwDcBase < 0 then
+          Error('Nil Python: ' + name + '() needs a value for every field before the last one given');
+        argNode := AllocNode(AN_ARG);
+        ASTLeft[argNode] := PyDcDefaultNode(ci, kwDcBase, kwI);
+        ASTRight[argNode] := -1;
+      end;
+      ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+    end;
+    nArgs := kwMax + 1;
+  end;
   { A hand-written ctor's declared parameter DEFAULTS. PyClassCreate builds
     the call itself — GetMem size, then the user args — so it never passes
     through the shared path that fills omitted trailing args, and `C()` on a
@@ -1564,73 +1710,7 @@ begin
     if dcBase >= 0 then
       while nArgs < UClsFCount[ci] do
       begin
-        i := dcBase + nArgs;
-        if (i >= PyDcCount) or (PyDcCi[i] <> ci) or (PyDcKind[i] = PYDC_NONE) then
-          Error('Nil Python: missing argument for dataclass field without default: ' + name);
-        case PyDcKind[i] of
-          PYDC_INT:
-          begin
-            valNode := AllocNode(AN_INT_LIT);
-            ASTIVal[valNode] := PyDcIVal[i];
-            ASTTk[valNode] := Ord(tyInteger);
-          end;
-          PYDC_FLOAT:
-          begin
-            valNode := AllocNode(AN_FLOAT_LIT);
-            ASTIVal[valNode] := PyDcIVal[i];
-            ASTTk[valNode] := Ord(tyDouble);
-          end;
-          PYDC_STR:
-          begin
-            valNode := AllocNode(AN_STR_LIT);
-            ASTSOffset[valNode] := PyDcSOff[i];
-            ASTSLen[valNode] := PyDcSLen[i];
-            ASTTk[valNode] := Ord(tyString);
-          end;
-          PYDC_NIL:
-          begin
-            tkF := IntToTypeKind(UFldTk[UClsFBase[ci] + (i - dcBase)]);
-            if tkF = tyAnsiString then
-              Error('Nil Python: None default for a str field is not supported yet');
-            valNode := AllocNode(AN_INT_LIT);
-            ASTIVal[valNode] := 0;
-            ASTTk[valNode] := Ord(tkF);
-          end;
-          PYDC_FACTORY_EXPR:
-          begin
-            { re-parse the captured lambda-body span at this construction
-              site: evaluated per construction, like CPython's factory }
-            k := TokPos - 1;              { restore point (CurTok's index) }
-            TokPos := PyDcIVal[i];
-            Next;
-            PyParseBoolExpr;
-            valNode := CurASTNode;
-            TokPos := k;
-            Next;
-          end;
-          PYDC_FACTORY_LIST:
-          begin
-            { fresh empty TPyList (same GetMem+ctor shape as a [] literal) }
-            k := FindUClass('TPyList');
-            if k < 0 then Error('Nil Python: pylib (TPyList) not loaded');
-            valNode := AllocNode(AN_CALL);
-            ASTIVal[valNode] := -Ord(tkGetMem);
-            ASTTk[valNode] := Ord(tyClass);
-            ASTRight[valNode] := REC_UCLASS_BASE + k;
-            tkNode := AllocNode(AN_INT_LIT);
-            ASTIVal[tkNode] := RecSize(REC_UCLASS_BASE + k);
-            ASTTk[tkNode] := Ord(tyInteger);
-            k := AllocNode(AN_ARG);
-            ASTLeft[k] := tkNode;
-            ASTLeft[valNode] := k;
-          end;
-          else { PYDC_BOOL }
-          begin
-            valNode := AllocNode(AN_INT_LIT);
-            ASTIVal[valNode] := PyDcIVal[i];
-            ASTTk[valNode] := Ord(tyBoolean);
-          end;
-        end;
+        valNode := PyDcDefaultNode(ci, dcBase, nArgs);
         argNode := AllocNode(AN_ARG);
         ASTLeft[argNode] := valNode;
         ASTRight[lastArg] := argNode;
