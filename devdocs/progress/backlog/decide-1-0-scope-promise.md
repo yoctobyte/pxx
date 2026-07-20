@@ -1,6 +1,6 @@
 ---
 prio: 55
-keep-open: scheme DECIDED 2026-07-20 (pin/1000 + LTS), but one detail is open (pins vs stabilizes) and this still gates feature-promo-launch-plan's loud launch — releases are not wanted yet
+keep-open: scheme fully DECIDED 2026-07-20 (VERSION/1000 + LTS); stays open only because it gates feature-promo-launch-plan's loud launch — releases are not wanted yet
 ---
 
 # DECIDE: version scheme — pin count / N, not semver
@@ -61,14 +61,13 @@ The "never ship 0.1 first" trap (semver would sort a later `0.03727` above
 `0.1`) is moot under /1000: the scheme starts at 0.222, already past 0.1, and
 only ever increases. No mixed-scheme ordering hazard exists.
 
-### Still open — one detail
+### Canonical counter — SETTLED 2026-07-20
 
-**Which counter is canonical.** `VERSION` counts *stabilizes* (222); `pin.log`
-counts *pins* (213). They have already diverged by 9 and will keep drifting.
-"Pin count / 1000" says pins, but the machinery increments VERSION on
-stabilize. Pick one and make the other stop looking like a version — a
-9-and-growing ambiguity in the thing we are about to call the release number is
-worth ten minutes now.
+**The current stabilized version is truth.** `VERSION` (the stabilize counter)
+is the number; today 222, i.e. **0.222**. `pin.log` is a log — it records which
+stabilized builds were blessed as the pinned seed, and is not a version.
+
+Nothing else left open on the scheme.
 
 ## HISTORICAL — USER DECISION 2026-07-12: first official release = **0.1 beta**
 *(superseded above; kept because the stage-1 bar it specifies is still live)*
