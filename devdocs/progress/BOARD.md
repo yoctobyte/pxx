@@ -31,7 +31,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (133)
+## backlog (134)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -54,6 +54,7 @@ _none_
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
 | decide-crtl-libm-glibc-bit-parity | U | 20 | decide | decide: crtl libm — correct rounding (current) vs glibc bug-parity | — |
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
+| decide-nilpy-and-or-return-operand-or-bool | U | 40 | decide | decide: should NilPy's `and` / `or` return an OPERAND, as Python does? | — |
 | decide-nilpy-bigint-vs-64bit-cells | U | 40 | decide | decide: NilPy integer semantics — arbitrary precision vs 64-bit (uforth needs one) | — |
 | decide-nilpy-parallel-capture-semantics | A | 45 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-rtti-none-semantics | A | 40 | decide | decide: `--rtti=none` semantics — what happens to the FUNCTIONAL parts of the RTTI blob? | — |
@@ -2622,6 +2623,7 @@ _none_
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
 - [p 40] [A] bug-a-param-pointer-rule-divergence
+- [p 40] [U] decide-nilpy-and-or-return-operand-or-bool
 - [p 40] [U] decide-nilpy-bigint-vs-64bit-cells
 - [p 40] [A] decide-rtti-none-semantics
 - [p 40] [A] feature-c-package-namespace-decision
