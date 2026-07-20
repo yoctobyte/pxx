@@ -1,0 +1,57 @@
+class AErr(Exception):
+    def __init__(self, v: int) -> None:
+        self.v = v
+
+class BErr(AErr):
+    def __init__(self, v: int) -> None:
+        self.v = v
+
+def go(k: int) -> None:
+    if k == 1:
+        raise AErr(10)
+    if k == 2:
+        raise BErr(20)
+    print("none")
+
+def run(k: int) -> None:
+    try:
+        go(k)
+    except BErr as e:
+        print("B")
+        print(e.v)
+    except AErr as e:
+        print("A")
+        print(e.v)
+
+run(0)
+run(1)
+run(2)
+
+def cleanup(k: int) -> None:
+    try:
+        go(k)
+    except AErr:
+        print("err")
+    finally:
+        print("fin")
+
+cleanup(0)
+cleanup(1)
+
+def reraise() -> None:
+    try:
+        try:
+            raise BErr(5)
+        except BErr:
+            print("inner")
+            raise
+    except AErr as e:
+        print("outer")
+        print(e.v)
+
+reraise()
+
+try:
+    print("bare")
+except:
+    print("never")

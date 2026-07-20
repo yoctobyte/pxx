@@ -218,6 +218,8 @@ test-nilpy: $(COMPILER)
 	# The file is CPython's own output — regenerate with
 	#   python3 test/test_nilpy_fstrings.npy > test/test_nilpy_fstrings.expected
 	/tmp/test_nilpy_fstrings26 | diff -u test/test_nilpy_fstrings.expected -
+	./$(COMPILER) test/test_nilpy_exceptions.npy /tmp/test_nilpy_exceptions26
+	test "$$(/tmp/test_nilpy_exceptions26)" = "$$(printf 'none\nA\n10\nB\n20\nnone\nfin\nerr\nfin\ninner\nouter\n5\nbare')"
 	./$(COMPILER) test/test_nilpy_kwargs.npy /tmp/test_nilpy_kwargs26
 	test "$$(/tmp/test_nilpy_kwargs26)" = "$$(printf 'Hello, Ann!\nHi, Bob!\nHello, Cid?\nYo, Dee?!\nHey, Eve?\nHello, Fay!\nHello, Gus.\n111\n124\n130\n245')"
 	./$(COMPILER) test/test_nilpy_defaults.npy /tmp/test_nilpy_defaults26

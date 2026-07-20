@@ -2368,6 +2368,125 @@ begin
   Result := node;
 end;
 
+{ Nil Python's `Exception` root. It is registered lazily — as an empty shell —
+  because nothing declares it: a user writes `class ForthThrow(Exception)` or
+  `except Exception:` and expects the base to already be there. Both sites call
+  this so the class index is the same one either way. }
+function PyEnsureExceptionClass: Integer;
+var k: Integer;
+begin
+  PyEnsureExceptionClass := FindUClass('Exception');
+  if PyEnsureExceptionClass < 0 then
+  begin
+    k := PyStoredName('Exception');
+    AddUClass(k, 9);
+    PyEnsureExceptionClass := FindUClass('Exception');
+  end;
+end;
+
+{ `try:` / `except [Class [as name]]:` / `finally:` -> the shared AN_TRY_EXCEPT
+  and AN_TRY_FINALLY nodes Pascal already lowers, so this is frontend shape
+  only, no new runtime.
+
+  Python allows except AND finally on one try; Pascal's nodes carry one or the
+  other, so a try with both nests as TRY_FINALLY(TRY_EXCEPT(body, handlers),
+  finalizer) — which is exactly Python's ordering (the handler runs first, the
+  finalizer runs on every path out).
+
+  A bare `except:` is the untyped catch-all (handler class -1); `except Class:`
+  matches Class and its descendants, the same chain `on E: TFoo do` uses. The
+  binder in `except Class as e:` becomes an ordinary local typed as the class,
+  which is what makes `except ForthThrow as e: ... e.code` work. }
+function PyParseTry: Integer;
+var node, innerNode, trySeq, finSeq, handlerHead, lastHandler, handlerNode: Integer;
+    actionSeq, handlerVar, ci, recId: Integer;
+    handlerName, className: AnsiString;
+begin
+  Inc(GenTryDepth);
+  Next;                                { `try` }
+  Expect(tkColon, ':');
+  Expect(tkNewline, 'newline');
+  Expect(tkIndent, 'indent');
+  trySeq := PyParseBlock;
+  Expect(tkDedent, 'dedent');
+  PySkipNewlines;
+
+  handlerHead := -1;
+  lastHandler := -1;
+  while CurTok.Kind = tkExcept do
+  begin
+    Next;
+    recId := -1;
+    handlerVar := -1;
+    if CurTok.Kind <> tkColon then
+    begin
+      if CurTok.Kind <> tkIdent then Error('Nil Python: except: expected an exception class');
+      className := CurTok.SVal;
+      Next;
+      if CaseEqual(className, 'Exception') then ci := PyEnsureExceptionClass
+      else ci := FindUClass(className);
+      if ci < 0 then Error('Nil Python: unknown exception class ' + className);
+      recId := REC_UCLASS_BASE + ci;
+      if PyIsIdent('as') then
+      begin
+        Next;
+        if CurTok.Kind <> tkIdent then Error('Nil Python: except ... as: expected a name');
+        handlerName := CurTok.SVal;
+        Next;
+        handlerVar := AllocVar(handlerName, tyClass);
+        Syms[handlerVar].RecName := recId;
+      end;
+    end;
+    Expect(tkColon, ':');
+    Expect(tkNewline, 'newline');
+    Expect(tkIndent, 'indent');
+    Inc(ExceptionHandlerParseDepth);
+    actionSeq := PyParseBlock;
+    Dec(ExceptionHandlerParseDepth);
+    Expect(tkDedent, 'dedent');
+    PySkipNewlines;
+    handlerNode := AllocNode(AN_EXC_HANDLER);
+    ASTIVal[handlerNode] := recId;
+    ASTSOffset[handlerNode] := handlerVar;
+    ASTLeft[handlerNode] := actionSeq;
+    if handlerHead = -1 then handlerHead := handlerNode
+    else ASTRight[lastHandler] := handlerNode;
+    lastHandler := handlerNode;
+  end;
+
+  finSeq := -1;
+  if CurTok.Kind = tkFinally then
+  begin
+    Next;
+    Expect(tkColon, ':');
+    Expect(tkNewline, 'newline');
+    Expect(tkIndent, 'indent');
+    finSeq := PyParseBlock;
+    Expect(tkDedent, 'dedent');
+  end;
+
+  if (handlerHead = -1) and (finSeq = -1) then
+    Error('Nil Python: try: needs an except: or a finally:');
+
+  innerNode := trySeq;
+  if handlerHead >= 0 then
+  begin
+    node := AllocNode(AN_TRY_EXCEPT);
+    ASTLeft[node] := trySeq;
+    ASTRight[node] := handlerHead;
+    innerNode := node;
+  end;
+  if finSeq >= 0 then
+  begin
+    node := AllocNode(AN_TRY_FINALLY);
+    ASTLeft[node] := innerNode;
+    ASTRight[node] := finSeq;
+    innerNode := node;
+  end;
+  Dec(GenTryDepth);
+  PyParseTry := innerNode;
+end;
+
 function PyParseWhile: Integer;
 var node: Integer;
 begin
@@ -3039,6 +3158,22 @@ begin
   if CurTok.Kind = tkFunction then begin Result := PyQueueNestedDef; Exit; end;
   if CurTok.Kind = tkIf then begin Result := PyParseIf; Exit; end;
   if CurTok.Kind = tkWhile then begin Result := PyParseWhile; Exit; end;
+  if CurTok.Kind = tkTry then begin Result := PyParseTry; Exit; end;
+  { `raise <expr>` and bare `raise` (re-raise inside a handler). }
+  if CurTok.Kind = tkRaise then
+  begin
+    Next;
+    node := AllocNode(AN_RAISE);
+    if CurTok.Kind in [tkNewline, tkDedent, tkEOF] then
+      ASTLeft[node] := -1
+    else
+    begin
+      PyParseBoolExpr;
+      ASTLeft[node] := CurASTNode;
+    end;
+    Result := node;
+    Exit;
+  end;
   if (CurTok.Kind = tkFor) or PyIsIdent('for') then begin Result := PyParseFor; Exit; end;
   if PyIsIdent('pass') then begin Next; Exit; end;
   { `break` / `continue`. The lexer already maps break to tkBreak, but no
@@ -3337,7 +3472,8 @@ begin
     stmt := PyParseStatement;
     Result := PySeqAppend(Result, stmt);
     if CurTok.Kind = tkNewline then PySkipNewlines
-    else if (stmt >= 0) and (ASTKind[stmt] in [AN_IF, AN_WHILE, AN_FOR]) then
+    else if (stmt >= 0) and (ASTKind[stmt] in [AN_IF, AN_WHILE, AN_FOR,
+                                               AN_TRY_EXCEPT, AN_TRY_FINALLY]) then
       continue
     else if PyStmtAteBlock then
     begin
@@ -4811,17 +4947,25 @@ end;
 
 procedure ParsePyProgram;
 var mainNode, stmt, blockNode, jmpPatch, i, savedUnitIdx: Integer; needsBuiltin: Boolean;
+    pyHasExceptions: Boolean;
     dummyNames: array[0..3] of AnsiString;
     dummyTypes: array[0..3] of TTypeKind;
     impName: AnsiString; isCount: Boolean;
 begin
   needsBuiltin := True;
+  pyHasExceptions := False;
   for i := 0 to MainProgramTokCount - 1 do
   begin
     if (Tokens[i].Kind = tkIdent) and (i + 1 < MainProgramTokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) then
       needsBuiltin := True;
+    { `try` / `raise` anywhere in the program pulls in the exception runtime
+      (setjmp/longjmp helpers, the unwind globals). The Pascal driver has the
+      same pre-scan; this driver had none, so a .npy try emitted an
+      IR_EXC_ENTER whose `call ExcSetJmpAddr` went to address 0 — an instant
+      stack-smash segfault with no output, not a diagnostic. }
+    if Tokens[i].Kind in [tkTry, tkRaise] then pyHasExceptions := True;
   end;
   PyCountAlias := '';
   PyDcCount := 0;
@@ -4844,6 +4988,7 @@ begin
     builtinheap div site compiled before PXXDivZero registers fell back to a
     zero Div0StubAddr. Python '//'/'%' always need the check; unconditional. }
   if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
+  if pyHasExceptions then EnableExceptionRuntime;
   { Forward-declare the builtin heap allocator before emitting the string
     runtime, which calls Alloc. The unit body (compiled by ParseUsesUnit below)
     fills these in. Mirrors the Pascal ParseProgram path; without it a .npy that
