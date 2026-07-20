@@ -1,0 +1,49 @@
+# Subclass layout and dispatch. bug-a-nilpy-subclass-overlays-parent-layout:
+# `class B(A)` restarted both the field offsets and the VMT slot numbering at
+# zero, so B's fields overlaid A's and B's first method took the slot of A's
+# first method — calling an INHERITED method silently ran a subclass method
+# instead. Filling the inherited slots then exposed the other half: an
+# un-overridden slot stayed NIL in the subclass VMT.
+# Output must match CPython running this same file.
+
+class Animal:
+    def __init__(self, name: str, legs: int) -> None:
+        self.name = name
+        self.legs = legs
+    def describe(self) -> str:
+        return self.name + " has " + str(self.legs)
+    def sound(self) -> str:
+        return "..."
+
+class Dog(Animal):
+    def sound(self) -> str:
+        return "woof"
+
+class Cat(Animal):
+    def __init__(self, name: str, legs: int) -> None:
+        self.name = name
+        self.legs = legs
+        self.lives = 9
+    def sound(self) -> str:
+        return "meow"
+    def spare(self) -> int:
+        return self.lives
+
+# inherited method must not be hijacked by a subclass slot
+d = Dog("rex", 4)
+print(d.describe())
+print(d.sound())
+
+# subclass fields sit PAST the parent's, so neither clobbers the other
+c = Cat("tom", 4)
+print(c.describe())
+print(c.sound(), c.spare())
+
+# base-typed reference dispatches to the override
+a: Animal = Dog("rex2", 4)
+print(a.sound(), a.describe())
+
+# and the same through a variant slot (list element)
+zoo = [Dog("ax", 4), Cat("bx", 4), Animal("cx", 2)]
+for x in zoo:
+    print(x.sound(), x.describe())

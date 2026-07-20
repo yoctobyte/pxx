@@ -3131,7 +3131,7 @@ end;
   means the dataclass duplicate-field check cannot see them and mis-fire. }
 procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
                                  fieldsOnly: Boolean);
-var i, j, k, depth, methodStart, nparams, procIdx, mmi, slot, curOff, align, sz: Integer;
+var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, align, sz: Integer;
     fldAnn, rhsAt, k2: Integer;
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
     fldRec, mRetRec: Integer; mRet: TTypeKind;
@@ -3147,7 +3147,18 @@ begin
   UClsMCount[ci] := 0;
   UClsPBase[ci] := UPropCount;
   UClsPCount[ci] := 0;
+  { A SUBCLASS continues the parent's layout: its own fields start past the
+    parent's instance size and its virtual slots past the parent's slot count.
+    Starting both at zero made `class B(A)` overlay B's fields on A's and reuse
+    A's VMT slots, so an INHERITED method silently ran a subclass method with
+    the same slot number (bug-a-nilpy-subclass-overlays-parent-layout). }
   curOff := 8;
+  if UClsParent[ci] >= 0 then
+  begin
+    curOff := UClsSize_[UClsParent[ci]];
+    if curOff < 8 then curOff := 8;
+    UClsVirtCount[ci] := UClsVirtCount[UClsParent[ci]];
+  end;
   align := 8;
   depth := 0;
   i := bodyStart;
@@ -3402,8 +3413,21 @@ begin
         mmi := UMthCount - 1;
         if not isCtor then
         begin
-          slot := UClsVirtCount[ci];
-          UClsVirtCount[ci] := UClsVirtCount[ci] + 1;
+          { An OVERRIDE takes the slot the parent already assigned to that name,
+            so a base-typed reference to a subclass instance dispatches to the
+            override. A new name gets the next free slot. }
+          slot := -1;
+          if UClsParent[ci] >= 0 then
+          begin
+            inhMmi := FindUMeth(UClsParent[ci],
+                                PyRawName(Tokens[i + 1].SOffset, Tokens[i + 1].SLen));
+            if inhMmi >= 0 then slot := UMthVirSlot[inhMmi];
+          end;
+          if slot < 0 then
+          begin
+            slot := UClsVirtCount[ci];
+            UClsVirtCount[ci] := UClsVirtCount[ci] + 1;
+          end;
           UMthVirSlot[mmi] := slot;
         end;
       end;
@@ -3532,6 +3556,31 @@ begin
       MethodFixups[MethodFixCount].ProcIdx := UMthProc_[i];
       Inc(MethodFixCount);
     end;
+  { INHERITED slots this class does not override still need an entry: the VMT is
+    per-class and starts zeroed, so an un-filled slot is a call through NIL. Walk
+    the ancestor chain nearest-first and take the first method holding the slot. }
+  for slot := 0 to UClsVirtCount[ci] - 1 do
+  begin
+    inhMmi := -1;
+    for i := UClsMBase[ci] to UClsMBase[ci] + UClsMCount[ci] - 1 do
+      if UMthVirSlot[i] = slot then inhMmi := i;
+    if inhMmi < 0 then
+    begin
+      k := UClsParent[ci];
+      while (k >= 0) and (inhMmi < 0) do
+      begin
+        for i := UClsMBase[k] to UClsMBase[k] + UClsMCount[k] - 1 do
+          if UMthVirSlot[i] = slot then inhMmi := i;
+        k := UClsParent[k];
+      end;
+      if inhMmi >= 0 then
+      begin
+        MethodFixups[MethodFixCount].DataPos := UClsVMTOffset[ci] + slot * 8;
+        MethodFixups[MethodFixCount].ProcIdx := UMthProc_[inhMmi];
+        Inc(MethodFixCount);
+      end;
+    end;
+  end;
 end;
 
 procedure PyParseMethod(ci: Integer);

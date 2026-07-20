@@ -266,6 +266,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_method_str_return26)" = "$$(printf 'alpha 1 True 2.5\nalpha! alpha literal\nbeta -2 False fallback\nalpha alpha! 5 6\nalphaalpha!\nnc')"
 	./$(COMPILER) test/test_nilpy_variant_polymorphic_builtins.npy /tmp/test_nilpy_variant_polymorphic_builtins26
 	test "$$(/tmp/test_nilpy_variant_polymorphic_builtins26)" = "$$(printf '2 abab abab\n0  \n3 xyzxyz xyzxyz\n1 qq qq\n9 9\n-6 -6\n0 0\n3.0 3.0\n-1.0 -1.0\n97 1 aaa\n122 1 zzz\n3\n2')"
+	./$(COMPILER) test/test_nilpy_inheritance.npy /tmp/test_nilpy_inheritance26
+	test "$$(/tmp/test_nilpy_inheritance26)" = "$$(printf 'rex has 4\nwoof\ntom has 4\nmeow 9\nwoof rex2 has 4\nwoof ax has 4\nmeow bx has 4\n... cx has 2')"
 	./$(COMPILER) test/test_nilpy_variant_method_call.npy /tmp/test_nilpy_variant_method_call26
 	test "$$(/tmp/test_nilpy_variant_method_call26)" = "$$(printf '2 20 True\n5 50 False\none 21\ntwo 24\n<alpha>\n<beta>\n20 <alpha>\n4\n25')"
 	./$(COMPILER) test/test_nilpy_variant_unbox.npy /tmp/test_nilpy_variant_unbox26
