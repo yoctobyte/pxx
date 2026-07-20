@@ -1,0 +1,29 @@
+# Accumulating through a for-in loop variable, which is always a VARIANT. A
+# nested variant operand (`2 * v` inside the addition) is an RVALUE with no
+# address, and the lowering asked for one directly — so the most ordinary
+# accumulation loop there is failed to compile
+# (bug-a-nilpy-int-times-variant-in-sum-not-lowered).
+# Output must match CPython running this same file.
+
+xs = [10, 20, 3]
+total = 0
+for v in xs:
+    total = total + 2 * v
+print(total)
+p = 0
+for v in xs:
+    p = p + v * v
+print(p)
+q = 0
+for v in xs:
+    q = q + (v + 1) * 2
+print(q)
+fs = [1.5, 2.5]
+f = 0.0
+for v in fs:
+    f = f + v * 2
+print(f)
+s = ""
+for v in ["a", "b"]:
+    s = s + v + "-"
+print(s)

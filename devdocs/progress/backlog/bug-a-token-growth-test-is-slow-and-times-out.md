@@ -89,3 +89,12 @@ string per candidate name is the classic one — see
 Next step for whoever picks this up: instrument the allocator (or run a build
 with symbols under a heap profiler — `perf` is blocked in this sandbox and the
 self-hosted binary carries no symtab, which is why this stopped here).
+
+- 2026-07-20 (later, box under concurrent Track T load) — same 12000-proc file:
+  **pinned 87s / 5.2 GB, HEAD 122s / 7.0 GB**. Note the earlier HEAD figure in
+  the table above was 67s / 4.5 GB on an idle box, so these numbers move a lot
+  with system pressure (the allocator appears to take more when more is free) —
+  whoever picks this up should compare pinned and HEAD in the SAME conditions
+  before concluding anything about a per-commit regression. What is not
+  conditional: it is quadratic, and 5-7 GB for 12000 empty procedures is the
+  bug.
