@@ -189,7 +189,25 @@ landed, gated, pushed commit with a CPython-diffed test in `test-nilpy`:
 | 362 | conditional expression `a if c else b` | same commit (32 sites) |
 | 373 | `res = None` then `res = <int>` | [[bug-nilpy-none-assign-to-plain-local]] |
 | 377 | `float(token)` | float() conversion, raises ValueError |
-| 384 | `@property` / `@x.setter` | [[feature-nilpy-property-decorator]] (OPEN) |
+| 384 | `@property` / `@x.setter` | property decorator, via AddUProperty |
+| 428 | variant bitwise `v & mask` | EmitVarBinOp bitwise ops |
+| 431 | `RuntimeError` | pylib exception tree |
+| 458 | keyword args in `Word(...)` | ctor keyword binding by FIELD index |
+| 460 | `dict.setdefault` | pylib |
+| 471 | ambiguous `.get` on a variant | renamed TPyList/TPyBytes `.get` -> `.at` |
+| 476 | statement after a `for` in a def | [[bug-nilpy-statement-after-for-in-a-def]] |
+| 494 | `hasattr` / `getattr` | resolved against declared fields |
+| 516 | `xs.append(a + b)` | expression arg to a const (by-ref) param |
+| 538 | `x in ("a","b")` | tuple on the `in` RHS |
+| 585 | `.find(sub, start)` | pylib |
+| 766 | def without `-> ret` | [[feature-nilpy-optional-return-annotation]] |
+| 772 | `for p in (tuple)` | tuple iteration |
+| 774 | `return (a, b)` | tuples as values + return-type inference |
+| 777 | `bytes` annotation | maps to TPyBytes |
+| 778 | `bytearray()` | zero-arg overload |
+| 783 | `out.extend(ch.encode(...))` | **CURRENT** — needs TPyBytes.extend AND str.encode |
+
+Wall moved 267 -> 783 on 2026-07-20 (session 3), across ~20 landed commits.
 
 Bugs found UNDER this work, all silent-wrong-behaviour rather than parse
 errors, all filed and fixed: [[bug-nilpy-call-returning-class-loses-identity]]
