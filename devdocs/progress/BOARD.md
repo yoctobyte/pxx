@@ -31,7 +31,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (132)
+## backlog (133)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -41,6 +41,7 @@ _none_
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
 | bug-nilpy-string-local-truncates-at-255 | N | 65 | bug | NilPy: a string local TRUNCATES at 255 characters, silently | — |
+| bug-nilpy-string-repeat-returns-a-pointer | N | 60 | bug | NilPy: `s * n` on a string returns a POINTER, silently | — |
 | bug-nilpy-subscript-on-literal | N | 35 | bug | NilPy: cannot subscript a string LITERAL — `"abc"[1]` | — |
 | bug-overload-mismatch-dumps-internals-to-stdout | A | 30 | bug | Overload-resolution failure dumps compiler internals to stdout | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
@@ -2537,6 +2538,7 @@ _none_
 - [p 65] [N] bug-nilpy-string-local-truncates-at-255
 - [p 65] [A] feature-a-typeref-handle
 - [p 60] [A] bug-a-nilpy-str-of-string-and-bool
+- [p 60] [N] bug-nilpy-string-repeat-returns-a-pointer
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-a-abi-oracle
