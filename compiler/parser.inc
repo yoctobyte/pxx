@@ -716,6 +716,7 @@ procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pypa
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 function PyMakeStrIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python s[i] (pyparser.inc) }
+function PyQualifyNested(const name: AnsiString): AnsiString; forward; { Nil Python nested-def name lookup (pyparser.inc) }
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python obj.meth() on a VARIANT receiver (pyparser.inc) }
@@ -8036,6 +8037,14 @@ begin
     tkIdent:
     begin
       name := CurTok.SVal;
+      { A NilPy def nested in another def is registered QUALIFIED
+        (`outer.inner`) so two parents may each define a `helper` without the
+        first registration winning every lookup. Inside the enclosing body the
+        call is written unqualified, so rewrite the name here, before any
+        lookup — overload matching resolves by name too, not just FindProc
+        (feature-nilpy-nested-defs). }
+      if PyExprMode and (PyNestPrefix <> '') and (FindSym(name) < 0) then
+        name := PyQualifyNested(name);
       if CaseEqual(name, 'await') and CurProcIsAsync then
       begin
         { `await E` as an expression. Binds tightly (a unary/primary operand, like

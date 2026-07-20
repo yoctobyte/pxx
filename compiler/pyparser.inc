@@ -2291,11 +2291,84 @@ begin
   end;
 end;
 
+{ Register a nested def's SHELL and queue its body for later compilation.
+  Returns an empty statement: the def itself produces no code where it stands.
+  The typing pre-pass trial-parses the enclosing body too, so this must stay
+  idempotent — a shell already carrying a BodyAddr means the real parse already
+  compiled it, and re-registering would give the enclosing calls a second,
+  bodyless Proc. }
+{ The name a call inside a nested def should actually look up. A def nested in
+  another def registers as `outer.inner`; inside the enclosing body it is called
+  unqualified. Walks the qualifier outwards — `a.b.c` then `a.b` then `a` — so an
+  inner sibling shadows an outer one, like Python's scope chain. Returns the name
+  unchanged when nothing qualified exists, which is every ordinary global call. }
+function PyQualifyNested(const name: AnsiString): AnsiString;
+var pfx: AnsiString; cut, i: Integer;
+begin
+  Result := name;
+  pfx := PyNestPrefix;
+  while pfx <> '' do
+  begin
+    if FindProc(pfx + '.' + name) >= 0 then
+    begin
+      Result := pfx + '.' + name;
+      Exit;
+    end;
+    cut := 0;
+    for i := 1 to Length(pfx) do
+      if pfx[i] = '.' then cut := i;
+    if cut = 0 then pfx := '' else pfx := Copy(pfx, 1, cut - 1);
+  end;
+end;
+
+function PyQueueNestedDef: Integer;
+var defTok, procIdx, bodyStart, bodyEnd: Integer; qname: AnsiString;
+begin
+  defTok := TokPos - 1;
+  PyParseDefHeader;
+  qname := PyHdrName;
+  if PyNestPrefix <> '' then qname := PyNestPrefix + '.' + qname;
+  procIdx := FindProc(qname);
+  if procIdx < 0 then
+  begin
+    procIdx := RegisterProc(qname, not PyHdrIsProc, PyHdrRetType, PyHdrNParams,
+                            PyHdrPNames, PyHdrPTypes);
+    PyApplyDefSignature(procIdx);
+    Procs[procIdx].BodyAddr := -1;
+  end;
+  { skip the body: PyParseDefHeader stopped on the INDENT that opens it }
+  bodyStart := TokPos - 1;
+  bodyEnd := PyFindBodyEnd(bodyStart);
+  { land ON the DEDENT that closes the nested body, then consume it, so the
+    enclosing block resumes at the statement after the def }
+  TokPos := bodyEnd;
+  Next;
+  if CurTok.Kind = tkDedent then Next;
+  PySkipNewlines;
+  PyStmtAteBlock := True;
+  if not PyTypingPass then
+  begin
+    if PyPendNestCount >= PY_MAX_NESTED then
+      Error('Nil Python: too many nested defs in one body');
+    PyPendNestTok[PyPendNestCount] := defTok;
+    PyPendNestPfx[PyPendNestCount] := PyNestPrefix;
+    Inc(PyPendNestCount);
+  end;
+  Result := -1;
+end;
+
 function PyParseStatement: Integer;
 var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integer; tk: TTypeKind;
     augTk: TTokenKind;
 begin
   Result := -1;
+  PyStmtAteBlock := False;
+  { Nested `def`: register the shell here (the enclosing body's calls resolve
+    against it), remember where the body starts, and skip it — PyParseDef
+    compiles the queued bodies after its own epilogue, because emitting one in
+    place would drop it into the middle of the enclosing routine's code
+    (feature-nilpy-nested-defs). }
+  if CurTok.Kind = tkFunction then begin Result := PyQueueNestedDef; Exit; end;
   if CurTok.Kind = tkIf then begin Result := PyParseIf; Exit; end;
   if CurTok.Kind = tkWhile then begin Result := PyParseWhile; Exit; end;
   if (CurTok.Kind = tkFor) or PyIsIdent('for') then begin Result := PyParseFor; Exit; end;
@@ -2588,6 +2661,14 @@ begin
     if CurTok.Kind = tkNewline then PySkipNewlines
     else if (stmt >= 0) and (ASTKind[stmt] in [AN_IF, AN_WHILE, AN_FOR]) then
       continue
+    else if PyStmtAteBlock then
+    begin
+      { a nested `def`: like if/while/for it consumed its own indented block
+        (and the DEDENT that closes it), but it produces no statement node
+        (feature-nilpy-nested-defs) }
+      PyStmtAteBlock := False;
+      continue;
+    end
     else if not (CurTok.Kind in [tkDedent, tkEOF]) then
       Error('Nil Python: expected newline after statement');
   end;
@@ -3028,8 +3109,9 @@ begin
 end;
 
 procedure PyParseDef;
-var name: AnsiString;
+var name, savedPfx, savedPfx2: AnsiString;
     nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyNode: Integer;
+    savedNest, savedTok: Integer;
     retType: TTypeKind; isProc: Boolean;
 begin
   PyParseDefHeader;
@@ -3043,6 +3125,9 @@ begin
     BodyAddr = -1; anything else means the name is being DEFINED AGAIN, which
     Python allows, so that gets its own Proc rather than overwriting the first
     one's body address out from under earlier callers. }
+  { A NESTED def registers under its enclosing def's qualifier, which is what
+    PyParseStatement already put in the queue entry — see PyNestPrefix. }
+  if PyNestPrefix <> '' then name := PyNestPrefix + '.' + name;
   procIdx := FindProc(name);
   if (procIdx < 0) or (Procs[procIdx].BodyAddr >= 0) then
   begin
@@ -3051,6 +3136,14 @@ begin
     PyApplyDefSignature(procIdx);
   end;
   Procs[procIdx].BodyAddr := CodeLen;
+  { Defs nested in THIS body qualify with this def's own (already qualified)
+    name, so `outer.inner.deeper` stays unique at any depth. Set BEFORE the
+    local-typing pre-pass: that pre-pass trial-parses the body, so it meets the
+    nested defs too and must register their shells under the same qualifier the
+    real parse will look for. }
+  savedPfx := PyNestPrefix;
+  savedNest := PyPendNestCount;
+  PyNestPrefix := name;
   savedSC := SymCount;
   savedFS := FrameSize;
   FrameSize := 0;
@@ -3109,6 +3202,25 @@ begin
   SymRollbackTo(savedSC);
   FrameSize := savedFS;
   CurProc := -1;
+  PyNestPrefix := savedPfx;
+  { Now that the enclosing routine's code is complete, compile the bodies its
+    statement parser queued — each re-enters here at its own `def` token, with
+    the qualifier it registered its shell under. Draining back to savedNest
+    keeps nesting depth honest: a nested def's own nested defs are queued and
+    drained by its own invocation. }
+  while PyPendNestCount > savedNest do
+  begin
+    Dec(PyPendNestCount);
+    savedTok := TokPos;
+    savedPfx2 := PyNestPrefix;
+    PyNestPrefix := PyPendNestPfx[PyPendNestCount];
+    TokPos := PyPendNestTok[PyPendNestCount];
+    Next;
+    PyParseDef;
+    PyNestPrefix := savedPfx2;
+    TokPos := savedTok - 1;
+    Next;
+  end;
 end;
 
 function PyMethodName(const name: AnsiString): AnsiString;

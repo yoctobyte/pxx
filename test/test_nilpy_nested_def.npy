@@ -1,0 +1,38 @@
+# Nested `def`. A def inside another def cannot be emitted where it is written
+# — single-pass emission would drop its body into the middle of the enclosing
+# routine's code — so the statement parser registers a shell and PyParseDef
+# compiles the queued bodies after its own epilogue (feature-nilpy-nested-defs).
+# The name is qualified with the enclosing def's, which is what lets `outer` and
+# `other` below each define their own `inner`: FindProc's hash chain is
+# registration-ordered, so an unqualified `inner` would always find the first.
+# Output must match CPython running this same file.
+
+def outer(n: int) -> int:
+    def inner(m: int) -> int:
+        return m * 2
+    return inner(n) + 1
+
+def two(n: int) -> int:
+    def a(m: int) -> int:
+        return m + 1
+    def b(m: int) -> int:
+        return m * 10
+    return a(n) + b(n)
+
+def other(n: int) -> int:
+    def inner(m: int) -> int:
+        return m * 100
+    return inner(n)
+
+print(outer(5))
+print(two(3))
+print(other(2))
+
+def deep(n: int) -> int:
+    def mid(m: int) -> int:
+        def bottom(k: int) -> int:
+            return k * 3
+        return bottom(m) + 1
+    return mid(n)
+
+print(deep(2))

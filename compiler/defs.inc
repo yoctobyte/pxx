@@ -10,6 +10,7 @@ const
   MAX_FIXUPS  = 131072;
   MAX_SYMS    = 131072;
   MAX_PROCS   = 16384;
+  PY_MAX_NESTED = 64;   { queued nested defs per enclosing body (feature-nilpy-nested-defs) }
   PROC_HASH_SIZE = 16384;  { FindProc hash buckets; power of two (mask below) }
   SYM_HASH_SIZE  = 65536;  { FindSym hash buckets; power of two }
   MAX_PROC_PARAMS = 32;
@@ -1425,6 +1426,23 @@ var
   LastTypePointerBaseRec : Integer;
   LastTypeProcSig : Integer;  { set by ParseTypeKind when a name resolves to a procedural type: signature proc index, else -1 }
   ErrorIdent : AnsiString;
+  { Nested `def` (feature-nilpy-nested-defs). A def inside another def cannot be
+    emitted where it is written — single-pass emission would drop its body into
+    the middle of the enclosing routine's code — so the statement parser
+    registers a SHELL (the header is enough for the enclosing body's calls to
+    resolve), remembers the token position, and PyParseDef compiles the queued
+    bodies after its own epilogue. Same lift-and-defer shape the Pascal path
+    uses for nested routines, minus the token re-injection: a NilPy def is
+    already just a proc, so re-entering PyParseDef at the saved token is enough.
+    The name is qualified with the enclosing def's (`outer.inner`) so two
+    parents may each define a `helper` without the first one winning every
+    lookup — FindProc's hash chain is registration-ordered. }
+  PyNestPrefix: AnsiString;                 { qualifier for defs nested in the body being parsed }
+  PyPendNestTok: array[0..PY_MAX_NESTED-1] of Integer;   { token index of each queued nested def }
+  PyPendNestPfx: array[0..PY_MAX_NESTED-1] of AnsiString;{ the qualifier it must register under }
+  PyPendNestCount: Integer;
+  PyStmtAteBlock: Boolean;   { last statement consumed its own indented block AND the DEDENT (nested def) }
+
   { Candidate list built by MatchProcCall when overload resolution fails, so the
     caller can append it AFTER its own error line instead of MatchProcCall
     writing raw internals to stdout ahead of the diagnostic
