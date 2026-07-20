@@ -96,12 +96,33 @@ list, diffed against CPython in `test/test_nilpy_slices.npy` (now in the
   `forward` declarations there. Invisible to the local gate; caught only by
   `make fpc-check`.
 
-**STILL OPEN — the other half of this ticket:**
-- **`int.to_bytes(n, "little", signed=True)` / `int.from_bytes(...)`** — a
-  method call on an int, with a KEYWORD argument. NilPy has no keyword
-  arguments at all. Recommend recognising these two as intrinsics with a fixed
-  argument shape rather than taking on keyword arguments for 36 sites.
-  **This is now uforth's wall** (uforth.py:271 parses; it stops on `to_bytes`).
+**to_bytes / from_bytes — LANDED 2026-07-20**, as intrinsics with a fixed
+argument shape (the recommended route), diffed against CPython in
+`test/test_nilpy_to_bytes.npy`, now in the `test-nilpy` gate.
+
+- pylib `pyint_to_bytes(v, n, signed)` / `pyint_from_bytes(b, signed)`,
+  little-endian two's complement, with Python's OverflowError checks kept:
+  uforth stores fixed-width Forth cells, so a silent truncation would corrupt
+  the data space rather than fail.
+- Byte order is NOT a parameter. Every one of the 36 censused sites is
+  little-endian, and a non-"little" order is a parse ERROR rather than an
+  ignored argument — an ignored one would produce plausible wrong bytes.
+  Likewise a missing `signed=` is rejected.
+- **THREE routes needed a hook, the same asymmetry the str methods have** —
+  and this cost the debugging time, again: an ident/field base
+  (`flag.to_bytes(...)`) is consumed by `ParseLValueAST`'s member path; a
+  grouped base (`(10).to_bytes(...)`, which uforth uses) is eaten by the
+  parenthesised-expression postfix chain, which now explicitly LEAVES
+  `.to_bytes(` alone; only a bare call result reaches `ParseFactor`'s suffix
+  loop. `int.from_bytes` is recognised before `ParseFactorCore` because `int`
+  is a type name, not a value.
+
+## TICKET COMPLETE
+
+Both halves are in. uforth's wall moved 267 -> 271 -> 308, and 308 is a
+different feature: `print(line, file=sys.stderr, flush=True)` — keyword
+arguments on the `print` BUILTIN (def/method keyword args already landed).
+Filed as [[feature-nilpy-print-kwargs]].
 
 Same shape as [[bug-a-nilpy-and-or-in-unavailable-in-call-arguments]]: the
 frontend can own the meaning, but the shared parser has to know where the form
@@ -111,3 +132,6 @@ is legal.
 
 `test-nilpy` green with a `.npy` case diffed against CPython + `--tier quick`
 + self-host byte-identical + `make fpc-check`.
+
+## Log
+- 2026-07-20 — resolved, commit HEAD.

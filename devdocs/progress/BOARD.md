@@ -25,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (133)
+## backlog (132)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -53,7 +53,6 @@ _none_
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
 | feature-a-promoint-variant-esp-targets | A | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
-| feature-a-promotable-int | A | 85 | feature | Promotable int — a new arbitrary-precision integer type (fixnum + heap bignum) | — |
 | feature-a-typeref-handle | A | 65 | feature | TypeRef: one type handle, carried — not ten parallel tuples | — |
 | feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-esp-conformance-coverage | C | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
@@ -87,7 +86,6 @@ _none_
 | feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
 | feature-networking | B | 45 | feature | Networking runtime | — |
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
-| feature-nilpy-bytes-and-slices | N | 55 | feature | NilPy: bytearray + slices (uforth's memory emulation) | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-default-args-on-nested-defs | N | 55 | feature | NilPy: default arguments as explicit by-value capture | — |
@@ -97,6 +95,7 @@ _none_
 | feature-nilpy-none-variant | N | 45 | feature | NilPy: `None` as a first-class variant value (VT_EMPTY) | — |
 | feature-nilpy-optional-return-annotation | N | 55 | feature | NilPy: `-> ret` is MANDATORY on every def; Python makes it optional | — |
 | feature-nilpy-parallel-for-in | A | 5 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
+| feature-nilpy-print-kwargs | N | 55 | feature | NilPy: keyword arguments on the `print` builtin (`file=`, `flush=`, `sep=`, `end=`) | — |
 | feature-nilpy-tk-binding | B | 45 | feature | Thin Tcl/Tk embed for pxx (lib/pcl/tk.pas) + a tkinter-shaped NilPy surface — v1 landed | — |
 | feature-opt-complex-packed-double | O | 35 | feature | Complex as a packed-double XMM value (SSE2/SSE3) | — |
 | feature-opt-float-register-temporaries | O | 20 | feature | float kernels: -O3 now 1.97x vs FPC (was 4.2x); residual = the rax value model — multi-session xmm-resident rewrite | — |
@@ -221,7 +220,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (908)
+## done (911)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -524,6 +523,7 @@ _none_
 | bug-nested-dynarray-cross-segfault | A | 50 | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
 | bug-nested-proc-sibling-call-unresolved | A | 50 | bug | Nested procedure can't call its sibling (and capturing self-recursion breaks) | — |
 | bug-nilpy-annotated-assignment-single-token-only | N | 60 | bug | NilPy: an annotated assignment only accepted a SINGLE-TOKEN annotation | — |
+| bug-nilpy-call-returning-class-loses-identity | N | 55 | bug | NilPy: a call returning a CLASS lost its class identity (silent, then SIGSEGV) | — |
 | bug-nilpy-class-typed-field-loses-identity | N | 70 | bug | NilPy: a class-typed field loses its class identity | — |
 | bug-nilpy-in-on-a-string-segfaults | N | 70 | bug | NilPy: `sub in s` on a STRING segfaults | — |
 | bug-nilpy-method-returning-str-garbage | N | 75 | bug | NilPy: a method returning `str` returns garbage | — |
@@ -706,6 +706,7 @@ _none_
 | feature-a-promoint-stage2-storage-arith | A | 85 | feature | Promotable int stage 2 — storage, checked arithmetic, Write | — |
 | feature-a-promoint-variant-integration | A | 60 | feature | Promotable int inside a Variant | — |
 | feature-a-promoint-wide-literals | A | 60 | feature | PromoInt cannot be initialised from a literal wider than Int64 | — |
+| feature-a-promotable-int | A | 85 | feature | Promotable int — a new arbitrary-precision integer type (fixnum + heap bignum) | — |
 | feature-aarch64-asm-emitter | A | 50 | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
 | feature-abs-sqr-intrinsics | A | 50 | feature | `Abs` / `Sqr` System intrinsics missing | — |
 | feature-adventure-scene-asset-pipeline | B | 50 | feature | Adventure scene asset pipeline | feature-image-ascii-renderer-library |
@@ -911,6 +912,7 @@ _none_
 | feature-nested-routines | A | 50 | feature | feature: nested (local) functions and procedures | — |
 | feature-net-lib-cross-target | A | 50 | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
 | feature-nil-python-frontend | A | 50 | feature | Nil Python frontend (`.npy`) | — |
+| feature-nilpy-bytes-and-slices | N | 55 | feature | NilPy: bytearray + slices (uforth's memory emulation) | — |
 | feature-nilpy-classvar-counter | N | 55 | feature | NilPy: ClassVar storage, next(), counter shim, lambda default_factory | — |
 | feature-nilpy-comparison-chaining | N | 50 | feature | NilPy: comparison chaining (`0 <= i < n`) | — |
 | feature-nilpy-decorators-dataclass | N | 55 | feature | NilPy: @dataclass v1 (decorator syntax, annotated scalar fields, defaults) | — |
@@ -2575,7 +2577,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 85] [A] feature-a-promotable-int
 - [p 70] [A] bug-a-aarch64-managed-string-concat-leak
 - [p 70] [A] bug-a-aarch64-variant-string-compare-always-false
 - [p 70] [T] regression-cascade-3d46e52fc733
@@ -2600,10 +2601,10 @@ _none_
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [A] feature-inline-asm-xmm-operands
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
-- [p 55] [N] feature-nilpy-bytes-and-slices
 - [p 55] [N] feature-nilpy-corpus-uforth
 - [p 55] [N] feature-nilpy-default-args-on-nested-defs
 - [p 55] [N] feature-nilpy-optional-return-annotation
+- [p 55] [N] feature-nilpy-print-kwargs
 - [p 55] [O] feature-opt-heap-per-thread-cache
 - [p 55] [P] feature-pascal-corpus-generics
 - [p 55] [A] feature-pascal-type-helpers

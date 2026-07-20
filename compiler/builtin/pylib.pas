@@ -187,6 +187,15 @@ function pylist_slice(l: TPyList; lo, hi: Integer): TPyList;
   rejected loudly rather than silently splicing: a quiet resize would move
   every address above the write and corrupt the data space. }
 procedure pybytes_setslice(b: TPyBytes; lo, hi: Integer; src: TPyBytes);
+{ `v.to_bytes(n, "little", signed=s)` and `int.from_bytes(b, "little",
+  signed=s)`. Recognised by the frontend as INTRINSICS with a fixed argument
+  shape rather than real methods, because their Python spelling carries a
+  KEYWORD argument and NilPy has no keyword arguments — 36 sites in uforth,
+  one spelling, so the intrinsic is far cheaper than the language feature.
+  Byte order is not a parameter: every censused use is little-endian, and the
+  frontend REJECTS anything else rather than silently ignoring it. }
+function pyint_to_bytes(v: Int64; n: Integer; signed: Boolean): TPyBytes;
+function pyint_from_bytes(b: TPyBytes; signed: Boolean): Int64;
 { Python's two-argument min/max. Spelled as ordinary pylib FUNCTIONS, the
   same way bytearray/bytes are: neither name is a Pascal keyword, so both
   resolve through the normal call path with no frontend hook.
@@ -1588,6 +1597,65 @@ begin
     dp := PByte(NativeInt(b.FData) + lo + k);
     dp^ := sp^;
   end;
+end;
+
+{ Little-endian, two's complement — the same layout the machine already uses,
+  so the loop is a plain byte peel rather than anything arithmetic. Python
+  raises OverflowError when the value does not fit in n bytes; that check is
+  kept, because uforth stores fixed-width Forth cells and a silent truncation
+  there would corrupt the data space rather than fail. }
+function pyint_to_bytes(v: Int64; n: Integer; signed: Boolean): TPyBytes;
+var k: Integer; p: PByte; u: Int64; fits: Boolean;
+begin
+  if n < 0 then n := 0;
+  if (not signed) and (v < 0) then
+  begin
+    WriteLn('OverflowError: can''t convert negative int to unsigned');
+    Halt(1);
+  end;
+  { n >= 8 always fits an Int64; below that, check the value's range }
+  fits := n >= 8;
+  if not fits then
+  begin
+    if signed then
+      fits := (v >= -(Int64(1) shl (8 * n - 1))) and (v < (Int64(1) shl (8 * n - 1)))
+    else
+      fits := v < (Int64(1) shl (8 * n));
+  end;
+  if not fits then
+  begin
+    WriteLn('OverflowError: int too big to convert');
+    Halt(1);
+  end;
+  Result := TPyBytes.Create(n);
+  u := v;
+  for k := 0 to n - 1 do
+  begin
+    p := PByte(NativeInt(Result.FData) + k);
+    p^ := u and 255;
+    u := u shr 8;   { arithmetic shift: sign bits fill, which is what two's
+                      complement little-endian wants for a negative value }
+  end;
+end;
+
+function pyint_from_bytes(b: TPyBytes; signed: Boolean): Int64;
+var k: Integer; p: PByte; acc: Int64;
+begin
+  acc := 0;
+  { high byte down to low, so each step is one shift-in }
+  for k := b.FLen - 1 downto 0 do
+  begin
+    p := PByte(NativeInt(b.FData) + k);
+    acc := (acc shl 8) or p^;
+  end;
+  { sign-extend from the top bit of the HIGHEST byte present }
+  if signed and (b.FLen > 0) and (b.FLen < 8) then
+  begin
+    p := PByte(NativeInt(b.FData) + (b.FLen - 1));
+    if (p^ and 128) <> 0 then
+      acc := acc - (Int64(1) shl (8 * b.FLen));
+  end;
+  Result := acc;
 end;
 
 function bytes(b: TPyBytes): TPyBytes;

@@ -1996,6 +1996,115 @@ begin
   Result := sliceNode;
 end;
 
+{ ---- to_bytes / from_bytes -------------------------------------------------
+  Both are recognised as intrinsics with a FIXED argument shape, not as real
+  methods: their Python spelling ends in a keyword argument (`signed=True`)
+  and NilPy has no keyword arguments. See pylib for why that trade is right.
+
+  The shape accepted is exactly the one the corpus uses:
+      <int>.to_bytes(n, "little", signed=<expr>)
+      int.from_bytes(<bytes>, "little", signed=<expr>)
+  Anything else — a big-endian order, a missing `signed=` — is an ERROR rather
+  than a silently ignored argument, because both would produce plausible wrong
+  bytes rather than a failure. }
+
+function PyIsIntBaseTk(tk: TTypeKind): Boolean;
+begin
+  Result := (tk = tyInteger) or (tk = tyInt64) or (tk = tyInt8) or
+            (tk = tyInt16) or (tk = tyUInt8) or (tk = tyUInt16) or
+            (tk = tyUInt32) or (tk = tyUInt64);
+end;
+
+{ Parses the shared tail `, "little", signed=<expr> )` and returns the node for
+  the signed flag. CurTok is the comma before the byte order. }
+function PyParseByteOrderAndSigned: Integer;
+var ordText: AnsiString;
+begin
+  Expect(tkComma, ',');
+  if CurTok.Kind <> tkString then
+    Error('Nil Python: to_bytes/from_bytes needs a literal byte order, "little"');
+  ordText := CurTok.SVal;
+  if ordText <> 'little' then
+    Error('Nil Python: only the "little" byte order is supported, got "'
+          + ordText + '"');
+  Next;
+  Expect(tkComma, ',');
+  if (CurTok.Kind <> tkIdent) or (LowerCase(CurTok.SVal) <> 'signed') then
+    Error('Nil Python: to_bytes/from_bytes needs the signed= keyword argument');
+  Next;
+  Expect(tkAssign, '=');
+  PyParseBoolExpr;
+  Result := CurASTNode;
+end;
+
+{ `<int>.to_bytes(...)`; CurTok is the '(' . }
+function PyParseToBytes(baseNode: Integer): Integer;
+var procIdx, callNode, a0, a1, a2, nNode, sNode: Integer;
+begin
+  procIdx := FindProc('pyint_to_bytes');
+  if procIdx < 0 then Error('Nil Python: pylib (pyint_to_bytes) not loaded');
+  Expect(tkLParen, '(');
+  PyParseBoolExpr;
+  nNode := CurASTNode;
+  sNode := PyParseByteOrderAndSigned;
+  Expect(tkRParen, ')');
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := baseNode;
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := nNode;
+  a2 := AllocNode(AN_ARG); ASTLeft[a2] := sNode;
+  ASTRight[a0] := a1; ASTRight[a1] := a2; ASTRight[a2] := -1;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := procIdx;
+  ASTTk[callNode] := Ord(tyClass);
+  ASTRight[callNode] := ProcRetRecId[procIdx];   { TPyBytes identity }
+  ASTLeft[callNode] := a0;
+  LastExprTk := tyClass;
+  Result := callNode;
+end;
+
+{ `int.from_bytes(...)`; CurTok is the '(' . }
+function PyParseFromBytes: Integer;
+var procIdx, callNode, a0, a1, bNode, sNode: Integer;
+begin
+  procIdx := FindProc('pyint_from_bytes');
+  if procIdx < 0 then Error('Nil Python: pylib (pyint_from_bytes) not loaded');
+  Expect(tkLParen, '(');
+  PyParseBoolExpr;
+  bNode := CurASTNode;
+  sNode := PyParseByteOrderAndSigned;
+  Expect(tkRParen, ')');
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := bNode;
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := sNode;
+  ASTRight[a0] := a1; ASTRight[a1] := -1;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := procIdx;
+  ASTTk[callNode] := Ord(tyInt64);
+  ASTRight[callNode] := -1;
+  ASTLeft[callNode] := a0;
+  LastExprTk := tyInt64;
+  Result := callNode;
+end;
+
+{ Is CurTok the '.' of a `.to_bytes(` suffix? Used by the generic postfix
+  chains to LEAVE the suffix alone so the intrinsic can claim it — a grouped
+  `(10).to_bytes(...)` would otherwise be eaten as a member access on an
+  integer and die as "unexpected token". }
+function PyIsToBytesSuffixAhead: Boolean;
+begin
+  Result := (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
+            (Tokens[TokPos].Kind = tkIdent) and
+            (LowerCase(GetTokenStr(TokPos)) = 'to_bytes') and
+            (Tokens[TokPos + 1].Kind = tkLParen);
+end;
+
+{ Is the token stream at `int.from_bytes(` ? CurTok is the `int` ident. }
+function PyIsFromBytesAhead: Boolean;
+begin
+  Result := (CurTok.Kind = tkIdent) and (LowerCase(CurTok.SVal) = 'int') and
+            (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+            (Tokens[TokPos + 1].Kind = tkIdent) and
+            (LowerCase(GetTokenStr(TokPos + 1)) = 'from_bytes');
+end;
+
 { `v.field` (READ) where `v` is a VARIANT: unbox to the class that declares the
   field and read it. Returns -1 when no class declares the name. }
 function PyMakeVariantField(baseNode: Integer; const fname: AnsiString;
