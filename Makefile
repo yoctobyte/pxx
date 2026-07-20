@@ -258,6 +258,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_floordiv_modulo26)" = "$$(printf '7 3 2 1 0\n7 -3 -3 -2 0\n-7 3 -3 2 0\n-7 -3 2 -1 0\n8 4 2 0 0\n8 -4 -2 0 0\n-8 4 -2 0 0\n-8 -4 2 0 0\n0 5 0 0 0\n0 -5 0 0 0\n1 7 0 1 0\n-1 7 -1 6 0\n1 -7 -1 -6 0\n-1 -7 0 -1 0\n3.0 1.5\n-4.0 0.5\n-4.0 -0.5')"
 	./$(COMPILER) test/test_nilpy_int_str_builtins.npy /tmp/test_nilpy_int_str_builtins26
 	test "$$(/tmp/test_nilpy_int_str_builtins26)" = "$$(printf '42 -7 9 3 2 -2 1\nab  True False 5 -5 2.5 0.0\n34\n101 14 2\n2 2.75\n0 0\n9 4 1 0\n-9 -5 1 0\n10 5 0 0\n-10 -5 0 0')"
+	./$(COMPILER) test/test_nilpy_pyexpr_semantics.npy /tmp/test_nilpy_pyexpr_semantics26
+	test "$$(/tmp/test_nilpy_pyexpr_semantics26)" = "$$(printf 'False\nTrue\nTrue\nTrue\nTrue\nababab ababab x \n4 3 4\n4 True\nTrue\nTrue False True')"
 	./$(COMPILER) test/test_nilpy_variant_unbox.npy /tmp/test_nilpy_variant_unbox26
 	test "$$(/tmp/test_nilpy_variant_unbox26)" = "$$(printf '7 -3 0\n2.5 -0.5\nab z\nTrue False\n8 6 14 3 1 -7\n4 -21\n3.5 5.0\nabc\nTrue True True\n4\nabz\n2.0')"
 	./$(COMPILER) test/test_nilpy_dataclass.npy /tmp/test_nilpy_dataclass26

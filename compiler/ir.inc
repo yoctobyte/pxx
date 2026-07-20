@@ -3237,6 +3237,30 @@ begin
     end;
 end;
 
+function IRNodeIsPyStr(n: Integer): Boolean;
+{ A Python str operand: pxx spells a one-character literal tyChar, but Python
+  has no character type -- "a" * 3 must repeat, not multiply a code point. }
+var tk: TTypeKind;
+begin
+  IRNodeIsPyStr := False;
+  if n < 0 then Exit;
+  tk := IntToTypeKind(ASTTk[n]);
+  IRNodeIsPyStr := (tk = tyString) or (tk = tyAnsiString) or (tk = tyChar);
+end;
+
+function IRNodePyListRec(n: Integer): Integer;
+{ The rec id when n is a TPyList, else -1. }
+var ci: Integer;
+begin
+  IRNodePyListRec := -1;
+  if n < 0 then Exit;
+  if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
+  ci := FindUClass('TPyList');
+  if ci < 0 then Exit;
+  if ResolveNodeRec(n) = REC_UCLASS_BASE + ci then
+    IRNodePyListRec := REC_UCLASS_BASE + ci;
+end;
+
 function IRNodeIsFloatThroughNeg(n: Integer): Boolean;
 { Is this operand floating point, seeing through unary minus? AN_NEG does not
   carry its operand's type, so `-x // y` with a float x looked integer and
@@ -4842,6 +4866,49 @@ begin
           IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
         end;
         Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyBoolean));
+        Exit;
+      end;
+      { Python's `s * n` repeats the text; Pascal has no such operator, so the
+        string's HANDLE was multiplied as an integer and the result printed as
+        a pointer (bug-a-nilpy-string-repeat-returns-a-pointer). Either operand
+        order. }
+      if PyProgramMode and (Integer(ASTIVal[node]) = Ord(tkStar)) and
+         (IRNodeIsPyStr(ASTLeft[node]) <> IRNodeIsPyStr(ASTRight[node])) then
+      begin
+        if IRNodeIsPyStr(ASTLeft[node]) then
+        begin argVal := ASTLeft[node]; item := ASTRight[node]; end
+        else
+        begin argVal := ASTRight[node]; item := ASTLeft[node]; end;
+        cpi := FindProc('pystr_repeat');
+        if cpi < 0 then Error('Nil Python: pystr_repeat (pylib) not loaded');
+        left := IRLowerCallArg(cpi, 0, argVal, Procs[cpi].Params[0].IsRef);
+        first := IRAppend(IR_ARG, left, -1, -1, 0, ASTTk[argVal]);
+        right := IRLowerAST(item);
+        last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyInt64));
+        IRB[first] := last;
+        ASTTk[node] := Ord(tyAnsiString);
+        Result := IRAppendCall(cpi, first, -1, Ord(tyAnsiString));
+        Exit;
+      end;
+      { Python compares CONTAINERS by contents, not identity. `xs == ys` on two
+        lists was a pointer compare and answered False for equal lists
+        (bug-a-nilpy-container-equality-compares-identity). pylib's PyVarEq
+        already compares strings by content, so the element rule is settled. }
+      if PyProgramMode and
+         ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
+         (IRNodePyListRec(ASTLeft[node]) >= 0) and
+         (IRNodePyListRec(ASTLeft[node]) = IRNodePyListRec(ASTRight[node])) then
+      begin
+        cpi := FindProc('pylist_eq');
+        if cpi < 0 then Error('Nil Python: pylist_eq (pylib) not loaded');
+        left := IRLowerAST(ASTLeft[node]);
+        first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyClass));
+        right := IRLowerAST(ASTRight[node]);
+        last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyClass));
+        IRB[first] := last;
+        Result := IRAppendCall(cpi, first, -1, Ord(tyBoolean));
+        if Integer(ASTIVal[node]) = Ord(tkNeq) then
+          Result := IRAppend(IR_NOT, Result, -1, -1, 0, Ord(tyBoolean));
         Exit;
       end;
       { Python's `//` and `%` FLOOR; Pascal's div/mod TRUNCATE. Same tokens, so

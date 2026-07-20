@@ -1827,6 +1827,21 @@ end;
 
 { Build `container.<meth>(args...)` as an AN_CALL, given the container's class
   index. Returns -1 when the method is absent. }
+function PyNodeListCi(n: Integer): Integer;
+{ The TPyList class index when n is a list, else -1. `xs += ys` on lists is
+  Python's IN-PLACE extend; lowering it as `xs := xs + ys` added the two class
+  HANDLES and crashed (bug-a-nilpy-list-augmented-add-segfaults). }
+var ci, rec: Integer;
+begin
+  PyNodeListCi := -1;
+  if n < 0 then Exit;
+  if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
+  ci := FindUClass('TPyList');
+  if ci < 0 then Exit;
+  rec := ResolveNodeRec(n);
+  if rec = REC_UCLASS_BASE + ci then PyNodeListCi := ci;
+end;
+
 function PyCallMeth1(ci: Integer; const mname: AnsiString;
                      selfNode, argNode: Integer): Integer;
 var mmi, mpi, selfArg, valArg: Integer;
@@ -2227,6 +2242,13 @@ begin
     begin
       Next;
       PyParseBoolExpr;
+      if (augTk = tkPlus) and (PyNodeListCi(lhsNode) >= 0) then
+      begin
+        { list += list is in-place extend, and the whole statement IS the call }
+        Result := PyCallMeth1(PyNodeListCi(lhsNode), 'extend', lhsNode, CurASTNode);
+        if Result < 0 then Error('Nil Python: pylib TPyList.extend not loaded');
+        Exit;
+      end;
       node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(augTk);
       ASTLeft[node] := lhsNode; ASTRight[node] := CurASTNode;
       ASTTk[node] := ASTTk[lhsNode];
@@ -2267,6 +2289,13 @@ begin
     augTk := PyAugBinTok(CurTok.Kind);
     Next;
     PyParseBoolExpr;
+    if (augTk = tkPlus) and (PyNodeListCi(PyMakeIdent(symIdx)) >= 0) then
+    begin
+      Result := PyCallMeth1(PyNodeListCi(PyMakeIdent(symIdx)), 'extend',
+                            PyMakeIdent(symIdx), CurASTNode);
+      if Result < 0 then Error('Nil Python: pylib TPyList.extend not loaded');
+      Exit;
+    end;
     PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(augTk);
     ASTLeft[node] := PyMakeIdent(symIdx); ASTRight[node] := CurASTNode;

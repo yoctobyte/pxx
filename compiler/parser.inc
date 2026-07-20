@@ -717,6 +717,22 @@ procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 function PyMakeStrIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python s[i] (pyparser.inc) }
 
+procedure ParseArgExpr;
+{ A call ARGUMENT under NilPy must be parsed by the Python precedence chain
+  (or < and < not < comparison, and `in`/`is` with Python's meaning), not by
+  the shared ParseExpr, which implements Pascal's -- where and/or bind TIGHTER
+  than comparison and `in` is set membership. Without this `show(a in d)` and
+  `show(x > 1 and y > 1)` were parse errors while the identical expressions
+  worked in a statement, and every f-string hole is a call argument
+  (bug-a-nilpy-and-or-in-unavailable-in-call-arguments).
+
+  Same delegation PyParseListLiteral / PyParseStrMethod already use: the shared
+  parser knows WHERE an expression is legal, pyparser.inc decides what it
+  MEANS. }
+begin
+  if PyExprMode then PyParseBoolExpr else ParseExpr;
+end;
+
 { Types a NilPy str method may be called ON. tyChar is included because Python
   has NO character type: the shared lexer types a one-character literal like
   "b" (and `s[0]`) as tyChar, but to Python that is a str of length 1, so
@@ -10147,7 +10163,7 @@ begin
           else
           begin
             node := TryDelphiBareProcArg;
-            if node >= 0 then CurASTNode := node else ParseExpr;
+            if node >= 0 then CurASTNode := node else ParseArgExpr;
           end;
           argSeq := AllocNode(AN_ARG);
           ASTLeft[argSeq] := CurASTNode;
@@ -15968,7 +15984,7 @@ begin
             else
             begin
               node := TryDelphiBareProcArg;
-              if node >= 0 then CurASTNode := node else ParseExpr;
+              if node >= 0 then CurASTNode := node else ParseArgExpr;
             end;
             argSeq := AllocNode(AN_ARG);
             ASTLeft[argSeq] := CurASTNode;

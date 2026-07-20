@@ -1,0 +1,22 @@
+d = {"a": 1}
+xs = [1, 2]
+ys = [1, 2]
+
+def show(b: bool) -> None:
+    print(b)
+
+show(1 > 2 and 2 > 1)
+show(1 > 2 or 2 > 1)
+show("a" in d)
+show(not (1 > 2))
+show(xs == ys)
+print("ab" * 3, 3 * "ab", "x" * 1, "y" * 0)
+xs += [3, 4]
+print(len(xs), xs[2], xs[3])
+zs = []
+zs += xs
+print(len(zs), zs == xs)
+ss = ["p"]
+ss += ["q"]
+print(ss == ["p", "q"])
+print([] == [], [1] == [], ["a"] == ["a"])

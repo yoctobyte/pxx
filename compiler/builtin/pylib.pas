@@ -58,6 +58,10 @@ type
     function pop: Variant;
     function pop_at(i: Integer): Variant;
     procedure insert(i: Integer; const v: Variant);
+    { Python's `xs += ys` / xs.extend(ys): IN-PLACE, appending ys's elements.
+      `+` on two lists would add the two class HANDLES
+      (bug-a-nilpy-list-augmented-add-segfaults). }
+    function extend(other: TPyList): TPyList;
     procedure clear;
     property Items[i: Integer]: Variant read get write put; default;
   end;
@@ -180,6 +184,10 @@ function len(b: TPyBytes): Integer; overload;
   loudly here rather than yielding a silent 0 -- the whole point of the
   ticket was that int() of a string returned a plausible wrong number. }
 function pystr_to_int(const s: AnsiString): Int64;
+{ Python's `s * n` / `n * s`: repeat the text. Multiplying a string by an
+  integer otherwise multiplied its HANDLE
+  (bug-a-nilpy-string-repeat-returns-a-pointer). n <= 0 yields ''. }
+function pystr_repeat(const s: AnsiString; n: Int64): AnsiString;
 function pyfloordiv_i(a: Int64; b: Int64): Int64;
 function pyfloormod_i(a: Int64; b: Int64): Int64;
 function pyfloordiv_f(a: Double; b: Double): Double;
@@ -191,6 +199,9 @@ function max(a: Double; b: Double): Double; overload;
 function len(l: TPyList): Integer;
 function len(d: TPyDict): Integer; overload;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
+{ Python compares lists by CONTENTS. Element equality is PyVarEq, which
+  already compares strings by text rather than by which copy you hold. }
+function pylist_eq(a: TPyList; b: TPyList): Boolean;
 function len(const s: AnsiString): Integer; overload;
 function next(c: TPyCounter): Int64;
 function pycontains(l: TPyList; const v: Variant): Boolean;
@@ -648,6 +659,26 @@ begin
   Result := Self;
 end;
 
+function TPyList.extend(other: TPyList): TPyList;
+var
+  i, n: Integer;
+  src, dst: PPyVarRec;
+begin
+  Result := Self;
+  if other = nil then Exit;
+  { snapshot the source length FIRST: xs.extend(xs) must copy the ORIGINAL
+    elements and terminate, not chase its own growth }
+  n := other.FLen;
+  for i := 0 to n - 1 do
+  begin
+    PyListGrow(Self, FLen + 1);
+    src := PPyVarRec(NativeInt(other.FItems) + i * 16);
+    dst := PPyVarRec(NativeInt(FItems) + FLen * 16);
+    PyVarSlotSet(dst, src);
+    FLen := FLen + 1;
+  end;
+end;
+
 function TPyList.add(const v: Variant): TPyList;
 begin
   if not pycontains(Self, v) then append(v);
@@ -983,9 +1014,33 @@ begin
   end;
 end;
 
+function pylist_eq(a: TPyList; b: TPyList): Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+  if a = b then begin Result := True; Exit; end;
+  if (a = nil) or (b = nil) then Exit;
+  if a.FLen <> b.FLen then Exit;
+  for i := 0 to a.FLen - 1 do
+    if not PyVarEq(PPyVarRec(NativeInt(a.FItems) + i * 16),
+                   PPyVarRec(NativeInt(b.FItems) + i * 16)) then Exit;
+  Result := True;
+end;
+
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
 begin
   Result := d.indexof(k) >= 0;
+end;
+
+function pystr_repeat(const s: AnsiString; n: Int64): AnsiString;
+var
+  i: Int64;
+begin
+  Result := '';
+  if n <= 0 then Exit;
+  for i := 1 to n do
+    Result := Result + s;
 end;
 
 function pystr_to_int(const s: AnsiString): Int64;
