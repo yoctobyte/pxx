@@ -56,6 +56,17 @@ begin
   Writeln(a + 1);
   Writeln(a * 2);
 
+  { WIDE LITERALS: a value past Int64 can be written down, not just computed.
+    The lexer folds every literal to 64 bits, so these arrive as digit text. }
+  a := 18446744073709551616;
+  Writeln(a);
+  a := -18446744073709551616;
+  Writeln(a);
+  Writeln(-a);
+  a := 99999999999999999999999999999999;
+  b := 100000000000000000000000000000000;
+  Writeln(b - a);
+
   { DEMOTION: a value that grew and shrank is usable as an ordinary int again }
   a := 1;
   for i := 1 to 30 do a := a * i;

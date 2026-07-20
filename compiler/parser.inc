@@ -7159,12 +7159,25 @@ begin
     tkInteger:
     begin
       node := AllocNode(AN_INT_LIT); ASTIVal[node] := CurTok.IVal;
+      { A literal wider than Int64 carries its DIGIT TEXT (the lexer sets SVal
+        only in that case). ASTIVal holds the wrapped 64-bit reading, which is
+        still the right QWord value; the span lets a promotable-int target take
+        the exact value instead (feature-a-promoint-wide-literals). }
       { A literal that does not fit a signed 32-bit Integer is an Int64; the
         i386 backend keys its 64-bit codegen off this type. }
       if (CurTok.IVal > 2147483647) or (CurTok.IVal < -2147483648) then
         ASTTk[node] := Ord(tyInt64)
       else
         ASTTk[node] := Ord(tyInteger);
+      if Tokens[TokPos - 1].SLen > 0 then
+      begin
+        ASTSOffset[node] := Tokens[TokPos - 1].SOffset;
+        ASTSLen[node] := Tokens[TokPos - 1].SLen;
+        { Force Int64 even though the WRAPPED value may look small: 2^64 wraps
+          to 0 and would otherwise be typed tyInteger, which is both wrong and
+          indistinguishable from a char literal's char-pool span. }
+        ASTTk[node] := Ord(tyInt64);
+      end;
       CurASTNode := node; Next;
     end;
     tkLBrack:

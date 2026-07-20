@@ -842,6 +842,25 @@ end;
 
   Stage 4 (check elision) is what inlines the fast path back into the caller. }
 
+{ An integer literal too wide for Int64, carrying its digit text.
+
+  The tyInt64 test is load-bearing: a CHAR literal is also an AN_INT_LIT with a
+  char-pool span (the case-of-string label path keys off exactly that), so
+  "has a span" alone would misread `'a'` as a wide number. }
+function IsWideIntLit(node: Integer): Boolean;
+begin
+  IsWideIntLit := (ASTKind[node] = AN_INT_LIT) and (ASTSLen[node] > 0) and
+                  (ASTTk[node] = Ord(tyInt64));
+end;
+
+{ `-<wide literal>`. The digit text the lexer preserved carries NO sign, and
+  ASTIVal holds only the wrapped reading, so the negation has to be applied to
+  the parsed bignum rather than to either of those. }
+function IsWideNegLit(node: Integer): Boolean;
+begin
+  IsWideNegLit := (ASTKind[node] = AN_NEG) and IsWideIntLit(ASTLeft[node]);
+end;
+
 function PromoPayloadOffset(tk: TTypeKind): Integer;
 begin
   PromoPayloadOffset := TypeSize(tk) div 2;
@@ -888,6 +907,28 @@ begin
   IRPromoTempSlot := IRAppend(IR_SLOTADDR, tmpSym, -1, -1, 0, Ord(tyPointer));
 end;
 
+{ Initialise a promo slot from a literal form that cannot go through
+  PXXPromoFromInt because its value does not fit 64 bits. Returns False when the
+  node is not such a literal. }
+function IRPromoInitFromLiteral(dstAddr, node: Integer): Boolean;
+var litNode, zeroAddr, zeroSym: Integer;
+begin
+  IRPromoInitFromLiteral := False;
+  if IsWideIntLit(node) then litNode := node
+  else if IsWideNegLit(node) then litNode := ASTLeft[node]
+  else Exit;
+  IRMarkStatementNode(IRPromoCall('PXXPromoFromStr', dstAddr,
+                        IRAppend(IR_CONST_STR, ASTSOffset[litNode], ASTSLen[litNode],
+                                 -1, 0, Ord(tyString)), -1, tyUnknown));
+  if IsWideNegLit(node) then
+  begin
+    { negate in place: dst := 0 - dst. A fresh temp slot is already inline 0. }
+    zeroAddr := IRPromoTempSlot(zeroSym);
+    IRMarkStatementNode(IRPromoCall('PXXPromoSub', dstAddr, zeroAddr, dstAddr, tyUnknown));
+  end;
+  IRPromoInitFromLiteral := True;
+end;
+
 { The slot ADDRESS of an expression usable as a promotable int. A promo-typed
   expression already IS a slot; an ordinary integer expression is boxed into a
   fresh temp slot first, which is what makes `p + 1` and `p + n` work without
@@ -905,9 +946,12 @@ begin
       IRPromoAddrOf := IRLowerAST(node);
     Exit;
   end;
-  value := IRLowerAST(node);
   addr := IRPromoTempSlot(tmpSym);
-  IRMarkStatementNode(IRPromoCall('PXXPromoFromInt', addr, value, -1, tyUnknown));
+  if not IRPromoInitFromLiteral(addr, node) then
+  begin
+    value := IRLowerAST(node);
+    IRMarkStatementNode(IRPromoCall('PXXPromoFromInt', addr, value, -1, tyUnknown));
+  end;
   IRPromoAddrOf := IRAppend(IR_SLOTADDR, tmpSym, -1, -1, 0, Ord(tyPointer));
 end;
 
@@ -3536,7 +3580,19 @@ begin
 
   case ASTKind[node] of
     AN_INT_LIT, AN_BOOL_LIT:
+    begin
+      { Reaching here means the literal is being materialised as a MACHINE int.
+        A literal past UInt64 has no correct 64-bit reading, so this is where it
+        is rejected — not in the lexer, which cannot know the target. A promo
+        target consumes the digit text before this point and never arrives here
+        (bug-a-integer-literal-out-of-range-wraps-silently). }
+      if IsWideIntLit(node) and
+         DecDigitsExceed(GetTokenStrFromRaw(ASTSOffset[node], ASTSLen[node]),
+                         '18446744073709551615') then
+        Error('number ' + GetTokenStrFromRaw(ASTSOffset[node], ASTSLen[node])
+              + ' is out of range');
       Result := IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[node], ASTTk[node]);
+    end;
 
     AN_FLOAT_LIT:
       { IVal holds the IEEE 754 double bit pattern. The IR value model carries
@@ -4872,6 +4928,24 @@ begin
 
     AN_NEG:
     begin
+      if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTLeft[node]])) then
+      begin
+        { `-p` on a promotable int: rewrite to `0 - p` so the ordinary promo
+          binop path handles it. IR_NEG on the raw slot would negate the ADDRESS,
+          and for a wide literal the digit text carries no sign — `x :=
+          -18446744073709551616` gave 0 and `-x` segfaulted before this.
+          Same rewrite the variant case below uses, for the same reason. }
+        first := AllocNode(AN_INT_LIT);
+        ASTIVal[first] := 0;
+        ASTTk[first] := Ord(tyInteger);
+        last := AllocNode(AN_BINOP);
+        ASTIVal[last] := Ord(tkMinus);
+        ASTLeft[last] := first;
+        ASTRight[last] := ASTLeft[node];
+        ASTTk[last] := ASTTk[ASTLeft[node]];
+        Result := IRLowerAST(last);
+        Exit;
+      end;
       if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant then
       begin
         { `-v` on a variant: rewrite to `0 - v` so the existing IR_VAR_BINOP
@@ -5408,6 +5482,10 @@ begin
         if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]])) then
           Result := IRPromoCall('PXXPromoCopy', leftAddr,
                                 IRPromoAddrOf(ASTRight[node]), -1, tyUnknown)
+        else if IRPromoInitFromLiteral(leftAddr, ASTRight[node]) then
+          { a literal wider than Int64 (optionally negated): ASTIVal holds only
+            the wrapped reading, so the exact value comes from the digit text }
+          Result := leftAddr
         else
           Result := IRPromoCall('PXXPromoFromInt', leftAddr,
                                 IRLowerAST(ASTRight[node]), -1, tyUnknown);

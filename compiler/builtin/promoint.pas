@@ -39,6 +39,7 @@ type
   PPromoStr  = ^AnsiString;
 
 procedure PXXPromoFromInt(dst: Pointer; v: Int64);
+procedure PXXPromoFromStr(dst: Pointer; const s: AnsiString);
 procedure PXXPromoCopy(dst, src: Pointer);
 procedure PXXPromoClear(dst: Pointer);
 procedure PXXPromoAdd(dst, a, b: Pointer);
@@ -571,6 +572,34 @@ begin
   w^ := PROMO_TAG_HEAP;
   sp := PPromoStr(SlotPayloadAddr(dst));
   sp^ := PackBig(r);
+end;
+
+{ Exact decimal -> promotable int. The inverse of PXXPromoToStr, and what lets
+  a literal wider than Int64 be written down at all: the lexer folds every
+  literal to 64 bits, so a wide one has to arrive here as TEXT. }
+procedure PXXPromoFromStr(dst: Pointer; const s: AnsiString);
+var r, ten: TBig;
+    i: Integer;
+    neg: Boolean;
+begin
+  SetLength(r.limbs, 0);
+  r.neg := False;
+  ten := BFromInt(10);
+  neg := False;
+  i := 1;
+  if (Length(s) >= 1) and ((s[1] = '-') or (s[1] = '+')) then
+  begin
+    neg := s[1] = '-';
+    i := 2;
+  end;
+  while i <= Length(s) do
+  begin
+    if not (s[i] in ['0'..'9']) then Break;
+    r := BAddSigned(BMul(r, ten), BFromInt(Ord(s[i]) - 48));
+    Inc(i);
+  end;
+  if neg and not BIsZero(r) then r.neg := True;
+  StoreBig(dst, r);
 end;
 
 procedure PXXPromoCopy(dst, src: Pointer);

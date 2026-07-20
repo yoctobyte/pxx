@@ -552,7 +552,7 @@ test-asm: $(COMPILER)
 test-core: $(COMPILER)
 	# promotable int: arbitrary precision, exact against CPython (feature-a-promotable-int)
 	./$(COMPILER) test/test_promoint.pas /tmp/test_promoint26
-	test "$$(/tmp/test_promoint26)" = "$$(printf '0\n12\n60\n7\n2\n2\n-5\n25\n7\nlt\ngt\neq\nsame\n265252859812191058636308480000000\n0\n265252859812191058636308480\n109361473\n-15511210043330985984000000\n15511210043330985984000000\n9223372036854775808\n18446744073709551614\n1')"
+	test "$$(/tmp/test_promoint26)" = "$$(printf '0\n12\n60\n7\n2\n2\n-5\n25\n7\nlt\ngt\neq\nsame\n265252859812191058636308480000000\n0\n265252859812191058636308480\n109361473\n-15511210043330985984000000\n15511210043330985984000000\n9223372036854775808\n18446744073709551614\n18446744073709551616\n-18446744073709551616\n18446744073709551616\n1\n1')"
 	# ...and it is ARBITRARY PRECISION: 25! is exact, not 25! mod 2^64
 	./$(COMPILER) test/test_promoint_overflow.pas /tmp/test_promoint_overflow26
 	test "$$(/tmp/test_promoint_overflow26)" = "15511210043330985984000000"

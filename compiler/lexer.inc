@@ -1081,6 +1081,29 @@ begin
   Inc(PasCondValueCount);
 end;
 
+{ Is the decimal digit string `d` numerically greater than `limit` (also a
+  decimal digit string)? Compared as TEXT so the check itself can never
+  overflow the type it is guarding. }
+function DecDigitsExceed(const d, limit: AnsiString): Boolean;
+var a: AnsiString;
+    i: Integer;
+begin
+  a := d;
+  while (Length(a) > 1) and (a[1] = '0') do a := Copy(a, 2, Length(a) - 1);
+  if Length(a) <> Length(limit) then
+  begin
+    DecDigitsExceed := Length(a) > Length(limit);
+    Exit;
+  end;
+  for i := 1 to Length(a) do
+    if a[i] <> limit[i] then
+    begin
+      DecDigitsExceed := a[i] > limit[i];
+      Exit;
+    end;
+  DecDigitsExceed := False;
+end;
+
 function PasCondWordIsDigits(const w: AnsiString): Boolean;
 var i: Integer;
 begin
@@ -1975,6 +1998,7 @@ var
 {$endif}
   s: AnsiString;
   n: Int64;
+  decDigits: AnsiString;   { the literal's digits, for the over-range check }
   floatStart, fpos: Integer;
 begin
   if DebugTrace then writeln('Entering Next. SrcPos = ', SrcPos);
@@ -2007,8 +2031,12 @@ begin
   begin
     n := 0;
     floatStart := SrcPos;
+    decDigits := '';
     while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do
-      begin n := n*10 + (Ord(Source[SrcPos])-48); Inc(SrcPos); end;
+      begin
+        AppendChar(decDigits, Source[SrcPos]);
+        n := n*10 + (Ord(Source[SrcPos])-48); Inc(SrcPos);
+      end;
     { detect float: '.' followed by digit, or e/E exponent }
     if ((SrcPos < Length(Source)) and (Source[SrcPos] = '.') and (Source[SrcPos+1] in ['0'..'9'])) or
        ((SrcPos <= Length(Source)) and ((Source[SrcPos] = 'e') or (Source[SrcPos] = 'E'))) then
@@ -2028,6 +2056,20 @@ begin
       while fpos < SrcPos do begin AppendChar(s, Source[fpos]); Inc(fpos); end;
       CurTok.Kind := tkFloat; CurTok.IVal := StrToDoubleBits(s); Exit;
     end;
+    { A decimal literal too wide for Int64 used to wrap SILENTLY — a wrong value
+      baked in at lex time, from a constant the programmer wrote out in full,
+      with no diagnostic and nothing for {$Q+} to catch
+      (bug-a-integer-literal-out-of-range-wraps-silently).
+
+      Between Int64 and UInt64 the wrapped bits ARE the right QWord value, so
+      that case keeps working exactly as before. Wider than that, the digit TEXT
+      is the only correct reading — and it is carried on the token rather than
+      rejected here, because the lexer cannot know the target: a promotable-int
+      target takes ANY width exactly (feature-a-promoint-wide-literals). The
+      out-of-range diagnostic therefore lives at the point of USE, in the
+      AN_INT_LIT lowering, where the target type is known. }
+    if DecDigitsExceed(decDigits, '9223372036854775807') then
+      CurTok.SVal := decDigits;
     CurTok.Kind := tkInteger; CurTok.IVal := n; Exit;
   end;
 
