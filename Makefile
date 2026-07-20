@@ -266,6 +266,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_method_str_return26)" = "$$(printf 'alpha 1 True 2.5\nalpha! alpha literal\nbeta -2 False fallback\nalpha alpha! 5 6\nalphaalpha!\nnc')"
 	./$(COMPILER) test/test_nilpy_variant_polymorphic_builtins.npy /tmp/test_nilpy_variant_polymorphic_builtins26
 	test "$$(/tmp/test_nilpy_variant_polymorphic_builtins26)" = "$$(printf '2 abab abab\n0  \n3 xyzxyz xyzxyz\n1 qq qq\n9 9\n-6 -6\n0 0\n3.0 3.0\n-1.0 -1.0\n97 1 aaa\n122 1 zzz\n3\n2')"
+	./$(COMPILER) test/test_nilpy_unary_minus_precedence.npy /tmp/test_nilpy_unary_minus_precedence26
+	test "$$(/tmp/test_nilpy_unary_minus_precedence26)" = "$$(printf -- '-4 1 -4 1\n-4 -1 3 -1\n-14 -5 -3.5 -9 9\n-4.0 0.5 0\n-4 1 -14 -3\n3 3')"
 	./$(COMPILER) test/test_nilpy_print_container.npy /tmp/test_nilpy_print_container26
 	test "$$(/tmp/test_nilpy_print_container26)" = "$$(printf "['a', 'bb']\n[1, 2, 3]\n[]\n[1.5, True, 'x']\n['a', 'b']\n{'k': 'v', 'n': 2}\n[[1, 2], ['a']]")"
 	./$(COMPILER) test/test_nilpy_one_char_string.npy /tmp/test_nilpy_one_char_string26

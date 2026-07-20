@@ -1,0 +1,17 @@
+# Unary minus binds TIGHTER than * / // % in Python, but is an additive-level
+# sign in Pascal (`-7 div 2` really is `-(7 div 2)` in FPC). NilPy took the
+# Pascal binding, so `-7 // 2` was -3 instead of -4 and `-7 % 2` was -1 instead
+# of 1 — silent, plausible, off by exactly one
+# (bug-a-nilpy-unary-minus-precedence-vs-floordiv). Only NON-distributive
+# operators expose it, which is why the `*`, `+`, `/` lines below always looked
+# fine and hid it.
+# Output must match CPython running this same file.
+
+print(-7 // 2, -7 % 2, (-7) // 2, (-7) % 2)
+print(7 // -2, 7 % -2, -7 // -2, -7 % -2)
+print(-7 * 2, -7 + 2, -7 / 2, -7 - 2, 2 - -7)
+print(-7.5 // 2, -7.5 % 2, -0 // 3)
+a = 7
+b = 2
+print(-a // b, -a % b, -a * b, -(a // b))
+print(+7 // 2, - -7 // 2)

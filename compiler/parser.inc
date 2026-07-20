@@ -7621,7 +7621,12 @@ begin
     begin
       Next; ParseFactor;
       left := CurASTNode;
-      node := AllocNode(AN_NEG); ASTLeft[node] := left; CurASTNode := node;
+      node := AllocNode(AN_NEG); ASTLeft[node] := left;
+      { Carry the operand's type, as the additive-level sign in ParseSimpleExpr
+        does. Left untagged, `-(a // b)` on an Int64-returning helper printed
+        18446744073709551613 instead of -3 — the untyped node read unsigned. }
+      ASTTk[node] := ASTTk[left];
+      CurASTNode := node;
     end;
     tkNot:
     begin
@@ -10616,7 +10621,18 @@ end;
 procedure ParseSimpleExpr;
 var op: TTokenKind; neg: Boolean; left, right, node, opci: Integer;
 begin
-  neg := CurTok.Kind = tkMinus; Eat(tkMinus); Eat(tkPlus);
+  { Unary minus is an ADDITIVE-level sign in Pascal — `-7 div 2` really is
+    `-(7 div 2)` in FPC — but binds TIGHTER than `*`, `/`, `//` and `%` in
+    Python, so `-7 // 2` is `(-7) // 2` = -4, not -3. Under PyExprMode leave the
+    minus for ParseFactor's own tkMinus case, which negates one factor.
+    Only NON-DISTRIBUTIVE operators expose the difference, which is why `-7 * 2`
+    and `-7 + 2` never caught it
+    (bug-a-nilpy-unary-minus-precedence-vs-floordiv). }
+  neg := (CurTok.Kind = tkMinus) and not PyExprMode;
+  if neg then Eat(tkMinus);
+  { Unary plus is identity, so its binding is unobservable — keep eating it here
+    rather than teaching the factor a no-op case. }
+  Eat(tkPlus);
   ParseTerm;
   if neg then
   begin
