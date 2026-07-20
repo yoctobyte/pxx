@@ -26,3 +26,6 @@ subscript suffix alongside the `.method(` suffix, routed through
 
 Low priority: rare in real code and in the uforth corpus (which indexes
 variables, not literals).
+
+## Log
+- 2026-07-20 — resolved, commit b315409f.

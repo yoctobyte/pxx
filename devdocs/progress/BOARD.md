@@ -26,7 +26,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (139)
+## backlog (138)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -35,7 +35,6 @@ _none_
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
 | bug-nilpy-string-local-truncates-at-255 | N | 65 | bug | NilPy: a string local TRUNCATES at 255 characters, silently | — |
-| bug-nilpy-subscript-on-literal | N | 35 | bug | NilPy: cannot subscript a string LITERAL — `"abc"[1]` | — |
 | bug-overload-mismatch-dumps-internals-to-stdout | A | 30 | bug | Overload-resolution failure dumps compiler internals to stdout | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | bug-test-core-oversized-job-6gb-flaky | A | 60 | bug | One test-core job needs ~6.8 GB and flakes under load (the recurring `Terminated`) | — |
@@ -228,7 +227,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (873)
+## done (874)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -534,6 +533,7 @@ _none_
 | bug-nilpy-str-index-off-by-one | N | 75 | bug | NilPy string subscripts are 1-BASED — silently off by one vs CPython | — |
 | bug-nilpy-str-param-length-index | A | 55 | bug | NilPy: `str` parameter breaks Length / indexing / codegen | — |
 | bug-nilpy-string-class-field | N | 60 | bug | NilPy: str class field registered as tyString = inline string[N] semantics (garbage reads) | — |
+| bug-nilpy-subscript-on-literal | N | 35 | bug | NilPy: cannot subscript a string LITERAL — `"abc"[1]` | — |
 | bug-not-on-int64-is-boolean | A | 50 | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |
 | bug-o3-inline-breaks-frame-walk-intrinsics | A | 60 | bug | -O3 inlining deletes a frame the stack-frame intrinsics can observe | — |
 | bug-object-ref-array-identity-in-method | A | 50 | bug | Object-reference array identity lookup fails in Eliah palette icon handler | — |
@@ -2652,7 +2652,6 @@ _none_
 - [p 40] [T] feature-twatch-full-tier-coverage-age
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
-- [p 35] [N] bug-nilpy-subscript-on-literal
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [A] feature-nested-routine-fixed-array-capture
 - [p 35] [O] feature-opt-complex-packed-double
