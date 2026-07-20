@@ -2459,6 +2459,7 @@ begin
   else if dotted = 'os.path.dirname' then Result := 'pyos_path_dirname'
   else if dotted = 'os.getcwd' then Result := 'pyos_getcwd'
   else if dotted = 'sys.exit' then Result := 'pysys_exit'
+  else if dotted = 'textwrap.dedent' then Result := 'pytextwrap_dedent'
   else Result := '';
 end;
 
@@ -2470,7 +2471,7 @@ begin
   Result := False; pname := ''; nTok := 0;
   if TokPos < 1 then Exit;
   base := LowerCase(GetTokenStr(TokPos - 1));
-  if (base <> 'os') and (base <> 'sys') then Exit;
+  if (base <> 'os') and (base <> 'sys') and (base <> 'textwrap') then Exit;
   if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot) then Exit;
   if TokPos + 1 >= TokCount then Exit;
   d2 := base + '.' + LowerCase(GetTokenStr(TokPos + 1));

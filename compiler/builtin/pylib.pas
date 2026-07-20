@@ -291,6 +291,10 @@ procedure pysys_exit(code: Integer);
   are byte strings; latin-1/utf-8 of ASCII is identity). }
 function pyopen(const path: AnsiString): TPyList;
 function pyfile_read(l: TPyList): AnsiString;
+{ textwrap.dedent: remove the longest run of leading whitespace common to every
+  non-blank line. Blank lines are normalised to empty and ignored when
+  computing the common prefix, as CPython does. }
+function pytextwrap_dedent(const s: AnsiString): AnsiString;
 { Python's two-argument min/max. Spelled as ordinary pylib FUNCTIONS, the
   same way bytearray/bytes are: neither name is a Pascal keyword, so both
   resolve through the normal call path with no frontend hook.
@@ -2270,6 +2274,53 @@ begin
   begin
     v := l.at(i);
     Result := Result + pystr_of(v);
+  end;
+end;
+
+function pytextwrap_dedent(const s: AnsiString): AnsiString;
+var i, n, lineStart, wsLen, common: Integer; line: AnsiString;
+    haveCommon: Boolean;
+begin
+  { pass 1: the common leading-whitespace length over non-blank lines }
+  common := -1;
+  haveCommon := False;
+  i := 1; n := Length(s);
+  lineStart := 1;
+  while i <= n + 1 do
+  begin
+    if (i > n) or (s[i] = #10) then
+    begin
+      line := Copy(s, lineStart, i - lineStart);
+      { blank line (only whitespace) does not constrain the common prefix }
+      wsLen := 0;
+      while (wsLen < Length(line)) and
+            ((line[wsLen + 1] = ' ') or (line[wsLen + 1] = #9)) do Inc(wsLen);
+      if wsLen < Length(line) then          { non-blank }
+      begin
+        if not haveCommon then begin common := wsLen; haveCommon := True; end
+        else if wsLen < common then common := wsLen;
+      end;
+      lineStart := i + 1;
+    end;
+    Inc(i);
+  end;
+  if not haveCommon then common := 0;
+
+  { pass 2: strip `common` chars from the front of each line }
+  Result := '';
+  i := 1; lineStart := 1;
+  while i <= n + 1 do
+  begin
+    if (i > n) or (s[i] = #10) then
+    begin
+      line := Copy(s, lineStart, i - lineStart);
+      if Length(line) >= common then line := Copy(line, common + 1, Length(line) - common)
+      else line := '';
+      Result := Result + line;
+      if i <= n then Result := Result + #10;
+      lineStart := i + 1;
+    end;
+    Inc(i);
   end;
 end;
 

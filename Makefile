@@ -228,6 +228,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_bytes26)" = "$$(printf '4\n0\n0\n65\n66\n0\n255\n255\n65\n65\n1\n4\n1024\n0')"
 	./$(COMPILER) test/test_nilpy_file_read.npy /tmp/test_nilpy_file_read26
 	test "$$(/tmp/test_nilpy_file_read26)" = "$$(printf '%b' 'abc\n  abc\nabc  \nhello\nxxhello\nhelloxx\nline')"
+	./$(COMPILER) test/test_nilpy_dedent.npy /tmp/test_nilpy_dedent26
+	test "$$(/tmp/test_nilpy_dedent26)" = "$$(printf '%b' 'a\n  b\nc\n')"
 	./$(COMPILER) test/test_nilpy_dict_pop.npy /tmp/test_nilpy_dict_pop26
 	test "$$(/tmp/test_nilpy_dict_pop26)" = "$$(printf '%b' '1\n99\n1\n0')"
 	./$(COMPILER) test/test_nilpy_raise_from.npy /tmp/test_nilpy_raise_from26
