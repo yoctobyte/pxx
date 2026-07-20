@@ -148,7 +148,24 @@ Gate: `test-nilpy` GREEN, `--tier quick` GREEN, self-host byte-identical,
 **FPC bootstrap clean + byte-identical fixedpoint** (added to this unit's gate
 after unit 1 broke it invisibly), whole test file diffed against CPython.
 
-## Remaining
+## Remaining — PARKED to backlog 2026-07-20
 
-`.encode()`/`.decode()` stay OUT (bytes model, filed separately when needed).
-Open: [[bug-nilpy-subscript-on-literal]].
+Moved out of `working/` because nobody is on it. Units 1-3 are done and
+gated; what is left is small and independent, so this is pickup-ready rather
+than half-applied.
+
+**Left in scope: `.rjust()` — 3 sites, all in the .UFO stdlib**
+(`IO.UFO` x2, `MATH.UFO` x1), which is why `grep` over `uforth.py` alone shows
+zero. One row in `PyStrMethodInfo` plus one pylib function, per this ticket's
+own "adding a method =" rule. `.ljust()`/`.center()` are absent from the
+corpus and not worth pre-empting.
+
+**Out of scope, deliberately:** `.encode()`/`.decode()` — 16 sites across
+uforth.py and the .UFO blocks, but they are not str->str and need a bytes
+model. The bytes core landed separately (TPyBytes, 6468ff22); wire them up
+under [[feature-nilpy-bytes-and-slices]], not here.
+
+**Blocked/related, both filed:** [[bug-nilpy-subscript-on-literal]] (`"abc"[1]`
+does not parse — needs the shared ParseFactor hook, so Track A-adjacent).
+[[bug-nilpy-string-local-truncates-at-255]] limits what any of these methods
+can build.
