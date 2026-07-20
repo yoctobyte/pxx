@@ -63,6 +63,7 @@ var
   PyHdrPNames: array[0..15] of AnsiString;
   PyHdrPTypes: array[0..15] of TTypeKind;
   PyHdrPCis: array[0..15] of Integer;
+  PyHdrPSigs: array[0..15] of Integer;   { Callable signature per parameter, or -1 }
   PyHdrDefHas: array[0..15] of Boolean;
   PyHdrDefIsStr: array[0..15] of Boolean;
   PyHdrDefVal: array[0..15] of Int64;
@@ -187,6 +188,11 @@ end;
 var
   PyLastTypeCi: Integer;  { class index when PyParseType returned tyClass }
   PyAnnLastCi: Integer;   { class index when PyAnnTypeAt returned tyClass }
+  { Signature proc index when PyAnnTypeAt saw a `Callable[[...], R]` — the same
+    `$proctype` shape a Pascal procedural type registers, so an indirect call
+    through the value marshals through the machinery that already exists
+    (feature-nilpy-function-values). -1 when the annotation was not Callable. }
+  PyAnnLastProcSig: Integer;
   PyCountAlias: AnsiString;  { local name bound to itertools.count ('' = none) }
 
 { Token-index annotation parser for the richer grammar dataclass fields use:
@@ -198,9 +204,14 @@ var
   clean unsupported error. Advances i past the annotation. }
 function PyAnnTypeAt(var i: Integer): TTypeKind;
 var lo: AnsiString; depth: Integer;
+    sigN, sigPi: Integer; sigIsFunc: Boolean; sigRet: TTypeKind;
+    sigPNames: array[0..15] of AnsiString;
+    sigPTypes: array[0..15] of TTypeKind;
+    sigPCis: array[0..15] of Integer;
 begin
   Result := tyUnknown;
   PyAnnLastCi := -1;
+  PyAnnLastProcSig := -1;
   if i >= MainProgramTokCount then Exit;
   if Tokens[i].Kind = tkString then
   begin
@@ -235,17 +246,54 @@ begin
   end;
   if lo = 'callable' then
   begin
+    { `Callable[[P1, P2], R]` — the parameter list and result really are parsed
+      now, into a `$proctype` signature Proc (BodyAddr = -1), exactly as a Pascal
+      procedural type registers one. The bracket group used to be SKIPPED, which
+      left the value an untyped pointer: it could be passed around but never
+      called, since the call site had no signature to marshal against
+      (feature-nilpy-function-values). }
     Inc(i);
+    sigN := 0;
+    sigIsFunc := False;
+    sigRet := tyInteger;
     if (i < MainProgramTokCount) and (Tokens[i].Kind = tkLBrack) then
     begin
-      depth := 1; Inc(i);
-      while (i < MainProgramTokCount) and (depth > 0) do
+      Inc(i);
+      { the PARAMETER list — `[P1, P2]` or `[]` }
+      if (i < MainProgramTokCount) and (Tokens[i].Kind = tkLBrack) then
       begin
-        if Tokens[i].Kind = tkLBrack then Inc(depth)
-        else if Tokens[i].Kind = tkRBrack then Dec(depth);
         Inc(i);
+        while (i < MainProgramTokCount) and (Tokens[i].Kind <> tkRBrack) do
+        begin
+          if sigN >= 16 then Error('Nil Python: too many Callable parameters');
+          sigPTypes[sigN] := PyAnnTypeAt(i);
+          if sigPTypes[sigN] = tyUnknown then
+            Error('Nil Python: unsupported Callable parameter type');
+          sigPCis[sigN] := PyAnnLastCi;
+          sigPNames[sigN] := 'p' + PyIntLiteralText(sigN);
+          Inc(sigN);
+          if (i < MainProgramTokCount) and (Tokens[i].Kind = tkComma) then Inc(i);
+        end;
+        if (i < MainProgramTokCount) and (Tokens[i].Kind = tkRBrack) then Inc(i);
       end;
+      if (i < MainProgramTokCount) and (Tokens[i].Kind = tkComma) then Inc(i);
+      { the RESULT — `None` for a procedure, else a type }
+      if (i < MainProgramTokCount) and (Tokens[i].Kind = tkNil) then Inc(i)
+      else
+      begin
+        sigRet := PyAnnTypeAt(i);
+        sigIsFunc := sigRet <> tyUnknown;
+        if not sigIsFunc then sigRet := tyInteger;
+      end;
+      if (i < MainProgramTokCount) and (Tokens[i].Kind = tkRBrack) then Inc(i);
     end;
+    sigPi := RegisterProc('$proctype', sigIsFunc, sigRet, sigN, sigPNames, sigPTypes);
+    Procs[sigPi].BodyAddr := -1;
+    for depth := 0 to sigN - 1 do
+      if (sigPTypes[depth] = tyClass) and (sigPCis[depth] >= 0) then
+        Syms[Procs[sigPi].Params[depth].SymIdx].RecName :=
+          REC_UCLASS_BASE + sigPCis[depth];
+    PyAnnLastProcSig := sigPi;
     Result := tyPointer;
     Exit;
   end;
@@ -1645,6 +1693,92 @@ begin
   if Result < 0 then Error('Nil Python: this value cannot be subscripted');
 end;
 
+{ `v.field` (READ) where `v` is a VARIANT: unbox to the class that declares the
+  field and read it. Returns -1 when no class declares the name. }
+function PyMakeVariantField(baseNode: Integer; const fname: AnsiString;
+                            var tk: TTypeKind; var recName: Integer): Integer;
+var ci, fi, hitCi, hitFi, unboxArg, unboxCall, castNode: Integer;
+begin
+  Result := -1;
+  hitCi := -1; hitFi := -1;
+  for ci := 0 to UClsCount - 1 do
+  begin
+    if UClsIsRecord[ci] then Continue;
+    fi := FindUField(ci, fname);
+    if fi < 0 then Continue;
+    if hitCi < 0 then begin hitCi := ci; hitFi := fi; end
+    else if (UFldTk[fi] <> UFldTk[hitFi]) or (UFldOff_[fi] <> UFldOff_[hitFi]) then
+      Error('Nil Python: .' + fname + ' on a dynamically-typed value is '
+        + 'ambiguous (several classes declare it at different offsets) — '
+        + 'assign to an annotated local first');
+  end;
+  if hitCi < 0 then Exit;
+  unboxArg := AllocNode(AN_ARG);
+  ASTLeft[unboxArg] := baseNode;
+  unboxCall := AllocNode(AN_CALL);
+  ASTIVal[unboxCall] := FindProc('pyvarobj');
+  if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+  ASTTk[unboxCall] := Ord(tyPointer);
+  ASTLeft[unboxCall] := unboxArg;
+  castNode := AllocNode(AN_CLASS_CAST);
+  ASTLeft[castNode] := unboxCall;
+  ASTIVal[castNode] := hitCi;
+  ASTTk[castNode]   := Ord(tyClass);
+  Result := AllocNode(AN_FIELD);
+  ASTLeft[Result] := castNode;
+  ASTSOffset[Result] := PyStoredName(fname);
+  ASTSLen[Result] := Length(fname);
+  ASTTk[Result] := UFldTk[hitFi];
+  tk := IntToTypeKind(UFldTk[hitFi]);
+  recName := UFldRec_[hitFi];
+end;
+
+{ `v.field(args)` where `v` is a VARIANT and `field` holds a function value:
+  unbox to the owning class, read the field, call through it. }
+function PyMakeVariantFieldCall(baseNode, ci: Integer; const fname: AnsiString;
+                                sigPi: Integer): Integer;
+var unboxArg, unboxCall, castNode, fieldNode, argsHead, lastArg, argNode, n: Integer;
+begin
+  unboxArg := AllocNode(AN_ARG);
+  ASTLeft[unboxArg] := baseNode;
+  unboxCall := AllocNode(AN_CALL);
+  ASTIVal[unboxCall] := FindProc('pyvarobj');
+  if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+  ASTTk[unboxCall] := Ord(tyPointer);
+  ASTLeft[unboxCall] := unboxArg;
+  castNode := AllocNode(AN_CLASS_CAST);
+  ASTLeft[castNode] := unboxCall;
+  ASTIVal[castNode] := ci;
+  ASTTk[castNode]   := Ord(tyClass);
+  fieldNode := AllocNode(AN_FIELD);
+  ASTLeft[fieldNode] := castNode;
+  ASTSOffset[fieldNode] := PyStoredName(fname);
+  ASTSLen[fieldNode] := Length(fname);
+  ASTTk[fieldNode] := Ord(tyPointer);
+  Expect(tkLParen, '(');
+  argsHead := -1; lastArg := -1; n := 0;
+  while CurTok.Kind <> tkRParen do
+  begin
+    ParseArgExpr;
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := CurASTNode;
+    if argsHead = -1 then argsHead := argNode else ASTRight[lastArg] := argNode;
+    lastArg := argNode;
+    Inc(n);
+    if CurTok.Kind = tkComma then Next else Break;
+  end;
+  Expect(tkRParen, ')');
+  if n <> Procs[sigPi].ParamCount then
+    Error('Nil Python: .' + fname + '() takes ' +
+          PyIntLiteralText(Procs[sigPi].ParamCount) + ' argument(s)');
+  Result := AllocNode(AN_CALL_IND);
+  ASTLeft[Result]  := argsHead;
+  ASTRight[Result] := fieldNode;
+  ASTIVal[Result]  := sigPi;
+  ASTTk[Result]    := Ord(Procs[sigPi].RetType);
+  ASTSLen[Result]  := 0;
+end;
+
 { `w.meth(args)` where `w` is a VARIANT — a for-in loop variable, a list/dict
   element, anything living in a 16-byte variant slot. Python dispatches on the
   RUNTIME type; pxx resolves methods against the receiver's STATIC class, and a
@@ -1706,7 +1840,31 @@ begin
     end;
   end;
   if hitCi < 0 then
-    Error('Nil Python: no class declares a method .' + mname + '()');
+  begin
+    { Not a method — but it may be a procedural FIELD holding a function value,
+      which is how a dispatch table is written (`w.native(vm)`). Resolve the
+      field the same way, by name across the declared classes, and call through
+      it (feature-nilpy-function-values). }
+    for ci := 0 to UClsCount - 1 do
+    begin
+      if UClsIsRecord[ci] then Continue;
+      mmi := FindUField(ci, mname);
+      if mmi < 0 then Continue;
+      if UFldProcSig[mmi] < 0 then Continue;
+      if hitCi < 0 then begin hitCi := ci; hitMmi := mmi; end
+      else if UFldProcSig[mmi] <> UFldProcSig[hitMmi] then
+        Error('Nil Python: .' + mname + '() on a dynamically-typed value is '
+          + 'ambiguous (several classes declare that field) — assign to an '
+          + 'annotated local first');
+    end;
+    if hitCi >= 0 then
+    begin
+      Result := PyMakeVariantFieldCall(baseNode, hitCi, mname, UFldProcSig[hitMmi]);
+      Exit;
+    end;
+    Error('Nil Python: no class declares a method or callable field .'
+          + mname + '()');
+  end;
 
   { VT_OBJECT payload -> instance pointer -> hard cast to the owning class }
   unboxArg := AllocNode(AN_ARG);
@@ -2756,6 +2914,7 @@ end;
 
 function PyParseStatement: Integer;
 var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integer; tk: TTypeKind;
+    annSig: Integer;   { Callable signature of an annotated target, or -1 }
     augTk: TTokenKind;
 begin
   Result := -1;
@@ -2965,6 +3124,7 @@ begin
     annIdx := TokPos + 1;
     tk := PyAnnTypeAt(annIdx);
     ci := PyAnnLastCi;
+    annSig := PyAnnLastProcSig;
     if (tk <> tyUnknown) and (annIdx < TokCount) and
        (Tokens[annIdx].Kind = tkAssign) then
     begin
@@ -2984,6 +3144,7 @@ begin
         symIdx := AllocVar(name, tk);
         if (tk = tyClass) and (ci >= 0) then
           Syms[symIdx].RecName := REC_UCLASS_BASE + ci;
+        if annSig >= 0 then SymProcSig[symIdx] := annSig;
       end;
       lhsNode := PyMakeIdent(symIdx);
       PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
@@ -3402,6 +3563,7 @@ begin
     annIdx := TokPos - 1;
     PyHdrPTypes[PyHdrNParams] := PyAnnTypeAt(annIdx);
     PyHdrPCis[PyHdrNParams] := PyAnnLastCi;
+    PyHdrPSigs[PyHdrNParams] := PyAnnLastProcSig;
     if PyHdrPTypes[PyHdrNParams] = tyUnknown then
       ErrorAt(Tokens[annIdx].Line,
               'Nil Python: parameter ' + PyHdrPNames[PyHdrNParams]
@@ -3552,6 +3714,7 @@ begin
       PyHdrPNames[i] := Procs[procIdx].Params[i].Name;
       PyHdrPTypes[i] := Procs[procIdx].Params[i].TypeKind;
       PyHdrPCis[i] := -1;
+      PyHdrPSigs[i] := -1;
     end;
     nparams := Procs[procIdx].ParamCount;
   end;
@@ -3581,6 +3744,10 @@ begin
       ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := PyHdrPTypes[i] = tyVariant;
     if (PyHdrPTypes[i] = tyClass) and (PyHdrPCis[i] >= 0) then
       Syms[idx].RecName := REC_UCLASS_BASE + PyHdrPCis[i];
+    { A `Callable[...]` parameter is callable INSIDE the body, and its bare name
+      at a CALL SITE must become the routine's address rather than a call — both
+      need the signature on the symbol (feature-nilpy-function-values). }
+    if PyHdrPSigs[i] >= 0 then SymProcSig[idx] := PyHdrPSigs[i];
   end;
   if not isProc then
   begin
@@ -3649,14 +3816,22 @@ begin
 end;
 
 function PyHeaderParamType(methodStart, stopIdx: Integer; const name: AnsiString): TTypeKind;
-var i: Integer;
+{ The full annotation grammar, not the single-token reader: a ctor parameter may
+  be annotated `Callable[[VM], None]` / `Optional[T]` / `List[T]` just like any
+  other, and reading only one token typed the field tyUnknown and errored with
+  "annotate it" on an annotation that was already there
+  (feature-nilpy-function-values). PyAnnLastProcSig is left set for the caller,
+  which is how a Callable FIELD gets its call signature. }
+var i, k: Integer;
 begin
   Result := tyUnknown;
+  PyAnnLastProcSig := -1;
   for i := methodStart to stopIdx - 2 do
     if (Tokens[i].Kind = tkIdent) and (GetTokenStr(i) = name) and
        (Tokens[i + 1].Kind = tkColon) then
     begin
-      Result := PyTypeFromTokenIndex(i + 2);
+      k := i + 2;
+      Result := PyAnnTypeAt(k);
       Exit;
     end;
 end;
@@ -3752,7 +3927,7 @@ end;
 procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
                                  fieldsOnly: Boolean);
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, align, sz: Integer;
-    fldAnn, rhsAt, k2: Integer;
+    fldAnn, rhsAt, k2, fldSig: Integer;
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
     fldRec, mRetRec: Integer; mRet: TTypeKind;
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
@@ -4065,6 +4240,7 @@ begin
             registered NO fields at all and every later `self.x` mis-resolved
             against an empty class. }
           fldAnn := -1;
+          fldSig := -1;
           if (Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = 'self') and
              (Tokens[j + 1].Kind = tkDot) and (Tokens[j + 2].Kind = tkIdent) then
           begin
@@ -4080,6 +4256,7 @@ begin
                 List/Callable/forward refs). }
               k2 := fldAnn;
               tk := PyAnnTypeAt(k2);
+              fldSig := PyAnnLastProcSig;
               fldRec := REC_NONE;
               if (tk = tyClass) and (PyAnnLastCi >= 0) then
                 fldRec := REC_UCLASS_BASE + PyAnnLastCi;
@@ -4093,6 +4270,7 @@ begin
               begin
                 rhsName := GetTokenStr(rhsAt);
                 tk := PyHeaderParamType(methodStart, j, rhsName);
+                fldSig := PyAnnLastProcSig;
                 fldRec := PyHeaderParamRec(methodStart, j, rhsName);
               end;
               if tk = tyUnknown then
@@ -4122,7 +4300,12 @@ begin
             begin
               sz := TypeSize(tk);
               curOff := AlignTo(curOff, TypeAlign(tk));
+              { AddUField reads LastTypeProcSig for a procedural field, which is
+                what makes `w.native(vm)` lower to an indirect call rather than
+                "field is not callable" (feature-nilpy-function-values). }
+              LastTypeProcSig := fldSig;
               AddUField(ci, Tokens[j + 2].SOffset, Tokens[j + 2].SLen, curOff, Ord(tk), fldRec);
+              LastTypeProcSig := -1;
               Inc(curOff, sz);
             end;
           end;

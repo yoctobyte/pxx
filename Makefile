@@ -268,6 +268,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_variant_polymorphic_builtins26)" = "$$(printf '2 abab abab\n0  \n3 xyzxyz xyzxyz\n1 qq qq\n9 9\n-6 -6\n0 0\n3.0 3.0\n-1.0 -1.0\n97 1 aaa\n122 1 zzz\n3\n2')"
 	./$(COMPILER) test/test_nilpy_list_repeat.npy /tmp/test_nilpy_list_repeat26
 	test "$$(/tmp/test_nilpy_list_repeat26)" = "$$(printf '[0, 0, 0, 0] 4\n['"'"'a'"'"', '"'"'a'"'"', '"'"'a'"'"'] 3\n[1, 2, 1, 2]\n[] []\n[[0], [0]]\n[[0, 9], [0, 9]]\n[0, 1, 2]')"
+	./$(COMPILER) test/test_nilpy_function_values.npy /tmp/test_nilpy_function_values26
+	test "$$(/tmp/test_nilpy_function_values26)" = "$$(printf '1\n11\nONE\n12\nONE 13\nTEN 23\n34')"
 	./$(COMPILER) test/test_nilpy_variant_builtin_sweep.npy /tmp/test_nilpy_variant_builtin_sweep26
 	test "$$(/tmp/test_nilpy_variant_builtin_sweep26)" = "$$(printf '3 1 5 7\n7 14 -7 True\n7 1 A\n-2 1 -3 5\n3 6 3 True\n-3 2 A\n0 0 0 5\n0 0 0 False\n0 1 A\n1.5 -1.5 3.0\n2.5 2.5 5.0\n2 ['"'"'a'"'"', '"'"'b'"'"'] True AB\n1 ['"'"'c'"'"'] True C\n0 [] False ')"
 	./$(COMPILER) test/test_nilpy_none.npy /tmp/test_nilpy_none26

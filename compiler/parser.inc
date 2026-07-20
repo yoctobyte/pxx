@@ -722,6 +722,7 @@ function PyMakeListRepeat(a, b: Integer): Integer; forward;              { Nil P
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python obj.meth() on a VARIANT receiver (pyparser.inc) }
+function PyMakeVariantField(baseNode: Integer; const fname: AnsiString; var tk: TTypeKind; var recName: Integer): Integer; forward; { Nil Python obj.field on a VARIANT receiver (pyparser.inc) }
 
 procedure ParseArgExpr;
 { A call ARGUMENT under NilPy must be parsed by the Python precedence chain
@@ -4496,6 +4497,21 @@ begin
         Continue;
       end;
 
+      { Same receiver, no call: a plain FIELD READ off a variant — `x.name`
+        where x is a for-in variable. Without it the access fell through and
+        read the slot as though it were the object, printing an integer where
+        the field's value belonged — silently
+        (feature-nilpy-function-values found it via `w.name` in a dispatch
+        table). Resolved by field NAME across the declared classes, like the
+        method case. }
+      if PyExprMode and (tk = tyVariant) then
+      begin
+        Next;   { consume the field name, as the call branch above does }
+        node := PyMakeVariantField(node, fieldName, tk, recName);
+        if node >= 0 then Continue;
+        Error('Nil Python: no class declares a field .' + fieldName);
+      end;
+
       { Metaclass-dispatched construction `classRef.Create(args)`: the base is a
         metaclass value — either a `class of T` variable (AN_IDENT, a tyPointer
         whose element is a class) or an inline metaclass cast `TFooClass(expr)`
@@ -8040,6 +8056,25 @@ begin
     tkIdent:
     begin
       name := CurTok.SVal;
+      { A bare def NAME in a value position is that function's ADDRESS. Python
+        has no paramless call without parentheses — `f` is the function, `f()`
+        calls it — so unlike Pascal there is nothing to disambiguate, and
+        without this the name fell through to the paramless-call/Result path
+        (feature-nilpy-function-values). Only when a '(' does NOT follow, and
+        only for a name that resolves to a proc and not to a variable. }
+      if PyExprMode and (CurTok.Kind = tkIdent) and
+         (Tokens[TokPos].Kind <> tkLParen) and (FindSym(name) < 0) and
+         (FindProc(PyQualifyNested(name)) >= 0) then
+      begin
+        node := AllocNode(AN_PROCADDR);
+        ASTIVal[node] := FindProc(PyQualifyNested(name));
+        ASTTk[node] := Ord(tyPointer);
+        CurASTNode := node;
+        LastExprTk := tyPointer;
+        Next;
+        Exit;
+      end;
+
       { A NilPy def nested in another def is registered QUALIFIED
         (`outer.inner`) so two parents may each define a `helper` without the
         first registration winning every lookup. Inside the enclosing body the

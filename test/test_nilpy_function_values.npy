@@ -1,0 +1,54 @@
+# A def as a VALUE — passed, assigned, stored in a field, dispatched from a list
+# and a dict. This is uforth's dispatch table in miniature
+# (`vm.define_word("DUP", native=w_dup)`), and it needed no closure machinery:
+# these functions capture nothing (feature-nilpy-function-values).
+# `Callable[[T], R]` now registers a real signature instead of skipping the
+# bracket group, which is what lets the value be CALLED and not merely held.
+# Output must match CPython running this same file.
+
+from typing import Callable, Optional
+
+class VM:
+    def __init__(self) -> None:
+        self.acc = 0
+    def push(self, n: int) -> None:
+        self.acc = self.acc + n
+
+class Word:
+    def __init__(self, name: str, native: Callable[[VM], None]) -> None:
+        self.name = name
+        self.native = native
+
+def w_one(vm: VM) -> None:
+    vm.push(1)
+
+def w_ten(vm: VM) -> None:
+    vm.push(10)
+
+def apply(f: Callable[[VM], None], vm: VM) -> None:
+    f(vm)
+
+vm = VM()
+apply(w_one, vm)
+print(vm.acc)
+
+g: Callable[[VM], None] = w_ten
+g(vm)
+print(vm.acc)
+
+w = Word("ONE", w_one)
+print(w.name)
+w.native(vm)
+print(vm.acc)
+
+words = [Word("ONE", w_one), Word("TEN", w_ten)]
+for x in words:
+    x.native(vm)
+    print(x.name, vm.acc)
+
+d = {}
+d["ONE"] = Word("ONE", w_one)
+d["TEN"] = Word("TEN", w_ten)
+for k in d:
+    d[k].native(vm)
+print(vm.acc)
