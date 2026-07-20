@@ -219,9 +219,21 @@ landed, gated, pushed commit with a CPython-diffed test in `test-nilpy`:
 | 1272 | `dict.pop(k, default)` | pylib |
 | 1284 | `textwrap.dedent` | stdlib shim |
 | 1286 | `join(EXPR for x in it)` genexpr arg | [[feature-nilpy-generator-expression-arg]] (OPEN) |
-| 1289 | `exec(wrapper, env, ns)` | [[feature-lib-pyexec]] (OPEN — the runtime Python evaluator, the largest remaining piece) |
+| 1286 | `join(EXPR for x in it)` genexpr arg | expression comprehensions + hoisting |
+| 1289 | `exec(wrapper, env, ns)` | compiles via pylib stub; real engine = [[feature-lib-pyexec]] |
+| 1290 | `r = ns["__body__"]()` | **CURRENT** — a DYNAMIC call through a variant callable (the function exec created); needs the dynamic-dispatch machinery that is part of [[feature-lib-pyexec]] |
 
-Wall moved 267 -> 1286 on 2026-07-20/21 (session 3), across ~36 landed commits —
+Wall moved 267 -> 1290 on 2026-07-20/21 (session 3), across ~48 landed commits.
+From 1290 on the code is the exec EXECUTION MODEL: `ns["__body__"]()` calls the
+function `exec()` was meant to build, so it cannot be meaningfully compiled
+without the pyexec evaluator (a synthetic dynamic-call that crashes at runtime
+under the stub is not real progress). Remaining VM methods past the exec block
+(1294+) are independent, but reaching them means compiling a call through a
+variant callable first. This is the [[feature-lib-pyexec]] boundary: the file
+parses through exec, and running the exec'd PYTHON blocks (uforth's native
+words) is the next subsystem.
+
+ —
 roughly the first 30% of the 4357-line file, and past every class definition,
 the VM core, the dictionary, number parsing, the tokenizer, and file I/O
 (with/open, comprehensions, strip(chars), raise-from, dict.pop, dedent). The
