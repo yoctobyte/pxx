@@ -5,4 +5,4 @@
 | borg | `ec7cdabea3a9` | 2026-07-20T11:49:36Z | GREEN (opt) | 134.1s | `ec7cdabea3a9` GREEN |
 
 ## Open regressions
-- **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `c110ad262437`, last good `76a2321346ed`, 3 commit(s) in range
+- **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `2f88c6559bc2`, last good `76a2321346ed`, 1 commit(s) in range
