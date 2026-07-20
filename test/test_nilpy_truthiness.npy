@@ -1,0 +1,10 @@
+s = "abc"
+e = ""
+if s: print("s truthy")
+else: print("s falsy")
+if e: print("e truthy")
+else: print("e falsy")
+if not s: print("not s -> True")
+else: print("not s -> False")
+print(bool(s))
+print(bool(e))

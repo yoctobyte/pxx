@@ -817,7 +817,7 @@ begin
 end;
 
 procedure PyParseBoolNot;
-var node, zeroNode, operand: Integer; opTk: TTypeKind;
+var node, zeroNode, operand, lenNode, argNode: Integer; opTk: TTypeKind;
 begin
   if CurTok.Kind = tkNot then
   begin
@@ -832,10 +832,34 @@ begin
       came out right, and 0 only by luck (-1 is also truthy).
 
       For an ordinal operand the answer is `operand = 0` instead. Booleans
-      keep AN_NOT, where it is already logical. Non-ordinals (a string, a
-      class, a variant) still go through AN_NOT unchanged — `not <container>`
-      is its own question, filed separately rather than guessed at here. }
-    if (opTk = tyBoolean) or not PyNumeric(opTk) then
+      keep AN_NOT, where it is already logical.
+
+      A STRING is truthy when it is non-empty, so `not s` is `Length(s) = 0`.
+      Falling through to AN_NOT complemented the string HANDLE instead, which
+      is never zero, so `not s` was True for every string including a
+      non-empty one — silently, and `if s:` / `bool(s)` were correct all
+      along, which is what hid it (bug-nilpy-not-on-string-always-true).
+      A class or variant operand is still its own question and still goes
+      through AN_NOT unchanged. }
+    if PyIsStrBaseTk(opTk) then
+    begin
+      lenNode := AllocNode(AN_CALL);
+      ASTIVal[lenNode] := -Ord(tkLength);
+      ASTTk[lenNode] := Ord(tyInteger);
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := operand;
+      ASTRight[argNode] := -1;
+      ASTLeft[lenNode] := argNode;
+      zeroNode := AllocNode(AN_INT_LIT);
+      ASTIVal[zeroNode] := 0;
+      ASTTk[zeroNode] := Ord(tyInteger);
+      node := AllocNode(AN_BINOP);
+      ASTIVal[node] := Ord(tkEq);
+      ASTLeft[node] := lenNode;
+      ASTRight[node] := zeroNode;
+      ASTTk[node] := Ord(tyBoolean);
+    end
+    else if (opTk = tyBoolean) or not PyNumeric(opTk) then
     begin
       node := AllocNode(AN_NOT);
       ASTLeft[node] := operand;
@@ -2126,6 +2150,82 @@ begin
   LastExprTk := tyInteger;
 end;
 
+{ ---- stdlib dotted calls: os.path.join(...), sys.exit(...) ----------------
+  `os` and `sys` are deferred imports and never become symbols, so a dotted
+  call on them cannot go through ordinary member resolution — it is mapped by
+  NAME onto a pylib function instead. Same reasoning as sys.stdout/sys.stderr
+  above, and handled at the same factor level so every pass agrees.
+
+  Deliberately a fixed table rather than a general module system: each entry is
+  a shim with real semantics behind it, and an unmapped name must stay an
+  error rather than resolve to something plausible. }
+function PyStdlibCallProc(const dotted: AnsiString): AnsiString;
+begin
+  if dotted = 'os.path.isabs' then Result := 'pyos_path_isabs'
+  else if dotted = 'os.path.join' then Result := 'pyos_path_join'
+  else if dotted = 'os.path.exists' then Result := 'pyos_path_exists'
+  else if dotted = 'os.path.abspath' then Result := 'pyos_path_abspath'
+  else if dotted = 'os.path.dirname' then Result := 'pyos_path_dirname'
+  else if dotted = 'os.getcwd' then Result := 'pyos_getcwd'
+  else if dotted = 'sys.exit' then Result := 'pysys_exit'
+  else Result := '';
+end;
+
+{ nTok = how many tokens the dotted name occupies, so the caller can skip to
+  the '(' . CurTok is the leading `os`/`sys`. }
+function PyStdlibCallAhead(var pname: AnsiString; var nTok: Integer): Boolean;
+var base, d2, d3: AnsiString;
+begin
+  Result := False; pname := ''; nTok := 0;
+  if TokPos < 1 then Exit;
+  base := LowerCase(GetTokenStr(TokPos - 1));
+  if (base <> 'os') and (base <> 'sys') then Exit;
+  if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot) then Exit;
+  if TokPos + 1 >= TokCount then Exit;
+  d2 := base + '.' + LowerCase(GetTokenStr(TokPos + 1));
+  { three segments first — `os.path.join` must not be read as `os.path` }
+  if (TokPos + 4 < TokCount) and (Tokens[TokPos + 2].Kind = tkDot) and
+     (Tokens[TokPos + 4].Kind = tkLParen) then
+  begin
+    d3 := d2 + '.' + LowerCase(GetTokenStr(TokPos + 3));
+    pname := PyStdlibCallProc(d3);
+    if pname <> '' then begin nTok := 5; Result := True; Exit; end;
+  end;
+  if (TokPos + 2 < TokCount) and (Tokens[TokPos + 2].Kind = tkLParen) then
+  begin
+    pname := PyStdlibCallProc(d2);
+    if pname <> '' then begin nTok := 3; Result := True; Exit; end;
+  end;
+end;
+
+function PyParseStdlibCall(const pname: AnsiString; nTok: Integer): Integer;
+var procIdx, callNode, argNode, lastArg, i: Integer;
+begin
+  procIdx := FindProc(pname);
+  if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  for i := 1 to nTok do Next;          { the dotted name; CurTok = '(' }
+  Expect(tkLParen, '(');
+  lastArg := -1;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := procIdx;
+  ASTTk[callNode] := Ord(Procs[procIdx].RetType);
+  ASTRight[callNode] := ProcRetRecId[procIdx];
+  ASTLeft[callNode] := -1;
+  if CurTok.Kind <> tkRParen then
+    repeat
+      PyParseBoolExpr;
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := CurASTNode;
+      ASTRight[argNode] := -1;
+      if lastArg < 0 then ASTLeft[callNode] := argNode
+      else ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+    until not Eat(tkComma);
+  Expect(tkRParen, ')');
+  LastExprTk := IntToTypeKind(ASTTk[callNode]);
+  Result := callNode;
+end;
+
 { Is the token stream at `int.from_bytes(` ? CurTok is the `int` ident. }
 function PyIsFromBytesAhead: Boolean;
 begin
@@ -2764,6 +2864,31 @@ begin
   Result := node;
 end;
 
+{ A suite is either an INDENTED BLOCK or a one-line body on the same line as
+  the header (`if not token: return None`). Python allows both everywhere a
+  suite is legal, and uforth uses the one-line form heavily for guard clauses.
+  Semicolon-separated statements are accepted in the one-line form, as Python
+  does. }
+function PyParseSuite: Integer;
+var stmt, seq: Integer;
+begin
+  if CurTok.Kind = tkNewline then
+  begin
+    Expect(tkNewline, 'newline');
+    Expect(tkIndent, 'indent');
+    Result := PyParseBlock;
+    Expect(tkDedent, 'dedent');
+    Exit;
+  end;
+  seq := -1;
+  repeat
+    stmt := PyParseStatement;
+    seq := PySeqAppend(seq, stmt);
+  until not Eat(tkSemicolon);
+  if CurTok.Kind = tkNewline then Next;
+  Result := seq;
+end;
+
 function PyParseIf: Integer;
 var node, pairNode, condNode, thenNode, elseNode: Integer;
 begin
@@ -2771,10 +2896,7 @@ begin
   PyParseBoolExpr;
   condNode := CurASTNode;
   Expect(tkColon, ':');
-  Expect(tkNewline, 'newline');
-  Expect(tkIndent, 'indent');
-  thenNode := PyParseBlock;
-  Expect(tkDedent, 'dedent');
+  thenNode := PyParseSuite;
   elseNode := -1;
   if PyIsIdent('elif') then
     elseNode := PyParseIf()
@@ -2782,10 +2904,7 @@ begin
   begin
     Next;
     Expect(tkColon, ':');
-    Expect(tkNewline, 'newline');
-    Expect(tkIndent, 'indent');
-    elseNode := PyParseBlock;
-    Expect(tkDedent, 'dedent');
+    elseNode := PyParseSuite;
   end;
   pairNode := AllocNode(AN_PAIR);
   ASTLeft[pairNode] := thenNode;
@@ -2923,10 +3042,7 @@ begin
   node := AllocNode(AN_WHILE);
   ASTLeft[node] := CurASTNode;
   Expect(tkColon, ':');
-  Expect(tkNewline, 'newline');
-  Expect(tkIndent, 'indent');
-  ASTRight[node] := PyParseBlock;
-  Expect(tkDedent, 'dedent');
+  ASTRight[node] := PyParseSuite;
   Result := node;
 end;
 
@@ -3087,8 +3203,8 @@ begin
     Error('Nil Python: a two-name for target needs a dict (.items()) or enumerate()');
 
   Expect(tkColon, ':');
-  Expect(tkNewline, 'newline');
-  Expect(tkIndent, 'indent');
+  { body suite (indented block or one-liner) is parsed below, after the
+    hidden loop locals are allocated. }
 
   { hidden locals first, so the loop variable keeps the name the user wrote }
   if isStr then cSym := AllocVar(PyHiddenName('c'), tyAnsiString)
@@ -3230,8 +3346,8 @@ begin
     bodyNode := PySeqAppend(bodyNode, node);
   end;
 
-  node := PyParseBlock;
-  Expect(tkDedent, 'dedent');
+  node := PyParseSuite;
+
   bodyNode := PySeqAppend(bodyNode, node);
 
   { while __py_i + 1 < __py_n }
@@ -3917,6 +4033,16 @@ begin
   begin
     stmt := PyParseStatement;
     Result := PySeqAppend(Result, stmt);
+    { `u = int(vm.pop()); addr = int(vm.pop())` — Python allows several simple
+      statements on one line, separated by ';'. Consumed here so the newline
+      check below still applies to the LAST one on the line. }
+    while CurTok.Kind = tkSemicolon do
+    begin
+      Next;
+      if CurTok.Kind in [tkNewline, tkDedent, tkEOF] then Break;  { trailing ';' }
+      stmt := PyParseStatement;
+      Result := PySeqAppend(Result, stmt);
+    end;
     if CurTok.Kind = tkNewline then PySkipNewlines
     else if (stmt >= 0) and (ASTKind[stmt] in [AN_IF, AN_WHILE, AN_FOR,
                                                AN_TRY_EXCEPT, AN_TRY_FINALLY]) then
@@ -5578,6 +5704,14 @@ begin
     begin
       stmt := PyParseStatement;
       mainNode := PySeqAppend(mainNode, stmt);
+      { several simple statements on one line, as in PyParseBlock }
+      while CurTok.Kind = tkSemicolon do
+      begin
+        Next;
+        if CurTok.Kind in [tkNewline, tkDedent, tkEOF] then Break;
+        stmt := PyParseStatement;
+        mainNode := PySeqAppend(mainNode, stmt);
+      end;
     end;
     PySkipNewlines;
   end;

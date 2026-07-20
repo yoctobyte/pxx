@@ -729,6 +729,8 @@ function PyParseToBytes(baseNode: Integer): Integer; forward; { Nil Python <int>
 function PyParseFromBytes: Integer; forward; { Nil Python int.from_bytes(...) intrinsic (pyparser.inc) }
 function PyIsFromBytesAhead: Boolean; forward; { Nil Python: at `int.from_bytes(`? (pyparser.inc) }
 function PyIsSysStreamAhead: Boolean; forward; { Nil Python: at `sys.stdout`/`sys.stderr`? (pyparser.inc) }
+function PyStdlibCallAhead(var pname: AnsiString; var nTok: Integer): Boolean; forward; { Nil Python: at a mapped os./sys. call? (pyparser.inc) }
+function PyParseStdlibCall(const pname: AnsiString; nTok: Integer): Integer; forward; { Nil Python os./sys. call -> pylib shim (pyparser.inc) }
 function PyParseSysStream: Integer; forward; { Nil Python sys.stdout/sys.stderr -> its fd (pyparser.inc) }
 function PyIsToBytesSuffixAhead: Boolean; forward; { Nil Python: at a `.to_bytes(` suffix? (pyparser.inc) }
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python obj.meth() on a VARIANT receiver (pyparser.inc) }
@@ -10791,7 +10793,8 @@ end;
   Applying this after the additive layer made `"a" + "b".upper()` parse as
   `("a" + "b").upper()` and silently print AB where CPython prints aB. }
 procedure ParseFactor;
-var smNameTok, smBase: Integer;
+var smNameTok, smBase, sdTok: Integer;
+    sdName: AnsiString;
 begin
   { `int.from_bytes(...)` is an INTRINSIC, not a call on a value: `int` is a
     type name, so the ordinary factor path would try to resolve it as a
@@ -10802,6 +10805,9 @@ begin
     CurASTNode := PyParseFromBytes;
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
   end
+  else if PyExprMode and PyStdlibCallAhead(sdName, sdTok) then
+    { `os.path.join(...)`, `sys.exit(...)` — mapped by name onto a pylib shim. }
+    CurASTNode := PyParseStdlibCall(sdName, sdTok)
   else if PyExprMode and PyIsSysStreamAhead then
   begin
     { `sys.stderr` is a VALUE (its fd), not a member access on a variable —

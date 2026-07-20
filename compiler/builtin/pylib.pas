@@ -196,6 +196,20 @@ procedure pybytes_setslice(b: TPyBytes; lo, hi: Integer; src: TPyBytes);
   frontend REJECTS anything else rather than silently ignoring it. }
 function pyint_to_bytes(v: Int64; n: Integer; signed: Boolean): TPyBytes;
 function pyint_from_bytes(b: TPyBytes; signed: Boolean): Int64;
+{ os.path / os / sys shims. Reached by NAME from the frontend's stdlib table
+  (`os.path.join(...)` -> pyos_path_join), because `os` and `sys` are deferred
+  imports and never become symbols.
+
+  POSIX semantics only — '/' separators, no drive letters. Everything that can
+  be answered by string manipulation is, so only exists() and getcwd() touch
+  the kernel; that keeps the arch-specific syscall surface down to two calls. }
+function pyos_path_isabs(const p: AnsiString): Boolean;
+function pyos_path_join(const a: AnsiString; const b: AnsiString): AnsiString;
+function pyos_path_dirname(const p: AnsiString): AnsiString;
+function pyos_path_exists(const p: AnsiString): Boolean;
+function pyos_path_abspath(const p: AnsiString): AnsiString;
+function pyos_getcwd: AnsiString;
+procedure pysys_exit(code: Integer);
 { Python's two-argument min/max. Spelled as ordinary pylib FUNCTIONS, the
   same way bytearray/bytes are: neither name is a Pascal keyword, so both
   resolve through the normal call path with no frontend hook.
@@ -1656,6 +1670,135 @@ begin
       acc := acc - (Int64(1) shl (8 * b.FLen));
   end;
   Result := acc;
+end;
+
+function pyos_path_isabs(const p: AnsiString): Boolean;
+begin
+  Result := (Length(p) > 0) and (p[1] = '/');
+end;
+
+function pyos_path_join(const a: AnsiString; const b: AnsiString): AnsiString;
+begin
+  { Python's join: an ABSOLUTE second component discards the first entirely,
+    and an empty first component contributes nothing. }
+  if pyos_path_isabs(b) then begin Result := b; Exit; end;
+  if Length(a) = 0 then begin Result := b; Exit; end;
+  if a[Length(a)] = '/' then Result := a + b
+  else Result := a + '/' + b;
+end;
+
+function pyos_path_dirname(const p: AnsiString): AnsiString;
+var i: Integer;
+begin
+  Result := '';
+  i := Length(p);
+  while (i > 0) and (p[i] <> '/') do Dec(i);
+  if i = 0 then Exit;              { no separator: dirname is empty }
+  if i = 1 then begin Result := '/'; Exit; end;   { keep the root slash }
+  Result := Copy(p, 1, i - 1);
+end;
+
+{ access(path, F_OK) — "does the name exist". Per-arch numbers, the same shape
+  Randomize uses. aarch64 and riscv have no access(2), only faccessat(2), which
+  takes AT_FDCWD (-100) as its first argument. A target with no number here
+  reports False rather than guessing. }
+function pyos_path_exists(const p: AnsiString): Boolean;
+var r: Int64; cs: AnsiString;
+begin
+  Result := False;
+  if Length(p) = 0 then Exit;
+  cs := p + #0;
+  r := -1;
+{$ifdef CPUX86_64}
+  r := __pxxrawsyscall(21, Int64(@cs[1]), 0, 0, 0, 0, 0);
+{$endif}
+{$ifdef CPUAARCH64}
+  r := __pxxrawsyscall(48, -100, Int64(@cs[1]), 0, 0, 0, 0);
+{$endif}
+{$ifdef CPU_ARM32}
+  r := __pxxrawsyscall(33, Int64(@cs[1]), 0, 0, 0, 0, 0);
+{$endif}
+{$ifdef CPU_I386}
+  r := __pxxrawsyscall(33, Int64(@cs[1]), 0, 0, 0, 0, 0);
+{$endif}
+{$ifdef CPU_RISCV32}
+{$ifndef PXX_ESP}
+  r := __pxxrawsyscall(48, -100, Int64(@cs[1]), 0, 0, 0, 0);
+{$endif}
+{$endif}
+  Result := r = 0;
+end;
+
+function pyos_getcwd: AnsiString;
+var buf: array[0..4095] of Char; r: Int64; i: Integer;
+begin
+  Result := '';
+  buf[0] := #0;
+  r := -1;
+{$ifdef CPUX86_64}
+  r := __pxxrawsyscall(79, Int64(@buf[0]), 4096, 0, 0, 0, 0);
+{$endif}
+{$ifdef CPUAARCH64}
+  r := __pxxrawsyscall(17, Int64(@buf[0]), 4096, 0, 0, 0, 0);
+{$endif}
+{$ifdef CPU_ARM32}
+  r := __pxxrawsyscall(183, Int64(@buf[0]), 4096, 0, 0, 0, 0);
+{$endif}
+{$ifdef CPU_I386}
+  r := __pxxrawsyscall(183, Int64(@buf[0]), 4096, 0, 0, 0, 0);
+{$endif}
+{$ifdef CPU_RISCV32}
+{$ifndef PXX_ESP}
+  r := __pxxrawsyscall(17, Int64(@buf[0]), 4096, 0, 0, 0, 0);
+{$endif}
+{$endif}
+  if r <= 0 then Exit;
+  { the kernel returns a NUL-terminated path; length is read from the bytes so
+    the differing return conventions (length vs pointer) do not matter }
+  i := 0;
+  while (i < 4096) and (buf[i] <> #0) do
+  begin
+    Result := Result + buf[i];
+    Inc(i);
+  end;
+end;
+
+{ Normalises '.' and '..' components after making the path absolute, which is
+  what Python's abspath does (it does NOT resolve symlinks — that is realpath).
+  Kept purely lexical for exactly that reason. }
+function pyos_path_abspath(const p: AnsiString): AnsiString;
+var full, comp, outp: AnsiString; i, j: Integer;
+begin
+  if pyos_path_isabs(p) then full := p
+  else full := pyos_path_join(pyos_getcwd, p);
+  outp := '';
+  i := 1;
+  while i <= Length(full) do
+  begin
+    while (i <= Length(full)) and (full[i] = '/') do Inc(i);
+    j := i;
+    while (j <= Length(full)) and (full[j] <> '/') do Inc(j);
+    if j > i then
+    begin
+      comp := Copy(full, i, j - i);
+      if comp = '..' then
+        outp := pyos_path_dirname(outp)
+      else if comp <> '.' then
+      begin
+        if (Length(outp) = 0) or (outp[Length(outp)] <> '/') then
+          outp := outp + '/';
+        outp := outp + comp;
+      end;
+    end;
+    i := j;
+  end;
+  if Length(outp) = 0 then outp := '/';
+  Result := outp;
+end;
+
+procedure pysys_exit(code: Integer);
+begin
+  Halt(code);
 end;
 
 function bytes(b: TPyBytes): TPyBytes;

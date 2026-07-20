@@ -1,0 +1,13 @@
+import os
+print(os.path.isabs("/a/b"))
+print(os.path.isabs("a/b"))
+print(os.path.join("/a", "b"))
+print(os.path.join("/a/", "b"))
+print(os.path.join("/a", "/b"))
+print(os.path.dirname("/a/b/c"))
+print(os.path.dirname("/a"))
+print(os.path.dirname("abc"))
+print(os.path.exists("/"))
+print(os.path.exists("/definitely/not/here"))
+print(os.path.abspath("/a/b/../c"))
+print(os.path.abspath("/a/./b"))

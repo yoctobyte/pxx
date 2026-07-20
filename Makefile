@@ -226,6 +226,12 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_defaults26)" = "$$(printf '3\n6\nhi bob\nhi bob!\nend...\nend!\n7\n103\n106\n3\n-3\n206')"
 	./$(COMPILER) test/test_nilpy_bytes.npy /tmp/test_nilpy_bytes26
 	test "$$(/tmp/test_nilpy_bytes26)" = "$$(printf '4\n0\n0\n65\n66\n0\n255\n255\n65\n65\n1\n4\n1024\n0')"
+	./$(COMPILER) test/test_nilpy_os_path.npy /tmp/test_nilpy_os_path26
+	test "$$(/tmp/test_nilpy_os_path26)" = "$$(printf 'True\nFalse\n/a/b\n/a/b\n/b\n/a/b\n/\n\nTrue\nFalse\n/a/c\n/a/b')"
+	./$(COMPILER) test/test_nilpy_suites.npy /tmp/test_nilpy_suites26
+	test "$$(/tmp/test_nilpy_suites26)" = "$$(printf '0\n1\n2\n14\n1\n2\n3\nbig\n3')"
+	./$(COMPILER) test/test_nilpy_truthiness.npy /tmp/test_nilpy_truthiness26
+	test "$$(/tmp/test_nilpy_truthiness26)" = "$$(printf 's truthy\ne falsy\nnot s -> False\nTrue\nFalse')"
 	./$(COMPILER) test/test_nilpy_print_kwargs.npy /tmp/test_nilpy_print_kwargs26
 	test "$$(/tmp/test_nilpy_print_kwargs26 2>/dev/null)" = "$$(printf 'ab\nx|y|\nplain\nmulti 1 2\nafter stderr\nnl end\nflush only')"
 	test "$$(/tmp/test_nilpy_print_kwargs26 2>&1 >/dev/null)" = "to stderr"

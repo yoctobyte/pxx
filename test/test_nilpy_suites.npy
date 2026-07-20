@@ -1,0 +1,21 @@
+def guard(t: str) -> int:
+    if not t: return 0
+    if t == "x": return 1
+    return 2
+
+print(guard(""))
+print(guard("x"))
+print(guard("y"))
+n = 0
+i = 0
+while i < 5:
+    if i == 2: n = n + 10
+    else: n = n + 1
+    i = i + 1
+print(n)
+for k in [1, 2, 3]: print(k)
+if n > 5: print("big")
+elif n < 0: print("neg")
+else: print("small")
+a = 1; b = 2
+print(a + b)
