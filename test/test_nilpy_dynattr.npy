@@ -1,0 +1,15 @@
+from typing import Any
+def init(vm: Any) -> None:
+    if not hasattr(vm, '_ptr'):
+        vm._ptr = 100
+def use(vm: Any) -> int:
+    init(vm)
+    p = vm._ptr
+    vm._ptr = p + 5
+    return vm._ptr
+class VM:
+    def __init__(self) -> None:
+        self.n = 0
+v = VM()
+print(use(v))
+print(use(v))

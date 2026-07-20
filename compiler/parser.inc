@@ -719,6 +719,8 @@ function PyMakeDynCall(baseNode: Integer): Integer; forward; { Nil Python: call 
 procedure PyParseLambdaStub; forward; { Nil Python: consume a lambda -> None (pyparser.inc) }
 function PyIsIdent(const s: AnsiString): Boolean; forward; { (pyparser.inc) }
 function PyMakeVariantGetItem(baseNode, idxNode: Integer): Integer; forward; { Nil Python v[key] on a variant (pyparser.inc) }
+function PyMakeDynAttrGet(baseNode: Integer; const fname: AnsiString): Integer; forward; { Nil Python obj.name dynamic read (pyparser.inc) }
+function PyMakeDynAttrSet(baseNode: Integer; const fname: AnsiString; valNode: Integer): Integer; forward; { Nil Python obj.name = v dynamic write (pyparser.inc) }
 function PyMakeVariantSetItem(baseNode, idxNode, valNode: Integer): Integer; forward; { Nil Python v[key]=val on a variant (pyparser.inc) }
 function PyMakeStrIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python s[i] (pyparser.inc) }
 function PyQualifyNested(const name: AnsiString): AnsiString; forward; { Nil Python nested-def name lookup (pyparser.inc) }
@@ -4663,9 +4665,20 @@ begin
       if PyExprMode and (tk = tyVariant) then
       begin
         Next;   { consume the field name, as the call branch above does }
-        node := PyMakeVariantField(node, fieldName, tk, recName);
-        if node >= 0 then Continue;
-        Error('Nil Python: no class declares a field .' + fieldName);
+        indexNode := PyMakeVariantField(node, fieldName, tk, recName);
+        if indexNode >= 0 then begin node := indexNode; Continue; end;
+        { No class declares it -> a DYNAMIC attribute. `vm._trans_ptr = X`
+          (assignment) becomes pydynattr_set; a read becomes pydynattr_get. }
+        if CurTok.Kind = tkAssign then
+        begin
+          Next;
+          PyParseBoolExpr;
+          node := PyMakeDynAttrSet(node, fieldName, CurASTNode);
+          tk := tyUnknown; Result := node; Exit;
+        end;
+        node := PyMakeDynAttrGet(node, fieldName);
+        tk := tyVariant; recName := REC_NONE;
+        Continue;
       end;
 
       { Metaclass-dispatched construction `classRef.Create(args)`: the base is a
@@ -8404,6 +8417,29 @@ begin
           atDflt := CurASTNode;
         end;
         Expect(tkRParen, ')');
+        { A VARIANT receiver may carry DYNAMIC attributes set at run time, which
+          a compile-time field check cannot see — resolve hasattr/getattr on it
+          through the dynamic-attribute store at run time. }
+        if (atFld < 0) and (IntToTypeKind(ASTTk[atRecv]) = tyVariant) then
+        begin
+          if atIsGet then CurASTNode := PyMakeDynAttrGet(atRecv, atName)
+          else
+          begin
+            idx := FindProc('pydynattr_has');
+            if idx < 0 then Error('Nil Python: pylib (pydynattr_has) not loaded');
+            argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := atRecv;
+            argSeq2 := AllocNode(AN_STR_LIT);
+            ASTSOffset[argSeq2] := PyStoredName(atName); ASTSLen[argSeq2] := Length(atName);
+            ASTTk[argSeq2] := Ord(tyString);
+            argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := argSeq2; ASTRight[argSeq3] := -1;
+            ASTRight[argSeq] := argSeq3;
+            node := AllocNode(AN_CALL); ASTIVal[node] := idx;
+            ASTTk[node] := Ord(tyBoolean); ASTLeft[node] := argSeq;
+            CurASTNode := node;
+          end;
+          LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+          Exit;
+        end;
         if not atIsGet then
         begin
           node := AllocNode(AN_INT_LIT);

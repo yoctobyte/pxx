@@ -441,6 +441,13 @@ function pyvarobj(const v: Variant): Pointer;
   by an integer key. }
 function pyvar_getitem(const v: Variant; const key: Variant): Variant;
 procedure pyvar_setitem(const v: Variant; const key: Variant; const val: Variant);
+{ DYNAMIC instance attributes: `obj.name = v` / `obj.name` where `name` is not a
+  declared field (Python adds them freely). Stored in one global dict keyed by
+  the object's address and the attribute name, so no per-class field is needed.
+  uforth uses this for lazy state (`if not hasattr(vm, '_trans_ptr'): vm._trans_ptr = ...`). }
+function pydynattr_get(const obj: Variant; const name: AnsiString): Variant;
+procedure pydynattr_set(const obj: Variant; const name: AnsiString; const val: Variant);
+function pydynattr_has(const obj: Variant; const name: AnsiString): Boolean;
 { `v[lo:hi]` where v is a VARIANT — slice the str/list/bytes it holds, at run
   time. Returns a variant of the same kind. }
 function pyvar_slice(const v: Variant; lo, hi: Integer): Variant;
@@ -805,6 +812,39 @@ end;
 function pyvarobj(const v: Variant): Pointer;
 begin
   Result := Pointer(PPyVarRec(@v)^.Payload);
+end;
+
+var
+  PyDynAttrStore: TPyDict;   { lazily created; keys are "addr:name" }
+
+function PyDynAttrKey(const obj: Variant; const name: AnsiString): AnsiString;
+begin
+  Result := pystr_of(Int64(PPyVarRec(@obj)^.Payload)) + ':' + name;
+end;
+
+procedure pydynattr_set(const obj: Variant; const name: AnsiString; const val: Variant);
+begin
+  if PyDynAttrStore = nil then PyDynAttrStore := TPyDict.Create;
+  PyDynAttrStore.store(PyDynAttrKey(obj, name), val);
+end;
+
+function pydynattr_has(const obj: Variant; const name: AnsiString): Boolean;
+begin
+  Result := (PyDynAttrStore <> nil) and
+            (PyDynAttrStore.indexof(PyDynAttrKey(obj, name)) >= 0);
+end;
+
+function pydynattr_get(const obj: Variant; const name: AnsiString): Variant;
+begin
+  if pydynattr_has(obj, name) then
+    Result := PyDynAttrStore.fetch(PyDynAttrKey(obj, name))
+  else
+  begin
+    { Python raises AttributeError; None is returned here because uforth always
+      guards a dynamic read with hasattr first. }
+    PPyVarRec(@Result)^.VType := 0;
+    PPyVarRec(@Result)^.Payload := 0;
+  end;
 end;
 
 function pyvar_getitem(const v: Variant; const key: Variant): Variant;

@@ -2283,6 +2283,45 @@ begin
   LastExprTk := tyVariant;
 end;
 
+{ `obj.name` (dynamic attribute read) -> pydynattr_get(obj, "name"). }
+function PyMakeDynAttrGet(baseNode: Integer; const fname: AnsiString): Integer;
+var procIdx, a0, a1, nameNode: Integer;
+begin
+  procIdx := FindProc('pydynattr_get');
+  if procIdx < 0 then Error('Nil Python: pylib (pydynattr_get) not loaded');
+  nameNode := AllocNode(AN_STR_LIT);
+  ASTSOffset[nameNode] := PyStoredName(fname);
+  ASTSLen[nameNode] := Length(fname);
+  ASTTk[nameNode] := Ord(tyString);
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := baseNode;
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := nameNode;
+  ASTRight[a0] := a1; ASTRight[a1] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyVariant);
+  ASTLeft[Result] := a0;
+end;
+
+{ `obj.name = val` (dynamic attribute write) -> pydynattr_set(obj, "name", val). }
+function PyMakeDynAttrSet(baseNode: Integer; const fname: AnsiString; valNode: Integer): Integer;
+var procIdx, a0, a1, a2, nameNode: Integer;
+begin
+  procIdx := FindProc('pydynattr_set');
+  if procIdx < 0 then Error('Nil Python: pylib (pydynattr_set) not loaded');
+  nameNode := AllocNode(AN_STR_LIT);
+  ASTSOffset[nameNode] := PyStoredName(fname);
+  ASTSLen[nameNode] := Length(fname);
+  ASTTk[nameNode] := Ord(tyString);
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := baseNode;
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := nameNode;
+  a2 := AllocNode(AN_ARG); ASTLeft[a2] := valNode;
+  ASTRight[a0] := a1; ASTRight[a1] := a2; ASTRight[a2] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyUnknown);
+  ASTLeft[Result] := a0;
+end;
+
 function PyMakeVariantGetItem(baseNode, idxNode: Integer): Integer;
 var procIdx, a0, a1: Integer;
 begin
