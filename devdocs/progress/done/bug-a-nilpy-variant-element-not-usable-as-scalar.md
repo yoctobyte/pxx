@@ -108,3 +108,6 @@ print.
 
 `make test` + self-host byte-identical, `test-nilpy` green, and all four
 repros above matching CPython.
+
+## Log
+- 2026-07-20 — resolved, commit 8bd1ac4c.
