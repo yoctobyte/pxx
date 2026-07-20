@@ -1609,6 +1609,16 @@ begin
   else if tk = tyPromoInt64 then PromoIntInlineBits := 64;
 end;
 
+{ The machine integer type a promotable int's inline payload IS. This is the
+  type every promo rvalue lowers to, so all downstream integer codegen applies
+  unchanged. Native by construction — the storage class is chosen to match the
+  target's word. }
+function PromoNativeTk(tk: TTypeKind): TTypeKind;
+begin
+  PromoNativeTk := tyInt64;
+  if tk = tyPromoInt32 then PromoNativeTk := tyInt32;
+end;
+
 { The variant tag a promotable int of this storage class carries. }
 function PromoIntVarTag(tk: TTypeKind): Integer;
 begin
@@ -1850,6 +1860,22 @@ function TypeArithmeticResult(lhs, rhs: TTypeKind): TTypeKind;
 { Integer arithmetic is evaluated as an 8-byte value. Signedness follows the
   same widening rule as relational comparisons. }
 begin
+  { A promotable int is INFECTIOUS: mixing one with any ordinary integer yields a
+    promotable int, never the machine type. Losing precision at the boundary is
+    exactly the cliff this type exists to remove, so the wider storage class
+    wins. Checked before the signedness rule because promo has no unsigned form. }
+  if TypeIsPromoInt(lhs) or TypeIsPromoInt(rhs) then
+  begin
+    { Always the 64-bit class today. Keeping a promo32 op in its own 32-bit
+      class would be the principled rule — the op then traps in the operands'
+      own width — but the backend's {$Q+} overflow check only covers 64-bit
+      ops (measured: `{$Q+} c: Integer; c := c + 2000000000` wraps silently,
+      see bug-a-qplus-misses-32bit-overflow). Computing in 64-bit is what makes
+      the trap real, so promo32 stays declaration-blocked until that check
+      exists rather than shipping a class that silently truncates. }
+    Result := tyPromoInt64;
+    Exit;
+  end;
   if TypeCompareUnsigned(lhs, rhs) then
     Result := tyUInt64
   else
@@ -1864,6 +1890,11 @@ function TypeArithmeticResultOp(lhs, rhs: TTypeKind; op: TTokenKind): TTypeKind;
   (UInt64/QWord/NativeUInt) forces UInt64 — so `cardinal(3) - cardinal(5)` = -2,
   not 2^64-2, while `qword - qword` stays unsigned. }
 begin
+  if TypeIsPromoInt(lhs) or TypeIsPromoInt(rhs) then
+  begin
+    Result := TypeArithmeticResult(lhs, rhs);
+    Exit;
+  end;
   if (op = tkMinus) and (lhs <> tyUInt64) and (rhs <> tyUInt64) and
      (lhs <> tyNativeUInt) and (rhs <> tyNativeUInt) then
     Result := tyInt64

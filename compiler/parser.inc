@@ -10837,6 +10837,13 @@ begin
     else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or (ASTTk[left] = Ord(tyExtended)) or
             (ASTTk[right] = Ord(tySingle)) or (ASTTk[right] = Ord(tyDouble)) or (ASTTk[right] = Ord(tyExtended)) then
       ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
+    else if TypeIsPromoInt(IntToTypeKind(ASTTk[left])) or
+            TypeIsPromoInt(IntToTypeKind(ASTTk[right])) then
+      { Promotable int is infectious — see the twin arm in the other binop
+        typing site. Above the ordinal arm because promo is deliberately not
+        TypeIsOrdinal. }
+      ASTTk[node] := Ord(TypeArithmeticResult(IntToTypeKind(ASTTk[left]),
+                                              IntToTypeKind(ASTTk[right])))
     else if TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then
       ASTTk[node] := Ord(TypeArithmeticResult(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
     else
@@ -10960,6 +10967,17 @@ begin
     else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or (ASTTk[left] = Ord(tyExtended)) or
             (ASTTk[right] = Ord(tySingle)) or (ASTTk[right] = Ord(tyDouble)) or (ASTTk[right] = Ord(tyExtended)) then
       ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
+    else if TypeIsPromoInt(IntToTypeKind(ASTTk[left])) or
+            TypeIsPromoInt(IntToTypeKind(ASTTk[right])) then
+      { A promotable int is infectious: mixing it with any ordinary integer
+        yields a promotable int. This arm must sit ABOVE the ordinal arm because
+        promo is deliberately not reported by TypeIsOrdinal — without it the
+        result fell through to the tyInteger default and the IR lowering never
+        saw a promo type, so overflow silently WRAPPED (25! came out as 25! mod
+        2^64 instead of trapping). Below the float arm, so promo-with-float
+        still resolves as float. }
+      ASTTk[node] := Ord(TypeArithmeticResultOp(IntToTypeKind(ASTTk[left]),
+                                                IntToTypeKind(ASTTk[right]), op))
     else if TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then
     begin
       { FPC range-based constants: a NON-NEGATIVE integer literal paired with a
@@ -17266,16 +17284,18 @@ begin
       else if (not tnHasAlias) and (CaseEqual(lo, 'promoint') or CaseEqual(lo, 'promoint32')
                                     or CaseEqual(lo, 'promoint64')) then
       begin
-        { Storage and arithmetic are stage 2. Reject the declaration outright
-          rather than let a promo-typed symbol reach codegen: every integer path
-          would treat the {tag, payload} struct as a machine word and silently
-          compute on the tag. An error here costs a diagnostic; the alternative
-          costs a silent wrong answer. }
-        Error('promotable int is not implemented yet: the type name is reserved '
-              + '(feature-a-promotable-int stage 2 adds storage and arithmetic)');
+        { PromoInt32 is reserved but not yet declarable: its arithmetic would
+          have to trap in 32-bit width, and the backend's overflow check only
+          covers 64-bit ops today (bug-a-qplus-misses-32bit-overflow). Shipping
+          it now would mean a promotable int that silently wraps at 2^31 — the
+          precise defect this type removes. Blocked, not faked. }
         if CaseEqual(lo, 'promoint32') then Result := tyPromoInt32
         else if CaseEqual(lo, 'promoint64') then Result := tyPromoInt64
         else Result := PromoIntDefaultKind;
+        if Result = tyPromoInt32 then
+          Error('PromoInt32 is not available yet: its overflow trap needs the '
+                + '32-bit {$Q+} check (bug-a-qplus-misses-32bit-overflow). '
+                + 'Use PromoInt64.');
       end
       else if (not tnHasAlias) and (EnableAutoVar and CaseEqual(lo, 'auto')) then Result := tyAuto
       else
