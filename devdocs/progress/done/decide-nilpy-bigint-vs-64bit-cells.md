@@ -86,3 +86,6 @@ and unnecessary cost; a promoting int is a well-predicted `jo` on the fast path.
   `((ud_hi & M) << 64) | ud_lo` paths stop being a cliff.
 - CPython is the oracle for the semantics; see
   [[feature-t-nilpy-cpython-differential-fuzzer]].
+
+## Log
+- 2026-07-20 — resolved, commit bc9134e7.

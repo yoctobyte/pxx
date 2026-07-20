@@ -1,5 +1,6 @@
 ---
 prio: 55
+keep-open: the 0.1-vs-1.0 call is made, but this deliberately gates feature-promo-launch-plan's loud launch until 0.1 has shipped and been used
 ---
 
 # DECIDE: first release is 0.1-BETA — a 1.0-grade bar under a modest number
@@ -116,3 +117,20 @@ claiming. So: scope 0.1 → ship it → learn from real users → *then* the lou
   modesty is in the number, not the standard. Consequence recorded in stage 1: 0.1 is a
   substantial milestone, not a quick win, and the "ship early, learn from strangers" argument does
   not apply to it. Release ≠ launch still holds.
+
+## Why this stays in backlog (2026-07-20)
+
+`check`'s DECIDED-NOT-MOVED rule flags a decide- ticket that records a decision
+and has not moved. This one is an intentional exception, declared via
+`keep-open:` in the frontmatter.
+
+The decision here IS "defer, and keep gating": first release is 0.1 beta, and
+**the loud moment stays in the pocket** until strangers have run 0.1 and we
+have fixed what they broke. `feature-promo-launch-plan` is blocked-by this
+ticket precisely so that launch work cannot be picked off the ready queue
+early — its own note says "the *launch* is what that blocker gates. The
+*visibility* work below is NOT blocked — start it now."
+
+So resolving this would release exactly the work the decision parks. It closes
+when 0.1 has actually shipped, at which point the deferred question (what 1.0
+promises forever — stage 2) is re-filed as its own decide.

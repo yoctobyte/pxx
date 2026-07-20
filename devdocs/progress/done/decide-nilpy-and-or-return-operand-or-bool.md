@@ -86,3 +86,6 @@ is reached only by genuinely mixed-type value uses.
   or reject; never widen.
 - Int operands depend on the new int representation:
   [[feature-a-promotable-int]]. Land that first.
+
+## Log
+- 2026-07-20 — resolved, commit 5287bdd7.

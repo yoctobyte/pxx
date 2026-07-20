@@ -810,15 +810,33 @@ pre code{background:none;padding:0}
         # ready queue as if still open. 2026-07-20:
         # decide-variant-tag-mismatch-policy sat in backlog at prio 60 with
         # both halves settled inside it, ranking above real work.
-        decision_re = re.compile(r"^##\s+(DECISION|RESOLVED)\b", re.I | re.M)
+        # Heading forms actually in use across the board — the first cut only
+        # knew DECISION/RESOLVED and so missed three decided tickets still
+        # sitting in backlog ("## USER DECISION 2026-07-12", "## DECIDED
+        # 2026-07-20"). Anchored right after the '##' on purpose: it must NOT
+        # match "## Also decided-needed", which means the opposite.
+        decision_re = re.compile(
+            r"^##\s+(USER\s+)?(DECISION|DECIDED|RESOLVED)\b", re.I | re.M)
         for st in ("backlog", "urgent"):
             for t in self.by_status[st]:
-                if t.slug.startswith("decide-") and decision_re.search(t.text):
-                    lines.append(
-                        f"DECIDED-NOT-MOVED: {t.slug} records a decision but is still in {st}/ — "
-                        f"resolve it so its dependents unblock"
-                    )
-                    problems = 1
+                if not (t.slug.startswith("decide-") and decision_re.search(t.text)):
+                    continue
+                # "recorded a decision" does not always mean "should move": a
+                # decision can BE "defer this, and keep gating what depends on
+                # it". decide-1-0-scope-promise is exactly that — it answers
+                # "first release is 0.1 beta" while deliberately holding
+                # feature-promo-launch-plan's loud launch shut. Closing it
+                # would release the very work the decision parks. Such a
+                # ticket declares itself with `keep-open:` in frontmatter and
+                # is not nagged about; everything else is drift.
+                if t.fm.get("keep-open"):
+                    continue
+                lines.append(
+                    f"DECIDED-NOT-MOVED: {t.slug} records a decision but is still in {st}/ — "
+                    f"resolve it so its dependents unblock, or set `keep-open: <why>` "
+                    f"if it deliberately gates something"
+                )
+                problems = 1
 
         # The mirror: moved without writing DOWN the answer. Dependents reach
         # the decision by following their blocked-by slug into done/, so a
