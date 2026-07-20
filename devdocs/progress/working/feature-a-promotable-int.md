@@ -218,3 +218,63 @@ int→float overflow, `str(bigint)` round-trips, and uforth's
 
 Also assert the negative: a Pascal/C program that never uses the type must show
 **no size growth** and no reference to the bignum entry points.
+
+---
+
+## Progress log
+
+### Landed 2026-07-20
+
+- `bf86b54e` — type kinds `tyPromoInt32` (27) / `tyPromoInt64` (28) appended to
+  `TTypeKind`; contiguous 8-entry variant tag block at `VT_PROMO_BASE = 8192`;
+  `TypeSize` (8 / 16); `TypeIsPromoInt`, `PromoIntInlineBits`, `PromoIntVarTag`,
+  `PromoIntDefaultKind`. The freeze-forever decisions are now in the tree.
+  Deliberately absent from `TypeIsOrdinal` / `TypeSigned` so no existing integer
+  path can pick the type up.
+- `f053b2ed` — `PromoInt` / `PromoInt32` / `PromoInt64` reserved in the Pascal
+  type resolver, currently erroring with a "not implemented yet" diagnostic.
+
+### MEASURED: the current cliff is at 2^31, not 2^63
+
+The ticket's framing ("silently wraps at 2^63") is optimistic — measured against
+CPython before touching anything:
+
+```python
+def fact(n: int) -> int:
+    r = 1
+    i = 1
+    while i <= n:
+        r = r * i
+        i = i + 1
+    return r
+print(fact(13))
+```
+
+pxx prints `1932053504`, CPython prints `6227020800`. NilPy's `int` annotation
+maps to `tyInteger` (pyparser.inc:138, :227), which is **4-byte signed**, so an
+explicitly annotated `-> int` function wraps at 2^31. A loop-carried
+accumulator inferred from `z = 1` does the same: `z * 100000` three times gives
+`-1530494976` instead of `10^15`.
+
+It is also inconsistent — `w = 2147483647; w = w + 1` DOES widen (the AST-typing
+pre-pass widens on a literal that does not fit), while arithmetic growth does
+not. So today the width a NilPy int gets depends on whether the big value
+appears as a literal.
+
+This strengthens "land this first": the cliff is shallow enough to hit in
+ordinary programs, not just in bignum-flavoured ones.
+
+### Next step — stage 2
+
+Storage and arithmetic. Order that keeps every increment green:
+
+1. `{tag, payload}` slot allocation + zero-init for a promo-typed local/global.
+2. Store: integer expr -> promo, with a range check against the inline width.
+3. Load: promo -> Int64 where the tag says inline; raise on the spilled tag
+   (which stage 2 cannot produce yet).
+4. Checked `+` / `-` / `*` and the comparisons, trapping on overflow.
+5. `Write`/`Str` via the existing integer path while inline.
+
+x86-64 first, other backends erroring explicitly rather than falling through.
+Removing the stage-1 declaration guard in parser.inc is the last step of (1),
+not the first — nothing should be declarable until the slot is real.
