@@ -268,6 +268,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_variant_polymorphic_builtins26)" = "$$(printf '2 abab abab\n0  \n3 xyzxyz xyzxyz\n1 qq qq\n9 9\n-6 -6\n0 0\n3.0 3.0\n-1.0 -1.0\n97 1 aaa\n122 1 zzz\n3\n2')"
 	./$(COMPILER) test/test_nilpy_list_repeat.npy /tmp/test_nilpy_list_repeat26
 	test "$$(/tmp/test_nilpy_list_repeat26)" = "$$(printf '[0, 0, 0, 0] 4\n['"'"'a'"'"', '"'"'a'"'"', '"'"'a'"'"'] 3\n[1, 2, 1, 2]\n[] []\n[[0], [0]]\n[[0, 9], [0, 9]]\n[0, 1, 2]')"
+	./$(COMPILER) test/test_nilpy_unpack.npy /tmp/test_nilpy_unpack26
+	test "$$(/tmp/test_nilpy_unpack26)" = "$$(printf '1 2\n2 1\np 2 3.5\n7 8\na 1\nb 2\nc 3\n6\na 1\nb 2\nc 3')"
 	./$(COMPILER) test/test_nilpy_comparison_chaining.npy /tmp/test_nilpy_comparison_chaining26
 	test "$$(/tmp/test_nilpy_comparison_chaining26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nTrue\nFalse\nTrue\ncall\nTrue')"
 	./$(COMPILER) test/test_nilpy_nested_def.npy /tmp/test_nilpy_nested_def26

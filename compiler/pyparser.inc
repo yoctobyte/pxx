@@ -2084,12 +2084,51 @@ end;
   body that only passes it along or prints it is correct today. Consuming one
   AS A SCALAR is bug-a-nilpy-variant-element-not-usable-as-scalar, which is
   Track A and predates this. }
-function PyParseForIn(const name: AnsiString): Integer;
+{ Index of the '.' in a trailing `.items()` before the loop's ':', or -1. The
+  suffix has to be recognised at TOKEN level: parsing it as an expression would
+  look for a TPyDict method that does not exist, and inventing one would need a
+  tuple type the two-name loop does not require. }
+function PyItemsSuffixAhead: Integer;
+var i, depth: Integer;
+begin
+  Result := -1;
+  i := TokPos - 1;
+  depth := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkLParen, tkLBrack] then Inc(depth)
+    else if Tokens[i].Kind in [tkRParen, tkRBrack] then Dec(depth)
+    else if (depth = 0) and (Tokens[i].Kind = tkColon) then
+    begin
+      if (i >= 4) and (Tokens[i - 4].Kind = tkDot) and
+         (Tokens[i - 3].Kind = tkIdent) and (GetTokenStr(i - 3) = 'items') and
+         (Tokens[i - 2].Kind = tkLParen) and (Tokens[i - 1].Kind = tkRParen) then
+        Result := i - 4;
+      Exit;
+    end
+    else if Tokens[i].Kind in [tkNewline, tkEOF] then Exit;
+    Inc(i);
+  end;
+end;
+
+function PyParseForIn(const name: AnsiString; const name2: AnsiString): Integer;
 var contNode, ci, dictCi, listCi, symIdx, cSym, iSym, nSym: Integer;
+    sym2, vSym, vListNode, itemsDot: Integer;   { two-name target: `for k, v in d.items()` }
     elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
     isStr: Boolean; contTk: TTypeKind;
 begin
+  { `d.items()`: hide the suffix behind a fake ':' so the expression parser stops
+    at the dict, then step over the four suffix tokens and restore. }
+  itemsDot := -1;
+  if name2 <> '' then itemsDot := PyItemsSuffixAhead;
+  if itemsDot >= 0 then Tokens[itemsDot].Kind := tkColon;
   PyParseBoolExpr;
+  if itemsDot >= 0 then
+  begin
+    Tokens[itemsDot].Kind := tkDot;
+    TokPos := itemsDot + 4;
+    Next;
+  end;
   contNode := CurASTNode;
   contTk := IntToTypeKind(ASTTk[contNode]);
   isStr := (contTk = tyString) or (contTk = tyAnsiString);
@@ -2104,12 +2143,24 @@ begin
       Error('Nil Python: for-in needs a list, set, dict or str (got something untyped)');
     if (dictCi >= 0) and (ci = dictCi) then
     begin
-      { iterate a dict's KEYS, as Python does }
+      { A two-name target reads the dict's parallel VALUE list by the same
+        index; a single name iterates its KEYS, as Python does. }
+      if name2 <> '' then
+      begin
+        vSym := AllocVar(PyHiddenName('v'), tyClass);
+        Syms[vSym].RecName := REC_UCLASS_BASE + listCi;
+        vListNode := PyCallMeth1(dictCi, 'vallist', contNode, -1);
+        if vListNode < 0 then Error('Nil Python: pylib (TPyDict.vallist) not loaded');
+      end;
       contNode := PyCallMeth1(dictCi, 'keylist', contNode, -1);
       if contNode < 0 then Error('Nil Python: pylib (TPyDict.keylist) not loaded');
       ci := listCi;
-    end;
-  end;
+    end
+    else if name2 <> '' then
+      Error('Nil Python: a two-name for target needs a dict (.items())');
+  end
+  else if name2 <> '' then
+    Error('Nil Python: a two-name for target needs a dict (.items())');
 
   Expect(tkColon, ':');
   Expect(tkNewline, 'newline');
@@ -2127,6 +2178,12 @@ begin
     if isStr then symIdx := AllocVar(name, tyAnsiString)
     else symIdx := AllocVar(name, tyVariant);
   end;
+  sym2 := -1;
+  if name2 <> '' then
+  begin
+    sym2 := FindSym(name2);
+    if sym2 < 0 then sym2 := AllocVar(name2, tyVariant);
+  end;
 
   { __py_c := container }
   seq := -1;
@@ -2134,6 +2191,13 @@ begin
   ASTLeft[node] := PyMakeIdent(cSym);
   ASTRight[node] := contNode;
   seq := PySeqAppend(seq, node);
+  if sym2 >= 0 then
+  begin
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(vSym);
+    ASTRight[node] := vListNode;
+    seq := PySeqAppend(seq, node);
+  end;
 
   { __py_n := len(__py_c) }
   if isStr then
@@ -2205,6 +2269,17 @@ begin
   ASTRight[node] := elemNode;
   bodyNode := PySeqAppend(bodyNode, node);
 
+  { the value name reads the parallel list at the same index }
+  if sym2 >= 0 then
+  begin
+    elemNode := PyCallMeth1(listCi, 'get', PyMakeIdent(vSym), PyMakeIdent(iSym));
+    if elemNode < 0 then Error('Nil Python: pylib (get) not loaded');
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(sym2);
+    ASTRight[node] := elemNode;
+    bodyNode := PySeqAppend(bodyNode, node);
+  end;
+
   node := PyParseBlock;
   Expect(tkDedent, 'dedent');
   bodyNode := PySeqAppend(bodyNode, node);
@@ -2230,22 +2305,34 @@ begin
 end;
 
 function PyParseFor: Integer;
-var name: AnsiString; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
+var name, name2: AnsiString; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
     pair1, pair2, pair3, bodyNode, oneNode, limitNode: Integer;
 begin
   Next;
   if CurTok.Kind <> tkIdent then Error('Nil Python: expected loop variable after for');
   name := CurTok.SVal;
   Next;
+  { `for k, v in d.items():` — a two-name target, which only a dict serves
+    today (feature-nilpy-tuple-unpack). No tuple type is invented for it: the
+    two names read the dict's parallel key and value lists by the same index. }
+  name2 := '';
+  if CurTok.Kind = tkComma then
+  begin
+    Next;
+    if CurTok.Kind <> tkIdent then Error('Nil Python: expected a second loop variable');
+    name2 := CurTok.SVal;
+    Next;
+  end;
   Expect(tkIn, 'in');
   { `for x in range(...)` keeps the counted-loop lowering below; anything else
     is a container and goes through the desugar. }
   if not (PyIsIdent('range') and (TokPos < TokCount) and
           (Tokens[TokPos].Kind = tkLParen)) then
   begin
-    Result := PyParseForIn(name);
+    Result := PyParseForIn(name, name2);
     Exit;
   end;
+  if name2 <> '' then Error('Nil Python: a two-name for target needs a dict (.items())');
   symIdx := FindSym(name);
   if symIdx < 0 then symIdx := AllocVar(name, tyInteger);
   PyExpectIdent('range');
@@ -2448,12 +2535,86 @@ begin
   Result := -1;
 end;
 
+{ `a, b = x, y` — SIMULTANEOUS assignment. Every right-hand side is evaluated
+  into a hidden temp before ANY target is stored, which is the whole reason this
+  is not just a sequence of assignments: `a, b = b, a` would otherwise become
+  `a = b; b = a` and lose the old `a` (feature-nilpy-tuple-unpack). }
+function PyParseUnpackAssign: Integer;
+var names: array[0..7] of AnsiString;
+    tmps: array[0..7] of Integer;
+    nTargets, nValues, i, symIdx, node, seq, tk: Integer;
+begin
+  nTargets := 0;
+  repeat
+    if CurTok.Kind <> tkIdent then Error('Nil Python: expected a name in the assignment target');
+    if nTargets >= 8 then Error('Nil Python: at most 8 unpacking targets');
+    names[nTargets] := CurTok.SVal;
+    Inc(nTargets);
+    Next;
+  until not Eat(tkComma);
+  Expect(tkAssign, '=');
+
+  { values into temps, left to right }
+  seq := -1;
+  nValues := 0;
+  repeat
+    PyParseBoolExpr;
+    if nValues >= nTargets then
+      Error('Nil Python: too many values to unpack');
+    tk := ASTTk[CurASTNode];
+    if IntToTypeKind(tk) = tyString then tk := Ord(tyAnsiString);
+    tmps[nValues] := AllocVar(PyHiddenName('unp'), IntToTypeKind(tk));
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(tmps[nValues]);
+    ASTRight[node] := CurASTNode;
+    seq := PySeqAppend(seq, node);
+    Inc(nValues);
+  until not Eat(tkComma);
+  if nValues <> nTargets then
+    Error('Nil Python: not enough values to unpack');
+
+  { then the stores }
+  for i := 0 to nTargets - 1 do
+  begin
+    symIdx := FindSym(names[i]);
+    if symIdx < 0 then symIdx := AllocVar(names[i], Syms[tmps[i]].TypeKind);
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(symIdx);
+    ASTRight[node] := PyMakeIdent(tmps[i]);
+    seq := PySeqAppend(seq, node);
+  end;
+  Result := seq;
+end;
+
+{ Does an `a, b = ...` target list start here? Only a bare comma-separated name
+  list followed by `=` qualifies — anything else is left to the ordinary paths. }
+function PyUnpackTargetAhead: Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if CurTok.Kind <> tkIdent then Exit;
+  i := TokPos;                    { the token AFTER the current ident }
+  if (i >= TokCount) or (Tokens[i].Kind <> tkComma) then Exit;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkComma then
+    begin
+      Inc(i);
+      if (i >= TokCount) or (Tokens[i].Kind <> tkIdent) then Exit;
+      Inc(i);
+    end
+    else if Tokens[i].Kind = tkAssign then begin Result := True; Exit; end
+    else Exit;
+  end;
+end;
+
 function PyParseStatement: Integer;
 var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integer; tk: TTypeKind;
     augTk: TTokenKind;
 begin
   Result := -1;
   PyStmtAteBlock := False;
+  if PyUnpackTargetAhead then begin Result := PyParseUnpackAssign; Exit; end;
   { Nested `def`: register the shell here (the enclosing body's calls resolve
     against it), remember where the body starts, and skip it — PyParseDef
     compiles the queued bodies after its own epilogue, because emitting one in

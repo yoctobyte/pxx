@@ -1,0 +1,31 @@
+# Sequence unpacking. `a, b = x, y` is SIMULTANEOUS: every right-hand side is
+# evaluated into a temp before any target is stored, which is why the swap line
+# below works — a naive lowering makes it `a = b; b = a` and loses the old a.
+# `for k, v in d.items()` reads the dict's parallel key/value lists by the same
+# index; no tuple type is invented for it, and the `.items()` suffix is
+# recognised at token level because parsing it would look for a TPyDict method
+# that does not exist (feature-nilpy-tuple-unpack).
+# Output must match CPython running this same file.
+
+a, b = 1, 2
+print(a, b)
+a, b = b, a
+print(a, b)
+x, y, z = "p", 2, 3.5
+print(x, y, z)
+def f() -> int:
+    return 7
+m, n = f(), f() + 1
+print(m, n)
+d = {}
+d["a"] = 1
+d["b"] = 2
+d["c"] = 3
+for k, v in d.items():
+    print(k, v)
+total = 0
+for k, v in d.items():
+    total = total + v
+print(total)
+for k in d:
+    print(k, d[k])
