@@ -26,11 +26,10 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (134)
+## backlog (133)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-nilpy-int-times-variant-in-sum-not-lowered | A | 60 | bug | NilPy: `total = total + k * v` with a VARIANT operand fails to lower | — |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
 | bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
@@ -223,7 +222,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (883)
+## done (884)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -243,6 +242,7 @@ _none_
 | bug-a-nilpy-container-equality-compares-identity | A | 55 | bug | NilPy: `==` on a list or dict compares IDENTITY, not contents | — |
 | bug-a-nilpy-floordiv-and-modulo-wrong-for-negatives | A | 75 | bug | NilPy: `//` and `%` are WRONG for negative operands, silently | — |
 | bug-a-nilpy-int-of-string-returns-a-pointer | A | 80 | bug | NilPy `int("42")` returns a POINTER, silently — and `float()` does not exist | — |
+| bug-a-nilpy-int-times-variant-in-sum-not-lowered | A | 60 | bug | NilPy: `total = total + k * v` with a VARIANT operand fails to lower | — |
 | bug-a-nilpy-list-augmented-add-segfaults | A | 55 | bug | NilPy: `xs += [2]` on a list SEGFAULTS | — |
 | bug-a-nilpy-method-call-on-variant-receiver | A | 70 | bug | NilPy: calling a method on a VARIANT receiver is a parse error | — |
 | bug-a-nilpy-one-char-literal-through-ctor-str-param | A | 70 | bug | NilPy: a ONE-character literal through a ctor `str` param becomes a char — silent, then segfaults | — |
@@ -2557,7 +2557,6 @@ _none_
 - [p 70] [T] regression-cascade-3d46e52fc733
 - [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
 - [p 65] [A] feature-a-typeref-handle
-- [p 60] [A] bug-a-nilpy-int-times-variant-in-sum-not-lowered
 - [p 60] [A] bug-test-core-oversized-job-6gb-flaky
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [A] decide-constructor-exception-cleanup-semantics

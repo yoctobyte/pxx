@@ -47,3 +47,6 @@ that [[project_variant_scalar_unbox_landed]] records.
 `test-nilpy` green + `--tier quick` + self-host byte-identical, with the repro
 plus `total = total + v * v`, `total = total + (v + 1) * 2` and a float variant
 matching CPython.
+
+## Log
+- 2026-07-20 — resolved, commit 08775145.
