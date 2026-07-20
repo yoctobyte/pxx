@@ -98,7 +98,7 @@ _none_
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nilpy-list-repeat | N | 40 | feature | NilPy: `[0] * 4` (list repeat) is not lowered | — |
 | feature-nilpy-missing-builtins | N | 45 | feature | NilPy: the remaining missing builtins — min/max, list(), reversed(), enumerate(), hex() | — |
-| feature-nilpy-nested-def-as-value | N | 55 | feature | NilPy: a nested def used as a VALUE (stored, passed, returned) | — |
+| feature-nilpy-nested-def-as-value | N | 70 | feature | NilPy: a nested def used as a VALUE (stored, passed, returned) | — |
 | feature-nilpy-none-variant | N | 50 | feature | NilPy: `None` as a first-class variant value (VT_EMPTY) | — |
 | feature-nilpy-parallel-for-in | A | 45 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
 | feature-nilpy-str-methods | N | 55 | feature | NilPy: string methods (.upper/.lower/.strip/.split/.join/.startswith...) | — |
@@ -2550,6 +2550,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [N] feature-nilpy-nested-def-as-value
 - [p 70] [T] regression-cascade-3d46e52fc733
 - [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
 - [p 65] [A] feature-a-typeref-handle
@@ -2575,7 +2576,6 @@ _none_
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
 - [p 55] [N] feature-nilpy-bytes-and-slices
 - [p 55] [N] feature-nilpy-corpus-uforth
-- [p 55] [N] feature-nilpy-nested-def-as-value
 - [p 55] [N] feature-nilpy-str-methods
 - [p 55] [N] feature-nilpy-tuple-unpack
 - [p 55] [P] feature-pascal-corpus-generics

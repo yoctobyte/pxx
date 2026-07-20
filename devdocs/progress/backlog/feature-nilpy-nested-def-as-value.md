@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 55
+prio: 70
 type: feature
 ---
 
@@ -41,8 +41,12 @@ That is a real feature, not an extension of the current one:
 uforth registers native words. If that registration stores the inner function
 in a table rather than calling it inline, the current slice is not enough for
 the corpus and this ticket is the real blocker.
-Check before scheduling: `grep -n "def .*:" uforth.py` around the registration
-sites and see whether the inner name is CALLED or STORED.
+Checked 2026-07-20 with an `ast` walk over `/home/rene/projects/uforth/uforth.py`:
+of the references to inner-def names, **52 are calls and ~197 are value uses**
+(249 name references total, which includes the call's own function reference).
+So uforth STORES its natives far more often than it calls them inline — this
+ticket, not the landed slice, is the corpus blocker. Priority raised to match
+[[feature-nilpy-corpus-uforth]] accordingly.
 
 ## Gate
 
