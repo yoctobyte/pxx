@@ -236,6 +236,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_raise_from26)" = "$$(printf '%b' '5\ncaught wrapped')"
 	./$(COMPILER) test/test_nilpy_file_open.npy /tmp/test_nilpy_file_open26
 	test "$$(/tmp/test_nilpy_file_open26)" = "$$(printf '%b' 'alpha\nbeta\ngamma\n3\n3')"
+	./$(COMPILER) test/test_nilpy_variant_subscript.npy /tmp/test_nilpy_variant_subscript26
+	test "$$(/tmp/test_nilpy_variant_subscript26)" = "$$(printf '%b' '1\n2\n20\n99')"
 	./$(COMPILER) test/test_nilpy_dyncall.npy /tmp/test_nilpy_dyncall26
 	test "$$(/tmp/test_nilpy_dyncall26)" = "42"
 	./$(COMPILER) test/test_nilpy_exec_stub.npy /tmp/test_nilpy_exec_stub26

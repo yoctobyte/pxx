@@ -422,6 +422,12 @@ function pycontains(l: TPyList; const v: Variant): Boolean;
 function pystr_contains(const s: AnsiString; const sub: AnsiString): Boolean;
 function pyvartag(const v: Variant): Int64;
 function pyvarobj(const v: Variant): Pointer;
+{ `v[key]` / `v[key] = val` where v is a VARIANT holding a container — a dict
+  entry that was itself a `.get()` result, so its container type is only known
+  at run time. Dispatch on the boxed object: dict fetch/store by key, list index
+  by an integer key. }
+function pyvar_getitem(const v: Variant; const key: Variant): Variant;
+procedure pyvar_setitem(const v: Variant; const key: Variant; const val: Variant);
 
 { str methods. The frontend desugars `s.upper()` into pystr_upper(s) — see
   PyParseStrMethod. ASCII-only for now: CPython's str.upper() is full-Unicode
@@ -783,6 +789,42 @@ end;
 function pyvarobj(const v: Variant): Pointer;
 begin
   Result := Pointer(PPyVarRec(@v)^.Payload);
+end;
+
+function pyvar_getitem(const v: Variant; const key: Variant): Variant;
+var o: TObject; ki: Int64;
+begin
+  o := TObject(pyvarobj(v));
+  if o is TPyDict then
+    Result := TPyDict(o).fetch(key)
+  else if o is TPyList then
+  begin
+    ki := PPyVarRec(@key)^.Payload;      { list index is an integer key }
+    Result := TPyList(o).at(ki);
+  end
+  else
+  begin
+    WriteLn('TypeError: object is not subscriptable');
+    Halt(1);
+  end;
+end;
+
+procedure pyvar_setitem(const v: Variant; const key: Variant; const val: Variant);
+var o: TObject; ki: Int64;
+begin
+  o := TObject(pyvarobj(v));
+  if o is TPyDict then
+    TPyDict(o).store(key, val)
+  else if o is TPyList then
+  begin
+    ki := PPyVarRec(@key)^.Payload;
+    TPyList(o).put(ki, val);
+  end
+  else
+  begin
+    WriteLn('TypeError: object does not support item assignment');
+    Halt(1);
+  end;
 end;
 
 constructor TPyCounter.Create(start: Int64);

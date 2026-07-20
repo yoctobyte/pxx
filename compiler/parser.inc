@@ -716,6 +716,8 @@ procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pypa
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 function PyMakeDynCall(baseNode: Integer): Integer; forward; { Nil Python: call a callable stored in a variant (pyparser.inc) }
+function PyMakeVariantGetItem(baseNode, idxNode: Integer): Integer; forward; { Nil Python v[key] on a variant (pyparser.inc) }
+function PyMakeVariantSetItem(baseNode, idxNode, valNode: Integer): Integer; forward; { Nil Python v[key]=val on a variant (pyparser.inc) }
 function PyMakeStrIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python s[i] (pyparser.inc) }
 function PyQualifyNested(const name: AnsiString): AnsiString; forward; { Nil Python nested-def name lookup (pyparser.inc) }
 function PyListRepeatPair(a, b: Integer): Boolean; forward;              { Nil Python `xs * n` (pyparser.inc) }
@@ -4250,6 +4252,28 @@ begin
     end
     else if CurTok.Kind = tkLBrack then
     begin
+      { `v[key]` / `v[key] = val` on a VARIANT base — dispatched to pyvar_getitem
+        / pyvar_setitem at run time (dict by key, list by int). A variant that
+        holds a container reaches here as an ordinary ident subscript. }
+      if PyExprMode and (tk = tyVariant) then
+      begin
+        Next;                     { consume '[' }
+        PyParseBoolExpr;
+        indexNode := CurASTNode;
+        Expect(tkRBrack, ']');
+        if CurTok.Kind = tkAssign then
+        begin
+          Next;
+          PyParseBoolExpr;
+          node := PyMakeVariantSetItem(node, indexNode, CurASTNode);
+          tk := tyUnknown;
+          Result := node;
+          Exit;
+        end;
+        node := PyMakeVariantGetItem(node, indexNode);
+        tk := tyVariant; recName := REC_NONE;
+        Continue;
+      end;
       { NilPy SLICE on an lvalue base, e.g. `self.memory[a:b]`. Diverted here,
         before the default-indexed-property path below, because that path
         consumes the bracket itself — so the decision has to be made by

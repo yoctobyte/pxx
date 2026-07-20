@@ -547,8 +547,12 @@ begin
   if a = b then begin Result := a; Exit; end;
   if (a = tyVariant) or (b = tyVariant) then
   begin
-    if ((a = tyVariant) or PyVariantScalar(a)) and
-       ((b = tyVariant) or PyVariantScalar(b)) then
+    { A class (list/dict/object) boxes into a variant as VT_OBJECT — the same
+      representation container slots and isinstance already use — so a local
+      that is a `.get()` result (variant) one moment and a `{...}` literal
+      (tyClass) the next widens to variant rather than erroring. }
+    if ((a = tyVariant) or PyVariantScalar(a) or (a = tyClass)) and
+       ((b = tyVariant) or PyVariantScalar(b) or (b = tyClass)) then
     begin
       Result := tyVariant;
       Exit;
@@ -2171,6 +2175,8 @@ begin
   Result := False;
   if n < 0 then Exit;
   if PyIsStrBaseTk(IntToTypeKind(ASTTk[n])) then begin Result := True; Exit; end;
+  { a variant may hold a container — subscript dispatches at run time }
+  if IntToTypeKind(ASTTk[n]) = tyVariant then begin Result := True; Exit; end;
   if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
   rec := ResolveNodeRec(n);
   if rec < REC_UCLASS_BASE then Exit;
@@ -2183,12 +2189,58 @@ end;
 { `base[idx]` for those bases: pystr_at for a string, the container's own getter
   for a list (`get`) or a dict (`fetch`) — the same methods the lvalue path
   reaches, just built here because a non-lvalue never gets there. }
+{ `v[key]` on a variant -> pyvar_getitem(v, key); yields a variant. }
+function PyMakeVariantGetItem(baseNode, idxNode: Integer): Integer;
+var procIdx, a0, a1: Integer;
+begin
+  procIdx := FindProc('pyvar_getitem');
+  if procIdx < 0 then Error('Nil Python: pylib (pyvar_getitem) not loaded');
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := baseNode;
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := idxNode;
+  ASTRight[a0] := a1; ASTRight[a1] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyVariant);
+  ASTLeft[Result] := a0;
+end;
+
+{ `v[key] = val` on a variant -> pyvar_setitem(v, key, val), a statement. }
+function PyMakeVariantSetItem(baseNode, idxNode, valNode: Integer): Integer;
+var procIdx, a0, a1, a2: Integer;
+begin
+  procIdx := FindProc('pyvar_setitem');
+  if procIdx < 0 then Error('Nil Python: pylib (pyvar_setitem) not loaded');
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := baseNode;
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := idxNode;
+  a2 := AllocNode(AN_ARG); ASTLeft[a2] := valNode;
+  ASTRight[a0] := a1; ASTRight[a1] := a2; ASTRight[a2] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyUnknown);
+  ASTLeft[Result] := a0;
+end;
+
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer;
-var rec, listCi, dictCi: Integer;
+var rec, listCi, dictCi, procIdx, a0, a1: Integer;
 begin
   if PyIsStrBaseTk(IntToTypeKind(ASTTk[baseNode])) then
   begin
     Result := PyMakeStrIndex(baseNode, idxNode);
+    Exit;
+  end;
+  if IntToTypeKind(ASTTk[baseNode]) = tyVariant then
+  begin
+    { `v[key]` on a variant — dispatch to pyvar_getitem, which unboxes the
+      container at run time (dict by key, list by int index). }
+    procIdx := FindProc('pyvar_getitem');
+    if procIdx < 0 then Error('Nil Python: pylib (pyvar_getitem) not loaded');
+    a0 := AllocNode(AN_ARG); ASTLeft[a0] := baseNode;
+    a1 := AllocNode(AN_ARG); ASTLeft[a1] := idxNode;
+    ASTRight[a0] := a1; ASTRight[a1] := -1;
+    Result := AllocNode(AN_CALL);
+    ASTIVal[Result] := procIdx;
+    ASTTk[Result] := Ord(tyVariant);
+    ASTLeft[Result] := a0;
     Exit;
   end;
   rec := ResolveNodeRec(baseNode);

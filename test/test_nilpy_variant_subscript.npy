@@ -1,0 +1,11 @@
+from typing import Any
+e: Any = None
+e = {"a": 1}
+e["b"] = 2
+print(e["a"])
+print(e["b"])
+lst: Any = None
+lst = [10, 20, 30]
+print(lst[1])
+lst[1] = 99
+print(lst[1])
