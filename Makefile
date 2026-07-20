@@ -196,6 +196,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_string_variant26)" = "$$(printf '5\napple\nTrue\nFalse\nFalse\nTrue\nTrue\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nFalse\nFalse\nhello world\nhello potato\ngreen world')"
 	./$(COMPILER) test/test_nilpy_optional_param.npy /tmp/test_nilpy_optional_param26
 	test "$$(/tmp/test_nilpy_optional_param26)" = "$$(printf '%b' '5\n7\n10')"
+	./$(COMPILER) test/test_nilpy_stmt_semicolon.npy /tmp/test_nilpy_stmt_semicolon26
+	test "$$(/tmp/test_nilpy_stmt_semicolon26)" = "$$(printf '%b' '1\n2')"
 	./$(COMPILER) test/test_nilpy_no_return_annotation.npy /tmp/test_nilpy_no_return_annotation26
 	test "$$(/tmp/test_nilpy_no_return_annotation26)" = "$$(printf '%b' '4\ng ran\n10\nn=5')"
 	./$(COMPILER) test/test_nilpy_range_step.npy /tmp/test_nilpy_range_step26

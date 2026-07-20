@@ -4750,7 +4750,9 @@ begin
   begin
     PyParseBoolExpr;
     lhsNode := CurASTNode;
-    if CurTok.Kind in [tkNewline, tkDedent, tkEOF] then
+    { tkSemicolon ends a statement too — `if c: xs.append(1); i += 2` puts a
+      method-call expression statement before a ';' on a one-line suite. }
+    if CurTok.Kind in [tkNewline, tkDedent, tkEOF, tkSemicolon] then
     begin
       Result := lhsNode;   { expression statement, e.g. obj.method() }
       Exit;
