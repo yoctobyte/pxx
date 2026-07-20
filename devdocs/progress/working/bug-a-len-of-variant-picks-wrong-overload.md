@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 70
+prio: 55
 type: bug
 ---
 
@@ -77,3 +77,48 @@ is Track A. File the split when picking this up.
 
 `make test` + self-host byte-identical, `test-nilpy` green, and the repro
 plus a variant-argument sweep of the builtin table matching CPython.
+
+## MOSTLY FIXED 2026-07-20 (commit 31fcd497)
+
+`len`, `ord` and `*` on a variant now dispatch at runtime via pylib
+`pylen_v` / `pyord_v` / `pymul_v` — including `len()` of a nested list, dict
+or bytearray, resolved with closed-world `is` on the VT_OBJECT payload.
+Covered by `test/test_nilpy_variant_polymorphic_builtins.npy`, diffed against
+CPython.
+
+Two seams were required, and missing the second is why a first attempt only
+half-worked: **`len` resolves to a PROC, `ord` is an INTRINSIC** (AN_CALL with
+a negative ASTIVal) dispatched earlier in `IRLowerAST` and never reaching the
+proc-name hook. Any further builtin needs checking against BOTH.
+
+## Still open: `abs(v)` — and the reason is worth recording
+
+`abs` is a parser SOFT-ALIAS to `__pxxAbsInt` / `__pxxAbsDbl`, and the alias
+picks Int vs Dbl by STATIC type, which a variant cannot answer. A `pyabs_v`
+returning a **Variant** was written and works standalone:
+
+```python
+for a in [7]:
+    print(abs(a))          # 7, correct
+```
+
+but breaks as soon as a second variant-producing expression shares the
+statement:
+
+```python
+    print(abs(a), -a)      # dies
+```
+
+Notably this is NOT a general limitation — two Variant-returning helpers do
+coexist fine (`print(a//2, a%2)` is correct), so `pyfloordiv_v`'s marshalling
+differs from what the builtin-redirect seam produces. Neither `IRVariantAddr`
+nor `IRLowerCallArg` for the argument fixed it, so the difference is in how
+the RESULT's hidden destination is allocated, not the argument.
+
+`pyabs_v` was removed rather than shipped half-working. Reproduce with the two
+lines above; the `//` path is the working oracle to diff the emitted call
+against.
+
+Remaining untested against a variant argument: `min`, `max`, `bool`, `list`,
+`chr`. Sweep them the same way before closing.
+
