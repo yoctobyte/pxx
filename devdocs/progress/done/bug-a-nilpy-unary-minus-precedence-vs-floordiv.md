@@ -49,3 +49,6 @@ PyExprMode-gated unary-minus binding — rather than as a one-off, and cover
 repros above matching CPython. Add a sweep of unary minus against `//`, `%`,
 `*`, `/`, `+` for both signs of both operands — the distributive cases are
 what hid this.
+
+## Log
+- 2026-07-20 — resolved, commit 2db3608e.

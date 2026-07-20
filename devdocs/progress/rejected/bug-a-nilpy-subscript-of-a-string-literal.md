@@ -2,6 +2,7 @@
 track: A
 prio: 40
 type: bug
+status: rejected
 ---
 
 # NilPy: subscripting a string LITERAL is a parse error
@@ -30,3 +31,9 @@ needs the same treatment at factor level.
 `make test` + self-host byte-identical, `test-nilpy` green, the repro matching
 CPython — plus a negative index (`"abc"[-1]`) and a chained one
 (`"abc"[1].upper()`).
+
+## Log
+
+- 2026-07-20 — DUPLICATE of [[bug-nilpy-subscript-on-literal]], filed 2026-07-19
+  with the same repro and the same root-cause reading. Rejected in favour of the
+  older ticket; nothing here is lost.

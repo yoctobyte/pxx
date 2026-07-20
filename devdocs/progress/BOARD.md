@@ -26,12 +26,10 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (140)
+## backlog (138)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-nilpy-subscript-of-a-string-literal | A | 40 | bug | NilPy: subscripting a string LITERAL is a parse error | — |
-| bug-a-nilpy-unary-minus-precedence-vs-floordiv | A | 70 | bug | NilPy: unary minus binds LOOSER than `//` and `%` — `-7 // 2` is -3, not -4 | — |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
@@ -229,7 +227,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (872)
+## done (873)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -257,6 +255,7 @@ _none_
 | bug-a-nilpy-str-of-string-and-bool | A | 60 | bug | NilPy `str()` prints a string's POINTER and a bool's 1 | — |
 | bug-a-nilpy-string-repeat-returns-a-pointer | A | 60 | bug | NilPy: `s * n` on a string returns a POINTER, silently | — |
 | bug-a-nilpy-subclass-overlays-parent-layout | A | 70 | bug | NilPy: a subclass overlaid the parent's fields and VMT slots | — |
+| bug-a-nilpy-unary-minus-precedence-vs-floordiv | A | 70 | bug | NilPy: unary minus binds LOOSER than `//` and `%` — `-7 // 2` is -3, not -4 | — |
 | bug-a-nilpy-variant-element-not-usable-as-scalar | A | 85 | bug | NilPy: a list/dict ELEMENT cannot be used as a scalar — silent garbage or IR_UNSUPPORTED | — |
 | bug-a-o2-miscompiles-disassembler | A | 70 | bug | -O2 miscompiles the x86-64 disassembler (`WriteDisassemblyX64`) | — |
 | bug-a-o2-resident-param-stale-after-longjmp | A | 90 | bug | bug: -O2 (DEFAULT) resident param reads STALE after exception longjmp | — |
@@ -1106,10 +1105,11 @@ _none_
 | track-c-ternary-string-literal-segfault | C | 50 | track | C: ternary with two string-literal arms segfaults at runtime | — |
 | track-c-va-arg-nonint-lea | C | 50 | track | C: va_arg of any non-`int` type -> "invalid symbol in lea" | — |
 
-## rejected (1433)
+## rejected (1434)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-nilpy-subscript-of-a-string-literal | A | 40 | bug | NilPy: subscripting a string LITERAL is a parse error | — |
 | bug-a-threadsafe-heap-parallel-for-managed-string-race | A | 70 | bug | REJECTED — not a heap bug: was a shared captured-variable data race | — |
 | bug-c-invalid-symbol-in-lea-sqlite | C | 50 | bug | C: `invalid symbol in lea` lowering sqlite amalgamation | — |
 | bug-compiler-uses-unit-interactions | A | 50 | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
@@ -2546,7 +2546,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [A] bug-a-nilpy-unary-minus-precedence-vs-floordiv
 - [p 70] [N] feature-nilpy-nested-defs
 - [p 70] [T] regression-cascade-3d46e52fc733
 - [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
@@ -2639,7 +2638,6 @@ _none_
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
-- [p 40] [A] bug-a-nilpy-subscript-of-a-string-literal
 - [p 40] [A] bug-a-param-pointer-rule-divergence
 - [p 40] [U] decide-nilpy-and-or-return-operand-or-bool
 - [p 40] [U] decide-nilpy-bigint-vs-64bit-cells
