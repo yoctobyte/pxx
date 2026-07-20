@@ -98,3 +98,17 @@ self-hosted binary carries no symtab, which is why this stopped here).
   before concluding anything about a per-commit regression. What is not
   conditional: it is quadratic, and 5-7 GB for 12000 empty procedures is the
   bug.
+
+## Phantom RED, second sighting
+
+tstate now carries `test-core#src:test/test_interface_mainbody_ascast_temp.pas
+bad=d46bcff4834b` — the SAME test as the 20260720T091031Z report, and the same
+non-failure: it compiles and runs correctly at d46bcff4 (`cast=107 / after nil /
+destroy 7`, the expected order), verified directly. It is the job that follows
+the 12000-proc token-growth compile in test-core, so when that compile is
+SIGTERMed under memory pressure the report blames its neighbour.
+
+**For Track T: do not bisect this one.** Two separate SHAs have now produced it
+with the named test passing standalone. Either raise that job's memory headroom,
+shrink the generated program, or run it in its own scope — the underlying cost
+is this ticket.
