@@ -870,6 +870,11 @@ begin
     { 0 or 1 args, and the two forms are DIFFERENT algorithms — see pylib.
       PyParseStrMethod picks the concrete function from the arg count. }
     begin pname := 'pystr_split_sep'; retTk := tyClass; wantArgs := -1; end
+  else if CaseEqual(mname, 'rjust') then
+    { 1 or 2 args: rjust(width) pads with spaces, rjust(width, fill) with the
+      first character of fill. PyParseStrMethod picks the concrete function
+      from the arg count, like split. }
+    begin pname := 'pystr_rjust'; wantArgs := -2; end
   else if CaseEqual(mname, 'splitlines') then
     begin pname := 'pystr_splitlines'; retTk := tyClass; end
   else
@@ -1533,12 +1538,21 @@ begin
     else Break;
   end;
   Expect(tkRParen, ')');
-  if wantArgs < 0 then
+  if wantArgs = -1 then
   begin
     { optional-argument form: split() and split(sep) are separate functions }
     if i = 0 then pname := 'pystr_split_ws'
     else if i <> 1 then
       Error('Nil Python: str method .' + mname + '() takes at most one argument');
+    procIdx := FindProc(pname);
+    if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  end
+  else if wantArgs = -2 then
+  begin
+    { width plus an OPTIONAL fill character — rjust }
+    if i = 2 then pname := pname + '_c'
+    else if i <> 1 then
+      Error('Nil Python: str method .' + mname + '() takes one or two arguments');
     procIdx := FindProc(pname);
     if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   end

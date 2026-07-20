@@ -135,3 +135,14 @@ while i < len(line):
     if line[i] == "D":
         print(i)
     i = i + 1
+
+# unit 4: .rjust(width[, fill]) — right-align, never truncate, default fill is a
+# space. The .UFO stdlib's three sites are the whole corpus demand.
+print("[" + "7".rjust(3) + "]")
+print("7".rjust(3, "0"))
+print("abc".rjust(2))
+print("[" + "".rjust(4, "*") + "]")
+print("x".rjust(0), "y".rjust(1))
+wpad = "42"
+print(wpad.rjust(5, "."), len(wpad.rjust(5, ".")))
+print("a".rjust(3).strip())

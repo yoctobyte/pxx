@@ -227,6 +227,11 @@ function pystr_repeat_v(const v: Variant; n: Int64): AnsiString;
   same inner list — so the variant slots are copied as they stand
   (feature-nilpy-list-repeat). n <= 0 yields an empty list. }
 function pylist_repeat(l: TPyList; n: Int64): TPyList;
+{ `s.rjust(w)` / `s.rjust(w, fill)` — right-align in a field of w characters.
+  Python returns the string UNCHANGED when it is already at least that long
+  (it never truncates), and the fill defaults to a space. }
+function pystr_rjust(const s: AnsiString; w: Int64): AnsiString;
+function pystr_rjust_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
 function pyfloordiv_i(a: Int64; b: Int64): Int64;
 function pyfloormod_i(a: Int64; b: Int64): Int64;
 function pyfloordiv_f(a: Double; b: Double): Double;
@@ -1723,6 +1728,23 @@ begin
     Exit;
   end;
   Result := pystr_of(v);
+end;
+
+function pystr_rjust_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
+var pad: Char; i, need: Integer;
+begin
+  pad := ' ';
+  if Length(fill) > 0 then pad := fill[1];
+  need := w - Length(s);
+  Result := '';
+  if need > 0 then
+    for i := 1 to need do Result := Result + pad;
+  Result := Result + s;
+end;
+
+function pystr_rjust(const s: AnsiString; w: Int64): AnsiString;
+begin
+  Result := pystr_rjust_c(s, w, ' ');
 end;
 
 function pylist_repeat(l: TPyList; n: Int64): TPyList;
