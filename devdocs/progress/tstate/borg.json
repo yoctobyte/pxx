@@ -3457,8 +3457,8 @@
   "wall": 3600.3
  },
  "last_opt": {
-  "date": "2026-07-19T15:50:33Z",
-  "sha": "69f7bda93ac498addfd9a41a8f4e70036369ed41"
+  "date": "2026-07-20T03:28:06Z",
+  "sha": "3d46e52fc7337093c4326baf60de6a38ec527cfb"
  },
  "open_regressions": [
   {
