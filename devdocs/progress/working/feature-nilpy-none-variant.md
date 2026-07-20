@@ -66,3 +66,26 @@ then re-drive.
 
 `test-nilpy` green with a `.npy` case diffed against CPython + `--tier quick`
 + self-host byte-identical + `make fpc-check`.
+
+## Log
+
+- 2026-07-20 (1933d8d0) — landed: None PRINTS as None (variant writer + the bare
+  literal), `is None` / `is not None` on a variant is a TAG test through
+  pyvartag (it was a payload compare answering True for integer 0 — the silent
+  wrong this ticket warned about, now pinned by the test's `0 is None → False`),
+  `None` as a list/set ELEMENT stores VT_EMPTY via pylib's new `pynone`, and
+  pylib's str()/repr() of an empty slot spell None. The neighbouring VT_OBJECT
+  gap is closed to the extent it can be: an object slot prints `<object>`
+  instead of a blank line (CPython's spelling carries an address, so it is not
+  oracle-diffable). Regression test `test/test_nilpy_none.npy`.
+- **Remaining, deliberately not half-fixed:** `d[k] = None` still stores 0.
+  That statement is parsed as an assignment EXPRESSION by the shared parser
+  (the value-bearing store), so it never passes through the NilPy assignment
+  paths where the other None rewrites live. The fix wants the general rule —
+  in PyExprMode a bare `None` is a VARIANT None, with the sentinel forms
+  (`Optional[int]` → 0, `Optional[Class]` → nil) restored by
+  PyCoerceAssignmentRHS at the annotated targets — rather than another
+  per-site rewrite. Re-file or re-open with that shape.
+- Also noted while testing: a def with NO return annotation (`def f(k: str):`)
+  does not parse. Separate gap, not filed yet — mention it if it blocks a
+  corpus drive.
