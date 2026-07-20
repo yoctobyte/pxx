@@ -499,6 +499,7 @@ end;
 function IRLowerAST(node: Integer): Integer; forward;
 function IRVariantUnboxKind(target: TTypeKind): Boolean; forward;
 function IRLowerVariantAsScalar(argAST: Integer; target: TTypeKind): Integer; forward;
+function IRVariantAddr(argAST: Integer): Integer; forward;
 function IRMethodRefCode(mref: Integer): Integer; forward;
 function IRMaterializeIntfCast(node: Integer; doTrap: Boolean): Integer; forward;
 
@@ -2255,6 +2256,19 @@ begin
   begin
     if isRefArg then
     begin
+      { A VARIANT argument travels by address, and a variant RVALUE — the
+        `(v + 1)` in `(v + 1) * 2`, whose lowering is an IR_VAR_BINOP result —
+        has none. Park it in a variant temp first, exactly as IRVariantAddr
+        does for the other by-address paths; without this a nested variant
+        operand hit IR_UNSUPPORTED
+        (bug-a-nilpy-int-times-variant-in-sum-not-lowered). }
+      if (argTk = tyVariant) and
+         not (ASTKind[argAST] in [AN_IDENT, AN_FIELD, AN_INDEX, AN_DEREF, AN_CALL]) then
+      begin
+        value := IRVariantAddr(argAST);
+        IRLowerCallArg := value;
+        Exit;
+      end;
       if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < MAX_PROC_PARAMS) and
          (ProcParamDynDepth[cpi * MAX_PROC_PARAMS + pathIdx] > 0) and
          (ASTKind[argAST] = AN_IDENT) and
@@ -5096,8 +5110,14 @@ begin
         { Variant operand: make both sides variant addresses (box a scalar side
           into a temp), then IR_VAR_BINOP. Comparison -> Boolean in rax;
           arithmetic -> a Variant result in a fresh BSS temp (addr in rax). }
+        { IRVariantAddr, not IRLowerAddress: a variant RVALUE — a nested
+          variant BINOP such as the `2 * v` in `total = total + 2 * v` — has no
+          address, and taking one emitted IR_UNSUPPORTED for a plain
+          accumulation loop over for-in variables
+          (bug-a-nilpy-int-times-variant-in-sum-not-lowered). The helper parks
+          such a value in a variant temp first. }
         if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant then
-          left := IRLowerAddress(ASTLeft[node])
+          left := IRVariantAddr(ASTLeft[node])
         else
         begin
           { box temp is a routine local (per-call/thread slot), not a shared
@@ -5108,7 +5128,7 @@ begin
                            IRLowerAST(ASTLeft[node]), Ord(IntToTypeKind(ASTTk[ASTLeft[node]])), 0, Ord(tyVariant));
         end;
         if IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant then
-          right := IRLowerAddress(ASTRight[node])
+          right := IRVariantAddr(ASTRight[node])
         else
         begin
           { box temp is a routine local (per-call/thread slot), not a shared
