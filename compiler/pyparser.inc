@@ -644,7 +644,13 @@ begin
     else if nm = 'bool' then term := TagEq(VT_BOOL)
     else
     begin
-      ci := FindUClass(CurTok.SVal);
+      { Python's container type NAMES map to the pylib classes that back them;
+        `list` etc. are not user classes, so FindUClass alone never found them.
+        `tuple` is TPyList because that is how a tuple is represented. }
+      if (nm = 'list') or (nm = 'tuple') then ci := FindUClass('TPyList')
+      else if nm = 'dict' then ci := FindUClass('TPyDict')
+      else if (nm = 'bytes') or (nm = 'bytearray') then ci := FindUClass('TPyBytes')
+      else ci := FindUClass(CurTok.SVal);
       if ci < 0 then Error('Nil Python: unknown type in isinstance: ' + CurTok.SVal);
       if isVar then
       begin
@@ -3948,6 +3954,7 @@ function PyParseUnpackAssign: Integer;
 var names: array[0..7] of AnsiString;
     tmps: array[0..7] of Integer;
     nTargets, nValues, i, symIdx, node, seq, tk: Integer;
+    unpCi, unpIdx, unpElem: Integer;
 begin
   nTargets := 0;
   repeat
@@ -3969,12 +3976,40 @@ begin
     tk := ASTTk[CurASTNode];
     if IntToTypeKind(tk) = tyString then tk := Ord(tyAnsiString);
     tmps[nValues] := AllocVar(PyHiddenName('unp'), IntToTypeKind(tk));
+    if IntToTypeKind(tk) = tyClass then
+      Syms[tmps[nValues]].RecName := ResolveNodeRec(CurASTNode);
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := PyMakeIdent(tmps[nValues]);
     ASTRight[node] := CurASTNode;
     seq := PySeqAppend(seq, node);
     Inc(nValues);
   until not Eat(tkComma);
+  { `pfx, content = cs` — ONE value for several targets means the value is a
+    SEQUENCE to be indexed, not a shortfall. Our tuples are TPyLists, so this
+    is the shape a function returning a tuple produces. }
+  if (nValues = 1) and (nTargets > 1) then
+  begin
+    unpCi := PyNodeListCi(PyMakeIdent(tmps[0]));
+    if unpCi < 0 then
+      Error('Nil Python: cannot unpack this value into several names — it is '
+            + 'not a list or tuple');
+    for i := 0 to nTargets - 1 do
+    begin
+      unpIdx := AllocNode(AN_INT_LIT);
+      ASTIVal[unpIdx] := i;
+      ASTTk[unpIdx] := Ord(tyInteger);
+      unpElem := PyCallMeth1(unpCi, 'at', PyMakeIdent(tmps[0]), unpIdx);
+      if unpElem < 0 then Error('Nil Python: pylib (TPyList.at) not loaded');
+      symIdx := FindSym(names[i]);
+      if symIdx < 0 then symIdx := AllocVar(names[i], tyVariant);
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := PyMakeIdent(symIdx);
+      ASTRight[node] := unpElem;
+      seq := PySeqAppend(seq, node);
+    end;
+    Result := seq;
+    Exit;
+  end;
   if nValues <> nTargets then
     Error('Nil Python: not enough values to unpack');
 
@@ -5133,6 +5168,17 @@ begin
     begin
       if (j + 1 >= TokCount) or
          (Tokens[j + 1].Kind in [tkNewline, tkDedent, tkEOF]) then Exit;
+      { `return None` says nothing about the type — None is compatible with
+        every result — so keep scanning for a return that does. uforth's
+        _parse_compound_string returns None on its guard paths and the TUPLE
+        only at the end; taking the first return typed it as an integer and
+        the tuple came back truncated. }
+      if (Tokens[j + 1].Kind = tkNil) and (j + 2 < TokCount) and
+         (Tokens[j + 2].Kind in [tkNewline, tkDedent, tkEOF]) then
+      begin
+        Inc(j);
+        Continue;
+      end;
       e := j + 1;
       while (e < TokCount) and not (Tokens[e].Kind in [tkNewline, tkDedent, tkEOF]) do
         Inc(e);
@@ -5261,6 +5307,12 @@ begin
       { @dataclass field: name : annotation [= literal-default] }
       j := i + 2;
       tk := PyAnnTypeAt(j);
+      { Captured HERE, before the default-value scan below can clobber it: a
+        `Callable[...]` field carries a procedural signature, and AddUField
+        reads it from LastTypeProcSig. Without it the field was registered as
+        a plain pointer and `w.native(vm)` was not recognised as a call at all
+        — the parse stopped before the '(' (bug-nilpy-dataclass-callable-field). }
+      fldSig := PyAnnLastProcSig;
       if tk = tyUnknown then
         Error('Nil Python: unsupported dataclass field type for ' +
               GetTokenStr(i));
@@ -5350,11 +5402,13 @@ begin
         Error('Nil Python: duplicate dataclass field ' + GetTokenStr(i));
       sz := TypeSize(tk);
       curOff := AlignTo(curOff, TypeAlign(tk));
+      LastTypeProcSig := fldSig;   { procedural field — see the capture above }
       if (tk = tyClass) and (PyAnnLastCi >= 0) then
         AddUField(ci, Tokens[i].SOffset, Tokens[i].SLen, curOff, Ord(tk),
                   REC_UCLASS_BASE + PyAnnLastCi)
       else
         AddUField(ci, Tokens[i].SOffset, Tokens[i].SLen, curOff, Ord(tk), REC_NONE);
+      LastTypeProcSig := -1;
       Inc(curOff, sz);
       if not fieldsOnly then
       begin

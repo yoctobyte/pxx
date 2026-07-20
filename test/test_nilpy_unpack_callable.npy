@@ -1,0 +1,38 @@
+from typing import Any, Callable, Optional
+from dataclasses import dataclass
+
+@dataclass
+class Word:
+    name: str = ""
+    native: Optional[Callable[["VM"], None]] = None
+
+def hit(vm: Any) -> None:
+    print("native ran")
+
+def pair(a: int):
+    return (a, a + 1)
+
+def maybe(flag: int):
+    if flag == 0:
+        return None
+    return (7, 8)
+
+class VM:
+    def __init__(self) -> None:
+        self.w = Word(name="x", native=hit)
+    def look(self) -> Optional[Word]:
+        return self.w
+    def run(self) -> None:
+        word = self.look() if isinstance(1, int) else None
+        if word is not None:
+            word.native(self)
+
+v = VM()
+v.run()
+cs = pair(5)
+x, y = cs
+print(x)
+print(y)
+p, q = maybe(1)
+print(p)
+print(q)
