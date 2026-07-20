@@ -1,0 +1,42 @@
+xs = [7, -3, 0]
+fs = [2.5, -0.5]
+ss = ["ab", "", "z"]
+bs = [True, False]
+
+def gi(i: int) -> int:
+    return xs[i]
+def gf(i: int) -> float:
+    return fs[i]
+def gs(i: int) -> str:
+    return ss[i]
+def gb(i: int) -> bool:
+    return bs[i]
+
+print(gi(0), gi(1), gi(2))
+print(gf(0), gf(1))
+print(gs(0), gs(2))
+print(gb(0), gb(1))
+
+a = xs[0]
+print(a + 1, a - 1, a * 2, a // 2, a % 2, -a)
+print(xs[0] + xs[1], xs[0] * xs[1])
+c = fs[0]
+print(c + 1.0, c * 2.0)
+d = ss[0]
+print(d + "c")
+print(xs[0] > xs[1], xs[0] == 7, ss[0] == "ab")
+
+acc = 0
+for v in xs:
+    acc = acc + v
+print(acc)
+
+t = ""
+for w in ss:
+    t = t + w
+print(t)
+
+tot = 0.0
+for f in fs:
+    tot = tot + f
+print(tot)

@@ -497,6 +497,8 @@ begin
 end;
 
 function IRLowerAST(node: Integer): Integer; forward;
+function IRVariantUnboxKind(target: TTypeKind): Boolean; forward;
+function IRLowerVariantAsScalar(argAST: Integer; target: TTypeKind): Integer; forward;
 function IRMethodRefCode(mref: Integer): Integer; forward;
 function IRMaterializeIntfCast(node: Integer; doTrap: Boolean): Integer; forward;
 
@@ -1793,6 +1795,21 @@ begin
     ASTRight[caSlCall] := argAST;
     IRLowerAST(caSlCall);
     Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyVariant));
+    Exit;
+  end;
+  { Variant -> SCALAR at a call boundary, the mirror of the scalar->Variant
+    boxing above: a variant argument given to a scalar parameter (`len(v)`,
+    where v holds a string) otherwise passed the raw 8 bytes, i.e. the tag.
+    By-reference params are excluded — there is no scalar slot to write back
+    to. (bug-a-nilpy-variant-element-not-usable-as-scalar.) }
+  if (cpi >= 0) and (pathIdx >= 0) and
+     (pathIdx < Procs[cpi].ParamCount) and
+     (IntToTypeKind(ASTTk[argAST]) = tyVariant) and
+     ((not Procs[cpi].Params[pathIdx].IsRef) or
+      ProcParamIsConst[cpi * MAX_PROC_PARAMS + pathIdx]) and
+     IRVariantUnboxKind(Procs[cpi].Params[pathIdx].TypeKind) then
+  begin
+    Result := IRLowerVariantAsScalar(argAST, Procs[cpi].Params[pathIdx].TypeKind);
     Exit;
   end;
   { `@obj.Method` given directly to a method-pointer parameter (`of object`
@@ -3190,9 +3207,83 @@ begin
   faFldRecIdxHelper := outIdx >= 0;
 end;
 
+function IRVariantUnboxKind(target: TTypeKind): Boolean;
+{ Which scalar targets a tyVariant value may be unboxed into. Anything not
+  listed keeps the pre-existing lowering (records, sets, classes, pointers —
+  none of which a variant payload can stand in for). }
+begin
+  IRVariantUnboxKind :=
+    TypeIsFloat(target) or (target = tyBoolean) or (target = tyChar) or
+    (target = tyString) or (target = tyAnsiString) or
+    (target = tyInteger) or (target = tyInt8) or (target = tyInt16) or
+    (target = tyInt32) or (target = tyInt64) or (target = tyNativeInt) or
+    (target = tyUInt8) or (target = tyUInt16) or (target = tyUInt32) or
+    (target = tyUInt64) or (target = tyNativeUInt);
+end;
+
+function IRVariantAddr(argAST: Integer): Integer;
+{ The ADDRESS of a variant expression — variants are always marshalled by
+  address (write, str(), unbox, parameter passing all want this).
+
+  A variant RVALUE (an IR_VAR_BINOP result, say) has no address to take, so
+  IRLowerAddress alone emitted IR_UNSUPPORTED — that, not the missing unbox,
+  is why `print(xs[0] + 1)` failed to compile. Park such a value in a variant
+  temp via the ordinary assignment path first: IR_VAR_STORE owns the 16-byte
+  ARC-correct copy, and the temp is a plain variant local the epilogue clears.
+  Same materialisation the Variant-parameter marshalling uses. }
+var vaTmp, vaIdent, vaAsg: Integer;
+begin
+  if not (ASTKind[argAST] in [AN_IDENT, AN_FIELD, AN_INDEX, AN_DEREF, AN_CALL]) then
+  begin
+    vaTmp := AllocVar('', tyVariant);
+    vaIdent := AllocNode(AN_IDENT);
+    ASTIVal[vaIdent] := vaTmp;
+    ASTTk[vaIdent] := Ord(tyVariant);
+    vaAsg := AllocNode(AN_ASSIGN);
+    ASTLeft[vaAsg] := vaIdent;
+    ASTRight[vaAsg] := argAST;
+    IRLowerAST(vaAsg);
+    argAST := vaIdent;
+  end;
+  IRVariantAddr := IRLowerAddress(argAST);
+end;
+
+function IRLowerVariantAsScalar(argAST: Integer; target: TTypeKind): Integer;
+{ Unbox a tyVariant expression into a scalar of `target`'s class by calling the
+  matching builtin. Target-independent on purpose: routing through a runtime
+  helper rather than a new IR op means all six backends get this for free and
+  there is no per-backend tag dispatch to keep in sync
+  (bug-a-nilpy-variant-element-not-usable-as-scalar).
+
+  A variant argument is always passed BY ADDRESS — same marshalling the
+  str()/write paths use, so a call-returning-Variant (`xs[0]`, whose result is
+  an sret temp) works here exactly as it does there. }
+var vuProc, vuAddr, vuArg: Integer;
+    vuName: string;
+    vuRet: TTypeKind;
+begin
+  if TypeIsFloat(target) then
+  begin vuName := 'VariantToDouble'; vuRet := tyDouble; end
+  else if target = tyBoolean then
+  begin vuName := 'VariantToBool'; vuRet := tyBoolean; end
+  else if target = tyChar then
+  begin vuName := 'VariantToChar'; vuRet := tyChar; end
+  else if (target = tyString) or (target = tyAnsiString) then
+  begin vuName := 'VariantToStr'; vuRet := tyAnsiString; end
+  else
+  begin vuName := 'VariantToInt64'; vuRet := tyInt64; end;
+
+  vuProc := FindProc(vuName);
+  if vuProc < 0 then Error('variant unbox: ' + vuName + ' builtin not loaded');
+  vuAddr := IRVariantAddr(argAST);
+  vuArg := IRAppend(IR_ARG, vuAddr, -1, -1, 0, Ord(tyVariant));
+  IRLowerVariantAsScalar := IRAppendCall(vuProc, vuArg, -1, Ord(vuRet));
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
+    vuExitUnboxed: Boolean;         { `return <variant>` unboxed to a scalar result }
     intfCallCi, intfSelfSym, intfImtSym: Integer;   { single-pointer interface call }
     frameNode, slotNode, bpAddr, addrAddr, bpVal, selfVal: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
@@ -4588,6 +4679,24 @@ begin
 
     AN_NEG:
     begin
+      if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant then
+      begin
+        { `-v` on a variant: rewrite to `0 - v` so the existing IR_VAR_BINOP
+          runtime tag dispatch decides the arithmetic. Unboxing to a fixed
+          scalar here would have to guess int vs double and would print -7.0
+          for an int payload; IR_NEG on the raw 8 bytes negated the TAG.
+          (bug-a-nilpy-variant-element-not-usable-as-scalar.) }
+        first := AllocNode(AN_INT_LIT);
+        ASTIVal[first] := 0;
+        ASTTk[first] := Ord(tyInteger);
+        last := AllocNode(AN_BINOP);
+        ASTIVal[last] := Ord(tkMinus);
+        ASTLeft[last] := first;
+        ASTRight[last] := ASTLeft[node];
+        ASTTk[last] := Ord(tyVariant);
+        Result := IRLowerAST(last);
+        Exit;
+      end;
       left := IRLowerAST(ASTLeft[node]);
       Result := IRAppend(IR_NEG, left, -1, -1, 0, ASTTk[node]);
     end;
@@ -5339,6 +5448,17 @@ begin
       end
       else
       begin
+        { Variant SOURCE, scalar target — the mirror of the variant-target case
+          above, and the one that was missing. Unboxing HERE, at the value, and
+          then falling into the ordinary store keeps every downstream rule
+          (ARC for a managed target, store width, the C-string skip below);
+          before this the scalar store read the variant's first 8 bytes, i.e.
+          the TAG, so `i := v` yielded 1 and a string target segfaulted on the
+          tag as a handle (bug-a-nilpy-variant-element-not-usable-as-scalar). }
+        if (IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant) and
+           IRVariantUnboxKind(IntToTypeKind(ASTTk[ASTLeft[node]])) then
+          value := IRLowerVariantAsScalar(ASTRight[node], IntToTypeKind(ASTTk[ASTLeft[node]]))
+        else
         value := IRLowerAST(ASTRight[node]);
         { A C string literal stored to a pointer must land on char 0, not the
           8-byte Pascal length prefix the literal's handle points at. Apply the
@@ -5418,6 +5538,18 @@ begin
       begin
         if ASTLeft[node] <> -1 then
         begin
+          { `return <variant>` from a function with a SCALAR result: unbox
+            before the store, and store with the RESULT symbol's kind — the
+            plain path below stored with the variant's own ASTTk, so the
+            8-byte load handed back the TAG
+            (bug-a-nilpy-variant-element-not-usable-as-scalar). }
+          vuExitUnboxed := (CurProc >= 0) and (Procs[CurProc].RetSymIdx >= 0) and
+                           (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant) and
+                           IRVariantUnboxKind(Syms[Procs[CurProc].RetSymIdx].TypeKind);
+          if vuExitUnboxed then
+            value := IRLowerVariantAsScalar(ASTLeft[node],
+                                            Syms[Procs[CurProc].RetSymIdx].TypeKind)
+          else
           value := IRLowerAST(ASTLeft[node]);
           { A C function returning `char*` (any pointer) that returns a string
             literal must yield the char data at Offset+8, not the frozen string's
@@ -5482,6 +5614,9 @@ begin
                                  Ord(IntToTypeKind(ASTTk[ASTLeft[node]])), 0, Ord(tyVariant));
               end;
             end
+            else if vuExitUnboxed then
+              last := IRAppend(IR_STORE_SYM, varIdx, value, -1, 0,
+                               Ord(Syms[varIdx].TypeKind))
             else
               last := IRAppend(IR_STORE_SYM, varIdx, value, -1, 0, ASTTk[ASTLeft[node]]);
           end;
@@ -5626,7 +5761,7 @@ begin
         begin
           procIdx := FindProc('VariantToStr');
           if procIdx < 0 then Error('str: VariantToStr builtin not loaded');
-          value := IRLowerAddress(argVal);
+          value := IRVariantAddr(argVal);
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyVariant));
           Result := IRAppendCall(procIdx, argNode, -1, Ord(tyAnsiString));
           Exit;
@@ -6792,7 +6927,7 @@ begin
           { A Variant arg writes its slot address; codegen reads tag+payload and
             dispatches at runtime (IRTk stays tyVariant). }
           if IntToTypeKind(ASTTk[ASTLeft[item]]) = tyVariant then
-            value := IRLowerAddress(ASTLeft[item])
+            value := IRVariantAddr(ASTLeft[item])
           else
             value := IRLowerAST(ASTLeft[item]);
           if IsNodePChar(ASTLeft[item]) then
@@ -6810,7 +6945,7 @@ begin
         end
         else if IntToTypeKind(ASTTk[item]) = tyVariant then
         begin
-          value := IRLowerAddress(item);
+          value := IRVariantAddr(item);
           outNode := IRAppend(IR_WRITE, value, -1, -1, writeFd, Ord(tyVariant));
         end
         else

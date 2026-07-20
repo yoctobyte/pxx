@@ -25,6 +25,17 @@ procedure Val(const s: AnsiString; var v: Int64; var code: Integer);
 procedure ValQWord(const s: AnsiString; var v: QWord; var code: Integer);
 procedure ValFloat(const s: AnsiString; var v: Double; var code: Integer);
 function VariantToStr(const v: Variant): AnsiString;
+{ Variant -> SCALAR unboxing, the counterpart of IR_VAR_STORE/IR_VAR_BOX.
+  Without these a variant reaching a scalar context (assignment, return,
+  argument) was read as a raw 8-byte load and yielded the TAG, silently
+  (bug-a-nilpy-variant-element-not-usable-as-scalar). Numeric/bool/char tags
+  coerce between each other the way Pascal's Variant and Python's numeric
+  tower both do; a STRING payload in a numeric context is a genuine type
+  error and halts loudly rather than inventing a number. }
+function VariantToInt64(const v: Variant): Int64;
+function VariantToDouble(const v: Variant): Double;
+function VariantToBool(const v: Variant): Boolean;
+function VariantToChar(const v: Variant): Char;
 function PCharToString(p: PChar): AnsiString;
 
 { WideChar -> UTF-8 conversion, backing the frontend's widechar-in-string-context
@@ -394,6 +405,76 @@ begin
     Result := '';
 end;
 
+
+function VariantToInt64(const v: Variant): Int64;
+var
+  p: PVariantRecord;
+begin
+  p := @v;
+  if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) or (p^.VType = 5) then
+    Result := p^.Payload
+  else if p^.VType = 3 then
+    Result := Trunc(PDouble(@p^.Payload)^)
+  else if p^.VType = 0 then
+    Result := 0
+  else
+  begin
+    { VT_STRING (6). CPython raises TypeError here; parsing the text would
+      turn a type error into a plausible number, which is exactly the failure
+      mode this whole fix exists to remove. }
+    writeln('Runtime error: variant holds a string, an integer was required');
+    Halt(219);
+  end;
+end;
+
+function VariantToDouble(const v: Variant): Double;
+var
+  p: PVariantRecord;
+begin
+  p := @v;
+  if p^.VType = 3 then
+    Result := PDouble(@p^.Payload)^
+  else if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) or (p^.VType = 5) then
+    Result := p^.Payload
+  else if p^.VType = 0 then
+    Result := 0.0
+  else
+  begin
+    writeln('Runtime error: variant holds a string, a float was required');
+    Halt(219);
+  end;
+end;
+
+function VariantToBool(const v: Variant): Boolean;
+var
+  p: PVariantRecord;
+begin
+  { Python truthiness: 0/0.0/''/None are false, everything else true. }
+  p := @v;
+  if p^.VType = 3 then
+    Result := PDouble(@p^.Payload)^ <> 0.0
+  else if p^.VType = 6 then
+    Result := PAnsiString(@p^.Payload)^ <> ''
+  else if p^.VType = 0 then
+    Result := False
+  else
+    Result := p^.Payload <> 0;
+end;
+
+function VariantToChar(const v: Variant): Char;
+var
+  p: PVariantRecord;
+  s: AnsiString;
+begin
+  p := @v;
+  if p^.VType = 6 then
+  begin
+    s := PAnsiString(@p^.Payload)^;
+    if s = '' then Result := #0 else Result := s[1];
+  end
+  else
+    Result := Chr(p^.Payload and $FF);
+end;
 
 function StrQWord(v: QWord; width: Integer): AnsiString;
 { StrInt's UNSIGNED sibling: a QWord >= 2^63 must not print with a minus sign
