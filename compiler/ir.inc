@@ -894,6 +894,33 @@ begin
   IRPromoCall := IRAppendCall(cpi, arg0, -1, Ord(retTk));
 end;
 
+{ Three- and four-argument variants of IRPromoCall. Same linked IR_ARG chain
+  (IRB = next argument) — see IRPromoCall for why that link is load-bearing. }
+function IRPromoCall3(const fname: AnsiString; a0, a1, a2: Integer; retTk: TTypeKind): Integer;
+var cpi, g0, g1, g2: Integer;
+begin
+  cpi := FindProc(fname);
+  if cpi < 0 then Error('promotable int: runtime helper ' + fname + ' not found');
+  g0 := IRAppend(IR_ARG, a0, -1, -1, 0, Ord(tyPointer));
+  g1 := IRAppend(IR_ARG, a1, -1, -1, 0, Ord(tyPointer));
+  g2 := IRAppend(IR_ARG, a2, -1, -1, 0, IRTk[a2]);
+  IRB[g0] := g1; IRB[g1] := g2;
+  IRPromoCall3 := IRAppendCall(cpi, g0, -1, Ord(retTk));
+end;
+
+function IRPromoCall4(const fname: AnsiString; a0, a1, a2, a3: Integer; retTk: TTypeKind): Integer;
+var cpi, g0, g1, g2, g3: Integer;
+begin
+  cpi := FindProc(fname);
+  if cpi < 0 then Error('promotable int: runtime helper ' + fname + ' not found');
+  g0 := IRAppend(IR_ARG, a0, -1, -1, 0, Ord(tyPointer));
+  g1 := IRAppend(IR_ARG, a1, -1, -1, 0, Ord(tyPointer));
+  g2 := IRAppend(IR_ARG, a2, -1, -1, 0, Ord(tyPointer));
+  g3 := IRAppend(IR_ARG, a3, -1, -1, 0, IRTk[a3]);
+  IRB[g0] := g1; IRB[g1] := g2; IRB[g2] := g3;
+  IRPromoCall4 := IRAppendCall(cpi, g0, -1, Ord(retTk));
+end;
+
 { A fresh promo temp slot, zeroed so its tag starts INLINE. }
 function IRPromoTempSlot(var symOut: Integer): Integer;
 var tmpSym: Integer;
@@ -3515,7 +3542,7 @@ end;
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
-    promoLhs, promoRhs, promoDst, promoSym: Integer;   { promotable-int slot lowering }
+    promoLhs, promoRhs, promoDst, promoSym, promoOp: Integer;   { promotable-int slot lowering }
     vuExitUnboxed: Boolean;         { `return <variant>` unboxed to a scalar result }
     fdName: string;                 { NilPy floor-div/mod helper being called }
     pvName: string;                 { NilPy variant-dispatch builtin }
@@ -5321,15 +5348,97 @@ begin
                             IRLowerAST(ASTRight[node]), Ord(IntToTypeKind(ASTTk[ASTRight[node]])), 0, Ord(tyVariant));
         end;
         item := Integer(ASTIVal[node]);
+        { A variant may hold a PROMOTABLE INT whose value does not fit 64 bits.
+          Its payload is then a managed string, and the ordinary variant binop
+          reads a payload as an integer — `v + w` returned pointer arithmetic, a
+          silent wrong answer. Try the promo helper first and fall back to the
+          existing path when neither side is promo-tagged, so ordinary variant
+          semantics stay exactly where they live (per-backend codegen) instead
+          of being reimplemented and drifting.
+
+          Both operand ADDRESSES are parked in pointer temps first: an IR value
+          node is a SUBTREE and referencing it twice RE-EMITS it, which for a
+          boxed operand would evaluate the source expression a second time. }
+        if FindProc('PXXPromoVarArithTry') >= 0 then
+        begin
+          promoSym := AllocVar('', tyPointer);
+          IRAppend(IR_STORE_SYM, promoSym, left, -1, 0, Ord(tyPointer));
+          left := IRAppend(IR_LOAD_SYM, promoSym, -1, -1, 0, Ord(tyPointer));
+          promoSym := AllocVar('', tyPointer);
+          IRAppend(IR_STORE_SYM, promoSym, right, -1, 0, Ord(tyPointer));
+          right := IRAppend(IR_LOAD_SYM, promoSym, -1, -1, 0, Ord(tyPointer));
+        end;
         if (item = Ord(tkEq)) or (item = Ord(tkNeq)) or (item = Ord(tkLt)) or
            (item = Ord(tkLe)) or (item = Ord(tkGt)) or (item = Ord(tkGe)) then
-          Result := IRAppend(IR_VAR_BINOP, left, right, item, 0, Ord(tyBoolean))
+        begin
+          promoOp := 0;
+          if item = Ord(tkEq) then promoOp := 1
+          else if item = Ord(tkNeq) then promoOp := 2
+          else if item = Ord(tkLt) then promoOp := 3
+          else if item = Ord(tkLe) then promoOp := 4
+          else if item = Ord(tkGt) then promoOp := 5
+          else if item = Ord(tkGe) then promoOp := 6;
+          if FindProc('PXXPromoVarCmpTry') < 0 then
+            Result := IRAppend(IR_VAR_BINOP, left, right, item, 0, Ord(tyBoolean))
+          else
+          begin
+            { r: 0 = not handled, 1 = False, 2 = True }
+            promoSym := AllocVar('', tyInteger);
+            IRAppend(IR_STORE_SYM, promoSym,
+                     IRPromoCall3('PXXPromoVarCmpTry', left, right,
+                                  IRAppend(IR_CONST_INT, -1, -1, -1, promoOp, Ord(tyInteger)),
+                                  tyInteger), -1, 0, Ord(tyInteger));
+            varIdx := AllocVar('', tyBoolean);
+            elseLabel := IRNewLabel;
+            endLabel := IRNewLabel;
+            IRAppend(IR_JUMP_IF_FALSE, elseLabel,
+                     IRAppend(IR_LOAD_SYM, promoSym, -1, -1, 0, Ord(tyInteger)), -1, 0, 0);
+            IRAppend(IR_STORE_SYM, varIdx,
+                     IRAppend(IR_BINOP,
+                              IRAppend(IR_LOAD_SYM, promoSym, -1, -1, 0, Ord(tyInteger)),
+                              IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+                              Ord(tkMinus), 0, Ord(tyInteger)), -1, 0, Ord(tyBoolean));
+            IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
+            IRAppend(IR_LABEL, -1, -1, -1, elseLabel, 0);
+            IRAppend(IR_STORE_SYM, varIdx,
+                     IRAppend(IR_VAR_BINOP, left, right, item, 0, Ord(tyBoolean)),
+                     -1, 0, Ord(tyBoolean));
+            IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+            Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyBoolean));
+          end;
+        end
         else
         begin
           BSSSize := AlignTo(BSSSize, 8);
           idx := BSSSize;
           Inc(BSSSize, 16);
-          Result := IRAppend(IR_VAR_BINOP, left, right, item, idx, Ord(tyVariant));
+          promoOp := 0;
+          if item = Ord(tkPlus) then promoOp := 1
+          else if item = Ord(tkMinus) then promoOp := 2
+          else if item = Ord(tkStar) then promoOp := 3
+          else if item = Ord(tkDiv) then promoOp := 4
+          else if item = Ord(tkMod) then promoOp := 5;
+          if (promoOp = 0) or (FindProc('PXXPromoVarArithTry') < 0) then
+            Result := IRAppend(IR_VAR_BINOP, left, right, item, idx, Ord(tyVariant))
+          else
+          begin
+            varIdx := AllocVar('', tyVariant);
+            promoDst := IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(tyPointer));
+            elseLabel := IRNewLabel;
+            endLabel := IRNewLabel;
+            IRAppend(IR_JUMP_IF_FALSE, elseLabel,
+                     IRPromoCall4('PXXPromoVarArithTry', promoDst, left, right,
+                                  IRAppend(IR_CONST_INT, -1, -1, -1, promoOp, Ord(tyInteger)),
+                                  tyInteger), -1, 0, 0);
+            IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
+            IRAppend(IR_LABEL, -1, -1, -1, elseLabel, 0);
+            IRAppend(IR_VAR_STORE, IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(tyPointer)),
+                     IRAppend(IR_VAR_BINOP, left, right, item, idx, Ord(tyVariant)),
+                     Ord(tyVariant), 0, Ord(tyVariant));
+            IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+            Result := IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(tyPointer));
+            IRTk[Result] := Ord(tyVariant);
+          end;
         end;
       end
       else

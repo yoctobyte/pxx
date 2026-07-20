@@ -5,7 +5,7 @@ program test_promoint;
 var a, b, c: PromoInt;
     i: Integer;
     s: Int64;
-    vv: Variant;
+    vv, ww: Variant;
 begin
   { zero-init: an untouched promo variable reads as inline 0 }
   Writeln(a);
@@ -81,6 +81,21 @@ begin
   c := 0;
   c := vv;
   Writeln(c);
+
+  { VARIANT ARITHMETIC on a heap-tier promo. The ordinary variant binop reads a
+    payload as an integer, so before this these returned pointer arithmetic. }
+  a := 1;
+  for i := 1 to 30 do a := a * i;
+  vv := a;
+  ww := 2;
+  Writeln(vv + ww);
+  Writeln(vv * ww);
+  if vv > ww then Writeln('vgt');
+  { and the FALLBACK still behaves: ordinary variants are untouched }
+  vv := 7; ww := 3;
+  Writeln(vv + ww);
+  Writeln(vv div ww);
+  if vv > ww then Writeln('ogt');
 
   { DEMOTION: a value that grew and shrank is usable as an ordinary int again }
   a := 1;

@@ -25,11 +25,12 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (132)
+## backlog (133)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-aarch64-managed-string-concat-leak | A | 70 | bug | aarch64: repeated string concat inside a function LEAKS | — |
+| bug-a-aarch64-variant-string-compare-always-false | A | 70 | bug | aarch64: comparing two string-valued Variants is always FALSE | — |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
 | bug-a-qplus-misses-32bit-overflow | A | 60 | bug | `{$Q+}` does not trap 32-bit overflow — only 64-bit ops are checked | — |
 | bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
@@ -2574,6 +2575,7 @@ _none_
 
 - [p 85] [A] feature-a-promotable-int
 - [p 70] [A] bug-a-aarch64-managed-string-concat-leak
+- [p 70] [A] bug-a-aarch64-variant-string-compare-always-false
 - [p 70] [T] regression-cascade-3d46e52fc733
 - [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
 - [p 65] [A] feature-a-typeref-handle

@@ -61,6 +61,8 @@ function  PXXPromoCmp(a, b: Pointer): Integer;
 function  PXXPromoToStr(a: Pointer): AnsiString;
 procedure PXXPromoToVariant(dstVar, src: Pointer);
 procedure PXXPromoFromVariant(dst, srcVar: Pointer);
+function  PXXPromoVarArithTry(dst, a, b: Pointer; op: Integer): Integer;
+function  PXXPromoVarCmpTry(a, b: Pointer; op: Integer): Integer;
 function  PXXPromoFitsInt64(a: Pointer): Boolean;
 function  PXXPromoToInt64(a: Pointer): Int64;
 
@@ -854,6 +856,83 @@ begin
     Exit;
   end;
   RunError(219);   { EVariantError: not convertible to an integer }
+end;
+
+{ ---- Variant ARITHMETIC ------------------------------------------------
+
+  A variant holding a HEAP promo has an AnsiString payload; the ordinary variant
+  binop treats a payload as an integer, so `v + w` returned the string POINTER
+  arithmetic — a silent wrong answer, which is the one failure mode this type
+  exists to remove.
+
+  These are "try" helpers: they return 0 when neither operand is promo-tagged,
+  and the compiler then falls through to the existing variant binop. That keeps
+  ordinary variant semantics exactly where they already live (hand-written
+  per-backend codegen) instead of reimplementing them here and risking drift.
+
+  `op` is a small normalised code, not a token ordinal — TTokenKind is a
+  compiler type and is not visible from a builtin unit. }
+
+function EitherPromoTagged(a, b: Pointer): Boolean;
+begin
+  EitherPromoTagged := (SlotTag(a) = VT_PROMO_INT64_TAG) or
+                       (SlotTag(b) = VT_PROMO_INT64_TAG);
+end;
+
+function PXXPromoVarArithTry(dst, a, b: Pointer; op: Integer): Integer;
+var pa, pb, pr: array[0..1] of NativeInt;   { three promo slots }
+begin
+  PXXPromoVarArithTry := 0;
+  if not EitherPromoTagged(a, b) then Exit;
+  PXXPromoInit(@pa); PXXPromoInit(@pb); PXXPromoInit(@pr);
+  PXXPromoFromVariant(@pa, a);
+  PXXPromoFromVariant(@pb, b);
+  if op = 1 then PXXPromoAdd(@pr, @pa, @pb)
+  else if op = 2 then PXXPromoSub(@pr, @pa, @pb)
+  else if op = 3 then PXXPromoMul(@pr, @pa, @pb)
+  else if op = 4 then PXXPromoDiv(@pr, @pa, @pb)
+  else if op = 5 then PXXPromoMod(@pr, @pa, @pb)
+  else
+  begin
+    { an operator with no promotable-int meaning (e.g. `/`): leave it to the
+      ordinary variant path rather than inventing semantics }
+    PXXPromoClear(@pa); PXXPromoClear(@pb); PXXPromoClear(@pr);
+    Exit;
+  end;
+  PXXPromoToVariant(dst, @pr);
+  { these slots are raw arrays, not compiler-managed locals, so their heap
+    payloads must be released by hand }
+  PXXPromoClear(@pa); PXXPromoClear(@pb); PXXPromoClear(@pr);
+  PXXPromoVarArithTry := 1;
+end;
+
+{ 0 = not handled, 1 = False, 2 = True. Encoded in one return value so the
+  caller needs a single call and one branch. }
+function PXXPromoVarCmpTry(a, b: Pointer; op: Integer): Integer;
+var pa, pb: array[0..1] of NativeInt;
+    c: Integer;
+    res: Boolean;
+begin
+  PXXPromoVarCmpTry := 0;
+  if not EitherPromoTagged(a, b) then Exit;
+  PXXPromoInit(@pa); PXXPromoInit(@pb);
+  PXXPromoFromVariant(@pa, a);
+  PXXPromoFromVariant(@pb, b);
+  c := PXXPromoCmp(@pa, @pb);
+  PXXPromoClear(@pa); PXXPromoClear(@pb);
+  res := False;
+  if op = 1 then res := c = 0
+  else if op = 2 then res := c <> 0
+  else if op = 3 then res := c < 0
+  else if op = 4 then res := c <= 0
+  else if op = 5 then res := c > 0
+  else if op = 6 then res := c >= 0
+  else
+  begin
+    PXXPromoVarCmpTry := 0;
+    Exit;
+  end;
+  if res then PXXPromoVarCmpTry := 2 else PXXPromoVarCmpTry := 1;
 end;
 
 function PXXPromoFitsInt64(a: Pointer): Boolean;
