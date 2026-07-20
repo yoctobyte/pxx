@@ -1,5 +1,6 @@
 ---
 prio: 45  # auto
+blocked-by: [feature-inline-asm-xmm-operands]
 ---
 
 # Random library — HW/OS/software tiered RNG (cross-target capability test)
@@ -260,4 +261,15 @@ programs compile and run unmodified.
   crash, it degrades distribution, and detecting that reliably needs a
   statistical battery this repo does not have yet. The lock's correctness rests
   on the argument above; the test is a regression guard, not the justification.
+
+## Blocked (2026-07-20)
+
+Slices 1-3 and 7 are done. Slices **4-6 are the HW entropy tiers** and every one
+of them needs an instruction the asm frontend cannot encode: `rdrand`/`rdseed`
+(x86), `rndr` (aarch64 FEAT_RNG), and on ESP the RNG register read. The frontend
+has no `cpuid` either, so the capability probe those tiers need is equally
+unreachable — this is not "not written yet", it is not expressible.
+
+`blocked-by: feature-inline-asm-xmm-operands`, which now tracks the whole missing
+mnemonic surface including `cpuid`. Nothing further is available in this lane.
 

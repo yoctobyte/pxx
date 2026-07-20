@@ -46,6 +46,7 @@ typedef struct { double hi, lo; } crtl_dd;
 double fabs(double x);
 double rint(double x);
 double ldexp(double x, int e);
+double floor(double x);
 int isinf(double x);
 double fmod(double x, double y);   /* binds to the Pascal routine */
 double sqrt(double x);             /* binds to the Pascal routine */
@@ -428,6 +429,97 @@ static int crtl_trig_reduce(double x, crtl_dd *r) {
   return (int)(n & 3);
 }
 
+/* ---- Payne-Hanek reduction, for |x| >= 1e8 -------------------------------
+   Cody-Waite above runs out at 1e8: it subtracts a few fixed chunks of pi/2, so
+   once x is large enough that x*2/pi needs more bits than those chunks carry,
+   the result is dominated by the bits that were never there. Payne-Hanek fixes
+   that by multiplying by a 2/pi expansion long enough for ANY double.
+
+   2/pi as 24-bit chunks, 1440 bits. 24 is not arbitrary: a 24x24-bit product is
+   below 2^48 and therefore EXACT in a double, which is what lets the whole
+   convolution run in plain double arithmetic with no int128 and no error term.
+   Derived at 700 decimal digits; the leading entries match fdlibm's published
+   ipio2 (0xA2F983, 0x6E4E44, 0x1529FC, 0x2757D1, ...), which is the check that
+   the derivation is right and not merely self-consistent. */
+static const double crtl_ipio2[60] = {
+    10680707.0,    7228996.0,    1387004.0,    2578385.0,
+    16069853.0,   12639074.0,    9804092.0,    4427841.0,
+    16666979.0,   11263675.0,   12935607.0,    2387514.0,
+     4345298.0,   14681673.0,    3074569.0,   13734428.0,
+    16653803.0,    1880361.0,   10960616.0,    8533493.0,
+     3062596.0,    8710556.0,    7349940.0,    6258241.0,
+     3772886.0,    3769171.0,    3798172.0,    8675211.0,
+    12450088.0,    3874808.0,    9961438.0,     366607.0,
+    15675153.0,    9132554.0,    7151469.0,    3571407.0,
+     2607881.0,   12013382.0,    4155038.0,    6285869.0,
+     7677882.0,   13102053.0,   15825725.0,     473591.0,
+     9065106.0,   15363067.0,    6271263.0,    9264392.0,
+     5636912.0,    4652155.0,    7056368.0,   13614112.0,
+    10155062.0,    1944035.0,    9527646.0,   15080200.0,
+     6658437.0,    6231200.0,    6832269.0,   16767104.0
+};
+
+static crtl_dd crtl_pio2(void);
+
+/* Reduce ax = |x| (finite, >= 1e8). Returns q in 0..3 (the quadrant) and sets
+   *r to the reduced argument with |*r| <= pi/4.
+
+   Writing ax = X * 2^(e0-48) with X three 24-bit chunks, and 2/pi as the chunk
+   sum above, the product collects by k = i+j into terms C_k * 2^(e0-24(k+1)).
+   Only the low two integer bits survive `mod 4`, so terms whose exponent is >= 2
+   contribute a multiple of 4 and are skipped outright — that is what keeps the
+   work constant regardless of how enormous x is. */
+static int crtl_trig_reduce_big(double ax, crtl_dd *r) {
+  double tx[3], z, ck, t, nd;
+  crtl_dd acc, fr;
+  int e0, k, kstart, i, j, ek, q;
+
+  e0 = 0;
+  z = ax;
+  /* e0 such that ax * 2^-e0 lands in [2^23, 2^24) */
+  while (z >= 16777216.0) { z *= 0.5; e0++; }
+  while (z < 8388608.0)   { z *= 2.0; e0--; }
+
+  for (i = 0; i < 3; i++) {
+    tx[i] = (double)(long long)z;          /* z >= 0, integral part */
+    z = (z - tx[i]) * 16777216.0;
+  }
+
+  /* first k whose term can still matter mod 4 */
+  kstart = 0;
+  while (e0 - 24 * (kstart + 1) > 1) kstart++;
+
+  acc.hi = 0.0; acc.lo = 0.0;
+  for (k = kstart; k <= kstart + 7; k++) {
+    ek = e0 - 24 * (k + 1);
+    ck = 0.0;
+    for (j = 0; j < 3; j++) {
+      i = k - j;
+      if (i < 0 || i >= 60) continue;
+      /* exact: each product < 2^48, at most three of them, sum < 2^50 */
+      ck += tx[j] * crtl_ipio2[i];
+    }
+    if (ck == 0.0) continue;
+    t = ldexp(ck, ek);
+    /* Reduce mod 4 while t is still exactly representable. t carries 50
+       significant bits; the residue needs at most 2 integer bits plus t's
+       fractional bits, and whenever t >= 4 that total stays inside 53 — so this
+       subtraction is exact, not merely close. */
+    if (t >= 4.0 || t <= -4.0) t = t - 4.0 * floor(t * 0.25);
+    acc = crtl_dd_add(acc, crtl_2sum(t, 0.0));
+  }
+
+  /* fold the accumulated terms back into [0,4), then split into quadrant and
+     a residue in [-1/2, 1/2] so |r| <= pi/4 for the kernels */
+  t = floor((acc.hi + acc.lo) * 0.25);
+  acc = crtl_dd_add(acc, crtl_2sum(-4.0 * t, 0.0));
+  nd = rint(acc.hi + acc.lo);
+  fr = crtl_dd_add(acc, crtl_2sum(-nd, 0.0));
+  q = (int)nd & 3;
+  *r = crtl_dd_mul(fr, crtl_pio2());
+  return q;
+}
+
 /* sin/cos of a reduced dd argument, |r| <= ~0.786, by 13-term dd Taylor. */
 static crtl_dd crtl_sin_kernel(crtl_dd r) {
   crtl_dd r2, s;
@@ -467,10 +559,21 @@ static void crtl_sincos_dd(double x, crtl_dd *sn, crtl_dd *cs) {
   }
 }
 
-/* Pascal fallbacks for the huge-argument range the CW reduction can't do. */
-extern double Sin(double x);
-extern double Cos(double x);
-extern double Tan(double x);
+/* sin/cos of a huge argument, via Payne-Hanek. Mirrors crtl_sincos_dd's
+   quadrant mapping; ax must be |x|, so the caller reapplies the sign (sin and
+   tan are odd, cos is even). */
+static void crtl_sincos_big(double ax, crtl_dd *sn, crtl_dd *cs) {
+  crtl_dd r, a, b;
+  int q = crtl_trig_reduce_big(ax, &r);
+  a = crtl_sin_kernel(r);
+  b = crtl_cos_kernel(r);
+  switch (q) {
+    case 0: *sn = a; *cs = b; break;
+    case 1: *sn = b; *cs = crtl_dd_neg(a); break;
+    case 2: *sn = crtl_dd_neg(a); *cs = crtl_dd_neg(b); break;
+    default: *sn = crtl_dd_neg(b); *cs = a; break;
+  }
+}
 
 /* NOT named sin/cos/tan: Pascal Sin/Cos/Tan collide (b377 landmine) —
    C callers come through the math.h function-like macros. */
@@ -478,7 +581,10 @@ double __crtl_sin(double x) {
   crtl_dd sn, cs;
   if (x != x || x == 0.0) return x;
   if (isinf(x)) return (x - x) / (x - x);
-  if (fabs(x) >= 1.0e8) return Sin(x);
+  if (fabs(x) >= 1.0e8) {
+    crtl_sincos_big(fabs(x), &sn, &cs);
+    return x < 0.0 ? -(sn.hi + sn.lo) : (sn.hi + sn.lo);
+  }
   crtl_sincos_dd(x, &sn, &cs);
   return sn.hi + sn.lo;
 }
@@ -487,7 +593,10 @@ double __crtl_cos(double x) {
   crtl_dd sn, cs;
   if (x != x) return x;
   if (isinf(x)) return (x - x) / (x - x);
-  if (fabs(x) >= 1.0e8) return Cos(x);
+  if (fabs(x) >= 1.0e8) {
+    crtl_sincos_big(fabs(x), &sn, &cs);   /* cos is even: no sign fixup */
+    return cs.hi + cs.lo;
+  }
   crtl_sincos_dd(x, &sn, &cs);
   return cs.hi + cs.lo;
 }
@@ -496,7 +605,11 @@ double __crtl_tan(double x) {
   crtl_dd sn, cs, t;
   if (x != x || x == 0.0) return x;
   if (isinf(x)) return (x - x) / (x - x);
-  if (fabs(x) >= 1.0e8) return Tan(x);
+  if (fabs(x) >= 1.0e8) {
+    crtl_sincos_big(fabs(x), &sn, &cs);
+    t = crtl_dd_div(sn, cs);
+    return x < 0.0 ? -(t.hi + t.lo) : (t.hi + t.lo);
+  }
   crtl_sincos_dd(x, &sn, &cs);
   t = crtl_dd_div(sn, cs);
   return t.hi + t.lo;

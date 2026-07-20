@@ -1,5 +1,6 @@
 ---
 prio: 45  # auto
+blocked-by: [decide-gpc-as-corpus-target]
 ---
 
 # Wish: compile GPC
@@ -29,3 +30,5 @@ FPC/Delphi surface the Pascal frontend targets, so the work would not feed the
 compat campaign that Synapse/fgl/FPC-itself do. Left in place rather than moved,
 because moving it to `rejected/` IS the decision and that is the user's to make.
 
+Blocked on [[decide-gpc-as-corpus-target]] (2026-07-20) so it stops appearing as
+available Track B work while it waits on a scope call.

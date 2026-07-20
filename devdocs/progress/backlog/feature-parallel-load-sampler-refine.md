@@ -1,6 +1,7 @@
 ---
 prio: 20
 track: B
+blocked-by: [feature-os-targets-bsd-mac]
 ---
 
 # Parallel load sampler — refinements (ramp/EMA, BSD/cgroup)
@@ -87,4 +88,13 @@ for the second: on a saturated box, `ParPolite` — the mode whose entire purpos
 is to be polite — takes maximum width. This is pre-existing behaviour and not
 touched here, but it deserves a distinct sentinel (say -1 for "no reading", 0 for
 "genuinely nothing free") so the two cases can diverge.
+
+## Blocked (2026-07-20)
+
+Items 1 and 3 landed. Items **2 (BSD sampler) and 4 (macOS sampler)** are the
+whole remainder, and both are per-OS syscall work that cannot be written
+responsibly without the OS to run it on — a load sampler guessed at fails in the
+direction of over-parallelizing, silently. `blocked-by:
+feature-os-targets-bsd-mac`, which is where the per-OS port belongs anyway (that
+ticket already names the sampler as part of its scope).
 
