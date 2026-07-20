@@ -30,7 +30,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-nilpy-one-char-literal-through-ctor-str-param | A | 70 | bug | NilPy: a ONE-character literal through a ctor `str` param becomes a char — silent, then segfaults | — |
+| bug-a-nilpy-print-of-a-list-prints-a-pointer | A | 55 | bug | NilPy: print() of a list prints the handle, not the elements | — |
 | bug-a-nilpy-subscript-of-a-string-literal | A | 40 | bug | NilPy: subscripting a string LITERAL is a parse error | — |
 | bug-a-nilpy-unary-minus-precedence-vs-floordiv | A | 70 | bug | NilPy: unary minus binds LOOSER than `//` and `%` — `-7 // 2` is -3, not -4 | — |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
@@ -230,7 +230,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (870)
+## done (871)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -252,6 +252,7 @@ _none_
 | bug-a-nilpy-int-of-string-returns-a-pointer | A | 80 | bug | NilPy `int("42")` returns a POINTER, silently — and `float()` does not exist | — |
 | bug-a-nilpy-list-augmented-add-segfaults | A | 55 | bug | NilPy: `xs += [2]` on a list SEGFAULTS | — |
 | bug-a-nilpy-method-call-on-variant-receiver | A | 70 | bug | NilPy: calling a method on a VARIANT receiver is a parse error | — |
+| bug-a-nilpy-one-char-literal-through-ctor-str-param | A | 70 | bug | NilPy: a ONE-character literal through a ctor `str` param becomes a char — silent, then segfaults | — |
 | bug-a-nilpy-one-char-string-literal-is-a-char | A | 70 | bug | NilPy: a 1-character string literal was a char, and segfaulted as an argument | — |
 | bug-a-nilpy-str-of-string-and-bool | A | 60 | bug | NilPy `str()` prints a string's POINTER and a bool's 1 | — |
 | bug-a-nilpy-string-repeat-returns-a-pointer | A | 60 | bug | NilPy: `s * n` on a string returns a POINTER, silently | — |
@@ -2545,7 +2546,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [A] bug-a-nilpy-one-char-literal-through-ctor-str-param
 - [p 70] [A] bug-a-nilpy-unary-minus-precedence-vs-floordiv
 - [p 70] [N] feature-nilpy-nested-defs
 - [p 70] [T] regression-cascade-3d46e52fc733
@@ -2569,6 +2569,7 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
+- [p 55] [A] bug-a-nilpy-print-of-a-list-prints-a-pointer
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope

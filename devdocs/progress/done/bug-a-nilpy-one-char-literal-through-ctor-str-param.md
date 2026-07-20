@@ -53,3 +53,19 @@ crosses into a `str` context and confirm tyChar widens.**
 matching CPython, plus a sweep of one-character strings through: ctor param,
 def param, method param, field assignment, list/dict element, return value,
 concatenation and comparison.
+
+## Log
+
+- 2026-07-20 — fixed at the ROOT the ticket asked for: a 1-character literal is
+  no longer a char in NilPy at all (da66e43d), rather than widening it at each
+  crossing. Filed separately as
+  [[bug-a-nilpy-one-char-string-literal-is-a-char]] before this duplicate was
+  spotted; both describe the same defect.
+- The sweep this ticket asks for was run against CPython and passes: ctor param,
+  def param, method param, field assignment and re-assignment, list/dict
+  element, return value, concatenation, comparison, repeat, `in`, `int()`,
+  `str()`, `ord()`, `chr()`, str methods, `+=`. Regression test:
+  `test/test_nilpy_one_char_string.npy` in `make test-nilpy`.
+- One unrelated gap surfaced by the sweep and filed on its own:
+  [[bug-a-nilpy-print-of-a-list-prints-a-pointer]].
+- 2026-07-20 — resolved, commit da66e43d.
