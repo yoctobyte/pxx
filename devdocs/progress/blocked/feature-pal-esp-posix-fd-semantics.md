@@ -46,3 +46,13 @@ identifier.
   PAL workarounds.
 
 - 2026-07-19 (backlog sweep note) Stale blocker ref: bug-esp-idf-heap-linux-mmap-ecall is resolved (in done/). Ticket itself still fully open (ESP backend stdio-based, PAL_OPEN_EXCL unsupported).
+
+## Moved to blocked/ (2026-07-20, Track B sweep)
+
+Acceptance is a C3/S3 link-and-run smoke; there is no device and no qemu/IDF
+runner in this lane. External constraint, so `blocked/` rather than backlog.
+
+One thing IS doable without hardware and is worth doing first when this resumes:
+host-side `--platform=esp` tests that pin the CURRENT behaviour — `PAL_OPEN_EXCL`
+returning `PAL_ERR_UNSUPPORTED`, and the errno collapse — so the rewrite has a
+baseline to diff against instead of changing semantics blind.

@@ -18,14 +18,16 @@ _none_
 
 _none_
 
-## blocked (2)
+## blocked (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
+| feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
+| feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (132)
+## backlog (128)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -37,6 +39,7 @@ _none_
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
 | bug-cdecl-indirect-over-6-integer-args | A | 50 | bug | `cdecl` indirect call with more than 6 integer args is rejected | — |
+| bug-nilpy-bitwise-on-float-variant-truncates | A | 30 | bug | NilPy: a bitwise op on a FLOAT variant truncates instead of raising TypeError | — |
 | bug-open-array-param-length-high-zero | P | 65 | bug | `Length()` / `High()` on an open-array parameter return 0 / -1 | — |
 | bug-parallel-for-captured-boolean-loses-type | A | 50 | bug | Captured Boolean loses its type inside a parallel-for body (overload resolution fails) | — |
 | bug-parallel-for-captured-dynarray-var-arg-segfault | A | 60 | bug | Passing a captured dynamic array by `var` from a parallel-for body segfaults | — |
@@ -50,6 +53,7 @@ _none_
 | compat-pascal-const-expr-ord-chr-succ | P | 45 | compat | `Ord()` / `Chr()` / `Length()` / `Succ()` are not folded in constant expressions | — |
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
 | decide-abi-portable-vs-target-split | A | 50 | decide |  | — |
+| decide-dns-libc-backend-shape | U | 40 | decide | Track U: how should a libc-backed DNS resolver be reached from libc-free static ELF? | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
@@ -65,17 +69,15 @@ _none_
 | feature-crtl-trig-payne-hanek | B | 15 | feature | crtl libm: Payne-Hanek reduction for \|x\| >= 1e8 trig (sin/cos/tan) | — |
 | feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | feature-nilpy-break-continue, feature-nilpy-tk-binding |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
-| feature-dns-backends-selection | B | 40 | feature | DNS backends beyond dns_wire: dns_libc / dns_resolved / dns_esp + selection | — |
+| feature-dns-backends-selection | B | 40 | feature | DNS backends beyond dns_wire: dns_libc / dns_resolved / dns_esp + selection | decide-dns-libc-backend-shape |
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-dynamic-include-paths-config | A | 45 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | 45 | feature | Dynamic soname discovery (no execve) | — |
 | feature-dynarray-insert-delete-managed-elements | A | 45 | feature | Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets | — |
-| feature-eliah-ai-command-rail | B | 45 | feature | feature: Eliah AI command rail + console pane | — |
 | feature-embed-dwscript-rtti | P | 45 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
 | feature-embed-pascal-script | P | 45 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-emission-size-dce | A | 45 | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
 | feature-esp-hardware-flash-validation | A | 45 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
-| feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-float-exception-mask-control | A | 60 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
 | feature-ilja-tui | B | 45 | feature | Ilja — TUI (ANSI) face | — |
 | feature-inline-asm-xmm-operands | A | 55 | feature | Inline asm cannot express float or vector code (no xmm operands, no packed SSE, no VEX, no cpuid) | — |
@@ -104,7 +106,6 @@ _none_
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-opt-rtti-emit-on-use | O | 40 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | — |
-| feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-load-sampler-refine | B | 20 | feature | Parallel load sampler — refinements (ramp/EMA, BSD/cgroup) | — |
 | feature-pascal-asmmode-directive-tolerance | A | 50 | feature | Accept `{$asmMode default}` (and other non-intel asmmode values) | — |
 | feature-pascal-builtin-tobject-class | A | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | — |
@@ -127,10 +128,8 @@ _none_
 | feature-port-windows-pe | A | 45→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
 | feature-promo-launch-plan | A | 25 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
-| feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
+| feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
-| feature-rtl-math-on-crtl-dd-kernels | B | 10 | feature | RTL math.pas on the crtl dd kernels — correct rounding for Pascal too | — |
-| feature-rtl-optout-for-lcl | A+B | 45 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
 | feature-rtti-field-reflection | A | 45 | feature | RTTI: field get/set by name (extends the VMT-8 method-reflection blob) | — |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
@@ -138,11 +137,10 @@ _none_
 | feature-t-windows-wine-harness | T | 45 | feature | Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
-| feature-tls13-from-scratch | B | 53 | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
 | feature-toolchain-cli-ux | A | 45 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-twatch-full-tier-coverage-age | T | 40 | feature | No signal distinguishes "full tier is lagging" from "full tier never completes" | — |
 | feature-typeinfo-all-types | A | 50 | feature | `TypeInfo(T)` for every type, not just enums | — |
-| feature-typinfo-facade-unit | B | 50 | feature | `typinfo` facade unit: FPC's RTTI API shapes over OUR blobs | — |
+| feature-typinfo-facade-unit | B | 50 | feature | `typinfo` facade unit: FPC's RTTI API shapes over OUR blobs | feature-typeinfo-all-types |
 | feature-unicodestring-model | A | 40 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 | feature-web-track-w-bootstrap | A | 40→45 | feature | Track W (website) — bootstrap the lane: two repos, one board | — |
 | feature-web-tracker-and-host-portability | A | 45 | feature | Public tracker on GitHub + host-portability rule (nothing lives only in a service) | feature-web-track-w-bootstrap |
@@ -187,7 +185,7 @@ _none_
 | feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
 | feature-zig-frontend | B | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
-## rainy-day (21)
+## rainy-day (25)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -198,6 +196,7 @@ _none_
 | feature-allocator-quality | A | 50 | feature | Allocator quality: split / coalesce / bins / alignment | — |
 | feature-async-auto-backend | A | 50 | feature | Auto stackless/stackful backend selection | — |
 | feature-dwarf-debug-info | A | 50 | feature | DWARF debug info (`-g`) — phased, x86-64 first | — |
+| feature-eliah-ai-command-rail | B | 45 | feature | feature: Eliah AI command rail + console pane | — |
 | feature-extended-type-support | A | 50 | feature | Proper `Extended` type support (currently aliased to Double) | — |
 | feature-fpc-vs-pxx-feature-boundary | A | 50 | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
 | feature-handle-compacting-heap | A | 50 | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
@@ -205,8 +204,11 @@ _none_
 | feature-mode-delphi-remaining | A | 50 | feature | `{$mode delphi}` — remaining @-relax edge slices | — |
 | feature-no-ansistring-profile | A | 50 | feature | No-AnsiString / bounded-string profile | — |
 | feature-os-targets-bsd-mac | A | 50 | feature | Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized) | — |
+| feature-rtl-math-on-crtl-dd-kernels | B | 10 | feature | RTL math.pas on the crtl dd kernels — correct rounding for Pascal too | — |
+| feature-rtl-optout-for-lcl | A+B | 45 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
 | feature-stackful-coro-port | A | 50 | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | A | 50 | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
+| feature-tls13-from-scratch | B | 53 | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
 | goal-compile-fpc-compiler | A | 50 | goal | 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX | — |
 | goal-compile-linux-tinyconfig | C | 50 | goal | 🗼 Lighthouse — boot a Linux tinyconfig kernel built with PXX's C frontend | — |
 | idea-demo-app-candidates | E | 50 | idea | Demo / test application candidates — selection criteria + catalog | — |
@@ -2615,11 +2617,10 @@ _none_
 - [p 55] [A] feature-pascal-type-helpers
 - [p 55] [T] feature-pasmith-multi-unit-programs
 - [p 55] [A] feature-signal-siginfo-ucontext
-- [p 53] [B] feature-esp-peripheral-callback-api
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
-- [p 53] [B] feature-tls13-from-scratch
-- [p 50] [A] bug-cdecl-indirect-over-6-integer-args
+- [p 50] [A] bug-cdecl-indirect-over-6-integer-args (unblocks 1)
+- [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [A] bug-parallel-for-captured-boolean-loses-type
 - [p 50] [A] decide-abi-portable-vs-target-split
 - [p 50] [D] docs-devnotes-ai-assisted-build
@@ -2628,8 +2629,6 @@ _none_
 - [p 50] [A] feature-pascal-asmmode-directive-tolerance
 - [p 50] [A] feature-pascal-initialize-finalize-intrinsics
 - [p 50] [A] feature-release-checksums-repro
-- [p 50] [A] feature-typeinfo-all-types
-- [p 50] [B] feature-typinfo-facade-unit
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [B] feature-nilpy-tk-binding (unblocks 1)
@@ -2645,7 +2644,6 @@ _none_
 - [p 45] [A] feature-dynamic-include-paths-config
 - [p 45] [A] feature-dynamic-soname-discovery
 - [p 45] [A] feature-dynarray-insert-delete-managed-elements
-- [p 45] [B] feature-eliah-ai-command-rail
 - [p 45] [P] feature-embed-dwscript-rtti
 - [p 45] [P] feature-embed-pascal-script
 - [p 45] [A] feature-emission-size-dce
@@ -2661,8 +2659,6 @@ _none_
 - [p 45] [P] feature-pascal-corpus-passrc
 - [p 45] [A] feature-pascal-exitcode-finalization-halt
 - [p 45] [B] feature-random-library
-- [p 45] [B] feature-real-dynlib-loader
-- [p 45] [A+B] feature-rtl-optout-for-lcl
 - [p 45] [A] feature-rtti-field-reflection
 - [p 45] [T] feature-t-windows-wine-harness
 - [p 45] [A] feature-toolchain-cli-ux
@@ -2673,11 +2669,11 @@ _none_
 - [p 45] [T] task-t-enroll-pascal-conformance-tier
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 42] [A] feature-pascal-builtin-tobject-class
+- [p 40] [U] decide-dns-libc-backend-shape (unblocks 1)
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
 - [p 40] [A] bug-a-param-pointer-rule-divergence
 - [p 40] [A] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision
-- [p 40] [B] feature-dns-backends-selection
 - [p 40] [O] feature-opt-rtti-emit-on-use
 - [p 40] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 40] [T] feature-twatch-full-tier-coverage-age
@@ -2688,7 +2684,7 @@ _none_
 - [p 35] [O] feature-opt-complex-packed-double
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
 - [p 30] [C] bug-c-compound-literal-address-of
-- [p 30] [B] feature-pal-esp-posix-fd-semantics
+- [p 30] [A] bug-nilpy-bitwise-on-float-variant-truncates
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
 - [p 30] [D] idea-public-status-page
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
@@ -2704,7 +2700,6 @@ _none_
 - [p 15] [N] feature-nilpy-nested-def-as-value
 - [p 15] [P] feature-pascal-corpus-expansion
 - [p 12] [P] task-pascal-conformance-long-tail
-- [p 10] [B] feature-rtl-math-on-crtl-dd-kernels
 - [p 10] [A] idea-cross-namespace-ambiguity-warning
 - [p  5] [A] decide-nilpy-parallel-capture-semantics (unblocks 1)
 
@@ -2712,8 +2707,11 @@ _none_
 
 - **3** — feature-port-rtl-over-libc
 - **2** — feature-web-track-w-bootstrap
+- **1** — bug-cdecl-indirect-over-6-integer-args
+- **1** — decide-dns-libc-backend-shape
 - **1** — decide-nilpy-parallel-capture-semantics
 - **1** — feature-nilpy-break-continue
 - **1** — feature-nilpy-tk-binding
 - **1** — feature-port-freebsd-native
 - **1** — feature-port-windows-pe
+- **1** — feature-typeinfo-all-types

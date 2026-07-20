@@ -1,5 +1,6 @@
 ---
 prio: 45  # auto
+blocked-by: [bug-cdecl-indirect-over-6-integer-args]
 ---
 
 # Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy

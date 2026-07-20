@@ -129,3 +129,17 @@ This ticket builds the high-level layer that hides the SDK call **and** the
   acceptance run, drop the interim `iram;`, then GPIO/ADC slices). Stays low
   prio per the user's "Pascal has prio" call — no live agent, so out of the
   unfinished/ live-lock.
+
+## Moved to blocked/ (2026-07-20, Track B sweep)
+
+Slice 1 (esptimer + demo) is written but **unverified**, and the acceptance for
+every remaining slice is "it runs on the device". Neither ESP32 hardware nor a
+qemu/IDF runner is available to this lane, so nothing here can be honestly
+completed or honestly closed — it would be code nobody has ever executed.
+
+Blocked on an external constraint, not on another ticket, which is what
+`blocked/` is for (same category as [[feature-port-macos]]). What would unblock
+it: a C3/S3 board or a working qemu-esp32 harness. A host-side compile-only
+smoke (riscv32 `.o` + `readelf -sW` import assertions) is possible without
+hardware and would be worth doing, but it proves linkage, not behaviour — do not
+mistake it for acceptance.

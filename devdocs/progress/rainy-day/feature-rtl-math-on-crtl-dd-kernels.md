@@ -24,3 +24,9 @@ Notes for the implementer:
 - The dd kernels live in C sources; a Pascal program today only links crtl
   when C objects are present — needs a pull path (builtin unit or crtl-as-
   unit) before Pascal can call them. That plumbing is the actual work.
+
+## Moved to rainy-day/ (2026-07-20, Track B sweep)
+
+The ticket already records the user's 2026-07-19 call: **"not bothered for now"**.
+It was still in backlog and still ranked. Moved to match the decision that was
+already made.

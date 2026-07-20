@@ -245,3 +245,17 @@ validates the cert chain to the system trust store, and transfers application
 data — Pascal record layer at minimum, kTLS offload optional. Every primitive
 smoke-tested against published vectors. Unit head + docs state the
 not-for-hostile-production caveat and point at OpenSSL-dlopen for that.
+
+## Moved to rainy-day/ (2026-07-20, Track B sweep)
+
+The ticket's own status line has said **"DEFERRED, start alongside BSD support
+(not now)"** since 2026-06-24, yet it kept surfacing at the top of the Track B
+ready queue at prio 53 — so the queue was advertising as available work
+something the ticket itself says not to start. `rainy-day/` matches the stated
+intent.
+
+Nothing is lost: M1-M7 are implemented and tested, and a real server-authenticated
+https GET against `openssl s_server` works today via `make tls13-handshake-devtest`.
+The next slices (RSA-PSS scheme dispatch, kTLS RX, ciphersuite negotiation) are
+listed in the ticket and can be pulled individually if one becomes urgent — that
+does not require un-deferring the umbrella.

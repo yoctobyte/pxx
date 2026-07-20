@@ -1,5 +1,6 @@
 ---
 prio: 50
+blocked-by: [feature-typeinfo-all-types]
 ---
 
 # `typinfo` facade unit: FPC's RTTI API shapes over OUR blobs

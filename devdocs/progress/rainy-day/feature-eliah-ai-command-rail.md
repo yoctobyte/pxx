@@ -47,3 +47,9 @@ networking path is covered; no command logic is duplicated for the AI source.
 ## Log
 - 2026-06-24 — filed as a suggestion while finishing M5; AI deferred per the
   decision that it adds little to local testing beyond networking.
+
+## Moved to rainy-day/ (2026-07-20, Track B sweep)
+
+Ticket status is "backlog (suggestion — deferred)" — a suggestion nobody has
+accepted, sitting at prio 45 in the ready queue. Moved to `rainy-day/` so the
+queue reflects that. Pull it back if the idea is actually wanted.

@@ -1,5 +1,6 @@
 ---
 prio: 40
+blocked-by: [decide-dns-libc-backend-shape]
 ---
 
 # DNS backends beyond dns_wire: dns_libc / dns_resolved / dns_esp + selection

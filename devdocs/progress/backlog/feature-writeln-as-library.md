@@ -94,3 +94,17 @@ its file descriptor instead of stdout. Phase it:
   vtFormatted alongside.
 - Related: the bracket-elision sugar is independently valuable — could land and be
   used for user variadics well before any writeln rewrite.
+
+## Track B note (2026-07-20)
+
+Listed in the Track B ready queue, but phases 1 and 2 — variadic bracket-elision
+and `expr:w:p` formatting — are **parser work in `compiler/**`**, i.e. Track A/P,
+not Track B. Track B cannot start this; only phase 3 (the library `write` /
+`writeln` over `array of const`) is ours, and on its own, called with explicit
+`[...]` brackets, it is a strictly worse `writeln` that nobody would use. The
+value is in the sugar, and the sugar is the compiler's.
+
+Left in backlog rather than blocked/, since it is not externally blocked — it
+just needs the owning lane to be A/P for the first two phases. Whoever ranks
+this should treat it as a Track A ticket with a Track B tail.
+

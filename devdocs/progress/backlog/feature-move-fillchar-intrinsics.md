@@ -77,3 +77,16 @@ The sysutils copies are now shadowed (builtin registers first, identical
 code); REMOVING them is a Track B follow-up (lib/** ownership) —
 [[task-remove-sysutils-move-fillchar-copies]]. Part 2 (optimized intrinsic
 emission, rep movsb/stosb-class) remains this ticket's open scope.
+
+## Track B note (2026-07-20)
+
+Surfacing in the **Track B** ready queue, but the ticket's own header already
+says Track A and the remaining half (part 2: emitting `Move`/`FillChar` as
+intrinsics instead of calls) is `compiler/**`. Part 1 landed in v145, and the
+Track B tail — deleting the shadowed copies from `lib/rtl/sysutils.pas` — was
+split out as `task-remove-sysutils-move-fillchar-copies` and **completed
+2026-07-04** (it is in `done/`).
+
+So there is no Track B work left here at all; the lane label is what is stale,
+not the ticket. Whoever picks this up: it is Track A.
+

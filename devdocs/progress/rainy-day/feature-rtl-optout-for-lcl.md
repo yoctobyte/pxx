@@ -63,3 +63,10 @@ Low priority — parked deliberately. Filed so the boundary requirement (opt out
 of *our* PCL, never depend on FPC's RTL) is not forgotten when LCL work resumes.
 Related: [[feature-classes-tlist-notify-hook]] and the "grow `classes` toward
 `TComponent`" thread are the RTL-floor pieces LCL needs regardless.
+
+## Moved to rainy-day/ (2026-07-20, Track B sweep)
+
+Ticket says "**not now, keep in mind**", and the actionable part
+(`ParseUsesUnit` search-order plus a new flag) is `compiler/**` — Track A, not
+Track B, despite the A+B label. Both reasons point the same way: it should not
+be sitting in the Track B ready queue.
