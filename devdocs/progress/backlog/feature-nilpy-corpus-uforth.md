@@ -103,7 +103,11 @@ slices, f-strings, raise, isinstance, augassign.
    - [[bug-a-nilpy-variant-element-not-usable-as-scalar]] (p85) — `return
      xs[0]` is silent garbage. List-wide, predates dict, and it is the one
      that matters most: uforth reads from vm.stack / vm.dict / vm.xt_table on
-     almost every line.
+     almost every line. **Now the binding constraint on for-in too**: the loop
+     variable is a variant, so `for v in xs: acc = acc + v` — iterate a list
+     of strings, build a string, the most ordinary loop there is — produces
+     GARBAGE BYTES. for-in landed usable for printing and passing along, not
+     for consuming.
    - [[bug-a-str-boxed-into-variant-does-not-own-bytes]] (p80) — a str boxed
      into a variant has frame lifetime, so same-length keys collide.
    - [[bug-nilpy-method-returning-str-garbage]] — VM has many `-> str`
