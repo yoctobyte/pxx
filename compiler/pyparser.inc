@@ -3749,6 +3749,10 @@ begin
   ParseUsesUnit('builtinheap');
   if needsBuiltin then ParseUsesUnit('builtin');
   ParseUsesUnit('pylib');
+  { Only NOW: the units above are ORDINARY PASCAL and their own div/mod must
+    keep truncating semantics. Setting this at entry rewrote pylib's own
+    `a div b` into a call to the helper being defined. }
+  PyProgramMode := True;
   PySkipNewlines;
   { A leading module docstring may precede the imports; consume it. }
   if (CurTok.Kind = tkString) and (TokPos < TokCount) and

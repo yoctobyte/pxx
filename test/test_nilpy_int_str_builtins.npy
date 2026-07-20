@@ -1,0 +1,15 @@
+print(int("42"), int("-7"), int("  9  "), int(3), int(2.9), int(-2.9), int(True))
+print(str("ab"), str(""), str(True), str(False), str(5), str(-5), str(2.5), str(0.0))
+print(str(3) + str(4))
+i: int = int("100")
+print(i + 1, i // 7, i % 7)
+f: float = 2.75
+print(int(f), str(f))
+print(int("0"), int("-0"))
+
+def half(n: int) -> int:
+    return n // 2
+def rem(n: int) -> int:
+    return n % 2
+for n in [9, -9, 10, -10]:
+    print(n, half(n), rem(n), n - (half(n) * 2 + rem(n)))

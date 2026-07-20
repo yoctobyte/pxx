@@ -3221,6 +3221,35 @@ begin
     (target = tyUInt64) or (target = tyNativeUInt);
 end;
 
+function IRFindProc1ByArgTk(const name: AnsiString; tk: TTypeKind): Integer;
+{ Pick a 1-argument overload by its parameter's type kind, across ALL units.
+  FindProcOverload is scoped to CurrentUnitIdx, so it cannot see pylib's
+  pystr_of from the main program being lowered. }
+var i: Integer;
+begin
+  IRFindProc1ByArgTk := -1;
+  for i := 0 to ProcCount - 1 do
+    if (Procs[i].Name = name) and (Procs[i].ParamCount = 1) and
+       (Procs[i].Params[0].TypeKind = tk) then
+    begin
+      IRFindProc1ByArgTk := i;
+      Exit;
+    end;
+end;
+
+function IRNodeIsFloatThroughNeg(n: Integer): Boolean;
+{ Is this operand floating point, seeing through unary minus? AN_NEG does not
+  carry its operand's type, so `-x // y` with a float x looked integer and
+  picked the integer floor-div helper, which then reinterpreted the double's
+  bits. Only AN_NEG needs unwrapping -- every other operand shape the NilPy
+  arithmetic layer produces carries its own ASTTk. }
+begin
+  while (n >= 0) and (ASTKind[n] = AN_NEG) and
+        not TypeIsFloat(IntToTypeKind(ASTTk[n])) do
+    n := ASTLeft[n];
+  IRNodeIsFloatThroughNeg := (n >= 0) and TypeIsFloat(IntToTypeKind(ASTTk[n]));
+end;
+
 function IRVariantAddr(argAST: Integer): Integer;
 { The ADDRESS of a variant expression — variants are always marshalled by
   address (write, str(), unbox, parameter passing all want this).
@@ -3284,6 +3313,8 @@ function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
     vuExitUnboxed: Boolean;         { `return <variant>` unboxed to a scalar result }
+    fdName: string;                 { NilPy floor-div/mod helper being called }
+    fdTk: TTypeKind;
     intfCallCi, intfSelfSym, intfImtSym: Integer;   { single-pointer interface call }
     frameNode, slotNode, bpAddr, addrAddr, bpVal, selfVal: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
@@ -4698,6 +4729,13 @@ begin
         Exit;
       end;
       left := IRLowerAST(ASTLeft[node]);
+      { Trust the LOWERED operand's type over the parse-time one: `//` on floats
+        is spelled tkDiv, so the parser typed it integer and only the lowering
+        knows it produced a double. Negating with the stale tag emitted an
+        integer NEG over double bits. }
+      if TypeIsFloat(IntToTypeKind(IRTk[left])) and
+         not TypeIsFloat(IntToTypeKind(ASTTk[node])) then
+        ASTTk[node] := IRTk[left];
       Result := IRAppend(IR_NEG, left, -1, -1, 0, ASTTk[node]);
     end;
 
@@ -4804,6 +4842,51 @@ begin
           IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
         end;
         Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyBoolean));
+        Exit;
+      end;
+      { Python's `//` and `%` FLOOR; Pascal's div/mod TRUNCATE. Same tokens, so
+        the language decides. Route both to the pylib helpers, which correct
+        the quotient and the remainder TOGETHER -- fixing one alone would break
+        the identity a = (a//b)*b + (a%b) for mixed signs.
+        (bug-a-nilpy-floordiv-and-modulo-wrong-for-negatives.) }
+      if PyProgramMode and
+         ((Integer(ASTIVal[node]) = Ord(tkDiv)) or (Integer(ASTIVal[node]) = Ord(tkMod))) and
+         (IntToTypeKind(ASTTk[ASTLeft[node]]) <> tyVariant) and
+         (IntToTypeKind(ASTTk[ASTRight[node]]) <> tyVariant) then
+      begin
+        { Decide by the OPERANDS, not the node: `x // y` on floats is still
+          tkDiv, which Pascal only ever spells for integers, so the node's own
+          type kind is not float and would have picked the integer helper and
+          reinterpreted the double bits as an int. }
+        if IRNodeIsFloatThroughNeg(ASTLeft[node]) or
+           IRNodeIsFloatThroughNeg(ASTRight[node]) then
+        begin
+          if Integer(ASTIVal[node]) = Ord(tkDiv) then
+            fdName := 'pyfloordiv_f'
+          else
+            fdName := 'pyfloormod_f';
+          fdTk := tyDouble;
+          { tkDiv is an integer-only spelling in Pascal, so the parser left the
+            node integer-typed. Consumers (write, assignment) read ASTTk, and
+            would print the double's BITS. }
+          ASTTk[node] := Ord(tyDouble);
+        end
+        else
+        begin
+          if Integer(ASTIVal[node]) = Ord(tkDiv) then
+            fdName := 'pyfloordiv_i'
+          else
+            fdName := 'pyfloormod_i';
+          fdTk := tyInt64;
+        end;
+        cpi := FindProc(fdName);
+        if cpi < 0 then Error('Nil Python: ' + fdName + ' (pylib) not loaded');
+        left := IRLowerCallArg(cpi, 0, ASTLeft[node], False);
+        first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(fdTk));
+        right := IRLowerCallArg(cpi, 1, ASTRight[node], False);
+        last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(fdTk));
+        IRB[first] := last;
+        Result := IRAppendCall(cpi, first, -1, Ord(fdTk));
         Exit;
       end;
       { Operator overloading: a <op> b on a class/record operand resolves to a
@@ -5753,10 +5836,77 @@ begin
           Exit;
         end;
       end;
+      if cpi = -200 then
+      begin
+        { Nil Python int(). There was no lowering at all, so every argument fell
+          through and int("42") handed back the string's POINTER
+          (bug-a-nilpy-int-of-string-returns-a-pointer). }
+        argVal := ASTLeft[item];
+        argTk := IntToTypeKind(ASTTk[argVal]);
+        if argTk = tyVariant then
+        begin
+          procIdx := FindProc('VariantToInt64');
+          if procIdx < 0 then Error('int: VariantToInt64 builtin not loaded');
+          value := IRVariantAddr(argVal);
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyVariant));
+          Result := IRAppendCall(procIdx, argNode, -1, Ord(tyInt64));
+          Exit;
+        end;
+        if argTk = tyChar then
+        begin
+          { A ONE-character literal is tyChar, not a string -- int("0") would
+            otherwise fall through to the identity path and yield the character
+            CODE, 48. Widen to a string and parse it like any other. }
+          procIdx := FindProc('pystr_ofchar');
+          if procIdx < 0 then Error('int: pystr_ofchar (pylib) not loaded');
+          value := IRLowerAST(argVal);
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyChar));
+          value := IRAppendCall(procIdx, argNode, -1, Ord(tyAnsiString));
+          procIdx := FindProc('pystr_to_int');
+          if procIdx < 0 then Error('int: pystr_to_int (pylib) not loaded');
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
+          Result := IRAppendCall(procIdx, argNode, -1, Ord(tyInt64));
+          Exit;
+        end;
+        if (argTk = tyString) or (argTk = tyAnsiString) then
+        begin
+          { int("42") parses the TEXT. pystr_to_int reports a Python-shaped
+            ValueError on junk rather than yielding a silent 0. }
+          procIdx := FindProc('pystr_to_int');
+          if procIdx < 0 then Error('int: pystr_to_int (pylib) not loaded');
+          value := IRLowerCallArg(procIdx, 0, argVal, Procs[procIdx].Params[0].IsRef);
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(argTk));
+          Result := IRAppendCall(procIdx, argNode, -1, Ord(tyInt64));
+          Exit;
+        end;
+        { int(int) / int(bool) are already the value. int(float) never reaches
+          here -- the parser routes it to the -203 Trunc intrinsic. }
+        Result := IRLowerAST(argVal);
+        Exit;
+      end;
       if cpi = -201 then
       begin
         argVal := ASTLeft[item];
         argTk := IntToTypeKind(ASTTk[argVal]);
+        { A string is already its own str(); a Boolean must print Python's
+          True/False, not 1/0. Both went through the numeric formatter and
+          produced a pointer and a digit respectively
+          (bug-a-nilpy-str-of-string-and-bool). pystr_of already spells every
+          type the Python way for f-strings -- reuse it rather than grow the
+          intrinsic, picking the overload by ARGUMENT TYPE. }
+        if (argTk = tyString) or (argTk = tyAnsiString) or (argTk = tyBoolean) or
+           (argTk = tyChar) then
+        begin
+          if (argTk = tyString) or (argTk = tyAnsiString) then
+            procIdx := IRFindProc1ByArgTk('pystr_of', tyAnsiString)
+          else
+            procIdx := IRFindProc1ByArgTk('pystr_of', argTk);
+          if procIdx < 0 then Error('str: pystr_of (pylib) overload not found');
+          value := IRLowerCallArg(procIdx, 0, argVal, Procs[procIdx].Params[0].IsRef);
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(argTk));
+          Result := IRAppendCall(procIdx, argNode, -1, Ord(Procs[procIdx].RetType));
+          Exit;
+        end;
         if argTk = tyVariant then
         begin
           procIdx := FindProc('VariantToStr');

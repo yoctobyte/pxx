@@ -162,6 +162,28 @@ function len(b: TPyBytes): Integer; overload;
   unknown-arity error, not a silent answer. lib/rtl/math.pas has capitalised
   Min/Max, but NilPy programs do not load it, and Python spells them lower
   case. }
+{ Python's `//` and `%`: the quotient FLOORS (rounds toward -infinity) and the
+  remainder takes the DIVISOR's sign, where Pascal's div/mod truncate toward
+  zero and the remainder takes the dividend's. They differ only when the signs
+  disagree: -7 // 3 is -3 in Python and -2 in Pascal.
+
+  Corrected together, never separately: the identity a = (a//b)*b + (a%b) must
+  hold for every sign combination, and it does here by construction -- when the
+  signs disagree the quotient loses one and the remainder gains one b, so
+  (q-1)*b + (r+b) = q*b + r = a exactly.
+
+  Distinct names per operand type rather than an overload set: a Variant
+  argument would otherwise pick an overload arbitrarily
+  (bug-a-len-of-variant-picks-wrong-overload). The IR lowering selects by
+  operand type and calls one by name. }
+{ Python's int("42"). A junk string is a ValueError in Python, so it halts
+  loudly here rather than yielding a silent 0 -- the whole point of the
+  ticket was that int() of a string returned a plausible wrong number. }
+function pystr_to_int(const s: AnsiString): Int64;
+function pyfloordiv_i(a: Int64; b: Int64): Int64;
+function pyfloormod_i(a: Int64; b: Int64): Int64;
+function pyfloordiv_f(a: Double; b: Double): Double;
+function pyfloormod_f(a: Double; b: Double): Double;
 function min(a: Int64; b: Int64): Int64;
 function min(a: Double; b: Double): Double; overload;
 function max(a: Int64; b: Int64): Int64; overload;
@@ -964,6 +986,54 @@ end;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
 begin
   Result := d.indexof(k) >= 0;
+end;
+
+function pystr_to_int(const s: AnsiString): Int64;
+var
+  v: Int64;
+  code: Integer;
+  t: AnsiString;
+begin
+  t := pystr_strip(s);          { Python's int() tolerates surrounding space }
+  Val(t, v, code);
+  if (code <> 0) or (t = '') then
+  begin
+    writeln('Runtime error: int() got a string that is not a number: ', s);
+    Halt(219);
+  end;
+  Result := v;
+end;
+
+function pyfloordiv_i(a: Int64; b: Int64): Int64;
+var q, r: Int64;
+begin
+  q := a div b;
+  r := a mod b;
+  if (r <> 0) and ((r < 0) <> (b < 0)) then q := q - 1;
+  Result := q;
+end;
+
+function pyfloormod_i(a: Int64; b: Int64): Int64;
+var r: Int64;
+begin
+  r := a mod b;
+  if (r <> 0) and ((r < 0) <> (b < 0)) then r := r + b;
+  Result := r;
+end;
+
+function pyfloordiv_f(a: Double; b: Double): Double;
+var q: Double;
+begin
+  q := Int(a / b);
+  { Int() truncates toward zero; step down when the true quotient was negative
+    and inexact, so the result floors like Python's. }
+  if (q * b <> a) and ((a < 0) <> (b < 0)) then q := q - 1;
+  Result := q;
+end;
+
+function pyfloormod_f(a: Double; b: Double): Double;
+begin
+  Result := a - pyfloordiv_f(a, b) * b;
 end;
 
 function min(a: Int64; b: Int64): Int64;

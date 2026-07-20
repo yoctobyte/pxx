@@ -7956,8 +7956,19 @@ begin
       if isNilPy and (name = 'int') then
       begin
         Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
-        node := AllocNode(AN_CALL); ASTIVal[node] := -200;
-        ASTTk[node] := Ord(tyInteger);
+        node := AllocNode(AN_CALL);
+        { int(float) truncates toward zero, which is exactly the -203 Trunc
+          intrinsic -- reuse it rather than duplicating its SSE lowering. Every
+          other argument type goes to -200, whose lowering handles string
+          (parse the text), variant (unbox) and int/bool (identity). }
+        if TypeIsFloat(LastExprTk) then
+        begin
+          ASTIVal[node] := -203; ASTTk[node] := Ord(tyInt64);
+        end
+        else
+        begin
+          ASTIVal[node] := -200; ASTTk[node] := Ord(tyInteger);
+        end;
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
         ASTLeft[node] := argSeq;
         CurASTNode := node;

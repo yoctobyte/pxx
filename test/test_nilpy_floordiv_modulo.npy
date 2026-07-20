@@ -1,0 +1,26 @@
+def show(a: int, b: int) -> None:
+    q: int = a // b
+    r: int = a % b
+    chk: int = a - (q * b + r)
+    print(a, b, q, r, chk)
+
+show(7, 3)
+show(7, -3)
+show(-7, 3)
+show(-7, -3)
+show(8, 4)
+show(8, -4)
+show(-8, 4)
+show(-8, -4)
+show(0, 5)
+show(0, -5)
+show(1, 7)
+show(-1, 7)
+show(1, -7)
+show(-1, -7)
+
+x: float = 7.5
+y: float = 2.0
+print(x // y, x % y)
+print((-x) // y, (-x) % y)
+print(x // -y, x % -y)

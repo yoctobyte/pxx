@@ -1329,6 +1329,12 @@ var
   CLocalStaticDecl : Boolean; { current block-scope C declaration had `static`;
     allocate its storage globally while still parsing it in statement position }
   CHeaderMode : Boolean; { parsing C in header/FFI mode }
+  PyProgramMode : Boolean; { compiling a Nil-Python .npy program. Python's `//`
+    and `%` FLOOR (quotient rounds toward -inf, remainder takes the DIVISOR's
+    sign) where Pascal's div/mod TRUNCATE. Same tokens (tkDiv/tkMod), opposite
+    answers for mixed signs, so the lowering needs to know which language it
+    is compiling. NilPy has no `div` keyword, so this never shadows a
+    deliberate Pascal truncating divide. }
   CProgramMode : Boolean; { compiling a C .c program (vs importing a header):
     a `{...}` function body is a LOCAL definition (internal), so the pass-1
     signature scan must mark it ProcExternal=False even while skipping the body,
