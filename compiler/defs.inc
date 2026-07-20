@@ -544,6 +544,15 @@ const
     are reserved for the pointer-tagged family the ticket keeps in reserve.
     Base is far above FPC's varXxx range (which tops out in the hundreds) so a
     future FPC addition cannot collide. }
+  { The in-memory storage discriminator of a promotable-int SLOT — distinct from
+    the VT_PROMO_* variant tags above, which only apply when a promotable int is
+    boxed inside a variant. INLINE is 0 on purpose: the ordinary managed
+    zero-init then leaves a fresh promo variable holding inline 0, which is the
+    correct initial value for free. }
+  PROMO_TAG_INLINE = 0;   { payload = the machine integer itself }
+  PROMO_TAG_HEAP   = 1;   { payload = pointer to the heap bignum (stage 2b) }
+  PROMO_TAG_OFFSET = 0;   { byte offset of the tag word within the slot }
+
   VT_PROMO_BASE     = 8192;
   VT_PROMO_INT32    = 8192;  { payload = inline Int32, or a bignum ref when the spill bit is set }
   VT_PROMO_INT64    = 8193;  { payload = inline Int64, or a bignum ref }
@@ -785,6 +794,8 @@ type
     { Ordinals 27+: the PROMOTABLE INT family (feature-a-promotable-int). ONE
       semantic type — arbitrary precision — in two storage classes that differ
       only in how wide the inline payload is before it spills to a heap bignum.
+      The distinction is the target's NATIVE int size: a slot is two machine
+      words, so the payload is whatever the core adds in one instruction.
       The number in the name is the usable inline width, so a future
       pointer-tagged pair would be tyPromoInt31/tyPromoInt63 and needs no
       "tagged" suffix. Semantics are written ONCE against TypeIsPromoInt and
@@ -792,8 +803,8 @@ type
       boundary is semantically unobservable (the type is arbitrary precision
       either way), which is what makes a per-target default safe under
       differential testing against x86-64. }
-    tyPromoInt32,  { 27: promotable int, 32-bit inline payload — {tag, payload}, 8 bytes }
-    tyPromoInt64   { 28: promotable int, 64-bit inline payload — {tag, payload}, 16 bytes }
+    tyPromoInt32,  { 27: promotable int on a 32-bit native word — {tag, payload}, 2x4 bytes }
+    tyPromoInt64   { 28: promotable int on a 64-bit native word — {tag, payload}, 2x8 bytes }
   );
 
   TSymKind  = (skLocal, skGlobal, skParam, skConst);

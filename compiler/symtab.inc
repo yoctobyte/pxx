@@ -1584,10 +1584,53 @@ begin
     24: Result := 0;  { tyAuto }
     { Promotable int family — {tag, payload}, tag width matches the payload so
       the struct stays naturally aligned (feature-a-promotable-int). }
-    27: Result := 8;  { tyPromoInt32 — 4-byte tag + 4-byte inline Int32 }
-    28: Result := 16; { tyPromoInt64 — 8-byte tag + 8-byte inline Int64 }
+    27: Result := 8;  { tyPromoInt32 — two 32-bit NATIVE words: tag + inline payload }
+    28: Result := 16; { tyPromoInt64 — two 64-bit NATIVE words: tag + inline payload }
   end;
 end;
+
+{ The PROMOTABLE INT family (feature-a-promotable-int). Deliberately NOT
+  reported by TypeIsOrdinal or TypeSigned: a promotable int is a {tag, payload}
+  struct, not a machine word, so letting the existing integer codegen recognise
+  it would silently operate on the tag. Anything that must handle it asks for it
+  by name — an unhandled site errors instead of miscompiling. }
+function TypeIsPromoInt(tk: TTypeKind): Boolean;
+begin
+  TypeIsPromoInt := (tk = tyPromoInt32) or (tk = tyPromoInt64);
+end;
+
+{ Usable inline width in bits, before the value spills to a heap bignum. The
+  boundary is semantically unobservable — the type is arbitrary precision either
+  way — so this only ever changes performance, never a result. }
+function PromoIntInlineBits(tk: TTypeKind): Integer;
+begin
+  PromoIntInlineBits := 0;
+  if tk = tyPromoInt32 then PromoIntInlineBits := 32
+  else if tk = tyPromoInt64 then PromoIntInlineBits := 64;
+end;
+
+{ The variant tag a promotable int of this storage class carries. }
+function PromoIntVarTag(tk: TTypeKind): Integer;
+begin
+  PromoIntVarTag := -1;
+  if tk = tyPromoInt32 then PromoIntVarTag := VT_PROMO_INT32
+  else if tk = tyPromoInt64 then PromoIntVarTag := VT_PROMO_INT64;
+end;
+
+{ Per-target default storage class. The distinction is the target's NATIVE int
+  size, not an arbitrary width pick: the slot is two native machine words (tag +
+  inline payload), so the payload is whatever the core adds in one instruction.
+  64-bit hosts get promoInt64; the 32-bit embedded cores get promoInt32, where
+  int64 is multi-instruction emulation and 16 bytes per int is expensive in
+  scarce SRAM (NilPy on ESP is a project subgoal, so this is not hypothetical).
+  A per-value override may still pick the wider class where range analysis
+  justifies it — the promotion boundary is semantically unobservable either way. }
+function PromoIntDefaultKind: TTypeKind;
+begin
+  if TARGET_PTR_SIZE >= 8 then PromoIntDefaultKind := tyPromoInt64
+  else PromoIntDefaultKind := tyPromoInt32;
+end;
+
 
 function SymNeedsZeroing(i: Integer; var zeroBytes: Integer): Boolean;
 begin
@@ -1617,6 +1660,15 @@ begin
   else if Syms[i].TypeKind = tyVariant then
   begin
     zeroBytes := TypeSize(tyVariant);
+    Result := True;
+  end
+  else if TypeIsPromoInt(Syms[i].TypeKind) then
+  begin
+    { PROMO_TAG_INLINE is 0, so zeroing the slot leaves the variable holding
+      inline 0 — the correct initial value, at no extra cost. Once the heap
+      tier lands, this same zeroing is what keeps the tag from ever starting
+      as a garbage HEAP marker pointing at a garbage bignum. }
+    zeroBytes := TypeSize(Syms[i].TypeKind);
     Result := True;
   end
   else if SymIsComInterface(i) then
@@ -1686,45 +1738,6 @@ begin
     15, 16, 17:      { tyNativeInt, tyNativeUInt, tyPointer }
       Result := True;
   end;
-end;
-
-{ The PROMOTABLE INT family (feature-a-promotable-int). Deliberately NOT
-  reported by TypeIsOrdinal or TypeSigned: a promotable int is a {tag, payload}
-  struct, not a machine word, so letting the existing integer codegen recognise
-  it would silently operate on the tag. Anything that must handle it asks for it
-  by name — an unhandled site errors instead of miscompiling. }
-function TypeIsPromoInt(tk: TTypeKind): Boolean;
-begin
-  TypeIsPromoInt := (tk = tyPromoInt32) or (tk = tyPromoInt64);
-end;
-
-{ Usable inline width in bits, before the value spills to a heap bignum. The
-  boundary is semantically unobservable — the type is arbitrary precision either
-  way — so this only ever changes performance, never a result. }
-function PromoIntInlineBits(tk: TTypeKind): Integer;
-begin
-  PromoIntInlineBits := 0;
-  if tk = tyPromoInt32 then PromoIntInlineBits := 32
-  else if tk = tyPromoInt64 then PromoIntInlineBits := 64;
-end;
-
-{ The variant tag a promotable int of this storage class carries. }
-function PromoIntVarTag(tk: TTypeKind): Integer;
-begin
-  PromoIntVarTag := -1;
-  if tk = tyPromoInt32 then PromoIntVarTag := VT_PROMO_INT32
-  else if tk = tyPromoInt64 then PromoIntVarTag := VT_PROMO_INT64;
-end;
-
-{ Per-target default storage class. 64-bit hosts get promoInt64; the 32-bit
-  embedded cores get promoInt32, because int64 there is multi-instruction
-  emulation and 16 bytes per int is expensive in scarce SRAM (NilPy on ESP is a
-  project subgoal, so this is not hypothetical). A per-value override may still
-  pick the other class where range analysis justifies it. }
-function PromoIntDefaultKind: TTypeKind;
-begin
-  if TARGET_PTR_SIZE >= 8 then PromoIntDefaultKind := tyPromoInt64
-  else PromoIntDefaultKind := tyPromoInt32;
 end;
 
 function TypeIsFloat(tk: TTypeKind): Boolean;
