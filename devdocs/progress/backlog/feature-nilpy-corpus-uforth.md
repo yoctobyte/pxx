@@ -185,7 +185,11 @@ landed, gated, pushed commit with a CPython-diffed test in `test-nilpy`:
 | 308 | `print(..., file=sys.stderr, flush=True)` | [[feature-nilpy-print-kwargs]] |
 | 311 | `os.path.*` | os/sys shim table |
 | 331 | one-line suite `if not t: return None` | `PyParseSuite` |
-| 359 | `int(s, base)` + `except ValueError` | [[feature-nilpy-builtin-exceptions]] (OPEN) |
+| 359 | `int(s, base)` + `except ValueError` | [[feature-nilpy-builtin-exceptions]] |
+| 362 | conditional expression `a if c else b` | same commit (32 sites) |
+| 373 | `res = None` then `res = <int>` | [[bug-nilpy-none-assign-to-plain-local]] |
+| 377 | `float(token)` | float() conversion, raises ValueError |
+| 384 | `@property` / `@x.setter` | [[feature-nilpy-property-decorator]] (OPEN) |
 
 Bugs found UNDER this work, all silent-wrong-behaviour rather than parse
 errors, all filed and fixed: [[bug-nilpy-call-returning-class-loses-identity]]
@@ -201,6 +205,7 @@ estimate. Roughly in wall order:
 | construct | sites | note |
 | --- | --- | --- |
 | f-strings | 42 | expander exists; needs verifying against these |
+| `@property` + setter | 2 (x2 accessors) | the current wall |
 | decorators | 15 | `@property`/setters beyond the landed `@dataclass` |
 | `getattr(o, "n", default)` | 16 | needs [[feature-rtti-field-reflection]] |
 | comprehensions | 4 | list comprehensions |

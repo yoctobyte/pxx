@@ -25,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (131)
+## backlog (132)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -96,6 +96,7 @@ _none_
 | feature-nilpy-none-variant | N | 45 | feature | NilPy: `None` as a first-class variant value (VT_EMPTY) | — |
 | feature-nilpy-optional-return-annotation | N | 55 | feature | NilPy: `-> ret` is MANDATORY on every def; Python makes it optional | — |
 | feature-nilpy-parallel-for-in | A | 5 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
+| feature-nilpy-property-decorator | N | 55 | feature | NilPy: `@property` and `@x.setter` inside a class | — |
 | feature-nilpy-tk-binding | B | 45 | feature | Thin Tcl/Tk embed for pxx (lib/pcl/tk.pas) + a tkinter-shaped NilPy surface — v1 landed | — |
 | feature-opt-complex-packed-double | O | 35 | feature | Complex as a packed-double XMM value (SSE2/SSE3) | — |
 | feature-opt-float-register-temporaries | O | 20 | feature | float kernels: -O3 now 1.97x vs FPC (was 4.2x); residual = the rax value model — multi-session xmm-resident rewrite | — |
@@ -2608,6 +2609,7 @@ _none_
 - [p 55] [N] feature-nilpy-corpus-uforth
 - [p 55] [N] feature-nilpy-default-args-on-nested-defs
 - [p 55] [N] feature-nilpy-optional-return-annotation
+- [p 55] [N] feature-nilpy-property-decorator
 - [p 55] [O] feature-opt-heap-per-thread-cache
 - [p 55] [P] feature-pascal-corpus-generics
 - [p 55] [A] feature-pascal-type-helpers
