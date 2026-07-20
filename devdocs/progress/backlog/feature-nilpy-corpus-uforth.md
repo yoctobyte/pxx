@@ -208,9 +208,21 @@ landed, gated, pushed commit with a CPython-diffed test in `test-nilpy`:
 | 783 | `out.extend(ch.encode(...))` | TPyBytes.extend + str.encode |
 | 789 | `out.append(ord(ch))` | TPyBytes.append (+ the list/bytes name collision) |
 | 840 | `word.is_native()` after `Optional[Word]` | full annotation grammar for RETURN types |
-| 841 | `word.native(self)` — call through a procedural FIELD on a class local | **CURRENT** |
+| 841 | `word.native(self)` — procedural FIELD on a class local | @dataclass Callable field keeps its signature |
+| 849 | `pfx, content = cs` | unpack a single sequence value into several names |
+| 883 | `isinstance(num, list)` | container type names -> pylib classes |
+| 884 | `for n in num` (num is Any) | unbox variant to TPyList |
+| 1039 | multi-line `self.trace_log(...,)` | trailing comma in a method call |
+| 1079 | four adjacent f-strings | implicit string concatenation |
+| 1228 | `with open(...)` + comprehension + dict-arg | [[feature-nilpy-file-io-and-comprehensions]] (OPEN — a CLUSTER) |
 
-Wall moved 267 -> 841 on 2026-07-20 (session 3), across ~24 landed commits.
+Wall moved 267 -> 1228 on 2026-07-20 (session 3), across ~30 landed commits —
+roughly the first quarter of the 4357-line file, and past every class
+definition, the VM core, the dictionary, number parsing, and the tokenizer.
+The remaining walls are large feature CLUSTERS (file I/O, comprehensions,
+generators, sys.stdin+select), each multiple sessions.
+
+
 
 Bugs found UNDER this work, all silent-wrong-behaviour rather than parse
 errors, all filed and fixed: [[bug-nilpy-call-returning-class-loses-identity]]
