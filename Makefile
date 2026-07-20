@@ -226,6 +226,10 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_defaults26)" = "$$(printf '3\n6\nhi bob\nhi bob!\nend...\nend!\n7\n103\n106\n3\n-3\n206')"
 	./$(COMPILER) test/test_nilpy_bytes.npy /tmp/test_nilpy_bytes26
 	test "$$(/tmp/test_nilpy_bytes26)" = "$$(printf '4\n0\n0\n65\n66\n0\n255\n255\n65\n65\n1\n4\n1024\n0')"
+	./$(COMPILER) test/test_nilpy_int_base.npy /tmp/test_nilpy_int_base26
+	test "$$(/tmp/test_nilpy_int_base26)" = "$$(printf '255\n2\n511\n-26\n255\n42\n7\n1295\ncaught ValueError\ncaught empty\ncaught bad base\ndone')"
+	./$(COMPILER) test/test_nilpy_ternary.npy /tmp/test_nilpy_ternary26
+	test "$$(/tmp/test_nilpy_ternary26)" = "$$(printf '%b' '-1\n0\npos\nb\nc\n10\n20')"
 	./$(COMPILER) test/test_nilpy_os_path.npy /tmp/test_nilpy_os_path26
 	test "$$(/tmp/test_nilpy_os_path26)" = "$$(printf 'True\nFalse\n/a/b\n/a/b\n/b\n/a/b\n/\n\nTrue\nFalse\n/a/c\n/a/b')"
 	./$(COMPILER) test/test_nilpy_suites.npy /tmp/test_nilpy_suites26

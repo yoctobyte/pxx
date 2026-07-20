@@ -59,3 +59,6 @@ works), `KeyboardInterrupt`, `OSError`, `ValueError`.
 a FAILING parse caught by `except ValueError`, not just a succeeding one, since
 the catch is the whole point) + `--tier quick` + self-host byte-identical +
 `make fpc-check` clean relative to HEAD.
+
+## Log
+- 2026-07-20 — resolved, commit HEAD.

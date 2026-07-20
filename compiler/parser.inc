@@ -7188,7 +7188,7 @@ begin
 end;
 
 procedure ParseFactorCore;
-var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
+var intBaseArg: Integer; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     mcCtorNm: AnsiString;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
@@ -8212,7 +8212,31 @@ begin
       end;
       if isNilPy and (name = 'int') then
       begin
-        Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        Next; Expect(tkLParen, '('); ParseExpr;
+        { `int(s, base)` — the two-argument radix form. A separate pylib
+          function rather than another intrinsic, because it must RAISE
+          ValueError on a bad parse (pylib declares the Python exception
+          hierarchy so it can), and the -200 intrinsic has no way to fail. }
+        if CurTok.Kind = tkComma then
+        begin
+          intBaseArg := CurASTNode;
+          Next;
+          ParseExpr;
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := FindProc('pyint_parse');
+          if ASTIVal[node] < 0 then Error('Nil Python: pylib (pyint_parse) not loaded');
+          ASTTk[node] := Ord(tyInt64);
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := intBaseArg;
+          intBaseArg := AllocNode(AN_ARG); ASTLeft[intBaseArg] := CurASTNode;
+          ASTRight[argSeq] := intBaseArg;
+          ASTRight[intBaseArg] := -1;
+          ASTLeft[node] := argSeq;
+          Expect(tkRParen, ')');
+          CurASTNode := node;
+          LastExprTk := tyInt64;
+          Exit;
+        end;
+        Expect(tkRParen, ')');
         node := AllocNode(AN_CALL);
         { int(float) truncates toward zero, which is exactly the -203 Trunc
           intrinsic -- reuse it rather than duplicating its SSE lowering. Every

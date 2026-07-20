@@ -117,6 +117,31 @@ type
     v1 is the mapping core: allocate, index, len. SLICES (`b[a:c]`, and
     `b[a:c] = other`) need the shared parser's subscript grammar, which is
     Track A — see feature-nilpy-bytes-and-slices. }
+  { Python's builtin exception hierarchy, declared HERE rather than synthesised
+    by the frontend, for one reason: pylib itself must be able to RAISE these
+    (int(s, base) has to fail catchably), and a Pascal unit cannot name a class
+    the frontend invented at parse time. Declaring them in the library makes
+    FindUClass('ValueError') resolve for `except ValueError:` and makes
+    `raise ValueError.Create(..)` legal in here, with one hierarchy for both.
+
+    PyEnsureExceptionClass creates `Exception` only when it is MISSING, so it
+    now finds this one and the whole tree shares a root — which is what makes
+    a bare `except Exception:` catch a ValueError. }
+  Exception = class
+  public
+    msg: AnsiString;
+    constructor Create(const m: AnsiString);
+  end;
+  ValueError        = class(Exception) end;
+  TypeError         = class(Exception) end;
+  IndexError        = class(Exception) end;
+  KeyError          = class(Exception) end;
+  OSError           = class(Exception) end;
+  AttributeError    = class(Exception) end;
+  EOFError          = class(Exception) end;
+  KeyboardInterrupt = class(Exception) end;
+  ZeroDivisionError = class(Exception) end;
+
   TPyBytes = class
   public
     FLen: Integer;
@@ -196,6 +221,11 @@ procedure pybytes_setslice(b: TPyBytes; lo, hi: Integer; src: TPyBytes);
   frontend REJECTS anything else rather than silently ignoring it. }
 function pyint_to_bytes(v: Int64; n: Integer; signed: Boolean): TPyBytes;
 function pyint_from_bytes(b: TPyBytes; signed: Boolean): Int64;
+{ Python's two-argument int(s, base). RAISES ValueError on a bad parse rather
+  than halting, which is the whole point: a Forth interpreter tries EVERY input
+  word as a number, so a non-numeric token is the ordinary case and a fatal
+  error there would kill the interpreter on its first word. }
+function pyint_parse(const s: AnsiString; base: Integer): Int64;
 { os.path / os / sys shims. Reached by NAME from the frontend's stdlib table
   (`os.path.join(...)` -> pyos_path_join), because `os` and `sys` are deferred
   imports and never become symbols.
@@ -1670,6 +1700,73 @@ begin
       acc := acc - (Int64(1) shl (8 * b.FLen));
   end;
   Result := acc;
+end;
+
+function PyDigitVal(c: Char): Integer;
+begin
+  if (c >= '0') and (c <= '9') then Result := Ord(c) - Ord('0')
+  else if (c >= 'a') and (c <= 'z') then Result := Ord(c) - Ord('a') + 10
+  else if (c >= 'A') and (c <= 'Z') then Result := Ord(c) - Ord('A') + 10
+  else Result := -1;
+end;
+
+function pyint_parse(const s: AnsiString; base: Integer): Int64;
+var i, n, d: Integer; neg: Boolean; acc: Int64; body: AnsiString;
+begin
+  body := s;
+  { Python strips surrounding whitespace before parsing }
+  i := 1; n := Length(body);
+  while (i <= n) and ((body[i] = ' ') or (body[i] = #9)) do Inc(i);
+  while (n >= i) and ((body[n] = ' ') or (body[n] = #9)) do Dec(n);
+  body := Copy(body, i, n - i + 1);
+
+  neg := False;
+  if (Length(body) > 0) and ((body[1] = '-') or (body[1] = '+')) then
+  begin
+    neg := body[1] = '-';
+    body := Copy(body, 2, Length(body) - 1);
+  end;
+
+  { base 0 means "infer from the prefix", and an explicit base may also carry
+    the matching prefix (int('0xff', 16) is legal in Python) }
+  if (Length(body) > 1) and (body[1] = '0') then
+  begin
+    d := -1;
+    case body[2] of
+      'x', 'X': d := 16;
+      'o', 'O': d := 8;
+      'b', 'B': d := 2;
+    end;
+    if (d > 0) and ((base = 0) or (base = d)) then
+    begin
+      base := d;
+      body := Copy(body, 3, Length(body) - 2);
+    end;
+  end;
+  if base = 0 then base := 10;
+  if (base < 2) or (base > 36) then
+    raise ValueError.Create('int() base must be >= 2 and <= 36');
+
+  { an EMPTY digit run is an error, not zero — int('') and int('0x') both raise }
+  if Length(body) = 0 then
+    raise ValueError.Create('invalid literal for int()');
+
+  acc := 0;
+  for i := 1 to Length(body) do
+  begin
+    if body[i] = '_' then Continue;      { Python allows digit separators }
+    d := PyDigitVal(body[i]);
+    if (d < 0) or (d >= base) then
+      raise ValueError.Create('invalid literal for int()');
+    acc := acc * base + d;
+  end;
+  if neg then acc := -acc;
+  Result := acc;
+end;
+
+constructor Exception.Create(const m: AnsiString);
+begin
+  msg := m;
 end;
 
 function pyos_path_isabs(const p: AnsiString): Boolean;

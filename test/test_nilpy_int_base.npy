@@ -1,0 +1,21 @@
+print(int("ff", 16))
+print(int("10", 2))
+print(int("777", 8))
+print(int("-1a", 16))
+print(int("0xff", 16))
+print(int("42", 10))
+print(int("  7  ", 10))
+print(int("zz", 36))
+try:
+    print(int("zz", 10))
+except ValueError:
+    print("caught ValueError")
+try:
+    print(int("", 10))
+except ValueError:
+    print("caught empty")
+try:
+    print(int("12", 99))
+except ValueError:
+    print("caught bad base")
+print("done")

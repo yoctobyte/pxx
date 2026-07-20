@@ -900,7 +900,7 @@ begin
 end;
 
 procedure PyParseBoolExpr;
-var left, right, node: Integer;
+var left, right, node, condNode, elseNode, pairNode: Integer;
 begin
   PyParseBoolAnd;
   left := CurASTNode;
@@ -911,6 +911,44 @@ begin
     right := CurASTNode;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkOr);
     ASTLeft[node] := left; ASTRight[node] := right; ASTTk[node] := Ord(tyBoolean);
+    left := node;
+  end;
+  { Python's CONDITIONAL EXPRESSION, `A if C else B` — the value comes first
+    and the condition second, unlike every other language's ternary. Lowest
+    precedence in the expression grammar, so it wraps the whole or-expression
+    just parsed, and the else-arm recurses so `a if p else b if q else c`
+    chains to the right as Python does.
+
+    Reuses AN_TERNARY, which the C frontend already lowers (Left = condition,
+    Right = AN_PAIR(then, else)) with only the selected arm evaluated. The
+    result type is taken from the THEN arm; the two arms having different
+    types is a NilPy question the corpus does not raise. }
+  if CurTok.Kind = tkIf then
+  begin
+    Next;
+    PyParseBoolExpr;
+    condNode := CurASTNode;
+    if CurTok.Kind <> tkElse then
+      Error('Nil Python: a conditional expression needs an else');
+    Next;
+    PyParseBoolExpr;
+    elseNode := CurASTNode;
+    pairNode := AllocNode(AN_PAIR);
+    ASTLeft[pairNode] := left;
+    ASTRight[pairNode] := elseNode;
+    node := AllocNode(AN_TERNARY);
+    ASTLeft[node] := condNode;
+    ASTRight[node] := pairNode;
+    { NilPy strings are MANAGED; a string-valued conditional tagged with the
+      then-arm's frozen tyString printed garbage when used directly as a write
+      argument, because a frozen string is content-addressed and a conditional
+      yields a value, not a location. Tagging the result managed matches how
+      every other NilPy string expression is typed. }
+    if PyIsStrBaseTk(IntToTypeKind(ASTTk[left])) or
+       PyIsStrBaseTk(IntToTypeKind(ASTTk[elseNode])) then
+      ASTTk[node] := Ord(tyAnsiString)
+    else
+      ASTTk[node] := ASTTk[left];
     left := node;
   end;
   CurASTNode := left;
