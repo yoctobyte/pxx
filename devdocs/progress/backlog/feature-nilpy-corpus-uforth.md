@@ -130,6 +130,20 @@ slices, f-strings, raise, isinstance, augassign.
    slices and `int.to_bytes(..., signed=True)` need a shared-parser hook, so
    that one is not purely ours after all.
 
+   **Sweeping NilPy's operators and builtins against CPython (2026-07-20)
+   turned up more than the feature work did** — three SILENT wrong answers
+   and a segfault that no feature test would have found, because they are in
+   constructs nobody thought to re-check: `not <non-zero int>` was the
+   BITWISE complement (fixed, 8f18dba4), `in` on a string segfaulted (fixed,
+   c49064af), `int("42")` returns a pointer
+   ([[bug-a-nilpy-int-of-string-returns-a-pointer]], Track A), and `s * 2`
+   returns a pointer ([[bug-nilpy-string-repeat-returns-a-pointer]]). Worth
+   repeating the sweep after each feature wave.
+
+   Biggest newly-measured gap: **[[feature-nilpy-nested-defs]] — 214 sites**.
+   The word-registration functions define their natives inline, so this is
+   the structure of uforth's second half, not an occasional idiom.
+
    The rest of the census is now characterised and filed rather than left as
    a list: [[feature-nilpy-exceptions]] (p60 — `raise` / `try` / `except`
    have NO statement rule at all, and exceptions are uforth's control flow,
