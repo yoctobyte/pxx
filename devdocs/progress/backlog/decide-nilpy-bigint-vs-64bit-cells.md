@@ -43,3 +43,46 @@ Options:
 Recommendation: 1 with the fixnum/bignum tier if the Python story is
 strategic; else 2 (dual-use with cfront int128 makes it earn its keep
 twice). 3 only as a stopgap to get early milestones green.
+
+## DECIDED 2026-07-20: option 1, via a NEW distinct "promotable int" type
+
+Arbitrary precision is not optional — this is Python, and the current silent
+wrap at 2^63 is a correctness cliff. Implemented as the classic fixnum/bignum
+tier, but as a **new, distinct type** rather than by changing any existing one.
+Spec + work item: [[feature-a-promotable-int]] (urgent; land before further
+NilPy work).
+
+### Why a new type instead of making variant ints promotable
+
+Pascal's `varInteger`/`varInt64` have specified, FPC-compatible semantics.
+Making them promotable would be both **inaccurate** (changes documented Pascal
+behaviour) and **unnecessary overhead** for Pascal and C code that never asked
+for bigints. Since the AST/IR is shared across frontends, the type system —
+not the frontend — has to carry the distinction.
+
+So: a new type, and a **new appended variant tag**. Standard Pascal never sees
+it; existing tags keep their numbers and their exact semantics.
+
+### The three tiers (this is the important separation)
+
+Bigint is a **width** fallback, variant is a **type** fallback. Never conflate:
+
+1. **native int64** — where provably safe (loop induction vars, indices,
+   `len()` results). Zero overhead, no checks. This is what keeps ordinary
+   loops fast.
+2. **promotable int** — statically still an int, may not fit a register.
+   Overflow-checked, promotes to heap bignum.
+3. **variant** — the *type* itself is unknown.
+
+NilPy uses tier 1 when it can prove safety, tier 2 otherwise, tier 3 only for
+genuinely dynamic values. Falling back to variant for every int would be a real
+and unnecessary cost; a promoting int is a well-predicted `jo` on the fast path.
+
+### Notes
+
+- **Option 2 (int128) is not superseded.** It remains independently worth doing
+  for the C frontend's `unsigned __int128` (libbf / quickjs). Orthogonal.
+- uforth's 128-bit composites fall out for free once ints promote — the
+  `((ud_hi & M) << 64) | ud_lo` paths stop being a cliff.
+- CPython is the oracle for the semantics; see
+  [[feature-t-nilpy-cpython-differential-fuzzer]].

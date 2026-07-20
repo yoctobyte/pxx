@@ -43,8 +43,46 @@ no NilPy type.
    ([[bug-a-nilpy-variant-element-not-usable-as-scalar]]) for a construct
    that is overwhelmingly used in conditions.
 
-## Recommendation
+## Recommendation (superseded — see Decision)
 
 **1, with a note in the docs.** The value form is absent from the corpus, the
 cost of 2 is real, and 3 makes the common case worse to serve the rare one.
 Worth revisiting only if a corpus actually uses `x = a or default`.
+
+## DECIDED 2026-07-20: option 3, refined — return the OPERAND
+
+This is a core Python language feature, not a corner: `x = a or "default"` is
+everyday idiom, and silently returning a Boolean would break it for every user
+who writes normal Python. We mimic official behaviour.
+
+The cost that made option 3 look expensive largely evaporates once you split on
+**how the result is consumed**, not on the operand types:
+
+- **Condition context** (`if a and b:`, `while x or y:`, `not (a or b)`) — the
+  value is discarded; only truthiness is used. Pure control flow: no result
+  temp, no variant, *regardless of operand types*. This is the overwhelming
+  majority of real uses and covers 100% of the uforth corpus, so the
+  variant-as-scalar problem ([[bug-a-nilpy-variant-element-not-usable-as-scalar]])
+  is never reached by the common case.
+- **Value context**, both sides same static type `T` → result is `T`. No
+  variant. Covers `x = a or 0`, `name = given or "anon"`.
+- **Value context**, mixed but variant-promotable → variant.
+- **Not variant-promotable** (records, classes, dynamic arrays) → reject at
+  compile time with a clear diagnostic. This is already NilPy's documented
+  posture for incompatible variant assignments; no new policy needed.
+
+So the tiering is: **control flow → typed → variant → diagnostic**, and variant
+is reached only by genuinely mixed-type value uses.
+
+### Implementation notes
+
+- `not` is the exception and always yields a real Boolean. Do not unify it with
+  `and`/`or`.
+- Make truthiness its own IR op (`IsTrue`). Specialise statically: int/float
+  `<> 0`, string/list/dict length test, pointer `<> nil`; only variant goes
+  through runtime dispatch. One op so the backend can fold it in conditions.
+- **Do not widen mixed numerics.** `1 or 2.5` is `1` in CPython, not `1.0`.
+  Joining int|float to float silently changes observable output — use a variant
+  or reject; never widen.
+- Int operands depend on the new int representation:
+  [[feature-a-promotable-int]]. Land that first.
