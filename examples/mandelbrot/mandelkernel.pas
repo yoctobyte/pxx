@@ -630,7 +630,10 @@ begin
     dst[dstOfs + i] := EscapePortable(cre0 + i * dre, cim, maxIt);
 end;
 
-begin
+{ `initialization`, not the classic `begin ... end.` — that form is currently
+  parsed and then silently dropped, so this would be dead code. See
+  bug-unit-init-begin-form-not-executed. }
+initialization
   { Deliberately NO detection here — see InitMandelKernel. }
   gDetected := misPortable;
   gDetectedValid := False;

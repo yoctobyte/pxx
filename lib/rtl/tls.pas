@@ -178,6 +178,9 @@ begin
     gBackend.Close(c);
 end;
 
-begin
+{ `initialization`, not the classic `begin ... end.` — that form is currently
+  parsed and then silently dropped, so this would be dead code. See
+  bug-unit-init-begin-form-not-executed. }
+initialization
   gBackend := nil;
 end.

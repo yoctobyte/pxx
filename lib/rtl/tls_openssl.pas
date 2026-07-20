@@ -315,6 +315,9 @@ begin
   if gBackend <> nil then begin gBackend.Free; gBackend := nil; end;
 end;
 
-begin
+{ `initialization`, not the classic `begin ... end.` — that form is currently
+  parsed and then silently dropped, so this would be dead code. See
+  bug-unit-init-begin-form-not-executed. }
+initialization
   gLib := NilHandle; gClientCtx := nil; gServerCtx := nil; gBackend := nil;
 end.
