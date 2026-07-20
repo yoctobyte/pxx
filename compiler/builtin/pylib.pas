@@ -176,8 +176,9 @@ type
       dispatch on the receiver's class, not another method on this class.
       (filed as feature-nilpy-runtime-method-dispatch-on-variant) }
     procedure append(v: Integer);
-    { bytes.find(sub, start) — index of the sub-bytes at/after start, or -1. }
-    function find(sub: TPyBytes; start: Integer): Integer;
+    { bytes.find(sub[, start]) — index of the sub-bytes at/after start (0), or -1. }
+    function find(sub: TPyBytes): Integer; overload;
+    function find(sub: TPyBytes; start: Integer): Integer; overload;
     { bytes.decode(encoding [, errors]). Our strings ARE byte strings, so
       latin-1 is an exact identity mapping; the `errors` argument is accepted
       and ignored because latin-1 cannot fail. Named `errors` so the keyword
@@ -2446,7 +2447,12 @@ begin
   end;
 end;
 
-function TPyBytes.find(sub: TPyBytes; start: Integer): Integer;
+function TPyBytes.find(sub: TPyBytes): Integer; overload;
+begin
+  Result := pybytes_find(Self, sub, 0);
+end;
+
+function TPyBytes.find(sub: TPyBytes; start: Integer): Integer; overload;
 begin
   Result := pybytes_find(Self, sub, start);
 end;
