@@ -1,0 +1,12 @@
+xs = [1, 2, 3, 4]
+a = [x * x for x in xs]
+for v in a:
+    print(v)
+b = [i + 10 for i in range(3)]
+for v in b:
+    print(v)
+words = ["ab", "cde"]
+c = [len(w) for w in words]
+for v in c:
+    print(v)
+print(len(a))

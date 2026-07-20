@@ -47,6 +47,13 @@ var
     Python's implicit declaration does not give you (`x = 1` then `x = "s"`
     is one variant local, not an Integer one). }
   PyTypingPass: Boolean;
+  { List-comprehension mode for PyParseForIn: when PyCompTarget >= 0 the loop
+    has NO parsed suite. Instead its body is `PyCompTarget.append(EXPR)`, where
+    EXPR is re-parsed from the tokens at PyCompExprStart (a comprehension writes
+    the element expression BEFORE the `for`), and the header ends at `]` rather
+    than `:`. See PyParseListComp. }
+  PyCompTarget: Integer;
+  PyCompExprStart: Integer;
   PyTypingChanged: Boolean;
   PyHiddenSeq: Integer;   { serial for hidden for-in loop temps }
   { One parsed `def` header, filled by PyParseDefHeader and read by both its
@@ -3463,10 +3470,48 @@ begin
   end;
 end;
 
+{ Is the token stream at `[ EXPR for VAR in ...` — a list comprehension?
+  CurTok is the '['. Scans at bracket depth 1 for a `for` keyword, the same
+  disambiguation PyDictLiteralAt uses for ':'. }
+function PyIsListCompAhead: Boolean;
+var i, depth: Integer;
+begin
+  Result := False;
+  if CurTok.Kind <> tkLBrack then Exit;
+  { CurTok is the '[' (= Tokens[TokPos-1]); the first token inside it is
+    Tokens[TokPos]. Scan Tokens[i] from there. }
+  i := TokPos;
+  depth := 1;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkLBrack, tkLParen, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRBrack, tkRParen, tkEnd] then
+    begin
+      Dec(depth);
+      if depth = 0 then Exit;
+    end
+    else if (depth = 1) and (Tokens[i].Kind = tkFor) then
+    begin
+      Result := True;
+      Exit;
+    end
+    else if (depth = 1) and (Tokens[i].Kind = tkIdent) and
+            (LowerCase(GetTokenStr(i)) = 'for') then
+    begin
+      { NilPy lexes `for` as a plain ident, not tkFor (see PyParseFor's
+        PyIsIdent('for')), so a comprehension's `for` is an ident here. }
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 function PyParseForIn(const name: AnsiString; const name2: AnsiString; enumMode: Boolean): Integer;
 var contNode, ci, dictCi, listCi, symIdx, cSym, iSym, nSym: Integer;
     sym2, vSym, vListNode, itemsDot: Integer;   { two-name target: `for k, v in d.items()` }
     elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
+    compSaved: Integer;
     isStr: Boolean; contTk: TTypeKind;
 begin
   { `d.items()`: hide the suffix behind a fake ':' so the expression parser stops
@@ -3547,7 +3592,8 @@ begin
   else if (name2 <> '') and not enumMode then
     Error('Nil Python: a two-name for target needs a dict (.items()) or enumerate()');
 
-  Expect(tkColon, ':');
+  { a comprehension ends its header at ']', not ':' — the body is synthetic }
+  if PyCompTarget < 0 then Expect(tkColon, ':');
   { body suite (indented block or one-liner) is parsed below, after the
     hidden loop locals are allocated. }
 
@@ -3691,7 +3737,23 @@ begin
     bodyNode := PySeqAppend(bodyNode, node);
   end;
 
-  node := PyParseSuite;
+  if PyCompTarget >= 0 then
+  begin
+    { comprehension body: `target.append(EXPR)`. EXPR sits BEFORE the `for`, so
+      jump back to it, parse it with the loop variable now in scope, then
+      restore the cursor (the `]` the header stopped at). The `TokPos := k;
+      Next` idiom re-reads a token to restore CurTok, as the factory-default
+      re-parse does. }
+    compSaved := TokPos - 1;              { index of CurTok (the `]`) }
+    TokPos := PyCompExprStart; Next;      { CurTok := first EXPR token }
+    PyParseBoolExpr;
+    node := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'append',
+                        PyMakeIdent(PyCompTarget), CurASTNode);
+    if node < 0 then Error('Nil Python: pylib TPyList.append not loaded');
+    TokPos := compSaved; Next;            { restore to the `]` }
+  end
+  else
+    node := PyParseSuite;
 
   bodyNode := PySeqAppend(bodyNode, node);
 
@@ -3722,10 +3784,64 @@ begin
   Result := PySeqAppend(seq, whileNode);
 end;
 
+{ `target = [ EXPR for VAR in ITER ]`. Desugars to: create a fresh TPyList in
+  `target`, then a for-loop over ITER whose body is `target.append(EXPR)`.
+  Reuses PyParseForIn for the iteration itself (range / list / variant unbox all
+  come free) via PyCompTarget/PyCompExprStart; see those globals. CurTok is the
+  '[' and `targetSym` is the already-declared destination local. Returns the
+  statement sequence; PyStmtAteBlock is left set by PyParseForIn. }
+function PyParseFor: Integer; forward;
+
+function PyParseListComp(targetSym: Integer): Integer;
+var seq, node, sizeNode, createNode, aSeq: Integer;
+    savedTarget, savedStart, listCiN: Integer;
+begin
+  listCiN := FindUClass('TPyList');
+  if listCiN < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  { target := TPyList.Create — the same GetMem+size shape a `[]` literal uses }
+  createNode := AllocNode(AN_CALL);
+  ASTIVal[createNode] := -Ord(tkGetMem);
+  ASTTk[createNode] := Ord(tyClass);
+  ASTRight[createNode] := REC_UCLASS_BASE + listCiN;
+  sizeNode := AllocNode(AN_INT_LIT);
+  ASTIVal[sizeNode] := RecSize(REC_UCLASS_BASE + listCiN);
+  ASTTk[sizeNode] := Ord(tyInteger);
+  aSeq := AllocNode(AN_ARG);
+  ASTLeft[aSeq] := sizeNode;
+  ASTLeft[createNode] := aSeq;
+  Syms[targetSym].RecName := REC_UCLASS_BASE + listCiN;
+  node := AllocNode(AN_ASSIGN);
+  ASTLeft[node] := PyMakeIdent(targetSym);
+  ASTRight[node] := createNode;
+  seq := PySeqAppend(-1, node);
+
+  Next;                                { consume '[' — CurTok = first EXPR token }
+  savedStart := TokPos - 1;            { index of the first EXPR token }
+  { skip the EXPR to leave the cursor AT `for` (an IDENT here, not tkFor — see
+    PyIsListCompAhead); no nested `for` in the censused comprehensions }
+  while not (PyIsIdent('for') or (CurTok.Kind = tkEOF)) do Next;
+  if not PyIsIdent('for') then Error('Nil Python: malformed list comprehension');
+
+  savedTarget := PyCompTarget;
+  PyCompTarget := targetSym;
+  PyCompExprStart := savedStart;
+  { PyParseFor handles `for VAR in ITER`, dispatching range vs container; both
+    paths honour PyCompTarget by appending EXPR instead of parsing a suite. }
+  node := PyParseFor;
+  PyCompTarget := savedTarget;
+  Expect(tkRBrack, ']');
+  seq := PySeqAppend(seq, node);
+  { PyParseFor sets PyStmtAteBlock (it normally consumes an indented block); a
+    comprehension is an expression on one line, so clear it or the enclosing
+    statement loop skips its newline check. }
+  PyStmtAteBlock := False;
+  Result := seq;
+end;
+
 function PyParseFor: Integer;
 var name, name2: AnsiString;
     enumMode: Boolean; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
-    pair1, pair2, pair3, bodyNode, oneNode, limitNode: Integer;
+    pair1, pair2, pair3, bodyNode, oneNode, limitNode, compSaved: Integer;
 begin
   Next;
   if CurTok.Kind <> tkIdent then Error('Nil Python: expected loop variable after for');
@@ -3791,11 +3907,27 @@ begin
       Error('Nil Python: range step other than 1 is not supported in v1');
   end;
   Expect(tkRParen, ')');
-  Expect(tkColon, ':');
-  Expect(tkNewline, 'newline');
-  Expect(tkIndent, 'indent');
-  bodyNode := PyParseBlock;
-  Expect(tkDedent, 'dedent');
+  if PyCompTarget >= 0 then
+  begin
+    { comprehension over range: body is `target.append(EXPR)`, EXPR re-parsed
+      from before the `for` — the same shape PyParseForIn uses. Header ends at
+      `]`, not `:`. }
+    compSaved := TokPos - 1;
+    TokPos := PyCompExprStart; Next;
+    PyParseBoolExpr;
+    bodyNode := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'append',
+                           PyMakeIdent(PyCompTarget), CurASTNode);
+    if bodyNode < 0 then Error('Nil Python: pylib TPyList.append not loaded');
+    TokPos := compSaved; Next;
+  end
+  else
+  begin
+    Expect(tkColon, ':');
+    Expect(tkNewline, 'newline');
+    Expect(tkIndent, 'indent');
+    bodyNode := PyParseBlock;
+    Expect(tkDedent, 'dedent');
+  end;
 
   oneNode := AllocNode(AN_INT_LIT);
   ASTIVal[oneNode] := 1;
@@ -4340,6 +4472,15 @@ begin
     symIdx := FindSym(name);
     Next;
     Expect(tkAssign, '=');
+    { `target = [EXPR for VAR in ITER]` — a list comprehension. Desugared to an
+      empty-list init plus an appending loop, so the whole statement IS that
+      sequence, not an ordinary assignment. }
+    if PyIsListCompAhead then
+    begin
+      if symIdx < 0 then symIdx := AllocVar(name, tyClass);
+      Result := PyParseListComp(symIdx);
+      Exit;
+    end;
     { `res = None` stores a real None (VT_EMPTY), exactly as the `self.x = None`
       and `d[k] = None` routes already did. Without it the nil literal lowered
       to a plain zero, so the local was born non-variant and the very next
@@ -6204,6 +6345,7 @@ begin
     keep truncating semantics. Setting this at entry rewrote pylib's own
     `a div b` into a call to the helper being defined. }
   PyProgramMode := True;
+  PyCompTarget := -1;   { no comprehension in progress by default }
   PySkipNewlines;
   { A leading module docstring may precede the imports; consume it. }
   if (CurTok.Kind = tkString) and (TokPos < TokCount) and
