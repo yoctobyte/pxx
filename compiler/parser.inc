@@ -10895,6 +10895,7 @@ end;
 
 procedure ParseExpr;
 var op: TTokenKind; left, right, node, isci, isNode, isArg, isArg2: Integer; isIsTest: Boolean;
+    chMid, chSym, chAssign, chSeq, chRight, chCmp, chAnd: Integer;   { Python comparison chaining }
 begin
   ParseSimpleExpr;
   { `X is T` / `X as T` — is/as are contextual identifiers (not reserved tokens),
@@ -11022,6 +11023,52 @@ begin
       ASTTk[left] := Ord(tyUInt64);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
+
+    { Python COMPARISON CHAINING: `0 <= i < n` means `(0 <= i) and (i < n)` with
+      the middle operand evaluated ONCE. That single evaluation is why it cannot
+      be desugared by repeating the token text — `a < f() < b` would call f
+      twice (feature-nilpy-comparison-chaining). Anything but a plain
+      ident/literal is bound to a hidden local first: an IR value node is a
+      SUBTREE, so referencing one twice RE-EMITS it. Pascal has no chained
+      comparison (`a < b < c` is a type error there), so this is PyExprMode-only. }
+    while PyExprMode and (CurTok.Kind in [tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe]) do
+    begin
+      if (ASTKind[right] = AN_IDENT) or (ASTKind[right] = AN_INT_LIT) or
+         (ASTKind[right] = AN_FLOAT_LIT) then
+        chMid := right
+      else
+      begin
+        chSym := AllocVar('', IntToTypeKind(ASTTk[right]));
+        chMid := AllocNode(AN_IDENT);
+        ASTIVal[chMid] := chSym;
+        ASTTk[chMid] := ASTTk[right];
+        chAssign := AllocNode(AN_ASSIGN);
+        ASTLeft[chAssign] := chMid;
+        ASTRight[chAssign] := right;
+        { (t := mid, t) — evaluate the middle operand once, yield the temp }
+        chSeq := AllocNode(AN_COMMA);
+        ASTLeft[chSeq] := chAssign;
+        ASTRight[chSeq] := chMid;
+        ASTTk[chSeq] := ASTTk[right];
+        ASTRight[node] := chSeq;    { the FIRST comparison consumes the binding }
+      end;
+      op := CurTok.Kind; Next;
+      ParseSimpleExpr;
+      chRight := CurASTNode;
+      chCmp := AllocNode(AN_BINOP);
+      ASTIVal[chCmp] := Ord(op);
+      ASTLeft[chCmp] := chMid;
+      ASTRight[chCmp] := chRight;
+      ASTTk[chCmp] := Ord(tyBoolean);
+      chAnd := AllocNode(AN_BINOP);
+      ASTIVal[chAnd] := Ord(tkAnd);
+      ASTLeft[chAnd] := node;
+      ASTRight[chAnd] := chCmp;
+      ASTTk[chAnd] := Ord(tyBoolean);
+      node := chAnd;
+      right := chRight;
+      CurASTNode := node;
+    end;
   end;
   { Compound assignment expression `lv += rhs` (and -= *= /=), right-associative
     so `a += b += c` nests on the Right and each yields its stored value. The

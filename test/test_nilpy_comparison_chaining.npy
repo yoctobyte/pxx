@@ -1,0 +1,25 @@
+# Python comparison chaining: `0 <= i < n` is `(0 <= i) and (i < n)` with the
+# middle operand evaluated ONCE. The single evaluation is why it cannot be
+# desugared by repeating the token text — the `1 < f() < 9` line below prints
+# "call" exactly once, and CPython's output is what pins that
+# (feature-nilpy-comparison-chaining).
+# Output must match CPython running this same file.
+
+calls = 0
+def f() -> int:
+    global_bump()
+    return 5
+
+def global_bump() -> None:
+    print("call")
+
+print(1 < 2 < 3)
+print(3 < 2 < 1)
+print(1 < 2 > 0)
+print("a" < "b" < "c")
+i = 2
+n = 4
+print(0 <= i < n)
+print(0 <= 9 < n)
+print(1 == 1 == 1)
+print(1 < f() < 9)
