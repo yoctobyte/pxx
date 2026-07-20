@@ -5062,7 +5062,8 @@ begin
                 FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
                 mai := Procs[mpi].ParamCount-1;
               end
-              else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+              else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',')
+              else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
               Inc(mai);
             end;
             Expect(tkRParen, ')');
@@ -5166,7 +5167,8 @@ begin
                 FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
                 mai := Procs[mpi].ParamCount-1;
               end
-              else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+              else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',')
+              else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
               Inc(mai);
             end;
             Expect(tkRParen, ')');
@@ -5349,7 +5351,8 @@ begin
         FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
         mai := Procs[mpi].ParamCount-1;
       end
-      else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+      else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',')
+      else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
       Inc(mai);
     end;
     Expect(tkRParen, ')');
@@ -6392,7 +6395,8 @@ begin
               FillDefaultArgs(mpi, mai+1, callN, lastA);
               mai := Procs[mpi].ParamCount-1;
             end
-            else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+            else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',')
+            else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
             Inc(mai);
           end;
           Expect(tkRParen, ')');
@@ -7711,7 +7715,8 @@ begin
                   FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
                   mai := Procs[mpi].ParamCount-1;
                 end
-                else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+                else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',')
+              else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
                 Inc(mai);
               end;
               Expect(tkRParen, ')');
@@ -7777,7 +7782,8 @@ begin
                   FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
                   mai := Procs[mpi].ParamCount-1;
                 end
-                else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+                else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',')
+              else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
                 Inc(mai);
               end;
               Expect(tkRParen, ')');

@@ -1,0 +1,23 @@
+class VM:
+    def __init__(self) -> None:
+        self._c = False
+    @property
+    def compiling(self) -> bool:
+        return self._c
+    def log(self, tag: str, msg: str) -> None:
+        print(tag + " " + msg)
+    def go(self, token: str) -> None:
+        self.log(
+            "exec",
+            f"mode={'compile' if self.compiling else 'interpret'} token={token!r}",
+        )
+
+def top(a: int, b: int) -> int:
+    return a + b
+
+v = VM()
+v.go("dup")
+print(top(
+    3,
+    4,
+))
