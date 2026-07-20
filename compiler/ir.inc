@@ -6139,7 +6139,10 @@ begin
         pvName := '';
         pvTk := tyInt64;
         if Procs[cpi].Name = 'len' then pvName := 'pylen_v'
-;
+        else if Procs[cpi].Name = 'list' then
+          begin pvName := 'pylist_v'; pvTk := tyClass; end
+        else if Procs[cpi].Name = 'bool' then
+          begin pvName := 'bool'; pvTk := tyBoolean; end;
         if pvName <> '' then
         begin
           procIdx := FindProc(pvName);

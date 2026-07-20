@@ -231,6 +231,18 @@ function pystr_repeat_v(const v: Variant; n: Int64): AnsiString;
   language, so a None stored in a container arrived as integer 0
   (feature-nilpy-none-variant). }
 function pynone: Variant;
+{ The VARIANT forms of two more builtins, for the same reason pylen_v exists: a
+  for-in loop variable is always a variant, and an overload set resolved by
+  static type picks the wrong member for it. }
+function pylist_v(const v: Variant): TPyList;
+{ abs() of a variant: the tag decides int or float, which the static
+  __pxxAbsInt/__pxxAbsDbl split cannot (a for-in variable is a variant). }
+function pyabs_v(const v: Variant): Variant;
+function bool(const v: Variant): Boolean;
+function bool(i: Int64): Boolean; overload;
+function bool(d: Double): Boolean; overload;
+function bool(const s: AnsiString): Boolean; overload;
+function bool(l: TPyList): Boolean; overload;
 function pylist_repeat(l: TPyList; n: Int64): TPyList;
 { `s.rjust(w)` / `s.rjust(w, fill)` — right-align in a field of w characters.
   Python returns the string UNCHANGED when it is already at least that long
@@ -1746,6 +1758,68 @@ begin
     Exit;
   end;
   Result := pystr_of(v);
+end;
+
+function pyabs_v(const v: Variant): Variant;
+var t: Int64; d: Double; i: Int64;
+begin
+  t := pyvartag(v);
+  if t = 3 then           { VT_DOUBLE }
+  begin
+    d := pyvar_to_float(v);
+    if d < 0.0 then d := -d;
+    Result := d;
+    Exit;
+  end;
+  if (t = 1) or (t = 2) or (t = 4) then   { VT_INT / VT_INT64 / VT_BOOL }
+  begin
+    i := pyvar_to_int(v);
+    if i < 0 then i := -i;
+    Result := i;
+    Exit;
+  end;
+  PyTypeError(t, 'a number');
+  Result := 0;
+end;
+
+{ list(v) on a variant: a str yields its characters, a list a shallow copy. }
+function pylist_v(const v: Variant): TPyList;
+var o: TObject;
+begin
+  if pyvartag(v) = 6 then begin Result := list(VariantToStr(v)); Exit; end;
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then begin Result := list(TPyList(o)); Exit; end;
+  end;
+  PyTypeError(pyvartag(v), 'a str or a list');
+  Result := TPyList.Create;
+end;
+
+{ Python truthiness: 0, 0.0, '', [] and None are false; everything else true. }
+function bool(const v: Variant): Boolean;
+begin
+  Result := pyvar_to_bool(v);
+end;
+
+function bool(i: Int64): Boolean; overload;
+begin
+  Result := i <> 0;
+end;
+
+function bool(d: Double): Boolean; overload;
+begin
+  Result := d <> 0.0;
+end;
+
+function bool(const s: AnsiString): Boolean; overload;
+begin
+  Result := Length(s) > 0;
+end;
+
+function bool(l: TPyList): Boolean; overload;
+begin
+  Result := (l <> nil) and (l.count > 0);
 end;
 
 function pynone: Variant;

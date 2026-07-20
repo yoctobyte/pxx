@@ -1,0 +1,16 @@
+# Every builtin an ordinary loop reaches, applied to a for-in VARIABLE — which
+# is always a VARIANT, so an overload set resolved by static type picks the
+# wrong member for it (bug-a-len-of-variant-picks-wrong-overload). abs() had the
+# subtler form: the int helper's call was tagged with the ARGUMENT's type, so it
+# claimed to return a Variant it never produced and crashed as soon as a second
+# expression shared the statement — which is why `abs(a) + abs(a)` is here.
+# Output must match CPython running this same file.
+
+for a in [7, -3, 0]:
+    print(a // 2, a % 2, min(a, 5), max(a, 5))
+    print(abs(a), abs(a) + abs(a), -a, bool(a))
+    print(str(a), len(str(a)), chr(65))
+for f in [1.5, -2.5]:
+    print(abs(f), -f, abs(f) * 2)
+for s in ["ab", "c", ""]:
+    print(len(s), list(s), bool(s), s.upper())

@@ -1663,7 +1663,25 @@ end;
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var ci, mmi, mpi, i, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
+    smPName: AnsiString; smTk: TTypeKind; smArgs: Integer;
 begin
+  { A STR method on a variant receiver — `for s in ["ab"]: s.upper()`, where the
+    loop variable is a variant holding a string. Render the receiver with
+    pystr_of (which spells every tag Python's way) and hand it to the ordinary
+    str-method desugar, rather than looking for a class that declares `upper`. }
+  if PyStrMethodInfo(mname, smPName, smTk, smArgs) then
+  begin
+    i := FindProc('pystr_of');
+    if i < 0 then Error('Nil Python: pylib (pystr_of) not loaded');
+    unboxArg := AllocNode(AN_ARG);
+    ASTLeft[unboxArg] := baseNode;
+    unboxCall := AllocNode(AN_CALL);
+    ASTIVal[unboxCall] := i;
+    ASTTk[unboxCall] := Ord(tyAnsiString);
+    ASTLeft[unboxCall] := unboxArg;
+    Result := PyParseStrMethod(unboxCall, mname);
+    Exit;
+  end;
   { candidate scan — one entry per class whose method set answers to mname }
   hitCi := -1; hitMmi := -1; hitPi := -1;
   for ci := 0 to UClsCount - 1 do

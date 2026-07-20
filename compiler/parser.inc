@@ -9350,6 +9350,24 @@ begin
         Next; Expect(tkLParen, '(');
         ParseExpr; node := CurASTNode;
         Expect(tkRParen, ')');
+        { A VARIANT argument — a for-in loop variable is always one — cannot
+          choose between the int and float helpers statically, and tagging the
+          int helper's call tyVariant (which is what the argument's type gave
+          it) made the result marshal as a variant it never produced: a
+          segfault as soon as a second expression shared the statement.
+          pyabs_v dispatches on the tag and really does return a Variant
+          (bug-a-len-of-variant-picks-wrong-overload). }
+        if PyExprMode and CaseEqual(name, 'Abs') and
+           (IntToTypeKind(ASTTk[node]) = tyVariant) and
+           (FindProc('pyabs_v') >= 0) then
+        begin
+          helperPi := FindProc('pyabs_v');
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
+          CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
+          ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyVariant);
+          LastExprTk := tyVariant;
+          Exit;
+        end;
         if TypeIsFloat(IntToTypeKind(ASTTk[node])) then
         begin
           if CaseEqual(name, 'Abs') then helperPi := FindProc('__pxxAbsDbl')
