@@ -125,3 +125,30 @@ Remaining: (b) other-target run verification, (d) Synapse SSL end-to-end
 (gated on the jedi.inc lexer bug, see bug-pascal-directive-inside-paren-star-comment).
 
 - 2026-07-19 (backlog sweep note) UNBLOCKED: the jedi.inc directive-in-comment lexer bug blocking item (d) Synapse-SSL end-to-end is resolved (in done/). All done-when bullets met on x86-64; remaining = (b) other-target run verification + (d).
+
+- 2026-07-20 (Track B) — Item **(d) Synapse SSL end-to-end is NOT unblocked**
+  after all; the 2026-07-19 sweep note is too optimistic. The jedi.inc lexer bug
+  it named is indeed fixed, but `external/synapse/ssl_openssl3_lib.pas` now stops
+  on a different wall:
+
+  ```
+  pascal26:1111: error: cdecl indirect call: more than 6 integer args not supported yet
+  ```
+
+  OpenSSL has plenty of 7+ argument entry points and Synapse binds all of them
+  through `dlopen` + function pointers, so the unit cannot compile and the
+  end-to-end test that would actually exercise the loader cannot be written.
+  Filed as [[bug-cdecl-indirect-over-6-integer-args]] (Track A). Note that
+  [[feature-cdecl-indirect-cross-targets]], marked done, lists ">6/>4 args
+  marshals correctly" in its acceptance — that is not true of the indirect path
+  today, and the two should be reconciled.
+
+  Landed on the way: `HModule` in `lib/rtl/dynlibs.pas` as an alias of
+  `TLibHandle`. Synapse's loader helpers are declared `function LoadLib(const
+  Value: String): HModule`, and that spelling simply did not exist in our
+  dynlibs. Source compatibility, not a second type. `lib_synapse` still green.
+
+  So item (d) stays open and is now **blocked on Track A**, not on Track B.
+  Item (b) (other-target run verification) is unchanged and needs the cross
+  runners.
+

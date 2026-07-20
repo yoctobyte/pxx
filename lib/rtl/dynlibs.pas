@@ -26,6 +26,10 @@ uses platform;
 type
   { FPC: PtrInt-wide opaque handle. }
   TLibHandle = PtrInt;
+  { FPC/Delphi spelling of the same thing. Real code uses both — Synapse's
+    OpenSSL bindings declare their loader helpers as `function LoadLib(...):
+    HModule` — so the alias is source compatibility, not a second type. }
+  HModule = TLibHandle;
 
 const
   NilHandle: TLibHandle = 0;

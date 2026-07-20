@@ -25,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (131)
+## backlog (132)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -36,6 +36,7 @@ _none_
 | bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
+| bug-cdecl-indirect-over-6-integer-args | A | 50 | bug | `cdecl` indirect call with more than 6 integer args is rejected | — |
 | bug-open-array-param-length-high-zero | P | 65 | bug | `Length()` / `High()` on an open-array parameter return 0 / -1 | — |
 | bug-parallel-for-captured-boolean-loses-type | A | 50 | bug | Captured Boolean loses its type inside a parallel-for body (overload resolution fails) | — |
 | bug-parallel-for-captured-dynarray-var-arg-segfault | A | 60 | bug | Passing a captured dynamic array by `var` from a parallel-for body segfaults | — |
@@ -2618,6 +2619,7 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
+- [p 50] [A] bug-cdecl-indirect-over-6-integer-args
 - [p 50] [A] bug-parallel-for-captured-boolean-loses-type
 - [p 50] [A] decide-abi-portable-vs-target-split
 - [p 50] [D] docs-devnotes-ai-assisted-build
