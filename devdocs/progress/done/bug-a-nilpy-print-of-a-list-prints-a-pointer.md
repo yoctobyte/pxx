@@ -34,3 +34,6 @@ Silent, and it makes the most natural debugging line in Python useless.
 `make test` + self-host byte-identical, `test-nilpy` green, and the repro
 matching CPython for: list of str, list of int, list of float, nested list,
 empty list, and a dict (`{'k': 'v'}`).
+
+## Log
+- 2026-07-20 — resolved, commit b13557c6.
