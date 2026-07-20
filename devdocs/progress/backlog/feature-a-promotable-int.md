@@ -392,3 +392,42 @@ today; NilPy will need that and it belongs with the adoption work.
 
 Filed on the way: [[bug-a-aarch64-managed-string-concat-leak]] — ordinary
 Pascal, not promo, but it is what a promo bignum loop on aarch64 hits.
+
+
+## FEATURE COMPLETE 2026-07-20
+
+All five stages of the staged plan are done, plus the 32-bit bring-up.
+
+| stage | state |
+| --- | --- |
+| 1. Type + trapping overflow | done (`bf86b54e` … `a2b88243`) |
+| 2. Promotion (heap bignum) | done (`2296b874`) |
+| 3. Check elision | done to 9x-of-Int64 (`b3f703b3`); true range analysis deliberately not attempted, see ticket |
+| 4. Variant integration | done (`11f8b672`, `df786485`) |
+| 5. Pascal dialect exposure | done — `PromoInt` is opt-in and explicitly typed |
+
+Plus: wide literals past Int64 (`cb119351`), native-width type names
+(`0adbb80d`), 32-bit natives (`67239e24`).
+
+**Verified, not assumed:** a 50-case randomized differential against CPython
+(`+ - * div mod`, negative operands and divisors, literals to 10^40); byte-identical
+output on i386, aarch64 and arm32; the promo core also byte-identical on riscv32;
+no leak over 200k variant boxings; and a program that never names the type shows
+no size growth (35 KB vs 92 KB).
+
+### Bugs this work found in EXISTING code, all filed separately
+
+- [[bug-a-integer-literal-out-of-range-wraps-silently]] — FIXED. Over-range
+  decimal literals wrapped silently, in ordinary Pascal.
+- [[bug-a-aarch64-managed-string-concat-leak]] — open. `s := s + lit` in a
+  function leaks on aarch64.
+- [[bug-a-aarch64-variant-string-compare-always-false]] — open. Comparing two
+  string Variants returns FALSE both ways on aarch64.
+- [[bug-a-qplus-misses-32bit-overflow]] — open. `{$Q+}` only checks 64-bit ops.
+
+### Left, low priority
+
+- [[feature-a-promoint-variant-esp-targets]] — variant interop does not build on
+  riscv32/xtensa (their gaps, not promo's; the promo core works there).
+- NilPy adopting it as its `int` — the original motivation, deliberately after
+  the NilPy refactor.
