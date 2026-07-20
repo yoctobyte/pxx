@@ -87,5 +87,23 @@ is reached only by genuinely mixed-type value uses.
 - Int operands depend on the new int representation:
   [[feature-a-promotable-int]]. Land that first.
 
+### Truthiness protocol — DECIDED 2026-07-20: follow CPython exactly
+
+Accepted with its overhead. `IsTrue(x)` resolves in CPython's order:
+
+1. type defines `__bool__` → call it (result must be a bool);
+2. else type defines `__len__` → truthy iff length ≠ 0;
+3. else → always truthy.
+
+Builtin falsy set: `None`, `False`, `0`, `0.0`, `""`, `()`, `[]`, `{}`, `set()`,
+`range(0)`. A promotable int is falsy iff its **value** is zero in either storage
+tier — the heap tier must not read as truthy merely because a pointer is non-nil.
+
+The overhead is mostly avoidable in practice: when the operand's class is known
+statically (the common case), `__bool__`/`__len__` resolution happens at
+**compile time** and lowers to a direct call or an inlined length test. Only
+genuinely dynamic operands (variant) need a runtime lookup — so "follow Python
+even if it costs" mainly costs on paths that were already dynamic.
+
 ## Log
 - 2026-07-20 — resolved, commit 5287bdd7.

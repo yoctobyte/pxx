@@ -5,6 +5,7 @@ program test_promoint;
 var a, b, c: PromoInt;
     i: Integer;
     s: Int64;
+    vv: Variant;
 begin
   { zero-init: an untouched promo variable reads as inline 0 }
   Writeln(a);
@@ -66,6 +67,20 @@ begin
   a := 99999999999999999999999999999999;
   b := 100000000000000000000000000000000;
   Writeln(b - a);
+
+  { VARIANT round trip. An inline value boxes as an ordinary VT_INT64; only a
+    heap value takes the reserved VT_PROMO_INT64 tag, carrying its exact
+    decimal as a managed string. }
+  a := 42;
+  vv := a;
+  Writeln(vv);
+  a := 1;
+  for i := 1 to 30 do a := a * i;
+  vv := a;
+  Writeln(vv);
+  c := 0;
+  c := vv;
+  Writeln(c);
 
   { DEMOTION: a value that grew and shrank is usable as an ordinary int again }
   a := 1;

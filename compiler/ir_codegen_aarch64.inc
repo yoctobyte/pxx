@@ -720,18 +720,27 @@ begin
 end;
 
 procedure EmitVariantClearA64;
-var pDone: Integer;
+var pDone, pRel: Integer;
 begin
+  { Managed payload = VT_STRING, or any tag in the promotable-int block (a promo
+    too large for the inline tier rides in a variant as a managed AnsiString of
+    its decimal). Nothing else uses a tag at or above VT_PROMO_BASE, so the
+    upper bound is unnecessary here — one lower-bound compare covers the whole
+    reserved block. Without this arm every promo-holding variant LEAKED. }
   EmitI32($F81F0FE0);                                           { str x0, [sp, #-16]! }
   EmitI32($F9400000);                                           { ldr x0, [x0] (tag) }
   EmitI32($F100181F);                                           { cmp x0, #6 (VT_STRING) }
+  pRel := CodeLen;
+  EmitI32($54000000);                                           { b.eq .rel }
+  EmitI32($F140081F);                                           { cmp x0, #2, lsl #12 (8192) }
   pDone := CodeLen;
-  EmitI32($54000001);                                           { b.ne .done }
+  EmitI32($5400000B);                                           { b.lt .done }
+  Patch32(pRel, $54000000 or (((CodeLen - pRel) div 4) and $7FFFF) shl 5);
   EmitI32($F94003E0);                                           { ldr x0, [sp] (addr) }
   EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
   EmitStrDecRefA64;
   { .done }
-  Patch32(pDone, $54000001 or (((CodeLen - pDone) div 4) and $7FFFF) shl 5);
+  Patch32(pDone, $5400000B or (((CodeLen - pDone) div 4) and $7FFFF) shl 5);
   EmitI32($F94003E0);                                           { ldr x0, [sp] }
   EmitI32($D2800001);                                           { movz x1, #0 }
   EmitI32($F9000001);                                           { str x1, [x0] }
@@ -740,18 +749,23 @@ begin
 end;
 
 procedure EmitVariantRetainA64;
-var pDone: Integer;
+var pDone, pRel: Integer;
 begin
+  { Same managed-payload test as EmitVariantClearA64 — see there. }
   EmitI32($F81F0FE0);                                           { str x0, [sp, #-16]! }
   EmitI32($F9400000);                                           { ldr x0, [x0] (tag) }
   EmitI32($F100181F);                                           { cmp x0, #6 (VT_STRING) }
+  pRel := CodeLen;
+  EmitI32($54000000);                                           { b.eq .rel }
+  EmitI32($F140081F);                                           { cmp x0, #2, lsl #12 (8192) }
   pDone := CodeLen;
-  EmitI32($54000001);                                           { b.ne .done }
+  EmitI32($5400000B);                                           { b.lt .done }
+  Patch32(pRel, $54000000 or (((CodeLen - pRel) div 4) and $7FFFF) shl 5);
   EmitI32($F94003E0);                                           { ldr x0, [sp] }
   EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
   EmitStrIncRefA64;
   { .done }
-  Patch32(pDone, $54000001 or (((CodeLen - pDone) div 4) and $7FFFF) shl 5);
+  Patch32(pDone, $5400000B or (((CodeLen - pDone) div 4) and $7FFFF) shl 5);
   EmitI32($F84107E0);                                           { ldr x0, [sp], #16 }
 end;
 

@@ -400,6 +400,12 @@ begin
     Result := Chr(p^.Payload)
   else if p^.VType = 6 then
     Result := PAnsiString(@p^.Payload)^
+  else if p^.VType = 8193 then
+    { VT_PROMO_INT64: a promotable int too large for the inline tier. Its
+      payload IS the exact decimal, held as a managed AnsiString — see
+      compiler/builtin/promoint.pas. An inline-tier promo never reaches here;
+      it is stored as an ordinary VT_INT64. }
+    Result := PAnsiString(@p^.Payload)^
   else if p^.VType = 0 then
     Result := 'None'
   else
@@ -416,6 +422,7 @@ begin
   else if t = 5 then Result := 'a character'
   else if t = 6 then Result := 'a string'
   else if t = 7 then Result := 'an object'
+  else if (t >= 8192) and (t <= 8199) then Result := 'a promotable integer'
   else Result := 'an unknown tag';
 end;
 
@@ -431,6 +438,15 @@ begin
     Result := Trunc(PDouble(@p^.Payload)^)
   else if p^.VType = 0 then
     Result := 0
+  else if p^.VType = 8193 then
+  begin
+    { VT_PROMO_INT64 holds a value that did NOT fit the inline tier, so by
+      construction it does not fit an Int64 either. Truncating it is the defect
+      the promotable int exists to remove — assign to a PromoInt instead. }
+    writeln('Runtime error: EVariantError, promotable integer ',
+            PAnsiString(@p^.Payload)^, ' does not fit an Int64');
+    Halt(219);
+  end
   else if p^.VType = 6 then
   begin
     { VT_STRING. FPC PARSES it -- measured, not assumed: `i := v` with v='42'

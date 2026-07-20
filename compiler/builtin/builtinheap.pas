@@ -2499,7 +2499,11 @@ begin
     ch := Chr(PByte(Int64(v) + 8)^);
     write(ch);
   end
-  else if tag = 6 then  { VT_STRING }
+  else if (tag = 6) or ((tag >= 8192) and (tag <= 8199)) then
+  { VT_STRING, or any tag in the promotable-int block: a promo too large for
+    the inline tier rides in a variant as a managed AnsiString of its exact
+    decimal, so it PRINTS through the same path. An inline-tier promo is stored
+    as an ordinary VT_INT64 and never reaches here. }
   begin
     s := PWord(Int64(v) + 8)^;
     if s <> 0 then

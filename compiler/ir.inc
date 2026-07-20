@@ -899,11 +899,16 @@ function IRPromoTempSlot(var symOut: Integer): Integer;
 var tmpSym: Integer;
 begin
   tmpSym := AllocVar('', tyPromoInt64);
-  { The zeroing is a SIDE EFFECT, so it has to join the emitted statement
-    chain. Codegen walks statements and emits each one's subtree; a node that
-    is only referenced as an operand of a later node never gets emitted. }
-  IRMarkStatementNode(IRAppend(IR_ZERO_SYM, tmpSym, -1, -1, 0, Ord(tyPromoInt64)));
+  { Initialise through the runtime rather than IR_ZERO_SYM: several backends do
+    not implement that op (aarch64 rejects it outright), and routing this the
+    same way as every other promo operation keeps the whole feature backend-free.
+    The init is a SIDE EFFECT, so it has to join the emitted statement chain —
+    codegen walks statements and emits each one's subtree, and a node referenced
+    only as a later operand is never emitted at all. }
   symOut := tmpSym;
+  IRMarkStatementNode(IRPromoCall('PXXPromoInit',
+                        IRAppend(IR_SLOTADDR, tmpSym, -1, -1, 0, Ord(tyPointer)),
+                        -1, -1, tyUnknown));
   IRPromoTempSlot := IRAppend(IR_SLOTADDR, tmpSym, -1, -1, 0, Ord(tyPointer));
 end;
 
@@ -5479,7 +5484,12 @@ begin
       begin
         varIdx := ASTIVal[ASTLeft[node]];
         leftAddr := IRAppend(IR_SLOTADDR, varIdx, -1, -1, 0, Ord(tyPointer));
-        if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]])) then
+        if IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant then
+          { variant -> promotable int: the runtime reads whichever tier the
+            variant holds (VT_INT64 inline, VT_PROMO_INT64 heap) }
+          Result := IRPromoCall('PXXPromoFromVariant', leftAddr,
+                                IRVariantAddr(ASTRight[node]), -1, tyUnknown)
+        else if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]])) then
           Result := IRPromoCall('PXXPromoCopy', leftAddr,
                                 IRPromoAddrOf(ASTRight[node]), -1, tyUnknown)
         else if IRPromoInitFromLiteral(leftAddr, ASTRight[node]) then
@@ -5904,7 +5914,13 @@ begin
         { Variant target. IRC carries the source kind: tyVariant => full 16-byte
           copy; any scalar kind => box it (tag + payload) via IR_VAR_STORE. }
         leftAddr := IRLowerAddress(ASTLeft[node]);
-        if IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant then
+        if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]])) then
+          { promotable int -> variant. An INLINE value becomes an ordinary
+            VT_INT64 variant, so the common case needs no new handling
+            downstream; only a heap value takes the VT_PROMO_INT64 tag. }
+          Result := IRPromoCall('PXXPromoToVariant', leftAddr,
+                                IRPromoAddrOf(ASTRight[node]), -1, tyUnknown)
+        else if IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant then
         begin
           if rhsIsLValue then
             right := IRLowerAddress(ASTRight[node])

@@ -34,6 +34,15 @@ const
   PROMO_TAG_INLINE = 0;
   PROMO_TAG_HEAP   = 1;
 
+  { Variant tags. Mirrors defs.inc's VT_* (not visible from a builtin unit);
+    the promo block is deliberately contiguous so VarClear can range-test it. }
+  VT_EMPTY_TAG       = 0;
+  VT_INT_TAG         = 1;
+  VT_INT64_TAG       = 2;
+  VT_BOOL_TAG        = 4;
+  VT_STRING_TAG      = 6;
+  VT_PROMO_INT64_TAG = 8193;
+
 type
   PPromoWord = ^NativeInt;
   PPromoStr  = ^AnsiString;
@@ -42,6 +51,7 @@ procedure PXXPromoFromInt(dst: Pointer; v: Int64);
 procedure PXXPromoFromStr(dst: Pointer; const s: AnsiString);
 procedure PXXPromoCopy(dst, src: Pointer);
 procedure PXXPromoClear(dst: Pointer);
+procedure PXXPromoInit(dst: Pointer);
 procedure PXXPromoAdd(dst, a, b: Pointer);
 procedure PXXPromoSub(dst, a, b: Pointer);
 procedure PXXPromoMul(dst, a, b: Pointer);
@@ -49,6 +59,8 @@ procedure PXXPromoDiv(dst, a, b: Pointer);
 procedure PXXPromoMod(dst, a, b: Pointer);
 function  PXXPromoCmp(a, b: Pointer): Integer;
 function  PXXPromoToStr(a: Pointer): AnsiString;
+procedure PXXPromoToVariant(dstVar, src: Pointer);
+procedure PXXPromoFromVariant(dst, srcVar: Pointer);
 function  PXXPromoFitsInt64(a: Pointer): Boolean;
 function  PXXPromoToInt64(a: Pointer): Int64;
 
@@ -544,6 +556,20 @@ begin
   w^ := 0;
 end;
 
+{ Blind initialisation of a FRESH slot: writes tag and payload without reading
+  either. PXXPromoClear cannot be used on uninitialised memory because it tests
+  the old tag and would release a garbage payload. Used for compiler temps,
+  which is also why promo needs no IR_ZERO_SYM — an op several backends do not
+  implement. }
+procedure PXXPromoInit(dst: Pointer);
+var w: PPromoWord;
+begin
+  w := PPromoWord(dst);
+  w^ := PROMO_TAG_INLINE;
+  w := PPromoWord(SlotPayloadAddr(dst));
+  w^ := 0;
+end;
+
 procedure PXXPromoFromInt(dst: Pointer; v: Int64);
 var w: PPromoWord;
 begin
@@ -742,6 +768,92 @@ begin
     Exit;
   end;
   PXXPromoToStr := BToStr(SlotBig(a));
+end;
+
+{ ---- Variant interop ---------------------------------------------------
+
+  A promotable int inside a Variant is stored in whichever tier keeps the
+  variant machinery unchanged:
+
+    INLINE value -> an ordinary VT_INT64 variant. The common case therefore
+                    needs NO new handling anywhere downstream.
+    HEAP value   -> VT_PROMO_INT64, payload = a managed AnsiString holding the
+                    exact decimal.
+
+  Making the heap payload a managed string (rather than, say, a raw block) is
+  what keeps VarClear/VarCopy a RANGE TEST over the reserved tag block instead
+  of a growing switch in six hand-written emitters. }
+
+{ Release whatever the destination variant currently holds, leaving the payload
+  word ZERO. Writing a managed string straight over the old payload would treat
+  whatever was there — an integer, say — as an AnsiString ref and release
+  garbage, which is exactly how the first version segfaulted. }
+procedure ClearVariantSlot(dstVar: Pointer);
+var tagW, payW: PPromoWord;
+    sp: PPromoStr;
+begin
+  tagW := PPromoWord(dstVar);
+  if (tagW^ = VT_STRING_TAG) or (tagW^ = VT_PROMO_INT64_TAG) then
+  begin
+    sp := PPromoStr(SlotPayloadAddr(dstVar));
+    sp^ := '';                       { managed release }
+  end;
+  payW := PPromoWord(SlotPayloadAddr(dstVar));
+  payW^ := 0;
+  tagW^ := VT_EMPTY_TAG;
+end;
+
+procedure PXXPromoToVariant(dstVar, src: Pointer);
+var tagW, payW: PPromoWord;
+    sp: PPromoStr;
+    txt: AnsiString;
+begin
+  { render BEFORE clearing: src and dstVar may be the same slot }
+  if SlotTag(src) <> PROMO_TAG_INLINE then txt := BToStr(SlotBig(src)) else txt := '';
+  ClearVariantSlot(dstVar);
+  tagW := PPromoWord(dstVar);
+  if SlotTag(src) = PROMO_TAG_INLINE then
+  begin
+    payW := PPromoWord(SlotPayloadAddr(dstVar));
+    tagW^ := VT_INT64_TAG;
+    payW^ := NativeInt(SlotInt(src));
+    Exit;
+  end;
+  tagW^ := VT_PROMO_INT64_TAG;
+  sp := PPromoStr(SlotPayloadAddr(dstVar));
+  sp^ := txt;
+end;
+
+procedure PXXPromoFromVariant(dst, srcVar: Pointer);
+var tag: NativeInt;
+    sp: PPromoStr;
+    w: PPromoWord;
+begin
+  tag := SlotTag(srcVar);
+  if tag = VT_PROMO_INT64_TAG then
+  begin
+    sp := PPromoStr(SlotPayloadAddr(srcVar));
+    PXXPromoFromStr(dst, sp^);
+    Exit;
+  end;
+  if (tag = VT_INT_TAG) or (tag = VT_INT64_TAG) or (tag = VT_BOOL_TAG) then
+  begin
+    w := PPromoWord(SlotPayloadAddr(srcVar));
+    PXXPromoFromInt(dst, Int64(w^));
+    Exit;
+  end;
+  if tag = VT_STRING_TAG then
+  begin
+    sp := PPromoStr(SlotPayloadAddr(srcVar));
+    PXXPromoFromStr(dst, sp^);
+    Exit;
+  end;
+  if tag = VT_EMPTY_TAG then
+  begin
+    PXXPromoFromInt(dst, 0);
+    Exit;
+  end;
+  RunError(219);   { EVariantError: not convertible to an integer }
 end;
 
 function PXXPromoFitsInt64(a: Pointer): Boolean;

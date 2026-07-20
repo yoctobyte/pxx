@@ -814,13 +814,23 @@ procedure EmitVariantClear;
   reset the slot to VT_EMPTY. Preserves the slot address in rax. The jne
   target is patched manually (not via EmitAsmX64's `.label` form) because it
   jumps past IREmitCodeCall -- see EmitDynArrayReleaseLocked. }
-var pDone: Integer;
+var pDone, pDone2, pHit: Integer;
 begin
-  EmitAsmX64(['push rax', 'cmp qword [rax], %', VT_STRING]);
-  EmitB($0F); EmitB($85); pDone := CodeLen; EmitI32(0); { jne done }
+  { Managed payload = VT_STRING, or ANY tag in the promotable-int block: a promo
+    too large for the inline tier rides in a variant as a managed AnsiString of
+    its decimal. Without this arm every such variant LEAKED. The block is
+    contiguous so this stays a range test in six hand-written emitters. }
+  EmitAsmX64(['push rax', 'mov rcx, [rax]', 'cmp rcx, %', VT_STRING]);
+  EmitB($0F); EmitB($84); pHit := CodeLen; EmitI32(0);   { je release }
+  EmitAsmX64(['cmp rcx, %', VT_PROMO_BASE]);
+  EmitB($0F); EmitB($8C); pDone := CodeLen; EmitI32(0);  { jl done }
+  EmitAsmX64(['cmp rcx, %', VT_PROMO_LAST]);
+  EmitB($0F); EmitB($8F); pDone2 := CodeLen; EmitI32(0); { jg done }
+  Patch32(pHit, CodeLen - (pHit + 4));
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(AnsiStrReleaseAddr);
   Patch32(pDone, CodeLen - (pDone + 4));
+  Patch32(pDone2, CodeLen - (pDone2 + 4));
   EmitAsmX64([
     'pop rax',
     'mov qword [rax], %', VT_EMPTY,
@@ -831,13 +841,20 @@ end;
 procedure EmitVariantRetain;
 { rax = address of a variant slot. Retain a managed payload. Preserves rax.
   See EmitVariantClear for why the jne target is patched manually. }
-var pDone: Integer;
+var pDone, pDone2, pHit: Integer;
 begin
-  EmitAsmX64(['push rax', 'cmp qword [rax], %', VT_STRING]);
-  EmitB($0F); EmitB($85); pDone := CodeLen; EmitI32(0); { jne done }
+  { Same managed-payload test as EmitVariantClear — see there. }
+  EmitAsmX64(['push rax', 'mov rcx, [rax]', 'cmp rcx, %', VT_STRING]);
+  EmitB($0F); EmitB($84); pHit := CodeLen; EmitI32(0);   { je retain }
+  EmitAsmX64(['cmp rcx, %', VT_PROMO_BASE]);
+  EmitB($0F); EmitB($8C); pDone := CodeLen; EmitI32(0);  { jl done }
+  EmitAsmX64(['cmp rcx, %', VT_PROMO_LAST]);
+  EmitB($0F); EmitB($8F); pDone2 := CodeLen; EmitI32(0); { jg done }
+  Patch32(pHit, CodeLen - (pHit + 4));
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(AnsiStrRetainAddr);
   Patch32(pDone, CodeLen - (pDone + 4));
+  Patch32(pDone2, CodeLen - (pDone2 + 4));
   EmitAsmX64(['pop rax']);
 end;
 
@@ -1190,7 +1207,8 @@ procedure EmitWriteVariant;
 { On entry rax = address of a 16-byte variant slot: [tag:8][payload:8].
   Reads the tag and dispatches to the matching scalar writer. Clobbers the
   caller-saved set like the other write helpers; balances its own stack. }
-var pInt, pInt64, pBool, pDbl, pChar, pStr, pNil, jmpDefault, pEnd1, pEnd2, pEnd3,
+var pPromoSkip, pPromoStr: Integer;
+    pInt, pInt64, pBool, pDbl, pChar, pStr, pNil, jmpDefault, pEnd1, pEnd2, pEnd3,
     pBoolF, pEnd4, trueOff, falseOff: Integer;
     pNone, pObj, pEnd5, pEnd6, noneOff, objOff: Integer;
 begin
@@ -1208,6 +1226,16 @@ begin
   EmitB($0F); EmitB($84); pChar := CodeLen; EmitI32(0);
   EmitAsmX64(['cmp rax, %', VT_STRING]);
   EmitB($0F); EmitB($84); pStr := CodeLen; EmitI32(0);
+  { A promotable int too big for the inline tier rides in the variant as a
+    managed AnsiString of its exact decimal, so it PRINTS through the string
+    branch. The promo tags were reserved as a contiguous block precisely so
+    every such site stays a range test rather than a growing switch — see
+    EmitVariantClear, which does the same. }
+  EmitAsmX64(['cmp rax, %', VT_PROMO_BASE]);
+  EmitB($0F); EmitB($8C); pPromoSkip := CodeLen; EmitI32(0);   { jl skip }
+  EmitAsmX64(['cmp rax, %', VT_PROMO_LAST]);
+  EmitB($0F); EmitB($8E); pPromoStr := CodeLen; EmitI32(0);    { jle -> string }
+  Patch32(pPromoSkip, CodeLen - (pPromoSkip + 4));
   EmitAsmX64(['cmp rax, %', VT_EMPTY]);
   EmitB($0F); EmitB($84); pNone := CodeLen; EmitI32(0);
   EmitAsmX64(['cmp rax, %', VT_OBJECT]);
@@ -1262,6 +1290,7 @@ begin
 
   { managed string: payload points after the refcount/length header }
   Patch32(pStr, CodeLen - (pStr + 4));
+  Patch32(pPromoStr, CodeLen - (pPromoStr + 4));
   EmitAsmX64([
     'mov rax, [rsp]',
     'mov rax, [rax+8]',
