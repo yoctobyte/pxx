@@ -4938,14 +4938,11 @@
  "open_regressions": [
   {
    "bad": "c110ad2624372063b84d032e31880c14df64b1e2",
-   "good": "296a0cc7277bd17de8b5d304e74cfd93b9cf0b52",
+   "good": "76a2321346ed5d10bdd9ee0a0280e09519c1acd2",
    "job": "fpc-bootstrap#src:compiler/compiler.pas",
    "name": "fpc-bootstrap#00",
    "opened": "2026-07-20T08:59:57Z",
    "range": [
-    "4e8674acc889cccad431a2c0fa5c5f2755e5f2c7",
-    "a67504b4d1be4dc68081054791baaee84de9ef9d",
-    "76a2321346ed5d10bdd9ee0a0280e09519c1acd2",
     "2f88c6559bc2440b73768034e6edcd8e36811c21",
     "752becea8a24cce986f96d911553bd0c8b560756",
     "c110ad2624372063b84d032e31880c14df64b1e2"
