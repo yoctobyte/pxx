@@ -716,6 +716,7 @@ procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pypa
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 function PyMakeStrIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python s[i] (pyparser.inc) }
+function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python obj.meth() on a VARIANT receiver (pyparser.inc) }
 
 procedure ParseArgExpr;
 { A call ARGUMENT under NilPy must be parsed by the Python precedence chain
@@ -4471,6 +4472,22 @@ begin
         node := PyParseStrMethod(node, fieldName);
         tk := IntToTypeKind(ASTTk[node]);
         recName := REC_NONE;
+        Continue;
+      end;
+
+      { Nil Python method call on a VARIANT receiver: `w.name()` where `w` is a
+        for-in loop variable or any container element (every slot is a 16-byte
+        variant). The receiver has no static class, so the call is resolved by
+        METHOD NAME across the declared classes and the object pointer is
+        unboxed from the slot — see PyParseVariantMethod
+        (bug-a-nilpy-method-call-on-variant-receiver). }
+      if PyExprMode and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+         (tk = tyVariant) then
+      begin
+        Next;   { consume the method name; CurTok is now the '(' }
+        node := PyParseVariantMethod(node, fieldName);
+        tk := IntToTypeKind(ASTTk[node]);
+        recName := ResolveNodeRec(node);
         Continue;
       end;
 

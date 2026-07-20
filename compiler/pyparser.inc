@@ -1558,6 +1558,98 @@ begin
   Result := callNode;
 end;
 
+{ `w.meth(args)` where `w` is a VARIANT — a for-in loop variable, a list/dict
+  element, anything living in a 16-byte variant slot. Python dispatches on the
+  RUNTIME type; pxx resolves methods against the receiver's STATIC class, and a
+  variant slot records no class identity, so the form used to be a parse error
+  (bug-a-nilpy-method-call-on-variant-receiver) and "iterate a list of objects,
+  call a method" — an utterly ordinary Python shape — was unavailable.
+
+  Resolution is by METHOD NAME across the declared classes: the slot's VT_OBJECT
+  payload is the instance pointer (unboxed with pylib's pyvarobj) and is hard-cast
+  to the one class that declares `mname`. When several unrelated classes declare
+  the same name the call is genuinely ambiguous without a runtime class tag in the
+  slot, and that is an error telling the user to annotate a typed local. A method
+  declared once and INHERITED is not ambiguous — the candidates then agree on one
+  proc index, and a virtual method still dispatches through the VMT at runtime,
+  so a subclass instance in the slot runs its own override. }
+function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer;
+var ci, mmi, mpi, i, unboxArg, unboxCall, castNode: Integer;
+    selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
+begin
+  { candidate scan — one entry per class whose method set answers to mname }
+  hitCi := -1; hitMmi := -1; hitPi := -1;
+  for ci := 0 to UClsCount - 1 do
+  begin
+    if UClsIsRecord[ci] then Continue;
+    mmi := FindUMeth(ci, mname);
+    if mmi < 0 then Continue;
+    mpi := UMthProc_[mmi];
+    if hitCi < 0 then begin hitCi := ci; hitMmi := mmi; hitPi := mpi; end
+    else if mpi <> hitPi then
+    begin
+      { An OVERRIDE is not an ambiguity: keep the ancestor's declaration so the
+        call goes through that VMT slot and the runtime instance picks its own
+        override. Only two UNRELATED classes are genuinely undecidable. }
+      if IsSubclassOf(hitCi, ci) then
+        { ci is the ANCESTOR — its slot is the one to dispatch through }
+        begin hitCi := ci; hitMmi := mmi; hitPi := mpi; end
+      else if not IsSubclassOf(ci, hitCi) then
+        Error('Nil Python: .' + mname + '() on a dynamically-typed value is '
+          + 'ambiguous (several classes declare it) — assign to an annotated '
+          + 'local first');
+    end;
+  end;
+  if hitCi < 0 then
+    Error('Nil Python: no class declares a method .' + mname + '()');
+
+  { VT_OBJECT payload -> instance pointer -> hard cast to the owning class }
+  unboxArg := AllocNode(AN_ARG);
+  ASTLeft[unboxArg] := baseNode;
+  unboxCall := AllocNode(AN_CALL);
+  ASTIVal[unboxCall] := FindProc('pyvarobj');
+  if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+  ASTTk[unboxCall] := Ord(tyPointer);
+  ASTLeft[unboxCall] := unboxArg;
+  castNode := AllocNode(AN_CLASS_CAST);
+  ASTLeft[castNode] := unboxCall;
+  ASTIVal[castNode] := hitCi;
+  ASTTk[castNode]   := Ord(tyClass);
+
+  selfArg := AllocNode(AN_ARG);
+  ASTLeft[selfArg] := castNode;
+  lastArg := selfArg;
+
+  Expect(tkLParen, '(');
+  i := 0;
+  while CurTok.Kind <> tkRParen do
+  begin
+    ParseArgExpr;
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := CurASTNode;
+    ASTRight[lastArg] := argNode;
+    lastArg := argNode;
+    Inc(i);
+    if CurTok.Kind = tkComma then Next
+    else Break;
+  end;
+  Expect(tkRParen, ')');
+
+  mpi := hitPi;
+  if UMthVirSlot[hitMmi] >= 0 then
+  begin
+    callNode := AllocNode(AN_VIRTUAL_CALL);
+    ASTRight[callNode] := UMthVirSlot[hitMmi];
+  end
+  else
+    callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := mpi;
+  ASTTk[callNode] := Ord(Procs[mpi].RetType);
+  ASTLeft[callNode] := selfArg;
+  LastExprTk := Procs[mpi].RetType;
+  Result := callNode;
+end;
+
 { List literal [a, b, c] -> TPyList create + chained .append() calls, one
   expression tree (append returns Self). Reached from ParseFactor's PyExprMode
   tkLBrack branch, so nested literals in argument positions work too. }

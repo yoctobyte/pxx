@@ -1,0 +1,46 @@
+# Method calls on a VARIANT receiver — a for-in loop variable and a container
+# element both live in a 16-byte variant slot, so the receiver has no static
+# class. bug-a-nilpy-method-call-on-variant-receiver: this used to be a parse
+# error ("unexpected token ("), which made "iterate a list of objects and call
+# a method" — one of the most ordinary Python shapes — unavailable.
+# Output must match CPython running this same file.
+
+class Box:
+    def __init__(self, v: int) -> None:
+        self.v = v
+    def value(self) -> int:
+        return self.v
+    def scaled(self, k: int) -> int:
+        return self.v * k
+    def between(self, lo: int, hi: int) -> bool:
+        return (self.v >= lo) and (self.v <= hi)
+
+class Named:
+    def __init__(self, n: str) -> None:
+        self.n = n
+    def label(self) -> str:
+        return "<" + self.n + ">"
+
+# list element via for-in
+bs = [Box(2), Box(5)]
+for b in bs:
+    print(b.value(), b.scaled(10), b.between(1, 4))
+
+# dict value indexed inside the loop
+d = {}
+d["one"] = Box(7)
+d["two"] = Box(8)
+for k in d:
+    print(k, d[k].scaled(3))
+
+# str-returning method on a variant receiver
+ns = [Named("alpha"), Named("beta")]
+for n in ns:
+    print(n.label())
+
+# direct element subscript, no loop variable
+print(bs[1].scaled(4), ns[0].label())
+
+# nested call: a variant-receiver call as an argument
+for b in bs:
+    print(b.scaled(b.value()))
