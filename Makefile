@@ -194,8 +194,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_str_float26)" = "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
 	./$(COMPILER) test/test_nilpy_string_variant.npy /tmp/test_nilpy_string_variant26
 	test "$$(/tmp/test_nilpy_string_variant26)" = "$$(printf '5\napple\nTrue\nFalse\nFalse\nTrue\nTrue\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nFalse\nFalse\nhello world\nhello potato\ngreen world')"
-	! ./$(COMPILER) test/test_nilpy_missing_param_annotation_fail.npy /tmp/test_nilpy_missing_param_annotation_fail26 > /tmp/test_nilpy_missing_param_annotation_fail.log 2>&1
-	grep -q "unexpected token" /tmp/test_nilpy_missing_param_annotation_fail.log
+	./$(COMPILER) test/test_nilpy_optional_param.npy /tmp/test_nilpy_optional_param26
+	test "$$(/tmp/test_nilpy_optional_param26)" = "$$(printf '%b' '5\n7\n10')"
 	./$(COMPILER) test/test_nilpy_no_return_annotation.npy /tmp/test_nilpy_no_return_annotation26
 	test "$$(/tmp/test_nilpy_no_return_annotation26)" = "$$(printf '%b' '4\ng ran\n10\nn=5')"
 	./$(COMPILER) test/test_nilpy_range_step.npy /tmp/test_nilpy_range_step26

@@ -5331,18 +5331,30 @@ begin
     if CurTok.Kind <> tkIdent then Error('Nil Python: expected parameter name');
     PyHdrPNames[PyHdrNParams] := CurTok.SVal;
     Next;
-    Expect(tkColon, ':');
-    { same full annotation grammar as a method parameter }
-    annIdx := TokPos - 1;
-    PyHdrPTypes[PyHdrNParams] := PyAnnTypeAt(annIdx);
-    PyHdrPCis[PyHdrNParams] := PyAnnLastCi;
-    PyHdrPSigs[PyHdrNParams] := PyAnnLastProcSig;
-    if PyHdrPTypes[PyHdrNParams] = tyUnknown then
-      ErrorAt(Tokens[annIdx].Line,
-              'Nil Python: parameter ' + PyHdrPNames[PyHdrNParams]
-              + ' has an unsupported type annotation');
-    TokPos := annIdx;
-    Next;
+    if CurTok.Kind <> tkColon then
+    begin
+      { UNANNOTATED parameter — Python does not require a type. Defaults to Any
+        (variant), the same fallback an unannotated local gets. uforth's native
+        word bodies are all `def w(vm):`. }
+      PyHdrPTypes[PyHdrNParams] := tyVariant;
+      PyHdrPCis[PyHdrNParams] := -1;
+      PyHdrPSigs[PyHdrNParams] := -1;
+    end
+    else
+    begin
+      Expect(tkColon, ':');
+      { same full annotation grammar as a method parameter }
+      annIdx := TokPos - 1;
+      PyHdrPTypes[PyHdrNParams] := PyAnnTypeAt(annIdx);
+      PyHdrPCis[PyHdrNParams] := PyAnnLastCi;
+      PyHdrPSigs[PyHdrNParams] := PyAnnLastProcSig;
+      if PyHdrPTypes[PyHdrNParams] = tyUnknown then
+        ErrorAt(Tokens[annIdx].Line,
+                'Nil Python: parameter ' + PyHdrPNames[PyHdrNParams]
+                + ' has an unsupported type annotation');
+      TokPos := annIdx;
+      Next;
+    end;
     PyHdrDefHas[PyHdrNParams] := False;
     if CurTok.Kind = tkAssign then
     begin
@@ -6025,9 +6037,14 @@ begin
         begin
           Inc(j);
           if Tokens[j].Kind <> tkColon then
-            ErrorAt(Tokens[j].Line,
-                    'Nil Python: parameter ' + pnames[nparams]
-                    + ' needs a type annotation');
+          begin
+            { UNANNOTATED parameter — defaults to Any (variant), matching
+              PyParseDefHeader. Must agree with the header parse or the
+              registered signature and the frame disagree. }
+            ptypes[nparams] := tyVariant;
+          end
+          else
+          begin
           Inc(j);
           { PyAnnTypeAt, not PyTypeFromTokenIndex: a method parameter takes
             the SAME annotation grammar as a field or a dataclass member —
@@ -6040,6 +6057,7 @@ begin
             ErrorAt(Tokens[j].Line,
                     'Nil Python: parameter ' + pnames[nparams]
                     + ' has an unsupported type annotation');
+          end;
           if Tokens[j].Kind = tkAssign then
           begin
             Inc(j);
@@ -6352,6 +6370,11 @@ begin
     pnames[nparams] := CurTok.SVal; Next;
     if (nparams = 0) and (pnames[nparams] = 'self') then
     begin ptypes[nparams] := tyClass; pcis[nparams] := ci; end
+    else if CurTok.Kind <> tkColon then
+    begin
+      { UNANNOTATED parameter -> Any (variant); must match the pre-pass. }
+      ptypes[nparams] := tyVariant; pcis[nparams] := -1;
+    end
     else
     begin
       Expect(tkColon, ':');

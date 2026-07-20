@@ -10,7 +10,7 @@ const
   MAX_FIXUPS  = 131072;
   MAX_SYMS    = 131072;
   MAX_PROCS   = 16384;
-  PY_MAX_NESTED = 64;   { queued nested defs per enclosing body (feature-nilpy-nested-defs) }
+  PY_MAX_NESTED = 512;  { queued nested defs per enclosing body (feature-nilpy-nested-defs); uforth registers ~100 native-word bodies in one setup function }
   PY_MAX_CAPS = 8;      { enclosing locals one nested def may capture }
   PROC_HASH_SIZE = 16384;  { FindProc hash buckets; power of two (mask below) }
   SYM_HASH_SIZE  = 65536;  { FindSym hash buckets; power of two }

@@ -1,0 +1,11 @@
+def f(vm):
+    return 5
+def g(a, b: int):
+    return a + b
+class C:
+    def m(self, x):
+        return x + 1
+print(f(0))
+print(g(3, 4))
+c = C()
+print(c.m(9))
