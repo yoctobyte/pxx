@@ -217,3 +217,47 @@ programs compile and run unmodified.
   `test/lib_random.pas` still prints the expected deterministic seeded streams.
   Resume at slice 4: dedicated compiler intrinsics for CPUID/RDRAND (or the
   target-specific HW tiers), then thread-safe state.
+
+## Log
+- 2026-07-20 — **Slice 7 (thread-safe state) landed** (Track B, `lib/rtl/random.pas`).
+  Slices 4-6 (HW tiers: RDRAND/RDSEED, aarch64 RNDR, ESP RNG) remain blocked —
+  they need `rdrand`/`cpuid`/`rndr` from inline asm, and the asm frontend has
+  none of them: see [[feature-inline-asm-xmm-operands]], which now tracks the
+  whole missing-mnemonic surface including `cpuid`.
+
+  Two halves, because "thread-safe" alone would have been the wrong answer:
+
+  **The shared generator is now locked.** `xs0..3`, `sm_state` and `lcg_state`
+  sit behind a spinlock (`__pxxatomic_xchg`). A spinlock is the right shape here
+  — a PRNG step is a few register ops, so a futex round trip would cost more
+  than the work it guards, and hold times are bounded by construction. The
+  failure it prevents is worse than a lost value: two threads interleaving in
+  `XoshiroNext` corrupt the state word by word and can leave the four registers
+  correlated, so the generator keeps emitting plausible numbers while its stream
+  quality has quietly collapsed.
+
+  **`TRandomState` is the answer for threaded work.** A lock makes the shared
+  generator safe but it is still one contended stream, and — the part that
+  matters for simulation — no thread gets a reproducible sequence, because the
+  interleaving decides who draws what. So there is now an explicit per-stream
+  API: `RandomStateSeed` / `RandomStateRandomize` / `RandomStateNext` /
+  `RandomStateRange` / `RandomStateSplit`. No lock, no contention, and each
+  stream replays exactly from its seed. `RandomStateSplit` is the documented way
+  to fan one seed into N per-worker states; seeding each worker from its index
+  instead is precisely the correlated-streams mistake SplitMix64 exists to avoid.
+
+  Both generator paths now go through one `XoshiroStep` body, so there is a
+  single copy of the algorithm rather than one per call site.
+
+  Gated: `test/lib_randomstate.pas` in `make lib-test` (single-threaded and
+  bounded) covers seed reproducibility, divergence, split distinctness, split
+  reproducibility, range bounds and uniformity, and the all-zero-state fixed
+  point that xoshiro would otherwise never escape.
+
+  **What the threaded check does and does not prove:** 200k concurrent draws
+  across 8 workers produce no zero outputs and leave the shared stream healthy.
+  That is evidence of coherence, not a proof of it — a lost update does not
+  crash, it degrades distribution, and detecting that reliably needs a
+  statistical battery this repo does not have yet. The lock's correctness rests
+  on the argument above; the test is a regression guard, not the justification.
+

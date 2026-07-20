@@ -72,6 +72,42 @@ function RandRange(lo, hi: Integer): Integer;
 { Raw 64-bit random value (xoshiro). }
 function Random64: UInt64;
 
+{ --- Explicit generator state (the thread-safe way) --- }
+
+{ The functions above share ONE process-wide xoshiro state. That state is
+  guarded by a lock, so calling them concurrently is safe — but it is a shared
+  lock and a shared stream: two threads contend for it, and neither gets a
+  reproducible sequence of its own, because the interleaving decides who draws
+  what.
+
+  For threaded work give each thread its OWN TRandomState. No lock is taken, no
+  contention exists, and each stream is independently reproducible from its
+  seed — which is what makes a parallel simulation repeatable. Derive the
+  per-thread seeds with RandomStateSplit rather than seeding each from, say, its
+  thread index: nearby seeds are exactly what SplitMix64 exists to decorrelate,
+  and hand-picked ones are how correlated "random" streams get shipped. }
+type
+  TRandomState = record
+    s0, s1, s2, s3: UInt64;
+  end;
+
+{ Seed a private state (SplitMix64 expansion, same as XoshiroSeed). }
+procedure RandomStateSeed(var st: TRandomState; seed: UInt64);
+
+{ Seed a private state from OS entropy. False (and a fallback seed) if entropy
+  is unavailable, as on bare metal. }
+function RandomStateRandomize(var st: TRandomState): Boolean;
+
+{ Raw 64-bit draw; advances only `st`. No lock. }
+function RandomStateNext(var st: TRandomState): UInt64;
+
+{ Inclusive lo..hi drawn from `st`. }
+function RandomStateRange(var st: TRandomState; lo, hi: Integer): Integer;
+
+{ Derive an independent child stream from `parent`, advancing the parent. Use
+  this to fan out one seed into N per-thread states. }
+procedure RandomStateSplit(var parent: TRandomState; var child: TRandomState);
+
 implementation
 
 { ===== SplitMix64 — seed expander ===== }
@@ -92,13 +128,44 @@ end;
 
 var xs0, xs1, xs2, xs3: UInt64;
 
+{ Spinlock over the SHARED generator (xs0..3, sm_state, lcg_state).
+
+  A PRNG step is a handful of register operations, so a spinlock is the right
+  shape — a futex round trip would cost more than the work it protects, and hold
+  times are bounded by construction (no allocation, no syscall, no recursion
+  inside the critical section).
+
+  It exists because the alternative is worse than slow: two threads interleaving
+  in XoshiroNext do not merely race for a value, they corrupt the state word by
+  word and can leave the four registers correlated — a generator that keeps
+  producing plausible-looking numbers while its stream quality has quietly
+  collapsed. That is the failure mode this lock is here to prevent.
+
+  Callers that care about throughput or reproducibility should use their own
+  TRandomState instead and take no lock at all. }
+var gRandLock: Integer = 0;
+
+procedure RandLock;
+begin
+  while Integer(__pxxatomic_xchg(@gRandLock, 1)) <> 0 do ;
+end;
+
+procedure RandUnlock;
+var ig: Integer;
+begin
+  ig := Integer(__pxxatomic_xchg(@gRandLock, 0));
+  if ig = 0 then ;
+end;
+
 procedure XoshiroSeed(seed: UInt64);
 begin
+  RandLock;
   sm_state := seed;
   xs0 := SplitMix64Next;
   xs1 := SplitMix64Next;
   xs2 := SplitMix64Next;
   xs3 := SplitMix64Next;
+  RandUnlock;
 end;
 
 function RotL64(x: UInt64; k: Integer): UInt64;
@@ -106,18 +173,30 @@ begin
   RotL64 := (x shl k) or (x shr (64 - k));
 end;
 
-function XoshiroNext: UInt64;
+{ The xoshiro256** step over an explicit state. Every generator path in this
+  unit — shared and per-stream — goes through this one body, so there is exactly
+  one copy of the algorithm to be right. }
+function XoshiroStep(var a0, a1, a2, a3: UInt64): UInt64;
 var t: UInt64;
 begin
-  t := RotL64(xs1 * 5, 7) * 9;
-  XoshiroNext := t;
-  t := xs1 shl 17;
-  xs2 := xs2 xor xs0;
-  xs3 := xs3 xor xs1;
-  xs1 := xs1 xor xs2;
-  xs0 := xs0 xor xs3;
-  xs2 := xs2 xor t;
-  xs3 := RotL64(xs3, 45);
+  t := RotL64(a1 * 5, 7) * 9;
+  XoshiroStep := t;
+  t := a1 shl 17;
+  a2 := a2 xor a0;
+  a3 := a3 xor a1;
+  a1 := a1 xor a2;
+  a0 := a0 xor a3;
+  a2 := a2 xor t;
+  a3 := RotL64(a3, 45);
+end;
+
+function XoshiroNext: UInt64;
+var v: UInt64;
+begin
+  RandLock;
+  v := XoshiroStep(xs0, xs1, xs2, xs3);
+  RandUnlock;
+  XoshiroNext := v;
 end;
 
 { ===== LCG ===== }
@@ -126,13 +205,19 @@ var lcg_state: LongWord;
 
 procedure LCGSeed(seed: LongWord);
 begin
+  RandLock;
   lcg_state := seed;
+  RandUnlock;
 end;
 
 function LCGNext: LongWord;
+var v: LongWord;
 begin
+  RandLock;
   lcg_state := lcg_state * 1664525 + 1013904223;
-  LCGNext := lcg_state;
+  v := lcg_state;
+  RandUnlock;
+  LCGNext := v;
 end;
 
 { ===== Tier 2: OS CSPRNG (getrandom syscall) ===== }
@@ -209,7 +294,75 @@ begin
   RandRange := lo + Integer(v mod UInt64(span));
 end;
 
+
+{ ===== Explicit per-stream state ===== }
+
+{ SplitMix64 over a caller-supplied word — the same expander the shared seeder
+  uses, but with no shared state, so it is safe to call from any thread. }
+function SplitMixOver(var w: UInt64): UInt64;
+var z: UInt64;
+begin
+  w := w + UInt64($9E3779B97F4A7C15);
+  z := w;
+  z := (z xor (z shr 30)) * UInt64($BF58476D1CE4E5B9);
+  z := (z xor (z shr 27)) * UInt64($94D049BB133111EB);
+  SplitMixOver := z xor (z shr 31);
+end;
+
+procedure RandomStateSeed(var st: TRandomState; seed: UInt64);
+var z: UInt64;
+begin
+  z := seed;
+  st.s0 := SplitMixOver(z);
+  st.s1 := SplitMixOver(z);
+  st.s2 := SplitMixOver(z);
+  st.s3 := SplitMixOver(z);
+  { All-zero state is xoshiro's one fixed point: it would emit zeros forever.
+    SplitMix64 makes it vanishingly unlikely, not impossible. }
+  if (st.s0 or st.s1 or st.s2 or st.s3) = 0 then st.s0 := UInt64($9E3779B97F4A7C15);
+end;
+
+function RandomStateRandomize(var st: TRandomState): Boolean;
+var seed: UInt64; ok: Boolean;
+begin
+  seed := 0;
+  ok := HWEntropy64(seed);
+  if not ok then ok := OSEntropy64(seed);
+  if not ok then seed := UInt64($A39B3C2D1E0F4857);   { last-resort constant }
+  RandomStateSeed(st, seed);
+  RandomStateRandomize := ok;
+end;
+
+function RandomStateNext(var st: TRandomState): UInt64;
+begin
+  RandomStateNext := XoshiroStep(st.s0, st.s1, st.s2, st.s3);
+end;
+
+function RandomStateRange(var st: TRandomState; lo, hi: Integer): Integer;
+var span: Integer; v: UInt64;
+begin
+  if hi < lo then
+  begin
+    RandomStateRange := lo;
+    Exit;
+  end;
+  span := hi - lo + 1;
+  v := RandomStateNext(st) shr 33;
+  RandomStateRange := lo + Integer(v mod UInt64(span));
+end;
+
+procedure RandomStateSplit(var parent: TRandomState; var child: TRandomState);
+begin
+  { Seed the child from one draw of the parent, run back through SplitMix64 by
+    RandomStateSeed. Consecutive children therefore start from parent outputs,
+    which are already well separated — this is the documented way to fan out
+    xoshiro streams without them sharing structure. }
+  RandomStateSeed(child, RandomStateNext(parent));
+end;
+
+
 initialization
   lcg_state := 2463534242;
   XoshiroRandomize;   { seed xoshiro from OS entropy (or HW when tier 1 wired) }
+
 end.
