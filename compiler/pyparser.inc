@@ -4678,6 +4678,32 @@ begin
   end;
 end;
 
+{ Is the `def` at token index defIdx decorated with @property or @x.setter?
+  Returns the prefix its method name must be MANGLED with, or '' for a plain
+  method.
+
+  Python names the getter and the setter identically (`base` twice), which
+  Pascal cannot hold, so each accessor becomes a distinct hidden method and the
+  PROPERTY keeps the plain name. The member pre-pass and PyParseMethod both
+  call this one helper, deliberately: they derive the name independently and a
+  disagreement between them is a silent ABI mismatch. }
+function PyPropAccessorPrefixAt(defIdx: Integer): AnsiString;
+var i: Integer;
+begin
+  Result := '';
+  i := defIdx - 1;
+  while (i >= 0) and (Tokens[i].Kind in [tkNewline, tkIndent, tkDedent]) do Dec(i);
+  if i < 1 then Exit;
+  if (Tokens[i - 1].Kind = tkAt) and (LowerCase(GetTokenStr(i)) = 'property') then
+  begin
+    Result := '__prop_get_';
+    Exit;
+  end;
+  if (i >= 3) and (Tokens[i - 3].Kind = tkAt) and (Tokens[i - 1].Kind = tkDot) and
+     (LowerCase(GetTokenStr(i)) = 'setter') then
+    Result := '__prop_set_';
+end;
+
 function PyMethodName(const name: AnsiString): AnsiString;
 begin
   if name = '__init__' then Result := 'create' else Result := name;
@@ -4797,7 +4823,7 @@ procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, align, sz: Integer;
     fldAnn, rhsAt, k2, fldSig: Integer;
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
-    fldRec, mRetRec: Integer; mRet: TTypeKind;
+    fldRec, mRetRec, pri: Integer; mRet: TTypeKind;
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
     pdefHas: array[0..15] of Boolean; pdefIsStr: array[0..15] of Boolean;
     pdefVal: array[0..15] of Int64;
@@ -4971,6 +4997,8 @@ begin
       methodStart := i;
       origName := GetTokenStr(i + 1);
       name := PyMethodName(origName);
+      if PyPropAccessorPrefixAt(i) <> '' then
+        name := PyPropAccessorPrefixAt(i) + origName;
       isCtor := name = 'create';
       nparams := 0;
       for k := 0 to 15 do pdefHas[k] := False;
@@ -5068,6 +5096,41 @@ begin
       begin
         k := PyStoredName('create');
         AddUMeth(ci, k, 6, procIdx);
+      end
+      else if PyPropAccessorPrefixAt(methodStart) <> '' then
+      begin
+        { the accessor is registered under its MANGLED name, matching the proc
+          RegisterProc just made; AddUMeth otherwise keys on the raw source
+          token, leaving the method called `base` while the property looks for
+          `__prop_get_base`. }
+        AddUMeth(ci, PyStoredName(name), Length(name), procIdx);
+        { The PROPERTY is registered HERE, in the pre-pass, and not when the
+          decorated def is later parsed: a method defined EARLIER in the class
+          may already use `self.base`, and it is parsed before the accessor's
+          own def is reached. }
+        if not fieldsOnly then
+        begin
+          pri := FindUProp(ci, origName);
+          if pri < 0 then
+          begin
+            pri := AddUProperty(ci, PyStoredName(origName), Length(origName),
+                                Ord(mRet), mRetRec);
+            UPropPub[pri] := 1;
+          end;
+          if PyPropAccessorPrefixAt(methodStart) = '__prop_set_' then
+          begin
+            UPropWriteMOff[pri] := PyStoredName(name);
+            UPropWriteMLen[pri] := Length(name);
+          end
+          else
+          begin
+            { the getter defines the property's TYPE }
+            UPropReadMOff[pri] := PyStoredName(name);
+            UPropReadMLen[pri] := Length(name);
+            UPropTk[pri] := Ord(mRet);
+            UPropRec[pri] := mRetRec;
+          end;
+        end;
       end
       else
         AddUMeth(ci, Tokens[i + 1].SOffset, Tokens[i + 1].SLen, procIdx);
@@ -5261,7 +5324,12 @@ var origName, name, fullName: AnsiString; procIdx, i, idx, nparams, savedSC, sav
     isCtor: Boolean;
 begin
   Expect(tkFunction, 'def');
-  origName := CurTok.SVal; name := PyMethodName(origName); Next;
+  origName := CurTok.SVal; name := PyMethodName(origName);
+  { same mangling the pre-pass applied. TokPos-2 is the `def`, since CurTok is
+    the name that follows it. }
+  if PyPropAccessorPrefixAt(TokPos - 2) <> '' then
+    name := PyPropAccessorPrefixAt(TokPos - 2) + origName;
+  Next;
   isCtor := name = 'create';
   Expect(tkLParen, '(');
   nparams := 0;
@@ -5513,6 +5581,7 @@ end;
 
 procedure PyParseClass(isDC: Boolean);
 var ci, bodyStart, bodyEnd, baseCi, k: Integer;
+    propName: AnsiString;
 begin
   Expect(tkClass, 'class');
   ci := FindUClass(CurTok.SVal); Next;
@@ -5555,7 +5624,30 @@ begin
       PySkipNewlines;
     end
     else if CurTok.Kind = tkAt then
-      Error('Nil Python: unsupported decorator inside class (only @dataclass on classes)')
+    begin
+      { @property / @<name>.setter. The accessors were name-mangled and the
+        property registered by the member pre-pass, so this only has to consume
+        the decorator and parse the def that follows. }
+      Next;
+      if CurTok.Kind <> tkIdent then
+        Error('Nil Python: unsupported decorator inside class (only @property and @<name>.setter)');
+      propName := CurTok.SVal;
+      Next;
+      if CurTok.Kind = tkDot then
+      begin
+        Next;
+        if (CurTok.Kind <> tkIdent) or (LowerCase(CurTok.SVal) <> 'setter') then
+          Error('Nil Python: unsupported decorator inside class (only @property and @<name>.setter)');
+        Next;
+      end
+      else if LowerCase(propName) <> 'property' then
+        Error('Nil Python: unsupported decorator inside class (only @property and @<name>.setter)');
+      PySkipNewlines;
+      if CurTok.Kind <> tkFunction then
+        Error('Nil Python: @property must be followed by a def');
+      PyParseMethod(ci);
+      PySkipNewlines;
+    end
     else
     begin
       PyParseMethod(ci);

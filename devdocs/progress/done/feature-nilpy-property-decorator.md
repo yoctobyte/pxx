@@ -69,3 +69,6 @@ member lookup order between properties and methods becomes load-bearing.
 BOTH directions (a read and a write, and a write whose effect is observed
 through a later read) + `--tier quick` + self-host byte-identical +
 `make fpc-check` clean relative to HEAD.
+
+## Log
+- 2026-07-20 — resolved, commit HEAD.
