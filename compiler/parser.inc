@@ -7293,7 +7293,14 @@ begin
     tkString:
     begin
       prevTok := TokPos - 1;
-      if Length(CurTok.SVal) = 1 then
+      { A 1-character literal is a CHAR in Pascal — but Python has no char type,
+        `"d"` is a 1-length str like any other. Typing it tyChar in NilPy made
+        every context that expects a string depend on a char->string coercion,
+        and the method/ctor call-argument paths have none: `A("d")` passed the
+        character CODE where the callee dereferenced a string pointer, so a
+        1-character argument segfaulted while `A("dd")` worked
+        (bug-a-nilpy-one-char-string-literal-is-a-char). }
+      if (Length(CurTok.SVal) = 1) and not PyExprMode then
       begin
         node := AllocNode(AN_INT_LIT); ASTIVal[node] := Ord(CurTok.SVal[1]); ASTTk[node] := Ord(tyChar);
         ASTSOffset[node] := Tokens[prevTok].SOffset; ASTSLen[node] := Tokens[prevTok].SLen;
@@ -8896,7 +8903,25 @@ begin
         begin op := Ord(tkChr); LastExprTk := tyChar; end
         else
         begin op := Ord(tkOrd); LastExprTk := tyInteger; end;
-        Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        Next; Expect(tkLParen, '(');
+        if PyExprMode then PyParseBoolExpr else ParseExpr;
+        Expect(tkRParen, ')');
+        { Python has no char type: `ord("a")` takes a 1-length STR, which the
+          ordinal intrinsic would read as the string's pointer. Route a string
+          operand to pylib instead — as a normal AN_CALL, so the argument goes
+          through the regular frozen-string conversion. }
+        if (op = Ord(tkOrd)) and PyExprMode and
+           ((IntToTypeKind(ASTTk[CurASTNode]) = tyString) or
+            (IntToTypeKind(ASTTk[CurASTNode]) = tyAnsiString)) then
+        begin
+          idx := FindProc('pyord_s');
+          if idx < 0 then Error('Nil Python: pylib (pyord_s) not loaded');
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+          node := AllocNode(AN_CALL); ASTIVal[node] := idx;
+          ASTTk[node] := Ord(tyInt64); ASTLeft[node] := argSeq;
+          CurASTNode := node; LastExprTk := tyInt64;
+          Exit;
+        end;
         node := AllocNode(AN_CALL); ASTIVal[node] := -op;
         if op = Ord(tkChr) then ASTTk[node] := Ord(tyChar) else ASTTk[node] := Ord(tyInteger);
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;

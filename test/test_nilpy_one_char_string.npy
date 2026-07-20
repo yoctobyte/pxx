@@ -1,0 +1,35 @@
+# A 1-character literal is a str, not a char. Python has no char type, but the
+# shared Pascal factor typed `"d"` as tyChar, so every context expecting a
+# string leaned on a char->string coercion — and the method/constructor
+# argument paths have none: the character CODE was passed where the callee
+# dereferenced a string pointer, so `A("d")` segfaulted while `A("dd")` worked
+# (bug-a-nilpy-one-char-string-literal-is-a-char).
+# Output must match CPython running this same file.
+
+class A:
+    def __init__(self, n: str) -> None:
+        self.n = n
+    def put(self, s: str) -> str:
+        return self.n + s
+
+# constructor argument
+a = A("d")
+print(a.n, len(a.n))
+
+# method argument
+print(a.put("x"))
+
+# plain function argument, module-level local, container element
+def f(s: str) -> str:
+    return s + "!"
+
+print(f("q"))
+z: str = "z"
+print(z + "!", len(z))
+xs = ["a", "bb"]
+for x in xs:
+    print(x, len(x))
+
+# a 1-length str is still an ordinal source and still compares/concatenates
+print(ord("a"), chr(98), "a" < "b", "a" + "b")
+print("a" * 3, "a" in "cat")

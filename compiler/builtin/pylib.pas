@@ -206,6 +206,7 @@ function pyvar_to_int(const v: Variant): Int64;
   to repeat or multiply (bug-a-len-of-variant-picks-wrong-overload). }
 function pylen_v(const v: Variant): Int64;
 function pyord_v(const v: Variant): Int64;
+function pyord_s(const s: AnsiString): Int64;
 function pymul_v(const a: Variant; const b: Variant): Variant;
 function pyvar_to_float(const v: Variant): Double;
 function pyvar_to_bool(const v: Variant): Boolean;
@@ -323,6 +324,19 @@ end;
   NUL — silently, on all 123 uforth subscript sites
   (bug-nilpy-str-index-off-by-one). Out of range raises IndexError like CPython,
   matching TPyList's existing PyListFix behaviour. }
+{ ord() of a str. Python has no char type, so a 1-character literal is a str
+  like any other and ord("a") must read its single character. }
+function pyord_s(const s: AnsiString): Int64;
+begin
+  if Length(s) <> 1 then
+  begin
+    writeln('TypeError: ord() expected a character, but string of length ',
+            Length(s), ' found');
+    Halt(1);
+  end;
+  Result := Ord(s[1]);
+end;
+
 function pystr_at(const s: AnsiString; i: Integer): Char;
 var n: Integer;
 begin
