@@ -37,14 +37,14 @@ _none_
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-nilpy-and-or-in-unavailable-in-call-arguments | A | 65 | bug | NilPy `and` / `or` / `in` / `is` do not work in a CALL ARGUMENT | — |
+| bug-a-nilpy-container-equality-compares-identity | A | 55 | bug | NilPy: `==` on a list or dict compares IDENTITY, not contents | — |
+| bug-a-nilpy-list-augmented-add-segfaults | A | 55 | bug | NilPy: `xs += [2]` on a list SEGFAULTS | — |
 | bug-a-nilpy-str-of-string-and-bool | A | 60 | bug | NilPy `str()` prints a string's POINTER and a bool's 1 | — |
+| bug-a-nilpy-string-repeat-returns-a-pointer | A | 60 | bug | NilPy: `s * n` on a string returns a POINTER, silently | — |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
-| bug-nilpy-container-equality-compares-identity | N | 55 | bug | NilPy: `==` on a list or dict compares IDENTITY, not contents | — |
-| bug-nilpy-list-augmented-add-segfaults | N | 55 | bug | NilPy: `xs += [2]` on a list SEGFAULTS | — |
 | bug-nilpy-string-local-truncates-at-255 | N | 65 | bug | NilPy: a string local TRUNCATES at 255 characters, silently | — |
-| bug-nilpy-string-repeat-returns-a-pointer | N | 60 | bug | NilPy: `s * n` on a string returns a POINTER, silently | — |
 | bug-nilpy-subscript-on-literal | N | 35 | bug | NilPy: cannot subscript a string LITERAL — `"abc"[1]` | — |
 | bug-overload-mismatch-dumps-internals-to-stdout | A | 30 | bug | Overload-resolution failure dumps compiler internals to stdout | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
@@ -2546,7 +2546,7 @@ _none_
 - [p 65] [N] bug-nilpy-string-local-truncates-at-255
 - [p 65] [A] feature-a-typeref-handle
 - [p 60] [A] bug-a-nilpy-str-of-string-and-bool
-- [p 60] [N] bug-nilpy-string-repeat-returns-a-pointer
+- [p 60] [A] bug-a-nilpy-string-repeat-returns-a-pointer
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-a-abi-oracle
@@ -2562,8 +2562,8 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
-- [p 55] [N] bug-nilpy-container-equality-compares-identity
-- [p 55] [N] bug-nilpy-list-augmented-add-segfaults
+- [p 55] [A] bug-a-nilpy-container-equality-compares-identity
+- [p 55] [A] bug-a-nilpy-list-augmented-add-segfaults
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope

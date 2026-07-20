@@ -1,5 +1,5 @@
 ---
-track: N
+track: A
 prio: 60
 type: bug
 ---
@@ -20,6 +20,19 @@ is multiplied as an integer and the product printed as a number.
 
 The list form is different and honest: `[0] * 3` fails to compile
 ("len(xs)" then errors), so only the string case is silent.
+
+## Why Track A, not N
+
+Checked the file ownership before filing a fix: `pyparser.inc` owns only the
+BITWISE and BOOLEAN layers (`PyParseBitOr` down to `PyParseIsCmp`). The
+comparison and arithmetic layers are the shared parser's `ParseSimpleExpr` /
+comparison chain in `parser.inc:10781`, so the node is built — and its
+semantics chosen — outside Track N's files. The fix belongs there, gated on
+`PyExprMode` the way other NilPy-specific behaviour already is.
+
+This is the same boundary that put `bug-a-nilpy-floordiv-and-modulo-wrong-for-negatives`
+and `bug-a-nilpy-and-or-in-unavailable-in-call-arguments` in Track A: NilPy's
+own precedence chain sits ABOVE the arithmetic, not around it.
 
 ## Shape
 

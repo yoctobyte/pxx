@@ -1,5 +1,5 @@
 ---
-track: N
+track: A
 prio: 55
 type: bug
 ---
@@ -25,6 +25,19 @@ compares element-wise (and for dicts, key/value-wise, order-insensitively).
 Comparing a container with ITSELF is True either way, which is exactly the
 case a hand-written test reaches for — so this survived the whole list and
 dict test suite.
+
+## Why Track A, not N
+
+Checked the file ownership before filing a fix: `pyparser.inc` owns only the
+BITWISE and BOOLEAN layers (`PyParseBitOr` down to `PyParseIsCmp`). The
+comparison and arithmetic layers are the shared parser's `ParseSimpleExpr` /
+comparison chain in `parser.inc:10781`, so the node is built — and its
+semantics chosen — outside Track N's files. The fix belongs there, gated on
+`PyExprMode` the way other NilPy-specific behaviour already is.
+
+This is the same boundary that put `bug-a-nilpy-floordiv-and-modulo-wrong-for-negatives`
+and `bug-a-nilpy-and-or-in-unavailable-in-call-arguments` in Track A: NilPy's
+own precedence chain sits ABOVE the arithmetic, not around it.
 
 ## Shape
 
