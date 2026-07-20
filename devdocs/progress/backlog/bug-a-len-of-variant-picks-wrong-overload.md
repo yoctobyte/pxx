@@ -34,6 +34,31 @@ kind, and which one is right depends on the tag at runtime. Widening the
 unbox to guess would turn a crash into a silent wrong answer — strictly
 worse.
 
+## Wider than `len` — confirmed 2026-07-20 by the operator sweep
+
+The same shape hit two more operators once the rest of the NilPy semantics
+landed (commit a123c875 and follow-up). Both involve a for-in loop variable,
+which is ALWAYS a variant, so these are ordinary Python, not corner cases:
+
+```python
+for s in ["ab"]:
+    print(s * 2)     # CPython abab -> pxx a POINTER
+    print(len(s))    # CPython 2    -> pxx SEGFAULT
+```
+
+`v * 2` is the interesting one and is NOT just a missing unbox: it is
+genuinely ambiguous at lowering time. If the payload is a string Python
+REPEATS, if it is a number Python MULTIPLIES. A speculative "treat a variant
+operand of `*` as a string" hook was written and reverted during that session
+for exactly this reason -- it would have miscompiled `v * 2` on an int.
+
+The honest fix is one runtime-dispatching multiply (`pymul_v`) alongside the
+`pyfloordiv_v` / `pyfloormod_v` pair that DID land, since `//` and `%` are
+unambiguous (numeric tags only, string is an error) while `*` is not.
+`builtinheap`'s existing variant binop already dispatches arithmetic on tags
+and is the natural place, but it is shared with Pascal variants -- decide
+whether string-repeat belongs there or in a NilPy-only helper.
+
 ## Shape
 
 A `len(const v: Variant): Integer` overload in pylib that switches on the

@@ -30,6 +30,7 @@ type
   PPyVarRec = ^TPyVarRec;
   PInt64 = ^Int64;
   PPyAnsiString = ^AnsiString;
+  PPyDouble = ^Double;
 
   { itertools.count shim: uforth allocates xt ids via
     next(Word._xt_counter). Generators come much later; a bare int counter
@@ -188,6 +189,13 @@ function pystr_to_int(const s: AnsiString): Int64;
   integer otherwise multiplied its HANDLE
   (bug-a-nilpy-string-repeat-returns-a-pointer). n <= 0 yields ''. }
 function pystr_repeat(const s: AnsiString; n: Int64): AnsiString;
+{ The VARIANT forms. A for-in loop variable is always a variant, so without
+  these the most ordinary Python loop (`for a in xs: a // 2`) silently kept
+  Pascal's truncating semantics. Tag dispatch at RUNTIME is the only correct
+  answer -- the payload's type is not known when lowering. }
+function pyfloordiv_v(const a: Variant; const b: Variant): Variant;
+function pyfloormod_v(const a: Variant; const b: Variant): Variant;
+function pystr_repeat_v(const v: Variant; n: Int64): AnsiString;
 function pyfloordiv_i(a: Int64; b: Int64): Int64;
 function pyfloormod_i(a: Int64; b: Int64): Int64;
 function pyfloordiv_f(a: Double; b: Double): Double;
@@ -1031,6 +1039,70 @@ end;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
 begin
   Result := d.indexof(k) >= 0;
+end;
+
+function PyVarIsFloat(p: PPyVarRec): Boolean;
+begin
+  PyVarIsFloat := p^.VType = 3;
+end;
+
+function PyVarAsFloat(p: PPyVarRec): Double;
+begin
+  if p^.VType = 3 then PyVarAsFloat := PPyDouble(@p^.Payload)^
+  else PyVarAsFloat := p^.Payload;
+end;
+
+function pyfloordiv_v(const a: Variant; const b: Variant): Variant;
+var
+  pa, pb, r: PPyVarRec;
+  dv: Double;
+begin
+  pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
+  r^.VType := 0; r^.Payload := 0;
+  if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
+  begin
+    dv := pyfloordiv_f(PyVarAsFloat(pa), PyVarAsFloat(pb));
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := dv;
+  end
+  else
+  begin
+    r^.VType := 2;
+    r^.Payload := pyfloordiv_i(pa^.Payload, pb^.Payload);
+  end;
+end;
+
+function pyfloormod_v(const a: Variant; const b: Variant): Variant;
+var
+  pa, pb, r: PPyVarRec;
+  dv: Double;
+begin
+  pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
+  r^.VType := 0; r^.Payload := 0;
+  if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
+  begin
+    dv := pyfloormod_f(PyVarAsFloat(pa), PyVarAsFloat(pb));
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := dv;
+  end
+  else
+  begin
+    r^.VType := 2;
+    r^.Payload := pyfloormod_i(pa^.Payload, pb^.Payload);
+  end;
+end;
+
+function pystr_repeat_v(const v: Variant; n: Int64): AnsiString;
+var
+  p: PPyVarRec;
+begin
+  p := PPyVarRec(@v);
+  if p^.VType <> 6 then
+  begin
+    writeln('Runtime error: cannot repeat a non-string value');
+    Halt(219);
+  end;
+  Result := pystr_repeat(PPyAnsiString(@p^.Payload)^, n);
 end;
 
 function pystr_repeat(const s: AnsiString; n: Int64): AnsiString;

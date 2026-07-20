@@ -4771,6 +4771,16 @@ begin
 
     AN_NOT:
     begin
+      if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant then
+      begin
+        { `not v` is Python TRUTHINESS over the payload. The raw 8-byte load
+          was the tag, which is non-zero for every typed value, so `not b` was
+          False whatever b held. }
+        left := IRLowerVariantAsScalar(ASTLeft[node], tyBoolean);
+        ASTTk[node] := Ord(tyBoolean);
+        Result := IRAppend(IR_NOT, left, -1, -1, 0, Ord(tyBoolean));
+        Exit;
+      end;
       left := IRLowerAST(ASTLeft[node]);
       Result := IRAppend(IR_NOT, left, -1, -1, 0, ASTTk[node]);
       { A bitwise complement of an UNSIGNED subword type truncates to its width
@@ -4918,8 +4928,31 @@ begin
         (bug-a-nilpy-floordiv-and-modulo-wrong-for-negatives.) }
       if PyProgramMode and
          ((Integer(ASTIVal[node]) = Ord(tkDiv)) or (Integer(ASTIVal[node]) = Ord(tkMod))) and
-         (IntToTypeKind(ASTTk[ASTLeft[node]]) <> tyVariant) and
-         (IntToTypeKind(ASTTk[ASTRight[node]]) <> tyVariant) then
+         ((IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant) or
+          (IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant)) then
+      begin
+        { A VARIANT operand -- which a for-in loop variable always is. The
+          payload's type is unknown here, so the helper dispatches on the tag
+          at runtime; without this the most ordinary Python loop
+          (`for a in xs: a // 2`) silently kept Pascal's truncating result. The
+          scalar-to-Variant boxing in IRLowerCallArg handles a mixed pair. }
+        if Integer(ASTIVal[node]) = Ord(tkDiv) then
+          fdName := 'pyfloordiv_v'
+        else
+          fdName := 'pyfloormod_v';
+        cpi := FindProc(fdName);
+        if cpi < 0 then Error('Nil Python: ' + fdName + ' (pylib) not loaded');
+        left := IRLowerCallArg(cpi, 0, ASTLeft[node], Procs[cpi].Params[0].IsRef);
+        first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyVariant));
+        right := IRLowerCallArg(cpi, 1, ASTRight[node], Procs[cpi].Params[1].IsRef);
+        last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyVariant));
+        IRB[first] := last;
+        ASTTk[node] := Ord(tyVariant);
+        Result := IRAppendCall(cpi, first, -1, Ord(tyVariant));
+        Exit;
+      end;
+      if PyProgramMode and
+         ((Integer(ASTIVal[node]) = Ord(tkDiv)) or (Integer(ASTIVal[node]) = Ord(tkMod))) then
       begin
         { Decide by the OPERANDS, not the node: `x // y` on floats is still
           tkDiv, which Pascal only ever spells for integers, so the node's own
@@ -5976,6 +6009,17 @@ begin
         end;
         if argTk = tyVariant then
         begin
+          { pystr_of's Variant overload spells Python's True/False for VT_BOOL,
+            which VariantToStr has no case for at all and renders as ''. }
+          procIdx := -1;
+          if PyProgramMode then procIdx := IRFindProc1ByArgTk('pystr_of', tyVariant);
+          if procIdx >= 0 then
+          begin
+            value := IRVariantAddr(argVal);
+            argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyVariant));
+            Result := IRAppendCall(procIdx, argNode, -1, Ord(Procs[procIdx].RetType));
+            Exit;
+          end;
           procIdx := FindProc('VariantToStr');
           if procIdx < 0 then Error('str: VariantToStr builtin not loaded');
           value := IRVariantAddr(argVal);

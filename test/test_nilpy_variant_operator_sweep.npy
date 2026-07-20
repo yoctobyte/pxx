@@ -1,0 +1,27 @@
+ints = [7, -7, 0]
+flts = [2.5, -2.5]
+strs = ["ab", ""]
+bools = [True, False]
+d = {"k": 1, "j": 2}
+xs = [1, 2, 3]
+
+for a in ints:
+    print(a, -a, a + 1, a - 1, a * 2)
+for a in ints:
+    print(a // 2, a % 2, a / 2)
+for f in flts:
+    print(f, -f, f + 1.0, f * 2.0)
+for s in strs:
+    print(s, s + "!")
+for b in bools:
+    print(b, not b, str(b))
+print(len(d), len(xs))
+print("k" in d, "z" in d)
+print(1 in xs, 9 in xs)
+print(str(1), str(1.5), str("z"), str(True))
+print(int("5"), int(5), int(5.9), int(-5.9))
+print(xs == [1,2,3], xs == [1,2], [] == [])
+print(min(1,2), max(1,2), min(1.5,2.5), max(1.5,2.5))
+print(ord("a"), chr(98))
+print(7 > 3, 7 < 3, 7 >= 7, 7 <= 6, 7 == 7, 7 != 7)
+print(True and False, True or False)
