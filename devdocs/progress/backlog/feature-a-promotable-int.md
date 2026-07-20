@@ -285,3 +285,29 @@ Storage and arithmetic. Order that keeps every increment green:
 x86-64 first, other backends erroring explicitly rather than falling through.
 Removing the stage-1 declaration guard in parser.inc is the last step of (1),
 not the first — nothing should be declarable until the slot is real.
+
+
+### Stage 3 landed 2026-07-20 — arbitrary precision works
+
+`2296b874`. Heap bignum tier via `compiler/builtin/promoint.pas`. 30! is exact,
+values demote back to the inline tier when they fit, and a 60-case randomized
+differential against CPython (`+ - * div mod`, negative operands and divisors,
+values straddling the Int64 boundary) matches on every case.
+
+Representation follows [[decide-promoint-rvalue-representation]] Option A
+(answered): rvalue = slot address, tyVariant model, so all six backends work
+with no backend changes. Lifetime rides the managed-AnsiString refcount, as
+decided.
+
+DCE gate verified, not assumed: a program that never names the type is 35 KB;
+one that declares a `PromoInt` is 92 KB.
+
+**Remaining, filed separately:**
+- [[feature-a-promoint-wide-literals]] — a value cannot be WRITTEN past Int64
+  yet (the lexer folds the literal first), blocked on
+  [[bug-a-integer-literal-out-of-range-wraps-silently]].
+- [[bug-a-qplus-misses-32bit-overflow]] — blocks `PromoInt32`, which is
+  declaration-blocked until its own-width trap is possible.
+- Stage 4 (check elision), stage 5 (variant integration + NilPy adoption) still
+  open. Every op is currently a runtime call; stage 4 is what restores native
+  speed for values that never leave the inline tier.
