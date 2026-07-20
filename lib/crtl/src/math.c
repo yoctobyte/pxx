@@ -212,6 +212,35 @@ static double crtl_exp_dd(crtl_dd a) {
   return crtl_dd_scale(s, k);
 }
 
+/* exp2(x) = 2^x.
+
+   Declared in our <math.h> but never implemented — a C program calling it
+   linked and then died at runtime with "undefined symbol: exp2". Found by the
+   declared-but-unimplemented sweep on feature-crtl-implement-libc-assumptions.
+
+   Computed as exp(x * ln2) with ln2 carried as a double-double, so the product
+   keeps its low bits instead of losing them to a single rounding before the
+   exponential — which is exactly where a naive `exp(x * M_LN2)` goes wrong for
+   large |x|. Exact powers of two are answered directly: 2^k must be EXACT for
+   integral k, and routing those through the series would round.
+
+   Note the file's naming rule does not bite here: `exp2` does not collide with
+   any Pascal identifier the way bare `exp` does, so this is a plain
+   definition rather than a __crtl_ name plus a macro. */
+double exp2(double x) {
+  crtl_dd a, ln2;
+  double k;
+  if (x != x) return x;                                   /* NaN */
+  if (x > 1100.0)  return x * crtl_bits2d(0x7FE0000000000000ull);  /* +inf */
+  if (x < -1200.0) return crtl_bits2d(1ull) * 0.5;                 /* +0 */
+  k = floor(x);
+  if (k == x && k >= -1022.0 && k <= 1023.0) return ldexp(1.0, (int)k);
+  ln2.hi = crtl_bits2d(0x3FE62E42FEFA39EFull);
+  ln2.lo = crtl_bits2d(0x3C7ABC9E3B39803Full);
+  a = crtl_dd_mul(crtl_2sum(x, 0.0), ln2);
+  return crtl_exp_dd(a);
+}
+
 /* NOT named `exp`: that name collides case-insensitively with Pascal Exp
    (two definitions -> silently broken call binding). C callers reach this
    through `#define exp(x) __crtl_exp(x)` in crtl math.h. */

@@ -89,3 +89,41 @@ so this is pin lag — the pinned v222 predates it — not a live defect in HEAD
 Worth confirming after the next `make pin`; it is also why the existing
 `crtl_*.c` tests are all exit-code based rather than printing anything.
 
+## Declared-but-unimplemented sweep (2026-07-20, Track B)
+
+Ran the ticket's own first category as an actual sweep rather than waiting for
+the next project to trip over it: every `extern` function declared in
+`lib/crtl/include/**` checked for a definition in `lib/crtl/src/**`, then each
+survivor probed by taking its address, linking, and running.
+
+**107 declared, 23 with no visible definition, exactly 1 real gap.** The other 22
+resolve and were noise in the static check, worth recording so nobody re-chases
+them:
+
+- `__pxx_fegetround` / `__pxx_fesetround` / `__pxx_setjmp` / `__pxx_longjmp` —
+  registered by the compiler (`cparser.inc`), not library symbols.
+- `ceil floor fmod sqrt hypot log2 log10 cosh sinh tanh cos sin tan` — bind to
+  Pascal RTL routines, or reach `__crtl_*` through the math.h macros.
+- `ioctl mremap msync chmod umask` — all link and run.
+
+**The one real gap: `exp2`.** Declared in `<math.h>`, defined nowhere. A C
+program calling it compiled, linked, and then died at run time with
+`undefined symbol: exp2` — the worst-behaved shape in this category, because
+nothing catches it until the program is already running.
+
+Implemented as `exp(x * ln2)` with ln2 carried as a double-double, so the
+product keeps its low bits rather than losing them to a rounding before the
+exponential (which is where a naive `exp(x * M_LN2)` drifts for large |x|).
+Exact powers of two return `ldexp` directly — `2^k` must be *exact* for integral
+k, and routing those through the series would round. Judged against 120-digit
+references: 16 cases, all correctly rounded, 0 ulp. Gated as
+`test/crtl_exp2.c` in `make lib-test`.
+
+## Standing-collector note
+
+This ticket is an **ongoing collector by design** — its own status line says so —
+so it does not have a "done" state and should not sit in the ready queue as if it
+did. The currently-collected batch (inttypes completeness + this sweep) is
+closed. File the next batch against it when a project trips over something; the
+sweep above is cheap to re-run and worth repeating after any header change.
+
