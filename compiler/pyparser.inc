@@ -1558,6 +1558,47 @@ begin
   Result := callNode;
 end;
 
+{ A `[` may follow a non-lvalue factor when the value is subscriptable in
+  Python: a str (including a literal), a list, or a dict. ParseFactor asks
+  before consuming the bracket so nothing else's syntax is stolen. }
+function PySubscriptableSuffix(n: Integer): Boolean;
+var rec, listCi, dictCi: Integer;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  if PyIsStrBaseTk(IntToTypeKind(ASTTk[n])) then begin Result := True; Exit; end;
+  if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
+  rec := ResolveNodeRec(n);
+  if rec < REC_UCLASS_BASE then Exit;
+  listCi := FindUClass('TPyList');
+  dictCi := FindUClass('TPyDict');
+  Result := ((listCi >= 0) and (rec = REC_UCLASS_BASE + listCi)) or
+            ((dictCi >= 0) and (rec = REC_UCLASS_BASE + dictCi));
+end;
+
+{ `base[idx]` for those bases: pystr_at for a string, the container's own getter
+  for a list (`get`) or a dict (`fetch`) — the same methods the lvalue path
+  reaches, just built here because a non-lvalue never gets there. }
+function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer;
+var rec, listCi, dictCi: Integer;
+begin
+  if PyIsStrBaseTk(IntToTypeKind(ASTTk[baseNode])) then
+  begin
+    Result := PyMakeStrIndex(baseNode, idxNode);
+    Exit;
+  end;
+  rec := ResolveNodeRec(baseNode);
+  listCi := FindUClass('TPyList');
+  dictCi := FindUClass('TPyDict');
+  if (listCi >= 0) and (rec = REC_UCLASS_BASE + listCi) then
+    Result := PyCallMeth1(listCi, 'get', baseNode, idxNode)
+  else if (dictCi >= 0) and (rec = REC_UCLASS_BASE + dictCi) then
+    Result := PyCallMeth1(dictCi, 'fetch', baseNode, idxNode)
+  else
+    Result := -1;
+  if Result < 0 then Error('Nil Python: this value cannot be subscripted');
+end;
+
 { `w.meth(args)` where `w` is a VARIANT — a for-in loop variable, a list/dict
   element, anything living in a 16-byte variant slot. Python dispatches on the
   RUNTIME type; pxx resolves methods against the receiver's STATIC class, and a

@@ -716,6 +716,8 @@ procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pypa
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 function PyMakeStrIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python s[i] (pyparser.inc) }
+function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
+function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python obj.meth() on a VARIANT receiver (pyparser.inc) }
 
 procedure ParseArgExpr;
@@ -10533,7 +10535,7 @@ end;
   Applying this after the additive layer made `"a" + "b".upper()` parse as
   `("a" + "b").upper()` and silently print AB where CPython prints aB. }
 procedure ParseFactor;
-var smNameTok: Integer;
+var smNameTok, smBase: Integer;
 begin
   ParseFactorCore;
   while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
@@ -10546,6 +10548,33 @@ begin
     Next;                       { consume the name; CurTok = '(' }
     CurASTNode := PyParseStrMethod(CurASTNode, GetTokenStr(smNameTok));
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+  end;
+  { Same asymmetry for the SUBSCRIPT suffix: `s[i]` on an ident goes through
+    ParseLValueAST, but a string literal and a call RESULT are not lvalues, so
+    `"abc"[1]` and `"a b".split(" ")[1]` never consumed the '[' and were parse
+    errors (bug-nilpy-subscript-on-literal). Reaching here at all means nobody
+    else claimed the bracket. Looped, and with the str-method suffix re-applied
+    inside, so `"abc"[1].upper()` and longer chains keep composing. }
+  while PyExprMode and (CurTok.Kind = tkLBrack) and
+        PySubscriptableSuffix(CurASTNode) do
+  begin
+    smBase := CurASTNode;
+    Next;                       { consume '[' }
+    PyParseBoolExpr;
+    Expect(tkRBrack, ']');
+    CurASTNode := PyMakeSuffixIndex(smBase, CurASTNode);
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+    while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
+          (Tokens[TokPos].Kind = tkIdent) and
+          (Tokens[TokPos + 1].Kind = tkLParen) and
+          PyIsStrBaseTk(IntToTypeKind(ASTTk[CurASTNode])) do
+    begin
+      Next;
+      smNameTok := TokPos - 1;
+      Next;
+      CurASTNode := PyParseStrMethod(CurASTNode, GetTokenStr(smNameTok));
+      LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+    end;
   end;
 end;
 

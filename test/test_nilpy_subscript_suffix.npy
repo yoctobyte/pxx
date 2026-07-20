@@ -1,0 +1,17 @@
+# Subscripting a value that is not an LVALUE: a string literal, a call result, a
+# container literal. The subscript is parsed in ParseLValueAST, which a literal
+# never enters, so `"abc"[1]` and `"a,b".split(",")[1]` were parse errors
+# (bug-nilpy-subscript-on-literal) — the same asymmetry the str-method suffix
+# needed its ParseFactor wrapper for.
+# Output must match CPython running this same file.
+
+print("abc"[1], "abc"[0], "abc"[2], "abc"[-1])
+print("abc"[1].upper(), "a,b,c".split(",")[2], "a b".split(" ")[0])
+print(["x", "y"][1], [10, 20, 30][0])
+print({"k": "v"}["k"])
+s = "xyz"
+print(s[1], s[-1], s[0].upper())
+xs = ["p", "q"]
+print(xs[1], len(xs[0]))
+d = {"a": 1}
+print(d["a"])
