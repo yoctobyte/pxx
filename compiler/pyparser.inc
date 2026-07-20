@@ -2344,6 +2344,40 @@ begin
   Result := callNode;
 end;
 
+{ hasattr(obj, "name") / getattr(obj, "name" [, default]).
+
+  Every censused use passes a STRING LITERAL attribute name, and NilPy classes
+  have statically-declared fields, so both resolve at COMPILE time against the
+  receiver's class. A receiver with no static class (a variant, e.g. a caught
+  exception) counts as "does not declare it" — which is right for the corpus,
+  where getattr(e, "errno", 1) probes for attributes our exception shims do not
+  have and wants the default.
+
+  Deviation worth knowing: Python's hasattr answers "has this attribute been
+  ASSIGNED on this instance", per object. NilPy fields always exist and are
+  zero-initialised, so a declared field reports True even before first
+  assignment. Filed as decide-nilpy-hasattr-per-instance-semantics. }
+function PyAttrFieldIdx(recvNode: Integer; const attr: AnsiString): Integer;
+var rec, ci: Integer;
+begin
+  Result := -1;
+  if recvNode < 0 then Exit;
+  rec := ResolveNodeRec(recvNode);
+  if rec < REC_UCLASS_BASE then Exit;
+  ci := rec - REC_UCLASS_BASE;
+  Result := FindUField(ci, attr);
+end;
+
+{ Reads the string-literal attribute name; CurTok is the ',' before it. }
+function PyParseAttrName: AnsiString;
+begin
+  Expect(tkComma, ',');
+  if CurTok.Kind <> tkString then
+    Error('Nil Python: hasattr/getattr needs a literal attribute name');
+  Result := CurTok.SVal;
+  Next;
+end;
+
 { Is the token stream at `int.from_bytes(` ? CurTok is the `int` ident. }
 function PyIsFromBytesAhead: Boolean;
 begin

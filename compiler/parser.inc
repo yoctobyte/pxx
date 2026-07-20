@@ -728,6 +728,8 @@ function PyIsIntBaseTk(tk: TTypeKind): Boolean; forward; { Nil Python: is this a
 function PyParseToBytes(baseNode: Integer): Integer; forward; { Nil Python <int>.to_bytes(...) intrinsic (pyparser.inc) }
 function PyParseFromBytes: Integer; forward; { Nil Python int.from_bytes(...) intrinsic (pyparser.inc) }
 function PyIsFromBytesAhead: Boolean; forward; { Nil Python: at `int.from_bytes(`? (pyparser.inc) }
+function PyAttrFieldIdx(recvNode: Integer; const attr: AnsiString): Integer; forward; { Nil Python hasattr/getattr field lookup (pyparser.inc) }
+function PyParseAttrName: AnsiString; forward; { Nil Python: the literal attr name in hasattr/getattr (pyparser.inc) }
 function PyIsSysStreamAhead: Boolean; forward; { Nil Python: at `sys.stdout`/`sys.stderr`? (pyparser.inc) }
 function PyStdlibCallAhead(var pname: AnsiString; var nTok: Integer): Boolean; forward; { Nil Python: at a mapped os./sys. call? (pyparser.inc) }
 function PyParseStdlibCall(const pname: AnsiString; nTok: Integer): Integer; forward; { Nil Python os./sys. call -> pylib shim (pyparser.inc) }
@@ -7188,7 +7190,7 @@ begin
 end;
 
 procedure ParseFactorCore;
-var intBaseArg: Integer; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
+var intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     mcCtorNm: AnsiString;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
@@ -8254,6 +8256,51 @@ begin
         ASTLeft[node] := argSeq;
         CurASTNode := node;
         LastExprTk := tyInteger;
+        Exit;
+      end
+      else if isNilPy and ((name = 'hasattr') or (name = 'getattr')) then
+      begin
+        { Resolved against the receiver's DECLARED fields — see PyAttrFieldIdx
+          for why a compile-time answer is the right shape here. }
+        atIsGet := name = 'getattr';
+        Next; Expect(tkLParen, '(');
+        ParseExpr;
+        atRecv := CurASTNode;
+        atName := PyParseAttrName;
+        atFld := PyAttrFieldIdx(atRecv, atName);
+        atDflt := -1;
+        if CurTok.Kind = tkComma then
+        begin
+          Next;
+          ParseExpr;
+          atDflt := CurASTNode;
+        end;
+        Expect(tkRParen, ')');
+        if not atIsGet then
+        begin
+          node := AllocNode(AN_INT_LIT);
+          if atFld >= 0 then ASTIVal[node] := 1 else ASTIVal[node] := 0;
+          ASTTk[node] := Ord(tyBoolean);
+          CurASTNode := node;
+          LastExprTk := tyBoolean;
+          Exit;
+        end;
+        if atFld >= 0 then
+        begin
+          { the field exists: an ordinary field read }
+          node := AllocNode(AN_FIELD);
+          ASTLeft[node] := atRecv;
+          ASTSOffset[node] := PyStoredName(atName);
+          ASTSLen[node] := Length(atName);
+          ASTTk[node] := UFldTk[atFld];
+          CurASTNode := node;
+          LastExprTk := IntToTypeKind(UFldTk[atFld]);
+          Exit;
+        end;
+        if atDflt < 0 then
+          Error('Nil Python: getattr on an attribute this type does not declare needs a default');
+        CurASTNode := atDflt;
+        LastExprTk := IntToTypeKind(ASTTk[atDflt]);
         Exit;
       end
       else if isNilPy and (name = 'float') then

@@ -1,0 +1,12 @@
+class Thing:
+    def __init__(self) -> None:
+        self.code = 7
+        self.label = "hi"
+
+t = Thing()
+print(hasattr(t, "code"))
+print(hasattr(t, "nope"))
+print(getattr(t, "code", 0))
+print(getattr(t, "label", "x"))
+print(getattr(t, "missing", 42))
+print(getattr(t, "missing", "fallback"))
