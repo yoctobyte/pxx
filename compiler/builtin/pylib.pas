@@ -222,6 +222,11 @@ function pyvar_to_char(const v: Variant): Char;
 function pyfloordiv_v(const a: Variant; const b: Variant): Variant;
 function pyfloormod_v(const a: Variant; const b: Variant): Variant;
 function pystr_repeat_v(const v: Variant; n: Int64): AnsiString;
+{ `xs * n` on a LIST: a new list whose slots are the original's, repeated.
+  Python copies REFERENCES, not elements — `[[0]] * 3` gives three aliases of the
+  same inner list — so the variant slots are copied as they stand
+  (feature-nilpy-list-repeat). n <= 0 yields an empty list. }
+function pylist_repeat(l: TPyList; n: Int64): TPyList;
 function pyfloordiv_i(a: Int64; b: Int64): Int64;
 function pyfloormod_i(a: Int64; b: Int64): Int64;
 function pyfloordiv_f(a: Double; b: Double): Double;
@@ -1718,6 +1723,17 @@ begin
     Exit;
   end;
   Result := pystr_of(v);
+end;
+
+function pylist_repeat(l: TPyList; n: Int64): TPyList;
+var r: TPyList; i, k: Integer;
+begin
+  r := TPyList.Create;
+  if (l <> nil) and (n > 0) then
+    for k := 1 to n do
+      for i := 0 to l.count - 1 do
+        r.append(l.get(i));
+  Result := r;
 end;
 
 { repr() dispatching on the RUNTIME tag, so a container element nested inside a

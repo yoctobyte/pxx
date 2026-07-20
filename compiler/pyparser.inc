@@ -1863,6 +1863,40 @@ begin
   end;
 end;
 
+{ Is this a `list * int` pair (either operand order)? }
+function PyNodeIsPyList(n: Integer): Boolean;
+var listCi: Integer;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
+  listCi := FindUClass('TPyList');
+  Result := (listCi >= 0) and (ResolveNodeRec(n) = REC_UCLASS_BASE + listCi);
+end;
+
+function PyListRepeatPair(a, b: Integer): Boolean;
+begin
+  Result := (PyNodeIsPyList(a) and TypeIsOrdinal(IntToTypeKind(ASTTk[b]))) or
+            (PyNodeIsPyList(b) and TypeIsOrdinal(IntToTypeKind(ASTTk[a])));
+end;
+
+{ Build pylist_repeat(list, count) for `xs * n` / `n * xs`. }
+function PyMakeListRepeat(a, b: Integer): Integer;
+var listNode, cntNode, procIdx, arg0, arg1: Integer;
+begin
+  if PyNodeIsPyList(a) then begin listNode := a; cntNode := b; end
+  else begin listNode := b; cntNode := a; end;
+  procIdx := FindProc('pylist_repeat');
+  if procIdx < 0 then Error('Nil Python: pylib (pylist_repeat) not loaded');
+  arg0 := AllocNode(AN_ARG); ASTLeft[arg0] := listNode;
+  arg1 := AllocNode(AN_ARG); ASTLeft[arg1] := cntNode;
+  ASTRight[arg0] := arg1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyClass);
+  ASTLeft[Result] := arg0;
+end;
+
 { Wrap a TPyList / TPyDict expression in the pylib repr call, so it prints as
   Python spells a container. Anything else is returned unchanged. }
 function PyReprContainer(n: Integer): Integer;

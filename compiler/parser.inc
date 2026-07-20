@@ -717,6 +717,8 @@ procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 function PyMakeStrIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python s[i] (pyparser.inc) }
 function PyQualifyNested(const name: AnsiString): AnsiString; forward; { Nil Python nested-def name lookup (pyparser.inc) }
+function PyListRepeatPair(a, b: Integer): Boolean; forward;              { Nil Python `xs * n` (pyparser.inc) }
+function PyMakeListRepeat(a, b: Integer): Integer; forward;              { Nil Python `xs * n` (pyparser.inc) }
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python obj.meth() on a VARIANT receiver (pyparser.inc) }
@@ -10719,6 +10721,17 @@ begin
             (PyIsStrBaseTk(IntToTypeKind(ASTTk[left])) <>
              PyIsStrBaseTk(IntToTypeKind(ASTTk[right]))) then
       ASTTk[node] := Ord(tyAnsiString)
+    { `xs * n` on a LIST repeats it. Built as a direct call rather than tagged
+      like the string case, because the RESULT's class identity has to survive
+      into a local: an AN_BINOP carries no record id, so an inferred local would
+      hold a tyClass with no identity and len() would mis-pick its overload
+      (feature-nilpy-list-repeat). }
+    else if PyExprMode and (op = tkStar) and PyListRepeatPair(left, right) then
+    begin
+      node := PyMakeListRepeat(left, right);
+      CurASTNode := node;
+      continue;
+    end
     else if (op = tkAnd) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
       ASTTk[node] := Ord(tyBoolean)
     else if (ASTTk[left] = Ord(tySet)) or (ASTTk[right] = Ord(tySet)) then

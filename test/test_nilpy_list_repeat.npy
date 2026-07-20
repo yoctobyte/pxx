@@ -1,0 +1,26 @@
+# `xs * n` on a list. Built as a direct pylist_repeat call rather than a tagged
+# binop, because the result's CLASS IDENTITY has to survive into an inferred
+# local — an AN_BINOP carries no record id, and a tyClass local with no identity
+# makes len() mis-pick its overload (feature-nilpy-list-repeat).
+# Python copies REFERENCES, not elements: the `a[0].append(9)` case below shows
+# both slots of `[[0]] * 2` are the SAME inner list.
+# Output must match CPython running this same file.
+
+xs = [0] * 4
+print(xs, len(xs))
+ys = 3 * ["a"]
+print(ys, len(ys))
+print([1, 2] * 2)
+print([] * 3, [1] * 0)
+zs = [[0]] * 2
+print(zs)
+a = [[0]] * 2
+a[0].append(9)
+print(a)
+n = 3
+grid = [0] * n
+i = 0
+while i < len(grid):
+    grid[i] = i
+    i = i + 1
+print(grid)
