@@ -8367,6 +8367,38 @@ begin
         LastExprTk := IntToTypeKind(ASTTk[atDflt]);
         Exit;
       end
+      else if isNilPy and (name = 'exec') then
+      begin
+        { exec(src, globals[, locals]) -> pyexec(src, g, l). Compiles now; the
+          evaluator is feature-lib-pyexec (see the pylib stub). A missing
+          locals argument passes the globals dict for both, as Python does. }
+        Next; Expect(tkLParen, '(');
+        ParseExpr; atRecv := CurASTNode;         { src }
+        Expect(tkComma, ',');
+        ParseExpr; atFld := CurASTNode;          { globals }
+        if CurTok.Kind = tkComma then
+        begin
+          Next;
+          ParseExpr; atDflt := CurASTNode;       { locals }
+        end
+        else
+          atDflt := atFld;
+        Expect(tkRParen, ')');
+        idx := FindProc('pyexec');
+        if idx < 0 then Error('Nil Python: pylib (pyexec) not loaded');
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := idx;
+        ASTTk[node] := Ord(tyUnknown);           { procedure — no result }
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := atRecv;
+        argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := atFld;
+        argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := atDflt;
+        ASTRight[argSeq] := argSeq2; ASTRight[argSeq2] := argSeq3;
+        ASTRight[argSeq3] := -1;
+        ASTLeft[node] := argSeq;
+        CurASTNode := node;
+        LastExprTk := tyUnknown;
+        Exit;
+      end
       else if isNilPy and (name = 'open') then
       begin
         { open(path[, mode, encoding=...]) -> pyopen(path), a TPyList of lines.

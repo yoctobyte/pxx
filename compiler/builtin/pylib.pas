@@ -295,6 +295,12 @@ function pyfile_read(l: TPyList): AnsiString;
   non-blank line. Blank lines are normalised to empty and ignored when
   computing the common prefix, as CPython does. }
 function pytextwrap_dedent(const s: AnsiString): AnsiString;
+{ exec(src, globals[, locals]) — run a Python-subset source string against the
+  given namespaces. STUB: compiles and links so uforth builds, but does not yet
+  evaluate the source. The real two-engine evaluator (tokenizer+parser+AST
+  cache, then a tree-walker) is feature-lib-pyexec, a large separate subsystem.
+  Until it lands, exec'd bodies are no-ops. }
+procedure pyexec(const src: AnsiString; g: TPyDict; l: TPyDict);
 { Python's two-argument min/max. Spelled as ordinary pylib FUNCTIONS, the
   same way bytearray/bytes are: neither name is a Pascal keyword, so both
   resolve through the normal call path with no frontend hook.
@@ -2275,6 +2281,12 @@ begin
     v := l.at(i);
     Result := Result + pystr_of(v);
   end;
+end;
+
+procedure pyexec(const src: AnsiString; g: TPyDict; l: TPyDict);
+begin
+  { STUB — see the interface note. The tree-walker that actually runs `src`
+    against g/l is feature-lib-pyexec. No-op for now so the program links. }
 end;
 
 function pytextwrap_dedent(const s: AnsiString): AnsiString;
