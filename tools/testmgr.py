@@ -1258,11 +1258,30 @@ class Manager:
         # progress clock ticking again with the least added pressure.
         job = min(self.queue, key=lambda j: j.est_mem)
         if not announced:
-            print("testmgr: STARVED %.0fs — %d jobs queued, none running, and the "
-                  "memory gates are held by OTHER load on this box. Forcing jobs "
-                  "through one at a time (degraded/serial) rather than stalling to "
-                  "the deadline." % (now - self._last_progress, len(self.queue)),
-                  flush=True)
+            # WHY the gates are shut is a MEASUREMENT, not an assumption. This
+            # line used to assert "OTHER load on this box" unconditionally --
+            # false whenever the cheapest queued job simply does not fit here,
+            # which is the common case (one 6.8 GB job on a 16 GB box). That
+            # wrong assertion cost a 2026-07-20 investigation most of a day:
+            # it says "not our fault", so the job's own footprint never gets
+            # suspected. Name the binding constraint instead of guessing it.
+            mi = meminfo()
+            avail = mi.get("MemAvailable", 0)
+            if avail - job.est_mem <= MEM_FLOOR:
+                why = ("the cheapest queued job (%s) is estimated at %d MB and "
+                       "only %d MB is available (floor %d MB) — it does not fit "
+                       "alongside anything on this box"
+                       % (job.name, job.est_mem >> 20, avail >> 20,
+                          MEM_FLOOR >> 20))
+            else:
+                why = ("the memory gates are held by OTHER load on this box "
+                       "(%d MB available, PSI %.1f%%, %d MB free swap)"
+                       % (avail >> 20, mem_pressure(),
+                          mi.get("SwapFree", 0) >> 20))
+            print("testmgr: STARVED %.0fs — %d jobs queued, none running, and %s. "
+                  "Forcing jobs through one at a time (degraded/serial) rather "
+                  "than stalling to the deadline."
+                  % (now - self._last_progress, len(self.queue), why), flush=True)
         print("testmgr: forcing %s (degraded)" % job.name, flush=True)
         return job
 
