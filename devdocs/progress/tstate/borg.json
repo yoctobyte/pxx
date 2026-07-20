@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-19T18:19:34Z",
-   "fixed": [],
-   "new_red": [
-    "fpc-bootstrap#src:compiler/compiler.pas"
-   ],
-   "sha": "adfa67851eba9ad04d80e51ed553906d851b0db1",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-19T18:36:18Z",
    "fixed": [],
    "new_red": [
@@ -3366,6 +3356,14 @@
    "sha": "fa69dd186752e85d6e3e7468e592c0f8e82a5a9c",
    "tier": "full",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-20T14:44:25Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "0e26bd30abedc174d5ac50f4429cde4cddb05e8d",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -4896,11 +4894,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-20T14:37:47Z",
-  "sha": "fa69dd186752e85d6e3e7468e592c0f8e82a5a9c",
-  "tier": "full",
+  "date": "2026-07-20T14:44:25Z",
+  "sha": "0e26bd30abedc174d5ac50f4429cde4cddb05e8d",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 493.3
+  "wall": 343.6
  },
  "last_bench": {
   "conf_rows": 550,
