@@ -7,10 +7,12 @@
 # advances it — with the increment at the bottom, `continue` skipped it and
 # the loop hung.
 #
-# NOT covered, and diagnosed rather than miscompiled: iterating a container
-# held in a Variant (`for r in rows` where rows is a list OF lists). The
-# element would have to be unboxed first, which is
-# bug-a-nilpy-variant-element-not-usable-as-scalar (Track A).
+# NOT covered, and NOT because it works: the loop variable is a Variant, and
+# CONSUMING one as a scalar is bug-a-nilpy-variant-element-not-usable-as-scalar
+# (Track A). Concretely, `acc = acc + v` over a list of strings produces
+# GARBAGE BYTES today, and iterating a container held in a variant
+# (`for r in rows` where rows is a list OF lists) is a clean error. Both are
+# recorded in that ticket; widen this file when it lands.
 
 xs = [1, 2, 3]
 for x in xs:
