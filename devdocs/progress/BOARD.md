@@ -26,7 +26,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (137)
+## backlog (138)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -48,6 +48,7 @@ _none_
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | decide-nilpy-and-or-return-operand-or-bool | U | 40 | decide | decide: should NilPy's `and` / `or` return an OPERAND, as Python does? | — |
 | decide-nilpy-bigint-vs-64bit-cells | U | 40 | decide | decide: NilPy integer semantics — arbitrary precision vs 64-bit (uforth needs one) | — |
+| decide-nilpy-closure-model | U | 70 | decide | DECIDE: which closure model for NilPy? | — |
 | decide-nilpy-parallel-capture-semantics | A | 45 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-rtti-none-semantics | A | 40 | decide | decide: `--rtti=none` semantics — what happens to the FUNCTIONAL parts of the RTTI blob? | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
@@ -2550,6 +2551,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [U] decide-nilpy-closure-model
 - [p 70] [N] feature-nilpy-nested-def-as-value
 - [p 70] [T] regression-cascade-3d46e52fc733
 - [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
