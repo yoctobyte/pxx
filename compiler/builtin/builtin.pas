@@ -422,6 +422,7 @@ end;
 function VariantToInt64(const v: Variant): Int64;
 var
   p: PVariantRecord;
+  vcode: Integer;
 begin
   p := @v;
   if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) or (p^.VType = 5) then
@@ -430,12 +431,21 @@ begin
     Result := Trunc(PDouble(@p^.Payload)^)
   else if p^.VType = 0 then
     Result := 0
+  else if p^.VType = 6 then
+  begin
+    { VT_STRING. FPC PARSES it -- measured, not assumed: `i := v` with v='42'
+      yields 42 and v='abc' raises EVariantError. NilPy does NOT come through
+      here (it has pylib's pyvar_to_int, which raises a Python TypeError for
+      any string); this helper is the Pascal path and follows Pascal. }
+    Val(PAnsiString(@p^.Payload)^, Result, vcode);
+    if vcode <> 0 then
+    begin
+      writeln('Runtime error: EVariantError, cannot convert string to integer');
+      Halt(219);
+    end;
+  end
   else
   begin
-    { VT_STRING (6) or VT_OBJECT (7). CPython raises TypeError here; parsing a
-      string's text would turn a type error into a plausible number, which is
-      exactly the failure mode this whole fix exists to remove. Name the tag
-      actually found -- an earlier version said "string" for both. }
     writeln('Runtime error: variant holds ', VariantTagName(p^.VType),
             ', an integer was required');
     Halt(219);
@@ -445,6 +455,7 @@ end;
 function VariantToDouble(const v: Variant): Double;
 var
   p: PVariantRecord;
+  vcode: Integer;
 begin
   p := @v;
   if p^.VType = 3 then
@@ -453,6 +464,16 @@ begin
     Result := p^.Payload
   else if p^.VType = 0 then
     Result := 0.0
+  else if p^.VType = 6 then
+  begin
+    { FPC coerces a numeric string here too (v='2.5' -> 2.50, measured). }
+    ValFloat(PAnsiString(@p^.Payload)^, Result, vcode);
+    if vcode <> 0 then
+    begin
+      writeln('Runtime error: EVariantError, cannot convert string to float');
+      Halt(219);
+    end;
+  end
   else
   begin
     writeln('Runtime error: variant holds ', VariantTagName(p^.VType),
@@ -465,14 +486,22 @@ function VariantToBool(const v: Variant): Boolean;
 var
   p: PVariantRecord;
 begin
-  { Python truthiness: 0/0.0/''/None are false, everything else true. }
+  { PASCAL rules. This once carried Python's truthiness while NilPy was still
+    routed through it; NilPy now has pylib's pyvar_to_bool. FPC RAISES for a
+    string here (`b := v` with v='' is EVariantError, measured) rather than
+    treating '' as false, and 0.0 is False. }
   p := @v;
   if p^.VType = 3 then
     Result := PDouble(@p^.Payload)^ <> 0.0
-  else if p^.VType = 6 then
-    Result := PAnsiString(@p^.Payload)^ <> ''
   else if p^.VType = 0 then
     Result := False
+  else if (p^.VType = 6) or (p^.VType = 7) then
+  begin
+    writeln('Runtime error: EVariantError, cannot convert ',
+            VariantTagName(p^.VType), ' to boolean');
+    Halt(219);
+    Result := False;
+  end
   else
     Result := p^.Payload <> 0;
 end;
