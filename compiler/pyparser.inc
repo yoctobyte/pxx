@@ -4274,6 +4274,14 @@ begin
     begin
       PyParseBoolExpr;
       ASTLeft[node] := CurASTNode;
+      { `raise X from e` — PEP 3134 exception chaining. The cause is metadata
+        (it sets __cause__ for the traceback); the raise itself is unchanged, so
+        `from EXPR` is consumed and dropped. }
+      if PyIsIdent('from') then
+      begin
+        Next;
+        PyParseBoolExpr;
+      end;
     end;
     Result := node;
     Exit;

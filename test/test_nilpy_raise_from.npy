@@ -1,0 +1,12 @@
+def f(n: int) -> int:
+    try:
+        if n < 0:
+            raise ValueError("neg")
+        return n
+    except ValueError as e:
+        raise RuntimeError("wrapped") from e
+try:
+    print(f(5))
+    print(f(-1))
+except RuntimeError:
+    print("caught wrapped")
