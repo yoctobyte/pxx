@@ -83,14 +83,38 @@ def pid_alive(pid, needle):
         return False
 
 
+def is_daemon(pid, clone):
+    """Is `pid` REALLY the watcher daemon for `clone`?
+
+    Parse argv rather than substring-matching /proc/<pid>/cmdline. A plain
+    `"twatch.py" in cmdline` test matches anything that merely MENTIONS the
+    daemon -- a `tail -f`/`grep` on its log, an editor, a monitoring loop that
+    greps for it. 2026-07-20 exactly that happened: a health-check loop whose
+    own command line contained `twatch.py --clone` was mistaken for the
+    daemon, so `trackt restart` printed "daemon already running" and never
+    started it. The watcher stayed down and status kept reporting RUNNING --
+    a silent outage, which is the one thing this check must never cause.
+
+    The real daemon is `<python> <...>/twatch.py --clone <clone>`, so require
+    argv[1] to BE the script and the clone to be a real argument.
+    """
+    try:
+        with open("/proc/%d/cmdline" % pid, "rb") as f:
+            argv = [a for a in f.read().decode(errors="replace").split("\0") if a]
+    except OSError:
+        return False
+    if len(argv) < 2 or "python" not in os.path.basename(argv[0]):
+        return False
+    return argv[1].endswith("twatch.py") and clone in argv
+
+
 def daemon_pid(clone):
     w = read_json(os.path.join(clone, twatch.WATCH_REL))
     pid = w.get("pid")
-    if pid and w.get("phase") != "stopped" and pid_alive(pid, "twatch.py"):
+    if pid and w.get("phase") != "stopped" and is_daemon(pid, clone):
         return pid, w
     for p in os.listdir("/proc"):     # daemon older than watch.json support
-        if p.isdigit() and pid_alive(int(p), "twatch.py") \
-                and pid_alive(int(p), clone):
+        if p.isdigit() and is_daemon(int(p), clone):
             return int(p), w
     return None, w
 
