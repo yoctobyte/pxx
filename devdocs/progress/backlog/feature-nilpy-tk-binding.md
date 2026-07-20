@@ -52,3 +52,22 @@ construction: Tk does all widget/layout/event work.
 
 - Not full tkinter parity — the common subset, thin.
 - Not a C-callback event system — the poll model is the deliberate thin choice.
+
+## Log
+- 2026-07-20 (Track B) — **Item 3 (gate smoke) landed.** `examples/tk/hello.npy`
+  now runs under `xvfb-run` as part of `make lib-test`, asserting its exact
+  output. It SKIPs cleanly when `xvfb-run` or the system `libtk8.6` is missing —
+  an absent GUI stack on a build host is not a code defect, and reddening the
+  Track B gate over one would just train people to ignore it.
+
+  It cannot hang the suite: the `.npy` closes itself via `after 400 {destroy .}`,
+  so termination does not depend on anything the harness does.
+
+  Wired into `lib-test` rather than `test-nilpy` on purpose — `test-nilpy` builds
+  with `$(COMPILER)` (a fresh compiler), and Track B builds with
+  `$(PXX_STABLE)` and never rebuilds. Same coverage, correct lane.
+
+  Items 1 (tkinter-shaped convenience surface) and 2 (`ttk` themed widgets)
+  remain open; both are additive wrapper work on top of `TkEval` with no
+  blocker.
+

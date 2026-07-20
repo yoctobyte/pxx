@@ -5427,6 +5427,17 @@ lib-test: pxx-stable-check
 	# host has no AF_INET6 — a broken layout is the target, not the CI netstack)
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_ipv6.pas /tmp/lib_ipv6
 	/tmp/lib_ipv6 | tail -n 1 | grep -qE '^IPV6 (OK|SKIP)'
+	# NilPy -> Tcl/Tk embed, headless. Needs xvfb-run + the system libtcl/libtk
+	# 8.6, so it SKIPS cleanly when either is missing rather than reddening a gate
+	# over an absent GUI stack. The .npy auto-closes via `after`, so it terminates
+	# on its own — nothing here can hang the suite waiting on a window.
+	@if command -v xvfb-run >/dev/null 2>&1 && [ -e /usr/lib/$$(uname -m)-linux-gnu/libtk8.6.so.0 ]; then \
+	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/hello.npy /tmp/lib_tk_hello >/dev/null && \
+	  test "$$(xvfb-run -a /tmp/lib_tk_hello)" = "ok: nilpy tk window shown and closed" && \
+	  echo "  tk-nilpy: ok"; \
+	else \
+	  echo "  tk-nilpy: SKIP (no xvfb-run or no libtk8.6)"; \
+	fi
 	# MulHiU64: intrinsic on CPU64, Pascal fallback elsewhere. The sweep
 	# fingerprint is identical on every target iff the two agree bit for bit.
 	$(PXX_STABLE) test/lib_wideint.pas /tmp/lib_wideint
@@ -5685,7 +5696,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_paths.pas /tmp/lib_paths
 	test "$$(/tmp/lib_paths | grep -c '=ok')" = "14"
 	test "$$(/tmp/lib_paths | grep -c 'FAIL')" = "0"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
