@@ -10674,6 +10674,16 @@ begin
       ASTTk[node] := Ord(Procs[opci].RetType)
     else if (ASTTk[left] = Ord(tyVariant)) or (ASTTk[right] = Ord(tyVariant)) then
       ASTTk[node] := Ord(tyVariant)
+    { Python's `s * n` REPEATS the text (either operand order), and the IR
+      lowers it to pystr_repeat — but the node had been tagged with the
+      arithmetic result here, so a local taking its value was typed Integer and
+      `len(s)` found no overload
+      (bug-a-nilpy-str-repeat-local-infers-as-int). Tag it at parse time, where
+      the inference reads it. }
+    else if PyExprMode and (op = tkStar) and
+            (PyIsStrBaseTk(IntToTypeKind(ASTTk[left])) <>
+             PyIsStrBaseTk(IntToTypeKind(ASTTk[right]))) then
+      ASTTk[node] := Ord(tyAnsiString)
     else if (op = tkAnd) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
       ASTTk[node] := Ord(tyBoolean)
     else if (ASTTk[left] = Ord(tySet)) or (ASTTk[right] = Ord(tySet)) then

@@ -1,0 +1,17 @@
+# `s = "x" * 300` typed the LOCAL as Integer: the repeat is lowered to
+# pystr_repeat in the IR, but the binop node was tagged with the arithmetic
+# result at parse time, which is where local inference reads it — so `len(s)`
+# then found no matching overload
+# (bug-a-nilpy-str-repeat-local-infers-as-int). Printing the repeat directly
+# was always correct, which is what hid it.
+# Output must match CPython running this same file.
+
+s = "x" * 300
+print(len(s))
+t = 3 * "ab"
+print(t, len(t))
+print("q" * 2)
+u = "z" * 2 + "y"
+print(u)
+n = 3 * 4
+print(n)
