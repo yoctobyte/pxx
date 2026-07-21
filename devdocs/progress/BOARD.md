@@ -27,7 +27,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (138)
+## backlog (139)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -95,6 +95,7 @@ _none_
 | feature-n-nilpy-ast-typing-module-scope | N | 55 | feature | NilPy: type MODULE locals from the AST too | — |
 | feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
 | feature-networking | B | 20 | feature | Networking runtime | — |
+| feature-nilpy-bound-method-value | N | 65 | feature | NilPy: a BOUND METHOD as a value (`self.push` carries self) | — |
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-closure-default-and-remaining | N | 45 | feature | NilPy: remaining uforth walls past ~88% (closure-captured defaults, then exec) | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
@@ -2606,6 +2607,7 @@ _none_
 - [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
 - [p 65] [P] bug-open-array-param-length-high-zero
 - [p 65] [A] feature-a-typeref-handle
+- [p 65] [N] feature-nilpy-bound-method-value
 - [p 60] [A] bug-a-qplus-misses-32bit-overflow
 - [p 60] [A] bug-parallel-for-captured-dynarray-var-arg-segfault
 - [p 60] [A] bug-test-core-oversized-job-6gb-flaky
