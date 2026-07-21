@@ -92,11 +92,36 @@ type
   PSingle  = ^Single;
   PVariant = ^Variant;
 
-  { Trampoline thunk shapes the M1 host methods use (Self = leading Pointer). }
-  TPushFn  = procedure(self: Pointer; const v: Variant);
-  TPopFn   = function(self: Pointer): Variant;
+  { Trampoline thunk shapes (Self = leading Pointer). fpush/fpop carry a Double;
+    everything else uses the all-Variant family below, which covers a
+    NilPy-compiled host (every method param/return is a Variant) and the typed
+    push/pop shapes alike — a Variant arg is passed by address, a Variant result
+    via the hidden destination, both supplied by pxx's own codegen. }
   TFpushFn = procedure(self: Pointer; v: Double);
   TFpopFn  = function(self: Pointer): Double;
+
+  { Variant-return, N Variant args (N = 0..5). }
+  TVFn0 = function(self: Pointer): Variant;
+  TVFn1 = function(self: Pointer; const a: Variant): Variant;
+  TVFn2 = function(self: Pointer; const a, b: Variant): Variant;
+  TVFn3 = function(self: Pointer; const a, b, c: Variant): Variant;
+  TVFn4 = function(self: Pointer; const a, b, c, d: Variant): Variant;
+  TVFn5 = function(self: Pointer; const a, b, c, d, e: Variant): Variant;
+  { void (procedure), N Variant args. }
+  TVPr0 = procedure(self: Pointer);
+  TVPr1 = procedure(self: Pointer; const a: Variant);
+  TVPr2 = procedure(self: Pointer; const a, b: Variant);
+  TVPr3 = procedure(self: Pointer; const a, b, c: Variant);
+  TVPr4 = procedure(self: Pointer; const a, b, c, d: Variant);
+  TVPr5 = procedure(self: Pointer; const a, b, c, d, e: Variant);
+  { AnsiString-return (e.g. next_token_strict), N Variant args (0..2). }
+  TSFn0 = function(self: Pointer): AnsiString;
+  TSFn1 = function(self: Pointer; const a: Variant): AnsiString;
+  TSFn2 = function(self: Pointer; const a, b: Variant): AnsiString;
+  { Int64-return, N Variant args (0..2). }
+  TIFn0 = function(self: Pointer): Int64;
+  TIFn1 = function(self: Pointer; const a: Variant): Int64;
+  TIFn2 = function(self: Pointer; const a, b: Variant): Int64;
 
 { ---- variant makers (build via pointer writes -> safe as functions) ---- }
 
@@ -167,56 +192,127 @@ procedure PyHostCall(vmobj: Pointer; const name: AnsiString;
 var
   cls: PClassRTTI;
   mi:  PMethInfo;
-  pushfn: TPushFn; popfn: TPopFn; fpushfn: TFpushFn; fpopfn: TFpopFn;
-  a0: Variant;
+  fpushfn: TFpushFn; fpopfn: TFpopFn;
+  n, nargs: Integer;    { n = user args (Arity - 1) }
+  a0, a1, a2, a3, a4: Variant;
+  pk: PInt64;
+  allVariant: Boolean;
+  i: Integer;
+  rk: Int64;
+  code: Pointer;
+  vf0: TVFn0; vf1: TVFn1; vf2: TVFn2; vf3: TVFn3; vf4: TVFn4; vf5: TVFn5;
+  vp0: TVPr0; vp1: TVPr1; vp2: TVPr2; vp3: TVPr3; vp4: TVPr4; vp5: TVPr5;
+  sf0: TSFn0; sf1: TSFn1; sf2: TSFn2;
+  if0: TIFn0; if1: TIFn1; if2: TIFn2;
 begin
   cls := GetInstanceRTTI(vmobj);
-  if cls = nil then
-  begin
-    writeln('pyeval: no RTTI on vm for host call ', name);
-    Halt(1);
-  end;
+  if cls = nil then begin writeln('pyeval: no RTTI on vm for host call ', name); Halt(1); end;
   mi := PyFindMethCI(cls, name);
-  if mi = nil then
-  begin
-    writeln('pyeval: vm has no method ', name);
-    Halt(1);
-  end;
+  if mi = nil then begin writeln('pyeval: vm has no method ', name); Halt(1); end;
 
-  { M1 dispatch: the four stack shapes, keyed on (RetKind, Arity, float-ness).
-    Arity counts Self, so a 1-arg method has Arity 2. }
-  if (mi^.RetKind = 0) and (mi^.Arity = 2) then
+  n := Integer(mi^.Arity) - 1;   { drop Self }
+  nargs := args.count;
+  pk := PInt64(mi^.ParamKinds);
+  rk := mi^.RetKind;
+
+  { --- Double param/return shapes (fpush/fpop): the one non-Variant family --- }
+  if (rk = 0) and (n = 1) and (pk <> nil) and (pk[1] = TK_DOUBLE) then
   begin
-    { procedure(const Variant) vs procedure(Double) — float param? }
-    a0 := args.at(0);
-    if PInt64(mi^.ParamKinds)[1] = TK_DOUBLE then
-    begin
-      fpushfn := TFpushFn(mi^.Code);
-      fpushfn(vmobj, pyvar_to_float(a0));
-    end
-    else
-    begin
-      pushfn := TPushFn(mi^.Code);
-      pushfn(vmobj, a0);
-    end;
+    fpushfn := TFpushFn(mi^.Code);
+    fpushfn(vmobj, pyvar_to_float(args.at(0)));
     res := MakeNone;
-  end
-  else if (mi^.RetKind = TK_VARIANT) and (mi^.Arity = 1) then
-  begin
-    popfn := TPopFn(mi^.Code);
-    res := popfn(vmobj);
-  end
-  else if (mi^.RetKind = TK_DOUBLE) and (mi^.Arity = 1) then
+    Exit;
+  end;
+  if (rk = TK_DOUBLE) and (n = 0) then
   begin
     fpopfn := TFpopFn(mi^.Code);
     res := MakeFloat(fpopfn(vmobj));
-  end
-  else
+    Exit;
+  end;
+
+  { --- general family: every param is a Variant (true for a NilPy-compiled host,
+        and for the typed push/pop shapes). Pass args by value (pxx passes each
+        `const Variant` by address); box the result per RetKind. --- }
+  allVariant := True;
+  if pk <> nil then
+    for i := 1 to n do
+      if pk[i] <> TK_VARIANT then allVariant := False;
+  if not allVariant then
   begin
-    writeln('pyeval: unsupported host-call shape for ', name,
-            ' (RetKind=', mi^.RetKind, ' Arity=', mi^.Arity, ')');
+    writeln('pyeval: host method ', name, ' has a non-Variant, non-Double param shape');
     Halt(1);
   end;
+  if nargs < n then
+  begin writeln('pyeval: too few args to ', name, ' (need ', n, ', got ', nargs, ')'); Halt(1); end;
+
+  if n >= 1 then a0 := args.at(0);
+  if n >= 2 then a1 := args.at(1);
+  if n >= 3 then a2 := args.at(2);
+  if n >= 4 then a3 := args.at(3);
+  if n >= 5 then a4 := args.at(4);
+  code := mi^.Code;
+
+  { Variant return }
+  if rk = TK_VARIANT then
+  begin
+    case n of
+      0: begin vf0 := TVFn0(code); res := vf0(vmobj); end;
+      1: begin vf1 := TVFn1(code); res := vf1(vmobj, a0); end;
+      2: begin vf2 := TVFn2(code); res := vf2(vmobj, a0, a1); end;
+      3: begin vf3 := TVFn3(code); res := vf3(vmobj, a0, a1, a2); end;
+      4: begin vf4 := TVFn4(code); res := vf4(vmobj, a0, a1, a2, a3); end;
+      5: begin vf5 := TVFn5(code); res := vf5(vmobj, a0, a1, a2, a3, a4); end;
+    else
+      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+    end;
+    Exit;
+  end;
+
+  { void return }
+  if rk = 0 then
+  begin
+    case n of
+      0: begin vp0 := TVPr0(code); vp0(vmobj); end;
+      1: begin vp1 := TVPr1(code); vp1(vmobj, a0); end;
+      2: begin vp2 := TVPr2(code); vp2(vmobj, a0, a1); end;
+      3: begin vp3 := TVPr3(code); vp3(vmobj, a0, a1, a2); end;
+      4: begin vp4 := TVPr4(code); vp4(vmobj, a0, a1, a2, a3); end;
+      5: begin vp5 := TVPr5(code); vp5(vmobj, a0, a1, a2, a3, a4); end;
+    else
+      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+    end;
+    res := MakeNone;
+    Exit;
+  end;
+
+  { AnsiString return (next_token_strict, next_token, …) — arity 0..2 }
+  if rk = 23 then
+  begin
+    case n of
+      0: begin sf0 := TSFn0(code); res := MakeStr(sf0(vmobj)); end;
+      1: begin sf1 := TSFn1(code); res := MakeStr(sf1(vmobj, a0)); end;
+      2: begin sf2 := TSFn2(code); res := MakeStr(sf2(vmobj, a0, a1)); end;
+    else
+      begin writeln('pyeval: string-return arity ', n, ' unsupported for ', name); Halt(1); end;
+    end;
+    Exit;
+  end;
+
+  { Int64 / Integer / Boolean / Char return — arity 0..2 }
+  if (rk = 13) or (rk = 1) or (rk = 2) or (rk = 3) then
+  begin
+    case n of
+      0: begin if0 := TIFn0(code); res := pyvar_of_int(if0(vmobj)); end;
+      1: begin if1 := TIFn1(code); res := pyvar_of_int(if1(vmobj, a0)); end;
+      2: begin if2 := TIFn2(code); res := pyvar_of_int(if2(vmobj, a0, a1)); end;
+    else
+      begin writeln('pyeval: int-return arity ', n, ' unsupported for ', name); Halt(1); end;
+    end;
+    Exit;
+  end;
+
+  writeln('pyeval: unsupported host-call return kind ', rk, ' for ', name);
+  Halt(1);
 end;
 
 { ---- field (attribute) reflection: M2 ---- }

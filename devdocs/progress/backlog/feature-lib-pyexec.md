@@ -309,3 +309,19 @@ a bounded set; the ticket's "generic native-call trampoline" (per-target asm
 thunk marshalling N variant args) is the clean general solution — the one genuinely
 novel runtime piece left. Also still open: slices (`[a:b]`), del, isinstance,
 f-strings, int.from_bytes, dict-literal, and the bignum tail.
+
+## 2026-07-21 — generic trampoline generalized (arbitrary vm-method arities)
+
+PyHostCall now dispatches ANY host method whose params are all Variant (the
+NilPy-compiled host case) plus the fpush/fpop Double shapes — no hand asm, just
+enumerated typed proc-ptr casts by arity (0..5) and return kind
+(Variant/void/AnsiString/Int64). Unlocks vm.define_word(name, body),
+vm.next_token_strict() -> str, vm.next_token(), and the rest of the method census.
+A Variant arg rides by address, the result via hidden-dest — pxx's own ABI.
+
+test/test_pyeval_trampoline_shapes.pas (2/3-arg Variant methods, string-return,
+void multi-arg) — ALL PASS. All pyeval tests + self-host byte-identical green.
+
+Remaining corpus gaps now: f-strings (8), dict/set literals, del, isinstance,
+int.from_bytes, and the bignum tail (13 double-cell MATH). None need new
+architecture — all mechanical grammar/builtin additions.
