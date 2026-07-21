@@ -41,3 +41,20 @@ these ~13 blocks RUN (since `def`/compound landed) but return WRONG values.
 self-contained corner; the interpreter is correct everywhere else. Full bignum
 (A) is a large Track A investment better justified by a broader need than these
 ~13 words. Flagging for the user to rank.
+
+## RESOLVED 2026-07-21 — B′ implemented (user agreed)
+
+User confirmed the fork and the reasoning that bignum here is a TRANSIENT
+intermediate (never on the Forth stack — the double-cell words mask/split back to
+two 64-bit cells before push), so doing it well is worth it and overhead is a
+non-issue (the tree-walker dominates; promo engages only on overflow).
+
+Implemented B′ (commit on master): pyeval integers auto-promote to promoint.pas
+on Int64 overflow and demote back when they fit; `& (2^k-1)` / `>>k` / `<<k`
+reduce to mod/div/mul by powers of two; big literals tokenize to promo; push()
+coerces a promo back to a 64-bit cell. General bignum bitwise-and with a
+non-power-of-2 mask is unsupported (not used by the corpus) and errors clearly.
+Hand-checked: 10^10*10^10 = 10^20 -> hi=5, lo=7766279631452241920. Done.
+
+## Log
+- 2026-07-21 — resolved, commit 0e05946d.

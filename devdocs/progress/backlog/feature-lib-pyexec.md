@@ -343,3 +343,14 @@ correctly) but auto-using pyeval regresses an unrelated str-index test with a
 runtime segfault — parked in [[feature-nilpy-wire-pyeval-exec]] for root-cause.
 The `str`->`slit` rename that unblocked the *compile* is on master.
 Bignum strategy is a Track U fork: [[decide-pyeval-bignum-strategy]].
+
+## 2026-07-21 — bignum landed (double-cell MATH now correct)
+
+The deferred bignum tail is done: pyeval integers auto-promote to promoint.pas's
+arbitrary precision on overflow and demote back when they fit (the variant
+changes shape). The ~13 double-cell MATH.UFO words (UM*, M*/, D+, D<, …) that RAN
+but returned WRONG values now compute correct 128-bit intermediates and split
+them back to two 64-bit cells. [[decide-pyeval-bignum-strategy]] resolved (B′).
+So the interpreter is now correct across the whole censused corpus, modulo the
+few import/try blocks. Only the exec()-into-NilPy WIRING
+([[feature-nilpy-wire-pyeval-exec]]) remains before uforth actually runs on it.
