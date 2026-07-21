@@ -3482,6 +3482,17 @@ begin
   end;
   Expect(tkRParen, ')');
 
+  { Overload selection by the ACTUAL argument count. The candidate scan above
+    picked the first method named `mname`; a class like TPyDict declares `get(k)`
+    AND `get(k, d)` as overloads, so a 2-arg `.get(key, default)` on a variant
+    receiver would otherwise bind to the 1-arg body and pass a stray argument
+    (crash). Re-resolve within the chosen class by arity now that `i` is known. }
+  if hitCi >= 0 then
+  begin
+    mmi := FindUMethArity(hitCi, mname, i);
+    if mmi >= 0 then begin hitMmi := mmi; hitPi := UMthProc_[mmi]; end;
+  end;
+
   mpi := hitPi;
   if UMthVirSlot[hitMmi] >= 0 then
   begin
