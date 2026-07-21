@@ -148,6 +148,14 @@ begin
   r^.VType := 0; r^.Payload := 0;
 end;
 
+{ box a class/object pointer as a VT_OBJECT variant }
+function PyBoxObj(p: Pointer): Variant;
+var r: PPyRec;
+begin
+  r := PPyRec(@Result);
+  r^.VType := 7; r^.Payload := Int64(p);
+end;
+
 { ---- host-call trampoline ---- }
 
 { Case-insensitive method lookup over the class hierarchy. GetMethInfoByName is
@@ -1449,6 +1457,26 @@ begin
   if name = 'isinstance' then
   begin
     res := pyvar_of_bool(PyIsInstance(args.at(0), args.at(1))); Exit;
+  end;
+  if name = 'repr' then
+  begin
+    if nargs <> 1 then EvalError('repr() expects 1 arg');
+    res := MakeStr(pyvar_repr(args.at(0))); Exit;
+  end;
+  if (name = 'bytearray') or (name = 'bytes') then
+  begin
+    { bytearray() / bytearray(n) / bytes(existing) }
+    if nargs = 0 then
+      res := PyBoxObj(Pointer(bytearray))
+    else
+    begin
+      cand := args.at(0);
+      if PPyRec(@cand)^.VType = 7 then
+        res := PyBoxObj(Pointer(bytes(TPyBytes(pyvarobj(cand)))))
+      else
+        res := PyBoxObj(Pointer(bytearray(pyvar_to_int(cand))));
+    end;
+    Exit;
   end;
   if name = 'hasattr' then
   begin
