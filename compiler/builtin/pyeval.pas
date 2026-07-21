@@ -1548,7 +1548,27 @@ begin
     end;
   end
   else if IsOp('(') then
-  begin Advance; ParseExpr(res); ExpectOp(')'); end
+  begin
+    { `(expr)` is a grouping; `(a, b, ...)` is a tuple. A tuple is backed by a
+      TPyList (same VT_OBJECT representation), so membership (`x in (d, 10)`) and
+      iteration work — uforth's WORD uses `mem[..] not in (d, 10)`. }
+    Advance;
+    ParseExpr(res);
+    if IsOp(',') then
+    begin
+      li := TPyList.Create;
+      li.append(res);
+      while IsOp(',') do
+      begin
+        Advance;
+        if IsOp(')') then Break;   { trailing comma }
+        ParseExpr(elem);
+        li.append(elem);
+      end;
+      PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(li));
+    end;
+    ExpectOp(')');
+  end
   else
   begin EvalError('unexpected token in expression: "' + TkText[Cur] + '"'); res := MakeNone; end;
 
