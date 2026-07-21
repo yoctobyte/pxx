@@ -690,7 +690,7 @@ procedure Tokenize(const s: AnsiString);
 var
   c, c2: Char;
   start: Integer;
-  ident, op, str: AnsiString;
+  ident, op, slit: AnsiString;
   iv: Int64;
   fv, scale: Double;
   isFloat: Boolean;
@@ -815,31 +815,31 @@ begin
     begin
       c2 := c;
       Pos := Pos + 1;
-      str := '';
+      slit := '';
       while (Pos <= SLen) and (Src[Pos] <> c2) do
       begin
         if (Src[Pos] = '\') and (Pos + 1 <= SLen) then
         begin
           Pos := Pos + 1;
           case Src[Pos] of
-            'n': str := str + #10;
-            't': str := str + #9;
-            'r': str := str + #13;
-            '\': str := str + '\';
-            '''': str := str + '''';
-            '"': str := str + '"';
-            '0': str := str + #0;
+            'n': slit := slit + #10;
+            't': slit := slit + #9;
+            'r': slit := slit + #13;
+            '\': slit := slit + '\';
+            '''': slit := slit + '''';
+            '"': slit := slit + '"';
+            '0': slit := slit + #0;
           else
-            str := str + Src[Pos];
+            slit := slit + Src[Pos];
           end;
         end
         else
-          str := str + Src[Pos];
+          slit := slit + Src[Pos];
         Pos := Pos + 1;
       end;
       if Pos > SLen then TokError('unterminated string');
       Pos := Pos + 1;   { closing quote }
-      AddTok(PK_STR, str, 0, 0);
+      AddTok(PK_STR, slit, 0, 0);
       continue;
     end;
     { operators / punctuation — longest match first }
