@@ -66,6 +66,31 @@ allocator / stack-slot reuse leaves garbage (0x200000000) in it; -O0 happens to
 leave zero. So the fix is real prologue zero-init of that temp, not an -O2
 codegen bug per se. Default builds are -O2, so this still blocks.
 
+## Refined findings (2026-07-21, session 2)
+
+- The bug is the SAME at -O0 and -O2, it just manifests differently: at -O2 the
+  release faults (SIGSEGV); at -O0 the corrupted value makes `tokenize` return an
+  EMPTY token list, so the interpreter dispatches nothing and `1 2 + .` produces
+  no output. So uforth "runs clean" at -O0 but does nothing — the SAME root
+  blocks native-word execution.
+- The release is emitted by the CODEGEN EPILOGUE for managed-typed locals in
+  scope — it is NOT a named IR op, so `--dump-ir` does not show it (confirmed:
+  the tokenize IR block, ~1060 ops at dump line 29463, has NO release op).
+- tokenize's IR block has many managed-string locals: `cur_word`, `content`,
+  `prefix`, `prev_tok`, `bs`, `line`, `tokens` (+ `i/j/k/L/ch/self`). A local
+  assigned only inside the char loop is garbage on the early-return path and gets
+  released at epilogue — matches "early return still crashes". `EmitManagedLocals
+  ZeroInit` SHOULD cover declared tyAnsiString locals, so the offender is either
+  (a) a local `PyCollectLocalsAST` typed as something other than tyAnsiString but
+  used as one, or (b) a hidden temp created during CompileAST (after the prologue
+  zero-init pass) lacking `SymIsHiddenArgTemp`. Audited all `AllocVar('',
+  tyAnsiString)` sites in ir.inc — only the case-of-string selector (7417) missed
+  the flag and is now FIXED (separate commit, byte-identical); it was not
+  tokenize's (tokenize has no case-of-string), so the offender is still open.
+- Fixed en route (real, committed): bytes slice-assign from a variant rhs
+  (`mem[a:b] = snapshot["blk"]`) — that unblocked `_restore_input_state`, which
+  is why -O0 now reaches "runs clean".
+
 ## Next steps
 
 - Reduce uforth.py's tokenize with creduce (oracle = "compiled binary SIGSEGVs
