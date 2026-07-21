@@ -1,0 +1,13 @@
+def go() -> int:
+    mem = bytearray(64)
+    mem[0] = 42
+    mem[1] = 7
+    snap = {}
+    snap["blk"] = bytes(mem[0:8])
+    mem[0] = 0
+    mem[1] = 0
+    mem[16:24] = snap["blk"]
+    print(int(mem[16]))
+    print(int(mem[17]))
+    return 0
+go()

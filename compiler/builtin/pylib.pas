@@ -287,6 +287,7 @@ procedure pylist_setslice(l: TPyList; lo, hi: Integer; src: TPyList);   { l[lo:h
   rejected loudly rather than silently splicing: a quiet resize would move
   every address above the write and corrupt the data space. }
 procedure pybytes_setslice(b: TPyBytes; lo, hi: Integer; src: TPyBytes);
+procedure pybytes_setslice_v(b: TPyBytes; lo, hi: Integer; const src: Variant);   { RHS is a variant holding bytes }
 { `v.to_bytes(n, "little", signed=s)` and `int.from_bytes(b, "little",
   signed=s)`. Recognised by the frontend as INTRINSICS with a fixed argument
   shape rather than real methods, because their Python spelling carries a
@@ -2182,6 +2183,22 @@ begin
     dp := PByte(NativeInt(b.FData) + lo + k);
     dp^ := sp^;
   end;
+end;
+
+{ `b[lo:hi] = v` where the RHS is a VARIANT holding bytes — e.g. a value fetched
+  from a dict (`mem[a:b] = snapshot["blk"]`). Unbox to the TPyBytes it holds;
+  without this the variant's 16 bytes were read as a TPyBytes header and the
+  length check saw garbage ("length mismatch (expected 8, got <garbage>)"). }
+procedure pybytes_setslice_v(b: TPyBytes; lo, hi: Integer; const src: Variant);
+var o: TObject;
+begin
+  if pyvartag(src) = 7 then
+  begin
+    o := TObject(pyvarobj(src));
+    if o is TPyBytes then begin pybytes_setslice(b, lo, hi, TPyBytes(o)); Exit; end;
+  end;
+  WriteLn('TypeError: byte slice assignment requires bytes');
+  Halt(1);
 end;
 
 { Little-endian, two's complement — the same layout the machine already uses,

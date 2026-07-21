@@ -2616,6 +2616,10 @@ var procIdx, a3, a: Integer;
 begin
   if ASTIVal[sliceNode] = FindProc('pylist_slice') then
     procIdx := FindProc('pylist_setslice')
+  else if IntToTypeKind(ASTTk[rhsNode]) = tyVariant then
+    { `bytes[a:b] = <variant>` (e.g. a dict-fetched bytes value) — unbox at run
+      time; a raw variant handed to pybytes_setslice is misread as a TPyBytes. }
+    procIdx := FindProc('pybytes_setslice_v')
   else
     procIdx := FindProc('pybytes_setslice');
   if procIdx < 0 then Error('Nil Python: pylib (setslice) not loaded');
