@@ -446,3 +446,26 @@ did not even appear to be invoked in the last trace — needs confirming whether
 interpret_file's `finally` runs restore under NilPy. Fixing this loads the ENTIRE
 stdlib in one shot → unblocks +!/VARIABLE/>IN/memory words and most of the suite.
 This is the single highest-leverage next hunt.
+
+## 2026-07-21 (session 5c): STD multi-file INCLUDE FIXED — 5 files load, next=dynamic attrs
+
+**FIXED (commit 58d9a422): STD.UFO now loads CORE→IO→FLOAT→DEBUG→VARIABLE** (was
+ONLY CORE). Root: storing a VARIANT into a tyClass slot didn't unbox — the raw
+16-byte variant overwrote the 8-byte class pointer. interpret_file snapshots the
+input state into a dict and restores `self.current_source = snap["current_source"]`
+(a class instance) in a nested INCLUDE's finally; the round-trip lost object
+identity, so after CORE's INCLUDE the outer STD source read `is not before_source`
+and the line-loop broke. Fix: PyUnboxVariantToClass wraps a variant→tyClass store
+as `pyvarobj(v)` + AN_CLASS_CAST (pyparser.inc, attribute-assign site). General
+NilPy correctness fix.
+
+**NEXT BLOCKER: pyeval lacks DYNAMIC ATTRIBUTES.** Load halts at VARIABLE.UFO:352
+`TRUE CONSTANT <TRUE>` (a top-level stmt) → runs CONSTANT→ENSURE-VARS whose PYTHON
+body is `if not hasattr(vm, 'vars'): vm.vars = {}`. `vars` is NOT a declared VM
+field — it's a pure dynamic attribute (uforth sets it lazily; also `_trans_ptr`
+etc). pyeval's attribute get/set uses GetFieldPtr (declared fields only) → "pyeval:
+object has no attribute vars". Fix = pyeval attribute access falls back to
+pydynattr_get/set/has (already in pylib for NilPy) when the name isn't a declared
+field: `vm.vars` read → pydynattr_get, `vm.vars = x` write → pydynattr_set,
+`hasattr(vm,'vars')` → declared-or-pydynattr_has. Bounded pyeval M2 addition;
+unblocks VARIABLE/CONSTANT/arrays and the rest of the stdlib load.
