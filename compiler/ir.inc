@@ -7415,6 +7415,10 @@ begin
         if caseIsStr then
         begin
           selTmpSym := AllocVar('', tyAnsiString);
+          { managed temp: prologue nil-init so a scope-exit / skipped-branch
+            release sees an empty handle, not stack garbage (the same rule every
+            other managed hidden temp follows). }
+          SymIsHiddenArgTemp[selTmpSym] := True;
           selTmpTk := Ord(tyAnsiString);
         end
         else
