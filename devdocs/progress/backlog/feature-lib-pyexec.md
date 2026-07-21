@@ -325,3 +325,21 @@ void multi-arg) — ALL PASS. All pyeval tests + self-host byte-identical green.
 Remaining corpus gaps now: f-strings (8), dict/set literals, del, isinstance,
 int.from_bytes, and the bignum tail (13 double-cell MATH). None need new
 architecture — all mechanical grammar/builtin additions.
+
+## 2026-07-21 — engine-1 FEATURE-COMPLETE (standalone); wiring parked
+
+pyeval now covers essentially the whole Python subset the corpus uses:
+expressions, all control flow (if/elif/else, while+break, for+range), nested
+functions (def/return with own scope), attribute + subscript + slice read/write,
+str/list/bytes/dict methods, the generalized host trampoline (any all-Variant
+method arity + string/int/void returns), f-strings, is/is not/in/not in,
+isinstance/del/dict+set literals, raise, hasattr, repr, bytearray/bytes,
+int.to_bytes/from_bytes + slice-assign (MEMORY store words). 14 dedicated test
+files; ~84/131 corpus RUN_OK with a full stub (rest = the deliberately-deferred
+bignum tail + a few import/try blocks). Self-host byte-identical throughout.
+
+The exec()->EvalPyStmts WIRING was proven end-to-end (a NilPy VM ran SWAP
+correctly) but auto-using pyeval regresses an unrelated str-index test with a
+runtime segfault — parked in [[feature-nilpy-wire-pyeval-exec]] for root-cause.
+The `str`->`slit` rename that unblocked the *compile* is on master.
+Bignum strategy is a Track U fork: [[decide-pyeval-bignum-strategy]].
