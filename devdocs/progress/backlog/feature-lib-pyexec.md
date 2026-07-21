@@ -102,3 +102,39 @@ both engines closely with the user. Decisions:
 Startable-today piece unchanged and still recommended first: extract the PYTHON
 block corpus + CPython oracle results into `test/`, pinning the contract.
 
+## 2026-07-21 — corpus extracted, contract pinned, milestones sized
+
+`tools/pyexec_corpus.py` extracts + categorizes the blocks from a uforth checkout
+(nothing vendored — uforth stays the user's separate tree). Measured over the
+shipped `.UFO` stdlib: **131 blocks — 60 pure-stack, 71 vm-accessing.**
+
+- host FIELDS used: `memory`(25), `vars`(12), `here`(8), `_pic_buf`(7),
+  `rstack`(7), `stack`(4), `dict`(3), `base`(3), `trace`(2), `input_pos`(2),
+  `current_token_index`(2), + singletons (`xt_table`, `current_def_name`,
+  `fstack`, `input_line`). — served by [[feature-rtti-field-reflection]] (LANDED).
+- host METHODS used: `define_word`(13), `next_token_strict`(12), `push`(7),
+  `next_token`(4), `pop`(4), + `exec_token_runtime`/`run_forth_word`/
+  `strip_string_token`/`is_string_token` (1 each). — need method reflection
+  (un-gate the RTTI method table + arity/param-kinds in MethInfo) + the generic
+  native-call trampoline.
+- language features: builtin call `len/int/str/chr/ord/abs/range`(48), bitops(39),
+  ternary(24), augassign(24), slice(19), floordiv(13), for(12), while(9),
+  f-string(8), if-stmt(7).
+
+**Milestone ladder this yields (each shippable, gated on the corpus subset):**
+
+- **M1 — 60 pure-stack blocks.** Expression + statement tree-walker over
+  variants, with only `push`/`pop`/`fpush`/`fpop` bound (bound-method value or a
+  stack bridge). NO field/method reflection. This already covers `/`, `2/`,
+  arithmetic, bitops, ternary, augassign, floordiv — i.e. the exact PYTHON-bodied
+  words that SEGFAULT today. Biggest correctness win for the least machinery;
+  build first.
+- **M2 — + field-accessing blocks.** Wire field reflection (landed) into the
+  walker: `vm.memory[i]`, `vm.here`, `vm.base`, … read/write via GetFieldPtr.
+- **M3 — + method-calling blocks.** Method reflection (un-gate + MethInfo sig) +
+  the generic native-call trampoline: `vm.define_word(...)`, `vm.next_token_strict()`.
+  Bound-method capture ([[feature-nilpy-bound-method-value]]) folds in here.
+
+Front half (tokenizer + parser -> cached AST) is shared by all three and by the
+later JIT; build it once at M1.
+
