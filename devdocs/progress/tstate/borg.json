@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-20T19:27:59Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "6182728ed011f830912f6dccaaeced1eedaf39d2",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-20T19:34:25Z",
    "fixed": [],
    "new_red": [],
@@ -426,6 +418,16 @@
    "sha": "0a2d36eaf0f91c2b5d3ce394b069533bfdd0c149",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-21T03:02:36Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_interface_mainbody_ascast_temp.pas"
+   ],
+   "sha": "b5d4783bc0d3237ca938cdcbf06c2956c854e7bd",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -1331,7 +1333,7 @@
   "test-core#src:test/test_interface_com_default.pas": "pass",
   "test-core#src:test/test_interface_com_value_param.pas": "pass",
   "test-core#src:test/test_interface_constref_cdecl_b249.pas": "pass",
-  "test-core#src:test/test_interface_mainbody_ascast_temp.pas": "pass",
+  "test-core#src:test/test_interface_mainbody_ascast_temp.pas": "fail",
   "test-core#src:test/test_interface_single_pointer_abi_b337.pas": "pass",
   "test-core#src:test/test_interfaces.pas": "pass",
   "test-core#src:test/test_interfaces_as.pas": "pass",
@@ -1969,11 +1971,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-21T02:46:59Z",
-  "sha": "0a2d36eaf0f91c2b5d3ce394b069533bfdd0c149",
-  "tier": "opt",
-  "verdict": "GREEN",
-  "wall": 155.5
+  "date": "2026-07-21T03:02:36Z",
+  "sha": "b5d4783bc0d3237ca938cdcbf06c2956c854e7bd",
+  "tier": "native",
+  "verdict": "RED",
+  "wall": 507.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -2004,6 +2006,25 @@
     "2f88c6559bc2440b73768034e6edcd8e36811c21"
    ],
    "src": "compiler/compiler.pas"
+  },
+  {
+   "bad": "b5d4783bc0d3237ca938cdcbf06c2956c854e7bd",
+   "good": "0a2d36eaf0f91c2b5d3ce394b069533bfdd0c149",
+   "job": "test-core#src:test/test_interface_mainbody_ascast_temp.pas",
+   "name": "test-core#122",
+   "opened": "2026-07-21T03:02:36Z",
+   "range": [
+    "ec9cda7db8184ca14ff16a5468c60d347a622445",
+    "3e309f84627e1fd67c52007d9655e21a37d620a8",
+    "d9f8d02f07436ac8c2519ed85899b37bdc84290f",
+    "fa4400b76a91998b1a603f8a4cdfb41774d7a667",
+    "2e7bca8da116f15f9223ef83048443e6c641ba89",
+    "a67e8d6c746fda4c96d87c195e5673779d003cf3",
+    "abb0a51a273e82ffd5a5bf6ff347e3ca6065af3e",
+    "1b4dbcf9d0f91f7b826aef49bc038fa0ea2b7004",
+    "b5d4783bc0d3237ca938cdcbf06c2956c854e7bd"
+   ],
+   "src": "test/test_interface_mainbody_ascast_temp.pas"
   }
  ]
 }
