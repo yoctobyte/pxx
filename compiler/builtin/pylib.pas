@@ -1911,7 +1911,11 @@ begin
   else
   begin
     r^.VType := 2;
-    r^.Payload := pyfloordiv_i(pa^.Payload, pb^.Payload);
+    { pyvar_to_int, not raw Payload: a non-int-tagged operand (e.g. a VT_CHAR /
+      VT_STRING digit, or an int arriving under a tag whose value is not stored
+      directly in Payload) otherwise read as 0 -> a spurious divide-by-zero.
+      Mirrors pysub_v/pyadd_v, which already coerce through pyvar_to_int. }
+    r^.Payload := pyfloordiv_i(pyvar_to_int(a), pyvar_to_int(b));
   end;
 end;
 
@@ -1931,7 +1935,9 @@ begin
   else
   begin
     r^.VType := 2;
-    r^.Payload := pyfloormod_i(pa^.Payload, pb^.Payload);
+    { pyvar_to_int, not raw Payload — see pyfloordiv_v: a non-directly-tagged
+      operand otherwise reads 0 and modulo divides by zero. }
+    r^.Payload := pyfloormod_i(pyvar_to_int(a), pyvar_to_int(b));
   end;
 end;
 

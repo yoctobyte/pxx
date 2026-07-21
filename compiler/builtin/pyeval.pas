@@ -1449,12 +1449,18 @@ begin
       if IsIntishV(a) and IsIntishV(b) then begin PyIMul(a, b, t); a := t; end else a := pymul_v(a, b); end
     else if IsOp('//') then
     begin Advance; ParseUnary(b);
-      if IsIntishV(a) and IsIntishV(b) then begin PyIFloorDiv(a, b, t); a := t; end else a := pyfloordiv_v(a, b); end
+      { skipping a not-taken/def-skip branch: names read as None(0), so a real
+        divide would be 0 div 0 -> runtime error 200. No side effect matters
+        here, so just yield None. }
+      if not Executing then a := MakeNone
+      else if IsIntishV(a) and IsIntishV(b) then begin PyIFloorDiv(a, b, t); a := t; end else a := pyfloordiv_v(a, b); end
     else if IsOp('%') then
     begin Advance; ParseUnary(b);
-      if IsIntishV(a) and IsIntishV(b) then begin PyIMod(a, b, t); a := t; end else a := pymod_v(a, b); end
+      if not Executing then a := MakeNone
+      else if IsIntishV(a) and IsIntishV(b) then begin PyIMod(a, b, t); a := t; end else a := pymod_v(a, b); end
     else begin Advance; ParseUnary(b);
-      a := MakeFloat(pyvar_to_float(a) / pyvar_to_float(b)); end;
+      if not Executing then a := MakeNone
+      else a := MakeFloat(pyvar_to_float(a) / pyvar_to_float(b)); end;
   end;
   res := a;
 end;
@@ -2448,6 +2454,23 @@ begin
   for i := 0 to savedN - 1 do begin LclNames[i] := savedNames[i]; LclVals[i] := savedVals[i]; end;
 end;
 
+{ Trampoline that runs the pending `__body__` def. exec() stores a variant
+  pointing here into the caller's namespace dict; NilPy's `ns["__body__"]()`
+  unboxes the payload (this address) and calls it with the all-Variant dynamic
+  ABI (0 args, Variant result — see PyMakeDynCall / PyDynCallSig). Runs the def
+  registered by the immediately-preceding EvalPyStmts over the still-live token
+  stream + EnvG. A var-out call into Result (not `Result := CallUserFn(...)`)
+  sidesteps the Variant-fn-return NRVO corruption. }
+function PyBodyTramp: Variant;
+var idx: Integer; noArgs: TPyList;
+begin
+  idx := FnFind('__body__');
+  if idx < 0 then begin PPyRec(@Result)^.VType := 0; PPyRec(@Result)^.Payload := 0; Exit; end;
+  noArgs := TPyList.Create;
+  CallUserFn(idx, noArgs, Result);
+  noArgs.Free;
+end;
+
 procedure EvalPyStmts(const src: AnsiString; g: TPyDict; l: TPyDict);
 begin
   EnvG := g;
@@ -2474,6 +2497,14 @@ begin
       EvalError('expected end of statement, got "' + CurText + '"');
     SkipSeparators;
   end;
+  { The uforth exec() idiom is `exec("def __body__(): ...", env, ns)` followed by
+    `ns["__body__"]()`. The loop above only REGISTERED the def (ExecDef records its
+    body span). Publish it into the caller's namespace as a callable variant so
+    the separate `ns["__body__"]()` reaches it: the value's payload is
+    &PyBodyTramp, unboxed and called through the dynamic-call ABI. Keyed with a
+    VT_STRING matching NilPy's dict key (PyVarEq compares string content). }
+  if (l <> nil) and (FnFind('__body__') >= 0) then
+    l.store(MakeStr('__body__'), PyBoxObj(Pointer(@PyBodyTramp)));
 end;
 
 end.
