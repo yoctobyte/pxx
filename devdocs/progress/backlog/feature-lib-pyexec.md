@@ -63,3 +63,42 @@ the RTTI dependency is extracting uforth's 134 PYTHON blocks with their CPython
 results into a fixture corpus under `test/` — that is worth doing on its own,
 because it pins the contract before any engine exists to argue with.
 
+## 2026-07-21 — architecture confirmed with user; JIT = rainy-day
+
+Reached this ticket by driving uforth to the point where PYTHON-bodied stdlib
+words (`/`, `2/`, most of CORE) are the wall (see
+[[feature-nilpy-corpus-uforth]] MILESTONE 3 — full STD.UFO now loads). Examined
+both engines closely with the user. Decisions:
+
+- **Engine 1 (reflective tree-walker) is THE path** — reaches the goal (uforth
+  runs, suite matches CPython), lower risk. Depends on
+  [[feature-rtti-field-reflection]] (field get/set by name; method invoke-by-name
+  already ships). Novel runtime code = essentially ONE piece: a **generic
+  native-call trampoline** (proc addr + N variant args + param types -> marshal +
+  indirect call; bounded arity, per-target asm thunk, written once, reused for
+  both method-by-name and bound-method values).
+- **Engine 2 (JIT) = RAINY-DAY, one of the last things.** Not deferred for code
+  size — the hard part is (a) making the AOT compiler REENTRANT (it is a
+  single-shot batch tool over pervasive globals) and (b) RUNTIME SYMBOL BINDING
+  (serialize the AOT symtab — class layouts, method/global addresses — into the
+  binary + a runtime resolver so a snippet binds to the LIVE program's
+  vm.*/push/pop) and (c) a mmap+exec loader. Three flavors exist (in-process full
+  compiler / small dedicated subset-codegen / subprocess `pascal26`+`.so`+dlopen
+  — the last reuses the existing .so writer but is not self-contained). Kept on
+  record deliberately: a JIT *with knowledge of the running binary* is a broadly
+  useful capability beyond Python (user note). It drops in LATER over the SAME
+  cached AST, behind a `speed-vs-size` flag — so it never blocks correctness and
+  the reentrancy cost is never paid until perf actually matters. Its own ticket
+  when that phase starts.
+
+- **Bound-method values** ([[feature-nilpy-bound-method-value]]) are a sub-piece
+  of the host bridge, not a separate general feature: uforth's env is
+  `{"push": self.push, ...}`, and capturing `self.push` as a value currently
+  SIGSEGVs (drops self). For the tree-walker this reduces to capturing
+  `self.m` as `{recv, method-ref}` and dispatching via the method-reflection
+  invoke-by-name + the generic-call trampoline above — the interpreter never
+  needs the general NilPy `env["push"](x)` dynamic call to work.
+
+Startable-today piece unchanged and still recommended first: extract the PYTHON
+block corpus + CPython oracle results into `test/`, pinning the contract.
+

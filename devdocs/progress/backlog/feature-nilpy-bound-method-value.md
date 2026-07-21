@@ -45,35 +45,34 @@ callable value is unavoidable: pyeval cannot run a single PYTHON-bodied stdlib
 word (`/`, `2/`, most of CORE) until this lands. Sequencing decided with the
 user: bound methods FIRST, then pyeval.
 
-## Scope refinement (2026-07-21) — two consumption shapes
+## Scope refinement (2026-07-21) — folds into the reflection bridge
 
-Investigated the call mechanism. `ns["__body__"]()` / `env["push"](x)` go through
-`PyMakeDynCall` (pyparser.inc:3077): unbox the variant to its payload as a raw
-CODE POINTER, emit `AN_CALL_IND` with `ASTSLen=0` (no Self). That is why a bound
-method segfaults — self is never passed. Two ways to fix, very different size:
+Investigated the call mechanism and the consumer. `ns["__body__"]()` /
+`env["push"](x)` go through `PyMakeDynCall` (pyparser.inc:3077): unbox the variant
+to its payload as a raw CODE POINTER, `AN_CALL_IND` with `ASTSLen=0` (no Self) —
+which is why a bound method segfaults, self is never passed.
 
-**(A) General — `env["push"](x)` works as compiled NilPy.** PyMakeDynCall must
-RUNTIME-branch on the callee variant's tag: bound-method object → load {code,recv},
-call `code(recv, args)` (Self prepended, `ASTSLen=1`); plain func value → today's
-no-Self call. The static type of a dict fetch is unknown, so the branch is
-unavoidably runtime — an if/else around two CALL_IND shapes in the frontend.
-Bigger, and it touches the shared dynamic-call lowering (self-host-critical).
+An early idea was a narrow "pyeval hardcodes push/pop signatures" path. **That is
+WRONG** — the exec'd bodies do not just call push/pop; they touch ~25 distinct
+`vm` MEMBERS, fields AND methods with args (`vm.memory`, `vm.here`,
+`vm.define_word(...)`, `vm.run_forth_word(...)`, …; full census in
+[[feature-rtti-field-reflection]]). No fixed callable set covers that, so the
+interpreter needs GENERAL reflection over the host object, not hardcoded
+signatures.
 
-**(B) Narrow — pyeval is the only caller.** uforth NEVER calls `env["push"](x)`
-as compiled NilPy; it does `env["push"] = self.push` (CAPTURE) and
-`ns["__body__"]()` (trampoline, already a plain fn ptr). The push/pop calls live
-INSIDE the exec'd source, run by the pyeval interpreter. So pyeval (Pascal) reads
-the bound-method object {code,recv} out of `g` and calls it via a TYPED
-proc-pointer cast — it hardcodes push/pop/fpush/fpop's fixed signatures, no
-general dispatch. Requirement shrinks to: (1) CAPTURE `self.method` as a
-{code,recv} variant; (2) pyeval reads+invokes it; (3) PyMakeDynCall just ERRORS
-clearly on a bound-method variant instead of segfaulting. Much smaller, no
-runtime tag-branch in shared call lowering — but couples the representation to
-pyeval, so build them together.
+So this ticket folds into the [[feature-lib-pyexec]] host bridge rather than
+standing alone: capturing `self.method` as a value becomes `{recv, method-ref}`,
+and it is invoked through the SAME machinery the tree-walker uses for every
+`vm.method(...)` — method reflection (invoke-by-name, VMT-8, already ships) plus
+the generic native-call trampoline. i.e. a bound-method value is just
+"method-by-name with the receiver already bound." Build it with pyeval, not
+before it.
 
-Recommendation: **(B)**, built alongside pyeval — it avoids the risky shared
-dynamic-dispatch change and is exactly what uforth needs. Promote to (A) only if
-a corpus genuinely calls a stored bound method directly.
+The one piece that must still work standalone: `env["push"] = self.push` must
+STORE a usable value (currently the capture drops self). Make capture produce the
+`{recv, method-ref}` object; and make `PyMakeDynCall` at least ERROR clearly on a
+bound-method variant instead of segfaulting, until/unless a corpus needs the
+general compiled `env["push"](x)` path (then add the runtime tag-branch).
 
 ## Design
 

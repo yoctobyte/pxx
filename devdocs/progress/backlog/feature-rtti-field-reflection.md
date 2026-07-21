@@ -30,3 +30,29 @@ Notes:
 Gate: `make test` + self-host byte-identical; regression exercising field
 get/set by name on a class with mixed field types incl. a record field and
 a variant.
+
+## 2026-07-21 finding — the current field RTTI is INSUFFICIENT for this
+
+Measured while scoping the uforth exec() bridge (pyeval). Two concrete gaps the
+implementation MUST close, both verified in `rtti_emit.inc`:
+
+- **Published-gated.** `EmitRTTI` gives unpublished classes "zero counts and no
+  prop/meth arrays" (rtti_emit.inc ~329). NilPy classes publish nothing, so
+  uforth's `VM` gets an EMPTY field table today — reflection finds nothing. The
+  field/method tables must be emitted for ALL NilPy-lowered class members, not
+  just published ones. (The per-class HEADER is already emitted for every class;
+  only the member arrays are gated.)
+- **No field TYPE.** `EmitFieldInfo` (rtti_emit.inc ~295) writes only name-ptr +
+  byte offset. The exec bridge reads/writes `vm.memory` / `vm.here` / `vm.base`
+  as VARIANTS, so it needs the field's type kind (and record id for aggregates)
+  to box/unbox correctly — exactly the `(name, type kind, byte offset, record
+  id)` tuple this ticket already specifies. Confirmed the gap is real, not
+  hypothetical.
+
+Consumer census (uforth PYTHON blocks): ~25 distinct `vm` members are touched —
+FIELDS `memory, vars, here, rstack, stack, dict, base, _pic_buf,
+current_def_tokens, input_line, fstack, input_pos, current_token_index,
+current_def_name, xt_table` and METHODS `define_word, next_token_strict,
+next_token, run_forth_word, exec_token_runtime, strip_string_token,
+is_string_token, trace`. Method invoke-by-name (VMT-8) already ships and covers
+the method half; this ticket's field get/set completes the bridge.
