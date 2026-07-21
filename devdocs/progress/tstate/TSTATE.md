@@ -2,8 +2,11 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `4527aada3b3c` | 2026-07-21T06:08:58Z | RED (native) | 575.6s | `7515e6f4fb97` RED |
+| borg | `6d3025ea6af7` | 2026-07-21T06:25:47Z | RED (native) | 651.3s | `7515e6f4fb97` RED |
 
 ## Open regressions
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `2f88c6559bc2`, last good `76a2321346ed`, 1 commit(s) in range
-- **test-core#src:test/test_interface_mainbody_ascast_temp.pas** — test/test_interface_mainbody_ascast_temp.pas (borg): bad `ec9cda7db818`, last good `0a2d36eaf0f9`, 1 commit(s) in range
+- **test-core#src:test/test_method_ptr_cast_b277.pas** — test/test_method_ptr_cast_b277.pas (borg): bad `6d3025ea6af7`, last good `4527aada3b3c`, 2 commit(s) in range
+- **test-core#src:test/test_rtti_method_reflection_b254.pas** — test/test_rtti_method_reflection_b254.pas (borg): bad `6d3025ea6af7`, last good `4527aada3b3c`, 2 commit(s) in range
+- **test-core#src:test/test_strict_visibility_b262.pas** — test/test_strict_visibility_b262.pas (borg): bad `6d3025ea6af7`, last good `4527aada3b3c`, 2 commit(s) in range
+- **test-core#src:test/test_tobject_methodaddress_b256.pas** — test/test_tobject_methodaddress_b256.pas (borg): bad `6d3025ea6af7`, last good `4527aada3b3c`, 2 commit(s) in range
