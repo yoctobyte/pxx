@@ -2226,8 +2226,27 @@ begin
   if n < 0 then n := 0;
   if (not signed) and (v < 0) then
   begin
-    WriteLn('OverflowError: can''t convert negative int to unsigned');
-    Halt(1);
+    { A negative Int64 given to an UNSIGNED conversion: NilPy ints are 64-bit but
+      Python's are unbounded, so a value like 0xFFFFFFFFFFFFFFFF (2^64-1 in
+      Python) lands here as -1. For a field >= 8 bytes wide the low 8 bytes ARE
+      that unsigned value's bytes (two's complement == the reinterpreted
+      magnitude), zero-extended above byte 7 since the value is < 2^64 — so it
+      encodes identically to Python. Only a field narrower than the 64-bit
+      pattern genuinely overflows. }
+    if n < 8 then
+    begin
+      WriteLn('OverflowError: can''t convert negative int to unsigned');
+      Halt(1);
+    end;
+    Result := TPyBytes.Create(n);
+    u := v;
+    for k := 0 to n - 1 do
+    begin
+      p := PByte(NativeInt(Result.FData) + k);
+      if k < 8 then p^ := u and 255 else p^ := 0;
+      u := u shr 8;
+    end;
+    Exit;
   end;
   { n >= 8 always fits an Int64; below that, check the value's range }
   fits := n >= 8;

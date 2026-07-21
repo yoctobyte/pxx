@@ -964,6 +964,22 @@ begin
       else
         node := FindProc('pycontains');
       if node < 0 then Error('Nil Python: pylib (pycontains) not loaded');
+      { A tyChar value (`s[0] in ("a","b")`, a subscript yields tyChar) is boxed
+        VT_CHAR, but the collection holds VT_STRING elements, so the tag never
+        matched and membership was always False. In Python a char IS a 1-char
+        str; promote it via pystr_ofchar so it compares as one. See the same
+        receiver coercion in PyParseStrMethod. }
+      if IntToTypeKind(ASTTk[left]) = tyChar then
+      begin
+        j := FindProc('pystr_ofchar');
+        if j < 0 then Error('Nil Python: pylib (pystr_ofchar) not loaded');
+        i := AllocNode(AN_ARG);
+        ASTLeft[i] := left;
+        left := AllocNode(AN_CALL);
+        ASTIVal[left] := j;
+        ASTTk[left] := Ord(tyAnsiString);
+        ASTLeft[left] := i;
+      end;
       i := AllocNode(AN_ARG);            { the container, arg 0 }
       ASTLeft[i] := right;
       j := AllocNode(AN_ARG);            { the value, arg 1 }
