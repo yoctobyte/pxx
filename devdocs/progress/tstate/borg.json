@@ -1980,14 +1980,13 @@
  },
  "open_regressions": [
   {
-   "bad": "d81dc218cdcb4e584e81862f0901a3adcb32405f",
+   "bad": "5beaf2edcbe727bb8664baa0e9fcd7d96597e14d",
    "good": "651a0368a74d0f2a39837517ed3ede686c6e08cc",
    "job": "test-core#src:test/test_interface_mainbody_ascast_temp.pas",
    "name": "test-core#122",
    "opened": "2026-07-21T21:24:07Z",
    "range": [
-    "5beaf2edcbe727bb8664baa0e9fcd7d96597e14d",
-    "d81dc218cdcb4e584e81862f0901a3adcb32405f"
+    "5beaf2edcbe727bb8664baa0e9fcd7d96597e14d"
    ],
    "src": "test/test_interface_mainbody_ascast_temp.pas"
   }
