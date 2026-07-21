@@ -27,3 +27,11 @@ function NestStrOff(const s: AnsiString): Integer; forward;
 function MangleSuffix(n: Integer): AnsiString; forward;
 function IRAppendCall(procIdx, firstArg, classIdx, tk: Integer): Integer; forward;
 function IRWrapChkBounds(value: Integer; lo, hi: Int64): Integer; forward;
+{ NilPy frontend helpers used above their definition in pyparser.inc. }
+function PyIntLiteralText(n: Int64): AnsiString; forward;
+function PyIsPylibContainerCi(ci: Integer): Boolean; forward;
+function PyCallMeth1(ci: Integer; const mname: AnsiString;
+                     selfNode, argNode: Integer): Integer; forward;
+procedure PyParseDefHeader; forward;
+procedure PyApplyDefSignature(procIdx: Integer); forward;
+function PyPrependResultZero(procIdx, bodyNode: Integer): Integer; forward;
