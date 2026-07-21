@@ -337,6 +337,7 @@ function pystdin_readline: AnsiString;
   no type-ahead — the correct default for pipes/files and never wrong for the
   native words, which run under the (stubbed) exec path. }
 function pystdin_isatty: Integer;
+function pystr_is_none(const s: AnsiString): Boolean;
 function pyvar_box(const v: Variant): Variant;   { box a value into a variant }
 { input([prompt]): a line from stdin without its trailing newline. }
 function pyinput: AnsiString;
@@ -2673,6 +2674,14 @@ end;
 function pystdin_isatty: Integer;
 begin
   Result := 0;
+end;
+
+{ `s is None` for a str-typed value: a NilPy str that is None has a nil handle,
+  a real string (including "") does not. Compares the managed handle, not the
+  content — content compare against None read the wrong bytes and crashed. }
+function pystr_is_none(const s: AnsiString): Boolean;
+begin
+  Result := Pointer(s) = nil;
 end;
 
 { Identity that BOXES its argument into a variant: passing a scalar to a Variant

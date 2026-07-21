@@ -873,13 +873,44 @@ begin
       Next;
       neg := False;
       if CurTok.Kind = tkNot then begin neg := True; Next; end;
-      { `x is None` on a VARIANT is a TAG test, not a payload compare. As a
-        payload compare it answered True for a slot holding integer 0 —
-        silently, since 0 is an ordinary value (feature-nilpy-none-variant). }
-      if (CurTok.Kind = tkNil) and (IntToTypeKind(ASTTk[left]) = tyVariant) then
+      { `x is None` / `x is not None`. The lowering depends on the STATIC type of
+        the left side — comparing a managed string or a scalar directly against a
+        None variant read the wrong bytes and crashed. }
+      if CurTok.Kind = tkNil then
       begin
         Next;
-        node := PyMakeTagTest(left, 0, neg);
+        rTk := IntToTypeKind(ASTTk[left]);
+        if rTk = tyVariant then
+          { VARIANT: a tag test (VT_EMPTY), not a payload compare — a payload
+            compare answered True for a slot holding integer 0. }
+          node := PyMakeTagTest(left, 0, neg)
+        else if (rTk = tyString) or (rTk = tyAnsiString) or (rTk = tyChar) then
+        begin
+          { STRING: a content compare against None read the wrong bytes and
+            crashed. Test the managed HANDLE for nil via pystr_is_none. }
+          j := AllocNode(AN_ARG); ASTLeft[j] := left; ASTRight[j] := -1;
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := FindProc('pystr_is_none');
+          if ASTIVal[node] < 0 then Error('Nil Python: pylib (pystr_is_none) not loaded');
+          ASTTk[node] := Ord(tyBoolean); ASTLeft[node] := j;
+          if neg then
+          begin
+            i := AllocNode(AN_NOT); ASTLeft[i] := node; ASTTk[i] := Ord(tyBoolean);
+            node := i;
+          end;
+        end
+        else
+        begin
+          { numeric (Optional[int]'s None sentinel is 0) and object/pointer (nil
+            is None) both compare the value to 0. }
+          node := AllocNode(AN_BINOP);
+          if neg then ASTIVal[node] := Ord(tkNeq) else ASTIVal[node] := Ord(tkEq);
+          ASTLeft[node] := left;
+          right := AllocNode(AN_INT_LIT); ASTIVal[right] := 0;
+          if (rTk = tyClass) or (rTk = tyPointer) then ASTTk[right] := Ord(tyPointer)
+          else ASTTk[right] := ASTTk[left];
+          ASTRight[node] := right; ASTTk[node] := Ord(tyBoolean);
+        end;
         left := node;
         Continue;
       end;

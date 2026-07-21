@@ -413,6 +413,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_optional_int_none26)" = "$$(printf '%b' '7\n42\n0')"
 	./$(COMPILER) test/test_nilpy_variant_in.npy /tmp/test_nilpy_variant_in26
 	test "$$(/tmp/test_nilpy_variant_in26)" = "$$(printf '%b' '2 in list\n5 not in list\nk in dict')"
+	./$(COMPILER) test/test_nilpy_is_none_typed.npy /tmp/test_nilpy_is_none_typed26
+	test "$$(/tmp/test_nilpy_is_none_typed26)" = "$$(printf '%b' '11\nobj-live')"
 	./$(COMPILER) examples/shell/shell0.npy /tmp/test_nilpy_shell026
 	/tmp/test_nilpy_shell026 | grep -q "hello portable userland"
 

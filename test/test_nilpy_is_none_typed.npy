@@ -1,0 +1,19 @@
+class C:
+    def __init__(self) -> None:
+        self.x: int = 0
+def check(line: str, n: int) -> int:
+    r = 0
+    if line is not None:
+        r = r + 1
+    if line is None:
+        r = r + 100
+    if n is not None:
+        r = r + 10
+    return r
+def go() -> int:
+    print(check("hi", 5))
+    c = C()
+    if c is not None:
+        print("obj-live")
+    return 0
+go()
