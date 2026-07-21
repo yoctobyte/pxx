@@ -915,6 +915,10 @@ begin
       rTk := IntToTypeKind(ASTTk[right]);
       if (rTk = tyString) or (rTk = tyAnsiString) then
         node := FindProc('pystr_contains')
+      else if rTk = tyVariant then
+        { container type known only at run time (a dict/list slot value) —
+          unbox and dispatch inside pyvar_contains. }
+        node := FindProc('pyvar_contains')
       else if ResolveNodeRec(right) = REC_UCLASS_BASE + FindUClass('TPyDict') then
         node := FindProc('pydictcontains')
       else

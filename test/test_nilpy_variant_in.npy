@@ -1,0 +1,16 @@
+def go() -> int:
+    outer = []
+    outer.append([1, 2, 3])
+    outer.append({"k": 9})
+    v = outer[0]
+    d = outer[1]
+    if 2 in v:
+        print("2 in list")
+    if 5 in v:
+        print("BAD")
+    else:
+        print("5 not in list")
+    if "k" in d:
+        print("k in dict")
+    return 0
+go()

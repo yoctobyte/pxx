@@ -492,6 +492,7 @@ function pylist_eq(a: TPyList; b: TPyList): Boolean;
 function len(const s: AnsiString): Integer; overload;
 function next(c: TPyCounter): Int64;
 function pycontains(l: TPyList; const v: Variant): Boolean;
+function pyvar_contains(const c: Variant; const v: Variant): Boolean;
 { `sub in s` on a STRING is SUBSTRING containment in Python, not element
   membership. Without a case of its own it reached pycontains, which read the
   string handle as a TPyList and scanned its header words as variant slots —
@@ -1364,6 +1365,23 @@ begin
       Result := True;
       Exit;
     end;
+end;
+
+{ `v in container` where the container is a VARIANT (its type is only known at
+  run time — e.g. `x in select(...)[0]`, a list held in a dict/list slot). Unbox
+  and dispatch: object -> dict key / list element, str -> substring. }
+function pyvar_contains(const c: Variant; const v: Variant): Boolean;
+var o: TObject;
+begin
+  Result := False;
+  if pyvartag(c) = 7 then
+  begin
+    o := TObject(pyvarobj(c));
+    if o is TPyDict then Result := pydictcontains(TPyDict(o), v)
+    else if o is TPyList then Result := pycontains(TPyList(o), v);
+  end
+  else if pyvartag(c) = 6 then
+    Result := pystr_contains(pystr_of(c), pystr_of(v));
 end;
 
 procedure PyKeyError;
