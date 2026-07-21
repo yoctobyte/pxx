@@ -8445,6 +8445,26 @@ begin
         CurASTNode := node;
         Exit;
       end;
+      if isNilPy and (name = '__name__') then
+      begin
+        { compiled as the main program, so __name__ is always "__main__". }
+        Next;
+        node := AllocNode(AN_STR_LIT);
+        ASTSOffset[node] := PyStoredName('__main__'); ASTSLen[node] := 8;
+        ASTTk[node] := Ord(tyString);
+        CurASTNode := node; LastExprTk := tyString;
+        Exit;
+      end;
+      if isNilPy and (name = '__file__') then
+      begin
+        Next;
+        node := AllocNode(AN_CALL);
+        idx := FindProc('pysys_file');
+        if idx < 0 then Error('Nil Python: pylib (pysys_file) not loaded');
+        ASTIVal[node] := idx; ASTTk[node] := Ord(tyAnsiString); ASTLeft[node] := -1;
+        CurASTNode := node; LastExprTk := tyAnsiString;
+        Exit;
+      end;
       if isNilPy and (name = 'int') then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr;

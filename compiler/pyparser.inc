@@ -2197,10 +2197,12 @@ begin
   Expect(tkRParen, ')');
   if wantArgs = -1 then
   begin
-    { optional-argument form: split() and split(sep) are separate functions }
+    { optional-argument form: split(), split(sep) and split(sep, maxsplit) are
+      separate functions. }
     if i = 0 then pname := 'pystr_split_ws'
+    else if i = 2 then pname := 'pystr_split_sep_max'
     else if i <> 1 then
-      Error('Nil Python: str method .' + mname + '() takes at most one argument');
+      Error('Nil Python: str method .' + mname + '() takes at most two arguments');
     procIdx := FindProc(pname);
     if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   end
@@ -4952,16 +4954,24 @@ begin
   if (nValues = 1) and (nTargets > 1) then
   begin
     unpCi := PyNodeListCi(PyMakeIdent(tmps[0]));
-    if unpCi < 0 then
+    { A VARIANT value (e.g. `k, v = stack.pop()` — pop yields a variant holding a
+      pair) is indexed at run time via pyvar_getitem, which unboxes to the list
+      it holds. A static list uses TPyList.at. }
+    if (unpCi < 0) and (IntToTypeKind(ASTTk[PyMakeIdent(tmps[0])]) <> tyVariant) then
       Error('Nil Python: cannot unpack this value into several names — it is '
-            + 'not a list or tuple');
+            + 'not a list, tuple or variant');
     for i := 0 to nTargets - 1 do
     begin
       unpIdx := AllocNode(AN_INT_LIT);
       ASTIVal[unpIdx] := i;
       ASTTk[unpIdx] := Ord(tyInteger);
-      unpElem := PyCallMeth1(unpCi, 'at', PyMakeIdent(tmps[0]), unpIdx);
-      if unpElem < 0 then Error('Nil Python: pylib (TPyList.at) not loaded');
+      if unpCi >= 0 then
+      begin
+        unpElem := PyCallMeth1(unpCi, 'at', PyMakeIdent(tmps[0]), unpIdx);
+        if unpElem < 0 then Error('Nil Python: pylib (TPyList.at) not loaded');
+      end
+      else
+        unpElem := PyMakeVariantGetItem(PyMakeIdent(tmps[0]), unpIdx);
       symIdx := FindSym(names[i]);
       if symIdx < 0 then symIdx := AllocVar(names[i], tyVariant);
       node := AllocNode(AN_ASSIGN);
@@ -5017,6 +5027,21 @@ var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integ
 begin
   Result := -1;
   PyStmtAteBlock := False;
+  { `nonlocal x, y` / `global x, y` — a scope DECLARATION, parsed and skipped.
+    The nested-def capture already exposes the enclosing name for reading; a
+    WRITE does not yet propagate back to the enclosing frame (capture is
+    by-value) — filed as feature-nilpy-nonlocal-write-propagation. }
+  if PyIsIdent('nonlocal') or PyIsIdent('global') then
+  begin
+    Next;
+    while CurTok.Kind = tkIdent do
+    begin
+      Next;
+      if not Eat(tkComma) then Break;
+    end;
+    Result := -1;
+    Exit;
+  end;
   if PyUnpackTargetAhead then begin Result := PyParseUnpackAssign; Exit; end;
   { Nested `def`: register the shell here (the enclosing body's calls resolve
     against it), remember where the body starts, and skip it — PyParseDef

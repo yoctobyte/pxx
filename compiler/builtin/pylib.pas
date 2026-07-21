@@ -342,6 +342,7 @@ function pyvar_box(const v: Variant): Variant;   { box a value into a variant }
 function pyinput: AnsiString;
 { sys.argv: the command line as a TPyList of strings, argv[0] = program name. }
 function pysys_argv: TPyList;
+function pysys_file: AnsiString;   { the __file__ dunder }
 { select.select(r, w, x, timeout): the ready-sets triple. The shim returns three
   empty lists (nothing ready), which is the safe answer for the non-tty default
   and all uforth asks of it. }
@@ -544,6 +545,7 @@ function pystr_len(const s: AnsiString): Integer;
 function pystr_join(const sep: AnsiString; l: TPyList): AnsiString;
 function pystr_split_ws(const s: AnsiString): TPyList;
 function pystr_split_sep(const s: AnsiString; const sep: AnsiString): TPyList;
+function pystr_split_sep_max(const s: AnsiString; const sep: AnsiString; maxsplit: Integer): TPyList;
 function pystr_splitlines(const s: AnsiString): TPyList;
 
 implementation
@@ -817,6 +819,41 @@ begin
       Result.append(Copy(s, st, i - st));
       i := i + m;
       st := i;
+    end
+    else
+      Inc(i);
+  end;
+  Result.append(Copy(s, st, n - st + 1));
+end;
+
+{ s.split(sep, maxsplit): at most `maxsplit` splits, so the result has at most
+  maxsplit+1 fields — the remainder (including further separators) is the last. }
+function pystr_split_sep_max(const s: AnsiString; const sep: AnsiString; maxsplit: Integer): TPyList;
+var i, j, n, m, st, done: Integer; hit: Boolean;
+begin
+  Result := TPyList.Create;
+  n := Length(s);
+  m := Length(sep);
+  if m = 0 then
+  begin
+    writeln('ValueError: empty separator');
+    Halt(1);
+  end;
+  if maxsplit < 0 then begin Result := pystr_split_sep(s, sep); Exit; end;
+  st := 1; i := 1; done := 0;
+  while (i <= n) and (done < maxsplit) do
+  begin
+    hit := False;
+    if i + m - 1 <= n then
+    begin
+      hit := True;
+      for j := 1 to m do
+        if s[i + j - 1] <> sep[j] then begin hit := False; Break; end;
+    end;
+    if hit then
+    begin
+      Result.append(Copy(s, st, i - st));
+      i := i + m; st := i; Inc(done);
     end
     else
       Inc(i);
@@ -2646,6 +2683,13 @@ begin
   r := TPyList.Create;
   for i := 0 to ParamCount do r.append(ParamStr(i));   { argv[0] = program name }
   Result := r;
+end;
+
+function pysys_file: AnsiString;
+begin
+  { __file__ — the running program's path, the closest analogue for a compiled
+    binary (uforth uses it to find STD.UFO beside the script). }
+  Result := ParamStr(0);
 end;
 
 function pyselect_select(const r: Variant; const w: Variant; const x: Variant; const t: Variant): TPyList;
