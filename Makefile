@@ -421,6 +421,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_unnamed_managed_temp_init26)" = "75"
 	./$(COMPILER) test/test_nilpy_not_container.npy /tmp/test_nilpy_not_container26
 	test "$$(/tmp/test_nilpy_not_container26)" = "$$(printf '%b' 'xs-truthy\nB\nd-truthy\nD')"
+	./$(COMPILER) test/test_nilpy_variant_to_str_param.npy /tmp/test_nilpy_variant_to_str_param26
+	test "$$(/tmp/test_nilpy_variant_to_str_param26)" = "$$(printf '%b' 'WORLD\nHELLO\nWORLD\nworld')"
 	./$(COMPILER) examples/shell/shell0.npy /tmp/test_nilpy_shell026
 	/tmp/test_nilpy_shell026 | grep -q "hello portable userland"
 
