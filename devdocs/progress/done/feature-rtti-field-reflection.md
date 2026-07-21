@@ -54,5 +54,30 @@ FIELDS `memory, vars, here, rstack, stack, dict, base, _pic_buf,
 current_def_tokens, input_line, fstack, input_pos, current_token_index,
 current_def_name, xt_table` and METHODS `define_word, next_token_strict,
 next_token, run_forth_word, exec_token_runtime, strip_string_token,
-is_string_token, trace`. Method invoke-by-name (VMT-8) already ships and covers
-the method half; this ticket's field get/set completes the bridge.
+is_string_token, trace`.
+
+## LANDED 2026-07-21 (commit e8ebbf0a) — field side complete
+
+- Field table now emits EVERY field (not just published); FieldInfo grown to
+  `(name, offset, typeKind, recId, flags)`, RTTI_FIELD_SIZE 16 -> 40, flags bit0
+  = published so the streamer still filters. `EmitFieldInfo`/`EmitRTTI` in
+  rtti_emit.inc, `TFieldInfo` in typinfo.pas kept in lockstep.
+- Runtime helpers in typinfo.pas: `GetFieldInfoByName`, `GetInstanceRTTI` (VMT-8
+  backlink), `GetFieldPtr(instance, cls, name, out kind) -> Pointer`.
+- `test/test_rtti_field_get_by_name.pas`: int/int64(read+write)/object/record +
+  absent-name. Quick+limited GREEN (only the pre-existing test-core#122 flake),
+  self-host byte-identical after the expected RTTI reseed.
+
+## FOLLOW-ON (not this ticket) — method table is ALSO published-gated
+
+Discovered while landing fields: the METHOD table (`UMthPub=1` gate in
+rtti_emit.inc) is published-only too, so `GetMethodAddr` finds NOTHING on a
+NilPy class — method invoke-by-name does NOT yet cover uforth's `define_word` /
+`run_forth_word` / etc. The exec bridge needs the same un-gating for methods,
+plus arity/param-type in `MethInfo` (currently name+code only) so the generic
+native-call trampoline can marshal args. Filed as part of the pyeval host-bridge
+work in [[feature-lib-pyexec]] (build with the trampoline), not here — this
+ticket was scoped to FIELD get/set and that is done.
+
+## Log
+- 2026-07-21 — resolved, commit e8ebbf0a.
