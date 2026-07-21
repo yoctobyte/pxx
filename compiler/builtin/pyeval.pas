@@ -1873,7 +1873,10 @@ begin
   LclN := 0;
   Executing := True;
   BreakFlag := False;
-  Tokenize(PreprocessFStrings(src));
+  { Dedent first (as CPython's exec path does via textwrap.dedent): a corpus
+    block extracted from indented .UFO source carries a uniform leading indent on
+    every line, which would otherwise tokenize as a spurious opening INDENT. }
+  Tokenize(PreprocessFStrings(pytextwrap_dedent(src)));
   Cur := 0;
   SkipSeparators;
   while (CurKind <> PK_EOF) and (CurKind <> PK_DEDENT) do
