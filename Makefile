@@ -250,7 +250,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_variant_print_container.npy /tmp/test_nilpy_variant_print_container26
 	test "$$(/tmp/test_nilpy_variant_print_container26)" = "$$(printf '%b' '[1, 2]\n[10, 20]\n{\047k\047: 1}\n7\nhi')"
 	./$(COMPILER) test/test_nilpy_exception_print.npy /tmp/test_nilpy_exception_print26
-	test "$$(/tmp/test_nilpy_exception_print26)" = "$$(printf '%b' 'bad value\nboom')"
+	test "$$(/tmp/test_nilpy_exception_print26)" = "$$(printf '%b' 'bad value\nbad value\ngot: bad value\nboom')"
 	./$(COMPILER) test/test_nilpy_dynattr.npy /tmp/test_nilpy_dynattr26
 	test "$$(/tmp/test_nilpy_dynattr26)" = "$$(printf '%b' '105\n110')"
 	./$(COMPILER) test/test_nilpy_dynattr_class.npy /tmp/test_nilpy_dynattr_class26

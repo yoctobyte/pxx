@@ -69,7 +69,9 @@ IsSubclassOf) and reads the `.msg` field instead of the instance pointer. Test
 `test/test_nilpy_exception_print.npy`; test-nilpy + quick green, self-host
 byte-identical.
 
-STILL OPEN: `str(e)` and `f"{e}"` still yield the pointer — the str()-call /
+UPDATE: `str(e)` now landed too (same Exception->\.msg rewrite in the str() call
+lowering in parser.inc). print(e) + str(e) + `".." + str(e)` all show the message.
+STILL OPEN: only `f"{e}"` (the f-string hole path) yields empty — the str()-call /
 f-string-hole lowering of a class instance does not route through `.msg`. The
 str() call-lowering site was not located in this pass (str is recognised as
 returning tyString at 189/355 but the value lowering is elsewhere). Next: find

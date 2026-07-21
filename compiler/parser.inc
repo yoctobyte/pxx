@@ -8734,7 +8734,29 @@ begin
       end
       else if isNilPy and (name = 'str') then
       begin
-        Next; Expect(tkLParen, '('); ParseArgExpr; Expect(tkRParen, ')');
+        Next; Expect(tkLParen, '('); ParseArgExpr;
+        { str(e) of a built-in Exception (or subclass) is its message: rewrite
+          the argument to a read of the `.msg` field, so str() returns the text
+          rather than the instance pointer (feature-nilpy-exception-message). }
+        if IntToTypeKind(ASTTk[CurASTNode]) = tyClass then
+        begin
+          atRecv := ResolveNodeRec(CurASTNode);
+          if atRecv >= REC_UCLASS_BASE then
+          begin
+            atFld := FindUClass('Exception');
+            if (atFld >= 0) and (((atRecv - REC_UCLASS_BASE) = atFld)
+                or IsSubclassOf(atRecv - REC_UCLASS_BASE, atFld)) then
+            begin
+              atDflt := AllocNode(AN_FIELD);
+              ASTLeft[atDflt] := CurASTNode;
+              ASTSOffset[atDflt] := PyStoredName('msg');
+              ASTSLen[atDflt] := 3;
+              ASTTk[atDflt] := Ord(tyAnsiString);
+              CurASTNode := atDflt;
+            end;
+          end;
+        end;
+        Expect(tkRParen, ')');
         node := AllocNode(AN_CALL); ASTIVal[node] := -201;
         { str() lowers to StrInt/FloatToStr/VariantToStr, which return AnsiString
           in managed mode (the default) and frozen tyString under
