@@ -1125,6 +1125,7 @@ end;
   they pass through unchanged. }
 function PyMakeTruthy(n: Integer): Integer;
 var procIdx, argNode, rec, lenNode, zeroNode, node: Integer;
+    nilNode, guardNode, falseNode, pairNode, ternNode: Integer;
 begin
   Result := n;
   if IntToTypeKind(ASTTk[n]) = tyVariant then
@@ -1151,7 +1152,25 @@ begin
       node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkNeq);
       ASTLeft[node] := lenNode; ASTRight[node] := zeroNode;
       ASTTk[node] := Ord(tyBoolean);
-      Result := node;
+      { A container field/var typed Optional[List]/List can be None (a nil class
+        pointer). count() would deref nil and SIGSEGV, so guard: nil -> falsy
+        without calling count. `(n <> nil) ? (count<>0) : false`. n is a
+        field/var read here (no side effect), so evaluating it twice is safe.
+        (bug: `if w.forth_body:` in uforth's inner interpreter crashed on native
+        words whose forth_body is None.) }
+      nilNode := AllocNode(AN_INT_LIT);
+      ASTIVal[nilNode] := 0; ASTTk[nilNode] := Ord(tyPointer);
+      guardNode := AllocNode(AN_BINOP); ASTIVal[guardNode] := Ord(tkNeq);
+      ASTLeft[guardNode] := n; ASTRight[guardNode] := nilNode;
+      ASTTk[guardNode] := Ord(tyBoolean);
+      falseNode := AllocNode(AN_INT_LIT);
+      ASTIVal[falseNode] := 0; ASTTk[falseNode] := Ord(tyBoolean);
+      pairNode := AllocNode(AN_PAIR);
+      ASTLeft[pairNode] := node; ASTRight[pairNode] := falseNode;
+      ternNode := AllocNode(AN_TERNARY);
+      ASTLeft[ternNode] := guardNode; ASTRight[ternNode] := pairNode;
+      ASTTk[ternNode] := Ord(tyBoolean);
+      Result := ternNode;
     end;
   end;
 end;
