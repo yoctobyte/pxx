@@ -1172,9 +1172,20 @@ end;
   field copy on purpose: ownership transfers, so retain/release would be
   wasted work and, for the shifts, wrong. }
 
+{ Tags whose payload is a MANAGED AnsiString ref and must be refcounted through
+  a slot copy: VT_STRING (6) and VT_PROMO_INT64 (8193, a heap-tier promotable
+  int whose payload is its exact decimal). Missing the promo tag moved the raw
+  pointer with no retain — the payload was freed while the slot still pointed
+  at it, and the recycled bytes surfaced as another string entirely
+  (the container-slot landmine). }
+function PyVarSlotManaged(t: Int64): Boolean;
+begin
+  PyVarSlotManaged := (t = 6) or (t = 8193);
+end;
+
 procedure PyVarSlotClear(dst: PPyVarRec);
 begin
-  if dst^.VType = 6 then PPyAnsiString(@dst^.Payload)^ := '';
+  if PyVarSlotManaged(dst^.VType) then PPyAnsiString(@dst^.Payload)^ := '';
   dst^.VType := 0;
   dst^.Payload := 0;
 end;
@@ -1187,10 +1198,10 @@ var
 begin
   if dst = src then Exit;
   s := '';
-  if src^.VType = 6 then s := PPyAnsiString(@src^.Payload)^;
+  if PyVarSlotManaged(src^.VType) then s := PPyAnsiString(@src^.Payload)^;
   PyVarSlotClear(dst);
   dst^.VType := src^.VType;
-  if src^.VType = 6 then
+  if PyVarSlotManaged(src^.VType) then
     PPyAnsiString(@dst^.Payload)^ := s
   else
     dst^.Payload := src^.Payload;

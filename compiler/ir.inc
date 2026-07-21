@@ -1038,6 +1038,10 @@ function IRPromoBoxedVariantAddr(node: Integer): Integer;
 var vSym: Integer;
 begin
   vSym := AllocVar('', tyVariant);
+  { PXXPromoToVariant CLEARS the destination first, which READS the old tag —
+    a garbage tag releases a wild AnsiString. Flag the temp for the prologue
+    nil-init pass like every other hidden variant temp. }
+  SymIsHiddenArgTemp[vSym] := True;
   IRMarkStatementNode(IRPromoCall('PXXPromoToVariant',
                         IRAppend(IR_LEA, vSym, -1, -1, 0, Ord(tyPointer)),
                         IRPromoAddrOf(node), -1, tyUnknown));
@@ -6152,11 +6156,18 @@ begin
           copy; any scalar kind => box it (tag + payload) via IR_VAR_STORE. }
         leftAddr := IRLowerAddress(ASTLeft[node]);
         if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]])) then
+        begin
           { promotable int -> variant. An INLINE value becomes an ordinary
             VT_INT64 variant, so the common case needs no new handling
-            downstream; only a heap value takes the VT_PROMO_INT64 tag. }
+            downstream; only a heap value takes the VT_PROMO_INT64 tag.
+            Statement-marked HERE: when this assignment is synthesised as a
+            SUBEXPRESSION (the call-arg scalar->Variant boxing temp), nothing
+            else marks the call and codegen would silently skip it, leaving
+            the temp VT_EMPTY (None). }
           Result := IRPromoCall('PXXPromoToVariant', leftAddr,
-                                IRPromoAddrOf(ASTRight[node]), -1, tyUnknown)
+                                IRPromoAddrOf(ASTRight[node]), -1, tyUnknown);
+          IRMarkStatementNode(Result);
+        end
         else if IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant then
         begin
           if rhsIsLValue then

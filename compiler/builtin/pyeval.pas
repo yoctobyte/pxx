@@ -206,15 +206,17 @@ begin
   IsIntishV := (t = 1) or (t = 2) or (t = 4) or (t = VT_PROMO);
 end;
 
-{ Int64 value of any int-ish variant, promo included (truncates a promo that
-  exceeds Int64 — callers coerce only where a 64-bit cell is expected). }
+{ Int64 value of any int-ish variant, promo included (a promo that exceeds
+  Int64 narrows mod 2^64, two's complement — callers coerce only where a
+  64-bit cell is expected, and the wrap is what keeps the masked-cell idiom an
+  identity; the CHECKED PXXPromoToInt64 trapped mid-idiom). }
 function PyToI64(const v: Variant): Int64;
 var s: array[0..1] of NativeInt;
 begin
   if IsPromoV(v) then
   begin
     PXXPromoInit(@s); PXXPromoFromVariant(@s, @v);
-    PyToI64 := PXXPromoToInt64(@s);
+    PyToI64 := PXXPromoToInt64Wrap(@s);
     PXXPromoClear(@s);
   end
   else PyToI64 := pyvar_to_int(v);
@@ -229,7 +231,8 @@ end;
 
 { a op b through promotable-int; the result auto-demotes to VT_INT64 when it
   fits (PXXPromoToVariant), so bignum never lingers once it is back in range.
-  op: 1 add, 2 sub, 3 mul, 4 floordiv, 5 mod. }
+  op: 1 add, 2 sub, 3 mul, 4 floordiv, 5 mod, 6 and, 7 or, 8 xor,
+  9 shl, 10 shr (the bitwise five have Python two's-complement semantics). }
 procedure PromoOp(const a, b: Variant; op: Integer; var res: Variant);
 var pa, pb, pr: array[0..1] of NativeInt;
 begin
@@ -240,6 +243,11 @@ begin
   else if op = 2 then PXXPromoSub(@pr, @pa, @pb)
   else if op = 3 then PXXPromoMul(@pr, @pa, @pb)
   else if op = 4 then PXXPromoDiv(@pr, @pa, @pb)
+  else if op = 6 then PXXPromoAnd(@pr, @pa, @pb)
+  else if op = 7 then PXXPromoOr(@pr, @pa, @pb)
+  else if op = 8 then PXXPromoXor(@pr, @pa, @pb)
+  else if op = 9 then PXXPromoShl(@pr, @pa, @pb)
+  else if op = 10 then PXXPromoShr(@pr, @pa, @pb)
   else PXXPromoMod(@pr, @pa, @pb);
   PXXPromoToVariant(@res, @pr);
   PXXPromoClear(@pa); PXXPromoClear(@pb); PXXPromoClear(@pr);
@@ -288,7 +296,17 @@ procedure PyIMul(const a, b: Variant; var res: Variant);
 var ia, ib, r: Int64;
 begin
   if IsPromoV(a) or IsPromoV(b) then begin PromoOp(a, b, 3, res); Exit; end;
-  ia := pyvar_to_int(a); ib := pyvar_to_int(b); r := ia * ib;
+  ia := pyvar_to_int(a); ib := pyvar_to_int(b);
+  { the div-based overflow probe below itself SIGFPEs when r = Low(Int64) and
+    ia = -1 (hardware idiv overflow), so the -1 multiplier is decided here:
+    it overflows only for ib = Low(Int64). }
+  if ia = -1 then
+  begin
+    if ib = Low(Int64) then PromoOp(a, b, 3, res)
+    else res := pyvar_of_int(-ib);
+    Exit;
+  end;
+  r := ia * ib;
   if (ia <> 0) and (r div ia <> ib) then PromoOp(a, b, 3, res)
   else res := pyvar_of_int(r);
 end;
@@ -296,12 +314,19 @@ end;
 procedure PyIFloorDiv(const a, b: Variant; var res: Variant);
 begin
   if IsPromoV(a) or IsPromoV(b) then PromoOp(a, b, 4, res)
+  { Low(Int64) // -1 = 2^63, past Int64 — and the hardware idiv traps SIGFPE
+    on exactly that pair, so it must promote BEFORE reaching pyfloordiv_v. }
+  else if (pyvar_to_int(a) = Low(Int64)) and (pyvar_to_int(b) = -1) then
+    PromoOp(a, b, 4, res)
   else res := pyfloordiv_v(a, b);
 end;
 
 procedure PyIMod(const a, b: Variant; var res: Variant);
 begin
   if IsPromoV(a) or IsPromoV(b) then PromoOp(a, b, 5, res)
+  { same idiv SIGFPE pair as PyIFloorDiv (the result is simply 0) }
+  else if (pyvar_to_int(a) = Low(Int64)) and (pyvar_to_int(b) = -1) then
+    PromoOp(a, b, 5, res)
   else res := pymod_v(a, b);
 end;
 
@@ -313,51 +338,41 @@ begin
   PyIMul(a, p, res);
 end;
 
-{ `a >> n` == floor(a / 2^n) (Python arithmetic shift). Promo -> floordiv;
-  Int64 -> the existing sign-propagating shift. }
+{ `a >> n` == floor(a / 2^n) (Python arithmetic shift). Promo -> the promo
+  runtime's arithmetic shr; Int64 -> the existing sign-propagating shift. }
 procedure PyIShr(const a, nv: Variant; var res: Variant);
-var p: Variant;
 begin
-  if IsPromoV(a) then begin Pow2V(PyToI64(nv), p); PromoOp(a, p, 4, res); end
+  if IsPromoV(a) then PromoOp(a, nv, 10, res)
   else res := pyshr_v(a, nv);
 end;
 
-{ Is v an all-ones mask 2^k - 1? returns k. Handles the corpus's 0xFFFF...FFFF
-  (2^64-1, a promo) and any Int64-fitting all-ones mask. }
-function MaskPow2(const v: Variant; var k: Int64): Boolean;
-var iv, t: Int64; s: array[0..1] of NativeInt; txt: AnsiString;
-begin
-  MaskPow2 := False;
-  if IsPromoV(v) then
-  begin
-    PXXPromoInit(@s); PXXPromoFromVariant(@s, @v); txt := PXXPromoToStr(@s);
-    PXXPromoClear(@s);
-    if txt = '18446744073709551615' then begin k := 64; MaskPow2 := True; end;
-    Exit;
-  end;
-  iv := pyvar_to_int(v);
-  if iv <= 0 then Exit;
-  if (iv and (iv + 1)) <> 0 then Exit;   { not all-ones }
-  k := 0; t := iv;
-  while t > 0 do begin t := t shr 1; k := k + 1; end;
-  MaskPow2 := True;
-end;
-
-{ `a & b`. Both Int64 -> plain and. One side promo -> the other must be an
-  all-ones mask (2^k-1), giving `value mod 2^k` (== keep low k bits, Python's
-  unsigned masking). A general bignum bitwise-and is not supported. }
+{ `a & b`. Both Int64 -> plain and (Int64 AND is already two's complement).
+  A promo side -> the promo runtime's bitwise AND (Python two's-complement
+  fixed-width view), which makes `-2 & 0xFFFFFFFFFFFFFFFF` the positive
+  unsigned reading — the earlier mask-only mod-2^k rewrite kept the SIGN of a
+  negative operand (Pascal mod truncates) and broke exactly those cells. }
 procedure PyIBitAnd(const a, b: Variant; var res: Variant);
-var k: Int64; p: Variant;
 begin
   if (not IsPromoV(a)) and (not IsPromoV(b)) then
-  begin res := pyvar_of_int(pyvar_to_int(a) and pyvar_to_int(b)); Exit; end;
-  if MaskPow2(b, k) then begin Pow2V(k, p); PromoOp(a, p, 5, res); end
-  else if MaskPow2(a, k) then begin Pow2V(k, p); PromoOp(b, p, 5, res); end
+    res := pyvar_of_int(pyvar_to_int(a) and pyvar_to_int(b))
   else
-  begin
-    writeln('pyeval: bignum bitwise-and needs a power-of-2-minus-1 mask');
-    Halt(1);
-  end;
+    PromoOp(a, b, 6, res);
+end;
+
+procedure PyIBitOr(const a, b: Variant; var res: Variant);
+begin
+  if (not IsPromoV(a)) and (not IsPromoV(b)) then
+    res := pyvar_of_int(pyvar_to_int(a) or pyvar_to_int(b))
+  else
+    PromoOp(a, b, 7, res);
+end;
+
+procedure PyIBitXor(const a, b: Variant; var res: Variant);
+begin
+  if (not IsPromoV(a)) and (not IsPromoV(b)) then
+    res := pyvar_of_int(pyvar_to_int(a) xor pyvar_to_int(b))
+  else
+    PromoOp(a, b, 8, res);
 end;
 
 function PyICmp(const a, b: Variant): Int64;
@@ -1623,14 +1638,27 @@ begin
   if IsOp('-') then
   begin
     Advance; ParseUnary(t);
-    { -a: promo-aware (0 - a) for a bignum, else the plain neg }
-    if IsPromoV(t) then PromoOp(pyvar_of_int(0), t, 2, res) else res := pyneg_v(t);
+    { -a: promo-aware (0 - a) for a bignum — and for Low(Int64), whose plain
+      neg wraps to itself while Python yields +2^63 }
+    if IsPromoV(t) or (IsIntishV(t) and (PyToI64(t) = Low(Int64))) then
+      PromoOp(pyvar_of_int(0), t, 2, res)
+    else res := pyneg_v(t);
     Exit;
   end;
   if IsOp('+') then
   begin Advance; ParseUnary(res); Exit; end;
   if IsOp('~') then
-  begin Advance; ParseUnary(t); res := pyinvert_v(t); Exit; end;
+  begin
+    Advance; ParseUnary(t);
+    { ~a = -a - 1; a bignum operand goes through the promo runtime }
+    if IsPromoV(t) then
+    begin
+      PromoOp(pyvar_of_int(-1), t, 2, res);   { -1 - a == ~a }
+      Exit;
+    end;
+    res := pyinvert_v(t);
+    Exit;
+  end;
   ParsePrimary(res);
 end;
 
@@ -1700,18 +1728,22 @@ begin
 end;
 
 procedure ParseBitXor(var res: Variant);
-var a, b: Variant;
+var a, b, t: Variant;
 begin
   ParseBitAnd(a);
-  while IsOp('^') do begin Advance; ParseBitAnd(b); a := pybitxor_v(a, b); end;
+  while IsOp('^') do
+  begin Advance; ParseBitAnd(b);
+    if IsIntishV(a) and IsIntishV(b) then begin PyIBitXor(a, b, t); a := t; end else a := pybitxor_v(a, b); end;
   res := a;
 end;
 
 procedure ParseBitOr(var res: Variant);
-var a, b: Variant;
+var a, b, t: Variant;
 begin
   ParseBitXor(a);
-  while IsOp('|') do begin Advance; ParseBitXor(b); a := pybitor_v(a, b); end;
+  while IsOp('|') do
+  begin Advance; ParseBitXor(b);
+    if IsIntishV(a) and IsIntishV(b) then begin PyIBitOr(a, b, t); a := t; end else a := pybitor_v(a, b); end;
   res := a;
 end;
 
@@ -1889,8 +1921,9 @@ begin
   begin
     if nargs <> 1 then EvalError('abs() expects 1 arg');
     cand := args.at(0);
-    if IsPromoV(cand) then
+    if IsPromoV(cand) or (IsIntishV(cand) and (PyToI64(cand) = Low(Int64))) then
     begin
+      { promo, or Low(Int64) whose plain abs wraps to itself: 0 - a }
       if PromoCmp(cand, pyvar_of_int(0)) < 0 then PromoOp(pyvar_of_int(0), cand, 2, res)
       else res := cand;
     end

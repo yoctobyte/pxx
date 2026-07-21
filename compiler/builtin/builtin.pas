@@ -583,7 +583,16 @@ begin
   begin
     neg := v < 0;
     n := v;
-    if neg then n := -n;
+    if neg then
+    begin
+      { Low(Int64) has no positive counterpart (-n wraps to itself and the
+        digit loop then produced just "-"): peel the last digit in the
+        NEGATIVE domain first — Pascal div/mod truncate toward zero, so
+        n mod 10 is in -9..0 and n div 10 moves toward zero. }
+      d := -(n mod 10);
+      digits := Chr(Ord('0') + d);
+      n := -(n div 10);
+    end;
     while n > 0 do
     begin
       d := n mod 10;

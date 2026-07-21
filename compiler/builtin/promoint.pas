@@ -777,12 +777,25 @@ begin
   BToNative := False;
   if Length(r.limbs) > 3 then Exit;         { >= 1e27, far past any native word }
   acc := 0;
-  for i := Length(r.limbs) - 1 downto 0 do
-  begin
-    if acc > (High(Int64) - r.limbs[i]) div BIG_BASE then Exit;
-    acc := acc * BIG_BASE + r.limbs[i];
-  end;
-  if r.neg then acc := -acc;
+  if r.neg then
+    { Accumulate in the NEGATIVE domain: two's complement is asymmetric, so
+      Low(Int64) — whose magnitude has no positive counterpart — must demote
+      too. The positive-magnitude loop rejected exactly that value, leaving a
+      -2^63 cell stranded on the heap tier (where a container slot loses its
+      managed payload). Guard is exact: trunc-div of a negative is the ceiling
+      of the real quotient, and `acc >= ceil((Low+limb)/BASE)` is precisely
+      `acc*BASE - limb >= Low` for integer acc. }
+    for i := Length(r.limbs) - 1 downto 0 do
+    begin
+      if acc < (Low(Int64) + r.limbs[i]) div BIG_BASE then Exit;
+      acc := acc * BIG_BASE - r.limbs[i];
+    end
+  else
+    for i := Length(r.limbs) - 1 downto 0 do
+    begin
+      if acc > (High(Int64) - r.limbs[i]) div BIG_BASE then Exit;
+      acc := acc * BIG_BASE + r.limbs[i];
+    end;
   if SizeOf(NativeInt) < 8 then
     if (acc > 2147483647) or (acc < -2147483648) then Exit;
   v := acc;
