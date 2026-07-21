@@ -107,6 +107,7 @@ const
   PK_INT    = 2;
   PK_FLOAT  = 3;
   PK_STR    = 4;
+  PK_BYTES  = 14;   { b'...' literal — chars are byte values }
   PK_OP     = 5;
   PK_NL     = 6;
   PK_INDENT = 7;
@@ -1099,8 +1100,8 @@ end;
 
 procedure Tokenize(const s: AnsiString);
 var
-  c, c2: Char;
-  start: Integer;
+  c, c2, hc: Char;
+  start, hv, hk: Integer;
   ident, op, slit: AnsiString;
   iv, dg: Int64;
   fv, scale: Double;
@@ -1228,6 +1229,56 @@ begin
       if ((c = 'f') or (c = 'F')) and (Pos + 1 <= SLen) and
          ((Src[Pos+1] = '''') or (Src[Pos+1] = '"')) then
         TokError('f-strings not supported in M1');
+      { b'...' — a BYTES literal: scan like a string, tag PK_BYTES }
+      if ((c = 'b') or (c = 'B')) and (Pos + 1 <= SLen) and
+         ((Src[Pos+1] = '''') or (Src[Pos+1] = '"')) then
+      begin
+        Pos := Pos + 1;
+        c2 := Src[Pos];
+        Pos := Pos + 1;
+        slit := '';
+        while (Pos <= SLen) and (Src[Pos] <> c2) do
+        begin
+          if (Src[Pos] = '\') and (Pos + 1 <= SLen) then
+          begin
+            Pos := Pos + 1;
+            case Src[Pos] of
+              'n': slit := slit + #10;
+              't': slit := slit + #9;
+              'r': slit := slit + #13;
+              '\': slit := slit + '\';
+              '''': slit := slit + '''';
+              '"': slit := slit + '"';
+              '0': slit := slit + #0;
+              'x':
+                begin
+                  hv := 0;
+                  if (Pos + 2 <= SLen) then
+                  begin
+                    for hk := 1 to 2 do
+                    begin
+                      Pos := Pos + 1;
+                      hc := Src[Pos];
+                      if (hc >= '0') and (hc <= '9') then hv := hv * 16 + Ord(hc) - 48
+                      else if (hc >= 'a') and (hc <= 'f') then hv := hv * 16 + Ord(hc) - 87
+                      else if (hc >= 'A') and (hc <= 'F') then hv := hv * 16 + Ord(hc) - 55;
+                    end;
+                  end;
+                  slit := slit + Chr(hv);
+                end;
+            else
+              slit := slit + Src[Pos];
+            end;
+          end
+          else
+            slit := slit + Src[Pos];
+          Pos := Pos + 1;
+        end;
+        if Pos > SLen then TokError('unterminated bytes literal');
+        Pos := Pos + 1;
+        AddTok(PK_BYTES, slit, 0, 0);
+        continue;
+      end;
       start := Pos;
       while (Pos <= SLen) and IsIdentChar(Src[Pos]) do Pos := Pos + 1;
       ident := Copy(Src, start, Pos - start);
@@ -1253,6 +1304,20 @@ begin
             '''': slit := slit + '''';
             '"': slit := slit + '"';
             '0': slit := slit + #0;
+            'x':
+              begin
+                hv := 0;
+                if (Pos + 2 <= SLen) then
+                  for hk := 1 to 2 do
+                  begin
+                    Pos := Pos + 1;
+                    hc := Src[Pos];
+                    if (hc >= '0') and (hc <= '9') then hv := hv * 16 + Ord(hc) - 48
+                    else if (hc >= 'a') and (hc <= 'f') then hv := hv * 16 + Ord(hc) - 87
+                    else if (hc >= 'A') and (hc <= 'F') then hv := hv * 16 + Ord(hc) - 55;
+                  end;
+                slit := slit + Chr(hv);
+              end;
           else
             slit := slit + Src[Pos];
           end;
@@ -1727,6 +1792,27 @@ var
   loVal, hiVal: Int64;
   haveLo: Boolean;
 begin
+  { ---- targeted module intercepts (import is a no-op statement) ----
+    sys.stdout.write(EXPR) / sys.stdout.flush() — the corpus's D. / D.R
+    printers. stderr writes are swallowed (matching the compiled side). }
+  if (TkKind[Cur] = PK_NAME) and (TkText[Cur] = 'sys') and
+     (TkKind[Cur+1] = PK_OP) and (TkText[Cur+1] = '.') then
+  begin
+    Advance; Advance;                    { sys . }
+    name := CurText; Advance;            { stdout / stderr }
+    if (CurKind = PK_OP) and (CurText = '.') then Advance;
+    fld := CurText; Advance;             { write / flush }
+    ExpectOp('(');
+    if not IsOp(')') then
+    begin
+      ParseExpr(recv);
+      if (fld = 'write') and (name = 'stdout') and Executing then
+        write(pystr_of(recv));
+    end;
+    ExpectOp(')');
+    res := MakeNone;
+    Exit;
+  end;
   { ---- atom ---- }
   if TkKind[Cur] = PK_INT then
   begin res := pyvar_of_int(TkInt[Cur]); Advance; end
@@ -1734,6 +1820,11 @@ begin
   begin PyBigLit(TkText[Cur], res); Advance; end
   else if TkKind[Cur] = PK_FLOAT then
   begin res := MakeFloat(TkFloat[Cur]); Advance; end
+  else if TkKind[Cur] = PK_BYTES then
+  begin
+    res := PyBoxObj(Pointer(bytes(TkText[Cur])));   { chars are the byte values }
+    Advance;
+  end
   else if TkKind[Cur] = PK_STR then
   begin res := MakeStr(TkText[Cur]); Advance; end
   else if IsOp('[') then
@@ -1919,7 +2010,12 @@ begin
       { skip-mode: names read as None and pymul_v on a mixed pair raises —
         same rule as // below }
       if not Executing then a := MakeNone
-      else if IsIntishV(a) and IsIntishV(b) then begin PyIMul(a, b, t); a := t; end else a := pymul_v(a, b); end
+      else if IsIntishV(a) and IsIntishV(b) then begin PyIMul(a, b, t); a := t; end
+      else if (PPyRec(@a)^.VType = 7) and
+              (TObject(Pointer(PPyRec(@a)^.Payload)) is TPyBytes) and IsIntishV(b) then
+        { b'..' * n — bytes repetition }
+        a := PyBoxObj(Pointer(pybytes_repeat(TPyBytes(pyvarobj(a)), pyvar_to_int(b))))
+      else a := pymul_v(a, b); end
     else if IsOp('//') then
     begin Advance; ParseUnary(b);
       { skipping a not-taken/def-skip branch: names read as None(0), so a real
@@ -2304,6 +2400,31 @@ begin
       end
       else
         EvalError('list(): unsupported argument');
+    end;
+    res := PyBoxObj(Pointer(li));
+    Exit;
+  end;
+  if name = 'reversed' then
+  begin
+    { reversed(list|str) -> a reversed LIST (materialised) }
+    li := TPyList.Create;
+    if nargs > 0 then
+    begin
+      cand := args.at(0);
+      if (PPyRec(@cand)^.VType = 7) and
+         (TObject(Pointer(PPyRec(@cand)^.Payload)) is TPyList) then
+      begin
+        for i := TPyList(pyvarobj(cand)).count - 1 downto 0 do
+          li.append(TPyList(pyvarobj(cand)).at(i));
+      end
+      else if PPyRec(@cand)^.VType = 6 then
+      begin
+        s := PPyAnsiString(@PPyRec(@cand)^.Payload)^;
+        for i := Length(s) downto 1 do
+          li.append(MakeStr(s[i]));
+      end
+      else
+        EvalError('reversed(): unsupported argument');
     end;
     res := PyBoxObj(Pointer(li));
     Exit;
@@ -2974,7 +3095,7 @@ end;
 
 { def name(p1, p2, ...): SUITE — registers the function and skips its body. }
 procedure ExecDef;
-var name, params: AnsiString; bodyPos: Integer;
+var name, params, pname: AnsiString; bodyPos: Integer; dv: Variant;
 begin
   Advance;   { def }
   if CurKind <> PK_NAME then EvalError('def: expected a name');
@@ -2984,8 +3105,23 @@ begin
   while not IsOp(')') do
   begin
     if CurKind <> PK_NAME then EvalError('def: expected a parameter name');
-    if params <> '' then params := params + ',';
-    params := params + TkText[Cur]; Advance;
+    pname := TkText[Cur]; Advance;
+    if IsOp('=') then
+    begin
+      { `def _const(v, _lo=lo):` — a DEFAULT bound at def time (the corpus's
+        capture idiom). Evaluate NOW and store as a LOCAL of the defining
+        scope: PyMakeClosure snapshots the scope, so the body resolves the
+        name through the capture. Not appended to params — the call site
+        never passes it. }
+      Advance;
+      ParseExpr(dv);
+      if Executing then LclSet(pname, dv);
+    end
+    else
+    begin
+      if params <> '' then params := params + ',';
+      params := params + pname;
+    end;
     if IsOp(',') then Advance
     else if not IsOp(')') then EvalError('def: expected , or ) in params');
   end;
@@ -3020,7 +3156,18 @@ begin
     Exit;
   end;
   if IsKw('pass') then begin Advance; Exit; end;
-  if IsKw('import') or IsKw('continue') or IsKw('elif') or IsKw('else') then
+  if IsKw('import') then
+  begin
+    { `import sys` / `import time` — the module NAMES resolve through the
+      targeted intercepts (sys.stdout.write etc.); the statement itself is
+      consumed and ignored. Dotted names allowed. }
+    Advance;
+    while (CurKind = PK_NAME) or ((CurKind = PK_OP) and (CurText = '.')) or
+          ((CurKind = PK_OP) and (CurText = ',')) do
+      Advance;
+    Exit;
+  end;
+  if IsKw('continue') or IsKw('elif') or IsKw('else') then
     EvalError('statement "' + CurText + '" is not supported yet');
 
   if (TkKind[Cur] = PK_NAME) and AssignmentAhead then

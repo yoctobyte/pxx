@@ -733,6 +733,8 @@ function PyListRepeatPair(a, b: Integer): Boolean; forward;              { Nil P
 function PyMakeListRepeat(a, b: Integer): Integer; forward;              { Nil Python `xs * n` (pyparser.inc) }
 function PyBytesRepeatPair(a, b: Integer): Boolean; forward;             { Nil Python `bytes * n` (pyparser.inc) }
 function PyMakeBytesRepeat(a, b: Integer): Integer; forward;             { Nil Python `bytes * n` (pyparser.inc) }
+function PyNodeIsPyBytes(n: Integer): Boolean; forward;                  { Nil Python: node typed TPyBytes? (pyparser.inc) }
+function PyMakeBytesBinCall(const fname: AnsiString; a, b: Integer; retTk: TTypeKind): Integer; forward; { bytes binop helper call (pyparser.inc) }
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
 function PyIsSliceBase(n: Integer): Boolean; forward; { Nil Python: may this value be sliced? (pyparser.inc) }
@@ -8721,12 +8723,80 @@ begin
       end
       else if isNilPy and (name = 'open') then
       begin
-        { open(path[, mode, encoding=...]) -> pyopen(path), a TPyList of lines.
-          Only the path is used; the remaining positional/keyword args are
-          skipped (read mode is assumed — see pyopen). }
+        { open(path) -> pyopen(path), a TPyList of lines (read-slurp).
+          open(path, mode) -> pyfile_open, a REAL OS file handle (uforth's
+          file words create/write/seek through it). Later positional/keyword
+          args (encoding=...) are skipped either way. }
         Next; Expect(tkLParen, '(');
         ParseExpr;
         atRecv := CurASTNode;
+        if CurTok.Kind = tkComma then
+        begin
+          Next;
+          ParseArgExpr;
+          { A TEXT read (`open(p, "r"...)`) is INCLUDE's line iteration — keep
+            the read-slurp TPyList. Any binary/write mode is uforth's file-VFS
+            handle: pyfile_open returns a real TPyFile. Decided on the mode
+            literal so both call shapes work. }
+          if (ASTKind[CurASTNode] = AN_STR_LIT) and
+             (ASTSLen[CurASTNode] >= 1) and
+             (TokChars[ASTSOffset[CurASTNode]] = 'r') and
+             ((ASTSLen[CurASTNode] = 1) or (TokChars[ASTSOffset[CurASTNode]+1] <> 'b')) then
+          begin
+            { drop remaining args, then lower to pyopen(path) }
+            while CurTok.Kind = tkComma do
+            begin
+              Next;
+              atFld := 0;
+              while (CurTok.Kind <> tkEOF) and
+                    not ((atFld = 0) and (CurTok.Kind in [tkComma, tkRParen])) do
+              begin
+                if CurTok.Kind = tkLParen then Inc(atFld)
+                else if CurTok.Kind = tkRParen then Dec(atFld);
+                Next;
+              end;
+            end;
+            Expect(tkRParen, ')');
+            node := AllocNode(AN_ARG);
+            ASTLeft[node] := atRecv;
+            atRecv := AllocNode(AN_CALL);
+            ASTIVal[atRecv] := FindProc('pyopen');
+            if ASTIVal[atRecv] < 0 then Error('Nil Python: pylib (pyopen) not loaded');
+            ASTTk[atRecv] := Ord(tyClass);
+            ASTLeft[atRecv] := node;
+            ASTRight[atRecv] := REC_UCLASS_BASE + FindUClass('TPyList');
+            CurASTNode := atRecv;
+            LastExprTk := tyClass;
+            Exit;
+          end;
+          node := AllocNode(AN_ARG);
+          ASTLeft[node] := atRecv;
+          atFld := AllocNode(AN_ARG);
+          ASTLeft[atFld] := CurASTNode;
+          ASTRight[node] := atFld;
+          atRecv := AllocNode(AN_CALL);
+          ASTIVal[atRecv] := FindProc('pyfile_open');
+          if ASTIVal[atRecv] < 0 then Error('Nil Python: pylib (pyfile_open) not loaded');
+          ASTTk[atRecv] := Ord(tyClass);
+          ASTLeft[atRecv] := node;
+          ASTRight[atRecv] := REC_UCLASS_BASE + FindUClass('TPyFile');   { .write/.seek resolve }
+          while CurTok.Kind = tkComma do
+          begin
+            Next;
+            atFld := 0;
+            while (CurTok.Kind <> tkEOF) and
+                  not ((atFld = 0) and (CurTok.Kind in [tkComma, tkRParen])) do
+            begin
+              if CurTok.Kind = tkLParen then Inc(atFld)
+              else if CurTok.Kind = tkRParen then Dec(atFld);
+              Next;
+            end;
+          end;
+          Expect(tkRParen, ')');
+          CurASTNode := atRecv;
+          LastExprTk := tyClass;
+          Exit;
+        end;
         while CurTok.Kind = tkComma do
         begin
           Next;
@@ -11663,6 +11733,13 @@ begin
       ASTTk[node] := Ord(Procs[opci].RetType)
     else if (ASTTk[left] = Ord(tyVariant)) or (ASTTk[right] = Ord(tyVariant)) then
       ASTTk[node] := Ord(tyVariant)
+    else if PyExprMode and (op = tkPlus) and PyNodeIsPyBytes(left) and PyNodeIsPyBytes(right) then
+    begin
+      { b1 + b2 — bytes concatenation (uforth WRITE-LINE) }
+      node := PyMakeBytesBinCall('pybytes_concat', left, right, tyClass);
+      CurASTNode := node;
+      continue;
+    end
     else if (op = tkPlus) and ((ASTTk[left] = Ord(tyAnsiString)) or (ASTTk[right] = Ord(tyAnsiString))) then
       ASTTk[node] := Ord(tyAnsiString)
     else if (op = tkPlus) and ((ASTTk[left] = Ord(tyString)) or (ASTTk[right] = Ord(tyString)) or
@@ -11871,6 +11948,22 @@ begin
     else if (ASTTk[right] = Ord(tyUInt64)) and (ASTKind[left] = AN_INT_LIT) and
             (ASTIVal[left] >= 0) then
       ASTTk[left] := Ord(tyUInt64);
+    if PyExprMode and (op in [tkEq, tkNeq]) and
+       PyNodeIsPyBytes(left) and PyNodeIsPyBytes(right) then
+    begin
+      { bytes VALUE equality (`raw == b""`): the class-pair fallthrough
+        compared POINTERS, which is Python-wrong for bytes }
+      node := PyMakeBytesBinCall('pybytes_eq', left, right, tyBoolean);
+      if op = tkNeq then
+      begin
+        left := AllocNode(AN_NOT);
+        ASTLeft[left] := node;
+        ASTTk[left] := Ord(tyBoolean);
+        node := left;
+      end;
+      CurASTNode := node;
+      Exit;
+    end;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
 

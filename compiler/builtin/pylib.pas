@@ -57,26 +57,6 @@ type
     constructor Create;
   end;
 
-  { A file object with the mutable methods uforth's file-VFS words call
-    (seek/tell/truncate/read/write/close/flush). These words run only under the
-    exec path (stubbed), so the methods are STUBS — the class exists so the
-    variant method dispatch resolves `entry["file"].truncate(...)` etc. A real
-    file object is feature-lib-pyfile-object. }
-  TPyFile = class
-  public
-    constructor Create;
-    procedure seek(offset: Int64); overload;
-    procedure seek(offset: Int64; whence: Int64); overload;
-    function tell: Int64;
-    procedure truncate(size: Int64);
-    function read: AnsiString; overload;
-    function read(n: Int64): AnsiString; overload;
-    function readline: AnsiString;
-    function write(const s: AnsiString): Int64;
-    procedure close;
-    procedure flush;
-  end;
-
   TPyList = class
   public
     FLen: Integer;
@@ -216,8 +196,28 @@ type
       form binds through the ordinary method keyword-argument path. }
     function decode(const encoding: AnsiString): AnsiString; overload;
     function decode(const encoding: AnsiString; const errors: AnsiString): AnsiString; overload;
+    { bytes.endswith(suffix) — the READ-LINE CR/LF trim }
+    function endswith(sfx: TPyBytes): Boolean;
     property Items[i: Integer]: Integer read at write put; default;
   end;
+
+  { A real OS file (raw x86-64 syscalls, no libc) backing NilPy's open(path,
+    mode) — uforth's CREATE-FILE/OPEN-FILE/READ-LINE/WRITE-FILE/... words. }
+  TPyFile = class
+  public
+    FFd: Int64;
+    constructor Create;
+    function read(u: Int64): TPyBytes;
+    function readline: TPyBytes;
+    function write(b: TPyBytes): Int64;
+    procedure seek(pos: Int64); overload;
+    procedure seek(pos: Int64; whence: Int64); overload;
+    function tell: Int64;
+    procedure truncate(sz: Int64);
+    procedure flush;
+    procedure close;
+  end;
+
 
 { Python's str() for an f-string hole. Overloaded so ARGUMENT TYPE picks the
   spelling, which is the whole point: the shared str() intrinsic lowers every
@@ -492,6 +492,9 @@ function bool(const s: AnsiString): Boolean; overload;
 function bool(l: TPyList): Boolean; overload;
 function pylist_repeat(l: TPyList; n: Int64): TPyList;
 function pybytes_repeat(b: TPyBytes; n: Int64): TPyBytes;
+function pybytes_concat(a, b: TPyBytes): TPyBytes;
+function pybytes_eq(a, b: TPyBytes): Boolean;
+function pyfile_open(const path, mode: AnsiString): TPyFile;
 { `s.rjust(w)` / `s.rjust(w, fill)` — right-align in a field of w characters.
   Python returns the string UNCHANGED when it is already at least that long
   (it never truncates), and the fill defaults to a space. }
@@ -532,6 +535,7 @@ function pydictcontains(d: TPyDict; const k: Variant): Boolean;
 function pylist_eq(a: TPyList; b: TPyList): Boolean;
 function len(const s: AnsiString): Integer; overload;
 function next(c: TPyCounter): Int64;
+function pyvar_holds(const v: Variant; k: Int64): Boolean;
 function pycontains(l: TPyList; const v: Variant): Boolean;
 function pyvar_contains(const c: Variant; const v: Variant): Boolean;
 { `sub in s` on a STRING is SUBSTRING containment in Python, not element
@@ -1065,56 +1069,6 @@ begin
   st_size := 0;
 end;
 
-{ TPyFile — all STUBS (the file-VFS words that use them never run; see the class
-  note). Present so the frontend can resolve the method names. }
-constructor TPyFile.Create;
-begin
-end;
-
-procedure TPyFile.seek(offset: Int64);
-begin
-end;
-
-procedure TPyFile.seek(offset: Int64; whence: Int64);
-begin
-end;
-
-function TPyFile.tell: Int64;
-begin
-  Result := 0;
-end;
-
-procedure TPyFile.truncate(size: Int64);
-begin
-end;
-
-function TPyFile.read: AnsiString;
-begin
-  Result := '';
-end;
-
-function TPyFile.read(n: Int64): AnsiString;
-begin
-  Result := '';
-end;
-
-function TPyFile.readline: AnsiString;
-begin
-  Result := '';
-end;
-
-function TPyFile.write(const s: AnsiString): Int64;
-begin
-  Result := Length(s);
-end;
-
-procedure TPyFile.close;
-begin
-end;
-
-procedure TPyFile.flush;
-begin
-end;
 
 function next(c: TPyCounter): Int64;
 begin
@@ -1420,6 +1374,19 @@ begin
   end
   else
     Result := p^.Payload = q^.Payload;
+end;
+
+{ Does this variant hold the given pylib container? k: 1=list, 2=dict,
+  3=bytes. The runtime side of variant-method dual dispatch. }
+function pyvar_holds(const v: Variant; k: Int64): Boolean;
+var o: TObject;
+begin
+  pyvar_holds := False;
+  if pyvartag(v) <> 7 then Exit;
+  o := TObject(pyvarobj(v));
+  if k = 1 then pyvar_holds := o is TPyList
+  else if k = 2 then pyvar_holds := o is TPyDict
+  else if k = 3 then pyvar_holds := o is TPyBytes;
 end;
 
 function pycontains(l: TPyList; const v: Variant): Boolean;
@@ -2466,14 +2433,38 @@ begin
 end;
 
 procedure pybytes_setslice(b: TPyBytes; lo, hi: Integer; src: TPyBytes);
-var k: Integer; sp, dp: PByte;
+var k, oldLen, delta: Integer; sp, dp: PByte;
 begin
   PySliceBounds(b.FLen, lo, hi);
   if src.FLen <> (hi - lo) then
   begin
-    WriteLn('ValueError: byte slice assignment length mismatch (expected ',
-            hi - lo, ', got ', src.FLen, ')');
-    Halt(1);
+    { Python bytearray slice assignment RESIZES on a length mismatch —
+      inserting or deleting bytes and shifting the tail. uforth's 2VARIABLE
+      leans on this (`memory[h:h+16] = b'..' * 16` with a 64-byte value,
+      thanks to a doubled backslash CPython also sees), so matching the
+      resize is quirk-compatibility, not generosity. }
+    oldLen := b.FLen;
+    delta := src.FLen - (hi - lo);
+    if delta > 0 then
+    begin
+      PyBytesEnsure(b, oldLen + delta);
+      for k := oldLen - 1 downto hi do
+      begin
+        sp := PByte(NativeInt(b.FData) + k);
+        dp := PByte(NativeInt(b.FData) + k + delta);
+        dp^ := sp^;
+      end;
+    end
+    else
+    begin
+      for k := hi to oldLen - 1 do
+      begin
+        sp := PByte(NativeInt(b.FData) + k);
+        dp := PByte(NativeInt(b.FData) + k + delta);
+        dp^ := sp^;
+      end;
+      b.FLen := oldLen + delta;
+    end;
   end;
   for k := 0 to src.FLen - 1 do
   begin
@@ -3756,6 +3747,140 @@ begin
     for i := 0 to w - 1 do
       r.put(k * w + i, b.at(i));
   Result := r;
+end;
+
+{ b1 + b2 — Python bytes concatenation (uforth WRITE-LINE's `data + b'\n'`). }
+function pybytes_concat(a, b: TPyBytes): TPyBytes;
+var r: TPyBytes; i, na, nb: Integer;
+begin
+  if a = nil then na := 0 else na := a.count;
+  if b = nil then nb := 0 else nb := b.count;
+  r := TPyBytes.Create(na + nb);
+  for i := 0 to na - 1 do r.put(i, a.at(i));
+  for i := 0 to nb - 1 do r.put(na + i, b.at(i));
+  Result := r;
+end;
+
+{ bytes VALUE equality (`raw == b""`): pointer compare is Python-wrong. }
+function pybytes_eq(a, b: TPyBytes): Boolean;
+var i, na, nb: Integer;
+begin
+  Result := False;
+  if a = nil then na := 0 else na := a.count;
+  if b = nil then nb := 0 else nb := b.count;
+  if na <> nb then Exit;
+  for i := 0 to na - 1 do
+    if a.at(i) <> b.at(i) then Exit;
+  Result := True;
+end;
+
+function TPyBytes.endswith(sfx: TPyBytes): Boolean;
+var i, n, m: Integer;
+begin
+  Result := False;
+  n := count;
+  if sfx = nil then begin Result := True; Exit; end;
+  m := sfx.count;
+  if m > n then Exit;
+  for i := 0 to m - 1 do
+    if at(n - m + i) <> sfx.at(i) then Exit;
+  Result := True;
+end;
+
+{ ---- TPyFile: raw-syscall file handles (x86-64) ---- }
+
+constructor TPyFile.Create;
+begin
+  FFd := -1;
+end;
+
+function pyfile_open(const path, mode: AnsiString): TPyFile;
+var flags, fd: Int64; z: AnsiString; i: Integer; wantCreate, wantRW: Boolean;
+begin
+  wantCreate := False; wantRW := False;
+  for i := 1 to Length(mode) do
+  begin
+    if mode[i] = 'w' then wantCreate := True;
+    if mode[i] = '+' then wantRW := True;
+  end;
+  if wantCreate then flags := 2 + 64 + 512        { O_RDWR|O_CREAT|O_TRUNC }
+  else if wantRW then flags := 2                  { O_RDWR }
+  else flags := 0;                                { O_RDONLY }
+  z := path + #0;
+  fd := __pxxrawsyscall(2, Int64(NativeInt(PChar(z))), flags, 420, 0, 0, 0);  { open, 0644 }
+  if fd < 0 then
+  begin
+    WriteLn('FileNotFoundError: ', path);
+    Halt(1);
+  end;
+  Result := TPyFile.Create;
+  Result.FFd := fd;
+end;
+
+function TPyFile.read(u: Int64): TPyBytes;
+var r: TPyBytes; got: Int64;
+begin
+  if u < 0 then u := 0;
+  r := TPyBytes.Create(u);
+  got := __pxxrawsyscall(0, FFd, Int64(NativeInt(r.FData)), u, 0, 0, 0);
+  if got < 0 then got := 0;
+  r.FLen := got;
+  Result := r;
+end;
+
+function TPyFile.readline: TPyBytes;
+var r: TPyBytes; got: Int64; ch: Byte;
+begin
+  { one byte at a time — line reads are rare and short in the corpus }
+  r := TPyBytes.Create(0);
+  while True do
+  begin
+    got := __pxxrawsyscall(0, FFd, Int64(NativeInt(@ch)), 1, 0, 0, 0);
+    if got <= 0 then Break;
+    r.append(ch);
+    if ch = 10 then Break;
+  end;
+  Result := r;
+end;
+
+function TPyFile.write(b: TPyBytes): Int64;
+begin
+  if (b = nil) or (b.FLen = 0) then begin Result := 0; Exit; end;
+  Result := __pxxrawsyscall(1, FFd, Int64(NativeInt(b.FData)), b.FLen, 0, 0, 0);
+end;
+
+procedure TPyFile.seek(pos: Int64);
+var r: Int64;
+begin
+  r := __pxxrawsyscall(8, FFd, pos, 0, 0, 0, 0);   { lseek SEEK_SET }
+end;
+
+procedure TPyFile.seek(pos: Int64; whence: Int64);
+var r: Int64;
+begin
+  r := __pxxrawsyscall(8, FFd, pos, whence, 0, 0, 0);
+end;
+
+function TPyFile.tell: Int64;
+begin
+  Result := __pxxrawsyscall(8, FFd, 0, 1, 0, 0, 0);   { lseek SEEK_CUR }
+end;
+
+procedure TPyFile.truncate(sz: Int64);
+var r: Int64;
+begin
+  r := __pxxrawsyscall(77, FFd, sz, 0, 0, 0, 0);   { ftruncate }
+end;
+
+procedure TPyFile.flush;
+begin
+  { raw fds are unbuffered — nothing to do }
+end;
+
+procedure TPyFile.close;
+var r: Int64;
+begin
+  r := __pxxrawsyscall(3, FFd, 0, 0, 0, 0, 0);
 end;
 
 { repr() dispatching on the RUNTIME tag, so a container element nested inside a

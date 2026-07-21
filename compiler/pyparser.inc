@@ -3807,9 +3807,13 @@ begin
 end;
 
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer;
-var ci, mmi, mpi, i, unboxArg, unboxCall, castNode: Integer;
+var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
     smPName: AnsiString; smTk: TTypeKind; smArgs: Integer;
+    dualPi, dcall, dself, dcast, tern, pairN, condN: Integer;
+    dualCis, dualMmis: array[0..2] of Integer;
+    nDual, di: Integer;
+    argExprs: array[0..15] of Integer;
 begin
   { A STR method on a variant receiver — `for s in ["ab"]: s.upper()`, where the
     loop variable is a variant holding a string. Render the receiver with
@@ -3830,6 +3834,7 @@ begin
   end;
   { candidate scan — one entry per class whose method set answers to mname }
   hitCi := -1; hitMmi := -1; hitPi := -1;
+  nDual := 0;
   for ci := 0 to UClsCount - 1 do
   begin
     if UClsIsRecord[ci] then Continue;
@@ -3860,13 +3865,36 @@ begin
           begin hitCi := ci; hitMmi := mmi; hitPi := mpi; end;
       end
       else if PyIsPylibContainerCi(hitCi) and not PyIsPylibContainerCi(ci) then
+      begin
         { the other candidate is a pylib container (list/dict/bytes), this one a
-          USER class — prefer the user class. `vm.pop()` on an unannotated (so
-          variant) `vm` param means VM.pop, not TPyList.pop/TPyDict.pop. Same
-          workaround family; the real fix is runtime dispatch. }
-        begin hitCi := ci; hitMmi := mmi; hitPi := mpi; end
+          USER class: hold the USER class statically but remember the container
+          for a RUNTIME is-test branch — `vm.pop()` on a variant param means
+          VM.pop, while `pending.pop()` on a variant LIST must reach
+          TPyList.pop (the static pick alone called VM.pop on a list and
+          jumped through garbage — uforth END-STRUCTURE). }
+        if nDual <= High(dualCis) then
+        begin
+          dualCis[nDual] := hitCi; dualMmis[nDual] := hitMmi; Inc(nDual);
+        end;
+        hitCi := ci; hitMmi := mmi; hitPi := mpi;
+      end
       else if PyIsPylibContainerCi(ci) and not PyIsPylibContainerCi(hitCi) then
-        { keep the user-class candidate already held }
+      begin
+        { keep the user-class candidate; remember the container for the branch }
+        if nDual <= High(dualCis) then
+        begin
+          dualCis[nDual] := ci; dualMmis[nDual] := mmi; Inc(nDual);
+        end;
+      end
+      else if PyIsPylibContainerCi(ci) and PyIsPylibContainerCi(hitCi) then
+      begin
+        { TWO containers declare it (list.pop and dict.pop): keep the current
+          hit, branch on the other at runtime too }
+        if nDual <= High(dualCis) then
+        begin
+          dualCis[nDual] := ci; dualMmis[nDual] := mmi; Inc(nDual);
+        end;
+      end
       else if not IsSubclassOf(ci, hitCi) then
         Error('Nil Python: .' + mname + '() on a dynamically-typed value is '
           + 'ambiguous (several classes declare it) — assign to an annotated '
@@ -3922,6 +3950,7 @@ begin
   while CurTok.Kind <> tkRParen do
   begin
     ParseArgExpr;
+    if i <= High(argExprs) then argExprs[i] := CurASTNode;
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := CurASTNode;
     ASTRight[lastArg] := argNode;
@@ -3956,6 +3985,80 @@ begin
   ASTLeft[callNode] := selfArg;
   LastExprTk := Procs[mpi].RetType;
   Result := callNode;
+
+  { RUNTIME dual dispatch: the receiver may be one of the remembered pylib
+    CONTAINERS rather than the statically-preferred class. For each container
+    candidate, wrap: `pyvar_holds(recv, k) ? <container call> : <fallback>` —
+    recv/arg expression nodes are shared across arms (side-effect-free in the
+    corpus; the b346 re-emission caveat applies). }
+  if (nDual > 0) and (i <= High(argExprs) + 1) then
+    for di := 0 to nDual - 1 do
+    begin
+      mmi := FindUMethArity(dualCis[di], mname, i);
+      if mmi < 0 then mmi := dualMmis[di];
+      if mmi < 0 then Continue;
+      dualPi := UMthProc_[mmi];
+      unboxArg := AllocNode(AN_ARG);
+      ASTLeft[unboxArg] := baseNode;
+      unboxCall := AllocNode(AN_CALL);
+      ASTIVal[unboxCall] := FindProc('pyvarobj');
+      ASTTk[unboxCall] := Ord(tyPointer);
+      ASTLeft[unboxCall] := unboxArg;
+      dcast := AllocNode(AN_CLASS_CAST);
+      ASTLeft[dcast] := unboxCall;
+      ASTIVal[dcast] := dualCis[di];
+      ASTTk[dcast] := Ord(tyClass);
+      dself := AllocNode(AN_ARG);
+      ASTLeft[dself] := dcast;
+      lastArg := dself;
+      for k := 0 to i - 1 do
+      begin
+        argNode := AllocNode(AN_ARG);
+        ASTLeft[argNode] := argExprs[k];
+        ASTRight[lastArg] := argNode;
+        lastArg := argNode;
+      end;
+      if UMthVirSlot[mmi] >= 0 then
+      begin
+        dcall := AllocNode(AN_VIRTUAL_CALL);
+        ASTRight[dcall] := UMthVirSlot[mmi];
+      end
+      else
+        dcall := AllocNode(AN_CALL);
+      ASTIVal[dcall] := dualPi;
+      ASTTk[dcall] := Ord(Procs[dualPi].RetType);
+      ASTLeft[dcall] := dself;
+
+      { cond: pyvar_holds(recv, kind) }
+      unboxArg := AllocNode(AN_ARG);
+      ASTLeft[unboxArg] := baseNode;
+      condN := AllocNode(AN_INT_LIT);
+      if dualCis[di] = FindUClass('TPyList') then ASTIVal[condN] := 1
+      else if dualCis[di] = FindUClass('TPyDict') then ASTIVal[condN] := 2
+      else ASTIVal[condN] := 3;
+      ASTTk[condN] := Ord(tyInt64);
+      unboxCall := AllocNode(AN_ARG);
+      ASTLeft[unboxCall] := condN;
+      ASTRight[unboxArg] := unboxCall;
+      condN := AllocNode(AN_CALL);
+      ASTIVal[condN] := FindProc('pyvar_holds');
+      if ASTIVal[condN] < 0 then Error('Nil Python: pylib (pyvar_holds) not loaded');
+      ASTTk[condN] := Ord(tyBoolean);
+      ASTLeft[condN] := unboxArg;
+
+      pairN := AllocNode(AN_PAIR);
+      ASTLeft[pairN] := dcall;
+      ASTRight[pairN] := Result;
+      tern := AllocNode(AN_TERNARY);
+      ASTLeft[tern] := condN;
+      ASTRight[tern] := pairN;
+      if Procs[dualPi].RetType = Procs[mpi].RetType then
+        ASTTk[tern] := Ord(Procs[mpi].RetType)
+      else
+        ASTTk[tern] := Ord(tyVariant);
+      LastExprTk := IntToTypeKind(ASTTk[tern]);
+      Result := tern;
+    end;
 end;
 
 { A None VALUE: pylib's pynone() yields a variant tagged VT_EMPTY. }
@@ -4184,6 +4287,21 @@ function PyBytesRepeatPair(a, b: Integer): Boolean;
 begin
   Result := (PyNodeIsPyBytes(a) and TypeIsOrdinal(IntToTypeKind(ASTTk[b]))) or
             (PyNodeIsPyBytes(b) and TypeIsOrdinal(IntToTypeKind(ASTTk[a])));
+end;
+
+{ helper-call builder for bytes binary ops (concat, eq) }
+function PyMakeBytesBinCall(const fname: AnsiString; a, b: Integer; retTk: TTypeKind): Integer;
+var procIdx, arg0, arg1: Integer;
+begin
+  procIdx := FindProc(fname);
+  if procIdx < 0 then Error('Nil Python: pylib (' + fname + ') not loaded');
+  arg0 := AllocNode(AN_ARG); ASTLeft[arg0] := a;
+  arg1 := AllocNode(AN_ARG); ASTLeft[arg1] := b;
+  ASTRight[arg0] := arg1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(retTk);
+  ASTLeft[Result] := arg0;
 end;
 
 function PyMakeBytesRepeat(a, b: Integer): Integer;
@@ -5626,8 +5744,8 @@ begin
 end;
 
 function PyQueueNestedDef: Integer;
-var defTok, procIdx, bodyStart, bodyEnd, i, j, nCaps, nOwn, csym, capCi: Integer;
-    qname, cname: AnsiString; already: Boolean;
+var defTok, procIdx, bodyStart, bodyEnd, i, j, k, nCaps, nOwn, csym, csym2, capCi: Integer;
+    qname, cname, cn2: AnsiString; already: Boolean;
     capNames: array[0..PY_MAX_CAPS-1] of AnsiString;
     capTypes: array[0..PY_MAX_CAPS-1] of TTypeKind;
     capRecs: array[0..PY_MAX_CAPS-1] of Integer;
@@ -5677,6 +5795,44 @@ begin
             else
               capRecs[nCaps] := REC_NONE;
             Inc(nCaps);
+          end
+          else
+          begin
+            { TRANSITIVE capture: the name is a SIBLING nested def that itself
+              captures enclosing locals not in scope inside a THIRD sibling.
+              CPython binds those at the sibling's def site; pxx flattens, so
+              this def must forward them. Pull each of the callee's captures
+              that resolves in the CURRENT enclosing scope into our own set
+              (uforth's _open_file_common -> _file_open_mode -> FAM_RO).
+              Filed decide-nilpy-transitive-nested-def-capture. }
+            csym := FindProc(PyQualifyNested(cname));
+            if (csym >= 0) and (PyCapCount[csym] > 0) then
+              for k := 0 to PyCapCount[csym] - 1 do
+              begin
+                cn2 := PyCapName[csym * PY_MAX_CAPS + k];
+                already := False;
+                for j := 0 to PyHdrNParams - 1 do
+                  if PyHdrPNames[j] = cn2 then already := True;
+                for j := 0 to nCaps - 1 do
+                  if capNames[j] = cn2 then already := True;
+                if not already then
+                begin
+                  csym2 := FindSym(cn2);
+                  if (csym2 >= 0) and (Syms[csym2].Kind in [skLocal, skParam]) and
+                     not Syms[csym2].IsArray and (Syms[csym2].TypeKind <> tyRecord) then
+                  begin
+                    if nCaps >= PY_MAX_CAPS then
+                      Error('Nil Python: a nested def may capture at most 8 enclosing names');
+                    capNames[nCaps] := cn2;
+                    capTypes[nCaps] := Syms[csym2].TypeKind;
+                    if Syms[csym2].TypeKind = tyClass then
+                      capRecs[nCaps] := Syms[csym2].RecName
+                    else
+                      capRecs[nCaps] := REC_NONE;
+                    Inc(nCaps);
+                  end;
+                end;
+              end;
           end;
         end;
       end;
