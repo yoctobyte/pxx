@@ -1472,6 +1472,7 @@ type
 var
   Closures: array of TPyClosure;
   ClosureN: Integer;
+
   PyClosureMagicMarker: Integer;   { its ADDRESS is the closure sentinel }
 
 function PyMakeClosureObj(cidx: Int64): Pointer;
@@ -3214,7 +3215,36 @@ begin
   noArgs.Free;
 end;
 
+{ ---- tokenization cache ------------------------------------------------
+  A PYTHON-bodied Forth word re-enters EvalPyStmts with the SAME source on
+  every execution, and tokenize+preprocess dominated the interpreter (~3ms per
+  word — the blocktest ELF-HASH loops made it visible). Direct-mapped cache
+  keyed by the raw source; a hit reuses the token arrays by reference. On a
+  miss the live refs are NILLED first so Tokenize allocates fresh arrays and
+  never mutates a cached buffer in place. }
+const PYTOK_CACHE = 64;
+type
+  TTokCacheEntry = record
+    Src:    AnsiString;
+    Kinds:  array of Integer;
+    Texts:  array of AnsiString;
+    Ints:   array of Int64;
+    Floats: array of Double;
+    NTok:   Integer;
+  end;
+var
+  TokCache: array[0..PYTOK_CACHE-1] of TTokCacheEntry;
+
+function PyTokCacheSlot(const src: AnsiString): Integer;
+var n: Integer;
+begin
+  n := Length(src);
+  if n = 0 then begin PyTokCacheSlot := 0; Exit; end;
+  PyTokCacheSlot := (n * 31 + Ord(src[1]) * 7 + Ord(src[n])) mod PYTOK_CACHE;
+end;
+
 procedure EvalPyStmts(const src: AnsiString; g: TPyDict; l: TPyDict);
+var cslot: Integer;
 begin
   EnvG := g;
   { locals live in pyeval's own arrays (see LclSet); the `l` dict argument is
@@ -3229,7 +3259,26 @@ begin
   { Dedent first (as CPython's exec path does via textwrap.dedent): a corpus
     block extracted from indented .UFO source carries a uniform leading indent on
     every line, which would otherwise tokenize as a spurious opening INDENT. }
-  Tokenize(PreprocessFStrings(pytextwrap_dedent(src)));
+  cslot := PyTokCacheSlot(src);
+  if TokCache[cslot].Src = src then
+  begin
+    TkKind := TokCache[cslot].Kinds;
+    TkText := TokCache[cslot].Texts;
+    TkInt := TokCache[cslot].Ints;
+    TkFloat := TokCache[cslot].Floats;
+    TkN := TokCache[cslot].NTok;
+  end
+  else
+  begin
+    TkKind := nil; TkText := nil; TkInt := nil; TkFloat := nil;
+    Tokenize(PreprocessFStrings(pytextwrap_dedent(src)));
+    TokCache[cslot].Src := src;
+    TokCache[cslot].Kinds := TkKind;
+    TokCache[cslot].Texts := TkText;
+    TokCache[cslot].Ints := TkInt;
+    TokCache[cslot].Floats := TkFloat;
+    TokCache[cslot].NTok := TkN;
+  end;
   Cur := 0;
   SkipSeparators;
   while (CurKind <> PK_EOF) and (CurKind <> PK_DEDENT) do
