@@ -403,6 +403,10 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_variant_unbox26)" = "$$(printf '7 -3 0\n2.5 -0.5\nab z\nTrue False\n8 6 14 3 1 -7\n4 -21\n3.5 5.0\nabc\nTrue True True\n4\nabz\n2.0')"
 	./$(COMPILER) test/test_nilpy_dataclass.npy /tmp/test_nilpy_dataclass26
 	test "$$(/tmp/test_nilpy_dataclass26)" = "$$(printf '3\n4\n25\n10\nfull 1.5 2 False custom\ndefaults 2.5 7 True std\nmix 9.0 7 True std')"
+	./$(COMPILER) test/test_nilpy_dict_comprehension.npy /tmp/test_nilpy_dict_comprehension26
+	test "$$(/tmp/test_nilpy_dict_comprehension26)" = "$$(printf '%b' '3\n60\n9\n3\n4')"
+	./$(COMPILER) test/test_nilpy_captured_class.npy /tmp/test_nilpy_captured_class26
+	test "$$(/tmp/test_nilpy_captured_class26)" = "$$(printf '%b' 'HE\n?\n2')"
 	./$(COMPILER) examples/shell/shell0.npy /tmp/test_nilpy_shell026
 	/tmp/test_nilpy_shell026 | grep -q "hello portable userland"
 

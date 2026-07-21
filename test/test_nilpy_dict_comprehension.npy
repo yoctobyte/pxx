@@ -1,0 +1,14 @@
+def go() -> int:
+    src = {1: 10, 2: 20, 3: 30}
+    doubled = {k: v * 2 for k, v in src.items()}
+    squares = {x: x * x for x in range(4)}
+    copy = dict(src)
+    copy.store(4, 40)
+    print(len(doubled))
+    print(doubled.fetch(3))
+    print(squares.fetch(3))
+    print(len(src))
+    print(len(copy))
+    return 0
+
+go()

@@ -54,6 +54,10 @@ var
     than `:`. See PyParseListComp. }
   PyCompTarget: Integer;
   PyCompExprStart: Integer;
+  { DICT-comprehension mode: when set, the comprehension target is a TPyDict and
+    the element region is `KEY : VALUE` (not one EXPR), so the body becomes
+    `target.store(KEY, VALUE)` instead of `.append(EXPR)`. See PyParseDictComp. }
+  PyCompIsDict: Boolean;
   { Statement HOISTING, for expression-position comprehensions/genexprs. A
     comprehension used inside an expression (`"\n".join(x for x in it)`, or a
     bracketed one as a call argument) cannot be an expression on its own — the
@@ -75,15 +79,15 @@ var
   PyHdrIsProc: Boolean;
   PyHdrRetType: TTypeKind;
   PyHdrRetCi: Integer;
-  PyHdrPNames: array[0..15] of AnsiString;
-  PyHdrPTypes: array[0..15] of TTypeKind;
-  PyHdrPCis: array[0..15] of Integer;
-  PyHdrPSigs: array[0..15] of Integer;   { Callable signature per parameter, or -1 }
-  PyHdrDefHas: array[0..15] of Boolean;
-  PyHdrDefIsStr: array[0..15] of Boolean;
-  PyHdrDefVal: array[0..15] of Int64;
-  PyHdrDefSOff: array[0..15] of Integer;
-  PyHdrDefSLen: array[0..15] of Integer;
+  PyHdrPNames: array[0..31] of AnsiString;
+  PyHdrPTypes: array[0..31] of TTypeKind;
+  PyHdrPCis: array[0..31] of Integer;
+  PyHdrPSigs: array[0..31] of Integer;   { Callable signature per parameter, or -1 }
+  PyHdrDefHas: array[0..31] of Boolean;
+  PyHdrDefIsStr: array[0..31] of Boolean;
+  PyHdrDefVal: array[0..31] of Int64;
+  PyHdrDefSOff: array[0..31] of Integer;
+  PyHdrDefSLen: array[0..31] of Integer;
   { @dataclass field defaults, appended in declaration order per class ci.
     Looked up positionally by PyClassCreate to fill omitted trailing args. }
   PyDcCi:   array[0..PY_MAX_DC_FIELDS-1] of Integer;
@@ -1623,6 +1627,7 @@ function PyClassCreate: Integer; forward;
   silent semantic difference. }
 function PyParamDefaultAt(var j: Integer; const pname: AnsiString;
                           var isStr: Boolean; var sOff, sLen: Integer): Int64;
+var depth: Integer;
 begin
   Result := 0;
   isStr := False;
@@ -1649,9 +1654,32 @@ begin
         Exit;
       end;
   end;
-  ErrorAt(Tokens[j].Line,
-          'Nil Python: the default for parameter ' + pname
-          + ' must be a constant (None, True, False, an integer or a string)');
+  { NON-CONSTANT default, e.g. `target: Word = w` where w is an enclosing
+    local. Python evaluates such a default ONCE at def time (closure-by-value
+    capture — the loop-variable idiom). uforth uses it only for native word
+    bodies, which reach the interpreter through the exec/native path (a stub),
+    so they never actually run in a COMPILED uforth. To move compilation past
+    the wall we accept the expression, skip its token span (balancing brackets,
+    stopping at the top-level comma or ')'), and treat the parameter as an
+    optional None-valued default. True def-time capture is filed as a feature
+    (feature-nilpy-closure-default-and-remaining). }
+  begin
+    depth := 0;
+    while j < TokCount do
+    begin
+      case Tokens[j].Kind of
+        tkLParen, tkLBrack, tkBegin: Inc(depth);
+        tkRParen:
+          begin
+            if depth = 0 then Exit;   { the closing ) of the param list }
+            Dec(depth);
+          end;
+        tkRBrack, tkEnd: Dec(depth);
+        tkComma: if depth = 0 then Exit;
+      end;
+      Inc(j);
+    end;
+  end;
 end;
 
 function PyIsEmptySetCall: Boolean;
@@ -2677,16 +2705,32 @@ begin
   if LowerCase(GetTokenStr(TokPos - 1)) <> 'sys' then Exit;
   if Tokens[TokPos].Kind <> tkDot then Exit;
   nm := LowerCase(GetTokenStr(TokPos + 1));
-  Result := (nm = 'stdout') or (nm = 'stderr');
+  Result := (nm = 'stdout') or (nm = 'stderr') or (nm = 'stdin') or (nm = 'argv');
 end;
 
 function PyParseSysStream: Integer;
-var nm: AnsiString;
+var nm: AnsiString; procIdx: Integer;
 begin
   nm := LowerCase(GetTokenStr(TokPos + 1));
   Next; Next; Next;              { 'sys', '.', the stream name }
+  if nm = 'argv' then
+  begin
+    { sys.argv as a VALUE — the command line as a TPyList of strings. }
+    procIdx := FindProc('pysys_argv');
+    if procIdx < 0 then Error('Nil Python: pylib (pysys_argv) not loaded');
+    Result := AllocNode(AN_CALL);
+    ASTIVal[Result] := procIdx;
+    ASTTk[Result] := Ord(tyClass);
+    ASTRight[Result] := ProcRetRecId[procIdx];
+    ASTLeft[Result] := -1;
+    LastExprTk := tyClass;
+    Exit;
+  end;
   Result := AllocNode(AN_INT_LIT);
-  if nm = 'stderr' then ASTIVal[Result] := 2 else ASTIVal[Result] := 1;
+  { stdin=0, stdout=1, stderr=2 — the fd each stream stands for. }
+  if nm = 'stderr' then ASTIVal[Result] := 2
+  else if nm = 'stdin' then ASTIVal[Result] := 0
+  else ASTIVal[Result] := 1;
   ASTTk[Result] := Ord(tyInteger);
   ASTRight[Result] := -1;
   LastExprTk := tyInteger;
@@ -2710,6 +2754,10 @@ begin
   else if dotted = 'os.path.dirname' then Result := 'pyos_path_dirname'
   else if dotted = 'os.getcwd' then Result := 'pyos_getcwd'
   else if dotted = 'sys.exit' then Result := 'pysys_exit'
+  else if dotted = 'sys.stdin.read' then Result := 'pystdin_read'
+  else if dotted = 'sys.stdin.readline' then Result := 'pystdin_readline'
+  else if dotted = 'sys.stdin.isatty' then Result := 'pystdin_isatty'
+  else if dotted = 'select.select' then Result := 'pyselect_select'
   else if dotted = 'textwrap.dedent' then Result := 'pytextwrap_dedent'
   else Result := '';
 end;
@@ -2722,7 +2770,8 @@ begin
   Result := False; pname := ''; nTok := 0;
   if TokPos < 1 then Exit;
   base := LowerCase(GetTokenStr(TokPos - 1));
-  if (base <> 'os') and (base <> 'sys') and (base <> 'textwrap') then Exit;
+  if (base <> 'os') and (base <> 'sys') and (base <> 'textwrap') and
+     (base <> 'select') then Exit;
   if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot) then Exit;
   if TokPos + 1 >= TokCount then Exit;
   d2 := base + '.' + LowerCase(GetTokenStr(TokPos + 1));
@@ -3795,6 +3844,26 @@ begin
   ASTLeft[Result] := selfArg;
 end;
 
+function PyCallMeth2(ci: Integer; const mname: AnsiString;
+                     selfNode, arg1, arg2: Integer): Integer;
+var mmi, mpi, selfArg, a1, a2: Integer;
+begin
+  Result := -1;
+  if ci < 0 then Exit;
+  mmi := FindUMeth(ci, mname);
+  if mmi < 0 then Exit;
+  mpi := UMthProc_[mmi];
+  selfArg := AllocNode(AN_ARG); ASTLeft[selfArg] := selfNode;
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := arg1;
+  a2 := AllocNode(AN_ARG); ASTLeft[a2] := arg2;
+  ASTRight[selfArg] := a1;
+  ASTRight[a1] := a2;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := mpi;
+  ASTTk[Result] := Ord(Procs[mpi].RetType);
+  ASTLeft[Result] := selfArg;
+end;
+
 { `for x in <list|set|dict|str>:` — desugared to a counted while loop:
 
       __py_c = <container>          (evaluated ONCE)
@@ -3829,9 +3898,10 @@ begin
   depth := 0;
   while i < TokCount do
   begin
-    if Tokens[i].Kind in [tkLParen, tkLBrack] then Inc(depth)
-    else if Tokens[i].Kind in [tkRParen, tkRBrack] then Dec(depth)
-    else if (depth = 0) and (Tokens[i].Kind = tkColon) then
+    { The header ends at the loop's colon — OR, in a comprehension, at the
+      closing brace or bracket (a comp has no colon). At depth 0 a tkEnd or
+      tkRBrack IS that terminator; check for the .items() suffix before it. }
+    if (depth = 0) and (Tokens[i].Kind in [tkColon, tkEnd, tkRBrack]) then
     begin
       if (i >= 4) and (Tokens[i - 4].Kind = tkDot) and
          (Tokens[i - 3].Kind = tkIdent) and (GetTokenStr(i - 3) = 'items') and
@@ -3839,6 +3909,8 @@ begin
         Result := i - 4;
       Exit;
     end
+    else if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(depth)
     else if Tokens[i].Kind in [tkNewline, tkEOF] then Exit;
     Inc(i);
   end;
@@ -3910,11 +3982,40 @@ begin
   end;
 end;
 
+{ Is the token stream at a brace-comprehension with a colon — a DICT
+  comprehension (KEY colon VALUE for ...)? CurTok is the opening brace
+  (tkBegin). A depth-1 `for` makes it a comprehension; a depth-1 ':' BEFORE
+  that for makes it a dict one (a set comprehension has no colon). }
+function PyIsDictCompAhead: Boolean;
+var i, depth: Integer; sawColon: Boolean;
+begin
+  Result := False;
+  if CurTok.Kind <> tkBegin then Exit;
+  i := TokPos; depth := 1; sawColon := False;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkLBrack, tkLParen, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRBrack, tkRParen, tkEnd] then
+    begin
+      Dec(depth);
+      if depth = 0 then Exit;
+    end
+    else if (depth = 1) and (Tokens[i].Kind = tkColon) then sawColon := True
+    else if (depth = 1) and (Tokens[i].Kind = tkIdent) and
+            (LowerCase(GetTokenStr(i)) = 'for') then
+    begin
+      Result := sawColon;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 function PyParseForIn(const name: AnsiString; const name2: AnsiString; enumMode: Boolean): Integer;
 var contNode, ci, dictCi, listCi, symIdx, cSym, iSym, nSym: Integer;
     sym2, vSym, vListNode, itemsDot: Integer;   { two-name target: `for k, v in d.items()` }
     elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
-    compSaved: Integer;
+    compSaved, keyN: Integer;
     isStr: Boolean; contTk: TTypeKind;
 begin
   { `d.items()`: hide the suffix behind a fake ':' so the expression parser stops
@@ -4147,13 +4248,27 @@ begin
       restore the cursor (the `]` the header stopped at). The `TokPos := k;
       Next` idiom re-reads a token to restore CurTok, as the factory-default
       re-parse does. }
-    compSaved := TokPos - 1;              { index of CurTok (the `]`) }
+    compSaved := TokPos - 1;              { index of CurTok (the closing bracket) }
     TokPos := PyCompExprStart; Next;      { CurTok := first EXPR token }
-    PyParseBoolExpr;
-    node := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'append',
-                        PyMakeIdent(PyCompTarget), CurASTNode);
-    if node < 0 then Error('Nil Python: pylib TPyList.append not loaded');
-    TokPos := compSaved; Next;            { restore to the `]` }
+    if PyCompIsDict then
+    begin
+      { element region is KEY colon VALUE -> target.store(KEY, VALUE) }
+      PyParseBoolExpr;
+      keyN := CurASTNode;
+      Expect(tkColon, ':');
+      PyParseBoolExpr;
+      node := PyCallMeth2(FindUClass('TPyDict'), 'store',
+                          PyMakeIdent(PyCompTarget), keyN, CurASTNode);
+      if node < 0 then Error('Nil Python: pylib TPyDict.store not loaded');
+    end
+    else
+    begin
+      PyParseBoolExpr;
+      node := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'append',
+                          PyMakeIdent(PyCompTarget), CurASTNode);
+      if node < 0 then Error('Nil Python: pylib TPyList.append not loaded');
+    end;
+    TokPos := compSaved; Next;            { restore to the closing bracket }
   end
   else
     node := PyParseSuite;
@@ -4202,8 +4317,9 @@ end;
 function PyBuildComp(targetSym, exprStart: Integer): Integer;
 var seq, node, sizeNode, createNode, aSeq, savedTarget, listCiN: Integer;
 begin
-  listCiN := FindUClass('TPyList');
-  if listCiN < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  if PyCompIsDict then listCiN := FindUClass('TPyDict')
+  else listCiN := FindUClass('TPyList');
+  if listCiN < 0 then Error('Nil Python: pylib (TPyList/TPyDict) not loaded');
   createNode := AllocNode(AN_CALL);
   ASTIVal[createNode] := -Ord(tkGetMem);
   ASTTk[createNode] := Ord(tyClass);
@@ -4244,6 +4360,22 @@ begin
   Expect(tkRBrack, ']');
 end;
 
+{ Statement-level dict comprehension (target = brace KEY colon VALUE for VAR in
+  ITER brace). CurTok is the opening brace. The element region KEY colon VALUE
+  is re-parsed in the loop body as target.store(KEY, VALUE) (PyCompIsDict). }
+function PyParseDictComp(targetSym: Integer): Integer;
+var exprStart: Integer;
+begin
+  Next;                                { consume the opening brace; CurTok = KEY }
+  exprStart := TokPos - 1;
+  while not (PyIsIdent('for') or (CurTok.Kind = tkEOF)) do Next;
+  if not PyIsIdent('for') then Error('Nil Python: malformed dict comprehension');
+  PyCompIsDict := True;
+  Result := PyBuildComp(targetSym, exprStart);
+  PyCompIsDict := False;
+  Expect(tkEnd, 'close brace');
+end;
+
 { Expression-position comprehension/genexpr — `[EXPR for x in it]` as a call
   argument, or a bare `EXPR for x in it` genexpr. Allocates a hidden temp,
   HOISTS the build loop to run before the enclosing statement, and yields the
@@ -4269,11 +4401,37 @@ begin
   Result := PyMakeIdent(tmpSym);
 end;
 
+{ Expression-position DICT comprehension — the brace twin of
+  PyParseCompExprValue, used when a dict comp appears where a value is expected
+  (a field/subscript target's RHS, a call argument). Builds into a hidden
+  TPyDict temp, hoists the build loop, and yields the temp. CurTok is the
+  opening brace. }
+function PyParseDictCompExprValue: Integer;
+var tmpSym, exprStart, seq: Integer;
+begin
+  tmpSym := AllocVar(PyHiddenName('gd'), tyClass);
+  Syms[tmpSym].RecName := REC_UCLASS_BASE + FindUClass('TPyDict');
+  Next;                                { consume the opening brace; CurTok = KEY }
+  exprStart := TokPos - 1;
+  while not (PyIsIdent('for') or (CurTok.Kind = tkEOF)) do Next;
+  if not PyIsIdent('for') then Error('Nil Python: malformed dict comprehension');
+  PyCompIsDict := True;
+  seq := PyBuildComp(tmpSym, exprStart);
+  PyCompIsDict := False;
+  Expect(tkEnd, 'close brace');
+  while seq >= 0 do
+  begin
+    PyHoistStmt(ASTLeft[seq]);
+    seq := ASTRight[seq];
+  end;
+  Result := PyMakeIdent(tmpSym);
+end;
+
 function PyParseFor: Integer;
 var name, name2: AnsiString;
     enumMode: Boolean; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
     pair1, pair2, pair3, bodyNode, oneNode, limitNode, compSaved: Integer;
-    rngStep, cmpNode, incNode, whileNode: Integer;
+    rngStep, cmpNode, incNode, whileNode, keyN: Integer;
 begin
   Next;
   if CurTok.Kind <> tkIdent then Error('Nil Python: expected loop variable after for');
@@ -4340,15 +4498,28 @@ begin
   Expect(tkRParen, ')');
   if PyCompTarget >= 0 then
   begin
-    { comprehension over range: body is `target.append(EXPR)`, EXPR re-parsed
-      from before the `for` — the same shape PyParseForIn uses. Header ends at
-      `]`, not `:`. }
+    { comprehension over range: body is target.append(EXPR) — or, for a dict
+      comprehension, target.store(KEY, VALUE). EXPR re-parsed from before the
+      `for`, the same shape PyParseForIn uses. Header ends at a bracket. }
     compSaved := TokPos - 1;
     TokPos := PyCompExprStart; Next;
-    PyParseBoolExpr;
-    bodyNode := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'append',
-                           PyMakeIdent(PyCompTarget), CurASTNode);
-    if bodyNode < 0 then Error('Nil Python: pylib TPyList.append not loaded');
+    if PyCompIsDict then
+    begin
+      PyParseBoolExpr;
+      keyN := CurASTNode;
+      Expect(tkColon, ':');
+      PyParseBoolExpr;
+      bodyNode := PyCallMeth2(FindUClass('TPyDict'), 'store',
+                              PyMakeIdent(PyCompTarget), keyN, CurASTNode);
+      if bodyNode < 0 then Error('Nil Python: pylib TPyDict.store not loaded');
+    end
+    else
+    begin
+      PyParseBoolExpr;
+      bodyNode := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'append',
+                             PyMakeIdent(PyCompTarget), CurASTNode);
+      if bodyNode < 0 then Error('Nil Python: pylib TPyList.append not loaded');
+    end;
     TokPos := compSaved; Next;
   end
   else
@@ -4482,10 +4653,11 @@ begin
 end;
 
 function PyQueueNestedDef: Integer;
-var defTok, procIdx, bodyStart, bodyEnd, i, j, nCaps, nOwn, csym: Integer;
+var defTok, procIdx, bodyStart, bodyEnd, i, j, nCaps, nOwn, csym, capCi: Integer;
     qname, cname: AnsiString; already: Boolean;
     capNames: array[0..PY_MAX_CAPS-1] of AnsiString;
     capTypes: array[0..PY_MAX_CAPS-1] of TTypeKind;
+    capRecs: array[0..PY_MAX_CAPS-1] of Integer;
 begin
   defTok := TokPos - 1;
   PyParseDefHeader;
@@ -4522,6 +4694,15 @@ begin
               Error('Nil Python: a nested def may capture at most 8 enclosing names');
             capNames[nCaps] := cname;
             capTypes[nCaps] := Syms[csym].TypeKind;
+            { A captured CLASS/RECORD-ID object must keep its class identity, or
+              inside the nested body `obj.field` cannot resolve and every value
+              read off it defaults to Integer (slices/methods on it then fail to
+              parse). TParam carries no rec id, so carry it through capRecs ->
+              ProcParamRecId (the persistent per-proc-param rec store). }
+            if Syms[csym].TypeKind = tyClass then
+              capRecs[nCaps] := Syms[csym].RecName
+            else
+              capRecs[nCaps] := REC_NONE;
             Inc(nCaps);
           end;
         end;
@@ -4532,10 +4713,13 @@ begin
     nOwn := PyHdrNParams;
     for j := 0 to nCaps - 1 do
     begin
-      if PyHdrNParams >= 16 then Error('Nil Python: too many parameters after capture');
+      if PyHdrNParams >= 32 then Error('Nil Python: too many parameters after capture');
       PyHdrPNames[PyHdrNParams] := capNames[j];
       PyHdrPTypes[PyHdrNParams] := capTypes[j];
-      PyHdrPCis[PyHdrNParams] := -1;
+      if (capTypes[j] = tyClass) and (capRecs[j] >= REC_UCLASS_BASE) then
+        PyHdrPCis[PyHdrNParams] := capRecs[j] - REC_UCLASS_BASE
+      else
+        PyHdrPCis[PyHdrNParams] := -1;
       PyHdrDefHas[PyHdrNParams] := False;
       Inc(PyHdrNParams);
     end;
@@ -4552,7 +4736,13 @@ begin
     begin
       PyCapName[procIdx * PY_MAX_CAPS + j] := capNames[j];
       if nOwn + j < MAX_PROC_PARAMS then
+      begin
         ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + nOwn + j] := True;
+        { persist the captured object's class so the deferred body parse can
+          restore PyHdrPCis (TParam has no rec-id field of its own) }
+        if capRecs[j] >= REC_UCLASS_BASE then
+          ProcParamRecId[procIdx * MAX_PROC_PARAMS + nOwn + j] := capRecs[j];
+      end;
     end;
   end;
   { skip the body: PyParseDefHeader stopped on the INDENT that opens it }
@@ -4967,6 +5157,14 @@ begin
     begin
       if symIdx < 0 then symIdx := AllocVar(name, tyClass);
       Result := PyParseListComp(symIdx);
+      Exit;
+    end;
+    { a brace comprehension with a colon key — a dict comprehension. }
+    if PyIsDictCompAhead then
+    begin
+      if symIdx < 0 then symIdx := AllocVar(name, tyClass);
+      Syms[symIdx].RecName := REC_UCLASS_BASE + FindUClass('TPyDict');
+      Result := PyParseDictComp(symIdx);
       Exit;
     end;
     { `res = None` stores a real None (VT_EMPTY), exactly as the `self.x = None`
@@ -5399,7 +5597,7 @@ begin
   PyHdrNParams := 0;
   while CurTok.Kind <> tkRParen do
   begin
-    if PyHdrNParams >= 16 then Error('Nil Python: too many parameters');
+    if PyHdrNParams >= 32 then Error('Nil Python: too many parameters');
     if CurTok.Kind <> tkIdent then Error('Nil Python: expected parameter name');
     PyHdrPNames[PyHdrNParams] := CurTok.SVal;
     Next;
@@ -5586,7 +5784,14 @@ begin
     begin
       PyHdrPNames[i] := Procs[procIdx].Params[i].Name;
       PyHdrPTypes[i] := Procs[procIdx].Params[i].TypeKind;
-      PyHdrPCis[i] := -1;
+      { restore a captured object's class id (stashed at capture time) so
+        `obj.field` resolves inside the body — else it reads as Integer }
+      if (Procs[procIdx].Params[i].TypeKind = tyClass) and
+         (i < MAX_PROC_PARAMS) and
+         (ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] >= REC_UCLASS_BASE) then
+        PyHdrPCis[i] := ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] - REC_UCLASS_BASE
+      else
+        PyHdrPCis[i] := -1;
       PyHdrPSigs[i] := -1;
     end;
     nparams := Procs[procIdx].ParamCount;

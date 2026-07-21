@@ -1,0 +1,18 @@
+class Box:
+    def __init__(self) -> None:
+        self.items: list = []
+
+def outer(b: Box) -> None:
+    def inner(i: int) -> str:
+        v = b.items[i]
+        if isinstance(v, str):
+            return v[:2].upper()
+        return "?"
+    print(inner(0))
+    print(inner(1))
+    print(len(b.items))
+
+b = Box()
+b.items.append("hello")
+b.items.append(7)
+outer(b)

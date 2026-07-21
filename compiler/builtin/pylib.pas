@@ -288,6 +288,25 @@ function pyos_path_exists(const p: AnsiString): Boolean;
 function pyos_path_abspath(const p: AnsiString): AnsiString;
 function pyos_getcwd: AnsiString;
 procedure pysys_exit(code: Integer);
+{ sys.stdin.read(n): read up to n bytes from fd 0, returned as a byte string.
+  Returns '' at EOF (Python's read at EOF gives ''), which is exactly what
+  uforth's KEY word tests for. }
+function pystdin_read(n: Integer): AnsiString;
+{ sys.stdin.readline(): one line from fd 0 (keeping the trailing newline), '' at
+  EOF. Reads a byte at a time so it stops at the newline like Python. }
+function pystdin_readline: AnsiString;
+{ sys.stdin.isatty(): 0 (a non-tty). The value that makes uforth's KEY? report
+  no type-ahead — the correct default for pipes/files and never wrong for the
+  native words, which run under the (stubbed) exec path. }
+function pystdin_isatty: Integer;
+{ input([prompt]): a line from stdin without its trailing newline. }
+function pyinput: AnsiString;
+{ sys.argv: the command line as a TPyList of strings, argv[0] = program name. }
+function pysys_argv: TPyList;
+{ select.select(r, w, x, timeout): the ready-sets triple. The shim returns three
+  empty lists (nothing ready), which is the safe answer for the non-tty default
+  and all uforth asks of it. }
+function pyselect_select(const r: Variant; const w: Variant; const x: Variant; const t: Variant): TPyList;
 { open(path[, mode, encoding=...]) in READ mode -> a TPyList of the file's
   lines, each keeping its trailing '\n' exactly as Python's `for line in f`
   yields them. The whole file is read eagerly, so the file object IS just the
@@ -411,6 +430,11 @@ function max(a: Double; b: Double): Double; overload;
 function list(l: TPyList): TPyList;
 function list(const s: AnsiString): TPyList; overload;
 function list(const v: Variant): TPyList; overload;
+{ `dict(x)` — a shallow COPY of a mapping, as Python's dict() constructor makes.
+  Same overload-by-argument-type shape as list() (feature-nilpy-missing-builtins).
+  uforth uses `dict(vm.dict)` to snapshot word-list state for MARKER. }
+function dict(d: TPyDict): TPyDict;
+function dict(const v: Variant): TPyDict; overload;
 { `reversed(x)` — Python returns a lazy iterator; NilPy's `for` is a counted-loop
   desugar with no iterator concept, so this is the reversed COPY, which behaves
   identically for `for x in reversed(xs)` and `list(reversed(xs))`. }
@@ -2382,6 +2406,85 @@ begin
   ok := True;
 end;
 
+function pystdin_read(n: Integer): AnsiString;
+var nread: Int64; buf: array[0..8191] of Char; i, want: Integer;
+    nrRead: Integer; supported: Boolean;
+begin
+  Result := '';
+  if n <= 0 then Exit;
+  nrRead := 0; supported := False;
+{$ifdef CPUX86_64}
+  nrRead := 0; supported := True;
+{$endif}
+{$ifdef CPUAARCH64}
+  nrRead := 63; supported := True;
+{$endif}
+{$ifdef CPU_ARM32}
+  nrRead := 3; supported := True;
+{$endif}
+{$ifdef CPU_I386}
+  nrRead := 3; supported := True;
+{$endif}
+{$ifdef CPU_RISCV32}
+{$ifndef PXX_ESP}
+  nrRead := 63; supported := True;
+{$endif}
+{$endif}
+  if not supported then Exit;
+  want := n;
+  if want > 8192 then want := 8192;
+  nread := __pxxrawsyscall(nrRead, 0, Int64(@buf[0]), want, 0, 0, 0);
+  if nread > 0 then
+    for i := 0 to nread - 1 do Result := Result + buf[i];
+end;
+
+function pystdin_readline: AnsiString;
+var one: AnsiString;
+begin
+  Result := '';
+  while True do
+  begin
+    one := pystdin_read(1);
+    if one = '' then Exit;           { EOF }
+    Result := Result + one;
+    if one = #10 then Exit;          { include and stop at the newline }
+  end;
+end;
+
+function pystdin_isatty: Integer;
+begin
+  Result := 0;
+end;
+
+{ input(): read one line from stdin and drop the trailing newline, as Python's
+  input() does. (A prompt argument is printed by the caller, then ignored here.) }
+function pyinput: AnsiString;
+begin
+  Result := pystdin_readline;
+  if (Length(Result) > 0) and (Result[Length(Result)] = #10) then
+    SetLength(Result, Length(Result) - 1);
+  if (Length(Result) > 0) and (Result[Length(Result)] = #13) then
+    SetLength(Result, Length(Result) - 1);
+end;
+
+function pysys_argv: TPyList;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  for i := 0 to ParamCount do r.append(ParamStr(i));   { argv[0] = program name }
+  Result := r;
+end;
+
+function pyselect_select(const r: Variant; const w: Variant; const x: Variant; const t: Variant): TPyList;
+var res: TPyList;
+begin
+  res := TPyList.Create;
+  res.append(TPyList.Create);        { rlist — nothing ready }
+  res.append(TPyList.Create);        { wlist }
+  res.append(TPyList.Create);        { xlist }
+  Result := res;
+end;
+
 function pyopen(const path: AnsiString): TPyList;
 var content, line: AnsiString; ok: Boolean; i, n: Integer;
 begin
@@ -2893,6 +2996,32 @@ begin
   r := TPyList.Create;
   for i := 1 to Length(s) do r.append(pystr_ofchar(s[i]));
   Result := r;
+end;
+
+function dict(d: TPyDict): TPyDict;
+var r: TPyDict; ks, vs: TPyList; i: Integer;
+begin
+  r := TPyDict.Create;
+  if d <> nil then
+  begin
+    ks := d.keylist;
+    vs := d.vallist;
+    for i := 0 to ks.count - 1 do r.store(ks.at(i), vs.at(i));
+  end;
+  Result := r;
+end;
+
+{ dict(v) where v is a VARIANT holding a dict — `dict(vm.attr)` once the field
+  read boxes to a variant. A non-dict (None/other) yields an empty dict. }
+function dict(const v: Variant): TPyDict; overload;
+var o: TObject;
+begin
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyDict then begin Result := dict(TPyDict(o)); Exit; end;
+  end;
+  Result := TPyDict.Create;   { None / non-mapping }
 end;
 
 function reversed(l: TPyList): TPyList;

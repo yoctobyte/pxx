@@ -781,6 +781,8 @@ begin
 end;
 procedure PyParseSetLiteral; forward;  { Nil Python {a, b} literal (pyparser.inc) }
 function PyClassCreateExpr: Integer; forward; { Nil Python ClassName(args) ctor (pyparser.inc) }
+function PyIsDictCompAhead: Boolean; forward; { Nil Python dict comprehension lookahead (pyparser.inc) }
+function PyParseDictCompExprValue: Integer; forward; { Nil Python dict comp in expression position (pyparser.inc) }
 
 { Read/Write/Readln/Writeln are intrinsics resolved by context at the call site,
   not true reserved words — FPC lets a user declaration shadow them. Accept them
@@ -7443,8 +7445,18 @@ begin
     tkBegin:
     begin
       if not PyExprMode then Error('unexpected begin in expression');
-      PyParseSetLiteral;
-      LastExprTk := tyClass;
+      if PyIsDictCompAhead then
+      begin
+        { a brace dict comprehension in an EXPRESSION position (a field/subscript
+          target's RHS, a call argument) — a hoisted hidden TPyDict temp. }
+        CurASTNode := PyParseDictCompExprValue;
+        LastExprTk := tyClass;
+      end
+      else
+      begin
+        PyParseSetLiteral;
+        LastExprTk := tyClass;
+      end;
     end;
     tkNil:
     begin
@@ -8541,6 +8553,25 @@ begin
         ASTLeft[node] := argSeq;
         CurASTNode := node;
         LastExprTk := tyUnknown;
+        Exit;
+      end
+      else if isNilPy and (name = 'input') then
+      begin
+        { input([prompt]) -> pyinput(), a line from stdin minus the newline. Any
+          prompt argument is parsed and discarded (its only effect in Python is a
+          stdout write; uforth's REPL prompt is cosmetic). }
+        Next; Expect(tkLParen, '(');
+        if CurTok.Kind <> tkRParen then ParseExpr;
+        while CurTok.Kind = tkComma do begin Next; ParseExpr; end;
+        Expect(tkRParen, ')');
+        node := AllocNode(AN_CALL);
+        idx := FindProc('pyinput');
+        if idx < 0 then Error('Nil Python: pylib (pyinput) not loaded');
+        ASTIVal[node] := idx;
+        ASTTk[node] := Ord(tyAnsiString);
+        ASTLeft[node] := -1;
+        CurASTNode := node;
+        LastExprTk := tyAnsiString;
         Exit;
       end
       else if isNilPy and (name = 'open') then
