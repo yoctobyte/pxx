@@ -1069,3 +1069,4 @@
 {"date": "2026-07-21T06:51:25Z", "fixed": ["test-asm#src:compiler/compiler.pas"], "full": true, "new_red": [], "sha": "7854772da794f62b4eeb84e4f3a084bee46c7623", "tier": "full", "verdict": "RED", "wall": 493.2}
 {"date": "2026-07-21T06:54:25Z", "fixed": [], "full": false, "new_red": [], "sha": "7854772da794f62b4eeb84e4f3a084bee46c7623", "tier": "opt", "verdict": "GREEN", "wall": 173.4}
 {"date": "2026-07-21T07:35:39Z", "fixed": [], "full": false, "new_red": [], "sha": "f128c74cfa1e9c311759be7e0c02e8e2d24a71bf", "tier": "native", "verdict": "GREEN", "wall": 307.0}
+{"date": "2026-07-21T07:44:19Z", "fixed": [], "full": true, "new_red": [], "sha": "f128c74cfa1e9c311759be7e0c02e8e2d24a71bf", "tier": "full", "verdict": "RED", "wall": 498.6}
