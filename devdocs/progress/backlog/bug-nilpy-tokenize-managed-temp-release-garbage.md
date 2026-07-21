@@ -91,6 +91,27 @@ codegen bug per se. Default builds are -O2, so this still blocks.
   (`mem[a:b] = snapshot["blk"]`) — that unblocked `_restore_input_state`, which
   is why -O0 now reaches "runs clean".
 
+## Analysis caveat (don't repeat this dead end)
+
+An IR-dump count of `default_mem` (12) vs unnamed tyAnsiString temps (13) in
+tokenize looked like a smoking gun (sym 153, the `str(tokens[-1]).upper() if
+tokens else ""` ternary temp, line 111). It is NOT conclusive: `default_mem` is
+the INLINE release-before-store for arg temps, whereas ternary/result temps are
+nil'd via `SymIsHiddenArgTemp` at the CODEGEN prologue — which the IR dump does
+not show. So a temp without `default_mem` may still be nil'd by the flag. The
+exact construct (str-ternary with a str-method-chain arm + early return)
+reproduces GREEN in isolation. The bug stays layout-sensitive.
+
+## Tooling for the next attempt
+
+Raw gdb conditional breakpoints on the ARC release helper (0x40021a `decq
+-0x10(%rax)`) are too slow — the condition is evaluated on every managed release
+across uforth's whole startup (thousands). Use instead: (a) rr record/replay with
+a hardware watchpoint on the faulting frame slot, or (b) a debug compiler build
+that logs each managed temp's frame offset + whether it was nil-inited, then
+diff against the epilogue release list for tokenize. The gdb helper addresses:
+AddRef 0x400202 (`incq -0x10(%rax)`), Release ~0x400210 (`decq -0x10(%rax)`).
+
 ## Next steps
 
 - Reduce uforth.py's tokenize with creduce (oracle = "compiled binary SIGSEGVs
