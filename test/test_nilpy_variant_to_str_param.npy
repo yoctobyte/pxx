@@ -1,0 +1,18 @@
+def sh(token: str) -> str:
+    return token.upper()
+class C:
+    def __init__(self) -> None:
+        self.n: int = 0
+    def m(self, token: str) -> str:
+        return token.lower()
+def go() -> int:
+    lst = ["World"]
+    d = {1: "Hello"}
+    print(sh(lst[0]))
+    print(sh(d.get(1)))
+    v = lst[0]
+    print(sh(v))
+    c = C()
+    print(c.m(lst[0]))
+    return 0
+go()

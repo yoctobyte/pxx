@@ -355,7 +355,16 @@ begin
   if lo = 'int' then begin Result := tyInteger; Inc(i); Exit; end;
   if lo = 'float' then begin Result := tyDouble; Inc(i); Exit; end;
   if lo = 'bool' then begin Result := tyBoolean; Inc(i); Exit; end;
-  if lo = 'str' then begin Result := tyString; Inc(i); Exit; end;
+  if lo = 'str' then
+  begin
+    { NilPy strings are MANAGED (unbounded) — the same tyAnsiString locals and
+      fields already use. Returning the FROZEN tyString here left `def f(s: str)`
+      params frozen (255-char ceiling; and a variant arg unboxed to a managed
+      handle then mismarshalled as a frozen slot -> garbage). One place, so the
+      param header and the class pre-pass agree. }
+    if PyProgramMode then Result := tyAnsiString else Result := tyString;
+    Inc(i); Exit;
+  end;
   if lo = 'any' then begin Result := tyVariant; Inc(i); Exit; end;
   { `bytes` / `bytearray` annotate the pylib TPyBytes class — the same object
     bytearray(n) returns, so an annotated parameter and an inferred local agree. }

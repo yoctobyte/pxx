@@ -3549,9 +3549,16 @@ begin
     scalar context (Python raises TypeError for a string or object in a
     numeric slot; Pascal's Variant is historically coercive), and no single
     helper can hold both specs, so NilPy has its own in pylib. }
-  if PyProgramMode and (target <> tyString) and (target <> tyAnsiString) then
+  if PyProgramMode then
   begin
-    if TypeIsFloat(target) then
+    { NilPy variants tag/lay out differently from Pascal Variants, so use the
+      pylib helpers. A str target unboxes via pystr_of (spells every tag Python's
+      way) — the Pascal VariantToStr misread a NilPy string variant and produced
+      garbage when a list element (variant) was passed to a `str` parameter
+      (bug-nilpy-variant-arg-to-str-param-garbage). }
+    if (target = tyString) or (target = tyAnsiString) then
+    begin vuName := 'pystr_of'; vuRet := tyAnsiString; end
+    else if TypeIsFloat(target) then
     begin vuName := 'pyvar_to_float'; vuRet := tyDouble; end
     else if target = tyBoolean then
     begin vuName := 'pyvar_to_bool'; vuRet := tyBoolean; end
@@ -3573,7 +3580,14 @@ begin
   else
   begin vuName := 'VariantToInt64'; vuRet := tyInt64; end;
 
-  vuProc := FindProc(vuName);
+  { pystr_of is OVERLOADED (per argument type); a variant address must go to the
+    tyVariant overload, not whichever FindProc returns first (the AnsiString one
+    -> a variant handed to a string param crashed). The explicit str() lowering
+    picks the same overload. }
+  if vuName = 'pystr_of' then
+    vuProc := IRFindProc1ByArgTk('pystr_of', tyVariant)
+  else
+    vuProc := FindProc(vuName);
   if vuProc < 0 then Error('variant unbox: ' + vuName + ' builtin not loaded');
   vuAddr := IRVariantAddr(argAST);
   vuArg := IRAppend(IR_ARG, vuAddr, -1, -1, 0, Ord(tyVariant));
