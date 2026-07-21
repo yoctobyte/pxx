@@ -111,3 +111,31 @@ uforth compiles unmodified, STD.UFO fully loads, VARIABLE/CONSTANT/memory words
 run (`VARIABLE Q 42 Q ! Q @ .`=42, `100 8192 ! 5 8192 +! 8192 @ .`=105, `BL .`=32),
 and the prelim suite executes and matches the CPython oracle byte-for-byte through
 Pass #21. Only the unsigned-cell arithmetic above is missing.
+
+## RESOLVED 2026-07-21 (session 5g) — full adoption landed, gate met
+
+Commits f058b95b (adoption) + e2eb2ade (Low(Int64) family + pyeval bignum).
+Design as decided: a wide literal (any size) is a promo-typed literal
+(pylexer digit text -> parser tyPromoInt64 under PyExprMode); PyWiden carries
+promo infectiously (promo+int -> promo, promo+variant -> variant); shifts of
+machine ints always type promo (1<<64, arithmetic >>); the variant binop maps
+bitwise ops 6-10 into PXXPromoVarArithTry (shl/shr fire even on two inline
+operands, NilPy-only); promo narrows mod 2^64 at concrete-int boundaries
+(PXXPromoToInt64Wrap — assignment, call args, pyvar_to_int, PyToI64), which
+is exactly what makes the mask-and-sign-convert idiom an identity.
+
+Gate: mask snippets CPython-identical; push_norm round-trips demote to inline
+VT_INT64 through TPyList; `: T 0 5 0 DO 1+ LOOP ; T .` = 5; prelim suite
+byte-identical to CPython (0/57); core.fr arithmetic 0 INCORRECT to line 639.
+Self-host byte-identical, quick 11/11, test-nilpy/test-uforth/promoint green.
+
+Follow-on (not this ticket): tick/EXECUTE xt wall in core.fr:640 — see
+[[feature-nilpy-corpus-uforth]]. Residual known narrowings (documented, not
+bugs): compiled-NilPy scalar `//` of Low//-1 still idiv-traps (pylib
+pyfloordiv_v, no promoint dep); additive int64+int64 overflow does not
+promote unless a wide literal infects the expression (uforth's mask
+discipline makes this invisible; CPython-differential print(c+c+1) still
+wraps).
+
+## Log
+- 2026-07-21 — resolved, commit e2eb2ade.

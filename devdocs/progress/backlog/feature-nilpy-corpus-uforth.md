@@ -6,6 +6,38 @@ type: feature
 
 # NilPy corpus: uforth — a real Python Forth system as Track N's forcing target
 
+## MILESTONE 2026-07-21 (session 5g): DO/LOOP runs, prelim suite BYTE-IDENTICAL to CPython; core.fr arithmetic green
+
+Full tier-2 promotable-int adoption landed (commits f058b95b + e2eb2ade; the
+promo ticket bug-nilpy-wide-int-literal-and-unsigned-mask-not-promoted is
+RESOLVED — read its final notes for the design). Results:
+
+- `: T 0 5 0 DO 1+ LOOP ; T .` = 5 — the DO/LOOP blocker is gone.
+- `tests/prelimtest.fth` output is BYTE-IDENTICAL to `python3 uforth.py`
+  (diff empty): 23/23 passes, 0/57 failed. ~2.2s vs CPython 0.26s (~9x).
+- Forth-2012 `core.fr` (via tester.fr) runs with **0 INCORRECT through line
+  639 of 1009** — MIN-INT/MAX-INT comparisons, M* / UM* / SM/REM / FM/MOD
+  double-cell division, LSHIFT/RSHIFT, +! cells all match.
+
+**NEXT WALL (line 640): tick/EXECUTE xt handling.** `T{ ' GT1 EXECUTE -> 123
+}T` dies with `TypeError: expected a number, got str`. Repro: `: GT1 123 ; '
+GT1 .` — CPython prints the int xt (369); ours ends with a STRING cell on the
+stack. Tick is a PYTHON word (`CORE.UFO:274`): `w = vm.dict.get(name.upper());
+vm.push(w)` pushes a Word OBJECT; compiled `push()` must hit `isinstance(value,
+Word)` → `value = value.xt_id`. Somewhere that chain yields the name string
+instead — object-identity / isinstance-on-boxed-object territory (NOT
+arithmetic). Isolated `S" XY"`/C@ tests pass standalone. Full runtests.fth
+hangs if run naively (buffered output; run core.fr via a driver as in
+tests/_t3.fth pattern — note stray `tests/_t*.fth`/`_c.fr` are scratch, not
+checked in).
+
+Landmines added this session (details in memory
+project_promotable_int_stages123 + the resolved promo ticket): Low(Int64) is a
+bug FAMILY (StrInt print, BToNative demote, pyeval abs/neg/~, PyIMul div-probe
+SIGFPE, idiv Low//-1); heap-promo variants now survive TPyList/TPyDict slots
+(PyVarSlotSet refcounts tag 8193); promo->variant stores must be
+statement-marked or arg-boxing temps stay VT_EMPTY.
+
 - **Track:** N (Nil-Python frontend) umbrella; spawns A/B/U work.
 - **Opened:** 2026-07-19 (user decision). Source: ~/projects/uforth (user's
   own project, not yet on GitHub — vendor/fetch story TBD when it lands
