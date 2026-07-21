@@ -1489,3 +1489,6 @@ prio: 70
 *Cascade stub: one signal for one event. Track T agent (face 2) or the owning
 dev track triages the root; individual tickets only for whatever remains red
 after the root is fixed.*
+
+## Rejected 2026-07-21
+Old (2026-07-20 early — the 461-job flood sha) borg qemu-collapse event, superseded by later green fulls; not a live regression.

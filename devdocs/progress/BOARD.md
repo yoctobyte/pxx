@@ -27,12 +27,13 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (139)
+## backlog (138)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-aarch64-managed-string-concat-leak | A | 70 | bug | aarch64: repeated string concat inside a function LEAKS | — |
 | bug-a-aarch64-variant-string-compare-always-false | A | 70 | bug | aarch64: comparing two string-valued Variants is always FALSE | — |
+| bug-a-cfront-riscv32-byval-record-result-pxxmemmove | A | 70 | bug | bug: C→riscv32 by-value record result emits PXXMemMove but the C compile never injects builtinheap | — |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
 | bug-a-qplus-misses-32bit-overflow | A | 60 | bug | `{$Q+}` does not trap 32-bit overflow — only 64-bit ops are checked | — |
 | bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
@@ -162,8 +163,6 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
-| regression-cascade-3d46e52fc733 | T | 70 | regression | regression CASCADE: 1471 jobs newly red at 3d46e52fc733 (auto-filed by twatch) | — |
-| regression-cascade-6906a3416548 | T | 70 | regression | regression CASCADE: 18 jobs newly red at 6906a3416548 (auto-filed by twatch) | — |
 | regression-optdiff-o3-stack-frame-intrinsics | O | 70 | regression | -O3 differential: test_stack_frame_intrinsics_b270.pas (optdiff, persistent) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
@@ -1159,7 +1158,7 @@ _none_
 | track-c-ternary-string-literal-segfault | C | 50 | track | C: ternary with two string-literal arms segfaults at runtime | — |
 | track-c-va-arg-nonint-lea | C | 50 | track | C: va_arg of any non-`int` type -> "invalid symbol in lea" | — |
 
-## rejected (1434)
+## rejected (1436)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1180,6 +1179,8 @@ _none_
 | feature-lazy-standard-unit-emission | A | 50 | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
 | feature-opt-float-const-pool | O | 35 | feature | -O3: load float constants from a data pool, not GPR materialization | — |
 | feature-opt-lazy-token-sval | O | 55 | feature | Lazy / conditional CurTok.SVal materialization — cut per-token string allocation | — |
+| regression-cascade-3d46e52fc733 | T | 70 | regression | regression CASCADE: 1471 jobs newly red at 3d46e52fc733 (auto-filed by twatch) | — |
+| regression-cascade-6906a3416548 | T | 70 | regression | regression CASCADE: 18 jobs newly red at 6906a3416548 (auto-filed by twatch) | — |
 | regression-cascade-f5c8fbec-fpc-bootstrap | A | 0 | regression | Cascade sweep: 939 auto-filed regressions at f5c8fbec6016 — one root cause, already fixed | — |
 | regression-lib-fpc-clean-00 | T | 70 | regression | regression: lib-fpc-clean#00 red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-selfhost-fixedpoint-selfhost-fixedpoint | T | 70 | regression | regression: selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh red at f6cad82e8063 (auto-filed by twatch) | — |
@@ -2602,8 +2603,7 @@ _none_
 
 - [p 70] [A] bug-a-aarch64-managed-string-concat-leak
 - [p 70] [A] bug-a-aarch64-variant-string-compare-always-false
-- [p 70] [T] regression-cascade-3d46e52fc733
-- [p 70] [T] regression-cascade-6906a3416548
+- [p 70] [A] bug-a-cfront-riscv32-byval-record-result-pxxmemmove
 - [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
 - [p 65] [P] bug-open-array-param-length-high-zero
 - [p 65] [A] feature-a-typeref-handle

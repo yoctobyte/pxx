@@ -36,3 +36,6 @@ prio: 70
 *Cascade stub: one signal for one event. Track T agent (face 2) or the owning
 dev track triages the root; individual tickets only for whatever remains red
 after the root is fixed.*
+
+## Superseded 2026-07-21
+Root-caused to bug-a-cfront-riscv32-byval-record-result-pxxmemmove (Track A). Cascade stub retired into that bug.
