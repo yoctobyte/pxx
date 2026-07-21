@@ -1021,6 +1021,25 @@ begin
       ASTRight[node] := zeroNode;
       ASTTk[node] := Ord(tyBoolean);
     end
+    else if (opTk = tyClass) and (ResolveNodeRec(operand) >= REC_UCLASS_BASE) and
+            PyIsPylibContainerCi(ResolveNodeRec(operand) - REC_UCLASS_BASE) then
+    begin
+      { A LIST / DICT / bytes is truthy when NON-EMPTY (Python), so `not xs` is
+        `len(xs) = 0` — via .count. Falling through to AN_NOT complemented the
+        object HANDLE (never nil), so `not xs` was True for every container
+        including a non-empty one (bug-nilpy-not-on-container-always-true, the
+        `if not tokens:` in uforth's interpret loop broke on real tokens). }
+      lenNode := PyCallMeth1(ResolveNodeRec(operand) - REC_UCLASS_BASE, 'count', operand, -1);
+      if lenNode < 0 then Error('Nil Python: pylib container .count not loaded');
+      zeroNode := AllocNode(AN_INT_LIT);
+      ASTIVal[zeroNode] := 0;
+      ASTTk[zeroNode] := Ord(tyInteger);
+      node := AllocNode(AN_BINOP);
+      ASTIVal[node] := Ord(tkEq);
+      ASTLeft[node] := lenNode;
+      ASTRight[node] := zeroNode;
+      ASTTk[node] := Ord(tyBoolean);
+    end
     else if (opTk = tyBoolean) or not PyNumeric(opTk) then
     begin
       node := AllocNode(AN_NOT);

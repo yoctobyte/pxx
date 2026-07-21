@@ -1,0 +1,11 @@
+def go() -> int:
+    xs = ["a", "b"]
+    ys = []
+    d = {1: 2}
+    e = {}
+    print("A" if not xs else "xs-truthy")
+    print("B" if not ys else "ys-truthy")
+    print("C" if not d else "d-truthy")
+    print("D" if not e else "e-truthy")
+    return 0
+go()
