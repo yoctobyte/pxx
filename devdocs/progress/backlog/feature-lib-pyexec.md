@@ -229,3 +229,17 @@ green. pyeval is NOT auto-used yet (standalone only), so zero blast radius.
   bound-method capture), per the ladder above.
 - Corpus-coverage measurement over all 60 pure-stack blocks (grammar accept-rate)
   is the recommended immediate next step.
+
+### M1 coverage measured (corpus-driven, 2026-07-21)
+
+Ran all 60 pure-stack blocks through pyeval against a seeded stub VM:
+- **41 RUN OK** — M1 accepts + evaluates without error (68%).
+- **16 cleanly M1-rejected** — the deferred tail: 13 bignum double-cell MATH words
+  (UM*/M*//D<… with `if`/`def` blocks + `0x10000000000000000`), 2 `import`, 1 f-string.
+- **3 unclear** — `print(hex(val)[2:].upper(), …)` etc.: slice/postfix-method on a
+  call result; parser reports "expected , or )" instead of a clean M1-reject. Minor
+  diagnostic gap; these need M2 subscripts anyway.
+
+So M1 core already runs the arithmetic/stack/bitwise words that segfault today;
+the remaining pure-stack blocks are precisely the bignum + compound-block tail
+already scheduled after M1.
