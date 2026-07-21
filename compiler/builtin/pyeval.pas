@@ -718,10 +718,12 @@ end;
 
 procedure ParseExpr(var res: Variant); forward;   { conditional/ternary — lowest }
 procedure ParseCall(const callee: AnsiString; var res: Variant); forward;
+procedure ParseMethodCall(const recv: Variant; const mname: AnsiString;
+                          var res: Variant); forward;
 
 { atom, then a postfix chain of `.attr` (field read) and `[index]` (subscript). }
 procedure ParsePrimary(var res: Variant);
-var name, fld: AnsiString; recv, idx: Variant;
+var name, fld: AnsiString; recv, idx, elem: Variant; li: TPyList;
 begin
   { ---- atom ---- }
   if TkKind[Cur] = PK_INT then
@@ -730,6 +732,21 @@ begin
   begin res := MakeFloat(TkFloat[Cur]); Advance; end
   else if TkKind[Cur] = PK_STR then
   begin res := MakeStr(TkText[Cur]); Advance; end
+  else if IsOp('[') then
+  begin
+    { list literal }
+    Advance;
+    li := TPyList.Create;
+    while not IsOp(']') do
+    begin
+      ParseExpr(elem);
+      li.append(elem);
+      if IsOp(',') then Advance
+      else if not IsOp(']') then EvalError('expected , or ] in list literal');
+    end;
+    ExpectOp(']');
+    PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(li));
+  end
   else if TkKind[Cur] = PK_NAME then
   begin
     name := TkText[Cur];
@@ -756,10 +773,11 @@ begin
       Advance;
       if TkKind[Cur] <> PK_NAME then EvalError('expected attribute name after "."');
       fld := TkText[Cur]; Advance;
-      if IsOp('(') then
-        EvalError('method calls (obj.' + fld + '(...)) are M3, not yet supported');
       recv := res;
-      if Executing then PyFieldGet(pyvarobj(recv), fld, res) else res := MakeNone;
+      if IsOp('(') then
+        ParseMethodCall(recv, fld, res)
+      else if Executing then PyFieldGet(pyvarobj(recv), fld, res)
+      else res := MakeNone;
     end
     else
     begin
@@ -1090,6 +1108,109 @@ begin
     Exit;
   end;
   CallBuiltin(callee, args, endKw, sepKw, haveEnd, haveSep, res);
+end;
+
+{ positional-only `( expr, ... )` into `args` }
+procedure ParseArgs(args: TPyList);
+var v: Variant;
+begin
+  ExpectOp('(');
+  while not IsOp(')') do
+  begin
+    ParseExpr(v);
+    args.append(v);
+    if IsOp(',') then Advance
+    else if not IsOp(')') then EvalError('expected , or ) in method call');
+  end;
+  ExpectOp(')');
+end;
+
+{ recv.mname(args). Dispatches str / list / bytes / dict methods to pylib; any
+  other VT_OBJECT receiver is treated as a reflected HOST object and routed
+  through the trampoline (PyHostCall). Method coverage is the corpus subset;
+  unsupported names error clearly. }
+procedure ParseMethodCall(const recv: Variant; const mname: AnsiString;
+                          var res: Variant);
+var
+  args: TPyList;
+  o: TObject; li: TPyList; by: TPyBytes;
+  s: AnsiString; b2: TPyBytes;
+begin
+  args := TPyList.Create;
+  ParseArgs(args);
+  if not Executing then begin res := MakeNone; Exit; end;
+
+  { string methods }
+  if PPyRec(@recv)^.VType = 6 then
+  begin
+    s := PAnsiString(@PPyRec(@recv)^.Payload)^;
+    if mname = 'upper' then res := MakeStr(pystr_upper(s))
+    else if mname = 'lower' then res := MakeStr(pystr_lower(s))
+    else if mname = 'strip' then
+    begin
+      if args.count = 0 then res := MakeStr(pystr_strip(s))
+      else res := MakeStr(pystr_strip_chars(s, pystr_of(args.at(0))));
+    end
+    else if mname = 'join' then
+      res := MakeStr(pystr_join(s, TPyList(pyvarobj(args.at(0)))))
+    else if mname = 'startswith' then
+      res := pyvar_of_bool(pystr_startswith(s, pystr_of(args.at(0))))
+    else if mname = 'endswith' then
+      res := pyvar_of_bool(pystr_endswith(s, pystr_of(args.at(0))))
+    else if mname = 'find' then
+      res := pyvar_of_int(pystr_find(s, pystr_of(args.at(0))))
+    else if mname = 'encode' then
+    begin
+      b2 := pystr_encode(s);
+      PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(b2));
+    end
+    else
+      EvalError('str method not supported: ' + mname);
+    Exit;
+  end;
+
+  if PPyRec(@recv)^.VType = 7 then
+  begin
+    o := TObject(Pointer(PPyRec(@recv)^.Payload));
+    if o is TPyList then
+    begin
+      li := TPyList(o);
+      if mname = 'append' then begin li.append(args.at(0)); res := MakeNone; end
+      else if mname = 'insert' then
+        begin li.insert(pyvar_to_int(args.at(0)), args.at(1)); res := MakeNone; end
+      else if mname = 'pop' then
+      begin
+        if args.count = 0 then res := li.pop
+        else res := li.pop(pyvar_to_int(args.at(0)));
+      end
+      else if mname = 'clear' then begin li.clear; res := MakeNone; end
+      else if mname = 'extend' then
+        begin li.extend(TPyList(pyvarobj(args.at(0)))); res := MakeNone; end
+      else
+        EvalError('list method not supported: ' + mname);
+      Exit;
+    end;
+    if o is TPyBytes then
+    begin
+      by := TPyBytes(o);
+      if mname = 'append' then begin by.append(pyvar_to_int(args.at(0))); res := MakeNone; end
+      else if mname = 'decode' then
+      begin
+        if args.count = 0 then res := MakeStr(by.decode('utf-8'))
+        else res := MakeStr(by.decode(pystr_of(args.at(0))));
+      end
+      else if mname = 'extend' then
+        begin by.extend(TPyBytes(pyvarobj(args.at(0)))); res := MakeNone; end
+      else
+        EvalError('bytes method not supported: ' + mname);
+      Exit;
+    end;
+    { otherwise: a reflected host object (vm) — dispatch through the trampoline }
+    PyHostCall(Pointer(PPyRec(@recv)^.Payload), mname, args, res);
+    Exit;
+  end;
+
+  EvalError('cannot call method ' + mname + ' on this value');
 end;
 
 { ---- statements ---- }

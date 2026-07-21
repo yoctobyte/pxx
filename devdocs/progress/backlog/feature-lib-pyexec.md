@@ -287,3 +287,25 @@ Remaining for full vm coverage: **M3 method calls** (vm.define_word(...),
 list.append/insert, bytes.decode, str.join), slices (`vm.memory[a:b]`,
 `hex(x)[2:]`), `del`, `isinstance`, f-strings, and the bignum tail. M3 +
 list/bytes methods are the last big unlock.
+
+## 2026-07-21 — M3 (partial) landed: method calls + list literals
+
+pyeval now dispatches METHOD calls and parses list literals:
+- **str methods**: upper/lower/strip/join/startswith/endswith/find/encode.
+- **list methods**: append/insert/pop/clear/extend. **bytes**: append/decode/extend.
+- **host vm methods** via the trampoline: `vm.push(x)`, `vm.pop()` (the M1
+  push/pop/fpush/fpop shapes). Non-container VT_OBJECT receivers route to PyHostCall.
+- **list literals** `[a, b, c]` / `[]` in the expression grammar.
+
+test/test_pyeval_m3.pas (str upper/join, list append/insert, vm.push/vm.pop via
+trampoline, pictured-output build idiom) — ALL PASS. M1/compound/M2 green;
+self-host byte-identical; quick tier green.
+
+**Remaining M3 = the GENERIC native-call trampoline.** Host methods with
+signatures beyond push/pop/fpush/fpop (vm.define_word(name, ...),
+vm.next_token_strict() -> str, etc.) currently error "unsupported host-call
+shape". Enumerating typed proc-ptr casts per (arity, retKind, paramKinds) covers
+a bounded set; the ticket's "generic native-call trampoline" (per-target asm
+thunk marshalling N variant args) is the clean general solution — the one genuinely
+novel runtime piece left. Also still open: slices (`[a:b]`), del, isinstance,
+f-strings, int.from_bytes, dict-literal, and the bignum tail.
