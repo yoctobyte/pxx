@@ -56,3 +56,23 @@ provides the runtime (Exception has `msg` + `Create(m)`; ValueError etc. are
 subclasses that inherit it) — the gap is frontend wiring: PyEnsureExceptionClass
 registers an EMPTY UClass, and the built-in names are not callable in expression
 position. Prio bumped 45 -> 55.
+
+## 2026-07-21 — PARTIAL: print(e) landed; construction/catch/field already worked
+
+Re-tested with the current compiler: `raise Exception("m")` construction, `except`
+matching, and `e.msg` field access ALL already work (ticket's "undefined variable"
+was stale). The remaining gap was the message READBACK.
+
+Landed: `print(e)` of an Exception (or subclass) now shows its message —
+PyReprContainer detects an exception-typed print arg (FindUClass('Exception') +
+IsSubclassOf) and reads the `.msg` field instead of the instance pointer. Test
+`test/test_nilpy_exception_print.npy`; test-nilpy + quick green, self-host
+byte-identical.
+
+STILL OPEN: `str(e)` and `f"{e}"` still yield the pointer — the str()-call /
+f-string-hole lowering of a class instance does not route through `.msg`. The
+str() call-lowering site was not located in this pass (str is recognised as
+returning tyString at 189/355 but the value lowering is elsewhere). Next: find
+where `str(<classinstance>)` lowers and apply the same Exception→.msg rewrite (or
+give the frontend Exception UClass a real str path). Keep this ticket open until
+str(e)/f-string parity lands.

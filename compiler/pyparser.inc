@@ -3552,6 +3552,7 @@ end;
   Python spells a container. Anything else is returned unchanged. }
 function PyReprContainer(n: Integer): Integer;
 var rec, listCi, dictCi, procIdx, argNode, callNode: Integer; pname: AnsiString;
+    excCi, argCi, fieldNode: Integer;
 begin
   Result := n;
   if n < 0 then Exit;
@@ -3574,6 +3575,21 @@ begin
   if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
   rec := ResolveNodeRec(n);
   if rec < REC_UCLASS_BASE then Exit;
+  { print(e) of an Exception (or subclass) shows its message, like Python's
+    str(e) — read the `msg` field instead of the instance pointer
+    (feature-nilpy-exception-message). }
+  excCi := FindUClass('Exception');
+  argCi := rec - REC_UCLASS_BASE;
+  if (excCi >= 0) and ((argCi = excCi) or IsSubclassOf(argCi, excCi)) then
+  begin
+    fieldNode := AllocNode(AN_FIELD);
+    ASTLeft[fieldNode] := n;
+    ASTSOffset[fieldNode] := PyStoredName('msg');
+    ASTSLen[fieldNode] := 3;
+    ASTTk[fieldNode] := Ord(tyAnsiString);
+    Result := fieldNode;
+    Exit;
+  end;
   listCi := FindUClass('TPyList');
   dictCi := FindUClass('TPyDict');
   if (listCi >= 0) and (rec = REC_UCLASS_BASE + listCi) then pname := 'pylist_repr'

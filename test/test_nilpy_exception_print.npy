@@ -1,0 +1,13 @@
+# Regression: feature-nilpy-exception-message (print path).
+# print(e) of a caught built-in exception shows its message, like CPython str(e).
+def main() -> None:
+    try:
+        raise ValueError("bad value")
+    except Exception as e:
+        print(e)
+    try:
+        raise RuntimeError("boom")
+    except Exception as e:
+        print(e)
+
+main()
