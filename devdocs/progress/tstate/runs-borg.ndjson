@@ -1111,3 +1111,4 @@
 {"date": "2026-07-21T13:12:13Z", "fixed": [], "full": false, "new_red": [], "sha": "68b6abc67c3679a251913935172ff44c917d8fa6", "tier": "opt", "verdict": "GREEN", "wall": 152.3}
 {"date": "2026-07-21T13:34:51Z", "fixed": [], "full": false, "new_red": [], "sha": "58d9a422805743433163fd306fbfd15d6b1a4dec", "tier": "native", "verdict": "GREEN", "wall": 296.6}
 {"date": "2026-07-21T13:46:07Z", "fixed": [], "full": true, "new_red": ["test-core#src:test/test_interface_mainbody_ascast_temp.pas"], "sha": "58d9a422805743433163fd306fbfd15d6b1a4dec", "tier": "full", "verdict": "RED", "wall": 653.9}
+{"date": "2026-07-21T13:50:49Z", "fixed": [], "full": false, "new_red": [], "sha": "58d9a422805743433163fd306fbfd15d6b1a4dec", "tier": "opt", "verdict": "GREEN", "wall": 272.3}
