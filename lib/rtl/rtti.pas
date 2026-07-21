@@ -79,7 +79,9 @@ const
   RTTI_OFS_PARENT     = 8;
   RTTI_OFS_METHCOUNT  = 48;
   RTTI_OFS_METHS      = 56;
-  RTTI_METH_ENTRY     = 16;   { {name, code} }
+  RTTI_METH_ENTRY     = 40;   { {name, code, arity, retKind, paramKinds} — grown
+                                for the reflection host bridge; this unit reads
+                                only name(+0)/code(+8), the stride is what matters }
   RTTI_METH_OFS_NAME  = 0;
   RTTI_METH_OFS_CODE  = 8;
 

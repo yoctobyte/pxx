@@ -275,10 +275,14 @@ begin
 end;
 
 { Fill a MethInfo record (RTTI_METH_SIZE bytes) at the already-reserved offset
-  miPos for published method mi. Record must be reserved by the caller first
-  (see EmitPropInfo: InternStr appends and would otherwise split the array). }
+  miPos for method mi: name, code, arity (Params incl. Self), return type kind,
+  and a pointer to an `arity`-long array of Ord(TTypeKind) param kinds (appended
+  at the current tail — like the name InternStr, so it does not split the
+  reserved record array). The generic native-call trampoline reads arity +
+  param kinds to marshal variant args to each param's type. Record must be
+  reserved by the caller first. }
 procedure EmitMethInfo(mi, miPos: Integer);
-var strIdx, procIdx: Integer;
+var strIdx, procIdx, arity, p, paramOff: Integer;
     nm: AnsiString;
 begin
   nm := TokSliceStr(UMthNOff[mi], UMthNLen[mi]);
@@ -286,6 +290,26 @@ begin
   AddDataPtrFix(miPos + 0, Strs[strIdx].Offset);
   procIdx := UMthProc_[mi];
   if procIdx >= 0 then QueueMethCodeFixup(miPos + 8, procIdx);
+  arity := 0;
+  if procIdx >= 0 then
+  begin
+    arity := Procs[procIdx].ParamCount;
+    PatchDataU64(miPos + 16, arity);
+    { retKind 0 = no result (a procedure); a function stores its RetType kind, so
+      the trampoline boxes a return value only when there is one. }
+    if Procs[procIdx].IsFunc then
+      PatchDataU64(miPos + 24, Ord(Procs[procIdx].RetType))
+    else
+      PatchDataU64(miPos + 24, 0);
+  end;
+  if arity > 0 then
+  begin
+    paramOff := DataLen;
+    DataPutZeros(arity * 8);
+    for p := 0 to arity - 1 do
+      PatchDataU64(paramOff + p * 8, Ord(Procs[procIdx].Params[p].TypeKind));
+    AddDataPtrFix(miPos + 32, paramOff);
+  end;
 end;
 
 { Fill a FieldInfo record (RTTI_FIELD_SIZE bytes) at fiPos for field fi:
@@ -396,23 +420,19 @@ begin
       PatchDataU64(hdr + 32, propCount);
       if propCount > 0 then AddDataPtrFix(hdr + 40, firstOff);
 
-      { published methods (own) — same contiguous-reserve-then-fill rule. }
+      { ALL methods (own) — same contiguous-reserve-then-fill rule. Every method
+        is emitted (not just published) so invoke-by-name reaches any class,
+        including NilPy-lowered ones whose methods publish nothing, and the
+        trampoline gets each method's signature (feature-lib-pyexec host bridge). }
       base := UClsMBase[ci]; cnt := UClsMCount[ci];
-      methCount := 0;
-      for i := 0 to cnt - 1 do
-        if UMthPub[base + i] = 1 then Inc(methCount);
+      methCount := cnt;
       firstOff := -1;
       if methCount > 0 then
       begin
         firstOff := DataLen;
         DataPutZeros(methCount * RTTI_METH_SIZE);
-        k := 0;
         for i := 0 to cnt - 1 do
-          if UMthPub[base + i] = 1 then
-          begin
-            EmitMethInfo(base + i, firstOff + k * RTTI_METH_SIZE);
-            Inc(k);
-          end;
+          EmitMethInfo(base + i, firstOff + i * RTTI_METH_SIZE);
       end;
       PatchDataU64(hdr + 48, methCount);
       if methCount > 0 then AddDataPtrFix(hdr + 56, firstOff);

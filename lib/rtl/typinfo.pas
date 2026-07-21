@@ -40,6 +40,10 @@ type
     {$ifdef CPU32} _pad_name: LongInt; {$endif}
     Code:    Pointer;
     {$ifdef CPU32} _pad_code: LongInt; {$endif}
+    Arity:      Int64;    { param count, incl. Self at index 0 for a method }
+    RetKind:    Int64;    { Ord(TTypeKind) of the return type }
+    ParamKinds: Pointer;  { ^array of `Arity` Int64 Ord(TTypeKind) words; nil if 0 }
+    {$ifdef CPU32} _pad_pk: LongInt; {$endif}
   end;
   PMethInfo = ^TMethInfo;
 
@@ -161,6 +165,9 @@ function SetFieldByName(instance: Pointer; cls: PClassRTTI; const name: string; 
 function GetFieldInfoByName(cls: PClassRTTI; const name: string): PFieldInfo;
 function GetInstanceRTTI(instance: Pointer): PClassRTTI;
 function GetFieldPtr(instance: Pointer; cls: PClassRTTI; const name: string; var kind: Int64): Pointer;
+{ Full method descriptor by name (any method, walks the hierarchy) — Code +
+  Arity + RetKind + ParamKinds, what the generic native-call trampoline needs. }
+function GetMethInfoByName(cls: PClassRTTI; const name: string): PMethInfo;
 function GetEnumValue(et: PEnumRTTI; const name: string): Integer;
 procedure SetSetProp(instance: Pointer; p: PPropInfo; ordinal: Integer);
 
@@ -601,6 +608,31 @@ begin
         if fields[i].NamePtr^ = name then
         begin
           GetFieldInfoByName := @fields[i];
+          Exit;
+        end;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+end;
+
+{ The full method descriptor for `name`, over every method in the hierarchy. }
+function GetMethInfoByName(cls: PClassRTTI; const name: string): PMethInfo;
+var
+  curr: PClassRTTI;
+  meths: PMethInfo;
+  i: Integer;
+begin
+  GetMethInfoByName := nil;
+  curr := cls;
+  while curr <> nil do
+  begin
+    if curr^.MethCount > 0 then
+    begin
+      meths := curr^.MethsPtr;
+      for i := 0 to Integer(curr^.MethCount) - 1 do
+        if meths[i].NamePtr^ = name then
+        begin
+          GetMethInfoByName := @meths[i];
           Exit;
         end;
     end;
