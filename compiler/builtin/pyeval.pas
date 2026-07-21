@@ -723,7 +723,12 @@ procedure ParseMethodCall(const recv: Variant; const mname: AnsiString;
 
 { atom, then a postfix chain of `.attr` (field read) and `[index]` (subscript). }
 procedure ParsePrimary(var res: Variant);
-var name, fld: AnsiString; recv, idx, elem: Variant; li: TPyList;
+var
+  name, fld: AnsiString;
+  recv, idx, elem, hiTmp: Variant;
+  li: TPyList;
+  loVal, hiVal: Int64;
+  haveLo: Boolean;
 begin
   { ---- atom ---- }
   if TkKind[Cur] = PK_INT then
@@ -781,11 +786,31 @@ begin
     end
     else
     begin
-      Advance;
-      ParseExpr(idx);
-      ExpectOp(']');
+      { subscript or slice }
+      Advance;   { [ }
       recv := res;
-      if Executing then PySubscriptGet(recv, idx, res) else res := MakeNone;
+      haveLo := False;
+      if not IsOp(':') then begin ParseExpr(idx); haveLo := True; end;
+      if IsOp(':') then
+      begin
+        { slice [lo:hi(:step)] — bounds int-coerced, omitted -> PY_SLICE_OMIT }
+        loVal := PY_SLICE_OMIT; hiVal := PY_SLICE_OMIT;
+        if haveLo then loVal := pyvar_to_int(idx);
+        Advance;
+        if (not IsOp(']')) and (not IsOp(':')) then
+        begin ParseExpr(hiTmp); hiVal := pyvar_to_int(hiTmp); end;
+        if IsOp(':') then   { step — parsed and ignored (M2) }
+        begin Advance; if not IsOp(']') then ParseExpr(hiTmp); end;
+        ExpectOp(']');
+        if Executing then res := pyvar_slice(recv, loVal, hiVal) else res := MakeNone;
+      end
+      else
+      begin
+        { plain index — keep idx as a Variant so dict string keys work }
+        if not haveLo then EvalError('empty subscript');
+        ExpectOp(']');
+        if Executing then PySubscriptGet(recv, idx, res) else res := MakeNone;
+      end;
     end;
   end;
 end;
