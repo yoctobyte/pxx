@@ -78,6 +78,7 @@ function  PXXPromoVarArithTry(dst, a, b: Pointer; op: Integer): Integer;
 function  PXXPromoVarCmpTry(a, b: Pointer; op: Integer): Integer;
 function  PXXPromoFitsInt64(a: Pointer): Boolean;
 function  PXXPromoToInt64(a: Pointer): Int64;
+function  PXXPromoToInt64Wrap(a: Pointer): Int64;
 
 implementation
 
@@ -1229,7 +1230,13 @@ function PXXPromoVarArithTry(dst, a, b: Pointer; op: Integer): Integer;
 var pa, pb, pr: array[0..1] of NativeInt;   { three promo slots }
 begin
   PXXPromoVarArithTry := 0;
-  if not EitherPromoTagged(a, b) then Exit;
+  { shl/shr (9/10) are handled UNCONDITIONALLY: an int64 shl can overflow into
+    the bignum range (Python `1 << 64` = 2^64) and the native variant shr is a
+    LOGICAL shift while Python's >> is arithmetic floor division — so even two
+    plain VT_INT64 operands must route through the promo runtime here. The
+    other operators keep the promo-tag gate so ordinary variant semantics stay
+    in the per-backend codegen. }
+  if (op < 9) and not EitherPromoTagged(a, b) then Exit;
   PXXPromoInit(@pa); PXXPromoInit(@pb); PXXPromoInit(@pr);
   PXXPromoFromVariant(@pa, a);
   PXXPromoFromVariant(@pb, b);
@@ -1238,6 +1245,11 @@ begin
   else if op = 3 then PXXPromoMul(@pr, @pa, @pb)
   else if op = 4 then PXXPromoDiv(@pr, @pa, @pb)
   else if op = 5 then PXXPromoMod(@pr, @pa, @pb)
+  else if op = 6 then PXXPromoAnd(@pr, @pa, @pb)
+  else if op = 7 then PXXPromoOr(@pr, @pa, @pb)
+  else if op = 8 then PXXPromoXor(@pr, @pa, @pb)
+  else if op = 9 then PXXPromoShl(@pr, @pa, @pb)
+  else if op = 10 then PXXPromoShr(@pr, @pa, @pb)
   else
   begin
     { an operator with no promotable-int meaning (e.g. `/`): leave it to the
@@ -1294,6 +1306,33 @@ begin
   if SlotTag(a) <> PROMO_TAG_INLINE then
     RunError(215);
   PXXPromoToInt64 := SlotInt(a);
+end;
+
+{ Slow path split out so the fast one never names TBig (a routine that mentions
+  a dynarray record pays managed prologue on every call). }
+function PromoWrapHeap(a: Pointer): Int64;
+var bg: TBig; r: Int64; i: Integer;
+begin
+  bg := SlotBig(a);
+  r := 0;
+  for i := Length(bg.limbs) - 1 downto 0 do
+    r := r * BIG_BASE + bg.limbs[i];   { wrapping is the point: value mod 2^64 }
+  if bg.neg then r := -r;
+  PromoWrapHeap := r;
+end;
+
+{ Narrowing WITH two's-complement wrap (value mod 2^64), the C/machine reading.
+  Used where a promo value lands in a concrete int slot (a NilPy `int`-annotated
+  variable): NilPy's documented narrowing of Python's arbitrary precision is
+  64-bit congruence, and the masked-cell idiom (`n & 0xFFF... ; if n >= 2^63:
+  n -= 2^64`) is only an identity under exactly this rule — the checked
+  PXXPromoToInt64 would trap on the intermediate. }
+function PXXPromoToInt64Wrap(a: Pointer): Int64;
+begin
+  if SlotTag(a) = PROMO_TAG_INLINE then
+    PXXPromoToInt64Wrap := SlotInt(a)
+  else
+    PXXPromoToInt64Wrap := PromoWrapHeap(a);
 end;
 
 end.

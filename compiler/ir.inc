@@ -849,8 +849,10 @@ end;
   "has a span" alone would misread `'a'` as a wide number. }
 function IsWideIntLit(node: Integer): Boolean;
 begin
+  { tyPromoInt64 is the NilPy typing of the same wide literal (ints are
+    arbitrary precision there); the span still carries the exact digits. }
   IsWideIntLit := (ASTKind[node] = AN_INT_LIT) and (ASTSLen[node] > 0) and
-                  (ASTTk[node] = Ord(tyInt64));
+                  ((ASTTk[node] = Ord(tyInt64)) or (ASTTk[node] = Ord(tyPromoInt64)));
 end;
 
 { `-<wide literal>`. The digit text the lexer preserved carries NO sign, and
@@ -976,7 +978,12 @@ procedure IRPromoEmitBinop(dstAddr, node: Integer); forward;
 function IRPromoAddrOf(node: Integer): Integer;
 var tmpSym, addr, value: Integer;
 begin
-  if TypeIsPromoInt(IntToTypeKind(ASTTk[node])) then
+  { A wide LITERAL may itself be typed tyPromoInt64 (NilPy), but it is not a
+    slot — it must take the boxing path below, where IRPromoInitFromLiteral
+    consumes the digit text. Checked before the promo-typed branch, which
+    would otherwise hand the wrapped machine constant back as a slot address. }
+  if (not IsWideIntLit(node)) and (not IsWideNegLit(node)) and
+     TypeIsPromoInt(IntToTypeKind(ASTTk[node])) then
   begin
     if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
        TypeIsPromoInt(Syms[ASTIVal[node]].TypeKind) then
@@ -1020,6 +1027,21 @@ begin
   else if op = tkXor then PromoOpHelper := 'PXXPromoXor'
   else if op = tkShl then PromoOpHelper := 'PXXPromoShl'
   else if op = tkShr then PromoOpHelper := 'PXXPromoShr';
+end;
+
+{ Box a promotable-int-typed expression (or a wide literal) into a fresh
+  variant temp and return the temp's ADDRESS — the shape the variant binop
+  wants for a mixed `variant ⊕ promo` operand. An INLINE value becomes an
+  ordinary VT_INT64 variant; only a heap value takes VT_PROMO_INT64. The temp
+  is an ordinary variant local (prologue-zeroed, epilogue-cleared). }
+function IRPromoBoxedVariantAddr(node: Integer): Integer;
+var vSym: Integer;
+begin
+  vSym := AllocVar('', tyVariant);
+  IRMarkStatementNode(IRPromoCall('PXXPromoToVariant',
+                        IRAppend(IR_LEA, vSym, -1, -1, 0, Ord(tyPointer)),
+                        IRPromoAddrOf(node), -1, tyUnknown));
+  IRPromoBoxedVariantAddr := IRAppend(IR_LEA, vSym, -1, -1, 0, Ord(tyPointer));
 end;
 
 procedure IRPromoEmitBinop(dstAddr, node: Integer);
@@ -2031,6 +2053,17 @@ begin
      IRVariantUnboxKind(Procs[cpi].Params[pathIdx].TypeKind) then
   begin
     Result := IRLowerVariantAsScalar(argAST, Procs[cpi].Params[pathIdx].TypeKind);
+    Exit;
+  end;
+  { PROMO argument to a concrete int parameter: same mod-2^64 narrowing as the
+    assignment path — the raw lowering would pass the slot ADDRESS. }
+  if (cpi >= 0) and (pathIdx >= 0) and
+     (pathIdx < Procs[cpi].ParamCount) and
+     TypeIsPromoInt(IntToTypeKind(ASTTk[argAST])) and
+     (not Procs[cpi].Params[pathIdx].IsRef) and
+     TypeIsOrdinal(Procs[cpi].Params[pathIdx].TypeKind) then
+  begin
+    Result := IRPromoCall('PXXPromoToInt64Wrap', IRPromoAddrOf(argAST), -1, -1, tyInt64);
     Exit;
   end;
   { `@obj.Method` given directly to a method-pointer parameter (`of object`
@@ -3685,7 +3718,13 @@ begin
                          '18446744073709551615') then
         Error('number ' + GetTokenStrFromRaw(ASTSOffset[node], ASTSLen[node])
               + ' is out of range');
-      Result := IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[node], ASTTk[node]);
+      { A promo-TYPED wide literal (NilPy) that still lands here is being read
+        as a machine int; the wrapped bits are the right QWord reading, and the
+        IR must not carry tyPromoInt64 on a plain constant. }
+      if ASTTk[node] = Ord(tyPromoInt64) then
+        Result := IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[node], Ord(tyInt64))
+      else
+        Result := IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[node], ASTTk[node]);
     end;
 
     AN_FLOAT_LIT:
@@ -5390,6 +5429,12 @@ begin
           such a value in a variant temp first. }
         if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant then
           left := IRVariantAddr(ASTLeft[node])
+        else if IsWideIntLit(ASTLeft[node]) or IsWideNegLit(ASTLeft[node]) or
+                TypeIsPromoInt(IntToTypeKind(ASTTk[ASTLeft[node]])) then
+          { a wide literal / promo-typed operand: IR_VAR_BOX would box the
+            WRAPPED machine int — route through the promo runtime instead so
+            an over-Int64 value keeps its exact reading (VT_PROMO_INT64) }
+          left := IRPromoBoxedVariantAddr(ASTLeft[node])
         else
         begin
           { box temp is a routine local (per-call/thread slot), not a shared
@@ -5401,6 +5446,9 @@ begin
         end;
         if IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant then
           right := IRVariantAddr(ASTRight[node])
+        else if IsWideIntLit(ASTRight[node]) or IsWideNegLit(ASTRight[node]) or
+                TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]])) then
+          right := IRPromoBoxedVariantAddr(ASTRight[node])
         else
         begin
           { box temp is a routine local (per-call/thread slot), not a shared
@@ -5479,7 +5527,16 @@ begin
           else if item = Ord(tkMinus) then promoOp := 2
           else if item = Ord(tkStar) then promoOp := 3
           else if item = Ord(tkDiv) then promoOp := 4
-          else if item = Ord(tkMod) then promoOp := 5;
+          else if item = Ord(tkMod) then promoOp := 5
+          else if item = Ord(tkAnd) then promoOp := 6
+          else if item = Ord(tkOr) then promoOp := 7
+          else if item = Ord(tkXor) then promoOp := 8
+          { shl/shr through the promo runtime are NilPy-only: the runtime
+            handles them even for two plain VT_INT64 operands (Python `1 << 64`
+            promotes; Python >> is arithmetic, the native op is logical). A
+            Pascal Variant shl keeps the native wrapping semantics. }
+          else if (item = Ord(tkShl)) and PyProgramMode then promoOp := 9
+          else if (item = Ord(tkShr)) and PyProgramMode then promoOp := 10;
           if (promoOp = 0) or (FindProc('PXXPromoVarArithTry') < 0) then
             Result := IRAppend(IR_VAR_BINOP, left, right, item, idx, Ord(tyVariant))
           else
@@ -6127,6 +6184,15 @@ begin
         if (IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant) and
            IRVariantUnboxKind(IntToTypeKind(ASTTk[ASTLeft[node]])) then
           value := IRLowerVariantAsScalar(ASTRight[node], IntToTypeKind(ASTTk[ASTLeft[node]]))
+        else if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]])) and
+                TypeIsOrdinal(lhsTk) then
+          { PROMO source, concrete int target (a NilPy `int`-annotated variable
+            reassigned with a masked expression, `n = n & 0xFFFFFFFFFFFFFFFF`):
+            narrow with two's-complement WRAP (value mod 2^64). The raw store
+            would write the slot ADDRESS; the checked narrowing would trap on
+            exactly the masked intermediates the idiom is built from. }
+          value := IRPromoCall('PXXPromoToInt64Wrap',
+                               IRPromoAddrOf(ASTRight[node]), -1, -1, tyInt64)
         else
         value := IRLowerAST(ASTRight[node]);
         { A C string literal stored to a pointer must land on char 0, not the
@@ -7223,7 +7289,7 @@ begin
         releases the dest's old managed fields before copy, so the temp must be
         nil-inited (allocated post-prologue) — same rule as other hidden temps. }
       if (argTk = tyAnsiString) or (argTk = tyString) or TypeIsAggregate(argTk) or
-         (argTk = tyVariant) then
+         (argTk = tyVariant) or TypeIsPromoInt(argTk) then
         SymIsHiddenArgTemp[varIdx] := True;
       elseLabel := IRNewLabel;
       endLabel := IRNewLabel;
@@ -7252,6 +7318,10 @@ begin
         consumer would deref a truncated value (segfault). Yield its address. }
       if (argTk = tyRecord) or (argTk = tyVariant) then
         Result := IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(argTk))
+      else if TypeIsPromoInt(argTk) then
+        { a promotable int's rvalue is its SLOT ADDRESS (the tyVariant model);
+          a scalar load would hand the consumer the tag word }
+        Result := IRAppend(IR_SLOTADDR, varIdx, -1, -1, 0, Ord(tyPointer))
       else
         Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(argTk));
     end;
@@ -7761,6 +7831,10 @@ begin
             dispatches at runtime (IRTk stays tyVariant). }
           if IntToTypeKind(ASTTk[ASTLeft[item]]) = tyVariant then
             value := IRVariantAddr(ASTLeft[item])
+          else if IsWideIntLit(ASTLeft[item]) or IsWideNegLit(ASTLeft[item]) then
+            { a wide literal must not reach the machine-int lowering (it would
+              reject a value past UInt64); box it from its digit text }
+            value := IRPromoAddrOf(ASTLeft[item])
           else
             value := IRLowerAST(ASTLeft[item]);
           if IsNodePChar(ASTLeft[item]) then
@@ -7769,12 +7843,15 @@ begin
               printing the pointer value. }
             outNode := IRAppend(IR_WRITE, value, ASTIVal[item], -3, writeFd, Ord(tyPointer))
           else if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTLeft[item]])) then
+          begin
             { A promotable int PRINTS via the runtime, which renders whichever
               tier it is in — a bignum has no machine-int form to hand the
-              integer writer. `value` is already the slot address. }
+              integer writer. `value` is already the slot address (a wide
+              literal was boxed above). }
             outNode := IRAppend(IR_WRITE,
                                 IRPromoCall('PXXPromoToStr', value, -1, -1, tyAnsiString),
-                                ASTIVal[item], ASTSOffset[item], writeFd, Ord(tyAnsiString))
+                                ASTIVal[item], ASTSOffset[item], writeFd, Ord(tyAnsiString));
+          end
           else
             outNode := IRAppend(IR_WRITE, value, ASTIVal[item], ASTSOffset[item], writeFd, Ord(IntToTypeKind(ASTTk[ASTLeft[item]])));
         end

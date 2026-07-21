@@ -62,7 +62,10 @@ begin
   Tokens[TokCount].Kind := k;
   Tokens[TokCount].IVal := ival;
   Tokens[TokCount].Line := line;
-  if (k = tkIdent) or (k = tkString) then
+  { A tkInteger carries text only when the literal is wider than Int64: the
+    exact decimal digits, for the promotable-int lowering (the Pascal lexer's
+    CurTok.SVal convention, ferried through the NilPy token pool). }
+  if (k = tkIdent) or (k = tkString) or ((k = tkInteger) and (sval <> '')) then
   begin
     off := TokCharLen;
     len := Length(sval);
@@ -85,6 +88,28 @@ begin
     Tokens[TokCount].SLen := 0;
   end;
   Inc(TokCount); EnsureTokCapacity(TokCount+1);
+end;
+
+{ dec := dec*base + digit, on a decimal digit string (`''` = 0). Carries the
+  exact value of a radix literal (0x/0o/0b) wider than Int64: the promotable-int
+  runtime takes DECIMAL text (PXXPromoFromStr), so the base conversion happens
+  here where the digits stream by. Literals are short; the quadratic string
+  arithmetic is irrelevant. }
+procedure PyDecMulAdd(var dec: AnsiString; base, digit: Integer);
+var i, carry, v: Integer;
+begin
+  carry := digit;
+  for i := Length(dec) downto 1 do
+  begin
+    v := (Ord(dec[i]) - 48) * base + carry;
+    dec[i] := Chr(48 + v mod 10);
+    carry := v div 10;
+  end;
+  while carry > 0 do
+  begin
+    dec := Chr(48 + carry mod 10) + dec;
+    carry := carry div 10;
+  end;
 end;
 
 { ===== f-string expansion =====
@@ -497,6 +522,7 @@ var
   k: TTokenKind;
   numBase, digit, startLine: Integer;
   hasDigit, isTriple: Boolean;
+  decText: AnsiString;   { the literal's exact decimal digits, for the over-Int64 case }
 begin
   TokCount := 0;
   TokCharLen := 0;
@@ -622,6 +648,7 @@ begin
           end;
           Inc(P, 2);
           hasDigit := False;
+          decText := '';
           while P <= Length(Source) do
           begin
             c2 := Source[P];
@@ -632,6 +659,7 @@ begin
             else break;
             if digit >= numBase then break;
             n := n * numBase + digit;
+            PyDecMulAdd(decText, numBase, digit);
             hasDigit := True;
             Inc(P);
           end;
@@ -640,13 +668,23 @@ begin
             CurTok.Line := SrcLine;
             Error('invalid numeric literal');
           end;
-          PyEmitToken(tkInteger, n, SrcLine, '');
+          { Wider than Int64: the wrapped n has no correct signed reading, so
+            carry the exact decimal for the promotable-int lowering (same
+            convention as the Pascal lexer's decimal path). }
+          if DecDigitsExceed(decText, '9223372036854775807') then
+            PyEmitToken(tkInteger, n, SrcLine, decText)
+          else
+            PyEmitToken(tkInteger, n, SrcLine, '');
           continue;
         end;
+        decText := '';
         while (P <= Length(Source)) and (Source[P] in ['0'..'9','_']) do
         begin
           if Source[P] <> '_' then
+          begin
             n := n * 10 + (Ord(Source[P]) - 48);
+            AppendChar(decText, Source[P]);
+          end;
           Inc(P);
         end;
         { detect float: '.' followed by digit, or e/E exponent }
@@ -672,6 +710,9 @@ begin
           end;
           PyEmitToken(tkFloat, StrToDoubleBits(s), SrcLine, '');
         end
+        else if DecDigitsExceed(decText, '9223372036854775807') then
+          { decimal wider than Int64: carry the exact digits (promo lowering) }
+          PyEmitToken(tkInteger, n, SrcLine, decText)
         else
         begin
           PyEmitToken(tkInteger, n, SrcLine, '');

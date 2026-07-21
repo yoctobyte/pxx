@@ -7484,6 +7484,14 @@ begin
           to 0 and would otherwise be typed tyInteger, which is both wrong and
           indistinguishable from a char literal's char-pool span. }
         ASTTk[node] := Ord(tyInt64);
+        { NilPy: ints are arbitrary precision, so a wide literal IS a
+          promotable int — the promo type makes the binop/assign typing carry
+          promotion through everything it touches (the `& 0xFFFFFFFFFFFFFFFF`
+          unsigned-mask idiom). Gated on the parse MODE, not isNilPy: the
+          auto-used Pascal units compile under isNilPy too and must keep the
+          Pascal reading. }
+        if PyExprMode then
+          ASTTk[node] := Ord(tyPromoInt64);
       end;
       CurASTNode := node; Next;
     end;

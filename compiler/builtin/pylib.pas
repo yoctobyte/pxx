@@ -1710,10 +1710,28 @@ end;
 function pyvar_to_int(const v: Variant): Int64;
 var
   p: PPyVarRec;
+  ds: AnsiString;
+  i: Integer;
+  r: Int64;
 begin
   p := PPyVarRec(@v);
   if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
     Result := p^.Payload
+  else if p^.VType = 8193 then
+  begin
+    { VT_PROMO_INT64: a heap-tier promotable int (payload = exact decimal in a
+      managed string). Narrowing to a machine int is NilPy's documented mod-2^64
+      two's-complement reading — the same rule the compiler's promo->int store
+      uses (PXXPromoToInt64Wrap) — so the masked-cell idiom stays an identity
+      instead of a TypeError. }
+    ds := PPyAnsiString(@p^.Payload)^;
+    r := 0;
+    for i := 1 to Length(ds) do
+      if ds[i] in ['0'..'9'] then
+        r := r * 10 + (Ord(ds[i]) - 48);   { wrapping mod 2^64 is the point }
+    if (ds <> '') and (ds[1] = '-') then r := -r;
+    Result := r;
+  end
   else if p^.VType = 3 then
     Result := Trunc(PPyDouble(@p^.Payload)^)   { Python int(float) truncates }
   else if p^.VType = 0 then

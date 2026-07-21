@@ -558,6 +558,25 @@ begin
   if a = tyUnknown then begin Result := b; Exit; end;
   if b = tyUnknown then begin Result := a; Exit; end;
   if a = b then begin Result := a; Exit; end;
+  if TypeIsPromoInt(a) or TypeIsPromoInt(b) then
+  begin
+    { Promotable int (a wide literal, or an expression it infected). It joins a
+      VARIANT as a variant — a promo boxes into one (inline -> VT_INT64, heap ->
+      VT_PROMO_INT64) — and stays PROMO among machine ints, which is what
+      carries `x & 0xFFFFFFFFFFFFFFFF` through the scalar binop typing.
+      Promo + float has no scalar lowering; error honestly (annotate). }
+    if (a = tyVariant) or (b = tyVariant) then
+      Result := tyVariant
+    else if (TypeIsPromoInt(a) or (a = tyInteger) or (a = tyInt64) or (a = tyBoolean)) and
+            (TypeIsPromoInt(b) or (b = tyInteger) or (b = tyInt64) or (b = tyBoolean)) then
+      Result := tyPromoInt64
+    else
+    begin
+      Error(PyWidenErr);
+      Result := tyUnknown;
+    end;
+    Exit;
+  end;
   if (a = tyVariant) or (b = tyVariant) then
   begin
     { A class (list/dict/object) boxes into a variant as VT_OBJECT — the same
@@ -699,7 +718,11 @@ begin
     if CurTok.Kind <> tkIdent then Error('Nil Python: expected a type in isinstance');
     nm := LowerCase(CurTok.SVal);
     if nm = 'int' then
-      term := OrJoin(OrJoin(TagEq(VT_INT), TagEq(VT_INT64)), TagEq(VT_BOOL))
+      { VT_PROMO_INT64: a heap-tier promotable int (a masked cell past 2^63)
+        is still Python `int` — without this, uforth's push() normalization
+        skipped exactly the values that most needed it }
+      term := OrJoin(OrJoin(OrJoin(TagEq(VT_INT), TagEq(VT_INT64)), TagEq(VT_BOOL)),
+                     TagEq(VT_PROMO_INT64))
     else if nm = 'float' then term := TagEq(VT_DOUBLE)
     else if nm = 'str' then term := TagEq(VT_STRING)
     else if nm = 'bool' then term := TagEq(VT_BOOL)
@@ -778,7 +801,7 @@ begin
 end;
 
 procedure PyParseShift;
-var left, right, node: Integer; op: TTokenKind;
+var left, right, node: Integer; op: TTokenKind; w: TTypeKind;
 begin
   PyParseBitOperand;
   left := CurASTNode;
@@ -788,7 +811,15 @@ begin
     PyBitGuard(left); Next; PyParseBitOperand; right := CurASTNode; PyBitGuard(right);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op);
     ASTLeft[node] := left; ASTRight[node] := right;
-    ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
+    { A shift of machine ints is typed PROMO: `1 << 64` must promote past
+      Int64 (CPython), and Python's >> is arithmetic floor division while the
+      native shr is logical — both need the promo runtime, unconditionally.
+      Variant operands keep the variant typing; the variant binop routes
+      shifts through the same runtime (NilPy-only op map). }
+    w := PyWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right]));
+    if (w = tyInteger) or (w = tyInt64) or (w = tyBoolean) then
+      w := tyPromoInt64;
+    ASTTk[node] := Ord(w);
     left := node;
   end;
   CurASTNode := left;
@@ -2797,9 +2828,12 @@ end;
 
 function PyIsIntBaseTk(tk: TTypeKind): Boolean;
 begin
+  { tyPromoInt64: a wide-literal-infected int (`0xFF... if flag else 0`) is
+    still Python int; the receiver narrows mod 2^64 at the intrinsic's Int64
+    parameter, which reproduces the unsigned byte image. }
   Result := (tk = tyInteger) or (tk = tyInt64) or (tk = tyInt8) or
             (tk = tyInt16) or (tk = tyUInt8) or (tk = tyUInt16) or
-            (tk = tyUInt32) or (tk = tyUInt64);
+            (tk = tyUInt32) or (tk = tyUInt64) or TypeIsPromoInt(tk);
 end;
 
 { Parses the shared tail `, "little", signed=<expr> )` and returns the node for
@@ -5550,7 +5584,11 @@ begin
       end;
       node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(augTk);
       ASTLeft[node] := lhsNode; ASTRight[node] := CurASTNode;
-      ASTTk[node] := ASTTk[lhsNode];
+      { widen, don't copy the lhs type: `n -= 0x10000000000000000` on an int
+        target must type the binop PROMO or the wide literal is machine-lowered
+        (out of range); the promo->int store then narrows mod 2^64 }
+      ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[lhsNode]),
+                                 IntToTypeKind(ASTTk[CurASTNode])));
       rhsNode := node;
     end
     else
@@ -5630,7 +5668,10 @@ begin
     PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(augTk);
     ASTLeft[node] := PyMakeIdent(symIdx); ASTRight[node] := CurASTNode;
-    ASTTk[node] := Ord(Syms[symIdx].TypeKind);
+    { widen, don't copy the target type: `n -= 0x10000000000000000` on an int
+      target must type the binop PROMO (see the twin lhs-expression site) }
+    ASTTk[node] := Ord(PyWiden(Syms[symIdx].TypeKind,
+                               IntToTypeKind(ASTTk[CurASTNode])));
     rhsNode := node;
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := PyMakeIdent(symIdx);
