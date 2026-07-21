@@ -5828,6 +5828,27 @@ begin
           EmitAsmX64(['mov qword [rbp+%], 0', Syms[i].Offset]);
       end;
 
+  { Safety net for lowering temps the flag missed: an UNNAMED managed skLocal
+    (str-method-chain / ternary result, etc.) whose init lives on a branch a run
+    may skip would otherwise be freed uninitialised at the epilogue (decq on
+    stale stack bytes -> SIGSEGV, or a corrupted value). Nil it here. Scoped to
+    UNNAMED (Name='') UNFLAGGED AnsiString/Variant temps: the compiler's own
+    hidden temps are all flagged (handled above), so it emits nothing extra here
+    and the self-host fixedpoint stays byte-identical. }
+  if CurProc >= 0 then
+    for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+      if (Syms[i].Kind = skLocal) and (Syms[i].Name = '') and
+         not Syms[i].IsArray and not SymIsHiddenArgTemp[i] then
+      begin
+        if Syms[i].TypeKind = tyAnsiString then
+          EmitAsmX64(['mov qword [rbp+%], 0', Syms[i].Offset])
+        else if Syms[i].TypeKind = tyVariant then
+        begin
+          EmitAsmX64(['mov qword [rbp+%], 0', Syms[i].Offset]);
+          EmitAsmX64(['mov qword [rbp+%], 0', Syms[i].Offset + 8]);
+        end;
+      end;
+
   for i := 0 to IRCount - 1 do
   begin
     DbgRecordRow(i);   { DWARF -g line table }

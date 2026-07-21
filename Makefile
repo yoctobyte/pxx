@@ -417,6 +417,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_is_none_typed26)" = "$$(printf '%b' '11\nobj-live')"
 	./$(COMPILER) test/test_nilpy_bytes_setslice_variant.npy /tmp/test_nilpy_bytes_setslice_variant26
 	test "$$(/tmp/test_nilpy_bytes_setslice_variant26)" = "$$(printf '%b' '42\n7')"
+	./$(COMPILER) test/test_nilpy_unnamed_managed_temp_init.npy /tmp/test_nilpy_unnamed_managed_temp_init26
+	test "$$(/tmp/test_nilpy_unnamed_managed_temp_init26)" = "75"
 	./$(COMPILER) examples/shell/shell0.npy /tmp/test_nilpy_shell026
 	/tmp/test_nilpy_shell026 | grep -q "hello portable userland"
 

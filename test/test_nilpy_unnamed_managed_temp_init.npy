@@ -1,0 +1,23 @@
+from typing import List
+class C:
+    def __init__(self) -> None:
+        self.q: int = 0
+    def tok(self, flag: int, xs: list) -> List[str]:
+        out: List[str] = []
+        out.append("seed")
+        if flag == 0:
+            return out
+        prev = str(xs[-1]).upper() if xs else ""
+        out.append(prev)
+        return out
+def go() -> int:
+    c = C()
+    total = 0
+    i = 0
+    while i < 50:
+        r = c.tok(i % 2, ["ab", "cd"])
+        total = total + len(r)
+        i = i + 1
+    print(total)
+    return 0
+go()
