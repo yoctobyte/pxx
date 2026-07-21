@@ -440,6 +440,26 @@ begin
     begin writeln('pyeval: unsupported subscript-assign target'); Halt(1); end;
 end;
 
+{ del container[index] }
+procedure PyDelSubscript(const container: Variant; const index: Variant);
+var o: TObject; li: TPyList; di: TPyDict; i, nn: Int64;
+begin
+  if PPyRec(@container)^.VType <> 7 then
+  begin writeln('pyeval: cannot del a subscript of a non-container'); Halt(1); end;
+  o := TObject(Pointer(PPyRec(@container)^.Payload));
+  if o is TPyList then
+  begin
+    li := TPyList(o); nn := li.count; i := pyvar_to_int(index);
+    if i < 0 then i := i + nn;
+    if (i < 0) or (i >= nn) then begin writeln('pyeval: del index out of range'); Halt(1); end;
+    li.pop_at(i);
+  end
+  else if o is TPyDict then
+    TPyDict(o).remove(index)
+  else
+    begin writeln('pyeval: unsupported del target'); Halt(1); end;
+end;
+
 { ---- tokenizer ---- }
 
 var
@@ -821,7 +841,7 @@ begin
     { 1-char }
     case c of
       '+', '-', '*', '/', '%', '&', '|', '^', '~',
-      '<', '>', '=', '(', ')', '[', ']', ',', ':', '.', ';':
+      '<', '>', '=', '(', ')', '[', ']', ',', ':', '.', ';', '{', '}':
         begin
           AddTok(PK_OP, Copy(Src, Pos, 1), 0, 0);
           Pos := Pos + 1;
@@ -899,20 +919,53 @@ begin
   LclN := LclN + 1;
 end;
 
+{ Python type objects (int/str/…) as first-class values, needed by isinstance's
+  second argument. Encoded in a pyeval-internal variant tag 100 whose payload is
+  the VT_* the type maps to (int->2, float->3, bool->4, str->6, bytes/list/dict
+  use their container discriminators 7/107/207). -1 if `name` is not a type. }
+const PY_TYPETAG = 100;
+function PyTypeCode(const name: AnsiString): Int64;
+begin
+  if (name = 'int') then PyTypeCode := 2
+  else if (name = 'float') then PyTypeCode := 3
+  else if (name = 'bool') then PyTypeCode := 4
+  else if (name = 'str') then PyTypeCode := 6
+  else if (name = 'bytes') or (name = 'bytearray') then PyTypeCode := 7
+  else if (name = 'list') then PyTypeCode := 107
+  else if (name = 'dict') then PyTypeCode := 207
+  else PyTypeCode := -1;
+end;
+
+procedure LclDelete(const name: AnsiString);
+var i, j: Integer;
+begin
+  i := LclFind(name);
+  if i < 0 then Exit;
+  for j := i to LclN - 2 do
+  begin LclNames[j] := LclNames[j+1]; LclVals[j] := LclVals[j+1]; end;
+  LclN := LclN - 1;
+end;
+
 procedure EnvGet(const name: AnsiString; var res: Variant);
-var i: Integer;
+var i: Integer; tc: Int64;
 begin
   i := LclFind(name);
   if i >= 0 then
     res := LclVals[i]
   else if (EnvG <> nil) and (EnvG.indexof(name) >= 0) then
     res := EnvG.fetch(name)
-  else if not Executing then
-    res := MakeNone      { walking a skipped branch — names may be undefined }
   else
   begin
-    EvalError('name not defined: ' + name);
-    res := MakeNone;
+    tc := PyTypeCode(name);
+    if tc >= 0 then
+    begin PPyRec(@res)^.VType := PY_TYPETAG; PPyRec(@res)^.Payload := tc; end
+    else if not Executing then
+      res := MakeNone      { walking a skipped branch — names may be undefined }
+    else
+    begin
+      EvalError('name not defined: ' + name);
+      res := MakeNone;
+    end;
   end;
 end;
 
@@ -927,6 +980,7 @@ var
   name, fld: AnsiString;
   recv, idx, elem, hiTmp: Variant;
   li: TPyList;
+  dd: TPyDict;
   loVal, hiVal: Int64;
   haveLo: Boolean;
 begin
@@ -951,6 +1005,50 @@ begin
     end;
     ExpectOp(']');
     PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(li));
+  end
+  else if IsOp('{') then
+  begin
+    { dict literal { k: v, ... } or set literal { v, ... } (empty {} -> dict).
+      A set is backed by a TPyList, per pylib's set model. }
+    Advance;
+    if IsOp('}') then
+    begin
+      Advance;
+      dd := TPyDict.Create;
+      PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(dd));
+    end
+    else
+    begin
+      ParseExpr(elem);
+      if IsOp(':') then
+      begin
+        { dict }
+        Advance; ParseExpr(idx);   { idx = value }
+        dd := TPyDict.Create; dd.store(elem, idx);
+        while IsOp(',') do
+        begin
+          Advance;
+          if IsOp('}') then Break;
+          ParseExpr(elem); ExpectOp(':'); ParseExpr(idx);
+          dd.store(elem, idx);
+        end;
+        ExpectOp('}');
+        PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(dd));
+      end
+      else
+      begin
+        { set -> TPyList }
+        li := TPyList.Create; li.append(elem);
+        while IsOp(',') do
+        begin
+          Advance;
+          if IsOp('}') then Break;
+          ParseExpr(elem); li.append(elem);
+        end;
+        ExpectOp('}');
+        PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(li));
+      end;
+    end;
   end
   else if TkKind[Cur] = PK_NAME then
   begin
@@ -1168,6 +1266,29 @@ end;
 
 { ---- builtins ---- }
 
+{ isinstance(value, typeobj). typeobj is a PY_TYPETAG sentinel (payload = the
+  type code from PyTypeCode). Maps the value's runtime tag/class to a code and
+  compares. }
+function PyIsInstance(const v: Variant; const t: Variant): Boolean;
+var vt, want: Int64; o: TObject;
+begin
+  PyIsInstance := False;
+  if PPyRec(@t)^.VType <> PY_TYPETAG then Exit;   { second arg was not a type }
+  want := PPyRec(@t)^.Payload;
+  vt := PPyRec(@v)^.VType;
+  if (want = 2) then PyIsInstance := (vt = 1) or (vt = 2)                 { int }
+  else if (want = 3) then PyIsInstance := (vt = 3)                        { float }
+  else if (want = 4) then PyIsInstance := (vt = 4)                        { bool }
+  else if (want = 6) then PyIsInstance := (vt = 6) or (vt = 5)            { str/char }
+  else if vt = 7 then
+  begin
+    o := TObject(Pointer(PPyRec(@v)^.Payload));
+    if want = 7 then PyIsInstance := o is TPyBytes
+    else if want = 107 then PyIsInstance := o is TPyList
+    else if want = 207 then PyIsInstance := o is TPyDict;
+  end;
+end;
+
 { range(...) materialised into a TPyList, boxed as a VT_OBJECT variant. }
 function pyrange_list(args: TPyList): Variant;
 var lo, hi, step, i: Int64; n: Integer; r: TPyList; ro: PPyRec;
@@ -1242,6 +1363,10 @@ begin
   begin
     { f-string hole: __fmt(value, 'spec') — see PreprocessFStrings }
     res := MakeStr(pyformat_of(args.at(0), pystr_of(args.at(1)))); Exit;
+  end;
+  if name = 'isinstance' then
+  begin
+    res := pyvar_of_bool(PyIsInstance(args.at(0), args.at(1))); Exit;
   end;
   if name = 'min' then
   begin
@@ -1680,6 +1805,41 @@ begin
   else PySubscriptSet(tcont, tindex, v);
 end;
 
+{ del NAME | del container[index] (chains supported; final step deleted). }
+procedure ExecDel;
+var base, fld: AnsiString; recv, idx: Variant;
+begin
+  Advance;   { del }
+  if CurKind <> PK_NAME then EvalError('del: expected a target');
+  base := TkText[Cur]; Advance;
+  if not (IsOp('.') or IsOp('[')) then
+  begin
+    if Executing then LclDelete(base);
+    Exit;
+  end;
+  EnvGet(base, recv);
+  while True do
+  begin
+    if IsOp('.') then
+    begin
+      Advance; fld := TkText[Cur]; Advance;
+      if Executing then PyFieldGet(pyvarobj(recv), fld, recv) else recv := MakeNone;
+    end
+    else if IsOp('[') then
+    begin
+      Advance; ParseExpr(idx); ExpectOp(']');
+      if not (IsOp('.') or IsOp('[')) then
+      begin
+        if Executing then PyDelSubscript(recv, idx);
+        Exit;
+      end;
+      if Executing then PySubscriptGet(recv, idx, recv) else recv := MakeNone;
+    end
+    else
+      EvalError('del: invalid target');
+  end;
+end;
+
 procedure ExecStatement;
 var v: Variant;
 begin
@@ -1689,9 +1849,10 @@ begin
   if IsKw('if') then begin ExecIf; StmtWasCompound := True; Exit; end;
   if IsKw('while') then begin ExecWhile; StmtWasCompound := True; Exit; end;
   if IsKw('for') then begin ExecFor; StmtWasCompound := True; Exit; end;
+  if IsKw('del') then begin ExecDel; Exit; end;
   if IsKw('break') then begin Advance; if Executing then BreakFlag := True; Exit; end;
   if IsKw('pass') then begin Advance; Exit; end;
-  if IsKw('def') or IsKw('return') or IsKw('raise') or IsKw('del')
+  if IsKw('def') or IsKw('return') or IsKw('raise')
      or IsKw('import') or IsKw('continue') or IsKw('elif') or IsKw('else') then
     EvalError('statement "' + CurText + '" is not supported yet');
 
