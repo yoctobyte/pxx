@@ -1152,26 +1152,40 @@ begin
 end;
 
 { `a or b` as a value -> `a if truthy(a) else b`; `a and b` -> `b if truthy(a)
-  else a`. Reuses AN_TERNARY (only the selected arm evaluates). `a` appears in
-  both the condition and an arm — fine for the side-effect-free operands the
-  corpus uses; a call with side effects would double-evaluate (noted). }
+  else a`. Lowered to AN_TERNARY so ONLY the selected arm evaluates — Python
+  short-circuit. `a` appears in both the condition and an arm — fine for the
+  side-effect-free operands the corpus uses; a call with side effects would
+  double-evaluate (noted).
+
+  A prior version used an eager pylib call (pyand_v/pyor_v) to get clean variant
+  boxing, but that evaluated BOTH operands and so lost short-circuit — the common
+  `if xs and xs[0]:` / `if tokens and tokens[-1]...:` guard then indexed an empty
+  container and crashed (bug-nilpy-and-or-not-short-circuit). The ternary keeps
+  short-circuit; class/variant-valued ternary arms are already handled (see the
+  conditional-expression lowering below). }
 function PyMakeBoolOpValue(a, b: Integer; isOr: Boolean): Integer;
-var procIdx, a0, a1: Integer; pname: AnsiString;
+var condNode, thenNode, elseNode, pairNode, node: Integer;
+    ta, tb: TTypeKind;
 begin
-  { A pylib call rather than a ternary, so the normal call path boxes each
-    operand into a variant (a ternary arm that is a raw class/scalar would be
-    mislabelled variant and read as garbage). Loses short-circuit — see the
-    pylib note. }
-  if isOr then pname := 'pyor_v' else pname := 'pyand_v';
-  procIdx := FindProc(pname);
-  if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
-  a0 := AllocNode(AN_ARG); ASTLeft[a0] := a;
-  a1 := AllocNode(AN_ARG); ASTLeft[a1] := b;
-  ASTRight[a0] := a1; ASTRight[a1] := -1;
-  Result := AllocNode(AN_CALL);
-  ASTIVal[Result] := procIdx;
-  ASTTk[Result] := Ord(tyVariant);
-  ASTLeft[Result] := a0;
+  condNode := PyMakeTruthy(a);
+  if isOr then begin thenNode := a; elseNode := b; end
+  else begin thenNode := b; elseNode := a; end;
+  pairNode := AllocNode(AN_PAIR);
+  ASTLeft[pairNode] := thenNode;
+  ASTRight[pairNode] := elseNode;
+  node := AllocNode(AN_TERNARY);
+  ASTLeft[node] := condNode;
+  ASTRight[node] := pairNode;
+  ta := IntToTypeKind(ASTTk[a]); tb := IntToTypeKind(ASTTk[b]);
+  if PyIsStrBaseTk(ta) or PyIsStrBaseTk(tb) then
+    ASTTk[node] := Ord(tyAnsiString)
+  else if ASTTk[a] = ASTTk[b] then
+    { same type on both arms -> keep it, preserving a container/class identity so
+      `.method()` on the result still resolves }
+    ASTTk[node] := ASTTk[thenNode]
+  else
+    ASTTk[node] := Ord(tyVariant);
+  Result := node;
 end;
 
 procedure PyParseBoolExpr;
@@ -1207,7 +1221,7 @@ begin
   begin
     Next;
     PyParseBoolExpr;
-    condNode := CurASTNode;
+    condNode := PyMakeTruthy(CurASTNode);
     if CurTok.Kind <> tkElse then
       Error('Nil Python: a conditional expression needs an else');
     Next;

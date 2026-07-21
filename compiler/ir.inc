@@ -3607,6 +3607,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     intfCallCi, intfSelfSym, intfImtSym: Integer;   { single-pointer interface call }
     frameNode, slotNode, bpAddr, addrAddr, bpVal, selfVal: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
+    ctorArgCpi, ctorArgSlot: Integer;   { construction: coerce ctor args by the ctor's param types }
     isRefArg: Boolean; argTk: TTypeKind; callRetType: TTypeKind; callVal: Integer;
     startLabel, elseLabel, endLabel, startLabelNode, endLabelNode: Integer;
     lhsNode, pair3, pair1, pair2, initNode, limitNode, isDownNode, bodyNode: Integer;
@@ -6688,7 +6689,23 @@ begin
           value := IRAppend(IR_LEA, dynLenTmp, -1, -1, 0, Ord(tyPointer));
         end
         else
-          value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
+        begin
+          { A class instantiation `C(args)` is an IR_CALL to GetMem (cpi =
+            -tkGetMem), so the arg-coercion in IRLowerCallArg — which keys on the
+            callee's param types — never fired for the ctor's own arguments. A
+            variant element (`C(lst[0])`) went to a str/scalar ctor param as its
+            raw 8-byte tag, storing garbage. Coerce user args (pathIdx>0; the
+            size arg at 0 fills self's slot) by the CTOR's param types, the same
+            path a normal method call already uses. }
+          ctorArgCpi := cpi;
+          if (cpi = -Ord(tkGetMem)) and (pathIdx > 0) and
+             (classIdx >= REC_UCLASS_BASE) then
+          begin
+            ctorArgSlot := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
+            if ctorArgSlot >= 0 then ctorArgCpi := UMthProc_[ctorArgSlot];
+          end;
+          value := IRLowerCallArg(ctorArgCpi, pathIdx, ASTLeft[item], isRefArg);
+        end;
 
         { A materialised managed-string argument (a literal, concat, char/string
           coercion, or function result — anything that is not an existing lvalue)
