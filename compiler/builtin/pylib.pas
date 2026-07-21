@@ -1679,9 +1679,16 @@ begin
     Result := p^.Payload
   else if p^.VType = 3 then
     Result := Trunc(PPyDouble(@p^.Payload)^)   { Python int(float) truncates }
+  else if p^.VType = 0 then
+    { None -> 0, the sentinel NilPy's Optional[int] uses (PyAnnTypeAt maps
+      Optional[X]'s None to 0/nil). Reached when an Optional[int] function
+      returns a missing dict.get / an unset value: the variant is VT_EMPTY and
+      the scalar-return coercion routes it here. Halting would break the whole
+      Optional[int]-returns-None contract (uforth's _lookup_local_slot). }
+    Result := 0
   else
   begin
-    { str/object/None: Python will not silently produce a number here.
+    { str/object: Python will not silently produce a number here.
       int("42") is a DIFFERENT operation (pystr_to_int) and stays explicit. }
     PyTypeError(p^.VType, 'a number');
     Result := 0;
