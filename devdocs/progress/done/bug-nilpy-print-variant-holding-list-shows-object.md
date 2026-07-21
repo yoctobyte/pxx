@@ -24,3 +24,6 @@ does.
 
 Not blocking uforth (it slices bytes, whose print path is separate). Filed for
 correctness.
+
+## Log
+- 2026-07-21 — resolved, commit f9f0c7af.
