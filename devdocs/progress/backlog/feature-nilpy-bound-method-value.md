@@ -110,3 +110,43 @@ end;
 [[feature-lib-pyexec]] — `pyeval.pas` / `EvalPyStmts` tree-walker over the tiny
 pop/push/arith/ternary subset, single-slot trampoline for the `def __body__` +
 immediate-call shape, reusing pylib's variant ops.
+
+## 2026-07-21 — CAPTURE landed; uforth PYTHON words run (commit 9b6be556)
+
+`obj.method` used as a value (no following call) now captures {code, recv}
+instead of dropping self. Implementation:
+- **Capture** (parser.inc, class-typed `.member` postfix): NilPy + MAIN scope
+  (`CurrentUnitIdx < 0`) + no `(` → PyMakeBoundMethod → `pybound_new(@method,
+  self)`. The `CurrentUnitIdx < 0` guard is ESSENTIAL: `isNilPy` is a
+  whole-compilation flag, so without it the intercept fired while compiling the
+  auto-used Pascal units (pylib's `xs.count`/`.nextval` paren-less property/
+  function reads) and mis-captured them → "variant holds an unknown tag" at
+  runtime. Gate on main-program scope so Pascal units keep Pascal semantics.
+- **Runtime** (pylib): `pybound_new/code/recv` box {Code,Recv} as VT_BOUNDMETHOD
+  (tag 8).
+
+This UNBLOCKED uforth: `env = {"vm": self, "push": self.push, ...}` now stores
+cleanly, and pyeval reaches push/pop through `env["vm"]`. uforth's PYTHON-bodied
+stdlib words RUN correct: `10 3 /`=3, `17 5 MOD`=2, `8 2/`=4, SWAP/DUP/ROT/
+comparisons all right. `make test-uforth` now drives a PYTHON word.
+
+## STILL OPEN
+
+1. **Compiled `env["f"](x)` call path.** PyMakeDynCall on a VT_BOUNDMETHOD variant
+   still segfaults (unboxes the {code,recv} record as a raw code pointer). uforth
+   never hits it (pyeval uses env["vm"]), but the ticket's gate repro
+   `env["push"](5)` does. Needs a runtime tag-branch in the emitted indirect call
+   (VT_BOUNDMETHOD → prepend Recv as Self; else plain call). Virtual-method
+   bind-now (read the VMT slot off recv at capture) is also deferred — uforth's
+   push/pop are non-virtual.
+2. **Per-capture heap leak.** pybound_new GetMems 16 bytes, never freed; uforth
+   rebuilds its env per exec call. Same lifetime class as the env TPyDict itself
+   (also unfreed) — a general NilPy container-lifetime concern, not specific here.
+
+## Next corpus target (feature-nilpy-corpus-uforth)
+
+The Forth-2012 conformance suite (uforth `tests/runtests.fth`) now EXECUTES real
+test code through pxx-uforth (preliminary SOURCE/TYPE/CR/comment tests run) but
+fails early in prelimtest with an uncaught exception (empty message — a ForthThrow
+or bare raise) where CPython passes all 57. That is the next multi-session Track N
+push: driving the conformance suite to match CPython's oracle output.
