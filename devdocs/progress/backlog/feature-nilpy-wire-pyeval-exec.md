@@ -49,16 +49,43 @@ passes with the unmodified compiler. Only the `ParseUsesUnit('pyeval')` matters
 (str_param does not use exec()), so merely PULLING pyeval into a NilPy program
 breaks unrelated str indexing.
 
-## Hypothesis
+## Bisect results (2026-07-21) — narrowed to bulk emitted code, NOT the obvious suspects
 
-pyeval references GetMethInfoByName / GetInstanceRTTI (typinfo), which may force
-method-RTTI emission for more/other classes, shifting the RTTI method-table
-stride or a variant-tag layout that NilPy str indexing depends on (cf.
-`project_rtti_method_table_multi_consumer_stride_landmine`). Or a global/symbol
-interaction from the extra unit. Needs a bisect: does pulling a MINIMAL unit that
-merely `uses typinfo` + calls one reflection fn reproduce it? (typinfo-only
-auto-use does NOT break it — verified — so it is pyeval-specific, likely its
-reflection *calls*, not typinfo's mere presence.)
+Rebuilt the compiler with pyeval auto-used, swapping pyeval's body:
+- **typinfo-only** auto-use (no pyeval): str_param PASSES → not typinfo.
+- **minimal pyeval** (unit present, no-op `EvalPyStmts`, same `uses`): PASSES →
+  NOT unit presence, NOT the module globals (Pos/Cur/Src/…), NOT a name clash.
+- **pyeval that only calls the reflection fns** (GetInstanceRTTI /
+  GetMethInfoByName / GetFieldPtr): PASSES → NOT the RTTI-reflection calls / RTTI
+  emission. (So the original method-table-stride hypothesis is WRONG.)
+- **full real pyeval**: str_param SEGFAULTS.
+
+Key fact: `str_param.npy` never calls exec(), so pyeval's runtime code never
+executes in it. The fault is therefore a **compile-time emission side-effect** of
+pyeval's ~60 procs + hundreds of string-literal constants being added to the
+program — it changes the code EMITTED for str_param's own str-indexing loop.
+
+Further bisect ruled out MORE suspects (each = one compiler rebuild + str_param run):
+- minimal pyeval + **300 string-literal constants**: PASSES → not the string pool.
+- minimal pyeval + the **typed proc-pointer casts** (TVFn0/TVFn2/TVPr1/TSFn0 with
+  `const Variant` params, cast from mi^.Code and called): PASSES → not the casts.
+- full real pyeval **minus the PreprocessFStrings call**: still SEGFAULTS → not
+  PreprocessFStrings.
+
+Decisive observation: str_param's binary GROWS from ~188KB (minimal pyeval) to
+~481KB (full pyeval) — all of pyeval is linked in (auto-used → fully emitted).
+The crash is on face 3, the `tok` str-scanning loop (`while i <= n: c = line[i]`).
+So it is **a layout-sensitive miscompile in str_param's OWN str-indexing code (or
+a shared runtime helper), EXPOSED by the ~290KB of extra emitted code** — not any
+single pyeval construct. Likely a relative-offset / alignment / fixed-buffer bug
+that only manifests past a certain code size or at a certain layout.
+
+Next step (focused session): binary-search by trimming pyeval's function set in
+halves until str_param passes, to find the size threshold; then diff the emitted
+str_param `tok` code between the passing and failing builds (same source, only
+the surrounding code volume differs) to see which instruction miscompiles. This
+is a latent Track A codegen bug that pyeval merely surfaces — worth fixing on its
+own, independent of pyeval.
 
 ## Options (Track U decision if root-cause is costly)
 
