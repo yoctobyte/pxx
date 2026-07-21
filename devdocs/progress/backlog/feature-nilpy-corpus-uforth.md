@@ -480,6 +480,41 @@ and vice versa. hasattr already routed to pydynattr_has. `vm.vars`, `vm._trans_p
 etc. now work; STD load passes VARIABLE.UFO:352. NilPy-path only; self-host
 byte-identical, pyeval standalone + test-nilpy + quick green.
 
+## 2026-07-21 (session 5e): closure-as-native-word LANDED; STD fully loads; suite RUNS to Pass #21
+
+**MILESTONE: uforth's STD.UFO fully loads and the conformance prelim suite RUNS,
+matching the CPython oracle byte-for-byte through Pass #21 of 23.** Landed this
+session (all gated, pushed):
+- **closure-as-native-word** ([[feature-pyeval-closure-as-native-word]] — the
+  reverse bridge). A pyeval nested `def` passed to a host method
+  (`define_word(name, native=_w)`) is captured as a persistent closure (heap
+  snapshot of tokens/body/params/free-vars), boxed as a VT_PYCLOSURE variant or a
+  magic-marked closure-object pointer for a Callable field. PyMakeDynCall and the
+  class proc-field call (`word.native(vm2)`) branch at runtime: closure →
+  PyClosureCall1 / pyclosure_call_ptr, real compiled fn → the plain indirect call.
+- **pyeval dynamic attributes** (commit 6bbf3f3f) — vm.vars/_trans_ptr via pydynattr.
+- **pointer-family host calls** — PyHostCall can call annotated mixed-ABI methods
+  (`define_word(name: str, native: Callable, forth_body, immediate: bool) -> Word`).
+- **variant method overload-by-arity** — `vm.vars.get(k, default)` on a dynamic-attr
+  dict (was binding the 1-arg overload → SIGSEGV).
+- **pyeval tuple literals** `(a, b)` — uforth WORD's `mem[i] not in (d, 10)`.
+
+Verify targets ALL pass: `VARIABLE Q 42 Q ! Q @ .`=42, `100 8192 ! 5 8192 +! 8192
+@ .`=105, `BL .`=32. `1 2 + .`=3, `10 3 / .`=3. `make test-uforth` green.
+
+**NEXT BLOCKER (hard, architectural) = DO/LOOP needs promotable-int/bignum.**
+The prelim suite hangs at the first DO/LOOP (Pass #22 region). uforth's
+`_loop_crossed` uses `(idx-limit) & 0xFFFFFFFFFFFFFFFF` + an UNSIGNED compare;
+NilPy's 64-bit ints make the mask a no-op and the compare signed → infinite loop.
+Wide int literals (`0xFFFF...`, `18446744073709551615`), `1<<64`, and additive
+overflow all wrap to 64-bit instead of promoting. This is the
+[[decide-nilpy-bigint-vs-64bit-cells]] decision (RESOLVED: promotable-int) whose
+[[feature-a-promotable-int]] is done for stages 1-3 but does NOT yet cover these
+paths. Filed as [[bug-nilpy-wide-int-literal-and-unsigned-mask-not-promoted]]
+(Track A). Completing it unblocks DO/LOOP → the rest of the suite.
+
+## Earlier this session (5d): closure-as-native-word BLOCKER
+
 **NEXT BLOCKER = closure-as-native-word** ([[feature-pyeval-closure-as-native-word]]).
 Load now halts at `VARIABLE.UFO:30`: the word body does `def _w(vm2): vm2.push(name)`
 then `vm.define_word(name, native=_w)` — a pyeval-internal nested `def` passed as a
