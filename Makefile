@@ -5016,10 +5016,10 @@ test-fpjson:
 
 # uforth (a real Python Forth VM, ~4300 lines single-file + layered .UFO stdlib)
 # compiled UNMODIFIED as Nil-Python — the Track N forcing corpus
-# (feature-nilpy-corpus-uforth). Smoke: uforth.py compiles, STD.UFO loads, and a
-# native-word line evaluates. `1 2 + .` -> "3", clean exit. (PYTHON-bodied stdlib
-# words need bound-method-value capture — feature-nilpy-bound-method-value — so
-# they are not yet driven here.) Skips if the tree is absent:
+# (feature-nilpy-corpus-uforth). Smoke: uforth.py compiles, STD.UFO loads, and
+# both NATIVE and PYTHON-bodied stdlib words evaluate — `1 2 + .` (native `+`) and
+# `10 3 / .` (`/` is a PYTHON block, exec'd via the pyeval bridge + bound-method
+# env) — expecting "3" then "3", clean exit. Skips if the tree is absent:
 #   git clone git@github.com:yoctobyte/uforth ~/projects/uforth
 UFORTH_SRC ?= $(HOME)/projects/uforth
 test-uforth: $(COMPILER)
@@ -5032,9 +5032,9 @@ test-uforth: $(COMPILER)
 	echo "compiling uforth.py as Nil-Python ..."; \
 	"$$root/$(COMPILER)" "$(UFORTH_SRC)/uforth.py" "$$wd/uforth" > /dev/null || \
 	  { echo "test-uforth: FAIL — uforth.py did not compile"; exit 1; }; \
-	printf '1 2 + .\nBYE\n' | ( cd "$(UFORTH_SRC)" && timeout 60 "$$wd/uforth" ) > "$$wd/out.txt" 2>&1; rc=$$?; \
-	if [ "$$rc" = "0" ] && grep -q "^3 " "$$wd/out.txt"; then \
-	  echo "test-uforth: PASS — compiles, STD.UFO loads, native words evaluate (1 2 + . = 3)"; \
+	printf '1 2 + .\n10 3 / .\nBYE\n' | ( cd "$(UFORTH_SRC)" && timeout 60 "$$wd/uforth" ) > "$$wd/out.txt" 2>&1; rc=$$?; \
+	if [ "$$rc" = "0" ] && grep -q "^3 3 " "$$wd/out.txt"; then \
+	  echo "test-uforth: PASS — compiles, STD.UFO loads, native + PYTHON-bodied words evaluate (1 2 + . = 3, 10 3 / . = 3)"; \
 	else \
 	  echo "test-uforth: FAIL (exit $$rc)"; tail -8 "$$wd/out.txt"; exit 1; \
 	fi
