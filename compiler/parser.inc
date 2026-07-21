@@ -8637,8 +8637,8 @@ begin
         else
           atDflt := atFld;
         Expect(tkRParen, ')');
-        idx := FindProc('pyexec');
-        if idx < 0 then Error('Nil Python: pylib (pyexec) not loaded');
+        idx := FindProc('EvalPyStmts');
+        if idx < 0 then Error('Nil Python: pyeval (EvalPyStmts) not loaded');
         node := AllocNode(AN_CALL);
         ASTIVal[node] := idx;
         ASTTk[node] := Ord(tyUnknown);           { procedure — no result }

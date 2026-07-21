@@ -1264,6 +1264,25 @@ begin
   CurASTNode := left;
 end;
 
+{ NilPy variable-binding resolution. A program/local name must never bind to an
+  imported unit's global. Python's namespace is locals + module globals +
+  builtins — NOT a used unit's internal variables. FindSym, however, walks the
+  whole flat symbol table case-insensitively, so a user variable `cur` (a str)
+  silently reuses pylib/pyeval's implementation global `Cur` (an Integer). The
+  shared BSS slot is then stored/loaded at the wrong width — a truncated pointer
+  that segfaults (surfaced when auto-using pyeval regressed str_param). Return the
+  match only when it belongs to the main program (SymUnitIdx = -1, set because
+  CurrentUnitIdx is -1 outside an imported unit); otherwise -1 so the caller
+  AllocVars a fresh program-scoped variable that shadows the unit global.
+  Mirrors the unit-scoping FindProcOverload already applies to procedures. }
+function PyProgSym(const name: AnsiString): Integer;
+var si: Integer;
+begin
+  si := FindSym(name);
+  if (si >= 0) and (SymUnitIdx[si] <> -1) then si := -1;
+  PyProgSym := si;
+end;
+
 function PyFindConstraint(const name: AnsiString): Integer;
 var i: Integer;
 begin
@@ -1509,7 +1528,7 @@ begin
         if (tk = tyUnknown) and (ci >= 0) then tk := PyLocals[ci].TypeKind
         else
         begin
-          si := FindSym(name);
+          si := PyProgSym(name);
           if si >= 0 then tk := Syms[si].TypeKind;
         end;
         { obj.method(...) on a class-typed name: the expression's type is the
@@ -3997,7 +4016,7 @@ begin
     if CurTok.Kind <> tkIdent then Error('Nil Python: with ... as: expected a name');
     varName := CurTok.SVal;
     Next;
-    symIdx := FindSym(varName);
+    symIdx := PyProgSym(varName);
     if symIdx < 0 then symIdx := AllocVar(varName, IntToTypeKind(ASTTk[exprNode]));
     if IntToTypeKind(ASTTk[exprNode]) = tyClass then
       Syms[symIdx].RecName := ResolveNodeRec(exprNode);
@@ -4324,7 +4343,7 @@ begin
   if not isStr then Syms[cSym].RecName := REC_UCLASS_BASE + ci;
   nSym := AllocVar(PyHiddenName('n'), tyInteger);
   iSym := AllocVar(PyHiddenName('i'), tyInteger);
-  symIdx := FindSym(name);
+  symIdx := PyProgSym(name);
   if symIdx < 0 then
   begin
     if enumMode then symIdx := AllocVar(name, tyInteger)
@@ -4334,7 +4353,7 @@ begin
   sym2 := -1;
   if name2 <> '' then
   begin
-    sym2 := FindSym(name2);
+    sym2 := PyProgSym(name2);
     if sym2 < 0 then
     begin
       { enumerate over a STRING yields 1-character strs, like the single-name
@@ -4667,8 +4686,8 @@ begin
   cbN := AllocVar(PyHiddenName('znb'), tyInteger);
   nSym := AllocVar(PyHiddenName('zn'), tyInteger);
   iSym := AllocVar(PyHiddenName('zi'), tyInteger);
-  xSym := FindSym(name);  if xSym < 0 then xSym := AllocVar(name, tyVariant);
-  ySym := FindSym(name2); if ySym < 0 then ySym := AllocVar(name2, tyVariant);
+  xSym := PyProgSym(name);  if xSym < 0 then xSym := AllocVar(name, tyVariant);
+  ySym := PyProgSym(name2); if ySym < 0 then ySym := AllocVar(name2, tyVariant);
 
   seq := -1;
   { za = A; zb = B }
@@ -4771,7 +4790,7 @@ begin
     Exit;
   end;
   if name2 <> '' then Error('Nil Python: a two-name for target needs a dict (.items())');
-  symIdx := FindSym(name);
+  symIdx := PyProgSym(name);
   if symIdx < 0 then symIdx := AllocVar(name, tyInteger);
   PyExpectIdent('range');
   Expect(tkLParen, '(');
@@ -5128,7 +5147,7 @@ begin
       end
       else
         unpElem := PyMakeVariantGetItem(PyMakeIdent(tmps[0]), unpIdx);
-      symIdx := FindSym(names[i]);
+      symIdx := PyProgSym(names[i]);
       if symIdx < 0 then symIdx := AllocVar(names[i], tyVariant);
       node := AllocNode(AN_ASSIGN);
       ASTLeft[node] := PyMakeIdent(symIdx);
@@ -5144,7 +5163,7 @@ begin
   { then the stores }
   for i := 0 to nTargets - 1 do
   begin
-    symIdx := FindSym(names[i]);
+    symIdx := PyProgSym(names[i]);
     if symIdx < 0 then symIdx := AllocVar(names[i], Syms[tmps[i]].TypeKind);
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := PyMakeIdent(symIdx);
@@ -5419,7 +5438,7 @@ begin
      (PyAugBinTok(Tokens[TokPos].Kind) <> tkEOF) then
   begin
     name := CurTok.SVal;
-    symIdx := FindSym(name);
+    symIdx := PyProgSym(name);
     if symIdx < 0 then
       Error('Nil Python: augmented assignment to undefined name ' + name);
     Next;
@@ -5468,7 +5487,7 @@ begin
       Next;                      { CurTok = '=' }
       Expect(tkAssign, '=');
       PyParseBoolExpr;
-      symIdx := FindSym(name);
+      symIdx := PyProgSym(name);
       if symIdx < 0 then
       begin
         { `s: str` means an UNBOUNDED Python string, so the local is managed —
@@ -5494,7 +5513,7 @@ begin
      (Tokens[TokPos].Kind = tkAssign) then
   begin
     name := CurTok.SVal;
-    symIdx := FindSym(name);
+    symIdx := PyProgSym(name);
     Next;
     Expect(tkAssign, '=');
     { `target = [EXPR for VAR in ITER]` — a list comprehension. Desugared to an
@@ -5678,7 +5697,7 @@ begin
     savedFS := FrameSize;
     { seed the scratch scope with what the previous round learned }
     for i := 0 to PyLocalCount - 1 do
-      if FindSym(PyLocals[i].Name) < 0 then
+      if PyProgSym(PyLocals[i].Name) < 0 then
       begin
         si := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
         if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
@@ -5784,7 +5803,7 @@ begin
     savedFS := FrameSize;
     savedBSS := BSSSize;
     for i := 0 to PyLocalCount - 1 do
-      if FindSym(PyLocals[i].Name) < 0 then
+      if PyProgSym(PyLocals[i].Name) < 0 then
       begin
         si := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
         if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
@@ -6190,7 +6209,7 @@ begin
   end;
   PyCollectLocalsAST(bodyStart);
   for i := 0 to PyLocalCount - 1 do
-    if FindSym(PyLocals[i].Name) < 0 then
+    if PyProgSym(PyLocals[i].Name) < 0 then
     begin
       idx := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
       if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
@@ -7084,7 +7103,7 @@ begin
     defs. One pre-pass now serves both. }
   PyCollectLocalsAST(bodyStart);
   for i := 0 to PyLocalCount - 1 do
-    if FindSym(PyLocals[i].Name) < 0 then
+    if PyProgSym(PyLocals[i].Name) < 0 then
     begin
       idx := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
       if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
@@ -7430,6 +7449,7 @@ begin
   ParseUsesUnit('builtinheap');
   if needsBuiltin then ParseUsesUnit('builtin');
   ParseUsesUnit('pylib');
+  ParseUsesUnit('pyeval');
   { Only NOW: the units above are ORDINARY PASCAL and their own div/mod must
     keep truncating semantics. Setting this at entry rewrote pylib's own
     `a div b` into a call to the helper being defined. }
