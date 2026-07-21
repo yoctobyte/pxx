@@ -248,6 +248,11 @@ function pyrepr_of(const v: Variant): AnsiString; overload;
 function pylist_repr(l: TPyList): AnsiString;
 function pydict_repr(d: TPyDict): AnsiString;
 function pyvar_repr(const v: Variant): AnsiString;
+{ print()'s string form of a VARIANT: a container payload (list/dict) shows its
+  Python repr (`[1, 2]`), every scalar its plain str() (no quotes). Used by the
+  frontend to format a variant/Any print argument, which otherwise reached the
+  backend's `<object>` placeholder (bug-nilpy-print-variant-holding-list). }
+function pyvar_print_of(const v: Variant): AnsiString;
 { Python's format() for an f-string hole with a spec. The spec arrives as the
   literal text between ':' and the closing brace; this unit is the ONE place
   that interprets it, so the lexer never has to know what "05x" means. }
@@ -3623,6 +3628,19 @@ begin
     if o is TPyDict then begin Result := pydict_repr(TPyDict(o)); Exit; end;
   end;
   Result := pyrepr_of(v);
+end;
+
+function pyvar_print_of(const v: Variant): AnsiString;
+var o: TObject;
+begin
+  { a container prints as its repr; every scalar as plain str (no quotes) }
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then begin Result := pylist_repr(TPyList(o)); Exit; end;
+    if o is TPyDict then begin Result := pydict_repr(TPyDict(o)); Exit; end;
+  end;
+  Result := pystr_of(v);
 end;
 
 function pylist_repr(l: TPyList): AnsiString;

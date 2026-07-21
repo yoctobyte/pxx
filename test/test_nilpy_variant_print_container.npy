@@ -1,0 +1,19 @@
+# Regression: bug-nilpy-print-variant-holding-list-shows-object
+# print() of a variant/Any holding a list or dict must show its repr, not
+# the backend <object> placeholder. Scalars in an Any print as plain str().
+
+def f(t: Any) -> Any:
+    return t[:2]
+
+def main() -> None:
+    print(f([1, 2, 3, 4]))   # a variant holding a (sliced) list
+    x: Any = [10, 20]
+    print(x)
+    y: Any = {"k": 1}
+    print(y)
+    n: Any = 7               # scalar Any still prints plainly
+    print(n)
+    s: Any = "hi"
+    print(s)
+
+main()

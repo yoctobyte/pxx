@@ -3555,6 +3555,22 @@ var rec, listCi, dictCi, procIdx, argNode, callNode: Integer; pname: AnsiString;
 begin
   Result := n;
   if n < 0 then Exit;
+  { a variant/Any arg may hold a container at runtime; route it through a runtime
+    dispatcher (container -> repr, scalar -> str) so it never reaches the backend
+    `<object>` placeholder (bug-nilpy-print-variant-holding-list). }
+  if IntToTypeKind(ASTTk[n]) = tyVariant then
+  begin
+    procIdx := FindProc('pyvar_print_of');
+    if procIdx < 0 then Exit;
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := n;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := procIdx;
+    ASTTk[callNode] := Ord(tyAnsiString);
+    ASTLeft[callNode] := argNode;
+    Result := callNode;
+    Exit;
+  end;
   if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
   rec := ResolveNodeRec(n);
   if rec < REC_UCLASS_BASE then Exit;
