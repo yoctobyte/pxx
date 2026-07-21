@@ -445,9 +445,9 @@ procedure pyvar_setitem(const v: Variant; const key: Variant; const val: Variant
   declared field (Python adds them freely). Stored in one global dict keyed by
   the object's address and the attribute name, so no per-class field is needed.
   uforth uses this for lazy state (`if not hasattr(vm, '_trans_ptr'): vm._trans_ptr = ...`). }
-function pydynattr_get(const obj: Variant; const name: AnsiString): Variant;
-procedure pydynattr_set(const obj: Variant; const name: AnsiString; const val: Variant);
-function pydynattr_has(const obj: Variant; const name: AnsiString): Boolean;
+function pydynattr_get(obj: Pointer; const name: AnsiString): Variant;
+procedure pydynattr_set(obj: Pointer; const name: AnsiString; const val: Variant);
+function pydynattr_has(obj: Pointer; const name: AnsiString): Boolean;
 { `v[lo:hi]` where v is a VARIANT — slice the str/list/bytes it holds, at run
   time. Returns a variant of the same kind. }
 function pyvar_slice(const v: Variant; lo, hi: Integer): Variant;
@@ -817,24 +817,24 @@ end;
 var
   PyDynAttrStore: TPyDict;   { lazily created; keys are "addr:name" }
 
-function PyDynAttrKey(const obj: Variant; const name: AnsiString): AnsiString;
+function PyDynAttrKey(obj: Pointer; const name: AnsiString): AnsiString;
 begin
-  Result := pystr_of(Int64(PPyVarRec(@obj)^.Payload)) + ':' + name;
+  Result := pystr_of(Int64(NativeInt(obj))) + ':' + name;
 end;
 
-procedure pydynattr_set(const obj: Variant; const name: AnsiString; const val: Variant);
+procedure pydynattr_set(obj: Pointer; const name: AnsiString; const val: Variant);
 begin
   if PyDynAttrStore = nil then PyDynAttrStore := TPyDict.Create;
   PyDynAttrStore.store(PyDynAttrKey(obj, name), val);
 end;
 
-function pydynattr_has(const obj: Variant; const name: AnsiString): Boolean;
+function pydynattr_has(obj: Pointer; const name: AnsiString): Boolean;
 begin
   Result := (PyDynAttrStore <> nil) and
             (PyDynAttrStore.indexof(PyDynAttrKey(obj, name)) >= 0);
 end;
 
-function pydynattr_get(const obj: Variant; const name: AnsiString): Variant;
+function pydynattr_get(obj: Pointer; const name: AnsiString): Variant;
 begin
   if pydynattr_has(obj, name) then
     Result := PyDynAttrStore.fetch(PyDynAttrKey(obj, name))

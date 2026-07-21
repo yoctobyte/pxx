@@ -719,6 +719,7 @@ function PyMakeDynCall(baseNode: Integer): Integer; forward; { Nil Python: call 
 procedure PyParseLambdaStub; forward; { Nil Python: consume a lambda -> None (pyparser.inc) }
 function PyIsIdent(const s: AnsiString): Boolean; forward; { (pyparser.inc) }
 function PyMakeVariantGetItem(baseNode, idxNode: Integer): Integer; forward; { Nil Python v[key] on a variant (pyparser.inc) }
+function PyMakeObjPtr(baseNode: Integer): Integer; forward; { Nil Python: object as a pointer for the dynattr store (pyparser.inc) }
 function PyMakeDynAttrGet(baseNode: Integer; const fname: AnsiString): Integer; forward; { Nil Python obj.name dynamic read (pyparser.inc) }
 function PyMakeDynAttrSet(baseNode: Integer; const fname: AnsiString; valNode: Integer): Integer; forward; { Nil Python obj.name = v dynamic write (pyparser.inc) }
 function PyMakeVariantSetItem(baseNode, idxNode, valNode: Integer): Integer; forward; { Nil Python v[key]=val on a variant (pyparser.inc) }
@@ -8417,17 +8418,21 @@ begin
           atDflt := CurASTNode;
         end;
         Expect(tkRParen, ')');
-        { A VARIANT receiver may carry DYNAMIC attributes set at run time, which
-          a compile-time field check cannot see — resolve hasattr/getattr on it
-          through the dynamic-attribute store at run time. }
-        if (atFld < 0) and (IntToTypeKind(ASTTk[atRecv]) = tyVariant) then
+        { An undeclared attribute may be set DYNAMICALLY at run time (on a
+          variant OR a class instance), which a compile-time field check cannot
+          see — resolve hasattr/getattr through the dynamic-attribute store. A
+          getattr WITH a default keeps the old behaviour (return the default for
+          an unknown attribute) rather than the store, which is what the
+          censused getattr(e, "errno", 1) probes want. }
+        if (atFld < 0) and (not (atIsGet and (atDflt >= 0))) and
+           (IntToTypeKind(ASTTk[atRecv]) in [tyVariant, tyClass]) then
         begin
           if atIsGet then CurASTNode := PyMakeDynAttrGet(atRecv, atName)
           else
           begin
             idx := FindProc('pydynattr_has');
             if idx < 0 then Error('Nil Python: pylib (pydynattr_has) not loaded');
-            argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := atRecv;
+            argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := PyMakeObjPtr(atRecv);
             argSeq2 := AllocNode(AN_STR_LIT);
             ASTSOffset[argSeq2] := PyStoredName(atName); ASTSLen[argSeq2] := Length(atName);
             ASTTk[argSeq2] := Ord(tyString);

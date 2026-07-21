@@ -2283,6 +2283,21 @@ begin
   LastExprTk := tyVariant;
 end;
 
+{ The object as a POINTER for the dynamic-attribute store: a variant is unboxed
+  through pyvarobj; a class instance already IS the object pointer. }
+function PyMakeObjPtr(baseNode: Integer): Integer;
+var procIdx, argNode: Integer;
+begin
+  if IntToTypeKind(ASTTk[baseNode]) <> tyVariant then begin Result := baseNode; Exit; end;
+  procIdx := FindProc('pyvarobj');
+  if procIdx < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+  argNode := AllocNode(AN_ARG); ASTLeft[argNode] := baseNode; ASTRight[argNode] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyPointer);
+  ASTLeft[Result] := argNode;
+end;
+
 { `obj.name` (dynamic attribute read) -> pydynattr_get(obj, "name"). }
 function PyMakeDynAttrGet(baseNode: Integer; const fname: AnsiString): Integer;
 var procIdx, a0, a1, nameNode: Integer;
@@ -2293,7 +2308,7 @@ begin
   ASTSOffset[nameNode] := PyStoredName(fname);
   ASTSLen[nameNode] := Length(fname);
   ASTTk[nameNode] := Ord(tyString);
-  a0 := AllocNode(AN_ARG); ASTLeft[a0] := baseNode;
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := PyMakeObjPtr(baseNode);
   a1 := AllocNode(AN_ARG); ASTLeft[a1] := nameNode;
   ASTRight[a0] := a1; ASTRight[a1] := -1;
   Result := AllocNode(AN_CALL);
@@ -2312,7 +2327,7 @@ begin
   ASTSOffset[nameNode] := PyStoredName(fname);
   ASTSLen[nameNode] := Length(fname);
   ASTTk[nameNode] := Ord(tyString);
-  a0 := AllocNode(AN_ARG); ASTLeft[a0] := baseNode;
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := PyMakeObjPtr(baseNode);
   a1 := AllocNode(AN_ARG); ASTLeft[a1] := nameNode;
   a2 := AllocNode(AN_ARG); ASTLeft[a2] := valNode;
   ASTRight[a0] := a1; ASTRight[a1] := a2; ASTRight[a2] := -1;
