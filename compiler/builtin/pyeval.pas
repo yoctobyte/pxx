@@ -440,6 +440,22 @@ begin
     begin writeln('pyeval: unsupported subscript-assign target'); Halt(1); end;
 end;
 
+{ container[lo:hi] = value. bytes take a variant RHS holding bytes; lists take a
+  list RHS. Omitted bounds arrive as PY_SLICE_OMIT. }
+procedure PySliceSet(const container: Variant; lo, hi: Int64; const val: Variant);
+var o: TObject;
+begin
+  if PPyRec(@container)^.VType <> 7 then
+  begin writeln('pyeval: cannot slice-assign a non-container'); Halt(1); end;
+  o := TObject(Pointer(PPyRec(@container)^.Payload));
+  if o is TPyBytes then
+    pybytes_setslice_v(TPyBytes(o), lo, hi, val)
+  else if o is TPyList then
+    pylist_setslice(TPyList(o), lo, hi, TPyList(pyvarobj(val)))
+  else
+    begin writeln('pyeval: unsupported slice-assign target'); Halt(1); end;
+end;
+
 { del container[index] }
 procedure PyDelSubscript(const container: Variant; const index: Variant);
 var o: TObject; li: TPyList; di: TPyDict; i, nn: Int64;
@@ -1500,15 +1516,26 @@ begin
   CallBuiltin(callee, args, endKw, sepKw, haveEnd, haveSep, res);
 end;
 
-{ positional-only `( expr, ... )` into `args` }
-procedure ParseArgs(args: TPyList);
-var v: Variant;
+{ `( expr, ... )` into `args`; a `signed=<bool>` keyword arg (to_bytes/from_bytes)
+  is captured into signedKw, other keyword args are ignored (e.g. byteorder is
+  positional and consumed as an ordinary arg). }
+procedure ParseArgs(args: TPyList; var signedKw: Boolean);
+var v: Variant; kw: AnsiString;
 begin
+  signedKw := False;
   ExpectOp('(');
   while not IsOp(')') do
   begin
-    ParseExpr(v);
-    args.append(v);
+    if (TkKind[Cur] = PK_NAME) and (TkKind[Cur+1] = PK_OP) and (TkText[Cur+1] = '=') then
+    begin
+      kw := TkText[Cur]; Advance; Advance; ParseExpr(v);
+      if kw = 'signed' then signedKw := pyvar_to_bool(v);
+    end
+    else
+    begin
+      ParseExpr(v);
+      args.append(v);
+    end;
     if IsOp(',') then Advance
     else if not IsOp(')') then EvalError('expected , or ) in method call');
   end;
@@ -1525,13 +1552,40 @@ var
   args: TPyList;
   o: TObject; li: TPyList; by: TPyBytes;
   s: AnsiString; b2: TPyBytes;
+  signedKw: Boolean;
+  rvt: Int64;
 begin
   args := TPyList.Create;
-  ParseArgs(args);
+  ParseArgs(args, signedKw);
   if not Executing then begin res := MakeNone; Exit; end;
+  rvt := PPyRec(@recv)^.VType;
+
+  { int.to_bytes(length, byteorder, *, signed=…) -> bytes }
+  if (rvt = 1) or (rvt = 2) or (rvt = 4) then
+  begin
+    if mname = 'to_bytes' then
+    begin
+      by := pyint_to_bytes(pyvar_to_int(recv), pyvar_to_int(args.at(0)), signedKw);
+      PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(by));
+      Exit;
+    end;
+    EvalError('int method not supported: ' + mname);
+  end;
+
+  { int.from_bytes(bytes, byteorder, *, signed=…) — a static method on the int
+    type object (a PY_TYPETAG sentinel). }
+  if rvt = PY_TYPETAG then
+  begin
+    if (PPyRec(@recv)^.Payload = 2) and (mname = 'from_bytes') then
+    begin
+      res := pyvar_of_int(pyint_from_bytes(TPyBytes(pyvarobj(args.at(0))), signedKw));
+      Exit;
+    end;
+    EvalError('type method not supported: ' + mname);
+  end;
 
   { string methods }
-  if PPyRec(@recv)^.VType = 6 then
+  if rvt = 6 then
   begin
     s := PAnsiString(@PPyRec(@recv)^.Payload)^;
     if mname = 'upper' then res := MakeStr(pystr_upper(s))
@@ -1781,10 +1835,12 @@ end;
 procedure DoAssignment;
 var
   base, aug, fld: AnsiString;
-  recv, idx, rhs, cur, v, tcont, tindex: Variant;
-  tkind: Integer;   { 0 local, 1 attribute, 2 subscript }
+  recv, idx, rhs, cur, v, tcont, tindex, hiTmp: Variant;
+  tkind: Integer;   { 0 local, 1 attribute, 2 subscript, 3 slice }
   tname: AnsiString;
   tobj: Pointer;
+  tlo, thi: Int64;
+  isSlice, haveIdx: Boolean;
 begin
   base := TkText[Cur]; Advance;
   tkind := 0; tname := base; tobj := nil;
@@ -1803,10 +1859,30 @@ begin
       end
       else if IsOp('[') then
       begin
-        Advance; ParseExpr(idx); ExpectOp(']');
+        Advance;
+        isSlice := False; haveIdx := False; tlo := PY_SLICE_OMIT; thi := PY_SLICE_OMIT;
+        if not IsOp(':') then begin ParseExpr(idx); haveIdx := True; end;
+        if IsOp(':') then
+        begin
+          isSlice := True;
+          if haveIdx then tlo := pyvar_to_int(idx);
+          Advance;
+          if (not IsOp(']')) and (not IsOp(':')) then begin ParseExpr(hiTmp); thi := pyvar_to_int(hiTmp); end;
+          if IsOp(':') then begin Advance; if not IsOp(']') then ParseExpr(hiTmp); end;
+        end;
+        ExpectOp(']');
         if (TkKind[Cur] = PK_OP) and IsAssignOp(TkText[Cur]) then
-        begin tkind := 2; tcont := recv; tindex := idx; Break; end;
-        if Executing then PySubscriptGet(recv, idx, recv) else recv := MakeNone;
+        begin
+          if isSlice then begin tkind := 3; tcont := recv; end
+          else begin tkind := 2; tcont := recv; tindex := idx; end;
+          Break;
+        end;
+        if Executing then
+        begin
+          if isSlice then recv := pyvar_slice(recv, tlo, thi)
+          else PySubscriptGet(recv, idx, recv);
+        end
+        else recv := MakeNone;
       end
       else
         EvalError('invalid assignment target');
@@ -1816,6 +1892,11 @@ begin
   aug := TkText[Cur]; Advance;
   ParseExpr(rhs);
   if not Executing then Exit;
+
+  if aug <> '=' then
+  begin
+    if tkind = 3 then EvalError('augmented slice assignment not supported');
+  end;
 
   if aug = '=' then v := rhs
   else
@@ -1837,7 +1918,8 @@ begin
 
   if tkind = 0 then LclSet(tname, v)
   else if tkind = 1 then PyFieldSet(tobj, tname, v)
-  else PySubscriptSet(tcont, tindex, v);
+  else if tkind = 2 then PySubscriptSet(tcont, tindex, v)
+  else PySliceSet(tcont, tlo, thi, v);
 end;
 
 { del NAME | del container[index] (chains supported; final step deleted). }
@@ -1880,7 +1962,7 @@ end;
   argument, if any, is the message. Propagated by halting with a diagnostic —
   catchable try/except is a later milestone. }
 procedure ExecRaise;
-var excName, msg: AnsiString; args: TPyList; v: Variant;
+var excName, msg: AnsiString; args: TPyList; v: Variant; sk: Boolean;
 begin
   Advance;   { raise }
   msg := '';
@@ -1890,7 +1972,7 @@ begin
     if IsOp('(') then
     begin
       args := TPyList.Create;
-      ParseArgs(args);
+      ParseArgs(args, sk);
       if args.count > 0 then begin v := args.at(0); msg := pystr_of(v); end;
     end;
   end
