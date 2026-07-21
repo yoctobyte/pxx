@@ -29,11 +29,23 @@ uforth `TypeError` from the running VM, not a compiler crash). The wall went
 267 -> full-parse -> compiled-binary across the 2026-07-21 session (~15 commits,
 ~30 NilPy features + one Track A IR fix). See "Wall progression" below.
 
-**Next phase = uforth RUNS CORRECTLY.** First observed runtime issue: `1 2 + .`
-yields `TypeError: expected a number, got NoneType` — a runtime-semantics bug
-(likely number-literal push / stack, or the native-word dispatch path), NOT a
-compile gap. This is the milestone-3 runtime-correctness lane; [[feature-lib-pyexec]]
-(native-word PYTHON blocks actually executing) is part of it.
+**Next phase = uforth RUNS CORRECTLY (in progress).** The runtime-correctness
+lane fixed a chain of bugs this session and now gets uforth through construction,
+banner, REPL, line-read and tokenization:
+- `None` assigned to a scalar `Optional[int]` field stored a variant → coercion
+  crash in the VM constructor. Fixed (stores the type's 0).
+- `x in <variant>` read variant bytes as a list header → the REPL's
+  `sys.stdin in select.select(...)[0]` crashed. Fixed (pyvar_contains).
+- `str is not None` compared a string handle to a None variant → crash on the
+  first interpreted line. Fixed (typed is-None: str→nil-handle, numeric→0,
+  class→nil-ptr).
+
+CURRENT BLOCKER: [[bug-nilpy-tokenize-managed-temp-release-garbage]] — `VM.tokenize`
+SIGSEGVs on RETURN releasing a managed-string HIDDEN TEMP that holds stack garbage
+(gdb: `decq -0x10(%rax)`, rax=0x200000000). Layout-sensitive (a known landmine
+class); ~12 hand reductions all pass, so it needs creduce or IR inspection. This
+is Track A. [[feature-lib-pyexec]] (native-word PYTHON blocks executing) is the
+phase after.
 
 Landed this session toward compile: captured-class identity in nested defs,
 dict comprehensions + dict(), call-result subscript-assign, os/sys/select/stdin
