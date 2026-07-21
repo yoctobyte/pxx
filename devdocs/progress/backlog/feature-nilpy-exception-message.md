@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 45
+prio: 55
 type: feature
 ---
 
@@ -44,3 +44,15 @@ Measure before building: census how many corpus sites actually construct a bare
 
 `test-nilpy` green with a `.npy` case diffed against CPython + `--tier quick` +
 self-host byte-identical.
+
+## Census (2026-07-21) — it IS needed, broadly
+
+uforth.py has **85 raises of built-in exception classes with a message**
+(Exception/ValueError/RuntimeError/KeyError/TypeError/IndexError(msg)) in its
+NilPy-compiled body, not just typed ForthThrow subclasses. So the initial
+"works without it" is wrong for the full port: the built-in exception classes
+must be constructible with a message and answer str()/print(). pylib ALREADY
+provides the runtime (Exception has `msg` + `Create(m)`; ValueError etc. are
+subclasses that inherit it) — the gap is frontend wiring: PyEnsureExceptionClass
+registers an EMPTY UClass, and the built-in names are not callable in expression
+position. Prio bumped 45 -> 55.
