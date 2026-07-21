@@ -716,6 +716,7 @@ procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pypa
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 function PyMakeDynCall(baseNode: Integer): Integer; forward; { Nil Python: call a callable stored in a variant (pyparser.inc) }
+function PyMakeBoundMethod(mpi, selfNode: Integer): Integer; forward; { Nil Python: `obj.method` (no call) -> a bound-method value (pyparser.inc) }
 procedure PyParseLambdaStub; forward; { Nil Python: consume a lambda -> None (pyparser.inc) }
 function PyIsIdent(const s: AnsiString): Boolean; forward; { (pyparser.inc) }
 function PyMakeVariantGetItem(baseNode, idxNode: Integer): Integer; forward; { Nil Python v[key] on a variant (pyparser.inc) }
@@ -5111,6 +5112,21 @@ begin
         EnforceMethVis(mmi, fieldName);
         mpi := UMthProc_[mmi];
         Next; { consume method name }
+        { NilPy: `obj.method` with NO following call is a BOUND-METHOD VALUE, not
+          a paren-less call (Python has no paren-less calls). Capture {code, self}
+          as a callable variant. uforth's exec env = {"push": self.push, ...} needs
+          this to STORE without dropping self and segfaulting.
+          (feature-nilpy-bound-method-value.) Virtual methods bind now off the
+          receiver's VMT is a later refinement; uforth's push/pop are direct. }
+        if isNilPy and (CurrentUnitIdx < 0) and (CurTok.Kind <> tkLParen) and
+           (mci >= 0) and not UClsIsInterface[mci] then
+        begin
+          node := PyMakeBoundMethod(mpi, node);
+          tk := tyVariant; recName := REC_NONE;
+          ASTTk[node] := Ord(tyVariant);
+          Result := node;
+          Exit;
+        end;
         if (mci >= 0) and UClsIsInterface[mci] then
         begin
           { CORBA interface call `iface.M(args)`: dispatch through the IMT slot.

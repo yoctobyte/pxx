@@ -3130,6 +3130,30 @@ begin
   ASTSLen[Result]  := 0;                 { plain proc pointer, no Self }
 end;
 
+{ `obj.method` used as a VALUE (no following call): capture it as a bound-method
+  variant so the receiver is not dropped. pybound_new(@method, self) boxes
+  {code, recv}; the receiver is passed by ADDRESS-as-value (an object reference is
+  already a pointer). See feature-nilpy-bound-method-value: uforth's exec env
+  binds `self.push`/`self.pop` this way. mpi is the method proc (param 0 = Self);
+  selfNode supplies the receiver. }
+function PyMakeBoundMethod(mpi, selfNode: Integer): Integer;
+var procAddr, recvArg, selfArg, callNode, boundPi: Integer;
+begin
+  boundPi := FindProc('pybound_new');
+  if boundPi < 0 then Error('Nil Python: pylib (pybound_new) not loaded');
+  procAddr := AllocNode(AN_PROCADDR);
+  ASTIVal[procAddr] := mpi;
+  ASTTk[procAddr]   := Ord(tyPointer);
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := boundPi;
+  ASTTk[callNode]   := Ord(tyVariant);
+  selfArg := AllocNode(AN_ARG);  ASTLeft[selfArg] := procAddr;   { code }
+  recvArg := AllocNode(AN_ARG);  ASTLeft[recvArg] := selfNode;   { recv }
+  ASTRight[selfArg] := recvArg;  ASTRight[recvArg] := -1;
+  ASTLeft[callNode] := selfArg;
+  Result := callNode;
+end;
+
 { `v.field(args)` where `v` is a VARIANT and `field` holds a function value:
   unbox to the owning class, read the field, call through it. }
 function PyMakeVariantFieldCall(baseNode, ci: Integer; const fname: AnsiString;

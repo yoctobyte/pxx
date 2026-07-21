@@ -345,6 +345,16 @@ function pystdin_readline: AnsiString;
 function pystdin_isatty: Integer;
 function pystr_is_none(const s: AnsiString): Boolean;
 function pyvar_box(const v: Variant): Variant;   { box a value into a variant }
+{ A BOUND METHOD captured as a value (`env["push"] = vm.push`): a heap
+  {code, recv} pair boxed as a VT_BOUNDMETHOD (8) variant. Recv is the receiver
+  the method needs as Self; Code is its entry. Used by the NilPy capture of
+  `obj.method` with no following call (feature-nilpy-bound-method-value). uforth
+  stores these in its exec env; the pyeval interpreter reaches the receiver
+  through env["vm"] rather than invoking them, so a stored bound method must
+  merely not crash. }
+function pybound_new(code, recv: Pointer): Variant;
+function pybound_code(const v: Variant): Pointer;
+function pybound_recv(const v: Variant): Pointer;
 { input([prompt]): a line from stdin without its trailing newline. }
 function pyinput: AnsiString;
 { sys.argv: the command line as a TPyList of strings, argv[0] = program name. }
@@ -2951,6 +2961,31 @@ end;
 function pyvar_box(const v: Variant): Variant;
 begin
   Result := v;
+end;
+
+type
+  TPyBoundRec = record Code, Recv: Pointer; end;
+  PPyBoundRec = ^TPyBoundRec;
+
+function pybound_new(code, recv: Pointer): Variant;
+var b: PPyBoundRec; r: PPyVarRec;
+begin
+  b := GetMem(SizeOf(TPyBoundRec));
+  b^.Code := code;
+  b^.Recv := recv;
+  r := PPyVarRec(@Result);
+  r^.VType := 8;                       { VT_BOUNDMETHOD }
+  r^.Payload := Int64(NativeInt(b));
+end;
+
+function pybound_code(const v: Variant): Pointer;
+begin
+  pybound_code := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.Code;
+end;
+
+function pybound_recv(const v: Variant): Pointer;
+begin
+  pybound_recv := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.Recv;
 end;
 
 { input(): read one line from stdin and drop the trailing newline, as Python's
