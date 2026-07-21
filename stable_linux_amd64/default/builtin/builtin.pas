@@ -25,6 +25,18 @@ procedure Val(const s: AnsiString; var v: Int64; var code: Integer);
 procedure ValQWord(const s: AnsiString; var v: QWord; var code: Integer);
 procedure ValFloat(const s: AnsiString; var v: Double; var code: Integer);
 function VariantToStr(const v: Variant): AnsiString;
+function VariantTagName(t: Int64): AnsiString;
+{ Variant -> SCALAR unboxing, the counterpart of IR_VAR_STORE/IR_VAR_BOX.
+  Without these a variant reaching a scalar context (assignment, return,
+  argument) was read as a raw 8-byte load and yielded the TAG, silently
+  (bug-a-nilpy-variant-element-not-usable-as-scalar). Numeric/bool/char tags
+  coerce between each other the way Pascal's Variant and Python's numeric
+  tower both do; a STRING payload in a numeric context is a genuine type
+  error and halts loudly rather than inventing a number. }
+function VariantToInt64(const v: Variant): Int64;
+function VariantToDouble(const v: Variant): Double;
+function VariantToBool(const v: Variant): Boolean;
+function VariantToChar(const v: Variant): Char;
 function PCharToString(p: PChar): AnsiString;
 
 { WideChar -> UTF-8 conversion, backing the frontend's widechar-in-string-context
@@ -59,8 +71,10 @@ procedure __pxxStrInsert(const src: AnsiString; var s: AnsiString; index: Intege
   The instance reaches its class RTTI through the backlink the compiler reserves one
   word BEFORE the VMT: [instance+0] is the VMT address, so the blob is at
   [[instance+0] - 8]. Blob layout is fixed by the RTTI_* constants in defs.inc:
-  +0 name, +8 parent, +48 methCount, +56 meths; a method entry is 16 bytes
-  {name, code}. Names are INTERNED FROZEN STRINGS — the pointer targets an 8-byte
+  +0 name, +8 parent, +48 methCount, +56 meths; a method entry is 48 bytes
+  {name, code, arity, retKind, paramKinds, flags} and only PUBLISHED entries
+  (flags bit0) count for MethodAddress/MethodName. Names are INTERNED FROZEN
+  STRINGS — the pointer targets an 8-byte
   length prefix with the chars at +8, NOT a bare char*.
 
   Own and inherited methods both resolve (the parent chain is walked). Matching is
@@ -380,7 +394,10 @@ var
   p: PVariantRecord;
 begin
   p := @v;
-  if p^.VType = 1 then
+  if (p^.VType = 1) or (p^.VType = 2) then
+    { VT_INT and VT_INT64 both hold an integer payload; VariantToInt64 already
+      treats them alike — the str path must too, or a 64-bit-tagged int (e.g. a
+      binop result) formats as the empty string. }
     Result := StrInt(p^.Payload, 0)
   else if p^.VType = 3 then
     Result := FloatToStr(PDouble(@p^.Payload)^)
@@ -388,12 +405,142 @@ begin
     Result := Chr(p^.Payload)
   else if p^.VType = 6 then
     Result := PAnsiString(@p^.Payload)^
+  else if p^.VType = 8193 then
+    { VT_PROMO_INT64: a promotable int too large for the inline tier. Its
+      payload IS the exact decimal, held as a managed AnsiString — see
+      compiler/builtin/promoint.pas. An inline-tier promo never reaches here;
+      it is stored as an ordinary VT_INT64. }
+    Result := PAnsiString(@p^.Payload)^
   else if p^.VType = 0 then
     Result := 'None'
   else
     Result := '';
 end;
 
+
+function VariantTagName(t: Int64): AnsiString;
+begin
+  if t = 0 then Result := 'None'
+  else if (t = 1) or (t = 2) then Result := 'an integer'
+  else if t = 3 then Result := 'a float'
+  else if t = 4 then Result := 'a boolean'
+  else if t = 5 then Result := 'a character'
+  else if t = 6 then Result := 'a string'
+  else if t = 7 then Result := 'an object'
+  else if (t >= 8192) and (t <= 8199) then Result := 'a promotable integer'
+  else Result := 'an unknown tag';
+end;
+
+function VariantToInt64(const v: Variant): Int64;
+var
+  p: PVariantRecord;
+  vcode: Integer;
+begin
+  p := @v;
+  if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) or (p^.VType = 5) then
+    Result := p^.Payload
+  else if p^.VType = 3 then
+    Result := Trunc(PDouble(@p^.Payload)^)
+  else if p^.VType = 0 then
+    Result := 0
+  else if p^.VType = 8193 then
+  begin
+    { VT_PROMO_INT64 holds a value that did NOT fit the inline tier, so by
+      construction it does not fit an Int64 either. Truncating it is the defect
+      the promotable int exists to remove — assign to a PromoInt instead. }
+    writeln('Runtime error: EVariantError, promotable integer ',
+            PAnsiString(@p^.Payload)^, ' does not fit an Int64');
+    Halt(219);
+  end
+  else if p^.VType = 6 then
+  begin
+    { VT_STRING. FPC PARSES it -- measured, not assumed: `i := v` with v='42'
+      yields 42 and v='abc' raises EVariantError. NilPy does NOT come through
+      here (it has pylib's pyvar_to_int, which raises a Python TypeError for
+      any string); this helper is the Pascal path and follows Pascal. }
+    Val(PAnsiString(@p^.Payload)^, Result, vcode);
+    if vcode <> 0 then
+    begin
+      writeln('Runtime error: EVariantError, cannot convert string to integer');
+      Halt(219);
+    end;
+  end
+  else
+  begin
+    writeln('Runtime error: variant holds ', VariantTagName(p^.VType),
+            ', an integer was required');
+    Halt(219);
+  end;
+end;
+
+function VariantToDouble(const v: Variant): Double;
+var
+  p: PVariantRecord;
+  vcode: Integer;
+begin
+  p := @v;
+  if p^.VType = 3 then
+    Result := PDouble(@p^.Payload)^
+  else if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) or (p^.VType = 5) then
+    Result := p^.Payload
+  else if p^.VType = 0 then
+    Result := 0.0
+  else if p^.VType = 6 then
+  begin
+    { FPC coerces a numeric string here too (v='2.5' -> 2.50, measured). }
+    ValFloat(PAnsiString(@p^.Payload)^, Result, vcode);
+    if vcode <> 0 then
+    begin
+      writeln('Runtime error: EVariantError, cannot convert string to float');
+      Halt(219);
+    end;
+  end
+  else
+  begin
+    writeln('Runtime error: variant holds ', VariantTagName(p^.VType),
+            ', a float was required');
+    Halt(219);
+  end;
+end;
+
+function VariantToBool(const v: Variant): Boolean;
+var
+  p: PVariantRecord;
+begin
+  { PASCAL rules. This once carried Python's truthiness while NilPy was still
+    routed through it; NilPy now has pylib's pyvar_to_bool. FPC RAISES for a
+    string here (`b := v` with v='' is EVariantError, measured) rather than
+    treating '' as false, and 0.0 is False. }
+  p := @v;
+  if p^.VType = 3 then
+    Result := PDouble(@p^.Payload)^ <> 0.0
+  else if p^.VType = 0 then
+    Result := False
+  else if (p^.VType = 6) or (p^.VType = 7) then
+  begin
+    writeln('Runtime error: EVariantError, cannot convert ',
+            VariantTagName(p^.VType), ' to boolean');
+    Halt(219);
+    Result := False;
+  end
+  else
+    Result := p^.Payload <> 0;
+end;
+
+function VariantToChar(const v: Variant): Char;
+var
+  p: PVariantRecord;
+  s: AnsiString;
+begin
+  p := @v;
+  if p^.VType = 6 then
+  begin
+    s := PAnsiString(@p^.Payload)^;
+    if s = '' then Result := #0 else Result := s[1];
+  end
+  else
+    Result := Chr(p^.Payload and $FF);
+end;
 
 function StrQWord(v: QWord; width: Integer): AnsiString;
 { StrInt's UNSIGNED sibling: a QWord >= 2^63 must not print with a minus sign
@@ -897,7 +1044,9 @@ const
   PXX_RTTI_PARENT    = 8;
   PXX_RTTI_METHCOUNT = 48;
   PXX_RTTI_METHS     = 56;
-  PXX_RTTI_METHSIZE  = 16;
+  PXX_RTTI_METHSIZE  = 48;   { {name,code,arity,retKind,paramKinds,flags} }
+  PXX_RTTI_METH_FLAGS = 40;
+  PXX_RTTI_METH_PUBLISHED = 1;
 
 function __pxxRttiOf(Instance: Pointer): Pointer;
 { The class RTTI blob of an instance: [[instance+0] - 8]. nil when the class
@@ -988,6 +1137,8 @@ begin
       for i := 0 to cnt - 1 do
       begin
         e := Pointer(PtrUInt(meths) + PtrUInt(i * PXX_RTTI_METHSIZE));
+        { the table now holds every method; MethodAddress is published-only (FPC) }
+        if (PPxxInt_(PtrUInt(e) + PXX_RTTI_METH_FLAGS)^ and PXX_RTTI_METH_PUBLISHED) = 0 then Continue;
         if __pxxSameNameCI(__pxxRttiName(PPxxPtr_(e)^), Name) then
         begin
           Result := PPxxPtr_(PtrUInt(e) + 8)^;
@@ -1012,6 +1163,7 @@ begin
       for i := 0 to cnt - 1 do
       begin
         e := Pointer(PtrUInt(meths) + PtrUInt(i * PXX_RTTI_METHSIZE));
+        if (PPxxInt_(PtrUInt(e) + PXX_RTTI_METH_FLAGS)^ and PXX_RTTI_METH_PUBLISHED) = 0 then Continue;
         if PPxxPtr_(PtrUInt(e) + 8)^ = Address then
         begin
           Result := __pxxRttiName(PPxxPtr_(e)^);
