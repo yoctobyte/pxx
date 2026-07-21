@@ -243,3 +243,24 @@ Ran all 60 pure-stack blocks through pyeval against a seeded stub VM:
 So M1 core already runs the arithmetic/stack/bitwise words that segfault today;
 the remaining pure-stack blocks are precisely the bignum + compound-block tail
 already scheduled after M1.
+
+## 2026-07-21 — compound blocks landed (if/elif/else, while, for, break)
+
+pyeval now handles Python-indented COMPOUND blocks: INDENT/DEDENT in the
+tokenizer (offside rule), if/elif/else (inline + block), while (+break), for-in
+over range()/lists. Skipped branches walk the grammar with an `Executing` gate
+(no side effects); while/for re-walk the body token span each iteration
+(correctness-first). `range()` builtin added. test/test_pyeval_compound.pas — 10
+cases incl. nested for + if-in-for — ALL PASS; M1 test still green; self-host
+byte-identical; quick tier green.
+
+Locals moved OUT of the passed-in TPyDict into pyeval's own name/value arrays:
+TPyDict keyed by an AnsiString-boxed Variant is unreliable — store and indexof
+box the string inconsistently and a heap key's bytes go stale after the block
+returns (the pylib str-into-variant ownership landmine). Owned AnsiString names
+compared with `=` are exact. Globals (the `vm` handle) still read from the host
+dict, which works. Filed nothing new — this is a pyeval-side choice, though the
+underlying TPyDict AnsiString-key boxing inconsistency is worth a Track B look.
+
+Next: M2 — attribute access (vm.here get/set via GetFieldPtr) + subscripts
+(vm.memory[i]); then M3 method calls. That unlocks the 71 vm-accessing blocks.

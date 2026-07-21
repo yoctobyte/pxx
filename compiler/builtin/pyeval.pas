@@ -8,13 +8,18 @@
   exactly the set of PYTHON-bodied stdlib words (SWAP, OVER, ROT, /, MOD, bit
   ops, ternary min/max, …) that SEGFAULT today because pyexec is a stub.
 
-  M1 grammar: a sequence of SIMPLE statements separated by `;` or newline —
-  assignment, augmented assignment, and expression statements. Full expression
-  grammar: ternary, boolean and/or/not, comparisons, |^& bit ops, <<>> shifts,
-  +-*/ // %, unary -/+/~, calls, int/float/hex literals, names, True/False/None.
-  Compound blocks (if/while/for/def with indentation), attribute access, and
-  subscripts are M1-rest / M2 / M3 — this unit rejects them with a clear error
-  rather than misbehaving.
+  Grammar: statements separated by `;`/newline, plus COMPOUND blocks with Python
+  indentation — if/elif/else, while (+break), for-in over range()/lists.
+  Assignment + augassign, expression statements. Full expression grammar:
+  ternary, boolean and/or/not, comparisons (incl. chains), |^& bit ops, <<>>
+  shifts, +-*/ // %, unary -/+/~, calls, int/float/hex literals, names,
+  True/False/None. Locals live in pyeval's own name/value arrays (LclSet) —
+  TPyDict keyed by an AnsiString-boxed Variant is unreliable (see LclSet note).
+
+  Still out of scope (M2/M3, or the bignum tail): attribute access (vm.here),
+  subscripts (vm.memory[i]), method calls (vm.define_word), def, arbitrary-
+  precision ints (`x & 0xFFFFFFFFFFFFFFFF` as unsigned), f-strings. Rejected with
+  a clear error rather than misbehaving.
 
   Host bridge (M1 convention): a bare call `push(x)` / `pop()` / `fpush(x)` /
   `fpop()` dispatches through PyHostCall(g["vm"], name, args) — the trampoline
@@ -64,13 +69,15 @@ const
 
   { Token kinds — plain integer consts (not an enum) so they are valid `case`
     labels; pxx rejects Ord(enumconst) as a case label. }
-  PK_EOF   = 0;
-  PK_NAME  = 1;
-  PK_INT   = 2;
-  PK_FLOAT = 3;
-  PK_STR   = 4;
-  PK_OP    = 5;
-  PK_NL    = 6;
+  PK_EOF    = 0;
+  PK_NAME   = 1;
+  PK_INT    = 2;
+  PK_FLOAT  = 3;
+  PK_STR    = 4;
+  PK_OP     = 5;
+  PK_NL     = 6;
+  PK_INDENT = 7;
+  PK_DEDENT = 8;
 
 type
   PPyRec = ^TPyRec;
@@ -222,7 +229,26 @@ var
   Pos:  Integer;      { 1-based cursor into Src during tokenize }
   Cur:  Integer;      { current token index during eval }
 
-  EnvG, EnvL: TPyDict;
+  EnvG: TPyDict;   { host-provided globals (read-only here); holds "vm" etc. }
+
+  { Local scope kept as parallel arrays rather than a TPyDict: TPyDict keyed by a
+    Variant boxed from an AnsiString is unreliable (store/indexof box the string
+    inconsistently, and a heap key's bytes go stale — see the boxing landmine in
+    pylib). Owned AnsiString names compared with `=` are exact and stable. }
+  LclNames: array of AnsiString;
+  LclVals:  array of Variant;
+  LclN:     Integer;
+
+  { Control-flow state. `Executing` gates side effects: while walking a
+    not-taken branch (if/elif/else, or a while/for that skips its body once to
+    advance past it) the grammar is still consumed but calls don't dispatch,
+    stores don't write, and undefined names resolve to None instead of erroring.
+    `BreakFlag` unwinds the innermost loop. }
+  Executing: Boolean;
+  BreakFlag: Boolean;
+  { set by ExecStatement when the statement was a compound block (if/while/for):
+    such a statement self-terminates at its DEDENT, so no `;`/NL separator follows. }
+  StmtWasCompound: Boolean;
 
 procedure AddTok(kind: Integer; const text: AnsiString; iv: Int64; fv: Double);
 begin
@@ -284,24 +310,58 @@ var
   iv: Int64;
   fv, scale: Double;
   isFloat: Boolean;
+  atLineStart: Boolean;
+  col, sp: Integer;
+  indent: array of Integer;   { indentation stack; indent[0] = 0 }
+  nInd: Integer;
 begin
   Src := s; SLen := Length(s); Pos := 1; TkN := 0;
+  SetLength(indent, 64); indent[0] := 0; nInd := 1;
+  atLineStart := True;
   while Pos <= SLen do
   begin
+    { Python offside rule: at the start of each logical (non-blank, non-comment)
+      line, compare leading-whitespace width to the indent stack and emit
+      INDENT / DEDENT tokens. Blank and comment-only lines never change indent. }
+    if atLineStart then
+    begin
+      sp := Pos; col := 0;
+      while (sp <= SLen) and ((Src[sp] = ' ') or (Src[sp] = #9)) do
+      begin col := col + 1; sp := sp + 1; end;
+      { blank line or comment-only line: consume through its newline, no change }
+      if (sp > SLen) or (Src[sp] = #10) or (Src[sp] = #13) or (Src[sp] = '#') then
+      begin
+        while (Pos <= SLen) and (Src[Pos] <> #10) do Pos := Pos + 1;
+        if Pos <= SLen then Pos := Pos + 1;   { the newline }
+        continue;   { still atLineStart }
+      end;
+      Pos := sp;   { skip the leading whitespace }
+      if col > indent[nInd-1] then
+      begin
+        if nInd >= Length(indent) then SetLength(indent, Length(indent) * 2);
+        indent[nInd] := col; nInd := nInd + 1;
+        AddTok(PK_INDENT, '', 0, 0);
+      end
+      else
+        while (nInd > 1) and (col < indent[nInd-1]) do
+        begin nInd := nInd - 1; AddTok(PK_DEDENT, '', 0, 0); end;
+      atLineStart := False;
+    end;
     c := Src[Pos];
+    if c = #10 then
+    begin
+      AddTok(PK_NL, '', 0, 0);
+      Pos := Pos + 1;
+      atLineStart := True;
+      continue;
+    end;
     { whitespace (not newline) }
     if (c = ' ') or (c = #9) or (c = #13) then
     begin
       Pos := Pos + 1;
       continue;
     end;
-    if c = #10 then
-    begin
-      AddTok(PK_NL, '', 0, 0);
-      Pos := Pos + 1;
-      continue;
-    end;
-    { comment }
+    { comment (to end of line; the newline is handled at the top of the loop) }
     if c = '#' then
     begin
       while (Pos <= SLen) and (Src[Pos] <> #10) do Pos := Pos + 1;
@@ -439,6 +499,9 @@ begin
       TokError('unexpected character ' + Copy(Src, Pos, 1));
     end;
   end;
+  { close any open blocks at end of input }
+  if (TkN > 0) and (TkKind[TkN-1] <> PK_NL) then AddTok(PK_NL, '', 0, 0);
+  while nInd > 1 do begin nInd := nInd - 1; AddTok(PK_DEDENT, '', 0, 0); end;
   AddTok(PK_EOF, '', 0, 0);
 end;
 
@@ -481,12 +544,40 @@ begin
   Advance;
 end;
 
-procedure EnvGet(const name: AnsiString; var res: Variant);
+function LclFind(const name: AnsiString): Integer;
+var i: Integer;
 begin
-  if (EnvL <> nil) and (EnvL.indexof(name) >= 0) then
-    res := EnvL.fetch(name)
+  LclFind := -1;
+  for i := 0 to LclN - 1 do
+    if LclNames[i] = name then begin LclFind := i; Exit; end;
+end;
+
+procedure LclSet(const name: AnsiString; const v: Variant);
+var i: Integer;
+begin
+  i := LclFind(name);
+  if i >= 0 then begin LclVals[i] := v; Exit; end;
+  if LclN >= Length(LclNames) then
+  begin
+    if Length(LclNames) = 0 then SetLength(LclNames, 16)
+    else SetLength(LclNames, Length(LclNames) * 2);
+    SetLength(LclVals, Length(LclNames));
+  end;
+  LclNames[LclN] := name;
+  LclVals[LclN] := v;
+  LclN := LclN + 1;
+end;
+
+procedure EnvGet(const name: AnsiString; var res: Variant);
+var i: Integer;
+begin
+  i := LclFind(name);
+  if i >= 0 then
+    res := LclVals[i]
   else if (EnvG <> nil) and (EnvG.indexof(name) >= 0) then
     res := EnvG.fetch(name)
+  else if not Executing then
+    res := MakeNone      { walking a skipped branch — names may be undefined }
   else
   begin
     EvalError('name not defined: ' + name);
@@ -687,6 +778,25 @@ end;
 
 { ---- builtins ---- }
 
+{ range(...) materialised into a TPyList, boxed as a VT_OBJECT variant. }
+function pyrange_list(args: TPyList): Variant;
+var lo, hi, step, i: Int64; n: Integer; r: TPyList; ro: PPyRec;
+begin
+  n := args.count;
+  if n = 1 then begin lo := 0; hi := pyvar_to_int(args.at(0)); step := 1; end
+  else if n = 2 then
+    begin lo := pyvar_to_int(args.at(0)); hi := pyvar_to_int(args.at(1)); step := 1; end
+  else
+    begin lo := pyvar_to_int(args.at(0)); hi := pyvar_to_int(args.at(1));
+          step := pyvar_to_int(args.at(2)); end;
+  r := TPyList.Create;
+  if step > 0 then
+  begin i := lo; while i < hi do begin r.append(pyvar_of_int(i)); i := i + step; end; end
+  else if step < 0 then
+  begin i := lo; while i > hi do begin r.append(pyvar_of_int(i)); i := i + step; end; end;
+  ro := PPyRec(@Result); ro^.VType := 7; ro^.Payload := Int64(Pointer(r));
+end;
+
 procedure CallBuiltin(const name: AnsiString; args: TPyList;
                       const endKw, sepKw: AnsiString;
                       haveEnd, haveSep: Boolean; var res: Variant);
@@ -754,6 +864,13 @@ begin
     begin e := args.at(i); if pycmp_v(e, cand) > 0 then cand := e; end;
     res := cand; Exit;
   end;
+  if name = 'range' then
+  begin
+    { range(stop) | range(start,stop) | range(start,stop,step) -> a materialised
+      TPyList of ints (correctness-first; a lazy iterator can come later). }
+    res := pyrange_list(args);
+    Exit;
+  end;
   if name = 'print' then
   begin
     s := '';
@@ -813,6 +930,9 @@ begin
   end;
   ExpectOp(')');
 
+  { skipped branch: consume the call but do not dispatch (no side effects) }
+  if not Executing then begin res := MakeNone; Exit; end;
+
   if IsHostName(callee) then
   begin
     if (EnvG = nil) or (EnvG.indexof('vm') < 0) then
@@ -832,11 +952,148 @@ begin
   while IsOp(';') or (CurKind = PK_NL) do Advance;
 end;
 
-procedure ParseStatement;
+procedure ExecStatement; forward;
+
+{ Execute (or, if `doEval` is False, merely skip) the suite that follows a `:`.
+  A suite is either INLINE — simple statements to end of line — or a BLOCK:
+  NEWLINE INDENT statement+ DEDENT. Skipping walks the same grammar with
+  Executing off so the token cursor lands past the suite either way. }
+procedure ExecSuite(doEval: Boolean);
+var saved: Boolean;
+begin
+  saved := Executing;
+  Executing := saved and doEval;
+  if CurKind = PK_NL then
+  begin
+    { block form }
+    while CurKind = PK_NL do Advance;
+    if CurKind <> PK_INDENT then
+    begin Executing := saved; EvalError('expected an indented block'); end;
+    Advance;   { INDENT }
+    while (CurKind <> PK_DEDENT) and (CurKind <> PK_EOF) do
+    begin
+      if BreakFlag then
+      begin
+        { unwinding a loop: fast-skip the rest of the block with eval off }
+        Executing := False;
+      end;
+      ExecStatement;
+      SkipSeparators;
+    end;
+    if CurKind = PK_DEDENT then Advance;
+  end
+  else
+  begin
+    { inline form: simple statements until newline / dedent / eof }
+    while (CurKind <> PK_NL) and (CurKind <> PK_DEDENT) and (CurKind <> PK_EOF) do
+    begin
+      if BreakFlag then Executing := False;
+      ExecStatement;
+      while IsOp(';') do Advance;
+    end;
+  end;
+  Executing := saved;
+end;
+
+procedure ExecIf;
+var cond: Variant; done: Boolean;
+begin
+  Advance;   { if }
+  ParseExpr(cond);
+  ExpectOp(':');
+  done := Executing and pyvar_to_bool(cond);
+  ExecSuite(done);
+  while IsKw('elif') do
+  begin
+    Advance;
+    ParseExpr(cond);
+    ExpectOp(':');
+    if (not done) and Executing and pyvar_to_bool(cond) then
+    begin ExecSuite(True); done := True; end
+    else
+      ExecSuite(False);
+  end;
+  if IsKw('else') then
+  begin
+    Advance; ExpectOp(':');
+    ExecSuite(Executing and (not done));
+  end;
+end;
+
+procedure ExecWhile;
+var cond: Variant; condPos: Integer; guard: Int64;
+begin
+  Advance;   { while }
+  condPos := Cur;
+  guard := 0;
+  while True do
+  begin
+    Cur := condPos;
+    ParseExpr(cond);
+    ExpectOp(':');
+    if Executing and pyvar_to_bool(cond) then
+    begin
+      ExecSuite(True);
+      if BreakFlag then begin BreakFlag := False; Break; end;
+      guard := guard + 1;
+      if guard > 100000000 then EvalError('while: iteration guard tripped');
+    end
+    else
+    begin
+      ExecSuite(False);   { skip body once to advance past it }
+      Break;
+    end;
+  end;
+end;
+
+procedure ExecFor;
+var
+  varName: AnsiString;
+  iter: Variant;
+  lst: TPyList;
+  bodyPos, i, n: Integer;
+begin
+  Advance;   { for }
+  if CurKind <> PK_NAME then EvalError('for: expected a loop variable');
+  varName := TkText[Cur]; Advance;
+  if not IsKw('in') then EvalError('for: expected "in"');
+  Advance;
+  ParseExpr(iter);
+  ExpectOp(':');
+  bodyPos := Cur;
+  if not Executing then begin ExecSuite(False); Exit; end;
+  if PPyRec(@iter)^.VType <> 7 then
+    EvalError('for: M1/M2 iterate over a list/range only');
+  lst := TPyList(Pointer(PPyRec(@iter)^.Payload));
+  n := lst.count;
+  if n = 0 then begin ExecSuite(False); Exit; end;
+  for i := 0 to n - 1 do
+  begin
+    LclSet(varName, lst.at(i));
+    Cur := bodyPos;
+    ExecSuite(True);
+    if BreakFlag then begin BreakFlag := False; Exit; end;
+  end;
+  { after the last real iteration Cur is already past the suite }
+end;
+
+procedure ExecStatement;
 var
   target, aug: AnsiString;
   rhs, cur, v: Variant;
 begin
+  StmtWasCompound := False;
+  { compound statements (self-terminating at DEDENT). Set the flag AFTER the call
+    returns — the nested statements inside the block reset it. }
+  if IsKw('if') then begin ExecIf; StmtWasCompound := True; Exit; end;
+  if IsKw('while') then begin ExecWhile; StmtWasCompound := True; Exit; end;
+  if IsKw('for') then begin ExecFor; StmtWasCompound := True; Exit; end;
+  if IsKw('break') then begin Advance; if Executing then BreakFlag := True; Exit; end;
+  if IsKw('pass') then begin Advance; Exit; end;
+  if IsKw('def') or IsKw('return') or IsKw('raise') or IsKw('del')
+     or IsKw('import') or IsKw('continue') or IsKw('elif') or IsKw('else') then
+    EvalError('statement "' + CurText + '" is not supported yet');
+
   { assignment / augassign?  NAME (=|op=) ...  — lookahead. }
   if (TkKind[Cur] = PK_NAME) and (TkKind[Cur+1] = PK_OP) then
   begin
@@ -846,7 +1103,7 @@ begin
     begin
       Advance; Advance;
       ParseExpr(rhs);
-      EnvL.store(target, rhs);
+      if Executing then LclSet(target, rhs);
       Exit;
     end;
     if (aug = '+=') or (aug = '-=') or (aug = '*=') or (aug = '//=')
@@ -855,28 +1112,24 @@ begin
     begin
       Advance; Advance;
       ParseExpr(rhs);
-      EnvGet(target, cur);
-      if aug = '+=' then v := pyadd_v(cur, rhs)
-      else if aug = '-=' then v := pysub_v(cur, rhs)
-      else if aug = '*=' then v := pymul_v(cur, rhs)
-      else if aug = '//=' then v := pyfloordiv_v(cur, rhs)
-      else if aug = '%=' then v := pymod_v(cur, rhs)
-      else if aug = '&=' then v := pybitand_v(cur, rhs)
-      else if aug = '|=' then v := pybitor_v(cur, rhs)
-      else if aug = '^=' then v := pybitxor_v(cur, rhs)
-      else if aug = '<<=' then v := pyshl_v(cur, rhs)
-      else v := pyshr_v(cur, rhs);
-      EnvL.store(target, v);
+      if Executing then
+      begin
+        EnvGet(target, cur);
+        if aug = '+=' then v := pyadd_v(cur, rhs)
+        else if aug = '-=' then v := pysub_v(cur, rhs)
+        else if aug = '*=' then v := pymul_v(cur, rhs)
+        else if aug = '//=' then v := pyfloordiv_v(cur, rhs)
+        else if aug = '%=' then v := pymod_v(cur, rhs)
+        else if aug = '&=' then v := pybitand_v(cur, rhs)
+        else if aug = '|=' then v := pybitor_v(cur, rhs)
+        else if aug = '^=' then v := pybitxor_v(cur, rhs)
+        else if aug = '<<=' then v := pyshl_v(cur, rhs)
+        else v := pyshr_v(cur, rhs);
+        LclSet(target, v);
+      end;
       Exit;
     end;
   end;
-  { compound-statement keywords we do not support in M1 }
-  if IsKw('if') or IsKw('elif') or IsKw('else') or IsKw('while')
-     or IsKw('for') or IsKw('def') or IsKw('return') or IsKw('raise')
-     or IsKw('del') or IsKw('import') or IsKw('pass') or IsKw('break')
-     or IsKw('continue') then
-    EvalError('statement "' + CurText +
-              '" is not supported in M1 (pure-stack subset only)');
   { expression statement (e.g. push(x), pop()) — value discarded }
   ParseExpr(v);
 end;
@@ -884,15 +1137,21 @@ end;
 procedure EvalPyStmts(const src: AnsiString; g: TPyDict; l: TPyDict);
 begin
   EnvG := g;
-  EnvL := l;
-  if EnvL = nil then EnvL := g;
+  { locals live in pyeval's own arrays (see LclSet); the `l` dict argument is
+    accepted for API compatibility with Python's exec(src, g, l) but is not the
+    backing store — uforth's block locals are function-internal and never read
+    back by the host. }
+  LclN := 0;
+  Executing := True;
+  BreakFlag := False;
   Tokenize(src);
   Cur := 0;
   SkipSeparators;
-  while CurKind <> PK_EOF do
+  while (CurKind <> PK_EOF) and (CurKind <> PK_DEDENT) do
   begin
-    ParseStatement;
-    if (CurKind <> PK_EOF) and not (IsOp(';') or (CurKind = PK_NL)) then
+    ExecStatement;
+    if (not StmtWasCompound) and (CurKind <> PK_EOF) and (CurKind <> PK_DEDENT)
+       and not (IsOp(';') or (CurKind = PK_NL)) then
       EvalError('expected end of statement, got "' + CurText + '"');
     SkipSeparators;
   end;
