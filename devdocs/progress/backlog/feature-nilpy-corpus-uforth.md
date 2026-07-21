@@ -62,6 +62,48 @@ runtime bug (number push/pop or the `.` word's cell read). Then
 [[feature-lib-pyexec]] for the PYTHON native-word blocks. The dispatch/exec
 substrate is now live, so these are incremental runtime-correctness items.
 
+MILESTONE 3 (2026-07-21, session 3): `1 2 + .` PRINTS 3, and the FULL STD.UFO
+stdlib LOADS (CORE/IO/FLOAT/DEBUG/VARIABLE/MEMORY/RSTACK/EXTRA/STRING/MATH all
+`INCLUDE`d, banner shown, no error). A chain of nine silent variant/static-type
+boundary bugs fixed — every one was a wrong-VALUE or hard-abort in the compiled
+path that CPython never hit:
+- `str(variant)` of a VT_INT64-tagged int returned '' — VariantToStr handled
+  VT_INT (tag 1) but not VT_INT64 (tag 2). Any int binop result is tag 2, so
+  `.` printed nothing. (builtin.pas)
+- `if <container>:` / `while <container>:` was always truthy — a list/dict handle
+  is never nil; and `if <variant>:` tested the tag word (variant holding 0 was
+  truthy). PyMakeTruthy (was dead code) now does `.count<>0` / `bool(v)`, wired
+  into if/while. pyvar_to_bool length-checks a boxed container too. (pyparser/pylib)
+- `a and b` / `a or b` with a container/variant operand used eager pyand_v/pyor_v
+  → NO short-circuit → `if xs and xs[0]:` / `if tokens and tokens[-1]:` indexed
+  an empty container and crashed. Now an AN_TERNARY (only the taken arm runs).
+- `A if C else B`: the condition C, if a container, was always truthy. Route C
+  through PyMakeTruthy (same as if/while).
+- `C(lst[0])`: a variant element to a str/scalar CTOR param stored garbage — a
+  class instantiation is a GetMem IR_CALL, so IRLowerCallArg never coerced args
+  by the ctor's param types. Now it does (pathIdx>0 → ctor proc). (ir.inc)
+- `s[0] in ("a","b")`: a subscript yields tyChar (VT_CHAR), the collection holds
+  VT_STRING — tags never matched, membership always False. Promote a tyChar `in`
+  value via pystr_ofchar. (uforth's is_string_token: `tok[0] in ('"',"'")`.)
+- `(0xFFFFFFFFFFFFFFFF).to_bytes(8,signed=False)`: NilPy ints are 64-bit so 2^64-1
+  is -1; pyint_to_bytes hard-raised OverflowError. For a >=8-byte field the low 8
+  bytes ARE the unsigned value's bytes — emit them. (uforth's STATE flag store.)
+- `Optional[int]` function returning None (`return d.get(missing)`) → pyvar_to_int
+  hard-raised. Map VT_EMPTY -> the 0 sentinel Optional[X] already uses. (uforth's
+  _lookup_local_slot, hit on every non-local token while compiling STD.UFO.)
+
+All nine committed green (testmgr quick + self-host byte-identical), pushed.
+
+**NEXT / CRITICAL PATH = [[feature-lib-pyexec]].** Running a PYTHON-bodied word
+(`/`, `2/`, and much of CORE) now SEGFAULTS: exec_python_inline does
+`exec(wrapper, env, ns); ns["__body__"]()`, but exec() is the no-op stub
+(pylib.pas ~2787), so `ns` stays empty and `ns["__body__"]()` calls a
+non-existent function → crash. `1 2 + .` works because +/./native words are real
+Pascal; the stdlib's Python-bodied words do not. exec() (parse-once-cached AST →
+tree-walker over the tiny pop/push/arith/ternary subset uforth uses) is the
+subsystem that unblocks correct execution of the stdlib and the conformance
+oracle. This is the forcing function's next lane.
+
 Landed this session toward compile: captured-class identity in nested defs,
 dict comprehensions + dict(), call-result subscript-assign, os/sys/select/stdin
 shims, TPyFile stubs, list.pop(i), except tuples, del/assign list slices, zip(),
