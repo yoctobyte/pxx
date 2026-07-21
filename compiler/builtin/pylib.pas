@@ -430,6 +430,28 @@ function pyor_v(const a: Variant; const b: Variant): Variant;
 function pyand_v(const a: Variant; const b: Variant): Variant;
 function pyfloordiv_v(const a: Variant; const b: Variant): Variant;
 function pyfloormod_v(const a: Variant; const b: Variant): Variant;
+{ Arithmetic / bitwise / compare over VARIANTS, for the pyeval tree-walker
+  (feature-lib-pyexec): its operands are always variants and Python dispatches
+  on the runtime tag. `+` concatenates two strings, else numeric add (float if
+  either is float). `%` is Python modulo (== pyfloormod). The bit ops coerce
+  both sides through int() and are DISTINCT from pyand_v/pyor_v (those are the
+  boolean `and`/`or`; these are `&`/`|`). pycmp_v returns -1/0/1 with Python
+  cross-type numeric rules; pyeq_v is value equality across tags. }
+function pyadd_v(const a: Variant; const b: Variant): Variant;
+function pysub_v(const a: Variant; const b: Variant): Variant;
+function pymod_v(const a: Variant; const b: Variant): Variant;
+function pybitand_v(const a: Variant; const b: Variant): Variant;
+function pybitor_v(const a: Variant; const b: Variant): Variant;
+function pybitxor_v(const a: Variant; const b: Variant): Variant;
+function pyshl_v(const a: Variant; const b: Variant): Variant;
+function pyshr_v(const a: Variant; const b: Variant): Variant;
+function pyinvert_v(const a: Variant): Variant;   { ~a }
+function pyneg_v(const a: Variant): Variant;      { -a }
+function pycmp_v(const a: Variant; const b: Variant): Int64;   { -1/0/1 }
+function pyeq_v(const a: Variant; const b: Variant): Boolean;
+function pyint_v(const v: Variant): Variant;      { int(v) as a variant }
+function pyvar_of_int(v: Int64): Variant;
+function pyvar_of_bool(b: Boolean): Variant;
 function pystr_repeat_v(const v: Variant; n: Int64): AnsiString;
 { `xs * n` on a LIST: a new list whose slots are the original's, repeated.
   Python copies REFERENCES, not elements — `[[0]] * 3` gives three aliases of the
@@ -1906,6 +1928,176 @@ begin
     r^.VType := 2;
     r^.Payload := pyfloormod_i(pa^.Payload, pb^.Payload);
   end;
+end;
+
+{ text of a str(6)/char(5) variant, for the string-aware ops below }
+function PyVarText(p: PPyVarRec): AnsiString;
+begin
+  if p^.VType = 5 then Result := pystr_ofchar(Chr(p^.Payload and $FF))
+  else if p^.VType = 6 then Result := PPyAnsiString(@p^.Payload)^
+  else Result := '';
+end;
+
+function pyvar_of_int(v: Int64): Variant;
+var r: PPyVarRec;
+begin
+  r := PPyVarRec(@Result);
+  r^.VType := 2;
+  r^.Payload := v;
+end;
+
+function pyvar_of_bool(b: Boolean): Variant;
+var r: PPyVarRec;
+begin
+  r := PPyVarRec(@Result);
+  r^.VType := 4;
+  if b then r^.Payload := 1 else r^.Payload := 0;
+end;
+
+function pyint_v(const v: Variant): Variant;
+begin
+  Result := pyvar_of_int(pyvar_to_int(v));
+end;
+
+function pyadd_v(const a: Variant; const b: Variant): Variant;
+var pa, pb, r: PPyVarRec; concat: AnsiString;
+begin
+  pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
+  r^.VType := 0; r^.Payload := 0;
+  { str/char + str/char -> concat }
+  if ((pa^.VType = 6) or (pa^.VType = 5)) and ((pb^.VType = 6) or (pb^.VType = 5)) then
+  begin
+    concat := PyVarText(pa) + PyVarText(pb);
+    r^.VType := 6;
+    PPyAnsiString(@r^.Payload)^ := concat;
+    Exit;
+  end;
+  if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
+  begin
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := PyVarAsFloat(pa) + PyVarAsFloat(pb);
+  end
+  else
+  begin
+    r^.VType := 2;
+    r^.Payload := pyvar_to_int(a) + pyvar_to_int(b);
+  end;
+end;
+
+function pysub_v(const a: Variant; const b: Variant): Variant;
+var pa, pb, r: PPyVarRec;
+begin
+  pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
+  r^.VType := 0; r^.Payload := 0;
+  if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
+  begin
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := PyVarAsFloat(pa) - PyVarAsFloat(pb);
+  end
+  else
+  begin
+    r^.VType := 2;
+    r^.Payload := pyvar_to_int(a) - pyvar_to_int(b);
+  end;
+end;
+
+function pymod_v(const a: Variant; const b: Variant): Variant;
+begin
+  Result := pyfloormod_v(a, b);
+end;
+
+function pybitand_v(const a: Variant; const b: Variant): Variant;
+begin
+  Result := pyvar_of_int(pyvar_to_int(a) and pyvar_to_int(b));
+end;
+
+function pybitor_v(const a: Variant; const b: Variant): Variant;
+begin
+  Result := pyvar_of_int(pyvar_to_int(a) or pyvar_to_int(b));
+end;
+
+function pybitxor_v(const a: Variant; const b: Variant): Variant;
+begin
+  Result := pyvar_of_int(pyvar_to_int(a) xor pyvar_to_int(b));
+end;
+
+function pyshl_v(const a: Variant; const b: Variant): Variant;
+begin
+  Result := pyvar_of_int(pyvar_to_int(a) shl pyvar_to_int(b));
+end;
+
+function pyshr_v(const a: Variant; const b: Variant): Variant;
+var av, n, rv: Int64;
+begin
+  { Python >> is ARITHMETIC (sign-propagating, floors toward -inf). Pascal shr
+    is logical, so synthesise the sign fill: -x>>n == ~(~x >> n). }
+  av := pyvar_to_int(a); n := pyvar_to_int(b);
+  if n >= 64 then
+  begin
+    if av < 0 then rv := -1 else rv := 0;
+  end
+  else if av < 0 then
+    rv := not ((not av) shr n)
+  else
+    rv := av shr n;
+  Result := pyvar_of_int(rv);
+end;
+
+function pyinvert_v(const a: Variant): Variant;
+begin
+  Result := pyvar_of_int(not pyvar_to_int(a));
+end;
+
+function pyneg_v(const a: Variant): Variant;
+var p, r: PPyVarRec;
+begin
+  p := PPyVarRec(@a); r := PPyVarRec(@Result);
+  if PyVarIsFloat(p) then
+  begin
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := -PyVarAsFloat(p);
+  end
+  else
+    Result := pyvar_of_int(-pyvar_to_int(a));
+end;
+
+function pycmp_v(const a: Variant; const b: Variant): Int64;
+var pa, pb: PPyVarRec; sa, sb: AnsiString; fa, fb: Double; ia, ib: Int64;
+begin
+  pa := PPyVarRec(@a); pb := PPyVarRec(@b);
+  if ((pa^.VType = 6) or (pa^.VType = 5)) and ((pb^.VType = 6) or (pb^.VType = 5)) then
+  begin
+    sa := PyVarText(pa); sb := PyVarText(pb);
+    if sa < sb then Result := -1
+    else if sa > sb then Result := 1
+    else Result := 0;
+    Exit;
+  end;
+  if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
+  begin
+    fa := PyVarAsFloat(pa); fb := PyVarAsFloat(pb);
+    if fa < fb then Result := -1
+    else if fa > fb then Result := 1
+    else Result := 0;
+    Exit;
+  end;
+  ia := pyvar_to_int(a); ib := pyvar_to_int(b);
+  if ia < ib then Result := -1
+  else if ia > ib then Result := 1
+  else Result := 0;
+end;
+
+function pyeq_v(const a: Variant; const b: Variant): Boolean;
+var pa, pb: PPyVarRec;
+begin
+  pa := PPyVarRec(@a); pb := PPyVarRec(@b);
+  { None equals only None }
+  if (pa^.VType = 0) or (pb^.VType = 0) then
+  begin
+    Result := (pa^.VType = 0) and (pb^.VType = 0);
+    Exit;
+  end;
+  Result := pycmp_v(a, b) = 0;
 end;
 
 function pystr_repeat_v(const v: Variant; n: Int64): AnsiString;

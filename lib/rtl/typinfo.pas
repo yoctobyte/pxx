@@ -181,7 +181,33 @@ function GetEnumNameCount(TypeInfo: PEnumRTTI): Integer;
 
 implementation
 
-uses sysutils;   { CompareText -- FPC-parity case-insensitive GetEnumValue }
+{ CompareText inlined (was `uses sysutils`) so a program can use typinfo
+  ALONGSIDE a unit that defines its OWN `Exception` class (e.g. pylib's Python
+  hierarchy). sysutils and pylib both declare `Exception`, and pulling both into
+  scope makes the compiler resolve inherited constructors (EConvertError.CreateFmt)
+  against the wrong one — see feature-lib-pyexec / the same-named-class collision
+  Track A ticket. typinfo needed sysutils for this ONE case-insensitive compare
+  in GetEnumValue; nothing else. }
+function TiCompareText(const a, b: string): Integer;
+var i, n: Integer; ca, cb: Char;
+begin
+  n := Length(a);
+  if Length(b) < n then n := Length(b);
+  for i := 1 to n do
+  begin
+    ca := a[i]; cb := b[i];
+    if (ca >= 'a') and (ca <= 'z') then ca := Chr(Ord(ca) - 32);
+    if (cb >= 'a') and (cb <= 'z') then cb := Chr(Ord(cb) - 32);
+    if ca <> cb then
+    begin
+      if ca < cb then TiCompareText := -1 else TiCompareText := 1;
+      Exit;
+    end;
+  end;
+  if Length(a) < Length(b) then TiCompareText := -1
+  else if Length(a) > Length(b) then TiCompareText := 1
+  else TiCompareText := 0;
+end;
 
 function TypeKindSize(tk: Int64): Integer;
 begin
@@ -499,7 +525,7 @@ begin
     { case-INSENSITIVE, as in FPC. It was an exact match, which is a silent compat gap:
       FPC's GetEnumValue('green') finds Green. Loosening it can only ever match MORE, so the
       streaming path (which passes exact names) is unaffected. }
-    if CompareText(sp^, name) = 0 then
+    if TiCompareText(sp^, name) = 0 then
     begin
       GetEnumValue := i;
       Exit;

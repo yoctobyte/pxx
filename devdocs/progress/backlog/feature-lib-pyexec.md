@@ -185,3 +185,47 @@ Remaining = the interpreter (a laborious but standard tree-walker), build plan:
 
 Checkpoint tag `checkpoint-pre-exec-arc` marks the pre-arc state for rollback.
 
+
+## 2026-07-21 — M1 CORE landed (pyeval.pas), standalone-green
+
+`compiler/builtin/pyeval.pas` created: the M1 tree-walker over Variants. Covers
+the pure-stack grammar — simple statements (`;`/newline), assignment + augassign,
+full expression grammar (ternary, and/or/not, comparisons incl. chains, |^&,
+<<>> arithmetic shifts, +-*/ // %, unary -/+/~), int/float/hex literals,
+True/False/None, builtins (int/float/abs/bool/len/ord/chr/str/hex/min/max/print),
+and the host bridge push/pop/fpush/fpop reflected BY NAME (case-insensitive)
+through the trampoline. `test/test_pyeval_m1.pas` drives SWAP/OVER/ROT, bitops,
+shifts, ternary min/max, floordiv/mod, augassign, comparisons, float stack — ALL
+PASS. pylib gained the variant ops it needs (pyadd_v/pysub_v/pymod_v/pybit*_v/
+pyshl_v/pyshr_v/pyinvert_v/pyneg_v/pycmp_v/pyeq_v/pyint_v/pyvar_of_int/bool).
+
+Gate: quick tier green, self-host byte-identical, RTTI-consumer tests + test-nilpy
+green. pyeval is NOT auto-used yet (standalone only), so zero blast radius.
+
+### Blockers hit + resolved / filed
+
+- **typinfo⊕pylib `Exception` collision (FIXED).** Both units define
+  `Exception = class`; combined, the compiler resolved sysutils's
+  `EConvertError.CreateFmt` against pylib's Exception (no CreateFmt) →
+  "class method not found". typinfo pulled sysutils only for one `CompareText`
+  in GetEnumValue — inlined it (`TiCompareText`) and dropped `uses sysutils`, so
+  a program can now use pylib + typinfo together (which pyeval requires).
+- **Variant-fn-return-forward NRVO corruption (Track A ticket filed:
+  `bug-a-variant-fn-return-forward-nrvo-corruption`).** `function F: Variant;
+  begin F := G(...) end` silently corrupts. Forced pyeval's evaluator to be all
+  `var res: Variant` PROCEDURES instead of Variant functions. Broad latent
+  correctness hole beyond pyeval.
+- **open `array of Variant` param silent miscompile (Track A ticket filed:
+  `bug-a-open-array-of-variant-silent-miscompile`).** Reads only elem 0. pyeval
+  passes args in a TPyList to sidestep.
+
+### M1 deferred tail (next)
+
+- **bignum / unsigned-mask semantics.** `x & 0xFFFFFFFFFFFFFFFF` must yield the
+  arbitrary-precision unsigned value; M1 is Int64 so U<, UM*, M*/, D< and the
+  double-cell MATH.UFO words are OUT of M1. Needs the promotable-int/bignum path.
+- **compound blocks** (if/while/for/def + indentation) for the MATH block form.
+- Then M2 (field reflection into the walker) and M3 (method reflection +
+  bound-method capture), per the ladder above.
+- Corpus-coverage measurement over all 60 pure-stack blocks (grammar accept-rate)
+  is the recommended immediate next step.
