@@ -1188,24 +1188,40 @@ begin
   res := a;
 end;
 
+function PyCmpAhead: Boolean;
+begin
+  PyCmpAhead := IsOp('<') or IsOp('>') or IsOp('<=') or IsOp('>=')
+    or IsOp('==') or IsOp('!=') or IsKw('is') or IsKw('in')
+    or (IsKw('not') and (TkKind[Cur+1] = PK_NAME) and (TkText[Cur+1] = 'in'));
+end;
+
 procedure ParseCompare(var res: Variant);
 var a, b: Variant; c: Int64; ok: Boolean;
 begin
   ParseBitOr(a);
-  if not (IsOp('<') or IsOp('>') or IsOp('<=') or IsOp('>=')
-          or IsOp('==') or IsOp('!=')) then
-  begin res := a; Exit; end;
-  { Python chains: a < b < c == (a<b) and (b<c). }
+  if not PyCmpAhead then begin res := a; Exit; end;
+  { Python chains: a < b < c == (a<b) and (b<c). `is`/`is not` are identity
+    (value-equality here — sufficient for the `x is None` idiom); `in`/`not in`
+    are membership. }
   ok := True;
-  while IsOp('<') or IsOp('>') or IsOp('<=') or IsOp('>=')
-        or IsOp('==') or IsOp('!=') do
+  while PyCmpAhead do
   begin
     if IsOp('==') then begin Advance; ParseBitOr(b); ok := ok and pyeq_v(a, b); end
     else if IsOp('!=') then begin Advance; ParseBitOr(b); ok := ok and (not pyeq_v(a, b)); end
     else if IsOp('<') then begin Advance; ParseBitOr(b); c := pycmp_v(a, b); ok := ok and (c < 0); end
     else if IsOp('>') then begin Advance; ParseBitOr(b); c := pycmp_v(a, b); ok := ok and (c > 0); end
     else if IsOp('<=') then begin Advance; ParseBitOr(b); c := pycmp_v(a, b); ok := ok and (c <= 0); end
-    else begin Advance; ParseBitOr(b); c := pycmp_v(a, b); ok := ok and (c >= 0); end;
+    else if IsOp('>=') then begin Advance; ParseBitOr(b); c := pycmp_v(a, b); ok := ok and (c >= 0); end
+    else if IsKw('is') then
+    begin
+      Advance;
+      if IsKw('not') then begin Advance; ParseBitOr(b); ok := ok and (not pyeq_v(a, b)); end
+      else begin ParseBitOr(b); ok := ok and pyeq_v(a, b); end;
+    end
+    else if IsKw('in') then
+    begin Advance; ParseBitOr(b); ok := ok and pyvar_contains(b, a); end
+    else { not in }
+    begin Advance; Advance; ParseBitOr(b); ok := ok and (not pyvar_contains(b, a)); end;
     a := b;
   end;
   res := pyvar_of_bool(ok);
