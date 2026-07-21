@@ -529,6 +529,110 @@ begin
   Halt(1);
 end;
 
+function PyEscQuote(const s: AnsiString): AnsiString;
+var i: Integer;
+begin
+  Result := '';
+  for i := 1 to Length(s) do
+  begin
+    if s[i] = '''' then Result := Result + '''''' else Result := Result + s[i];
+  end;
+end;
+
+{ Source-level f-string desugar: rewrite `f'lit{expr:spec}lit'` into
+  `('lit' + __fmt(expr, 'spec') + 'lit')` before tokenizing, so the normal
+  expression grammar evaluates the holes. Normal string literals are copied
+  verbatim (never rewritten). Nested brackets inside a hole are respected;
+  `{{`/`}}` are literal braces; a `!r`/`!s`/`!a` conversion is parsed and
+  ignored. Keeps f-strings out of the tokenizer/evaluator entirely. }
+function PreprocessFStrings(const src: AnsiString): AnsiString;
+var
+  i, n, depth: Integer;
+  c, q, ch: Char;
+  outp, seg, hole, spec: AnsiString;
+  prevIdent, needPlus: Boolean;
+begin
+  outp := ''; i := 1; n := Length(src); prevIdent := False;
+  while i <= n do
+  begin
+    c := src[i];
+    { normal string literal — copy verbatim }
+    if (c = '''') or (c = '"') then
+    begin
+      q := c; outp := outp + c; i := i + 1;
+      while (i <= n) and (src[i] <> q) do
+      begin
+        if (src[i] = '\') and (i < n) then begin outp := outp + src[i]; i := i + 1; end;
+        outp := outp + src[i]; i := i + 1;
+      end;
+      if i <= n then begin outp := outp + src[i]; i := i + 1; end;
+      prevIdent := False;
+      continue;
+    end;
+    { f-string prefix (f/F not part of a longer identifier, followed by a quote) }
+    if ((c = 'f') or (c = 'F')) and (not prevIdent) and (i < n)
+       and ((src[i+1] = '''') or (src[i+1] = '"')) then
+    begin
+      q := src[i+1]; i := i + 2;
+      outp := outp + '(';
+      seg := ''; needPlus := False;
+      while (i <= n) and (src[i] <> q) do
+      begin
+        ch := src[i];
+        if (ch = '{') and (i < n) and (src[i+1] = '{') then begin seg := seg + '{'; i := i + 2; end
+        else if (ch = '}') and (i < n) and (src[i+1] = '}') then begin seg := seg + '}'; i := i + 2; end
+        else if ch = '{' then
+        begin
+          if seg <> '' then
+          begin
+            if needPlus then outp := outp + ' + ';
+            outp := outp + '''' + PyEscQuote(seg) + '''';
+            needPlus := True; seg := '';
+          end;
+          i := i + 1; hole := ''; depth := 0;
+          while (i <= n) and not ((depth = 0) and
+                 ((src[i] = '}') or (src[i] = ':') or (src[i] = '!'))) do
+          begin
+            if (src[i] = '(') or (src[i] = '[') or (src[i] = '{') then depth := depth + 1
+            else if (src[i] = ')') or (src[i] = ']') or (src[i] = '}') then depth := depth - 1;
+            hole := hole + src[i]; i := i + 1;
+          end;
+          spec := '';
+          if (i <= n) and (src[i] = '!') then
+          begin i := i + 1; if i <= n then i := i + 1; end;   { !r/!s/!a — ignored }
+          if (i <= n) and (src[i] = ':') then
+          begin
+            i := i + 1;
+            while (i <= n) and (src[i] <> '}') do begin spec := spec + src[i]; i := i + 1; end;
+          end;
+          if (i <= n) and (src[i] = '}') then i := i + 1;
+          if needPlus then outp := outp + ' + ';
+          outp := outp + '__fmt(' + hole + ', ''' + PyEscQuote(spec) + ''')';
+          needPlus := True;
+        end
+        else begin seg := seg + ch; i := i + 1; end;
+      end;
+      if i <= n then i := i + 1;   { closing quote }
+      if seg <> '' then
+      begin
+        if needPlus then outp := outp + ' + ';
+        outp := outp + '''' + PyEscQuote(seg) + '''';
+        needPlus := True;
+      end;
+      if not needPlus then outp := outp + '''''';   { empty f-string }
+      outp := outp + ')';
+      prevIdent := False;
+    end
+    else
+    begin
+      outp := outp + c;
+      prevIdent := IsIdentChar(c);
+      i := i + 1;
+    end;
+  end;
+  Result := outp;
+end;
+
 procedure Tokenize(const s: AnsiString);
 var
   c, c2: Char;
@@ -1134,6 +1238,11 @@ begin
     if nargs <> 1 then EvalError('hex() expects 1 arg');
     res := MakeStr(hex(pyvar_to_int(args.at(0)))); Exit;
   end;
+  if name = '__fmt' then
+  begin
+    { f-string hole: __fmt(value, 'spec') — see PreprocessFStrings }
+    res := MakeStr(pyformat_of(args.at(0), pystr_of(args.at(1)))); Exit;
+  end;
   if name = 'min' then
   begin
     if nargs < 1 then EvalError('min() needs args');
@@ -1603,7 +1712,7 @@ begin
   LclN := 0;
   Executing := True;
   BreakFlag := False;
-  Tokenize(src);
+  Tokenize(PreprocessFStrings(src));
   Cur := 0;
   SkipSeparators;
   while (CurKind <> PK_EOF) and (CurKind <> PK_DEDENT) do
