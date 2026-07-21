@@ -183,7 +183,7 @@ begin
     tkIdent:
     begin
       lo := LowerCase(GetTokenStr(i));
-      if lo = 'int' then Result := tyInteger
+      if lo = 'int' then Result := tyInt64   { NilPy int = a 64-bit cell }
       else if lo = 'float' then Result := tyDouble
       else if lo = 'bool' then Result := tyBoolean
       else if lo = 'str' then Result := tyString
@@ -352,7 +352,7 @@ begin
   if Tokens[i].Kind = tkNil then begin Inc(i); Exit; end;
   if Tokens[i].Kind <> tkIdent then Exit;
   lo := LowerCase(GetTokenStr(i));
-  if lo = 'int' then begin Result := tyInteger; Inc(i); Exit; end;
+  if lo = 'int' then begin Result := tyInt64; Inc(i); Exit; end;   { 64-bit cell }
   if lo = 'float' then begin Result := tyDouble; Inc(i); Exit; end;
   if lo = 'bool' then begin Result := tyBoolean; Inc(i); Exit; end;
   if lo = 'str' then
@@ -2495,20 +2495,107 @@ end;
   for a list (`get`) or a dict (`fetch`) — the same methods the lvalue path
   reaches, just built here because a non-lvalue never gets there. }
 { `v[key]` on a variant -> pyvar_getitem(v, key); yields a variant. }
-{ Consume a `lambda [p1, p2, ...]: <expr>` and reduce it to a None value. The
-  body is SKIPPED at the token level (balanced to the enclosing `,` or `)`), so
-  its parameters need no scope — full lambda support is filed separately
-  (feature-nilpy-lambda); this keeps a program that stores a lambda compiling. }
 function PyMakeNone: Integer; forward;
 
+{ A `lambda p1, ...: <expr>` — lowered to a PYEVAL CLOSURE built from the
+  body's SOURCE text: pyclosure_src_new(params, 'return <expr>') with every
+  free name's VALUE captured at build time via chained pyclosure_src_cap
+  calls. The result is the same magic-sentinel closure object the reverse
+  bridge (`word.native(vm2)` and PyMakeDynCall) already dispatches on, so a
+  lambda stored into a Callable field runs exactly like a captured nested
+  `def` (uforth: `define_word("STATE", native=lambda vm: vm.push(A))`).
+  The body is re-tokenized by pyeval at build time, so the text below is a
+  space-joined reconstruction from the token span — exotic tokens error
+  honestly rather than desugaring wrong. }
+
+{ Text of one body token for that reconstruction. }
+function PyLambdaTokText(i: Integer): AnsiString;
+begin
+  case Tokens[i].Kind of
+    tkIdent:   Result := GetTokenStr(i);
+    tkInteger: Result := PyIntLiteralText(Tokens[i].IVal);
+    tkString:  Result := '"' + GetTokenStr(i) + '"';
+    tkDot:     Result := '.';
+    tkComma:   Result := ',';
+    tkLParen:  Result := '(';
+    tkRParen:  Result := ')';
+    tkLBrack:  Result := '[';
+    tkRBrack:  Result := ']';
+    tkColon:   Result := ':';
+    tkPlus:    Result := '+';
+    tkMinus:   Result := '-';
+    tkStar:    Result := '*';
+    tkSlash:   Result := '/';
+    tkDiv:     Result := '//';
+    tkMod:     Result := '%';
+    tkAmp:     Result := '&';
+    tkPipe:    Result := '|';
+    tkXor:     Result := '^';
+    tkShl:     Result := '<<';
+    tkShr:     Result := '>>';
+    tkLogNot:  Result := '~';
+    tkEq:      Result := '==';
+    tkNeq:     Result := '!=';
+    tkLt:      Result := '<';
+    tkLe:      Result := '<=';
+    tkGt:      Result := '>';
+    tkGe:      Result := '>=';
+    tkAnd:     Result := 'and';
+    tkOr:      Result := 'or';
+    tkNot:     Result := 'not';
+    tkIn:      Result := 'in';
+    tkIf:      Result := 'if';
+    tkElse:    Result := 'else';
+    tkNil:     Result := 'None';
+    tkTrue:    Result := 'True';
+    tkFalse:   Result := 'False';
+    { statement-level tokens, for whole nested-def bodies (DOES> closures) }
+    tkAssign:  Result := '=';
+    tkExit:    Result := 'return';
+    tkWhile:   Result := 'while';
+    tkBreak:   Result := 'break';
+    tkRaise:   Result := 'raise';
+    tkwriteln: Result := 'print';
+    tkPlusEq:  Result := '+=';
+    tkMinusEq: Result := '-=';
+    tkStarEq:  Result := '*=';
+    tkSlashEq: Result := '/=';
+    tkModEq:   Result := '%=';
+    tkAmpEq:   Result := '&=';
+    tkPipeEq:  Result := '|=';
+    tkXorEq:   Result := '^=';
+  else
+    Error('Nil Python: this token is not supported in a lambda/closure body yet');
+    Result := '';
+  end;
+end;
+
 procedure PyParseLambdaStub;
-var depth: Integer;
+var depth, bStart, bEnd, i, j, pi, capPi, symIdx: Integer;
+    params, src, nm: AnsiString;
+    pNames: array[0..7] of AnsiString;
+    nParams: Integer;
+    node, argA, argB, capNode: Integer;
+    dup: Boolean;
 begin
   Next;                                { consume `lambda` }
-  { parameters up to ':' }
-  while (CurTok.Kind <> tkColon) and (CurTok.Kind <> tkEOF) do Next;
+  params := '';
+  nParams := 0;
+  while (CurTok.Kind <> tkColon) and (CurTok.Kind <> tkEOF) do
+  begin
+    if CurTok.Kind = tkIdent then
+    begin
+      if nParams > High(pNames) then Error('Nil Python: too many lambda parameters');
+      pNames[nParams] := LowerCase(CurTok.SVal);
+      Inc(nParams);
+      if params <> '' then params := params + ',';
+      params := params + CurTok.SVal;
+    end;
+    Next;
+  end;
   Expect(tkColon, ':');
-  { skip the body expression, balanced, up to a depth-0 ',' or ')' or line end }
+  { the body expression's token span, balanced to a depth-0 ',' ')' or line end }
+  bStart := TokPos - 1;
   depth := 0;
   while CurTok.Kind <> tkEOF do
   begin
@@ -2521,8 +2608,274 @@ begin
     else if (depth = 0) and (CurTok.Kind in [tkComma, tkNewline, tkDedent]) then Break;
     Next;
   end;
-  CurASTNode := PyMakeNone;
-  LastExprTk := tyVariant;
+  bEnd := TokPos - 1;
+
+  pi := FindProc('pyclosure_src_new');
+  capPi := FindProc('pyclosure_src_cap');
+  if (pi < 0) or (capPi < 0) then
+  begin
+    { pyeval not loaded: keep the old degrade-to-None behaviour }
+    CurASTNode := PyMakeNone;
+    LastExprTk := tyVariant;
+    Exit;
+  end;
+
+  src := 'return';
+  for i := bStart to bEnd - 1 do
+    src := src + ' ' + PyLambdaTokText(i);
+
+  { pyclosure_src_new(params, src) }
+  argA := AllocNode(AN_ARG);
+  argB := AllocNode(AN_STR_LIT);
+  ASTSOffset[argB] := PyStoredName(params); ASTSLen[argB] := Length(params);
+  ASTTk[argB] := Ord(tyString);
+  ASTLeft[argA] := argB;
+  argB := AllocNode(AN_ARG);
+  node := AllocNode(AN_STR_LIT);
+  ASTSOffset[node] := PyStoredName(src); ASTSLen[node] := Length(src);
+  ASTTk[node] := Ord(tyString);
+  ASTLeft[argB] := node;
+  ASTRight[argA] := argB;
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := pi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+
+  { capture each free name that resolves to a value symbol: chained
+    pyclosure_src_cap(obj, 'name', name). Idents after a '.' are members;
+    the lambda's own params bind at invoke time. }
+  for i := bStart to bEnd - 1 do
+    if (Tokens[i].Kind = tkIdent) and
+       ((i = bStart) or (Tokens[i - 1].Kind <> tkDot)) then
+    begin
+      nm := LowerCase(GetTokenStr(i));
+      dup := False;
+      for j := 0 to nParams - 1 do
+        if pNames[j] = nm then dup := True;
+      { a name captured once is enough (values, not references) }
+      for j := bStart to i - 1 do
+        if (Tokens[j].Kind = tkIdent) and (LowerCase(GetTokenStr(j)) = nm) and
+           ((j = bStart) or (Tokens[j - 1].Kind <> tkDot)) then dup := True;
+      if dup then Continue;
+      symIdx := PyProgSym(GetTokenStr(i));
+      if symIdx < 0 then Continue;
+      if not (Syms[symIdx].Kind in [skGlobal, skLocal, skParam]) then Continue;
+      if Syms[symIdx].IsArray or (Syms[symIdx].TypeKind = tyRecord) then Continue;
+      argA := AllocNode(AN_ARG);
+      ASTLeft[argA] := node;                       { the closure obj so far }
+      argB := AllocNode(AN_ARG);
+      capNode := AllocNode(AN_STR_LIT);
+      ASTSOffset[capNode] := PyStoredName(GetTokenStr(i));
+      ASTSLen[capNode] := Length(GetTokenStr(i));
+      ASTTk[capNode] := Ord(tyString);
+      ASTLeft[argB] := capNode;
+      ASTRight[argA] := argB;
+      capNode := AllocNode(AN_ARG);
+      ASTLeft[capNode] := PyMakeIdent(symIdx);
+      ASTRight[argB] := capNode;
+      node := AllocNode(AN_CALL);
+      ASTIVal[node] := capPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+    end;
+
+  CurASTNode := node;
+  LastExprTk := tyPointer;
+end;
+
+{ A NESTED def taken AS A VALUE whose meaning depends on values live RIGHT NOW —
+  default-arg expressions (`def does_runtime(vm2, _addr=data_addr): ...`, the
+  uforth DOES> idiom: defaults bind per-invocation of the enclosing word) or
+  scanned captures. A plain proc ADDRESS loses those bindings, so build a pyeval
+  closure instead: pyclosure_src_new(<non-default params>, <body source>) with
+  each defaulted param and each captured enclosing name bound as a build-time
+  value cap. Returns the AST node, or -1 when the plain address is still right
+  (no defaults, no captures — the fast path stays untouched). }
+function PyNestedDefClosureValue(procIdx: Integer): Integer;
+var defTok, i, j, k, depth, bodyInd, bodyEnd, savedTok: Integer;
+    params, src, nm: AnsiString;
+    pNames: array[0..15] of AnsiString;
+    pDefS, pDefE: array[0..15] of Integer;
+    nP: Integer;
+    node, argA, argB, capNode, pi, capPi, symIdx: Integer;
+    pendingNL, dup: Boolean;
+begin
+  Result := -1;
+  if (procIdx < 0) or (PyDefTokOf[procIdx] = 0) then Exit;
+  defTok := PyDefTokOf[procIdx] - 1;
+  pi := FindProc('pyclosure_src_new');
+  capPi := FindProc('pyclosure_src_cap');
+  if (pi < 0) or (capPi < 0) then Exit;
+
+  { scan the header straight off the tokens: def NAME ( params ) [-> ann] : }
+  i := defTok;
+  if Tokens[i].Kind <> tkFunction then Exit;
+  Inc(i);                         { name }
+  Inc(i);
+  if Tokens[i].Kind <> tkLParen then Exit;
+  Inc(i);
+  nP := 0;
+  depth := 1;
+  while (i < TokCount) and (depth > 0) do
+  begin
+    if Tokens[i].Kind = tkLParen then Inc(depth)
+    else if Tokens[i].Kind = tkRParen then
+    begin
+      Dec(depth);
+      if depth = 0 then Break;
+    end
+    else if (depth = 1) and (Tokens[i].Kind = tkIdent) and
+            ((Tokens[i - 1].Kind = tkLParen) or (Tokens[i - 1].Kind = tkComma)) then
+    begin
+      if nP > High(pNames) then Exit;
+      pNames[nP] := GetTokenStr(i);
+      pDefS[nP] := -1; pDefE[nP] := -1;
+      Inc(nP);
+    end
+    else if (depth = 1) and (Tokens[i].Kind = tkAssign) and (nP > 0) then
+    begin
+      { default expression span, balanced to the depth-1 ',' or ')' }
+      pDefS[nP - 1] := i + 1;
+      j := i + 1; k := 0;
+      while j < TokCount do
+      begin
+        if Tokens[j].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(k)
+        else if Tokens[j].Kind in [tkRParen, tkRBrack, tkEnd] then
+        begin
+          if k = 0 then Break;
+          Dec(k);
+        end
+        else if (k = 0) and (Tokens[j].Kind = tkComma) then Break;
+        Inc(j);
+      end;
+      pDefE[nP - 1] := j;
+      i := j - 1;
+    end;
+    Inc(i);
+  end;
+
+  { Closure-ize only when DEFAULT-ARG expressions exist (the DOES> idiom binds
+    per-invocation values through them). A def with only scanned captures keeps
+    the plain-address lowering — the capture scan over-collects (it sees
+    dot-members too), and call sites already append capture actuals. }
+  dup := False;
+  for j := 0 to nP - 1 do
+    if pDefS[j] >= 0 then dup := True;
+  if not dup then Exit;
+
+  { colon, then the INDENT that opens the body }
+  while (i < TokCount) and (Tokens[i].Kind <> tkColon) do Inc(i);
+  bodyInd := i + 1;
+  while (bodyInd < TokCount) and (Tokens[bodyInd].Kind = tkNewline) do Inc(bodyInd);
+  if (bodyInd >= TokCount) or (Tokens[bodyInd].Kind <> tkIndent) then Exit;
+  bodyEnd := PyFindBodyEnd(bodyInd);
+
+  { Body SOURCE reconstruction: a FLAT statement stream at indent 0 (the
+    src-closure invoke loop runs it that way); nested blocks keep their
+    RELATIVE indentation. }
+  src := '';
+  depth := 1;
+  pendingNL := False;
+  i := bodyInd + 1;
+  while i < bodyEnd do
+  begin
+    case Tokens[i].Kind of
+      tkNewline: pendingNL := True;
+      tkIndent:  Inc(depth);
+      tkDedent:
+      begin
+        Dec(depth);
+        { the DEDENT matching the opening INDENT closes the def's own body —
+          whatever bodyEnd says, nothing past it belongs to this def }
+        if depth = 0 then Break;
+      end;
+    else
+      begin
+        if pendingNL then
+        begin
+          src := src + Chr(10);
+          for j := 2 to depth do src := src + '  ';
+          pendingNL := False;
+        end
+        else if src <> '' then
+          src := src + ' ';
+        src := src + PyLambdaTokText(i);
+      end;
+    end;
+    Inc(i);
+  end;
+  src := src + Chr(10);
+
+  { params string = the NON-defaulted params; defaulted ones bind as caps }
+  params := '';
+  for j := 0 to nP - 1 do
+    if pDefS[j] < 0 then
+    begin
+      if params <> '' then params := params + ',';
+      params := params + pNames[j];
+    end;
+
+  argA := AllocNode(AN_ARG);
+  argB := AllocNode(AN_STR_LIT);
+  ASTSOffset[argB] := PyStoredName(params); ASTSLen[argB] := Length(params);
+  ASTTk[argB] := Ord(tyString);
+  ASTLeft[argA] := argB;
+  argB := AllocNode(AN_ARG);
+  node := AllocNode(AN_STR_LIT);
+  ASTSOffset[node] := PyStoredName(src); ASTSLen[node] := Length(src);
+  ASTTk[node] := Ord(tyString);
+  ASTLeft[argB] := node;
+  ASTRight[argA] := argB;
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := pi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+
+  { bind each DEFAULTED param: re-parse its default expression HERE, in the
+    scope where the def statement stands, so `_addr=data_addr` reads the
+    enclosing local's current value — Python's default-at-def-time rule }
+  for j := 0 to nP - 1 do
+    if pDefS[j] >= 0 then
+    begin
+      savedTok := TokPos - 1;
+      TokPos := pDefS[j];
+      Next;
+      PyParseBoolExpr;
+      capNode := CurASTNode;
+      TokPos := savedTok;
+      Next;
+      argA := AllocNode(AN_ARG);
+      ASTLeft[argA] := node;
+      argB := AllocNode(AN_ARG);
+      k := AllocNode(AN_STR_LIT);
+      ASTSOffset[k] := PyStoredName(pNames[j]); ASTSLen[k] := Length(pNames[j]);
+      ASTTk[k] := Ord(tyString);
+      ASTLeft[argB] := k;
+      ASTRight[argA] := argB;
+      k := AllocNode(AN_ARG);
+      ASTLeft[k] := capNode;
+      ASTRight[argB] := k;
+      node := AllocNode(AN_CALL);
+      ASTIVal[node] := capPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+    end;
+
+  { bind each scanned CAPTURE (an enclosing local the body reads) by value }
+  for j := 0 to PyCapCount[procIdx] - 1 do
+  begin
+    nm := PyCapName[procIdx * PY_MAX_CAPS + j];
+    symIdx := PyProgSym(nm);
+    if symIdx < 0 then Continue;
+    if not (Syms[symIdx].Kind in [skGlobal, skLocal, skParam]) then Continue;
+    argA := AllocNode(AN_ARG);
+    ASTLeft[argA] := node;
+    argB := AllocNode(AN_ARG);
+    capNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[capNode] := PyStoredName(nm); ASTSLen[capNode] := Length(nm);
+    ASTTk[capNode] := Ord(tyString);
+    ASTLeft[argB] := capNode;
+    ASTRight[argA] := argB;
+    capNode := AllocNode(AN_ARG);
+    ASTLeft[capNode] := PyMakeIdent(symIdx);
+    ASTRight[argB] := capNode;
+    node := AllocNode(AN_CALL);
+    ASTIVal[node] := capPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+  end;
+
+  Result := node;
 end;
 
 { The object as a POINTER for the dynamic-attribute store: a variant is unboxed
@@ -3750,6 +4103,40 @@ function PyListRepeatPair(a, b: Integer): Boolean;
 begin
   Result := (PyNodeIsPyList(a) and TypeIsOrdinal(IntToTypeKind(ASTTk[b]))) or
             (PyNodeIsPyList(b) and TypeIsOrdinal(IntToTypeKind(ASTTk[a])));
+end;
+
+function PyNodeIsPyBytes(n: Integer): Boolean;
+var byCi: Integer;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
+  byCi := FindUClass('TPyBytes');
+  Result := (byCi >= 0) and (ResolveNodeRec(n) = REC_UCLASS_BASE + byCi);
+end;
+
+{ `bytes([...]) * n` / `n * b` — Python bytes repetition (uforth's FILL:
+  `bytes([ch]) * u`). Same shape as the list-repeat pair. }
+function PyBytesRepeatPair(a, b: Integer): Boolean;
+begin
+  Result := (PyNodeIsPyBytes(a) and TypeIsOrdinal(IntToTypeKind(ASTTk[b]))) or
+            (PyNodeIsPyBytes(b) and TypeIsOrdinal(IntToTypeKind(ASTTk[a])));
+end;
+
+function PyMakeBytesRepeat(a, b: Integer): Integer;
+var byNode, cntNode, procIdx, arg0, arg1: Integer;
+begin
+  if PyNodeIsPyBytes(a) then begin byNode := a; cntNode := b; end
+  else begin byNode := b; cntNode := a; end;
+  procIdx := FindProc('pybytes_repeat');
+  if procIdx < 0 then Error('Nil Python: pylib (pybytes_repeat) not loaded');
+  arg0 := AllocNode(AN_ARG); ASTLeft[arg0] := byNode;
+  arg1 := AllocNode(AN_ARG); ASTLeft[arg1] := cntNode;
+  ASTRight[arg0] := arg1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyClass);
+  ASTLeft[Result] := arg0;
 end;
 
 { Build pylist_repeat(list, count) for `xs * n` / `n * xs`. }
@@ -5268,6 +5655,9 @@ begin
       end;
     end;
   end;
+  { record the def's token position: a nested def taken AS A VALUE re-lowers
+    from this span as a value-binding closure (see PyNestedDefClosureValue) }
+  PyDefTokOf[procIdx] := defTok + 1;
   { skip the body: PyParseDefHeader stopped on the INDENT that opens it }
   { land ON the DEDENT that closes the nested body, then consume it, so the
     enclosing block resumes at the statement after the def }

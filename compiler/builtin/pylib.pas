@@ -266,6 +266,7 @@ function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; over
 function bytearray: TPyBytes; overload;   { bytearray() — an EMPTY buffer }
 function bytearray(n: Integer): TPyBytes; overload;
 function bytes(b: TPyBytes): TPyBytes;
+function pybytes_from_list(l: TPyList): TPyBytes;
 function bytes(const s: AnsiString): TPyBytes; overload;
 function pybytes_find(b: TPyBytes; sub: TPyBytes; start: Integer): Integer;
 function len(b: TPyBytes): Integer; overload;
@@ -490,6 +491,7 @@ function bool(d: Double): Boolean; overload;
 function bool(const s: AnsiString): Boolean; overload;
 function bool(l: TPyList): Boolean; overload;
 function pylist_repeat(l: TPyList; n: Int64): TPyList;
+function pybytes_repeat(b: TPyBytes; n: Int64): TPyBytes;
 { `s.rjust(w)` / `s.rjust(w, fill)` — right-align in a field of w characters.
   Python returns the string UNCHANGED when it is already at least that long
   (it never truncates), and the fill defaults to a space. }
@@ -1381,7 +1383,25 @@ var
   a, b: PChar;
 begin
   Result := False;
+  { The int-family tags (VT_INT/VT_INT64/VT_BOOL) are ONE Python number and
+    must compare CROSS-TAG: a masked cell comes back VT_INT64 while a
+    define-time key is VT_INT, and the old tag-sensitive compare made
+    xt_table.get(xt) miss its own key (uforth EXECUTE). Python agrees:
+    True == 1 == 1 regardless of provenance. }
+  if ((p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4)) and
+     ((q^.VType = 1) or (q^.VType = 2) or (q^.VType = 4)) then
+  begin
+    Result := p^.Payload = q^.Payload;
+    Exit;
+  end;
   if p^.VType <> q^.VType then Exit;
+  if p^.VType = 8193 then
+  begin
+    { VT_PROMO_INT64: payload is the exact decimal in a managed string —
+      compare CONTENT, not the two string refs }
+    Result := PPyAnsiString(@p^.Payload)^ = PPyAnsiString(@q^.Payload)^;
+    Exit;
+  end;
   if p^.VType = 6 then
   begin
     a := PChar(p^.Payload);
@@ -3147,6 +3167,13 @@ end;
 function bytes(b: TPyBytes): TPyBytes;
 var k: Integer; src, dst: PByte;
 begin
+  { A LIST argument binds to this overload too (class-arg overload resolution
+    is not identity-precise): hand it to the from-list builder. }
+  if TObject(b) is TPyList then
+  begin
+    Result := pybytes_from_list(TPyList(TObject(b)));
+    Exit;
+  end;
   { bytes(x) is an immutable COPY in Python; immutability is not modelled, but
     the copy is, because uforth uses it to snapshot memory }
   Result := TPyBytes.Create(b.FLen);
@@ -3155,6 +3182,22 @@ begin
     src := PByte(NativeInt(b.FData) + k);
     dst := PByte(NativeInt(Result.FData) + k);
     dst^ := src^;
+  end;
+end;
+
+{ bytes([32, 33]) — from a LIST of small ints. Called from the bytes() copy
+  overload via a runtime `is` check: overload resolution binds ANY class arg
+  to the first class-typed param, so a list arg arrived AS the TPyBytes param
+  and the variant slots' TAG bytes were read as data (uforth FILL wrote tag
+  bytes into memory). }
+function pybytes_from_list(l: TPyList): TPyBytes;
+var k: Integer; p: PByte;
+begin
+  Result := TPyBytes.Create(l.count);
+  for k := 0 to l.count - 1 do
+  begin
+    p := PByte(NativeInt(Result.FData) + k);
+    p^ := Byte(pyvar_to_int(l.at(k)) and $FF);
   end;
 end;
 
@@ -3682,6 +3725,21 @@ begin
     for k := 1 to n do
       for i := 0 to l.count - 1 do
         r.append(l.at(i));
+  Result := r;
+end;
+
+{ `b * n` — Python bytes repetition (uforth FILL's `bytes([ch]) * u`).
+  TPyBytes deliberately has no .append (name-collision note at the class), so
+  the result is sized up front and filled with put. }
+function pybytes_repeat(b: TPyBytes; n: Int64): TPyBytes;
+var r: TPyBytes; i, k, w: Integer;
+begin
+  if (b = nil) or (n < 0) then n := 0;
+  if b = nil then w := 0 else w := b.count;
+  r := TPyBytes.Create(w * n);
+  for k := 0 to n - 1 do
+    for i := 0 to w - 1 do
+      r.put(k * w + i, b.at(i));
   Result := r;
 end;
 

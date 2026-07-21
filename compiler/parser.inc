@@ -718,7 +718,8 @@ function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; 
 function PyMakeDynCall(baseNode: Integer): Integer; forward; { Nil Python: call a callable stored in a variant (pyparser.inc) }
 function PyWrapClosureFieldCall(fieldNode, argExpr, defCall: Integer): Integer; forward; { Nil Python: a Callable field may hold a pyeval closure (pyparser.inc) }
 function PyMakeBoundMethod(mpi, selfNode: Integer): Integer; forward; { Nil Python: `obj.method` (no call) -> a bound-method value (pyparser.inc) }
-procedure PyParseLambdaStub; forward; { Nil Python: consume a lambda -> None (pyparser.inc) }
+procedure PyParseLambdaStub; forward; { Nil Python: lambda -> pyeval closure value (pyparser.inc) }
+function PyNestedDefClosureValue(procIdx: Integer): Integer; forward; { Nil Python: nested-def-as-value with live bindings -> closure, or -1 (pyparser.inc) }
 function PyIsIdent(const s: AnsiString): Boolean; forward; { (pyparser.inc) }
 function PyMakeVariantGetItem(baseNode, idxNode: Integer): Integer; forward; { Nil Python v[key] on a variant (pyparser.inc) }
 function PyMakeObjPtr(baseNode: Integer): Integer; forward; { Nil Python: object as a pointer for the dynattr store (pyparser.inc) }
@@ -730,6 +731,8 @@ function PyMakeStrIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Pyt
 function PyQualifyNested(const name: AnsiString): AnsiString; forward; { Nil Python nested-def name lookup (pyparser.inc) }
 function PyListRepeatPair(a, b: Integer): Boolean; forward;              { Nil Python `xs * n` (pyparser.inc) }
 function PyMakeListRepeat(a, b: Integer): Integer; forward;              { Nil Python `xs * n` (pyparser.inc) }
+function PyBytesRepeatPair(a, b: Integer): Boolean; forward;             { Nil Python `bytes * n` (pyparser.inc) }
+function PyMakeBytesRepeat(a, b: Integer): Integer; forward;             { Nil Python `bytes * n` (pyparser.inc) }
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
 function PyIsSliceBase(n: Integer): Boolean; forward; { Nil Python: may this value be sliced? (pyparser.inc) }
@@ -8446,12 +8449,21 @@ begin
          (Tokens[TokPos].Kind <> tkLParen) and (FindSym(name) < 0) and
          (FindProc(PyQualifyNested(name)) >= 0) then
       begin
-        node := AllocNode(AN_PROCADDR);
-        ASTIVal[node] := FindProc(PyQualifyNested(name));
-        ASTTk[node] := Ord(tyPointer);
+        idx := FindProc(PyQualifyNested(name));
+        Next;
+        { A nested def whose meaning depends on values live NOW (default-arg
+          expressions, captured enclosing locals) cannot travel as a bare
+          address — bind those values into a closure (uforth's DOES>).
+          -1 = nothing to bind, the plain address stays. }
+        node := PyNestedDefClosureValue(idx);
+        if node < 0 then
+        begin
+          node := AllocNode(AN_PROCADDR);
+          ASTIVal[node] := idx;
+          ASTTk[node] := Ord(tyPointer);
+        end;
         CurASTNode := node;
         LastExprTk := tyPointer;
-        Next;
         Exit;
       end;
 
@@ -8535,12 +8547,16 @@ begin
         end
         else
         begin
-          ASTIVal[node] := -200; ASTTk[node] := Ord(tyInteger);
+          { tyInt64, not tyInteger: NilPy's int is a 64-bit cell. The -200
+            result is a full 64-bit value; typing it 32-bit made an inferred
+            local truncate it at the store (`start = int(vm.pop())` of
+            maxint read back as -1 — uforth's DO index). }
+          ASTIVal[node] := -200; ASTTk[node] := Ord(tyInt64);
         end;
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
         ASTLeft[node] := argSeq;
         CurASTNode := node;
-        LastExprTk := tyInteger;
+        LastExprTk := tyInt64;
         Exit;
       end
       else if isNilPy and ((name = 'hasattr') or (name = 'getattr')) then
@@ -11525,6 +11541,13 @@ begin
     else if PyExprMode and (op = tkStar) and PyListRepeatPair(left, right) then
     begin
       node := PyMakeListRepeat(left, right);
+      CurASTNode := node;
+      continue;
+    end
+    else if PyExprMode and (op = tkStar) and PyBytesRepeatPair(left, right) then
+    begin
+      { `bytes([ch]) * u` — bytes repetition (uforth FILL) }
+      node := PyMakeBytesRepeat(left, right);
       CurASTNode := node;
       continue;
     end

@@ -1499,6 +1499,11 @@ var
     here, so passing the value at each call site is exactly Python's answer for
     reads. Writes need `nonlocal` and are not this. }
   PyCapCount : array[0..MAX_PROCS-1] of Integer;
+  { 1 + token index of a NESTED def's `def` token, 0 = none. Recorded so the
+    def taken AS A VALUE (`target.native = does_runtime`) can be re-lowered as
+    a pyeval closure binding its default-arg/captured values at that point
+    (uforth's DOES>). }
+  PyDefTokOf : array[0..MAX_PROCS-1] of Integer;
   PyCapName  : array[0..MAX_PROCS*PY_MAX_CAPS-1] of AnsiString;
 
   { Candidate list built by MatchProcCall when overload resolution fails, so the

@@ -2059,6 +2059,23 @@ begin
     Result := IRLowerVariantAsScalar(argAST, Procs[cpi].Params[pathIdx].TypeKind);
     Exit;
   end;
+  { NilPy: a VARIANT argument to a CLASS-typed parameter unboxes via pyvarobj
+    (the VT_OBJECT payload) — the raw lowering passed the 16-byte variant's
+    ADDRESS as the object pointer, and the callee dereferenced the TAG word
+    (uforth EXECUTE: run_forth_word(word) with word straight from
+    xt_table.get, a variant). Mirrors the scalar unbox block above. }
+  if PyProgramMode and (cpi >= 0) and (pathIdx >= 0) and
+     (pathIdx < Procs[cpi].ParamCount) and
+     (IntToTypeKind(ASTTk[argAST]) = tyVariant) and
+     (Procs[cpi].Params[pathIdx].TypeKind = tyClass) and
+     (not Procs[cpi].Params[pathIdx].IsRef) then
+  begin
+    caSlCall := FindProc('pyvarobj');
+    if caSlCall < 0 then Error('variant unbox: pyvarobj builtin not loaded');
+    caArg1 := IRAppend(IR_ARG, IRVariantAddr(argAST), -1, -1, 0, Ord(tyVariant));
+    Result := IRAppendCall(caSlCall, caArg1, -1, Ord(tyPointer));
+    Exit;
+  end;
   { PROMO argument to a concrete int parameter: same mod-2^64 narrowing as the
     assignment path — the raw lowering would pass the slot ADDRESS. }
   if (cpi >= 0) and (pathIdx >= 0) and

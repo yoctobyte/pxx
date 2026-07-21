@@ -71,6 +71,15 @@ function PyClosureCall1(const clv: Variant; const a0: Variant): Variant;
 function pyclosure_is(p: Pointer): Boolean;
 function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;
 
+{ Build a closure from raw SOURCE text — the compiled frontend's lowering of a
+  Python `lambda`: `lambda vm: vm.push(A)` becomes
+  pyclosure_src_new('vm', 'return vm.push(A)') with each free name's VALUE
+  captured at build time via pyclosure_src_cap (returns the object, so the
+  frontend can chain caps as one expression). The result is the same
+  magic-sentinel closure object Word.native already dispatches on. }
+function pyclosure_src_new(const params, src: AnsiString): Pointer;
+function pyclosure_src_cap(obj: Pointer; const name: AnsiString; const v: Variant): Pointer;
+
 implementation
 
 const
@@ -669,11 +678,38 @@ var
   kind: Int64;
   p: Pointer;
   r: PPyRec;
+  mi: PMethInfo;
+  noArgs: TPyList;
+  gname: AnsiString;
 begin
   cls := GetInstanceRTTI(obj);
   if cls = nil then begin writeln('pyeval: no RTTI for attribute ', name); Halt(1); end;
   p := GetFieldPtr(obj, cls, name, kind);
-  if p = nil then begin res := pydynattr_get(obj, name); Exit; end;
+  if p = nil then
+  begin
+    { A @property compiles to a METHOD, so an attribute read that misses the
+      fields must invoke a 0-arg method of that name (uforth's `vm.base` — a
+      miss here read the dynattr store instead, yielded None, and `ud % base`
+      divided by zero). Arity 1 = self only, the getter shape; anything wider
+      is a real method and stays a plain (dynattr) miss so `vm.push` as a
+      value is not suddenly a call. }
+    gname := '__prop_get_' + name;      { the @property getter's mangled name }
+    mi := PyFindMethCI(cls, gname);
+    if mi = nil then
+    begin
+      gname := name;
+      mi := PyFindMethCI(cls, name);
+    end;
+    if (mi <> nil) and (mi^.Arity = 1) then
+    begin
+      noArgs := TPyList.Create;
+      PyHostCall(obj, gname, noArgs, res);
+      noArgs.Free;
+      Exit;
+    end;
+    res := pydynattr_get(obj, name);
+    Exit;
+  end;
   r := PPyRec(@res);
   case kind of
     1: res := pyvar_of_int(PLongInt(p)^);        { tyInteger — 4-byte }
@@ -724,7 +760,20 @@ end;
 procedure PySubscriptGet(const container: Variant; const index: Variant;
                          var res: Variant);
 var o: TObject; li: TPyList; by: TPyBytes; di: TPyDict; i, n: Int64;
+    s: AnsiString;
 begin
+  if PPyRec(@container)^.VType = 6 then
+  begin
+    { s[i] — a one-character string, Python indexing (the pictured-numeric
+      digit table `'0123456789...'[digit]` comes through here) }
+    s := PPyAnsiString(@PPyRec(@container)^.Payload)^;
+    n := Length(s); i := pyvar_to_int(index);
+    if i < 0 then i := i + n;
+    if (i < 0) or (i >= n) then
+    begin writeln('pyeval: string index out of range'); Halt(1); end;
+    res := MakeStr(s[i + 1]);
+    Exit;
+  end;
   if PPyRec(@container)^.VType <> 7 then
   begin writeln('pyeval: cannot subscript a non-container'); Halt(1); end;
   o := TObject(Pointer(PPyRec(@container)^.Payload));
@@ -1373,6 +1422,10 @@ type
     CapNames: array of AnsiString;
     CapVals:  array of Variant;
     CapN:    Integer;
+    { True for a closure built from raw SOURCE (pyclosure_src_new): its body is
+      a FLAT statement stream at indent 0, run by a top-level loop rather than
+      ExecSuite's after-a-colon suite grammar. }
+    FlatSrc: Boolean;
   end;
   { A closure passed to a Callable/Pointer host param (uforth's
     `define_word(name, native=_w)`) is stored in the class's Pointer-typed field
@@ -1400,6 +1453,62 @@ begin
   o^.Magic := @PyClosureMagicMarker;
   o^.Cidx  := cidx;
   PyMakeClosureObj := Pointer(o);
+end;
+
+{ Closure from raw SOURCE (the compiled `lambda` lowering). Tokenizes the body
+  text into the closure's own snapshot buffer — the live interpreter state
+  (token buffer, cursor, source scanner) is saved and restored, so this is safe
+  to call from inside a running EvalPyStmts. BodyPos 0 = the start of the flat
+  `return <expr>` statement; ExecSuite's inline form runs it. }
+function pyclosure_src_new(const params, src: AnsiString): Pointer;
+var sKinds: array of Integer; sTexts: array of AnsiString;
+    sInts: array of Int64; sFloats: array of Double;
+    sTkN, sCur, sPos, sSLen: Integer; sSrc: AnsiString;
+    c, i: Integer;
+begin
+  sKinds := TkKind; sTexts := TkText; sInts := TkInt; sFloats := TkFloat;
+  sTkN := TkN; sCur := Cur; sSrc := Src; sPos := Pos; sSLen := SLen;
+  Tokenize(src);
+  if ClosureN >= Length(Closures) then
+  begin
+    if Length(Closures) = 0 then SetLength(Closures, 8)
+    else SetLength(Closures, Length(Closures) * 2);
+  end;
+  c := ClosureN; ClosureN := ClosureN + 1;
+  SetLength(Closures[c].Kinds, TkN);
+  SetLength(Closures[c].Texts, TkN);
+  SetLength(Closures[c].Ints, TkN);
+  SetLength(Closures[c].Floats, TkN);
+  for i := 0 to TkN - 1 do
+  begin
+    Closures[c].Kinds[i]  := TkKind[i];
+    Closures[c].Texts[i]  := TkText[i];
+    Closures[c].Ints[i]   := TkInt[i];
+    Closures[c].Floats[i] := TkFloat[i];
+  end;
+  Closures[c].NTok := TkN;
+  Closures[c].BodyPos := 0;
+  Closures[c].Params := params;
+  SetLength(Closures[c].CapNames, 0);
+  SetLength(Closures[c].CapVals, 0);
+  Closures[c].CapN := 0;
+  Closures[c].FlatSrc := True;
+  TkKind := sKinds; TkText := sTexts; TkInt := sInts; TkFloat := sFloats;
+  TkN := sTkN; Cur := sCur; Src := sSrc; Pos := sPos; SLen := sSLen;
+  pyclosure_src_new := PyMakeClosureObj(c);
+end;
+
+function pyclosure_src_cap(obj: Pointer; const name: AnsiString; const v: Variant): Pointer;
+var c, n: Integer;
+begin
+  c := PClosureObj(obj)^.Cidx;
+  n := Closures[c].CapN;
+  SetLength(Closures[c].CapNames, n + 1);
+  SetLength(Closures[c].CapVals, n + 1);
+  Closures[c].CapNames[n] := name;
+  Closures[c].CapVals[n] := v;
+  Closures[c].CapN := n + 1;
+  pyclosure_src_cap := obj;
 end;
 
 function PyMakeClosure(fnIdx: Integer): Variant;
@@ -1670,7 +1779,10 @@ begin
   begin
     if IsOp('*') then
     begin Advance; ParseUnary(b);
-      if IsIntishV(a) and IsIntishV(b) then begin PyIMul(a, b, t); a := t; end else a := pymul_v(a, b); end
+      { skip-mode: names read as None and pymul_v on a mixed pair raises —
+        same rule as // below }
+      if not Executing then a := MakeNone
+      else if IsIntishV(a) and IsIntishV(b) then begin PyIMul(a, b, t); a := t; end else a := pymul_v(a, b); end
     else if IsOp('//') then
     begin Advance; ParseUnary(b);
       { skipping a not-taken/def-skip branch: names read as None(0), so a real
@@ -1697,10 +1809,15 @@ begin
   begin
     if IsOp('+') then
     begin Advance; ParseMul(b);
-      if IsIntishV(a) and IsIntishV(b) then begin PyIAdd(a, b, t); a := t; end else a := pyadd_v(a, b); end
+      { skip-mode: names read as None, and pyadd_v('...' + None) raises a
+        TypeError out of a branch that is not even taken — the dead
+        `raise E('msg: ' + name)` in uforth's tick. Yield None like //. }
+      if not Executing then a := MakeNone
+      else if IsIntishV(a) and IsIntishV(b) then begin PyIAdd(a, b, t); a := t; end else a := pyadd_v(a, b); end
     else
     begin Advance; ParseMul(b);
-      if IsIntishV(a) and IsIntishV(b) then begin PyISub(a, b, t); a := t; end else a := pysub_v(a, b); end;
+      if not Executing then a := MakeNone
+      else if IsIntishV(a) and IsIntishV(b) then begin PyISub(a, b, t); a := t; end else a := pysub_v(a, b); end;
   end;
   res := a;
 end;
@@ -2098,7 +2215,10 @@ end;
   is captured into signedKw, other keyword args are ignored (e.g. byteorder is
   positional and consumed as an ordinary arg). }
 procedure ParseArgs(args: TPyList; var signedKw: Boolean);
-var v: Variant; kw: AnsiString;
+var v, itv, item: Variant; kw, gname: AnsiString;
+    exprStart, endPos, gi, gn: Integer;
+    gres, glist: TPyList; go: TObject; gby: TPyBytes; gs: AnsiString;
+    gexec: Boolean;
 begin
   signedKw := False;
   ExpectOp('(');
@@ -2117,7 +2237,86 @@ begin
     end
     else
     begin
+      { PROBE pass with Executing off: finds the expression's span end without
+        evaluating (a genexp's item expr mentions the not-yet-bound loop var).
+        Not a genexp -> re-parse for real; genexp -> per-item replays below. }
+      exprStart := Cur;
+      gexec := Executing;
+      Executing := False;
       ParseExpr(v);
+      Executing := gexec;
+      if not IsKw('for') then
+      begin
+        Cur := exprStart;
+        ParseExpr(v);
+      end
+      else
+      begin
+        { GENERATOR EXPRESSION `EXPR for NAME in ITER` — evaluated eagerly to a
+          list (`''.join(chr(vm.memory[a+i]) for i in range(u))`, the corpus's
+          string builders). The item expression's TOKEN SPAN is re-evaluated
+          per element with NAME bound — same replay trick the typing pre-pass
+          uses. No `if` filter and one loop variable: honest errors otherwise. }
+        Advance;
+        if TkKind[Cur] <> PK_NAME then EvalError('genexp: expected a name after for');
+        gname := TkText[Cur]; Advance;
+        if not IsKw('in') then EvalError('genexp: expected in');
+        Advance;
+        ParseExpr(itv);
+        endPos := Cur;
+        if not gexec then
+        begin
+          { skip-mode (a def registration walk): structure parsed, nothing runs }
+          v := MakeNone;
+          args.append(v);
+          if IsOp(',') then Advance
+          else if not IsOp(')') then EvalError('expected , or ) in method call');
+          Continue;
+        end;
+        gres := TPyList.Create;
+        if PPyRec(@itv)^.VType = 6 then
+        begin
+          gs := PPyAnsiString(@PPyRec(@itv)^.Payload)^;
+          for gi := 1 to Length(gs) do
+          begin
+            LclSet(gname, MakeStr(gs[gi]));
+            Cur := exprStart; ParseExpr(item);
+            gres.append(item);
+          end;
+        end
+        else
+        begin
+          go := TObject(Pointer(PPyRec(@itv)^.Payload));
+          if go is TPyList then
+          begin
+            glist := TPyList(go); gn := glist.count;
+            for gi := 0 to gn - 1 do
+            begin
+              LclSet(gname, glist.at(gi));
+              Cur := exprStart; ParseExpr(item);
+              gres.append(item);
+            end;
+          end
+          else if go is TPyBytes then
+          begin
+            gby := TPyBytes(go); gn := gby.count;
+            for gi := 0 to gn - 1 do
+            begin
+              LclSet(gname, pyvar_of_int(gby.at(gi)));
+              Cur := exprStart; ParseExpr(item);
+              gres.append(item);
+            end;
+          end
+          else
+          begin
+            writeln('DBG genexp itv tag=', PPyRec(@itv)^.VType);
+            EvalError('genexp: unsupported iterable');
+          end;
+        end;
+        Cur := endPos;
+        PPyRec(@v)^.VType := 7;
+        PPyRec(@v)^.Payload := Int64(NativeInt(Pointer(gres)));
+      end;
       args.append(v);
     end;
     if IsOp(',') then Advance
@@ -2136,6 +2335,7 @@ var
   args: TPyList;
   o: TObject; li: TPyList; by: TPyBytes;
   s: AnsiString; b2: TPyBytes;
+  i: Integer;
   signedKw: Boolean;
   rvt: Int64;
 begin
@@ -2187,6 +2387,13 @@ begin
       res := pyvar_of_bool(pystr_endswith(s, pystr_of(args.at(0))))
     else if mname = 'find' then
       res := pyvar_of_int(pystr_find(s, pystr_of(args.at(0))))
+    else if mname = 'index' then
+    begin
+      { str.index: find, but a MISS is a ValueError instead of -1 }
+      i := pystr_find(s, pystr_of(args.at(0)));
+      if i < 0 then EvalError('ValueError: substring not found');
+      res := pyvar_of_int(i);
+    end
     else if mname = 'encode' then
     begin
       b2 := pystr_encode(s);
@@ -2743,7 +2950,18 @@ begin
   Executing := True; BreakFlag := False;
   ReturnFlag := False; ReturnValue := MakeNone;
   Cur := Closures[cidx].BodyPos;
-  ExecSuite(True);
+  if Closures[cidx].FlatSrc then
+  begin
+    { source-built closure: flat statements at indent 0 until EOF }
+    SkipSeparators;
+    while (CurKind <> PK_EOF) and not ReturnFlag do
+    begin
+      ExecStatement;
+      SkipSeparators;
+    end;
+  end
+  else
+    ExecSuite(True);
   res := ReturnValue;
 
   { restore caller interpreter state }
