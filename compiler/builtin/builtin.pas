@@ -392,7 +392,10 @@ var
   p: PVariantRecord;
 begin
   p := @v;
-  if p^.VType = 1 then
+  if (p^.VType = 1) or (p^.VType = 2) then
+    { VT_INT and VT_INT64 both hold an integer payload; VariantToInt64 already
+      treats them alike — the str path must too, or a 64-bit-tagged int (e.g. a
+      binop result) formats as the empty string. }
     Result := StrInt(p^.Payload, 0)
   else if p^.VType = 3 then
     Result := FloatToStr(PDouble(@p^.Payload)^)
