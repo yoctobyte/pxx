@@ -1,7 +1,7 @@
 ---
 summary: "UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest"
 type: feature
-prio: 50
+prio: 30
 blocked-by: [feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset]
 ---
 

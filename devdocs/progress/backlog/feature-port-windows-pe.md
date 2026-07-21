@@ -1,7 +1,8 @@
 ---
 summary: "Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine"
 type: feature
-prio: 45
+track: W
+prio: 25
 blocked-by: [feature-port-rtl-over-libc]
 ---
 

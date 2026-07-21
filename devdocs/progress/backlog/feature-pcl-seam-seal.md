@@ -1,7 +1,7 @@
 ---
 summary: "PCL: seal the TWidgetSet seam — route extctrls/dialogs/glarea through the widgetset so ZERO raw gtk_ lives outside gtk3widgets.pas (enabler for any 2nd backend)"
 type: feature
-prio: 45
+prio: 25
 ---
 
 # PCL — seal the leaky TWidgetSet seam

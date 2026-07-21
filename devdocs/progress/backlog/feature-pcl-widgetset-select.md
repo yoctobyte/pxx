@@ -1,7 +1,7 @@
 ---
 summary: "PCL: compile-time widgetset selection (--widgetset=) + sparse widgetset×OS matrix that HARD-FAILS unsupported cells with a clear reason (copy LCL -ws)"
 type: feature
-prio: 40
+prio: 25
 ---
 
 # PCL — compile-time widgetset selection + sparse-matrix hard-fail

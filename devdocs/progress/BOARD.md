@@ -61,7 +61,6 @@ _none_
 | decide-dns-libc-backend-shape | U | 40 | decide | Track U: how should a libc-backed DNS resolver be reached from libc-free static ELF? | — |
 | decide-gpc-as-corpus-target | U | 45 | decide | Track U: reject the GPC corpus wish, or keep it? Two sweeps have called it a rejection candidate. | — |
 | decide-ilja-tui-render-model | U | 45 | decide | Track U: four render/input questions Ilja (TUI IDE face) must answer before any code | — |
-| decide-nilpy-gui-tk-vs-pcl | B | 30 | decide | DECIDE: NilPy `import tk` — thin tk-face over the common PCL core (A) vs keep the real Tcl/Tk embed (B) | — |
 | decide-nilpy-hasattr-per-instance-semantics | U | 35 | decide | decide: should NilPy's hasattr answer per-INSTANCE or per-CLASS? | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
@@ -134,15 +133,16 @@ _none_
 | feature-pasmith-divergence-signature-granularity | T | 35 | feature | pasmith divergence signatures are too coarse: end-of-program divergences all collapse to pxx-vs-fpc_trace-length, so distinct bugs can over-dedup and hide each other | — |
 | feature-pasmith-multi-unit-programs | T | 55 | feature | pasmith: generate multi-UNIT programs — the last structurally unreachable bug class | — |
 | feature-pasmith-qplus-rplus-rungs | T | 30 | feature | pasmith rungs for {$Q+}/{$R+}: generate checked regions + try/except EIntOverflow/ERangeError harnesses, differential vs FPC | — |
-| feature-pcl-cross-platform-gui | B | 50 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
-| feature-pcl-seam-seal | B | 45→50 | feature | PCL: seal the TWidgetSet seam — route extctrls/dialogs/glarea through the widgetset so ZERO raw gtk_ lives outside gtk3widgets.pas (enabler for any 2nd backend) | — |
-| feature-pcl-widgetset-select | B | 40→50 | feature | PCL: compile-time widgetset selection (--widgetset=) + sparse widgetset×OS matrix that HARD-FAILS unsupported cells with a clear reason (copy LCL -ws) | — |
-| feature-pcl-win32-widgetset | B | 40→50 | feature | PCL: native Win32 widgetset — a 2nd TWidgetSet subclass over user32/gdi32, zero-dep (no GTK bundle). Best-effort, UN-GATED (no Windows box, Wine-smoke only) | feature-pcl-seam-seal, feature-port-windows-pe |
+| feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
+| feature-pcl-seam-seal | B | 25→30 | feature | PCL: seal the TWidgetSet seam — route extctrls/dialogs/glarea through the widgetset so ZERO raw gtk_ lives outside gtk3widgets.pas (enabler for any 2nd backend) | — |
+| feature-pcl-tk-windows-compat | B | 25 | feature | NilPy tk on Windows — quarantine the Tcl/Tk-DLL-swarm problem behind a {$ifdef WINDOWS} include in tk.pas; emulate/wrap, stub now fill later. Linux keeps the real embed | feature-port-windows-pe |
+| feature-pcl-widgetset-select | B | 25→30 | feature | PCL: compile-time widgetset selection (--widgetset=) + sparse widgetset×OS matrix that HARD-FAILS unsupported cells with a clear reason (copy LCL -ws) | — |
+| feature-pcl-win32-widgetset | B | 25→30 | feature | PCL: native Win32 widgetset — a 2nd TWidgetSet subclass over user32/gdi32, zero-dep (no GTK bundle). Best-effort, UN-GATED (no Windows box, Wine-smoke only) | feature-pcl-seam-seal, feature-port-windows-pe |
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | — |
 | feature-port-multi-os-abstraction | A | 55 | feature | UMBRELLA: abstract the target-OS axis — FreeBSD (native) + Windows (PE, Wine-tested), phased | feature-port-freebsd-native, feature-port-rtl-over-libc, feature-port-windows-pe |
 | feature-port-openbsd-libc | A | 50 | feature | OpenBSD/amd64 target — route RTL through libc.so; pinsyscalls satisfied by construction | feature-port-rtl-over-libc |
 | feature-port-rtl-over-libc | A | 55 | feature | RTL-over-libc lowering mode — route runtime primitives through a system C library instead of raw syscalls | — |
-| feature-port-windows-pe | A | 45→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
+| feature-port-windows-pe | A | 25→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
 | feature-promo-launch-plan | A | 25 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
 | feature-pyeval-closure-as-native-word | N | 50 | feature | pyeval: a nested `def` passed to a host method, called back later (closure-as-native-word) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-inline-asm-xmm-operands |
@@ -151,7 +151,7 @@ _none_
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 40 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
-| feature-t-windows-wine-harness | T | 45 | feature | Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate | — |
+| feature-t-windows-wine-harness | T | 25 | feature | Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | feature-tls13-from-scratch |
 | feature-toolchain-cli-ux | A | 45 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
@@ -238,7 +238,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (926)
+## done (927)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -716,6 +716,7 @@ _none_
 | decide-nilpy-and-or-return-operand-or-bool | U | 40 | decide | decide: should NilPy's `and` / `or` return an OPERAND, as Python does? | — |
 | decide-nilpy-bigint-vs-64bit-cells | U | 40 | decide | decide: NilPy integer semantics — arbitrary precision vs 64-bit (uforth needs one) | — |
 | decide-nilpy-closure-model | A | 50 | decide |  | — |
+| decide-nilpy-gui-tk-vs-pcl | A | 25 | decide | RESOLVED 2026-07-21: keep the real Tcl/Tk embed on Linux (works); Windows = opt-in tk emulate/wrap via a platform include, later. Follow-up: feature-pcl-tk-windows-compat | — |
 | decide-promoint-rvalue-representation | U | 85 | decide | Promotable int: what IS an rvalue once heap bignums exist? | — |
 | decide-pyeval-bignum-strategy | U | 40 | decide | decide: how should pyeval handle arbitrary-precision (bignum) integers? | — |
 | decide-rtti-none-semantics | A | 40 | decide | decide: `--rtti=none` semantics — what happens to the FUNCTIONAL parts of the RTTI blob? | — |
@@ -2649,9 +2650,7 @@ _none_
 - [p 55] [T] feature-pasmith-multi-unit-programs
 - [p 55] [A] feature-signal-siginfo-ucontext
 - [p 53] [A] feature-threadsafe-heap-optimize
-- [p 50] [B] feature-pcl-seam-seal (unblocks 2)
 - [p 50] [A] bug-cdecl-indirect-over-6-integer-args (unblocks 1)
-- [p 50] [B] feature-pcl-widgetset-select (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [A] bug-parallel-for-captured-boolean-loses-type
 - [p 50] [A] decide-abi-portable-vs-target-split
@@ -2692,7 +2691,6 @@ _none_
 - [p 45] [N] feature-nilpy-none-variant
 - [p 45] [P] feature-pascal-corpus-passrc
 - [p 45] [A] feature-pascal-exitcode-finalization-halt
-- [p 45] [T] feature-t-windows-wine-harness
 - [p 45] [A] feature-toolchain-cli-ux
 - [p 45] [A] feature-writeln-as-library
 - [p 45] [A] feature-xtensa-stack-args-over-6-words
@@ -2718,15 +2716,17 @@ _none_
 - [p 35] [A] feature-nested-routine-fixed-array-capture
 - [p 35] [O] feature-opt-complex-packed-double
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
+- [p 30] [B] feature-pcl-seam-seal (unblocks 2)
+- [p 30] [B] feature-pcl-widgetset-select (unblocks 1)
 - [p 30] [C] bug-c-compound-literal-address-of
 - [p 30] [A] bug-nilpy-bitwise-on-float-variant-truncates
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
-- [p 30] [B] decide-nilpy-gui-tk-vs-pcl
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
 - [p 30] [D] idea-public-status-page
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [C] bug-c-float-literal-subnormal-parses-zero
 - [p 25] [A] feature-promo-launch-plan
+- [p 25] [T] feature-t-windows-wine-harness
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 20] [P] compat-pascal-method-impl-without-declaration
 - [p 20] [B] feature-networking
@@ -2743,8 +2743,8 @@ _none_
 ## Leverage (tickets each one unblocks)
 
 - **3** — feature-port-rtl-over-libc
+- **3** — feature-port-windows-pe
 - **2** — feature-pcl-seam-seal
-- **2** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-cdecl-indirect-over-6-integer-args
 - **1** — decide-dns-libc-backend-shape
