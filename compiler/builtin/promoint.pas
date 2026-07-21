@@ -65,6 +65,11 @@ procedure PXXPromoSubInt(dst, a: Pointer; b: Int64);
 procedure PXXPromoMulInt(dst, a: Pointer; b: Int64);
 procedure PXXPromoDiv(dst, a, b: Pointer);
 procedure PXXPromoMod(dst, a, b: Pointer);
+procedure PXXPromoAnd(dst, a, b: Pointer);
+procedure PXXPromoOr(dst, a, b: Pointer);
+procedure PXXPromoXor(dst, a, b: Pointer);
+procedure PXXPromoShl(dst, a, b: Pointer);
+procedure PXXPromoShr(dst, a, b: Pointer);
 function  PXXPromoCmp(a, b: Pointer): Integer;
 function  PXXPromoToStr(a: Pointer): AnsiString;
 procedure PXXPromoToVariant(dstVar, src: Pointer);
@@ -95,6 +100,7 @@ type
     neg:   Boolean;
     limbs: array of Int64;
   end;
+  TByteDynArray = array of Byte;
 
 procedure BNorm(var a: TBig);
 var n: Integer;
@@ -468,6 +474,139 @@ begin
   end;
   if a.neg then s := '-' + s;
   BToStr := s;
+end;
+
+{ ---- bitwise (Python two's-complement semantics) -----------------------
+
+  Bignums here are sign-magnitude base-1e9, which has no bit view, so a bitwise
+  op converts BOTH operands to a fixed-width two's-complement BYTE array, applies
+  the op byte-wise, and reads the result back as a signed two's-complement value.
+  Python's ints are infinite-width two's complement; a width one byte wider than
+  the larger operand's magnitude reproduces the sign-extension exactly (the extra
+  byte carries the sign bit so `-1 & big` keeps big's high bits). }
+
+{ Bitwise works over fixed byte buffers rather than dynamic arrays: pxx's
+  dynamic-array-return codegen has a history of miscompiles, and the operands
+  here are bounded (uforth's widest is a 128-bit composite), so a fixed cap is
+  both safe and simpler. }
+const PROMO_BITBYTES = 512;   { supports up to a ~4096-bit value }
+type TBitBuf = array[0..PROMO_BITBYTES - 1] of Byte;
+
+{ magnitude of `a` as little-endian base-256 bytes; returns the byte count }
+function BMagToBuf(const a: TBig; var buf: TBitBuf): Integer;
+var cur, q: TBig; rem: Int64; n, i: Integer;
+begin
+  if BIsZero(a) then begin BMagToBuf := 0; Exit; end;
+  cur := a; cur.neg := False;
+  n := 0;
+  while not BIsZero(cur) do
+  begin
+    SetLength(q.limbs, Length(cur.limbs)); q.neg := False;
+    rem := 0;
+    for i := Length(cur.limbs) - 1 downto 0 do
+    begin
+      rem := rem * BIG_BASE + cur.limbs[i];
+      q.limbs[i] := rem div 256;
+      rem := rem mod 256;
+    end;
+    BNorm(q);
+    if n < PROMO_BITBYTES then buf[n] := Byte(rem);
+    Inc(n);
+    cur := q;
+  end;
+  BMagToBuf := n;
+end;
+
+{ signed two's-complement of `a` into `w` bytes of `buf` (w >= mag length + 1) }
+procedure BTwosToBuf(const a: TBig; w: Integer; var buf: TBitBuf);
+var mag: TBitBuf; mn, i, carry, v: Integer;
+begin
+  mn := BMagToBuf(a, mag);
+  for i := 0 to w - 1 do
+    if i < mn then buf[i] := mag[i] else buf[i] := 0;
+  if a.neg then
+  begin
+    carry := 1;
+    for i := 0 to w - 1 do
+    begin
+      v := (buf[i] xor $FF) + carry;
+      buf[i] := Byte(v and $FF);
+      carry := v shr 8;
+    end;
+  end;
+end;
+
+{ read `w` little-endian two's-complement bytes of `buf` as a signed TBig }
+function BFromBuf(const buf: TBitBuf; w: Integer): TBig;
+var mag: TBitBuf; i, carry, v, k: Integer; neg: Boolean; r: TBig;
+begin
+  neg := (w > 0) and ((buf[w - 1] and $80) <> 0);
+  if neg then
+  begin
+    carry := 1;
+    for i := 0 to w - 1 do
+    begin
+      v := (buf[i] xor $FF) + carry;
+      mag[i] := Byte(v and $FF);
+      carry := v shr 8;
+    end;
+  end
+  else
+    for i := 0 to w - 1 do mag[i] := buf[i];
+  SetLength(r.limbs, 0); r.neg := False;
+  for k := w - 1 downto 0 do
+    r := BAddMag(BMulSmall(r, 256), BFromInt(mag[k]));
+  r.neg := neg and not BIsZero(r);
+  BNorm(r);
+  BFromBuf := r;
+end;
+
+{ op: 0=AND 1=OR 2=XOR (Python two's-complement) }
+function BBitwise(const a, b: TBig; op: Integer): TBig;
+var wa, wb, w, i: Integer; ta, tb, tmp: TBitBuf;
+begin
+  wa := BMagToBuf(a, tmp); wb := BMagToBuf(b, tmp);
+  w := wa; if wb > w then w := wb; Inc(w);   { +1 sign byte }
+  if w > PROMO_BITBYTES then w := PROMO_BITBYTES;
+  BTwosToBuf(a, w, ta); BTwosToBuf(b, w, tb);
+  for i := 0 to w - 1 do
+    case op of
+      0: ta[i] := ta[i] and tb[i];
+      1: ta[i] := ta[i] or tb[i];
+      else ta[i] := ta[i] xor tb[i];
+    end;
+  BBitwise := BFromBuf(ta, w);
+end;
+
+{ a * 2^k (magnitude doubling preserves the sign, matching Python `<<`) }
+function BShl(const a: TBig; k: Int64): TBig;
+var r: TBig; i: Int64; wasNeg: Boolean;
+begin
+  if k <= 0 then begin BShl := a; Exit; end;
+  wasNeg := a.neg;
+  r := a; r.neg := False;
+  for i := 1 to k do r := BMulSmall(r, 2);
+  r.neg := wasNeg and not BIsZero(r);
+  BShl := r;
+end;
+
+{ floor(a / 2^k) — Python arithmetic shift right }
+function BShr(const a: TBig; k: Int64): TBig;
+var q, rem, p2: TBig; i: Int64;
+begin
+  if k <= 0 then begin BShr := a; Exit; end;
+  p2 := BFromInt(1);
+  for i := 1 to k do p2 := BMulSmall(p2, 2);
+  BDivMod(a, p2, q, rem);
+  { BDivMod truncates toward zero; Python `>>` FLOORS. For a negative dividend
+    with a nonzero remainder, floor is one MORE in magnitude (more negative). }
+  if a.neg and not BIsZero(rem) then
+  begin
+    q.neg := False;
+    q := BAddMag(q, BFromInt(1));
+    q.neg := not BIsZero(q);
+  end;
+  BShr := q;
 end;
 
 
@@ -898,6 +1037,56 @@ begin
     Exit;
   end;
   PXXPromoCmp := BCmp(SlotBig(a), SlotBig(b));
+end;
+
+{ A shift count as an Int64. Always small in practice; an inline slot is the
+  common case, a heap slot is read from its low limbs. }
+function PromoShiftCount(b: Pointer): Int64;
+var bg: TBig; r: Int64; i: Integer;
+begin
+  if SlotTag(b) = PROMO_TAG_INLINE then begin PromoShiftCount := SlotInt(b); Exit; end;
+  bg := SlotBig(b);
+  r := 0;
+  for i := Length(bg.limbs) - 1 downto 0 do r := r * BIG_BASE + bg.limbs[i];
+  if bg.neg then r := -r;
+  PromoShiftCount := r;
+end;
+
+{ ---- bitwise: Python two's-complement semantics ---- }
+procedure PXXPromoAnd(dst, a, b: Pointer);
+begin
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+    PXXPromoFromInt(dst, SlotInt(a) and SlotInt(b))   { Int64 AND is two's complement }
+  else
+    StoreBig(dst, BBitwise(SlotBig(a), SlotBig(b), 0));
+end;
+
+procedure PXXPromoOr(dst, a, b: Pointer);
+begin
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+    PXXPromoFromInt(dst, SlotInt(a) or SlotInt(b))
+  else
+    StoreBig(dst, BBitwise(SlotBig(a), SlotBig(b), 1));
+end;
+
+procedure PXXPromoXor(dst, a, b: Pointer);
+begin
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+    PXXPromoFromInt(dst, SlotInt(a) xor SlotInt(b))
+  else
+    StoreBig(dst, BBitwise(SlotBig(a), SlotBig(b), 2));
+end;
+
+procedure PXXPromoShl(dst, a, b: Pointer);
+begin
+  { shift count b is small in practice; a<<k always risks Int64 overflow so it
+    goes through the bignum path unconditionally. }
+  StoreBig(dst, BShl(SlotBig(a), PromoShiftCount(b)));
+end;
+
+procedure PXXPromoShr(dst, a, b: Pointer);
+begin
+  StoreBig(dst, BShr(SlotBig(a), PromoShiftCount(b)));
 end;
 
 function PXXPromoToStr(a: Pointer): AnsiString;

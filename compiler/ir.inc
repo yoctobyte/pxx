@@ -1014,7 +1014,12 @@ begin
   else if op = tkMinus then PromoOpHelper := 'PXXPromoSub'
   else if op = tkStar then PromoOpHelper := 'PXXPromoMul'
   else if op = tkDiv then PromoOpHelper := 'PXXPromoDiv'
-  else if op = tkMod then PromoOpHelper := 'PXXPromoMod';
+  else if op = tkMod then PromoOpHelper := 'PXXPromoMod'
+  else if op = tkAnd then PromoOpHelper := 'PXXPromoAnd'
+  else if op = tkOr then PromoOpHelper := 'PXXPromoOr'
+  else if op = tkXor then PromoOpHelper := 'PXXPromoXor'
+  else if op = tkShl then PromoOpHelper := 'PXXPromoShl'
+  else if op = tkShr then PromoOpHelper := 'PXXPromoShr';
 end;
 
 procedure IRPromoEmitBinop(dstAddr, node: Integer);
