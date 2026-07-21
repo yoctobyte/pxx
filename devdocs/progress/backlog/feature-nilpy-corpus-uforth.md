@@ -469,3 +469,25 @@ pydynattr_get/set/has (already in pylib for NilPy) when the name isn't a declare
 field: `vm.vars` read → pydynattr_get, `vm.vars = x` write → pydynattr_set,
 `hasattr(vm,'vars')` → declared-or-pydynattr_has. Bounded pyeval M2 addition;
 unblocks VARIABLE/CONSTANT/arrays and the rest of the stdlib load.
+
+## 2026-07-21 (session 5d): dynamic attrs FIXED — next=closure-as-native-word
+
+**FIXED (commit 6bbf3f3f): pyeval dynamic attributes.** PyFieldGet/PyFieldSet
+(pyeval.pas ~566/597) Halt(1)'d on any name GetFieldPtr couldn't resolve; now a
+nil GetFieldPtr routes to pydynattr_get / pydynattr_set — the same pointer-keyed
+store (`addr:name`) the NilPy frontend uses, so pyeval reads see frontend writes
+and vice versa. hasattr already routed to pydynattr_has. `vm.vars`, `vm._trans_ptr`
+etc. now work; STD load passes VARIABLE.UFO:352. NilPy-path only; self-host
+byte-identical, pyeval standalone + test-nilpy + quick green.
+
+**NEXT BLOCKER = closure-as-native-word** ([[feature-pyeval-closure-as-native-word]]).
+Load now halts at `VARIABLE.UFO:30`: the word body does `def _w(vm2): vm2.push(name)`
+then `vm.define_word(name, native=_w)` — a pyeval-internal nested `def` passed as a
+VALUE to a host method, called back much later as `word.native(vm2)` (NilPy
+PyMakeDynCall). Two parts: (1) pyeval EnvGet must resolve a bare def name to a
+callable value (today `pyeval: name not defined: _w`); (2) the closure must be
+snapshotted (body + captured `name`) into a persistent stateful callable variant,
+and PyMakeDynCall gains a tag-branch prepending the closure state — same
+reverse-bridge gap as VT_BOUNDMETHOD. Direction set by [[decide-nilpy-closure-model]].
+Backs VARIABLE/CONSTANT/CREATE/arrays → gates the memory-word half of the
+conformance suite. Full scope in the new ticket.
