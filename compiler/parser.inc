@@ -6189,6 +6189,7 @@ end;
 function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer;
 var crBlob, crNode: Integer;   { class-reference ops on a chained value }
 var dfCi, dfPri, dfMmi, dfMpi, dfI, dfSelf, dfIdxHead, dfIdxTail: Integer;   { default property on a chained value }
+    dfW, dfValArg: Integer; dfAssign: Boolean;
     dfName: AnsiString;
 var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
     ci, mmi, mpi, callN, selfArg, lastA, aSeq, aNode, aIdx, mai: Integer;
@@ -6571,6 +6572,45 @@ begin
       if (tk = tyClass) and (recId >= REC_UCLASS_BASE) then dfCi := recId - REC_UCLASS_BASE;
       dfPri := -1;
       if dfCi >= 0 then dfPri := FindDefaultProp(dfCi);
+      { Default-property WRITE on a chained base — `f(x)[k] = v`, where the base
+        is a call result (a dict/list reference) rather than a named lvalue, so
+        the whole target reaches this expression loop instead of ParseLValueAST.
+        Peek past the [...] group for a trailing '=' and, if present, build the
+        setter (mirrors the ParseLValueAST default-property write path). }
+      if (dfPri >= 0) and PyExprMode and (UPropWriteMLen[dfPri] > 0) then
+      begin
+        dfAssign := False;
+        dfI := TokPos - 1; dfW := 0;      { TokPos-1 = the '[' }
+        while dfI < TokCount do
+        begin
+          if Tokens[dfI].Kind = tkLBrack then Inc(dfW)
+          else if Tokens[dfI].Kind = tkRBrack then
+          begin Dec(dfW); if dfW = 0 then begin Inc(dfI); Break; end; end;
+          Inc(dfI);
+        end;
+        if (dfI < TokCount) and (Tokens[dfI].Kind = tkAssign) then dfAssign := True;
+        if dfAssign then
+        begin
+          dfName := '';
+          for dfI := 0 to UPropWriteMLen[dfPri] - 1 do
+            AppendChar(dfName, TokChars[UPropWriteMOff[dfPri] + dfI]);
+          dfMmi := FindUMeth(dfCi, dfName);
+          if dfMmi < 0 then Error('default property setter not found: ' + dfName);
+          dfMpi := UMthProc_[dfMmi];
+          dfIdxHead := -1; dfIdxTail := -1;
+          ParsePropIndexArgs(dfIdxHead, dfIdxTail);   { consumes [ .. ] }
+          Expect(tkAssign, '=');
+          ParseExpr;
+          if UMthVirSlot[dfMmi] >= 0 then
+          begin sub := AllocNode(AN_VIRTUAL_CALL); ASTRight[sub] := UMthVirSlot[dfMmi]; end
+          else sub := AllocNode(AN_CALL);
+          ASTIVal[sub] := dfMpi; ASTTk[sub] := Ord(Procs[dfMpi].RetType);
+          dfSelf := AllocNode(AN_ARG); ASTLeft[dfSelf] := node; ASTLeft[sub] := dfSelf;
+          dfValArg := AllocNode(AN_ARG); ASTLeft[dfValArg] := CurASTNode;  { value }
+          ASTRight[dfSelf] := dfIdxHead; ASTRight[dfIdxTail] := dfValArg;
+          node := sub; outTk := Procs[dfMpi].RetType; Result := node; Exit;
+        end;
+      end;
       if (dfPri >= 0) and (UPropReadMLen[dfPri] > 0) then
       begin
         dfName := '';
@@ -8407,7 +8447,7 @@ begin
       end;
       if isNilPy and (name = 'int') then
       begin
-        Next; Expect(tkLParen, '('); ParseExpr;
+        Next; Expect(tkLParen, '('); ParseArgExpr;
         { `int(s, base)` — the two-argument radix form. A separate pylib
           function rather than another intrinsic, because it must RAISE
           ValueError on a bad parse (pylib declares the Python exception
@@ -8416,7 +8456,7 @@ begin
         begin
           intBaseArg := CurASTNode;
           Next;
-          ParseExpr;
+          ParseArgExpr;
           node := AllocNode(AN_CALL);
           ASTIVal[node] := FindProc('pyint_parse');
           if ASTIVal[node] < 0 then Error('Nil Python: pylib (pyint_parse) not loaded');
@@ -8610,7 +8650,7 @@ begin
       end
       else if isNilPy and (name = 'float') then
       begin
-        Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        Next; Expect(tkLParen, '('); ParseArgExpr; Expect(tkRParen, ')');
         { Dispatched on the ARGUMENT type, not by overload: a string is PARSED
           (and raises ValueError on failure, which uforth catches), an integer
           is widened, and a float is already the answer. }
@@ -8637,7 +8677,7 @@ begin
       end
       else if isNilPy and (name = 'str') then
       begin
-        Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        Next; Expect(tkLParen, '('); ParseArgExpr; Expect(tkRParen, ')');
         node := AllocNode(AN_CALL); ASTIVal[node] := -201;
         { str() lowers to StrInt/FloatToStr/VariantToStr, which return AnsiString
           in managed mode (the default) and frozen tyString under

@@ -2753,6 +2753,9 @@ begin
   else if dotted = 'os.path.abspath' then Result := 'pyos_path_abspath'
   else if dotted = 'os.path.dirname' then Result := 'pyos_path_dirname'
   else if dotted = 'os.getcwd' then Result := 'pyos_getcwd'
+  else if dotted = 'os.remove' then Result := 'pyos_remove'
+  else if dotted = 'os.rename' then Result := 'pyos_rename'
+  else if dotted = 'os.stat' then Result := 'pyos_stat'
   else if dotted = 'sys.exit' then Result := 'pysys_exit'
   else if dotted = 'sys.stdin.read' then Result := 'pystdin_read'
   else if dotted = 'sys.stdin.readline' then Result := 'pystdin_readline'
@@ -2805,6 +2808,7 @@ begin
   ASTLeft[callNode] := -1;
   if CurTok.Kind <> tkRParen then
     repeat
+      if CurTok.Kind = tkRParen then Break;   { a trailing comma before ) }
       PyParseBoolExpr;
       argNode := AllocNode(AN_ARG);
       ASTLeft[argNode] := CurASTNode;

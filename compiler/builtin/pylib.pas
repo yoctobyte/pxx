@@ -47,6 +47,16 @@ type
     function nextval: Int64;
   end;
 
+  { os.stat() result — only the fields uforth reads. A stub value today (the
+    native word that stats a file runs under the exec path, which is stubbed);
+    the class exists so `st.st_mode` resolves as a field access. }
+  TPyStat = class
+  public
+    st_mode: Int64;
+    st_size: Int64;
+    constructor Create;
+  end;
+
   TPyList = class
   public
     FLen: Integer;
@@ -288,6 +298,11 @@ function pyos_path_exists(const p: AnsiString): Boolean;
 function pyos_path_abspath(const p: AnsiString): AnsiString;
 function pyos_getcwd: AnsiString;
 procedure pysys_exit(code: Integer);
+{ os.remove / os.rename: unlink / rename via syscall, returning 0 (Python returns
+  None; the value is unused). os.stat: a stubbed TPyStat — see the class note. }
+function pyos_remove(const path: AnsiString): Integer;
+function pyos_rename(const src: AnsiString; const dst: AnsiString): Integer;
+function pyos_stat(const path: AnsiString): TPyStat;
 { sys.stdin.read(n): read up to n bytes from fd 0, returned as a byte string.
   Returns '' at EOF (Python's read at EOF gives ''), which is exactly what
   uforth's KEY word tests for. }
@@ -939,6 +954,12 @@ function TPyCounter.nextval: Int64;
 begin
   Result := FNext;
   FNext := FNext + 1;
+end;
+
+constructor TPyStat.Create;
+begin
+  st_mode := 0;
+  st_size := 0;
 end;
 
 function next(c: TPyCounter): Int64;
@@ -2436,6 +2457,69 @@ begin
   nread := __pxxrawsyscall(nrRead, 0, Int64(@buf[0]), want, 0, 0, 0);
   if nread > 0 then
     for i := 0 to nread - 1 do Result := Result + buf[i];
+end;
+
+function pyos_remove(const path: AnsiString): Integer;
+var cs: AnsiString; r: Int64; nrUnlinkat: Integer;
+begin
+  Result := 0;
+  nrUnlinkat := 0;
+{$ifdef CPUX86_64}
+  nrUnlinkat := 263;
+{$endif}
+{$ifdef CPUAARCH64}
+  nrUnlinkat := 35;
+{$endif}
+{$ifdef CPU_ARM32}
+  nrUnlinkat := 328;
+{$endif}
+{$ifdef CPU_I386}
+  nrUnlinkat := 301;
+{$endif}
+{$ifdef CPU_RISCV32}
+{$ifndef PXX_ESP}
+  nrUnlinkat := 35;
+{$endif}
+{$endif}
+  if nrUnlinkat = 0 then Exit;
+  cs := path + #0;
+  r := __pxxrawsyscall(nrUnlinkat, -100, Int64(@cs[1]), 0, 0, 0, 0);   { AT_FDCWD }
+  Result := Integer(r);
+end;
+
+function pyos_rename(const src: AnsiString; const dst: AnsiString): Integer;
+var cs, cd: AnsiString; r: Int64; nrRenameat: Integer;
+begin
+  Result := 0;
+  nrRenameat := 0;
+{$ifdef CPUX86_64}
+  nrRenameat := 264;
+{$endif}
+{$ifdef CPUAARCH64}
+  nrRenameat := 38;
+{$endif}
+{$ifdef CPU_ARM32}
+  nrRenameat := 329;
+{$endif}
+{$ifdef CPU_I386}
+  nrRenameat := 302;
+{$endif}
+{$ifdef CPU_RISCV32}
+{$ifndef PXX_ESP}
+  nrRenameat := 38;
+{$endif}
+{$endif}
+  if nrRenameat = 0 then Exit;
+  cs := src + #0; cd := dst + #0;
+  r := __pxxrawsyscall(nrRenameat, -100, Int64(@cs[1]), -100, Int64(@cd[1]), 0, 0);
+  Result := Integer(r);
+end;
+
+function pyos_stat(const path: AnsiString): TPyStat;
+begin
+  { STUB: a zeroed result. The only caller runs under the exec path (stubbed),
+    so the value is never observed; the object exists so `.st_mode` compiles. }
+  Result := TPyStat.Create;
 end;
 
 function pystdin_readline: AnsiString;
