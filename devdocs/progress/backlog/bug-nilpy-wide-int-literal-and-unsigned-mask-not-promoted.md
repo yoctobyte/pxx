@@ -58,6 +58,53 @@ patch. Gate: CPython-differential on the snippets above, then
 (`cd ~/projects/uforth && /tmp/uforth tests/prelimtest.fth` matches
 `python3 uforth.py tests/prelimtest.fth`: 0/57 failed).
 
+## 2026-07-21 (session 5f): promo BITWISE landed; NilPy adoption is all-or-nothing
+
+**Landed (commit 90b95e47): promoint bitwise ops** — PXXPromoAnd/Or/Xor/Shl/Shr
+with Python two's-complement semantics (AND/OR/XOR via a fixed-width
+two's-complement byte view, SHL = ×2^k, SHR = floor ÷2^k). Routed through
+PromoOpHelper. Verified in Pascal: `(4-5) and 2^64-1` = 2^64-1, unsigned compare
+crosses, `1 shl 64` = 2^64. This is the arithmetic the mask idiom needs, and it
+is correct and self-host-green.
+
+**Wiring it into NilPy for uforth was attempted and REVERTED** — it works for the
+isolated idiom but poisons uforth's whole stack, because of one line:
+
+```python
+def push(self, value):                 # uforth.py:417 — called for EVERY push
+    if isinstance(value, int) ...:
+        value = value & 0xFFFFFFFFFFFFFFFF     # -> promo
+        if value >= 0x8000000000000000:
+            value -= 0x10000000000000000       # sign-convert back to int64
+    self.stack.append(value)
+```
+
+Findings from the attempt (all real, all needed for a correct full adoption):
+1. **Nested-def params are typed concrete, not variant.** uforth's `_loop_crossed`
+   is nested, so `(old-lim) & mask` is a SCALAR binop; a variant-only promo path
+   never fires. Both scalar and variant binop lowering must promote on a wide-lit
+   operand.
+2. **`push()` masks EVERY value**, so a partial promo makes every stack cell a
+   promo. That is fine ONLY if the value demotes back to inline int64 — which the
+   sign-conversion does... except `0x10000000000000000` (2^64) exceeds UInt64 and
+   was gated OUT of promo, so `value -= 2^64` subtracted 0 and left a HEAP promo on
+   the stack. Heap promos then (a) don't round-trip through a TPyList slot (managed
+   AnsiString payload, container-slot landmine) and (b) hard-fail
+   `VariantToInt64` at every int boundary (address, count).
+3. So the wide-literal-as-promo rule cannot be capped at UInt64 — it must cover
+   ANY size (the whole point of arbitrary precision), and the range check at
+   ir.inc:3701 must let a promo-typed literal through instead of erroring.
+4. `PyWiden` needed promo rules (promo+variant→variant since promo boxes into a
+   variant; promo+int→promo) — that part was correct and is the model to keep.
+
+**Conclusion: this is the DECIDED full promotable-int adoption, not a surgical
+patch.** For uforth to run, a masked cell must promote AND demote cleanly through
+`push`/containers/int-boundaries — i.e. NilPy ints become tier-2 promotable by
+default (the decision doc's model), with promo values that survive a container
+slot and coerce at int boundaries. That is a large Track A change (blast radius:
+shared binop typing, IRLowerAST of a promo literal, container promo storage,
+VariantToInt64 demotion). The bitwise runtime is now in place for it.
+
 ## What already works (2026-07-21)
 
 uforth compiles unmodified, STD.UFO fully loads, VARIABLE/CONSTANT/memory words
