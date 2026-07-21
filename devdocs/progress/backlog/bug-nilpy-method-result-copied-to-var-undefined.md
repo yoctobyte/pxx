@@ -54,3 +54,26 @@ set is the first blocked by this.
 
 `/tmp/w79.npy` (6 lines above). `./compiler/pascal26 repro.npy /tmp/out` →
 `error: undefined variable (raw)`.
+
+## 2026-07-22: FIRST HALF FIXED; a second file-set blocker remains
+
+FIXED (the undefined-variable half): PyCollectModuleLocalsAST skipped a
+module-level `x = obj.method()` assignment entirely (class methods aren't
+registered during the token pre-scan), so `x` was never a symbol and a later
+`y = x` in the same collect round failed. Now the skip still forgoes parsing
+the RHS but records the target name (PyNoteLocalType + a scratch AllocVar so
+the same round resolves it). `raw = a.mk(); zz = raw` compiles.
+
+REMAINING (distinct, still open): a bytes value read from a dict-sourced
+variant then sliced comes back mis-tagged. `remainder = d["rem"]` (variant,
+None) then `remainder = raw` (raw = TPyBytes from readline) then
+`remainder[:3]` → runtime `TypeError: object is not subscriptable`,
+pyvar_slice sees tag=2 (VT_INT64) not 7 (VT_OBJECT). The class→variant store
+tagged the bytes pointer VT_INT64 because `raw` itself was typed tyVariant (by
+the collect-skip above) rather than TPyBytes, so `remainder = raw` is a
+variant→variant 16-byte copy of a variant that was never boxed as VT_OBJECT.
+Root: the collect-skip types method-call-result locals tyVariant, losing the
+bytes class identity, and the subsequent variant-to-variant copy propagates a
+mis-tagged slot. Fix needs the collect to recover the method result's class
+(or the store to re-box). uforth READ-LINE is the only word blocked; file
+create/write/close verified working.
