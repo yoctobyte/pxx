@@ -69,3 +69,13 @@ Track A (shared `symtab.inc` + riscv codegen + builtin injection). The overnight
 `regression-cascade-6906a3416548` stub is superseded by this ticket; the second
 stale stub `regression-cascade-3d46e52fc733` is the OLD (2026-07-20 early, the 461-job flood sha) qemu-collapse
 event and unrelated — safe to reject.
+
+## Also covers test-lua-cross (2026-07-21)
+
+`test-lua-cross` builds lua for all four cross targets (`aarch64 arm32 i386
+riscv32`); the job is red because its **riscv32** leg fails on the same
+`PXXMemMove not found` — lua's C hits a by-value struct return under
+`--target=riscv32`. So `test-lua-cross` in the 6906a341 cascade is NOT a
+separate failure; it is this bug under a non-riscv-looking job name. It will go
+green with the fix. Current real red surface from this one root: 17
+`test-*riscv32*` jobs + `test-lua-cross` = 18, matching the cascade exactly.
