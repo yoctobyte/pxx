@@ -138,3 +138,50 @@ shipped `.UFO` stdlib: **131 blocks — 60 pure-stack, 71 vm-accessing.**
 Front half (tokenizer + parser -> cached AST) is shared by all three and by the
 later JIT; build it once at M1.
 
+## 2026-07-21 — host-bridge FOUNDATION landed; interpreter is what remains
+
+The hard/novel keystone of engine-1 is done and tested:
+- FIELD reflection (commit e8ebbf0a): GetFieldPtr / GetInstanceRTTI over any field
+  with type. [[feature-rtti-field-reflection]] resolved.
+- METHOD reflection (commit 73395c74): all methods emitted, MethInfo =
+  name/code/arity/retKind(0=proc)/paramKinds; GetMethInfoByName.
+- TRAMPOLINE ABI proven (commit 40adbd6e, test_pyexec_trampoline_abi): calling
+  push(const Variant)/pop:Variant/fpush(Double)/fpop:Double BY NAME through the
+  reflected code pointer round-trips. Because caller and callee share pxx's
+  codegen, the trampoline is built from **typed proc-pointer casts** — pxx
+  supplies each target's ABI (hidden-dest variant return, variant-by-address
+  param, xmm floats), NO hand-rolled asm. A variant arg is passed as its address
+  (GP), so the only non-GP shapes are float params/returns + the variant
+  hidden-dest return.
+
+Remaining = the interpreter (a laborious but standard tree-walker), build plan:
+
+1. **`compiler/builtin/pyeval.pas`** (new unit; `uses pylib, typinfo`). NOT
+   auto-used until solid — build + test standalone via a Pascal driver first, so
+   a parse error can't break every NilPy compile. pylib must EXPORT the variant
+   ops the evaluator needs (pyvar_to_int/float/bool, pyvarobj, pymul_v,
+   pyfloordiv_v already exported; ADD pyadd_v/pysub_v/pymod_v/compare to the
+   interface).
+2. **Trampoline dispatcher** `PyHostCall(vm, name, args, nargs): Variant` — reflect
+   name on vm's class (GetMethInfoByName), marshal each variant arg by paramKinds
+   (variant param -> pass @variant; int -> pyvar_to_int; …), dispatch on
+   (retKind, arity, float-ness) to the matching typed proc-ptr cast, box the
+   result by retKind. M1 needs the 4 stack shapes + a GP-arity family; extend for
+   M2/M3 method shapes.
+3. **Tokenizer + recursive-descent evaluator** over Variants for the pure-stack
+   grammar (assign/augassign, names as locals in a TPyDict, int lits, arith/bit/
+   compare/floordiv, ternary, calls). Correctness-first: may re-parse per call;
+   cache the AST later (SWAP runs millions of times).
+4. **Host-call resolution (M1 convention):** a call `name(args)` or `vm.name(args)`
+   -> `PyHostCall(g["vm"], name, args)`. Uses g["vm"]; sidesteps bound-method
+   values for M1 (the env's callables are all vm methods of the same name). Proper
+   bound-method capture ([[feature-nilpy-bound-method-value]]) folds in at M3.
+5. **def/ns wrapper + NilPy wiring (last):** EvalPyStmts sees `def __body__():
+   body`; store {body, g} in a single global pending slot, set l["__body__"] to a
+   variant whose payload = &PyEvalTrampoline; `ns["__body__"]()` (PyMakeDynCall
+   unboxes payload -> indirect call) runs the pending body. Then rename the
+   parser.inc `exec()` binding from pyexec to EvalPyStmts and add
+   `ParseUsesUnit('pyeval')` after pylib.
+
+Checkpoint tag `checkpoint-pre-exec-arc` marks the pre-arc state for rollback.
+
