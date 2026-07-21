@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `ec98060628c5` | 2026-07-21T21:58:56Z | RED (full) | 927.3s | `ec98060628c5` RED |
+| borg | `ec98060628c5` | 2026-07-21T22:02:43Z | GREEN (opt) | 217.4s | `ec98060628c5` RED |
 
 ## Open regressions
 - **test-core#src:test/test_interface_mainbody_ascast_temp.pas** — test/test_interface_mainbody_ascast_temp.pas (borg): bad `3a9e4f5409b3`, last good `651a0368a74d`, 8 commit(s) in range
