@@ -385,3 +385,35 @@ estimate. Roughly in wall order:
 `sys.stdin` is the awkward one: 8 sites needing `.isatty()`, `.readline()`,
 `.read(1)` and membership in `select.select([...])` — i.e. a real file-object
 model, not another shim function. Worth its own ticket when reached.
+
+## MILESTONE 2026-07-21 (session 4): exec() PYTHON words run; wall = bound-method values
+
+The [[feature-lib-pyexec]] critical path is CLOSED end to end. Landed this session:
+
+- **exec() wired to pyeval** ([[feature-nilpy-wire-pyeval-exec]] resolved). The
+  auto-use regression was a case-insensitive unit-global name collision, not a
+  codegen bug — fixed with PyProgSym ([[project_nilpy_unit_global_name_collision]]).
+- **`.py` recognized as Nil-Python** — uforth.py compiles UNMODIFIED now (was a
+  shebang lexer error under the Pascal path). Binary ~1.36MB, procs~1019.
+- **exec def/ns callable** (the arc's "step 5"). uforth's idiom is
+  `exec("def __body__(): ...", env, ns)` then `ns["__body__"]()`. EvalPyStmts now
+  publishes a callable variant (payload = &PyBodyTramp) into the namespace dict;
+  NilPy's PyMakeDynCall unboxes + invokes it. Verified: push/pop/`//`/`%`/ternary
+  bodies run correct through a NilPy VM.
+- **skip-mode floordiv fix**: registering a `def` walks its body with
+  Executing=False; names read as None(0), so `a // b` did `0 div 0` → runtime
+  error 200. ParseMul now yields None for //,%,/ when not Executing.
+- **test-uforth smoke target** (Makefile): compiles uforth.py, loads STD.UFO,
+  asserts `1 2 + .` = 3. Skips if the tree is absent. In `.PHONY`.
+
+**NEW WALL = bound-method values** ([[feature-nilpy-bound-method-value]]).
+uforth builds `env = {"vm": self, "push": self.push, "pop": self.pop, ...}` and
+`env = {"push": vm.push}` **SIGSEGVs at construction** — capturing `obj.method`
+(no call) as a dict value is unimplemented; NilPy reads it as a bogus field. This
+is why `10 3 /` (a PYTHON-bodied word) still cores while `1 2 + .` (native) works:
+the crash is uforth's env construction, NOT exec/floordiv (those now run — proven
+by driving the exact `/` body with an env of `{"vm": vm}` only, which pyeval
+resolves via g["vm"].method and evaluates correctly). pyeval never actually calls
+env["push"] (it intercepts push/pop through g["vm"]), so the fix is: NilPy must
+represent `obj.method` as a callable variant ({recv, method-ref}) without
+crashing. That unlocks the whole PYTHON-bodied stdlib.
