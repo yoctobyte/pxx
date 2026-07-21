@@ -720,6 +720,7 @@ procedure PyParseLambdaStub; forward; { Nil Python: consume a lambda -> None (py
 function PyIsIdent(const s: AnsiString): Boolean; forward; { (pyparser.inc) }
 function PyMakeVariantGetItem(baseNode, idxNode: Integer): Integer; forward; { Nil Python v[key] on a variant (pyparser.inc) }
 function PyMakeObjPtr(baseNode: Integer): Integer; forward; { Nil Python: object as a pointer for the dynattr store (pyparser.inc) }
+function PyAugBinTok(k: TTokenKind): TTokenKind; forward; { Nil Python augmented-assign op (pyparser.inc) }
 function PyMakeDynAttrGet(baseNode: Integer; const fname: AnsiString): Integer; forward; { Nil Python obj.name dynamic read (pyparser.inc) }
 function PyMakeDynAttrSet(baseNode: Integer; const fname: AnsiString; valNode: Integer): Integer; forward; { Nil Python obj.name = v dynamic write (pyparser.inc) }
 function PyMakeVariantSetItem(baseNode, idxNode, valNode: Integer): Integer; forward; { Nil Python v[key]=val on a variant (pyparser.inc) }
@@ -4601,6 +4602,21 @@ begin
           Next;
           ParseArgExpr;
           node := PyMakeDynAttrSet(node, fieldName, CurASTNode);
+          tk := tyUnknown; Result := node; Exit;
+        end;
+        { augmented assignment `vm._x += v` -> set(x, get(x) OP v). The base is
+          re-read in the get; fine for the side-effect-free receivers here. }
+        if PyAugBinTok(CurTok.Kind) <> tkEOF then
+        begin
+          fldSigPi := Ord(PyAugBinTok(CurTok.Kind));   { the binary op }
+          Next;
+          ParseArgExpr;
+          callIndNode := AllocNode(AN_BINOP);
+          ASTIVal[callIndNode] := fldSigPi;
+          ASTLeft[callIndNode] := PyMakeDynAttrGet(node, fieldName);
+          ASTRight[callIndNode] := CurASTNode;
+          ASTTk[callIndNode] := Ord(tyVariant);
+          node := PyMakeDynAttrSet(node, fieldName, callIndNode);
           tk := tyUnknown; Result := node; Exit;
         end;
         node := PyMakeDynAttrGet(node, fieldName);

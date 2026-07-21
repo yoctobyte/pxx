@@ -1,0 +1,9 @@
+class VM:
+    def __init__(self) -> None:
+        self.n = 0
+def f(vm: VM) -> int:
+    vm._p = 10
+    vm._p += 5
+    return vm._p
+v = VM()
+print(f(v))
