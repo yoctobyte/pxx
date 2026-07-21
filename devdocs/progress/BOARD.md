@@ -27,7 +27,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (139)
+## backlog (138)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -43,7 +43,6 @@ _none_
 | bug-nilpy-comprehension-as-for-iterable-segfaults | N | 35 | bug | NilPy: a comprehension used directly as a for-loop iterable segfaults | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-print-variant-holding-list-shows-object | N | 30 | bug | NilPy: print() of a variant holding a list/dict shows `<object>` not its repr | — |
-| bug-nilpy-tokenize-managed-temp-release-garbage | A | 60 | bug | NilPy/uforth: managed-string hidden temp released with garbage at method return | — |
 | bug-open-array-param-length-high-zero | P | 65 | bug | `Length()` / `High()` on an open-array parameter return 0 / -1 | — |
 | bug-parallel-for-captured-boolean-loses-type | A | 50 | bug | Captured Boolean loses its type inside a parallel-for body (overload resolution fails) | — |
 | bug-parallel-for-captured-dynarray-var-arg-segfault | A | 60 | bug | Passing a captured dynamic array by `var` from a parallel-for body segfaults | — |
@@ -233,7 +232,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (920)
+## done (921)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -548,6 +547,7 @@ _none_
 | bug-nilpy-string-class-field | N | 60 | bug | NilPy: str class field registered as tyString = inline string[N] semantics (garbage reads) | — |
 | bug-nilpy-string-local-truncates-at-255 | N | 65 | bug | NilPy: a string local TRUNCATES at 255 characters, silently | — |
 | bug-nilpy-subscript-on-literal | N | 35 | bug | NilPy: cannot subscript a string LITERAL — `"abc"[1]` | — |
+| bug-nilpy-tokenize-managed-temp-release-garbage | A | 60 | bug | NilPy/uforth: managed-string hidden temp released with garbage at method return | — |
 | bug-not-on-int64-is-boolean | A | 50 | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |
 | bug-o3-inline-breaks-frame-walk-intrinsics | A | 60 | bug | -O3 inlining deletes a frame the stack-frame intrinsics can observe | — |
 | bug-object-ref-array-identity-in-method | A | 50 | bug | Object-reference array identity lookup fails in Eliah palette icon handler | — |
@@ -2607,7 +2607,6 @@ _none_
 - [p 65] [P] bug-open-array-param-length-high-zero
 - [p 65] [A] feature-a-typeref-handle
 - [p 60] [A] bug-a-qplus-misses-32bit-overflow
-- [p 60] [A] bug-nilpy-tokenize-managed-temp-release-garbage
 - [p 60] [A] bug-parallel-for-captured-dynarray-var-arg-segfault
 - [p 60] [A] bug-test-core-oversized-job-6gb-flaky
 - [p 60] [A] bug-unit-init-begin-form-not-executed

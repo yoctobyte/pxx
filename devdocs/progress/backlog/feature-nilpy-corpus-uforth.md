@@ -40,12 +40,27 @@ banner, REPL, line-read and tokenization:
   first interpreted line. Fixed (typed is-None: str→nil-handle, numeric→0,
   class→nil-ptr).
 
-CURRENT BLOCKER: [[bug-nilpy-tokenize-managed-temp-release-garbage]] — `VM.tokenize`
-SIGSEGVs on RETURN releasing a managed-string HIDDEN TEMP that holds stack garbage
-(gdb: `decq -0x10(%rax)`, rax=0x200000000). Layout-sensitive (a known landmine
-class); ~12 hand reductions all pass, so it needs creduce or IR inspection. This
-is Track A. [[feature-lib-pyexec]] (native-word PYTHON blocks executing) is the
-phase after.
+MILESTONE 2 (2026-07-21, session 2): uforth EXECUTES native words without
+crashing. `1 2 + .` runs the tokenizer, dispatch loop, exec_token_runtime, and
+the + / . native words to completion (exit 0). The tokenize SIGSEGV is FIXED and
+a chain of runtime bugs behind it:
+- tokenize managed-temp SIGSEGV — ROOT-caused: an unnamed managed skLocal (str-
+  method-chain / ternary result) missed the codegen-prologue nil; the epilogue
+  freed stack garbage. Fixed by nil'ing unflagged unnamed managed temps (self-
+  host byte-identical). [[bug-nilpy-tokenize-managed-temp-release-garbage]] closed.
+- `not <container>` was handle-complement (always True) → `if not tokens:` broke
+  on real tokens. Now emptiness (`len==0`).
+- variant arg (list/dict element) to a `str` param → garbage/crash. `str`
+  annotation now maps to managed tyAnsiString; IRLowerVariantAsScalar uses the
+  pystr_of tyVariant overload.
+- `return dict.get(k)` from an Optional[class] function → variant tag stored as
+  the class pointer, so `is None` misread it (lookup_word returned a bogus Word).
+  Now unboxes via pyvarobj.
+
+REMAINING: `. ` prints its trailing space but not the number value — a further
+runtime bug (number push/pop or the `.` word's cell read). Then
+[[feature-lib-pyexec]] for the PYTHON native-word blocks. The dispatch/exec
+substrate is now live, so these are incremental runtime-correctness items.
 
 Landed this session toward compile: captured-class identity in nested defs,
 dict comprehensions + dict(), call-result subscript-assign, os/sys/select/stdin
