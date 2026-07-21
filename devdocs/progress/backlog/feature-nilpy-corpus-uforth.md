@@ -21,6 +21,27 @@ memory, isinstance dispatch) — deliberately chosen to DRIVE NilPy feature
 development (the P-corpus role fpjson played). Goal: uforth runs UNMODIFIED
 under pxx-NilPy, suite output matching CPython's.
 
+## MILESTONE 2026-07-21: uforth.py COMPILES end to end
+
+The full 4357-line uforth.py now compiles under pxx-NilPy to an ~858KB binary,
+and the interpreter loop RUNS (reaches uforth-level runtime behaviour — e.g. a
+uforth `TypeError` from the running VM, not a compiler crash). The wall went
+267 -> full-parse -> compiled-binary across the 2026-07-21 session (~15 commits,
+~30 NilPy features + one Track A IR fix). See "Wall progression" below.
+
+**Next phase = uforth RUNS CORRECTLY.** First observed runtime issue: `1 2 + .`
+yields `TypeError: expected a number, got NoneType` — a runtime-semantics bug
+(likely number-literal push / stack, or the native-word dispatch path), NOT a
+compile gap. This is the milestone-3 runtime-correctness lane; [[feature-lib-pyexec]]
+(native-word PYTHON blocks actually executing) is part of it.
+
+Landed this session toward compile: captured-class identity in nested defs,
+dict comprehensions + dict(), call-result subscript-assign, os/sys/select/stdin
+shims, TPyFile stubs, list.pop(i), except tuples, del/assign list slices, zip(),
+getattr-checks-dynamic-store + the variant-ternary IR fix, unpack-from-variant,
+__file__/__name__, split(sep,max), nonlocal, and **nested defs inside methods**
+(the last unlock — flush_current's forward).
+
 ## Architecture decisions (settled 2026-07-19 session)
 
 - **exec() becomes a real library** ([[feature-lib-pyexec]]), NOT a
