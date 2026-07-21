@@ -99,3 +99,6 @@ own, independent of pyeval.
 
 Recommendation: option 1 (debug the segfault) — the e2e success shows the runtime
 path is sound; the fault is a compile-time emission side-effect.
+
+## Log
+- 2026-07-21 — resolved, commit 08fda0c2.
