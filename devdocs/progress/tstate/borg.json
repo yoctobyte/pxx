@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-21T09:12:00Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "102fa73006e2f01118a5ed9b315b0c431053310c",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-21T09:19:44Z",
    "fixed": [],
    "new_red": [],
@@ -409,6 +401,16 @@
    "sha": "651a0368a74d0f2a39837517ed3ede686c6e08cc",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-21T21:24:07Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_interface_mainbody_ascast_temp.pas"
+   ],
+   "sha": "3a9e4f5409b370db0ed16100ae8bb36181a2f581",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -1314,7 +1316,7 @@
   "test-core#src:test/test_interface_com_default.pas": "pass",
   "test-core#src:test/test_interface_com_value_param.pas": "pass",
   "test-core#src:test/test_interface_constref_cdecl_b249.pas": "pass",
-  "test-core#src:test/test_interface_mainbody_ascast_temp.pas": "pass",
+  "test-core#src:test/test_interface_mainbody_ascast_temp.pas": "fail",
   "test-core#src:test/test_interface_single_pointer_abi_b337.pas": "pass",
   "test-core#src:test/test_interfaces.pas": "pass",
   "test-core#src:test/test_interfaces_as.pas": "pass",
@@ -1952,11 +1954,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-21T19:44:31Z",
-  "sha": "651a0368a74d0f2a39837517ed3ede686c6e08cc",
-  "tier": "opt",
-  "verdict": "GREEN",
-  "wall": 259.9
+  "date": "2026-07-21T21:24:07Z",
+  "sha": "3a9e4f5409b370db0ed16100ae8bb36181a2f581",
+  "tier": "native",
+  "verdict": "RED",
+  "wall": 723.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1976,5 +1978,24 @@
   "date": "2026-07-21T19:44:35Z",
   "sha": "651a0368a74d0f2a39837517ed3ede686c6e08cc"
  },
- "open_regressions": []
+ "open_regressions": [
+  {
+   "bad": "3a9e4f5409b370db0ed16100ae8bb36181a2f581",
+   "good": "651a0368a74d0f2a39837517ed3ede686c6e08cc",
+   "job": "test-core#src:test/test_interface_mainbody_ascast_temp.pas",
+   "name": "test-core#122",
+   "opened": "2026-07-21T21:24:07Z",
+   "range": [
+    "5beaf2edcbe727bb8664baa0e9fcd7d96597e14d",
+    "d81dc218cdcb4e584e81862f0901a3adcb32405f",
+    "4399fddc4d46fb901009cb1984a655cef9d544b5",
+    "67bb9400036b7d457fddd34bb9a3227a351a7818",
+    "96c3826bf0515e426816f9da75f8765db7a55974",
+    "5a5b8aeb71f554b56d6aff2132f35ab996a85ef7",
+    "2e158cc9477c9aae0af991a9ab1f298a91eeea7a",
+    "3a9e4f5409b370db0ed16100ae8bb36181a2f581"
+   ],
+   "src": "test/test_interface_mainbody_ascast_temp.pas"
+  }
+ ]
 }
