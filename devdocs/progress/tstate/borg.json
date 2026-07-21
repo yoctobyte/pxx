@@ -2008,16 +2008,14 @@
    "src": "compiler/compiler.pas"
   },
   {
-   "bad": "fa4400b76a91998b1a603f8a4cdfb41774d7a667",
+   "bad": "3e309f84627e1fd67c52007d9655e21a37d620a8",
    "good": "0a2d36eaf0f91c2b5d3ce394b069533bfdd0c149",
    "job": "test-core#src:test/test_interface_mainbody_ascast_temp.pas",
    "name": "test-core#122",
    "opened": "2026-07-21T03:02:36Z",
    "range": [
     "ec9cda7db8184ca14ff16a5468c60d347a622445",
-    "3e309f84627e1fd67c52007d9655e21a37d620a8",
-    "d9f8d02f07436ac8c2519ed85899b37bdc84290f",
-    "fa4400b76a91998b1a603f8a4cdfb41774d7a667"
+    "3e309f84627e1fd67c52007d9655e21a37d620a8"
    ],
    "src": "test/test_interface_mainbody_ascast_temp.pas"
   }

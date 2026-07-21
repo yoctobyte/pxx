@@ -6,4 +6,4 @@
 
 ## Open regressions
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `2f88c6559bc2`, last good `76a2321346ed`, 1 commit(s) in range
-- **test-core#src:test/test_interface_mainbody_ascast_temp.pas** — test/test_interface_mainbody_ascast_temp.pas (borg): bad `fa4400b76a91`, last good `0a2d36eaf0f9`, 4 commit(s) in range
+- **test-core#src:test/test_interface_mainbody_ascast_temp.pas** — test/test_interface_mainbody_ascast_temp.pas (borg): bad `3e309f84627e`, last good `0a2d36eaf0f9`, 2 commit(s) in range
