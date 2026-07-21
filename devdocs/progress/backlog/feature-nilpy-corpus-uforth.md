@@ -417,3 +417,32 @@ resolves via g["vm"].method and evaluates correctly). pyeval never actually call
 env["push"] (it intercepts push/pop through g["vm"]), so the fix is: NilPy must
 represent `obj.method` as a callable variant ({recv, method-ref}) without
 crashing. That unlocks the whole PYTHON-bodied stdlib.
+
+## MILESTONE 2026-07-21 (session 5): colon words RUN; STD load stops after CORE
+
+Two concrete findings driving the conformance suite:
+
+**FIXED (commit 68b6abc6): colon-word execution.** Every colon word that called a
+sub-word SIGSEGV'd. Root: `if w.forth_body:` in uforth's inner interpreter
+(run_forth_word) — `Word.forth_body` is `Optional[List]`, None for native words.
+NilPy's PyMakeTruthy emitted `forth_body.count() != 0` with NO nil-check, so a
+None field derefed null. Now nil-guarded: `(x <> nil) ? (count<>0) : false`. A
+general NilPy bug (`if optionalContainer:`), fixed for all. Colon words now run:
+`: SQ DUP * ; 7 SQ .` = 49, and every native/PYTHON word chained through them.
+
+**NEXT BLOCKER: STD.UFO loads ONLY CORE.UFO.** The whole time, only CORE.UFO's
+words were defined — IO/FLOAT/DEBUG/VARIABLE/MEMORY/RSTACK/EXTRA/STRING/MATH never
+loaded. That is why `+!`, `>IN`, `VARIABLE`, `BL`, `UM*` etc. all THROW -13
+(undefined word), and why the conformance prelimtest dies at Pass #1 (`0 >IN +!`).
+Instrumented: STD.UFO runs `"CORE.UFO" INCLUDE` (completes), then its line-loop
+never reaches line 2 (`"IO.UFO" INCLUDE`). The resync at interpret_file's loop
+(uforth.py ~1265: `if self.current_source is not before_source ...`) sees the
+source as CHANGED after CORE's nested interpret_file returns, and breaks
+(current_source.kind != "file"). So the outer STD source is not correctly restored
+across a nested INCLUDE. Suspect: NilPy class-instance IDENTITY (`is`) after the
+InputSource round-trips through the `_snapshot_input_state()` dict, or the
+dict-stored class value not restoring as the same object. `_restore_input_state`
+did not even appear to be invoked in the last trace — needs confirming whether
+interpret_file's `finally` runs restore under NilPy. Fixing this loads the ENTIRE
+stdlib in one shot → unblocks +!/VARIABLE/>IN/memory words and most of the suite.
+This is the single highest-leverage next hunt.
