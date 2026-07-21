@@ -655,7 +655,8 @@ begin
   n := Length(inFile);
   isC := (n >= 2) and (inFile[n] = 'c') and (inFile[n-1] = '.');
   isBasic := (n >= 4) and (inFile[n] = 's') and (inFile[n-1] = 'a') and (inFile[n-2] = 'b') and (inFile[n-3] = '.');
-  isNilPy := (n >= 4) and (inFile[n] = 'y') and (inFile[n-1] = 'p') and (inFile[n-2] = 'n') and (inFile[n-3] = '.');
+  isNilPy := ((n >= 4) and (inFile[n] = 'y') and (inFile[n-1] = 'p') and (inFile[n-2] = 'n') and (inFile[n-3] = '.'))
+             or ((n >= 3) and (inFile[n] = 'y') and (inFile[n-1] = 'p') and (inFile[n-2] = '.'));
   isAsm := (n >= 4) and (inFile[n] = 'm') and (inFile[n-1] = 's') and (inFile[n-2] = 'a') and (inFile[n-3] = '.');
   isRust := (n >= 3) and (inFile[n] = 's') and (inFile[n-1] = 'r') and (inFile[n-2] = '.');
   isAda := (n >= 4) and (inFile[n] = 'b') and (inFile[n-1] = 'd') and (inFile[n-2] = 'a') and (inFile[n-3] = '.');
