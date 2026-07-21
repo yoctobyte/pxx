@@ -1289,6 +1289,21 @@ begin
   end;
 end;
 
+{ hasattr(obj, name): a field or method of that name exists on obj's class.
+  Also covers the dynamic-attribute store uforth uses (vm._trans_ptr lazy init). }
+function PyHasAttr(const obj: Variant; const name: AnsiString): Boolean;
+var cls: PClassRTTI; kind: Int64; p: Pointer;
+begin
+  PyHasAttr := False;
+  if PPyRec(@obj)^.VType <> 7 then Exit;
+  cls := GetInstanceRTTI(Pointer(PPyRec(@obj)^.Payload));
+  if cls = nil then Exit;
+  p := GetFieldPtr(Pointer(PPyRec(@obj)^.Payload), cls, name, kind);
+  if p <> nil then begin PyHasAttr := True; Exit; end;
+  if PyFindMethCI(cls, name) <> nil then begin PyHasAttr := True; Exit; end;
+  PyHasAttr := pydynattr_has(Pointer(PPyRec(@obj)^.Payload), name);
+end;
+
 { range(...) materialised into a TPyList, boxed as a VT_OBJECT variant. }
 function pyrange_list(args: TPyList): Variant;
 var lo, hi, step, i: Int64; n: Integer; r: TPyList; ro: PPyRec;
@@ -1367,6 +1382,10 @@ begin
   if name = 'isinstance' then
   begin
     res := pyvar_of_bool(PyIsInstance(args.at(0), args.at(1))); Exit;
+  end;
+  if name = 'hasattr' then
+  begin
+    res := pyvar_of_bool(PyHasAttr(args.at(0), pystr_of(args.at(1)))); Exit;
   end;
   if name = 'min' then
   begin
@@ -1840,6 +1859,34 @@ begin
   end;
 end;
 
+{ raise ExcName('message') | raise ExcName | raise. The exception class name is
+  consumed as a bare identifier (it is not a defined value); the first call
+  argument, if any, is the message. Propagated by halting with a diagnostic —
+  catchable try/except is a later milestone. }
+procedure ExecRaise;
+var excName, msg: AnsiString; args: TPyList; v: Variant;
+begin
+  Advance;   { raise }
+  msg := '';
+  if CurKind = PK_NAME then
+  begin
+    excName := TkText[Cur]; Advance;
+    if IsOp('(') then
+    begin
+      args := TPyList.Create;
+      ParseArgs(args);
+      if args.count > 0 then begin v := args.at(0); msg := pystr_of(v); end;
+    end;
+  end
+  else
+    excName := 'Exception';
+  if Executing then
+  begin
+    writeln('pyeval: ', excName, ': ', msg);
+    Halt(1);
+  end;
+end;
+
 procedure ExecStatement;
 var v: Variant;
 begin
@@ -1850,9 +1897,10 @@ begin
   if IsKw('while') then begin ExecWhile; StmtWasCompound := True; Exit; end;
   if IsKw('for') then begin ExecFor; StmtWasCompound := True; Exit; end;
   if IsKw('del') then begin ExecDel; Exit; end;
+  if IsKw('raise') then begin ExecRaise; Exit; end;
   if IsKw('break') then begin Advance; if Executing then BreakFlag := True; Exit; end;
   if IsKw('pass') then begin Advance; Exit; end;
-  if IsKw('def') or IsKw('return') or IsKw('raise')
+  if IsKw('def') or IsKw('return')
      or IsKw('import') or IsKw('continue') or IsKw('elif') or IsKw('else') then
     EvalError('statement "' + CurText + '" is not supported yet');
 
