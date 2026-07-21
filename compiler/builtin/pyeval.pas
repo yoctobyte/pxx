@@ -513,6 +513,15 @@ var
     such a statement self-terminates at its DEDENT, so no `;`/NL separator follows. }
   StmtWasCompound: Boolean;
 
+  { nested `def` functions: name -> (body token position, comma-joined params).
+    A call saves/restores the local scope + cursor for a fresh function frame. }
+  FnName:    array of AnsiString;
+  FnBodyPos: array of Integer;
+  FnParams:  array of AnsiString;
+  FnN:       Integer;
+  ReturnFlag:  Boolean;
+  ReturnValue: Variant;
+
 procedure AddTok(kind: Integer; const text: AnsiString; iv: Int64; fv: Double);
 begin
   if TkN >= Length(TkKind) then
@@ -962,6 +971,31 @@ begin
   LclN := LclN - 1;
 end;
 
+function FnFind(const name: AnsiString): Integer;
+var i: Integer;
+begin
+  FnFind := -1;
+  for i := 0 to FnN - 1 do
+    if FnName[i] = name then begin FnFind := i; Exit; end;
+end;
+
+procedure FnRegister(const name: AnsiString; bodyPos: Integer; const params: AnsiString);
+var i: Integer;
+begin
+  i := FnFind(name);
+  if i >= 0 then
+  begin FnBodyPos[i] := bodyPos; FnParams[i] := params; Exit; end;
+  if FnN >= Length(FnName) then
+  begin
+    if Length(FnName) = 0 then SetLength(FnName, 8)
+    else SetLength(FnName, Length(FnName) * 2);
+    SetLength(FnBodyPos, Length(FnName));
+    SetLength(FnParams, Length(FnName));
+  end;
+  FnName[FnN] := name; FnBodyPos[FnN] := bodyPos; FnParams[FnN] := params;
+  FnN := FnN + 1;
+end;
+
 procedure EnvGet(const name: AnsiString; var res: Variant);
 var i: Integer; tc: Int64;
 begin
@@ -989,6 +1023,7 @@ procedure ParseExpr(var res: Variant); forward;   { conditional/ternary — lowe
 procedure ParseCall(const callee: AnsiString; var res: Variant); forward;
 procedure ParseMethodCall(const recv: Variant; const mname: AnsiString;
                           var res: Variant); forward;
+procedure CallUserFn(fnIdx: Integer; args: TPyList; var res: Variant); forward;
 
 { atom, then a postfix chain of `.attr` (field read) and `[index]` (subscript). }
 procedure ParsePrimary(var res: Variant);
@@ -1504,6 +1539,10 @@ begin
   { skipped branch: consume the call but do not dispatch (no side effects) }
   if not Executing then begin res := MakeNone; Exit; end;
 
+  { user-defined nested function takes precedence (Python scoping) }
+  if FnFind(callee) >= 0 then
+  begin CallUserFn(FnFind(callee), args, res); Exit; end;
+
   if IsHostName(callee) then
   begin
     if (EnvG = nil) or (EnvG.indexof('vm') < 0) then
@@ -1684,9 +1723,9 @@ begin
     Advance;   { INDENT }
     while (CurKind <> PK_DEDENT) and (CurKind <> PK_EOF) do
     begin
-      if BreakFlag then
+      if BreakFlag or ReturnFlag then
       begin
-        { unwinding a loop: fast-skip the rest of the block with eval off }
+        { unwinding a loop or function: fast-skip the rest with eval off }
         Executing := False;
       end;
       ExecStatement;
@@ -1699,7 +1738,7 @@ begin
     { inline form: simple statements until newline / dedent / eof }
     while (CurKind <> PK_NL) and (CurKind <> PK_DEDENT) and (CurKind <> PK_EOF) do
     begin
-      if BreakFlag then Executing := False;
+      if BreakFlag or ReturnFlag then Executing := False;
       ExecStatement;
       while IsOp(';') do Advance;
     end;
@@ -1746,6 +1785,7 @@ begin
     if Executing and pyvar_to_bool(cond) then
     begin
       ExecSuite(True);
+      if ReturnFlag then Break;   { unwind to the function frame }
       if BreakFlag then begin BreakFlag := False; Break; end;
       guard := guard + 1;
       if guard > 100000000 then EvalError('while: iteration guard tripped');
@@ -1784,6 +1824,7 @@ begin
     LclSet(varName, lst.at(i));
     Cur := bodyPos;
     ExecSuite(True);
+    if ReturnFlag then Exit;   { unwind to the function frame }
     if BreakFlag then begin BreakFlag := False; Exit; end;
   end;
   { after the last real iteration Cur is already past the suite }
@@ -1985,6 +2026,30 @@ begin
   end;
 end;
 
+{ def name(p1, p2, ...): SUITE — registers the function and skips its body. }
+procedure ExecDef;
+var name, params: AnsiString; bodyPos: Integer;
+begin
+  Advance;   { def }
+  if CurKind <> PK_NAME then EvalError('def: expected a name');
+  name := TkText[Cur]; Advance;
+  ExpectOp('(');
+  params := '';
+  while not IsOp(')') do
+  begin
+    if CurKind <> PK_NAME then EvalError('def: expected a parameter name');
+    if params <> '' then params := params + ',';
+    params := params + TkText[Cur]; Advance;
+    if IsOp(',') then Advance
+    else if not IsOp(')') then EvalError('def: expected , or ) in params');
+  end;
+  ExpectOp(')');
+  ExpectOp(':');
+  bodyPos := Cur;
+  if Executing then FnRegister(name, bodyPos, params);
+  ExecSuite(False);   { skip the body — it runs on call }
+end;
+
 procedure ExecStatement;
 var v: Variant;
 begin
@@ -1994,12 +2059,22 @@ begin
   if IsKw('if') then begin ExecIf; StmtWasCompound := True; Exit; end;
   if IsKw('while') then begin ExecWhile; StmtWasCompound := True; Exit; end;
   if IsKw('for') then begin ExecFor; StmtWasCompound := True; Exit; end;
+  if IsKw('def') then begin ExecDef; StmtWasCompound := True; Exit; end;
   if IsKw('del') then begin ExecDel; Exit; end;
   if IsKw('raise') then begin ExecRaise; Exit; end;
   if IsKw('break') then begin Advance; if Executing then BreakFlag := True; Exit; end;
+  if IsKw('return') then
+  begin
+    Advance;
+    if (CurKind = PK_NL) or (CurKind = PK_EOF) or (CurKind = PK_DEDENT) or IsOp(';') then
+      v := MakeNone
+    else
+      ParseExpr(v);
+    if Executing then begin ReturnValue := v; ReturnFlag := True; end;
+    Exit;
+  end;
   if IsKw('pass') then begin Advance; Exit; end;
-  if IsKw('def') or IsKw('return')
-     or IsKw('import') or IsKw('continue') or IsKw('elif') or IsKw('else') then
+  if IsKw('import') or IsKw('continue') or IsKw('elif') or IsKw('else') then
     EvalError('statement "' + CurText + '" is not supported yet');
 
   if (TkKind[Cur] = PK_NAME) and AssignmentAhead then
@@ -2007,6 +2082,58 @@ begin
 
   { expression statement (e.g. push(x), pop()) — value discarded }
   ParseExpr(v);
+end;
+
+{ Call a nested `def` function: fresh local scope bound to the params, body run
+  from its recorded token position, `return` value captured. The caller's scope,
+  cursor, and return state are saved and restored so calls nest and re-enter. }
+procedure CallUserFn(fnIdx: Integer; args: TPyList; var res: Variant);
+var
+  savedNames: array of AnsiString;
+  savedVals:  array of Variant;
+  savedN, savedCur, i, ai, plen: Integer;
+  savedRF: Boolean;
+  savedRV: Variant;
+  params, pname: AnsiString;
+begin
+  { save the caller frame }
+  savedN := LclN;
+  SetLength(savedNames, LclN); SetLength(savedVals, LclN);
+  for i := 0 to LclN - 1 do begin savedNames[i] := LclNames[i]; savedVals[i] := LclVals[i]; end;
+  savedCur := Cur; savedRF := ReturnFlag; savedRV := ReturnValue;
+
+  { fresh scope + bind params positionally }
+  LclN := 0;
+  params := FnParams[fnIdx];
+  plen := Length(params); ai := 0; pname := ''; i := 1;
+  while i <= plen + 1 do
+  begin
+    if (i > plen) or (params[i] = ',') then
+    begin
+      if pname <> '' then
+      begin
+        if ai < args.count then LclSet(pname, args.at(ai)) else LclSet(pname, MakeNone);
+        ai := ai + 1; pname := '';
+      end;
+    end
+    else
+      pname := pname + params[i];
+    i := i + 1;
+  end;
+
+  { run the body }
+  ReturnFlag := False; ReturnValue := MakeNone;
+  Cur := FnBodyPos[fnIdx];
+  ExecSuite(True);
+  res := ReturnValue;
+
+  { restore the caller frame }
+  ReturnFlag := savedRF; ReturnValue := savedRV;
+  Cur := savedCur;
+  LclN := savedN;
+  if Length(LclNames) < savedN then SetLength(LclNames, savedN);
+  if Length(LclVals) < savedN then SetLength(LclVals, savedN);
+  for i := 0 to savedN - 1 do begin LclNames[i] := savedNames[i]; LclVals[i] := savedVals[i]; end;
 end;
 
 procedure EvalPyStmts(const src: AnsiString; g: TPyDict; l: TPyDict);
@@ -2017,8 +2144,10 @@ begin
     backing store — uforth's block locals are function-internal and never read
     back by the host. }
   LclN := 0;
+  FnN := 0;
   Executing := True;
   BreakFlag := False;
+  ReturnFlag := False;
   { Dedent first (as CPython's exec path does via textwrap.dedent): a corpus
     block extracted from indented .UFO source carries a uniform leading indent on
     every line, which would otherwise tokenize as a spurious opening INDENT. }
