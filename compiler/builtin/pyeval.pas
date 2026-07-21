@@ -573,7 +573,7 @@ begin
   cls := GetInstanceRTTI(obj);
   if cls = nil then begin writeln('pyeval: no RTTI for attribute ', name); Halt(1); end;
   p := GetFieldPtr(obj, cls, name, kind);
-  if p = nil then begin writeln('pyeval: object has no attribute ', name); Halt(1); end;
+  if p = nil then begin res := pydynattr_get(obj, name); Exit; end;
   r := PPyRec(@res);
   case kind of
     1: res := pyvar_of_int(PLongInt(p)^);        { tyInteger — 4-byte }
@@ -603,7 +603,7 @@ begin
   cls := GetInstanceRTTI(obj);
   if cls = nil then begin writeln('pyeval: no RTTI for attribute ', name); Halt(1); end;
   p := GetFieldPtr(obj, cls, name, kind);
-  if p = nil then begin writeln('pyeval: object has no attribute ', name); Halt(1); end;
+  if p = nil then begin pydynattr_set(obj, name, val); Exit; end;
   case kind of
     1: PLongInt(p)^ := pyvar_to_int(val);
     2: if pyvar_to_bool(val) then PByte(p)^ := 1 else PByte(p)^ := 0;
