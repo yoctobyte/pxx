@@ -716,6 +716,7 @@ procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pypa
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 function PyMakeDynCall(baseNode: Integer): Integer; forward; { Nil Python: call a callable stored in a variant (pyparser.inc) }
+function PyWrapClosureFieldCall(fieldNode, argExpr, defCall: Integer): Integer; forward; { Nil Python: a Callable field may hold a pyeval closure (pyparser.inc) }
 function PyMakeBoundMethod(mpi, selfNode: Integer): Integer; forward; { Nil Python: `obj.method` (no call) -> a bound-method value (pyparser.inc) }
 procedure PyParseLambdaStub; forward; { Nil Python: consume a lambda -> None (pyparser.inc) }
 function PyIsIdent(const s: AnsiString): Boolean; forward; { (pyparser.inc) }
@@ -5395,6 +5396,13 @@ begin
         node := callIndNode;
         tk := Procs[fldSigPi].RetType;
         recName := ProcRetRecId[fldSigPi];
+        { NilPy: a Callable field (Word.native) may hold a pyeval closure rather
+          than a compiled function address (uforth's VARIABLE/CONSTANT words).
+          Branch at runtime on the 1-arg `-> None` shape. Pascal is unaffected
+          (gated on isNilPy). }
+        if isNilPy and (not isMethodPtr) and (argsHead2 >= 0) and
+           (ASTRight[argsHead2] = -1) and (Procs[fldSigPi].RetType = tyInteger) then
+          node := PyWrapClosureFieldCall(fieldNode, ASTLeft[argsHead2], callIndNode);
       end;
     end;
   end;

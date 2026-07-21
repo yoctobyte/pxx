@@ -3131,6 +3131,77 @@ begin
   Procs[Result].BodyAddr := -1;
 end;
 
+{ Wrap a 1-arg dynamic call so a VT_PYCLOSURE callee routes to pyeval's reverse
+  bridge instead of being unboxed as a code pointer. Builds
+  `pyvartag(callee)=9 ? PyClosureCall1(callee, arg) : <defCall>`. calleeNode is
+  the callee variant; argExpr is the single argument expression; defCall is the
+  already-built AN_CALL_IND fast path. }
+function PyWrapClosureDynCall(calleeNode, argExpr, defCall: Integer): Integer;
+var tagCall, tagArg, nineLit, guard, clArgC, clArgA, thenCall, pair, tern: Integer;
+    tagPi, callPi: Integer;
+begin
+  tagPi := FindProc('pyvartag');
+  callPi := FindProc('PyClosureCall1');
+  if (tagPi < 0) or (callPi < 0) then
+  begin PyWrapClosureDynCall := defCall; Exit; end;
+
+  { pyvartag(callee) }
+  tagArg := AllocNode(AN_ARG); ASTLeft[tagArg] := calleeNode; ASTRight[tagArg] := -1;
+  tagCall := AllocNode(AN_CALL);
+  ASTIVal[tagCall] := tagPi; ASTLeft[tagCall] := tagArg; ASTTk[tagCall] := Ord(tyInt64);
+
+  nineLit := AllocNode(AN_INT_LIT);
+  ASTIVal[nineLit] := 9; ASTTk[nineLit] := Ord(tyInt64);
+
+  guard := AllocNode(AN_BINOP); ASTIVal[guard] := Ord(tkEq);
+  ASTLeft[guard] := tagCall; ASTRight[guard] := nineLit; ASTTk[guard] := Ord(tyBoolean);
+
+  { PyClosureCall1(callee, arg) }
+  clArgA := AllocNode(AN_ARG); ASTLeft[clArgA] := argExpr; ASTRight[clArgA] := -1;
+  clArgC := AllocNode(AN_ARG); ASTLeft[clArgC] := calleeNode; ASTRight[clArgC] := clArgA;
+  thenCall := AllocNode(AN_CALL);
+  ASTIVal[thenCall] := callPi; ASTLeft[thenCall] := clArgC; ASTTk[thenCall] := Ord(tyVariant);
+
+  pair := AllocNode(AN_PAIR);
+  ASTLeft[pair] := thenCall; ASTRight[pair] := defCall;
+  tern := AllocNode(AN_TERNARY);
+  ASTLeft[tern] := guard; ASTRight[tern] := pair; ASTTk[tern] := Ord(tyVariant);
+  PyWrapClosureDynCall := tern;
+end;
+
+{ Wrap a 1-arg call through a Callable/Pointer FIELD (`word.native(vm2)`) so a
+  field holding a pyeval closure object routes to the pointer-form reverse bridge.
+  The field pointer holds either a real compiled function address (uforth's own
+  `w_plus`) or a closure object (uforth's VARIABLE/CONSTANT words, whose native is
+  a captured PYTHON `def`); pyclosure_is tells them apart at runtime. Builds
+  `pyclosure_is(field) ? pyclosure_call_ptr(field, arg) : <defCall>`. fieldNode is
+  the field read (side-effect-free, so re-used across guard and arms); argExpr the
+  single argument; defCall the already-built AN_CALL_IND. }
+function PyWrapClosureFieldCall(fieldNode, argExpr, defCall: Integer): Integer;
+var isArg, isCall, clArgP, clArgA, thenCall, pair, tern: Integer;
+    isPi, callPi: Integer;
+begin
+  isPi := FindProc('pyclosure_is');
+  callPi := FindProc('pyclosure_call_ptr');
+  if (isPi < 0) or (callPi < 0) then
+  begin PyWrapClosureFieldCall := defCall; Exit; end;
+
+  isArg := AllocNode(AN_ARG); ASTLeft[isArg] := fieldNode; ASTRight[isArg] := -1;
+  isCall := AllocNode(AN_CALL);
+  ASTIVal[isCall] := isPi; ASTLeft[isCall] := isArg; ASTTk[isCall] := Ord(tyBoolean);
+
+  clArgA := AllocNode(AN_ARG); ASTLeft[clArgA] := argExpr; ASTRight[clArgA] := -1;
+  clArgP := AllocNode(AN_ARG); ASTLeft[clArgP] := fieldNode; ASTRight[clArgP] := clArgA;
+  thenCall := AllocNode(AN_CALL);
+  ASTIVal[thenCall] := callPi; ASTLeft[thenCall] := clArgP; ASTTk[thenCall] := Ord(tyInteger);
+
+  pair := AllocNode(AN_PAIR);
+  ASTLeft[pair] := thenCall; ASTRight[pair] := defCall;
+  tern := AllocNode(AN_TERNARY);
+  ASTLeft[tern] := isCall; ASTRight[tern] := pair; ASTTk[tern] := Ord(tyInteger);
+  PyWrapClosureFieldCall := tern;
+end;
+
 { `<value>(args)` where the value is a VARIANT holding a callable — the function
   `exec()` stored in a namespace dict, called as `ns["__body__"]()`. Unbox the
   variant to its payload (the code pointer) and emit an indirect call with a
@@ -3170,6 +3241,20 @@ begin
   ASTIVal[Result]  := sigPi;
   ASTTk[Result]    := Ord(tyVariant);
   ASTSLen[Result]  := 0;                 { plain proc pointer, no Self }
+
+  { Reverse bridge for pyeval closures. `word.native(vm2)` may hold either a
+    compiled NilPy function value (a raw proc address — the default AN_CALL_IND
+    above) OR a pyeval closure captured from a PYTHON block's nested `def`
+    (uforth's VARIABLE/CONSTANT words). The latter is boxed as a VT_PYCLOSURE
+    (tag 9) whose payload is a closure index, not a code pointer, so unboxing it
+    as an address would crash. Branch at runtime: tag 9 -> PyClosureCall1;
+    everything else -> the fast indirect call. Only the 1-arg shape is emitted
+    (every uforth native word is `native(vm)`); other arities keep the plain
+    path. baseNode is re-used across the guard and both arms — it is a field/var
+    read here, so evaluating it more than once is safe (same idiom as
+    PyMakeTruthy / PyMakeBoolOpValue). }
+  if n = 1 then
+    Result := PyWrapClosureDynCall(baseNode, ASTLeft[argsHead], Result);
 end;
 
 { `obj.method` used as a VALUE (no following call): capture it as a bound-method
@@ -3240,6 +3325,12 @@ begin
   ASTIVal[Result]  := sigPi;
   ASTTk[Result]    := Ord(Procs[sigPi].RetType);
   ASTSLen[Result]  := 0;
+
+  { A Callable field may hold a pyeval closure (uforth's VARIABLE/CONSTANT native
+    words) rather than a compiled function address; branch at runtime. Only the
+    1-arg `-> None` shape (every uforth native word: `native(vm)`) is wrapped. }
+  if (n = 1) and (Procs[sigPi].RetType = tyInteger) then
+    Result := PyWrapClosureFieldCall(fieldNode, ASTLeft[argsHead], Result);
 end;
 
 { `w.meth(args)` where `w` is a VARIANT — a for-in loop variable, a list/dict

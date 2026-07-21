@@ -59,6 +59,18 @@ procedure EvalPyStmts(const src: AnsiString; g: TPyDict; l: TPyDict);
 procedure PyHostCall(vmobj: Pointer; const name: AnsiString;
                      args: TPyList; var res: Variant);
 
+{ Reverse bridge: invoke a captured pyeval closure (a nested `def` passed to a
+  host method as a value) with one Variant argument. NilPy's PyMakeDynCall routes
+  here when the callee variant carries the VT_PYCLOSURE tag. }
+function PyClosureCall1(const clv: Variant; const a0: Variant): Variant;
+
+{ Pointer-form reverse bridge: a closure stored in a Callable/Pointer field
+  (Word.native) and called as `word.native(vm2)`. pyclosure_is tells a closure
+  object apart from a real compiled function address so the field-call site can
+  branch. }
+function pyclosure_is(p: Pointer): Boolean;
+function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;
+
 implementation
 
 const
@@ -123,6 +135,17 @@ type
   TIFn0 = function(self: Pointer): Int64;
   TIFn1 = function(self: Pointer; const a: Variant): Int64;
   TIFn2 = function(self: Pointer; const a, b: Variant): Int64;
+  { Pointer-family shape: every param is a pointer-sized register value
+    (int/int64/bool/char/pointer/class/AnsiString-by-value), passed as an Int64 in
+    an integer register, result an Int64 (a class/pointer return, or an ordinal).
+    Covers annotated host methods like `define_word(name: str, native: Callable,
+    forth_body, immediate: bool) -> Word` that the all-Variant path cannot call. }
+  TPFn0 = function(self: Pointer): Int64;
+  TPFn1 = function(self: Pointer; a: Int64): Int64;
+  TPFn2 = function(self: Pointer; a, b: Int64): Int64;
+  TPFn3 = function(self: Pointer; a, b, c: Int64): Int64;
+  TPFn4 = function(self: Pointer; a, b, c, d: Int64): Int64;
+  TPFn5 = function(self: Pointer; a, b, c, d, e: Int64): Int64;
 
 { ---- variant makers (build via pointer writes -> safe as functions) ---- }
 
@@ -438,6 +461,11 @@ var
   vp0: TVPr0; vp1: TVPr1; vp2: TVPr2; vp3: TVPr3; vp4: TVPr4; vp5: TVPr5;
   sf0: TSFn0; sf1: TSFn1; sf2: TSFn2;
   if0: TIFn0; if1: TIFn1; if2: TIFn2;
+  pf0: TPFn0; pf1: TPFn1; pf2: TPFn2; pf3: TPFn3; pf4: TPFn4; pf5: TPFn5;
+  ptrFamily: Boolean;
+  pa: array[0..4] of Int64;
+  psHold: array[0..4] of AnsiString;   { keep AnsiString-by-value args alive across the call }
+  pret: Int64;
 begin
   cls := GetInstanceRTTI(vmobj);
   if cls = nil then begin writeln('pyeval: no RTTI on vm for host call ', name); Halt(1); end;
@@ -471,10 +499,67 @@ begin
   if pk <> nil then
     for i := 1 to n do
       if pk[i] <> TK_VARIANT then allVariant := False;
+
+  { --- pointer-family shape: an annotated host method whose params are all
+        pointer-sized register values (int/int64/bool/char/pointer/class/
+        AnsiString-by-value). uforth's `define_word(name: str, native: Callable,
+        forth_body, immediate: bool) -> Word` is the driver. Each arg is coerced
+        to the Int64 the callee's ABI expects in an integer register; omitted
+        trailing params are filled from their per-kind zero default (None -> nil,
+        False -> 0), matching Python's defaults. --- }
   if not allVariant then
   begin
-    writeln('pyeval: host method ', name, ' has a non-Variant, non-Double param shape');
-    Halt(1);
+    ptrFamily := (n <= 5) and (pk <> nil);
+    if ptrFamily then
+      for i := 1 to n do
+        if not ((pk[i] = 1) or (pk[i] = 2) or (pk[i] = 3) or (pk[i] = 13) or
+                (pk[i] = 17) or (pk[i] = 6) or (pk[i] = 23)) then ptrFamily := False;
+    if not ptrFamily then
+    begin
+      writeln('pyeval: host method ', name, ' has an unsupported param shape');
+      Halt(1);
+    end;
+    for i := 0 to 4 do pa[i] := 0;
+    for i := 1 to n do
+    begin
+      if (i - 1) >= nargs then
+        pa[i-1] := 0            { omitted -> per-kind zero default }
+      else if pk[i] = 23 then
+      begin
+        psHold[i-1] := pystr_of(args.at(i-1));
+        pa[i-1] := Int64(NativeInt(Pointer(psHold[i-1])));
+      end
+      else if (pk[i] = 17) or (pk[i] = 6) then
+      begin
+        { a Pointer/Callable/class param: a closure -> its object pointer, an
+          object/function value -> its payload pointer, None -> nil. }
+        a0 := args.at(i-1);
+        case PPyRec(@a0)^.VType of
+          VT_PYCLOSURE: pa[i-1] := PPyRec(@a0)^.Payload;
+          7:            pa[i-1] := PPyRec(@a0)^.Payload;
+          0:            pa[i-1] := 0;
+        else            pa[i-1] := pyvar_to_int(a0);
+        end;
+      end
+      else
+        pa[i-1] := pyvar_to_int(args.at(i-1));   { int/int64/bool/char }
+    end;
+    code := mi^.Code;
+    case n of
+      0: begin pf0 := TPFn0(code); pret := pf0(vmobj); end;
+      1: begin pf1 := TPFn1(code); pret := pf1(vmobj, pa[0]); end;
+      2: begin pf2 := TPFn2(code); pret := pf2(vmobj, pa[0], pa[1]); end;
+      3: begin pf3 := TPFn3(code); pret := pf3(vmobj, pa[0], pa[1], pa[2]); end;
+      4: begin pf4 := TPFn4(code); pret := pf4(vmobj, pa[0], pa[1], pa[2], pa[3]); end;
+      5: begin pf5 := TPFn5(code); pret := pf5(vmobj, pa[0], pa[1], pa[2], pa[3], pa[4]); end;
+    end;
+    { box the result by its kind: class/pointer -> VT_OBJECT; ordinal -> int;
+      void (rk=0) -> None. }
+    if (rk = 6) or (rk = 17) then
+    begin PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := pret; end
+    else if rk = 0 then res := MakeNone
+    else res := pyvar_of_int(pret);
+    Exit;
   end;
   if nargs < n then
   begin writeln('pyeval: too few args to ', name, ' (need ', n, ', got ', nargs, ')'); Halt(1); end;
@@ -1251,6 +1336,93 @@ begin
   FnN := FnN + 1;
 end;
 
+{ ---- persistent closures: a nested `def` captured as a VALUE (M2c) ---- }
+{ A pyeval `def` used as a value — passed to a host method (uforth's
+  `vm.define_word(name, native=_w)`) and called back much later as
+  `word.native(vm2)` — must OUTLIVE its EvalPyStmts: Tokenize reuses the global
+  token buffer on the next exec, and the enclosing locals (`name`) are gone too.
+  So snapshot the whole token buffer, the body position, the params, and the
+  enclosing locals into a persistent record. Boxed as a VT_PYCLOSURE (tag 9)
+  variant whose payload is the record index; the reverse bridge (NilPy's
+  PyMakeDynCall) sees the tag and routes the call to PyClosureCall1. }
+const VT_PYCLOSURE = 9;
+type
+  TPyClosure = record
+    Kinds:  array of Integer;
+    Texts:  array of AnsiString;
+    Ints:   array of Int64;
+    Floats: array of Double;
+    NTok:   Integer;
+    BodyPos: Integer;
+    Params:  AnsiString;
+    CapNames: array of AnsiString;
+    CapVals:  array of Variant;
+    CapN:    Integer;
+  end;
+  { A closure passed to a Callable/Pointer host param (uforth's
+    `define_word(name, native=_w)`) is stored in the class's Pointer-typed field
+    (Word.native) and later called as `word.native(vm2)` — an indirect call
+    through a raw pointer, NOT the Variant dynamic-call path. So the value living
+    in that field must be a POINTER that the call site can tell apart from a real
+    compiled function address. A TClosureObj does that: its first word is a fixed
+    Magic sentinel (the address of a pyeval global), which a real code pointer's
+    first instruction bytes will not match, so `word.native(vm2)` can branch —
+    closure -> PyClosureCallPtr, real fn -> the plain indirect call. }
+  TClosureObj = record
+    Magic: Pointer;
+    Cidx:  Int64;
+  end;
+  PClosureObj = ^TClosureObj;
+var
+  Closures: array of TPyClosure;
+  ClosureN: Integer;
+  PyClosureMagicMarker: Integer;   { its ADDRESS is the closure sentinel }
+
+function PyMakeClosureObj(cidx: Int64): Pointer;
+var o: PClosureObj;
+begin
+  o := GetMem(SizeOf(TClosureObj));
+  o^.Magic := @PyClosureMagicMarker;
+  o^.Cidx  := cidx;
+  PyMakeClosureObj := Pointer(o);
+end;
+
+function PyMakeClosure(fnIdx: Integer): Variant;
+var c, i: Integer; r: PPyRec;
+begin
+  if ClosureN >= Length(Closures) then
+  begin
+    if Length(Closures) = 0 then SetLength(Closures, 8)
+    else SetLength(Closures, Length(Closures) * 2);
+  end;
+  c := ClosureN; ClosureN := ClosureN + 1;
+  SetLength(Closures[c].Kinds, TkN);
+  SetLength(Closures[c].Texts, TkN);
+  SetLength(Closures[c].Ints, TkN);
+  SetLength(Closures[c].Floats, TkN);
+  for i := 0 to TkN - 1 do
+  begin
+    Closures[c].Kinds[i]  := TkKind[i];
+    Closures[c].Texts[i]  := TkText[i];
+    Closures[c].Ints[i]   := TkInt[i];
+    Closures[c].Floats[i] := TkFloat[i];
+  end;
+  Closures[c].NTok    := TkN;
+  Closures[c].BodyPos := FnBodyPos[fnIdx];
+  Closures[c].Params  := FnParams[fnIdx];
+  SetLength(Closures[c].CapNames, LclN);
+  SetLength(Closures[c].CapVals, LclN);
+  for i := 0 to LclN - 1 do
+  begin
+    Closures[c].CapNames[i] := LclNames[i];
+    Closures[c].CapVals[i]  := LclVals[i];
+  end;
+  Closures[c].CapN := LclN;
+  r := PPyRec(@Result);
+  r^.VType   := VT_PYCLOSURE;
+  r^.Payload := Int64(NativeInt(PyMakeClosureObj(c)));   { payload = closure-obj pointer }
+end;
+
 procedure EnvGet(const name: AnsiString; var res: Variant);
 var i: Integer; tc: Int64;
 begin
@@ -1264,6 +1436,10 @@ begin
     tc := PyTypeCode(name);
     if tc >= 0 then
     begin PPyRec(@res)^.VType := PY_TYPETAG; PPyRec(@res)^.Payload := tc; end
+    else if FnFind(name) >= 0 then
+      { a nested `def` used as a bare value (no call) — capture it as a closure so
+        it survives being stored by a host method and called back later. }
+      res := PyMakeClosure(FnFind(name))
     else if not Executing then
       res := MakeNone      { walking a skipped branch — names may be undefined }
     else
@@ -1878,7 +2054,13 @@ begin
     if (TkKind[Cur] = PK_NAME) and (TkKind[Cur+1] = PK_OP) and (TkText[Cur+1] = '=') then
     begin
       kw := TkText[Cur]; Advance; Advance; ParseExpr(v);
-      if kw = 'signed' then signedKw := pyvar_to_bool(v);
+      { `signed=` steers pyint.to_bytes and is consumed out-of-band. Every other
+        keyword arg is a host-method kwarg (uforth's `define_word(name,
+        native=_w)`): append it positionally. uforth passes kwargs in the
+        method's declaration order, and PyHostCall fills any omitted trailing
+        params from their per-kind defaults, so positional order is correct. }
+      if kw = 'signed' then signedKw := pyvar_to_bool(v)
+      else args.append(v);
     end
     else
     begin
@@ -2452,6 +2634,111 @@ begin
   if Length(LclNames) < savedN then SetLength(LclNames, savedN);
   if Length(LclVals) < savedN then SetLength(LclVals, savedN);
   for i := 0 to savedN - 1 do begin LclNames[i] := savedNames[i]; LclVals[i] := savedVals[i]; end;
+end;
+
+{ Run a captured closure (PyMakeClosure) with `args`. The whole interpreter state
+  is swapped to the closure's snapshot — its own token buffer, a fresh scope
+  holding the captured free vars plus the bound params, and the body cursor — then
+  fully restored, so a closure can run while another EvalPyStmts / closure is on
+  the stack (a native PYTHON word may call another). }
+procedure PyClosureInvoke(cidx: Integer; args: TPyList; var res: Variant);
+var
+  sKinds:  array of Integer;   sTexts: array of AnsiString;
+  sInts:   array of Int64;     sFloats: array of Double;
+  sTkN, sCur, sLclN, sFnN, i, ai, plen: Integer;
+  sLclNames: array of AnsiString; sLclVals: array of Variant;
+  sFnName:  array of AnsiString;   sFnBodyPos: array of Integer;
+  sFnParams: array of AnsiString;
+  sRF, sExec, sBreak: Boolean; sRV: Variant;
+  params, pname: AnsiString;
+begin
+  { save caller interpreter state }
+  sKinds := TkKind; sTexts := TkText; sInts := TkInt; sFloats := TkFloat;
+  sTkN := TkN; sCur := Cur; sLclN := LclN; sFnN := FnN;
+  SetLength(sLclNames, LclN); SetLength(sLclVals, LclN);
+  for i := 0 to LclN - 1 do begin sLclNames[i] := LclNames[i]; sLclVals[i] := LclVals[i]; end;
+  SetLength(sFnName, FnN); SetLength(sFnBodyPos, FnN); SetLength(sFnParams, FnN);
+  for i := 0 to FnN - 1 do
+  begin sFnName[i] := FnName[i]; sFnBodyPos[i] := FnBodyPos[i]; sFnParams[i] := FnParams[i]; end;
+  sRF := ReturnFlag; sRV := ReturnValue; sExec := Executing; sBreak := BreakFlag;
+
+  { install the closure's snapshot token buffer }
+  TkKind := Closures[cidx].Kinds; TkText := Closures[cidx].Texts;
+  TkInt  := Closures[cidx].Ints;  TkFloat := Closures[cidx].Floats;
+  TkN := Closures[cidx].NTok;
+
+  { fresh scope: captured free vars first, params second (params shadow) }
+  LclN := 0; FnN := 0;
+  for i := 0 to Closures[cidx].CapN - 1 do
+    LclSet(Closures[cidx].CapNames[i], Closures[cidx].CapVals[i]);
+  params := Closures[cidx].Params;
+  plen := Length(params); ai := 0; pname := ''; i := 1;
+  while i <= plen + 1 do
+  begin
+    if (i > plen) or (params[i] = ',') then
+    begin
+      if pname <> '' then
+      begin
+        if ai < args.count then LclSet(pname, args.at(ai)) else LclSet(pname, MakeNone);
+        ai := ai + 1; pname := '';
+      end;
+    end
+    else pname := pname + params[i];
+    i := i + 1;
+  end;
+
+  Executing := True; BreakFlag := False;
+  ReturnFlag := False; ReturnValue := MakeNone;
+  Cur := Closures[cidx].BodyPos;
+  ExecSuite(True);
+  res := ReturnValue;
+
+  { restore caller interpreter state }
+  TkKind := sKinds; TkText := sTexts; TkInt := sInts; TkFloat := sFloats;
+  TkN := sTkN; Cur := sCur;
+  FnN := sFnN;
+  if Length(FnName) < sFnN then
+  begin SetLength(FnName, sFnN); SetLength(FnBodyPos, sFnN); SetLength(FnParams, sFnN); end;
+  for i := 0 to sFnN - 1 do
+  begin FnName[i] := sFnName[i]; FnBodyPos[i] := sFnBodyPos[i]; FnParams[i] := sFnParams[i]; end;
+  LclN := sLclN;
+  if Length(LclNames) < sLclN then begin SetLength(LclNames, sLclN); SetLength(LclVals, sLclN); end;
+  for i := 0 to sLclN - 1 do begin LclNames[i] := sLclNames[i]; LclVals[i] := sLclVals[i]; end;
+  ReturnFlag := sRF; ReturnValue := sRV; Executing := sExec; BreakFlag := sBreak;
+end;
+
+{ Reverse bridge, 1-arg form: NilPy's PyMakeDynCall calls this when the callee
+  VARIANT is a VT_PYCLOSURE. The var-out call into Result sidesteps the
+  Variant-fn-return NRVO corruption. }
+function PyClosureCall1(const clv: Variant; const a0: Variant): Variant;
+var args: TPyList;
+begin
+  args := TPyList.Create;
+  args.append(a0);
+  PyClosureInvoke(PClosureObj(NativeInt(PPyRec(@clv)^.Payload))^.Cidx, args, Result);
+  args.Free;
+end;
+
+{ Is `p` a closure object rather than a real compiled function address? The
+  call-through-field site (`word.native(vm2)`) uses this to choose the bridge.
+  Reading the first word of a code pointer is safe; a real function's opening
+  bytes will not equal the sentinel address. }
+function pyclosure_is(p: Pointer): Boolean;
+begin
+  pyclosure_is := (p <> nil) and (PClosureObj(p)^.Magic = @PyClosureMagicMarker);
+end;
+
+{ Reverse bridge, POINTER form: `word.native(vm2)` where the Callable field holds
+  a closure object (uforth's VARIABLE/CONSTANT words). The closure's result is
+  discarded — a Forth native word is `-> None`. }
+function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;
+var args: TPyList; r: Variant;
+begin
+  args := TPyList.Create;
+  args.append(a0);
+  PyClosureInvoke(PClosureObj(objptr)^.Cidx, args, r);
+  args.Free;
+  pyclosure_call_ptr := 0;
 end;
 
 { Trampoline that runs the pending `__body__` def. exec() stores a variant
