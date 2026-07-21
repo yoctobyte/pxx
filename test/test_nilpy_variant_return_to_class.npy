@@ -1,0 +1,23 @@
+from typing import Optional
+class W:
+    def __init__(self, v: int) -> None:
+        self.v: int = v
+class C:
+    def __init__(self) -> None:
+        self.d: dict = {}
+    def look(self, k: str) -> Optional[W]:
+        return self.d.get(k)
+    def put(self, k: str, w: W) -> None:
+        self.d.store(k, w)
+def go() -> int:
+    c = C()
+    if c.look("missing") is not None:
+        print("BAD")
+    else:
+        print("none-ok")
+    c.put("a", W(7))
+    got = c.look("a")
+    if got is not None:
+        print("found-ok")
+    return 0
+go()

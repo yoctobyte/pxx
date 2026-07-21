@@ -423,6 +423,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_not_container26)" = "$$(printf '%b' 'xs-truthy\nB\nd-truthy\nD')"
 	./$(COMPILER) test/test_nilpy_variant_to_str_param.npy /tmp/test_nilpy_variant_to_str_param26
 	test "$$(/tmp/test_nilpy_variant_to_str_param26)" = "$$(printf '%b' 'WORLD\nHELLO\nWORLD\nworld')"
+	./$(COMPILER) test/test_nilpy_variant_return_to_class.npy /tmp/test_nilpy_variant_return_to_class26
+	test "$$(/tmp/test_nilpy_variant_return_to_class26)" = "$$(printf '%b' 'none-ok\nfound-ok')"
 	./$(COMPILER) examples/shell/shell0.npy /tmp/test_nilpy_shell026
 	/tmp/test_nilpy_shell026 | grep -q "hello portable userland"
 

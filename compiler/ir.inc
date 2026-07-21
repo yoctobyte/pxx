@@ -3599,6 +3599,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
     promoLhs, promoRhs, promoDst, promoSym, promoOp: Integer;   { promotable-int slot lowering }
     vuExitUnboxed: Boolean;         { `return <variant>` unboxed to a scalar result }
+    vuArgProc, vuArgAddr, vuArgNode: Integer;   { `return <variant>` -> class via pyvarobj }
     fdName: string;                 { NilPy floor-div/mod helper being called }
     pvName: string;                 { NilPy variant-dispatch builtin }
     pvTk: TTypeKind;
@@ -6211,6 +6212,22 @@ begin
           if vuExitUnboxed then
             value := IRLowerVariantAsScalar(ASTLeft[node],
                                             Syms[Procs[CurProc].RetSymIdx].TypeKind)
+          else if PyProgramMode and (CurProc >= 0) and (Procs[CurProc].RetSymIdx >= 0) and
+                  (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant) and
+                  (Syms[Procs[CurProc].RetSymIdx].TypeKind = tyClass) then
+          begin
+            { `return <variant>` from an Optional[class] function (`return
+              self.d.get(k)`, whose 1-arg get yields a variant None or a boxed
+              object): unbox to the object POINTER via pyvarobj (nil for None), so
+              the tyClass result holds a real handle and `is None` works. Without
+              it the variant's 8-byte tag was returned as the class pointer
+              (bug-nilpy-variant-return-to-class-result). }
+            vuArgProc := FindProc('pyvarobj');
+            if vuArgProc < 0 then Error('variant->class return: pyvarobj not loaded');
+            vuArgAddr := IRVariantAddr(ASTLeft[node]);
+            vuArgNode := IRAppend(IR_ARG, vuArgAddr, -1, -1, 0, Ord(tyVariant));
+            value := IRAppendCall(vuArgProc, vuArgNode, -1, Ord(tyPointer));
+          end
           else
           value := IRLowerAST(ASTLeft[node]);
           { A C function returning `char*` (any pointer) that returns a string
