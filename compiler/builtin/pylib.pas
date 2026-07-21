@@ -1707,8 +1707,10 @@ end;
 function pyvar_to_bool(const v: Variant): Boolean;
 var
   p: PPyVarRec;
+  o: TObject;
 begin
-  { Python truthiness -- TOTAL, never an error: 0, 0.0, '', None are false. }
+  { Python truthiness -- TOTAL, never an error: 0, 0.0, '', None, and an EMPTY
+    container are false. }
   p := PPyVarRec(@v);
   if p^.VType = 3 then
     Result := PPyDouble(@p^.Payload)^ <> 0.0
@@ -1716,6 +1718,18 @@ begin
     Result := PPyAnsiString(@p^.Payload)^ <> ''
   else if p^.VType = 0 then
     Result := False
+  else if p^.VType = 7 then
+  begin
+    { A boxed container is falsy when empty (Python), so a variant produced by
+      `x and <list>` / `x or <dict>` tests its length, not its handle — the
+      handle is never nil, which made every boxed container truthy. A non-
+      container object stays truthy on its non-nil handle. }
+    o := TObject(Pointer(p^.Payload));
+    if o is TPyList then Result := TPyList(o).count > 0
+    else if o is TPyDict then Result := TPyDict(o).count > 0
+    else if o is TPyBytes then Result := TPyBytes(o).count > 0
+    else Result := p^.Payload <> 0;
+  end
   else
     Result := p^.Payload <> 0;
 end;

@@ -1097,20 +1097,47 @@ begin
   CurASTNode := left;
 end;
 
-{ A truthiness condition for `n`: a variant is tested with pylib bool() (its raw
-  scalar would be the tag), everything else tests naturally in a condition. }
+{ A truthiness condition for `n` in an `if`/`while` context. Python truthiness is
+  type-directed, but a raw NilPy condition tests the storage cell:
+    - a VARIANT tests its tag word, so `if v:` was true for every variant
+      including one holding 0 — route it through pylib bool().
+    - a LIST / DICT / bytes is a class HANDLE (never nil), so `if xs:` was true
+      for every container including an empty one — test `len(xs) <> 0` via .count
+      (bug-nilpy-if-on-container-always-true; uforth's `and self.include_stack`
+      indexed [-1] on an empty list because the guard never went false).
+  Ordinals and strings already test correctly (0 / empty are falsy natively), so
+  they pass through unchanged. }
 function PyMakeTruthy(n: Integer): Integer;
-var procIdx, argNode: Integer;
+var procIdx, argNode, rec, lenNode, zeroNode, node: Integer;
 begin
-  if IntToTypeKind(ASTTk[n]) <> tyVariant then begin Result := n; Exit; end;
-  procIdx := FindProc('bool');
-  if procIdx < 0 then begin Result := n; Exit; end;
-  argNode := AllocNode(AN_ARG);
-  ASTLeft[argNode] := n; ASTRight[argNode] := -1;
-  Result := AllocNode(AN_CALL);
-  ASTIVal[Result] := procIdx;
-  ASTTk[Result] := Ord(tyBoolean);
-  ASTLeft[Result] := argNode;
+  Result := n;
+  if IntToTypeKind(ASTTk[n]) = tyVariant then
+  begin
+    procIdx := FindProc('bool');
+    if procIdx < 0 then Exit;
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := n; ASTRight[argNode] := -1;
+    Result := AllocNode(AN_CALL);
+    ASTIVal[Result] := procIdx;
+    ASTTk[Result] := Ord(tyBoolean);
+    ASTLeft[Result] := argNode;
+    Exit;
+  end;
+  if IntToTypeKind(ASTTk[n]) = tyClass then
+  begin
+    rec := ResolveNodeRec(n);
+    if (rec >= REC_UCLASS_BASE) and PyIsPylibContainerCi(rec - REC_UCLASS_BASE) then
+    begin
+      lenNode := PyCallMeth1(rec - REC_UCLASS_BASE, 'count', n, -1);
+      if lenNode < 0 then Exit;
+      zeroNode := AllocNode(AN_INT_LIT);
+      ASTIVal[zeroNode] := 0; ASTTk[zeroNode] := Ord(tyInteger);
+      node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkNeq);
+      ASTLeft[node] := lenNode; ASTRight[node] := zeroNode;
+      ASTTk[node] := Ord(tyBoolean);
+      Result := node;
+    end;
+  end;
 end;
 
 { True when `a or b` / `a and b` must return an OPERAND (Python semantics) rather
@@ -3704,7 +3731,7 @@ var node, pairNode, condNode, thenNode, elseNode: Integer;
 begin
   Next;
   PyParseBoolExpr;
-  condNode := CurASTNode;
+  condNode := PyMakeTruthy(CurASTNode);
   Expect(tkColon, ':');
   thenNode := PyParseSuite;
   elseNode := -1;
@@ -3884,7 +3911,7 @@ begin
   Next;
   PyParseBoolExpr;
   node := AllocNode(AN_WHILE);
-  ASTLeft[node] := CurASTNode;
+  ASTLeft[node] := PyMakeTruthy(CurASTNode);
   Expect(tkColon, ':');
   ASTRight[node] := PyParseSuite;
   Result := node;
