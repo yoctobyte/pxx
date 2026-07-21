@@ -472,17 +472,32 @@ def job_key(j):
     return j.get("sel") or j["name"]
 
 
-def reg_open(r, fixed, now):
+def reg_open(r, fixed, authoritative):
     """Is this ledger entry still an open regression after the latest run?
 
     A per-job entry closes when its job is in `fixed`.  A CASCADE entry names
     no single job (its "job" is a synthetic cascade@<sha> key that can never
     appear in `fixed`), so it closes only once every job it swept up is
-    passing again — otherwise it would pin itself open forever.  Jobs absent
-    from `now` weren't run this tier and stay open (unknown != fixed).
+    genuinely passing again — otherwise it would pin itself open forever.
+
+    `authoritative` is the MERGED per-job status (persisted st["jobs"] overlaid
+    with this run's results), NOT just this run's `now`.  Using this run alone
+    closed a cascade whenever ONE run happened to show every swept job as
+    non-red — which bit us 2026-07-20/21: the riscv32 record-result cascade
+    (18 jobs) closed off a single lucky full run, then the jobs failed again as
+    STILL-RED (filing nothing), so 17 jobs sat `fail` in the jobs map with the
+    cascade gone from open_regressions.  Against the merged map a job that is
+    still `fail` in the persisted state keeps the cascade open even when this
+    tier did not run it.
+
+    A `skip` is mapped to `pass` by diff_jobs (corpus-absent is pass-equivalent
+    for a normal verdict), but it is NOT proof a regression is fixed — so a
+    cascade whose jobs only ever SKIP would wrongly close.  That is a known
+    residual; the merged-map fix removes the common transient-flake close, which
+    is what actually happened here.
     """
     if r.get("cascade"):
-        return any(now.get(j, "red") != "pass" for j in r["cascade"])
+        return any(authoritative.get(j, "red") != "pass" for j in r["cascade"])
     return r["job"] not in fixed
 
 
@@ -630,7 +645,11 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # Neither case is dropped silently: the per-job red still lands in
     # st["jobs"] and in the written report, so the signal survives without the
     # ledger claiming N independent bisectable regressions that don't exist.
-    regs = [r for r in st["open_regressions"] if reg_open(r, fixed, now)]
+    # Cascade close is judged against the MERGED map (what we knew, overlaid
+    # with what this run showed), so a cascade cannot close off one lucky run
+    # while its jobs remain red in the persisted state. See reg_open.
+    authoritative = dict(st["jobs"], **now)
+    regs = [r for r in st["open_regressions"] if reg_open(r, fixed, authoritative)]
     srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
     namemap = {job_key(j): j["name"] for j in report["jobs"]}
     rng = clone.commits_between(parent, sha) if parent else [sha]
