@@ -79,9 +79,13 @@ const
   RTTI_OFS_PARENT     = 8;
   RTTI_OFS_METHCOUNT  = 48;
   RTTI_OFS_METHS      = 56;
-  RTTI_METH_ENTRY     = 40;   { {name, code, arity, retKind, paramKinds} — grown
-                                for the reflection host bridge; this unit reads
-                                only name(+0)/code(+8), the stride is what matters }
+  RTTI_METH_ENTRY     = 48;   { {name, code, arity, retKind, paramKinds, flags} —
+                                grown for the reflection host bridge. The meth
+                                table now holds EVERY method; this unit enumerates
+                                only PUBLISHED ones (flags bit0), so RttiMethodCount
+                                / RttiMethodEntry filter on it. }
+  RTTI_METH_OFS_FLAGS = 40;
+  RTTI_METH_FLAG_PUBLISHED = 1;
   RTTI_METH_OFS_NAME  = 0;
   RTTI_METH_OFS_CODE  = 8;
 
@@ -136,24 +140,38 @@ begin
   else GetRttiClassName := CStrToStr(PtrAt(Rtti, RTTI_OFS_NAME));
 end;
 
+function MethEntryIsPublished(e: Pointer): Boolean;
+begin
+  MethEntryIsPublished :=
+    (IntAt(e, RTTI_METH_OFS_FLAGS) and RTTI_METH_FLAG_PUBLISHED) <> 0;
+end;
+
 function RttiMethodCount(Rtti: Pointer): Integer;
-{ own + inherited, walking the parent chain }
-var n: Integer; cur: Pointer;
+{ PUBLISHED methods, own + inherited. The table holds every method now, so
+  count only the ones flagged published (the enumeration contract). }
+var n, cnt, j: Integer; cur, meths, e: Pointer;
 begin
   n := 0;
   cur := Rtti;
   while cur <> nil do
   begin
-    n := n + Integer(IntAt(cur, RTTI_OFS_METHCOUNT));
+    cnt := Integer(IntAt(cur, RTTI_OFS_METHCOUNT));
+    meths := PtrAt(cur, RTTI_OFS_METHS);
+    if meths <> nil then
+      for j := 0 to cnt - 1 do
+      begin
+        e := Pointer(PtrUInt(meths) + PtrUInt(j * RTTI_METH_ENTRY));
+        if MethEntryIsPublished(e) then n := n + 1;
+      end;
     cur := PtrAt(cur, RTTI_OFS_PARENT);
   end;
   RttiMethodCount := n;
 end;
 
 function RttiMethodEntry(Rtti: Pointer; Index: Integer): Pointer;
-{ The Index'th method across the chain, own-first then up through the ancestors.
-  nil when Index is out of range. }
-var cur, meths: Pointer; cnt, i: Integer;
+{ The Index'th PUBLISHED method across the chain, own-first then up through the
+  ancestors. Non-published entries are skipped. nil when out of range. }
+var cur, meths, e: Pointer; cnt, i, j: Integer;
 begin
   RttiMethodEntry := nil;
   if Index < 0 then Exit;
@@ -162,14 +180,17 @@ begin
   while cur <> nil do
   begin
     cnt := Integer(IntAt(cur, RTTI_OFS_METHCOUNT));
-    if i < cnt then
-    begin
-      meths := PtrAt(cur, RTTI_OFS_METHS);
-      if meths = nil then Exit;
-      RttiMethodEntry := Pointer(PtrUInt(meths) + PtrUInt(i * RTTI_METH_ENTRY));
-      Exit;
-    end;
-    i := i - cnt;
+    meths := PtrAt(cur, RTTI_OFS_METHS);
+    if meths <> nil then
+      for j := 0 to cnt - 1 do
+      begin
+        e := Pointer(PtrUInt(meths) + PtrUInt(j * RTTI_METH_ENTRY));
+        if MethEntryIsPublished(e) then
+        begin
+          if i = 0 then begin RttiMethodEntry := e; Exit; end;
+          i := i - 1;
+        end;
+      end;
     cur := PtrAt(cur, RTTI_OFS_PARENT);
   end;
 end;

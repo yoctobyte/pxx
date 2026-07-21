@@ -310,6 +310,7 @@ begin
       PatchDataU64(paramOff + p * 8, Ord(Procs[procIdx].Params[p].TypeKind));
     AddDataPtrFix(miPos + 32, paramOff);
   end;
+  if UMthPub[mi] = 1 then PatchDataU64(miPos + 40, RTTI_METH_FLAG_PUBLISHED);
 end;
 
 { Fill a FieldInfo record (RTTI_FIELD_SIZE bytes) at fiPos for field fi:

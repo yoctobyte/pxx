@@ -137,13 +137,16 @@ const
                             what lets an interface VALUE be a single instance pointer
                             (FPC's ABI) instead of a fat {IMT,instance} pair. }
   RTTI_PROP_SIZE   = 64;  { name,kind,typeRef,getKind,getRef,setKind,setRef,ordType }
-  RTTI_METH_SIZE   = 40;  { name,code,arity,retKind,paramKindsPtr — ALL methods
-                            (not just published), so method invoke-by-name reaches
-                            any class incl. NilPy-lowered ones, and the generic
-                            native-call trampoline has the signature it needs to
-                            marshal variant args (feature-lib-pyexec host bridge).
-                            arity counts Self (Params[0]); paramKinds is `arity`
-                            Int64 Ord(TTypeKind) words (nil when arity=0). }
+  RTTI_METH_SIZE   = 48;  { name,code,arity,retKind,paramKindsPtr,flags — ALL
+                            methods (not just published), so method invoke-by-name
+                            reaches any class incl. NilPy-lowered ones, and the
+                            generic native-call trampoline has the signature it
+                            needs (feature-lib-pyexec host bridge). arity counts
+                            Self (Params[0]); paramKinds is `arity` Int64
+                            Ord(TTypeKind) words (nil when arity=0); flags bit0 =
+                            published — the streaming/published ENUMERATION in
+                            rtti.pas filters on it, invoke-by-name ignores it. }
+  RTTI_METH_FLAG_PUBLISHED = 1;
   RTTI_FIELD_SIZE  = 40;  { name,offset,typeKind,recId,flags — ALL fields (not just
                             published), so field get/set by name reflects any class
                             incl. NilPy-lowered ones (feature-rtti-field-reflection).

@@ -41,9 +41,10 @@ type
     Code:    Pointer;
     {$ifdef CPU32} _pad_code: LongInt; {$endif}
     Arity:      Int64;    { param count, incl. Self at index 0 for a method }
-    RetKind:    Int64;    { Ord(TTypeKind) of the return type }
+    RetKind:    Int64;    { Ord(TTypeKind) of the return type; 0 = a procedure }
     ParamKinds: Pointer;  { ^array of `Arity` Int64 Ord(TTypeKind) words; nil if 0 }
     {$ifdef CPU32} _pad_pk: LongInt; {$endif}
+    Flags:      Int64;    { bit0 = published (RTTI_METH_FLAG_PUBLISHED) }
   end;
   PMethInfo = ^TMethInfo;
 

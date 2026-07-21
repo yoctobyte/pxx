@@ -71,8 +71,10 @@ procedure __pxxStrInsert(const src: AnsiString; var s: AnsiString; index: Intege
   The instance reaches its class RTTI through the backlink the compiler reserves one
   word BEFORE the VMT: [instance+0] is the VMT address, so the blob is at
   [[instance+0] - 8]. Blob layout is fixed by the RTTI_* constants in defs.inc:
-  +0 name, +8 parent, +48 methCount, +56 meths; a method entry is 16 bytes
-  {name, code}. Names are INTERNED FROZEN STRINGS — the pointer targets an 8-byte
+  +0 name, +8 parent, +48 methCount, +56 meths; a method entry is 48 bytes
+  {name, code, arity, retKind, paramKinds, flags} and only PUBLISHED entries
+  (flags bit0) count for MethodAddress/MethodName. Names are INTERNED FROZEN
+  STRINGS — the pointer targets an 8-byte
   length prefix with the chars at +8, NOT a bare char*.
 
   Own and inherited methods both resolve (the parent chain is walked). Matching is
@@ -1042,7 +1044,9 @@ const
   PXX_RTTI_PARENT    = 8;
   PXX_RTTI_METHCOUNT = 48;
   PXX_RTTI_METHS     = 56;
-  PXX_RTTI_METHSIZE  = 16;
+  PXX_RTTI_METHSIZE  = 48;   { {name,code,arity,retKind,paramKinds,flags} }
+  PXX_RTTI_METH_FLAGS = 40;
+  PXX_RTTI_METH_PUBLISHED = 1;
 
 function __pxxRttiOf(Instance: Pointer): Pointer;
 { The class RTTI blob of an instance: [[instance+0] - 8]. nil when the class
@@ -1133,6 +1137,8 @@ begin
       for i := 0 to cnt - 1 do
       begin
         e := Pointer(PtrUInt(meths) + PtrUInt(i * PXX_RTTI_METHSIZE));
+        { the table now holds every method; MethodAddress is published-only (FPC) }
+        if (PPxxInt_(PtrUInt(e) + PXX_RTTI_METH_FLAGS)^ and PXX_RTTI_METH_PUBLISHED) = 0 then Continue;
         if __pxxSameNameCI(__pxxRttiName(PPxxPtr_(e)^), Name) then
         begin
           Result := PPxxPtr_(PtrUInt(e) + 8)^;
@@ -1157,6 +1163,7 @@ begin
       for i := 0 to cnt - 1 do
       begin
         e := Pointer(PtrUInt(meths) + PtrUInt(i * PXX_RTTI_METHSIZE));
+        if (PPxxInt_(PtrUInt(e) + PXX_RTTI_METH_FLAGS)^ and PXX_RTTI_METH_PUBLISHED) = 0 then Continue;
         if PPxxPtr_(PtrUInt(e) + 8)^ = Address then
         begin
           Result := __pxxRttiName(PPxxPtr_(e)^);
