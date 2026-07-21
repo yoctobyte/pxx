@@ -43,7 +43,7 @@ unit pyeval;
 
 interface
 
-uses pylib, typinfo;
+uses pylib, typinfo, promoint;
 
 { Run a statement sequence `src` with globals g / locals l (Python's explicit
   exec form; uforth always passes both). Assignments write locals; name reads
@@ -78,6 +78,7 @@ const
   PK_NL     = 6;
   PK_INDENT = 7;
   PK_DEDENT = 8;
+  PK_BIGINT = 9;   { integer/hex literal that overflows Int64; TkText = its text }
 
 type
   PPyRec = ^TPyRec;
@@ -154,6 +155,231 @@ var r: PPyRec;
 begin
   r := PPyRec(@Result);
   r^.VType := 7; r^.Payload := Int64(p);
+end;
+
+{ ---- promotable-int (bignum) integer layer --------------------------------
+
+  Python ints are arbitrary precision. pyeval keeps them as Int64 while they fit
+  and PROMOTES to promoint.pas's bignum on overflow — the value's variant simply
+  changes shape (VT_INT64 <-> VT_PROMO_INT64). Bignum is a TRANSIENT intermediate
+  (the double-cell MATH words compute a 128-bit product then mask/shift it back
+  into two 64-bit cells before push); the Forth stack itself stays 64-bit. Only
+  the ~13 MATH words ever trigger it, so the Int64 fast path is untouched.
+
+  Overhead is a non-issue: the tree-walker re-parses per call and dominates; the
+  promo path engages only on actual overflow. Bitwise `&`/`<<`/`>>` reduce to
+  mod/mul/div by powers of two (the only forms the corpus uses); a general bignum
+  bitwise-and with a non-power-of-2 mask is unsupported and errors clearly. }
+
+const VT_PROMO = 8193;   { VT_PROMO_INT64_TAG — a bignum boxed in a variant }
+
+function IsPromoV(const v: Variant): Boolean;
+begin IsPromoV := PPyRec(@v)^.VType = VT_PROMO; end;
+
+function IsIntishV(const v: Variant): Boolean;
+var t: Int64;
+begin
+  t := PPyRec(@v)^.VType;
+  IsIntishV := (t = 1) or (t = 2) or (t = 4) or (t = VT_PROMO);
+end;
+
+{ Int64 value of any int-ish variant, promo included (truncates a promo that
+  exceeds Int64 — callers coerce only where a 64-bit cell is expected). }
+function PyToI64(const v: Variant): Int64;
+var s: array[0..1] of NativeInt;
+begin
+  if IsPromoV(v) then
+  begin
+    PXXPromoInit(@s); PXXPromoFromVariant(@s, @v);
+    PyToI64 := PXXPromoToInt64(@s);
+    PXXPromoClear(@s);
+  end
+  else PyToI64 := pyvar_to_int(v);
+end;
+
+{ NOTE — these return Variant via a `var res` out-param, NEVER as a function
+  result. A Variant function whose Result is assigned from another Variant call
+  corrupts the value under the current codegen (the NRVO forward bug — see the
+  unit header); a var-out procedure sidesteps it. So `res := pyvar_of_int(x)` and
+  `PromoOp(a,b,op,res)` are safe here, where `Result := pyvar_of_int(x)` would not
+  be. }
+
+{ a op b through promotable-int; the result auto-demotes to VT_INT64 when it
+  fits (PXXPromoToVariant), so bignum never lingers once it is back in range.
+  op: 1 add, 2 sub, 3 mul, 4 floordiv, 5 mod. }
+procedure PromoOp(const a, b: Variant; op: Integer; var res: Variant);
+var pa, pb, pr: array[0..1] of NativeInt;
+begin
+  PXXPromoInit(@pa); PXXPromoInit(@pb); PXXPromoInit(@pr);
+  PXXPromoFromVariant(@pa, @a);
+  PXXPromoFromVariant(@pb, @b);
+  if op = 1 then PXXPromoAdd(@pr, @pa, @pb)
+  else if op = 2 then PXXPromoSub(@pr, @pa, @pb)
+  else if op = 3 then PXXPromoMul(@pr, @pa, @pb)
+  else if op = 4 then PXXPromoDiv(@pr, @pa, @pb)
+  else PXXPromoMod(@pr, @pa, @pb);
+  PXXPromoToVariant(@res, @pr);
+  PXXPromoClear(@pa); PXXPromoClear(@pb); PXXPromoClear(@pr);
+end;
+
+function PromoCmp(const a, b: Variant): Int64;
+var pa, pb: array[0..1] of NativeInt;
+begin
+  PXXPromoInit(@pa); PXXPromoInit(@pb);
+  PXXPromoFromVariant(@pa, @a); PXXPromoFromVariant(@pb, @b);
+  PromoCmp := PXXPromoCmp(@pa, @pb);
+  PXXPromoClear(@pa); PXXPromoClear(@pb);
+end;
+
+{ 2^k as a variant (Int64 while it fits, else promo). }
+procedure Pow2V(k: Int64; var res: Variant);
+var s, t: array[0..1] of NativeInt; i: Int64;
+begin
+  if (k >= 0) and (k < 62) then begin res := pyvar_of_int(Int64(1) shl k); Exit; end;
+  PXXPromoInit(@s); PXXPromoInit(@t); PXXPromoFromInt(@s, 1);
+  i := 1;
+  while i <= k do begin PXXPromoMulInt(@t, @s, 2); PXXPromoCopy(@s, @t); i := i + 1; end;
+  PXXPromoToVariant(@res, @s);
+  PXXPromoClear(@s); PXXPromoClear(@t);
+end;
+
+procedure PyIAdd(const a, b: Variant; var res: Variant);
+var ia, ib, s: Int64;
+begin
+  if IsPromoV(a) or IsPromoV(b) then begin PromoOp(a, b, 1, res); Exit; end;
+  ia := pyvar_to_int(a); ib := pyvar_to_int(b); s := ia + ib;
+  if ((ib > 0) and (s < ia)) or ((ib < 0) and (s > ia)) then PromoOp(a, b, 1, res)
+  else res := pyvar_of_int(s);
+end;
+
+procedure PyISub(const a, b: Variant; var res: Variant);
+var ia, ib, s: Int64;
+begin
+  if IsPromoV(a) or IsPromoV(b) then begin PromoOp(a, b, 2, res); Exit; end;
+  ia := pyvar_to_int(a); ib := pyvar_to_int(b); s := ia - ib;
+  if ((ib < 0) and (s < ia)) or ((ib > 0) and (s > ia)) then PromoOp(a, b, 2, res)
+  else res := pyvar_of_int(s);
+end;
+
+procedure PyIMul(const a, b: Variant; var res: Variant);
+var ia, ib, r: Int64;
+begin
+  if IsPromoV(a) or IsPromoV(b) then begin PromoOp(a, b, 3, res); Exit; end;
+  ia := pyvar_to_int(a); ib := pyvar_to_int(b); r := ia * ib;
+  if (ia <> 0) and (r div ia <> ib) then PromoOp(a, b, 3, res)
+  else res := pyvar_of_int(r);
+end;
+
+procedure PyIFloorDiv(const a, b: Variant; var res: Variant);
+begin
+  if IsPromoV(a) or IsPromoV(b) then PromoOp(a, b, 4, res)
+  else res := pyfloordiv_v(a, b);
+end;
+
+procedure PyIMod(const a, b: Variant; var res: Variant);
+begin
+  if IsPromoV(a) or IsPromoV(b) then PromoOp(a, b, 5, res)
+  else res := pymod_v(a, b);
+end;
+
+{ `a << n` == a * 2^n; routed through PyIMul so overflow auto-promotes. }
+procedure PyIShl(const a, nv: Variant; var res: Variant);
+var p: Variant;
+begin
+  Pow2V(PyToI64(nv), p);
+  PyIMul(a, p, res);
+end;
+
+{ `a >> n` == floor(a / 2^n) (Python arithmetic shift). Promo -> floordiv;
+  Int64 -> the existing sign-propagating shift. }
+procedure PyIShr(const a, nv: Variant; var res: Variant);
+var p: Variant;
+begin
+  if IsPromoV(a) then begin Pow2V(PyToI64(nv), p); PromoOp(a, p, 4, res); end
+  else res := pyshr_v(a, nv);
+end;
+
+{ Is v an all-ones mask 2^k - 1? returns k. Handles the corpus's 0xFFFF...FFFF
+  (2^64-1, a promo) and any Int64-fitting all-ones mask. }
+function MaskPow2(const v: Variant; var k: Int64): Boolean;
+var iv, t: Int64; s: array[0..1] of NativeInt; txt: AnsiString;
+begin
+  MaskPow2 := False;
+  if IsPromoV(v) then
+  begin
+    PXXPromoInit(@s); PXXPromoFromVariant(@s, @v); txt := PXXPromoToStr(@s);
+    PXXPromoClear(@s);
+    if txt = '18446744073709551615' then begin k := 64; MaskPow2 := True; end;
+    Exit;
+  end;
+  iv := pyvar_to_int(v);
+  if iv <= 0 then Exit;
+  if (iv and (iv + 1)) <> 0 then Exit;   { not all-ones }
+  k := 0; t := iv;
+  while t > 0 do begin t := t shr 1; k := k + 1; end;
+  MaskPow2 := True;
+end;
+
+{ `a & b`. Both Int64 -> plain and. One side promo -> the other must be an
+  all-ones mask (2^k-1), giving `value mod 2^k` (== keep low k bits, Python's
+  unsigned masking). A general bignum bitwise-and is not supported. }
+procedure PyIBitAnd(const a, b: Variant; var res: Variant);
+var k: Int64; p: Variant;
+begin
+  if (not IsPromoV(a)) and (not IsPromoV(b)) then
+  begin res := pyvar_of_int(pyvar_to_int(a) and pyvar_to_int(b)); Exit; end;
+  if MaskPow2(b, k) then begin Pow2V(k, p); PromoOp(a, p, 5, res); end
+  else if MaskPow2(a, k) then begin Pow2V(k, p); PromoOp(b, p, 5, res); end
+  else
+  begin
+    writeln('pyeval: bignum bitwise-and needs a power-of-2-minus-1 mask');
+    Halt(1);
+  end;
+end;
+
+function PyICmp(const a, b: Variant): Int64;
+begin
+  if IsPromoV(a) or IsPromoV(b) then PyICmp := PromoCmp(a, b)
+  else PyICmp := pycmp_v(a, b);
+end;
+
+function PyIEq(const a, b: Variant): Boolean;
+begin
+  if IsPromoV(a) or IsPromoV(b) then PyIEq := PromoCmp(a, b) = 0
+  else PyIEq := pyeq_v(a, b);
+end;
+
+{ Parse an integer/hex literal that overflowed Int64 into a promo variant. }
+procedure PyBigLit(const text: AnsiString; var res: Variant);
+var s, t: array[0..1] of NativeInt; i, n: Integer; c: Char; d, base: Int64; isHex: Boolean;
+begin
+  PXXPromoInit(@s); PXXPromoInit(@t);
+  n := Length(text); i := 1; isHex := False;
+  if (n >= 2) and (text[1] = '0') and ((text[2] = 'x') or (text[2] = 'X')) then
+  begin isHex := True; i := 3; base := 16; end
+  else base := 10;
+  PXXPromoFromInt(@s, 0);
+  while i <= n do
+  begin
+    c := text[i];
+    if c <> '_' then
+    begin
+      if isHex then
+      begin
+        if (c >= '0') and (c <= '9') then d := Ord(c) - Ord('0')
+        else if (c >= 'a') and (c <= 'f') then d := Ord(c) - Ord('a') + 10
+        else d := Ord(c) - Ord('A') + 10;
+      end
+      else
+        d := Ord(c) - Ord('0');
+      { s := s*base + d, via a temp to avoid dst/src aliasing }
+      PXXPromoMulInt(@t, @s, base);
+      PXXPromoAddInt(@s, @t, d);
+    end;
+    i := i + 1;
+  end;
+  PXXPromoToVariant(@res, @s);
+  PXXPromoClear(@s); PXXPromoClear(@t);
 end;
 
 { ---- host-call trampoline ---- }
@@ -258,6 +484,14 @@ begin
   if n >= 3 then a2 := args.at(2);
   if n >= 4 then a3 := args.at(3);
   if n >= 5 then a4 := args.at(4);
+  { A host method (push/define_word/…) expects 64-bit cells: coerce any bignum
+    arg back to Int64 so a promo never leaks onto the Forth stack. The double-cell
+    words mask to 64 bits before push; this is the defensive belt. }
+  if IsPromoV(a0) then a0 := pyvar_of_int(PyToI64(a0));
+  if IsPromoV(a1) then a1 := pyvar_of_int(PyToI64(a1));
+  if IsPromoV(a2) then a2 := pyvar_of_int(PyToI64(a2));
+  if IsPromoV(a3) then a3 := pyvar_of_int(PyToI64(a3));
+  if IsPromoV(a4) then a4 := pyvar_of_int(PyToI64(a4));
   code := mi^.Code;
 
   { Variant return }
@@ -691,9 +925,9 @@ var
   c, c2: Char;
   start: Integer;
   ident, op, slit: AnsiString;
-  iv: Int64;
+  iv, dg: Int64;
   fv, scale: Double;
-  isFloat: Boolean;
+  isFloat, ovf: Boolean;
   atLineStart: Boolean;
   col, sp: Integer;
   indent: array of Integer;   { indentation stack; indent[0] = 0 }
@@ -754,28 +988,40 @@ begin
     { number }
     if IsDigit(c) then
     begin
-      { hex }
+      { hex — overflow past Int64 becomes a promo big-literal token }
       if (c = '0') and (Pos + 1 <= SLen) and
          ((Src[Pos+1] = 'x') or (Src[Pos+1] = 'X')) then
       begin
+        start := Pos;
         Pos := Pos + 2;
-        iv := 0;
+        iv := 0; ovf := False;
         if (Pos > SLen) or (not IsHexDigit(Src[Pos])) then
           TokError('malformed hex literal');
         while (Pos <= SLen) and (IsHexDigit(Src[Pos]) or (Src[Pos] = '_')) do
         begin
-          if Src[Pos] <> '_' then iv := iv * 16 + HexVal(Src[Pos]);
+          if Src[Pos] <> '_' then
+          begin
+            dg := HexVal(Src[Pos]);
+            if iv > (High(Int64) - dg) div 16 then ovf := True;
+            if not ovf then iv := iv * 16 + dg;
+          end;
           Pos := Pos + 1;
         end;
-        AddTok(PK_INT, '', iv, 0);
+        if ovf then AddTok(PK_BIGINT, Copy(Src, start, Pos - start), 0, 0)
+        else AddTok(PK_INT, '', iv, 0);
         continue;
       end;
       { decimal int or float }
       start := Pos;
-      iv := 0; isFloat := False;
+      iv := 0; isFloat := False; ovf := False;
       while (Pos <= SLen) and (IsDigit(Src[Pos]) or (Src[Pos] = '_')) do
       begin
-        if Src[Pos] <> '_' then iv := iv * 10 + (Ord(Src[Pos]) - Ord('0'));
+        if Src[Pos] <> '_' then
+        begin
+          dg := Ord(Src[Pos]) - Ord('0');
+          if iv > (High(Int64) - dg) div 10 then ovf := True;
+          if not ovf then iv := iv * 10 + dg;
+        end;
         Pos := Pos + 1;
       end;
       fv := iv;
@@ -794,6 +1040,7 @@ begin
       if (Pos <= SLen) and ((Src[Pos] = 'e') or (Src[Pos] = 'E')) then
         TokError('float exponent literals not supported in M1');
       if isFloat then AddTok(PK_FLOAT, '', 0, fv)
+      else if ovf then AddTok(PK_BIGINT, Copy(Src, start, Pos - start), 0, 0)
       else AddTok(PK_INT, '', iv, 0);
       continue;
     end;
@@ -1046,6 +1293,8 @@ begin
   { ---- atom ---- }
   if TkKind[Cur] = PK_INT then
   begin res := pyvar_of_int(TkInt[Cur]); Advance; end
+  else if TkKind[Cur] = PK_BIGINT then
+  begin PyBigLit(TkText[Cur], res); Advance; end
   else if TkKind[Cur] = PK_FLOAT then
   begin res := MakeFloat(TkFloat[Cur]); Advance; end
   else if TkKind[Cur] = PK_STR then
@@ -1176,7 +1425,12 @@ procedure ParseUnary(var res: Variant);
 var t: Variant;
 begin
   if IsOp('-') then
-  begin Advance; ParseUnary(t); res := pyneg_v(t); Exit; end;
+  begin
+    Advance; ParseUnary(t);
+    { -a: promo-aware (0 - a) for a bignum, else the plain neg }
+    if IsPromoV(t) then PromoOp(pyvar_of_int(0), t, 2, res) else res := pyneg_v(t);
+    Exit;
+  end;
   if IsOp('+') then
   begin Advance; ParseUnary(res); Exit; end;
   if IsOp('~') then
@@ -1185,14 +1439,20 @@ begin
 end;
 
 procedure ParseMul(var res: Variant);
-var a, b: Variant;
+var a, b, t: Variant;
 begin
   ParseUnary(a);
   while IsOp('*') or IsOp('/') or IsOp('//') or IsOp('%') do
   begin
-    if IsOp('*') then begin Advance; ParseUnary(b); a := pymul_v(a, b); end
-    else if IsOp('//') then begin Advance; ParseUnary(b); a := pyfloordiv_v(a, b); end
-    else if IsOp('%') then begin Advance; ParseUnary(b); a := pymod_v(a, b); end
+    if IsOp('*') then
+    begin Advance; ParseUnary(b);
+      if IsIntishV(a) and IsIntishV(b) then begin PyIMul(a, b, t); a := t; end else a := pymul_v(a, b); end
+    else if IsOp('//') then
+    begin Advance; ParseUnary(b);
+      if IsIntishV(a) and IsIntishV(b) then begin PyIFloorDiv(a, b, t); a := t; end else a := pyfloordiv_v(a, b); end
+    else if IsOp('%') then
+    begin Advance; ParseUnary(b);
+      if IsIntishV(a) and IsIntishV(b) then begin PyIMod(a, b, t); a := t; end else a := pymod_v(a, b); end
     else begin Advance; ParseUnary(b);
       a := MakeFloat(pyvar_to_float(a) / pyvar_to_float(b)); end;
   end;
@@ -1200,34 +1460,40 @@ begin
 end;
 
 procedure ParseAdd(var res: Variant);
-var a, b: Variant;
+var a, b, t: Variant;
 begin
   ParseMul(a);
   while IsOp('+') or IsOp('-') do
   begin
-    if IsOp('+') then begin Advance; ParseMul(b); a := pyadd_v(a, b); end
-    else begin Advance; ParseMul(b); a := pysub_v(a, b); end;
+    if IsOp('+') then
+    begin Advance; ParseMul(b);
+      if IsIntishV(a) and IsIntishV(b) then begin PyIAdd(a, b, t); a := t; end else a := pyadd_v(a, b); end
+    else
+    begin Advance; ParseMul(b);
+      if IsIntishV(a) and IsIntishV(b) then begin PyISub(a, b, t); a := t; end else a := pysub_v(a, b); end;
   end;
   res := a;
 end;
 
 procedure ParseShift(var res: Variant);
-var a, b: Variant;
+var a, b, t: Variant;
 begin
   ParseAdd(a);
   while IsOp('<<') or IsOp('>>') do
   begin
-    if IsOp('<<') then begin Advance; ParseAdd(b); a := pyshl_v(a, b); end
-    else begin Advance; ParseAdd(b); a := pyshr_v(a, b); end;
+    if IsOp('<<') then begin Advance; ParseAdd(b); PyIShl(a, b, t); a := t; end
+    else begin Advance; ParseAdd(b); PyIShr(a, b, t); a := t; end;
   end;
   res := a;
 end;
 
 procedure ParseBitAnd(var res: Variant);
-var a, b: Variant;
+var a, b, t: Variant;
 begin
   ParseShift(a);
-  while IsOp('&') do begin Advance; ParseShift(b); a := pybitand_v(a, b); end;
+  while IsOp('&') do
+  begin Advance; ParseShift(b);
+    if IsIntishV(a) and IsIntishV(b) then begin PyIBitAnd(a, b, t); a := t; end else a := pybitand_v(a, b); end;
   res := a;
 end;
 
@@ -1265,17 +1531,17 @@ begin
   ok := True;
   while PyCmpAhead do
   begin
-    if IsOp('==') then begin Advance; ParseBitOr(b); ok := ok and pyeq_v(a, b); end
-    else if IsOp('!=') then begin Advance; ParseBitOr(b); ok := ok and (not pyeq_v(a, b)); end
-    else if IsOp('<') then begin Advance; ParseBitOr(b); c := pycmp_v(a, b); ok := ok and (c < 0); end
-    else if IsOp('>') then begin Advance; ParseBitOr(b); c := pycmp_v(a, b); ok := ok and (c > 0); end
-    else if IsOp('<=') then begin Advance; ParseBitOr(b); c := pycmp_v(a, b); ok := ok and (c <= 0); end
-    else if IsOp('>=') then begin Advance; ParseBitOr(b); c := pycmp_v(a, b); ok := ok and (c >= 0); end
+    if IsOp('==') then begin Advance; ParseBitOr(b); ok := ok and PyIEq(a, b); end
+    else if IsOp('!=') then begin Advance; ParseBitOr(b); ok := ok and (not PyIEq(a, b)); end
+    else if IsOp('<') then begin Advance; ParseBitOr(b); c := PyICmp(a, b); ok := ok and (c < 0); end
+    else if IsOp('>') then begin Advance; ParseBitOr(b); c := PyICmp(a, b); ok := ok and (c > 0); end
+    else if IsOp('<=') then begin Advance; ParseBitOr(b); c := PyICmp(a, b); ok := ok and (c <= 0); end
+    else if IsOp('>=') then begin Advance; ParseBitOr(b); c := PyICmp(a, b); ok := ok and (c >= 0); end
     else if IsKw('is') then
     begin
       Advance;
-      if IsKw('not') then begin Advance; ParseBitOr(b); ok := ok and (not pyeq_v(a, b)); end
-      else begin ParseBitOr(b); ok := ok and pyeq_v(a, b); end;
+      if IsKw('not') then begin Advance; ParseBitOr(b); ok := ok and (not PyIEq(a, b)); end
+      else begin ParseBitOr(b); ok := ok and PyIEq(a, b); end;
     end
     else if IsKw('in') then
     begin Advance; ParseBitOr(b); ok := ok and pyvar_contains(b, a); end
@@ -1407,7 +1673,10 @@ begin
   if name = 'int' then
   begin
     if nargs <> 1 then EvalError('int() expects 1 arg in M1');
-    res := pyint_v(args.at(0)); Exit;
+    cand := args.at(0);
+    { int() of a bignum is identity (stays arbitrary precision); else pyint_v }
+    if IsPromoV(cand) then res := cand else res := pyint_v(cand);
+    Exit;
   end;
   if name = 'float' then
   begin
@@ -1417,7 +1686,14 @@ begin
   if name = 'abs' then
   begin
     if nargs <> 1 then EvalError('abs() expects 1 arg');
-    res := pyabs_v(args.at(0)); Exit;
+    cand := args.at(0);
+    if IsPromoV(cand) then
+    begin
+      if PromoCmp(cand, pyvar_of_int(0)) < 0 then PromoOp(pyvar_of_int(0), cand, 2, res)
+      else res := cand;
+    end
+    else res := pyabs_v(cand);
+    Exit;
   end;
   if name = 'bool' then
   begin
@@ -1973,16 +2249,24 @@ begin
     if tkind = 0 then EnvGet(tname, cur)
     else if tkind = 1 then PyFieldGet(tobj, tname, cur)
     else PySubscriptGet(tcont, tindex, cur);
-    if aug = '+=' then v := pyadd_v(cur, rhs)
-    else if aug = '-=' then v := pysub_v(cur, rhs)
-    else if aug = '*=' then v := pymul_v(cur, rhs)
-    else if aug = '//=' then v := pyfloordiv_v(cur, rhs)
-    else if aug = '%=' then v := pymod_v(cur, rhs)
-    else if aug = '&=' then v := pybitand_v(cur, rhs)
+    { promo-aware for the int-ish operators (the double-cell re-sign step
+      `lo -= 0x10000000000000000` is an augassign with a bignum RHS) }
+    if aug = '+=' then
+    begin if IsIntishV(cur) and IsIntishV(rhs) then PyIAdd(cur, rhs, v) else v := pyadd_v(cur, rhs); end
+    else if aug = '-=' then
+    begin if IsIntishV(cur) and IsIntishV(rhs) then PyISub(cur, rhs, v) else v := pysub_v(cur, rhs); end
+    else if aug = '*=' then
+    begin if IsIntishV(cur) and IsIntishV(rhs) then PyIMul(cur, rhs, v) else v := pymul_v(cur, rhs); end
+    else if aug = '//=' then
+    begin if IsIntishV(cur) and IsIntishV(rhs) then PyIFloorDiv(cur, rhs, v) else v := pyfloordiv_v(cur, rhs); end
+    else if aug = '%=' then
+    begin if IsIntishV(cur) and IsIntishV(rhs) then PyIMod(cur, rhs, v) else v := pymod_v(cur, rhs); end
+    else if aug = '&=' then
+    begin if IsIntishV(cur) and IsIntishV(rhs) then PyIBitAnd(cur, rhs, v) else v := pybitand_v(cur, rhs); end
     else if aug = '|=' then v := pybitor_v(cur, rhs)
     else if aug = '^=' then v := pybitxor_v(cur, rhs)
-    else if aug = '<<=' then v := pyshl_v(cur, rhs)
-    else v := pyshr_v(cur, rhs);
+    else if aug = '<<=' then PyIShl(cur, rhs, v)
+    else PyIShr(cur, rhs, v);
   end;
 
   if tkind = 0 then LclSet(tname, v)
