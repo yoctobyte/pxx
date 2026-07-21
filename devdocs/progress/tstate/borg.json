@@ -2008,7 +2008,7 @@
    "src": "compiler/compiler.pas"
   },
   {
-   "bad": "b5d4783bc0d3237ca938cdcbf06c2956c854e7bd",
+   "bad": "fa4400b76a91998b1a603f8a4cdfb41774d7a667",
    "good": "0a2d36eaf0f91c2b5d3ce394b069533bfdd0c149",
    "job": "test-core#src:test/test_interface_mainbody_ascast_temp.pas",
    "name": "test-core#122",
@@ -2017,12 +2017,7 @@
     "ec9cda7db8184ca14ff16a5468c60d347a622445",
     "3e309f84627e1fd67c52007d9655e21a37d620a8",
     "d9f8d02f07436ac8c2519ed85899b37bdc84290f",
-    "fa4400b76a91998b1a603f8a4cdfb41774d7a667",
-    "2e7bca8da116f15f9223ef83048443e6c641ba89",
-    "a67e8d6c746fda4c96d87c195e5673779d003cf3",
-    "abb0a51a273e82ffd5a5bf6ff347e3ca6065af3e",
-    "1b4dbcf9d0f91f7b826aef49bc038fa0ea2b7004",
-    "b5d4783bc0d3237ca938cdcbf06c2956c854e7bd"
+    "fa4400b76a91998b1a603f8a4cdfb41774d7a667"
    ],
    "src": "test/test_interface_mainbody_ascast_temp.pas"
   }
