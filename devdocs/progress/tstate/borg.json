@@ -1980,7 +1980,7 @@
  },
  "open_regressions": [
   {
-   "bad": "3a9e4f5409b370db0ed16100ae8bb36181a2f581",
+   "bad": "67bb9400036b7d457fddd34bb9a3227a351a7818",
    "good": "651a0368a74d0f2a39837517ed3ede686c6e08cc",
    "job": "test-core#src:test/test_interface_mainbody_ascast_temp.pas",
    "name": "test-core#122",
@@ -1989,11 +1989,7 @@
     "5beaf2edcbe727bb8664baa0e9fcd7d96597e14d",
     "d81dc218cdcb4e584e81862f0901a3adcb32405f",
     "4399fddc4d46fb901009cb1984a655cef9d544b5",
-    "67bb9400036b7d457fddd34bb9a3227a351a7818",
-    "96c3826bf0515e426816f9da75f8765db7a55974",
-    "5a5b8aeb71f554b56d6aff2132f35ab996a85ef7",
-    "2e158cc9477c9aae0af991a9ab1f298a91eeea7a",
-    "3a9e4f5409b370db0ed16100ae8bb36181a2f581"
+    "67bb9400036b7d457fddd34bb9a3227a351a7818"
    ],
    "src": "test/test_interface_mainbody_ascast_temp.pas"
   }

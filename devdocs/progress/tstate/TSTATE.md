@@ -5,4 +5,4 @@
 | borg | `ec98060628c5` | 2026-07-21T22:02:43Z | GREEN (opt) | 217.4s | `ec98060628c5` RED |
 
 ## Open regressions
-- **test-core#src:test/test_interface_mainbody_ascast_temp.pas** — test/test_interface_mainbody_ascast_temp.pas (borg): bad `3a9e4f5409b3`, last good `651a0368a74d`, 8 commit(s) in range
+- **test-core#src:test/test_interface_mainbody_ascast_temp.pas** — test/test_interface_mainbody_ascast_temp.pas (borg): bad `67bb9400036b`, last good `651a0368a74d`, 4 commit(s) in range
