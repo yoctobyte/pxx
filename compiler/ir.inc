@@ -7169,7 +7169,8 @@ begin
       { Managed/aggregate result temp: the per-arm AN_ASSIGN delegation below
         releases the dest's old managed fields before copy, so the temp must be
         nil-inited (allocated post-prologue) — same rule as other hidden temps. }
-      if (argTk = tyAnsiString) or (argTk = tyString) or TypeIsAggregate(argTk) then
+      if (argTk = tyAnsiString) or (argTk = tyString) or TypeIsAggregate(argTk) or
+         (argTk = tyVariant) then
         SymIsHiddenArgTemp[varIdx] := True;
       elseLabel := IRNewLabel;
       endLabel := IRNewLabel;
@@ -7193,7 +7194,10 @@ begin
         loads the record's FIRST 8 BYTES instead — the consumer then used that
         field value as the source address (C `c = cond ? a : b` with struct
         arms copied from *(a.z): the sqlite CREATE TRIGGER NOMEM bug). }
-      if argTk = tyRecord then
+      { A variant (16-byte {tag,payload}) is carried by ADDRESS like a record —
+        an IR_LOAD_SYM scalar load would take only the first 8 bytes and the
+        consumer would deref a truncated value (segfault). Yield its address. }
+      if (argTk = tyRecord) or (argTk = tyVariant) then
         Result := IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(argTk))
       else
         Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(argTk));

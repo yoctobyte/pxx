@@ -8545,6 +8545,43 @@ begin
           LastExprTk := tyBoolean;
           Exit;
         end;
+        { getattr WITH a default on an undeclared attribute of a class/variant:
+          the attribute may have been set DYNAMICALLY, so return the stored value
+          if present else the default — `pydynattr_has(o,n) ? pydynattr_get(o,n) :
+          default`. Without the store check this always returned the default, so
+          `getattr(vm, "_x", None)` reported None even after `vm._x = ...`. }
+        if (atFld < 0) and (atDflt >= 0) and
+           (IntToTypeKind(ASTTk[atRecv]) in [tyVariant, tyClass]) then
+        begin
+          idx := FindProc('pydynattr_has');
+          if idx < 0 then Error('Nil Python: pylib (pydynattr_has) not loaded');
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := PyMakeObjPtr(atRecv);
+          argSeq2 := AllocNode(AN_STR_LIT);
+          ASTSOffset[argSeq2] := PyStoredName(atName); ASTSLen[argSeq2] := Length(atName);
+          ASTTk[argSeq2] := Ord(tyString);
+          argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := argSeq2; ASTRight[argSeq3] := -1;
+          ASTRight[argSeq] := argSeq3;
+          node := AllocNode(AN_CALL); ASTIVal[node] := idx;
+          ASTTk[node] := Ord(tyBoolean); ASTLeft[node] := argSeq;
+          { box the default into a variant so both ternary branches share the
+            variant representation (a raw scalar branch would be misread) }
+          idx := FindProc('pyvar_box');
+          if idx < 0 then Error('Nil Python: pylib (pyvar_box) not loaded');
+          argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := atDflt; ASTRight[argSeq2] := -1;
+          argSeq3 := AllocNode(AN_CALL); ASTIVal[argSeq3] := idx;
+          ASTTk[argSeq3] := Ord(tyVariant); ASTLeft[argSeq3] := argSeq2;
+          atDflt := argSeq3;
+          { the value branch and the boxed default, joined by a ternary typed variant }
+          argSeq2 := AllocNode(AN_PAIR);
+          ASTLeft[argSeq2] := PyMakeDynAttrGet(atRecv, atName);
+          ASTRight[argSeq2] := atDflt;
+          argSeq3 := AllocNode(AN_TERNARY);
+          ASTLeft[argSeq3] := node; ASTRight[argSeq3] := argSeq2;
+          ASTTk[argSeq3] := Ord(tyVariant);
+          CurASTNode := argSeq3;
+          LastExprTk := tyVariant;
+          Exit;
+        end;
         if atFld >= 0 then
         begin
           { the field exists: an ordinary field read }

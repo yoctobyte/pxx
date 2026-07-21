@@ -337,6 +337,7 @@ function pystdin_readline: AnsiString;
   no type-ahead — the correct default for pipes/files and never wrong for the
   native words, which run under the (stubbed) exec path. }
 function pystdin_isatty: Integer;
+function pyvar_box(const v: Variant): Variant;   { box a value into a variant }
 { input([prompt]): a line from stdin without its trailing newline. }
 function pyinput: AnsiString;
 { sys.argv: the command line as a TPyList of strings, argv[0] = program name. }
@@ -2617,6 +2618,15 @@ end;
 function pystdin_isatty: Integer;
 begin
   Result := 0;
+end;
+
+{ Identity that BOXES its argument into a variant: passing a scalar to a Variant
+  parameter materialises the box, so `pyvar_box(5)` yields a variant holding 5.
+  Used to give a getattr default a variant representation for a variant-typed
+  ternary (both branches must be variants). }
+function pyvar_box(const v: Variant): Variant;
+begin
+  Result := v;
 end;
 
 { input(): read one line from stdin and drop the trailing newline, as Python's
