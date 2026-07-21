@@ -138,7 +138,11 @@ const
                             (FPC's ABI) instead of a fat {IMT,instance} pair. }
   RTTI_PROP_SIZE   = 64;  { name,kind,typeRef,getKind,getRef,setKind,setRef,ordType }
   RTTI_METH_SIZE   = 16;  { name,code }
-  RTTI_FIELD_SIZE  = 16;  { name,offset (published fields, for streamed child->field wiring) }
+  RTTI_FIELD_SIZE  = 40;  { name,offset,typeKind,recId,flags — ALL fields (not just
+                            published), so field get/set by name reflects any class
+                            incl. NilPy-lowered ones (feature-rtti-field-reflection).
+                            flags bit0 = published (streamer filters on it). }
+  RTTI_FIELD_FLAG_PUBLISHED = 1;
 
   REC_NONE         = 0;
   REC_TMETHODFIXUP = 15;

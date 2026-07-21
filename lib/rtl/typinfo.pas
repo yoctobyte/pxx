@@ -3,6 +3,11 @@ unit typinfo;
 
 interface
 
+const
+  { TFieldInfo.Flags bit0: the field is published (the streamer binds named
+    children only into published fields; reflection reaches any field). }
+  RTTI_FIELD_FLAG_PUBLISHED = 1;
+
 type
   { RTTI metadata name strings are emitted into the static blob as frozen,
     word-length-prefixed strings (rtti_emit.inc points NamePtr at Strs[].Offset).
@@ -41,7 +46,10 @@ type
   TFieldInfo = record
     NamePtr: PString;
     {$ifdef CPU32} _pad_name: LongInt; {$endif}
-    Offset:  Int64;       { byte offset of the field within the instance }
+    Offset:   Int64;      { byte offset of the field within the instance }
+    TypeKind: Int64;      { Ord(TTypeKind) of the field }
+    RecId:    Int64;      { record/class id for aggregates, else REC_NONE }
+    Flags:    Int64;      { bit0 = published (RTTI_FIELD_FLAG_PUBLISHED) }
   end;
   PFieldInfo = ^TFieldInfo;
 
@@ -145,6 +153,14 @@ function GetMethodProp(instance: Pointer; p: PPropInfo): TMethod;
 procedure SetMethodProp(instance: Pointer; p: PPropInfo; const v: TMethod);
 function GetMethodAddr(cls: PClassRTTI; const name: string): Pointer;
 function SetFieldByName(instance: Pointer; cls: PClassRTTI; const name: string; value: Pointer): Boolean;
+{ Field reflection over ANY field (published or not). GetFieldInfoByName walks
+  the class hierarchy for the descriptor; GetInstanceRTTI recovers a live
+  object's class RTTI from the VMT backlink ([[instance] - 8]); GetFieldPtr
+  returns the field's address inside `instance` (nil if absent) and, via `kind`,
+  its Ord(TTypeKind). Foundation for the exec()/getattr host bridge. }
+function GetFieldInfoByName(cls: PClassRTTI; const name: string): PFieldInfo;
+function GetInstanceRTTI(instance: Pointer): PClassRTTI;
+function GetFieldPtr(instance: Pointer; cls: PClassRTTI; const name: string; var kind: Int64): Pointer;
 function GetEnumValue(et: PEnumRTTI; const name: string): Integer;
 procedure SetSetProp(instance: Pointer; p: PPropInfo; ordinal: Integer);
 
@@ -549,6 +565,9 @@ begin
       fields := curr^.FieldsPtr;
       for i := 0 to Integer(curr^.FieldCount) - 1 do
       begin
+        { The field table now holds EVERY field; the streamer only ever binds a
+          child into a PUBLISHED one, so skip the rest (matches Delphi). }
+        if (fields[i].Flags and RTTI_FIELD_FLAG_PUBLISHED) = 0 then Continue;
         ps := fields[i].NamePtr;
         if ps^ = name then
         begin
@@ -561,6 +580,58 @@ begin
     end;
     curr := PClassRTTI(curr^.ParentRTTI);
   end;
+end;
+
+{ The descriptor for field `name`, searched across the whole class hierarchy and
+  over EVERY field (not just published). nil if the class declares none. }
+function GetFieldInfoByName(cls: PClassRTTI; const name: string): PFieldInfo;
+var
+  curr: PClassRTTI;
+  fields: PFieldInfo;
+  i: Integer;
+begin
+  GetFieldInfoByName := nil;
+  curr := cls;
+  while curr <> nil do
+  begin
+    if curr^.FieldCount > 0 then
+    begin
+      fields := curr^.FieldsPtr;
+      for i := 0 to Integer(curr^.FieldCount) - 1 do
+        if fields[i].NamePtr^ = name then
+        begin
+          GetFieldInfoByName := @fields[i];
+          Exit;
+        end;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+end;
+
+{ A live object reaches its class RTTI through the word reserved just before the
+  VMT: instance+0 holds the VMT pointer, and [VMT - 8] is the RTTI backlink the
+  emitter stamps (see rtti_emit.inc). nil if the object has no VMT. }
+function GetInstanceRTTI(instance: Pointer): PClassRTTI;
+var vmt: Pointer;
+begin
+  GetInstanceRTTI := nil;
+  if instance = nil then Exit;
+  vmt := PPointer(instance)^;
+  if vmt = nil then Exit;
+  GetInstanceRTTI := PClassRTTI(PPointer(PUInt8(vmt) - 8)^);
+end;
+
+{ Address of field `name` within `instance` (nil if absent); `kind` receives its
+  Ord(TTypeKind). The caller boxes/unboxes the pointed-to storage per kind. }
+function GetFieldPtr(instance: Pointer; cls: PClassRTTI; const name: string; var kind: Int64): Pointer;
+var fi: PFieldInfo;
+begin
+  GetFieldPtr := nil;
+  kind := 0;
+  fi := GetFieldInfoByName(cls, name);
+  if fi = nil then Exit;
+  kind := fi^.TypeKind;
+  GetFieldPtr := @PUInt8(instance)[fi^.Offset];
 end;
 
 end.
