@@ -54,11 +54,27 @@ nested-def **capture spill** for `flush_current`, given the early-return still
 crashes, or the managed-string ternary/`join` result temp) and is not covered by
 `EmitManagedLocalsZeroInit` / `SymIsHiddenArgTemp`.
 
+## KEY FINDING: optimizer-sensitive (-O2 only)
+
+At **-O0 (`-g`) and -O1 the tokenize SIGSEGV does NOT happen** — uforth runs
+past tokenize and reaches a *different, deterministic* error deeper in
+(`ValueError: byte slice assignment length mismatch (expected 8, got <garbage>)`,
+in `set_in_pos`'s `int(pos).to_bytes(8,...)` slice-assign — a second
+uninitialized-value bug, tracked separately). This CONFIRMS the diagnosis: the
+managed-string hidden temp is genuinely uninitialized, and only -O2's register
+allocator / stack-slot reuse leaves garbage (0x200000000) in it; -O0 happens to
+leave zero. So the fix is real prologue zero-init of that temp, not an -O2
+codegen bug per se. Default builds are -O2, so this still blocks.
+
 ## Next steps
 
 - Reduce uforth.py's tokenize with creduce (oracle = "compiled binary SIGSEGVs
   on `1 2 + .`") to a minimal case — hand-reduction failed because the trigger
-  is layout-sensitive.
+  is layout-sensitive. NOTE the -O0 successor bug (set_in_pos's `mem[a:b] =
+  int(pos).to_bytes(8,...)` length mismatch) ALSO does not reproduce in isolation
+  (a captured nested def doing exactly that slice-assign works at both -O0/-O2).
+  Both are context-sensitive: creduce/IR-dump on the real file is the path, not
+  more hand-repros.
 - Or inspect tokenize's lowered IR for a managed-string temp (AllocVar '' with
   tyAnsiString) that is not marked SymIsHiddenArgTemp / not zero-inited, then
   extend the zero-init to cover it. Prime suspect: the capture-spill temp path
