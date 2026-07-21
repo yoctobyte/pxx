@@ -80,6 +80,18 @@ function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;
 function pyclosure_src_new(const params, src: AnsiString): Pointer;
 function pyclosure_src_cap(obj: Pointer; const name: AnsiString; const v: Variant): Pointer;
 
+{ BOUND COMPILED FUNCTION: a nested def taken as a value whose captures must
+  travel with it (uforth's MARKER: `def restore(v): ...snapshot locals...;
+  define_word(name, native=restore)`). The object carries the COMPILED code
+  address plus each captured value as a register word; the field-call bridge
+  recognises it by magic (like a closure) and calls code(arg, bound...).
+  The body runs NATIVELY — no pyeval subset limits. }
+function pyboundfn_new(code: Pointer; n: Int64; a0var: Int64): Pointer;
+function pyboundfn_bind(obj: Pointer; idx: Int64; v: Int64): Pointer;
+function pyboundfn_is(p: Pointer): Boolean;
+function pyboundfn_bind_var(obj: Pointer; idx: Int64; const v: Variant): Pointer;
+function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
+
 implementation
 
 const
@@ -394,6 +406,22 @@ function PyIEq(const a, b: Variant): Boolean;
 begin
   if IsPromoV(a) or IsPromoV(b) then PyIEq := PromoCmp(a, b) = 0
   else PyIEq := pyeq_v(a, b);
+end;
+
+{ `is` identity, plus the compiled Optional[str] narrowing: a host method typed
+  Optional[str] returns None as an EMPTY AnsiString across the trampoline (the
+  documented sentinel), so `tok is None` must accept '' — without it EXTRA.UFO's
+  `.( ` loop (`tok = vm.next_token(); if tok is None: break`) never saw the end
+  of the line and re-spun the tokenizer forever. }
+function PyIsIdentity(const a, b: Variant): Boolean;
+begin
+  if ((PPyRec(@a)^.VType = 0) and (PPyRec(@b)^.VType = 6) and
+      (PPyAnsiString(@PPyRec(@b)^.Payload)^ = '')) or
+     ((PPyRec(@b)^.VType = 0) and (PPyRec(@a)^.VType = 6) and
+      (PPyAnsiString(@PPyRec(@a)^.Payload)^ = '')) then
+    PyIsIdentity := True
+  else
+    PyIsIdentity := PyIEq(a, b);
 end;
 
 { Parse an integer/hex literal that overflowed Int64 into a promo variant. }
@@ -1360,7 +1388,7 @@ begin
   else if (name = 'bool') then PyTypeCode := 4
   else if (name = 'str') then PyTypeCode := 6
   else if (name = 'bytes') or (name = 'bytearray') then PyTypeCode := 7
-  else if (name = 'list') then PyTypeCode := 107
+  else if (name = 'list') or (name = 'tuple') then PyTypeCode := 107  { a tuple IS a TPyList }
   else if (name = 'dict') then PyTypeCode := 207
   else PyTypeCode := -1;
 end;
@@ -1454,6 +1482,114 @@ begin
   o^.Cidx  := cidx;
   PyMakeClosureObj := Pointer(o);
 end;
+
+{ ---- bound compiled functions (see interface note) ---- }
+type
+  TBoundFnObj = record
+    Magic:  Pointer;
+    Code:   Pointer;
+    NBound: Int64;
+    A0Var:  Int64;   { 1 = the user argument is a VARIANT param (pass its address) }
+    Bound:  array[0..19] of Int64;
+  end;
+  PBoundFnObj = ^TBoundFnObj;
+  TBF1  = function(a0: Int64): Int64;
+  TBF2  = function(a0, a1: Int64): Int64;
+  TBF3  = function(a0, a1, a2: Int64): Int64;
+  TBF4  = function(a0, a1, a2, a3: Int64): Int64;
+  TBF5  = function(a0, a1, a2, a3, a4: Int64): Int64;
+  TBF6  = function(a0, a1, a2, a3, a4, a5: Int64): Int64;
+  TBF7  = function(a0, a1, a2, a3, a4, a5, a6: Int64): Int64;
+  TBF8  = function(a0, a1, a2, a3, a4, a5, a6, a7: Int64): Int64;
+  TBF9  = function(a0, a1, a2, a3, a4, a5, a6, a7, a8: Int64): Int64;
+  TBF11 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10: Int64): Int64;
+  TBF13 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12: Int64): Int64;
+var
+  PyBoundFnMagicMarker: Integer;
+
+function pyboundfn_new(code: Pointer; n: Int64; a0var: Int64): Pointer;
+var o: PBoundFnObj; i: Integer;
+begin
+  o := GetMem(SizeOf(TBoundFnObj));
+  o^.Magic := @PyBoundFnMagicMarker;
+  o^.Code := code;
+  o^.NBound := n;
+  o^.A0Var := a0var;
+  for i := 0 to 19 do o^.Bound[i] := 0;
+  pyboundfn_new := Pointer(o);
+end;
+
+function pyboundfn_bind(obj: Pointer; idx: Int64; v: Int64): Pointer;
+var o: PBoundFnObj;
+begin
+  o := PBoundFnObj(obj);
+  o^.Bound[idx] := v;
+  pyboundfn_bind := obj;
+end;
+
+function pyboundfn_is(p: Pointer): Boolean;
+begin
+  pyboundfn_is := (p <> nil) and (PBoundFnObj(p)^.Magic = @PyBoundFnMagicMarker);
+end;
+
+{ Bind a VARIANT capture: variant params travel BY ADDRESS, and the enclosing
+  local dies with its frame — so the value is copied into a small heap slot
+  that lives as long as the object (leaked with it; markers are few). }
+function pyboundfn_bind_var(obj: Pointer; idx: Int64; const v: Variant): Pointer;
+var o: PBoundFnObj; pv: PVariant;
+begin
+  o := PBoundFnObj(obj);
+  pv := GetMem(16);   { a Variant slot: 8-byte tag + 8-byte payload }
+  PPyRec(pv)^.VType := 0; PPyRec(pv)^.Payload := 0;
+  pv^ := v;
+  o^.Bound[idx] := Int64(NativeInt(Pointer(pv)));
+  pyboundfn_bind_var := obj;
+end;
+
+{ Call code(a0, bound...). a0 is the ONE user argument — a class/object variant
+  yields its instance pointer, an int its value. Missing arities pad upward
+  (extra register args are ABI-harmless); a procedure callee's garbage result
+  is discarded. }
+function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
+var o: PBoundFnObj; p0, rr: Int64; b: PInt64; code: Pointer;
+    va0: Variant;
+    f1: TBF1; f2: TBF2; f3: TBF3; f4: TBF4; f5: TBF5; f6: TBF6; f7: TBF7;
+    f8: TBF8; f9: TBF9; f11: TBF11; f13: TBF13;
+begin
+  rr := 0;
+  o := PBoundFnObj(objptr);
+  code := o^.Code;
+  if o^.A0Var <> 0 then
+  begin
+    { an unannotated (variant) first param travels BY ADDRESS }
+    va0 := a0;
+    p0 := Int64(NativeInt(Pointer(@va0)));
+  end
+  else
+  case PPyRec(@a0)^.VType of
+    7: p0 := PPyRec(@a0)^.Payload;
+    0: p0 := 0;
+  else p0 := pyvar_to_int(a0);
+  end;
+  b := @o^.Bound[0];
+  case o^.NBound of
+    0: begin f1 := TBF1(code); rr := f1(p0); end;
+    1: begin f2 := TBF2(code); rr := f2(p0, b[0]); end;
+    2: begin f3 := TBF3(code); rr := f3(p0, b[0], b[1]); end;
+    3: begin f4 := TBF4(code); rr := f4(p0, b[0], b[1], b[2]); end;
+    4: begin f5 := TBF5(code); rr := f5(p0, b[0], b[1], b[2], b[3]); end;
+    5: begin f6 := TBF6(code); rr := f6(p0, b[0], b[1], b[2], b[3], b[4]); end;
+    6: begin f7 := TBF7(code); rr := f7(p0, b[0], b[1], b[2], b[3], b[4], b[5]); end;
+    7: begin f8 := TBF8(code); rr := f8(p0, b[0], b[1], b[2], b[3], b[4], b[5], b[6]); end;
+    8: begin f9 := TBF9(code); rr := f9(p0, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]); end;
+    9, 10:
+      begin f11 := TBF11(code); rr := f11(p0, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9]); end;
+    else
+      begin f13 := TBF13(code); rr := f13(p0, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11]); end;
+  end;
+  if rr = 0 then pyboundfn_call_ptr := 0 else pyboundfn_call_ptr := 0;
+end;
+
 
 { Closure from raw SOURCE (the compiled `lambda` lowering). Tokenizes the body
   text into the closure's own snapshot buffer — the live interpreter state
@@ -1891,8 +2027,8 @@ begin
     else if IsKw('is') then
     begin
       Advance;
-      if IsKw('not') then begin Advance; ParseBitOr(b); ok := ok and (not PyIEq(a, b)); end
-      else begin ParseBitOr(b); ok := ok and PyIEq(a, b); end;
+      if IsKw('not') then begin Advance; ParseBitOr(b); ok := ok and (not PyIsIdentity(a, b)); end
+      else begin ParseBitOr(b); ok := ok and PyIsIdentity(a, b); end;
     end
     else if IsKw('in') then
     begin Advance; ParseBitOr(b); ok := ok and pyvar_contains(b, a); end
@@ -1912,26 +2048,48 @@ begin
 end;
 
 procedure ParseAnd(var res: Variant);
-var a, b: Variant;
+var a, b: Variant; sv: Boolean;
 begin
   ParseNot(a);
   while IsKw('and') do
   begin
-    Advance; ParseNot(b);
-    { value semantics: a and b -> b if a truthy else a }
-    if pyvar_to_bool(a) then a := b;
+    Advance;
+    { SHORT-CIRCUIT via a skip-mode parse of the dead operand — uforth's TO:
+      `isinstance(current, tuple) and len(current) == 3` must not evaluate
+      len() when current is an int. Value semantics: a and b -> b if a. }
+    if Executing and pyvar_to_bool(a) then
+    begin
+      ParseNot(b);
+      a := b;
+    end
+    else
+    begin
+      sv := Executing; Executing := False;
+      ParseNot(b);
+      Executing := sv;
+    end;
   end;
   res := a;
 end;
 
 procedure ParseOr(var res: Variant);
-var a, b: Variant;
+var a, b: Variant; sv: Boolean;
 begin
   ParseAnd(a);
   while IsKw('or') do
   begin
-    Advance; ParseAnd(b);
-    if not pyvar_to_bool(a) then a := b;
+    Advance;
+    if Executing and not pyvar_to_bool(a) then
+    begin
+      ParseAnd(b);
+      a := b;
+    end
+    else
+    begin
+      sv := Executing; Executing := False;
+      ParseAnd(b);
+      Executing := sv;
+    end;
   end;
   res := a;
 end;
@@ -2018,7 +2176,7 @@ end;
 procedure CallBuiltin(const name: AnsiString; args: TPyList;
                       const endKw, sepKw: AnsiString;
                       haveEnd, haveSep: Boolean; var res: Variant);
-var i, nargs: Integer; s, sep, endc: AnsiString; cand, e: Variant;
+var i, nargs: Integer; s, sep, endc: AnsiString; cand, e: Variant; li: TPyList;
 begin
   nargs := args.count;
   if name = 'int' then
@@ -2125,6 +2283,29 @@ begin
     for i := 1 to nargs - 1 do
     begin e := args.at(i); if pycmp_v(e, cand) > 0 then cand := e; end;
     res := cand; Exit;
+  end;
+  if name = 'list' then
+  begin
+    { list() -> a fresh empty list; list(xs) -> a shallow copy }
+    li := TPyList.Create;
+    if nargs > 0 then
+    begin
+      cand := args.at(0);
+      if (PPyRec(@cand)^.VType = 7) and
+         (TObject(Pointer(PPyRec(@cand)^.Payload)) is TPyList) then
+        li.extend(TPyList(pyvarobj(cand)))
+      else if PPyRec(@cand)^.VType = 6 then
+      begin
+        { list("abc") -> one-character strings, Python's str iteration }
+        s := PPyAnsiString(@PPyRec(@cand)^.Payload)^;
+        for i := 1 to Length(s) do
+          li.append(MakeStr(s[i]));
+      end
+      else
+        EvalError('list(): unsupported argument');
+    end;
+    res := PyBoxObj(Pointer(li));
+    Exit;
   end;
   if name = 'range' then
   begin
@@ -2308,10 +2489,7 @@ begin
             end;
           end
           else
-          begin
-            writeln('DBG genexp itv tag=', PPyRec(@itv)^.VType);
             EvalError('genexp: unsupported iterable');
-          end;
         end;
         Cur := endPos;
         PPyRec(@v)^.VType := 7;
@@ -2385,6 +2563,13 @@ begin
       res := pyvar_of_bool(pystr_startswith(s, pystr_of(args.at(0))))
     else if mname = 'endswith' then
       res := pyvar_of_bool(pystr_endswith(s, pystr_of(args.at(0))))
+    else if mname = 'rjust' then
+    begin
+      if args.count >= 2 then
+        res := MakeStr(pystr_rjust_c(s, pyvar_to_int(args.at(0)), pystr_of(args.at(1))))
+      else
+        res := MakeStr(pystr_rjust(s, pyvar_to_int(args.at(0))));
+    end
     else if mname = 'find' then
       res := pyvar_of_int(pystr_find(s, pystr_of(args.at(0))))
     else if mname = 'index' then

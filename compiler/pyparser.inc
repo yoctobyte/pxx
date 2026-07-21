@@ -2687,26 +2687,119 @@ end;
   each defaulted param and each captured enclosing name bound as a build-time
   value cap. Returns the AST node, or -1 when the plain address is still right
   (no defaults, no captures — the fast path stays untouched). }
+{ Bound-compiled-fn VALUE for a captures-only nested def: pyboundfn_new(addr,
+  n) then chained pyboundfn_bind(obj, i, <capture value>) — each capture
+  resolved HERE, the same actual a direct call site would append. Returns -1
+  when a capture cannot travel as a register word (variant/unresolved), so the
+  caller falls back to the plain address. }
+function PyMakeBoundFnValue(procIdx: Integer): Integer;
+var j, symIdx, node, argA, argB, argC, pi, bindPi, varBindPi, vNode: Integer;
+    nm: AnsiString;
+begin
+  Result := -1;
+  pi := FindProc('pyboundfn_new');
+  bindPi := FindProc('pyboundfn_bind');
+  varBindPi := FindProc('pyboundfn_bind_var');
+  if (pi < 0) or (bindPi < 0) or (varBindPi < 0) then Exit;
+  if PyCapCount[procIdx] > 12 then Exit;
+  for j := 0 to PyCapCount[procIdx] - 1 do
+  begin
+    nm := PyCapName[procIdx * PY_MAX_CAPS + j];
+    symIdx := PyProgSym(nm);
+    if symIdx < 0 then Exit;
+    if not (Syms[symIdx].Kind in [skGlobal, skLocal, skParam]) then Exit;
+    { a MANAGED capture stored as a raw word would dangle when the enclosing
+      scope releases it — refuse, fall back to the plain address. Variants are
+      fine: they bind through a heap COPY (pyboundfn_bind_var). }
+    if (Syms[symIdx].TypeKind = tyAnsiString) or (Syms[symIdx].TypeKind = tyString) then Exit;
+    if Syms[symIdx].IsArray or (Syms[symIdx].TypeKind = tyRecord) then Exit;
+  end;
+
+  argA := AllocNode(AN_ARG);
+  node := AllocNode(AN_PROCADDR);
+  ASTIVal[node] := procIdx; ASTTk[node] := Ord(tyPointer);
+  ASTLeft[argA] := node;
+  argB := AllocNode(AN_ARG);
+  node := AllocNode(AN_INT_LIT);
+  ASTIVal[node] := PyCapCount[procIdx]; ASTTk[node] := Ord(tyInt64);
+  ASTLeft[argB] := node;
+  ASTRight[argA] := argB;
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := pi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+
+  for j := 0 to PyCapCount[procIdx] - 1 do
+  begin
+    nm := PyCapName[procIdx * PY_MAX_CAPS + j];
+    symIdx := PyProgSym(nm);
+    argA := AllocNode(AN_ARG);
+    ASTLeft[argA] := node;
+    argB := AllocNode(AN_ARG);
+    vNode := AllocNode(AN_INT_LIT);
+    ASTIVal[vNode] := j; ASTTk[vNode] := Ord(tyInt64);
+    ASTLeft[argB] := vNode;
+    ASTRight[argA] := argB;
+    argC := AllocNode(AN_ARG);
+    ASTLeft[argC] := PyMakeIdent(symIdx);
+    ASTRight[argB] := argC;
+    node := AllocNode(AN_CALL);
+    if Syms[symIdx].TypeKind = tyVariant then
+      ASTIVal[node] := varBindPi
+    else
+      ASTIVal[node] := bindPi;
+    ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+  end;
+  Result := node;
+end;
+
 function PyNestedDefClosureValue(procIdx: Integer): Integer;
-var defTok, i, j, k, depth, bodyInd, bodyEnd, savedTok: Integer;
-    params, src, nm: AnsiString;
+var defTok, i, j, k, depth: Integer;
     pNames: array[0..15] of AnsiString;
     pDefS, pDefE: array[0..15] of Integer;
-    nP: Integer;
-    node, argA, argB, capNode, pi, capPi, symIdx: Integer;
-    pendingNL, dup: Boolean;
+    nP, nDef, nOwn, bindIdx, savedTok: Integer;
+    node, argA, argB, argC, vNode, newPi, bindPi, varBindPi, symIdx: Integer;
+    nm: AnsiString;
+    anyBind: Boolean;
+
+  { chain one pyboundfn_bind / _bind_var call: node := bind(node, idx, valNode) }
+  procedure ChainBind(valNode: Integer; isVar: Boolean);
+  begin
+    argA := AllocNode(AN_ARG);
+    ASTLeft[argA] := node;
+    argB := AllocNode(AN_ARG);
+    vNode := AllocNode(AN_INT_LIT);
+    ASTIVal[vNode] := bindIdx; ASTTk[vNode] := Ord(tyInt64);
+    ASTLeft[argB] := vNode;
+    ASTRight[argA] := argB;
+    argC := AllocNode(AN_ARG);
+    ASTLeft[argC] := valNode;
+    ASTRight[argB] := argC;
+    node := AllocNode(AN_CALL);
+    if isVar then ASTIVal[node] := varBindPi else ASTIVal[node] := bindPi;
+    ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+    Inc(bindIdx);
+  end;
+
 begin
+  { A nested def taken AS A VALUE whose meaning depends on values live NOW —
+    default-arg expressions (uforth's DOES>/DEFER: the defaults bind
+    per-invocation values) or scanned captures (uforth's MARKER restore).
+    Lowered to a BOUND COMPILED FUNCTION: pyboundfn_new(addr, n) with each
+    defaulted param's expression and each capture VALUE bound in parameter
+    order; the call bridge then invokes the COMPILED body natively as
+    code(arg, defaults..., caps...). -1 = nothing to bind (plain address) or
+    an unbindable shape (fall back to the plain address). }
   Result := -1;
   if (procIdx < 0) or (PyDefTokOf[procIdx] = 0) then Exit;
   defTok := PyDefTokOf[procIdx] - 1;
-  pi := FindProc('pyclosure_src_new');
-  capPi := FindProc('pyclosure_src_cap');
-  if (pi < 0) or (capPi < 0) then Exit;
+  newPi := FindProc('pyboundfn_new');
+  bindPi := FindProc('pyboundfn_bind');
+  varBindPi := FindProc('pyboundfn_bind_var');
+  if (newPi < 0) or (bindPi < 0) or (varBindPi < 0) then Exit;
 
-  { scan the header straight off the tokens: def NAME ( params ) [-> ann] : }
+  { scan the header straight off the tokens: def NAME ( params ) ... }
   i := defTok;
   if Tokens[i].Kind <> tkFunction then Exit;
-  Inc(i);                         { name }
+  Inc(i);
   Inc(i);
   if Tokens[i].Kind <> tkLParen then Exit;
   Inc(i);
@@ -2730,7 +2823,6 @@ begin
     end
     else if (depth = 1) and (Tokens[i].Kind = tkAssign) and (nP > 0) then
     begin
-      { default expression span, balanced to the depth-1 ',' or ')' }
       pDefS[nP - 1] := i + 1;
       j := i + 1; k := 0;
       while j < TokCount do
@@ -2750,84 +2842,55 @@ begin
     Inc(i);
   end;
 
-  { Closure-ize only when DEFAULT-ARG expressions exist (the DOES> idiom binds
-    per-invocation values through them). A def with only scanned captures keeps
-    the plain-address lowering — the capture scan over-collects (it sees
-    dot-members too), and call sites already append capture actuals. }
-  dup := False;
+  nDef := 0;
+  nOwn := 0;
   for j := 0 to nP - 1 do
-    if pDefS[j] >= 0 then dup := True;
-  if not dup then Exit;
+    if pDefS[j] >= 0 then Inc(nDef) else Inc(nOwn);
+  anyBind := (nDef > 0) or (PyCapCount[procIdx] > 0);
+  if not anyBind then Exit;
+  { the bridge passes exactly ONE user argument before the bound values }
+  if nOwn <> 1 then Exit;
+  if nDef + PyCapCount[procIdx] > 12 then Exit;
+  { defaulted params must come after the single own param (Python guarantees) }
 
-  { colon, then the INDENT that opens the body }
-  while (i < TokCount) and (Tokens[i].Kind <> tkColon) do Inc(i);
-  bodyInd := i + 1;
-  while (bodyInd < TokCount) and (Tokens[bodyInd].Kind = tkNewline) do Inc(bodyInd);
-  if (bodyInd >= TokCount) or (Tokens[bodyInd].Kind <> tkIndent) then Exit;
-  bodyEnd := PyFindBodyEnd(bodyInd);
-
-  { Body SOURCE reconstruction: a FLAT statement stream at indent 0 (the
-    src-closure invoke loop runs it that way); nested blocks keep their
-    RELATIVE indentation. }
-  src := '';
-  depth := 1;
-  pendingNL := False;
-  i := bodyInd + 1;
-  while i < bodyEnd do
+  { every capture must resolve to a value symbol we can bind }
+  for j := 0 to PyCapCount[procIdx] - 1 do
   begin
-    case Tokens[i].Kind of
-      tkNewline: pendingNL := True;
-      tkIndent:  Inc(depth);
-      tkDedent:
-      begin
-        Dec(depth);
-        { the DEDENT matching the opening INDENT closes the def's own body —
-          whatever bodyEnd says, nothing past it belongs to this def }
-        if depth = 0 then Break;
-      end;
-    else
-      begin
-        if pendingNL then
-        begin
-          src := src + Chr(10);
-          for j := 2 to depth do src := src + '  ';
-          pendingNL := False;
-        end
-        else if src <> '' then
-          src := src + ' ';
-        src := src + PyLambdaTokText(i);
-      end;
-    end;
-    Inc(i);
+    nm := PyCapName[procIdx * PY_MAX_CAPS + j];
+    symIdx := PyProgSym(nm);
+    if symIdx < 0 then Exit;
+    if not (Syms[symIdx].Kind in [skGlobal, skLocal, skParam]) then Exit;
+    if (Syms[symIdx].TypeKind = tyAnsiString) or (Syms[symIdx].TypeKind = tyString) then Exit;
+    if Syms[symIdx].IsArray or (Syms[symIdx].TypeKind = tyRecord) then Exit;
   end;
-  src := src + Chr(10);
 
-  { params string = the NON-defaulted params; defaulted ones bind as caps }
-  params := '';
-  for j := 0 to nP - 1 do
-    if pDefS[j] < 0 then
-    begin
-      if params <> '' then params := params + ',';
-      params := params + pNames[j];
-    end;
-
+  { pyboundfn_new(addr, n, a0var) — a0var says whether the single own param
+    is a VARIANT (unannotated) and must travel by address }
   argA := AllocNode(AN_ARG);
-  argB := AllocNode(AN_STR_LIT);
-  ASTSOffset[argB] := PyStoredName(params); ASTSLen[argB] := Length(params);
-  ASTTk[argB] := Ord(tyString);
-  ASTLeft[argA] := argB;
+  node := AllocNode(AN_PROCADDR);
+  ASTIVal[node] := procIdx; ASTTk[node] := Ord(tyPointer);
+  ASTLeft[argA] := node;
   argB := AllocNode(AN_ARG);
-  node := AllocNode(AN_STR_LIT);
-  ASTSOffset[node] := PyStoredName(src); ASTSLen[node] := Length(src);
-  ASTTk[node] := Ord(tyString);
+  node := AllocNode(AN_INT_LIT);
+  ASTIVal[node] := nDef + PyCapCount[procIdx]; ASTTk[node] := Ord(tyInt64);
   ASTLeft[argB] := node;
   ASTRight[argA] := argB;
+  argC := AllocNode(AN_ARG);
+  node := AllocNode(AN_INT_LIT);
+  if (Procs[procIdx].ParamCount > 0) and
+     (Procs[procIdx].Params[0].TypeKind = tyVariant) then
+    ASTIVal[node] := 1
+  else
+    ASTIVal[node] := 0;
+  ASTTk[node] := Ord(tyInt64);
+  ASTLeft[argC] := node;
+  ASTRight[argB] := argC;
   node := AllocNode(AN_CALL);
-  ASTIVal[node] := pi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+  ASTIVal[node] := newPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+  bindIdx := 0;
 
-  { bind each DEFAULTED param: re-parse its default expression HERE, in the
-    scope where the def statement stands, so `_addr=data_addr` reads the
-    enclosing local's current value — Python's default-at-def-time rule }
+  { bind each DEFAULTED param: its default expression re-parsed HERE, in the
+    scope where the def statement stands — Python's default-at-def-time rule }
   for j := 0 to nP - 1 do
     if pDefS[j] >= 0 then
     begin
@@ -2835,44 +2898,23 @@ begin
       TokPos := pDefS[j];
       Next;
       PyParseBoolExpr;
-      capNode := CurASTNode;
+      k := CurASTNode;
       TokPos := savedTok;
       Next;
-      argA := AllocNode(AN_ARG);
-      ASTLeft[argA] := node;
-      argB := AllocNode(AN_ARG);
-      k := AllocNode(AN_STR_LIT);
-      ASTSOffset[k] := PyStoredName(pNames[j]); ASTSLen[k] := Length(pNames[j]);
-      ASTTk[k] := Ord(tyString);
-      ASTLeft[argB] := k;
-      ASTRight[argA] := argB;
-      k := AllocNode(AN_ARG);
-      ASTLeft[k] := capNode;
-      ASTRight[argB] := k;
-      node := AllocNode(AN_CALL);
-      ASTIVal[node] := capPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+      { pass mode follows the CALLEE PARAM's type: a variant param reads an
+        ADDRESS (bind_var heap-boxes the value), a concrete one a raw word }
+      ChainBind(k, (bindIdx + 1 < Procs[procIdx].ParamCount) and
+                   (Procs[procIdx].Params[bindIdx + 1].TypeKind = tyVariant));
     end;
 
-  { bind each scanned CAPTURE (an enclosing local the body reads) by value }
+  { then each scanned CAPTURE, by current value }
   for j := 0 to PyCapCount[procIdx] - 1 do
   begin
     nm := PyCapName[procIdx * PY_MAX_CAPS + j];
     symIdx := PyProgSym(nm);
-    if symIdx < 0 then Continue;
-    if not (Syms[symIdx].Kind in [skGlobal, skLocal, skParam]) then Continue;
-    argA := AllocNode(AN_ARG);
-    ASTLeft[argA] := node;
-    argB := AllocNode(AN_ARG);
-    capNode := AllocNode(AN_STR_LIT);
-    ASTSOffset[capNode] := PyStoredName(nm); ASTSLen[capNode] := Length(nm);
-    ASTTk[capNode] := Ord(tyString);
-    ASTLeft[argB] := capNode;
-    ASTRight[argA] := argB;
-    capNode := AllocNode(AN_ARG);
-    ASTLeft[capNode] := PyMakeIdent(symIdx);
-    ASTRight[argB] := capNode;
-    node := AllocNode(AN_CALL);
-    ASTIVal[node] := capPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+    ChainBind(PyMakeIdent(symIdx),
+              (bindIdx + 1 < Procs[procIdx].ParamCount) and
+              (Procs[procIdx].Params[bindIdx + 1].TypeKind = tyVariant));
   end;
 
   Result := node;
@@ -3567,6 +3609,7 @@ end;
 function PyWrapClosureFieldCall(fieldNode, argExpr, defCall: Integer): Integer;
 var isArg, isCall, clArgP, clArgA, thenCall, pair, tern: Integer;
     isPi, callPi: Integer;
+    bfIsPi, bfCallPi, bfIsArg, bfIsCall, bfArgA, bfArgP, bfCall: Integer;
 begin
   isPi := FindProc('pyclosure_is');
   callPi := FindProc('pyclosure_call_ptr');
@@ -3581,6 +3624,26 @@ begin
   clArgP := AllocNode(AN_ARG); ASTLeft[clArgP] := fieldNode; ASTRight[clArgP] := clArgA;
   thenCall := AllocNode(AN_CALL);
   ASTIVal[thenCall] := callPi; ASTLeft[thenCall] := clArgP; ASTTk[thenCall] := Ord(tyInteger);
+
+  { middle branch: a BOUND COMPILED FN (captures-only nested def as a value —
+    uforth's MARKER restore) — pyboundfn_is ? pyboundfn_call_ptr : defCall }
+  bfIsPi := FindProc('pyboundfn_is');
+  bfCallPi := FindProc('pyboundfn_call_ptr');
+  if (bfIsPi >= 0) and (bfCallPi >= 0) then
+  begin
+    bfIsArg := AllocNode(AN_ARG); ASTLeft[bfIsArg] := fieldNode; ASTRight[bfIsArg] := -1;
+    bfIsCall := AllocNode(AN_CALL);
+    ASTIVal[bfIsCall] := bfIsPi; ASTLeft[bfIsCall] := bfIsArg; ASTTk[bfIsCall] := Ord(tyBoolean);
+    bfArgA := AllocNode(AN_ARG); ASTLeft[bfArgA] := argExpr; ASTRight[bfArgA] := -1;
+    bfArgP := AllocNode(AN_ARG); ASTLeft[bfArgP] := fieldNode; ASTRight[bfArgP] := bfArgA;
+    bfCall := AllocNode(AN_CALL);
+    ASTIVal[bfCall] := bfCallPi; ASTLeft[bfCall] := bfArgP; ASTTk[bfCall] := Ord(tyInteger);
+    pair := AllocNode(AN_PAIR);
+    ASTLeft[pair] := bfCall; ASTRight[pair] := defCall;
+    tern := AllocNode(AN_TERNARY);
+    ASTLeft[tern] := bfIsCall; ASTRight[tern] := pair; ASTTk[tern] := Ord(tyInteger);
+    defCall := tern;
+  end;
 
   pair := AllocNode(AN_PAIR);
   ASTLeft[pair] := thenCall; ASTRight[pair] := defCall;
@@ -6555,6 +6618,7 @@ end;
   past the `:` NEWLINE INDENT that opens the body. The single implementation
   of the header grammar — see the PyHdr* declaration for why that matters. }
 function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind; forward; { defined with the pre-pass helpers below }
+function PyDefHasValueReturn(defIdx: Integer): Boolean; forward; { lying `-> None` detector (with the pre-pass helpers) }
 
 procedure PyParseDefHeader;
 var annIdx, hdrDefIdx, hdrRetRec: Integer;
@@ -6632,9 +6696,20 @@ begin
   begin
     Expect(tkMinus, '- in ->');
     Expect(tkGt, '> in ->');
-    { `-> None` declares a procedure (no Result). }
+    { `-> None` declares a procedure (no Result) — UNLESS the body returns a
+      value anyway (CPython ignores annotations; uforth's finalize_definition
+      lies). Then the annotation loses and the type is inferred, or the caller
+      reads a discarded Result as garbage. }
     PyHdrIsProc := CurTok.Kind = tkNil;
-    if PyHdrIsProc then begin PyHdrRetType := tyInteger; Next; end
+    if PyHdrIsProc and PyDefHasValueReturn(hdrDefIdx) then
+    begin
+      PyHdrIsProc := False;
+      Next;   { the None }
+      PyHdrRetType := PyInferDefRetType(hdrDefIdx, hdrRetRec);
+      if PyHdrRetType = tyClass then
+        PyHdrRetCi := hdrRetRec - REC_UCLASS_BASE;
+    end
+    else if PyHdrIsProc then begin PyHdrRetType := tyInteger; Next; end
     else begin PyHdrRetType := PyParseType; PyHdrRetCi := PyLastTypeCi; end;
   end;
   { `-> str` is an unbounded Python string, so the Result var is MANAGED — the
@@ -6977,10 +7052,12 @@ end;
   decides the registered signature and the header decides the frame, so the two
   must reach the same answer or the mismatch is a silent ABI bug. }
 function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
-var j, pdepth, bdepth, e: Integer;
+var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart: Integer;
+    t2: TTypeKind;
 begin
   Result := tyInteger;
   retRec := REC_NONE;
+  rec2 := -1;
   j := methodStart + 2;
   pdepth := 0;
   while j < TokCount do
@@ -6993,6 +7070,7 @@ begin
     end;
     Inc(j);
   end;
+  bodyScanStart := j;
   bdepth := 0;
   while j < TokCount do
   begin
@@ -7022,11 +7100,83 @@ begin
       while (e < TokCount) and not (Tokens[e].Kind in [tkNewline, tkDedent, tkEOF]) do
         Inc(e);
       Result := PyInferExprType(j + 1, e);
+      { `return w` — a bare ident the scanner cannot type: chase the ident's
+        ASSIGNMENT earlier in the body and infer from its right-hand side
+        (uforth's finalize_definition: `w = self.define_word(...)`, whose
+        annotated Word return carries the class). Last well-typed assignment
+        wins. }
+      if ((Result = tyUnknown) or (Result = tyInteger)) and
+         (e = j + 2) and (Tokens[j + 1].Kind = tkIdent) then
+      begin
+        for k := bodyScanStart to j - 1 do
+          if (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount) and
+             (Tokens[k + 1].Kind = tkAssign) and
+             CaseEqual(GetTokenStr(k), GetTokenStr(j + 1)) then
+          begin
+            e2 := k + 2;
+            while (e2 < TokCount) and not (Tokens[e2].Kind in [tkNewline, tkDedent, tkEOF]) do
+              Inc(e2);
+            t2 := PyInferExprType(k + 2, e2);
+            if (t2 <> tyUnknown) and (t2 <> tyInteger) then
+            begin
+              Result := t2;
+              rec2 := PyInferLastCi;
+            end;
+          end;
+        if (Result = tyClass) and (rec2 >= 0) then
+          PyInferLastCi := rec2;
+      end;
       if Result = tyUnknown then Result := tyInteger;
       if Result = tyString then Result := tyAnsiString;
       if (Result = tyClass) and (PyInferLastCi >= 0) then
         retRec := REC_UCLASS_BASE + PyInferLastCi;
       Exit;
+    end;
+    Inc(j);
+  end;
+end;
+
+{ Does the def's body contain a VALUE-bearing `return`? (`return` bare and
+  `return None` do not count.) Used to override a LYING `-> None` annotation:
+  CPython ignores annotations entirely, and uforth's finalize_definition is
+  annotated `-> None` yet returns the new Word — trusting the annotation
+  compiled it as a procedure and the caller read garbage (the :NONAME xt). }
+function PyDefHasValueReturn(defIdx: Integer): Boolean;
+var j, pdepth, bdepth: Integer;
+begin
+  Result := False;
+  j := defIdx + 2;
+  pdepth := 0;
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind = tkLParen then Inc(pdepth)
+    else if Tokens[j].Kind = tkRParen then
+    begin
+      Dec(pdepth);
+      if pdepth = 0 then begin Inc(j); Break; end;
+    end;
+    Inc(j);
+  end;
+  bdepth := 0;
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind = tkIndent then Inc(bdepth)
+    else if Tokens[j].Kind = tkDedent then
+    begin
+      Dec(bdepth);
+      if bdepth <= 0 then Exit;
+    end
+    else if Tokens[j].Kind = tkFunction then Exit   { a nested def: stop }
+    else if (Tokens[j].Kind = tkExit) and (bdepth >= 1) then
+    begin
+      if (j + 1 < TokCount) and
+         not (Tokens[j + 1].Kind in [tkNewline, tkDedent, tkEOF]) and
+         not ((Tokens[j + 1].Kind = tkNil) and (j + 2 < TokCount) and
+              (Tokens[j + 2].Kind in [tkNewline, tkDedent, tkEOF])) then
+      begin
+        Result := True;
+        Exit;
+      end;
     end;
     Inc(j);
   end;
@@ -7060,6 +7210,13 @@ begin
       grammar, and the narrow one wins wherever it is still wired up" bug the
       parameter path already carries a note about
       (bug-nilpy-optional-return-annotation-loses-the-class). }
+    { the same lying `-> None` override as PyParseDefHeader — the pre-pass and
+      the real parse MUST agree or the signature silently mismatches }
+    if (Tokens[j + 3].Kind = tkNil) and PyDefHasValueReturn(methodStart) then
+    begin
+      Result := PyInferDefRetType(methodStart, retRec);
+      Exit;
+    end;
     k := j + 3;
     Result := PyAnnTypeAt(k);
     if (Result = tyClass) and (PyAnnLastCi >= 0) then

@@ -2347,9 +2347,24 @@ begin
 end;
 
 procedure TPyBytes.extend(src: TPyBytes);
-var k, base: Integer; sp, dp: PByte;
+var k, base: Integer; sp, dp: PByte; sl: TPyList;
 begin
   if src = nil then Exit;
+  { A LIST/TUPLE of ints binds to this class param too (overload resolution is
+    not identity-precise): `out.extend((13, 10))` — read its VALUES instead of
+    misreading TPyList fields as byte storage. }
+  if TObject(src) is TPyList then
+  begin
+    sl := TPyList(TObject(src));
+    base := FLen;
+    PyBytesEnsure(Self, FLen + sl.count);
+    for k := 0 to sl.count - 1 do
+    begin
+      dp := PByte(NativeInt(FData) + base + k);
+      dp^ := Byte(pyvar_to_int(sl.at(k)) and $FF);
+    end;
+    Exit;
+  end;
   base := FLen;
   PyBytesEnsure(Self, FLen + src.FLen);
   for k := 0 to src.FLen - 1 do

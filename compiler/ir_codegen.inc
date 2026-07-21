@@ -2426,7 +2426,28 @@ begin
             evaluation cannot clobber it; pop args into the ABI registers, then
             pop the callee into r11 and call. }
           if nArgs > 6 then
-            Error('indirect call with more than 6 parameters is not supported');
+          begin
+            { ALL-STACK convention, the mirror of the >6 DIRECT call: callee
+              pushed deepest, args left-to-right on top (arg0 deepest of the
+              args — the layout the callee's >6 prologue reads); the callee
+              address is retrieved from below the args, and the caller pops
+              args + callee after. Reached only by the bound-compiled-fn
+              bridge (pyboundfn_call_ptr's 7+-arg fan-out); ordinary indirect
+              calls stay on the register arm below. }
+            IREmitNode(IRA[node]); EmitB($50);       { push callee addr (deepest) }
+            argNode := IRB[node];
+            while argNode <> -1 do
+            begin
+              IREmitNode(IRA[argNode]);
+              EmitB($50);                            { push arg }
+              argNode := IRB[argNode];
+            end;
+            EmitB($4C); EmitB($8B); EmitB($9C); EmitB($24); EmitI32(nArgs * 8); { mov r11, [rsp + nArgs*8] = callee }
+            EmitB($41); EmitB($FF); EmitB($D3);      { call r11 }
+            EmitB($48); EmitB($81); EmitB($C4); EmitI32((nArgs + 1) * 8);       { add rsp: args + callee }
+          end
+          else
+          begin
           IREmitNode(IRA[node]); EmitB($50);         { push rax = callee addr }
           { -O2 (promoted from -O3 2026-07-11): the last arg's push/pop pair is back-to-back — keep it in rax
             and mov it into its register (same as the direct-call collapse). }
@@ -2470,6 +2491,7 @@ begin
           FloatPoolSave;
           EmitB($41); EmitB($FF); EmitB($D3);         { call r11 }
           FloatPoolRestore;
+          end;
         end;
       end;
 
