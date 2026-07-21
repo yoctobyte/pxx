@@ -2565,17 +2565,23 @@ begin
   if n < 0 then Exit;
   if ASTKind[n] <> AN_CALL then Exit;
   procIdx := FindProc('pybytes_slice');
+  if (procIdx >= 0) and (ASTIVal[n] = procIdx) then begin Result := True; Exit; end;
+  { a LIST slice read (`l[lo:hi]`) is also a valid slice-assign target }
+  procIdx := FindProc('pylist_slice');
   Result := (procIdx >= 0) and (ASTIVal[n] = procIdx);
 end;
 
-{ `b[lo:hi] = src` — turn the already-built read into the setter call by
-  swapping the target proc and appending the source as a fourth argument. The
-  whole statement IS this call. }
+{ `b[lo:hi] = src` / `l[lo:hi] = src` — turn the already-built read into the
+  setter call by swapping the target proc and appending the source as a fourth
+  argument. The whole statement IS this call. }
 function PyRewriteSliceAssign(sliceNode, rhsNode: Integer): Integer;
 var procIdx, a3, a: Integer;
 begin
-  procIdx := FindProc('pybytes_setslice');
-  if procIdx < 0 then Error('Nil Python: pylib (pybytes_setslice) not loaded');
+  if ASTIVal[sliceNode] = FindProc('pylist_slice') then
+    procIdx := FindProc('pylist_setslice')
+  else
+    procIdx := FindProc('pybytes_setslice');
+  if procIdx < 0 then Error('Nil Python: pylib (setslice) not loaded');
   a3 := AllocNode(AN_ARG);
   ASTLeft[a3] := rhsNode;
   ASTRight[a3] := -1;
@@ -4480,6 +4486,84 @@ begin
   Result := PyMakeIdent(tmpSym);
 end;
 
+{ `for x, y in zip(A, B):` — iterate two containers in parallel. Desugared to a
+  counted while loop over min(len(A), len(B)), binding x=A[i], y=B[i]. CurTok is
+  at `zip`; the two names are already parsed. }
+function PyParseForZip(const name, name2: AnsiString): Integer;
+var listCi, caSym, cbSym, caN, cbN, nSym, iSym, xSym, ySym: Integer;
+    aNode, bNode, node, cnd, thenElse, seq, bodyNode, whileNode, incN, oneN: Integer;
+begin
+  listCi := FindUClass('TPyList');
+  if listCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  Next; Expect(tkLParen, '(');           { consume `zip` and `(` }
+  PyParseBoolExpr; aNode := CurASTNode;
+  Expect(tkComma, ',');
+  PyParseBoolExpr; bNode := CurASTNode;
+  Expect(tkRParen, ')');
+  Expect(tkColon, ':');
+
+  { hidden container / length / index locals }
+  caSym := AllocVar(PyHiddenName('za'), tyClass); Syms[caSym].RecName := REC_UCLASS_BASE + listCi;
+  cbSym := AllocVar(PyHiddenName('zb'), tyClass); Syms[cbSym].RecName := REC_UCLASS_BASE + listCi;
+  caN := AllocVar(PyHiddenName('zna'), tyInteger);
+  cbN := AllocVar(PyHiddenName('znb'), tyInteger);
+  nSym := AllocVar(PyHiddenName('zn'), tyInteger);
+  iSym := AllocVar(PyHiddenName('zi'), tyInteger);
+  xSym := FindSym(name);  if xSym < 0 then xSym := AllocVar(name, tyVariant);
+  ySym := FindSym(name2); if ySym < 0 then ySym := AllocVar(name2, tyVariant);
+
+  seq := -1;
+  { za = A; zb = B }
+  node := AllocNode(AN_ASSIGN); ASTLeft[node] := PyMakeIdent(caSym); ASTRight[node] := aNode;
+  seq := PySeqAppend(seq, node);
+  node := AllocNode(AN_ASSIGN); ASTLeft[node] := PyMakeIdent(cbSym); ASTRight[node] := bNode;
+  seq := PySeqAppend(seq, node);
+  { zna = len(za); znb = len(zb) }
+  node := AllocNode(AN_ASSIGN); ASTLeft[node] := PyMakeIdent(caN);
+  ASTRight[node] := PyCallMeth1(listCi, 'count', PyMakeIdent(caSym), -1);
+  seq := PySeqAppend(seq, node);
+  node := AllocNode(AN_ASSIGN); ASTLeft[node] := PyMakeIdent(cbN);
+  ASTRight[node] := PyCallMeth1(listCi, 'count', PyMakeIdent(cbSym), -1);
+  seq := PySeqAppend(seq, node);
+  { zn = zna if zna < znb else znb  (ternary over idents, no subtree reuse) }
+  cnd := AllocNode(AN_BINOP); ASTIVal[cnd] := Ord(tkLt);
+  ASTLeft[cnd] := PyMakeIdent(caN); ASTRight[cnd] := PyMakeIdent(cbN); ASTTk[cnd] := Ord(tyBoolean);
+  thenElse := AllocNode(AN_PAIR); ASTLeft[thenElse] := PyMakeIdent(caN); ASTRight[thenElse] := PyMakeIdent(cbN);
+  node := AllocNode(AN_TERNARY); ASTLeft[node] := cnd; ASTRight[node] := thenElse; ASTTk[node] := Ord(tyInteger);
+  incN := AllocNode(AN_ASSIGN); ASTLeft[incN] := PyMakeIdent(nSym); ASTRight[incN] := node;
+  seq := PySeqAppend(seq, incN);
+  { zi = 0 }
+  oneN := AllocNode(AN_INT_LIT); ASTIVal[oneN] := 0; ASTTk[oneN] := Ord(tyInteger);
+  node := AllocNode(AN_ASSIGN); ASTLeft[node] := PyMakeIdent(iSym); ASTRight[node] := oneN;
+  seq := PySeqAppend(seq, node);
+
+  { loop body: x = za[zi]; y = zb[zi]; <body>; zi += 1 }
+  bodyNode := -1;
+  node := AllocNode(AN_ASSIGN); ASTLeft[node] := PyMakeIdent(xSym);
+  ASTRight[node] := PyCallMeth1(listCi, 'at', PyMakeIdent(caSym), PyMakeIdent(iSym));
+  bodyNode := PySeqAppend(bodyNode, node);
+  node := AllocNode(AN_ASSIGN); ASTLeft[node] := PyMakeIdent(ySym);
+  ASTRight[node] := PyCallMeth1(listCi, 'at', PyMakeIdent(cbSym), PyMakeIdent(iSym));
+  bodyNode := PySeqAppend(bodyNode, node);
+  Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
+  bodyNode := PySeqAppend(bodyNode, PyParseBlock);
+  Expect(tkDedent, 'dedent');
+  { zi = zi + 1 }
+  oneN := AllocNode(AN_INT_LIT); ASTIVal[oneN] := 1; ASTTk[oneN] := Ord(tyInteger);
+  incN := AllocNode(AN_BINOP); ASTIVal[incN] := Ord(tkPlus);
+  ASTLeft[incN] := PyMakeIdent(iSym); ASTRight[incN] := oneN; ASTTk[incN] := Ord(tyInteger);
+  node := AllocNode(AN_ASSIGN); ASTLeft[node] := PyMakeIdent(iSym); ASTRight[node] := incN;
+  bodyNode := PySeqAppend(bodyNode, node);
+
+  { while zi < zn }
+  cnd := AllocNode(AN_BINOP); ASTIVal[cnd] := Ord(tkLt);
+  ASTLeft[cnd] := PyMakeIdent(iSym); ASTRight[cnd] := PyMakeIdent(nSym); ASTTk[cnd] := Ord(tyBoolean);
+  whileNode := AllocNode(AN_WHILE); ASTLeft[whileNode] := cnd; ASTRight[whileNode] := bodyNode;
+  seq := PySeqAppend(seq, whileNode);
+  PyStmtAteBlock := True;
+  Result := seq;
+end;
+
 function PyParseFor: Integer;
 var name, name2: AnsiString;
     enumMode: Boolean; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
@@ -4502,6 +4586,13 @@ begin
     Next;
   end;
   Expect(tkIn, 'in');
+  { `for x, y in zip(A, B):` — parallel iteration over two containers. }
+  if (name2 <> '') and PyIsIdent('zip') and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    Result := PyParseForZip(name, name2);
+    Exit;
+  end;
   { `for x in range(...)` keeps the counted-loop lowering below; anything else
     is a container and goes through the desugar. }
   if not (PyIsIdent('range') and (TokPos < TokCount) and

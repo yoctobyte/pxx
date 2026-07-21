@@ -281,6 +281,7 @@ function pystr_slice(const s: AnsiString; lo, hi: Integer): AnsiString;
 function pybytes_slice(b: TPyBytes; lo, hi: Integer): TPyBytes;
 function pylist_slice(l: TPyList; lo, hi: Integer): TPyList;
 function pylist_del_slice(l: TPyList; lo, hi: Integer): TPyList;   { del l[lo:hi] in place }
+procedure pylist_setslice(l: TPyList; lo, hi: Integer; src: TPyList);   { l[lo:hi] = src in place }
 { `b[lo:hi] = src`. uforth assigns a slice of the SAME length everywhere (it is
   emulating fixed-width cells in Forth data space), so a length CHANGE is
   rejected loudly rather than silently splicing: a quiet resize would move
@@ -3249,6 +3250,23 @@ begin
   for i := hi to l.count - 1 do
     l.put(i - gap, l.at(i));
   l.FLen := l.count - gap;
+end;
+
+{ `l[lo:hi] = src` — replace that slice IN PLACE with src's elements (Python's
+  list slice assignment). Rebuilds the list: prefix + src + suffix. }
+procedure pylist_setslice(l: TPyList; lo, hi: Integer; src: TPyList);
+var keep: TPyList; i: Integer;
+begin
+  if l = nil then Exit;
+  PySliceBounds(l.count, lo, hi);
+  keep := TPyList.Create;
+  for i := 0 to lo - 1 do keep.append(l.at(i));
+  if src <> nil then
+    for i := 0 to src.count - 1 do keep.append(src.at(i));
+  for i := hi to l.count - 1 do keep.append(l.at(i));
+  { copy back into l so the original handle stays valid }
+  l.FLen := 0;
+  for i := 0 to keep.count - 1 do l.append(keep.at(i));
 end;
 
 function pylist_repeat(l: TPyList; n: Int64): TPyList;
