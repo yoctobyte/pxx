@@ -1,0 +1,10 @@
+class VM:
+    def __init__(self) -> None:
+        self.n = 0
+def use(vm: VM) -> int:
+    if not hasattr(vm, "_p"):
+        vm._p = 100
+    vm._p = vm._p + 5
+    return vm._p
+v = VM()
+print(use(v))

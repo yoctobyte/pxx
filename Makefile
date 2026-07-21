@@ -249,6 +249,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_variant_slice26)" = "$$(printf '%b' 'ab\n3\n2')"
 	./$(COMPILER) test/test_nilpy_dynattr.npy /tmp/test_nilpy_dynattr26
 	test "$$(/tmp/test_nilpy_dynattr26)" = "$$(printf '%b' '105\n110')"
+	./$(COMPILER) test/test_nilpy_dynattr_class.npy /tmp/test_nilpy_dynattr_class26
+	test "$$(/tmp/test_nilpy_dynattr_class26)" = "105"
 	./$(COMPILER) test/test_nilpy_lambda_stub.npy /tmp/test_nilpy_lambda_stub26
 	test "$$(/tmp/test_nilpy_lambda_stub26)" = "$$(printf '%b' 'A\nB\nok')"
 	test "$$(/tmp/test_nilpy_variant_subscript26)" = "$$(printf '%b' '1\n2\n20\n99')"

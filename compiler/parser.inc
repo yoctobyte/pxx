@@ -4585,6 +4585,29 @@ begin
       propFLen := Tokens[prevTok].SLen;
       viaProp := False;
 
+      { NilPy DYNAMIC attribute on a class instance: `vm._trans_ptr` where the
+        class declares no such field/method/property. Python adds attributes at
+        run time; route reads to pydynattr_get and writes to pydynattr_set (the
+        instance pointer keys the store). Guarded to genuinely undeclared names,
+        so nothing that resolves today changes. }
+      if isNilPy and (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
+         (FindUField(recName - REC_UCLASS_BASE, fieldName) < 0) and
+         (FindUMeth(recName - REC_UCLASS_BASE, fieldName) < 0) and
+         (FindUProp(recName - REC_UCLASS_BASE, fieldName) < 0) then
+      begin
+        Next;   { consume the field name }
+        if CurTok.Kind = tkAssign then
+        begin
+          Next;
+          ParseArgExpr;
+          node := PyMakeDynAttrSet(node, fieldName, CurASTNode);
+          tk := tyUnknown; Result := node; Exit;
+        end;
+        node := PyMakeDynAttrGet(node, fieldName);
+        tk := tyVariant; recName := REC_NONE;
+        Continue;
+      end;
+
       { IMPLICIT DEREF: `p.field` where p is a pointer to a RECORD means `p^.field`
         (FPC/Delphi). Without this the AN_FIELD was built straight over the pointer,
         so the field resolved at an offset into the POINTER VALUE itself and read
