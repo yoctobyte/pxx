@@ -1123,6 +1123,29 @@ end;
       indexed [-1] on an empty list because the guard never went false).
   Ordinals and strings already test correctly (0 / empty are falsy natively), so
   they pass through unchanged. }
+{ Unbox a VARIANT value to a class instance pointer: pyvarobj(v) -> the payload
+  pointer, hard-cast to class ci. Used when a variant (e.g. a dict/list element,
+  dynamically typed) is stored into a tyClass slot — a field or class-typed local.
+  Without it the raw 16-byte variant is written into an 8-byte class slot and the
+  reader sees garbage (a class object round-tripped through a dict, then assigned
+  back to `self.field`, lost its identity and read empty fields — uforth's INCLUDE
+  input-source restore across nested files). }
+function PyUnboxVariantToClass(varNode, ci: Integer): Integer;
+var unboxArg, unboxCall, castNode: Integer;
+begin
+  unboxArg := AllocNode(AN_ARG); ASTLeft[unboxArg] := varNode; ASTRight[unboxArg] := -1;
+  unboxCall := AllocNode(AN_CALL);
+  ASTIVal[unboxCall] := FindProc('pyvarobj');
+  if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+  ASTTk[unboxCall] := Ord(tyPointer);
+  ASTLeft[unboxCall] := unboxArg;
+  castNode := AllocNode(AN_CLASS_CAST);
+  ASTLeft[castNode] := unboxCall;
+  ASTIVal[castNode] := ci;
+  ASTTk[castNode]   := Ord(tyClass);
+  Result := castNode;
+end;
+
 function PyMakeTruthy(n: Integer): Integer;
 var procIdx, argNode, rec, lenNode, zeroNode, node: Integer;
     nilNode, guardNode, falseNode, pairNode, ternNode: Integer;
@@ -5471,6 +5494,13 @@ begin
     if (ASTKind[lhsNode] = AN_IDENT) and
        (ASTKind[rhsNode] = AN_CALL) and (ASTIVal[rhsNode] = -Ord(tkGetMem)) then
       Syms[ASTIVal[lhsNode]].RecName := ASTRight[rhsNode];
+    { Storing a VARIANT (dict/list element, dynamically typed) into a tyClass slot
+      must unbox to the instance pointer — otherwise the raw variant overwrites the
+      8-byte class slot and the object reads as garbage / loses identity. }
+    if (IntToTypeKind(ASTTk[lhsNode]) = tyClass) and
+       (IntToTypeKind(ASTTk[rhsNode]) = tyVariant) and
+       (ResolveNodeRec(lhsNode) >= REC_UCLASS_BASE) then
+      rhsNode := PyUnboxVariantToClass(rhsNode, ResolveNodeRec(lhsNode) - REC_UCLASS_BASE);
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := lhsNode;
     ASTRight[node] := rhsNode;
