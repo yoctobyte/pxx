@@ -264,3 +264,26 @@ underlying TPyDict AnsiString-key boxing inconsistency is worth a Track B look.
 
 Next: M2 — attribute access (vm.here get/set via GetFieldPtr) + subscripts
 (vm.memory[i]); then M3 method calls. That unlocks the 71 vm-accessing blocks.
+
+## 2026-07-21 — M2 landed: attribute + subscript access (field reflection)
+
+pyeval now reaches host state through field reflection (GetFieldPtr):
+- **Attribute** read/write: `vm.here`, `vm.trace = True`, `vm.here += n` — scalar
+  kinds (int/int64/bool/char/single/double/ansistring/variant) unbox/box by
+  TTypeKind; class-valued fields (memory/stack) expose as VT_OBJECT for chaining.
+- **Subscript** read/write: `vm.memory[i]`, `vm.stack[-1]`, `vm.memory[addr]=v`
+  over TPyBytes / TPyList (Python negative indexing) and TPyDict keys.
+- Assignment targets generalised to local | attribute | subscript, plain +
+  augmented, via a token-scan lvalue detector (AssignmentAhead) + a chain walker
+  (DoAssignment) that reads intermediate steps and writes only the final slot.
+- Postfix `.attr` / `[index]` chain added to the expression grammar.
+
+test/test_pyeval_m2.pas (18 cases: read/write scalars, augassign, bytes/list
+subscripts incl. negative, computed-address store, loop-writing memory, cond with
+attr+subscript) — ALL PASS. M1 + compound tests green; self-host byte-identical;
+quick tier green.
+
+Remaining for full vm coverage: **M3 method calls** (vm.define_word(...),
+list.append/insert, bytes.decode, str.join), slices (`vm.memory[a:b]`,
+`hex(x)[2:]`), `del`, `isinstance`, f-strings, and the bignum tail. M3 +
+list/bytes methods are the last big unlock.

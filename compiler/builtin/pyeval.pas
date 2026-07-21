@@ -86,6 +86,12 @@ type
     Payload: Int64;
   end;
 
+  { pointer types for boxing/unboxing reflected fields by TTypeKind }
+  PLongInt = ^LongInt;
+  PByte    = ^Byte;
+  PSingle  = ^Single;
+  PVariant = ^Variant;
+
   { Trampoline thunk shapes the M1 host methods use (Self = leading Pointer). }
   TPushFn  = procedure(self: Pointer; const v: Variant);
   TPopFn   = function(self: Pointer): Variant;
@@ -211,6 +217,131 @@ begin
             ' (RetKind=', mi^.RetKind, ' Arity=', mi^.Arity, ')');
     Halt(1);
   end;
+end;
+
+{ ---- field (attribute) reflection: M2 ---- }
+
+{ Read field `name` on `obj` and box it by its TTypeKind. Scalar kinds unbox to
+  int/bool/float; a string field to a str variant; anything else (a class-valued
+  field like memory/stack) is boxed as VT_OBJECT holding the field's stored
+  pointer, so a following subscript / method call can reach it. }
+procedure PyFieldGet(obj: Pointer; const name: AnsiString; var res: Variant);
+var
+  cls: PClassRTTI;
+  kind: Int64;
+  p: Pointer;
+  r: PPyRec;
+begin
+  cls := GetInstanceRTTI(obj);
+  if cls = nil then begin writeln('pyeval: no RTTI for attribute ', name); Halt(1); end;
+  p := GetFieldPtr(obj, cls, name, kind);
+  if p = nil then begin writeln('pyeval: object has no attribute ', name); Halt(1); end;
+  r := PPyRec(@res);
+  case kind of
+    1: res := pyvar_of_int(PLongInt(p)^);        { tyInteger — 4-byte }
+    2: res := pyvar_of_bool(PByte(p)^ <> 0);     { tyBoolean }
+    3: res := pyvar_of_int(PByte(p)^);           { tyChar }
+    13: res := pyvar_of_int(PInt64(p)^);         { tyInt64 }
+    18: res := MakeFloat(PSingle(p)^);           { tySingle }
+    19: res := MakeFloat(PDouble(p)^);           { tyDouble }
+    22: res := PVariant(p)^;                      { tyVariant — copy the slot }
+    23: res := MakeStr(PAnsiString(p)^);          { tyAnsiString }
+  else
+    { class / aggregate field: the slot holds an object pointer; expose it as a
+      VT_OBJECT so subscripts and method calls can reach the container }
+    r^.VType := 7; r^.Payload := PInt64(p)^;
+  end;
+end;
+
+{ Write `val` into scalar/string field `name` on `obj`, coercing to the field's
+  kind. Object-typed fields are not writable this way in M2 (would need lifetime
+  handling); rejected. }
+procedure PyFieldSet(obj: Pointer; const name: AnsiString; const val: Variant);
+var
+  cls: PClassRTTI;
+  kind: Int64;
+  p: Pointer;
+begin
+  cls := GetInstanceRTTI(obj);
+  if cls = nil then begin writeln('pyeval: no RTTI for attribute ', name); Halt(1); end;
+  p := GetFieldPtr(obj, cls, name, kind);
+  if p = nil then begin writeln('pyeval: object has no attribute ', name); Halt(1); end;
+  case kind of
+    1: PLongInt(p)^ := pyvar_to_int(val);
+    2: if pyvar_to_bool(val) then PByte(p)^ := 1 else PByte(p)^ := 0;
+    3: PByte(p)^ := pyvar_to_int(val) and $FF;
+    13: PInt64(p)^ := pyvar_to_int(val);
+    18: PSingle(p)^ := pyvar_to_float(val);
+    19: PDouble(p)^ := pyvar_to_float(val);
+    22: PVariant(p)^ := val;
+    23: PAnsiString(p)^ := pystr_of(val);
+  else
+    begin writeln('pyeval: cannot assign to object-typed attribute ', name); Halt(1); end;
+  end;
+end;
+
+{ container[index] read. `container` is a VT_OBJECT variant; a list yields the
+  element (Python negative indexing), a bytes object an int, a dict the value at
+  the key. Slices are not handled here (M2b). }
+procedure PySubscriptGet(const container: Variant; const index: Variant;
+                         var res: Variant);
+var o: TObject; li: TPyList; by: TPyBytes; di: TPyDict; i, n: Int64;
+begin
+  if PPyRec(@container)^.VType <> 7 then
+  begin writeln('pyeval: cannot subscript a non-container'); Halt(1); end;
+  o := TObject(Pointer(PPyRec(@container)^.Payload));
+  if o is TPyList then
+  begin
+    li := TPyList(o); n := li.count; i := pyvar_to_int(index);
+    if i < 0 then i := i + n;
+    if (i < 0) or (i >= n) then begin writeln('pyeval: list index out of range'); Halt(1); end;
+    res := li.at(i);
+  end
+  else if o is TPyBytes then
+  begin
+    by := TPyBytes(o); n := by.count; i := pyvar_to_int(index);
+    if i < 0 then i := i + n;
+    if (i < 0) or (i >= n) then begin writeln('pyeval: index out of range'); Halt(1); end;
+    res := pyvar_of_int(by.at(i));
+  end
+  else if o is TPyDict then
+  begin
+    di := TPyDict(o);
+    res := di.fetch(index);
+  end
+  else
+    begin writeln('pyeval: unsupported subscript target'); Halt(1); end;
+end;
+
+{ container[index] = val }
+procedure PySubscriptSet(const container: Variant; const index: Variant;
+                         const val: Variant);
+var o: TObject; li: TPyList; by: TPyBytes; di: TPyDict; i, n: Int64;
+begin
+  if PPyRec(@container)^.VType <> 7 then
+  begin writeln('pyeval: cannot subscript-assign a non-container'); Halt(1); end;
+  o := TObject(Pointer(PPyRec(@container)^.Payload));
+  if o is TPyList then
+  begin
+    li := TPyList(o); n := li.count; i := pyvar_to_int(index);
+    if i < 0 then i := i + n;
+    if (i < 0) or (i >= n) then begin writeln('pyeval: list assignment index out of range'); Halt(1); end;
+    li.put(i, val);
+  end
+  else if o is TPyBytes then
+  begin
+    by := TPyBytes(o); n := by.count; i := pyvar_to_int(index);
+    if i < 0 then i := i + n;
+    if (i < 0) or (i >= n) then begin writeln('pyeval: index out of range'); Halt(1); end;
+    by.put(i, pyvar_to_int(val) and $FF);
+  end
+  else if o is TPyDict then
+  begin
+    di := TPyDict(o);
+    di.store(index, val);
+  end
+  else
+    begin writeln('pyeval: unsupported subscript-assign target'); Halt(1); end;
 end;
 
 { ---- tokenizer ---- }
@@ -588,41 +719,57 @@ end;
 procedure ParseExpr(var res: Variant); forward;   { conditional/ternary — lowest }
 procedure ParseCall(const callee: AnsiString; var res: Variant); forward;
 
+{ atom, then a postfix chain of `.attr` (field read) and `[index]` (subscript). }
 procedure ParsePrimary(var res: Variant);
-var name: AnsiString;
+var name, fld: AnsiString; recv, idx: Variant;
 begin
-  case TkKind[Cur] of
-    PK_INT:
-      begin res := pyvar_of_int(TkInt[Cur]); Advance; Exit; end;
-    PK_FLOAT:
-      begin res := MakeFloat(TkFloat[Cur]); Advance; Exit; end;
-    PK_STR:
-      begin res := MakeStr(TkText[Cur]); Advance; Exit; end;
-    PK_NAME:
-      begin
-        name := TkText[Cur];
-        if name = 'True' then begin Advance; res := pyvar_of_bool(True); Exit; end;
-        if name = 'False' then begin Advance; res := pyvar_of_bool(False); Exit; end;
-        if name = 'None' then begin Advance; res := MakeNone; Exit; end;
-        Advance;
-        if IsOp('(') then begin ParseCall(name, res); Exit; end;
-        if IsOp('.') then
-          EvalError('attribute access (' + name + '.x) is M2/M3, not M1');
-        if IsOp('[') then
-          EvalError('subscripting is M2, not M1');
-        EnvGet(name, res);
-        Exit;
-      end;
-  end;
-  if IsOp('(') then
+  { ---- atom ---- }
+  if TkKind[Cur] = PK_INT then
+  begin res := pyvar_of_int(TkInt[Cur]); Advance; end
+  else if TkKind[Cur] = PK_FLOAT then
+  begin res := MakeFloat(TkFloat[Cur]); Advance; end
+  else if TkKind[Cur] = PK_STR then
+  begin res := MakeStr(TkText[Cur]); Advance; end
+  else if TkKind[Cur] = PK_NAME then
   begin
-    Advance;
-    ParseExpr(res);
-    ExpectOp(')');
-    Exit;
+    name := TkText[Cur];
+    if name = 'True' then begin Advance; res := pyvar_of_bool(True); end
+    else if name = 'False' then begin Advance; res := pyvar_of_bool(False); end
+    else if name = 'None' then begin Advance; res := MakeNone; end
+    else
+    begin
+      Advance;
+      if IsOp('(') then ParseCall(name, res)
+      else EnvGet(name, res);
+    end;
+  end
+  else if IsOp('(') then
+  begin Advance; ParseExpr(res); ExpectOp(')'); end
+  else
+  begin EvalError('unexpected token in expression: "' + TkText[Cur] + '"'); res := MakeNone; end;
+
+  { ---- postfix chain ---- }
+  while IsOp('.') or IsOp('[') do
+  begin
+    if IsOp('.') then
+    begin
+      Advance;
+      if TkKind[Cur] <> PK_NAME then EvalError('expected attribute name after "."');
+      fld := TkText[Cur]; Advance;
+      if IsOp('(') then
+        EvalError('method calls (obj.' + fld + '(...)) are M3, not yet supported');
+      recv := res;
+      if Executing then PyFieldGet(pyvarobj(recv), fld, res) else res := MakeNone;
+    end
+    else
+    begin
+      Advance;
+      ParseExpr(idx);
+      ExpectOp(']');
+      recv := res;
+      if Executing then PySubscriptGet(recv, idx, res) else res := MakeNone;
+    end;
   end;
-  EvalError('unexpected token in expression: "' + TkText[Cur] + '"');
-  res := MakeNone;
 end;
 
 procedure ParseUnary(var res: Variant);
@@ -1077,10 +1224,113 @@ begin
   { after the last real iteration Cur is already past the suite }
 end;
 
-procedure ExecStatement;
+function IsAssignOp(const s: AnsiString): Boolean;
+begin
+  IsAssignOp := (s = '=') or (s = '+=') or (s = '-=') or (s = '*=')
+    or (s = '//=') or (s = '%=') or (s = '&=') or (s = '|=') or (s = '^=')
+    or (s = '<<=') or (s = '>>=');
+end;
+
+{ Token-only scan: does a NAME (.attr | [expr])* chain from Cur end at an assign
+  op? Decides assignment vs expression statement without evaluating anything. }
+function AssignmentAhead: Boolean;
+var p, depth: Integer;
+begin
+  AssignmentAhead := False;
+  p := Cur;
+  if TkKind[p] <> PK_NAME then Exit;
+  p := p + 1;
+  while True do
+  begin
+    if (TkKind[p] = PK_OP) and (TkText[p] = '.') then
+    begin
+      p := p + 1;
+      if TkKind[p] <> PK_NAME then Exit;
+      p := p + 1;
+    end
+    else if (TkKind[p] = PK_OP) and (TkText[p] = '[') then
+    begin
+      depth := 1; p := p + 1;
+      while (depth > 0) and (TkKind[p] <> PK_EOF) do
+      begin
+        if (TkKind[p] = PK_OP) and (TkText[p] = '[') then depth := depth + 1
+        else if (TkKind[p] = PK_OP) and (TkText[p] = ']') then depth := depth - 1;
+        p := p + 1;
+      end;
+    end
+    else
+      Break;
+  end;
+  AssignmentAhead := (TkKind[p] = PK_OP) and IsAssignOp(TkText[p]);
+end;
+
+{ Assignment to a local, an attribute (obj.field), or a subscript
+  (container[index]) — plain and augmented. The receiver chain is walked and
+  intermediate steps read normally; only the final step is the lvalue. }
+procedure DoAssignment;
 var
-  target, aug: AnsiString;
-  rhs, cur, v: Variant;
+  base, aug, fld: AnsiString;
+  recv, idx, rhs, cur, v, tcont, tindex: Variant;
+  tkind: Integer;   { 0 local, 1 attribute, 2 subscript }
+  tname: AnsiString;
+  tobj: Pointer;
+begin
+  base := TkText[Cur]; Advance;
+  tkind := 0; tname := base; tobj := nil;
+  if IsOp('.') or IsOp('[') then
+  begin
+    EnvGet(base, recv);
+    while True do
+    begin
+      if IsOp('.') then
+      begin
+        Advance;
+        fld := TkText[Cur]; Advance;
+        if (TkKind[Cur] = PK_OP) and IsAssignOp(TkText[Cur]) then
+        begin tkind := 1; tobj := pyvarobj(recv); tname := fld; Break; end;
+        if Executing then PyFieldGet(pyvarobj(recv), fld, recv) else recv := MakeNone;
+      end
+      else if IsOp('[') then
+      begin
+        Advance; ParseExpr(idx); ExpectOp(']');
+        if (TkKind[Cur] = PK_OP) and IsAssignOp(TkText[Cur]) then
+        begin tkind := 2; tcont := recv; tindex := idx; Break; end;
+        if Executing then PySubscriptGet(recv, idx, recv) else recv := MakeNone;
+      end
+      else
+        EvalError('invalid assignment target');
+    end;
+  end;
+
+  aug := TkText[Cur]; Advance;
+  ParseExpr(rhs);
+  if not Executing then Exit;
+
+  if aug = '=' then v := rhs
+  else
+  begin
+    if tkind = 0 then EnvGet(tname, cur)
+    else if tkind = 1 then PyFieldGet(tobj, tname, cur)
+    else PySubscriptGet(tcont, tindex, cur);
+    if aug = '+=' then v := pyadd_v(cur, rhs)
+    else if aug = '-=' then v := pysub_v(cur, rhs)
+    else if aug = '*=' then v := pymul_v(cur, rhs)
+    else if aug = '//=' then v := pyfloordiv_v(cur, rhs)
+    else if aug = '%=' then v := pymod_v(cur, rhs)
+    else if aug = '&=' then v := pybitand_v(cur, rhs)
+    else if aug = '|=' then v := pybitor_v(cur, rhs)
+    else if aug = '^=' then v := pybitxor_v(cur, rhs)
+    else if aug = '<<=' then v := pyshl_v(cur, rhs)
+    else v := pyshr_v(cur, rhs);
+  end;
+
+  if tkind = 0 then LclSet(tname, v)
+  else if tkind = 1 then PyFieldSet(tobj, tname, v)
+  else PySubscriptSet(tcont, tindex, v);
+end;
+
+procedure ExecStatement;
+var v: Variant;
 begin
   StmtWasCompound := False;
   { compound statements (self-terminating at DEDENT). Set the flag AFTER the call
@@ -1094,42 +1344,9 @@ begin
      or IsKw('import') or IsKw('continue') or IsKw('elif') or IsKw('else') then
     EvalError('statement "' + CurText + '" is not supported yet');
 
-  { assignment / augassign?  NAME (=|op=) ...  — lookahead. }
-  if (TkKind[Cur] = PK_NAME) and (TkKind[Cur+1] = PK_OP) then
-  begin
-    target := TkText[Cur];
-    aug := TkText[Cur+1];
-    if aug = '=' then
-    begin
-      Advance; Advance;
-      ParseExpr(rhs);
-      if Executing then LclSet(target, rhs);
-      Exit;
-    end;
-    if (aug = '+=') or (aug = '-=') or (aug = '*=') or (aug = '//=')
-       or (aug = '%=') or (aug = '&=') or (aug = '|=') or (aug = '^=')
-       or (aug = '<<=') or (aug = '>>=') then
-    begin
-      Advance; Advance;
-      ParseExpr(rhs);
-      if Executing then
-      begin
-        EnvGet(target, cur);
-        if aug = '+=' then v := pyadd_v(cur, rhs)
-        else if aug = '-=' then v := pysub_v(cur, rhs)
-        else if aug = '*=' then v := pymul_v(cur, rhs)
-        else if aug = '//=' then v := pyfloordiv_v(cur, rhs)
-        else if aug = '%=' then v := pymod_v(cur, rhs)
-        else if aug = '&=' then v := pybitand_v(cur, rhs)
-        else if aug = '|=' then v := pybitor_v(cur, rhs)
-        else if aug = '^=' then v := pybitxor_v(cur, rhs)
-        else if aug = '<<=' then v := pyshl_v(cur, rhs)
-        else v := pyshr_v(cur, rhs);
-        LclSet(target, v);
-      end;
-      Exit;
-    end;
-  end;
+  if (TkKind[Cur] = PK_NAME) and AssignmentAhead then
+  begin DoAssignment; Exit; end;
+
   { expression statement (e.g. push(x), pop()) — value discarded }
   ParseExpr(v);
 end;
