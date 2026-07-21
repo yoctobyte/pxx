@@ -1,0 +1,14 @@
+from typing import Optional
+class C:
+    def __init__(self) -> None:
+        self.a: Optional[int] = None
+        self.b: int = 7
+    def set(self, v: int) -> None:
+        self.a = v
+
+c = C()
+print(c.b)
+c.set(42)
+print(int(c.a))
+c.a = None
+print(int(c.a))

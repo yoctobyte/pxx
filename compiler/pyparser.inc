@@ -5215,11 +5215,21 @@ begin
       Expect(tkAssign, '=');
       { `d[k] = None` / `o.f = None` stores a real None (VT_EMPTY), not the
         integer 0 the nil literal lowers to elsewhere
-        (feature-nilpy-none-variant). }
+        (feature-nilpy-none-variant) — UNLESS the target is a scalar-numeric
+        field (`self.x: Optional[int] = None`), where Optional[int] mapped to
+        tyInt64 and None is that type's 0 sentinel. Storing a variant None there
+        would coerce via pyvar_to_int and raise 'expected a number'. }
       if CurTok.Kind = tkNil then
       begin
         Next;
-        rhsNode := PyMakeNone;
+        if PyNumeric(IntToTypeKind(ASTTk[lhsNode])) then
+        begin
+          rhsNode := AllocNode(AN_INT_LIT);
+          ASTIVal[rhsNode] := 0;
+          ASTTk[rhsNode] := ASTTk[lhsNode];
+        end
+        else
+          rhsNode := PyMakeNone;
       end
       else if PyIsEmptySetCall then
         rhsNode := PyParseEmptySet
