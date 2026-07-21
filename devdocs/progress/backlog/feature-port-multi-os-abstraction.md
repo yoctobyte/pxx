@@ -45,7 +45,16 @@ Each phase is an independently-useful, already-filed child ticket. The abstracti
 - **P2 — Windows/amd64 PE (Wine-tested).** [[feature-port-windows-pe]] (new PE/COFF
   writer + **MS x64 ABI** + CRT-free ~10-symbol kernel32/ntdll binding) +
   [[feature-t-windows-wine-harness]] (the zero-VM test bed: wine runner + mingw-w64
-  differential oracle). The big rock — Axis B, not runtime.
+  differential oracle). The big rock — Axis B, not runtime. **Scoped 2026-07-21:**
+  cross-compile FROM Linux only (self-host on Windows is *not* a goal); single-threaded
+  console first (threads/sync/mmap = a deferred model-port, futex ≠ Win events); a
+  2026-07-21 scout pinned the exact edit sites (see the child ticket).
+- **P2-GUI (best-effort tail, NOT core scope; owned by the GUI umbrella).** The Windows
+  widgetset [[feature-pcl-win32-widgetset]] lives under [[feature-pcl-cross-platform-gui]]
+  (Track B), blocked-by THIS umbrella's PE work + the GUI seam-seal. Native user32/gdi32
+  (zero-dep; GTK rejected for its ~30-40 MB DLL swarm, not its LGPL). **Un-gated:** no
+  Windows box, Wine-smoke only; parity on real Windows not guaranteed. Console+stdio
+  earns "runs on Windows"; GUI bolts on after and does not gate this OS umbrella.
 
 ## Adjacent — NOT in this umbrella's active scope
 

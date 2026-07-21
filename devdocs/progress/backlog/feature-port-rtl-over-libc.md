@@ -45,6 +45,32 @@ existing machinery to the RTL's own primitives*, not a new subsystem.
 - Keep the primitive *set* identical; only the lowering of each changes. Everything
   above the primitives (managed strings, heap, exceptions) is untouched.
 
+## The switch reaches UP into codegen, not just the RTL library (2026-07-21 scout)
+
+Sizing the Windows target surfaced a subtlety worth pinning here: raw `syscall` lives in
+**two** places, and the lowering switch must cover both — it is not purely an
+`lib/rtl/*` edit.
+
+1. **RTL primitives (the library half — expected).** `lib/rtl/pxxcio.pas` is the single
+   IO chokepoint (fd 1, `__pxxrawsyscall`), plus `ansiterm.pas:192`. libc/kernel32 mode
+   swaps these. Straightforward.
+2. **Emitted program startup (the codegen half — easy to miss).** The compiler emits a
+   raw `syscall` instruction into the program's **own `_start` stub**:
+   `compiler/emit.inc:116` `EmitwriteSyscall` (i386 `int 0x80` `:118`, aarch64 `svc`
+   `:105`), `EmitSyscall`=`0F 05` at `emit.inc:80`, `SYS_WRITE=1` at `defs.inc:601`.
+   This is **codegen**, below the RTL — in libc/DLL mode it must emit a `CALL` to an
+   imported symbol (Windows: `kernel32!WriteFile`/`ExitProcess`, needing the
+   [[feature-port-windows-pe]] IAT), not a `syscall`. So the flag threads into `emit.inc`,
+   not only `lib/rtl`.
+3. **Bypass modules (out of THIS ticket's primitive set — flag separately).**
+   `lib/rtl/palthread.pas`, `palsync.pas`, `baseunix.pas:122`, `random.pas:225` call
+   `__pxxrawsyscall` directly (clone/futex/mmap/getrandom/termios), bypassing pxxcio.
+   These are a per-OS **model** port, not a lowering flip (futex ≠ Win events), and are
+   deferred — Windows single-threaded first (see [[feature-port-windows-pe]]).
+
+The "zero `syscall` instructions" acceptance grep below already implies #2; this note
+just names *where* so the implementer patches `emit.inc` and doesn't stop at `lib/rtl`.
+
 ## Acceptance
 
 - With libc-call mode on for a Linux host (proving the mode against a known-good

@@ -61,6 +61,59 @@ The ticket is big because of **PE format + MS x64 ABI**, NOT because of runtime 
 the runtime shrinks to a ~10-symbol import table. Bind ntdll/kernel32 **exports** via the
 IAT, never the raw syscall instruction.
 
+## Scout — concrete anchors (2026-07-21 sizing session)
+
+Read-only scout of the tree, so the implementer starts from a map, not a blank grep.
+Confirms the design above and pins the exact edit sites.
+
+- **SysV arg regs (the thing to fork for MS x64):** `compiler/ir_codegen.inc:4163-4170`
+  assigns int args 0→rdi,1→rsi,2→rdx,3→rcx,4→r8,5→r9; float args → xmm0..7 at
+  `:4051-4056` / `~4151-4160`. The C-call ABI branch is `ir_codegen.inc:4029-4036`
+  (`if ProcExternal or ProcCdecl`). **There is no callconv enum** — convention is a
+  per-proc boolean (`ProcCdecl[]`, `symtab.inc:4764`), hardwired to SysV. MS x64 =
+  a new discriminator threaded through IR_CALL lowering + the prologue param-spill
+  (`parser.inc:24317`). Fork rcx/rdx/r8/r9, add the 32-byte shadow-space reservation,
+  swap the callee-saved set (Win64: RSI/RDI + XMM6-15 callee-saved; SysV: scratch).
+- **The external-call path already treats calls as opaque clobber barriers**, so the
+  optimizer needs no new teaching — MS x64 fills the arg-mapping into machinery that
+  exists. This is why piece is **moderate, not large** (linear codegen fork, not new
+  subsystem). The two genuine debug traps: missing shadow space → silent stack
+  corruption; forgotten XMM6-15 save → silent FP corruption across a callback.
+- **PE writer:** ELF-only today in `compiler/elfwriter.inc` (3303 LOC): `writeELF`
+  `:1488`, ehdr/PT_LOAD/reloc helpers `:433-702`. New `pewriter.inc` reuses the
+  `writeU8/16/32/64` + fixup byte-writers (`:555-702`); only the container (DOS stub,
+  PE\0\0, COFF hdr, optional hdr, `.idata` IAT/ILT) is new. Linear to write — the pain
+  is first-boot: the Windows loader rejects a malformed PE **silently/cryptically**
+  ("not a valid Win32 app"), so budget debug time for RVA math + IAT twin-array
+  (INT/IAT) + section file-vs-virtual alignment. Output dispatch to patch:
+  `compiler.pas:948-961` (currently arch-keyed only).
+- **Platform axis is half-built (good news — the enum already exists):** `defs.inc:636`
+  has `TargetPlatform` = { PLATFORM_POSIX=0, PLATFORM_ESP=1 }; globals at
+  `defs.inc:925/:1584`, derivation `compiler.pas:612-623`. Add `PLATFORM_WINDOWS`,
+  a `--target=x86_64-windows` CLI surface (`compiler.pas:276-339`), guard it to
+  `TARGET_X86_64`, and wire it into the emitter (`compiler.pas:948`) + RTL-PAL
+  selection (`compiler.pas:678-683`). This sub-piece is **trivial** — the `(arch,os)`
+  product is already in the type system, just missing the Windows member.
+
+## Refined scope (2026-07-21) — cross-compile only, single-thread first
+
+- **Cross-compile FROM Linux only.** Self-hosting *on* Windows is explicitly **not a
+  goal** — not now, maybe once all features land as a distant 2nd. The target exists to
+  emit Windows apps transparently, nothing more. The ELF default and self-host gate stay
+  bit-identical; Windows is purely additive output.
+- **Single-threaded console first; defer threads/sync/mmap.** The raw-syscall RTL modules
+  that bypass the IO chokepoint — `lib/rtl/palthread.pas`, `palsync.pas`, and the
+  `mmap`/`futex`/`clone` sites — are a **threading-model mismatch** (futex ≠ Win event
+  objects; `CreateThread`/`WaitForSingleObject`/`VirtualAlloc`). Not covered by the
+  ~10-symbol kernel32 binding above and NOT required for a console or a simple GUI app.
+  Land Windows single-threaded; file threads as a follow-up only when an app needs them.
+- **GUI is a separate, best-effort, un-gated follow-up** — see
+  [[feature-pcl-win32-widgetset]] under the GUI umbrella
+  [[feature-pcl-cross-platform-gui]]. Native user32/gdi32, zero-dep (no GTK bundle).
+  Correctness/layout/signal parity **explicitly not guaranteed or gated** (no Windows
+  box; Wine-smoke only). Console + stdio is the spine that earns "runs on Windows"; GUI
+  bolts on after.
+
 ## Testing is cheap — Wine
 
 Test bed: [[feature-t-windows-wine-harness]] (wine runner + mingw-w64 oracle), and this
