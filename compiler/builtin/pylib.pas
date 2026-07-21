@@ -57,6 +57,26 @@ type
     constructor Create;
   end;
 
+  { A file object with the mutable methods uforth's file-VFS words call
+    (seek/tell/truncate/read/write/close/flush). These words run only under the
+    exec path (stubbed), so the methods are STUBS — the class exists so the
+    variant method dispatch resolves `entry["file"].truncate(...)` etc. A real
+    file object is feature-lib-pyfile-object. }
+  TPyFile = class
+  public
+    constructor Create;
+    procedure seek(offset: Int64); overload;
+    procedure seek(offset: Int64; whence: Int64); overload;
+    function tell: Int64;
+    procedure truncate(size: Int64);
+    function read: AnsiString; overload;
+    function read(n: Int64): AnsiString; overload;
+    function readline: AnsiString;
+    function write(const s: AnsiString): Int64;
+    procedure close;
+    procedure flush;
+  end;
+
   TPyList = class
   public
     FLen: Integer;
@@ -75,7 +95,8 @@ type
     function at(i: Integer): Variant;
     procedure put(i: Integer; const v: Variant);
     function count: Integer;
-    function pop: Variant;
+    function pop: Variant; overload;
+    function pop(i: Integer): Variant; overload;   { list.pop(index) — Python removes at i }
     function pop_at(i: Integer): Variant;
     procedure insert(i: Integer; const v: Variant);
     { Python's `xs += ys` / xs.extend(ys): IN-PLACE, appending ys's elements.
@@ -259,6 +280,7 @@ function pystr_encode(const s: AnsiString): TPyBytes;
 function pystr_slice(const s: AnsiString; lo, hi: Integer): AnsiString;
 function pybytes_slice(b: TPyBytes; lo, hi: Integer): TPyBytes;
 function pylist_slice(l: TPyList; lo, hi: Integer): TPyList;
+function pylist_del_slice(l: TPyList; lo, hi: Integer): TPyList;   { del l[lo:hi] in place }
 { `b[lo:hi] = src`. uforth assigns a slice of the SAME length everywhere (it is
   emulating fixed-width cells in Forth data space), so a length CHANGE is
   rejected loudly rather than silently splicing: a quiet resize would move
@@ -962,6 +984,57 @@ begin
   st_size := 0;
 end;
 
+{ TPyFile — all STUBS (the file-VFS words that use them never run; see the class
+  note). Present so the frontend can resolve the method names. }
+constructor TPyFile.Create;
+begin
+end;
+
+procedure TPyFile.seek(offset: Int64);
+begin
+end;
+
+procedure TPyFile.seek(offset: Int64; whence: Int64);
+begin
+end;
+
+function TPyFile.tell: Int64;
+begin
+  Result := 0;
+end;
+
+procedure TPyFile.truncate(size: Int64);
+begin
+end;
+
+function TPyFile.read: AnsiString;
+begin
+  Result := '';
+end;
+
+function TPyFile.read(n: Int64): AnsiString;
+begin
+  Result := '';
+end;
+
+function TPyFile.readline: AnsiString;
+begin
+  Result := '';
+end;
+
+function TPyFile.write(const s: AnsiString): Int64;
+begin
+  Result := Length(s);
+end;
+
+procedure TPyFile.close;
+begin
+end;
+
+procedure TPyFile.flush;
+begin
+end;
+
 function next(c: TPyCounter): Int64;
 begin
   Result := c.nextval;
@@ -1148,6 +1221,11 @@ function TPyList.pop: Variant;
 begin
   Result := at(FLen - 1);
   FLen := FLen - 1;
+end;
+
+function TPyList.pop(i: Integer): Variant;
+begin
+  Result := pop_at(i);
 end;
 
 function TPyList.pop_at(i: Integer): Variant;
@@ -3154,6 +3232,23 @@ begin
       r.append(l.at(i));
   end;
   Result := r;
+end;
+
+{ `del l[lo:hi]` — remove that slice from the list IN PLACE (Python's del on a
+  list slice), honouring the same PY_SLICE_OMIT bounds. Returns Self so the del
+  rewrite can use it as a value node. }
+function pylist_del_slice(l: TPyList; lo, hi: Integer): TPyList;
+var i, gap: Integer;
+begin
+  Result := l;
+  if l = nil then Exit;
+  PySliceBounds(l.count, lo, hi);
+  if hi <= lo then Exit;
+  gap := hi - lo;
+  { shift the tail down over the deleted range }
+  for i := hi to l.count - 1 do
+    l.put(i - gap, l.at(i));
+  l.FLen := l.count - gap;
 end;
 
 function pylist_repeat(l: TPyList; n: Int64): TPyList;

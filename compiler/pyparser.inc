@@ -2698,21 +2698,36 @@ end;
   `sys.stderr` resolves. Modelling it as an fd integer is what lets
   AN_WRITE/AN_WRITELN pick it up through their existing ival slot. }
 function PyIsSysStreamAhead: Boolean;
-var nm: AnsiString;
+var base, nm: AnsiString;
 begin
   Result := False;
   if (TokPos < 1) or (TokPos + 1 >= TokCount) then Exit;
-  if LowerCase(GetTokenStr(TokPos - 1)) <> 'sys' then Exit;
+  base := LowerCase(GetTokenStr(TokPos - 1));
   if Tokens[TokPos].Kind <> tkDot then Exit;
   nm := LowerCase(GetTokenStr(TokPos + 1));
-  Result := (nm = 'stdout') or (nm = 'stderr') or (nm = 'stdin') or (nm = 'argv');
+  if base = 'sys' then
+    Result := (nm = 'stdout') or (nm = 'stderr') or (nm = 'stdin') or (nm = 'argv')
+  else if base = 'os' then
+    { os.SEEK_SET/CUR/END — the whence CONSTANTS, bare values not calls. }
+    Result := (nm = 'seek_set') or (nm = 'seek_cur') or (nm = 'seek_end');
 end;
 
 function PyParseSysStream: Integer;
 var nm: AnsiString; procIdx: Integer;
 begin
   nm := LowerCase(GetTokenStr(TokPos + 1));
-  Next; Next; Next;              { 'sys', '.', the stream name }
+  Next; Next; Next;              { base, '.', the member name }
+  if (nm = 'seek_set') or (nm = 'seek_cur') or (nm = 'seek_end') then
+  begin
+    Result := AllocNode(AN_INT_LIT);
+    if nm = 'seek_cur' then ASTIVal[Result] := 1
+    else if nm = 'seek_end' then ASTIVal[Result] := 2
+    else ASTIVal[Result] := 0;
+    ASTTk[Result] := Ord(tyInteger);
+    ASTRight[Result] := -1;
+    LastExprTk := tyInteger;
+    Exit;
+  end;
   if nm = 'argv' then
   begin
     { sys.argv as a VALUE — the command line as a TPyList of strings. }
@@ -3668,6 +3683,7 @@ function PyParseTry: Integer;
 var node, innerNode, trySeq, finSeq, handlerHead, lastHandler, handlerNode: Integer;
     actionSeq, handlerVar, ci, recId: Integer;
     handlerName, className: AnsiString;
+    excRecs: array[0..15] of Integer; nExc, ei: Integer;   { except (A, B, ...) tuple }
 begin
   Inc(GenTryDepth);
   Next;                                { `try` }
@@ -3685,15 +3701,41 @@ begin
     Next;
     recId := -1;
     handlerVar := -1;
+    nExc := 0;
     if CurTok.Kind <> tkColon then
     begin
-      if CurTok.Kind <> tkIdent then Error('Nil Python: except: expected an exception class');
-      className := CurTok.SVal;
-      Next;
-      if CaseEqual(className, 'Exception') then ci := PyEnsureExceptionClass
-      else ci := FindUClass(className);
-      if ci < 0 then Error('Nil Python: unknown exception class ' + className);
-      recId := REC_UCLASS_BASE + ci;
+      { `except Class:` OR `except (A, B, C):` — a tuple catches any of them.
+        A tuple becomes one handler node per class, sharing the action and the
+        binder (Python binds `e` to whichever was caught). }
+      if CurTok.Kind = tkLParen then
+      begin
+        Next;
+        while CurTok.Kind <> tkRParen do
+        begin
+          if CurTok.Kind <> tkIdent then Error('Nil Python: except: expected an exception class');
+          className := CurTok.SVal;
+          Next;
+          if CaseEqual(className, 'Exception') then ci := PyEnsureExceptionClass
+          else ci := FindUClass(className);
+          if ci < 0 then Error('Nil Python: unknown exception class ' + className);
+          if nExc > 15 then Error('Nil Python: too many exception classes in one except');
+          excRecs[nExc] := REC_UCLASS_BASE + ci; Inc(nExc);
+          if not Eat(tkComma) then Break;
+        end;
+        Expect(tkRParen, ')');
+        recId := excRecs[0];
+      end
+      else
+      begin
+        if CurTok.Kind <> tkIdent then Error('Nil Python: except: expected an exception class');
+        className := CurTok.SVal;
+        Next;
+        if CaseEqual(className, 'Exception') then ci := PyEnsureExceptionClass
+        else ci := FindUClass(className);
+        if ci < 0 then Error('Nil Python: unknown exception class ' + className);
+        recId := REC_UCLASS_BASE + ci;
+        excRecs[0] := recId; nExc := 1;
+      end;
       if PyIsIdent('as') then
       begin
         Next;
@@ -3701,7 +3743,7 @@ begin
         handlerName := CurTok.SVal;
         Next;
         handlerVar := AllocVar(handlerName, tyClass);
-        Syms[handlerVar].RecName := recId;
+        Syms[handlerVar].RecName := recId;   { the first listed class }
       end;
     end;
     Expect(tkColon, ':');
@@ -3712,13 +3754,20 @@ begin
     Dec(ExceptionHandlerParseDepth);
     Expect(tkDedent, 'dedent');
     PySkipNewlines;
-    handlerNode := AllocNode(AN_EXC_HANDLER);
-    ASTIVal[handlerNode] := recId;
-    ASTSOffset[handlerNode] := handlerVar;
-    ASTLeft[handlerNode] := actionSeq;
-    if handlerHead = -1 then handlerHead := handlerNode
-    else ASTRight[lastHandler] := handlerNode;
-    lastHandler := handlerNode;
+    { one handler node per listed class (>=1); a bare `except:` has nExc=0 and
+      still emits a single catch-all (recId -1). }
+    ei := 0;
+    repeat
+      handlerNode := AllocNode(AN_EXC_HANDLER);
+      if nExc = 0 then ASTIVal[handlerNode] := -1
+      else ASTIVal[handlerNode] := excRecs[ei];
+      ASTSOffset[handlerNode] := handlerVar;
+      ASTLeft[handlerNode] := actionSeq;
+      if handlerHead = -1 then handlerHead := handlerNode
+      else ASTRight[lastHandler] := handlerNode;
+      lastHandler := handlerNode;
+      Inc(ei);
+    until ei >= nExc;
   end;
 
   finSeq := -1;
@@ -4942,12 +4991,24 @@ begin
       is exactly the duplication this frontend keeps getting bitten by. }
     PyParseBoolExpr;
     delBase := CurASTNode;
+    { `del l[lo:hi]` — the read lowered to a pylist_slice COPY; swap the proc to
+      the in-place delete (same l, lo, hi arguments). }
+    if (ASTKind[delBase] = AN_CALL) and (FindProc('pylist_slice') >= 0) and
+       (ASTIVal[delBase] = FindProc('pylist_slice')) then
+    begin
+      symIdx := FindProc('pylist_del_slice');
+      if symIdx < 0 then Error('Nil Python: pylib (pylist_del_slice) not loaded');
+      ASTIVal[delBase] := symIdx;
+      ASTTk[delBase] := Ord(Procs[symIdx].RetType);
+      Result := delBase;
+      Exit;
+    end;
     ci := FindUClass('TPyDict');
     symIdx := -1;
     if ci >= 0 then symIdx := FindUMeth(ci, 'fetch');
     if (symIdx < 0) or (ASTKind[delBase] <> AN_CALL) or
        (ASTIVal[delBase] <> UMthProc_[symIdx]) then
-      Error('Nil Python: del is supported on a dict subscript only (del d[k])');
+      Error('Nil Python: del is supported on a dict subscript or a list slice (del d[k], del l[a:b])');
     symIdx := FindUMeth(ci, 'remove');
     if symIdx < 0 then Error('Nil Python: TPyDict.remove not found');
     ASTIVal[delBase] := UMthProc_[symIdx];
