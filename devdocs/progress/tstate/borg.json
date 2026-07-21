@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-20T21:00:28Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "244588252a2c4779afdee4616619bf1c9e845e50",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-07-20T21:03:11Z",
    "fixed": [],
    "new_red": [],
@@ -416,6 +408,21 @@
    "sha": "f0023b0dcef846d18b0a51c80c139beba7008731",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-21T06:43:04Z",
+   "fixed": [
+    "test-core#src:test/test_method_ptr_cast_b277.pas",
+    "test-core#src:test/test_rtti_method_reflection_b254.pas",
+    "test-core#src:test/test_strict_visibility_b262.pas",
+    "test-core#src:test/test_tobject_methodaddress_b256.pas"
+   ],
+   "new_red": [
+    "test-asm#src:compiler/compiler.pas"
+   ],
+   "sha": "7854772da794f62b4eeb84e4f3a084bee46c7623",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -674,7 +681,7 @@
   "test-arm32#src:test/test_u64_to_double.pas": "pass",
   "test-arm32#src:test/test_uint32_write.pas": "pass",
   "test-arm32#src:test/test_uint64_ops.pas": "pass",
-  "test-asm#src:compiler/compiler.pas": "pass",
+  "test-asm#src:compiler/compiler.pas": "fail",
   "test-asm#src:test/hello.pas": "pass",
   "test-asm#src:test/test_asm_entry_global.asm": "pass",
   "test-asm#src:test/test_asm_extern.asm": "pass",
@@ -1395,7 +1402,7 @@
   "test-core#src:test/test_method_overload_types_b248.pas": "pass",
   "test-core#src:test/test_method_pointer_arg_b361.pas": "pass",
   "test-core#src:test/test_method_pointer_virtual_b357.pas": "pass",
-  "test-core#src:test/test_method_ptr_cast_b277.pas": "fail",
+  "test-core#src:test/test_method_ptr_cast_b277.pas": "pass",
   "test-core#src:test/test_method_read_write_unqualified.pas": "pass",
   "test-core#src:test/test_method_shadows_unit_proc.pas": "pass",
   "test-core#src:test/test_methodptr.pas": "pass",
@@ -1520,7 +1527,7 @@
   "test-core#src:test/test_rtti.pas": "pass",
   "test-core#src:test/test_rtti_emit.pas@1": "pass",
   "test-core#src:test/test_rtti_emit.pas@2": "pass",
-  "test-core#src:test/test_rtti_method_reflection_b254.pas": "fail",
+  "test-core#src:test/test_rtti_method_reflection_b254.pas": "pass",
   "test-core#src:test/test_rtti_reg.pas": "pass",
   "test-core#src:test/test_runtime_set_member_b294.pas": "pass",
   "test-core#src:test/test_rust_advanced.rs": "pass",
@@ -1582,7 +1589,7 @@
   "test-core#src:test/test_streaming.pas": "pass",
   "test-core#src:test/test_streaming_enumset.pas": "pass",
   "test-core#src:test/test_strict_overload.pas": "pass",
-  "test-core#src:test/test_strict_visibility_b262.pas": "fail",
+  "test-core#src:test/test_strict_visibility_b262.pas": "pass",
   "test-core#src:test/test_string_concat.pas": "pass",
   "test-core#src:test/test_string_const_scoping_b314.pas": "pass",
   "test-core#src:test/test_string_copy_intrinsic.pas": "pass",
@@ -1607,7 +1614,7 @@
   "test-core#src:test/test_tmyclass_name.pas": "pass",
   "test-core#src:test/test_tobject_cast_free.pas": "pass",
   "test-core#src:test/test_tobject_destroy_override.pas": "pass",
-  "test-core#src:test/test_tobject_methodaddress_b256.pas": "fail",
+  "test-core#src:test/test_tobject_methodaddress_b256.pas": "pass",
   "test-core#src:test/test_tobject_param_b243.pas": "pass",
   "test-core#src:test/test_type_helper_for_spelling.pas": "pass",
   "test-core#src:test/test_type_runtime.pas": "pass",
@@ -1959,11 +1966,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-21T06:35:14Z",
-  "sha": "f0023b0dcef846d18b0a51c80c139beba7008731",
+  "date": "2026-07-21T06:43:04Z",
+  "sha": "7854772da794f62b4eeb84e4f3a084bee46c7623",
   "tier": "native",
   "verdict": "RED",
-  "wall": 508.7
+  "wall": 378.2
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1996,52 +2003,16 @@
    "src": "compiler/compiler.pas"
   },
   {
-   "bad": "6d3025ea6af7bbe23a42eda2cbd9e188f2426e02",
-   "good": "4527aada3b3c0725bd8b5a1f44aa62bf46ca8cb1",
-   "job": "test-core#src:test/test_method_ptr_cast_b277.pas",
-   "name": "test-core#74",
-   "opened": "2026-07-21T06:25:47Z",
+   "bad": "7854772da794f62b4eeb84e4f3a084bee46c7623",
+   "good": "f0023b0dcef846d18b0a51c80c139beba7008731",
+   "job": "test-asm#src:compiler/compiler.pas",
+   "name": "test-asm#14",
+   "opened": "2026-07-21T06:43:04Z",
    "range": [
-    "1f714bd7d4117fd24958deda03781289b3afffe6",
-    "6d3025ea6af7bbe23a42eda2cbd9e188f2426e02"
+    "5ac52d1840c4ddfafd1b9c7b45da216e4e8234a9",
+    "7854772da794f62b4eeb84e4f3a084bee46c7623"
    ],
-   "src": "test/test_method_ptr_cast_b277.pas"
-  },
-  {
-   "bad": "6d3025ea6af7bbe23a42eda2cbd9e188f2426e02",
-   "good": "4527aada3b3c0725bd8b5a1f44aa62bf46ca8cb1",
-   "job": "test-core#src:test/test_rtti_method_reflection_b254.pas",
-   "name": "test-core#90",
-   "opened": "2026-07-21T06:25:47Z",
-   "range": [
-    "1f714bd7d4117fd24958deda03781289b3afffe6",
-    "6d3025ea6af7bbe23a42eda2cbd9e188f2426e02"
-   ],
-   "src": "test/test_rtti_method_reflection_b254.pas"
-  },
-  {
-   "bad": "6d3025ea6af7bbe23a42eda2cbd9e188f2426e02",
-   "good": "4527aada3b3c0725bd8b5a1f44aa62bf46ca8cb1",
-   "job": "test-core#src:test/test_strict_visibility_b262.pas",
-   "name": "test-core#86",
-   "opened": "2026-07-21T06:25:47Z",
-   "range": [
-    "1f714bd7d4117fd24958deda03781289b3afffe6",
-    "6d3025ea6af7bbe23a42eda2cbd9e188f2426e02"
-   ],
-   "src": "test/test_strict_visibility_b262.pas"
-  },
-  {
-   "bad": "6d3025ea6af7bbe23a42eda2cbd9e188f2426e02",
-   "good": "4527aada3b3c0725bd8b5a1f44aa62bf46ca8cb1",
-   "job": "test-core#src:test/test_tobject_methodaddress_b256.pas",
-   "name": "test-core#93",
-   "opened": "2026-07-21T06:25:47Z",
-   "range": [
-    "1f714bd7d4117fd24958deda03781289b3afffe6",
-    "6d3025ea6af7bbe23a42eda2cbd9e188f2426e02"
-   ],
-   "src": "test/test_tobject_methodaddress_b256.pas"
+   "src": "compiler/compiler.pas"
   }
  ]
 }
