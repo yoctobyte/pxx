@@ -1,0 +1,18 @@
+class Tokenizer:
+    def __init__(self) -> None:
+        self.count: int = 0
+
+    def run(self, base: int) -> int:
+        acc = [0]
+
+        def bump(step: int) -> None:
+            acc[0] = acc[0] + base + step
+
+        bump(1)
+        bump(2)
+        self.count = acc[0]
+        return acc[0]
+
+t = Tokenizer()
+print(t.run(10))
+print(t.count)

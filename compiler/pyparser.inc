@@ -6812,6 +6812,7 @@ var origName, name, fullName: AnsiString; procIdx, i, idx, nparams, savedSC, sav
     savedSelf, patchPos, bodyNode, bodyStart, annIdx: Integer; pnames: array[0..15] of AnsiString;
     ptypes: array[0..15] of TTypeKind; pcis: array[0..15] of Integer;
     isCtor: Boolean;
+    savedNest, savedTok: Integer; savedPfx, savedPfx2: AnsiString;
 begin
   Expect(tkFunction, 'def');
   origName := CurTok.SVal; name := PyMethodName(origName);
@@ -6924,6 +6925,13 @@ begin
         Syms[idx].RecName := REC_UCLASS_BASE + PyLocals[i].RecCi;
     end;
   Procs[procIdx].BodyAddr := CodeLen;
+  { A method may contain nested defs (`def helper(): ...` inside it). They queue
+    their bodies just like a plain def's do, so the method must set the nest
+    prefix (for capture + qualified registration) and drain the queue after its
+    epilogue — otherwise the shells stay forward-declared and never link
+    (feature-nilpy-nested-defs-in-methods). }
+  savedPfx := PyNestPrefix; PyNestPrefix := fullName;
+  savedNest := PyPendNestCount;
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
   EmitAggregateDestStash(procIdx);
   PyEmitParamSpills(procIdx, nparams);
@@ -6936,6 +6944,22 @@ begin
   bodyNode := PyPrependResultZero(procIdx, bodyNode);
   CompileAST(bodyNode); EmitProcEpilog(Procs[procIdx].RetSymIdx); PatchProcPrologue(patchPos, FrameSize);
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
+  PyNestPrefix := savedPfx;
+  { drain the nested-def bodies this method queued — each re-enters PyParseDef at
+    its own `def` token under the qualifier it registered with. }
+  while PyPendNestCount > savedNest do
+  begin
+    Dec(PyPendNestCount);
+    savedTok := TokPos;
+    savedPfx2 := PyNestPrefix;
+    PyNestPrefix := PyPendNestPfx[PyPendNestCount];
+    TokPos := PyPendNestTok[PyPendNestCount];
+    Next;
+    PyParseDef;
+    PyNestPrefix := savedPfx2;
+    TokPos := savedTok - 1;
+    Next;
+  end;
 end;
 
 { Emit the synthesized @dataclass ctor body: spill params, then

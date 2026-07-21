@@ -407,6 +407,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_dict_comprehension26)" = "$$(printf '%b' '3\n60\n9\n3\n4')"
 	./$(COMPILER) test/test_nilpy_captured_class.npy /tmp/test_nilpy_captured_class26
 	test "$$(/tmp/test_nilpy_captured_class26)" = "$$(printf '%b' 'HE\n?\n2')"
+	./$(COMPILER) test/test_nilpy_method_nested_def.npy /tmp/test_nilpy_method_nested_def26
+	test "$$(/tmp/test_nilpy_method_nested_def26)" = "$$(printf '%b' '23\n23')"
 	./$(COMPILER) examples/shell/shell0.npy /tmp/test_nilpy_shell026
 	/tmp/test_nilpy_shell026 | grep -q "hello portable userland"
 
