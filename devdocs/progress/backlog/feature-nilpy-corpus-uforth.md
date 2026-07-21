@@ -172,6 +172,25 @@ slices, f-strings, raise, isinstance, augassign.
 - No full CPython emulation in pyexec — the censused block subset is the
   contract.
 
+
+
+## Session 2026-07-21 (session 3, continued) — 267 -> ~3830 (~88%)
+
+An extended run took the first parse error from 1290 (the exec boundary) to
+~3830 (88% of the file), landing (each green, gated, pushed): dynamic call
+through a variant callable, class-in-variant widen + subscript/slice, decode
+keyword arg, ternary/genexpr as method/call arguments, and/or returning the
+operand (Python value semantics), range() with a step, lambda parse-stub,
+optional parameter annotations, user-class-over-container variant dispatch,
+method-call ';' statements, bytes literals + bytes.find, str-method chaining
+after a class-value method, and DYNAMIC INSTANCE ATTRIBUTES (get/set/+=/hasattr
+on variants and class instances, via a pointer-keyed store). ~40 commits.
+
+Current wall uforth.py:3829 — a closure-captured parameter default. Remaining:
+[[feature-nilpy-closure-default-and-remaining]] then [[feature-lib-pyexec]] for
+actual execution. The file parses ~88% of the way; exec() is a stub, so native
+words do not run yet.
+
 ## Wall progression — session 2026-07-20 (session 3)
 
 uforth.py's first parse error, tracked as each gap closed. Each step is a
