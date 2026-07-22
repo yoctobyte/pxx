@@ -1687,17 +1687,12 @@ begin
     else SetLength(Closures, Length(Closures) * 2);
   end;
   c := ClosureN; ClosureN := ClosureN + 1;
-  SetLength(Closures[c].Kinds, TkN);
-  SetLength(Closures[c].Texts, TkN);
-  SetLength(Closures[c].Ints, TkN);
-  SetLength(Closures[c].Floats, TkN);
-  for i := 0 to TkN - 1 do
-  begin
-    Closures[c].Kinds[i]  := TkKind[i];
-    Closures[c].Texts[i]  := TkText[i];
-    Closures[c].Ints[i]   := TkInt[i];
-    Closures[c].Floats[i] := TkFloat[i];
-  end;
+  { ref-share, not deep-copy — see PyMakeClosure; here Tokenize(src) just
+    allocated these arrays fresh, so nothing else mutates them }
+  Closures[c].Kinds  := TkKind;
+  Closures[c].Texts  := TkText;
+  Closures[c].Ints   := TkInt;
+  Closures[c].Floats := TkFloat;
   Closures[c].NTok := TkN;
   Closures[c].BodyPos := 0;
   Closures[c].Params := params;
@@ -1732,17 +1727,16 @@ begin
     else SetLength(Closures, Length(Closures) * 2);
   end;
   c := ClosureN; ClosureN := ClosureN + 1;
-  SetLength(Closures[c].Kinds, TkN);
-  SetLength(Closures[c].Texts, TkN);
-  SetLength(Closures[c].Ints, TkN);
-  SetLength(Closures[c].Floats, TkN);
-  for i := 0 to TkN - 1 do
-  begin
-    Closures[c].Kinds[i]  := TkKind[i];
-    Closures[c].Texts[i]  := TkText[i];
-    Closures[c].Ints[i]   := TkInt[i];
-    Closures[c].Floats[i] := TkFloat[i];
-  end;
+  { REFERENCE-share the token arrays instead of deep-copying: a full snapshot
+    of the exec source per closure (every `ns["__body__"]` lookup!) was the
+    dominant per-call leak in uforth's PYTHON-word path (~20 KB/exec). Safe
+    because the tokenization cache never mutates a live buffer in place — on a
+    miss the live refs are nilled first and Tokenize allocates fresh arrays
+    (see the cache note above). }
+  Closures[c].Kinds  := TkKind;
+  Closures[c].Texts  := TkText;
+  Closures[c].Ints   := TkInt;
+  Closures[c].Floats := TkFloat;
   Closures[c].NTok    := TkN;
   Closures[c].BodyPos := FnBodyPos[fnIdx];
   Closures[c].Params  := FnParams[fnIdx];
