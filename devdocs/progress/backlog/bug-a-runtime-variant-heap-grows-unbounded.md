@@ -220,3 +220,32 @@ old slot must be freed before the new one is stored. The fix belongs at that
 store/overwrite point (and the matching scope-exit / container-overwrite paths).
 Track A. Repro compiles with any current compiler; `make bench-uforth` keeps the
 uforth-scale number (552 MB) tracked as the regression/verification signal.
+
+## 2026-07-22 narrowing #2 (fable-abcnp): remaining layer = pyeval exec'd PYTHON words
+
+After the 4th layer (managed-record return into reused dest, resolved
+2026-07-22) the COMPILED path is flat: an empty `: T 200000 0 DO LOOP ; T` and
+a native-word churn loop (`I 1 + DROP I I * DROP`, DUP/DROP) hold ~20 MB at
+any iteration count. The bench's microbench-doloop is still 553 MB because its
+body is built from PYTHON-bodied stdlib words. Per-op RSS at 20k iterations
+(5-deep stack, one op per iteration):
+
+- native compiled words (DUP DROP): 20 MB — FLAT
+- `1 LSHIFT` 105 MB · `XOR` 99 MB · `1 AND` 99 MB · `OVER` 133 MB ·
+  `SWAP` 115 MB — all PYTHON-bodied (CORE.UFO), ~4-5 KB leaked per call.
+
+So the surviving leak is uforth's `exec_python_inline` path: per call it
+builds an env dict {vm, push, pop, fpush, fpop} (TPyDict + bound-method
+boxes), dedents + re-wraps the source into a `def __body__():` string, execs
+(pyeval parse), and calls the closure — and those per-call structures are
+never reclaimed under pxx (NilPy object/dict instances have no GC; CPython
+frees them by refcount). Candidate fixes: (a) pyeval-side caching keyed on
+the source string (parse once per word, reuse env), (b) uforth-side: hoist
+env/wrapper construction out of the hot path (upstream change), (c) NilPy
+runtime: reclaim dict/list/bound-method instances whose binding dies at
+frame exit. (a) is the local, biggest-win option: the 141 stdlib words are
+static strings. Track N/A shared — pyeval.pas is builtin.
+
+Bench after layer 4 (uforth_bench --runs 1): doloop 553 MB (was 582),
+core 158 MB (was 166), prelim 32 MB — the deltas match the compiled-path
+fixes; the bulk is this exec layer.
