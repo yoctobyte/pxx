@@ -323,6 +323,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_to_bytes26)" = "$$(printf '8\n10\n0\n10\n254\n255\n-2\n255\n0\n255\n-1\n255')"
 	./$(COMPILER) test/test_nilpy_comp_iterable.npy /tmp/test_nilpy_comp_iterable26
 	test "$$(/tmp/test_nilpy_comp_iterable26)" = "$$(printf '2\n3\n4\nr 0\nr 1\nr 2\n66')"
+	./$(COMPILER) test/test_nilpy_mixed_return_variant.npy /tmp/test_nilpy_mixed_return_variant26
+	test "$$(/tmp/test_nilpy_mixed_return_variant26)" = "$$(printf 'pos\n42\n1 2\na b\n43')"
 	./$(COMPILER) test/test_nilpy_variant_str_boxing.npy /tmp/test_nilpy_variant_str_boxing26
 	test "$$(/tmp/test_nilpy_variant_str_boxing26)" = "$$(printf 'hello changed\nabcdef\npos\n500000 abcdef')"
 	./$(COMPILER) test/test_nilpy_escape_decode.npy /tmp/test_nilpy_escape_decode26

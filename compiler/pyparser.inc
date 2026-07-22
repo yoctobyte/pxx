@@ -7420,12 +7420,14 @@ end;
   decides the registered signature and the header decides the frame, so the two
   must reach the same answer or the mismatch is a silent ABI bug. }
 function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
-var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart: Integer;
-    t2: TTypeKind;
+var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
+    t2, cur: TTypeKind;
+    seenAny: Boolean;
 begin
   Result := tyInteger;
   retRec := REC_NONE;
   rec2 := -1;
+  seenAny := False;
   j := methodStart + 2;
   pdepth := 0;
   while j < TokCount do
@@ -7467,7 +7469,7 @@ begin
       e := j + 1;
       while (e < TokCount) and not (Tokens[e].Kind in [tkNewline, tkDedent, tkEOF]) do
         Inc(e);
-      Result := PyInferExprType(j + 1, e);
+      cur := PyInferExprType(j + 1, e);
       { `return w` — a bare ident the scanner cannot type: chase the ident's
         ASSIGNMENT earlier in the body and infer from its right-hand side
         (uforth's finalize_definition: `w = self.define_word(...)`, whose
@@ -7478,7 +7480,8 @@ begin
         HEADER pass (the pre-pass has no PyLocals) — trusting it here made the
         two passes infer different return types, a silent ABI mismatch. The
         token-only chase below gives both passes the same answer. }
-      if ((Result = tyUnknown) or (Result = tyInteger) or TypeIsPromoInt(Result)) and
+      rec2 := -1;
+      if ((cur = tyUnknown) or (cur = tyInteger) or TypeIsPromoInt(cur)) and
          (e = j + 2) and (Tokens[j + 1].Kind = tkIdent) then
       begin
         for k := bodyScanStart to j - 1 do
@@ -7492,25 +7495,45 @@ begin
             t2 := PyInferExprType(k + 2, e2);
             if (t2 <> tyUnknown) and (t2 <> tyInteger) then
             begin
-              Result := t2;
+              cur := t2;
               rec2 := PyInferLastCi;
             end;
           end;
-        if (Result = tyClass) and (rec2 >= 0) then
+        if (cur = tyClass) and (rec2 >= 0) then
           PyInferLastCi := rec2;
       end;
-      if Result = tyUnknown then Result := tyInteger;
-      if Result = tyString then Result := tyAnsiString;
+      if cur = tyUnknown then cur := tyInteger;
+      if cur = tyString then cur := tyAnsiString;
       { A PROMOTABLE INT cannot cross the call boundary raw: its rvalue is the
         frame SLOT ADDRESS and the frame dies at return — the caller read a
         stack address as the value (uforth /STRING returned garbage and the
         word list was walked through it -> wild jump). Box to a variant
         (inline -> VT_INT64, heap -> VT_PROMO), which the Result store and
         every caller already handle. }
-      if TypeIsPromoInt(Result) then Result := tyVariant;
-      if (Result = tyClass) and (PyInferLastCi >= 0) then
-        retRec := REC_UCLASS_BASE + PyInferLastCi;
-      Exit;
+      if TypeIsPromoInt(cur) then cur := tyVariant;
+      curRec := REC_NONE;
+      if (cur = tyClass) and (PyInferLastCi >= 0) then
+        curRec := REC_UCLASS_BASE + PyInferLastCi;
+      { Merge with the other returns instead of taking the first and exiting:
+        a def whose arms return DIFFERENT kinds (`return "pos"` / `return 42`)
+        must produce a VARIANT result — the first-return rule stored the int
+        as a string handle and the consumer crashed on it
+        (bug-nilpy-mixed-str-int-return-segfault). Identical kinds (and the
+        single-return case) keep exactly the old answer. }
+      if not seenAny then
+      begin
+        seenAny := True;
+        Result := cur;
+        retRec := curRec;
+      end
+      else if (Result <> cur) or
+              ((Result = tyClass) and (retRec <> curRec)) then
+      begin
+        Result := tyVariant;
+        retRec := REC_NONE;
+      end;
+      j := e;
+      Continue;
     end;
     Inc(j);
   end;
