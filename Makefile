@@ -40,7 +40,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
 .PHONY: fuzz-csmith
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -5038,6 +5038,15 @@ test-uforth: $(COMPILER)
 	else \
 	  echo "test-uforth: FAIL (exit $$rc)"; tail -8 "$$wd/out.txt"; exit 1; \
 	fi
+
+# uforth cross-runtime speed oracle (feature-t-uforth-benchmark-harness):
+# the SAME uforth.py under CPython vs pxx-compiled-native, wall + max-RSS +
+# speedup. Uses the CURRENT $(COMPILER) (pinned stable is too old to lex
+# uforth's char-code literals). Skips cleanly when uforth/python3 absent.
+# `make bench-uforth` = quick set; `make bench-uforth BENCH_FULL=1` adds the
+# ELF-HASH outlier. Rows -> devdocs/progress/tstate/bench.tsv.
+bench-uforth: $(COMPILER)
+	@tools/uforth_bench.py --pxx ./$(COMPILER) $(if $(BENCH_FULL),--full,)
 
 CHESS_SRC ?= library_candidates/chess/Vice11/src
 PERFT_DEEP ?=
