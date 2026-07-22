@@ -42,3 +42,48 @@ or N as a ticket, per "T owns the tool, never the bug". Needs uforth
 checked out (path configurable, default ~/projects/uforth); skip cleanly
 when absent or when python3/pypy is missing. Keep runs bounded — a
 --quick mode without ELF-HASH for routine runs, the full set for nightly.
+
+## LANDED 2026-07-22 — tools/uforth_bench.py (f783cd25)
+
+Standalone harness (T's call over a testmgr tier: the cross-runtime shape does
+not fit the pxx-vs-FPC bench face). `make bench-uforth` [`BENCH_FULL=1`].
+
+- **Runtimes:** cpython, cpython-O, pypy-if-present, pxx-native.
+- **Workloads:** microbench-doloop, prelim (prelimtest.fth), core
+  (tester.fr+core.fr concatenated — the suite pieces THROW -13 without the
+  TESTING preamble), blocktest-elfhash (full only).
+- **Source = GitHub** (git@github.com:yoctobyte/uforth): fetches origin, warns
+  when the checkout is behind, and stamps the uforth sha into every bench.tsv
+  row (7th column) so a number is tied to a specific source.
+- **Quality:** min wall over N clean runs, descheduled runs discarded
+  (wall>cpu*1.4); max-RSS from the child rusage via wait4. Skips cleanly when
+  uforth/python3/a usable pxx is absent; a workload the base runtime can't run
+  is SKIPped with a reason, not emitted as partial rows.
+- **Must use the CURRENT compiler** — pinned stable can't lex uforth's
+  char-code literals (`empty char-code literal after #`); default --pxx is the
+  repo compiler, `make bench-uforth` passes ./$(COMPILER).
+
+### First numbers (noisy — box under concurrent full-tier load)
+| workload | cpython | pxx | speedup | pxx RSS |
+| --- | --- | --- | --- | --- |
+| microbench-doloop | ~5.6s | ~17.8s | 0.31x (3.2x slower) | 582 MB |
+| prelim | ~0.43s | ~1.77s | 0.24x | 32 MB |
+| core | ~0.89s | ~5.1s | 0.17x | 166 MB |
+
+pxx is 3-6x slower and 5-24x the RSS on these — **Track O findings, filed
+there, not fixed under T**. The 582 MB microbench RSS is the standout (the pxx
+runtime/GC footprint on a tight loop). Consistent with the ticket's prior
+"≈9x slower on prelim" ballpark; fast paths already took DO/LOOP 31s→7.5s.
+
+### Follow-ups (filed, not blocking)
+1. **ELF-HASH workload** — blocktest.fth needs uforth's block-word preamble
+   (FIRST-TEST-BLOCK / LIMIT-TEST-BLOCK / `[?IF]`) that tester.fr alone does not
+   provide, so blocktest-elfhash currently SKIPs. Assemble that preamble, or
+   extract the ELF-HASH section as a standalone snippet, to restore the tracked
+   ~100x outlier.
+2. **Daemon idle-bench integration** — the harness is standalone + a make
+   target today. Hanging it off the watcher's idle `bench` phase (so uforth
+   rows land per-sha automatically) is a separate step; the row schema already
+   matches bench.tsv.
+3. **Run on a quiet box** for a clean baseline — the numbers above were taken
+   while the full-tier daemon was running; re-baseline when idle.
