@@ -1,0 +1,24 @@
+xs = [1, 2, 3, 4, 5]
+a = [x for x in xs if x > 1]
+print(len(a), a[0], a[3])
+b = [x * 2 for x in range(6) if x % 2 == 0]
+print(len(b), b[0], b[1], b[2])
+c = [x for x in xs if x > 99]
+print(len(c))
+d = {k: k * k for k in range(5) if k != 2}
+print(len(d), d[4])
+words = ["ab", "cde", "f"]
+e = [w for w in words if len(w) > 1]
+print(len(e), e[0], e[1])
+xs = [1]
+a = [x for x in xs]
+n = 0
+for x in range(6):
+    if x > 2:
+        n = n + 1
+print(n)
+m = 0
+for x in range(6):
+    if x % 2 == 0:
+        m = m + 1
+print(m)

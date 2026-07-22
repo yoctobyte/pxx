@@ -5092,8 +5092,35 @@ var contNode, ci, dictCi, listCi, symIdx, cSym, iSym, nSym: Integer;
     sym2, vSym, vListNode, itemsDot: Integer;   { two-name target: `for k, v in d.items()` }
     elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
     compSaved, keyN: Integer;
+    filtIdx, fj, fdepth, filtPair, filtN: Integer;  { comprehension `if` filter }
     isStr: Boolean; contTk: TTypeKind;
 begin
+  { A comprehension filter — `[EXPR for V in ITER if COND]` — must not let the
+    ITER expression parser see the `if`: it parses as a ternary head and dies
+    on the missing else. Hide the depth-0 `if` behind a fake ':' while ITER
+    parses (the .items() trick below); the body build restores and consumes
+    it (feature-nilpy-comprehension-if-filter). }
+  filtIdx := -1;
+  if PyCompTarget >= 0 then
+  begin
+    fj := TokPos - 1;                  { CurTok's index = first ITER token }
+    fdepth := 0;
+    while fj < TokCount do
+    begin
+      case Tokens[fj].Kind of
+        tkLParen, tkLBrack, tkBegin: Inc(fdepth);
+        tkRParen, tkRBrack, tkEnd:
+          begin
+            if fdepth = 0 then break;  { the comprehension's own closer }
+            Dec(fdepth);
+          end;
+        tkNewline, tkEOF: break;
+        tkIf: if fdepth = 0 then begin filtIdx := fj; break; end;
+      end;
+      Inc(fj);
+    end;
+    if filtIdx >= 0 then Tokens[filtIdx].Kind := tkColon;
+  end;
   { `d.items()`: hide the suffix behind a fake ':' so the expression parser stops
     at the dict, then step over the four suffix tokens and restore. }
   itemsDot := -1;
@@ -5112,6 +5139,7 @@ begin
     Next;
   end;
   if enumMode then Expect(tkRParen, ')');
+  if filtIdx >= 0 then Tokens[filtIdx].Kind := tkIf;   { un-hide the filter }
   contNode := CurASTNode;
   { enumerate() over a STRING trips an inline-placeholder leak in the element
     tree (AN_INLINE_PARAM reaching IRLowerAST) — filed separately rather than
@@ -5351,6 +5379,20 @@ begin
       if node < 0 then Error('Nil Python: pylib TPyList.append not loaded');
     end;
     TokPos := compSaved; Next;            { restore to the closing bracket }
+    { `... if COND]`: parse the filter (loop variable now in scope) and gate
+      the append on it. The cursor lands on the real closer for the caller. }
+    if CurTok.Kind = tkIf then
+    begin
+      Next;
+      PyParseBoolExpr;
+      filtN := AllocNode(AN_IF);
+      ASTLeft[filtN] := PyMakeTruthy(CurASTNode);
+      filtPair := AllocNode(AN_PAIR);
+      ASTLeft[filtPair] := node;
+      ASTRight[filtPair] := -1;
+      ASTRight[filtN] := filtPair;
+      node := filtN;
+    end;
   end
   else
     node := PyParseSuite;
@@ -5692,6 +5734,21 @@ begin
       if bodyNode < 0 then Error('Nil Python: pylib TPyList.append not loaded');
     end;
     TokPos := compSaved; Next;
+    { `... if COND]`: gate the append on the filter — the range path sees the
+      `if` directly (no ITER expression ahead of it), same wrap as the
+      container path (feature-nilpy-comprehension-if-filter). }
+    if CurTok.Kind = tkIf then
+    begin
+      Next;
+      PyParseBoolExpr;
+      node := AllocNode(AN_IF);
+      ASTLeft[node] := PyMakeTruthy(CurASTNode);
+      pair1 := AllocNode(AN_PAIR);
+      ASTLeft[pair1] := bodyNode;
+      ASTRight[pair1] := -1;
+      ASTRight[node] := pair1;
+      bodyNode := node;
+    end;
   end
   else
   begin
@@ -5700,6 +5757,23 @@ begin
     Expect(tkIndent, 'indent');
     bodyNode := PyParseBlock;
     Expect(tkDedent, 'dedent');
+  end;
+
+  { A pre-existing VARIANT loop variable (x was a container-loop target
+    earlier) must not be driven raw by the counted-for/while lowering: an
+    untagged integer written into the variant slot left a stale tag, so
+    `x > 2` matched nothing and `x % 2` raised "expected a number, got str".
+    Count with a hidden int and box it into the variant at the top of each
+    iteration (bug-nilpy-range-for-variant-loop-var). }
+  if Syms[symIdx].TypeKind = tyVariant then
+  begin
+    keyN := AllocVar(PyHiddenName('i'), tyInteger);
+    node := AllocNode(AN_ASSIGN);              { x = __py_i (boxes the int) }
+    ASTLeft[node] := PyMakeIdent(symIdx);
+    ASTRight[node] := PyMakeIdent(keyN);
+    incNode := PySeqAppend(-1, node);
+    bodyNode := PySeqAppend(incNode, bodyNode);
+    symIdx := keyN;
   end;
 
   if rngStep >= 0 then
