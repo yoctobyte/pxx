@@ -52,3 +52,6 @@ give an arbitrary but consistent answer — matching "always FALSE" here).
 The repro above matching x86-64 on aarch64, plus `=`/`<>`/`<=`/`>=` and a
 char-vs-string mix; `--tier quick` + self-host byte-identical + cross. Check
 arm32/riscv32 for the same shape.
+
+## Log
+- 2026-07-22 — resolved, commit a5042090.
