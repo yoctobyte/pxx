@@ -13,3 +13,6 @@ bug-nilpy-comprehension-as-for-iterable-segfaults (which fixed the iterable-
 position hoist ordering; filters are orthogonal). Desugar: wrap the append in
 `if <cond>:` inside PyBuildComp's loop.
 Gate: len([x for x in [1,2,3] if x > 1]) = 2, CPython-diffed; test-nilpy green.
+
+## Log
+- 2026-07-22 — resolved, commit e4792549.
