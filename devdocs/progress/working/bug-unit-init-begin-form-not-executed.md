@@ -7,7 +7,7 @@ track: A
 
 - **Type:** bug — **Track A** (unit initialization in `compiler/parser.inc` /
   the unit-init emission path).
-- **Status:** backlog — filed 2026-07-20 (**refiled** — see Correction).
+- **Status:** working
 - **Found by:** Track E, building `examples/mandelbrot/mandelkernel.pas`.
 
 ## Correction to the original filing

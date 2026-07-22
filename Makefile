@@ -2525,6 +2525,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_var_open_array_field26)" = "$$(printf '256\n1284')"
 	./$(COMPILER) test/test_open_array_managed_length.pas /tmp/test_open_array_managed_length26
 	test "$$(/tmp/test_open_array_managed_length26)" = "$$(printf 'varstr 4 3 0\nw0 w1 w2 w3 \nconststr 4 3\nvalstr 4 3\nvarint 5 4\n42\nvarstr 2 1 0\nw0 w1\nconststr 2 1\nvarint 3 2\n42')"
+	./$(COMPILER) -Itest/unitinit test/test_unit_init_begin_form.pas /tmp/test_unit_init_begin_form26
+	test "$$(/tmp/test_unit_init_begin_form26)" = "$$(printf '7\n8\n222')"
 	./$(COMPILER) test/test_static_array_length.pas /tmp/test_static_array_length26
 	test "$$(/tmp/test_static_array_length26)" = "$$(printf '3\n2\n64\n60\n3\n2\n0\n5\n9\n5')"
 	./$(COMPILER) -Itest/builtin_shadow test/test_builtin_name_demote.pas /tmp/test_builtin_name_demote26

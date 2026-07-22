@@ -25822,6 +25822,18 @@ begin
             Inc(DeclItemCount);
           end;
         end;
+        tkBegin:
+        begin
+          { Classic Turbo-Pascal `begin ... end.` unit initialization — same
+            emission as `initialization` (it was parsed, accepted, and silently
+            dropped: bug-unit-init-begin-form-not-executed). The body's closing
+            `end.` doubles as the unit terminator; ParseInitializationSection
+            stops AT that `end`, which the tkEnd/tkDot check above then sees. }
+          Next;                       { consume 'begin' }
+          PreScanPass := False;
+          ParseInitializationSection(uname);
+          PreScanPass := True;
+        end;
         tkIdent:
           { constructor/destructor are identifiers in this dialect, not tokens;
             their method bodies live in the unit implementation just like
