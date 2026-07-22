@@ -270,3 +270,28 @@ instances — that is [[feature-nilpy-object-reclamation]] (user resolved
 This umbrella stays open, gated on the reclamation ticket; bench.tsv keeps
 the regression signal. Also filed en route:
 [[bug-nilpy-mixed-str-int-return-segfault]] (pre-existing crash).
+
+## PARTIAL FIX #2 verified — local reassignment reclaims; container path remains (Track T, 2026-07-22, @c5cdc449)
+
+Re-ran the minimal ladder on a fresh fixedpoint compiler at HEAD:
+
+| repro | baseline | now | |
+| --- | --- | --- | --- |
+| I — variant LOCAL reassign (`v = pick(i)`) | 47 MB | **0 MB** | FIXED |
+| H — variant-int list push/pop | 57 MB | 58 MB | leaks |
+| G — string list push/pop | 29 MB | ~33 MB | leaks (no regression — a 59 MB reading was a noise spike; 35/35/31 on reruns) |
+| D — variant list push/pop | 19 MB | 24 MB | leaks |
+| A — plain-int list (control) | 0 MB | 0 MB | ok |
+| uforth microbench | 552 MB | 552 MB | unchanged |
+| uforth prelim | 31 MB | 31 MB | unchanged |
+
+**Clean split:** the variant **local-reassignment** box is now reclaimed on
+overwrite (I: 47→0). What remains is **container/collection** reclamation — a
+variant or string element parked in a list is not freed when it is popped or
+overwritten (H, D, G). uforth is unchanged because its Forth data stack IS a
+list of variants, so it rides entirely on the container path, not the
+local-reassign path that got fixed.
+
+Remaining work = free the element's box on list pop / element-store-overwrite /
+container teardown (the [[feature-nilpy-object-reclamation]] lane). uforth's
+552 MB microbench is the scoreboard; it drops when the container path reclaims.
