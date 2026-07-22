@@ -27,11 +27,10 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (148)
+## backlog (147)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-aarch64-managed-string-concat-leak | A | 70 | bug | aarch64: repeated string concat inside a function LEAKS | — |
 | bug-a-aarch64-variant-string-compare-always-false | A | 70 | bug | aarch64: comparing two string-valued Variants is always FALSE | — |
 | bug-a-open-array-of-variant-silent-miscompile | A | 45 | bug | Open `array of Variant` parameter silently miscompiles (reads only first elem) | — |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
@@ -242,7 +241,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (931)
+## done (932)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -250,6 +249,7 @@ _none_
 | bug-32bit-truthiness-high-half | A | 70 | bug | `if (v)` on a 64-bit value tested only the LOW half on every 32-bit target | — |
 | bug-64bit-named-const-truncated-32bit-targets | A | 80 | bug | 64-bit named constants are truncated to 32 bits on the 32-bit targets | — |
 | bug-64bit-shift-xor-literal-gaps | A | 50 | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
+| bug-a-aarch64-managed-string-concat-leak | A | 70 | bug | aarch64: repeated string concat inside a function LEAKS | — |
 | bug-a-cfront-riscv32-byval-record-result-pxxmemmove | A | 70 | bug | bug: C→riscv32 by-value record result emits PXXMemMove but the C compile never injects builtinheap | — |
 | bug-a-class-managed-fields-not-finalized-on-destroy | A | 40 | bug | managed-field finalization gap + heap-lock hazard: a class finalizes NO managed fields on Free (leak), and a COM interface field of a RECORD cannot be finalized under the record heap lock without deadlocking — both need the interface release moved outside the non-reentrant heap lock | — |
 | bug-a-compiler-hang-on-valid-c-programs | A | 60 | bug | pxx compiler HANGS (non-termination, 100% CPU) compiling two valid C programs gcc builds in <1s — pr23324.c (bitfields+empty union) and pr44164.c (nested struct + empty compound literal); worst class: no output, no error | — |
@@ -2621,7 +2621,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [A] bug-a-aarch64-managed-string-concat-leak
 - [p 70] [A] bug-a-aarch64-variant-string-compare-always-false
 - [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
 - [p 65] [P] bug-open-array-param-length-high-zero

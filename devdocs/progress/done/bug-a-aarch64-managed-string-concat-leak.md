@@ -64,3 +64,6 @@ remove working functionality to hide a defect that is not its own.
 
 The repro above flat on aarch64, `--tier quick` + self-host byte-identical +
 cross. Worth checking arm32/riscv32 for the same shape once found.
+
+## Log
+- 2026-07-22 — resolved, commit c46ba554.
