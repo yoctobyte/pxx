@@ -27,11 +27,10 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (136)
+## backlog (135)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-managed-record-return-into-reused-dest-leaks | A | 55 | bug | Managed-record function results into a REUSED destination leak the old payload | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 55 | bug | issue: runtime heap grows unbounded in a dynamic/variant-heavy loop (long-running programs OOM) | — |
 | bug-nilpy-bitwise-on-float-variant-truncates | A | 30 | bug | NilPy: a bitwise op on a FLOAT variant truncates instead of raising TypeError | — |
 | bug-nilpy-bytes-literal-escapes-not-decoded | N | 30 | bug | NilPy: `\xHH` (and presumably `\0`-style) escapes in a BYTES literal are not decoded | — |
@@ -230,7 +229,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (951)
+## done (952)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -250,6 +249,7 @@ _none_
 | bug-a-interface-release-on-last-ref-not-destroyed | A | 40 | bug | COM interface: dropping the last interface reference (:= nil) does NOT run the destructor — pxx defers/skips Release, breaking interface RAII (silent) | — |
 | bug-a-len-of-variant-picks-wrong-overload | A | 55 | bug | `len(v)` on a Variant segfaults — a polymorphic builtin cannot pick an overload statically | — |
 | bug-a-libcfree-unresolved-extern-silent-zero | C | 68 | bug | libc-free link: unresolved external symbol patched to 0 instead of a link error | — |
+| bug-a-managed-record-return-into-reused-dest-leaks | A | 55 | bug | Managed-record function results into a REUSED destination leak the old payload | — |
 | bug-a-method-pointer-virtual-captures-static-address | A | 45 | bug | @baseref.VirtualMethod binds the STATIC base method address, not the virtual override — a method pointer to a virtual method via a base-typed ref calls the wrong method (silent), and contradicts pxx's own direct virtual dispatch | — |
 | bug-a-nilpy-and-or-in-unavailable-in-call-arguments | A | 65 | bug | NilPy `and` / `or` / `in` / `is` do not work in a CALL ARGUMENT | — |
 | bug-a-nilpy-container-equality-compares-identity | A | 55 | bug | NilPy: `==` on a list or dict compares IDENTITY, not contents | — |
@@ -2643,7 +2643,6 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
-- [p 55] [A] bug-a-managed-record-return-into-reused-dest-leaks
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland

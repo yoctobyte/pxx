@@ -54,3 +54,6 @@ aarch64 EmitA64CopyBytes, arm32, riscv32/xtensa PXXMemMove).
 lk23-style repro flat; `d := m and 65535` / `or` heap-tier PromoInt64 loops
 flat; uforth `: T 100000 0 DO LOOP ; T` RSS bounded; make test + self-host
 byte-identical + cross for touched backends.
+
+## Log
+- 2026-07-22 — resolved, commit 86d9d3c3.
