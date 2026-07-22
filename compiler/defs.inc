@@ -549,6 +549,7 @@ const
   VT_STRING  = 6;   { payload = managed AnsiString ref }
   VT_OBJECT  = 7;   { payload = class instance pointer (NilPy Any/list slots; isinstance) }
   VT_BOUNDMETHOD = 8; { payload = {code, recv} pair pointer (pylib pybound_new) }
+  VT_PYCLOSURE_TAG = 9; { payload = pyeval closure object (refcounted RAW2 block) }
 
   { Population tag a PXXObjAlloc-headered instance carries at [inst-8] — MUST
     match PXX_OBJ_MAGIC in compiler/builtin/builtinheap.pas. Odd value, so it

@@ -846,7 +846,7 @@ procedure EmitVariantClear;
   reset the slot to VT_EMPTY. Preserves the slot address in rax. The jne
   target is patched manually (not via EmitAsmX64's `.label` form) because it
   jumps past IREmitCodeCall -- see EmitDynArrayReleaseLocked. }
-var pDone, pDone2, pHit, pObj, pObj2, pSkip: Integer;
+var pDone, pDone2, pHit, pObj, pObj2, pObj3, pSkip: Integer;
 begin
   { Managed payload = VT_STRING, or ANY tag in the promotable-int block: a promo
     too large for the inline tier rides in a variant as a managed AnsiString of
@@ -863,6 +863,8 @@ begin
   EmitB($0F); EmitB($84); pObj := CodeLen; EmitI32(0);   { je objchk }
   EmitAsmX64(['cmp rcx, %', VT_BOUNDMETHOD]);
   EmitB($0F); EmitB($84); pObj2 := CodeLen; EmitI32(0);  { je objchk }
+  EmitAsmX64(['cmp rcx, %', VT_PYCLOSURE_TAG]);
+  EmitB($0F); EmitB($84); pObj3 := CodeLen; EmitI32(0);  { je objchk }
   EmitAsmX64(['cmp rcx, %', VT_PROMO_BASE]);
   EmitB($0F); EmitB($8C); pDone := CodeLen; EmitI32(0);  { jl done }
   EmitAsmX64(['cmp rcx, %', VT_PROMO_LAST]);
@@ -875,6 +877,7 @@ begin
     check, the population-tag guard AND the recursive finalizer hook }
   Patch32(pObj, CodeLen - (pObj + 4));
   Patch32(pObj2, CodeLen - (pObj2 + 4));
+  Patch32(pObj3, CodeLen - (pObj3 + 4));
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(ObjReleaseBlobAddr);
   Patch32(pDone, CodeLen - (pDone + 4));
@@ -898,7 +901,7 @@ end;
 procedure EmitVariantRetain;
 { rax = address of a variant slot. Retain a managed payload. Preserves rax.
   See EmitVariantClear for why the jne target is patched manually. }
-var pDone, pDone2, pHit, pObj, pObj2, pSkip: Integer;
+var pDone, pDone2, pHit, pObj, pObj2, pObj3, pSkip: Integer;
 begin
   { Same managed-payload test as EmitVariantClear — see there, including the
     object-tag arm and its population-tag guard. }
@@ -908,6 +911,8 @@ begin
   EmitB($0F); EmitB($84); pObj := CodeLen; EmitI32(0);   { je objchk }
   EmitAsmX64(['cmp rcx, %', VT_BOUNDMETHOD]);
   EmitB($0F); EmitB($84); pObj2 := CodeLen; EmitI32(0);  { je objchk }
+  EmitAsmX64(['cmp rcx, %', VT_PYCLOSURE_TAG]);
+  EmitB($0F); EmitB($84); pObj3 := CodeLen; EmitI32(0);  { je objchk }
   EmitAsmX64(['cmp rcx, %', VT_PROMO_BASE]);
   EmitB($0F); EmitB($8C); pDone := CodeLen; EmitI32(0);  { jl done }
   EmitAsmX64(['cmp rcx, %', VT_PROMO_LAST]);
@@ -920,6 +925,7 @@ begin
     check and the population-tag guard }
   Patch32(pObj, CodeLen - (pObj + 4));
   Patch32(pObj2, CodeLen - (pObj2 + 4));
+  Patch32(pObj3, CodeLen - (pObj3 + 4));
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(ObjRetainBlobAddr);
   Patch32(pDone, CodeLen - (pDone + 4));

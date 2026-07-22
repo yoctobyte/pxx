@@ -119,6 +119,9 @@ const
     instance (no VMT at +0) — today only pybound_new's {code,recv} pairs.
     Release runs the finalize hook with raw=1 so the hook won't VMT-dispatch. }
   PXX_OBJ_MAGIC_RAW = $505942F9;
+  { second RAW flavor: a pyeval closure object — finalized through the same
+    hook with rawKind=2 (pylib forwards to pyeval's registry free) }
+  PXX_OBJ_MAGIC_RAW2 = $505942E1;
 type
   { Finalizer for a dying refcounted object, installed by pylib (which knows
     the container types). p = the object, raw = 1 for a RAW (VMT-less) block.
@@ -129,6 +132,7 @@ var
   PXXObjFinalizeHook: TPXXObjFinalize;
 function PXXObjAlloc(size: NativeInt): Pointer;
 function PXXObjAllocRaw(size: NativeInt): Pointer;
+function PXXObjAllocRaw2(size: NativeInt): Pointer;
 procedure PXXObjRetain(p: Pointer);
 procedure PXXObjRelease(p: Pointer);
 procedure PXXObjFree(p: Pointer);
@@ -267,6 +271,9 @@ var
                         None sentinel or boxed int reaching a retain would
                         otherwise fault reading [p-8]) }
   HeapHigh : Int64;   { highest arena end ever mapped }
+  PyDbgSite: Int64;  { TEMP }
+  PyDbgSiteCnt: array[0..15] of Int64;  { TEMP: bump allocs per site }
+  PyDbgSiteB: array[0..15] of Int64;
   FreeList : Int64;   { head of the LARGE (> HEAP_BIN_MAX) free list, 0 = empty }
   { bin[i] holds blocks of exactly (i+1)*8 bytes. BSS-zeroed = all empty. }
   FreeBins : array[0..HEAP_BIN_COUNT-1] of Int64;
@@ -473,6 +480,11 @@ begin
     Anything that changes the bump path (arena reuse, guard bytes, an arena from
     a source that is not zero) must re-produce the guarantee here, not push it
     back onto callers. }
+  if PyDbgSite < 16 then
+  begin
+    PyDbgSiteCnt[PyDbgSite] := PyDbgSiteCnt[PyDbgSite] + 1;
+    PyDbgSiteB[PyDbgSite] := PyDbgSiteB[PyDbgSite] + size;
+  end;
   need := size + 8;                         { 8-byte size header + payload }
   if (HeapPtr = 0) or (HeapEnd - HeapPtr < need) then
   begin
@@ -1181,6 +1193,16 @@ begin
                      (Int64(p) >= HeapLow + 24) and (Int64(p) < HeapHigh);
 end;
 
+function PXXObjAllocRaw2(size: NativeInt): Pointer;
+var base: Int64;
+begin
+  if size < 8 then size := 8;
+  base := Int64(PXXAlloc(size + 16, 8));
+  PWord(base)^ := 1;                         { refcount }
+  PWord(base + 8)^ := PXX_OBJ_MAGIC_RAW2;    { pyeval closure object }
+  Result := Pointer(base + 16);
+end;
+
 procedure PXXObjRetain(p: Pointer);
 var base, t: Int64;
 {$ifdef PXX_TS_SOFTLOCK}
@@ -1191,7 +1213,8 @@ begin
   if not PXXObjPlausible(p) then Exit;
   base := Int64(p) - 16;
   t := PWord(base + 8)^;
-  if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) then Exit;  { not ours }
+  if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) and
+     (t <> PXX_OBJ_MAGIC_RAW2) then Exit;  { not ours }
 {$ifdef PXX_TS_SOFTLOCK}
   tsIgnore := __pxxatomic_add(Pointer(base), 1);
 {$else}
@@ -1206,7 +1229,8 @@ begin
   if not PXXObjPlausible(p) then Exit;
   base := Int64(p) - 16;
   t := PWord(base + 8)^;
-  if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) then Exit;  { not ours }
+  if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) and
+     (t <> PXX_OBJ_MAGIC_RAW2) then Exit;  { not ours }
 {$ifdef PXX_TS_SOFTLOCK}
   rc := __pxxatomic_add(Pointer(base), -1) - 1;   { returns the OLD value }
 {$else}
@@ -1222,6 +1246,8 @@ begin
     begin
       if t = PXX_OBJ_MAGIC_RAW then
         PXXObjFinalizeHook(p, 1)
+      else if t = PXX_OBJ_MAGIC_RAW2 then
+        PXXObjFinalizeHook(p, 2)
       else
         PXXObjFinalizeHook(p, 0);
     end;
@@ -2427,7 +2453,7 @@ procedure PXXVarClear(v: Pointer);
 begin
   if (PWord(v)^ = 6) or ((PWord(v)^ >= 8192) and (PWord(v)^ <= 8199)) then
     PXXStrDecRef(Pointer(PWord(Int64(v) + 8)^))
-  else if (PWord(v)^ = 7) or (PWord(v)^ = 8) then
+  else if (PWord(v)^ = 7) or (PWord(v)^ = 8) or (PWord(v)^ = 9) then
     PXXObjRelease(Pointer(PWord(Int64(v) + 8)^));
   PXXMemZero(v, 16);
 end;
@@ -2436,7 +2462,7 @@ procedure PXXVarRetain(v: Pointer);
 begin
   if (PWord(v)^ = 6) or ((PWord(v)^ >= 8192) and (PWord(v)^ <= 8199)) then
     PXXStrIncRef(Pointer(PWord(Int64(v) + 8)^))
-  else if (PWord(v)^ = 7) or (PWord(v)^ = 8) then
+  else if (PWord(v)^ = 7) or (PWord(v)^ = 8) or (PWord(v)^ = 9) then
     PXXObjRetain(Pointer(PWord(Int64(v) + 8)^));
 end;
 

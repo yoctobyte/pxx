@@ -33,6 +33,9 @@ type
     Payload: Int64;
   end;
   PPyVarRec = ^TPyVarRec;
+  { rawKind=2 (a pyeval closure object) forwards through this hook; installed
+    by pyeval, which owns the closure registry. nil until pyeval initializes. }
+  TPyClosureFinalize = procedure(objp: Pointer);
   PInt64 = ^Int64;
   PPyAnsiString = ^AnsiString;
   PPyDouble = ^Double;
@@ -358,6 +361,9 @@ function pyvar_box(const v: Variant): Variant;   { box a value into a variant }
   stores these in its exec env; the pyeval interpreter reaches the receiver
   through env["vm"] rather than invoking them, so a stored bound method must
   merely not crash. }
+var
+  PyClosureFinalizeHook: TPyClosureFinalize;
+
 function pybound_new(code, recv: Pointer): Variant;
 function pybound_code(const v: Variant): Pointer;
 function pybound_recv(const v: Variant): Pointer;
@@ -1169,7 +1175,7 @@ end;
   participate (feature-nilpy-object-reclamation slice 2). }
 function PyVarSlotIsObj(t: Int64): Boolean;
 begin
-  PyVarSlotIsObj := (t = 7) or (t = 8);
+  PyVarSlotIsObj := (t = 7) or (t = 8) or (t = 9);   { 9 = pyeval closure }
 end;
 
 procedure PyVarSlotClear(dst: PPyVarRec);
@@ -3091,10 +3097,19 @@ var
   o: TObject;
 begin
   if objp = nil then Exit;
+  if rawKind = 2 then
+  begin
+    { pyeval closure object: the registry entry (captures, token refs) is
+      pyeval's to free }
+    if PyClosureFinalizeHook <> nil then PyClosureFinalizeHook(objp);
+    Exit;
+  end;
   if rawKind <> 0 then
   begin
     { bound pair: drop the pair's ref on its receiver. Code is either a proc
-      address or a closure-obj record (unheadered) — nothing to release. }
+      address or a refcounted closure obj — release both ends (magic-guarded,
+      so a plain code address no-ops). }
+    PXXObjRelease(PPyBoundRec(objp)^.Code);
     PXXObjRelease(PPyBoundRec(objp)^.Recv);
     Exit;
   end;
@@ -3144,6 +3159,7 @@ begin
   b := PPyBoundRec(PXXObjAllocRaw(SizeOf(TPyBoundRec)));
   b^.Code := code;
   b^.Recv := recv;
+  PXXObjRetain(code);   { a closure-obj code is refcounted; plain addresses no-op }
   PXXObjRetain(recv);
   r := PPyVarRec(@Result);
   r^.VType := 8;                       { VT_BOUNDMETHOD }

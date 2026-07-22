@@ -1547,13 +1547,72 @@ type
 var
   Closures: array of TPyClosure;
   ClosureN: Integer;
+  PyDbgExecN: Int64;
 
   PyClosureMagicMarker: Integer;   { its ADDRESS is the closure sentinel }
+
+{ Recycle stack of dead Closures[] rows (feature-nilpy-object-reclamation):
+  a closure OBJECT is a refcounted RAW2 block; when it dies, PyEvalClosureFree
+  releases the row's captures and token refs and parks the index here for the
+  next creator. }
+var
+  ClosureFreeStk: array of Integer;
+  ClosureFreeN: Integer;
+
+procedure PyEvalClosureFree(objp: Pointer);
+var c, i: Integer;
+begin
+  if objp = nil then Exit;
+  if PClosureObj(objp)^.Magic <> @PyClosureMagicMarker then Exit;
+  c := Integer(PClosureObj(objp)^.Cidx);
+  if (c < 0) or (c >= ClosureN) then Exit;
+  Closures[c].Kinds := nil;
+  Closures[c].Texts := nil;
+  Closures[c].Ints := nil;
+  Closures[c].Floats := nil;
+  for i := 0 to Closures[c].CapN - 1 do
+  begin
+    Closures[c].CapNames[i] := '';
+    Closures[c].CapVals[i] := 0;   { variant := int releases any payload }
+  end;
+  SetLength(Closures[c].CapNames, 0);
+  SetLength(Closures[c].CapVals, 0);
+  Closures[c].CapN := 0;
+  Closures[c].Params := '';
+  Closures[c].NTok := 0;
+  if ClosureFreeN >= Length(ClosureFreeStk) then
+  begin
+    if Length(ClosureFreeStk) = 0 then SetLength(ClosureFreeStk, 16)
+    else SetLength(ClosureFreeStk, Length(ClosureFreeStk) * 2);
+  end;
+  ClosureFreeStk[ClosureFreeN] := c;
+  ClosureFreeN := ClosureFreeN + 1;
+end;
+
+{ Pop a recycled registry row, or mint a fresh one. }
+function PyClosureAllocRow: Integer;
+begin
+  if ClosureFreeN > 0 then
+  begin
+    ClosureFreeN := ClosureFreeN - 1;
+    PyClosureAllocRow := ClosureFreeStk[ClosureFreeN];
+    Exit;
+  end;
+  if ClosureN >= Length(Closures) then
+  begin
+    if Length(Closures) = 0 then SetLength(Closures, 8)
+    else SetLength(Closures, Length(Closures) * 2);
+  end;
+  PyClosureAllocRow := ClosureN;
+  ClosureN := ClosureN + 1;
+end;
 
 function PyMakeClosureObj(cidx: Int64): Pointer;
 var o: PClosureObj;
 begin
-  o := GetMem(SizeOf(TClosureObj));
+  PXXObjFinalizeHook := @PyObjFinalize;
+  PyClosureFinalizeHook := @PyEvalClosureFree;
+  o := PClosureObj(PXXObjAllocRaw2(SizeOf(TClosureObj)));
   o^.Magic := @PyClosureMagicMarker;
   o^.Cidx  := cidx;
   PyMakeClosureObj := Pointer(o);
@@ -1681,12 +1740,7 @@ begin
   sKinds := TkKind; sTexts := TkText; sInts := TkInt; sFloats := TkFloat;
   sTkN := TkN; sCur := Cur; sSrc := Src; sPos := Pos; sSLen := SLen;
   Tokenize(src);
-  if ClosureN >= Length(Closures) then
-  begin
-    if Length(Closures) = 0 then SetLength(Closures, 8)
-    else SetLength(Closures, Length(Closures) * 2);
-  end;
-  c := ClosureN; ClosureN := ClosureN + 1;
+  c := PyClosureAllocRow;
   { ref-share, not deep-copy — see PyMakeClosure; here Tokenize(src) just
     allocated these arrays fresh, so nothing else mutates them }
   Closures[c].Kinds  := TkKind;
@@ -1721,12 +1775,7 @@ end;
 function PyMakeClosure(fnIdx: Integer): Variant;
 var c, i: Integer; r: PPyRec;
 begin
-  if ClosureN >= Length(Closures) then
-  begin
-    if Length(Closures) = 0 then SetLength(Closures, 8)
-    else SetLength(Closures, Length(Closures) * 2);
-  end;
-  c := ClosureN; ClosureN := ClosureN + 1;
+  c := PyClosureAllocRow;
   { REFERENCE-share the token arrays instead of deep-copying: a full snapshot
     of the exec source per closure (every `ns["__body__"]` lookup!) was the
     dominant per-call leak in uforth's PYTHON-word path (~20 KB/exec). Safe
@@ -3406,6 +3455,7 @@ end;
 procedure EvalPyStmts(const src: AnsiString; g: TPyDict; l: TPyDict);
 var cslot: Integer;
 begin
+  PyDbgSite := 1;
   EnvG := g;
   { locals live in pyeval's own arrays (see LclSet); the `l` dict argument is
     accepted for API compatibility with Python's exec(src, g, l) but is not the
@@ -3443,7 +3493,9 @@ begin
   SkipSeparators;
   while (CurKind <> PK_EOF) and (CurKind <> PK_DEDENT) do
   begin
+    PyDbgSite := 2;
     ExecStatement;
+    PyDbgSite := 3;
     if (not StmtWasCompound) and (CurKind <> PK_EOF) and (CurKind <> PK_DEDENT)
        and not (IsOp(';') or (CurKind = PK_NL)) then
       EvalError('expected end of statement, got "' + CurText + '"');
@@ -3455,8 +3507,15 @@ begin
     the separate `ns["__body__"]()` reaches it: the value's payload is
     &PyBodyTramp, unboxed and called through the dynamic-call ABI. Keyed with a
     VT_STRING matching NilPy's dict key (PyVarEq compares string content). }
+  PyDbgSite := 4;
   if (l <> nil) and (FnFind('__body__') >= 0) then
     l.store(MakeStr('__body__'), PyBoxObj(Pointer(@PyBodyTramp)));
+  PyDbgSite := 0;
+  Inc(PyDbgExecN);
+  if PyDbgExecN mod 20000 = 0 then
+    for cslot := 0 to 8 do
+      if PyDbgSiteCnt[cslot] > 0 then
+        writeln('DBG site=', cslot, ' bumps=', PyDbgSiteCnt[cslot], ' bytes=', PyDbgSiteB[cslot]);
 end;
 
 end.
