@@ -923,6 +923,11 @@ begin
       { Absolute data address (sentinel-resolvable), see the x86-64 case. }
       EmitLoadDataRefXtensa(reg_xtensa_a2, Integer(IRIVal[node]));
 
+    IR_VMTADDR:
+      { a2 = address of class ci's VMT (the identity stored at [instance+0]).
+        Offsets are final at codegen, so the data-ref is direct. }
+      EmitLoadDataRefXtensa(reg_xtensa_a2, UClsVMTOffset[IRA[node]]);
+
     IR_LOAD_SYM:
       if Is64BitXtensa(Syms[IRA[node]].TypeKind) then
         EmitLoadVar64Xtensa(IRA[node])

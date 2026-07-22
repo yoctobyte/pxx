@@ -6840,6 +6840,92 @@ begin
       pendBase := PendOAWBCount;   { open-array copy-out writebacks added by this call's args }
       if cpi = -Ord(tkGetMem) then
         classIdx := ASTRight[node];
+      { NilPy-user class construction goes through PXXObjAlloc so the instance
+        carries the [inst-16] refcount header (rc = 1, owned by whatever binds
+        it) — feature-nilpy-object-reclamation, design in
+        devdocs/dev/nilpy-object-reclamation.md. Lowered target-independently
+        (the AN_METACLASS_NEW idiom: alloc call, VMT stamp via IR_VMTADDR, ctor
+        as an ordinary call), replacing the per-backend inline -tkGetMem arm for
+        these nodes only. Gate is BOTH flags: isNilPy alone would also reroute
+        pylib/pyeval's own Pascal constructions, whose instances are
+        manual-lifetime and must keep the plain allocation
+        (project_pyeval_arc_state_and_wiring_blocker). }
+      if (cpi = -Ord(tkGetMem)) and (classIdx >= REC_UCLASS_BASE) and
+         isNilPy and (CurrentUnitIdx < 0) then
+      begin
+        procIdx := FindProc('PXXObjAlloc');
+        if procIdx < 0 then Error('Nil Python: PXXObjAlloc (builtinheap) not loaded');
+        { inst := PXXObjAlloc(size). The size arg is the first AN_ARG; ctor
+          args hang off it (ASTRight chain), exactly as the inline path reads
+          them. }
+        value := IRLowerAST(ASTLeft[ASTLeft[node]]);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyNativeInt));
+        mcInstSym := AllocVar('', tyPointer);
+        IRAppend(IR_STORE_SYM, mcInstSym,
+                 IRAppendCall(procIdx, argNode, -1, Ord(tyPointer)),
+                 -1, 0, Ord(tyPointer));
+        { [inst+0] := VMT }
+        IRAppend(IR_STORE_MEM,
+                 IRAppend(IR_LOAD_SYM, mcInstSym, -1, -1, 0, Ord(tyPointer)),
+                 IRAppend(IR_VMTADDR, classIdx - REC_UCLASS_BASE, -1, -1, 0, Ord(tyPointer)),
+                 -1, 0, Ord(tyPointer));
+        { Ctor: the overload the frontend resolved from the arg types, else the
+          first Create by name (same policy as IRResolveCtorProc). A class with
+          no ctor (bare shell) is legal — alloc + stamp is the whole job. }
+        slot := FindUCtorOverloadArgs(classIdx - REC_UCLASS_BASE, ASTRight[ASTLeft[node]]);
+        if slot >= 0 then
+          cpi := UMthProc_[slot]
+        else
+        begin
+          cpi := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
+          if cpi >= 0 then cpi := UMthProc_[cpi];
+        end;
+        if cpi >= 0 then
+        begin
+          mcSelfArg := IRAppend(IR_ARG,
+                         IRAppend(IR_LOAD_SYM, mcInstSym, -1, -1, 0, Ord(tyPointer)),
+                         -1, -1, 0, Ord(tyClass));
+          first := mcSelfArg; last := mcSelfArg;
+          item := ASTRight[ASTLeft[node]];
+          pathIdx := 1;
+          while item <> -1 do
+          begin
+            { Param-aware arg lowering + the managed-string temp slot — the
+              same shape as AN_METACLASS_NEW's ctor-arg loop, for the same
+              reasons (see the comments there). }
+            isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
+            value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
+            argIsManagedTemp :=
+              (not isRefArg) and (pathIdx < Procs[cpi].ParamCount) and
+              (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) and
+              (ASTKind[ASTLeft[item]] <> AN_IDENT) and
+              (ASTKind[ASTLeft[item]] <> AN_FIELD) and
+              (ASTKind[ASTLeft[item]] <> AN_INDEX) and
+              (ASTKind[ASTLeft[item]] <> AN_DEREF);
+            if argIsManagedTemp then
+            begin
+              hiddenArgSym := AllocVar('', tyAnsiString);
+              SymIsHiddenArgTemp[hiddenArgSym] := True;
+              IRAppend(IR_DEFAULT_MEM,
+                IRAppend(IR_SLOTADDR, hiddenArgSym, -1, -1, 0, Ord(tyPointer)),
+                -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyAnsiString));
+              IRAppend(IR_STORE_SYM, hiddenArgSym, value, -1, 0, Ord(tyAnsiString));
+              value := IRAppend(IR_LOAD_SYM, hiddenArgSym, -1, -1, 0, Ord(tyAnsiString));
+              argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
+            end
+            else
+              argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+            IRB[last] := argNode;
+            last := argNode;
+            item := ASTRight[item];
+            Inc(pathIdx);
+          end;
+          { runs for its side effect (fills the instance); result discarded }
+          IRMarkStatementNode(IRAppendCall(cpi, first, -1, Ord(tyClass)));
+        end;
+        Result := IRAppend(IR_LOAD_SYM, mcInstSym, -1, -1, 0, ASTTk[node]);
+        Exit;
+      end;
       while item <> -1 do
       begin
         isRefArg := False;

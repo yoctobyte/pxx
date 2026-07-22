@@ -957,6 +957,11 @@ begin
         sentinel data-ref the other backends use (patched after EmitRTTI). }
       EmitLoadDataRefRISCV32(reg_a0, -(CLASSREF_DATAREF_BASE + IRA[node]));
 
+    IR_VMTADDR:
+      { a0 = address of class ci's VMT (the identity stored at [instance+0]).
+        Offsets are final at codegen, so the data-ref is direct. }
+      EmitLoadDataRefRISCV32(reg_a0, UClsVMTOffset[IRA[node]]);
+
     IR_FRAME:
       { get_frame: s0 is the frame pointer. NOTE it points at the BOTTOM of the
         frame here, so the saved caller fp and the return address are at +8/+12,
