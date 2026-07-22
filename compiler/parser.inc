@@ -4355,15 +4355,25 @@ begin
             if mmi < 0 then Error('setter method not found: ' + methName);
             mpi := UMthProc_[mmi];
             Expect(tkAssign, ':=');
-            { NilPy `d[k] = None` through the default-prop setter: None is a
-              real value (VT_EMPTY variant), not the nil pointer literal —
-              parsed as nil it boxed integer 0 into the variant param and
-              `d[k] is None` tag-tested false afterwards (same fix as the
-              dict/list-literal element routes, feature-nilpy-none-variant). }
-            if PyExprMode and (CurTok.Kind = tkNil) then
+            { NilPy value expression: two divergences from the Pascal reader.
+              (1) `d[k] = None` stores a real None (VT_EMPTY variant), not the
+              nil pointer literal — parsed as nil it boxed integer 0 and
+              `d[k] is None` tag-tested false afterwards
+              (feature-nilpy-none-variant, same fix as the literal routes).
+              (2) The value must go through the PY expression grammar:
+              Python's bit operators (& | ^ << >>) live in the Py layers, so
+              ParseExpr STOPPED before them — `m[addr] = len(b) & 0xFF`
+              silently stored only `len(b)`'s lowering with `& 0xFF` dangling
+              (uforth C" wrote a zero length byte; FIND then matched nothing). }
+            if PyExprMode then
             begin
-              Next;
-              CurASTNode := PyMakeNone;
+              if CurTok.Kind = tkNil then
+              begin
+                Next;
+                CurASTNode := PyMakeNone;
+              end
+              else
+                PyParseBoolExpr;
             end
             else
               ParseExpr;

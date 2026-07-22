@@ -1188,6 +1188,8 @@ begin
   Result := castNode;
 end;
 
+function PyMakeNone: Integer; forward;
+
 function PyMakeTruthy(n: Integer): Integer;
 var procIdx, argNode, rec, lenNode, zeroNode, node: Integer;
     nilNode, guardNode, falseNode, pairNode, ternNode: Integer;
@@ -1325,7 +1327,16 @@ begin
     if CurTok.Kind <> tkElse then
       Error('Nil Python: a conditional expression needs an else');
     Next;
-    PyParseBoolExpr;
+    { `A if C else None`: None is a real value (VT_EMPTY variant) — the nil
+      literal boxed integer 0 and the consumer's `is None` tag-test failed
+      (feature-nilpy-none-variant, sibling of the literal/setter routes). }
+    if CurTok.Kind = tkNil then
+    begin
+      Next;
+      CurASTNode := PyMakeNone;
+    end
+    else
+      PyParseBoolExpr;
     elseNode := CurASTNode;
     pairNode := AllocNode(AN_PAIR);
     ASTLeft[pairNode] := left;
@@ -2505,8 +2516,9 @@ end;
 { `base[idx]` for those bases: pystr_at for a string, the container's own getter
   for a list (`get`) or a dict (`fetch`) — the same methods the lvalue path
   reaches, just built here because a non-lvalue never gets there. }
-{ `v[key]` on a variant -> pyvar_getitem(v, key); yields a variant. }
-function PyMakeNone: Integer; forward;
+{ `v[key]` on a variant -> pyvar_getitem(v, key); yields a variant.
+  (PyMakeNone's forward declaration moved up beside PyMakeTruthy — the
+  conditional-expression None arms need it inside PyParseBoolExpr.) }
 
 { A `lambda p1, ...: <expr>` — lowered to a PYEVAL CLOSURE built from the
   body's SOURCE text: pyclosure_src_new(params, 'return <expr>') with every
