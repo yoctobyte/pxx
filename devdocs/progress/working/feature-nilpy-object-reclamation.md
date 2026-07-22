@@ -81,3 +81,27 @@ doloop RSS 595 -> 463 MB. Remaining tail to the <40 MB target:
   covered); scope-exit tyClass release arm is x86-64 only so far
 - `d = None` (RHS non-class) stores raw — old binding's ref leaks
 - shared instance in two locals canary test (verification set) not yet written
+
+## Night follow-ups (2026-07-23, fable-a-n)
+
+Landed since the slice-4 note: variant hidden-dest temp pre-call clear;
+mid-body tyClass watermark zero-init (hidden temps join ARC); refcounted
+pyeval closure objects (RAW2 magic + registry recycle stack, VT_PYCLOSURE=9
+in all ARC arms); construction-in-arg spill to owning temp (pathIdx>=1).
+doloop 595 -> 413 MB; plain container/bound-method churn probes flat.
+
+NEXT (ranked):
+1. **Literal-chain ownership**: list/dict literals lower as Self-returning
+   chains (Create.append(a).append(b)); the chain result IS the receiver, so
+   receiver-position constructions cannot be ARC-spilled (test_nilpy_forin
+   regression showed why). Fix in pyparser: hoist `__py_t := Create` +
+   append statements (PyHoistHead exists), yield the temp IDENT as the
+   expression. Closes arg-position literal leaks (exec(src, {...}) 15 MB /
+   20k probe; genexp-join wrapper build ~200 B/iter).
+2. bug-n-pyeval-per-exec-leaks (see that ticket): ~24B/exec site-2 string +
+   caller-side 64B with wrapper build.
+3. Class-typed FIELDS in finalizer (kind for tyClass + release) — field refs
+   leak on instance death.
+4. aarch64 EmitVariantClearA64/RetainA64 object arms + non-x86 scope-exit
+   tyClass release arm (leak-only asymmetry today).
+5. `d = None` (RHS non-class) rebind leaks the old binding's ref.
