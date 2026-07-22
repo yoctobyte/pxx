@@ -35,3 +35,6 @@ ProcRetRecId tagged (compare the pylib readline path, pyparser.inc ~3312).
 
 ## Gate
 Repro matches CPython; test-nilpy green + self-host byte-identical.
+
+## Log
+- 2026-07-22 — resolved, commit 377566ca.
