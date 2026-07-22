@@ -8533,6 +8533,58 @@ begin
         CurASTNode := node; LastExprTk := tyAnsiString;
         Exit;
       end;
+      if isNilPy and (name = 'pystr_of') and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { f-string hole: the LEXER desugars {x} to pystr_of(x), so the semantic
+          rewrites str()/print() apply to a CLASS argument (Exception -> .msg,
+          container -> repr) never fired here — an exception or a list inside
+          an f-string rendered as an empty string
+          (feature-nilpy-exception-message-text). Parse the argument; when a
+          class rewrite applies the result is already a string, so the
+          pystr_of call is dropped (it is the identity on strings). Any other
+          argument type REWINDS and takes the ordinary overload path,
+          unchanged byte for byte. }
+        intBaseArg := TokPos;            { rewind point: CurTok = pystr_of }
+        Next; Expect(tkLParen, '('); ParseArgExpr;
+        if IntToTypeKind(ASTTk[CurASTNode]) = tyClass then
+        begin
+          atRecv := ResolveNodeRec(CurASTNode);
+          if atRecv >= REC_UCLASS_BASE then
+          begin
+            atFld := FindUClass('Exception');
+            if (atFld >= 0) and (((atRecv - REC_UCLASS_BASE) = atFld)
+                or IsSubclassOf(atRecv - REC_UCLASS_BASE, atFld)) then
+            begin
+              atDflt := AllocNode(AN_FIELD);
+              ASTLeft[atDflt] := CurASTNode;
+              ASTSOffset[atDflt] := PyStoredName('msg');
+              ASTSLen[atDflt] := 3;
+              ASTTk[atDflt] := Ord(tyAnsiString);
+              Expect(tkRParen, ')');
+              CurASTNode := atDflt; LastExprTk := tyAnsiString;
+              Exit;
+            end;
+            procIdx := -1;
+            if atRecv - REC_UCLASS_BASE = FindUClass('TPyList') then
+              procIdx := FindProc('pylist_repr')
+            else if atRecv - REC_UCLASS_BASE = FindUClass('TPyDict') then
+              procIdx := FindProc('pydict_repr');
+            if procIdx >= 0 then
+            begin
+              argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+              node := AllocNode(AN_CALL);
+              ASTIVal[node] := procIdx; ASTTk[node] := Ord(tyAnsiString);
+              ASTLeft[node] := argSeq;
+              Expect(tkRParen, ')');
+              CurASTNode := node; LastExprTk := tyAnsiString;
+              Exit;
+            end;
+          end;
+        end;
+        { no class rewrite: rewind and take the ordinary overload path }
+        TokPos := intBaseArg - 1; Next;
+      end;
       if isNilPy and (name = 'int') then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr;

@@ -6198,14 +6198,48 @@ begin
   if PyIsIdent('super') and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkLParen) then
   begin
-    { v1: super().__init__(...) is consumed and DISCARDED (args unevaluated).
-      The Exception base is an empty shell until the try/except rung lands;
-      argument side effects would be lost — none in the censused corpus. }
     Next; Expect(tkLParen, '('); Expect(tkRParen, ')');
     Expect(tkDot, '.');
     if CurTok.Kind <> tkIdent then Error('Nil Python: expected method after super().');
+    name := CurTok.SVal;
     Next;
     Expect(tkLParen, '(');
+    { super().__init__(msg) in an Exception-descended class STORES the message
+      (self.msg := msg): Python keeps it as args[0] and str(e) / f"{e}" read it
+      back — discarding it left every user exception with an empty text
+      (feature-nilpy-exception-message-text). Any other super() call keeps the
+      v1 discard below (args unevaluated). }
+    ci := -1;
+    if CaseEqual(name, '__init__') and (CurSelfClass >= REC_UCLASS_BASE) and
+       (CurTok.Kind <> tkRParen) then
+    begin
+      ci := FindUClass('Exception');
+      if (ci >= 0) and (CurSelfClass - REC_UCLASS_BASE <> ci) and
+         (not IsSubclassOf(CurSelfClass - REC_UCLASS_BASE, ci)) then ci := -1;
+      if ci >= 0 then
+      begin
+        symIdx := PyProgSym('self');
+        if symIdx < 0 then ci := -1;
+      end;
+    end;
+    if ci >= 0 then
+    begin
+      PyParseBoolExpr;
+      rhsNode := CurASTNode;
+      Expect(tkRParen, ')');
+      lhsNode := AllocNode(AN_FIELD);
+      ASTLeft[lhsNode] := PyMakeIdent(symIdx);
+      ASTSOffset[lhsNode] := PyStoredName('msg');
+      ASTSLen[lhsNode] := 3;
+      ASTTk[lhsNode] := Ord(tyAnsiString);
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := lhsNode;
+      ASTRight[node] := rhsNode;
+      Result := node;
+      Exit;
+    end;
+    { v1 fallback: the call is consumed and DISCARDED (args unevaluated) —
+      argument side effects would be lost; none in the censused corpus. }
     ci := 1;
     while (ci > 0) and (CurTok.Kind <> tkEOF) do
     begin
