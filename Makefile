@@ -2311,6 +2311,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_qplus26)" = "$$(printf 'wrapped 0\ncaught=4')"
 	./$(COMPILER) test/test_overflow_qplus_narrow.pas /tmp/test_qplus_narrow26
 	test "$$(/tmp/test_qplus_narrow26)" = "caught=5 clean=4 wrap=-294967296"
+	./$(COMPILER) test/test_variant_fn_return_forward.pas /tmp/test_variant_fn_return_forward26
+	test "$$(/tmp/test_variant_fn_return_forward26)" = "$$(printf '2 77\n2 77\n2 77\nforwarded')"
 	./$(COMPILER) test/test_overflow_succ_pred.pas /tmp/test_qplus_sp26
 	test "$$(/tmp/test_qplus_sp26)" = "$$(printf 'wrapped-hi 4294967295\ncaught=3')"
 	./$(COMPILER) test/test_range_checks_rplus.pas /tmp/test_rplus26

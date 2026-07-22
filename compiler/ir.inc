@@ -6245,10 +6245,20 @@ begin
           Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
                              RecSize(ResolveNodeRec(ASTLeft[node])), Ord(tyRecord));
       end
-      else if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant then
+      else if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant) or
+              ((ASTKind[ASTLeft[node]] = AN_IDENT) and
+               (Integer(ASTIVal[ASTLeft[node]]) >= 0) and
+               (Syms[ASTIVal[ASTLeft[node]]].TypeKind = tyVariant) and
+               (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyUnknown)) then
       begin
         { Variant target. IRC carries the source kind: tyVariant => full 16-byte
-          copy; any scalar kind => box it (tag + payload) via IR_VAR_STORE. }
+          copy; any scalar kind => box it (tag + payload) via IR_VAR_STORE.
+          The function-name result form (`FuncName := variantCall`) leaves the
+          LHS ASTTk unset, exactly like the record arm above — without the
+          symbol-TypeKind fallback it fell to the generic 8-byte store_sym, so
+          a Variant FUNCTION forwarding another Variant call's result kept only
+          whatever rax held: VType garbage, payload lost
+          (bug-a-variant-fn-return-forward-nrvo-corruption). }
         leftAddr := IRLowerAddress(ASTLeft[node]);
         if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]])) then
         begin
