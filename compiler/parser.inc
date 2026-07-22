@@ -18149,6 +18149,19 @@ begin
         LastTypePointerElemRec := REC_NONE;
         Result := tyPointer;
       end
+      { The keyword-token builtins by NAME: the real lexer always tokenizes
+        these as tkBoolean_T/tkInteger_T/…, so this arm is only reached by a
+        SYNTHETIC token stream that spells them as plain identifiers — the
+        parallel-for capture accessor (`capj: ^Boolean` built via NestStrOff)
+        being the one in-tree producer. Without the mapping the caret element
+        type silently defaulted, so a captured Boolean deref re-typed as
+        Integer and overload resolution rejected `Sink(i, lflag)`
+        (bug-parallel-for-captured-boolean-loses-type). }
+      else if (not tnHasAlias) and (CaseEqual(lo, 'boolean')) then Result := tyBoolean
+      else if (not tnHasAlias) and (CaseEqual(lo, 'integer')) then Result := tyInteger
+      else if (not tnHasAlias) and (CaseEqual(lo, 'char')) then Result := tyChar
+      else if (not tnHasAlias) and (CaseEqual(lo, 'single')) then Result := tySingle
+      else if (not tnHasAlias) and (CaseEqual(lo, 'double')) then Result := tyDouble
       else if (not tnHasAlias) and (CaseEqual(lo, 'shortint') or CaseEqual(lo, 'int8')) then Result := tyInt8
       else if (not tnHasAlias) and (CaseEqual(lo, 'byte') or CaseEqual(lo, 'uint8')) then Result := tyUInt8
       else if (not tnHasAlias) and (CaseEqual(lo, 'smallint') or CaseEqual(lo, 'int16')) then Result := tyInt16

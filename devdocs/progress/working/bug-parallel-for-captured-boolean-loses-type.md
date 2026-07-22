@@ -7,7 +7,7 @@ track: A
 
 - **Type:** bug — **Track A** (parallel-for capture lowering; `parser.inc`
   capture-frame path).
-- **Status:** backlog — filed 2026-07-20.
+- **Status:** working
 - **Found by:** Track E, building `examples/mandelbrot/mandelzoom.pas`
   ([[feature-demo-mandelbrot-asm-autozoom]]).
 
