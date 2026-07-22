@@ -49,3 +49,6 @@ Option 1 (variant Optional[int]) — it is the only fully-correct choice and
 `is None` already does the right thing on a variant. Scope: the Optional[int]
 type mapping in PyAnnTypeAt (currently tyInt64) and the return coercion.
 Root-causes bug-nilpy-locals-list-pointer-truncated-32bit's local-read half.
+
+## Log
+- 2026-07-22 — resolved, commit 3fe423d7.
