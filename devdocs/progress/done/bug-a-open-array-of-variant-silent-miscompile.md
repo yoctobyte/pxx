@@ -47,3 +47,6 @@ fixed for general Pascal code.
 Open-array descriptor / element-stride computation when the element type is a
 16-byte managed Variant — probably a stride or high-bound miscalc making every
 index alias element 0.
+
+## Log
+- 2026-07-22 — resolved, commit b3f83eef.
