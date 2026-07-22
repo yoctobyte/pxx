@@ -4175,7 +4175,17 @@ begin
     PyParseBoolExpr;
     keyNode := CurASTNode;
     Expect(tkColon, ':');
-    PyParseBoolExpr;
+    { `None` as a VALUE is a real value in Python (VT_EMPTY) — parsed as a nil
+      literal it boxes as integer 0, `is None` tag-tests false, and the usual
+      `if d[k] is None:` miss-branch is skipped (same fix the list-literal
+      element path carries, feature-nilpy-none-variant). }
+    if CurTok.Kind = tkNil then
+    begin
+      Next;
+      CurASTNode := PyMakeNone;
+    end
+    else
+      PyParseBoolExpr;
     valArg := AllocNode(AN_ARG);
     ASTLeft[valArg] := CurASTNode;
     keyArg := AllocNode(AN_ARG);
