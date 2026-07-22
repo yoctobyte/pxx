@@ -5912,3 +5912,12 @@
 2026-07-22T08:22:39Z	borg	0b2942ef8a4b	selfcompile	-O0	10785.4
 2026-07-22T08:22:39Z	borg	0b2942ef8a4b	selfcompile	-O2	8281.1
 2026-07-22T08:22:39Z	borg	0b2942ef8a4b	selfcompile	-O3	7229.4
+2026-07-22T08:49:26Z	borg	afbb6af5	uforth-microbench-doloop	cpython	8214.1	07ffdb1	23996
+2026-07-22T08:49:26Z	borg	afbb6af5	uforth-microbench-doloop	cpython-O	7983.0	07ffdb1	29668
+2026-07-22T08:49:26Z	borg	afbb6af5	uforth-microbench-doloop	pxx	19075.1	07ffdb1	596412
+2026-07-22T08:49:26Z	borg	afbb6af5	uforth-prelim	cpython	279.3	07ffdb1	24184
+2026-07-22T08:49:26Z	borg	afbb6af5	uforth-prelim	cpython-O	474.0	07ffdb1	29308
+2026-07-22T08:49:26Z	borg	afbb6af5	uforth-prelim	pxx	1691.4	07ffdb1	32828
+2026-07-22T08:49:26Z	borg	afbb6af5	uforth-core	cpython	825.9	07ffdb1	24388
+2026-07-22T08:49:26Z	borg	afbb6af5	uforth-core	cpython-O	1093.8	07ffdb1	29668
+2026-07-22T08:49:26Z	borg	afbb6af5	uforth-core	pxx	5270.9	07ffdb1	169532

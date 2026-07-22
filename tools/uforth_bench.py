@@ -307,10 +307,12 @@ def main():
         new = not os.path.exists(BENCH_TSV)
         with open(BENCH_TSV, "a") as f:
             if new:
-                f.write("# date\thost\tsha\tworkload\tlevel\tms\tuforth_sha\n")
-            for wname, level, ms, _rss in rows:
-                f.write("%s\t%s\t%s\tuforth-%s\t%s\t%.1f\t%s\n"
-                        % (date, host, psha, wname, level, ms, usha))
+                f.write("# date\thost\tsha\tworkload\tlevel\tms"
+                        "\tuforth_sha\trss_kb\n")
+            for wname, level, ms, rss in rows:
+                f.write("%s\t%s\t%s\tuforth-%s\t%s\t%.1f\t%s\t%d\n"
+                        % (date, host, psha, wname, level, ms, usha,
+                           rss or 0))
         print("\nwrote %d rows -> %s" % (len(rows), BENCH_TSV))
     else:
         print("\n--no-write: %d rows not persisted" % len(rows))

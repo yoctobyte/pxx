@@ -128,8 +128,16 @@ def read_bench(tdir):
                         ms = float(c[5])
                     except ValueError:
                         continue
+                    try:
+                        rss = int(c[7]) if len(c) >= 8 else 0
+                    except ValueError:
+                        rss = 0
                     rows.append({"date": c[0], "host": c[1], "sha": c[2],
-                                 "workload": c[3], "level": c[4], "ms": ms})
+                                 "workload": c[3], "level": c[4], "ms": ms,
+                                 # cols 7/8 (uforth_sha, rss_kb) present only on
+                                 # the cross-runtime uforth rows
+                                 "src_sha": c[6] if len(c) >= 7 else "",
+                                 "rss": rss})
     except OSError:
         pass
     return rows
@@ -257,11 +265,72 @@ def render_coverage(tdir):
     return "".join(out)
 
 
+def render_uforth_bench(rows):
+    """Cross-runtime uforth table: the SAME uforth.py under CPython variants vs
+    pxx-compiled-native (feature-t-uforth-benchmark-harness). A DIFFERENT axis
+    from the pxx opt-level table below — runtimes, not -O levels — so it gets
+    its own section rather than blank cells in a table it does not fit.
+
+    Rows are the ones whose workload begins `uforth-`; level is the runtime."""
+    uf = [r for r in rows if r["workload"].startswith("uforth-")]
+    if not uf:
+        return ""
+    latest, order = {}, []
+    src = ""
+    for r in uf:
+        w = r["workload"][len("uforth-"):]
+        if w not in order:
+            order.append(w)
+        latest[(w, r["level"])] = r
+        if r["src_sha"]:
+            src = r["src_sha"]
+    # only render columns for runtimes actually present, in a sensible order
+    known = ["cpython", "cpython-O", "pypy", "pxx"]
+    levels = [l for l in known
+              if any((w, l) in latest for w in order)]
+    head = "<tr><th>workload" + "".join("<th>%s" % l for l in levels)
+    head += "<th>pxx vs cpython<th>pxx peak RSS</tr>"
+    tab = head
+    for w in order:
+        cells = ["<td><code>%s</code>" % html.escape(w)]
+        vals = {}
+        for l in levels:
+            r = latest.get((w, l))
+            if r:
+                vals[l] = r["ms"]
+                cells.append("<td class=num>%.0f" % r["ms"])
+            else:
+                cells.append("<td class=dim>—")
+        # pxx vs cpython: <1x = pxx slower (the current reality); flag it
+        if "cpython" in vals and "pxx" in vals and vals["pxx"]:
+            ratio = vals["cpython"] / vals["pxx"]
+            cls = "win" if ratio >= 1.0 else "lose"
+            spd = "<span class=%s>%.2fx</span>" % (cls, ratio)
+        else:
+            spd = "—"
+        cells.append("<td class=num>%s" % spd)
+        pxx_row = latest.get((w, "pxx"))
+        rss = pxx_row["rss"] if pxx_row else 0
+        cells.append("<td class=num>%s"
+                     % ("%.0f MB" % (rss / 1024) if rss else "—"))
+        tab += "<tr>" + "".join(cells) + "</tr>"
+    note = ("<p class=dim>Same <code>uforth.py</code> (a real ~4300-line NilPy "
+            "program) on each runtime, same Forth workloads. ms = min wall over "
+            "repeated runs. <code>pxx vs cpython</code> &lt;1x means pxx is "
+            "slower than CPython (the current Track&nbsp;O gap). Source: "
+            "uforth@%s.</p>" % (html.escape(src) or "?"))
+    return ("<h2>uforth — cross-runtime</h2>%s<table>%s</table>" % (note, tab))
+
+
 def render_bench(tdir, links):
     rows = read_bench(tdir)
     # latest ms per (workload, level), preserving first-seen workload order.
+    # uforth-* rows are a different axis (runtimes, not opt levels) — pulled
+    # into their own section so they don't render as all-blank here.
     latest, order = {}, []
     for r in rows:
+        if r["workload"].startswith("uforth-"):
+            continue
         if r["workload"] not in order:
             order.append(r["workload"])
         latest[(r["workload"], r["level"])] = r
@@ -311,8 +380,9 @@ def render_bench(tdir, links):
             "compares pxx -O2 against FPC -O2 on the same source "
             "(&gt;1x = slower than FPC). Only FPC-comparable workloads carry an "
             "<code>fpc</code> column.</p>")
+    uforth = render_uforth_bench(rows)
     body = ("<h1>Benchmarks</h1>%s<h2>Latest per workload</h2><table>%s</table>"
-            "<h2>History</h2><table>%s</table>" % (note, tab, hist))
+            "%s<h2>History</h2><table>%s</table>" % (note, tab, uforth, hist))
     return _page("Track T benchmarks", body, links)
 
 
