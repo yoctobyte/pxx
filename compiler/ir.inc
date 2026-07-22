@@ -2020,6 +2020,12 @@ begin
   if (cpi >= 0) and (pathIdx >= 0) and
      (pathIdx < Procs[cpi].ParamCount) and
      (Procs[cpi].Params[pathIdx].TypeKind = tyVariant) and
+     { an open `array of Variant` param carries the ELEMENT type in TypeKind —
+       boxing the whole ARRAY (its handle) into a variant temp handed the
+       callee &temp as the data pointer: Length read stack garbage and every
+       element aliased the temp (bug-a-open-array-of-variant-silent-miscompile,
+       the same TypeKind-is-the-element-type blindspot as tkLength/marshalling). }
+     (not Procs[cpi].Params[pathIdx].IsArray) and
      ((IntToTypeKind(ASTTk[argAST]) <> tyVariant) or
       (not Procs[cpi].Params[pathIdx].IsRef)) then
   begin

@@ -2313,6 +2313,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_qplus_narrow26)" = "caught=5 clean=4 wrap=-294967296"
 	./$(COMPILER) test/test_variant_fn_return_forward.pas /tmp/test_variant_fn_return_forward26
 	test "$$(/tmp/test_variant_fn_return_forward26)" = "$$(printf '2 77\n2 77\n2 77\nforwarded')"
+	./$(COMPILER) test/test_open_array_of_variant.pas /tmp/test_open_array_of_variant26
+	test "$$(/tmp/test_open_array_of_variant26)" = "$$(printf '35\n7\n9')"
 	./$(COMPILER) test/test_overflow_succ_pred.pas /tmp/test_qplus_sp26
 	test "$$(/tmp/test_qplus_sp26)" = "$$(printf 'wrapped-hi 4294967295\ncaught=3')"
 	./$(COMPILER) test/test_range_checks_rplus.pas /tmp/test_rplus26
