@@ -115,8 +115,8 @@ So on that terrain:
 
 The one real follow-up is **memory**, not speed: pxx peak RSS is 582 MB on the
 microbench vs CPython's 24 MB (~24x). That is the pxx runtime/GC footprint on a
-tight loop and the thing worth looking into later — filed as the memory item,
-NOT as a speed regression.
+tight loop and the thing worth looking into later — filed as [[bug-a-runtime-variant-heap-grows-unbounded]] (the memory
+item), NOT as a speed regression.
 
 **Claims discipline for any public copy:** if these ever appear in
 docs/website, frame them honestly — "competitive with CPython on a
