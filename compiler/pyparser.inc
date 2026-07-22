@@ -322,6 +322,12 @@ var
     (feature-nilpy-function-values). -1 when the annotation was not Callable. }
   PyAnnLastProcSig: Integer;
   PyCountAlias: AnsiString;  { local name bound to itertools.count ('' = none) }
+  { True only while parsing a def's RETURN annotation: there Optional[int] maps
+    to tyVariant (None = VT_EMPTY tag) instead of the tyInt64 0-sentinel, so
+    `return d.get(k)` hands back a None distinguishable from a legitimate 0
+    (decide-nilpy-optional-int-none-vs-zero). FIELDS and params keep the
+    0-sentinel mapping, which existing consumers (fpjson) rely on. }
+  PyAnnRetScope: Boolean;
 
 { Token-index annotation parser for the richer grammar dataclass fields use:
     NAME | NAME '[' ann {',' ann} ']' | "ForwardRef" | None
@@ -387,6 +393,11 @@ begin
         the sentinel space is the full address range }
       if Result = tyInteger then Result := tyInt64;
       if Result = tyString then Result := tyAnsiString;
+      { RETURN annotations only: an Optional[int] result is a real variant so
+        None (VT_EMPTY) and a legitimate 0 stay distinct — with the 0-sentinel
+        `if x is not None` took the wrong branch on a valid 0 (uforth's
+        _lookup_local_slot, slot 0 read as absent). }
+      if PyAnnRetScope and (Result = tyInt64) then Result := tyVariant;
     end;
     Exit;
   end;
@@ -6891,7 +6902,13 @@ begin
         PyHdrRetCi := hdrRetRec - REC_UCLASS_BASE;
     end
     else if PyHdrIsProc then begin PyHdrRetType := tyInteger; Next; end
-    else begin PyHdrRetType := PyParseType; PyHdrRetCi := PyLastTypeCi; end;
+    else
+    begin
+      PyAnnRetScope := True;
+      PyHdrRetType := PyParseType;
+      PyAnnRetScope := False;
+      PyHdrRetCi := PyLastTypeCi;
+    end;
   end;
   { `-> str` is an unbounded Python string, so the Result var is MANAGED — the
     method path has mapped it this way all along, and a def returning a string
@@ -7399,7 +7416,9 @@ begin
       Exit;
     end;
     k := j + 3;
+    PyAnnRetScope := True;
     Result := PyAnnTypeAt(k);
+    PyAnnRetScope := False;
     if (Result = tyClass) and (PyAnnLastCi >= 0) then
       retRec := REC_UCLASS_BASE + PyAnnLastCi
     else
