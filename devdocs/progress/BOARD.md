@@ -43,7 +43,6 @@ _none_
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
 | bug-cdecl-indirect-over-6-integer-args | A | 50 | bug | `cdecl` indirect call with more than 6 integer args is rejected | — |
 | bug-nilpy-bitwise-on-float-variant-truncates | A | 30 | bug | NilPy: a bitwise op on a FLOAT variant truncates instead of raising TypeError | — |
-| bug-nilpy-class-value-into-variant-local-mistagged | N | 65 | bug | NilPy: storing a class value into a variant-typed local mis-tags it VT_INT64 | — |
 | bug-nilpy-comprehension-as-for-iterable-segfaults | N | 35 | bug | NilPy: a comprehension used directly as a for-loop iterable segfaults | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-locals-list-pointer-truncated-32bit | N | 55 | bug | NilPy: a list passed to a method truncates its pointer to 32-bit (SIGSEGV) | — |
@@ -107,6 +106,7 @@ _none_
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-default-args-on-nested-defs | N | 55 | feature | NilPy: default arguments as explicit by-value capture | — |
+| feature-nilpy-exception-message-text | N | 30 | feature | NilPy: exception message text — super().__init__(msg) discarded, str(e) empty | — |
 | feature-nilpy-exception-message | N | 55 | feature | NilPy: `Exception(msg)` — the root class takes no arguments | — |
 | feature-nilpy-file-io-and-comprehensions | N | 55 | feature | NilPy: file I/O (`with open`), list comprehensions, and dict literals-in-args | — |
 | feature-nilpy-generator-expression-arg | N | 45 | feature | NilPy: a generator expression as a call argument | — |
@@ -242,7 +242,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (928)
+## done (929)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -547,6 +547,7 @@ _none_
 | bug-nilpy-annotated-assignment-single-token-only | N | 60 | bug | NilPy: an annotated assignment only accepted a SINGLE-TOKEN annotation | — |
 | bug-nilpy-call-returning-class-loses-identity | N | 55 | bug | NilPy: a call returning a CLASS lost its class identity (silent, then SIGSEGV) | — |
 | bug-nilpy-class-typed-field-loses-identity | N | 70 | bug | NilPy: a class-typed field loses its class identity | — |
+| bug-nilpy-class-value-into-variant-local-mistagged | N | 65 | bug | NilPy: storing a class value into a variant-typed local mis-tags it VT_INT64 | — |
 | bug-nilpy-in-on-a-string-segfaults | N | 70 | bug | NilPy: `sub in s` on a STRING segfaults | — |
 | bug-nilpy-method-returning-str-garbage | N | 75 | bug | NilPy: a method returning `str` returns garbage | — |
 | bug-nilpy-not-on-string-always-true | N | 60 | bug | NilPy: `not s` on a string was ALWAYS True (silent wrong branch) | — |
@@ -2622,7 +2623,6 @@ _none_
 - [p 70] [A] bug-a-aarch64-variant-string-compare-always-false
 - [p 70] [A] bug-a-cfront-riscv32-byval-record-result-pxxmemmove
 - [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
-- [p 65] [N] bug-nilpy-class-value-into-variant-local-mistagged
 - [p 65] [P] bug-open-array-param-length-high-zero
 - [p 65] [A] feature-a-typeref-handle
 - [p 65] [N] feature-nilpy-bound-method-value
@@ -2730,6 +2730,7 @@ _none_
 - [p 30] [C] bug-c-compound-literal-address-of
 - [p 30] [A] bug-nilpy-bitwise-on-float-variant-truncates
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
+- [p 30] [N] feature-nilpy-exception-message-text
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
 - [p 30] [D] idea-public-status-page
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear

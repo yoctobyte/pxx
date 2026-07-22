@@ -66,3 +66,6 @@ getitem-typed variant local with a conditional class-reassignment: the
 control-flow type merge / boxing of the class value in the branch mis-tags.
 This is uforth's exact READ-LINE shape (`remainder = entry.get(...)` then
 `if remainder is None: ... remainder = raw`). Isolated to a def body.
+
+## Log
+- 2026-07-22 — resolved, commit fc801b6d.
