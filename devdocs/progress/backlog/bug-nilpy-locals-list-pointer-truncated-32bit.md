@@ -1,0 +1,40 @@
+---
+track: N
+prio: 55
+type: bug
+---
+
+# NilPy: a list passed to a method truncates its pointer to 32-bit (SIGSEGV)
+
+## Symptom
+
+uforth's localstest.fth SIGSEGVs at the first `{: :}` local declaration:
+`: LT0 {: :} ; 0 LT0` crashes. Backtrace:
+
+```
+#0 TPyList.count (Self=0xffffffffb212d9c0) at uforth.py:1102
+#1 _define_local_names at uforth.py:752   (`for name in names:`)
+```
+
+`Self=0xffffffffb212d9c0` — the high 32 bits are all 1s: a 64-bit list pointer
+was loaded/stored through a **32-bit sign-extending** path (`movslq`), so
+`len(names)`/iteration dereferences a truncated wild pointer. The classic
+pointer-width landmine, here on a TPyList value.
+
+`names = list(args) + list(vals)` in `_compile_local_decl`, passed to
+`_define_local_names(names)`. The list built by `list(a) + list(b)` (or the
+method-argument marshalling of it) narrows the handle to 32 bits.
+
+## Likely locus
+
+A tyClass/list value moved through a slot typed 4-byte (tyInteger) somewhere in
+the call `_define_local_names(names)` — either the parameter's frame slot, or a
+`list(x) + list(y)` concat result stored to a 4-byte local. Same family as the
+untyped-nested-def-param-is-tyInteger note (32-bit) in
+project_promotable_int_stages123, and the variant-slot width landmines.
+Reproduce by narrowing `list(a)+list(b)` passed to a def parameter.
+
+## Impact
+
+Blocks the locals conformance set (localstest.fth). Sets already passing:
+core / coreplus / coreext / block / double / exception / facility.
