@@ -57,26 +57,6 @@ type
     constructor Create;
   end;
 
-  { A file object with the mutable methods uforth's file-VFS words call
-    (seek/tell/truncate/read/write/close/flush). These words run only under the
-    exec path (stubbed), so the methods are STUBS — the class exists so the
-    variant method dispatch resolves `entry["file"].truncate(...)` etc. A real
-    file object is feature-lib-pyfile-object. }
-  TPyFile = class
-  public
-    constructor Create;
-    procedure seek(offset: Int64); overload;
-    procedure seek(offset: Int64; whence: Int64); overload;
-    function tell: Int64;
-    procedure truncate(size: Int64);
-    function read: AnsiString; overload;
-    function read(n: Int64): AnsiString; overload;
-    function readline: AnsiString;
-    function write(const s: AnsiString): Int64;
-    procedure close;
-    procedure flush;
-  end;
-
   TPyList = class
   public
     FLen: Integer;
@@ -216,8 +196,28 @@ type
       form binds through the ordinary method keyword-argument path. }
     function decode(const encoding: AnsiString): AnsiString; overload;
     function decode(const encoding: AnsiString; const errors: AnsiString): AnsiString; overload;
+    { bytes.endswith(suffix) — the READ-LINE CR/LF trim }
+    function endswith(sfx: TPyBytes): Boolean;
     property Items[i: Integer]: Integer read at write put; default;
   end;
+
+  { A real OS file (raw x86-64 syscalls, no libc) backing NilPy's open(path,
+    mode) — uforth's CREATE-FILE/OPEN-FILE/READ-LINE/WRITE-FILE/... words. }
+  TPyFile = class
+  public
+    FFd: Int64;
+    constructor Create;
+    function read(u: Int64): TPyBytes;
+    function readline: TPyBytes;
+    function write(b: TPyBytes): Int64;
+    procedure seek(pos: Int64); overload;
+    procedure seek(pos: Int64; whence: Int64); overload;
+    function tell: Int64;
+    procedure truncate(sz: Int64);
+    procedure flush;
+    procedure close;
+  end;
+
 
 { Python's str() for an f-string hole. Overloaded so ARGUMENT TYPE picks the
   spelling, which is the whole point: the shared str() intrinsic lowers every
@@ -266,6 +266,7 @@ function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; over
 function bytearray: TPyBytes; overload;   { bytearray() — an EMPTY buffer }
 function bytearray(n: Integer): TPyBytes; overload;
 function bytes(b: TPyBytes): TPyBytes;
+function pybytes_from_list(l: TPyList): TPyBytes;
 function bytes(const s: AnsiString): TPyBytes; overload;
 function pybytes_find(b: TPyBytes; sub: TPyBytes; start: Integer): Integer;
 function len(b: TPyBytes): Integer; overload;
@@ -345,6 +346,16 @@ function pystdin_readline: AnsiString;
 function pystdin_isatty: Integer;
 function pystr_is_none(const s: AnsiString): Boolean;
 function pyvar_box(const v: Variant): Variant;   { box a value into a variant }
+{ A BOUND METHOD captured as a value (`env["push"] = vm.push`): a heap
+  {code, recv} pair boxed as a VT_BOUNDMETHOD (8) variant. Recv is the receiver
+  the method needs as Self; Code is its entry. Used by the NilPy capture of
+  `obj.method` with no following call (feature-nilpy-bound-method-value). uforth
+  stores these in its exec env; the pyeval interpreter reaches the receiver
+  through env["vm"] rather than invoking them, so a stored bound method must
+  merely not crash. }
+function pybound_new(code, recv: Pointer): Variant;
+function pybound_code(const v: Variant): Pointer;
+function pybound_recv(const v: Variant): Pointer;
 { input([prompt]): a line from stdin without its trailing newline. }
 function pyinput: AnsiString;
 { sys.argv: the command line as a TPyList of strings, argv[0] = program name. }
@@ -480,6 +491,10 @@ function bool(d: Double): Boolean; overload;
 function bool(const s: AnsiString): Boolean; overload;
 function bool(l: TPyList): Boolean; overload;
 function pylist_repeat(l: TPyList; n: Int64): TPyList;
+function pybytes_repeat(b: TPyBytes; n: Int64): TPyBytes;
+function pybytes_concat(a, b: TPyBytes): TPyBytes;
+function pybytes_eq(a, b: TPyBytes): Boolean;
+function pyfile_open(const path, mode: AnsiString): TPyFile;
 { `s.rjust(w)` / `s.rjust(w, fill)` — right-align in a field of w characters.
   Python returns the string UNCHANGED when it is already at least that long
   (it never truncates), and the fill defaults to a space. }
@@ -520,6 +535,7 @@ function pydictcontains(d: TPyDict; const k: Variant): Boolean;
 function pylist_eq(a: TPyList; b: TPyList): Boolean;
 function len(const s: AnsiString): Integer; overload;
 function next(c: TPyCounter): Int64;
+function pyvar_holds(const v: Variant; k: Int64): Boolean;
 function pycontains(l: TPyList; const v: Variant): Boolean;
 function pyvar_contains(const c: Variant; const v: Variant): Boolean;
 { `sub in s` on a STRING is SUBSTRING containment in Python, not element
@@ -988,6 +1004,15 @@ begin
     ki := PPyVarRec(@key)^.Payload;      { list index is an integer key }
     Result := TPyList(o).at(ki);
   end
+  else if o is TPyBytes then
+  begin
+    { bytes/bytearray index -> the integer byte value. Missing this case made
+      `b[i]` on a VARIANT holding bytes (e.g. after `x = None; x = readline()`)
+      raise 'not subscriptable' even though len(x) worked. }
+    ki := PPyVarRec(@key)^.Payload;
+    if ki < 0 then ki := ki + TPyBytes(o).count;
+    Result := pyvar_of_int(TPyBytes(o).at(ki));
+  end
   else
   begin
     WriteLn('TypeError: object is not subscriptable');
@@ -1053,56 +1078,6 @@ begin
   st_size := 0;
 end;
 
-{ TPyFile — all STUBS (the file-VFS words that use them never run; see the class
-  note). Present so the frontend can resolve the method names. }
-constructor TPyFile.Create;
-begin
-end;
-
-procedure TPyFile.seek(offset: Int64);
-begin
-end;
-
-procedure TPyFile.seek(offset: Int64; whence: Int64);
-begin
-end;
-
-function TPyFile.tell: Int64;
-begin
-  Result := 0;
-end;
-
-procedure TPyFile.truncate(size: Int64);
-begin
-end;
-
-function TPyFile.read: AnsiString;
-begin
-  Result := '';
-end;
-
-function TPyFile.read(n: Int64): AnsiString;
-begin
-  Result := '';
-end;
-
-function TPyFile.readline: AnsiString;
-begin
-  Result := '';
-end;
-
-function TPyFile.write(const s: AnsiString): Int64;
-begin
-  Result := Length(s);
-end;
-
-procedure TPyFile.close;
-begin
-end;
-
-procedure TPyFile.flush;
-begin
-end;
 
 function next(c: TPyCounter): Int64;
 begin
@@ -1162,9 +1137,20 @@ end;
   field copy on purpose: ownership transfers, so retain/release would be
   wasted work and, for the shifts, wrong. }
 
+{ Tags whose payload is a MANAGED AnsiString ref and must be refcounted through
+  a slot copy: VT_STRING (6) and VT_PROMO_INT64 (8193, a heap-tier promotable
+  int whose payload is its exact decimal). Missing the promo tag moved the raw
+  pointer with no retain — the payload was freed while the slot still pointed
+  at it, and the recycled bytes surfaced as another string entirely
+  (the container-slot landmine). }
+function PyVarSlotManaged(t: Int64): Boolean;
+begin
+  PyVarSlotManaged := (t = 6) or (t = 8193);
+end;
+
 procedure PyVarSlotClear(dst: PPyVarRec);
 begin
-  if dst^.VType = 6 then PPyAnsiString(@dst^.Payload)^ := '';
+  if PyVarSlotManaged(dst^.VType) then PPyAnsiString(@dst^.Payload)^ := '';
   dst^.VType := 0;
   dst^.Payload := 0;
 end;
@@ -1177,10 +1163,10 @@ var
 begin
   if dst = src then Exit;
   s := '';
-  if src^.VType = 6 then s := PPyAnsiString(@src^.Payload)^;
+  if PyVarSlotManaged(src^.VType) then s := PPyAnsiString(@src^.Payload)^;
   PyVarSlotClear(dst);
   dst^.VType := src^.VType;
-  if src^.VType = 6 then
+  if PyVarSlotManaged(src^.VType) then
     PPyAnsiString(@dst^.Payload)^ := s
   else
     dst^.Payload := src^.Payload;
@@ -1360,7 +1346,25 @@ var
   a, b: PChar;
 begin
   Result := False;
+  { The int-family tags (VT_INT/VT_INT64/VT_BOOL) are ONE Python number and
+    must compare CROSS-TAG: a masked cell comes back VT_INT64 while a
+    define-time key is VT_INT, and the old tag-sensitive compare made
+    xt_table.get(xt) miss its own key (uforth EXECUTE). Python agrees:
+    True == 1 == 1 regardless of provenance. }
+  if ((p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4)) and
+     ((q^.VType = 1) or (q^.VType = 2) or (q^.VType = 4)) then
+  begin
+    Result := p^.Payload = q^.Payload;
+    Exit;
+  end;
   if p^.VType <> q^.VType then Exit;
+  if p^.VType = 8193 then
+  begin
+    { VT_PROMO_INT64: payload is the exact decimal in a managed string —
+      compare CONTENT, not the two string refs }
+    Result := PPyAnsiString(@p^.Payload)^ = PPyAnsiString(@q^.Payload)^;
+    Exit;
+  end;
   if p^.VType = 6 then
   begin
     a := PChar(p^.Payload);
@@ -1379,6 +1383,19 @@ begin
   end
   else
     Result := p^.Payload = q^.Payload;
+end;
+
+{ Does this variant hold the given pylib container? k: 1=list, 2=dict,
+  3=bytes. The runtime side of variant-method dual dispatch. }
+function pyvar_holds(const v: Variant; k: Int64): Boolean;
+var o: TObject;
+begin
+  pyvar_holds := False;
+  if pyvartag(v) <> 7 then Exit;
+  o := TObject(pyvarobj(v));
+  if k = 1 then pyvar_holds := o is TPyList
+  else if k = 2 then pyvar_holds := o is TPyDict
+  else if k = 3 then pyvar_holds := o is TPyBytes;
 end;
 
 function pycontains(l: TPyList; const v: Variant): Boolean;
@@ -1700,10 +1717,28 @@ end;
 function pyvar_to_int(const v: Variant): Int64;
 var
   p: PPyVarRec;
+  ds: AnsiString;
+  i: Integer;
+  r: Int64;
 begin
   p := PPyVarRec(@v);
   if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
     Result := p^.Payload
+  else if p^.VType = 8193 then
+  begin
+    { VT_PROMO_INT64: a heap-tier promotable int (payload = exact decimal in a
+      managed string). Narrowing to a machine int is NilPy's documented mod-2^64
+      two's-complement reading — the same rule the compiler's promo->int store
+      uses (PXXPromoToInt64Wrap) — so the masked-cell idiom stays an identity
+      instead of a TypeError. }
+    ds := PPyAnsiString(@p^.Payload)^;
+    r := 0;
+    for i := 1 to Length(ds) do
+      if ds[i] in ['0'..'9'] then
+        r := r * 10 + (Ord(ds[i]) - 48);   { wrapping mod 2^64 is the point }
+    if (ds <> '') and (ds[1] = '-') then r := -r;
+    Result := r;
+  end
   else if p^.VType = 3 then
     Result := Trunc(PPyDouble(@p^.Payload)^)   { Python int(float) truncates }
   else if p^.VType = 0 then
@@ -1911,7 +1946,11 @@ begin
   else
   begin
     r^.VType := 2;
-    r^.Payload := pyfloordiv_i(pa^.Payload, pb^.Payload);
+    { pyvar_to_int, not raw Payload: a non-int-tagged operand (e.g. a VT_CHAR /
+      VT_STRING digit, or an int arriving under a tag whose value is not stored
+      directly in Payload) otherwise read as 0 -> a spurious divide-by-zero.
+      Mirrors pysub_v/pyadd_v, which already coerce through pyvar_to_int. }
+    r^.Payload := pyfloordiv_i(pyvar_to_int(a), pyvar_to_int(b));
   end;
 end;
 
@@ -1931,7 +1970,9 @@ begin
   else
   begin
     r^.VType := 2;
-    r^.Payload := pyfloormod_i(pa^.Payload, pb^.Payload);
+    { pyvar_to_int, not raw Payload — see pyfloordiv_v: a non-directly-tagged
+      operand otherwise reads 0 and modulo divides by zero. }
+    r^.Payload := pyfloormod_i(pyvar_to_int(a), pyvar_to_int(b));
   end;
 end;
 
@@ -2282,9 +2323,24 @@ begin
 end;
 
 procedure TPyBytes.extend(src: TPyBytes);
-var k, base: Integer; sp, dp: PByte;
+var k, base: Integer; sp, dp: PByte; sl: TPyList;
 begin
   if src = nil then Exit;
+  { A LIST/TUPLE of ints binds to this class param too (overload resolution is
+    not identity-precise): `out.extend((13, 10))` — read its VALUES instead of
+    misreading TPyList fields as byte storage. }
+  if TObject(src) is TPyList then
+  begin
+    sl := TPyList(TObject(src));
+    base := FLen;
+    PyBytesEnsure(Self, FLen + sl.count);
+    for k := 0 to sl.count - 1 do
+    begin
+      dp := PByte(NativeInt(FData) + base + k);
+      dp^ := Byte(pyvar_to_int(sl.at(k)) and $FF);
+    end;
+    Exit;
+  end;
   base := FLen;
   PyBytesEnsure(Self, FLen + src.FLen);
   for k := 0 to src.FLen - 1 do
@@ -2386,14 +2442,38 @@ begin
 end;
 
 procedure pybytes_setslice(b: TPyBytes; lo, hi: Integer; src: TPyBytes);
-var k: Integer; sp, dp: PByte;
+var k, oldLen, delta: Integer; sp, dp: PByte;
 begin
   PySliceBounds(b.FLen, lo, hi);
   if src.FLen <> (hi - lo) then
   begin
-    WriteLn('ValueError: byte slice assignment length mismatch (expected ',
-            hi - lo, ', got ', src.FLen, ')');
-    Halt(1);
+    { Python bytearray slice assignment RESIZES on a length mismatch —
+      inserting or deleting bytes and shifting the tail. uforth's 2VARIABLE
+      leans on this (`memory[h:h+16] = b'..' * 16` with a 64-byte value,
+      thanks to a doubled backslash CPython also sees), so matching the
+      resize is quirk-compatibility, not generosity. }
+    oldLen := b.FLen;
+    delta := src.FLen - (hi - lo);
+    if delta > 0 then
+    begin
+      PyBytesEnsure(b, oldLen + delta);
+      for k := oldLen - 1 downto hi do
+      begin
+        sp := PByte(NativeInt(b.FData) + k);
+        dp := PByte(NativeInt(b.FData) + k + delta);
+        dp^ := sp^;
+      end;
+    end
+    else
+    begin
+      for k := hi to oldLen - 1 do
+      begin
+        sp := PByte(NativeInt(b.FData) + k);
+        dp := PByte(NativeInt(b.FData) + k + delta);
+        dp^ := sp^;
+      end;
+      b.FLen := oldLen + delta;
+    end;
   end;
   for k := 0 to src.FLen - 1 do
   begin
@@ -2874,6 +2954,10 @@ begin
   if nrUnlinkat = 0 then Exit;
   cs := path + #0;
   r := __pxxrawsyscall(nrUnlinkat, -100, Int64(@cs[1]), 0, 0, 0, 0);   { AT_FDCWD }
+  { CPython os.remove RAISES on failure (deleting a missing file must be a
+    catchable error — Forth-2012 DELETE-FILE expects a nonzero ior, not 0). }
+  if r < 0 then
+    raise OSError.Create('FileNotFoundError: ' + path);
   Result := Integer(r);
 end;
 
@@ -2902,14 +2986,28 @@ begin
   if nrRenameat = 0 then Exit;
   cs := src + #0; cd := dst + #0;
   r := __pxxrawsyscall(nrRenameat, -100, Int64(@cs[1]), -100, Int64(@cd[1]), 0, 0);
+  { CPython os.rename raises on failure, same as os.remove above }
+  if r < 0 then
+    raise OSError.Create('FileNotFoundError: ' + src);
   Result := Integer(r);
 end;
 
 function pyos_stat(const path: AnsiString): TPyStat;
+var cs: AnsiString; r: Int64; buf: array[0..143] of Byte;
 begin
-  { STUB: a zeroed result. The only caller runs under the exec path (stubbed),
-    so the value is never observed; the object exists so `.st_mode` compiles. }
+  { Real stat on x86-64 (uforth FILE-STATUS: a missing file must raise a
+    catchable OSError like CPython). Other targets keep the zeroed stub —
+    their struct stat layouts differ and no gated caller observes the value. }
   Result := TPyStat.Create;
+{$ifdef CPUX86_64}
+  cs := path + #0;
+  FillChar(buf[0], SizeOf(buf), 0);
+  r := __pxxrawsyscall(4, Int64(@cs[1]), Int64(@buf[0]), 0, 0, 0, 0);  { stat }
+  if r < 0 then
+    raise OSError.Create('FileNotFoundError: ' + path);
+  Result.st_mode := PInt64(@buf[24])^ and $FFFFFFFF;   { u32 st_mode (uid sits above) }
+  Result.st_size := PInt64(@buf[48])^;
+{$endif}
 end;
 
 function pystdin_readline: AnsiString;
@@ -2945,6 +3043,31 @@ end;
 function pyvar_box(const v: Variant): Variant;
 begin
   Result := v;
+end;
+
+type
+  TPyBoundRec = record Code, Recv: Pointer; end;
+  PPyBoundRec = ^TPyBoundRec;
+
+function pybound_new(code, recv: Pointer): Variant;
+var b: PPyBoundRec; r: PPyVarRec;
+begin
+  b := GetMem(SizeOf(TPyBoundRec));
+  b^.Code := code;
+  b^.Recv := recv;
+  r := PPyVarRec(@Result);
+  r^.VType := 8;                       { VT_BOUNDMETHOD }
+  r^.Payload := Int64(NativeInt(b));
+end;
+
+function pybound_code(const v: Variant): Pointer;
+begin
+  pybound_code := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.Code;
+end;
+
+function pybound_recv(const v: Variant): Pointer;
+begin
+  pybound_recv := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.Recv;
 end;
 
 { input(): read one line from stdin and drop the trailing newline, as Python's
@@ -3077,6 +3200,13 @@ end;
 function bytes(b: TPyBytes): TPyBytes;
 var k: Integer; src, dst: PByte;
 begin
+  { A LIST argument binds to this overload too (class-arg overload resolution
+    is not identity-precise): hand it to the from-list builder. }
+  if TObject(b) is TPyList then
+  begin
+    Result := pybytes_from_list(TPyList(TObject(b)));
+    Exit;
+  end;
   { bytes(x) is an immutable COPY in Python; immutability is not modelled, but
     the copy is, because uforth uses it to snapshot memory }
   Result := TPyBytes.Create(b.FLen);
@@ -3085,6 +3215,22 @@ begin
     src := PByte(NativeInt(b.FData) + k);
     dst := PByte(NativeInt(Result.FData) + k);
     dst^ := src^;
+  end;
+end;
+
+{ bytes([32, 33]) — from a LIST of small ints. Called from the bytes() copy
+  overload via a runtime `is` check: overload resolution binds ANY class arg
+  to the first class-typed param, so a list arg arrived AS the TPyBytes param
+  and the variant slots' TAG bytes were read as data (uforth FILL wrote tag
+  bytes into memory). }
+function pybytes_from_list(l: TPyList): TPyBytes;
+var k: Integer; p: PByte;
+begin
+  Result := TPyBytes.Create(l.count);
+  for k := 0 to l.count - 1 do
+  begin
+    p := PByte(NativeInt(Result.FData) + k);
+    p^ := Byte(pyvar_to_int(l.at(k)) and $FF);
   end;
 end;
 
@@ -3613,6 +3759,165 @@ begin
       for i := 0 to l.count - 1 do
         r.append(l.at(i));
   Result := r;
+end;
+
+{ `a + b` list concatenation (Python). A fresh list of a's then b's elements. }
+function pylist_concat(a, b: TPyList): TPyList;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  if a <> nil then for i := 0 to a.count - 1 do r.append(a.at(i));
+  if b <> nil then for i := 0 to b.count - 1 do r.append(b.at(i));
+  Result := r;
+end;
+
+{ `b * n` — Python bytes repetition (uforth FILL's `bytes([ch]) * u`).
+  TPyBytes deliberately has no .append (name-collision note at the class), so
+  the result is sized up front and filled with put. }
+function pybytes_repeat(b: TPyBytes; n: Int64): TPyBytes;
+var r: TPyBytes; i, k, w: Integer;
+begin
+  if (b = nil) or (n < 0) then n := 0;
+  if b = nil then w := 0 else w := b.count;
+  r := TPyBytes.Create(w * n);
+  for k := 0 to n - 1 do
+    for i := 0 to w - 1 do
+      r.put(k * w + i, b.at(i));
+  Result := r;
+end;
+
+{ b1 + b2 — Python bytes concatenation (uforth WRITE-LINE's `data + b'\n'`). }
+function pybytes_concat(a, b: TPyBytes): TPyBytes;
+var r: TPyBytes; i, na, nb: Integer;
+begin
+  if a = nil then na := 0 else na := a.count;
+  if b = nil then nb := 0 else nb := b.count;
+  r := TPyBytes.Create(na + nb);
+  for i := 0 to na - 1 do r.put(i, a.at(i));
+  for i := 0 to nb - 1 do r.put(na + i, b.at(i));
+  Result := r;
+end;
+
+{ bytes VALUE equality (`raw == b""`): pointer compare is Python-wrong. }
+function pybytes_eq(a, b: TPyBytes): Boolean;
+var i, na, nb: Integer;
+begin
+  Result := False;
+  if a = nil then na := 0 else na := a.count;
+  if b = nil then nb := 0 else nb := b.count;
+  if na <> nb then Exit;
+  for i := 0 to na - 1 do
+    if a.at(i) <> b.at(i) then Exit;
+  Result := True;
+end;
+
+function TPyBytes.endswith(sfx: TPyBytes): Boolean;
+var i, n, m: Integer;
+begin
+  Result := False;
+  n := count;
+  if sfx = nil then begin Result := True; Exit; end;
+  m := sfx.count;
+  if m > n then Exit;
+  for i := 0 to m - 1 do
+    if at(n - m + i) <> sfx.at(i) then Exit;
+  Result := True;
+end;
+
+{ ---- TPyFile: raw-syscall file handles (x86-64) ---- }
+
+constructor TPyFile.Create;
+begin
+  FFd := -1;
+end;
+
+function pyfile_open(const path, mode: AnsiString): TPyFile;
+var flags, fd: Int64; z: AnsiString; i: Integer; wantCreate, wantRW: Boolean;
+begin
+  wantCreate := False; wantRW := False;
+  for i := 1 to Length(mode) do
+  begin
+    if mode[i] = 'w' then wantCreate := True;
+    if mode[i] = '+' then wantRW := True;
+  end;
+  if wantCreate then flags := 2 + 64 + 512        { O_RDWR|O_CREAT|O_TRUNC }
+  else if wantRW then flags := 2                  { O_RDWR }
+  else flags := 0;                                { O_RDONLY }
+  z := path + #0;
+  fd := __pxxrawsyscall(2, Int64(NativeInt(PChar(z))), flags, 420, 0, 0, 0);  { open, 0644 }
+  if fd < 0 then
+    { CPython open() raises a CATCHABLE OSError (uforth's OPEN-FILE wraps the
+      call in try/except and turns it into a nonzero ior — the Forth-2012
+      DELETE-FILE test reopens a deleted file expecting failure, not a halt). }
+    raise OSError.Create('FileNotFoundError: ' + path);
+  Result := TPyFile.Create;
+  Result.FFd := fd;
+end;
+
+function TPyFile.read(u: Int64): TPyBytes;
+var r: TPyBytes; got: Int64;
+begin
+  if u < 0 then u := 0;
+  r := TPyBytes.Create(u);
+  got := __pxxrawsyscall(0, FFd, Int64(NativeInt(r.FData)), u, 0, 0, 0);
+  if got < 0 then got := 0;
+  r.FLen := got;
+  Result := r;
+end;
+
+function TPyFile.readline: TPyBytes;
+var r: TPyBytes; got: Int64; ch: Byte;
+begin
+  { one byte at a time — line reads are rare and short in the corpus }
+  r := TPyBytes.Create(0);
+  while True do
+  begin
+    got := __pxxrawsyscall(0, FFd, Int64(NativeInt(@ch)), 1, 0, 0, 0);
+    if got <= 0 then Break;
+    r.append(ch);
+    if ch = 10 then Break;
+  end;
+  Result := r;
+end;
+
+function TPyFile.write(b: TPyBytes): Int64;
+begin
+  if (b = nil) or (b.FLen = 0) then begin Result := 0; Exit; end;
+  Result := __pxxrawsyscall(1, FFd, Int64(NativeInt(b.FData)), b.FLen, 0, 0, 0);
+end;
+
+procedure TPyFile.seek(pos: Int64);
+var r: Int64;
+begin
+  r := __pxxrawsyscall(8, FFd, pos, 0, 0, 0, 0);   { lseek SEEK_SET }
+end;
+
+procedure TPyFile.seek(pos: Int64; whence: Int64);
+var r: Int64;
+begin
+  r := __pxxrawsyscall(8, FFd, pos, whence, 0, 0, 0);
+end;
+
+function TPyFile.tell: Int64;
+begin
+  Result := __pxxrawsyscall(8, FFd, 0, 1, 0, 0, 0);   { lseek SEEK_CUR }
+end;
+
+procedure TPyFile.truncate(sz: Int64);
+var r: Int64;
+begin
+  r := __pxxrawsyscall(77, FFd, sz, 0, 0, 0, 0);   { ftruncate }
+end;
+
+procedure TPyFile.flush;
+begin
+  { raw fds are unbuffered — nothing to do }
+end;
+
+procedure TPyFile.close;
+var r: Int64;
+begin
+  r := __pxxrawsyscall(3, FFd, 0, 0, 0, 0, 0);
 end;
 
 { repr() dispatching on the RUNTIME tag, so a container element nested inside a

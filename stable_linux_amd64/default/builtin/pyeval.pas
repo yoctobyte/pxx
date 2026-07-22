@@ -59,6 +59,39 @@ procedure EvalPyStmts(const src: AnsiString; g: TPyDict; l: TPyDict);
 procedure PyHostCall(vmobj: Pointer; const name: AnsiString;
                      args: TPyList; var res: Variant);
 
+{ Reverse bridge: invoke a captured pyeval closure (a nested `def` passed to a
+  host method as a value) with one Variant argument. NilPy's PyMakeDynCall routes
+  here when the callee variant carries the VT_PYCLOSURE tag. }
+function PyClosureCall1(const clv: Variant; const a0: Variant): Variant;
+
+{ Pointer-form reverse bridge: a closure stored in a Callable/Pointer field
+  (Word.native) and called as `word.native(vm2)`. pyclosure_is tells a closure
+  object apart from a real compiled function address so the field-call site can
+  branch. }
+function pyclosure_is(p: Pointer): Boolean;
+function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;
+
+{ Build a closure from raw SOURCE text — the compiled frontend's lowering of a
+  Python `lambda`: `lambda vm: vm.push(A)` becomes
+  pyclosure_src_new('vm', 'return vm.push(A)') with each free name's VALUE
+  captured at build time via pyclosure_src_cap (returns the object, so the
+  frontend can chain caps as one expression). The result is the same
+  magic-sentinel closure object Word.native already dispatches on. }
+function pyclosure_src_new(const params, src: AnsiString): Pointer;
+function pyclosure_src_cap(obj: Pointer; const name: AnsiString; const v: Variant): Pointer;
+
+{ BOUND COMPILED FUNCTION: a nested def taken as a value whose captures must
+  travel with it (uforth's MARKER: `def restore(v): ...snapshot locals...;
+  define_word(name, native=restore)`). The object carries the COMPILED code
+  address plus each captured value as a register word; the field-call bridge
+  recognises it by magic (like a closure) and calls code(arg, bound...).
+  The body runs NATIVELY — no pyeval subset limits. }
+function pyboundfn_new(code: Pointer; n: Int64; a0var: Int64): Pointer;
+function pyboundfn_bind(obj: Pointer; idx: Int64; v: Int64): Pointer;
+function pyboundfn_is(p: Pointer): Boolean;
+function pyboundfn_bind_var(obj: Pointer; idx: Int64; const v: Variant): Pointer;
+function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
+
 implementation
 
 const
@@ -74,6 +107,7 @@ const
   PK_INT    = 2;
   PK_FLOAT  = 3;
   PK_STR    = 4;
+  PK_BYTES  = 14;   { b'...' literal — chars are byte values }
   PK_OP     = 5;
   PK_NL     = 6;
   PK_INDENT = 7;
@@ -123,6 +157,17 @@ type
   TIFn0 = function(self: Pointer): Int64;
   TIFn1 = function(self: Pointer; const a: Variant): Int64;
   TIFn2 = function(self: Pointer; const a, b: Variant): Int64;
+  { Pointer-family shape: every param is a pointer-sized register value
+    (int/int64/bool/char/pointer/class/AnsiString-by-value), passed as an Int64 in
+    an integer register, result an Int64 (a class/pointer return, or an ordinal).
+    Covers annotated host methods like `define_word(name: str, native: Callable,
+    forth_body, immediate: bool) -> Word` that the all-Variant path cannot call. }
+  TPFn0 = function(self: Pointer): Int64;
+  TPFn1 = function(self: Pointer; a: Int64): Int64;
+  TPFn2 = function(self: Pointer; a, b: Int64): Int64;
+  TPFn3 = function(self: Pointer; a, b, c: Int64): Int64;
+  TPFn4 = function(self: Pointer; a, b, c, d: Int64): Int64;
+  TPFn5 = function(self: Pointer; a, b, c, d, e: Int64): Int64;
 
 { ---- variant makers (build via pointer writes -> safe as functions) ---- }
 
@@ -183,15 +228,17 @@ begin
   IsIntishV := (t = 1) or (t = 2) or (t = 4) or (t = VT_PROMO);
 end;
 
-{ Int64 value of any int-ish variant, promo included (truncates a promo that
-  exceeds Int64 — callers coerce only where a 64-bit cell is expected). }
+{ Int64 value of any int-ish variant, promo included (a promo that exceeds
+  Int64 narrows mod 2^64, two's complement — callers coerce only where a
+  64-bit cell is expected, and the wrap is what keeps the masked-cell idiom an
+  identity; the CHECKED PXXPromoToInt64 trapped mid-idiom). }
 function PyToI64(const v: Variant): Int64;
 var s: array[0..1] of NativeInt;
 begin
   if IsPromoV(v) then
   begin
     PXXPromoInit(@s); PXXPromoFromVariant(@s, @v);
-    PyToI64 := PXXPromoToInt64(@s);
+    PyToI64 := PXXPromoToInt64Wrap(@s);
     PXXPromoClear(@s);
   end
   else PyToI64 := pyvar_to_int(v);
@@ -206,7 +253,8 @@ end;
 
 { a op b through promotable-int; the result auto-demotes to VT_INT64 when it
   fits (PXXPromoToVariant), so bignum never lingers once it is back in range.
-  op: 1 add, 2 sub, 3 mul, 4 floordiv, 5 mod. }
+  op: 1 add, 2 sub, 3 mul, 4 floordiv, 5 mod, 6 and, 7 or, 8 xor,
+  9 shl, 10 shr (the bitwise five have Python two's-complement semantics). }
 procedure PromoOp(const a, b: Variant; op: Integer; var res: Variant);
 var pa, pb, pr: array[0..1] of NativeInt;
 begin
@@ -217,6 +265,11 @@ begin
   else if op = 2 then PXXPromoSub(@pr, @pa, @pb)
   else if op = 3 then PXXPromoMul(@pr, @pa, @pb)
   else if op = 4 then PXXPromoDiv(@pr, @pa, @pb)
+  else if op = 6 then PXXPromoAnd(@pr, @pa, @pb)
+  else if op = 7 then PXXPromoOr(@pr, @pa, @pb)
+  else if op = 8 then PXXPromoXor(@pr, @pa, @pb)
+  else if op = 9 then PXXPromoShl(@pr, @pa, @pb)
+  else if op = 10 then PXXPromoShr(@pr, @pa, @pb)
   else PXXPromoMod(@pr, @pa, @pb);
   PXXPromoToVariant(@res, @pr);
   PXXPromoClear(@pa); PXXPromoClear(@pb); PXXPromoClear(@pr);
@@ -265,7 +318,17 @@ procedure PyIMul(const a, b: Variant; var res: Variant);
 var ia, ib, r: Int64;
 begin
   if IsPromoV(a) or IsPromoV(b) then begin PromoOp(a, b, 3, res); Exit; end;
-  ia := pyvar_to_int(a); ib := pyvar_to_int(b); r := ia * ib;
+  ia := pyvar_to_int(a); ib := pyvar_to_int(b);
+  { the div-based overflow probe below itself SIGFPEs when r = Low(Int64) and
+    ia = -1 (hardware idiv overflow), so the -1 multiplier is decided here:
+    it overflows only for ib = Low(Int64). }
+  if ia = -1 then
+  begin
+    if ib = Low(Int64) then PromoOp(a, b, 3, res)
+    else res := pyvar_of_int(-ib);
+    Exit;
+  end;
+  r := ia * ib;
   if (ia <> 0) and (r div ia <> ib) then PromoOp(a, b, 3, res)
   else res := pyvar_of_int(r);
 end;
@@ -273,12 +336,19 @@ end;
 procedure PyIFloorDiv(const a, b: Variant; var res: Variant);
 begin
   if IsPromoV(a) or IsPromoV(b) then PromoOp(a, b, 4, res)
+  { Low(Int64) // -1 = 2^63, past Int64 — and the hardware idiv traps SIGFPE
+    on exactly that pair, so it must promote BEFORE reaching pyfloordiv_v. }
+  else if (pyvar_to_int(a) = Low(Int64)) and (pyvar_to_int(b) = -1) then
+    PromoOp(a, b, 4, res)
   else res := pyfloordiv_v(a, b);
 end;
 
 procedure PyIMod(const a, b: Variant; var res: Variant);
 begin
   if IsPromoV(a) or IsPromoV(b) then PromoOp(a, b, 5, res)
+  { same idiv SIGFPE pair as PyIFloorDiv (the result is simply 0) }
+  else if (pyvar_to_int(a) = Low(Int64)) and (pyvar_to_int(b) = -1) then
+    PromoOp(a, b, 5, res)
   else res := pymod_v(a, b);
 end;
 
@@ -290,51 +360,41 @@ begin
   PyIMul(a, p, res);
 end;
 
-{ `a >> n` == floor(a / 2^n) (Python arithmetic shift). Promo -> floordiv;
-  Int64 -> the existing sign-propagating shift. }
+{ `a >> n` == floor(a / 2^n) (Python arithmetic shift). Promo -> the promo
+  runtime's arithmetic shr; Int64 -> the existing sign-propagating shift. }
 procedure PyIShr(const a, nv: Variant; var res: Variant);
-var p: Variant;
 begin
-  if IsPromoV(a) then begin Pow2V(PyToI64(nv), p); PromoOp(a, p, 4, res); end
+  if IsPromoV(a) then PromoOp(a, nv, 10, res)
   else res := pyshr_v(a, nv);
 end;
 
-{ Is v an all-ones mask 2^k - 1? returns k. Handles the corpus's 0xFFFF...FFFF
-  (2^64-1, a promo) and any Int64-fitting all-ones mask. }
-function MaskPow2(const v: Variant; var k: Int64): Boolean;
-var iv, t: Int64; s: array[0..1] of NativeInt; txt: AnsiString;
-begin
-  MaskPow2 := False;
-  if IsPromoV(v) then
-  begin
-    PXXPromoInit(@s); PXXPromoFromVariant(@s, @v); txt := PXXPromoToStr(@s);
-    PXXPromoClear(@s);
-    if txt = '18446744073709551615' then begin k := 64; MaskPow2 := True; end;
-    Exit;
-  end;
-  iv := pyvar_to_int(v);
-  if iv <= 0 then Exit;
-  if (iv and (iv + 1)) <> 0 then Exit;   { not all-ones }
-  k := 0; t := iv;
-  while t > 0 do begin t := t shr 1; k := k + 1; end;
-  MaskPow2 := True;
-end;
-
-{ `a & b`. Both Int64 -> plain and. One side promo -> the other must be an
-  all-ones mask (2^k-1), giving `value mod 2^k` (== keep low k bits, Python's
-  unsigned masking). A general bignum bitwise-and is not supported. }
+{ `a & b`. Both Int64 -> plain and (Int64 AND is already two's complement).
+  A promo side -> the promo runtime's bitwise AND (Python two's-complement
+  fixed-width view), which makes `-2 & 0xFFFFFFFFFFFFFFFF` the positive
+  unsigned reading — the earlier mask-only mod-2^k rewrite kept the SIGN of a
+  negative operand (Pascal mod truncates) and broke exactly those cells. }
 procedure PyIBitAnd(const a, b: Variant; var res: Variant);
-var k: Int64; p: Variant;
 begin
   if (not IsPromoV(a)) and (not IsPromoV(b)) then
-  begin res := pyvar_of_int(pyvar_to_int(a) and pyvar_to_int(b)); Exit; end;
-  if MaskPow2(b, k) then begin Pow2V(k, p); PromoOp(a, p, 5, res); end
-  else if MaskPow2(a, k) then begin Pow2V(k, p); PromoOp(b, p, 5, res); end
+    res := pyvar_of_int(pyvar_to_int(a) and pyvar_to_int(b))
   else
-  begin
-    writeln('pyeval: bignum bitwise-and needs a power-of-2-minus-1 mask');
-    Halt(1);
-  end;
+    PromoOp(a, b, 6, res);
+end;
+
+procedure PyIBitOr(const a, b: Variant; var res: Variant);
+begin
+  if (not IsPromoV(a)) and (not IsPromoV(b)) then
+    res := pyvar_of_int(pyvar_to_int(a) or pyvar_to_int(b))
+  else
+    PromoOp(a, b, 7, res);
+end;
+
+procedure PyIBitXor(const a, b: Variant; var res: Variant);
+begin
+  if (not IsPromoV(a)) and (not IsPromoV(b)) then
+    res := pyvar_of_int(pyvar_to_int(a) xor pyvar_to_int(b))
+  else
+    PromoOp(a, b, 8, res);
 end;
 
 function PyICmp(const a, b: Variant): Int64;
@@ -347,6 +407,22 @@ function PyIEq(const a, b: Variant): Boolean;
 begin
   if IsPromoV(a) or IsPromoV(b) then PyIEq := PromoCmp(a, b) = 0
   else PyIEq := pyeq_v(a, b);
+end;
+
+{ `is` identity, plus the compiled Optional[str] narrowing: a host method typed
+  Optional[str] returns None as an EMPTY AnsiString across the trampoline (the
+  documented sentinel), so `tok is None` must accept '' — without it EXTRA.UFO's
+  `.( ` loop (`tok = vm.next_token(); if tok is None: break`) never saw the end
+  of the line and re-spun the tokenizer forever. }
+function PyIsIdentity(const a, b: Variant): Boolean;
+begin
+  if ((PPyRec(@a)^.VType = 0) and (PPyRec(@b)^.VType = 6) and
+      (PPyAnsiString(@PPyRec(@b)^.Payload)^ = '')) or
+     ((PPyRec(@b)^.VType = 0) and (PPyRec(@a)^.VType = 6) and
+      (PPyAnsiString(@PPyRec(@a)^.Payload)^ = '')) then
+    PyIsIdentity := True
+  else
+    PyIsIdentity := PyIEq(a, b);
 end;
 
 { Parse an integer/hex literal that overflowed Int64 into a promo variant. }
@@ -438,6 +514,11 @@ var
   vp0: TVPr0; vp1: TVPr1; vp2: TVPr2; vp3: TVPr3; vp4: TVPr4; vp5: TVPr5;
   sf0: TSFn0; sf1: TSFn1; sf2: TSFn2;
   if0: TIFn0; if1: TIFn1; if2: TIFn2;
+  pf0: TPFn0; pf1: TPFn1; pf2: TPFn2; pf3: TPFn3; pf4: TPFn4; pf5: TPFn5;
+  ptrFamily: Boolean;
+  pa: array[0..4] of Int64;
+  psHold: array[0..4] of AnsiString;   { keep AnsiString-by-value args alive across the call }
+  pret: Int64;
 begin
   cls := GetInstanceRTTI(vmobj);
   if cls = nil then begin writeln('pyeval: no RTTI on vm for host call ', name); Halt(1); end;
@@ -471,10 +552,67 @@ begin
   if pk <> nil then
     for i := 1 to n do
       if pk[i] <> TK_VARIANT then allVariant := False;
+
+  { --- pointer-family shape: an annotated host method whose params are all
+        pointer-sized register values (int/int64/bool/char/pointer/class/
+        AnsiString-by-value). uforth's `define_word(name: str, native: Callable,
+        forth_body, immediate: bool) -> Word` is the driver. Each arg is coerced
+        to the Int64 the callee's ABI expects in an integer register; omitted
+        trailing params are filled from their per-kind zero default (None -> nil,
+        False -> 0), matching Python's defaults. --- }
   if not allVariant then
   begin
-    writeln('pyeval: host method ', name, ' has a non-Variant, non-Double param shape');
-    Halt(1);
+    ptrFamily := (n <= 5) and (pk <> nil);
+    if ptrFamily then
+      for i := 1 to n do
+        if not ((pk[i] = 1) or (pk[i] = 2) or (pk[i] = 3) or (pk[i] = 13) or
+                (pk[i] = 17) or (pk[i] = 6) or (pk[i] = 23)) then ptrFamily := False;
+    if not ptrFamily then
+    begin
+      writeln('pyeval: host method ', name, ' has an unsupported param shape');
+      Halt(1);
+    end;
+    for i := 0 to 4 do pa[i] := 0;
+    for i := 1 to n do
+    begin
+      if (i - 1) >= nargs then
+        pa[i-1] := 0            { omitted -> per-kind zero default }
+      else if pk[i] = 23 then
+      begin
+        psHold[i-1] := pystr_of(args.at(i-1));
+        pa[i-1] := Int64(NativeInt(Pointer(psHold[i-1])));
+      end
+      else if (pk[i] = 17) or (pk[i] = 6) then
+      begin
+        { a Pointer/Callable/class param: a closure -> its object pointer, an
+          object/function value -> its payload pointer, None -> nil. }
+        a0 := args.at(i-1);
+        case PPyRec(@a0)^.VType of
+          VT_PYCLOSURE: pa[i-1] := PPyRec(@a0)^.Payload;
+          7:            pa[i-1] := PPyRec(@a0)^.Payload;
+          0:            pa[i-1] := 0;
+        else            pa[i-1] := pyvar_to_int(a0);
+        end;
+      end
+      else
+        pa[i-1] := pyvar_to_int(args.at(i-1));   { int/int64/bool/char }
+    end;
+    code := mi^.Code;
+    case n of
+      0: begin pf0 := TPFn0(code); pret := pf0(vmobj); end;
+      1: begin pf1 := TPFn1(code); pret := pf1(vmobj, pa[0]); end;
+      2: begin pf2 := TPFn2(code); pret := pf2(vmobj, pa[0], pa[1]); end;
+      3: begin pf3 := TPFn3(code); pret := pf3(vmobj, pa[0], pa[1], pa[2]); end;
+      4: begin pf4 := TPFn4(code); pret := pf4(vmobj, pa[0], pa[1], pa[2], pa[3]); end;
+      5: begin pf5 := TPFn5(code); pret := pf5(vmobj, pa[0], pa[1], pa[2], pa[3], pa[4]); end;
+    end;
+    { box the result by its kind: class/pointer -> VT_OBJECT; ordinal -> int;
+      void (rk=0) -> None. }
+    if (rk = 6) or (rk = 17) then
+    begin PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := pret; end
+    else if rk = 0 then res := MakeNone
+    else res := pyvar_of_int(pret);
+    Exit;
   end;
   if nargs < n then
   begin writeln('pyeval: too few args to ', name, ' (need ', n, ', got ', nargs, ')'); Halt(1); end;
@@ -569,11 +707,38 @@ var
   kind: Int64;
   p: Pointer;
   r: PPyRec;
+  mi: PMethInfo;
+  noArgs: TPyList;
+  gname: AnsiString;
 begin
   cls := GetInstanceRTTI(obj);
   if cls = nil then begin writeln('pyeval: no RTTI for attribute ', name); Halt(1); end;
   p := GetFieldPtr(obj, cls, name, kind);
-  if p = nil then begin writeln('pyeval: object has no attribute ', name); Halt(1); end;
+  if p = nil then
+  begin
+    { A @property compiles to a METHOD, so an attribute read that misses the
+      fields must invoke a 0-arg method of that name (uforth's `vm.base` — a
+      miss here read the dynattr store instead, yielded None, and `ud % base`
+      divided by zero). Arity 1 = self only, the getter shape; anything wider
+      is a real method and stays a plain (dynattr) miss so `vm.push` as a
+      value is not suddenly a call. }
+    gname := '__prop_get_' + name;      { the @property getter's mangled name }
+    mi := PyFindMethCI(cls, gname);
+    if mi = nil then
+    begin
+      gname := name;
+      mi := PyFindMethCI(cls, name);
+    end;
+    if (mi <> nil) and (mi^.Arity = 1) then
+    begin
+      noArgs := TPyList.Create;
+      PyHostCall(obj, gname, noArgs, res);
+      noArgs.Free;
+      Exit;
+    end;
+    res := pydynattr_get(obj, name);
+    Exit;
+  end;
   r := PPyRec(@res);
   case kind of
     1: res := pyvar_of_int(PLongInt(p)^);        { tyInteger — 4-byte }
@@ -603,7 +768,7 @@ begin
   cls := GetInstanceRTTI(obj);
   if cls = nil then begin writeln('pyeval: no RTTI for attribute ', name); Halt(1); end;
   p := GetFieldPtr(obj, cls, name, kind);
-  if p = nil then begin writeln('pyeval: object has no attribute ', name); Halt(1); end;
+  if p = nil then begin pydynattr_set(obj, name, val); Exit; end;
   case kind of
     1: PLongInt(p)^ := pyvar_to_int(val);
     2: if pyvar_to_bool(val) then PByte(p)^ := 1 else PByte(p)^ := 0;
@@ -624,7 +789,20 @@ end;
 procedure PySubscriptGet(const container: Variant; const index: Variant;
                          var res: Variant);
 var o: TObject; li: TPyList; by: TPyBytes; di: TPyDict; i, n: Int64;
+    s: AnsiString;
 begin
+  if PPyRec(@container)^.VType = 6 then
+  begin
+    { s[i] — a one-character string, Python indexing (the pictured-numeric
+      digit table `'0123456789...'[digit]` comes through here) }
+    s := PPyAnsiString(@PPyRec(@container)^.Payload)^;
+    n := Length(s); i := pyvar_to_int(index);
+    if i < 0 then i := i + n;
+    if (i < 0) or (i >= n) then
+    begin writeln('pyeval: string index out of range'); Halt(1); end;
+    res := MakeStr(s[i + 1]);
+    Exit;
+  end;
   if PPyRec(@container)^.VType <> 7 then
   begin writeln('pyeval: cannot subscript a non-container'); Halt(1); end;
   o := TObject(Pointer(PPyRec(@container)^.Payload));
@@ -922,8 +1100,8 @@ end;
 
 procedure Tokenize(const s: AnsiString);
 var
-  c, c2: Char;
-  start: Integer;
+  c, c2, hc: Char;
+  start, hv, hk: Integer;
   ident, op, slit: AnsiString;
   iv, dg: Int64;
   fv, scale: Double;
@@ -1051,6 +1229,56 @@ begin
       if ((c = 'f') or (c = 'F')) and (Pos + 1 <= SLen) and
          ((Src[Pos+1] = '''') or (Src[Pos+1] = '"')) then
         TokError('f-strings not supported in M1');
+      { b'...' — a BYTES literal: scan like a string, tag PK_BYTES }
+      if ((c = 'b') or (c = 'B')) and (Pos + 1 <= SLen) and
+         ((Src[Pos+1] = '''') or (Src[Pos+1] = '"')) then
+      begin
+        Pos := Pos + 1;
+        c2 := Src[Pos];
+        Pos := Pos + 1;
+        slit := '';
+        while (Pos <= SLen) and (Src[Pos] <> c2) do
+        begin
+          if (Src[Pos] = '\') and (Pos + 1 <= SLen) then
+          begin
+            Pos := Pos + 1;
+            case Src[Pos] of
+              'n': slit := slit + #10;
+              't': slit := slit + #9;
+              'r': slit := slit + #13;
+              '\': slit := slit + '\';
+              '''': slit := slit + '''';
+              '"': slit := slit + '"';
+              '0': slit := slit + #0;
+              'x':
+                begin
+                  hv := 0;
+                  if (Pos + 2 <= SLen) then
+                  begin
+                    for hk := 1 to 2 do
+                    begin
+                      Pos := Pos + 1;
+                      hc := Src[Pos];
+                      if (hc >= '0') and (hc <= '9') then hv := hv * 16 + Ord(hc) - 48
+                      else if (hc >= 'a') and (hc <= 'f') then hv := hv * 16 + Ord(hc) - 87
+                      else if (hc >= 'A') and (hc <= 'F') then hv := hv * 16 + Ord(hc) - 55;
+                    end;
+                  end;
+                  slit := slit + Chr(hv);
+                end;
+            else
+              slit := slit + Src[Pos];
+            end;
+          end
+          else
+            slit := slit + Src[Pos];
+          Pos := Pos + 1;
+        end;
+        if Pos > SLen then TokError('unterminated bytes literal');
+        Pos := Pos + 1;
+        AddTok(PK_BYTES, slit, 0, 0);
+        continue;
+      end;
       start := Pos;
       while (Pos <= SLen) and IsIdentChar(Src[Pos]) do Pos := Pos + 1;
       ident := Copy(Src, start, Pos - start);
@@ -1076,6 +1304,20 @@ begin
             '''': slit := slit + '''';
             '"': slit := slit + '"';
             '0': slit := slit + #0;
+            'x':
+              begin
+                hv := 0;
+                if (Pos + 2 <= SLen) then
+                  for hk := 1 to 2 do
+                  begin
+                    Pos := Pos + 1;
+                    hc := Src[Pos];
+                    if (hc >= '0') and (hc <= '9') then hv := hv * 16 + Ord(hc) - 48
+                    else if (hc >= 'a') and (hc <= 'f') then hv := hv * 16 + Ord(hc) - 87
+                    else if (hc >= 'A') and (hc <= 'F') then hv := hv * 16 + Ord(hc) - 55;
+                  end;
+                slit := slit + Chr(hv);
+              end;
           else
             slit := slit + Src[Pos];
           end;
@@ -1211,7 +1453,7 @@ begin
   else if (name = 'bool') then PyTypeCode := 4
   else if (name = 'str') then PyTypeCode := 6
   else if (name = 'bytes') or (name = 'bytearray') then PyTypeCode := 7
-  else if (name = 'list') then PyTypeCode := 107
+  else if (name = 'list') or (name = 'tuple') then PyTypeCode := 107  { a tuple IS a TPyList }
   else if (name = 'dict') then PyTypeCode := 207
   else PyTypeCode := -1;
 end;
@@ -1251,6 +1493,262 @@ begin
   FnN := FnN + 1;
 end;
 
+{ ---- persistent closures: a nested `def` captured as a VALUE (M2c) ---- }
+{ A pyeval `def` used as a value — passed to a host method (uforth's
+  `vm.define_word(name, native=_w)`) and called back much later as
+  `word.native(vm2)` — must OUTLIVE its EvalPyStmts: Tokenize reuses the global
+  token buffer on the next exec, and the enclosing locals (`name`) are gone too.
+  So snapshot the whole token buffer, the body position, the params, and the
+  enclosing locals into a persistent record. Boxed as a VT_PYCLOSURE (tag 9)
+  variant whose payload is the record index; the reverse bridge (NilPy's
+  PyMakeDynCall) sees the tag and routes the call to PyClosureCall1. }
+const VT_PYCLOSURE = 9;
+type
+  TPyClosure = record
+    Kinds:  array of Integer;
+    Texts:  array of AnsiString;
+    Ints:   array of Int64;
+    Floats: array of Double;
+    NTok:   Integer;
+    BodyPos: Integer;
+    Params:  AnsiString;
+    CapNames: array of AnsiString;
+    CapVals:  array of Variant;
+    CapN:    Integer;
+    { True for a closure built from raw SOURCE (pyclosure_src_new): its body is
+      a FLAT statement stream at indent 0, run by a top-level loop rather than
+      ExecSuite's after-a-colon suite grammar. }
+    FlatSrc: Boolean;
+  end;
+  { A closure passed to a Callable/Pointer host param (uforth's
+    `define_word(name, native=_w)`) is stored in the class's Pointer-typed field
+    (Word.native) and later called as `word.native(vm2)` — an indirect call
+    through a raw pointer, NOT the Variant dynamic-call path. So the value living
+    in that field must be a POINTER that the call site can tell apart from a real
+    compiled function address. A TClosureObj does that: its first word is a fixed
+    Magic sentinel (the address of a pyeval global), which a real code pointer's
+    first instruction bytes will not match, so `word.native(vm2)` can branch —
+    closure -> PyClosureCallPtr, real fn -> the plain indirect call. }
+  TClosureObj = record
+    Magic: Pointer;
+    Cidx:  Int64;
+  end;
+  PClosureObj = ^TClosureObj;
+var
+  Closures: array of TPyClosure;
+  ClosureN: Integer;
+
+  PyClosureMagicMarker: Integer;   { its ADDRESS is the closure sentinel }
+
+function PyMakeClosureObj(cidx: Int64): Pointer;
+var o: PClosureObj;
+begin
+  o := GetMem(SizeOf(TClosureObj));
+  o^.Magic := @PyClosureMagicMarker;
+  o^.Cidx  := cidx;
+  PyMakeClosureObj := Pointer(o);
+end;
+
+{ ---- bound compiled functions (see interface note) ---- }
+type
+  TBoundFnObj = record
+    Magic:  Pointer;
+    Code:   Pointer;
+    NBound: Int64;
+    A0Var:  Int64;   { 1 = the user argument is a VARIANT param (pass its address) }
+    Bound:  array[0..19] of Int64;
+  end;
+  PBoundFnObj = ^TBoundFnObj;
+  TBF1  = function(a0: Int64): Int64;
+  TBF2  = function(a0, a1: Int64): Int64;
+  TBF3  = function(a0, a1, a2: Int64): Int64;
+  TBF4  = function(a0, a1, a2, a3: Int64): Int64;
+  TBF5  = function(a0, a1, a2, a3, a4: Int64): Int64;
+  TBF6  = function(a0, a1, a2, a3, a4, a5: Int64): Int64;
+  TBF7  = function(a0, a1, a2, a3, a4, a5, a6: Int64): Int64;
+  TBF8  = function(a0, a1, a2, a3, a4, a5, a6, a7: Int64): Int64;
+  TBF9  = function(a0, a1, a2, a3, a4, a5, a6, a7, a8: Int64): Int64;
+  TBF11 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10: Int64): Int64;
+  TBF13 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12: Int64): Int64;
+var
+  PyBoundFnMagicMarker: Integer;
+
+function pyboundfn_new(code: Pointer; n: Int64; a0var: Int64): Pointer;
+var o: PBoundFnObj; i: Integer;
+begin
+  o := GetMem(SizeOf(TBoundFnObj));
+  o^.Magic := @PyBoundFnMagicMarker;
+  o^.Code := code;
+  o^.NBound := n;
+  o^.A0Var := a0var;
+  for i := 0 to 19 do o^.Bound[i] := 0;
+  pyboundfn_new := Pointer(o);
+end;
+
+function pyboundfn_bind(obj: Pointer; idx: Int64; v: Int64): Pointer;
+var o: PBoundFnObj;
+begin
+  o := PBoundFnObj(obj);
+  o^.Bound[idx] := v;
+  pyboundfn_bind := obj;
+end;
+
+function pyboundfn_is(p: Pointer): Boolean;
+begin
+  pyboundfn_is := (p <> nil) and (PBoundFnObj(p)^.Magic = @PyBoundFnMagicMarker);
+end;
+
+{ Bind a VARIANT capture: variant params travel BY ADDRESS, and the enclosing
+  local dies with its frame — so the value is copied into a small heap slot
+  that lives as long as the object (leaked with it; markers are few). }
+function pyboundfn_bind_var(obj: Pointer; idx: Int64; const v: Variant): Pointer;
+var o: PBoundFnObj; pv: PVariant;
+begin
+  o := PBoundFnObj(obj);
+  pv := GetMem(16);   { a Variant slot: 8-byte tag + 8-byte payload }
+  PPyRec(pv)^.VType := 0; PPyRec(pv)^.Payload := 0;
+  pv^ := v;
+  o^.Bound[idx] := Int64(NativeInt(Pointer(pv)));
+  pyboundfn_bind_var := obj;
+end;
+
+{ Call code(a0, bound...). a0 is the ONE user argument — a class/object variant
+  yields its instance pointer, an int its value. Missing arities pad upward
+  (extra register args are ABI-harmless); a procedure callee's garbage result
+  is discarded. }
+function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
+var o: PBoundFnObj; p0, rr: Int64; b: PInt64; code: Pointer;
+    va0: Variant;
+    f1: TBF1; f2: TBF2; f3: TBF3; f4: TBF4; f5: TBF5; f6: TBF6; f7: TBF7;
+    f8: TBF8; f9: TBF9; f11: TBF11; f13: TBF13;
+begin
+  rr := 0;
+  o := PBoundFnObj(objptr);
+  code := o^.Code;
+  if o^.A0Var <> 0 then
+  begin
+    { an unannotated (variant) first param travels BY ADDRESS }
+    va0 := a0;
+    p0 := Int64(NativeInt(Pointer(@va0)));
+  end
+  else
+  case PPyRec(@a0)^.VType of
+    7: p0 := PPyRec(@a0)^.Payload;
+    0: p0 := 0;
+  else p0 := pyvar_to_int(a0);
+  end;
+  b := @o^.Bound[0];
+  case o^.NBound of
+    0: begin f1 := TBF1(code); rr := f1(p0); end;
+    1: begin f2 := TBF2(code); rr := f2(p0, b[0]); end;
+    2: begin f3 := TBF3(code); rr := f3(p0, b[0], b[1]); end;
+    3: begin f4 := TBF4(code); rr := f4(p0, b[0], b[1], b[2]); end;
+    4: begin f5 := TBF5(code); rr := f5(p0, b[0], b[1], b[2], b[3]); end;
+    5: begin f6 := TBF6(code); rr := f6(p0, b[0], b[1], b[2], b[3], b[4]); end;
+    6: begin f7 := TBF7(code); rr := f7(p0, b[0], b[1], b[2], b[3], b[4], b[5]); end;
+    7: begin f8 := TBF8(code); rr := f8(p0, b[0], b[1], b[2], b[3], b[4], b[5], b[6]); end;
+    8: begin f9 := TBF9(code); rr := f9(p0, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]); end;
+    9, 10:
+      begin f11 := TBF11(code); rr := f11(p0, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9]); end;
+    else
+      begin f13 := TBF13(code); rr := f13(p0, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11]); end;
+  end;
+  if rr = 0 then pyboundfn_call_ptr := 0 else pyboundfn_call_ptr := 0;
+end;
+
+
+{ Closure from raw SOURCE (the compiled `lambda` lowering). Tokenizes the body
+  text into the closure's own snapshot buffer — the live interpreter state
+  (token buffer, cursor, source scanner) is saved and restored, so this is safe
+  to call from inside a running EvalPyStmts. BodyPos 0 = the start of the flat
+  `return <expr>` statement; ExecSuite's inline form runs it. }
+function pyclosure_src_new(const params, src: AnsiString): Pointer;
+var sKinds: array of Integer; sTexts: array of AnsiString;
+    sInts: array of Int64; sFloats: array of Double;
+    sTkN, sCur, sPos, sSLen: Integer; sSrc: AnsiString;
+    c, i: Integer;
+begin
+  sKinds := TkKind; sTexts := TkText; sInts := TkInt; sFloats := TkFloat;
+  sTkN := TkN; sCur := Cur; sSrc := Src; sPos := Pos; sSLen := SLen;
+  Tokenize(src);
+  if ClosureN >= Length(Closures) then
+  begin
+    if Length(Closures) = 0 then SetLength(Closures, 8)
+    else SetLength(Closures, Length(Closures) * 2);
+  end;
+  c := ClosureN; ClosureN := ClosureN + 1;
+  SetLength(Closures[c].Kinds, TkN);
+  SetLength(Closures[c].Texts, TkN);
+  SetLength(Closures[c].Ints, TkN);
+  SetLength(Closures[c].Floats, TkN);
+  for i := 0 to TkN - 1 do
+  begin
+    Closures[c].Kinds[i]  := TkKind[i];
+    Closures[c].Texts[i]  := TkText[i];
+    Closures[c].Ints[i]   := TkInt[i];
+    Closures[c].Floats[i] := TkFloat[i];
+  end;
+  Closures[c].NTok := TkN;
+  Closures[c].BodyPos := 0;
+  Closures[c].Params := params;
+  SetLength(Closures[c].CapNames, 0);
+  SetLength(Closures[c].CapVals, 0);
+  Closures[c].CapN := 0;
+  Closures[c].FlatSrc := True;
+  TkKind := sKinds; TkText := sTexts; TkInt := sInts; TkFloat := sFloats;
+  TkN := sTkN; Cur := sCur; Src := sSrc; Pos := sPos; SLen := sSLen;
+  pyclosure_src_new := PyMakeClosureObj(c);
+end;
+
+function pyclosure_src_cap(obj: Pointer; const name: AnsiString; const v: Variant): Pointer;
+var c, n: Integer;
+begin
+  c := PClosureObj(obj)^.Cidx;
+  n := Closures[c].CapN;
+  SetLength(Closures[c].CapNames, n + 1);
+  SetLength(Closures[c].CapVals, n + 1);
+  Closures[c].CapNames[n] := name;
+  Closures[c].CapVals[n] := v;
+  Closures[c].CapN := n + 1;
+  pyclosure_src_cap := obj;
+end;
+
+function PyMakeClosure(fnIdx: Integer): Variant;
+var c, i: Integer; r: PPyRec;
+begin
+  if ClosureN >= Length(Closures) then
+  begin
+    if Length(Closures) = 0 then SetLength(Closures, 8)
+    else SetLength(Closures, Length(Closures) * 2);
+  end;
+  c := ClosureN; ClosureN := ClosureN + 1;
+  SetLength(Closures[c].Kinds, TkN);
+  SetLength(Closures[c].Texts, TkN);
+  SetLength(Closures[c].Ints, TkN);
+  SetLength(Closures[c].Floats, TkN);
+  for i := 0 to TkN - 1 do
+  begin
+    Closures[c].Kinds[i]  := TkKind[i];
+    Closures[c].Texts[i]  := TkText[i];
+    Closures[c].Ints[i]   := TkInt[i];
+    Closures[c].Floats[i] := TkFloat[i];
+  end;
+  Closures[c].NTok    := TkN;
+  Closures[c].BodyPos := FnBodyPos[fnIdx];
+  Closures[c].Params  := FnParams[fnIdx];
+  SetLength(Closures[c].CapNames, LclN);
+  SetLength(Closures[c].CapVals, LclN);
+  for i := 0 to LclN - 1 do
+  begin
+    Closures[c].CapNames[i] := LclNames[i];
+    Closures[c].CapVals[i]  := LclVals[i];
+  end;
+  Closures[c].CapN := LclN;
+  r := PPyRec(@Result);
+  r^.VType   := VT_PYCLOSURE;
+  r^.Payload := Int64(NativeInt(PyMakeClosureObj(c)));   { payload = closure-obj pointer }
+end;
+
 procedure EnvGet(const name: AnsiString; var res: Variant);
 var i: Integer; tc: Int64;
 begin
@@ -1264,6 +1762,10 @@ begin
     tc := PyTypeCode(name);
     if tc >= 0 then
     begin PPyRec(@res)^.VType := PY_TYPETAG; PPyRec(@res)^.Payload := tc; end
+    else if FnFind(name) >= 0 then
+      { a nested `def` used as a bare value (no call) — capture it as a closure so
+        it survives being stored by a host method and called back later. }
+      res := PyMakeClosure(FnFind(name))
     else if not Executing then
       res := MakeNone      { walking a skipped branch — names may be undefined }
     else
@@ -1290,6 +1792,27 @@ var
   loVal, hiVal: Int64;
   haveLo: Boolean;
 begin
+  { ---- targeted module intercepts (import is a no-op statement) ----
+    sys.stdout.write(EXPR) / sys.stdout.flush() — the corpus's D. / D.R
+    printers. stderr writes are swallowed (matching the compiled side). }
+  if (TkKind[Cur] = PK_NAME) and (TkText[Cur] = 'sys') and
+     (TkKind[Cur+1] = PK_OP) and (TkText[Cur+1] = '.') then
+  begin
+    Advance; Advance;                    { sys . }
+    name := CurText; Advance;            { stdout / stderr }
+    if (CurKind = PK_OP) and (CurText = '.') then Advance;
+    fld := CurText; Advance;             { write / flush }
+    ExpectOp('(');
+    if not IsOp(')') then
+    begin
+      ParseExpr(recv);
+      if (fld = 'write') and (name = 'stdout') and Executing then
+        write(pystr_of(recv));
+    end;
+    ExpectOp(')');
+    res := MakeNone;
+    Exit;
+  end;
   { ---- atom ---- }
   if TkKind[Cur] = PK_INT then
   begin res := pyvar_of_int(TkInt[Cur]); Advance; end
@@ -1297,6 +1820,11 @@ begin
   begin PyBigLit(TkText[Cur], res); Advance; end
   else if TkKind[Cur] = PK_FLOAT then
   begin res := MakeFloat(TkFloat[Cur]); Advance; end
+  else if TkKind[Cur] = PK_BYTES then
+  begin
+    res := PyBoxObj(Pointer(bytes(TkText[Cur])));   { chars are the byte values }
+    Advance;
+  end
   else if TkKind[Cur] = PK_STR then
   begin res := MakeStr(TkText[Cur]); Advance; end
   else if IsOp('[') then
@@ -1372,7 +1900,27 @@ begin
     end;
   end
   else if IsOp('(') then
-  begin Advance; ParseExpr(res); ExpectOp(')'); end
+  begin
+    { `(expr)` is a grouping; `(a, b, ...)` is a tuple. A tuple is backed by a
+      TPyList (same VT_OBJECT representation), so membership (`x in (d, 10)`) and
+      iteration work — uforth's WORD uses `mem[..] not in (d, 10)`. }
+    Advance;
+    ParseExpr(res);
+    if IsOp(',') then
+    begin
+      li := TPyList.Create;
+      li.append(res);
+      while IsOp(',') do
+      begin
+        Advance;
+        if IsOp(')') then Break;   { trailing comma }
+        ParseExpr(elem);
+        li.append(elem);
+      end;
+      PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(li));
+    end;
+    ExpectOp(')');
+  end
   else
   begin EvalError('unexpected token in expression: "' + TkText[Cur] + '"'); res := MakeNone; end;
 
@@ -1427,14 +1975,27 @@ begin
   if IsOp('-') then
   begin
     Advance; ParseUnary(t);
-    { -a: promo-aware (0 - a) for a bignum, else the plain neg }
-    if IsPromoV(t) then PromoOp(pyvar_of_int(0), t, 2, res) else res := pyneg_v(t);
+    { -a: promo-aware (0 - a) for a bignum — and for Low(Int64), whose plain
+      neg wraps to itself while Python yields +2^63 }
+    if IsPromoV(t) or (IsIntishV(t) and (PyToI64(t) = Low(Int64))) then
+      PromoOp(pyvar_of_int(0), t, 2, res)
+    else res := pyneg_v(t);
     Exit;
   end;
   if IsOp('+') then
   begin Advance; ParseUnary(res); Exit; end;
   if IsOp('~') then
-  begin Advance; ParseUnary(t); res := pyinvert_v(t); Exit; end;
+  begin
+    Advance; ParseUnary(t);
+    { ~a = -a - 1; a bignum operand goes through the promo runtime }
+    if IsPromoV(t) then
+    begin
+      PromoOp(pyvar_of_int(-1), t, 2, res);   { -1 - a == ~a }
+      Exit;
+    end;
+    res := pyinvert_v(t);
+    Exit;
+  end;
   ParsePrimary(res);
 end;
 
@@ -1446,15 +2007,29 @@ begin
   begin
     if IsOp('*') then
     begin Advance; ParseUnary(b);
-      if IsIntishV(a) and IsIntishV(b) then begin PyIMul(a, b, t); a := t; end else a := pymul_v(a, b); end
+      { skip-mode: names read as None and pymul_v on a mixed pair raises —
+        same rule as // below }
+      if not Executing then a := MakeNone
+      else if IsIntishV(a) and IsIntishV(b) then begin PyIMul(a, b, t); a := t; end
+      else if (PPyRec(@a)^.VType = 7) and
+              (TObject(Pointer(PPyRec(@a)^.Payload)) is TPyBytes) and IsIntishV(b) then
+        { b'..' * n — bytes repetition }
+        a := PyBoxObj(Pointer(pybytes_repeat(TPyBytes(pyvarobj(a)), pyvar_to_int(b))))
+      else a := pymul_v(a, b); end
     else if IsOp('//') then
     begin Advance; ParseUnary(b);
-      if IsIntishV(a) and IsIntishV(b) then begin PyIFloorDiv(a, b, t); a := t; end else a := pyfloordiv_v(a, b); end
+      { skipping a not-taken/def-skip branch: names read as None(0), so a real
+        divide would be 0 div 0 -> runtime error 200. No side effect matters
+        here, so just yield None. }
+      if not Executing then a := MakeNone
+      else if IsIntishV(a) and IsIntishV(b) then begin PyIFloorDiv(a, b, t); a := t; end else a := pyfloordiv_v(a, b); end
     else if IsOp('%') then
     begin Advance; ParseUnary(b);
-      if IsIntishV(a) and IsIntishV(b) then begin PyIMod(a, b, t); a := t; end else a := pymod_v(a, b); end
+      if not Executing then a := MakeNone
+      else if IsIntishV(a) and IsIntishV(b) then begin PyIMod(a, b, t); a := t; end else a := pymod_v(a, b); end
     else begin Advance; ParseUnary(b);
-      a := MakeFloat(pyvar_to_float(a) / pyvar_to_float(b)); end;
+      if not Executing then a := MakeNone
+      else a := MakeFloat(pyvar_to_float(a) / pyvar_to_float(b)); end;
   end;
   res := a;
 end;
@@ -1467,10 +2042,15 @@ begin
   begin
     if IsOp('+') then
     begin Advance; ParseMul(b);
-      if IsIntishV(a) and IsIntishV(b) then begin PyIAdd(a, b, t); a := t; end else a := pyadd_v(a, b); end
+      { skip-mode: names read as None, and pyadd_v('...' + None) raises a
+        TypeError out of a branch that is not even taken — the dead
+        `raise E('msg: ' + name)` in uforth's tick. Yield None like //. }
+      if not Executing then a := MakeNone
+      else if IsIntishV(a) and IsIntishV(b) then begin PyIAdd(a, b, t); a := t; end else a := pyadd_v(a, b); end
     else
     begin Advance; ParseMul(b);
-      if IsIntishV(a) and IsIntishV(b) then begin PyISub(a, b, t); a := t; end else a := pysub_v(a, b); end;
+      if not Executing then a := MakeNone
+      else if IsIntishV(a) and IsIntishV(b) then begin PyISub(a, b, t); a := t; end else a := pysub_v(a, b); end;
   end;
   res := a;
 end;
@@ -1498,18 +2078,22 @@ begin
 end;
 
 procedure ParseBitXor(var res: Variant);
-var a, b: Variant;
+var a, b, t: Variant;
 begin
   ParseBitAnd(a);
-  while IsOp('^') do begin Advance; ParseBitAnd(b); a := pybitxor_v(a, b); end;
+  while IsOp('^') do
+  begin Advance; ParseBitAnd(b);
+    if IsIntishV(a) and IsIntishV(b) then begin PyIBitXor(a, b, t); a := t; end else a := pybitxor_v(a, b); end;
   res := a;
 end;
 
 procedure ParseBitOr(var res: Variant);
-var a, b: Variant;
+var a, b, t: Variant;
 begin
   ParseBitXor(a);
-  while IsOp('|') do begin Advance; ParseBitXor(b); a := pybitor_v(a, b); end;
+  while IsOp('|') do
+  begin Advance; ParseBitXor(b);
+    if IsIntishV(a) and IsIntishV(b) then begin PyIBitOr(a, b, t); a := t; end else a := pybitor_v(a, b); end;
   res := a;
 end;
 
@@ -1540,8 +2124,8 @@ begin
     else if IsKw('is') then
     begin
       Advance;
-      if IsKw('not') then begin Advance; ParseBitOr(b); ok := ok and (not PyIEq(a, b)); end
-      else begin ParseBitOr(b); ok := ok and PyIEq(a, b); end;
+      if IsKw('not') then begin Advance; ParseBitOr(b); ok := ok and (not PyIsIdentity(a, b)); end
+      else begin ParseBitOr(b); ok := ok and PyIsIdentity(a, b); end;
     end
     else if IsKw('in') then
     begin Advance; ParseBitOr(b); ok := ok and pyvar_contains(b, a); end
@@ -1561,26 +2145,48 @@ begin
 end;
 
 procedure ParseAnd(var res: Variant);
-var a, b: Variant;
+var a, b: Variant; sv: Boolean;
 begin
   ParseNot(a);
   while IsKw('and') do
   begin
-    Advance; ParseNot(b);
-    { value semantics: a and b -> b if a truthy else a }
-    if pyvar_to_bool(a) then a := b;
+    Advance;
+    { SHORT-CIRCUIT via a skip-mode parse of the dead operand — uforth's TO:
+      `isinstance(current, tuple) and len(current) == 3` must not evaluate
+      len() when current is an int. Value semantics: a and b -> b if a. }
+    if Executing and pyvar_to_bool(a) then
+    begin
+      ParseNot(b);
+      a := b;
+    end
+    else
+    begin
+      sv := Executing; Executing := False;
+      ParseNot(b);
+      Executing := sv;
+    end;
   end;
   res := a;
 end;
 
 procedure ParseOr(var res: Variant);
-var a, b: Variant;
+var a, b: Variant; sv: Boolean;
 begin
   ParseAnd(a);
   while IsKw('or') do
   begin
-    Advance; ParseAnd(b);
-    if not pyvar_to_bool(a) then a := b;
+    Advance;
+    if Executing and not pyvar_to_bool(a) then
+    begin
+      ParseAnd(b);
+      a := b;
+    end
+    else
+    begin
+      sv := Executing; Executing := False;
+      ParseAnd(b);
+      Executing := sv;
+    end;
   end;
   res := a;
 end;
@@ -1667,7 +2273,7 @@ end;
 procedure CallBuiltin(const name: AnsiString; args: TPyList;
                       const endKw, sepKw: AnsiString;
                       haveEnd, haveSep: Boolean; var res: Variant);
-var i, nargs: Integer; s, sep, endc: AnsiString; cand, e: Variant;
+var i, nargs: Integer; s, sep, endc: AnsiString; cand, e: Variant; li: TPyList;
 begin
   nargs := args.count;
   if name = 'int' then
@@ -1687,8 +2293,9 @@ begin
   begin
     if nargs <> 1 then EvalError('abs() expects 1 arg');
     cand := args.at(0);
-    if IsPromoV(cand) then
+    if IsPromoV(cand) or (IsIntishV(cand) and (PyToI64(cand) = Low(Int64))) then
     begin
+      { promo, or Low(Int64) whose plain abs wraps to itself: 0 - a }
       if PromoCmp(cand, pyvar_of_int(0)) < 0 then PromoOp(pyvar_of_int(0), cand, 2, res)
       else res := cand;
     end
@@ -1773,6 +2380,54 @@ begin
     for i := 1 to nargs - 1 do
     begin e := args.at(i); if pycmp_v(e, cand) > 0 then cand := e; end;
     res := cand; Exit;
+  end;
+  if name = 'list' then
+  begin
+    { list() -> a fresh empty list; list(xs) -> a shallow copy }
+    li := TPyList.Create;
+    if nargs > 0 then
+    begin
+      cand := args.at(0);
+      if (PPyRec(@cand)^.VType = 7) and
+         (TObject(Pointer(PPyRec(@cand)^.Payload)) is TPyList) then
+        li.extend(TPyList(pyvarobj(cand)))
+      else if PPyRec(@cand)^.VType = 6 then
+      begin
+        { list("abc") -> one-character strings, Python's str iteration }
+        s := PPyAnsiString(@PPyRec(@cand)^.Payload)^;
+        for i := 1 to Length(s) do
+          li.append(MakeStr(s[i]));
+      end
+      else
+        EvalError('list(): unsupported argument');
+    end;
+    res := PyBoxObj(Pointer(li));
+    Exit;
+  end;
+  if name = 'reversed' then
+  begin
+    { reversed(list|str) -> a reversed LIST (materialised) }
+    li := TPyList.Create;
+    if nargs > 0 then
+    begin
+      cand := args.at(0);
+      if (PPyRec(@cand)^.VType = 7) and
+         (TObject(Pointer(PPyRec(@cand)^.Payload)) is TPyList) then
+      begin
+        for i := TPyList(pyvarobj(cand)).count - 1 downto 0 do
+          li.append(TPyList(pyvarobj(cand)).at(i));
+      end
+      else if PPyRec(@cand)^.VType = 6 then
+      begin
+        s := PPyAnsiString(@PPyRec(@cand)^.Payload)^;
+        for i := Length(s) downto 1 do
+          li.append(MakeStr(s[i]));
+      end
+      else
+        EvalError('reversed(): unsupported argument');
+    end;
+    res := PyBoxObj(Pointer(li));
+    Exit;
   end;
   if name = 'range' then
   begin
@@ -1863,7 +2518,10 @@ end;
   is captured into signedKw, other keyword args are ignored (e.g. byteorder is
   positional and consumed as an ordinary arg). }
 procedure ParseArgs(args: TPyList; var signedKw: Boolean);
-var v: Variant; kw: AnsiString;
+var v, itv, item: Variant; kw, gname: AnsiString;
+    exprStart, endPos, gi, gn: Integer;
+    gres, glist: TPyList; go: TObject; gby: TPyBytes; gs: AnsiString;
+    gexec: Boolean;
 begin
   signedKw := False;
   ExpectOp('(');
@@ -1872,11 +2530,93 @@ begin
     if (TkKind[Cur] = PK_NAME) and (TkKind[Cur+1] = PK_OP) and (TkText[Cur+1] = '=') then
     begin
       kw := TkText[Cur]; Advance; Advance; ParseExpr(v);
-      if kw = 'signed' then signedKw := pyvar_to_bool(v);
+      { `signed=` steers pyint.to_bytes and is consumed out-of-band. Every other
+        keyword arg is a host-method kwarg (uforth's `define_word(name,
+        native=_w)`): append it positionally. uforth passes kwargs in the
+        method's declaration order, and PyHostCall fills any omitted trailing
+        params from their per-kind defaults, so positional order is correct. }
+      if kw = 'signed' then signedKw := pyvar_to_bool(v)
+      else args.append(v);
     end
     else
     begin
+      { PROBE pass with Executing off: finds the expression's span end without
+        evaluating (a genexp's item expr mentions the not-yet-bound loop var).
+        Not a genexp -> re-parse for real; genexp -> per-item replays below. }
+      exprStart := Cur;
+      gexec := Executing;
+      Executing := False;
       ParseExpr(v);
+      Executing := gexec;
+      if not IsKw('for') then
+      begin
+        Cur := exprStart;
+        ParseExpr(v);
+      end
+      else
+      begin
+        { GENERATOR EXPRESSION `EXPR for NAME in ITER` — evaluated eagerly to a
+          list (`''.join(chr(vm.memory[a+i]) for i in range(u))`, the corpus's
+          string builders). The item expression's TOKEN SPAN is re-evaluated
+          per element with NAME bound — same replay trick the typing pre-pass
+          uses. No `if` filter and one loop variable: honest errors otherwise. }
+        Advance;
+        if TkKind[Cur] <> PK_NAME then EvalError('genexp: expected a name after for');
+        gname := TkText[Cur]; Advance;
+        if not IsKw('in') then EvalError('genexp: expected in');
+        Advance;
+        ParseExpr(itv);
+        endPos := Cur;
+        if not gexec then
+        begin
+          { skip-mode (a def registration walk): structure parsed, nothing runs }
+          v := MakeNone;
+          args.append(v);
+          if IsOp(',') then Advance
+          else if not IsOp(')') then EvalError('expected , or ) in method call');
+          Continue;
+        end;
+        gres := TPyList.Create;
+        if PPyRec(@itv)^.VType = 6 then
+        begin
+          gs := PPyAnsiString(@PPyRec(@itv)^.Payload)^;
+          for gi := 1 to Length(gs) do
+          begin
+            LclSet(gname, MakeStr(gs[gi]));
+            Cur := exprStart; ParseExpr(item);
+            gres.append(item);
+          end;
+        end
+        else
+        begin
+          go := TObject(Pointer(PPyRec(@itv)^.Payload));
+          if go is TPyList then
+          begin
+            glist := TPyList(go); gn := glist.count;
+            for gi := 0 to gn - 1 do
+            begin
+              LclSet(gname, glist.at(gi));
+              Cur := exprStart; ParseExpr(item);
+              gres.append(item);
+            end;
+          end
+          else if go is TPyBytes then
+          begin
+            gby := TPyBytes(go); gn := gby.count;
+            for gi := 0 to gn - 1 do
+            begin
+              LclSet(gname, pyvar_of_int(gby.at(gi)));
+              Cur := exprStart; ParseExpr(item);
+              gres.append(item);
+            end;
+          end
+          else
+            EvalError('genexp: unsupported iterable');
+        end;
+        Cur := endPos;
+        PPyRec(@v)^.VType := 7;
+        PPyRec(@v)^.Payload := Int64(NativeInt(Pointer(gres)));
+      end;
       args.append(v);
     end;
     if IsOp(',') then Advance
@@ -1895,6 +2635,7 @@ var
   args: TPyList;
   o: TObject; li: TPyList; by: TPyBytes;
   s: AnsiString; b2: TPyBytes;
+  i: Integer;
   signedKw: Boolean;
   rvt: Int64;
 begin
@@ -1944,8 +2685,22 @@ begin
       res := pyvar_of_bool(pystr_startswith(s, pystr_of(args.at(0))))
     else if mname = 'endswith' then
       res := pyvar_of_bool(pystr_endswith(s, pystr_of(args.at(0))))
+    else if mname = 'rjust' then
+    begin
+      if args.count >= 2 then
+        res := MakeStr(pystr_rjust_c(s, pyvar_to_int(args.at(0)), pystr_of(args.at(1))))
+      else
+        res := MakeStr(pystr_rjust(s, pyvar_to_int(args.at(0))));
+    end
     else if mname = 'find' then
       res := pyvar_of_int(pystr_find(s, pystr_of(args.at(0))))
+    else if mname = 'index' then
+    begin
+      { str.index: find, but a MISS is a ValueError instead of -1 }
+      i := pystr_find(s, pystr_of(args.at(0)));
+      if i < 0 then EvalError('ValueError: substring not found');
+      res := pyvar_of_int(i);
+    end
     else if mname = 'encode' then
     begin
       b2 := pystr_encode(s);
@@ -2340,7 +3095,7 @@ end;
 
 { def name(p1, p2, ...): SUITE — registers the function and skips its body. }
 procedure ExecDef;
-var name, params: AnsiString; bodyPos: Integer;
+var name, params, pname: AnsiString; bodyPos: Integer; dv: Variant;
 begin
   Advance;   { def }
   if CurKind <> PK_NAME then EvalError('def: expected a name');
@@ -2350,8 +3105,23 @@ begin
   while not IsOp(')') do
   begin
     if CurKind <> PK_NAME then EvalError('def: expected a parameter name');
-    if params <> '' then params := params + ',';
-    params := params + TkText[Cur]; Advance;
+    pname := TkText[Cur]; Advance;
+    if IsOp('=') then
+    begin
+      { `def _const(v, _lo=lo):` — a DEFAULT bound at def time (the corpus's
+        capture idiom). Evaluate NOW and store as a LOCAL of the defining
+        scope: PyMakeClosure snapshots the scope, so the body resolves the
+        name through the capture. Not appended to params — the call site
+        never passes it. }
+      Advance;
+      ParseExpr(dv);
+      if Executing then LclSet(pname, dv);
+    end
+    else
+    begin
+      if params <> '' then params := params + ',';
+      params := params + pname;
+    end;
     if IsOp(',') then Advance
     else if not IsOp(')') then EvalError('def: expected , or ) in params');
   end;
@@ -2386,7 +3156,18 @@ begin
     Exit;
   end;
   if IsKw('pass') then begin Advance; Exit; end;
-  if IsKw('import') or IsKw('continue') or IsKw('elif') or IsKw('else') then
+  if IsKw('import') then
+  begin
+    { `import sys` / `import time` — the module NAMES resolve through the
+      targeted intercepts (sys.stdout.write etc.); the statement itself is
+      consumed and ignored. Dotted names allowed. }
+    Advance;
+    while (CurKind = PK_NAME) or ((CurKind = PK_OP) and (CurText = '.')) or
+          ((CurKind = PK_OP) and (CurText = ',')) do
+      Advance;
+    Exit;
+  end;
+  if IsKw('continue') or IsKw('elif') or IsKw('else') then
     EvalError('statement "' + CurText + '" is not supported yet');
 
   if (TkKind[Cur] = PK_NAME) and AssignmentAhead then
@@ -2448,7 +3229,169 @@ begin
   for i := 0 to savedN - 1 do begin LclNames[i] := savedNames[i]; LclVals[i] := savedVals[i]; end;
 end;
 
+{ Run a captured closure (PyMakeClosure) with `args`. The whole interpreter state
+  is swapped to the closure's snapshot — its own token buffer, a fresh scope
+  holding the captured free vars plus the bound params, and the body cursor — then
+  fully restored, so a closure can run while another EvalPyStmts / closure is on
+  the stack (a native PYTHON word may call another). }
+procedure PyClosureInvoke(cidx: Integer; args: TPyList; var res: Variant);
+var
+  sKinds:  array of Integer;   sTexts: array of AnsiString;
+  sInts:   array of Int64;     sFloats: array of Double;
+  sTkN, sCur, sLclN, sFnN, i, ai, plen: Integer;
+  sLclNames: array of AnsiString; sLclVals: array of Variant;
+  sFnName:  array of AnsiString;   sFnBodyPos: array of Integer;
+  sFnParams: array of AnsiString;
+  sRF, sExec, sBreak: Boolean; sRV: Variant;
+  params, pname: AnsiString;
+begin
+  { save caller interpreter state }
+  sKinds := TkKind; sTexts := TkText; sInts := TkInt; sFloats := TkFloat;
+  sTkN := TkN; sCur := Cur; sLclN := LclN; sFnN := FnN;
+  SetLength(sLclNames, LclN); SetLength(sLclVals, LclN);
+  for i := 0 to LclN - 1 do begin sLclNames[i] := LclNames[i]; sLclVals[i] := LclVals[i]; end;
+  SetLength(sFnName, FnN); SetLength(sFnBodyPos, FnN); SetLength(sFnParams, FnN);
+  for i := 0 to FnN - 1 do
+  begin sFnName[i] := FnName[i]; sFnBodyPos[i] := FnBodyPos[i]; sFnParams[i] := FnParams[i]; end;
+  sRF := ReturnFlag; sRV := ReturnValue; sExec := Executing; sBreak := BreakFlag;
+
+  { install the closure's snapshot token buffer }
+  TkKind := Closures[cidx].Kinds; TkText := Closures[cidx].Texts;
+  TkInt  := Closures[cidx].Ints;  TkFloat := Closures[cidx].Floats;
+  TkN := Closures[cidx].NTok;
+
+  { fresh scope: captured free vars first, params second (params shadow) }
+  LclN := 0; FnN := 0;
+  for i := 0 to Closures[cidx].CapN - 1 do
+    LclSet(Closures[cidx].CapNames[i], Closures[cidx].CapVals[i]);
+  params := Closures[cidx].Params;
+  plen := Length(params); ai := 0; pname := ''; i := 1;
+  while i <= plen + 1 do
+  begin
+    if (i > plen) or (params[i] = ',') then
+    begin
+      if pname <> '' then
+      begin
+        if ai < args.count then LclSet(pname, args.at(ai)) else LclSet(pname, MakeNone);
+        ai := ai + 1; pname := '';
+      end;
+    end
+    else pname := pname + params[i];
+    i := i + 1;
+  end;
+
+  Executing := True; BreakFlag := False;
+  ReturnFlag := False; ReturnValue := MakeNone;
+  Cur := Closures[cidx].BodyPos;
+  if Closures[cidx].FlatSrc then
+  begin
+    { source-built closure: flat statements at indent 0 until EOF }
+    SkipSeparators;
+    while (CurKind <> PK_EOF) and not ReturnFlag do
+    begin
+      ExecStatement;
+      SkipSeparators;
+    end;
+  end
+  else
+    ExecSuite(True);
+  res := ReturnValue;
+
+  { restore caller interpreter state }
+  TkKind := sKinds; TkText := sTexts; TkInt := sInts; TkFloat := sFloats;
+  TkN := sTkN; Cur := sCur;
+  FnN := sFnN;
+  if Length(FnName) < sFnN then
+  begin SetLength(FnName, sFnN); SetLength(FnBodyPos, sFnN); SetLength(FnParams, sFnN); end;
+  for i := 0 to sFnN - 1 do
+  begin FnName[i] := sFnName[i]; FnBodyPos[i] := sFnBodyPos[i]; FnParams[i] := sFnParams[i]; end;
+  LclN := sLclN;
+  if Length(LclNames) < sLclN then begin SetLength(LclNames, sLclN); SetLength(LclVals, sLclN); end;
+  for i := 0 to sLclN - 1 do begin LclNames[i] := sLclNames[i]; LclVals[i] := sLclVals[i]; end;
+  ReturnFlag := sRF; ReturnValue := sRV; Executing := sExec; BreakFlag := sBreak;
+end;
+
+{ Reverse bridge, 1-arg form: NilPy's PyMakeDynCall calls this when the callee
+  VARIANT is a VT_PYCLOSURE. The var-out call into Result sidesteps the
+  Variant-fn-return NRVO corruption. }
+function PyClosureCall1(const clv: Variant; const a0: Variant): Variant;
+var args: TPyList;
+begin
+  args := TPyList.Create;
+  args.append(a0);
+  PyClosureInvoke(PClosureObj(NativeInt(PPyRec(@clv)^.Payload))^.Cidx, args, Result);
+  args.Free;
+end;
+
+{ Is `p` a closure object rather than a real compiled function address? The
+  call-through-field site (`word.native(vm2)`) uses this to choose the bridge.
+  Reading the first word of a code pointer is safe; a real function's opening
+  bytes will not equal the sentinel address. }
+function pyclosure_is(p: Pointer): Boolean;
+begin
+  pyclosure_is := (p <> nil) and (PClosureObj(p)^.Magic = @PyClosureMagicMarker);
+end;
+
+{ Reverse bridge, POINTER form: `word.native(vm2)` where the Callable field holds
+  a closure object (uforth's VARIABLE/CONSTANT words). The closure's result is
+  discarded — a Forth native word is `-> None`. }
+function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;
+var args: TPyList; r: Variant;
+begin
+  args := TPyList.Create;
+  args.append(a0);
+  PyClosureInvoke(PClosureObj(objptr)^.Cidx, args, r);
+  args.Free;
+  pyclosure_call_ptr := 0;
+end;
+
+{ Trampoline that runs the pending `__body__` def. exec() stores a variant
+  pointing here into the caller's namespace dict; NilPy's `ns["__body__"]()`
+  unboxes the payload (this address) and calls it with the all-Variant dynamic
+  ABI (0 args, Variant result — see PyMakeDynCall / PyDynCallSig). Runs the def
+  registered by the immediately-preceding EvalPyStmts over the still-live token
+  stream + EnvG. A var-out call into Result (not `Result := CallUserFn(...)`)
+  sidesteps the Variant-fn-return NRVO corruption. }
+function PyBodyTramp: Variant;
+var idx: Integer; noArgs: TPyList;
+begin
+  idx := FnFind('__body__');
+  if idx < 0 then begin PPyRec(@Result)^.VType := 0; PPyRec(@Result)^.Payload := 0; Exit; end;
+  noArgs := TPyList.Create;
+  CallUserFn(idx, noArgs, Result);
+  noArgs.Free;
+end;
+
+{ ---- tokenization cache ------------------------------------------------
+  A PYTHON-bodied Forth word re-enters EvalPyStmts with the SAME source on
+  every execution, and tokenize+preprocess dominated the interpreter (~3ms per
+  word — the blocktest ELF-HASH loops made it visible). Direct-mapped cache
+  keyed by the raw source; a hit reuses the token arrays by reference. On a
+  miss the live refs are NILLED first so Tokenize allocates fresh arrays and
+  never mutates a cached buffer in place. }
+const PYTOK_CACHE = 64;
+type
+  TTokCacheEntry = record
+    Src:    AnsiString;
+    Kinds:  array of Integer;
+    Texts:  array of AnsiString;
+    Ints:   array of Int64;
+    Floats: array of Double;
+    NTok:   Integer;
+  end;
+var
+  TokCache: array[0..PYTOK_CACHE-1] of TTokCacheEntry;
+
+function PyTokCacheSlot(const src: AnsiString): Integer;
+var n: Integer;
+begin
+  n := Length(src);
+  if n = 0 then begin PyTokCacheSlot := 0; Exit; end;
+  PyTokCacheSlot := (n * 31 + Ord(src[1]) * 7 + Ord(src[n])) mod PYTOK_CACHE;
+end;
+
 procedure EvalPyStmts(const src: AnsiString; g: TPyDict; l: TPyDict);
+var cslot: Integer;
 begin
   EnvG := g;
   { locals live in pyeval's own arrays (see LclSet); the `l` dict argument is
@@ -2463,7 +3406,26 @@ begin
   { Dedent first (as CPython's exec path does via textwrap.dedent): a corpus
     block extracted from indented .UFO source carries a uniform leading indent on
     every line, which would otherwise tokenize as a spurious opening INDENT. }
-  Tokenize(PreprocessFStrings(pytextwrap_dedent(src)));
+  cslot := PyTokCacheSlot(src);
+  if TokCache[cslot].Src = src then
+  begin
+    TkKind := TokCache[cslot].Kinds;
+    TkText := TokCache[cslot].Texts;
+    TkInt := TokCache[cslot].Ints;
+    TkFloat := TokCache[cslot].Floats;
+    TkN := TokCache[cslot].NTok;
+  end
+  else
+  begin
+    TkKind := nil; TkText := nil; TkInt := nil; TkFloat := nil;
+    Tokenize(PreprocessFStrings(pytextwrap_dedent(src)));
+    TokCache[cslot].Src := src;
+    TokCache[cslot].Kinds := TkKind;
+    TokCache[cslot].Texts := TkText;
+    TokCache[cslot].Ints := TkInt;
+    TokCache[cslot].Floats := TkFloat;
+    TokCache[cslot].NTok := TkN;
+  end;
   Cur := 0;
   SkipSeparators;
   while (CurKind <> PK_EOF) and (CurKind <> PK_DEDENT) do
@@ -2474,6 +3436,14 @@ begin
       EvalError('expected end of statement, got "' + CurText + '"');
     SkipSeparators;
   end;
+  { The uforth exec() idiom is `exec("def __body__(): ...", env, ns)` followed by
+    `ns["__body__"]()`. The loop above only REGISTERED the def (ExecDef records its
+    body span). Publish it into the caller's namespace as a callable variant so
+    the separate `ns["__body__"]()` reaches it: the value's payload is
+    &PyBodyTramp, unboxed and called through the dynamic-call ABI. Keyed with a
+    VT_STRING matching NilPy's dict key (PyVarEq compares string content). }
+  if (l <> nil) and (FnFind('__body__') >= 0) then
+    l.store(MakeStr('__body__'), PyBoxObj(Pointer(@PyBodyTramp)));
 end;
 
 end.

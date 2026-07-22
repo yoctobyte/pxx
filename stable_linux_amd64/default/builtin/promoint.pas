@@ -58,6 +58,7 @@ procedure PXXPromoCopy(dst, src: Pointer);
 procedure PXXPromoClear(dst: Pointer);
 procedure PXXPromoInit(dst: Pointer);
 procedure PXXPromoAdd(dst, a, b: Pointer);
+
 procedure PXXPromoSub(dst, a, b: Pointer);
 procedure PXXPromoMul(dst, a, b: Pointer);
 procedure PXXPromoAddInt(dst, a: Pointer; b: Int64);
@@ -65,6 +66,11 @@ procedure PXXPromoSubInt(dst, a: Pointer; b: Int64);
 procedure PXXPromoMulInt(dst, a: Pointer; b: Int64);
 procedure PXXPromoDiv(dst, a, b: Pointer);
 procedure PXXPromoMod(dst, a, b: Pointer);
+procedure PXXPromoAnd(dst, a, b: Pointer);
+procedure PXXPromoOr(dst, a, b: Pointer);
+procedure PXXPromoXor(dst, a, b: Pointer);
+procedure PXXPromoShl(dst, a, b: Pointer);
+procedure PXXPromoShr(dst, a, b: Pointer);
 function  PXXPromoCmp(a, b: Pointer): Integer;
 function  PXXPromoToStr(a: Pointer): AnsiString;
 procedure PXXPromoToVariant(dstVar, src: Pointer);
@@ -73,6 +79,7 @@ function  PXXPromoVarArithTry(dst, a, b: Pointer; op: Integer): Integer;
 function  PXXPromoVarCmpTry(a, b: Pointer; op: Integer): Integer;
 function  PXXPromoFitsInt64(a: Pointer): Boolean;
 function  PXXPromoToInt64(a: Pointer): Int64;
+function  PXXPromoToInt64Wrap(a: Pointer): Int64;
 
 implementation
 
@@ -95,6 +102,7 @@ type
     neg:   Boolean;
     limbs: array of Int64;
   end;
+  TByteDynArray = array of Byte;
 
 procedure BNorm(var a: TBig);
 var n: Integer;
@@ -470,6 +478,139 @@ begin
   BToStr := s;
 end;
 
+{ ---- bitwise (Python two's-complement semantics) -----------------------
+
+  Bignums here are sign-magnitude base-1e9, which has no bit view, so a bitwise
+  op converts BOTH operands to a fixed-width two's-complement BYTE array, applies
+  the op byte-wise, and reads the result back as a signed two's-complement value.
+  Python's ints are infinite-width two's complement; a width one byte wider than
+  the larger operand's magnitude reproduces the sign-extension exactly (the extra
+  byte carries the sign bit so `-1 & big` keeps big's high bits). }
+
+{ Bitwise works over fixed byte buffers rather than dynamic arrays: pxx's
+  dynamic-array-return codegen has a history of miscompiles, and the operands
+  here are bounded (uforth's widest is a 128-bit composite), so a fixed cap is
+  both safe and simpler. }
+const PROMO_BITBYTES = 512;   { supports up to a ~4096-bit value }
+type TBitBuf = array[0..PROMO_BITBYTES - 1] of Byte;
+
+{ magnitude of `a` as little-endian base-256 bytes; returns the byte count }
+function BMagToBuf(const a: TBig; var buf: TBitBuf): Integer;
+var cur, q: TBig; rem: Int64; n, i: Integer;
+begin
+  if BIsZero(a) then begin BMagToBuf := 0; Exit; end;
+  cur := a; cur.neg := False;
+  n := 0;
+  while not BIsZero(cur) do
+  begin
+    SetLength(q.limbs, Length(cur.limbs)); q.neg := False;
+    rem := 0;
+    for i := Length(cur.limbs) - 1 downto 0 do
+    begin
+      rem := rem * BIG_BASE + cur.limbs[i];
+      q.limbs[i] := rem div 256;
+      rem := rem mod 256;
+    end;
+    BNorm(q);
+    if n < PROMO_BITBYTES then buf[n] := Byte(rem);
+    Inc(n);
+    cur := q;
+  end;
+  BMagToBuf := n;
+end;
+
+{ signed two's-complement of `a` into `w` bytes of `buf` (w >= mag length + 1) }
+procedure BTwosToBuf(const a: TBig; w: Integer; var buf: TBitBuf);
+var mag: TBitBuf; mn, i, carry, v: Integer;
+begin
+  mn := BMagToBuf(a, mag);
+  for i := 0 to w - 1 do
+    if i < mn then buf[i] := mag[i] else buf[i] := 0;
+  if a.neg then
+  begin
+    carry := 1;
+    for i := 0 to w - 1 do
+    begin
+      v := (buf[i] xor $FF) + carry;
+      buf[i] := Byte(v and $FF);
+      carry := v shr 8;
+    end;
+  end;
+end;
+
+{ read `w` little-endian two's-complement bytes of `buf` as a signed TBig }
+function BFromBuf(const buf: TBitBuf; w: Integer): TBig;
+var mag: TBitBuf; i, carry, v, k: Integer; neg: Boolean; r: TBig;
+begin
+  neg := (w > 0) and ((buf[w - 1] and $80) <> 0);
+  if neg then
+  begin
+    carry := 1;
+    for i := 0 to w - 1 do
+    begin
+      v := (buf[i] xor $FF) + carry;
+      mag[i] := Byte(v and $FF);
+      carry := v shr 8;
+    end;
+  end
+  else
+    for i := 0 to w - 1 do mag[i] := buf[i];
+  SetLength(r.limbs, 0); r.neg := False;
+  for k := w - 1 downto 0 do
+    r := BAddMag(BMulSmall(r, 256), BFromInt(mag[k]));
+  r.neg := neg and not BIsZero(r);
+  BNorm(r);
+  BFromBuf := r;
+end;
+
+{ op: 0=AND 1=OR 2=XOR (Python two's-complement) }
+function BBitwise(const a, b: TBig; op: Integer): TBig;
+var wa, wb, w, i: Integer; ta, tb, tmp: TBitBuf;
+begin
+  wa := BMagToBuf(a, tmp); wb := BMagToBuf(b, tmp);
+  w := wa; if wb > w then w := wb; Inc(w);   { +1 sign byte }
+  if w > PROMO_BITBYTES then w := PROMO_BITBYTES;
+  BTwosToBuf(a, w, ta); BTwosToBuf(b, w, tb);
+  for i := 0 to w - 1 do
+    case op of
+      0: ta[i] := ta[i] and tb[i];
+      1: ta[i] := ta[i] or tb[i];
+      else ta[i] := ta[i] xor tb[i];
+    end;
+  BBitwise := BFromBuf(ta, w);
+end;
+
+{ a * 2^k (magnitude doubling preserves the sign, matching Python `<<`) }
+function BShl(const a: TBig; k: Int64): TBig;
+var r: TBig; i: Int64; wasNeg: Boolean;
+begin
+  if k <= 0 then begin BShl := a; Exit; end;
+  wasNeg := a.neg;
+  r := a; r.neg := False;
+  for i := 1 to k do r := BMulSmall(r, 2);
+  r.neg := wasNeg and not BIsZero(r);
+  BShl := r;
+end;
+
+{ floor(a / 2^k) — Python arithmetic shift right }
+function BShr(const a: TBig; k: Int64): TBig;
+var q, rem, p2: TBig; i: Int64;
+begin
+  if k <= 0 then begin BShr := a; Exit; end;
+  p2 := BFromInt(1);
+  for i := 1 to k do p2 := BMulSmall(p2, 2);
+  BDivMod(a, p2, q, rem);
+  { BDivMod truncates toward zero; Python `>>` FLOORS. For a negative dividend
+    with a nonzero remainder, floor is one MORE in magnitude (more negative). }
+  if a.neg and not BIsZero(rem) then
+  begin
+    q.neg := False;
+    q := BAddMag(q, BFromInt(1));
+    q.neg := not BIsZero(q);
+  end;
+  BShr := q;
+end;
+
 
 { ---- slot accessors ---------------------------------------------------- }
 
@@ -637,12 +778,25 @@ begin
   BToNative := False;
   if Length(r.limbs) > 3 then Exit;         { >= 1e27, far past any native word }
   acc := 0;
-  for i := Length(r.limbs) - 1 downto 0 do
-  begin
-    if acc > (High(Int64) - r.limbs[i]) div BIG_BASE then Exit;
-    acc := acc * BIG_BASE + r.limbs[i];
-  end;
-  if r.neg then acc := -acc;
+  if r.neg then
+    { Accumulate in the NEGATIVE domain: two's complement is asymmetric, so
+      Low(Int64) — whose magnitude has no positive counterpart — must demote
+      too. The positive-magnitude loop rejected exactly that value, leaving a
+      -2^63 cell stranded on the heap tier (where a container slot loses its
+      managed payload). Guard is exact: trunc-div of a negative is the ceiling
+      of the real quotient, and `acc >= ceil((Low+limb)/BASE)` is precisely
+      `acc*BASE - limb >= Low` for integer acc. }
+    for i := Length(r.limbs) - 1 downto 0 do
+    begin
+      if acc < (Low(Int64) + r.limbs[i]) div BIG_BASE then Exit;
+      acc := acc * BIG_BASE - r.limbs[i];
+    end
+  else
+    for i := Length(r.limbs) - 1 downto 0 do
+    begin
+      if acc > (High(Int64) - r.limbs[i]) div BIG_BASE then Exit;
+      acc := acc * BIG_BASE + r.limbs[i];
+    end;
   if SizeOf(NativeInt) < 8 then
     if (acc > 2147483647) or (acc < -2147483648) then Exit;
   v := acc;
@@ -675,11 +829,65 @@ end;
 { Exact decimal -> promotable int. The inverse of PXXPromoToStr, and what lets
   a literal wider than Int64 be written down at all: the lexer folds every
   literal to 64 bits, so a wide one has to arrive here as TEXT. }
+type
+  TFromStrCacheEntry = record
+    Key: AnsiString;                 { the mask/2^63/2^64 constants recur on
+                                       every loop iteration }
+    Tag: NativeInt;
+    InlineVal: NativeInt;
+    Payload: AnsiString;
+  end;
+var
+  FromStrCache: array[0..3] of TFromStrCacheEntry;
+
+function PromoFromStrSlot(const s: AnsiString): Integer;
+begin
+  if s = '' then begin PromoFromStrSlot := 0; Exit; end;
+  PromoFromStrSlot := (Length(s) + Ord(s[1]) + Ord(s[Length(s)])) mod 4;
+end;
+
+{ TBig-free cache probe/write, split out so the hot repeat path never pays the
+  managed-record prologue (the 344ns landmine). }
+function PromoFromStrCached(dst: Pointer; const s: AnsiString): Boolean;
+var w: PPromoWord; sp: PPromoStr; c: Integer;
+begin
+  PromoFromStrCached := False;
+  c := PromoFromStrSlot(s);
+  if (FromStrCache[c].Key = '') or (s <> FromStrCache[c].Key) then Exit;
+  if FromStrCache[c].Tag = PROMO_TAG_INLINE then
+    PXXPromoFromInt(dst, FromStrCache[c].InlineVal)
+  else
+  begin
+    PXXPromoClear(dst);
+    w := PPromoWord(dst);
+    w^ := PROMO_TAG_HEAP;
+    sp := PPromoStr(SlotPayloadAddr(dst));
+    sp^ := FromStrCache[c].Payload;
+  end;
+  PromoFromStrCached := True;
+end;
+
+procedure PromoFromStrRemember(dst: Pointer; const s: AnsiString);
+var sp: PPromoStr; c: Integer;
+begin
+  c := PromoFromStrSlot(s);
+  FromStrCache[c].Key := s;
+  FromStrCache[c].Tag := SlotTag(dst);
+  if FromStrCache[c].Tag = PROMO_TAG_INLINE then
+    FromStrCache[c].InlineVal := PPromoWord(SlotPayloadAddr(dst))^
+  else
+  begin
+    sp := PPromoStr(SlotPayloadAddr(dst));
+    FromStrCache[c].Payload := sp^;
+  end;
+end;
+
 procedure PXXPromoFromStr(dst: Pointer; const s: AnsiString);
 var r, ten: TBig;
     i: Integer;
     neg: Boolean;
 begin
+  if PromoFromStrCached(dst, s) then Exit;
   SetLength(r.limbs, 0);
   r.neg := False;
   ten := BFromInt(10);
@@ -701,6 +909,7 @@ begin
   end;
   if neg and not BIsZero(r) then r.neg := True;
   StoreBig(dst, r);
+  PromoFromStrRemember(dst, s);
 end;
 
 procedure PXXPromoCopy(dst, src: Pointer);
@@ -743,8 +952,99 @@ begin
   StoreBig(dst, BAddSigned(SlotBig(a), SlotBig(b)));
 end;
 
+{ ---- packed-form fast paths for the unsigned-mask idiom -----------------
+  The SLOT heap payload is the PackBig binary (sign byte + base-1e9 limbs as
+  8-byte LE words). The DO/LOOP boundary check (`(i-lim) & 0xFF..F`, unsigned
+  compare, `-= 2^64`) runs these per iteration; the general path's
+  unpack/repack profiled as the interpreter's dominant cost. }
+
+{ the packed form of an unsigned 64-bit value (0 or 3 limbs) }
+function SlotPackU64(u: QWord): AnsiString;
+var s: AnsiString; i, k, nl: Integer; limb: Int64;
+    ls: array[0..2] of Int64;
+begin
+  nl := 0;
+  while u > 0 do
+  begin
+    ls[nl] := Int64(u mod 1000000000);
+    u := u div 1000000000;
+    Inc(nl);
+  end;
+  s := #0;
+  for i := 0 to nl - 1 do
+  begin
+    limb := ls[i];
+    for k := 0 to 7 do
+    begin
+      s := s + Chr(Byte(limb and 255));
+      limb := limb shr 8;
+    end;
+  end;
+  SlotPackU64 := s;
+end;
+
+{ packed positive payload -> QWord, when it has <= 3 limbs; False otherwise }
+function SlotPackedToU64(const s: AnsiString; var u: QWord): Boolean;
+var n, i, k: Integer; limb: Int64; m: QWord;
+begin
+  SlotPackedToU64 := False;
+  if (Length(s) < 1) or (Ord(s[1]) <> 0) then Exit;
+  n := (Length(s) - 1) div 8;
+  if n > 3 then Exit;
+  u := 0;
+  m := 1;
+  for i := 0 to n - 1 do
+  begin
+    limb := 0;
+    for k := 7 downto 0 do
+      limb := (limb shl 8) or Ord(s[1 + i * 8 + k + 1]);
+    u := u + QWord(limb) * m;
+    m := m * 1000000000;
+  end;
+  SlotPackedToU64 := True;
+end;
+
+var
+  SlotMask64Packed: AnsiString;      { PackBig(2^64-1), lazily built }
+  SlotPow64Packed: AnsiString;       { PackBig(2^64) }
+
+{ 2^64 exceeds a QWord literal; its base-1e9 limbs are spelled out }
+function SlotPackPow64: AnsiString;
+var s: AnsiString; limb: Int64; k, i: Integer; ls: array[0..2] of Int64;
+begin
+  ls[0] := 709551616; ls[1] := 446744073; ls[2] := 18;
+  s := #0;
+  for i := 0 to 2 do
+  begin
+    limb := ls[i];
+    for k := 0 to 7 do
+    begin
+      s := s + Chr(Byte(limb and 255));
+      limb := limb shr 8;
+    end;
+  end;
+  SlotPackPow64 := s;
+end;
+
+procedure SlotWriteHeap(dst: Pointer; const payload: AnsiString);
+var w: PPromoWord; sp: PPromoStr;
+begin
+  PXXPromoClear(dst);
+  w := PPromoWord(dst);
+  w^ := PROMO_TAG_HEAP;
+  sp := PPromoStr(SlotPayloadAddr(dst));
+  sp^ := payload;
+end;
+
+{ dst := the unsigned 64-bit reading of inline v }
+procedure SlotStoreUnsigned64(dst: Pointer; v: Int64);
+begin
+  if v >= 0 then PXXPromoFromInt(dst, v)
+  else SlotWriteHeap(dst, SlotPackU64(QWord(v)));
+end;
+
 procedure PXXPromoSub(dst, a, b: Pointer);
-var x, y, r: Int64;
+var x, y, r: Int64; su: QWord;
 begin
   if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
   begin
@@ -755,6 +1055,19 @@ begin
     else
       PXXPromoFromInt(dst, r);
     Exit;
+  end;
+  { fast path: [2^63..2^64) - 2^64 = the two's-complement int64 reading — the
+    sign-convert half of the masked-cell idiom, no bignum traffic }
+  if (SlotTag(a) = PROMO_TAG_HEAP) and (SlotTag(b) = PROMO_TAG_HEAP) then
+  begin
+    if SlotPow64Packed = '' then SlotPow64Packed := SlotPackPow64;
+    if PPromoStr(SlotPayloadAddr(b))^ = SlotPow64Packed then
+      if SlotPackedToU64(PPromoStr(SlotPayloadAddr(a))^, su) then
+        if su >= QWord(9223372036854775807) + 1 then
+        begin
+          PXXPromoFromInt(dst, Int64(su));   { wraps to su - 2^64 exactly }
+          Exit;
+        end;
   end;
   StoreBig(dst, BSubSigned(SlotBig(a), SlotBig(b)));
 end;
@@ -900,6 +1213,82 @@ begin
   PXXPromoCmp := BCmp(SlotBig(a), SlotBig(b));
 end;
 
+{ A shift count as an Int64. Always small in practice; an inline slot is the
+  common case, a heap slot is read from its low limbs. }
+function PromoShiftCount(b: Pointer): Int64;
+var bg: TBig; r: Int64; i: Integer;
+begin
+  if SlotTag(b) = PROMO_TAG_INLINE then begin PromoShiftCount := SlotInt(b); Exit; end;
+  bg := SlotBig(b);
+  r := 0;
+  for i := Length(bg.limbs) - 1 downto 0 do r := r * BIG_BASE + bg.limbs[i];
+  if bg.neg then r := -r;
+  PromoShiftCount := r;
+end;
+
+
+{ ---- bitwise: Python two's-complement semantics ---- }
+procedure PXXPromoAnd(dst, a, b: Pointer);
+var sp: PPromoStr; u: QWord;
+begin
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+  begin
+    PXXPromoFromInt(dst, SlotInt(a) and SlotInt(b));   { Int64 AND is two's complement }
+    Exit;
+  end;
+  { fast mask path: v & 0xFFFFFFFFFFFFFFFF }
+  if SlotMask64Packed = '' then
+    SlotMask64Packed := SlotPackU64(QWord(18446744073709551615));
+  if SlotTag(b) = PROMO_TAG_HEAP then
+  begin
+    sp := PPromoStr(SlotPayloadAddr(b));
+    if sp^ = SlotMask64Packed then
+    begin
+      if SlotTag(a) = PROMO_TAG_INLINE then
+      begin
+        SlotStoreUnsigned64(dst, SlotInt(a));
+        Exit;
+      end;
+      sp := PPromoStr(SlotPayloadAddr(a));
+      if SlotPackedToU64(sp^, u) then
+      begin
+        { already in the u64 range: identity (copy handles dst=a aliasing) }
+        PXXPromoCopy(dst, a);
+        Exit;
+      end;
+    end;
+  end;
+  StoreBig(dst, BBitwise(SlotBig(a), SlotBig(b), 0));
+end;
+
+procedure PXXPromoOr(dst, a, b: Pointer);
+begin
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+    PXXPromoFromInt(dst, SlotInt(a) or SlotInt(b))
+  else
+    StoreBig(dst, BBitwise(SlotBig(a), SlotBig(b), 1));
+end;
+
+procedure PXXPromoXor(dst, a, b: Pointer);
+begin
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+    PXXPromoFromInt(dst, SlotInt(a) xor SlotInt(b))
+  else
+    StoreBig(dst, BBitwise(SlotBig(a), SlotBig(b), 2));
+end;
+
+procedure PXXPromoShl(dst, a, b: Pointer);
+begin
+  { shift count b is small in practice; a<<k always risks Int64 overflow so it
+    goes through the bignum path unconditionally. }
+  StoreBig(dst, BShl(SlotBig(a), PromoShiftCount(b)));
+end;
+
+procedure PXXPromoShr(dst, a, b: Pointer);
+begin
+  StoreBig(dst, BShr(SlotBig(a), PromoShiftCount(b)));
+end;
+
 function PXXPromoToStr(a: Pointer): AnsiString;
 var s: AnsiString;
 begin
@@ -1036,11 +1425,174 @@ begin
                        (VarTag(b) = VT_PROMO_INT64_TAG);
 end;
 
+{ ---- fast path for the unsigned-mask idiom -----------------------------
+  `v & 0xFFFFFFFFFFFFFFFF` runs on EVERY DO/LOOP boundary check (uforth's
+  _loop_crossed) and every stack push; the general path unpacks the mask
+  bignum, allocates three promo slots and repacks — profiled as the dominant
+  interpreter cost. Here: recognise the full-mask payload by CONTENT (packed
+  form built lazily), then write the result variant directly — a non-negative
+  int64 stays inline, a negative one becomes 2^64+v packed straight from
+  unsigned arithmetic. No TBig, no slot machinery. }
+{ A VARIANT heap-promo payload is the exact DECIMAL text (see
+  PXXPromoToVariant). Unsigned 64-bit decimal, built without TBig. }
+function DecU64(u: QWord): AnsiString;
+var rev, s: AnsiString; i: Integer;
+begin
+  if u = 0 then begin DecU64 := '0'; Exit; end;
+  rev := '';
+  while u > 0 do
+  begin
+    rev := rev + Chr(48 + Integer(u mod 10));
+    u := u div 10;
+  end;
+  s := '';
+  for i := Length(rev) downto 1 do s := s + rev[i];
+  DecU64 := s;
+end;
+
+function IsMaskPayload(v: Pointer): Boolean;
+var sp: PPromoStr;
+begin
+  IsMaskPayload := False;
+  if VarTag(v) <> VT_PROMO_INT64_TAG then Exit;
+  sp := PPromoStr(VarPayloadAddr(v));
+  IsMaskPayload := sp^ = '18446744073709551615';
+end;
+
+{ dst := the unsigned 64-bit reading of inline int64 v — inline when it fits,
+  a decimal heap payload when v was negative. }
+procedure StoreUnsigned64(dst: Pointer; v: Int64);
+var tagW: PVarWord; sp: PPromoStr;
+begin
+  ClearVariantSlot(dst);
+  tagW := PVarWord(dst);
+  if v >= 0 then
+  begin
+    tagW^ := VT_INT64_TAG;
+    PVarWord(VarPayloadAddr(dst))^ := v;
+  end
+  else
+  begin
+    tagW^ := VT_PROMO_INT64_TAG;
+    sp := PPromoStr(VarPayloadAddr(dst));
+    sp^ := DecU64(QWord(v));
+  end;
+end;
+
+{ payload is a canonical POSITIVE decimal (heap promo of a value > Int64) }
+function VarPromoIsPosDec(v: Pointer): Boolean;
+var sp: PPromoStr;
+begin
+  VarPromoIsPosDec := False;
+  if VarTag(v) <> VT_PROMO_INT64_TAG then Exit;
+  sp := PPromoStr(VarPayloadAddr(v));
+  VarPromoIsPosDec := (Length(sp^) > 0) and (sp^[1] in ['0'..'9']);
+end;
+
+{ compare two canonical positive decimals: length, then lexicographic }
+function DecCmpPos(const x, y: AnsiString): Integer;
+var i: Integer;
+begin
+  if Length(x) <> Length(y) then
+  begin
+    if Length(x) < Length(y) then DecCmpPos := -1 else DecCmpPos := 1;
+    Exit;
+  end;
+  for i := 1 to Length(x) do
+    if x[i] <> y[i] then
+    begin
+      if x[i] < y[i] then DecCmpPos := -1 else DecCmpPos := 1;
+      Exit;
+    end;
+  DecCmpPos := 0;
+end;
+
+function VarIsInlineInt(v: Pointer): Boolean;
+begin
+  VarIsInlineInt := (VarTag(v) = VT_INT_TAG) or (VarTag(v) = VT_INT64_TAG) or
+                    (VarTag(v) = VT_BOOL_TAG);
+end;
+
+{ decimal digits -> Int64, wrapping mod 2^64 (the two's-complement reading) }
+function DecToI64Wrap(const s: AnsiString): Int64;
+var r: Int64; i: Integer;
+begin
+  r := 0;
+  for i := 1 to Length(s) do
+    if s[i] in ['0'..'9'] then
+      r := r * 10 + (Ord(s[i]) - 48);
+  DecToI64Wrap := r;
+end;
+
 function PXXPromoVarArithTry(dst, a, b: Pointer; op: Integer): Integer;
 var pa, pb, pr: array[0..1] of NativeInt;   { three promo slots }
+    sp: PPromoStr; dsp: PPromoStr; tagW: PVarWord; t: AnsiString;
 begin
   PXXPromoVarArithTry := 0;
-  if not EitherPromoTagged(a, b) then Exit;
+  { FAST PATH: `v & 0xFFFFFFFFFFFFFFFF` — the DO/LOOP boundary/push idiom —
+    without any TBig unpack/repack or promo-slot traffic. }
+  if op = 6 then
+  begin
+    if IsMaskPayload(b) then
+    begin
+      if VarIsInlineInt(a) then
+      begin
+        StoreUnsigned64(dst, PVarWord(VarPayloadAddr(a))^);
+        PXXPromoVarArithTry := 1;
+        Exit;
+      end;
+      if VarPromoIsPosDec(a) then
+      begin
+        sp := PPromoStr(VarPayloadAddr(a));
+        if DecCmpPos(sp^, '18446744073709551615') <= 0 then
+        begin
+          { already the unsigned 64-bit reading: identity }
+          t := sp^;                      { copy BEFORE clearing: dst may alias a }
+          ClearVariantSlot(dst);
+          tagW := PVarWord(dst);
+          tagW^ := VT_PROMO_INT64_TAG;
+          dsp := PPromoStr(VarPayloadAddr(dst));
+          dsp^ := t;
+          PXXPromoVarArithTry := 1;
+          Exit;
+        end;
+      end;
+    end
+    else if IsMaskPayload(a) and VarIsInlineInt(b) then
+    begin
+      StoreUnsigned64(dst, PVarWord(VarPayloadAddr(b))^);
+      PXXPromoVarArithTry := 1;
+      Exit;
+    end;
+  end;
+  { FAST PATH: `v -= 0x10000000000000000` — the sign-convert half of the
+    masked-cell idiom. v is a canonical u64-range decimal; the result is its
+    two's-complement int64 reading, computed by wrapping decimal->QWord. }
+  if (op = 2) and VarPromoIsPosDec(a) and (VarTag(b) = VT_PROMO_INT64_TAG) then
+  begin
+    sp := PPromoStr(VarPayloadAddr(b));
+    if sp^ = '18446744073709551616' then
+    begin
+      sp := PPromoStr(VarPayloadAddr(a));
+      if DecCmpPos(sp^, '18446744073709551615') <= 0 then
+      begin
+        t := sp^;
+        ClearVariantSlot(dst);
+        tagW := PVarWord(dst);
+        tagW^ := VT_INT64_TAG;
+        PVarWord(VarPayloadAddr(dst))^ := DecToI64Wrap(t);
+        PXXPromoVarArithTry := 1;
+        Exit;
+      end;
+    end;
+  end;
+  { shl/shr (9/10) are handled UNCONDITIONALLY: an int64 shl can overflow into
+    the bignum range (Python `1 << 64` = 2^64) and the native variant shr is a
+    LOGICAL shift while Python's >> is arithmetic floor division — so even two
+    plain VT_INT64 operands must route through the promo runtime here. The
+    other operators keep the promo-tag gate so ordinary variant semantics stay
+    in the per-backend codegen. }
+  if (op < 9) and not EitherPromoTagged(a, b) then Exit;
   PXXPromoInit(@pa); PXXPromoInit(@pb); PXXPromoInit(@pr);
   PXXPromoFromVariant(@pa, a);
   PXXPromoFromVariant(@pb, b);
@@ -1049,6 +1601,11 @@ begin
   else if op = 3 then PXXPromoMul(@pr, @pa, @pb)
   else if op = 4 then PXXPromoDiv(@pr, @pa, @pb)
   else if op = 5 then PXXPromoMod(@pr, @pa, @pb)
+  else if op = 6 then PXXPromoAnd(@pr, @pa, @pb)
+  else if op = 7 then PXXPromoOr(@pr, @pa, @pb)
+  else if op = 8 then PXXPromoXor(@pr, @pa, @pb)
+  else if op = 9 then PXXPromoShl(@pr, @pa, @pb)
+  else if op = 10 then PXXPromoShr(@pr, @pa, @pb)
   else
   begin
     { an operator with no promotable-int meaning (e.g. `/`): leave it to the
@@ -1069,14 +1626,33 @@ function PXXPromoVarCmpTry(a, b: Pointer; op: Integer): Integer;
 var pa, pb: array[0..1] of NativeInt;
     c: Integer;
     res: Boolean;
+    va, vb: Int64;
 begin
   PXXPromoVarCmpTry := 0;
   if not EitherPromoTagged(a, b) then Exit;
-  PXXPromoInit(@pa); PXXPromoInit(@pb);
-  PXXPromoFromVariant(@pa, a);
-  PXXPromoFromVariant(@pb, b);
-  c := PXXPromoCmp(@pa, @pb);
-  PXXPromoClear(@pa); PXXPromoClear(@pb);
+  { FAST PATH: heap promos in variants are canonical positive decimals, so the
+    DO/LOOP `u_old > u_new` compares run without unpacking a bignum. A heap
+    promo (value > Int64 max by construction) beats any inline int. }
+  if VarPromoIsPosDec(a) and VarPromoIsPosDec(b) then
+    c := DecCmpPos(PPromoStr(VarPayloadAddr(a))^, PPromoStr(VarPayloadAddr(b))^)
+  else if VarPromoIsPosDec(a) and VarIsInlineInt(b) then
+    c := 1
+  else if VarIsInlineInt(a) and VarPromoIsPosDec(b) then
+    c := -1
+  else if VarIsInlineInt(a) and VarIsInlineInt(b) then
+  begin
+    va := PVarWord(VarPayloadAddr(a))^;
+    vb := PVarWord(VarPayloadAddr(b))^;
+    if va < vb then c := -1 else if va > vb then c := 1 else c := 0;
+  end
+  else
+  begin
+    PXXPromoInit(@pa); PXXPromoInit(@pb);
+    PXXPromoFromVariant(@pa, a);
+    PXXPromoFromVariant(@pb, b);
+    c := PXXPromoCmp(@pa, @pb);
+    PXXPromoClear(@pa); PXXPromoClear(@pb);
+  end;
   res := False;
   if op = 1 then res := c = 0
   else if op = 2 then res := c <> 0
@@ -1105,6 +1681,33 @@ begin
   if SlotTag(a) <> PROMO_TAG_INLINE then
     RunError(215);
   PXXPromoToInt64 := SlotInt(a);
+end;
+
+{ Slow path split out so the fast one never names TBig (a routine that mentions
+  a dynarray record pays managed prologue on every call). }
+function PromoWrapHeap(a: Pointer): Int64;
+var bg: TBig; r: Int64; i: Integer;
+begin
+  bg := SlotBig(a);
+  r := 0;
+  for i := Length(bg.limbs) - 1 downto 0 do
+    r := r * BIG_BASE + bg.limbs[i];   { wrapping is the point: value mod 2^64 }
+  if bg.neg then r := -r;
+  PromoWrapHeap := r;
+end;
+
+{ Narrowing WITH two's-complement wrap (value mod 2^64), the C/machine reading.
+  Used where a promo value lands in a concrete int slot (a NilPy `int`-annotated
+  variable): NilPy's documented narrowing of Python's arbitrary precision is
+  64-bit congruence, and the masked-cell idiom (`n & 0xFFF... ; if n >= 2^63:
+  n -= 2^64`) is only an identity under exactly this rule — the checked
+  PXXPromoToInt64 would trap on the intermediate. }
+function PXXPromoToInt64Wrap(a: Pointer): Int64;
+begin
+  if SlotTag(a) = PROMO_TAG_INLINE then
+    PXXPromoToInt64Wrap := SlotInt(a)
+  else
+    PXXPromoToInt64Wrap := PromoWrapHeap(a);
 end;
 
 end.
