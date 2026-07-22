@@ -4587,8 +4587,14 @@ begin
           begin
             arg1Node := IRB[node];
             val1Node := IRA[arg1Node];
-            if (IntToTypeKind(IRTk[val1Node]) = tyAnsiString) or
-               ((IRKind[val1Node] = IR_LEA) and (Syms[IRA[val1Node]].TypeKind = tyAnsiString)) then
+            { An `array of AnsiString` param/var carries the ELEMENT type in the
+              sym's TypeKind, so a bare string-type test routes it to the string
+              branch — which reads Length(a[0]) instead of the element count
+              (bug-open-array-param-length-high-zero). An IR_LEA of an ARRAY sym
+              is never a plain managed string; send it to the array branch below. }
+            if ((IntToTypeKind(IRTk[val1Node]) = tyAnsiString) or
+               ((IRKind[val1Node] = IR_LEA) and (Syms[IRA[val1Node]].TypeKind = tyAnsiString))) and
+               not ((IRKind[val1Node] = IR_LEA) and Syms[IRA[val1Node]].IsArray) then
              begin
                IREmitNode(val1Node);                          { rax = data ptr (or 0) }
                if (IRKind[val1Node] = IR_LEA) and

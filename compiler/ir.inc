@@ -2309,7 +2309,15 @@ begin
         oaEligible := True;
       end;
     end;
-    if oaEligible and (caElemTk <> tyAnsiString) and
+    { AnsiString elements ride the same copy-in/copy-out: the raw handle bytes
+      move into the temp (no ARC — the temp is a byte buffer, so scope exit
+      never DecRefs the elements), the callee assigns slots with normal ARC,
+      and the copy-out moves the resulting handle set back over the caller's
+      slots. Ownership transfers wholesale; refcounts stay balanced because
+      the caller's stale copies are overwritten, never released or read.
+      Records with managed FIELDS stay excluded (a field-wise release in the
+      callee would need the copy-out to be field-aware). }
+    if oaEligible and
        not ((caElemTk = tyRecord) and RecordHasManagedFields(caElemRec)) then
     begin
       if caElemTk = tyRecord then caElemSz := RecSize(caElemRec)
@@ -2558,6 +2566,11 @@ begin
       else if (cpi >= 0) and
          (ASTKind[argAST] = AN_IDENT) and
          (Syms[ASTIVal[argAST]].TypeKind = tyAnsiString) and
+         { an ARRAY of AnsiString carries the element type in TypeKind — it is
+           not a managed-string slot; a dyn array to a var open-array param
+           passes its data-pointer VALUE (IRLowerAddress), matching the scalar-
+           element arrays and the callee's [data-8] Length read. }
+         not Syms[ASTIVal[argAST]].IsArray and
          not ((Syms[ASTIVal[argAST]].Kind = skParam) and
               Syms[ASTIVal[argAST]].IsRef) then
         value := IRAppend(IR_SLOTADDR, ASTIVal[argAST], -1, -1, 0, Ord(tyPointer))

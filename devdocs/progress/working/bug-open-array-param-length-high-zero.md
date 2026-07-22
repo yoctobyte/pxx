@@ -8,7 +8,7 @@ track: P
 - **Type:** bug — **Track P** (Pascal frontend; open-array parameter lowering).
   May be the shared open-array descriptor / ABI rather than the frontend, in
   which case it belongs to A — the two live next to each other.
-- **Status:** backlog — filed 2026-07-20.
+- **Status:** working
 - **Found by:** Track B, writing `lib/rtl/truststore.pas`
   ([[feature-tls-system-trust-store]]) — a `for i := 0 to High(a)` style bound
   over an open-array out-parameter silently produced an empty result.

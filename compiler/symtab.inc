@@ -8,6 +8,7 @@ procedure EmitManagedRecordReleaseLocked(recId: Integer); forward;
 procedure EmitAcquireHeapLock; forward;
 procedure EmitReleaseHeapLock; forward;
 procedure EmitLoadVarA64(idx: Integer); forward;
+procedure EmitLoadDataRefA64(rd, dataOff: Integer); forward;
 procedure EmitA64CopyBytes(countReg, srcReg, dstReg: Integer); forward;
 procedure EmitArm32CopyBytes(countReg, srcReg, dstReg: Integer); forward;
 procedure EmitLoadVarArm32(idx: Integer); forward;
