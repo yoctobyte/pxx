@@ -5921,3 +5921,32 @@
 2026-07-22T08:49:26Z	borg	afbb6af5	uforth-core	cpython	825.9	07ffdb1	24388
 2026-07-22T08:49:26Z	borg	afbb6af5	uforth-core	cpython-O	1093.8	07ffdb1	29668
 2026-07-22T08:49:26Z	borg	afbb6af5	uforth-core	pxx	5270.9	07ffdb1	169532
+2026-07-22T09:14:36Z	borg	bf193547c7ff	mandelbrot	-O0	1367.0
+2026-07-22T09:14:36Z	borg	bf193547c7ff	mandelbrot	-O2	1366.7
+2026-07-22T09:14:36Z	borg	bf193547c7ff	mandelbrot	-O3	665.2
+2026-07-22T09:14:36Z	borg	bf193547c7ff	mandelbrot-p	-O0	1517.4
+2026-07-22T09:14:36Z	borg	bf193547c7ff	mandelbrot-p	-O2	1518.5
+2026-07-22T09:14:36Z	borg	bf193547c7ff	mandelbrot-p	-O3	615.0
+2026-07-22T09:14:36Z	borg	bf193547c7ff	mandelbrot-p	fpc	314.5
+2026-07-22T09:14:36Z	borg	bf193547c7ff	raytracer	-O0	11539.6
+2026-07-22T09:14:36Z	borg	bf193547c7ff	raytracer	-O2	6627.8
+2026-07-22T09:14:36Z	borg	bf193547c7ff	raytracer	-O3	6527.4
+2026-07-22T09:14:36Z	borg	bf193547c7ff	raytracer-p	-O0	314.7
+2026-07-22T09:14:36Z	borg	bf193547c7ff	raytracer-p	-O2	314.6
+2026-07-22T09:14:36Z	borg	bf193547c7ff	raytracer-p	-O3	264.3
+2026-07-22T09:14:36Z	borg	bf193547c7ff	raytracer-p	fpc	31.9
+2026-07-22T09:14:36Z	borg	bf193547c7ff	sieve	-O0	114.0
+2026-07-22T09:14:36Z	borg	bf193547c7ff	sieve	-O2	64.0
+2026-07-22T09:14:36Z	borg	bf193547c7ff	sieve	-O3	63.8
+2026-07-22T09:14:36Z	borg	bf193547c7ff	sieve	fpc	31.9
+2026-07-22T09:14:36Z	borg	bf193547c7ff	nbody	-O0	615.2
+2026-07-22T09:14:36Z	borg	bf193547c7ff	nbody	-O2	564.9
+2026-07-22T09:14:36Z	borg	bf193547c7ff	nbody	-O3	364.6
+2026-07-22T09:14:36Z	borg	bf193547c7ff	nbody	fpc	64.0
+2026-07-22T09:14:36Z	borg	bf193547c7ff	fib	-O0	264.4
+2026-07-22T09:14:36Z	borg	bf193547c7ff	fib	-O2	164.2
+2026-07-22T09:14:36Z	borg	bf193547c7ff	fib	-O3	114.1
+2026-07-22T09:14:36Z	borg	bf193547c7ff	fib	fpc	114.1
+2026-07-22T09:14:36Z	borg	bf193547c7ff	selfcompile	-O0	8582.9
+2026-07-22T09:14:36Z	borg	bf193547c7ff	selfcompile	-O2	7180.2
+2026-07-22T09:14:36Z	borg	bf193547c7ff	selfcompile	-O3	7279.6
