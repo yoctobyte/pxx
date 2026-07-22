@@ -1004,6 +1004,15 @@ begin
     ki := PPyVarRec(@key)^.Payload;      { list index is an integer key }
     Result := TPyList(o).at(ki);
   end
+  else if o is TPyBytes then
+  begin
+    { bytes/bytearray index -> the integer byte value. Missing this case made
+      `b[i]` on a VARIANT holding bytes (e.g. after `x = None; x = readline()`)
+      raise 'not subscriptable' even though len(x) worked. }
+    ki := PPyVarRec(@key)^.Payload;
+    if ki < 0 then ki := ki + TPyBytes(o).count;
+    Result := pyvar_of_int(TPyBytes(o).at(ki));
+  end
   else
   begin
     WriteLn('TypeError: object is not subscriptable');
