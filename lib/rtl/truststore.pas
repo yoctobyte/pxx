@@ -62,15 +62,8 @@ function TrustReadFile(const path: AnsiString; var content: AnsiString): Boolean
 
 { Split a concatenated PEM text into its DER blocks. Returns the number found
   and fills `ders`; anything outside a BEGIN/END CERTIFICATE pair is ignored, so
-  the human-readable headers real bundles carry are harmless.
-
-  `cap` is passed explicitly instead of using `Length(ders)`, because Length and
-  High on an open-array parameter currently return 0 and -1 — see
-  bug-open-array-param-length-high-zero. Without it this loop runs zero times
-  and a 121-certificate bundle yields no anchors, silently. Revert to
-  `Length(ders)` when that is fixed. }
-function PemSplit(const pem: AnsiString; var ders: array of AnsiString;
-                  cap: Integer): Integer;
+  the human-readable headers real bundles carry are harmless. }
+function PemSplit(const pem: AnsiString; var ders: array of AnsiString): Integer;
 
 { Read and parse a concatenated-PEM bundle. Unparseable entries are skipped. }
 function LoadTrustFile(const path: AnsiString; var store: TTrustStore): Boolean;
@@ -142,8 +135,7 @@ begin
   StripWs := r;
 end;
 
-function PemSplit(const pem: AnsiString; var ders: array of AnsiString;
-                  cap: Integer): Integer;
+function PemSplit(const pem: AnsiString; var ders: array of AnsiString): Integer;
 var
   pos, b, e, bodyStart: Integer;
   body, der: AnsiString;
@@ -151,7 +143,7 @@ var
 begin
   n := 0;
   pos := 1;
-  while (pos <= Length(pem)) and (n < cap) do
+  while (pos <= Length(pem)) and (n < Length(ders)) do
   begin
     b := Pos(PEM_BEGIN, Copy(pem, pos, Length(pem) - pos + 1));
     if b = 0 then Break;
@@ -188,7 +180,7 @@ begin
     Exit;
   end;
 
-  count := PemSplit(pem, ders, MAX_ROOTS);
+  count := PemSplit(pem, ders);
   for i := 0 to count - 1 do
   begin
     c := X509Parse(ders[i]);
