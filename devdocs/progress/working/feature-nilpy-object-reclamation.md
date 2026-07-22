@@ -2,6 +2,7 @@
 track: A
 prio: 55
 type: feature
+owner: fable-a-n
 ---
 
 # NilPy object reclamation — dict/list/instance/bound-method lifetime
