@@ -60,3 +60,6 @@ A `{$Q+}` test per width (Integer, Cardinal, SmallInt, Byte) asserting runtime
 error 215, plus the existing 64-bit case still trapping and `{$Q-}` still
 wrapping. `--tier quick` + self-host byte-identical; cross where a backend's
 check is touched.
+
+## Log
+- 2026-07-22 — resolved, commit 035b78a7.
