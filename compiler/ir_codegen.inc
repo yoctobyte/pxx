@@ -5283,7 +5283,18 @@ begin
           if tk = tyString then
             EmitAnsiStrFromInlineString
           else if tk = tyAnsiString then
-            IREmitCodeCall(AnsiStrRetainAddr)
+          begin
+            { An lvalue source shares its handle -> retain. A CALL result or a
+              concat BINOP is already OWNED (+1, ownership transfers) — the
+              unconditional retain leaked one handle per boxed call result
+              (`v = f()` into a variant in a loop; uforth's PYTHON-word path).
+              Same discrimination IR_STORE_SYM applies
+              (bug-a-runtime-variant-heap-grows-unbounded). }
+            if not (((IRKind[IRB[node]] = IR_BINOP) and
+                     (IntToTypeKind(IRTk[IRB[node]]) = tyAnsiString)) or
+                    ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0))) then
+              IREmitCodeCall(AnsiStrRetainAddr);
+          end
           else if (tk = tyInteger) or (tk = tyInt8) or (tk = tyInt16) or (tk = tyInt32) then
           begin EmitB($48); EmitB($98); end;     { cdqe: sign-extend eax -> rax }
           EmitB($50);                            { push rax  (payload) }

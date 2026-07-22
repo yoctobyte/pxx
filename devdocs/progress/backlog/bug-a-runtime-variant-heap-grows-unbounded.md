@@ -249,3 +249,24 @@ static strings. Track N/A shared — pyeval.pas is builtin.
 Bench after layer 4 (uforth_bench --runs 1): doloop 553 MB (was 582),
 core 158 MB (was 166), prelim 32 MB — the deltas match the compiled-path
 fixes; the bulk is this exec layer.
+
+## Layer 5 FIXED (fable-abcnp, 2026-07-22): variant boxing double-retained call-result strings
+
+The Track T reduction above (`v = pick(i)`) root-caused: pick's Result is
+inferred ANSISTRING (from the `return "neg"` arm — NOT a payload-agnostic
+int box), and `v = pick(...)` boxes the call-result handle into the variant
+slot via IR_VAR_STORE, which retained UNCONDITIONALLY. A call result is
+already owned (+1, ownership transfers), so every boxed call-result string
+leaked one handle — the `return i` case leaked identically (variant→string
+conversion helper allocates the text). Fix: IR_VAR_STORE now skips the
+retain for CALL results and concat BINOPs, the same discrimination
+IR_STORE_SYM has always applied; x86-64 + i386 + arm32 + aarch64
+(riscv32/xtensa have no variant store). Reduction repro: 62.7 MB → 288 KB.
+
+Bench unchanged (doloop still ~553 MB): the reduction found a REAL adjacent
+leak, but the exec'd-PYTHON-word path leaks via per-call TPyDict/bound-method
+instances — that is [[feature-nilpy-object-reclamation]] (user resolved
+[[decide-uforth-exec-leak-strategy]]: no uforth changes; fix the compiler).
+This umbrella stays open, gated on the reclamation ticket; bench.tsv keeps
+the regression signal. Also filed en route:
+[[bug-nilpy-mixed-str-int-return-segfault]] (pre-existing crash).

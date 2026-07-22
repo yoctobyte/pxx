@@ -35,3 +35,17 @@ Option 3. File the NilPy-reclamation work as its own Track A/N ticket sized
 honestly; do the uforth hoist immediately (its repo is ours, and CPython
 gains too). The umbrella ticket then closes, replaced by the language-gap
 ticket.
+
+## RESOLVED by user (2026-07-22)
+
+uforth will NOT be changed — it is a test case; if there is an improvement
+suggestion it belongs as a ticket in the uforth repo, not here ("for us it's
+not relevant — and actually we should be thankful for revealing bugs").
+The remaining work is NilPy object reclamation, which must be fixed either
+way: Python code leaking memory is not a selling point — leaks should come
+from application bugs, not compiler errors. (With the fair caveat that this
+is genuinely hard — most complex applications under any compiler leak or
+fragment; FPC's 2010s threaded-ansistring leaks being the cautionary tale:
+threading × memory management IS hard.)
+
+Re-filed as [[feature-nilpy-object-reclamation]] (Track A, p55).

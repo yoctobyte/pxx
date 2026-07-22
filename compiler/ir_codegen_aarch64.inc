@@ -3454,7 +3454,13 @@ begin
           else if tk = tyAnsiString then
           begin
             IREmitNodeAarch64(IRB[node]);   { x0 = handle }
-            EmitStrIncRefA64;
+            { A CALL result / concat BINOP is already OWNED (+1) — retaining
+              again leaked one handle per boxed call result (mirrors the
+              x86-64 fix; bug-a-runtime-variant-heap-grows-unbounded). }
+            if not (((IRKind[IRB[node]] = IR_BINOP) and
+                     (IntToTypeKind(IRTk[IRB[node]]) = tyAnsiString)) or
+                    ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0))) then
+              EmitStrIncRefA64;
           end
           else
           begin

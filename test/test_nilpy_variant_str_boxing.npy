@@ -1,0 +1,22 @@
+def f():
+    return "abc" + "def"
+def g(cond):
+    if cond > 0:
+        return "pos"
+    return 42
+def main():
+    s = "hello"
+    v = s
+    s = "changed"
+    print(v, s)
+    v = f()
+    print(v)
+    v = g(1)
+    print(v)
+    i = 0
+    while i < 500000:
+        v = g(1)
+        v = f()
+        i = i + 1
+    print(i, v)
+main()

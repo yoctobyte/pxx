@@ -3677,7 +3677,13 @@ begin
             else
             begin
               IREmitNodeArm32(IRB[node]);             { r0 = handle }
-              EmitStrIncRefArm32;
+              { A CALL result / concat BINOP is already OWNED (+1) — retaining
+                again leaked one handle per boxed call result (mirrors the
+                x86-64 fix; bug-a-runtime-variant-heap-grows-unbounded). }
+              if not (((IRKind[IRB[node]] = IR_BINOP) and
+                       (IntToTypeKind(IRTk[IRB[node]]) = tyAnsiString)) or
+                      ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0))) then
+                EmitStrIncRefArm32;
             end;
             EmitI32($E92D0001);                       { push {r0} (payload) }
           end
