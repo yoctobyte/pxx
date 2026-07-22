@@ -548,6 +548,14 @@ const
   VT_CHAR    = 5;   { payload = byte in low 8 bits }
   VT_STRING  = 6;   { payload = managed AnsiString ref }
   VT_OBJECT  = 7;   { payload = class instance pointer (NilPy Any/list slots; isinstance) }
+  VT_BOUNDMETHOD = 8; { payload = {code, recv} pair pointer (pylib pybound_new) }
+
+  { Population tag a PXXObjAlloc-headered instance carries at [inst-8] — MUST
+    match PXX_OBJ_MAGIC in compiler/builtin/builtinheap.pas. Odd value, so it
+    can never equal a plain block's allocator size word (always a multiple of
+    8); the variant clear/retain emitters test it before touching [inst-16]
+    (feature-nilpy-object-reclamation). }
+  PXX_OBJ_MAGIC_TAG = $505942F1;
 
   { PROMOTABLE INT tag block (feature-a-promotable-int). Variant tags can never
     be renumbered — Pascal code compares VarType() against documented constants

@@ -814,7 +814,7 @@ procedure EmitVariantClear;
   reset the slot to VT_EMPTY. Preserves the slot address in rax. The jne
   target is patched manually (not via EmitAsmX64's `.label` form) because it
   jumps past IREmitCodeCall -- see EmitDynArrayReleaseLocked. }
-var pDone, pDone2, pHit: Integer;
+var pDone, pDone2, pHit, pObj, pObj2, pSkip, pObjNil, pObjNoMag: Integer;
 begin
   { Managed payload = VT_STRING, or ANY tag in the promotable-int block: a promo
     too large for the inline tier rides in a variant as a managed AnsiString of
@@ -822,6 +822,15 @@ begin
     contiguous so this stays a range test in six hand-written emitters. }
   EmitAsmX64(['push rax', 'mov rcx, [rax]', 'cmp rcx, %', VT_STRING]);
   EmitB($0F); EmitB($84); pHit := CodeLen; EmitI32(0);   { je release }
+  { VT_OBJECT / VT_BOUNDMETHOD: a refcounted object block shares the string
+    header protocol exactly (rc at [p-16], free base = p-16), so the SAME
+    release blob serves — guarded by the [p-8] population tag so a
+    manual-lifetime Pascal instance in a variant is left alone
+    (feature-nilpy-object-reclamation slice 2). }
+  EmitAsmX64(['cmp rcx, %', VT_OBJECT]);
+  EmitB($0F); EmitB($84); pObj := CodeLen; EmitI32(0);   { je objchk }
+  EmitAsmX64(['cmp rcx, %', VT_BOUNDMETHOD]);
+  EmitB($0F); EmitB($84); pObj2 := CodeLen; EmitI32(0);  { je objchk }
   EmitAsmX64(['cmp rcx, %', VT_PROMO_BASE]);
   EmitB($0F); EmitB($8C); pDone := CodeLen; EmitI32(0);  { jl done }
   EmitAsmX64(['cmp rcx, %', VT_PROMO_LAST]);
@@ -829,8 +838,20 @@ begin
   Patch32(pHit, CodeLen - (pHit + 4));
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(AnsiStrReleaseAddr);
+  EmitB($E9); pSkip := CodeLen; EmitI32(0);              { jmp done }
+  { objchk: payload non-nil AND headered -> release via the shared blob }
+  Patch32(pObj, CodeLen - (pObj + 4));
+  Patch32(pObj2, CodeLen - (pObj2 + 4));
+  EmitAsmX64(['mov rax, [rax+8]', 'test rax, rax']);
+  EmitB($0F); EmitB($84); pObjNil := CodeLen; EmitI32(0);   { je done }
+  EmitAsmX64(['mov rcx, [rax-8]', 'cmp rcx, %', PXX_OBJ_MAGIC_TAG]);
+  EmitB($0F); EmitB($85); pObjNoMag := CodeLen; EmitI32(0); { jne done }
+  IREmitCodeCall(AnsiStrReleaseAddr);
   Patch32(pDone, CodeLen - (pDone + 4));
   Patch32(pDone2, CodeLen - (pDone2 + 4));
+  Patch32(pSkip, CodeLen - (pSkip + 4));
+  Patch32(pObjNil, CodeLen - (pObjNil + 4));
+  Patch32(pObjNoMag, CodeLen - (pObjNoMag + 4));
   EmitAsmX64([
     'pop rax',
     'mov qword [rax], %', VT_EMPTY,
@@ -838,14 +859,34 @@ begin
   ]);
 end;
 
+procedure EmitObjRetainRaxGuarded;
+{ rax = object pointer (or nil). Retain iff it carries the PXX_OBJ_MAGIC
+  population tag at [rax-8] (a PXXObjAlloc-headered NilPy instance); preserves
+  rax. Shares the string retain blob — the header protocol is identical. }
+var pNil, pNoMag: Integer;
+begin
+  EmitAsmX64(['test rax, rax']);
+  EmitB($0F); EmitB($84); pNil := CodeLen; EmitI32(0);    { je done }
+  EmitAsmX64(['push rcx', 'mov rcx, [rax-8]', 'cmp rcx, %', PXX_OBJ_MAGIC_TAG, 'pop rcx']);
+  EmitB($0F); EmitB($85); pNoMag := CodeLen; EmitI32(0);  { jne done }
+  IREmitCodeCall(AnsiStrRetainAddr);
+  Patch32(pNil, CodeLen - (pNil + 4));
+  Patch32(pNoMag, CodeLen - (pNoMag + 4));
+end;
+
 procedure EmitVariantRetain;
 { rax = address of a variant slot. Retain a managed payload. Preserves rax.
   See EmitVariantClear for why the jne target is patched manually. }
-var pDone, pDone2, pHit: Integer;
+var pDone, pDone2, pHit, pObj, pObj2, pSkip, pObjNil, pObjNoMag: Integer;
 begin
-  { Same managed-payload test as EmitVariantClear — see there. }
+  { Same managed-payload test as EmitVariantClear — see there, including the
+    object-tag arm and its population-tag guard. }
   EmitAsmX64(['push rax', 'mov rcx, [rax]', 'cmp rcx, %', VT_STRING]);
   EmitB($0F); EmitB($84); pHit := CodeLen; EmitI32(0);   { je retain }
+  EmitAsmX64(['cmp rcx, %', VT_OBJECT]);
+  EmitB($0F); EmitB($84); pObj := CodeLen; EmitI32(0);   { je objchk }
+  EmitAsmX64(['cmp rcx, %', VT_BOUNDMETHOD]);
+  EmitB($0F); EmitB($84); pObj2 := CodeLen; EmitI32(0);  { je objchk }
   EmitAsmX64(['cmp rcx, %', VT_PROMO_BASE]);
   EmitB($0F); EmitB($8C); pDone := CodeLen; EmitI32(0);  { jl done }
   EmitAsmX64(['cmp rcx, %', VT_PROMO_LAST]);
@@ -853,8 +894,20 @@ begin
   Patch32(pHit, CodeLen - (pHit + 4));
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(AnsiStrRetainAddr);
+  EmitB($E9); pSkip := CodeLen; EmitI32(0);              { jmp done }
+  { objchk: payload non-nil AND headered -> retain via the shared blob }
+  Patch32(pObj, CodeLen - (pObj + 4));
+  Patch32(pObj2, CodeLen - (pObj2 + 4));
+  EmitAsmX64(['mov rax, [rax+8]', 'test rax, rax']);
+  EmitB($0F); EmitB($84); pObjNil := CodeLen; EmitI32(0);   { je done }
+  EmitAsmX64(['mov rcx, [rax-8]', 'cmp rcx, %', PXX_OBJ_MAGIC_TAG]);
+  EmitB($0F); EmitB($85); pObjNoMag := CodeLen; EmitI32(0); { jne done }
+  IREmitCodeCall(AnsiStrRetainAddr);
   Patch32(pDone, CodeLen - (pDone + 4));
   Patch32(pDone2, CodeLen - (pDone2 + 4));
+  Patch32(pSkip, CodeLen - (pSkip + 4));
+  Patch32(pObjNil, CodeLen - (pObjNil + 4));
+  Patch32(pObjNoMag, CodeLen - (pObjNoMag + 4));
   EmitAsmX64(['pop rax']);
 end;
 
@@ -5294,6 +5347,17 @@ begin
                      (IntToTypeKind(IRTk[IRB[node]]) = tyAnsiString)) or
                     ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0))) then
               IREmitCodeCall(AnsiStrRetainAddr);
+          end
+          else if tk = tyClass then
+          begin
+            { Boxing an object: the variant slot takes its own +1 (guarded by
+              the [p-8] population tag; unheadered Pascal instances no-op).
+              Unconditional — a construction result boxed here keeps its
+              never-released construction ref until the scope-exit slice of
+              feature-nilpy-object-reclamation lands, which is the pre-existing
+              leak, while an lvalue source NEEDS the retain or the slot's later
+              clear would free a borrowed instance. }
+            EmitObjRetainRaxGuarded;
           end
           else if (tk = tyInteger) or (tk = tyInt8) or (tk = tyInt16) or (tk = tyInt32) then
           begin EmitB($48); EmitB($98); end;     { cdqe: sign-extend eax -> rax }

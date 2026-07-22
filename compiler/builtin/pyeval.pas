@@ -200,6 +200,9 @@ var r: PPyRec;
 begin
   r := PPyRec(@Result);
   r^.VType := 7; r^.Payload := Int64(p);
+  { slot takes its own +1 (magic-guarded; see the borrow-everywhere note in
+    feature-nilpy-object-reclamation slice 2) }
+  PXXObjRetain(p);
 end;
 
 { ---- promotable-int (bignum) integer layer --------------------------------
@@ -609,7 +612,10 @@ begin
     { box the result by its kind: class/pointer -> VT_OBJECT; ordinal -> int;
       void (rk=0) -> None. }
     if (rk = 6) or (rk = 17) then
-    begin PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := pret; end
+    begin
+      PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := pret;
+      PXXObjRetain(Pointer(NativeInt(pret)));   { slot owns +1 (magic-guarded) }
+    end
     else if rk = 0 then res := MakeNone
     else res := pyvar_of_int(pret);
     Exit;
@@ -751,8 +757,12 @@ begin
     23: res := MakeStr(PAnsiString(p)^);          { tyAnsiString }
   else
     { class / aggregate field: the slot holds an object pointer; expose it as a
-      VT_OBJECT so subscripts and method calls can reach the container }
+      VT_OBJECT so subscripts and method calls can reach the container. A field
+      read BORROWS — the field keeps its own ref — so the variant must take +1
+      (no-op on unheadered Pascal instances; the variant's scope-exit release
+      balances it once the object arms are live). }
     r^.VType := 7; r^.Payload := PInt64(p)^;
+    PXXObjRetain(Pointer(NativeInt(r^.Payload)));
   end;
 end;
 
@@ -1841,6 +1851,7 @@ begin
     end;
     ExpectOp(']');
     PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(li));
+    PXXObjRetain(Pointer(li));   { slot owns +1 (magic-guarded) }
   end
   else if IsOp('{') then
   begin
@@ -1852,6 +1863,7 @@ begin
       Advance;
       dd := TPyDict.Create;
       PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(dd));
+      PXXObjRetain(Pointer(dd));   { slot owns +1 (magic-guarded) }
     end
     else
     begin
@@ -1870,6 +1882,7 @@ begin
         end;
         ExpectOp('}');
         PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(dd));
+        PXXObjRetain(Pointer(dd));   { slot owns +1 (magic-guarded) }
       end
       else
       begin
@@ -1883,6 +1896,7 @@ begin
         end;
         ExpectOp('}');
         PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(li));
+        PXXObjRetain(Pointer(li));   { slot owns +1 (magic-guarded) }
       end;
     end;
   end
@@ -1918,6 +1932,7 @@ begin
         li.append(elem);
       end;
       PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(li));
+      PXXObjRetain(Pointer(li));   { slot owns +1 (magic-guarded) }
     end;
     ExpectOp(')');
   end
@@ -2268,6 +2283,7 @@ begin
   else if step < 0 then
   begin i := lo; while i > hi do begin r.append(pyvar_of_int(i)); i := i + step; end; end;
   ro := PPyRec(@Result); ro^.VType := 7; ro^.Payload := Int64(Pointer(r));
+  PXXObjRetain(Pointer(r));   { slot owns +1 (magic-guarded) }
 end;
 
 procedure CallBuiltin(const name: AnsiString; args: TPyList;
@@ -2616,6 +2632,7 @@ begin
         Cur := endPos;
         PPyRec(@v)^.VType := 7;
         PPyRec(@v)^.Payload := Int64(NativeInt(Pointer(gres)));
+        PXXObjRetain(Pointer(gres));   { slot owns +1 (magic-guarded) }
       end;
       args.append(v);
     end;
@@ -2651,6 +2668,7 @@ begin
     begin
       by := pyint_to_bytes(pyvar_to_int(recv), pyvar_to_int(args.at(0)), signedKw);
       PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(by));
+      PXXObjRetain(Pointer(by));   { slot owns +1 (magic-guarded) }
       Exit;
     end;
     EvalError('int method not supported: ' + mname);
@@ -2705,6 +2723,7 @@ begin
     begin
       b2 := pystr_encode(s);
       PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(b2));
+      PXXObjRetain(Pointer(b2));   { slot owns +1 (magic-guarded) }
     end
     else
       EvalError('str method not supported: ' + mname);

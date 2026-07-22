@@ -2353,17 +2353,23 @@ end;
 
 procedure PXXVarClear(v: Pointer);
 { Release a string payload and zero the 16-byte slot (both words fully, so
-  32-bit targets leave no stale high halves behind). }
+  32-bit targets leave no stale high halves behind). Object payloads
+  (VT_OBJECT 7 / VT_BOUNDMETHOD 8) ride PXXObjRelease, whose PXX_OBJ_MAGIC
+  guard makes it a no-op on manual-lifetime Pascal instances. }
 begin
   if PWord(v)^ = 6 then  { VT_STRING }
-    PXXStrDecRef(Pointer(PWord(Int64(v) + 8)^));
+    PXXStrDecRef(Pointer(PWord(Int64(v) + 8)^))
+  else if (PWord(v)^ = 7) or (PWord(v)^ = 8) then
+    PXXObjRelease(Pointer(PWord(Int64(v) + 8)^));
   PXXMemZero(v, 16);
 end;
 
 procedure PXXVarRetain(v: Pointer);
 begin
   if PWord(v)^ = 6 then  { VT_STRING }
-    PXXStrIncRef(Pointer(PWord(Int64(v) + 8)^));
+    PXXStrIncRef(Pointer(PWord(Int64(v) + 8)^))
+  else if (PWord(v)^ = 7) or (PWord(v)^ = 8) then
+    PXXObjRetain(Pointer(PWord(Int64(v) + 8)^));
 end;
 
 { ---- Float -> text writers (portable bodies for the cross targets, used in
