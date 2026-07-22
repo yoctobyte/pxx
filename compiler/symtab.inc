@@ -5927,10 +5927,12 @@ begin
   end;
   if TargetArch = TARGET_AARCH64 then
   begin
-    { Release local COM/ARC interface references before returning (nil-safe).
+    { Release local managed variables before returning (mirrors the arm32 arm
+      set: COM interface, AnsiString, Variant, record-with-managed-fields).
       Must precede the result load: each call clobbers x0. }
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+      begin
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
         begin
           EmitLoadImmA64(9, Syms[i].Offset);
@@ -5939,7 +5941,40 @@ begin
           procIdx := FindProc('PXXIntfRelease');
           if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
           EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
+        begin
+          EmitLoadVarA64(i);                       { x0 = handle }
+          procIdx := FindProc('PXXStrDecRef');
+          if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyVariant) and not Syms[i].IsArray then
+        begin
+          { Variant local: clear (releases any managed payload). x0 = address. }
+          EmitLoadImmA64(9, Syms[i].Offset);
+          EmitI32($8B0903A0);  { add x0, x29, x9  (x0 = variant address) }
+          procIdx := FindProc('PXXVarClear');
+          if procIdx < 0 then Error('compiler error: PXXVarClear not found');
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+                RecordHasManagedFields(Syms[i].RecName) then
+        begin
+          { Record-with-managed-fields local: release each managed field via the
+            portable helper. x0 = record address, x1 = layout descriptor. }
+          EmitLoadImmA64(9, Syms[i].Offset);
+          EmitI32($8B0903A0);  { add x0, x29, x9  (x0 = record address) }
+          EmitLoadDataRefA64(1,
+            -(RECORD_RTTI_DATAREF_BASE + (Syms[i].RecName - REC_UCLASS_BASE)));
+          procIdx := FindProc('PXXRecordRelease');
+          if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
+          EmitCallProc(procIdx);
         end;
+      end;
     if retSymIdx >= 0 then
     begin
       if RetViaHiddenDest(Syms[retSymIdx].TypeKind) and
