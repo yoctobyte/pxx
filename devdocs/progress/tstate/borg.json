@@ -1994,12 +1994,11 @@
   },
   {
    "bad": "040d94dfe407253a46f0e31b177ecc55919371c8",
-   "good": "ec39f350faddf8ba34e6d5cacd9f6e11e2a7a9c5",
+   "good": "c36120c671ada329efc2666cbfcca0d17d7ab077",
    "job": "fpc-bootstrap#src:compiler/compiler.pas",
    "name": "fpc-bootstrap#00",
    "opened": "2026-07-22T00:35:00Z",
    "range": [
-    "c36120c671ada329efc2666cbfcca0d17d7ab077",
     "040d94dfe407253a46f0e31b177ecc55919371c8"
    ],
    "src": "compiler/compiler.pas"
