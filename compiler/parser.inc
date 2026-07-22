@@ -4355,7 +4355,18 @@ begin
             if mmi < 0 then Error('setter method not found: ' + methName);
             mpi := UMthProc_[mmi];
             Expect(tkAssign, ':=');
-            ParseExpr;
+            { NilPy `d[k] = None` through the default-prop setter: None is a
+              real value (VT_EMPTY variant), not the nil pointer literal —
+              parsed as nil it boxed integer 0 into the variant param and
+              `d[k] is None` tag-tested false afterwards (same fix as the
+              dict/list-literal element routes, feature-nilpy-none-variant). }
+            if PyExprMode and (CurTok.Kind = tkNil) then
+            begin
+              Next;
+              CurASTNode := PyMakeNone;
+            end
+            else
+              ParseExpr;
             if UMthVirSlot[mmi] >= 0 then begin mcallNode := AllocNode(AN_VIRTUAL_CALL); ASTRight[mcallNode] := UMthVirSlot[mmi]; end
             else mcallNode := AllocNode(AN_CALL);
             ASTIVal[mcallNode] := mpi; ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
