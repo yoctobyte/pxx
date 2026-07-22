@@ -103,6 +103,14 @@ function PXXPCharOf(p: Pointer): Pointer;
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
 procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
+{ NilPy object reclamation (devdocs/dev/nilpy-object-reclamation.md): class
+  instances created by NilPy code paths are refcounted like AnsiString handles.
+  The instance pointer is base+16 of its own heap block, rc at [inst-16] — the
+  same protocol as the string handles above. Pascal-created instances are NOT
+  in this scheme; only allocations routed through PXXObjAlloc are. }
+function PXXObjAlloc(size: NativeInt): Pointer;
+procedure PXXObjRetain(p: Pointer);
+procedure PXXObjRelease(p: Pointer);
 { COM/ARC interface ARC helpers dispatch through the IMT via an indirect call,
   which the ESP (xtensa/riscv32) backends cannot lower yet; ESP has no COM
   interfaces anyway, so exclude them there (their RegisterProc is likewise
@@ -1091,6 +1099,54 @@ begin
 end;
 
 procedure PXXStrDecRef(p: Pointer);
+var base, rc: Int64;
+begin
+  if p = nil then Exit;
+  base := Int64(p) - 16;
+{$ifdef PXX_TS_SOFTLOCK}
+  rc := __pxxatomic_add(Pointer(base), -1) - 1;   { returns the OLD value }
+{$else}
+  rc := PWord(base)^ - 1;
+  PWord(base)^ := rc;
+{$endif}
+  if rc = 0 then PXXFree(Pointer(base));
+end;
+
+{ NilPy object-reclamation primitives. An instance allocated here lives at
+  base+16 of its own heap block: [rc:8][spare:8][instance data...], so the
+  refcount sits at [inst-16] exactly like a managed string's — the same
+  retain/release idiom (and the same threadsafe atomic) applies. The spare
+  word at [inst-8] is reserved (zero); note it is NOT the RTTI backlink —
+  that one lives before the VMT table, not before the instance.
+  PXXObjRelease at rc=0 currently just frees the block; the recursive
+  per-type finalizer (VMT `__finalize__` slot) is a later slice of
+  feature-nilpy-object-reclamation and hooks in right before the free. }
+function PXXObjAlloc(size: NativeInt): Pointer;
+var base: Int64;
+begin
+  if size < 8 then size := 8;
+  base := Int64(PXXAlloc(size + 16, 8));
+  PWord(base)^ := 1;            { refcount }
+  PWord(base + 8)^ := 0;        { reserved }
+  Result := Pointer(base + 16);
+end;
+
+procedure PXXObjRetain(p: Pointer);
+var base: Int64;
+{$ifdef PXX_TS_SOFTLOCK}
+    tsIgnore: Int64;
+{$endif}
+begin
+  if p = nil then Exit;
+  base := Int64(p) - 16;
+{$ifdef PXX_TS_SOFTLOCK}
+  tsIgnore := __pxxatomic_add(Pointer(base), 1);
+{$else}
+  PWord(base)^ := PWord(base)^ + 1;
+{$endif}
+end;
+
+procedure PXXObjRelease(p: Pointer);
 var base, rc: Int64;
 begin
   if p = nil then Exit;
