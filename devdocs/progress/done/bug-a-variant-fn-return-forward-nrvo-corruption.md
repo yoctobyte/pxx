@@ -51,3 +51,6 @@ NRVO / hidden-dest assignment for a Variant function Result, where the callee's
 16-byte managed-variant return is copied into the caller's Result/local with the
 wrong width or an aliased destination. Compare the working procedure-var-param
 path (real address) against the function-Result path.
+
+## Log
+- 2026-07-22 — resolved, commit 51d1c801.
