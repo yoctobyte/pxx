@@ -735,6 +735,7 @@ function PyBytesRepeatPair(a, b: Integer): Boolean; forward;             { Nil P
 function PyMakeBytesRepeat(a, b: Integer): Integer; forward;             { Nil Python `bytes * n` (pyparser.inc) }
 function PyNodeIsPyBytes(n: Integer): Boolean; forward;                  { Nil Python: node typed TPyBytes? (pyparser.inc) }
 function PyMakeBytesBinCall(const fname: AnsiString; a, b: Integer; retTk: TTypeKind): Integer; forward; { bytes binop helper call (pyparser.inc) }
+function PyMakeListBinCall(const fname: AnsiString; a, b: Integer): Integer; forward; { list binop -> TPyList call (pyparser.inc) }
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
 function PyIsSliceBase(n: Integer): Boolean; forward; { Nil Python: may this value be sliced? (pyparser.inc) }
@@ -11737,6 +11738,13 @@ begin
     begin
       { b1 + b2 — bytes concatenation (uforth WRITE-LINE) }
       node := PyMakeBytesBinCall('pybytes_concat', left, right, tyClass);
+      CurASTNode := node;
+      continue;
+    end
+    else if PyExprMode and (op = tkPlus) and PyNodeIsPyList(left) and PyNodeIsPyList(right) then
+    begin
+      { xs + ys — list concatenation (uforth {: :} locals: list(a)+list(b)) }
+      node := PyMakeListBinCall('pylist_concat', left, right);
       CurASTNode := node;
       continue;
     end

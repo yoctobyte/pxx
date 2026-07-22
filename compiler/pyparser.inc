@@ -4304,6 +4304,24 @@ begin
   ASTLeft[Result] := arg0;
 end;
 
+{ list binop helper call, tagging the result with TPyList class identity so
+  len()/subscript/iteration resolve on it. }
+function PyMakeListBinCall(const fname: AnsiString; a, b: Integer): Integer;
+var procIdx, arg0, arg1, ci: Integer;
+begin
+  procIdx := FindProc(fname);
+  if procIdx < 0 then Error('Nil Python: pylib (' + fname + ') not loaded');
+  arg0 := AllocNode(AN_ARG); ASTLeft[arg0] := a;
+  arg1 := AllocNode(AN_ARG); ASTLeft[arg1] := b;
+  ASTRight[arg0] := arg1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyClass);
+  ASTLeft[Result] := arg0;
+  ci := FindUClass('TPyList');
+  if ci >= 0 then ASTRight[Result] := REC_UCLASS_BASE + ci;
+end;
+
 function PyMakeBytesRepeat(a, b: Integer): Integer;
 var byNode, cntNode, procIdx, arg0, arg1: Integer;
 begin

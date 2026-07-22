@@ -3743,6 +3743,16 @@ begin
   Result := r;
 end;
 
+{ `a + b` list concatenation (Python). A fresh list of a's then b's elements. }
+function pylist_concat(a, b: TPyList): TPyList;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  if a <> nil then for i := 0 to a.count - 1 do r.append(a.at(i));
+  if b <> nil then for i := 0 to b.count - 1 do r.append(b.at(i));
+  Result := r;
+end;
+
 { `b * n` — Python bytes repetition (uforth FILL's `bytes([ch]) * u`).
   TPyBytes deliberately has no .append (name-collision note at the class), so
   the result is sized up front and filled with put. }
