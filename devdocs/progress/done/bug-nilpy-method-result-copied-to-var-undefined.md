@@ -77,3 +77,6 @@ bytes class identity, and the subsequent variant-to-variant copy propagates a
 mis-tagged slot. Fix needs the collect to recover the method result's class
 (or the store to re-box). uforth READ-LINE is the only word blocked; file
 create/write/close verified working.
+
+## Log
+- 2026-07-22 — resolved, commit 35103fd4.
