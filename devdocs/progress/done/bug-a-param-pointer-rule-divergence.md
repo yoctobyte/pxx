@@ -38,3 +38,6 @@ Resolved properly by [[feature-a-abi-oracle]] rather than by patching the three
 outliers — patching them just re-creates the same trap with 8 agreeing copies.
 If the oracle is deferred, at minimum reconcile `ParamSize` with `AllocParam`,
 since those two disagreeing is indefensible on its own.
+
+## Log
+- 2026-07-22 — resolved, commit 84a499cb.
