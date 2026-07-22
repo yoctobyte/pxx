@@ -97,6 +97,13 @@ var
   PyDcSLen: array[0..PY_MAX_DC_FIELDS-1] of Integer;
   PyDcCount: Integer;
   PyDcClassIsDc: array[0..PY_MAX_DC_FIELDS-1] of Boolean;  { indexed by ci }
+  { True when the member pre-pass already ran the FULL PyRegisterClassMembers
+    for this ci (methods + fields + defaults), so PyParseClass must not run it
+    again — a second full run would duplicate the append-only PyDc* defaults
+    and re-RegisterProc every method. Hoisting members is what lets the
+    module-collect trial parse resolve `x = obj.method()`
+    (bug-nilpy-method-result-copied-to-var-undefined). }
+  PyMembersHoisted: array[0..MAX_UCLASS-1] of Boolean;
 
 function PyIsIdent(const s: AnsiString): Boolean;
 begin
@@ -6777,40 +6784,14 @@ begin
           signatures are now hoisted is the remaining half of
           feature-n-nilpy-ast-typing-module-scope; until then such an
           assignment needs the annotated form above. }
-        { A method call on a NAME is skipped, not parsed: class members are not
-          registered until PyParseClass reaches the class, so trial-parsing
-          `x = c.two(1)` here would fail on a method that is perfectly valid a
-          moment later. Skipping costs nothing — the real parse declares the
-          local from the same AST rule — it only forgoes WIDENING for that
-          name, which is what the annotated form is for. A method call on a
-          literal (`"a,b".split(",")`) is not affected: its base is not an
-          identifier. }
-        bodyIx := i + 2;
-        while (bodyIx + 2 < MainProgramTokCount) and
-              not (Tokens[bodyIx].Kind in [tkNewline, tkDedent]) do
-        begin
-          if (Tokens[bodyIx].Kind = tkIdent) and
-             (Tokens[bodyIx + 1].Kind = tkDot) and
-             (Tokens[bodyIx + 2].Kind = tkIdent) and
-             (bodyIx + 3 < MainProgramTokCount) and
-             (Tokens[bodyIx + 3].Kind = tkLParen) then Break;
-          Inc(bodyIx);
-        end;
-        if (bodyIx + 2 < MainProgramTokCount) and
-           (Tokens[bodyIx].Kind = tkIdent) and (Tokens[bodyIx + 1].Kind = tkDot) then
-        begin
-          { A method-call RHS is skipped (the class method isn't registered
-            yet), but the TARGET name must still be recorded — otherwise a
-            LATER module statement that reads it (`raw = a.mk()` then
-            `zz = raw`) fails to resolve the name in this same collect pass.
-            Type unknown; the real parse types it from the same AST rule, and
-            the annotated form remains the escape hatch for widening
-            (bug-nilpy-method-result-copied-to-var-undefined). }
-          while (bodyIx < MainProgramTokCount) and
-                not (Tokens[bodyIx].Kind in [tkNewline, tkDedent]) do Inc(bodyIx);
-          i := bodyIx;
-          continue;
-        end;
+        { A method call on a NAME used to be skipped here because class
+          members were not registered until PyParseClass reached the class.
+          The member pre-pass now hoists method signatures (PyMembersHoisted),
+          so `x = c.two(1)` trial-parses and types x from the method's real
+          return type — which is what lets `raw = a.mk(); zz = raw` resolve
+          AND keeps raw's class identity (a tyVariant fallback mis-tagged a
+          bytes result VT_INT64: bug-nilpy-method-result-copied-to-var-
+          undefined). }
         TokPos := i;
         Next;
         PyParseStatement;
@@ -8289,8 +8270,8 @@ end;
   The real pass later resets each class's field window and rebuilds it, so
   these entries are orphaned rather than duplicated. }
 procedure PyRegisterClassFieldsPrepass;
-var i, j, ci, bs, be, depth: Integer;
-    isDC: Boolean;
+var i, j, k, ci, bs, be, depth, baseCi: Integer;
+    isDC, hoist: Boolean;
 begin
   i := 0;
   while i < MainProgramTokCount - 2 do
@@ -8307,6 +8288,31 @@ begin
         if (j >= 1) and (Tokens[j].Kind = tkIdent) and
            CaseEqual(GetTokenStr(j), 'dataclass') and (Tokens[j - 1].Kind = tkAt) then
           isDC := True;
+        { The FULL registration (methods included) needs the parent link set
+          first — a subclass's field offsets and virtual slots continue the
+          parent's layout. Resolve the base list here, exactly as PyParseClass
+          does (including the auto-shelled Exception base). If the base cannot
+          be resolved yet, fall back to fields-only and let PyParseClass do
+          the full run as before. }
+        hoist := True;
+        if Tokens[i + 2].Kind = tkLParen then
+        begin
+          baseCi := -1;
+          if Tokens[i + 3].Kind = tkIdent then
+          begin
+            baseCi := FindUClass(GetTokenStr(i + 3));
+            if (baseCi < 0) and CaseEqual(GetTokenStr(i + 3), 'Exception') then
+            begin
+              k := PyStoredName('Exception');
+              AddUClass(k, 9);
+              baseCi := FindUClass('Exception');
+            end;
+          end;
+          if baseCi >= 0 then
+            UClsParent[ci] := baseCi
+          else
+            hoist := False;
+        end;
         { skip the header to its tkIndent, honouring a parenthesised base list }
         j := i + 2;
         depth := 0;
@@ -8322,7 +8328,12 @@ begin
           bs := j + 1;   { first BODY token, matching PyParseClass's bodyStart
                            (it takes TokPos-1 after Expect(tkIndent)) }
           be := PyFindBodyEnd(bs);
-          PyRegisterClassMembers(ci, bs, be, isDC, True);
+          { Full members when the parent is settled: methods registered here
+            let the module-collect trial parse resolve `x = obj.method()`.
+            PyParseClass skips its own (second) full run via the flag — the
+            append-only PyDc* default tables must be filled exactly once. }
+          PyRegisterClassMembers(ci, bs, be, isDC, not hoist);
+          if hoist then PyMembersHoisted[ci] := True;
         end;
       end;
     end;
@@ -8357,7 +8368,12 @@ begin
   end;
   Expect(tkColon, ':'); Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
   bodyStart := TokPos - 1; bodyEnd := PyFindBodyEnd(bodyStart);
-  PyRegisterClassMembers(ci, bodyStart, bodyEnd, isDC, False);
+  { The member pre-pass may have already done the FULL registration (methods
+    + fields + PyDc* defaults) so the module-collect trial parse could resolve
+    method calls; re-running it would duplicate the append-only defaults and
+    re-register every method proc. }
+  if not PyMembersHoisted[ci] then
+    PyRegisterClassMembers(ci, bodyStart, bodyEnd, isDC, False);
   if isDC and (ci < PY_MAX_DC_FIELDS) then PyDcClassIsDc[ci] := True;
   PySkipNewlines;
   while CurTok.Kind <> tkDedent do
@@ -8434,6 +8450,7 @@ begin
   PyCountAlias := '';
   PyDcCount := 0;
   for i := 0 to PY_MAX_DC_FIELDS - 1 do PyDcClassIsDc[i] := False;
+  for i := 0 to MAX_UCLASS - 1 do PyMembersHoisted[i] := False;
   PyRegisterClassShells;
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
   BSS_HEAP_PTR    := BSSSize; Inc(BSSSize, 8);
