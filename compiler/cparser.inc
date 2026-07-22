@@ -7620,6 +7620,14 @@ begin
         the soft-float __pxx_d2i64 kernel, so pull the unit here too. The other
         kernels are unused dead code on arm32. }
       ParseUsesUnit('softfloat');
+    { builtinheap BEFORE pxxcio, mirroring the Pascal ParseProgram epilogue.
+      pxxcio's own uses clause is `platform, builtinheap, math` — platform
+      first — and platform has record-returning functions (PalIn6Any etc.).
+      The riscv32/xtensa aggregate-result epilogue lowers onto PXXMemMove via
+      FindProc, so builtinheap's headers must be registered before any unit
+      with a record-returning function compiles, or the C compile dies with
+      "PXXMemMove not found". Idempotent if already loaded. }
+    ParseUsesUnit('builtinheap');
     ParseUsesUnit('pxxcio');
     { --threadsafe C: pull the libc-free pthread bridge (palpthread over the
       palthread/palsync PAL) so a `<pthread.h>` shim's extern __pxx_pmutex_*/
