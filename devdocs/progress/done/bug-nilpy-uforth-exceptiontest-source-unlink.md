@@ -101,3 +101,6 @@ Known residual gap (pre-existing, by design of the nil-handle sentinel):
 `field = ""` then `field is None` answers True (nil handle conflates '' with
 None for str-typed slots). Filed only as a note here — uforth does not depend
 on the distinction.
+
+## Log
+- 2026-07-22 — resolved, commit 98ea2c51.
