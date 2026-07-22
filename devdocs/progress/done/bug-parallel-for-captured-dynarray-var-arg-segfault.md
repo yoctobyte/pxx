@@ -7,7 +7,7 @@ track: A
 
 - **Type:** bug — **Track A** (parallel-for capture lowering; `parser.inc` /
   `ir_codegen.inc` capture-frame path).
-- **Status:** working
+- **Status:** done
 - **Found by:** Track E, building `examples/mandelbrot/mandelzoom.pas`
   ([[feature-demo-mandelbrot-asm-autozoom]]).
 
@@ -70,3 +70,4 @@ around this by putting the framebuffer in a global, which workers reach directly
 - 2026-07-20 — Filed from Track E. Workaround used in the demo: globals are not
   captured at all (they are statically addressable), so a global dynamic array
   written from workers behaves correctly — verified.
+- 2026-07-22 — resolved, commit 69ebf4bb.
