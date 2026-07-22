@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-21T15:00:12Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "09dbbe04c079e88f57cd6283c3b9d5452a5d7202",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-07-21T15:09:49Z",
    "fixed": [],
    "new_red": [],
@@ -438,11 +430,21 @@
    "sha": "bf193547c7ffde6b5b1d637dec501ae209399192",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-22T09:27:56Z",
+   "fixed": [
+    "fpc-bootstrap#src:compiler/compiler.pas"
+   ],
+   "new_red": [],
+   "sha": "9da5da7fd793b5517f0ce49898b390dd265e7739",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
  "jobs": {
-  "fpc-bootstrap#src:compiler/compiler.pas": "fail",
+  "fpc-bootstrap#src:compiler/compiler.pas": "pass",
   "lib-fpc-clean#00": "pass",
   "optdiff#shard0/6": "pass",
   "optdiff#shard1/6": "pass",
@@ -1472,6 +1474,7 @@
   "test-core#src:test/test_op_unit_scope.pas@2": "pass",
   "test-core#src:test/test_open_array_ctor_stmt.pas": "pass",
   "test-core#src:test/test_open_array_field_args.pas": "pass",
+  "test-core#src:test/test_open_array_managed_length.pas": "pass",
   "test-core#src:test/test_open_array_no_leak.pas": "pass",
   "test-core#src:test/test_operator_enumerator.pas": "pass",
   "test-core#src:test/test_operator_implicit_shortstring_b356.pas": "pass",
@@ -1981,11 +1984,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-22T09:14:26Z",
-  "sha": "bf193547c7ffde6b5b1d637dec501ae209399192",
-  "tier": "opt",
+  "date": "2026-07-22T09:27:56Z",
+  "sha": "9da5da7fd793b5517f0ce49898b390dd265e7739",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 210.8
+  "wall": 319.5
  },
  "last_bench": {
   "conf_rows": 550,
@@ -2005,19 +2008,5 @@
   "date": "2026-07-22T09:14:30Z",
   "sha": "bf193547c7ffde6b5b1d637dec501ae209399192"
  },
- "open_regressions": [
-  {
-   "bad": "d260b731153766e47dffa90b2946fedfe564eb93",
-   "good": "afbb6af5452519c5614df1fd13d5931dfa82176b",
-   "job": "fpc-bootstrap#src:compiler/compiler.pas",
-   "name": "fpc-bootstrap#00",
-   "opened": "2026-07-22T08:57:03Z",
-   "range": [
-    "c46ba554409b4aa7e4191890163625ea00e13614",
-    "e7967f042d14ea14a01932442ad1106577035f83",
-    "d260b731153766e47dffa90b2946fedfe564eb93"
-   ],
-   "src": "compiler/compiler.pas"
-  }
- ]
+ "open_regressions": []
 }
