@@ -2015,15 +2015,11 @@
  "open_regressions": [
   {
    "bad": "4046db00e36679aec05b4f9e2b16f11f06714abe",
-   "good": "8ee26d0428b00e164d91014e5f022a5bc39d5ee3",
+   "good": "de0f410610c606b401497164432a8bb482ecf238",
    "job": "fpc-bootstrap#src:compiler/compiler.pas",
    "name": "fpc-bootstrap#00",
    "opened": "2026-07-22T15:57:28Z",
    "range": [
-    "f8c4a0e11f23afdb8079a3fcc2dfdec1afb8b3f9",
-    "66756bf470495f1552776788c93c67d4d9c011de",
-    "69f213b0ad905ed805316bf7ac67de6e4b7df471",
-    "de0f410610c606b401497164432a8bb482ecf238",
     "9e6834ea9cceda4072bc2bad867d38a15a2d15cb",
     "0ad9d15d7890925ca8544b7e3948959c38d75431",
     "86d9d3c34eb0b147e4617fe02dfa64d70f18dde8",
