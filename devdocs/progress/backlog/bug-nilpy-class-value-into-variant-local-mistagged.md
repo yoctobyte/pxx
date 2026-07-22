@@ -41,3 +41,28 @@ Also the general Python idiom `x = None; ...; x = <container>` any time the
 None forces x to variant. File I/O itself (TPyFile, raw syscalls) is done and
 CREATE/WRITE/CLOSE verified. Related: the module-scope half was fixed in
 5d4a1c49; this is the container-identity-through-variant half.
+
+## 2026-07-22: getitem FIXED; slice case narrowed to dict-source + if-block
+
+FIXED: pyvar_getitem now handles TPyBytes (commit c524a4ce) — `x = None;
+x = bytes([...]); x[0]` works; so do slices when x comes from None.
+
+REMAINING (narrowed): the mis-tag (variant stores class value as VT_INT64)
+fires ONLY with BOTH: (1) the variant local sourced from a dict subscript
+`remainder = d["k"]` (getitem-returned variant), AND (2) the class value
+reassigned INSIDE a conditional block, then used after:
+
+```python
+def rd():
+    remainder = d["rem"]        # variant from getitem
+    if remainder is None:
+        remainder = bytes([1,2,3,4])   # class into variant, INSIDE the if
+    print(remainder[:3])        # slice -> pyvar_slice sees tag 2 (VT_INT64)
+```
+
+Works if remainder is sourced from `None` instead of `d["k"]` (w104), OR if
+the reassignment is flat (no if — w102). So it is the interaction of a
+getitem-typed variant local with a conditional class-reassignment: the
+control-flow type merge / boxing of the class value in the branch mis-tags.
+This is uforth's exact READ-LINE shape (`remainder = entry.get(...)` then
+`if remainder is None: ... remainder = raw`). Isolated to a def body.
