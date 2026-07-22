@@ -121,3 +121,12 @@ BFromBuf/BMagToBuf temps, or a retain imbalance on `FuncName := call` of
 TBig inside promoint compiled under the frozen/managed split. uforth's empty
 DO LOOP still grows (its boundary compare produces heap u64s every pass), so
 this residual is the dominant remaining cost there.
+
+## 2026-07-22 (later): layer 4 root-caused into its own ticket
+
+The residual is NOT promoint-specific: any managed-record function result
+raw-copied into a REUSED destination (loop within one frame) orphans the
+dest's previous handles — filed as
+[[bug-a-managed-record-return-into-reused-dest-leaks]] (generic 15-line
+repro, 117 B/iter). This umbrella stays open pending that fix; uforth's
+DO LOOP growth is dominated by it.
