@@ -27,7 +27,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (141)
+## backlog (140)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -42,7 +42,6 @@ _none_
 | bug-nilpy-locals-list-pointer-truncated-32bit | N | 55 | bug | NilPy: a list passed to a method truncates its pointer to 32-bit (SIGSEGV) | — |
 | bug-nilpy-uforth-exceptiontest-source-unlink | N | 40 | bug | NilPy: uforth exceptiontest source-unlink test fails under the full driver | — |
 | bug-nilpy-user-class-bytes-method-loses-identity | N | 45 | bug | NilPy: a USER class method `-> bytes` result loses its TPyBytes identity | — |
-| bug-parallel-for-captured-boolean-loses-type | A | 50 | bug | Captured Boolean loses its type inside a parallel-for body (overload resolution fails) | — |
 | bug-qplus-narrow-32bit-backends | A | 35 | bug | {$Q+} narrow-width overflow still unchecked on the 32-bit backends | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | bug-unit-finalization-not-executed | A | 40 | bug | A unit's `finalization` section is silently never executed | — |
@@ -235,7 +234,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (942)
+## done (943)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -571,6 +570,7 @@ _none_
 | bug-overload-mismatch-dumps-internals-to-stdout | A | 30 | bug | Overload-resolution failure dumps compiler internals to stdout | — |
 | bug-overload-resolution-by-type | A | 50 | bug | bug: overload resolution binds a string arg to an earlier integer-param overload | — |
 | bug-overload-resolution-record-identity | A | 45 | bug | overload resolution ignores record IDENTITY — wrong overload silently called | — |
+| bug-parallel-for-captured-boolean-loses-type | A | 50 | bug | Captured Boolean loses its type inside a parallel-for body (overload resolution fails) | — |
 | bug-parallel-for-captured-dynarray-var-arg-segfault | A | 60 | bug | Passing a captured dynamic array by `var` from a parallel-for body segfaults | — |
 | bug-paramless-self-recursion-silent-result-read | A | 50 | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
 | bug-paramstr-inline-argstr | A | 50 | bug | bug: ParamStr/ArgStr result not usable inline (needs a string variable) | — |
@@ -2655,7 +2655,6 @@ _none_
 - [p 55] [A] feature-signal-siginfo-ucontext
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
-- [p 50] [A] bug-parallel-for-captured-boolean-loses-type
 - [p 50] [A] decide-abi-portable-vs-target-split
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile

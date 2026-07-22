@@ -7,7 +7,7 @@ track: A
 
 - **Type:** bug — **Track A** (parallel-for capture lowering; `parser.inc`
   capture-frame path).
-- **Status:** working
+- **Status:** done
 - **Found by:** Track E, building `examples/mandelbrot/mandelzoom.pas`
   ([[feature-demo-mandelbrot-asm-autozoom]]).
 
@@ -68,3 +68,4 @@ capture path, worse failure mode) · [[feature-demo-mandelbrot-asm-autozoom]] ·
 ## Log
 - 2026-07-20 — Filed from Track E. Demo works around it by reading the flag from
   a global instead of a captured local.
+- 2026-07-22 — resolved, commit 49f4eb55.
