@@ -8629,6 +8629,9 @@ begin
   i := RegisterProc('PXXAlloc', True, tyPointer, 2, dummyNames, dummyTypes);
   dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
   i := RegisterProc('PXXFree', False, tyPointer, 1, dummyNames, dummyTypes);
+  { the emitted obj blobs call these (feature-nilpy-object-reclamation) }
+  i := RegisterProc('PXXObjRetain', False, tyPointer, 1, dummyNames, dummyTypes);
+  i := RegisterProc('PXXObjRelease', False, tyPointer, 1, dummyNames, dummyTypes);
   dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
   dummyNames[1] := 'newSize'; dummyTypes[1] := tyNativeInt;
   dummyNames[2] := 'align'; dummyTypes[2] := tyInteger;

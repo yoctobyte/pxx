@@ -115,7 +115,20 @@ procedure PXXStrDecRef(p: Pointer);
   a neighbour block, and PXXObjFree frees correctly either way. }
 const
   PXX_OBJ_MAGIC = $505942F1;   { low bits 001 — never an allocator size word }
+  { RAW variant of the tag: a refcounted heap block that is NOT a class
+    instance (no VMT at +0) — today only pybound_new's {code,recv} pairs.
+    Release runs the finalize hook with raw=1 so the hook won't VMT-dispatch. }
+  PXX_OBJ_MAGIC_RAW = $505942F9;
+type
+  { Finalizer for a dying refcounted object, installed by pylib (which knows
+    the container types). p = the object, raw = 1 for a RAW (VMT-less) block.
+    Runs after rc hits 0 and before the block is freed; it releases the
+    object's children recursively. nil = no finalizer (plain free). }
+  TPXXObjFinalize = procedure(objp: Pointer; rawKind: NativeInt);
+var
+  PXXObjFinalizeHook: TPXXObjFinalize;
 function PXXObjAlloc(size: NativeInt): Pointer;
+function PXXObjAllocRaw(size: NativeInt): Pointer;
 procedure PXXObjRetain(p: Pointer);
 procedure PXXObjRelease(p: Pointer);
 procedure PXXObjFree(p: Pointer);
@@ -1139,15 +1152,26 @@ begin
   Result := Pointer(base + 16);
 end;
 
-procedure PXXObjRetain(p: Pointer);
+function PXXObjAllocRaw(size: NativeInt): Pointer;
 var base: Int64;
+begin
+  if size < 8 then size := 8;
+  base := Int64(PXXAlloc(size + 16, 8));
+  PWord(base)^ := 1;                        { refcount }
+  PWord(base + 8)^ := PXX_OBJ_MAGIC_RAW;    { VMT-less block (bound pairs) }
+  Result := Pointer(base + 16);
+end;
+
+procedure PXXObjRetain(p: Pointer);
+var base, t: Int64;
 {$ifdef PXX_TS_SOFTLOCK}
     tsIgnore: Int64;
 {$endif}
 begin
   if p = nil then Exit;
   base := Int64(p) - 16;
-  if PWord(base + 8)^ <> PXX_OBJ_MAGIC then Exit;   { unheadered: not ours }
+  t := PWord(base + 8)^;
+  if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) then Exit;  { not ours }
 {$ifdef PXX_TS_SOFTLOCK}
   tsIgnore := __pxxatomic_add(Pointer(base), 1);
 {$else}
@@ -1156,18 +1180,32 @@ begin
 end;
 
 procedure PXXObjRelease(p: Pointer);
-var base, rc: Int64;
+var base, rc, t: Int64;
 begin
   if p = nil then Exit;
   base := Int64(p) - 16;
-  if PWord(base + 8)^ <> PXX_OBJ_MAGIC then Exit;   { unheadered: not ours }
+  t := PWord(base + 8)^;
+  if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) then Exit;  { not ours }
 {$ifdef PXX_TS_SOFTLOCK}
   rc := __pxxatomic_add(Pointer(base), -1) - 1;   { returns the OLD value }
 {$else}
   rc := PWord(base)^ - 1;
   PWord(base)^ := rc;
 {$endif}
-  if rc = 0 then PXXFree(Pointer(base));
+  if rc = 0 then
+  begin
+    { Run the type finalizer (releases children, recursing back through here)
+      before the block goes away. Installed by pylib; nil in programs that
+      never construct a refcounted object. }
+    if PXXObjFinalizeHook <> nil then
+    begin
+      if t = PXX_OBJ_MAGIC_RAW then
+        PXXObjFinalizeHook(p, 1)
+      else
+        PXXObjFinalizeHook(p, 0);
+    end;
+    PXXFree(Pointer(base));
+  end;
 end;
 
 { Free an instance whichever population it belongs to: headered -> release
@@ -1604,6 +1642,8 @@ begin
       subDesc := Pointer(memberPtr + 12 + typeRef);
       memberSize := PInt32(Int64(subDesc) + 4)^;
     end
+    else if kind = 5 then
+      memberSize := 16                   { Variant slot: [tag:8][payload:8] }
     else
     begin
       memberSize := SizeOf(Pointer);
@@ -1623,6 +1663,10 @@ begin
           end;
         3: { Record }
           PXXRecordRelease(itemAddr, subDesc);
+        5: { Variant field: release any managed/object payload, recursing
+             through PXXObjRelease's finalizer for a held container
+             (feature-nilpy-object-reclamation) }
+          PXXVarClear(itemAddr);
       end;
       j := j + 1;
     end;
@@ -2355,9 +2399,12 @@ procedure PXXVarClear(v: Pointer);
 { Release a string payload and zero the 16-byte slot (both words fully, so
   32-bit targets leave no stale high halves behind). Object payloads
   (VT_OBJECT 7 / VT_BOUNDMETHOD 8) ride PXXObjRelease, whose PXX_OBJ_MAGIC
-  guard makes it a no-op on manual-lifetime Pascal instances. }
+  guard makes it a no-op on manual-lifetime Pascal instances. A promo-block
+  tag (8192..8199) rides in a variant as a managed AnsiString of its decimal —
+  same release as VT_STRING (mirrors the x86-64 EmitVariantClear range test;
+  this portable body previously missed it, a cross-target leak). }
 begin
-  if PWord(v)^ = 6 then  { VT_STRING }
+  if (PWord(v)^ = 6) or ((PWord(v)^ >= 8192) and (PWord(v)^ <= 8199)) then
     PXXStrDecRef(Pointer(PWord(Int64(v) + 8)^))
   else if (PWord(v)^ = 7) or (PWord(v)^ = 8) then
     PXXObjRelease(Pointer(PWord(Int64(v) + 8)^));
@@ -2366,7 +2413,7 @@ end;
 
 procedure PXXVarRetain(v: Pointer);
 begin
-  if PWord(v)^ = 6 then  { VT_STRING }
+  if (PWord(v)^ = 6) or ((PWord(v)^ >= 8192) and (PWord(v)^ <= 8199)) then
     PXXStrIncRef(Pointer(PWord(Int64(v) + 8)^))
   else if (PWord(v)^ = 7) or (PWord(v)^ = 8) then
     PXXObjRetain(Pointer(PWord(Int64(v) + 8)^));

@@ -46,9 +46,15 @@ end;
 
 function ClassFieldNeedsFinal(fi: Integer): Boolean;
 { CLASS-descriptor member predicate: everything the record path manages, plus
-  COM interface fields (kind 4). }
+  COM interface fields (kind 4) and Variant fields (kind 5 — a variant slot can
+  hold a managed string, a promo, or a refcounted NilPy object; the walker
+  clears it via PXXVarClear on finalize, feature-nilpy-object-reclamation).
+  CLASS descriptors only on purpose: extending FieldIsManaged itself would
+  flip records with variant fields into the managed-record codegen paths,
+  a much broader change than destroy-time finalize. }
 begin
-  ClassFieldNeedsFinal := FieldIsManaged(fi) or FieldIsComInterface(fi);
+  ClassFieldNeedsFinal := FieldIsManaged(fi) or FieldIsComInterface(fi) or
+    ((UFldTk[fi] = Ord(tyVariant)) and not UFldIsArray[fi]);
 end;
 
 function RecordManagedFieldCount(ci: Integer): Integer;
@@ -744,6 +750,8 @@ begin
               mKind := 2
             else if FieldIsComInterface(fi) then
               mKind := 4
+            else if UFldTk[fi] = Ord(tyVariant) then
+              mKind := 5                 { Variant slot (PXXVarClear on finalize) }
             else
               mKind := 3;
             PatchDataI32(mHdr + 4, mKind);

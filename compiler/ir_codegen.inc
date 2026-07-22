@@ -600,6 +600,27 @@ begin
     Error('compiler error: div-zero check call must be exactly 5 bytes (jnz +5 would land mid-instruction)');
 end;
 
+procedure EmitObjBlobBody(const procName: AnsiString);
+{ Body of an object retain/release blob: preserve every caller-clobbered GP
+  reg, rdi := rax (the object), call the named Pascal proc, restore, ret. }
+var procIdx: Integer;
+begin
+  EmitAsmX64(['push rax', 'push rcx', 'push rdx', 'push rsi', 'push rdi']);
+  EmitB($41); EmitB($50);   { push r8 }
+  EmitB($41); EmitB($51);   { push r9 }
+  EmitB($41); EmitB($52);   { push r10 }
+  EmitB($41); EmitB($53);   { push r11 }
+  EmitAsmX64(['mov rdi, rax']);
+  procIdx := FindProc(procName);
+  if procIdx < 0 then Error('compiler error: ' + procName + ' not registered before EmitAnsiStringRuntime');
+  EmitCallProc(procIdx);
+  EmitB($41); EmitB($5B);   { pop r11 }
+  EmitB($41); EmitB($5A);   { pop r10 }
+  EmitB($41); EmitB($59);   { pop r9 }
+  EmitB($41); EmitB($58);   { pop r8 }
+  EmitAsmX64(['pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rax', 'ret']);
+end;
+
 procedure EmitAnsiStringRuntime;
 var pNilUnique, pNilUnique2, pDone, pDone2,
     pConcatNil, pConcatDone, pFail, pLfDone: Integer;
@@ -618,6 +639,17 @@ begin
   EmitAnsiStrReleaseLocked;
   EmitReleaseHeapLock;
   EmitAsmX64(['pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rax', 'ret']);
+
+  { Object retain/release blobs (feature-nilpy-object-reclamation): thin
+    reg-preserving wrappers over the Pascal PXXObjRetain/PXXObjRelease, which
+    carry the population-tag guard (so unheadered Pascal instances no-op) and
+    the recursive finalizer hook. rax = object pointer (nil ok). The wrapper
+    saves ALL caller-clobbered GP regs because the callee is arbitrary compiled
+    Pascal (the finalizer can run container teardown). }
+  ObjRetainBlobAddr := CodeLen;
+  EmitObjBlobBody('PXXObjRetain');
+  ObjReleaseBlobAddr := CodeLen;
+  EmitObjBlobBody('PXXObjRelease');
 
   AnsiStrUniqueAddr := CodeLen;
   EmitAsmX64(['push rbx', 'push rcx', 'push rdx', 'push rsi', 'push rdi']);
@@ -814,7 +846,7 @@ procedure EmitVariantClear;
   reset the slot to VT_EMPTY. Preserves the slot address in rax. The jne
   target is patched manually (not via EmitAsmX64's `.label` form) because it
   jumps past IREmitCodeCall -- see EmitDynArrayReleaseLocked. }
-var pDone, pDone2, pHit, pObj, pObj2, pSkip, pObjNil, pObjNoMag: Integer;
+var pDone, pDone2, pHit, pObj, pObj2, pSkip: Integer;
 begin
   { Managed payload = VT_STRING, or ANY tag in the promotable-int block: a promo
     too large for the inline tier rides in a variant as a managed AnsiString of
@@ -839,19 +871,15 @@ begin
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(AnsiStrReleaseAddr);
   EmitB($E9); pSkip := CodeLen; EmitI32(0);              { jmp done }
-  { objchk: payload non-nil AND headered -> release via the shared blob }
+  { objchk: release via the object blob — the Pascal callee carries the nil
+    check, the population-tag guard AND the recursive finalizer hook }
   Patch32(pObj, CodeLen - (pObj + 4));
   Patch32(pObj2, CodeLen - (pObj2 + 4));
-  EmitAsmX64(['mov rax, [rax+8]', 'test rax, rax']);
-  EmitB($0F); EmitB($84); pObjNil := CodeLen; EmitI32(0);   { je done }
-  EmitAsmX64(['mov rcx, [rax-8]', 'cmp rcx, %', PXX_OBJ_MAGIC_TAG]);
-  EmitB($0F); EmitB($85); pObjNoMag := CodeLen; EmitI32(0); { jne done }
-  IREmitCodeCall(AnsiStrReleaseAddr);
+  EmitAsmX64(['mov rax, [rax+8]']);
+  IREmitCodeCall(ObjReleaseBlobAddr);
   Patch32(pDone, CodeLen - (pDone + 4));
   Patch32(pDone2, CodeLen - (pDone2 + 4));
   Patch32(pSkip, CodeLen - (pSkip + 4));
-  Patch32(pObjNil, CodeLen - (pObjNil + 4));
-  Patch32(pObjNoMag, CodeLen - (pObjNoMag + 4));
   EmitAsmX64([
     'pop rax',
     'mov qword [rax], %', VT_EMPTY,
@@ -860,24 +888,17 @@ begin
 end;
 
 procedure EmitObjRetainRaxGuarded;
-{ rax = object pointer (or nil). Retain iff it carries the PXX_OBJ_MAGIC
-  population tag at [rax-8] (a PXXObjAlloc-headered NilPy instance); preserves
-  rax. Shares the string retain blob — the header protocol is identical. }
-var pNil, pNoMag: Integer;
+{ rax = object pointer (or nil). Retain via the object blob; the Pascal callee
+  carries the nil check and the population-tag guard, so a manual-lifetime
+  Pascal instance is left alone. Preserves rax. }
 begin
-  EmitAsmX64(['test rax, rax']);
-  EmitB($0F); EmitB($84); pNil := CodeLen; EmitI32(0);    { je done }
-  EmitAsmX64(['push rcx', 'mov rcx, [rax-8]', 'cmp rcx, %', PXX_OBJ_MAGIC_TAG, 'pop rcx']);
-  EmitB($0F); EmitB($85); pNoMag := CodeLen; EmitI32(0);  { jne done }
-  IREmitCodeCall(AnsiStrRetainAddr);
-  Patch32(pNil, CodeLen - (pNil + 4));
-  Patch32(pNoMag, CodeLen - (pNoMag + 4));
+  IREmitCodeCall(ObjRetainBlobAddr);
 end;
 
 procedure EmitVariantRetain;
 { rax = address of a variant slot. Retain a managed payload. Preserves rax.
   See EmitVariantClear for why the jne target is patched manually. }
-var pDone, pDone2, pHit, pObj, pObj2, pSkip, pObjNil, pObjNoMag: Integer;
+var pDone, pDone2, pHit, pObj, pObj2, pSkip: Integer;
 begin
   { Same managed-payload test as EmitVariantClear — see there, including the
     object-tag arm and its population-tag guard. }
@@ -895,19 +916,15 @@ begin
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(AnsiStrRetainAddr);
   EmitB($E9); pSkip := CodeLen; EmitI32(0);              { jmp done }
-  { objchk: payload non-nil AND headered -> retain via the shared blob }
+  { objchk: retain via the object blob — the Pascal callee carries the nil
+    check and the population-tag guard }
   Patch32(pObj, CodeLen - (pObj + 4));
   Patch32(pObj2, CodeLen - (pObj2 + 4));
-  EmitAsmX64(['mov rax, [rax+8]', 'test rax, rax']);
-  EmitB($0F); EmitB($84); pObjNil := CodeLen; EmitI32(0);   { je done }
-  EmitAsmX64(['mov rcx, [rax-8]', 'cmp rcx, %', PXX_OBJ_MAGIC_TAG]);
-  EmitB($0F); EmitB($85); pObjNoMag := CodeLen; EmitI32(0); { jne done }
-  IREmitCodeCall(AnsiStrRetainAddr);
+  EmitAsmX64(['mov rax, [rax+8]']);
+  IREmitCodeCall(ObjRetainBlobAddr);
   Patch32(pDone, CodeLen - (pDone + 4));
   Patch32(pDone2, CodeLen - (pDone2 + 4));
   Patch32(pSkip, CodeLen - (pSkip + 4));
-  Patch32(pObjNil, CodeLen - (pObjNil + 4));
-  Patch32(pObjNoMag, CodeLen - (pObjNoMag + 4));
   EmitAsmX64(['pop rax']);
 end;
 

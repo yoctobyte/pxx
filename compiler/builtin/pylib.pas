@@ -361,6 +361,12 @@ function pyvar_box(const v: Variant): Variant;   { box a value into a variant }
 function pybound_new(code, recv: Pointer): Variant;
 function pybound_code(const v: Variant): Pointer;
 function pybound_recv(const v: Variant): Pointer;
+{ Finalizer for dying refcounted objects, installed into builtinheap's
+  PXXObjFinalizeHook by the container constructors and pybound_new: releases
+  the object's children recursively before the block is freed
+  (feature-nilpy-object-reclamation slice 3). rawKind = 1 means a VMT-less
+  {code,recv} bound pair. }
+procedure PyObjFinalize(objp: Pointer; rawKind: NativeInt);
 { input([prompt]): a line from stdin without its trailing newline. }
 function pyinput: AnsiString;
 { sys.argv: the command line as a TPyList of strings, argv[0] = program name. }
@@ -1097,6 +1103,8 @@ end;
 
 constructor TPyList.Create;
 begin
+  { first construction installs the recursive finalizer (slice 3) }
+  PXXObjFinalizeHook := @PyObjFinalize;
   FLen := 0;
   FCap := 0;
   FItems := nil;
@@ -1456,6 +1464,7 @@ end;
 
 constructor TPyDict.Create;
 begin
+  PXXObjFinalizeHook := @PyObjFinalize;
   FLen := 0;
   FCap := 0;
   FKeys := nil;
@@ -2271,6 +2280,7 @@ end;
 constructor TPyBytes.Create(n: Integer);
 var k: Integer; p: PByte;
 begin
+  PXXObjFinalizeHook := @PyObjFinalize;
   if n < 0 then n := 0;
   FLen := n;
   FData := nil;
@@ -3072,15 +3082,75 @@ type
   TPyBoundRec = record Code, Recv: Pointer; end;
   PPyBoundRec = ^TPyBoundRec;
 
+procedure PyObjFinalize(objp: Pointer; rawKind: NativeInt);
+var
+  k: Integer;
+  l: TPyList;
+  d: TPyDict;
+  by: TPyBytes;
+  o: TObject;
+begin
+  if objp = nil then Exit;
+  if rawKind <> 0 then
+  begin
+    { bound pair: drop the pair's ref on its receiver. Code is either a proc
+      address or a closure-obj record (unheadered) — nothing to release. }
+    PXXObjRelease(PPyBoundRec(objp)^.Recv);
+    Exit;
+  end;
+  o := TObject(objp);
+  if o is TPyList then
+  begin
+    l := TPyList(objp);
+    for k := 0 to l.FLen - 1 do
+      PyVarSlotClear(PPyVarRec(NativeInt(l.FItems) + k * 16));
+    if l.FItems <> nil then FreeMem(l.FItems);
+    l.FItems := nil; l.FLen := 0; l.FCap := 0;
+    Exit;
+  end;
+  if o is TPyDict then
+  begin
+    d := TPyDict(objp);
+    for k := 0 to d.FLen - 1 do
+    begin
+      PyVarSlotClear(PPyVarRec(NativeInt(d.FKeys) + k * 16));
+      PyVarSlotClear(PPyVarRec(NativeInt(d.FVals) + k * 16));
+    end;
+    if d.FKeys <> nil then FreeMem(d.FKeys);
+    if d.FVals <> nil then FreeMem(d.FVals);
+    d.FKeys := nil; d.FVals := nil; d.FLen := 0; d.FCap := 0;
+    Exit;
+  end;
+  if o is TPyBytes then
+  begin
+    by := TPyBytes(objp);
+    if by.FData <> nil then FreeMem(by.FData);
+    by.FData := nil; by.FLen := 0;
+    Exit;
+  end;
+  { user class / anything else: release managed + variant fields via the
+    class layout descriptor walker (kind 5 = variant slots, which recurses
+    back through PXXObjRelease for held containers) }
+  PXXClassFinalize(objp);
+end;
+
 function pybound_new(code, recv: Pointer): Variant;
 var b: PPyBoundRec; r: PPyVarRec;
 begin
-  b := GetMem(SizeOf(TPyBoundRec));
+  { RAW refcounted block (no VMT): rc at [b-16], PXX_OBJ_MAGIC_RAW at [b-8].
+    The pair OWNS +1 on its receiver; PyObjFinalize's raw arm drops it when
+    the pair dies (feature-nilpy-object-reclamation slice 3). }
+  PXXObjFinalizeHook := @PyObjFinalize;
+  b := PPyBoundRec(PXXObjAllocRaw(SizeOf(TPyBoundRec)));
   b^.Code := code;
   b^.Recv := recv;
+  PXXObjRetain(recv);
   r := PPyVarRec(@Result);
   r^.VType := 8;                       { VT_BOUNDMETHOD }
   r^.Payload := Int64(NativeInt(b));
+  { the Result slot itself owns +1 (borrow-everywhere model; the construction
+    ref above stays with the pair until scope-exit release lands) }
+  PXXObjRetain(Pointer(b));
 end;
 
 function pybound_code(const v: Variant): Pointer;

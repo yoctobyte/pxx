@@ -26539,6 +26539,13 @@ begin
     dummyNames[0] := 'v';         dummyTypes[0] := tyPointer;
     i := RegisterProc('PXXVarClear', False, tyPointer, 1, dummyNames, dummyTypes);
     i := RegisterProc('PXXVarRetain', False, tyPointer, 1, dummyNames, dummyTypes);
+    { object retain/release: the emitted obj blobs call these (population-tag
+      guard + finalizer hook live in the Pascal bodies) — registered here so
+      EmitAnsiStringRuntime can reference them before builtinheap parses
+      (feature-nilpy-object-reclamation) }
+    dummyNames[0] := 'p';         dummyTypes[0] := tyPointer;
+    i := RegisterProc('PXXObjRetain', False, tyPointer, 1, dummyNames, dummyTypes);
+    i := RegisterProc('PXXObjRelease', False, tyPointer, 1, dummyNames, dummyTypes);
     i := RegisterProc('PXXWriteVariant', False, tyPointer, 1, dummyNames, dummyTypes);
 
     dummyNames[0] := 'p';         dummyTypes[0] := tyPointer;

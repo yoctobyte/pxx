@@ -1951,6 +1951,10 @@ var
   AnsiStrUniqueAddr : Integer;
   AnsiStrConcatAddr : Integer;
   AnsiStrLoadFileAddr : Integer;
+  ObjRetainBlobAddr  : Integer;  { reg-preserving wrapper over PXXObjRetain (rax = obj);
+                                   population-tag guard + finalizer hook live in the
+                                   Pascal proc (feature-nilpy-object-reclamation) }
+  ObjReleaseBlobAddr : Integer;  { same, over PXXObjRelease }
 
   TokChars   : array[0..STRING_CAP-1] of Char;
   TokCharLen : Integer;
