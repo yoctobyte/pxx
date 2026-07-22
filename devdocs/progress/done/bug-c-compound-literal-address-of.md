@@ -25,3 +25,6 @@ storage). gcc compiles-and-runs this fine.
 Repro above; expected: prints/uses 2^54. Fix shape: route scalar compound
 literals through an anonymous temp (AllocVar + AN_COMPOUND_LITERAL, like the
 b381 float-narrow temp) at least when their address is taken.
+
+## Log
+- 2026-07-22 — resolved, commit 160c23ca.

@@ -27,13 +27,12 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (138)
+## backlog (137)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 55 | bug | issue: runtime heap grows unbounded in a dynamic/variant-heavy loop (long-running programs OOM) | — |
-| bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
 | bug-nilpy-bitwise-on-float-variant-truncates | A | 30 | bug | NilPy: a bitwise op on a FLOAT variant truncates instead of raising TypeError | — |
 | bug-nilpy-bytes-literal-escapes-not-decoded | N | 30 | bug | NilPy: `\xHH` (and presumably `\0`-style) escapes in a BYTES literal are not decoded | — |
@@ -232,7 +231,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (948)
+## done (949)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -311,6 +310,7 @@ _none_
 | bug-c-cast-as-call-arg-parse-error | C | 50 | bug | C: cast expression as call argument fails to parse | — |
 | bug-c-chained-pointer-index-loses-base-type | C | 50 | bug | C chained pointer indexing loses base type | — |
 | bug-c-comment-terminator-greedy | C | 30 | bug | C lexer: block comment possibly not terminated at the FIRST `*/` | — |
+| bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
 | bug-c-const-cast-in-array-dim | C | 50 | bug | C: `(type)` cast inside a constant expression (array dimension) | — |
 | bug-c-const-eval-bitwise-not | C | 50 | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
 | bug-c-create-trigger-huge-alloc-oom | A | 50 | bug | CREATE TRIGGER → spurious "out of memory" (huge bad-size alloc) | — |
@@ -2726,7 +2726,6 @@ _none_
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
 - [p 30] [B] feature-pcl-seam-seal (unblocks 2)
 - [p 30] [B] feature-pcl-widgetset-select (unblocks 1)
-- [p 30] [C] bug-c-compound-literal-address-of
 - [p 30] [A] bug-nilpy-bitwise-on-float-variant-truncates
 - [p 30] [N] bug-nilpy-bytes-literal-escapes-not-decoded
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
