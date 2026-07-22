@@ -42,3 +42,16 @@ protocol) applies to every new release path.
 
 Gate: uforth doloop RSS bounded and near-CPython; test-nilpy green;
 self-host byte-identical; the vstr/vbox probes in the umbrella stay flat.
+
+## Design pass done (fable-abcnp, 2026-07-22)
+
+Full design in **devdocs/dev/nilpy-object-reclamation.md** — written while
+the leak investigation was warm. Summary: rc in the existing heap-block
+header word ([-16], the AnsiString protocol), ownership rules mirroring the
+string ones (call results owned, lvalues retained — the layer-5
+discrimination), recursive per-type finalizers via a VMT slot, cycles
+explicitly out of scope (FPC-grade contract), everything behind the
+NilPy-user gate (isNilPy AND CurrentUnitIdx<0 — the pyeval landmine).
+Five-slice ladder, slices 1-3 inert/additive, slice 4 (scope-exit release
+of NilPy tyClass locals) is the one that drains uforth's env-per-call and
+carries the risk. Verification set in the doc. Pick up at slice 1.
