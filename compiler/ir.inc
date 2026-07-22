@@ -2563,6 +2563,29 @@ begin
           arg below). A forwarded by-ref param already holds &caller_slot in its
           slot, so it takes the IRLowerAddress path. }
         value := IRAppend(IR_SLOTADDR, ASTIVal[argAST], -1, -1, 0, Ord(tyPointer))
+      else if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < MAX_PROC_PARAMS) and
+         (ProcParamDynDepth[cpi * MAX_PROC_PARAMS + pathIdx] > 0) and
+         (ASTKind[argAST] = AN_DEREF) then
+      begin
+        { `p^` (p: ^TArr) to a var/out named-dyn-array param. In this dialect a
+          pointer-to-dyn-array holds the HANDLE (the array convention: @la and
+          p^[i] both work on the data pointer), so there is no addressable
+          handle SLOT to pass — but the callee's convention is &slot (it derefs
+          once to reach the handle). IRLowerAddress handed it the handle
+          directly, so the callee read element 0 as the handle and crashed
+          (bug-parallel-for-captured-dynarray-var-arg-segfault: the parallel-for
+          worker's capture accessor is exactly such a p^). Materialise a hidden
+          slot: temp := handle, pass &temp. Element writes alias the shared
+          buffer, so they propagate; a SetLength through the param lands in the
+          temp only (resize-through-p^ has no home to publish to — same
+          copy-in-no-copy-out shape as an open-array temp). A plain tyPointer
+          temp on purpose: a dyn-array-typed local would DecRef the borrowed
+          handle at scope exit. }
+        tmpSym := AllocVar('', tyPointer);
+        value := IRLowerAST(ASTLeft[argAST]);
+        IRAppend(IR_STORE_SYM, tmpSym, value, -1, 0, Ord(tyPointer));
+        value := IRAppend(IR_SLOTADDR, tmpSym, -1, -1, 0, Ord(tyPointer));
+      end
       else if (cpi >= 0) and
          (ASTKind[argAST] = AN_IDENT) and
          (Syms[ASTIVal[argAST]].TypeKind = tyAnsiString) and
@@ -2579,6 +2602,18 @@ begin
     end
     else
     begin
+      { `p^` (p: ^TArr) to a BY-VALUE dyn-array param: the callee wants the
+        HANDLE, which is p's value — the mirror of the by-ref case above.
+        IRLowerAST over the deref would load [handle], i.e. element 0
+        (bug-parallel-for-captured-dynarray-var-arg-segfault, const/value arm). }
+      if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < MAX_PROC_PARAMS) and
+         (pathIdx < Procs[cpi].ParamCount) and
+         (ProcParamDynDepth[cpi * MAX_PROC_PARAMS + pathIdx] > 0) and
+         (ASTKind[argAST] = AN_DEREF) then
+      begin
+        Result := IRLowerAST(ASTLeft[argAST]);
+        Exit;
+      end;
       value := IRLowerAST(argAST);
       if (argTk = tyRecord) and ((ASTKind[argAST] = AN_CALL) or (ASTKind[argAST] = AN_BINOP)) then
         value := IRAppend(IR_LOAD_MEM, value, -1, -1, 0, ASTTk[argAST]);

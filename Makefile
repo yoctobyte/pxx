@@ -550,6 +550,8 @@ test-threads: $(COMPILER)
 	# `parallel for` ansistring capture: Length + char-index + compare of a captured string (needs the p^[k] fix)
 	./$(COMPILER) --threadsafe test/test_parallel_for_capture_string.pas /tmp/test_parallel_for_capture_string26
 	test "$$(/tmp/test_parallel_for_capture_string26 | tail -n 1)" = "PARFORSTR OK"
+	./$(COMPILER) --threadsafe test/test_parallel_for_capture_callee.pas /tmp/test_parallel_for_capture_callee26
+	test "$$(/tmp/test_parallel_for_capture_callee26 | tail -n 1)" = "PARFORCALLEE OK"
 	# async (per-thread coroutine scheduler) composes with parallel (OS threads): each worker runs its own reactor
 	./$(COMPILER) --threadsafe test/test_async_parallel_compat.pas /tmp/test_async_parallel_compat26
 	test "$$(/tmp/test_async_parallel_compat26 | tail -n 1)" = "ASYNC x PARALLEL OK"
