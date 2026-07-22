@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-21T23:35:47Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "b1372248fe634d6cd54a71f8840d973035d0e315",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-21T23:51:08Z",
    "fixed": [],
    "new_red": [],
@@ -431,6 +423,14 @@
    "new_red": [],
    "sha": "5db7b2bcb47daf8b4b93ce632e9ac0ef10e4c3d0",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-22T12:19:17Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "6d76dfed5979dc6381d7f253ad8efc431b7b948b",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1473,6 +1473,7 @@
   "test-core#src:test/test_open_array_field_args.pas": "pass",
   "test-core#src:test/test_open_array_managed_length.pas": "pass",
   "test-core#src:test/test_open_array_no_leak.pas": "pass",
+  "test-core#src:test/test_open_array_of_variant.pas": "pass",
   "test-core#src:test/test_operator_enumerator.pas": "pass",
   "test-core#src:test/test_operator_implicit_shortstring_b356.pas": "pass",
   "test-core#src:test/test_overflow_checks_qplus.pas": "pass",
@@ -1986,11 +1987,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-22T12:16:51Z",
-  "sha": "5db7b2bcb47daf8b4b93ce632e9ac0ef10e4c3d0",
-  "tier": "opt",
+  "date": "2026-07-22T12:19:17Z",
+  "sha": "6d76dfed5979dc6381d7f253ad8efc431b7b948b",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 199.5
+  "wall": 101.2
  },
  "last_bench": {
   "conf_rows": 550,
