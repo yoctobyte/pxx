@@ -27,7 +27,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (140)
+## backlog (139)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -39,7 +39,6 @@ _none_
 | bug-nilpy-bitwise-on-float-variant-truncates | A | 30 | bug | NilPy: a bitwise op on a FLOAT variant truncates instead of raising TypeError | — |
 | bug-nilpy-comprehension-as-for-iterable-segfaults | N | 35 | bug | NilPy: a comprehension used directly as a for-loop iterable segfaults | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
-| bug-nilpy-locals-list-pointer-truncated-32bit | N | 55 | bug | NilPy: a list passed to a method truncates its pointer to 32-bit (SIGSEGV) | — |
 | bug-nilpy-uforth-exceptiontest-source-unlink | N | 40 | bug | NilPy: uforth exceptiontest source-unlink test fails under the full driver | — |
 | bug-nilpy-user-class-bytes-method-loses-identity | N | 45 | bug | NilPy: a USER class method `-> bytes` result loses its TPyBytes identity | — |
 | bug-qplus-narrow-32bit-backends | A | 35 | bug | {$Q+} narrow-width overflow still unchecked on the 32-bit backends | — |
@@ -234,7 +233,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (944)
+## done (945)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -548,6 +547,7 @@ _none_
 | bug-nilpy-class-typed-field-loses-identity | N | 70 | bug | NilPy: a class-typed field loses its class identity | — |
 | bug-nilpy-class-value-into-variant-local-mistagged | N | 65 | bug | NilPy: storing a class value into a variant-typed local mis-tags it VT_INT64 | — |
 | bug-nilpy-in-on-a-string-segfaults | N | 70 | bug | NilPy: `sub in s` on a STRING segfaults | — |
+| bug-nilpy-locals-list-pointer-truncated-32bit | N | 55 | bug | NilPy: a list passed to a method truncates its pointer to 32-bit (SIGSEGV) | — |
 | bug-nilpy-method-result-copied-to-var-undefined | N | 60 | bug | NilPy: `x = obj.method()` immediately followed by `y = x` leaves x undefined | — |
 | bug-nilpy-method-returning-str-garbage | N | 75 | bug | NilPy: a method returning `str` returns garbage | — |
 | bug-nilpy-not-on-string-always-true | N | 60 | bug | NilPy: `not s` on a string was ALWAYS True (silent wrong branch) | — |
@@ -2641,7 +2641,6 @@ _none_
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
-- [p 55] [N] bug-nilpy-locals-list-pointer-truncated-32bit
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope

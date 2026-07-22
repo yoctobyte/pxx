@@ -65,3 +65,15 @@ loop's token advance after LocalInit's `continue` desyncs. Next: dump LT5's
 compiled body tokens to see whether `A` became LocalGet or an
 exec_token_runtime('A') / WordCall. Declare-only locals ({: A :}, {: :}) are
 unaffected; only reading/`TO` fails.
+
+## 2026-07-22 (later): REMAINING half verified FIXED at HEAD
+
+`: LT5 {: A :} A ; 5 LT5 .` prints 5, and the full Forth-2012 locals set
+(`tests/_drv_locals.fth`) produces output byte-identical to CPython running
+the same uforth.py (13 passes, same End-of-set marker), with uforth rebuilt at
+current HEAD. The local-read path was unblocked by the intervening NilPy fixes
+(class-method signature hoisting + module-collect typing, list concat class
+identity, variant forwarding). Closing.
+
+## Log
+- 2026-07-22 — resolved, commit 5db7b2bc.
