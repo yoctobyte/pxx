@@ -2325,11 +2325,23 @@ begin
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
+{ THE one place that says "this param's slot holds a pointer, not the value".
+  ParamSize and AllocParam both read it, so the two can no longer disagree —
+  they DID on tyVariant (bug-a-param-pointer-rule-divergence: AllocParam gave a
+  variant param a pointer-sized slot while ParamSize said 16, so any consumer
+  sizing a copy off ParamSize overran the slot; latent only because today's
+  variant params flow through materialised temps). The five per-backend
+  codegen copies of this rule still exist — the full unification is
+  feature-a-abi-oracle. }
+function ParamSlotIsPointer(tk: TTypeKind; isRef, isArray: Boolean): Boolean;
+begin
+  Result := isRef or isArray or (tk = tyString) or (tk = tyRecord) or
+            (tk = tyVariant) or (tk = tyClass) or (tk = tyPointer);
+end;
+
 function ParamSize(idx: Integer): Integer;
 begin
-  if Syms[idx].IsRef or Syms[idx].IsArray or (Syms[idx].TypeKind = tyString) or
-     (Syms[idx].TypeKind = tyRecord) or
-     (Syms[idx].TypeKind = tyClass) or (Syms[idx].TypeKind = tyPointer) then
+  if ParamSlotIsPointer(Syms[idx].TypeKind, Syms[idx].IsRef, Syms[idx].IsArray) then
     Result := TARGET_PTR_SIZE
   else
     Result := TypeSize(Syms[idx].TypeKind);
@@ -2416,12 +2428,12 @@ begin
     sz := RecSize(LastTypeRecId);
     if sz < TARGET_PTR_SIZE then sz := TARGET_PTR_SIZE;
   end
-  else if isRef or isArray or (tk = tyString) or (tk = tyRecord) or (tk = tyVariant) or (tk = tyClass) or (tk = tyPointer) then
+  else if ParamSlotIsPointer(tk, isRef, isArray) then
     sz := TARGET_PTR_SIZE
   else
     sz := TypeSize(tk);
 
-  if isRef or isArray or (tk = tyString) or (tk = tyRecord) or (tk = tyVariant) or (tk = tyClass) or (tk = tyPointer) then
+  if ParamSlotIsPointer(tk, isRef, isArray) then
     align := TARGET_PTR_SIZE
   else
     align := TypeAlign(tk);
