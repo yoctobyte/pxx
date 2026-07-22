@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `040d94dfe407` | 2026-07-22T00:35:00Z | RED (native) | 492.4s | `b1372248fe63` RED |
+| borg | `040d94dfe407` | 2026-07-22T00:45:39Z | RED (full) | 618.3s | `040d94dfe407` RED |
 
 ## Open regressions
 - **test-core#src:test/test_interface_mainbody_ascast_temp.pas** — test/test_interface_mainbody_ascast_temp.pas (borg): bad `5beaf2edcbe7`, last good `651a0368a74d`, 1 commit(s) in range
