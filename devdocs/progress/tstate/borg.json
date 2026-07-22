@@ -1,33 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-22T08:18:00Z",
-   "fixed": [
-    "test-c-conformance-riscv32#shard0/6",
-    "test-c-conformance-riscv32#shard1/6",
-    "test-c-conformance-riscv32#shard2/6",
-    "test-c-conformance-riscv32#shard3/6",
-    "test-c-conformance-riscv32#shard4/6",
-    "test-c-conformance-riscv32#shard5/6",
-    "test-lua-cross#src:test/lua/runner.c",
-    "test-riscv32#src:test/ccross_args.c@1",
-    "test-riscv32#src:test/ccross_args.c@2",
-    "test-riscv32#src:test/ccross_double_to_int.c@1",
-    "test-riscv32#src:test/ccross_double_to_int.c@2",
-    "test-riscv32#src:test/ccross_entry.c@1",
-    "test-riscv32#src:test/ccross_entry.c@2",
-    "test-riscv32#src:test/cunsigned_div_mod_b123.c@1",
-    "test-riscv32#src:test/cunsigned_int_arith_b121.c@1",
-    "test-riscv32#src:test/cunsigned_int_arith_b121.c@2",
-    "test-riscv32#src:test/cunsigned_semantics_sweep_b138.c@1",
-    "test-riscv32#src:test/cunsigned_semantics_sweep_b138.c@2"
-   ],
-   "new_red": [],
-   "sha": "0b2942ef8a4bc33fed298f6f11bf842603bcc795",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-22T08:22:29Z",
    "fixed": [],
    "new_red": [],
@@ -429,6 +402,14 @@
    "new_red": [],
    "sha": "4046db00e36679aec05b4f9e2b16f11f06714abe",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-22T16:26:05Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "63359629a2fb98bdcd4e9b47a9f067e1c8fba55c",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1988,11 +1969,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-22T16:05:35Z",
-  "sha": "4046db00e36679aec05b4f9e2b16f11f06714abe",
-  "tier": "opt",
+  "date": "2026-07-22T16:26:05Z",
+  "sha": "63359629a2fb98bdcd4e9b47a9f067e1c8fba55c",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 202.1
+  "wall": 140.4
  },
  "last_bench": {
   "conf_rows": 550,
