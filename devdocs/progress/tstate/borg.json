@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-22T09:27:56Z",
-   "fixed": [
-    "fpc-bootstrap#src:compiler/compiler.pas"
-   ],
-   "new_red": [],
-   "sha": "9da5da7fd793b5517f0ce49898b390dd265e7739",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-22T09:34:31Z",
    "fixed": [],
    "new_red": [],
@@ -405,11 +395,21 @@
    "sha": "45608c595ec94071e5b81a1b22950e190400fcc6",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-22T17:28:47Z",
+   "fixed": [],
+   "new_red": [
+    "fpc-bootstrap#src:compiler/compiler.pas"
+   ],
+   "sha": "182a4dc9bb5ffdf3bfabb8fa0ede061beb794e0f",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
  "jobs": {
-  "fpc-bootstrap#src:compiler/compiler.pas": "pass",
+  "fpc-bootstrap#src:compiler/compiler.pas": "fail",
   "lib-fpc-clean#00": "pass",
   "optdiff#shard0/6": "pass",
   "optdiff#shard1/6": "pass",
@@ -1965,11 +1965,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-22T17:19:20Z",
-  "sha": "45608c595ec94071e5b81a1b22950e190400fcc6",
-  "tier": "opt",
+  "date": "2026-07-22T17:28:47Z",
+  "sha": "182a4dc9bb5ffdf3bfabb8fa0ede061beb794e0f",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 179.6
+  "wall": 112.9
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1989,5 +1989,25 @@
   "date": "2026-07-22T17:19:24Z",
   "sha": "45608c595ec94071e5b81a1b22950e190400fcc6"
  },
- "open_regressions": []
+ "open_regressions": [
+  {
+   "bad": "182a4dc9bb5ffdf3bfabb8fa0ede061beb794e0f",
+   "good": "45608c595ec94071e5b81a1b22950e190400fcc6",
+   "job": "fpc-bootstrap#src:compiler/compiler.pas",
+   "name": "fpc-bootstrap#00",
+   "opened": "2026-07-22T17:28:47Z",
+   "range": [
+    "f00d5e1ec2e9f37d0da716127bfba367d77b753f",
+    "6437e8ac150bcd53aed2e5621b700ac150212535",
+    "67863711b31269a9f05680768fb84e7e8c8bbbb0",
+    "6f73c5a88befd087bf2d495819f499048d123e1e",
+    "b1976742df2c57eca84cd069d4e8b16a43a204cf",
+    "4c1033d943d210318b6f1aa38c53eae30e9e4aba",
+    "fe6a8102fcd8f30ab095fe8b8d1250e7cec793a4",
+    "f1a6ae2b251c7504ccaa95975e3d943b2da7033c",
+    "182a4dc9bb5ffdf3bfabb8fa0ede061beb794e0f"
+   ],
+   "src": "compiler/compiler.pas"
+  }
+ ]
 }
