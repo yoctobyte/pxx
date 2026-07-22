@@ -130,3 +130,38 @@ dest's previous handles — filed as
 [[bug-a-managed-record-return-into-reused-dest-leaks]] (generic 15-line
 repro, 117 B/iter). This umbrella stays open pending that fix; uforth's
 DO LOOP growth is dominated by it.
+
+## PARTIAL FIX — 4 layers closed, microbench path still leaks (Track T re-measure 2026-07-22)
+
+Track A closed four leak layers:
+- `ca293f1c` — three promo-int heap-leak layers (variant-heavy loops grew unbounded)
+- `528e67d3`/`86d9d3c3`/`c4f4c0b0` — layer 4: managed-record-return into a
+  reused/aliased dest leaked the dest's managed fields; released before the
+  epilogue copy.
+
+Re-measured with a compiler built clean at origin HEAD (4944278f, converged
+fixedpoint — NOT the daemon's mid-bisect binary, which misled a first attempt):
+
+| workload | baseline @afbb6af5 | now @4944278f |
+| --- | --- | --- |
+| microbench-doloop | 582 MB | **552 MB — still linear, still leaking** |
+| prelim | 32 MB | 31 MB |
+| core | 166 MB | 158 MB |
+
+So the four fixed layers did not dominate the **microbench** — a pure-integer
+Forth-stack loop (DUP/LSHIFT/XOR/SWAP/AND, DROPs its result). Its RSS still
+climbs monotonically to ~552 MB. There is a **remaining layer** in the
+Forth-stack integer-cell path: uforth pushes numbers onto its data stack and the
+popped/consumed cells are not reclaimed, ~one leaked allocation per stack op.
+
+The earlier isolation still holds and points the remaining hunt: a pure-int
+*NilPy* loop (`x = (x ^ (i<<1)) & 65535`, 30M iters) stays flat at 0 MB, so the
+remaining leak is NOT the native-int tier — it is whatever boxing uforth's data
+stack uses for its cells (list-of-variant, or the promo/variant slot for a value
+that lives on a Python list rather than in a scoped local). That difference —
+value on a long-lived container vs a scoped local — is the likely seam: the four
+fixed layers were scoped-local/return-dest lifetimes; a cell parked on the data
+stack has no scope end to trigger release.
+
+Ticket stays OPEN for the remaining layer. bench.tsv now carries post-fix rows,
+so the /bench page tracks any further progress.
