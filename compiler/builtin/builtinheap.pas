@@ -260,6 +260,13 @@ const
 var
   HeapPtr  : Int64;   { next free byte in the current arena (0 = none yet) }
   HeapEnd  : Int64;   { end address of the current arena }
+  HeapLow  : Int64;   { lowest arena base ever mapped (0 = none yet) — with
+                        HeapHigh, a conservative "is this plausibly one of our
+                        heap payloads" range for the PXXObj* guards, which must
+                        not deref header words of arbitrary values (a NilPy
+                        None sentinel or boxed int reaching a retain would
+                        otherwise fault reading [p-8]) }
+  HeapHigh : Int64;   { highest arena end ever mapped }
   FreeList : Int64;   { head of the LARGE (> HEAP_BIN_MAX) free list, 0 = empty }
   { bin[i] holds blocks of exactly (i+1)*8 bytes. BSS-zeroed = all empty. }
   FreeBins : array[0..HEAP_BIN_COUNT-1] of Int64;
@@ -473,6 +480,8 @@ begin
     if arena < HEAP_ARENA then arena := HEAP_ARENA;
     HeapPtr := HeapMmap(arena);
     HeapEnd := HeapPtr + arena;
+    if (HeapLow = 0) or (HeapPtr < HeapLow) then HeapLow := HeapPtr;
+    if HeapEnd > HeapHigh then HeapHigh := HeapEnd;
   end;
   base := HeapPtr;
   HeapPtr := HeapPtr + need;
@@ -1162,6 +1171,16 @@ begin
   Result := Pointer(base + 16);
 end;
 
+{ TRUE iff p can be one of our headered payloads: 8-aligned and inside the
+  mapped-arena envelope with room for the 16-byte header below it. Values that
+  fail are ints/sentinels/foreign pointers — the guards must not even READ
+  their header words. }
+function PXXObjPlausible(p: Pointer): Boolean;
+begin
+  PXXObjPlausible := (HeapLow <> 0) and ((Int64(p) and 7) = 0) and
+                     (Int64(p) >= HeapLow + 24) and (Int64(p) < HeapHigh);
+end;
+
 procedure PXXObjRetain(p: Pointer);
 var base, t: Int64;
 {$ifdef PXX_TS_SOFTLOCK}
@@ -1169,6 +1188,7 @@ var base, t: Int64;
 {$endif}
 begin
   if p = nil then Exit;
+  if not PXXObjPlausible(p) then Exit;
   base := Int64(p) - 16;
   t := PWord(base + 8)^;
   if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) then Exit;  { not ours }
@@ -1183,6 +1203,7 @@ procedure PXXObjRelease(p: Pointer);
 var base, rc, t: Int64;
 begin
   if p = nil then Exit;
+  if not PXXObjPlausible(p) then Exit;
   base := Int64(p) - 16;
   t := PWord(base + 8)^;
   if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) then Exit;  { not ours }
@@ -1216,7 +1237,7 @@ end;
 procedure PXXObjFree(p: Pointer);
 begin
   if p = nil then Exit;
-  if PWord(Int64(p) - 8)^ = PXX_OBJ_MAGIC then
+  if PXXObjPlausible(p) and (PWord(Int64(p) - 8)^ = PXX_OBJ_MAGIC) then
     PXXObjRelease(p)
   else
     PXXFree(p);

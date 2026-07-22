@@ -5996,6 +5996,101 @@ begin
           ASTRight[node] := WrapPCharToString(ASTRight[node]);
       end;
 
+      { NilPy-user class-local/global rebinding ARC
+        (feature-nilpy-object-reclamation slice 4): retain the new value UNLESS
+        it is a construction (whose rc=1 transfers to the binding), release the
+        old value, then store — retain-first, so self-assignment is safe. The
+        Pascal callees carry the nil check and the population-tag guard.
+        Params are excluded on purpose: a param holds the CALLER's borrowed
+        ref; releasing it on rebind (or at scope exit, where params are also
+        skipped) would drop a ref the callee never owned. }
+      if isNilPy and (CurrentUnitIdx < 0) and
+         (ASTKind[ASTLeft[node]] = AN_IDENT) and
+         (Integer(ASTIVal[ASTLeft[node]]) >= 0) and
+         PyClassSymArcEligible(ASTIVal[ASTLeft[node]]) and
+         (IntToTypeKind(ASTTk[ASTRight[node]]) = tyClass) then
+      begin
+        varIdx := ASTIVal[ASTLeft[node]];
+        intfTmpInst := AllocVar('', tyPointer);
+        IRAppend(IR_STORE_SYM, intfTmpInst, IRLowerAST(ASTRight[node]), -1, 0, Ord(tyPointer));
+        { A construction OR any call result is OWNED (+1 already: rc=1 from
+          PXXObjAlloc, or the callee's return-retain) — retaining it again
+          would leak one ref per call. Only lvalue-ish sources are borrows. }
+        if not ((ASTKind[ASTRight[node]] = AN_CALL) or
+                (ASTKind[ASTRight[node]] = AN_VIRTUAL_CALL) or
+                (ASTKind[ASTRight[node]] = AN_INTF_CALL) or
+                (ASTKind[ASTRight[node]] = AN_CALL_IND) or
+                (ASTKind[ASTRight[node]] = AN_METACLASS_NEW)) then
+        begin
+          procIdx := FindProc('PXXObjRetain');
+          if procIdx < 0 then Error('Nil Python: PXXObjRetain (builtinheap) not loaded');
+          first := IRAppend(IR_ARG,
+                     IRAppend(IR_LOAD_SYM, intfTmpInst, -1, -1, 0, Ord(tyPointer)),
+                     -1, -1, 0, Ord(tyPointer));
+          seq := IRAppendCall(procIdx, first, -1, Ord(tyUnknown));
+          IRIVal[seq] := 1;   { statement: emit for effect }
+        end;
+        procIdx := FindProc('PXXObjRelease');
+        if procIdx < 0 then Error('Nil Python: PXXObjRelease (builtinheap) not loaded');
+        first := IRAppend(IR_ARG,
+                   IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyPointer)),
+                   -1, -1, 0, Ord(tyPointer));
+        seq := IRAppendCall(procIdx, first, -1, Ord(tyUnknown));
+        IRIVal[seq] := 1;
+        Result := IRAppend(IR_STORE_SYM, varIdx,
+                    IRAppend(IR_LOAD_SYM, intfTmpInst, -1, -1, 0, Ord(tyPointer)),
+                    -1, 0, ASTTk[ASTLeft[node]]);
+        Exit;
+      end;
+
+      { NilPy-user class FIELD store ARC (feature-nilpy-object-reclamation,
+        field-store side pulled forward from slice 5): without it a `self.w = w`
+        stores a raw pointer, and the local's scope-exit release frees the
+        object out from under the field (uforth's word registry). Same
+        ownership rules as the local arm: call/construction results are OWNED
+        (no retain), lvalues are borrows (retain); the field's old value is
+        released, retain-first order. Class-typed fields are not walked by the
+        finalizer yet, so the field's ref leaks when the instance dies —
+        leak-over-UAF until the finalizer grows a class-field kind. }
+      if isNilPy and (CurrentUnitIdx < 0) and
+         (ASTKind[ASTLeft[node]] = AN_FIELD) and
+         (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyClass) and
+         (IntToTypeKind(ASTTk[ASTRight[node]]) = tyClass) then
+      begin
+        seq := AllocVar('', tyPointer);        { the value }
+        IRAppend(IR_STORE_SYM, seq, IRLowerAST(ASTRight[node]), -1, 0, Ord(tyPointer));
+        varIdx := AllocVar('', tyPointer);     { the field slot address }
+        IRAppend(IR_STORE_SYM, varIdx, IRLowerAddress(ASTLeft[node]), -1, 0, Ord(tyPointer));
+        if not ((ASTKind[ASTRight[node]] = AN_CALL) or
+                (ASTKind[ASTRight[node]] = AN_VIRTUAL_CALL) or
+                (ASTKind[ASTRight[node]] = AN_INTF_CALL) or
+                (ASTKind[ASTRight[node]] = AN_CALL_IND) or
+                (ASTKind[ASTRight[node]] = AN_METACLASS_NEW)) then
+        begin
+          procIdx := FindProc('PXXObjRetain');
+          if procIdx < 0 then Error('Nil Python: PXXObjRetain (builtinheap) not loaded');
+          first := IRAppend(IR_ARG,
+                     IRAppend(IR_LOAD_SYM, seq, -1, -1, 0, Ord(tyPointer)),
+                     -1, -1, 0, Ord(tyPointer));
+          last := IRAppendCall(procIdx, first, -1, Ord(tyUnknown));
+          IRIVal[last] := 1;
+        end;
+        procIdx := FindProc('PXXObjRelease');
+        if procIdx < 0 then Error('Nil Python: PXXObjRelease (builtinheap) not loaded');
+        first := IRAppend(IR_ARG,
+                   IRAppend(IR_LOAD_MEM,
+                     IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyPointer)),
+                     -1, -1, 0, Ord(tyPointer)),
+                   -1, -1, 0, Ord(tyPointer));
+        last := IRAppendCall(procIdx, first, -1, Ord(tyUnknown));
+        IRIVal[last] := 1;
+        Result := IRAppend(IR_STORE_MEM,
+                    IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyPointer)),
+                    IRAppend(IR_LOAD_SYM, seq, -1, -1, 0, Ord(tyPointer)),
+                    -1, 0, Ord(tyPointer));
+        Exit;
+      end;
+
       { Class -> interface: build the CORBA fat pointer {IMT, instance} into the
         LHS. The IMT for (RHS static class, interface) is captured here; the
         instance pointer is the RHS value. (interface := interface falls through
@@ -6525,6 +6620,31 @@ begin
                 last := IRAppend(IR_VAR_STORE, leftAddr, value,
                                  Ord(IntToTypeKind(ASTTk[ASTLeft[node]])), 0, Ord(tyVariant));
               end;
+            end
+            else if (Syms[varIdx].TypeKind = tyClass) and
+                    isNilPy and (CurrentUnitIdx < 0) then
+            begin
+              { Returning an object TRANSFERS ownership to the caller
+                (feature-nilpy-object-reclamation slice 4): take +1 here,
+                because a returned local's own ref dies in the callee's
+                scope-exit release right after this. Call results are
+                therefore OWNED at the caller, which must not retain them
+                again (see the AN_ASSIGN arm). Guarded + magic-checked in
+                the Pascal callee, so sentinels and Pascal instances no-op.
+                The value must round-trip through a temp — re-emitting an IR
+                value node re-evaluates its subtree (the b346 landmine). }
+              seq := AllocVar('', tyPointer);
+              IRAppend(IR_STORE_SYM, seq, value, -1, 0, Ord(tyPointer));
+              procIdx := FindProc('PXXObjRetain');
+              if procIdx < 0 then Error('Nil Python: PXXObjRetain (builtinheap) not loaded');
+              first := IRAppend(IR_ARG,
+                         IRAppend(IR_LOAD_SYM, seq, -1, -1, 0, Ord(tyPointer)),
+                         -1, -1, 0, Ord(tyPointer));
+              last := IRAppendCall(procIdx, first, -1, Ord(tyUnknown));
+              IRIVal[last] := 1;
+              last := IRAppend(IR_STORE_SYM, varIdx,
+                        IRAppend(IR_LOAD_SYM, seq, -1, -1, 0, Ord(tyPointer)),
+                        -1, 0, Ord(Syms[varIdx].TypeKind));
             end
             else if vuExitUnboxed then
               last := IRAppend(IR_STORE_SYM, varIdx, value, -1, 0,
@@ -7953,6 +8073,25 @@ begin
     begin
       handlerLabel := IRNewLabel;
       endLabel := IRNewLabel;
+      { NilPy: an `except C as e` binder is a tyClass local created MID-body,
+        so the proc-entry zero-init pass never saw it — but the scope-exit
+        release arm (feature-nilpy-object-reclamation slice 4) reads its slot
+        at every proc exit, including exits where no exception ever bound it.
+        Nil the slot here, before the try body, so that release sees nil, not
+        stale stack bytes (the t.c freelist-corruption repro). }
+      if isNilPy and (CurrentUnitIdx < 0) then
+      begin
+        handlerNode := ASTRight[node];
+        while handlerNode <> -1 do
+        begin
+          if (ASTSOffset[handlerNode] >= 0) and
+             (Syms[ASTSOffset[handlerNode]].TypeKind = tyClass) then
+            IRAppend(IR_DEFAULT_MEM,
+              IRAppend(IR_SLOTADDR, ASTSOffset[handlerNode], -1, -1, 0, Ord(tyPointer)),
+              -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));
+          handlerNode := ASTRight[handlerNode];
+        end;
+      end;
       first := IRAppend(IR_EXC_ENTER, handlerLabel, -1, -1, 0, 0);
 
       ExceptionFinallyBody[ExceptionCodegenDepth] := -1;

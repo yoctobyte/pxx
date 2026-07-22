@@ -7451,7 +7451,13 @@ begin
         { COM/ARC interface fat pointer: must start nil so the ARC release at
           first overwrite / scope exit sees an empty slot, not stale stack bytes
           (a garbage IMT would dispatch _Release into nowhere). }
-        zeroBytes := RecSize(Syms[i].RecName);
+        zeroBytes := RecSize(Syms[i].RecName)
+      else if (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
+              isNilPy and (CurrentUnitIdx < 0) then
+        { NilPy-user class local: refcounted binding — must start nil so the
+          rebind release and the scope-exit release see an empty slot
+          (feature-nilpy-object-reclamation slice 4). }
+        zeroBytes := TARGET_PTR_SIZE;
       { One owner for the guarantee, every target, every size. }
       EmitZeroFrameSlot(Syms[i].Offset, zeroBytes);
     end;

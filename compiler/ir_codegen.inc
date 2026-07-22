@@ -5368,13 +5368,15 @@ begin
           else if tk = tyClass then
           begin
             { Boxing an object: the variant slot takes its own +1 (guarded by
-              the [p-8] population tag; unheadered Pascal instances no-op).
-              Unconditional — a construction result boxed here keeps its
-              never-released construction ref until the scope-exit slice of
-              feature-nilpy-object-reclamation lands, which is the pre-existing
-              leak, while an lvalue source NEEDS the retain or the slot's later
-              clear would free a borrowed instance. }
-            EmitObjRetainRaxGuarded;
+              the [p-8] population tag; unheadered Pascal instances no-op) —
+              UNLESS the source is a call result, which is already OWNED (+1
+              from the callee's return-retain / the construction rc): the same
+              discrimination the tyAnsiString arm above applies
+              (feature-nilpy-object-reclamation slice 4). }
+            if not (((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0)) or
+                    (IRKind[IRB[node]] = IR_VIRTUAL_CALL) or
+                    (IRKind[IRB[node]] = IR_CALL_IND)) then
+              EmitObjRetainRaxGuarded;
           end
           else if (tk = tyInteger) or (tk = tyInt8) or (tk = tyInt16) or (tk = tyInt32) then
           begin EmitB($48); EmitB($98); end;     { cdqe: sign-extend eax -> rax }

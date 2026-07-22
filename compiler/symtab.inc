@@ -5544,6 +5544,22 @@ begin
   x64_add_reg_imm(8, rRSP, EXC_FRAME_SIZE);  { add rsp, EXC_FRAME_SIZE }
 end;
 
+{ Class-binding ARC eligibility (feature-nilpy-object-reclamation slice 4):
+  only NAMED user locals/globals participate in rebind-release + scope-exit
+  release. Hidden desugar temps ('' or '__py_*') are created MID-body, after
+  the proc-entry zero-init pass, so releasing them would read stale stack
+  bytes; they keep raw pointer semantics (their construction refs leak as
+  before this feature). Except-handler binders are named and get their slot
+  nil'd by the AN_TRY_EXCEPT lowering. }
+function PyClassSymArcEligible(symIdx: Integer): Boolean;
+begin
+  Result := (Syms[symIdx].TypeKind = tyClass) and
+            ((Syms[symIdx].Kind = skLocal) or (Syms[symIdx].Kind = skGlobal)) and
+            (not Syms[symIdx].IsArray) and (not Syms[symIdx].IsRef) and
+            (Syms[symIdx].Name <> '') and
+            (Copy(Syms[symIdx].Name, 1, 5) <> '__py_');
+end;
+
 procedure EmitManagedLocalCleanup(retSymIdx: Integer);
 var i, procIdx: Integer;
 begin
@@ -5572,6 +5588,21 @@ begin
         { lea rax, [rbp + Offset] }
         x64_lea_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);
         EmitVariantClear;
+      end
+      else if (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
+              isNilPy and (CurrentUnitIdx < 0) and
+              PyClassSymArcEligible(i) then
+      begin
+        { NilPy-user class local: drop the binding's ref at scope exit — the
+          trigger that actually reclaims (feature-nilpy-object-reclamation
+          slice 4). The Pascal callee carries the nil check and population-tag
+          guard, so a Pascal-created instance held here is left alone. }
+        procIdx := FindProc('PXXObjRelease');
+        if procIdx >= 0 then
+        begin
+          x64_mov_reg_mem(8, rRDI, rRBP, Syms[i].Offset, True);  { rdi = instance }
+          EmitCallProc(procIdx);
+        end;
       end
       else if TypeIsPromoInt(Syms[i].TypeKind) then
       begin

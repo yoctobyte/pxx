@@ -3148,9 +3148,8 @@ begin
   r := PPyVarRec(@Result);
   r^.VType := 8;                       { VT_BOUNDMETHOD }
   r^.Payload := Int64(NativeInt(b));
-  { the Result slot itself owns +1 (borrow-everywhere model; the construction
-    ref above stays with the pair until scope-exit release lands) }
-  PXXObjRetain(Pointer(b));
+  { the Result slot takes the construction's own +1 (ownership transfer) —
+    downstream copies retain/release it like any object payload }
 end;
 
 function pybound_code(const v: Variant): Pointer;
