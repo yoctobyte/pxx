@@ -27,14 +27,13 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (132)
+## backlog (131)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 55 | bug | issue: runtime heap grows unbounded in a dynamic/variant-heavy loop (long-running programs OOM) | — |
 | bug-nilpy-bitwise-on-float-variant-truncates | A | 30 | bug | NilPy: a bitwise op on a FLOAT variant truncates instead of raising TypeError | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
-| bug-nilpy-mixed-str-int-return-segfault | N | 35 | bug | NilPy: def returning both a str and an int literal SIGSEGVs on the int arm | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -226,7 +225,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (959)
+## done (960)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -550,6 +549,7 @@ _none_
 | bug-nilpy-locals-list-pointer-truncated-32bit | N | 55 | bug | NilPy: a list passed to a method truncates its pointer to 32-bit (SIGSEGV) | — |
 | bug-nilpy-method-result-copied-to-var-undefined | N | 60 | bug | NilPy: `x = obj.method()` immediately followed by `y = x` leaves x undefined | — |
 | bug-nilpy-method-returning-str-garbage | N | 75 | bug | NilPy: a method returning `str` returns garbage | — |
+| bug-nilpy-mixed-str-int-return-segfault | N | 35 | bug | NilPy: def returning both a str and an int literal SIGSEGVs on the int arm | — |
 | bug-nilpy-not-on-string-always-true | N | 60 | bug | NilPy: `not s` on a string was ALWAYS True (silent wrong branch) | — |
 | bug-nilpy-param-spill-width | N | 60 | bug | NilPy: bool/char param spill wrote 4 bytes into a 1-byte slot (SILENT, then SIGSEGV) | — |
 | bug-nilpy-print-variant-holding-list-shows-object | N | 30 | bug | NilPy: print() of a variant holding a list/dict shows `<object>` not its repr | — |
@@ -2721,7 +2721,6 @@ _none_
 - [p 40] [T] feature-twatch-full-tier-coverage-age
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
-- [p 35] [N] bug-nilpy-mixed-str-int-return-segfault
 - [p 35] [U] decide-nilpy-hasattr-per-instance-semantics
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [A] feature-nested-routine-fixed-array-capture

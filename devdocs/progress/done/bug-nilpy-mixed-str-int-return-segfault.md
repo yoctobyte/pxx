@@ -27,3 +27,6 @@ idiom, so worth p35.
 
 Repro: probe above; gate = pxx output matches CPython (`pos` / `42`),
 test-nilpy green.
+
+## Log
+- 2026-07-22 — resolved, commit 3f8f7786.
