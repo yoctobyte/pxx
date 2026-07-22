@@ -380,7 +380,7 @@ function StrToDoubleBits(const s: AnsiString): Int64;
 var
   i, len, fracDigits, expSign, expVal, decExp, bexp, intDropped: Integer;
   hasDot: Boolean;
-  coeff, N, D, mant, biasedExp, signBit, bitval, be: Int64;
+  coeff, N, D, mant, biasedExp, signBit, bitval, be, N2, D2, lowBits: Int64;
   c: Char;
 begin
   Result := 0;
@@ -497,7 +497,11 @@ begin
   end;
 
   if bexp > 1023 then begin Result := signBit or $7FF0000000000000; Exit; end;
-  if bexp < -1022 then begin Result := signBit; Exit; end;
+  { bexp < -1022: SUBNORMAL range — fall through to the mantissa extraction
+    and denormalize after it (the old early exit flushed every subnormal
+    literal to zero: bug-c-float-literal-subnormal-parses-zero). Anything
+    below half of 2^-1074 is a true zero. }
+  if bexp < -1076 then begin Result := signBit; Exit; end;
 
   N := N - D;
   mant := 0;
@@ -511,6 +515,26 @@ begin
     else N := N * 2;
     bitval := bitval shr 1;
   end;
+  { SUBNORMAL (bexp < -1022): the 53-bit significand 2^52|mant shifts right by
+    (-1022 - bexp) with round-to-nearest-even; the extraction remainder N is
+    the sticky bit. The exponent field is 0; a round-up carry into 2^52 lands
+    exactly on the minimum NORMAL (biased exponent 1, mantissa 0). }
+  if bexp < -1022 then
+  begin
+    N2 := $10000000000000 or mant;          { 2^52 | mant = full significand }
+    D2 := 1;
+    i := -1022 - bexp;                      { shift >= 1, <= 54 }
+    if i > 53 then begin Result := signBit; Exit; end;
+    while i > 0 do begin D2 := D2 * 2; Dec(i); end;
+    lowBits := N2 mod D2;
+    N2 := N2 div D2;
+    if (lowBits > D2 div 2) or
+       ((lowBits = D2 div 2) and ((N <> 0) or ((N2 and 1) = 1))) then
+      N2 := N2 + 1;                         { carry into 2^52 = min normal }
+    Result := signBit or N2;
+    Exit;
+  end;
+
   { Round to nearest, ties to even (remainder N/D vs one half). Truncating here
     left every inexact literal 1 ulp low (0.1 -> ...999 instead of ...99A),
     which broke e.g. sqlite's Dekker double-double kernels built on exact

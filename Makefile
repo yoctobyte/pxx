@@ -1990,6 +1990,8 @@ test-core: $(COMPILER)
 	/tmp/ccompound_literal_b21626; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccompound_literal_addrof.c /tmp/ccompound_literal_addrof26
 	/tmp/ccompound_literal_addrof26; test "$$?" = "42"
+	./$(COMPILER) test/csubnormal_literal.c /tmp/csubnormal_literal26
+	/tmp/csubnormal_literal26; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccompound_literal_postfix_b217.c /tmp/ccompound_literal_postfix_b21726
 	/tmp/ccompound_literal_postfix_b21726; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccompound_literal_nested_b218.c /tmp/ccompound_literal_nested_b21826
