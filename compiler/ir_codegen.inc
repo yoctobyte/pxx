@@ -893,6 +893,37 @@ begin
   Code[pSkip] := Byte(CodeLen - (pSkip + 1));
 end;
 
+procedure EmitOvfCheckNarrowX64(tk: TTypeKind);
+{ {$Q+} overflow trap for a result type NARROWER than 64 bits. The binop was
+  computed at 64-bit register width on sign/zero-extended operands, so rax
+  holds the mathematically exact result and the 64-bit OF/CF never fire for a
+  32-bit wrap (bug-a-qplus-misses-32bit-overflow). The check is therefore a
+  range test: re-extend the result's low width and trap when it differs from
+  the full value. rcx (the consumed right operand) is the scratch. }
+var pSkip, procIdx: Integer;
+begin
+  if TypeSigned(tk) then
+    case TypeSize(tk) of
+      1: begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($C8); end; { movsx rcx, al }
+      2: begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($C8); end; { movsx rcx, ax }
+    else begin EmitB($48); EmitB($63); EmitB($C8); end;             { movsxd rcx, eax }
+    end
+  else
+    case TypeSize(tk) of
+      1: begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($C8); end; { movzx rcx, al }
+      2: begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($C8); end; { movzx rcx, ax }
+    else begin EmitB($89); EmitB($C1); end;                         { mov ecx, eax (zero-extends) }
+    end;
+  EmitB($48); EmitB($39); EmitB($C1);    { cmp rcx, rax }
+  EmitB($74);                            { je skip (in range) }
+  pSkip := CodeLen; EmitB(0);
+  procIdx := FindProc('PXXOverflow');
+  if procIdx < 0 then
+    Error('{$Q+}: PXXOverflow runtime helper not found (builtinheap not loaded)');
+  EmitCallProc(procIdx);
+  Code[pSkip] := Byte(CodeLen - (pSkip + 1));
+end;
+
 procedure EmitCvtSi2SdOrU64(xmm, reg: Integer; srcTk: TTypeKind);
 { cvtsi2sd xmm<xmm>, r<reg> (reg: 0=rax, 1=rcx) — with the unsigned fixup when
   the SOURCE type is unsigned 64-bit: cvtsi2sd is a SIGNED conversion, so a
@@ -2677,6 +2708,18 @@ begin
         else
         begin
           IREmitNode(IRB[node]);
+          { {$Q+}: integer arithmetic runs at 64-bit register width by design,
+            so a Q-tagged binop's own flags check is exact and never fires for
+            a sub-64-bit destination — the silent wrap happens HERE, when the
+            64-bit value narrows into the slot. Range-check the value against
+            the destination width before storing
+            (bug-a-qplus-misses-32bit-overflow). }
+          if (IRB[node] >= 0) and (IRKind[IRB[node]] = IR_BINOP) and
+             (IRIVal[IRB[node]] = 1) and
+             TypeIsOrdinal(Syms[symIdx].TypeKind) and
+             (not Syms[symIdx].IsArray) and
+             (TypeSize(Syms[symIdx].TypeKind) < 8) then
+            EmitOvfCheckNarrowX64(Syms[symIdx].TypeKind);
           { IR carries floats as double bits in rax; EmitStoreVar reads xmm0.
             A float-typed RHS is bit-copied (movq); an integer-typed RHS into a
             float slot is converted (cvtsi2sd) — `d := 1` / `d := n`. Branching on
@@ -3627,19 +3670,40 @@ begin
             begin
               EmitB($48); EmitB($01); EmitB($C8);                    { add rax, rcx }
               if IRIVal[node] = 1 then                               { {$Q+}: trap a wrapped result }
-                EmitOvfCheckX64(not TypeSigned(IntToTypeKind(IRTk[node])));
+              begin
+                { sub-64-bit result: the 64-bit flags never fire for a narrow
+                  wrap — range-test the exact 64-bit result instead. }
+                if TypeSize(IntToTypeKind(IRTk[node])) < 8 then
+                  EmitOvfCheckNarrowX64(IntToTypeKind(IRTk[node]))
+                else
+                  EmitOvfCheckX64(not TypeSigned(IntToTypeKind(IRTk[node])));
+              end;
             end;
           tkMinus:
             begin
               EmitB($48); EmitB($29); EmitB($C8);                    { sub rax, rcx }
               if IRIVal[node] = 1 then
-                EmitOvfCheckX64(not TypeSigned(IntToTypeKind(IRTk[node])));
+              begin
+                if TypeSize(IntToTypeKind(IRTk[node])) < 8 then
+                  EmitOvfCheckNarrowX64(IntToTypeKind(IRTk[node]))
+                else
+                  EmitOvfCheckX64(not TypeSigned(IntToTypeKind(IRTk[node])));
+              end;
             end;
           tkStar:
             begin
               if IRIVal[node] = 1 then
               begin
-                if TypeSigned(IntToTypeKind(IRTk[node])) then
+                if TypeSize(IntToTypeKind(IRTk[node])) < 8 then
+                begin
+                  { narrow checked mul: both operands are <= 32-bit extended,
+                    so imul's low-64 result is bit-exact for the range test
+                    (a wrap past 2^63 still leaves the same low-64 bits mul
+                    would produce). }
+                  EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1);    { imul rax, rcx }
+                  EmitOvfCheckNarrowX64(IntToTypeKind(IRTk[node]));
+                end
+                else if TypeSigned(IntToTypeKind(IRTk[node])) then
                 begin
                   EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1);    { imul rax, rcx }
                   EmitOvfCheckX64(False);                            { OF = signed overflow }

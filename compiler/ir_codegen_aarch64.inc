@@ -1364,6 +1364,32 @@ begin
           Exit;
         end;
         IREmitNodeAarch64(IRB[node]);
+        { {$Q+}: integer arithmetic runs at 64-bit register width, so a
+          Q-tagged binop's own flags check never fires for a sub-64-bit
+          destination — the wrap happens at this narrowing store. Re-extend
+          the low width into x9 and trap on mismatch (mirrors the x86-64
+          EmitOvfCheckNarrowX64; bug-a-qplus-misses-32bit-overflow). }
+        if (IRB[node] >= 0) and (IRKind[IRB[node]] = IR_BINOP) and
+           (IRIVal[IRB[node]] = 1) and
+           TypeIsOrdinal(Syms[IRA[node]].TypeKind) and
+           (not Syms[IRA[node]].IsArray) and
+           (TypeSize(Syms[IRA[node]].TypeKind) < 8) then
+        begin
+          if TypeSigned(Syms[IRA[node]].TypeKind) then
+            case TypeSize(Syms[IRA[node]].TypeKind) of
+              1: EmitI32($93401C09);   { sxtb x9, w0 }
+              2: EmitI32($93403C09);   { sxth x9, w0 }
+            else EmitI32($93407C09);   { sxtw x9, w0 }
+            end
+          else
+            case TypeSize(Syms[IRA[node]].TypeKind) of
+              1: EmitI32($53001C09);   { uxtb w9, w0 }
+              2: EmitI32($53003C09);   { uxth w9, w0 }
+            else EmitI32($2A0003E9);   { mov w9, w0 (zero-extends) }
+            end;
+          EmitI32($EB00013F);          { cmp x9, x0 }
+          EmitOvfCheckA64($54000000);  { b.eq skip (in range) }
+        end;
         if TypeIsFloat(Syms[IRA[node]].TypeKind) and
            not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
         begin
