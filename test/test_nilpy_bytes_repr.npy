@@ -1,0 +1,18 @@
+# print(bytes) renders CPython's b'...' repr — it used to print the instance
+# POINTER (bug-nilpy-user-class-bytes-method-loses-identity). Covers a user
+# class method returning bytes (annotated), a slice of it, a variant-held
+# bytes (through a dict), escapes, and the quote flip.
+class F:
+    def readline(self) -> bytes:
+        return b"abc\n"
+
+f = F()
+raw: bytes = f.readline()
+print(raw)
+print(raw[:3])
+d = {}
+d["b"] = b"held"
+print(d["b"])
+print(b"tab\there")
+print(b"q'q")
+print(b'dq"dq')

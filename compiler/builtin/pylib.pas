@@ -246,6 +246,7 @@ function pyrepr_of(const v: Variant): AnsiString; overload;
   Recursive: a nested list/dict element is reprd as a container, not as its
   object tag. }
 function pylist_repr(l: TPyList): AnsiString;
+function pybytes_repr(b: TPyBytes): AnsiString;
 function pydict_repr(d: TPyDict): AnsiString;
 function pyvar_repr(const v: Variant): AnsiString;
 { print()'s string form of a VARIANT: a container payload (list/dict) shows its
@@ -3931,6 +3932,7 @@ begin
     o := TObject(pyvarobj(v));
     if o is TPyList then begin Result := pylist_repr(TPyList(o)); Exit; end;
     if o is TPyDict then begin Result := pydict_repr(TPyDict(o)); Exit; end;
+    if o is TPyBytes then begin Result := pybytes_repr(TPyBytes(o)); Exit; end;
   end;
   Result := pyrepr_of(v);
 end;
@@ -3944,6 +3946,7 @@ begin
     o := TObject(pyvarobj(v));
     if o is TPyList then begin Result := pylist_repr(TPyList(o)); Exit; end;
     if o is TPyDict then begin Result := pydict_repr(TPyDict(o)); Exit; end;
+    if o is TPyBytes then begin Result := pybytes_repr(TPyBytes(o)); Exit; end;
   end;
   Result := pystr_of(v);
 end;
@@ -3974,6 +3977,41 @@ begin
     Result := Result + pyvar_repr(k) + ': ' + pyvar_repr(d.fetch(k));
   end;
   Result := Result + '}';
+end;
+
+{ CPython bytes repr: b'...' with printable ASCII kept, \t \n \r named, the
+  rest as \xHH. Like CPython, the quote flips to double quotes when the data
+  contains a single quote but no double quote. }
+function pybytes_repr(b: TPyBytes): AnsiString;
+var i, c: Integer; q: Char; hasSq, hasDq: Boolean;
+const HexD: array[0..15] of Char = ('0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f');
+begin
+  hasSq := False; hasDq := False;
+  if b <> nil then
+    for i := 0 to b.count - 1 do
+    begin
+      c := b.at(i);
+      if c = 39 then hasSq := True
+      else if c = 34 then hasDq := True;
+    end;
+  if hasSq and (not hasDq) then q := '"' else q := '''';
+  Result := 'b' + q;
+  if b <> nil then
+    for i := 0 to b.count - 1 do
+    begin
+      c := b.at(i);
+      if c = 92 then Result := Result + '\\'
+      else if c = Ord(q) then Result := Result + '\' + q
+      else if c = 9 then Result := Result + '\t'
+      else if c = 10 then Result := Result + '\n'
+      else if c = 13 then Result := Result + '\r'
+      else if (c >= 32) and (c <= 126) then Result := Result + Chr(c)
+      else
+      begin
+        Result := Result + '\x' + HexD[(c shr 4) and 15] + HexD[c and 15];
+      end;
+    end;
+  Result := Result + q;
 end;
 
 function pystr_of(const v: Variant): AnsiString; overload;

@@ -4449,6 +4449,10 @@ begin
   dictCi := FindUClass('TPyDict');
   if (listCi >= 0) and (rec = REC_UCLASS_BASE + listCi) then pname := 'pylist_repr'
   else if (dictCi >= 0) and (rec = REC_UCLASS_BASE + dictCi) then pname := 'pydict_repr'
+  { bytes prints as b'...' like CPython — it fell through to the integer path
+    and printed the instance pointer (bug-nilpy-user-class-bytes-method-loses-
+    identity: the visible half; the annotated form hit this too). }
+  else if (PyBytesCi >= 0) and (rec = REC_UCLASS_BASE + PyBytesCi) then pname := 'pybytes_repr'
   else Exit;
   procIdx := FindProc(pname);
   if procIdx < 0 then Exit;   { pylib not loaded — leave the old behaviour }
