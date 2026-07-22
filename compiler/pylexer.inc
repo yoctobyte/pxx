@@ -753,9 +753,58 @@ begin
               case Source[P] of
                 'n': AppendChar(s, #10);
                 't': AppendChar(s, #9);
+                'r': AppendChar(s, #13);
+                'a': AppendChar(s, #7);
+                'b': AppendChar(s, #8);
+                'f': AppendChar(s, #12);
+                'v': AppendChar(s, #11);
                 '\': AppendChar(s, '\');
                 '''': AppendChar(s, '''');
                 '"': AppendChar(s, '"');
+                'x':
+                  begin
+                    { \xHH — two hex digits, CPython's numeric byte escape
+                      (bug-nilpy-bytes-literal-escapes-not-decoded). A
+                      malformed \x stays literal text, the lax-dialect
+                      fallback below. }
+                    if (P + 2 <= Length(Source)) and
+                       (Source[P+1] in ['0'..'9', 'a'..'f', 'A'..'F']) and
+                       (Source[P+2] in ['0'..'9', 'a'..'f', 'A'..'F']) then
+                    begin
+                      digit := 0;
+                      case Source[P+1] of
+                        '0'..'9': digit := Ord(Source[P+1]) - Ord('0');
+                        'a'..'f': digit := Ord(Source[P+1]) - Ord('a') + 10;
+                        'A'..'F': digit := Ord(Source[P+1]) - Ord('A') + 10;
+                      end;
+                      digit := digit * 16;
+                      case Source[P+2] of
+                        '0'..'9': digit := digit + Ord(Source[P+2]) - Ord('0');
+                        'a'..'f': digit := digit + Ord(Source[P+2]) - Ord('a') + 10;
+                        'A'..'F': digit := digit + Ord(Source[P+2]) - Ord('A') + 10;
+                      end;
+                      AppendChar(s, Chr(digit));
+                      Inc(P, 2);
+                    end
+                    else begin AppendChar(s, '\'); AppendChar(s, 'x'); end;
+                  end;
+                '0'..'7':
+                  begin
+                    { \ooo — one to three octal digits (\0 = NUL). }
+                    digit := Ord(Source[P]) - Ord('0');
+                    if (P + 1 <= Length(Source)) and (Source[P+1] in ['0'..'7']) then
+                    begin
+                      digit := digit * 8 + Ord(Source[P+1]) - Ord('0');
+                      Inc(P);
+                      if (P + 1 <= Length(Source)) and (Source[P+1] in ['0'..'7']) and
+                         (digit * 8 + Ord(Source[P+1]) - Ord('0') <= 255) then
+                      begin
+                        digit := digit * 8 + Ord(Source[P+1]) - Ord('0');
+                        Inc(P);
+                      end;
+                    end;
+                    AppendChar(s, Chr(digit));
+                  end;
                 else begin AppendChar(s, '\'); AppendChar(s, Source[P]); end;
               end;
               Inc(P);

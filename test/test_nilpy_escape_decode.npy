@@ -1,0 +1,11 @@
+d = b"\x00\xff"
+print(len(d))
+print(d[0], d[1])
+e = b"\x41\x42c"
+print(len(e), e[0], e[2])
+s = "\x41\0\101"
+print(len(s))
+print("A\ta".find("\t"))
+print(len("\a\b\f\v\r"))
+bad = "\xzz"
+print(len(bad))
