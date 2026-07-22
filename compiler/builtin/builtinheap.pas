@@ -107,10 +107,18 @@ procedure PXXStrDecRef(p: Pointer);
   instances created by NilPy code paths are refcounted like AnsiString handles.
   The instance pointer is base+16 of its own heap block, rc at [inst-16] — the
   same protocol as the string handles above. Pascal-created instances are NOT
-  in this scheme; only allocations routed through PXXObjAlloc are. }
+  in this scheme; only allocations routed through PXXObjAlloc are. A headered
+  instance is recognized at runtime by PXX_OBJ_MAGIC in the word at [inst-8]:
+  a plain-GetMem instance has its allocator SIZE word there, always a multiple
+  of 8, and the magic has low bits set — so the two populations cannot be
+  confused, retain/release no-op on unheadered instances instead of corrupting
+  a neighbour block, and PXXObjFree frees correctly either way. }
+const
+  PXX_OBJ_MAGIC = $505942F1;   { low bits 001 — never an allocator size word }
 function PXXObjAlloc(size: NativeInt): Pointer;
 procedure PXXObjRetain(p: Pointer);
 procedure PXXObjRelease(p: Pointer);
+procedure PXXObjFree(p: Pointer);
 { COM/ARC interface ARC helpers dispatch through the IMT via an indirect call,
   which the ESP (xtensa/riscv32) backends cannot lower yet; ESP has no COM
   interfaces anyway, so exclude them there (their RegisterProc is likewise
@@ -1126,8 +1134,8 @@ var base: Int64;
 begin
   if size < 8 then size := 8;
   base := Int64(PXXAlloc(size + 16, 8));
-  PWord(base)^ := 1;            { refcount }
-  PWord(base + 8)^ := 0;        { reserved }
+  PWord(base)^ := 1;                    { refcount }
+  PWord(base + 8)^ := PXX_OBJ_MAGIC;    { population tag, see the interface }
   Result := Pointer(base + 16);
 end;
 
@@ -1139,6 +1147,7 @@ var base: Int64;
 begin
   if p = nil then Exit;
   base := Int64(p) - 16;
+  if PWord(base + 8)^ <> PXX_OBJ_MAGIC then Exit;   { unheadered: not ours }
 {$ifdef PXX_TS_SOFTLOCK}
   tsIgnore := __pxxatomic_add(Pointer(base), 1);
 {$else}
@@ -1151,6 +1160,7 @@ var base, rc: Int64;
 begin
   if p = nil then Exit;
   base := Int64(p) - 16;
+  if PWord(base + 8)^ <> PXX_OBJ_MAGIC then Exit;   { unheadered: not ours }
 {$ifdef PXX_TS_SOFTLOCK}
   rc := __pxxatomic_add(Pointer(base), -1) - 1;   { returns the OLD value }
 {$else}
@@ -1158,6 +1168,20 @@ begin
   PWord(base)^ := rc;
 {$endif}
   if rc = 0 then PXXFree(Pointer(base));
+end;
+
+{ Free an instance whichever population it belongs to: headered -> release
+  (rc discipline), plain GetMem -> ordinary free. This is what the FreeMem
+  tail of a `.Free` desugar lowers to in a NilPy compilation, so hand-written
+  Pascal units (pyeval's TPyList arg lists, a user unit's obj.Free) stay
+  correct when construction is rerouted through PXXObjAlloc. }
+procedure PXXObjFree(p: Pointer);
+begin
+  if p = nil then Exit;
+  if PWord(Int64(p) - 8)^ = PXX_OBJ_MAGIC then
+    PXXObjRelease(p)
+  else
+    PXXFree(p);
 end;
 
 { COM/ARC interface refcount helpers. `fatptr` is the ADDRESS of a 16-/8-byte

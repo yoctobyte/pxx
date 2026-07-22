@@ -6599,6 +6599,21 @@ begin
           cfCall := IRAppendCall(cfPi, cfArg, -1, Ord(tyNativeInt));
           IRIVal[cfCall] := 1;   { statement: emit for effect }
         end;
+        { NilPy compilation: instances are constructed through PXXObjAlloc and
+          live at base+16 of their block (feature-nilpy-object-reclamation), so
+          the plain FreeMem here would free the wrong base. PXXObjFree
+          discriminates by the [inst-8] population tag: headered -> release,
+          plain GetMem (an instance a Pascal-mode unit allocated) -> ordinary
+          free. Pascal-mode compilations keep the inline FreeMem arm. }
+        if isNilPy then
+        begin
+          cfPi := FindProc('PXXObjFree');
+          if cfPi < 0 then Error('Nil Python: PXXObjFree (builtinheap) not loaded');
+          cfArg := IRAppend(IR_ARG, IRLowerAST(ASTLeft[ASTLeft[node]]), -1, -1, 0, Ord(tyPointer));
+          Result := IRAppendCall(cfPi, cfArg, -1, Ord(tyNativeInt));
+          IRIVal[Result] := 1;   { statement: emit for effect }
+          Exit;
+        end;
       end;
       if cpi = -102 then
       begin
@@ -6846,12 +6861,15 @@ begin
         devdocs/dev/nilpy-object-reclamation.md. Lowered target-independently
         (the AN_METACLASS_NEW idiom: alloc call, VMT stamp via IR_VMTADDR, ctor
         as an ordinary call), replacing the per-backend inline -tkGetMem arm for
-        these nodes only. Gate is BOTH flags: isNilPy alone would also reroute
-        pylib/pyeval's own Pascal constructions, whose instances are
-        manual-lifetime and must keep the plain allocation
-        (project_pyeval_arc_state_and_wiring_blocker). }
+        these nodes only. Gate is isNilPy — the WHOLE compilation, units
+        included: pylib/pyeval-created instances (keys() results, host-call arg
+        lists) escape into user variant slots, and the release paths cannot
+        tell populations apart, so every instance in a NilPy program must carry
+        the header. The units' manual `.Free` sites (FreeMem on the instance
+        pointer — wrong base for a headered block) are converted to
+        PXXObjRelease in pyeval; Pascal-mode compilations are untouched. }
       if (cpi = -Ord(tkGetMem)) and (classIdx >= REC_UCLASS_BASE) and
-         isNilPy and (CurrentUnitIdx < 0) then
+         isNilPy then
       begin
         procIdx := FindProc('PXXObjAlloc');
         if procIdx < 0 then Error('Nil Python: PXXObjAlloc (builtinheap) not loaded');
