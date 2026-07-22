@@ -6210,8 +6210,27 @@ begin
     node := AllocNode(AN_EXIT);
     if not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) then
     begin
-      PyParseBoolExpr;
-      ASTLeft[node] := CurASTNode;
+      if (CurTok.Kind = tkNil) and (CurProc >= 0) and
+         (Procs[CurProc].RetSymIdx >= 0) and
+         (Syms[Procs[CurProc].RetSymIdx].TypeKind = tyVariant) and
+         ((TokPos >= TokCount) or
+          (Tokens[TokPos].Kind in [tkNewline, tkDedent, tkEOF, tkSemicolon])) then
+      begin
+        { `return None` from a variant-returning def hands back a real None
+          (VT_EMPTY): the nil literal lowers to integer 0 elsewhere, so the
+          caller's `is None` tag test failed on every guard-path return —
+          uforth's _parse_number returned 0 for a junk token, which was PUSHED
+          instead of raising THROW -13
+          (bug-nilpy-uforth-exceptiontest-source-unlink). Non-variant results
+          keep the documented 0/nil sentinel mapping. }
+        Next;
+        ASTLeft[node] := PyMakeNone;
+      end
+      else
+      begin
+        PyParseBoolExpr;
+        ASTLeft[node] := CurASTNode;
+      end;
     end;
     Result := node;
     Exit;
@@ -6337,6 +6356,18 @@ begin
           rhsNode := AllocNode(AN_INT_LIT);
           ASTIVal[rhsNode] := 0;
           ASTTk[rhsNode] := ASTTk[lhsNode];
+        end
+        else if IntToTypeKind(ASTTk[lhsNode]) in [tyAnsiString, tyString] then
+        begin
+          { str-typed target: the None sentinel is a NIL handle (what
+            pystr_is_none tests and `if self.f` must see as falsy). The
+            variant-None route below would coerce through variant->string and
+            store the TEXT 'None' — truthy, and `is None` false
+            (bug-nilpy-none-into-str-field-stores-text). }
+          rhsNode := AllocNode(AN_CALL);
+          ASTIVal[rhsNode] := FindProc('pystr_none');
+          if ASTIVal[rhsNode] < 0 then Error('Nil Python: pylib (pystr_none) not loaded');
+          ASTTk[rhsNode] := Ord(tyAnsiString);
         end
         else
           rhsNode := PyMakeNone;

@@ -1,0 +1,24 @@
+from typing import Optional, Any
+
+def guard(x: int) -> Optional[Any]:
+    try:
+        v = int("zz", 16)
+        return v
+    except ValueError:
+        pass
+    if x > 5:
+        return x
+    return None
+
+def plain() -> Optional[Any]:
+    return None
+
+def show(tag: str, r) -> None:
+    if r is None:
+        print(tag, "NONE")
+    else:
+        print(tag, r)
+
+show("a", plain())
+show("b", guard(3))
+show("c", guard(9))

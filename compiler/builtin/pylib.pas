@@ -346,6 +346,10 @@ function pystdin_readline: AnsiString;
   native words, which run under the (stubbed) exec path. }
 function pystdin_isatty: Integer;
 function pystr_is_none(const s: AnsiString): Boolean;
+{ The None value for a str-typed slot: a NIL managed handle (what
+  pystr_is_none tests). Assigning the None literal to a str field/local must
+  store this, not the text 'None' a variant->string coercion produces. }
+function pystr_none: AnsiString;
 function pyvar_box(const v: Variant): Variant;   { box a value into a variant }
 { A BOUND METHOD captured as a value (`env["push"] = vm.push`): a heap
   {code, recv} pair boxed as a VT_BOUNDMETHOD (8) variant. Recv is the receiver
@@ -3035,6 +3039,11 @@ end;
 function pystr_is_none(const s: AnsiString): Boolean;
 begin
   Result := Pointer(s) = nil;
+end;
+
+function pystr_none: AnsiString;
+begin
+  Result := '';
 end;
 
 { Identity that BOXES its argument into a variant: passing a scalar to a Variant

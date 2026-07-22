@@ -1,0 +1,21 @@
+from typing import Optional
+
+class A:
+    def __init__(self) -> None:
+        self.f: Optional[str] = None
+
+    def check(self, word: str) -> str:
+        if self.f and word.upper() != self.f:
+            return "skip"
+        return "show"
+
+a = A()
+print(a.f is None)
+print(a.check("dup"))
+a.f = "DUP"
+print(a.f is None)
+print(a.check("dup"))
+print(a.check("swap"))
+a.f = None
+print(a.f is None)
+print(a.check("swap"))

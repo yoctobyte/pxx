@@ -323,8 +323,12 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_to_bytes26)" = "$$(printf '8\n10\n0\n10\n254\n255\n-2\n255\n0\n255\n-1\n255')"
 	./$(COMPILER) test/test_nilpy_comp_iterable.npy /tmp/test_nilpy_comp_iterable26
 	test "$$(/tmp/test_nilpy_comp_iterable26)" = "$$(printf '2\n3\n4\nr 0\nr 1\nr 2\n66')"
+	./$(COMPILER) test/test_nilpy_return_none_variant.npy /tmp/test_nilpy_return_none_variant26
+	test "$$(/tmp/test_nilpy_return_none_variant26)" = "$$(printf 'a NONE\nb NONE\nc 9')"
+	./$(COMPILER) test/test_nilpy_none_str_field.npy /tmp/test_nilpy_none_str_field26
+	test "$$(/tmp/test_nilpy_none_str_field26)" = "$$(printf 'True\nshow\nFalse\nshow\nskip\nTrue\nshow')"
 	./$(COMPILER) test/test_nilpy_bytes_repr.npy /tmp/test_nilpy_bytes_repr26
-	test "$$(/tmp/test_nilpy_bytes_repr26)" = "$$(printf "b'abc\\\\n'\nb'abc'\nb'held'\nb'tab\\\\there'\nb\\\"q'q\\\"\nb'dq\\\"dq'")"
+	test "$$(/tmp/test_nilpy_bytes_repr26)" = "$$(printf "b'abc\\\\n'\nb'abc'\nb'held'\nb'tab\\\\there'\nb\"q'q\"\nb'dq\"dq'")"
 	./$(COMPILER) test/test_nilpy_slices.npy /tmp/test_nilpy_slices26
 	test "$$(/tmp/test_nilpy_slices26)" = "$$(printf 'cde\nabc\nfgh\nabcdefgh\nfgh\nab\ndef\n\n\nab\n3\n3\n65\n67\n2\n66\n90\n65\n66\n0\n3\n20\n20\n40\n50\n5')"
 	./$(COMPILER) test/test_nilpy_set.npy /tmp/test_nilpy_set26

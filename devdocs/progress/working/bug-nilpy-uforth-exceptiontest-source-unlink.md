@@ -72,3 +72,32 @@ Debugging note: enabling uforth's TRACE under pxx malfunctions on its own —
 (None-variant truthiness / .upper() on a None field?), so the trace harness
 can't be used as-is to bisect; that misbehaviour is itself a lead
 (None-holding field truthiness in a compiled method).
+
+## 2026-07-22 RESOLVED (fable-abcnp): two NilPy bugs, neither in the unwind
+
+Root cause of the swallow: **`return None` in a variant-returning def lowered
+the nil literal to integer 0**, so uforth's `_parse_number` (annotated
+`-> Optional[Any]`) returned a 0-variant instead of None for a junk token —
+`exec_token_runtime` saw "a number", PUSHED 0 and resumed the line instead of
+raising THROW -13. No exception was ever raised, which is why every unwind
+probe passed. Fix: `return None` in a tyVariant-result def now emits a real
+None (pynone / VT_EMPTY); non-variant results keep the documented 0/nil
+sentinel. (pyparser tkExit branch.)
+
+Side lead confirmed + fixed too: `self.f = None` / `self.f: Optional[str] =
+None` on a str-typed field coerced through variant->string and stored the TEXT
+'None' (truthy, `is None` false) — the trace_filter misbehaviour. None into a
+str-typed target now stores the NIL handle (new pylib `pystr_none`), matching
+pystr_is_none and truthiness.
+
+Full 5-file driver (prelim+tester+utilities+errorreport+exceptiontest) now
+BYTE-IDENTICAL to CPython (needs STD.UFO/CORE.UFO reachable from cwd —
+compiled binary has no __file__ fallback). Regression tests:
+test_nilpy_return_none_variant.npy, test_nilpy_none_str_field.npy (wired into
+test-nilpy). Also fixed a dash-vs-bash printf `\"` portability bug in the
+bytes_repr Makefile expectation (pre-existing, env-dependent).
+
+Known residual gap (pre-existing, by design of the nil-handle sentinel):
+`field = ""` then `field is None` answers True (nil handle conflates '' with
+None for str-typed slots). Filed only as a note here — uforth does not depend
+on the distinction.
