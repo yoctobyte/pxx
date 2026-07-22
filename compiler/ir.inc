@@ -6328,6 +6328,14 @@ begin
             vuArgNode := IRAppend(IR_ARG, vuArgAddr, -1, -1, 0, Ord(tyVariant));
             value := IRAppendCall(vuArgProc, vuArgNode, -1, Ord(tyPointer));
           end
+          else if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTLeft[node]])) then
+            { PROMOTABLE INT result value: its rvalue is the frame SLOT ADDRESS,
+              so the generic lowering must not run — the Result stores below go
+              through the promo runtime (box to a variant Result / wrap to an
+              ordinal one), mirroring the AN_ASSIGN promo arms. Left unhandled,
+              the caller received a dead frame's slot address as the value
+              (uforth /STRING -> wild jump through the word list). }
+            value := -1
           else
           value := IRLowerAST(ASTLeft[node]);
           { A C function returning `char*` (any pointer) that returns a string
@@ -6375,7 +6383,16 @@ begin
             else if Syms[varIdx].TypeKind = tyVariant then
             begin
               leftAddr := IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(tyPointer));
-              if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant then
+              if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTLeft[node]])) then
+              begin
+                { promo -> variant Result: box (inline -> VT_INT64, heap ->
+                  VT_PROMO), the same lowering the AN_ASSIGN variant-target
+                  promo arm uses. Statement-marked or codegen skips it. }
+                last := IRPromoCall('PXXPromoToVariant', leftAddr,
+                                    IRPromoAddrOf(ASTLeft[node]), -1, tyUnknown);
+                IRMarkStatementNode(last);
+              end
+              else if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant then
               begin
                 rhsIsLValue := (ASTKind[ASTLeft[node]] = AN_IDENT) or
                                (ASTKind[ASTLeft[node]] = AN_FIELD) or
@@ -6396,6 +6413,14 @@ begin
             else if vuExitUnboxed then
               last := IRAppend(IR_STORE_SYM, varIdx, value, -1, 0,
                                Ord(Syms[varIdx].TypeKind))
+            else if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTLeft[node]])) and
+                    TypeIsOrdinal(Syms[varIdx].TypeKind) then
+              { promo -> concrete-int Result: two's-complement wrap mod 2^64,
+                the same narrowing the AN_ASSIGN store applies. }
+              last := IRAppend(IR_STORE_SYM, varIdx,
+                               IRPromoCall('PXXPromoToInt64Wrap',
+                                           IRPromoAddrOf(ASTLeft[node]), -1, -1, tyInt64),
+                               -1, 0, Ord(Syms[varIdx].TypeKind))
             else
               last := IRAppend(IR_STORE_SYM, varIdx, value, -1, 0, ASTTk[ASTLeft[node]]);
           end;

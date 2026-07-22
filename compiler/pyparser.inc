@@ -2858,7 +2858,16 @@ begin
   for j := 0 to nP - 1 do
     if pDefS[j] >= 0 then Inc(nDef) else Inc(nOwn);
   anyBind := (nDef > 0) or (PyCapCount[procIdx] > 0);
-  if not anyBind then Exit;
+  { An UNANNOTATED single param compiled as a VARIANT also forces the bound-fn
+    wrapper even with nothing to bind: the raw-address fallback lets the
+    call bridge marshal per the FIELD's Callable annotation (vm: VM -> raw
+    instance pointer) while the compiled body reads the slot as a variant —
+    the pointer was reinterpreted as a variant tag and the first method call
+    dispatched through garbage (uforth's `def w(vm):` native words, /STRING).
+    The wrapper's A0Var route passes the argument boxed by address instead. }
+  if not anyBind then
+    if (nOwn <> 1) or (nDef > 0) or (Procs[procIdx].ParamCount < 1) or
+       (Procs[procIdx].Params[0].TypeKind <> tyVariant) then Exit;
   { the bridge passes exactly ONE user argument before the bound values }
   if nOwn <> 1 then Exit;
   if nDef + PyCapCount[procIdx] > 12 then Exit;
@@ -7313,7 +7322,12 @@ begin
         (uforth's finalize_definition: `w = self.define_word(...)`, whose
         annotated Word return carries the class). Last well-typed assignment
         wins. }
-      if ((Result = tyUnknown) or (Result = tyInteger)) and
+      { PROMO also re-chases: PyInferExprType consults PyLocals for a bare
+        ident, and a local widened to promo by the body is only visible in the
+        HEADER pass (the pre-pass has no PyLocals) — trusting it here made the
+        two passes infer different return types, a silent ABI mismatch. The
+        token-only chase below gives both passes the same answer. }
+      if ((Result = tyUnknown) or (Result = tyInteger) or TypeIsPromoInt(Result)) and
          (e = j + 2) and (Tokens[j + 1].Kind = tkIdent) then
       begin
         for k := bodyScanStart to j - 1 do
@@ -7336,6 +7350,13 @@ begin
       end;
       if Result = tyUnknown then Result := tyInteger;
       if Result = tyString then Result := tyAnsiString;
+      { A PROMOTABLE INT cannot cross the call boundary raw: its rvalue is the
+        frame SLOT ADDRESS and the frame dies at return — the caller read a
+        stack address as the value (uforth /STRING returned garbage and the
+        word list was walked through it -> wild jump). Box to a variant
+        (inline -> VT_INT64, heap -> VT_PROMO), which the Result store and
+        every caller already handle. }
+      if TypeIsPromoInt(Result) then Result := tyVariant;
       if (Result = tyClass) and (PyInferLastCi >= 0) then
         retRec := REC_UCLASS_BASE + PyInferLastCi;
       Exit;
