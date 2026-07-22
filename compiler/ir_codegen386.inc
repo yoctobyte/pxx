@@ -1036,6 +1036,21 @@ begin
     Error('target i386: 64-bit binop operator not yet supported');
 end;
 
+procedure EmitOvfCheckNarrow386Trap;
+{ {$Q+} narrow-store trap tail: flags hold `cmp ecx, eax` of the re-extended
+  low width vs the exact 32-bit value — trap on mismatch
+  (bug-qplus-narrow-32bit-backends). }
+var pSkip, procIdx: Integer;
+begin
+  EmitB($74);                            { je skip (in range) }
+  pSkip := CodeLen; EmitB(0);
+  procIdx := FindProc('PXXOverflow');
+  if procIdx < 0 then
+    Error('{$Q+}: PXXOverflow runtime helper not found (builtinheap not loaded)');
+  EmitCallProc(procIdx);
+  Code[pSkip] := Byte(CodeLen - (pSkip + 1));
+end;
+
 procedure EmitIntToXmm386(dst: Integer; srcTk: TTypeKind);
 { integer value -> xmm<dst> as double, by source type. A 64-BIT source lives in
   the eax(lo):edx(hi) pair; the plain cvtsi2sd consumed only eax, so
@@ -1536,6 +1551,49 @@ begin
           x86-64 IR_STORE_SYM fix; C-mode only. }
         if CProgramMode and TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
           begin EmitB($F2); EmitB($0F); EmitB($2C); EmitB($C0); end;   { cvttsd2si eax, xmm0 }
+        { {$Q+}: a Q-tagged binop feeding a NARROWER slot wraps at this store —
+          Pascal Q+ arithmetic is widened to Int64 by the frontend, so the
+          value here is the edx:eax pair and the destination (4/2/1 bytes)
+          truncates it. Re-extend the destination width and trap when it
+          differs from the full pair (mirrors EmitOvfCheckNarrowX64, ILP32
+          leg; bug-qplus-narrow-32bit-backends). A 32-bit-typed checked binop
+          (no widening) is exact in eax; only sub-32 destinations need the
+          low-width re-check then. }
+        if (IRB[node] >= 0) and (IRKind[IRB[node]] = IR_BINOP) and
+           (IRIVal[IRB[node]] = 1) and TypeIsOrdinal(tk) and
+           (not Syms[si].IsArray) and (TypeSize(tk) < 8) and
+           (Is64Bit386(IntToTypeKind(IRTk[IRB[node]])) or (TypeSize(tk) < 4)) then
+        begin
+          if TypeSigned(tk) then
+          begin
+            case TypeSize(tk) of
+              1: begin EmitB($0F); EmitB($BE); EmitB($C8); end  { movsx ecx, al }
+              2: begin EmitB($0F); EmitB($BF); EmitB($C8); end  { movsx ecx, ax }
+            else begin EmitB($89); EmitB($C1); end;             { mov ecx, eax }
+            end;
+            EmitB($31); EmitB($C1);                             { xor ecx, eax (lo diff) }
+            if Is64Bit386(IntToTypeKind(IRTk[IRB[node]])) then
+            begin
+              EmitB($89); EmitB($C3);                           { mov ebx, eax }
+              EmitB($C1); EmitB($FB); EmitB($1F);               { sar ebx, 31 (expected hi) }
+              EmitB($31); EmitB($D3);                           { xor ebx, edx (hi diff) }
+              EmitB($09); EmitB($D9);                           { or ecx, ebx }
+            end;
+          end
+          else
+          begin
+            case TypeSize(tk) of
+              1: begin EmitB($0F); EmitB($B6); EmitB($C8); end  { movzx ecx, al }
+              2: begin EmitB($0F); EmitB($B7); EmitB($C8); end  { movzx ecx, ax }
+            else begin EmitB($89); EmitB($C1); end;             { mov ecx, eax }
+            end;
+            EmitB($31); EmitB($C1);                             { xor ecx, eax (lo diff) }
+            if Is64Bit386(IntToTypeKind(IRTk[IRB[node]])) then
+              begin EmitB($09); EmitB($D1); end;                { or ecx, edx (hi must be 0) }
+          end;
+          EmitB($85); EmitB($C9);                               { test ecx, ecx }
+          EmitOvfCheckNarrow386Trap;                            { jz skip / trap }
+        end;
         sz := TypeSize(tk);
         if Syms[si].Kind = skGlobal then
         begin
@@ -2197,9 +2255,32 @@ begin
         IREmitNode386(right);
         EmitB($89); EmitB($C1);                      { mov ecx, eax }
         EmitB($58);                                  { pop eax }
-        if op = Ord(tkPlus) then begin EmitB($01); EmitB($C8); end       { add eax, ecx }
-        else if op = Ord(tkMinus) then begin EmitB($29); EmitB($C8); end { sub eax, ecx }
-        else if op = Ord(tkStar) then begin EmitB($0F); EmitB($AF); EmitB($C1); end { imul eax, ecx }
+        if op = Ord(tkPlus) then
+        begin
+          EmitB($01); EmitB($C8);                    { add eax, ecx }
+          { {$Q+}: on ILP32 the 32-bit op IS the full width, so its flags carry
+            the exact verdict (OF signed / CF unsigned) — the x86-64 backend
+            checks at the narrowing store instead, but here the wrap already
+            happened in the register (bug-qplus-narrow-32bit-backends).
+            Sub-32-bit destinations are exact at 32 bits and range-checked at
+            the store below. }
+          if IRIVal[node] = 1 then
+            EmitOvfCheckX64(not TypeSigned(IntToTypeKind(IRTk[node])));
+        end
+        else if op = Ord(tkMinus) then
+        begin
+          EmitB($29); EmitB($C8);                    { sub eax, ecx }
+          if IRIVal[node] = 1 then
+            EmitOvfCheckX64(not TypeSigned(IntToTypeKind(IRTk[node])));
+        end
+        else if op = Ord(tkStar) then
+        begin
+          EmitB($0F); EmitB($AF); EmitB($C1);        { imul eax, ecx }
+          { imul's OF is the SIGNED 32-bit verdict; unsigned checked mul stays
+            deferred here, like the 64-bit pair path records. }
+          if (IRIVal[node] = 1) and TypeSigned(IntToTypeKind(IRTk[node])) then
+            EmitOvfCheckX64(False);
+        end
         else if op = Ord(tkDiv) then
         begin
           { unsigned dividend (Cardinal/LongWord, C unsigned int): zero edx + div }

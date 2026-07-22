@@ -3391,6 +3391,8 @@ test-i386: $(COMPILER)
 	# MUL stays deferred on 32-bit pairs — feature-overflow-checks-cross-and-intrinsics)
 	./$(COMPILER) --target=i386 test/test_overflow_checks_qplus.pas /tmp/test_i386_qplus
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_qplus)" = "$$(printf 'wrapped 0\ncaught=4')"
+	./$(COMPILER) --target=i386 test/test_overflow_qplus_narrow.pas /tmp/test_i386_qplus_narrow
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_qplus_narrow)" = "$$(printf 'caught=5 clean=4 wrap=-294967296')"
 	./$(COMPILER) --target=i386 test/test_managed_strlen_deref.pas /tmp/test_i386_managed_strlen
 	./$(COMPILER) test/test_managed_strlen_deref.pas /tmp/test_i386_managed_strlen_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_managed_strlen)" = "$$(/tmp/test_i386_managed_strlen_x64)"
@@ -3721,6 +3723,8 @@ test-aarch64: $(COMPILER)
 	# {$$Q+} overflow-checked arithmetic raises catchable EIntOverflow (aarch64 leg)
 	./$(COMPILER) --target=aarch64 test/test_overflow_checks_qplus.pas /tmp/test_aarch64_qplus
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_qplus)" = "$$(printf 'wrapped 0\ncaught=4')"
+	./$(COMPILER) --target=aarch64 test/test_overflow_qplus_narrow.pas /tmp/test_aarch64_qplus_narrow
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_qplus_narrow)" = "$$(printf 'caught=5 clean=4 wrap=-294967296')"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_record_array_store.pas /tmp/test_aarch64_rec_arr_store
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record_array_store.pas /tmp/test_aarch64_rec_arr_store_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_rec_arr_store)" = "$$(/tmp/test_aarch64_rec_arr_store_x64)"
@@ -4009,6 +4013,8 @@ test-riscv32: $(COMPILER)
 	# the unsigned rows; signed checked MUL stays deferred on 32-bit pairs)
 	./$(COMPILER) --target=riscv32 test/test_overflow_checks_qplus.pas /tmp/test_riscv32_qplus
 	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_qplus)" = "$$(printf 'wrapped 0\ncaught=4')"
+	./$(COMPILER) --target=riscv32 test/test_overflow_qplus_narrow.pas /tmp/test_riscv32_qplus_narrow
+	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_qplus_narrow)" = "$$(printf 'caught=5 clean=4 wrap=-294967296')"
 	./$(COMPILER) --target=riscv32 test/ccross_entry.c /tmp/test_riscv32_centry
 	tools/run_target.sh riscv32 /tmp/test_riscv32_centry; test "$$?" = "42"
 	./$(COMPILER) --target=riscv32 test/ccross_args.c /tmp/test_riscv32_cargs
@@ -4423,6 +4429,8 @@ test-arm32: $(COMPILER)
 	# MUL stays deferred on 32-bit pairs — feature-overflow-checks-cross-and-intrinsics)
 	./$(COMPILER) --target=arm32 test/test_overflow_checks_qplus.pas /tmp/test_arm32_qplus
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_qplus)" = "$$(printf 'wrapped 0\ncaught=4')"
+	./$(COMPILER) --target=arm32 test/test_overflow_qplus_narrow.pas /tmp/test_arm32_qplus_narrow
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_qplus_narrow)" = "$$(printf 'caught=5 clean=4 wrap=-294967296')"
 	./$(COMPILER) --target=arm32 test/test_managed_strlen_deref.pas /tmp/test_arm32_managed_strlen
 	./$(COMPILER) test/test_managed_strlen_deref.pas /tmp/test_arm32_managed_strlen_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_managed_strlen)" = "$$(/tmp/test_arm32_managed_strlen_x64)"

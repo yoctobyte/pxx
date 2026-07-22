@@ -1405,6 +1405,46 @@ begin
           EmitI32($EEBD0BC0);                       { vcvt.s32.f64 s0, d0 (trunc) }
           EmitI32($EE100A10);                       { vmov r0, s0 }
         end;
+        { {$Q+}: a Q-tagged binop feeding a NARROWER slot wraps at this store —
+          Pascal Q+ arithmetic is widened to Int64 by the frontend, so the
+          value here is the r0(lo):r1(hi) pair and the destination (4/2/1
+          bytes) truncates it. Re-extend the destination width and trap when
+          it differs from the full pair (ILP32 leg of the x86-64 narrow-store
+          check; bug-qplus-narrow-32bit-backends). }
+        if (IRB[node] >= 0) and (IRKind[IRB[node]] = IR_BINOP) and
+           (IRIVal[IRB[node]] = 1) and TypeIsOrdinal(tk) and
+           (not Syms[IRA[node]].IsArray) and (TypeSize(tk) < 8) and
+           (Is64BitArm32(IntToTypeKind(IRTk[IRB[node]])) or (TypeSize(tk) < 4)) then
+        begin
+          if TypeSigned(tk) then
+          begin
+            case TypeSize(tk) of
+              1: EmitI32($E6AF2070);  { sxtb r2, r0 }
+              2: EmitI32($E6BF2070);  { sxth r2, r0 }
+            else EmitI32($E1A02000);  { mov r2, r0 }
+            end;
+            EmitI32($E0222000);       { eor r2, r2, r0 (lo diff) }
+            if Is64BitArm32(IntToTypeKind(IRTk[IRB[node]])) then
+            begin
+              EmitI32($E1A03FC0);     { mov r3, r0 asr #31 (expected hi) }
+              EmitI32($E0233001);     { eor r3, r3, r1 (hi diff) }
+              EmitI32($E1822003);     { orr r2, r2, r3 }
+            end;
+          end
+          else
+          begin
+            case TypeSize(tk) of
+              1: EmitI32($E6EF2070);  { uxtb r2, r0 }
+              2: EmitI32($E6FF2070);  { uxth r2, r0 }
+            else EmitI32($E1A02000);  { mov r2, r0 }
+            end;
+            EmitI32($E0222000);       { eor r2, r2, r0 (lo diff) }
+            if Is64BitArm32(IntToTypeKind(IRTk[IRB[node]])) then
+              EmitI32($E1822001);     { orr r2, r2, r1 (hi must be 0) }
+          end;
+          EmitI32($E3520000);         { cmp r2, #0 }
+          EmitOvfCheckArm32($0A000000);  { b.eq skip (in range) }
+        end;
         EmitStoreVarArm32(IRA[node]);
       end;
 
@@ -1770,9 +1810,51 @@ begin
         EmitI32($E1A01000); { mov r1, r0 }
         EmitI32($E8BD0001); { pop {r0} }
 
-        if op = Ord(tkPlus) then EmitI32($E0800001)        { add r0, r0, r1 }
-        else if op = Ord(tkMinus) then EmitI32($E0400001)  { sub r0, r0, r1 }
-        else if op = Ord(tkStar) then EmitI32($E0000091)   { mul r0, r1, r0 }
+        if op = Ord(tkPlus) then
+        begin
+          { {$Q+}: on ILP32 the 32-bit op IS the full width — flag-setting form
+            plus a trap: V for signed, C for unsigned. Sub-32-bit destinations
+            are exact here and range-checked at the narrowing store
+            (bug-qplus-narrow-32bit-backends). }
+          if IRIVal[node] = 1 then
+          begin
+            EmitI32($E0900001);                            { adds r0, r0, r1 }
+            if TypeSigned(IntToTypeKind(IRTk[node])) then
+              EmitOvfCheckArm32($7A000000)                 { b.vc skip }
+            else
+              EmitOvfCheckArm32($3A000000);                { b.cc skip }
+          end
+          else
+            EmitI32($E0800001);                            { add r0, r0, r1 }
+        end
+        else if op = Ord(tkMinus) then
+        begin
+          if IRIVal[node] = 1 then
+          begin
+            EmitI32($E0500001);                            { subs r0, r0, r1 }
+            if TypeSigned(IntToTypeKind(IRTk[node])) then
+              EmitOvfCheckArm32($7A000000)                 { b.vc skip }
+            else
+              EmitOvfCheckArm32($2A000000);                { b.cs skip (no borrow) }
+          end
+          else
+            EmitI32($E0400001);                            { sub r0, r0, r1 }
+        end
+        else if op = Ord(tkStar) then
+        begin
+          if (IRIVal[node] = 1) and TypeSigned(IntToTypeKind(IRTk[node])) then
+          begin
+            { signed checked mul: 64-bit product, trap unless the high word is
+              the sign extension of the low. Unsigned checked mul stays
+              deferred, like the 64-bit pair path records. }
+            EmitI32($E0C32190);                            { smull r2, r3, r0, r1 }
+            EmitI32($E1530FC2);                            { cmp r3, r2 asr #31 }
+            EmitOvfCheckArm32($0A000000);                  { b.eq skip (in range) }
+            EmitI32($E1A00002);                            { mov r0, r2 }
+          end
+          else
+            EmitI32($E0000091);                            { mul r0, r1, r0 }
+        end
         else if op = Ord(tkDiv) then
         begin
           { unsigned dividend (Cardinal/LongWord, C unsigned int) -> udiv (bit21) }

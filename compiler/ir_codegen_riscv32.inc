@@ -1125,6 +1125,60 @@ begin
         else
         begin
           IREmitNodeRISCV32(IRB[node]);
+          { {$Q+}: a Q-tagged binop feeding a NARROWER slot wraps at this
+            store — Pascal Q+ arithmetic is widened to Int64 by the frontend,
+            so the value here is the a0(lo):a1(hi) pair and the destination
+            (4/2/1 bytes) truncates it. Re-extend the destination width and
+            trap when it differs from the full pair (ILP32 leg of the x86-64
+            narrow-store check; bug-qplus-narrow-32bit-backends). }
+          if (IRB[node] >= 0) and (IRKind[IRB[node]] = IR_BINOP) and
+             (IRIVal[IRB[node]] = 1) and
+             TypeIsOrdinal(Syms[IRA[node]].TypeKind) and
+             (not Syms[IRA[node]].IsArray) and
+             (TypeSize(Syms[IRA[node]].TypeKind) < 8) and
+             (Is64BitRISCV32(IntToTypeKind(IRTk[IRB[node]])) or
+              (TypeSize(Syms[IRA[node]].TypeKind) < 4)) then
+          begin
+            if TypeSigned(Syms[IRA[node]].TypeKind) then
+            begin
+              case TypeSize(Syms[IRA[node]].TypeKind) of
+                1: begin
+                     rv32_slli(reg_t4, reg_a0, 24);
+                     rv32_srai(reg_t4, reg_t4, 24);   { sign-extend low byte }
+                   end;
+                2: begin
+                     rv32_slli(reg_t4, reg_a0, 16);
+                     rv32_srai(reg_t4, reg_t4, 16);   { sign-extend low half }
+                   end;
+              else rv32_addi(reg_t4, reg_a0, 0);      { full low word }
+              end;
+              rv32_xor(reg_t3, reg_t4, reg_a0);       { lo diff }
+              if Is64BitRISCV32(IntToTypeKind(IRTk[IRB[node]])) then
+              begin
+                rv32_srai(reg_t4, reg_a0, 31);        { expected hi = sign fill }
+                rv32_xor(reg_t4, reg_t4, reg_a1);     { hi diff }
+                rv32_or(reg_t3, reg_t3, reg_t4);
+              end;
+            end
+            else
+            begin
+              case TypeSize(Syms[IRA[node]].TypeKind) of
+                1: begin
+                     rv32_slli(reg_t4, reg_a0, 24);
+                     rv32_srli(reg_t4, reg_t4, 24);   { zero-extend low byte }
+                   end;
+                2: begin
+                     rv32_slli(reg_t4, reg_a0, 16);
+                     rv32_srli(reg_t4, reg_t4, 16);   { zero-extend low half }
+                   end;
+              else rv32_addi(reg_t4, reg_a0, 0);      { full low word }
+              end;
+              rv32_xor(reg_t3, reg_t4, reg_a0);       { lo diff }
+              if Is64BitRISCV32(IntToTypeKind(IRTk[IRB[node]])) then
+                rv32_or(reg_t3, reg_t3, reg_a1);      { hi must be 0 }
+            end;
+            EmitOvfTrapRISCV32;                       { trap when t3 <> 0 }
+          end;
           EmitStoreVarRISCV32(IRA[node]);
         end;
       end;
@@ -1627,9 +1681,65 @@ begin
         rv32_lw(reg_a0, reg_sp, 0);
         rv32_addi(reg_sp, reg_sp, 4);
 
-        if op = Ord(tkPlus) then rv32_add(reg_a0, reg_a0, reg_a1)
-        else if op = Ord(tkMinus) then rv32_sub(reg_a0, reg_a0, reg_a1)
-        else if op = Ord(tkStar) then rv32_mul(reg_a0, reg_a0, reg_a1)
+        if op = Ord(tkPlus) then
+        begin
+          { {$Q+}: on ILP32 the 32-bit op IS the full width, so the verdict is
+            computed here (no flags on RISC-V: slt/sltu comparisons into t3,
+            EmitOvfTrapRISCV32 traps on t3<>0). Sub-32-bit destinations are
+            exact here and range-checked at the narrowing store
+            (bug-qplus-narrow-32bit-backends). }
+          if IRIVal[node] = 1 then
+          begin
+            rv32_addi(reg_t0, reg_a0, 0);           { t0 = left }
+            rv32_add(reg_a0, reg_a0, reg_a1);
+            if TypeSigned(IntToTypeKind(IRTk[node])) then
+            begin
+              rv32_slt(reg_t3, reg_a0, reg_t0);     { result < left }
+              rv32_slt(reg_t4, reg_a1, reg_zero);   { right < 0 }
+              rv32_xor(reg_t3, reg_t3, reg_t4);     { differ = signed overflow }
+            end
+            else
+              rv32_sltu(reg_t3, reg_a0, reg_t0);    { carry out = overflow }
+            EmitOvfTrapRISCV32;
+          end
+          else
+            rv32_add(reg_a0, reg_a0, reg_a1);
+        end
+        else if op = Ord(tkMinus) then
+        begin
+          if IRIVal[node] = 1 then
+          begin
+            rv32_addi(reg_t0, reg_a0, 0);           { t0 = left }
+            rv32_sub(reg_a0, reg_a0, reg_a1);
+            if TypeSigned(IntToTypeKind(IRTk[node])) then
+            begin
+              rv32_slt(reg_t3, reg_a0, reg_t0);     { result < left }
+              rv32_slt(reg_t4, reg_zero, reg_a1);   { right > 0 }
+              rv32_xor(reg_t3, reg_t3, reg_t4);     { differ = signed overflow }
+            end
+            else
+              rv32_sltu(reg_t3, reg_t0, reg_a1);    { left < right = borrow }
+            EmitOvfTrapRISCV32;
+          end
+          else
+            rv32_sub(reg_a0, reg_a0, reg_a1);
+        end
+        else if op = Ord(tkStar) then
+        begin
+          if (IRIVal[node] = 1) and TypeSigned(IntToTypeKind(IRTk[node])) then
+          begin
+            { signed checked mul: trap unless mulh equals the sign extension
+              of the low product. Unsigned checked mul stays deferred, like
+              the 64-bit pair path records. }
+            rv32_mulh(reg_t0, reg_a0, reg_a1);      { t0 = high 32 of product }
+            rv32_mul(reg_a0, reg_a0, reg_a1);       { a0 = low 32 }
+            rv32_srai(reg_t4, reg_a0, 31);          { t4 = sign fill of low }
+            rv32_xor(reg_t3, reg_t0, reg_t4);       { nonzero = overflow }
+            EmitOvfTrapRISCV32;
+          end
+          else
+            rv32_mul(reg_a0, reg_a0, reg_a1);
+        end
         else if op = Ord(tkDiv) then
         begin
           { unsigned dividend (Cardinal/LongWord, C unsigned int) -> divu }

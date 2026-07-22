@@ -117,6 +117,7 @@ procedure rv32_jal(rd, offset: Integer);    begin EmitJType(offset, rd, $6F); en
 procedure rv32_jalr(rd, rs1, imm: Integer); begin EmitIType(imm, rs1, 0, rd, $67); end;
 procedure rv32_mul(rd, rs1, rs2: Integer);  begin EmitRType(1, rs2, rs1, 0, rd, $33); end;
 procedure rv32_mulhu(rd, rs1, rs2: Integer);begin EmitRType(1, rs2, rs1, 3, rd, $33); end;
+procedure rv32_mulh(rd, rs1, rs2: Integer); begin EmitRType(1, rs2, rs1, 1, rd, $33); end;
 procedure rv32_div(rd, rs1, rs2: Integer);  begin EmitRType(1, rs2, rs1, 4, rd, $33); end;
 procedure rv32_divu(rd, rs1, rs2: Integer); begin EmitRType(1, rs2, rs1, 5, rd, $33); end;
 procedure rv32_rem(rd, rs1, rs2: Integer);  begin EmitRType(1, rs2, rs1, 6, rd, $33); end;
