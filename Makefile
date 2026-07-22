@@ -1253,6 +1253,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_int_arg_to_float_param26)" = "$$(printf '80.0\n50.0\n1.0 2.0 3.0\n2.500 2.500 2.500')"
 	./$(COMPILER) test/test_record_temp_byval_arg.pas /tmp/test_record_temp_byval_arg26
 	test "$$(/tmp/test_record_temp_byval_arg26)" = "$$(printf '18\n46')"
+	./$(COMPILER) test/test_managed_record_return_reuse.pas /tmp/test_managed_record_return_reuse26
+	test "$$(/tmp/test_managed_record_return_reuse26)" = "$$(printf '10 123\n10 123\n20 246\n10 123\n20 246')"
 	./$(COMPILER) test/test_ctor_string_literal_arg.pas /tmp/test_ctor_string_literal_arg26
 	test "$$(/tmp/test_ctor_string_literal_arg26)" = "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
 	./$(COMPILER) test/test_single_in_aggregate.pas /tmp/test_single_in_aggregate26
