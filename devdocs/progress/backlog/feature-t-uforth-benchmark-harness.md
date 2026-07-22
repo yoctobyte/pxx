@@ -87,3 +87,30 @@ runtime/GC footprint on a tight loop). Consistent with the ticket's prior
    matches bench.tsv.
 3. **Run on a quiet box** for a clean baseline — the numbers above were taken
    while the full-tier daemon was running; re-baseline when idle.
+
+## Reading the numbers (user, 2026-07-22) — these are GOOD, not a slowness flag
+
+The pxx-vs-CPython ratios must NOT be read as "pxx is slow". uforth is a Forth
+VM built on heavy dynamic dispatch — `exec()` (uforth.py:1289), ~17
+exec/eval/getattr sites, PYTHON-bodied words compiled and run dynamically. That
+is close to the worst case for an AOT compiler and close to the best case for
+CPython, whose decades-tuned C eval loop (and, on newer builds, its JIT) is
+exactly built to chew through this shape.
+
+So on that terrain:
+- **core 0.16x / prelim 0.17x** — within ~6x of CPython on a dynamic-dispatch-
+  heavy REAL program is a strong result, not a gap to close.
+- **microbench-doloop 0.43x** — on the tight interpreter loop, within ~2.3x of
+  CPython. Very good; this is the path the promoint fast-paths already target
+  (they took it 31s→7.5s earlier).
+
+The one real follow-up is **memory**, not speed: pxx peak RSS is 582 MB on the
+microbench vs CPython's 24 MB (~24x). That is the pxx runtime/GC footprint on a
+tight loop and the thing worth looking into later — filed as the memory item,
+NOT as a speed regression.
+
+**Claims discipline for any public copy:** if these ever appear in
+docs/website, frame them honestly — "competitive with CPython on a
+dispatch-heavy Forth VM" is fair; "as fast as CPython" is not (it is 0.16-0.43x
+here), and the numbers are workload-specific. State the workload and that pxx
+AOT-compiles a program whose hot path is dynamic dispatch.
