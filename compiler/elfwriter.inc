@@ -386,38 +386,51 @@ begin
   end;
 end;
 
+{ Append a short line into the TokChars bounce buffer at pos (clamped to
+  STRING_CAP). WriteMapFile used to build the whole map by AnsiString
+  concatenation — one `mapContent := mapContent + line` per proc — which is a
+  quadratic copy AND drove the allocator's large-block first-fit walk into
+  O(n^2): on the 12000-proc token-growth stress test the map writer, not the
+  compile, was most of the wall time (bug-a-token-growth-test-is-slow-and-
+  times-out; sampled PCs sat in PXXStrConcat/PXXAlloc). Building straight into
+  the fixed buffer is a single linear pass. }
+procedure MapAppendLine(const s: AnsiString; var pos: Integer);
+var k: Integer;
+begin
+  for k := 1 to Length(s) do
+  begin
+    if pos >= STRING_CAP then Exit;
+    TokChars[pos] := s[k];
+    pos := pos + 1;
+  end;
+end;
+
 procedure WriteMapFile(const outPath: AnsiString; codeOffset: Int64);
 var
-  mapPath, mapContent: AnsiString;
-  f, i, j, len: Integer;
+  mapPath: AnsiString;
+  f, i, len: Integer;
   addr: Int64;
 begin
   mapPath := outPath + '.map';
-  mapContent := '# Frankonpiler Map File' + #10;
-  mapContent := mapContent + '# Executable: ' + outPath + #10;
-  mapContent := mapContent + '# Base Address: 0x' + IntToHexStr(LOAD_ADDR, 8) + #10;
-  mapContent := mapContent + '# Code Offset: 0x' + IntToHexStr(codeOffset, 8) + #10 + #10;
-  
+  len := 0;
+  MapAppendLine('# Frankonpiler Map File' + #10, len);
+  MapAppendLine('# Executable: ' + outPath + #10, len);
+  MapAppendLine('# Base Address: 0x' + IntToHexStr(LOAD_ADDR, 8) + #10, len);
+  MapAppendLine('# Code Offset: 0x' + IntToHexStr(codeOffset, 8) + #10 + #10, len);
+
   { Entry / _start }
   addr := LOAD_ADDR + codeOffset;
-  mapContent := mapContent + '0x' + IntToHexStr(addr, 16) + ' _start' + #10;
-  
+  MapAppendLine('0x' + IntToHexStr(addr, 16) + ' _start' + #10, len);
+
   for i := 0 to ProcCount - 1 do
   begin
     if Procs[i].BodyAddr >= 0 then
     begin
       addr := LOAD_ADDR + codeOffset + Procs[i].BodyAddr;
-      mapContent := mapContent + '0x' + IntToHexStr(addr, 16) + ' ' + Procs[i].Name + #10;
+      MapAppendLine('0x' + IntToHexStr(addr, 16) + ' ' + Procs[i].Name + #10, len);
     end;
   end;
-  
-  len := Length(mapContent);
-  if len > STRING_CAP then
-    len := STRING_CAP;
-    
-  for j := 0 to len - 1 do
-    TokChars[j] := mapContent[j + 1];
-  
+
   f := sysopen(mapPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
   if f >= 0 then
   begin

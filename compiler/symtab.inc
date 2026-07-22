@@ -4101,7 +4101,12 @@ end;
 function FindProcOverloadRec(const name: AnsiString; nParams: Integer; const ptypes: array of TTypeKind; const precs: array of Integer; const parr: array of Boolean; const pbyref: array of Boolean): Integer;
 var i, j: Integer; match: Boolean;
 begin
-  for i := 0 to ProcCount-1 do
+  { Hash-chain walk (FIFO = registration order) instead of the full Procs scan
+    — this runs once per RegisterProc, so the linear version made registering
+    N procs O(N^2) string compares: the 12000-proc token-growth test spent
+    ~50% of an 80s compile here (bug-a-token-growth-test-is-slow-and-times-out). }
+  i := ProcChainHead(name);
+  while i >= 0 do
   begin
     if (ProcUnitIdx[i] = CurrentUnitIdx) and (Procs[i].Name = name) then
     begin
@@ -4126,6 +4131,7 @@ begin
         end;
       end;
     end;
+    i := ProcHashNext[i];
   end;
   Result := -1;
 end;

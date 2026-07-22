@@ -1094,34 +1094,36 @@ test-core: $(COMPILER)
 	# at build time (a committed source would be ~300 KB); local array keeps it off the
 	# global-fixup table, wide-but-few statements stay under the AST cap and seq-walk
 	# recursion depth. 180 statements x 400 terms ~= 340k IR nodes; sum = 180*2200.
-	@python3 -c "t='+'.join('a[%d]'%(k%10) for k in range(400)); L=['program p;','procedure big;','var s: int64; a: array[0..9] of int64; i: longint;','begin','  for i := 0 to 9 do a[i] := i + 1;','  s := 0;']+['  s := s + '+t+';']*180+['  writeln(s);','end;','begin big; end.']; open('/tmp/test_ir_overflow_large.pas','w').write(chr(10).join(L)+chr(10))"
-	./$(COMPILER) /tmp/test_ir_overflow_large.pas /tmp/test_ir_overflow_large26
+	# NOTE (bug-test-core-oversized-job-6gb-flaky): each stress test's generator is
+	# EMBEDDED in its compile line via $$(python3 -c "...; print(p)"). testmgr's
+	# split_jobs starts a job at a line BEGINNING with the compiler, and a separate
+	# generator line lands in the PREVIOUS job while sharing the /tmp filename with
+	# the next — union-find then chained every stress test plus an innocent unit test
+	# into one ~6.8 GB job that flaked under load and serialized the tier. Embedded,
+	# each stress test is its own job with its own learned mem/duration.
+	./$(COMPILER) "$$(python3 -c "t='+'.join('a[%d]'%(k%10) for k in range(400)); L=['program p;','procedure big;','var s: int64; a: array[0..9] of int64; i: longint;','begin','  for i := 0 to 9 do a[i] := i + 1;','  s := 0;']+['  s := s + '+t+';']*180+['  writeln(s);','end;','begin big; end.']; p='/tmp/test_ir_overflow_large.pas'; open(p,'w').write(chr(10).join(L)+chr(10)); print(p)")" /tmp/test_ir_overflow_large26
 	test "$$(/tmp/test_ir_overflow_large26)" = "396000"
 	# Dynamic AST arrays: a function body with > 516096 AST nodes (the old fixed
 	# INLINE_AST_BASE per-proc cap) must compile — feature-dynamic-compiler-tables.
 	# 350 statements x 400 terms ~= 560k AST nodes; sum = 350*2200. Local array +
 	# few-wide statements keep it off the global-fixup table and under seq-walk depth.
-	@python3 -c "t='+'.join('a[%d]'%(k%10) for k in range(400)); L=['program p;','procedure big;','var s: int64; a: array[0..9] of int64; i: longint;','begin','  for i := 0 to 9 do a[i] := i + 1;','  s := 0;']+['  s := s + '+t+';']*350+['  writeln(s);','end;','begin big; end.']; open('/tmp/test_ast_overflow_large.pas','w').write(chr(10).join(L)+chr(10))"
-	./$(COMPILER) /tmp/test_ast_overflow_large.pas /tmp/test_ast_overflow_large26
+	./$(COMPILER) "$$(python3 -c "t='+'.join('a[%d]'%(k%10) for k in range(400)); L=['program p;','procedure big;','var s: int64; a: array[0..9] of int64; i: longint;','begin','  for i := 0 to 9 do a[i] := i + 1;','  s := 0;']+['  s := s + '+t+';']*350+['  writeln(s);','end;','begin big; end.']; p='/tmp/test_ast_overflow_large.pas'; open(p,'w').write(chr(10).join(L)+chr(10)); print(p)")" /tmp/test_ast_overflow_large26
 	test "$$(/tmp/test_ast_overflow_large26)" = "770000"
 	# Dynamic token arrays: a source with more tokens than the initial 65536 reserve
 	# must grow the token buffer (EnsureTokCapacity), not overflow — feature-dynamic-
 	# compiler-tables. 12000 tiny procs ~= 72k tokens (one doubling). The old 2M cap
 	# is exercised by the sqlite corpus (Track T), not a unit test (a >2M-token program
 	# trips MAX_PROCS/MAX_AST first). self-host already lexes ~1M tokens per build.
-	@python3 -c "L=['program p;']+['procedure q%d; begin end;'%i for i in range(12000)]+['begin','  writeln(42);','end.']; open('/tmp/test_token_growth.pas','w').write(chr(10).join(L)+chr(10))"
-	./$(COMPILER) /tmp/test_token_growth.pas /tmp/test_token_growth26
+	./$(COMPILER) "$$(python3 -c "L=['program p;']+['procedure q%d; begin end;'%i for i in range(12000)]+['begin','  writeln(42);','end.']; p='/tmp/test_token_growth.pas'; open(p,'w').write(chr(10).join(L)+chr(10)); print(p)")" /tmp/test_token_growth26
 	test "$$(/tmp/test_token_growth26)" = "42"
 	# Dynamic Syms arrays: >16384 symbols (the EnsureSymCapacity initial reserve) must
 	# grow the parallel Sym* arrays, not overflow — feature-dynamic-compiler-tables.
-	@python3 -c "L=['program p;','var']+['  v%d: longint;'%i for i in range(20000)]+['begin','  v0 := 7; writeln(v0);','end.']; open('/tmp/test_sym_growth.pas','w').write(chr(10).join(L)+chr(10))"
-	./$(COMPILER) /tmp/test_sym_growth.pas /tmp/test_sym_growth26
+	./$(COMPILER) "$$(python3 -c "L=['program p;','var']+['  v%d: longint;'%i for i in range(20000)]+['begin','  v0 := 7; writeln(v0);','end.']; p='/tmp/test_sym_growth.pas'; open(p,'w').write(chr(10).join(L)+chr(10)); print(p)")" /tmp/test_sym_growth26
 	test "$$(/tmp/test_sym_growth26)" = "7"
 	# Dynamic UField arrays: a struct with >16384 fields (the EnsureUFieldCapacity
 	# reserve) must grow the UFld* pool — feature-dynamic-compiler-tables. Access low
 	# fields (offset 0/4) to sidestep a separate pre-existing huge-struct high-offset bug.
-	@python3 -c "L=['struct s {']+['  int f%d;'%i for i in range(20000)]+['};','int main(void){ struct s b; b.f0=7; b.f1=35; return b.f0+b.f1; }']; open('/tmp/test_ufield_growth.c','w').write(chr(10).join(L)+chr(10))"
-	./$(COMPILER) /tmp/test_ufield_growth.c /tmp/test_ufield_growth26
+	./$(COMPILER) "$$(python3 -c "L=['struct s {']+['  int f%d;'%i for i in range(20000)]+['};','int main(void){ struct s b; b.f0=7; b.f1=35; return b.f0+b.f1; }']; p='/tmp/test_ufield_growth.c'; open(p,'w').write(chr(10).join(L)+chr(10)); print(p)")" /tmp/test_ufield_growth26
 	/tmp/test_ufield_growth26; test $$? -eq 42
 	./$(COMPILER) test/test_dynarray_of_fixed_array.pas /tmp/test_dynarray_of_fixed_array26
 	test "$$(/tmp/test_dynarray_of_fixed_array26 | tail -1)" = "total ok 13 / 13"
