@@ -1153,9 +1153,21 @@ begin
   PyVarSlotManaged := (t = 6) or (t = 8193);
 end;
 
+{ Tags whose payload is a refcounted OBJECT block: VT_OBJECT (7, a class
+  instance) and VT_BOUNDMETHOD (8, a {code,recv} pair). Retain/release ride
+  PXXObjRetain/Release, which no-op unless the payload carries the
+  PXX_OBJ_MAGIC header tag — so a Pascal-created (manual-lifetime) instance
+  passing through a slot is left alone, and only PXXObjAlloc-headered blocks
+  participate (feature-nilpy-object-reclamation slice 2). }
+function PyVarSlotIsObj(t: Int64): Boolean;
+begin
+  PyVarSlotIsObj := (t = 7) or (t = 8);
+end;
+
 procedure PyVarSlotClear(dst: PPyVarRec);
 begin
-  if PyVarSlotManaged(dst^.VType) then PPyAnsiString(@dst^.Payload)^ := '';
+  if PyVarSlotManaged(dst^.VType) then PPyAnsiString(@dst^.Payload)^ := ''
+  else if PyVarSlotIsObj(dst^.VType) then PXXObjRelease(Pointer(NativeInt(dst^.Payload)));
   dst^.VType := 0;
   dst^.Payload := 0;
 end;
@@ -1168,7 +1180,8 @@ var
 begin
   if dst = src then Exit;
   s := '';
-  if PyVarSlotManaged(src^.VType) then s := PPyAnsiString(@src^.Payload)^;
+  if PyVarSlotManaged(src^.VType) then s := PPyAnsiString(@src^.Payload)^
+  else if PyVarSlotIsObj(src^.VType) then PXXObjRetain(Pointer(NativeInt(src^.Payload)));
   PyVarSlotClear(dst);
   dst^.VType := src^.VType;
   if PyVarSlotManaged(src^.VType) then
