@@ -79,3 +79,6 @@ riscv32`); the job is red because its **riscv32** leg fails on the same
 separate failure; it is this bug under a non-riscv-looking job name. It will go
 green with the fix. Current real red surface from this one root: 17
 `test-*riscv32*` jobs + `test-lua-cross` = 18, matching the cascade exactly.
+
+## Log
+- 2026-07-22 — resolved, commit 40eff645.
