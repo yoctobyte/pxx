@@ -27,13 +27,12 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (137)
+## backlog (136)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 55 | bug | issue: runtime heap grows unbounded in a dynamic/variant-heavy loop (long-running programs OOM) | — |
-| bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
 | bug-nilpy-bitwise-on-float-variant-truncates | A | 30 | bug | NilPy: a bitwise op on a FLOAT variant truncates instead of raising TypeError | — |
 | bug-nilpy-bytes-literal-escapes-not-decoded | N | 30 | bug | NilPy: `\xHH` (and presumably `\0`-style) escapes in a BYTES literal are not decoded | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
@@ -231,7 +230,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (949)
+## done (950)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -333,6 +332,7 @@ _none_
 | bug-c-field-of-call-result | C | 50 | bug | C: `f()->field` — field/index of a pointer-returning call result | — |
 | bug-c-field-on-pointer-arithmetic | C | 50 | bug | C: `(p + i)->field` (field on a computed pointer) fails / Unsupported | — |
 | bug-c-float-int-cast-and-spill | C | 50 | bug | C: int<->float numeric cast + computed-double spill across branches | — |
+| bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
 | bug-c-float-single-precision | C | 55 | bug | C float (single precision): arithmetic rounding + implicit arg conversions wrong | — |
 | bug-c-float-single-return-zero | C | 60 | bug | C: a function returning `float` (single) returns 0 on x86-64 | — |
 | bug-c-float-vararg-promotion-32bit | A | 55 | bug | C: float (single) vararg prints 0.000000 on i386/arm32/riscv32 — default argument promotion missing | — |
@@ -2733,7 +2733,6 @@ _none_
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
 - [p 30] [D] idea-public-status-page
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
-- [p 25] [C] bug-c-float-literal-subnormal-parses-zero
 - [p 25] [A] feature-promo-launch-plan
 - [p 25] [T] feature-t-windows-wine-harness
 - [p 25] [C] idea-c-realworld-test-targets

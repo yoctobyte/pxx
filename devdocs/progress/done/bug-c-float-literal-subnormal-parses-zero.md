@@ -38,3 +38,6 @@ scaling pass — tracked with the runtime twin
 [[bug-crtl-strtod-precision-cjson-floats]]. Regression test
 test/csubnormal_literal.c in make test. Benefits Pascal literals too (shared
 lexer routine).
+
+## Log
+- 2026-07-22 — resolved, commit 8fc9508d.
