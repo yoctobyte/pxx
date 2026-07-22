@@ -52,3 +52,16 @@ segfault. `LocalGet` executes `frame.local_slots[token.slot]`; the compiled
 NilPy reads `token.slot` off a variant-held LocalGet dataclass. Likely the
 slot attribute or the local_slots index is mis-read. Declare-only locals pass;
 only the read/`TO` path fails. Localstest lines up to 54 pass.
+
+## local-READ narrowed: LocalGet never executes
+
+Instrumenting the compiled uforth: for `: LT5 {: A :} A ; 5 LT5`, LocalInit
+runs to completion (base=0, extend→1 slot, pops 5 into slot 0), but the
+following `LocalGet(0)` branch NEVER fires — the run loop leaves the word
+before reaching it, then main() reports an empty-message "Script error". So
+either (a) `A` in the colon body did NOT compile to LocalGet (compile_token's
+`_lookup_local_slot('A')` missed the freshly-declared local), or (b) the run
+loop's token advance after LocalInit's `continue` desyncs. Next: dump LT5's
+compiled body tokens to see whether `A` became LocalGet or an
+exec_token_runtime('A') / WordCall. Declare-only locals ({: A :}, {: :}) are
+unaffected; only reading/`TO` fails.
