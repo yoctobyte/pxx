@@ -1188,7 +1188,6 @@ begin
   Result := castNode;
 end;
 
-function PyMakeNone: Integer; forward;
 
 function PyMakeTruthy(n: Integer): Integer;
 var procIdx, argNode, rec, lenNode, zeroNode, node: Integer;
@@ -2517,8 +2516,8 @@ end;
   for a list (`get`) or a dict (`fetch`) — the same methods the lvalue path
   reaches, just built here because a non-lvalue never gets there. }
 { `v[key]` on a variant -> pyvar_getitem(v, key); yields a variant.
-  (PyMakeNone's forward declaration moved up beside PyMakeTruthy — the
-  conditional-expression None arms need it inside PyParseBoolExpr.) }
+  (PyMakeNone's forward declaration lives in parser.inc's Py* forward block —
+  parser.inc's PyExprMode nil arm and PyParseBoolExpr both need it.) }
 
 { A `lambda p1, ...: <expr>` — lowered to a PYEVAL CLOSURE built from the
   body's SOURCE text: pyclosure_src_new(params, 'return <expr>') with every

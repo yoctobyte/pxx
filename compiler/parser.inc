@@ -736,6 +736,8 @@ function PyMakeBytesRepeat(a, b: Integer): Integer; forward;             { Nil P
 function PyNodeIsPyBytes(n: Integer): Boolean; forward;                  { Nil Python: node typed TPyBytes? (pyparser.inc) }
 function PyMakeBytesBinCall(const fname: AnsiString; a, b: Integer; retTk: TTypeKind): Integer; forward; { bytes binop helper call (pyparser.inc) }
 function PyMakeListBinCall(const fname: AnsiString; a, b: Integer): Integer; forward; { list binop -> TPyList call (pyparser.inc) }
+function PyMakeNone: Integer; forward;                                   { Nil Python None literal node (pyparser.inc) }
+function PyNodeIsPyList(n: Integer): Boolean; forward;                   { Nil Python: node typed TPyList? (pyparser.inc) }
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
 function PyIsSliceBase(n: Integer): Boolean; forward; { Nil Python: may this value be sliced? (pyparser.inc) }
