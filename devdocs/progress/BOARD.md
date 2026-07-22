@@ -27,7 +27,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (145)
+## backlog (144)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -170,7 +170,6 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
-| regression-optdiff-o3-stack-frame-intrinsics | O | 70 | regression | -O3 differential: test_stack_frame_intrinsics_b270.pas (optdiff, persistent) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
 | task-t-enroll-pascal-conformance-tier | T | 45 | task | Enroll test-pascal-conformance in testmgr tiers (sharded, like the C battery) | — |
@@ -239,7 +238,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (934)
+## done (935)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1108,6 +1107,7 @@ _none_
 | regression-fpc-bootstrap-canary-forwards-b310 | A | 40 | regression | advisory: fpc-bootstrap canary red at 603cf2bd — forwards drift + enum-arg from b310 | — |
 | regression-fpc-bootstrap-compiler | T | 40 | regression | advisory: fpc-bootstrap#src:compiler/compiler.pas red at 96b6bac331d9 (auto-filed by twatch) | — |
 | regression-op-overload-class-eq-strict-operator | A | 50 | regression | regression: test_op_overload.pas red — b369 made class = / <> rejection unconditional | — |
+| regression-optdiff-o3-stack-frame-intrinsics | O | 70 | regression | -O3 differential: test_stack_frame_intrinsics_b270.pas (optdiff, persistent) | — |
 | regression-optdiff-shard4-6 | T | 70 | regression | regression: optdiff#shard4/6 red at 6e0395e5495f (auto-filed by twatch) | — |
 | regression-test-aarch64-test-asyncecho | T | 70 | regression | regression: test-aarch64#src:test/test_asyncecho.pas red at 88986014e07d (auto-filed by twatch) | — |
 | regression-test-aarch64-test-lfm | T | 70 | regression | regression: test-aarch64#src:test/test_lfm.pas red at adaecd1206f3 (auto-filed by twatch) | — |
@@ -2621,7 +2621,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
 - [p 65] [A] feature-a-typeref-handle
 - [p 65] [N] feature-nilpy-bound-method-value
 - [p 60] [A] bug-a-qplus-misses-32bit-overflow

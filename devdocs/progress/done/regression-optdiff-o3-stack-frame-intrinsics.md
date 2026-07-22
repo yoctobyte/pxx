@@ -51,3 +51,13 @@ If it no longer reproduces, close it — the last confirmed sighting is
 The captured log tail begins with `Terminated`, i.e. the shard was killed
 (timeout / harness stop) around the same run. Worth ruling out that the reported
 diff is an artifact of a truncated run before digging into codegen.
+
+## Log
+- 2026-07-22 — Reconfirm attempt at HEAD (79ef4cf6+): full `tools/optdiff.sh`
+  sweep = pass=1065 skip=165 **diff=0**; manual `-O0` vs `-O3` on
+  test_stack_frame_intrinsics_b270.pas byte-identical, rc 0/0, and 5 repeat
+  `-O3` runs hash-identical (deterministic). Last confirmed sighting was
+  2026-07-18; many -O3-adjacent fixes landed since. Closing per the ticket's
+  own instruction. If the watcher re-reports it, reopen with the failing
+  stdout diff attached.
+- 2026-07-22 — resolved, commit 79ef4cf6.
