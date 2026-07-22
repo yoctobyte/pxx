@@ -38,3 +38,17 @@ Reproduce by narrowing `list(a)+list(b)` passed to a def parameter.
 
 Blocks the locals conformance set (localstest.fth). Sets already passing:
 core / coreplus / coreext / block / double / exception / facility.
+
+## 2026-07-22: SIGSEGV FIXED (list concat); local-READ is a follow-on
+
+FIXED (commit 040d94df): the crash was `names = list(a) + list(b)` — `+` on
+two lists fell through to integer addition, so an int was passed where a list
+was expected and the handle truncated. Added pylist_concat + a `+` arm.
+`{: :}`, `{: A :}` (declare-only) now work.
+
+REMAINING (follow-on): READING a local still errors — `: LT5 {: A :} A ; 5
+LT5` raises a uforth-level exception (empty message, "Script error"), not a
+segfault. `LocalGet` executes `frame.local_slots[token.slot]`; the compiled
+NilPy reads `token.slot` off a variant-held LocalGet dataclass. Likely the
+slot attribute or the local_slots index is mis-read. Declare-only locals pass;
+only the read/`TO` path fails. Localstest lines up to 54 pass.
