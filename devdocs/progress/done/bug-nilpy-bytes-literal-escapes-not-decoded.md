@@ -15,3 +15,6 @@ NAMED escapes appear to decode; it is the numeric \xHH family that does not.
 
 Where: the .npy lexer's bytes-literal scanner (pylexer.inc).
 Gate: len(b"\x00\xff") = 2 and print matches CPython; test-nilpy green.
+
+## Log
+- 2026-07-22 — resolved, commit bb7538f0.
