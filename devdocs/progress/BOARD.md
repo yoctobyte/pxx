@@ -27,7 +27,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (146)
+## backlog (147)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -43,6 +43,7 @@ _none_
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
 | bug-cdecl-indirect-over-6-integer-args | A | 50 | bug | `cdecl` indirect call with more than 6 integer args is rejected | — |
 | bug-nilpy-bitwise-on-float-variant-truncates | A | 30 | bug | NilPy: a bitwise op on a FLOAT variant truncates instead of raising TypeError | — |
+| bug-nilpy-class-value-into-variant-local-mistagged | N | 65 | bug | NilPy: storing a class value into a variant-typed local mis-tags it VT_INT64 | — |
 | bug-nilpy-comprehension-as-for-iterable-segfaults | N | 35 | bug | NilPy: a comprehension used directly as a for-loop iterable segfaults | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-method-result-copied-to-var-undefined | N | 60 | bug | NilPy: `x = obj.method()` immediately followed by `y = x` leaves x undefined | — |
@@ -2619,6 +2620,7 @@ _none_
 - [p 70] [A] bug-a-aarch64-variant-string-compare-always-false
 - [p 70] [A] bug-a-cfront-riscv32-byval-record-result-pxxmemmove
 - [p 70] [O] regression-optdiff-o3-stack-frame-intrinsics
+- [p 65] [N] bug-nilpy-class-value-into-variant-local-mistagged
 - [p 65] [P] bug-open-array-param-length-high-zero
 - [p 65] [A] feature-a-typeref-handle
 - [p 65] [N] feature-nilpy-bound-method-value
