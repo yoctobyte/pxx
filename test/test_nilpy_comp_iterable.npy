@@ -1,0 +1,13 @@
+# A comprehension used directly as a for-loop ITERABLE (and inside range()/
+# zip() arguments) — the hoisted one-shot build loop was flushed INTO the
+# loop body by the body's own statement parse, so the container temp was nil
+# on the first iteration (bug-nilpy-comprehension-as-for-iterable-segfaults).
+xs = [1, 2, 3]
+for v in [x + 1 for x in xs]:
+    print(v)
+for i in range(len([x * 2 for x in xs])):
+    print("r", i)
+total = 0
+for a, b in zip([q for q in xs], [q * 10 for q in xs]):
+    total = total + a + b
+print(total)

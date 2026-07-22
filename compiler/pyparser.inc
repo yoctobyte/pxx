@@ -5203,8 +5203,14 @@ begin
     end;
   end;
 
+  { An expression-position comprehension used AS the iterable hoists its build
+    loop onto PyHoistHead. Drain it NOW, into this desugar's own init
+    sequence: the body's PyParseSuite below also flushes the hoist, so leaving
+    it pending moved the one-shot build INSIDE the loop body — the container
+    temp was nil on the first iteration (len on nil = SIGSEGV)
+    (bug-nilpy-comprehension-as-for-iterable-segfaults). }
   { __py_c := container }
-  seq := -1;
+  seq := PyFlushHoist(-1);
   node := AllocNode(AN_ASSIGN);
   ASTLeft[node] := PyMakeIdent(cSym);
   ASTRight[node] := contNode;
@@ -5529,7 +5535,8 @@ begin
   xSym := PyProgSym(name);  if xSym < 0 then xSym := AllocVar(name, tyVariant);
   ySym := PyProgSym(name2); if ySym < 0 then ySym := AllocVar(name2, tyVariant);
 
-  seq := -1;
+  { drain a comp-iterable's hoisted build before the loop — see PyParseForIn }
+  seq := PyFlushHoist(-1);
   { za = A; zb = B }
   node := AllocNode(AN_ASSIGN); ASTLeft[node] := PyMakeIdent(caSym); ASTRight[node] := aNode;
   seq := PySeqAppend(seq, node);
@@ -5585,7 +5592,7 @@ function PyParseFor: Integer;
 var name, name2: AnsiString;
     enumMode: Boolean; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
     pair1, pair2, pair3, bodyNode, oneNode, limitNode, compSaved: Integer;
-    rngStep, cmpNode, incNode, whileNode, keyN: Integer;
+    rngStep, cmpNode, incNode, whileNode, keyN, hoistPre: Integer;
 begin
   Next;
   if CurTok.Kind <> tkIdent then Error('Nil Python: expected loop variable after for');
@@ -5656,6 +5663,9 @@ begin
     PyParseBoolExpr;
     rngStep := CurASTNode;
   end;
+  { drain a hoisted comp build inside the range() arguments before the body
+    parse flushes it INTO the loop body — see PyParseForIn }
+  hoistPre := PyFlushHoist(-1);
   Expect(tkRParen, ')');
   if PyCompTarget >= 0 then
   begin
@@ -5734,6 +5744,7 @@ begin
     ASTLeft[whileNode] := cmpNode;
     ASTRight[whileNode] := bodyNode;
     Result := PySeqAppend(Result, whileNode);
+    if hoistPre >= 0 then Result := PySeqAppend(hoistPre, Result);
     PyStmtAteBlock := True;
     Exit;
   end;
@@ -5762,6 +5773,11 @@ begin
   node := AllocNode(AN_FOR);
   ASTLeft[node] := lhsNode;
   ASTRight[node] := pair3;
+  if hoistPre >= 0 then
+  begin
+    PyStmtAteBlock := True;
+    node := PySeqAppend(hoistPre, node);
+  end;
   Result := node;
 end;
 
