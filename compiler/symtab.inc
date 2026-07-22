@@ -5553,11 +5553,12 @@ end;
   nil'd by the AN_TRY_EXCEPT lowering. }
 function PyClassSymArcEligible(symIdx: Integer): Boolean;
 begin
+  { hidden desugar temps included: every NilPy tyClass local — whenever it was
+    minted — is nil'd by CompileAST's watermark pass before its first
+    statement runs, so releases never read stale stack bytes }
   Result := (Syms[symIdx].TypeKind = tyClass) and
             ((Syms[symIdx].Kind = skLocal) or (Syms[symIdx].Kind = skGlobal)) and
-            (not Syms[symIdx].IsArray) and (not Syms[symIdx].IsRef) and
-            (Syms[symIdx].Name <> '') and
-            (Copy(Syms[symIdx].Name, 1, 5) <> '__py_');
+            (not Syms[symIdx].IsArray) and (not Syms[symIdx].IsRef);
 end;
 
 procedure EmitManagedLocalCleanup(retSymIdx: Integer);

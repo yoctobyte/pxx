@@ -1951,6 +1951,9 @@ var
   AnsiStrUniqueAddr : Integer;
   AnsiStrConcatAddr : Integer;
   AnsiStrLoadFileAddr : Integer;
+  PyZeroedProc  : Integer;  { CompileAST mid-body tyClass zero-init watermark:
+                              which proc the watermark belongs to (-2 = none) }
+  PyZeroedUpTo  : Integer;  { first sym index NOT yet nil'd for that proc }
   ObjRetainBlobAddr  : Integer;  { reg-preserving wrapper over PXXObjRetain (rax = obj);
                                    population-tag guard + finalizer hook live in the
                                    Pascal proc (feature-nilpy-object-reclamation) }

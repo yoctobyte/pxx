@@ -6801,6 +6801,28 @@ begin
       if (Syms[iZeroTmp].Kind = skLocal) and (Syms[iZeroTmp].Name = '') and
          SymIsComInterface(iZeroTmp) then
         EmitZeroFrameSlot(Syms[iZeroTmp].Offset, RecSize(Syms[iZeroTmp].RecName));
+  { NilPy: nil every tyClass local this proc has minted since the last
+    statement (named comprehension targets, hidden desugar temps, handler
+    binders — all created after the prologue zero-init pass). Same placement
+    trick as the COM-temp pass above: the stores land at the head of this
+    statement's code, so a release inside the statement (or at scope exit)
+    never reads stale stack bytes. Watermarked so a local is nil'd exactly
+    once — re-zeroing would wipe values across statements
+    (feature-nilpy-object-reclamation slice 4). }
+  if isNilPy and (CurrentUnitIdx < 0) and (CurProc >= 0) then
+  begin
+    if PyZeroedProc <> CurProc then
+    begin
+      PyZeroedProc := CurProc;
+      PyZeroedUpTo := Procs[CurProc].ScopeBase;
+    end;
+    for iZeroTmp := PyZeroedUpTo to SymCount - 1 do
+      if (Syms[iZeroTmp].Kind = skLocal) and
+         (Syms[iZeroTmp].TypeKind = tyClass) and
+         (not Syms[iZeroTmp].IsArray) and (not Syms[iZeroTmp].IsRef) then
+        EmitZeroFrameSlot(Syms[iZeroTmp].Offset, TARGET_PTR_SIZE);
+    PyZeroedUpTo := SymCount;
+  end;
   IRVerify;
   if MeasureRegcall and (CurProc >= 0) then RegcallMeasureBody;
   if MeasureInline and (CurProc >= 0) then InlineMeasureBody;
