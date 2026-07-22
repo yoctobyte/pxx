@@ -7,7 +7,7 @@ track: A
 
 - **Type:** bug — **Track A** (call ABI / `ir_codegen.inc`, the cdecl indirect
   path).
-- **Status:** working
+- **Status:** done
 - **Found by:** Track B, attempting item (d) of
   [[feature-real-dynlib-loader]] — compiling Synapse's `ssl_openssl3_lib.pas`.
 
@@ -79,3 +79,4 @@ path, and the gap that let this through is itself worth closing.
 
 ## Log
 - 2026-07-20 — Filed from Track B with the minimal repro.
+- 2026-07-22 — resolved, commit 58e0a7a5.
