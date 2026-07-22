@@ -3723,7 +3723,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     writeFd: Integer;
     foldStr: AnsiString;
     down: Boolean;
-    varIdx: Integer;
+    varIdx, varIdx2: Integer;
     initValNode, storeNode, limitValNode, cmpNode, condJmpNode, bodyIRNode: Integer;
     loadVarNode2, constOneNode, stepNode, storeStepNode, jmpNode: Integer;
     hiddenArgSym: Integer; argIsManagedTemp: Boolean;
@@ -5770,6 +5770,36 @@ begin
               ' to a variable of enum type ' +
               GetTokenStrFromRaw(EnumTypeNOff[NodeEnumIdOf(ASTLeft[node])],
                                  EnumTypeNLen[NodeEnumIdOf(ASTLeft[node])]));
+
+      { @BodiedPascalProc into a `cdecl` proc-type var: the indirect cdecl call
+        arm marshals TRUE SysV (floats in xmm0..7, int/sse classes counted
+        independently, >6 ints spill to stack), but a bodied pxx proc's
+        prologue receives the INTERNAL convention (every param in an integer
+        register by position, >6 all-stack). The two coincide only for <=6
+        integer/pointer params — beyond that the call silently mis-marshals
+        (bug-cdecl-indirect-over-6-integer-args: the old loud reject was lost
+        when stack spill landed for dlsym'd C targets). Reject the unsound
+        binding loudly until bodied cdecl procs get a genuine SysV prologue;
+        external (dlsym/C) values are unaffected. }
+      if (not CProgramMode) and
+         (ASTKind[ASTRight[node]] = AN_PROCADDR) and
+         (ASTKind[ASTLeft[node]] = AN_IDENT) and
+         (Integer(ASTIVal[ASTLeft[node]]) >= 0) and
+         (SymProcSig[ASTIVal[ASTLeft[node]]] >= 0) and
+         ProcCdecl[SymProcSig[ASTIVal[ASTLeft[node]]]] and
+         (Integer(ASTIVal[ASTRight[node]]) >= 0) and
+         (not ProcExternal[ASTIVal[ASTRight[node]]]) then
+      begin
+        varIdx := ASTIVal[ASTRight[node]];   { the bodied target proc }
+        if Procs[varIdx].ParamCount > 6 then
+          ErrorAt(ASTLine[node], '@' + Procs[varIdx].Name +
+            ' as a cdecl function pointer: a Pascal-bodied proc with more than 6 parameters is not SysV-callable yet (bug-cdecl-indirect-over-6-integer-args)');
+        for varIdx2 := 0 to Procs[varIdx].ParamCount - 1 do
+          if TypeIsFloat(Procs[varIdx].Params[varIdx2].TypeKind) and
+             (not Procs[varIdx].Params[varIdx2].IsRef) then
+            ErrorAt(ASTLine[node], '@' + Procs[varIdx].Name +
+              ' as a cdecl function pointer: a Pascal-bodied proc with a by-value float parameter is not SysV-callable yet (bug-cdecl-indirect-over-6-integer-args)');
+      end;
 
       { PROMOTABLE INT store. Handled before every other assignment shape so no
         integer path ever sees the {tag, payload} slot. A promo source is COPIED
