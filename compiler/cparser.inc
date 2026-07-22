@@ -2042,12 +2042,34 @@ begin
 end;
 
 { Unary prefix: `- + ! ~ * &`, sizeof, and casts `(type)expr`. }
+{ Materialise a SCALAR compound literal's converted value into an anonymous
+  temp and yield an addressable lvalue (C99 6.5.2.5: a compound literal has
+  storage). Same COMPOUND_LITERAL-temp + DEREF shape as the (float) narrow
+  cast (b381). Without this, `&(unsigned long long){X}` took the address of a
+  VALUE node — bogus pointer, SIGSEGV on the read
+  (bug-c-compound-literal-address-of). }
+function CScalarLitLValue(valNode: Integer; tk: TTypeKind): Integer;
+var tmp, idn, asn, sq, node: Integer;
+begin
+  tmp := AllocVar('', tk);
+  idn := AllocNode(AN_IDENT); ASTIVal[idn] := tmp; ASTTk[idn] := Ord(tk);
+  asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := idn; ASTRight[asn] := valNode;
+  ASTTk[asn] := Ord(tk);
+  sq := AllocNode(AN_SEQ); ASTLeft[sq] := asn; ASTRight[sq] := -1;
+  node := AllocNode(AN_COMPOUND_LITERAL);
+  ASTIVal[node] := tmp; ASTLeft[node] := sq; ASTTk[node] := Ord(tk);
+  Result := AllocNode(AN_DEREF);       { COMPOUND_LITERAL yields the ADDRESS }
+  ASTLeft[Result] := node; ASTTk[Result] := Ord(tk);
+end;
+
 function ParseCUnary: Integer;
 var node, operand, castElemTk, castElemRec, castDepth, castBaseTk, castBaseRec,
     argSeq, castProcSig, castPtrElemProcSig, clRecId, arrCastLen,
     frTmp, frIdn, frAsn, frSeq: Integer;
+    clScalar: Boolean;
     castTk, opTk: TTypeKind; isVoidCast: Boolean;
 begin
+  clScalar := False;
   { sizeof }
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
   begin
@@ -2101,7 +2123,9 @@ begin
         pointer target (record/array targets took their branches above).
         quickjs: `return (JSAtomKindEnum){-1};`. The value is expr converted
         to T, exactly a cast's conversion — so parse the braced expression
-        and fall through to the shared cast-conversion path below. }
+        and fall through to the shared cast-conversion path below; the exits
+      wrap the converted value in an addressable temp (CScalarLitLValue). }
+      clScalar := True;
       Next;
       operand := ParseCExpr;
       if CurTok.Kind = tkComma then Next;   { trailing comma allowed }
@@ -2135,6 +2159,7 @@ begin
       node := AllocNode(AN_CALL); ASTIVal[node] := -203;   { Trunc: float -> int }
       argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := operand;
       ASTLeft[node] := argSeq; ASTTk[node] := Ord(castTk);
+      if clScalar then node := CScalarLitLValue(node, castTk);
       Result := node; Exit;
     end
     else if (castDepth = 0) and TypeIsFloat(castTk)
@@ -2143,6 +2168,7 @@ begin
       node := AllocNode(AN_CALL); ASTIVal[node] := -206;   { Int: int -> float }
       argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := operand;
       ASTLeft[node] := argSeq; ASTTk[node] := Ord(castTk);
+      if clScalar then node := CScalarLitLValue(node, castTk);
       Result := node; Exit;
     end;
     { A `(float)` cast of a DOUBLE value must actually narrow to single
@@ -2189,6 +2215,7 @@ begin
       ASTTk[node] := Ord(tyPointer);
     end
     else ASTTk[node] := Ord(castTk);
+    if clScalar then node := CScalarLitLValue(node, IntToTypeKind(ASTTk[node]));
     Result := node;
     Exit;
   end;

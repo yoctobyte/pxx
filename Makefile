@@ -1988,6 +1988,8 @@ test-core: $(COMPILER)
 	/tmp/cfnptr_range_table_b21526; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccompound_literal_b216.c /tmp/ccompound_literal_b21626
 	/tmp/ccompound_literal_b21626; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccompound_literal_addrof.c /tmp/ccompound_literal_addrof26
+	/tmp/ccompound_literal_addrof26; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccompound_literal_postfix_b217.c /tmp/ccompound_literal_postfix_b21726
 	/tmp/ccompound_literal_postfix_b21726; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccompound_literal_nested_b218.c /tmp/ccompound_literal_nested_b21826
