@@ -165,3 +165,58 @@ stack has no scope end to trigger release.
 
 Ticket stays OPEN for the remaining layer. bench.tsv now carries post-fix rows,
 so the /bench page tracks any further progress.
+
+## DIAGNOSED — the remaining layer is variant-box lifetime on reassignment (Track T, 2026-07-22)
+
+Not fixing (Track A's), just localizing, per the user. valgrind/heaptrack are
+useless here — the x86-64 build uses a custom mmap arena allocator
+(builtinheap.pas `{$else}` path: FreeList/FreeBins/HeapPtr bump); the libc
+calloc/free path is `{$ifdef PXX_ESP_IDF}` only. perf uprobes are blocked
+(`perf_event_paranoid=4`, no root) and gdb break-per-call is far too slow
+(startup alone allocates thousands of times loading the 141 .UFO PYTHON words).
+
+So instead: **reduce uforth to a minimal NilPy repro.** Peak RSS, 2M-iter loops,
+compiler at origin HEAD (4944278f). Ladder:
+
+| repro | peak RSS | leaks? |
+| --- | --- | --- |
+| plain-int local, `x = (x^(i<<1))&65535` (30M iters) | 0 MB | no |
+| plain-int list append/pop | 0 MB | no |
+| plain-int function-call result | 0 MB | no |
+| **variant local reassigned, `v = pick(i)`** | **47 MB** | **YES** |
+| variant-int list append/pop | 57 MB | yes |
+| string list append/pop | 29 MB | yes |
+
+where `pick(i)` returns `"neg"` for i<0 else `i & 255` — so its result is a
+VARIANT, but at runtime always the int arm. The minimal repro is ~10 lines and
+needs NO container, NO string payload, NO pop:
+
+```python
+def pick(i):
+    if i < 0:
+        return "neg"        # makes pick's return type VARIANT
+    return i & 255          # ...but every actual value is a plain int
+def main():
+    v = 0
+    i = 0
+    while i < 2000000:
+        v = pick(i)         # reassigning the variant local leaks the OLD box
+        i = i + 1
+    print(i)
+main()
+```
+
+### The finding
+A variant value's heap box is **not released when its binding is overwritten**.
+It is payload-agnostic — the box leaks even when the payload is a plain int with
+no managed content — so it is the variant **slot/box** itself, not a managed
+string/record inside it (those were the earlier, already-fixed layers). No
+container and no scope-exit is needed; a plain reassignment `v = <variant>` in a
+loop orphans the previous box every iteration.
+
+This is exactly the seam [[decide-promoint-rvalue-representation]] Option A
+creates: a promo/variant rvalue is a heap-slot address, and on reassignment the
+old slot must be freed before the new one is stored. The fix belongs at that
+store/overwrite point (and the matching scope-exit / container-overwrite paths).
+Track A. Repro compiles with any current compiler; `make bench-uforth` keeps the
+uforth-scale number (552 MB) tracked as the regression/verification signal.
