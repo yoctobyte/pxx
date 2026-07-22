@@ -5544,6 +5544,19 @@ begin
         x64_lea_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);
         EmitVariantClear;
       end
+      else if TypeIsPromoInt(Syms[i].TypeKind) then
+      begin
+        { Promotable-int local/temp: release a heap-tier payload at scope exit.
+          Without this every call that spilled a promo value to the bignum tier
+          (e.g. the & 0xFFFFFFFFFFFFFFFF mask-constant temp) leaked its payload
+          once per call (bug-a-runtime-variant-heap-grows-unbounded). }
+        procIdx := FindProc('PXXPromoClear');
+        if procIdx >= 0 then
+        begin
+          x64_lea_reg_mem(8, rRDI, rRBP, Syms[i].Offset, True);  { rdi = slot addr }
+          EmitCallProc(procIdx);
+        end;
+      end
       else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
       begin
         { mov rax, [rbp + Offset] }
@@ -5966,6 +5979,20 @@ begin
           procIdx := FindProc('PXXVarClear');
           if procIdx < 0 then Error('compiler error: PXXVarClear not found');
           EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
+        begin
+          { Promotable-int local/temp: release a heap-tier payload at scope
+            exit (mirrors the x86-64 EmitManagedLocalCleanup arm; see
+            bug-a-runtime-variant-heap-grows-unbounded). }
+          procIdx := FindProc('PXXPromoClear');
+          if procIdx >= 0 then
+          begin
+            EmitLoadImmA64(9, Syms[i].Offset);
+            EmitI32($8B0903A0);  { add x0, x29, x9  (x0 = slot address) }
+            EmitCallProc(procIdx);
+          end;
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
                 (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and

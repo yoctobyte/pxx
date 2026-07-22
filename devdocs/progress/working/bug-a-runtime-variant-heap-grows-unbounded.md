@@ -80,3 +80,44 @@ Track A (variant boxing / value lifetime / heap allocator). Start by confirming
 whether the leaked allocation is the variant cell, the promo slot, or the
 exec-body temporary — the isolation above says it is one of the dynamic-path
 allocations, not the typed path. Not fixed under T.
+
+## 2026-07-22 progress (fable-abcnp): three leak layers fixed, one narrowed
+
+**Fixed (landed, gated):**
+1. **Promo temp-slot re-init orphan** — IRPromoTempSlot emitted a per-visit
+   PXXPromoInit that blindly re-tagged the slot INLINE while it still held last
+   iteration's heap payload: one managed allocation orphaned per loop pass.
+   Now: one prologue zero via SymIsHiddenArgTemp; every valid-slot writer
+   (FromInt/FromStr/StoreBig) already releases the old payload itself.
+2. **Wide-literal string arg leak** — IRPromoCall bypasses the AST call path's
+   materialised-managed-arg owning-local machinery, so the digit text passed to
+   PXXPromoFromStr leaked one refcount-1 string per evaluation. Now bound
+   through a hidden owning tyAnsiString local.
+3. **No scope-exit release for promo slots** — a call that spilled a promo
+   value to the heap tier leaked its payload once per call. Added a
+   TypeIsPromoInt arm to EmitManagedLocalCleanup (x86-64) and the aarch64
+   epilogue (PXXPromoClear).
+
+Probes now FLAT: `(x - y) & 0xFFFFFFFFFFFFFFFF` in a def called 200k times;
+module-level `r = i & MASK`; `i & m`. Pascal promo locals in a loop: flat.
+
+**REMAINING (narrowed, pure-Pascal 5-line repro):** the heap-tier BITWISE
+helper path still leaks per operation when an OPERAND is heap-tagged:
+
+```pascal
+var m, d: PromoInt64; k: Integer;
+begin
+  m := 18446744073709551615;          { heap tier }
+  for k := 1 to 200000 do d := m and 65535;   { 12.4 MB; `or` = 137 MB }
+end.
+```
+
+The leak is inside PXXPromoAnd/Or's `StoreBig(dst, BBitwise(SlotBig(a),
+SlotBig(b)))` chain (~60B per AND, ~690B per OR-with-heap-result). Generic
+replicas of the shape (record-with-dynarray fn results, nested as const args,
+string-result-through-deref-store) are all FLAT, so it is something specific
+in those helpers' code — suspect list: TBitBuf locals (large fixed arrays?),
+BFromBuf/BMagToBuf temps, or a retain imbalance on `FuncName := call` of
+TBig inside promoint compiled under the frozen/managed split. uforth's empty
+DO LOOP still grows (its boundary compare produces heap u64s every pass), so
+this residual is the dominant remaining cost there.

@@ -928,16 +928,17 @@ function IRPromoTempSlot(var symOut: Integer): Integer;
 var tmpSym: Integer;
 begin
   tmpSym := AllocVar('', tyPromoInt64);
-  { Initialise through the runtime rather than IR_ZERO_SYM: several backends do
-    not implement that op (aarch64 rejects it outright), and routing this the
-    same way as every other promo operation keeps the whole feature backend-free.
-    The init is a SIDE EFFECT, so it has to join the emitted statement chain —
-    codegen walks statements and emits each one's subtree, and a node referenced
-    only as a later operand is never emitted at all. }
+  { First-touch init: ONE prologue zero via the hidden-arg-temp machinery (the
+    tag word reads PROMO_TAG_INLINE), not a per-visit PXXPromoInit statement.
+    The per-visit init re-executed inside a loop and blindly re-tagged the slot
+    INLINE while it still held last iteration's HEAP payload — orphaning one
+    managed allocation per pass, which is what made uforth's empty DO LOOP grow
+    without bound (bug-a-runtime-variant-heap-grows-unbounded; the boundary
+    check runs `& 0xFFFFFFFFFFFFFFFF` every iteration). Every writer of an
+    ALREADY-VALID slot (PXXPromoFromInt / FromStr / StoreBig) releases the old
+    payload itself, so a zeroed first state is all the init must provide. }
+  SymIsHiddenArgTemp[tmpSym] := True;
   symOut := tmpSym;
-  IRMarkStatementNode(IRPromoCall('PXXPromoInit',
-                        IRAppend(IR_SLOTADDR, tmpSym, -1, -1, 0, Ord(tyPointer)),
-                        -1, -1, tyUnknown));
   IRPromoTempSlot := IRAppend(IR_SLOTADDR, tmpSym, -1, -1, 0, Ord(tyPointer));
 end;
 
@@ -945,15 +946,28 @@ end;
   PXXPromoFromInt because its value does not fit 64 bits. Returns False when the
   node is not such a literal. }
 function IRPromoInitFromLiteral(dstAddr, node: Integer): Boolean;
-var litNode, zeroAddr, zeroSym: Integer;
+var litNode, zeroAddr, zeroSym, strSym: Integer;
 begin
   IRPromoInitFromLiteral := False;
   if IsWideIntLit(node) then litNode := node
   else if IsWideNegLit(node) then litNode := ASTLeft[node]
   else Exit;
+  { The digit text must reach PXXPromoFromStr through a hidden OWNING string
+    local, not as a bare IR_CONST_STR argument: IRPromoCall builds its IR
+    directly and bypasses the AST call path's materialised-managed-arg
+    owning-local machinery, so the per-call refcount-1 handle had no owner and
+    leaked one string per evaluation — a wide mask constant inside a loop grew
+    the heap without bound (bug-a-runtime-variant-heap-grows-unbounded). The
+    store releases the previous iteration's handle; scope exit releases the
+    last. }
+  strSym := AllocVar('', tyAnsiString);
+  SymIsHiddenArgTemp[strSym] := True;
+  IRMarkStatementNode(IRAppend(IR_STORE_SYM, strSym,
+    IRAppend(IR_CONST_STR, ASTSOffset[litNode], ASTSLen[litNode],
+             -1, 0, Ord(tyString)), -1, 0, Ord(tyAnsiString)));
   IRMarkStatementNode(IRPromoCall('PXXPromoFromStr', dstAddr,
-                        IRAppend(IR_CONST_STR, ASTSOffset[litNode], ASTSLen[litNode],
-                                 -1, 0, Ord(tyString)), -1, tyUnknown));
+                        IRAppend(IR_LOAD_SYM, strSym, -1, -1, 0, Ord(tyAnsiString)),
+                        -1, tyUnknown));
   if IsWideNegLit(node) then
   begin
     { negate in place: dst := 0 - dst. A fresh temp slot is already inline 0. }
