@@ -6339,7 +6339,6 @@ begin
   begin
     name := CurTok.SVal;
     symIdx := PyProgSym(name);
-    writeln('DBGX assign name=', name, ' tokpos=', TokPos, ' typing=', PyTypingPass, ' curproc=', CurProc);
     Next;
     Expect(tkAssign, '=');
     { `target = [EXPR for VAR in ITER]` — a list comprehension. Desugared to an
@@ -6372,7 +6371,7 @@ begin
     end
     else if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
        (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
-      begin rhsNode := PyClassCreate; writeln('DBGC after ClassCreate tokpos=', TokPos, ' curkind=', Ord(CurTok.Kind)); end
+      rhsNode := PyClassCreate
     else if PyIsEmptySetCall then
       rhsNode := PyParseEmptySet
     else if PyIsCountCall then
@@ -6714,12 +6713,6 @@ begin
             Type unknown; the real parse types it from the same AST rule, and
             the annotated form remains the escape hatch for widening
             (bug-nilpy-method-result-copied-to-var-undefined). }
-          PyNoteLocalType(GetTokenStr(i), tyVariant, REC_NONE);
-          { AND declare it as a scratch symbol NOW, so a later statement in
-            THIS round can resolve it (the scratch scope is rolled back at
-            round end like every other trial symbol). }
-          if PyProgSym(GetTokenStr(i)) < 0 then
-            AllocVar(GetTokenStr(i), tyVariant);
           while (bodyIx < MainProgramTokCount) and
                 not (Tokens[bodyIx].Kind in [tkNewline, tkDedent]) do Inc(bodyIx);
           i := bodyIx;
