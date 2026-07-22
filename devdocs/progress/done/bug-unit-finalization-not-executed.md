@@ -50,3 +50,6 @@ exit, which the OS mostly reclaims anyway. Escalate if a real consumer appears.
 - Reverse-dependency-order test (mirror of test_unit_init_begin_form).
 - Runs on `Halt(n)` too.
 - Gate: `make test` + self-host byte-identical.
+
+## Log
+- 2026-07-22 — resolved, commit fa8b67ae.

@@ -27,7 +27,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (132)
+## backlog (131)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -36,7 +36,6 @@ _none_
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-qplus-narrow-32bit-backends | A | 35 | bug | {$Q+} narrow-width overflow still unchecked on the 32-bit backends | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
-| bug-unit-finalization-not-executed | A | 40 | bug | A unit's `finalization` section is silently never executed | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -226,7 +225,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (956)
+## done (957)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -692,6 +691,7 @@ _none_
 | bug-twatch-repro-line-job-number-drift | T | 55 | bug | bug: twatch repro lines rot — job numbers drift as tests are added | — |
 | bug-typed-const-array-of-string-broken | A | 50 | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
 | bug-uclass-field-window-stale-base | A | 60 | bug | bug: UClass field window base goes stale under shells-then-fields registration | — |
+| bug-unit-finalization-not-executed | A | 40 | bug | A unit's `finalization` section is silently never executed | — |
 | bug-unit-init-begin-form-not-executed | A | 60 | bug | A unit's `begin ... end.` initialization section is silently never executed | — |
 | bug-unit-operator-def-silently-skipped | A | 44 | bug | unit-scoped operator definitions silently skipped → record binop miscompile | — |
 | bug-unit-qualified-constant-not-resolved | A | 50 | bug | Unit-qualified constant reference `Unit.Const` is not resolved | — |
@@ -2706,7 +2706,6 @@ _none_
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [U] decide-dns-libc-backend-shape (unblocks 1)
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
-- [p 40] [A] bug-unit-finalization-not-executed
 - [p 40] [U] decide-nilpy-transitive-nested-def-capture
 - [p 40] [A] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision
