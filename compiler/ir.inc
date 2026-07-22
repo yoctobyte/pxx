@@ -1952,6 +1952,40 @@ begin
     Result := IRLowerCallArg(cpi, pathIdx, WrapWideCharToUTF8(argAST), isRefArg);
     Exit;
   end;
+  { NilPy: a CONSTRUCTION in argument position (`join([... for ...])`,
+    `exec(src, {"a": 1})`) has no binding to consume its rc=1 — the arg itself
+    is a borrow — so it leaked whole containers per call. Spill it to a hidden
+    OWNING tyClass temp: release the temp's previous occupant (same slot every
+    trip through a loop; first use is nil'd by the mid-body watermark pass),
+    store, pass the temp. Scope exit drops the last one
+    (feature-nilpy-object-reclamation). Param 0 (a method receiver) is
+    excluded: the for-in and method desugars route the SAME construction
+    subtree through receiver position with their own binding plumbing, and
+    spilling it there double-consumed the construction (test_nilpy_forin
+    SIGSEGV). A bare `[...].method()` receiver still leaks — rare shape. }
+  if isNilPy and (CurrentUnitIdx < 0) and (not isRefArg) and
+     (cpi >= 0) and (pathIdx >= 1) and (pathIdx < Procs[cpi].ParamCount) and
+     (Procs[cpi].Params[pathIdx].TypeKind = tyClass) and
+     (ASTKind[argAST] = AN_CALL) and
+     (Integer(ASTIVal[argAST]) = -Ord(tkGetMem)) and
+     (Integer(ASTRight[argAST]) >= REC_UCLASS_BASE) then
+  begin
+    tmpSym := AllocVar('', tyClass);
+    Syms[tmpSym].RecName := ASTRight[argAST];
+    value := IRLowerAST(argAST);
+    arcCall := FindProc('PXXObjRelease');
+    if arcCall >= 0 then
+    begin
+      arcArg1 := IRAppend(IR_ARG,
+                   IRAppend(IR_LOAD_SYM, tmpSym, -1, -1, 0, Ord(tyPointer)),
+                   -1, -1, 0, Ord(tyPointer));
+      arcArg2 := IRAppendCall(arcCall, arcArg1, -1, Ord(tyUnknown));
+      IRIVal[arcArg2] := 1;   { statement: emit for effect }
+    end;
+    IRAppend(IR_STORE_SYM, tmpSym, value, -1, 0, Ord(tyPointer));
+    Result := IRAppend(IR_LOAD_SYM, tmpSym, -1, -1, 0, Ord(tyClass));
+    Exit;
+  end;
   { C double->int argument coercion: a float argument passed to a named INTEGER
     parameter is truncated. Do it backend-agnostically by spilling the float to a
     hidden integer local — its IR_STORE_SYM reuses the double->int conversion
