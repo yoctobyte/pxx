@@ -141,3 +141,6 @@ fallback if the quadratic behaviour turns out to be hard to remove.**
 Splitting still has independent merit (a job should not be named after an
 unrelated 36-line test — see the `extract_src` note above), but it is no longer
 the primary recommendation.
+
+## Log
+- 2026-07-22 — resolved, commit 06219176.

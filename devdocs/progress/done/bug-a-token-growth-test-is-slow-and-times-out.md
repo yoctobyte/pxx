@@ -112,3 +112,4 @@ SIGTERMed under memory pressure the report blames its neighbour.
 with the named test passing standalone. Either raise that job's memory headroom,
 shrink the generated program, or run it in its own scope — the underlying cost
 is this ticket.
+- 2026-07-22 — resolved, commit 06219176.

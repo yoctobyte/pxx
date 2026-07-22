@@ -27,13 +27,12 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (143)
+## backlog (141)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-open-array-of-variant-silent-miscompile | A | 45 | bug | Open `array of Variant` parameter silently miscompiles (reads only first elem) | — |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
-| bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
 | bug-a-variant-fn-return-forward-nrvo-corruption | A | 55 | bug | Variant FUNCTION forwarding another Variant call's result corrupts the value | — |
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
@@ -47,7 +46,6 @@ _none_
 | bug-parallel-for-captured-boolean-loses-type | A | 50 | bug | Captured Boolean loses its type inside a parallel-for body (overload resolution fails) | — |
 | bug-qplus-narrow-32bit-backends | A | 35 | bug | {$Q+} narrow-width overflow still unchecked on the 32-bit backends | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
-| bug-test-core-oversized-job-6gb-flaky | A | 60 | bug | One test-core job needs ~6.8 GB and flakes under load (the recurring `Terminated`) | — |
 | bug-unit-finalization-not-executed | A | 40 | bug | A unit's `finalization` section is silently never executed | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -237,7 +235,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (939)
+## done (941)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -279,6 +277,7 @@ _none_
 | bug-a-parallel-for-aarch64-multi-capture | A | 40 | bug | aarch64: `parallel for` with 2+ captures → Bus error (alignment) | — |
 | bug-a-qplus-misses-32bit-overflow | A | 60 | bug | `{$Q+}` does not trap 32-bit overflow — only 64-bit ops are checked | — |
 | bug-a-str-boxed-into-variant-does-not-own-bytes | A | 80 | bug | A `str` boxed into a Variant does not OWN its bytes — silent wrong values | — |
+| bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
 | bug-aarch64-arm32-record-temp-byvalue-arg | A | 50 | bug | aarch64/arm32: record temporary as a by-value arg fails codegen | — |
 | bug-aggregate-member-array-as-var-param | A | 50 | bug | bug: passing an array that is a member of an aggregate (record field / 2D-array row) as a var/const param segfaults | — |
 | bug-ansistring-concat-arg-static-bloat | A | 50 | bug | AnsiString concat expression as a call argument allocates an ~8 MB static buffer per site | — |
@@ -674,6 +673,7 @@ _none_
 | bug-t-pasmith-with-rung-mutates-global-inside-function | T | 40 | bug | pasmith: wide rungs (`with`/`reccopy`/…) mutate a GLOBAL inside a function body → order-dependent program | — |
 | bug-t-progress-track-detection-prose-mention | T | 40 | bug | progress.py track() matches a prose 'Track T' mention in the Type/Track bullet before the authoritative frontmatter track: field — mis-tags tickets (3 hit in one session) | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
+| bug-test-core-oversized-job-6gb-flaky | A | 60 | bug | One test-core job needs ~6.8 GB and flakes under load (the recurring `Terminated`) | — |
 | bug-test-hardcoded-tmp-so-path | C | 40 | bug | bug: test_c_lazycasing.pas hardcodes /tmp/liblazycasing.so (non-hermetic test) | — |
 | bug-test-riscv32-thin-coverage | A | 35 | bug | riscv32 cross-target test coverage is thin vs i386/arm32/aarch64 | — |
 | bug-testmgr-aarch64-conformance-shard3-timeout-flake | T | 35 | bug | test-c-conformance-aarch64#shard3 00040.c times out (exit 124) under full parallel load; passes standalone — recurring flake | — |
@@ -2626,7 +2626,6 @@ _none_
 
 - [p 65] [A] feature-a-typeref-handle
 - [p 65] [N] feature-nilpy-bound-method-value
-- [p 60] [A] bug-test-core-oversized-job-6gb-flaky
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
@@ -2671,7 +2670,6 @@ _none_
 - [p 45] [U] decide-gpc-as-corpus-target (unblocks 1)
 - [p 45] [U] decide-ilja-tui-render-model (unblocks 1)
 - [p 45] [A] bug-a-open-array-of-variant-silent-miscompile
-- [p 45] [A] bug-a-token-growth-test-is-slow-and-times-out
 - [p 45] [N] bug-nilpy-user-class-bytes-method-loses-identity
 - [p 45] [T] bug-t-watcher-dev-contention-false-newred
 - [p 45] [A] chore-makefile-selfhost-iterate-to-convergence
