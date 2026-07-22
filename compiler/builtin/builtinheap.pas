@@ -2079,15 +2079,15 @@ begin
     begin
       if isCompare = 1 then
       begin
-        { Compare tags first }
-        if lTag <> rTag then
+        { A side whose tag is neither string nor char (mixed string/number)
+          compares unequal, unordered. }
+        if not (((lTag = 5) or (lTag = 6)) and ((rTag = 5) or (rTag = 6))) then
         begin
           if opTk = 65 then Result := 1 else Result := 0; { tkNeq = 65 }
           Exit;
         end;
-        
-        { Tags are the same: string/string or char/char }
-        if lTag = 5 then
+
+        if (lTag = 5) and (rTag = 5) then
         begin
           { Char comparison }
           if opTk = 64 then Result := Int64(lVal = rVal)
@@ -2100,15 +2100,53 @@ begin
         end
         else
         begin
-          { String comparison }
-          lStr := Pointer(lVal);
-          rStr := Pointer(rVal);
-          if lStr = nil then lLen := 0 else lLen := PWord(Int64(lStr) - 8)^;
-          if rStr = nil then rLen := 0 else rLen := PWord(Int64(rStr) - 8)^;
-          
-          resVal := PXXStrEq(lLen, lStr, rLen, rStr);
-          if opTk = 64 then Result := resVal
-          else if opTk = 65 then Result := 1 - resVal
+          { String (or char-vs-string) comparison, lexicographic. A char side
+            reads its payload as a 1-byte buffer at the slot, mirroring the
+            concat arm below. }
+          if lTag = 5 then
+          begin
+            lStr := Pointer(Int64(left) + 8);
+            lLen := 1;
+          end
+          else
+          begin
+            lStr := Pointer(lVal);
+            if lStr = nil then lLen := 0 else lLen := PWord(Int64(lStr) - 8)^;
+          end;
+          if rTag = 5 then
+          begin
+            rStr := Pointer(Int64(right) + 8);
+            rLen := 1;
+          end
+          else
+          begin
+            rStr := Pointer(rVal);
+            if rStr = nil then rLen := 0 else rLen := PWord(Int64(rStr) - 8)^;
+          end;
+
+          { resVal = -1 / 0 / +1 ordering: byte compare over the common
+            prefix, then the shorter string orders first. }
+          resVal := 0;
+          lVal := 0;                      { reused as the byte index }
+          while (resVal = 0) and (lVal < lLen) and (lVal < rLen) do
+          begin
+            rVal := Int64(PByte(Int64(lStr) + lVal)^) - Int64(PByte(Int64(rStr) + lVal)^);
+            if rVal < 0 then resVal := -1
+            else if rVal > 0 then resVal := 1;
+            lVal := lVal + 1;
+          end;
+          if resVal = 0 then
+          begin
+            if lLen < rLen then resVal := -1
+            else if lLen > rLen then resVal := 1;
+          end;
+
+          if opTk = 64 then Result := Int64(resVal = 0)
+          else if opTk = 65 then Result := Int64(resVal <> 0)
+          else if opTk = 66 then Result := Int64(resVal < 0)
+          else if opTk = 67 then Result := Int64(resVal <= 0)
+          else if opTk = 68 then Result := Int64(resVal > 0)
+          else if opTk = 69 then Result := Int64(resVal >= 0)
           else Result := 0;
           Exit;
         end;
