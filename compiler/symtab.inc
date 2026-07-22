@@ -19,6 +19,7 @@ procedure EmitLoadVarXtensa(idx: Integer); forward;
 procedure EmitLoadVar64Xtensa(idx: Integer); forward;
 procedure EmitLoadVarRISCV32(idx: Integer); forward;
 procedure EmitLoadVar64RISCV32(idx: Integer); forward;
+procedure EmitLoadDataRefRISCV32(rd, dataOff: Integer); forward;
 procedure EmitLoadImmRISCV32(rd: Integer; v: Int32); forward;
 procedure EmitSlotAddrRISCV32(rd, si: Integer); forward;
 procedure EmitFrameAddrXtensa(rd: Integer; off: Integer); forward;
@@ -4830,6 +4831,22 @@ begin
     Procs[ProcCount].Params[i].IsRef    := CProgramMode and (ptypes[i] = tyRecord);
   end;
   Result := ProcCount; Inc(ProcCount);
+end;
+
+{ The __pxx_run_finalizers shell every exit path calls (main-body fall-off and
+  every Halt site). Registered lazily — a Halt can lower before all units are
+  parsed, so the shell is a forward call resolved by ApplyCallFixups; the body
+  (unit finalizers in reverse init order, behind a run-once BSS guard) is
+  emitted by EmitFinalizerRunnerBody in parser.inc
+  (bug-unit-finalization-not-executed). }
+function GetFiniRunnerProc: Integer;
+var dummyNames: array[0..0] of AnsiString;
+    dummyTypes: array[0..0] of TTypeKind;
+begin
+  if FiniRunnerProc < 0 then
+    FiniRunnerProc := RegisterProc('__pxx_run_finalizers', False, tyInteger, 0,
+                                   dummyNames, dummyTypes);
+  Result := FiniRunnerProc;
 end;
 
 { ===== int-to-string write ===== }

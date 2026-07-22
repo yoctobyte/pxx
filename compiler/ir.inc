@@ -6394,6 +6394,12 @@ begin
           value := IRLowerAST(ASTLeft[node])
         else
           value := -1;
+        { FPC runs unit finalization sections on Halt too. The runner shell is
+          registered lazily (this Halt may lower before later units parse);
+          its body — reverse-order finalizers behind a run-once guard — is
+          emitted after the main body (bug-unit-finalization-not-executed). }
+        last := IRAppendCall(GetFiniRunnerProc, -1, -1, Ord(tyInteger));
+        IRIVal[last] := 1;   { statement-level: side-effect call }
         last := IRAppend(IR_TERMINATE, value, -1, -1, AN_HALT, 0);
       end
       else if (CurProc < 0) and (ASTLeft[node] <> -1) then
@@ -6403,6 +6409,8 @@ begin
           program-level Exit never carries a value, so this never fires in a
           self-build (byte-identical preserved). }
         value := IRLowerAST(ASTLeft[node]);
+        last := IRAppendCall(GetFiniRunnerProc, -1, -1, Ord(tyInteger));
+        IRIVal[last] := 1;   { statement-level: side-effect call }
         last := IRAppend(IR_TERMINATE, value, -1, -1, AN_HALT, 0);
       end
       else

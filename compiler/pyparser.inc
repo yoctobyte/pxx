@@ -8765,5 +8765,6 @@ begin
     whose body is compiled after the string runtime that calls it). Pascal
     ParseProgram does this; .npy needs it too now that string/variant codegen
     calls PXXAlloc. }
+  EmitFinalizerRunnerBody;   { resolve any Halt-site __pxx_run_finalizers forward calls }
   ApplyCallFixups;
 end;

@@ -698,6 +698,9 @@ begin
   CompiledUnitCount := 0;
   UnitAliasCount := 0;
   InitProcCount := 0;
+  FiniProcCount := 0;
+  FiniRunnerProc := -1;
+  FiniGuardSym := -1;
   InInterface := False;
   PreScanPass := False;
   DeclItemCount := 0;

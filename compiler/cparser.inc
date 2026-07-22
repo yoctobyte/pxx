@@ -7774,6 +7774,7 @@ begin
   end;
 
   CProgramMode := False;
+  EmitFinalizerRunnerBody;   { resolve any Halt-site __pxx_run_finalizers forward calls }
   ApplyCallFixups;
 
   mainIdx := FindProc('main');

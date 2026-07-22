@@ -1570,6 +1570,17 @@ var
     Called at program entry before the main body so unit globals get set up. }
   InitProcs : array[0..255] of Integer;
   InitProcCount : Integer;
+  { Synthesized unit `finalization` procs, in registration (dependency) order;
+    run in REVERSE at program exit — normal main-body fall-off AND Halt —
+    mirroring FPC (bug-unit-finalization-not-executed). FiniRunnerProc is the
+    __pxx_run_finalizers shell every exit path calls: registered lazily (a
+    Halt site can lower before all units are parsed), body emitted after the
+    main body, guarded by a BSS flag so a Halt inside a finalizer cannot
+    recurse. }
+  FiniProcs : array[0..255] of Integer;
+  FiniProcCount : Integer;
+  FiniRunnerProc : Integer;
+  FiniGuardSym : Integer;
   { COM-interface `as`-cast temps materialised in the MAIN program body (CurProc<0,
     so skGlobal — no scope-exit cleanup). Each is AddRef'd on creation and released
     at program exit, matching FPC's end-of-main temp lifetime

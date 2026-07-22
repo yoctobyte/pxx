@@ -25648,14 +25648,17 @@ end;
   program entry calls (in dependency order) before `main begin`. Precondition:
   the `initialization` keyword has been consumed; statements run until `end` or
   `finalization`. Leaves the parser positioned at that terminator. }
-procedure ParseInitializationSection(const uname: AnsiString);
+procedure ParseInitializationSection(const uname: AnsiString; isFini: Boolean);
 var
   procIdx, savedSC, savedFS, savedGLC, savedGFC, j, patchPos: Integer;
   seqNode, lastSeq, stmtNode: Integer;
   dummyNames: array[0..0] of AnsiString;
   dummyTypes: array[0..0] of TTypeKind;
 begin
-  procIdx := RegisterProc('__init_' + uname, False, tyInteger, 0, dummyNames, dummyTypes);
+  if isFini then
+    procIdx := RegisterProc('__fini_' + uname, False, tyInteger, 0, dummyNames, dummyTypes)
+  else
+    procIdx := RegisterProc('__init_' + uname, False, tyInteger, 0, dummyNames, dummyTypes);
   if TargetArch = TARGET_XTENSA then
     while (CodeLen mod 4) <> 0 do xtensa_nop; { CALL0 targets must be 4-aligned }
   Procs[procIdx].BodyAddr := CodeLen;
@@ -25715,11 +25718,91 @@ begin
   GotoLabelCount := savedGLC; GotoFixupCount := savedGFC;
   CurProc := -1;
 
-  if InitProcCount < 256 then
+  if isFini then
+  begin
+    if FiniProcCount < 256 then
+    begin
+      FiniProcs[FiniProcCount] := procIdx;
+      Inc(FiniProcCount);
+    end;
+  end
+  else if InitProcCount < 256 then
   begin
     InitProcs[InitProcCount] := procIdx;
     Inc(InitProcCount);
   end;
+end;
+
+{ Emit the __pxx_run_finalizers body: the registered unit finalizers in
+  REVERSE init order, behind a run-once BSS guard (so a Halt inside a
+  finalizer cannot recurse). Emitted after the main body — every unit's
+  __fini_ proc exists by then; Halt sites called the shell forward and
+  ApplyCallFixups resolves them. Runs (as a no-op shell) even when no unit
+  has a finalization section, iff some Halt site registered the shell.
+  Called before ApplyCallFixups by every frontend driver. }
+procedure EmitFinalizerRunnerBody;
+var
+  procIdx, j, patchPos, savedSC, savedFS: Integer;
+  identN, litN, condN, asgN, callN, seqN, lastSeq, pairN, ifN: Integer;
+begin
+  if (FiniRunnerProc < 0) and (FiniProcCount = 0) then Exit;
+  procIdx := GetFiniRunnerProc;
+  FiniGuardSym := AllocVar('__pxx_fini_done', tyInteger);  { CurProc<0: BSS, zeroed }
+
+  if TargetArch = TARGET_XTENSA then
+    while (CodeLen mod 4) <> 0 do xtensa_nop;
+  Procs[procIdx].BodyAddr := CodeLen;
+  savedSC := SymCount; savedFS := FrameSize;
+  FrameSize := 0;
+  CurProc := procIdx;
+  Procs[procIdx].ScopeBase := SymCount;
+  patchPos := EmitProcPrologue;
+  Procs[procIdx].FramePatch := patchPos;
+  if (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
+    xtensa_mov(reg_xtensa_a7, reg_xtensa_a15);
+
+  { if __pxx_fini_done = 0 then begin
+      __pxx_fini_done := 1; __fini_<N-1>; ...; __fini_<0> end }
+  identN := AllocNode(AN_IDENT);
+  ASTIVal[identN] := FiniGuardSym; ASTTk[identN] := Ord(tyInteger);
+  litN := AllocNode(AN_INT_LIT);
+  ASTIVal[litN] := 0; ASTTk[litN] := Ord(tyInteger);
+  condN := AllocNode(AN_BINOP);
+  ASTIVal[condN] := Ord(tkEq);
+  ASTLeft[condN] := identN; ASTRight[condN] := litN;
+  ASTTk[condN] := Ord(tyBoolean);
+
+  identN := AllocNode(AN_IDENT);
+  ASTIVal[identN] := FiniGuardSym; ASTTk[identN] := Ord(tyInteger);
+  litN := AllocNode(AN_INT_LIT);
+  ASTIVal[litN] := 1; ASTTk[litN] := Ord(tyInteger);
+  asgN := AllocNode(AN_ASSIGN);
+  ASTLeft[asgN] := identN; ASTRight[asgN] := litN;
+
+  seqN := AllocNode(AN_SEQ);
+  ASTLeft[seqN] := asgN;
+  lastSeq := seqN;
+  for j := FiniProcCount - 1 downto 0 do
+  begin
+    callN := AllocNode(AN_CALL);
+    ASTIVal[callN] := FiniProcs[j];
+    ASTTk[callN] := Ord(tyInteger);
+    ASTRight[lastSeq] := AllocNode(AN_SEQ);
+    lastSeq := ASTRight[lastSeq];
+    ASTLeft[lastSeq] := callN;
+  end;
+
+  pairN := AllocNode(AN_PAIR);
+  ASTLeft[pairN] := seqN; ASTRight[pairN] := -1;
+  ifN := AllocNode(AN_IF);
+  ASTLeft[ifN] := condN; ASTRight[ifN] := pairN;
+  CompileAST(ifN);
+  ASTNodeCount := INLINE_AST_RESERVE;
+
+  EmitProcEpilog(-1);
+  PatchProcPrologue(patchPos, FrameSize);
+  SymRollbackTo(savedSC); FrameSize := savedFS;
+  CurProc := -1;
 end;
 
 procedure ParseUnit;
@@ -25844,7 +25927,7 @@ begin
             stops AT that `end`, which the tkEnd/tkDot check above then sees. }
           Next;                       { consume 'begin' }
           PreScanPass := False;
-          ParseInitializationSection(uname);
+          ParseInitializationSection(uname, False);
           PreScanPass := True;
         end;
         tkIdent:
@@ -25868,7 +25951,17 @@ begin
               body-deferred) — all routines above are already registered. }
             Next;                       { consume 'initialization' }
             PreScanPass := False;
-            ParseInitializationSection(uname);
+            ParseInitializationSection(uname, False);
+            PreScanPass := True;
+          end
+          else if CaseEqual(CurTok.SVal, 'finalization') then
+          begin
+            { finalization emits its body in place, registered into FiniProcs;
+              the exit chain runs them in reverse init order
+              (bug-unit-finalization-not-executed). }
+            Next;                       { consume 'finalization' }
+            PreScanPass := False;
+            ParseInitializationSection(uname, True);
             PreScanPass := True;
           end
           else if CaseEqual(CurTok.SVal, 'operator') then
@@ -25885,7 +25978,7 @@ begin
           else if CaseEqual(CurTok.SVal, 'resourcestring') then
             ParseConstSection(-1, 0)    { registers as plain string constants }
           else
-            Next;                       { 'finalization' + its body are skipped }
+            Next;
         else
           Next;
       end;
@@ -26979,6 +27072,12 @@ begin
     end;
 
   EmitMainBodyIntfTempRelease;
+  { Unit finalization sections, in REVERSE init order — after the main body,
+    like FPC (bug-unit-finalization-not-executed). Halt sites call the same
+    runner; the guard inside makes whichever path runs first the only one. }
+  if (FiniProcCount > 0) or (FiniRunnerProc >= 0) then
+    EmitCallProc(GetFiniRunnerProc);
   EmitExit(0);
+  EmitFinalizerRunnerBody;
   ApplyCallFixups;
 end;

@@ -2040,6 +2040,7 @@ begin
     else Error('Zig: expected fn (or pub fn) at top level');
   end;
 
+  EmitFinalizerRunnerBody;   { resolve any Halt-site __pxx_run_finalizers forward calls }
   ApplyCallFixups;
   Patch32(callPatch, Procs[mainIdx].BodyAddr - (callPatch + 4));
 end;
