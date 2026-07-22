@@ -34,3 +34,6 @@ store the evaluated expr there, and route str(e)/f-string interpolation of
 a class value whose class derives Exception to that field. `raise
 X.Create(msg)` already carries a message — check how the except-binding
 exposes it today.
+
+## Log
+- 2026-07-22 — resolved, commit 4d54c04a.
