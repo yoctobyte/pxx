@@ -1622,6 +1622,26 @@ begin
     if (Procs[procIdx].RetType = tyRecord) and
        RecordHasManagedFields(ProcRetRecId[procIdx]) then
       SymIsHiddenArgTemp[scratchSym] := True;
+    { A variant hidden-dest call OVERWRITES the temp raw (the callee copies 16
+      bytes into [dest]), so a managed payload from the temp's previous life —
+      the SAME sym on every trip through a loop — leaked once per call: ~40
+      B/iter of bound pairs in the uforth env-build. Release it first
+      (feature-nilpy-object-reclamation; NilPy-gated, Pascal emission
+      unchanged). }
+    if (Procs[procIdx].RetType = tyVariant) and isNilPy and (CurrentUnitIdx < 0) then
+    begin
+      { the temp is created mid-body, after the prologue zero-init pass — mark
+        it so codegen nil-inits its extent, or the FIRST clear here would
+        dispatch on a stale stack tag (the mid-body-local landmine) }
+      SymIsHiddenArgTemp[scratchSym] := True;
+      savedRecId := FindProc('PXXVarClear');
+      if savedRecId >= 0 then
+        IRIVal[IRAppend(IR_CALL, savedRecId,
+                 IRAppend(IR_ARG,
+                   IRAppend(IR_LEA, scratchSym, -1, -1, 0, Ord(tyPointer)),
+                   -1, -1, 0, Ord(tyPointer)),
+                 -1, 0, Ord(tyUnknown))] := 1;
+    end;
     scratchAddr := IRAppend(IR_LEA, scratchSym, -1, -1, 0, Ord(tyPointer));
     Result := IRAppend(IR_CALL, procIdx, firstArg, scratchAddr, 0, tk);
   end
