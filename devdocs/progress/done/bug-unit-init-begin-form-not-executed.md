@@ -7,7 +7,7 @@ track: A
 
 - **Type:** bug — **Track A** (unit initialization in `compiler/parser.inc` /
   the unit-init emission path).
-- **Status:** working
+- **Status:** done
 - **Found by:** Track E, building `examples/mandelbrot/mandelkernel.pas`.
 
 ## Correction to the original filing
@@ -120,3 +120,4 @@ surfaced).
   stage counter: the whole init section never runs. Added the in-tree sweep
   (3 affected units, all currently harmless) and the `finalization` / ordering
   follow-ups.
+- 2026-07-22 — resolved, commit a1fb9480.

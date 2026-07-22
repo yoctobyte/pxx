@@ -49,7 +49,7 @@ _none_
 | bug-parallel-for-captured-dynarray-var-arg-segfault | A | 60 | bug | Passing a captured dynamic array by `var` from a parallel-for body segfaults | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | bug-test-core-oversized-job-6gb-flaky | A | 60 | bug | One test-core job needs ~6.8 GB and flakes under load (the recurring `Terminated`) | — |
-| bug-unit-init-begin-form-not-executed | A | 60 | bug | A unit's `begin ... end.` initialization section is silently never executed | — |
+| bug-unit-finalization-not-executed | A | 40 | bug | A unit's `finalization` section is silently never executed | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -238,7 +238,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (935)
+## done (936)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -685,6 +685,7 @@ _none_
 | bug-twatch-repro-line-job-number-drift | T | 55 | bug | bug: twatch repro lines rot — job numbers drift as tests are added | — |
 | bug-typed-const-array-of-string-broken | A | 50 | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
 | bug-uclass-field-window-stale-base | A | 60 | bug | bug: UClass field window base goes stale under shells-then-fields registration | — |
+| bug-unit-init-begin-form-not-executed | A | 60 | bug | A unit's `begin ... end.` initialization section is silently never executed | — |
 | bug-unit-operator-def-silently-skipped | A | 44 | bug | unit-scoped operator definitions silently skipped → record binop miscompile | — |
 | bug-unit-qualified-constant-not-resolved | A | 50 | bug | Unit-qualified constant reference `Unit.Const` is not resolved | — |
 | bug-unqualified-property-in-method | A | 50 | bug | Unqualified property access inside a method body fails | — |
@@ -2627,7 +2628,6 @@ _none_
 - [p 60] [N] bug-nilpy-method-result-copied-to-var-undefined
 - [p 60] [A] bug-parallel-for-captured-dynarray-var-arg-segfault
 - [p 60] [A] bug-test-core-oversized-job-6gb-flaky
-- [p 60] [A] bug-unit-init-begin-form-not-executed
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
@@ -2708,6 +2708,7 @@ _none_
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
 - [p 40] [A] bug-a-param-pointer-rule-divergence
 - [p 40] [N] bug-nilpy-uforth-exceptiontest-source-unlink
+- [p 40] [A] bug-unit-finalization-not-executed
 - [p 40] [U] decide-nilpy-transitive-nested-def-capture
 - [p 40] [A] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision
