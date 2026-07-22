@@ -97,6 +97,15 @@ is close to the worst case for an AOT compiler and close to the best case for
 CPython, whose decades-tuned C eval loop (and, on newer builds, its JIT) is
 exactly built to chew through this shape.
 
+**And it is heavier than uforth.py alone suggests (user, 2026-07-22):** the
+.UFO stdlib is itself full of dynamic bodies — **141 PYTHON-bodied words across
+all 10 .UFO files** (1964 lines), compiled and `exec`'d on EVERY run during
+startup, before the workload begins. So a short workload like prelim (279 ms)
+is largely stdlib-load time dominated by exec'd Python bodies. The dynamic
+surface pxx must route through its Python-body path is far larger than the
+uforth.py `exec()` sites alone — which makes staying within ~6x of CPython on
+these runs a stronger result still.
+
 So on that terrain:
 - **core 0.16x / prelim 0.17x** — within ~6x of CPython on a dynamic-dispatch-
   heavy REAL program is a strong result, not a gap to close.
