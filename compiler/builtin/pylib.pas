@@ -2954,6 +2954,10 @@ begin
   if nrUnlinkat = 0 then Exit;
   cs := path + #0;
   r := __pxxrawsyscall(nrUnlinkat, -100, Int64(@cs[1]), 0, 0, 0, 0);   { AT_FDCWD }
+  { CPython os.remove RAISES on failure (deleting a missing file must be a
+    catchable error — Forth-2012 DELETE-FILE expects a nonzero ior, not 0). }
+  if r < 0 then
+    raise OSError.Create('FileNotFoundError: ' + path);
   Result := Integer(r);
 end;
 
@@ -2982,14 +2986,28 @@ begin
   if nrRenameat = 0 then Exit;
   cs := src + #0; cd := dst + #0;
   r := __pxxrawsyscall(nrRenameat, -100, Int64(@cs[1]), -100, Int64(@cd[1]), 0, 0);
+  { CPython os.rename raises on failure, same as os.remove above }
+  if r < 0 then
+    raise OSError.Create('FileNotFoundError: ' + src);
   Result := Integer(r);
 end;
 
 function pyos_stat(const path: AnsiString): TPyStat;
+var cs: AnsiString; r: Int64; buf: array[0..143] of Byte;
 begin
-  { STUB: a zeroed result. The only caller runs under the exec path (stubbed),
-    so the value is never observed; the object exists so `.st_mode` compiles. }
+  { Real stat on x86-64 (uforth FILE-STATUS: a missing file must raise a
+    catchable OSError like CPython). Other targets keep the zeroed stub —
+    their struct stat layouts differ and no gated caller observes the value. }
   Result := TPyStat.Create;
+{$ifdef CPUX86_64}
+  cs := path + #0;
+  FillChar(buf[0], SizeOf(buf), 0);
+  r := __pxxrawsyscall(4, Int64(@cs[1]), Int64(@buf[0]), 0, 0, 0, 0);  { stat }
+  if r < 0 then
+    raise OSError.Create('FileNotFoundError: ' + path);
+  Result.st_mode := PInt64(@buf[24])^ and $FFFFFFFF;   { u32 st_mode (uid sits above) }
+  Result.st_size := PInt64(@buf[48])^;
+{$endif}
 end;
 
 function pystdin_readline: AnsiString;
@@ -3828,10 +3846,10 @@ begin
   z := path + #0;
   fd := __pxxrawsyscall(2, Int64(NativeInt(PChar(z))), flags, 420, 0, 0, 0);  { open, 0644 }
   if fd < 0 then
-  begin
-    WriteLn('FileNotFoundError: ', path);
-    Halt(1);
-  end;
+    { CPython open() raises a CATCHABLE OSError (uforth's OPEN-FILE wraps the
+      call in try/except and turns it into a nonzero ior — the Forth-2012
+      DELETE-FILE test reopens a deleted file expecting failure, not a halt). }
+    raise OSError.Create('FileNotFoundError: ' + path);
   Result := TPyFile.Create;
   Result.FFd := fd;
 end;
