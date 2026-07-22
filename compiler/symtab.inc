@@ -5801,6 +5801,19 @@ begin
         { Aggregate result: copy the Result local into the caller's hidden
           destination (pointer the prologue stashed in the dest-sym slot from
           ecx), return that pointer in eax. Mirrors the x86-64 rep-movsb path. }
+        if (Syms[retSymIdx].TypeKind = tyRecord) and not Syms[retSymIdx].IsArray and
+           RecordHasManagedFields(Syms[retSymIdx].RecName) then
+        begin
+          { A reused destination still holds the previous value's managed
+            handles; release them before the raw copy orphans them. }
+          EmitB($8B); EmitB($85); EmitI32(Syms[ProcAggregateDestSym[CurProc]].Offset); { mov eax, [ebp+destOff] }
+          EmitB($50);                                { push eax (arg0 recAddr) }
+          EmitB($68); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (Syms[retSymIdx].RecName - REC_UCLASS_BASE))); { push desc }
+          procIdx := FindProc('PXXRecordRelease');
+          if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
+          EmitCallProc(procIdx);
+          EmitB($81); EmitB($C4); EmitI32(8);        { add esp, 8 }
+        end;
         EmitB($8B); EmitB($BD); EmitI32(Syms[ProcAggregateDestSym[CurProc]].Offset); { mov edi, [ebp+destOff] }
         EmitB($89); EmitB($F8);                                  { mov eax, edi (return value) }
         EmitB($8D); EmitB($B5); EmitI32(Syms[retSymIdx].Offset); { lea esi, [ebp+resultOff] }
@@ -5922,6 +5935,18 @@ begin
         { Aggregate result: copy the Result local into the caller's hidden
           destination (pointer the prologue stashed from r12), return the
           pointer in r0. r5=src, r6=dst, r4=count for EmitArm32CopyBytes. }
+        if (Syms[retSymIdx].TypeKind = tyRecord) and not Syms[retSymIdx].IsArray and
+           RecordHasManagedFields(Syms[retSymIdx].RecName) then
+        begin
+          { A reused destination still holds the previous value's managed
+            handles; release them before the raw copy orphans them. }
+          EmitLoadVarArm32(ProcAggregateDestSym[CurProc]);  { r0 = dest ptr }
+          EmitLoadDataRefArm32(1,
+            -(RECORD_RTTI_DATAREF_BASE + (Syms[retSymIdx].RecName - REC_UCLASS_BASE)));
+          procIdx := FindProc('PXXRecordRelease');
+          if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
+          EmitCallProc(procIdx);
+        end;
         EmitLoadVarArm32(ProcAggregateDestSym[CurProc]);  { r0 = dest ptr }
         EmitI32($E1A06000);                               { mov r6, r0 (dst) }
         EmitLoadVarAddrArm32(retSymIdx);                  { r0 = &Result }
@@ -6029,6 +6054,18 @@ begin
         { Aggregate result: copy the Result local into the caller's hidden
           destination (pointer the prologue stashed from x8), return the pointer
           in x0. EmitA64CopyBytes uses x4/x5/x6 + w8, leaving x0 intact. }
+        if (Syms[retSymIdx].TypeKind = tyRecord) and not Syms[retSymIdx].IsArray and
+           RecordHasManagedFields(Syms[retSymIdx].RecName) then
+        begin
+          { A reused destination still holds the previous value's managed
+            handles; release them before the raw copy orphans them. }
+          EmitLoadVarA64(ProcAggregateDestSym[CurProc]);   { x0 = dest ptr }
+          EmitLoadDataRefA64(1,
+            -(RECORD_RTTI_DATAREF_BASE + (Syms[retSymIdx].RecName - REC_UCLASS_BASE)));
+          procIdx := FindProc('PXXRecordRelease');
+          if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
+          EmitCallProc(procIdx);
+        end;
         EmitLoadVarA64(ProcAggregateDestSym[CurProc]);   { x0 = dest ptr }
         EmitI32($AA0003E6);                              { mov x6, x0 (dst) }
         EmitLoadImmA64(9, Syms[retSymIdx].Offset);
@@ -6194,6 +6231,18 @@ begin
         { Aggregate (record) result: copy the Result local into the caller's
           hidden destination (the pointer the prologue stashed from t1), return
           that pointer in a0. PXXMemMove(dest, &Result, size). }
+        if (Syms[retSymIdx].TypeKind = tyRecord) and not Syms[retSymIdx].IsArray and
+           RecordHasManagedFields(Syms[retSymIdx].RecName) then
+        begin
+          { A reused destination still holds the previous value's managed
+            handles; release them before the raw copy orphans them. }
+          EmitLoadVarRISCV32(ProcAggregateDestSym[CurProc]); { a0 = dest ptr }
+          EmitLoadDataRefRISCV32(reg_a1,
+            -(RECORD_RTTI_DATAREF_BASE + (Syms[retSymIdx].RecName - REC_UCLASS_BASE)));
+          procIdx := FindProc('PXXRecordRelease');
+          if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
+          EmitCallProc(procIdx);
+        end;
         EmitSlotAddrRISCV32(reg_a1, retSymIdx);              { a1 = &Result (src) }
         EmitLoadVarRISCV32(ProcAggregateDestSym[CurProc]);   { a0 = dest ptr }
         sz := AggRetCopySize(retSymIdx);
@@ -6252,6 +6301,22 @@ begin
     begin
       { Aggregate results use a hidden caller-owned destination pointer in r10.
         The prologue saves it in a local so nested calls cannot clobber it. }
+      if (Syms[retSymIdx].TypeKind = tyRecord) and not Syms[retSymIdx].IsArray and
+         RecordHasManagedFields(Syms[retSymIdx].RecName) then
+      begin
+        { A reused destination (r := f(...) in a loop, or a re-executed hidden
+          temp) still holds the previous value's managed handles; the raw copy
+          below would orphan them. Release them first — safe here because the
+          body is done reading any argument that may alias the destination,
+          and any Result field copied from an alias was retained on copy-in. }
+        x64_push_reg(rRBX);
+        EmitLoadVar(ProcAggregateDestSym[CurProc]);
+        x64_mov_reg_reg(8, rRBX, rRAX);            { rbx = dest }
+        EmitAcquireHeapLock;
+        EmitManagedRecordReleaseLocked(Syms[retSymIdx].RecName);
+        EmitReleaseHeapLock;
+        x64_pop_reg(rRBX);
+      end;
       EmitLoadVar(ProcAggregateDestSym[CurProc]);
       EmitB($50);                                  { push original destination }
       EmitB($48); EmitB($89); EmitB($C7);          { mov rdi, rax }
