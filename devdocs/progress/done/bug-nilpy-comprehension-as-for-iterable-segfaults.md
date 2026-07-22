@@ -42,3 +42,6 @@ argument, none of which hit this. Filed for correctness, not for the corpus.
 Give PyParseForIn/PyParseFor's hidden loop temps serial-unique names even under
 re-entrancy (PyHiddenName may be reusing a counter that the nested call resets),
 or materialise a for-loop's comprehension iterable through the statement path.
+
+## Log
+- 2026-07-22 — resolved, commit 58fff656.
