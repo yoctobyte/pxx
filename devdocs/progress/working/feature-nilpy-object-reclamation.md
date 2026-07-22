@@ -55,3 +55,28 @@ NilPy-user gate (isNilPy AND CurrentUnitIdx<0 — the pyeval landmine).
 Five-slice ladder, slices 1-3 inert/additive, slice 4 (scope-exit release
 of NilPy tyClass locals) is the one that drains uforth's env-per-call and
 carries the risk. Verification set in the doc. Pick up at slice 1.
+
+## Progress (fable-a-n, night 2026-07-22/23)
+
+Slices 1-4 LANDED (commits 0b39d0ea..HEAD): primitives + PXXObjAlloc
+construction route (whole NilPy compilation, uniform headers, PXX_OBJ_MAGIC
+population tag at [inst-8]); variant-slot ARC for VT_OBJECT/VT_BOUNDMETHOD
+(x86-64 emitters via reg-preserving obj blobs, portable helpers for cross);
+recursive finalizers (PXXObjFinalizeHook -> pylib PyObjFinalize; RAW magic for
+bound pairs which own +1 on recv; class layout kind 5 = variant fields);
+binding ARC + scope-exit release (owned = construction/call results via
+return-retain; borrows retain; field-store ARC pulled forward; PXXObjPlausible
+heap-envelope guard).
+
+doloop RSS 595 -> 463 MB. Remaining tail to the <40 MB target:
+- pyeval-side pinning (raw retains at PPyRec writes never released by pyeval's
+  own storage; LclSet/globals lifetime)
+- hidden desugar temps ('__py_*', '') excluded from ARC — their construction
+  refs still leak (needs a mid-body zero-init story before they can join)
+- class-typed FIELDS not walked by the finalizer (kind for tyClass fields +
+  release in PyObjFinalize/PXXRecordRelease) — field refs leak on instance death
+- aarch64 inline EmitVariantClearA64/RetainA64 lack the object arms (leak-only
+  asymmetry; arm32/i386/rv32/xtensa go through portable PXXVarClear and are
+  covered); scope-exit tyClass release arm is x86-64 only so far
+- `d = None` (RHS non-class) stores raw — old binding's ref leaks
+- shared instance in two locals canary test (verification set) not yet written
