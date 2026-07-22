@@ -25,3 +25,6 @@ aarch64 IR_STORE_SYM hook). Measure first per backend whether the tag is
 Gate: test/test_overflow_qplus_narrow.pas prints
 `caught=5 clean=4 wrap=-294967296` on each backend; wire it into the four
 cross suites next to test_overflow_checks_qplus.pas.
+
+## Log
+- 2026-07-22 — resolved, commit 9097042d.
