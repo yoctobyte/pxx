@@ -49,3 +49,6 @@ fragment; FPC's 2010s threaded-ansistring leaks being the cautionary tale:
 threading × memory management IS hard.)
 
 Re-filed as [[feature-nilpy-object-reclamation]] (Track A, p55).
+
+## Log
+- 2026-07-22 — resolved, commit a98b3f1f.
