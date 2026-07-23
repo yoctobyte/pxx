@@ -3586,12 +3586,23 @@ begin
 
           IREmitCodeCall(AnsiStrConcatAddr);
           EmitB($50); { preserve concat result while releasing owned children }
-          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          { An OWNED operand dies with the concat: a nested concat's temp — and
+            equally a CALL result, which arrives at rc=1 by the function-result
+            convention. Without the call arm every `"x" + f()` leaked f's
+            result once per evaluation (uforth's wrapper build, ~3 strings per
+            PYTHON-word exec). Lvalues are borrows and stay. }
+          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and
+             ((IRKind[left] = IR_BINOP) or
+              ((IRKind[left] = IR_CALL) and (IRA[left] >= 0)) or
+              (IRKind[left] = IR_VIRTUAL_CALL) or (IRKind[left] = IR_CALL_IND)) then
           begin
             EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($10); { mov rax, [rsp+16] }
             IREmitCodeCall(AnsiStrReleaseAddr);
           end;
-          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and
+             ((IRKind[right] = IR_BINOP) or
+              ((IRKind[right] = IR_CALL) and (IRA[right] >= 0)) or
+              (IRKind[right] = IR_VIRTUAL_CALL) or (IRKind[right] = IR_CALL_IND)) then
           begin
             EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] }
             IREmitCodeCall(AnsiStrReleaseAddr);
