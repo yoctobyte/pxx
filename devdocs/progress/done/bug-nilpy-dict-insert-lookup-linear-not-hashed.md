@@ -33,3 +33,6 @@ amortised) here; and/or improve arena large-block reuse (that ticket).
 Give TPyDict a real hash table with amortised-doubling growth (Track N/pylib),
 so insert/lookup are O(1). This removes the dominant uforth compile-time cost
 AND most of the realloc churn feeding the arena RSS blowup.
+
+## Log
+- 2026-07-23 — resolved, commit 87a2501f.

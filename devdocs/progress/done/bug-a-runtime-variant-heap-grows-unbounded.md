@@ -447,3 +447,41 @@ attributed to the three tickets above (dict-O(N) + arena-reuse + bytes-slice),
 none of which is the variant-box/container-lifetime class this umbrella was
 opened for. This umbrella can close once those are filed/tracked; the real work
 moves to #1 (dict) and #2 (arena), with #3 the clean leak.
+
+## core residual CLOSED — real root was O(filesize²) file slurp (2026-07-23, @a50491d6)
+
+The core O(N²) was NEITHER the dict scan NOR the arena-reuse gap (both earlier
+theories here were wrong — chased via isolated dict-build timing and libc-vs-arena
+RSS, both misleading). callgrind pinned it: 83% of instructions in PXXStrConcat,
+and an n=150-vs-n=300 diff showed that cost was ~constant in def-count → it was
+FILE READING, not the defs. `pyfile_slurp` appended each byte with
+`Result := Result + buf[i]` (O(filesize²)); it reads the stdlib on every start
+AND the program's own input, so a bigger input file cost quadratically — that is
+the "O(N²) in definition count" (more defs = bigger .fr file). Fixed with
+amortised-doubling capacity (+ pystr_upper/lower preallocation).
+
+Result — uforth, mmap arena, every workload now FLAT and BELOW CPython (~24 MB):
+
+| workload | original | now |
+| --- | --- | --- |
+| microbench | 552 MB | 13.3 MB |
+| core | 158 MB | 13.3 MB |
+| prelim | 32 MB | 13.3 MB |
+
+defs `: wN 1 2 + drop ;`: 1k 1.64 s/42 MB → 0.37 s/6 MB; 4k 16.9 s/838 MB →
+0.71 s/12 MB; 16k linear at 2.05 s/31 MB. Both time and memory O(N²)→linear.
+
+### Umbrella RESOLVED
+The unbounded-growth symptom is gone across every workload. The layers found and
+fixed over this campaign: promo-int heap leaks (ca293f1c), managed-record return
+into reused dest (528e67d3…), container reclamation (684715e0), managed-string
+deref-to-const arg ([[project_nilpy_managed_deref_const_arg_leak_fixed]]),
+bytes/owned-obj-arg-0 reclamation, and finally this O(filesize²) slurp. Spin-offs
+kept as their own tickets: [[bug-nilpy-dict-insert-lookup-linear-not-hashed]]
+(landed — TPyDict now O(1) hashed, a real win though NOT this umbrella's cause),
+[[perf-nilpy-remaining-perbyte-string-builders]] (join/repr/fmt/strip),
+and the arena large-block reuse note (Track O, latent — no longer a live problem
+now that the churn is gone). Marking resolved.
+
+## Log
+- 2026-07-23 — resolved, commit a50491d6.
