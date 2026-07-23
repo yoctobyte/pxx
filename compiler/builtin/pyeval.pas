@@ -2563,11 +2563,11 @@ begin
   ExpectOp(')');
 
   { skipped branch: consume the call but do not dispatch (no side effects) }
-  if not Executing then begin res := MakeNone; Exit; end;
+  if not Executing then begin res := MakeNone; args.Free; Exit; end;
 
   { user-defined nested function takes precedence (Python scoping) }
   if FnFind(callee) >= 0 then
-  begin CallUserFn(FnFind(callee), args, res); Exit; end;
+  begin CallUserFn(FnFind(callee), args, res); args.Free; Exit; end;
 
   if IsHostName(callee) then
   begin
@@ -2576,9 +2576,11 @@ begin
     vmv := EnvG.fetch('vm');
     vmobj := pyvarobj(vmv);
     PyHostCall(vmobj, callee, args, res);
+    args.Free;
     Exit;
   end;
   CallBuiltin(callee, args, endKw, sepKw, haveEnd, haveSep, res);
+  args.Free;
 end;
 
 { `( expr, ... )` into `args`; a `signed=<bool>` keyword arg (to_bytes/from_bytes)
