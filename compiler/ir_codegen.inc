@@ -570,6 +570,30 @@ begin
   ]);
 end;
 
+procedure EmitPyBitFloatErrStub;
+{ Shared NilPy bitwise-on-float TypeError abort stub: a bitwise operator
+  (& | ^ << >>) with a float variant operand raises TypeError in Python rather
+  than truncating to int. Write the message to stdout and exit_group(219) — the
+  same print+Halt convention pylib's PyTypeError uses (NilPy runtime type errors
+  abort, they are not catchable). Pure syscalls, no unit dependency. Emitted on
+  the NilPy x86-64 emit path only; EmitVarBinOp's bitwise-double arm calls it.
+  See bug-nilpy-bitwise-on-float-variant-truncates. }
+var si: Integer;
+begin
+  PyBitFloatErrStubAddr := CodeLen;
+  si := InternStr('TypeError: unsupported operand type(s) for bitwise operator: ''float''' + Chr(10));
+  EmitAsmX64([
+    'mov rax, %', 1,                        { sys_write }
+    'mov rdi, %', 1,                        { stdout }
+    'mov rsi, @data', Strs[si].Offset + 8,  { message bytes }
+    'mov rdx, %', Strs[si].Len,
+    'syscall',
+    'mov rax, %', 231,                      { sys_exit_group }
+    'mov rdi, %', 219,
+    'syscall'
+  ]);
+end;
+
 procedure EmitDivZeroCheckX64;
 { Pre-divide zero check for integer div/mod (divisor in rcx): 2 instructions on
   the fall-through path next to a ~20+-cycle idiv. Calls PXXDivZero (message +
@@ -1820,14 +1844,25 @@ begin
           (opTk = Ord(tkAnd)) or (opTk = Ord(tkOr)) or (opTk = Ord(tkXor)) or
           (opTk = Ord(tkShl)) or (opTk = Ord(tkShr)) then
   begin
+    { A BITWISE op (& | ^ << >>) reached the double path, so one operand is a
+      float variant. Python raises TypeError for `1.5 & 2` rather than
+      truncating; under NilPy, do the same via the shared abort stub (message +
+      exit_group(219), the print+Halt convention pylib's PyTypeError uses — these
+      runtime type errors abort, not catchable). The stub never returns.
+      div/mod keep Pascal truncation semantics below (a deliberate deviation,
+      not this bug). Non-NilPy Variant code keeps the old truncation for every
+      op. bug-nilpy-bitwise-on-float-variant-truncates. }
+    if isNilPy and ((opTk = Ord(tkAnd)) or (opTk = Ord(tkOr)) or
+                    (opTk = Ord(tkXor)) or (opTk = Ord(tkShl)) or
+                    (opTk = Ord(tkShr))) then
+    begin
+      IREmitCodeCall(PyBitFloatErrStubAddr);
+      { never returns; the truncation below is skipped }
+    end
+    else
+    begin
     { div/mod and the BITWISE ops are integer operators: truncate the double
-      operands to int64, apply, store VT_INT64. (Pascal div/mod semantics.)
-
-      DEVIATION, filed as bug-nilpy-bitwise-on-float-variant-truncates: Python
-      raises TypeError for `1.5 & 2` rather than truncating. Emitting a runtime
-      type error needs machinery this routine does not have, and truncation is
-      at least consistent with how div/mod already treat a double operand here.
-      Unreachable from the corpus, which masks ints behind isinstance guards. }
+      operands to int64, apply, store VT_INT64. (Pascal div/mod semantics.) }
     EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);                  { cvttsd2si rax, xmm0 }
     EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C9);                  { cvttsd2si rcx, xmm1 }
     if      opTk = Ord(tkAnd) then begin EmitB($48); EmitB($21); EmitB($C8); end { and rax,rcx }
@@ -1843,6 +1878,7 @@ begin
     EmitB($48); EmitB($C7); EmitB($02); EmitI32(VT_INT64);                       { mov qword[rdx],VT_INT64 }
     EmitB($48); EmitB($89); EmitB($42); EmitB($08);                              { mov [rdx+8],rax }
     EmitB($48); EmitB($89); EmitB($D0);                                          { mov rax,rdx }
+    end;   { close the NilPy-bitwise-raise vs truncate split }
   end
   else
   begin

@@ -12,6 +12,7 @@ procedure ParseCUnit; forward;
 procedure RegisterCMacroConsts; forward;
 procedure EmitAnsiStringRuntime; forward;
 procedure EmitDiv0Stub; forward;
+procedure EmitPyBitFloatErrStub; forward;
 procedure EmitSignalRuntime; forward;
 procedure EmitIoLockStubs; forward;
 procedure EmitIoLockStubs386; forward;

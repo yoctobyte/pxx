@@ -1946,6 +1946,12 @@ var
                              emitted unconditionally on x86-64; the fallback
                              call target when builtinheap (PXXDivZero) is not
                              pulled in. See bug-integer-div-zero-sigfpe-uncatchable. }
+  PyBitFloatErrStubAddr : Integer;  { code offset of the shared NilPy bitwise-on-
+                             float TypeError abort stub (write the message +
+                             exit_group(219)); emitted on the NilPy x86-64 path.
+                             A bitwise op with a float variant operand raises in
+                             Python rather than truncating — see
+                             bug-nilpy-bitwise-on-float-variant-truncates. }
   AnsiStrReleaseAddr : Integer;
   AnsiStrRetainAddr  : Integer;
   AnsiStrFromLiteralAddr : Integer;

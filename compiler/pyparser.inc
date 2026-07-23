@@ -8679,6 +8679,10 @@ begin
     builtinheap div site compiled before PXXDivZero registers fell back to a
     zero Div0StubAddr. Python '//'/'%' always need the check; unconditional. }
   if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
+  { Bitwise-on-float TypeError abort stub — EmitVarBinOp's double path calls it
+    when a bitwise op has a float variant operand (Python raises, we abort like
+    pylib's PyTypeError). bug-nilpy-bitwise-on-float-variant-truncates. }
+  if TargetArch = TARGET_X86_64 then EmitPyBitFloatErrStub;
   if pyHasExceptions then EnableExceptionRuntime;
   { Forward-declare the builtin heap allocator before emitting the string
     runtime, which calls Alloc. The unit body (compiled by ParseUsesUnit below)
