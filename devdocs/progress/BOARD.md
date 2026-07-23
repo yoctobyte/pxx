@@ -28,11 +28,10 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (132)
+## backlog (131)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-nilpy-managed-deref-to-const-arg-leaks | A | 35 | bug | isNilPy: inline managed-string deref to a const param leaks the temp | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 55 | bug | issue: runtime heap grows unbounded in a dynamic/variant-heavy loop (long-running programs OOM) | — |
 | bug-nilpy-bitwise-on-float-variant-truncates | A | 30 | bug | NilPy: a bitwise op on a FLOAT variant truncates instead of raising TypeError | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
@@ -227,7 +226,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (963)
+## done (964)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -256,6 +255,7 @@ _none_
 | bug-a-nilpy-int-of-string-returns-a-pointer | A | 80 | bug | NilPy `int("42")` returns a POINTER, silently — and `float()` does not exist | — |
 | bug-a-nilpy-int-times-variant-in-sum-not-lowered | A | 60 | bug | NilPy: `total = total + k * v` with a VARIANT operand fails to lower | — |
 | bug-a-nilpy-list-augmented-add-segfaults | A | 55 | bug | NilPy: `xs += [2]` on a list SEGFAULTS | — |
+| bug-a-nilpy-managed-deref-to-const-arg-leaks | A | 35 | bug | isNilPy: inline managed-string deref to a const param leaks the temp | — |
 | bug-a-nilpy-method-call-on-variant-receiver | A | 70 | bug | NilPy: calling a method on a VARIANT receiver is a parse error | — |
 | bug-a-nilpy-one-char-literal-through-ctor-str-param | A | 70 | bug | NilPy: a ONE-character literal through a ctor `str` param becomes a char — silent, then segfaults | — |
 | bug-a-nilpy-one-char-string-literal-is-a-char | A | 70 | bug | NilPy: a 1-character string literal was a char, and segfaulted as an argument | — |
@@ -2725,7 +2725,6 @@ _none_
 - [p 40] [T] feature-twatch-full-tier-coverage-age
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
-- [p 35] [A] bug-a-nilpy-managed-deref-to-const-arg-leaks
 - [p 35] [U] decide-nilpy-hasattr-per-instance-semantics
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [A] feature-nested-routine-fixed-array-capture

@@ -57,3 +57,6 @@ Every isNilPy-compiled builtin that passes a managed-string deref to a
 const param leaks per call. The three known hot sites are patched at the
 call site; a root fix would remove the need for those binds and cover any
 future sites. Not correctness — pure leak.
+
+## Log
+- 2026-07-23 — resolved, commit 32fdbcda.
