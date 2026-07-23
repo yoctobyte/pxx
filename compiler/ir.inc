@@ -7143,6 +7143,18 @@ begin
       end;
       while item <> -1 do
       begin
+        { NilPy: a tyChar arg (`s[i]`, AN_INDEX/pystr_at) to a string parameter
+          is turned into a real 1-char managed string HERE, before argIsManagedTemp
+          and the arg-tk are read from ASTLeft[item] — so it joins the owning-arg-
+          temp path (released) instead of the raw char being materialised inline by
+          codegen with no owner (bug-n-nilpy-char-to-string-arg-leaks). Done in the
+          loop, not IRLowerCallArg, because the owning-temp decision reads the
+          ORIGINAL arg node. }
+        if isNilPy and (cpi >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+           ((Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) or
+            (Procs[cpi].Params[pathIdx].TypeKind = tyString)) and
+           (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyChar) then
+          ASTLeft[item] := WrapCharToPyStr(ASTLeft[item]);
         isRefArg := False;
         if cpi >= 0 then
         begin

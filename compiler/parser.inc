@@ -6959,6 +6959,27 @@ begin
   Result := wCall;
 end;
 
+{ NilPy: wrap a tyChar VALUE as pystr_ofchar(char) -> a real 1-char managed
+  string. Used at call-arg marshalling to turn `s[i]` (pystr_at yields Char)
+  into a tyAnsiString expression BEFORE argIsManagedTemp is decided, so a char
+  passed to a string parameter (`len(s[i])`, a `const s: AnsiString` param)
+  flows through the owning-arg-temp path and is released — instead of the raw
+  char being materialised inline by codegen with no owner (leak). Returns the
+  original node unchanged if pystr_ofchar is not loaded (non-NilPy builds). }
+function WrapCharToPyStr(argNode: Integer): Integer;
+var procIdx, wArg, wCall: Integer;
+begin
+  procIdx := FindProc('pystr_ofchar');
+  if procIdx < 0 then begin WrapCharToPyStr := argNode; Exit; end;
+  wArg := AllocNode(AN_ARG);
+  ASTLeft[wArg] := argNode; ASTRight[wArg] := -1; ASTTk[wArg] := Ord(tyChar);
+  wCall := AllocNode(AN_CALL);
+  ASTIVal[wCall] := procIdx;
+  ASTTk[wCall] := Ord(tyAnsiString);
+  ASTLeft[wCall] := wArg; ASTRight[wCall] := -1;
+  WrapCharToPyStr := wCall;
+end;
+
 { Metaclass descendant enforcement. When the assignment target is a `class of
   TBase` variable (a tyPointer sym whose element is tyClass with a user-class
   rec id), the assigned value must be TBase or a descendant. Two RHS shapes
