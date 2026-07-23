@@ -75,3 +75,43 @@ Reproduce:
 memcheck reports 0 ERRORS — the ARC layers are sound; these are pure
 leaks. Top target: the PyHostCall string materializations (~1.6 KB/exec)
 and pyeval's ParseCall/ParsePrimary object results.
+
+## Progress 2026-07-23 (session 4 — three fixes landed)
+
+Note the num-callers=10 attributions above COLLAPSE deeper stacks onto
+pyeval frames; with num-callers=20 most of the "PyHostCall" and
+"ParseCall" bytes redistribute to the NilPy-compiled uforth VM methods
+(VM.compile_token / exec_token / interpret_file / tokenize) — i.e. the
+leaks are largely in USER (uforth) code paths, not pyeval internals.
+
+Landed (each gated: testmgr quick + test-nilpy/uforth/fpjson + self-host
+byte-identical + -dPXX_LIBC_HEAP probe):
+
+1. **pyeval ParseCall args leak** (4740c916) — `args := TPyList.Create`
+   never freed on any of the 4 ParseCall exit paths (pyeval is a builtin
+   unit, CurrentUnitIdx>=0, so no auto scope-exit ARC). Added `args.Free`.
+   doloop definitely-lost 3,673,600 -> 3,248,400 B (−425 KB direct,
+   −552 KB indirect); loss record 750 (ParseCall/ParsePrimary) closed.
+
+2. **pyeval host-dispatch churn** (8c62a8f3) — PyFindMethCI lowercased
+   both names into fresh buffers per compare (churn, not a leak).
+   Replaced with zero-alloc PyEqCI.
+
+3. **managed-string arg-temp leak in 6 more call paths** (this commit) —
+   the per-store IR_DEFAULT_MEM leak fixed in 2edd88fa for the direct
+   AN_CALL path SURVIVED in CALL_IND / INTF_CALL / VIRTUAL_CALL /
+   METACLASS_NEW / ctor-arg-loop / default-str-param arg-temp sites.
+   A string literal passed to a **method** (`c.g("dup")` in a loop)
+   leaked one handle per call; the free-function form did not. Removed
+   the per-store DEFAULT_MEM at all 6 sites (slot nil-init'd once at body
+   head via SymIsHiddenArgTemp; STORE's release-of-old frees prev handle).
+   Minimal repro: `m6.npy` (method + str-literal arg, unused in body) —
+   4999 leaks -> 0. doloop 3,248,400 -> 2,957,688 B (−291 KB), memcheck
+   errors 1138 -> 1118.
+
+Remaining (NOT yet fixed): the bulk of the doloop 2.9 MB is in the NilPy
+uforth VM methods themselves — needs a specific-pattern repro. Generic
+str-temp / container-of-str / dict-string-key / method-str-arg all probe
+CLEAN now; the residual pattern is still unidentified. Startup one-offs
+(build_base_vm bytearray 1 MB, VM.create) are not per-iter and low
+priority.

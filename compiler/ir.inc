@@ -7122,9 +7122,8 @@ begin
             begin
               hiddenArgSym := AllocVar('', tyAnsiString);
               SymIsHiddenArgTemp[hiddenArgSym] := True;
-              IRAppend(IR_DEFAULT_MEM,
-                IRAppend(IR_SLOTADDR, hiddenArgSym, -1, -1, 0, Ord(tyPointer)),
-                -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyAnsiString));
+              { no per-store DEFAULT_MEM — see the arg-temp paths above
+                (bug-a-managed-string-arg-temp-leaks-on-loop-reuse) }
               IRAppend(IR_STORE_SYM, hiddenArgSym, value, -1, 0, Ord(tyAnsiString));
               value := IRAppend(IR_LOAD_SYM, hiddenArgSym, -1, -1, 0, Ord(tyAnsiString));
               argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
@@ -7358,9 +7357,8 @@ begin
             begin
               hiddenArgSym := AllocVar('', tyAnsiString);
               SymIsHiddenArgTemp[hiddenArgSym] := True;
-              IRAppend(IR_DEFAULT_MEM,
-                IRAppend(IR_SLOTADDR, hiddenArgSym, -1, -1, 0, Ord(tyPointer)),
-                -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyAnsiString));
+              { no per-store DEFAULT_MEM — see the arg-temp paths above
+                (bug-a-managed-string-arg-temp-leaks-on-loop-reuse) }
               IRAppend(IR_STORE_SYM, hiddenArgSym, value, -1, 0, Ord(tyAnsiString));
               value := IRAppend(IR_LOAD_SYM, hiddenArgSym, -1, -1, 0, Ord(tyAnsiString));
               argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
@@ -7519,9 +7517,13 @@ begin
             owning local, pass by borrow — see AN_CALL / AN_VIRTUAL_CALL }
           hiddenArgSym := AllocVar('', tyAnsiString);
           SymIsHiddenArgTemp[hiddenArgSym] := True;
-          IRAppend(IR_DEFAULT_MEM,
-            IRAppend(IR_SLOTADDR, hiddenArgSym, -1, -1, 0, Ord(tyPointer)),
-            -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyAnsiString));
+          { No per-store IR_DEFAULT_MEM: the slot is nil-init'd ONCE at body head
+            (SymIsHiddenArgTemp codegen pass / BSS), so STORE_SYM's release-of-old
+            frees the previous iteration's materialised handle on every loop reuse.
+            A per-store zero re-leaked it every trip
+            (bug-a-managed-string-arg-temp-leaks-on-loop-reuse — same fix as the
+            direct AN_CALL path, extended here to the CALL_IND / INTF_CALL /
+            VIRTUAL_CALL / METACLASS_NEW arg paths). }
           IRAppend(IR_STORE_SYM, hiddenArgSym, value, -1, 0, Ord(tyAnsiString));
           value := IRAppend(IR_LOAD_SYM, hiddenArgSym, -1, -1, 0, Ord(tyAnsiString));
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
@@ -7622,9 +7624,13 @@ begin
         begin
           hiddenArgSym := AllocVar('', tyAnsiString);
           SymIsHiddenArgTemp[hiddenArgSym] := True;
-          IRAppend(IR_DEFAULT_MEM,
-            IRAppend(IR_SLOTADDR, hiddenArgSym, -1, -1, 0, Ord(tyPointer)),
-            -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyAnsiString));
+          { No per-store IR_DEFAULT_MEM: the slot is nil-init'd ONCE at body head
+            (SymIsHiddenArgTemp codegen pass / BSS), so STORE_SYM's release-of-old
+            frees the previous iteration's materialised handle on every loop reuse.
+            A per-store zero re-leaked it every trip
+            (bug-a-managed-string-arg-temp-leaks-on-loop-reuse — same fix as the
+            direct AN_CALL path, extended here to the CALL_IND / INTF_CALL /
+            VIRTUAL_CALL / METACLASS_NEW arg paths). }
           IRAppend(IR_STORE_SYM, hiddenArgSym, value, -1, 0, Ord(tyAnsiString));
           value := IRAppend(IR_LOAD_SYM, hiddenArgSym, -1, -1, 0, Ord(tyAnsiString));
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
@@ -8487,9 +8493,13 @@ begin
             pass by borrow (ARC coercion + no per-call leak) — see AN_CALL }
           hiddenArgSym := AllocVar('', tyAnsiString);
           SymIsHiddenArgTemp[hiddenArgSym] := True;
-          IRAppend(IR_DEFAULT_MEM,
-            IRAppend(IR_SLOTADDR, hiddenArgSym, -1, -1, 0, Ord(tyPointer)),
-            -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyAnsiString));
+          { No per-store IR_DEFAULT_MEM: the slot is nil-init'd ONCE at body head
+            (SymIsHiddenArgTemp codegen pass / BSS), so STORE_SYM's release-of-old
+            frees the previous iteration's materialised handle on every loop reuse.
+            A per-store zero re-leaked it every trip
+            (bug-a-managed-string-arg-temp-leaks-on-loop-reuse — same fix as the
+            direct AN_CALL path, extended here to the CALL_IND / INTF_CALL /
+            VIRTUAL_CALL / METACLASS_NEW arg paths). }
           IRAppend(IR_STORE_SYM, hiddenArgSym, value, -1, 0, Ord(tyAnsiString));
           value := IRAppend(IR_LOAD_SYM, hiddenArgSym, -1, -1, 0, Ord(tyAnsiString));
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
@@ -8589,9 +8599,13 @@ begin
             call paths allocate }
           hiddenArgSym := AllocVar('', tyAnsiString);
           SymIsHiddenArgTemp[hiddenArgSym] := True;
-          IRAppend(IR_DEFAULT_MEM,
-            IRAppend(IR_SLOTADDR, hiddenArgSym, -1, -1, 0, Ord(tyPointer)),
-            -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyAnsiString));
+          { No per-store IR_DEFAULT_MEM: the slot is nil-init'd ONCE at body head
+            (SymIsHiddenArgTemp codegen pass / BSS), so STORE_SYM's release-of-old
+            frees the previous iteration's materialised handle on every loop reuse.
+            A per-store zero re-leaked it every trip
+            (bug-a-managed-string-arg-temp-leaks-on-loop-reuse — same fix as the
+            direct AN_CALL path, extended here to the CALL_IND / INTF_CALL /
+            VIRTUAL_CALL / METACLASS_NEW arg paths). }
           IRAppend(IR_STORE_SYM, hiddenArgSym, value, -1, 0, Ord(tyAnsiString));
           value := IRAppend(IR_LOAD_SYM, hiddenArgSym, -1, -1, 0, Ord(tyAnsiString));
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
