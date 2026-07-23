@@ -49,3 +49,29 @@ night for the exact diff), then log allocation BACKTRACE-lite (a global
 "current pyeval site" tag set/cleared around EvalPyStmts subroutines) to
 attribute the 40/64B blocks. The 24B blocks smell like 1-2 char
 PXXStrFromLit name strings (LclNames?) with one lost ref per exec.
+
+## Valgrind attribution (2026-07-23, -dPXX_LIBC_HEAP + tools/vgsym.py)
+
+The new libc-heap profile makes this precise. 200-iteration doloop,
+aggregated definitely-lost by call-site signature (bytes, records, stack):
+
+    1938296 B   2  PXXStrFromLit <- (blob) <- PyHostCall
+    1205104 B   1  PXXObjAlloc <- ParseCall <- ParsePrimary     (pyeval expr eval)
+    1048584 B   1  TPyBytes.Create <- bytearray <- VM.create    (startup, one-off)
+     419360 B   2  PXXObjAlloc <- VM._make_file_source <- VM.advance_file_source
+     377472 B  15  PXXObjAlloc <- pyint_to_bytes <- VM._set_active_source
+     328352 B   5  PXXStrFromLit <- (blob) <- VM.tokenize
+     264448 B   9  PXXStrFromLit <- (blob) <- ExecSuite
+     224112 B   3  PXXObjAlloc <- list <- VM.run_forth_word
+     210096 B   1  PXXStrConcat <- (blob) <- build_base_vm.w_include
+     176440 B   9  PXXStrConcat <- (blob) <- Tokenize            (pyeval tokenizer)
+     131008 B   1  PXXStrFromLit <- (blob) <- ParsePrimary
+
+Reproduce:
+    pascal26 -dPXX_LIBC_HEAP --proc-map uforth.py /tmp/ufv
+    ... | valgrind --leak-check=full --num-callers=10 /tmp/ufv 2>&1 \
+        | tools/vgsym.py /tmp/ufv.map
+
+memcheck reports 0 ERRORS — the ARC layers are sound; these are pure
+leaks. Top target: the PyHostCall string materializations (~1.6 KB/exec)
+and pyeval's ParseCall/ParsePrimary object results.
