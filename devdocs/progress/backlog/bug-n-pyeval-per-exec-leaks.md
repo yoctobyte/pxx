@@ -50,7 +50,7 @@ night for the exact diff), then log allocation BACKTRACE-lite (a global
 attribute the 40/64B blocks. The 24B blocks smell like 1-2 char
 PXXStrFromLit name strings (LclNames?) with one lost ref per exec.
 
-## Valgrind attribution (2026-07-23, -dPXX_LIBC_HEAP + tools/vgsym.py)
+## Valgrind attribution (2026-07-23, -dPXX_LIBC_HEAP + tools/vgsym.py — HOWTO: devdocs/dev/valgrind.md)
 
 The new libc-heap profile makes this precise. 200-iteration doloop,
 aggregated definitely-lost by call-site signature (bytes, records, stack):

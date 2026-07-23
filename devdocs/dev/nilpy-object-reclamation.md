@@ -109,6 +109,10 @@ contract. Park points between slices are safe (nothing half-owns).
 
 ## Verification set
 
+Leak attribution tooling: **devdocs/dev/valgrind.md** (`-dPXX_LIBC_HEAP`
++ `tools/vgsym.py`) — memcheck sees every allocation with symbolized
+stacks; 0 memcheck errors on the ARC probes as of 2026-07-23.
+
 - `v = pick(i)` / vstr / vbox probes (umbrella ticket) stay flat.
 - uforth: `make test-uforth`, the 4 suite drivers byte-identical vs CPython,
   `make bench-uforth` doloop RSS target < 40 MB.
