@@ -295,3 +295,38 @@ local-reassign path that got fixed.
 Remaining work = free the element's box on list pop / element-store-overwrite /
 container teardown (the [[feature-nilpy-object-reclamation]] lane). uforth's
 552 MB microbench is the scoreboard; it drops when the container path reclaims.
+
+## MOSTLY FIXED — container reclamation landed; ~28x cut (Track T, 2026-07-23, @684715e0)
+
+The managed-string arg-temp + pyeval + char-to-string + per-call TPyList fixes
+(2edd88fa, 4740c916, 5d3693bb, 98aaecd0, a0574d81, …) closed the container path.
+
+**Every isolated repro is now clean:**
+
+| repro | baseline | now |
+| --- | --- | --- |
+| I variant local reassign | 47 MB | **0 MB** |
+| H variant-int list push/pop | 57 MB | **0 MB** |
+| G string list push/pop | 29 MB | **0 MB** |
+| D variant list push/pop | 19 MB | **0 MB** |
+| J exec() in a loop | (new) | **0 MB** |
+| A plain-int control | 0 MB | 0 MB |
+
+**uforth (the scoreboard):**
+
+| workload | baseline | now |
+| --- | --- | --- |
+| microbench (20k) | 552 MB | **35 MB** (16x) |
+| prelim | 31 MB | 15 MB |
+| core | 158 MB | 103 MB |
+
+### Residual — small, still linear, NOT reproduced by any simple repro
+uforth microbench peak vs iters: 10k→24 MB, 20k→34 MB, 40k→55 MB — still linear
+at **~1 KB/iter** (was ~28 KB/iter: a ~28x cut). So a small leak remains, but it
+is NOT any of the isolated patterns above (all 0 MB now, including exec() in a
+loop). It is some uforth-specific COMBINATION — most likely an exec'd
+PYTHON-body word that manipulates the variant data stack, a path the simple
+repros don't hit. Chasing it with more blind repros is diminishing returns;
+Track A would want to profile uforth directly (or instrument PXXAlloc caller
+addresses in a throwaway build) for the last layer. The 16x/28x win is the
+headline; the scoreboard (`make bench-uforth`) tracks any further drop.
