@@ -6,6 +6,29 @@ type: bug
 
 # Managed-string arg-materialization temp leaks one handle per loop iteration
 
+## RESOLVED 2edd88fa (+ b145ae9b) 2026-07-23
+
+Fixed by dropping the per-store `IR_DEFAULT_MEM` (leak → 0 bytes). The
+"breaks self-host" blocker that reverted this before was a RED HERRING:
+NOT an over-free / under-count / refcount bug at all (every theory below
+about over-release is WRONG). The real bug was a **pre-existing
+out-of-bounds write** — `PyAnnTypeAt`'s Callable branch did
+`Syms[Procs[sigPi].Params[depth].SymIdx].RecName := …` where
+`RegisterProc` always leaves a raw param's `SymIdx = -1`, so it wrote
+`Syms[-1]` ~40 bytes before the Syms base. Silent in mainline (lands on
+padding); this leak fix only shifted the heap layout so the stray write
+hit a live proc-name buffer → the flaky "dataclass ctor not registered".
+Fixed independently in b145ae9b (record via `ProcParamRecId`). With that
+in, 20/20 ASLR runs of uforth compile clean and the leak is gone.
+
+The forensic sections below are kept as a record of the (mis-guided)
+over-free hunt; the actual resolution is the two lines above. The tell we
+missed early: the corruption was heap-layout-flaky (ASLR/setarch/no-free
+all flipped it) — that is the signature of a stray OOB write finding a
+victim, not of a deterministic refcount error.
+
+---
+
 A frozen literal (or any materialized value) passed to a `const s:
 AnsiString` / `const string` parameter is bound to a hidden owning temp
 in IRLowerCallArg (7 sites, all `argIsManagedTemp` → `hiddenArgSym`):
@@ -200,3 +223,6 @@ Gate any fix on: `make test` + self-host fixedpoint + compile uforth.py
 FROM THE REPO ROOT (`./compiler/pascal26 ~/projects/uforth/uforth.py
 /tmp/x`, not just test-uforth's workdir) + `make bench-uforth` + the
 valgrind probe above going to 0.
+
+## Log
+- 2026-07-23 — resolved, commit 2edd88fa.

@@ -6719,3 +6719,21 @@
 2026-07-23T07:25:09Z	borg	c088f2861121	selfcompile	-O0	6978.2
 2026-07-23T07:25:09Z	borg	c088f2861121	selfcompile	-O2	6276.7
 2026-07-23T07:25:09Z	borg	c088f2861121	selfcompile	-O3	6126.1
+2026-07-23T10:02:56Z	borg	ac597ef7	uforth-microbench-doloop	cpython	6165.4	07ffdb1	24044
+2026-07-23T10:02:56Z	borg	ac597ef7	uforth-microbench-doloop	cpython-O	7374.7	07ffdb1	29740
+2026-07-23T10:02:56Z	borg	ac597ef7	uforth-microbench-doloop	pxx	18475.8	07ffdb1	318724
+2026-07-23T10:02:56Z	borg	ac597ef7	uforth-prelim	cpython	295.8	07ffdb1	24264
+2026-07-23T10:02:56Z	borg	ac597ef7	uforth-prelim	cpython-O	455.7	07ffdb1	29696
+2026-07-23T10:02:56Z	borg	ac597ef7	uforth-prelim	pxx	1645.3	07ffdb1	20356
+2026-07-23T10:02:56Z	borg	ac597ef7	uforth-core	cpython	820.7	07ffdb1	24408
+2026-07-23T10:02:56Z	borg	ac597ef7	uforth-core	cpython-O	943.0	07ffdb1	29708
+2026-07-23T10:02:56Z	borg	ac597ef7	uforth-core	pxx	4164.0	07ffdb1	121024
+2026-07-23T10:03:17Z	borg	ac597ef7	uforth-microbench-doloop	cpython	7164.5	07ffdb1	23976
+2026-07-23T10:03:17Z	borg	ac597ef7	uforth-microbench-doloop	cpython-O	7057.5	07ffdb1	29704
+2026-07-23T10:03:17Z	borg	ac597ef7	uforth-microbench-doloop	pxx	18373.8	07ffdb1	318724
+2026-07-23T10:03:17Z	borg	ac597ef7	uforth-prelim	cpython	264.6	07ffdb1	24248
+2026-07-23T10:03:17Z	borg	ac597ef7	uforth-prelim	cpython-O	458.5	07ffdb1	29684
+2026-07-23T10:03:17Z	borg	ac597ef7	uforth-prelim	pxx	1481.8	07ffdb1	20484
+2026-07-23T10:03:17Z	borg	ac597ef7	uforth-core	cpython	745.4	07ffdb1	24396
+2026-07-23T10:03:17Z	borg	ac597ef7	uforth-core	cpython-O	827.3	07ffdb1	29708
+2026-07-23T10:03:17Z	borg	ac597ef7	uforth-core	pxx	3946.3	07ffdb1	121024

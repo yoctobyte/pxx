@@ -28,11 +28,10 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (133)
+## backlog (132)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-managed-string-arg-temp-leaks-on-loop-reuse | A | 45 | bug | Managed-string arg-materialization temp leaks one handle per loop iteration | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 55 | bug | issue: runtime heap grows unbounded in a dynamic/variant-heavy loop (long-running programs OOM) | — |
 | bug-n-pyeval-per-exec-leaks | N | 45 | bug | pyeval leaks per exec() call — forensics from the object-reclamation night | — |
 | bug-nilpy-bitwise-on-float-variant-truncates | A | 30 | bug | NilPy: a bitwise op on a FLOAT variant truncates instead of raising TypeError | — |
@@ -228,7 +227,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (960)
+## done (961)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -249,6 +248,7 @@ _none_
 | bug-a-len-of-variant-picks-wrong-overload | A | 55 | bug | `len(v)` on a Variant segfaults — a polymorphic builtin cannot pick an overload statically | — |
 | bug-a-libcfree-unresolved-extern-silent-zero | C | 68 | bug | libc-free link: unresolved external symbol patched to 0 instead of a link error | — |
 | bug-a-managed-record-return-into-reused-dest-leaks | A | 55 | bug | Managed-record function results into a REUSED destination leak the old payload | — |
+| bug-a-managed-string-arg-temp-leaks-on-loop-reuse | A | 45 | bug | Managed-string arg-materialization temp leaks one handle per loop iteration | — |
 | bug-a-method-pointer-virtual-captures-static-address | A | 45 | bug | @baseref.VirtualMethod binds the STATIC base method address, not the virtual override — a method pointer to a virtual method via a base-typed ref calls the wrong method (silent), and contradicts pxx's own direct virtual dispatch | — |
 | bug-a-nilpy-and-or-in-unavailable-in-call-arguments | A | 65 | bug | NilPy `and` / `or` / `in` / `is` do not work in a CALL ARGUMENT | — |
 | bug-a-nilpy-container-equality-compares-identity | A | 55 | bug | NilPy: `==` on a list or dict compares IDENTITY, not contents | — |
@@ -2678,7 +2678,6 @@ _none_
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [U] decide-gpc-as-corpus-target (unblocks 1)
 - [p 45] [U] decide-ilja-tui-render-model (unblocks 1)
-- [p 45] [A] bug-a-managed-string-arg-temp-leaks-on-loop-reuse
 - [p 45] [N] bug-n-pyeval-per-exec-leaks
 - [p 45] [T] bug-t-watcher-dev-contention-false-newred
 - [p 45] [A] chore-makefile-selfhost-iterate-to-convergence
