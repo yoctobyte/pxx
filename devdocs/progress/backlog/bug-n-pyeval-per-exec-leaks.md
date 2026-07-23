@@ -109,9 +109,38 @@ byte-identical + -dPXX_LIBC_HEAP probe):
    4999 leaks -> 0. doloop 3,248,400 -> 2,957,688 B (−291 KB), memcheck
    errors 1138 -> 1118.
 
-Remaining (NOT yet fixed): the bulk of the doloop 2.9 MB is in the NilPy
-uforth VM methods themselves — needs a specific-pattern repro. Generic
-str-temp / container-of-str / dict-string-key / method-str-arg all probe
-CLEAN now; the residual pattern is still unidentified. Startup one-offs
-(build_base_vm bytearray 1 MB, VM.create) are not per-iter and low
-priority.
+## Progress 2026-07-23 (session 5 — DOMINANT per-iter leak fixed)
+
+**Tooling breakthrough: build the profiled binary with `-g`.** The default
+(-O2) binary has NO frame pointers, so valgrind's stacks are unreliable
+(bogus `_start`/thunk frames, misattribution). `pascal26 -g` emits frame
+pointers → valgrind gives real caller chains (one persistent spurious
+`_start` thunk frame remains — it's the register-saving PXXStrFromLit
+wrapper; the frame ABOVE it is the true caller). This is what finally
+pinned the leaks. Also: `5 3 XOR DROP` in a DO-LOOP is a compact repro
+(XOR is a PYTHON-bodied word → pyeval per iter); an empty `DO LOOP` and
+native `DUP DROP` do NOT scale.
+
+4. **isNilPy inline managed-string-deref to const param** (a0574d81 +
+   d1529d77) — THE dominant per-exec leak. `PyEqCI(meths[i].NamePtr^,
+   name)` in PyFindMethCI passed a `^AnsiString` deref straight to a
+   `const AnsiString` param; compiled under isNilPy that materialised an
+   UNOWNED copy per comparison, leaking one handle per method scanned, per
+   lookup. PyFindMethCI runs once per host-method dispatch (PyHasAttr /
+   PyHostCall) = every PYTHON-word eval. Fixed by binding the deref to a
+   skLocal first (`mn := meths[i].NamePtr^`), which gets the normal ungated
+   scope-exit release. Same fix applied to the two sibling deref-to-const
+   sites (PyFieldGet kind-23 string field, pystr_repeat_v).
+   **doloop (-dPXX_LIBC_HEAP, 200 iters): 2,957,688 -> 1,003,264 B (−66%),
+   67,115 -> 17,808 blocks. Per-iteration leak 249 -> ~6 blocks/iter
+   (−97.5%).** At N=800: 8.9 MB -> 1.18 MB.
+   Underlying COMPILER bug filed separately (plain-Pascal `p^`-to-const is
+   clean; only isNilPy-compiled builtins leak the deref temp) — see
+   bug-a-nilpy-managed-deref-to-const-arg-leaks.
+
+Remaining: (a) ~16.6 K blocks of ONE-TIME startup leaks (STD.UFO load —
+PXXStrConcat/FromLit in VM.compile_token / VM.tokenize / _parse_compound_string,
+plus a single 227 KB build_base_vm block) — bounded, freed at exit, low
+priority; (b) a small ~6 blocks/iter residual spread across many
+varying-depth pyeval stacks (no single signature scales >2 in the -g
+profile). The dominant unbounded growth is gone.
