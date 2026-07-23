@@ -1965,15 +1965,31 @@ begin
     subtree through receiver position with their own binding plumbing, and
     spilling it there double-consumed the construction (test_nilpy_forin
     SIGSEGV). A bare `[...].method()` receiver still leaks — rare shape. }
+  { Two owned-object shapes reach here as a construction-in-arg:
+    (a) a class NEW (`SomeClass(...)`, an IR_CALL to GetMem, ASTRight = the
+        user class), and
+    (b) a builtin/user call that RETURNS an owned tyClass object — `list(src)`,
+        `dict()`, a factory method — whose result is likewise rc=1 with no
+        binding to consume it. `Frame(list(src))` stored the list in a field
+        (retain -> rc=2) but never released the caller's original rc=1, leaking
+        one container per call (uforth run_forth_word's `Frame(list(body))` —
+        the top per-iteration doloop leak found via DHAT). Both spill to the
+        same owning temp whose inline release-of-previous drops the prior trip's
+        object each loop iteration. }
   if isNilPy and (CurrentUnitIdx < 0) and (not isRefArg) and
      (cpi >= 0) and (pathIdx >= 1) and (pathIdx < Procs[cpi].ParamCount) and
      (Procs[cpi].Params[pathIdx].TypeKind = tyClass) and
      (ASTKind[argAST] = AN_CALL) and
-     (Integer(ASTIVal[argAST]) = -Ord(tkGetMem)) and
-     (Integer(ASTRight[argAST]) >= REC_UCLASS_BASE) then
+     ( ((Integer(ASTIVal[argAST]) = -Ord(tkGetMem)) and
+        (Integer(ASTRight[argAST]) >= REC_UCLASS_BASE))
+       or (IntToTypeKind(ASTTk[argAST]) = tyClass) ) then
   begin
     tmpSym := AllocVar('', tyClass);
-    Syms[tmpSym].RecName := ASTRight[argAST];
+    if (Integer(ASTIVal[argAST]) = -Ord(tkGetMem)) and
+       (Integer(ASTRight[argAST]) >= REC_UCLASS_BASE) then
+      Syms[tmpSym].RecName := ASTRight[argAST]
+    else
+      Syms[tmpSym].RecName := REC_NONE;   { generic owned object; PXXObjRelease is magic-guarded }
     value := IRLowerAST(argAST);
     arcCall := FindProc('PXXObjRelease');
     if arcCall >= 0 then
