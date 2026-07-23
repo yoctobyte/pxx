@@ -1547,7 +1547,6 @@ type
 var
   Closures: array of TPyClosure;
   ClosureN: Integer;
-  PyDbgExecN: Int64;
 
   PyClosureMagicMarker: Integer;   { its ADDRESS is the closure sentinel }
 
@@ -3455,7 +3454,6 @@ end;
 procedure EvalPyStmts(const src: AnsiString; g: TPyDict; l: TPyDict);
 var cslot: Integer;
 begin
-  PyDbgSite := 1;
   EnvG := g;
   { locals live in pyeval's own arrays (see LclSet); the `l` dict argument is
     accepted for API compatibility with Python's exec(src, g, l) but is not the
@@ -3493,9 +3491,7 @@ begin
   SkipSeparators;
   while (CurKind <> PK_EOF) and (CurKind <> PK_DEDENT) do
   begin
-    PyDbgSite := 2;
     ExecStatement;
-    PyDbgSite := 3;
     if (not StmtWasCompound) and (CurKind <> PK_EOF) and (CurKind <> PK_DEDENT)
        and not (IsOp(';') or (CurKind = PK_NL)) then
       EvalError('expected end of statement, got "' + CurText + '"');
@@ -3507,15 +3503,8 @@ begin
     the separate `ns["__body__"]()` reaches it: the value's payload is
     &PyBodyTramp, unboxed and called through the dynamic-call ABI. Keyed with a
     VT_STRING matching NilPy's dict key (PyVarEq compares string content). }
-  PyDbgSite := 4;
   if (l <> nil) and (FnFind('__body__') >= 0) then
     l.store(MakeStr('__body__'), PyBoxObj(Pointer(@PyBodyTramp)));
-  PyDbgSite := 0;
-  Inc(PyDbgExecN);
-  if PyDbgExecN mod 20000 = 0 then
-    for cslot := 0 to 8 do
-      if PyDbgSiteCnt[cslot] > 0 then
-        writeln('DBG site=', cslot, ' bumps=', PyDbgSiteCnt[cslot], ' bytes=', PyDbgSiteB[cslot]);
 end;
 
 end.

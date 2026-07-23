@@ -271,9 +271,6 @@ var
                         None sentinel or boxed int reaching a retain would
                         otherwise fault reading [p-8]) }
   HeapHigh : Int64;   { highest arena end ever mapped }
-  PyDbgSite: Int64;  { TEMP }
-  PyDbgSiteCnt: array[0..15] of Int64;  { TEMP: bump allocs per site }
-  PyDbgSiteB: array[0..15] of Int64;
   FreeList : Int64;   { head of the LARGE (> HEAP_BIN_MAX) free list, 0 = empty }
   { bin[i] holds blocks of exactly (i+1)*8 bytes. BSS-zeroed = all empty. }
   FreeBins : array[0..HEAP_BIN_COUNT-1] of Int64;
@@ -480,11 +477,6 @@ begin
     Anything that changes the bump path (arena reuse, guard bytes, an arena from
     a source that is not zero) must re-produce the guarantee here, not push it
     back onto callers. }
-  if PyDbgSite < 16 then
-  begin
-    PyDbgSiteCnt[PyDbgSite] := PyDbgSiteCnt[PyDbgSite] + 1;
-    PyDbgSiteB[PyDbgSite] := PyDbgSiteB[PyDbgSite] + size;
-  end;
   need := size + 8;                         { 8-byte size header + payload }
   if (HeapPtr = 0) or (HeapEnd - HeapPtr < need) then
   begin
