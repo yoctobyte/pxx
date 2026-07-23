@@ -1714,6 +1714,9 @@ begin
              through PXXObjRelease's finalizer for a held container
              (feature-nilpy-object-reclamation) }
           PXXVarClear(itemAddr);
+        6: { NilPy class-typed field: drop the instance's ref on its child
+             (magic-guarded — a Pascal instance stored here no-ops) }
+          PXXObjRelease(Pointer(PWord(itemAddr)^));
       end;
       j := j + 1;
     end;

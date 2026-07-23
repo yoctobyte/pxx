@@ -54,7 +54,11 @@ function ClassFieldNeedsFinal(fi: Integer): Boolean;
   a much broader change than destroy-time finalize. }
 begin
   ClassFieldNeedsFinal := FieldIsManaged(fi) or FieldIsComInterface(fi) or
-    ((UFldTk[fi] = Ord(tyVariant)) and not UFldIsArray[fi]);
+    ((UFldTk[fi] = Ord(tyVariant)) and not UFldIsArray[fi]) or
+    { NilPy only: class-typed fields are refcounted bindings (kind 6) —
+      released on finalize so a dying instance drops its children. In Pascal
+      mode a class field is a manual-lifetime pointer and stays out. }
+    (isNilPy and (UFldTk[fi] = Ord(tyClass)) and not UFldIsArray[fi]);
 end;
 
 function RecordManagedFieldCount(ci: Integer): Integer;
@@ -752,6 +756,8 @@ begin
               mKind := 4
             else if UFldTk[fi] = Ord(tyVariant) then
               mKind := 5                 { Variant slot (PXXVarClear on finalize) }
+            else if UFldTk[fi] = Ord(tyClass) then
+              mKind := 6                 { object binding (PXXObjRelease on finalize) }
             else
               mKind := 3;
             PatchDataI32(mHdr + 4, mKind);
