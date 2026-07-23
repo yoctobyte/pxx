@@ -108,6 +108,13 @@ type
     FCap: Integer;
     FKeys: Pointer;
     FVals: Pointer;
+    { Open-addressing hash INDEX over the insertion-ordered FKeys/FVals arrays
+      (feature-nilpy-dict): FHash holds FHashCap Int32 slots, each an index into
+      FKeys (-1 = empty). FKeys stays the ordered storage (iteration order +
+      delete-shift preserved); the index just makes indexof O(1) instead of a
+      linear scan. Rebuilt on grow and on remove (which shifts the tail). }
+    FHash: Pointer;
+    FHashCap: Integer;
     constructor Create;
     function count: Integer;
     function indexof(const k: Variant): Integer;
@@ -1475,6 +1482,8 @@ begin
   FCap := 0;
   FKeys := nil;
   FVals := nil;
+  FHash := nil;
+  FHashCap := 0;
 end;
 
 function TPyDict.count: Integer;
@@ -1487,9 +1496,11 @@ begin
   Result := d.FLen;
 end;
 
+procedure PyDictRehash(d: TPyDict; newHashCap: Integer); forward;
+
 procedure PyDictGrow(d: TPyDict; need: Integer);
 var
-  newCap, k: Integer;
+  newCap, k, hashCap: Integer;
   newKeys, newVals: Pointer;
   src, dst: PPyVarRec;
 begin
@@ -1522,21 +1533,115 @@ begin
   d.FKeys := newKeys;
   d.FVals := newVals;
   d.FCap := newCap;
+  { Rebuild the hash index at ~2x capacity (load factor <= 0.5), power of two so
+    indexof's `and (FHashCap-1)` masks correctly. Reinserts the FLen live keys. }
+  hashCap := 16;
+  while hashCap < newCap * 2 do hashCap := hashCap * 2;
+  PyDictRehash(d, hashCap);
+end;
+
+function PyStrBytesHash(a: PChar; n: Integer): NativeUInt;
+{ FNV-1a over n bytes at a. }
+var i: Integer; h: NativeUInt;
+begin
+  h := NativeUInt($cbf29ce484222325);   { FNV-1a 64-bit offset basis }
+  if a <> nil then
+    for i := 0 to n - 1 do
+      h := (h xor NativeUInt(Byte(a[i]))) * NativeUInt($100000001b3);   { FNV prime }
+  Result := h;
+end;
+
+function PyVarHashKey(p: PPyVarRec): NativeUInt;
+{ Hash CONSISTENT WITH PyVarEq (equal keys MUST hash equal):
+  - int-family VT_INT/VT_INT64/VT_BOOL (1/2/4): by payload, tag-independent
+    (PyVarEq compares these cross-tag by value);
+  - VT_PROMO_INT64 (8193) and VT_STRING (6): by string CONTENT;
+  - else: same VType required by PyVarEq, so hash (VType, payload).
+  A wrong hash here silently loses keys, so this mirrors PyVarEq arm-for-arm. }
+var h: NativeUInt; sp: PPyAnsiString;
+begin
+  if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
+    h := NativeUInt(p^.Payload)
+  else if p^.VType = 8193 then
+  begin
+    sp := PPyAnsiString(@p^.Payload);
+    h := PyStrBytesHash(PChar(sp^), Length(sp^));
+  end
+  else if p^.VType = 6 then
+  begin
+    if Pointer(p^.Payload) = nil then h := PyStrBytesHash(nil, 0)
+    else h := PyStrBytesHash(PChar(p^.Payload),
+                             Integer(PInt64(NativeInt(p^.Payload) - 8)^));
+  end
+  else
+    h := (NativeUInt(p^.VType) * NativeUInt($100000001b3)) xor NativeUInt(p^.Payload);
+  { murmur3 fmix64 avalanche so the low bits that FHashCap-1 masks are well mixed }
+  h := h xor (h shr 33);
+  h := h * NativeUInt($ff51afd7ed558ccd);
+  h := h xor (h shr 33);
+  h := h * NativeUInt($c4ceb9fe1a85ec53);
+  h := h xor (h shr 33);
+  Result := h;
+end;
+
+procedure PyDictHashPut(d: TPyDict; keyIdx: Integer);
+{ Insert FKeys[keyIdx]'s slot index into the open-addressing table. Caller
+  guarantees the key is not already present, so no PyVarEq dup check here. }
+var mask, pos: NativeUInt; slotp: PInteger;
+begin
+  mask := NativeUInt(d.FHashCap) - 1;
+  pos := PyVarHashKey(PPyVarRec(NativeInt(d.FKeys) + keyIdx * 16)) and mask;
+  while True do
+  begin
+    slotp := PInteger(NativeInt(d.FHash) + NativeInt(pos) * 4);
+    if slotp^ < 0 then begin slotp^ := keyIdx; Exit; end;
+    pos := (pos + 1) and mask;
+  end;
+end;
+
+procedure PyDictRehash(d: TPyDict; newHashCap: Integer);
+{ (Re)build the hash index at newHashCap (a power of two) from the current
+  FKeys/FLen. Called after a grow or a remove-shift changes the layout. }
+var i: Integer;
+begin
+  if d.FHash <> nil then FreeMem(d.FHash);
+  d.FHashCap := newHashCap;
+  GetMem(d.FHash, newHashCap * 4);
+  for i := 0 to newHashCap - 1 do
+    PInteger(NativeInt(d.FHash) + i * 4)^ := -1;
+  for i := 0 to d.FLen - 1 do
+    PyDictHashPut(d, i);
 end;
 
 function TPyDict.indexof(const k: Variant): Integer;
 var
   i: Integer;
   q: PPyVarRec;
+  mask, pos: NativeUInt;
+  idx: Integer;
 begin
   Result := -1;
+  if FLen = 0 then Exit;
   q := PPyVarRec(@k);
-  for i := 0 to FLen - 1 do
-    if PyVarEq(PPyVarRec(NativeInt(FKeys) + i * 16), q) then
-    begin
-      Result := i;
-      Exit;
-    end;
+  if FHashCap = 0 then
+  begin
+    { defensive linear fallback — store() always builds the index, so this only
+      runs if a dict somehow held entries with no index }
+    for i := 0 to FLen - 1 do
+      if PyVarEq(PPyVarRec(NativeInt(FKeys) + i * 16), q) then
+      begin Result := i; Exit; end;
+    Exit;
+  end;
+  mask := NativeUInt(FHashCap) - 1;
+  pos := PyVarHashKey(q) and mask;
+  while True do
+  begin
+    idx := PInteger(NativeInt(FHash) + NativeInt(pos) * 4)^;
+    if idx < 0 then Exit;   { empty slot -> key absent }
+    if PyVarEq(PPyVarRec(NativeInt(FKeys) + idx * 16), q) then
+    begin Result := idx; Exit; end;
+    pos := (pos + 1) and mask;
+  end;
 end;
 
 function TPyDict.fetch(const k: Variant): Variant;
@@ -1575,11 +1680,15 @@ begin
   i := indexof(k);
   if i < 0 then
   begin
-    PyDictGrow(Self, FLen + 1);
+    PyDictGrow(Self, FLen + 1);   { rebuilds the hash index if it grew }
     i := FLen;
     src := PPyVarRec(@k);
     dst := PPyVarRec(NativeInt(FKeys) + i * 16);
     PyVarSlotSet(dst, src);
+    { register the new key in the index (grow keeps load factor <= 0.5, so a
+      slot is always free). FHashCap is 0 only for the never-grown empty dict,
+      which cannot reach here — PyDictGrow(1) always allocates it. }
+    PyDictHashPut(Self, i);
     FLen := FLen + 1;
   end;
   src := PPyVarRec(@v);
@@ -1647,6 +1756,9 @@ begin
     dst^.Payload := src^.Payload;
   end;
   FLen := FLen - 1;
+  { the tail shift renumbered every entry after the hole, so the stored slot
+    indices are stale — rebuild the index from the new layout. }
+  if FHashCap > 0 then PyDictRehash(Self, FHashCap);
 end;
 
 function TPyDict.pop(const k: Variant; const d: Variant): Variant;
@@ -3136,7 +3248,9 @@ begin
     end;
     if d.FKeys <> nil then FreeMem(d.FKeys);
     if d.FVals <> nil then FreeMem(d.FVals);
-    d.FKeys := nil; d.FVals := nil; d.FLen := 0; d.FCap := 0;
+    if d.FHash <> nil then FreeMem(d.FHash);
+    d.FKeys := nil; d.FVals := nil; d.FHash := nil;
+    d.FLen := 0; d.FCap := 0; d.FHashCap := 0;
     Exit;
   end;
   if o is TPyBytes then
