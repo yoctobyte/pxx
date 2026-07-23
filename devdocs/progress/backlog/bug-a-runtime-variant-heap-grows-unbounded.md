@@ -359,3 +359,52 @@ the RSS-slope test doesn't apply directly. Ticket stays OPEN for that: confirm
 whether core's 100 MB grows with a longer/looped core run (leak) or is a flat
 high-watermark (just memory-heavy dynamic dispatch). If flat, this umbrella is
 effectively done — the "unbounded growth → OOM" concern is resolved.
+
+## core residual CHARACTERISED (Track A, 2026-07-23): it is a LEAK, O(n²), in the `:` / `S"` paths
+
+Per the user's request, characterised whether core's 100 MB is a leak or a
+static high-watermark. **It is a leak, and super-linear (≈O(n²)) in the
+word-definition path.** Method: run the core suite 1×/2×/3× (tester.fr +
+core.fr repeated), and isolate the constructs.
+
+Core suite repeated (peak RSS, default mmap arena):
+
+| workload | peak RSS |
+| --- | --- |
+| core ×1 | 100 MB |
+| core ×2 | 385 MB |
+| core ×3 | 847 MB |
+
+Isolated constructs (2000 ops each, arithmetic control):
+
+| workload | peak RSS |
+| --- | --- |
+| 2000 colon defs `: wN 1 2 + drop ;` | 200 MB |
+| 2000 `S" ..." 2DROP` string literals | 324 MB |
+| 2000-iter arithmetic `1 2 + DROP` (control) | **14 MB flat** |
+
+Colon-def scaling (the smoking gun — quadratic, not linear):
+
+| N defs | peak RSS |
+| --- | --- |
+| 1000 | 42 MB |
+| 2000 | 200 MB |
+| 4000 | 838 MB |
+
+Doubling N ~quadruples RSS → **O(n²) memory in dictionary building.** The
+arithmetic/data-stack path is FLAT (14 MB) — the earlier fixes hold. The
+residual is exclusively the **compile/dictionary path**: each `:` definition
+(and each `S"` literal) costs memory that grows with the number of prior
+definitions. Classic shape of a growing container (uforth's word dictionary —
+a list/dict held in a long-lived global variant) being copied or re-boxed on
+every append with the old copy not reclaimed, i.e. append is O(n) copy and the
+prior container leaks → O(n²) total.
+
+**Handoff:** this is the [[feature-nilpy-object-reclamation]] lane, specifically
+the **container-overwrite / long-lived-global-variant** reclamation path (not
+the local-reassign or scope-exit paths already fixed). Likely uforth's
+dictionary global reassigned per definition; confirm whether the overwrite of a
+container-holding GLOBAL variant reclaims the old container (the fixed
+reclamation covered locals/scoped containers; a global reassigned in a loop is
+the untested seam). The microbench scoreboard is now flat/below CPython; this
+`:`/`S"` O(n²) path is the last open layer.
