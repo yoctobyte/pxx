@@ -479,7 +479,7 @@ begin
 end;
 
 function PyFindMethCI(cls: PClassRTTI; const name: AnsiString): PMethInfo;
-var curr: PClassRTTI; meths: PMethInfo; i: Integer; lname: AnsiString;
+var curr: PClassRTTI; meths: PMethInfo; i: Integer; lname, mname: AnsiString;
 begin
   PyFindMethCI := nil;
   lname := PyLowerStr(name);
@@ -490,11 +490,20 @@ begin
     begin
       meths := curr^.MethsPtr;
       for i := 0 to Integer(curr^.MethCount) - 1 do
-        if PyLowerStr(meths[i].NamePtr^) = lname then
+      begin
+        { bind the lowered name to a LOCAL: the tyAnsiString store releases the
+          previous iteration's handle (rebind ARC), and the final one drops at
+          proc exit. The old inline `PyLowerStr(...) = lname` leaked the fresh
+          call result every iteration — the top per-exec leak the valgrind
+          libc-heap profile attributed to PyHostCall (host-method lookup runs
+          once per PYTHON-word call). }
+        mname := PyLowerStr(meths[i].NamePtr^);
+        if mname = lname then
         begin
           PyFindMethCI := @meths[i];
           Exit;
         end;
+      end;
     end;
     curr := PClassRTTI(curr^.ParentRTTI);
   end;
