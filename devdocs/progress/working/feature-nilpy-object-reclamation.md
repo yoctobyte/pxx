@@ -69,7 +69,7 @@ binding ARC + scope-exit release (owned = construction/call results via
 return-retain; borrows retain; field-store ARC pulled forward; PXXObjPlausible
 heap-envelope guard).
 
-doloop RSS 595 -> 463 MB. Remaining tail to the <40 MB target:
+doloop RSS 595 -> 369 MB (as of the valgrind-profile night). Remaining tail to the <40 MB target:
 - pyeval-side pinning (raw retains at PPyRec writes never released by pyeval's
   own storage; LclSet/globals lifetime)
 - hidden desugar temps ('__py_*', '') excluded from ARC — their construction
