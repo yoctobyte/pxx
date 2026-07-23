@@ -468,9 +468,19 @@ begin
     end;
     sigPi := RegisterProc('$proctype', sigIsFunc, sigRet, sigN, sigPNames, sigPTypes);
     Procs[sigPi].BodyAddr := -1;
+    { Record each class-typed Callable-parameter's rec id in ProcParamRecId —
+      the per-param class store the call-marshalling path actually reads
+      (ir.inc coerceParamSym / LastTypeRecId). RegisterProc leaves every raw
+      param's Params[].SymIdx = -1 (no allocated Syms entry), so the old
+      `Syms[Procs[sigPi].Params[depth].SymIdx].RecName := ...` was `Syms[-1]` —
+      a latent out-of-bounds write 40 bytes before the Syms base (silent when
+      it lands on padding, memory-corrupting when a layout shift puts a live
+      block there) that ALSO never recorded the class (nothing reads a raw
+      param's Syms RecName). }
     for depth := 0 to sigN - 1 do
-      if (sigPTypes[depth] = tyClass) and (sigPCis[depth] >= 0) then
-        Syms[Procs[sigPi].Params[depth].SymIdx].RecName :=
+      if (sigPTypes[depth] = tyClass) and (sigPCis[depth] >= 0) and
+         (depth < MAX_PROC_PARAMS) then
+        ProcParamRecId[sigPi * MAX_PROC_PARAMS + depth] :=
           REC_UCLASS_BASE + sigPCis[depth];
     PyAnnLastProcSig := sigPi;
     Result := tyPointer;
