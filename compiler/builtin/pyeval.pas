@@ -498,7 +498,7 @@ begin
 end;
 
 function PyFindMethCI(cls: PClassRTTI; const name: AnsiString): PMethInfo;
-var curr: PClassRTTI; meths: PMethInfo; i: Integer; mn: AnsiString;
+var curr: PClassRTTI; meths: PMethInfo; i: Integer;
 begin
   PyFindMethCI := nil;
   curr := cls;
@@ -508,20 +508,16 @@ begin
     begin
       meths := curr^.MethsPtr;
       for i := 0 to Integer(curr^.MethCount) - 1 do
-      begin
-        { Bind the method name to a LOCAL before comparing: passing the raw
-          `meths[i].NamePtr^` (a ^AnsiString deref) to a `const AnsiString`
-          param materialised an unowned copy per compare that leaked once per
-          method scanned, per lookup (PyHasAttr / PyHostCall host dispatch, the
-          dominant uforth doloop per-exec leak). The local rebinds (release-of-
-          old) each iteration and drops at scope exit. }
-        mn := meths[i].NamePtr^;
-        if PyEqCI(mn, name) then
+        { The `meths[i].NamePtr^` (^AnsiString deref) to a `const AnsiString`
+          param no longer leaks: the isNilPy arg lowering now owns a
+          managed-string deref arg via a hidden local (ir.inc,
+          bug-a-nilpy-managed-deref-to-const-arg-leaks). The earlier per-site
+          `mn := NamePtr^` bind is therefore unnecessary. }
+        if PyEqCI(meths[i].NamePtr^, name) then
         begin
           PyFindMethCI := @meths[i];
           Exit;
         end;
-      end;
     end;
     curr := PClassRTTI(curr^.ParentRTTI);
   end;
@@ -781,7 +777,7 @@ begin
     18: res := MakeFloat(PSingle(p)^);           { tySingle }
     19: res := MakeFloat(PDouble(p)^);           { tyDouble }
     22: res := PVariant(p)^;                      { tyVariant — copy the slot }
-    23: begin gname := PAnsiString(p)^; res := MakeStr(gname); end;  { tyAnsiString — bind to a local so the deref temp is released (isNilPy const-arg leak) }
+    23: res := MakeStr(PAnsiString(p)^);          { tyAnsiString (deref arg owned by the isNilPy arg lowering) }
   else
     { class / aggregate field: the slot holds an object pointer; expose it as a
       VT_OBJECT so subscripts and method calls can reach the container. A field

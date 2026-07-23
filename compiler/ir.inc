@@ -7312,7 +7312,16 @@ begin
           (ASTKind[ASTLeft[item]] <> AN_IDENT) and
           (ASTKind[ASTLeft[item]] <> AN_FIELD) and
           (ASTKind[ASTLeft[item]] <> AN_INDEX) and
-          (ASTKind[ASTLeft[item]] <> AN_DEREF);
+          { A managed-string DEREF value (`p^`, p: ^AnsiString) is normally a
+            borrow (excluded), but under isNilPy passing it directly to a
+            `const AnsiString` param leaks one handle per call — the isNilPy
+            arg lowering materialises an unowned copy that never releases
+            (bug-a-nilpy-managed-deref-to-const-arg-leaks; plain Pascal `p^`-
+            to-const is clean, so this fires under isNilPy only). Route it
+            through the owning-temp path instead: the hidden local's STORE
+            retains a proper +1 (release-of-old on loop reuse) and scope exit
+            frees it — exactly the `mn := p^` bind the hot call sites used. }
+          ((ASTKind[ASTLeft[item]] <> AN_DEREF) or isNilPy);
 
         { Auto const char* marshalling: a string argument passed to a Pointer
           parameter gets the same +8 length-prefix skip as an explicit PChar()
@@ -7539,7 +7548,9 @@ begin
            (ASTKind[ASTLeft[item]] <> AN_IDENT) and
            (ASTKind[ASTLeft[item]] <> AN_FIELD) and
            (ASTKind[ASTLeft[item]] <> AN_INDEX) and
-           (ASTKind[ASTLeft[item]] <> AN_DEREF) then
+           { isNilPy: own a `p^` managed-string arg — see the identical clause
+             above (bug-a-nilpy-managed-deref-to-const-arg-leaks). }
+           ((ASTKind[ASTLeft[item]] <> AN_DEREF) or isNilPy) then
         begin
           { materialised managed-string arg through a proc variable: hidden
             owning local, pass by borrow — see AN_CALL / AN_VIRTUAL_CALL }
@@ -7647,7 +7658,16 @@ begin
           (ASTKind[ASTLeft[item]] <> AN_IDENT) and
           (ASTKind[ASTLeft[item]] <> AN_FIELD) and
           (ASTKind[ASTLeft[item]] <> AN_INDEX) and
-          (ASTKind[ASTLeft[item]] <> AN_DEREF);
+          { A managed-string DEREF value (`p^`, p: ^AnsiString) is normally a
+            borrow (excluded), but under isNilPy passing it directly to a
+            `const AnsiString` param leaks one handle per call — the isNilPy
+            arg lowering materialises an unowned copy that never releases
+            (bug-a-nilpy-managed-deref-to-const-arg-leaks; plain Pascal `p^`-
+            to-const is clean, so this fires under isNilPy only). Route it
+            through the owning-temp path instead: the hidden local's STORE
+            retains a proper +1 (release-of-old on loop reuse) and scope exit
+            frees it — exactly the `mn := p^` bind the hot call sites used. }
+          ((ASTKind[ASTLeft[item]] <> AN_DEREF) or isNilPy);
         if argIsManagedTemp then
         begin
           hiddenArgSym := AllocVar('', tyAnsiString);
@@ -8515,7 +8535,9 @@ begin
            (ASTKind[ASTLeft[item]] <> AN_IDENT) and
            (ASTKind[ASTLeft[item]] <> AN_FIELD) and
            (ASTKind[ASTLeft[item]] <> AN_INDEX) and
-           (ASTKind[ASTLeft[item]] <> AN_DEREF) then
+           { isNilPy: own a `p^` managed-string arg — see the identical clause
+             above (bug-a-nilpy-managed-deref-to-const-arg-leaks). }
+           ((ASTKind[ASTLeft[item]] <> AN_DEREF) or isNilPy) then
         begin
           { materialised managed-string arg: bind to a hidden owning local and
             pass by borrow (ARC coercion + no per-call leak) — see AN_CALL }
@@ -8620,7 +8642,16 @@ begin
           (ASTKind[ASTLeft[item]] <> AN_IDENT) and
           (ASTKind[ASTLeft[item]] <> AN_FIELD) and
           (ASTKind[ASTLeft[item]] <> AN_INDEX) and
-          (ASTKind[ASTLeft[item]] <> AN_DEREF);
+          { A managed-string DEREF value (`p^`, p: ^AnsiString) is normally a
+            borrow (excluded), but under isNilPy passing it directly to a
+            `const AnsiString` param leaks one handle per call — the isNilPy
+            arg lowering materialises an unowned copy that never releases
+            (bug-a-nilpy-managed-deref-to-const-arg-leaks; plain Pascal `p^`-
+            to-const is clean, so this fires under isNilPy only). Route it
+            through the owning-temp path instead: the hidden local's STORE
+            retains a proper +1 (release-of-old on loop reuse) and scope exit
+            frees it — exactly the `mn := p^` bind the hot call sites used. }
+          ((ASTKind[ASTLeft[item]] <> AN_DEREF) or isNilPy);
         if argIsManagedTemp then
         begin
           { a managed-string temp must outlive the call; same hidden slot the other

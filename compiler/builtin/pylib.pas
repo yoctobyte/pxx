@@ -2182,7 +2182,6 @@ end;
 function pystr_repeat_v(const v: Variant; n: Int64): AnsiString;
 var
   p: PPyVarRec;
-  s: AnsiString;
 begin
   p := PPyVarRec(@v);
   if p^.VType <> 6 then
@@ -2190,10 +2189,10 @@ begin
     writeln('Runtime error: cannot repeat a non-string value');
     Halt(219);
   end;
-  { bind the deref to a local so the materialised temp is released
-    (isNilPy const-arg deref leak, see PyFindMethCI) }
-  s := PPyAnsiString(@p^.Payload)^;
-  Result := pystr_repeat(s, n);
+  { the `PPyAnsiString(@p^.Payload)^` deref arg is owned by the isNilPy arg
+    lowering (bug-a-nilpy-managed-deref-to-const-arg-leaks), so no per-site
+    bind is needed. }
+  Result := pystr_repeat(PPyAnsiString(@p^.Payload)^, n);
 end;
 
 function pystr_repeat(const s: AnsiString; n: Int64): AnsiString;
