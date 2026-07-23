@@ -408,3 +408,42 @@ container-holding GLOBAL variant reclaims the old container (the fixed
 reclamation covered locals/scoped containers; a global reassigned in a loop is
 the untested seam). The microbench scoreboard is now flat/below CPython; this
 `:`/`S"` O(n²) path is the last open layer.
+
+## core O(N²) fully ROOT-CAUSED (Track A, 2026-07-23) — three distinct causes, NOT one leak
+
+Dug into the core residual (uforth defs `: wN 1 2 + drop ;`, N=1000/2000/4000).
+CPython uforth runs the SAME source flat/linear (RSS 24→26 MB, time
+0.26→0.40s), so every O(N²) below is pxx-introduced, not uforth's algorithm.
+
+**Decisive split — memory O(N²) is the ALLOCATOR, not a leak:**
+
+| build | defs RSS 1k/2k/4k | time |
+| --- | --- | --- |
+| mmap arena (default) | 42 / 200 / 838 MB — **O(N²)** | O(N²) |
+| libc heap (-dPXX_LIBC_HEAP) | 7 / 9 / 13 MB — **LINEAR** | O(N²) |
+
+Same program, linear RSS under libc → the O(N²) RSS is the **mmap arena not
+reusing freed large blocks**, not leaked-and-lost memory. Three root causes,
+each its own fix:
+
+1. **NilPy dict insert/lookup is O(N)** (linear, not hashed) → O(N²) compile
+   TIME, and each growing dict realloc frees a >512 B buffer.
+   → [[bug-nilpy-dict-insert-lookup-linear-not-hashed]] (the biggest lever:
+   fixes the time AND most of the churn).
+2. **Arena large-block (>512 B) reuse gap.** builtinheap exact-size bins stop at
+   HEAP_BIN_MAX=512 B; larger frees go to a FreeList that does not reuse a freed
+   N-byte buffer for a later (N+k)-byte request, so dict-realloc churn bumps
+   HeapPtr forever → O(N²) high-water. libc coalesces → linear. This is the
+   "add capacity, don't release old" at the allocator level. Track O
+   (heap allocator; [[project_heap_size_class_allocator]]). Improving large-block
+   reuse/coalescing would make even pathological churn linear-RSS.
+3. **`bytes(seq[a:b])` leaks the intermediate** — a genuine (definitely-lost)
+   leak in `VM._snapshot_input_state` (3×/line), linear here but unbounded in a
+   bytes-slice loop → [[bug-nilpy-bytes-of-slice-leaks-intermediate]].
+
+**Status of the umbrella:** the ORIGINAL unbounded-growth symptom (microbench
+552 MB) is fixed and flat/below CPython. The remaining core O(N²) is now fully
+attributed to the three tickets above (dict-O(N) + arena-reuse + bytes-slice),
+none of which is the variant-box/container-lifetime class this umbrella was
+opened for. This umbrella can close once those are filed/tracked; the real work
+moves to #1 (dict) and #2 (arena), with #3 the clean leak.
