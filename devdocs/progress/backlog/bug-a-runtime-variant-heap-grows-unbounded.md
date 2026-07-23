@@ -330,3 +330,32 @@ repros don't hit. Chasing it with more blind repros is diminishing returns;
 Track A would want to profile uforth directly (or instrument PXXAlloc caller
 addresses in a throwaway build) for the last layer. The 16x/28x win is the
 headline; the scoreboard (`make bench-uforth`) tracks any further drop.
+
+## Residual CLOSED on microbench+prelim (Track A, 2026-07-23, @32fdbcda)
+
+The ~1 KB/iter microbench residual was the isNilPy managed-string
+**deref-to-const arg leak** ([[project_nilpy_managed_deref_const_arg_leak_fixed]],
+root-fixed 32fdbcda): PyFindMethCI's `meths[i].NamePtr^` to a `const AnsiString`
+param leaked one handle per method scanned per host-dispatch — the doloop's
+dominant per-exec allocation. Root-fixed in the arg lowering (isNilPy owns a
+managed-string deref arg via a hidden local at all 6 arg-temp sites); the 3
+hand binds are removed.
+
+`uforth_bench --runs 1` after the fix:
+
+| workload | baseline | last-noted | now |
+| --- | --- | --- | --- |
+| microbench-doloop | 552 MB | 35 MB | **13.8 MB** (below CPython's 23) |
+| prelim | 31 MB | 15 MB | **15.1 MB** |
+| core | 158 MB | 103 MB | **100.3 MB** |
+
+microbench RSS is now FLAT across 10k/40k/80k iters (~14 MB, no per-iter
+growth) — the unbounded-growth symptom is GONE on the scoreboard workload,
+and microbench+prelim sit at/below CPython.
+
+**Remaining: `core` at 100 MB (~4x CPython).** Not yet characterised as leak
+vs static working set — core is a fixed (non-iter-parameterised) workload, so
+the RSS-slope test doesn't apply directly. Ticket stays OPEN for that: confirm
+whether core's 100 MB grows with a longer/looped core run (leak) or is a flat
+high-watermark (just memory-heavy dynamic dispatch). If flat, this umbrella is
+effectively done — the "unbounded growth → OOM" concern is resolved.
