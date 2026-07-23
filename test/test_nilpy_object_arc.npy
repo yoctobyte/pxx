@@ -1,0 +1,40 @@
+# Object-reclamation ARC canaries (feature-nilpy-object-reclamation):
+# a shared instance must survive its other binding being rebound or
+# cleared, and heavy rebind churn must neither crash nor corrupt.
+
+# shared list survives the first binding's rebind loop
+a = [1, 2, 3]
+b = a
+i = 0
+while i < 1000:
+    a = [i]
+    i = i + 1
+print(len(b))
+
+# shared dict survives `= None` over its sibling
+c = {"k": 9}
+d = c
+c = None
+print(d["k"])
+
+# container-held object survives its local dying (function scope)
+def keeper(store: dict) -> None:
+    w = [7, 8]
+    store["w"] = w
+
+s = {}
+keeper(s)
+ws = s["w"]
+print(len(ws))
+
+# rebind churn through fields
+class Box:
+    def __init__(self) -> None:
+        self.v = []
+
+bx = Box()
+i = 0
+while i < 1000:
+    bx.v = [i, i]
+    i = i + 1
+print(len(bx.v))
