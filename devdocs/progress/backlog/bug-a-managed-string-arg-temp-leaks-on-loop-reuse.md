@@ -166,14 +166,35 @@ with an under-count you cannot tell an owned handle from a borrowed one at
 the materialisation site (both read rc=1). The ONLY correct fix is to find
 the missing-retain — some assignment of a managed-string handle into a
 persistent slot (Global, record field, array, or a callee's kept copy)
-that does not retain. Hunt method that will work: a use-after-free oracle
-— in the AnsiStr release blob, when a release drives rc to 0, POISON the
-data (e.g. write 0xEE over it) INSTEAD of / before freeing; then any
-still-live owner reading it sees the poison, and a gdb watchpoint on the
-poison-read (or the first byte flipping to 0xEE at an address later found
-in Procs[]/Syms[]/a field) backtraces the reader. Or: shrink the repro
-first — bisect uforth.py down to the minimal file that still miscompiles,
-which makes any of the above tractable.
+that does not retain. STORE_SYM and STORE_MEM both use the SAME move
+classification (BINOP concat / user-CALL IRA>=0 = owned +1, else retain)
+and are consistent, so the leak is a specific callee whose Result does NOT
+carry the +1 the move-assumption relies on — the NRVO / Result-not-excluded
+-from-cleanup family (cf. [[project_variant_fn_return_forward_nrvo_corruption]],
+frozen-string-result). Runtime needle.
+
+### CONFIRMED CAUSAL + a workaround (2026-07-23)
+
+- **`PXXFree` as a no-op (leak everything, `-dPXX_DBG_NOFREE`): uforth
+  compiles CLEAN, 0/8 ASLR runs fail** (vs the fix build 30/30). Definitive
+  proof the over-free is the cause, and a (very leaky) safe fallback.
+- Poison-on-free (`0xEE` over the freed payload, still freed+reused): also
+  0/8 — so the corruption is a use-after-free **READ of freed-but-intact
+  data used as an INDEX** (poison masks it; `0xEEEE…` as a *pointer* would
+  fault but doesn't, so it's an index, then bounds-benign). The freed block
+  is read through a DANGLING reference before reuse.
+- **The corruption is LAYOUT-FLAKY under ASLR** (the "cwd-dependent" tell):
+  a single run may pass. Always measure over ≥20 ASLR runs, OR pin the
+  layout with `setarch -R` + a fixed binary — but note `setarch -R`
+  CHANGES the layout, so a build that corrupts under ASLR may be clean
+  under `setarch -R` and vice-versa; the earlier gdb traces used a debug
+  binary that happened to corrupt deterministically under `setarch -R`.
+- dc2/dc3 (uforth-shaped dataclasses incl. Optional[Callable[["VM"],None]],
+  docstring, ClassVar, `field`) compile CLEAN — the trigger is NOT the
+  dataclass pre-pass; it needs the later body/module compilation. Top-of-
+  file truncation of uforth.py is NOT a valid repro (forward-refs to VM
+  break parse for mainline too). Bisect by DELETING interior bodies while
+  keeping forward-ref stubs.
 
 Gate any fix on: `make test` + self-host fixedpoint + compile uforth.py
 FROM THE REPO ROOT (`./compiler/pascal26 ~/projects/uforth/uforth.py
