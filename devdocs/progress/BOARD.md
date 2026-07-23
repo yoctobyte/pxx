@@ -28,11 +28,12 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (132)
+## backlog (133)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 55 | bug | issue: runtime heap grows unbounded in a dynamic/variant-heavy loop (long-running programs OOM) | — |
+| bug-n-nilpy-char-to-string-arg-leaks | N | 40 | bug | NilPy tyChar arg to a string parameter leaks one handle per call | — |
 | bug-n-pyeval-per-exec-leaks | N | 45 | bug | pyeval leaks per exec() call — forensics from the object-reclamation night | — |
 | bug-nilpy-bitwise-on-float-variant-truncates | A | 30 | bug | NilPy: a bitwise op on a FLOAT variant truncates instead of raising TypeError | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
@@ -2713,6 +2714,7 @@ _none_
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [U] decide-dns-libc-backend-shape (unblocks 1)
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
+- [p 40] [N] bug-n-nilpy-char-to-string-arg-leaks
 - [p 40] [U] decide-nilpy-transitive-nested-def-capture
 - [p 40] [A] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision
