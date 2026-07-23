@@ -144,3 +144,27 @@ plus a single 227 KB build_base_vm block) — bounded, freed at exit, low
 priority; (b) a small ~6 blocks/iter residual spread across many
 varying-depth pyeval stacks (no single signature scales >2 in the -g
 profile). The dominant unbounded growth is gone.
+
+## RESOLVED 2026-07-23 (session 5) — unbounded per-iter leak eliminated
+
+The per-exec (per-iteration) unbounded growth is GONE. Two fixes:
+- **a0574d81** — PyFindMethCI `NamePtr^`→const deref materialised-copy leak
+  (249 → 6 blocks/iter).
+- **04f69cff** — construction-in-arg spill extended to owned-object CALL
+  RESULTS (`Frame(list(src))` etc.), not just class-NEW args (6 → 0.008
+  blocks/iter).
+
+**Proof it's flat:** doloop definitely-lost at N=0 / N=800 / N=3000 =
+9,146 / 9,152 / 9,142 blocks — no growth with iteration count. Total
+3.67 MB → 587 KB. DHAT (`--tool=dhat` on `-g`) confirms no allocation
+site's never-freed count scales with iterations.
+
+Remaining ~9 K blocks are ALL one-time startup and do NOT grow:
+`vm = VM()` (227 KB object graph — allocate-at-startup / free-at-exit app
+design, not a leak) + bounded compile-time temporaries during STD.UFO load
+(InputSource-per-line objects, tokenizer string temps). The latter are real
+but one-time (fixed by source size, reclaimed at process exit) and are
+obscured from precise attribution by the register-saving PXXStrFromLit/Concat
+thunk, which breaks frame-pointer chains even under DHAT. Not worth chasing
+for a run-and-exit tool. Closing the unbounded-leak scope; any future
+one-time-startup cleanup can be a fresh low-prio ticket.
