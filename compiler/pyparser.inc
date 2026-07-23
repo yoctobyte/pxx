@@ -136,6 +136,21 @@ begin
   PyHoistHead := PySeqAppend(PyHoistHead, node);
 end;
 
+{ Requeue a stashed hoist chain IN FRONT of whatever is pending. A header
+  expression's hoisted setup (a literal build in an if/while condition) must
+  flush at the ENCLOSING statement, not be stolen by the first nested suite's
+  own flush — that compiled the build INSIDE the then-branch while the
+  condition read the still-nil temp. }
+procedure PyHoistPrepend(stash: Integer);
+var tail: Integer;
+begin
+  if stash < 0 then Exit;
+  tail := stash;
+  while ASTRight[tail] >= 0 do tail := ASTRight[tail];
+  ASTRight[tail] := PyHoistHead;
+  PyHoistHead := stash;
+end;
+
 { Prepend any hoisted setup statements to `seq`, then clear. Called by each
   statement-sequence builder right after it parses one statement, so the
   expression-comprehension setup lands before the statement that uses it. }
@@ -4115,7 +4130,8 @@ end;
   expression tree (append returns Self). Reached from ParseFactor's PyExprMode
   tkLBrack branch, so nested literals in argument positions work too. }
 procedure PyParseListLiteralT(opener, closer: TTokenKind);
-var ci, recId, node, argNode, sizeNode, callNode, selfArg, valArg, mmi, mpi: Integer;
+var ci, recId, node, argNode, sizeNode, callNode, selfArg, valArg, mmi, mpi,
+    tmpSym, asgn: Integer;
 begin
   Expect(opener, '[');
   ci := FindUClass('TPyList');
@@ -4131,6 +4147,20 @@ begin
   argNode := AllocNode(AN_ARG);
   ASTLeft[argNode] := sizeNode;
   ASTLeft[node] := argNode;
+  { BIND the construction to a hidden temp and append onto the temp IDENT via
+    hoisted statements, yielding the ident as the expression — instead of the
+    old Self-returning call chain whose result doubled as the receiver. The
+    temp OWNS the construction ref (rebind ARC), the scope-exit release drops
+    it, and every consumer of the literal sees a borrowable lvalue — which is
+    what lets arg-position literals reclaim (exec(src, {...}) leaked one
+    container per call) (feature-nilpy-object-reclamation). The comprehension
+    hoist already runs this same statement-queue in every statement context. }
+  tmpSym := AllocVar(PyHiddenName('lit'), tyClass);
+  Syms[tmpSym].RecName := recId;
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(tmpSym);
+  ASTRight[asgn] := node;
+  PyHoistStmt(asgn);
   mmi := FindUMeth(ci, 'append');
   if mmi < 0 then Error('Nil Python: TPyList.append not found');
   mpi := UMthProc_[mmi];
@@ -4149,19 +4179,17 @@ begin
     valArg := AllocNode(AN_ARG);
     ASTLeft[valArg] := CurASTNode;
     selfArg := AllocNode(AN_ARG);
-    ASTLeft[selfArg] := node;
+    ASTLeft[selfArg] := PyMakeIdent(tmpSym);
     ASTRight[selfArg] := valArg;
     callNode := AllocNode(AN_CALL);
     ASTIVal[callNode] := mpi;
     ASTTk[callNode] := Ord(tyClass);
     ASTLeft[callNode] := selfArg;
-    node := callNode;
+    PyHoistStmt(callNode);
     if not Eat(tkComma) then break;
   end;
   Expect(closer, ']/}');
-  { mark the outermost node so assignment RecName wiring sees a list; a
-    chained append is an ordinary AN_CALL whose result class is TPyList }
-  CurASTNode := node;
+  CurASTNode := PyMakeIdent(tmpSym);
 end;
 
 procedure PyParseListLiteral;
@@ -4178,7 +4206,7 @@ end;
    no statement context. *)
 procedure PyParseDictLiteral;
 var ci, recId, node, argNode, sizeNode, callNode, selfArg, keyArg, valArg,
-    mmi, mpi, keyNode: Integer;
+    mmi, mpi, keyNode, tmpSym, asgn: Integer;
 begin
   Expect(tkBegin, 'open brace');
   ci := FindUClass('TPyDict');
@@ -4194,6 +4222,13 @@ begin
   argNode := AllocNode(AN_ARG);
   ASTLeft[argNode] := sizeNode;
   ASTLeft[node] := argNode;
+  { bind-then-setitem via hoisted statements — see PyParseListLiteralT }
+  tmpSym := AllocVar(PyHiddenName('lit'), tyClass);
+  Syms[tmpSym].RecName := recId;
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(tmpSym);
+  ASTRight[asgn] := node;
+  PyHoistStmt(asgn);
   mmi := FindUMeth(ci, 'setitem');
   if mmi < 0 then Error('Nil Python: TPyDict.setitem not found');
   mpi := UMthProc_[mmi];
@@ -4219,17 +4254,17 @@ begin
     ASTLeft[keyArg] := keyNode;
     ASTRight[keyArg] := valArg;
     selfArg := AllocNode(AN_ARG);
-    ASTLeft[selfArg] := node;
+    ASTLeft[selfArg] := PyMakeIdent(tmpSym);
     ASTRight[selfArg] := keyArg;
     callNode := AllocNode(AN_CALL);
     ASTIVal[callNode] := mpi;
     ASTTk[callNode] := Ord(tyClass);
     ASTLeft[callNode] := selfArg;
-    node := callNode;
+    PyHoistStmt(callNode);
     if not Eat(tkComma) then break;
   end;
   Expect(tkEnd, 'close brace');
-  CurASTNode := node;
+  CurASTNode := PyMakeIdent(tmpSym);
 end;
 
 procedure PyParseSetLiteral;
@@ -4648,11 +4683,13 @@ begin
 end;
 
 function PyParseIf: Integer;
-var node, pairNode, condNode, thenNode, elseNode: Integer;
+var node, pairNode, condNode, thenNode, elseNode, condHoist: Integer;
 begin
   Next;
   PyParseBoolExpr;
   condNode := PyMakeTruthy(CurASTNode);
+  { protect the condition's hoisted setup from the nested suites' flush }
+  condHoist := PyHoistHead; PyHoistHead := -1;
   Expect(tkColon, ':');
   thenNode := PyParseSuite;
   elseNode := -1;
@@ -4664,6 +4701,7 @@ begin
     Expect(tkColon, ':');
     elseNode := PyParseSuite;
   end;
+  PyHoistPrepend(condHoist);
   pairNode := AllocNode(AN_PAIR);
   ASTLeft[pairNode] := thenNode;
   ASTRight[pairNode] := elseNode;
@@ -4827,14 +4865,20 @@ begin
 end;
 
 function PyParseWhile: Integer;
-var node: Integer;
+var node, condHoist: Integer;
 begin
   Next;
   PyParseBoolExpr;
   node := AllocNode(AN_WHILE);
   ASTLeft[node] := PyMakeTruthy(CurASTNode);
+  { see PyParseIf: keep the condition's hoisted setup for the ENCLOSING
+    flush. NOTE a literal in a while CONDITION is built once, before the
+    loop — CPython rebuilds it per test; acceptable divergence, the pattern
+    is `while x in ("a","b")` membership against constants. }
+  condHoist := PyHoistHead; PyHoistHead := -1;
   Expect(tkColon, ':');
   ASTRight[node] := PyParseSuite;
+  PyHoistPrepend(condHoist);
   Result := node;
 end;
 
@@ -6801,6 +6845,13 @@ begin
     ASTNodeCount := savedAST;
     FrameSize := savedFS;
     CurASTNode := savedCur;
+    { hoisted setup statements queued during the TRIAL parse reference AST
+      nodes the rollback just discarded — flushing them into the real parse
+      lowered recycled node ids (IR_UNSUPPORTED kind 9 after a multi-expr
+      f-string, once the literal bind-then-append hoist landed). Nothing can
+      be legitimately pending here: trials start at statement boundaries,
+      where the suite builders have already flushed. }
+    PyHoistHead := -1;
     { Re-READ the saved token rather than restoring a saved copy of CurTok:
       Next does SetLength(CurTok.SVal, ...) in place, so a record copy taken
       before the trial parse shares that buffer and comes back holding whatever
@@ -6967,6 +7018,7 @@ begin
     FrameSize := savedFS;
     BSSSize := savedBSS;
     CurASTNode := savedCur;
+    PyHoistHead := -1;   { discard trial-queued hoists — see PyCollectLocalsAST }
     TokPos := savedTok - 1;
     Next;
     Inc(rnd);
