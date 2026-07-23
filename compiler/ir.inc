@@ -1625,10 +1625,12 @@ begin
     { A variant hidden-dest call OVERWRITES the temp raw (the callee copies 16
       bytes into [dest]), so a managed payload from the temp's previous life —
       the SAME sym on every trip through a loop — leaked once per call: ~40
-      B/iter of bound pairs in the uforth env-build. Release it first
-      (feature-nilpy-object-reclamation; NilPy-gated, Pascal emission
-      unchanged). }
-    if (Procs[procIdx].RetType = tyVariant) and isNilPy and (CurrentUnitIdx < 0) then
+      B/iter of bound pairs in the uforth env-build, and in PASCAL mode every
+      pyeval host-call arg temp (PyHostCall's args.at() results, valgrind's
+      top doloop record). The variant-slot protocol is mode-universal (tag-6
+      payloads are managed refs even in frozen builds — the EmitVariantClear
+      string arm predates all of this), so clear unconditionally. }
+    if Procs[procIdx].RetType = tyVariant then
     begin
       { the temp is created mid-body, after the prologue zero-init pass — mark
         it so codegen nil-inits its extent, or the FIRST clear here would
