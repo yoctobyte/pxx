@@ -5,7 +5,11 @@ import sys, re, bisect
 entries=[]
 for line in open(sys.argv[1]):
     parts=line.split()
-    if len(parts)>=2:
+    if len(parts)>=3 and parts[0]=='PROC':
+        try: addr=int(parts[1],16)
+        except ValueError: continue
+        entries.append((addr,parts[2]))
+    elif len(parts)>=2:
         try: addr=int(parts[0],16)
         except ValueError: continue
         entries.append((addr,parts[1]))
