@@ -632,13 +632,16 @@ function pystr_upper(const s: AnsiString): AnsiString;
 var i: Integer;
     c: Char;
 begin
-  Result := '';
+  { Preallocate to the known final length and write in place. The old
+    `Result := Result + c` reallocated the whole string every byte — O(n^2)
+    per call, and one of the top PXXStrConcat callers in profiles. }
+  SetLength(Result, Length(s));
   for i := 1 to Length(s) do
   begin
     c := s[i];
     if (c >= 'a') and (c <= 'z') then
       c := Chr(Ord(c) - 32);
-    Result := Result + c;
+    Result[i] := c;
   end;
 end;
 
@@ -646,13 +649,13 @@ function pystr_lower(const s: AnsiString): AnsiString;
 var i: Integer;
     c: Char;
 begin
-  Result := '';
+  SetLength(Result, Length(s));   { preallocate — see pystr_upper (no per-byte realloc) }
   for i := 1 to Length(s) do
   begin
     c := s[i];
     if (c >= 'A') and (c <= 'Z') then
       c := Chr(Ord(c) + 32);
-    Result := Result + c;
+    Result[i] := c;
   end;
 end;
 
@@ -3008,9 +3011,11 @@ end;
 function pyfile_slurp(const path: AnsiString; var ok: Boolean): AnsiString;
 var cs: AnsiString; fd, nread: Int64; buf: array[0..8191] of Char; i: Integer;
     nrOpenat, nrRead, nrClose: Integer;
+    rlen, rcap: Integer;
 begin
   Result := '';
   ok := False;
+  rlen := 0; rcap := 0;
   { syscall numbers resolved once, so the read loop below has no ifdefs in it.
     openat(AT_FDCWD) everywhere for portability (aarch64/riscv lack open). }
   nrOpenat := 0; nrRead := 0; nrClose := 0;
@@ -3040,8 +3045,23 @@ begin
   begin
     nread := __pxxrawsyscall(nrRead, fd, Int64(@buf[0]), 8192, 0, 0, 0);
     if nread > 0 then
-      for i := 0 to nread - 1 do Result := Result + buf[i];
+    begin
+      { Amortised-doubling append, NOT `Result := Result + buf[i]` per byte
+        (that reallocated + recopied the whole string every byte — O(n^2) in
+        file size, the dominant NilPy startup cost since it slurps the .UFO /
+        pyeval stdlib). Grow capacity geometrically, blit each chunk in place. }
+      if rlen + Integer(nread) > rcap then
+      begin
+        rcap := (rlen + Integer(nread)) * 2;
+        if rcap < 16384 then rcap := 16384;
+        SetLength(Result, rcap);   { SetLength preserves the existing rlen bytes }
+      end;
+      for i := 0 to Integer(nread) - 1 do
+        Result[rlen + i + 1] := buf[i];
+      rlen := rlen + Integer(nread);
+    end;
   end;
+  SetLength(Result, rlen);   { trim to the exact length read }
   nread := __pxxrawsyscall(nrClose, fd, 0, 0, 0, 0, 0);  { result discarded }
   ok := True;
 end;
