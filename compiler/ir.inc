@@ -6058,6 +6058,28 @@ begin
         Params are excluded on purpose: a param holds the CALLER's borrowed
         ref; releasing it on rebind (or at scope exit, where params are also
         skipped) would drop a ref the callee never owned. }
+      { `d = None` (or any scalar) over a class binding: the old object's ref
+        must still drop, then the sentinel stores raw through the generic path
+        (the scope-exit release no-ops on it via the plausibility guard). }
+      if isNilPy and (CurrentUnitIdx < 0) and
+         (ASTKind[ASTLeft[node]] = AN_IDENT) and
+         (Integer(ASTIVal[ASTLeft[node]]) >= 0) and
+         PyClassSymArcEligible(ASTIVal[ASTLeft[node]]) and
+         (IntToTypeKind(ASTTk[ASTRight[node]]) in
+            [tyInteger, tyInt8, tyInt16, tyInt32, tyInt64, tyNativeInt,
+             tyBoolean, tyChar, tyDouble, tySingle]) then
+      begin
+        procIdx := FindProc('PXXObjRelease');
+        if procIdx >= 0 then
+        begin
+          first := IRAppend(IR_ARG,
+                     IRAppend(IR_LOAD_SYM, Integer(ASTIVal[ASTLeft[node]]), -1, -1, 0, Ord(tyPointer)),
+                     -1, -1, 0, Ord(tyPointer));
+          seq := IRAppendCall(procIdx, first, -1, Ord(tyUnknown));
+          IRIVal[seq] := 1;   { statement: emit for effect; then fall through }
+        end;
+      end;
+
       if isNilPy and (CurrentUnitIdx < 0) and
          (ASTKind[ASTLeft[node]] = AN_IDENT) and
          (Integer(ASTIVal[ASTLeft[node]]) >= 0) and
