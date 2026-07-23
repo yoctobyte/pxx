@@ -1977,12 +1977,28 @@ begin
         same owning temp whose inline release-of-previous drops the prior trip's
         object each loop iteration. }
   if isNilPy and (CurrentUnitIdx < 0) and (not isRefArg) and
-     (cpi >= 0) and (pathIdx >= 1) and (pathIdx < Procs[cpi].ParamCount) and
-     (Procs[cpi].Params[pathIdx].TypeKind = tyClass) and
+     (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
      (ASTKind[argAST] = AN_CALL) and
-     ( ((Integer(ASTIVal[argAST]) = -Ord(tkGetMem)) and
-        (Integer(ASTRight[argAST]) >= REC_UCLASS_BASE))
-       or (IntToTypeKind(ASTTk[argAST]) = tyClass) ) then
+     ( { A construction / tyClass-tagged arg keeps the pathIdx>=1 receiver guard:
+         the for-in and method desugars route the SAME construction subtree
+         through receiver position (pathIdx 0) with their own binding plumbing,
+         and spilling it there double-consumes (test_nilpy_forin SIGSEGV). }
+       ( (pathIdx >= 1) and
+         ( ((Integer(ASTIVal[argAST]) = -Ord(tkGetMem)) and
+            (Integer(ASTRight[argAST]) >= REC_UCLASS_BASE))
+           or (IntToTypeKind(ASTTk[argAST]) = tyClass) ) )
+       { An object-returning PROC call result (`pybytes_slice`, `pylist_slice`,
+         `list`, a factory — ProcRetRecId set) is owned (+1) but in a value-arg
+         position often carries a tyPointer tag rather than tyClass, so the
+         checks above miss it and the owned rc=1 leaked — `bytes(mem[a:b])`,
+         `len(mem[a:b])` (uforth `_snapshot_input_state` does 3x
+         `bytes(memory[a:b])`/line; bug-nilpy-bytes-of-slice-leaks-intermediate).
+         This is a genuine value argument, not a construction routed through a
+         receiver, so it is safe to spill even at pathIdx 0 (bytes()/len() are
+         free functions, not methods). All NilPy results are owned + the consumer
+         borrows, so spill+release stays balanced regardless of the param tag. }
+       or ((Integer(ASTIVal[argAST]) >= 0) and
+           (ProcRetRecId[Integer(ASTIVal[argAST])] >= REC_UCLASS_BASE)) ) then
   begin
     tmpSym := AllocVar('', tyClass);
     if (Integer(ASTIVal[argAST]) = -Ord(tkGetMem)) and
