@@ -37,3 +37,6 @@ this one bug.
 
 x86-64 only: `EmitVarBinOp` has no counterpart in the other backends, so
 variant bitwise ops are not available cross-target at all yet.
+
+## Log
+- 2026-07-23 — resolved, commit 64d86ef3.
