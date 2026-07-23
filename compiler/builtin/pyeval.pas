@@ -781,7 +781,7 @@ begin
     18: res := MakeFloat(PSingle(p)^);           { tySingle }
     19: res := MakeFloat(PDouble(p)^);           { tyDouble }
     22: res := PVariant(p)^;                      { tyVariant — copy the slot }
-    23: res := MakeStr(PAnsiString(p)^);          { tyAnsiString }
+    23: begin gname := PAnsiString(p)^; res := MakeStr(gname); end;  { tyAnsiString — bind to a local so the deref temp is released (isNilPy const-arg leak) }
   else
     { class / aggregate field: the slot holds an object pointer; expose it as a
       VT_OBJECT so subscripts and method calls can reach the container. A field
