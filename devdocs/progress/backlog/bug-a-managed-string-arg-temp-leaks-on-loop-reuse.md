@@ -139,17 +139,41 @@ Findings:
   damage), not a direct borrow of that name — the ROOT over-free is an
   earlier hidden-arg-temp release elsewhere and is NOT yet pinned.
 
-Refined fix note: `AnsiStrUnique` (candidate a) will NOT work — it is
-rc-gated, and the liar UNDER-counts (the temp's borrowed ref is not in the
-rc), so unique sees rc≤1 and skips the clone. The correct fixes are
-either **(b)** find the mis-classified callee and make its Result carry a
-real +1, or a **deep byte-copy** (not COW) of the materialised value into
-the temp so the temp owns a genuinely private buffer AND release the
-source when the classification says it was owned. Next step to pin the
-root over-free: watch free-list integrity from process start, or trap in
-`PXXFree` when freeing a block whose rc word is still ≥1 (a free of a
-still-referenced managed block = the smoking gun), and backtrace via the
-stack-scan method above.
+## Session-3 (2026-07-23) — it is UNDER-count, NOT over-share
+
+Instrumented STORE_SYM's hidden-arg-temp MOVE branch to log every stored
+handle whose refcount is >1 (a shared handle treated as solely-owned).
+Compiling uforth logs exactly **ONE** such value before the crash:
+`"Word"` (rc 3), from `FindProc(PyQualifyNested(name))` in ParseFactorCore
+(`PyQualifyNested` returns its `const` param directly: `Result := name`).
+That case is **BENIGN** — `Result := <const-param>` retains, so the temp
+owns a real ref; a 100 000-iteration `n := g(id(x))` /
+`function id(const s):AnsiString; begin Result:=s end` stress test keeps
+`x` intact with zero valgrind errors. So the rc>1 check was a false
+positive and **the over-free is NOT of a shared (rc>1) handle**.
+
+Therefore the liar **UNDER-counts**: it frees an rc-**1** buffer that a
+second owner still holds via an UNCOUNTED alias (a `Global/field := handle`
+somewhere that skipped its retain, or a callee that stashes a handle it
+also returns). rc=1 is invisible to the rc>1 probe, and the block goes on
+the free list via a single (not double) free — which is why the earlier
+double-free walk of the size bin found nothing. My-fix's release-old is
+the first release that ever runs on that temp (mainline's DEFAULT_MEM
+leaked it), so it exposes the latent missing-retain.
+
+This kills BOTH `AnsiStrUnique` and `deep-copy+release-source` as fixes:
+with an under-count you cannot tell an owned handle from a borrowed one at
+the materialisation site (both read rc=1). The ONLY correct fix is to find
+the missing-retain — some assignment of a managed-string handle into a
+persistent slot (Global, record field, array, or a callee's kept copy)
+that does not retain. Hunt method that will work: a use-after-free oracle
+— in the AnsiStr release blob, when a release drives rc to 0, POISON the
+data (e.g. write 0xEE over it) INSTEAD of / before freeing; then any
+still-live owner reading it sees the poison, and a gdb watchpoint on the
+poison-read (or the first byte flipping to 0xEE at an address later found
+in Procs[]/Syms[]/a field) backtraces the reader. Or: shrink the repro
+first — bisect uforth.py down to the minimal file that still miscompiles,
+which makes any of the above tractable.
 
 Gate any fix on: `make test` + self-host fixedpoint + compile uforth.py
 FROM THE REPO ROOT (`./compiler/pascal26 ~/projects/uforth/uforth.py
