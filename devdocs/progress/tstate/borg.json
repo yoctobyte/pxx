@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-22T17:28:47Z",
-   "fixed": [],
-   "new_red": [
-    "fpc-bootstrap#src:compiler/compiler.pas"
-   ],
-   "sha": "182a4dc9bb5ffdf3bfabb8fa0ede061beb794e0f",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-22T17:33:01Z",
    "fixed": [],
    "new_red": [],
@@ -401,18 +391,20 @@
    "sha": "8ecefb2e9d8e9e726a368bd23740f9f63e5206d6",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-23T06:45:18Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8ecefb2e9d8e9e726a368bd23740f9f63e5206d6",
+   "tier": "full",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
  "jobs": {
   "fpc-bootstrap#src:compiler/compiler.pas": "fail",
   "lib-fpc-clean#00": "pass",
-  "optdiff#shard0/6": "pass",
-  "optdiff#shard1/6": "pass",
-  "optdiff#shard2/6": "pass",
-  "optdiff#shard3/6": "pass",
-  "optdiff#shard4/6": "pass",
-  "optdiff#shard5/6": "pass",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "pass",
   "test-aarch64#src:test/ccross_args.c": "pass",
   "test-aarch64#src:test/ccross_double_to_int.c": "pass",
@@ -1808,11 +1800,6 @@
   "test-i386#src:test/test_uint64_ops.pas": "pass",
   "test-lua#src:test/lua/runner.c": "pass",
   "test-lua-cross#src:test/lua/runner.c": "pass",
-  "test-opt#00": "pass",
-  "test-opt#src:compiler/compiler.pas@1": "pass",
-  "test-opt#src:compiler/compiler.pas@2": "pass",
-  "test-opt#src:compiler/compiler.pas@3": "pass",
-  "test-opt#src:test/test_atomic64.pas": "pass",
   "test-riscv32#00": "pass",
   "test-riscv32#src:test/ccross_args.c@1": "pass",
   "test-riscv32#src:test/ccross_args.c@2": "pass",
@@ -1965,11 +1952,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-23T06:40:50Z",
+  "date": "2026-07-23T06:45:18Z",
   "sha": "8ecefb2e9d8e9e726a368bd23740f9f63e5206d6",
-  "tier": "native",
+  "tier": "full",
   "verdict": "GREEN",
-  "wall": 176.9
+  "wall": 246.6
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1979,11 +1966,11 @@
   "sha": "49f57951450545ad7a2a3232a32ae59f13f7dbb1"
  },
  "last_full": {
-  "date": "2026-07-23T06:07:51Z",
-  "sha": "49f57951450545ad7a2a3232a32ae59f13f7dbb1",
+  "date": "2026-07-23T06:45:18Z",
+  "sha": "8ecefb2e9d8e9e726a368bd23740f9f63e5206d6",
   "tier": "full",
   "verdict": "GREEN",
-  "wall": 290.4
+  "wall": 246.6
  },
  "last_opt": {
   "date": "2026-07-23T06:11:07Z",
