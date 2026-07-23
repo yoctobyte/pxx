@@ -390,6 +390,50 @@ begin
   Result := np;
 end;
 {$else}
+{$ifdef PXX_LIBC_HEAP}
+{ Debug/diagnosis profile (-dPXX_LIBC_HEAP): back the pxx heap with dynamic
+  libc malloc so VALGRIND (memcheck/massif) sees every allocation with its
+  stack — the native arena/freelist allocator is invisible to it. Emitting the
+  externals flips the ELF writer into dynamic mode (PT_INTERP + DT_NEEDED)
+  automatically. Same 8-byte size header as the native allocator, calloc for
+  the zero-init contract. HeapLow/HeapHigh become a coarse min/max envelope so
+  PXXObjPlausible keeps working. NOT for production: no size-class bins, libc
+  lock discipline instead of the pxx one. }
+function pxx_libc_calloc(n: NativeUInt; size: NativeUInt): Pointer; cdecl; external 'libc.so.6' name 'calloc';
+procedure pxx_libc_free(p: Pointer); cdecl; external 'libc.so.6' name 'free';
+
+function PXXAlloc(size: NativeInt; align: Integer): Pointer;
+var p: Int64;
+begin
+  if size <= 0 then size := 8;
+  size := ((size + 7) div 8) * 8;
+  p := Int64(pxx_libc_calloc(1, NativeUInt(size + 8)));
+  PWord(p)^ := size;                             { 8-byte size header }
+  Result := Pointer(p + 8);                      { payload }
+  if (HeapLow = 0) or (p < HeapLow) then HeapLow := p;
+  if p + size + 8 > HeapHigh then HeapHigh := p + size + 8;
+end;
+
+procedure PXXFree(p: Pointer);
+begin
+  if p = nil then Exit;
+  pxx_libc_free(Pointer(Int64(p) - 8));
+end;
+
+function PXXRealloc(p: Pointer; newSize: NativeInt; align: Integer): Pointer;
+var np: Pointer; oldSize: NativeInt;
+begin
+  np := PXXAlloc(newSize, align);
+  if p <> nil then
+  begin
+    oldSize := NativeInt(PWord(Pointer(Int64(p) - 8))^);
+    if oldSize > newSize then oldSize := newSize;
+    PXXMemMove(np, p, oldSize);
+    PXXFree(p);
+  end;
+  Result := np;
+end;
+{$else}
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 var
   cur, prev, base, need, arena, i: Int64;
@@ -564,6 +608,7 @@ begin
   PXXFree(p);
   Result := np;
 end;
+{$endif}
 {$endif}  { PXX_ESP_IDF else: native allocator bodies }
 
 {$ifdef PXX_ESP}
