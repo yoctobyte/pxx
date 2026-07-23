@@ -103,12 +103,53 @@ Both original candidates below enable release-old, so BOTH hit this.
   needs a runtime trace to pin — the gdb hardware-watchpoint on the
   name-buffer refcount word is the tool (see below).
 
-Diagnostics that worked: instrument counters + print the name buffer's
-rc-word address at RegisterProc, then a gdb HW watchpoint on it to catch
-the errant `dec [rax-16]` and backtrace the culprit codegen site. (This
-session couldn't complete the watchpoint — the harness blocks the
-foreground-sleep / FIFO orchestration; retry with a proper detached
-runner.)
+## Session-2 forensics (2026-07-23, gdb watchpoint — CONFIRMED cascade)
+
+Reproduced with the fix applied, watching the failing name buffer. Method
+that works (record it — the LIBC-heap profile does NOT reproduce this, the
+NATIVE allocator layout is load-bearing):
+1. Print the buffer address at RegisterProc when `name='CompileAction.create'`:
+   `DbgWatchRel := Int64(Pointer(Procs[ProcCount].Name))`.
+2. Run with ASLR OFF (`setarch -R`, and gdb `set disable-randomization on`)
+   → the heap VA is DETERMINISTIC and identical across runs of the same
+   binary. Capture the printed address in gdb's own env (one throwaway run).
+3. `gdb -batch -ex "set disable-randomization on" -ex starti
+   -ex "watch *(int*)(ADDR+8) if *(int*)(ADDR+8)==28" -ex continue -ex bt`.
+   Frame pointers are ABSENT → gdb's `bt` dies at frame 1; scan the stack
+   (`x/80a $rsp`) and pipe through `tools/vgsym.py <p26>.map` (build the
+   compiler with `--proc-map`) to symbolise the return addresses.
+
+Findings:
+- The buffer is FREED WHILE LIVE: at the failure `Procs[824].Name` still
+  points at it, `rc=1`, but bytes 8-11 hold the int `28` (a `RecName =
+  REC_UCLASS_BASE+ci`). Watchpoint on `+8`: the 28 is written by
+  **`PyAnnTypeAt+0x1afe`** — a `Syms[garbage].RecName := …` WILD WRITE
+  through a corrupted `SymIdx`, i.e. `PyAnnTypeAt` is a downstream VICTIM
+  writing into a Syms entry that overlaps the buffer, not the perpetrator.
+- Watchpoint on the block header (`ADDR-16`) for a freelist-pointer write
+  (`> 1e8`): the block is handed to the free list by **`PXXFree`**, called
+  from a runtime release blob (return addr in the low `0x4000xx` blob
+  region — NOT the AnsiStr-release path a `ud2` there watches, which is why
+  the data-ptr `ud2` never fired). So it is a **cascade**: an EARLIER
+  over-release corrupted the free list, CompileAction.create's buffer was
+  then allocated at a doubly-owned address, and the other owner frees it.
+- The registration path for the freed name is itself clean: `PyRawName`
+  (pyparser.inc:1853) and `GetTokenStr` (parser.inc:702) both build FRESH
+  owned strings via AppendChar. So the aliasing is INDIRECT (freelist
+  damage), not a direct borrow of that name — the ROOT over-free is an
+  earlier hidden-arg-temp release elsewhere and is NOT yet pinned.
+
+Refined fix note: `AnsiStrUnique` (candidate a) will NOT work — it is
+rc-gated, and the liar UNDER-counts (the temp's borrowed ref is not in the
+rc), so unique sees rc≤1 and skips the clone. The correct fixes are
+either **(b)** find the mis-classified callee and make its Result carry a
+real +1, or a **deep byte-copy** (not COW) of the materialised value into
+the temp so the temp owns a genuinely private buffer AND release the
+source when the classification says it was owned. Next step to pin the
+root over-free: watch free-list integrity from process start, or trap in
+`PXXFree` when freeing a block whose rc word is still ≥1 (a free of a
+still-referenced managed block = the smoking gun), and backtrace via the
+stack-scan method above.
 
 Gate any fix on: `make test` + self-host fixedpoint + compile uforth.py
 FROM THE REPO ROOT (`./compiler/pascal26 ~/projects/uforth/uforth.py
