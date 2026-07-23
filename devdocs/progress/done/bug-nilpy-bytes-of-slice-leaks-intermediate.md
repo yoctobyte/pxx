@@ -38,3 +38,6 @@ Register the owned slice-call result as a hidden owning temp released after the
 consuming call (extend the owned-result-arg reclamation to slice-call results
 feeding builtins/`bytes()`), or have the consumer take ownership. Track A/N
 (reclamation lane). Repro compiles with any current compiler.
+
+## Log
+- 2026-07-23 — resolved, commit 219c4daa.

@@ -28,12 +28,11 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (132)
+## backlog (131)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 55 | bug | issue: runtime heap grows unbounded in a dynamic/variant-heavy loop (long-running programs OOM) | — |
-| bug-nilpy-bytes-of-slice-leaks-intermediate | A | 45 | bug | NilPy: `bytes(seq[a:b])` leaks the intermediate slice object every call | — |
 | bug-nilpy-dict-insert-lookup-linear-not-hashed | N | 45 | bug | NilPy: dict insert/lookup is O(N), not O(1) — quadratic build, drives uforth O(N²) | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
@@ -227,7 +226,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (965)
+## done (966)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -548,6 +547,7 @@ _none_
 | bug-nilpy-annotated-assignment-single-token-only | N | 60 | bug | NilPy: an annotated assignment only accepted a SINGLE-TOKEN annotation | — |
 | bug-nilpy-bitwise-on-float-variant-truncates | A | 30 | bug | NilPy: a bitwise op on a FLOAT variant truncates instead of raising TypeError | — |
 | bug-nilpy-bytes-literal-escapes-not-decoded | N | 30 | bug | NilPy: `\xHH` (and presumably `\0`-style) escapes in a BYTES literal are not decoded | — |
+| bug-nilpy-bytes-of-slice-leaks-intermediate | A | 45 | bug | NilPy: `bytes(seq[a:b])` leaks the intermediate slice object every call | — |
 | bug-nilpy-call-returning-class-loses-identity | N | 55 | bug | NilPy: a call returning a CLASS lost its class identity (silent, then SIGSEGV) | — |
 | bug-nilpy-class-typed-field-loses-identity | N | 70 | bug | NilPy: a class-typed field loses its class identity | — |
 | bug-nilpy-class-value-into-variant-local-mistagged | N | 65 | bug | NilPy: storing a class value into a variant-typed local mis-tags it VT_INT64 | — |
@@ -2682,7 +2682,6 @@ _none_
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [U] decide-gpc-as-corpus-target (unblocks 1)
 - [p 45] [U] decide-ilja-tui-render-model (unblocks 1)
-- [p 45] [A] bug-nilpy-bytes-of-slice-leaks-intermediate
 - [p 45] [N] bug-nilpy-dict-insert-lookup-linear-not-hashed
 - [p 45] [T] bug-t-watcher-dev-contention-false-newred
 - [p 45] [A] chore-makefile-selfhost-iterate-to-convergence
