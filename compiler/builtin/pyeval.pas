@@ -478,11 +478,29 @@ begin
   end;
 end;
 
+{ Case-insensitive string equality with NO allocation — the previous
+  lowercase-both-then-compare cost two fresh PXXStrFromLit buffers per call,
+  and PyFindMethCI runs once per host-method dispatch (the doloop leak the
+  valgrind libc-heap profile attributed to PyHostCall). }
+function PyEqCI(const a, b: AnsiString): Boolean;
+var i, n: Integer; ca, cb: Char;
+begin
+  n := Length(a);
+  if n <> Length(b) then begin PyEqCI := False; Exit; end;
+  for i := 1 to n do
+  begin
+    ca := a[i]; cb := b[i];
+    if (ca >= 'A') and (ca <= 'Z') then ca := Chr(Ord(ca) + 32);
+    if (cb >= 'A') and (cb <= 'Z') then cb := Chr(Ord(cb) + 32);
+    if ca <> cb then begin PyEqCI := False; Exit; end;
+  end;
+  PyEqCI := True;
+end;
+
 function PyFindMethCI(cls: PClassRTTI; const name: AnsiString): PMethInfo;
-var curr: PClassRTTI; meths: PMethInfo; i: Integer; lname, mname: AnsiString;
+var curr: PClassRTTI; meths: PMethInfo; i: Integer;
 begin
   PyFindMethCI := nil;
-  lname := PyLowerStr(name);
   curr := cls;
   while curr <> nil do
   begin
@@ -490,20 +508,12 @@ begin
     begin
       meths := curr^.MethsPtr;
       for i := 0 to Integer(curr^.MethCount) - 1 do
-      begin
-        { bind the lowered name to a LOCAL: the tyAnsiString store releases the
-          previous iteration's handle (rebind ARC), and the final one drops at
-          proc exit. The old inline `PyLowerStr(...) = lname` leaked the fresh
-          call result every iteration — the top per-exec leak the valgrind
-          libc-heap profile attributed to PyHostCall (host-method lookup runs
-          once per PYTHON-word call). }
-        mname := PyLowerStr(meths[i].NamePtr^);
-        if mname = lname then
+        { zero-allocation CI compare — no lowercased copies to leak }
+        if PyEqCI(meths[i].NamePtr^, name) then
         begin
           PyFindMethCI := @meths[i];
           Exit;
         end;
-      end;
     end;
     curr := PClassRTTI(curr^.ParentRTTI);
   end;
