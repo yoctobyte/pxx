@@ -222,3 +222,4 @@
 2026-07-17T14:37:51Z  v222  dd8e9256c6786be77c67c6556e0af772d45bc47f396e711abae7a6d27d39769b  90e84a357bd5d602ff3ddc56be89c468eddcfa5a  board: resolve builtin-name-demote bug (848e6b7e)
 2026-07-21T11:17:10Z  v223  d71a2f7ee71ef6d2f930506f1b36e76946a6b7916721beac93d6903e08d0ae1b  cbf989446d0bdc35144e328320f97f694ba0e96f  fix(fpc): add forwards for NilPy helpers used above definition
 2026-07-22T09:27:00Z  v224  b0f601ab9adcba34a132d39eedc8c10758fbe4a6b3df05419dab8a60a2ec1dac  2eaa6c0fa68145ca19b1107a9543f5a923a00549  tickets: resolve bug-open-array-param-length-high-zero (79ef4cf6)
+2026-07-24T05:42:53Z  v225  de4b0b65b49e668cd9374c61963a9e7af594fddfbbf5f48c9bffb51f430f93b6  15e9ca5a4934a66719ecc50b9034471a20cb12e0  tickets(A): VERIFIED @ d2b95677 — microbench flat 4MB, core O(n^2) gone

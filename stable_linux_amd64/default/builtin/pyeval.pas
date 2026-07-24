@@ -200,6 +200,9 @@ var r: PPyRec;
 begin
   r := PPyRec(@Result);
   r^.VType := 7; r^.Payload := Int64(p);
+  { slot takes its own +1 (magic-guarded; see the borrow-everywhere note in
+    feature-nilpy-object-reclamation slice 2) }
+  PXXObjRetain(p);
 end;
 
 { ---- promotable-int (bignum) integer layer --------------------------------
@@ -475,11 +478,29 @@ begin
   end;
 end;
 
+{ Case-insensitive string equality with NO allocation — the previous
+  lowercase-both-then-compare cost two fresh PXXStrFromLit buffers per call,
+  and PyFindMethCI runs once per host-method dispatch (the doloop leak the
+  valgrind libc-heap profile attributed to PyHostCall). }
+function PyEqCI(const a, b: AnsiString): Boolean;
+var i, n: Integer; ca, cb: Char;
+begin
+  n := Length(a);
+  if n <> Length(b) then begin PyEqCI := False; Exit; end;
+  for i := 1 to n do
+  begin
+    ca := a[i]; cb := b[i];
+    if (ca >= 'A') and (ca <= 'Z') then ca := Chr(Ord(ca) + 32);
+    if (cb >= 'A') and (cb <= 'Z') then cb := Chr(Ord(cb) + 32);
+    if ca <> cb then begin PyEqCI := False; Exit; end;
+  end;
+  PyEqCI := True;
+end;
+
 function PyFindMethCI(cls: PClassRTTI; const name: AnsiString): PMethInfo;
-var curr: PClassRTTI; meths: PMethInfo; i: Integer; lname: AnsiString;
+var curr: PClassRTTI; meths: PMethInfo; i: Integer;
 begin
   PyFindMethCI := nil;
-  lname := PyLowerStr(name);
   curr := cls;
   while curr <> nil do
   begin
@@ -487,7 +508,12 @@ begin
     begin
       meths := curr^.MethsPtr;
       for i := 0 to Integer(curr^.MethCount) - 1 do
-        if PyLowerStr(meths[i].NamePtr^) = lname then
+        { The `meths[i].NamePtr^` (^AnsiString deref) to a `const AnsiString`
+          param no longer leaks: the isNilPy arg lowering now owns a
+          managed-string deref arg via a hidden local (ir.inc,
+          bug-a-nilpy-managed-deref-to-const-arg-leaks). The earlier per-site
+          `mn := NamePtr^` bind is therefore unnecessary. }
+        if PyEqCI(meths[i].NamePtr^, name) then
         begin
           PyFindMethCI := @meths[i];
           Exit;
@@ -609,7 +635,10 @@ begin
     { box the result by its kind: class/pointer -> VT_OBJECT; ordinal -> int;
       void (rk=0) -> None. }
     if (rk = 6) or (rk = 17) then
-    begin PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := pret; end
+    begin
+      PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := pret;
+      PXXObjRetain(Pointer(NativeInt(pret)));   { slot owns +1 (magic-guarded) }
+    end
     else if rk = 0 then res := MakeNone
     else res := pyvar_of_int(pret);
     Exit;
@@ -748,11 +777,15 @@ begin
     18: res := MakeFloat(PSingle(p)^);           { tySingle }
     19: res := MakeFloat(PDouble(p)^);           { tyDouble }
     22: res := PVariant(p)^;                      { tyVariant — copy the slot }
-    23: res := MakeStr(PAnsiString(p)^);          { tyAnsiString }
+    23: res := MakeStr(PAnsiString(p)^);          { tyAnsiString (deref arg owned by the isNilPy arg lowering) }
   else
     { class / aggregate field: the slot holds an object pointer; expose it as a
-      VT_OBJECT so subscripts and method calls can reach the container }
+      VT_OBJECT so subscripts and method calls can reach the container. A field
+      read BORROWS — the field keeps its own ref — so the variant must take +1
+      (no-op on unheadered Pascal instances; the variant's scope-exit release
+      balances it once the object arms are live). }
     r^.VType := 7; r^.Payload := PInt64(p)^;
+    PXXObjRetain(Pointer(NativeInt(r^.Payload)));
   end;
 end;
 
@@ -1540,10 +1573,68 @@ var
 
   PyClosureMagicMarker: Integer;   { its ADDRESS is the closure sentinel }
 
+{ Recycle stack of dead Closures[] rows (feature-nilpy-object-reclamation):
+  a closure OBJECT is a refcounted RAW2 block; when it dies, PyEvalClosureFree
+  releases the row's captures and token refs and parks the index here for the
+  next creator. }
+var
+  ClosureFreeStk: array of Integer;
+  ClosureFreeN: Integer;
+
+procedure PyEvalClosureFree(objp: Pointer);
+var c, i: Integer;
+begin
+  if objp = nil then Exit;
+  if PClosureObj(objp)^.Magic <> @PyClosureMagicMarker then Exit;
+  c := Integer(PClosureObj(objp)^.Cidx);
+  if (c < 0) or (c >= ClosureN) then Exit;
+  Closures[c].Kinds := nil;
+  Closures[c].Texts := nil;
+  Closures[c].Ints := nil;
+  Closures[c].Floats := nil;
+  for i := 0 to Closures[c].CapN - 1 do
+  begin
+    Closures[c].CapNames[i] := '';
+    Closures[c].CapVals[i] := 0;   { variant := int releases any payload }
+  end;
+  SetLength(Closures[c].CapNames, 0);
+  SetLength(Closures[c].CapVals, 0);
+  Closures[c].CapN := 0;
+  Closures[c].Params := '';
+  Closures[c].NTok := 0;
+  if ClosureFreeN >= Length(ClosureFreeStk) then
+  begin
+    if Length(ClosureFreeStk) = 0 then SetLength(ClosureFreeStk, 16)
+    else SetLength(ClosureFreeStk, Length(ClosureFreeStk) * 2);
+  end;
+  ClosureFreeStk[ClosureFreeN] := c;
+  ClosureFreeN := ClosureFreeN + 1;
+end;
+
+{ Pop a recycled registry row, or mint a fresh one. }
+function PyClosureAllocRow: Integer;
+begin
+  if ClosureFreeN > 0 then
+  begin
+    ClosureFreeN := ClosureFreeN - 1;
+    PyClosureAllocRow := ClosureFreeStk[ClosureFreeN];
+    Exit;
+  end;
+  if ClosureN >= Length(Closures) then
+  begin
+    if Length(Closures) = 0 then SetLength(Closures, 8)
+    else SetLength(Closures, Length(Closures) * 2);
+  end;
+  PyClosureAllocRow := ClosureN;
+  ClosureN := ClosureN + 1;
+end;
+
 function PyMakeClosureObj(cidx: Int64): Pointer;
 var o: PClosureObj;
 begin
-  o := GetMem(SizeOf(TClosureObj));
+  PXXObjFinalizeHook := @PyObjFinalize;
+  PyClosureFinalizeHook := @PyEvalClosureFree;
+  o := PClosureObj(PXXObjAllocRaw2(SizeOf(TClosureObj)));
   o^.Magic := @PyClosureMagicMarker;
   o^.Cidx  := cidx;
   PyMakeClosureObj := Pointer(o);
@@ -1671,23 +1762,13 @@ begin
   sKinds := TkKind; sTexts := TkText; sInts := TkInt; sFloats := TkFloat;
   sTkN := TkN; sCur := Cur; sSrc := Src; sPos := Pos; sSLen := SLen;
   Tokenize(src);
-  if ClosureN >= Length(Closures) then
-  begin
-    if Length(Closures) = 0 then SetLength(Closures, 8)
-    else SetLength(Closures, Length(Closures) * 2);
-  end;
-  c := ClosureN; ClosureN := ClosureN + 1;
-  SetLength(Closures[c].Kinds, TkN);
-  SetLength(Closures[c].Texts, TkN);
-  SetLength(Closures[c].Ints, TkN);
-  SetLength(Closures[c].Floats, TkN);
-  for i := 0 to TkN - 1 do
-  begin
-    Closures[c].Kinds[i]  := TkKind[i];
-    Closures[c].Texts[i]  := TkText[i];
-    Closures[c].Ints[i]   := TkInt[i];
-    Closures[c].Floats[i] := TkFloat[i];
-  end;
+  c := PyClosureAllocRow;
+  { ref-share, not deep-copy — see PyMakeClosure; here Tokenize(src) just
+    allocated these arrays fresh, so nothing else mutates them }
+  Closures[c].Kinds  := TkKind;
+  Closures[c].Texts  := TkText;
+  Closures[c].Ints   := TkInt;
+  Closures[c].Floats := TkFloat;
   Closures[c].NTok := TkN;
   Closures[c].BodyPos := 0;
   Closures[c].Params := params;
@@ -1716,23 +1797,17 @@ end;
 function PyMakeClosure(fnIdx: Integer): Variant;
 var c, i: Integer; r: PPyRec;
 begin
-  if ClosureN >= Length(Closures) then
-  begin
-    if Length(Closures) = 0 then SetLength(Closures, 8)
-    else SetLength(Closures, Length(Closures) * 2);
-  end;
-  c := ClosureN; ClosureN := ClosureN + 1;
-  SetLength(Closures[c].Kinds, TkN);
-  SetLength(Closures[c].Texts, TkN);
-  SetLength(Closures[c].Ints, TkN);
-  SetLength(Closures[c].Floats, TkN);
-  for i := 0 to TkN - 1 do
-  begin
-    Closures[c].Kinds[i]  := TkKind[i];
-    Closures[c].Texts[i]  := TkText[i];
-    Closures[c].Ints[i]   := TkInt[i];
-    Closures[c].Floats[i] := TkFloat[i];
-  end;
+  c := PyClosureAllocRow;
+  { REFERENCE-share the token arrays instead of deep-copying: a full snapshot
+    of the exec source per closure (every `ns["__body__"]` lookup!) was the
+    dominant per-call leak in uforth's PYTHON-word path (~20 KB/exec). Safe
+    because the tokenization cache never mutates a live buffer in place — on a
+    miss the live refs are nilled first and Tokenize allocates fresh arrays
+    (see the cache note above). }
+  Closures[c].Kinds  := TkKind;
+  Closures[c].Texts  := TkText;
+  Closures[c].Ints   := TkInt;
+  Closures[c].Floats := TkFloat;
   Closures[c].NTok    := TkN;
   Closures[c].BodyPos := FnBodyPos[fnIdx];
   Closures[c].Params  := FnParams[fnIdx];
@@ -1841,6 +1916,7 @@ begin
     end;
     ExpectOp(']');
     PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(li));
+    PXXObjRetain(Pointer(li));   { slot owns +1 (magic-guarded) }
   end
   else if IsOp('{') then
   begin
@@ -1852,6 +1928,7 @@ begin
       Advance;
       dd := TPyDict.Create;
       PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(dd));
+      PXXObjRetain(Pointer(dd));   { slot owns +1 (magic-guarded) }
     end
     else
     begin
@@ -1870,6 +1947,7 @@ begin
         end;
         ExpectOp('}');
         PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(dd));
+        PXXObjRetain(Pointer(dd));   { slot owns +1 (magic-guarded) }
       end
       else
       begin
@@ -1883,6 +1961,7 @@ begin
         end;
         ExpectOp('}');
         PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(li));
+        PXXObjRetain(Pointer(li));   { slot owns +1 (magic-guarded) }
       end;
     end;
   end
@@ -1918,6 +1997,7 @@ begin
         li.append(elem);
       end;
       PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(li));
+      PXXObjRetain(Pointer(li));   { slot owns +1 (magic-guarded) }
     end;
     ExpectOp(')');
   end
@@ -2268,6 +2348,7 @@ begin
   else if step < 0 then
   begin i := lo; while i > hi do begin r.append(pyvar_of_int(i)); i := i + step; end; end;
   ro := PPyRec(@Result); ro^.VType := 7; ro^.Payload := Int64(Pointer(r));
+  PXXObjRetain(Pointer(r));   { slot owns +1 (magic-guarded) }
 end;
 
 procedure CallBuiltin(const name: AnsiString; args: TPyList;
@@ -2496,11 +2577,11 @@ begin
   ExpectOp(')');
 
   { skipped branch: consume the call but do not dispatch (no side effects) }
-  if not Executing then begin res := MakeNone; Exit; end;
+  if not Executing then begin res := MakeNone; args.Free; Exit; end;
 
   { user-defined nested function takes precedence (Python scoping) }
   if FnFind(callee) >= 0 then
-  begin CallUserFn(FnFind(callee), args, res); Exit; end;
+  begin CallUserFn(FnFind(callee), args, res); args.Free; Exit; end;
 
   if IsHostName(callee) then
   begin
@@ -2509,9 +2590,11 @@ begin
     vmv := EnvG.fetch('vm');
     vmobj := pyvarobj(vmv);
     PyHostCall(vmobj, callee, args, res);
+    args.Free;
     Exit;
   end;
   CallBuiltin(callee, args, endKw, sepKw, haveEnd, haveSep, res);
+  args.Free;
 end;
 
 { `( expr, ... )` into `args`; a `signed=<bool>` keyword arg (to_bytes/from_bytes)
@@ -2616,6 +2699,7 @@ begin
         Cur := endPos;
         PPyRec(@v)^.VType := 7;
         PPyRec(@v)^.Payload := Int64(NativeInt(Pointer(gres)));
+        PXXObjRetain(Pointer(gres));   { slot owns +1 (magic-guarded) }
       end;
       args.append(v);
     end;
@@ -2651,6 +2735,7 @@ begin
     begin
       by := pyint_to_bytes(pyvar_to_int(recv), pyvar_to_int(args.at(0)), signedKw);
       PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(by));
+      PXXObjRetain(Pointer(by));   { slot owns +1 (magic-guarded) }
       Exit;
     end;
     EvalError('int method not supported: ' + mname);
@@ -2705,6 +2790,7 @@ begin
     begin
       b2 := pystr_encode(s);
       PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(b2));
+      PXXObjRetain(Pointer(b2));   { slot owns +1 (magic-guarded) }
     end
     else
       EvalError('str method not supported: ' + mname);

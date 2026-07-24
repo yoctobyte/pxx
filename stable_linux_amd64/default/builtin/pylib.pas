@@ -33,6 +33,9 @@ type
     Payload: Int64;
   end;
   PPyVarRec = ^TPyVarRec;
+  { rawKind=2 (a pyeval closure object) forwards through this hook; installed
+    by pyeval, which owns the closure registry. nil until pyeval initializes. }
+  TPyClosureFinalize = procedure(objp: Pointer);
   PInt64 = ^Int64;
   PPyAnsiString = ^AnsiString;
   PPyDouble = ^Double;
@@ -105,6 +108,13 @@ type
     FCap: Integer;
     FKeys: Pointer;
     FVals: Pointer;
+    { Open-addressing hash INDEX over the insertion-ordered FKeys/FVals arrays
+      (feature-nilpy-dict): FHash holds FHashCap Int32 slots, each an index into
+      FKeys (-1 = empty). FKeys stays the ordered storage (iteration order +
+      delete-shift preserved); the index just makes indexof O(1) instead of a
+      linear scan. Rebuilt on grow and on remove (which shifts the tail). }
+    FHash: Pointer;
+    FHashCap: Integer;
     constructor Create;
     function count: Integer;
     function indexof(const k: Variant): Integer;
@@ -246,6 +256,7 @@ function pyrepr_of(const v: Variant): AnsiString; overload;
   Recursive: a nested list/dict element is reprd as a container, not as its
   object tag. }
 function pylist_repr(l: TPyList): AnsiString;
+function pybytes_repr(b: TPyBytes): AnsiString;
 function pydict_repr(d: TPyDict): AnsiString;
 function pyvar_repr(const v: Variant): AnsiString;
 { print()'s string form of a VARIANT: a container payload (list/dict) shows its
@@ -345,6 +356,10 @@ function pystdin_readline: AnsiString;
   native words, which run under the (stubbed) exec path. }
 function pystdin_isatty: Integer;
 function pystr_is_none(const s: AnsiString): Boolean;
+{ The None value for a str-typed slot: a NIL managed handle (what
+  pystr_is_none tests). Assigning the None literal to a str field/local must
+  store this, not the text 'None' a variant->string coercion produces. }
+function pystr_none: AnsiString;
 function pyvar_box(const v: Variant): Variant;   { box a value into a variant }
 { A BOUND METHOD captured as a value (`env["push"] = vm.push`): a heap
   {code, recv} pair boxed as a VT_BOUNDMETHOD (8) variant. Recv is the receiver
@@ -353,9 +368,18 @@ function pyvar_box(const v: Variant): Variant;   { box a value into a variant }
   stores these in its exec env; the pyeval interpreter reaches the receiver
   through env["vm"] rather than invoking them, so a stored bound method must
   merely not crash. }
+var
+  PyClosureFinalizeHook: TPyClosureFinalize;
+
 function pybound_new(code, recv: Pointer): Variant;
 function pybound_code(const v: Variant): Pointer;
 function pybound_recv(const v: Variant): Pointer;
+{ Finalizer for dying refcounted objects, installed into builtinheap's
+  PXXObjFinalizeHook by the container constructors and pybound_new: releases
+  the object's children recursively before the block is freed
+  (feature-nilpy-object-reclamation slice 3). rawKind = 1 means a VMT-less
+  {code,recv} bound pair. }
+procedure PyObjFinalize(objp: Pointer; rawKind: NativeInt);
 { input([prompt]): a line from stdin without its trailing newline. }
 function pyinput: AnsiString;
 { sys.argv: the command line as a TPyList of strings, argv[0] = program name. }
@@ -608,13 +632,16 @@ function pystr_upper(const s: AnsiString): AnsiString;
 var i: Integer;
     c: Char;
 begin
-  Result := '';
+  { Preallocate to the known final length and write in place. The old
+    `Result := Result + c` reallocated the whole string every byte — O(n^2)
+    per call, and one of the top PXXStrConcat callers in profiles. }
+  SetLength(Result, Length(s));
   for i := 1 to Length(s) do
   begin
     c := s[i];
     if (c >= 'a') and (c <= 'z') then
       c := Chr(Ord(c) - 32);
-    Result := Result + c;
+    Result[i] := c;
   end;
 end;
 
@@ -622,13 +649,13 @@ function pystr_lower(const s: AnsiString): AnsiString;
 var i: Integer;
     c: Char;
 begin
-  Result := '';
+  SetLength(Result, Length(s));   { preallocate — see pystr_upper (no per-byte realloc) }
   for i := 1 to Length(s) do
   begin
     c := s[i];
     if (c >= 'A') and (c <= 'Z') then
       c := Chr(Ord(c) + 32);
-    Result := Result + c;
+    Result[i] := c;
   end;
 end;
 
@@ -1092,6 +1119,8 @@ end;
 
 constructor TPyList.Create;
 begin
+  { first construction installs the recursive finalizer (slice 3) }
+  PXXObjFinalizeHook := @PyObjFinalize;
   FLen := 0;
   FCap := 0;
   FItems := nil;
@@ -1148,9 +1177,21 @@ begin
   PyVarSlotManaged := (t = 6) or (t = 8193);
 end;
 
+{ Tags whose payload is a refcounted OBJECT block: VT_OBJECT (7, a class
+  instance) and VT_BOUNDMETHOD (8, a {code,recv} pair). Retain/release ride
+  PXXObjRetain/Release, which no-op unless the payload carries the
+  PXX_OBJ_MAGIC header tag — so a Pascal-created (manual-lifetime) instance
+  passing through a slot is left alone, and only PXXObjAlloc-headered blocks
+  participate (feature-nilpy-object-reclamation slice 2). }
+function PyVarSlotIsObj(t: Int64): Boolean;
+begin
+  PyVarSlotIsObj := (t = 7) or (t = 8) or (t = 9);   { 9 = pyeval closure }
+end;
+
 procedure PyVarSlotClear(dst: PPyVarRec);
 begin
-  if PyVarSlotManaged(dst^.VType) then PPyAnsiString(@dst^.Payload)^ := '';
+  if PyVarSlotManaged(dst^.VType) then PPyAnsiString(@dst^.Payload)^ := ''
+  else if PyVarSlotIsObj(dst^.VType) then PXXObjRelease(Pointer(NativeInt(dst^.Payload)));
   dst^.VType := 0;
   dst^.Payload := 0;
 end;
@@ -1163,7 +1204,8 @@ var
 begin
   if dst = src then Exit;
   s := '';
-  if PyVarSlotManaged(src^.VType) then s := PPyAnsiString(@src^.Payload)^;
+  if PyVarSlotManaged(src^.VType) then s := PPyAnsiString(@src^.Payload)^
+  else if PyVarSlotIsObj(src^.VType) then PXXObjRetain(Pointer(NativeInt(src^.Payload)));
   PyVarSlotClear(dst);
   dst^.VType := src^.VType;
   if PyVarSlotManaged(src^.VType) then
@@ -1438,10 +1480,13 @@ end;
 
 constructor TPyDict.Create;
 begin
+  PXXObjFinalizeHook := @PyObjFinalize;
   FLen := 0;
   FCap := 0;
   FKeys := nil;
   FVals := nil;
+  FHash := nil;
+  FHashCap := 0;
 end;
 
 function TPyDict.count: Integer;
@@ -1454,9 +1499,11 @@ begin
   Result := d.FLen;
 end;
 
+procedure PyDictRehash(d: TPyDict; newHashCap: Integer); forward;
+
 procedure PyDictGrow(d: TPyDict; need: Integer);
 var
-  newCap, k: Integer;
+  newCap, k, hashCap: Integer;
   newKeys, newVals: Pointer;
   src, dst: PPyVarRec;
 begin
@@ -1489,21 +1536,115 @@ begin
   d.FKeys := newKeys;
   d.FVals := newVals;
   d.FCap := newCap;
+  { Rebuild the hash index at ~2x capacity (load factor <= 0.5), power of two so
+    indexof's `and (FHashCap-1)` masks correctly. Reinserts the FLen live keys. }
+  hashCap := 16;
+  while hashCap < newCap * 2 do hashCap := hashCap * 2;
+  PyDictRehash(d, hashCap);
+end;
+
+function PyStrBytesHash(a: PChar; n: Integer): NativeUInt;
+{ FNV-1a over n bytes at a. }
+var i: Integer; h: NativeUInt;
+begin
+  h := NativeUInt($cbf29ce484222325);   { FNV-1a 64-bit offset basis }
+  if a <> nil then
+    for i := 0 to n - 1 do
+      h := (h xor NativeUInt(Byte(a[i]))) * NativeUInt($100000001b3);   { FNV prime }
+  Result := h;
+end;
+
+function PyVarHashKey(p: PPyVarRec): NativeUInt;
+{ Hash CONSISTENT WITH PyVarEq (equal keys MUST hash equal):
+  - int-family VT_INT/VT_INT64/VT_BOOL (1/2/4): by payload, tag-independent
+    (PyVarEq compares these cross-tag by value);
+  - VT_PROMO_INT64 (8193) and VT_STRING (6): by string CONTENT;
+  - else: same VType required by PyVarEq, so hash (VType, payload).
+  A wrong hash here silently loses keys, so this mirrors PyVarEq arm-for-arm. }
+var h: NativeUInt; sp: PPyAnsiString;
+begin
+  if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
+    h := NativeUInt(p^.Payload)
+  else if p^.VType = 8193 then
+  begin
+    sp := PPyAnsiString(@p^.Payload);
+    h := PyStrBytesHash(PChar(sp^), Length(sp^));
+  end
+  else if p^.VType = 6 then
+  begin
+    if Pointer(p^.Payload) = nil then h := PyStrBytesHash(nil, 0)
+    else h := PyStrBytesHash(PChar(p^.Payload),
+                             Integer(PInt64(NativeInt(p^.Payload) - 8)^));
+  end
+  else
+    h := (NativeUInt(p^.VType) * NativeUInt($100000001b3)) xor NativeUInt(p^.Payload);
+  { murmur3 fmix64 avalanche so the low bits that FHashCap-1 masks are well mixed }
+  h := h xor (h shr 33);
+  h := h * NativeUInt($ff51afd7ed558ccd);
+  h := h xor (h shr 33);
+  h := h * NativeUInt($c4ceb9fe1a85ec53);
+  h := h xor (h shr 33);
+  Result := h;
+end;
+
+procedure PyDictHashPut(d: TPyDict; keyIdx: Integer);
+{ Insert FKeys[keyIdx]'s slot index into the open-addressing table. Caller
+  guarantees the key is not already present, so no PyVarEq dup check here. }
+var mask, pos: NativeUInt; slotp: PInteger;
+begin
+  mask := NativeUInt(d.FHashCap) - 1;
+  pos := PyVarHashKey(PPyVarRec(NativeInt(d.FKeys) + keyIdx * 16)) and mask;
+  while True do
+  begin
+    slotp := PInteger(NativeInt(d.FHash) + NativeInt(pos) * 4);
+    if slotp^ < 0 then begin slotp^ := keyIdx; Exit; end;
+    pos := (pos + 1) and mask;
+  end;
+end;
+
+procedure PyDictRehash(d: TPyDict; newHashCap: Integer);
+{ (Re)build the hash index at newHashCap (a power of two) from the current
+  FKeys/FLen. Called after a grow or a remove-shift changes the layout. }
+var i: Integer;
+begin
+  if d.FHash <> nil then FreeMem(d.FHash);
+  d.FHashCap := newHashCap;
+  GetMem(d.FHash, newHashCap * 4);
+  for i := 0 to newHashCap - 1 do
+    PInteger(NativeInt(d.FHash) + i * 4)^ := -1;
+  for i := 0 to d.FLen - 1 do
+    PyDictHashPut(d, i);
 end;
 
 function TPyDict.indexof(const k: Variant): Integer;
 var
   i: Integer;
   q: PPyVarRec;
+  mask, pos: NativeUInt;
+  idx: Integer;
 begin
   Result := -1;
+  if FLen = 0 then Exit;
   q := PPyVarRec(@k);
-  for i := 0 to FLen - 1 do
-    if PyVarEq(PPyVarRec(NativeInt(FKeys) + i * 16), q) then
-    begin
-      Result := i;
-      Exit;
-    end;
+  if FHashCap = 0 then
+  begin
+    { defensive linear fallback — store() always builds the index, so this only
+      runs if a dict somehow held entries with no index }
+    for i := 0 to FLen - 1 do
+      if PyVarEq(PPyVarRec(NativeInt(FKeys) + i * 16), q) then
+      begin Result := i; Exit; end;
+    Exit;
+  end;
+  mask := NativeUInt(FHashCap) - 1;
+  pos := PyVarHashKey(q) and mask;
+  while True do
+  begin
+    idx := PInteger(NativeInt(FHash) + NativeInt(pos) * 4)^;
+    if idx < 0 then Exit;   { empty slot -> key absent }
+    if PyVarEq(PPyVarRec(NativeInt(FKeys) + idx * 16), q) then
+    begin Result := idx; Exit; end;
+    pos := (pos + 1) and mask;
+  end;
 end;
 
 function TPyDict.fetch(const k: Variant): Variant;
@@ -1542,11 +1683,15 @@ begin
   i := indexof(k);
   if i < 0 then
   begin
-    PyDictGrow(Self, FLen + 1);
+    PyDictGrow(Self, FLen + 1);   { rebuilds the hash index if it grew }
     i := FLen;
     src := PPyVarRec(@k);
     dst := PPyVarRec(NativeInt(FKeys) + i * 16);
     PyVarSlotSet(dst, src);
+    { register the new key in the index (grow keeps load factor <= 0.5, so a
+      slot is always free). FHashCap is 0 only for the never-grown empty dict,
+      which cannot reach here — PyDictGrow(1) always allocates it. }
+    PyDictHashPut(Self, i);
     FLen := FLen + 1;
   end;
   src := PPyVarRec(@v);
@@ -1614,6 +1759,9 @@ begin
     dst^.Payload := src^.Payload;
   end;
   FLen := FLen - 1;
+  { the tail shift renumbered every entry after the hole, so the stored slot
+    indices are stale — rebuild the index from the new layout. }
+  if FHashCap > 0 then PyDictRehash(Self, FHashCap);
 end;
 
 function TPyDict.pop(const k: Variant; const d: Variant): Variant;
@@ -2156,6 +2304,9 @@ begin
     writeln('Runtime error: cannot repeat a non-string value');
     Halt(219);
   end;
+  { the `PPyAnsiString(@p^.Payload)^` deref arg is owned by the isNilPy arg
+    lowering (bug-a-nilpy-managed-deref-to-const-arg-leaks), so no per-site
+    bind is needed. }
   Result := pystr_repeat(PPyAnsiString(@p^.Payload)^, n);
 end;
 
@@ -2253,6 +2404,7 @@ end;
 constructor TPyBytes.Create(n: Integer);
 var k: Integer; p: PByte;
 begin
+  PXXObjFinalizeHook := @PyObjFinalize;
   if n < 0 then n := 0;
   FLen := n;
   FData := nil;
@@ -2859,9 +3011,11 @@ end;
 function pyfile_slurp(const path: AnsiString; var ok: Boolean): AnsiString;
 var cs: AnsiString; fd, nread: Int64; buf: array[0..8191] of Char; i: Integer;
     nrOpenat, nrRead, nrClose: Integer;
+    rlen, rcap: Integer;
 begin
   Result := '';
   ok := False;
+  rlen := 0; rcap := 0;
   { syscall numbers resolved once, so the read loop below has no ifdefs in it.
     openat(AT_FDCWD) everywhere for portability (aarch64/riscv lack open). }
   nrOpenat := 0; nrRead := 0; nrClose := 0;
@@ -2891,8 +3045,23 @@ begin
   begin
     nread := __pxxrawsyscall(nrRead, fd, Int64(@buf[0]), 8192, 0, 0, 0);
     if nread > 0 then
-      for i := 0 to nread - 1 do Result := Result + buf[i];
+    begin
+      { Amortised-doubling append, NOT `Result := Result + buf[i]` per byte
+        (that reallocated + recopied the whole string every byte — O(n^2) in
+        file size, the dominant NilPy startup cost since it slurps the .UFO /
+        pyeval stdlib). Grow capacity geometrically, blit each chunk in place. }
+      if rlen + Integer(nread) > rcap then
+      begin
+        rcap := (rlen + Integer(nread)) * 2;
+        if rcap < 16384 then rcap := 16384;
+        SetLength(Result, rcap);   { SetLength preserves the existing rlen bytes }
+      end;
+      for i := 0 to Integer(nread) - 1 do
+        Result[rlen + i + 1] := buf[i];
+      rlen := rlen + Integer(nread);
+    end;
   end;
+  SetLength(Result, rlen);   { trim to the exact length read }
   nread := __pxxrawsyscall(nrClose, fd, 0, 0, 0, 0, 0);  { result discarded }
   ok := True;
 end;
@@ -3036,6 +3205,11 @@ begin
   Result := Pointer(s) = nil;
 end;
 
+function pystr_none: AnsiString;
+begin
+  Result := '';
+end;
+
 { Identity that BOXES its argument into a variant: passing a scalar to a Variant
   parameter materialises the box, so `pyvar_box(5)` yields a variant holding 5.
   Used to give a getattr default a variant representation for a variant-typed
@@ -3049,15 +3223,86 @@ type
   TPyBoundRec = record Code, Recv: Pointer; end;
   PPyBoundRec = ^TPyBoundRec;
 
+procedure PyObjFinalize(objp: Pointer; rawKind: NativeInt);
+var
+  k: Integer;
+  l: TPyList;
+  d: TPyDict;
+  by: TPyBytes;
+  o: TObject;
+begin
+  if objp = nil then Exit;
+  if rawKind = 2 then
+  begin
+    { pyeval closure object: the registry entry (captures, token refs) is
+      pyeval's to free }
+    if PyClosureFinalizeHook <> nil then PyClosureFinalizeHook(objp);
+    Exit;
+  end;
+  if rawKind <> 0 then
+  begin
+    { bound pair: drop the pair's ref on its receiver. Code is either a proc
+      address or a refcounted closure obj — release both ends (magic-guarded,
+      so a plain code address no-ops). }
+    PXXObjRelease(PPyBoundRec(objp)^.Code);
+    PXXObjRelease(PPyBoundRec(objp)^.Recv);
+    Exit;
+  end;
+  o := TObject(objp);
+  if o is TPyList then
+  begin
+    l := TPyList(objp);
+    for k := 0 to l.FLen - 1 do
+      PyVarSlotClear(PPyVarRec(NativeInt(l.FItems) + k * 16));
+    if l.FItems <> nil then FreeMem(l.FItems);
+    l.FItems := nil; l.FLen := 0; l.FCap := 0;
+    Exit;
+  end;
+  if o is TPyDict then
+  begin
+    d := TPyDict(objp);
+    for k := 0 to d.FLen - 1 do
+    begin
+      PyVarSlotClear(PPyVarRec(NativeInt(d.FKeys) + k * 16));
+      PyVarSlotClear(PPyVarRec(NativeInt(d.FVals) + k * 16));
+    end;
+    if d.FKeys <> nil then FreeMem(d.FKeys);
+    if d.FVals <> nil then FreeMem(d.FVals);
+    if d.FHash <> nil then FreeMem(d.FHash);
+    d.FKeys := nil; d.FVals := nil; d.FHash := nil;
+    d.FLen := 0; d.FCap := 0; d.FHashCap := 0;
+    Exit;
+  end;
+  if o is TPyBytes then
+  begin
+    by := TPyBytes(objp);
+    if by.FData <> nil then FreeMem(by.FData);
+    by.FData := nil; by.FLen := 0;
+    Exit;
+  end;
+  { user class / anything else: release managed + variant fields via the
+    class layout descriptor walker (kind 5 = variant slots, which recurses
+    back through PXXObjRelease for held containers) }
+  PXXClassFinalize(objp);
+end;
+
 function pybound_new(code, recv: Pointer): Variant;
 var b: PPyBoundRec; r: PPyVarRec;
 begin
-  b := GetMem(SizeOf(TPyBoundRec));
+  { RAW refcounted block (no VMT): rc at [b-16], PXX_OBJ_MAGIC_RAW at [b-8].
+    The pair OWNS +1 on its receiver; PyObjFinalize's raw arm drops it when
+    the pair dies (feature-nilpy-object-reclamation slice 3). }
+  PXXObjFinalizeHook := @PyObjFinalize;
+  b := PPyBoundRec(PXXObjAllocRaw(SizeOf(TPyBoundRec)));
   b^.Code := code;
   b^.Recv := recv;
+  PXXObjRetain(code);   { a closure-obj code is refcounted; plain addresses no-op }
+  PXXObjRetain(recv);
   r := PPyVarRec(@Result);
   r^.VType := 8;                       { VT_BOUNDMETHOD }
   r^.Payload := Int64(NativeInt(b));
+  { the Result slot takes the construction's own +1 (ownership transfer) —
+    downstream copies retain/release it like any object payload }
 end;
 
 function pybound_code(const v: Variant): Pointer;
@@ -3931,6 +4176,7 @@ begin
     o := TObject(pyvarobj(v));
     if o is TPyList then begin Result := pylist_repr(TPyList(o)); Exit; end;
     if o is TPyDict then begin Result := pydict_repr(TPyDict(o)); Exit; end;
+    if o is TPyBytes then begin Result := pybytes_repr(TPyBytes(o)); Exit; end;
   end;
   Result := pyrepr_of(v);
 end;
@@ -3944,6 +4190,7 @@ begin
     o := TObject(pyvarobj(v));
     if o is TPyList then begin Result := pylist_repr(TPyList(o)); Exit; end;
     if o is TPyDict then begin Result := pydict_repr(TPyDict(o)); Exit; end;
+    if o is TPyBytes then begin Result := pybytes_repr(TPyBytes(o)); Exit; end;
   end;
   Result := pystr_of(v);
 end;
@@ -3974,6 +4221,41 @@ begin
     Result := Result + pyvar_repr(k) + ': ' + pyvar_repr(d.fetch(k));
   end;
   Result := Result + '}';
+end;
+
+{ CPython bytes repr: b'...' with printable ASCII kept, \t \n \r named, the
+  rest as \xHH. Like CPython, the quote flips to double quotes when the data
+  contains a single quote but no double quote. }
+function pybytes_repr(b: TPyBytes): AnsiString;
+var i, c: Integer; q: Char; hasSq, hasDq: Boolean;
+const HexD: array[0..15] of Char = ('0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f');
+begin
+  hasSq := False; hasDq := False;
+  if b <> nil then
+    for i := 0 to b.count - 1 do
+    begin
+      c := b.at(i);
+      if c = 39 then hasSq := True
+      else if c = 34 then hasDq := True;
+    end;
+  if hasSq and (not hasDq) then q := '"' else q := '''';
+  Result := 'b' + q;
+  if b <> nil then
+    for i := 0 to b.count - 1 do
+    begin
+      c := b.at(i);
+      if c = 92 then Result := Result + '\\'
+      else if c = Ord(q) then Result := Result + '\' + q
+      else if c = 9 then Result := Result + '\t'
+      else if c = 10 then Result := Result + '\n'
+      else if c = 13 then Result := Result + '\r'
+      else if (c >= 32) and (c <= 126) then Result := Result + Chr(c)
+      else
+      begin
+        Result := Result + '\x' + HexD[(c shr 4) and 15] + HexD[c and 15];
+      end;
+    end;
+  Result := Result + q;
 end;
 
 function pystr_of(const v: Variant): AnsiString; overload;

@@ -103,6 +103,39 @@ function PXXPCharOf(p: Pointer): Pointer;
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
 procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
+{ NilPy object reclamation (devdocs/dev/nilpy-object-reclamation.md): class
+  instances created by NilPy code paths are refcounted like AnsiString handles.
+  The instance pointer is base+16 of its own heap block, rc at [inst-16] — the
+  same protocol as the string handles above. Pascal-created instances are NOT
+  in this scheme; only allocations routed through PXXObjAlloc are. A headered
+  instance is recognized at runtime by PXX_OBJ_MAGIC in the word at [inst-8]:
+  a plain-GetMem instance has its allocator SIZE word there, always a multiple
+  of 8, and the magic has low bits set — so the two populations cannot be
+  confused, retain/release no-op on unheadered instances instead of corrupting
+  a neighbour block, and PXXObjFree frees correctly either way. }
+const
+  PXX_OBJ_MAGIC = $505942F1;   { low bits 001 — never an allocator size word }
+  { RAW variant of the tag: a refcounted heap block that is NOT a class
+    instance (no VMT at +0) — today only pybound_new's {code,recv} pairs.
+    Release runs the finalize hook with raw=1 so the hook won't VMT-dispatch. }
+  PXX_OBJ_MAGIC_RAW = $505942F9;
+  { second RAW flavor: a pyeval closure object — finalized through the same
+    hook with rawKind=2 (pylib forwards to pyeval's registry free) }
+  PXX_OBJ_MAGIC_RAW2 = $505942E1;
+type
+  { Finalizer for a dying refcounted object, installed by pylib (which knows
+    the container types). p = the object, raw = 1 for a RAW (VMT-less) block.
+    Runs after rc hits 0 and before the block is freed; it releases the
+    object's children recursively. nil = no finalizer (plain free). }
+  TPXXObjFinalize = procedure(objp: Pointer; rawKind: NativeInt);
+var
+  PXXObjFinalizeHook: TPXXObjFinalize;
+function PXXObjAlloc(size: NativeInt): Pointer;
+function PXXObjAllocRaw(size: NativeInt): Pointer;
+function PXXObjAllocRaw2(size: NativeInt): Pointer;
+procedure PXXObjRetain(p: Pointer);
+procedure PXXObjRelease(p: Pointer);
+procedure PXXObjFree(p: Pointer);
 { COM/ARC interface ARC helpers dispatch through the IMT via an indirect call,
   which the ESP (xtensa/riscv32) backends cannot lower yet; ESP has no COM
   interfaces anyway, so exclude them there (their RegisterProc is likewise
@@ -231,6 +264,13 @@ const
 var
   HeapPtr  : Int64;   { next free byte in the current arena (0 = none yet) }
   HeapEnd  : Int64;   { end address of the current arena }
+  HeapLow  : Int64;   { lowest arena base ever mapped (0 = none yet) — with
+                        HeapHigh, a conservative "is this plausibly one of our
+                        heap payloads" range for the PXXObj* guards, which must
+                        not deref header words of arbitrary values (a NilPy
+                        None sentinel or boxed int reaching a retain would
+                        otherwise fault reading [p-8]) }
+  HeapHigh : Int64;   { highest arena end ever mapped }
   FreeList : Int64;   { head of the LARGE (> HEAP_BIN_MAX) free list, 0 = empty }
   { bin[i] holds blocks of exactly (i+1)*8 bytes. BSS-zeroed = all empty. }
   FreeBins : array[0..HEAP_BIN_COUNT-1] of Int64;
@@ -350,6 +390,50 @@ begin
   Result := np;
 end;
 {$else}
+{$ifdef PXX_LIBC_HEAP}
+{ Debug/diagnosis profile (-dPXX_LIBC_HEAP): back the pxx heap with dynamic
+  libc malloc so VALGRIND (memcheck/massif) sees every allocation with its
+  stack — the native arena/freelist allocator is invisible to it. Emitting the
+  externals flips the ELF writer into dynamic mode (PT_INTERP + DT_NEEDED)
+  automatically. Same 8-byte size header as the native allocator, calloc for
+  the zero-init contract. HeapLow/HeapHigh become a coarse min/max envelope so
+  PXXObjPlausible keeps working. NOT for production: no size-class bins, libc
+  lock discipline instead of the pxx one. }
+function pxx_libc_calloc(n: NativeUInt; size: NativeUInt): Pointer; cdecl; external 'libc.so.6' name 'calloc';
+procedure pxx_libc_free(p: Pointer); cdecl; external 'libc.so.6' name 'free';
+
+function PXXAlloc(size: NativeInt; align: Integer): Pointer;
+var p: Int64;
+begin
+  if size <= 0 then size := 8;
+  size := ((size + 7) div 8) * 8;
+  p := Int64(pxx_libc_calloc(1, NativeUInt(size + 8)));
+  PWord(p)^ := size;                             { 8-byte size header }
+  Result := Pointer(p + 8);                      { payload }
+  if (HeapLow = 0) or (p < HeapLow) then HeapLow := p;
+  if p + size + 8 > HeapHigh then HeapHigh := p + size + 8;
+end;
+
+procedure PXXFree(p: Pointer);
+begin
+  if p = nil then Exit;
+  pxx_libc_free(Pointer(Int64(p) - 8));
+end;
+
+function PXXRealloc(p: Pointer; newSize: NativeInt; align: Integer): Pointer;
+var np: Pointer; oldSize: NativeInt;
+begin
+  np := PXXAlloc(newSize, align);
+  if p <> nil then
+  begin
+    oldSize := NativeInt(PWord(Pointer(Int64(p) - 8))^);
+    if oldSize > newSize then oldSize := newSize;
+    PXXMemMove(np, p, oldSize);
+    PXXFree(p);
+  end;
+  Result := np;
+end;
+{$else}
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 var
   cur, prev, base, need, arena, i: Int64;
@@ -444,6 +528,8 @@ begin
     if arena < HEAP_ARENA then arena := HEAP_ARENA;
     HeapPtr := HeapMmap(arena);
     HeapEnd := HeapPtr + arena;
+    if (HeapLow = 0) or (HeapPtr < HeapLow) then HeapLow := HeapPtr;
+    if HeapEnd > HeapHigh then HeapHigh := HeapEnd;
   end;
   base := HeapPtr;
   HeapPtr := HeapPtr + need;
@@ -522,6 +608,7 @@ begin
   PXXFree(p);
   Result := np;
 end;
+{$endif}
 {$endif}  { PXX_ESP_IDF else: native allocator bodies }
 
 {$ifdef PXX_ESP}
@@ -1104,6 +1191,121 @@ begin
   if rc = 0 then PXXFree(Pointer(base));
 end;
 
+{ NilPy object-reclamation primitives. An instance allocated here lives at
+  base+16 of its own heap block: [rc:8][spare:8][instance data...], so the
+  refcount sits at [inst-16] exactly like a managed string's — the same
+  retain/release idiom (and the same threadsafe atomic) applies. The spare
+  word at [inst-8] is reserved (zero); note it is NOT the RTTI backlink —
+  that one lives before the VMT table, not before the instance.
+  PXXObjRelease at rc=0 currently just frees the block; the recursive
+  per-type finalizer (VMT `__finalize__` slot) is a later slice of
+  feature-nilpy-object-reclamation and hooks in right before the free. }
+function PXXObjAlloc(size: NativeInt): Pointer;
+var base: Int64;
+begin
+  if size < 8 then size := 8;
+  base := Int64(PXXAlloc(size + 16, 8));
+  PWord(base)^ := 1;                    { refcount }
+  PWord(base + 8)^ := PXX_OBJ_MAGIC;    { population tag, see the interface }
+  Result := Pointer(base + 16);
+end;
+
+function PXXObjAllocRaw(size: NativeInt): Pointer;
+var base: Int64;
+begin
+  if size < 8 then size := 8;
+  base := Int64(PXXAlloc(size + 16, 8));
+  PWord(base)^ := 1;                        { refcount }
+  PWord(base + 8)^ := PXX_OBJ_MAGIC_RAW;    { VMT-less block (bound pairs) }
+  Result := Pointer(base + 16);
+end;
+
+{ TRUE iff p can be one of our headered payloads: 8-aligned and inside the
+  mapped-arena envelope with room for the 16-byte header below it. Values that
+  fail are ints/sentinels/foreign pointers — the guards must not even READ
+  their header words. }
+function PXXObjPlausible(p: Pointer): Boolean;
+begin
+  PXXObjPlausible := (HeapLow <> 0) and ((Int64(p) and 7) = 0) and
+                     (Int64(p) >= HeapLow + 24) and (Int64(p) < HeapHigh);
+end;
+
+function PXXObjAllocRaw2(size: NativeInt): Pointer;
+var base: Int64;
+begin
+  if size < 8 then size := 8;
+  base := Int64(PXXAlloc(size + 16, 8));
+  PWord(base)^ := 1;                         { refcount }
+  PWord(base + 8)^ := PXX_OBJ_MAGIC_RAW2;    { pyeval closure object }
+  Result := Pointer(base + 16);
+end;
+
+procedure PXXObjRetain(p: Pointer);
+var base, t: Int64;
+{$ifdef PXX_TS_SOFTLOCK}
+    tsIgnore: Int64;
+{$endif}
+begin
+  if p = nil then Exit;
+  if not PXXObjPlausible(p) then Exit;
+  base := Int64(p) - 16;
+  t := PWord(base + 8)^;
+  if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) and
+     (t <> PXX_OBJ_MAGIC_RAW2) then Exit;  { not ours }
+{$ifdef PXX_TS_SOFTLOCK}
+  tsIgnore := __pxxatomic_add(Pointer(base), 1);
+{$else}
+  PWord(base)^ := PWord(base)^ + 1;
+{$endif}
+end;
+
+procedure PXXObjRelease(p: Pointer);
+var base, rc, t: Int64;
+begin
+  if p = nil then Exit;
+  if not PXXObjPlausible(p) then Exit;
+  base := Int64(p) - 16;
+  t := PWord(base + 8)^;
+  if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) and
+     (t <> PXX_OBJ_MAGIC_RAW2) then Exit;  { not ours }
+{$ifdef PXX_TS_SOFTLOCK}
+  rc := __pxxatomic_add(Pointer(base), -1) - 1;   { returns the OLD value }
+{$else}
+  rc := PWord(base)^ - 1;
+  PWord(base)^ := rc;
+{$endif}
+  if rc = 0 then
+  begin
+    { Run the type finalizer (releases children, recursing back through here)
+      before the block goes away. Installed by pylib; nil in programs that
+      never construct a refcounted object. }
+    if PXXObjFinalizeHook <> nil then
+    begin
+      if t = PXX_OBJ_MAGIC_RAW then
+        PXXObjFinalizeHook(p, 1)
+      else if t = PXX_OBJ_MAGIC_RAW2 then
+        PXXObjFinalizeHook(p, 2)
+      else
+        PXXObjFinalizeHook(p, 0);
+    end;
+    PXXFree(Pointer(base));
+  end;
+end;
+
+{ Free an instance whichever population it belongs to: headered -> release
+  (rc discipline), plain GetMem -> ordinary free. This is what the FreeMem
+  tail of a `.Free` desugar lowers to in a NilPy compilation, so hand-written
+  Pascal units (pyeval's TPyList arg lists, a user unit's obj.Free) stay
+  correct when construction is rerouted through PXXObjAlloc. }
+procedure PXXObjFree(p: Pointer);
+begin
+  if p = nil then Exit;
+  if PXXObjPlausible(p) and (PWord(Int64(p) - 8)^ = PXX_OBJ_MAGIC) then
+    PXXObjRelease(p)
+  else
+    PXXFree(p);
+end;
+
 { COM/ARC interface refcount helpers. `fatptr` is the ADDRESS of a 16-/8-byte
   interface fat pointer (word 0 = IMT, word 1 = instance). The IMT is the
   implementing class's Interface Method Table: a vector of code addresses,
@@ -1524,6 +1726,8 @@ begin
       subDesc := Pointer(memberPtr + 12 + typeRef);
       memberSize := PInt32(Int64(subDesc) + 4)^;
     end
+    else if kind = 5 then
+      memberSize := 16                   { Variant slot: [tag:8][payload:8] }
     else
     begin
       memberSize := SizeOf(Pointer);
@@ -1543,6 +1747,13 @@ begin
           end;
         3: { Record }
           PXXRecordRelease(itemAddr, subDesc);
+        5: { Variant field: release any managed/object payload, recursing
+             through PXXObjRelease's finalizer for a held container
+             (feature-nilpy-object-reclamation) }
+          PXXVarClear(itemAddr);
+        6: { NilPy class-typed field: drop the instance's ref on its child
+             (magic-guarded — a Pascal instance stored here no-ops) }
+          PXXObjRelease(Pointer(PWord(itemAddr)^));
       end;
       j := j + 1;
     end;
@@ -2273,17 +2484,26 @@ end;
 
 procedure PXXVarClear(v: Pointer);
 { Release a string payload and zero the 16-byte slot (both words fully, so
-  32-bit targets leave no stale high halves behind). }
+  32-bit targets leave no stale high halves behind). Object payloads
+  (VT_OBJECT 7 / VT_BOUNDMETHOD 8) ride PXXObjRelease, whose PXX_OBJ_MAGIC
+  guard makes it a no-op on manual-lifetime Pascal instances. A promo-block
+  tag (8192..8199) rides in a variant as a managed AnsiString of its decimal —
+  same release as VT_STRING (mirrors the x86-64 EmitVariantClear range test;
+  this portable body previously missed it, a cross-target leak). }
 begin
-  if PWord(v)^ = 6 then  { VT_STRING }
-    PXXStrDecRef(Pointer(PWord(Int64(v) + 8)^));
+  if (PWord(v)^ = 6) or ((PWord(v)^ >= 8192) and (PWord(v)^ <= 8199)) then
+    PXXStrDecRef(Pointer(PWord(Int64(v) + 8)^))
+  else if (PWord(v)^ = 7) or (PWord(v)^ = 8) or (PWord(v)^ = 9) then
+    PXXObjRelease(Pointer(PWord(Int64(v) + 8)^));
   PXXMemZero(v, 16);
 end;
 
 procedure PXXVarRetain(v: Pointer);
 begin
-  if PWord(v)^ = 6 then  { VT_STRING }
-    PXXStrIncRef(Pointer(PWord(Int64(v) + 8)^));
+  if (PWord(v)^ = 6) or ((PWord(v)^ >= 8192) and (PWord(v)^ <= 8199)) then
+    PXXStrIncRef(Pointer(PWord(Int64(v) + 8)^))
+  else if (PWord(v)^ = 7) or (PWord(v)^ = 8) or (PWord(v)^ = 9) then
+    PXXObjRetain(Pointer(PWord(Int64(v) + 8)^));
 end;
 
 { ---- Float -> text writers (portable bodies for the cross targets, used in
