@@ -1,0 +1,23 @@
+# PEP 604 unions in annotations: `int | None` is how Python 3.10+ spells
+# Optional[int], and it gets Optional's exact treatment (including the widening
+# that keeps a legitimate 0 distinct from None). Output is CPython's.
+
+def length_or_none(x: str) -> int | None:
+    if x == "":
+        return None
+    return len(x)
+
+def zero_or_none(n: int) -> int | None:
+    if n == 0:
+        return 0
+    return None
+
+def first_arm(x: int) -> int | str:
+    return x + 1
+
+print("value:", length_or_none("abc"))
+print("none:", length_or_none("") is None)
+# the widening matters: a real 0 must not read as None
+print("zero is not None:", zero_or_none(0) is not None, zero_or_none(0))
+print("none is None:", zero_or_none(1) is None)
+print("union of two real types keeps the first:", first_arm(41))

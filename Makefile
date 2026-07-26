@@ -181,6 +181,9 @@ test-nilpy: $(COMPILER)
 	# re module over lib/rtl/regex.pas; expectation is CPython's own output
 	# collections.Counter (dict in Counter mode); expectation is CPython's output
 	# field(default_factory=dict); expectation is CPython's output
+	# PEP 604 unions in annotations; expectation is CPython's output
+	./$(COMPILER) test/test_nilpy_union_annotation.npy /tmp/test_nilpy_union26
+	test "$$(/tmp/test_nilpy_union26)" = "$$(printf 'value: 3\nnone: True\nzero is not None: True 0\nnone is None: True\nunion of two real types keeps the first: 42')"
 	./$(COMPILER) test/test_nilpy_dataclass_dict_factory.npy /tmp/test_nilpy_dcdict26
 	test "$$(/tmp/test_nilpy_dcdict26)" = "$$(printf 'F 1.5 1 because 7\nfresh per construction: 0 0')"
 	./$(COMPILER) test/test_nilpy_counter.npy /tmp/test_nilpy_counter26
@@ -3161,6 +3164,9 @@ test-core: $(COMPILER)
 	# re module over lib/rtl/regex.pas; expectation is CPython's own output
 	# collections.Counter (dict in Counter mode); expectation is CPython's output
 	# field(default_factory=dict); expectation is CPython's output
+	# PEP 604 unions in annotations; expectation is CPython's output
+	./$(COMPILER) test/test_nilpy_union_annotation.npy /tmp/test_nilpy_union26
+	test "$$(/tmp/test_nilpy_union26)" = "$$(printf 'value: 3\nnone: True\nzero is not None: True 0\nnone is None: True\nunion of two real types keeps the first: 42')"
 	./$(COMPILER) test/test_nilpy_dataclass_dict_factory.npy /tmp/test_nilpy_dcdict26
 	test "$$(/tmp/test_nilpy_dcdict26)" = "$$(printf 'F 1.5 1 because 7\nfresh per construction: 0 0')"
 	./$(COMPILER) test/test_nilpy_counter.npy /tmp/test_nilpy_counter26

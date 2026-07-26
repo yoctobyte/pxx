@@ -359,7 +359,11 @@ var
   in the ticket; honest variant-tagged fields come later), Callable[...] ->
   tyPointer, Any -> tyVariant, container types (List/Dict/Tuple/Set) remain a
   clean unsupported error. Advances i past the annotation. }
-function PyAnnTypeAt(var i: Integer): TTypeKind;
+function PyAnnTypeAt(var i: Integer): TTypeKind; forward;
+
+{ ONE annotation term. PyAnnTypeAt below layers PEP 604 unions (`int | None`)
+  over this, so every caller gets union support for free. }
+function PyAnnTypeTermAt(var i: Integer): TTypeKind;
 var lo: AnsiString; depth: Integer;
     sigN, sigPi: Integer; sigIsFunc: Boolean; sigRet: TTypeKind;
     sigPNames: array[0..15] of AnsiString;
@@ -546,18 +550,95 @@ begin
     Exit;
   end;
   if lo = 'tuple' then
-    { ErrorAt, not Error: this runs in a TOKEN-INDEX pre-pass with no parser
-      cursor, so plain Error reports whatever line the cursor happens to sit
-      on — for uforth that was line 26, ~180 lines from the actual
-      annotation. The token we are looking at knows its own line. }
-    ErrorAt(Tokens[i].Line,
-            'Nil Python: tuple types are not supported yet (' + lo + ')');
+  begin
+    { A tuple annotation is TPyList, which is the representation the rest of the
+      frontend ALREADY assumes: `isinstance(x, tuple)` tests TPyList (see
+      PyIsInstance), and a tuple display lowers to a list. Annotations are
+      erased anyway — they pick a type for inference, and TPyList is the right
+      one for something indexed, iterated and unpacked.
+
+      The DIFFERENCE from CPython, deliberate and worth stating: a tuple is
+      mutable here and is not hashable, so it cannot be a dict key. A program
+      that keys a dict by a tuple will fail at that use site rather than
+      silently misbehave. Immutability is not modelled anywhere in NilPy yet.
+
+      Previously this was a hard error, which rejected a whole module for an
+      annotation the compiler then erases — songformatter's key_analysis.py died
+      on `tuple[str, float]` after passing everything else. }
+    Inc(i);
+    if (i < MainProgramTokCount) and (Tokens[i].Kind = tkLBrack) then
+    begin
+      depth := 1; Inc(i);
+      while (i < MainProgramTokCount) and (depth > 0) do
+      begin
+        if Tokens[i].Kind = tkLBrack then Inc(depth)
+        else if Tokens[i].Kind = tkRBrack then Dec(depth);
+        Inc(i);
+      end;
+    end;
+    Result := tyClass;
+    PyAnnLastCi := FindUClass('TPyList');
+    Exit;
+  end;
   if IsClassType(GetTokenStr(i)) then
   begin
     Result := tyClass;
     PyAnnLastCi := FindUClass(GetTokenStr(i));
     Inc(i);
     Exit;
+  end;
+end;
+
+{ PEP 604 unions: `int | None`, `str | None`, `A | B`.
+
+  Python 3.10+ spells Optional[X] as `X | None`, and real code uses it far more
+  than the typing spelling — songformatter's key_analysis.py has
+  `-> int | None` and it rejected the whole module with "unexpected token".
+
+  Annotations pick a type for inference and are then erased, so a union takes the
+  first term that names a type. When one arm is None the union IS Optional, so it
+  gets Optional's exact treatment (the widening below), which is what keeps
+  `if x is not None` correct for a legitimate 0. A union of two real types
+  (`int | str`) keeps the first: NilPy has no union type, and the alternative is
+  rejecting code whose annotation it would have thrown away anyway. }
+function PyAnnTypeAt(var i: Integer): TTypeKind;
+var termT: TTypeKind; before, ci, sig: Integer; sawNone, first: Boolean;
+begin
+  Result := tyUnknown;
+  ci := -1;
+  sig := -1;
+  sawNone := False;
+  first := True;
+  while True do
+  begin
+    before := i;
+    if (i < MainProgramTokCount) and (Tokens[i].Kind = tkNil) then
+      sawNone := True;
+    termT := PyAnnTypeTermAt(i);
+    if first or ((Result = tyUnknown) and (termT <> tyUnknown)) then
+    begin
+      if first or (termT <> tyUnknown) then
+      begin
+        Result := termT;
+        ci := PyAnnLastCi;
+        sig := PyAnnLastProcSig;
+      end;
+    end;
+    first := False;
+    if i = before then Inc(i);   { never spin on a term that consumed nothing }
+    if (i < MainProgramTokCount) and (Tokens[i].Kind = tkPipe) then
+      Inc(i)
+    else
+      Break;
+  end;
+  PyAnnLastCi := ci;
+  PyAnnLastProcSig := sig;
+  if sawNone then
+  begin
+    { same widening as Optional[...] — see the note there }
+    if Result = tyInteger then Result := tyInt64;
+    if Result = tyString then Result := tyAnsiString;
+    if PyAnnRetScope and (Result = tyInt64) then Result := tyVariant;
   end;
 end;
 
