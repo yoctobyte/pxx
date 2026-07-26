@@ -173,3 +173,43 @@ NilPy resolves `import X` through the Pascal unit resolver, which is precisely h
 colliding with an RTL unit name binds to Pascal code (`json`, `math`, `net`,
 `http`, `random`, `collections`…). Needs a policy: allow-list the deliberate shims,
 or give Python shims their own search path. See that ticket.
+
+## Wall catalog, third pass (2026-07-26 — after Counter + the dict factory)
+
+`key_analysis.py` has now moved through three walls in a row, each fix revealing
+the next — which is the flywheel working as intended:
+
+`import re` (line 1) → `from collections import Counter` (line 4) →
+`field(default_factory=dict)` → **tuple type annotations** (`Nil Python: tuple
+types are not supported yet`).
+
+So the current wall per module:
+
+| module | first wall now |
+| --- | --- |
+| `key_analysis.py` | tuple types — see [[feature-nilpy-tuple-return]], which needs widening to cover tuple TYPES and annotations, not just `return 1, 2` |
+| `settings.py` | `import configparser` — [[feature-nilpy-configparser]] |
+| `convertrawtext.py` | `import tkinter` — [[feature-nilpy-tkinter-facade]] |
+| `SongFormatter.py` | `import json` binds the Pascal RTL unit — [[bug-nilpy-stdlib-name-binds-pascal-unit]] |
+
+Tuples are now the critical path for the engine modules, and they show up three
+ways: as annotations (`tuple[str, float]`), as returns (`return "xxxxxx", [0]*6`),
+and as `re.findall` results with 2+ groups (where the `re` module returns lists
+today — see that unit's header). One feature, three consumers.
+
+Two findings filed from this pass, both beyond songformatter:
+- [[bug-pascal-subclass-inherited-members]] — subclassing is half-wired FOUR ways
+  (inherited fields and methods invisible unqualified, wrong `Create`, inherited
+  default property loses subscript assignment). It forced Counter to ship as a
+  dict mode instead of a subclass, and it blocks the natural shape for
+  configparser's `optionxform` override.
+- [[feature-nilpy-augmented-subscript-assign]] — `d[k] += 1` and `xs[i] += 5` are
+  "not an lvalue". Pre-existing, reproduced on the pinned stable, and the most
+  common counting idiom in Python.
+
+**Diagnostic line numbers are unreliable and it is costing real time.** Three
+separate errors this session pointed at the wrong line: `import json` reports line
+64 in a 1-line file, the dataclass-factory error reported line 6 (a list literal)
+for a field on line 53, and the augmented-assignment error reports one line past
+the statement. Each sent me reading the wrong code first. Worth a ticket of its
+own if it keeps happening.
