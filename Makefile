@@ -180,6 +180,9 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_sqlite_crud26)" = "$$(printf '1 alice\n2 bob')"
 	# re module over lib/rtl/regex.pas; expectation is CPython's own output
 	# collections.Counter (dict in Counter mode); expectation is CPython's output
+	# field(default_factory=dict); expectation is CPython's output
+	./$(COMPILER) test/test_nilpy_dataclass_dict_factory.npy /tmp/test_nilpy_dcdict26
+	test "$$(/tmp/test_nilpy_dcdict26)" = "$$(printf 'F 1.5 1 because 7\nfresh per construction: 0 0')"
 	./$(COMPILER) test/test_nilpy_counter.npy /tmp/test_nilpy_counter26
 	test "$$(/tmp/test_nilpy_counter26)" = "$$(printf 'missing reads zero: 0\nstored: 2 len: 1\nfrom list: 2 1\nafter update: 2 3 1\nmc y 3\nmc x 2\nmc z 1\ntop: y\nkey x 2\nkey y 3\nkey z 1\nas dict: 2')"
 	./$(COMPILER) test/test_nilpy_re.npy /tmp/test_nilpy_re26
@@ -3157,6 +3160,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nil_python_core26)" = "$$(printf '0\n1\n1\n2\n3\n5\n10')"
 	# re module over lib/rtl/regex.pas; expectation is CPython's own output
 	# collections.Counter (dict in Counter mode); expectation is CPython's output
+	# field(default_factory=dict); expectation is CPython's output
+	./$(COMPILER) test/test_nilpy_dataclass_dict_factory.npy /tmp/test_nilpy_dcdict26
+	test "$$(/tmp/test_nilpy_dcdict26)" = "$$(printf 'F 1.5 1 because 7\nfresh per construction: 0 0')"
 	./$(COMPILER) test/test_nilpy_counter.npy /tmp/test_nilpy_counter26
 	test "$$(/tmp/test_nilpy_counter26)" = "$$(printf 'missing reads zero: 0\nstored: 2 len: 1\nfrom list: 2 1\nafter update: 2 3 1\nmc y 3\nmc x 2\nmc z 1\ntop: y\nkey x 2\nkey y 3\nkey z 1\nas dict: 2')"
 	./$(COMPILER) test/test_nilpy_re.npy /tmp/test_nilpy_re26

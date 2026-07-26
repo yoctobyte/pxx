@@ -33,6 +33,7 @@ const
   PYDC_BOOL  = 4;
   PYDC_NIL   = 5;  { None default: 0/nil for pointer-like and Optional[int] fields }
   PYDC_FACTORY_LIST = 6;  { field(default_factory=list): fresh empty TPyList per construction }
+  PYDC_FACTORY_DICT = 8;  { field(default_factory=dict): fresh empty TPyDict per construction }
   PYDC_FACTORY_EXPR = 7;  { field(default_factory=lambda: <expr>): IVal/SOff carry the
                             body's token span, re-parsed at every construction site }
 
@@ -2074,6 +2075,22 @@ case PyDcKind[i] of
       { fresh empty TPyList (same GetMem+ctor shape as a [] literal) }
       k := FindUClass('TPyList');
       if k < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+      valNode := AllocNode(AN_CALL);
+      ASTIVal[valNode] := -Ord(tkGetMem);
+      ASTTk[valNode] := Ord(tyClass);
+      ASTRight[valNode] := REC_UCLASS_BASE + k;
+      tkNode := AllocNode(AN_INT_LIT);
+      ASTIVal[tkNode] := RecSize(REC_UCLASS_BASE + k);
+      ASTTk[tkNode] := Ord(tyInteger);
+      k := AllocNode(AN_ARG);
+      ASTLeft[k] := tkNode;
+      ASTLeft[valNode] := k;
+    end;
+    PYDC_FACTORY_DICT:
+    begin
+      { fresh empty TPyDict (same GetMem+ctor shape as a {} literal) }
+      k := FindUClass('TPyDict');
+      if k < 0 then Error('Nil Python: pylib (TPyDict) not loaded');
       valNode := AllocNode(AN_CALL);
       ASTIVal[valNode] := -Ord(tkGetMem);
       ASTTk[valNode] := Ord(tyClass);
@@ -7805,10 +7822,14 @@ begin
                CaseEqual(GetTokenStr(j + 2), 'default_factory') and
                (Tokens[j + 3].Kind = tkAssign) and
                (Tokens[j + 4].Kind = tkIdent) and
-               CaseEqual(GetTokenStr(j + 4), 'list') and
+               (CaseEqual(GetTokenStr(j + 4), 'list') or
+                CaseEqual(GetTokenStr(j + 4), 'dict')) and
                (j + 5 < bodyEnd) and (Tokens[j + 5].Kind = tkRParen) then
             begin
-              defKind := PYDC_FACTORY_LIST;
+              if CaseEqual(GetTokenStr(j + 4), 'dict') then
+                defKind := PYDC_FACTORY_DICT
+              else
+                defKind := PYDC_FACTORY_LIST;
               j := j + 5;   { onto ')'; the common Inc(j) below steps past it }
             end
             else if CaseEqual(GetTokenStr(j), 'field') and (j + 6 < bodyEnd) and
@@ -7839,7 +7860,7 @@ begin
               defSLen := 0;
             end
             else
-              Error('Nil Python: unsupported dataclass field default (field(default_factory=list) and a zero-arg lambda are the supported forms)');
+              Error('Nil Python: unsupported dataclass field default (field(default_factory=list), field(default_factory=dict) and a zero-arg lambda are the supported forms)');
           end;
           tkMinus:
           begin

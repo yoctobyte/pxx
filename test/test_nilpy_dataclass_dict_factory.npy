@@ -1,0 +1,18 @@
+# field(default_factory=dict) alongside the list form: a FRESH empty dict per
+# construction, like CPython's factory. Output is what CPython prints.
+from dataclasses import dataclass, field
+from typing import Any
+
+@dataclass
+class Result:
+    label: str = ""
+    score: float = 0.0
+    reasons: list[str] = field(default_factory=list)
+    debug: dict[str, Any] = field(default_factory=dict)
+
+r = Result("F", 1.5)
+r.reasons.append("because")
+r.debug["k"] = 7
+print(r.label, r.score, len(r.reasons), r.reasons[0], r.debug["k"])
+r2 = Result()
+print("fresh per construction:", len(r2.reasons), len(r2.debug))
