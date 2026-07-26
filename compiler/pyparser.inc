@@ -3560,6 +3560,11 @@ begin
   else if dotted = 'sys.stdin.isatty' then Result := 'pystdin_isatty'
   else if dotted = 'select.select' then Result := 'pyselect_select'
   else if dotted = 'textwrap.dedent' then Result := 'pytextwrap_dedent'
+  { dict.fromkeys(iterable) — a CLASSMETHOD, so it reaches the same table: the
+    base name is a type rather than a module, which changes nothing here.
+    songformatter uses `list(dict.fromkeys(xs))`, the standard order-preserving
+    dedupe. }
+  else if dotted = 'dict.fromkeys' then Result := 'pydict_fromkeys'
   else Result := '';
 end;
 
@@ -3572,7 +3577,7 @@ begin
   if TokPos < 1 then Exit;
   base := LowerCase(GetTokenStr(TokPos - 1));
   if (base <> 'os') and (base <> 'sys') and (base <> 'textwrap') and
-     (base <> 'select') then Exit;
+     (base <> 'select') and (base <> 'dict') then Exit;
   if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot) then Exit;
   if TokPos + 1 >= TokCount then Exit;
   d2 := base + '.' + LowerCase(GetTokenStr(TokPos + 1));

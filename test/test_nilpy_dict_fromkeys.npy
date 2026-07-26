@@ -1,0 +1,9 @@
+# dict.fromkeys(iterable) — a classmethod, reached through the same dotted-call
+# table as os.path.join. `list(dict.fromkeys(xs))` is the standard
+# order-preserving dedupe. Output is what CPython prints.
+xs = ["b", "a", "b", "c", "a"]
+u = list(dict.fromkeys(xs))
+print("deduped:", len(u), u[0], u[1], u[2])
+d = dict.fromkeys(["k"])
+print("value is None:", d["k"] is None)
+print("empty:", len(dict.fromkeys([])))

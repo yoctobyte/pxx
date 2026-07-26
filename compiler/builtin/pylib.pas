@@ -561,6 +561,10 @@ function list(const v: Variant): TPyList; overload;
 function dict(d: TPyDict): TPyDict;
 function dict(const v: Variant): TPyDict; overload;
 
+{ dict.fromkeys(iterable): a dict with those keys, values None, insertion order
+  preserved. `list(dict.fromkeys(xs))` is the standard order-preserving dedupe. }
+function pydict_fromkeys(l: TPyList): TPyDict;
+
 { collections.Counter(...) — a TPyDict in Counter mode; see TPyDict. }
 function Counter: TPyDict;
 function Counter(l: TPyList): TPyDict; overload;
@@ -1811,6 +1815,16 @@ begin
   dst := PPyVarRec(@Result);
   PyVarSlotInit(dst, src);
   remove(k);
+end;
+
+function pydict_fromkeys(l: TPyList): TPyDict;
+var d: TPyDict; i: Integer;
+begin
+  d := TPyDict.Create;
+  if l <> nil then
+    for i := 0 to l.count - 1 do
+      d.store(l.at(i), pynone());
+  Result := d;
 end;
 
 { ---- collections.Counter ------------------------------------------------- }
