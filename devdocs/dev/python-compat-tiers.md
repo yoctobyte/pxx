@@ -57,61 +57,13 @@ This is the horizon, and the only tier that makes "toss any Python at pxx" true.
   Counter, tuple and configparser tests is CPython's own output for the same
   script, diffed. That is what keeps "compatible" from meaning "plausible".
 
-## What we may write, and what we may not
+## Legitimacy: see the legal note
 
-Not legal advice; this is the working line the project holds, and it matches long
-practice (Wine, Samba, the Nimbus fonts, clean-room BIOS work).
-
-**Free to do:**
-- Implement any library's API from its published documentation and observed
-  behavior, in our own code. Copyright protects their EXPRESSION — their source —
-  not the interface: not the module name, the function names, the parameter names,
-  or the call shapes.
-- Name our unit after the module it implements, so importing code resolves
-  unchanged. `reportlab.pas` implementing reportlab's canvas API is interface
-  naming, the same way `Nimbus Sans` implements Helvetica's metrics. (We used
-  exactly that font substitution for the songformatter preview.)
-- Vendor a third-party library whose licence permits it, keeping its notices
-  intact — pdfgen is public domain, which is why it was chosen. See
-  `decide-3rd-party-vendor-vs-fetch` for the general policy.
-
-**Must not do:**
-- Copy their source, or transcribe it while "rewriting". Clean room means written
-  from the interface, not from their implementation. If you have read their code
-  closely, say so in the ticket and prefer a different implementer.
-- Copy their documentation text into our headers.
-- Claim, in release notes, the website or a README, that pxx RUNS reportlab (or
-  PIL, or any package) when what it runs is our shim. Trademark and plain honesty
-  both land here, and it is the same discipline as the two byte-identicals note in
-  CLAUDE.md: say "a reportlab-compatible canvas", never "reportlab".
-- Imply endorsement by the upstream project.
-
-**Rule of thumb:** the NAME is an interface, the CODE is theirs, the CLAIM is ours
-to get right.
-
-### EU law is explicit about this
-
-Not legal advice, but the authorities are unusually clear and worth naming, since
-this project is developed in the EU:
-
-- **Software Directive 2009/24/EC, Art. 1(2)** — ideas and principles underlying
-  any element of a computer program, **including its interfaces**, are not
-  protected by copyright. The interface is fair game by statute, not just by
-  practice.
-- **CJEU C-406/10, SAS Institute v World Programming (2012)** — neither the
-  FUNCTIONALITY of a program, nor its programming language, nor its data file
-  formats are protected expression. World Programming reimplemented the SAS
-  language from observed behaviour and prevailed. Reimplementing what a library
-  DOES, from the outside, is squarely lawful.
-- **Art. 5(3) and Art. 6** allow observing/studying a program to determine its
-  ideas, and decompilation for interoperability, within limits.
-- **Trademark, EUTMR Art. 14(1)(c)** — referential use to indicate the intended
-  purpose of a product is expressly permitted. "reportlab-compatible" and "mimics
-  reportlab" are exactly that form.
-
-What none of this licenses is copying their source or documentation text: the
-expression stays theirs. The line is the same one as above, now with a statute
-behind it.
+Whether we may implement a named library at all, what "clean room" requires, and
+what we may never claim, are a standing project position and live in
+**`devdocs/legal/interface-compatibility.md`**. In one line: implementing someone
+else's interface is fair game, copying their code is not, and claiming to BE them
+is not. The naming scheme below follows from it.
 
 ### The import name is a MAPPING, not a filename (Rene, 2026-07-26)
 

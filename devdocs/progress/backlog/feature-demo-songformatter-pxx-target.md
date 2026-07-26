@@ -272,7 +272,9 @@ COMPILER's library set, which is backwards for a project whose mission is compil
 existing source as-is. A shim is now NAMED for the module it implements, so the app
 needs no change at all.
 
-Full policy: `devdocs/dev/python-compat-tiers.md` — three tiers (T1 name-shim,
+Legitimacy (may we implement a named library at all, what clean room requires, what
+we must never claim): `devdocs/legal/interface-compatibility.md`.
+Technical policy: `devdocs/dev/python-compat-tiers.md` — three tiers (T1 name-shim,
 T2 vendored C core with a Python face, T3 compile the actual package), the rule
 that T1 defers to a filed T3 ticket and must fail loudly outside its subset, and
 what we may and may not write (interface names and clean-room implementations yes;
