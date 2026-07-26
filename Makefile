@@ -187,6 +187,9 @@ test-nilpy: $(COMPILER)
 	# a .npy program using a unit with an `array of const` parameter
 	# subclassing a class from an imported unit: dotted base, from-import, and
 	# an override dispatching through the base's own call site
+	# configparser shim + the virtual optionxform hook a subclass overrides
+	./$(COMPILER) test/test_nilpy_configparser.npy /tmp/test_nilpy_cfgparse26
+	test "$$(/tmp/test_nilpy_cfgparse26)" = "$$(printf 'sections: 2\nhas UI: True has nope: False\nget: 1280x800\ndefault lowercases: True\noption: fontsize = 13\nsubclass keeps case: True\nand rejects folded: False')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_subclass_unit_base.npy /tmp/test_nilpy_subbase26
 	test "$$(/tmp/test_nilpy_subbase26)" = "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy /tmp/test_nilpy_aoc26
@@ -3183,6 +3186,9 @@ test-core: $(COMPILER)
 	# a .npy program using a unit with an `array of const` parameter
 	# subclassing a class from an imported unit: dotted base, from-import, and
 	# an override dispatching through the base's own call site
+	# configparser shim + the virtual optionxform hook a subclass overrides
+	./$(COMPILER) test/test_nilpy_configparser.npy /tmp/test_nilpy_cfgparse26
+	test "$$(/tmp/test_nilpy_cfgparse26)" = "$$(printf 'sections: 2\nhas UI: True has nope: False\nget: 1280x800\ndefault lowercases: True\noption: fontsize = 13\nsubclass keeps case: True\nand rejects folded: False')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_subclass_unit_base.npy /tmp/test_nilpy_subbase26
 	test "$$(/tmp/test_nilpy_subbase26)" = "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy /tmp/test_nilpy_aoc26

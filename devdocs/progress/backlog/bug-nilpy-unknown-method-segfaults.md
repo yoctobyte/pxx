@@ -1,0 +1,66 @@
+---
+summary: "nilpy: calling a method that does not exist compiles and SEGFAULTS instead of erroring"
+type: bug
+track: N
+prio: 70
+---
+
+# nilpy: an unknown method call compiles, then crashes
+
+- **Type:** bug (Nil-Python frontend, method resolution) — **Track N**
+- **Status:** backlog
+- **Opened:** 2026-07-26, adding [[feature-nilpy-configparser]].
+
+## Severity
+
+A typo, or any method the shim does not have, produces a binary that SEGFAULTS at
+runtime. No compile error, no runtime message. That is the worst failure class we
+have, and it is trivially reachable — every misspelled method name hits it.
+
+## Repro
+
+```python
+from configparser import ConfigParser
+cfg = ConfigParser()
+cfg.no_such_method_at_all("x")
+print("reached")
+```
+```
+ok: /tmp/unk  [code=829866B ...]      <- compiles clean
+Segmentation fault (core dumped)      <- exit 139, nothing printed
+```
+
+The call is emitted against a target that was never resolved, so control transfers
+to whatever the slot holds.
+
+## Related, same shape
+
+A method whose NAME is a Pascal keyword has the same outcome, and this one bites
+pure Pascal too:
+
+```pascal
+type T = class
+  constructor Create;
+  procedure set(x: Integer);   { accepted here }
+end;
+...
+t.set(5);                      { compiles; segfaults }
+```
+
+So `set` cannot be used as a method name, which matters because Python's
+`ConfigParser.set` is exactly that. lib/rtl/configparser.pas spells it `set_` for
+now, meaning `cfg.set(...)` from Python still does not work — songformatter's
+settings.py uses it.
+
+## Two fixes
+
+1. **An unresolved method must be a compile error** naming the class and method.
+   This is the important one.
+2. Then decide how a Python name that collides with a Pascal keyword reaches its
+   method: mapping the call `.set(` to a `set_` member is the smallest rule, and
+   would let shims keep Python's spelling for `set`, `type`, `end`, `not`.
+
+## Gate
+
+`make test-nilpy` green with a `.npy` case asserting the unknown-method call is
+REJECTED at compile time, + `--tier quick` + self-host byte-identical.

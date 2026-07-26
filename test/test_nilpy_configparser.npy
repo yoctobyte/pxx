@@ -1,0 +1,24 @@
+# configparser as a Python module: lib/rtl/configparser.pas is NAMED for it, so
+# `from configparser import ConfigParser` resolves through the unit resolver.
+# optionxform is virtual, so a subclass can keep option-name case - which is the
+# only reason real code subclasses ConfigParser.
+from configparser import ConfigParser
+
+class KeepCase(ConfigParser):
+    def optionxform(self, s: str) -> str:
+        return s
+
+INI = "[UI]\nWindowSize = 1280x800\n\n[Render]\nFontSize = 13\n# a comment\n"
+
+cfg = ConfigParser()
+cfg.read_string(INI)
+print("sections:", cfg.section_count())
+print("has UI:", cfg.has_section("UI"), "has nope:", cfg.has_section("nope"))
+print("get:", cfg.get("UI", "WindowSize"))
+print("default lowercases:", cfg.has_option("Render", "fontsize"))
+print("option:", cfg.option_at("Render", 0), "=", cfg.value_at("Render", 0))
+
+keep = KeepCase()
+keep.read_string(INI)
+print("subclass keeps case:", keep.has_option("Render", "FontSize"))
+print("and rejects folded:", keep.has_option("Render", "fontsize"))
