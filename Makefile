@@ -189,6 +189,9 @@ test-nilpy: $(COMPILER)
 	# an override dispatching through the base's own call site
 	# configparser shim + the virtual optionxform hook a subclass overrides
 	# keyword arguments bind by name, any subset (an omitted optional keeps its default)
+	# a method parameter that is unannotated AND defaulted, explicit and omitted
+	./$(COMPILER) test/test_nilpy_method_param_default.npy /tmp/test_nilpy_mpdef26
+	test "$$(/tmp/test_nilpy_mpdef26)" = "$$(printf 'all three: p f z\ndefaulted: p f\ndefault is None: True')"
 	# a field assigned from an unannotated ctor parameter becomes a variant
 	./$(COMPILER) test/test_nilpy_field_from_unannotated_param.npy /tmp/test_nilpy_fldparam26
 	test "$$(/tmp/test_nilpy_fldparam26)" = "$$(printf 'p f 0\nreassigned: q')"
@@ -3199,6 +3202,9 @@ test-core: $(COMPILER)
 	# an override dispatching through the base's own call site
 	# configparser shim + the virtual optionxform hook a subclass overrides
 	# keyword arguments bind by name, any subset (an omitted optional keeps its default)
+	# a method parameter that is unannotated AND defaulted, explicit and omitted
+	./$(COMPILER) test/test_nilpy_method_param_default.npy /tmp/test_nilpy_mpdef26
+	test "$$(/tmp/test_nilpy_mpdef26)" = "$$(printf 'all three: p f z\ndefaulted: p f\ndefault is None: True')"
 	# a field assigned from an unannotated ctor parameter becomes a variant
 	./$(COMPILER) test/test_nilpy_field_from_unannotated_param.npy /tmp/test_nilpy_fldparam26
 	test "$$(/tmp/test_nilpy_fldparam26)" = "$$(printf 'p f 0\nreassigned: q')"

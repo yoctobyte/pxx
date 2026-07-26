@@ -2368,6 +2368,14 @@ begin
         ASTSLen[valNode] := ProcParamDefaultSLen[ctorPi * MAX_PROC_PARAMS + k];
         ASTTk[valNode] := Ord(tyString);
       end
+      else if Procs[ctorPi].Params[k].TypeKind = tyVariant then
+        { A VARIANT parameter's omitted default has to be a real variant, not a
+          bare integer: `def __init__(self, a, on_change=None)` types on_change
+          Any, and filling it with AN_INT_LIT 0 handed the callee a machine word
+          where it reads a 16-byte slot — the call SEGFAULTED, or printed empty
+          fields, while passing the argument explicitly worked. pynone() is the
+          same None the `return None` path already uses for a variant result. }
+        valNode := PyMakeNone
       else
       begin
         valNode := AllocNode(AN_INT_LIT);
@@ -8569,6 +8577,12 @@ begin
     begin
       { UNANNOTATED parameter -> Any (variant); must match the pre-pass. }
       ptypes[nparams] := tyVariant; pcis[nparams] := -1;
+      if CurTok.Kind = tkAssign then
+      begin
+        Next;
+        if CurTok.Kind = tkMinus then Next;
+        Next;
+      end;
     end
     else
     begin

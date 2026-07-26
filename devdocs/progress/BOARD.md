@@ -28,14 +28,13 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (156)
+## backlog (155)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-cfront-fegetround-unresolved-float-printf | C | 55 | bug | cfront: __pxx_fegetround unresolved at runtime for any float-printf C program | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
-| bug-nilpy-method-unannotated-param-default | N | 65 | bug | nilpy: a method parameter that is unannotated AND has a default fails to parse; the obvious fix returns wrong values | — |
 | bug-nilpy-percent-string-format-garbage | N | 60 | bug | nilpy: printf-style % on a string yields garbage instead of formatting (silent wrong output) | — |
 | bug-nilpy-rtl-exception-surface-shadowed | N | 60 | bug | nilpy: pylib's Exception shadows sysutils' identical declaration, so RTL units fail on CreateFmt/FMessage | — |
 | bug-nilpy-stdlib-name-binds-pascal-unit | N | 60 | bug | nilpy: a Python stdlib import silently binds to a same-named Pascal RTL unit (import json -> lib/rtl/json.pas) | — |
@@ -2670,7 +2669,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [N] bug-nilpy-unknown-method-segfaults
-- [p 65] [N] bug-nilpy-method-unannotated-param-default
 - [p 65] [A] feature-a-typeref-handle
 - [p 65] [N] feature-nilpy-bound-method-value
 - [p 60] [N] bug-nilpy-percent-string-format-garbage

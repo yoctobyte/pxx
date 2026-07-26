@@ -1,0 +1,17 @@
+# A method parameter that is unannotated AND defaulted: `on_change=None`.
+# Two bugs met here. PyParseMethod skipped the default only in the ANNOTATED
+# branch, so the parameter list failed to close. And the omitted default was
+# filled with an integer literal typed as a variant, handing the callee a machine
+# word where it reads a 16-byte slot - a SEGFAULT, while passing the argument
+# explicitly worked. A variant parameter's default is now a real None (pynone).
+class C:
+    def __init__(self, parent, cb, on_change=None) -> None:
+        self.parent = parent
+        self.cb = cb
+        self.on_change = on_change
+
+c = C("p", "f", "z")
+print("all three:", c.parent, c.cb, c.on_change)
+d = C("p", "f")
+print("defaulted:", d.parent, d.cb)
+print("default is None:", d.on_change is None)
