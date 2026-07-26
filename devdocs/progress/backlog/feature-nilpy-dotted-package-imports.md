@@ -29,13 +29,21 @@ Until it lands, T1 shims only work for modules imported by a single bare name.
 
 ## Shape
 
+**Decided (Rene, 2026-07-26): resolution is a MAPPING, and the unit keeps OUR name.**
+`import reportlab` resolves to a unit named `mimic_reportlab`; a dotted path mangles
+onto the same scheme, `reportlab.pdfgen` -> `mimic_reportlab_pdfgen`. No file in the
+tree carries the upstream name, the tree says what each shim is, and the dotted case
+needs no package-directory machinery. Reasoning in
+`devdocs/dev/python-compat-tiers.md`.
+
 Two parts:
 
-1. **Resolve a dotted module path to a unit.** Either a package layout —
-   `lib/py/reportlab/pdfgen.pas` reached from `reportlab.pdfgen` — or a documented
-   mangling (`reportlab.pdfgen` -> unit `reportlab_pdfgen`). The layout is nicer to
-   read and groups a package's shims together; the mangling is less machinery.
-   Pick one and write it in the tiers doc.
+1. **A shim mapping in the import resolver.** Python module name (dotted or not) ->
+   `mimic_<mangled>` unit, consulted when the plain unit lookup fails, so ordinary
+   `uses`/`import` behaviour is untouched. Report the substitution
+   (`reportlab -> mimic_reportlab (shim, subset)`), and add a `--no-shims` flag that
+   makes any substitution an error — that flag is how a "compiled with no shims"
+   claim gets proven later.
 2. **Accept the dotted form in both import statements**: `from a.b import c` and
    `import a.b` / `import a.b as ab`. The plain `from <unit> import name` case
    already works (commit "dotted base classes and from <unit> import name"); this

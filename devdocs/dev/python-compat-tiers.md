@@ -113,16 +113,47 @@ What none of this licenses is copying their source or documentation text: the
 expression stays theirs. The line is the same one as above, now with a statute
 behind it.
 
+### The import name is a MAPPING, not a filename (Rene, 2026-07-26)
+
+The unit does not have to BE called `reportlab`. `import reportlab` RESOLVES to a
+unit named `mimic_reportlab`, through the import resolver. That is better on every
+axis:
+
+- **No file in our tree carries their name.** The trademark surface in the artifact
+  is zero. The name appears only as the import identifier the ecosystem
+  standardised on — used to identify an INTERFACE, not to badge origin, which is
+  the textbook shape of referential use.
+- **The tree is self-documenting.** A reader who opens `mimic_reportlab.pas` knows
+  at once it is a compatible implementation and not vendored upstream code. That is
+  what the `pxxpdf` name was reaching for, now without costing the application a
+  line.
+- **It answers the dotted-path problem for free.** A mapping can mangle:
+  `reportlab.pdfgen` -> `mimic_reportlab_pdfgen`. No package-directory machinery
+  needed, and `os.path`, `xml.etree.ElementTree` and friends work the same way.
+- **The substitution is traceable.** The compiler can report
+  `reportlab -> mimic_reportlab (shim, subset)` so a build says out loud which
+  imports were satisfied by a lookalike, and a `--no-shims` flag can make any
+  substitution an error — which is how a T3 claim gets PROVEN later: "this compiled
+  with no shims at all".
+
+The defence, in one line: we never present our code as theirs, we provide a
+compatible library, and the import name is a de-facto dependency specifier the
+ecosystem chose. A library that also trademarked its import identifier does not
+thereby prevent compatible implementations from being importable — that identifier
+is the coordination point every program already names.
+
 ### Two different names, do not conflate them
 
-- The **identifier** must be EXACT. `import reportlab` resolves to a unit called
-  `reportlab` and nothing else — the naming strategy has no value otherwise. Same
-  for `re`, `configparser`, `tkinter`.
-- The **label** — in the ticket title, the docs, the website, release notes — is
-  descriptive: "mimic-reportlab", "a reportlab-compatible canvas". That is the
-  referential use trademark law permits, and it keeps the claim honest.
+- The **file and unit name** is ours and says what it is: `mimic_reportlab`.
+- The **import identifier** is theirs and must match exactly, because that is what
+  programs write: `import reportlab`. It is resolved onto our unit by the mapping
+  above.
+- The **label** in tickets, docs, website and release notes is descriptive:
+  "mimic-reportlab", "a reportlab-compatible canvas" — never "reportlab".
 
-So: exact name in the code, descriptive name in the prose. Never the reverse.
+Bare-name shims already in the tree (`re`, `configparser`, `tkinter`) are named
+directly, which was the quick path. They should move behind the same mapping when
+it lands, so the rule is one rule.
 
 ## Concrete blocker for T1-by-naming
 
