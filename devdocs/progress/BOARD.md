@@ -83,7 +83,6 @@ _none_
 | feature-ipv6-complete-surface | B | 40 | feature | Finish IPv6: PalAcceptIpv6, UDP v6, asyncnet, AAAA lookups, dual-stack listeners | — |
 | feature-lib-pxxpdf-reportlab-compat | B | 50 | feature | pxxpdf — pxx pdfgen-backed, reportlab-compatible PDF library (nilpy) | bug-cfront-fegetround-unresolved-float-printf, feature-nilpy-fallback-import |
 | feature-lib-pyexec | B | 45 | feature | lib pyexec: a real exec() for Python-subset source (library, two engines) | feature-rtti-field-reflection |
-| feature-lib-regex-engine | B | 50 | feature | regex engine library — backtracking matcher, the substrate for nilpy's re module | — |
 | feature-mimic-fpc-compiler-define-profile | A | 50 | feature | FPC-compiler define profile (`fpcdefs.inc` build-config gates) | — |
 | feature-move-fillchar-intrinsics | A | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-n-nilpy-ast-typing-module-scope | N | 55 | feature | NilPy: type MODULE locals from the AST too | — |
@@ -152,6 +151,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-inline-asm-xmm-operands |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
+| feature-rtl-month-day-name-arrays | B | 55 | feature | RTL: ShortMonthNames / LongMonthNames / day-name arrays — lib-test's synapse step is red on them | — |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 40 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
@@ -244,7 +244,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (968)
+## done (969)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -963,6 +963,7 @@ _none_
 | feature-language-gaps-from-demos | A | 50 | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
 | feature-lazycasing-c-imports | A | 50 | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
 | feature-lib-bignum-operators | B | 42 | feature | bignum operator layer: TBigInt + - * div mod comparisons — Track B | — |
+| feature-lib-regex-engine | B | 50 | feature | regex engine library — backtracking matcher, the substrate for nilpy's re module | — |
 | feature-lib-vecmath | B | 42 | feature | vecmath library: TVec2/3/4 + TMat with operator overloads — Track B | — |
 | feature-library-test-suite | A+B | 50 | feature | Track B library test suite | — |
 | feature-library-var-out-lvalue-actuals | A | 50 | feature | Inc/Dec intrinsic rejects non-bare-symbol lvalue actuals | — |
@@ -2689,10 +2690,11 @@ _none_
 - [p 55] [P] feature-pascal-corpus-generics
 - [p 55] [A] feature-pascal-type-helpers
 - [p 55] [T] feature-pasmith-multi-unit-programs
+- [p 55] [B] feature-rtl-month-day-name-arrays
 - [p 55] [A] feature-signal-siginfo-ucontext
 - [p 53] [A] feature-threadsafe-heap-optimize
-- [p 50] [B] feature-lib-regex-engine (unblocks 1)
 - [p 50] [N] feature-nilpy-fallback-import (unblocks 1)
+- [p 50] [N] feature-nilpy-re-module (unblocks 1)
 - [p 50] [N] feature-nilpy-star-args-kwargs (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [A] decide-abi-portable-vs-target-split
@@ -2802,7 +2804,6 @@ _none_
 - **1** — decide-nilpy-parallel-capture-semantics
 - **1** — feature-inline-asm-xmm-operands
 - **1** — feature-lib-pxxpdf-reportlab-compat
-- **1** — feature-lib-regex-engine
 - **1** — feature-nilpy-break-continue
 - **1** — feature-nilpy-fallback-import
 - **1** — feature-nilpy-re-module

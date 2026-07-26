@@ -30,6 +30,15 @@ The results look like the numeric `mod` operator being applied to a string /
 pointer value rather than string interpolation, i.e. `%` is not being recognized
 as string formatting when the left operand is a str.
 
+## Lane note (2026-07-26)
+
+The multiplicative-expression loop that would need the `str % args` case lives in
+the SHARED `compiler/parser.inc` (~line 11736 for `tkMod`; the neighbouring
+`PyExprMode` string/list/bytes-repeat cases for `tkStar` are the precedent at
+~11706-11721), not in Track N's own `pyparser.inc`. So the hook itself is a Track A
+edit even though the semantics are nilpy's — needs the sole-A check, or file the
+parser.inc hook as a Track A ticket and keep the formatting helper in pyparser.inc.
+
 ## Fix shape
 
 Recognize `str % value` and `str % tuple` in the nilpy lowering and route to a
