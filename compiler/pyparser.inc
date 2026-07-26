@@ -2234,9 +2234,28 @@ begin
     begin
       kwName := CurTok.SVal;
       kwFld := FindUField(ci, kwName);
-      if kwFld < 0 then
-        Error('Nil Python: ' + name + ' has no field named ''' + kwName + '''');
-      kwFld := kwFld - UClsFBase[ci];      { absolute -> field INDEX }
+      if kwFld >= 0 then
+        kwFld := kwFld - UClsFBase[ci]     { absolute -> field INDEX }
+      else
+      begin
+        { Not a field: match the CONSTRUCTOR's parameter names. A hand-written
+          ctor - a Pascal class especially - names its options as parameters, not
+          as fields, and a widget facade is entirely that shape:
+          `Canvas(master, highlightthickness=0)` where highlightthickness is
+          ctor param 2. Param 0 is self, so param k is user-arg index k-1. }
+        kwCtorMi := FindUMeth(ci, 'create');
+        kwFld := -1;
+        if kwCtorMi >= 0 then
+        begin
+          kwCtorPi := UMthProc_[kwCtorMi];
+          for kwPk := 1 to Procs[kwCtorPi].ParamCount - 1 do
+            if CaseEqual(Procs[kwCtorPi].Params[kwPk].Name, kwName) then
+              kwFld := kwPk - 1;
+        end;
+        if kwFld < 0 then
+          Error('Nil Python: ' + name + ' has no field or constructor parameter named ''' +
+                kwName + '''');
+      end;
       Next; Next;                          { the name and the '=' }
       kwAny := True;
     end;

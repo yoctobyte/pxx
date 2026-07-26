@@ -1,0 +1,19 @@
+# The tkinter facade (lib/pcl/tkinter.pas) over tk.pas: widget objects with
+# options passed as keyword arguments, any subset, which is what real tkinter
+# code looks like. COMPILE-only in the suite - it needs an X display to run;
+# run it under xvfb to see the widget paths and a working StringVar.
+import tkinter
+from tkinter import Frame, Canvas, StringVar
+
+root = Tk_()
+f = Frame(root, highlightthickness=0)
+f.pack(side="top", fill="both", expand=1)
+c = Canvas(f, background="white", width=200, height=100)
+c.pack(side="left", fill="both", expand=1)
+item = c.create_text(10, 20, "hello", anchor="sw", fill="#000000")
+print("widget paths:", f.path, c.path)
+print("item id:", item)
+print("canvas width:", c.winfo_width())
+v = StringVar()
+v.set_("abc")
+print("var:", v.get())

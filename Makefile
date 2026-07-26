@@ -189,6 +189,11 @@ test-nilpy: $(COMPILER)
 	# an override dispatching through the base's own call site
 	# configparser shim + the virtual optionxform hook a subclass overrides
 	# keyword arguments bind by name, any subset (an omitted optional keeps its default)
+	# the tkinter facade: compiled, not run - it needs an X display. Lives in
+	# examples/tk/ because a .npy in test/ resolving `tk` picks up test/strings.pas
+	# (a PROGRAM named Strings) ahead of the RTL unit tk.pas uses - the resolver
+	# searches the source file's own directory first.
+	./$(COMPILER) examples/tk/tkinter_facade.npy /tmp/test_nilpy_tkinter26
 	./$(COMPILER) test/test_nilpy_kwargs_by_name.npy /tmp/test_nilpy_kwname26
 	test "$$(/tmp/test_nilpy_kwname26)" = "$$(printf '%b' 'contiguous: root 7 hi z\ninterior hole: 0 skipped-width z\nonly the last: 0  last-only\nnone given: 0  z')"
 	./$(COMPILER) test/test_nilpy_configparser.npy /tmp/test_nilpy_cfgparse26
@@ -3191,6 +3196,11 @@ test-core: $(COMPILER)
 	# an override dispatching through the base's own call site
 	# configparser shim + the virtual optionxform hook a subclass overrides
 	# keyword arguments bind by name, any subset (an omitted optional keeps its default)
+	# the tkinter facade: compiled, not run - it needs an X display. Lives in
+	# examples/tk/ because a .npy in test/ resolving `tk` picks up test/strings.pas
+	# (a PROGRAM named Strings) ahead of the RTL unit tk.pas uses - the resolver
+	# searches the source file's own directory first.
+	./$(COMPILER) examples/tk/tkinter_facade.npy /tmp/test_nilpy_tkinter26
 	./$(COMPILER) test/test_nilpy_kwargs_by_name.npy /tmp/test_nilpy_kwname26
 	test "$$(/tmp/test_nilpy_kwname26)" = "$$(printf '%b' 'contiguous: root 7 hi z\ninterior hole: 0 skipped-width z\nonly the last: 0  last-only\nnone given: 0  z')"
 	./$(COMPILER) test/test_nilpy_configparser.npy /tmp/test_nilpy_cfgparse26
