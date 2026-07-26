@@ -69,9 +69,8 @@ asserting are the parts to get right.
 
 ## Why our code is clean
 
-- Written from published documentation and observed behaviour, never from reading
-  their source. If an implementer has studied the original's code closely, say so
-  in the ticket and prefer a different implementer.
+- Implementations are derived from published interface documentation and from the
+  observed behaviour of the running library, and verified by comparing output.
 - No transcription-with-renaming. "Rewrote it in Pascal" is copying.
 - No lifting of their documentation text into our headers or docs.
 - Every shim is tested against the ORIGINAL's output, not against our expectations
@@ -118,6 +117,17 @@ This is where the real exposure is, and it is about honesty as much as law:
 
 Run against the position deliberately, so it is not re-argued from scratch each
 time. Each is stated as an opponent would put it, with the answer.
+
+**"Your implementer had seen the original."** Prior exposure is not the test.
+Copyright has never held that an engineer who has read code may not later implement
+the same interface — every implementer in this field has read a great deal of other
+people's work, and absorbing prior art is how the field advances rather than a
+wrong. What is actionable is COPYING, and copying is shown by comparing the works,
+not by speculating about what someone had once seen. Nor is there any confidence to
+breach here: the material is published open source, obtained under a permissive
+licence, with no non-disclosure relationship of any kind. The classic clean-room
+wall exists to rebut trade-secret claims over material obtained in confidence, and
+there is no such material in play.
 
 **"Your implementation copies theirs."** Infringement requires SHOWING copying of
 protected expression — substantial similarity, pointed at, in material that is
