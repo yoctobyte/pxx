@@ -89,6 +89,41 @@ practice (Wine, Samba, the Nimbus fonts, clean-room BIOS work).
 **Rule of thumb:** the NAME is an interface, the CODE is theirs, the CLAIM is ours
 to get right.
 
+### EU law is explicit about this
+
+Not legal advice, but the authorities are unusually clear and worth naming, since
+this project is developed in the EU:
+
+- **Software Directive 2009/24/EC, Art. 1(2)** — ideas and principles underlying
+  any element of a computer program, **including its interfaces**, are not
+  protected by copyright. The interface is fair game by statute, not just by
+  practice.
+- **CJEU C-406/10, SAS Institute v World Programming (2012)** — neither the
+  FUNCTIONALITY of a program, nor its programming language, nor its data file
+  formats are protected expression. World Programming reimplemented the SAS
+  language from observed behaviour and prevailed. Reimplementing what a library
+  DOES, from the outside, is squarely lawful.
+- **Art. 5(3) and Art. 6** allow observing/studying a program to determine its
+  ideas, and decompilation for interoperability, within limits.
+- **Trademark, EUTMR Art. 14(1)(c)** — referential use to indicate the intended
+  purpose of a product is expressly permitted. "reportlab-compatible" and "mimics
+  reportlab" are exactly that form.
+
+What none of this licenses is copying their source or documentation text: the
+expression stays theirs. The line is the same one as above, now with a statute
+behind it.
+
+### Two different names, do not conflate them
+
+- The **identifier** must be EXACT. `import reportlab` resolves to a unit called
+  `reportlab` and nothing else — the naming strategy has no value otherwise. Same
+  for `re`, `configparser`, `tkinter`.
+- The **label** — in the ticket title, the docs, the website, release notes — is
+  descriptive: "mimic-reportlab", "a reportlab-compatible canvas". That is the
+  referential use trademark law permits, and it keeps the claim honest.
+
+So: exact name in the code, descriptive name in the prose. Never the reverse.
+
 ## Concrete blocker for T1-by-naming
 
 `from reportlab.pdfgen import canvas` is a DOTTED module path. NilPy maps `import X`
