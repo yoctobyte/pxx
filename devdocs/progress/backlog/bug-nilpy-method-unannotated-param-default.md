@@ -58,3 +58,22 @@ position.
 `make test-nilpy` green with a `.npy` case that constructs such a class BOTH with
 and without the defaulted argument and prints every field, diffed against CPython
 — the parse alone is not evidence, as above.
+
+## Already ruled out (do not redo)
+
+Checked while filing this, so the next attempt can start past it:
+
+* The PRE-PASS reads the case correctly. `PyRegisterClassMembers` advances past the
+  parameter name before testing for `:`, so for an unannotated parameter the cursor
+  lands on the `=` and the shared `tkAssign` branch records the default value.
+* Those defaults ARE transferred to the proc record: right after
+  `RegisterProc(fullName, ...)` the loop copies `pdefHas`/`pdefVal`/`pdefIsStr`/
+  `pdefSOff`/`pdefSLen` into `ProcParamHasDefault[...]` and friends, which is what
+  the shared call path fills omitted trailing arguments from.
+
+So the parameter COUNT and the recorded DEFAULTS both look right on the pre-pass
+side, and the remaining suspect is the frame `PyParseMethod` builds versus that
+registered signature — or the ctor call path for a class that has both an
+`__init__` and (via the field scan) a field-derived `create`. Instrumenting the
+emitted argument list for `C("p", "f")` against the registered parameter list is
+probably the fastest way in.
