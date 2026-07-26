@@ -263,3 +263,24 @@ Recommended order from here:
 3. [[feature-nilpy-configparser]] — then settings.py.
 4. [[feature-nilpy-tkinter-facade]] — convertrawtext.py and the GUI (the big one).
 5. [[bug-nilpy-stdlib-name-binds-pascal-unit]] — SongFormatter.py's `import json`.
+
+## Naming strategy reversed (2026-07-26, Rene)
+
+The "honest name, not the reportlab name" decision is REVERSED. It put a change in
+the APPLICATION (a fallback import) to work around a naming scruple in the
+COMPILER's library set, which is backwards for a project whose mission is compiling
+existing source as-is. A shim is now NAMED for the module it implements, so the app
+needs no change at all.
+
+Full policy: `devdocs/dev/python-compat-tiers.md` — three tiers (T1 name-shim,
+T2 vendored C core with a Python face, T3 compile the actual package), the rule
+that T1 defers to a filed T3 ticket and must fail loudly outside its subset, and
+what we may and may not write (interface names and clean-room implementations yes;
+their code, their docs, and claiming pxx "runs reportlab" no).
+
+Consequences for this ticket:
+- [[feature-lib-pxxpdf-reportlab-compat]] becomes a `reportlab`-named shim over the
+  same vendored pdfgen backend, once [[feature-nilpy-dotted-package-imports]] lands
+  (`from reportlab.pdfgen import canvas` needs the dotted form).
+- songformatter's fallback import (`12cf40e`, already pushed) comes OUT at that
+  point and the app is unmodified source again. It is the last app-side change.

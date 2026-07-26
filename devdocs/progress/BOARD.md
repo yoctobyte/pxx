@@ -28,7 +28,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (155)
+## backlog (156)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -104,6 +104,7 @@ _none_
 | feature-nilpy-configparser | N | 45 | feature | nilpy: configparser module (INI settings) — songformatter's settings.py imports it | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-default-args-on-nested-defs | N | 55 | feature | NilPy: default arguments as explicit by-value capture | — |
+| feature-nilpy-dotted-package-imports | N | 55 | feature | nilpy: dotted package imports — `from reportlab.pdfgen import canvas`, so a shim can be NAMED for the module it implements | — |
 | feature-nilpy-exception-message | N | 55 | feature | NilPy: `Exception(msg)` — the root class takes no arguments | — |
 | feature-nilpy-fallback-import | N | 50 | feature | nilpy: fallback import (try/except ImportError) — soft-fail an unresolvable import, take the alternative | — |
 | feature-nilpy-file-io-and-comprehensions | N | 55 | feature | NilPy: file I/O (`with open`), list comprehensions, and dict literals-in-args | — |
@@ -2695,6 +2696,7 @@ _none_
 - [p 55] [N] feature-nilpy-catchable-runtime-errors
 - [p 55] [N] feature-nilpy-corpus-uforth
 - [p 55] [N] feature-nilpy-default-args-on-nested-defs
+- [p 55] [N] feature-nilpy-dotted-package-imports
 - [p 55] [N] feature-nilpy-exception-message
 - [p 55] [N] feature-nilpy-file-io-and-comprehensions
 - [p 55] [O] feature-opt-heap-per-thread-cache
