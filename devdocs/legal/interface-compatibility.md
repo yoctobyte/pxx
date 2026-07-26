@@ -42,6 +42,31 @@ supplier. A compatible implementation has to answer to the same identifier or it
 cannot be compatible at all. That is not appropriation; it is what compatibility
 MEANS.
 
+## The compiler is a tool, not a user of the mark
+
+A separate and simpler point, which covers the compiler even before any of the
+argument above is reached: **no law obliges a compiler to refuse source code
+because an identifier in it is trademarked.**
+
+When songformatter writes `import reportlab`, that line is the USER's document. The
+compiler reads it, resolves it and emits code. That is mechanical processing of
+text someone else wrote — the same act performed by a text editor displaying the
+word, a linter parsing it, a package manager fetching by it, or `grep`. Trademark
+law governs use of a sign **in the course of trade, as an indication of origin**.
+Resolving an identifier inside a third party's source is none of those things: pxx
+is not offering goods under that sign, and no one encountering the compilation
+thinks the mark tells them who made pxx.
+
+The obligation runs the other way, in fact. A compiler's job is to compile the
+program as written. A tool that refused input over the trademark status of a
+symbol in it would be broken as a tool, and the rule would be unworkable — any
+identifier can be somebody's mark.
+
+Where the boundary actually sits, and it is already covered above: what we SHIP
+(our own code, plus anything vendored under its licence) and what we CLAIM (never
+that pxx runs reportlab when it runs our shim). Compiling is free; branding and
+asserting are the parts to get right.
+
 ## Why our code is clean
 
 - Written from published documentation and observed behaviour, never from reading
