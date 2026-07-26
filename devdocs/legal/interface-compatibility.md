@@ -79,6 +79,23 @@ asserting are the parts to get right.
   of independent implementation: we are matching observable behaviour, which is
   precisely the lawful method.
 
+## Published open source is not leaked source
+
+Everything above depends on the material being PUBLISHED under a licence that
+permits reading it. That is the case for everything this project studies — CPython,
+reportlab, pdfgen, zlib, sqlite.
+
+Material that was never lawfully published is a different animal and is simply out
+of bounds: leaked source, source obtained under NDA, anything carrying a trade
+secret claim. There the classic clean-room wall earns its keep, because there IS a
+confidence and there IS unlicensed material. "Prior exposure is not the test" is
+about lawfully published work; it is not a licence to look at something that
+escaped.
+
+Practical rule: if it is not on a public repository under a licence you can name,
+nobody on this project reads it. There is no shortage of lawful material, and the
+puzzle is more interesting solved from the outside anyway.
+
 ## Naming: three names, kept apart
 
 | what | whose | example |
@@ -198,3 +215,10 @@ Whatever is vendored keeps its notices intact.
 ## In one line
 
 The name is an interface, the code is ours, the claim is the thing to get right.
+
+Or, put the way the decision actually got made: their project stays theirs, the
+interface is ours to implement, and the only real obligation is not creating
+confusion — which is a documentation discipline, not a constraint on the code.
+Wine reimplements Windows DLLs by name, ReactOS the kernel API, Samba the SMB
+protocol against an actively hostile vendor. None of them asked, and none of them
+had to.
