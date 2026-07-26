@@ -8445,9 +8445,15 @@ begin
                 Only for that case: a right-hand side the scanners could not
                 type at all still errors, because guessing there would hide a
                 real mistake. }
-              if (Tokens[j + 4].Kind = tkIdent) and
-                 PyHeaderHasParam(methodStart, j, GetTokenStr(j + 4)) then
+              if ((Tokens[j + 4].Kind = tkIdent) and
+                  PyHeaderHasParam(methodStart, j, GetTokenStr(j + 4))) or
+                 (Tokens[j + 4].Kind = tkNil) then
               begin
+                { ...or assigned None outright: `self.file_path = None`, which is
+                  how Python declares a field that gets a value later. There is
+                  no type to read off None, and demanding an annotation for it
+                  rejected the class. Variant, so the tag is whatever is stored
+                  next. }
                 tk := tyVariant;
                 fldRec := REC_NONE;
                 fldSig := -1;

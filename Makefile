@@ -194,7 +194,7 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_mpdef26)" = "$$(printf 'all three: p f z\ndefaulted: p f\ndefault is None: True')"
 	# a field assigned from an unannotated ctor parameter becomes a variant
 	./$(COMPILER) test/test_nilpy_field_from_unannotated_param.npy /tmp/test_nilpy_fldparam26
-	test "$$(/tmp/test_nilpy_fldparam26)" = "$$(printf 'p f 0\nreassigned: q')"
+	test "$$(/tmp/test_nilpy_fldparam26)" = "$$(printf 'p f 0\nreassigned: q\nNone field: True\nafter store: set')"
 	# the tkinter facade: compiled, not run - it needs an X display. Lives in
 	# examples/tk/ because a .npy in test/ resolving `tk` picks up test/strings.pas
 	# (a PROGRAM named Strings) ahead of the RTL unit tk.pas uses - the resolver
@@ -3207,7 +3207,7 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_mpdef26)" = "$$(printf 'all three: p f z\ndefaulted: p f\ndefault is None: True')"
 	# a field assigned from an unannotated ctor parameter becomes a variant
 	./$(COMPILER) test/test_nilpy_field_from_unannotated_param.npy /tmp/test_nilpy_fldparam26
-	test "$$(/tmp/test_nilpy_fldparam26)" = "$$(printf 'p f 0\nreassigned: q')"
+	test "$$(/tmp/test_nilpy_fldparam26)" = "$$(printf 'p f 0\nreassigned: q\nNone field: True\nafter store: set')"
 	# the tkinter facade: compiled, not run - it needs an X display. Lives in
 	# examples/tk/ because a .npy in test/ resolving `tk` picks up test/strings.pas
 	# (a PROGRAM named Strings) ahead of the RTL unit tk.pas uses - the resolver

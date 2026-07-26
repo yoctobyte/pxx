@@ -7,8 +7,13 @@ class C:
         self.parent = parent
         self.cb = cb
         self.n = 0
+        # a field declared as None: no type to read off it, so variant
+        self.path = None
 
 c = C("p", "f")
 print(c.parent, c.cb, c.n)
 c.parent = "q"
 print("reassigned:", c.parent)
+print("None field:", c.path is None)
+c.path = "set"
+print("after store:", c.path)
