@@ -182,6 +182,9 @@ test-nilpy: $(COMPILER)
 	# collections.Counter (dict in Counter mode); expectation is CPython's output
 	# field(default_factory=dict); expectation is CPython's output
 	# PEP 604 unions in annotations; expectation is CPython's output
+	# tuple returns + the keyword-only marker; expectation is CPython's output
+	./$(COMPILER) test/test_nilpy_tuple_return.npy /tmp/test_nilpy_tupret26
+	test "$$(/tmp/test_nilpy_tupret26)" = "$$(printf 'index: a 2 len: 2\nunpack: a 2\nthree: 3 6 x\none-tuple: 5 1\nsubscript call: 2\niter a\niter 2\nkwonly: 7 z')"
 	./$(COMPILER) test/test_nilpy_union_annotation.npy /tmp/test_nilpy_union26
 	test "$$(/tmp/test_nilpy_union26)" = "$$(printf 'value: 3\nnone: True\nzero is not None: True 0\nnone is None: True\nunion of two real types keeps the first: 42')"
 	./$(COMPILER) test/test_nilpy_dataclass_dict_factory.npy /tmp/test_nilpy_dcdict26
@@ -3165,6 +3168,9 @@ test-core: $(COMPILER)
 	# collections.Counter (dict in Counter mode); expectation is CPython's output
 	# field(default_factory=dict); expectation is CPython's output
 	# PEP 604 unions in annotations; expectation is CPython's output
+	# tuple returns + the keyword-only marker; expectation is CPython's output
+	./$(COMPILER) test/test_nilpy_tuple_return.npy /tmp/test_nilpy_tupret26
+	test "$$(/tmp/test_nilpy_tupret26)" = "$$(printf 'index: a 2 len: 2\nunpack: a 2\nthree: 3 6 x\none-tuple: 5 1\nsubscript call: 2\niter a\niter 2\nkwonly: 7 z')"
 	./$(COMPILER) test/test_nilpy_union_annotation.npy /tmp/test_nilpy_union26
 	test "$$(/tmp/test_nilpy_union26)" = "$$(printf 'value: 3\nnone: True\nzero is not None: True 0\nnone is None: True\nunion of two real types keeps the first: 42')"
 	./$(COMPILER) test/test_nilpy_dataclass_dict_factory.npy /tmp/test_nilpy_dcdict26

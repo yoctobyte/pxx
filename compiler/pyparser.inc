@@ -4222,6 +4222,72 @@ begin
     end;
 end;
 
+{ A bare tuple display — `return a, b` or `x = 1, 2` — built from an ALREADY
+  parsed first element, then the comma-separated rest. A tuple is a TPyList here
+  (the representation isinstance and the annotation path already use), so this is
+  the list-literal lowering with the brackets implied: bind a hidden temp, append
+  onto it through hoisted statements, yield the temp as the expression. Keeping
+  the temp is what lets the value be borrowed and reclaimed like any literal.
+
+  Mutability and hashability are the documented differences from CPython; see the
+  tuple annotation note in PyAnnTypeTermAt. }
+function PyMakeTupleFrom(firstNode: Integer): Integer;
+var ci, recId, node, argNode, sizeNode, callNode, selfArg, valArg, mmi, mpi,
+    tmpSym, asgn, elemNode: Integer;
+begin
+  ci := FindUClass('TPyList');
+  if ci < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  recId := REC_UCLASS_BASE + ci;
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := -Ord(tkGetMem);
+  ASTTk[node] := Ord(tyClass);
+  ASTRight[node] := recId;
+  sizeNode := AllocNode(AN_INT_LIT);
+  ASTIVal[sizeNode] := RecSize(recId);
+  ASTTk[sizeNode] := Ord(tyInteger);
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := sizeNode;
+  ASTLeft[node] := argNode;
+  tmpSym := AllocVar(PyHiddenName('tup'), tyClass);
+  Syms[tmpSym].RecName := recId;
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(tmpSym);
+  ASTRight[asgn] := node;
+  PyHoistStmt(asgn);
+  mmi := FindUMeth(ci, 'append');
+  if mmi < 0 then Error('Nil Python: TPyList.append not found');
+  mpi := UMthProc_[mmi];
+  elemNode := firstNode;
+  while True do
+  begin
+    valArg := AllocNode(AN_ARG);
+    ASTLeft[valArg] := elemNode;
+    selfArg := AllocNode(AN_ARG);
+    ASTLeft[selfArg] := PyMakeIdent(tmpSym);
+    ASTRight[selfArg] := valArg;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := mpi;
+    ASTTk[callNode] := Ord(tyClass);
+    ASTLeft[callNode] := selfArg;
+    PyHoistStmt(callNode);
+    if CurTok.Kind <> tkComma then Break;
+    Next;
+    { a trailing comma closes the tuple: `return x,` is a 1-tuple }
+    if CurTok.Kind in [tkNewline, tkDedent, tkEOF, tkRParen, tkRBrack] then Break;
+    if CurTok.Kind = tkNil then
+    begin
+      Next;
+      elemNode := PyMakeNone;
+    end
+    else
+    begin
+      PyParseBoolExpr;
+      elemNode := CurASTNode;
+    end;
+  end;
+  Result := PyMakeIdent(tmpSym);
+end;
+
 { A None VALUE: pylib's pynone() yields a variant tagged VT_EMPTY. }
 function PyMakeNone: Integer;
 var procIdx: Integer;
@@ -6455,7 +6521,11 @@ begin
       else
       begin
         PyParseBoolExpr;
-        ASTLeft[node] := CurASTNode;
+        if CurTok.Kind = tkComma then
+          { `return a, b` returns a tuple, which is a TPyList here }
+          ASTLeft[node] := PyMakeTupleFrom(CurASTNode)
+        else
+          ASTLeft[node] := CurASTNode;
       end;
     end;
     Result := node;
@@ -7156,6 +7226,21 @@ begin
   while CurTok.Kind <> tkRParen do
   begin
     if PyHdrNParams >= 32 then Error('Nil Python: too many parameters');
+    { A bare `*` marks the parameters after it keyword-only (PEP 3102). It is a
+      MARKER, not a parameter: consumed and dropped, so the ones after it are
+      ordinary parameters here. The DIFFERENCE from CPython is laxity — a
+      keyword-only parameter can also be passed positionally in NilPy, which
+      accepts programs CPython would reject but runs every program it accepts
+      the same way. songformatter's analyze_key(chords, *, chord_to_notes=...)
+      is the shape that needs it. `*args` / `**kwargs` proper are
+      feature-nilpy-star-args-kwargs. }
+    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkComma) then
+    begin
+      Next;              { the '*' }
+      Next;              { the ',' }
+      Continue;
+    end;
     if CurTok.Kind <> tkIdent then Error('Nil Python: expected parameter name');
     PyHdrPNames[PyHdrNParams] := CurTok.SVal;
     Next;
@@ -7581,8 +7666,9 @@ end;
   must reach the same answer or the mismatch is a silent ABI bug. }
 function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
 var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
+    tupDepth: Integer;
     t2, cur: TTypeKind;
-    seenAny: Boolean;
+    seenAny, tupComma: Boolean;
 begin
   Result := tyInteger;
   retRec := REC_NONE;
@@ -7629,7 +7715,27 @@ begin
       e := j + 1;
       while (e < TokCount) and not (Tokens[e].Kind in [tkNewline, tkDedent, tkEOF]) do
         Inc(e);
-      cur := PyInferExprType(j + 1, e);
+      { `return a, b` is a TUPLE, which is a TPyList here (see PyMakeTupleFrom).
+        Detected before the general inference, which would otherwise type the
+        def by the FIRST element — `return 5,` came back as an integer, so the
+        caller could not even len() it. Depth-tracked so a comma inside a call
+        or a subscript does not count. }
+      tupDepth := 0;
+      tupComma := False;
+      for k := j + 1 to e - 1 do
+      begin
+        if Tokens[k].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(tupDepth)
+        else if Tokens[k].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(tupDepth)
+        else if (Tokens[k].Kind = tkComma) and (tupDepth = 0) then tupComma := True;
+      end;
+      if tupComma then
+      begin
+        cur := tyClass;
+        PyInferLastCi := FindUClass('TPyList');
+        if PyInferLastCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+      end
+      else
+        cur := PyInferExprType(j + 1, e);
       { `return w` — a bare ident the scanner cannot type: chase the ident's
         ASSIGNMENT earlier in the body and infer from its right-hand side
         (uforth's finalize_definition: `w = self.define_word(...)`, whose

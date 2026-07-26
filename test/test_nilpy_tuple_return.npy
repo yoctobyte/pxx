@@ -1,0 +1,28 @@
+# `return a, b` returns a tuple, which is a TPyList here (the representation
+# isinstance and the annotation path already use). Indexing, unpacking, len and
+# iteration all work; a trailing comma makes a 1-tuple. Output is CPython's.
+def two():
+    return "a", 2
+
+def three(n: int):
+    return n, n * 2, "x"
+
+def one():
+    return 5,
+
+# a keyword-only marker in the signature: a MARKER, not a parameter
+def kwonly(a: int, *, b: str = "z"):
+    return a, b
+
+r = two()
+print("index:", r[0], r[1], "len:", len(r))
+a, b = two()
+print("unpack:", a, b)
+p, q, s = three(3)
+print("three:", p, q, s)
+print("one-tuple:", one()[0], len(one()))
+print("subscript call:", two()[1])
+for v in two():
+    print("iter", v)
+ka, kb = kwonly(7)
+print("kwonly:", ka, kb)
