@@ -239,3 +239,27 @@ Filed on the way, both pre-existing:
   stable with the Optional spelling, so unions inherit it, not introduce it).
 - [[feature-nilpy-augmented-subscript-assign]] and
   [[bug-pascal-subclass-inherited-members]] from the previous pass.
+
+## Wall catalog, fifth pass (2026-07-26 — dict.fromkeys)
+
+`key_analysis.py`: SEVEN walls cleared, now past every module-level statement and
+into the function bodies. Current wall:
+`.to_text() on a dynamically-typed value is ambiguous` — the receiver's class
+cannot be pinned statically, which is the existing
+[[feature-nilpy-runtime-method-dispatch-on-variant]]. That is the last known gap
+for this module, and it is a real feature rather than a shim.
+
+`settings.py`: surveyed, and the blocker is NOT the INI parsing (a dull surface) —
+it is `class CasePreservingConfigParser(configparser.ConfigParser)`, which needs a
+dotted base class AND working subclass overrides. So
+[[feature-nilpy-configparser]] is blocked in practice by
+[[bug-pascal-subclass-inherited-members]]. That bug is now on the critical path for
+two modules, which raises its value above its prio-60 filing.
+
+Recommended order from here:
+1. [[bug-pascal-subclass-inherited-members]] — unblocks configparser, and pylib
+   types can stop working around it (Counter is a mode flag because of it).
+2. [[feature-nilpy-runtime-method-dispatch-on-variant]] — finishes key_analysis.py.
+3. [[feature-nilpy-configparser]] — then settings.py.
+4. [[feature-nilpy-tkinter-facade]] — convertrawtext.py and the GUI (the big one).
+5. [[bug-nilpy-stdlib-name-binds-pascal-unit]] — SongFormatter.py's `import json`.
