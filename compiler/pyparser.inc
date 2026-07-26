@@ -2197,6 +2197,7 @@ function PyClassCreate: Integer;
 var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     nArgs, i, k, dcBase, valNode, tkNode, ctorMi, ctorPi: Integer; tkF: TTypeKind;
     kwI, kwJ, kwFld, kwMax, kwPos, kwDcBase: Integer; kwName: AnsiString;
+    kwCtorMi, kwCtorPi, kwPk, kwVal: Integer;
     kwAny: Boolean; kwSlot: array[0..PY_MAX_DC_KW - 1] of Integer;
 begin
   name := CurTok.SVal;
@@ -2278,11 +2279,49 @@ begin
         kwDcBase := -1;
         for kwJ := 0 to PyDcCount - 1 do
           if PyDcCi[kwJ] = ci then begin kwDcBase := kwJ; break; end;
-        if kwDcBase < 0 then
-          Error('Nil Python: ' + name + '() needs a value for every field before the last one given');
-        argNode := AllocNode(AN_ARG);
-        ASTLeft[argNode] := PyDcDefaultNode(ci, kwDcBase, kwI);
-        ASTRight[argNode] := -1;
+        if kwDcBase >= 0 then
+        begin
+          argNode := AllocNode(AN_ARG);
+          ASTLeft[argNode] := PyDcDefaultNode(ci, kwDcBase, kwI);
+          ASTRight[argNode] := -1;
+        end
+        else
+        begin
+          { A hand-written __init__ rather than a @dataclass: fill the hole from
+            the CTOR PARAMETER's declared default, the same table the trailing
+            fill below reads. Without this, keyword arguments had to cover a
+            contiguous PREFIX of the parameters, so skipping one optional was an
+            error — `W(master, text="x")` with a `width` in between. That is the
+            normal shape of every widget call a tkinter-style façade takes
+            (`tk.Canvas(self, highlightthickness=0)`), which is what made such a
+            façade impossible to write. Param 0 is self, so user arg kwI is
+            param kwI+1. }
+          kwCtorMi := FindUMeth(ci, 'create');
+          if kwCtorMi < 0 then
+            Error('Nil Python: ' + name + '() has no constructor to take defaults from');
+          kwCtorPi := UMthProc_[kwCtorMi];
+          kwPk := kwI + 1;
+          if (kwPk >= MAX_PROC_PARAMS) or
+             (not ProcParamHasDefault[kwCtorPi * MAX_PROC_PARAMS + kwPk]) then
+            Error('Nil Python: ' + name + '() is missing a value for parameter ' +
+                  AIntToStr(kwI + 1) + ', which has no default');
+          if ProcParamDefaultIsStr[kwCtorPi * MAX_PROC_PARAMS + kwPk] then
+          begin
+            kwVal := AllocNode(AN_STR_LIT);
+            ASTSOffset[kwVal] := ProcParamDefaultSOff[kwCtorPi * MAX_PROC_PARAMS + kwPk];
+            ASTSLen[kwVal] := ProcParamDefaultSLen[kwCtorPi * MAX_PROC_PARAMS + kwPk];
+            ASTTk[kwVal] := Ord(tyString);
+          end
+          else
+          begin
+            kwVal := AllocNode(AN_INT_LIT);
+            ASTIVal[kwVal] := ProcParamDefaultVal[kwCtorPi * MAX_PROC_PARAMS + kwPk];
+            ASTTk[kwVal] := Ord(Procs[kwCtorPi].Params[kwPk].TypeKind);
+          end;
+          argNode := AllocNode(AN_ARG);
+          ASTLeft[argNode] := kwVal;
+          ASTRight[argNode] := -1;
+        end;
       end;
       ASTRight[lastArg] := argNode;
       lastArg := argNode;

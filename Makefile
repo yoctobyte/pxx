@@ -188,6 +188,9 @@ test-nilpy: $(COMPILER)
 	# subclassing a class from an imported unit: dotted base, from-import, and
 	# an override dispatching through the base's own call site
 	# configparser shim + the virtual optionxform hook a subclass overrides
+	# keyword arguments bind by name, any subset (an omitted optional keeps its default)
+	./$(COMPILER) test/test_nilpy_kwargs_by_name.npy /tmp/test_nilpy_kwname26
+	test "$$(/tmp/test_nilpy_kwname26)" = "$$(printf '%b' 'contiguous: root 7 hi z\ninterior hole: 0 skipped-width z\nonly the last: 0  last-only\nnone given: 0  z')"
 	./$(COMPILER) test/test_nilpy_configparser.npy /tmp/test_nilpy_cfgparse26
 	test "$$(/tmp/test_nilpy_cfgparse26)" = "$$(printf 'sections: 2\nhas UI: True has nope: False\nget: 1280x800\ndefault lowercases: True\noption: fontsize = 13\nsubclass keeps case: True\nand rejects folded: False')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_subclass_unit_base.npy /tmp/test_nilpy_subbase26
@@ -3187,6 +3190,9 @@ test-core: $(COMPILER)
 	# subclassing a class from an imported unit: dotted base, from-import, and
 	# an override dispatching through the base's own call site
 	# configparser shim + the virtual optionxform hook a subclass overrides
+	# keyword arguments bind by name, any subset (an omitted optional keeps its default)
+	./$(COMPILER) test/test_nilpy_kwargs_by_name.npy /tmp/test_nilpy_kwname26
+	test "$$(/tmp/test_nilpy_kwname26)" = "$$(printf '%b' 'contiguous: root 7 hi z\ninterior hole: 0 skipped-width z\nonly the last: 0  last-only\nnone given: 0  z')"
 	./$(COMPILER) test/test_nilpy_configparser.npy /tmp/test_nilpy_cfgparse26
 	test "$$(/tmp/test_nilpy_cfgparse26)" = "$$(printf 'sections: 2\nhas UI: True has nope: False\nget: 1280x800\ndefault lowercases: True\noption: fontsize = 13\nsubclass keeps case: True\nand rejects folded: False')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_subclass_unit_base.npy /tmp/test_nilpy_subbase26

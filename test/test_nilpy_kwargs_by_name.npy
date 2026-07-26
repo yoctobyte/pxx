@@ -1,0 +1,20 @@
+# Keyword arguments bind by NAME, any subset: an omitted optional keeps its
+# declared default. Previously they had to cover a contiguous PREFIX, so skipping
+# one was an error - which is the normal shape of a widget-style call
+# (`Canvas(self, highlightthickness=0)`) and made such a facade impossible.
+# Output is what CPython prints.
+class W:
+    def __init__(self, master: str, width: int = 0, text: str = "", tag: str = "z") -> None:
+        self.master = master
+        self.width = width
+        self.text = text
+        self.tag = tag
+
+a = W("root", width=7, text="hi")
+print("contiguous:", a.master, a.width, a.text, a.tag)
+b = W("root", text="skipped-width")
+print("interior hole:", b.width, b.text, b.tag)
+c = W("root", tag="last-only")
+print("only the last:", c.width, c.text, c.tag)
+d = W("root")
+print("none given:", d.width, d.text, d.tag)
