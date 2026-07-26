@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-23T07:21:07Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "c088f2861121f06cc6f944cfa5214b508d7858ca",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-23T07:24:58Z",
    "fixed": [],
    "new_red": [],
@@ -398,6 +390,14 @@
    "new_red": [],
    "sha": "5d360be301b5d6860ed902acdcbb0a07424b9aea",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-26T11:29:34Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "b0106a8cc0a59710c3bffb77339e8d0a13546c47",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1428,6 +1428,8 @@
   "test-core#src:test/test_nilpy_dataclass_dict_factory.npy": "pass",
   "test-core#src:test/test_nilpy_re.npy": "pass",
   "test-core#src:test/test_nilpy_str_float.npy": "pass",
+  "test-core#src:test/test_nilpy_tuple_return.npy": "pass",
+  "test-core#src:test/test_nilpy_union_annotation.npy": "pass",
   "test-core#src:test/test_nilpy_variant.npy": "pass",
   "test-core#src:test/test_nilpy_widen_fix.npy": "pass",
   "test-core#src:test/test_not.pas": "pass",
@@ -1966,11 +1968,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-26T11:15:59Z",
-  "sha": "5d360be301b5d6860ed902acdcbb0a07424b9aea",
-  "tier": "opt",
+  "date": "2026-07-26T11:29:34Z",
+  "sha": "b0106a8cc0a59710c3bffb77339e8d0a13546c47",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 224.5
+  "wall": 287.8
  },
  "last_bench": {
   "conf_rows": 550,
