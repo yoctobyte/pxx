@@ -213,3 +213,29 @@ separate errors this session pointed at the wrong line: `import json` reports li
 for a field on line 53, and the augmented-assignment error reports one line past
 the statement. Each sent me reading the wrong code first. Worth a ticket of its
 own if it keeps happening.
+
+## Wall catalog, fourth pass (2026-07-26 — unions, tuples, keyword-only marker)
+
+`key_analysis.py` (762 lines) has walked SIX walls this session and now reaches
+line 29, having passed every def, dataclass, annotation and tuple return in the
+file:
+
+`import re` → `from collections import Counter` → `field(default_factory=dict)` →
+`tuple[...]` annotation → `int | None` annotation → `return a, b` → bare `*`
+keyword-only marker → **`dict.fromkeys`** (line 29).
+
+`dict.fromkeys(MODAL_KEYS)` is a classmethod on dict, so it needs the pylib method
+plus whatever the dotted-call path needs to resolve `dict.` as a TYPE rather than a
+value. Small, and it is the only thing left between this module and a compile —
+worth doing next simply to get the first songformatter module through.
+
+Landed for these: tuple annotations and returns both lower to TPyList; PEP 604
+unions get Optional's exact treatment (including the widening that keeps a real 0
+distinct from None); the keyword-only marker is consumed and dropped.
+
+Filed on the way, both pre-existing:
+- [[feature-nilpy-optional-string-param-accepts-none]] — passing None to an
+  `Optional[str]` PARAMETER does not match the overload (reproduces on the pinned
+  stable with the Optional spelling, so unions inherit it, not introduce it).
+- [[feature-nilpy-augmented-subscript-assign]] and
+  [[bug-pascal-subclass-inherited-members]] from the previous pass.
