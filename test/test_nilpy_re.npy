@@ -1,0 +1,33 @@
+# Nil Python `re`: lib/rtl/re.pas is named `re` so `import re` resolves
+# through the ordinary unit resolver, no frontend mapping needed. Every
+# line below prints what CPython prints for the same script (m.stop is
+# CPython's m.end — `end` is a Pascal keyword).
+import re
+
+m = re.match("([A-G])([b#]?)", "C#m7")
+if m:
+    print("match ok:", m.group(0), m.group(1), m.group(2))
+else:
+    print("BAD no match")
+
+if re.match("x", "abc") is None:
+    print("no-match is None ok")
+
+print("search:", re.search("[0-9]+", "abc 123 def").group(0))
+print("fullmatch none:", re.fullmatch("abc", "abcd") is None)
+print("sub:", re.sub("\\s+", " ", "a   b  c"))
+print("sub groupref:", re.sub("([A-G])#", "\\1sharp", "C# D"))
+
+xs = re.findall("[A-G][b#]?", "C# Db E")
+print("findall n:", len(xs), xs[0], xs[1], xs[2])
+
+pairs = re.findall("([A-G])(#|b)?", "EAD")
+print("findall groups n:", len(pairs))
+
+p = re.compile("^-?[0-9]+$")
+print("compiled match:", p.match("-42") is not None, p.match("4x") is None)
+print("compiled via module fn:", re.match(p, "17") is not None)
+# compared as a boolean: a literal backslash in the expected output
+# would have to survive make's printf, which is not worth the risk
+print("escape ok:", re.escape("a.b*c") == "a\\.b\\*c")
+print("start/stop:", m.start(0), m.stop(0))

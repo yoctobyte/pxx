@@ -178,6 +178,9 @@ test-nilpy: $(COMPILER)
 	rm -f /tmp/test_nilpy_sqlite_crud.db
 	./$(COMPILER) test/test_nilpy_sqlite_crud.npy /tmp/test_nilpy_sqlite_crud26
 	test "$$(/tmp/test_nilpy_sqlite_crud26)" = "$$(printf '1 alice\n2 bob')"
+	# re module over lib/rtl/regex.pas; expectation is CPython's own output
+	./$(COMPILER) test/test_nilpy_re.npy /tmp/test_nilpy_re26
+	test "$$(/tmp/test_nilpy_re26)" = "$$(printf 'match ok: C# C #\nno-match is None ok\nsearch: 123\nfullmatch none: True\nsub: a b c\nsub groupref: Csharp D\nfindall n: 3 C# Db E\nfindall groups n: 3\ncompiled match: True True\ncompiled via module fn: True\nescape ok: True\nstart/stop: 0 2')"
 	./$(COMPILER) test/test_nilpy_variant.npy /tmp/test_nilpy_variant26
 	test "$$(/tmp/test_nilpy_variant26)" = "$$(printf '5\n3.14\nTrue')"
 	./$(COMPILER) test/test_nilpy_control.npy /tmp/test_nilpy_control26
@@ -3149,6 +3152,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_float_intrinsics26)" = "$$(printf '3\n-3\n4\n2\n4\n0.7500\n3.0')"
 	./$(COMPILER) test/test_nil_python_core.npy /tmp/test_nil_python_core26
 	test "$$(/tmp/test_nil_python_core26)" = "$$(printf '0\n1\n1\n2\n3\n5\n10')"
+	# re module over lib/rtl/regex.pas; expectation is CPython's own output
+	./$(COMPILER) test/test_nilpy_re.npy /tmp/test_nilpy_re26
+	test "$$(/tmp/test_nilpy_re26)" = "$$(printf 'match ok: C# C #\nno-match is None ok\nsearch: 123\nfullmatch none: True\nsub: a b c\nsub groupref: Csharp D\nfindall n: 3 C# Db E\nfindall groups n: 3\ncompiled match: True True\ncompiled via module fn: True\nescape ok: True\nstart/stop: 0 2')"
 	./$(COMPILER) test/test_nilpy_variant.npy /tmp/test_nilpy_variant26
 	test "$$(/tmp/test_nilpy_variant26)" = "$$(printf '5\n3.14\nTrue')"
 	./$(COMPILER) test/test_nilpy_class.npy /tmp/test_nilpy_class26
@@ -5599,6 +5605,10 @@ lib-test: pxx-stable-check
 	/tmp/lib_math >/dev/null
 	$(PXX_STABLE) test/lib_sysutils.pas /tmp/lib_sysutils
 	test "$$(/tmp/lib_sysutils)" = "$$(printf '0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nQ\n7\nAB3Z\nab3z\nhello\nab\nbcde\nabcde\nabcde\nhello world\nstart end\nstart end\nabc\nfoobar\nx\nx\nbase\n77\nderived')"
+	# regex engine: 61 checks whose expectations are CPython's re output for the
+	# same pattern/subject pairs, including every songformatter pattern
+	$(PXX_STABLE) -Fulib/rtl test/lib_regex.pas /tmp/lib_regex
+	test "$$(/tmp/lib_regex | tail -n 1)" = "REGEX OK"
 	# regex engine: 61 checks whose expectations are CPython's re output for the
 	# same pattern/subject pairs, including every songformatter pattern
 	$(PXX_STABLE) -Fulib/rtl test/lib_regex.pas /tmp/lib_regex
