@@ -8934,6 +8934,14 @@ begin
   RegisterBuiltinTObject;
   ParseUsesUnit('builtinheap');
   if needsBuiltin then ParseUsesUnit('builtin');
+  { Resolve TVarRec now that builtinheap declared it, exactly as ParseProgram
+    does. Without this TVarRecId stayed REC_NONE for .npy programs, so ANY unit
+    an import pulls in that takes an `array of const` parameter was rejected with
+    "array of const requires the builtinheap unit" — while builtinheap was in
+    fact loaded. That blocked every RTL unit reaching sysutils (Format), which is
+    most of them, and is what `import json` actually died on. A .npy program has
+    no uses clause of its own, so it could not work around it. }
+  FixupTVarRecLayout;
   ParseUsesUnit('pylib');
   ParseUsesUnit('pyeval');
   { Only NOW: the units above are ORDINARY PASCAL and their own div/mod must

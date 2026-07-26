@@ -184,6 +184,9 @@ test-nilpy: $(COMPILER)
 	# PEP 604 unions in annotations; expectation is CPython's output
 	# tuple returns + the keyword-only marker; expectation is CPython's output
 	# dict.fromkeys; expectation is CPython's output
+	# a .npy program using a unit with an `array of const` parameter
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy /tmp/test_nilpy_aoc26
+	test "$$(/tmp/test_nilpy_aoc26)" = "x:2"
 	./$(COMPILER) test/test_nilpy_dict_fromkeys.npy /tmp/test_nilpy_fromkeys26
 	test "$$(/tmp/test_nilpy_fromkeys26)" = "$$(printf 'deduped: 3 b a c\nvalue is None: True\nempty: 0')"
 	./$(COMPILER) test/test_nilpy_tuple_return.npy /tmp/test_nilpy_tupret26
@@ -3173,6 +3176,9 @@ test-core: $(COMPILER)
 	# PEP 604 unions in annotations; expectation is CPython's output
 	# tuple returns + the keyword-only marker; expectation is CPython's output
 	# dict.fromkeys; expectation is CPython's output
+	# a .npy program using a unit with an `array of const` parameter
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy /tmp/test_nilpy_aoc26
+	test "$$(/tmp/test_nilpy_aoc26)" = "x:2"
 	./$(COMPILER) test/test_nilpy_dict_fromkeys.npy /tmp/test_nilpy_fromkeys26
 	test "$$(/tmp/test_nilpy_fromkeys26)" = "$$(printf 'deduped: 3 b a c\nvalue is None: True\nempty: 0')"
 	./$(COMPILER) test/test_nilpy_tuple_return.npy /tmp/test_nilpy_tupret26

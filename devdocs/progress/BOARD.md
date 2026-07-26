@@ -37,7 +37,7 @@ _none_
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-percent-string-format-garbage | N | 60 | bug | nilpy: printf-style % on a string yields garbage instead of formatting (silent wrong output) | — |
 | bug-nilpy-stdlib-name-binds-pascal-unit | N | 60 | bug | nilpy: a Python stdlib import silently binds to a same-named Pascal RTL unit (import json -> lib/rtl/json.pas) | — |
-| bug-pascal-subclass-inherited-members | P | 60 | bug | Pascal: subclassing is half-wired — inherited fields/methods invisible unqualified, wrong Create, default property loses subscript assignment | — |
+| bug-pascal-duplicate-class-name-silently-shadows | P | 50 | bug | Pascal: a duplicate class declaration silently binds to the earlier one instead of erroring | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -2670,7 +2670,6 @@ _none_
 - [p 65] [N] feature-nilpy-bound-method-value
 - [p 60] [N] bug-nilpy-percent-string-format-garbage
 - [p 60] [N] bug-nilpy-stdlib-name-binds-pascal-unit
-- [p 60] [P] bug-pascal-subclass-inherited-members
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
@@ -2704,6 +2703,7 @@ _none_
 - [p 50] [N] feature-nilpy-fallback-import (unblocks 1)
 - [p 50] [N] feature-nilpy-star-args-kwargs (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
+- [p 50] [P] bug-pascal-duplicate-class-name-silently-shadows
 - [p 50] [A] decide-abi-portable-vs-target-split
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile

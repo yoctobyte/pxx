@@ -1,0 +1,8 @@
+# A .npy program can use a unit that declares an `array of const` parameter.
+# ParsePyProgram pulls builtinheap but never resolved TVarRec from it, so
+# TVarRecId stayed REC_NONE and any such unit was rejected with "array of const
+# requires the builtinheap unit" - while builtinheap was in fact loaded. A .npy
+# program has no uses clause, so it could not work around it.
+import fmtprobe
+
+print(fmtprobe.describe("x", 2))
