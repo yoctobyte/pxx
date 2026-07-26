@@ -30,3 +30,23 @@ constants), so capture is minimal there.
 
 `test-nilpy` green with a `.npy` case storing a lambda and CALLING it (diffed
 against CPython), + `--tier quick` + self-host byte-identical + fpc-check clean.
+
+## Update (2026-07-26, probing songformatter — how the stub actually fails)
+
+Measured against `stable_linux_amd64/default/pinned`. The stub's failure mode is
+worse than "the body never runs":
+
+| shape | result |
+| --- | --- |
+| `ops = {"d": lambda v: v*2}` then `ops["d"](4)` | **SEGFAULT** (exit 139) |
+| `fs = [lambda v: v+1]` then `fs[0](5)` | prints an EMPTY value, no error |
+| `g = lambda v: v+1` then `g(5)` | `error: unexpected token` (doesn't parse) |
+| `rows.sort(key=lambda r: r[1])` | `error: undefined variable (key)` |
+
+Calling the None placeholder crashes rather than diagnosing, so a program using
+lambdas as values fails in the field instead of at build time. Until the real
+implementation lands, calling a stubbed lambda should be a compile error.
+
+songformatter needs this for `sorted(..., key=...)` and for dispatch dicts of
+small handlers; see [[feature-demo-songformatter-pxx-target]] and
+[[feature-nilpy-aggregate-builtins]].

@@ -1,12 +1,12 @@
 ---
-summary: "songformatter as a pxx compile target (nilpy) — headless CLI PDF converter"
+summary: "songformatter as a pxx compile target (nilpy) — GUI editor + live preview"
 type: feature
 track: E
 prio: 50
-blocked-by: [feature-lib-pxxpdf-reportlab-compat]
+blocked-by: [feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade]
 ---
 
-# songformatter as a pxx compile target (headless CLI converter)
+# songformatter as a pxx compile target (GUI editor + live preview)
 
 - **Type:** feature (example app built WITH pxx) — **Track E** (file-owned by B;
   build with `$(PXX_STABLE)`, never rebuild the compiler).
@@ -25,13 +25,35 @@ fallback import (`try: from reportlab… except ImportError: from pxxpdf…`); p
 is a reusable pxx lib presenting reportlab's API over pdfgen (honest name, not
 impersonating reportlab, not app-owned).
 
-## Scope for v1 = headless CLI converter
+## Scope for v1 = the GUI app
 
-`songformatter in.txt out.pdf` — the `convertrawtext.py` engine (parse → layout →
-PDF), NOT the Tk GUI. Rationale: the full Tk GUI is far (songformatter uses the
-Python tkinter OBJECT API; nilpy has only `import tk` flat-function + poll events,
-no kwargs/callbacks; Windows needs PE backend + win32 widgetset — all backlog).
-GUI + Windows one-click = later tickets.
+The editor + live preview, NOT a CLI converter (the user corrected an earlier
+headless framing: the GUI *is* the product — a musician opens a song and looks at
+it). So the GUI pieces are v1 work, not follow-ups: a tkinter façade over `tk.pas`,
+nilpy kwargs and callbacks, and the on-screen preview path.
+
+The preview architecture question is now SETTLED, and settled on the app side
+first: songformatter no longer previews through fitz/PyMuPDF at all. It draws the
+preview with the SAME calls that produce the PDF, through an injected canvas
+backend (`render_backend.TkCanvasBackend`, songformatter commit 29a874e) — the
+"parallel canvas" option. No PDF readback, no MuPDF (AGPL, huge dep web), no PIL
+requirement. pxxpdf therefore needs a second, screen-drawing backend rather than a
+PDF renderer.
+
+Screen-vs-PDF drift was the risk, and it is measured, not assumed: after three
+fixes the canvas agrees with the PDF to within 1px in position and content extent
+at both 1:1 and a fit-to-width zoom. The three fixes are the reusable lesson for
+pxxpdf's screen backend:
+
+1. Text is placed by its BASELINE in PDF space; toolkits anchor to the line box.
+2. Font sizes must be given to the toolkit in PIXELS, not points — integer-only
+   point sizes quantize twice and drew 13pt as 9pt (5.7% too large) at 0.655 zoom.
+3. Place text word by word at the x its PDF metrics give it: toolkits advance
+   glyphs by whole hinted pixels and the error reaches 10% across a line.
+
+Verification method worth reusing: screenshot the canvas and render the same input
+with `pdftoppm` at the matching resolution, then compare ink profiles for best-fit
+offset and content extent.
 
 ## Steps (each domino gates the next)
 
@@ -40,7 +62,7 @@ GUI + Windows one-click = later tickets.
 3. [[feature-lib-pxxpdf-reportlab-compat]] — the pxxpdf PDF backend under nilpy.
 4. Compile the engine core under nilpy; catalog every remaining wall and file
    each into its owning lane (IR/codegen → A, dialect/frontend → N, RTL → B).
-   Expect nilpy-subset hits: 1-based string slicing, O(N) dicts, missing stdlib.
+   **Step 4 has STARTED — see the wall catalog below.**
 5. Diff output vs the cpython/reportlab reference on `example_songs/` (37 songs).
 
 Build glue (Makefile / `-Fu` invocation + pdfgen fetch) = academic; can live as a
@@ -59,7 +81,8 @@ docs note, not full automation.
   NO PIL needed for embedding. PIL is only used for effects (opacity/blur/enhance
   on the bg image); those drop under nilpy. PIL itself = CPython C-extension, not
   nilpy-compilable. Wrap `from PIL import …` in the same `try/except ImportError`.
-- **Tk GUI on pxx** (tkinter façade over `tk.pas` + nilpy kwargs/callbacks).
+- **Tk GUI on pxx** (tkinter façade over `tk.pas` + nilpy kwargs/callbacks) — v1
+  scope now, per the section above.
 - **GUI preview architecture (the fitz question)** — today songformatter previews
   via render→PDF then PDF→pixmap (fitz/PyMuPDF, a MuPDF C lib+binding; GUI-only,
   not nilpy-compilable). Double work but pixel-perfect (preview = real PDF). Two
@@ -71,5 +94,59 @@ docs note, not full automation.
 - **Windows one-click binary** (PE backend + win32 widgetset + tk-windows-compat).
 - **Tool improvement:** exact chord x-positioning via pdfgen `pdf_get_font_text_width`.
 
+## Wall catalog (2026-07-26, measured against `stable_linux_amd64/default/pinned`)
+
+Probed with 35 small `.py` cases covering what songformatter actually uses, rather
+than fighting a 1833-line file one error at a time. Filed into their lanes:
+
+**Blocks the very first module** (`key_analysis.py` fails on line 1):
+- `import re` → nothing to bind to; pxx has no regex engine at all.
+  [[feature-lib-regex-engine]] (B) + [[feature-nilpy-re-module]] (N).
+  14 call sites surveyed: classes, alternation, non-greedy, non-capturing groups,
+  `\d`/`\s`, one VERBOSE pattern.
+
+**Silent wrong behavior — highest severity:**
+- `"%.2f" % 3.14159` prints `0.0`, `"%d" % 42` prints `39`, `"%s" % "str"` prints
+  `8568`. [[bug-nilpy-percent-string-format-garbage]] (N).
+- Calling a lambda stored in a dict SEGFAULTS; from a list it yields an empty
+  value. Evidence appended to [[feature-nilpy-lambda]] (N).
+
+**Language gaps:**
+- `return 1, 2` unparsed → [[feature-nilpy-tuple-return]]
+- `def f(*args, **kw)` unparsed → [[feature-nilpy-star-args-kwargs]]
+- `self.n = n` in a ctor demands an annotation →
+  [[feature-nilpy-class-field-infer-from-ctor]]
+- builtin errors aren't catchable (`int("nope")`, `1//0` abort past `except`) →
+  [[feature-nilpy-catchable-runtime-errors]]
+- `sum/max/min/any/all/sorted/set/map/filter/type` missing →
+  [[feature-nilpy-aggregate-builtins]]
+- f-string format specs (`{x:.2f}`, `{s:>5}`) →
+  [[feature-nilpy-fstring-format-spec]]
+- `g = lambda ...` doesn't parse; `sort(key=...)` errors → [[feature-nilpy-lambda]]
+- `str.replace` / `.ljust` / `.zfill` and `from collections import Counter` →
+  existing [[feature-nilpy-collections-and-string-methods]]
+- `with open(...) as f` → existing [[feature-nilpy-file-io-and-comprehensions]]
+- `for ... else` unparsed (minor, no ticket yet — songformatter doesn't use it)
+
+**Already fine** (verified working, no ticket needed): slicing (`s[1:3]`,
+`xs[1:3]`, negative, step), indexing, tuple unpack from literals and from
+`.split()`, `dict.get/.items/.setdefault`, `in`, f-strings without specs,
+comprehensions (list and dict), dataclasses with `field(default_factory=list)`,
+classes with annotated fields, `global`/`nonlocal`, kwargs at the CALL site,
+`raise`/`except X as e` for Python-raised exceptions, `"-" * 5`, `[0] * 3`,
+`enumerate`, `zip`, `range`, `len`, `str`, `int`.
+
+Also note: a `.py` extension compiles as nilpy exactly like `.npy` (no rename
+needed), and the compiler must be invoked from the repo root for RTL unit
+resolution.
+
+**Not a Track A gap after all:** the libc-free `exec` this app needs for its
+Preview PDF action already exists (`ExecutePipeline`, `lib/rtl/sysutils.pas`,
+ticket `feature-sys-process-spawning` done). Only the nilpy binding is missing →
+[[feature-nilpy-process-exec-binding]], and the app can carry a stub until then.
+
 ## Log
 - 2026-07-25 — filed as the umbrella goal from the planning session.
+- 2026-07-26 — rescoped headless → GUI-MVP; preview architecture settled as the
+  parallel canvas and shipped on the app side (songformatter 29a874e, 0d7a5c2);
+  step-4 wall catalog added and 9 tickets filed.
