@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-23T10:58:47Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e6ded26f25f65ec218e90bb5f8728c1bb8a42660",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-23T11:08:08Z",
    "fixed": [],
    "new_red": [],
@@ -398,6 +390,14 @@
    "new_red": [],
    "sha": "b84d89b4603bb1431896de5f316d58c03295b294",
    "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-26T12:56:48Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "b84d89b4603bb1431896de5f316d58c03295b294",
+   "tier": "full",
    "verdict": "GREEN"
   }
  ],
@@ -1030,7 +1030,6 @@
   "test-core#src:test/records.pas@1": "pass",
   "test-core#src:test/strict_fpc_case_fail.pas": "pass",
   "test-core#src:test/string_compare.pas@1": "pass",
-  "test-core#src:test/strings.pas": "pass",
   "test-core#src:test/strings.pas@1": "pass",
   "test-core#src:test/test_abs_sqr.pas": "pass",
   "test-core#src:test/test_absolute_overlay_b265.pas": "pass",
@@ -1426,7 +1425,6 @@
   "test-core#src:test/test_nilpy_dataclass_dict_factory.npy": "pass",
   "test-core#src:test/test_nilpy_dict_fromkeys.npy": "pass",
   "test-core#src:test/test_nilpy_field_from_unannotated_param.npy": "pass",
-  "test-core#src:test/test_nilpy_kwargs_by_name.npy": "pass",
   "test-core#src:test/test_nilpy_method_param_default.npy": "pass",
   "test-core#src:test/test_nilpy_re.npy": "pass",
   "test-core#src:test/test_nilpy_str_float.npy": "pass",
@@ -1966,11 +1964,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-26T12:49:44Z",
+  "date": "2026-07-26T12:56:48Z",
   "sha": "b84d89b4603bb1431896de5f316d58c03295b294",
-  "tier": "native",
+  "tier": "full",
   "verdict": "GREEN",
-  "wall": 269.0
+  "wall": 405.8
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1980,11 +1978,11 @@
   "sha": "5d360be301b5d6860ed902acdcbb0a07424b9aea"
  },
  "last_full": {
-  "date": "2026-07-26T11:56:58Z",
-  "sha": "d77533901359f862a9f25103ae5489632fa3b073",
+  "date": "2026-07-26T12:56:48Z",
+  "sha": "b84d89b4603bb1431896de5f316d58c03295b294",
   "tier": "full",
   "verdict": "GREEN",
-  "wall": 529.6
+  "wall": 405.8
  },
  "last_opt": {
   "date": "2026-07-26T11:16:03Z",
