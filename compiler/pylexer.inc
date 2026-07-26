@@ -529,6 +529,13 @@ begin
   P := 1;
   SrcLine := 1;
 
+  { Skip a leading UTF-8 BOM. CPython accepts one and ignores it, and .py files
+    written on Windows routinely carry it; without this the first token is the
+    BOM's first byte and the file dies at "unexpected character" on line 1. }
+  if (Length(Source) >= 3) and (Source[1] = #$EF) and (Source[2] = #$BB) and
+     (Source[3] = #$BF) then
+    P := 4;
+
   IndentStack[0] := 0;
   IndentStackTop := 0;
   parenDepth := 0;
