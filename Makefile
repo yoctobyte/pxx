@@ -189,6 +189,9 @@ test-nilpy: $(COMPILER)
 	# an override dispatching through the base's own call site
 	# configparser shim + the virtual optionxform hook a subclass overrides
 	# keyword arguments bind by name, any subset (an omitted optional keeps its default)
+	# a field assigned from an unannotated ctor parameter becomes a variant
+	./$(COMPILER) test/test_nilpy_field_from_unannotated_param.npy /tmp/test_nilpy_fldparam26
+	test "$$(/tmp/test_nilpy_fldparam26)" = "$$(printf 'p f 0\nreassigned: q')"
 	# the tkinter facade: compiled, not run - it needs an X display. Lives in
 	# examples/tk/ because a .npy in test/ resolving `tk` picks up test/strings.pas
 	# (a PROGRAM named Strings) ahead of the RTL unit tk.pas uses - the resolver
@@ -3196,6 +3199,9 @@ test-core: $(COMPILER)
 	# an override dispatching through the base's own call site
 	# configparser shim + the virtual optionxform hook a subclass overrides
 	# keyword arguments bind by name, any subset (an omitted optional keeps its default)
+	# a field assigned from an unannotated ctor parameter becomes a variant
+	./$(COMPILER) test/test_nilpy_field_from_unannotated_param.npy /tmp/test_nilpy_fldparam26
+	test "$$(/tmp/test_nilpy_fldparam26)" = "$$(printf 'p f 0\nreassigned: q')"
 	# the tkinter facade: compiled, not run - it needs an X display. Lives in
 	# examples/tk/ because a .npy in test/ resolving `tk` picks up test/strings.pas
 	# (a PROGRAM named Strings) ahead of the RTL unit tk.pas uses - the resolver

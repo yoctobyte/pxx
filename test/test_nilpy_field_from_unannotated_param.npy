@@ -1,0 +1,14 @@
+# A field assigned from an UNANNOTATED constructor parameter takes the variant
+# type instead of being an error. Python does not require the annotation, and
+# demanding one rejected whole modules over the shape of an ordinary class.
+# A right-hand side that cannot be typed at all is still an error.
+class C:
+    def __init__(self, parent, cb) -> None:
+        self.parent = parent
+        self.cb = cb
+        self.n = 0
+
+c = C("p", "f")
+print(c.parent, c.cb, c.n)
+c.parent = "q"
+print("reassigned:", c.parent)

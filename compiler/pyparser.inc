@@ -7642,6 +7642,35 @@ begin
   if name = '__init__' then Result := 'create' else Result := name;
 end;
 
+{ Is `name` one of this method's parameters at all — annotated or not? Used to
+  tell "assigned from an unannotated parameter" (fine, the field becomes a
+  variant) from "assigned from something we could not type" (still an error). }
+function PyHeaderHasParam(methodStart, stopIdx: Integer; const name: AnsiString): Boolean;
+var i, depth: Integer;
+begin
+  Result := False;
+  depth := 0;
+  for i := methodStart to stopIdx - 1 do
+  begin
+    if Tokens[i].Kind = tkLParen then Inc(depth)
+    else if Tokens[i].Kind = tkRParen then
+    begin
+      Dec(depth);
+      if depth <= 0 then Exit;         { past the parameter list }
+    end
+    else if (depth = 1) and (Tokens[i].Kind = tkIdent) and
+            (GetTokenStr(i) = name) then
+    begin
+      { a parameter NAME sits right after '(' or a ',' }
+      if (Tokens[i - 1].Kind = tkLParen) or (Tokens[i - 1].Kind = tkComma) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+  end;
+end;
+
 function PyHeaderParamType(methodStart, stopIdx: Integer; const name: AnsiString): TTypeKind;
 { The full annotation grammar, not the single-token reader: a ctor parameter may
   be annotated `Callable[[VM], None]` / `Optional[T]` / `List[T]` just like any
@@ -8396,10 +8425,31 @@ begin
               end;
             end;
             if tk = tyUnknown then
-              ErrorAt(Tokens[j].Line,
-                      'Nil Python: cannot infer the type of field self.'
-                      + GetTokenStr(j + 2) + ' - annotate it (self.'
-                      + GetTokenStr(j + 2) + ': int = ...)');
+            begin
+              { Assigned from a bare ctor PARAMETER that carries no annotation:
+                `def __init__(self, parent, on_next)` then `self.on_next =
+                on_next`. Python does not require the annotation and neither can
+                we — that is the shape of an ordinary class, and erroring here
+                rejected whole modules over it (songformatter's FormatText).
+                The field takes the variant type, which is what an unannotated
+                LOCAL already gets, so the value keeps its runtime tag.
+
+                Only for that case: a right-hand side the scanners could not
+                type at all still errors, because guessing there would hide a
+                real mistake. }
+              if (Tokens[j + 4].Kind = tkIdent) and
+                 PyHeaderHasParam(methodStart, j, GetTokenStr(j + 4)) then
+              begin
+                tk := tyVariant;
+                fldRec := REC_NONE;
+                fldSig := -1;
+              end
+              else
+                ErrorAt(Tokens[j].Line,
+                        'Nil Python: cannot infer the type of field self.'
+                        + GetTokenStr(j + 2) + ' - annotate it (self.'
+                        + GetTokenStr(j + 2) + ': int = ...)');
+            end;
             { see the dataclass branch: str fields are managed, not string[N] }
             if tk = tyString then tk := tyAnsiString;
             if tk <> tyClass then fldRec := REC_NONE;
