@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-23T10:20:03Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "1348e5cff1ead1005c91b322b0dd02ed86f98c71",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-23T10:30:30Z",
    "fixed": [],
    "new_red": [],
@@ -398,6 +390,14 @@
    "new_red": [],
    "sha": "d77533901359f862a9f25103ae5489632fa3b073",
    "tier": "full",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-26T12:04:01Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "c68c6ef1a1cc08426428cb584083e19b657b1d14",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1418,12 +1418,14 @@
   "test-core#src:test/test_nilpy_c_pointer.npy": "pass",
   "test-core#src:test/test_nilpy_call_return_infer.npy": "pass",
   "test-core#src:test/test_nilpy_class.npy": "pass",
+  "test-core#src:test/test_nilpy_configparser.npy": "pass",
   "test-core#src:test/test_nilpy_convert.npy": "pass",
   "test-core#src:test/test_nilpy_counter.npy": "pass",
   "test-core#src:test/test_nilpy_dataclass_dict_factory.npy": "pass",
   "test-core#src:test/test_nilpy_dict_fromkeys.npy": "pass",
   "test-core#src:test/test_nilpy_re.npy": "pass",
   "test-core#src:test/test_nilpy_str_float.npy": "pass",
+  "test-core#src:test/test_nilpy_subclass_unit_base.npy": "pass",
   "test-core#src:test/test_nilpy_tuple_return.npy": "pass",
   "test-core#src:test/test_nilpy_union_annotation.npy": "pass",
   "test-core#src:test/test_nilpy_variant.npy": "pass",
@@ -1959,11 +1961,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-26T11:56:58Z",
-  "sha": "d77533901359f862a9f25103ae5489632fa3b073",
-  "tier": "full",
+  "date": "2026-07-26T12:04:01Z",
+  "sha": "c68c6ef1a1cc08426428cb584083e19b657b1d14",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 529.6
+  "wall": 284.3
  },
  "last_bench": {
   "conf_rows": 550,
