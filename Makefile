@@ -179,6 +179,9 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_sqlite_crud.npy /tmp/test_nilpy_sqlite_crud26
 	test "$$(/tmp/test_nilpy_sqlite_crud26)" = "$$(printf '1 alice\n2 bob')"
 	# re module over lib/rtl/regex.pas; expectation is CPython's own output
+	# collections.Counter (dict in Counter mode); expectation is CPython's output
+	./$(COMPILER) test/test_nilpy_counter.npy /tmp/test_nilpy_counter26
+	test "$$(/tmp/test_nilpy_counter26)" = "$$(printf 'missing reads zero: 0\nstored: 2 len: 1\nfrom list: 2 1\nafter update: 2 3 1\nmc y 3\nmc x 2\nmc z 1\ntop: y\nkey x 2\nkey y 3\nkey z 1\nas dict: 2')"
 	./$(COMPILER) test/test_nilpy_re.npy /tmp/test_nilpy_re26
 	test "$$(/tmp/test_nilpy_re26)" = "$$(printf 'match ok: C# C #\nno-match is None ok\nsearch: 123\nfullmatch none: True\nsub: a b c\nsub groupref: Csharp D\nfindall n: 3 C# Db E\nfindall groups n: 3\ncompiled match: True True\ncompiled via module fn: True\nescape ok: True\nstart/stop: 0 2')"
 	./$(COMPILER) test/test_nilpy_variant.npy /tmp/test_nilpy_variant26
@@ -3153,6 +3156,9 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_nil_python_core.npy /tmp/test_nil_python_core26
 	test "$$(/tmp/test_nil_python_core26)" = "$$(printf '0\n1\n1\n2\n3\n5\n10')"
 	# re module over lib/rtl/regex.pas; expectation is CPython's own output
+	# collections.Counter (dict in Counter mode); expectation is CPython's output
+	./$(COMPILER) test/test_nilpy_counter.npy /tmp/test_nilpy_counter26
+	test "$$(/tmp/test_nilpy_counter26)" = "$$(printf 'missing reads zero: 0\nstored: 2 len: 1\nfrom list: 2 1\nafter update: 2 3 1\nmc y 3\nmc x 2\nmc z 1\ntop: y\nkey x 2\nkey y 3\nkey z 1\nas dict: 2')"
 	./$(COMPILER) test/test_nilpy_re.npy /tmp/test_nilpy_re26
 	test "$$(/tmp/test_nilpy_re26)" = "$$(printf 'match ok: C# C #\nno-match is None ok\nsearch: 123\nfullmatch none: True\nsub: a b c\nsub groupref: Csharp D\nfindall n: 3 C# Db E\nfindall groups n: 3\ncompiled match: True True\ncompiled via module fn: True\nescape ok: True\nstart/stop: 0 2')"
 	./$(COMPILER) test/test_nilpy_variant.npy /tmp/test_nilpy_variant26

@@ -139,6 +139,23 @@ type
     function setdefault(const k: Variant; const d: Variant): Variant;
     function keylist: TPyList;
     function vallist: TPyList;
+    { collections.Counter is this same type in Counter MODE, not a subclass.
+      A subclass would be the natural shape, but inherited fields and methods
+      need explicit Self. qualification here, the inherited constructor resolves
+      to the wrong Create, and — fatally — the inherited default property does
+      not carry subscript ASSIGNMENT, so `c[k] = v` on a subclass does not even
+      parse. See bug-pascal-subclass-inherited-members. As a mode, a Counter IS
+      a dict: subscript, items(), iteration and dict(c) all work already, and
+      only the missing-key read changes. }
+    FCounterMode: Boolean;
+    { Counter.update(iterable) COUNTS elements; a plain dict's update(pairs)
+      merges them. The mode picks which, which is why they share a name. }
+    procedure update(l: TPyList);
+    procedure update(d: TPyDict); overload;
+    { Counter.most_common([n]): (element, count) pairs, highest count first. The
+      pair is a 2-element list — NilPy has no tuple type; indexing is identical. }
+    function most_common: TPyList;
+    function most_common(n: Integer): TPyList; overload;
     property Items[const k: Variant]: Variant read fetch write store; default;
   end;
 
@@ -543,6 +560,11 @@ function list(const v: Variant): TPyList; overload;
   uforth uses `dict(vm.dict)` to snapshot word-list state for MARKER. }
 function dict(d: TPyDict): TPyDict;
 function dict(const v: Variant): TPyDict; overload;
+
+{ collections.Counter(...) — a TPyDict in Counter mode; see TPyDict. }
+function Counter: TPyDict;
+function Counter(l: TPyList): TPyDict; overload;
+function Counter(const s: AnsiString): TPyDict; overload;
 { `reversed(x)` — Python returns a lazy iterator; NilPy's `for` is a counted-loop
   desugar with no iterator concept, so this is the reversed COPY, which behaves
   identically for `for x in reversed(xs)` and `list(reversed(xs))`. }
@@ -1653,7 +1675,17 @@ var
   src, dst: PPyVarRec;
 begin
   i := indexof(k);
-  if i < 0 then PyKeyError;
+  if i < 0 then
+  begin
+    { Counter mode: a key that was never stored reads as 0, which is the whole
+      reason counting code uses a Counter (`c[k] += 1` with no seeding). }
+    if FCounterMode then
+    begin
+      Result := 0;
+      exit;
+    end;
+    PyKeyError;
+  end;
   src := PPyVarRec(NativeInt(FVals) + i * 16);
   dst := PPyVarRec(@Result);
   PyVarSlotInit(dst, src);
@@ -1779,6 +1811,122 @@ begin
   dst := PPyVarRec(@Result);
   PyVarSlotInit(dst, src);
   remove(k);
+end;
+
+{ ---- collections.Counter ------------------------------------------------- }
+
+procedure TPyDict.update(l: TPyList);
+var i: Integer; k, pair: Variant; pl: TPyList; o: TObject;
+begin
+  if l = nil then exit;
+  for i := 0 to l.count - 1 do
+  begin
+    if FCounterMode then
+    begin
+      k := l.at(i);
+      store(k, VariantToInt64(fetch(k)) + 1);
+    end
+    else
+    begin
+      { a plain dict updates from (key, value) pairs }
+      pair := l.at(i);
+      o := TObject(pyvarobj(pair));
+      if o is TPyList then
+      begin
+        pl := TPyList(o);
+        if pl.count >= 2 then store(pl.at(0), pl.at(1));
+      end;
+    end;
+  end;
+end;
+
+{ CPython's Counter.update(mapping) ADDS the mapping's values; a plain dict's
+  update(mapping) replaces them. }
+procedure TPyDict.update(d: TPyDict);
+var ks, vs: TPyList; i: Integer; k: Variant;
+begin
+  if d = nil then exit;
+  ks := d.keylist;
+  vs := d.vallist;
+  for i := 0 to ks.count - 1 do
+  begin
+    k := ks.at(i);
+    if FCounterMode then
+      store(k, VariantToInt64(fetch(k)) + VariantToInt64(vs.at(i)))
+    else
+      store(k, vs.at(i));
+  end;
+end;
+
+{ Insertion sort over an index vector: a Counter here holds a handful of note or
+  chord names, so the simple thing is the right thing. }
+function TPyDict.most_common(n: Integer): TPyList;
+var ks, vs, pair, res: TPyList;
+    idx: array of Integer;
+    i, j, t, cnt: Integer;
+begin
+  ks := keylist;
+  vs := vallist;
+  cnt := ks.count;
+  SetLength(idx, cnt);
+  for i := 0 to cnt - 1 do idx[i] := i;
+  for i := 1 to cnt - 1 do
+  begin
+    j := i;
+    while (j > 0) and
+          (VariantToInt64(vs.at(idx[j])) > VariantToInt64(vs.at(idx[j - 1]))) do
+    begin
+      t := idx[j];
+      idx[j] := idx[j - 1];
+      idx[j - 1] := t;
+      j := j - 1;
+    end;
+  end;
+  res := TPyList.Create;
+  if (n >= 0) and (n < cnt) then cnt := n;
+  for i := 0 to cnt - 1 do
+  begin
+    pair := TPyList.Create;
+    pair.append(ks.at(idx[i]));
+    pair.append(vs.at(idx[i]));
+    res.append(pair);
+  end;
+  Result := res;
+end;
+
+function TPyDict.most_common: TPyList;
+begin
+  Result := most_common(-1);
+end;
+
+{ Counter() / Counter(iterable) as plain functions, so Python's constructor
+  spelling resolves through the ordinary call path with no frontend mapping —
+  the same trick lib/rtl/re.pas uses for `import re`. }
+function Counter: TPyDict;
+var c: TPyDict;
+begin
+  c := TPyDict.Create;
+  c.FCounterMode := True;
+  Result := c;
+end;
+
+function Counter(l: TPyList): TPyDict;
+var c: TPyDict;
+begin
+  c := TPyDict.Create;
+  c.FCounterMode := True;
+  c.update(l);
+  Result := c;
+end;
+
+function Counter(const s: AnsiString): TPyDict;
+var c: TPyDict; i: Integer;
+begin
+  c := TPyDict.Create;
+  c.FCounterMode := True;
+  for i := 1 to Length(s) do
+    c.store(s[i], VariantToInt64(c.fetch(s[i])) + 1);
+  Result := c;
 end;
 
 function TPyDict.keylist: TPyList;

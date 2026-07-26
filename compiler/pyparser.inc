@@ -8758,8 +8758,12 @@ begin
       Next;
       { itertools is consumed-but-unresolved for now: uforth only needs
         count(); its use sites wall visibly until a shim lands (Track B). }
+      { `collections` joins these: the names it exports that we support are
+        ordinary pylib symbols (Counter -> pylib's TPyCounter constructors), so
+        consuming the from-import is enough — an unsupported name from it walls
+        visibly at its use site as an undefined variable, same as itertools. }
       if CaseEqual(impName, 'dataclasses') or CaseEqual(impName, 'typing') or
-         CaseEqual(impName, 'itertools') then
+         CaseEqual(impName, 'itertools') or CaseEqual(impName, 'collections') then
       begin
         while CurTok.Kind = tkIdent do
         begin

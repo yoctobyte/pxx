@@ -1,0 +1,24 @@
+# collections.Counter — a TPyDict in Counter mode (see pylib), so every dict
+# facility applies and only the missing-key read differs. Output below is what
+# CPython prints for the same script.
+from collections import Counter
+
+c = Counter()
+print("missing reads zero:", c["zz"])
+c["a"] = 2
+print("stored:", c["a"], "len:", len(c))
+
+c2 = Counter(["x", "y", "x"])
+print("from list:", c2["x"], c2["y"])
+
+c2.update(["y", "y", "z"])
+print("after update:", c2["x"], c2["y"], c2["z"])
+
+for pair in c2.most_common():
+    print("mc", pair[0], pair[1])
+print("top:", c2.most_common(1)[0][0])
+
+# insertion order, which CPython's dict and pylib's both preserve
+for k in c2:
+    print("key", k, c2[k])
+print("as dict:", dict(c2)["x"])
