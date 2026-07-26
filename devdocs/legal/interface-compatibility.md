@@ -114,6 +114,70 @@ This is where the real exposure is, and it is about honesty as much as law:
   substitution an error. When a program compiles under `--no-shims`, "no lookalikes
   involved" is a fact you can demonstrate.
 
+## Objections considered
+
+Run against the position deliberately, so it is not re-argued from scratch each
+time. Each is stated as an opponent would put it, with the answer.
+
+**"Your implementation copies theirs."** Infringement requires SHOWING copying of
+protected expression — substantial similarity, pointed at, in material that is
+itself protectable. Not asserted, shown. Put the two side by side: ours is Pascal
+over a public-domain C backend; theirs is a pure-Python library with its own PDF
+writer and its own architecture. Similarity fails on inspection. Any fragment that
+did resemble theirs would still have to clear triviality — short functional
+constructs, the obvious way to write a loop, names dictated by the interface, are
+not protectable (merger, scènes à faire, de minimis).
+
+**"You reimplemented an interface you had no right to."** The interface is excluded
+from protection by statute (Software Directive Art. 1(2)) and by CJEU C-406/10:
+functionality, language and file formats are not protected expression. Nothing to
+have a right to.
+
+**"Compiling a program that names a trademark is trademark use."** No. That line is
+in the USER's document; the compiler processes text, as an editor or a linter does.
+Trademark reaches use in the course of trade as an indication of origin, which this
+is not. See the section above.
+
+**"Naming your shim after their module is trademark use."** No file in this tree
+carries the upstream name; resolution is a mapping onto `mimic_*`. Where the name
+does appear, it appears as the import identifier an ecosystem standardised on —
+referential use, permitted by EUTMR Art. 14(1)(c).
+
+**"You tested against their software."** Against open-source software under
+permissive licences (CPython, PSF; reportlab, BSD), which carry no term restricting
+study, reimplementation or benchmarking. Observing what published open-source code
+does is unremarkable, and Art. 5(3) protects it besides. The rule this leaves is
+narrow and prospective: before deriving expectations by RUNNING a proprietary
+package, read its licence.
+
+**"Your `--no-shims` flag admits the substitution matters."** It does matter, and
+saying so plainly is the point. Disclosure is what honest practices look like; a
+project that reports its substitutions and can prove their absence on demand is
+demonstrating good faith, not confessing to something.
+
+**"Your shim might be incorrect."** It might. Nothing here warrants correctness —
+no fitness, no merchantability, no guarantee — exactly as every compiler and every
+library in this ecosystem ships. Bugs are not torts. What WOULD matter is a false
+CLAIM that induced reliance ("drop-in replacement"), which is why the claims rules
+above are the strict part of this document.
+
+## The correctness rule is ours, not the law's
+
+Shims fail loudly outside their subset and their expectations are diffed against
+the original's own output. That is engineering discipline, held because silently
+wrong output is the failure class this project treats as worst — not because any
+law requires it and not as an admission that any is owed. Do not read it as a
+warranty; there is none.
+
+## Jurisdiction
+
+The reasoning above is EU law, where this project is developed. Elsewhere the route
+differs — in the US the argument for reimplementing an interface runs through fair
+use for interoperability rather than through exclusion from protection, the ground
+Oracle litigated for a decade against Google and lost. Different mechanism, same
+practical destination; the conduct rules in this document are written to satisfy
+both.
+
 ## Vendoring is a different question
 
 Taking someone's code into the tree — pdfgen, zlib, sqlite — is governed by their
