@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-23T06:32:07Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "0ed0d77c4ffa9d46f239f478d866e59454503694",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-23T06:36:27Z",
    "fixed": [],
    "new_red": [],
@@ -398,6 +390,14 @@
    "new_red": [],
    "sha": "7c1fc7043524fbaa0e5ea0650c3533e279dff0cb",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-26T10:39:05Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "c1cb964b2a2ea9b124f4d4b143df2f424435a4a4",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1424,6 +1424,7 @@
   "test-core#src:test/test_nilpy_call_return_infer.npy": "pass",
   "test-core#src:test/test_nilpy_class.npy": "pass",
   "test-core#src:test/test_nilpy_convert.npy": "pass",
+  "test-core#src:test/test_nilpy_re.npy": "pass",
   "test-core#src:test/test_nilpy_str_float.npy": "pass",
   "test-core#src:test/test_nilpy_variant.npy": "pass",
   "test-core#src:test/test_nilpy_widen_fix.npy": "pass",
@@ -1963,11 +1964,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-26T10:22:36Z",
-  "sha": "7c1fc7043524fbaa0e5ea0650c3533e279dff0cb",
-  "tier": "opt",
+  "date": "2026-07-26T10:39:05Z",
+  "sha": "c1cb964b2a2ea9b124f4d4b143df2f424435a4a4",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 298.5
+  "wall": 269.7
  },
  "last_bench": {
   "conf_rows": 550,
