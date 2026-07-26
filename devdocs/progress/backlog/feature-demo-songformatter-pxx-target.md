@@ -150,3 +150,26 @@ ticket `feature-sys-process-spawning` done). Only the nilpy binding is missing �
 - 2026-07-26 — rescoped headless → GUI-MVP; preview architecture settled as the
   parallel canvas and shipped on the app side (songformatter 29a874e, 0d7a5c2);
   step-4 wall catalog added and 9 tickets filed.
+
+## Wall catalog, second pass (2026-07-26 — after regex + re + BOM landed)
+
+Where each module now stops, with the pinned stable plus the three commits below
+(`1e29abdf` regex engine, `68ad2687` the `re` module, `222ceb10` the BOM fix):
+
+| module | first wall now |
+| --- | --- |
+| `key_analysis.py` | `from collections import Counter` — [[feature-nilpy-collections-and-string-methods]] |
+| `settings.py` | `import configparser` — [[feature-nilpy-configparser]] |
+| `convertrawtext.py` | `import tkinter` — [[feature-nilpy-tkinter-facade]] |
+| `SongFormatter.py` | `import json` binds the Pascal RTL unit — [[bug-nilpy-stdlib-name-binds-pascal-unit]] |
+
+`import re` is GONE as a wall: `key_analysis.py` used to die on line 1 and now
+reaches line 4. `convertrawtext.py` used to die on line 1 with "unexpected
+character" (its UTF-8 BOM) and now reaches line 2.
+
+The `import json` finding is the one with design weight, and it cuts both ways:
+NilPy resolves `import X` through the Pascal unit resolver, which is precisely how
+`re` was provided with zero frontend change — but it means ANY Python stdlib name
+colliding with an RTL unit name binds to Pascal code (`json`, `math`, `net`,
+`http`, `random`, `collections`…). Needs a policy: allow-list the deliberate shims,
+or give Python shims their own search path. See that ticket.

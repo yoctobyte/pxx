@@ -28,7 +28,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (148)
+## backlog (150)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -36,6 +36,7 @@ _none_
 | bug-cfront-fegetround-unresolved-float-printf | C | 55 | bug | cfront: __pxx_fegetround unresolved at runtime for any float-printf C program | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-percent-string-format-garbage | N | 60 | bug | nilpy: printf-style % on a string yields garbage instead of formatting (silent wrong output) | — |
+| bug-nilpy-stdlib-name-binds-pascal-unit | N | 60 | bug | nilpy: a Python stdlib import silently binds to a same-named Pascal RTL unit (import json -> lib/rtl/json.pas) | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -96,6 +97,7 @@ _none_
 | feature-nilpy-class-field-infer-from-ctor | N | 50 | feature | nilpy: infer a class field's type from the ctor parameter assigned to it | — |
 | feature-nilpy-closure-default-and-remaining | N | 45 | feature | NilPy: remaining uforth walls past ~88% (closure-captured defaults, then exec) | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
+| feature-nilpy-configparser | N | 45 | feature | nilpy: configparser module (INI settings) — songformatter's settings.py imports it | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-default-args-on-nested-defs | N | 55 | feature | NilPy: default arguments as explicit by-value capture | — |
 | feature-nilpy-exception-message | N | 55 | feature | NilPy: `Exception(msg)` — the root class takes no arguments | — |
@@ -2664,6 +2666,7 @@ _none_
 - [p 65] [A] feature-a-typeref-handle
 - [p 65] [N] feature-nilpy-bound-method-value
 - [p 60] [N] bug-nilpy-percent-string-format-garbage
+- [p 60] [N] bug-nilpy-stdlib-name-binds-pascal-unit
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
@@ -2732,6 +2735,7 @@ _none_
 - [p 45] [B] feature-lib-pyexec
 - [p 45] [A] feature-move-fillchar-intrinsics
 - [p 45] [N] feature-nilpy-closure-default-and-remaining
+- [p 45] [N] feature-nilpy-configparser
 - [p 45] [N] feature-nilpy-generator-expression-arg
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [N] feature-nilpy-none-variant
