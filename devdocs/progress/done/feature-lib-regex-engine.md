@@ -84,4 +84,4 @@ unicode classes.
 `git stash -u`. The regex step itself passes inside `lib-test`, before that point.
 
 ## Log
-- 2026-07-26 — resolved, commit PENDING.
+- 2026-07-26 — resolved, commit 1e29abdf.
