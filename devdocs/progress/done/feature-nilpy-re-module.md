@@ -38,9 +38,9 @@ Compiled patterns: the same methods as the module functions.
 surveyed songformatter patterns, + `--tier quick` + self-host byte-identical.
 
 ## Log
-- 2026-07-26 — resolved, commit 68ad2687.
+- 2026-07-26 — resolved, commit ca4dac8d.
 
-## Update (2026-07-26) — landed, commit `68ad2687`
+## Update (2026-07-26) — landed, commit `ca4dac8d`
 
 `lib/rtl/re.pas`, named `re` so NO frontend change was needed: `import X` becomes
 `uses X`, so the unit name IS the Python module name, and `re.match(p, s)` resolves

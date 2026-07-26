@@ -154,7 +154,7 @@ ticket `feature-sys-process-spawning` done). Only the nilpy binding is missing â
 ## Wall catalog, second pass (2026-07-26 â€” after regex + re + BOM landed)
 
 Where each module now stops, with the pinned stable plus the three commits below
-(`1e29abdf` regex engine, `68ad2687` the `re` module, `222ceb10` the BOM fix):
+(`1e29abdf` regex engine, `ca4dac8d` the `re` module, `14e5f5e9` the BOM fix):
 
 | module | first wall now |
 | --- | --- |
