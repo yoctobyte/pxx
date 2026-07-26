@@ -1,0 +1,22 @@
+# Subclassing a class that came from an imported unit, three things at once:
+#   * a DOTTED base name, `class C(basehook.ConfigBase)` - the qualifier is
+#     consumed and the last segment is the class (unit scope is flat here)
+#   * `from basehook import ConfigBase`, which pulls the unit and lets the name
+#     resolve unqualified
+#   * the override actually DISPATCHING through the base's own call site, which
+#     needs the base method to be `virtual`
+import basehook
+from basehook import ConfigBase
+
+class KeepCase(basehook.ConfigBase):
+    def optionxform(self, s: str) -> str:
+        return s
+
+class Plain(ConfigBase):
+    def tag(self) -> str:
+        return "plain"
+
+k = KeepCase()
+p = Plain()
+print("override:", k.normalize("KeepCase"))
+print("inherited:", p.normalize("KeepCase"))

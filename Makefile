@@ -185,6 +185,10 @@ test-nilpy: $(COMPILER)
 	# tuple returns + the keyword-only marker; expectation is CPython's output
 	# dict.fromkeys; expectation is CPython's output
 	# a .npy program using a unit with an `array of const` parameter
+	# subclassing a class from an imported unit: dotted base, from-import, and
+	# an override dispatching through the base's own call site
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_subclass_unit_base.npy /tmp/test_nilpy_subbase26
+	test "$$(/tmp/test_nilpy_subbase26)" = "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy /tmp/test_nilpy_aoc26
 	test "$$(/tmp/test_nilpy_aoc26)" = "x:2"
 	./$(COMPILER) test/test_nilpy_dict_fromkeys.npy /tmp/test_nilpy_fromkeys26
@@ -3177,6 +3181,10 @@ test-core: $(COMPILER)
 	# tuple returns + the keyword-only marker; expectation is CPython's output
 	# dict.fromkeys; expectation is CPython's output
 	# a .npy program using a unit with an `array of const` parameter
+	# subclassing a class from an imported unit: dotted base, from-import, and
+	# an override dispatching through the base's own call site
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_subclass_unit_base.npy /tmp/test_nilpy_subbase26
+	test "$$(/tmp/test_nilpy_subbase26)" = "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy /tmp/test_nilpy_aoc26
 	test "$$(/tmp/test_nilpy_aoc26)" = "x:2"
 	./$(COMPILER) test/test_nilpy_dict_fromkeys.npy /tmp/test_nilpy_fromkeys26

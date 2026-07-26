@@ -8776,6 +8776,19 @@ begin
       empty shell (the try/except semantics rung is its own ticket) }
     Next;
     if CurTok.Kind <> tkIdent then Error('Nil Python: expected a base class name');
+    { A DOTTED base — `class Cfg(configparser.ConfigParser)` — names the module
+      it came from. Unit scope is flat here (an `import X` is a `uses X`, and its
+      symbols resolve unqualified), so the qualifier is consumed and the LAST
+      segment is the class. Without this, subclassing anything imported was
+      impossible: the parser took `configparser` as the base name and reported
+      it unknown. }
+    while (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) do
+    begin
+      Next;                { onto the '.' }
+      Next;                { onto the segment after it }
+      if CurTok.Kind <> tkIdent then
+        Error('Nil Python: expected a class name after . in the base class');
+    end;
     baseCi := FindUClass(CurTok.SVal);
     if (baseCi < 0) and CaseEqual(CurTok.SVal, 'Exception') then
     begin
@@ -9005,7 +9018,24 @@ begin
         end;
       end
       else
-        Error('Nil Python: from-import of module ' + impName + ' is not supported yet');
+      begin
+        { `from X import a, b` where X is a resolvable UNIT: pull the unit and
+          let the names resolve unqualified, which is how `import X` already
+          works (unit scope is flat). This is the form real code uses to reach a
+          shim — `from configparser import ConfigParser`. An unknown module still
+          fails, with the unit resolver's own "unit source not found: X". }
+        ParseUsesUnit(impName);
+        while CurTok.Kind = tkIdent do
+        begin
+          Next;
+          if PyIsIdent('as') then
+          begin
+            Next;
+            if CurTok.Kind = tkIdent then Next;
+          end;
+          if not Eat(tkComma) then Break;
+        end;
+      end;
       PySkipNewlines;
     end
     else
