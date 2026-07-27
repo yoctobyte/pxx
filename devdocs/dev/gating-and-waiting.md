@@ -26,6 +26,10 @@ is done, so the completion notification IS the result: one task, one answer.
 If you must wait on something else, wait on a CONDITION that ends
 (`until [ -f done.marker ]; do sleep 10; done`), never a fixed sleep you re-issue.
 
+Do not pipe it (`tools/gate.sh quick | tail`) when you care about the exit
+status — the pipe reports `tail`'s. The summary is already short; read it whole,
+or use `${PIPESTATUS[0]}`.
+
 ### `pgrep` matches your own watcher
 
 ```bash
