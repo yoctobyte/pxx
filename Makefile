@@ -208,6 +208,12 @@ test-nilpy: $(COMPILER)
 	# one Exception class serving both the Python and the sysutils surface
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
 	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	# a comprehension nested in another's element, dict spread, aggregate builtins
+	./$(COMPILER) test/test_nilpy_nested_comp.npy /tmp/test_nilpy_nestcomp26
+	test "$$(/tmp/test_nilpy_nestcomp26)" = "$$(printf '%b' '2\nab 2\ncd 2\n2 2 2\nx 1\ny 9\nz 3\n3\n3\n14\n5 1\nTrue True False True\n4.0\n28\npear apple')"
+	# a Callable parameter on a METHOD is callable in the body
+	./$(COMPILER) test/test_nilpy_method_callable_param.npy /tmp/test_nilpy_mcallable26
+	test "$$(/tmp/test_nilpy_mcallable26)" = "$$(printf '%b' '2\n[\047p\047, \047p!\047, \047q\047, \047q!\047]\n[\047P\047, \047Q\047]')"
 	# the pathlib shim, its `/` operator, and __str__ honoured by str()/print()/f-string
 	./$(COMPILER) test/test_nilpy_pathlib.npy /tmp/test_nilpy_pathlib26
 	test "$$(/tmp/test_nilpy_pathlib26)" = "$$(printf 'file.txt\nfile\n.txt\ndir/sub\ndir/sub\ndir/sub\nFalse\ndir/sub')"
@@ -3254,6 +3260,12 @@ test-core: $(COMPILER)
 	# one Exception class serving both the Python and the sysutils surface
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
 	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	# a comprehension nested in another's element, dict spread, aggregate builtins
+	./$(COMPILER) test/test_nilpy_nested_comp.npy /tmp/test_nilpy_nestcomp26
+	test "$$(/tmp/test_nilpy_nestcomp26)" = "$$(printf '%b' '2\nab 2\ncd 2\n2 2 2\nx 1\ny 9\nz 3\n3\n3\n14\n5 1\nTrue True False True\n4.0\n28\npear apple')"
+	# a Callable parameter on a METHOD is callable in the body
+	./$(COMPILER) test/test_nilpy_method_callable_param.npy /tmp/test_nilpy_mcallable26
+	test "$$(/tmp/test_nilpy_mcallable26)" = "$$(printf '%b' '2\n[\047p\047, \047p!\047, \047q\047, \047q!\047]\n[\047P\047, \047Q\047]')"
 	# the pathlib shim, its `/` operator, and __str__ honoured by str()/print()/f-string
 	./$(COMPILER) test/test_nilpy_pathlib.npy /tmp/test_nilpy_pathlib26
 	test "$$(/tmp/test_nilpy_pathlib26)" = "$$(printf 'file.txt\nfile\n.txt\ndir/sub\ndir/sub\ndir/sub\nFalse\ndir/sub')"

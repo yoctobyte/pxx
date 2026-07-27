@@ -610,6 +610,20 @@ function pydict_fromkeys(l: TPyList): TPyDict;
   iterable may be a list/tuple/set, a dict (its KEYS, like CPython) or a string
   (its characters); anything else is a loud TypeError rather than a guess. }
 function pyset_of(const v: Variant): TPyList;
+{ `{**a, **b}` — copy src's pairs into dst, later keys winning, which is
+  Python's merge rule. The frontend emits one call per `**` in a dict literal. }
+procedure pydict_merge(dst: TPyDict; src: TPyDict);
+{ The AGGREGATE builtins over a list (a generator expression already desugars to
+  one). Each keeps Python's own answer for the empty case: sum([]) is 0, any([])
+  is False, all([]) is True, and max/min of an empty sequence is an ERROR rather
+  than a made-up value. Element arithmetic and comparison go through the same
+  pyadd_v / PyVarCompare the operators use, so int/float/str behave as they do
+  everywhere else (feature-nilpy-aggregate-builtins). }
+function sum(l: TPyList): Variant;
+function max(l: TPyList): Variant; overload;
+function min(l: TPyList): Variant; overload;
+function any(l: TPyList): Boolean;
+function all(l: TPyList): Boolean;
 
 { collections.Counter(...) — a TPyDict in Counter mode; see TPyDict. }
 function Counter: TPyDict;
@@ -1861,6 +1875,90 @@ begin
   dst := PPyVarRec(@Result);
   PyVarSlotInit(dst, src);
   remove(k);
+end;
+
+{ a > b for the aggregate builtins: numbers by value, strings by text, which is
+  the pair Python orders and the corpus uses. A mixed number/string comparison
+  is a TypeError in CPython and halts here rather than inventing an order. }
+function pyvar_gt(const a: Variant; const b: Variant): Boolean;
+var pa, pb: PPyVarRec;
+begin
+  pa := PPyVarRec(@a); pb := PPyVarRec(@b);
+  if ((pa^.VType = 6) or (pa^.VType = 5)) and ((pb^.VType = 6) or (pb^.VType = 5)) then
+  begin
+    pyvar_gt := PyVarText(pa) > PyVarText(pb);
+    Exit;
+  end;
+  if ((pa^.VType = 6) or (pa^.VType = 5)) or ((pb^.VType = 6) or (pb^.VType = 5)) then
+  begin
+    WriteLn('TypeError: comparison of a string with a number');
+    Halt(1);
+  end;
+  if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
+    pyvar_gt := PyVarAsFloat(pa) > PyVarAsFloat(pb)
+  else
+    pyvar_gt := pyvar_to_int(a) > pyvar_to_int(b);
+end;
+
+function sum(l: TPyList): Variant;
+var i: Integer;
+begin
+  Result := pyvar_of_int(0);
+  if l = nil then Exit;
+  for i := 0 to l.count - 1 do Result := pyadd_v(Result, l.at(i));
+end;
+
+function max(l: TPyList): Variant;
+var i: Integer;
+begin
+  if (l = nil) or (l.count = 0) then
+  begin
+    WriteLn('ValueError: max() arg is an empty sequence');
+    Halt(1);
+  end;
+  Result := l.at(0);
+  for i := 1 to l.count - 1 do
+    if pyvar_gt(l.at(i), Result) then Result := l.at(i);
+end;
+
+function min(l: TPyList): Variant;
+var i: Integer;
+begin
+  if (l = nil) or (l.count = 0) then
+  begin
+    WriteLn('ValueError: min() arg is an empty sequence');
+    Halt(1);
+  end;
+  Result := l.at(0);
+  for i := 1 to l.count - 1 do
+    if pyvar_gt(Result, l.at(i)) then Result := l.at(i);
+end;
+
+function any(l: TPyList): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if l = nil then Exit;
+  for i := 0 to l.count - 1 do
+    if pyvar_to_bool(l.at(i)) then begin Result := True; Exit; end;
+end;
+
+function all(l: TPyList): Boolean;
+var i: Integer;
+begin
+  Result := True;
+  if l = nil then Exit;
+  for i := 0 to l.count - 1 do
+    if not pyvar_to_bool(l.at(i)) then begin Result := False; Exit; end;
+end;
+
+procedure pydict_merge(dst: TPyDict; src: TPyDict);
+var kl, vl: TPyList; i: Integer;
+begin
+  if (dst = nil) or (src = nil) then Exit;
+  kl := src.keylist;
+  vl := src.vallist;
+  for i := 0 to kl.count - 1 do dst.store(kl.at(i), vl.at(i));
 end;
 
 function pyset_of(const v: Variant): TPyList;

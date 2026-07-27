@@ -11287,6 +11287,14 @@ begin
           else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(procIdx, slotIdx) then
             CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[slotIdx].TypeKind,
               ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + slotIdx], ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + slotIdx])
+          else if isNilPy and PyBareGenExprAhead then
+            { a BARE generator expression as an argument — `sum(x*2 for x in xs)`.
+              It must be diverted BEFORE the element expression is parsed, since
+              that expression names the loop variable, which is not in scope
+              until the `for`. The str-method argument path already did this for
+              `"".join(...)`; ordinary calls did not, so every other consumer of
+              a genexpr (sum, max, any, ...) failed on the loop variable. }
+            CurASTNode := PyParseCompExprValue(False)
           else
           begin
             node := TryDelphiBareProcArg;

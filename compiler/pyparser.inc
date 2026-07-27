@@ -252,6 +252,14 @@ begin
     begin
       Result := True;
       Exit;
+    end
+    else if (depth = 1) and (Tokens[i].Kind = tkStar) and
+            (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkStar) then
+    begin
+      { `{**a, **b}` is a DICT with no colon in it at all — the spread is what
+        marks it. Without this it read as a set literal and failed to parse. }
+      Result := True;
+      Exit;
     end;
     Inc(i);
   end;
@@ -5154,6 +5162,29 @@ begin
   mpi := UMthProc_[mmi];
   while CurTok.Kind <> tkEnd do
   begin
+    { `{**a, **b}` — dict SPREAD. Each `**expr` copies that dict's pairs into
+      the literal being built, later keys winning, which is Python's merge rule.
+      songformatter writes `{**major_scales, **minor_scales}.items()`.
+      `**` arrives as two tkStar (the NilPy lexer has no `**` token). }
+    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkStar) then
+    begin
+      Next; Next;
+      PyParseBoolExpr;
+      valArg := AllocNode(AN_ARG);
+      ASTLeft[valArg] := CurASTNode;
+      selfArg := AllocNode(AN_ARG);
+      ASTLeft[selfArg] := PyMakeIdent(tmpSym);
+      ASTRight[selfArg] := valArg;
+      callNode := AllocNode(AN_CALL);
+      ASTIVal[callNode] := FindProc('pydict_merge');
+      if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pydict_merge) not loaded');
+      ASTTk[callNode] := Ord(tyInteger);
+      ASTLeft[callNode] := selfArg;
+      PyHoistStmt(callNode);
+      if not Eat(tkComma) then break;
+      Continue;
+    end;
     PyParseBoolExpr;
     keyNode := CurASTNode;
     Expect(tkColon, ':');
@@ -6103,7 +6134,7 @@ function PyParseForIn(const name: AnsiString; const name2: AnsiString; enumMode:
 var contNode, ci, dictCi, listCi, symIdx, cSym, iSym, nSym: Integer;
     sym2, vSym, vListNode, itemsDot: Integer;   { two-name target: `for k, v in d.items()` }
     elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
-    compSaved, keyN: Integer;
+    compSaved, keyN, savedHoist, innerHoist: Integer;
     filtIdx, fj, fdepth, filtPair, filtN: Integer;  { comprehension `if` filter }
     isStr: Boolean; contTk: TTypeKind;
 begin
@@ -6388,6 +6419,16 @@ begin
       restore the cursor (the `]` the header stopped at). The `TokPos := k;
       Next` idiom re-reads a token to restore CurTok, as the factory-default
       re-parse does. }
+    { NESTED comprehension: the element expression may itself be one, and it
+      HOISTS its own build loop. Those statements must land INSIDE this loop,
+      not in front of it — in front, the inner loop runs before this loop's
+      variable is bound, which is why
+      `{k: [f(x) for x in g(k)] for k in ks}` reported `undefined variable (k)`.
+      So the hoist queue is swapped out around the element parse and whatever it
+      collected is spliced into the body ahead of the append
+      (feature-nilpy-nested-comprehension). }
+    savedHoist := PyHoistHead;
+    PyHoistHead := -1;
     compSaved := TokPos - 1;              { index of CurTok (the closing bracket) }
     TokPos := PyCompExprStart; Next;      { CurTok := first EXPR token }
     if PyCompIsDict then
@@ -6422,6 +6463,15 @@ begin
       ASTRight[filtPair] := -1;
       ASTRight[filtN] := filtPair;
       node := filtN;
+    end;
+    { splice the element's own hoisted setup in FIRST, then restore the
+      enclosing statement's queue }
+    innerHoist := PyHoistHead;
+    PyHoistHead := savedHoist;
+    while innerHoist >= 0 do
+    begin
+      bodyNode := PySeqAppend(bodyNode, ASTLeft[innerHoist]);
+      innerHoist := ASTRight[innerHoist];
     end;
   end
   else
@@ -6468,8 +6518,34 @@ end;
   token index of the element EXPR (which sits before the `for`). Returns the
   statement sequence. Does NOT consume a trailing `]` — the caller does that
   for a bracketed comprehension; a bare genexpr has none. }
+{ Advance to THIS comprehension's `for`, skipping any nested one. The scan used
+  to stop at the first `for` it saw, so `[[c for c in k] for k in ks]` split at
+  the INNER for: the outer comprehension took `[c` as its element and
+  `for c in k` as its header, and `k` was undefined because the outer loop
+  variable had not been introduced yet. Bracket depth is what tells them apart —
+  a nested comprehension is always inside its own brackets or parens.
+  (feature-nilpy-nested-comprehension) }
+procedure PyScanToCompFor;
+var depth: Integer;
+begin
+  depth := 0;
+  while CurTok.Kind <> tkEOF do
+  begin
+    case CurTok.Kind of
+      tkLBrack, tkLParen, tkBegin: Inc(depth);
+      tkRBrack, tkRParen, tkEnd:
+        begin
+          if depth = 0 then Break;      { our own closer — malformed, caller reports }
+          Dec(depth);
+        end;
+    end;
+    if (depth = 0) and PyIsIdent('for') then Exit;
+    Next;
+  end;
+end;
+
 function PyBuildComp(targetSym, exprStart: Integer): Integer;
-var seq, node, sizeNode, createNode, aSeq, savedTarget, listCiN: Integer;
+var seq, node, sizeNode, createNode, aSeq, savedTarget, savedStart, listCiN: Integer;
 begin
   if PyCompIsDict then listCiN := FindUClass('TPyDict')
   else listCiN := FindUClass('TPyList');
@@ -6491,10 +6567,12 @@ begin
   seq := PySeqAppend(-1, node);
 
   savedTarget := PyCompTarget;
+  savedStart := PyCompExprStart;
   PyCompTarget := targetSym;
   PyCompExprStart := exprStart;
   node := PyParseFor;               { range/container both honour PyCompTarget }
   PyCompTarget := savedTarget;
+  PyCompExprStart := savedStart;    { a NESTED build clobbers it otherwise }
   seq := PySeqAppend(seq, node);
   { PyParseFor sets PyStmtAteBlock (it normally eats an indented block); a
     comprehension is a one-line expression, so clear it. }
@@ -6508,7 +6586,7 @@ var exprStart: Integer;
 begin
   Next;                                { consume '[' — CurTok = first EXPR token }
   exprStart := TokPos - 1;
-  while not (PyIsIdent('for') or (CurTok.Kind = tkEOF)) do Next;
+  PyScanToCompFor;
   if not PyIsIdent('for') then Error('Nil Python: malformed list comprehension');
   Result := PyBuildComp(targetSym, exprStart);
   Expect(tkRBrack, ']');
@@ -6522,7 +6600,7 @@ var exprStart: Integer;
 begin
   Next;                                { consume the opening brace; CurTok = KEY }
   exprStart := TokPos - 1;
-  while not (PyIsIdent('for') or (CurTok.Kind = tkEOF)) do Next;
+  PyScanToCompFor;
   if not PyIsIdent('for') then Error('Nil Python: malformed dict comprehension');
   PyCompIsDict := True;
   Result := PyBuildComp(targetSym, exprStart);
@@ -6537,14 +6615,21 @@ end;
   genexpr has neither. CurTok is the '[' (bracketed) or the first EXPR token
   (bare). Returns the temp's ident node. }
 function PyParseCompExprValue(bracketed: Boolean): Integer;
-var tmpSym, exprStart, seq: Integer;
+var tmpSym, exprStart, seq: Integer; savedDict: Boolean;
 begin
+  { A LIST comprehension nested inside a DICT one must not inherit dict mode:
+    PyCompIsDict is global, so `{k: [c for c in k] for k in ks}` built the inner
+    comprehension as a dict and died on the missing `:`
+    (feature-nilpy-nested-comprehension). }
+  savedDict := PyCompIsDict;
+  PyCompIsDict := False;
   tmpSym := AllocVar(PyHiddenName('gx'), tyClass);
   if bracketed then Next;              { consume '[' }
   exprStart := TokPos - 1;             { first EXPR token }
-  while not (PyIsIdent('for') or (CurTok.Kind = tkEOF)) do Next;
+  PyScanToCompFor;
   if not PyIsIdent('for') then Error('Nil Python: malformed comprehension');
   seq := PyBuildComp(tmpSym, exprStart);
+  PyCompIsDict := savedDict;
   if bracketed then Expect(tkRBrack, ']');
   { each build statement runs before the current one }
   while seq >= 0 do
@@ -6561,17 +6646,18 @@ end;
   TPyDict temp, hoists the build loop, and yields the temp. CurTok is the
   opening brace. }
 function PyParseDictCompExprValue: Integer;
-var tmpSym, exprStart, seq: Integer;
+var tmpSym, exprStart, seq: Integer; savedDict: Boolean;
 begin
+  savedDict := PyCompIsDict;
   tmpSym := AllocVar(PyHiddenName('gd'), tyClass);
   Syms[tmpSym].RecName := REC_UCLASS_BASE + FindUClass('TPyDict');
   Next;                                { consume the opening brace; CurTok = KEY }
   exprStart := TokPos - 1;
-  while not (PyIsIdent('for') or (CurTok.Kind = tkEOF)) do Next;
+  PyScanToCompFor;
   if not PyIsIdent('for') then Error('Nil Python: malformed dict comprehension');
   PyCompIsDict := True;
   seq := PyBuildComp(tmpSym, exprStart);
-  PyCompIsDict := False;
+  PyCompIsDict := savedDict;
   Expect(tkEnd, 'close brace');
   while seq >= 0 do
   begin
@@ -9438,6 +9524,7 @@ procedure PyParseMethod(ci: Integer);
 var origName, name, fullName: AnsiString; procIdx, i, idx, nparams, savedSC, savedFS,
     savedSelf, patchPos, bodyNode, bodyStart, annIdx: Integer; pnames: array[0..15] of AnsiString;
     ptypes: array[0..15] of TTypeKind; pcis: array[0..15] of Integer;
+    psigs: array[0..15] of Integer;   { Callable signature per parameter, or -1 }
     isCtor: Boolean;
     savedNest, savedTok: Integer; savedPfx, savedPfx2: AnsiString;
 begin
@@ -9454,6 +9541,7 @@ begin
   while CurTok.Kind <> tkRParen do
   begin
     pnames[nparams] := CurTok.SVal; Next;
+    psigs[nparams] := -1;
     if (nparams = 0) and (pnames[nparams] = 'self') then
     begin ptypes[nparams] := tyClass; pcis[nparams] := ci; end
     else if CurTok.Kind <> tkColon then
@@ -9477,6 +9565,13 @@ begin
       annIdx := TokPos - 1;
       ptypes[nparams] := PyAnnTypeAt(annIdx);
       pcis[nparams] := PyAnnLastCi;
+      { A `Callable[...]` parameter carries a procedural SIGNATURE, and without
+        it the name is not callable inside the body — the def path has recorded
+        this since function values landed, the METHOD path never did, so
+        `def analyze(self, chord_to_notes: Callable[[str], list[str]])` compiled
+        but `chord_to_notes(chord)` did not parse (feature-nilpy-function-values,
+        the method half). }
+      psigs[nparams] := PyAnnLastProcSig;
       TokPos := annIdx;
       Next;
       if CurTok.Kind = tkAssign then
@@ -9529,6 +9624,7 @@ begin
       ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := ptypes[i] = tyVariant;
     if (ptypes[i] = tyClass) and (pcis[i] >= 0) then
       Syms[idx].RecName := REC_UCLASS_BASE + pcis[i];
+    if psigs[i] >= 0 then SymProcSig[idx] := psigs[i];   { Callable parameter }
   end;
   if not isCtor then
   begin

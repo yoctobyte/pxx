@@ -1,0 +1,40 @@
+# A comprehension INSIDE another comprehension's element expression, and the
+# three separate faults that shape hit (feature-nilpy-nested-comprehension):
+#
+#   1. the scan for the comprehension's own `for` stopped at the FIRST one, so
+#      the outer comprehension split at the INNER for and its loop variable was
+#      never introduced -> "undefined variable (k)";
+#   2. the inner comprehension HOISTS its build loop, which landed in front of
+#      the outer loop instead of inside it — same symptom, different cause;
+#   3. PyCompIsDict is global, so a list comprehension nested in a dict one was
+#      built as a dict and died on the missing ':'.
+#
+# Also here: `{**a, **b}` dict spread, which is a dict literal with no colon in
+# it at all, and the aggregate builtins over a generator expression.
+ks = ["ab", "cd"]
+
+d = {k: [c for c in k] for k in ks}
+print(len(d))
+for k in ks:
+    print(k, len(d[k]))
+
+e = [[c for c in k] for k in ks]
+print(len(e), len(e[0]), len(e[1]))
+
+a = {"x": 1, "y": 2}
+b = {"y": 9, "z": 3}
+m = {**a, **b}
+for k2, v in m.items():
+    print(k2, v)
+print(len(m))
+n = {"p": 0, **a}
+print(len(n))
+
+xs = [3, 1, 4, 1, 5]
+print(sum(xs))
+print(max(xs), min(xs))
+print(any([0, 0, 2]), all([1, 2]), any([]), all([]))
+print(sum([1.5, 2.5]))
+print(sum(x * 2 for x in xs))
+ws = ["pear", "apple"]
+print(max(ws), min(ws))

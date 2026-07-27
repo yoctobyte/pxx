@@ -1,0 +1,33 @@
+# A `Callable[...]` parameter on a METHOD. The def path has recorded the
+# procedural signature since function values landed; the method path never did,
+# so the annotation compiled but the name was not callable in the body —
+# `def analyze(self, chord_to_notes: Callable[[str], list[str]])` then failed to
+# parse `chord_to_notes(chord)`. songformatter's key_analysis.py is built on
+# that shape: every detector takes the note lookup as a parameter.
+from typing import Callable
+
+
+def names(s: str) -> list[str]:
+    return [s, s + "!"]
+
+
+def upper_names(s: str) -> list[str]:
+    return [s.upper()]
+
+
+class Detector:
+    def use(self, cb: Callable[[str], list[str]]) -> int:
+        xs = cb("a")
+        return len(xs)
+
+    def collect(self, cb: Callable[[str], list[str]], items: list[str]) -> list[str]:
+        out = []
+        for it in items:
+            out.extend(cb(it))
+        return out
+
+
+d = Detector()
+print(d.use(names))
+print(d.collect(names, ["p", "q"]))
+print(d.collect(upper_names, ["p", "q"]))
