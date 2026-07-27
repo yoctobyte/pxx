@@ -23,6 +23,18 @@ spends a conversation turn per poll and learns nothing in between; the loop is
 what makes a 20-minute gate feel like a hang. `tools/gate.sh` exits when the gate
 is done, so the completion notification IS the result: one task, one answer.
 
+**And then leave it alone.** Backgrounding the gate and then checking its log
+every thirty seconds costs a turn per check and tells you nothing you will act
+on — the completion notification is the event. Hand-polling a running gate is
+the same mistake as a sleep-loop wearing different clothes; it happened twice in
+the session that produced this file.
+
+What you CAN do while a gate runs: keep exploring with the compiler binary as it
+stands (compiling `.npy` files, reading code, writing tests or tickets). What you
+must NOT do is run `make` — the gate is rebuilding that same binary, and a second
+build mid-suite gives both runs a torn tree. If a change needs a rebuild, wait
+for the notification.
+
 If you must wait on something else, wait on a CONDITION that ends
 (`until [ -f done.marker ]; do sleep 10; done`), never a fixed sleep you re-issue.
 
