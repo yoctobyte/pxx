@@ -208,6 +208,9 @@ test-nilpy: $(COMPILER)
 	# one Exception class serving both the Python and the sysutils surface
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
 	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	# sorted(key=lambda), d.items() as a value, for-target unpacking, Cls().m()
+	./$(COMPILER) test/test_nilpy_sorted_pairs.npy /tmp/test_nilpy_sortpairs26
+	test "$$(/tmp/test_nilpy_sortpairs26)" = "$$(printf '%b' '3\nb 1\nc 2\na 3\na 3\nc 2\nb 1\n[1, 2, 3]\nx 1\ny 2\n2 0 3\nbb\nnone\n11\n3')"
 	# a comprehension nested in another's element, dict spread, aggregate builtins
 	./$(COMPILER) test/test_nilpy_nested_comp.npy /tmp/test_nilpy_nestcomp26
 	test "$$(/tmp/test_nilpy_nestcomp26)" = "$$(printf '%b' '2\nab 2\ncd 2\n2 2 2\nx 1\ny 9\nz 3\n3\n3\n14\n5 1\nTrue True False True\n4.0\n28\npear apple')"
@@ -3260,6 +3263,9 @@ test-core: $(COMPILER)
 	# one Exception class serving both the Python and the sysutils surface
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
 	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	# sorted(key=lambda), d.items() as a value, for-target unpacking, Cls().m()
+	./$(COMPILER) test/test_nilpy_sorted_pairs.npy /tmp/test_nilpy_sortpairs26
+	test "$$(/tmp/test_nilpy_sortpairs26)" = "$$(printf '%b' '3\nb 1\nc 2\na 3\na 3\nc 2\nb 1\n[1, 2, 3]\nx 1\ny 2\n2 0 3\nbb\nnone\n11\n3')"
 	# a comprehension nested in another's element, dict spread, aggregate builtins
 	./$(COMPILER) test/test_nilpy_nested_comp.npy /tmp/test_nilpy_nestcomp26
 	test "$$(/tmp/test_nilpy_nestcomp26)" = "$$(printf '%b' '2\nab 2\ncd 2\n2 2 2\nx 1\ny 9\nz 3\n3\n3\n14\n5 1\nTrue True False True\n4.0\n28\npear apple')"

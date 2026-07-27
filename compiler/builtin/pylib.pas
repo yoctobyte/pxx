@@ -77,7 +77,12 @@ type
       the default property below. }
     function at(i: Integer): Variant;
     procedure put(i: Integer; const v: Variant);
-    function count: Integer;
+    { Two arities, and they are different Python things: the no-argument form is
+      this unit's internal length accessor (len(l) goes through it), while
+      Python's own `l.count(v)` counts OCCURRENCES of a value. Overloaded rather
+      than renamed because the corpus writes both. }
+    function count: Integer; overload;
+    function count(const v: Variant): Integer; overload;
     function pop: Variant; overload;
     function pop(i: Integer): Variant; overload;   { list.pop(index) — Python removes at i }
     function pop_at(i: Integer): Variant;
@@ -137,6 +142,13 @@ type
       which is what makes `d.setdefault(k, ...)[k2] = v` mutate the dict rather
       than a throwaway copy. }
     function setdefault(const k: Variant; const d: Variant): Variant;
+    { `d.items()` as a VALUE — a list of [key, value] pairs, which is what
+      `sorted(d.items(), key=...)` and `list(d.items())` need. NOT named `items`:
+      that collides with the default indexed property `Items[k]` above (Pascal is
+      case-insensitive), so the frontend maps the Python spelling onto this name,
+      exactly as keylist/vallist avoid the same clash. The for-in header form
+      never reaches here — it reads the parallel key/value lists directly. }
+    function itemlist: TPyList;
     function keylist: TPyList;
     function vallist: TPyList;
     { collections.Counter is this same type in Counter MODE, not a subclass.
@@ -619,6 +631,21 @@ procedure pydict_merge(dst: TPyDict; src: TPyDict);
   than a made-up value. Element arithmetic and comparison go through the same
   pyadd_v / PyVarCompare the operators use, so int/float/str behave as they do
   everywhere else (feature-nilpy-aggregate-builtins). }
+{ a > b: numbers by value, strings by text — the comparison the aggregate
+  builtins and pyeval's sorted() share. }
+function pyvar_gt(const a: Variant; const b: Variant): Boolean;
+{ `next(it)` / `next(it, default)` over a materialised sequence. NOT named
+  `next`: itertools' counter already owns that name for its own argument type,
+  and adding a TPyList overload made an untyped argument (a ClassVar holding a
+  counter) pick the wrong one and SEGFAULT. The frontend maps the Python
+  spelling onto these when the argument is a list. NilPy builds a
+  generator expression into a LIST, so this is "the first element" — the whole
+  sequence has already been evaluated, which is the documented difference from
+  CPython's lazy generator (it matters only for an infinite or side-effecting
+  generator, neither of which the corpus has). Without a default, an empty
+  sequence raises StopIteration, as Python does. }
+function pynext_first(l: TPyList): Variant;
+function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
 function max(l: TPyList): Variant; overload;
 function min(l: TPyList): Variant; overload;
@@ -1210,6 +1237,14 @@ begin
   FLen := 0;
   FCap := 0;
   FItems := nil;
+end;
+
+function TPyList.count(const v: Variant): Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to FLen - 1 do
+    if PyVarEq(PPyVarRec(NativeInt(FItems) + i * 16), PPyVarRec(@v)) then Inc(Result);
 end;
 
 function TPyList.count: Integer;
@@ -1900,6 +1935,18 @@ begin
     pyvar_gt := pyvar_to_int(a) > pyvar_to_int(b);
 end;
 
+function pynext_first(l: TPyList): Variant;
+begin
+  if (l = nil) or (l.count = 0) then
+    raise StopIteration.Create('next() on an exhausted sequence');
+  pynext_first := l.at(0);
+end;
+
+function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
+begin
+  if (l = nil) or (l.count = 0) then pynext_first_or := dflt else pynext_first_or := l.at(0);
+end;
+
 function sum(l: TPyList): Variant;
 var i: Integer;
 begin
@@ -2117,6 +2164,27 @@ begin
   for i := 1 to Length(s) do
     c.store(s[i], VariantToInt64(c.fetch(s[i])) + 1);
   Result := c;
+end;
+
+function TPyDict.itemlist: TPyList;
+var r, pair, kl, vl: TPyList; i: Integer; pv: Variant;
+begin
+  r := TPyList.Create;
+  kl := keylist;
+  vl := vallist;
+  for i := 0 to kl.count - 1 do
+  begin
+    pair := TPyList.Create;
+    pair.append(kl.at(i));
+    pair.append(vl.at(i));
+    { box the pair as a VT_OBJECT slot and retain it — the same shape a nested
+      list literal gets when it is appended }
+    PPyVarRec(@pv)^.VType := 7;
+    PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
+    PXXObjRetain(Pointer(pair));
+    r.append(pv);
+  end;
+  itemlist := r;
 end;
 
 function TPyDict.keylist: TPyList;

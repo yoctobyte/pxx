@@ -75,6 +75,12 @@ var
     the header grammar: the pre-pass decides the registered SIGNATURE and
     PyParseDef decides the FRAME, and any disagreement between them is a
     silent ABI mismatch rather than a parse error. }
+  { A for target with MORE than two names — `for a, b, c in triples:`. The first
+    two keep their own variables (the dict/enumerate/zip forms only ever have
+    two); anything beyond them lands here and is unpacked from the element by
+    index, which is the only form that can serve three. }
+  PyForExtraName: array[0..5] of AnsiString;
+  PyForExtraCount: Integer;
   PyHdrName: AnsiString;
   PyHdrNParams: Integer;
   PyHdrIsProc: Boolean;
@@ -129,6 +135,36 @@ begin
 end;
 
 function PySeqAppend(head, stmt: Integer): Integer; forward;
+{ An integer literal node, for the pair-unpack indices below. }
+function PyMakeIntLit(v: Int64): Integer;
+begin
+  Result := AllocNode(AN_INT_LIT);
+  ASTIVal[Result] := v;
+  ASTTk[Result] := Ord(tyInteger);
+end;
+
+{ One element of a `for a, b in pairs` loop target: `pair[idx]` through pylib's
+  pyvar_getitem. An ordinary function on purpose — TPyList.at is INLINED, and an
+  inline body built from here leaked its AN_INLINE_PARAM placeholder into
+  lowering. }
+function PyPairItem(pairNode, idx: Integer): Integer;
+var argNode, idxArg, callNode: Integer;
+begin
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := pairNode;
+  idxArg := AllocNode(AN_ARG);
+  ASTLeft[idxArg] := PyMakeIntLit(idx);
+  ASTRight[idxArg] := -1;          { terminate the chain — an unset ASTRight
+                                     ran the argument list into other nodes }
+  ASTRight[argNode] := idxArg;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := FindProc('pyvar_getitem');
+  if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pyvar_getitem) not loaded');
+  ASTTk[callNode] := Ord(tyVariant);
+  ASTLeft[callNode] := argNode;
+  Result := callNode;
+end;
+
 function PyBuildComp(targetSym, exprStart: Integer): Integer; forward; { comprehension core (pyparser.inc) }
 function PyMakeIdent(symIdx: Integer): Integer; forward; { (pyparser.inc) }
 function PyHiddenName(const stem: AnsiString): AnsiString; forward; { hidden temp name (pyparser.inc) }
@@ -2093,6 +2129,34 @@ begin
 end;
 
 function PyClassCreate: Integer; forward;
+
+{ Is the construction at CurTok followed by a `.name(` suffix — `Cls().m(...)`?
+  Then the statement's right-hand side is a CALL whose receiver happens to be a
+  construction, not a construction on its own. Scans past the ctor's own
+  argument list, which may itself contain parentheses. }
+function PyCtorSuffixAhead: Boolean;
+var i, depth: Integer;
+begin
+  Result := False;
+  i := TokPos;                     { the '(' after the class name }
+  depth := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRParen, tkRBrack, tkEnd] then
+    begin
+      Dec(depth);
+      if depth = 0 then
+      begin
+        Result := (i + 2 < TokCount) and (Tokens[i + 1].Kind = tkDot) and
+                  (Tokens[i + 2].Kind = tkIdent);
+        Exit;
+      end;
+    end
+    else if Tokens[i].Kind in [tkNewline, tkEOF] then Exit;
+    Inc(i);
+  end;
+end;
 
 { `_count(1)` (the itertools.count alias) -> a fresh TPyCounter. }
 (* `set()` — Python's empty-set constructor. There is no empty-set LITERAL in
@@ -4282,6 +4346,67 @@ begin
     end;
 end;
 
+{ `<class expr>.name(args)` where the receiver's class is KNOWN — the suffix a
+  fresh construction needs (`NoteCountingDetector().analyze(chords, fn)`).
+  ParseFactorCore handles this for an IDENT receiver, but a construction leaves
+  the core through the ctor intercept, so the postfix never ran and
+  `Cls().m()` was a parse error (bug-nilpy-method-call-on-fresh-construction).
+  CurTok is the '(' and the method name has been consumed. }
+function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer;
+var mmi, mpi, selfArg, lastArg, argNode, callNode, n, k: Integer;
+begin
+  mmi := FindUMeth(ci, mname);
+  if mmi < 0 then
+    Error('Nil Python: ' + PyRawName(UClsNOff[ci], UClsNLen[ci]) + ' has no method .' + mname + '()');
+  selfArg := AllocNode(AN_ARG);
+  ASTLeft[selfArg] := baseNode;
+  ASTRight[selfArg] := -1;
+  lastArg := selfArg;
+  Expect(tkLParen, '(');
+  n := 0;
+  while CurTok.Kind <> tkRParen do
+  begin
+    ParseArgExpr;
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := CurASTNode;
+    ASTRight[argNode] := -1;
+    ASTRight[lastArg] := argNode;
+    lastArg := argNode;
+    Inc(n);
+    if CurTok.Kind = tkComma then Next else Break;
+  end;
+  Expect(tkRParen, ')');
+  { pick the overload by the argument count written, then fill the callee's
+    remaining DEFAULTED parameters, exactly as the ordinary call path does }
+  k := FindUMethArity(ci, mname, n);
+  if k >= 0 then mmi := k;
+  mpi := UMthProc_[mmi];
+  k := n + 1;
+  while (k < Procs[mpi].ParamCount) and (k < MAX_PROC_PARAMS) and
+        ProcParamHasDefault[mpi * MAX_PROC_PARAMS + k] do
+  begin
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := DefaultArgValueNode(mpi, k);
+    ASTRight[argNode] := -1;
+    ASTRight[lastArg] := argNode;
+    lastArg := argNode;
+    Inc(k);
+  end;
+  if UMthVirSlot[mmi] >= 0 then
+  begin
+    callNode := AllocNode(AN_VIRTUAL_CALL);
+    ASTRight[callNode] := UMthVirSlot[mmi];
+  end
+  else
+    callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := mpi;
+  ASTTk[callNode] := Ord(Procs[mpi].RetType);
+  if (Procs[mpi].RetType = tyClass) and (ProcRetRecId[mpi] >= REC_UCLASS_BASE) then
+    ASTRight[callNode] := ProcRetRecId[mpi];
+  ASTLeft[callNode] := selfArg;
+  Result := callNode;
+end;
+
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
@@ -6105,6 +6230,96 @@ end;
   comprehension (KEY colon VALUE for ...)? CurTok is the opening brace
   (tkBegin). A depth-1 `for` makes it a comprehension; a depth-1 ':' BEFORE
   that for makes it a dict one (a set comprehension has no colon). }
+{ `( EXPR for VAR in ITER )` — a generator expression in its own parentheses,
+  which is how it is written when it is not the only argument:
+  `next((c for c in cs if p(c)), default)`. The bare form (no parens) is
+  PyBareGenExprAhead; the bracketed form is PyIsListCompAhead. }
+function PyIsParenCompAhead: Boolean;
+var i, depth: Integer;
+begin
+  Result := False;
+  if CurTok.Kind <> tkLParen then Exit;
+  i := TokPos;
+  depth := 1;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkLBrack, tkLParen, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRBrack, tkRParen, tkEnd] then
+    begin
+      Dec(depth);
+      if depth = 0 then Exit;
+    end
+    else if (depth = 1) and (Tokens[i].Kind = tkIdent) and
+            (LowerCase(GetTokenStr(i)) = 'for') then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
+{ Is the argument of the `next(` at CurTok a SEQUENCE rather than an iterator
+  object? A generator expression (bare or parenthesised) and a list literal are
+  sequences; a plain name is only assumed to be one when it is a list-typed
+  local. Anything else keeps the ordinary overload path, which is where
+  itertools' counter lives. }
+function PyNextOverListAhead: Boolean;
+var i, depth, si: Integer;
+begin
+  Result := False;
+  i := TokPos;                       { the '(' after `next` }
+  if (i < TokCount) and (Tokens[i].Kind in [tkLParen, tkLBrack]) then
+  begin
+    { `next((x for x in xs), d)` / `next([...])` — the argument opens its own
+      bracket; a `for` inside it at depth 1 makes it a generator. }
+    depth := 0;
+    while i < TokCount do
+    begin
+      if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+      else if Tokens[i].Kind in [tkRParen, tkRBrack, tkEnd] then
+      begin
+        Dec(depth);
+        if depth = 0 then Break;
+      end
+      else if (depth = 2) and (Tokens[i].Kind = tkIdent) and
+              (LowerCase(GetTokenStr(i)) = 'for') then
+      begin
+        Result := True;
+        Exit;
+      end;
+      Inc(i);
+    end;
+  end;
+  { a bare generator: `next(x for x in xs)` }
+  i := TokPos + 1;
+  depth := 1;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRParen, tkRBrack, tkEnd] then
+    begin
+      Dec(depth);
+      if depth = 0 then Break;
+    end
+    else if (depth = 1) and (Tokens[i].Kind = tkIdent) and
+            (LowerCase(GetTokenStr(i)) = 'for') then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+  { a NAME that is a list-typed local }
+  if (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkIdent) then
+  begin
+    si := PyProgSym(GetTokenStr(TokPos + 1));
+    if (si >= 0) and (Syms[si].TypeKind = tyClass) and
+       (Syms[si].RecName = REC_UCLASS_BASE + FindUClass('TPyList')) then
+      Result := True;
+  end;
+end;
+
 function PyIsDictCompAhead: Boolean;
 var i, depth: Integer; sawColon: Boolean;
 begin
@@ -6136,8 +6351,11 @@ var contNode, ci, dictCi, listCi, symIdx, cSym, iSym, nSym: Integer;
     elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
     compSaved, keyN, savedHoist, innerHoist: Integer;
     filtIdx, fj, fdepth, filtPair, filtN: Integer;  { comprehension `if` filter }
-    isStr: Boolean; contTk: TTypeKind;
+    isStr, pairMode: Boolean; contTk: TTypeKind;
+    elemNode2, pairSym, plistSym, xi, nExtra: Integer;
+    extraSyms: array[0..5] of Integer;
 begin
+  pairMode := False;
   { A comprehension filter — `[EXPR for V in ITER if COND]` — must not let the
     ITER expression parser see the `if`: it parses as a ternary head and dies
     on the missing else. Hide the depth-0 `if` behind a fake ':' while ITER
@@ -6240,6 +6458,8 @@ begin
     if ci >= REC_UCLASS_BASE then ci := ci - REC_UCLASS_BASE else ci := -1;
     if ci < 0 then
       Error('Nil Python: for-in needs a list, set, dict or str (got something untyped)');
+    if (PyForExtraCount > 0) and (dictCi >= 0) and (ci = dictCi) then
+      Error('Nil Python: a dict for-target takes two names');
     if (dictCi >= 0) and (ci = dictCi) then
     begin
       { A two-name target reads the dict's parallel VALUE list by the same
@@ -6256,7 +6476,11 @@ begin
       ci := listCi;
     end
     else if (name2 <> '') and not enumMode then
-      Error('Nil Python: a two-name for target needs a dict (.items()) or enumerate()');
+      { `for key, score in pairs:` over a LIST — each element is itself a
+        2-sequence and is UNPACKED into the two names, which is ordinary Python
+        and what `sorted(d.items(), ...)` hands back. Only a dict and enumerate()
+        were handled before. }
+      pairMode := True;
   end
   else if (name2 <> '') and not enumMode then
     Error('Nil Python: a two-name for target needs a dict (.items()) or enumerate()');
@@ -6278,6 +6502,12 @@ begin
     if enumMode then symIdx := AllocVar(name, tyInteger)
     else if isStr then symIdx := AllocVar(name, tyAnsiString)
     else symIdx := AllocVar(name, tyVariant);
+  end;
+  nExtra := PyForExtraCount;
+  for xi := 0 to nExtra - 1 do
+  begin
+    extraSyms[xi] := PyProgSym(PyForExtraName[xi]);
+    if extraSyms[xi] < 0 then extraSyms[xi] := AllocVar(PyForExtraName[xi], tyVariant);
   end;
   sym2 := -1;
   if name2 <> '' then
@@ -6308,8 +6538,11 @@ begin
     reading vSym/vListNode there took an UNINITIALISED node index, which landed
     in the retained-inline AST region and surfaced as "could not lower AST node
     (kind 78)" at the end of the program }
-  if (sym2 >= 0) and not enumMode then
+  if (sym2 >= 0) and (not enumMode) and (not pairMode) then
   begin
+    { ...and pairMode is the third form with no second container: the pairs come
+      from ONE list whose elements are unpacked, so reading vSym/vListNode here
+      hit the same uninitialised-node trap this comment was written for. }
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := PyMakeIdent(vSym);
     ASTRight[node] := vListNode;
@@ -6393,6 +6626,42 @@ begin
     ASTRight[node] := elemNode;
     bodyNode := PySeqAppend(bodyNode, node);
   end
+  else if pairMode then
+  begin
+    { name1 := elem[0]; name2 := elem[1]. The element is bound to a hidden local
+      FIRST: reusing the element expression twice duplicated the inlined body of
+      TPyList.at and leaked an AN_INLINE_PARAM placeholder into lowering
+      (IR_UNSUPPORTED). One read, two indexes. }
+    pairSym := AllocVar(PyHiddenName('pair'), tyVariant);
+    elemNode2 := AllocNode(AN_ASSIGN);
+    ASTLeft[elemNode2] := PyMakeIdent(pairSym);
+    ASTRight[elemNode2] := elemNode;
+    bodyNode := PySeqAppend(bodyNode, elemNode2);
+    { Indexed through pylib's pyvar_getitem, NOT through TPyList.at: `at` is an
+      INLINED method, and an inlined body reached from here leaked its
+      AN_INLINE_PARAM placeholder into lowering (IR_UNSUPPORTED). pyvar_getitem
+      is an ordinary function and takes the variant as it stands, so no unbox is
+      needed either. }
+    node := PyPairItem(PyMakeIdent(pairSym), 0);
+    elemNode2 := AllocNode(AN_ASSIGN);
+    ASTLeft[elemNode2] := PyMakeIdent(symIdx);
+    ASTRight[elemNode2] := node;
+    bodyNode := PySeqAppend(bodyNode, elemNode2);
+    node := PyPairItem(PyMakeIdent(pairSym), 1);
+    elemNode2 := AllocNode(AN_ASSIGN);
+    ASTLeft[elemNode2] := PyMakeIdent(sym2);
+    ASTRight[elemNode2] := node;
+    bodyNode := PySeqAppend(bodyNode, elemNode2);
+    { and any names past the second — `for anchor, weight, label in triples:` }
+    for xi := 0 to nExtra - 1 do
+    begin
+      node := PyPairItem(PyMakeIdent(pairSym), xi + 2);
+      elemNode2 := AllocNode(AN_ASSIGN);
+      ASTLeft[elemNode2] := PyMakeIdent(extraSyms[xi]);
+      ASTRight[elemNode2] := node;
+      bodyNode := PySeqAppend(bodyNode, elemNode2);
+    end;
+  end
   else
   begin
     node := AllocNode(AN_ASSIGN);
@@ -6402,7 +6671,7 @@ begin
   end;
 
   { the value name reads the parallel list at the same index }
-  if (sym2 >= 0) and not enumMode then
+  if (sym2 >= 0) and (not enumMode) and (not pairMode) then
   begin
     elemNode := PyCallMeth1(listCi, 'at', PyMakeIdent(vSym), PyMakeIdent(iSym));
     if elemNode < 0 then Error('Nil Python: pylib (get) not loaded');
@@ -6640,6 +6909,29 @@ begin
   Result := PyMakeIdent(tmpSym);
 end;
 
+{ The parenthesised generator expression: same build as the bracketed one, with
+  '(' and ')' as its delimiters. }
+function PyParseParenComp: Integer;
+var tmpSym, exprStart, seq: Integer; savedDict: Boolean;
+begin
+  savedDict := PyCompIsDict;
+  PyCompIsDict := False;
+  tmpSym := AllocVar(PyHiddenName('gp'), tyClass);
+  Next;                                { consume '(' }
+  exprStart := TokPos - 1;
+  PyScanToCompFor;
+  if not PyIsIdent('for') then Error('Nil Python: malformed generator expression');
+  seq := PyBuildComp(tmpSym, exprStart);
+  PyCompIsDict := savedDict;
+  Expect(tkRParen, ')');
+  while seq >= 0 do
+  begin
+    PyHoistStmt(ASTLeft[seq]);
+    seq := ASTRight[seq];
+  end;
+  Result := PyMakeIdent(tmpSym);
+end;
+
 { Expression-position DICT comprehension — the brace twin of
   PyParseCompExprValue, used when a dict comp appears where a value is expected
   (a field/subscript target's RHS, a call argument). Builds into a hidden
@@ -6760,14 +7052,28 @@ begin
     today (feature-nilpy-tuple-unpack). No tuple type is invented for it: the
     two names read the dict's parallel key and value lists by the same index. }
   name2 := '';
+  PyForExtraCount := 0;
   if CurTok.Kind = tkComma then
   begin
     Next;
     if CurTok.Kind <> tkIdent then Error('Nil Python: expected a second loop variable');
     name2 := CurTok.SVal;
     Next;
+    { and any further names: `for anchor, weight, label in (...)` }
+    while CurTok.Kind = tkComma do
+    begin
+      Next;
+      if CurTok.Kind <> tkIdent then Error('Nil Python: expected a loop variable after ,');
+      if PyForExtraCount > High(PyForExtraName) then
+        Error('Nil Python: too many names in a for target');
+      PyForExtraName[PyForExtraCount] := CurTok.SVal;
+      Inc(PyForExtraCount);
+      Next;
+    end;
   end;
   Expect(tkIn, 'in');
+  if (PyForExtraCount > 0) and PyIsIdent('zip') then
+    Error('Nil Python: zip() with more than two loop variables is not supported yet');
   { `for x, y in zip(A, B):` — parallel iteration over two containers. }
   if (name2 <> '') and PyIsIdent('zip') and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkLParen) then
@@ -7739,7 +8045,12 @@ begin
       rhsNode := PyMakeNone;
     end
     else if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
-       (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+       (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+       (not PyCtorSuffixAhead) then
+      { ...but `x = Cls().method(...)` is not a construction ASSIGNMENT: the
+        construction is the RECEIVER. Leave it to the expression parser, whose
+        factor path builds the construction and then applies the method suffix
+        (bug-nilpy-method-call-on-fresh-construction). }
       rhsNode := PyClassCreate
     else if PyIsEmptySetCall then
       rhsNode := PyParseEmptySet

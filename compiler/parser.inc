@@ -757,7 +757,11 @@ function PyParseAttrName: AnsiString; forward; { Nil Python: the literal attr na
 function PyTupleParenAhead: Boolean; forward; { Nil Python: is this '(' a tuple? (pyparser.inc) }
 procedure PyParseListLiteralT(opener, closer: TTokenKind); forward; { Nil Python list/tuple literal (pyparser.inc) }
 function PyIsListCompAhead: Boolean; forward; { Nil Python: is `[ ... for ... ]` a comprehension? (pyparser.inc) }
-function PyParseCompExprValue(bracketed: Boolean): Integer; forward; { Nil Python expression-position comprehension (pyparser.inc) }
+function PyParseCompExprValue(bracketed: Boolean): Integer; forward;
+function PyIsParenCompAhead: Boolean; forward;      { `(x for x in xs)` (pyparser.inc) }
+function PyNextOverListAhead: Boolean; forward;     { is `next(...)`'s argument a sequence? (pyparser.inc) }
+function PyParseParenComp: Integer; forward;
+function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer; forward; { `Cls().m(...)` (pyparser.inc) } { Nil Python expression-position comprehension (pyparser.inc) }
 function PyIsSysStreamAhead: Boolean; forward; { Nil Python: at `sys.stdout`/`sys.stderr`? (pyparser.inc) }
 function PyStdlibCallAhead(var pname: AnsiString; var nTok: Integer): Boolean; forward; { Nil Python: at a mapped os./sys. call? (pyparser.inc) }
 function PyParseStdlibCall(const pname: AnsiString; nTok: Integer): Integer; forward; { Nil Python os./sys. call -> pylib shim (pyparser.inc) }
@@ -4902,6 +4906,16 @@ begin
       if recName >= REC_UCLASS_BASE then
       begin
         mci := recName - REC_UCLASS_BASE;
+        { NilPy `d.items()` — Python's spelling collides with TPyDict's DEFAULT
+          indexed property `Items[k]` (Pascal is case-insensitive), so the name
+          resolved to the property and the following `(` was a parse error. A
+          CALL is unambiguous: `d.items()` can only mean the method. Mapped onto
+          `itemlist`, the same way keylist/vallist are named to stay clear of it. }
+        if isNilPy and CaseEqual(fieldName, 'items') and
+           (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+           (Tokens[TokPos + 1].Kind = tkRParen) and
+           (FindUMeth(mci, 'itemlist') >= 0) then
+          fieldName := 'itemlist';
         pri := FindUProp(mci, fieldName);
       end;
 
@@ -9008,6 +9022,40 @@ begin
         LastExprTk := tyDouble;
         Exit;
       end
+      else if isNilPy and (name = 'next') and (TokPos < TokCount) and
+              (Tokens[TokPos].Kind = tkLParen) and PyNextOverListAhead then
+      begin
+        { `next(<list>)` / `next(<list>, default)` — Python's builtin over a
+          sequence. Routed by ARGUMENT TYPE rather than by an overload: the name
+          is already itertools' counter advance, and a TPyList overload beside it
+          made an untyped argument pick the wrong one and segfault. }
+        Next; Expect(tkLParen, '(');
+        { the argument may be a BARE generator, which has to be diverted before
+          its element expression is parsed (the loop variable is not in scope
+          until the `for`) }
+        if PyBareGenExprAhead then CurASTNode := PyParseCompExprValue(False)
+        else ParseArgExpr;
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode; ASTRight[argSeq] := -1;
+        node := argSeq;
+        if CurTok.Kind = tkComma then
+        begin
+          Next;
+          ParseArgExpr;
+          atDflt := AllocNode(AN_ARG); ASTLeft[atDflt] := CurASTNode; ASTRight[atDflt] := -1;
+          ASTRight[argSeq] := atDflt;
+          procIdx := FindProc('pynext_first_or');
+        end
+        else
+          procIdx := FindProc('pynext_first');
+        if procIdx < 0 then Error('Nil Python: pylib (pynext_first) not loaded');
+        Expect(tkRParen, ')');
+        CurASTNode := AllocNode(AN_CALL);
+        ASTIVal[CurASTNode] := procIdx;
+        ASTTk[CurASTNode] := Ord(tyVariant);
+        ASTLeft[CurASTNode] := node;
+        LastExprTk := tyVariant;
+        Exit;
+      end
       else if isNilPy and (name = 'str') then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr;
@@ -11674,6 +11722,11 @@ begin
   else if PyExprMode and PyStdlibCallAhead(sdName, sdTok) then
     { `os.path.join(...)`, `sys.exit(...)` — mapped by name onto a pylib shim. }
     CurASTNode := PyParseStdlibCall(sdName, sdTok)
+  else if PyExprMode and PyIsParenCompAhead then
+    { `(x for x in xs)` — a generator expression in its own parentheses. Checked
+      before the tuple form, which would otherwise take the '(' and then fail on
+      the `for`. }
+    CurASTNode := PyParseParenComp
   else if PyExprMode and PyTupleParenAhead then
     { A parenthesised TUPLE as a value — `return (pfx, rest)`, `x = (a, b)`.
       Built as the same TPyList a `[...]` literal produces, which is what makes
@@ -11710,6 +11763,24 @@ begin
     smNameTok := TokPos - 1;
     Next;                       { consume the name; CurTok = '(' }
     CurASTNode := PyParseStrMethod(CurASTNode, GetTokenStr(smNameTok));
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+  end;
+  { A METHOD call on a class-typed expression that is not an ident — a fresh
+    construction, `Cls().m()`. ParseFactorCore does this for an ident receiver
+    and the ctor intercept exits before it, so the call was a parse error
+    (bug-nilpy-method-call-on-fresh-construction). Looped, so chains compose. }
+  while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
+        (Tokens[TokPos].Kind = tkIdent) and
+        (Tokens[TokPos + 1].Kind = tkLParen) and
+        (IntToTypeKind(ASTTk[CurASTNode]) = tyClass) and
+        (ResolveNodeRec(CurASTNode) >= REC_UCLASS_BASE) do
+  begin
+    smBase := CurASTNode;
+    Next;                       { consume '.'; CurTok = the method name }
+    smNameTok := TokPos - 1;
+    Next;                       { consume the name; CurTok = '(' }
+    CurASTNode := PyParseClassMethodCall(smBase,
+                    ResolveNodeRec(smBase) - REC_UCLASS_BASE, GetTokenStr(smNameTok));
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
   end;
   { Same asymmetry for the SUBSCRIPT suffix: `s[i]` on an ident goes through

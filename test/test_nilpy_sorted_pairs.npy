@@ -1,0 +1,43 @@
+# sorted() with a key= lambda, d.items() as a VALUE, tuple unpacking in a for
+# target, a method call on a fresh construction, list.count(v), next() over a
+# parenthesised generator — the cluster songformatter's key_analysis.py is
+# written in, and what it took to compile its scoring loops.
+d = {"a": 3, "b": 1, "c": 2}
+
+items = d.items()
+print(len(items))
+
+for k, v in sorted(items, key=lambda item: item[1]):
+    print(k, v)
+
+for k, v in sorted(items, key=lambda item: item[1], reverse=True):
+    print(k, v)
+
+print(sorted([3, 1, 2]))
+
+rows = [["x", 1], ["y", 2]]
+for a, b in rows:
+    print(a, b)
+
+xs = ["a", "b", "a"]
+print(xs.count("a"), xs.count("z"), len(xs))
+
+cs = ["a", "bb", "ccc"]
+print(next((c for c in cs if len(c) == 2), "none"))
+print(next((c for c in cs if len(c) == 9), "none"))
+
+
+class Scorer:
+    name = "scorer"
+
+    def score(self, n: int, bonus: int = 10) -> int:
+        return n + bonus
+
+
+# a method called directly on a construction — including one whose class has a
+# class ATTRIBUTE, which makes the construction yield a bound temp
+print(Scorer().score(1))
+print(Scorer().score(1, 2))
+# NOTE `Scorer().name` — a FIELD on a construction, no call — still does not
+# parse; only the method-call suffix is wired (see
+# bug-nilpy-method-call-on-fresh-construction).
