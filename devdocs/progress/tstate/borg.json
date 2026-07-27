@@ -2003,10 +2003,10 @@
  },
  "last_bench": {
   "conf_rows": 550,
-  "date": "2026-07-27T19:04:29Z",
+  "date": "2026-07-27T19:29:41Z",
   "rc": 0,
   "rows": 29,
-  "sha": "9ea536cf1aadc68189daec88efee2b75d1ca1ee3"
+  "sha": "bd03328fdcfa57fd0161ef31919e569df6ff017e"
  },
  "last_full": {
   "date": "2026-07-27T19:21:26Z",
