@@ -1247,6 +1247,13 @@ begin
     PyParseIsCmp;   { is/is-not over the bitwise chain over ParseExpr }
 end;
 
+{ An INTEGER-ish kind: the arms of a value-returning or/and unify onto Int64. }
+function PyIsIntLikeTk(tk: TTypeKind): Boolean;
+begin
+  Result := tk in [tyInteger, tyInt8, tyUInt8, tyInt16, tyUInt16, tyInt32,
+                   tyUInt32, tyInt64, tyUInt64, tyNativeInt, tyNativeUInt];
+end;
+
 function PyBoolOpReturnsOperand(a, b: Integer): Boolean; forward;
 function PyMakeBoolOpValue(a, b: Integer; isOr: Boolean): Integer; forward;
 
@@ -1258,14 +1265,23 @@ begin
   while CurTok.Kind = tkAnd do
   begin
     Next;
-    PyParseBoolNot;
-    right := CurASTNode;
+    if CurTok.Kind = tkNil then          { `x and None` — see the or-path note }
+    begin
+      Next;
+      right := PyMakeNone;
+    end
+    else
+    begin
+      PyParseBoolNot;
+      right := CurASTNode;
+    end;
     if PyBoolOpReturnsOperand(left, right) then
       node := PyMakeBoolOpValue(left, right, False)
     else
     begin
       node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkAnd);
-      ASTLeft[node] := left; ASTRight[node] := right; ASTTk[node] := Ord(tyBoolean);
+      ASTLeft[node] := PyMakeTruthy(left); ASTRight[node] := PyMakeTruthy(right);
+      ASTTk[node] := Ord(tyBoolean);
     end;
     left := node;
   end;
@@ -1311,6 +1327,30 @@ var procIdx, argNode, rec, lenNode, zeroNode, node: Integer;
     nilNode, guardNode, falseNode, pairNode, ternNode: Integer;
 begin
   Result := n;
+  { A STRING tests EMPTY, explicitly: a string cell used as a raw condition is a
+    pointer, and an empty literal's pointer is not nil, so `"" or x` took the
+    empty arm. `Length(s) <> 0` is the same shape `not s` already uses
+    (bug-nilpy-not-on-string-always-true — this is that bug on the truthy side). }
+  if PyIsStrBaseTk(IntToTypeKind(ASTTk[n])) then
+  begin
+    lenNode := AllocNode(AN_CALL);
+    ASTIVal[lenNode] := -Ord(tkLength);
+    ASTTk[lenNode] := Ord(tyInteger);
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := n;
+    ASTRight[argNode] := -1;
+    ASTLeft[lenNode] := argNode;
+    zeroNode := AllocNode(AN_INT_LIT);
+    ASTIVal[zeroNode] := 0;
+    ASTTk[zeroNode] := Ord(tyInteger);
+    node := AllocNode(AN_BINOP);
+    ASTIVal[node] := Ord(tkNeq);
+    ASTLeft[node] := lenNode;
+    ASTRight[node] := zeroNode;
+    ASTTk[node] := Ord(tyBoolean);
+    Result := node;
+    Exit;
+  end;
   if IntToTypeKind(ASTTk[n]) = tyVariant then
   begin
     procIdx := FindProc('bool');
@@ -1362,11 +1402,29 @@ end;
   than a Boolean — i.e. it is a VALUE, not pure control flow. Triggered when an
   operand is a variant or a class (a container/object); pure ordinal/boolean
   operands keep the cheap boolean form, which every condition context uses. }
+{ Python's `or`/`and` yield an OPERAND, not a bool — `name = given or "default"`
+  is the ubiquitous default-value idiom, and songformatter writes it constantly
+  (`match.group(2) or ""`, `document.get("file_path") or None`). So operand
+  semantics apply whenever either side is anything but a Boolean; two Booleans
+  keep the plain boolean lowering, where the two readings agree anyway and the
+  cheaper one is worth having. In a CONDITION the difference is invisible: the
+  `if`/`while` path wraps the result in the same truthiness test either way. }
 function PyBoolOpReturnsOperand(a, b: Integer): Boolean;
 var ta, tb: TTypeKind;
 begin
   ta := IntToTypeKind(ASTTk[a]); tb := IntToTypeKind(ASTTk[b]);
-  Result := (ta = tyVariant) or (tb = tyVariant) or (ta = tyClass) or (tb = tyClass);
+  { ...but only when the two arms have a type the RESULT can carry: a variant or
+    class arm (which boxes anything), two strings, or two of the same kind.
+    MIXED kinds — `self.f and word.upper() != self.f`, a string and a Boolean —
+    keep the boolean lowering, because typing that ternary as either arm's type
+    reinterprets the other one (a Boolean read as a string pointer SEGFAULTS,
+    which is how this rule was found). The operands are truthiness-tested there,
+    so an empty string is still falsy; what is lost is only the VALUE identity of
+    a mixed-type `or`, and that shape does not occur outside a condition. }
+  Result := (ta = tyVariant) or (tb = tyVariant) or (ta = tyClass) or (tb = tyClass)
+            or (PyIsStrBaseTk(ta) and PyIsStrBaseTk(tb))
+            or (PyIsIntLikeTk(ta) and PyIsIntLikeTk(tb))
+            or (ta = tb);
 end;
 
 { `a or b` as a value -> `a if truthy(a) else b`; `a and b` -> `b if truthy(a)
@@ -1397,6 +1455,9 @@ begin
   ta := IntToTypeKind(ASTTk[a]); tb := IntToTypeKind(ASTTk[b]);
   if PyIsStrBaseTk(ta) or PyIsStrBaseTk(tb) then
     ASTTk[node] := Ord(tyAnsiString)
+  else if PyIsIntLikeTk(ta) and PyIsIntLikeTk(tb) then
+    { two integer widths — the wider one carries both arms }
+    ASTTk[node] := Ord(tyInt64)
   else if ASTTk[a] = ASTTk[b] then
     { same type on both arms -> keep it, preserving a container/class identity so
       `.method()` on the result still resolves }
@@ -1414,14 +1475,27 @@ begin
   while CurTok.Kind = tkOr do
   begin
     Next;
-    PyParseBoolAnd;
-    right := CurASTNode;
+    { `x or None` — None as a VALUE is pylib's VT_EMPTY variant, not the nil/zero
+      cell a bare literal parses to; without this the fallback arm printed EMPTY
+      where CPython prints None (the feature-nilpy-none-variant family, same
+      treatment the conditional expression already gives its else arm). }
+    if CurTok.Kind = tkNil then
+    begin
+      Next;
+      right := PyMakeNone;
+    end
+    else
+    begin
+      PyParseBoolAnd;
+      right := CurASTNode;
+    end;
     if PyBoolOpReturnsOperand(left, right) then
       node := PyMakeBoolOpValue(left, right, True)
     else
     begin
       node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkOr);
-      ASTLeft[node] := left; ASTRight[node] := right; ASTTk[node] := Ord(tyBoolean);
+      ASTLeft[node] := PyMakeTruthy(left); ASTRight[node] := PyMakeTruthy(right);
+      ASTTk[node] := Ord(tyBoolean);
     end;
     left := node;
   end;
@@ -1953,6 +2027,60 @@ begin
   Result := s;
 end;
 
+{ A class ATTRIBUTE constant (`name = "x"` at class level) — the entry index for
+  class ci or an inherited one, or -1. See the PyClsAttr* note in defs.inc. }
+function PyFindClsAttr(ci: Integer; const nm: AnsiString): Integer;
+var i, c: Integer;
+begin
+  Result := -1;
+  c := ci;
+  while c >= 0 do
+  begin
+    for i := 0 to PyClsAttrCount - 1 do
+      if (PyClsAttrCi[i] = c) and
+         CaseEqual(PyRawName(PyClsAttrNOff[i], PyClsAttrNLen[i]), nm) then
+      begin
+        Result := i;
+        Exit;
+      end;
+    c := UClsParent[c];
+  end;
+end;
+
+{ That constant as an expression node. }
+function PyClsAttrNode(ai: Integer): Integer;
+begin
+  case PyClsAttrKind[ai] of
+    PYDC_STR:
+      begin
+        Result := AllocNode(AN_STR_LIT);
+        ASTSOffset[Result] := PyClsAttrSOff[ai];
+        ASTSLen[Result] := PyClsAttrSLen[ai];
+        ASTTk[Result] := Ord(tyString);
+      end;
+    PYDC_FLOAT:
+      begin
+        Result := AllocNode(AN_FLOAT_LIT);
+        ASTIVal[Result] := PyClsAttrIVal[ai];
+        ASTTk[Result] := Ord(tyDouble);
+      end;
+    PYDC_BOOL:
+      begin
+        Result := AllocNode(AN_INT_LIT);
+        ASTIVal[Result] := PyClsAttrIVal[ai];
+        ASTTk[Result] := Ord(tyBoolean);
+      end;
+    PYDC_NIL:
+      Result := PyMakeNone;
+  else
+    begin
+      Result := AllocNode(AN_INT_LIT);
+      ASTIVal[Result] := PyClsAttrIVal[ai];
+      ASTTk[Result] := Ord(tyInt64);
+    end;
+  end;
+end;
+
 function PyClassCreate: Integer; forward;
 
 { `_count(1)` (the itertools.count alias) -> a fresh TPyCounter. }
@@ -2032,16 +2160,47 @@ begin
   end;
 end;
 
-function PyIsEmptySetCall: Boolean;
+{ `set(...)`, empty or over an iterable. NOT a hook when the program declares
+  its own `set` — songformatter's settings.py has `def set(section, option,
+  value)` and imports it elsewhere, and a user definition must win over a
+  builtin spelling. }
+function PyIsSetCall: Boolean;
 begin
   Result := (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'set') and
-            (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+            (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+            (FindProc('set') < 0) and (FindSym('set') < 0);
+end;
+
+function PyIsEmptySetCall: Boolean;
+begin
+  Result := PyIsSetCall and (TokPos + 1 < TokCount) and
             (Tokens[TokPos + 1].Kind = tkRParen);
 end;
 
+{ A set is a TPyList (the representation annotations and `in` already use), so
+  `set()` is an empty one and `set(xs)` is a duplicate-skipping copy through
+  pylib's pyset_of — which also accepts a dict (its keys) and a string (its
+  characters), like CPython. }
 function PyParseEmptySet: Integer;
 var ci, recId, sizeNode, argNode: Integer;
 begin
+  if not PyIsEmptySetCall then
+  begin
+    Next;                          (* set *)
+    Expect(tkLParen, '(');
+    PyParseBoolExpr;
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := CurASTNode;
+    Result := AllocNode(AN_CALL);
+    ASTIVal[Result] := FindProc('pyset_of');
+    if ASTIVal[Result] < 0 then Error('Nil Python: pylib (pyset_of) not loaded');
+    ASTTk[Result] := Ord(tyClass);
+    ASTRight[Result] := REC_UCLASS_BASE + FindUClass('TPyList');
+    ASTLeft[Result] := argNode;
+    Expect(tkRParen, ')');
+    CurASTNode := Result;
+    Exit;
+  end;
   Next; Next; Next;                (* set ( ) *)
   ci := FindUClass('TPyList');
   if ci < 0 then Error('Nil Python: pylib (TPyList) not loaded');
@@ -2202,6 +2361,7 @@ var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     kwI, kwJ, kwFld, kwMax, kwPos, kwDcBase: Integer; kwName: AnsiString;
     kwCtorMi, kwCtorPi, kwPk, kwVal: Integer;
     kwAny: Boolean; kwSlot: array[0..PY_MAX_DC_KW - 1] of Integer;
+    attrAny: Boolean; attrSym, attrAsgn, attrFld, attrFi: Integer;
 begin
   name := CurTok.SVal;
   ci := FindUClass(name);
@@ -2411,6 +2571,48 @@ begin
       end;
   end;
   Result := node;
+  { CLASS ATTRIBUTES (`name = "note_counting"` at class level): give the new
+    instance its own copy. Python attaches them to the CLASS and reads them
+    through the instance, which is indistinguishable from this for every read —
+    the difference is only visible if the CLASS attribute is rebound at run time
+    to change existing instances, which nothing here does.
+
+    Emitted as hoisted stores on a temp, so they land AFTER the constructor. A
+    class with a constructor is therefore REFUSED rather than silently having
+    its ctor's own writes overwritten — that is the one case where "after" is
+    the wrong order and guessing would be silent corruption. }
+  attrAny := False;
+  for i := 0 to PyClsAttrCount - 1 do
+    if PyClsAttrCi[i] = ci then attrAny := True;
+  if attrAny then
+  begin
+    if FindUMeth(ci, 'create') >= 0 then
+      Error('Nil Python: ' + name + ' has both a class attribute and an '
+        + '__init__; NilPy would apply the class attributes after the '
+        + 'constructor. Assign them in __init__ instead.');
+    attrSym := AllocVar(PyHiddenName('clsattr'), tyClass);
+    Syms[attrSym].RecName := recId;
+    attrAsgn := AllocNode(AN_ASSIGN);
+    ASTLeft[attrAsgn] := PyMakeIdent(attrSym);
+    ASTRight[attrAsgn] := node;
+    PyHoistStmt(attrAsgn);
+    for i := 0 to PyClsAttrCount - 1 do
+      if PyClsAttrCi[i] = ci then
+      begin
+        attrFld := AllocNode(AN_FIELD);
+        ASTLeft[attrFld] := PyMakeIdent(attrSym);
+        ASTSOffset[attrFld] := PyClsAttrNOff[i];
+        ASTSLen[attrFld] := PyClsAttrNLen[i];
+        attrFi := FindUField(ci, PyRawName(PyClsAttrNOff[i], PyClsAttrNLen[i]));
+        if attrFi >= 0 then ASTTk[attrFld] := UFldTk[attrFi]
+        else ASTTk[attrFld] := Ord(tyVariant);
+        attrAsgn := AllocNode(AN_ASSIGN);
+        ASTLeft[attrAsgn] := attrFld;
+        ASTRight[attrAsgn] := PyClsAttrNode(i);
+        PyHoistStmt(attrAsgn);
+      end;
+    Result := PyMakeIdent(attrSym);
+  end;
 end;
 
 { Nil Python str methods: `s.upper()` -> pylib pystr_upper(s).
@@ -4054,13 +4256,29 @@ begin
             (ci = FindUClass('TPyBytes'));
 end;
 
+{ Does proc mpi declare a parameter with this name? Slot 0 is Self on a method,
+  so the scan starts at 1 — `self=` is not bindable by name. }
+function PyProcParamNamed(mpi: Integer; const nm: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if mpi < 0 then Exit;
+  for i := 1 to Procs[mpi].ParamCount - 1 do
+    if CaseEqual(Procs[mpi].Params[i].Name, nm) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
     smPName: AnsiString; smTk: TTypeKind; smArgs: Integer;
     dualPi, dcall, dself, dcast, tern, pairN, condN: Integer;
     dualCis, dualMmis: array[0..2] of Integer;
-    nDual, di: Integer;
+    nDual, di, kwIdx, kwDepth, swapCi, swapMmi, dualArgs: Integer;
+    anyKw: Boolean;
     argExprs: array[0..15] of Integer;
 begin
   { A STR method on a variant receiver — `for s in ["ab"]: s.upper()`, where the
@@ -4144,9 +4362,24 @@ begin
         end;
       end
       else if not IsSubclassOf(ci, hitCi) then
-        Error('Nil Python: .' + mname + '() on a dynamically-typed value is '
-          + 'ambiguous (several classes declare it) — assign to an annotated '
-          + 'local first');
+      begin
+        { Two UNRELATED USER classes declare the name. This used to be a hard
+          error; it is now the same RUNTIME dispatch the container/user split
+          above gets, only with an is-test on the receiver's actual class rather
+          than a variant tag test — the receiver carries VT_OBJECT plus a real
+          class pointer, so the test costs one compare per extra candidate and
+          only on calls that are genuinely ambiguous.
+          (feature-nilpy-runtime-method-dispatch-on-variant. songformatter's
+          key_analysis.py has three unrelated dataclasses declaring to_text().) }
+        if nDual <= High(dualCis) then
+        begin
+          dualCis[nDual] := ci; dualMmis[nDual] := mmi; Inc(nDual);
+        end
+        else
+          Error('Nil Python: .' + mname + '() on a dynamically-typed value has '
+            + 'too many candidate classes to dispatch at runtime — assign to an '
+            + 'annotated local first');
+      end;
     end;
   end;
   if hitCi < 0 then
@@ -4176,6 +4409,38 @@ begin
           + mname + '()');
   end;
 
+  { Which candidate does the CALL name? With several classes declaring the
+    method, the static pick so far is just the first one found — but a KEYWORD
+    argument names a parameter, and that identifies the intended signature.
+    Scan the argument list's `ident =` pairs before parsing them and promote the
+    candidate that has those parameters; the demoted one stays as a runtime arm.
+    key_analysis.py's `detector.to_text(verbose=True)` needs exactly this: the
+    first class found declares `to_text()` with no parameters at all. }
+  if (nDual > 0) and (CurTok.Kind = tkLParen) then
+  begin
+    k := TokPos; kwDepth := 1;
+    while (k < TokCount) and (kwDepth > 0) do
+    begin
+      if Tokens[k].Kind = tkLParen then Inc(kwDepth)
+      else if Tokens[k].Kind = tkRParen then Dec(kwDepth)
+      else if (kwDepth = 1) and (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount)
+              and (Tokens[k + 1].Kind = tkAssign)
+              and (not PyProcParamNamed(hitPi, GetTokenStr(k))) then
+      begin
+        smPName := GetTokenStr(k);
+        for di := 0 to nDual - 1 do
+          if (dualMmis[di] >= 0) and PyProcParamNamed(UMthProc_[dualMmis[di]], smPName) then
+          begin
+            swapCi := hitCi; swapMmi := hitMmi;
+            hitCi := dualCis[di]; hitMmi := dualMmis[di]; hitPi := UMthProc_[hitMmi];
+            dualCis[di] := swapCi; dualMmis[di] := swapMmi;
+            Break;
+          end;
+      end;
+      Inc(k);
+    end;
+  end;
+
   { VT_OBJECT payload -> instance pointer -> hard cast to the owning class }
   unboxArg := AllocNode(AN_ARG);
   ASTLeft[unboxArg] := baseNode;
@@ -4195,12 +4460,20 @@ begin
 
   Expect(tkLParen, '(');
   i := 0;
+  anyKw := False;
   while CurTok.Kind <> tkRParen do
   begin
+    { Keyword arguments here too — `detector.to_text(verbose=True)` on a
+      dynamically-typed receiver. They bind against the STATICALLY chosen
+      method; a runtime candidate re-uses the reordered argument list, which is
+      right as long as the candidates agree on parameter order, and they do
+      when they agree on the name and arity that got them here. }
+    kwIdx := PyKwArgIndex(hitPi, 1);
+    if kwIdx <> 0 then anyKw := True;
     ParseArgExpr;
-    if i <= High(argExprs) then argExprs[i] := CurASTNode;
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := CurASTNode;
+    ASTIVal[argNode] := kwIdx;
     ASTRight[lastArg] := argNode;
     lastArg := argNode;
     Inc(i);
@@ -4208,6 +4481,24 @@ begin
     else Break;
   end;
   Expect(tkRParen, ')');
+  if anyKw then
+  begin
+    { PyBindKwArgs orders the chain (self is slot 0, exactly as the ordinary
+      method path uses it) and fills omitted defaults, so `i` is re-derived from
+      the bound chain rather than from how many arguments were written. }
+    i := 0;
+    PyBindKwArgs(hitPi, selfArg, lastArg, i);
+    if i > 0 then Dec(i);          { drop self from the argument count }
+  end;
+  { the per-argument nodes the runtime-dispatch arms re-use, in bound order }
+  argNode := ASTRight[selfArg];
+  k := 0;
+  while (argNode >= 0) and (k <= High(argExprs)) do
+  begin
+    argExprs[k] := ASTLeft[argNode];
+    Inc(k);
+    argNode := ASTRight[argNode];
+  end;
 
   { Overload selection by the ACTUAL argument count. The candidate scan above
     picked the first method named `mname`; a class like TPyDict declares `get(k)`
@@ -4246,6 +4537,21 @@ begin
       if mmi < 0 then mmi := dualMmis[di];
       if mmi < 0 then Continue;
       dualPi := UMthProc_[mmi];
+      { The runtime candidate may declare MORE parameters than the call wrote,
+        with defaults — `to_text(self, verbose=False)` reached by a bare
+        `it.to_text()`. The arm builds its own argument chain, so it never passes
+        through the shared fill; without this the callee read an uninitialised
+        slot and crashed. A candidate that cannot be completed is dropped rather
+        than called short. }
+      dualArgs := i;
+      k := dualArgs + 1;
+      while (k < Procs[dualPi].ParamCount) and (k < MAX_PROC_PARAMS) and
+            ProcParamHasDefault[dualPi * MAX_PROC_PARAMS + k] do
+      begin
+        Inc(dualArgs);
+        Inc(k);
+      end;
+      if dualArgs + 1 <> Procs[dualPi].ParamCount then Continue;
       unboxArg := AllocNode(AN_ARG);
       ASTLeft[unboxArg] := baseNode;
       unboxCall := AllocNode(AN_CALL);
@@ -4266,6 +4572,13 @@ begin
         ASTRight[lastArg] := argNode;
         lastArg := argNode;
       end;
+      for k := i to dualArgs - 1 do
+      begin
+        argNode := AllocNode(AN_ARG);
+        ASTLeft[argNode] := DefaultArgValueNode(dualPi, k + 1);
+        ASTRight[lastArg] := argNode;
+        lastArg := argNode;
+      end;
       if UMthVirSlot[mmi] >= 0 then
       begin
         dcall := AllocNode(AN_VIRTUAL_CALL);
@@ -4277,22 +4590,42 @@ begin
       ASTTk[dcall] := Ord(Procs[dualPi].RetType);
       ASTLeft[dcall] := dself;
 
-      { cond: pyvar_holds(recv, kind) }
-      unboxArg := AllocNode(AN_ARG);
-      ASTLeft[unboxArg] := baseNode;
-      condN := AllocNode(AN_INT_LIT);
-      if dualCis[di] = FindUClass('TPyList') then ASTIVal[condN] := 1
-      else if dualCis[di] = FindUClass('TPyDict') then ASTIVal[condN] := 2
-      else ASTIVal[condN] := 3;
-      ASTTk[condN] := Ord(tyInt64);
-      unboxCall := AllocNode(AN_ARG);
-      ASTLeft[unboxCall] := condN;
-      ASTRight[unboxArg] := unboxCall;
-      condN := AllocNode(AN_CALL);
-      ASTIVal[condN] := FindProc('pyvar_holds');
-      if ASTIVal[condN] < 0 then Error('Nil Python: pylib (pyvar_holds) not loaded');
-      ASTTk[condN] := Ord(tyBoolean);
-      ASTLeft[condN] := unboxArg;
+      if PyIsPylibContainerCi(dualCis[di]) then
+      begin
+        { cond: pyvar_holds(recv, kind) }
+        unboxArg := AllocNode(AN_ARG);
+        ASTLeft[unboxArg] := baseNode;
+        condN := AllocNode(AN_INT_LIT);
+        if dualCis[di] = FindUClass('TPyList') then ASTIVal[condN] := 1
+        else if dualCis[di] = FindUClass('TPyDict') then ASTIVal[condN] := 2
+        else ASTIVal[condN] := 3;
+        ASTTk[condN] := Ord(tyInt64);
+        unboxCall := AllocNode(AN_ARG);
+        ASTLeft[unboxCall] := condN;
+        ASTRight[unboxArg] := unboxCall;
+        condN := AllocNode(AN_CALL);
+        ASTIVal[condN] := FindProc('pyvar_holds');
+        if ASTIVal[condN] < 0 then Error('Nil Python: pylib (pyvar_holds) not loaded');
+        ASTTk[condN] := Ord(tyBoolean);
+        ASTLeft[condN] := unboxArg;
+      end
+      else
+      begin
+        { cond: pyvarobj(recv) is <that user class> — the same test isinstance
+          lowers to, which is what makes an unrelated-user-class candidate
+          dispatchable at all. }
+        unboxArg := AllocNode(AN_ARG);
+        ASTLeft[unboxArg] := baseNode;
+        unboxCall := AllocNode(AN_CALL);
+        ASTIVal[unboxCall] := FindProc('pyvarobj');
+        if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+        ASTTk[unboxCall] := Ord(tyPointer);
+        ASTLeft[unboxCall] := unboxArg;
+        condN := AllocNode(AN_IS_TEST);
+        ASTLeft[condN] := unboxCall;
+        ASTIVal[condN] := dualCis[di];
+        ASTTk[condN] := Ord(tyBoolean);
+      end;
 
       pairN := AllocNode(AN_PAIR);
       ASTLeft[pairN] := dcall;
@@ -6737,6 +7070,20 @@ begin
   if PyIsIdent('del') then
   begin
     Next;
+    { `del name` on a plain LOCAL is accepted and emits nothing. Python unbinds
+      the name, so a later read raises NameError; NilPy has no binding to remove
+      and does not diagnose that later read — laxity in the same direction as
+      the keyword-only marker (we accept programs CPython rejects, and run every
+      program we accept the same way). The censused use is `del sections` as an
+      explicit "this parameter is deliberately unused". }
+    if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind in [tkNewline, tkDedent, tkEOF]) and
+       (FindSym(CurTok.SVal) >= 0) then
+    begin
+      Next;
+      Result := -1;
+      Exit;
+    end;
     { Parse the whole `d[k]` normally — it lowers to TPyDict.fetch(d, k) via
       the default indexed property — then REWRITE that call to .remove(d, k).
       Parsing the base and the subscript separately would mean re-implementing
@@ -8302,6 +8649,64 @@ begin
   begin
     if Tokens[i].Kind = tkIndent then Inc(depth)
     else if Tokens[i].Kind = tkDedent then Dec(depth)
+    else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
+            (i + 2 < bodyEnd) and (Tokens[i + 1].Kind = tkAssign) and
+            ((i = bodyStart) or
+             (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) and
+            (Tokens[i + 2].Kind in [tkInteger, tkFloat, tkString, tkTrue, tkFalse, tkNil]) then
+    begin
+      { A CLASS ATTRIBUTE — `name = "note_counting"`, unannotated, at class
+        level. Held as a per-class compile-time constant (see the PyClsAttr*
+        note in defs.inc): the read `self.name` becomes the literal, and an
+        assignment to it is refused rather than pretending Python's shared
+        class attribute exists. Registered in the pre-pass with everything
+        else, so a method body parsed later can already see it. }
+      { The attribute is a real FIELD on the instance (typed from its literal),
+        so reads and the construction-time store go through the ordinary field
+        path. Registered here in the pre-pass, before any method body is parsed. }
+      if FindUField(ci, GetTokenStr(i)) < 0 then
+      begin
+        case Tokens[i + 2].Kind of
+          tkInteger:      tk := tyInt64;
+          tkFloat:        tk := tyDouble;
+          tkString:       tk := tyAnsiString;
+          tkTrue, tkFalse: tk := tyBoolean;
+        else
+          tk := tyVariant;
+        end;
+        sz := TypeSize(tk);
+        curOff := AlignTo(curOff, TypeAlign(tk));
+        AddUField(ci, Tokens[i].SOffset, Tokens[i].SLen, curOff, Ord(tk), REC_NONE);
+        Inc(curOff, sz);
+      end;
+      if PyClsAttrCount < 256 then
+      begin
+        PyClsAttrCi[PyClsAttrCount]   := ci;
+        PyClsAttrNOff[PyClsAttrCount] := Tokens[i].SOffset;
+        PyClsAttrNLen[PyClsAttrCount] := Tokens[i].SLen;
+        PyClsAttrSOff[PyClsAttrCount] := 0;
+        PyClsAttrSLen[PyClsAttrCount] := 0;
+        PyClsAttrIVal[PyClsAttrCount] := 0;
+        case Tokens[i + 2].Kind of
+          tkInteger: begin PyClsAttrKind[PyClsAttrCount] := PYDC_INT;
+                           PyClsAttrIVal[PyClsAttrCount] := Tokens[i + 2].IVal; end;
+          tkFloat:   begin PyClsAttrKind[PyClsAttrCount] := PYDC_FLOAT;
+                           PyClsAttrIVal[PyClsAttrCount] := Tokens[i + 2].IVal; end;
+          tkString:  begin PyClsAttrKind[PyClsAttrCount] := PYDC_STR;
+                           PyClsAttrSOff[PyClsAttrCount] := Tokens[i + 2].SOffset;
+                           PyClsAttrSLen[PyClsAttrCount] := Tokens[i + 2].SLen; end;
+          tkTrue:    begin PyClsAttrKind[PyClsAttrCount] := PYDC_BOOL;
+                           PyClsAttrIVal[PyClsAttrCount] := 1; end;
+          tkFalse:   begin PyClsAttrKind[PyClsAttrCount] := PYDC_BOOL; end;
+        else
+          PyClsAttrKind[PyClsAttrCount] := PYDC_NIL;
+        end;
+        Inc(PyClsAttrCount);
+      end;
+      while (i < bodyEnd) and (Tokens[i].Kind <> tkNewline) do Inc(i);
+      Inc(i);
+      continue;
+    end
     else if isDC and (depth = 0) and (Tokens[i].Kind = tkIdent) and
             (i + 2 < bodyEnd) and (Tokens[i + 1].Kind = tkColon) and
             ((i = bodyStart) or
@@ -9207,6 +9612,13 @@ begin
     else if isDC and (CurTok.Kind = tkIdent) then
     begin
       { dataclass field line — already registered; skip to end of line }
+      while not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) do Next;
+      PySkipNewlines;
+    end
+    else if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+            (Tokens[TokPos].Kind = tkAssign) then
+    begin
+      { class-attribute line — registered as a constant by the pre-pass }
       while not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) do Next;
       PySkipNewlines;
     end

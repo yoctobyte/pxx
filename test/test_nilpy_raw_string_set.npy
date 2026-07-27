@@ -1,0 +1,24 @@
+# RAW strings (r'...') keep every backslash literal, which is how regex patterns
+# are written; and `set(iterable)`, which used to exist only in its empty form
+# and only as an assignment right-hand side.
+import re
+
+pat = r'^([A-G][b#]?)(.*?)$'
+m = re.match(pat, "C#maj")
+print(m.group(1))
+print(len(r'a\nb'))
+print('a\nb' == r'a\nb')
+print(r"d\d+")
+
+xs = [1, 2, 2, 3]
+print(len(set(xs)))
+print(len(set()))
+print(len(set({"a": 1, "b": 2})))
+print(len(set("hello")))
+
+
+def uniq(v):
+    return set(v)
+
+
+print(len(uniq([4, 4, 4])))

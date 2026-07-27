@@ -521,7 +521,7 @@ var
   floatStart, fpos: Integer;
   k: TTokenKind;
   numBase, digit, startLine: Integer;
-  hasDigit, isTriple: Boolean;
+  hasDigit, isTriple, rawStr: Boolean;
   decText: AnsiString;   { the literal's exact decimal digits, for the over-Int64 case }
 begin
   TokCount := 0;
@@ -624,8 +624,21 @@ begin
       { An actual token is about to be read, making this a logical line }
       IsLogicalLine := True;
 
+      { A RAW string prefix: r'...' / R"..." keeps every backslash literal, which
+        is what regex patterns are written with (`re.match(r'^([A-G][b#]?)')`).
+        Checked BEFORE the identifier branch, which would otherwise lex the
+        prefix as a one-letter name followed by an ordinary string. }
+      rawStr := False;
+      if ((c = 'r') or (c = 'R')) and (P + 1 <= Length(Source)) and
+         ((Source[P + 1] = '"') or (Source[P + 1] = '''')) then
+      begin
+        rawStr := True;
+        Inc(P);
+        c := Source[P];
+      end;
+
       { Identifiers and Keywords }
-      if c in ['a'..'z','A'..'Z','_'] then
+      if (not rawStr) and (c in ['a'..'z','A'..'Z','_']) then
       begin
         s := '';
         while (P <= Length(Source)) and (Source[P] in ['a'..'z','A'..'Z','0'..'9','_']) do
@@ -751,6 +764,18 @@ begin
             end;
             AppendChar(s, Source[P]);
             Inc(P);
+          end
+          else if (Source[P] = '\') and rawStr then
+          begin
+            { raw: the backslash is DATA, and it still stops the next character
+              from closing the string — Python's own rule for r'a\'b' }
+            AppendChar(s, Source[P]);
+            Inc(P);
+            if P <= Length(Source) then
+            begin
+              AppendChar(s, Source[P]);
+              Inc(P);
+            end;
           end
           else if Source[P] = '\' then
           begin

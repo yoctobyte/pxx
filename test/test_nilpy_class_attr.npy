@@ -1,0 +1,33 @@
+# A class-level `name = <literal>` with no annotation. Python makes it a shared
+# CLASS attribute; NilPy gives each instance its own copy, initialised at
+# construction, which reads identically — the difference is only visible if the
+# class attribute is rebound at run time to change existing instances.
+#
+# A class that has BOTH a class attribute and an __init__ is REFUSED rather than
+# silently applying the attributes after the constructor's own writes.
+#
+# Also here: `del name` on a plain local, which songformatter uses to mark a
+# deliberately unused parameter.
+class Detector:
+    name = "note_counting"
+    weight = 3
+    scale = 0.5
+    enabled = True
+
+    def describe(self, extra) -> str:
+        del extra
+        return self.name + " " + str(self.weight) + " " + str(self.scale) + " " + str(self.enabled)
+
+
+class Other:
+    name = "cadence"
+
+    def label(self) -> str:
+        return self.name
+
+
+d = Detector()
+print(d.describe("ignored"))
+o = Other()
+print(o.label())
+print(d.name, d.weight)

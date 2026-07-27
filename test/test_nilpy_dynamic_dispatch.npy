@@ -1,0 +1,42 @@
+# A method call on a value with NO static class, dispatched at RUNTIME across
+# UNRELATED classes that declare the same name — feature-nilpy-runtime-method-
+# dispatch-on-variant. Three dataclasses with to_text(), read out of a list, is
+# exactly songformatter key_analysis.py's detector shape.
+#
+# The keyword argument matters too: the candidate whose SIGNATURE has that
+# parameter is the one selected, which is what makes `d.to_text(verbose=True)`
+# reach the class that takes `verbose` rather than the first one found.
+from dataclasses import dataclass
+
+
+@dataclass
+class Candidate:
+    n: int = 1
+    def to_text(self) -> str:
+        return "cand" + str(self.n)
+
+
+@dataclass
+class Detector:
+    label: str = "d"
+    def to_text(self, verbose: bool = False) -> str:
+        if verbose:
+            return "DET:" + self.label
+        return self.label
+
+
+@dataclass
+class Summary:
+    f: float = 0.5
+    def to_text(self) -> str:
+        return "sum" + str(self.f)
+
+
+items = [Candidate(3), Detector("x"), Summary(1.5)]
+for it in items:
+    print(it.to_text())
+
+print(", ".join(it.to_text() for it in items))
+
+d = items[1]
+print(d.to_text(verbose=True))

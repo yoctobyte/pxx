@@ -1520,6 +1520,20 @@ var
     unmatched keyword arguments into the dict (PyPackStarArgs). }
   ProcPyStarIdx : array[0..MAX_PROCS-1] of Integer;
   ProcPyKwIdx   : array[0..MAX_PROCS-1] of Integer;
+  { CLASS ATTRIBUTES: an unannotated class-level `name = <literal>` in a plain
+    (non-dataclass) class. Python makes it a shared class attribute; NilPy holds
+    it as a per-class COMPILE-TIME CONSTANT, which is exactly right for the
+    read-only use every corpus has (`self.name` naming a detector) and is
+    REFUSED on assignment rather than silently diverging. Keyed by class ci and
+    the attribute's name span in the token char pool. }
+  PyClsAttrCi   : array[0..255] of Integer;
+  PyClsAttrNOff : array[0..255] of Integer;
+  PyClsAttrNLen : array[0..255] of Integer;
+  PyClsAttrKind : array[0..255] of Integer;    { PYDC_INT / _FLOAT / _STR / _BOOL / _NIL }
+  PyClsAttrIVal : array[0..255] of Int64;
+  PyClsAttrSOff : array[0..255] of Integer;
+  PyClsAttrSLen : array[0..255] of Integer;
+  PyClsAttrCount: Integer;
   PyCapName  : array[0..MAX_PROCS*PY_MAX_CAPS-1] of AnsiString;
 
   { Candidate list built by MatchProcCall when overload resolution fails, so the

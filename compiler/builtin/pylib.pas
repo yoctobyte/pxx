@@ -590,6 +590,11 @@ function dict(const v: Variant): TPyDict; overload;
 { dict.fromkeys(iterable): a dict with those keys, values None, insertion order
   preserved. `list(dict.fromkeys(xs))` is the standard order-preserving dedupe. }
 function pydict_fromkeys(l: TPyList): TPyDict;
+{ `set(iterable)` — Python's set constructor. A set is a TPyList here (see
+  PyAnnTypeAt and TPyList.add), so this is "copy, skipping duplicates". The
+  iterable may be a list/tuple/set, a dict (its KEYS, like CPython) or a string
+  (its characters); anything else is a loud TypeError rather than a guess. }
+function pyset_of(const v: Variant): TPyList;
 
 { collections.Counter(...) — a TPyDict in Counter mode; see TPyDict. }
 function Counter: TPyDict;
@@ -1841,6 +1846,38 @@ begin
   dst := PPyVarRec(@Result);
   PyVarSlotInit(dst, src);
   remove(k);
+end;
+
+function pyset_of(const v: Variant): TPyList;
+var r, kl: TPyList; o: TObject; i: Integer; sv: AnsiString;
+begin
+  r := TPyList.Create;
+  Result := r;
+  if pyvartag(v) = 6 then
+  begin
+    sv := pystr_of(v);
+    for i := 1 to Length(sv) do r.add(pystr_ofchar(sv[i]));
+    Exit;
+  end;
+  if pyvartag(v) <> 7 then
+  begin
+    WriteLn('TypeError: set() argument must be iterable');
+    Halt(1);
+  end;
+  o := TObject(pyvarobj(v));
+  if o is TPyList then
+  begin
+    for i := 0 to TPyList(o).count - 1 do r.add(TPyList(o).at(i));
+    Exit;
+  end;
+  if o is TPyDict then
+  begin
+    kl := TPyDict(o).keylist;
+    for i := 0 to kl.count - 1 do r.add(kl.at(i));
+    Exit;
+  end;
+  WriteLn('TypeError: set() argument must be iterable');
+  Halt(1);
 end;
 
 function pydict_fromkeys(l: TPyList): TPyDict;

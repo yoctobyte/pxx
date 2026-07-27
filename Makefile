@@ -208,6 +208,18 @@ test-nilpy: $(COMPILER)
 	# one Exception class serving both the Python and the sysutils surface
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
 	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	# a method on a dynamically-typed receiver, dispatched across unrelated classes
+	./$(COMPILER) test/test_nilpy_dynamic_dispatch.npy /tmp/test_nilpy_dyndisp26
+	test "$$(/tmp/test_nilpy_dyndisp26)" = "$$(printf '%b' 'cand3\nx\nsum1.5\ncand3, x, sum1.5\nDET:x')"
+	# Python or/and yield an OPERAND; an empty string is falsy
+	./$(COMPILER) test/test_nilpy_truthy_value_ops.npy /tmp/test_nilpy_truthy26
+	test "$$(/tmp/test_nilpy_truthy26)" = "$$(printf '%b' 'ab\nfallback\n7\n3\nb\n0\nx\nNone\nempty\ncond ok\nempty is falsy\nloop 0\n5')"
+	# a class-level `name = <literal>` attribute, and `del <local>`
+	./$(COMPILER) test/test_nilpy_class_attr.npy /tmp/test_nilpy_clsattr26
+	test "$$(/tmp/test_nilpy_clsattr26)" = "$$(printf '%b' 'note_counting 3 0.5 True\ncadence\nnote_counting 3')"
+	# r-prefixed raw strings, and set(iterable)
+	./$(COMPILER) test/test_nilpy_raw_string_set.npy /tmp/test_nilpy_rawset26
+	test "$$(/tmp/test_nilpy_rawset26)" = "$$(printf '%b' 'C#\n4\nFalse\nd\\d+\n3\n0\n2\n4\n1')"
 	# import X as Y (the alias wins over a same-named compiled unit)
 	./$(COMPILER) test/test_nilpy_import_alias.npy /tmp/test_nilpy_import_alias26
 	test "$$(/tmp/test_nilpy_import_alias26)" = "$$(printf '4\n7\n2')"
@@ -3233,6 +3245,18 @@ test-core: $(COMPILER)
 	# one Exception class serving both the Python and the sysutils surface
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
 	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	# a method on a dynamically-typed receiver, dispatched across unrelated classes
+	./$(COMPILER) test/test_nilpy_dynamic_dispatch.npy /tmp/test_nilpy_dyndisp26
+	test "$$(/tmp/test_nilpy_dyndisp26)" = "$$(printf '%b' 'cand3\nx\nsum1.5\ncand3, x, sum1.5\nDET:x')"
+	# Python or/and yield an OPERAND; an empty string is falsy
+	./$(COMPILER) test/test_nilpy_truthy_value_ops.npy /tmp/test_nilpy_truthy26
+	test "$$(/tmp/test_nilpy_truthy26)" = "$$(printf '%b' 'ab\nfallback\n7\n3\nb\n0\nx\nNone\nempty\ncond ok\nempty is falsy\nloop 0\n5')"
+	# a class-level `name = <literal>` attribute, and `del <local>`
+	./$(COMPILER) test/test_nilpy_class_attr.npy /tmp/test_nilpy_clsattr26
+	test "$$(/tmp/test_nilpy_clsattr26)" = "$$(printf '%b' 'note_counting 3 0.5 True\ncadence\nnote_counting 3')"
+	# r-prefixed raw strings, and set(iterable)
+	./$(COMPILER) test/test_nilpy_raw_string_set.npy /tmp/test_nilpy_rawset26
+	test "$$(/tmp/test_nilpy_rawset26)" = "$$(printf '%b' 'C#\n4\nFalse\nd\\d+\n3\n0\n2\n4\n1')"
 	# import X as Y (the alias wins over a same-named compiled unit)
 	./$(COMPILER) test/test_nilpy_import_alias.npy /tmp/test_nilpy_import_alias26
 	test "$$(/tmp/test_nilpy_import_alias26)" = "$$(printf '4\n7\n2')"

@@ -765,6 +765,8 @@ function PyMakeVariantField(baseNode: Integer; const fname: AnsiString; var tk: 
 function PyKwArgIndex(mpi, firstParam: Integer): Integer; forward; { Nil Python `name=expr` call argument (pyparser.inc) }
 procedure PyBindKwArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer); forward; { Nil Python keyword-argument reorder (pyparser.inc) }
 procedure PyPackStarArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer); forward; { Nil Python `*args`/`**kwargs` call-site packing (pyparser.inc) }
+function PyIsSetCall: Boolean; forward;   { Nil Python `set(...)` builtin, user definition permitting (pyparser.inc) }
+function PyParseEmptySet: Integer; forward; { Nil Python set() / set(iterable) (pyparser.inc) }
 
 procedure ParseArgExpr;
 { A call ARGUMENT under NilPy must be parsed by the Python precedence chain
@@ -7517,6 +7519,16 @@ begin
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
   begin
     CurASTNode := PyClassCreateExpr;
+    LastExprTk := tyClass;
+    Exit;
+  end;
+  { `set(xs)` in ANY expression position (`return set(...)`, an argument, a
+    comparison). It used to be recognised only as an assignment RHS, and only in
+    its empty form. PyIsSetCall stands down when the program declares its own
+    `set`, which songformatter's settings.py does. }
+  if PyExprMode and PyIsSetCall then
+  begin
+    CurASTNode := PyParseEmptySet;
     LastExprTk := tyClass;
     Exit;
   end;

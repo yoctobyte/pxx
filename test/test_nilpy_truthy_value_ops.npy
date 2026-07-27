@@ -1,0 +1,39 @@
+# Python's `or` / `and` yield an OPERAND, not a bool — `given or "default"` is
+# the ubiquitous default-value idiom and songformatter writes it constantly.
+# Two Booleans keep the plain boolean lowering; anything else takes operand
+# semantics. In a condition the two readings agree, since the if/while path
+# wraps the result in the same truthiness test.
+#
+# Also here: an EMPTY STRING is falsy. A string used as a raw condition is a
+# pointer and an empty literal's pointer is not nil, so `"" or x` used to take
+# the empty arm — the truthy-side twin of bug-nilpy-not-on-string-always-true.
+v = "AB"
+x = v or ""
+print(x.lower())
+print("" or "fallback")
+print(0 or 7)
+print(3 or 9)
+print("a" and "b")
+print(0 and 5)
+print("x" or None)
+print("" or None)
+
+xs = []
+print(xs or "empty")
+if v or xs:
+    print("cond ok")
+if not "":
+    print("empty is falsy")
+
+n = 0
+while n or True:
+    print("loop", n)
+    break
+
+# short circuit is preserved: the right arm must not evaluate
+def boom() -> int:
+    print("BOOM")
+    return 1
+
+ok = 5 or boom()
+print(ok)
