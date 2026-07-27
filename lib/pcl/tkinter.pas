@@ -49,8 +49,21 @@ type
     procedure grid_columnconfigure(index: Integer = 0; weight: Integer = -1);
     procedure grid_rowconfigure(index: Integer = 0; weight: Integer = -1);
 
-    { common configuration }
-    procedure configure(const opts: AnsiString);
+    { common configuration. Two spellings on purpose: Python writes
+      `w.configure(state="disabled")`, i.e. OPTIONS BY NAME, and NilPy binds
+      keyword arguments by name over any subset — so the options an application
+      actually sets are declared here as optional parameters. The raw-string form
+      stays for anything not yet named (and is what the named form builds).
+      An option this façade does not know is a compile error at the call site,
+      which is the point: silently dropping a widget option would show up as a
+      layout that is subtly wrong rather than as a diagnostic. }
+    procedure configure(const state: AnsiString = ''; const scrollregion: AnsiString = '';
+                        const yscrollcommand: AnsiString = '';
+                        const xscrollcommand: AnsiString = '';
+                        const text: AnsiString = ''; const background: AnsiString = '';
+                        width: Integer = -1; height: Integer = -1);
+    { the raw form, for an option this façade has not named yet }
+    procedure configure_raw(const opts: AnsiString);
     function cget(const option: AnsiString): AnsiString;
     procedure bind(const sequence, script: AnsiString);
     function winfo_width: Integer;
@@ -252,9 +265,22 @@ begin
          TkiOptInt('weight', weight));
 end;
 
-procedure Widget.configure(const opts: AnsiString);
+procedure Widget.configure_raw(const opts: AnsiString);
 begin
   TkEval(path + ' configure ' + opts);
+end;
+
+procedure Widget.configure(const state, scrollregion, yscrollcommand,
+                           xscrollcommand, text, background: AnsiString;
+                           width, height: Integer);
+var o: AnsiString;
+begin
+  o := TkiOptStr('state', state) + TkiOptStr('scrollregion', scrollregion)
+     + TkiOptStr('yscrollcommand', yscrollcommand)
+     + TkiOptStr('xscrollcommand', xscrollcommand)
+     + TkiOptStr('text', text) + TkiOptStr('background', background)
+     + TkiOptInt('width', width) + TkiOptInt('height', height);
+  if o <> '' then TkEval(path + ' configure' + o);
 end;
 
 function Widget.cget(const option: AnsiString): AnsiString;
