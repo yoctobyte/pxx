@@ -9484,8 +9484,11 @@ begin
     else if CurTok.Kind = tkNil then Next
     else PyParseType;
   end
-  else if isCtor then
-    Error('Nil Python: __init__ must be annotated -> None');
+  { An UNANNOTATED `__init__` is ordinary Python — `def __init__(self, parent):`
+    is what songformatter's SettingsEditor writes — and it registers exactly as
+    the annotated form does: PyMethodRetType yields tyUnknown for both, which
+    the member pre-pass maps to tyInteger, so accepting it here changes no
+    signature. The requirement was a syntax rule with nothing behind it. }
   Expect(tkColon, ':'); Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
   bodyStart := TokPos - 1;
   fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]); AppendChar(fullName, '.');

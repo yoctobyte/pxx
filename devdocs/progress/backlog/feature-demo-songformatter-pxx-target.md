@@ -293,6 +293,42 @@ Rung 3 (forwarding `*args`/`**kwargs` into a fixed-arity callee) is still open a
 is what settings.py's `getF` ultimately needs; it did not block the compile any
 further because the wall above it moved first.
 
+## Wall catalog, seventh pass (2026-07-27 — a long run of frontend work)
+
+Landed this session, each one a wall a module was standing on: `*args`/`**kwargs`
+(all three rungs — collection, `print(*args)`, and forwarding into a fixed-arity
+callee), `import X as Y`, unit-qualified class construction (`tk.Frame(...)`),
+one Exception class serving both the Python and the sysutils surface, runtime
+method dispatch across unrelated classes, Python `or`/`and` returning an OPERAND,
+empty-string falsiness, raw strings, `set(iterable)`, class attributes,
+`del <local>`, dict for-in over a variant, and an unannotated `__init__`.
+
+| module | first wall now |
+| --- | --- |
+| `key_analysis.py` | nested comprehension — [[feature-nilpy-nested-comprehension]] |
+| `settings.py` | the tkinter façade's surface (`grid_rowconfigure`, …) — [[feature-nilpy-tkinter-facade]] |
+| `convertrawtext.py` | `import tempfile` — no shim yet |
+| `SongFormatter.py` | `from pathlib import Path` — no shim yet |
+
+`settings.py` also has a RUNTIME blocker even once it compiles:
+[[bug-nilpy-omitted-variant-default-segfaults]] — reading a variant parameter
+that carries a default crashes. That ticket has the measured matrix.
+
+**What the remaining work looks like, honestly.** The frontend gaps are nearly
+worked out; what is left is mostly LIBRARY surface, and it is not small:
+
+1. **The tkinter façade is ~9 classes and 72 members**; songformatter needs Menu,
+   Notebook/ttk, Text, Toplevel, PanedWindow, filedialog, messagebox, the event
+   system (`bind`, `event_generate`), and the rest of the geometry managers. This
+   is Track B work and is the single biggest item left.
+2. **`tempfile` and `pathlib`** — two small T1 shims (NamedTemporaryFile with
+   `.name`/`.close()`; Path with `/`, `.stem`, `.name`, `.is_file`, `.open`).
+3. **`markdown` and `tkhtmlview`** for SongFormatter's help window — third-party,
+   and the honest answer there is probably to make that window optional rather
+   than shim a Markdown renderer.
+4. **The nested comprehension** and the defaulted-variant-parameter crash, both
+   filed with the analysis needed to start.
+
 ## Naming strategy reversed (2026-07-26, Rene)
 
 The "honest name, not the reportlab name" decision is REVERSED. It put a change in

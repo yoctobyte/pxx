@@ -47,6 +47,7 @@ type
     procedure grid(row: Integer = -1; column: Integer = -1;
                    const sticky: AnsiString = '');
     procedure grid_columnconfigure(index: Integer = 0; weight: Integer = -1);
+    procedure grid_rowconfigure(index: Integer = 0; weight: Integer = -1);
 
     { common configuration }
     procedure configure(const opts: AnsiString);
@@ -96,7 +97,10 @@ type
     procedure set_(const first, last: AnsiString);
   end;
 
-  Label_ = class(Widget)     { `Label` collides with nothing, but keep symmetry }
+  { Named exactly as Python names it. The trailing-underscore spelling was a
+    symmetry habit, and it cost the mission its whole point: an application
+    writes `tk.Label(...)` and must not have to write anything else. }
+  Label = class(Widget)
   public
     constructor Create(master: Widget; const text: AnsiString = '';
                        const anchor: AnsiString = ''; const font: AnsiString = '');
@@ -137,8 +141,15 @@ type
     procedure set_(value: Boolean);
   end;
 
-{ The root window. `Tk()` in Python; here a function, since the root is a
-  process-wide singleton in Tcl/Tk anyway. }
+  { The root window as Python spells it: `root = tk.Tk()`. Tcl's root is a
+    process-wide singleton, so every construction hands back the same '.' path;
+    the class exists so the application's own spelling compiles. }
+  Tk = class(Widget)
+  public
+    constructor Create;
+  end;
+
+{ The older function spelling, kept for the example and any caller that used it. }
 function Tk_: Widget;
 procedure mainloop;
 
@@ -232,6 +243,12 @@ end;
 procedure Widget.grid_columnconfigure(index: Integer; weight: Integer);
 begin
   TkEval('grid columnconfigure ' + path + ' ' + TkiIntStr(index) +
+         TkiOptInt('weight', weight));
+end;
+
+procedure Widget.grid_rowconfigure(index: Integer; weight: Integer);
+begin
+  TkEval('grid rowconfigure ' + path + ' ' + TkiIntStr(index) +
          TkiOptInt('weight', weight));
 end;
 
@@ -408,7 +425,7 @@ end;
 
 { ---- Label / Entry / Checkbutton ---------------------------------------- }
 
-constructor Label_.Create(master: Widget; const text, anchor, font: AnsiString);
+constructor Label.Create(master: Widget; const text, anchor, font: AnsiString);
 begin
   TkiEnsureStarted;
   path := TkiNextPath(master);
@@ -417,7 +434,7 @@ begin
          TkiOptStr('font', font));
 end;
 
-procedure Label_.set_text(const value: AnsiString);
+procedure Label.set_text(const value: AnsiString);
 begin
   TkEval(path + ' configure -text {' + value + '}');
 end;
@@ -497,6 +514,13 @@ begin
 end;
 
 { ---- root --------------------------------------------------------------- }
+
+constructor Tk.Create;
+begin
+  TkiEnsureStarted;
+  path := '.';
+  kind := 'toplevel';
+end;
 
 function Tk_: Widget;
 var w: Widget;
