@@ -200,6 +200,9 @@ test-nilpy: $(COMPILER)
 	# (a PROGRAM named Strings) ahead of the RTL unit tk.pas uses - the resolver
 	# searches the source file's own directory first.
 	./$(COMPILER) examples/tk/tkinter_facade.npy /tmp/test_nilpy_tkinter26
+	# a field assigned `tk.Canvas(...)` keeps its class in ANY method, so calls on
+	# it resolve statically and take keyword arguments (same X-display caveat)
+	./$(COMPILER) examples/tk/field_class_identity.npy /tmp/test_nilpy_fldcls26
 	./$(COMPILER) test/test_nilpy_kwargs_by_name.npy /tmp/test_nilpy_kwname26
 	test "$$(/tmp/test_nilpy_kwname26)" = "$$(printf '%b' 'contiguous: root 7 hi z\ninterior hole: 0 skipped-width z\nonly the last: 0  last-only\nnone given: 0  z')"
 	# a unit-qualified class construction (mod.Class(args))
@@ -3267,6 +3270,9 @@ test-core: $(COMPILER)
 	# (a PROGRAM named Strings) ahead of the RTL unit tk.pas uses - the resolver
 	# searches the source file's own directory first.
 	./$(COMPILER) examples/tk/tkinter_facade.npy /tmp/test_nilpy_tkinter26
+	# a field assigned `tk.Canvas(...)` keeps its class in ANY method, so calls on
+	# it resolve statically and take keyword arguments (same X-display caveat)
+	./$(COMPILER) examples/tk/field_class_identity.npy /tmp/test_nilpy_fldcls26
 	./$(COMPILER) test/test_nilpy_kwargs_by_name.npy /tmp/test_nilpy_kwname26
 	test "$$(/tmp/test_nilpy_kwname26)" = "$$(printf '%b' 'contiguous: root 7 hi z\ninterior hole: 0 skipped-width z\nonly the last: 0  last-only\nnone given: 0  z')"
 	# a unit-qualified class construction (mod.Class(args))

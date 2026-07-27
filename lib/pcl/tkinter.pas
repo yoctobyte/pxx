@@ -32,7 +32,15 @@ unit tkinter;
 
 interface
 
-uses tk;
+{ pylib on purpose. A façade's job is to accept what the APPLICATION writes, and
+  real Python passes Python shapes: `create_window((0, 0), window=<widget>)` hands
+  over a TUPLE and a widget OBJECT, not two ints and a Tcl path. Reading those
+  needs the variant/TPyList runtime. Ruled in deliberately (Track U,
+  decide-pcl-may-use-pylib): PCL is ours, and a façade that cannot take the
+  argument the app already writes would push the edit into the app — exactly what
+  the compile-as-is mission forbids. Pascal-only PCL users who never touch this
+  unit never link it. }
+uses tk, pylib;
 
 type
   Widget = class
@@ -86,6 +94,13 @@ type
                        height: Integer = -1);
     function create_window(x, y: Integer; const window: AnsiString;
                            const anchor: AnsiString): Integer;
+    { the Python spellings: a tuple coordinate and/or a widget as the window.
+      `create_window((0, 0), window=self.content, anchor="nw")` is what tkinter
+      applications actually write. }
+    function create_window(const pos: Variant; window: Widget;
+                           const anchor: AnsiString = ''): Integer; overload;
+    function create_window(x, y: Integer; window: Widget;
+                           const anchor: AnsiString = ''): Integer; overload;
     function create_text(x, y: Integer; const text: AnsiString;
                          const anchor: AnsiString = ''; const fill: AnsiString = '';
                          const font: AnsiString = ''): Integer;
@@ -94,7 +109,16 @@ type
     function create_rectangle(x1, y1, x2, y2: Integer;
                               const outline: AnsiString = '';
                               const fill: AnsiString = ''): Integer;
-    procedure itemconfigure(item: Integer; const opts: AnsiString);
+    { the raw form, mirroring configure_raw: an option this façade has not
+      named yet. Kept under a DIFFERENT name — a same-name overload made the
+      keyword form ambiguous, and NilPy binds keyword arguments against the
+      statically chosen overload. }
+    procedure itemconfigure_raw(item: Integer; const opts: AnsiString);
+    { the Python spelling: options BY NAME, like Widget.configure }
+    procedure itemconfigure(item: Integer; width: Integer = -1;
+                            height: Integer = -1; const state: AnsiString = '';
+                            const fill: AnsiString = '';
+                            const text: AnsiString = '');
     procedure delete_all;
     function bbox(item: Integer): AnsiString;
     procedure yview(const args: AnsiString);
@@ -370,6 +394,25 @@ begin
                    TkiOptStr('anchor', anchor)));
 end;
 
+function Canvas.create_window(const pos: Variant; window: Widget;
+                              const anchor: AnsiString): Integer;
+{ `pos` is a 2-sequence (Python tuple or list — both are a TPyList here). }
+var px, py: Integer;
+begin
+  px := pyvar_to_int(pyvar_getitem(pos, 0));
+  py := pyvar_to_int(pyvar_getitem(pos, 1));
+  create_window := create_window(px, py, window, anchor);
+end;
+
+function Canvas.create_window(x, y: Integer; window: Widget;
+                              const anchor: AnsiString): Integer;
+begin
+  if window = nil then
+    create_window := create_window(x, y, '', anchor)
+  else
+    create_window := create_window(x, y, window.path, anchor);
+end;
+
 function Canvas.create_text(x, y: Integer; const text, anchor, fill,
                             font: AnsiString): Integer;
 begin
@@ -396,7 +439,15 @@ begin
                       TkiOptStr('outline', outline) + TkiOptStr('fill', fill)));
 end;
 
-procedure Canvas.itemconfigure(item: Integer; const opts: AnsiString);
+procedure Canvas.itemconfigure(item: Integer; width, height: Integer;
+                               const state, fill, text: AnsiString);
+begin
+  itemconfigure_raw(item, TkiOptInt('width', width) + TkiOptInt('height', height) +
+                TkiOptStr('state', state) + TkiOptStr('fill', fill) +
+                TkiOptStr('text', text));
+end;
+
+procedure Canvas.itemconfigure_raw(item: Integer; const opts: AnsiString);
 begin
   TkEval(path + ' itemconfigure ' + TkiIntStr(item) + ' ' + opts);
 end;

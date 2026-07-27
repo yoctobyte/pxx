@@ -1,0 +1,22 @@
+# A field assigned a QUALIFIED construction keeps its class — in any method, not
+# only __init__ — so calls on it resolve statically and bind keyword arguments.
+import tkinter as tk
+
+
+class Panel:
+    def __init__(self, master):
+        self.master = master
+
+    def build(self):
+        self.canvas = tk.Canvas(self.master, highlightthickness=0)
+        self.content = tk.Frame(self.canvas)
+        self.item = self.canvas.create_window((0, 0), window=self.content, anchor="nw")
+        self.text = self.canvas.create_text(0, 0, text="hello", anchor="nw")
+        self.canvas.itemconfigure(self.item, width=120)
+        return self.item
+
+
+root = tk.Tk()
+p = Panel(root)
+print(p.build() > 0, p.text > 0)
+print(p.canvas.winfo_children() == "")

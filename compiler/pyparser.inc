@@ -1797,6 +1797,24 @@ begin
       PyInferLastCi := FindUClass('TPyList');
     Exit;
   end;
+  { A QUALIFIED construction — `tk.Canvas(root)`, the form every tkinter
+    application writes. Unqualified `Canvas(root)` was typed below; this one was
+    not, so `self.canvas = tk.Canvas(root)` recorded a field with no class
+    identity and every later `self.canvas.method(...)` fell through to the
+    dynamic-attribute path — which cannot bind keyword arguments, so
+    `self.canvas.create_text(0, 0, text="x")` was a parse error while the same
+    call through a LOCAL compiled. (The module qualifier is a unit alias here:
+    NilPy turns `import tkinter as tk` into a uses-clause alias, so the class is
+    found by its bare name.) }
+  if (startIdx + 2 < endIdx) and (Tokens[startIdx].Kind = tkIdent) and
+     (Tokens[startIdx + 1].Kind = tkDot) and (Tokens[startIdx + 2].Kind = tkIdent) and
+     (startIdx + 3 < endIdx) and (Tokens[startIdx + 3].Kind = tkLParen) and
+     (FindUClass(GetTokenStr(startIdx + 2)) >= 0) then
+  begin
+    Result := tyClass;
+    PyInferLastCi := FindUClass(GetTokenStr(startIdx + 2));
+    Exit;
+  end;
   if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkIdent) and
      IsClassType(GetTokenStr(startIdx)) and (startIdx + 1 < endIdx) and
      (Tokens[startIdx + 1].Kind = tkLParen) and
@@ -10033,8 +10051,14 @@ begin
           UMthVirSlot[mmi] := slot;
         end;
       end;
-      { Constructor assignments define fields: self.name = annotated_param. }
-      if isCtor then
+      { `self.name = ...` declares a field — in ANY method, not only the
+        constructor. Python creates the attribute wherever the assignment runs,
+        and real classes split their setup: songformatter's SettingsFrame builds
+        its widgets in `_build_layout`, so restricting this scan to `__init__`
+        left `self.canvas` unregistered and every use of it fell through to the
+        dynamic-attribute path (no class identity, no keyword arguments, no
+        method resolution). The scan only ADDS fields, and a name already
+        registered by an earlier method keeps its first type. }
       begin
         while (j < bodyEnd) and (Tokens[j].Kind <> tkIndent) do Inc(j);
         Inc(j);
@@ -10071,8 +10095,28 @@ begin
             else
             begin
               rhsAt := j + 4;
-              tk := PyTypeFromTokenIndex(rhsAt);
-              fldRec := PyRecFromTokenIndex(rhsAt);
+              { A QUALIFIED construction first — `self.canvas = tk.Canvas(root)`.
+                Reading the type off the FIRST token would resolve the module
+                alias `tk`, and a class may well be named for it (tkinter's own
+                `Tk` root window, matched case-insensitively): the field was then
+                recorded as a Tk, so `self.canvas.create_text(...)` found no such
+                method and fell through to the dynamic-attribute path — which
+                cannot bind keyword arguments. }
+              tk := tyUnknown;
+              fldRec := REC_NONE;
+              if (rhsAt + 3 < bodyEnd) and (Tokens[rhsAt].Kind = tkIdent) and
+                 (Tokens[rhsAt + 1].Kind = tkDot) and (Tokens[rhsAt + 2].Kind = tkIdent) and
+                 (Tokens[rhsAt + 3].Kind = tkLParen) and
+                 (FindUClass(GetTokenStr(rhsAt + 2)) >= 0) then
+              begin
+                tk := tyClass;
+                fldRec := REC_UCLASS_BASE + FindUClass(GetTokenStr(rhsAt + 2));
+              end;
+              if tk = tyUnknown then
+              begin
+                tk := PyTypeFromTokenIndex(rhsAt);
+                fldRec := PyRecFromTokenIndex(rhsAt);
+              end;
               if (tk = tyUnknown) and (Tokens[rhsAt].Kind = tkIdent) then
               begin
                 rhsName := GetTokenStr(rhsAt);
@@ -10121,6 +10165,14 @@ begin
                 fldRec := REC_NONE;
                 fldSig := -1;
               end
+              else if not isCtor then
+                { OUTSIDE the constructor an unreadable right-hand side is not a
+                  diagnostic: `self.items = self.load()` in a helper is ordinary
+                  Python, and the field is already declared (or will be) where
+                  its type IS readable. The variant keeps the runtime tag; only
+                  the ctor, where a field is normally introduced, still insists
+                  on something it can type. }
+                tk := tyVariant
               else
                 ErrorAt(Tokens[j].Line,
                         'Nil Python: cannot infer the type of field self.'

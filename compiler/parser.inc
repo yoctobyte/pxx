@@ -3090,7 +3090,24 @@ begin
     while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) and
           (nArgs < MAX_PROC_PARAMS) do
     begin
-      ParseExpr;
+      { NilPy `name=expr`: step over the keyword before probing, or the name is
+        parsed as an expression and reported as an undefined variable — an
+        OVERLOADED façade method could not be called with keyword arguments at
+        all (`canvas.create_window((0,0), window=w)`). The probe only needs the
+        argument's TYPE; which parameter it binds to is settled later by
+        PyKwArgIndex. }
+      if isNilPy and (CurTok.Kind = tkIdent) and
+         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign) then
+      begin
+        Next;   { the name }
+        Next;   { the '=' }
+      end;
+      { ParseArgExpr, not ParseExpr: under NilPy an argument obeys PYTHON
+        precedence and grammar, so a tuple argument `(0, 0)` is one expression
+        here. Probed with the Pascal chain it stopped at the comma, typed the
+        argument Integer and counted the tuple as two — which then ranked a
+        `(x, y: Integer)` overload above the tuple one. }
+      ParseArgExpr;
       argTk[nArgs] := IntToTypeKind(ASTTk[CurASTNode]);
       if argTk[nArgs] = tyClass then
         argRec[nArgs] := ResolveNodeRec(CurASTNode)
@@ -4730,6 +4747,8 @@ begin
           node := PyMakeDynAttrSet(node, fieldName, callIndNode);
           tk := tyUnknown; Result := node; Exit;
         end;
+                ' clsname=', PyRawName(UClsNOff[recName - REC_UCLASS_BASE], UClsNLen[recName - REC_UCLASS_BASE]),
+                ' findCanvas=', FindUClass('Canvas'), ' UClsCount=', UClsCount);
         node := PyMakeDynAttrGet(node, fieldName);
         tk := tyVariant; recName := REC_NONE;
         Continue;
@@ -8154,9 +8173,17 @@ begin
                   FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
                 mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
               end;
+              nArgs := 0;
               while mai <= Procs[mpi].ParamCount - 1 do
               begin
-                if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+                { NilPy `key=expr` here too. This is the loop a receiver reached
+                  through a FIELD lands in (`self.canvas.create_window(...)`),
+                  and it was the one method-call path with no keyword binding —
+                  so an ordinary tkinter call worked through a local and failed
+                  through a field (bug-nilpy-kwargs-on-a-field-receiver). }
+                kwIdx := PyKwArgIndex(mpi, 1);
+                if kwIdx > 0 then slotIdx := kwIdx - 1 else slotIdx := mai;
+                if Procs[mpi].Params[slotIdx].IsRef or Procs[mpi].Params[slotIdx].IsArray then
                 begin
                   if ByRefArgStartsExpression then
                   begin
@@ -8172,15 +8199,30 @@ begin
                 end
                 else begin ParseArgExpr; mexprNode := CurASTNode; end;
                 margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
+                ASTIVal[margSeq] := kwIdx;
                 ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
-                if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then
+                Inc(nArgs);
+                if (kwIdx = 0) and (mai < Procs[mpi].ParamCount-1) and
+                   CanFillDefaultsFrom(mpi, mai+1) then
                 begin
                   FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
                   mai := Procs[mpi].ParamCount-1;
                 end
-                else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',')
+                else if mai < Procs[mpi].ParamCount-1 then
+                begin
+                  if isNilPy and (CurTok.Kind = tkRParen) then Break;
+                  Expect(tkComma, ',');
+                end
               else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
                 Inc(mai);
+              end;
+              { reorder keyword arguments into declaration order and fill the
+                holes below the highest bound parameter }
+              margSeq := ASTRight[ASTLeft[mcallNode]];   { first REAL arg (past Self) }
+              if margSeq >= 0 then
+              begin
+                PyBindKwArgs(mpi, margSeq, mlastArg, nArgs);
+                ASTRight[ASTLeft[mcallNode]] := margSeq;
               end;
               Expect(tkRParen, ')');
             end;

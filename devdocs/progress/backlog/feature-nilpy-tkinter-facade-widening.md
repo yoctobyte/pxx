@@ -82,3 +82,41 @@ argument when the callee takes N ordinals — magic, and invisible at the call
 site) or leaving the tuple form unsupported (which would mean an app-side edit,
 against this project's mission). Recommendation: the `uses pylib` route, scoped
 to a `tkinter`-only helper unit so plain Pascal PCL users never link it.
+
+## The tuple wall is DOWN; callbacks are the next one (2026-07-27, later)
+
+`decide-pcl-may-use-pylib` is RESOLVED by Rene: *"our PCL will be our PCL. cheats
+allowed."* — a PCL façade may `uses pylib` to accept Python-shaped arguments.
+`lib/pcl/tkinter.pas` now does, and `create_window((0, 0), window=<widget>,
+anchor=...)` compiles.
+
+Four frontend bugs surfaced behind that one line, all fixed:
+
+1. The overload probe parsed `name=expr` as an expression → "undefined variable"
+   for every keyword argument to an OVERLOADED method.
+2. The probe used the Pascal expression chain, so a tuple argument `(0, 0)`
+   stopped at the comma — it typed the argument Integer and counted two, which
+   ranked an `(x, y: Integer)` overload above the tuple one.
+3. `self.canvas = tk.Canvas(...)` recorded the field's class from the FIRST
+   token, so the module alias `tk` resolved to tkinter's `Tk` class (Pascal is
+   case-insensitive) — the field became a Tk and every use of it fell through to
+   the dynamic-attribute path.
+4. Field declarations were scanned in `__init__` ONLY. Real classes split their
+   setup (`_build_layout`), so those fields were invisible.
+
+### Next: CALLBACKS
+
+`settings.py` now stops at
+
+```python
+widget.bind("<MouseWheel>", self._on_mousewheel, add="+")
+```
+
+Two things: an `add=` parameter (trivial), and a **bound method as the callback**
+— the real work. `lib/pcl/tk.pas` has no command registration at all: it only
+`Tcl_Eval`s strings. The shape needed is `Tcl_CreateCommand` (already the right
+external to add, next to `Tcl_Eval`) registering one dispatcher that carries an
+index into a table of NilPy callables, plus `command=` on Button/ttk.Button and
+the `event` object (`.delta`, `.num`, `.width`, `.widget`) the handlers read.
+That single feature unblocks `settings.py`, `convertrawtext.py`'s editor and the
+whole GUI MVP — it is the biggest remaining item on the tkinter side.

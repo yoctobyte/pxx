@@ -3,9 +3,16 @@ summary: "decide: may a PCL library unit use pylib (Python runtime types) to acc
 type: decision
 track: U
 prio: 55
+resolved: 2026-07-27
 ---
 
-# May `lib/pcl/**` depend on pylib?
+# May `lib/pcl/**` depend on pylib? — RESOLVED: YES
+
+**Rene, 2026-07-27: "our PCL will be our PCL. cheats allowed."** Option 1 taken.
+`lib/pcl/tkinter.pas` now `uses pylib` and accepts a tuple coordinate; the same
+licence covers every future Python-shaped argument a façade meets. Kept for the
+reasoning, not as an open question.
+
 
 - **Type:** decision — **Track U**
 - **Raised:** 2026-07-27, from songformatter's `settings.py`.
