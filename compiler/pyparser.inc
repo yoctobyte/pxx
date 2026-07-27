@@ -5209,6 +5209,7 @@ end;
 
 function PyParseBlock: Integer; forward;
 function PyParseStatement: Integer; forward;
+procedure PyParseImportRun; forward;   { `import` / `from ... import`, wherever it appears (pyparser.inc) }
 
 { Spill incoming integer args into their frame slots, following the internal
   x86-64 call convention: up to 6 params arrive in rdi rsi rdx rcx r8 r9;
@@ -7260,6 +7261,16 @@ begin
     other censused use is `del lst[a:]`, which needs slices and is not this
     ticket. Parsed as a statement rather than through the expression grammar
     because `d[k]` on its own would compile to a subscript READ. }
+  { An `import` in the body — Python allows one anywhere, and a real file puts a
+    block of them after its docstring or a try/except. Same code as the leading
+    run (PyParseImportRun); before this they were consumed and dropped. }
+  if (CurTok.Kind = tkUses) or (PyIsIdent('from') and (TokPos < TokCount) and
+      (Tokens[TokPos].Kind = tkIdent)) then
+  begin
+    PyParseImportRun;
+    Result := -1;
+    Exit;
+  end;
   if PyIsIdent('del') then
   begin
     Next;
@@ -9853,6 +9864,157 @@ begin
   if isDC then PyEmitDataclassCtor(ci);
 end;
 
+{ One run of `import` / `from ... import` statements, wherever they appear.
+  Extracted from ParsePyProgram's leading-import loop so that an import which is
+  NOT at the top of the file is handled by the SAME code. Python allows an import
+  anywhere, and songformatter's convertrawtext.py puts a whole block of them
+  after a try/except — those were silently IGNORED (no error, no registration),
+  which surfaced much later as `undefined variable (tempfile)` at the first use.
+  Silently dropping an import is the worst shape a gap can take. }
+procedure PyParseImportRun;
+var impName: AnsiString; isCount: Boolean; aStrIdx, realStrIdx: Integer;
+begin
+  while (CurTok.Kind = tkUses) or PyIsIdent('from') do
+  begin
+    if PyIsIdent('from') then
+    begin
+      Next;
+      if CurTok.Kind <> tkIdent then
+        Error('Nil Python: expected a module name after from');
+      impName := CurTok.SVal;
+      Next;
+      if CurTok.Kind <> tkUses then
+        Error('Nil Python: expected import after from ' + impName);
+      Next;
+      { itertools is consumed-but-unresolved for now: uforth only needs
+        count(); its use sites wall visibly until a shim lands (Track B). }
+      { `collections` joins these: the names it exports that we support are
+        ordinary pylib symbols (Counter -> pylib's TPyCounter constructors), so
+        consuming the from-import is enough — an unsupported name from it walls
+        visibly at its use site as an undefined variable, same as itertools. }
+      if CaseEqual(impName, 'dataclasses') or CaseEqual(impName, 'typing') or
+         CaseEqual(impName, 'itertools') or CaseEqual(impName, 'collections') then
+      begin
+        while CurTok.Kind = tkIdent do
+        begin
+          isCount := CaseEqual(impName, 'itertools') and
+                     CaseEqual(CurTok.SVal, 'count');
+          if isCount then PyCountAlias := CurTok.SVal;
+          Next;
+          if PyIsIdent('as') then
+          begin
+            Next;
+            if CurTok.Kind = tkIdent then
+            begin
+              if isCount then PyCountAlias := CurTok.SVal;
+              Next;
+            end;
+          end;
+          if not Eat(tkComma) then Break;
+        end;
+      end
+      else
+      begin
+        { `from X import a, b` where X is a resolvable UNIT: pull the unit and
+          let the names resolve unqualified, which is how `import X` already
+          works (unit scope is flat). This is the form real code uses to reach a
+          shim — `from configparser import ConfigParser`. An unknown module still
+          fails, with the unit resolver's own "unit source not found: X". }
+        ParseUsesUnit(impName);
+        while CurTok.Kind = tkIdent do
+        begin
+          Next;
+          if PyIsIdent('as') then
+          begin
+            Next;
+            if CurTok.Kind = tkIdent then Next;
+          end;
+          if not Eat(tkComma) then Break;
+        end;
+      end;
+      PySkipNewlines;
+    end
+    else
+    begin
+      Next;
+      while CurTok.Kind = tkIdent do
+      begin
+        { Python stdlib modules without a shim yet: consume-and-defer, use
+          sites wall visibly (same policy as itertools above). Everything
+          else goes through the unit resolver (sqlite3, C headers, ...). }
+        impName := CurTok.SVal;
+        if CaseEqual(impName, 'sys') or CaseEqual(impName, 'os') or
+           CaseEqual(impName, 'textwrap') or CaseEqual(impName, 'select') or
+           CaseEqual(impName, 'itertools') then
+          { skip }
+        else
+          ParseUsesUnit(impName);
+        Next;
+        { `import X as Y` — Python's module alias, and the same thing a Pascal
+          `uses X as Y` already does (feature-uses-alias-as): register the alias
+          with the unit resolver so a `Y.Sym` qualifier resolves onto X's
+          symbols. Unqualified names keep working either way, since unit scope
+          is flat — the alias only has to make the PREFIX acceptable.
+          `import tkinter as tk` is the shape songformatter uses. }
+        if PyIsIdent('as') then
+        begin
+          Next;
+          if CurTok.Kind <> tkIdent then
+            Error('Nil Python: expected a name after `as` in an import');
+          aStrIdx := InternStr(LowerCase(CurTok.SVal));
+          realStrIdx := InternStr(LowerCase(impName));
+          if (UnitAliasCount < 64) and (aStrIdx <> realStrIdx) then
+          begin
+            UnitAliasName[UnitAliasCount] := aStrIdx;
+            UnitAliasReal[UnitAliasCount] := realStrIdx;
+            Inc(UnitAliasCount);
+          end;
+          Next;
+        end;
+        if not Eat(tkComma) then Break;
+      end;
+      PySkipNewlines;
+    end;
+  end;
+end;
+
+{ Every TOP-LEVEL import in the file, wherever it sits. The leading run handles
+  the ones before the first statement; this one exists because Python allows an
+  import anywhere and real files use that — songformatter's convertrawtext.py has
+  a block of them after a try/except. Those were silently DROPPED: no error, no
+  registration, and the first use failed much later as `undefined variable`.
+
+  It has to run BEFORE the module-local pre-pass, not at statement level: that
+  pre-pass trial-parses the whole body, so it meets the use site before the body
+  parse would ever reach the import. Imports are re-encountered by the body parse
+  and handled there too (PyParseStatement); registering a unit twice is a no-op. }
+procedure PyPreScanImports;
+var i, depth, savedTok: Integer;
+begin
+  savedTok := TokPos;
+  i := 0;
+  depth := 0;
+  while i < MainProgramTokCount do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then Dec(depth)
+    else if (depth = 0) and
+            ((Tokens[i].Kind = tkUses) or
+             ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'from') and
+              (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkIdent))) and
+            ((i = 0) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) then
+    begin
+      TokPos := i;
+      Next;
+      PyParseImportRun;
+      i := TokPos - 2;
+    end;
+    Inc(i);
+  end;
+  TokPos := savedTok - 1;
+  Next;
+end;
+
 procedure ParsePyProgram;
 var mainNode, stmt, blockNode, jmpPatch, i, savedUnitIdx: Integer; needsBuiltin: Boolean;
     pyHasExceptions: Boolean;
@@ -9971,110 +10133,11 @@ begin
     the program body so their symbols are registered for the main code.
     `from dataclasses|typing import ...` is consumed and ignored (those
     names are built in); any other from-import is a clean unsupported. }
-  while (CurTok.Kind = tkUses) or PyIsIdent('from') do
-  begin
-    if PyIsIdent('from') then
-    begin
-      Next;
-      if CurTok.Kind <> tkIdent then
-        Error('Nil Python: expected a module name after from');
-      impName := CurTok.SVal;
-      Next;
-      if CurTok.Kind <> tkUses then
-        Error('Nil Python: expected import after from ' + impName);
-      Next;
-      { itertools is consumed-but-unresolved for now: uforth only needs
-        count(); its use sites wall visibly until a shim lands (Track B). }
-      { `collections` joins these: the names it exports that we support are
-        ordinary pylib symbols (Counter -> pylib's TPyCounter constructors), so
-        consuming the from-import is enough — an unsupported name from it walls
-        visibly at its use site as an undefined variable, same as itertools. }
-      if CaseEqual(impName, 'dataclasses') or CaseEqual(impName, 'typing') or
-         CaseEqual(impName, 'itertools') or CaseEqual(impName, 'collections') then
-      begin
-        while CurTok.Kind = tkIdent do
-        begin
-          isCount := CaseEqual(impName, 'itertools') and
-                     CaseEqual(CurTok.SVal, 'count');
-          if isCount then PyCountAlias := CurTok.SVal;
-          Next;
-          if PyIsIdent('as') then
-          begin
-            Next;
-            if CurTok.Kind = tkIdent then
-            begin
-              if isCount then PyCountAlias := CurTok.SVal;
-              Next;
-            end;
-          end;
-          if not Eat(tkComma) then Break;
-        end;
-      end
-      else
-      begin
-        { `from X import a, b` where X is a resolvable UNIT: pull the unit and
-          let the names resolve unqualified, which is how `import X` already
-          works (unit scope is flat). This is the form real code uses to reach a
-          shim — `from configparser import ConfigParser`. An unknown module still
-          fails, with the unit resolver's own "unit source not found: X". }
-        ParseUsesUnit(impName);
-        while CurTok.Kind = tkIdent do
-        begin
-          Next;
-          if PyIsIdent('as') then
-          begin
-            Next;
-            if CurTok.Kind = tkIdent then Next;
-          end;
-          if not Eat(tkComma) then Break;
-        end;
-      end;
-      PySkipNewlines;
-    end
-    else
-    begin
-      Next;
-      while CurTok.Kind = tkIdent do
-      begin
-        { Python stdlib modules without a shim yet: consume-and-defer, use
-          sites wall visibly (same policy as itertools above). Everything
-          else goes through the unit resolver (sqlite3, C headers, ...). }
-        impName := CurTok.SVal;
-        if CaseEqual(impName, 'sys') or CaseEqual(impName, 'os') or
-           CaseEqual(impName, 'textwrap') or CaseEqual(impName, 'select') or
-           CaseEqual(impName, 'itertools') then
-          { skip }
-        else
-          ParseUsesUnit(impName);
-        Next;
-        { `import X as Y` — Python's module alias, and the same thing a Pascal
-          `uses X as Y` already does (feature-uses-alias-as): register the alias
-          with the unit resolver so a `Y.Sym` qualifier resolves onto X's
-          symbols. Unqualified names keep working either way, since unit scope
-          is flat — the alias only has to make the PREFIX acceptable.
-          `import tkinter as tk` is the shape songformatter uses. }
-        if PyIsIdent('as') then
-        begin
-          Next;
-          if CurTok.Kind <> tkIdent then
-            Error('Nil Python: expected a name after `as` in an import');
-          aStrIdx := InternStr(LowerCase(CurTok.SVal));
-          realStrIdx := InternStr(LowerCase(impName));
-          if (UnitAliasCount < 64) and (aStrIdx <> realStrIdx) then
-          begin
-            UnitAliasName[UnitAliasCount] := aStrIdx;
-            UnitAliasReal[UnitAliasCount] := realStrIdx;
-            Inc(UnitAliasCount);
-          end;
-          Next;
-        end;
-        if not Eat(tkComma) then Break;
-      end;
-      PySkipNewlines;
-    end;
-  end;
+  PyParseImportRun;
+
   { Module-local type collection runs AFTER the units above so proc return
     types (len, VariantToStr, pylib methods) resolve during inference. }
+  PyPreScanImports;               { every top-level import, not just the leading ones }
   PyRegisterClassFieldsPrepass;   { fields must exist before local inference }
   PyRegisterDefShells;            { def signatures must exist before it too }
   PyCollectModuleLocalsAST;

@@ -1,0 +1,22 @@
+# The `html` and `tempfile` shims, and an import that is NOT at the top of the
+# file — Python allows one anywhere and a real file uses that. Those imports used
+# to be silently DROPPED: no error, no registration, and the first use failed
+# much later as `undefined variable`.
+x = 1
+
+import html
+
+print(html.escape('<a href="x">&</a>'))
+print(html.escape("it's", False))
+print(html.unescape("&lt;b&gt;&amp;&quot;&#65;&#x42;&nope;"))
+
+import tempfile
+import os
+
+f = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+print(os.path.exists(f.name))
+f.close()
+print(f.name[-4:])
+print(tempfile.gettempdir())
+os.remove(f.name)
+print(os.path.exists(f.name))

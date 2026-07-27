@@ -208,6 +208,9 @@ test-nilpy: $(COMPILER)
 	# one Exception class serving both the Python and the sysutils surface
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
 	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	# the html and tempfile shims, and an import that is not at the top of the file
+	./$(COMPILER) test/test_nilpy_html_tempfile.npy /tmp/test_nilpy_htmltmp26
+	test "$$(/tmp/test_nilpy_htmltmp26)" = "$$(printf '%b' '&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;\nit\047s\n<b>&\042AB&nope;\nTrue\n.pdf\n/tmp\nFalse')"
 	# forwarding a collected *args into a callee with ordinary parameters
 	./$(COMPILER) test/test_nilpy_star_forward.npy /tmp/test_nilpy_starfwd26
 	test "$$(/tmp/test_nilpy_starfwd26)" = "$$(printf 'UI/size\n1/2\na/b/c')"
@@ -3248,6 +3251,9 @@ test-core: $(COMPILER)
 	# one Exception class serving both the Python and the sysutils surface
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
 	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	# the html and tempfile shims, and an import that is not at the top of the file
+	./$(COMPILER) test/test_nilpy_html_tempfile.npy /tmp/test_nilpy_htmltmp26
+	test "$$(/tmp/test_nilpy_htmltmp26)" = "$$(printf '%b' '&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;\nit\047s\n<b>&\042AB&nope;\nTrue\n.pdf\n/tmp\nFalse')"
 	# forwarding a collected *args into a callee with ordinary parameters
 	./$(COMPILER) test/test_nilpy_star_forward.npy /tmp/test_nilpy_starfwd26
 	test "$$(/tmp/test_nilpy_starfwd26)" = "$$(printf 'UI/size\n1/2\na/b/c')"
