@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-23T16:12:26Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "9240b1545b1abb0cedb7384f2477a1d9a53b0850",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-23T16:17:12Z",
    "fixed": [],
    "new_red": [],
@@ -399,6 +391,16 @@
    "sha": "00d40e712b08900f7a124711bb7dfaf2cc294017",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-27T17:26:00Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_nilpy_html_tempfile.npy"
+   ],
+   "sha": "106a63cabbcaf58c334fc365316d9f7ce4081f00",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -1433,6 +1435,7 @@
   "test-core#src:test/test_nilpy_dict_fromkeys.npy": "pass",
   "test-core#src:test/test_nilpy_dynamic_dispatch.npy": "pass",
   "test-core#src:test/test_nilpy_field_from_unannotated_param.npy": "pass",
+  "test-core#src:test/test_nilpy_html_tempfile.npy": "fail",
   "test-core#src:test/test_nilpy_import_alias.npy": "pass",
   "test-core#src:test/test_nilpy_method_param_default.npy": "pass",
   "test-core#src:test/test_nilpy_qualified_ctor.npy": "pass",
@@ -1984,11 +1987,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-27T17:15:30Z",
-  "sha": "00d40e712b08900f7a124711bb7dfaf2cc294017",
-  "tier": "opt",
-  "verdict": "GREEN",
-  "wall": 167.3
+  "date": "2026-07-27T17:26:00Z",
+  "sha": "106a63cabbcaf58c334fc365316d9f7ce4081f00",
+  "tier": "native",
+  "verdict": "RED",
+  "wall": 103.9
  },
  "last_bench": {
   "conf_rows": 550,
@@ -2019,6 +2022,22 @@
     "b1976742df2c57eca84cd069d4e8b16a43a204cf"
    ],
    "src": "compiler/compiler.pas"
+  },
+  {
+   "bad": "106a63cabbcaf58c334fc365316d9f7ce4081f00",
+   "good": "00d40e712b08900f7a124711bb7dfaf2cc294017",
+   "job": "test-core#src:test/test_nilpy_html_tempfile.npy",
+   "name": "test-core#945",
+   "opened": "2026-07-27T17:26:00Z",
+   "range": [
+    "d3cdf4797e8935e4bbd12e04678953541d4833c8",
+    "26f88e7aace93d0aa08180bc271dbeb96f75cfa7",
+    "102f31dacd737ab147f79843b54049f7a692ffc0",
+    "05f54897b8365e0967a10ffd6065f0478329c066",
+    "037ed3a6fb97a0d11746e6b1f958a8b4eaf73ed5",
+    "106a63cabbcaf58c334fc365316d9f7ce4081f00"
+   ],
+   "src": "test/test_nilpy_html_tempfile.npy"
   }
  ]
 }
