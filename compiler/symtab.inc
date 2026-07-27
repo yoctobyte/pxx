@@ -6877,6 +6877,15 @@ begin
        (ASTLiftedVar[node] < SymCount) then
       Result := Syms[ASTLiftedVar[node]].RecName;
   end
+  else if (ASTKind[node] = AN_CALL) and (Integer(ASTIVal[node]) < 0) and
+          (ASTRight[node] >= REC_UCLASS_BASE) then
+    { A CONSTRUCTION — the GetMem-shaped call NilPy builds for `Cls(...)`. Its
+      proc id is a negative builtin marker, so the branch above skips it, and the
+      record it yields sits in ASTRight. Without this the construction had no
+      class identity at all: `Path("d") / "sub"` could not find the operator
+      overload (it fell into numeric division), and the same blindness is what
+      makes `Cls().method()` fail to resolve. }
+    Result := ASTRight[node]
   else if ASTKind[node] = AN_COMMA then
     { `(a, b)` yields b's value, so its record is b's. Without this a struct-valued
       comma resolved to REC_NONE and a call marshalled it as a SCALAR: csmith's

@@ -737,7 +737,10 @@ function PyMakeBytesRepeat(a, b: Integer): Integer; forward;             { Nil P
 function PyNodeIsPyBytes(n: Integer): Boolean; forward;                  { Nil Python: node typed TPyBytes? (pyparser.inc) }
 function PyMakeBytesBinCall(const fname: AnsiString; a, b: Integer; retTk: TTypeKind): Integer; forward; { bytes binop helper call (pyparser.inc) }
 function PyMakeListBinCall(const fname: AnsiString; a, b: Integer): Integer; forward; { list binop -> TPyList call (pyparser.inc) }
-function PyMakeNone: Integer; forward;                                   { Nil Python None literal node (pyparser.inc) }
+function PyMakeNone: Integer; forward;
+function PyCallMeth1(ci: Integer; const mname: AnsiString;
+                     selfNode, argNode: Integer): Integer; forward;   { one-arg method call (pyparser.inc) }
+function PyRawName(off, len: Integer): AnsiString; forward;           { name text from the token pool (pyparser.inc) }                                   { Nil Python None literal node (pyparser.inc) }
 function PyNodeIsPyList(n: Integer): Boolean; forward;                   { Nil Python: node typed TPyList? (pyparser.inc) }
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
@@ -8629,6 +8632,23 @@ begin
               CurASTNode := atDflt; LastExprTk := tyAnsiString;
               Exit;
             end;
+            { a class with `__str__` renders through it, the same rule the
+              print path uses (PyReprContainer) — `str(Path("a/b"))` printed
+              the instance POINTER without this }
+            atFld := FindUMeth(atRecv - REC_UCLASS_BASE, '__str__');
+            if atFld < 0 then atFld := FindUMeth(atRecv - REC_UCLASS_BASE, '__repr__');
+            if atFld >= 0 then
+            begin
+              atDflt := PyCallMeth1(atRecv - REC_UCLASS_BASE,
+                                    PyRawName(UMthNOff[atFld], UMthNLen[atFld]),
+                                    CurASTNode, -1);
+              if atDflt >= 0 then
+              begin
+                Expect(tkRParen, ')');
+                CurASTNode := atDflt; LastExprTk := tyAnsiString;
+                Exit;
+              end;
+            end;
             procIdx := -1;
             if atRecv - REC_UCLASS_BASE = FindUClass('TPyList') then
               procIdx := FindProc('pylist_repr')
@@ -9009,6 +9029,27 @@ begin
               ASTSLen[atDflt] := 3;
               ASTTk[atDflt] := Ord(tyAnsiString);
               CurASTNode := atDflt;
+            end
+            else
+            begin
+              { a class that defines `__str__` renders through it — Python's own
+                rule, and what makes a shim class printable. Without it
+                `str(Path("a/b"))` returned the instance POINTER, silently.
+                The print path has the same hook (PyReprContainer). }
+              atFld := FindUMeth(atRecv - REC_UCLASS_BASE, '__str__');
+              if atFld < 0 then atFld := FindUMeth(atRecv - REC_UCLASS_BASE, '__repr__');
+              if atFld >= 0 then
+              begin
+                atDflt := PyCallMeth1(atRecv - REC_UCLASS_BASE,
+                                      PyRawName(UMthNOff[atFld], UMthNLen[atFld]),
+                                      CurASTNode, -1);
+                if atDflt >= 0 then
+                begin
+                  Expect(tkRParen, ')');
+                  CurASTNode := atDflt; LastExprTk := tyAnsiString;
+                  Exit;
+                end;
+              end;
             end;
           end;
         end;

@@ -5363,7 +5363,7 @@ end;
   Python spells a container. Anything else is returned unchanged. }
 function PyReprContainer(n: Integer): Integer;
 var rec, listCi, dictCi, procIdx, argNode, callNode: Integer; pname: AnsiString;
-    excCi, argCi, fieldNode: Integer;
+    excCi, argCi, fieldNode, mmi: Integer;
 begin
   Result := n;
   if n < 0 then Exit;
@@ -5399,6 +5399,18 @@ begin
     ASTSLen[fieldNode] := 3;
     ASTTk[fieldNode] := Ord(tyAnsiString);
     Result := fieldNode;
+    Exit;
+  end;
+  { A class that defines `__str__` is rendered BY IT — Python's own rule, and
+    what makes a shim class printable at all: without it `str(Path("a/b"))`
+    printed the instance POINTER, silently. Checked before the pylib containers
+    so a user class can override even those. }
+  mmi := FindUMeth(argCi, '__str__');
+  if mmi < 0 then mmi := FindUMeth(argCi, '__repr__');
+  if mmi >= 0 then
+  begin
+    Result := PyCallMeth1(argCi, PyRawName(UMthNOff[mmi], UMthNLen[mmi]), n, -1);
+    if Result < 0 then Result := n;
     Exit;
   end;
   listCi := FindUClass('TPyList');

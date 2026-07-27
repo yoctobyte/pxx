@@ -1,0 +1,21 @@
+# The `pathlib` shim, and the `__str__` hook that makes a shim class printable:
+# str(p) / print(p) / an f-string hole all render a class through its __str__,
+# which is Python's rule. Without it they printed the instance POINTER.
+#
+# `d / "sub"` is a Pascal operator overload on a class, reached from NilPy's
+# division path. The CONSTRUCTION form (`Path("d") / "sub"`) still does not
+# parse — bug-nilpy-method-call-on-fresh-construction — so the test binds the
+# left operand to a name first, which is what songformatter writes anyway.
+from pathlib import Path
+
+p = Path("dir/sub/file.txt")
+print(p.name)
+print(p.stem)
+print(p.suffix)
+print(p.parent)
+d = Path("dir")
+q = d / "sub"
+print(q)
+print(str(q))
+print(p.is_file())
+print(f"{q}")
