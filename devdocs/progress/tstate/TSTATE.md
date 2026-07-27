@@ -2,8 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `49a7f115bac3` | 2026-07-27T17:41:20Z | RED (native) | 109.0s | `106a63cabbca` RED |
+| borg | `6ccdc0461946` | 2026-07-27T17:43:38Z | GREEN (native) | 108.4s | `106a63cabbca` RED |
 
 ## Open regressions
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `b1976742df2c`, last good `6f73c5a88bef`, 1 commit(s) in range
-- **test-core#src:test/test_nilpy_html_tempfile.npy** — test/test_nilpy_html_tempfile.npy (borg): bad `106a63cabbca`, last good `00d40e712b08`, 6 commit(s) in range

@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-23T16:35:56Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "3d49ad0a09a1c14eeb215b2bd75afd7dc250e08d",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-23T16:39:21Z",
    "fixed": [],
    "new_red": [],
@@ -401,6 +393,16 @@
    "sha": "49a7f115bac3f02fe0b503c59bdbb8abe133f290",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-27T17:43:38Z",
+   "fixed": [
+    "test-core#src:test/test_nilpy_html_tempfile.npy"
+   ],
+   "new_red": [],
+   "sha": "6ccdc04619469bec3825866f223b2d6793524e2b",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -1435,7 +1437,7 @@
   "test-core#src:test/test_nilpy_dict_fromkeys.npy": "pass",
   "test-core#src:test/test_nilpy_dynamic_dispatch.npy": "pass",
   "test-core#src:test/test_nilpy_field_from_unannotated_param.npy": "pass",
-  "test-core#src:test/test_nilpy_html_tempfile.npy": "fail",
+  "test-core#src:test/test_nilpy_html_tempfile.npy": "pass",
   "test-core#src:test/test_nilpy_import_alias.npy": "pass",
   "test-core#src:test/test_nilpy_method_param_default.npy": "pass",
   "test-core#src:test/test_nilpy_pathlib.npy": "pass",
@@ -1988,11 +1990,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-27T17:41:20Z",
-  "sha": "49a7f115bac3f02fe0b503c59bdbb8abe133f290",
+  "date": "2026-07-27T17:43:38Z",
+  "sha": "6ccdc04619469bec3825866f223b2d6793524e2b",
   "tier": "native",
-  "verdict": "RED",
-  "wall": 109.0
+  "verdict": "GREEN",
+  "wall": 108.4
  },
  "last_bench": {
   "conf_rows": 550,
@@ -2023,22 +2025,6 @@
     "b1976742df2c57eca84cd069d4e8b16a43a204cf"
    ],
    "src": "compiler/compiler.pas"
-  },
-  {
-   "bad": "106a63cabbcaf58c334fc365316d9f7ce4081f00",
-   "good": "00d40e712b08900f7a124711bb7dfaf2cc294017",
-   "job": "test-core#src:test/test_nilpy_html_tempfile.npy",
-   "name": "test-core#945",
-   "opened": "2026-07-27T17:26:00Z",
-   "range": [
-    "d3cdf4797e8935e4bbd12e04678953541d4833c8",
-    "26f88e7aace93d0aa08180bc271dbeb96f75cfa7",
-    "102f31dacd737ab147f79843b54049f7a692ffc0",
-    "05f54897b8365e0967a10ffd6065f0478329c066",
-    "037ed3a6fb97a0d11746e6b1f958a8b4eaf73ed5",
-    "106a63cabbcaf58c334fc365316d9f7ce4081f00"
-   ],
-   "src": "test/test_nilpy_html_tempfile.npy"
   }
  ]
 }
