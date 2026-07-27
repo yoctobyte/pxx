@@ -224,3 +224,4 @@
 2026-07-22T09:27:00Z  v224  b0f601ab9adcba34a132d39eedc8c10758fbe4a6b3df05419dab8a60a2ec1dac  2eaa6c0fa68145ca19b1107a9543f5a923a00549  tickets: resolve bug-open-array-param-length-high-zero (79ef4cf6)
 2026-07-24T05:42:53Z  v225  de4b0b65b49e668cd9374c61963a9e7af594fddfbbf5f48c9bffb51f430f93b6  15e9ca5a4934a66719ecc50b9034471a20cb12e0  tickets(A): VERIFIED @ d2b95677 — microbench flat 4MB, core O(n^2) gone
 2026-07-27T20:31:36Z  v226  f684f58d5a1ffcb8ea8252159d397dcda52f3f139a52ce19f4cd02c29bd9a102  9ba7c3735b7756653414e6206247e093ca7af55d  docs(progress): file decide-pcl-may-use-pylib (Track U)
+2026-07-27T22:14:52Z  v227  9212b95f0213233b5d8b3c9fbef8432f946cacf8d9117fb97fa1d85556cb4c06  d18d5b3c84839b829b0ff3c430fa978278c03a67  feat(nilpy,pcl): Python-shaped arguments in the tkinter façade
