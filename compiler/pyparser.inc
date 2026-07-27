@@ -14,7 +14,11 @@
 }
 
 const
-  PY_MAX_LOCALS = 128;
+  { 128 was too small for a real module: songformatter's key_analysis.py plus a
+    driver crosses it and the compile stops at "too many inferred module
+    locals". The table is per-scope constraints, four words each — 512 costs
+    nothing and covers a file several times that size. }
+  PY_MAX_LOCALS = 512;
 
 type
   TPyLocalConstraint = record
@@ -1725,6 +1729,16 @@ begin
   end;
 end;
 
+{ A name that is BOTH a type name and a builtin conversion call. }
+function PyIsBuiltinConvName(const nm: AnsiString): Boolean;
+var lo: AnsiString;
+begin
+  lo := LowerCase(nm);
+  Result := (lo = 'str') or (lo = 'int') or (lo = 'float') or (lo = 'bool') or
+            (lo = 'list') or (lo = 'dict') or (lo = 'set') or (lo = 'bytes') or
+            (lo = 'bytearray');
+end;
+
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     name, lo, smPName: AnsiString;
@@ -1815,6 +1829,16 @@ begin
       Continue;
     end;
     tk := PyTypeFromTokenIndex(i);
+    { A type NAME followed by '(' is a conversion CALL, not a bare type: it must
+      go through the call branch below, which knows the conversion's result type
+      AND skips the argument group. Reading it as a type here typed `str(d)` as
+      a string and then WIDENED over the argument `d` — and since locals exist
+      only in the body pass, the shell pre-pass said `str` and the body pass said
+      `variant` for the same def: two different return types for one signature,
+      i.e. the silent ABI mismatch, and the def crashed on return. }
+    if (tk <> tyUnknown) and (Tokens[i].Kind = tkIdent) and (i + 1 < endIdx) and
+       (Tokens[i + 1].Kind = tkLParen) and PyIsBuiltinConvName(GetTokenStr(i)) then
+      tk := tyUnknown;
     if tk = tyUnknown then
     begin
       if Tokens[i].Kind = tkIdent then
@@ -1823,8 +1847,12 @@ begin
         { Call form `name(...)`: take the callee's return type and skip the
           whole argument group so arg tokens do not pollute the widening. }
         if (i + 1 < endIdx) and (Tokens[i + 1].Kind = tkLParen) and
-           not IsClassType(name) then
+           ((not IsClassType(name)) or PyIsBuiltinConvName(name)) then
         begin
+          { ...and the builtin CONVERSIONS get in even though IsClassType
+            answers to their names: `str`, `int`, `float`, `bool`, `list`,
+            `dict`, `set` are type names AND callable intrinsics, and the guard
+            above kept `return str(x)` from ever reaching the table below. }
           { Shared-parser builtins are not Procs; without this they would fall
             through to tyVariant and poison the local's type (a variant local
             scalar-loaded on `return` yields its TAG, not the value). }
@@ -4767,6 +4795,23 @@ begin
   end;
 
   mpi := hitPi;
+  { Fill the callee's remaining DEFAULTED parameters. The runtime arms below do
+    this; the STATIC arm did not, so a dispatched `det.analyze(chords, fn)`
+    against `analyze(self, chords, fn, sections=None)` called a 4-parameter
+    method with 3 and the callee read an uninitialised slot — it crashed only
+    when the receiver was dynamically typed, which is what made it look like a
+    dispatch bug rather than a missing fill. }
+  k := i + 1;
+  while (k < Procs[mpi].ParamCount) and (k < MAX_PROC_PARAMS) and
+        ProcParamHasDefault[mpi * MAX_PROC_PARAMS + k] do
+  begin
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := DefaultArgValueNode(mpi, k);
+    ASTRight[argNode] := -1;
+    ASTRight[lastArg] := argNode;
+    lastArg := argNode;
+    Inc(k);
+  end;
   if UMthVirSlot[hitMmi] >= 0 then
   begin
     callNode := AllocNode(AN_VIRTUAL_CALL);
@@ -9264,7 +9309,15 @@ begin
         two passes infer different return types, a silent ABI mismatch. The
         token-only chase below gives both passes the same answer. }
       rec2 := -1;
-      if ((cur = tyUnknown) or (cur = tyInteger) or TypeIsPromoInt(cur)) and
+      { tyVARIANT re-chases too, and that is the whole point: in the BODY pass
+        PyInferExprType can see PyLocals and answers `variant` for a bare ident,
+        while the SHELL pre-pass has no locals, chases the assignment and answers
+        (say) `str`. The two passes then registered DIFFERENT return types for
+        the same def — the silent ABI mismatch this comment warns about — and a
+        def returning `s` where `s = str(x)` crashed on return. The token-only
+        chase gives both passes the same answer, so it must run in both. }
+      if ((cur = tyUnknown) or (cur = tyInteger) or (cur = tyVariant) or
+          TypeIsPromoInt(cur)) and
          (e = j + 2) and (Tokens[j + 1].Kind = tkIdent) then
       begin
         for k := bodyScanStart to j - 1 do
@@ -9276,7 +9329,7 @@ begin
             while (e2 < TokCount) and not (Tokens[e2].Kind in [tkNewline, tkDedent, tkEOF]) do
               Inc(e2);
             t2 := PyInferExprType(k + 2, e2);
-            if (t2 <> tyUnknown) and (t2 <> tyInteger) then
+            if (t2 <> tyUnknown) and (t2 <> tyInteger) and (t2 <> tyVariant) then
             begin
               cur := t2;
               rec2 := PyInferLastCi;

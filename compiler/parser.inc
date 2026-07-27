@@ -2434,6 +2434,16 @@ begin
     ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k];
     ASTTk[exprNode] := Ord(tySet);
   end
+  else if isNilPy and (Procs[mpi].Params[k].TypeKind = tyVariant) then
+    { A VARIANT parameter is passed by REFERENCE — the callee reads a 16-byte
+      slot through a pointer — so an omitted default cannot be a bare ordinal:
+      the callee dereferences it the moment it touches the parameter. pynone()
+      is the same None the constructor path already fills for this reason.
+      Reached from the paths that build a call by hand (the class-method suffix
+      and the dynamic-dispatch arms); the ordinary call path fills defaults in IR
+      and never came here. `def go(self, x, s=None)` called as `A().go(1)`
+      segfaulted on it. }
+    exprNode := PyMakeNone
   else
   begin
     exprNode := AllocNode(AN_INT_LIT);

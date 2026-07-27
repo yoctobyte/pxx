@@ -208,6 +208,9 @@ test-nilpy: $(COMPILER)
 	# one Exception class serving both the Python and the sysutils surface
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
 	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	# return-type inference agrees between the shell pre-pass and the body parse
+	./$(COMPILER) test/test_nilpy_infer_return.npy /tmp/test_nilpy_inferret26
+	test "$$(/tmp/test_nilpy_inferret26)" = "$$(printf '5\n6\nv7\n5\n[1, 2, 3]')"
 	# sorted(key=lambda), d.items() as a value, for-target unpacking, Cls().m()
 	./$(COMPILER) test/test_nilpy_sorted_pairs.npy /tmp/test_nilpy_sortpairs26
 	test "$$(/tmp/test_nilpy_sortpairs26)" = "$$(printf '%b' '3\nb 1\nc 2\na 3\na 3\nc 2\nb 1\n[1, 2, 3]\nx 1\ny 2\n2 0 3\nbb\nnone\n11\n3')"
@@ -3263,6 +3266,9 @@ test-core: $(COMPILER)
 	# one Exception class serving both the Python and the sysutils surface
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
 	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	# return-type inference agrees between the shell pre-pass and the body parse
+	./$(COMPILER) test/test_nilpy_infer_return.npy /tmp/test_nilpy_inferret26
+	test "$$(/tmp/test_nilpy_inferret26)" = "$$(printf '5\n6\nv7\n5\n[1, 2, 3]')"
 	# sorted(key=lambda), d.items() as a value, for-target unpacking, Cls().m()
 	./$(COMPILER) test/test_nilpy_sorted_pairs.npy /tmp/test_nilpy_sortpairs26
 	test "$$(/tmp/test_nilpy_sortpairs26)" = "$$(printf '%b' '3\nb 1\nc 2\na 3\na 3\nc 2\nb 1\n[1, 2, 3]\nx 1\ny 2\n2 0 3\nbb\nnone\n11\n3')"

@@ -1,0 +1,40 @@
+# Return-type inference for an UNANNOTATED def. Both inference passes — the
+# shell pre-pass (which has no locals) and the body parse (which does) — must
+# agree, because one decides the registered signature and the other the frame:
+# a disagreement is a silent ABI mismatch and the def crashes on return.
+#
+# Three ways it disagreed, all fixed here:
+#   1. `str`/`int`/... are type NAMES as well as conversion calls, so the type
+#      branch typed `str(d)` and then WIDENED over its argument — and arguments
+#      only have types in the body pass;
+#   2. the builtin conversions are intrinsics, not Procs, so the call branch
+#      answered "unknown" and fell to variant;
+#   3. a bare-ident return re-chases its assignment, but only when the first
+#      answer was unknown/int — a variant answer (which only the body pass can
+#      produce) skipped the chase.
+def a(x, d: int = 0):
+    return str(d)
+
+
+def b(x, d: int = 0):
+    s = str(d)
+    return s
+
+
+def c(x):
+    return "v" + str(x)
+
+
+def d(n: int):
+    return len(str(n)) + int("2")
+
+
+def e(xs):
+    return sorted(xs)
+
+
+print(a("x", 5))
+print(b("x", 6))
+print(c(7))
+print(d(123))
+print(e([3, 1, 2]))
