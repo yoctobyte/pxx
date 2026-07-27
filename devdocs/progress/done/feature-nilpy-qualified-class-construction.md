@@ -53,3 +53,16 @@ application's actual source.
 
 `make test-nilpy` green with a `.npy` case covering a qualified ctor with and
 without keyword arguments, `--tier quick`, self-host byte-identical.
+
+## Landed (2026-07-27)
+
+The intercept in `ParseFactor` grew a second form: `ident . ident (` where the
+first ident is not a symbol and names a unit or alias (`FindUnitOrAlias`) and the
+second names a class — consume the qualifier, then the ordinary
+`PyClassCreateExpr`. Keyword arguments come along free, since it is the same
+construction path as the unqualified spelling.
+
+`test/test_nilpy_qualified_ctor.npy` (`cp.ConfigParser()` through an alias, then
+methods on it), plus the qualified-with-kwargs form
+(`tk.Canvas(f, background="white", width=50)`) in the compile-only
+`examples/tk/tkinter_facade.npy`.

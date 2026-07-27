@@ -58,3 +58,39 @@ The second is cleaner and needs the shadowing bug fixed first.
 
 `make test-nilpy` green with a `.npy` case that imports an RTL unit AND prints a
 caught Python exception's message, + `--tier quick` + self-host byte-identical.
+
+## FIXED (2026-07-27)
+
+pylib's `Exception` now carries the sysutils surface on ONE storage:
+
+```pascal
+  Exception = class
+  public
+    msg: AnsiString;
+    FHelpContext: Integer;
+    constructor Create(const m: AnsiString);
+    constructor CreateFmt(const m: AnsiString; const args: array of const);
+    property FMessage: AnsiString read msg write msg;
+    property Message: AnsiString read msg write msg;
+    property HelpContext: Integer read FHelpContext write FHelpContext;
+  end;
+```
+
+The trap this ticket warned about is exactly what the PROPERTIES avoid. `print(e)`
+reads the `msg` FIELD — the frontend synthesises that field access directly
+(pyparser's PyReprContainer and the `str(e)` path) — so `msg` has to stay the
+field and every Pascal-side name has to be a view on it. Two synchronised fields
+put the Pascal write in one place and the Python read in the other, which is how
+the message came back empty.
+
+CreateFmt is implemented IN pylib, not borrowed from sysutils: a declaration in
+pylib needs an implementation in pylib (`unresolved forward: Exception.CreateFmt`
+otherwise), and pylib must not depend on sysutils, since pylib is pulled into
+every .npy. It supports `%s`, `%d` and `%%` — every spec the RTL's own raise sites
+use — and leaves an unsupported spec VERBATIM rather than guessing, so a wrong
+message shows up as a stray `%spec` instead of silently dropping an argument.
+
+Verified both directions in one test, `test/test_nilpy_rtl_exception_surface.npy`:
+a Python `raise ValueError("mine")` still prints `mine` with an RTL unit imported,
+and `su.StrToInt("abc")` arrives as `caught: "abc" is an invalid integer` —
+formatted, i.e. CreateFmt really ran.

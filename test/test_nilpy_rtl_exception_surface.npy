@@ -1,0 +1,23 @@
+# pylib's Python `Exception` and sysutils' Pascal one are the SAME class here (a
+# .npy pulls pylib first, so sysutils' declaration is shadowed). This checks both
+# surfaces on that one class at once — bug-nilpy-rtl-exception-surface-shadowed:
+#
+#   1. an RTL unit that raises through CreateFmt compiles and its message
+#      arrives FORMATTED (the shadowing class had no CreateFmt at all before);
+#   2. a Python-raised exception's message still survives with the RTL unit
+#      imported — the earlier attempt at this printed it EMPTY, which is the
+#      regression to watch for. `msg` is the one storage; Message/FMessage are
+#      properties over it.
+import sysutils as su
+
+try:
+    raise ValueError("mine")
+except ValueError as e:
+    print(e)
+
+try:
+    x = su.StrToInt("abc")
+except Exception as e:
+    print("caught:", e)
+
+print("end")

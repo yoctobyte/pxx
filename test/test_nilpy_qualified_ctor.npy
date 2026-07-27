@@ -1,0 +1,11 @@
+# Unit-qualified class construction: `mod.Class(args)`, which is how real
+# tkinter/configparser code is written. Only the PREFIX needed teaching — unit
+# scope is flat, so the class resolves by its bare name once it is consumed.
+# feature-nilpy-qualified-class-construction
+import configparser as cp
+
+cfg = cp.ConfigParser()
+cfg.add_section("UI")
+cfg.set_("UI", "size", "1280x800")
+print(cfg.get("UI", "size"))
+print(cfg.has_section("UI"), cfg.has_section("nope"))

@@ -7520,6 +7520,26 @@ begin
     LastExprTk := tyClass;
     Exit;
   end;
+  { The same intercept through a MODULE QUALIFIER — `tk.Frame(root, ...)`, which
+    is how real tkinter code is written. Without it the cursor sits on the unit
+    name, the ctor intercept above never fires, and the whole thing falls into
+    the Pascal qualified-call path: that resolves a qualified PROC (which is why
+    `tk.Tk_()` always worked) but cannot construct a class and does not do NilPy
+    keyword arguments. Unit scope here is flat, so consuming the qualifier is
+    enough — the class then resolves by its bare name.
+    (feature-nilpy-qualified-class-construction) }
+  if PyExprMode and (CurTok.Kind = tkIdent) and (TokPos + 2 < TokCount) and
+     (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos + 1].Kind = tkIdent) and
+     (Tokens[TokPos + 2].Kind = tkLParen) and
+     IsClassType(GetTokenStr(TokPos + 1)) and
+     (FindSym(CurTok.SVal) < 0) and (FindUnitOrAlias(CurTok.SVal) >= 0) then
+  begin
+    Next;                 { the module name }
+    Expect(tkDot, '.');
+    CurASTNode := PyClassCreateExpr;
+    LastExprTk := tyClass;
+    Exit;
+  end;
   case CurTok.Kind of
     tkInteger:
     begin

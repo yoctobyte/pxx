@@ -14,6 +14,12 @@ item = c.create_text(10, 20, "hello", anchor="sw", fill="#000000")
 print("widget paths:", f.path, c.path)
 print("item id:", item)
 print("canvas width:", c.winfo_width())
-v = StringVar()
+# the QUALIFIED spellings, which is how real tkinter code is written: the
+# module alias as a prefix, with keyword options. `tk` is also the name of a
+# real unit (lib/pcl/tk.pas, pulled in by tkinter), so this resolves only
+# because an explicit alias wins over a same-named compiled unit.
+c2 = tk.Canvas(f, background="white", width=50)
+c2.pack(side="right", fill="both", expand=0)
+v = tk.StringVar()
 v.set_("abc")
 print("var:", v.get())

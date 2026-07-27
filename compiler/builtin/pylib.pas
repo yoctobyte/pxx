@@ -180,7 +180,27 @@ type
   Exception = class
   public
     msg: AnsiString;
+    FHelpContext: Integer;
     constructor Create(const m: AnsiString);
+    { The SYSUTILS surface on the same object. A .npy program pulls pylib before
+      any imported unit, so sysutils' own `Exception` declaration is shadowed by
+      this one and its descendants (EConvertError, …) and method bodies compile
+      against THIS class — which used to have neither CreateFmt nor FMessage, so
+      `import json` (or anything reaching sysutils) died on the first raise
+      (bug-nilpy-rtl-exception-surface-shadowed).
+
+      FMessage and Message are PROPERTIES over `msg`, not fields: one storage,
+      so a Python `raise ValueError("mine")` and a Pascal `raise
+      EConvertError.CreateFmt(...)` write the same place and both read back. Two
+      synchronised fields were tried first and lost the message on the read path
+      — print(e) reads the `msg` FIELD directly (the frontend synthesises that
+      access), so `msg` must stay the field and everything else a view on it.
+      CreateFmt is declared here and IMPLEMENTED BY sysutils, which is the unit
+      that has Format(). }
+    constructor CreateFmt(const m: AnsiString; const args: array of const);
+    property FMessage: AnsiString read msg write msg;
+    property Message: AnsiString read msg write msg;
+    property HelpContext: Integer read FHelpContext write FHelpContext;
   end;
   ValueError        = class(Exception) end;
   TypeError         = class(Exception) end;
@@ -3042,6 +3062,82 @@ end;
 constructor Exception.Create(const m: AnsiString);
 begin
   msg := m;
+end;
+
+{ One `array of const` element as a string / as an integer's decimal text. The
+  same shape as sysutils' FmtArgStr/FmtArgInt, duplicated rather than shared
+  because pylib must not pull sysutils in. }
+function pyvarrec_str(const v: TVarRec): AnsiString;
+var pc: PChar; i: Integer;
+begin
+  Result := '';
+  case v.VType of
+    vtAnsiString, vtPChar:
+      begin
+        if v.VType = vtAnsiString then pc := PChar(v.VAnsiString) else pc := PChar(v.VPChar);
+        if pc <> nil then
+        begin
+          i := 0;
+          while pc[i] <> #0 do begin Result := Result + pc[i]; Inc(i); end;
+        end;
+      end;
+    vtChar:    Result := v.VChar;
+    vtInteger: Result := pystr_of(Int64(v.VInteger));
+    vtInt64:   Result := pystr_of(v.VInt64^);
+    vtBoolean: if v.VBoolean then Result := 'True' else Result := 'False';
+  end;
+end;
+
+function pyvarrec_int_str(const v: TVarRec): AnsiString;
+begin
+  case v.VType of
+    vtInt64:   Result := pystr_of(v.VInt64^);
+    vtBoolean: Result := pystr_of(Int64(Ord(v.VBoolean)));
+    vtChar:    Result := pystr_of(Int64(Ord(v.VChar)));
+  else
+    Result := pystr_of(Int64(v.VInteger));
+  end;
+end;
+
+{ sysutils' CreateFmt on the shadowing class. It cannot simply call Format():
+  pylib is pulled into every .npy and must not depend on sysutils (which is what
+  drags the whole RTL in), so the substitution is done here over the same
+  `array of const` FPC passes. The subset is what the RTL's own raise sites
+  actually use — %s, %d and %% — and an unsupported spec is left VERBATIM rather
+  than guessed at, so a wrong message is visible as a stray %spec instead of
+  silently losing its argument. }
+constructor Exception.CreateFmt(const m: AnsiString; const args: array of const);
+var i, ai: Integer; c: Char; outS: AnsiString;
+begin
+  outS := '';
+  ai := 0;
+  i := 1;
+  while i <= Length(m) do
+  begin
+    c := m[i];
+    if (c = '%') and (i < Length(m)) then
+    begin
+      c := m[i + 1];
+      if c = '%' then
+      begin
+        outS := outS + '%';
+        i := i + 2;
+        Continue;
+      end;
+      if ((c = 's') or (c = 'd')) and (ai <= High(args)) then
+      begin
+        if c = 's' then outS := outS + pyvarrec_str(args[ai])
+        else outS := outS + pyvarrec_int_str(args[ai]);
+        ai := ai + 1;
+        i := i + 2;
+        Continue;
+      end;
+    end;
+    outS := outS + m[i];
+    i := i + 1;
+  end;
+  msg := outS;
+  FHelpContext := 0;
 end;
 
 function pyos_path_isabs(const p: AnsiString): Boolean;

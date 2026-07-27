@@ -202,6 +202,12 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) examples/tk/tkinter_facade.npy /tmp/test_nilpy_tkinter26
 	./$(COMPILER) test/test_nilpy_kwargs_by_name.npy /tmp/test_nilpy_kwname26
 	test "$$(/tmp/test_nilpy_kwname26)" = "$$(printf '%b' 'contiguous: root 7 hi z\ninterior hole: 0 skipped-width z\nonly the last: 0  last-only\nnone given: 0  z')"
+	# a unit-qualified class construction (mod.Class(args))
+	./$(COMPILER) test/test_nilpy_qualified_ctor.npy /tmp/test_nilpy_qualctor26
+	test "$$(/tmp/test_nilpy_qualctor26)" = "$$(printf '1280x800\nTrue False')"
+	# one Exception class serving both the Python and the sysutils surface
+	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
+	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
 	# import X as Y (the alias wins over a same-named compiled unit)
 	./$(COMPILER) test/test_nilpy_import_alias.npy /tmp/test_nilpy_import_alias26
 	test "$$(/tmp/test_nilpy_import_alias26)" = "$$(printf '4\n7\n2')"
@@ -3221,6 +3227,12 @@ test-core: $(COMPILER)
 	./$(COMPILER) examples/tk/tkinter_facade.npy /tmp/test_nilpy_tkinter26
 	./$(COMPILER) test/test_nilpy_kwargs_by_name.npy /tmp/test_nilpy_kwname26
 	test "$$(/tmp/test_nilpy_kwname26)" = "$$(printf '%b' 'contiguous: root 7 hi z\ninterior hole: 0 skipped-width z\nonly the last: 0  last-only\nnone given: 0  z')"
+	# a unit-qualified class construction (mod.Class(args))
+	./$(COMPILER) test/test_nilpy_qualified_ctor.npy /tmp/test_nilpy_qualctor26
+	test "$$(/tmp/test_nilpy_qualctor26)" = "$$(printf '1280x800\nTrue False')"
+	# one Exception class serving both the Python and the sysutils surface
+	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
+	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
 	# import X as Y (the alias wins over a same-named compiled unit)
 	./$(COMPILER) test/test_nilpy_import_alias.npy /tmp/test_nilpy_import_alias26
 	test "$$(/tmp/test_nilpy_import_alias26)" = "$$(printf '4\n7\n2')"
