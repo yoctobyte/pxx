@@ -215,6 +215,9 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_infer_return.npy /tmp/test_nilpy_inferret26
 	test "$$(/tmp/test_nilpy_inferret26)" = "$$(printf '5\n6\nv7\n5\n[1, 2, 3]')"
 	# sorted(key=lambda), d.items() as a value, for-target unpacking, Cls().m()
+	# the function-object ABI, dict views, len(variant), a local named `result`
+	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy /tmp/test_nilpy_fnvalue26
+	test "$$(/tmp/test_nilpy_fnvalue26)" = "$$(printf '%b' '3\n5\n2\n2 3.0 2\n3.0\n1.0\nC\nG\n2\n4.0\n3.14 3    3.142 3.1     | 2.0')"
 	./$(COMPILER) test/test_nilpy_sorted_pairs.npy /tmp/test_nilpy_sortpairs26
 	test "$$(/tmp/test_nilpy_sortpairs26)" = "$$(printf '%b' '3\nb 1\nc 2\na 3\na 3\nc 2\nb 1\n[1, 2, 3]\nx 1\ny 2\n2 0 3\nbb\nnone\n11\n3')"
 	# a comprehension nested in another's element, dict spread, aggregate builtins
@@ -2689,6 +2692,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_const_precedence26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_const_typecast.pas /tmp/test_const_typecast26
 	test "$$(/tmp/test_const_typecast26)" = "$$(printf '4503599627370496\n4503599627370495\n300\n1\n65535\n-56\n4294967295\n-1\n1\n65535')"
+	# NativeUInt/NativeInt(field) widens the FIELD's width, not the cast's
+	./$(COMPILER) test/test_nativeint_cast_field.pas /tmp/test_nativeint_cast_field26
+	test "$$(/tmp/test_nativeint_cast_field26)" = "$$(printf '16\n16\n16\n16\n16\n15\n0')"
 	./$(COMPILER) test/test_const_array_of_string.pas /tmp/test_const_array_of_string26
 	test "$$(/tmp/test_const_array_of_string26)" = "$$(printf 'aa bb cc dd \na b c d \nxx yy zz \nzzz bb')"
 	./$(COMPILER) test/test_case_else_multistmt.pas /tmp/test_case_else_multistmt26
@@ -3276,6 +3282,9 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_infer_return.npy /tmp/test_nilpy_inferret26
 	test "$$(/tmp/test_nilpy_inferret26)" = "$$(printf '5\n6\nv7\n5\n[1, 2, 3]')"
 	# sorted(key=lambda), d.items() as a value, for-target unpacking, Cls().m()
+	# the function-object ABI, dict views, len(variant), a local named `result`
+	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy /tmp/test_nilpy_fnvalue26
+	test "$$(/tmp/test_nilpy_fnvalue26)" = "$$(printf '%b' '3\n5\n2\n2 3.0 2\n3.0\n1.0\nC\nG\n2\n4.0\n3.14 3    3.142 3.1     | 2.0')"
 	./$(COMPILER) test/test_nilpy_sorted_pairs.npy /tmp/test_nilpy_sortpairs26
 	test "$$(/tmp/test_nilpy_sortpairs26)" = "$$(printf '%b' '3\nb 1\nc 2\na 3\na 3\nc 2\nb 1\n[1, 2, 3]\nx 1\ny 2\n2 0 3\nbb\nnone\n11\n3')"
 	# a comprehension nested in another's element, dict spread, aggregate builtins

@@ -351,3 +351,33 @@ Consequences for this ticket:
   (`from reportlab.pdfgen import canvas` needs the dotted form).
 - songformatter's fallback import (`12cf40e`, already pushed) comes OUT at that
   point and the app is unmodified source again. It is the last app-side change.
+
+## Pass six — key_analysis.py RUNS (2026-07-27)
+
+The first songformatter module is DONE end to end: `key_analysis.py` compiles
+and its output matches CPython's for the same chord list (`C / weighted / 8`).
+[[bug-nilpy-key-analysis-compiles-but-segfaults]] is resolved; three tickets came
+out of the hunt, and one of them was not a NilPy bug at all:
+
+| what | lane |
+| --- | --- |
+| [[bug-nativeuint-cast-widens-load]] — `NativeUInt(field)` loaded eight bytes from a four-byte field | **A** (pure Pascal, target-independent, silent corruption) |
+| [[bug-nilpy-callable-return-abi-mismatch]] — a def passed to `Callable[...]` was marshalled by the ANNOTATION | N |
+| [[bug-nilpy-dict-views-and-result-alias]] — `d.values()`/`d.keys()` jumped to 0; a local named `result` aliased the function result; `len(<variant>)` did not compile; float f-string specs halted | N |
+
+The demanding-consumer pattern held again: one real 762-line module surfaced a
+core codegen bug that no test in the suite had touched.
+
+### Where the other five modules stand
+
+| module | wall |
+| --- | --- |
+| `key_analysis.py` | **none — compiles and runs** |
+| `kadrv.py` | `import key_analysis` — [[feature-nilpy-py-module-loader]] (T3) |
+| `convertrawtext.py` | `import ast` — needs a shim or a real parser |
+| `settings.py` | tkinter façade: `create_window((0,0), window=..., anchor=...)` — [[feature-nilpy-tkinter-facade-widening]] |
+| `render_backend.py` | `from reportlab...` — [[feature-lib-pxxpdf-reportlab-compat]] + dotted imports |
+| `SongFormatter.py` | `import markdown` (help window) |
+
+Next rung: the tkinter façade (settings.py is otherwise clean), then the `.py`
+module loader — which is what turns six separate files into one program.

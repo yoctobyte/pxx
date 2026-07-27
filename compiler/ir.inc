@@ -4780,9 +4780,20 @@ begin
           UInt64(1) lowers to the inner const's 32-bit IRTk and a shl-into-bit-31
           truncation would wrongly fire. See bug-shl-signed-integer-width. }
         castTk := IntToTypeKind(ASTTk[node]);
-        if ((castTk = tyInt64) or (castTk = tyUInt64))
-           and not ((IntToTypeKind(IRTk[Result]) = tyInt64)
-                    or (IntToTypeKind(IRTk[Result]) = tyUInt64)) then
+        { NativeInt/NativeUInt join Int64/UInt64 here when they ARE 64-bit
+          (the pointer-sized pair is 4 bytes on a 32-bit target, where the
+          narrowing branch below is the correct handler). Without them,
+          `NativeUInt(rec.someInteger)` fell through to the in-place retag,
+          which turns the operand's 4-byte field LOAD into an 8-byte one and
+          drags in whatever field sits next in the record — the same hazard the
+          float branch below documents. See bug-nativeuint-cast-widens-load. }
+        if ((castTk = tyInt64) or (castTk = tyUInt64) or
+            (((castTk = tyNativeInt) or (castTk = tyNativeUInt)) and
+             (TypeSize(castTk) = 8)))
+           and not ((IntToTypeKind(IRTk[Result]) = tyInt64) or
+                    (IntToTypeKind(IRTk[Result]) = tyUInt64) or
+                    (IntToTypeKind(IRTk[Result]) = tyNativeInt) or
+                    (IntToTypeKind(IRTk[Result]) = tyNativeUInt)) then
         begin
           { Widening numeric reinterpret 32->64 (e.g. Int64(someInteger)): on a
             32-bit target the inner value occupies one register and its high word

@@ -508,10 +508,16 @@ begin
         while (i < MainProgramTokCount) and (Tokens[i].Kind <> tkRBrack) do
         begin
           if sigN >= 16 then Error('Nil Python: too many Callable parameters');
-          sigPTypes[sigN] := PyAnnTypeAt(i);
-          if sigPTypes[sigN] = tyUnknown then
+          if PyAnnTypeAt(i) = tyUnknown then
             Error('Nil Python: unsupported Callable parameter type');
-          sigPCis[sigN] := PyAnnLastCi;
+          { Parameters follow the same function-object ABI as the result: the
+            annotation is a hint, the def that arrives here decides nothing, so
+            both ends pass variants (by reference, nilpy's variant convention).
+            A `Callable[[str], ...]` handed a def with an unannotated (variant)
+            parameter used to pass an AnsiString by value into a slot the callee
+            dereferenced as a variant address. }
+          sigPTypes[sigN] := tyVariant;
+          sigPCis[sigN] := -1;
           sigPNames[sigN] := 'p' + PyIntLiteralText(sigN);
           Inc(sigN);
           if (i < MainProgramTokCount) and (Tokens[i].Kind = tkComma) then Inc(i);
@@ -525,7 +531,14 @@ begin
       begin
         sigRet := PyAnnTypeAt(i);
         sigIsFunc := sigRet <> tyUnknown;
-        if not sigIsFunc then sigRet := tyInteger;
+        if not sigIsFunc then sigRet := tyInteger
+        else
+          { The declared result is a HINT, not an ABI: this signature marshals
+            calls to whichever def is passed in, and that def's own inference
+            may well disagree (`-> list[str]` vs a body returning `d.get(k, [])`,
+            which is a variant). Both ends therefore use the variant
+            hidden-destination convention — see PyDefUsedAsValue. }
+          sigRet := tyVariant;
       end;
       if (i < MainProgramTokCount) and (Tokens[i].Kind = tkRBrack) then Inc(i);
     end;
@@ -4481,6 +4494,21 @@ end;
   the core through the ctor intercept, so the postfix never ran and
   `Cls().m()` was a parse error (bug-nilpy-method-call-on-fresh-construction).
   CurTok is the '(' and the method name has been consumed. }
+{ Does this class have a parent, or any subclass? Only then does a virtual call
+  mean anything for a receiver of exactly this class. }
+function PyClassInHierarchy(ci: Integer): Boolean;
+var i: Integer;
+begin
+  Result := UClsParent[ci] >= 0;
+  if Result then Exit;
+  for i := 0 to UClsCount - 1 do
+    if UClsParent[i] = ci then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer;
 var mmi, mpi, selfArg, lastArg, argNode, callNode, n, k, kwIdx: Integer;
     anyKw: Boolean;
@@ -4536,7 +4564,13 @@ begin
     lastArg := argNode;
     Inc(k);
   end;
-  if UMthVirSlot[mmi] >= 0 then
+  { VIRTUAL dispatch only when the class actually participates in a hierarchy.
+    NilPy classes that merely SHARE a method name (songformatter has eight
+    unrelated detector classes each declaring analyze) still get virtual slots,
+    which costs a VMT indirection for nothing. For a receiver whose exact class is
+    known and that has neither parent nor children, a DIRECT call is what Python
+    means anyway: the method is resolved on that very type. }
+  if (UMthVirSlot[mmi] >= 0) and PyClassInHierarchy(ci) then
   begin
     callNode := AllocNode(AN_VIRTUAL_CALL);
     ASTRight[callNode] := UMthVirSlot[mmi];
@@ -4582,6 +4616,28 @@ begin
     ASTTk[unboxCall] := Ord(tyAnsiString);
     ASTLeft[unboxCall] := unboxArg;
     Result := PyParseStrMethod(unboxCall, mname);
+    Exit;
+  end;
+  { Python's dict views on a VARIANT receiver. The typed path (parser.inc's
+    member access) already maps items/keys/values onto pylib's itemlist /
+    keylist / vallist — names chosen to dodge the default `Items[]` property —
+    but a variant receiver never reaches it: the candidate scan below found no
+    class declaring `values`, and the call fell through to the pyeval dynamic
+    dispatch, which has no TPyDict branch and jumped through a nil host-call
+    slot. See bug-nilpy-dict-values-on-variant-receiver. }
+  if (mname = 'values') and (FindUClass('TPyDict') >= 0) then
+  begin
+    Result := PyParseVariantMethod(baseNode, 'vallist');
+    Exit;
+  end;
+  if (mname = 'keys') and (FindUClass('TPyDict') >= 0) then
+  begin
+    Result := PyParseVariantMethod(baseNode, 'keylist');
+    Exit;
+  end;
+  if (mname = 'items') and (FindUClass('TPyDict') >= 0) then
+  begin
+    Result := PyParseVariantMethod(baseNode, 'itemlist');
     Exit;
   end;
   { candidate scan — one entry per class whose method set answers to mname }
@@ -8166,7 +8222,20 @@ begin
       backing global) learns its class from a class-typed rhs. }
     if (ASTKind[lhsNode] = AN_IDENT) and
        (ASTKind[rhsNode] = AN_CALL) and (ASTIVal[rhsNode] = -Ord(tkGetMem)) then
-      Syms[ASTIVal[lhsNode]].RecName := ASTRight[rhsNode];
+      Syms[ASTIVal[lhsNode]].RecName := ASTRight[rhsNode]
+    { ...and from an ordinary CALL that returns a class: `c = Counter()` left the
+      local tyClass with NO class identity, so every later `c.method(...)` went
+      through the DYNAMIC receiver path instead of a direct call. Correctness now
+      rests elsewhere (the wild dereference this was first written to chase was
+      really [[bug-nativeuint-cast-widens-load]]); what it buys is the direct
+      call and the class identity a later field access needs. }
+    else if (ASTKind[lhsNode] = AN_IDENT) and
+            (ASTKind[rhsNode] = AN_CALL) and (Integer(ASTIVal[rhsNode]) >= 0) and
+            (Integer(ASTIVal[rhsNode]) < ProcCount) and
+            (IntToTypeKind(ASTTk[rhsNode]) = tyClass) and
+            (Syms[ASTIVal[lhsNode]].RecName = REC_NONE) and
+            (ProcRetRecId[Integer(ASTIVal[rhsNode])] >= REC_UCLASS_BASE) then
+      Syms[ASTIVal[lhsNode]].RecName := ProcRetRecId[Integer(ASTIVal[rhsNode])];
     { Storing a VARIANT (dict/list element, dynamically typed) into a tyClass slot
       must unbox to the instance pointer — otherwise the raw variant overwrites the
       8-byte class slot and the object reads as garbage / loses identity. }
@@ -8694,6 +8763,41 @@ end;
 function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind; forward; { defined with the pre-pass helpers below }
 function PyDefHasValueReturn(defIdx: Integer): Boolean; forward; { lying `-> None` detector (with the pre-pass helpers) }
 
+function PyDefUsedAsValue(const nm: AnsiString): Boolean;
+{ True iff the module mentions `nm` as a VALUE (a bare name that is not being
+  called and is not the `def` line or an attribute) — i.e. the routine is
+  passed around as a function object, typically into a `Callable[...]`
+  parameter.
+
+  Such a def must use the one ABI every Callable signature marshals against.
+  A `Callable[..., R]` cannot know which def it will receive, so both sides are
+  normalised to the VARIANT (hidden-destination) result convention here and in
+  PyAnnTypeAt's 'callable' branch. Without that, a def whose body infers a
+  variant result (`return d.get(k, [])`) handed to a `Callable[[str], list[str]]`
+  parameter returned through the hidden-destination convention while the
+  indirect call site expected a register result — the callee then wrote its
+  variant through whatever the caller happened to leave in the destination
+  register. See bug-nilpy-callable-return-abi-mismatch. }
+var j: Integer;
+begin
+  Result := False;
+  j := 0;
+  while j < MainProgramTokCount do
+  begin
+    if (Tokens[j].Kind = tkIdent) and CaseEqual(GetTokenStr(j), nm) then
+    begin
+      if not (((j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkLParen)) or
+              ((j > 0) and (Tokens[j - 1].Kind = tkDot)) or
+              ((j > 0) and (Tokens[j - 1].Kind = tkFunction))) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+    Inc(j);
+  end;
+end;
+
 procedure PyParseDefHeader;
 var annIdx, hdrDefIdx, hdrRetRec, starCi: Integer;
     isKwParam: Boolean;
@@ -8855,6 +8959,27 @@ begin
     built past 255 characters truncated silently without it
     (bug-nilpy-string-local-truncates-at-255). }
   if PyHdrRetType = tyString then PyHdrRetType := tyAnsiString;
+  { A def that is also used as a VALUE returns through the function-object ABI
+    (see PyDefUsedAsValue): variant result, so every `Callable[...]` call site
+    marshals the same way whichever def it received. A procedure stays a
+    procedure — there is no result to disagree about. }
+  if PyDefUsedAsValue(PyHdrName) then
+  begin
+    if (not PyHdrIsProc) and (PyHdrRetType <> tyVariant) then
+    begin
+      PyHdrRetType := tyVariant;
+      PyHdrRetCi := -1;
+    end;
+    { ...and its parameters, for the same reason (see PyAnnTypeAt's 'callable'
+      branch). `*args` / `**kwargs` are already packed containers and keep their
+      own types. }
+    for hdrRetRec := 0 to PyHdrNParams - 1 do
+      if (hdrRetRec <> PyHdrStarIdx) and (hdrRetRec <> PyHdrKwIdx) then
+      begin
+        PyHdrPTypes[hdrRetRec] := tyVariant;
+        PyHdrPCis[hdrRetRec] := -1;
+      end;
+  end;
   Expect(tkColon, ':');
   Expect(tkNewline, 'newline');
   Expect(tkIndent, 'indent');
@@ -9025,7 +9150,14 @@ begin
   end;
   if not isProc then
   begin
-    idx := AllocVar('Result', retType);
+    { NOT literally 'Result': Pascal's implicit result variable is case-insensitive,
+      and `for result in detector_results:` is ordinary Python (songformatter's
+      key_analysis writes it). Spelled that way, the loop variable RESOLVED to the
+      function's result and the def returned the last element instead of what it
+      computed. `return` targets RetSymIdx by index, never by name, so a name no
+      Python source can spell keeps the two apart.
+      See bug-nilpy-local-named-result-aliases-the-function-result. }
+    idx := AllocVar('$pyresult', retType);
     Procs[procIdx].RetSymIdx := idx;
     Syms[idx].Kind := skLocal;   { gates prologue zero-init -- see the method path }
     if (retType = tyClass) and (PyHdrRetCi >= 0) then
@@ -10196,7 +10328,8 @@ begin
   end;
   if not isCtor then
   begin
-    idx := AllocVar('Result', Procs[procIdx].RetType);
+    { see the note in the def path — a Python local may be named `result` }
+    idx := AllocVar('$pyresult', Procs[procIdx].RetType);
     Procs[procIdx].RetSymIdx := idx;
     { skLocal is what gates the prologue zero-init (IR_ZERO_SYM checks it), and
       the Pascal path sets it. Without it a MANAGED Result slot held stack

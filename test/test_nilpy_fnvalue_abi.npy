@@ -1,0 +1,51 @@
+# The function-object ABI: a def handed to a Callable[...] parameter is called
+# through the signature, so both ends must marshal the same way whatever the
+# def's own inference decided its result was.
+from typing import Callable
+from collections import Counter
+
+NOTES = {"C": ["C", "E", "G"], "F": ["F", "A", "C"]}
+
+
+def notes_of(ch):            # unannotated: infers a VARIANT result
+    return NOTES.get(ch, [])
+
+
+def literal_of(ch):          # infers a LIST result — the other ABI
+    return ["A", "B"]
+
+
+def count_all(chords: list[str], f: Callable[[str], list[str]]) -> int:
+    c = Counter()
+    for ch in chords:
+        c.update(f(ch))
+    return len(c)
+
+
+print(count_all(["C"], notes_of))
+print(count_all(["C", "F"], notes_of))
+print(count_all(["C"], literal_of))
+
+# dict views, and len() of a dynamically-typed value
+scores = {"C": 3.0, "G": 1.0}
+print(len(scores.values()), max(scores.values()), len(scores.keys()))
+for v in scores.values():
+    print(v)
+for k in sorted(scores.keys()):
+    print(k)
+vals = scores.values()
+print(len(vals))
+
+# a local named `result` is a plain local, not the function's result
+def pick(items) -> float:
+    total = 0.0
+    for result in items:
+        total = total + result
+    return total
+
+
+print(pick([1.5, 2.5]))
+
+# float format specs
+x = 3.14159
+print(f"{x:.2f} {x:.0f} {x:8.3f} {x:<8.1f}| {2:.1f}")

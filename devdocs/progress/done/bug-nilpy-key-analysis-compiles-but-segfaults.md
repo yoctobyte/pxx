@@ -35,7 +35,26 @@ print(res.final.winner.label)   # CPython: C / weighted / 8
 ```
 pxx: compiles, then SIGSEGV with no output.
 
-## Narrowed (2026-07-27, later)
+## RESOLVED (2026-07-27)
+
+`key_analysis.py` now compiles AND runs, and its output matches CPython for the
+same chord list (`C / weighted / 8`). Seven distinct causes in all; the last
+four were found after the narrowing below:
+
+1. **[[bug-nativeuint-cast-widens-load]]** (Track A) — `NativeUInt(field)` read
+   eight bytes from a four-byte field, so pylib's Counter hash mask carried bit
+   32 and the first `store` walked off into unmapped memory.
+2. **[[bug-nilpy-callable-return-abi-mismatch]]** — a def handed to a
+   `Callable[...]` parameter was marshalled by the ANNOTATION rather than by the
+   def's own signature.
+3. **[[bug-nilpy-dict-views-and-result-alias]]** — `d.values()` / `d.keys()`
+   jumped to address 0; a local named `result` aliased the function's result;
+   `len(<variant>)` did not compile; float f-string specs halted.
+
+Regression coverage: `test/test_nilpy_fnvalue_abi.npy` and
+`test/test_nativeint_cast_field.pas`.
+
+## Narrowed (2026-07-27, earlier)
 
 Four causes were found and FIXED from this ticket (all pushed): the two
 return-inference passes disagreeing, a variant parameter's omitted default

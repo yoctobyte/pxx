@@ -324,6 +324,8 @@ function pyprint_star(l: TPyList; leadSep: Boolean): AnsiString;
   that interprets it, so the lexer never has to know what "05x" means. }
 function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
 function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; overload;
+function PyFmtFixed(d: Double; prec: Integer): AnsiString;
+function pyformat_of(d: Double; const spec: AnsiString): AnsiString; overload;
 function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; overload;
 { `bytearray(n)` and `bytes(b)` are spelled as ordinary FUNCTIONS rather than
   recognised by the frontend: neither name is a Pascal keyword, so both
@@ -675,6 +677,11 @@ function pydictcontains(d: TPyDict; const k: Variant): Boolean;
   already compares strings by text rather than by which copy you hold. }
 function pylist_eq(a: TPyList; b: TPyList): Boolean;
 function len(const s: AnsiString): Integer; overload;
+{ len() of a VARIANT — a dynamically-typed value (a list element, a dataclass
+  field, anything the frontend could not pin to a class). Without it, `len(x)`
+  on such a value was a compile error listing only the class and string
+  overloads, which is a wall for ordinary Python. }
+function len(const v: Variant): Integer; overload;
 function next(c: TPyCounter): Int64;
 function pyvar_holds(const v: Variant; k: Int64): Boolean;
 function pycontains(l: TPyList; const v: Variant): Boolean;
@@ -1717,6 +1724,7 @@ procedure PyDictHashPut(d: TPyDict; keyIdx: Integer);
   guarantees the key is not already present, so no PyVarEq dup check here. }
 var mask, pos: NativeUInt; slotp: PInteger;
 begin
+          ' hashcap=', d.FHashCap, ' fkeys=', Int64(NativeInt(d.FKeys)), ' keyIdx=', keyIdx);
   mask := NativeUInt(d.FHashCap) - 1;
   pos := PyVarHashKey(PPyVarRec(NativeInt(d.FKeys) + keyIdx * 16)) and mask;
   while True do
@@ -1815,6 +1823,7 @@ var
   i: Integer;
   src, dst: PPyVarRec;
 begin
+          ' self=', Int64(NativeInt(Pointer(Self))), ' hashcap=', FHashCap);
   i := indexof(k);
   if i < 0 then
   begin
@@ -1822,6 +1831,8 @@ begin
     i := FLen;
     src := PPyVarRec(@k);
     dst := PPyVarRec(NativeInt(FKeys) + i * 16);
+            ' fhash=', Int64(NativeInt(FHash)), ' hashcap=', FHashCap,
+            ' countermode=', Ord(FCounterMode));
     PyVarSlotSet(dst, src);
     { register the new key in the index (grow keeps load factor <= 0.5, so a
       slot is always free). FHashCap is 0 only for the never-grown empty dict,
@@ -4031,6 +4042,22 @@ begin
   end;
 end;
 
+function len(const v: Variant): Integer; overload;
+var o: TObject; t: Int64;
+begin
+  t := pyvartag(v);
+  if (t = 5) or (t = 6) then begin Result := Length(VariantToStr(v)); Exit; end;
+  if t = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then begin Result := TPyList(o).count; Exit; end;
+    if o is TPyDict then begin Result := TPyDict(o).count; Exit; end;
+    if o is TPyBytes then begin Result := TPyBytes(o).count; Exit; end;
+  end;
+  PyTypeError(t, 'a str, list, dict or bytes');
+  Result := 0;
+end;
+
 function len(b: TPyBytes): Integer; overload;
 begin
   Result := b.FLen;
@@ -4103,10 +4130,22 @@ begin
     width := width * 10 + (Ord(spec[p]) - Ord('0'));
     Inc(p);
   end;
+  { a FLOAT spec on an integer value — Python prints `{2:.1f}` as `2.0`, and an
+    int is exactly representable, so hand it to the float formatter }
+  if (p <= Length(spec)) and (spec[p] = '.') then
+  begin
+    Result := pyformat_of(pyfloat_ofint(i), spec);
+    Exit;
+  end;
   if p <= Length(spec) then
   begin
     kind := spec[p];
     Inc(p);
+  end;
+  if (kind = 'f') or (kind = 'F') or (kind = 'e') or (kind = 'E') then
+  begin
+    Result := pyformat_of(pyfloat_ofint(i), spec);
+    Exit;
   end;
   if p <= Length(spec) then
   begin
@@ -4157,6 +4196,77 @@ begin
   Result := PyFmtPad(s, width, False, leftAlign);
 end;
 
+function PyFmtFixed(d: Double; prec: Integer): AnsiString;
+{ Fixed-point rendering with `prec` digits after the point — pylib's own, since
+  pylib may not pull sysutils in (see the FmtArgStr note above). Half-up
+  rounding with carry, which is what Python's `.Nf` prints for the values a
+  format spec is used on. }
+var neg: Boolean; ip: Int64; fp: Int64; scale: Double; i: Integer; fs: AnsiString;
+begin
+  if prec < 0 then prec := 0;
+  neg := d < 0.0;
+  if neg then d := -d;
+  scale := 1.0;
+  for i := 1 to prec do scale := scale * 10.0;
+  ip := Trunc(d);
+  fp := Round((d - ip) * scale);
+  if fp >= Round(scale) then begin ip := ip + 1; fp := 0; end;
+  Result := PyFmtBase(ip, 10, False);
+  if prec > 0 then
+  begin
+    fs := PyFmtBase(fp, 10, False);
+    while Length(fs) < prec do fs := '0' + fs;
+    Result := Result + '.' + fs;
+  end;
+  if neg then Result := '-' + Result;
+end;
+
+function pyformat_of(d: Double; const spec: AnsiString): AnsiString; overload;
+{ `{x:.2f}` and friends. Same grammar as the integer spec plus a `.precision`
+  group; `f` is fixed point, `g` is FloatToStr's compact form. }
+var p, width, prec: Integer; zero, leftAlign, hasPrec: Boolean;
+    kind: Char; body: AnsiString;
+begin
+  p := 1; zero := False; leftAlign := False; width := 0;
+  prec := 6; hasPrec := False; kind := 'f';
+  if (p <= Length(spec)) and ((spec[p] = '<') or (spec[p] = '>')) then
+  begin
+    leftAlign := spec[p] = '<';
+    Inc(p);
+  end;
+  if (p <= Length(spec)) and (spec[p] = '0') then begin zero := True; Inc(p); end;
+  while (p <= Length(spec)) and (spec[p] >= '0') and (spec[p] <= '9') do
+  begin
+    width := width * 10 + (Ord(spec[p]) - Ord('0'));
+    Inc(p);
+  end;
+  if (p <= Length(spec)) and (spec[p] = '.') then
+  begin
+    Inc(p);
+    prec := 0; hasPrec := True;
+    while (p <= Length(spec)) and (spec[p] >= '0') and (spec[p] <= '9') do
+    begin
+      prec := prec * 10 + (Ord(spec[p]) - Ord('0'));
+      Inc(p);
+    end;
+  end;
+  if p <= Length(spec) then begin kind := spec[p]; Inc(p); end;
+  if p <= Length(spec) then
+  begin
+    WriteLn('Nil Python: unsupported f-string format spec "', spec, '"');
+    Halt(1);
+  end;
+  if (kind = 'f') or (kind = 'F') then body := PyFmtFixed(d, prec)
+  else if (kind = 'g') or (kind = 'G') then body := FloatToStr(d)
+  else if kind = 's' then body := FloatToStr(d)
+  else
+  begin
+    WriteLn('Nil Python: unsupported f-string format spec "', spec, '"');
+    Halt(1);
+  end;
+  Result := PyFmtPad(body, width, zero, leftAlign);
+end;
+
 function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; overload;
 var tag: Int64;
 begin
@@ -4174,6 +4284,15 @@ begin
   if (tag = 1) or (tag = 2) or (tag = 4) or (tag = 5) then
   begin
     Result := pyformat_of(PPyVarRec(@v)^.Payload, spec);
+    Exit;
+  end;
+  { VT_DOUBLE: `{score:.1f}` is the single most common spec in real Python, so
+    the float formatter runs rather than the old halt. An INTEGER-tagged value
+    still gets one when the spec asks for a float form — Python formats `3` as
+    `3.0` under `.1f`. }
+  if tag = 3 then
+  begin
+    Result := pyformat_of(pyvar_to_float(v), spec);
     Exit;
   end;
   WriteLn('Nil Python: f-string format spec "', spec,

@@ -4685,6 +4685,23 @@ begin
         run time; route reads to pydynattr_get and writes to pydynattr_set (the
         instance pointer keys the store). Guarded to genuinely undeclared names,
         so nothing that resolves today changes. }
+      { Python's dict VIEWS, mapped before the dynamic-attribute fallback below:
+        pylib spells them keylist/vallist/itemlist (dodging the default `Items[]`
+        property, Pascal being case-insensitive). Undeclared as written, so
+        `d.values()` used to become a dynamic attribute read of a name no object
+        has, and CALLING that None-valued attribute jumped to address 0
+        (bug-nilpy-dict-values-method-missing). }
+      if isNilPy and (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
+         (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+         (Tokens[TokPos + 1].Kind = tkRParen) then
+      begin
+        if CaseEqual(fieldName, 'values') and
+           (FindUMeth(recName - REC_UCLASS_BASE, 'vallist') >= 0) then
+          fieldName := 'vallist'
+        else if CaseEqual(fieldName, 'keys') and
+                (FindUMeth(recName - REC_UCLASS_BASE, 'keylist') >= 0) then
+          fieldName := 'keylist';
+      end;
       if isNilPy and (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
          (FindUField(recName - REC_UCLASS_BASE, fieldName) < 0) and
          (FindUMeth(recName - REC_UCLASS_BASE, fieldName) < 0) and
@@ -4966,6 +4983,18 @@ begin
            (Tokens[TokPos + 1].Kind = tkRParen) and
            (FindUMeth(mci, 'itemlist') >= 0) then
           fieldName := 'itemlist';
+        { `d.keys()` / `d.values()` as VALUES, same treatment: Python's spellings
+          map onto keylist/vallist. Unmapped, they fell through to the dynamic
+          method dispatch and produced a garbage receiver — `max(d.values())`
+          segfaulted (bug-nilpy-dict-values-method-missing). }
+        if isNilPy and (TokPos + 1 < TokCount) and
+           (Tokens[TokPos].Kind = tkLParen) and (Tokens[TokPos + 1].Kind = tkRParen) then
+        begin
+          if CaseEqual(fieldName, 'keys') and (FindUMeth(mci, 'keylist') >= 0) then
+            fieldName := 'keylist'
+          else if CaseEqual(fieldName, 'values') and (FindUMeth(mci, 'vallist') >= 0) then
+            fieldName := 'vallist';
+        end;
         pri := FindUProp(mci, fieldName);
       end;
 
