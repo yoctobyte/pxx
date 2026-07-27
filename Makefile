@@ -213,7 +213,7 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_pathlib26)" = "$$(printf 'file.txt\nfile\n.txt\ndir/sub\ndir/sub\ndir/sub\nFalse\ndir/sub')"
 	# the html and tempfile shims, and an import that is not at the top of the file
 	./$(COMPILER) test/test_nilpy_html_tempfile.npy /tmp/test_nilpy_htmltmp26
-	test "$$(/tmp/test_nilpy_htmltmp26)" = "$$(printf '%b' '&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;\nit\047s\n<b>&\042AB&nope;\nTrue\n.pdf\n/tmp\nFalse')"
+	test "$$(/tmp/test_nilpy_htmltmp26)" = "$$(printf '%b' '&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;\nit\047s\n<b>&\042AB&nope;\nTrue\n.pdf\nTrue\nFalse')"
 	# forwarding a collected *args into a callee with ordinary parameters
 	./$(COMPILER) test/test_nilpy_star_forward.npy /tmp/test_nilpy_starfwd26
 	test "$$(/tmp/test_nilpy_starfwd26)" = "$$(printf 'UI/size\n1/2\na/b/c')"
@@ -3259,7 +3259,7 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_pathlib26)" = "$$(printf 'file.txt\nfile\n.txt\ndir/sub\ndir/sub\ndir/sub\nFalse\ndir/sub')"
 	# the html and tempfile shims, and an import that is not at the top of the file
 	./$(COMPILER) test/test_nilpy_html_tempfile.npy /tmp/test_nilpy_htmltmp26
-	test "$$(/tmp/test_nilpy_htmltmp26)" = "$$(printf '%b' '&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;\nit\047s\n<b>&\042AB&nope;\nTrue\n.pdf\n/tmp\nFalse')"
+	test "$$(/tmp/test_nilpy_htmltmp26)" = "$$(printf '%b' '&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;\nit\047s\n<b>&\042AB&nope;\nTrue\n.pdf\nTrue\nFalse')"
 	# forwarding a collected *args into a callee with ordinary parameters
 	./$(COMPILER) test/test_nilpy_star_forward.npy /tmp/test_nilpy_starfwd26
 	test "$$(/tmp/test_nilpy_starfwd26)" = "$$(printf 'UI/size\n1/2\na/b/c')"

@@ -361,6 +361,16 @@ Write public claims **uncompressed** — the qualifying words ("output", "oracle
   units. (Historic: C used a `feat/cfront` worktree until it merged at v80; that
   worktree is retired. Exception: Track T's watcher daemon runs in its own
   dedicated clone — it's infra, not a dev agent.)
+- **Run the gate with `tools/gate.sh` (quick | lib | full | check), and background
+  THAT — never poll a `make` you started.** It runs the whole gate to completion,
+  prints one line per step, and exits with the result, so the completion
+  notification is the answer. Polling a long run with repeated `sleep N; tail log`
+  burns a turn per poll and learns nothing; and `until ! pgrep -f "make test"`
+  never exits, because the watcher's own command line matches the pattern. It
+  also warns when Track T's watcher is running on this box (every compile then
+  takes 2-3x longer — slow, not stuck). Full note, including why an expected
+  output must never contain an absolute `/tmp` path (testmgr rewrites it):
+  **`devdocs/dev/gating-and-waiting.md`**.
 - **Confirm native, offload the matrix.** After a change, ALWAYS confirm it
   works natively yourself: `tools/testmgr.py --tier quick` plus self-host
   fixedpoint for compiler changes (≈40s). The breadth — cross targets, corpus,

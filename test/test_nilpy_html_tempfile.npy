@@ -17,6 +17,10 @@ f = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
 print(os.path.exists(f.name))
 f.close()
 print(f.name[-4:])
-print(tempfile.gettempdir())
+# NOT `print(tempfile.gettempdir())`: testmgr sandboxes a job by rewriting /tmp
+# paths to its scratch directory, and it rewrites the EXPECTATION too — so an
+# absolute /tmp in the expected output can never match what the program prints.
+# Assert the property instead of printing the path.
+print(tempfile.gettempdir() == "/tmp")
 os.remove(f.name)
 print(os.path.exists(f.name))
