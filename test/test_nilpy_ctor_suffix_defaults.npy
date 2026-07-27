@@ -1,0 +1,55 @@
+# A method called on a fresh CONSTRUCTION, in the shapes that crashed:
+#   - the method returns a CLASS (the suffix builder wrote the return's rec id
+#     over ASTRight, which on an AN_VIRTUAL_CALL is the VMT SLOT, so the call
+#     went through a garbage slot);
+#   - the method has a DEFAULTED parameter the call omits (the hand-built call
+#     never filled it, and a variant default arrived as a raw ordinal — a
+#     variant parameter is by-reference, so the callee dereferenced it).
+from dataclasses import dataclass, field
+from typing import Callable
+
+
+@dataclass
+class R:
+    detector: str = ""
+    debug: dict = field(default_factory=dict)
+
+
+class A:
+    name = "a"
+
+    def analyze(self, xs: list[str], fn: Callable[[str], list[str]],
+                sections: list[list[str]] | None = None) -> R:
+        del sections
+        n = 0
+        for x in xs:
+            n += len(fn(x))
+        return R(detector=self.name, debug={"n": n})
+
+
+class B:
+    name = "b"
+
+    def analyze(self, xs: list[str], fn: Callable[[str], list[str]],
+                sections: list[list[str]] | None = None) -> R:
+        base = A().analyze(xs, fn)
+        return R(detector=self.name + base.detector, debug=base.debug)
+
+
+def notes(c: str) -> list[str]:
+    return [c, c]
+
+
+# NOTE: bound to a name first — a FIELD access directly on a call result
+# (`A().analyze(...).detector`) is a separate unwired suffix, see
+# bug-nilpy-method-call-on-fresh-construction.
+ra = A().analyze(["a", "b"], notes)
+print(ra.detector)
+rb = B().analyze(["a"], notes)
+print(rb.detector)
+
+# and through the dynamic dispatch, where the STATIC arm also has to fill the
+# omitted default
+for det in [A(), B()]:
+    r = det.analyze(["a"], notes)
+    print(r.detector, len(r.debug))

@@ -35,6 +35,43 @@ print(res.final.winner.label)   # CPython: C / weighted / 8
 ```
 pxx: compiles, then SIGSEGV with no output.
 
+## Narrowed (2026-07-27, later)
+
+Four causes were found and FIXED from this ticket (all pushed): the two
+return-inference passes disagreeing, a variant parameter's omitted default
+arriving as a raw ordinal, the static arm of the dynamic dispatch never filling
+defaulted parameters, and the class-method suffix clobbering an
+AN_VIRTUAL_CALL's slot with the return's rec id. Each was its own segfault.
+
+What REMAINS is one crash with a strange signature:
+
+```python
+# key_analysis.py + this driver
+NOTES = {"C": ["C","E","G"]}
+def notes_of(ch):
+    return NOTES.get(ch, [])
+r = NoteCountingDetector().analyze(["C"], notes_of)   # SEGFAULT
+```
+but each of these is fine:
+```python
+d = NoteCountingDetector()
+r = d.analyze(["C"], notes_of)          # bound receiver: OK
+warm = NoteCountingDetector()           # any earlier construction of the
+r = NoteCountingDetector().analyze(...) # same class first: OK
+```
+
+So it is the FIRST construction of that class in the construction-suffix form.
+It also runs correctly **under gdb** (`gdb -batch -ex run ./kf1` prints and exits
+0), which makes it an uninitialised-memory or stack-layout heisenbug rather than
+a plain logic error — the debugger's different environment/stack zeroing hides
+it. A toy with the same shape (class attribute + virtual method + dataclass
+return + defaulted parameter) does NOT reproduce, so something specific to that
+762-line module matters: frame size, the number of hidden temps, or the class
+attribute's hoisted store landing somewhere it should not.
+
+Next step: build the failing case with `-g`, run under a watchpoint on the temp,
+or bisect the module by deleting method bodies until the toy reproduces.
+
 ## Where to start
 
 Compiling was reached through a long run of new machinery in one session, and any

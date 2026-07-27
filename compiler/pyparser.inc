@@ -4545,8 +4545,11 @@ begin
     callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := mpi;
   ASTTk[callNode] := Ord(Procs[mpi].RetType);
-  if (Procs[mpi].RetType = tyClass) and (ProcRetRecId[mpi] >= REC_UCLASS_BASE) then
-    ASTRight[callNode] := ProcRetRecId[mpi];
+  { ASTRight is NOT the place for the return's rec id here: on an
+    AN_VIRTUAL_CALL it holds the VMT SLOT, and writing the rec id over it sent
+    the call through a garbage slot — `A().make()` returning a class segfaulted
+    while the bound-variable form was fine. ResolveNodeRec already reads a
+    call's class from ProcRetRecId, so nothing needs to be stored. }
   ASTLeft[callNode] := selfArg;
   Result := callNode;
 end;
