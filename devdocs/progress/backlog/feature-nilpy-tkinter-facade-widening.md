@@ -55,3 +55,30 @@ at the declaration.
 `make lib-test` / the façade example compiles, and the widened surface is
 exercised from a `.npy` under Xvfb (see `docs/developer/gui-testing.md` — never
 grab the real display).
+
+## settings.py is now the ONLY thing between us and a second module (2026-07-27)
+
+With key_analysis.py running, `settings.py` compiles up to exactly one call:
+
+```python
+self.content_window = self.canvas.create_window((0, 0), window=self.content, anchor="nw")
+```
+
+Three separate widenings in one line, and the middle one is a design question:
+
+1. **A tuple coordinate.** Real tkinter takes `create_window(x, y, ...)` OR
+   `create_window((x, y), ...)`. The façade declares `x, y: Integer`; NilPy
+   passes the tuple as a TPyList variant.
+2. **`window=` is a WIDGET, not a path string.** The façade wants the Tcl path;
+   the app passes the Frame object. An overload taking `window: Widget` and
+   reading its `path` is the obvious fix and needs nothing new.
+3. Keyword binding by name already works.
+
+(1) is the fork worth a **Track U** decision before coding: accepting a tuple
+means `lib/pcl/tkinter.pas` needs to read a TPyList out of a Variant, i.e.
+`uses pylib` from a PCL unit — pulling the Python runtime into a library that
+Pascal programs also use. The alternatives are a frontend rule (unpack a tuple
+argument when the callee takes N ordinals — magic, and invisible at the call
+site) or leaving the tuple form unsupported (which would mean an app-side edit,
+against this project's mission). Recommendation: the `uses pylib` route, scoped
+to a `tkinter`-only helper unit so plain Pascal PCL users never link it.
