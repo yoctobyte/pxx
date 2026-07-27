@@ -1,0 +1,52 @@
+# *args / **kwargs on the CALLEE side, and print(*args).
+#
+# The collection rungs of feature-nilpy-star-args-kwargs: *args is one TPyList
+# parameter and **kwargs one TPyDict, filled by each call site. Forwarding a
+# collected *args into a fixed-arity callee (settings.py's getF) is rung 3 and
+# is NOT covered here.
+#
+# Every expectation below is CPython's own output for this file.
+
+def debug(*args):
+    print(len(args))
+    print(*args)
+
+
+def show(prefix, *args):
+    print(prefix, *args)
+
+
+def opts(a, **kw):
+    print(a, len(kw))
+    for k in kw:
+        print(k, kw[k])
+
+
+def both(a, *args, **kw):
+    print(a, len(args), len(kw))
+    print(*args)
+
+
+debug()
+debug("a", 1, 2.5, True)
+debug([1, 2], {"k": 1})
+
+show("p:")
+show("p:", "x", 9)
+
+opts(7)
+opts(7, alpha="a", beta=2)
+
+both(1)
+both(1, 2, 3, gamma="g")
+
+# a *args parameter is an ordinary list: index it, slice it, iterate it
+def tail(*args):
+    out = []
+    for a in args[1:]:
+        out.append(a)
+    return out
+
+
+print(tail(1, 2, 3))
+print(tail(1))

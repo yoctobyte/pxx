@@ -8,7 +8,7 @@ prio: 50
 # nilpy: `*args` / `**kwargs` parameters
 
 - **Type:** feature (Nil-Python frontend) — **Track N**
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-26 — probing songformatter under nilpy
   ([[feature-demo-songformatter-pxx-target]]).
 
@@ -120,3 +120,43 @@ Option (b) is the pragmatic one: `getF(*args, **kwargs)` becomes a switch over t
 argument count against `get`'s 2-or-3 parameters. Worth writing down that it is a
 DESUGARING, not a runtime feature, so it fails loudly when the callee's arity is
 unknown rather than guessing.
+
+## Rungs 1 and 2 LANDED (2026-07-27)
+
+`test/test_nilpy_star_args.npy`, every expectation diffed against CPython's own
+output for the same file.
+
+**Rung 1 — collection.** `*args` is one TPyList parameter, `**kwargs` one TPyDict,
+so the body indexes, slices, iterates and `len()`s them with the machinery lists
+and dicts already have. The call site packs: surplus positional arguments become
+`append` calls on a hidden list temp, keyword arguments that match no declared
+parameter become `setitem` on a hidden dict temp, and both containers are ALWAYS
+passed (empty when nothing was collected), which is what keeps the callee's arity
+fixed. Pieces: `PyHdrStarIdx`/`PyHdrKwIdx` in the one header grammar,
+`ProcPyStarIdx`/`ProcPyKwIdx` per proc, `PyPackStarArgs` run just before
+`PyBindKwArgs` at the two function-call sites. An unmatched keyword name is
+carried from `PyKwArgIndex` to the packer as a NEGATIVE `ASTIVal` encoding the key
+literal's node index, because the key must survive until the whole list is parsed.
+
+**Rung 2 — `print(*args)`.** pylib's `pyprint_star(list, leadSep)` renders the
+unpacked run as one string, separators included. The separator lives in the helper
+rather than being injected at the call site so that `print("a", *[])` prints `a`
+and not `a ` — an empty list must contribute no space. A positional argument AFTER
+a starred one is REFUSED, not approximated: whether a separator belongs between
+them is a run-time fact, and printing a stray one is silently wrong output.
+
+**Not covered, deliberately:**
+- **Rung 3 (forwarding into fixed parameters)** — unchanged, still the open scope.
+  `getF(*args, **kwargs)` in settings.py still needs the arity dispatch.
+- **METHOD parameters.** Method headers do not go through `PyParseDefHeader` (they
+  have their own parse in `PyRegisterClassMembers`/`PyParseMethod`), so `def
+  m(self, *args)` is still refused. The tkinter façade wants it; it is a separate,
+  mechanical extension.
+- **Call-site unpacking into a non-star callee** (`f(*xs)` where `f` has ordinary
+  parameters) — that IS rung 3.
+
+**Walls moved.** `convertrawtext.py` cleared `def debug(*args)` + `print(*args)`
+and now stops at `import tempfile` (line 64). `settings.py` cleared `getF`/`getI`
+and now stops at `import tkinter as tk` (line 2, the module body — the def-shell
+pre-pass used to fail before the body was ever reached), i.e. `import X as Y`
+aliasing is its next wall, ahead of the façade itself.

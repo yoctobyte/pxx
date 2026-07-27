@@ -4800,6 +4800,8 @@ begin
   InlineBodyHasCall[ProcCount] := False;
   ProcFrameSensitive[ProcCount] := False;
   InlineLocalCnt[ProcCount]    := 0;
+  ProcPyStarIdx[ProcCount]     := -1;
+  ProcPyKwIdx[ProcCount]       := -1;
   for i := 0 to MAX_PROC_PARAMS - 1 do
   begin
     ProcParamPtrDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;

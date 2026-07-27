@@ -1513,6 +1513,13 @@ var
     a pyeval closure binding its default-arg/captured values at that point
     (uforth's DOES>). }
   PyDefTokOf : array[0..MAX_PROCS-1] of Integer;
+  { `*args` / `**kwargs`: the parameter INDEX of the def's star-list and
+    star-dict parameter, or -1 when it has none. The callee side is ordinary —
+    one TPyList and one TPyDict parameter — and these say which, so each CALL
+    site can pack its surplus positional arguments into the list and its
+    unmatched keyword arguments into the dict (PyPackStarArgs). }
+  ProcPyStarIdx : array[0..MAX_PROCS-1] of Integer;
+  ProcPyKwIdx   : array[0..MAX_PROCS-1] of Integer;
   PyCapName  : array[0..MAX_PROCS*PY_MAX_CAPS-1] of AnsiString;
 
   { Candidate list built by MatchProcCall when overload resolution fails, so the

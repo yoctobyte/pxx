@@ -281,6 +281,12 @@ function pyvar_repr(const v: Variant): AnsiString;
   frontend to format a variant/Any print argument, which otherwise reached the
   backend's `<object>` placeholder (bug-nilpy-print-variant-holding-list). }
 function pyvar_print_of(const v: Variant): AnsiString;
+{ `print(*xs)` — the unpacked list rendered as print would render its elements:
+  each in print's own string form, single-space separated. leadSep asks for a
+  leading separator too, which is what a print argument BEFORE the `*xs` needs;
+  keeping it here rather than injecting a space at the call site is what makes
+  `print("a", *[])` print `a` and not `a `, since an empty list adds nothing. }
+function pyprint_star(l: TPyList; leadSep: Boolean): AnsiString;
 { Python's format() for an f-string hole with a spec. The spec arrives as the
   literal text between ':' and the closing brace; this unit is the ONE place
   that interprets it, so the lexer never has to know what "05x" means. }
@@ -4355,6 +4361,18 @@ begin
     if o is TPyBytes then begin Result := pybytes_repr(TPyBytes(o)); Exit; end;
   end;
   Result := pystr_of(v);
+end;
+
+function pyprint_star(l: TPyList; leadSep: Boolean): AnsiString;
+var i: Integer;
+begin
+  Result := '';
+  if l = nil then Exit;
+  for i := 0 to l.count - 1 do
+  begin
+    if (i > 0) or leadSep then Result := Result + ' ';
+    Result := Result + pyvar_print_of(l[i]);
+  end;
 end;
 
 function pylist_repr(l: TPyList): AnsiString;

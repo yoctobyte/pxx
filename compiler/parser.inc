@@ -764,6 +764,7 @@ function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integ
 function PyMakeVariantField(baseNode: Integer; const fname: AnsiString; var tk: TTypeKind; var recName: Integer): Integer; forward; { Nil Python obj.field on a VARIANT receiver (pyparser.inc) }
 function PyKwArgIndex(mpi, firstParam: Integer): Integer; forward; { Nil Python `name=expr` call argument (pyparser.inc) }
 procedure PyBindKwArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer); forward; { Nil Python keyword-argument reorder (pyparser.inc) }
+procedure PyPackStarArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer); forward; { Nil Python `*args`/`**kwargs` call-site packing (pyparser.inc) }
 
 procedure ParseArgExpr;
 { A call ARGUMENT under NilPy must be parsed by the Python precedence chain
@@ -11205,6 +11206,7 @@ begin
             Error('expected comma or close parenthesis');
         end;
         Expect(tkRParen, ')');
+        PyPackStarArgs(procIdx, argsHead, lastArg, nArgs);
         PyBindKwArgs(procIdx, argsHead, lastArg, nArgs);
 
         currArg := argsHead;
@@ -17288,6 +17290,7 @@ begin
               Error('expected comma or close parenthesis');
           end;
           Expect(tkRParen, ')');
+          PyPackStarArgs(procIdx, argsHead, lastArg, nArgs);
           PyBindKwArgs(procIdx, argsHead, lastArg, nArgs);
 
           currArg := argsHead;

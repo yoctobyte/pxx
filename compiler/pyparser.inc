@@ -89,6 +89,9 @@ var
   PyHdrDefVal: array[0..31] of Int64;
   PyHdrDefSOff: array[0..31] of Integer;
   PyHdrDefSLen: array[0..31] of Integer;
+  { parameter index of `*args` / `**kwargs` in the header just parsed, or -1 }
+  PyHdrStarIdx: Integer;
+  PyHdrKwIdx: Integer;
   { @dataclass field defaults, appended in declaration order per class ci.
     Looked up positionally by PyClassCreate to fill omitted trailing args. }
   PyDcCi:   array[0..PY_MAX_DC_FIELDS-1] of Integer;
@@ -2455,6 +2458,19 @@ begin
       PyKwArgIndex := i + 1;
       Exit;
     end;
+  { No declared parameter of that name — but a callee with `**kwargs` takes it
+    anyway, into the dict. The KEY has to survive until the whole argument list
+    is parsed, so the string literal node is allocated here and its index
+    returned NEGATIVE (-(node+1)); PyPackStarArgs decodes it. }
+  if ProcPyKwIdx[mpi] >= 0 then
+  begin
+    i := AllocNode(AN_STR_LIT);
+    ASTSOffset[i] := PyStoredName(nm);
+    ASTSLen[i] := Length(nm);
+    ASTTk[i] := Ord(tyString);
+    PyKwArgIndex := -(i + 1);
+    Exit;
+  end;
   Error('Nil Python: ' + Procs[mpi].Name + ' has no parameter named ''' + nm + '''');
 end;
 
@@ -4371,6 +4387,157 @@ begin
   ASTLeft[Result] := -1;
 end;
 
+{ An empty TPyList / TPyDict bound to a hidden temp, built by HOISTED statements
+  the way the literal parsers do (see PyParseListLiteralT for why the temp owns
+  the construction ref). Returns the temp SYMBOL — the callers below append or
+  store onto it and then yield PyMakeIdent(sym). }
+function PyNewContainerTemp(const clsName, tag: AnsiString): Integer;
+var ci, recId, node, argNode, sizeNode, tmpSym, asgn: Integer;
+begin
+  ci := FindUClass(clsName);
+  if ci < 0 then Error('Nil Python: pylib (' + clsName + ') not loaded');
+  recId := REC_UCLASS_BASE + ci;
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := -Ord(tkGetMem);
+  ASTTk[node] := Ord(tyClass);
+  ASTRight[node] := recId;
+  sizeNode := AllocNode(AN_INT_LIT);
+  ASTIVal[sizeNode] := RecSize(recId);
+  ASTTk[sizeNode] := Ord(tyInteger);
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := sizeNode;
+  ASTLeft[node] := argNode;
+  tmpSym := AllocVar(PyHiddenName(tag), tyClass);
+  Syms[tmpSym].RecName := recId;
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(tmpSym);
+  ASTRight[asgn] := node;
+  PyHoistStmt(asgn);
+  Result := tmpSym;
+end;
+
+{ One hoisted `tmp.<meth>(a [, b])` on a container temp. }
+procedure PyContainerCall1(tmpSym: Integer; const clsName, meth: AnsiString;
+                           argA, argB: Integer);
+var ci, mmi, mpi, selfArg, aArg, bArg, callNode: Integer;
+begin
+  ci := FindUClass(clsName);
+  if ci < 0 then Error('Nil Python: pylib (' + clsName + ') not loaded');
+  mmi := FindUMeth(ci, meth);
+  if mmi < 0 then Error('Nil Python: ' + clsName + '.' + meth + ' not found');
+  mpi := UMthProc_[mmi];
+  aArg := AllocNode(AN_ARG);
+  ASTLeft[aArg] := argA;
+  if argB >= 0 then
+  begin
+    bArg := AllocNode(AN_ARG);
+    ASTLeft[bArg] := argB;
+    ASTRight[aArg] := bArg;
+  end;
+  selfArg := AllocNode(AN_ARG);
+  ASTLeft[selfArg] := PyMakeIdent(tmpSym);
+  ASTRight[selfArg] := aArg;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := mpi;
+  ASTTk[callNode] := Ord(tyClass);
+  ASTLeft[callNode] := selfArg;
+  PyHoistStmt(callNode);
+end;
+
+{ Pack a call's surplus arguments into the callee's `*args` list and `**kwargs`
+  dict, so the rest of the call machinery sees an ORDINARY argument list of
+  exactly the declared arity (feature-nilpy-star-args-kwargs rung 1).
+
+  Runs on the parsed AN_ARG chain, just before PyBindKwArgs:
+  - positional arguments at or past the star parameter's index become
+    `tmp.append(v)` on a hidden TPyList;
+  - keyword arguments PyKwArgIndex could not match a parameter (marked with a
+    negative ASTIVal carrying their key literal) become `tmp.setitem(k, v)` on a
+    hidden TPyDict;
+  - the two temps are then spliced in at their parameter positions, AFTER the
+    kept positionals and BEFORE any matched keyword argument, so PyBindKwArgs
+    still sees positionals first.
+  The containers are always passed, empty when nothing was collected, which is
+  what keeps the callee's arity fixed.
+
+  No-op — chain untouched — for any callee without a star parameter, which is
+  every Pascal call and almost every NilPy one. }
+procedure PyPackStarArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer);
+var si, ki, n, nxt, pos, listSym, dictSym, keyNode, argNode: Integer;
+    posHead, posLast, kwHead, kwLast: Integer;
+begin
+  si := ProcPyStarIdx[mpi];
+  ki := ProcPyKwIdx[mpi];
+  if (si < 0) and (ki < 0) then Exit;
+  listSym := -1; dictSym := -1;
+  posHead := -1; posLast := -1; kwHead := -1; kwLast := -1;
+  pos := 0;
+  n := argsHead;
+  while n >= 0 do
+  begin
+    nxt := ASTRight[n];
+    ASTRight[n] := -1;
+    if ASTIVal[n] < 0 then
+    begin
+      if dictSym < 0 then dictSym := PyNewContainerTemp('TPyDict', 'kwargs');
+      keyNode := (-ASTIVal[n]) - 1;
+      PyContainerCall1(dictSym, 'TPyDict', 'setitem', keyNode, ASTLeft[n]);
+    end
+    else if ASTIVal[n] > 0 then
+    begin
+      { a keyword argument that DID match a declared parameter — kept, and it
+        must stay after the positionals PyBindKwArgs counts }
+      if kwHead < 0 then kwHead := n else ASTRight[kwLast] := n;
+      kwLast := n;
+    end
+    else
+    begin
+      if (si >= 0) and (pos >= si) then
+      begin
+        if listSym < 0 then listSym := PyNewContainerTemp('TPyList', 'starargs');
+        PyContainerCall1(listSym, 'TPyList', 'append', ASTLeft[n], -1);
+      end
+      else
+      begin
+        if posHead < 0 then posHead := n else ASTRight[posLast] := n;
+        posLast := n;
+      end;
+      Inc(pos);
+    end;
+    n := nxt;
+  end;
+  if si >= 0 then
+  begin
+    if listSym < 0 then listSym := PyNewContainerTemp('TPyList', 'starargs');
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := PyMakeIdent(listSym);
+    if posHead < 0 then posHead := argNode else ASTRight[posLast] := argNode;
+    posLast := argNode;
+  end;
+  if ki >= 0 then
+  begin
+    if dictSym < 0 then dictSym := PyNewContainerTemp('TPyDict', 'kwargs');
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := PyMakeIdent(dictSym);
+    if posHead < 0 then posHead := argNode else ASTRight[posLast] := argNode;
+    posLast := argNode;
+  end;
+  if kwHead >= 0 then
+  begin
+    if posHead < 0 then posHead := kwHead else ASTRight[posLast] := kwHead;
+    posLast := kwLast;
+  end;
+  argsHead := posHead;
+  lastArg := posLast;
+  nArgs := 0;
+  n := posHead;
+  while n >= 0 do
+  begin
+    Inc(nArgs);
+    n := ASTRight[n];
+  end;
+end;
+
 { List literal [a, b, c] -> TPyList create + chained .append() calls, one
   expression tree (append returns Self). Reached from ParseFactor's PyExprMode
   tkLBrack branch, so nested literals in argument positions work too. }
@@ -4786,8 +4953,9 @@ end;
 
 function PyParsePrint: Integer;
 var node, argNode, lastArg, sepLit, noneLit, endLit, writeFd: Integer;
+    starProc, starArg, leadLit: Integer;
     kw, endText: AnsiString;
-    haveEnd: Boolean;
+    haveEnd, isStar, sawStar: Boolean;
 begin
   Next;
   Expect(tkLParen, '(');
@@ -4795,6 +4963,7 @@ begin
   lastArg := -1;
   writeFd := 0;                { 0 = the default, which lowering reads as stdout }
   haveEnd := False;
+  sawStar := False;
   endText := '';
   if CurTok.Kind <> tkRParen then
     repeat
@@ -4825,11 +4994,22 @@ begin
         end;
         Continue;              { a keyword argument prints nothing itself }
       end;
+      { `print(*xs)` — the argument list is UNPACKED from a list at run time, so
+        its length (and therefore how many separators it contributes) is not a
+        compile-time fact. pyprint_star renders the whole run into one string,
+        separators included, which is why the synthetic space below is skipped
+        for it. An argument AFTER a starred one is refused rather than
+        approximated: the space between them exists only if the list was
+        non-empty, and printing a stray one would be silently wrong output.
+        (feature-nilpy-star-args-kwargs rung 2.) }
+      isStar := CurTok.Kind = tkStar;
+      if sawStar then
+        Error('Nil Python: print() takes no further argument after *unpacking');
       { Python print separates successive arguments with a single space.
         Inject a synthetic space char arg before every argument after the
         first (a tyChar AN_INT_LIT writes the byte, not a number). This is the
         .npy print path only; Pascal writeln keeps its no-separator semantics. }
-      if lastArg >= 0 then
+      if (lastArg >= 0) and (not isStar) then
       begin
         sepLit := AllocNode(AN_INT_LIT);
         ASTIVal[sepLit] := 32;
@@ -4846,7 +5026,29 @@ begin
         value everywhere else, which printed as 0 (feature-nilpy-none-variant).
         A None-VALUED VARIANT is handled in the writer instead, since its tag is
         only known at run time. }
-      if CurTok.Kind = tkNil then
+      if isStar then
+      begin
+        sawStar := True;
+        Next;                  { the '*' }
+        PyParseBoolExpr;
+        if IntToTypeKind(ASTTk[CurASTNode]) <> tyClass then
+          Error('Nil Python: print(*x) needs a list; got a value of another type');
+        starProc := FindProc('pyprint_star');
+        if starProc < 0 then Error('Nil Python: pylib (pyprint_star) not loaded');
+        starArg := AllocNode(AN_ARG);
+        ASTLeft[starArg] := CurASTNode;
+        leadLit := AllocNode(AN_INT_LIT);
+        if lastArg >= 0 then ASTIVal[leadLit] := 1 else ASTIVal[leadLit] := 0;
+        ASTTk[leadLit] := Ord(tyBoolean);
+        argNode := AllocNode(AN_ARG);
+        ASTLeft[argNode] := leadLit;
+        ASTRight[starArg] := argNode;
+        CurASTNode := AllocNode(AN_CALL);
+        ASTIVal[CurASTNode] := starProc;
+        ASTTk[CurASTNode] := Ord(tyAnsiString);
+        ASTLeft[CurASTNode] := starArg;
+      end
+      else if CurTok.Kind = tkNil then
       begin
         Next;
         noneLit := AllocNode(AN_STR_LIT);
@@ -7284,7 +7486,8 @@ function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind
 function PyDefHasValueReturn(defIdx: Integer): Boolean; forward; { lying `-> None` detector (with the pre-pass helpers) }
 
 procedure PyParseDefHeader;
-var annIdx, hdrDefIdx, hdrRetRec: Integer;
+var annIdx, hdrDefIdx, hdrRetRec, starCi: Integer;
+    isKwParam: Boolean;
 begin
   if CurTok.Kind <> tkFunction then Error('Nil Python: expected def');
   hdrDefIdx := TokPos - 1;          { the `def` token, for return inference }
@@ -7294,6 +7497,8 @@ begin
   Next;
   Expect(tkLParen, '(');
   PyHdrNParams := 0;
+  PyHdrStarIdx := -1;
+  PyHdrKwIdx := -1;
   while CurTok.Kind <> tkRParen do
   begin
     if PyHdrNParams >= 32 then Error('Nil Python: too many parameters');
@@ -7310,6 +7515,46 @@ begin
     begin
       Next;              { the '*' }
       Next;              { the ',' }
+      Continue;
+    end;
+    { `*args` / `**kwargs` — the COLLECTION side (feature-nilpy-star-args-kwargs
+      rung 1). The callee is ordinary: `*args` is ONE TPyList parameter and
+      `**kwargs` ONE TPyDict, so the body indexes, iterates and len()s them with
+      the machinery lists and dicts already have. Each CALL site packs its
+      surplus positional arguments into the list and its unmatched keyword
+      arguments into the dict — see PyPackStarArgs. `**` reaches here as two
+      tkStar tokens, since the NilPy lexer has no `**` token. }
+    if CurTok.Kind = tkStar then
+    begin
+      Next;                                   { the '*' }
+      isKwParam := CurTok.Kind = tkStar;
+      if isKwParam then Next;                 { the second '*' of `**` }
+      if CurTok.Kind <> tkIdent then
+        Error('Nil Python: expected a name after * in the parameter list');
+      if (isKwParam and (PyHdrKwIdx >= 0)) or ((not isKwParam) and (PyHdrStarIdx >= 0)) then
+        Error('Nil Python: ' + PyHdrName + '() has more than one * parameter of the same kind');
+      PyHdrPNames[PyHdrNParams] := CurTok.SVal;
+      Next;
+      { `*args: str` annotates the ELEMENT type; the parameter itself is still a
+        list, so the annotation is parsed (to consume it) and dropped. }
+      if CurTok.Kind = tkColon then
+      begin
+        annIdx := TokPos - 1;
+        PyAnnTypeAt(annIdx);
+        TokPos := annIdx;
+        Next;
+      end;
+      if isKwParam then starCi := FindUClass('TPyDict')
+      else starCi := FindUClass('TPyList');
+      if starCi < 0 then Error('Nil Python: pylib (TPyList/TPyDict) not loaded');
+      PyHdrPTypes[PyHdrNParams] := tyClass;
+      PyHdrPCis[PyHdrNParams] := starCi;
+      PyHdrPSigs[PyHdrNParams] := -1;
+      PyHdrDefHas[PyHdrNParams] := False;
+      if isKwParam then PyHdrKwIdx := PyHdrNParams
+      else PyHdrStarIdx := PyHdrNParams;
+      Inc(PyHdrNParams);
+      if not Eat(tkComma) then break;
       Continue;
     end;
     if CurTok.Kind <> tkIdent then Error('Nil Python: expected parameter name');
@@ -7415,6 +7660,17 @@ begin
     POINTER (test_nilpy_class_return). }
   if (PyHdrRetType = tyClass) and (PyHdrRetCi >= 0) then
     ProcRetRecId[procIdx] := REC_UCLASS_BASE + PyHdrRetCi;
+  { which parameter is `*args` / `**kwargs`, for the call-site packing. The rec
+    id is recorded too: a param symbol is reused once the callee's scope closes,
+    so overload matching reads the class from ProcParamRecId. }
+  ProcPyStarIdx[procIdx] := PyHdrStarIdx;
+  ProcPyKwIdx[procIdx] := PyHdrKwIdx;
+  if (PyHdrStarIdx >= 0) and (PyHdrStarIdx < MAX_PROC_PARAMS) then
+    ProcParamRecId[procIdx * MAX_PROC_PARAMS + PyHdrStarIdx] :=
+      REC_UCLASS_BASE + PyHdrPCis[PyHdrStarIdx];
+  if (PyHdrKwIdx >= 0) and (PyHdrKwIdx < MAX_PROC_PARAMS) then
+    ProcParamRecId[procIdx * MAX_PROC_PARAMS + PyHdrKwIdx] :=
+      REC_UCLASS_BASE + PyHdrPCis[PyHdrKwIdx];
   for i := 0 to PyHdrNParams - 1 do
     if PyHdrDefHas[i] and (i < MAX_PROC_PARAMS) then
     begin

@@ -264,6 +264,35 @@ Recommended order from here:
 4. [[feature-nilpy-tkinter-facade]] — convertrawtext.py and the GUI (the big one).
 5. [[bug-nilpy-stdlib-name-binds-pascal-unit]] — SongFormatter.py's `import json`.
 
+## Wall catalog, sixth pass (2026-07-27 — `*args` / `**kwargs` rungs 1+2)
+
+[[feature-nilpy-star-args-kwargs]] rungs 1 (collection) and 2 (`print(*args)`) are
+in. Both modules that were stuck on it moved:
+
+| module | first wall now |
+| --- | --- |
+| `convertrawtext.py` | `import tempfile` (line 64) — the module, not the syntax |
+| `settings.py` | `import tkinter as tk` (line 2) — import ALIASING is unsupported |
+| `key_analysis.py` | runtime method dispatch on a variant (unchanged) |
+| `SongFormatter.py` | `import json` binds the Pascal RTL unit (unchanged) |
+
+Two things worth recording from the pass:
+
+- **settings.py's wall jumped BACKWARDS in line order, which is progress, not a
+  regression.** It used to die at line 102 because the def-shell PRE-PASS parses
+  every `def` header before the module body runs; with `getF(*args, **kwargs)`
+  parsing, the body is finally reached and dies on line 2 instead. A pre-pass
+  failure always outranks a body failure regardless of line number — worth
+  remembering when reading these tables.
+- **`import X as Y` is a new, separate wall** and a small one (nilpy maps `import
+  X` onto the Pascal unit resolver, which already has `uses ... as` —
+  [[feature-uses-alias-as]], done). It stands in front of the tkinter façade for
+  settings.py, so it is the cheapest next step on this module.
+
+Rung 3 (forwarding `*args`/`**kwargs` into a fixed-arity callee) is still open and
+is what settings.py's `getF` ultimately needs; it did not block the compile any
+further because the wall above it moved first.
+
 ## Naming strategy reversed (2026-07-26, Rene)
 
 The "honest name, not the reportlab name" decision is REVERSED. It put a change in
