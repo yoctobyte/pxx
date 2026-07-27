@@ -70,6 +70,14 @@ function PyClosureCall1(const clv: Variant; const a0: Variant): Variant;
   branch. }
 function pyclosure_is(p: Pointer): Boolean;
 function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;
+{ The same call, keeping the RESULT — what a key function is for. }
+function pyclosure_call1(objptr: Pointer; const a0: Variant): Variant;
+{ Python's `sorted(xs, key=..., reverse=...)`. Lives here rather than in pylib
+  because the key is a CLOSURE and only this unit can invoke one. Stable
+  insertion sort: n is small in every censused use (a dict's items), and
+  stability is part of sorted()'s contract — equal keys keep their input order.
+  key = nil means sort by the elements themselves. }
+function sorted(l: TPyList; key: Pointer = nil; reverse: Boolean = False): TPyList;
 
 { Build a closure from raw SOURCE text — the compiled frontend's lowering of a
   Python `lambda`: `lambda vm: vm.push(A)` becomes
@@ -3421,6 +3429,49 @@ end;
 { Reverse bridge, POINTER form: `word.native(vm2)` where the Callable field holds
   a closure object (uforth's VARIABLE/CONSTANT words). The closure's result is
   discarded — a Forth native word is `-> None`. }
+function pyclosure_call1(objptr: Pointer; const a0: Variant): Variant;
+var args: TPyList;
+begin
+  args := TPyList.Create;
+  args.append(a0);
+  PyClosureInvoke(PClosureObj(objptr)^.Cidx, args, Result);
+  args.Free;
+end;
+
+function sorted(l: TPyList; key: Pointer; reverse: Boolean): TPyList;
+var r, keys: TPyList; i, j: Integer; kv, ev: Variant; swapped: Boolean;
+begin
+  r := TPyList.Create;
+  Result := r;
+  if l = nil then Exit;
+  keys := TPyList.Create;
+  for i := 0 to l.count - 1 do
+  begin
+    ev := l.at(i);
+    r.append(ev);
+    if (key <> nil) and pyclosure_is(key) then keys.append(pyclosure_call1(key, ev))
+    else keys.append(ev);
+  end;
+  { insertion sort, moving the key list in lockstep so a key is computed once }
+  for i := 1 to r.count - 1 do
+  begin
+    j := i;
+    swapped := True;
+    while (j > 0) and swapped do
+    begin
+      if reverse then swapped := pyvar_gt(keys.at(j), keys.at(j - 1))
+      else swapped := pyvar_gt(keys.at(j - 1), keys.at(j));
+      if swapped then
+      begin
+        ev := r.at(j); r.put(j, r.at(j - 1)); r.put(j - 1, ev);
+        kv := keys.at(j); keys.put(j, keys.at(j - 1)); keys.put(j - 1, kv);
+        Dec(j);
+      end;
+    end;
+  end;
+  keys.Free;
+end;
+
 function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;
 var args: TPyList; r: Variant;
 begin

@@ -77,7 +77,12 @@ type
       the default property below. }
     function at(i: Integer): Variant;
     procedure put(i: Integer; const v: Variant);
-    function count: Integer;
+    { Two arities, and they are different Python things: the no-argument form is
+      this unit's internal length accessor (len(l) goes through it), while
+      Python's own `l.count(v)` counts OCCURRENCES of a value. Overloaded rather
+      than renamed because the corpus writes both. }
+    function count: Integer; overload;
+    function count(const v: Variant): Integer; overload;
     function pop: Variant; overload;
     function pop(i: Integer): Variant; overload;   { list.pop(index) — Python removes at i }
     function pop_at(i: Integer): Variant;
@@ -137,8 +142,32 @@ type
       which is what makes `d.setdefault(k, ...)[k2] = v` mutate the dict rather
       than a throwaway copy. }
     function setdefault(const k: Variant; const d: Variant): Variant;
+    { `d.items()` as a VALUE — a list of [key, value] pairs, which is what
+      `sorted(d.items(), key=...)` and `list(d.items())` need. NOT named `items`:
+      that collides with the default indexed property `Items[k]` above (Pascal is
+      case-insensitive), so the frontend maps the Python spelling onto this name,
+      exactly as keylist/vallist avoid the same clash. The for-in header form
+      never reaches here — it reads the parallel key/value lists directly. }
+    function itemlist: TPyList;
     function keylist: TPyList;
     function vallist: TPyList;
+    { collections.Counter is this same type in Counter MODE, not a subclass.
+      A subclass would be the natural shape, but inherited fields and methods
+      need explicit Self. qualification here, the inherited constructor resolves
+      to the wrong Create, and — fatally — the inherited default property does
+      not carry subscript ASSIGNMENT, so `c[k] = v` on a subclass does not even
+      parse. See bug-pascal-subclass-inherited-members. As a mode, a Counter IS
+      a dict: subscript, items(), iteration and dict(c) all work already, and
+      only the missing-key read changes. }
+    FCounterMode: Boolean;
+    { Counter.update(iterable) COUNTS elements; a plain dict's update(pairs)
+      merges them. The mode picks which, which is why they share a name. }
+    procedure update(l: TPyList);
+    procedure update(d: TPyDict); overload;
+    { Counter.most_common([n]): (element, count) pairs, highest count first. The
+      pair is a 2-element list — NilPy has no tuple type; indexing is identical. }
+    function most_common: TPyList;
+    function most_common(n: Integer): TPyList; overload;
     property Items[const k: Variant]: Variant read fetch write store; default;
   end;
 
@@ -163,7 +192,27 @@ type
   Exception = class
   public
     msg: AnsiString;
+    FHelpContext: Integer;
     constructor Create(const m: AnsiString);
+    { The SYSUTILS surface on the same object. A .npy program pulls pylib before
+      any imported unit, so sysutils' own `Exception` declaration is shadowed by
+      this one and its descendants (EConvertError, …) and method bodies compile
+      against THIS class — which used to have neither CreateFmt nor FMessage, so
+      `import json` (or anything reaching sysutils) died on the first raise
+      (bug-nilpy-rtl-exception-surface-shadowed).
+
+      FMessage and Message are PROPERTIES over `msg`, not fields: one storage,
+      so a Python `raise ValueError("mine")` and a Pascal `raise
+      EConvertError.CreateFmt(...)` write the same place and both read back. Two
+      synchronised fields were tried first and lost the message on the read path
+      — print(e) reads the `msg` FIELD directly (the frontend synthesises that
+      access), so `msg` must stay the field and everything else a view on it.
+      CreateFmt is declared here and IMPLEMENTED BY sysutils, which is the unit
+      that has Format(). }
+    constructor CreateFmt(const m: AnsiString; const args: array of const);
+    property FMessage: AnsiString read msg write msg;
+    property Message: AnsiString read msg write msg;
+    property HelpContext: Integer read FHelpContext write FHelpContext;
   end;
   ValueError        = class(Exception) end;
   TypeError         = class(Exception) end;
@@ -264,11 +313,19 @@ function pyvar_repr(const v: Variant): AnsiString;
   frontend to format a variant/Any print argument, which otherwise reached the
   backend's `<object>` placeholder (bug-nilpy-print-variant-holding-list). }
 function pyvar_print_of(const v: Variant): AnsiString;
+{ `print(*xs)` — the unpacked list rendered as print would render its elements:
+  each in print's own string form, single-space separated. leadSep asks for a
+  leading separator too, which is what a print argument BEFORE the `*xs` needs;
+  keeping it here rather than injecting a space at the call site is what makes
+  `print("a", *[])` print `a` and not `a `, since an empty list adds nothing. }
+function pyprint_star(l: TPyList; leadSep: Boolean): AnsiString;
 { Python's format() for an f-string hole with a spec. The spec arrives as the
   literal text between ':' and the closing brace; this unit is the ONE place
   that interprets it, so the lexer never has to know what "05x" means. }
 function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
 function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; overload;
+function PyFmtFixed(d: Double; prec: Integer): AnsiString;
+function pyformat_of(d: Double; const spec: AnsiString): AnsiString; overload;
 function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; overload;
 { `bytearray(n)` and `bytes(b)` are spelled as ordinary FUNCTIONS rather than
   recognised by the frontend: neither name is a Pascal keyword, so both
@@ -506,6 +563,21 @@ function pynone: Variant;
   for-in loop variable is always a variant, and an overload set resolved by
   static type picks the wrong member for it. }
 function pylist_v(const v: Variant): TPyList;
+{ The same for a DICT: `for k, v in options.items()` where options came out of
+  another dict is a variant, and a two-name for-in needs the real TPyDict. }
+function pydict_v(const v: Variant): TPyDict;
+{ `f(*args, **kwargs)` FORWARDED into a fixed-arity callee (the third rung of
+  feature-nilpy-star-args-kwargs). The call site emits a dispatch on the actual
+  argument count, and these two check at run time what the desugar cannot check
+  at compile time: that the count is one the callee accepts, and that no keyword
+  arguments were forwarded — binding those by name would need a runtime call
+  protocol, so it FAILS rather than dropping them silently. }
+procedure pystar_check_arity(l: TPyList; lo: Integer; hi: Integer);
+procedure pystar_no_kwargs(d: TPyDict);
+{ One forwarded argument, or None when the caller passed fewer. The dispatch
+  evaluates every slot up to the callee's widest arity before choosing an arm,
+  so reading past the end has to be defined rather than an index error. }
+function pystar_arg(l: TPyList; i: Integer): Variant;
 { abs() of a variant: the tag decides int or float, which the static
   __pxxAbsInt/__pxxAbsDbl split cannot (a for-in variable is a variant). }
 function pyabs_v(const v: Variant): Variant;
@@ -543,6 +615,53 @@ function list(const v: Variant): TPyList; overload;
   uforth uses `dict(vm.dict)` to snapshot word-list state for MARKER. }
 function dict(d: TPyDict): TPyDict;
 function dict(const v: Variant): TPyDict; overload;
+
+{ dict.fromkeys(iterable): a dict with those keys, values None, insertion order
+  preserved. `list(dict.fromkeys(xs))` is the standard order-preserving dedupe. }
+function pydict_fromkeys(l: TPyList): TPyDict;
+{ `set(iterable)` — Python's set constructor. A set is a TPyList here (see
+  PyAnnTypeAt and TPyList.add), so this is "copy, skipping duplicates". The
+  iterable may be a list/tuple/set, a dict (its KEYS, like CPython) or a string
+  (its characters); anything else is a loud TypeError rather than a guess. }
+function pyset_of(const v: Variant): TPyList;
+{ `{**a, **b}` — copy src's pairs into dst, later keys winning, which is
+  Python's merge rule. The frontend emits one call per `**` in a dict literal. }
+procedure pydict_merge(dst: TPyDict; src: TPyDict);
+{ The AGGREGATE builtins over a list (a generator expression already desugars to
+  one). Each keeps Python's own answer for the empty case: sum([]) is 0, any([])
+  is False, all([]) is True, and max/min of an empty sequence is an ERROR rather
+  than a made-up value. Element arithmetic and comparison go through the same
+  pyadd_v / PyVarCompare the operators use, so int/float/str behave as they do
+  everywhere else (feature-nilpy-aggregate-builtins). }
+{ a > b: numbers by value, strings by text — the comparison the aggregate
+  builtins and pyeval's sorted() share. }
+function pyvar_gt(const a: Variant; const b: Variant): Boolean;
+{ `next(it)` / `next(it, default)` over a materialised sequence. NOT named
+  `next`: itertools' counter already owns that name for its own argument type,
+  and adding a TPyList overload made an untyped argument (a ClassVar holding a
+  counter) pick the wrong one and SEGFAULT. The frontend maps the Python
+  spelling onto these when the argument is a list. NilPy builds a
+  generator expression into a LIST, so this is "the first element" — the whole
+  sequence has already been evaluated, which is the documented difference from
+  CPython's lazy generator (it matters only for an infinite or side-effecting
+  generator, neither of which the corpus has). Without a default, an empty
+  sequence raises StopIteration, as Python does. }
+{ `zip(a, b)` as a VALUE — a list of [x, y] pairs, truncated to the shorter
+  input, which is Python's rule. The for-header form never comes here: it walks
+  both containers by index (PyParseForZip). }
+function pyzip(a: TPyList; b: TPyList): TPyList;
+function pynext_first(l: TPyList): Variant;
+function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
+function sum(l: TPyList): Variant;
+function max(l: TPyList): Variant; overload;
+function min(l: TPyList): Variant; overload;
+function any(l: TPyList): Boolean;
+function all(l: TPyList): Boolean;
+
+{ collections.Counter(...) — a TPyDict in Counter mode; see TPyDict. }
+function Counter: TPyDict;
+function Counter(l: TPyList): TPyDict; overload;
+function Counter(const s: AnsiString): TPyDict; overload;
 { `reversed(x)` — Python returns a lazy iterator; NilPy's `for` is a counted-loop
   desugar with no iterator concept, so this is the reversed COPY, which behaves
   identically for `for x in reversed(xs)` and `list(reversed(xs))`. }
@@ -558,6 +677,11 @@ function pydictcontains(d: TPyDict; const k: Variant): Boolean;
   already compares strings by text rather than by which copy you hold. }
 function pylist_eq(a: TPyList; b: TPyList): Boolean;
 function len(const s: AnsiString): Integer; overload;
+{ len() of a VARIANT — a dynamically-typed value (a list element, a dataclass
+  field, anything the frontend could not pin to a class). Without it, `len(x)`
+  on such a value was a compile error listing only the class and string
+  overloads, which is a wall for ordinary Python. }
+function len(const v: Variant): Integer; overload;
 function next(c: TPyCounter): Int64;
 function pyvar_holds(const v: Variant; k: Int64): Boolean;
 function pycontains(l: TPyList; const v: Variant): Boolean;
@@ -1126,6 +1250,14 @@ begin
   FItems := nil;
 end;
 
+function TPyList.count(const v: Variant): Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to FLen - 1 do
+    if PyVarEq(PPyVarRec(NativeInt(FItems) + i * 16), PPyVarRec(@v)) then Inc(Result);
+end;
+
 function TPyList.count: Integer;
 begin
   Result := FLen;
@@ -1592,6 +1724,7 @@ procedure PyDictHashPut(d: TPyDict; keyIdx: Integer);
   guarantees the key is not already present, so no PyVarEq dup check here. }
 var mask, pos: NativeUInt; slotp: PInteger;
 begin
+          ' hashcap=', d.FHashCap, ' fkeys=', Int64(NativeInt(d.FKeys)), ' keyIdx=', keyIdx);
   mask := NativeUInt(d.FHashCap) - 1;
   pos := PyVarHashKey(PPyVarRec(NativeInt(d.FKeys) + keyIdx * 16)) and mask;
   while True do
@@ -1653,7 +1786,17 @@ var
   src, dst: PPyVarRec;
 begin
   i := indexof(k);
-  if i < 0 then PyKeyError;
+  if i < 0 then
+  begin
+    { Counter mode: a key that was never stored reads as 0, which is the whole
+      reason counting code uses a Counter (`c[k] += 1` with no seeding). }
+    if FCounterMode then
+    begin
+      Result := 0;
+      exit;
+    end;
+    PyKeyError;
+  end;
   src := PPyVarRec(NativeInt(FVals) + i * 16);
   dst := PPyVarRec(@Result);
   PyVarSlotInit(dst, src);
@@ -1680,6 +1823,7 @@ var
   i: Integer;
   src, dst: PPyVarRec;
 begin
+          ' self=', Int64(NativeInt(Pointer(Self))), ' hashcap=', FHashCap);
   i := indexof(k);
   if i < 0 then
   begin
@@ -1687,6 +1831,8 @@ begin
     i := FLen;
     src := PPyVarRec(@k);
     dst := PPyVarRec(NativeInt(FKeys) + i * 16);
+            ' fhash=', Int64(NativeInt(FHash)), ' hashcap=', FHashCap,
+            ' countermode=', Ord(FCounterMode));
     PyVarSlotSet(dst, src);
     { register the new key in the index (grow keeps load factor <= 0.5, so a
       slot is always free). FHashCap is 0 only for the never-grown empty dict,
@@ -1779,6 +1925,301 @@ begin
   dst := PPyVarRec(@Result);
   PyVarSlotInit(dst, src);
   remove(k);
+end;
+
+{ a > b for the aggregate builtins: numbers by value, strings by text, which is
+  the pair Python orders and the corpus uses. A mixed number/string comparison
+  is a TypeError in CPython and halts here rather than inventing an order. }
+function pyvar_gt(const a: Variant; const b: Variant): Boolean;
+var pa, pb: PPyVarRec;
+begin
+  pa := PPyVarRec(@a); pb := PPyVarRec(@b);
+  if ((pa^.VType = 6) or (pa^.VType = 5)) and ((pb^.VType = 6) or (pb^.VType = 5)) then
+  begin
+    pyvar_gt := PyVarText(pa) > PyVarText(pb);
+    Exit;
+  end;
+  if ((pa^.VType = 6) or (pa^.VType = 5)) or ((pb^.VType = 6) or (pb^.VType = 5)) then
+  begin
+    WriteLn('TypeError: comparison of a string with a number');
+    Halt(1);
+  end;
+  if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
+    pyvar_gt := PyVarAsFloat(pa) > PyVarAsFloat(pb)
+  else
+    pyvar_gt := pyvar_to_int(a) > pyvar_to_int(b);
+end;
+
+function pyzip(a: TPyList; b: TPyList): TPyList;
+var r, pair: TPyList; i, n: Integer; pv: Variant;
+begin
+  r := TPyList.Create;
+  pyzip := r;
+  if (a = nil) or (b = nil) then Exit;
+  n := a.count;
+  if b.count < n then n := b.count;
+  for i := 0 to n - 1 do
+  begin
+    pair := TPyList.Create;
+    pair.append(a.at(i));
+    pair.append(b.at(i));
+    PPyVarRec(@pv)^.VType := 7;
+    PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
+    PXXObjRetain(Pointer(pair));
+    r.append(pv);
+  end;
+end;
+
+function pynext_first(l: TPyList): Variant;
+begin
+  if (l = nil) or (l.count = 0) then
+    raise StopIteration.Create('next() on an exhausted sequence');
+  pynext_first := l.at(0);
+end;
+
+function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
+begin
+  if (l = nil) or (l.count = 0) then pynext_first_or := dflt else pynext_first_or := l.at(0);
+end;
+
+function sum(l: TPyList): Variant;
+var i: Integer;
+begin
+  Result := pyvar_of_int(0);
+  if l = nil then Exit;
+  for i := 0 to l.count - 1 do Result := pyadd_v(Result, l.at(i));
+end;
+
+function max(l: TPyList): Variant;
+var i: Integer;
+begin
+  if (l = nil) or (l.count = 0) then
+  begin
+    WriteLn('ValueError: max() arg is an empty sequence');
+    Halt(1);
+  end;
+  Result := l.at(0);
+  for i := 1 to l.count - 1 do
+    if pyvar_gt(l.at(i), Result) then Result := l.at(i);
+end;
+
+function min(l: TPyList): Variant;
+var i: Integer;
+begin
+  if (l = nil) or (l.count = 0) then
+  begin
+    WriteLn('ValueError: min() arg is an empty sequence');
+    Halt(1);
+  end;
+  Result := l.at(0);
+  for i := 1 to l.count - 1 do
+    if pyvar_gt(Result, l.at(i)) then Result := l.at(i);
+end;
+
+function any(l: TPyList): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if l = nil then Exit;
+  for i := 0 to l.count - 1 do
+    if pyvar_to_bool(l.at(i)) then begin Result := True; Exit; end;
+end;
+
+function all(l: TPyList): Boolean;
+var i: Integer;
+begin
+  Result := True;
+  if l = nil then Exit;
+  for i := 0 to l.count - 1 do
+    if not pyvar_to_bool(l.at(i)) then begin Result := False; Exit; end;
+end;
+
+procedure pydict_merge(dst: TPyDict; src: TPyDict);
+var kl, vl: TPyList; i: Integer;
+begin
+  if (dst = nil) or (src = nil) then Exit;
+  kl := src.keylist;
+  vl := src.vallist;
+  for i := 0 to kl.count - 1 do dst.store(kl.at(i), vl.at(i));
+end;
+
+function pyset_of(const v: Variant): TPyList;
+var r, kl: TPyList; o: TObject; i: Integer; sv: AnsiString;
+begin
+  r := TPyList.Create;
+  Result := r;
+  if pyvartag(v) = 6 then
+  begin
+    sv := pystr_of(v);
+    for i := 1 to Length(sv) do r.add(pystr_ofchar(sv[i]));
+    Exit;
+  end;
+  if pyvartag(v) <> 7 then
+  begin
+    WriteLn('TypeError: set() argument must be iterable');
+    Halt(1);
+  end;
+  o := TObject(pyvarobj(v));
+  if o is TPyList then
+  begin
+    for i := 0 to TPyList(o).count - 1 do r.add(TPyList(o).at(i));
+    Exit;
+  end;
+  if o is TPyDict then
+  begin
+    kl := TPyDict(o).keylist;
+    for i := 0 to kl.count - 1 do r.add(kl.at(i));
+    Exit;
+  end;
+  WriteLn('TypeError: set() argument must be iterable');
+  Halt(1);
+end;
+
+function pydict_fromkeys(l: TPyList): TPyDict;
+var d: TPyDict; i: Integer;
+begin
+  d := TPyDict.Create;
+  if l <> nil then
+    for i := 0 to l.count - 1 do
+      d.store(l.at(i), pynone());
+  Result := d;
+end;
+
+{ ---- collections.Counter ------------------------------------------------- }
+
+procedure TPyDict.update(l: TPyList);
+var i: Integer; k, pair: Variant; pl: TPyList; o: TObject;
+begin
+  if l = nil then exit;
+  for i := 0 to l.count - 1 do
+  begin
+    if FCounterMode then
+    begin
+      k := l.at(i);
+      store(k, VariantToInt64(fetch(k)) + 1);
+    end
+    else
+    begin
+      { a plain dict updates from (key, value) pairs }
+      pair := l.at(i);
+      o := TObject(pyvarobj(pair));
+      if o is TPyList then
+      begin
+        pl := TPyList(o);
+        if pl.count >= 2 then store(pl.at(0), pl.at(1));
+      end;
+    end;
+  end;
+end;
+
+{ CPython's Counter.update(mapping) ADDS the mapping's values; a plain dict's
+  update(mapping) replaces them. }
+procedure TPyDict.update(d: TPyDict);
+var ks, vs: TPyList; i: Integer; k: Variant;
+begin
+  if d = nil then exit;
+  ks := d.keylist;
+  vs := d.vallist;
+  for i := 0 to ks.count - 1 do
+  begin
+    k := ks.at(i);
+    if FCounterMode then
+      store(k, VariantToInt64(fetch(k)) + VariantToInt64(vs.at(i)))
+    else
+      store(k, vs.at(i));
+  end;
+end;
+
+{ Insertion sort over an index vector: a Counter here holds a handful of note or
+  chord names, so the simple thing is the right thing. }
+function TPyDict.most_common(n: Integer): TPyList;
+var ks, vs, pair, res: TPyList;
+    idx: array of Integer;
+    i, j, t, cnt: Integer;
+begin
+  ks := keylist;
+  vs := vallist;
+  cnt := ks.count;
+  SetLength(idx, cnt);
+  for i := 0 to cnt - 1 do idx[i] := i;
+  for i := 1 to cnt - 1 do
+  begin
+    j := i;
+    while (j > 0) and
+          (VariantToInt64(vs.at(idx[j])) > VariantToInt64(vs.at(idx[j - 1]))) do
+    begin
+      t := idx[j];
+      idx[j] := idx[j - 1];
+      idx[j - 1] := t;
+      j := j - 1;
+    end;
+  end;
+  res := TPyList.Create;
+  if (n >= 0) and (n < cnt) then cnt := n;
+  for i := 0 to cnt - 1 do
+  begin
+    pair := TPyList.Create;
+    pair.append(ks.at(idx[i]));
+    pair.append(vs.at(idx[i]));
+    res.append(pair);
+  end;
+  Result := res;
+end;
+
+function TPyDict.most_common: TPyList;
+begin
+  Result := most_common(-1);
+end;
+
+{ Counter() / Counter(iterable) as plain functions, so Python's constructor
+  spelling resolves through the ordinary call path with no frontend mapping —
+  the same trick lib/rtl/re.pas uses for `import re`. }
+function Counter: TPyDict;
+var c: TPyDict;
+begin
+  c := TPyDict.Create;
+  c.FCounterMode := True;
+  Result := c;
+end;
+
+function Counter(l: TPyList): TPyDict;
+var c: TPyDict;
+begin
+  c := TPyDict.Create;
+  c.FCounterMode := True;
+  c.update(l);
+  Result := c;
+end;
+
+function Counter(const s: AnsiString): TPyDict;
+var c: TPyDict; i: Integer;
+begin
+  c := TPyDict.Create;
+  c.FCounterMode := True;
+  for i := 1 to Length(s) do
+    c.store(s[i], VariantToInt64(c.fetch(s[i])) + 1);
+  Result := c;
+end;
+
+function TPyDict.itemlist: TPyList;
+var r, pair, kl, vl: TPyList; i: Integer; pv: Variant;
+begin
+  r := TPyList.Create;
+  kl := keylist;
+  vl := vallist;
+  for i := 0 to kl.count - 1 do
+  begin
+    pair := TPyList.Create;
+    pair.append(kl.at(i));
+    pair.append(vl.at(i));
+    { box the pair as a VT_OBJECT slot and retain it — the same shape a nested
+      list literal gets when it is appended }
+    PPyVarRec(@pv)^.VType := 7;
+    PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
+    PXXObjRetain(Pointer(pair));
+    r.append(pv);
+  end;
+  itemlist := r;
 end;
 
 function TPyDict.keylist: TPyList;
@@ -2876,6 +3317,82 @@ begin
   msg := m;
 end;
 
+{ One `array of const` element as a string / as an integer's decimal text. The
+  same shape as sysutils' FmtArgStr/FmtArgInt, duplicated rather than shared
+  because pylib must not pull sysutils in. }
+function pyvarrec_str(const v: TVarRec): AnsiString;
+var pc: PChar; i: Integer;
+begin
+  Result := '';
+  case v.VType of
+    vtAnsiString, vtPChar:
+      begin
+        if v.VType = vtAnsiString then pc := PChar(v.VAnsiString) else pc := PChar(v.VPChar);
+        if pc <> nil then
+        begin
+          i := 0;
+          while pc[i] <> #0 do begin Result := Result + pc[i]; Inc(i); end;
+        end;
+      end;
+    vtChar:    Result := v.VChar;
+    vtInteger: Result := pystr_of(Int64(v.VInteger));
+    vtInt64:   Result := pystr_of(v.VInt64^);
+    vtBoolean: if v.VBoolean then Result := 'True' else Result := 'False';
+  end;
+end;
+
+function pyvarrec_int_str(const v: TVarRec): AnsiString;
+begin
+  case v.VType of
+    vtInt64:   Result := pystr_of(v.VInt64^);
+    vtBoolean: Result := pystr_of(Int64(Ord(v.VBoolean)));
+    vtChar:    Result := pystr_of(Int64(Ord(v.VChar)));
+  else
+    Result := pystr_of(Int64(v.VInteger));
+  end;
+end;
+
+{ sysutils' CreateFmt on the shadowing class. It cannot simply call Format():
+  pylib is pulled into every .npy and must not depend on sysutils (which is what
+  drags the whole RTL in), so the substitution is done here over the same
+  `array of const` FPC passes. The subset is what the RTL's own raise sites
+  actually use — %s, %d and %% — and an unsupported spec is left VERBATIM rather
+  than guessed at, so a wrong message is visible as a stray %spec instead of
+  silently losing its argument. }
+constructor Exception.CreateFmt(const m: AnsiString; const args: array of const);
+var i, ai: Integer; c: Char; outS: AnsiString;
+begin
+  outS := '';
+  ai := 0;
+  i := 1;
+  while i <= Length(m) do
+  begin
+    c := m[i];
+    if (c = '%') and (i < Length(m)) then
+    begin
+      c := m[i + 1];
+      if c = '%' then
+      begin
+        outS := outS + '%';
+        i := i + 2;
+        Continue;
+      end;
+      if ((c = 's') or (c = 'd')) and (ai <= High(args)) then
+      begin
+        if c = 's' then outS := outS + pyvarrec_str(args[ai])
+        else outS := outS + pyvarrec_int_str(args[ai]);
+        ai := ai + 1;
+        i := i + 2;
+        Continue;
+      end;
+    end;
+    outS := outS + m[i];
+    i := i + 1;
+  end;
+  msg := outS;
+  FHelpContext := 0;
+end;
+
 function pyos_path_isabs(const p: AnsiString): Boolean;
 begin
   Result := (Length(p) > 0) and (p[1] = '/');
@@ -3525,6 +4042,22 @@ begin
   end;
 end;
 
+function len(const v: Variant): Integer; overload;
+var o: TObject; t: Int64;
+begin
+  t := pyvartag(v);
+  if (t = 5) or (t = 6) then begin Result := Length(VariantToStr(v)); Exit; end;
+  if t = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then begin Result := TPyList(o).count; Exit; end;
+    if o is TPyDict then begin Result := TPyDict(o).count; Exit; end;
+    if o is TPyBytes then begin Result := TPyBytes(o).count; Exit; end;
+  end;
+  PyTypeError(t, 'a str, list, dict or bytes');
+  Result := 0;
+end;
+
 function len(b: TPyBytes): Integer; overload;
 begin
   Result := b.FLen;
@@ -3597,10 +4130,22 @@ begin
     width := width * 10 + (Ord(spec[p]) - Ord('0'));
     Inc(p);
   end;
+  { a FLOAT spec on an integer value — Python prints `{2:.1f}` as `2.0`, and an
+    int is exactly representable, so hand it to the float formatter }
+  if (p <= Length(spec)) and (spec[p] = '.') then
+  begin
+    Result := pyformat_of(pyfloat_ofint(i), spec);
+    Exit;
+  end;
   if p <= Length(spec) then
   begin
     kind := spec[p];
     Inc(p);
+  end;
+  if (kind = 'f') or (kind = 'F') or (kind = 'e') or (kind = 'E') then
+  begin
+    Result := pyformat_of(pyfloat_ofint(i), spec);
+    Exit;
   end;
   if p <= Length(spec) then
   begin
@@ -3651,6 +4196,77 @@ begin
   Result := PyFmtPad(s, width, False, leftAlign);
 end;
 
+function PyFmtFixed(d: Double; prec: Integer): AnsiString;
+{ Fixed-point rendering with `prec` digits after the point — pylib's own, since
+  pylib may not pull sysutils in (see the FmtArgStr note above). Half-up
+  rounding with carry, which is what Python's `.Nf` prints for the values a
+  format spec is used on. }
+var neg: Boolean; ip: Int64; fp: Int64; scale: Double; i: Integer; fs: AnsiString;
+begin
+  if prec < 0 then prec := 0;
+  neg := d < 0.0;
+  if neg then d := -d;
+  scale := 1.0;
+  for i := 1 to prec do scale := scale * 10.0;
+  ip := Trunc(d);
+  fp := Round((d - ip) * scale);
+  if fp >= Round(scale) then begin ip := ip + 1; fp := 0; end;
+  Result := PyFmtBase(ip, 10, False);
+  if prec > 0 then
+  begin
+    fs := PyFmtBase(fp, 10, False);
+    while Length(fs) < prec do fs := '0' + fs;
+    Result := Result + '.' + fs;
+  end;
+  if neg then Result := '-' + Result;
+end;
+
+function pyformat_of(d: Double; const spec: AnsiString): AnsiString; overload;
+{ `{x:.2f}` and friends. Same grammar as the integer spec plus a `.precision`
+  group; `f` is fixed point, `g` is FloatToStr's compact form. }
+var p, width, prec: Integer; zero, leftAlign, hasPrec: Boolean;
+    kind: Char; body: AnsiString;
+begin
+  p := 1; zero := False; leftAlign := False; width := 0;
+  prec := 6; hasPrec := False; kind := 'f';
+  if (p <= Length(spec)) and ((spec[p] = '<') or (spec[p] = '>')) then
+  begin
+    leftAlign := spec[p] = '<';
+    Inc(p);
+  end;
+  if (p <= Length(spec)) and (spec[p] = '0') then begin zero := True; Inc(p); end;
+  while (p <= Length(spec)) and (spec[p] >= '0') and (spec[p] <= '9') do
+  begin
+    width := width * 10 + (Ord(spec[p]) - Ord('0'));
+    Inc(p);
+  end;
+  if (p <= Length(spec)) and (spec[p] = '.') then
+  begin
+    Inc(p);
+    prec := 0; hasPrec := True;
+    while (p <= Length(spec)) and (spec[p] >= '0') and (spec[p] <= '9') do
+    begin
+      prec := prec * 10 + (Ord(spec[p]) - Ord('0'));
+      Inc(p);
+    end;
+  end;
+  if p <= Length(spec) then begin kind := spec[p]; Inc(p); end;
+  if p <= Length(spec) then
+  begin
+    WriteLn('Nil Python: unsupported f-string format spec "', spec, '"');
+    Halt(1);
+  end;
+  if (kind = 'f') or (kind = 'F') then body := PyFmtFixed(d, prec)
+  else if (kind = 'g') or (kind = 'G') then body := FloatToStr(d)
+  else if kind = 's' then body := FloatToStr(d)
+  else
+  begin
+    WriteLn('Nil Python: unsupported f-string format spec "', spec, '"');
+    Halt(1);
+  end;
+  Result := PyFmtPad(body, width, zero, leftAlign);
+end;
+
 function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; overload;
 var tag: Int64;
 begin
@@ -3668,6 +4284,15 @@ begin
   if (tag = 1) or (tag = 2) or (tag = 4) or (tag = 5) then
   begin
     Result := pyformat_of(PPyVarRec(@v)^.Payload, spec);
+    Exit;
+  end;
+  { VT_DOUBLE: `{score:.1f}` is the single most common spec in real Python, so
+    the float formatter runs rather than the old halt. An INTEGER-tagged value
+    still gets one when the spec asks for a float form — Python formats `3` as
+    `3.0` under `.1f`. }
+  if tag = 3 then
+  begin
+    Result := pyformat_of(pyvar_to_float(v), spec);
     Exit;
   end;
   WriteLn('Nil Python: f-string format spec "', spec,
@@ -3784,6 +4409,45 @@ begin
 end;
 
 { list(v) on a variant: a str yields its characters, a list a shallow copy. }
+procedure pystar_check_arity(l: TPyList; lo: Integer; hi: Integer);
+var n: Integer;
+begin
+  n := 0;
+  if l <> nil then n := l.count;
+  if (n < lo) or (n > hi) then
+  begin
+    WriteLn('TypeError: forwarded call got ', n, ' arguments, expected ', lo, ' to ', hi);
+    Halt(1);
+  end;
+end;
+
+procedure pystar_no_kwargs(d: TPyDict);
+begin
+  if (d <> nil) and (d.count > 0) then
+  begin
+    WriteLn('TypeError: forwarding **kwargs into a callee with named parameters is not supported');
+    Halt(1);
+  end;
+end;
+
+function pystar_arg(l: TPyList; i: Integer): Variant;
+begin
+  if (l = nil) or (i < 0) or (i >= l.count) then Result := pynone()
+  else Result := l.at(i);
+end;
+
+function pydict_v(const v: Variant): TPyDict;
+var o: TObject;
+begin
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyDict then begin Result := TPyDict(o); Exit; end;
+  end;
+  PyTypeError(pyvartag(v), 'a dict');
+  Result := TPyDict.Create;
+end;
+
 function pylist_v(const v: Variant): TPyList;
 var o: TObject;
 begin
@@ -4193,6 +4857,18 @@ begin
     if o is TPyBytes then begin Result := pybytes_repr(TPyBytes(o)); Exit; end;
   end;
   Result := pystr_of(v);
+end;
+
+function pyprint_star(l: TPyList; leadSep: Boolean): AnsiString;
+var i: Integer;
+begin
+  Result := '';
+  if l = nil then Exit;
+  for i := 0 to l.count - 1 do
+  begin
+    if (i > 0) or leadSep then Result := Result + ' ';
+    Result := Result + pyvar_print_of(l[i]);
+  end;
 end;
 
 function pylist_repr(l: TPyList): AnsiString;
