@@ -59,6 +59,10 @@ var
     the element region is `KEY : VALUE` (not one EXPR), so the body becomes
     `target.store(KEY, VALUE)` instead of `.append(EXPR)`. See PyParseDictComp. }
   PyCompIsDict: Boolean;
+  { SET-comprehension mode: a brace group with a `for` and no colon. The target
+    is a TPyList (which is how NilPy represents a set) and elements go in through
+    `add`, the duplicate-skipping insert, so len() matches Python's. }
+  PyCompIsSet: Boolean;
   { Statement HOISTING, for expression-position comprehensions/genexprs. A
     comprehension used inside an expression (`"\n".join(x for x in it)`, or a
     bracketed one as a call argument) cannot be an expression on its own — the
@@ -1768,8 +1772,14 @@ begin
   end;
   if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkIdent) and
      IsClassType(GetTokenStr(startIdx)) and (startIdx + 1 < endIdx) and
-     (Tokens[startIdx + 1].Kind = tkLParen) then
+     (Tokens[startIdx + 1].Kind = tkLParen) and
+     (FindUClass(GetTokenStr(startIdx)) >= 0) then
   begin
+    { ...and only for a class that REALLY exists: `str(x)` / `int(x)` are
+      builtin CONVERSIONS whose names IsClassType also answers to, and typing
+      them tyClass-with-no-identity made an unannotated `return str(x)` hand
+      back a string handle the caller read as an object pointer — a segfault.
+      The builtin table further down gives them their real result types. }
     Result := tyClass;
     PyInferLastCi := FindUClass(GetTokenStr(startIdx));
     Exit;
@@ -1822,6 +1832,31 @@ begin
           if (lo = 'length') or (lo = 'ord') or (lo = 'pos') then tk := tyInteger
           else if lo = 'chr' then tk := tyChar
           else if lo = 'copy' then tk := tyString
+          { The NilPy BUILTINS the shared parser lowers as intrinsics: they are
+            not Procs either, so `return str(x)` in an unannotated def inferred
+            an INTEGER, and the caller then read the returned string handle as a
+            number — a segfault or a garbage integer, silently
+            (bug-nilpy-unannotated-return-infers-number-for-string-concat is the
+            operator half of the same blind spot). }
+          else if (lo = 'str') or (lo = 'repr') or (lo = 'format') then tk := tyAnsiString
+          else if lo = 'int' then tk := tyInt64
+          else if lo = 'float' then tk := tyDouble
+          else if lo = 'bool' then tk := tyBoolean
+          else if (lo = 'len') or (lo = 'index') then tk := tyInteger
+          else if (lo = 'any') or (lo = 'all') then tk := tyBoolean
+          else if (lo = 'list') or (lo = 'sorted') or (lo = 'set') or
+                  (lo = 'zip') or (lo = 'enumerate') then
+          begin
+            tk := tyClass;
+            PyInferLastCi := FindUClass('TPyList');
+          end
+          else if lo = 'dict' then
+          begin
+            tk := tyClass;
+            PyInferLastCi := FindUClass('TPyDict');
+          end
+          else if (lo = 'sum') or (lo = 'max') or (lo = 'min') or (lo = 'next') or
+                  (lo = 'abs') then tk := tyVariant
           else
           begin
             { Every top-level def has a registered Proc by now
@@ -3508,6 +3543,72 @@ begin
   ASTLeft[Result] := a0;
 end;
 
+{ The READ half of a subscript augmented assignment: call the default indexed
+  property's GETTER with the same self and index arguments the setter is about to
+  use. `d[k] += v` needs the current element, and the setter path has already
+  consumed the bracket group, so the arguments are re-used rather than re-parsed.
+  (feature-nilpy-augmented-subscript-assign) }
+{ A fresh AN_ARG chain over the SAME expression nodes. The read and the write
+  of `d[k] += v` both need the index arguments, and sharing one chain linked the
+  setter's value onto the reader's arguments — a cycle the compiler then walked
+  forever. }
+function PyCloneArgChain(head: Integer): Integer;
+var n, prev, copy: Integer;
+begin
+  Result := -1;
+  prev := -1;
+  n := head;
+  while n >= 0 do
+  begin
+    copy := AllocNode(AN_ARG);
+    ASTLeft[copy] := ASTLeft[n];
+    ASTRight[copy] := -1;
+    if prev < 0 then Result := copy else ASTRight[prev] := copy;
+    prev := copy;
+    n := ASTRight[n];
+  end;
+end;
+
+{ `zip(a, b)` as a value -> pylib pyzip, which builds the pair list. }
+function PyMakeZip(aNode, bNode: Integer): Integer;
+var a0, a1: Integer;
+begin
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := aNode;
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := bNode; ASTRight[a1] := -1;
+  ASTRight[a0] := a1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := FindProc('pyzip');
+  if ASTIVal[Result] < 0 then Error('Nil Python: pylib (pyzip) not loaded');
+  ASTTk[Result] := Ord(tyClass);
+  ASTRight[Result] := REC_UCLASS_BASE + FindUClass('TPyList');
+  ASTLeft[Result] := a0;
+end;
+
+function PyMakeSubscriptRead(selfNode, idxArgs, ci, pri: Integer): Integer;
+var methName: AnsiString; i, mmi, mpi, selfArg, callNode: Integer;
+begin
+  methName := '';
+  for i := 0 to UPropReadMLen[pri] - 1 do
+    AppendChar(methName, TokChars[UPropReadMOff[pri] + i]);
+  mmi := FindUMeth(ci, methName);
+  if mmi < 0 then Error('Nil Python: default property getter not found: ' + methName);
+  mpi := UMthProc_[mmi];
+  selfArg := AllocNode(AN_ARG);
+  ASTLeft[selfArg] := selfNode;
+  ASTRight[selfArg] := idxArgs;
+  if UMthVirSlot[mmi] >= 0 then
+  begin
+    callNode := AllocNode(AN_VIRTUAL_CALL);
+    ASTRight[callNode] := UMthVirSlot[mmi];
+  end
+  else
+    callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := mpi;
+  ASTTk[callNode] := Ord(Procs[mpi].RetType);
+  ASTLeft[callNode] := selfArg;
+  Result := callNode;
+end;
+
 { `v[key] = val` on a variant -> pyvar_setitem(v, key, val), a statement. }
 function PyMakeVariantSetItem(baseNode, idxNode, valNode: Integer): Integer;
 var procIdx, a0, a1, a2: Integer;
@@ -4353,7 +4454,8 @@ end;
   `Cls().m()` was a parse error (bug-nilpy-method-call-on-fresh-construction).
   CurTok is the '(' and the method name has been consumed. }
 function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer;
-var mmi, mpi, selfArg, lastArg, argNode, callNode, n, k: Integer;
+var mmi, mpi, selfArg, lastArg, argNode, callNode, n, k, kwIdx: Integer;
+    anyKw: Boolean;
 begin
   mmi := FindUMeth(ci, mname);
   if mmi < 0 then
@@ -4362,13 +4464,21 @@ begin
   ASTLeft[selfArg] := baseNode;
   ASTRight[selfArg] := -1;
   lastArg := selfArg;
+  mpi := UMthProc_[mmi];
   Expect(tkLParen, '(');
   n := 0;
+  anyKw := False;
   while CurTok.Kind <> tkRParen do
   begin
+    { keyword arguments here too — `WeightedDetector().analyze(rs, weights=w)`.
+      Slot 0 is Self, so the name scan starts at 1, exactly as the ordinary
+      method path does. }
+    kwIdx := PyKwArgIndex(mpi, 1);
+    if kwIdx <> 0 then anyKw := True;
     ParseArgExpr;
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := CurASTNode;
+    ASTIVal[argNode] := kwIdx;
     ASTRight[argNode] := -1;
     ASTRight[lastArg] := argNode;
     lastArg := argNode;
@@ -4376,6 +4486,12 @@ begin
     if CurTok.Kind = tkComma then Next else Break;
   end;
   Expect(tkRParen, ')');
+  if anyKw then
+  begin
+    n := 0;
+    PyBindKwArgs(mpi, selfArg, lastArg, n);
+    if n > 0 then Dec(n);                { drop Self from the argument count }
+  end;
   { pick the overload by the argument count written, then fill the callee's
     remaining DEFAULTED parameters, exactly as the ordinary call path does }
   k := FindUMethArity(ci, mname, n);
@@ -4412,7 +4528,10 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
     smPName: AnsiString; smTk: TTypeKind; smArgs: Integer;
     dualPi, dcall, dself, dcast, tern, pairN, condN: Integer;
-    dualCis, dualMmis: array[0..2] of Integer;
+    { room for a real class hierarchy: songformatter has EIGHT detector classes
+      all declaring analyze(), and the cap of three turned that into "too many
+      candidate classes to dispatch at runtime" }
+    dualCis, dualMmis: array[0..15] of Integer;
     nDual, di, kwIdx, kwDepth, swapCi, swapMmi, dualArgs: Integer;
     anyKw: Boolean;
     argExprs: array[0..15] of Integer;
@@ -6234,6 +6353,34 @@ end;
   which is how it is written when it is not the only argument:
   `next((c for c in cs if p(c)), default)`. The bare form (no parens) is
   PyBareGenExprAhead; the bracketed form is PyIsListCompAhead. }
+{ A SET comprehension — a brace group holding EXPR then `for`, with no depth-1
+  ':' before that `for` (a ':' would make it a dict comprehension instead). }
+function PyIsSetCompAhead: Boolean;
+var i, depth: Integer;
+begin
+  Result := False;
+  if CurTok.Kind <> tkBegin then Exit;
+  i := TokPos;
+  depth := 1;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkLBrack, tkLParen, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRBrack, tkRParen, tkEnd] then
+    begin
+      Dec(depth);
+      if depth = 0 then Exit;
+    end
+    else if (depth = 1) and (Tokens[i].Kind = tkColon) then Exit   { a dict comp }
+    else if (depth = 1) and (Tokens[i].Kind = tkIdent) and
+            (LowerCase(GetTokenStr(i)) = 'for') then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 function PyIsParenCompAhead: Boolean;
 var i, depth: Integer;
 begin
@@ -6437,8 +6584,14 @@ begin
     ASTRight[contNode] := REC_UCLASS_BASE + dictCi;
     contTk := tyClass;
   end
-  else if (not isStr) and (contTk = tyVariant) then
+  else if (not isStr) and ((contTk = tyVariant) or (contTk = tyUnknown)) then
   begin
+    { tyUNKNOWN too: a field read on a dynamically-typed receiver
+      (`for c in result.candidates` where result came out of a list) has no
+      static type at all, and refusing it read as "for-in needs a list, set,
+      dict or str (got something untyped)". pylist_v decides at run time and
+      raises if the value is not a sequence, which is the honest answer when
+      the type genuinely is not known until then. }
     vSym := FindProc('pylist_v');
     if vSym < 0 then Error('Nil Python: pylib (pylist_v) not loaded');
     vListNode := AllocNode(AN_ARG);
@@ -6457,7 +6610,25 @@ begin
     ci := ResolveNodeRec(contNode);
     if ci >= REC_UCLASS_BASE then ci := ci - REC_UCLASS_BASE else ci := -1;
     if ci < 0 then
-      Error('Nil Python: for-in needs a list, set, dict or str (got something untyped)');
+    begin
+      { A class-typed expression with no CLASS IDENTITY — a field read on a
+        dynamically-typed receiver, `for c in result.candidates` where `result`
+        came out of a list. Refusing it read as "got something untyped"; unbox
+        through pylist_v instead and let the run time decide, which is what the
+        variant container path does and is the honest answer when the type is
+        genuinely unknown until then. }
+      vSym := FindProc('pylist_v');
+      if vSym < 0 then Error('Nil Python: pylib (pylist_v) not loaded');
+      vListNode := AllocNode(AN_ARG);
+      ASTLeft[vListNode] := contNode;
+      ASTRight[vListNode] := -1;
+      contNode := AllocNode(AN_CALL);
+      ASTIVal[contNode] := vSym;
+      ASTTk[contNode] := Ord(tyClass);
+      ASTLeft[contNode] := vListNode;
+      ASTRight[contNode] := REC_UCLASS_BASE + listCi;
+      ci := listCi;
+    end;
     if (PyForExtraCount > 0) and (dictCi >= 0) and (ci = dictCi) then
       Error('Nil Python: a dict for-target takes two names');
     if (dictCi >= 0) and (ci = dictCi) then
@@ -6714,9 +6885,13 @@ begin
     else
     begin
       PyParseBoolExpr;
-      node := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'append',
-                          PyMakeIdent(PyCompTarget), CurASTNode);
-      if node < 0 then Error('Nil Python: pylib TPyList.append not loaded');
+      if PyCompIsSet then
+        node := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'add',
+                            PyMakeIdent(PyCompTarget), CurASTNode)
+      else
+        node := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'append',
+                            PyMakeIdent(PyCompTarget), CurASTNode);
+      if node < 0 then Error('Nil Python: pylib TPyList.append/add not loaded');
     end;
     TokPos := compSaved; Next;            { restore to the closing bracket }
     { `... if COND]`: parse the filter (loop variable now in scope) and gate
@@ -6901,6 +7076,32 @@ begin
   PyCompIsDict := savedDict;
   if bracketed then Expect(tkRBrack, ']');
   { each build statement runs before the current one }
+  while seq >= 0 do
+  begin
+    PyHoistStmt(ASTLeft[seq]);
+    seq := ASTRight[seq];
+  end;
+  Result := PyMakeIdent(tmpSym);
+end;
+
+{ The SET comprehension: the same build, with braces as delimiters and `add`
+  as the insert. }
+function PyParseSetComp: Integer;
+var tmpSym, exprStart, seq: Integer; savedDict, savedSet: Boolean;
+begin
+  savedDict := PyCompIsDict; savedSet := PyCompIsSet;
+  PyCompIsDict := False; PyCompIsSet := True;
+  tmpSym := AllocVar(PyHiddenName('gs'), tyClass);
+  Next;                                { consume the opening brace — NOT written
+                                         as a quoted character: this dialect
+                                         nests brace comments, so even a quoted
+                                         brace inside one opens a nested comment }
+  exprStart := TokPos - 1;
+  PyScanToCompFor;
+  if not PyIsIdent('for') then Error('Nil Python: malformed set comprehension');
+  seq := PyBuildComp(tmpSym, exprStart);
+  PyCompIsDict := savedDict; PyCompIsSet := savedSet;
+  Expect(tkEnd, 'close brace');
   while seq >= 0 do
   begin
     PyHoistStmt(ASTLeft[seq]);

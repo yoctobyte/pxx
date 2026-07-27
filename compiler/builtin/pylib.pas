@@ -644,6 +644,10 @@ function pyvar_gt(const a: Variant; const b: Variant): Boolean;
   CPython's lazy generator (it matters only for an infinite or side-effecting
   generator, neither of which the corpus has). Without a default, an empty
   sequence raises StopIteration, as Python does. }
+{ `zip(a, b)` as a VALUE — a list of [x, y] pairs, truncated to the shorter
+  input, which is Python's rule. The for-header form never comes here: it walks
+  both containers by index (PyParseForZip). }
+function pyzip(a: TPyList; b: TPyList): TPyList;
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
@@ -1933,6 +1937,26 @@ begin
     pyvar_gt := PyVarAsFloat(pa) > PyVarAsFloat(pb)
   else
     pyvar_gt := pyvar_to_int(a) > pyvar_to_int(b);
+end;
+
+function pyzip(a: TPyList; b: TPyList): TPyList;
+var r, pair: TPyList; i, n: Integer; pv: Variant;
+begin
+  r := TPyList.Create;
+  pyzip := r;
+  if (a = nil) or (b = nil) then Exit;
+  n := a.count;
+  if b.count < n then n := b.count;
+  for i := 0 to n - 1 do
+  begin
+    pair := TPyList.Create;
+    pair.append(a.at(i));
+    pair.append(b.at(i));
+    PPyVarRec(@pv)^.VType := 7;
+    PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
+    PXXObjRetain(Pointer(pair));
+    r.append(pv);
+  end;
 end;
 
 function pynext_first(l: TPyList): Variant;

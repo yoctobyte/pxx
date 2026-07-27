@@ -728,6 +728,8 @@ function PyAugBinTok(k: TTokenKind): TTokenKind; forward; { Nil Python augmented
 function PyMakeDynAttrGet(baseNode: Integer; const fname: AnsiString): Integer; forward; { Nil Python obj.name dynamic read (pyparser.inc) }
 function PyMakeDynAttrSet(baseNode: Integer; const fname: AnsiString; valNode: Integer): Integer; forward; { Nil Python obj.name = v dynamic write (pyparser.inc) }
 function PyMakeVariantSetItem(baseNode, idxNode, valNode: Integer): Integer; forward; { Nil Python v[key]=val on a variant (pyparser.inc) }
+function PyMakeSubscriptRead(selfNode, idxArgs, ci, pri: Integer): Integer; forward; { the read half of `d[k] += v` (pyparser.inc) }
+function PyCloneArgChain(head: Integer): Integer; forward;
 function PyMakeStrIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python s[i] (pyparser.inc) }
 function PyQualifyNested(const name: AnsiString): AnsiString; forward; { Nil Python nested-def name lookup (pyparser.inc) }
 function PyListRepeatPair(a, b: Integer): Boolean; forward;              { Nil Python `xs * n` (pyparser.inc) }
@@ -761,6 +763,9 @@ function PyParseCompExprValue(bracketed: Boolean): Integer; forward;
 function PyIsParenCompAhead: Boolean; forward;      { `(x for x in xs)` (pyparser.inc) }
 function PyNextOverListAhead: Boolean; forward;     { is `next(...)`'s argument a sequence? (pyparser.inc) }
 function PyParseParenComp: Integer; forward;
+function PyMakeZip(aNode, bNode: Integer): Integer; forward;   { `zip(a, b)` as a value (pyparser.inc) }
+function PyIsSetCompAhead: Boolean; forward;    { set comprehension (pyparser.inc) }
+function PyParseSetComp: Integer; forward;
 function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer; forward; { `Cls().m(...)` (pyparser.inc) } { Nil Python expression-position comprehension (pyparser.inc) }
 function PyIsSysStreamAhead: Boolean; forward; { Nil Python: at `sys.stdout`/`sys.stderr`? (pyparser.inc) }
 function PyStdlibCallAhead(var pname: AnsiString; var nTok: Integer): Boolean; forward; { Nil Python: at a mapped os./sys. call? (pyparser.inc) }
@@ -3347,6 +3352,7 @@ end;
 
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
+  augBin: TTokenKind; augRead, augNode: Integer;   { `d[k] += v` }
   viaProp: Boolean;   { fieldName was rewritten from a PROPERTY's backing field — visibility is the property's, skip the field check }
   mblobNode, cpPri, cpMmi, cpMpi: Integer;
   mkw, mslot, mnArgs: Integer;   { NilPy keyword argument: binding+1, target param, rebound count }
@@ -4356,6 +4362,20 @@ begin
             Inc(i);
           end;
           if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
+          { `d[k] += v` — an AUGMENTED assignment to a subscript. Python's most
+            common counting idiom, and it reported "assignment target is not an
+            lvalue" because the subscript lowered to a getter CALL and the
+            augmented path then built an AN_ASSIGN over it. Desugared to
+            `d[k] = d[k] OP v`; the index expression is evaluated twice, which is
+            the same trade the `del d[k]` rewrite makes and is invisible for the
+            pure index expressions the corpus uses.
+            (feature-nilpy-augmented-subscript-assign) }
+          augBin := tkEOF;
+          if PyExprMode and (i < TokCount) then
+          begin
+            augBin := PyAugBinTok(Tokens[i].Kind);
+            if augBin <> tkEOF then isAssign := True;
+          end;
 
           ParsePropIndexArgs(margIdx, mlastArg);   { [a {, b}] (bracket consumed here) }
 
@@ -4367,7 +4387,17 @@ begin
             mmi := FindUMeth(mci, methName);
             if mmi < 0 then Error('setter method not found: ' + methName);
             mpi := UMthProc_[mmi];
-            Expect(tkAssign, ':=');
+            augRead := -1;
+            if augBin <> tkEOF then
+            begin
+              { the read is built HERE, over a CLONE of the index arguments: the
+                setter appends its value to margIdx's chain, and sharing that
+                chain with the reader made the value an argument of the read —
+                a cycle the compiler walked forever (it segfaulted). }
+              augRead := PyMakeSubscriptRead(node, PyCloneArgChain(margIdx), mci, pri);
+              Next;                                 { consume the `+=` token }
+            end
+            else Expect(tkAssign, ':=');
             { NilPy value expression: two divergences from the Pascal reader.
               (1) `d[k] = None` stores a real None (VT_EMPTY variant), not the
               nil pointer literal — parsed as nil it boxed integer 0 and
@@ -4390,6 +4420,16 @@ begin
             end
             else
               ParseExpr;
+            if augBin <> tkEOF then
+            begin
+              { value := <current element> OP <rhs> }
+              augNode := AllocNode(AN_BINOP);
+              ASTIVal[augNode] := Ord(augBin);
+              ASTLeft[augNode] := augRead;
+              ASTRight[augNode] := CurASTNode;
+              ASTTk[augNode] := Ord(tyVariant);
+              CurASTNode := augNode;
+            end;
             if UMthVirSlot[mmi] >= 0 then begin mcallNode := AllocNode(AN_VIRTUAL_CALL); ASTRight[mcallNode] := UMthVirSlot[mmi]; end
             else mcallNode := AllocNode(AN_CALL);
             ASTIVal[mcallNode] := mpi; ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
@@ -11722,6 +11762,25 @@ begin
   else if PyExprMode and PyStdlibCallAhead(sdName, sdTok) then
     { `os.path.join(...)`, `sys.exit(...)` — mapped by name onto a pylib shim. }
     CurASTNode := PyParseStdlibCall(sdName, sdTok)
+  else if PyExprMode and PyIsIdent('zip') and (TokPos < TokCount) and
+          (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    { `zip(a, b)` as a VALUE — `list(zip(chords, chords[1:]))`. The for-header
+      form is recognised earlier (PyParseForZip) and walks both containers by
+      index; here the pairs have to exist as a list. }
+    Next; Expect(tkLParen, '(');
+    ParseArgExpr;
+    smBase := CurASTNode;
+    Expect(tkComma, ',');
+    ParseArgExpr;
+    CurASTNode := PyMakeZip(smBase, CurASTNode);
+    Expect(tkRParen, ')');
+    LastExprTk := tyClass;
+  end
+  else if PyExprMode and PyIsSetCompAhead then
+    { A set comprehension, checked before the dict-literal path: a brace group
+      with a `for` and no colon in it is not a dict. }
+    CurASTNode := PyParseSetComp
   else if PyExprMode and PyIsParenCompAhead then
     { `(x for x in xs)` — a generator expression in its own parentheses. Checked
       before the tuple form, which would otherwise take the '(' and then fail on
