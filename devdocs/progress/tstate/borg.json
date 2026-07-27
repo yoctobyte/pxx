@@ -1991,10 +1991,10 @@
  },
  "last_bench": {
   "conf_rows": 550,
-  "date": "2026-07-27T16:05:56Z",
+  "date": "2026-07-27T16:46:36Z",
   "rc": 0,
   "rows": 29,
-  "sha": "7f19ca7d5c6a52cf736c75c416233fce895db815"
+  "sha": "d776def8cabc3533668f8dfe74f0db6badce29d7"
  },
  "last_full": {
   "date": "2026-07-27T16:37:29Z",
