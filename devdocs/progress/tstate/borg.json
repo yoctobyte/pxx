@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-26T11:12:08Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "5d360be301b5d6860ed902acdcbb0a07424b9aea",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-26T11:15:59Z",
    "fixed": [],
    "new_red": [],
@@ -402,6 +394,14 @@
    "new_red": [],
    "sha": "bd03328fdcfa57fd0161ef31919e569df6ff017e",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-27T20:18:13Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "1f8bb3e75dfe859fb628935ea483e02056864b85",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1410,6 +1410,7 @@
   "test-core#src:test/test_named_dynarray_field.pas": "pass",
   "test-core#src:test/test_named_operators.pas": "pass",
   "test-core#src:test/test_narrowing_typecast_rvalue.pas": "pass",
+  "test-core#src:test/test_nativeint_cast_field.pas": "pass",
   "test-core#src:test/test_nested_class_type_b348.pas": "pass",
   "test-core#src:test/test_nested_comments.pas": "pass",
   "test-core#src:test/test_nested_cow.pas": "pass",
@@ -1438,6 +1439,7 @@
   "test-core#src:test/test_nilpy_dict_fromkeys.npy": "pass",
   "test-core#src:test/test_nilpy_dynamic_dispatch.npy": "pass",
   "test-core#src:test/test_nilpy_field_from_unannotated_param.npy": "pass",
+  "test-core#src:test/test_nilpy_fnvalue_abi.npy": "pass",
   "test-core#src:test/test_nilpy_html_tempfile.npy": "pass",
   "test-core#src:test/test_nilpy_import_alias.npy": "pass",
   "test-core#src:test/test_nilpy_infer_return.npy": "pass",
@@ -1995,11 +1997,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-27T19:24:19Z",
-  "sha": "bd03328fdcfa57fd0161ef31919e569df6ff017e",
-  "tier": "opt",
+  "date": "2026-07-27T20:18:13Z",
+  "sha": "1f8bb3e75dfe859fb628935ea483e02056864b85",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 164.4
+  "wall": 124.3
  },
  "last_bench": {
   "conf_rows": 550,
