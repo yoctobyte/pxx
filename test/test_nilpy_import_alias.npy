@@ -1,0 +1,8 @@
+# `import X as Y` — Python's module alias, mapped onto the unit resolver's own
+# `uses X as Y` (feature-uses-alias-as). The alias only has to make the PREFIX
+# acceptable: unit scope is flat here, so the unqualified spelling still works.
+import math as m
+
+print(int(m.Sqrt(16.0)))
+print(int(m.Max(3, 7)))
+print(int(Round(2.5)))

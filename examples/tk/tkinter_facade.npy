@@ -2,7 +2,7 @@
 # options passed as keyword arguments, any subset, which is what real tkinter
 # code looks like. COMPILE-only in the suite - it needs an X display to run;
 # run it under xvfb to see the widget paths and a working StringVar.
-import tkinter
+import tkinter as tk
 from tkinter import Frame, Canvas, StringVar
 
 root = Tk_()

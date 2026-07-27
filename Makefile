@@ -202,6 +202,9 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) examples/tk/tkinter_facade.npy /tmp/test_nilpy_tkinter26
 	./$(COMPILER) test/test_nilpy_kwargs_by_name.npy /tmp/test_nilpy_kwname26
 	test "$$(/tmp/test_nilpy_kwname26)" = "$$(printf '%b' 'contiguous: root 7 hi z\ninterior hole: 0 skipped-width z\nonly the last: 0  last-only\nnone given: 0  z')"
+	# import X as Y (the alias wins over a same-named compiled unit)
+	./$(COMPILER) test/test_nilpy_import_alias.npy /tmp/test_nilpy_import_alias26
+	test "$$(/tmp/test_nilpy_import_alias26)" = "$$(printf '4\n7\n2')"
 	# *args / **kwargs collected on the callee side, and print(*args)
 	./$(COMPILER) test/test_nilpy_star_args.npy /tmp/test_nilpy_star_args26
 	test "$$(/tmp/test_nilpy_star_args26)" = "$$(printf '%b' '0\n\n4\na 1 2.5 True\n2\n[1, 2] {\047k\047: 1}\np:\np: x 9\n7 0\n7 2\nalpha a\nbeta 2\n1 0 0\n\n1 2 1\n2 3\n[2, 3]\n[]')"
@@ -3218,6 +3221,9 @@ test-core: $(COMPILER)
 	./$(COMPILER) examples/tk/tkinter_facade.npy /tmp/test_nilpy_tkinter26
 	./$(COMPILER) test/test_nilpy_kwargs_by_name.npy /tmp/test_nilpy_kwname26
 	test "$$(/tmp/test_nilpy_kwname26)" = "$$(printf '%b' 'contiguous: root 7 hi z\ninterior hole: 0 skipped-width z\nonly the last: 0  last-only\nnone given: 0  z')"
+	# import X as Y (the alias wins over a same-named compiled unit)
+	./$(COMPILER) test/test_nilpy_import_alias.npy /tmp/test_nilpy_import_alias26
+	test "$$(/tmp/test_nilpy_import_alias26)" = "$$(printf '4\n7\n2')"
 	# *args / **kwargs collected on the callee side, and print(*args)
 	./$(COMPILER) test/test_nilpy_star_args.npy /tmp/test_nilpy_star_args26
 	test "$$(/tmp/test_nilpy_star_args26)" = "$$(printf '%b' '0\n\n4\na 1 2.5 True\n2\n[1, 2] {\047k\047: 1}\np:\np: x 9\n7 0\n7 2\nalpha a\nbeta 2\n1 0 0\n\n1 2 1\n2 3\n[2, 3]\n[]')"

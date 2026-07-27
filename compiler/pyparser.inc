@@ -9251,6 +9251,7 @@ var mainNode, stmt, blockNode, jmpPatch, i, savedUnitIdx: Integer; needsBuiltin:
     dummyNames: array[0..3] of AnsiString;
     dummyTypes: array[0..3] of TTypeKind;
     impName: AnsiString; isCount: Boolean;
+    aStrIdx, realStrIdx: Integer;
 begin
   needsBuiltin := True;
   pyHasExceptions := False;
@@ -9430,13 +9431,35 @@ begin
         { Python stdlib modules without a shim yet: consume-and-defer, use
           sites wall visibly (same policy as itertools above). Everything
           else goes through the unit resolver (sqlite3, C headers, ...). }
-        if CaseEqual(CurTok.SVal, 'sys') or CaseEqual(CurTok.SVal, 'os') or
-           CaseEqual(CurTok.SVal, 'textwrap') or CaseEqual(CurTok.SVal, 'select') or
-           CaseEqual(CurTok.SVal, 'itertools') then
+        impName := CurTok.SVal;
+        if CaseEqual(impName, 'sys') or CaseEqual(impName, 'os') or
+           CaseEqual(impName, 'textwrap') or CaseEqual(impName, 'select') or
+           CaseEqual(impName, 'itertools') then
           { skip }
         else
-          ParseUsesUnit(CurTok.SVal);
+          ParseUsesUnit(impName);
         Next;
+        { `import X as Y` — Python's module alias, and the same thing a Pascal
+          `uses X as Y` already does (feature-uses-alias-as): register the alias
+          with the unit resolver so a `Y.Sym` qualifier resolves onto X's
+          symbols. Unqualified names keep working either way, since unit scope
+          is flat — the alias only has to make the PREFIX acceptable.
+          `import tkinter as tk` is the shape songformatter uses. }
+        if PyIsIdent('as') then
+        begin
+          Next;
+          if CurTok.Kind <> tkIdent then
+            Error('Nil Python: expected a name after `as` in an import');
+          aStrIdx := InternStr(LowerCase(CurTok.SVal));
+          realStrIdx := InternStr(LowerCase(impName));
+          if (UnitAliasCount < 64) and (aStrIdx <> realStrIdx) then
+          begin
+            UnitAliasName[UnitAliasCount] := aStrIdx;
+            UnitAliasReal[UnitAliasCount] := realStrIdx;
+            Inc(UnitAliasCount);
+          end;
+          Next;
+        end;
         if not Eat(tkComma) then Break;
       end;
       PySkipNewlines;

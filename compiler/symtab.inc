@@ -2140,8 +2140,12 @@ function FindUnitOrAlias(const name: AnsiString): Integer;
   match it — feature-uses-alias-as). }
 var i, j: Integer; lo: AnsiString;
 begin
-  Result := FindCompiledUnit(name);
-  if Result >= 0 then Exit;
+  { An explicit alias WINS over a unit that happens to carry the same name. The
+    alias was written on purpose (`import tkinter as tk`), while the same-named
+    unit is usually one pulled in transitively — lib/pcl/tk.pas is exactly that
+    case, and letting it win made `tk.Tk_()` resolve against the wrong unit and
+    report the member as undefined. This is also Python's own rule: the alias
+    rebinds the name in this module's namespace. }
   lo := name;
   for j := 1 to Length(lo) do
     if lo[j] in ['A'..'Z'] then lo[j] := Chr(Ord(lo[j]) + 32);
@@ -2151,7 +2155,7 @@ begin
       Result := UnitAliasReal[i];
       Exit;
     end;
-  Result := -1;
+  Result := FindCompiledUnit(name);
 end;
 
 function FindSymInUnit(const name: AnsiString; unitIdx: Integer): Integer;
