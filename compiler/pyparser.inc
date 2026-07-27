@@ -131,6 +131,9 @@ end;
 function PySeqAppend(head, stmt: Integer): Integer; forward;
 function PyBuildComp(targetSym, exprStart: Integer): Integer; forward; { comprehension core (pyparser.inc) }
 function PyMakeIdent(symIdx: Integer): Integer; forward; { (pyparser.inc) }
+function PyHiddenName(const stem: AnsiString): AnsiString; forward; { hidden temp name (pyparser.inc) }
+function PyCallMeth1(ci: Integer; const mname: AnsiString;
+                     selfNode, argNode: Integer): Integer; forward; { one-arg method call (pyparser.inc) }
 function PyParseFor: Integer; forward;
 function PyBareGenExprAhead: Boolean; forward; { bare genexpr as a call arg (pyparser.inc) }
 
@@ -4777,6 +4780,178 @@ begin
   PyHoistStmt(callNode);
 end;
 
+{ `get(*args, **kwargs)` FORWARDED into a callee with ORDINARY parameters — the
+  third rung of feature-nilpy-star-args-kwargs, and what songformatter's
+  settings.py getF/getI need. There is no static answer: the argument count is
+  only known at run time. So this is a DESUGARING, not a runtime feature — a
+  dispatch on len(args) over the arities the callee actually accepts:
+
+      pystar_check_arity(args, required, total)      (hoisted, fails loudly)
+      pystar_no_kwargs(kwargs)                       (hoisted, ditto)
+      len(args) = 3 ? f(args[0], args[1], args[2])
+                    : f(args[0], args[1])            ... down to the required count
+
+  Each argument is `args.at(k)`, a variant, coerced to the parameter's declared
+  type. A parameter type with no coercion is refused rather than passed raw.
+  Keyword forwarding is checked at run time and refused: binding a runtime dict
+  onto named parameters needs a call protocol NilPy does not have. }
+function PyStarForwardCall(procIdx, listNode, dictNode: Integer): Integer;
+var required, total, n, k, i, argNode, lastArg, callNode, elemNode: Integer;
+    lenNode, cntNode, condNode, pairNode, ternNode, chkArg, a2, a3: Integer;
+    listSym, dictSym, asgn, listCi, dictCi: Integer;
+    slotSyms: array[0..15] of Integer;
+    ptk: TTypeKind;
+begin
+  listCi := FindUClass('TPyList');
+  dictCi := FindUClass('TPyDict');
+  if listCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  { bind both containers to temps: each arm reads the list again, and the
+    expression must not be rebuilt per arm }
+  listSym := AllocVar(PyHiddenName('fwd'), tyClass);
+  Syms[listSym].RecName := REC_UCLASS_BASE + listCi;
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(listSym);
+  ASTRight[asgn] := listNode;
+  PyHoistStmt(asgn);
+  dictSym := -1;
+  if (dictNode >= 0) and (dictCi >= 0) then
+  begin
+    dictSym := AllocVar(PyHiddenName('fwdkw'), tyClass);
+    Syms[dictSym].RecName := REC_UCLASS_BASE + dictCi;
+    asgn := AllocNode(AN_ASSIGN);
+    ASTLeft[asgn] := PyMakeIdent(dictSym);
+    ASTRight[asgn] := dictNode;
+    PyHoistStmt(asgn);
+  end;
+
+  total := Procs[procIdx].ParamCount;
+  required := total;
+  while (required > 0) and (required - 1 < MAX_PROC_PARAMS) and
+        ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + (required - 1)] do
+    Dec(required);
+
+  { the two runtime guards }
+  chkArg := AllocNode(AN_ARG);
+  ASTLeft[chkArg] := PyMakeIdent(listSym);
+  a2 := AllocNode(AN_ARG);
+  ASTLeft[a2] := AllocNode(AN_INT_LIT);
+  ASTIVal[ASTLeft[a2]] := required;
+  ASTTk[ASTLeft[a2]] := Ord(tyInteger);
+  a3 := AllocNode(AN_ARG);
+  ASTLeft[a3] := AllocNode(AN_INT_LIT);
+  ASTIVal[ASTLeft[a3]] := total;
+  ASTTk[ASTLeft[a3]] := Ord(tyInteger);
+  ASTRight[chkArg] := a2;
+  ASTRight[a2] := a3;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := FindProc('pystar_check_arity');
+  if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pystar_check_arity) not loaded');
+  ASTTk[callNode] := Ord(tyInteger);
+  ASTLeft[callNode] := chkArg;
+  PyHoistStmt(callNode);
+  if dictSym >= 0 then
+  begin
+    chkArg := AllocNode(AN_ARG);
+    ASTLeft[chkArg] := PyMakeIdent(dictSym);
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := FindProc('pystar_no_kwargs');
+    if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pystar_no_kwargs) not loaded');
+    ASTTk[callNode] := Ord(tyInteger);
+    ASTLeft[callNode] := chkArg;
+    PyHoistStmt(callNode);
+  end;
+
+  { Every slot the widest arity could use, read ONCE into a hidden variant local.
+    The arms are alternatives but the reads are not — a ternary arm cannot carry
+    hoisted setup — so pystar_arg yields None past the end instead of an index
+    error, and a variant PARAMETER (which is by-reference) gets a real lvalue to
+    bind rather than a call result. }
+  if total > 16 then
+    Error('Nil Python: cannot forward *args into a callee with more than 16 parameters');
+  for k := 0 to total - 1 do
+  begin
+    slotSyms[k] := AllocVar(PyHiddenName('fwda'), tyVariant);
+    elemNode := AllocNode(AN_ARG);
+    ASTLeft[elemNode] := PyMakeIdent(listSym);
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := AllocNode(AN_INT_LIT);
+    ASTIVal[ASTLeft[argNode]] := k;
+    ASTTk[ASTLeft[argNode]] := Ord(tyInteger);
+    ASTRight[elemNode] := argNode;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := FindProc('pystar_arg');
+    if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pystar_arg) not loaded');
+    ASTTk[callNode] := Ord(tyVariant);
+    ASTLeft[callNode] := elemNode;
+    asgn := AllocNode(AN_ASSIGN);
+    ASTLeft[asgn] := PyMakeIdent(slotSyms[k]);
+    ASTRight[asgn] := callNode;
+    PyHoistStmt(asgn);
+  end;
+
+  { one call per accepted arity, folded into a ternary chain from the top down;
+    the LOWEST arity is the final else, which the arity guard has made safe }
+  Result := -1;
+  for n := required to total do
+  begin
+    lastArg := -1;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := procIdx;
+    ASTTk[callNode] := Ord(Procs[procIdx].RetType);
+    for k := 0 to n - 1 do
+    begin
+      elemNode := PyMakeIdent(slotSyms[k]);
+      ptk := Procs[procIdx].Params[k].TypeKind;
+      if ptk = tyVariant then
+        { pass the variant straight through }
+      else if PyIsStrBaseTk(ptk) or (ptk = tyAnsiString) then
+      begin
+        i := FindProc('pystr_of');
+        if i < 0 then Error('Nil Python: pylib (pystr_of) not loaded');
+        argNode := AllocNode(AN_ARG);
+        ASTLeft[argNode] := elemNode;
+        elemNode := AllocNode(AN_CALL);
+        ASTIVal[elemNode] := i;
+        ASTTk[elemNode] := Ord(tyAnsiString);
+        ASTLeft[elemNode] := argNode;
+      end
+      else
+        Error('Nil Python: cannot forward *args into ' + Procs[procIdx].Name
+          + ' — parameter ' + Procs[procIdx].Params[k].Name
+          + ' has a type no runtime argument can be coerced to');
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := elemNode;
+      if lastArg < 0 then ASTLeft[callNode] := argNode
+      else ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+    end;
+    if n = required then
+    begin
+      Result := callNode;
+      Continue;
+    end;
+    { cond: pylist.count = n }
+    lenNode := PyCallMeth1(listCi, 'count', PyMakeIdent(listSym), -1);
+    if lenNode < 0 then Error('Nil Python: pylib (TPyList.count) not loaded');
+    cntNode := AllocNode(AN_INT_LIT);
+    ASTIVal[cntNode] := n;
+    ASTTk[cntNode] := Ord(tyInteger);
+    condNode := AllocNode(AN_BINOP);
+    ASTIVal[condNode] := Ord(tkEq);
+    ASTLeft[condNode] := lenNode;
+    ASTRight[condNode] := cntNode;
+    ASTTk[condNode] := Ord(tyBoolean);
+    pairNode := AllocNode(AN_PAIR);
+    ASTLeft[pairNode] := callNode;
+    ASTRight[pairNode] := Result;
+    ternNode := AllocNode(AN_TERNARY);
+    ASTLeft[ternNode] := condNode;
+    ASTRight[ternNode] := pairNode;
+    ASTTk[ternNode] := Ord(Procs[procIdx].RetType);
+    Result := ternNode;
+  end;
+end;
+
 { Pack a call's surplus arguments into the callee's `*args` list and `**kwargs`
   dict, so the rest of the call machinery sees an ORDINARY argument list of
   exactly the declared arity (feature-nilpy-star-args-kwargs rung 1).
@@ -5982,7 +6157,25 @@ begin
     `isinstance(num, list)` guard, so the value really is a list at run time;
     pylist_v raises if it is not. Without this the loop refused an untyped
     container (bug-nilpy-for-in-over-variant). }
-  if (not isStr) and (contTk = tyVariant) then
+  { A two-name target over a VARIANT is a DICT — `for option, value in
+    options.items()` where options came out of another dict, which is exactly
+    songformatter's DEFAULT_SETTINGS (a dict of dicts). Unboxed to TPyDict
+    rather than to TPyList, and pydict_v raises if the value is not one. }
+  if (not isStr) and (contTk = tyVariant) and (name2 <> '') and (not enumMode) then
+  begin
+    vSym := FindProc('pydict_v');
+    if vSym < 0 then Error('Nil Python: pylib (pydict_v) not loaded');
+    vListNode := AllocNode(AN_ARG);
+    ASTLeft[vListNode] := contNode;
+    ASTRight[vListNode] := -1;
+    contNode := AllocNode(AN_CALL);
+    ASTIVal[contNode] := vSym;
+    ASTTk[contNode] := Ord(tyClass);
+    ASTLeft[contNode] := vListNode;
+    ASTRight[contNode] := REC_UCLASS_BASE + dictCi;
+    contTk := tyClass;
+  end
+  else if (not isStr) and (contTk = tyVariant) then
   begin
     vSym := FindProc('pylist_v');
     if vSym < 0 then Error('Nil Python: pylib (pylist_v) not loaded');

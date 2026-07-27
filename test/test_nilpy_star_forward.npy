@@ -1,0 +1,28 @@
+# Rung 3 of feature-nilpy-star-args-kwargs: forwarding a COLLECTED *args into a
+# callee with ordinary parameters — songformatter's settings.py getF/getI shape.
+#
+# The argument count is only known at run time, so this is a DESUGARING: a
+# dispatch on len(args) over the arities the callee accepts, with a runtime check
+# that fails loudly outside them and refuses forwarded keyword arguments (binding
+# a runtime dict onto named parameters needs a call protocol NilPy does not have).
+
+
+def join2(a, b):
+    return str(a) + "/" + str(b)
+
+
+def fwd(*args):
+    return join2(*args)
+
+
+def join3(a, b, c):
+    return str(a) + "/" + str(b) + "/" + str(c)
+
+
+def fwd3(*args):
+    return join3(*args)
+
+
+print(fwd("UI", "size"))
+print(fwd(1, 2))
+print(fwd3("a", "b", "c"))

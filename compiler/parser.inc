@@ -7508,6 +7508,7 @@ var intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiSt
     seEtid, seOrd: Integer;
     lenFieldRec, lenFieldIdx: Integer;   { Length() of a static-array record field }
     ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { bare class-const in a method body }
+    fwdList, fwdDict: Integer;   { `f(*args, **kwargs)` forwarded into fixed parameters }
 begin
   LastExprTk := tyInteger;
   { Nil Python: ClassName(args) in ANY expression position is construction
@@ -11207,6 +11208,34 @@ begin
         argsHead := -1;
         lastArg := -1;
         nArgs := 0;
+        { `f(*args, **kwargs)` FORWARDED into this callee's ordinary parameters:
+          the argument count is a run-time fact, so it desugars to a dispatch on
+          len(args) (PyStarForwardCall). Detected before the argument loop —
+          which parses expressions, and `*x` is not one. }
+        if isNilPy and (CurTok.Kind = tkStar) and (ProcPyStarIdx[procIdx] < 0) then
+        begin
+          Next;                          { the '*' }
+          ParseArgExpr;
+          fwdList := CurASTNode;
+          fwdDict := -1;
+          if CurTok.Kind = tkComma then
+          begin
+            Next;
+            if CurTok.Kind = tkStar then
+            begin
+              Next;
+              if CurTok.Kind = tkStar then Next;   { `**` is two tkStar }
+              ParseArgExpr;
+              fwdDict := CurASTNode;
+            end
+            else
+              Error('Nil Python: an argument after *unpacking is not supported yet');
+          end;
+          Expect(tkRParen, ')');
+          CurASTNode := PyStarForwardCall(procIdx, fwdList, fwdDict);
+          LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+          Exit;
+        end;
         while CurTok.Kind <> tkRParen do
         begin
           { NilPy `key=expr`: consumes the name, yields paramIndex+1 (0 = positional) }

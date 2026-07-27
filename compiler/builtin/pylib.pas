@@ -549,6 +549,21 @@ function pynone: Variant;
   for-in loop variable is always a variant, and an overload set resolved by
   static type picks the wrong member for it. }
 function pylist_v(const v: Variant): TPyList;
+{ The same for a DICT: `for k, v in options.items()` where options came out of
+  another dict is a variant, and a two-name for-in needs the real TPyDict. }
+function pydict_v(const v: Variant): TPyDict;
+{ `f(*args, **kwargs)` FORWARDED into a fixed-arity callee (the third rung of
+  feature-nilpy-star-args-kwargs). The call site emits a dispatch on the actual
+  argument count, and these two check at run time what the desugar cannot check
+  at compile time: that the count is one the callee accepts, and that no keyword
+  arguments were forwarded — binding those by name would need a runtime call
+  protocol, so it FAILS rather than dropping them silently. }
+procedure pystar_check_arity(l: TPyList; lo: Integer; hi: Integer);
+procedure pystar_no_kwargs(d: TPyDict);
+{ One forwarded argument, or None when the caller passed fewer. The dispatch
+  evaluates every slot up to the callee's widest arity before choosing an arm,
+  so reading past the end has to be defined rather than an index error. }
+function pystar_arg(l: TPyList; i: Integer): Variant;
 { abs() of a variant: the tag decides int or float, which the static
   __pxxAbsInt/__pxxAbsDbl split cannot (a for-in variable is a variant). }
 function pyabs_v(const v: Variant): Variant;
@@ -4085,6 +4100,45 @@ begin
 end;
 
 { list(v) on a variant: a str yields its characters, a list a shallow copy. }
+procedure pystar_check_arity(l: TPyList; lo: Integer; hi: Integer);
+var n: Integer;
+begin
+  n := 0;
+  if l <> nil then n := l.count;
+  if (n < lo) or (n > hi) then
+  begin
+    WriteLn('TypeError: forwarded call got ', n, ' arguments, expected ', lo, ' to ', hi);
+    Halt(1);
+  end;
+end;
+
+procedure pystar_no_kwargs(d: TPyDict);
+begin
+  if (d <> nil) and (d.count > 0) then
+  begin
+    WriteLn('TypeError: forwarding **kwargs into a callee with named parameters is not supported');
+    Halt(1);
+  end;
+end;
+
+function pystar_arg(l: TPyList; i: Integer): Variant;
+begin
+  if (l = nil) or (i < 0) or (i >= l.count) then Result := pynone()
+  else Result := l.at(i);
+end;
+
+function pydict_v(const v: Variant): TPyDict;
+var o: TObject;
+begin
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyDict then begin Result := TPyDict(o); Exit; end;
+  end;
+  PyTypeError(pyvartag(v), 'a dict');
+  Result := TPyDict.Create;
+end;
+
 function pylist_v(const v: Variant): TPyList;
 var o: TObject;
 begin

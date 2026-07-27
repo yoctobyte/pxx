@@ -208,6 +208,9 @@ test-nilpy: $(COMPILER)
 	# one Exception class serving both the Python and the sysutils surface
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
 	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	# forwarding a collected *args into a callee with ordinary parameters
+	./$(COMPILER) test/test_nilpy_star_forward.npy /tmp/test_nilpy_starfwd26
+	test "$$(/tmp/test_nilpy_starfwd26)" = "$$(printf 'UI/size\n1/2\na/b/c')"
 	# a method on a dynamically-typed receiver, dispatched across unrelated classes
 	./$(COMPILER) test/test_nilpy_dynamic_dispatch.npy /tmp/test_nilpy_dyndisp26
 	test "$$(/tmp/test_nilpy_dyndisp26)" = "$$(printf '%b' 'cand3\nx\nsum1.5\ncand3, x, sum1.5\nDET:x')"
@@ -3245,6 +3248,9 @@ test-core: $(COMPILER)
 	# one Exception class serving both the Python and the sysutils surface
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
 	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	# forwarding a collected *args into a callee with ordinary parameters
+	./$(COMPILER) test/test_nilpy_star_forward.npy /tmp/test_nilpy_starfwd26
+	test "$$(/tmp/test_nilpy_starfwd26)" = "$$(printf 'UI/size\n1/2\na/b/c')"
 	# a method on a dynamically-typed receiver, dispatched across unrelated classes
 	./$(COMPILER) test/test_nilpy_dynamic_dispatch.npy /tmp/test_nilpy_dyndisp26
 	test "$$(/tmp/test_nilpy_dyndisp26)" = "$$(printf '%b' 'cand3\nx\nsum1.5\ncand3, x, sum1.5\nDET:x')"
