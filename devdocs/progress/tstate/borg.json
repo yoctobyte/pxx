@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-27T18:31:50Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "165f249e384a7085d699602cb8e40f87a49e9313",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-27T18:36:11Z",
    "fixed": [],
    "new_red": [],
@@ -398,6 +390,14 @@
    "new_red": [],
    "sha": "081548fc86f09cf70e0fb47b595ff198e6323ce8",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-28T10:38:03Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "ba5a5f4fe52a6abfd064b97ee6697733061d2b98",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1437,7 +1437,10 @@
   "test-core#src:test/test_nilpy_ctor_suffix_defaults.npy": "pass",
   "test-core#src:test/test_nilpy_dataclass_dict_factory.npy": "pass",
   "test-core#src:test/test_nilpy_dict_fromkeys.npy": "pass",
+  "test-core#src:test/test_nilpy_dotted_import.npy": "pass",
   "test-core#src:test/test_nilpy_dynamic_dispatch.npy": "pass",
+  "test-core#src:test/test_nilpy_fallback_import.npy": "pass",
+  "test-core#src:test/test_nilpy_fallback_import_try_wins.npy": "pass",
   "test-core#src:test/test_nilpy_field_from_unannotated_param.npy": "pass",
   "test-core#src:test/test_nilpy_fnvalue_abi.npy": "pass",
   "test-core#src:test/test_nilpy_html_tempfile.npy": "pass",
@@ -2004,11 +2007,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-28T10:30:05Z",
-  "sha": "081548fc86f09cf70e0fb47b595ff198e6323ce8",
-  "tier": "opt",
+  "date": "2026-07-28T10:38:03Z",
+  "sha": "ba5a5f4fe52a6abfd064b97ee6697733061d2b98",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 188.7
+  "wall": 124.1
  },
  "last_bench": {
   "conf_rows": 550,
