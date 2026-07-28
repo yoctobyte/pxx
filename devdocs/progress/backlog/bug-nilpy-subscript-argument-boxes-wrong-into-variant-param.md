@@ -76,13 +76,34 @@ directly.
 That also explains why `min(d["n"], 1)` looked right: the same wrong overload
 runs, and its answer happens to coincide when the other operand wins.
 
-### Likely fix
+### Correction: arity is ALREADY filtered
 
-Filter overload candidates by ARGUMENT COUNT before considering types, so a
-two-argument call can never resolve to a one-parameter overload. Then decide
-what a variant argument should match — the established alternative in this
-codebase is distinct NAMES per operand type (`pyfloordiv_v` and friends) rather
-than an overload set, precisely because
+Checked in the source rather than inferred: `MatchProcCall` (symtab.inc) gates
+every type-match phase behind `ProcArityMatches`, which accepts a candidate only
+when `ParamCount = nArgs`, or when the extra parameters all carry defaults. A
+two-argument call therefore cannot select the one-parameter `max(TPyList)`
+overload, and the `max(class)` line in the failed compile above is the CANDIDATE
+REPORT listing every same-name proc — not the overload that was chosen. The
+"drop the second argument" theory does not survive.
+
+So the open question is narrower and still open: with `argTypes[0] = tyVariant`
+the exact phase cannot match `max(Int64, Int64)`, and one of the later
+compatible phases binds it — after which `IRLowerCallArg` should unbox the
+variant into the Int64 parameter exactly as it does for a user `def f(x: int)`,
+which is measured to work. Something between those two differs for an
+overloaded builtin.
+
+### Where to start next
+
+Instrument the pick: log which proc index `MatchCallDelphiProcAddr` returns for
+`max(d["n"], 1)` versus `max(v, 1)`, and compare it with the index for
+`f(d["n"])`. That one line of output decides whether the fault is in the phase
+that binds the overload or in the unbox that follows it — everything above is
+consistent with either.
+
+If the answer is "the overload set is the problem", the established alternative
+in this codebase is distinct NAMES per operand type (`pyfloordiv_v` and friends)
+rather than an overload set, precisely because
 [[bug-a-len-of-variant-picks-wrong-overload]] showed a Variant argument picks
-arbitrarily. A `pymax_v`/`pymin_v` pair selected by the frontend when either
-operand is a variant would follow that precedent exactly.
+arbitrarily — a `pymax_v`/`pymin_v` pair selected by the frontend when either
+operand is a variant would follow that precedent.
