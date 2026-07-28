@@ -912,6 +912,36 @@ end;
 { Tracked by NAME, not by symbol index: NilPy parses a body more than once
   (the module-local pre-pass trial-parses; def bodies compile from stored token
   positions), and a fresh pass allocates fresh symbols. A name is stable. }
+{ Does the ENCLOSING function assign this name AFTER the nested def being
+  parsed? Python binds a closure at CALL time, so a name assigned further down
+  is an ordinary capture that simply has no symbol yet at this point. The scan
+  starts past the DEDENT(s) that close the nested def itself.
+  bug-nilpy-closure-capture-assigned-later. }
+function PyEnclosingAssigns(fromTok: Integer; const nm: AnsiString): Boolean;
+var i, depth: Integer;
+begin
+  PyEnclosingAssigns := False;
+  i := fromTok;
+  while (i < MainProgramTokCount) and (Tokens[i].Kind in [tkDedent, tkNewline]) do Inc(i);
+  depth := 0;
+  while i < MainProgramTokCount do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then
+    begin
+      Dec(depth);
+      if depth < 0 then Exit;          { left the enclosing body }
+    end
+    else if (Tokens[i].Kind = tkIdent) and (i + 1 < MainProgramTokCount) and
+            (Tokens[i + 1].Kind = tkAssign) and (GetTokenStr(i) = nm) then
+    begin
+      PyEnclosingAssigns := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 function PyIsOptionalMissingNode(n: Integer): Boolean;
 begin
   PyIsOptionalMissingNode := False;
@@ -8527,6 +8557,10 @@ begin
         if not already then
         begin
           csym := FindSym(cname);
+          { assigned LATER in the enclosing body — materialise it now so it is
+            captured like any other name }
+          if (csym < 0) and PyEnclosingAssigns(bodyEnd, cname) then
+            csym := AllocVar(cname, tyVariant);
           if (csym >= 0) and (Syms[csym].Kind in [skLocal, skParam]) and
              not Syms[csym].IsArray and
              (Syms[csym].TypeKind <> tyRecord) then
@@ -10400,6 +10434,27 @@ end;
   Shared by PyMethodRetType and PyParseDefHeader on purpose: the pre-pass
   decides the registered signature and the header decides the frame, so the two
   must reach the same answer or the mismatch is a silent ABI bug. }
+{ The return type of a def NESTED in the body being scanned. Only top-level
+  defs are hoisted (PyRegisterDefShells scans at depth 0), so a call to a nested
+  helper has no registered signature when the ENCLOSING def's signature is
+  decided — and falling back to the Integer default made the enclosing function
+  hand a string result back as a number, silently.
+  bug-nilpy-nested-def-nonint-result-garbage. }
+function PyNestedDefRetType(scanFrom, scanTo: Integer; const nm: AnsiString;
+                            var retRec: Integer): TTypeKind;
+var i: Integer;
+begin
+  PyNestedDefRetType := tyUnknown;
+  retRec := REC_NONE;
+  for i := scanFrom to scanTo - 2 do
+    if (Tokens[i].Kind = tkFunction) and (Tokens[i + 1].Kind = tkIdent) and
+       CaseEqual(GetTokenStr(i + 1), nm) then
+    begin
+      PyNestedDefRetType := PyInferDefRetType(i, retRec);
+      Exit;
+    end;
+end;
+
 function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
 var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
     tupDepth: Integer;
@@ -10432,7 +10487,31 @@ begin
       Dec(bdepth);
       if bdepth <= 0 then Exit;              { end of this def's body }
     end
-    else if Tokens[j].Kind = tkFunction then Exit   { a nested def: stop }
+    else if Tokens[j].Kind = tkFunction then
+    begin
+      { A nested def: SKIP its body and keep scanning this one. Stopping here
+        meant the enclosing def's own `return` was never seen when a helper was
+        declared above it, so the type fell to the Integer default and a string
+        result came back as a number — silently
+        (bug-nilpy-nested-def-nonint-result-garbage). The nested def's own
+        returns must not be read as this def's, hence skip rather than descend. }
+      { step past the nested def's INDENT..matching DEDENT }
+      k := j;
+      while (k < TokCount) and (Tokens[k].Kind <> tkIndent) do Inc(k);
+      e2 := 0;
+      while k < TokCount do
+      begin
+        if Tokens[k].Kind = tkIndent then Inc(e2)
+        else if Tokens[k].Kind = tkDedent then
+        begin
+          Dec(e2);
+          if e2 = 0 then begin Inc(k); Break; end;
+        end;
+        Inc(k);
+      end;
+      j := k;
+      Continue;
+    end
     else if (Tokens[j].Kind = tkExit) and (bdepth >= 1) then
     begin
       if (j + 1 >= TokCount) or
@@ -10519,6 +10598,41 @@ begin
         anything that consumed the value read a string handle as a number.
         A def with NO value-returning return stays tyInteger — that is the
         harmless case this rule was written for, and it is decided elsewhere. }
+      { `return inner()` / `s = inner(); return s` where `inner` is a def
+        NESTED in this body: it has no registered signature yet, so the scans
+        above answer Integer by default and the enclosing function then hands a
+        string result back as a number. Find the nested def and take ITS type.
+        bug-nilpy-nested-def-nonint-result-garbage. }
+      if ((cur = tyUnknown) or (cur = tyInteger)) and (j + 2 < TokCount) and
+         (Tokens[j + 1].Kind = tkIdent) and (Tokens[j + 2].Kind = tkLParen) and
+         (FindProc(GetTokenStr(j + 1)) < 0) then
+      begin
+        t2 := PyNestedDefRetType(bodyScanStart, j, GetTokenStr(j + 1), rec2);
+        if t2 <> tyUnknown then
+        begin
+          cur := t2;
+          if (t2 = tyClass) and (rec2 >= REC_UCLASS_BASE) then
+            PyInferLastCi := rec2 - REC_UCLASS_BASE;
+        end;
+      end;
+      { the same through a local: `s = inner()` then `return s` }
+      if ((cur = tyUnknown) or (cur = tyInteger)) and
+         (e = j + 2) and (Tokens[j + 1].Kind = tkIdent) then
+        for k := bodyScanStart to j - 1 do
+          if (Tokens[k].Kind = tkIdent) and (k + 3 < TokCount) and
+             (Tokens[k + 1].Kind = tkAssign) and
+             (Tokens[k + 2].Kind = tkIdent) and (Tokens[k + 3].Kind = tkLParen) and
+             CaseEqual(GetTokenStr(k), GetTokenStr(j + 1)) and
+             (FindProc(GetTokenStr(k + 2)) < 0) then
+          begin
+            t2 := PyNestedDefRetType(bodyScanStart, k, GetTokenStr(k + 2), rec2);
+            if t2 <> tyUnknown then
+            begin
+              cur := t2;
+              if (t2 = tyClass) and (rec2 >= REC_UCLASS_BASE) then
+                PyInferLastCi := rec2 - REC_UCLASS_BASE;
+            end;
+          end;
       if cur = tyUnknown then cur := tyVariant;
       if cur = tyString then cur := tyAnsiString;
       { A PROMOTABLE INT cannot cross the call boundary raw: its rvalue is the
@@ -10562,7 +10676,7 @@ end;
   annotated `-> None` yet returns the new Word — trusting the annotation
   compiled it as a procedure and the caller read garbage (the :NONAME xt). }
 function PyDefHasValueReturn(defIdx: Integer): Boolean;
-var j, pdepth, bdepth: Integer;
+var j, pdepth, bdepth, k, e2: Integer;
 begin
   Result := False;
   j := defIdx + 2;
@@ -10586,7 +10700,31 @@ begin
       Dec(bdepth);
       if bdepth <= 0 then Exit;
     end
-    else if Tokens[j].Kind = tkFunction then Exit   { a nested def: stop }
+    else if Tokens[j].Kind = tkFunction then
+    begin
+      { A nested def: SKIP its body and keep scanning this one. Stopping here
+        meant the enclosing def's own `return` was never seen when a helper was
+        declared above it, so the type fell to the Integer default and a string
+        result came back as a number — silently
+        (bug-nilpy-nested-def-nonint-result-garbage). The nested def's own
+        returns must not be read as this def's, hence skip rather than descend. }
+      { step past the nested def's INDENT..matching DEDENT }
+      k := j;
+      while (k < TokCount) and (Tokens[k].Kind <> tkIndent) do Inc(k);
+      e2 := 0;
+      while k < TokCount do
+      begin
+        if Tokens[k].Kind = tkIndent then Inc(e2)
+        else if Tokens[k].Kind = tkDedent then
+        begin
+          Dec(e2);
+          if e2 = 0 then begin Inc(k); Break; end;
+        end;
+        Inc(k);
+      end;
+      j := k;
+      Continue;
+    end
     else if (Tokens[j].Kind = tkExit) and (bdepth >= 1) then
     begin
       if (j + 1 < TokCount) and

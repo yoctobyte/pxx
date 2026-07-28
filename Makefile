@@ -316,6 +316,9 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# a nested def's result type, and a capture assigned after the nested def
+	./$(COMPILER) test/test_nilpy_nested_def_result.npy /tmp/test_nilpy_nestdef26
+	test "$$(/tmp/test_nilpy_nestdef26)" = "$$(printf 'big\nbig\n7\nyes\nno')"
 	# tuple-vs-variant equality, round(x, n), enumerate() as a value,
 	# and the standard exception names
 	./$(COMPILER) test/test_nilpy_tuple_eq_round_enum.npy /tmp/test_nilpy_treq26
@@ -3466,6 +3469,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# a nested def's result type, and a capture assigned after the nested def
+	./$(COMPILER) test/test_nilpy_nested_def_result.npy /tmp/test_nilpy_nestdef26
+	test "$$(/tmp/test_nilpy_nestdef26)" = "$$(printf 'big\nbig\n7\nyes\nno')"
 	# tuple-vs-variant equality, round(x, n), enumerate() as a value,
 	# and the standard exception names
 	./$(COMPILER) test/test_nilpy_tuple_eq_round_enum.npy /tmp/test_nilpy_treq26

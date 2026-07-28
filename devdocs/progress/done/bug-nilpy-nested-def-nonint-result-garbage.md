@@ -62,3 +62,6 @@ the store boxes (a variant result carries a string correctly today, tested).
 
 Returning the result of a helper defined inside the same function is ordinary
 Python. The failure is silent and the value looks like a plausible number.
+
+## Log
+- 2026-07-28 — resolved, commit pending.

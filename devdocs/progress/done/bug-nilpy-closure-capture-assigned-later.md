@@ -67,3 +67,18 @@ end.
 
 `make test-nilpy` plus a `.npy` with a capture assigned after the nested def,
 and one assigned before (which must keep working), diffed against CPython.
+
+## Fixed 2026-07-28
+
+Both halves, and the ORDER mattered: every earlier attempt at the capture
+"compiled and produced garbage", and that garbage was
+[[bug-nilpy-nested-def-nonint-result-garbage]] underneath — the enclosing
+function's result type, not the capture. With that fixed, materialising the
+later-assigned local at capture time is enough, and
+`capture_after`/`capture_before` both match CPython.
+
+The lesson worth keeping: when a fix "works but returns a wrong value", suspect
+a second bug below it rather than the fix.
+
+## Log
+- 2026-07-28 — resolved, commit pending.

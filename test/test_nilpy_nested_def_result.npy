@@ -1,0 +1,47 @@
+# A def nested inside another: its RESULT type has to be known before the
+# enclosing signature is decided, or the enclosing function hands a string back
+# as a number — silently. Printing the value worked all along; returning it did
+# not. And a name the enclosing body assigns AFTER the nested def is an
+# ordinary capture, because Python binds a closure at call time.
+def outer_str():
+    def inner():
+        return "big"
+    return inner()
+
+
+def outer_via_local():
+    def inner():
+        return "big"
+    s = inner()
+    return s
+
+
+def outer_int():
+    def inner():
+        return 7
+    return inner()
+
+
+def capture_after():
+    def inner():
+        if flag:
+            return "yes"
+        return "no"
+    flag = True
+    return inner()
+
+
+def capture_before():
+    flag = False
+    def inner():
+        if flag:
+            return "yes"
+        return "no"
+    return inner()
+
+
+print(outer_str())
+print(outer_via_local())
+print(outer_int())
+print(capture_after())
+print(capture_before())

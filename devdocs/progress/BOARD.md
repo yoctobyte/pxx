@@ -278,7 +278,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (980)
+## done (982)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -607,6 +607,7 @@ _none_
 | bug-nilpy-callable-return-abi-mismatch | N | 75 | bug | nilpy: a def passed to a Callable[...] parameter marshalled by the ANNOTATION, not by the def | — |
 | bug-nilpy-class-typed-field-loses-identity | N | 70 | bug | NilPy: a class-typed field loses its class identity | — |
 | bug-nilpy-class-value-into-variant-local-mistagged | N | 65 | bug | NilPy: storing a class value into a variant-typed local mis-tags it VT_INT64 | — |
+| bug-nilpy-closure-capture-assigned-later | N | 60 | bug | A nested def cannot capture a name the enclosing function assigns LATER | — |
 | bug-nilpy-comprehension-as-for-iterable-segfaults | N | 35 | bug | NilPy: a comprehension used directly as a for-loop iterable segfaults | — |
 | bug-nilpy-dict-insert-lookup-linear-not-hashed | N | 45 | bug | NilPy: dict insert/lookup is O(N), not O(1) — quadratic build, drives uforth O(N²) | — |
 | bug-nilpy-dict-views-and-result-alias | N | 75 | bug | nilpy: d.values()/d.keys() jumped to address 0, and a local named `result` aliased the function result | — |
@@ -617,6 +618,7 @@ _none_
 | bug-nilpy-method-returning-str-garbage | N | 75 | bug | NilPy: a method returning `str` returns garbage | — |
 | bug-nilpy-mixed-str-int-return-segfault | N | 35 | bug | NilPy: def returning both a str and an int literal SIGSEGVs on the int arm | — |
 | bug-nilpy-module-class-vmtaddr | N | 60 | bug | A class in an imported `.py` module: "invalid class index in vmtaddr" | — |
+| bug-nilpy-nested-def-nonint-result-garbage | N | 75 | bug | A nested def's non-integer result is read as a number — silent garbage | — |
 | bug-nilpy-not-on-string-always-true | N | 60 | bug | NilPy: `not s` on a string was ALWAYS True (silent wrong branch) | — |
 | bug-nilpy-param-spill-width | N | 60 | bug | NilPy: bool/char param spill wrote 4 bytes into a 1-byte slot (SILENT, then SIGSEGV) | — |
 | bug-nilpy-print-variant-holding-list-shows-object | N | 30 | bug | NilPy: print() of a variant holding a list/dict shows `<object>` not its repr | — |
