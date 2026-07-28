@@ -6,4 +6,4 @@
 
 ## Open regressions
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `b1976742df2c`, last good `6f73c5a88bef`, 1 commit(s) in range
-- **test-core#src:examples/tk/facade_and_paths.npy** — examples/tk/facade_and_paths.npy (borg): bad `d64a5d6a97b4`, last good `3082839fb87b`, 2 commit(s) in range
+- **test-core#src:examples/tk/facade_and_paths.npy** — examples/tk/facade_and_paths.npy (borg): bad `d64a5d6a97b4`, last good `d87ee5a295cc`, 1 commit(s) in range
