@@ -374,10 +374,10 @@ core codegen bug that no test in the suite had touched.
 | --- | --- |
 | `key_analysis.py` | **none — compiles and runs** |
 | `kadrv.py` | `import key_analysis` — [[feature-nilpy-py-module-loader]] (T3) |
-| `convertrawtext.py` | its imports all RESOLVE now (the module loader, plus ast/atexit/subprocess/io shims); the walls left are [[bug-nilpy-module-class-vmtaddr]] (key_analysis as a module) and [[bug-unit-local-name-shadows-a-property]] (`import html` breaks `Path(...).name`, pre-existing) |
+| `convertrawtext.py` | its imports all RESOLVE now (the module loader, plus ast/atexit/subprocess/io shims); the walls left are [[bug-nilpy-module-class-vmtaddr]] (key_analysis as a module) and [[bug-unit-const-shadows-a-field]] (re.pas's `S = 4` captures pathlib's `s` field, pre-existing, plain Pascal too) |
 | `settings.py` | tkinter façade: `create_window((0,0), window=..., anchor=...)` — [[feature-nilpy-tkinter-facade-widening]] |
 | `render_backend.py` | `from reportlab...` — [[feature-lib-pxxpdf-reportlab-compat]] + dotted imports |
-| `SongFormatter.py` | `import markdown` (help window) |
+| `SongFormatter.py` | `import markdown` (help window) — [[feature-lib-markdown]]: vendor md4c under cfront, shim `markdown.markdown()`, and render into Tk TAGS rather than HTML |
 
 Next rung: the tkinter façade (settings.py is otherwise clean), then the `.py`
 module loader — which is what turns six separate files into one program.
@@ -411,9 +411,9 @@ Where the modules stand now:
 | `key_analysis.py` | **none — compiles and runs** |
 | `settings.py` | **none — compiles, runs, builds all 60 widgets** |
 | `kadrv.py` | `import key_analysis` — [[feature-nilpy-py-module-loader]] (T3) |
-| `convertrawtext.py` | its imports all RESOLVE now (the module loader, plus ast/atexit/subprocess/io shims); the walls left are [[bug-nilpy-module-class-vmtaddr]] (key_analysis as a module) and [[bug-unit-local-name-shadows-a-property]] (`import html` breaks `Path(...).name`, pre-existing) |
+| `convertrawtext.py` | its imports all RESOLVE now (the module loader, plus ast/atexit/subprocess/io shims); the walls left are [[bug-nilpy-module-class-vmtaddr]] (key_analysis as a module) and [[bug-unit-const-shadows-a-field]] (re.pas's `S = 4` captures pathlib's `s` field, pre-existing, plain Pascal too) |
 | `render_backend.py` | `from reportlab...` — [[feature-lib-pxxpdf-reportlab-compat]] + dotted imports |
-| `SongFormatter.py` | `import markdown` (help window) |
+| `SongFormatter.py` | `import markdown` (help window) — [[feature-lib-markdown]]: vendor md4c under cfront, shim `markdown.markdown()`, and render into Tk TAGS rather than HTML |
 
 Also filed on the way: [[feature-nilpy-function-values]] (`f = add`,
 `g = lambda ...` at statement level, calling a function value out of a

@@ -1,0 +1,4 @@
+import nilpy_modimport
+
+print(nilpy_modimport.ALL[1])
+print(len(nilpy_modimport.digits("a1b22c")))

@@ -46,3 +46,30 @@ pascal26 p.py p
 
 `make test-nilpy` with a module carrying a dataclass and a plain class used from
 the importer, plus the songformatter repro above.
+
+
+## FIXED (2026-07-28) — the module's FIRST import was never pre-scanned
+
+Not a class-numbering problem at all. `PyPreScanImports` recognises a top-level
+import by "the token before it ends a line, or it is token 0" — and for a MODULE
+the token before its first one is whatever the program's stream ended with. So a
+module whose FIRST line is an import (`import re`, which is `key_analysis.py`'s
+line 1) had that import skipped by the pre-scan and compiled later, from the
+BODY parse — in the middle of accumulating the module's top-level statements.
+
+Compiling a Pascal unit resets the AST pool (`ParseSubroutine` ends with
+`ASTNodeCount := INLINE_AST_RESERVE`), so every statement node collected so far
+was recycled under the module's feet, and the init proc was then built from
+whatever those slots held: "invalid class index in vmtaddr" from a node that had
+been a list literal. The one-line fix is `(i = PyScanLo)` in place of `(i = 0)`.
+
+Minimal repro, if it ever regresses:
+
+```python
+# lm2.py
+import re
+ALL = ['C', 'D']
+# main
+import lm2
+print(lm2.ALL[1])
+```

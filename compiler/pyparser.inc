@@ -11411,7 +11411,7 @@ begin
             ((Tokens[i].Kind = tkUses) or
              ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'from') and
               (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkIdent))) and
-            ((i = 0) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) then
+            ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) then
     begin
       TokPos := i;
       Next;
