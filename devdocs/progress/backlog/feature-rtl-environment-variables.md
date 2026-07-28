@@ -29,6 +29,25 @@ reachable without a syscall; it is a PAL-level accessor plus two surfaces:
 Writing (`putenv`/`os.environ[k] = v`) is a separate question — decide whether to
 support it at all rather than half-support it.
 
+## Implementation route (located 2026-07-28)
+
+The data is already reachable; nothing needs a syscall.
+
+- The program entry stub saves the initial stack pointer into a BSS global,
+  `BSS_INITIAL_RSP` (`compiler/parser.inc:26953` reserves it, `:27310` stores
+  rsp). `[initial_rsp]` is argc and `initial_rsp+8` is argv — that is exactly how
+  `ParamStr` reads its argument (`EmitArgvToStringManaged`,
+  `compiler/ir_codegen.inc:825`).
+- **envp starts one slot past argv's NULL terminator**: `initial_rsp + 8*(argc+2)`.
+- So the primitive is a `Pointer`-valued intrinsic returning that address, and
+  everything above it — walking `char**`, splitting on `=`, comparing names — can
+  be written in ordinary Pascal in sysutils. Only the intrinsic needs codegen,
+  and only per target that should support it (x86-64 first; the cross targets
+  each have their own entry stub, see the TARGET_ cases around `parser.inc:27310`).
+- `lib/crtl/src/stdlib.c:50` is `char *getenv(const char *name) { return 0; }`
+  with the comment "no environment yet" — point it at the same primitive so C
+  code compiled by pxx gets a real environment too.
+
 ## Gate
 
 `make test` + a test that reads a variable the harness sets, and a `.npy` doing
