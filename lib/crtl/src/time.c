@@ -27,7 +27,8 @@ int nanosleep(const struct timespec *req, struct timespec *rem) {
   return r;
 }
 
-time_t time(time_t *t) {
+/* Defined under the __crtl_ name — see the note in include/time.h. */
+time_t __crtl_time(time_t *t) {
   time_t now = (time_t)__pxx_time();
   if (t) *t = now;
   return now;

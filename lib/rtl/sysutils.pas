@@ -252,6 +252,14 @@ var
   TimeSeparator: Char;
   DateSeparator: Char;
   DecimalSeparator: Char;
+  { FPC's month/day name tables, 1-based (index 0 unused, as FPC declares them
+    array[1..12] / array[1..7]). Synapse reads ShortMonthNames to build its RFC
+    822 date parser's month table (synautil.pas), so the whole unit failed to
+    compile without them. English/C defaults, writable like FPC's. }
+  ShortMonthNames: array[1..12] of AnsiString;
+  LongMonthNames: array[1..12] of AnsiString;
+  ShortDayNames: array[1..7] of AnsiString;
+  LongDayNames: array[1..7] of AnsiString;
 
 type
   { FPC Currency is a fixed-point 4-decimal Int64; this RTL models it as
@@ -2091,4 +2099,23 @@ initialization
   TimeSeparator := ':';
   DateSeparator := '-';
   DecimalSeparator := '.';
+  ShortMonthNames[1] := 'Jan';  ShortMonthNames[2] := 'Feb';
+  ShortMonthNames[3] := 'Mar';  ShortMonthNames[4] := 'Apr';
+  ShortMonthNames[5] := 'May';  ShortMonthNames[6] := 'Jun';
+  ShortMonthNames[7] := 'Jul';  ShortMonthNames[8] := 'Aug';
+  ShortMonthNames[9] := 'Sep';  ShortMonthNames[10] := 'Oct';
+  ShortMonthNames[11] := 'Nov'; ShortMonthNames[12] := 'Dec';
+  LongMonthNames[1] := 'January';   LongMonthNames[2] := 'February';
+  LongMonthNames[3] := 'March';     LongMonthNames[4] := 'April';
+  LongMonthNames[5] := 'May';       LongMonthNames[6] := 'June';
+  LongMonthNames[7] := 'July';      LongMonthNames[8] := 'August';
+  LongMonthNames[9] := 'September'; LongMonthNames[10] := 'October';
+  LongMonthNames[11] := 'November'; LongMonthNames[12] := 'December';
+  ShortDayNames[1] := 'Sun'; ShortDayNames[2] := 'Mon'; ShortDayNames[3] := 'Tue';
+  ShortDayNames[4] := 'Wed'; ShortDayNames[5] := 'Thu'; ShortDayNames[6] := 'Fri';
+  ShortDayNames[7] := 'Sat';
+  LongDayNames[1] := 'Sunday';    LongDayNames[2] := 'Monday';
+  LongDayNames[3] := 'Tuesday';   LongDayNames[4] := 'Wednesday';
+  LongDayNames[5] := 'Thursday';  LongDayNames[6] := 'Friday';
+  LongDayNames[7] := 'Saturday';
 end.

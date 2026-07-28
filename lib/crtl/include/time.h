@@ -32,7 +32,16 @@ struct timespec {
 #define CLOCK_REALTIME  0
 #define CLOCK_MONOTONIC 1
 
-time_t time(time_t *t);
+/* The C name `time` collides case-insensitively with sysutils' Pascal `Time`
+   when the RTL is linked next to crtl, and cfront's FindProc spans both
+   namespaces — so `time(NULL)` bound to the Pascal function (no parameters,
+   Double result) and any C unit that read the clock crashed as soon as the
+   program also used sysutils (bug-c-unit-crashes-when-sysutils-is-used).
+   Same cure as exp/Exp in math.h: the implementation lives under __crtl_time
+   and C callers reach it through a FUNCTION-LIKE macro, so variables and
+   struct fields named `time` are untouched. */
+extern time_t __crtl_time(time_t *t);
+#define time(t) __crtl_time(t)
 clock_t clock(void);
 int nanosleep(const struct timespec *req, struct timespec *rem);
 int clock_gettime(int clk_id, struct timespec *tp);

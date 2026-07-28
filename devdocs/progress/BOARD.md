@@ -36,7 +36,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-c-exit-shadows-pascal-exit | A | 70 | bug | crtl's C `exit()` shadows Pascal's `Exit` — order-dependent | — |
-| bug-c-unit-crashes-when-sysutils-is-used | A | 70 | bug | A C unit's code segfaults when the program also uses sysutils | — |
+| bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 70 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-cfront-unit-globals-unregistered | C | 70 | bug | cfront: a file-scope global in a .c compiled as a UNIT is never reserved — arrays fail to lower, scalars silently read 0 | — |
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |
 | bug-nilpy-class-attr-instance-traversal-crashes | N | 70 | bug | A class attribute holding an INSTANCE crashes when traversed | — |
@@ -282,7 +282,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (992)
+## done (993)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -484,6 +484,7 @@ _none_
 | bug-c-typedef-return-corrupts-entry | C | 50 | bug | C: typedef return type can corrupt program entry call | — |
 | bug-c-unary-minus-no-integer-promotion | C | 65 | bug | Unary minus did not apply the integer promotions (silent unsigned compare) | — |
 | bug-c-union-bitfields-packed-sequentially | C | 60 | bug | bug: UNION bitfields packed sequentially like struct bitfields (silent wrong bits) | — |
+| bug-c-unit-crashes-when-sysutils-is-used | A | 70 | bug | A C unit's code segfaults when the program also uses sysutils | — |
 | bug-c-unixfile-mmap-field-offset-zero | A | 56 | bug | C: struct field resolves to offset 0 in the full sqlite unixFile (context-dependent) | — |
 | bug-c-unsigned-div-mod-32bit-backends | A | 50 | bug | C `unsigned int` / Pascal Cardinal division+mod use signed div on 32-bit backends | — |
 | bug-c-unsigned-int-32bit-arithmetic-semantics | A | 50 | bug | C `unsigned int` (32-bit) arithmetic computed in 64-bit — no wraparound, signed compares | — |
@@ -2723,7 +2724,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [A] bug-c-exit-shadows-pascal-exit
-- [p 70] [A] bug-c-unit-crashes-when-sysutils-is-used
+- [p 70] [A] bug-cfront-silent-bind-to-pascal-proc-of-different-arity
 - [p 70] [C] bug-cfront-unit-globals-unregistered
 - [p 70] [N] bug-nilpy-class-attr-instance-traversal-crashes
 - [p 70] [N] bug-nilpy-import-lost-after-a-fallback-import-block
