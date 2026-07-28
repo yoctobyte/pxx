@@ -75,6 +75,12 @@ const
   NORMAL = 'normal';
 
 type
+  { Tk's own error, which an application catches around clipboard and widget
+    calls that can fail (`except tk.TclError:`). One class, like the rest of
+    the NilPy exception surface. }
+  TclError = class(Exception)
+  end;
+
   Widget = class
   public
     path: AnsiString;         { the Tcl path name, e.g. `.w4.w9` }

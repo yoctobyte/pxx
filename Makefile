@@ -316,6 +316,9 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# a bare name is never a method; str.format with a spec; qualified except
+	./$(COMPILER) examples/tk/shadow_format_except.npy /tmp/test_nilpy_sfe26
+	test "$$(/tmp/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"
 	# a reserved-word constant (tk.END), a class named like an RTL record
 	# (Text), and a property read on a fresh construction (Path(x).name)
 	./$(COMPILER) examples/tk/facade_and_paths.npy /tmp/test_nilpy_facade_paths26
@@ -3473,6 +3476,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# a bare name is never a method; str.format with a spec; qualified except
+	./$(COMPILER) examples/tk/shadow_format_except.npy /tmp/test_nilpy_sfe26
+	test "$$(/tmp/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"
 	# a reserved-word constant (tk.END), a class named like an RTL record
 	# (Text), and a property read on a fresh construction (Path(x).name)
 	./$(COMPILER) examples/tk/facade_and_paths.npy /tmp/test_nilpy_facade_paths26

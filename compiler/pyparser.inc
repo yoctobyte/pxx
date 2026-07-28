@@ -1909,6 +1909,9 @@ begin
     { .encode(enc [, errors=...]) — the arguments are accepted and DROPPED; see
       the -4 case in PyParseStrMethod and pystr_encode for what that means. }
     begin pname := 'pystr_encode'; retTk := tyClass; wantArgs := -4; end
+  else if CaseEqual(mname, 'format') then
+    { one or two positional arguments — see the -6 case in PyParseStrMethod }
+    begin pname := 'pystr_format'; retTk := tyAnsiString; wantArgs := -6; end
   else if CaseEqual(mname, 'isspace') then
     begin pname := 'pystr_isspace'; retTk := tyBoolean; end
   else if CaseEqual(mname, 'isdigit') then
@@ -3199,7 +3202,7 @@ begin
   if not PyStrMethodInfo(mname, pname, retTk, wantArgs) then
     Error('Nil Python: unsupported str method .' + mname + '() (have: upper, '
       + 'lower, strip, lstrip, rstrip, startswith, endswith, find, isspace, '
-      + 'isdigit, isalpha, isupper, islower, '
+      + 'isdigit, isalpha, isupper, islower, format, '
       + 'join, split, splitlines)');
 
   procIdx := FindProc(pname);
@@ -3307,6 +3310,20 @@ begin
     if i = 2 then pname := pname + '_c'
     else if i <> 1 then
       Error('Nil Python: str method .' + mname + '() takes one or two arguments');
+    procIdx := FindProc(pname);
+    if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  end
+  else if wantArgs = -6 then
+  begin
+    { .format(a) / .format(a, b) — pylib overloads by arity, so the call just
+      has to pass the arguments through }
+    { ONE argument. The two-argument overload is written and does not marshal
+      correctly (the second Variant arrives wrong and the call segfaults), so
+      it is refused rather than shipped: a crash is worse than a diagnostic.
+      feature-nilpy-str-format-multiarg. }
+    if i <> 1 then
+      Error('Nil Python: str method .format() takes exactly one argument here; '
+            + 'several placeholders are not implemented yet — use an f-string');
     procIdx := FindProc(pname);
     if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   end
@@ -7034,6 +7051,15 @@ begin
         if CurTok.Kind <> tkIdent then Error('Nil Python: except: expected an exception class');
         className := CurTok.SVal;
         Next;
+        { `except tk.TclError:` — a QUALIFIED class. Unit scope is flat, so the
+          member name alone resolves; the qualifier just has to be consumed. }
+        if (CurTok.Kind = tkDot) and (TokPos < TokCount) and
+           (Tokens[TokPos].Kind = tkIdent) then
+        begin
+          Next;
+          className := CurTok.SVal;
+          Next;
+        end;
         if CaseEqual(className, 'Exception') then ci := PyEnsureExceptionClass
         else ci := FindUClass(className);
         if ci < 0 then Error('Nil Python: unknown exception class ' + className);
@@ -8514,7 +8540,13 @@ begin
   pfx := PyNestPrefix;
   while pfx <> '' do
   begin
-    if FindProc(pfx + '.' + name) >= 0 then
+    { Only a nested DEF qualifies. A CLASS prefix must not: Python reaches a
+      method through `self.` and never by a bare name, so inside a method the
+      unqualified call names the module-level function even when the class has
+      one of the same name — songformatter's `def select_image(self):
+      select_image()` delegates exactly that way, and qualifying turned it into
+      a call of ITSELF with no arguments. }
+    if (FindProc(pfx + '.' + name) >= 0) and (FindUClass(pfx) < 0) then
     begin
       Result := pfx + '.' + name;
       Exit;

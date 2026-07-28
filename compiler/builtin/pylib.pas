@@ -365,6 +365,11 @@ function pyprint_star(l: TPyList; leadSep: Boolean): AnsiString;
   literal text between ':' and the closing brace; this unit is the ONE place
   that interprets it, so the lexer never has to know what "05x" means. }
 function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
+{ `"...{}...{:.1f}".format(a, b)` — the positional placeholders, with the same
+  spec grammar the f-strings use (pyformat_of below). Named fields
+  (`{name}`) and index fields (`{0}`) are NOT here: they fail loudly rather
+  than being dropped, because a format spec decides what is PRINTED. }
+function pystr_format(const fmt: AnsiString; const a: Variant): AnsiString;
 function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; overload;
 function PyFmtFixed(d: Double; prec: Integer): AnsiString;
 function pyformat_of(d: Double; const spec: AnsiString): AnsiString; overload;
@@ -4526,6 +4531,65 @@ end;
     [ '<' | '>' ] [ '0' ] [ width ] [ 'd' | 'x' | 'X' | 'o' | 'b' | 's' ]
   Anything else halts with the spec quoted, because a format spec decides what
   is PRINTED and silently ignoring one produces wrong output. }
+{ The placeholder walk. Two variants rather than an open array: an open array
+  of Variant is not marshalled correctly here and crashed on the second
+  argument. }
+function PyFormatApply(const fmt: AnsiString; const a: Variant; const b: Variant;
+                       nArgs: Integer): AnsiString;
+var i, j, argi: Integer; spec, outS: AnsiString;
+begin
+  outS := '';
+  argi := 0;
+  i := 1;
+  while i <= Length(fmt) do
+  begin
+    if (fmt[i] = '{') and (i < Length(fmt)) and (fmt[i + 1] = '{') then
+    begin outS := outS + '{'; Inc(i, 2); Continue; end;
+    if (fmt[i] = '}') and (i < Length(fmt)) and (fmt[i + 1] = '}') then
+    begin outS := outS + '}'; Inc(i, 2); Continue; end;
+    if fmt[i] = '{' then
+    begin
+      j := i + 1;
+      spec := '';
+      while (j <= Length(fmt)) and (fmt[j] <> '}') do
+      begin
+        if fmt[j] = ':' then
+        begin
+          Inc(j);
+          spec := '';
+          while (j <= Length(fmt)) and (fmt[j] <> '}') do
+          begin spec := spec + fmt[j]; Inc(j); end;
+          Break;
+        end;
+        Inc(j);
+      end;
+      if argi >= nArgs then
+        raise Exception.Create('str.format: more placeholders than arguments');
+      if argi = 0 then
+      begin
+        if spec = '' then outS := outS + pystr_of(a)
+        else outS := outS + pyformat_of(a, spec);
+      end
+      else
+      begin
+        if spec = '' then outS := outS + pystr_of(b)
+        else outS := outS + pyformat_of(b, spec);
+      end;
+      Inc(argi);
+      i := j + 1;
+      Continue;
+    end;
+    outS := outS + fmt[i];
+    Inc(i);
+  end;
+  PyFormatApply := outS;
+end;
+
+function pystr_format(const fmt: AnsiString; const a: Variant): AnsiString;
+begin
+  pystr_format := PyFormatApply(fmt, a, a, 1);
+end;
+
 function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
 var p, width: Integer; zero, leftAlign: Boolean; kind: Char; body: AnsiString;
 begin

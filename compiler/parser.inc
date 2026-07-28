@@ -17807,7 +17807,12 @@ begin
           System.Delete(E,1,P) precisely because the class has its own
           Delete(Index); the shadow-clear sent it to the METHOD with mangled
           args (silent wrong dispatch, then a crash on FList). }
-        if (procIdx >= 0) and (qUnit = -1) and (si < 0) and
+        { …not in NilPy: Python reaches a method only through `self.`, so a bare
+          call names the module-level function even when the class declares one
+          of the same name. songformatter has `def select_image(self):
+          select_image()` — a method delegating to the module function it
+          shadows — and the shadow-clear turned it into a call of ITSELF. }
+        if (procIdx >= 0) and (qUnit = -1) and (si < 0) and (not isNilPy) and
            (CurSelfClass >= REC_UCLASS_BASE) and
            (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) >= 0) then
           procIdx := -1;
