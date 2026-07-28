@@ -1292,7 +1292,12 @@ begin
   end;
 end;
 
+{$ifndef PXX_ESP}
+{ Forward only where the BODY exists — PXXClassFinalize is itself inside
+  {$ifndef PXX_ESP}, so an unconditional forward left it unresolved on the
+  ESP profile (test-emit-obj: "unresolved forward: PXXClassFinalize"). }
 procedure PXXClassFinalize(inst: Pointer); forward;
+{$endif}
 
 { Free an instance whichever population it belongs to: headered -> release
   (rc discipline), plain GetMem -> ordinary free. This is what the FreeMem
@@ -1319,7 +1324,9 @@ begin
     PXXObjRelease(p)
   else
   begin
-    PXXClassFinalize(p);
+{$ifndef PXX_ESP}
+    PXXClassFinalize(p);   { ESP has no class-layout finalizer to run }
+{$endif}
     PXXFree(p);
   end;
 end;

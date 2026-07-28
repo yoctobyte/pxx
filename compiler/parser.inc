@@ -27540,6 +27540,20 @@ begin
        (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
+    { A VARIANT anywhere in the program pulls the builtin unit, because assigning
+      a variant to a scalar lowers to VariantToInt64/Double/Bool/Char/Str and
+      IRLowerVariantAsScalar hard-Errors when FindProc cannot see one. The unit
+      used to arrive only as a side effect of some OTHER feature (a string
+      variable pulled it, a Double did not), so on cross targets whether a
+      program built at all was decided by an unrelated declaration:
+      `out_ := someVariant` failed with "variant unbox: VariantToInt64 builtin
+      not loaded" on i386/aarch64/arm32 while x86-64 compiled it
+      (bug-a-variant-unbox-wrong-on-32bit-and-unavailable-cross). Same ESP
+      exclusions as the Str/Val pull above — those targets cannot compile the
+      unit, and there a variant program fails at the call site instead. }
+    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'variant') and
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+      needsBuiltin := True;
     { Bare `Copy(...)` on a string lowers to the __pxxStrCopy substring helper in
       the builtin unit (see ParseFactor). Pull the unit so the helper resolves;
       the string-vs-dynarray decision is made at the call site, so a dynarray-only

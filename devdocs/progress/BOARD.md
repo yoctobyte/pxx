@@ -30,12 +30,11 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (181)
+## backlog (180)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
-| bug-a-variant-unbox-wrong-on-32bit-and-unavailable-cross | A | 70 | bug | Variant -> scalar unbox: silently wrong on 32-bit, and unavailable on cross targets | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 70 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |
 | bug-nilpy-class-attr-instance-traversal-crashes | N | 70 | bug | A class attribute holding an INSTANCE crashes when traversed | — |
@@ -278,7 +277,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (998)
+## done (999)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -329,6 +328,7 @@ _none_
 | bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
 | bug-a-variant-class-boxing-missing-on-i386-aarch64 | A | 70 | bug | Storing a class into a Variant did not build on i386 or aarch64 | — |
 | bug-a-variant-fn-return-forward-nrvo-corruption | A | 55 | bug | Variant FUNCTION forwarding another Variant call's result corrupts the value | — |
+| bug-a-variant-unbox-wrong-on-32bit-and-unavailable-cross | A | 70 | bug | Variant -> scalar unbox is unavailable on cross targets | — |
 | bug-aarch64-arm32-record-temp-byvalue-arg | A | 50 | bug | aarch64/arm32: record temporary as a by-value arg fails codegen | — |
 | bug-aggregate-member-array-as-var-param | A | 50 | bug | bug: passing an array that is a member of an aggregate (record field / 2D-array row) as a var/const param segfaults | — |
 | bug-ansistring-concat-arg-static-bloat | A | 50 | bug | AnsiString concat expression as a call argument allocates an ~8 MB static buffer per site | — |
@@ -2724,7 +2724,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [A] bug-a-variant-unbox-wrong-on-32bit-and-unavailable-cross
 - [p 70] [A] bug-cfront-silent-bind-to-pascal-proc-of-different-arity
 - [p 70] [N] bug-nilpy-class-attr-instance-traversal-crashes
 - [p 70] [N] bug-nilpy-unannotated-return-infers-number-for-string-concat

@@ -3679,6 +3679,10 @@ progress-check:
 test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/hello.pas /tmp/test_i386_hello
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_hello)" = "Hello, World!"
+	# a Variant holding a CLASS, and the unbox back to a scalar: both halves
+	# were x86-64-only gaps, so every target must print the same line
+	./$(COMPILER) --target=i386 test/test_variant_class_cross.pas /tmp/test_i386_varcls
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_varcls)" = "end 7 100"
 	# inline expansion is target-independent (AST/IR level): -O2 output must match
 	# -O0 on every cross target (feature-inline-routines).
 	./$(COMPILER) --target=i386 test/test_inline_expand.pas /tmp/test_i386_inl_o0
@@ -4053,6 +4057,10 @@ test-i386: $(COMPILER)
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_hello)" = "Hello, World!"
+	# a Variant holding a CLASS, and the unbox back to a scalar: both halves
+	# were x86-64-only gaps, so every target must print the same line
+	./$(COMPILER) --target=aarch64 test/test_variant_class_cross.pas /tmp/test_aarch64_varcls
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_varcls)" = "end 7 100"
 	# inline expansion (feature-inline-routines): -O2 == -O0 on this cross target.
 	./$(COMPILER) --target=aarch64 test/test_inline_expand.pas /tmp/test_aarch64_inl_o0
 	./$(COMPILER) --target=aarch64 -O2 test/test_inline_expand.pas /tmp/test_aarch64_inl_o2
@@ -4747,6 +4755,10 @@ test-riscv32: $(COMPILER)
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_hello)" = "Hello, World!"
+	# a Variant holding a CLASS, and the unbox back to a scalar: both halves
+	# were x86-64-only gaps, so every target must print the same line
+	./$(COMPILER) --target=arm32 test/test_variant_class_cross.pas /tmp/test_arm32_varcls
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_varcls)" = "end 7 100"
 	# inline expansion (feature-inline-routines): -O2 == -O0 on this cross target.
 	./$(COMPILER) --target=arm32 test/test_inline_expand.pas /tmp/test_arm32_inl_o0
 	./$(COMPILER) --target=arm32 -O2 test/test_inline_expand.pas /tmp/test_arm32_inl_o2
