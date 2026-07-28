@@ -1,0 +1,14 @@
+# Two shapes real Python uses that used to fail:
+#  - isinstance() as the LAST thing in a generator-expression filter: its own
+#    ')' was read as a type-tuple's close and the genexpr's ')' was eaten too;
+#  - argument unpacking of a list LITERAL, f(*[a, b, c]).
+def add3(a, b, c):
+    return a + b + c
+
+
+xs = [1, 5, 3]
+print(max(x for x in xs if isinstance(x, int)))
+print(list(x for x in xs if isinstance(x, (int, str))))
+print(all(isinstance(x, int) and x > 0 for x in xs))
+print(add3(*[1, 2, 3]))
+print(add3(1, 2, 3))

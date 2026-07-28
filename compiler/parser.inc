@@ -12364,7 +12364,44 @@ end;
 procedure ParseExpr;
 var op: TTokenKind; left, right, node, isci, isNode, isArg, isArg2: Integer; isIsTest: Boolean;
     chMid, chSym, chAssign, chSeq, chRight, chCmp, chAnd: Integer;   { Python comparison chaining }
+    spDepth, spI: Integer;
 begin
+  { NilPy argument UNPACKING of a list literal: `f(*[a, b, c])` means
+    `f(a, b, c)`, and with a literal that is purely syntactic — songformatter
+    writes `canvas.setStrokeColorRGB(*[0.0, 0.0, 0.0])`.
+
+    Done by consuming the `*` and `[` and turning the matching `]` into a comma:
+    every argument loop in this parser already reads `expr (',' expr)*` and
+    tolerates the trailing comma before ')', so the elements are picked up as
+    ordinary arguments with no loop needing to know. The same hide-a-token
+    technique the comprehension filter uses.
+
+    Only a LITERAL list splices: unpacking a variable needs its length at
+    compile time, which a syntactic splice cannot give, so `f(*xs)` still walls
+    at the '*' rather than quietly passing one argument. }
+  if isNilPy and (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkLBrack) then
+  begin
+    spI := TokPos + 1;                 { first token inside the '[' }
+    spDepth := 1;
+    while spI < TokCount do
+    begin
+      if Tokens[spI].Kind in [tkLBrack, tkLParen] then Inc(spDepth)
+      else if Tokens[spI].Kind in [tkRParen] then Dec(spDepth)
+      else if Tokens[spI].Kind = tkRBrack then
+      begin
+        Dec(spDepth);
+        if spDepth = 0 then
+        begin
+          Tokens[spI].Kind := tkComma;
+          Next;                        { consume '*' }
+          Next;                        { consume '[' }
+          Break;
+        end;
+      end;
+      Inc(spI);
+    end;
+  end;
   ParseSimpleExpr;
   { `X is T` / `X as T` — is/as are contextual identifiers (not reserved tokens),
     treated as operators only when followed by a known class name, so a stray

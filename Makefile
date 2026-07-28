@@ -316,6 +316,9 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# isinstance last in a genexpr filter; f(*[a,b,c]) argument unpacking
+	./$(COMPILER) test/test_nilpy_genexp_isinstance_star.npy /tmp/test_nilpy_genexp_star26
+	test "$$(/tmp/test_nilpy_genexp_star26)" = "$$(printf '5\n[1, 5, 3]\nTrue\n6\n6')"
 	# a C library's names must not shadow a Python module qualifier
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_qualifier_vs_cproc.npy /tmp/test_nilpy_qual_cproc26
 	test "$$(/tmp/test_nilpy_qual_cproc26)" = "$$(printf 'main\nbye')"
@@ -3449,6 +3452,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# isinstance last in a genexpr filter; f(*[a,b,c]) argument unpacking
+	./$(COMPILER) test/test_nilpy_genexp_isinstance_star.npy /tmp/test_nilpy_genexp_star26
+	test "$$(/tmp/test_nilpy_genexp_star26)" = "$$(printf '5\n[1, 5, 3]\nTrue\n6\n6')"
 	# a C library's names must not shadow a Python module qualifier
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_qualifier_vs_cproc.npy /tmp/test_nilpy_qual_cproc26
 	test "$$(/tmp/test_nilpy_qual_cproc26)" = "$$(printf 'main\nbye')"

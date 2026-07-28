@@ -890,7 +890,7 @@ end;
   a side-effecting operand would double-evaluate — b346 family, noted). }
 procedure PyParseIsinstance;
 var xNode, node, left, term, callN, argN, tagCall: Integer;
-    isVar: Boolean; nm: AnsiString; ci: Integer;
+    isVar, hadTuple: Boolean; nm: AnsiString; ci: Integer;
 
   function TagEq(tagConst: Int64): Integer;
   var c, a, e: Integer;
@@ -928,7 +928,8 @@ begin
   isVar := IntToTypeKind(ASTTk[xNode]) = tyVariant;
   Expect(tkComma, ',');
   left := -1;
-  if CurTok.Kind = tkLParen then Next;   { optional tuple of types }
+  hadTuple := CurTok.Kind = tkLParen;
+  if hadTuple then Next;                 { optional tuple of types }
   repeat
     if CurTok.Kind <> tkIdent then Error('Nil Python: expected a type in isinstance');
     nm := LowerCase(CurTok.SVal);
@@ -983,11 +984,13 @@ begin
     Next;
     left := OrJoin(left, term);
   until not Eat(tkComma);
-  if CurTok.Kind = tkRParen then
-  begin
-    Next;   { tuple close }
-    if CurTok.Kind = tkRParen then Next   { call close }
-  end;
+  { Close exactly what was opened. The old form treated the FIRST ')' as the
+    tuple's and swallowed a following one as the call's — so a bare
+    `isinstance(x, int)` whose ')' was immediately followed by another, as in
+    `max(v for v in xs if isinstance(v, int))`, ate the genexpr's closer and
+    the parse ran off the end of the program. }
+  if hadTuple then Expect(tkRParen, ')');   { tuple close }
+  Expect(tkRParen, ')');                    { call close }
   CurASTNode := left;
 end;
 
