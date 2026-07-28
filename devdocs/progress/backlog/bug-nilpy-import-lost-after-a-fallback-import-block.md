@@ -74,6 +74,31 @@ dotted-statement branch at `pyparser.inc:8821` (that branch just calls
 PyParseBoolExpr and then fails its `Expect(tkAssign)` because the expression
 parse stopped early). Fix the factor path and both spellings follow.
 
+## The unit IS loaded — only the QUALIFIER form breaks
+
+Decisive experiment: after the C unit is pulled,
+
+```python
+from atexit import register
+register(bye)          # compiles and RUNS, prints "bye" at exit
+```
+
+while `import atexit` + `atexit.register(bye)` does not parse. So the unit is
+found, compiled and callable; what fails is recognising `atexit` as a qualifier.
+
+Two candidate causes inside `ConsumeUnitQualifier` were tried and are NOT it:
+
+- `if FindSym(name) >= 0 then Exit;` — restricting that shadow test to
+  locals/params/own-unit symbols (so a C library's symbol cannot beat a unit
+  name) changes nothing. Reverted.
+- the `CompiledUnits` cap. Reverted.
+
+That leaves `FindUnitOrAlias(name)` returning -1 for a unit that demonstrably
+compiled — check what `FindCompiledUnit('atexit')` sees after a C pull, and
+whether the C unit's registration disturbs the `CompiledUnits` / `Strs`
+interning the lookup depends on. Instrumenting that lookup is the next step and
+should settle it in one run.
+
 ## Where the fix is NOT
 
 `ConsumeUnitQualifier` (`compiler/parser.inc:864`) is not the site: it never
