@@ -394,6 +394,16 @@ function Time: TDateTime;
 
 function DateTimeToTimeStamp(DateTime: TDateTime): TTimeStamp;
 
+{ The process environment, FPC's spelling. Read from /proc/self/environ, whose
+  records are NUL-separated `NAME=VALUE` pairs — Linux-only, and deliberately so
+  for now: the environment block sits on the initial stack, but reaching it
+  needs a per-target intrinsic that does not exist yet (the route is written up
+  in feature-rtl-environment-variables, and it can replace the reader later
+  without changing this surface). An unset variable reads as '', as in FPC. }
+function GetEnvironmentVariable(const Name: string): string;
+function GetEnvironmentVariableCount: Integer;
+function GetEnvironmentString(Index: Integer): string;
+
 { File predicates over the PAL (FPC SysUtils). FileExists is True only for
   non-directories, DirectoryExists only for directories, matching FPC. }
 function FileExists(const FileName: string): Boolean;
@@ -1702,6 +1712,96 @@ begin
   DecodeTime(DateTime, h, mi, s, ms);
   Result.Time := Integer(h) * 3600000 + Integer(mi) * 60000 + Integer(s) * 1000 + ms;
   Result.Date := Trunc(DateTime) + DateDelta;
+end;
+
+{ ---- environment ---------------------------------------------------------- }
+
+var
+  EnvLoaded: Boolean;
+  EnvVars: array[0..1023] of string;   { each entry a whole NAME=VALUE record }
+  EnvCount: Integer;
+
+procedure EnvLoad;
+{ Read /proc/self/environ once, through the PAL: its records are NUL-separated,
+  so it is not text and this unit's text I/O cannot read it. A failure to open
+  leaves the table empty, which reads back as "every variable is unset" rather
+  than as an error — a program that cannot see its environment should behave
+  like one started without one. }
+var h, i, start: Integer; got: Int64; buf: array[0..16383] of Char; cur: string;
+begin
+  if EnvLoaded then Exit;
+  EnvLoaded := True;
+  EnvCount := 0;
+  h := PalOpen(PChar('/proc/self/environ'), 0, 0);   { O_RDONLY }
+  if h < 0 then Exit;
+  got := PalRead(h, @buf[0], SizeOf(buf));
+  PalClose(h);
+  if got <= 0 then Exit;
+  start := 0;
+  i := 0;
+  while i < got do
+  begin
+    if buf[i] = #0 then
+    begin
+      if i > start then
+      begin
+        cur := '';
+        while start < i do
+        begin
+          cur := cur + buf[start];
+          Inc(start);
+        end;
+        if EnvCount < 1024 then
+        begin
+          EnvVars[EnvCount] := cur;
+          Inc(EnvCount);
+        end;
+      end;
+      start := i + 1;
+    end;
+    Inc(i);
+  end;
+end;
+
+function GetEnvironmentVariableCount: Integer;
+begin
+  EnvLoad;
+  GetEnvironmentVariableCount := EnvCount;
+end;
+
+function GetEnvironmentString(Index: Integer): string;
+begin
+  EnvLoad;
+  { FPC numbers these from 1 }
+  if (Index >= 1) and (Index <= EnvCount) then GetEnvironmentString := EnvVars[Index - 1]
+  else GetEnvironmentString := '';
+end;
+
+function GetEnvironmentVariable(const Name: string): string;
+var i, j, n: Integer; rec, acc: string; matched: Boolean;
+begin
+  GetEnvironmentVariable := '';
+  if Name = '' then Exit;
+  EnvLoad;
+  n := Length(Name);
+  for i := 0 to EnvCount - 1 do
+  begin
+    rec := EnvVars[i];
+    if Length(rec) > n then
+      if rec[n + 1] = '=' then
+      begin
+        matched := True;
+        for j := 1 to n do
+          if rec[j] <> Name[j] then begin matched := False; Break; end;
+        if matched then
+        begin
+          acc := '';
+          for j := n + 2 to Length(rec) do acc := acc + rec[j];
+          GetEnvironmentVariable := acc;
+          Exit;
+        end;
+      end;
+  end;
 end;
 
 function FileExists(const FileName: string): Boolean;

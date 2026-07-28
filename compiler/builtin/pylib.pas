@@ -401,6 +401,16 @@ procedure pysys_exit(code: Integer);
 function pyos_remove(const path: AnsiString): Integer;
 function pyos_rename(const src: AnsiString; const dst: AnsiString): Integer;
 function pyos_stat(const path: AnsiString): TPyStat;
+{ os.environ.get(name[, default]) and os.getenv(name[, default]). The process
+  environment comes from /proc/self/environ (NUL-separated NAME=VALUE records);
+  reaching the real block on the initial stack needs an intrinsic that does not
+  exist yet — feature-rtl-environment-variables. An UNSET variable yields None,
+  not '', because that is what Python does and what `if os.environ.get(X):`
+  depends on. }
+function pyos_environ_get(const name: AnsiString): Variant;
+function pyos_environ_get_d(const name: AnsiString; const dflt: Variant): Variant;
+function pyos_getenv(const name: AnsiString): Variant;
+function pyos_getenv_d(const name: AnsiString; const dflt: Variant): Variant;
 { sys.stdin.read(n): read up to n bytes from fd 0, returned as a byte string.
   Returns '' at EOF (Python's read at EOF gives ''), which is exactly what
   uforth's KEY word tests for. }
@@ -3489,6 +3499,106 @@ begin
 {$endif}
 {$endif}
   Result := r = 0;
+end;
+
+{ ---- environment ---------------------------------------------------------- }
+
+var
+  PyEnvLoaded: Boolean;
+  PyEnvRaw: AnsiString;    { the whole file, NULs replaced by #1 separators }
+
+procedure PyEnvLoad;
+{ Read /proc/self/environ once. Linux-only, like pyos_getcwd's syscall set; on a
+  target without it the table stays empty and every lookup is None, which is the
+  honest answer for "this program has no environment". }
+var buf: array[0..16383] of Char; fd, r, closed: Int64; i: Integer;
+begin
+  if PyEnvLoaded then Exit;
+  PyEnvLoaded := True;
+  PyEnvRaw := '';
+  fd := -1;
+{$ifdef CPUX86_64}
+  { openat(AT_FDCWD, path, O_RDONLY) }
+  fd := __pxxrawsyscall(257, Int64(-100), Int64(PChar('/proc/self/environ')), 0, 0, 0, 0);
+{$endif}
+{$ifdef CPUAARCH64}
+  fd := __pxxrawsyscall(56, Int64(-100), Int64(PChar('/proc/self/environ')), 0, 0, 0, 0);
+{$endif}
+  if fd < 0 then Exit;
+  r := 0;
+{$ifdef CPUX86_64}
+  r := __pxxrawsyscall(0, fd, Int64(@buf[0]), 16384, 0, 0, 0);
+  closed := __pxxrawsyscall(3, fd, 0, 0, 0, 0, 0);
+{$endif}
+{$ifdef CPUAARCH64}
+  r := __pxxrawsyscall(63, fd, Int64(@buf[0]), 16384, 0, 0, 0);
+  closed := __pxxrawsyscall(57, fd, 0, 0, 0, 0, 0);
+{$endif}
+  if r <= 0 then Exit;
+  for i := 0 to Integer(r) - 1 do
+    if buf[i] = #0 then PyEnvRaw := PyEnvRaw + #1
+    else PyEnvRaw := PyEnvRaw + buf[i];
+  if Length(PyEnvRaw) > 0 then
+    if PyEnvRaw[Length(PyEnvRaw)] <> #1 then PyEnvRaw := PyEnvRaw + #1;
+end;
+
+function PyEnvLookup(const name: AnsiString; var found: Boolean): AnsiString;
+var i, j, recStart, n: Integer; matched: Boolean;
+begin
+  PyEnvLookup := '';
+  found := False;
+  if name = '' then Exit;
+  PyEnvLoad;
+  n := Length(name);
+  recStart := 1;
+  i := 1;
+  while i <= Length(PyEnvRaw) do
+  begin
+    if PyEnvRaw[i] = #1 then
+    begin
+      { record is PyEnvRaw[recStart .. i-1] }
+      if (i - recStart) > n then
+        if PyEnvRaw[recStart + n] = '=' then
+        begin
+          matched := True;
+          for j := 0 to n - 1 do
+            if PyEnvRaw[recStart + j] <> name[j + 1] then begin matched := False; Break; end;
+          if matched then
+          begin
+            for j := recStart + n + 1 to i - 1 do
+              PyEnvLookup := PyEnvLookup + PyEnvRaw[j];
+            found := True;
+            Exit;
+          end;
+        end;
+      recStart := i + 1;
+    end;
+    Inc(i);
+  end;
+end;
+
+function pyos_environ_get(const name: AnsiString): Variant;
+var v: AnsiString; found: Boolean;
+begin
+  v := PyEnvLookup(name, found);
+  if found then pyos_environ_get := v else pyos_environ_get := pynone;
+end;
+
+function pyos_environ_get_d(const name: AnsiString; const dflt: Variant): Variant;
+var v: AnsiString; found: Boolean;
+begin
+  v := PyEnvLookup(name, found);
+  if found then pyos_environ_get_d := v else pyos_environ_get_d := dflt;
+end;
+
+function pyos_getenv(const name: AnsiString): Variant;
+begin
+  pyos_getenv := pyos_environ_get(name);
+end;
+
+function pyos_getenv_d(const name: AnsiString; const dflt: Variant): Variant;
+begin
+  pyos_getenv_d := pyos_environ_get_d(name, dflt);
 end;
 
 function pyos_getcwd: AnsiString;

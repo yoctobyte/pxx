@@ -316,6 +316,11 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# the process environment, both surfaces (CPython-diffed)
+	PXX_ENV_PROBE=hello ./$(COMPILER) test/test_env_pascal.pas /tmp/test_env_pascal26
+	test "$$(PXX_ENV_PROBE=hello /tmp/test_env_pascal26)" = "$$(printf 'hello\n[]\ncount ok')"
+	./$(COMPILER) test/test_nilpy_environ.npy /tmp/test_nilpy_environ26
+	test "$$(PXX_ENV_PROBE=hello /tmp/test_nilpy_environ26)" = "$$(printf 'hello\nNone\nfallback\nhello\ntruthy\nunset is falsey')"
 	# the shape real code uses: the try block imports AND sets a flag
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_mixed.npy /tmp/test_nilpy_fallback_mixed26
 	test "$$(/tmp/test_nilpy_fallback_mixed26)" = "$$(printf 'False\nTrue\npresent')"
@@ -3438,6 +3443,11 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# the process environment, both surfaces (CPython-diffed)
+	PXX_ENV_PROBE=hello ./$(COMPILER) test/test_env_pascal.pas /tmp/test_env_pascal26
+	test "$$(PXX_ENV_PROBE=hello /tmp/test_env_pascal26)" = "$$(printf 'hello\n[]\ncount ok')"
+	./$(COMPILER) test/test_nilpy_environ.npy /tmp/test_nilpy_environ26
+	test "$$(PXX_ENV_PROBE=hello /tmp/test_nilpy_environ26)" = "$$(printf 'hello\nNone\nfallback\nhello\ntruthy\nunset is falsey')"
 	# the shape real code uses: the try block imports AND sets a flag
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_mixed.npy /tmp/test_nilpy_fallback_mixed26
 	test "$$(/tmp/test_nilpy_fallback_mixed26)" = "$$(printf 'False\nTrue\npresent')"

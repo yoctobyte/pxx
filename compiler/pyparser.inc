@@ -4347,6 +4347,8 @@ begin
   else if dotted = 'os.path.abspath' then Result := 'pyos_path_abspath'
   else if dotted = 'os.path.dirname' then Result := 'pyos_path_dirname'
   else if dotted = 'os.getcwd' then Result := 'pyos_getcwd'
+  else if dotted = 'os.environ.get' then Result := 'pyos_environ_get'
+  else if dotted = 'os.getenv' then Result := 'pyos_getenv'
   else if dotted = 'os.remove' then Result := 'pyos_remove'
   else if dotted = 'os.rename' then Result := 'pyos_rename'
   else if dotted = 'os.stat' then Result := 'pyos_stat'
@@ -4393,8 +4395,9 @@ begin
 end;
 
 function PyParseStdlibCall(const pname: AnsiString; nTok: Integer): Integer;
-var procIdx, callNode, argNode, lastArg, i: Integer;
+var procIdx, callNode, argNode, lastArg, i, nArgs: Integer;
 begin
+  nArgs := 0;
   procIdx := FindProc(pname);
   if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   for i := 1 to nTok do Next;          { the dotted name; CurTok = '(' }
@@ -4415,8 +4418,29 @@ begin
       if lastArg < 0 then ASTLeft[callNode] := argNode
       else ASTRight[lastArg] := argNode;
       lastArg := argNode;
+      Inc(nArgs);
     until not Eat(tkComma);
   Expect(tkRParen, ')');
+  { The optional-DEFAULT form of a shim, e.g. `os.environ.get(name, default)`
+    beside `os.environ.get(name)`. FindProc takes the first overload, and a call
+    node carries one fixed proc index, so the two arities cannot be one
+    overloaded name here — the second is registered as `<name>_d` and selected
+    by the count. Without this the two-argument call bound to the one-argument
+    proc and the default was silently dropped. }
+  if nArgs > Procs[procIdx].ParamCount then
+  begin
+    i := FindProc(pname + '_d');
+    if (i >= 0) and (Procs[i].ParamCount = nArgs) then
+    begin
+      procIdx := i;
+      ASTIVal[callNode] := procIdx;
+      ASTTk[callNode] := Ord(Procs[procIdx].RetType);
+      ASTRight[callNode] := ProcRetRecId[procIdx];
+    end
+    else
+      Error('Nil Python: ' + pname + ' takes ' +
+            'fewer arguments than were given');
+  end;
   LastExprTk := IntToTypeKind(ASTTk[callNode]);
   Result := callNode;
 end;

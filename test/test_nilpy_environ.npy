@@ -1,0 +1,13 @@
+# os.environ.get / os.getenv, both arities. An unset variable is None, not '' —
+# `if os.environ.get(X):` depends on it. Diffed against CPython with
+# PXX_ENV_PROBE=hello in the environment.
+import os
+
+print(os.environ.get("PXX_ENV_PROBE"))
+print(os.environ.get("NOT_SET_AT_ALL"))
+print(os.environ.get("NOT_SET_AT_ALL", "fallback"))
+print(os.getenv("PXX_ENV_PROBE"))
+if os.environ.get("PXX_ENV_PROBE"):
+    print("truthy")
+if not os.environ.get("NOT_SET_AT_ALL"):
+    print("unset is falsey")
