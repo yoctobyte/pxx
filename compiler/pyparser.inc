@@ -6547,8 +6547,27 @@ begin
   end;
 end;
 
+{ Advance k from the INDENT of a block to just past its matching DEDENT. }
+function PySkipToMatchingDedent(var k: Integer): Boolean;
+var depth: Integer;
+begin
+  PySkipToMatchingDedent := False;
+  if (k >= TokCount) or (Tokens[k].Kind <> tkIndent) then Exit;
+  depth := 0;
+  while k < TokCount do
+  begin
+    if Tokens[k].Kind = tkIndent then Inc(depth)
+    else if Tokens[k].Kind = tkDedent then
+    begin
+      Dec(depth);
+      if depth = 0 then begin Inc(k); PySkipToMatchingDedent := True; Exit; end;
+    end;
+    Inc(k);
+  end;
+end;
+
 function PyIsFallbackImportTry: Boolean;
-var i: Integer;
+var i, blockAt: Integer;
 begin
   PyIsFallbackImportTry := False;
   i := TokPos;                    { the ':' after `try` }
@@ -6556,23 +6575,41 @@ begin
      (Tokens[i + 1].Kind <> tkNewline) then Exit;
   Inc(i, 2);
   while (i < TokCount) and (Tokens[i].Kind = tkNewline) do Inc(i);
-  if not PyImportOnlyBlockAt(i) then Exit;
+  { the block must OPEN with an import — that is what makes the branch a
+    resolution question rather than a runtime one }
+  if (i >= TokCount) or (Tokens[i].Kind <> tkIndent) then Exit;
+  blockAt := i;                   { the INDENT, for the block skip below }
+  Inc(i);
+  while (i < TokCount) and (Tokens[i].Kind = tkNewline) do Inc(i);
+  if (i >= TokCount) then Exit;
+  if not ((Tokens[i].Kind = tkUses) or
+          ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'from'))) then Exit;
+  { and the handler must be `except ImportError`, not a general one }
+  i := blockAt;
+  if not PySkipToMatchingDedent(i) then Exit;
   while (i < TokCount) and (Tokens[i].Kind = tkNewline) do Inc(i);
   if (i + 1 >= TokCount) or (Tokens[i].Kind <> tkExcept) then Exit;
   if (Tokens[i + 1].Kind <> tkIdent) or
      not CaseEqual(GetTokenStr(i + 1), 'ImportError') then Exit;
-  Inc(i, 2);
-  { `except ImportError as e:` — the binder is allowed and ignored }
-  if (i < TokCount) and (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'as') then
-    Inc(i, 2);
-  if (i + 1 >= TokCount) or (Tokens[i].Kind <> tkColon) or
-     (Tokens[i + 1].Kind <> tkNewline) then Exit;
-  Inc(i, 2);
-  while (i < TokCount) and (Tokens[i].Kind = tkNewline) do Inc(i);
-  if not PyImportOnlyBlockAt(i) then Exit;
-  { one except clause, nothing after it: anything richer keeps the normal path }
-  if (i < TokCount) and (Tokens[i].Kind in [tkExcept, tkFinally, tkElse]) then Exit;
   PyIsFallbackImportTry := True;
+end;
+
+{ Consume the remainder of the block the parser is inside, stopping ON its
+  DEDENT (which the caller consumes). }
+procedure PySkipRestOfBlock;
+var depth: Integer;
+begin
+  depth := 0;
+  while CurTok.Kind <> tkEOF do
+  begin
+    if CurTok.Kind = tkIndent then Inc(depth)
+    else if CurTok.Kind = tkDedent then
+    begin
+      if depth = 0 then Exit;
+      Dec(depth);
+    end;
+    Next;
+  end;
 end;
 
 { Skip an indented block whole, without parsing it — the branch not taken. }
@@ -6600,6 +6637,20 @@ end;
   nothing else, because unit scope is flat and the fallback branch rebinds the
   names it needs. }
 function PyParseFallbackImportTry: Integer;
+{ `try: <imports> ... except ImportError: ...` resolved at COMPILE time. An
+  unresolvable module is not a runtime condition that could be caught — there is
+  no code to run — so the frontend decides the branch instead: the try block's
+  leading imports are attempted with the resolver in soft mode, and if any module
+  is missing the whole try block is skipped and the handler compiled in its
+  place. Under CPython the same source is ordinary Python and prefers the try
+  branch, which is the point of the idiom.
+
+  Two honest differences from CPython, both a consequence of deciding early:
+  statements in the try block BEFORE the failing import do not run (here nothing
+  in the block runs at all), and a module that resolved before the failing one
+  stays loaded — an unused unit in the binary, since the handler rebinds whatever
+  it needs. feature-nilpy-fallback-import. }
+var body: Integer;
 begin
   Next;                                { `try` }
   Expect(tkColon, ':');
@@ -6610,24 +6661,37 @@ begin
   SoftUnitMissed := False;
   PyParseImportRun;
   SoftUnitResolve := False;
-  Expect(tkDedent, 'dedent');
-  PySkipNewlines;
-  Expect(tkExcept, 'except');
-  Next;                                { ImportError }
-  if PyIsIdent('as') then begin Next; Next; end;
-  Expect(tkColon, ':');
-  Expect(tkNewline, 'newline');
-  PySkipNewlines;
   if SoftUnitMissed then
   begin
+    { drop the rest of the try block: it depends on what did not resolve }
+    PySkipRestOfBlock;
+    Expect(tkDedent, 'dedent');
+    PySkipNewlines;
+    Expect(tkExcept, 'except');
+    Next;                              { ImportError }
+    if PyIsIdent('as') then begin Next; Next; end;
+    Expect(tkColon, ':');
+    Expect(tkNewline, 'newline');
+    PySkipNewlines;
     Expect(tkIndent, 'indent');
-    PyParseImportRun;
+    body := PyParseBlock;
     Expect(tkDedent, 'dedent');
   end
   else
-    PySkipIndentedBlock;
+  begin
+    body := PyParseBlock;              { the rest of the try block }
+    Expect(tkDedent, 'dedent');
+    PySkipNewlines;
+    Expect(tkExcept, 'except');
+    Next;                              { ImportError }
+    if PyIsIdent('as') then begin Next; Next; end;
+    Expect(tkColon, ':');
+    Expect(tkNewline, 'newline');
+    PySkipNewlines;
+    PySkipIndentedBlock;               { the handler cannot be reached }
+  end;
   PySkipNewlines;
-  PyParseFallbackImportTry := -1;      { no runtime statement }
+  PyParseFallbackImportTry := body;
 end;
 
 function PyParseTry: Integer;

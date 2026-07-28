@@ -52,3 +52,39 @@ came along free. Worth revisiting only if Counter needs to diverge further.
 
 `make test` + self-host byte-identical, with a `test/` case asserting the duplicate
 declaration is rejected and names the earlier one.
+
+## Attempted fix 2026-07-28, REVERTED — and what it taught
+
+`FindUClass` returns the FIRST row with a matching name, whatever unit declared
+it, so the first unit to register a name captures it everywhere. The obvious fix
+— prefer a class whose `UClsUnitIdx` is the unit being parsed, falling back to
+first-match — does unblock the case that motivated it: `lib/pcl/tkinter.pas`
+declares `Canvas` (the Tk widget) and `lib/pcl/mimic_reportlab_pdfgen.pas`
+declares `Canvas` (reportlab's), both spellings are required by the applications
+using them, and without the preference the shim's own constructor binds to
+tkinter's class and reports the shim's own fields as undefined variables.
+
+**It also breaks exception handling, so it was reverted.** `test_nilpy_rtl_exception_surface`
+fails: pylib's `Exception` and sysutils' `Exception` are supposed to be ONE class
+here, and they are one only BECAUSE first-match hands pylib's row to everybody.
+With the preference in place, sysutils raises its own class and the program's
+`except Exception` catches the other one, so `su.StrToInt("abc")` escapes as an
+unhandled exception.
+
+The two cases cannot be told apart by a lookup rule: `Canvas` wants per-unit
+scope, `Exception` wants a deliberate merge, and nothing in the tables says
+which. So the fix needs the merge to become EXPLICIT — a class that means to
+replace a same-named one says so — before per-unit scoping can be turned on.
+Anything else trades a compile error for a silently-uncaught exception.
+
+**Still unfixed and worse than the declaration side:** a qualified REFERENCE is
+first-match too. Renaming the shim's class proved it — `canvas.Canvas(...)` after
+`from reportlab.pdfgen import canvas` silently bound to tkinter's `Canvas` and
+compiled. A same-named class reached through the wrong unit is silent wrong
+behavior, not a diagnostic.
+
+## Consequence right now
+
+`lib/pcl/mimic_reportlab_*` compiles and works on its own, and stops compiling as
+soon as an application imports tkinter as well — which songformatter's
+convertrawtext.py does. That module is blocked here.

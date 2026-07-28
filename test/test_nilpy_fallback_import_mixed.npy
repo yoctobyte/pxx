@@ -1,0 +1,18 @@
+# The shape real code uses: the try block imports AND sets a flag, and the
+# handler clears it. Deciding the branch at compile time has to keep the
+# handler's statements, not just its imports.
+try:
+    from nosuchpkg.nosuchmod import thing
+    HAVE_THING = True
+except ImportError:
+    HAVE_THING = False
+
+try:
+    from pkgprobe.opt import optname
+    HAVE_OPT = True
+except ImportError:
+    HAVE_OPT = False
+
+print(HAVE_THING)
+print(HAVE_OPT)
+print(optname())

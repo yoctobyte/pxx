@@ -316,6 +316,9 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# the shape real code uses: the try block imports AND sets a flag
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_mixed.npy /tmp/test_nilpy_fallback_mixed26
+	test "$$(/tmp/test_nilpy_fallback_mixed26)" = "$$(printf 'False\nTrue\npresent')"
 	# an imported name shadows a builtin only in the module that imported it
 	./$(COMPILER) test/test_nilpy_import_scope.npy /tmp/test_nilpy_import_scope26
 	test "$$(/tmp/test_nilpy_import_scope26)" = "$$(printf '3\npage.size=A4\n8')"
@@ -3435,6 +3438,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# the shape real code uses: the try block imports AND sets a flag
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_mixed.npy /tmp/test_nilpy_fallback_mixed26
+	test "$$(/tmp/test_nilpy_fallback_mixed26)" = "$$(printf 'False\nTrue\npresent')"
 	# an imported name shadows a builtin only in the module that imported it
 	./$(COMPILER) test/test_nilpy_import_scope.npy /tmp/test_nilpy_import_scope26
 	test "$$(/tmp/test_nilpy_import_scope26)" = "$$(printf '3\npage.size=A4\n8')"

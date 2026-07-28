@@ -30,11 +30,12 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (176)
+## backlog (178)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
+| bug-c-unit-crashes-when-sysutils-is-used | A | 70 | bug | A C unit's code segfaults when the program also uses sysutils | — |
 | bug-cfront-unit-globals-unregistered | C | 70 | bug | cfront: a file-scope global in a .c compiled as a UNIT is never reserved — arrays fail to lower, scalars silently read 0 | — |
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |
 | bug-nilpy-comparison-return-type-from-operands | N | 70 | bug | An unannotated def returning a COMPARISON typed its result from the operands | — |
@@ -179,6 +180,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-inline-asm-xmm-operands |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
+| feature-rtl-environment-variables | B | 45 | feature | No access to environment variables anywhere in the RTL | — |
 | feature-rtl-month-day-name-arrays | B | 55 | feature | RTL: ShortMonthNames / LongMonthNames / day-name arrays — lib-test's synapse step is red on them | — |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
@@ -2701,6 +2703,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [A] bug-c-unit-crashes-when-sysutils-is-used
 - [p 70] [C] bug-cfront-unit-globals-unregistered
 - [p 70] [N] bug-nilpy-comparison-return-type-from-operands
 - [p 70] [N] bug-nilpy-pydict-v-borrowed-reference
@@ -2803,6 +2806,7 @@ _none_
 - [p 45] [P] feature-pascal-corpus-passrc
 - [p 45] [A] feature-pascal-exitcode-finalization-halt
 - [p 45] [B] feature-real-dynlib-loader
+- [p 45] [B] feature-rtl-environment-variables
 - [p 45] [T] feature-t-uforth-benchmark-harness
 - [p 45] [A] feature-toolchain-cli-ux
 - [p 45] [A] feature-writeln-as-library
