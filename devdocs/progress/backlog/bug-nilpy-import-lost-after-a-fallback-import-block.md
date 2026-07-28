@@ -122,7 +122,17 @@ parser consumed `atexit` AND the `.` and then rejected `register`. Something is
 consuming an identifier plus a dot and then expecting a different token — and it
 is not `ConsumeUnitQualifier`, which never runs.
 
-**Next step, concretely:** probe the top of `PyParseStatement` for a statement
+**Leading hypothesis after all the eliminations: the failure is in a PRE-PASS,
+not the body parse.** The only `ident '.'` statement branch is
+`pyparser.inc:8822`, and it routes to `PyParseBoolExpr`, which would have
+reached the probed line in `ParseFactorCore` — it did not. Meanwhile a NilPy
+module goes through `PyRegisterDefShells` / `PyCollectModuleLocalsAST` BEFORE the
+body is parsed, and those walk module-level statements with their own simplified
+grammar. A pre-pass failure also outranks a body failure in reporting, which is
+why the line number looks like ordinary statement parsing. Probe those two
+pre-passes first; the body-parse paths are already ruled out.
+
+**Then:** probe the top of `PyParseStatement` for a statement
 whose first token is `atexit`, printing which branch takes it, and work forward
 from there. The dotted-statement branch at `pyparser.inc:8821` is NOT it (it
 routes to PyParseBoolExpr, which would have reached ParseFactorCore). Look for
