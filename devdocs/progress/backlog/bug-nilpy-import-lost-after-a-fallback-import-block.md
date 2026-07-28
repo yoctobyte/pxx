@@ -112,11 +112,23 @@ either, which means an EARLIER branch of `ParseFactorCore` (or of the NilPy
 being a branch that fires because `FindProc('atexit')` now succeeds, crtl having
 declared it.
 
-**Next step, concretely:** probe at the top of `ParseFactorCore`'s `tkIdent`
-handling, printing the name and which branch takes it, and walk back from there
-to the first branch that tests `FindProc`. The fix is then to let a name that is
-a compiled UNIT followed by `.ident` reach the qualifier path ahead of a
-C-imported proc of the same name.
+`ParseFactorCore`'s ident branch is not reached either — probed at
+`parser.inc:9352`, immediately before and after the `ConsumeUnitQualifier` call,
+and neither line fires. So the name is claimed BEFORE any expression parsing
+begins, i.e. in NilPy's STATEMENT dispatcher, not in the factor path.
+
+The error text places it exactly: `near: bye atexit >>> register` means the
+parser consumed `atexit` AND the `.` and then rejected `register`. Something is
+consuming an identifier plus a dot and then expecting a different token — and it
+is not `ConsumeUnitQualifier`, which never runs.
+
+**Next step, concretely:** probe the top of `PyParseStatement` for a statement
+whose first token is `atexit`, printing which branch takes it, and work forward
+from there. The dotted-statement branch at `pyparser.inc:8821` is NOT it (it
+routes to PyParseBoolExpr, which would have reached ParseFactorCore). Look for
+an earlier branch that pattern-matches `ident '.'` — a class/instance member
+assignment path is the likeliest shape, and it would be selected because
+`FindProc('atexit')` now succeeds.
 
 ## Where the fix is NOT
 
