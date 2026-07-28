@@ -1,6 +1,44 @@
 { SPDX-License-Identifier: MPL-2.0 }
 { ===== C Parser ===== }
 
+function CProcArgCount(argHead: Integer): Integer;
+{ Length of an AN_ARG chain (ASTRight links), for the arity cross-check below. }
+var n, a: Integer;
+begin
+  n := 0;
+  a := argHead;
+  while a >= 0 do begin Inc(n); a := ASTRight[a]; end;
+  CProcArgCount := n;
+end;
+
+procedure WarnCrossNamespaceArity(procIdx, nargs: Integer; const name: AnsiString);
+{ A C name resolves through FindProc, which spans the C and PASCAL namespaces
+  case-insensitively. That is deliberate -- lua's <math.h> sqrt/sin/cos bind to
+  the RTL's Pascal routines, which is how a C corpus gets a math library. What
+  was never checked is that the two AGREE on anything, and when they do not the
+  call compiles and crashes somewhere else entirely:
+
+    - time(NULL) bound to sysutils' `function Time: TDateTime` (no parameters,
+      Double result) and every C unit that read the clock crashed as soon as
+      the program also used sysutils -- the fault landed inside Time, on a
+      pointer truncated to 32 bits (bug-c-unit-crashes-when-sysutils-is-used);
+    - the same shape made exp(x) return e^(previous result), because the
+      argument never arrived (b377).
+
+  Both took days to find; a one-line arity comparison names either at once.
+  WARNING only, deliberately: it cannot break a corpus that binds correctly
+  today. The rung above -- refuse to bind, so an unresolved extern surfaces at
+  link time -- waits on evidence that no corpus needs a mismatched bind.
+  bug-cfront-silent-bind-to-pascal-proc-of-different-arity. }
+begin
+  if procIdx < 0 then Exit;
+  if ProcCdecl[procIdx] then Exit;         { a C proc -- same namespace, fine }
+  if ProcVariadic[procIdx] then Exit;
+  if Procs[procIdx].ParamCount = nargs then Exit;
+  WarnCrossBindArity(CurTok.Line, name, Procs[procIdx].Name,
+                     Procs[procIdx].ParamCount, nargs);
+end;
+
 function ParseCBlockAST: Integer; forward;
 function ParseCStatementAST: Integer; forward;
 function ParseCStmtExprAST: Integer; forward;
@@ -1149,6 +1187,7 @@ begin
         procIdx := FindProc(name);
         if procIdx >= 0 then
         begin
+          WarnCrossNamespaceArity(procIdx, CProcArgCount(argHead), name);
           node := AllocNode(AN_CALL);
           ASTIVal[node] := procIdx;
           ASTTk[node] := Ord(Procs[procIdx].RetType);
@@ -8049,7 +8088,12 @@ begin
       end;
   end
   else
+  begin
     procIdx := FindProc(name);
+    { a C DECLARATION landing on a Pascal routine of another arity -- the
+      shape `time_t time(time_t *)` against `function Time: TDateTime` }
+    WarnCrossNamespaceArity(procIdx, nparams, name);
+  end;
   wasNewProc := procIdx < 0;
   if wasNewProc then
     procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);

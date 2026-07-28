@@ -8,7 +8,7 @@ prio: 60
 # nilpy: `import json` binds to the RTL's Pascal `json` unit
 
 - **Type:** bug (Nil-Python frontend, import resolution) — **Track N**
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-26 — hit compiling songformatter's `SongFormatter.py`
   ([[feature-demo-songformatter-pxx-target]]).
 
@@ -71,3 +71,17 @@ from — a wrong line number sends the reader hunting in the wrong file.
 `make test-nilpy` green with a `.npy` case per decision (a clear diagnostic for an
 unsupported stdlib module, and a working shim for whatever is allow-listed), +
 `--tier quick` + self-host byte-identical.
+
+## Log
+- 2026-07-28 — resolved, commit 5174d000e.
+
+## Resolution
+
+Resolved by the `json` module work through 5174d000e ("lib+nilpy: the json
+module, Path.open, Toplevel"): `lib/rtl/json.pas` now IS the Python `json`
+surface, so the binding this ticket reported as wrong is the intended one, and
+the error it produced is gone.
+
+Re-verified 2026-07-28: a one-line `import json` compiles and runs clean, and
+the full surface round-trips against CPython (`test_nilpy_json_module.npy`,
+`test_nilpy_json_reparse_heap.npy`).

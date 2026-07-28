@@ -55,3 +55,19 @@ in that order.
 > Instance of [[decide-unit-local-names-leak-to-global-scope]] — unit-local
 > names are visible program-wide, so the first registration wins and the answer
 > depends on import order. Fixed here at the call site; the root is that ticket.
+
+## Log
+- 2026-07-28 — resolved, commit 7f851b83c.
+
+## Resolution
+
+Fixed by 7f851b83c, which landed exactly the second option this ticket
+proposed: the `Halt`/`Exit` soft-keyword arm in `parser.inc` now also takes the
+statement path when a proc of that name EXISTS but could not be called bare
+(no parenthesised argument list follows and the proc takes parameters), so
+crtl's `void exit(int)` no longer captures a Pascal `exit;`. A user's own
+parameterless `procedure Exit` still shadows, as before. The ticket was left in
+`backlog/` by that commit.
+
+Re-verified 2026-07-28: a program pulling a C unit (which auto-declares
+`exit`) ahead of a Pascal unit containing a bare `exit;` compiles.

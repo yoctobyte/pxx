@@ -8,7 +8,7 @@ prio: 70
 # cfront: file-scope globals are unregistered when the `.c` is a UNIT
 
 - **Type:** bug (C frontend, unit path) — **Track C**
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-07-28, probing AndreRenaud/pdfgen as the PDF backend for
   [[feature-demo-songformatter-pxx-target]]. A demanding consumer again.
 
@@ -75,3 +75,15 @@ bodies, with the func/global split in both.
 Blocks the pdfgen backend, hence [[feature-lib-pxxpdf-reportlab-compat]] and
 [[feature-demo-songformatter-pxx-target]]. Sibling of the (already fixed)
 `bug-cfront-fegetround-unresolved-float-printf`, which came from the same probe.
+
+## Log
+- 2026-07-28 — resolved, commit 4bc0c13dc.
+
+## Resolution
+
+Fixed by 4bc0c13dc ("fix(cfront): a .c compiled as a UNIT gets the C-program
+treatment"). The ticket was left in `backlog/` by that commit.
+
+Re-verified 2026-07-28 on this ticket's own repro, both halves: `pick(2)` over
+a file-scope `static int bins[]` returns 4 (it used to fail to lower), and the
+scalar case `base + i` returns 9 rather than silently reading the global as 0.

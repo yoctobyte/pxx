@@ -86,6 +86,33 @@ begin
           ' — move big buffers to the heap (GetMem) or a global');
 end;
 
+{ A C name resolved through FindProc, which spans the C and PASCAL namespaces
+  case-insensitively, and landed on a Pascal routine of a DIFFERENT arity. The
+  cross-namespace bind itself is deliberate (lua's <math.h> sqrt/sin/cos bind to
+  the RTL's Pascal routines), but nothing checked that the two agree, and when
+  they do not the call compiles and crashes somewhere else entirely:
+  `time(NULL)` bound to sysutils' parameterless `Time` and faulted inside it
+  (bug-c-unit-crashes-when-sysutils-is-used), and the same shape made exp(x)
+  return e^(previous result) because the argument never arrived (b377).
+  bug-cfront-silent-bind-to-pascal-proc-of-different-arity. }
+procedure WarnCrossBindArity(line: Integer; const cname, pname: AnsiString;
+                             pcount, nargs: Integer);
+begin
+  Inc(WarnCount);
+  if WarnAsError then
+  begin
+    writeln('pascal26:', line, ': error: C call to ''', cname,
+            ''' binds to the Pascal routine ''', pname, ''' which takes ',
+            pcount, ' parameter(s), not ', nargs,
+            ' (warning promoted by -Werror)');
+    Halt(1);
+  end;
+  writeln('pascal26:', line, ': warning: C call to ''', cname,
+          ''' binds to the Pascal routine ''', pname, ''' which takes ',
+          pcount, ' parameter(s), not ', nargs,
+          ' — the argument list will not arrive as written');
+end;
+
 { --auto-locals / {$IMPLICITVARS ON}: an assignment to an undeclared name just
   created an implicit routine-local. Warn so the sloppy-mode inference is
   visible (a typo'd name silently becomes a new variable otherwise). }

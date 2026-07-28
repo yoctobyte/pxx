@@ -168,3 +168,17 @@ code still resolves.
 > Instance of [[decide-unit-local-names-leak-to-global-scope]] — unit-local
 > names are visible program-wide, so the first registration wins and the answer
 > depends on import order. Fixed here at the call site; the root is that ticket.
+
+## Log
+- 2026-07-28 — resolved, commit 014a9bcba.
+
+## Resolution
+
+Fixed by 014a9bcba ("fix(nilpy): a C library's names no longer swallow Python
+ones") and 7f851b83c. The ticket was left in `backlog/` by those commits.
+
+Re-verified 2026-07-28 on both shapes: a plain `import atexit` with
+`atexit.register(...)`, and the songformatter shape where a
+`try: from reportlab.pdfgen import canvas / except ImportError:` block pulls a
+C unit (and with it crtl's `int atexit(void (*)(void))`) BEFORE the import.
+Both compile and print `main` / `bye` in CPython's order.

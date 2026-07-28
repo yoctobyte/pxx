@@ -80,3 +80,17 @@ Any `.npy` calling such a def without the last argument crashes.
 `make test-nilpy` green with a `.npy` case covering an omitted `=None` parameter
 on an unannotated def, tested BOTH ways (omitted and supplied) and diffed against
 CPython, + `--tier quick` + self-host byte-identical.
+
+## Log
+- 2026-07-28 — resolved, commit 13a8e4213.
+
+## Resolution
+
+Fixed with the rest of the default-argument machinery in 13a8e4213
+("fix(nilpy): a declared default is what the callee actually runs with"), which
+moved the fill to the callee so an omitted variant default is a real None
+rather than a raw ordinal handed across a by-reference parameter. The ticket was
+left in `backlog/` by that commit.
+
+Re-verified 2026-07-28: this ticket's repro prints `none` / `some`, matching
+CPython, with no segfault.

@@ -112,3 +112,38 @@ cases for the routine repro above and for two units legitimately exporting the
 same class name. Land incrementally or behind a flag — this changes resolution
 for the whole tree and is exactly the kind of change that should not arrive as
 one commit.
+
+## Measurement step, as designed (2026-07-28)
+
+Taking the ticket's own advice — resolve exactly as today, warn when a name
+resolves through a unit the current unit cannot legitimately see, then count.
+Shape of that work, so it can be picked up in one sitting:
+
+1. **Edge table.** No per-unit uses graph exists today; `ParseUsesUnitBody`
+   records dependency and parse ORDER only. Add three parallel arrays —
+   `UsesFrom` (Strs idx of the importing unit, -1 = main program), `UsesTo`,
+   `UsesInIface` (Boolean) — appended wherever a uses clause names a unit. The
+   section is known from where the clause is parsed; the parser has no
+   interface/implementation flag today, so one has to be threaded through (the
+   `implementation` keyword is matched by string compare at several sites, so
+   the state is genuinely absent, not merely unnamed).
+
+2. **`VisibilityAllows(curUnit, declUnit)`.** True when `declUnit = curUnit`,
+   or `declUnit` is reachable from `curUnit` by one edge of EITHER section
+   followed by INTERFACE-section edges only, transitively. That is the real
+   Pascal rule: the section controls whether the import is re-exported, not
+   whether it is legal.
+
+3. **Warn, behind `--warn-uses-leak`.** Opt-in so an ordinary build is
+   unchanged and the measurement can run over the whole tree without touching
+   any gate. Call it from the routine lookup the Pascal identifier path uses
+   and from `FindUClass`.
+
+4. **Count and classify** over `make test` + `make lib-test` + the corpora.
+   The expected shape of the answer: the RTL is the biggest consumer of the
+   current laxity, and the interesting number is how many DISTINCT (importing
+   unit, resolved unit) pairs appear rather than how many call sites.
+
+Only after that number exists is it worth deciding between "one ticket" and
+"a campaign" — and the enforcement itself should land behind the same flag
+before it becomes the default.
