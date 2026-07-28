@@ -2438,6 +2438,21 @@ end;
 { The AST node for parameter k's declared default value. Errors when k has no
   default. Shared by the trailing-arg fill below and the Nil Python
   keyword-argument bind, which needs the same node for a HOLE in the middle. }
+{ Wrap a string-valued node in pylib's boxer, yielding a Variant. }
+function PyBoxStrNode(strNode: Integer): Integer;
+var procIdx, argNode: Integer;
+begin
+  procIdx := FindProc('pyvar_of_str');
+  if procIdx < 0 then Error('Nil Python: pylib (pyvar_of_str) not loaded');
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := strNode;
+  ASTRight[argNode] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyVariant);
+  ASTLeft[Result] := argNode;
+end;
+
 function DefaultArgValueNode(mpi, k: Integer): Integer;
 var exprNode: Integer;
 begin
@@ -2450,6 +2465,12 @@ begin
     ASTSOffset[exprNode] := ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + k];
     ASTSLen[exprNode] := ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + k];
     ASTTk[exprNode] := Ord(tyString);
+    { A NilPy VARIANT parameter is passed by reference, so the literal has to be
+      a variant already — passed raw it arrived as a pointer-sized integer
+      (`def f(a="A")` called as `f()` printed 131). Same reason PyMakeNone is
+      used for the ordinary omitted default just below. }
+    if isNilPy and (Procs[mpi].Params[k].TypeKind = tyVariant) then
+      exprNode := PyBoxStrNode(exprNode);
   end
   else if ProcParamDefaultIsSet[mpi * MAX_PROC_PARAMS + k] then
   begin

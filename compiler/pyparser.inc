@@ -8820,38 +8820,47 @@ begin
   Result := -1;
 end;
 
-{ One target of an unpacking assignment: a plain NAME (created on first
-  assignment, as everywhere in NilPy) or an ATTRIBUTE `obj.field`. `newTk` is
-  the type a freshly created plain name takes. }
-function PyUnpackTargetNode(const nm, fld: AnsiString; newTk: TTypeKind): Integer;
-var symIdx, ci, fi: Integer;
+{ ONE store of an unpacking assignment: a plain NAME (created on first
+  assignment, as everywhere in NilPy), a declared ATTRIBUTE `obj.field`, or an
+  attribute the class never declared — Python creates that on assignment, and
+  it goes through the same dynamic store `obj.name = v` already uses. `newTk`
+  is the type a freshly created plain name takes. }
+function PyUnpackTargetStore(const nm, fld: AnsiString; valNode: Integer;
+                            newTk: TTypeKind): Integer;
+var symIdx, ci, fi, lhs: Integer;
 begin
   symIdx := PyProgSym(nm);
   if fld = '' then
   begin
     if symIdx < 0 then symIdx := AllocVar(nm, newTk);
-    Result := PyMakeIdent(symIdx);
-    Exit;
-  end;
-  if symIdx < 0 then
-    Error('Nil Python: ' + nm + ' is not defined, so ' + nm + '.' + fld
-          + ' cannot be assigned');
-  ci := -1;
-  if (Syms[symIdx].TypeKind = tyClass) and (Syms[symIdx].RecName >= REC_UCLASS_BASE) then
-    ci := Syms[symIdx].RecName - REC_UCLASS_BASE;
-  Result := AllocNode(AN_FIELD);
-  ASTLeft[Result] := PyMakeIdent(symIdx);
-  ASTSOffset[Result] := PyStoredName(fld);
-  ASTSLen[Result] := Length(fld);
-  ASTTk[Result] := Ord(tyVariant);
-  if ci >= 0 then
+    lhs := PyMakeIdent(symIdx);
+  end
+  else
   begin
-    fi := FindUField(ci, fld);
+    if symIdx < 0 then
+      Error('Nil Python: ' + nm + ' is not defined, so ' + nm + '.' + fld
+            + ' cannot be assigned');
+    ci := -1;
+    if (Syms[symIdx].TypeKind = tyClass) and (Syms[symIdx].RecName >= REC_UCLASS_BASE) then
+      ci := Syms[symIdx].RecName - REC_UCLASS_BASE;
+    fi := -1;
+    if ci >= 0 then fi := FindUField(ci, fld);
     if fi < 0 then
-      Error('Nil Python: ' + PyRawName(UClsNOff[ci], UClsNLen[ci])
-            + ' has no attribute ''' + fld + '''');
-    ASTTk[Result] := UFldTk[fi];
+    begin
+      { NOT a declared field — Python creates the attribute on assignment, and
+        the ordinary `obj.name = v` path already stores it dynamically }
+      PyUnpackTargetStore := PyMakeDynAttrSet(PyMakeIdent(symIdx), fld, valNode);
+      Exit;
+    end;
+    lhs := AllocNode(AN_FIELD);
+    ASTLeft[lhs] := PyMakeIdent(symIdx);
+    ASTSOffset[lhs] := PyStoredName(fld);
+    ASTSLen[lhs] := Length(fld);
+    ASTTk[lhs] := UFldTk[fi];
   end;
+  PyUnpackTargetStore := AllocNode(AN_ASSIGN);
+  ASTLeft[PyUnpackTargetStore] := lhs;
+  ASTRight[PyUnpackTargetStore] := valNode;
 end;
 
 { `a, b = x, y` — SIMULTANEOUS assignment. Every right-hand side is evaluated
@@ -8927,9 +8936,7 @@ begin
       end
       else
         unpElem := PyMakeVariantGetItem(PyMakeIdent(tmps[0]), unpIdx);
-      node := AllocNode(AN_ASSIGN);
-      ASTLeft[node] := PyUnpackTargetNode(names[i], flds[i], tyVariant);
-      ASTRight[node] := unpElem;
+      node := PyUnpackTargetStore(names[i], flds[i], unpElem, tyVariant);
       seq := PySeqAppend(seq, node);
     end;
     Result := seq;
@@ -8941,9 +8948,8 @@ begin
   { then the stores }
   for i := 0 to nTargets - 1 do
   begin
-    node := AllocNode(AN_ASSIGN);
-    ASTLeft[node] := PyUnpackTargetNode(names[i], flds[i], Syms[tmps[i]].TypeKind);
-    ASTRight[node] := PyMakeIdent(tmps[i]);
+    node := PyUnpackTargetStore(names[i], flds[i], PyMakeIdent(tmps[i]),
+                                Syms[tmps[i]].TypeKind);
     seq := PySeqAppend(seq, node);
   end;
   Result := seq;

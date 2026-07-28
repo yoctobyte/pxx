@@ -1,0 +1,69 @@
+# Six shapes songformatter's convertrawtext.py needed, each of which used to
+# fail (three of them SILENTLY, at run time, with a wrong value).
+
+# 1. an import INSIDE a def — the unit's code used to be emitted between the
+#    def's recorded body address and its prologue, so calling it entered the
+#    imported unit's first routine and returned that routine's result
+def imports_inside(t):
+    try:
+        import math
+    except ImportError:
+        return 0.0
+    return 2.5
+
+
+# 2. `*args` / `**kwargs` on a METHOD (the def path took them; the method path
+#    rejected the header and could not build the call)
+class Bag:
+    def __init__(self):
+        self.n = 0
+
+    def take(self, a, *rest, **kw):
+        s = str(a)
+        for r in rest:
+            s = s + "|" + str(r)
+        for k in sorted(kw):
+            s = s + " " + k + "=" + str(kw[k])
+        return s
+
+    # 3. a nested class in a class body: an attribute namespace
+    class Modes:
+        NORMAL = "Normal"
+        MULTIPLY = "Multiply"
+
+    # 4. an unpacking target may be an ATTRIBUTE, not only a bare name
+    def move(self, a, b):
+        self.x, self.y = a, b
+
+    def swap(self):
+        self.x, self.y = self.y, self.x
+
+
+def main():
+    print(imports_inside("hi"))
+
+    b = Bag()
+    print(b.take(1))
+    print(b.take(1, 2, 3))
+    print(b.take(1, 2, z=9, y=8))
+
+    b.move(3, 7)
+    print(b.x, b.y)
+    b.swap()
+    print(b.x, b.y)
+
+    # 5. a PARENTHESISED for target list
+    rows = [(1, "a", 2.5), (2, "b", 3.5)]
+    for (n, s, f) in rows:
+        print(n, s, f)
+
+    # 6. a call that omits EVERY optional argument still has to match
+    print(joined())
+    print(joined("x"))
+
+
+def joined(a="A", b="B", c="C"):
+    return a + b + c
+
+
+main()
