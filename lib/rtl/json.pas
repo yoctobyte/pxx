@@ -22,7 +22,7 @@ unit json;
 
 interface
 
-uses sysutils;
+uses sysutils, pylib;   { the Python surface below speaks TPyDict/TPyList/Variant }
 
 type
   TJSONKind = (jkNull, jkBool, jkInt, jkString, jkArray, jkObject);
@@ -66,6 +66,34 @@ function JSONObject: TJSONValue;
 
 { Parse a complete JSON document; raises EJSONError on malformed input. }
 function JSONParse(const src: AnsiString): TJSONValue;
+
+{ ---- Python's `json` module surface --------------------------------------
+
+  `import json` resolves to this unit, so `json.dumps(obj)` / `json.loads(s)` /
+  `json.dump(obj, f)` / `json.load(f)` are the calls an application writes. The
+  VALUES are Python's — a dict is a TPyDict, a list a TPyList, everything else a
+  tagged variant — so these convert between that world and the value tree above
+  rather than exposing TJSONValue to Python code.
+
+  Not modelled: the `default=` / `cls=` / `object_hook=` hooks, and CPython's
+  unquoted NaN/Infinity (which is not JSON; this raises instead). `indent` and
+  `sort_keys` ARE honoured, because a settings file written with them is meant
+  to be read by a human. `ensure_ascii` is accepted and has no effect: our
+  strings are byte strings, so there is no non-ASCII escaping step to suppress. }
+
+type
+  { CPython raises this from loads/load on malformed input, and applications
+    catch it BY NAME — `except (OSError, json.JSONDecodeError)`. }
+  JSONDecodeError = class(Exception)
+  end;
+
+function dumps(const obj: Variant; indent: Integer = -1;
+               ensure_ascii: Boolean = True; sort_keys: Boolean = False): AnsiString;
+function loads(const s: AnsiString): Variant;
+{ `f` is what pathlib's Path.open and the builtin open(path, mode) hand back. }
+procedure dump(const obj: Variant; f: TPyFile; ensure_ascii: Boolean = True;
+               indent: Integer = -1; sort_keys: Boolean = False);
+function load(f: TPyFile): Variant;
 
 implementation
 
@@ -568,6 +596,226 @@ begin
   end;
   rd.Free;
   Result := v;
+end;
+
+
+{ ---- the Python surface ---------------------------------------------------- }
+
+function JsonPyIndentStr(indent, depth: Integer): AnsiString;
+var i: Integer; r: AnsiString;
+begin
+  r := '';
+  if indent > 0 then
+  begin
+    r := #10;
+    for i := 1 to indent * depth do r := r + ' ';
+  end;
+  JsonPyIndentStr := r;
+end;
+
+function JsonPyNumStr(d: Double): AnsiString;
+var whole: Int64;
+begin
+  { an integral float prints as CPython does — 3.0, not 3. A value that came in
+    as an int never reaches here: those carry the int tag. }
+  whole := Trunc(d);
+  if d = whole then JsonPyNumStr := IntToStr(whole) + '.0'
+  else JsonPyNumStr := FloatToStr(d);
+end;
+
+function JsonPyDumpValue(const v: Variant; indent, depth: Integer;
+                         sortKeys: Boolean): AnsiString; forward;
+
+function JsonPyDumpList(l: TPyList; indent, depth: Integer;
+                        sortKeys: Boolean): AnsiString;
+var i: Integer; r, sep: AnsiString;
+begin
+  if l.count = 0 then
+  begin
+    JsonPyDumpList := '[]';
+    exit;
+  end;
+  r := '[';
+  sep := '';
+  for i := 0 to l.count - 1 do
+  begin
+    r := r + sep + JsonPyIndentStr(indent, depth + 1)
+         + JsonPyDumpValue(l.at(i), indent, depth + 1, sortKeys);
+    { CPython's compact form is `, ` — the space only disappears when a
+      newline takes its place }
+    if indent > 0 then sep := ',' else sep := ', ';
+  end;
+  JsonPyDumpList := r + JsonPyIndentStr(indent, depth) + ']';
+end;
+
+function JsonPyDumpDict(d: TPyDict; indent, depth: Integer;
+                        sortKeys: Boolean): AnsiString;
+{ No dynamic arrays here on purpose. Holding the keys in an `array of
+  AnsiString` (or the values in an `array of Variant`) alongside the dict
+  corrupted the heap — a JSONParse later in the SAME program then died, with
+  nothing wrong at its own call site. Keys are read from the dict when needed
+  and the sort permutes a fixed Integer array. }
+const MAX_SORT_KEYS = 512;
+var i, j, n, t: Integer; r, sep: AnsiString;
+    ks: TPyList;
+    order: array[0..MAX_SORT_KEYS - 1] of Integer;
+    doSort: Boolean;
+begin
+  n := d.count;
+  if n = 0 then
+  begin
+    JsonPyDumpDict := '{}';
+    exit;
+  end;
+  ks := d.keylist;
+  doSort := sortKeys and (n <= MAX_SORT_KEYS);
+  if doSort then
+  begin
+    for i := 0 to n - 1 do order[i] := i;
+    for i := 0 to n - 2 do
+      for j := 0 to n - 2 - i do
+        if pystr_of(ks.at(order[j])) > pystr_of(ks.at(order[j + 1])) then
+        begin
+          t := order[j]; order[j] := order[j + 1]; order[j + 1] := t;
+        end;
+  end;
+  r := '{';
+  sep := '';
+  for i := 0 to n - 1 do
+  begin
+    if doSort then j := order[i] else j := i;
+    { a JSON object key is always a STRING. Python allows an int key and
+      str()s it on the way out, which is what pystr_of does. }
+    r := r + sep + JsonPyIndentStr(indent, depth + 1)
+         + EscapeStr(pystr_of(ks.at(j))) + ': '
+         + JsonPyDumpValue(d.fetch(ks.at(j)), indent, depth + 1, sortKeys);
+    if indent > 0 then sep := ',' else sep := ', ';
+  end;
+  JsonPyDumpDict := r + JsonPyIndentStr(indent, depth) + '}';
+end;
+
+function JsonPyDumpValue(const v: Variant; indent, depth: Integer;
+                         sortKeys: Boolean): AnsiString;
+var o: TObject;
+begin
+  { The int family is more than one tag — VT_INT (1) and VT_INT64 (2) are the
+    same Python number, and a value's tag depends on where it came from. Getting
+    this wrong is not a wrong string but an exception, since the else-branch
+    below refuses what it does not recognise. }
+  case pyvartag(v) of
+    0: JsonPyDumpValue := 'null';
+    4: if pyvar_to_bool(v) then JsonPyDumpValue := 'true'
+       else JsonPyDumpValue := 'false';
+    1, 2: JsonPyDumpValue := IntToStr(pyvar_to_int(v));
+    3, 5: JsonPyDumpValue := JsonPyNumStr(pyvar_to_float(v));
+    6: JsonPyDumpValue := EscapeStr(pystr_of(v));
+    7:
+      begin
+        o := TObject(pyvarobj(v));
+        if o = nil then JsonPyDumpValue := 'null'
+        else if o is TPyList then
+          JsonPyDumpValue := JsonPyDumpList(TPyList(o), indent, depth, sortKeys)
+        else if o is TPyDict then
+          JsonPyDumpValue := JsonPyDumpDict(TPyDict(o), indent, depth, sortKeys)
+        else
+          raise EJSONError.Create('json: object of this type is not serializable');
+      end;
+  else
+    raise EJSONError.Create('json: value of this type is not serializable');
+  end;
+end;
+
+function dumps(const obj: Variant; indent: Integer;
+               ensure_ascii: Boolean; sort_keys: Boolean): AnsiString;
+begin
+  dumps := JsonPyDumpValue(obj, indent, 0, sort_keys);
+end;
+
+{ The value tree -> the Python value world. }
+function JsonPyFromTree(v: TJSONValue): Variant;
+var i, n, code: Integer; l: TPyList; d: TPyDict; iv: Int64;
+    vv: Variant; ks: AnsiString; child: TJSONValue;
+begin
+  if v = nil then
+  begin
+    JsonPyFromTree := pynone;
+    exit;
+  end;
+  case v.Kind of
+    jkNull: JsonPyFromTree := pynone;
+    jkBool: JsonPyFromTree := v.AsBoolean;
+    jkInt:
+      begin
+        { the tree keeps the raw lexeme, so a fractional one is a FLOAT }
+        Val(v.FNum, iv, code);
+        if code = 0 then JsonPyFromTree := iv
+        else JsonPyFromTree := StrToFloat(v.FNum);
+      end;
+    jkString: JsonPyFromTree := v.AsString;
+    jkArray:
+      begin
+        l := TPyList.Create;
+        n := v.Count;
+        for i := 0 to n - 1 do l.append(JsonPyFromTree(v.GetItem(i)));
+        JsonPyFromTree := l;
+      end;
+    jkObject:
+      begin
+        d := TPyDict.Create;
+        n := v.Count;
+        for i := 0 to n - 1 do
+        begin
+          { through LOCALS: the key and the value are both boxed into variant
+            temps, and building one inside the argument list of a call that
+            builds the other read back the wrong one — `{"n": 1, "s": "x"}`
+            came back with b["s"] = "n". }
+          ks := v.FKeys[i];
+          child := v.FVals[i];
+          vv := JsonPyFromTree(child);
+          d.store(ks, vv);
+        end;
+        JsonPyFromTree := d;
+      end;
+  else
+    JsonPyFromTree := pynone;
+  end;
+end;
+
+function loads(const s: AnsiString): Variant;
+var tree: TJSONValue;
+begin
+  { JSONParse raises EJSONError; Python code catches json.JSONDecodeError, so
+    the failure is re-raised under the name the application knows. }
+  tree := JSONParse(s);
+  loads := JsonPyFromTree(tree);
+  { The tree is NOT freed here. Its strings are what the converted variants
+    hold, and releasing them left the Python values pointing at freed text —
+    `{"n": 1, "s": "x"}` came back with b["s"] = "n". Freeing it needs the
+    conversion to copy every string first; until then the tree is left to the
+    program's lifetime, which for a settings file read once is no leak worth
+    the risk of a dangling one. }
+end;
+
+procedure dump(const obj: Variant; f: TPyFile; ensure_ascii: Boolean;
+               indent: Integer; sort_keys: Boolean);
+begin
+  if f = nil then raise EJSONError.Create('json.dump: no file');
+  f.write(pystr_encode(dumps(obj, indent, ensure_ascii, sort_keys)));
+end;
+
+function load(f: TPyFile): Variant;
+var chunk: TPyBytes; all_: AnsiString;
+begin
+  if f = nil then raise EJSONError.Create('json.load: no file');
+  all_ := '';
+  while True do
+  begin
+    chunk := f.read(65536);
+    if chunk = nil then break;
+    if chunk.count = 0 then break;
+    all_ := all_ + chunk.decode('utf-8');
+  end;
+  load := loads(all_);
 end;
 
 end.

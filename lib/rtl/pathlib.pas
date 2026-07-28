@@ -21,7 +21,7 @@ unit pathlib;
 
 interface
 
-uses sysutils, platform;
+uses sysutils, platform, pylib;   { Path.open hands back pylib's file object }
 
 type
   Path = class
@@ -55,6 +55,14 @@ type
     function __str__: AnsiString;
     function read_text: AnsiString;
     procedure write_text(const data: AnsiString);
+    { `with p.open("w", encoding="utf-8") as f:` — the file object is pylib's
+      TPyFile, the same one the builtin `open(path, mode)` yields for a write
+      mode, so json.dump and f.write take it unchanged. `encoding` and the
+      other text-mode options are accepted and ignored: our strings are byte
+      strings, so there is no decode step to configure. }
+    function open(const mode: AnsiString = 'r'; const encoding: AnsiString = '';
+                  const errors: AnsiString = '';
+                  const newline: AnsiString = ''): TPyFile;
   end;
 
 { mkdir goes straight to the platform layer: the RTL has DirectoryExists but no
@@ -225,6 +233,12 @@ end;
 operator / (a: Path; b: AnsiString): Path;
 begin
   Result := Path.Create(PlJoin(a.s, b));
+end;
+
+
+function Path.open(const mode, encoding, errors, newline: AnsiString): TPyFile;
+begin
+  open := pyfile_open(Self.s, mode);
 end;
 
 end.

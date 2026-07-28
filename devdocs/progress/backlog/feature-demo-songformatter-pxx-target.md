@@ -398,6 +398,32 @@ path (reportlab's blendmode is read through it).
 its own it ends in "invalid symbol in lea", which is a module-with-no-main
 artefact worth its own look.
 
+## 2026-07-28, later: the whole app compiles except one line
+
+`SongFormatter.py` — the entry point — now walks its own 595 lines and all
+three imported modules. What it took beyond the compile milestone above:
+
+- the module AST recycling fix ([[bug-nilpy-module-ast-recycled-by-nested-unit-compile]]),
+  which is what let `convertrawtext` be IMPORTED rather than only compiled
+- `tk.X` (a unit-qualified name falling back to the `NAME_` spelling), any
+  unmodelled `sys.<attr>` raising at run time, and module globals a def reads
+  from further up the file
+- keyword arguments binding to the CONSTRUCTOR's parameters before the class's
+  fields — `FormatText(nb, on_next=f)` was rejected as "multiple values"
+- a qualified exception class inside a tuple: `except (OSError, json.JSONDecodeError):`
+- libraries: `lib/rtl/markdown.pas`, `lib/pcl/tkhtmlview.pas`, the Python `json`
+  surface on `lib/rtl/json.pas`, `pathlib.Path.open`, and tkinter's `Toplevel`
+
+Two walls remain, both filed:
+
+- [[bug-nilpy-ambiguous-dynamic-field-needs-runtime-dispatch]] — `event.x` in a
+  Tk callback, refused because two classes declare `x` at different offsets.
+  The last COMPILER wall.
+- [[bug-heap-dict-literal-then-two-parses-corrupts]] — the allocator, not json:
+  a dict literal plus two parses in one program corrupts, so the session-file
+  round trip raises KeyError on a key that is in the file. Passes under
+  `-dPXX_LIBC_HEAP`.
+
 | module | wall |
 | --- | --- |
 | `key_analysis.py` | **none — compiles and runs** |

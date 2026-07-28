@@ -2841,26 +2841,30 @@ begin
        (Tokens[TokPos].Kind = tkAssign) then
     begin
       kwName := CurTok.SVal;
-      kwFld := FindUField(ci, kwName);
-      if kwFld >= 0 then
-        kwFld := kwFld - UClsFBase[ci]     { absolute -> field INDEX }
-      else
+      { The CONSTRUCTOR's parameters come FIRST when there is one. A
+        hand-written `__init__` names its options as parameters, and it usually
+        stores them into fields of the same name — `def __init__(self, parent,
+        on_next, on_change=None): self.on_next = on_next`. Matching the FIELD
+        first then bound the keyword to a field INDEX while the positional
+        argument had already taken that slot, and the construction was rejected
+        with "got multiple values for field 'on_next'" — an argument list that
+        is plain Python. Only a class with NO ctor (the dataclass shape, whose
+        arguments map straight onto its fields) falls through to the fields. }
+      kwCtorMi := FindUMeth(ci, 'create');
+      kwFld := -1;
+      if kwCtorMi >= 0 then
       begin
-        { Not a field: match the CONSTRUCTOR's parameter names. A hand-written
-          ctor - a Pascal class especially - names its options as parameters, not
-          as fields, and a widget facade is entirely that shape:
-          `Canvas(master, highlightthickness=0)` where highlightthickness is
-          ctor param 2. Param 0 is self, so param k is user-arg index k-1. }
-        kwCtorMi := FindUMeth(ci, 'create');
-        kwFld := -1;
-        if kwCtorMi >= 0 then
-        begin
-          kwCtorPi := UMthProc_[kwCtorMi];
-          for kwPk := 1 to Procs[kwCtorPi].ParamCount - 1 do
-            if CaseEqual(Procs[kwCtorPi].Params[kwPk].Name, kwName) then
-              kwFld := kwPk - 1;
-        end;
-        if kwFld < 0 then
+        kwCtorPi := UMthProc_[kwCtorMi];
+        for kwPk := 1 to Procs[kwCtorPi].ParamCount - 1 do
+          if CaseEqual(Procs[kwCtorPi].Params[kwPk].Name, kwName) then
+            kwFld := kwPk - 1;
+      end;
+      if kwFld < 0 then
+      begin
+        kwFld := FindUField(ci, kwName);
+        if kwFld >= 0 then
+          kwFld := kwFld - UClsFBase[ci]   { absolute -> field INDEX }
+        else
           Error('Nil Python: ' + name + ' has no field or constructor parameter named ''' +
                 kwName + '''');
       end;
@@ -7158,6 +7162,17 @@ begin
           if CurTok.Kind <> tkIdent then Error('Nil Python: except: expected an exception class');
           className := CurTok.SVal;
           Next;
+          { a QUALIFIED class inside the tuple too — `except (OSError,
+            json.JSONDecodeError):` is how a file read is guarded. The single
+            form below has taken this since tk.TclError; the tuple form did not,
+            and reported the MODULE name as an unknown exception class. }
+          if (CurTok.Kind = tkDot) and (TokPos < TokCount) and
+             (Tokens[TokPos].Kind = tkIdent) then
+          begin
+            Next;
+            className := CurTok.SVal;
+            Next;
+          end;
           if CaseEqual(className, 'Exception') then ci := PyEnsureExceptionClass
           else ci := FindUClass(className);
           if ci < 0 then Error('Nil Python: unknown exception class ' + className);

@@ -331,6 +331,9 @@ test-nilpy: $(COMPILER)
 	# a def reading a module global assigned further down the file
 	./$(COMPILER) test/test_nilpy_forward_module_global.npy /tmp/test_nilpy_fwdglob26
 	test "$$(/tmp/test_nilpy_fwdglob26)" = "$$(python3 test/test_nilpy_forward_module_global.npy)"
+	# the Python json module surface: dumps/loads and dump/load through pathlib
+	./$(COMPILER) test/test_nilpy_json_module.npy /tmp/test_nilpy_jsonmod26
+	test "$$(/tmp/test_nilpy_jsonmod26)" = "$$(python3 test/test_nilpy_json_module.npy)"
 	# a bare name is never a method; str.format with a spec; qualified except
 	./$(COMPILER) examples/tk/shadow_format_except.npy /tmp/test_nilpy_sfe26
 	test "$$(/tmp/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"
@@ -3506,6 +3509,9 @@ test-core: $(COMPILER)
 	# a def reading a module global assigned further down the file
 	./$(COMPILER) test/test_nilpy_forward_module_global.npy /tmp/test_nilpy_fwdglob26
 	test "$$(/tmp/test_nilpy_fwdglob26)" = "$$(python3 test/test_nilpy_forward_module_global.npy)"
+	# the Python json module surface: dumps/loads and dump/load through pathlib
+	./$(COMPILER) test/test_nilpy_json_module.npy /tmp/test_nilpy_jsonmod26
+	test "$$(/tmp/test_nilpy_jsonmod26)" = "$$(python3 test/test_nilpy_json_module.npy)"
 	# a bare name is never a method; str.format with a spec; qualified except
 	./$(COMPILER) examples/tk/shadow_format_except.npy /tmp/test_nilpy_sfe26
 	test "$$(/tmp/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"

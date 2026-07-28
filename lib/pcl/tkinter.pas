@@ -385,6 +385,19 @@ type
     procedure trace_add(const mode: AnsiString; const callback: Variant);
   end;
 
+  { `tk.Toplevel(root)` — a second window: a help viewer, a dialog, an analysis
+    panel. Tcl's `toplevel`, so it takes the same window operations as the root
+    (title, geometry) and the same widget operations as any other container. }
+  Toplevel = class(Widget)
+  public
+    constructor Create(master: Widget = nil; const background: AnsiString = '');
+    procedure geometry(const spec: AnsiString);
+    { `transient(parent)` / `grab_set()` are what a modal dialog writes. }
+    procedure transient(parent: Widget);
+    procedure grab_set;
+    procedure grab_release;
+  end;
+
   { The root window as Python spells it: `root = tk.Tk()`. Tcl's root is a
     process-wide singleton, so every construction hands back the same '.' path;
     the class exists so the application's own spelling compiles. }
@@ -1475,6 +1488,34 @@ begin
   w.path := '.';
   w.kind := 'toplevel';
   Tk_ := w;
+end;
+
+constructor Toplevel.Create(master: Widget; const background: AnsiString);
+begin
+  TkiEnsureStarted;
+  path := TkiNextPath(master);
+  kind := 'toplevel';
+  TkEval('toplevel ' + path + TkiOptStr('background', background));
+end;
+
+procedure Toplevel.geometry(const spec: AnsiString);
+begin
+  TkEval(path + ' geometry ' + spec);
+end;
+
+procedure Toplevel.transient(parent: Widget);
+begin
+  if parent <> nil then TkEval('wm transient ' + path + ' ' + parent.path);
+end;
+
+procedure Toplevel.grab_set;
+begin
+  TkEval('grab set ' + path);
+end;
+
+procedure Toplevel.grab_release;
+begin
+  TkEval('grab release ' + path);
 end;
 
 procedure mainloop;

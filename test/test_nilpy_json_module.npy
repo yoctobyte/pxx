@@ -1,0 +1,28 @@
+# Python's `json` module surface over pxx's JSON tree: dumps/loads, and
+# dump/load through a pathlib file. Values are Python's — dict, list, str, int,
+# float, bool, None.
+#
+# NOTE one shape is deliberately absent: TWO json.loads calls in a program that
+# also builds a dict literal crash in the ALLOCATOR, not in json —
+# bug-heap-dict-literal-then-two-parses-corrupts has the one-line repro and the
+# -dPXX_LIBC_HEAP discriminator. Add the round-trip-twice case here when that
+# is fixed.
+
+import json
+from pathlib import Path
+
+print(json.dumps(5))
+print(json.dumps("hi"))
+print(json.dumps(True))
+print(json.dumps(None))
+print(json.dumps(1.5))
+print(json.dumps({"name": "song", "bpm": 120, "tags": ["a", "b"]}))
+print(json.dumps({"b": 2, "a": 1}, sort_keys=True))
+print(json.dumps({"a": [1, 2]}, indent=2))
+
+p = Path("/tmp/pxx_test_json_module.json")
+with p.open("w", encoding="utf-8") as f:
+    json.dump({"name": "song", "tags": ["a", "b"], "bpm": 120}, f, indent=2)
+with p.open("r", encoding="utf-8") as f:
+    r = json.load(f)
+print(r["name"], r["bpm"], r["tags"][1], len(r))
