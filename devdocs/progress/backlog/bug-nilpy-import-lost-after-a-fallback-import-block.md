@@ -40,6 +40,25 @@ is enough. The same call compiles and RUNS in isolation, with and without
 - Not the submodule-alias registration added with dotted imports: disabling that
   hunk changes nothing.
 - Not `atexit` itself, and not the presence of tkinter.
+- **Not a fallback-import block on its own.** The obvious minimal case —
+
+  ```python
+  try:
+      from nosuchpkg.nosuchmod import thing
+      HAVE_THING = True
+  except ImportError:
+      HAVE_THING = False
+
+  import atexit
+
+  def bye(): print("bye")
+  atexit.register(bye)
+  ```
+
+  compiles and runs. So it takes something more than one such block; the real
+  file has TWO of them and a block of a dozen imports after. Bisect the import
+  section itself (lines 1-52 of convertrawtext.py compile; add the call and it
+  fails), removing one import at a time.
 
 ## Suspicion
 
