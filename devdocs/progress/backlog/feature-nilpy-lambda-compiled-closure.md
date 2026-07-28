@@ -65,3 +65,51 @@ from a token span and refuses anything exotic.
 `make test-nilpy` with a case that captures an object and calls a method on it
 from a lambda, CPython-diffed; and songformatter's `settings.py` populating its
 frame under Xvfb.
+
+
+## SLICE ONE LANDED (2026-07-28) — a call-shaped lambda is COMPILED
+
+A lambda whose body is a CALL (`lambda event: self.canvas.configure(
+scrollregion=self.canvas.bbox("all"))`, `lambda e: handler(e.width)`) and which
+has exactly one own parameter is now LIFTED into a real proc:
+
+- the header's own parameter becomes a variant param, every enclosing local or
+  parameter the body mentions (above all `self`) becomes a trailing capture
+  bound at build time, and the value is the same `pyboundfn_new` object the
+  nested-def path already produces — so the callback bridge dispatches it with
+  no new machinery;
+- the body is queued like a nested def's and compiled once the enclosing routine
+  is complete (`PyCompileLambdaBody`, drained in `PyParseDef`, `PyParseMethod`
+  and at module level).
+
+What that buys, beyond speed: keyword arguments now bind BY NAME against the
+real signature. Through pyeval they were appended POSITIONALLY
+([[bug-nilpy-pyeval-host-kwargs-positional]]), so `configure(scrollregion=X)`
+set `-state` instead — silently. And the five-argument cap on pyeval's host-call
+trampoline no longer applies to a lifted body.
+
+### Deliberately still on pyeval
+
+- a body that is not a call — `key=lambda p: p[1]` — because the bound-fn bridge
+  DISCARDS the callee's result, and a lambda whose value a caller reads must
+  return one. Lifting those needs the bridge to carry a result back;
+- more than one own parameter (`lambda a, b: ...`), and `*args` forms;
+- anything the shape test rejects, which keeps the fallback total.
+
+Three traps worth recording, each cost real time:
+
+1. `AllocParam` seeds a symbol's `RecName` from `LastTypeRecId` — whatever type
+   the parser last saw ANYWHERE. A body compiled far from its header inherited a
+   stale class id, and `event.width` reported "no such member" instead of a
+   dynamic attribute read. Set the class identity explicitly, or clear it.
+2. `PyExprMode` must be ON while the body parses. The module-level drain runs
+   after `ParsePyProgram` turns it off, and without it a `.name` read off a
+   variant fell through to a raw field read at offset 0 — it printed the
+   variant's TYPE TAG (7) as the attribute's value.
+3. The expression must be wrapped in an `AN_BLOCK` (and hoisted temporaries
+   flushed) before `CompileAST`, exactly as every other body path hands it one;
+   a bare expression node compiled to nothing at all, silently.
+
+Test: `examples/tk/callbacks.npy` (lifted lambda calling a method on `self`).
+Gate: `make test-nilpy` green, self-host fixedpoint byte-identical,
+`testmgr --tier quick` green.

@@ -75,9 +75,12 @@ type
       An option this façade does not know is a compile error at the call site,
       which is the point: silently dropping a widget option would show up as a
       layout that is subtly wrong rather than as a diagnostic. }
+    { yscrollcommand / xscrollcommand are VARIANT because Python passes a
+      CALLABLE — `canvas.configure(yscrollcommand=self.scrollbar.set)` is the
+      one spelling every scrollable widget uses. See TkiOptScrollCmd. }
     procedure configure(const state: AnsiString = ''; const scrollregion: AnsiString = '';
-                        const yscrollcommand: AnsiString = '';
-                        const xscrollcommand: AnsiString = '';
+                        const yscrollcommand: Variant = 0;
+                        const xscrollcommand: Variant = 0;
                         const text: AnsiString = ''; const background: AnsiString = '';
                         width: Integer = -1; height: Integer = -1);
     { the raw form, for an option this façade has not named yet }
@@ -159,8 +162,11 @@ type
 
   Scrollbar = class(Widget)
   public
+    { `command=` takes the scrolled widget's own yview/xview METHOD in Python
+      (`tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)`), so
+      it is a Variant. See TkiOptScrollCmd for how that is wired. }
     constructor Create(master: Widget; const orient: AnsiString = '';
-                       const command: AnsiString = '');
+                       const command: Variant = 0);
     procedure set_(const first, last: AnsiString);
   end;
 
@@ -306,14 +312,70 @@ end;
   for "not given" is '' for strings and -1 for the integer options Tk defaults
   itself. }
 function TkiOptStr(const name, value: AnsiString): AnsiString;
+{ A MULTI-WORD value must be braced: Tcl splits on spaces, so
+  `-scrollregion 0 0 500 1026` reached Tk as the option value `0` plus three
+  stray arguments — the canvas kept a one-element scrollregion and nothing
+  said so. Values without a space are left bare, which keeps every existing
+  command string byte-identical. }
+var i: Integer; hasSpace: Boolean;
 begin
-  if value = '' then TkiOptStr := '' else TkiOptStr := ' -' + name + ' ' + value;
+  if value = '' then begin TkiOptStr := ''; Exit; end;
+  hasSpace := False;
+  for i := 1 to Length(value) do
+    if value[i] = ' ' then hasSpace := True;
+  if hasSpace then TkiOptStr := ' -' + name + ' {' + value + '}'
+  else TkiOptStr := ' -' + name + ' ' + value;
 end;
 
 function TkiOptInt(const name: AnsiString; value: Integer): AnsiString;
 begin
   if value < 0 then TkiOptInt := ''
   else TkiOptInt := ' -' + name + ' ' + TkiIntStr(value);
+end;
+
+{ A SCROLL-WIRING option: `-yscrollcommand`, `-xscrollcommand`, and a
+  scrollbar's `-command`. Python hands each of them a BOUND METHOD of the other
+  widget (`self.scrollbar.set`, `self.canvas.yview`), and CPython's tkinter does
+  not call back into Python for these at all — it wires Tcl straight to the
+  other widget's own subcommand, which is why scrolling stays smooth. Same here:
+  the receiver gives the widget PATH and the option decides the subcommand, so
+  Tk drives both ends itself.
+
+  The receiver's METHOD NAME is not recoverable from a bound-method value, and
+  the option name determines it anyway — a scrollbar's command is the scrolled
+  widget's yview/xview, a widget's yscrollcommand is the scrollbar's set. A
+  callable that is NOT a widget method (a plain def, a lambda) needs the
+  callback registry to receive Tcl's own arguments, which the dispatcher cannot
+  do yet: it is refused loudly rather than wired to something wrong
+  (feature-lib-tkinter-callable-options-with-args). A STRING still passes
+  through verbatim, which is the raw Tcl form this unit has always taken. }
+function TkiOptScrollCmd(const name: AnsiString; const v: Variant;
+                         const subcmd: AnsiString): AnsiString;
+var o: TObject;
+begin
+  Result := '';
+  case pyvartag(v) of
+    0: Exit;                                  { omitted }
+    6: begin                                  { a raw Tcl script }
+         if pystr_of(v) = '' then Exit;
+         Result := ' -' + name + ' {' + pystr_of(v) + '}';
+       end;
+    8: begin                                  { a bound method: {code, receiver} }
+         o := TObject(pybound_recv(v));
+         if (o <> nil) and (o is Widget) then
+           Result := ' -' + name + ' {' + Widget(o).path + ' ' + subcmd + '}'
+         else
+         begin
+           WriteLn('tkinter: -', name,
+                   ' needs a widget method or a Tcl script (a plain callable ',
+                   'cannot receive Tk''s scroll arguments yet)');
+           Halt(1);
+         end;
+       end;
+  else
+    WriteLn('tkinter: -', name, ' takes a widget method or a Tcl script');
+    Halt(1);
+  end;
 end;
 
 { A canvas ITEM SPEC: the integer id create_* handed back, or a TAG name —
@@ -399,14 +461,15 @@ begin
   TkEval(path + ' configure ' + opts);
 end;
 
-procedure Widget.configure(const state, scrollregion, yscrollcommand,
-                           xscrollcommand, text, background: AnsiString;
+procedure Widget.configure(const state, scrollregion: AnsiString;
+                           const yscrollcommand, xscrollcommand: Variant;
+                           const text, background: AnsiString;
                            width, height: Integer);
 var o: AnsiString;
 begin
   o := TkiOptStr('state', state) + TkiOptStr('scrollregion', scrollregion)
-     + TkiOptStr('yscrollcommand', yscrollcommand)
-     + TkiOptStr('xscrollcommand', xscrollcommand)
+     + TkiOptScrollCmd('yscrollcommand', yscrollcommand, 'set')
+     + TkiOptScrollCmd('xscrollcommand', xscrollcommand, 'set')
      + TkiOptStr('text', text) + TkiOptStr('background', background)
      + TkiOptInt('width', width) + TkiOptInt('height', height);
   if o <> '' then TkEval(path + ' configure' + o);
@@ -779,13 +842,16 @@ end;
 { ---- Scrollbar ----------------------------------------------------------- }
 
 constructor Scrollbar.Create(master: Widget; const orient: AnsiString;
-                            const command: AnsiString);
+                            const command: Variant);
+var sub: AnsiString;
 begin
   TkiEnsureStarted;
   path := TkiNextPath(master);
   kind := 'scrollbar';
+  { a vertical scrollbar drives the widget's yview, a horizontal one its xview }
+  if orient = 'horizontal' then sub := 'xview' else sub := 'yview';
   TkEval('scrollbar ' + path + TkiOptStr('orient', orient) +
-         TkiOptStr('command', command));
+         TkiOptScrollCmd('command', command, sub));
 end;
 
 procedure Scrollbar.set_(const first, last: AnsiString);

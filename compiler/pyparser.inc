@@ -3205,6 +3205,39 @@ begin
   end;
 end;
 
+{ Is this lambda body a CALL whose value is discarded — `self.canvas.configure(
+  ...)`, `print(x)`, `handler(a, b)`? That is the GUI-callback shape, and it is
+  the only shape the lifted path takes today: the bound-fn bridge
+  (pyboundfn_call_ptr) DISCARDS the callee's result, so a lambda whose value a
+  caller reads (`key=lambda p: p[1]`) must keep the pyeval closure, which
+  returns one. Refusing loudly here beats lifting a body whose value silently
+  disappears. }
+function PyLambdaBodyIsDiscardableCall(bStart, bEnd: Integer): Boolean;
+var i, depth: Integer; sawCall: Boolean;
+begin
+  Result := False;
+  if bEnd - bStart < 3 then Exit;
+  if Tokens[bStart].Kind <> tkIdent then Exit;
+  if Tokens[bEnd - 1].Kind <> tkRParen then Exit;
+  depth := 0;
+  sawCall := False;
+  for i := bStart to bEnd - 1 do
+  begin
+    if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then
+    begin
+      if (depth = 0) and (Tokens[i].Kind = tkLParen) and (i > bStart) then sawCall := True;
+      Inc(depth);
+    end
+    else if Tokens[i].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(depth)
+    else if depth = 0 then
+    begin
+      { at depth 0 only the callee chain may appear: `a.b.c(` }
+      if not (Tokens[i].Kind in [tkIdent, tkDot]) then Exit;
+    end;
+  end;
+  Result := sawCall and (depth = 0);
+end;
+
 procedure PyParseLambdaStub;
 var depth, bStart, bEnd, i, j, pi, capPi, symIdx: Integer;
     params, src, nm: AnsiString;
@@ -3219,6 +3252,13 @@ var depth, bStart, bEnd, i, j, pi, capPi, symIdx: Integer;
     dcNames: array[0..7] of AnsiString;
     dcSyms: array[0..7] of Integer;
     dcCount: Integer;
+    { the LIFTED path: this lambda's own proc and the values bound into it }
+    lamProc, lamN, bindIdx, argC, vNode, capSym: Integer;
+    lamNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
+    lamTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+    lamSyms: array[0..MAX_PROC_PARAMS-1] of Integer;
+    lamRecs: array[0..MAX_PROC_PARAMS-1] of Integer;
+    newPi, bindPi, varBindPi: Integer;
 begin
   Next;                                { consume `lambda` }
   params := '';
@@ -3270,6 +3310,123 @@ begin
     Next;
   end;
   bEnd := TokPos - 1;
+
+  { ---- LIFT: compile the lambda as a real proc when its shape allows ----
+    A lambda is a nested def with one expression body, so the machinery that
+    already lifts a captures-only nested def (pyboundfn_new / _bind_var, and the
+    pending-body queue) serves it unchanged. Lifting means the body is COMPILED:
+    keyword arguments bind by name against the real signature, method calls go
+    through the ordinary call path, and there is no interpreter in the callback.
+    Everything the lifter does not accept keeps the pyeval closure below — that
+    fallback is the reason this can be narrow.
+    (feature-nilpy-lambda-compiled-closure) }
+  newPi := FindProc('pyboundfn_new');
+  bindPi := FindProc('pyboundfn_bind');
+  varBindPi := FindProc('pyboundfn_bind_var');
+  if (not PyTypingPass) and (nParams = 1) and (newPi >= 0) and (bindPi >= 0) and
+     (varBindPi >= 0) and PyLambdaBodyIsDiscardableCall(bStart, bEnd) then
+  begin
+    lamN := 0;
+    lamNames[0] := pNames[0];        { the one own parameter, unannotated }
+    lamTypes[0] := tyVariant;
+    lamSyms[0] := -1;
+    lamRecs[0] := REC_NONE;
+    lamN := 1;
+    { the `key=key` defaults first: Python's own idiom for pinning a value }
+    for i := 0 to dcCount - 1 do
+    begin
+      if lamN >= PY_MAX_CAPS then Break;
+      lamNames[lamN] := LowerCase(dcNames[i]);
+      lamTypes[lamN] := Syms[dcSyms[i]].TypeKind;
+      lamSyms[lamN] := dcSyms[i];
+      lamRecs[lamN] := Syms[dcSyms[i]].RecName;
+      Inc(lamN);
+    end;
+    { then every free name in the body that is an enclosing LOCAL or PARAM —
+      `self` above all. A global needs no capture: the lifted proc is top level
+      and sees it directly. }
+    for i := bStart to bEnd - 1 do
+      if (Tokens[i].Kind = tkIdent) and
+         ((i = bStart) or (Tokens[i - 1].Kind <> tkDot)) then
+      begin
+        nm := LowerCase(GetTokenStr(i));
+        dup := False;
+        for j := 0 to lamN - 1 do
+          if lamNames[j] = nm then dup := True;
+        if dup then Continue;
+        capSym := PyProgSym(GetTokenStr(i));
+        if capSym < 0 then Continue;
+        if not (Syms[capSym].Kind in [skLocal, skParam]) then Continue;
+        if Syms[capSym].IsArray or (Syms[capSym].TypeKind = tyRecord) then Continue;
+        if (Syms[capSym].TypeKind = tyAnsiString) or (Syms[capSym].TypeKind = tyString) then Continue;
+        if lamN >= PY_MAX_CAPS then Break;
+        lamNames[lamN] := nm;
+        lamTypes[lamN] := Syms[capSym].TypeKind;
+        lamSyms[lamN] := capSym;
+        lamRecs[lamN] := Syms[capSym].RecName;
+        Inc(lamN);
+      end;
+
+    if PyPendLamCount < PY_MAX_NESTED then
+    begin
+      Inc(PyLamSeq);
+      { a PROCEDURE: the bridge discards a result, and the body test above
+        already restricted this path to a call whose value nobody reads }
+      lamProc := RegisterProc('$pylam' + AIntToStr(PyLamSeq), False, tyInteger,
+                              lamN, lamNames, lamTypes);
+      Procs[lamProc].BodyAddr := -1;
+      for j := 1 to lamN - 1 do
+        if (lamTypes[j] = tyClass) and (lamRecs[j] >= REC_UCLASS_BASE) and
+           (j < MAX_PROC_PARAMS) then
+          ProcParamRecId[lamProc * MAX_PROC_PARAMS + j] := lamRecs[j];
+      PyPendLamTok[PyPendLamCount] := bStart;
+      PyPendLamProc[PyPendLamCount] := lamProc;
+      Inc(PyPendLamCount);
+
+      { pyboundfn_new(addr, nBound, a0var=1) — the own param is a variant and
+        travels by ADDRESS, exactly as the nested-def path passes its own }
+      argA := AllocNode(AN_ARG);
+      node := AllocNode(AN_PROCADDR);
+      ASTIVal[node] := lamProc; ASTTk[node] := Ord(tyPointer);
+      ASTLeft[argA] := node;
+      argB := AllocNode(AN_ARG);
+      node := AllocNode(AN_INT_LIT);
+      ASTIVal[node] := lamN - 1; ASTTk[node] := Ord(tyInt64);
+      ASTLeft[argB] := node;
+      ASTRight[argA] := argB;
+      argC := AllocNode(AN_ARG);
+      node := AllocNode(AN_INT_LIT);
+      ASTIVal[node] := 1; ASTTk[node] := Ord(tyInt64);
+      ASTLeft[argC] := node;
+      ASTRight[argB] := argC;
+      node := AllocNode(AN_CALL);
+      ASTIVal[node] := newPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+
+      { bind each captured value, in parameter order }
+      for j := 1 to lamN - 1 do
+      begin
+        bindIdx := j - 1;
+        argA := AllocNode(AN_ARG);
+        ASTLeft[argA] := node;
+        argB := AllocNode(AN_ARG);
+        vNode := AllocNode(AN_INT_LIT);
+        ASTIVal[vNode] := bindIdx; ASTTk[vNode] := Ord(tyInt64);
+        ASTLeft[argB] := vNode;
+        ASTRight[argA] := argB;
+        argC := AllocNode(AN_ARG);
+        ASTLeft[argC] := PyMakeIdent(lamSyms[j]);
+        ASTRight[argB] := argC;
+        node := AllocNode(AN_CALL);
+        if lamTypes[j] = tyVariant then ASTIVal[node] := varBindPi
+        else ASTIVal[node] := bindPi;
+        ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+      end;
+
+      CurASTNode := node;
+      LastExprTk := tyPointer;
+      Exit;
+    end;
+  end;
 
   pi := FindProc('pyclosure_src_new');
   capPi := FindProc('pyclosure_src_cap');
@@ -9345,10 +9502,94 @@ begin
   Next;
 end;
 
+{ Compile a LIFTED lambda's body: the queued proc's frame, then one
+  `return <expr>` parsed from the body's token span. Mirrors PyParseDef's body
+  half — a lambda has no statements, no locals and no nested defs, so what is
+  left is the prologue, the expression, and the epilogue.
+  (feature-nilpy-lambda-compiled-closure) }
+procedure PyCompileLambdaBody(procIdx, bStart: Integer);
+var i, idx, patchPos, savedSC, savedFS, nparams, node, seqNode: Integer;
+    savedExprMode: Boolean;
+begin
+  { NilPy expression rules must be ON while this body parses — the module-level
+    drain runs after ParsePyProgram turned them off, and without them a `.name`
+    read off a VARIANT parameter fell through to a raw field read at offset 0
+    (it printed the variant's TYPE TAG instead of the attribute). }
+  savedExprMode := PyExprMode;
+  PyExprMode := True;
+  nparams := Procs[procIdx].ParamCount;
+  savedSC := SymCount;
+  savedFS := FrameSize;
+  FrameSize := 0;
+  CurProc := procIdx;
+  Procs[procIdx].ScopeBase := SymCount;
+  for i := 0 to nparams - 1 do
+  begin
+    idx := AllocParam(Procs[procIdx].Params[i].Name, Procs[procIdx].Params[i].TypeKind,
+                      Procs[procIdx].Params[i].TypeKind = tyVariant, False);
+    Procs[procIdx].Params[i].SymIdx := idx;
+    Procs[procIdx].Params[i].IsRef := Procs[procIdx].Params[i].TypeKind = tyVariant;
+    if i < MAX_PROC_PARAMS then
+      ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] :=
+        Procs[procIdx].Params[i].TypeKind = tyVariant;
+    { AllocParam seeds RecName from LastTypeRecId — the type the parser last
+      saw ANYWHERE — and this body is compiled far from its own header, so the
+      leftover made every variant param look like a class instance and
+      `event.width` reported "no such member" instead of reading a dynamic
+      attribute. Set the class identity explicitly, or clear it. }
+    if (Procs[procIdx].Params[i].TypeKind = tyClass) and (i < MAX_PROC_PARAMS) and
+       (ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] >= REC_UCLASS_BASE) then
+      Syms[idx].RecName := ProcParamRecId[procIdx * MAX_PROC_PARAMS + i]
+    else
+      Syms[idx].RecName := REC_NONE;
+  end;
+  Procs[procIdx].BodyAddr := CodeLen;
+  patchPos := EmitProcPrologue;
+  Procs[procIdx].FramePatch := patchPos;
+  PyEmitParamSpills(procIdx, nparams);
+  PyInitVariantLocals(Procs[procIdx].ScopeBase);
+  EmitManagedLocalsZeroInit(Procs[procIdx].ScopeBase);
+  TokPos := bStart;
+  Next;
+  PyParseBoolExpr;
+  node := CurASTNode;
+  { the expression IS the statement (`obj.method()` is a statement node here),
+    but any temporaries the expression hoisted must be emitted before it, and
+    CompileAST wants a BLOCK the way every other body path hands it one }
+  node := PySeqAppend(PyFlushHoist(-1), node);
+  seqNode := AllocNode(AN_BLOCK);
+  ASTLeft[seqNode] := node;
+  ASTTk[seqNode] := Ord(tyUnknown);
+  CompileAST(seqNode);
+  EmitProcEpilog(Procs[procIdx].RetSymIdx);
+  PatchProcPrologue(patchPos, FrameSize);
+  SymRollbackTo(savedSC);
+  FrameSize := savedFS;
+  CurProc := -1;
+  PyExprMode := savedExprMode;
+end;
+
+{ Drain the lambda bodies queued while compiling the routine that just ended,
+  back to the mark it took on entry — the same discipline the nested-def queue
+  follows, and for the same reason: a lambda inside a lifted lambda would queue
+  onto this list too. }
+procedure PyDrainPendingLambdas(mark: Integer);
+var savedTok: Integer;
+begin
+  while PyPendLamCount > mark do
+  begin
+    Dec(PyPendLamCount);
+    savedTok := TokPos;
+    PyCompileLambdaBody(PyPendLamProc[PyPendLamCount], PyPendLamTok[PyPendLamCount]);
+    TokPos := savedTok - 1;
+    Next;
+  end;
+end;
+
 procedure PyParseDef;
 var name, savedPfx, savedPfx2: AnsiString;
     nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyNode: Integer;
-    savedNest, savedTok: Integer;
+    savedNest, savedTok, savedLam: Integer;
     retType: TTypeKind; isProc: Boolean;
 begin
   PyParseDefHeader;
@@ -9402,6 +9643,7 @@ begin
     real parse will look for. }
   savedPfx := PyNestPrefix;
   savedNest := PyPendNestCount;
+  savedLam := PyPendLamCount;
   PyNestPrefix := name;
   savedSC := SymCount;
   savedFS := FrameSize;
@@ -9491,6 +9733,7 @@ begin
     TokPos := savedTok - 1;
     Next;
   end;
+  PyDrainPendingLambdas(savedLam);
 end;
 
 { Is the `def` at token index defIdx decorated with @property or @x.setter?
@@ -10564,7 +10807,7 @@ var origName, name, fullName: AnsiString; procIdx, i, idx, nparams, savedSC, sav
     ptypes: array[0..15] of TTypeKind; pcis: array[0..15] of Integer;
     psigs: array[0..15] of Integer;   { Callable signature per parameter, or -1 }
     isCtor: Boolean;
-    savedNest, savedTok: Integer; savedPfx, savedPfx2: AnsiString;
+    savedNest, savedTok, savedLam: Integer; savedPfx, savedPfx2: AnsiString;
 begin
   Expect(tkFunction, 'def');
   origName := CurTok.SVal; name := PyMethodName(origName);
@@ -10712,6 +10955,7 @@ begin
     (feature-nilpy-nested-defs-in-methods). }
   savedPfx := PyNestPrefix; PyNestPrefix := fullName;
   savedNest := PyPendNestCount;
+  savedLam := PyPendLamCount;
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
   EmitAggregateDestStash(procIdx);
   PyEmitParamSpills(procIdx, nparams);
@@ -10740,6 +10984,7 @@ begin
     TokPos := savedTok - 1;
     Next;
   end;
+  PyDrainPendingLambdas(savedLam);
 end;
 
 { Emit the synthesized @dataclass ctor body: spill params, then
@@ -11342,6 +11587,11 @@ begin
   PyExprMode := False;
   CompileAST(blockNode);
   EmitExit(0);
+  { A lambda LIFTED at module level queues its body like one inside a def does,
+    and nothing else drains the module's queue. Emitted after the exit on
+    purpose: the code below is only ever reached by a call, and EmitExit never
+    falls through into it. }
+  PyDrainPendingLambdas(0);
   { Patch forward proc-call placeholders (e.g. the builtin heap allocator,
     whose body is compiled after the string runtime that calls it). Pascal
     ParseProgram does this; .npy needs it too now that string/variant codegen

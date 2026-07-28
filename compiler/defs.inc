@@ -1501,6 +1501,15 @@ var
   PyPendNestTok: array[0..PY_MAX_NESTED-1] of Integer;   { token index of each queued nested def }
   PyPendNestPfx: array[0..PY_MAX_NESTED-1] of AnsiString;{ the qualifier it must register under }
   PyPendNestCount: Integer;
+  { A LIFTED LAMBDA's body, queued exactly like a nested def's: a lambda whose
+    shape the lifter accepts becomes a real proc whose body is compiled once the
+    enclosing routine's code is complete (feature-nilpy-lambda-compiled-closure).
+    The body is an EXPRESSION, so the queue records its token span rather than a
+    `def` token, plus the proc the header already registered. }
+  PyPendLamTok: array[0..PY_MAX_NESTED-1] of Integer;    { token index of the body expression }
+  PyPendLamProc: array[0..PY_MAX_NESTED-1] of Integer;   { the proc registered for it }
+  PyPendLamCount: Integer;
+  PyLamSeq: Integer;                        { serial for the synthetic lambda name }
   PyStmtAteBlock: Boolean;   { last statement consumed its own indented block AND the DEDENT (nested def) }
   { Enclosing locals a nested def READS, lifted to trailing by-value parameters
     the call site fills in (feature-nilpy-nested-defs). Python reads a closed-over

@@ -381,3 +381,45 @@ core codegen bug that no test in the suite had touched.
 
 Next rung: the tkinter façade (settings.py is otherwise clean), then the `.py`
 module loader — which is what turns six separate files into one program.
+
+
+## Pass seven — settings.py RUNS (2026-07-28)
+
+The second songformatter module is done end to end: **settings.py builds its
+whole editor — 60 child widgets, exactly CPython's count — under Xvfb, from
+unmodified app source.** Five bugs stood between compiling and running, and the
+first three are silent-corruption class:
+
+| what | lane |
+| --- | --- |
+| [[bug-nilpy-pydict-v-borrowed-reference]] — a dict out of a dict was unboxed as a BORROWED reference; the caller's release freed a live object and corrupted the free list | N |
+| [[bug-nilpy-comparison-return-type-from-operands]] — an unannotated def returning a comparison typed its result from the operands (and tuple membership compared by identity) | N |
+| [[bug-nilpy-bound-method-coerced-to-string]] — a bound method passed to a string option compiled, and Tk then evaluated garbage: the event loop HUNG four layers from the cause | N |
+| StringVar had no `trace_add`; a canvas item spec refused a tag (`bbox("all")`); a multi-word option value was not braced, so `-scrollregion 0 0 500 1026` reached Tk as `0` plus three stray arguments | B |
+| [[feature-nilpy-lambda-compiled-closure]] slice one — a call-shaped lambda is now COMPILED, which is what makes `configure(scrollregion=...)` bind by NAME (pyeval appended keyword args positionally: [[bug-nilpy-pyeval-host-kwargs-positional]]) | N |
+
+Scroll wiring now follows CPython's tkinter: `Scrollbar(command=canvas.yview)`
+and `configure(yscrollcommand=scrollbar.set)` wire Tcl straight to the other
+widget's subcommand rather than calling back into Python. The general case (a
+plain callable that must receive Tk's own arguments) is filed as
+[[feature-lib-tkinter-callable-options-with-args]] and fails loudly meanwhile.
+
+Where the modules stand now:
+
+| module | wall |
+| --- | --- |
+| `key_analysis.py` | **none — compiles and runs** |
+| `settings.py` | **none — compiles, runs, builds all 60 widgets** |
+| `kadrv.py` | `import key_analysis` — [[feature-nilpy-py-module-loader]] (T3) |
+| `convertrawtext.py` | `import ast` — needs a shim or a real parser |
+| `render_backend.py` | `from reportlab...` — [[feature-lib-pxxpdf-reportlab-compat]] + dotted imports |
+| `SongFormatter.py` | `import markdown` (help window) |
+
+Also filed on the way: [[feature-nilpy-function-values]] (`f = add`,
+`g = lambda ...` at statement level, calling a function value out of a
+container), [[bug-nilpy-pyeval-prints-bool-as-number]],
+[[bug-nilpy-qualified-proc-omitted-default]].
+
+Technique that settled the hardest one: `-dPXX_LIBC_HEAP` puts the pxx heap on
+libc malloc so valgrind sees every allocation. A native-allocator crash that
+makes no sense at the crash site is a use-after-free until proven otherwise.

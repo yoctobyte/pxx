@@ -15,6 +15,11 @@ class App:
         self.frame = tk.Frame(root, width=200, height=100)
         self.frame.bind("<Configure>", self.on_configure)
         self.frame.bind("<Enter>", on_plain, add="+")
+        # a lambda whose body is a CALL is LIFTED to a real proc: `self` is
+        # bound as a capture and the method call compiles, so keyword args bind
+        # by name and no interpreter runs in the callback
+        # (feature-nilpy-lambda-compiled-closure)
+        self.frame.bind("<Configure>", lambda event: self.on_lifted(event), add="+")
         self.frame.pack(fill="both", expand=True)
         self.flag = BooleanVar(value=False)
         self.flag.trace_add("write", lambda *args: print("trace fired"))
@@ -27,6 +32,14 @@ class App:
         # commonest call in the widget and an Integer parameter refused it.
         self.canvas = tk.Canvas(root, width=50, height=50)
         self.canvas.create_rectangle(1, 1, 10, 10)
+        # scroll wiring: Python passes the other widget's own METHOD, and Tk is
+        # wired straight to it (a bound method into a string option used to
+        # produce a garbage Tcl script, which hung the event loop)
+        self.bar = tk.Scrollbar(root, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self.bar.set)
+
+    def on_lifted(self, event):
+        print("lifted", event.width, event.height)
 
     def on_configure(self, event):
         self.hits = self.hits + 1
