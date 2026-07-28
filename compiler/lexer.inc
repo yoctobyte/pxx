@@ -751,6 +751,8 @@ begin
   MatchQuiet := False;
   MimicFpc := False;
   NoShims := False;
+  DefaultCIncludeDirsAdded := False;
+  CRuntimeStubsEmitted := False;
   SoftUnitResolve := False;
   SoftUnitMissed := False;
   InterfacesComMode := True;   { FPC/Delphi default: interfaces are COM (refcounted). {$interfaces corba} opts out. }

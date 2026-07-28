@@ -80,6 +80,7 @@ procedure AsmI64(v: Int64); forward;
 {$include asmtext_arm32.inc}
 {$include asmtext_xtensa.inc}
 procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
+procedure AddDefaultCIncludeDirs; forward;   { the C unit pull in parser.inc needs it too }
 {$include parser.inc}
 {$include ir.inc}
 function GetOrAllocSymRTTI(symIdx: Integer): Integer; forward;

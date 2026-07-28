@@ -1832,6 +1832,11 @@ procedure AddDefaultCIncludeDirs;
 var d: AnsiString;
 begin
   if NoStdInc then Exit;
+  { Idempotent: a C source pulled as a UNIT calls this too (the main program may
+    be Pascal or NilPy, in which case nothing registered these yet), and it may
+    be pulled many times over one compile. }
+  if DefaultCIncludeDirsAdded then Exit;
+  DefaultCIncludeDirsAdded := True;
   { ExeDir-anchored (installed/normal: ExeDir = <root>/compiler/) ... }
   if ExeDir <> '' then
   begin

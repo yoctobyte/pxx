@@ -2864,6 +2864,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/shared_object26)" = "97"
 	./$(COMPILER) test/test_c_import.pas /tmp/c_import26
 	test "$$(/tmp/c_import26)" = "42"
+	# a .c pulled as a UNIT: globals reserved AND initialized, forward-declared
+	# static resolved, crtl's own <stdarg.h> found (gcc-differential)
+	./$(COMPILER) -Futest test/test_c_unit_globals.pas /tmp/c_unit_globals26
+	test "$$(/tmp/c_unit_globals26)" = "$$(printf '31\n8')"
 	./$(COMPILER) test/test_c_widths.pas /tmp/c_widths26
 	test "$$(/tmp/c_widths26)" = "5000000000"
 	./$(COMPILER) test/test_c_typedef.pas /tmp/c_typedef26

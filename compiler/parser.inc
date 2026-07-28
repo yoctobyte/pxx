@@ -26064,6 +26064,13 @@ begin
     savedCurTokIVal := CurTok.IVal;
     savedCurTokLine := CurTok.Line;
 
+    { pxx's own C headers belong on the `<>` search path here too. Only the
+      C-PROGRAM path registered them, so a `.c` pulled from a Pascal or NilPy
+      program resolved `#include <stdarg.h>` to the HOST header — whose va_list
+      is __builtin_va_list, which pxx cannot lower, so every variadic C file
+      failed with the va_list local reported as an undeclared identifier.
+      bug-cfront-unit-globals-unregistered. }
+    AddDefaultCIncludeDirs;
     CPreprocess(UnitContent, GetFilePath(path));
 
     { Append preprocessed tokens using C Lexer }

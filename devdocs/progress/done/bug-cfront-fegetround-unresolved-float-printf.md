@@ -81,14 +81,19 @@ EXCEPTION masking for the Pascal runtime; this is a cfront symbol-resolution bug
 - 2026-07-25 — filed. Root cause located, repro minimized, awaiting latest-master
   confirmation + fix.
 
-## Resolution (2026-07-28) — no longer reproduces
+## Resolution (2026-07-28) — half stale, half real
 
-The "FIRST STEP" above was carried out: rebuilt current master and ran the
-three-line repro. It compiles AND runs, printing `1.50`. The link-ordering
-problem the root-cause section describes was fixed by later `cparser.inc` work,
-not by anything filed here, so this closes as already-fixed rather than as a
-change of its own.
+Re-running the three-line repro from the FIRST STEP above: it compiles and runs,
+printing `1.50`. That is the C-PROGRAM path, and there the link-ordering problem
+is gone, fixed by later `cparser.inc` work rather than by anything filed here.
 
-The `M_SQRT2` half was NOT re-checked and does not belong to the symptom this
-ticket is named for; it is folded into the crtl math-constants work instead.
-- 2026-07-28 — resolved, commit verified-on-master.
+The bug was NOT gone, though, and closing it on that evidence alone was wrong.
+`__pxx_setjmp` / `__pxx_fegetround` were emitted by the C-program driver ONLY, so
+the identical failure remained on the C-UNIT path: a Pascal or NilPy program that
+pulls a `.c` unit whose code formats a float died at runtime with `undefined
+symbol: __pxx_fegetround`. Reproduced with AndreRenaud/pdfgen pulled from a Pascal
+program. Fixed by emitting the stubs from whichever path needs them first, guarded
+by `CRuntimeStubsEmitted` so they are emitted exactly once.
+
+`M_SQRT2` is still open and still only a warning; it belongs to the crtl
+math-constants work, not to this symptom.

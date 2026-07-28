@@ -30,7 +30,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (175)
+## backlog (176)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -52,6 +52,7 @@ _none_
 | bug-nilpy-unannotated-return-infers-number-for-string-concat | N | 70 | bug | nilpy: an unannotated def returning `variant + str` infers a NUMERIC return and prints garbage | — |
 | bug-nilpy-unknown-method-segfaults | N | 70 | bug | nilpy: calling a method that does not exist compiles and SEGFAULTS instead of erroring | — |
 | bug-pascal-duplicate-class-name-silently-shadows | P | 50 | bug | Pascal: a duplicate class declaration silently binds to the earlier one instead of erroring | — |
+| bug-pascal-uses-order-breaks-pylib-exception | A | 45 | bug | `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -2772,6 +2773,7 @@ _none_
 - [p 45] [U] decide-gpc-as-corpus-target (unblocks 1)
 - [p 45] [U] decide-ilja-tui-render-model (unblocks 1)
 - [p 45] [N] bug-nilpy-method-call-on-fresh-construction
+- [p 45] [A] bug-pascal-uses-order-breaks-pylib-exception
 - [p 45] [T] bug-t-watcher-dev-contention-false-newred
 - [p 45] [A] chore-makefile-selfhost-iterate-to-convergence
 - [p 45] [A] chore-makefile-testtmp-parameterize

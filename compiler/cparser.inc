@@ -7668,8 +7668,12 @@ begin
 
   { setjmp/longjmp primitives (lua's error model). After the entry stub, before
     any C body, so __pxx_setjmp/__pxx_longjmp resolve as bodied procs. }
-  EmitCSetjmpStubs;
-  EmitCFenvStubs;
+  if not CRuntimeStubsEmitted then
+  begin
+    CRuntimeStubsEmitted := True;
+    EmitCSetjmpStubs;
+    EmitCFenvStubs;
+  end;
 
   firstIdx := TokPos - 1;
   CProgramMode := True;
@@ -10362,21 +10366,136 @@ begin
   Eat(tkSemicolon);
 end;
 
-procedure ParseCUnit;
+{ One walk of a `.c` UNIT's tokens. declsOnly = pass 1: lay out types, register
+  every function signature and RESERVE every global, skipping bodies; otherwise
+  pass 2: compile the bodies, everything else already done. Same split
+  ParseCProgram uses, and for the same two reasons — a global needs storage
+  reserved before any body reads it, and a function used before its definition
+  needs a signature to resolve against. bug-cfront-unit-globals-unregistered. }
+procedure ParseCUnitPass(declsOnly: Boolean);
 begin
   while CurTok.Kind <> tkEOF do
   begin
-    if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'typedef') then
-      ParseCTypedef
-    else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then
-      ParseCEnumDecl
-    else if ((CurTok.Kind = tkRecord) or
-             ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'union'))) and
-            IsBareStructDecl then
-      ParseCStructDecl
+    if CIsPackMarker then CApplyPackMarker
+    else if CIsTopLevelTypeDecl then
+    begin
+      if not declsOnly then SkipCDeclToSemi
+      else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'typedef') then ParseCTypedef
+      else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then ParseCEnumDecl
+      else ParseCStructDecl;
+    end
     else if IsCTypeTok then
-      ParseCSubroutine
+    begin
+      if CTopLevelIsFunc then ParseCSubroutine
+      else if declsOnly then ParseCGlobalVarDecl
+      else SkipCDeclToSemi;
+    end
     else
       Next;
   end;
+end;
+
+procedure ParseCUnit;
+var firstIdx, savedAgg, savedScal, initIdx, patchPos, savedSC, savedFS: Integer;
+    savedProgramMode: Boolean;
+    dummyNames: array[0..0] of AnsiString;
+    dummyTypes: array[0..0] of TTypeKind;
+begin
+  { A HEADER declares and defines nothing, so its single registration pass is
+    already the whole job — and every C-header consumer in the tree (sqlite,
+    zlib, the gtk bindings) depends on exactly this walk. Left untouched. }
+  if CHeaderMode then
+  begin
+    while CurTok.Kind <> tkEOF do
+    begin
+      if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'typedef') then
+        ParseCTypedef
+      else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then
+        ParseCEnumDecl
+      else if ((CurTok.Kind = tkRecord) or
+               ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'union'))) and
+              IsBareStructDecl then
+        ParseCStructDecl
+      else if IsCTypeTok then
+        ParseCSubroutine
+      else
+        Next;
+    end;
+    Exit;
+  end;
+
+  { A `.c` unit gets the two-pass treatment. Without it a file-scope global was
+    never reserved: an array failed to lower at its first use and — worse — a
+    scalar compiled to a silent 0.
+
+    CProgramMode is on for the duration because it means "this token stream is a
+    C translation unit with real definitions", which a `.c` is whether or not it
+    is the main source. It is what tells a bodied function to register INTERNAL,
+    so a later prototype cannot flip it back to a dynamic import and a call
+    compiled before the definition resolves to a fixup — pdfgen's static helpers
+    are declared then defined exactly that way. It also selects C's own
+    semantics (integer promotion, struct-by-value ABI) for the bodies, which is
+    what this code is written in. Saved and restored: the importer may be
+    Pascal. }
+  { The C runtime primitives, exactly as the program driver emits them and for
+    the same reason: crtl's float formatter references __pxx_fegetround, so
+    without a bodied definition the reference binds to the dynamic PLT and the
+    program dies at runtime with `undefined symbol: __pxx_fegetround`. Only the
+    C-PROGRAM path emitted them, so any Pascal or NilPy program pulling a .c
+    unit that formats a float hit exactly that.
+    bug-cfront-fegetround-unresolved-float-printf, second half. }
+  if not CRuntimeStubsEmitted then
+  begin
+    CRuntimeStubsEmitted := True;
+    EmitCSetjmpStubs;
+    EmitCFenvStubs;
+  end;
+
+  firstIdx := TokPos - 1;
+  savedProgramMode := CProgramMode;
+  CProgramMode := True;
+  { The deferred global-initializer lists belong to THIS unit: the program
+    driver empties them at the top of `main`, and a unit has no main. Save the
+    outer state, collect ours, emit them into this unit's init proc below. }
+  savedAgg := CAggInitCount; savedScal := CScalInitCount;
+  CAggInitCount := 0; CScalInitCount := 0;
+  CHeaderMode := True;
+  ParseCUnitPass(True);
+  CHeaderMode := False;
+  TokPos := firstIdx; Next;
+  ParseCUnitPass(False);
+
+  { A C unit's initialized file-scope data — pdfgen's font tables, its bin_offset
+    array — is written by generated code, not by the ELF image, so something has
+    to RUN it. In a C program that is the head of `main`; here it is a unit
+    initialization proc, the same slot a Pascal unit's `initialization` section
+    uses, run in dependency order before the program body. Without it every such
+    table stayed zero and pdfgen's pdf_create simply returned NULL. }
+  if (CAggInitCount > 0) or (CScalInitCount > 0) then
+  begin
+    initIdx := RegisterProc('__init_c_' + Strs[CurrentUnitIdx].Text, False,
+                            tyInteger, 0, dummyNames, dummyTypes);
+    Procs[initIdx].BodyAddr := CodeLen;
+    savedSC := SymCount;
+    savedFS := FrameSize;
+    FrameSize := 0;
+    CurProc := initIdx;
+    Procs[initIdx].ScopeBase := SymCount;
+    patchPos := EmitProcPrologue;
+    Procs[initIdx].FramePatch := patchPos;
+    CompilePendingGlobalInits;
+    CEmitDeferredCAggInits;
+    EmitProcEpilog(-1);
+    PatchProcPrologue(patchPos, FrameSize);
+    SymRollbackTo(savedSC);
+    FrameSize := savedFS;
+    CurProc := -1;
+    if InitProcCount < 256 then
+    begin
+      InitProcs[InitProcCount] := initIdx;
+      Inc(InitProcCount);
+    end;
+  end;
+  CAggInitCount := savedAgg; CScalInitCount := savedScal;
+  CProgramMode := savedProgramMode;
 end;
