@@ -69,3 +69,57 @@ tuple.
 Sibling surface worth doing in the same pass: `"{} {}".format(a, b)` errors with
 "takes exactly one argument here; several placeholders are not implemented yet".
 That one is at least LOUD, unlike this.
+
+## Attempted 2026-07-28 — NOT landed, and why
+
+A full printf-style formatter was written and then **reverted**, because every
+wiring of it left at least one shape silently wrong, and a half-right `%` is
+the same failure class as the bug. What was learned is worth more than the
+code, so it is recorded here.
+
+### The runtime half works
+
+`PyPercentFormat(fmt, args)` in pylib: conversions `s r d i u f F e g G x X o c`
+and `%%`, with `-`/`0` flags, width and `.precision` (truncating for `%s`);
+unsupported conversion or short argument list halts with the spec quoted. Args
+are a single value or a TPyList (a tuple). Verified against CPython on literal
+formats, tuple arguments, width/flag/precision combinations, `%x/%X/%o`,
+report-style `"%-8s %3d %8.2f"` tables and `%%`. This part can be reused as is.
+
+### The compiler half is where it fails
+
+Three wirings, each correct for most shapes and wrong for one:
+
+1. **Hand-built IR_ARG chain in ir.inc, `pypercent_s(AnsiString, Variant)`.**
+   Works for literal arguments; delivers an EMPTY format string when the
+   argument is a variant lvalue. The chain mixes an AnsiString and a Variant
+   parameter, which is the shape
+   [[project_irlowercallarg_hand_built_args_landmine]] warns about.
+2. **Same, with both parameters `const Variant`** (mirroring pyfloormod_v, whose
+   uniform pair the backends do lower correctly). Fixes the variant lvalue;
+   a string LITERAL then arrives as its inline buffer address and the callee
+   reads the literal plus trailing heap as its format.
+3. **A real AN_CALL built in the parser** (like `PyMakeListRepeat`), so the
+   ordinary argument lowering applies. Literal and tuple arguments are correct;
+   a SUBSCRIPT argument (`d["k"]`, `l[0]`) still arrives as None, and the
+   printed result was `True`.
+
+A separate finding, needed by any of these: `ParseTerm` types a `%` node from
+`TypeDivideResult`, so even with the call correct, `line = "%s" % x` binds a
+NUMERIC local — the trial parse that types NilPy locals reads that field. The
+node has to be typed tyAnsiString (or the call has to be built) at PARSE time,
+not at IR lowering.
+
+### What to do next
+
+Find why a subscript argument boxes to None for this call while it boxes
+correctly for `str(d["k"])` and `len(d["k"])` — that is one diff between two
+lowering paths, and once it is understood, wiring (3) is a few lines. Do not
+start from the runtime; that part is done.
+
+### Known divergence to expect once it lands
+
+`"%s" % [1, 2]` will print `1` where CPython prints `[1, 2]`: CPython reads a
+TUPLE as the argument sequence and a LIST as one value, and a tuple lowers to a
+TPyList here, so the sequence reading has to win (it is what `"%d,%d" % (a, b)`
+needs). Tracked by [[bug-nilpy-str-of-tuple-is-empty]].
