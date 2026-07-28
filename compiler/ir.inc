@@ -3824,6 +3824,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
     ctorArgCpi, ctorArgSlot: Integer;   { construction: coerce ctor args by the ctor's param types }
     isRefArg: Boolean; argTk: TTypeKind; callRetType: TTypeKind; callVal: Integer;
+    lstNode, varNode: Integer;   { NilPy list-vs-variant equality }
     startLabel, elseLabel, endLabel, startLabelNode, endLabelNode: Integer;
     lhsNode, pair3, pair1, pair2, initNode, limitNode, isDownNode, bodyNode: Integer;
     foldOff, foldK: Integer;
@@ -5467,6 +5468,44 @@ begin
         first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyClass));
         right := IRLowerAST(ASTRight[node]);
         last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyClass));
+        IRB[first] := last;
+        Result := IRAppendCall(cpi, first, -1, Ord(tyBoolean));
+        if Integer(ASTIVal[node]) = Ord(tkNeq) then
+          Result := IRAppend(IR_NOT, Result, -1, -1, 0, Ord(tyBoolean));
+        Exit;
+      end;
+      { …and a list against a DYNAMICALLY-TYPED value: `key == cached_key`
+        where the cache starts as None. Boxing a class operand into a variant
+        for the scalar comparison below is not supported and reported as
+        "Variant operand: this scalar type not yet supported", so the whole
+        ordinary-Python idiom of caching a tuple against None failed to
+        compile. A list never equals a non-list, which is the rule pylib's
+        pylist_eq_v applies. }
+      if PyProgramMode and
+         ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
+         (((IRNodePyListRec(ASTLeft[node]) >= 0) and
+           (IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant)) or
+          ((IRNodePyListRec(ASTRight[node]) >= 0) and
+           (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant))) then
+      begin
+        cpi := FindProc('pylist_eq_v');
+        if cpi < 0 then Error('Nil Python: pylist_eq_v (pylib) not loaded');
+        if IRNodePyListRec(ASTLeft[node]) >= 0 then
+        begin
+          lstNode := ASTLeft[node]; varNode := ASTRight[node];
+        end
+        else
+        begin
+          lstNode := ASTRight[node]; varNode := ASTLeft[node];
+        end;
+        { the variant parameter is `const`, i.e. passed by REFERENCE — lower it
+          through IRLowerCallArg with the signature's own IsRef, as the
+          neighbouring pylib calls do, or the callee reads the value as a
+          pointer and dereferences garbage }
+        left := IRLowerCallArg(cpi, 0, lstNode, Procs[cpi].Params[0].IsRef);
+        right := IRLowerCallArg(cpi, 1, varNode, Procs[cpi].Params[1].IsRef);
+        first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyClass));
+        last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyVariant));
         IRB[first] := last;
         Result := IRAppendCall(cpi, first, -1, Ord(tyBoolean));
         if Integer(ASTIVal[node]) = Ord(tkNeq) then

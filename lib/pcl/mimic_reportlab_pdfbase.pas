@@ -9,10 +9,16 @@ unit mimic_reportlab_pdfbase;
 
 interface
 
-uses '../vendor/pdfgen/pdfgen.c';
+uses pylib, '../vendor/pdfgen/pdfgen.c';
 
 function stringWidth(const text: AnsiString; const fontName: AnsiString;
                      fontSize: Double): Double;
+
+{ The names an application may select. reportlab returns everything registered,
+  which for a build with no registerFont() call is the PDF standard-14 set —
+  and registering a TrueType font is outside this subset, so that is the whole
+  list. songformatter checks membership before accepting a font directive. }
+function getRegisteredFontNames: TPyList;
 
 implementation
 
@@ -30,6 +36,27 @@ begin
     stringWidth := 0.0
   else
     stringWidth := w;
+end;
+
+function getRegisteredFontNames: TPyList;
+var r: TPyList;
+begin
+  r := TPyList.Create;
+  r.append('Courier');
+  r.append('Courier-Bold');
+  r.append('Courier-Oblique');
+  r.append('Courier-BoldOblique');
+  r.append('Helvetica');
+  r.append('Helvetica-Bold');
+  r.append('Helvetica-Oblique');
+  r.append('Helvetica-BoldOblique');
+  r.append('Times-Roman');
+  r.append('Times-Bold');
+  r.append('Times-Italic');
+  r.append('Times-BoldItalic');
+  r.append('Symbol');
+  r.append('ZapfDingbats');
+  getRegisteredFontNames := r;
 end;
 
 initialization

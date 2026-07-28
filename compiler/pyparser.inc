@@ -2748,7 +2748,9 @@ var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     attrAny: Boolean; attrSym, attrAsgn, attrFld, attrFi: Integer;
 begin
   name := CurTok.SVal;
-  ci := FindUClass(name);
+  ci := -1;
+  if PyCtorQualUnit >= 0 then ci := FindUClassInUnit(name, PyCtorQualUnit);
+  if ci < 0 then ci := FindUClass(name);
   if ci < 0 then Error('Nil Python: class not found: ' + name);
   recId := REC_UCLASS_BASE + ci;
   Next;
@@ -11891,8 +11893,15 @@ begin
             name that is a plain value never gets qualified, so this is inert
             for it. Skipped when a real unit already carries the name, which is
             the only way this could hijack a genuine qualifier. }
+          { …but NOT for a name that is a CLASS: `from tkinter import Canvas`
+            imports a class, and the alias table folds case, so it claimed the
+            name `canvas` and beat the MODULE of that name imported later by
+            `from reportlab.pdfgen import canvas`. Python keeps them apart
+            because it is case-sensitive; here the class is the one that is
+            certainly not a submodule, so it is the one that does not register. }
           if (UnitAliasCount < 64) and (not SoftUnitMissed) and
-             (FindCompiledUnit(impAlias) < 0) then
+             (FindCompiledUnit(impAlias) < 0) and
+             (not UnitDeclaresClassExactly(impAlias, FindCompiledUnit(impName))) then
           begin
             UnitAliasName[UnitAliasCount] := InternStr(LowerCase(impAlias));
             UnitAliasReal[UnitAliasCount] := InternStr(LowerCase(impName));

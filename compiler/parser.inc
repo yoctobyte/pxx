@@ -7708,6 +7708,7 @@ var intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiSt
     lenFieldRec, lenFieldIdx: Integer;   { Length() of a static-array record field }
     ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { bare class-const in a method body }
     mapProc: Integer; mapKind: AnsiString;   { NilPy map(<type>, xs) }
+    rndArg: Integer;   { first operand of NilPy round(x, n) }
     fwdList, fwdDict: Integer;   { `f(*args, **kwargs)` forwarded into fixed parameters }
 begin
   LastExprTk := tyInteger;
@@ -7747,9 +7748,15 @@ begin
      IsClassType(GetTokenStr(TokPos + 1)) and
      (FindSym(CurTok.SVal) < 0) and (FindUnitOrAlias(CurTok.SVal) >= 0) then
   begin
+    { Remember WHICH unit was named: two libraries may export the same class
+      name (tkinter's `Canvas` and the reportlab shim's), and resolving by the
+      bare name afterwards took whichever was registered first — silently, and
+      then the keyword arguments did not match. }
+    PyCtorQualUnit := FindUnitOrAlias(CurTok.SVal);
     Next;                 { the module name }
     Expect(tkDot, '.');
     CurASTNode := PyClassCreateExpr;
+    PyCtorQualUnit := -1;
     LastExprTk := tyClass;
     Exit;
   end;
@@ -9394,7 +9401,31 @@ begin
         else if CaseEqual(name, 'round') then prevTok := -204
         else if CaseEqual(name, 'frac') then prevTok := -205
         else prevTok := -206;
-        Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        Next; Expect(tkLParen, '('); ParseExpr;
+        { Python's `round(x, ndigits)` — a FLOAT rounded to that many decimals,
+          a different operation from the one-argument form (which yields an
+          int). songformatter writes `round(pct, 2)` when normalising scores. }
+        if isNilPy and CaseEqual(name, 'round') and (CurTok.Kind = tkComma) then
+        begin
+          Next;
+          rndArg := CurASTNode;
+          ParseExpr;
+          Expect(tkRParen, ')');
+          argSeq := FindProc('pyround_n');
+          if argSeq < 0 then Error('Nil Python: pylib (pyround_n) not loaded');
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := argSeq;
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := rndArg;
+          prevTok := AllocNode(AN_ARG); ASTLeft[prevTok] := CurASTNode;
+          ASTRight[prevTok] := -1;
+          ASTRight[argSeq] := prevTok;
+          ASTLeft[node] := argSeq;
+          ASTTk[node] := Ord(tyDouble);
+          CurASTNode := node;
+          LastExprTk := tyDouble;
+          Exit;
+        end;
+        Expect(tkRParen, ')');
         node := AllocNode(AN_CALL); ASTIVal[node] := prevTok;
         if (prevTok = -203) or (prevTok = -204) then ASTTk[node] := Ord(tyInt64)
         else ASTTk[node] := Ord(tyDouble);
@@ -11989,6 +12020,29 @@ begin
   else if PyExprMode and PyStdlibCallAhead(sdName, sdTok) then
     { `os.path.join(...)`, `sys.exit(...)` — mapped by name onto a pylib shim. }
     CurASTNode := PyParseStdlibCall(sdName, sdTok)
+  else if PyExprMode and PyIsIdent('enumerate') and (TokPos < TokCount) and
+          (Tokens[TokPos].Kind = tkLParen) and (FindSym('enumerate') < 0) then
+  begin
+    { `enumerate(xs)` as a VALUE — `for i, s in reversed(list(enumerate(t)))`.
+      The for-HEADER form is recognised earlier and walks by index; here the
+      pairs have to exist as a list, exactly as for zip. }
+    Next; Expect(tkLParen, '(');
+    ParseArgExpr;
+    smBase := CurASTNode;
+    Expect(tkRParen, ')');
+    smNameTok := FindProc('pyenumerate');
+    if smNameTok < 0 then Error('Nil Python: pylib (pyenumerate) not loaded');
+    CurASTNode := AllocNode(AN_ARG);
+    ASTLeft[CurASTNode] := smBase;
+    ASTRight[CurASTNode] := -1;
+    smBase := CurASTNode;
+    CurASTNode := AllocNode(AN_CALL);
+    ASTIVal[CurASTNode] := smNameTok;
+    ASTLeft[CurASTNode] := smBase;
+    ASTTk[CurASTNode] := Ord(tyClass);
+    ASTRight[CurASTNode] := REC_UCLASS_BASE + FindUClass('TPyList');
+    LastExprTk := tyClass;
+  end
   else if PyExprMode and PyIsIdent('zip') and (TokPos < TokCount) and
           (Tokens[TokPos].Kind = tkLParen) then
   begin

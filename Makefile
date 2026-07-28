@@ -316,6 +316,10 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# tuple-vs-variant equality, round(x, n), enumerate() as a value,
+	# and the standard exception names
+	./$(COMPILER) test/test_nilpy_tuple_eq_round_enum.npy /tmp/test_nilpy_treq26
+	test "$$(/tmp/test_nilpy_treq26)" = "$$(printf "miss\nhit\nFalse True\n1.23 2\n{'a': 25.0}\n1 b\n0 a\ncaught: nope")"
 	# a string method on the RESULT of an unannotated def
 	./$(COMPILER) test/test_nilpy_method_on_call_result.npy /tmp/test_nilpy_mcall26
 	test "$$(/tmp/test_nilpy_mcall26)" = "$$(printf "['200', '100']\n640 480\npadded")"
@@ -3462,6 +3466,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# tuple-vs-variant equality, round(x, n), enumerate() as a value,
+	# and the standard exception names
+	./$(COMPILER) test/test_nilpy_tuple_eq_round_enum.npy /tmp/test_nilpy_treq26
+	test "$$(/tmp/test_nilpy_treq26)" = "$$(printf "miss\nhit\nFalse True\n1.23 2\n{'a': 25.0}\n1 b\n0 a\ncaught: nope")"
 	# a string method on the RESULT of an unannotated def
 	./$(COMPILER) test/test_nilpy_method_on_call_result.npy /tmp/test_nilpy_mcall26
 	test "$$(/tmp/test_nilpy_mcall26)" = "$$(printf "['200', '100']\n640 480\npadded")"

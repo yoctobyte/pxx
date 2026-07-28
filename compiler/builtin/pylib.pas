@@ -227,6 +227,48 @@ type
   NotImplementedError = class(RuntimeError) end;
   StopIteration     = class(Exception) end;
   OverflowError     = class(Exception) end;
+  { CPython 3 makes IOError and EnvironmentError aliases of OSError, and
+    FileNotFoundError / PermissionError subclasses of it. Real code catches
+    them by name — songformatter has `except IOError:` around a file read. }
+  IOError           = class(OSError) end;
+  EnvironmentError  = class(OSError) end;
+  FileNotFoundError = class(OSError) end;
+  PermissionError   = class(OSError) end;
+  FileExistsError   = class(OSError) end;
+  IsADirectoryError = class(OSError) end;
+  NotADirectoryError = class(OSError) end;
+  InterruptedError  = class(OSError) end;
+  ArithmeticError   = class(Exception) end;
+  FloatingPointError = class(ArithmeticError) end;
+  LookupError       = class(Exception) end;
+  NameError         = class(Exception) end;
+  UnboundLocalError = class(NameError) end;
+  RecursionError    = class(RuntimeError) end;
+  UnicodeError      = class(ValueError) end;
+  UnicodeDecodeError = class(UnicodeError) end;
+  UnicodeEncodeError = class(UnicodeError) end;
+  MemoryError       = class(Exception) end;
+  BufferError       = class(Exception) end;
+  AssertionError    = class(Exception) end;
+  SystemError       = class(Exception) end;
+  SystemExit        = class(Exception) end;
+  GeneratorExit     = class(Exception) end;
+  TimeoutError      = class(OSError) end;
+  ConnectionError   = class(OSError) end;
+  BrokenPipeError   = class(ConnectionError) end;
+  ConnectionResetError = class(ConnectionError) end;
+  ConnectionRefusedError = class(ConnectionError) end;
+  ConnectionAbortedError = class(ConnectionError) end;
+  BlockingIOError   = class(OSError) end;
+  ChildProcessError = class(OSError) end;
+  ProcessLookupError = class(OSError) end;
+  ImportError       = class(Exception) end;
+  ModuleNotFoundError = class(ImportError) end;
+  IndentationError  = class(Exception) end;
+  SyntaxError       = class(Exception) end;
+  TabError          = class(IndentationError) end;
+  ReferenceError    = class(Exception) end;
+  StopAsyncIteration = class(Exception) end;
 
   TPyBytes = class
   public
@@ -697,6 +739,15 @@ function pyvar_gt(const a: Variant; const b: Variant): Boolean;
   input, which is Python's rule. The for-header form never comes here: it walks
   both containers by index (PyParseForZip). }
 function pyzip(a: TPyList; b: TPyList): TPyList;
+{ `enumerate(xs)` as a VALUE — `for i, s in reversed(list(enumerate(t)))`. The
+  for-HEADER form is a counted loop and never comes here; this is the
+  materialised list of [index, item] pairs, the same shape pyzip builds. }
+function pyenumerate(a: TPyList): TPyList;
+{ Python's TWO-argument round(x, ndigits) — a float rounded to that many
+  decimals, unlike the one-argument form which yields an int. Half-away-from-
+  zero rather than CPython's banker's rounding: the difference shows only on an
+  exact .5 at the last digit, and matching it needs decimal arithmetic. }
+function pyround_n(x: Double; n: Integer): Double;
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
@@ -723,6 +774,10 @@ function pydictcontains(d: TPyDict; const k: Variant): Boolean;
 { Python compares lists by CONTENTS. Element equality is PyVarEq, which
   already compares strings by text rather than by which copy you hold. }
 function pylist_eq(a: TPyList; b: TPyList): Boolean;
+{ …and the MIXED form: a list against a dynamically-typed value. `key ==
+  cached_key` where the cache starts as None is ordinary Python, and comparing
+  a tuple with a non-list is simply False — never an error. }
+function pylist_eq_v(a: TPyList; const v: Variant): Boolean;
 function len(const s: AnsiString): Integer; overload;
 { len() of a VARIANT — a dynamically-typed value (a list element, a dataclass
   field, anything the frontend could not pin to a class). Without it, `len(x)`
@@ -2106,6 +2161,33 @@ begin
     pyvar_gt := pyvar_to_int(a) > pyvar_to_int(b);
 end;
 
+function pyround_n(x: Double; n: Integer): Double;
+var scale: Double; i: Integer;
+begin
+  scale := 1.0;
+  for i := 1 to n do scale := scale * 10.0;
+  if x >= 0.0 then pyround_n := Trunc(x * scale + 0.5) / scale
+  else pyround_n := -(Trunc(-x * scale + 0.5) / scale);
+end;
+
+function pyenumerate(a: TPyList): TPyList;
+var r, pair: TPyList; i: Integer; pv: Variant;
+begin
+  r := TPyList.Create;
+  pyenumerate := r;
+  if a = nil then Exit;
+  for i := 0 to a.count - 1 do
+  begin
+    pair := TPyList.Create;
+    pair.append(i);
+    pair.append(a.at(i));
+    PPyVarRec(@pv)^.VType := 7;
+    PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
+    PXXObjRetain(Pointer(pair));
+    r.append(pv);
+  end;
+end;
+
 function pyzip(a: TPyList; b: TPyList): TPyList;
 var r, pair: TPyList; i, n: Integer; pv: Variant;
 begin
@@ -2410,6 +2492,13 @@ begin
     Result.append(tmp);
     PyVarSlotClear(dst);   { tmp is reused next pass -- drop this retain }
   end;
+end;
+
+function pylist_eq_v(a: TPyList; const v: Variant): Boolean;
+begin
+  { a list equals only another list; None, a number or a string never does }
+  if pyvartag(v) <> 7 then pylist_eq_v := (a = nil) and (pyvartag(v) = 0)
+  else pylist_eq_v := pylist_eq(a, TPyList(pyvarobj(v)));
 end;
 
 function pylist_eq(a: TPyList; b: TPyList): Boolean;

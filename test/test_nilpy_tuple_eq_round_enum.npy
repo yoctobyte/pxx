@@ -1,0 +1,32 @@
+# Four ordinary Python shapes that used to fail:
+#  - a tuple compared against a dynamically-typed value (a cache seeded None);
+#  - round(x, ndigits), which is a different operation from round(x);
+#  - enumerate() as a VALUE rather than in a for-header;
+#  - the standard exception names (IOError and friends).
+cache = None
+
+
+def cache_key(a, b):
+    global cache
+    key = (a, b)
+    if key == cache:
+        return "hit"
+    cache = key
+    return "miss"
+
+
+print(cache_key("x", 1))
+print(cache_key("x", 1))
+print((1, 2) == None, (1, 2) != None)
+
+print(round(1.2345, 2), round(2.5))
+d = {"a": 1}
+print({k: round((v / 4) * 100, 2) for k, v in d.items()})
+
+for i, s in reversed(list(enumerate(["a", "b"]))):
+    print(i, s)
+
+try:
+    raise IOError("nope")
+except IOError as e:
+    print("caught:", e)

@@ -342,6 +342,47 @@ begin
   ClassNameIsDeliberatelyShared := (lo = 'exception');
 end;
 
+{ The class of that name DECLARED IN a given unit. Two libraries may export
+  the same class name — tkinter's `Canvas` and reportlab's — so a QUALIFIED
+  reference has to resolve in the unit it names, not by first match.
+  decide-class-namespace-scoping. }
+{ …matching the spelling EXACTLY. Python is case-sensitive, so `Canvas` (a
+  class tkinter exports) and `canvas` (a module reportlab exports) are two
+  different names; the unit-alias table folds case and cannot tell them apart,
+  so the decision of which is a submodule is made here, on the raw spelling. }
+function UnitDeclaresClassExactly(const name: AnsiString; unitIdx: Integer): Boolean;
+var i, j: Integer; ok: Boolean;
+begin
+  UnitDeclaresClassExactly := False;
+  for i := 0 to UClsCount - 1 do
+  begin
+    if UClsUnitIdx[i] <> unitIdx then Continue;
+    if UClsNLen[i] <> Length(name) then Continue;
+    ok := True;
+    for j := 0 to UClsNLen[i] - 1 do
+      if TokChars[UClsNOff[i] + j] <> name[j + 1] then begin ok := False; Break; end;
+    if ok then begin UnitDeclaresClassExactly := True; Exit; end;
+  end;
+end;
+
+function FindUClassInUnit(const name: AnsiString; unitIdx: Integer): Integer;
+var i: Integer; lo, name2: AnsiString;
+begin
+  Result := -1;
+  name2 := name;
+  lo := ULower(name2);
+  i := 0;
+  while i < UClsCount do
+  begin
+    if (UClsUnitIdx[i] = unitIdx) and UNameMatch(UClsNOff[i], UClsNLen[i], lo) then
+    begin
+      Result := i;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 function FindUClass(const name: AnsiString): Integer;
 var i: Integer; lo, name2: AnsiString;
 begin

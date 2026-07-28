@@ -753,6 +753,7 @@ begin
   NoShims := False;
   DefaultCIncludeDirsAdded := False;
   CRuntimeStubsEmitted := False;
+  PyCtorQualUnit := -1;
   PyStarSpliceDepth := 0;
   SoftUnitResolve := False;
   SoftUnitMissed := False;
