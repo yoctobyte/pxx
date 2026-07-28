@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-28T09:09:48Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "3d10333eca85a94ac4c230072bc573cf65717a6f",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-28T09:15:41Z",
    "fixed": [],
    "new_red": [],
@@ -401,6 +393,16 @@
    "sha": "ebc63e8eafdc3abb5be27c04224fdebc1c93ef56",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-28T14:30:34Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:examples/tk/facade_and_paths.npy"
+   ],
+   "sha": "d64a5d6a97b4484e3d5aefa0b475ab3817d11121",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -717,6 +719,7 @@
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
+  "test-core#src:examples/tk/facade_and_paths.npy": "fail",
   "test-core#src:examples/tk/field_class_identity.npy": "pass",
   "test-core#src:examples/tk/tkinter_facade.npy": "pass",
   "test-core#src:test/arrays.pas": "pass",
@@ -2020,11 +2023,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-28T14:14:28Z",
-  "sha": "ebc63e8eafdc3abb5be27c04224fdebc1c93ef56",
-  "tier": "opt",
-  "verdict": "GREEN",
-  "wall": 179.5
+  "date": "2026-07-28T14:30:34Z",
+  "sha": "d64a5d6a97b4484e3d5aefa0b475ab3817d11121",
+  "tier": "native",
+  "verdict": "RED",
+  "wall": 171.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -2055,6 +2058,22 @@
     "b1976742df2c57eca84cd069d4e8b16a43a204cf"
    ],
    "src": "compiler/compiler.pas"
+  },
+  {
+   "bad": "d64a5d6a97b4484e3d5aefa0b475ab3817d11121",
+   "good": "ebc63e8eafdc3abb5be27c04224fdebc1c93ef56",
+   "job": "test-core#src:examples/tk/facade_and_paths.npy",
+   "name": "test-core#991",
+   "opened": "2026-07-28T14:30:34Z",
+   "range": [
+    "1bcb0f8196c13fc6dd70a3839124481728dfee60",
+    "7495ac078bf23f2aa33ba071cf741aba4d95967f",
+    "83d0fad22a6d54411b47842fecbeacc57fc76ceb",
+    "3082839fb87b69361899e2ed6ced67179b120a3b",
+    "d87ee5a295cc7d6b8919ed11bcb7e5388d4b9a53",
+    "d64a5d6a97b4484e3d5aefa0b475ab3817d11121"
+   ],
+   "src": "examples/tk/facade_and_paths.npy"
   }
  ]
 }
