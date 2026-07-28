@@ -370,6 +370,34 @@ core codegen bug that no test in the suite had touched.
 
 ### Where the other five modules stand
 
+## 2026-07-28: convertrawtext.py COMPILES
+
+The file the track is named for parses, resolves and links end to end — 1960
+lines, 2141 procs, a 3.7 MB binary. What it took, beyond the walls listed above:
+
+- an `import` inside a def emitted the imported unit's code into the gap between
+  the def's recorded body address and its prologue, so calling the def entered
+  that UNIT's first routine (`try: import math` in a function returned math's pi)
+- `*args` / `**kwargs` on a METHOD — the header was rejected and the
+  arity-driven call loops could not call one
+- a nested `class` in a class body (reportlab's blendmode namespace)
+- `self.x, self.y = x, y` — an attribute as an unpacking target
+- `for (x, y, z) in xs:` — a parenthesised target list
+- a call omitting every optional argument (`filedialog.askopenfilename()`)
+- tkinter's `messagebox` / `filedialog` / `w.config` / `Scrollbar.config`,
+  Canvas scroll options, `create_oval` / `create_image`, and REAL canvas
+  coordinates
+
+Compiling is not running. The next wall is
+[[bug-nilpy-param-with-string-default-reads-garbage]]: a def's declared default
+is never the value the callee sees, and songformatter writes defaults
+everywhere. [[bug-nilpy-class-attr-instance-traversal-crashes]] is on the same
+path (reportlab's blendmode is read through it).
+
+`render_backend.py` compiles as an IMPORT but not standalone — as a program of
+its own it ends in "invalid symbol in lea", which is a module-with-no-main
+artefact worth its own look.
+
 | module | wall |
 | --- | --- |
 | `key_analysis.py` | **none — compiles and runs** |
@@ -455,7 +483,7 @@ canvas`) and the `mimic_<module>` mapping landed with `--no-shims` to prove a
 build used none, and `try/except ImportError` is now decided at compile time over
 any try body that opens with an import — which is the shape the PIL guard uses.
 
-**The blocker is [[decide-unit-local-names-leak-to-global-scope]].** tkinter exports `Canvas`
+**The blocker is [[decide-class-namespace-scoping]].** tkinter exports `Canvas`
 and so does reportlab; the class namespace is flat and first-match, so the
 shim's own constructor binds to tkinter's class and cannot see its own fields.
 Preferring the current unit's class fixes that and breaks exception handling,
@@ -479,7 +507,7 @@ itself is fine under the same conditions.
 | --- | --- |
 | `key_analysis.py` | none — compiles and runs |
 | `settings.py` | none — compiles, runs, builds all 60 widgets |
-| `convertrawtext.py` | [[decide-unit-local-names-leak-to-global-scope]] (tkinter's `Canvas` vs reportlab's), then [[feature-rtl-environment-variables]] |
-| `render_backend.py` | should follow convertrawtext — the shims it needs exist now |
+| `convertrawtext.py` | **compiles** (2026-07-28); runs into [[bug-nilpy-param-with-string-default-reads-garbage]] |
+| `render_backend.py` | **compiles** as an import; standalone ends in "invalid symbol in lea" |
 | `kadrv.py` | `import key_analysis` — the module loader landed; unverified since |
 | `SongFormatter.py` | `import markdown` — [[feature-lib-markdown]] |
