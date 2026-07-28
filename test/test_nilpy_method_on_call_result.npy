@@ -1,0 +1,14 @@
+# A string method applied to the RESULT of an unannotated def. The result type
+# is inferred, and an expression the inferrer cannot type comes back as a
+# number even though the VALUE is a string — so the method had no path and the
+# '.' was reported as an unexpected token. Runtime dispatch decides instead.
+def get(section, option, fallback):
+    return fallback
+
+
+parts = get("B", "S", "200x100").split("x")
+print(parts)
+
+w, h = map(int, get("B", "S", "640x480").split("x"))
+print(w, h)
+print(get("B", "S", "  padded  ").strip())

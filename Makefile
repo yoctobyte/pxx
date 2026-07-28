@@ -316,6 +316,9 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# a string method on the RESULT of an unannotated def
+	./$(COMPILER) test/test_nilpy_method_on_call_result.npy /tmp/test_nilpy_mcall26
+	test "$$(/tmp/test_nilpy_mcall26)" = "$$(printf "['200', '100']\n640 480\npadded")"
 	# an unavailable optional import compiles and fails only if used; map()
 	./$(COMPILER) test/test_nilpy_optional_and_map.npy /tmp/test_nilpy_opt_map26
 	test "$$(/tmp/test_nilpy_opt_map26)" = "$$(printf "False\n200 100\n['1', '2']\n[1.5, 2.0]")"
@@ -3459,6 +3462,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# a string method on the RESULT of an unannotated def
+	./$(COMPILER) test/test_nilpy_method_on_call_result.npy /tmp/test_nilpy_mcall26
+	test "$$(/tmp/test_nilpy_mcall26)" = "$$(printf "['200', '100']\n640 480\npadded")"
 	# an unavailable optional import compiles and fails only if used; map()
 	./$(COMPILER) test/test_nilpy_optional_and_map.npy /tmp/test_nilpy_opt_map26
 	test "$$(/tmp/test_nilpy_opt_map26)" = "$$(printf "False\n200 100\n['1', '2']\n[1.5, 2.0]")"

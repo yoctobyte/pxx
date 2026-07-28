@@ -12051,6 +12051,26 @@ begin
     CurASTNode := PyParseStrMethod(CurASTNode, GetTokenStr(smNameTok));
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
   end;
+  { A method on a CALL RESULT whose declared type is a scalar — `get(a, b,
+    c).split("x")`. An unannotated def's result is inferred, and an expression
+    the inferrer cannot type comes back tyInteger while the VALUE at run time
+    is whatever Python made it (the same call prints its string correctly).
+    The string loop above needs a string-typed base, so this shape did not
+    parse at all. Routed to runtime dispatch, which is what decides a variant's
+    method everywhere else; a receiver that really is a number still fails
+    there, by name. Restricted to a CALL base so nothing else changes. }
+  while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
+        (Tokens[TokPos].Kind = tkIdent) and
+        (Tokens[TokPos + 1].Kind = tkLParen) and
+        (ASTKind[CurASTNode] = AN_CALL) and
+        not (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) do
+  begin
+    Next;                       { consume '.'; CurTok = the method name }
+    smNameTok := TokPos - 1;
+    Next;                       { consume the name; CurTok = '(' }
+    CurASTNode := PyParseVariantMethod(CurASTNode, GetTokenStr(smNameTok));
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+  end;
   { A METHOD call on a class-typed expression that is not an ident — a fresh
     construction, `Cls().m()`. ParseFactorCore does this for an ident receiver
     and the ctor intercept exits before it, so the call was a parse error

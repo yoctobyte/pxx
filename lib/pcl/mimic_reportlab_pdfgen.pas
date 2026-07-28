@@ -93,7 +93,10 @@ type
     procedure line(x1, y1, x2, y2: Double);
     procedure rect(x, y, w, h: Double; const stroke: Variant = 0; const fill: Variant = 0);
     procedure circle(x, y, r: Double; const stroke: Variant = 0; const fill: Variant = 0);
-    procedure drawImage(const src: Variant; x, y: Double;
+    { every coordinate is a Variant: an application computes them from values
+      that are dynamically typed (settings, arithmetic on untyped parameters),
+      and the façade's job is to take Python shapes and convert }
+    procedure drawImage(const src: Variant; const x: Variant; const y: Variant;
                         const width: Variant = 0; const height: Variant = 0;
                         const mask: Variant = 0);
     function beginText(x, y: Double): PDFTextObject;
@@ -298,7 +301,7 @@ begin
   pdf_add_circle(doc, nil, sx, sy, sr, bw, strokeColour, fc);
 end;
 
-procedure Canvas.drawImage(const src: Variant; x, y: Double;
+procedure Canvas.drawImage(const src: Variant; const x: Variant; const y: Variant;
                            const width: Variant; const height: Variant;
                            const mask: Variant);
 var sx, sy, sw, sh: Single; path: AnsiString;
@@ -309,7 +312,7 @@ begin
   if path = '' then
     raise Exception.Create('reportlab shim: drawImage accepts a file path or an '
       + 'ImageReader over one; in-memory images are not in this subset');
-  sx := x; sy := y;
+  sx := pyvar_to_float(x); sy := pyvar_to_float(y);
   if pyvartag(width) = 0 then sw := 0 else sw := pyvar_to_float(width);
   if pyvartag(height) = 0 then sh := 0 else sh := pyvar_to_float(height);
   pdf_add_image_file(doc, nil, sx, sy, sw, sh, path);

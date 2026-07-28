@@ -10510,7 +10510,14 @@ begin
         if (cur = tyClass) and (rec2 >= 0) then
           PyInferLastCi := rec2;
       end;
-      if cur = tyUnknown then cur := tyInteger;
+      { A return EXPRESSION the scanner cannot type is DYNAMIC, not an integer.
+        `def g(a): return a` with an untyped parameter is the plain case, and
+        typing it tyInteger made the result a number: `g("a b").split(" ")`
+        had a string method applied to an "integer" and did not parse, and
+        anything that consumed the value read a string handle as a number.
+        A def with NO value-returning return stays tyInteger — that is the
+        harmless case this rule was written for, and it is decided elsewhere. }
+      if cur = tyUnknown then cur := tyVariant;
       if cur = tyString then cur := tyAnsiString;
       { A PROMOTABLE INT cannot cross the call boundary raw: its rvalue is the
         frame SLOT ADDRESS and the frame dies at return — the caller read a
