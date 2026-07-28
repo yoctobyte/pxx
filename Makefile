@@ -1270,6 +1270,11 @@ test-core: $(COMPILER)
 	# global (bug-pascal-class-const-visibility). FPC-differential identical.
 	./$(COMPILER) test/test_class_const_scope.pas /tmp/test_class_const_scope26
 	test "$$(/tmp/test_class_const_scope26 | tail -1)" = "CLASS CONST OK"
+	# the mirror rule for FIELDS: inside a method the class's own field beats a
+	# unit-level const of the same name, and reads and writes must agree
+	# (bug-unit-const-shadows-a-field). FPC-differential identical.
+	./$(COMPILER) test/test_unit_const_vs_field.pas /tmp/test_unit_const_vs_field26
+	test "$$(/tmp/test_unit_const_vs_field26 | tail -1)" = "UNIT CONST VS FIELD OK"
 	./$(COMPILER) --strict-visibility test/test_member_visibility.pas /tmp/test_member_visibility_strict26
 	test "$$(/tmp/test_member_visibility_strict26)" = "$$(printf '7\n30\n3\n1')"
 	! ./$(COMPILER) --strict-visibility test/test_member_visibility_strict_fail.pas /tmp/test_mvsf26 > /tmp/test_mvsf.log 2>&1

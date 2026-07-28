@@ -3387,6 +3387,29 @@ begin
             (Tokens[TokPos].Kind = tkLParen);
 end;
 
+function OwnFieldBeatsSym(idx: Integer; const nm: AnsiString): Integer;
+{ FPC scope order inside a method body: the enclosing class's OWN field beats
+  any unit-level name of the same spelling (const, var, typed const); only a
+  genuine local or parameter shadows the field. A name that bound to a unit
+  symbol is demoted to "unbound" here, which is what lets the implicit-Self
+  field paths — they all fire on `idx < 0` — resolve it instead.
+
+  Every bare-name resolution site must call this, or reads and writes disagree:
+  an earlier attempt that changed only the assignment path made `s := v` reach
+  the field while `s[1]` still read the const, which is worse than a uniform
+  error. Same rule the bare class-CONST path already implements.
+  bug-unit-const-shadows-a-field. }
+begin
+  Result := idx;
+  if idx < 0 then Exit;
+  if Syms[idx].Kind in [skLocal, skParam] then Exit;
+  { needs a real Self to hang the field off: an instance/advanced-record method,
+    never a class procedure (no Self) or a plain routine. }
+  if (CurProc < 0) or (CurSelfClass < REC_UCLASS_BASE) then Exit;
+  if Procs[CurProc].ParamCount <= 0 then Exit;
+  if FindUField(CurSelfClass - REC_UCLASS_BASE, nm) >= 0 then Result := -1;
+end;
+
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   augBin: TTokenKind; augRead, augNode: Integer;   { `d[k] += v` }
@@ -9985,6 +10008,12 @@ begin
         idx := FindSym(name);
         procIdx := FindProc(name);
       end;
+
+      { The EXPRESSION half of the own-field-beats-a-unit-name rule; the
+        statement half sits on the assignment path in ParseStatementAST. Skipped
+        for an explicitly qualified `unit.Name`, which asks for that unit's
+        symbol by construction. }
+      if qUnit < 0 then idx := OwnFieldBeatsSym(idx, name);
 
       { Bare class const inside a method body — `Result := Max` where TFoo declares
         `const Max`. FPC scope order: a genuine local/param shadows it, but a class
@@ -18010,7 +18039,7 @@ begin
               if qUnit >= 0 then
                 idx := FindSymInUnit(name, qUnit)
               else
-                idx := FindSym(name);
+                idx := OwnFieldBeatsSym(FindSym(name), name);
               { --auto-locals / {$IMPLICITVARS ON}: a simple assignment to a
                 previously-undeclared bare name (`i := 0`) declares a routine-
                 local tyAuto var here; the tyAuto-on-assignment block below
@@ -25632,26 +25661,23 @@ begin
     the RTL — which is how `import re` keeps finding lib/rtl/re.pas.
     (feature-nilpy-py-module-loader; the shadowing question this settles for
     NilPy is bug-nilpy-stdlib-name-binds-pascal-unit.) }
+  { CurUnitDir only, never SourceFileDir: the directory that matters is the one
+    holding the file doing the importing. For the program that IS its own
+    directory (compiler.pas seeds CurUnitDir with it), which is Python's rule;
+    for a Pascal unit it is that unit's directory, so `lib/pcl/tkinter.pas`'s
+    `uses tk` cannot be hijacked by a stray tk.npy sitting next to the user's
+    script — which is exactly what happened the first time a build ran out of a
+    directory full of old test files. }
   if isNilPy and (not isPath) and (Length(UnitContent) = 0) then
   begin
-    if CurUnitDir <> '' then
-    begin
-      ConcatThree(CurUnitDir, lo, '.py', path);
-      LoadFile(path, UnitContent);
-      if Length(UnitContent) = 0 then
-      begin
-        ConcatThree(CurUnitDir, lo, '.npy', path);
-        LoadFile(path, UnitContent);
-      end;
-    end;
+    { An empty CurUnitDir means the importer was named without a directory
+      (`pascal26 main.py`), so the bare name IS the relative path — the sibling
+      is in the working directory. }
+    ConcatThree(CurUnitDir, lo, '.py', path);
+    LoadFile(path, UnitContent);
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree(SourceFileDir, lo, '.py', path);
-      LoadFile(path, UnitContent);
-    end;
-    if Length(UnitContent) = 0 then
-    begin
-      ConcatThree(SourceFileDir, lo, '.npy', path);
+      ConcatThree(CurUnitDir, lo, '.npy', path);
       LoadFile(path, UnitContent);
     end;
     if Length(UnitContent) > 0 then isPyUnit := True;
