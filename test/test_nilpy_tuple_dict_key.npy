@@ -1,0 +1,27 @@
+# A tuple used as a dict KEY. A tuple lowers to a TPyList, and PyVarHashKey
+# hashed the list HANDLE while PyVarEq compares two lists ELEMENT BY ELEMENT —
+# so every tuple key stored fine and then missed on lookup with a KeyError.
+# bug-nilpy-tuple-dict-key-never-matches
+grid = {}
+for x in range(3):
+    for y in range(3):
+        grid[(x, y)] = x * 10 + y
+
+print(grid[(2, 1)])              # a key built fresh at lookup, not the stored object
+print(len(grid))                 # 9 distinct keys, not 9 collisions or 1 bucket
+print((0, 0) in grid, (9, 9) in grid)
+
+k = (1, 2)
+byvar = {k: "b"}
+print(byvar[(1, 2)])             # stored via a variable, read via a literal
+
+nested = {}
+nested[(1, (2, 3))] = "deep"     # the element hash must recurse
+print(nested[(1, (2, 3))])
+
+memo = {}
+memo[("a", 1, True)] = 5         # mixed element types in one key
+print(memo[("a", 1, True)])
+
+mixed = {1: "int", "1": "str", (1,): "tup"}
+print(mixed[1], mixed["1"], mixed[(1,)])

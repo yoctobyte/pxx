@@ -64,3 +64,21 @@ settings.py uses it.
 
 `make test-nilpy` green with a `.npy` case asserting the unknown-method call is
 REJECTED at compile time, + `--tier quick` + self-host byte-identical.
+
+## Scope re-measured 2026-07-28
+
+The PASCAL halves of this ticket are already fixed; what remains is NilPy-only.
+
+- An unknown method on a statically-typed Pascal receiver is a compile error:
+  `t.NoSuchMethod(5)` gives `"NoSuchMethod": no such member on this
+  record/class`, naming the member as fix (1) asked.
+- A method NAMED `set` works end to end in Pascal — declared, defined and
+  called (`t.set(5)` prints), so the keyword-collision half of fix (2) is gone
+  on that side. `lib/rtl/configparser.pas` can carry Python's spelling now;
+  whether `cfg.set(...)` reaches it from NilPy is the frontend question below.
+
+Still reproduces, and still Track N: a call on a DYNAMIC (variant) receiver,
+which is what every NilPy object is. `c.no_such_method_at_all("x")` on a NilPy
+class instance compiles clean and segfaults with nothing printed. The check has
+to happen where the dynamic dispatch is lowered, not in the Pascal member
+lookup that already rejects the static case.

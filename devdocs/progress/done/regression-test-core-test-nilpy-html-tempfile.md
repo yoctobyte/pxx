@@ -23,3 +23,11 @@ ok: /tmp/testmgr-scratch-1645643/test_nilpy_htmltmp26  [code=894712B  data=25580
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-07-28 — resolved, commit HEAD.
+
+## Resolution
+
+No longer reproduces. Verified 2026-07-28 at 287b1b34d: output byte-identical
+to CPython, the watcher's own job
+(`tools/testmgr.py --tier native --job 'test-core#src:test/test_nilpy_html_tempfile.npy'`)
+GREEN, and `tstate/borg.json` already records the job as `pass`.

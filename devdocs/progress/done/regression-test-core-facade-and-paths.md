@@ -46,3 +46,19 @@ works; only `facade_and_paths.npy`'s additions fail.
 **Owning lane: Track B** (`lib/pcl/tkinter.pas` + the example is E/B
 file-ownership) — the d64a5d6a author. Persistent (in open_regressions, jobs map
 = fail), reproduces with the repro line above. T files/enriches, does not fix.
+- 2026-07-28 — resolved, commit HEAD.
+
+## Resolution
+
+No longer reproduces. Verified 2026-07-28 three ways at 287b1b34d:
+
+- the program's output is byte-identical to CPython's;
+- the watcher's own job passes on the exact repro line —
+  `tools/testmgr.py --tier native --job 'test-core#src:examples/tk/facade_and_paths.npy'`
+  → GREEN;
+- Track T's current state (`tstate/borg.json`) already records this job as
+  `pass`.
+
+The stub was signal-only and the underlying red was fixed by the NilPy work in
+the range it named. Resolved rather than left ranked at p70, where it was
+crowding real work off the top of the queue.

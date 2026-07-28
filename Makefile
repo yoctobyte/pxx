@@ -340,6 +340,9 @@ test-nilpy: $(COMPILER)
 	# a Pascal unit's .Free must finalize managed fields ONCE, not twice
 	./$(COMPILER) test/test_nilpy_json_reparse_heap.npy /tmp/test_nilpy_jsonrep26
 	test "$$(/tmp/test_nilpy_jsonrep26)" = "$$(python3 test/test_nilpy_json_reparse_heap.npy)"
+	# a TUPLE as a dict key must hash by CONTENT, not by the list handle
+	./$(COMPILER) test/test_nilpy_tuple_dict_key.npy /tmp/test_nilpy_tupkey26
+	test "$$(/tmp/test_nilpy_tupkey26)" = "$$(python3 test/test_nilpy_tuple_dict_key.npy)"
 	# a bare name is never a method; str.format with a spec; qualified except
 	./$(COMPILER) examples/tk/shadow_format_except.npy /tmp/test_nilpy_sfe26
 	test "$$(/tmp/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"
@@ -3524,6 +3527,9 @@ test-core: $(COMPILER)
 	# a Pascal unit's .Free must finalize managed fields ONCE, not twice
 	./$(COMPILER) test/test_nilpy_json_reparse_heap.npy /tmp/test_nilpy_jsonrep26
 	test "$$(/tmp/test_nilpy_jsonrep26)" = "$$(python3 test/test_nilpy_json_reparse_heap.npy)"
+	# a TUPLE as a dict key must hash by CONTENT, not by the list handle
+	./$(COMPILER) test/test_nilpy_tuple_dict_key.npy /tmp/test_nilpy_tupkey26
+	test "$$(/tmp/test_nilpy_tupkey26)" = "$$(python3 test/test_nilpy_tuple_dict_key.npy)"
 	# a bare name is never a method; str.format with a spec; qualified except
 	./$(COMPILER) examples/tk/shadow_format_except.npy /tmp/test_nilpy_sfe26
 	test "$$(/tmp/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"

@@ -35,3 +35,25 @@ absent), so nothing is blocked on it today.
 
 `make test-nilpy` plus a `.npy` storing and reading tuple keys, including two
 distinct tuples with equal contents, diffed against CPython.
+
+## Log
+- 2026-07-28 — resolved, commit HEAD.
+
+## Fix
+
+`PyVarHashKey` (pylib.pas) gained a VT_OBJECT arm for a TPyList payload: the
+hash is now a sequence hash over the ELEMENTS, seeded by the length and
+recursing through `PyVarHashKey`, so it mirrors `PyVarEq`'s element-wise
+compare arm for arm. Any other object keeps the identity hash, which is what
+PyVarEq's identity compare for non-lists requires.
+
+Verified against CPython: the ticket's repro, a 3x3 coordinate grid keyed by
+`(x, y)`, keys built fresh at lookup vs stored from a variable, a nested tuple
+key, mixed element types in one key, `1` / `"1"` / `(1,)` as distinct keys in
+one dict, overwrite-in-place, iteration, `dict.get` with a tuple key, and a
+200-key stress with 231 membership probes. `test/test_nilpy_tuple_dict_key.npy`
+covers the set and is registered in `test-nilpy` / `test-core`.
+
+Found while testing it, filed separately:
+[[bug-nilpy-method-chaining-on-a-call-result]],
+[[bug-nilpy-str-of-tuple-is-empty]].

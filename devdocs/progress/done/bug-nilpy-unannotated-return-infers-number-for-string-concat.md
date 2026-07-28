@@ -50,3 +50,15 @@ key_analysis.py is full of them.
 `make test-nilpy` green with a `.npy` case covering an unannotated def returning
 a variant+str concatenation, the result printed AND fed into another
 concatenation, diffed against CPython, + `tools/gate.sh quick`.
+
+## Log
+- 2026-07-28 — resolved, commit dcbca98c1.
+
+## Resolution
+
+Fixed by dcbca98c1 ("fix(nilpy): return inference must agree between passes"),
+which is the same PyInferDefRetType work that closed
+[[bug-nilpy-comparison-return-type-from-operands]]. The ticket was left in
+`backlog/` by that commit.
+
+Re-verified 2026-07-28: this ticket's repro prints `aX`, matching CPython.

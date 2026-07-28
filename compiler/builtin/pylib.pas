@@ -1878,9 +1878,15 @@ function PyVarHashKey(p: PPyVarRec): NativeUInt;
   - int-family VT_INT/VT_INT64/VT_BOOL (1/2/4): by payload, tag-independent
     (PyVarEq compares these cross-tag by value);
   - VT_PROMO_INT64 (8193) and VT_STRING (6): by string CONTENT;
+  - VT_OBJECT (7) holding a TPyList: by ELEMENT CONTENT, recursively. A tuple
+    lowers to a TPyList, so `d[(1, 2)]` hashed the list HANDLE while PyVarEq
+    compares two distinct lists element by element — every tuple key stored fine
+    and then missed on lookup with a KeyError
+    (bug-nilpy-tuple-dict-key-never-matches). Any other object keeps the
+    identity hash, which is what PyVarEq's identity compare needs;
   - else: same VType required by PyVarEq, so hash (VType, payload).
   A wrong hash here silently loses keys, so this mirrors PyVarEq arm-for-arm. }
-var h: NativeUInt; sp: PPyAnsiString;
+var h: NativeUInt; sp: PPyAnsiString; ol: TObject; k: Integer;
 begin
   if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
     h := NativeUInt(p^.Payload)
@@ -1894,6 +1900,18 @@ begin
     if Pointer(p^.Payload) = nil then h := PyStrBytesHash(nil, 0)
     else h := PyStrBytesHash(PChar(p^.Payload),
                              Integer(PInt64(NativeInt(p^.Payload) - 8)^));
+  end
+  else if (p^.VType = 7) and (p^.Payload <> 0) and
+          (TObject(Pointer(NativeInt(p^.Payload))) is TPyList) then
+  begin
+    { sequence hash over the elements, seeded by the length — the same shape
+      CPython uses for tuples, and consistent with PyVarEq's element-wise
+      compare. Recurses, so a nested tuple key hashes by its contents too. }
+    ol := TObject(Pointer(NativeInt(p^.Payload)));
+    h := NativeUInt(TPyList(ol).FLen) * NativeUInt($9E3779B97F4A7C15);
+    for k := 0 to Integer(TPyList(ol).FLen) - 1 do
+      h := (h xor PyVarHashKey(PPyVarRec(NativeInt(TPyList(ol).FItems) + k * 16)))
+           * NativeUInt($100000001b3);
   end
   else
     h := (NativeUInt(p^.VType) * NativeUInt($100000001b3)) xor NativeUInt(p^.Payload);

@@ -50,3 +50,22 @@ support a conversion must be a compile error, never a wrong value.
 
 `make test-nilpy` green with a `.npy` case covering `%s %d %f %.Nf` and the tuple
 form, diffed against CPython, + `--tier quick` + self-host byte-identical.
+
+## Still live 2026-07-28 (287b1b34d)
+
+```
+print("%s" % "s")        CPython: s       pxx: 5207332
+print("%d" % 42)         CPython: 42      pxx: 36
+print("%.2f" % 3.14159)  CPython: 3.14    pxx: 0.0
+```
+
+The integer case is the tell: 42 comes back as **36**, which is `42 mod 6` —
+`"%d"` is being read as a numeric operand (its digit content) and `%` as the
+arithmetic modulo, exactly as the original report guessed. So the fix is at the
+`%` lowering, not in a formatting helper: when the LEFT operand is a string, the
+operator is interpolation, and only then does the right side become the argument
+tuple.
+
+Sibling surface worth doing in the same pass: `"{} {}".format(a, b)` errors with
+"takes exactly one argument here; several placeholders are not implemented yet".
+That one is at least LOUD, unlike this.

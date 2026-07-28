@@ -50,3 +50,26 @@ and the read would crash at run time.
 `make test-nilpy` plus a `.npy` that traverses a class attribute holding an
 instance, diffed against CPython — and the same through a nested class, which
 is the shape that surfaced it.
+
+## Narrowed 2026-07-28
+
+Splitting the traversal shows the fetch is fine and the SECOND hop is what
+dies:
+
+```python
+class Inner:
+    NORMAL = "Normal"
+class Outer:
+    mode = Inner()
+o = Outer()
+m = o.mode
+print("got attr")     # prints
+print(m.NORMAL)       # SIGSEGV
+```
+
+So `o.mode` yields a value that binds and can be assigned, and the crash is in
+reading a member OFF that value — i.e. what the class attribute holds is not
+recognised as an instance at the second access, rather than being absent. That
+also rules out the class-attribute initialiser failing to run at all.
+
+Still reproduces at 287b1b34d.
