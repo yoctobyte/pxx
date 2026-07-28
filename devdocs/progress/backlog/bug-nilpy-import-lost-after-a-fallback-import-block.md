@@ -1,15 +1,15 @@
 ---
 track: N
-prio: 65
+prio: 70
 type: bug
 ---
 
-# A later `import X` stops being a usable qualifier after a fallback-import block
+# A C library's function name shadows a Python module name as a qualifier
 
-songformatter's `convertrawtext.py` opens with two `try: <import> except
-ImportError:` blocks (reportlab, then PIL) and then a plain block of imports —
-`import os`, `import atexit`, `import tempfile`, ... After that, a qualified call
-on one of them fails to parse:
+Found on songformatter's `convertrawtext.py`, which is blocked by it
+([[feature-demo-songformatter-pxx-target]]).
+
+## Symptom
 
 ```
 pascal26:97: error: unexpected token
@@ -17,60 +17,58 @@ pascal26:97: error: unexpected token
 Expected: =, but got:  (Kind: 81, Line: 97)
 ```
 
-`atexit` is not recognised as a unit qualifier, so `atexit.register(del_tmp_file)`
-is read as an assignment target and the parser wants an `=`.
+`atexit.register(del_tmp_file)` is read as an assignment target, so the parser
+wants an `=`. The import is present and correct.
 
-## Repro
+## Root cause
 
-The first 52 lines of `convertrawtext.py` (its import section, nothing else) plus
+`lib/crtl/include/stdlib.h:45` declares `int atexit(void (*func)(void));`. Any C
+unit pulled into the program includes `<stdlib.h>`, which registers a PROC named
+`atexit` — and NilPy then resolves the bare name to that proc instead of treating
+it as a unit qualifier, so the dotted form stops parsing.
+
+In songformatter the C unit arrives through `from reportlab.pdfgen import
+canvas`: the shim `lib/pcl/mimic_reportlab_pdfgen.pas` pulls the vendored
+`pdfgen.c`.
+
+## Repro, smallest form
+
+A NilPy program, a Pascal unit `mid.pas` that does
+`uses pxxcio, sysutils, '<repo>/lib/vendor/pdfgen/pdfgen.c';`, and:
 
 ```python
+import mid
+import atexit
+
 def bye():
     print("bye")
 
 atexit.register(bye)
 ```
 
-is enough. The same call compiles and RUNS in isolation, with and without
-`import tkinter as tk` alongside it, so it is the import section as a whole, not
-`atexit`.
+Swap the shim for one with no C behind it (`from reportlab.lib.units import mm`)
+and it compiles. Position does not matter — importing `atexit` BEFORE the C unit
+fails the same way.
 
-## Ruled out
+## Ruled out along the way
 
-- Not the submodule-alias registration added with dotted imports: disabling that
-  hunk changes nothing.
-- Not `atexit` itself, and not the presence of tkinter.
-- **Not a fallback-import block on its own.** The obvious minimal case —
+- Not the fallback-import handling: a `try/except ImportError` block whose try
+  branch resolves, followed by the same call, compiles and runs.
+- Not the submodule-alias registration (disabling it changes nothing).
+- Not the `CompiledUnits` cap (raising 256 to 1024 changes nothing).
 
-  ```python
-  try:
-      from nosuchpkg.nosuchmod import thing
-      HAVE_THING = True
-  except ImportError:
-      HAVE_THING = False
+## Fix direction
 
-  import atexit
-
-  def bye(): print("bye")
-  atexit.register(bye)
-  ```
-
-  compiles and runs. So it takes something more than one such block; the real
-  file has TWO of them and a block of a dozen imports after. Bisect the import
-  section itself (lines 1-52 of convertrawtext.py compile; add the call and it
-  fails), removing one import at a time.
-
-## Suspicion
-
-`PyPreScanImports` walks top-level tokens counting INDENT/DEDENT to stay at depth
-0. The fallback-import handler consumes its blocks with its own skipping
-(`PySkipRestOfBlock` / `PySkipIndentedBlock`), so a block whose imports were
-decided at compile time may leave the pre-scan's idea of depth — or the token
-positions it scans — out of step with the body parse, and imports after it are
-registered in one pass but not the other. Start by dumping which units
-`PyPreScanImports` registers for this file versus which the body parse sees.
+Where NilPy decides whether a dotted name is a unit qualifier, a name that IS a
+compiled unit should win over a C proc of the same name — at least in the
+`name.member(` shape, which cannot be a call of the C function. The general
+version of this is the same question as
+[[bug-nilpy-stdlib-name-binds-pascal-unit]], now from the C side: the C library
+namespace is flat too, and `time`, `math`, `random` and `signal` are all C
+functions AND Python modules.
 
 ## Gate
 
-`make test-nilpy` plus a `.npy` with a fallback-import block followed by a plain
-import that is then used through a qualifier.
+`make test-nilpy` plus a `.npy` that imports a unit pulling a C source and then
+uses `atexit.register`, and a check that a genuine C `atexit(...)` call from C
+code still resolves.
