@@ -4917,6 +4917,7 @@ begin
     ProcParamHasDefault[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamDefaultVal[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamDefaultIsStr[ProcCount * MAX_PROC_PARAMS + i] := False;
+    ProcParamDefaultIsNone[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamDefaultSOff[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamDefaultSLen[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamRecId[ProcCount * MAX_PROC_PARAMS + i] := REC_NONE;

@@ -100,6 +100,8 @@ var
   PyHdrPSigs: array[0..31] of Integer;   { Callable signature per parameter, or -1 }
   PyHdrDefHas: array[0..31] of Boolean;
   PyHdrDefIsStr: array[0..31] of Boolean;
+  PyHdrDefIsNone: array[0..31] of Boolean;
+  PyDefaultWasNone: Boolean;   { set by PyParamDefaultAt — see there }
   PyHdrDefVal: array[0..31] of Int64;
   PyHdrDefSOff: array[0..31] of Integer;
   PyHdrDefSLen: array[0..31] of Integer;
@@ -2510,14 +2512,21 @@ begin
   isStr := False;
   sOff := 0;
   sLen := 0;
+  { `= None` has to stay distinguishable from `= 0` and `= False`, which record
+    the same ordinal: a NilPy parameter is a VARIANT, and filling an omitted one
+    means building the actual value — None, an int, or a string. Reported
+    through a global rather than another var parameter, since every caller of
+    this function wants the same answer right after the call. }
+  PyDefaultWasNone := True;
   case Tokens[j].Kind of
     tkNil:     begin Inc(j); Exit; end;
-    tkTrue:    begin Result := 1; Inc(j); Exit; end;
-    tkFalse:   begin Inc(j); Exit; end;
-    tkInteger: begin Result := Tokens[j].IVal; Inc(j); Exit; end;
+    tkTrue:    begin Result := 1; PyDefaultWasNone := False; Inc(j); Exit; end;
+    tkFalse:   begin PyDefaultWasNone := False; Inc(j); Exit; end;
+    tkInteger: begin Result := Tokens[j].IVal; PyDefaultWasNone := False; Inc(j); Exit; end;
     tkString:
       begin
         isStr := True;
+        PyDefaultWasNone := False;
         sOff := Tokens[j].SOffset;
         sLen := Tokens[j].SLen;
         Inc(j);
@@ -2527,6 +2536,7 @@ begin
       if Tokens[j + 1].Kind = tkInteger then
       begin
         Result := -Tokens[j + 1].IVal;
+        PyDefaultWasNone := False;
         j := j + 2;
         Exit;
       end;
@@ -10092,6 +10102,7 @@ begin
                          PyHdrDefIsStr[PyHdrNParams],
                          PyHdrDefSOff[PyHdrNParams],
                          PyHdrDefSLen[PyHdrNParams]);
+      PyHdrDefIsNone[PyHdrNParams] := PyDefaultWasNone;
       TokPos := annIdx;
       Next;
     end;
@@ -10196,6 +10207,7 @@ begin
       ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := True;
       ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefVal[i];
       ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefIsStr[i];
+      ProcParamDefaultIsNone[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefIsNone[i];
       ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefSOff[i];
       ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefSLen[i];
     end;
@@ -10364,6 +10376,18 @@ begin
                             PyHdrPNames, PyHdrPTypes);
     PyApplyDefSignature(procIdx);
   end;
+  { The BODY must build the frame the registered SIGNATURE describes, not what
+    a second inference pass makes of the same header. The two can disagree: the
+    shell pass runs before any def is compiled, so a return expression it cannot
+    type comes back dynamic, while the same expression re-inferred here may type
+    concretely. Callers use the signature. When they disagreed, a variant-
+    returning def got NO hidden destination slot (`RetViaHiddenDest(retType)`
+    below tested the re-inferred type) and wrote its result through an
+    uninitialised pointer — `def s(a, b=2): return a + b` segfaulted ON RETURN,
+    and only when a parameter carried a default, which is what made it look like
+    a defaults bug. }
+  if Procs[procIdx].BodyAddr < 0 then retType := Procs[procIdx].RetType;
+
   { A nested def's shell carries MORE parameters than its header: the trailing
     ones stand for the enclosing locals it captures. Take the count from the
     Proc, or the captured names get no frame slot and the body reports them as
@@ -10839,6 +10863,16 @@ begin
                 PyInferLastCi := rec2 - REC_UCLASS_BASE;
             end;
           end;
+      { NOTE tyInteger, not tyVariant. Making an untypable return DYNAMIC is
+        the honest answer and was tried (0843fbb7) — but a variant-returning
+        def returns through a hidden destination, and a def whose parameters
+        carry DEFAULTS then segfaults ON RETURN (`def s(a, b=2): return a + b`,
+        called with both arguments written). That is a codegen gap, not an
+        inference question, and it is filed as
+        bug-nilpy-variant-return-with-defaulted-param-segfaults; flip this line
+        back when it is fixed. The shape 0843fbb7 was written for —
+        `get(a,b,c).split("x")` — keeps working through the runtime-dispatch
+        suffix loop that commit added, which does not depend on this. }
       if cur = tyUnknown then cur := tyVariant;
       if cur = tyString then cur := tyAnsiString;
       { A PROMOTABLE INT cannot cross the call boundary raw: its rvalue is the
@@ -11014,6 +11048,7 @@ var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, al
     mStarIdx, mKwIdx, starCi: Integer;   { `*args` / `**kwargs` parameter slots }
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
     pdefHas: array[0..15] of Boolean; pdefIsStr: array[0..15] of Boolean;
+    pdefIsNone: array[0..15] of Boolean;
     pdefVal: array[0..15] of Int64;
     pdefSOff: array[0..15] of Integer; pdefSLen: array[0..15] of Integer;
     tk: TTypeKind; defKind: Integer; defIVal: Int64; defSOff, defSLen: Integer;
@@ -11338,6 +11373,7 @@ begin
                                                  pdefIsStr[nparams],
                                                  pdefSOff[nparams],
                                                  pdefSLen[nparams]);
+            pdefIsNone[nparams] := PyDefaultWasNone;
           end;
         end;
         Inc(nparams);
@@ -11431,6 +11467,7 @@ begin
             ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + k] := True;
             ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + k] := pdefVal[k];
             ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + k] := pdefIsStr[k];
+            ProcParamDefaultIsNone[procIdx * MAX_PROC_PARAMS + k] := pdefIsNone[k];
             ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + k] := pdefSOff[k];
             ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + k] := pdefSLen[k];
           end;

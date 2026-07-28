@@ -1355,6 +1355,7 @@ var
   ProcParamElemRowLo  : array[0..MAX_PARAM_DEPTHS-1] of Integer; { the row's low bound, paired with ProcParamElemRowLen }
   ProcParamDefaultVal : array[0..MAX_PARAM_DEPTHS-1] of Int64;   { the constant-folded default ordinal value (when ProcParamHasDefault). }
   ProcParamDefaultIsStr : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { default is a STRING literal (`msg: string = ''`), not an ordinal; the text is (SOff,SLen) below. }
+  ProcParamDefaultIsNone: array[0..MAX_PARAM_DEPTHS-1] of Boolean; { NilPy `= None` (or a non-constant default, which is treated as one) — distinct from the ordinal 0 a False/absent default records. }
   ProcParamDefaultIsSet : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { default is a SET (`opts: TOpts = []` / `= DefaultFormat`), not an ordinal: ProcParamDefaultVal holds the Data[] OFFSET of the baked 32-byte mask, and the call rebuilds an AN_SET_CONST_REF from it. }
   ProcParamDefaultSOff  : array[0..MAX_PARAM_DEPTHS-1] of Integer; { char-pool offset of the string default's text. }
   ProcParamDefaultSLen  : array[0..MAX_PARAM_DEPTHS-1] of Integer; { its length. }

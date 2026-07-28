@@ -57,12 +57,18 @@ def main():
     for (n, s, f) in rows:
         print(n, s, f)
 
-    # 6. a call that omits EVERY optional argument still has to match
-    print(joined())
-    print(joined("x"))
+    # 6. an inferred DYNAMIC return from a def whose parameters carry defaults.
+    #    The frame used to be built from a second inference pass rather than
+    #    from the registered signature, so this def got no hidden destination
+    #    slot and wrote its result through an uninitialised pointer — it
+    #    segfaulted ON RETURN, and only when a parameter had a default.
+    #    (Every argument is written: FILLING a NilPy default still passes None
+    #    to a by-reference variant parameter and crashes —
+    #    bug-nilpy-param-with-string-default-reads-garbage.)
+    print(summed(10, 20, 30))
 
 
-def joined(a="A", b="B", c="C"):
+def summed(a, b=2, c=3):
     return a + b + c
 
 

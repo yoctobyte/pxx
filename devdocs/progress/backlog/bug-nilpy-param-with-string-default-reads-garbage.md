@@ -50,9 +50,28 @@ return.
 
    The int it reports is the unboxed literal.
 
-Integer defaults are fine in both halves (`def f(a=1): return a + 1` → 6/2),
-which is why this survived: the default machinery works, only its variant/string
-combination does not.
+Integer defaults are no better once the default is actually FILLED: any omitted
+argument crashes, whatever its type —
+
+```python
+def summed(a, b=2, c=3):
+    return a + b + c
+print(summed(10, 20, 30))   # 60  — every argument written, fine
+print(summed(10, 20))       # CPython 33; pxx SEGFAULTS
+```
+
+— because `DefaultArgValueNode` passes `pynone()` for a variant parameter (a
+NilPy parameter is by-reference, so the raw ordinal cannot be handed over) and
+the IR fill (`ir.inc:7449`) passes the raw literal. So the honest summary is:
+**a NilPy def's declared default is never the value the callee sees.** Written
+arguments are correct; the machinery only fails where it has to MATERIALISE one.
+
+Boxing was tried and does not reach: `pyvar_of_int`/`pyvar_of_str` produce an
+rvalue, which has no address for a by-reference parameter, and a hoisted variant
+temp put the store outside the expression that needed it. The likely shape of
+the fix is a hidden variant local per defaulted parameter, initialised in the
+CALLEE's prologue when the caller signals the argument was omitted — i.e. the
+default belongs to the callee, not to every call site.
 
 ## Where it bites
 
