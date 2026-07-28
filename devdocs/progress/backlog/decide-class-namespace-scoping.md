@@ -78,3 +78,87 @@ first-match.
 
 So the decision stands open; what changed is that the cost of leaving it open is
 now a maintenance list rather than a blocked application.
+
+## 2026-07-28, second look: this is a SYMPTOM, and the fork is a false one
+
+Reviewing the options above against the actual resolver turned up the cause, and
+it retires most of this ticket. Filed as [[bug-pascal-uses-is-transitive]].
+
+**`uses` is not transitive in Pascal — and it is in pxx.** If A uses B, a unit
+using A must not see B's names, whichever section A imported B in. pxx has one
+flat global namespace for routines and for classes, so every unit's imports leak
+to its consumers. Measured in pure Pascal, no NilPy involved: a program that uses
+only `priv` resolves `IntToStr` although `priv` imported sysutils in its
+IMPLEMENTATION section and the program never mentions sysutils at all.
+
+Given that, the "fork" in this ticket is not a language-design question:
+
+- Two independent classes (`tkinter.Canvas` / reportlab's) are only in conflict
+  because both live in one namespace. With non-transitive `uses` they are
+  different names in different scopes. Nothing to decide.
+- One deliberately merged class (`Exception`) needs no merge mechanism either:
+  whichever of pylib/sysutils imports the other gets that one class by
+  construction, and `ClassNameIsDeliberatelyShared` is deleted.
+
+**So option 1's language surface is unnecessary** — the `replaces` declaration
+exists to reintroduce, by hand and per class, the scoping the resolver is
+missing wholesale. Option 2 (the current stopgap) stays as-is until the root fix
+lands; it is doing its job and costs one list entry.
+
+Also worth recording, since a `replaces`-style re-export may still be wanted for
+its own sake: **the FPC spelling already parses.** `type Exception =
+excbase.Exception;` goes through the unit-qualified type path
+(`parser.inc:18667`, Synapse's `TInAddr6 = sockets.Tin6_addr`) and registers a
+`UClsAlias` row. What is missing is plumbing, not syntax — alias rows carry
+`NOff/NLen/Ci` only (`defs.inc:2249`), no unit index, so `FindUClassInUnit`
+cannot see them and the NilPy qualified-ctor path (`pyparser.inc:2785`) skips
+them. No keyword needed.
+
+### Routes considered and rejected
+
+- **`{$ifndef HAS_EXCEPTION}` cooperative guard.** Pragmatic and needs no
+  compiler change — but it works only because pxx has a SECOND bug: defines leak
+  across unit boundaries, order-dependently
+  ([[bug-pascal-defines-leak-across-units]], filed). Fix that and the guard
+  breaks. It also makes which declaration wins a function of parse order,
+  silently, which is the opposite of what a project mixing Pascal and Python
+  modules in arbitrary order wants.
+- **Hoist `Exception` into a leaf `excbase.pas`, aliased from both.** Sound, and
+  `sysutils.Exception` keeps working (qualified type refs resolve the bare name —
+  `parser.inc:18667`). Rejected as premature: it drags `CreateFmt` with it, which
+  drags `Format`, which drags `FloatToStr` — and once `uses` scopes properly the
+  extra unit buys nothing.
+- **`pylib uses sysutils` unconditionally.** Cheapest of all and it works.
+  Measured cost is not the problem (`.npy` 855,980B/865 procs → 918,287B/984
+  procs, +7.3%). The problem is that with transitive `uses` it pours sysutils'
+  exports into EVERY Python program's namespace — and Pascal is case-insensitive
+  where Python is not, so `format`, `date`, `time`, `trim`, `pos`, `copy`,
+  `delete`, `insert` all shadow. This becomes the right answer, trivially, once
+  `uses` scopes.
+
+### Recommendation, revised
+
+Do nothing here. Keep option 2's list. Fix
+[[bug-pascal-uses-is-transitive]] (size it first with the warn-only pass
+described there) and [[bug-pascal-defines-leak-across-units]], then close this
+ticket as resolved-by-cause rather than deciding it.
+
+The one piece NOT covered by the root fix is the qualified-reference case
+(`canvas.Canvas(...)` binding first-match, noted above and in
+[[bug-pascal-duplicate-class-name-silently-shadows]]) — that needs the alias
+unit-index plumbing regardless, and is independent of the decision.
+
+### Side finding, recorded for whoever touches Exception
+
+`Exception.CreateFmt` has TWO bodies — `sysutils.pas:589` (full `Format`:
+`%d %u %x %X %s %f %g %c`, width, precision, padding) and `pylib.pas:3612` (a
+dependency-free substituter handling `%s`, `%d`, `%%` only, leaving any other
+spec verbatim so a wrong message is visible rather than silently lost). Which one
+runs is decided by link order. Measured: a `.npy` reaching a Pascal unit that
+raises `CreateFmt('hex=%x pad=[%5s]', [255,'ab'])` prints `hex=FF pad=[   ab]`,
+so **sysutils' body wins whenever both are linked**; pylib's is the standalone
+fallback, and pylib never calls `CreateFmt` itself. No RTL raise site currently
+uses a spec outside `%s`/`%d`, so the two agree on everything exercised today —
+the divergence is latent, not live. Worth a `%x`-and-width raise added to
+`test_nilpy_rtl_exception_surface` to make it a guarded case rather than a
+coincidence.

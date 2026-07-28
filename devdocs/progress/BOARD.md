@@ -30,7 +30,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (184)
+## backlog (186)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -55,7 +55,9 @@ _none_
 | bug-nilpy-ternary-comprehension-element-stringified | N | 70 | bug | A mixed-type conditional in a comprehension element turns numbers into strings | — |
 | bug-nilpy-unannotated-return-infers-number-for-string-concat | N | 70 | bug | nilpy: an unannotated def returning `variant + str` infers a NUMERIC return and prints garbage | — |
 | bug-nilpy-unknown-method-segfaults | N | 70 | bug | nilpy: calling a method that does not exist compiles and SEGFAULTS instead of erroring | — |
+| bug-pascal-defines-leak-across-units | A | 55 | bug | Pascal: {$define} in one unit stays visible in units parsed afterwards, so {$ifdef} compiles different code depending on uses ORDER | — |
 | bug-pascal-duplicate-class-name-silently-shadows | P | 50 | bug | Pascal: a duplicate class declaration silently binds to the earlier one instead of erroring | — |
+| bug-pascal-uses-is-transitive | A | 65 | bug | Pascal: uses is transitive — a unit's own uses leak into everything that uses IT, for routines and classes alike (one flat global namespace) | — |
 | bug-pascal-uses-order-breaks-pylib-exception | A | 45 | bug | `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
@@ -2725,6 +2727,7 @@ _none_
 - [p 70] [T] regression-test-core-test-nilpy-html-tempfile
 - [p 65] [N] bug-nilpy-bound-method-coerced-to-string
 - [p 65] [N] bug-nilpy-omitted-variant-default-segfaults
+- [p 65] [A] bug-pascal-uses-is-transitive
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [A] feature-a-typeref-handle
 - [p 65] [N] feature-nilpy-bound-method-value
@@ -2748,6 +2751,7 @@ _none_
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
 - [p 55] [N] bug-nilpy-int-parse-halts-instead-of-raising
+- [p 55] [A] bug-pascal-defines-leak-across-units
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
