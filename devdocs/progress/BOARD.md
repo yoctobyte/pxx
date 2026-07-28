@@ -40,7 +40,7 @@ _none_
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |
 | bug-nilpy-comparison-return-type-from-operands | N | 70 | bug | An unannotated def returning a COMPARISON typed its result from the operands | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
-| bug-nilpy-import-lost-after-a-fallback-import-block | N | 65 | bug | A later `import X` stops being a usable qualifier after a fallback-import block | — |
+| bug-nilpy-import-lost-after-a-fallback-import-block | N | 70 | bug | A C library's function name shadows a Python module name as a qualifier | — |
 | bug-nilpy-int-parse-halts-instead-of-raising | N | 55 | bug | nilpy: int(\"abc\") halts the program instead of raising a catchable ValueError | — |
 | bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
 | bug-nilpy-method-call-on-fresh-construction | N | 45 | bug | nilpy: Cls().method() — a method call directly on a construction expression | — |
@@ -2708,13 +2708,13 @@ _none_
 - [p 70] [A] bug-c-unit-crashes-when-sysutils-is-used
 - [p 70] [C] bug-cfront-unit-globals-unregistered
 - [p 70] [N] bug-nilpy-comparison-return-type-from-operands
+- [p 70] [N] bug-nilpy-import-lost-after-a-fallback-import-block
 - [p 70] [N] bug-nilpy-pydict-v-borrowed-reference
 - [p 70] [N] bug-nilpy-unannotated-return-infers-number-for-string-concat
 - [p 70] [N] bug-nilpy-unknown-method-segfaults
 - [p 70] [N] feature-nilpy-function-values
 - [p 70] [T] regression-test-core-test-nilpy-html-tempfile
 - [p 65] [N] bug-nilpy-bound-method-coerced-to-string
-- [p 65] [N] bug-nilpy-import-lost-after-a-fallback-import-block
 - [p 65] [N] bug-nilpy-omitted-variant-default-segfaults
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [A] feature-a-typeref-handle

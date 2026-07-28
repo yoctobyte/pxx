@@ -1749,6 +1749,14 @@ begin
     begin pname := 'pystr_encode'; retTk := tyClass; wantArgs := -4; end
   else if CaseEqual(mname, 'isspace') then
     begin pname := 'pystr_isspace'; retTk := tyBoolean; end
+  else if CaseEqual(mname, 'isdigit') then
+    begin pname := 'pystr_isdigit'; retTk := tyBoolean; end
+  else if CaseEqual(mname, 'isalpha') then
+    begin pname := 'pystr_isalpha'; retTk := tyBoolean; end
+  else if CaseEqual(mname, 'isupper') then
+    begin pname := 'pystr_isupper'; retTk := tyBoolean; end
+  else if CaseEqual(mname, 'islower') then
+    begin pname := 'pystr_islower'; retTk := tyBoolean; end
   else if CaseEqual(mname, 'join') then
     begin pname := 'pystr_join'; wantArgs := 1; end
   else if CaseEqual(mname, 'split') then
@@ -3024,6 +3032,7 @@ begin
   if not PyStrMethodInfo(mname, pname, retTk, wantArgs) then
     Error('Nil Python: unsupported str method .' + mname + '() (have: upper, '
       + 'lower, strip, lstrip, rstrip, startswith, endswith, find, isspace, '
+      + 'isdigit, isalpha, isupper, islower, '
       + 'join, split, splitlines)');
 
   procIdx := FindProc(pname);
@@ -4106,16 +4115,55 @@ end;
 { Parse the tail of a slice: CurTok is the ':' , `loNode` is the low bound
   already parsed (-1 when omitted, as in `b[:n]`). Consumes through ']'. }
 function PyParseSliceTail(baseNode, loNode: Integer): Integer;
-var hiNode: Integer;
+var hiNode, revIdx, revArg: Integer; stepNeg, loOmitted, hiOmitted: Boolean;
 begin
   Next;                              { consume ':' }
+  loOmitted := loNode < 0;
   if loNode < 0 then loNode := PySliceOmitNode;
-  if CurTok.Kind = tkRBrack then
-    hiNode := PySliceOmitNode        { `b[lo:]` }
+  hiOmitted := (CurTok.Kind = tkRBrack) or (CurTok.Kind = tkColon);
+  if hiOmitted then
+    hiNode := PySliceOmitNode        { `b[lo:]`, and `b[lo::step]` }
   else
   begin
     PyParseBoolExpr;
     hiNode := CurASTNode;
+  end;
+  { An optional STEP: `xs[lo:hi:step]`. Only the whole-range reverse `[::-1]`
+    is implemented, because that is the idiom real code uses and pylib already
+    has `reversed` (a reversed COPY, which is what a slice yields anyway). Any
+    other step is refused by name rather than approximated — a slice that
+    silently ignored its step would produce a plausible wrong answer. }
+  if CurTok.Kind = tkColon then
+  begin
+    Next;                            { consume the second ':' }
+    if CurTok.Kind = tkRBrack then
+      Error('Nil Python: a slice step is required after the second '':''');
+    stepNeg := (CurTok.Kind = tkMinus) and (TokPos < TokCount) and
+               (Tokens[TokPos].Kind = tkInteger) and (Tokens[TokPos].IVal = 1);
+    if not (stepNeg and loOmitted and hiOmitted) then
+      Error('Nil Python: only the whole-range reverse slice [::-1] is supported; '
+            + 'other steps are not implemented');
+    Next; Next;                      { '-' and the 1 }
+    Expect(tkRBrack, ']');
+    { A slice of a STRING is a string; `reversed` would hand back a list of
+      characters, which prints as a list and crashes wherever a string was
+      expected. Pick the helper from the base's type. }
+    if IntToTypeKind(ASTTk[baseNode]) in [tyString, tyAnsiString] then
+      revIdx := FindProc('pystr_reverse')
+    else
+      revIdx := FindProc('reversed');
+    if revIdx < 0 then Error('Nil Python: pylib (reversed) not loaded');
+    Result := AllocNode(AN_CALL);
+    ASTIVal[Result] := revIdx;
+    revArg := AllocNode(AN_ARG);
+    ASTLeft[revArg] := baseNode;
+    ASTRight[revArg] := -1;
+    ASTLeft[Result] := revArg;
+    ASTTk[Result] := Ord(Procs[revIdx].RetType);
+    ASTRight[Result] := ProcRetRecId[revIdx];
+    LastExprTk := Procs[revIdx].RetType;
+    CurASTNode := Result;
+    Exit;
   end;
   Expect(tkRBrack, ']');
   Result := PyMakeSlice(baseNode, loNode, hiNode);
@@ -4285,7 +4333,8 @@ begin
   if Tokens[TokPos].Kind <> tkDot then Exit;
   nm := LowerCase(GetTokenStr(TokPos + 1));
   if base = 'sys' then
-    Result := (nm = 'stdout') or (nm = 'stderr') or (nm = 'stdin') or (nm = 'argv')
+    Result := (nm = 'stdout') or (nm = 'stderr') or (nm = 'stdin') or (nm = 'argv') or
+              (nm = 'platform')
   else if base = 'os' then
     { os.SEEK_SET/CUR/END — the whence CONSTANTS, bare values not calls. }
     Result := (nm = 'seek_set') or (nm = 'seek_cur') or (nm = 'seek_end');
@@ -4305,6 +4354,20 @@ begin
     ASTTk[Result] := Ord(tyInteger);
     ASTRight[Result] := -1;
     LastExprTk := tyInteger;
+    Exit;
+  end;
+  if nm = 'platform' then
+  begin
+    { sys.platform — the value CPython reports on the platform pxx hosts on.
+      songformatter branches on it to pick a file-opener command, and every
+      such test in real code is `== "darwin"` / `.startswith("win")`, so a
+      constant string is the whole of what is needed. When pxx targets Windows
+      this has to follow the TARGET, not the host. }
+    Result := AllocNode(AN_STR_LIT);
+    ASTSOffset[Result] := PyStoredName('linux');
+    ASTSLen[Result] := 5;
+    ASTTk[Result] := Ord(tyString);
+    LastExprTk := tyString;
     Exit;
   end;
   if nm = 'argv' then
@@ -4350,6 +4413,7 @@ begin
   else if dotted = 'os.environ.get' then Result := 'pyos_environ_get'
   else if dotted = 'os.getenv' then Result := 'pyos_getenv'
   else if dotted = 'os.remove' then Result := 'pyos_remove'
+  else if dotted = 'os.startfile' then Result := 'pyos_startfile'
   else if dotted = 'os.rename' then Result := 'pyos_rename'
   else if dotted = 'os.stat' then Result := 'pyos_stat'
   else if dotted = 'sys.exit' then Result := 'pysys_exit'
@@ -8529,6 +8593,7 @@ var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integ
     annSig: Integer;   { Callable signature of an annotated target, or -1 }
     augTk: TTokenKind;
     mmi, mpi, selfArg, lastArg, argNode, kwIdx, j, k: Integer;   { inherited (super()) call }
+    dbgQ: Boolean;
 begin
   Result := -1;
   PyStmtAteBlock := False;
@@ -8821,7 +8886,10 @@ begin
   if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkDot) then
   begin
+    dbgQ := CaseEqual(CurTok.SVal, 'atexit');
+    if dbgQ then WriteLn('DBG dotted-branch entered for atexit');
     PyParseBoolExpr;
+    if dbgQ then WriteLn('DBG after expr: CurTok.Kind=', Ord(CurTok.Kind), ' SVal=[', CurTok.SVal, ']');
     lhsNode := CurASTNode;
     { tkSemicolon ends a statement too — `if c: xs.append(1); i += 2` puts a
       method-call expression statement before a ';' on a one-line suite. }

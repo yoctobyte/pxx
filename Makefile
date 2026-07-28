@@ -316,6 +316,12 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# a C library's names must not shadow a Python module qualifier
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_qualifier_vs_cproc.npy /tmp/test_nilpy_qual_cproc26
+	test "$$(/tmp/test_nilpy_qual_cproc26)" = "$$(printf 'main\nbye')"
+	# builtin shadowed by a parameter, [::-1] on list and str, the is* predicates
+	./$(COMPILER) test/test_nilpy_builtin_shadow_slice.npy /tmp/test_nilpy_bshadow26
+	test "$$(/tmp/test_nilpy_bshadow26)" = "$$(printf 'int:7\nother\n[3, 2, 1]\ncba\nTrue False False\nTrue True False\nTrue False\nTrue False')"
 	# the process environment, both surfaces (CPython-diffed)
 	PXX_ENV_PROBE=hello ./$(COMPILER) test/test_env_pascal.pas /tmp/test_env_pascal26
 	test "$$(PXX_ENV_PROBE=hello /tmp/test_env_pascal26)" = "$$(printf 'hello\n[]\ncount ok')"
@@ -3443,6 +3449,12 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# a C library's names must not shadow a Python module qualifier
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_qualifier_vs_cproc.npy /tmp/test_nilpy_qual_cproc26
+	test "$$(/tmp/test_nilpy_qual_cproc26)" = "$$(printf 'main\nbye')"
+	# builtin shadowed by a parameter, [::-1] on list and str, the is* predicates
+	./$(COMPILER) test/test_nilpy_builtin_shadow_slice.npy /tmp/test_nilpy_bshadow26
+	test "$$(/tmp/test_nilpy_bshadow26)" = "$$(printf 'int:7\nother\n[3, 2, 1]\ncba\nTrue False False\nTrue True False\nTrue False\nTrue False')"
 	# the process environment, both surfaces (CPython-diffed)
 	PXX_ENV_PROBE=hello ./$(COMPILER) test/test_env_pascal.pas /tmp/test_env_pascal26
 	test "$$(PXX_ENV_PROBE=hello /tmp/test_env_pascal26)" = "$$(printf 'hello\n[]\ncount ok')"

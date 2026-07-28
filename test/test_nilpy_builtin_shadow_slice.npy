@@ -1,0 +1,22 @@
+# Three things a real Python file does that used to fail:
+#  - a PARAMETER named for a builtin (`input`) shadows it, as in Python;
+#  - the whole-range reverse slice [::-1], on a list and on a string;
+#  - the is* string predicates, including CPython's empty-string and
+#    no-cased-characters rules.
+def describe(input):
+    if isinstance(input, int):
+        return "int:" + str(input)
+    return "other"
+
+
+print(describe(7))
+print(describe("x"))
+
+xs = [1, 2, 3]
+print(xs[::-1])
+print("abc"[::-1])
+
+print("12".isdigit(), "a".isdigit(), "".isdigit())
+print("AB".isupper(), "A1".isupper(), "12".isupper())
+print("ab".islower(), "aB".islower())
+print("ab".isalpha(), "a1".isalpha())

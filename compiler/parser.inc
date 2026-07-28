@@ -8755,9 +8755,19 @@ begin
         calls it — so unlike Pascal there is nothing to disambiguate, and
         without this the name fell through to the paramless-call/Result path
         (feature-nilpy-function-values). Only when a '(' does NOT follow, and
-        only for a name that resolves to a proc and not to a variable. }
+        only for a name that resolves to a proc and not to a variable.
+
+        A '.' does not follow either: there the name is a QUALIFIER or a
+        receiver, never a function value — a function value has no members. The
+        C library namespace is flat and shares names with Python modules
+        (crtl's <stdlib.h> declares `atexit`), so pulling any C unit used to
+        make this branch swallow `atexit` in `atexit.register(fn)`, leaving the
+        parser on the dot and reporting "Expected: =". The module had imported
+        and resolved perfectly well; only the dotted form broke.
+        bug-nilpy-import-lost-after-a-fallback-import-block. }
       if PyExprMode and (CurTok.Kind = tkIdent) and
-         (Tokens[TokPos].Kind <> tkLParen) and (FindSym(name) < 0) and
+         (Tokens[TokPos].Kind <> tkLParen) and (Tokens[TokPos].Kind <> tkDot) and
+         (FindSym(name) < 0) and
          (FindProc(PyQualifyNested(name)) >= 0) then
       begin
         idx := FindProc(PyQualifyNested(name));
@@ -9080,11 +9090,17 @@ begin
         LastExprTk := tyUnknown;
         Exit;
       end
-      else if isNilPy and (name = 'input') then
+      else if isNilPy and (name = 'input') and (FindSym(name) < 0) and
+              (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         { input([prompt]) -> pyinput(), a line from stdin minus the newline. Any
           prompt argument is parsed and discarded (its only effect in Python is a
-          stdout write; uforth's REPL prompt is cosmetic). }
+          stdout write; uforth's REPL prompt is cosmetic).
+
+          Only when a '(' follows AND nothing else is called `input`: Python
+          lets a parameter shadow a builtin, and songformatter's
+          `int_to_roman(input)` does exactly that — `isinstance(input, int)`
+          was read as the BUILTIN and demanded its parenthesis. }
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkRParen then ParseExpr;
         while CurTok.Kind = tkComma do begin Next; ParseExpr; end;

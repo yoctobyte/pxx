@@ -407,6 +407,14 @@ function pyos_stat(const path: AnsiString): TPyStat;
   exist yet — feature-rtl-environment-variables. An UNSET variable yields None,
   not '', because that is what Python does and what `if os.environ.get(X):`
   depends on. }
+{ os.startfile(path) — Windows only in CPython, and the branch that calls it is
+  guarded by `sys.platform.startswith("win")`. It has to COMPILE on a file that
+  supports Windows, and it must not pretend to work if reached. }
+{ `s[::-1]` — a reversed STRING. `reversed(s)` yields a LIST of characters,
+  which is right for `for c in reversed(s)` but wrong for a slice: a slice of a
+  string is a string. }
+function pystr_reverse(const s: AnsiString): AnsiString;
+function pyos_startfile(const path: AnsiString): Integer;
 function pyos_environ_get(const name: AnsiString): Variant;
 function pyos_environ_get_d(const name: AnsiString; const dflt: Variant): Variant;
 function pyos_getenv(const name: AnsiString): Variant;
@@ -757,6 +765,12 @@ function pystr_find(const s: AnsiString; const sub: AnsiString): Integer;
   ORIGINAL string, as Python does. }
 function pystr_find_from(const s: AnsiString; const sub: AnsiString; start: Integer): Integer;
 function pystr_isspace(const s: AnsiString): Boolean;
+{ CPython: "".isdigit()/.isalpha()/.isupper()/.islower() are all FALSE — the
+  all-quantifier does not hold vacuously for any of them. }
+function pystr_isdigit(const s: AnsiString): Boolean;
+function pystr_isalpha(const s: AnsiString): Boolean;
+function pystr_isupper(const s: AnsiString): Boolean;
+function pystr_islower(const s: AnsiString): Boolean;
 function pystr_ofchar(c: Char): AnsiString;
 function pystr_at(const s: AnsiString; i: Integer): Char;
 { Length() as a real Proc. The for-in desugar builds its AST directly and so
@@ -963,6 +977,50 @@ begin
   tail := Copy(s, start + 1, Length(s) - start);
   r := pystr_find(tail, sub);
   if r < 0 then Result := -1 else Result := r + start;
+end;
+
+function pystr_isdigit(const s: AnsiString): Boolean;
+var i: Integer;
+begin
+  if Length(s) = 0 then begin pystr_isdigit := False; Exit; end;
+  for i := 1 to Length(s) do
+    if not (s[i] in ['0'..'9']) then begin pystr_isdigit := False; Exit; end;
+  pystr_isdigit := True;
+end;
+
+function pystr_isalpha(const s: AnsiString): Boolean;
+var i: Integer;
+begin
+  if Length(s) = 0 then begin pystr_isalpha := False; Exit; end;
+  for i := 1 to Length(s) do
+    if not (s[i] in ['A'..'Z', 'a'..'z']) then begin pystr_isalpha := False; Exit; end;
+  pystr_isalpha := True;
+end;
+
+{ CPython: a string with no CASED characters is neither upper nor lower, so
+  "123".isupper() is False while "A1".isupper() is True. }
+function pystr_isupper(const s: AnsiString): Boolean;
+var i: Integer; cased: Boolean;
+begin
+  cased := False;
+  for i := 1 to Length(s) do
+  begin
+    if s[i] in ['a'..'z'] then begin pystr_isupper := False; Exit; end;
+    if s[i] in ['A'..'Z'] then cased := True;
+  end;
+  pystr_isupper := cased;
+end;
+
+function pystr_islower(const s: AnsiString): Boolean;
+var i: Integer; cased: Boolean;
+begin
+  cased := False;
+  for i := 1 to Length(s) do
+  begin
+    if s[i] in ['A'..'Z'] then begin pystr_islower := False; Exit; end;
+    if s[i] in ['a'..'z'] then cased := True;
+  end;
+  pystr_islower := cased;
 end;
 
 { CPython: "".isspace() is FALSE — an empty string has no characters to be
@@ -3575,6 +3633,21 @@ begin
     end;
     Inc(i);
   end;
+end;
+
+function pystr_reverse(const s: AnsiString): AnsiString;
+var i: Integer; r: AnsiString;
+begin
+  r := '';
+  for i := Length(s) downto 1 do r := r + s[i];
+  pystr_reverse := r;
+end;
+
+function pyos_startfile(const path: AnsiString): Integer;
+begin
+  pyos_startfile := 0;
+  raise Exception.Create('os.startfile is Windows-only and is not implemented; '
+    + 'guard the call with sys.platform or use subprocess');
 end;
 
 function pyos_environ_get(const name: AnsiString): Variant;
