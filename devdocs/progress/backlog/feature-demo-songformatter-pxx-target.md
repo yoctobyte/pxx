@@ -423,3 +423,63 @@ container), [[bug-nilpy-pyeval-prints-bool-as-number]],
 Technique that settled the hardest one: `-dPXX_LIBC_HEAP` puts the pxx heap on
 libc malloc so valgrind sees every allocation. A native-allocator crash that
 makes no sense at the crash site is a use-after-free until proven otherwise.
+
+
+## Pass eight — the PDF backend is real; the class namespace is the blocker (2026-07-28)
+
+The reportlab side went from "nothing exists" to "a working backend that a
+Pascal program drives", and then stopped on a language-level question rather
+than on anything reportlab-shaped.
+
+**Landed.** AndreRenaud/pdfgen is vendored (`lib/vendor/pdfgen`, Unlicense, the
+first third-party source committed here) and compiles under cfront as a UNIT
+pulled from Pascal, writing a valid PDF. Getting there took four cfront fixes,
+all in the "a `.c` compiled as a unit was a poorer relation of the same file
+compiled as a program" family: file-scope globals were never reserved (an array
+failed to lower; a **scalar silently read as 0**), their initializers never ran
+(a unit has no `main` to run them at the head of, so pdfgen's tables stayed zero
+and `pdf_create` returned NULL), a prototype ahead of its definition stayed a
+dynamic import, and the crtl headers plus the C runtime stubs were only wired up
+when the MAIN source was C — so `<stdarg.h>` came from the host and every
+variadic C file failed. That last one is the second half of
+[[bug-cfront-fegetround-unresolved-float-printf]], which had been closed on the
+program-path repro alone.
+
+Six shim units over it — `mimic_reportlab_pdfgen` (the canvas),
+`mimic_reportlab_lib_colors` / `_units` / `_pagesizes` / `_utils`, and
+`mimic_reportlab_pdfbase` (stringWidth from pdfgen's own metrics). Each states
+its subset and raises outside it.
+
+On the frontend side, dotted package imports (`from reportlab.pdfgen import
+canvas`) and the `mimic_<module>` mapping landed with `--no-shims` to prove a
+build used none, and `try/except ImportError` is now decided at compile time over
+any try body that opens with an import — which is the shape the PIL guard uses.
+
+**The blocker is [[decide-class-namespace-scoping]].** tkinter exports `Canvas`
+and so does reportlab; the class namespace is flat and first-match, so the
+shim's own constructor binds to tkinter's class and cannot see its own fields.
+Preferring the current unit's class fixes that and breaks exception handling,
+because pylib's and sysutils' `Exception` are one class only by virtue of
+first-match. That attempt is written up and reverted in
+[[bug-pascal-duplicate-class-name-silently-shadows]]. The sharpest edge is that a
+qualified reference is first-match too: renaming the shim's class made
+`canvas.Canvas(...)` bind silently to tkinter's `Canvas` and compile.
+
+**Behind it**, with the collision worked around locally, `convertrawtext.py`
+resolves every import and stops at `os.environ.get(...)` —
+[[feature-rtl-environment-variables]]: nothing in the RTL can read the
+environment at all.
+
+**And at run time**, [[bug-c-unit-crashes-when-sysutils-is-used]]: `pdf_create`
+segfaults when the program also uses sysutils, and passes under
+`-dPXX_LIBC_HEAP`, so it is the pxx allocator rather than pdfgen. The heap bridge
+itself is fine under the same conditions.
+
+| module | wall |
+| --- | --- |
+| `key_analysis.py` | none — compiles and runs |
+| `settings.py` | none — compiles, runs, builds all 60 widgets |
+| `convertrawtext.py` | [[decide-class-namespace-scoping]] (tkinter's `Canvas` vs reportlab's), then [[feature-rtl-environment-variables]] |
+| `render_backend.py` | should follow convertrawtext — the shims it needs exist now |
+| `kadrv.py` | `import key_analysis` — the module loader landed; unverified since |
+| `SongFormatter.py` | `import markdown` — [[feature-lib-markdown]] |
