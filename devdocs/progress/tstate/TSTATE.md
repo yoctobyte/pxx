@@ -2,8 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `6bb593298d12` | 2026-07-28T15:05:57Z | GREEN (opt) | 239.7s | `6bb593298d12` RED |
+| borg | `89e07d3cfa98` | 2026-07-28T18:02:53Z | GREEN (native) | 216.0s | `6bb593298d12` RED |
 
 ## Open regressions
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `b1976742df2c`, last good `6f73c5a88bef`, 1 commit(s) in range
-- **test-core#src:examples/tk/facade_and_paths.npy** — examples/tk/facade_and_paths.npy (borg): bad `d64a5d6a97b4`, last good `d87ee5a295cc`, 1 commit(s) in range

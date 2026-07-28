@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-28T09:47:31Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "f098085f963a95cd3a055a0f70bf009e297f10d9",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-28T09:53:12Z",
    "fixed": [],
    "new_red": [],
@@ -403,6 +395,16 @@
    "sha": "6bb593298d12d312fda2caace51b64b6c042ac4c",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-28T18:02:53Z",
+   "fixed": [
+    "test-core#src:examples/tk/facade_and_paths.npy"
+   ],
+   "new_red": [],
+   "sha": "89e07d3cfa98e54ffd6f7fd3ccb2f193181b731f",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -719,8 +721,9 @@
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
-  "test-core#src:examples/tk/facade_and_paths.npy": "fail",
+  "test-core#src:examples/tk/facade_and_paths.npy": "pass",
   "test-core#src:examples/tk/field_class_identity.npy": "pass",
+  "test-core#src:examples/tk/import_in_body.npy": "pass",
   "test-core#src:examples/tk/shadow_format_except.npy": "pass",
   "test-core#src:examples/tk/tkinter_facade.npy": "pass",
   "test-core#src:test/arrays.pas": "pass",
@@ -1478,6 +1481,7 @@
   "test-core#src:test/test_nilpy_sorted_pairs.npy": "pass",
   "test-core#src:test/test_nilpy_star_args.npy": "pass",
   "test-core#src:test/test_nilpy_star_forward.npy": "pass",
+  "test-core#src:test/test_nilpy_star_methods_and_targets.npy": "pass",
   "test-core#src:test/test_nilpy_str_float.npy": "pass",
   "test-core#src:test/test_nilpy_subclass_unit_base.npy": "pass",
   "test-core#src:test/test_nilpy_ternary_comp.npy": "pass",
@@ -2024,11 +2028,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-28T15:05:57Z",
-  "sha": "6bb593298d12d312fda2caace51b64b6c042ac4c",
-  "tier": "opt",
+  "date": "2026-07-28T18:02:53Z",
+  "sha": "89e07d3cfa98e54ffd6f7fd3ccb2f193181b731f",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 239.7
+  "wall": 216.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -2059,17 +2063,6 @@
     "b1976742df2c57eca84cd069d4e8b16a43a204cf"
    ],
    "src": "compiler/compiler.pas"
-  },
-  {
-   "bad": "d64a5d6a97b4484e3d5aefa0b475ab3817d11121",
-   "good": "d87ee5a295cc7d6b8919ed11bcb7e5388d4b9a53",
-   "job": "test-core#src:examples/tk/facade_and_paths.npy",
-   "name": "test-core#991",
-   "opened": "2026-07-28T14:30:34Z",
-   "range": [
-    "d64a5d6a97b4484e3d5aefa0b475ab3817d11121"
-   ],
-   "src": "examples/tk/facade_and_paths.npy"
   }
  ]
 }
