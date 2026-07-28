@@ -2009,10 +2009,10 @@
  },
  "last_bench": {
   "conf_rows": 550,
-  "date": "2026-07-28T08:23:18Z",
+  "date": "2026-07-28T08:55:13Z",
   "rc": 0,
   "rows": 29,
-  "sha": "c0d555a371929396d283edefcf1e80799c9dc3ec"
+  "sha": "afe03074c57876cf3f0d33edd4b8a1d0c65527a8"
  },
  "last_full": {
   "date": "2026-07-28T08:46:21Z",
