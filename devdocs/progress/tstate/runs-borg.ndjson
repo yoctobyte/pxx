@@ -1447,3 +1447,4 @@
 {"date": "2026-07-28T15:01:48Z", "fixed": [], "full": true, "new_red": [], "sha": "6bb593298d12d312fda2caace51b64b6c042ac4c", "tier": "full", "verdict": "RED", "wall": 430.2}
 {"date": "2026-07-28T15:05:57Z", "fixed": [], "full": false, "new_red": [], "sha": "6bb593298d12d312fda2caace51b64b6c042ac4c", "tier": "opt", "verdict": "GREEN", "wall": 239.7}
 {"date": "2026-07-28T18:02:53Z", "fixed": ["test-core#src:examples/tk/facade_and_paths.npy"], "full": false, "new_red": [], "sha": "89e07d3cfa98e54ffd6f7fd3ccb2f193181b731f", "tier": "native", "verdict": "GREEN", "wall": 216.0}
+{"date": "2026-07-28T18:10:25Z", "fixed": [], "full": true, "new_red": ["test-arm32#src:examples/net/httpdemo.pas", "test-i386#src:examples/net/httpdemo.pas"], "sha": "89e07d3cfa98e54ffd6f7fd3ccb2f193181b731f", "tier": "full", "verdict": "RED", "wall": 429.4}
