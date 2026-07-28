@@ -57,6 +57,15 @@ fails the same way.
 - Not the submodule-alias registration (disabling it changes nothing).
 - Not the `CompiledUnits` cap (raising 256 to 1024 changes nothing).
 
+## Where the fix is NOT
+
+`ConsumeUnitQualifier` (`compiler/parser.inc:864`) is not the site: it never
+consults `FindProc`, and it would happily return the unit for `atexit`. The
+shadowing therefore happens UPSTREAM, in NilPy's dispatch for a statement or
+factor that starts with an identifier — the proc named `atexit` is matched there
+before the qualifier is ever considered. Start by finding which branch in
+`PyParseStatement` / `PyParseFactorCore` claims the name.
+
 ## Fix direction
 
 Where NilPy decides whether a dotted name is a unit qualifier, a name that IS a
