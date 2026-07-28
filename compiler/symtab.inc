@@ -328,12 +328,43 @@ begin
     end;
 end;
 
+function ClassNameIsDeliberatelyShared(const lo: AnsiString): Boolean;
+{ Names that MEAN one class across the whole program, not one per unit. The list
+  is short and it is the honest form of an arrangement that used to be implicit:
+  pylib declares `Exception` and so does sysutils, and a NilPy program catches
+  what an RTL unit raises only because both resolve to the same row. Scoping
+  classes per unit without this turns that into a silently uncaught exception
+  (test_nilpy_rtl_exception_surface).
+
+  Option 2 of decide-class-namespace-scoping. Option 1 — let a class DECLARE
+  that it replaces a same-named one — retires this list. }
+begin
+  ClassNameIsDeliberatelyShared := (lo = 'exception');
+end;
+
 function FindUClass(const name: AnsiString): Integer;
 var i: Integer; lo, name2: AnsiString;
 begin
   Result := -1;
   name2 := name;
   lo := ULower(name2);
+  { A class declared in the unit being parsed wins over a same-named one
+    elsewhere. Two libraries may legitimately export the same class name —
+    tkinter's `Canvas` and reportlab's `Canvas` are both spellings their
+    applications require — and with one flat namespace the first unit registered
+    captured the name everywhere, so the second unit's own methods bound to the
+    first unit's class and could not see their own fields.
+    bug-pascal-duplicate-class-name-silently-shadows. }
+  if (CurrentUnitIdx >= 0) and not ClassNameIsDeliberatelyShared(lo) then
+  begin
+    i := 0;
+    while i < UClsCount do
+    begin
+      if (UClsUnitIdx[i] = CurrentUnitIdx) and
+         UNameMatch(UClsNOff[i], UClsNLen[i], lo) then begin Result := i; Exit; end;
+      Inc(i);
+    end;
+  end;
   i := 0;
   while i < UClsCount do
   begin

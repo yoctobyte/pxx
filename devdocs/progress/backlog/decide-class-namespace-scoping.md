@@ -61,3 +61,20 @@ This is not only a NilPy question. It is the Pascal class namespace, so any two
 Pascal libraries with a same-named class have it; NilPy just meets it sooner
 because Python code imports several libraries into one module as a matter of
 course.
+
+## Option 2 implemented as the stopgap (2026-07-28)
+
+Classes are now resolved per unit — a class declared in the unit being parsed
+wins — EXCEPT for a named list of deliberately shared names, which today holds
+exactly one entry, `Exception`. `ClassNameIsDeliberatelyShared` in
+`compiler/symtab.inc` is that list, and it exists because pylib's and sysutils'
+`Exception` mean ONE class and the tree relies on it.
+
+This unblocks the reportlab shim next to tkinter, and it keeps
+`test_nilpy_rtl_exception_surface` green. It does NOT settle the fork: the list
+is exactly the thing that will rot, and option 1 (a class declares that it
+replaces a same-named one) retires it. The qualified-reference case is also still
+first-match.
+
+So the decision stands open; what changed is that the cost of leaving it open is
+now a maintenance list rather than a blocked application.
