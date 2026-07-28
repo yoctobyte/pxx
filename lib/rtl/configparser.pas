@@ -34,6 +34,12 @@ unit configparser;
 
 interface
 
+{ pylib for TPyFile: `cfg.write(f)` hands over NilPy's file object, and a
+  configparser that cannot take it forces the application to change — which the
+  compile-as-is mission rules out (see decide-pcl-may-use-pylib for the same
+  call in the tkinter façade). }
+uses pylib;
+
 const
   CP_MAX_SECTIONS = 64;
   CP_MAX_OPTIONS  = 256;   { per section }
@@ -60,7 +66,16 @@ type
     function has_option(const section, option: AnsiString): Boolean;
     function get(const section, option: AnsiString): AnsiString;
     procedure set_(const section, option, value: AnsiString);
-    function sections: AnsiString;      { newline-separated, see section_count }
+    { CPython returns a LIST of section names, and applications iterate it
+      (`for s in cfg.sections()`); the newline-joined string made that iterate
+      CHARACTERS. sections_text keeps the old spelling for Pascal callers. }
+    function sections: TPyList;
+    function sections_text: AnsiString;  { newline-separated, see section_count }
+    { CPython's items(section): the (key, value) pairs of one section, which is
+      how a settings UI walks it. Each pair is a 2-element list — NilPy's tuple. }
+    function items(const section: AnsiString): TPyList;
+    { options(section): just the names }
+    function options(const section: AnsiString): TPyList;
     function section_count: Integer;
     function section_at(i: Integer): AnsiString;
     function option_count(const section: AnsiString): Integer;
@@ -72,6 +87,10 @@ type
       the caller has the path. }
     function read(const path: AnsiString): Boolean;
     function write(const path: AnsiString): Boolean;
+    { CPython's spelling: `cfg.write(f)` with an OPEN FILE, which is what
+      applications write (songformatter's settings module does). The file object
+      is NilPy's TPyFile; its fd takes the text directly. }
+    function write(f: TPyFile): Boolean; overload;
 
     { Parse from a string, so a caller can supply the text however it likes. }
     procedure take_line(const raw: AnsiString; var cur: AnsiString);
@@ -188,7 +207,49 @@ begin
   if (i < 0) or (i >= nsect) then section_at := '' else section_at := sects[i].name;
 end;
 
-function ConfigParser.sections: AnsiString;
+function CpStrVar(const s: AnsiString): Variant;
+{ a str as a NilPy value }
+begin
+  Result := s;
+end;
+
+function ConfigParser.sections: TPyList;
+var i: Integer;
+begin
+  Result := TPyList.Create;
+  for i := 0 to nsect - 1 do
+    Result.append(CpStrVar(sects[i].name));
+end;
+
+function ConfigParser.options(const section: AnsiString): TPyList;
+var i, j: Integer;
+begin
+  Result := TPyList.Create;
+  for i := 0 to nsect - 1 do
+    if sects[i].name = section then
+      for j := 0 to sects[i].count - 1 do
+        Result.append(CpStrVar(sects[i].keys[j]));
+end;
+
+function ConfigParser.items(const section: AnsiString): TPyList;
+var i, j: Integer; pair: TPyList; v: Variant;
+begin
+  Result := TPyList.Create;
+  for i := 0 to nsect - 1 do
+    if sects[i].name = section then
+      for j := 0 to sects[i].count - 1 do
+      begin
+        pair := TPyList.Create;
+        pair.append(CpStrVar(sects[i].keys[j]));
+        pair.append(CpStrVar(sects[i].vals[j]));
+        PPyVarRec(@v)^.VType := 7;
+        PPyVarRec(@v)^.Payload := Int64(NativeInt(Pointer(pair)));
+        PXXObjRetain(Pointer(pair));
+        Result.append(v);
+      end;
+end;
+
+function ConfigParser.sections_text: AnsiString;
 var i: Integer; r: AnsiString;
 begin
   r := '';
@@ -197,7 +258,7 @@ begin
     if i > 0 then r := r + #10;
     r := r + sects[i].name;
   end;
-  sections := r;
+  sections_text := r;
 end;
 
 function ConfigParser.option_count(const section: AnsiString): Integer;
@@ -305,6 +366,18 @@ begin
     read_string(text);
   end;
   read := ok;
+end;
+
+function ConfigParser.write(f: TPyFile): Boolean;
+var body: AnsiString; b: TPyBytes; i: Integer;
+begin
+  Result := False;
+  if f = nil then Exit;
+  body := to_string;
+  b := TPyBytes.Create(Length(body));
+  for i := 1 to Length(body) do b.put(i - 1, Ord(body[i]));
+  f.write(b);
+  Result := True;
 end;
 
 function ConfigParser.write(const path: AnsiString): Boolean;

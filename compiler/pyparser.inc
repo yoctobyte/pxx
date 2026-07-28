@@ -4527,6 +4527,100 @@ begin
     end;
 end;
 
+function PyMakeFuncValue: Integer;
+{ A bare def NAME in a value position — `w.bind(seq, on_plain)`, `sorted(l,
+  key=cmp)`. Python's function object; NilPy already builds one for a bound
+  METHOD (pybound_new with the receiver), so a plain def is the same pair with
+  a nil receiver and every consumer (pycallback_call*, the tkinter dispatcher)
+  handles both. Returns -1 when the token is not a def name, so callers fall
+  through to their existing handling. CurTok is the identifier. }
+var pi, procAddr, argA, argB, callNode, nilNode, boundPi: Integer;
+begin
+  Result := -1;
+  if not isNilPy then Exit;
+  if CurTok.Kind <> tkIdent then Exit;
+  if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then Exit;  { a CALL }
+  if FindSym(CurTok.SVal) >= 0 then Exit;                                 { a variable }
+  pi := FindProc(CurTok.SVal);
+  if pi < 0 then Exit;
+  boundPi := FindProc('pybound_new');
+  if boundPi < 0 then Exit;
+  procAddr := AllocNode(AN_PROCADDR);
+  ASTIVal[procAddr] := pi;
+  ASTTk[procAddr] := Ord(tyPointer);
+  nilNode := AllocNode(AN_INT_LIT);
+  ASTIVal[nilNode] := 0;
+  ASTTk[nilNode] := Ord(tyPointer);
+  argA := AllocNode(AN_ARG); ASTLeft[argA] := procAddr;
+  argB := AllocNode(AN_ARG); ASTLeft[argB] := nilNode; ASTRight[argB] := -1;
+  ASTRight[argA] := argB;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := boundPi;
+  ASTTk[callNode] := Ord(tyVariant);
+  ASTLeft[callNode] := argA;
+  Next;                      { consume the name }
+  Result := callNode;
+end;
+
+function PyNoClassDeclares(const mname: AnsiString): Boolean;
+{ True when no declared class has a method of this name. }
+var ci: Integer;
+begin
+  Result := True;
+  for ci := 0 to UClsCount - 1 do
+    if (not UClsIsRecord[ci]) and (FindUMeth(ci, mname) >= 0) then
+    begin
+      Result := False;
+      Exit;
+    end;
+end;
+
+function PyPromoteOverloadByKw(ci, mmi: Integer; const mname: AnsiString): Integer;
+{ Pick the same-class OVERLOAD a keyword argument names. `Widget.bind(seq,
+  script)` and `Widget.bind(seq, callback, add)` are two methods of one name, and
+  FindUMeth hands back whichever was declared first; a call written
+  `bind(seq, cb, add="+")` then failed with "no parameter named add". The
+  keyword identifies the intended signature, exactly as it does for the
+  across-classes promotion in PyParseVariantMethod.
+
+  CurTok is the '(' of the call. Returns the better mmi, or the one given. }
+var k, depth, di, cand, curr: Integer; pname: AnsiString;
+begin
+  Result := mmi;
+  if (ci < 0) or (mmi < 0) or (CurTok.Kind <> tkLParen) then Exit;
+  k := TokPos; depth := 1;
+  while (k < TokCount) and (depth > 0) do
+  begin
+    if Tokens[k].Kind = tkLParen then Inc(depth)
+    else if Tokens[k].Kind = tkRParen then Dec(depth)
+    else if (depth = 1) and (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount) and
+            (Tokens[k + 1].Kind = tkAssign) and
+            (not PyProcParamNamed(UMthProc_[Result], GetTokenStr(k))) then
+    begin
+      pname := GetTokenStr(k);
+      { up the PARENT CHAIN too: a NilPy class that subclasses a façade widget
+        inherits both overloads, and only the base declares them. }
+      curr := ci;
+      while curr >= 0 do
+      begin
+        for di := 0 to UClsMCount[curr] - 1 do
+        begin
+          cand := UClsMBase[curr] + di;
+          if UNameMatch(UMthNOff[cand], UMthNLen[cand], ULower(mname)) and
+             PyProcParamNamed(UMthProc_[cand], pname) then
+          begin
+            Result := cand;
+            curr := -1;
+            Break;
+          end;
+        end;
+        if curr >= 0 then curr := UClsParent[curr];
+      end;
+    end;
+    Inc(k);
+  end;
+end;
+
 function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer;
 var mmi, mpi, selfArg, lastArg, argNode, callNode, n, k, kwIdx: Integer;
     anyKw: Boolean;
@@ -4534,6 +4628,7 @@ begin
   mmi := FindUMeth(ci, mname);
   if mmi < 0 then
     Error('Nil Python: ' + PyRawName(UClsNOff[ci], UClsNLen[ci]) + ' has no method .' + mname + '()');
+  mmi := PyPromoteOverloadByKw(ci, mmi, mname);
   selfArg := AllocNode(AN_ARG);
   ASTLeft[selfArg] := baseNode;
   ASTRight[selfArg] := -1;
@@ -4656,6 +4751,27 @@ begin
   if (mname = 'items') and (FindUClass('TPyDict') >= 0) then
   begin
     Result := PyParseVariantMethod(baseNode, 'itemlist');
+    Exit;
+  end;
+  { `w.destroy()` on a dynamically-typed widget — see the typed path in
+    parser.inc: Pascal reserves `destroy` for the destructor. }
+  if mname = 'destroy' then
+  begin
+    for ci := 0 to UClsCount - 1 do
+      if (not UClsIsRecord[ci]) and (FindUMeth(ci, 'destroy_') >= 0) then
+      begin
+        Result := PyParseVariantMethod(baseNode, 'destroy_');
+        Exit;
+      end;
+  end;
+  { A Python method name Pascal RESERVES — the library convention is a trailing
+    underscore (`set_`, `destroy_`). If nothing declares the name as written but
+    something declares the underscored one, that is the method meant:
+    configparser's `cfg.set(section, key, value)` on a dynamically-typed
+    receiver. The typed path in parser.inc does the same. }
+  if PyNoClassDeclares(mname) and (not PyNoClassDeclares(mname + '_')) then
+  begin
+    Result := PyParseVariantMethod(baseNode, mname + '_');
     Exit;
   end;
   { candidate scan — one entry per class whose method set answers to mname }
@@ -4799,6 +4915,18 @@ begin
       end;
       Inc(k);
     end;
+  end;
+
+  { Same question, but for OVERLOADS OF ONE CLASS. The candidate scan keeps one
+    entry per class, so `Widget.bind(seq, script)` and `Widget.bind(seq,
+    callback, add)` collapse to whichever was declared first — and a keyword
+    argument the chosen one does not have was then a hard error
+    (`bind(..., add="+")`, which is what songformatter writes). The keyword
+    names the signature here just as it does across classes above. }
+  if hitCi >= 0 then
+  begin
+    hitMmi := PyPromoteOverloadByKw(hitCi, hitMmi, mname);
+    if hitMmi >= 0 then hitPi := UMthProc_[hitMmi];
   end;
 
   { VT_OBJECT payload -> instance pointer -> hard cast to the owning class }
@@ -7915,6 +8043,7 @@ function PyParseStatement: Integer;
 var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integer; tk: TTypeKind;
     annSig: Integer;   { Callable signature of an annotated target, or -1 }
     augTk: TTokenKind;
+    mmi, mpi, selfArg, lastArg, argNode, kwIdx, j, k: Integer;   { inherited (super()) call }
 begin
   Result := -1;
   PyStmtAteBlock := False;
@@ -8130,8 +8259,63 @@ begin
       Result := node;
       Exit;
     end;
-    { v1 fallback: the call is consumed and DISCARDED (args unevaluated) —
-      argument side effects would be lost; none in the censused corpus. }
+    { A REAL inherited call — Pascal's `inherited M(args)`. `super().__init__(p)`
+      is how a class that extends a library widget gets built (songformatter's
+      SettingsEditor extends tk.Frame), and discarding it left the base's own
+      fields unset: the Tk path was empty, so every later command addressed a
+      widget that had never been created. Direct call (not virtual): `super()`
+      names the PARENT's body, which is what inherited means. }
+    symIdx := PyProgSym('self');
+    ci := -1;
+    if CurSelfClass >= REC_UCLASS_BASE then ci := UClsParent[CurSelfClass - REC_UCLASS_BASE];
+    if (ci >= 0) and (symIdx >= 0) then
+    begin
+      mmi := FindUMeth(ci, PyMethodName(name));
+      if mmi >= 0 then
+      begin
+        mpi := UMthProc_[mmi];
+        selfArg := AllocNode(AN_ARG);
+        ASTLeft[selfArg] := PyMakeIdent(symIdx);
+        ASTRight[selfArg] := -1;
+        lastArg := selfArg;
+        k := 1;
+        while CurTok.Kind <> tkRParen do
+        begin
+          kwIdx := PyKwArgIndex(mpi, 1);
+          PyParseBoolExpr;
+          argNode := AllocNode(AN_ARG);
+          ASTLeft[argNode] := CurASTNode;
+          ASTIVal[argNode] := kwIdx;
+          ASTRight[argNode] := -1;
+          ASTRight[lastArg] := argNode;
+          lastArg := argNode;
+          Inc(k);
+          if CurTok.Kind = tkComma then Next else Break;
+        end;
+        Expect(tkRParen, ')');
+        j := 0;
+        PyBindKwArgs(mpi, selfArg, lastArg, j);
+        if j > 0 then k := j;
+        { the base's remaining defaulted parameters }
+        while (k < Procs[mpi].ParamCount) and (k < MAX_PROC_PARAMS) and
+              ProcParamHasDefault[mpi * MAX_PROC_PARAMS + k] do
+        begin
+          argNode := AllocNode(AN_ARG);
+          ASTLeft[argNode] := DefaultArgValueNode(mpi, k);
+          ASTRight[argNode] := -1;
+          ASTRight[lastArg] := argNode;
+          lastArg := argNode;
+          Inc(k);
+        end;
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := mpi;
+        ASTTk[node] := Ord(Procs[mpi].RetType);
+        ASTLeft[node] := selfArg;
+        Result := node;
+        Exit;
+      end;
+    end;
+    { fallback: no such method on the parent — consume and discard, as before }
     ci := 1;
     while (ci > 0) and (CurTok.Kind <> tkEOF) do
     begin
@@ -9635,6 +9819,7 @@ end;
 procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
                                  fieldsOnly: Boolean);
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, align, sz: Integer;
+    ovMmi, ovPi: Integer;   { the inherited method an override must match }
     fldAnn, rhsAt, k2, fldSig: Integer;
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
     fldRec, mRetRec, pri: Integer; mRet: TTypeKind;
@@ -9938,6 +10123,29 @@ begin
       for k := 1 to Length(name) do AppendChar(fullName, name[k]);
       mRet := PyMethodRetType(methodStart, mRetRec);
       if mRet = tyUnknown then mRet := tyInteger;   { `-> None` / unannotated }
+      { An OVERRIDE takes the base method's signature. Python overrides need no
+        annotations, so `def optionxform(self, s): return s` infers a variant
+        result — but the inherited method occupies a VMT slot with the base's
+        types, and the base's own body calls THROUGH that slot. The two must
+        agree or the base reads the override's result as the wrong kind
+        (configparser's optionxform, overridden by every case-preserving
+        subclass, returned a variant where an AnsiString was expected). The
+        base's parameter types come with it, for the same reason. }
+      if (not fieldsOnly) and (not isCtor) and (UClsParent[ci] >= 0) then
+      begin
+        ovMmi := FindUMeth(UClsParent[ci], name);
+        if ovMmi >= 0 then
+        begin
+          ovPi := UMthProc_[ovMmi];
+          if (ovPi >= 0) and (Procs[ovPi].ParamCount = nparams) then
+          begin
+            mRet := Procs[ovPi].RetType;
+            mRetRec := ProcRetRecId[ovPi];
+            for k := 1 to nparams - 1 do
+              ptypes[k] := Procs[ovPi].Params[k].TypeKind;
+          end;
+        end;
+      end;
       { str is managed here as everywhere else in NilPy }
       if mRet = tyString then mRet := tyAnsiString;
       if mRet <> tyClass then mRetRec := REC_NONE;
@@ -9990,6 +10198,9 @@ begin
       begin
         k := PyStoredName('create');
         AddUMeth(ci, k, 6, procIdx);
+        { mark it a real constructor, like the Pascal declaration does — the
+          metaclass and ctor-overload paths test UMthIsCtor, not the name }
+        UMthIsCtor[UMthCount - 1] := True;
       end
       else if PyPropAccessorPrefixAt(methodStart) <> '' then
       begin
@@ -10364,6 +10575,15 @@ begin
   fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]); AppendChar(fullName, '.');
   for i := 1 to Length(name) do AppendChar(fullName, name[i]);
   procIdx := FindProc(fullName);
+  { An OVERRIDE's parameters take the BASE method's types — the member pre-pass
+    did the same when it registered this signature (see PyRegisterClassMembers),
+    and the two passes MUST agree or the frame disagrees with the signature.
+    Python overrides carry no annotations, so without this
+    `def optionxform(self, s)` bound a variant parameter to an AnsiString slot
+    and the inherited caller read the wrong kind. }
+  if procIdx >= 0 then
+    for i := 1 to nparams - 1 do
+      if i < Procs[procIdx].ParamCount then ptypes[i] := Procs[procIdx].Params[i].TypeKind;
   savedSC := SymCount; savedFS := FrameSize; savedSelf := CurSelfClass;
   FrameSize := 0; CurProc := procIdx; CurSelfClass := REC_UCLASS_BASE + ci;
   Procs[procIdx].ScopeBase := SymCount;

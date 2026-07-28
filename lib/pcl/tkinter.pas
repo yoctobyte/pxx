@@ -40,7 +40,7 @@ interface
   argument the app already writes would push the edit into the app — exactly what
   the compile-as-is mission forbids. Pascal-only PCL users who never touch this
   unit never link it. }
-uses tk, pylib;
+uses tk, pylib, pyeval;
 
 type
   Widget = class
@@ -50,12 +50,22 @@ type
     constructor Create;
 
     { geometry managers }
+    { `expand=True` is what applications write, so it is a Variant: a bool, a
+      number, or absent. }
     procedure pack(const side: AnsiString = ''; const fill: AnsiString = '';
-                   expand: Integer = -1; padx: Integer = -1; pady: Integer = -1);
+                   const expand: Variant = 0; const padx: Variant = 0;
+                   const pady: Variant = 0);
+    { padx/pady are VARIANT: tkinter takes either a number or a (left, right)
+      pair, and applications write both. See TkiOptPad. }
     procedure grid(row: Integer = -1; column: Integer = -1;
-                   const sticky: AnsiString = '');
-    procedure grid_columnconfigure(index: Integer = 0; weight: Integer = -1);
-    procedure grid_rowconfigure(index: Integer = 0; weight: Integer = -1);
+                   const sticky: AnsiString = '';
+                   columnspan: Integer = -1; rowspan: Integer = -1;
+                   const padx: Variant = 0; const pady: Variant = 0;
+                   ipadx: Integer = -1; ipady: Integer = -1);
+    procedure grid_columnconfigure(index: Integer = 0; weight: Integer = -1;
+                                   minsize: Integer = -1; pad: Integer = -1);
+    procedure grid_rowconfigure(index: Integer = 0; weight: Integer = -1;
+                                minsize: Integer = -1; pad: Integer = -1);
 
     { common configuration. Two spellings on purpose: Python writes
       `w.configure(state="disabled")`, i.e. OPTIONS BY NAME, and NilPy binds
@@ -74,10 +84,27 @@ type
     procedure configure_raw(const opts: AnsiString);
     function cget(const option: AnsiString): AnsiString;
     procedure bind(const sequence, script: AnsiString);
+    { the Python spelling: a CALLABLE handler. `self._on_wheel` arrives as a
+      bound-method variant and is invoked with an Event; `add="+"` appends to
+      the existing binding instead of replacing it, exactly as tkinter's does. }
+    procedure bind(const sequence: AnsiString; const callback: Variant;
+                   const add: AnsiString = ''); overload;
     function winfo_width: Integer;
     function winfo_height: Integer;
-    function winfo_children: AnsiString;   { space-separated Tcl paths }
+    { Python hands back a LIST OF WIDGETS, and applications call methods on the
+      elements (`for w in frame.winfo_children(): w.destroy()`). Returning the
+      raw Tcl string made those elements strings. }
+    function winfo_children: TPyList;
+    { the widget that has keyboard focus, or nil — applications compare it to
+      themselves (`if self.focus_get() == self`) }
+    function focus_get: Widget;
+    { the raw Tcl answer, for a caller that wants the paths }
+    function winfo_children_paths: AnsiString;
     procedure destroy_;                    { `destroy` is a Pascal-ish trap }
+    { process pending events without entering the main loop — what a test (and
+      plenty of real code) uses to make geometry and bindings take effect }
+    procedure update;
+    procedure update_idletasks;
   end;
 
   Frame = class(Widget)
@@ -139,14 +166,18 @@ type
     writes `tk.Label(...)` and must not have to write anything else. }
   Label = class(Widget)
   public
+    { `font=` is a Tk font SPEC: a name, or the (family, size, style) tuple
+      applications write — `font=("TkDefaultFont", 10, "bold")`. Variant takes
+      both; see TkiOptFont. }
     constructor Create(master: Widget; const text: AnsiString = '';
-                       const anchor: AnsiString = ''; const font: AnsiString = '');
+                       const anchor: AnsiString = ''; const font: Variant = 0);
     procedure set_text(const value: AnsiString);
   end;
 
   Entry = class(Widget)
   public
-    constructor Create(master: Widget; const textvariable: AnsiString = '';
+    { `textvariable=` takes the VARIABLE OBJECT, like Checkbutton's `variable=` }
+    constructor Create(master: Widget; const textvariable: Variant = 0;
                        width: Integer = -1);
     function get: AnsiString;
     procedure insert(index: Integer; const value: AnsiString);
@@ -154,10 +185,32 @@ type
 
   Checkbutton = class(Widget)
   public
+    { `variable=` takes the VARIABLE OBJECT in Python, and on/offvalue are
+      whatever type the variable holds — booleans for a BooleanVar. Variants
+      accept all of it; TkiVarName reads a variable object's Tcl name. }
     constructor Create(master: Widget; const text: AnsiString = '';
-                       const variable: AnsiString = '';
-                       const onvalue: AnsiString = '';
-                       const offvalue: AnsiString = '');
+                       const variable: Variant = 0;
+                       const onvalue: Variant = 0;
+                       const offvalue: Variant = 0;
+                       const anchor: AnsiString = '';
+                       const command: Variant = 0);
+  end;
+
+  { The event object a bound handler receives. Tk substitutes the % codes into
+    the callback script and the dispatcher fills these in; the names are
+    tkinter's, because handlers read them (`event.delta`, `event.width`). A
+    field Tk did not substitute stays -1 / '' rather than guessing. }
+  Event = class
+  public
+    x: Integer;
+    y: Integer;
+    delta: Integer;
+    num: Integer;
+    width: Integer;
+    height: Integer;
+    keysym: AnsiString;
+    widget: AnsiString;
+    constructor Create;
   end;
 
   { tkinter's variable objects. A Tcl variable by name, which is how the real
@@ -165,7 +218,8 @@ type
   StringVar = class
   public
     name: AnsiString;
-    constructor Create;
+    { `StringVar(value="x")` — tkinter's initial value, by keyword }
+    constructor Create(const value: AnsiString = '');
     function get: AnsiString;
     procedure set_(const value: AnsiString);
   end;
@@ -173,9 +227,13 @@ type
   BooleanVar = class
   public
     name: AnsiString;
-    constructor Create;
+    { `BooleanVar(value=True)`. Variant so an omitted value stays distinct from
+      False, which the Tcl variable must not start as when nothing was asked. }
+    constructor Create(const value: Variant = 0);
     function get: Boolean;
     procedure set_(value: Boolean);
+    { the Python spelling of a variable trace: `var.trace_add("write", cb)` }
+    procedure trace_add(const mode: AnsiString; const callback: Variant);
   end;
 
   { The root window as Python spells it: `root = tk.Tk()`. Tcl's root is a
@@ -262,31 +320,64 @@ begin
 end;
 
 procedure Widget.pack(const side: AnsiString; const fill: AnsiString;
-                     expand: Integer; padx: Integer; pady: Integer);
+                     const expand, padx, pady: Variant);
 var opts: AnsiString;
 begin
   opts := TkiOptStr('side', side) + TkiOptStr('fill', fill) +
-          TkiOptInt('expand', expand) + TkiOptInt('padx', padx) +
-          TkiOptInt('pady', pady);
+          TkiOptVar('expand', expand) + TkiOptPad('padx', padx) +
+          TkiOptPad('pady', pady);
   TkEval('pack ' + path + opts);
 end;
 
-procedure Widget.grid(row: Integer; column: Integer; const sticky: AnsiString);
+function TkiOptPad(const name: AnsiString; const p: Variant): AnsiString;
+{ A padding option: absent (None), a NUMBER, or a (left, right) PAIR — Tk spells
+  the pair `-padx {8 6}`. The pair is what a tkinter application writes when the
+  two sides differ, and it arrives here as a TPyList. }
+var l: TPyList; i: Integer; body: AnsiString;
+begin
+  Result := '';
+  case pyvartag(p) of
+    0: Exit;                                   { None / omitted }
+    7:
+      begin
+        l := TPyList(pyvarobj(p));
+        if (l = nil) or (l.count = 0) then Exit;
+        body := '';
+        for i := 0 to l.count - 1 do
+        begin
+          if i > 0 then body := body + ' ';
+          body := body + TkiIntStr(pyvar_to_int(l.at(i)));
+        end;
+        Result := ' -' + name + ' {' + body + '}';
+      end;
+  else
+    Result := ' -' + name + ' ' + TkiIntStr(pyvar_to_int(p));
+  end;
+end;
+
+procedure Widget.grid(row: Integer; column: Integer; const sticky: AnsiString;
+                      columnspan, rowspan: Integer;
+                      const padx, pady: Variant; ipadx, ipady: Integer);
 begin
   TkEval('grid ' + path + TkiOptInt('row', row) + TkiOptInt('column', column) +
-         TkiOptStr('sticky', sticky));
+         TkiOptStr('sticky', sticky) +
+         TkiOptInt('columnspan', columnspan) + TkiOptInt('rowspan', rowspan) +
+         TkiOptPad('padx', padx) + TkiOptPad('pady', pady) +
+         TkiOptInt('ipadx', ipadx) + TkiOptInt('ipady', ipady));
 end;
 
-procedure Widget.grid_columnconfigure(index: Integer; weight: Integer);
+procedure Widget.grid_columnconfigure(index, weight, minsize, pad: Integer);
 begin
   TkEval('grid columnconfigure ' + path + ' ' + TkiIntStr(index) +
-         TkiOptInt('weight', weight));
+         TkiOptInt('weight', weight) + TkiOptInt('minsize', minsize) +
+         TkiOptInt('pad', pad));
 end;
 
-procedure Widget.grid_rowconfigure(index: Integer; weight: Integer);
+procedure Widget.grid_rowconfigure(index, weight, minsize, pad: Integer);
 begin
   TkEval('grid rowconfigure ' + path + ' ' + TkiIntStr(index) +
-         TkiOptInt('weight', weight));
+         TkiOptInt('weight', weight) + TkiOptInt('minsize', minsize) +
+         TkiOptInt('pad', pad));
 end;
 
 procedure Widget.configure_raw(const opts: AnsiString);
@@ -312,6 +403,156 @@ begin
   cget := TkEval(path + ' cget -' + option);
 end;
 
+{ ===== callbacks =====
+
+  One Tcl command, `pxxcb`, dispatches every Python callable the application
+  registered. The script Tk evaluates carries the registry index and the %
+  substitutions the binding asked for:  `{pxxcb 3 %x %y %D %b %w %h %K %W}`.
+  A `-command` option has no event, so it registers `{pxxcb 3}` and the handler
+  is called with no argument. }
+const
+  TKI_MAX_CALLBACKS = 512;
+
+type
+  TTkiFn0 = function: Int64;
+  TTkiFn1 = function(const a0: Variant): Int64;
+
+var
+  gTkCb: array[0..TKI_MAX_CALLBACKS - 1] of Variant;
+  gTkCbCount: Integer;
+  gTkCbReady: Boolean;
+
+procedure TkiCallValue(const cb: Variant; const arg: Variant; withArg: Boolean);
+{ Invoke whatever kind of Python callable this is. NilPy has four shapes and a
+  façade meets all of them: a BOUND METHOD (tag 8, {code, receiver}), a pyeval
+  CLOSURE and a captures-carrying nested def (both a magic-tagged heap object
+  boxed as an integer), and a plain compiled def (its code ADDRESS, likewise
+  boxed). The two heap kinds are told apart by their own magic markers rather
+  than by the tag, which is the same integer tag for all three. }
+var p: Pointer; f1: TTkiFn1; f0: TTkiFn0;
+begin
+  if pycallback_is(cb) then
+  begin
+    if withArg then pycallback_call1(cb, arg) else pycallback_call0(cb);
+    Exit;
+  end;
+  p := Pointer(NativeInt(PPyVarRec(@cb)^.Payload));
+  if p = nil then Exit;
+  if pyclosure_is(p) then
+  begin
+    pyclosure_call_ptr(p, arg);
+    Exit;
+  end;
+  if pyboundfn_is(p) then
+  begin
+    pyboundfn_call_ptr(p, arg);
+    Exit;
+  end;
+  { a plain compiled def: the value IS its code address }
+  if withArg then
+  begin
+    f1 := TTkiFn1(p);
+    f1(arg);
+  end
+  else
+  begin
+    f0 := TTkiFn0(p);
+    f0;
+  end;
+end;
+
+function TkiCbArgInt(argc: Integer; argv: PPAnsiChar; i: Integer): Integer;
+{ A % substitution Tk could not fill arrives as '??'. Report it as -1 rather
+  than as a number the handler would believe. }
+var s: AnsiString;
+begin
+  s := TkCmdArg(argc, argv, i);
+  if (s = '') or (s = '??') then TkiCbArgInt := -1
+  else TkiCbArgInt := TkiStrInt(s);
+end;
+
+function TkiCbDispatch(clientData: Pointer; interp: Pointer;
+                       argc: Integer; argv: PPAnsiChar): Integer; cdecl;
+var idx: Integer; ev: Event; evv: Variant;
+begin
+  TkiCbDispatch := 0;                       { TCL_OK }
+  idx := TkiStrInt(TkCmdArg(argc, argv, 1));
+  if (idx < 0) or (idx >= gTkCbCount) then Exit;
+  if argc <= 2 then
+  begin
+    { a `-command` callback: no event argument }
+    TkiCallValue(gTkCb[idx], pynone, False);
+    Exit;
+  end;
+  ev := Event.Create;
+  ev.x := TkiCbArgInt(argc, argv, 2);
+  ev.y := TkiCbArgInt(argc, argv, 3);
+  ev.delta := TkiCbArgInt(argc, argv, 4);
+  ev.num := TkiCbArgInt(argc, argv, 5);
+  ev.width := TkiCbArgInt(argc, argv, 6);
+  ev.height := TkiCbArgInt(argc, argv, 7);
+  ev.keysym := TkCmdArg(argc, argv, 8);
+  ev.widget := TkCmdArg(argc, argv, 9);
+  PPyVarRec(@evv)^.VType := 7;              { VT_OBJECT }
+  PPyVarRec(@evv)^.Payload := Int64(NativeInt(Pointer(ev)));
+  PXXObjRetain(Pointer(ev));
+  TkiCallValue(gTkCb[idx], evv, True);
+end;
+
+function TkiRegisterCallback(const cb: Variant): Integer;
+{ Store the callable and return its index. The registry holds the value for the
+  process's lifetime — a widget's binding outlives every local that built it,
+  and a Tk application's callbacks are few and permanent. }
+begin
+  if not gTkCbReady then
+  begin
+    TkRegisterCommand('pxxcb', @TkiCbDispatch);
+    gTkCbReady := True;
+  end;
+  if gTkCbCount >= TKI_MAX_CALLBACKS then
+  begin
+    TkiRegisterCallback := -1;
+    Exit;
+  end;
+  gTkCb[gTkCbCount] := cb;
+  TkiRegisterCallback := gTkCbCount;
+  gTkCbCount := gTkCbCount + 1;
+end;
+
+{ The script Tk runs for a BOUND event: index plus the substitutions the event
+  object exposes. }
+function TkiCbScript(idx: Integer): AnsiString;
+begin
+  TkiCbScript := 'pxxcb ' + TkiIntStr(idx) +
+                 ' %x %y %D %b %w %h %K %W';
+end;
+
+constructor Event.Create;
+begin
+  x := -1; y := -1; delta := -1; num := -1; width := -1; height := -1;
+  keysym := ''; widget := '';
+end;
+
+procedure Widget.bind(const sequence: AnsiString; const callback: Variant;
+                      const add: AnsiString);
+var idx: Integer; op: AnsiString;
+begin
+  idx := TkiRegisterCallback(callback);
+  if idx < 0 then Exit;
+  if add = '' then op := '' else op := '+';
+  TkEval('bind ' + path + ' ' + sequence + ' {' + op + TkiCbScript(idx) + '}');
+end;
+
+procedure Widget.update;
+begin
+  TkEval('update');
+end;
+
+procedure Widget.update_idletasks;
+begin
+  TkEval('update idletasks');
+end;
+
 procedure Widget.bind(const sequence, script: AnsiString);
 begin
   TkEval('bind ' + path + ' ' + sequence + ' {' + script + '}');
@@ -327,9 +568,47 @@ begin
   winfo_height := TkiStrInt(TkEval('winfo height ' + path));
 end;
 
-function Widget.winfo_children: AnsiString;
+function Widget.focus_get: Widget;
+var p: AnsiString;
 begin
-  winfo_children := TkEval('winfo children ' + path);
+  Result := nil;
+  p := TkEval('focus');
+  if p = '' then Exit;
+  Result := Widget.Create;
+  Result.path := p;
+  Result.kind := 'widget';
+end;
+
+function Widget.winfo_children_paths: AnsiString;
+begin
+  winfo_children_paths := TkEval('winfo children ' + path);
+end;
+
+function Widget.winfo_children: TPyList;
+var raw, cur: AnsiString; i: Integer; w: Widget; v: Variant;
+begin
+  Result := TPyList.Create;
+  raw := TkEval('winfo children ' + path);
+  cur := '';
+  for i := 1 to Length(raw) + 1 do
+  begin
+    if (i > Length(raw)) or (raw[i] = ' ') then
+    begin
+      if cur <> '' then
+      begin
+        w := Widget.Create;
+        w.path := cur;
+        w.kind := 'widget';
+        PPyVarRec(@v)^.VType := 7;
+        PPyVarRec(@v)^.Payload := Int64(NativeInt(Pointer(w)));
+        PXXObjRetain(Pointer(w));
+        Result.append(v);
+      end;
+      cur := '';
+    end
+    else
+      cur := cur + raw[i];
+  end;
 end;
 
 procedure Widget.destroy_;
@@ -502,13 +781,40 @@ end;
 
 { ---- Label / Entry / Checkbutton ---------------------------------------- }
 
-constructor Label.Create(master: Widget; const text, anchor, font: AnsiString);
+function TkiOptFont(const f: Variant): AnsiString;
+{ A font option: absent, a NAME, or the (family, size, style) tuple. Tk spells
+  the tuple as a braced list, `-font {TkDefaultFont 10 bold}`. }
+var l: TPyList; i: Integer; body: AnsiString; el: Variant;
+begin
+  Result := '';
+  case pyvartag(f) of
+    0: Exit;
+    7:
+      begin
+        l := TPyList(pyvarobj(f));
+        if (l = nil) or (l.count = 0) then Exit;
+        body := '';
+        for i := 0 to l.count - 1 do
+        begin
+          if i > 0 then body := body + ' ';
+          el := l.at(i);
+          if (pyvartag(el) = 5) or (pyvartag(el) = 6) then body := body + VariantToStr(el)
+          else body := body + TkiIntStr(pyvar_to_int(el));
+        end;
+        Result := ' -font {' + body + '}';
+      end;
+    5, 6: Result := ' -font {' + VariantToStr(f) + '}';
+  end;
+end;
+
+constructor Label.Create(master: Widget; const text, anchor: AnsiString;
+                        const font: Variant);
 begin
   TkiEnsureStarted;
   path := TkiNextPath(master);
   kind := 'label';
   TkEval('label ' + path + ' -text {' + text + '}' + TkiOptStr('anchor', anchor) +
-         TkiOptStr('font', font));
+         TkiOptFont(font));
 end;
 
 procedure Label.set_text(const value: AnsiString);
@@ -516,13 +822,13 @@ begin
   TkEval(path + ' configure -text {' + value + '}');
 end;
 
-constructor Entry.Create(master: Widget; const textvariable: AnsiString;
+constructor Entry.Create(master: Widget; const textvariable: Variant;
                         width: Integer);
 begin
   TkiEnsureStarted;
   path := TkiNextPath(master);
   kind := 'entry';
-  TkEval('entry ' + path + TkiOptStr('textvariable', textvariable) +
+  TkEval('entry ' + path + TkiOptStr('textvariable', TkiVarName(textvariable)) +
          TkiOptInt('width', width));
 end;
 
@@ -536,15 +842,56 @@ begin
   TkEval(path + ' insert ' + TkiIntStr(index) + ' {' + value + '}');
 end;
 
-constructor Checkbutton.Create(master: Widget; const text, variable,
-                              onvalue, offvalue: AnsiString);
+function TkiVarName(const v: Variant): AnsiString;
+{ The Tcl name behind a variable OBJECT (StringVar / BooleanVar), or the string
+  itself when a caller passed the name directly. Absent yields ''. }
+var o: TObject;
+begin
+  Result := '';
+  case pyvartag(v) of
+    0: Exit;
+    7:
+      begin
+        o := TObject(pyvarobj(v));
+        if o is StringVar then Result := StringVar(o).name
+        else if o is BooleanVar then Result := BooleanVar(o).name;
+      end;
+    5, 6: Result := VariantToStr(v);
+  end;
+end;
+
+function TkiOptVar(const name: AnsiString; const v: Variant): AnsiString;
+{ An option whose value may be a number, a bool, a string or None. }
+begin
+  Result := '';
+  case pyvartag(v) of
+    0: Exit;
+    4: if bool(v) then Result := ' -' + name + ' 1' else Result := ' -' + name + ' 0';
+    5, 6: Result := ' -' + name + ' {' + VariantToStr(v) + '}';
+  else
+    Result := ' -' + name + ' ' + TkiIntStr(pyvar_to_int(v));
+  end;
+end;
+
+constructor Checkbutton.Create(master: Widget; const text: AnsiString;
+                              const variable, onvalue, offvalue: Variant;
+                              const anchor: AnsiString;
+                              const command: Variant);
+var vn: AnsiString; idx: Integer;
 begin
   TkiEnsureStarted;
   path := TkiNextPath(master);
   kind := 'checkbutton';
+  vn := TkiVarName(variable);
   TkEval('checkbutton ' + path + ' -text {' + text + '}' +
-         TkiOptStr('variable', variable) + TkiOptStr('onvalue', onvalue) +
-         TkiOptStr('offvalue', offvalue));
+         TkiOptStr('variable', vn) + TkiOptVar('onvalue', onvalue) +
+         TkiOptVar('offvalue', offvalue) + TkiOptStr('anchor', anchor));
+  if pyvartag(command) <> 0 then
+  begin
+    idx := TkiRegisterCallback(command);
+    if idx >= 0 then
+      TkEval(path + ' configure -command {pxxcb ' + TkiIntStr(idx) + '}');
+  end;
 end;
 
 { ---- variables ----------------------------------------------------------- }
@@ -555,11 +902,11 @@ begin
   TkiNextVar := 'pyvar' + TkiIntStr(gTkVarSeq);
 end;
 
-constructor StringVar.Create;
+constructor StringVar.Create(const value: AnsiString);
 begin
   TkiEnsureStarted;
   name := TkiNextVar;
-  TkEval('set ' + name + ' {}');
+  TkEval('set ' + name + ' {' + value + '}');
 end;
 
 function StringVar.get: AnsiString;
@@ -572,11 +919,26 @@ begin
   TkEval('set ' + name + ' {' + value + '}');
 end;
 
-constructor BooleanVar.Create;
+constructor BooleanVar.Create(const value: Variant);
+var v: AnsiString;
 begin
   TkiEnsureStarted;
   name := TkiNextVar;
-  TkEval('set ' + name + ' 0');
+  if bool(value) then v := '1' else v := '0';
+  TkEval('set ' + name + ' ' + v);
+end;
+
+procedure BooleanVar.trace_add(const mode: AnsiString; const callback: Variant);
+{ Tcl's variable trace: `trace add variable <name> write {pxxcb N}`. The
+  callback runs with the three Tcl trace arguments appended, which the
+  dispatcher ignores — tkinter's own trace_add hands its callback the same
+  three and most handlers ignore them too. }
+var idx: Integer; op: AnsiString;
+begin
+  idx := TkiRegisterCallback(callback);
+  if idx < 0 then Exit;
+  if mode = '' then op := 'write' else op := mode;
+  TkEval('trace add variable ' + name + ' ' + op + ' {pxxcb ' + TkiIntStr(idx) + '}');
 end;
 
 function BooleanVar.get: Boolean;

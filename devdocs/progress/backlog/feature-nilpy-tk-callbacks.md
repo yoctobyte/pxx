@@ -5,7 +5,23 @@ track: B
 prio: 65
 ---
 
-# Callable options for the tkinter façade
+# Callable options for the tkinter façade — LANDED 2026-07-28
+
+Done: `Tcl_CreateCommand` in `lib/pcl/tk.pas`, one `pxxcb` dispatcher, a
+callback registry and an `Event` object in `tkinter.pas`, and three callable
+shapes reaching Tk — a BOUND METHOD (`self._on_wheel`), a plain def name, and a
+`lambda`. `bind(..., add="+")`, `Checkbutton(command=...)` and
+`BooleanVar.trace_add` all route through it. Example: `examples/tk/callbacks.npy`
+(compiled by the suite, run under Xvfb).
+
+What it needed on the compiler side: `pycallback_call0/1` in pylib (call a
+function value from library code), a bare def NAME as a value
+(`PyMakeFuncValue`), keyword arguments on overloaded and field-receiver method
+calls, and a real `super().__init__`.
+
+REMAINING for songformatter: a lambda that calls a METHOD on a captured object —
+[[feature-nilpy-lambda-compiled-closure]].
+
 
 - **Type:** feature (PCL façade + a little frontend) — **Track B**
 - **Opened:** 2026-07-27, the wall `settings.py` now stops at.

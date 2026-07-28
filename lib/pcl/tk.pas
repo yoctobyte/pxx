@@ -85,6 +85,24 @@ procedure TtkButton(const path, text, command: AnsiString);
 procedure TtkEntry(const path, opts: AnsiString);
 procedure TtkFrame(const path, opts: AnsiString);
 
+{ ===== callbacks: a Tcl command implemented in Pascal =====
+
+  Tk delivers an event or a button press by EVALUATING a script, so a callable
+  option (`-command`, `bind`) needs a Tcl command that calls back into this
+  program. TkRegisterCommand installs one; the script Tk runs is then e.g.
+  `{pxxcb 3 %x %y}`, and Tk substitutes the % codes before the command sees
+  them. The handler gets the raw argv, which is all the façade needs to build
+  an event object. }
+type
+  PPAnsiChar = ^PAnsiChar;
+  TTclCmdProc = function(clientData: Pointer; interp: Pointer;
+                         argc: Integer; argv: PPAnsiChar): Integer; cdecl;
+
+procedure TkRegisterCommand(const name: AnsiString; proc: TTclCmdProc);
+{ argv[i] as a Pascal string, i counted as Tcl counts it (0 = the command
+  name). Out of range yields '' rather than a wild read. }
+function TkCmdArg(argc: Integer; argv: PPAnsiChar; i: Integer): AnsiString;
+
 implementation
 
 type
@@ -97,6 +115,9 @@ function Tcl_GetStringResult(interp: PTclInterp): PAnsiChar; cdecl; external 'li
 procedure Tcl_FindExecutable(argv0: PAnsiChar); cdecl; external 'libtcl8.6.so.0';
 function Tk_Init(interp: PTclInterp): Integer; cdecl; external 'libtk8.6.so.0';
 procedure Tk_MainLoop; cdecl; external 'libtk8.6.so.0';
+function Tcl_CreateCommand(interp: PTclInterp; cmdName: PAnsiChar;
+                           proc: TTclCmdProc; clientData: Pointer;
+                           deleteProc: Pointer): Pointer; cdecl; external 'libtcl8.6.so.0';
 
 const
   TCL_OK = 0;
@@ -130,6 +151,22 @@ end;
 procedure TkMainLoop;
 begin
   Tk_MainLoop;
+end;
+
+procedure TkRegisterCommand(const name: AnsiString; proc: TTclCmdProc);
+begin
+  if gInterp = nil then Exit;
+  Tcl_CreateCommand(gInterp, PAnsiChar(name), proc, nil, nil);
+end;
+
+function TkCmdArg(argc: Integer; argv: PPAnsiChar; i: Integer): AnsiString;
+var p: PPAnsiChar;
+begin
+  Result := '';
+  if (argv = nil) or (i < 0) or (i >= argc) then Exit;
+  p := PPAnsiChar(NativeInt(argv) + i * SizeOf(Pointer));
+  if p^ = nil then Exit;
+  Result := StrPas(PChar(p^));
 end;
 
 { ===== tkinter-shaped convenience surface ===== }

@@ -1,0 +1,32 @@
+# Callable options: a bound method, a plain def and a lambda all reach Tk, and a
+# variable trace fires. Compiled by the suite, run under Xvfb by hand — it needs
+# a display. See feature-nilpy-tk-callbacks.
+import tkinter as tk
+from tkinter import BooleanVar
+
+
+def on_plain(event):
+    print("plain", event.width)
+
+
+class App:
+    def __init__(self, root):
+        self.hits = 0
+        self.frame = tk.Frame(root, width=200, height=100)
+        self.frame.bind("<Configure>", self.on_configure)
+        self.frame.bind("<Enter>", on_plain, add="+")
+        self.frame.pack(fill="both", expand=True)
+        self.flag = BooleanVar(value=False)
+        self.flag.trace_add("write", lambda *args: print("trace fired"))
+
+    def on_configure(self, event):
+        self.hits = self.hits + 1
+        print("configure", event.width, event.height)
+
+
+root = tk.Tk()
+app = App(root)
+root.update()
+app.flag.set_(True)
+root.update()
+print("hits", app.hits)

@@ -203,6 +203,8 @@ test-nilpy: $(COMPILER)
 	# a field assigned `tk.Canvas(...)` keeps its class in ANY method, so calls on
 	# it resolve statically and take keyword arguments (same X-display caveat)
 	./$(COMPILER) examples/tk/field_class_identity.npy /tmp/test_nilpy_fldcls26
+	# callable options: bound method / plain def / lambda, and a variable trace
+	./$(COMPILER) examples/tk/callbacks.npy /tmp/test_nilpy_tkcb26
 	./$(COMPILER) test/test_nilpy_kwargs_by_name.npy /tmp/test_nilpy_kwname26
 	test "$$(/tmp/test_nilpy_kwname26)" = "$$(printf '%b' 'contiguous: root 7 hi z\ninterior hole: 0 skipped-width z\nonly the last: 0  last-only\nnone given: 0  z')"
 	# a unit-qualified class construction (mod.Class(args))
@@ -3273,6 +3275,8 @@ test-core: $(COMPILER)
 	# a field assigned `tk.Canvas(...)` keeps its class in ANY method, so calls on
 	# it resolve statically and take keyword arguments (same X-display caveat)
 	./$(COMPILER) examples/tk/field_class_identity.npy /tmp/test_nilpy_fldcls26
+	# callable options: bound method / plain def / lambda, and a variable trace
+	./$(COMPILER) examples/tk/callbacks.npy /tmp/test_nilpy_tkcb26
 	./$(COMPILER) test/test_nilpy_kwargs_by_name.npy /tmp/test_nilpy_kwname26
 	test "$$(/tmp/test_nilpy_kwname26)" = "$$(printf '%b' 'contiguous: root 7 hi z\ninterior hole: 0 skipped-width z\nonly the last: 0  last-only\nnone given: 0  z')"
 	# a unit-qualified class construction (mod.Class(args))

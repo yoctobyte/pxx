@@ -773,6 +773,7 @@ function PyParseStdlibCall(const pname: AnsiString; nTok: Integer): Integer; for
 function PyParseSysStream: Integer; forward; { Nil Python sys.stdout/sys.stderr -> its fd (pyparser.inc) }
 function PyIsToBytesSuffixAhead: Boolean; forward; { Nil Python: at a `.to_bytes(` suffix? (pyparser.inc) }
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python obj.meth() on a VARIANT receiver (pyparser.inc) }
+function PyMakeFuncValue: Integer; forward; { Nil Python bare def NAME as a value (pyparser.inc) }
 function PyMakeVariantField(baseNode: Integer; const fname: AnsiString; var tk: TTypeKind; var recName: Integer): Integer; forward; { Nil Python obj.field on a VARIANT receiver (pyparser.inc) }
 function PyKwArgIndex(mpi, firstParam: Integer): Integer; forward; { Nil Python `name=expr` call argument (pyparser.inc) }
 procedure PyBindKwArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer); forward; { Nil Python keyword-argument reorder (pyparser.inc) }
@@ -3262,6 +3263,14 @@ begin
       end;
       Inc(i);
     end;
+    { A Python __init__ REPLACES the base's — the type's own is what
+      `Sub(arg)` runs, never an inherited constructor that happens to accept the
+      same argument better. Ranking by argument TYPE picked the base's whenever
+      the subclass's parameter was unannotated (i.e. a variant), so
+      `class SettingsEditor(tk.Frame)` constructed a bare Frame and the
+      subclass's body never ran. Pascal keeps the inherited-ctor lookup: FPC
+      really does let `TSub.Create` resolve to the base's. }
+    if isNilPy and (nCand > 0) then Break;
     curr := UClsParent[curr];
   end;
 
@@ -4717,7 +4726,26 @@ begin
           fieldName := 'vallist'
         else if CaseEqual(fieldName, 'keys') and
                 (FindUMeth(recName - REC_UCLASS_BASE, 'keylist') >= 0) then
-          fieldName := 'keylist';
+          fieldName := 'keylist'
+        { `w.destroy()` — Python's spelling of a name Pascal reserves for the
+          destructor, so the façade declares `destroy_` and the Python form maps
+          onto it here. Same treatment as the dict views above. }
+        else if CaseEqual(fieldName, 'destroy') and
+                (FindUMeth(recName - REC_UCLASS_BASE, 'destroy_') >= 0) then
+          fieldName := 'destroy_';
+      end;
+      { A Python method name Pascal RESERVES — the library convention is a
+        trailing underscore (`set_`, `destroy_`), and `cfg.set(section, key,
+        value)` (configparser's own spelling) must reach it. Any argument list,
+        unlike the view methods above, so this guard is only "a call follows". }
+      if isNilPy and (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
+         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        if (FindUMeth(recName - REC_UCLASS_BASE, fieldName) < 0) and
+           (FindUProp(recName - REC_UCLASS_BASE, fieldName) < 0) and
+           (FindUField(recName - REC_UCLASS_BASE, fieldName) < 0) and
+           (FindUMeth(recName - REC_UCLASS_BASE, fieldName + '_') >= 0) then
+          fieldName := fieldName + '_';
       end;
       if isNilPy and (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
          (FindUField(recName - REC_UCLASS_BASE, fieldName) < 0) and
@@ -5312,8 +5340,13 @@ begin
                 end
                 else
                 begin
-                  margIdx := FindSym(CurTok.SVal); Next;
-                  mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                  { a bare def NAME passed as a value — Python's function object }
+                  mexprNode := PyMakeFuncValue;
+                  if mexprNode < 0 then
+                  begin
+                    margIdx := FindSym(CurTok.SVal); Next;
+                    mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                  end;
                 end;
               end
               else begin ParseArgExpr; mexprNode := CurASTNode; end;
@@ -5406,8 +5439,13 @@ begin
                 end
                 else
                 begin
-                  margIdx := FindSym(CurTok.SVal); Next;
-                  mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                  { a bare def NAME passed as a value — Python's function object }
+                  mexprNode := PyMakeFuncValue;
+                  if mexprNode < 0 then
+                  begin
+                    margIdx := FindSym(CurTok.SVal); Next;
+                    mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                  end;
                 end;
               end
               else
@@ -5431,7 +5469,25 @@ begin
                 FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
                 mai := Procs[mpi].ParamCount-1;
               end
-              else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',')
+              else if mai < Procs[mpi].ParamCount-1 then
+              begin
+                Expect(tkComma, ',');
+                { Python's TRAILING comma before the closing paren — the shape a
+                  multi-line call is written in:
+                      w.bind(
+                          "<Configure>",
+                          lambda event: ...,
+                      )
+                  The loop would go round once more and demand another argument.
+                  Stop here instead and let the omitted parameters take their
+                  defaults, exactly as an argument list that simply ended. }
+                if isNilPy and (CurTok.Kind = tkRParen) then
+                begin
+                  if CanFillDefaultsFrom(mpi, mai+1) then
+                    FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
+                  Break;
+                end;
+              end
               else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
               Inc(mai);
             end;
@@ -5605,8 +5661,12 @@ begin
         else
         begin
           if CurTok.Kind <> tkIdent then Error('expected variable');
-          margIdx := FindSym(CurTok.SVal); Next;
-          mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+          mexprNode := PyMakeFuncValue;
+          if mexprNode < 0 then
+          begin
+            margIdx := FindSym(CurTok.SVal); Next;
+            mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+          end;
         end;
       end
       else
@@ -8076,6 +8136,7 @@ begin
             mci := baseRec - REC_UCLASS_BASE;
             if FindUProp(mci, fieldName) < 0 then
               mmi := FindUMethOverloadAhead(mci, fieldName, CountCallArgsAhead);
+                      ' params=', Procs[UMthProc_[mmi]].ParamCount);
           end;
           if (mmi >= 0) and (mci >= 0) then EnforceMethVis(mmi, fieldName);
           if (mmi >= 0) and (mci >= 0) and UClsIsInterface[mci] then

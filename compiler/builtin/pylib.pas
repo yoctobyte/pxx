@@ -431,6 +431,22 @@ var
 function pybound_new(code, recv: Pointer): Variant;
 function pybound_code(const v: Variant): Pointer;
 function pybound_recv(const v: Variant): Pointer;
+{ CALL a function value from library code — the piece a callback-taking façade
+  needs. `self.handler` reaches a library as a VT_BOUNDMETHOD variant (a
+  {code, receiver} pair); a plain def reaches it as the same pair with a nil
+  receiver. Both are invoked here so a PCL widget can hand a Tk event back to
+  the Python method that asked for it.
+
+  The callee's own arguments are variants BY ADDRESS, which is NilPy's variant
+  convention, and its result is read as one machine word and discarded — an
+  event handler returns None. A handler whose result rides the hidden-destination
+  convention (an annotated `-> str`, say) is NOT callable this way; that needs
+  the same normalisation defs got (see PyDefUsedAsValue) and is filed as
+  feature-nilpy-tk-callbacks. }
+function pycallback_call0(const cb: Variant): Int64;
+function pycallback_call1(const cb: Variant; const a0: Variant): Int64;
+{ True for a value that pycallback_call* can invoke. }
+function pycallback_is(const cb: Variant): Boolean;
 { Finalizer for dying refcounted objects, installed into builtinheap's
   PXXObjFinalizeHook by the container constructors and pybound_new: releases
   the object's children recursively before the block is freed
@@ -3825,6 +3841,57 @@ end;
 function pybound_code(const v: Variant): Pointer;
 begin
   pybound_code := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.Code;
+end;
+
+type
+  TPyCbM0 = function(recv: Pointer): Int64;
+  TPyCbM1 = function(recv: Pointer; const a0: Variant): Int64;
+  TPyCbF0 = function: Int64;
+  TPyCbF1 = function(const a0: Variant): Int64;
+
+function pycallback_is(const cb: Variant): Boolean;
+begin
+  pycallback_is := PPyVarRec(@cb)^.VType = 8;
+end;
+
+function pycallback_call0(const cb: Variant): Int64;
+var code, recv: Pointer; m0: TPyCbM0; f0: TPyCbF0;
+begin
+  pycallback_call0 := 0;
+  if not pycallback_is(cb) then Exit;
+  code := pybound_code(cb);
+  recv := pybound_recv(cb);
+  if code = nil then Exit;
+  if recv = nil then
+  begin
+    f0 := TPyCbF0(code);
+    pycallback_call0 := f0;
+  end
+  else
+  begin
+    m0 := TPyCbM0(code);
+    pycallback_call0 := m0(recv);
+  end;
+end;
+
+function pycallback_call1(const cb: Variant; const a0: Variant): Int64;
+var code, recv: Pointer; m1: TPyCbM1; f1: TPyCbF1;
+begin
+  pycallback_call1 := 0;
+  if not pycallback_is(cb) then Exit;
+  code := pybound_code(cb);
+  recv := pybound_recv(cb);
+  if code = nil then Exit;
+  if recv = nil then
+  begin
+    f1 := TPyCbF1(code);
+    pycallback_call1 := f1(a0);
+  end
+  else
+  begin
+    m1 := TPyCbM1(code);
+    pycallback_call1 := m1(recv, a0);
+  end;
 end;
 
 function pybound_recv(const v: Variant): Pointer;
