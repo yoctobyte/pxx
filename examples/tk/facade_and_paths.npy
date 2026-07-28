@@ -1,0 +1,16 @@
+# Shapes a real tkinter/pathlib application writes:
+#  - a qualified constant whose name Pascal reserves (tk.END -> END_);
+#  - a class whose name is also an RTL RECORD (Text: the file type) — a
+#    construction means the class, and with keyword arguments;
+#  - a property read on a FRESH construction, which carries no parentheses.
+import tkinter as tk
+from tkinter import Text
+from pathlib import Path
+
+print(tk.END)
+print(tk.BOTH, tk.LEFT, tk.CENTER)
+
+print(Path("/tmp/a/song.txt").name)
+print(Path("/tmp/a/song.txt").stem)
+print(str(Path("/tmp/a/song.txt").with_suffix(".pdf")))
+print(str(Path("/tmp/a/song.txt").with_name("other.md")))

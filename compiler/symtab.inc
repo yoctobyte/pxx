@@ -913,6 +913,26 @@ begin
   end;
 end;
 
+{ The CLASS of that name, skipping same-named RECORDS. FindUClass returns the
+  first row whatever it is, and the RTL has a `Text` record (the file type), so
+  a façade class called Text — the name a tkinter application writes — was
+  invisible: `Text(master, wrap=...)` was read as a record TYPECAST, which
+  parses with one argument and fails with two.
+  decide-class-namespace-scoping. }
+function FindUClassNonRecord(const name: AnsiString): Integer;
+var i: Integer; lo, name2: AnsiString;
+begin
+  Result := -1;
+  name2 := name;
+  lo := ULower(name2);
+  for i := 0 to UClsCount - 1 do
+    if (not UClsIsRecord[i]) and UNameMatch(UClsNOff[i], UClsNLen[i], lo) then
+    begin
+      Result := i;
+      Exit;
+    end;
+end;
+
 function IsClassType(const lo: AnsiString): Boolean;
 var ci: Integer; lo2: AnsiString;
 begin

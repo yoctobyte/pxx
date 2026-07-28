@@ -42,6 +42,38 @@ interface
   unit never link it. }
 uses tk, pylib, pyeval;
 
+{ Tk's option WORDS, which tkinter exposes as module constants and applications
+  write as `tk.BOTH` / `tk.LEFT`. They are the literal Tcl strings.
+
+  Names that collide with a Pascal builtin are left out rather than renamed:
+  a const called CHAR (the type) or INSERT (the procedure) ends the const
+  block, and every constant declared after it silently disappears — which is
+  how `tk.CENTER` came back as an undefined variable while `tk.WORD` resolved.
+  Add such a name only with a spelling the frontend maps. }
+const
+  BOTH = 'both';
+  X_ = 'x';
+  Y_ = 'y';
+  LEFT = 'left';
+  RIGHT = 'right';
+  TOP = 'top';
+  BOTTOM = 'bottom';
+  HORIZONTAL = 'horizontal';
+  VERTICAL = 'vertical';
+  WORD = 'word';
+  { `END` is what an application writes (`text.delete("1.0", tk.END)`); Pascal
+    reserves the word, so the constant is END_ and the frontend maps the
+    qualified spelling onto it — the trailing-underscore convention the
+    reserved METHOD names already use (set_, destroy_). }
+  END_ = 'end';
+  NW = 'nw';
+  NE = 'ne';
+  SW = 'sw';
+  SE = 'se';
+  CENTER = 'center';
+  DISABLED = 'disabled';
+  NORMAL = 'normal';
+
 type
   Widget = class
   public
@@ -92,6 +124,10 @@ type
       the existing binding instead of replacing it, exactly as tkinter's does. }
     procedure bind(const sequence: AnsiString; const callback: Variant;
                    const add: AnsiString = ''); overload;
+    { the toplevel window this widget lives in, and its title bar — an editor
+      shows the open document's name there }
+    function winfo_toplevel: Widget;
+    procedure title(const text: AnsiString);
     function winfo_width: Integer;
     function winfo_height: Integer;
     { Python hands back a LIST OF WIDGETS, and applications call methods on the
@@ -115,6 +151,46 @@ type
     constructor Create(master: Widget; highlightthickness: Integer = -1;
                        const background: AnsiString = ''; width: Integer = -1;
                        height: Integer = -1);
+  end;
+
+  { ttk's PanedWindow — songformatter's editor is a horizontal split. Written
+    `ttk.PanedWindow(...)`, and `ttk` resolves onto this unit, so the ttk
+    widgets live here beside the classic ones and use the `ttk::` command
+    prefix (see lib/pcl/tk.pas's note on why ttk is worth the prefix). }
+  PanedWindow = class(Widget)
+  public
+    constructor Create(master: Widget; const orient: AnsiString = '';
+                       width: Integer = -1; height: Integer = -1);
+    { `paned.add(child, weight=1)` — a pane, optionally with a resize weight }
+    procedure add(child: Widget; weight: Integer = -1);
+  end;
+
+  { A menu, and the popup an application posts on right-click. }
+  Menu = class(Widget)
+  public
+    constructor Create(master: Widget; tearoff: Integer = -1);
+    { `label` is what the application writes as a keyword, so that IS the
+      parameter name — keyword arguments bind by name. }
+    procedure add_command(const label: AnsiString; const command: Variant);
+    procedure add_separator;
+    { `post(x_root, y_root)` places the popup at a SCREEN coordinate }
+    procedure post(x, y: Integer);
+  end;
+
+  { A multi-line text widget. The subset is what an editor needs: put text in,
+    take it out, clear it, and set the options songformatter sets. }
+  Text = class(Widget)
+  public
+    constructor Create(master: Widget; const wrap: AnsiString = '';
+                       width: Integer = -1; height: Integer = -1;
+                       const background: AnsiString = '');
+    { Tk indices are strings ("1.0", "end"); an application writes them
+      verbatim, so they stay strings here rather than being modelled. }
+    procedure insert(const index_: AnsiString; const chars: AnsiString);
+    procedure delete(const first_: AnsiString; const last_: AnsiString = '');
+    function get(const first_: AnsiString; const last_: AnsiString = ''): AnsiString;
+    procedure tag_add(const tagName, first_, last_: AnsiString);
+    procedure event_generate(const sequence: AnsiString);
   end;
 
   Canvas = class(Widget)
@@ -591,6 +667,20 @@ begin
   TkEval('bind ' + path + ' ' + sequence + ' {' + op + TkiCbScript(idx) + '}');
 end;
 
+function Widget.winfo_toplevel: Widget;
+var w: Widget;
+begin
+  w := Widget.Create;
+  w.path := TkEval('winfo toplevel ' + path);
+  w.kind := 'toplevel';
+  winfo_toplevel := w;
+end;
+
+procedure Widget.title(const text: AnsiString);
+begin
+  TkEval('wm title ' + path + ' {' + text + '}');
+end;
+
 procedure Widget.update;
 begin
   TkEval('update');
@@ -697,6 +787,97 @@ begin
   TkEval('frame ' + path + TkiOptInt('highlightthickness', highlightthickness) +
          TkiOptStr('background', background) + TkiOptInt('width', width) +
          TkiOptInt('height', height));
+end;
+
+{ ---- PanedWindow (ttk) ---------------------------------------------------- }
+
+constructor PanedWindow.Create(master: Widget; const orient: AnsiString;
+                               width: Integer; height: Integer);
+begin
+  TkiEnsureStarted;
+  path := TkiNextPath(master);
+  kind := 'panedwindow';
+  TkEval('ttk::panedwindow ' + path + TkiOptStr('orient', orient) +
+         TkiOptInt('width', width) + TkiOptInt('height', height));
+end;
+
+procedure PanedWindow.add(child: Widget; weight: Integer);
+begin
+  if child = nil then Exit;
+  TkEval(path + ' add ' + child.path + TkiOptInt('weight', weight));
+end;
+
+{ ---- Menu ---------------------------------------------------------------- }
+
+constructor Menu.Create(master: Widget; tearoff: Integer);
+begin
+  TkiEnsureStarted;
+  path := TkiNextPath(master);
+  kind := 'menu';
+  TkEval('menu ' + path + TkiOptInt('tearoff', tearoff));
+end;
+
+procedure Menu.add_command(const label: AnsiString; const command: Variant);
+var cbIdx: Integer;
+begin
+  { `command=` is a CALLABLE in Python — routed through the same callback
+    registry every other command option uses. }
+  cbIdx := TkiRegisterCallback(command);
+  if cbIdx < 0 then
+    TkEval(path + ' add command' + TkiOptStr('label', label))
+  else
+    TkEval(path + ' add command' + TkiOptStr('label', label) +
+           ' -command {' + TkiCbScript(cbIdx) + '}');
+end;
+
+procedure Menu.add_separator;
+begin
+  TkEval(path + ' add separator');
+end;
+
+procedure Menu.post(x, y: Integer);
+begin
+  TkEval(path + ' post ' + TkiIntStr(x) + ' ' + TkiIntStr(y));
+end;
+
+{ ---- Text ---------------------------------------------------------------- }
+
+constructor Text.Create(master: Widget; const wrap: AnsiString;
+                        width: Integer; height: Integer;
+                        const background: AnsiString);
+begin
+  TkiEnsureStarted;
+  path := TkiNextPath(master);
+  kind := 'text';
+  TkEval('text ' + path + TkiOptStr('wrap', wrap) + TkiOptInt('width', width) +
+         TkiOptInt('height', height) + TkiOptStr('background', background));
+end;
+
+procedure Text.insert(const index_: AnsiString; const chars: AnsiString);
+begin
+  TkEval(path + ' insert ' + index_ + ' {' + chars + '}');
+end;
+
+procedure Text.delete(const first_: AnsiString; const last_: AnsiString);
+begin
+  if last_ = '' then TkEval(path + ' delete ' + first_)
+  else TkEval(path + ' delete ' + first_ + ' ' + last_);
+end;
+
+function Text.get(const first_: AnsiString; const last_: AnsiString): AnsiString;
+begin
+  if last_ = '' then get := TkEval(path + ' get ' + first_)
+  else get := TkEval(path + ' get ' + first_ + ' ' + last_);
+end;
+
+procedure Text.tag_add(const tagName, first_, last_: AnsiString);
+begin
+  TkEval(path + ' tag add ' + tagName + ' ' + first_ + ' ' + last_);
+end;
+
+procedure Text.event_generate(const sequence: AnsiString);
+begin
+  TkEval('event generate ' + path + ' ' + sequence);
 end;
 
 { ---- Canvas -------------------------------------------------------------- }

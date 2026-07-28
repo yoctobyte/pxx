@@ -44,6 +44,11 @@ type
     function is_dir: Boolean;
     procedure mkdir(parents: Boolean = False; exist_ok: Boolean = False);
     function joinpath(const child: AnsiString): Path;
+    { `p.with_suffix(".pdf")` — the same path with its extension replaced (or
+      added when there is none), and `.with_name(...)` beside it. CPython
+      requires the new suffix to start with a dot, or be empty to strip. }
+    function with_suffix(const suffix: AnsiString): Path;
+    function with_name(const name: AnsiString): Path;
     { Python renders a Path through __str__; NilPy calls it for `str(p)` and
       `print(p)` the same way (feature-nilpy-dunder-str). Without one, a class
       printed its instance POINTER. }
@@ -152,6 +157,37 @@ end;
 function Path.joinpath(const child: AnsiString): Path;
 begin
   joinpath := Path.Create(PlJoin(s, child));
+end;
+
+function Path.with_suffix(const suffix: AnsiString): Path;
+var i, cut, lastSlash: Integer; base: AnsiString;
+begin
+  lastSlash := 0;
+  cut := 0;
+  for i := 1 to Length(s) do
+  begin
+    if (s[i] = '/') then begin lastSlash := i; cut := 0; end;
+    if (s[i] = '.') and (i > lastSlash + 1) then cut := i;
+  end;
+  if cut > 0 then
+  begin
+    base := '';
+    for i := 1 to cut - 1 do base := base + s[i];
+  end
+  else
+    base := s;
+  with_suffix := Path.Create(base + suffix);
+end;
+
+function Path.with_name(const name: AnsiString): Path;
+var i, lastSlash: Integer; dir: AnsiString;
+begin
+  lastSlash := 0;
+  for i := 1 to Length(s) do
+    if s[i] = '/' then lastSlash := i;
+  dir := '';
+  for i := 1 to lastSlash do dir := dir + s[i];
+  with_name := Path.Create(dir + name);
 end;
 
 function Path.__str__: AnsiString;

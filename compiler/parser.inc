@@ -861,14 +861,33 @@ end;
   namespace unit (`Posix.SysSocket`) wins over its first component. Returns the
   unit index and leaves the parser ON the member name; returns -1 and consumes
   nothing when the leading name is not a compiled unit (e.g. `record.field`). }
+{ Python attribute names that Pascal reserves. A library exposes them with a
+  trailing underscore; this maps the spelling the application writes onto it. }
+function PyMapReservedMember(const nm: AnsiString): AnsiString;
+begin
+  PyMapReservedMember := nm;
+  if CaseEqual(nm, 'END') or CaseEqual(nm, 'TYPE') or CaseEqual(nm, 'FILE') or
+     CaseEqual(nm, 'LABEL') or CaseEqual(nm, 'SET') or CaseEqual(nm, 'STRING') or
+     CaseEqual(nm, 'ARRAY') or CaseEqual(nm, 'RECORD') or CaseEqual(nm, 'TEXT') or
+     CaseEqual(nm, 'DIV') or CaseEqual(nm, 'MOD') or CaseEqual(nm, 'IN') or
+     CaseEqual(nm, 'IS') or CaseEqual(nm, 'OR') or CaseEqual(nm, 'AND') or
+     CaseEqual(nm, 'NOT') or CaseEqual(nm, 'WITH') then
+    PyMapReservedMember := nm + '_';
+end;
+
 function ConsumeUnitQualifier(var name: AnsiString): Integer;
 var cand: AnsiString; bestUnit, bestExtra, extra, ti, k, u: Integer;
 begin
   Result := -1;
   if CurTok.Kind <> tkIdent then Exit;
-  { Need at least one `.ident` after the name to be a qualifier at all. }
+  { Need at least one `.ident` after the name to be a qualifier at all — or, in
+    NilPy, a `.KEYWORD`: `tk.END` is written by every tkinter application and
+    END is a reserved word here, so the façade spells the constant END_ and the
+    member name is mapped to it below. The same trailing-underscore convention
+    the reserved METHOD names use (set_, destroy_). }
   if not ((TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkDot) and
-          (Tokens[TokPos + 1].Kind = tkIdent)) then Exit;
+          ((Tokens[TokPos + 1].Kind = tkIdent) or
+           (isNilPy and (Tokens[TokPos + 1].Kind = tkEnd)))) then Exit;
 
   { `System.X` — pxx has no separate System unit (System IS the builtin layer).
     Strip the qualifier so FPC's `System.Move(...)` / `System.FreeMem` resolve
@@ -929,7 +948,10 @@ begin
     Next;                 { consume identifier (CurTok -> '.') }
     Expect(tkDot, '.');   { consume '.'        (CurTok -> next ident) }
   end;
-  name := CurTok.SVal;    { member name; parser left on it }
+  if CurTok.Kind = tkIdent then
+    name := CurTok.SVal
+  else
+    name := GetTokenStr(TokPos - 1) + '_';   { `tk.END` -> END_ }
 end;
 
 function LastDotName(const s: AnsiString): AnsiString;
@@ -7717,7 +7739,14 @@ begin
     top-level assignments, so a ctor call in a method arg quietly became a
     cast — a Word("x") boxed into a list slot carried the string pointer
     with an int64 tag. }
-  if PyExprMode and (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
+  { FindUClassNonRecord, not IsClassType: the first row of that name may be a
+    RECORD — the RTL's `Text` file type against tkinter's Text widget — and a
+    construction in NilPy always means the class. Read as a record typecast it
+    parsed with one argument and failed with two. Confined to this NilPy
+    intercept: Pascal code still gets the record, which is what `var f: Text`
+    means there. }
+  if PyExprMode and (CurTok.Kind = tkIdent) and
+     (FindUClassNonRecord(CurTok.SVal) >= 0) and
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
   begin
     CurASTNode := PyClassCreateExpr;
@@ -7745,7 +7774,7 @@ begin
   if PyExprMode and (CurTok.Kind = tkIdent) and (TokPos + 2 < TokCount) and
      (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos + 1].Kind = tkIdent) and
      (Tokens[TokPos + 2].Kind = tkLParen) and
-     IsClassType(GetTokenStr(TokPos + 1)) and
+     (FindUClassNonRecord(GetTokenStr(TokPos + 1)) >= 0) and
      (FindSym(CurTok.SVal) < 0) and (FindUnitOrAlias(CurTok.SVal) >= 0) then
   begin
     { Remember WHICH unit was named: two libraries may export the same class
@@ -9436,6 +9465,13 @@ begin
         Exit;
       end;
       qUnit := ConsumeUnitQualifier(name);
+      { A qualified member whose name Pascal RESERVES: `tk.END` is what every
+        tkinter application writes, and a library cannot declare a constant
+        called END, so it declares END_ and the name is mapped here. The same
+        trailing-underscore convention the reserved METHOD names already use
+        (set_, destroy_). Applied to the qualified form only, so an ordinary
+        Pascal `unit.End` is untouched — there is no such thing. }
+      if isNilPy and (qUnit >= 0) then name := PyMapReservedMember(name);
       prevTok := TokPos - 1;
       if CaseEqual(name, 'inherited') then
       begin
@@ -10204,7 +10240,14 @@ begin
       { qUnit = -1 only: `System.X` (qUnit = -2) names the RTL routine
         explicitly, so the class method must not shadow it — the statement-side
         twin has the same guard (fpjson's System.Delete vs TJSONArray.Delete). }
-      if (procIdx >= 0) and (qUnit = -1) and (idx < 0) and
+      { …but NOT in NilPy, where a bare name is NEVER a method: Python reaches
+        a method only through `self.`, so an unqualified call names the
+        module-level function even when the class has one of the same name.
+        songformatter's `def select_image(self): select_image()` is exactly
+        that — a method delegating to the module function it shadows — and
+        routing it to implicit-Self dispatch made it a call of ITSELF with the
+        wrong arity. }
+      if (procIdx >= 0) and (qUnit = -1) and (idx < 0) and (not isNilPy) and
          (CurSelfClass >= REC_UCLASS_BASE) and
          (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) >= 0) then
         procIdx := -1;
@@ -11997,6 +12040,7 @@ end;
 procedure ParseFactor;
 var smNameTok, smBase, sdTok: Integer;
     sdName: AnsiString;
+    smTk: TTypeKind;   { receiver kind for a suffix on a fresh construction }
 begin
   { A `lambda` expression. Consumed and reduced to a placeholder None value:
     full lambda support is function-value synthesis (like nested defs), and the
@@ -12142,6 +12186,23 @@ begin
     CurASTNode := PyParseClassMethodCall(smBase,
                     ResolveNodeRec(smBase) - REC_UCLASS_BASE, GetTokenStr(smNameTok));
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+  end;
+  { …and a PROPERTY or FIELD read on that fresh construction, which carries no
+    parentheses: `Path(self.file_path).name`. The loop above needs a '(' after
+    the member, so the no-argument form — the one pathlib's name/stem/suffix
+    are written with — still had nowhere to go and reported "expected newline
+    after statement". Read through the ordinary class-selector machinery, the
+    same as for an ident receiver. }
+  while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
+        (Tokens[TokPos].Kind = tkIdent) and
+        (Tokens[TokPos + 1].Kind <> tkLParen) and
+        (IntToTypeKind(ASTTk[CurASTNode]) = tyClass) and
+        (ResolveNodeRec(CurASTNode) >= REC_UCLASS_BASE) do
+  begin
+    smBase := CurASTNode;
+    smTk := IntToTypeKind(ASTTk[smBase]);
+    CurASTNode := ParseClassRecordSelectors(smBase, ResolveNodeRec(smBase), smTk);
+    LastExprTk := smTk;
   end;
   { Same asymmetry for the SUBSCRIPT suffix: `s[i]` on an ident goes through
     ParseLValueAST, but a string literal and a call RESULT are not lvalues, so

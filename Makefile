@@ -316,6 +316,10 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# a reserved-word constant (tk.END), a class named like an RTL record
+	# (Text), and a property read on a fresh construction (Path(x).name)
+	./$(COMPILER) examples/tk/facade_and_paths.npy /tmp/test_nilpy_facade_paths26
+	test "$$(/tmp/test_nilpy_facade_paths26)" = "$$(printf 'end\nboth left center\nsong.txt\nsong\n/tmp/a/song.pdf\n/tmp/a/other.md')"
 	# a nested def's result type, and a capture assigned after the nested def
 	./$(COMPILER) test/test_nilpy_nested_def_result.npy /tmp/test_nilpy_nestdef26
 	test "$$(/tmp/test_nilpy_nestdef26)" = "$$(printf 'big\nbig\n7\nyes\nno')"
@@ -3469,6 +3473,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# a reserved-word constant (tk.END), a class named like an RTL record
+	# (Text), and a property read on a fresh construction (Path(x).name)
+	./$(COMPILER) examples/tk/facade_and_paths.npy /tmp/test_nilpy_facade_paths26
+	test "$$(/tmp/test_nilpy_facade_paths26)" = "$$(printf 'end\nboth left center\nsong.txt\nsong\n/tmp/a/song.pdf\n/tmp/a/other.md')"
 	# a nested def's result type, and a capture assigned after the nested def
 	./$(COMPILER) test/test_nilpy_nested_def_result.npy /tmp/test_nilpy_nestdef26
 	test "$$(/tmp/test_nilpy_nestdef26)" = "$$(printf 'big\nbig\n7\nyes\nno')"

@@ -2780,6 +2780,9 @@ begin
   name := CurTok.SVal;
   ci := -1;
   if PyCtorQualUnit >= 0 then ci := FindUClassInUnit(name, PyCtorQualUnit);
+  { skip a same-named RECORD (the RTL's `Text` file type against tkinter's Text
+    widget): a construction always means the class }
+  if ci < 0 then ci := FindUClassNonRecord(name);
   if ci < 0 then ci := FindUClass(name);
   if ci < 0 then Error('Nil Python: class not found: ' + name);
   recId := REC_UCLASS_BASE + ci;
