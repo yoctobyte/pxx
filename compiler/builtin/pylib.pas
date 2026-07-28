@@ -635,6 +635,11 @@ function pyeq_v(const a: Variant; const b: Variant): Boolean;
 function pyint_v(const v: Variant): Variant;      { int(v) as a variant }
 function pyvar_of_int(v: Int64): Variant;
 function pyvar_of_bool(b: Boolean): Variant;
+{ Identity on a Variant. Its use is the ARGUMENT side: passing a scalar here
+  boxes it through the ordinary call-argument path, which is the one place that
+  knows how to make a variant out of any value — so an Integer field read and a
+  Variant one can be the two arms of one expression. }
+function pyvar_id(const v: Variant): Variant;
 function pystr_repeat_v(const v: Variant; n: Int64): AnsiString;
 { `xs * n` on a LIST: a new list whose slots are the original's, repeated.
   Python copies REFERENCES, not elements — `[[0]] * 3` gives three aliases of the
@@ -2837,6 +2842,11 @@ begin
   r := PPyVarRec(@Result);
   r^.VType := 4;
   if b then r^.Payload := 1 else r^.Payload := 0;
+end;
+
+function pyvar_id(const v: Variant): Variant;
+begin
+  Result := v;
 end;
 
 function pyint_v(const v: Variant): Variant;

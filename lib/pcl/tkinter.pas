@@ -120,14 +120,26 @@ type
                         const yscrollcommand: Variant = 0;
                         const xscrollcommand: Variant = 0;
                         const text: AnsiString = ''; const background: AnsiString = '';
-                        width: Integer = -1; height: Integer = -1);
+                        width: Integer = -1; height: Integer = -1;
+                        { a MENU option, declared here rather than as a Menu
+                          overload: NilPy binds keyword arguments against the
+                          statically chosen overload, so a same-named one is
+                          not reachable by keyword (see configure_raw's note).
+                          `m.configure(postcommand=fn)` runs fn just before the
+                          menu posts — how an application greys entries out at
+                          the last moment. }
+                        const postcommand: Variant = 0);
     { `w.config(...)` — tkinter's own short spelling of configure, and what a
       real application writes about as often as the long one. }
     procedure config(const state: AnsiString = ''; const scrollregion: AnsiString = '';
                      const yscrollcommand: Variant = 0;
                      const xscrollcommand: Variant = 0;
                      const text: AnsiString = ''; const background: AnsiString = '';
-                     width: Integer = -1; height: Integer = -1);
+                     width: Integer = -1; height: Integer = -1;
+                     { `root.config(menu=menubar)` — how a window's menu bar is
+                       attached, and the only option here that takes a WIDGET. }
+                     menu: Widget = nil;
+                     const postcommand: Variant = 0);
     { the raw form, for an option this façade has not named yet }
     procedure configure_raw(const opts: AnsiString);
     function cget(const option: AnsiString): AnsiString;
@@ -184,8 +196,12 @@ type
     constructor Create(master: Widget; tearoff: Integer = -1);
     { `label` is what the application writes as a keyword, so that IS the
       parameter name — keyword arguments bind by name. }
-    procedure add_command(const label: AnsiString; const command: Variant);
+    procedure add_command(const label: AnsiString; const command: Variant = 0;
+                          const accelerator: AnsiString = '';
+                          const state: AnsiString = '');
     procedure add_separator;
+    { `menubar.add_cascade(label="File", menu=file_menu)` — a submenu. }
+    procedure add_cascade(const label: AnsiString; menu: Widget = nil);
     { `post(x_root, y_root)` places the popup at a SCREEN coordinate }
     procedure post(x, y: Integer);
   end;
@@ -700,10 +716,14 @@ end;
 procedure Widget.config(const state, scrollregion: AnsiString;
                         const yscrollcommand, xscrollcommand: Variant;
                         const text, background: AnsiString;
-                        width, height: Integer);
+                        width, height: Integer; menu: Widget;
+                        const postcommand: Variant);
 begin
   configure(state, scrollregion, yscrollcommand, xscrollcommand,
-            text, background, width, height);
+            text, background, width, height, postcommand);
+  { the menu bar is `wm`-level on the root and an ordinary option elsewhere;
+    Tcl takes the same spelling for both }
+  if menu <> nil then TkEval(path + ' configure -menu ' + menu.path);
 end;
 
 procedure Widget.configure_raw(const opts: AnsiString);
@@ -714,9 +734,13 @@ end;
 procedure Widget.configure(const state, scrollregion: AnsiString;
                            const yscrollcommand, xscrollcommand: Variant;
                            const text, background: AnsiString;
-                           width, height: Integer);
-var o: AnsiString;
+                           width, height: Integer;
+                           const postcommand: Variant);
+var o: AnsiString; cbIdx: Integer;
 begin
+  cbIdx := TkiRegisterCallback(postcommand);
+  if cbIdx >= 0 then
+    TkEval(path + ' configure -postcommand {' + TkiCbScript(cbIdx) + '}');
   o := TkiOptStr('state', state) + TkiOptStr('scrollregion', scrollregion)
      + TkiOptScrollCmd('yscrollcommand', yscrollcommand, 'set')
      + TkiOptScrollCmd('xscrollcommand', xscrollcommand, 'set')
@@ -1021,18 +1045,31 @@ begin
   TkEval('menu ' + path + TkiOptInt('tearoff', tearoff));
 end;
 
-procedure Menu.add_command(const label: AnsiString; const command: Variant);
+procedure Menu.add_command(const label: AnsiString; const command: Variant;
+                           const accelerator, state: AnsiString);
 var cbIdx: Integer;
 begin
   { `command=` is a CALLABLE in Python — routed through the same callback
     registry every other command option uses. }
   cbIdx := TkiRegisterCallback(command);
   if cbIdx < 0 then
-    TkEval(path + ' add command' + TkiOptStr('label', label))
+    TkEval(path + ' add command' + TkiOptStr('label', label) +
+           TkiOptStr('accelerator', accelerator) + TkiOptStr('state', state))
   else
     TkEval(path + ' add command' + TkiOptStr('label', label) +
+           TkiOptStr('accelerator', accelerator) + TkiOptStr('state', state) +
            ' -command {' + TkiCbScript(cbIdx) + '}');
 end;
+
+procedure Menu.add_cascade(const label: AnsiString; menu: Widget);
+var o: AnsiString;
+begin
+  o := '';
+  if menu <> nil then o := ' -menu ' + menu.path;
+  TkEval(path + ' add cascade -label {' + label + '}' + o);
+end;
+
+
 
 procedure Menu.add_separator;
 begin

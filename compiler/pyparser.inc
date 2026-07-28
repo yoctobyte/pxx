@@ -4776,24 +4776,11 @@ end;
 
 { `v.field` (READ) where `v` is a VARIANT: unbox to the class that declares the
   field and read it. Returns -1 when no class declares the name. }
-function PyMakeVariantField(baseNode: Integer; const fname: AnsiString;
-                            var tk: TTypeKind; var recName: Integer): Integer;
-var ci, fi, hitCi, hitFi, unboxArg, unboxCall, castNode: Integer;
+{ Read `<class>.field` off a variant: unbox to that class and read. }
+function PyVariantFieldArm(baseNode, ci, fi: Integer;
+                           const fname: AnsiString): Integer;
+var unboxArg, unboxCall, castNode: Integer;
 begin
-  Result := -1;
-  hitCi := -1; hitFi := -1;
-  for ci := 0 to UClsCount - 1 do
-  begin
-    if UClsIsRecord[ci] then Continue;
-    fi := FindUField(ci, fname);
-    if fi < 0 then Continue;
-    if hitCi < 0 then begin hitCi := ci; hitFi := fi; end
-    else if (UFldTk[fi] <> UFldTk[hitFi]) or (UFldOff_[fi] <> UFldOff_[hitFi]) then
-      Error('Nil Python: .' + fname + ' on a dynamically-typed value is '
-        + 'ambiguous (several classes declare it at different offsets) — '
-        + 'assign to an annotated local first');
-  end;
-  if hitCi < 0 then Exit;
   unboxArg := AllocNode(AN_ARG);
   ASTLeft[unboxArg] := baseNode;
   unboxCall := AllocNode(AN_CALL);
@@ -4803,15 +4790,121 @@ begin
   ASTLeft[unboxCall] := unboxArg;
   castNode := AllocNode(AN_CLASS_CAST);
   ASTLeft[castNode] := unboxCall;
-  ASTIVal[castNode] := hitCi;
+  ASTIVal[castNode] := ci;
   ASTTk[castNode]   := Ord(tyClass);
   Result := AllocNode(AN_FIELD);
   ASTLeft[Result] := castNode;
   ASTSOffset[Result] := PyStoredName(fname);
   ASTSLen[Result] := Length(fname);
-  ASTTk[Result] := UFldTk[hitFi];
-  tk := IntToTypeKind(UFldTk[hitFi]);
-  recName := UFldRec_[hitFi];
+  ASTTk[Result] := UFldTk[fi];
+end;
+
+{ Force a node to Variant. A scalar goes through pyvar_id, whose parameter is a
+  const Variant, so the ordinary call-argument boxing does the work. }
+function PyForceVariant(node: Integer): Integer;
+var argNode: Integer;
+begin
+  if IntToTypeKind(ASTTk[node]) = tyVariant then
+  begin
+    PyForceVariant := node;
+    Exit;
+  end;
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := node;
+  ASTRight[argNode] := -1;
+  PyForceVariant := AllocNode(AN_CALL);
+  ASTIVal[PyForceVariant] := FindProc('pyvar_id');
+  if ASTIVal[PyForceVariant] < 0 then Error('Nil Python: pylib (pyvar_id) not loaded');
+  ASTTk[PyForceVariant] := Ord(tyVariant);
+  ASTLeft[PyForceVariant] := argNode;
+end;
+
+{ `v.field` (READ) where `v` is a VARIANT: unbox to the class that declares the
+  field and read it. Returns -1 when no class declares the name.
+
+  When SEVERAL classes declare it and they disagree on offset or type, the class
+  is decided at RUN TIME — one `pyvarobj(v) is C ? <read as C> : ...` arm per
+  candidate, which is exactly how a METHOD on a variant is dispatched
+  (PyParseVariantMethod). This used to be refused outright, telling the
+  application to annotate a local; `event.x` in a Tk callback is the shape, and
+  tkinter's Event (Integer at 8) collides with any other class that has an `x`
+  (songformatter's text object holds a Variant at 24). Refusing was safe but it
+  asked the program to change, and the program is the thing being compiled.
+
+  Arms are boxed to Variant when the candidates' field types differ, so the
+  expression has ONE type whichever class turns up. }
+function PyMakeVariantField(baseNode: Integer; const fname: AnsiString;
+                            var tk: TTypeKind; var recName: Integer): Integer;
+const MAX_FIELD_CANDIDATES = 16;
+var ci, fi, i, n, armN, condN, pairN, tern, unboxArg, unboxCall: Integer;
+    cands: array[0..MAX_FIELD_CANDIDATES - 1] of Integer;
+    candFi: array[0..MAX_FIELD_CANDIDATES - 1] of Integer;
+    sameShape: Boolean;
+begin
+  Result := -1;
+  n := 0;
+  for ci := 0 to UClsCount - 1 do
+  begin
+    if UClsIsRecord[ci] then Continue;
+    fi := FindUField(ci, fname);
+    if fi < 0 then Continue;
+    if n < MAX_FIELD_CANDIDATES then
+    begin
+      cands[n] := ci;
+      candFi[n] := fi;
+      Inc(n);
+    end;
+  end;
+  if n = 0 then Exit;
+
+  sameShape := True;
+  for i := 1 to n - 1 do
+    if (UFldTk[candFi[i]] <> UFldTk[candFi[0]]) or
+       (UFldOff_[candFi[i]] <> UFldOff_[candFi[0]]) then sameShape := False;
+
+  if sameShape then
+  begin
+    { one layout: read it directly, exactly as before — no dispatch, and the
+      emitted code for every program that already compiled is unchanged }
+    Result := PyVariantFieldArm(baseNode, cands[0], candFi[0], fname);
+    tk := IntToTypeKind(UFldTk[candFi[0]]);
+    recName := UFldRec_[candFi[0]];
+    Exit;
+  end;
+
+  { Several layouts: decide at run time. The LAST candidate is the fallback arm,
+    so a receiver of none of these classes reads as that one did before —
+    wrong, but no worse than the single-class guess this replaces, and the
+    common case (a receiver that IS one of them) is now right. }
+  Result := PyForceVariant(PyVariantFieldArm(baseNode, cands[n - 1],
+                                             candFi[n - 1], fname));
+  for i := n - 2 downto 0 do
+  begin
+    armN := PyForceVariant(PyVariantFieldArm(baseNode, cands[i], candFi[i], fname));
+    { cond: pyvarobj(v) is <candidate> — the test isinstance lowers to }
+    unboxArg := AllocNode(AN_ARG);
+    ASTLeft[unboxArg] := baseNode;
+    unboxCall := AllocNode(AN_CALL);
+    ASTIVal[unboxCall] := FindProc('pyvarobj');
+    if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+    ASTTk[unboxCall] := Ord(tyPointer);
+    ASTLeft[unboxCall] := unboxArg;
+    condN := AllocNode(AN_IS_TEST);
+    ASTLeft[condN] := unboxCall;
+    ASTIVal[condN] := cands[i];
+    ASTTk[condN] := Ord(tyBoolean);
+
+    pairN := AllocNode(AN_PAIR);
+    ASTLeft[pairN] := armN;
+    ASTRight[pairN] := Result;
+    tern := AllocNode(AN_TERNARY);
+    ASTLeft[tern] := condN;
+    ASTRight[tern] := pairN;
+    ASTTk[tern] := Ord(tyVariant);
+    Result := tern;
+  end;
+  tk := tyVariant;
+  recName := REC_NONE;
 end;
 
 { A synthetic call signature: nArgs Variant params, Variant result, no body.

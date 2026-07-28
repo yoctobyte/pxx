@@ -1,0 +1,36 @@
+# Reading `.field` off a dynamically-typed value when SEVERAL classes declare
+# that name at different offsets AND different types. The class is decided at
+# run time, one arm per candidate — the same way a method on a variant is
+# dispatched. This used to be refused outright ("assign to an annotated local
+# first"), which asked the program to change; `event.x` in a Tk callback is the
+# shape that forces it, since tkinter's Event collides with any other class
+# that has an `x`.
+
+class A:
+    def __init__(self):
+        self.tag = 1
+        self.x = 42            # Integer, one offset
+
+
+class B:
+    def __init__(self):
+        self.p = "a"
+        self.q = "b"
+        self.x = "text"        # a different type, a different offset
+
+
+class C:
+    def __init__(self):
+        self.x = 3.5           # and a third
+
+
+def read_x(v):
+    return v.x
+
+
+print(read_x(A()))
+print(read_x(B()))
+print(read_x(C()))
+
+# the same name read twice off different receivers in one expression
+print(str(read_x(A())) + "/" + str(read_x(B())))

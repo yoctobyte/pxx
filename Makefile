@@ -334,6 +334,9 @@ test-nilpy: $(COMPILER)
 	# the Python json module surface: dumps/loads and dump/load through pathlib
 	./$(COMPILER) test/test_nilpy_json_module.npy /tmp/test_nilpy_jsonmod26
 	test "$$(/tmp/test_nilpy_jsonmod26)" = "$$(python3 test/test_nilpy_json_module.npy)"
+	# .field off a variant when several classes declare it at different offsets
+	./$(COMPILER) test/test_nilpy_ambiguous_variant_field.npy /tmp/test_nilpy_ambfld26
+	test "$$(/tmp/test_nilpy_ambfld26)" = "$$(python3 test/test_nilpy_ambiguous_variant_field.npy)"
 	# a bare name is never a method; str.format with a spec; qualified except
 	./$(COMPILER) examples/tk/shadow_format_except.npy /tmp/test_nilpy_sfe26
 	test "$$(/tmp/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"
@@ -3512,6 +3515,9 @@ test-core: $(COMPILER)
 	# the Python json module surface: dumps/loads and dump/load through pathlib
 	./$(COMPILER) test/test_nilpy_json_module.npy /tmp/test_nilpy_jsonmod26
 	test "$$(/tmp/test_nilpy_jsonmod26)" = "$$(python3 test/test_nilpy_json_module.npy)"
+	# .field off a variant when several classes declare it at different offsets
+	./$(COMPILER) test/test_nilpy_ambiguous_variant_field.npy /tmp/test_nilpy_ambfld26
+	test "$$(/tmp/test_nilpy_ambfld26)" = "$$(python3 test/test_nilpy_ambiguous_variant_field.npy)"
 	# a bare name is never a method; str.format with a spec; qualified except
 	./$(COMPILER) examples/tk/shadow_format_except.npy /tmp/test_nilpy_sfe26
 	test "$$(/tmp/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"
