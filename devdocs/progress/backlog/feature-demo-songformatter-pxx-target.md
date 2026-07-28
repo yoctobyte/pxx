@@ -398,31 +398,35 @@ path (reportlab's blendmode is read through it).
 its own it ends in "invalid symbol in lea", which is a module-with-no-main
 artefact worth its own look.
 
-## 2026-07-28, later: the whole app compiles except one line
+## 2026-07-28: SongFormatter.py COMPILES — the whole application
 
-`SongFormatter.py` — the entry point — now walks its own 595 lines and all
-three imported modules. What it took beyond the compile milestone above:
+3,973 lines of Python across five modules (SongFormatter, convertrawtext,
+render_backend, settings, key_analysis) into a 4.3 MB static binary, 2,270
+procs. No compiler wall left in its path.
 
-- the module AST recycling fix ([[bug-nilpy-module-ast-recycled-by-nested-unit-compile]]),
-  which is what let `convertrawtext` be IMPORTED rather than only compiled
-- `tk.X` (a unit-qualified name falling back to the `NAME_` spelling), any
-  unmodelled `sys.<attr>` raising at run time, and module globals a def reads
-  from further up the file
+The run from "convertrawtext parses" to here:
+
+- [[bug-nilpy-module-ast-recycled-by-nested-unit-compile]] — the AST arena is
+  per-proc scratch and a module holds nodes across the whole file, so importing
+  a module that imports another recycled the outer one's statement list. The
+  floor has to track the list as it GROWS, not just its start.
+- [[bug-nilpy-ambiguous-dynamic-field-needs-runtime-dispatch]] — `event.x`,
+  resolved by dispatching on the receiver's real class at run time.
 - keyword arguments binding to the CONSTRUCTOR's parameters before the class's
-  fields — `FormatText(nb, on_next=f)` was rejected as "multiple values"
-- a qualified exception class inside a tuple: `except (OSError, json.JSONDecodeError):`
+  fields; a qualified exception class inside a tuple; `tk.X` falling back to the
+  `NAME_` spelling; any unmodelled `sys.<attr>` raising rather than reading as
+  zero; module globals a def reads from further up the file.
 - libraries: `lib/rtl/markdown.pas`, `lib/pcl/tkhtmlview.pas`, the Python `json`
-  surface on `lib/rtl/json.pas`, `pathlib.Path.open`, and tkinter's `Toplevel`
+  surface on `lib/rtl/json.pas`, `pathlib.Path.open`, tkinter's `Toplevel`,
+  menus (`config(menu=)`, `add_cascade`, `postcommand`, accelerators), canvas
+  scroll options and real (non-integer) coordinates, `messagebox`, `filedialog`.
 
-Two walls remain, both filed:
-
-- [[bug-nilpy-ambiguous-dynamic-field-needs-runtime-dispatch]] — `event.x` in a
-  Tk callback, refused because two classes declare `x` at different offsets.
-  The last COMPILER wall.
-- [[bug-heap-dict-literal-then-two-parses-corrupts]] — the allocator, not json:
-  a dict literal plus two parses in one program corrupts, so the session-file
-  round trip raises KeyError on a key that is in the file. Passes under
-  `-dPXX_LIBC_HEAP`.
+**Compiling is not running.** The session file does not round-trip yet:
+[[bug-heap-dict-literal-then-two-parses-corrupts]] — the ALLOCATOR, not json (a
+dict literal plus two parses in one program; clean under `-dPXX_LIBC_HEAP`,
+the same discriminator as [[bug-c-unit-crashes-when-sysutils-is-used]]). Next
+after that: an end-to-end GUI run under Xvfb, and a PDF diff against the
+reportlab reference.
 
 | module | wall |
 | --- | --- |
@@ -536,4 +540,4 @@ itself is fine under the same conditions.
 | `convertrawtext.py` | **compiles** (2026-07-28); runs into [[bug-nilpy-param-with-string-default-reads-garbage]] |
 | `render_backend.py` | **compiles** as an import; standalone ends in "invalid symbol in lea" |
 | `kadrv.py` | `import key_analysis` — the module loader landed; unverified since |
-| `SongFormatter.py` | `import markdown` — [[feature-lib-markdown]] |
+| `SongFormatter.py` | **compiles** (2026-07-28); runs into [[bug-heap-dict-literal-then-two-parses-corrupts]] |

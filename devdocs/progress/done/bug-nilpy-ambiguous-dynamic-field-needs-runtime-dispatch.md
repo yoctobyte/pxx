@@ -44,7 +44,19 @@ dispatch.
 `SongFormatter.py:435` — the last compiler-side wall in the songformatter track
 ([[feature-demo-songformatter-pxx-target]]). Everything before it now compiles.
 
+## Resolved 2026-07-28 (c141327c)
+
+Runtime dispatch, as recommended: `PyMakeVariantField` collects every candidate
+class, and when they disagree on offset or type emits one
+`pyvarobj(v) is C ? <read as C> : ...` arm each, forcing the arms to Variant
+through pylib's new `pyvar_id` when the field types differ. A single shared
+layout still reads directly, so nothing that already compiled changed shape.
+Covered by `test/test_nilpy_ambiguous_variant_field.npy` against CPython.
+
 ## Gate
 
 `make test-nilpy` plus a `.npy` with two classes declaring the same field name
 at different offsets, read through a variant, diffed against CPython.
+
+## Log
+- 2026-07-28 — resolved, commit c141327c.
