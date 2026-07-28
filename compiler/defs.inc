@@ -1166,6 +1166,7 @@ var
   BuiltinUnitIdxCache : Integer;  { cached InternStr('builtin') idx; the builtin intrinsic unit is fallback-only in MatchProcCall (see BuiltinUnitIdx). }
   BuiltinUnitIdxSet   : Boolean;  { BSS -> False: the cache above is computed lazily once per process. }
   MimicFpc : Boolean;  { --mimic-fpc / {$MIMIC FPC}: install a curated FPC 3.2.2 define set so identity-probing library headers pick their FPC path. Opt-in only, NEVER default (the compiler's own {$ifdef FPC} means real FPC; mimic during self-build = broken bootstrap). }
+  PyStarSpliceDepth : Integer;  { open `f(*[...])` argument splices: the elements are parsed as ordinary comma-separated arguments and the closing ']' is consumed by the ParseExpr call that lands on it. }
   SoftUnitResolve : Boolean;  { while resolving the imports in a `try:` that has an `except ImportError:` — a module that cannot be found sets SoftUnitMissed instead of erroring, so the fallback branch can be compiled instead (feature-nilpy-fallback-import). }
   SoftUnitMissed : Boolean;
   CRuntimeStubsEmitted : Boolean;  { the C runtime primitive stubs (__pxx_setjmp/longjmp, __pxx_fe*round) are emitted once per compile, from whichever path first needs them — the C program driver or a pulled .c unit. }

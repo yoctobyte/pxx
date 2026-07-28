@@ -7707,6 +7707,7 @@ var intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiSt
     seEtid, seOrd: Integer;
     lenFieldRec, lenFieldIdx: Integer;   { Length() of a static-array record field }
     ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { bare class-const in a method body }
+    mapProc: Integer; mapKind: AnsiString;   { NilPy map(<type>, xs) }
     fwdList, fwdDict: Integer;   { `f(*args, **kwargs)` forwarded into fixed parameters }
 begin
   LastExprTk := tyInteger;
@@ -9242,6 +9243,44 @@ begin
         ASTLeft[node] := argSeq;
         CurASTNode := node;
         LastExprTk := tyDouble;
+        Exit;
+      end
+      else if isNilPy and (name = 'map') and (TokPos < TokCount) and
+              (Tokens[TokPos].Kind = tkLParen) and (FindSym(name) < 0) then
+      begin
+        { `map(int, xs)` — the CONVERSION forms, which is what real code writes
+          (`w, h = map(int, s.split("x"))`). The first argument must be a type
+          NAME; a general map over an arbitrary callable is separate work, and
+          refusing it by name beats guessing. }
+        Next; Expect(tkLParen, '(');
+        if CurTok.Kind <> tkIdent then
+          Error('Nil Python: map() takes a type name as its first argument '
+                + '(int, str or float) in this implementation');
+        mapKind := LowerCase(CurTok.SVal);
+        if mapKind = 'int' then mapProc := FindProc('pymap_int')
+        else if mapKind = 'str' then mapProc := FindProc('pymap_str')
+        else if mapKind = 'float' then mapProc := FindProc('pymap_float')
+        else
+          Error('Nil Python: map() over ' + CurTok.SVal + ' is not implemented '
+                + '(int, str and float are)');
+        if mapProc < 0 then Error('Nil Python: pylib (pymap_*) not loaded');
+        Next;
+        Expect(tkComma, ',');
+        { the NilPy expression parser: the argument is normally a call with a
+          string-method suffix (`get(...).split("x")`), which the Pascal chain
+          does not apply }
+        PyParseBoolExpr;
+        Expect(tkRParen, ')');
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := mapProc;
+        argSeq := AllocNode(AN_ARG);
+        ASTLeft[argSeq] := CurASTNode;
+        ASTRight[argSeq] := -1;
+        ASTLeft[node] := argSeq;
+        ASTTk[node] := Ord(tyClass);
+        ASTRight[node] := ProcRetRecId[mapProc];
+        CurASTNode := node;
+        LastExprTk := tyClass;
         Exit;
       end
       else if isNilPy and (name = 'next') and (TokPos < TokCount) and
@@ -12370,37 +12409,26 @@ begin
     `f(a, b, c)`, and with a literal that is purely syntactic — songformatter
     writes `canvas.setStrokeColorRGB(*[0.0, 0.0, 0.0])`.
 
-    Done by consuming the `*` and `[` and turning the matching `]` into a comma:
-    every argument loop in this parser already reads `expr (',' expr)*` and
-    tolerates the trailing comma before ')', so the elements are picked up as
-    ordinary arguments with no loop needing to know. The same hide-a-token
-    technique the comprehension filter uses.
+    The '*' and '[' are consumed here and the elements are then parsed as
+    ordinary arguments: every argument loop in this parser already reads
+    `expr (',' expr)*`, so the commas INSIDE the literal do the work. The only
+    token the loops cannot make sense of is the closing ']', which is consumed
+    at the end of whichever ParseExpr call lands on it.
+
+    Nothing is mutated. An earlier version rewrote the ']' into a comma, which
+    worked once and then broke: NilPy re-parses a body (the module-local
+    pre-pass trial-parses, def bodies are compiled from stored token
+    positions), and the second pass met a '[' whose ']' had been overwritten.
 
     Only a LITERAL list splices: unpacking a variable needs its length at
-    compile time, which a syntactic splice cannot give, so `f(*xs)` still walls
-    at the '*' rather than quietly passing one argument. }
+    compile time, so `f(*xs)` still walls at the '*' rather than quietly
+    passing one argument. }
   if isNilPy and (CurTok.Kind = tkStar) and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkLBrack) then
   begin
-    spI := TokPos + 1;                 { first token inside the '[' }
-    spDepth := 1;
-    while spI < TokCount do
-    begin
-      if Tokens[spI].Kind in [tkLBrack, tkLParen] then Inc(spDepth)
-      else if Tokens[spI].Kind in [tkRParen] then Dec(spDepth)
-      else if Tokens[spI].Kind = tkRBrack then
-      begin
-        Dec(spDepth);
-        if spDepth = 0 then
-        begin
-          Tokens[spI].Kind := tkComma;
-          Next;                        { consume '*' }
-          Next;                        { consume '[' }
-          Break;
-        end;
-      end;
-      Inc(spI);
-    end;
+    Next;                              { consume '*' }
+    Next;                              { consume '[' }
+    Inc(PyStarSpliceDepth);
   end;
   ParseSimpleExpr;
   { `X is T` / `X as T` — is/as are contextual identifiers (not reserved tokens),
@@ -12614,6 +12642,15 @@ begin
     end;
     ASTTk[node] := ASTTk[left];
     CurASTNode := node;
+  end;
+  { The closing ']' of a `*[...]` argument splice: the elements were handed to
+    the caller's argument loop one comma at a time, and this is the token the
+    loop would not know what to do with. Consumed by whichever ParseExpr call
+    lands on it — the last element's. }
+  if (PyStarSpliceDepth > 0) and (CurTok.Kind = tkRBrack) then
+  begin
+    Dec(PyStarSpliceDepth);
+    Next;
   end;
 end;
 

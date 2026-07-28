@@ -1,0 +1,24 @@
+# An optional dependency that is NOT available, and the code that uses it:
+# CPython compiles such a file and only fails if the guarded code runs, which
+# is what the application's own HAVE_* flag relies on. Values taken from the
+# missing module spread through locals, so a whole chain must compile.
+try:
+    from nosuchpkg import Image
+    HAVE_IMG = True
+except ImportError:
+    HAVE_IMG = False
+
+
+def resize(path):
+    img = Image.open(path)
+    img = img.resize((2, 2))
+    return img
+
+
+print(HAVE_IMG)
+
+# map() over a type name, including strings that must PARSE as int() does
+w, h = map(int, "200x100".split("x"))
+print(w, h)
+print(list(map(str, [1, 2])))
+print(list(map(float, ["1.5", 2])))

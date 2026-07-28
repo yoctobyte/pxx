@@ -753,6 +753,7 @@ begin
   NoShims := False;
   DefaultCIncludeDirsAdded := False;
   CRuntimeStubsEmitted := False;
+  PyStarSpliceDepth := 0;
   SoftUnitResolve := False;
   SoftUnitMissed := False;
   InterfacesComMode := True;   { FPC/Delphi default: interfaces are COM (refcounted). {$interfaces corba} opts out. }

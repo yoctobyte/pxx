@@ -412,6 +412,9 @@ var
     builtin. Python scopes a name to the module that imported it, so record who
     imported what and ask this table rather than the global one.
     bug-nilpy-imported-name-shadows-builtin-everywhere. }
+  PyOptMissingSym: array[0..127] of Integer;  { interned names bound to None by an unresolved optional import }
+  PyExprHadOptionalMissing: Boolean;  { the expression just parsed reached an unavailable module }
+  PyOptMissingCount: Integer;
   PyImpName: array[0..255] of Integer;      { interned lowercase name }
   PyImpNameUnit: array[0..255] of Integer;  { CurrentUnitIdx of the importer }
   PyImpNameCount: Integer;
@@ -881,6 +884,124 @@ procedure PyBitGuard(n: Integer);
 begin
   if IntToTypeKind(ASTTk[n]) = tyBoolean then
     Error('Nil Python: parenthesize the comparison next to a bitwise operator');
+end;
+
+{ Names bound to None because the optional import they came from did not
+  resolve. Kept so a USE of such a name can be turned into a runtime failure
+  that names the module, instead of a compile error about a missing method —
+  CPython compiles the same file and raises only if the code runs.
+  feature-nilpy-fallback-import. }
+function PyOptionalMissingNamed(const nm: AnsiString): Boolean;
+var i, ni: Integer;
+begin
+  PyOptionalMissingNamed := False;
+  if nm = '' then Exit;
+  ni := InternStr(LowerCase(nm));
+  for i := 0 to PyOptMissingCount - 1 do
+    if PyOptMissingSym[i] = ni then begin PyOptionalMissingNamed := True; Exit; end;
+end;
+
+procedure PyNoteOptionalMissingName(const nm: AnsiString);
+begin
+  if PyOptionalMissingNamed(nm) then Exit;
+  if PyOptMissingCount >= 128 then Exit;
+  PyOptMissingSym[PyOptMissingCount] := InternStr(LowerCase(nm));
+  Inc(PyOptMissingCount);
+end;
+
+{ Tracked by NAME, not by symbol index: NilPy parses a body more than once
+  (the module-local pre-pass trial-parses; def bodies compile from stored token
+  positions), and a fresh pass allocates fresh symbols. A name is stable. }
+function PyIsOptionalMissingNode(n: Integer): Boolean;
+begin
+  PyIsOptionalMissingNode := False;
+  if n < 0 then Exit;
+  if ASTKind[n] <> AN_IDENT then Exit;
+  PyIsOptionalMissingNode := PyOptionalMissingNamed(Syms[ASTIVal[n]].Name);
+end;
+
+function PyOptionalMissingName(n: Integer): AnsiString;
+begin
+  PyOptionalMissingName := Syms[ASTIVal[n]].Name;
+end;
+
+{ A value taken FROM an unavailable optional module is itself unavailable:
+  `img = Image.open(f)` then `img.resize(...)`. Marking the target keeps the
+  whole chain compiling and failing at the first call that runs. }
+{ Keyed off a FLAG rather than the RHS node: the expression layers wrap a call
+  (coercions, boxing), so testing the node kind missed the very case this is
+  for. The flag is set wherever an unavailable-module call is built and read
+  here, at the assignment that stores its result. }
+procedure PyNoteOptionalTaint(symIdx, rhsNode: Integer);
+begin
+  if symIdx < 0 then Exit;
+  if not PyExprHadOptionalMissing then Exit;
+  PyNoteOptionalMissingName(Syms[symIdx].Name);
+end;
+
+{ Swallow a trailing `.name(...)` chain on an unavailable value:
+  `ImageDraw.Draw(mask).rectangle(...)`. Every link is equally unavailable, so
+  the whole chain collapses onto the single raise the head produced, and the
+  parser lands where the statement ends. Without this the call result was
+  parsed and the '.' after it had nothing to attach to. }
+procedure PySkipOptionalMissingChain;
+var depth: Integer;
+begin
+  { the head call's OWN argument list first — the dispatch site hands control
+    here before those arguments have been consumed }
+  if CurTok.Kind = tkLParen then
+  begin
+    depth := 0;
+    while CurTok.Kind <> tkEOF do
+    begin
+      if CurTok.Kind = tkLParen then Inc(depth)
+      else if CurTok.Kind = tkRParen then
+      begin
+        Dec(depth);
+        if depth = 0 then begin Next; Break; end;
+      end;
+      Next;
+    end;
+  end;
+  while (CurTok.Kind = tkDot) and (TokPos < TokCount) and
+        (Tokens[TokPos].Kind = tkIdent) do
+  begin
+    Next;                              { '.' }
+    Next;                              { member name }
+    if CurTok.Kind <> tkLParen then Exit;
+    depth := 0;
+    while CurTok.Kind <> tkEOF do
+    begin
+      if CurTok.Kind = tkLParen then Inc(depth)
+      else if CurTok.Kind = tkRParen then
+      begin
+        Dec(depth);
+        if depth = 0 then begin Next; Break; end;
+      end;
+      Next;
+    end;
+  end;
+end;
+
+function PyMakeOptionalMissingCall(const what: AnsiString): Integer;
+var procIdx, argNode, litNode: Integer;
+begin
+  procIdx := FindProc('pyoptional_missing');
+  if procIdx < 0 then Error('Nil Python: pylib (pyoptional_missing) not loaded');
+  litNode := AllocNode(AN_STR_LIT);
+  ASTSOffset[litNode] := PyStoredName(what);
+  ASTSLen[litNode] := Length(what);
+  ASTTk[litNode] := Ord(tyString);
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := litNode;
+  ASTRight[argNode] := -1;
+  PyMakeOptionalMissingCall := AllocNode(AN_CALL);
+  ASTIVal[PyMakeOptionalMissingCall] := procIdx;
+  ASTLeft[PyMakeOptionalMissingCall] := argNode;
+  ASTTk[PyMakeOptionalMissingCall] := Ord(tyVariant);
+  LastExprTk := tyVariant;
+  PyExprHadOptionalMissing := True;
+  PySkipOptionalMissingChain;
 end;
 
 { isinstance(x, T) / isinstance(x, (T1, T2, ...)) — desugared to tag checks
@@ -5090,6 +5211,16 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     anyKw: Boolean;
     argExprs: array[0..15] of Integer;
 begin
+  { A receiver that came from an optional module which did not resolve — the
+    name itself, or anything assigned from it. Checked BEFORE class dispatch:
+    otherwise a same-named method on an unrelated class captures the call
+    (`img.save(buf, format="PNG")` bound to the reportlab shim's Canvas.save),
+    which is a wrong binding, not a missing one. }
+  if PyIsOptionalMissingNode(baseNode) then
+  begin
+    Result := PyMakeOptionalMissingCall(PyOptionalMissingName(baseNode) + '.' + mname);
+    Exit;
+  end;
   { A STR method on a variant receiver — `for s in ["ab"]: s.upper()`, where the
     loop variable is a variant holding a string. Render the receiver with
     pystr_of (which spells every tag Python's way) and hand it to the ordinary
@@ -5255,6 +5386,30 @@ begin
     if hitCi >= 0 then
     begin
       Result := PyMakeVariantFieldCall(baseNode, hitCi, mname, UFldProcSig[hitMmi]);
+      Exit;
+    end;
+    { The receiver is a name bound to None because its optional import did not
+      resolve — `Image.open(...)` after `try: from PIL import Image` failed.
+      CPython compiles that file and raises only if the call runs, which is
+      what the application's own HAVE_PIL guard relies on. Emit the same shape:
+      a call that raises, naming the module. }
+    if PyIsOptionalMissingNode(baseNode) then
+    begin
+      Result := PyMakeOptionalMissingCall(PyOptionalMissingName(baseNode) + '.' + mname);
+      Exit;
+    end;
+    { …and anything else dynamically typed, ONCE this program is known to have
+      an optional import that did not resolve. A value taken from such a module
+      spreads through locals (`img = Image.open(f)` then `img.resize(...)`),
+      and NilPy parses a body more than once, so tracking the taint statement
+      by statement does not hold. Closed-world dispatch stays a compile error
+      for every program WITHOUT such an import — which is all of them until one
+      says `try: import X / except ImportError:` — so typo detection is
+      unchanged there. feature-nilpy-fallback-import. }
+    if (PyOptMissingCount > 0) and
+       (IntToTypeKind(ASTTk[baseNode]) = tyVariant) then
+    begin
+      Result := PyMakeOptionalMissingCall('.' + mname + ' (an optional module)');
       Exit;
     end;
     Error('Nil Python: no class declares a method or callable field .'
@@ -8609,6 +8764,7 @@ var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integ
 begin
   Result := -1;
   PyStmtAteBlock := False;
+  PyExprHadOptionalMissing := False;
   { `nonlocal x, y` / `global x, y` — a scope DECLARATION, parsed and skipped.
     The nested-def capture already exposes the enclosing name for reading; a
     WRITE does not yet propagate back to the enclosing frame (capture is
@@ -9038,6 +9194,7 @@ begin
       if Result < 0 then Error('Nil Python: pylib TPyList.extend not loaded');
       Exit;
     end;
+    PyNoteOptionalTaint(symIdx, CurASTNode);
     PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(augTk);
     ASTLeft[node] := PyMakeIdent(symIdx); ASTRight[node] := CurASTNode;
@@ -9090,7 +9247,8 @@ begin
         if annSig >= 0 then SymProcSig[symIdx] := annSig;
       end;
       lhsNode := PyMakeIdent(symIdx);
-      PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
+      PyNoteOptionalTaint(symIdx, CurASTNode);
+    PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
       node := AllocNode(AN_ASSIGN);
       ASTLeft[node] := lhsNode;
       ASTRight[node] := CurASTNode;
@@ -9202,6 +9360,7 @@ begin
     if PyTypingPass then
       PyNoteLocalType(name, IntToTypeKind(ASTTk[rhsNode]), ResolveNodeRec(rhsNode));
     lhsNode := PyMakeIdent(symIdx);
+    PyNoteOptionalTaint(symIdx, rhsNode);
     PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, rhsNode);
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := lhsNode;
@@ -11653,7 +11812,7 @@ begin
 end;
 
 procedure PyParseImportRun;
-var impName, impAlias, impRoot: AnsiString; isCount: Boolean; aStrIdx, realStrIdx: Integer;
+var impName, impAlias, impRoot: AnsiString; isCount: Boolean; aStrIdx, realStrIdx, optSym: Integer;
 begin
   while (CurTok.Kind = tkUses) or PyIsIdent('from') do
   begin
@@ -11731,6 +11890,18 @@ begin
             UnitAliasName[UnitAliasCount] := InternStr(LowerCase(impAlias));
             UnitAliasReal[UnitAliasCount] := InternStr(LowerCase(impName));
             Inc(UnitAliasCount);
+          end;
+          { The module did not resolve and we are inside a `try:` whose handler
+            will be compiled instead — bind what it would have imported to
+            None, so code that references the name COMPILES and fails when it
+            RUNS. CPython raises NameError there; either way the failure is at
+            use, not at import, which is the whole point of the guard the
+            application wraps around such calls (`if not HAVE_PIL: return`).
+            A variant global is born VT_EMPTY, which IS None. }
+          if SoftUnitMissed then
+          begin
+            if PyProgSym(impAlias) < 0 then optSym := AllocVar(impAlias, tyVariant);
+            PyNoteOptionalMissingName(impAlias);
           end;
           if PyImpNameCount < 256 then
           begin
@@ -11968,6 +12139,8 @@ begin
   end;
   PyCountAlias := '';
   PyImpNameCount := 0;
+  PyOptMissingCount := 0;
+  PyExprHadOptionalMissing := False;
   PyDcCount := 0;
   for i := 0 to PY_MAX_DC_FIELDS - 1 do PyDcClassIsDc[i] := False;
   for i := 0 to MAX_UCLASS - 1 do PyMembersHoisted[i] := False;

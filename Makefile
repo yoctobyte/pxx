@@ -316,6 +316,9 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# an unavailable optional import compiles and fails only if used; map()
+	./$(COMPILER) test/test_nilpy_optional_and_map.npy /tmp/test_nilpy_opt_map26
+	test "$$(/tmp/test_nilpy_opt_map26)" = "$$(printf "False\n200 100\n['1', '2']\n[1.5, 2.0]")"
 	# a mixed-type conditional as a comprehension element, and that
 	# comprehension assigned back to the parameter it reads
 	./$(COMPILER) test/test_nilpy_ternary_comp.npy /tmp/test_nilpy_ternary_comp26
@@ -3456,6 +3459,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# an unavailable optional import compiles and fails only if used; map()
+	./$(COMPILER) test/test_nilpy_optional_and_map.npy /tmp/test_nilpy_opt_map26
+	test "$$(/tmp/test_nilpy_opt_map26)" = "$$(printf "False\n200 100\n['1', '2']\n[1.5, 2.0]")"
 	# a mixed-type conditional as a comprehension element, and that
 	# comprehension assigned back to the parameter it reads
 	./$(COMPILER) test/test_nilpy_ternary_comp.npy /tmp/test_nilpy_ternary_comp26

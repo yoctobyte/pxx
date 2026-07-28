@@ -414,6 +414,11 @@ function pyos_stat(const path: AnsiString): TPyStat;
   which is right for `for c in reversed(s)` but wrong for a slice: a slice of a
   string is a string. }
 function pystr_reverse(const s: AnsiString): AnsiString;
+{ A name that came from an optional import whose module was not available.
+  Binding it to None lets the file COMPILE, exactly as CPython compiles a
+  module whose `try: import X` failed; this is what happens if such a name is
+  actually USED, and it names the module so the message is actionable. }
+function pyoptional_missing(const what: AnsiString): Variant;
 function pyos_startfile(const path: AnsiString): Integer;
 function pyos_environ_get(const name: AnsiString): Variant;
 function pyos_environ_get_d(const name: AnsiString; const dflt: Variant): Variant;
@@ -669,6 +674,14 @@ procedure pydict_merge(dst: TPyDict; src: TPyDict);
   everywhere else (feature-nilpy-aggregate-builtins). }
 { a > b: numbers by value, strings by text — the comparison the aggregate
   builtins and pyeval's sorted() share. }
+{ `map(int, xs)` / `map(str, xs)` / `map(float, xs)` — the conversion forms,
+  which is what real code uses (`w, h = map(int, s.split("x"))`). A general
+  map() over an arbitrary callable is separate work; the frontend refuses
+  anything but a type name rather than guessing.
+  feature-nilpy-aggregate-builtins. }
+function pymap_int(l: TPyList): TPyList;
+function pymap_str(l: TPyList): TPyList;
+function pymap_float(l: TPyList): TPyList;
 function pyvar_gt(const a: Variant; const b: Variant): Boolean;
 { `next(it)` / `next(it, default)` over a materialised sequence. NOT named
   `next`: itertools' counter already owns that name for its own argument type,
@@ -2039,6 +2052,40 @@ end;
 { a > b for the aggregate builtins: numbers by value, strings by text, which is
   the pair Python orders and the corpus uses. A mixed number/string comparison
   is a TypeError in CPython and halts here rather than inventing an order. }
+function pymap_int(l: TPyList): TPyList;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  if l <> nil then
+    for i := 0 to l.count - 1 do
+      { int("200") PARSES, as CPython's int() does — the elements of a
+        `s.split(...)` are strings, which is the common source for map(int, …) }
+      if pyvartag(l.at(i)) = 6 then r.append(pystr_to_int(pystr_of(l.at(i))))   { 6 = VT_STRING }
+      else r.append(pyvar_to_int(l.at(i)));
+  pymap_int := r;
+end;
+
+function pymap_str(l: TPyList): TPyList;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  if l <> nil then
+    for i := 0 to l.count - 1 do r.append(pystr_of(l.at(i)));
+  pymap_str := r;
+end;
+
+function pymap_float(l: TPyList): TPyList;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  if l <> nil then
+    for i := 0 to l.count - 1 do
+      { float("1.5") PARSES, as CPython's float() does }
+      if pyvartag(l.at(i)) = 6 then r.append(pyfloat_parse(pystr_of(l.at(i))))
+      else r.append(pyvar_to_float(l.at(i)));
+  pymap_float := r;
+end;
+
 function pyvar_gt(const a: Variant; const b: Variant): Boolean;
 var pa, pb: PPyVarRec;
 begin
@@ -3641,6 +3688,14 @@ begin
   r := '';
   for i := Length(s) downto 1 do r := r + s[i];
   pystr_reverse := r;
+end;
+
+function pyoptional_missing(const what: AnsiString): Variant;
+begin
+  pyoptional_missing := pynone;
+  raise Exception.Create('this build has no ' + what
+    + ': the import it came from could not be resolved, and the code guarding '
+    + 'that (the flag its except-branch sets) let this call through anyway');
 end;
 
 function pyos_startfile(const path: AnsiString): Integer;
