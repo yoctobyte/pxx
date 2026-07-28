@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-26T12:43:56Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "4a419c0f3c0c12aec5b694ef9704b085f4dd9276",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-26T12:49:44Z",
    "fixed": [],
    "new_red": [],
@@ -403,6 +395,14 @@
    "sha": "b37be2e182273c9c9609732594d447b99b8653d7",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-28T06:36:06Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "b5b3902d252055f1f56890766b5dd95f5ebbaa5d",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -718,6 +718,7 @@
   "test-core#src:compiler/compiler.pas@1": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
+  "test-core#src:examples/tk/callbacks.npy": "pass",
   "test-core#src:examples/tk/field_class_identity.npy": "pass",
   "test-core#src:examples/tk/tkinter_facade.npy": "pass",
   "test-core#src:test/arrays.pas": "pass",
@@ -1998,11 +1999,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-27T22:24:09Z",
-  "sha": "b37be2e182273c9c9609732594d447b99b8653d7",
-  "tier": "opt",
+  "date": "2026-07-28T06:36:06Z",
+  "sha": "b5b3902d252055f1f56890766b5dd95f5ebbaa5d",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 144.4
+  "wall": 190.6
  },
  "last_bench": {
   "conf_rows": 550,
