@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `d64a5d6a97b4` | 2026-07-28T14:35:47Z | RED (full) | 289.8s | `d64a5d6a97b4` RED |
+| borg | `d64a5d6a97b4` | 2026-07-28T14:39:04Z | GREEN (opt) | 190.8s | `d64a5d6a97b4` RED |
 
 ## Open regressions
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `b1976742df2c`, last good `6f73c5a88bef`, 1 commit(s) in range

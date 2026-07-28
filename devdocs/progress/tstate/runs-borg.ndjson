@@ -1442,3 +1442,4 @@
 {"date": "2026-07-28T14:14:28Z", "fixed": [], "full": false, "new_red": [], "sha": "ebc63e8eafdc3abb5be27c04224fdebc1c93ef56", "tier": "opt", "verdict": "GREEN", "wall": 179.5}
 {"date": "2026-07-28T14:30:34Z", "fixed": [], "full": false, "new_red": ["test-core#src:examples/tk/facade_and_paths.npy"], "sha": "d64a5d6a97b4484e3d5aefa0b475ab3817d11121", "tier": "native", "verdict": "RED", "wall": 171.0}
 {"date": "2026-07-28T14:35:47Z", "fixed": [], "full": true, "new_red": [], "sha": "d64a5d6a97b4484e3d5aefa0b475ab3817d11121", "tier": "full", "verdict": "RED", "wall": 289.8}
+{"date": "2026-07-28T14:39:04Z", "fixed": [], "full": false, "new_red": [], "sha": "d64a5d6a97b4484e3d5aefa0b475ab3817d11121", "tier": "opt", "verdict": "GREEN", "wall": 190.8}
