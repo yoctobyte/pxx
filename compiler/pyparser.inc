@@ -7042,8 +7042,9 @@ function PyParseFallbackImportTry: Integer;
   in the block runs at all), and a module that resolved before the failing one
   stays loaded — an unused unit in the binary, since the handler rebinds whatever
   it needs. feature-nilpy-fallback-import. }
-var body: Integer;
+var body, savedHoist: Integer;
 begin
+  savedHoist := PyHoistHead;
   Next;                                { `try` }
   Expect(tkColon, ':');
   Expect(tkNewline, 'newline');
@@ -7055,7 +7056,13 @@ begin
   SoftUnitResolve := False;
   if SoftUnitMissed then
   begin
-    { drop the rest of the try block: it depends on what did not resolve }
+    { drop the rest of the try block: it depends on what did not resolve.
+      Anything the IMPORT RUN itself queued as a hoisted setup statement goes
+      with it — the block is not being compiled, so a setup for it would be
+      emitted into the enclosing body naming symbols that block never
+      allocated (render_backend's PIL guard did exactly this: a stray IR_LEA of
+      a rolled-back temp, reported at the module's last line). }
+    PyHoistHead := savedHoist;
     PySkipRestOfBlock;
     Expect(tkDedent, 'dedent');
     PySkipNewlines;
@@ -10228,9 +10235,17 @@ end;
   FindProc. Bodies are skipped by span, so this emits no code and allocates no
   symbols. }
 procedure PyRegisterDefShells;
-var savedTok, i, depth, procIdx: Integer;
+var savedTok, i, depth, procIdx, savedHoist: Integer;
 begin
   savedTok := TokPos;
+  { This pass parses HEADERS ONLY, but a header can queue a hoisted setup
+    statement (a default's value, an inferred return's trial parse), and the
+    hoist queue is global. Left queued, that node was flushed into whatever
+    statement came next — in a MODULE, after the symbols it names had been
+    rolled back, which the IR verifier then rejected at the module's last line
+    with nothing there to explain it. Nothing this pass queues is wanted: it
+    emits no code and the real parse builds its own. }
+  savedHoist := PyHoistHead;
   i := PyScanLo;
   depth := 0;
   while i < MainProgramTokCount do
@@ -10258,6 +10273,7 @@ begin
     end;
     Inc(i);
   end;
+  PyHoistHead := savedHoist;
   { Re-READ the saved token rather than restoring a copy of CurTok: Next
     rewrites CurTok.SVal in place
     (project_curtok_record_copy_shares_sval_landmine). }
@@ -10352,9 +10368,10 @@ end;
 procedure PyParseDef;
 var name, savedPfx, savedPfx2: AnsiString;
     nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyNode: Integer;
-    savedNest, savedTok, savedLam: Integer;
+    savedNest, savedTok, savedLam, savedHoist: Integer;
     retType: TTypeKind; isProc: Boolean;
 begin
+  savedHoist := PyHoistHead;
   PyParseDefHeader;
   name := PyHdrName;
   nparams := PyHdrNParams;
@@ -10495,6 +10512,15 @@ begin
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
   SymRollbackTo(savedSC);
+  { Anything the BODY left on the hoist queue names this routine's locals, and
+    they have just been rolled back. The queue is global, so the residue was
+    flushed into whatever statement came next — inside a module that is the
+    import-time init, which then loaded a symbol index past SymCount and the IR
+    verifier rejected the whole compile at the module's LAST line, naming a
+    `def` header 1700 lines earlier only in the DWARF line. A body's own hoists
+    are flushed by its statement loop; whatever is left is stale by
+    construction. }
+  PyHoistHead := savedHoist;
   FrameSize := savedFS;
   CurProc := -1;
   PyNestPrefix := savedPfx;
@@ -12596,7 +12622,7 @@ end;
   (feature-nilpy-py-module-loader) }
 procedure ParsePyUnit(const uname: AnsiString);
 var stmt, seqNode, lastSeq, procIdx, patchPos, savedSC, savedFS: Integer;
-    savedScanLo, savedMainTok, savedNest, savedLam: Integer;
+    savedScanLo, savedMainTok, savedNest, savedLam, savedHoist: Integer;
     savedExprMode: Boolean;
     dummyNames: array[0..0] of AnsiString;
     dummyTypes: array[0..0] of TTypeKind;
@@ -12611,11 +12637,19 @@ begin
   PyScanLo := TokPos - 1;
   MainProgramTokCount := TokCount;
 
+  { The pre-passes TRIAL-PARSE: they emit no code, and anything they queue on
+    the global hoist list is a leftover of a parse that is about to be redone.
+    Left queued, such a node was flushed into a later statement — in a MODULE,
+    after the symbols it names had been rolled back with the scope that made
+    them, so the IR verifier rejected the compile at the module's LAST line
+    with nothing there to explain it. Drop the queue instead. }
+  savedHoist := PyHoistHead;
   PyRegisterClassShells;          { the class ROWS the field pre-pass fills in }
   PyPreScanImports;
   PyRegisterClassFieldsPrepass;
   PyRegisterDefShells;
   PyCollectModuleLocalsAST;
+  PyHoistHead := savedHoist;
   PyExprMode := True;
 
   seqNode := AllocNode(AN_SEQ);
@@ -12670,7 +12704,13 @@ begin
   CompileAST(seqNode);
   EmitProcEpilog(-1);
   PatchProcPrologue(patchPos, FrameSize);
-  SymRollbackTo(savedSC);
+  { The symbols this body allocated are NOT rolled back. The IR it emitted
+    still names them, and the IR buffer outlives the proc — a later verify then
+    met an index past SymCount and rejected the whole compile
+    ("invalid IR symbol reference in load_sym" at the module's last line, with
+    nothing at that line to explain it). A module's import-time code runs once
+    at start-up and its temps are module-lifetime anyway, so keeping them costs
+    symbol slots and nothing else. }
   FrameSize := savedFS;
   CurProc := -1;
   if InitProcCount < 256 then

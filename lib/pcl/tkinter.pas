@@ -203,6 +203,20 @@ type
     procedure delete(const first_: AnsiString; const last_: AnsiString = '');
     function get(const first_: AnsiString; const last_: AnsiString = ''): AnsiString;
     procedure tag_add(const tagName, first_, last_: AnsiString);
+    { Style a tag: the options a rendered document needs. A tag is applied to a
+      RANGE by tag_add, so text inserted between two `index` reads can be given
+      a font, a colour, margins or spacing. }
+    procedure tag_configure(const tagName: AnsiString;
+                            const font: AnsiString = '';
+                            const foreground: AnsiString = '';
+                            const background: AnsiString = '';
+                            const justify: AnsiString = '';
+                            const underline: Variant = 0;
+                            spacing1: Integer = -1; spacing3: Integer = -1;
+                            lmargin1: Integer = -1; lmargin2: Integer = -1);
+    { Tk's own index arithmetic, resolved to a concrete `line.char` — the
+      caller records where a run STARTED before inserting it. }
+    function index(const idx: AnsiString): AnsiString;
     procedure event_generate(const sequence: AnsiString);
   end;
 
@@ -378,6 +392,21 @@ type
   public
     constructor Create;
   end;
+
+{ The Text class under a name that does NOT collide with the RTL's `Text`
+  record, so another unit can declare a field of this type at all. }
+type
+  TkTextWidget = Text;
+
+{ A Text widget built from ANOTHER unit. `Text` is also the RTL's file record,
+  and an unqualified lookup outside this unit finds that one — so a sibling unit
+  (lib/pcl/tkhtmlview) cannot write `Text.Create(...)` at all. Inside this unit
+  the name resolves to the class, so the construction lives here.
+  See [[decide-class-namespace-scoping]] / [[bug-pascal-uses-is-transitive]]:
+  this is a workaround for the flat namespace, and it goes away when that does. }
+function NewText(master: Widget; const wrap: AnsiString = '';
+                 width: Integer = -1; height: Integer = -1;
+                 const background: AnsiString = ''): Text;
 
 { The older function spelling, kept for the example and any caller that used it. }
 function Tk_: Widget;
@@ -1037,6 +1066,30 @@ begin
   TkEval(path + ' tag add ' + tagName + ' ' + first_ + ' ' + last_);
 end;
 
+procedure Text.tag_configure(const tagName: AnsiString;
+                             const font, foreground, background,
+                             justify: AnsiString;
+                             const underline: Variant;
+                             spacing1, spacing3, lmargin1, lmargin2: Integer);
+var o: AnsiString;
+begin
+  o := TkiOptStr('font', font) + TkiOptStr('foreground', foreground)
+     + TkiOptStr('background', background) + TkiOptStr('justify', justify)
+     + TkiOptInt('spacing1', spacing1) + TkiOptInt('spacing3', spacing3)
+     + TkiOptInt('lmargin1', lmargin1) + TkiOptInt('lmargin2', lmargin2);
+  if pyvartag(underline) <> 0 then
+  begin
+    if pyvar_to_bool(underline) then o := o + ' -underline 1'
+    else o := o + ' -underline 0';
+  end;
+  TkEval(path + ' tag configure ' + tagName + o);
+end;
+
+function Text.index(const idx: AnsiString): AnsiString;
+begin
+  index := TkEval(path + ' index ' + idx);
+end;
+
 procedure Text.event_generate(const sequence: AnsiString);
 begin
   TkEval('event generate ' + path + ' ' + sequence);
@@ -1428,6 +1481,13 @@ procedure mainloop;
 begin
   TkiEnsureStarted;
   TkMainLoop;
+end;
+
+function NewText(master: Widget; const wrap: AnsiString;
+                 width, height: Integer;
+                 const background: AnsiString): Text;
+begin
+  NewText := Text.Create(master, wrap, width, height, background);
 end;
 
 { ---- dialogs ---- }
