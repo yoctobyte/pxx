@@ -54,3 +54,13 @@ worse than the compile error its sibling gives.
 ## Gate
 
 `make test-nilpy` plus a `.npy` covering both shapes, diffed against CPython.
+
+## Log
+- 2026-07-28 — resolved, commit d5b2bd02c.
+
+## Resolution
+
+Fixed by d5b2bd02c ("fix(nilpy): a conditional's arms decide its type together,
+not the first one"). Re-verified 2026-07-28: the ticket's repro prints
+`[0, 'x', 2]`, matching CPython. The ticket was left in `backlog/` by that
+commit.

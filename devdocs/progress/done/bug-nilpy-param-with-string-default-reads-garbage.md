@@ -87,3 +87,17 @@ arg and filled default, string and int, annotated and not.
 Note for whoever takes it: `pyvar_of_str` (pylib) and `PyBoxStrNode`
 (`parser.inc`) were added for the by-hand call path and box a string literal
 into a Variant; the IR default-fill needs the same thing, or an `IR_VAR_BOX`.
+
+## Log
+- 2026-07-28 — resolved, commit 13a8e4213.
+
+## Resolution
+
+Fixed by 13a8e4213 ("fix(nilpy): a declared default is what the callee actually
+runs with"), which moved the default fill to the CALLEE — the shape this ticket
+predicted — and added `test/test_nilpy_default_arguments.npy`. The ticket was
+left in `backlog/` by that commit.
+
+Re-verified 2026-07-28 on the exact repros above: `f("z")`/`f()` print `z`/`A`,
+`len(a)` on a filled string default is `1`, and `summed(10, 20)` is `33`. All
+match CPython.

@@ -37,3 +37,13 @@ NOT included: Python hands back an OPERAND, and NilPy implements that.
 
 `test/test_nilpy_membership_bool_return.npy`, CPython-diffed; `make test-nilpy`;
 self-host fixedpoint byte-identical.
+
+## Log
+- 2026-07-28 — resolved, commit dcbca98c1.
+
+## Resolution
+
+Fixed by dcbca98c1 ("fix(nilpy): return inference must agree between passes").
+Re-verified 2026-07-28: the ticket's `is_bool_setting` (a membership test ORed
+with another) and `bigger` (a comparison) both return the Boolean CPython does.
+The ticket was left in `backlog/` by that commit.

@@ -52,3 +52,11 @@ is a use-after-free until proven otherwise, and this is how to see it.
 
 `test/test_nilpy_membership_bool_return.npy` (third section: two passes over a
 dict of dicts), `make test-nilpy`, self-host fixedpoint.
+
+## Log
+- 2026-07-28 — resolved, commit 5174d000e.
+
+## Resolution
+
+Already fixed by earlier NilPy work that did not move the ticket. Re-verified
+2026-07-28 at 5174d000e: the repro above matches CPython exactly.

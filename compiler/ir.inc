@@ -6912,12 +6912,22 @@ begin
          (ASTLeft[ASTLeft[node]] >= 0) and
          (IntToTypeKind(ASTTk[ASTLeft[ASTLeft[node]]]) = tyClass) then
       begin
-        cfPi := FindProc('PXXClassFinalize');
-        if cfPi >= 0 then
+        { Pascal-mode only. In a NilPy compilation the finalize is PXXObjFree's
+          job for BOTH populations (see its comment): emitting it here too
+          finalized a headered instance twice — once inline, once again through
+          PXXObjRelease's rc=0 hook — so every managed field was released twice
+          and a caller-owned string died (bug-heap-dict-literal-then-two-parses-
+          corrupts). It also finalized an instance that was still referenced,
+          since the inline call cannot see the refcount. }
+        if not isNilPy then
         begin
-          cfArg := IRAppend(IR_ARG, IRLowerAST(ASTLeft[ASTLeft[node]]), -1, -1, 0, Ord(tyPointer));
-          cfCall := IRAppendCall(cfPi, cfArg, -1, Ord(tyNativeInt));
-          IRIVal[cfCall] := 1;   { statement: emit for effect }
+          cfPi := FindProc('PXXClassFinalize');
+          if cfPi >= 0 then
+          begin
+            cfArg := IRAppend(IR_ARG, IRLowerAST(ASTLeft[ASTLeft[node]]), -1, -1, 0, Ord(tyPointer));
+            cfCall := IRAppendCall(cfPi, cfArg, -1, Ord(tyNativeInt));
+            IRIVal[cfCall] := 1;   { statement: emit for effect }
+          end;
         end;
         { NilPy compilation: instances are constructed through PXXObjAlloc and
           live at base+16 of their block (feature-nilpy-object-reclamation), so

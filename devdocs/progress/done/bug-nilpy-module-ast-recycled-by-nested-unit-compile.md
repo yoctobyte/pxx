@@ -101,3 +101,18 @@ parsed and compiled in one pass.
 `make test-nilpy`, plus a two-module `.npy` pair where the imported module has
 module-level statements AND imports a Pascal unit of its own — that is the
 minimum shape that recycles.
+
+## Log
+- 2026-07-28 — resolved, commit f9fdca595.
+
+## Resolution
+
+Fixed by f9fdca595 ("fix(nilpy): a module's AST outlives the units it imports"),
+which landed the `ASTArenaFloor` this ticket describes plus the four walls the
+recycling had been masking. The ticket was left in `backlog/` by that commit.
+
+Re-verified 2026-07-28 on synthetic repros of every shape the ticket names:
+one-level import, three sibling `.py` imports from one module, a module that
+also pulls a PASCAL unit mid-parse (`import tkinter`), and a three-level chain
+(`top -> deep -> conv -> {a,b,c}`) with `json` in the mix. All compile and match
+CPython output.

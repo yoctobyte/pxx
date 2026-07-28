@@ -49,3 +49,11 @@ in a deferred pass, so the likely culprit is the import run consuming or
 repositioning tokens that the deferred parse then reads — compare `TokPos`
 before and after the in-body `PyParseImportRun` against the def's recorded body
 span. Fix that first; the newline handling is the easy half.
+
+## Log
+- 2026-07-28 — resolved, commit 5174d000e.
+
+## Resolution
+
+Already fixed by earlier NilPy work that did not move the ticket. Re-verified
+2026-07-28 at 5174d000e: the repro above matches CPython exactly.

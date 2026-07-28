@@ -1,0 +1,14 @@
+# Regression: `.Free` in a Pascal unit used to finalize a headered instance
+# TWICE (the desugar's inline PXXClassFinalize plus PXXObjRelease's rc=0 hook),
+# so json.pas's `rd.FSrc := src` released the CALLER's own string reference.
+# The source string then died while still bound, and the allocator handed the
+# block out again mid-use — the second parse crashed.
+# bug-heap-dict-literal-then-two-parses-corrupts
+import json
+
+d = {"a": 1}                 # a NilPy heap object, never used again
+s = '{"a": 1}'
+print(json.loads(s)["a"])
+print(json.loads(s)["a"])
+print(s)                     # the source string must still be intact
+print(json.loads('{"n": 1, "t": "x"}')["t"])
