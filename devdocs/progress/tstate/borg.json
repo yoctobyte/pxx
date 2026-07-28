@@ -2061,14 +2061,11 @@
   },
   {
    "bad": "d64a5d6a97b4484e3d5aefa0b475ab3817d11121",
-   "good": "ebc63e8eafdc3abb5be27c04224fdebc1c93ef56",
+   "good": "83d0fad22a6d54411b47842fecbeacc57fc76ceb",
    "job": "test-core#src:examples/tk/facade_and_paths.npy",
    "name": "test-core#991",
    "opened": "2026-07-28T14:30:34Z",
    "range": [
-    "1bcb0f8196c13fc6dd70a3839124481728dfee60",
-    "7495ac078bf23f2aa33ba071cf741aba4d95967f",
-    "83d0fad22a6d54411b47842fecbeacc57fc76ceb",
     "3082839fb87b69361899e2ed6ced67179b120a3b",
     "d87ee5a295cc7d6b8919ed11bcb7e5388d4b9a53",
     "d64a5d6a97b4484e3d5aefa0b475ab3817d11121"
