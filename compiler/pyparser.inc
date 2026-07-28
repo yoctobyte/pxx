@@ -3182,14 +3182,40 @@ var depth, bStart, bEnd, i, j, pi, capPi, symIdx: Integer;
     nParams: Integer;
     node, argA, argB, capNode: Integer;
     dup: Boolean;
+    { `lambda *args, key=key, var=var:` — a DEFAULTED parameter is Python's
+      idiom for capturing a loop variable by value, not a parameter the caller
+      ever supplies. Held here and bound as a build-time capture, exactly as the
+      nested-def path already binds its default-arg expressions. }
+    dcNames: array[0..7] of AnsiString;
+    dcSyms: array[0..7] of Integer;
+    dcCount: Integer;
 begin
   Next;                                { consume `lambda` }
   params := '';
   nParams := 0;
+  dcCount := 0;
   while (CurTok.Kind <> tkColon) and (CurTok.Kind <> tkEOF) do
   begin
     if CurTok.Kind = tkIdent then
     begin
+      if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign) then
+      begin
+        { `name=<value>` — a CAPTURE, not a parameter. Only a bare name is
+          supported as the value (which is the whole idiom: `key=key`); anything
+          richer says so rather than binding the wrong thing. }
+        if dcCount > High(dcNames) then Error('Nil Python: too many lambda default captures');
+        dcNames[dcCount] := CurTok.SVal;
+        Next; Next;                    { the name and the '=' }
+        if CurTok.Kind <> tkIdent then
+          Error('Nil Python: a lambda default capture must be a plain name (key=key)');
+        symIdx := PyProgSym(CurTok.SVal);
+        if symIdx < 0 then
+          Error('Nil Python: lambda default capture ' + dcNames[dcCount] + ' names nothing');
+        dcSyms[dcCount] := symIdx;
+        Inc(dcCount);
+        Next;                          { the value name }
+        Continue;
+      end;
       if nParams > High(pNames) then Error('Nil Python: too many lambda parameters');
       pNames[nParams] := LowerCase(CurTok.SVal);
       Inc(nParams);
@@ -3279,6 +3305,25 @@ begin
       node := AllocNode(AN_CALL);
       ASTIVal[node] := capPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
     end;
+
+  { the defaulted params, bound under the PARAMETER's name }
+  for i := 0 to dcCount - 1 do
+  begin
+    argA := AllocNode(AN_ARG);
+    ASTLeft[argA] := node;
+    argB := AllocNode(AN_ARG);
+    capNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[capNode] := PyStoredName(dcNames[i]);
+    ASTSLen[capNode] := Length(dcNames[i]);
+    ASTTk[capNode] := Ord(tyString);
+    ASTLeft[argB] := capNode;
+    ASTRight[argA] := argB;
+    capNode := AllocNode(AN_ARG);
+    ASTLeft[capNode] := PyMakeIdent(dcSyms[i]);
+    ASTRight[argB] := capNode;
+    node := AllocNode(AN_CALL);
+    ASTIVal[node] := capPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+  end;
 
   CurASTNode := node;
   LastExprTk := tyPointer;

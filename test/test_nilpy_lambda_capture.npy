@@ -1,0 +1,27 @@
+# A lambda captures by DEFAULT PARAMETER — Python's idiom for pinning a loop
+# variable, and what a GUI callback built in a loop relies on — as well as by
+# free name. Both must survive to invoke time (feature-nilpy-tk-callbacks).
+offset = 100
+
+
+class Box:
+    def __init__(self, n):
+        self.n = n
+
+    def key_of(self, v):
+        return v * self.n
+
+
+b = Box(3)
+rows = [4, 1, 3, 2]
+
+# free-name capture of an OBJECT, with a method call on it at invoke time
+print(sorted(rows, key=lambda v: -b.key_of(v)))
+# a DEFAULT-parameter capture pins the value at build time; ascending here, so
+# a lost `off` (which used to leave the name unbound) changes the answer
+print(sorted(rows, key=lambda v, off=offset: off + v))
+# both kinds in one lambda, and the sign flips the order again
+print(sorted(rows, key=lambda v, obj=b, off=offset: off - obj.key_of(v)))
+# the pinned value really is the one captured, not the one live at call time
+offset = 0
+print(sorted(rows, key=lambda v, off=offset: off + v))

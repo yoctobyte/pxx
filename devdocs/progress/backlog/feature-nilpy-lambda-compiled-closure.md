@@ -1,14 +1,36 @@
 ---
-summary: "nilpy: a lambda cannot call a method on a captured object — compile lambdas like nested defs"
+summary: "nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics)"
 type: feature
 track: N
-prio: 65
+prio: 45
 ---
 
-# A lambda's body runs in pyeval, which cannot call our methods
+# A lambda's body runs in pyeval, interpreted from its source text
 
 - **Type:** feature (Nil-Python frontend) — **Track N**
 - **Opened:** 2026-07-28, the wall `settings.py` stops at once it is BUILT.
+
+## CORRECTED (2026-07-28, same day)
+
+The first diagnosis here — "pyeval cannot call our methods" — was WRONG. It can:
+`PyHostCall` reads the instance's class RTTI, finds the method by name and
+marshals by arity and kind, so a lambda that captures a widget and calls a method
+on it works today:
+
+```python
+v.trace_add("write", lambda *a: print(v.get()))        # works
+v.trace_add("write", lambda *a, var=v: print(var.get()))   # used to fail
+```
+
+The real gap was narrow and is FIXED: a lambda's own DEFAULT PARAMETERS
+(`key=key`, `var=var` — Python's idiom for pinning a loop variable) were parsed
+as ordinary parameters and their values discarded, so the name was unbound at
+invoke time and the method call landed on nothing. They are now bound as
+build-time captures, exactly as the nested-def path already binds its
+default-arg expressions. Test: `test/test_nilpy_lambda_capture.npy`.
+
+What remains below is the LONG-TERM item, and it is about performance and having
+ONE implementation of Python semantics — not about a missing capability.
 
 ## What breaks
 
@@ -16,18 +38,14 @@ prio: 65
 var.trace_add("write", lambda *args, key=key, var=var: self.update_setting(section, key, var))
 ```
 
-The callback fires (the Tk callback mechanism works — see
-[[feature-nilpy-tk-callbacks]], landed), and then:
+A `lambda` is lowered to a pyeval CLOSURE built from the body's SOURCE TEXT
+(`pyclosure_src_new`), so every invocation re-runs an interpreter over it. That
+costs speed in a hot path (`sorted(key=...)`, a GUI callback per event), and it
+means Python semantics exist TWICE in this project — once in the compiler, once
+in pyeval — which is the kind of duplication that drifts.
 
-```
-pyeval: cannot call method get on this value
-```
-
-A `lambda` is lowered to a pyeval CLOSURE built from the body's source text
-(`pyclosure_src_new`), and the interpreter can only call methods on the types it
-knows (list, dict, str, bytes) plus a host trampoline that our compiled classes
-are not registered with. Every captured object — a `BooleanVar`, `self`, any
-widget — is opaque to it.
+It also limits what a body may contain: `PyLambdaTokText` reconstructs the source
+from a token span and refuses anything exotic.
 
 ## Two ways out
 
