@@ -1,0 +1,47 @@
+# A def's declared DEFAULT is what the callee must actually run with. Every
+# line here used to be wrong: an omitted default arrived as None whatever it
+# was declared as, or as a raw ordinal / frozen string handle that the callee
+# dereferenced (a segfault), and a written `None` boxed to the integer 0.
+
+def top(a, b=2, c="C", d=None):
+    return str(a) + "/" + str(b) + "/" + c + "/" + str(d)
+
+
+class Bag:
+    def take(self, x, s=None, n=7, t="T"):
+        return str(x) + "/" + str(s) + "/" + str(n) + "/" + t
+
+    def ints(self, x, a=5, b=6):
+        return str(x + a + b)
+
+
+def main():
+    # a def: every arity, and the written form of each default
+    print(top(1))
+    print(top(1, 5))
+    print(top(1, 5, "x"))
+    print(top(1, 5, "x", "y"))
+    print(top(1, 2, "C", None))
+
+    # a method: the same, including a None default beside int and str ones
+    b = Bag()
+    print(b.take(1))
+    print(b.take(1, "s"))
+    print(b.take(1, "s", 9))
+    print(b.take(1, "s", 9, "Z"))
+    print(b.take(1, None, 7, "T"))
+    print(b.ints(1))
+    print(b.ints(1, 10))
+    print(b.ints(1, 10, 20))
+
+    # None is None, not zero — a callee has to be able to tell
+    print(sees_none(None), sees_none(0), sees_none())
+
+
+def sees_none(v=None):
+    if v is None:
+        return "none"
+    return "value:" + str(v)
+
+
+main()

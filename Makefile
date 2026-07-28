@@ -324,6 +324,10 @@ test-nilpy: $(COMPILER)
 	# targets, and a dynamic return from a def with defaulted parameters
 	./$(COMPILER) test/test_nilpy_star_methods_and_targets.npy /tmp/test_nilpy_starm26
 	test "$$(/tmp/test_nilpy_starm26)" = "$$(python3 test/test_nilpy_star_methods_and_targets.npy)"
+	# a declared DEFAULT is what the callee runs with — int, str and None,
+	# defs and methods, every arity, plus a written None
+	./$(COMPILER) test/test_nilpy_default_arguments.npy /tmp/test_nilpy_dfl26
+	test "$$(/tmp/test_nilpy_dfl26)" = "$$(python3 test/test_nilpy_default_arguments.npy)"
 	# a bare name is never a method; str.format with a spec; qualified except
 	./$(COMPILER) examples/tk/shadow_format_except.npy /tmp/test_nilpy_sfe26
 	test "$$(/tmp/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"
@@ -3492,6 +3496,10 @@ test-core: $(COMPILER)
 	# targets, and a dynamic return from a def with defaulted parameters
 	./$(COMPILER) test/test_nilpy_star_methods_and_targets.npy /tmp/test_nilpy_starm26
 	test "$$(/tmp/test_nilpy_starm26)" = "$$(python3 test/test_nilpy_star_methods_and_targets.npy)"
+	# a declared DEFAULT is what the callee runs with — int, str and None,
+	# defs and methods, every arity, plus a written None
+	./$(COMPILER) test/test_nilpy_default_arguments.npy /tmp/test_nilpy_dfl26
+	test "$$(/tmp/test_nilpy_dfl26)" = "$$(python3 test/test_nilpy_default_arguments.npy)"
 	# a bare name is never a method; str.format with a spec; qualified except
 	./$(COMPILER) examples/tk/shadow_format_except.npy /tmp/test_nilpy_sfe26
 	test "$$(/tmp/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"

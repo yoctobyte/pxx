@@ -2459,24 +2459,31 @@ begin
     ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k];
     ASTTk[exprNode] := Ord(tySet);
   end
-  else if isNilPy and (Procs[mpi].Params[k].TypeKind = tyVariant) then
-    { A VARIANT parameter is passed by REFERENCE — the callee reads a 16-byte
-      slot through a pointer — so an omitted default cannot be a bare ordinal:
-      the callee dereferences it the moment it touches the parameter. None is
-      what the constructor path fills for the same reason.
+  else if isNilPy and (Procs[mpi].Params[k].TypeKind = tyVariant) and
+          ProcParamDefaultIsNone[mpi * MAX_PROC_PARAMS + k] then
+    { A variant parameter is passed by REFERENCE — the callee reads a 16-byte
+      slot through a pointer — so a `= None` default cannot be a bare ordinal:
+      the callee dereferences it the moment it touches the parameter.
+      `def go(self, x, s=None)` called as `A().go(1)` segfaulted on it.
 
-      It is also NOT the declared default, which is a known hole: `def f(a=1)`
-      called as `f()` runs with a=None. Boxing the value was tried and does not
-      reach: an rvalue has no address, and a hoisted variant temp put the store
-      in the wrong place. Filed as
-      bug-nilpy-param-with-string-default-reads-garbage, which covers both
-      halves. }
+      Only for the defaults that really ARE None. A declared value falls
+      through to the ordinal node below and is boxed into a variant temp by
+      IRLowerCallArg, exactly as a WRITTEN literal argument is — passing None
+      for every default meant `def f(a=1)` called as `f()` ran with a=None,
+      silently. }
     exprNode := PyMakeNone
   else
   begin
     exprNode := AllocNode(AN_INT_LIT);
     ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k];
     ASTTk[exprNode] := Ord(Procs[mpi].Params[k].TypeKind);
+    { A VARIANT parameter takes the literal as an INTEGER, so IRLowerCallArg
+      boxes it into a variant temp and passes the temp's address. Tagged with
+      the parameter's own type it looked like a variant already, the boxing was
+      skipped, and the callee dereferenced a bare ordinal — `def g(self, x,
+      s=5)` called as `A().g(1)` segfaulted. }
+    if Procs[mpi].Params[k].TypeKind = tyVariant then
+      ASTTk[exprNode] := Ord(tyInteger);
   end;
   DefaultArgValueNode := exprNode;
 end;
@@ -2533,18 +2540,6 @@ begin
       for k := nArgs to Procs[i].ParamCount - 1 do
       begin
         if not ProcParamHasDefault[i * MAX_PROC_PARAMS + k] then ok := False;
-        { A NilPy DEF's defaulted parameter is a by-reference VARIANT, and the
-          fill cannot build one yet — DefaultArgValueNode passes None. Matching
-          such a call would turn a loud "no overload matches" into a silent
-          wrong value, so leave it erroring until
-          bug-nilpy-param-with-string-default-reads-garbage is fixed.
-
-          A LIBRARY routine (ProcUnitIdx >= 0) is a different case: a Pascal
-          `const filetypes: Variant = 0` means "not supplied", which is exactly
-          what None says — `filedialog.askopenfilename()` is the shape, and it
-          reads the argument back as omitted. }
-        if (ProcUnitIdx[i] < 0) and (Procs[i].Params[k].TypeKind = tyVariant) then
-          ok := False;
       end;
       if ok then
       begin

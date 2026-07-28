@@ -1936,7 +1936,7 @@ var argTk: TTypeKind;
     value: Integer;
     caCount, caElemRec, caElemSz, caSym, savedRec, caArgSym: Integer;
     caElemTk: TTypeKind;
-    caIdent, caCountLit, caArg1, caArg2, caSlCall: Integer;
+    caIdent, caCountLit, caArg1, caArg2, caSlCall, caNone: Integer;
     caRecName: Integer; caField: AnsiString; oaEligible: Boolean;
   coerceParamSym, coerceIntfCi, coerceCast: Integer;
   arcArg1, arcArg2, arcCall: Integer;
@@ -2119,6 +2119,31 @@ begin
     the argument — a variant arg is always passed by address (see the
     VariantToStr marshalling). Without this an `l.append(1)` hit
     IR_UNSUPPORTED on the raw AN_INT_LIT (feature-core-variant-arg-boxing). }
+  { A variant RVALUE to a by-reference variant parameter. The parameter is
+    passed by address and a call result has none, so it needs a slot: `pynone()`
+    filled for an omitted `= None` reached the callee as the returned bytes
+    read through a pointer. The boxing branch below skips this case by design —
+    it fires only when the argument is NOT already a variant. }
+  if (cpi >= 0) and (pathIdx >= 0) and
+     (pathIdx < Procs[cpi].ParamCount) and
+     (Procs[cpi].Params[pathIdx].TypeKind = tyVariant) and
+     (not Procs[cpi].Params[pathIdx].IsArray) and
+     Procs[cpi].Params[pathIdx].IsRef and
+     (IntToTypeKind(ASTTk[argAST]) = tyVariant) and
+     ((ASTKind[argAST] = AN_CALL) or (ASTKind[argAST] = AN_VIRTUAL_CALL)) then
+  begin
+    tmpSym := AllocVar('', tyVariant);
+    caIdent := AllocNode(AN_IDENT);
+    ASTIVal[caIdent] := tmpSym;
+    ASTTk[caIdent] := Ord(tyVariant);
+    caSlCall := AllocNode(AN_ASSIGN);
+    ASTLeft[caSlCall] := caIdent;
+    ASTRight[caSlCall] := argAST;
+    IRLowerAST(caSlCall);
+    Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyVariant));
+    Exit;
+  end;
+
   if (cpi >= 0) and (pathIdx >= 0) and
      (pathIdx < Procs[cpi].ParamCount) and
      (Procs[cpi].Params[pathIdx].TypeKind = tyVariant) and
@@ -2147,7 +2172,21 @@ begin
     ASTTk[caIdent] := Ord(tyVariant);
     caSlCall := AllocNode(AN_ASSIGN);
     ASTLeft[caSlCall] := caIdent;
-    ASTRight[caSlCall] := argAST;
+    { Python's `None` reaches here as the nil POINTER literal, which boxes to
+      the integer 0 — `f(None)` then printed 0 where CPython prints None, and a
+      callee testing `is None` never matched. The empty variant is what None
+      means, and it is what an omitted `= None` default already fills. }
+    if isNilPy and (ASTKind[argAST] = AN_INT_LIT) and (ASTIVal[argAST] = 0) and
+       (IntToTypeKind(ASTTk[argAST]) = tyPointer) and (FindProc('pynone') >= 0) then
+    begin
+      caNone := AllocNode(AN_CALL);
+      ASTIVal[caNone] := FindProc('pynone');
+      ASTTk[caNone] := Ord(tyVariant);
+      ASTLeft[caNone] := -1;
+      ASTRight[caSlCall] := caNone;
+    end
+    else
+      ASTRight[caSlCall] := argAST;
     IRLowerAST(caSlCall);
     Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyVariant));
     Exit;
@@ -3823,6 +3862,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     frameNode, slotNode, bpAddr, addrAddr, bpVal, selfVal: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
     ctorArgCpi, ctorArgSlot: Integer;   { construction: coerce ctor args by the ctor's param types }
+    dfltAST, dfltSym, dfltIdent, dfltAsgn: Integer;   { a filled default, materialised for IRLowerCallArg }
     isRefArg: Boolean; argTk: TTypeKind; callRetType: TTypeKind; callVal: Integer;
     lstNode, varNode: Integer;   { NilPy list-vs-variant equality }
     startLabel, elseLabel, endLabel, startLabelNode, endLabelNode: Integer;
@@ -7446,7 +7486,56 @@ begin
         while (pathIdx < Procs[cpi].ParamCount) and (pathIdx < MAX_PROC_PARAMS) and
               ProcParamHasDefault[cpi * MAX_PROC_PARAMS + pathIdx] do
         begin
-          if ProcParamDefaultIsStr[cpi * MAX_PROC_PARAMS + pathIdx] then
+          { A NilPy VARIANT parameter takes its default the same way it takes a
+            written argument: as an AST literal handed to IRLowerCallArg, which
+            boxes it into a variant temp and passes the temp's address. Built
+            by hand here the value reached the callee as a raw ordinal or a
+            frozen string handle, and the callee dereferenced it — a def's
+            declared default was never what it actually ran with. }
+          if (Procs[cpi].Params[pathIdx].TypeKind = tyVariant) and
+             (not Procs[cpi].Params[pathIdx].IsArray) then
+          begin
+            if ProcParamDefaultIsNone[cpi * MAX_PROC_PARAMS + pathIdx] then
+            begin
+              { `= None` is not the ordinal 0 it is recorded as. pynone()
+                yields the empty variant, and its result needs a slot of its
+                own: an rvalue has no address, and the parameter is passed by
+                one. }
+              dfltAST := AllocNode(AN_CALL);
+              ASTIVal[dfltAST] := FindProc('pynone');
+              if ASTIVal[dfltAST] < 0 then Error('Nil Python: pylib (pynone) not loaded');
+              ASTTk[dfltAST] := Ord(tyVariant);
+              ASTLeft[dfltAST] := -1;
+              dfltSym := AllocVar('', tyVariant);
+              dfltIdent := AllocNode(AN_IDENT);
+              ASTIVal[dfltIdent] := dfltSym;
+              ASTTk[dfltIdent] := Ord(tyVariant);
+              dfltAsgn := AllocNode(AN_ASSIGN);
+              ASTLeft[dfltAsgn] := dfltIdent;
+              ASTRight[dfltAsgn] := dfltAST;
+              IRLowerAST(dfltAsgn);
+              value := IRAppend(IR_LEA, dfltSym, -1, -1, 0, Ord(tyVariant));
+            end
+            else
+            begin
+              if ProcParamDefaultIsStr[cpi * MAX_PROC_PARAMS + pathIdx] then
+              begin
+                dfltAST := AllocNode(AN_STR_LIT);
+                ASTSOffset[dfltAST] := ProcParamDefaultSOff[cpi * MAX_PROC_PARAMS + pathIdx];
+                ASTSLen[dfltAST] := ProcParamDefaultSLen[cpi * MAX_PROC_PARAMS + pathIdx];
+                ASTTk[dfltAST] := Ord(tyString);
+              end
+              else
+              begin
+                dfltAST := AllocNode(AN_INT_LIT);
+                ASTIVal[dfltAST] := ProcParamDefaultVal[cpi * MAX_PROC_PARAMS + pathIdx];
+                ASTTk[dfltAST] := Ord(tyInteger);
+              end;
+              value := IRLowerCallArg(cpi, pathIdx, dfltAST, False);
+            end;
+            argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyVariant));
+          end
+          else if ProcParamDefaultIsStr[cpi * MAX_PROC_PARAMS + pathIdx] then
           begin
             { The default is a FROZEN literal (inline length prefix). A managed
               `string` param expects an AnsiString, so it needs the same hidden
