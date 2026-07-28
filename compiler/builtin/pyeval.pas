@@ -100,6 +100,15 @@ function pyboundfn_is(p: Pointer): Boolean;
 function pyboundfn_bind_var(obj: Pointer; idx: Int64; const v: Variant): Pointer;
 function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
 
+{ Invoke whatever kind of Python callable a value holds, with one argument or
+  none. NilPy has four shapes — a BOUND METHOD (tag 8, {code, receiver}), a
+  pyeval CLOSURE, a lifted bound-fn (both magic-tagged heap objects boxed as an
+  integer), and a plain compiled def (its code ADDRESS, likewise boxed) — and
+  every library that accepts a callable meets all four. The dispatch lived
+  inside lib/pcl/tkinter.pas; it belongs here, next to the two object kinds only
+  this unit can recognise. }
+procedure pycall_value(const cb: Variant; const arg: Variant; withArg: Boolean);
+
 implementation
 
 const
@@ -1658,6 +1667,9 @@ type
     Bound:  array[0..19] of Int64;
   end;
   PBoundFnObj = ^TBoundFnObj;
+  { a plain compiled def taken as a value: the value IS its code address }
+  TPyCallFn0 = function: Int64;
+  TPyCallFn1 = function(const a0: Variant): Int64;
   TBF1  = function(a0: Int64): Int64;
   TBF2  = function(a0, a1: Int64): Int64;
   TBF3  = function(a0, a1, a2: Int64): Int64;
@@ -1715,6 +1727,39 @@ end;
   yields its instance pointer, an int its value. Missing arities pad upward
   (extra register args are ABI-harmless); a procedure callee's garbage result
   is discarded. }
+procedure pycall_value(const cb: Variant; const arg: Variant; withArg: Boolean);
+var p: Pointer; f1: TPyCallFn1; f0: TPyCallFn0;
+begin
+  if pycallback_is(cb) then
+  begin
+    if withArg then pycallback_call1(cb, arg) else pycallback_call0(cb);
+    Exit;
+  end;
+  p := Pointer(NativeInt(PPyRec(@cb)^.Payload));
+  if p = nil then Exit;
+  if pyclosure_is(p) then
+  begin
+    pyclosure_call_ptr(p, arg);
+    Exit;
+  end;
+  if pyboundfn_is(p) then
+  begin
+    pyboundfn_call_ptr(p, arg);
+    Exit;
+  end;
+  { a plain compiled def: the value IS its code address }
+  if withArg then
+  begin
+    f1 := TPyCallFn1(p);
+    f1(arg);
+  end
+  else
+  begin
+    f0 := TPyCallFn0(p);
+    f0;
+  end;
+end;
+
 function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
 var o: PBoundFnObj; p0, rr: Int64; b: PInt64; code: Pointer;
     va0: Variant;

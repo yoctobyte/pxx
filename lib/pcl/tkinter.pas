@@ -500,42 +500,13 @@ var
   gTkCbReady: Boolean;
 
 procedure TkiCallValue(const cb: Variant; const arg: Variant; withArg: Boolean);
-{ Invoke whatever kind of Python callable this is. NilPy has four shapes and a
-  façade meets all of them: a BOUND METHOD (tag 8, {code, receiver}), a pyeval
-  CLOSURE and a captures-carrying nested def (both a magic-tagged heap object
-  boxed as an integer), and a plain compiled def (its code ADDRESS, likewise
-  boxed). The two heap kinds are told apart by their own magic markers rather
-  than by the tag, which is the same integer tag for all three. }
-var p: Pointer; f1: TTkiFn1; f0: TTkiFn0;
+{ Every Python callable shape a façade meets: a BOUND METHOD (tag 8, {code,
+  receiver}), a pyeval CLOSURE, a lifted bound-fn, and a plain compiled def
+  (its code ADDRESS). The dispatch itself lives in pyeval as pycall_value —
+  two of those four kinds are pyeval's own objects, and every library that
+  takes a callable needs the same four-way test (atexit does too). }
 begin
-  if pycallback_is(cb) then
-  begin
-    if withArg then pycallback_call1(cb, arg) else pycallback_call0(cb);
-    Exit;
-  end;
-  p := Pointer(NativeInt(PPyVarRec(@cb)^.Payload));
-  if p = nil then Exit;
-  if pyclosure_is(p) then
-  begin
-    pyclosure_call_ptr(p, arg);
-    Exit;
-  end;
-  if pyboundfn_is(p) then
-  begin
-    pyboundfn_call_ptr(p, arg);
-    Exit;
-  end;
-  { a plain compiled def: the value IS its code address }
-  if withArg then
-  begin
-    f1 := TTkiFn1(p);
-    f1(arg);
-  end
-  else
-  begin
-    f0 := TTkiFn0(p);
-    f0;
-  end;
+  pycall_value(cb, arg, withArg);
 end;
 
 function TkiCbArgInt(argc: Integer; argv: PPAnsiChar; i: Integer): Integer;

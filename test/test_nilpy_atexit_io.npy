@@ -1,0 +1,25 @@
+# atexit handlers run at exit, LAST registered first (CPython's order), and the
+# io buffers behave like the file object a library expects.
+import atexit
+from io import StringIO
+
+
+def bye():
+    print("bye ran")
+
+
+def second():
+    print("second ran")
+
+
+atexit.register(bye)
+atexit.register(second)
+
+b = StringIO()
+print(b.write("hello"), b.write(" world"))
+print(b.getvalue())
+b.seek(0)
+print(b.read(5), b.tell())
+print(b.read())
+print(StringIO("seed").getvalue())
+print("main done")

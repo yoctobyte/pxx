@@ -1629,10 +1629,18 @@ end;
   AllocVars a fresh program-scoped variable that shadows the unit global.
   Mirrors the unit-scoping FindProcOverload already applies to procedures. }
 function PyProgSym(const name: AnsiString): Integer;
+{ A name belonging to the COMPILATION UNIT being parsed: the program itself
+  (SymUnitIdx = -1), or — while a `.py` MODULE is being compiled — that module's
+  own symbols, which carry its unit index. Without the second case a module's
+  method could not see its own `self`: every symbol it allocates is tagged with
+  the unit, so the test "must be program-level" rejected all of them
+  (feature-nilpy-py-module-loader). Symbols of OTHER units stay invisible here,
+  which is the point of the check — an RTL unit's internals must not bind to a
+  bare Python name. }
 var si: Integer;
 begin
   si := FindSym(name);
-  if (si >= 0) and (SymUnitIdx[si] <> -1) then si := -1;
+  if (si >= 0) and (SymUnitIdx[si] <> -1) and (SymUnitIdx[si] <> CurrentUnitIdx) then si := -1;
   PyProgSym := si;
 end;
 
@@ -11714,6 +11722,11 @@ begin
   ASTTk[blockNode] := Ord(tyUnknown);
   PyExprMode := False;
   CompileAST(blockNode);
+  { Unit FINALIZATION, in reverse init order, after the program body — like
+    Pascal's driver, and like FPC. `atexit.register(fn)` is a finalization
+    handler, so without this an imported module's exit code never ran. }
+  if (FiniProcCount > 0) or (FiniRunnerProc >= 0) then
+    EmitCallProc(GetFiniRunnerProc);
   EmitExit(0);
   { A lambda LIFTED at module level queues its body like one inside a def does,
     and nothing else drains the module's queue. Emitted after the exit on

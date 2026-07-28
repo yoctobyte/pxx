@@ -298,6 +298,9 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_py_module_import26)" = "$$(printf 'module init ran\nprogram body\n8\n8\n3 3 b\n9\n7')"
 	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy /tmp/test_nilpy_ast_literal26
 	test "$$(/tmp/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
+	# atexit handlers run at exit (LIFO), io's in-memory buffers behave
+	./$(COMPILER) test/test_nilpy_atexit_io.npy /tmp/test_nilpy_atexit_io26
+	test "$$(/tmp/test_nilpy_atexit_io26)" = "$$(printf '5 6\nhello world\nhello 5\n world\nseed\nmain done\nsecond ran\nbye ran')"
 	./$(COMPILER) test/test_nilpy_str_float.npy /tmp/test_nilpy_str_float26
 	test "$$(/tmp/test_nilpy_str_float26)" = "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
 	./$(COMPILER) test/test_nilpy_string_variant.npy /tmp/test_nilpy_string_variant26
@@ -3384,6 +3387,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_py_module_import26)" = "$$(printf 'module init ran\nprogram body\n8\n8\n3 3 b\n9\n7')"
 	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy /tmp/test_nilpy_ast_literal26
 	test "$$(/tmp/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
+	# atexit handlers run at exit (LIFO), io's in-memory buffers behave
+	./$(COMPILER) test/test_nilpy_atexit_io.npy /tmp/test_nilpy_atexit_io26
+	test "$$(/tmp/test_nilpy_atexit_io26)" = "$$(printf '5 6\nhello world\nhello 5\n world\nseed\nmain done\nsecond ran\nbye ran')"
 	./$(COMPILER) test/test_nilpy_str_float.npy /tmp/test_nilpy_str_float26
 	test "$$(/tmp/test_nilpy_str_float26)" = "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
 	./$(COMPILER) test/test_sets.pas /tmp/test_sets26

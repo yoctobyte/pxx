@@ -25510,7 +25510,7 @@ var
   basePath, ext, emsg: AnsiString;
   lastSlash, lastDot: Integer;
   isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
-  isPyUnit: Boolean;
+  isPyUnit, savedPyExprMode: Boolean;
   savedNestedComments: Boolean;
   unitNeedsText: Boolean;
 begin
@@ -26024,6 +26024,13 @@ begin
       bug-unit-mode-directives-leak). }
     savedCaseMode := CaseSensitiveMode;
     savedNestedComments := NestedComments;
+    { A PASCAL unit is parsed with PASCAL expression rules, whoever pulled it
+      in. NilPy turns on Python's and/or/not precedence for its own body, and a
+      `.py` MODULE that imports a Pascal unit (settings.py -> configparser)
+      reached this branch with the flag still on: `(c >= 'A') and (c <= 'Z')`
+      then failed on `and`. Restored below with the rest of the per-unit modes. }
+    savedPyExprMode := PyExprMode;
+    PyExprMode := False;
     { fresh per-unit default: FPC lexes each unit under its OWN mode — an
       includer's {$MODE DELPHI} (NestedComments off) must not change how this
       unit's comments nest. The unit's own MODE/NESTEDCOMMENTS directives
@@ -26097,6 +26104,7 @@ begin
     CurUnitDir := savedUnitDir;
     CaseSensitiveMode := savedCaseMode;
     NestedComments := savedNestedComments;
+    PyExprMode := savedPyExprMode;
     CurrentUnitIdx := savedCurrentUnitIdx;
     CurrentCLibrary := savedCurrentCLibrary;
   end;
