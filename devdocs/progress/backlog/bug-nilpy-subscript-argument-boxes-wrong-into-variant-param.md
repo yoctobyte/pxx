@@ -51,3 +51,38 @@ helpers' parameters are declared) is not.
 directly into `max`/`min` in both operand positions, diffed against CPython —
 and, once found, the same shape through one more `const Variant` helper to show
 the fix is at the boxing and not at max/min.
+
+## Narrowed further — it is OVERLOAD RESOLUTION, not the subscript
+
+Measured after filing:
+
+- A USER def takes the same argument correctly:
+  `def f(x: int) -> int: return x + 1` called as `f(d["n"])` returns 43, and so
+  does an unannotated `def g(x)`. So `IRLowerCallArg`'s variant-to-scalar unbox
+  DOES fire for a subscript argument — the general path is fine.
+- `max` is OVERLOADED in pylib: `max(Int64, Int64)`, `max(Double, Double)` and
+  a ONE-argument `max(l: TPyList): Variant`.
+- `print(max([3, 9], 1))` — a two-argument call whose first argument is a list —
+  fails to compile with the candidate list showing `max(class)`, i.e. the
+  ONE-parameter overload is offered for a TWO-argument call.
+
+So the shape is: a variant argument does not match `Int64`/`Double` exactly,
+resolution falls through to the 1-parameter `max(TPyList)` overload, the second
+argument is dropped, and the call yields that overload's Variant result — which
+is the pointer that gets printed. `max(v, 1)` with the value bound to a local
+works because the local's declared type resolves the two-parameter overload
+directly.
+
+That also explains why `min(d["n"], 1)` looked right: the same wrong overload
+runs, and its answer happens to coincide when the other operand wins.
+
+### Likely fix
+
+Filter overload candidates by ARGUMENT COUNT before considering types, so a
+two-argument call can never resolve to a one-parameter overload. Then decide
+what a variant argument should match — the established alternative in this
+codebase is distinct NAMES per operand type (`pyfloordiv_v` and friends) rather
+than an overload set, precisely because
+[[bug-a-len-of-variant-picks-wrong-overload]] showed a Variant argument picks
+arbitrarily. A `pymax_v`/`pymin_v` pair selected by the frontend when either
+operand is a variant would follow that precedent exactly.
