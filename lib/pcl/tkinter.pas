@@ -140,14 +140,17 @@ type
       named yet. Kept under a DIFFERENT name — a same-name overload made the
       keyword form ambiguous, and NilPy binds keyword arguments against the
       statically chosen overload. }
-    procedure itemconfigure_raw(item: Integer; const opts: AnsiString);
+    procedure itemconfigure_raw(const item: Variant; const opts: AnsiString);
     { the Python spelling: options BY NAME, like Widget.configure }
-    procedure itemconfigure(item: Integer; width: Integer = -1;
+    procedure itemconfigure(const item: Variant; width: Integer = -1;
                             height: Integer = -1; const state: AnsiString = '';
                             const fill: AnsiString = '';
                             const text: AnsiString = '');
     procedure delete_all;
-    function bbox(item: Integer): AnsiString;
+    { An item is named by its ID or by a TAG — `canvas.bbox("all")` is the
+      commonest call in the whole widget, so an Integer parameter refused the
+      normal spelling. Variant takes both (see TkiItemSpec). }
+    function bbox(const item: Variant): AnsiString;
     procedure yview(const args: AnsiString);
     procedure yview_scroll(n: Integer; const what: AnsiString);
     procedure xview(const args: AnsiString);
@@ -222,6 +225,8 @@ type
     constructor Create(const value: AnsiString = '');
     function get: AnsiString;
     procedure set_(const value: AnsiString);
+    { the Python spelling of a variable trace: `var.trace_add("write", cb)` }
+    procedure trace_add(const mode: AnsiString; const callback: Variant);
   end;
 
   BooleanVar = class
@@ -309,6 +314,15 @@ function TkiOptInt(const name: AnsiString; value: Integer): AnsiString;
 begin
   if value < 0 then TkiOptInt := ''
   else TkiOptInt := ' -' + name + ' ' + TkiIntStr(value);
+end;
+
+{ A canvas ITEM SPEC: the integer id create_* handed back, or a TAG name —
+  `canvas.bbox("all")`, `canvas.itemconfigure("chords", state="hidden")`. Tk
+  takes either in the same position, so the façade must too. }
+function TkiItemSpec(const item: Variant): AnsiString;
+begin
+  if pyvartag(item) = 6 then Result := pystr_of(item)
+  else Result := TkiIntStr(Integer(pyvar_to_int(item)));
 end;
 
 { ---- Widget -------------------------------------------------------------- }
@@ -718,7 +732,7 @@ begin
                       TkiOptStr('outline', outline) + TkiOptStr('fill', fill)));
 end;
 
-procedure Canvas.itemconfigure(item: Integer; width, height: Integer;
+procedure Canvas.itemconfigure(const item: Variant; width, height: Integer;
                                const state, fill, text: AnsiString);
 begin
   itemconfigure_raw(item, TkiOptInt('width', width) + TkiOptInt('height', height) +
@@ -726,9 +740,9 @@ begin
                 TkiOptStr('text', text));
 end;
 
-procedure Canvas.itemconfigure_raw(item: Integer; const opts: AnsiString);
+procedure Canvas.itemconfigure_raw(const item: Variant; const opts: AnsiString);
 begin
-  TkEval(path + ' itemconfigure ' + TkiIntStr(item) + ' ' + opts);
+  TkEval(path + ' itemconfigure ' + TkiItemSpec(item) + ' ' + opts);
 end;
 
 procedure Canvas.delete_all;
@@ -736,9 +750,9 @@ begin
   TkEval(path + ' delete all');
 end;
 
-function Canvas.bbox(item: Integer): AnsiString;
+function Canvas.bbox(const item: Variant): AnsiString;
 begin
-  bbox := TkEval(path + ' bbox ' + TkiIntStr(item));
+  bbox := TkEval(path + ' bbox ' + TkiItemSpec(item));
 end;
 
 procedure Canvas.yview(const args: AnsiString);
@@ -917,6 +931,17 @@ end;
 procedure StringVar.set_(const value: AnsiString);
 begin
   TkEval('set ' + name + ' {' + value + '}');
+end;
+
+procedure StringVar.trace_add(const mode: AnsiString; const callback: Variant);
+{ same Tcl trace as BooleanVar's — see the note there. An Entry's textvariable
+  is a StringVar, so this is the spelling an editable field actually uses. }
+var idx: Integer; op: AnsiString;
+begin
+  idx := TkiRegisterCallback(callback);
+  if idx < 0 then Exit;
+  if mode = '' then op := 'write' else op := mode;
+  TkEval('trace add variable ' + name + ' ' + op + ' {pxxcb ' + TkiIntStr(idx) + '}');
 end;
 
 constructor BooleanVar.Create(const value: Variant);

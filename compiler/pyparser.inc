@@ -1777,6 +1777,36 @@ begin
     end;
     Inc(k2);
   end;
+  { A COMPARISON or a membership test yields a Boolean whatever its operands
+    are, and the scan below types an expression by the operands it recognises:
+    `return v in {"0", "1"}` typed itself by the set literal (a TPyList) and
+    `return v > "0"` by the string, so the def's registered result type
+    disagreed with what the body actually returns — the caller read a Boolean
+    as an object pointer and crashed on the next use
+    (bug-nilpy-comparison-return-type-inferred-from-operands). `and`/`or` are
+    deliberately NOT here: Python hands back an OPERAND, not a Boolean, and
+    NilPy implements that. Depth-tracked so an operator inside a call or a
+    subscript does not decide the whole expression. }
+  k2 := startIdx;
+  depth := 0;
+  while k2 < endIdx do
+  begin
+    if Tokens[k2].Kind in [tkBegin, tkLBrack, tkLParen] then Inc(depth)
+    else if Tokens[k2].Kind in [tkEnd, tkRBrack, tkRParen] then Dec(depth)
+    else if (depth = 0) and (Tokens[k2].Kind in [tkEq, tkNeq, tkLt, tkLe,
+                                                 tkGt, tkGe, tkIn]) then
+    begin
+      Result := tyBoolean;
+      Exit;
+    end;
+    Inc(k2);
+  end;
+  { `not <expr>` is a Boolean too. }
+  if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkNot) then
+  begin
+    Result := tyBoolean;
+    Exit;
+  end;
   { A parenthesised TUPLE is built as a TPyList, so it must INFER as one too —
     otherwise an unannotated `return (a, b)` typed itself Integer and handed
     back the list pointer truncated. }

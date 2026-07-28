@@ -1534,6 +1534,7 @@ var
   k: Integer;
   la, lb: Int64;
   a, b: PChar;
+  pl, ql: TObject;
 begin
   Result := False;
   { The int-family tags (VT_INT/VT_INT64/VT_BOOL) are ONE Python number and
@@ -1548,6 +1549,30 @@ begin
     Exit;
   end;
   if p^.VType <> q^.VType then Exit;
+  if p^.VType = 7 then
+  begin
+    { Two OBJECTS. Identity settles it first (and covers every class this unit
+      does not compare by value). A tuple lowers to a TPyList, so
+      `("Options", "Debug") in BOOLEAN_SETTINGS` compares two DISTINCT list
+      objects and identity alone answered False where Python says True —
+      Python compares sequences ELEMENT BY ELEMENT. }
+    Result := p^.Payload = q^.Payload;
+    if Result then Exit;
+    if (p^.Payload = 0) or (q^.Payload = 0) then Exit;
+    pl := TObject(Pointer(NativeInt(p^.Payload)));
+    ql := TObject(Pointer(NativeInt(q^.Payload)));
+    if (pl is TPyList) and (ql is TPyList) then
+    begin
+      la := TPyList(pl).FLen;
+      lb := TPyList(ql).FLen;
+      if la <> lb then Exit;
+      for k := 0 to Integer(la) - 1 do
+        if not PyVarEq(PPyVarRec(NativeInt(TPyList(pl).FItems) + k * 16),
+                       PPyVarRec(NativeInt(TPyList(ql).FItems) + k * 16)) then Exit;
+      Result := True;
+    end;
+    Exit;
+  end;
   if p^.VType = 8193 then
   begin
     { VT_PROMO_INT64: payload is the exact decimal in a managed string —
@@ -4509,7 +4534,19 @@ begin
   if pyvartag(v) = 7 then
   begin
     o := TObject(pyvarobj(v));
-    if o is TPyDict then begin Result := TPyDict(o); Exit; end;
+    if o is TPyDict then
+    begin
+      { The dict INSIDE the variant is handed back as-is (unlike pylist_v, which
+        copies), so the reference leaving this function is a second owner: the
+        caller releases the temporary when the statement ends, and without this
+        retain that release drops the variant's own reference. It freed the live
+        dict under `for k, v in outer[key].items()` — a use-after-free that
+        corrupted the free list and crashed a later PXXAlloc
+        (bug-nilpy-pydict-v-borrowed-reference). }
+      PXXObjRetain(Pointer(o));
+      Result := TPyDict(o);
+      Exit;
+    end;
   end;
   PyTypeError(pyvartag(v), 'a dict');
   Result := TPyDict.Create;

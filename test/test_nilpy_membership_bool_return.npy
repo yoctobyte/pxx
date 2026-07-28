@@ -1,0 +1,47 @@
+# Three fixes that songformatter's settings.py forced, all CPython-diffed.
+
+# 1. A TUPLE is a TPyList, so membership compared two distinct objects by
+#    IDENTITY and answered False where Python compares element by element.
+BOOLEAN_SETTINGS = {
+    ("Options", "PrintGuitarChords"),
+    ("Misc", "Debug"),
+}
+print(("Options", "PrintGuitarChords") in BOOLEAN_SETTINGS)
+print(("Options", "Missing") in BOOLEAN_SETTINGS)
+print([1, [2, 3]] == [1, [2, 3]])
+
+# 2. An unannotated def returning a COMPARISON typed its result from the
+#    OPERANDS (the set literal, the string), so the caller read a Boolean as an
+#    object pointer and crashed on the next use.
+def is_boolean_setting(section, key, value):
+    return (section, key) in BOOLEAN_SETTINGS or value in {"0", "1"}
+
+def bigger(a, b):
+    return a > b
+
+def missing(d, k):
+    return not k in d
+
+print(is_boolean_setting("Options", "PrintGuitarChords", "x"))
+print(is_boolean_setting("UI", "WindowSize", "1280x800"))
+print(is_boolean_setting("UI", "WindowSize", "1"))
+print(bigger(3, 2))
+print(bigger("a", "b"))
+print(missing({"a": 1}, "b"))
+
+# 3. Iterating a dict that came out of ANOTHER dict handed the inner dict back
+#    without an owning reference, so the caller's release freed a live object —
+#    a use-after-free that corrupted the free list and crashed a later alloc.
+#    Two passes: the second one only survives if the dict is still alive.
+DEFAULTS = {"UI": {"WindowSize": "1280x800"}, "Render": {"FontSize": "13", "Font": "Helvetica"}}
+
+def walk():
+    n = 0
+    for section, options in DEFAULTS.items():
+        for option, value in options.items():
+            n += 1
+    return n
+
+print(walk())
+print(walk())
+print(walk())

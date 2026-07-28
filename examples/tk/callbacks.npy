@@ -2,7 +2,7 @@
 # variable trace fires. Compiled by the suite, run under Xvfb by hand — it needs
 # a display. See feature-nilpy-tk-callbacks.
 import tkinter as tk
-from tkinter import BooleanVar
+from tkinter import BooleanVar, StringVar
 
 
 def on_plain(event):
@@ -18,6 +18,15 @@ class App:
         self.frame.pack(fill="both", expand=True)
         self.flag = BooleanVar(value=False)
         self.flag.trace_add("write", lambda *args: print("trace fired"))
+        # an Entry's textvariable is a StringVar, so the trace an editable
+        # field uses is THIS one — it had no trace_add at all, and an
+        # unresolved method compiles clean and jumps to 0.
+        self.text = StringVar(value="a")
+        self.text.trace_add("write", lambda *args: print("str trace fired"))
+        # a canvas item is named by its id OR by a tag: bbox("all") is the
+        # commonest call in the widget and an Integer parameter refused it.
+        self.canvas = tk.Canvas(root, width=50, height=50)
+        self.canvas.create_rectangle(1, 1, 10, 10)
 
     def on_configure(self, event):
         self.hits = self.hits + 1
@@ -28,5 +37,7 @@ root = tk.Tk()
 app = App(root)
 root.update()
 app.flag.set_(True)
+app.text.set_("b")
 root.update()
+print("bbox", app.canvas.bbox("all"))
 print("hits", app.hits)
