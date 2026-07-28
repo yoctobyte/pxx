@@ -304,6 +304,12 @@ test-nilpy: $(COMPILER)
 	# a module whose FIRST line is an import: the pre-scan must not skip it
 	./$(COMPILER) test/test_nilpy_module_first_import.npy /tmp/test_nilpy_module_first_import26
 	test "$$(/tmp/test_nilpy_module_first_import26)" = "$$(printf 'D\n2')"
+	# an imported name shadows a builtin only in the module that imported it
+	./$(COMPILER) test/test_nilpy_import_scope.npy /tmp/test_nilpy_import_scope26
+	test "$$(/tmp/test_nilpy_import_scope26)" = "$$(printf '3\npage.size=A4\n8')"
+	# rebinding a name across types widens to a variant, as Python allows
+	./$(COMPILER) test/test_nilpy_rebind_type.npy /tmp/test_nilpy_rebind_type26
+	test "$$(/tmp/test_nilpy_rebind_type26)" = "$$(printf 'plain string\nholder:one\n43\nback to a string')"
 	./$(COMPILER) test/test_nilpy_str_float.npy /tmp/test_nilpy_str_float26
 	test "$$(/tmp/test_nilpy_str_float26)" = "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
 	./$(COMPILER) test/test_nilpy_string_variant.npy /tmp/test_nilpy_string_variant26
@@ -3401,6 +3407,12 @@ test-core: $(COMPILER)
 	# a module whose FIRST line is an import: the pre-scan must not skip it
 	./$(COMPILER) test/test_nilpy_module_first_import.npy /tmp/test_nilpy_module_first_import26
 	test "$$(/tmp/test_nilpy_module_first_import26)" = "$$(printf 'D\n2')"
+	# an imported name shadows a builtin only in the module that imported it
+	./$(COMPILER) test/test_nilpy_import_scope.npy /tmp/test_nilpy_import_scope26
+	test "$$(/tmp/test_nilpy_import_scope26)" = "$$(printf '3\npage.size=A4\n8')"
+	# rebinding a name across types widens to a variant, as Python allows
+	./$(COMPILER) test/test_nilpy_rebind_type.npy /tmp/test_nilpy_rebind_type26
+	test "$$(/tmp/test_nilpy_rebind_type26)" = "$$(printf 'plain string\nholder:one\n43\nback to a string')"
 	./$(COMPILER) test/test_nilpy_str_float.npy /tmp/test_nilpy_str_float26
 	test "$$(/tmp/test_nilpy_str_float26)" = "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
 	./$(COMPILER) test/test_sets.pas /tmp/test_sets26

@@ -54,3 +54,6 @@ resolution in the expression path needs the same rule at the same time.
 
 `make test` + the repro above as a regression test, plus a Pascal case pairing
 `uses re` with a class whose field is called `s`.
+
+## Log
+- 2026-07-28 — resolved, commit c3ad992a.

@@ -1,0 +1,19 @@
+# Python rebinds a name freely; the inferred type widens to a variant rather
+# than erroring "too dynamic". convertrawtext.py does exactly this: a str
+# placeholder replaced by a NamedTemporaryFile object.
+class Holder:
+    def __init__(self, tag):
+        self.tag = tag
+
+    def label(self):
+        return "holder:" + self.tag
+
+
+slot = "plain string"
+print(slot)
+slot = Holder("one")
+print(slot.label())
+slot = 42
+print(slot + 1)
+slot = "back to a string"
+print(slot)

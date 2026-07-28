@@ -1,0 +1,6 @@
+from nilpy_impset import set
+import nilpy_impscope
+
+print(nilpy_impscope.distinct([1, 2, 2, 3]))
+print(set("page", "size", "A4"))
+print(len(set("ab", "cd", "ef")))

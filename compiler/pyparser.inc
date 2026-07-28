@@ -403,6 +403,18 @@ var
     (feature-nilpy-function-values). -1 when the annotation was not Callable. }
   PyAnnLastProcSig: Integer;
   PyCountAlias: AnsiString;  { local name bound to itertools.count ('' = none) }
+  { Names a module pulled in with `from X import name`, tagged with the
+    IMPORTING module's unit index. Unit scope in this compiler is flat, so a
+    name another module imported is findable from everywhere — which is wrong
+    for a builtin spelling: songformatter's convertrawtext.py writes `from
+    settings import get, set`, and that must shadow `set` in convertrawtext
+    ALONE, not inside key_analysis.py, where `set(MODE_INTERVALS[mode])` is the
+    builtin. Python scopes a name to the module that imported it, so record who
+    imported what and ask this table rather than the global one.
+    bug-nilpy-imported-name-shadows-builtin-everywhere. }
+  PyImpName: array[0..255] of Integer;      { interned lowercase name }
+  PyImpNameUnit: array[0..255] of Integer;  { CurrentUnitIdx of the importer }
+  PyImpNameCount: Integer;
   { True only while parsing a def's RETURN annotation: there Optional[int] maps
     to tyVariant (None = VT_EMPTY tag) instead of the tyInt64 0-sentinel, so
     `return d.get(k)` hands back a None distinguishable from a legitimate 0
@@ -829,7 +841,14 @@ begin
     Result := tyAnsiString;
     Exit;
   end;
-  if PyVariantScalar(a) and PyVariantScalar(b) then
+  { Two kinds that share no scalar representation but both BOX: a variant holds
+    either, a scalar by value and a class as VT_OBJECT — exactly what the
+    class-meets-variant rule above already relies on. This is what a plain
+    rebinding needs: convertrawtext.py sets `temp_file = 'tmppdf.pdf'` and then
+    `temp_file = tempfile.NamedTemporaryFile(...)`, which Python allows and
+    which used to be rejected as "too dynamic". }
+  if (PyVariantScalar(a) or (a = tyClass)) and
+     (PyVariantScalar(b) or (b = tyClass)) then
   begin
     Result := tyVariant;
     Exit;
@@ -2367,15 +2386,33 @@ begin
   end;
 end;
 
-{ `set(...)`, empty or over an iterable. NOT a hook when the program declares
-  its own `set` — songformatter's settings.py has `def set(section, option,
-  value)` and imports it elsewhere, and a user definition must win over a
-  builtin spelling. }
+{ Does a user definition of this name shadow the builtin spelling HERE — in the
+  module being parsed right now? Python's rule is per-module: a name counts if
+  this module defines it (a def or a module-level variable, both tagged with the
+  current unit) or imported it by name. A def in some OTHER module does not,
+  even though flat unit scope makes it findable. bug-nilpy-imported-name-shadows-builtin-everywhere. }
+function PyUserNameShadowsHere(const nm: AnsiString): Boolean;
+var si, i, ni: Integer;
+begin
+  Result := True;
+  if FindProcInUnit(nm, CurrentUnitIdx) >= 0 then Exit;
+  si := FindSym(nm);
+  if (si >= 0) and (SymUnitIdx[si] = CurrentUnitIdx) then Exit;
+  ni := InternStr(LowerCase(nm));
+  for i := 0 to PyImpNameCount - 1 do
+    if (PyImpName[i] = ni) and (PyImpNameUnit[i] = CurrentUnitIdx) then Exit;
+  Result := False;
+end;
+
+{ `set(...)`, empty or over an iterable. NOT a hook when THIS module declares or
+  imports its own `set` — songformatter's settings.py has `def set(section,
+  option, value)` and convertrawtext.py imports it by name, and a user
+  definition must win over a builtin spelling where it is in scope. }
 function PyIsSetCall: Boolean;
 begin
   Result := (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'set') and
             (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
-            (FindProc('set') < 0) and (FindSym('set') < 0);
+            (not PyUserNameShadowsHere('set'));
 end;
 
 function PyIsEmptySetCall: Boolean;
@@ -11281,7 +11318,7 @@ end;
   which surfaced much later as `undefined variable (tempfile)` at the first use.
   Silently dropping an import is the worst shape a gap can take. }
 procedure PyParseImportRun;
-var impName: AnsiString; isCount: Boolean; aStrIdx, realStrIdx: Integer;
+var impName, impAlias: AnsiString; isCount: Boolean; aStrIdx, realStrIdx: Integer;
 begin
   while (CurTok.Kind = tkUses) or PyIsIdent('from') do
   begin
@@ -11332,11 +11369,26 @@ begin
         ParseUsesUnit(impName);
         while CurTok.Kind = tkIdent do
         begin
+          { Record the name against the IMPORTING module (ParseUsesUnit has
+            restored CurrentUnitIdx by now), so a builtin spelling it shadows
+            is shadowed here and nowhere else. `as` rebinds it, so the ALIAS is
+            the name in scope. }
+          impAlias := CurTok.SVal;
           Next;
           if PyIsIdent('as') then
           begin
             Next;
-            if CurTok.Kind = tkIdent then Next;
+            if CurTok.Kind = tkIdent then
+            begin
+              impAlias := CurTok.SVal;
+              Next;
+            end;
+          end;
+          if PyImpNameCount < 256 then
+          begin
+            PyImpName[PyImpNameCount] := InternStr(LowerCase(impAlias));
+            PyImpNameUnit[PyImpNameCount] := CurrentUnitIdx;
+            Inc(PyImpNameCount);
           end;
           if not Eat(tkComma) then Break;
         end;
@@ -11568,6 +11620,7 @@ begin
     if Tokens[i].Kind in [tkTry, tkRaise] then pyHasExceptions := True;
   end;
   PyCountAlias := '';
+  PyImpNameCount := 0;
   PyDcCount := 0;
   for i := 0 to PY_MAX_DC_FIELDS - 1 do PyDcClassIsDc[i] := False;
   for i := 0 to MAX_UCLASS - 1 do PyMembersHoisted[i] := False;

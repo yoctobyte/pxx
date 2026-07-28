@@ -30,7 +30,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (176)
+## backlog (175)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -42,7 +42,6 @@ _none_
 | bug-nilpy-int-parse-halts-instead-of-raising | N | 55 | bug | nilpy: int(\"abc\") halts the program instead of raising a catchable ValueError | — |
 | bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
 | bug-nilpy-method-call-on-fresh-construction | N | 45 | bug | nilpy: Cls().method() — a method call directly on a construction expression | — |
-| bug-nilpy-module-class-vmtaddr | N | 60 | bug | A class in an imported `.py` module: "invalid class index in vmtaddr" | — |
 | bug-nilpy-omitted-variant-default-segfaults | N | 65 | bug | nilpy: reading a DEFAULTED variant parameter segfaults (by-ref seen as by-value) | — |
 | bug-nilpy-percent-string-format-garbage | N | 60 | bug | nilpy: printf-style % on a string yields garbage instead of formatting (silent wrong output) | — |
 | bug-nilpy-pydict-v-borrowed-reference | N | 70 | bug | `pydict_v` handed back a BORROWED dict — use-after-free, heap corruption | — |
@@ -54,7 +53,6 @@ _none_
 | bug-nilpy-unknown-method-segfaults | N | 70 | bug | nilpy: calling a method that does not exist compiles and SEGFAULTS instead of erroring | — |
 | bug-pascal-duplicate-class-name-silently-shadows | P | 50 | bug | Pascal: a duplicate class declaration silently binds to the earlier one instead of erroring | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
-| bug-unit-local-name-shadows-a-property | A | 55 | bug | A unit's LOCAL variable name breaks a property access with the same name | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -99,6 +97,7 @@ _none_
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-ipv6-complete-surface | B | 40 | feature | Finish IPv6: PalAcceptIpv6, UDP v6, asyncnet, AAAA lookups, dual-stack listeners | — |
+| feature-lib-markdown | B | 45 | feature | A Markdown library — and the `markdown` Python shim over it | — |
 | feature-lib-pxxpdf-reportlab-compat | B | 50 | feature | pxxpdf — pxx pdfgen-backed, reportlab-compatible PDF library (nilpy) | bug-cfront-fegetround-unresolved-float-printf, feature-nilpy-fallback-import |
 | feature-lib-pyexec | B | 45 | feature | lib pyexec: a real exec() for Python-subset source (library, two engines) | feature-rtti-field-reflection |
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | — |
@@ -273,7 +272,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (977)
+## done (979)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -610,6 +609,7 @@ _none_
 | bug-nilpy-method-result-copied-to-var-undefined | N | 60 | bug | NilPy: `x = obj.method()` immediately followed by `y = x` leaves x undefined | — |
 | bug-nilpy-method-returning-str-garbage | N | 75 | bug | NilPy: a method returning `str` returns garbage | — |
 | bug-nilpy-mixed-str-int-return-segfault | N | 35 | bug | NilPy: def returning both a str and an int literal SIGSEGVs on the int arm | — |
+| bug-nilpy-module-class-vmtaddr | N | 60 | bug | A class in an imported `.py` module: "invalid class index in vmtaddr" | — |
 | bug-nilpy-not-on-string-always-true | N | 60 | bug | NilPy: `not s` on a string was ALWAYS True (silent wrong branch) | — |
 | bug-nilpy-param-spill-width | N | 60 | bug | NilPy: bool/char param spill wrote 4 bytes into a 1-byte slot (SILENT, then SIGSEGV) | — |
 | bug-nilpy-print-variant-holding-list-shows-object | N | 30 | bug | NilPy: print() of a variant holding a list/dict shows `<object>` not its repr | — |
@@ -754,6 +754,7 @@ _none_
 | bug-twatch-repro-line-job-number-drift | T | 55 | bug | bug: twatch repro lines rot — job numbers drift as tests are added | — |
 | bug-typed-const-array-of-string-broken | A | 50 | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
 | bug-uclass-field-window-stale-base | A | 60 | bug | bug: UClass field window base goes stale under shells-then-fields registration | — |
+| bug-unit-const-shadows-a-field | A | 60 | bug | A unit-level CONST shadows a same-named FIELD inside the class's own method | — |
 | bug-unit-finalization-not-executed | A | 40 | bug | A unit's `finalization` section is silently never executed | — |
 | bug-unit-init-begin-form-not-executed | A | 60 | bug | A unit's `begin ... end.` initialization section is silently never executed | — |
 | bug-unit-operator-def-silently-skipped | A | 44 | bug | unit-scoped operator definitions silently skipped → record binop miscompile | — |
@@ -2709,7 +2710,6 @@ _none_
 - [p 65] [A] feature-a-typeref-handle
 - [p 65] [N] feature-nilpy-bound-method-value
 - [p 65] [B] feature-nilpy-tk-callbacks
-- [p 60] [N] bug-nilpy-module-class-vmtaddr
 - [p 60] [N] bug-nilpy-percent-string-format-garbage
 - [p 60] [N] bug-nilpy-pyeval-host-kwargs-positional
 - [p 60] [N] bug-nilpy-stdlib-name-binds-pascal-unit
@@ -2730,7 +2730,6 @@ _none_
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
 - [p 55] [N] bug-nilpy-int-parse-halts-instead-of-raising
-- [p 55] [A] bug-unit-local-name-shadows-a-property
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
@@ -2788,6 +2787,7 @@ _none_
 - [p 45] [A] feature-emission-size-dce
 - [p 45] [A] feature-esp-hardware-flash-validation
 - [p 45] [O] feature-inline-nonleaf-and-branch-locals
+- [p 45] [B] feature-lib-markdown
 - [p 45] [B] feature-lib-pyexec
 - [p 45] [A] feature-move-fillchar-intrinsics
 - [p 45] [N] feature-nilpy-closure-default-and-remaining
