@@ -57,6 +57,23 @@ fails the same way.
 - Not the submodule-alias registration (disabling it changes nothing).
 - Not the `CompiledUnits` cap (raising 256 to 1024 changes nothing).
 
+## Narrowed to the EXPRESSION parser
+
+Written as a value rather than a statement, the failure changes shape:
+
+```python
+x = atexit.register(bye)
+```
+```
+pascal26:7: error: expected expression
+  near:    x  atexit >>>  register
+```
+
+So it is NilPy's factor/expression path that claims the name, not the
+dotted-statement branch at `pyparser.inc:8821` (that branch just calls
+PyParseBoolExpr and then fails its `Expect(tkAssign)` because the expression
+parse stopped early). Fix the factor path and both spellings follow.
+
 ## Where the fix is NOT
 
 `ConsumeUnitQualifier` (`compiler/parser.inc:864`) is not the site: it never
