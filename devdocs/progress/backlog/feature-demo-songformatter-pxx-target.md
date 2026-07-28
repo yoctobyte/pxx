@@ -374,7 +374,7 @@ core codegen bug that no test in the suite had touched.
 | --- | --- |
 | `key_analysis.py` | **none — compiles and runs** |
 | `kadrv.py` | `import key_analysis` — [[feature-nilpy-py-module-loader]] (T3) |
-| `convertrawtext.py` | `import ast` — needs a shim or a real parser |
+| `convertrawtext.py` | `from settings import get, ...` — [[feature-nilpy-py-module-loader]]; `import ast` is only `ast.literal_eval` on a list-of-floats string (two call sites), so a small T1 shim covers it |
 | `settings.py` | tkinter façade: `create_window((0,0), window=..., anchor=...)` — [[feature-nilpy-tkinter-facade-widening]] |
 | `render_backend.py` | `from reportlab...` — [[feature-lib-pxxpdf-reportlab-compat]] + dotted imports |
 | `SongFormatter.py` | `import markdown` (help window) |
@@ -411,7 +411,7 @@ Where the modules stand now:
 | `key_analysis.py` | **none — compiles and runs** |
 | `settings.py` | **none — compiles, runs, builds all 60 widgets** |
 | `kadrv.py` | `import key_analysis` — [[feature-nilpy-py-module-loader]] (T3) |
-| `convertrawtext.py` | `import ast` — needs a shim or a real parser |
+| `convertrawtext.py` | `from settings import get, ...` — [[feature-nilpy-py-module-loader]]; `import ast` is only `ast.literal_eval` on a list-of-floats string (two call sites), so a small T1 shim covers it |
 | `render_backend.py` | `from reportlab...` — [[feature-lib-pxxpdf-reportlab-compat]] + dotted imports |
 | `SongFormatter.py` | `import markdown` (help window) |
 
