@@ -1471,3 +1471,4 @@
 {"date": "2026-07-28T20:56:15Z", "fixed": ["test-arm32#src:examples/net/httpdemo.pas", "test-i386#src:examples/net/httpdemo.pas"], "full": true, "new_red": [], "sha": "76d3d8d9f8cca91bb99e8457c9dd8fe0c9b52879", "tier": "full", "verdict": "RED", "wall": 256.4}
 {"date": "2026-07-28T20:59:51Z", "fixed": [], "full": false, "new_red": [], "sha": "76d3d8d9f8cca91bb99e8457c9dd8fe0c9b52879", "tier": "opt", "verdict": "GREEN", "wall": 208.1}
 {"date": "2026-07-28T21:09:01Z", "fixed": [], "full": false, "new_red": [], "sha": "c08e990542715ace2e7a9d48d5f08f4f240df40e", "tier": "native", "verdict": "GREEN", "wall": 132.6}
+{"date": "2026-07-28T21:13:41Z", "fixed": [], "full": true, "new_red": [], "sha": "c08e990542715ace2e7a9d48d5f08f4f240df40e", "tier": "full", "verdict": "RED", "wall": 272.6}
