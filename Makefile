@@ -316,6 +316,10 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# a mixed-type conditional as a comprehension element, and that
+	# comprehension assigned back to the parameter it reads
+	./$(COMPILER) test/test_nilpy_ternary_comp.npy /tmp/test_nilpy_ternary_comp26
+	test "$$(/tmp/test_nilpy_ternary_comp26)" = "$$(printf "[0, 'x', 2]\n[0, 'x', 2]\n['a', 'b']")"
 	# isinstance last in a genexpr filter; f(*[a,b,c]) argument unpacking
 	./$(COMPILER) test/test_nilpy_genexp_isinstance_star.npy /tmp/test_nilpy_genexp_star26
 	test "$$(/tmp/test_nilpy_genexp_star26)" = "$$(printf '5\n[1, 5, 3]\nTrue\n6\n6')"
@@ -3452,6 +3456,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# a mixed-type conditional as a comprehension element, and that
+	# comprehension assigned back to the parameter it reads
+	./$(COMPILER) test/test_nilpy_ternary_comp.npy /tmp/test_nilpy_ternary_comp26
+	test "$$(/tmp/test_nilpy_ternary_comp26)" = "$$(printf "[0, 'x', 2]\n[0, 'x', 2]\n['a', 'b']")"
 	# isinstance last in a genexpr filter; f(*[a,b,c]) argument unpacking
 	./$(COMPILER) test/test_nilpy_genexp_isinstance_star.npy /tmp/test_nilpy_genexp_star26
 	test "$$(/tmp/test_nilpy_genexp_star26)" = "$$(printf '5\n[1, 5, 3]\nTrue\n6\n6')"

@@ -1629,11 +1629,19 @@ begin
       argument, because a frozen string is content-addressed and a conditional
       yields a value, not a location. Tagging the result managed matches how
       every other NilPy string expression is typed. }
-    if PyIsStrBaseTk(IntToTypeKind(ASTTk[left])) or
+    if PyIsStrBaseTk(IntToTypeKind(ASTTk[left])) and
        PyIsStrBaseTk(IntToTypeKind(ASTTk[elseNode])) then
       ASTTk[node] := Ord(tyAnsiString)
     else
-      ASTTk[node] := ASTTk[left];
+      { The arms may have DIFFERENT types — `"x" if v == "x" else v - 1` is
+        ordinary Python, and songformatter writes exactly that. Widen across
+        both, the same rule an assignment uses: a str/int pair boxes into a
+        variant and each value survives as itself. Taking the THEN arm's type
+        (or forcing a string when EITHER arm was one) stringified the numeric
+        arm, so `[0, 'x', 2]` came out as `['0', 'x', '2']` — a plausible wrong
+        value. bug-nilpy-ternary-comprehension-element-stringified. }
+      ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[left]),
+                                 IntToTypeKind(ASTTk[elseNode])));
     left := node;
   end;
   CurASTNode := left;
@@ -8596,7 +8604,8 @@ var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integ
     annSig: Integer;   { Callable signature of an annotated target, or -1 }
     augTk: TTokenKind;
     mmi, mpi, selfArg, lastArg, argNode, kwIdx, j, k: Integer;   { inherited (super()) call }
-    dbgQ: Boolean;
+    cmpTmp, cmpSeq, cmpAsgn: Integer;   { comprehension into a non-list target }
+    cmpExisted: Boolean;
 begin
   Result := -1;
   PyStmtAteBlock := False;
@@ -8889,10 +8898,7 @@ begin
   if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkDot) then
   begin
-    dbgQ := CaseEqual(CurTok.SVal, 'atexit');
-    if dbgQ then WriteLn('DBG dotted-branch entered for atexit');
     PyParseBoolExpr;
-    if dbgQ then WriteLn('DBG after expr: CurTok.Kind=', Ord(CurTok.Kind), ' SVal=[', CurTok.SVal, ']');
     lhsNode := CurASTNode;
     { tkSemicolon ends a statement too — `if c: xs.append(1); i += 2` puts a
       method-call expression statement before a ';' on a one-line suite. }
@@ -9104,7 +9110,28 @@ begin
       sequence, not an ordinary assignment. }
     if PyIsListCompAhead then
     begin
+      { A name being introduced HERE is born as the list itself; only a name
+        that already exists with some other type needs the detour below. }
+      cmpExisted := symIdx >= 0;
       if symIdx < 0 then symIdx := AllocVar(name, tyClass);
+      if cmpExisted and (PyNodeListCi(PyMakeIdent(symIdx)) < 0) then
+      begin
+        { The name already exists with a type that is not a list — a variant
+          PARAMETER being rebound is the common case, and songformatter writes
+          exactly that (`fret_positions = [... for fret in fret_positions]`).
+          The loop appends INTO the target, so a non-list target left the
+          append with no class to resolve against and the whole comprehension
+          failed with a misleading "pylib TPyList.append/add not loaded".
+          Build into a hidden list and assign it across instead. }
+        cmpTmp := AllocVar(PyHiddenName('comp'), tyClass);
+        Syms[cmpTmp].RecName := REC_UCLASS_BASE + FindUClass('TPyList');
+        cmpSeq := PyParseListComp(cmpTmp);
+        cmpAsgn := AllocNode(AN_ASSIGN);
+        ASTLeft[cmpAsgn] := PyMakeIdent(symIdx);
+        ASTRight[cmpAsgn] := PyMakeIdent(cmpTmp);
+        Result := PySeqAppend(cmpSeq, cmpAsgn);
+        Exit;
+      end;
       Result := PyParseListComp(symIdx);
       Exit;
     end;
