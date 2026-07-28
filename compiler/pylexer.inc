@@ -524,8 +524,11 @@ var
   hasDigit, isTriple, rawStr: Boolean;
   decText: AnsiString;   { the literal's exact decimal digits, for the over-Int64 case }
 begin
-  TokCount := 0;
-  TokCharLen := 0;
+  if not PyLexAppending then
+  begin
+    TokCount := 0;
+    TokCharLen := 0;
+  end;
   P := 1;
   SrcLine := 1;
 
@@ -1042,4 +1045,23 @@ begin
   end;
 
   PyEmitToken(tkEOF, 0, SrcLine, '');
+end;
+
+{ Lex a `.py` MODULE into the token stream, after whatever is already there,
+  and return the index of its first token. The importer parses from there and
+  restores its own position afterwards — the same shape LexAppend gives a
+  Pascal unit and CLexAppend a C one (feature-nilpy-py-module-loader). }
+function PyLexAppend(const src: AnsiString): Integer;
+var savedSource: AnsiString; savedLine: Integer;
+begin
+  savedSource := Source;
+  savedLine := SrcLine;
+  Source := src;
+  PyExpandFStrings;            { operates on Source, like the main program's }
+  Result := TokCount;
+  PyLexAppending := True;
+  PyLexAll(False);
+  PyLexAppending := False;
+  Source := savedSource;
+  SrcLine := savedLine;
 end;

@@ -2119,7 +2119,7 @@ end;
 procedure PyRegisterClassShells;
 var i: Integer;
 begin
-  for i := 0 to MainProgramTokCount - 2 do
+  for i := PyScanLo to MainProgramTokCount - 2 do
     if (Tokens[i].Kind = tkClass) and (Tokens[i + 1].Kind = tkIdent) and
        (FindUClass(GetTokenStr(i + 1)) < 0) then
       AddUClass(Tokens[i + 1].SOffset, Tokens[i + 1].SLen);
@@ -9468,7 +9468,7 @@ procedure PyRegisterDefShells;
 var savedTok, i, depth, procIdx: Integer;
 begin
   savedTok := TokPos;
-  i := 0;
+  i := PyScanLo;
   depth := 0;
   while i < MainProgramTokCount do
   begin
@@ -11093,7 +11093,7 @@ procedure PyRegisterClassFieldsPrepass;
 var i, j, k, ci, bs, be, depth, baseCi: Integer;
     isDC, hoist: Boolean;
 begin
-  i := 0;
+  i := PyScanLo;
   while i < MainProgramTokCount - 2 do
   begin
     if (Tokens[i].Kind = tkClass) and (Tokens[i + 1].Kind = tkIdent) then
@@ -11393,7 +11393,7 @@ procedure PyPreScanImports;
 var i, depth, savedTok: Integer;
 begin
   savedTok := TokPos;
-  i := 0;
+  i := PyScanLo;
   depth := 0;
   while i < MainProgramTokCount do
   begin
@@ -11414,6 +11414,126 @@ begin
   end;
   TokPos := savedTok - 1;
   Next;
+end;
+
+{ A `.py` MODULE, pulled in by an import (`from settings import get`,
+  `import key_analysis`). Parsed with the same frontend as a program, but its
+  declarations land in a UNIT: ParseUsesUnit has already set CurrentUnitIdx, so
+  every proc, class and module-level variable registered here is tagged with it
+  and scoped like a Pascal unit's — which is what keeps `settings.get` from
+  colliding with an importer's own `get`.
+
+  A module's top-level STATEMENTS are its import-time code (settings.py runs
+  `ensure_default_settings()` there, and the importer depends on it having run),
+  so they compile into an `__init_<module>` proc registered in InitProcs — the
+  same place a Pascal unit's `initialization` section goes, run in dependency
+  order before the program body. They are PARSED with CurProc = -1, exactly as a
+  program's top-level statements are, so the names they bind stay module-level
+  variables rather than becoming locals of the init proc.
+  (feature-nilpy-py-module-loader) }
+procedure ParsePyUnit(const uname: AnsiString);
+var stmt, seqNode, lastSeq, procIdx, patchPos, savedSC, savedFS: Integer;
+    savedScanLo, savedMainTok, savedNest, savedLam: Integer;
+    savedExprMode: Boolean;
+    dummyNames: array[0..0] of AnsiString;
+    dummyTypes: array[0..0] of TTypeKind;
+begin
+  savedScanLo := PyScanLo;
+  savedMainTok := MainProgramTokCount;
+  savedExprMode := PyExprMode;
+  savedNest := PyPendNestCount;
+  savedLam := PyPendLamCount;
+  { the pre-passes below scan "the compilation unit": for a module that is its
+    own token span, not the program's }
+  PyScanLo := TokPos - 1;
+  MainProgramTokCount := TokCount;
+
+  PyRegisterClassShells;          { the class ROWS the field pre-pass fills in }
+  PyPreScanImports;
+  PyRegisterClassFieldsPrepass;
+  PyRegisterDefShells;
+  PyCollectModuleLocalsAST;
+  PyExprMode := True;
+
+  seqNode := AllocNode(AN_SEQ);
+  lastSeq := seqNode;
+  PySkipNewlines;
+  while CurTok.Kind <> tkEOF do
+  begin
+    if CurTok.Kind = tkClass then PyParseClass(False)
+    else if CurTok.Kind = tkAt then
+    begin
+      Next;
+      if not PyIsIdent('dataclass') then
+        Error('Nil Python: unsupported decorator (only @dataclass)');
+      Next;
+      if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;
+      Expect(tkNewline, 'newline');
+      PySkipNewlines;
+      if CurTok.Kind <> tkClass then
+        Error('Nil Python: @dataclass must precede a class');
+      PyParseClass(True);
+    end
+    else if CurTok.Kind = tkFunction then PyParseDef
+    else
+    begin
+      stmt := PyParseStatement;
+      stmt := PySeqAppend(PyFlushHoist(-1), stmt);
+      if stmt >= 0 then
+      begin
+        if ASTLeft[lastSeq] = -1 then ASTLeft[lastSeq] := stmt
+        else
+        begin
+          ASTRight[lastSeq] := AllocNode(AN_SEQ);
+          lastSeq := ASTRight[lastSeq];
+          ASTLeft[lastSeq] := stmt;
+        end;
+      end;
+    end;
+    PySkipNewlines;
+  end;
+
+  { the module's import-time code, as this unit's initialization section }
+  procIdx := RegisterProc('__init_' + uname, False, tyInteger, 0,
+                          dummyNames, dummyTypes);
+  Procs[procIdx].BodyAddr := CodeLen;
+  savedSC := SymCount;
+  savedFS := FrameSize;
+  FrameSize := 0;
+  CurProc := procIdx;
+  Procs[procIdx].ScopeBase := SymCount;
+  patchPos := EmitProcPrologue;
+  Procs[procIdx].FramePatch := patchPos;
+  CompileAST(seqNode);
+  EmitProcEpilog(-1);
+  PatchProcPrologue(patchPos, FrameSize);
+  SymRollbackTo(savedSC);
+  FrameSize := savedFS;
+  CurProc := -1;
+  if InitProcCount < 256 then
+  begin
+    InitProcs[InitProcCount] := procIdx;
+    Inc(InitProcCount);
+  end;
+
+  { bodies queued while compiling this module (nested defs, lifted lambdas) }
+  PyDrainPendingLambdas(savedLam);
+  while PyPendNestCount > savedNest do
+  begin
+    Dec(PyPendNestCount);
+    stmt := TokPos;
+    PyNestPrefix := PyPendNestPfx[PyPendNestCount];
+    TokPos := PyPendNestTok[PyPendNestCount];
+    Next;
+    PyParseDef;
+    PyNestPrefix := '';
+    TokPos := stmt - 1;
+    Next;
+  end;
+
+  PyExprMode := savedExprMode;
+  MainProgramTokCount := savedMainTok;
+  PyScanLo := savedScanLo;
 end;
 
 procedure ParsePyProgram;
@@ -11581,6 +11701,14 @@ begin
     PySkipNewlines;
   end;
   Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
+  { Unit INITIALISATION, in dependency order, before the program's own body —
+    the same thing ParseProgram does for Pascal. An imported `.py` module's
+    top-level code lives in one of these (`settings.py` runs
+    `ensure_default_settings()` there, and a module-level name has no value
+    until it has run), so without this an importer read zeroes and crashed on
+    the first module-level list (feature-nilpy-py-module-loader). }
+  for i := 0 to InitProcCount - 1 do
+    EmitCallProc(InitProcs[i]);
   blockNode := AllocNode(AN_BLOCK);
   ASTLeft[blockNode] := mainNode;
   ASTTk[blockNode] := Ord(tyUnknown);

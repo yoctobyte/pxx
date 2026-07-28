@@ -65,3 +65,51 @@ ELF already exists and is proven (a sibling `.c` compiles in statically —
 `convertrawtext.py` gets past its imports; a two-file probe
 (`helper.py` + `main.py`, both spellings above) prints CPython's answer; and
 importing a module twice runs its module-level code once.
+
+
+## LANDED (2026-07-28) — and it was plumbing, not a redesign
+
+The first framing of this ticket overstated the difficulty. Almost everything a
+module loader needs already existed for Pascal units and only had to be pointed
+at a `.py` file:
+
+| need | what already did it |
+| --- | --- |
+| compile a foreign source into the same ELF | `ParseUsesUnit`'s C branch (a sibling `.c`), copied in shape |
+| name scoping, qualified access, aliases | `CurrentUnitIdx` tagging + `uses ... as` (which is how `import X as Y` works) |
+| import-time code | a unit's `initialization` section, registered in `InitProcs` |
+| don't compile a module twice | `CompiledUnits` dedupe in `ParseUsesUnit` |
+
+What was actually written:
+
+1. **`PyLexAppend`** — lex a module onto the end of the token stream and return
+   its first token, the shape `LexAppend` / `CLexAppend` already have. `PyLexAll`
+   no longer resets `TokCount` when appending.
+2. **`ParsePyUnit`** — the program parser's loop, with the top-level statements
+   compiled into an `__init_<module>` proc registered in `InitProcs` instead of
+   into the program body. They are PARSED with `CurProc = -1`, so the names they
+   bind stay module-level variables rather than becoming locals of the init proc.
+3. **`PyScanLo`** — the top-level pre-passes (class shells, class fields, def
+   shells, imports) scanned `0 .. MainProgramTokCount`; they now scan the
+   compilation unit being parsed, which for a module is its own span.
+4. **Resolution** — a NilPy import looks for `X.py` / `X.npy` in the importing
+   file's directory FIRST, which is Python's own rule and settles the shadowing
+   question for NilPy: a local module beats the RTL, a name with no local module
+   still finds `lib/rtl/X.pas` (so `import re` is unchanged).
+5. **`ParsePyProgram` emits the init calls** before the program body, exactly as
+   `ParseProgram` does for Pascal. Without it a module's top-level code never
+   ran: module-level names read as zero and the first list access segfaulted.
+
+Two traps: `PyRegisterClassShells` is the pass that CREATES each class row (the
+field pre-pass only fills one in), so a module whose class was not shelled first
+failed with "undefined variable" on its own class; and the pre-passes' bounds
+guard is `MainProgramTokCount`, which has to be re-pointed at the module's end
+while it parses.
+
+Verified against CPython: module functions, classes, module-level names,
+qualified and `from`-import spellings, a module importing another module, a
+double import running its initialisation once, and ordering (module init before
+program body). Test: `test/test_nilpy_py_module_import.npy`.
+
+Still open, and deliberately not done here: `from X import *`, relative imports
+(`from . import y`), and packages (a directory with `__init__.py`).

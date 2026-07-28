@@ -1,0 +1,13 @@
+# A sibling .py MODULE, imported both ways. The module's own top-level code runs
+# ONCE, before the program body, and it runs FIRST — module-level names have no
+# value until it has (feature-nilpy-py-module-loader).
+import nilpy_modhelper
+from nilpy_modhelper import twice, Box, COUNT
+
+print("program body")
+print(nilpy_modhelper.twice(4))
+print(twice(4))
+print(nilpy_modhelper.COUNT, COUNT, nilpy_modhelper.NAMES[1])
+b = Box(9)
+print(b.get())
+print(nilpy_modhelper.Box(7).get())

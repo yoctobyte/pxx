@@ -2526,3 +2526,13 @@ const
 
 var
   isC, isBasic, isNilPy, isAsm, isRust, isAda, isZig, isLol, isWs, isF90, isAlgol, isErl: Boolean;
+  { PyLexAll is APPENDING to the token stream (a `.py` MODULE pulled in by an
+    import) rather than lexing the main program: it must not reset TokCount or
+    the shared token-char buffer (feature-nilpy-py-module-loader). }
+  PyLexAppending: Boolean;
+  { First token of the NilPy compilation unit being parsed. 0 for the main
+    program; the module's first token while a `.py` import is parsed, so the
+    top-level pre-passes (def shells, class fields, imports) scan that module
+    and not the program again. MainProgramTokCount is its upper bound and is
+    likewise re-pointed for the module. }
+  PyScanLo: Integer;

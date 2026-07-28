@@ -740,6 +740,7 @@ function PyNodeIsPyBytes(n: Integer): Boolean; forward;                  { Nil P
 function PyMakeBytesBinCall(const fname: AnsiString; a, b: Integer; retTk: TTypeKind): Integer; forward; { bytes binop helper call (pyparser.inc) }
 function PyMakeListBinCall(const fname: AnsiString; a, b: Integer): Integer; forward; { list binop -> TPyList call (pyparser.inc) }
 function PyMakeNone: Integer; forward;
+procedure ParsePyUnit(const uname: AnsiString); forward;   { a `.py` MODULE pulled in by an import (pyparser.inc) }
 function PyCallMeth1(ci: Integer; const mname: AnsiString;
                      selfNode, argNode: Integer): Integer; forward;   { one-arg method call (pyparser.inc) }
 function PyRawName(off, len: Integer): AnsiString; forward;           { name text from the token pool (pyparser.inc) }                                   { Nil Python None literal node (pyparser.inc) }
@@ -25509,10 +25510,12 @@ var
   basePath, ext, emsg: AnsiString;
   lastSlash, lastDot: Integer;
   isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
+  isPyUnit: Boolean;
   savedNestedComments: Boolean;
   unitNeedsText: Boolean;
 begin
   isPath := False;
+  isPyUnit := False;
   for i := 1 to Length(name) do
     if name[i] = '/' then isPath := True;
   if isPath then
@@ -25596,12 +25599,62 @@ begin
         ConcatThree(basePath, '.pp', '', path);
         LoadFileCI(path, UnitContent);
       end;
+      { A NilPy program importing a SIBLING MODULE: `from settings import get`
+        must find settings.py next to the importer, the way Python looks in the
+        script's own directory first. Only for a NilPy compilation — a Pascal
+        `uses` must never start pulling Python in
+        (feature-nilpy-py-module-loader). }
+      if isNilPy and (Length(UnitContent) = 0) then
+      begin
+        ConcatThree(basePath, '.py', '', path);
+        LoadFile(path, UnitContent);
+        if Length(UnitContent) = 0 then
+        begin
+          ConcatThree(basePath, '.npy', '', path);
+          LoadFile(path, UnitContent);
+        end;
+        if Length(UnitContent) > 0 then isPyUnit := True;
+      end;
     end;
     if Length(UnitContent) = 0 then
     begin
       ConcatThree('uses: unit source not found: ', basePath, '', emsg);
       Error(emsg);
     end;
+  end;
+
+  { A NILPY import looks for a sibling MODULE first, which is Python's own rule:
+    the importing script's directory comes before anything the implementation
+    ships. `from settings import get` must bind to settings.py next to the
+    program even though the search chain below would reach lib/rtl first.
+    Restricted to .py/.npy and to a NilPy compilation, so no Pascal `uses`
+    resolution changes and a name with no local module still falls through to
+    the RTL — which is how `import re` keeps finding lib/rtl/re.pas.
+    (feature-nilpy-py-module-loader; the shadowing question this settles for
+    NilPy is bug-nilpy-stdlib-name-binds-pascal-unit.) }
+  if isNilPy and (not isPath) and (Length(UnitContent) = 0) then
+  begin
+    if CurUnitDir <> '' then
+    begin
+      ConcatThree(CurUnitDir, lo, '.py', path);
+      LoadFile(path, UnitContent);
+      if Length(UnitContent) = 0 then
+      begin
+        ConcatThree(CurUnitDir, lo, '.npy', path);
+        LoadFile(path, UnitContent);
+      end;
+    end;
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree(SourceFileDir, lo, '.py', path);
+      LoadFile(path, UnitContent);
+    end;
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree(SourceFileDir, lo, '.npy', path);
+      LoadFile(path, UnitContent);
+    end;
+    if Length(UnitContent) > 0 then isPyUnit := True;
   end;
 
   { --mimic-fpc: pxx's own RTL SHADOWS every search root (the unit's own dir,
@@ -25872,6 +25925,36 @@ begin
     end;
     ConcatThree('uses: unit source not found: ', lo, '', emsg);
     Error(emsg);
+  end;
+
+  if isPyUnit then
+  begin
+    { A `.py` module: lex it onto the end of the token stream, parse it as this
+      unit, then put the importer's own position back — the same shape the C and
+      Pascal branches below use. }
+    savedTokPos := TokPos;
+    savedCurTokKind := CurTok.Kind;
+    savedCurTokSVal := CurTok.SVal;
+    savedCurTokIVal := CurTok.IVal;
+    savedCurTokLine := CurTok.Line;
+    savedUnitDir := CurUnitDir;
+    CurUnitDir := GetFilePath(path);
+    savedCurrentUnitIdx := CurrentUnitIdx;
+    CurrentUnitIdx := strIdx;
+
+    startPos := PyLexAppend(UnitContent);
+    TokPos := startPos;
+    Next;
+    ParsePyUnit(lo);
+
+    CurrentUnitIdx := savedCurrentUnitIdx;
+    CurUnitDir := savedUnitDir;
+    TokPos := savedTokPos;
+    CurTok.Kind := savedCurTokKind;
+    CurTok.SVal := savedCurTokSVal;
+    CurTok.IVal := savedCurTokIVal;
+    CurTok.Line := savedCurTokLine;
+    Exit;
   end;
 
   if isCUnit then

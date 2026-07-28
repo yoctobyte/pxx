@@ -1,0 +1,8 @@
+import ast
+v = ast.literal_eval("[0.7, 0.7, 0.5]")
+print(v[0], v[1], v[2], len(v))
+print(ast.literal_eval("42"), ast.literal_eval("-3"), ast.literal_eval("'hi'"))
+print(ast.literal_eval("(1, 2)")[1])
+print(ast.literal_eval("True"), ast.literal_eval("None"))
+d = ast.literal_eval("{'a': 1, 'b': [2, 3]}")
+print(d["a"], d["b"][1])

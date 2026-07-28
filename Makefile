@@ -293,6 +293,11 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_bool26)" = "$$(printf 'True\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nFalse\nFalse\nzero is falsy\nfive is truthy')"
 	./$(COMPILER) test/test_nilpy_membership_bool_return.npy /tmp/test_nilpy_membership_bool_return26
 	test "$$(/tmp/test_nilpy_membership_bool_return26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n3\n3\n3')"
+	# a sibling .py MODULE: unit scoping, its own initialisation, both import forms
+	./$(COMPILER) test/test_nilpy_py_module_import.npy /tmp/test_nilpy_py_module_import26
+	test "$$(/tmp/test_nilpy_py_module_import26)" = "$$(printf 'module init ran\nprogram body\n8\n8\n3 3 b\n9\n7')"
+	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy /tmp/test_nilpy_ast_literal26
+	test "$$(/tmp/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
 	./$(COMPILER) test/test_nilpy_str_float.npy /tmp/test_nilpy_str_float26
 	test "$$(/tmp/test_nilpy_str_float26)" = "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
 	./$(COMPILER) test/test_nilpy_string_variant.npy /tmp/test_nilpy_string_variant26
@@ -3374,6 +3379,11 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_bool26)" = "$$(printf 'True\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nFalse\nFalse\nzero is falsy\nfive is truthy')"
 	./$(COMPILER) test/test_nilpy_membership_bool_return.npy /tmp/test_nilpy_membership_bool_return26
 	test "$$(/tmp/test_nilpy_membership_bool_return26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n3\n3\n3')"
+	# a sibling .py MODULE: unit scoping, its own initialisation, both import forms
+	./$(COMPILER) test/test_nilpy_py_module_import.npy /tmp/test_nilpy_py_module_import26
+	test "$$(/tmp/test_nilpy_py_module_import26)" = "$$(printf 'module init ran\nprogram body\n8\n8\n3 3 b\n9\n7')"
+	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy /tmp/test_nilpy_ast_literal26
+	test "$$(/tmp/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
 	./$(COMPILER) test/test_nilpy_str_float.npy /tmp/test_nilpy_str_float26
 	test "$$(/tmp/test_nilpy_str_float26)" = "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
 	./$(COMPILER) test/test_sets.pas /tmp/test_sets26
