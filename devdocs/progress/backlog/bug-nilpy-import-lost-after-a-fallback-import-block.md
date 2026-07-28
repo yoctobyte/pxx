@@ -99,6 +99,25 @@ whether the C unit's registration disturbs the `CompiledUnits` / `Strs`
 interning the lookup depends on. Instrumenting that lookup is the next step and
 should settle it in one run.
 
+## ConsumeUnitQualifier is never REACHED
+
+Instrumented at the very first line of `ConsumeUnitQualifier`
+(`compiler/parser.inc:864`), before every early Exit: with the C unit pulled,
+the probe never fires for `atexit`. So the qualifier machinery is not choosing
+wrongly — control never gets there.
+
+`ParseFactorCore` calls it at `parser.inc:9352`, and that line is not reached
+either, which means an EARLIER branch of `ParseFactorCore` (or of the NilPy
+`ParseFactor` wrapper above it) claims the name first — the obvious candidate
+being a branch that fires because `FindProc('atexit')` now succeeds, crtl having
+declared it.
+
+**Next step, concretely:** probe at the top of `ParseFactorCore`'s `tkIdent`
+handling, printing the name and which branch takes it, and walk back from there
+to the first branch that tests `FindProc`. The fix is then to let a name that is
+a compiled UNIT followed by `.ident` reach the qualifier path ahead of a
+C-imported proc of the same name.
+
 ## Where the fix is NOT
 
 `ConsumeUnitQualifier` (`compiler/parser.inc:864`) is not the site: it never
