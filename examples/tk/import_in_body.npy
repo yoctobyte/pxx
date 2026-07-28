@@ -1,0 +1,15 @@
+# An import inside a BLOCK — a function body or any indented suite. Ordinary
+# Python, and the unit pull has to happen before the body is parsed: pulling it
+# mid-parse APPENDS tokens and the enclosing body then ran past its measured
+# end, so the whole function silently produced nothing.
+def go():
+    print("before")
+    import tkinter as tk
+    print("after", tk.BOTH)
+
+
+if True:
+    import tkinter as tk2
+    print("in a suite", tk2.LEFT)
+
+go()

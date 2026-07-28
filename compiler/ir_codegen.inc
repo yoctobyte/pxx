@@ -5456,6 +5456,12 @@ begin
           tyChar:                              size := VT_CHAR;
           tyDouble, tySingle, tyExtended:      size := VT_DOUBLE;
           tyString, tyAnsiString:               size := VT_STRING;
+          { A CLASS boxes as VT_OBJECT — the representation container slots and
+            isinstance already use. Without it, storing a tuple or a list into a
+            variant (`self._pdf_font = (name, size)`, ordinary Python) failed
+            with "this scalar type not yet supported". Retained like any other
+            object slot, so the slot's release balances. }
+          tyClass:                             size := VT_OBJECT;
         else
           Error('Variant operand: this scalar type not yet supported');
         end;
@@ -5464,6 +5470,8 @@ begin
           EmitAnsiStrFromInlineString
         else if tk = tyAnsiString then
           IREmitCodeCall(AnsiStrRetainAddr)
+        else if tk = tyClass then
+          IREmitCodeCall(ObjRetainBlobAddr)
         else if (tk = tyInteger) or (tk = tyInt8) or (tk = tyInt16) or (tk = tyInt32) then
         begin EmitB($48); EmitB($98); end;     { cdqe }
         EmitB($50);                            { push payload }

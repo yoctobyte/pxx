@@ -779,6 +779,7 @@ function PyMakeVariantField(baseNode: Integer; const fname: AnsiString; var tk: 
 function PyKwArgIndex(mpi, firstParam: Integer): Integer; forward; { Nil Python `name=expr` call argument (pyparser.inc) }
 procedure PyBindKwArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer); forward; { Nil Python keyword-argument reorder (pyparser.inc) }
 procedure PyPackStarArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer); forward; { Nil Python `*args`/`**kwargs` call-site packing (pyparser.inc) }
+procedure PyParseStarMethodArgs(mpi, mcallNode: Integer; var mlastArg, mai: Integer); forward; { Nil Python varargs METHOD call (pyparser.inc) }
 function PyIsSetCall: Boolean; forward;   { Nil Python `set(...)` builtin, user definition permitting (pyparser.inc) }
 function PyParseEmptySet: Integer; forward; { Nil Python set() / set(iterable) (pyparser.inc) }
 
@@ -2500,6 +2501,57 @@ begin
   Result := (CurTok.Kind = tkRParen) and (nextIdx <= Procs[mpi].ParamCount - 1) and
             (nextIdx < MAX_PROC_PARAMS) and
             ProcParamHasDefault[mpi * MAX_PROC_PARAMS + nextIdx];
+end;
+
+{ A call written with FEWER arguments than any overload declares, where the
+  missing ones all carry defaults — `filedialog.askopenfilename()` against
+  `askopenfilename(title=''; filetypes=...; ...)`. The method paths have filled
+  trailing defaults for a long time (CanFillDefaultsFrom); the plain
+  qualified/unqualified CALL path never did, so a Python call that simply
+  omitted every optional argument reported "no overload matches these
+  arguments" and named no reason.
+
+  Returns the proc it filled for, or -1 to leave the caller's diagnostic alone.
+  Only trailing parameters are supplied, and only when EVERY one of them has a
+  declared default — an arity that is short by a non-defaulted parameter is
+  still a real mismatch. }
+function TryFillTrailingDefaults(const name: AnsiString; qUnit: Integer;
+  var nArgs, argsHead, lastArg: Integer): Integer;
+var i, k, cand, exprNode, argSeq: Integer; ok: Boolean;
+begin
+  cand := -1;
+  for i := 0 to ProcCount - 1 do
+    if ((Procs[i].Name = name) or
+        ((not ProcCaseSensitive[i]) and CaseEqual(Procs[i].Name, name))) and
+       ((qUnit < 0) or (ProcUnitIdx[i] = qUnit)) and
+       (Procs[i].ParamCount > nArgs) and (Procs[i].ParamCount <= MAX_PROC_PARAMS) then
+    begin
+      ok := True;
+      for k := nArgs to Procs[i].ParamCount - 1 do
+        if not ProcParamHasDefault[i * MAX_PROC_PARAMS + k] then ok := False;
+      if ok then
+      begin
+        cand := i;
+        Break;
+      end;
+    end;
+  if cand < 0 then
+  begin
+    TryFillTrailingDefaults := -1;
+    Exit;
+  end;
+  for k := nArgs to Procs[cand].ParamCount - 1 do
+  begin
+    exprNode := DefaultArgValueNode(cand, k);
+    argSeq := AllocNode(AN_ARG);
+    ASTLeft[argSeq] := exprNode;
+    ASTRight[argSeq] := -1;
+    if lastArg = -1 then argsHead := argSeq
+    else ASTRight[lastArg] := argSeq;
+    lastArg := argSeq;
+  end;
+  nArgs := Procs[cand].ParamCount;
+  TryFillTrailingDefaults := cand;
 end;
 
 { Count the arguments of the call whose NAME is CurTok (Tokens[TokPos] = '('
@@ -4392,6 +4444,12 @@ begin
           CurASTNode := node;
           Continue;
         end;
+        { `v[a, b]` — a TUPLE key. Python builds a tuple from the comma-separated
+          subscript, which is how a 2-D lookup is written (PIL's `px[x, y]`) and
+          how any dict keyed by pairs is read. A dict-typed base already did
+          this; a VARIANT base stopped at the comma and demanded the ']'. }
+        if CurTok.Kind = tkComma then
+          indexNode := PyMakeTupleFrom(indexNode);
         Expect(tkRBrack, ']');
         if CurTok.Kind = tkAssign then
         begin
@@ -5461,6 +5519,12 @@ begin
                 FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
               mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
             end;
+            { A method with `*args` / `**kwargs` has no fixed arity, so the
+              arity-driven loop below cannot parse its call. Hand the whole
+              argument list to the NilPy path, which packs the surplus. }
+            if isNilPy and (mai <= Procs[mpi].ParamCount-1) and
+               ((ProcPyStarIdx[mpi] >= 0) or (ProcPyKwIdx[mpi] >= 0)) then
+              PyParseStarMethodArgs(mpi, mcallNode, mlastArg, mai);
             while mai <= Procs[mpi].ParamCount-1 do
             begin
               { NilPy `key=expr` on the METHOD path. Params[0] is Self, so names
@@ -11756,7 +11820,9 @@ begin
             CurASTNode := node;
             Exit;
           end;
-          Error('no overload of ' + name + ' matches these arguments' + OverloadReport);
+          procIdx := TryFillTrailingDefaults(name, qUnit, nArgs, argsHead, lastArg);
+          if procIdx < 0 then
+            Error('no overload of ' + name + ' matches these arguments' + OverloadReport);
         end;
 
         { NilPy nested def: fill the trailing parameters that stand for the
@@ -17140,8 +17206,18 @@ begin
         ASTLeft[node] := valNode;
         ASTRight[node] := CurASTNode;
       end
+      { …and a proc of that name shadows only if a BARE statement could actually
+        call it. crtl declares `void exit(int)`, so pulling any C unit made
+        every later Pascal unit's `exit;` bind to a routine that needs an
+        argument and report "undefined variable (exit)" — order-dependent, and
+        it broke lib/pcl/tkinter.pas whenever a C-backed shim was imported
+        first. A user's own parameterless `procedure Exit` still shadows.
+        bug-c-exit-shadows-pascal-exit. }
       else if (CaseEqual(name, 'Halt') or CaseEqual(name, 'Exit')) and
-              (FindProc(name) < 0) and (FindSym(name) < 0) then
+              ((FindProc(name) < 0) or
+               ((Tokens[TokPos].Kind <> tkLParen) and
+                (Procs[FindProc(name)].ParamCount > 0))) and
+              (FindSym(name) < 0) then
       begin
         { Halt / Exit: soft-keyword statements (bare, or with an optional
           (expr)). A user proc or in-scope symbol of the same name shadows —
@@ -17948,6 +18024,8 @@ begin
           end;
 
           procIdx := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, argTypes);
+          if procIdx < 0 then
+            procIdx := TryFillTrailingDefaults(name, qUnit, nArgs, argsHead, lastArg);
           if procIdx < 0 then
             Error('no overload of ' + name + ' matches these arguments' + OverloadReport);
 
@@ -25756,7 +25834,27 @@ begin
   end;
 end;
 
+{ Compiling a unit sets up and tears down PROC context of its own — CurProc,
+  the frame size, the enclosing class. A NilPy `import` may appear inside a
+  function body (Python allows one anywhere, and a `try: import x / except
+  ImportError:` in a def is the standard optional-dependency idiom), so the
+  compile can start while a proc body is half-emitted. Without this save the
+  importing routine came back with the unit's leftovers: the def's own body
+  never ran and the call returned whatever the last unit routine did — a
+  `try: import math` in a def made every call return math's pi, silently
+  (bug-nilpy-import-inside-def-clobbers-proc-context). }
+procedure ParseUsesUnitBody(const name: AnsiString); forward;
+
 procedure ParseUsesUnit(const name: AnsiString);
+var savedProc, savedFrame, savedSelf: Integer;
+begin
+  savedProc := CurProc; savedFrame := FrameSize; savedSelf := CurSelfClass;
+  CurProc := -1;
+  ParseUsesUnitBody(name);
+  CurProc := savedProc; FrameSize := savedFrame; CurSelfClass := savedSelf;
+end;
+
+procedure ParseUsesUnitBody(const name: AnsiString);
 var
   lo, cName, path: AnsiString;
   startPos, savedTokPos, strIdx, i, savedCurrentUnitIdx, savedCUC: Integer;

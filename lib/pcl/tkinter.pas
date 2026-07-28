@@ -121,6 +121,13 @@ type
                         const xscrollcommand: Variant = 0;
                         const text: AnsiString = ''; const background: AnsiString = '';
                         width: Integer = -1; height: Integer = -1);
+    { `w.config(...)` — tkinter's own short spelling of configure, and what a
+      real application writes about as often as the long one. }
+    procedure config(const state: AnsiString = ''; const scrollregion: AnsiString = '';
+                     const yscrollcommand: Variant = 0;
+                     const xscrollcommand: Variant = 0;
+                     const text: AnsiString = ''; const background: AnsiString = '';
+                     width: Integer = -1; height: Integer = -1);
     { the raw form, for an option this façade has not named yet }
     procedure configure_raw(const opts: AnsiString);
     function cget(const option: AnsiString): AnsiString;
@@ -199,11 +206,30 @@ type
     procedure event_generate(const sequence: AnsiString);
   end;
 
+  { An image Tk can draw on a canvas. THE SUBSET: `PhotoImage(data=<base64
+    PNG>)`, which is how an application hands Tk an in-memory image without a
+    temporary file — and `file=` for one on disk. Tk owns the pixels; keeping
+    the object alive is the caller's job, as in tkinter. }
+  PhotoImage = class
+  public
+    name: AnsiString;         { the Tcl image name }
+    constructor Create(const data: Variant; const file_: AnsiString = '');
+    function width: Integer;
+    function height: Integer;
+  end;
+
   Canvas = class(Widget)
   public
     constructor Create(master: Widget; highlightthickness: Integer = -1;
                        const background: AnsiString = ''; width: Integer = -1;
-                       height: Integer = -1);
+                       height: Integer = -1;
+                       { a canvas driving a scrollbar reports its position the
+                         same way a Text widget does — `yscrollcommand=yscroll.set` }
+                       const yscrollcommand: Variant = 0;
+                       const xscrollcommand: Variant = 0;
+                       const scrollregion: AnsiString = '';
+                       const cursor: AnsiString = '';
+                       borderwidth: Integer = -1);
     function create_window(x, y: Integer; const window: AnsiString;
                            const anchor: AnsiString): Integer;
     { the Python spellings: a tuple coordinate and/or a widget as the window.
@@ -213,14 +239,22 @@ type
                            const anchor: AnsiString = ''): Integer; overload;
     function create_window(x, y: Integer; window: Widget;
                            const anchor: AnsiString = ''): Integer; overload;
-    function create_text(x, y: Integer; const text: AnsiString;
+    function create_text(x, y: Double; const text: AnsiString;
                          const anchor: AnsiString = ''; const fill: AnsiString = '';
                          const font: AnsiString = ''): Integer;
-    function create_line(x1, y1, x2, y2: Integer;
-                         const fill: AnsiString = ''): Integer;
-    function create_rectangle(x1, y1, x2, y2: Integer;
+    function create_line(x1, y1, x2, y2: Double;
+                         const fill: AnsiString = '';
+                         width: Double = -1): Integer;
+    function create_rectangle(x1, y1, x2, y2: Double;
                               const outline: AnsiString = '';
-                              const fill: AnsiString = ''): Integer;
+                              const fill: AnsiString = '';
+                              width: Double = -1): Integer;
+    function create_oval(x1, y1, x2, y2: Double;
+                         const outline: AnsiString = '';
+                         const fill: AnsiString = '';
+                         width: Double = -1): Integer;
+    function create_image(x, y: Double; image: PhotoImage;
+                          const anchor: AnsiString = ''): Integer;
     { the raw form, mirroring configure_raw: an option this façade has not
       named yet. Kept under a DIFFERENT name — a same-name overload made the
       keyword form ambiguous, and NilPy binds keyword arguments against the
@@ -247,9 +281,17 @@ type
     { `command=` takes the scrolled widget's own yview/xview METHOD in Python
       (`tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)`), so
       it is a Variant. See TkiOptScrollCmd for how that is wired. }
+    { the orientation it was built with, so a LATER `sb.config(command=...)`
+      still knows whether the scrolled widget's yview or xview is meant —
+      the callable itself carries only {code, receiver}, not the method name }
+    orient_: AnsiString;
     constructor Create(master: Widget; const orient: AnsiString = '';
                        const command: Variant = 0);
     procedure set_(const first, last: AnsiString);
+    { `yscroll.config(command=cv.yview)` — the other half of the scrollbar
+      wiring, written after both widgets exist. }
+    procedure config(const command: Variant); overload;
+    procedure configure(const command: Variant); overload;
   end;
 
   { Named exactly as Python names it. The trailing-underscore spelling was a
@@ -341,6 +383,41 @@ type
 function Tk_: Widget;
 procedure mainloop;
 
+{ ---- tkinter.messagebox / tkinter.filedialog / tkinter.simpledialog ----
+
+  Python writes `from tkinter import messagebox` and then
+  `messagebox.showwarning(title, text)`. NilPy resolves the qualified member in
+  the unit the `from` named, so these live in `tkinter` itself under their
+  Python names rather than in submodule units of their own.
+
+  All of them are the real Tcl dialogs (`tk_messageBox`, `tk_getOpenFile`,
+  `tk_getSaveFile`), not stubs — the same commands CPython's tkinter sends. }
+procedure showinfo(const title, message: AnsiString);
+procedure showwarning(const title, message: AnsiString);
+procedure showerror(const title, message: AnsiString);
+function askyesno(const title, message: AnsiString): Boolean;
+function askokcancel(const title, message: AnsiString): Boolean;
+{ `askyesnocancel` answers three ways, so it returns a VARIANT: True, False or
+  None — exactly what CPython returns, and what a caller testing `is None`
+  needs. }
+function askyesnocancel(const title, message: AnsiString): Variant;
+
+{ filedialog. `filetypes` is a Python list of (label, pattern) pairs; the
+  Variant form takes that list as written. An empty result means the user
+  cancelled, which is CPython's '' too. }
+function askopenfilename(const title: AnsiString = '';
+                         const filetypes: Variant = 0;
+                         const initialdir: AnsiString = '';
+                         const initialfile: AnsiString = '';
+                         const defaultextension: AnsiString = ''): AnsiString;
+function asksaveasfilename(const title: AnsiString = '';
+                           const filetypes: Variant = 0;
+                           const initialdir: AnsiString = '';
+                           const initialfile: AnsiString = '';
+                           const defaultextension: AnsiString = ''): AnsiString;
+function askdirectory(const title: AnsiString = '';
+                      const initialdir: AnsiString = ''): AnsiString;
+
 implementation
 
 var
@@ -349,6 +426,8 @@ var
   gTkStarted: Boolean;
 
 function TkiIntStr(n: Integer): AnsiString; forward;
+function TkiNumStr(d: Double): AnsiString; forward;
+function TkiOptNum(const name: AnsiString; d: Double): AnsiString; forward;
 function TkiStrInt(const s: AnsiString): Integer; forward;
 
 function TkiNextPath(master: Widget): AnsiString;
@@ -379,6 +458,44 @@ begin
   end;
   if neg then r := '-' + r;
   TkiIntStr := r;
+end;
+
+{ Canvas coordinates and line widths are REAL in Python — reportlab points
+  scaled by a zoom factor land on x.5 constantly, and rounding them to whole
+  pixels made the on-screen preview drift from the PDF. Tcl takes a decimal
+  string happily, so two decimals are printed by hand rather than pulling
+  sysutils into this unit. }
+function TkiNumStr(d: Double): AnsiString;
+var whole: Integer; frac: Integer; neg: Boolean; v: Double;
+begin
+  neg := d < 0;
+  if neg then v := -d else v := d;
+  whole := Trunc(v);
+  frac := Trunc((v - whole) * 100 + 0.5);
+  if frac >= 100 then
+  begin
+    Inc(whole);
+    frac := frac - 100;
+  end;
+  TkiNumStr := TkiIntStr(whole);
+  if frac > 0 then
+  begin
+    if frac < 10 then TkiNumStr := TkiNumStr + '.0' + TkiIntStr(frac)
+    else
+    begin
+      while (frac mod 10) = 0 do frac := frac div 10;
+      TkiNumStr := TkiNumStr + '.' + TkiIntStr(frac);
+    end;
+  end;
+  if neg then TkiNumStr := '-' + TkiNumStr;
+end;
+
+{ Sentinel for an omitted numeric option is a NEGATIVE value: Tk's -width is
+  never negative, and 0 is meaningful (a hairline / hidden outline). }
+function TkiOptNum(const name: AnsiString; d: Double): AnsiString;
+begin
+  if d < 0 then TkiOptNum := ''
+  else TkiOptNum := ' -' + name + ' ' + TkiNumStr(d);
 end;
 
 procedure TkiEnsureStarted;
@@ -536,6 +653,15 @@ begin
   TkEval('grid rowconfigure ' + path + ' ' + TkiIntStr(index) +
          TkiOptInt('weight', weight) + TkiOptInt('minsize', minsize) +
          TkiOptInt('pad', pad));
+end;
+
+procedure Widget.config(const state, scrollregion: AnsiString;
+                        const yscrollcommand, xscrollcommand: Variant;
+                        const text, background: AnsiString;
+                        width, height: Integer);
+begin
+  configure(state, scrollregion, yscrollcommand, xscrollcommand,
+            text, background, width, height);
 end;
 
 procedure Widget.configure_raw(const opts: AnsiString);
@@ -795,6 +921,36 @@ begin
          TkiOptInt('height', height));
 end;
 
+{ ---- PhotoImage ---------------------------------------------------------- }
+
+constructor PhotoImage.Create(const data: Variant; const file_: AnsiString);
+var payload: AnsiString;
+begin
+  TkiEnsureStarted;
+  Inc(gTkWidgetSeq);
+  name := 'pxximg' + TkiIntStr(gTkWidgetSeq);
+  if file_ <> '' then
+    TkEval('image create photo ' + name + ' -file {' + file_ + '}')
+  else
+  begin
+    payload := pystr_of(data);
+    if payload = '' then
+      TkEval('image create photo ' + name)
+    else
+      TkEval('image create photo ' + name + ' -data {' + payload + '}');
+  end;
+end;
+
+function PhotoImage.width: Integer;
+begin
+  width := TkiStrInt(TkEval('image width ' + name));
+end;
+
+function PhotoImage.height: Integer;
+begin
+  height := TkiStrInt(TkEval('image height ' + name));
+end;
+
 { ---- PanedWindow (ttk) ---------------------------------------------------- }
 
 constructor PanedWindow.Create(master: Widget; const orient: AnsiString;
@@ -890,14 +1046,22 @@ end;
 
 constructor Canvas.Create(master: Widget; highlightthickness: Integer;
                          const background: AnsiString; width: Integer;
-                         height: Integer);
+                         height: Integer;
+                         const yscrollcommand, xscrollcommand: Variant;
+                         const scrollregion, cursor: AnsiString;
+                         borderwidth: Integer);
 begin
   TkiEnsureStarted;
   path := TkiNextPath(master);
   kind := 'canvas';
   TkEval('canvas ' + path + TkiOptInt('highlightthickness', highlightthickness) +
          TkiOptStr('background', background) + TkiOptInt('width', width) +
-         TkiOptInt('height', height));
+         TkiOptInt('height', height) +
+         TkiOptScrollCmd('yscrollcommand', yscrollcommand, 'set') +
+         TkiOptScrollCmd('xscrollcommand', xscrollcommand, 'set') +
+         TkiOptStr('scrollregion', scrollregion) +
+         TkiOptStr('cursor', cursor) +
+         TkiOptInt('borderwidth', borderwidth));
 end;
 
 function Canvas.create_window(x, y: Integer; const window: AnsiString;
@@ -927,30 +1091,57 @@ begin
     create_window := create_window(x, y, window.path, anchor);
 end;
 
-function Canvas.create_text(x, y: Integer; const text, anchor, fill,
+function Canvas.create_text(x, y: Double; const text, anchor, fill,
                             font: AnsiString): Integer;
 begin
-  create_text := TkiStrInt(TkEval(path + ' create text ' + TkiIntStr(x) + ' ' +
-                 TkiIntStr(y) + ' -text {' + text + '}' +
+  create_text := TkiStrInt(TkEval(path + ' create text ' + TkiNumStr(x) + ' ' +
+                 TkiNumStr(y) + ' -text {' + text + '}' +
                  TkiOptStr('anchor', anchor) + TkiOptStr('fill', fill) +
                  TkiOptStr('font', font)));
 end;
 
-function Canvas.create_line(x1, y1, x2, y2: Integer;
-                            const fill: AnsiString): Integer;
+function Canvas.create_line(x1, y1, x2, y2: Double;
+                            const fill: AnsiString; width: Double): Integer;
 begin
-  create_line := TkiStrInt(TkEval(path + ' create line ' + TkiIntStr(x1) + ' ' +
-                 TkiIntStr(y1) + ' ' + TkiIntStr(x2) + ' ' + TkiIntStr(y2) +
-                 TkiOptStr('fill', fill)));
+  create_line := TkiStrInt(TkEval(path + ' create line ' + TkiNumStr(x1) + ' ' +
+                 TkiNumStr(y1) + ' ' + TkiNumStr(x2) + ' ' + TkiNumStr(y2) +
+                 TkiOptStr('fill', fill) + TkiOptNum('width', width)));
 end;
 
-function Canvas.create_rectangle(x1, y1, x2, y2: Integer;
-                                 const outline, fill: AnsiString): Integer;
+function Canvas.create_rectangle(x1, y1, x2, y2: Double;
+                                 const outline, fill: AnsiString;
+                                 width: Double): Integer;
 begin
   create_rectangle := TkiStrInt(TkEval(path + ' create rectangle ' +
-                      TkiIntStr(x1) + ' ' + TkiIntStr(y1) + ' ' +
-                      TkiIntStr(x2) + ' ' + TkiIntStr(y2) +
-                      TkiOptStr('outline', outline) + TkiOptStr('fill', fill)));
+                      TkiNumStr(x1) + ' ' + TkiNumStr(y1) + ' ' +
+                      TkiNumStr(x2) + ' ' + TkiNumStr(y2) +
+                      TkiOptStr('outline', outline) + TkiOptStr('fill', fill) +
+                      TkiOptNum('width', width)));
+end;
+
+function Canvas.create_oval(x1, y1, x2, y2: Double;
+                            const outline, fill: AnsiString;
+                            width: Double): Integer;
+begin
+  create_oval := TkiStrInt(TkEval(path + ' create oval ' +
+                 TkiNumStr(x1) + ' ' + TkiNumStr(y1) + ' ' +
+                 TkiNumStr(x2) + ' ' + TkiNumStr(y2) +
+                 TkiOptStr('outline', outline) + TkiOptStr('fill', fill) +
+                 TkiOptNum('width', width)));
+end;
+
+{ An image item takes the PhotoImage's Tk NAME, not a path — the photo must
+  outlive the item or Tk draws nothing (CPython has the same rule; the app
+  keeps its own reference for exactly this reason). }
+function Canvas.create_image(x, y: Double; image: PhotoImage;
+                             const anchor: AnsiString): Integer;
+var nm: AnsiString;
+begin
+  nm := '';
+  if image <> nil then nm := image.name;
+  create_image := TkiStrInt(TkEval(path + ' create image ' + TkiNumStr(x) +
+                  ' ' + TkiNumStr(y) + TkiOptStr('image', nm) +
+                  TkiOptStr('anchor', anchor)));
 end;
 
 procedure Canvas.itemconfigure(const item: Variant; width, height: Integer;
@@ -1008,8 +1199,21 @@ begin
   kind := 'scrollbar';
   { a vertical scrollbar drives the widget's yview, a horizontal one its xview }
   if orient = 'horizontal' then sub := 'xview' else sub := 'yview';
+  orient_ := orient;
   TkEval('scrollbar ' + path + TkiOptStr('orient', orient) +
          TkiOptScrollCmd('command', command, sub));
+end;
+
+procedure Scrollbar.config(const command: Variant);
+var sub: AnsiString;
+begin
+  if orient_ = 'horizontal' then sub := 'xview' else sub := 'yview';
+  TkEval(path + ' configure' + TkiOptScrollCmd('command', command, sub));
+end;
+
+procedure Scrollbar.configure(const command: Variant);
+begin
+  config(command);
 end;
 
 procedure Scrollbar.set_(const first, last: AnsiString);
@@ -1224,6 +1428,108 @@ procedure mainloop;
 begin
   TkiEnsureStarted;
   TkMainLoop;
+end;
+
+{ ---- dialogs ---- }
+
+function TkiMsgBox(const title, message, icon, boxType: AnsiString): AnsiString;
+begin
+  TkiEnsureStarted;
+  TkiMsgBox := TkEval('tk_messageBox -title {' + title + '} -message {' +
+               message + '} -icon ' + icon + ' -type ' + boxType);
+end;
+
+procedure showinfo(const title, message: AnsiString);
+begin
+  TkiMsgBox(title, message, 'info', 'ok');
+end;
+
+procedure showwarning(const title, message: AnsiString);
+begin
+  TkiMsgBox(title, message, 'warning', 'ok');
+end;
+
+procedure showerror(const title, message: AnsiString);
+begin
+  TkiMsgBox(title, message, 'error', 'ok');
+end;
+
+function askyesno(const title, message: AnsiString): Boolean;
+begin
+  askyesno := TkiMsgBox(title, message, 'question', 'yesno') = 'yes';
+end;
+
+function askokcancel(const title, message: AnsiString): Boolean;
+begin
+  askokcancel := TkiMsgBox(title, message, 'question', 'okcancel') = 'ok';
+end;
+
+function askyesnocancel(const title, message: AnsiString): Variant;
+var r: AnsiString;
+begin
+  r := TkiMsgBox(title, message, 'question', 'yesnocancel');
+  if r = 'yes' then askyesnocancel := True
+  else if r = 'no' then askyesnocancel := False
+  else askyesnocancel := pynone;    { cancelled — CPython returns None }
+end;
+
+{ `[("PNG images", "*.png"), ("All files", "*.*")]` -> Tcl's
+  `{{PNG images} {*.png}} {{All files} {*.*}}`. Anything that is not a
+  two-element pair is skipped rather than mangled. }
+function TkiFileTypes(const filetypes: Variant): AnsiString;
+var n, i: Integer; pair: Variant; r: AnsiString;
+begin
+  r := '';
+  if pyvartag(filetypes) <> 7 then
+  begin
+    TkiFileTypes := '';
+    exit;
+  end;
+  n := pylen_v(filetypes);
+  for i := 0 to n - 1 do
+  begin
+    pair := pyvar_getitem(filetypes, i);
+    if pyvartag(pair) <> 7 then continue;
+    if pylen_v(pair) < 2 then continue;
+    r := r + ' {{' + pystr_of(pyvar_getitem(pair, 0)) + '} {' +
+         pystr_of(pyvar_getitem(pair, 1)) + '}}';
+  end;
+  if r <> '' then r := ' -filetypes {' + r + ' }';
+  TkiFileTypes := r;
+end;
+
+function TkiFileDialog(const cmd, title: AnsiString; const filetypes: Variant;
+                       const initialdir, initialfile, defaultextension: AnsiString): AnsiString;
+begin
+  TkiEnsureStarted;
+  TkiFileDialog := TkEval(cmd + TkiOptStr('title', title) +
+                   TkiFileTypes(filetypes) +
+                   TkiOptStr('initialdir', initialdir) +
+                   TkiOptStr('initialfile', initialfile) +
+                   TkiOptStr('defaultextension', defaultextension));
+end;
+
+function askopenfilename(const title: AnsiString; const filetypes: Variant;
+                         const initialdir, initialfile,
+                         defaultextension: AnsiString): AnsiString;
+begin
+  askopenfilename := TkiFileDialog('tk_getOpenFile', title, filetypes,
+                                   initialdir, initialfile, defaultextension);
+end;
+
+function asksaveasfilename(const title: AnsiString; const filetypes: Variant;
+                           const initialdir, initialfile,
+                           defaultextension: AnsiString): AnsiString;
+begin
+  asksaveasfilename := TkiFileDialog('tk_getSaveFile', title, filetypes,
+                                     initialdir, initialfile, defaultextension);
+end;
+
+function askdirectory(const title, initialdir: AnsiString): AnsiString;
+begin
+  TkiEnsureStarted;
+  askdirectory := TkEval('tk_chooseDirectory' + TkiOptStr('title', title) +
+                  TkiOptStr('initialdir', initialdir));
 end;
 
 begin

@@ -162,3 +162,23 @@ uses a spec outside `%s`/`%d`, so the two agree on everything exercised today �
 the divergence is latent, not live. Worth a `%x`-and-width raise added to
 `test_nilpy_rtl_exception_surface` to make it a guarded case rather than a
 coincidence.
+
+
+### The same leak, five faces (recorded 2026-07-28 from the songformatter track)
+
+Every one of these was patched at its own call site while walking
+`convertrawtext.py`, i.e. treated as five bugs. They are one:
+[[bug-pascal-uses-is-transitive]]. Kept here so the root fix has a checklist of
+what should stop needing a patch.
+
+| collision | what broke | patched at |
+| --- | --- | --- |
+| crtl's C `atexit` vs Python's `atexit` module | `atexit.register(fn)` stopped parsing once ANY C unit was pulled | the function-value branch |
+| crtl's C `exit(int)` vs Pascal's `Exit` | `lib/pcl/tkinter.pas`'s own `exit;` became "undefined variable", depending on IMPORT ORDER | the Halt/Exit soft-keyword guard |
+| the RTL's `Text` record vs tkinter's `Text` widget | a construction parsed as a record TYPECAST — fine with one argument, broken with two | the NilPy construction sites |
+| tkinter's `Canvas` vs reportlab's `Canvas` | the shim's own methods bound to the OTHER unit's class and could not see their own fields | per-unit preference at construction |
+| pylib's `Exception` vs sysutils' `Exception` | relied on the leak: they are one class only BECAUSE of first-match | — (would break if scoping landed naively) |
+
+The pattern: **the first registration wins, silently, and the answer depends on
+import order.** That is the property to remove — and each per-site patch above
+should be reverted as the root fix lands, not kept.

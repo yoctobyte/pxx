@@ -316,13 +316,17 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# an import inside a function body / indented suite (pulled by the
+	# pre-scan, so the body's measured extent stays valid)
+	./$(COMPILER) examples/tk/import_in_body.npy /tmp/test_nilpy_impbody26
+	test "$$(/tmp/test_nilpy_impbody26)" = "$$(printf 'in a suite left\nbefore\nafter both')"
 	# a bare name is never a method; str.format with a spec; qualified except
 	./$(COMPILER) examples/tk/shadow_format_except.npy /tmp/test_nilpy_sfe26
 	test "$$(/tmp/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"
 	# a reserved-word constant (tk.END), a class named like an RTL record
 	# (Text), and a property read on a fresh construction (Path(x).name)
 	./$(COMPILER) examples/tk/facade_and_paths.npy /tmp/test_nilpy_facade_paths26
-	test "$$(/tmp/test_nilpy_facade_paths26)" = "$$(printf 'end\nboth left center\nsong.txt\nsong\n/tmp/a/song.pdf\n/tmp/a/other.md')"
+	test "$$(/tmp/test_nilpy_facade_paths26)" = "$$(printf 'end\nboth left center\nsong.txt\nsong\n/songs/a/song.pdf\n/songs/a/other.md')"
 	# a nested def's result type, and a capture assigned after the nested def
 	./$(COMPILER) test/test_nilpy_nested_def_result.npy /tmp/test_nilpy_nestdef26
 	test "$$(/tmp/test_nilpy_nestdef26)" = "$$(printf 'big\nbig\n7\nyes\nno')"
@@ -3476,13 +3480,17 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
 	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
+	# an import inside a function body / indented suite (pulled by the
+	# pre-scan, so the body's measured extent stays valid)
+	./$(COMPILER) examples/tk/import_in_body.npy /tmp/test_nilpy_impbody26
+	test "$$(/tmp/test_nilpy_impbody26)" = "$$(printf 'in a suite left\nbefore\nafter both')"
 	# a bare name is never a method; str.format with a spec; qualified except
 	./$(COMPILER) examples/tk/shadow_format_except.npy /tmp/test_nilpy_sfe26
 	test "$$(/tmp/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"
 	# a reserved-word constant (tk.END), a class named like an RTL record
 	# (Text), and a property read on a fresh construction (Path(x).name)
 	./$(COMPILER) examples/tk/facade_and_paths.npy /tmp/test_nilpy_facade_paths26
-	test "$$(/tmp/test_nilpy_facade_paths26)" = "$$(printf 'end\nboth left center\nsong.txt\nsong\n/tmp/a/song.pdf\n/tmp/a/other.md')"
+	test "$$(/tmp/test_nilpy_facade_paths26)" = "$$(printf 'end\nboth left center\nsong.txt\nsong\n/songs/a/song.pdf\n/songs/a/other.md')"
 	# a nested def's result type, and a capture assigned after the nested def
 	./$(COMPILER) test/test_nilpy_nested_def_result.npy /tmp/test_nilpy_nestdef26
 	test "$$(/tmp/test_nilpy_nestdef26)" = "$$(printf 'big\nbig\n7\nyes\nno')"

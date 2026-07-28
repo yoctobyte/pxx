@@ -164,3 +164,7 @@ functions AND Python modules.
 `make test-nilpy` plus a `.npy` that imports a unit pulling a C source and then
 uses `atexit.register`, and a check that a genuine C `atexit(...)` call from C
 code still resolves.
+
+> Instance of [[decide-unit-local-names-leak-to-global-scope]] — unit-local
+> names are visible program-wide, so the first registration wins and the answer
+> depends on import order. Fixed here at the call site; the root is that ticket.

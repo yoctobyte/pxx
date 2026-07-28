@@ -455,7 +455,7 @@ canvas`) and the `mimic_<module>` mapping landed with `--no-shims` to prove a
 build used none, and `try/except ImportError` is now decided at compile time over
 any try body that opens with an import — which is the shape the PIL guard uses.
 
-**The blocker is [[decide-class-namespace-scoping]].** tkinter exports `Canvas`
+**The blocker is [[decide-unit-local-names-leak-to-global-scope]].** tkinter exports `Canvas`
 and so does reportlab; the class namespace is flat and first-match, so the
 shim's own constructor binds to tkinter's class and cannot see its own fields.
 Preferring the current unit's class fixes that and breaks exception handling,
@@ -479,7 +479,7 @@ itself is fine under the same conditions.
 | --- | --- |
 | `key_analysis.py` | none — compiles and runs |
 | `settings.py` | none — compiles, runs, builds all 60 widgets |
-| `convertrawtext.py` | [[decide-class-namespace-scoping]] (tkinter's `Canvas` vs reportlab's), then [[feature-rtl-environment-variables]] |
+| `convertrawtext.py` | [[decide-unit-local-names-leak-to-global-scope]] (tkinter's `Canvas` vs reportlab's), then [[feature-rtl-environment-variables]] |
 | `render_backend.py` | should follow convertrawtext — the shims it needs exist now |
 | `kadrv.py` | `import key_analysis` — the module loader landed; unverified since |
 | `SongFormatter.py` | `import markdown` — [[feature-lib-markdown]] |

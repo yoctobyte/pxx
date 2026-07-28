@@ -9,7 +9,9 @@ unit mimic_reportlab_pdfbase;
 
 interface
 
-uses pylib, '../vendor/pdfgen/pdfgen.c';
+{ pxxcio supplies the heap bridge the C backend allocates through —
+  without it the link leaves __pxx_malloc unresolved. }
+uses pxxcio, pylib, '../vendor/pdfgen/pdfgen.c';
 
 function stringWidth(const text: AnsiString; const fontName: AnsiString;
                      fontSize: Double): Double;

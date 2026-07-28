@@ -5204,6 +5204,17 @@ begin
     if CurTok.Kind = tkComma then Next else Break;
   end;
   Expect(tkRParen, ')');
+  { `*args` / `**kwargs` on a METHOD: pack the surplus arguments before the
+    keyword bind, exactly as the top-level call path does. Self occupies slot 0
+    of the parameter list, so the counter is passed INCLUDING it and the
+    argument count is re-derived afterwards. }
+  if (ProcPyStarIdx[mpi] >= 0) or (ProcPyKwIdx[mpi] >= 0) then
+  begin
+    n := n + 1;
+    PyPackStarArgs(mpi, selfArg, lastArg, n);
+    if n > 0 then Dec(n);
+    anyKw := False;   { the packing consumed every keyword argument }
+  end;
   if anyKw then
   begin
     n := 0;
@@ -5552,6 +5563,17 @@ begin
     else Break;
   end;
   Expect(tkRParen, ')');
+  { `*args` / `**kwargs` on a METHOD: pack the surplus arguments before the
+    keyword bind, exactly as the top-level call path does. Self occupies slot 0
+    of the parameter list, so the counter is passed INCLUDING it and the
+    argument count is re-derived afterwards. }
+  if (ProcPyStarIdx[hitPi] >= 0) or (ProcPyKwIdx[hitPi] >= 0) then
+  begin
+    i := i + 1;
+    PyPackStarArgs(hitPi, selfArg, lastArg, i);
+    if i > 0 then Dec(i);
+    anyKw := False;   { the packing consumed every keyword argument }
+  end;
   if anyKw then
   begin
     { PyBindKwArgs orders the chain (self is slot 0, exactly as the ordinary
@@ -6055,6 +6077,44 @@ end;
 
   No-op — chain untouched — for any callee without a star parameter, which is
   every Pascal call and almost every NilPy one. }
+{ The Pascal-side method-call loops are ARITY-DRIVEN: they parse exactly the
+  parameters the callee declares, demanding a comma between them. A method with
+  `*args` / `**kwargs` has no fixed arity, so those loops either demanded an
+  argument that was never written or left surplus ones for the `)` to choke on
+  (`def drawImage(self, img, x, y, width=0, ..., **kw)` — songformatter's
+  render backend — failed on every call). Parse the list Python-style instead,
+  then hand it to the same packing the top-level def path uses.
+
+  On entry the cursor sits just past `(` and the AN_ARG chain already holds
+  Self at slot 0, which is what makes the parameter indices line up. }
+procedure PyParseStarMethodArgs(mpi, mcallNode: Integer; var mlastArg, mai: Integer);
+var argNode, kwIdx, head, cnt: Integer;
+begin
+  head := ASTLeft[mcallNode];
+  cnt := 1;                          { Self }
+  while CurTok.Kind <> tkRParen do
+  begin
+    kwIdx := PyKwArgIndex(mpi, 1);
+    ParseArgExpr;
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := CurASTNode;
+    ASTIVal[argNode] := kwIdx;
+    ASTRight[argNode] := -1;
+    if mlastArg < 0 then ASTLeft[mcallNode] := argNode
+    else ASTRight[mlastArg] := argNode;
+    if head < 0 then head := argNode;
+    mlastArg := argNode;
+    Inc(cnt);
+    if CurTok.Kind = tkComma then Next else Break;
+  end;
+  PyPackStarArgs(mpi, head, mlastArg, cnt);
+  PyBindKwArgs(mpi, head, mlastArg, cnt);
+  ASTLeft[mcallNode] := head;
+  { every declared parameter is now present, so the caller's arity loop has
+    nothing left to do }
+  mai := Procs[mpi].ParamCount;
+end;
+
 procedure PyPackStarArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer);
 var si, ki, n, nxt, pos, listSym, dictSym, keyNode, argNode: Integer;
     posHead, posLast, kwHead, kwLast: Integer;
@@ -6136,7 +6196,7 @@ end;
   tkLBrack branch, so nested literals in argument positions work too. }
 procedure PyParseListLiteralT(opener, closer: TTokenKind);
 var ci, recId, node, argNode, sizeNode, callNode, selfArg, valArg, mmi, mpi,
-    tmpSym, asgn: Integer;
+    tmpSym, asgn, starExt: Integer;
 begin
   Expect(opener, '[');
   ci := FindUClass('TPyList');
@@ -6174,6 +6234,21 @@ begin
     { `None` as an ELEMENT is a real value in Python, and the slot can hold it —
       VT_EMPTY. Parsed as a nil literal everywhere else, it would box as integer
       0 (feature-nilpy-none-variant). }
+    { `*xs` INSIDE a literal — `(family, -px, *styles)` splices the sequence in
+      rather than adding it as one element. Python's iterable unpacking; unlike
+      the call-argument form this works on ANY sequence, because the target is
+      built at run time and can simply be EXTENDED. }
+    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind <> tkStar) then
+    begin
+      Next;
+      PyParseBoolExpr;
+      starExt := PyCallMeth1(ci, 'extend', PyMakeIdent(tmpSym), CurASTNode);
+      if starExt < 0 then Error('Nil Python: pylib TPyList.extend not loaded');
+      PyHoistStmt(starExt);
+      if not Eat(tkComma) then break;
+      Continue;
+    end;
     if CurTok.Kind = tkNil then
     begin
       Next;
@@ -6318,6 +6393,7 @@ end;
 function PyParseBlock: Integer; forward;
 function PyParseStatement: Integer; forward;
 procedure PyParseImportRun; forward;   { `import` / `from ... import`, wherever it appears (pyparser.inc) }
+procedure PyParseOneImport; forward;   { ONE import statement, inside a block (pyparser.inc) }
 
 { Spill incoming integer args into their frame slots, following the internal
   x86-64 call convention: up to 6 params arrive in rdi rsi rdx rcx r8 r9;
@@ -6996,7 +7072,12 @@ begin
     PySkipNewlines;
     PySkipIndentedBlock;               { the handler cannot be reached }
   end;
-  PySkipNewlines;
+  { This statement consumed its own indented block(s) — and the DEDENT that
+    closed the last one — exactly as a nested def does, so tell the block
+    parser rather than leaving it to demand a newline that is gone.
+    Without this a fallback-import inside a FUNCTION body made the next
+    statement read as a continuation. }
+  PyStmtAteBlock := True;
   PyParseFallbackImportTry := body;
 end;
 
@@ -8270,8 +8351,31 @@ var name, name2: AnsiString;
     enumMode: Boolean; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
     pair1, pair2, pair3, bodyNode, oneNode, limitNode, compSaved: Integer;
     rngStep, cmpNode, incNode, whileNode, keyN, hoistPre: Integer;
+    parenTarget: Boolean; pDepth, pScan: Integer;
 begin
   Next;
+  { A PARENTHESISED target list — `for (x, y, text, font, pf) in self.lines:`.
+    Python allows the parens and songformatter's render backend writes them;
+    they carry no meaning, so they are consumed here and the name list below is
+    unchanged. Only taken when the matching `)` is followed by `in`, so a
+    generator target or a parenthesised expression is left alone. }
+  parenTarget := False;
+  if CurTok.Kind = tkLParen then
+  begin
+    pDepth := 1;
+    pScan := TokPos;
+    while (pScan < TokCount) and (pDepth > 0) do
+    begin
+      if Tokens[pScan].Kind = tkLParen then Inc(pDepth)
+      else if Tokens[pScan].Kind = tkRParen then Dec(pDepth);
+      Inc(pScan);
+    end;
+    if (pDepth = 0) and (pScan < TokCount) and (Tokens[pScan].Kind = tkIn) then
+    begin
+      parenTarget := True;
+      Next;
+    end;
+  end;
   if CurTok.Kind <> tkIdent then Error('Nil Python: expected loop variable after for');
   name := CurTok.SVal;
   Next;
@@ -8298,6 +8402,7 @@ begin
       Next;
     end;
   end;
+  if parenTarget then Expect(tkRParen, ')');
   Expect(tkIn, 'in');
   if (PyForExtraCount > 0) and PyIsIdent('zip') then
     Error('Nil Python: zip() with more than two loop variables is not supported yet');
@@ -8715,12 +8820,47 @@ begin
   Result := -1;
 end;
 
+{ One target of an unpacking assignment: a plain NAME (created on first
+  assignment, as everywhere in NilPy) or an ATTRIBUTE `obj.field`. `newTk` is
+  the type a freshly created plain name takes. }
+function PyUnpackTargetNode(const nm, fld: AnsiString; newTk: TTypeKind): Integer;
+var symIdx, ci, fi: Integer;
+begin
+  symIdx := PyProgSym(nm);
+  if fld = '' then
+  begin
+    if symIdx < 0 then symIdx := AllocVar(nm, newTk);
+    Result := PyMakeIdent(symIdx);
+    Exit;
+  end;
+  if symIdx < 0 then
+    Error('Nil Python: ' + nm + ' is not defined, so ' + nm + '.' + fld
+          + ' cannot be assigned');
+  ci := -1;
+  if (Syms[symIdx].TypeKind = tyClass) and (Syms[symIdx].RecName >= REC_UCLASS_BASE) then
+    ci := Syms[symIdx].RecName - REC_UCLASS_BASE;
+  Result := AllocNode(AN_FIELD);
+  ASTLeft[Result] := PyMakeIdent(symIdx);
+  ASTSOffset[Result] := PyStoredName(fld);
+  ASTSLen[Result] := Length(fld);
+  ASTTk[Result] := Ord(tyVariant);
+  if ci >= 0 then
+  begin
+    fi := FindUField(ci, fld);
+    if fi < 0 then
+      Error('Nil Python: ' + PyRawName(UClsNOff[ci], UClsNLen[ci])
+            + ' has no attribute ''' + fld + '''');
+    ASTTk[Result] := UFldTk[fi];
+  end;
+end;
+
 { `a, b = x, y` — SIMULTANEOUS assignment. Every right-hand side is evaluated
   into a hidden temp before ANY target is stored, which is the whole reason this
   is not just a sequence of assignments: `a, b = b, a` would otherwise become
   `a = b; b = a` and lose the old `a` (feature-nilpy-tuple-unpack). }
 function PyParseUnpackAssign: Integer;
 var names: array[0..7] of AnsiString;
+    flds: array[0..7] of AnsiString;    { attribute target, or '' for a plain name }
     tmps: array[0..7] of Integer;
     nTargets, nValues, i, symIdx, node, seq, tk: Integer;
     unpCi, unpIdx, unpElem: Integer;
@@ -8730,8 +8870,18 @@ begin
     if CurTok.Kind <> tkIdent then Error('Nil Python: expected a name in the assignment target');
     if nTargets >= 8 then Error('Nil Python: at most 8 unpacking targets');
     names[nTargets] := CurTok.SVal;
-    Inc(nTargets);
+    flds[nTargets] := '';
     Next;
+    { An ATTRIBUTE target — `self.x, self.y = x, y`, which is how a class
+      records a position in one line. Only the object.field shape is taken;
+      anything deeper reports its own error. }
+    if (CurTok.Kind = tkDot) and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) then
+    begin
+      Next;
+      flds[nTargets] := CurTok.SVal;
+      Next;
+    end;
+    Inc(nTargets);
   until not Eat(tkComma);
   Expect(tkAssign, '=');
 
@@ -8777,10 +8927,8 @@ begin
       end
       else
         unpElem := PyMakeVariantGetItem(PyMakeIdent(tmps[0]), unpIdx);
-      symIdx := PyProgSym(names[i]);
-      if symIdx < 0 then symIdx := AllocVar(names[i], tyVariant);
       node := AllocNode(AN_ASSIGN);
-      ASTLeft[node] := PyMakeIdent(symIdx);
+      ASTLeft[node] := PyUnpackTargetNode(names[i], flds[i], tyVariant);
       ASTRight[node] := unpElem;
       seq := PySeqAppend(seq, node);
     end;
@@ -8793,10 +8941,8 @@ begin
   { then the stores }
   for i := 0 to nTargets - 1 do
   begin
-    symIdx := PyProgSym(names[i]);
-    if symIdx < 0 then symIdx := AllocVar(names[i], Syms[tmps[i]].TypeKind);
     node := AllocNode(AN_ASSIGN);
-    ASTLeft[node] := PyMakeIdent(symIdx);
+    ASTLeft[node] := PyUnpackTargetNode(names[i], flds[i], Syms[tmps[i]].TypeKind);
     ASTRight[node] := PyMakeIdent(tmps[i]);
     seq := PySeqAppend(seq, node);
   end;
@@ -8811,6 +8957,9 @@ begin
   Result := False;
   if CurTok.Kind <> tkIdent then Exit;
   i := TokPos;                    { the token AFTER the current ident }
+  { an ATTRIBUTE target counts as one name — `self.x, self.y = x, y` }
+  if (i + 1 < TokCount) and (Tokens[i].Kind = tkDot) and
+     (Tokens[i + 1].Kind = tkIdent) then Inc(i, 2);
   if (i >= TokCount) or (Tokens[i].Kind <> tkComma) then Exit;
   while i < TokCount do
   begin
@@ -8819,6 +8968,8 @@ begin
       Inc(i);
       if (i >= TokCount) or (Tokens[i].Kind <> tkIdent) then Exit;
       Inc(i);
+      if (i + 1 < TokCount) and (Tokens[i].Kind = tkDot) and
+         (Tokens[i + 1].Kind = tkIdent) then Inc(i, 2);
     end
     else if Tokens[i].Kind = tkAssign then begin Result := True; Exit; end
     else Exit;
@@ -8919,7 +9070,13 @@ begin
   if (CurTok.Kind = tkUses) or (PyIsIdent('from') and (TokPos < TokCount) and
       (Tokens[TokPos].Kind = tkIdent)) then
   begin
-    PyParseImportRun;
+    { ONE import statement, not a run: inside a block the trailing NEWLINE
+      terminates the statement and belongs to the block parser, while
+      PyParseImportRun skips newlines to reach the next import — which made the
+      following line read as a continuation. The unit is registered exactly as
+      the run would; only the newline handling differs.
+      bug-nilpy-function-level-import-drops-body. }
+    PyParseOneImport;
     Result := -1;
     Exit;
   end;
@@ -10223,7 +10380,14 @@ begin
     end;
     nparams := Procs[procIdx].ParamCount;
   end;
-  Procs[procIdx].BodyAddr := CodeLen;
+  { NOTE: BodyAddr is recorded at the PROLOGUE below, not here. Between this
+    point and the prologue sits the local-typing pre-pass, which trial-parses
+    the body — and a body containing an `import` compiles that unit right
+    there, emitting the whole unit's code into the gap. A BodyAddr taken here
+    then pointed at the imported unit's first routine instead of this def:
+    calling `def w(): try: import math ...` ran math's code and returned its
+    pi, with the def's own body never entered and no diagnostic
+    (bug-nilpy-import-inside-def-clobbers-proc-context). }
   { Defs nested in THIS body qualify with this def's own (already qualified)
     name, so `outer.inner.deeper` stays unique at any depth. Set BEFORE the
     local-typing pre-pass: that pre-pass trial-parses the body, so it meets the
@@ -10285,6 +10449,7 @@ begin
         Syms[idx].RecName := REC_UCLASS_BASE + PyLocals[i].RecCi;
     end;
 
+  Procs[procIdx].BodyAddr := CodeLen;   { see the note above: AFTER the pre-pass }
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
   EmitAggregateDestStash(procIdx);
@@ -10840,6 +11005,7 @@ var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, al
     fldAnn, rhsAt, k2, fldSig: Integer;
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
     fldRec, mRetRec, pri: Integer; mRet: TTypeKind;
+    mStarIdx, mKwIdx, starCi: Integer;   { `*args` / `**kwargs` parameter slots }
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
     pdefHas: array[0..15] of Boolean; pdefIsStr: array[0..15] of Boolean;
     pdefVal: array[0..15] of Int64;
@@ -11089,8 +11255,44 @@ begin
       nparams := 0;
       for k := 0 to 15 do pdefHas[k] := False;
       j := i + 3;
+      mStarIdx := -1; mKwIdx := -1;
       while Tokens[j].Kind <> tkRParen do
       begin
+        { `*` / `*args` / `**kwargs` in a METHOD header. The top-level def path
+          (PyParseDefHeader) has taken these since feature-nilpy-star-args-kwargs;
+          the method path never did, so `def drawImage(self, ..., **kw)` failed
+          to parse while the identical free function compiled. Both passes need
+          it and both must agree, since the pre-pass decides the registered
+          signature and PyParseMethod builds the frame from it. }
+        if Tokens[j].Kind = tkStar then
+        begin
+          Inc(j);
+          { a BARE `*` is the keyword-only marker — no parameter of its own }
+          if Tokens[j].Kind = tkComma then
+          begin
+            Inc(j);
+            Continue;
+          end;
+          if Tokens[j].Kind = tkStar then
+          begin
+            mKwIdx := nparams;
+            Inc(j);
+          end
+          else mStarIdx := nparams;
+          pnames[nparams] := GetTokenStr(j);
+          Inc(j);
+          { `*args: str` annotates the ELEMENT; the parameter stays a list }
+          if Tokens[j].Kind = tkColon then
+          begin
+            Inc(j);
+            PyAnnTypeAt(j);
+            Inc(j);
+          end;
+          ptypes[nparams] := tyClass;
+          Inc(nparams);
+          if Tokens[j].Kind = tkComma then Inc(j);
+          Continue;
+        end;
         pnames[nparams] := GetTokenStr(j);
         if (nparams = 0) and (pnames[nparams] = 'self') then
         begin
@@ -11195,6 +11397,25 @@ begin
       begin
         procIdx := RegisterProc(fullName, not isCtor, mRet, nparams, pnames, ptypes);
         if mRetRec >= REC_UCLASS_BASE then ProcRetRecId[procIdx] := mRetRec;
+        { the call-site packing reads these two, and overload matching reads the
+          parameter's class out of ProcParamRecId — same wiring the def path
+          does at the end of PyParseDefHeader }
+        ProcPyStarIdx[procIdx] := mStarIdx;
+        ProcPyKwIdx[procIdx] := mKwIdx;
+        if (mStarIdx >= 0) and (mStarIdx < MAX_PROC_PARAMS) then
+        begin
+          starCi := FindUClass('TPyList');
+          if starCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+          ProcParamRecId[procIdx * MAX_PROC_PARAMS + mStarIdx] :=
+            REC_UCLASS_BASE + starCi;
+        end;
+        if (mKwIdx >= 0) and (mKwIdx < MAX_PROC_PARAMS) then
+        begin
+          starCi := FindUClass('TPyDict');
+          if starCi < 0 then Error('Nil Python: pylib (TPyDict) not loaded');
+          ProcParamRecId[procIdx * MAX_PROC_PARAMS + mKwIdx] :=
+            REC_UCLASS_BASE + starCi;
+        end;
         { Trailing constant defaults. The shared call path already fills
           omitted trailing args from these arrays (symtab.inc), so a NilPy
           method with defaults needs no call-site work of its own. }
@@ -11505,7 +11726,7 @@ var origName, name, fullName: AnsiString; procIdx, i, idx, nparams, savedSC, sav
     savedSelf, patchPos, bodyNode, bodyStart, annIdx: Integer; pnames: array[0..15] of AnsiString;
     ptypes: array[0..15] of TTypeKind; pcis: array[0..15] of Integer;
     psigs: array[0..15] of Integer;   { Callable signature per parameter, or -1 }
-    isCtor: Boolean;
+    isCtor: Boolean; isKwP: Boolean; starCi: Integer;
     savedNest, savedTok, savedLam: Integer; savedPfx, savedPfx2: AnsiString;
 begin
   Expect(tkFunction, 'def');
@@ -11520,6 +11741,38 @@ begin
   nparams := 0;
   while CurTok.Kind <> tkRParen do
   begin
+    { `*` / `*args` / `**kwargs` — mirrors the member pre-pass above; the two
+      must produce the same parameter list or the frame and the registered
+      signature disagree. }
+    if CurTok.Kind = tkStar then
+    begin
+      Next;
+      if CurTok.Kind = tkComma then     { bare `*`: keyword-only marker }
+      begin
+        Next;
+        Continue;
+      end;
+      isKwP := CurTok.Kind = tkStar;
+      if isKwP then Next;
+      pnames[nparams] := CurTok.SVal; Next;
+      if CurTok.Kind = tkColon then
+      begin
+        annIdx := TokPos - 1;
+        Inc(annIdx);
+        PyAnnTypeAt(annIdx);
+        TokPos := annIdx;
+        Next;
+      end;
+      if isKwP then starCi := FindUClass('TPyDict')
+      else starCi := FindUClass('TPyList');
+      if starCi < 0 then Error('Nil Python: pylib (TPyList/TPyDict) not loaded');
+      ptypes[nparams] := tyClass;
+      pcis[nparams] := starCi;
+      psigs[nparams] := -1;
+      Inc(nparams);
+      if not Eat(tkComma) then break;
+      Continue;
+    end;
     pnames[nparams] := CurTok.SVal; Next;
     psigs[nparams] := -1;
     if (nparams = 0) and (pnames[nparams] = 'self') then
@@ -11954,6 +12207,19 @@ begin
       PyParseMethod(ci);
       PySkipNewlines;
     end
+    else if CurTok.Kind = tkClass then
+    begin
+      { A class NESTED in a class body — songformatter's render backend declares
+        a small `class _BlendModes:` holding two constants, which is how a
+        Python file writes an attribute namespace. Parsed as an ordinary class:
+        the class namespace is flat here, so the inner one is simply registered
+        under its own name and the enclosing body continues.
+        (That flatness is the subject of
+        decide-unit-local-names-leak-to-global-scope; a nested class SHOULD be
+        scoped to its outer one, and today it is not.) }
+      PyParseClass(False);
+      PySkipNewlines;
+    end
     else
     begin
       PyParseMethod(ci);
@@ -11990,6 +12256,65 @@ begin
     Next;
     Result := Result + '_' + CurTok.SVal;
     Next;
+  end;
+end;
+
+{ A single `import X [as Y]` / `from X import a, b` statement, leaving the
+  parser ON the terminating newline. Shares the resolver with PyParseImportRun;
+  see the note at the statement-level call site for why the newline matters. }
+procedure PyParseOneImport;
+var impName, impAlias, impRoot: AnsiString; aStrIdx, realStrIdx: Integer;
+begin
+  if PyIsIdent('from') then
+  begin
+    Next;
+    if CurTok.Kind <> tkIdent then
+      Error('Nil Python: expected a module name after from');
+    impName := PyConsumeDottedModule(impRoot);
+    if CurTok.Kind <> tkUses then
+      Error('Nil Python: expected import after from ' + impName);
+    Next;
+    if not (CaseEqual(impRoot, 'dataclasses') or CaseEqual(impRoot, 'typing') or
+            CaseEqual(impRoot, 'itertools') or CaseEqual(impRoot, 'collections')) then
+      ParseUsesUnit(impName);
+    while CurTok.Kind = tkIdent do
+    begin
+      Next;
+      if PyIsIdent('as') then
+      begin
+        Next;
+        if CurTok.Kind = tkIdent then Next;
+      end;
+      if not Eat(tkComma) then Break;
+    end;
+  end
+  else
+  begin
+    Next;
+    while CurTok.Kind = tkIdent do
+    begin
+      impName := PyConsumeDottedModule(impRoot);
+      if not (CaseEqual(impRoot, 'sys') or CaseEqual(impRoot, 'os') or
+              CaseEqual(impRoot, 'textwrap') or CaseEqual(impRoot, 'select') or
+              CaseEqual(impRoot, 'itertools')) then
+        ParseUsesUnit(impName);
+      if PyIsIdent('as') then
+      begin
+        Next;
+        if CurTok.Kind <> tkIdent then
+          Error('Nil Python: expected a name after `as` in an import');
+        aStrIdx := InternStr(LowerCase(CurTok.SVal));
+        realStrIdx := InternStr(LowerCase(impName));
+        if (UnitAliasCount < 64) and (aStrIdx <> realStrIdx) then
+        begin
+          UnitAliasName[UnitAliasCount] := aStrIdx;
+          UnitAliasReal[UnitAliasCount] := realStrIdx;
+          Inc(UnitAliasCount);
+        end;
+        Next;
+      end;
+      if not Eat(tkComma) then Break;
+    end;
   end;
 end;
 
@@ -12156,17 +12481,45 @@ end;
   pre-pass trial-parses the whole body, so it meets the use site before the body
   parse would ever reach the import. Imports are re-encountered by the body parse
   and handled there too (PyParseStatement); registering a unit twice is a no-op. }
+{ Imports at ANY depth are pulled HERE, before any body is parsed. A unit pull
+  APPENDS the unit's tokens to the stream, and a body whose extent was already
+  measured (PyFindBodyEnd) then ran past its end — the enclosing function
+  silently produced nothing, which is what an in-body `import` used to do. The
+  statement itself is still parsed later; the unit is compiled by then, so the
+  pull is a no-op and appends nothing.
+
+  EXCEPT inside a `try:`, where an import must stay soft: that is the
+  fallback-import idiom (`try: import reportlab / except ImportError:`), whose
+  whole point is that the module may be absent. Those are decided when the
+  block is parsed. }
 procedure PyPreScanImports;
-var i, depth, savedTok: Integer;
+var i, depth, savedTok, tryAt, j: Integer;
 begin
   savedTok := TokPos;
   i := PyScanLo;
   depth := 0;
+  tryAt := -1;
   while i < MainProgramTokCount do
   begin
     if Tokens[i].Kind = tkIndent then Inc(depth)
-    else if Tokens[i].Kind = tkDedent then Dec(depth)
-    else if (depth = 0) and
+    else if Tokens[i].Kind = tkDedent then
+    begin
+      Dec(depth);
+      { Left the try STATEMENT — not merely its first block: an `except` or
+        `finally` block is a sibling at the same depth and its imports are just
+        as soft (the fallback idiom's handler is `from pxxpdf import canvas`).
+        Look past the newlines for the clause that follows. }
+      if (tryAt >= 0) and (depth <= tryAt) then
+      begin
+        j := i + 1;
+        while (j < MainProgramTokCount) and (Tokens[j].Kind = tkNewline) do Inc(j);
+        if (j >= MainProgramTokCount) or
+           not (Tokens[j].Kind in [tkExcept, tkFinally, tkElse]) then tryAt := -1;
+      end;
+    end
+    else if (Tokens[i].Kind = tkTry) and (tryAt < 0) then
+      tryAt := depth
+    else if (tryAt < 0) and
             ((Tokens[i].Kind = tkUses) or
              ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'from') and
               (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkIdent))) and

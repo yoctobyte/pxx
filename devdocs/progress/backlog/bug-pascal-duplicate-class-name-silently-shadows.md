@@ -88,3 +88,7 @@ behavior, not a diagnostic.
 `lib/pcl/mimic_reportlab_*` compiles and works on its own, and stops compiling as
 soon as an application imports tkinter as well — which songformatter's
 convertrawtext.py does. That module is blocked here.
+
+> Instance of [[decide-unit-local-names-leak-to-global-scope]] — unit-local
+> names are visible program-wide, so the first registration wins and the answer
+> depends on import order. Fixed here at the call site; the root is that ticket.

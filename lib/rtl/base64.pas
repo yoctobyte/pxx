@@ -8,14 +8,47 @@ unit base64;
 
 interface
 
-uses hashing;   { TByteArray }
+{ pylib for the Python spellings below: `base64.b64encode(b)` takes BYTES, and
+  reading a TPyBytes needs the NilPy runtime. Ruled in by
+  decide-pcl-may-use-pylib — a shim's job is to accept what the application
+  already writes. Pascal callers of Base64Encode never touch it. }
+uses hashing, pylib;   { TByteArray }
 
 function Base64Encode(const data: TByteArray): AnsiString;
 function Base64EncodeStr(const s: AnsiString): AnsiString;
 function Base64Decode(const s: AnsiString; var data: TByteArray): Boolean;
 function Base64DecodeStr(const s: AnsiString): AnsiString;
 
+{ Python's `base64` module surface, so `import base64` resolves to this unit and
+  `base64.b64encode(data)` is the call an application writes. CPython returns
+  BYTES; the value is invariably handed straight to something that wants text
+  (a data: URI, a Tk `-data` option), so a string is returned here and the
+  difference is stated rather than hidden. }
+function b64encode(const data: Variant): AnsiString;
+function b64decode(const data: Variant): AnsiString;
+
 implementation
+
+function b64encode(const data: Variant): AnsiString;
+var by: TPyBytes; raw: AnsiString; i: Integer;
+begin
+  { bytes (TPyBytes) or a plain string — an application may hand over either }
+  if pyvartag(data) = 7 then
+  begin
+    by := TPyBytes(pyvarobj(data));
+    raw := '';
+    if by <> nil then
+      for i := 0 to by.count - 1 do raw := raw + Chr(by.at(i));
+  end
+  else
+    raw := pystr_of(data);
+  b64encode := Base64EncodeStr(raw);
+end;
+
+function b64decode(const data: Variant): AnsiString;
+begin
+  b64decode := Base64DecodeStr(pystr_of(data));
+end;
 
 const
   ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
