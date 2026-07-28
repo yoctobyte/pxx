@@ -21,7 +21,12 @@ unit pathlib;
 
 interface
 
-uses sysutils, platform, pylib;   { Path.open hands back pylib's file object }
+{ pylib FIRST: both it and sysutils declare `Exception`, the name is shared
+  program-wide, and the first unit to register it owns the row — with sysutils
+  first, pylib's own method bodies bind to sysutils' class and the unit fails
+  to compile ("undefined variable (msg)"). Same reason as lib/rtl/json.pas;
+  see decide-class-namespace-scoping. }
+uses pylib, sysutils, platform;   { Path.open hands back pylib's file object }
 
 type
   Path = class

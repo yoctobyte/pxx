@@ -57,13 +57,25 @@ const
 
 type
 
+  { Storage shape MUST match pylib's `Exception` declaration member for member:
+    the field `msg` first, `FHelpContext` second, with FMessage/Message as
+    PROPERTIES over msg. Both units declare `Exception`, the name is shared
+    program-wide (ClassNameIsDeliberatelyShared), and whichever unit registers
+    first owns the single row — so the two declarations have to be
+    interchangeable. They were not: sysutils stored in a FIELD `FMessage`, so
+    any program that pulled sysutils before pylib compiled pylib's own method
+    bodies against this class and died with "undefined variable (msg)". That
+    took out examples/net/httpdemo.pas on every target and any `uses json`.
+    Keep the two declarations in step; the real cure is
+    decide-class-namespace-scoping. }
   Exception = class
-    FMessage: string;
+    msg: string;
     FHelpContext: Integer;
     constructor Create(const msg: string);
     constructor CreateFmt(const msg: string; const args: array of const);
     property HelpContext: Integer read FHelpContext write FHelpContext;
-    property Message: string read FMessage write FMessage;
+    property FMessage: string read msg write msg;
+    property Message: string read msg write msg;
   end;
 
   { FPC System.TMethod: the two words a method pointer is made of. A `procedure of

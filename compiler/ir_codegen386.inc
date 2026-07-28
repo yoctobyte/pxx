@@ -578,6 +578,11 @@ begin
     tyChar:                              Result := VT_CHAR;
     tyDouble, tySingle, tyExtended:      Result := VT_DOUBLE;
     tyString, tyAnsiString:              Result := VT_STRING;
+    { A CLASS boxes as VT_OBJECT, the representation container slots and
+      isinstance already use — the x86-64 arm has had it; i386 had not, so
+      `v := someObject` (examples/net/httpdemo.pas) failed to build for this
+      target only. Retained at the store, so the slot's release balances. }
+    tyClass:                             Result := VT_OBJECT;
   else
     Error(what + ': this scalar type not yet supported');
   end;
@@ -4191,6 +4196,18 @@ begin
             end;
             EmitB($50);                              { push payload }
           end
+          else if tk = tyClass then
+          begin
+            IREmitNode386(IRB[node]);                { eax = instance pointer }
+            { the slot takes its own reference; PXXObjRetain no-ops on an
+              instance that carries no refcount header }
+            EmitB($50);                              { push eax (arg0) }
+            procIdx := FindProc('PXXObjRetain');
+            if procIdx < 0 then Error('compiler error: PXXObjRetain not found');
+            EmitCallProc(procIdx);
+            EmitB($58);                              { pop eax }
+            EmitB($50);                              { push payload }
+          end
           else
           begin
             IREmitNode386(IRB[node]);                { scalar -> eax / double -> xmm0 }
@@ -4232,6 +4249,16 @@ begin
           if procIdx < 0 then Error('compiler error: PXXStrIncRef not found');
           EmitCallProc(procIdx);
           EmitB($58);
+          EmitB($50);                                { push payload }
+        end
+        else if tk = tyClass then
+        begin
+          IREmitNode386(IRB[node]);                  { eax = instance pointer }
+          EmitB($50);                                { push eax (arg0) }
+          procIdx := FindProc('PXXObjRetain');
+          if procIdx < 0 then Error('compiler error: PXXObjRetain not found');
+          EmitCallProc(procIdx);
+          EmitB($58);                                { pop eax }
           EmitB($50);                                { push payload }
         end
         else

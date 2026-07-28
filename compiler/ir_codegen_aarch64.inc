@@ -103,6 +103,18 @@ begin
   EmitI32($F84107E0);             { ldr x0, [sp], #16 (restore handle) }
 end;
 
+procedure EmitObjRetainA64;
+{ x0 = class instance pointer. Retain; x0 preserved. PXXObjRetain no-ops on an
+  instance that carries no refcount header, so a Pascal-created object is safe. }
+var procIdx: Integer;
+begin
+  EmitI32($F81F0FE0);             { str x0, [sp, #-16]! }
+  procIdx := FindProc('PXXObjRetain');
+  if procIdx < 0 then Error('compiler error: PXXObjRetain not found');
+  EmitCallProc(procIdx);
+  EmitI32($F84107E0);             { ldr x0, [sp], #16 }
+end;
+
 procedure EmitStrDecRefA64;
 { x0 = managed-string handle. x0 clobbered. }
 var procIdx: Integer;
@@ -3437,6 +3449,10 @@ begin
             tyChar:                              sz := VT_CHAR;
             tyDouble, tySingle, tyExtended:      sz := VT_DOUBLE;
             tyString, tyAnsiString:              sz := VT_STRING;
+            { A CLASS boxes as VT_OBJECT, as the x86-64 arm has long done;
+              aarch64 had not, so `v := someObject` failed to build for this
+              target only (examples/net/httpdemo.pas). }
+            tyClass:                             sz := VT_OBJECT;
           else
             Error('Variant := this type not yet supported');
           end;
@@ -3461,6 +3477,11 @@ begin
                      (IntToTypeKind(IRTk[IRB[node]]) = tyAnsiString)) or
                     ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0))) then
               EmitStrIncRefA64;
+          end
+          else if tk = tyClass then
+          begin
+            IREmitNodeAarch64(IRB[node]);   { x0 = instance pointer }
+            EmitObjRetainA64;               { the slot takes its own reference }
           end
           else
           begin
@@ -3491,6 +3512,7 @@ begin
           tyChar:                              sz := VT_CHAR;
           tyDouble, tySingle, tyExtended:      sz := VT_DOUBLE;
           tyString, tyAnsiString:              sz := VT_STRING;
+          tyClass:                             sz := VT_OBJECT;
         else
           Error('Variant operand: this scalar type not yet supported');
         end;
@@ -3509,6 +3531,11 @@ begin
         begin
           IREmitNodeAarch64(IRB[node]);   { x0 = handle }
           EmitStrIncRefA64;
+        end
+        else if tk = tyClass then
+        begin
+          IREmitNodeAarch64(IRB[node]);   { x0 = instance pointer }
+          EmitObjRetainA64;
         end
         else
         begin

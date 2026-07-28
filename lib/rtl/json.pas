@@ -22,7 +22,16 @@ unit json;
 
 interface
 
-uses sysutils, pylib;   { the Python surface below speaks TPyDict/TPyList/Variant }
+{ pylib BEFORE sysutils, and that order is load-bearing. Both units declare
+  `Exception`, and the name is deliberately shared program-wide
+  (ClassNameIsDeliberatelyShared), so the FIRST unit to register it owns the
+  row. pylib's own method bodies are written against pylib's Exception — whose
+  message storage is the field `msg`, with FMessage/Message as properties over
+  it — so with sysutils first, pylib's `constructor Exception.Create` bound to
+  sysutils' class and died with "undefined variable (msg)". That took down
+  every program reaching this unit, including examples/net/httpdemo.pas on all
+  targets. The underlying order-dependence is decide-class-namespace-scoping. }
+uses pylib, sysutils;   { the Python surface below speaks TPyDict/TPyList/Variant }
 
 type
   TJSONKind = (jkNull, jkBool, jkInt, jkString, jkArray, jkObject);
