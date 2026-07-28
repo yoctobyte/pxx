@@ -130,6 +130,7 @@ begin
   RegcallEligibleUses := 0;
   MeasureInline := False;
   InlineASTNext := 0;
+  ASTArenaFloor := INLINE_AST_RESERVE;  { raised while a NilPy module parse is live — see defs.inc }
   ASTNodeCount := INLINE_AST_RESERVE;   { per-proc AST starts above the low inline reserve; the per-body resets restore this, but the FIRST allocation (before any reset) must not land in [0..INLINE_AST_RESERVE) and collide with retained inline nodes }
   EnsureTokCapacity(65536);   { bootstrap the dynamic token arrays before any lexer runs }
   InliningActive := 0;
@@ -742,6 +743,7 @@ begin
   MainProgramTokCount := MAX_TOKENS;
   BLabelCount := 0;
   BFixupCount := 0;
+  ASTArenaFloor := INLINE_AST_RESERVE;
   ASTNodeCount := INLINE_AST_RESERVE; CurASTNode := -1;   { per-proc AST above the low inline reserve (dynamic AST arrays) }
   IRCount := 0; IRLabelCount := 0;
   LoopNestDepth := 0; LoopBreakFixCount := 0; LoopContinueFixCount := 0;

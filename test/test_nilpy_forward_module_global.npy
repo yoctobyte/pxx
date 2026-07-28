@@ -1,0 +1,38 @@
+# A function reads a module global that is assigned FURTHER DOWN the file.
+# Python binds a global at call time, so this is ordinary: songformatter's menu
+# callbacks all reach for widgets built at the bottom of the module. The global
+# used to be created only when its assignment statement was reached — i.e.
+# after the def that used it — and the body reported "undefined variable".
+
+def greet():
+    return banner.upper() + "!"
+
+
+def counted():
+    return "n=" + str(counter)
+
+
+class Box:
+    def __init__(self, v):
+        self.v = v
+
+    def get(self):
+        return self.v
+
+
+def boxed():
+    return the_box.get()
+
+
+banner = "hello"
+counter = 7
+the_box = Box("inside")
+
+print(greet())
+print(counted())
+print(boxed())
+
+# a name assigned by UNPACKING is still typed by the unpack, not by the
+# pre-pass — it takes the value's own type
+first, second = "a", 2
+print(first, second)

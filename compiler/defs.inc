@@ -1954,6 +1954,17 @@ var
   RequireForward   : Boolean;    { --strict / --require-forward / {$REQUIRE FORWARD ON}: enforce FPC's routine visibility (header above the call: full def / forward; / interface / method) instead of the pre-scan's auto-forward. Default off; --mimic-fpc implies. The FPC-free seed-ordering proxy (feature-require-forward-strict-mode). }
   NoDivCheck       : Boolean;    { user opt-out (--no-div-check): skip the pre-divide zero check on integer div/mod (FPC-style runtime error 200 is the default; without the check x86 raw-SIGFPEs and ARM silently yields 0). x86-64 only for now. }
   NoSignals        : Boolean;    { user opt-out (--no-signals): skip the default signal runtime (SIGINT/SIGTERM dispatch + SetSignalHandler support). Default ON, no auto-detection — user decision, see feature-signal-handlers. x86-64 Linux only for now. }
+  { The AST arena is per-proc scratch: a body compiles and ASTNodeCount goes
+    back to the floor, handing those nodes out again. That holds while ONE
+    parse is live — but a NilPy module accumulates its import-time statements
+    across the whole file, and parsing it compiles other units (tkinter, a
+    sibling .py) whose bodies reset the arena underneath it. The module's own
+    statement list was then re-allocated as something else: its init proc
+    compiled whatever the later parse had put there, and rejected the build at
+    the module's last line. Raised while such a parse is live so a nested reset
+    cannot drop below it. See
+    bug-nilpy-module-ast-recycled-by-nested-unit-compile. }
+  ASTArenaFloor    : Integer;
   StrictIR         : Boolean;    { DEFAULT ON (--no-strict-ir opts out): IRVerify hard-errors on any IR_UNSUPPORTED node (a frontend could not lower an AST node). Turns "frontend gap -> silent nondeterministic self-host miscompile" into an immediate compile error naming the AST kind. All frontends incl. Rust measured 0 before the flip. See feature-selfhost-guard-ir-unsupported / bug-selfhost-multifn-ifelse-miscompile. }
   ExcSetJmpAddr   : Integer;
   ExcLongJmpAddr  : Integer;

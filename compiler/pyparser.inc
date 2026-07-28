@@ -185,7 +185,20 @@ function PyBareGenExprAhead: Boolean; forward; { bare genexpr as a call arg (pyp
 
 { Queue a setup statement to run before the current one — see PyHoistHead. }
 procedure PyHoistStmt(node: Integer);
+var scan: Integer;
 begin
+  { The SAME node queued twice makes the chain self-referential — PySeqAppend
+    links the tail to it, and the tail IS it — so the flush walks forever and
+    the body lowers a repeated, half-valid statement. It happens for real: the
+    typing pre-pass runs several iterations and rolls ASTNodeCount back to the
+    same watermark each round, so each round's hoist gets the same node id.
+    Queueing a node already on the chain is never meaningful. }
+  scan := PyHoistHead;
+  while scan >= 0 do
+  begin
+    if (scan = node) or (ASTLeft[scan] = node) then Exit;
+    scan := ASTRight[scan];
+  end;
   PyHoistHead := PySeqAppend(PyHoistHead, node);
 end;
 
@@ -4527,8 +4540,12 @@ begin
   if Tokens[TokPos].Kind <> tkDot then Exit;
   nm := LowerCase(GetTokenStr(TokPos + 1));
   if base = 'sys' then
-    Result := (nm = 'stdout') or (nm = 'stderr') or (nm = 'stdin') or (nm = 'argv') or
-              (nm = 'platform')
+    { ANY sys attribute: the four modelled ones below, and everything else as a
+      runtime "not available here". `sys._MEIPASS` is the shape — PyInstaller
+      sets it and CPython raises AttributeError when it is absent, which is
+      exactly what the application's `try/except` around it expects. Reported
+      at run time, not silently zero. }
+    Result := True
   else if base = 'os' then
     { os.SEEK_SET/CUR/END — the whence CONSTANTS, bare values not calls. }
     Result := (nm = 'seek_set') or (nm = 'seek_cur') or (nm = 'seek_end');
@@ -4575,6 +4592,13 @@ begin
     ASTRight[Result] := ProcRetRecId[procIdx];
     ASTLeft[Result] := -1;
     LastExprTk := tyClass;
+    Exit;
+  end;
+  if (nm <> 'stdout') and (nm <> 'stderr') and (nm <> 'stdin') then
+  begin
+    { an attribute this sys does not have — raise, as CPython does }
+    Result := PyMakeOptionalMissingCall('sys.' + nm);
+    LastExprTk := IntToTypeKind(ASTTk[Result]);
     Exit;
   end;
   Result := AllocNode(AN_INT_LIT);
@@ -11791,13 +11815,15 @@ begin
 end;
 
 procedure PyParseMethod(ci: Integer);
-var origName, name, fullName: AnsiString; procIdx, i, idx, nparams, savedSC, savedFS,
+var savedHoist: Integer;
+    origName, name, fullName: AnsiString; procIdx, i, idx, nparams, savedSC, savedFS,
     savedSelf, patchPos, bodyNode, bodyStart, annIdx: Integer; pnames: array[0..15] of AnsiString;
     ptypes: array[0..15] of TTypeKind; pcis: array[0..15] of Integer;
     psigs: array[0..15] of Integer;   { Callable signature per parameter, or -1 }
     isCtor: Boolean; isKwP: Boolean; starCi: Integer;
     savedNest, savedTok, savedLam: Integer; savedPfx, savedPfx2: AnsiString;
 begin
+  savedHoist := PyHoistHead;
   Expect(tkFunction, 'def');
   origName := CurTok.SVal; name := PyMethodName(origName);
   { same mangling the pre-pass applied. TokPos-2 is the `def`, since CurTok is
@@ -11989,6 +12015,13 @@ begin
   bodyNode := PyPrependResultZero(procIdx, bodyNode);
   CompileAST(bodyNode); EmitProcEpilog(Procs[procIdx].RetSymIdx); PatchProcPrologue(patchPos, FrameSize);
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
+  { Whatever the BODY left queued names this method's locals, which the
+    rollback above has just discarded. The queue is global, so the residue was
+    flushed into the next statement — at module level that is the import-time
+    body, which then referenced a symbol that no longer existed. A body's own
+    hoists are flushed by its statement loop; the rest is stale by
+    construction. Same rule as PyParseDef. }
+  PyHoistHead := savedHoist;
   PyNestPrefix := savedPfx;
   { drain the nested-def bodies this method queued — each re-enters PyParseDef at
     its own `def` token under the qualifier it registered with. }
@@ -12620,9 +12653,131 @@ end;
   program's top-level statements are, so the names they bind stay module-level
   variables rather than becoming locals of the init proc.
   (feature-nilpy-py-module-loader) }
+{ Create every module-level name the type pre-pass found, BEFORE any def or
+  class body is parsed. Python binds a global at CALL time, so a function may
+  read a name the module assigns further down the file — songformatter's menu
+  callbacks all reach for widgets built at the bottom of SongFormatter.py. The
+  pre-pass types these names but rolls its symbols back, and the real symbol was
+  created only when the assignment statement was reached, i.e. AFTER the def
+  that used it: the body reported "undefined variable" for an ordinary global.
+  Pre-creating them changes nothing about the assignment itself — it stores into
+  the same symbol either way. }
+{ Is `nm` a target of a module-level UNPACKING assignment (`a, b = f()`)? The
+  type pre-pass does not model those, and the type it happens to record for one
+  is not the value it receives — creating the global from it turned
+  `a, b = two()` into a store of a string into an integer slot. Such a name is
+  left to the unpack path, which creates it from the actual value. }
+function PyIsModuleUnpackTarget(const nm: AnsiString): Boolean;
+var i, j, depth: Integer; sawName, sawComma: Boolean;
+begin
+  Result := False;
+  depth := 0;
+  i := PyScanLo;
+  while i < MainProgramTokCount do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then Dec(depth)
+    else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
+            (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkComma) and
+            { at a STATEMENT boundary. Without this, `Button(x, textvariable=v,
+              command=f)` matched: `v , command =` is an identifier, a comma and
+              an `=`, and the whole module global was then skipped. }
+            ((i = 0) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent,
+                                                tkSemicolon, tkEOF])) then
+    begin
+      { scan the comma-separated name list; it is an unpack target only if it
+        ends at `=` }
+      j := i;
+      sawName := False;
+      sawComma := False;
+      while j < MainProgramTokCount do
+      begin
+        if Tokens[j].Kind = tkIdent then
+        begin
+          sawName := True;
+          Inc(j);
+          { an ATTRIBUTE target counts as one name }
+          if (j + 1 < MainProgramTokCount) and (Tokens[j].Kind = tkDot) and
+             (Tokens[j + 1].Kind = tkIdent) then Inc(j, 2);
+        end
+        else if Tokens[j].Kind = tkComma then
+        begin
+          sawComma := True;
+          Inc(j);
+        end
+        else Break;
+      end;
+      if sawName and sawComma and (j < MainProgramTokCount) and
+         (Tokens[j].Kind = tkAssign) then
+      begin
+        j := i;
+        while (j < MainProgramTokCount) and (Tokens[j].Kind <> tkAssign) do
+        begin
+          if (Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = nm) then
+          begin
+            Result := True;
+            Exit;
+          end;
+          Inc(j);
+        end;
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
+procedure PyAllocModuleGlobals;
+var i, j, k, depth, idx, ci: Integer; nm: AnsiString; usedEarlier: Boolean;
+begin
+  { ONLY the names a routine ABOVE them reads — the shape that fails outright:
+    `def refresh(): bpm_label.set(...)` at the top of the file,
+    `bpm_label = tk.StringVar(...)` at the bottom. Everything else keeps being
+    created by its own assignment, with the concrete type that gives it:
+    pre-creating every module name from the type pre-pass instead was tried and
+    is too eager — the pre-pass's guess is not always the assignment's type, and
+    a name it typed one way then took stores of another. }
+  depth := 0;
+  i := PyScanLo;
+  while i < MainProgramTokCount do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then Dec(depth)
+    else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
+            (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkAssign) then
+    begin
+      nm := GetTokenStr(i);
+      if (PyProgSym(nm) < 0) and not PyIsModuleUnpackTarget(nm) then
+      begin
+        { the read has to be INSIDE a routine (depth > 0): a module-level use
+          before the assignment is a genuine "used before defined", and
+          pre-creating the symbol would hide it }
+        usedEarlier := False;
+        k := 0;
+        for j := PyScanLo to i - 1 do
+        begin
+          if Tokens[j].Kind = tkIndent then Inc(k)
+          else if Tokens[j].Kind = tkDedent then Dec(k)
+          else if (k > 0) and (Tokens[j].Kind = tkIdent) and
+                  (GetTokenStr(j) = nm) then
+          begin
+            usedEarlier := True;
+            Break;
+          end;
+        end;
+        if usedEarlier then
+        begin
+          ci := AllocVar(nm, tyVariant);
+          Syms[ci].RecName := REC_NONE;
+        end;
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
 procedure ParsePyUnit(const uname: AnsiString);
 var stmt, seqNode, lastSeq, procIdx, patchPos, savedSC, savedFS: Integer;
-    savedScanLo, savedMainTok, savedNest, savedLam, savedHoist: Integer;
+    savedScanLo, savedMainTok, savedNest, savedLam, savedHoist, savedFloor: Integer;
     savedExprMode: Boolean;
     dummyNames: array[0..0] of AnsiString;
     dummyTypes: array[0..0] of TTypeKind;
@@ -12649,11 +12804,17 @@ begin
   PyRegisterClassFieldsPrepass;
   PyRegisterDefShells;
   PyCollectModuleLocalsAST;
+  PyAllocModuleGlobals;           { a def may read a global assigned further down }
   PyHoistHead := savedHoist;
   PyExprMode := True;
 
   seqNode := AllocNode(AN_SEQ);
   lastSeq := seqNode;
+  { From here this module's import-time statement list is LIVE across the whole
+    file, and parsing it compiles other units whose per-body resets would hand
+    these nodes out again — see ASTArenaFloor in defs.inc. }
+  savedFloor := ASTArenaFloor;
+  ASTArenaFloor := ASTNodeCount;
   PySkipNewlines;
   while CurTok.Kind <> tkEOF do
   begin
@@ -12686,6 +12847,7 @@ begin
           ASTLeft[lastSeq] := stmt;
         end;
       end;
+      ASTArenaFloor := ASTNodeCount;   { see the note at the loop head }
     end;
     PySkipNewlines;
   end;
@@ -12734,6 +12896,7 @@ begin
     Next;
   end;
 
+  ASTArenaFloor := savedFloor;
   PyExprMode := savedExprMode;
   MainProgramTokCount := savedMainTok;
   PyScanLo := savedScanLo;
@@ -12868,10 +13031,17 @@ begin
   PyRegisterClassFieldsPrepass;   { fields must exist before local inference }
   PyRegisterDefShells;            { def signatures must exist before it too }
   PyCollectModuleLocalsAST;
+  PyAllocModuleGlobals;           { a def may read a global assigned further down }
   PyExprMode := True;   { Pascal RTL units are loaded; from here on, .npy expression
                           parsing uses Python and/or/not precedence }
   mainNode := -1;
   PySkipNewlines;
+  { The program's own statement list is live until the body is compiled at the
+    end of this routine, and parsing it compiles units whose per-body resets
+    would hand these nodes out again — the same hazard ParsePyUnit guards, and
+    the program's nodes sit just ABOVE the reserve, so they are the first to be
+    recycled. See ASTArenaFloor in defs.inc. }
+  ASTArenaFloor := ASTNodeCount;
   while CurTok.Kind <> tkEOF do
   begin
     if CurTok.Kind = tkClass then PyParseClass(False)
@@ -12894,6 +13064,9 @@ begin
       stmt := PyParseStatement;
       mainNode := PyFlushHoist(mainNode);
       mainNode := PySeqAppend(mainNode, stmt);
+      { the list just grew — everything it now holds must sit BELOW the floor,
+        or the next unit compile hands those nodes out again }
+      ASTArenaFloor := ASTNodeCount;
       { several simple statements on one line, as in PyParseBlock }
       while CurTok.Kind = tkSemicolon do
       begin
@@ -12902,6 +13075,7 @@ begin
         stmt := PyParseStatement;
         mainNode := PyFlushHoist(mainNode);
         mainNode := PySeqAppend(mainNode, stmt);
+        ASTArenaFloor := ASTNodeCount;
       end;
     end;
     PySkipNewlines;

@@ -950,7 +950,21 @@ begin
     Expect(tkDot, '.');   { consume '.'        (CurTok -> next ident) }
   end;
   if CurTok.Kind = tkIdent then
-    name := CurTok.SVal
+  begin
+    name := CurTok.SVal;
+    { The trailing-underscore convention is not only for RESERVED words: a
+      façade renames any constant whose bare spelling collides with something
+      already in the flat namespace, and which names collide depends on what
+      else the program links (`tk.X` resolved on its own and stopped resolving
+      once the app pulled in a C unit). So when the plain member is not
+      declared in the named unit but `NAME_` is, take that — the same rule
+      `tk.END` -> END_ already follows, applied where the collision is
+      accidental rather than syntactic. Retired by
+      [[bug-pascal-uses-is-transitive]], with the rest of the flat namespace. }
+    if isNilPy and (FindStrConst(name) < 0) and
+       (FindStrConst(name + '_') >= 0) then
+      name := name + '_';
+  end
   else
     name := GetTokenStr(TokPos - 1) + '_';   { `tk.END` -> END_ }
 end;
@@ -18621,7 +18635,7 @@ var node: Integer;
 begin
   node := ParseStatementAST;
   CompileAST(node);
-  ASTNodeCount := INLINE_AST_RESERVE;
+  ASTNodeCount := ASTArenaFloor;
 end;
 
 procedure ParseBlock;
@@ -18629,7 +18643,7 @@ var node: Integer;
 begin
   node := ParseBlockAST;
   CompileAST(node);
-  ASTNodeCount := INLINE_AST_RESERVE;
+  ASTNodeCount := ASTArenaFloor;
 end;
 
 { ===== Declaration parsing ===== }
@@ -23699,7 +23713,7 @@ begin
     ASTRight[assignNode] := valNode;
 
     CompileAST(assignNode);
-    ASTNodeCount := INLINE_AST_RESERVE;
+    ASTNodeCount := ASTArenaFloor;
   end;
   RcSuppressAssign := False;
   LocalInitCount := 0;
@@ -25530,7 +25544,7 @@ begin
     Expect(tkAsm, 'asm');
     asmNode := ParseAsmStatementAST;
     CompileAST(asmNode);
-    ASTNodeCount := INLINE_AST_RESERVE;
+    ASTNodeCount := ASTArenaFloor;
   end
   else if isStackless then
   begin
@@ -25554,7 +25568,7 @@ begin
     genStepAST := BuildStacklessStep(genBodyAST, procIdx);
     ProcGenInstSize[procIdx] := SL_OFF_SLOTS + 8 * CurGenSlotNext;
     CompileAST(genStepAST);
-    ASTNodeCount := INLINE_AST_RESERVE;
+    ASTNodeCount := ASTArenaFloor;
   end
   else
   begin
@@ -25567,7 +25581,7 @@ begin
     inlineBodyNode := ParseBlockAST;
     if methOwnerCi < 0 then TryRetainInlineBody(procIdx, inlineBodyNode);
     CompileAST(inlineBodyNode);
-    ASTNodeCount := INLINE_AST_RESERVE;
+    ASTNodeCount := ASTArenaFloor;
     Expect(tkEnd, 'end');
     Eat(tkSemicolon);
   end;
@@ -26647,7 +26661,7 @@ begin
     end;
   end;
   CompileAST(seqNode);
-  ASTNodeCount := INLINE_AST_RESERVE;
+  ASTNodeCount := ASTArenaFloor;
 
   EmitProcEpilog(-1);
   PatchProcPrologue(patchPos, FrameSize);
@@ -26735,7 +26749,7 @@ begin
   ifN := AllocNode(AN_IF);
   ASTLeft[ifN] := condN; ASTRight[ifN] := pairN;
   CompileAST(ifN);
-  ASTNodeCount := INLINE_AST_RESERVE;
+  ASTNodeCount := ASTArenaFloor;
 
   EmitProcEpilog(-1);
   PatchProcPrologue(patchPos, FrameSize);
@@ -27186,7 +27200,7 @@ begin
     ASTRight[assignNode] := valNode;
 
     CompileAST(assignNode);
-    ASTNodeCount := INLINE_AST_RESERVE;
+    ASTNodeCount := ASTArenaFloor;
   end;
 end;
 

@@ -328,6 +328,9 @@ test-nilpy: $(COMPILER)
 	# defs and methods, every arity, plus a written None
 	./$(COMPILER) test/test_nilpy_default_arguments.npy /tmp/test_nilpy_dfl26
 	test "$$(/tmp/test_nilpy_dfl26)" = "$$(python3 test/test_nilpy_default_arguments.npy)"
+	# a def reading a module global assigned further down the file
+	./$(COMPILER) test/test_nilpy_forward_module_global.npy /tmp/test_nilpy_fwdglob26
+	test "$$(/tmp/test_nilpy_fwdglob26)" = "$$(python3 test/test_nilpy_forward_module_global.npy)"
 	# a bare name is never a method; str.format with a spec; qualified except
 	./$(COMPILER) examples/tk/shadow_format_except.npy /tmp/test_nilpy_sfe26
 	test "$$(/tmp/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"
@@ -3500,6 +3503,9 @@ test-core: $(COMPILER)
 	# defs and methods, every arity, plus a written None
 	./$(COMPILER) test/test_nilpy_default_arguments.npy /tmp/test_nilpy_dfl26
 	test "$$(/tmp/test_nilpy_dfl26)" = "$$(python3 test/test_nilpy_default_arguments.npy)"
+	# a def reading a module global assigned further down the file
+	./$(COMPILER) test/test_nilpy_forward_module_global.npy /tmp/test_nilpy_fwdglob26
+	test "$$(/tmp/test_nilpy_fwdglob26)" = "$$(python3 test/test_nilpy_forward_module_global.npy)"
 	# a bare name is never a method; str.format with a spec; qualified except
 	./$(COMPILER) examples/tk/shadow_format_except.npy /tmp/test_nilpy_sfe26
 	test "$$(/tmp/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"
