@@ -48,6 +48,21 @@ in scope as the trailing parameters they were registered as, and a name the
 enclosing scope will assign has to be added to the capture list BEFORE the body
 is queued.
 
+## Third attempt: compiles, and produces GARBAGE
+
+Skipping the DEDENT(s) that close the nested def before scanning forward for a
+later `name =` (the earlier scan started ON them, so its depth went negative
+immediately and it found nothing) does make the program compile — and it then
+prints a wild integer instead of `yes`. The capture is passed as a trailing
+argument at the CALL site, so materialising the local is not enough on its own:
+the pre-allocated variant is not the symbol the later assignment writes, or it
+is never initialised.
+
+That is worse than the compile error and was reverted. Whatever the fix is, it
+has to make the enclosing assignment and the capture agree on ONE symbol — which
+is the same conclusion the deferred-body analysis above reaches, from the other
+end.
+
 ## Gate
 
 `make test-nilpy` plus a `.npy` with a capture assigned after the nested def,
