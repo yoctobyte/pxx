@@ -25529,7 +25529,7 @@ end;
 procedure ParseUsesUnit(const name: AnsiString);
 var
   lo, cName, path: AnsiString;
-  startPos, savedTokPos, strIdx, i, savedCurrentUnitIdx: Integer;
+  startPos, savedTokPos, strIdx, i, savedCurrentUnitIdx, savedCUC: Integer;
   savedCurTokKind: TTokenKind;
   savedCurTokSVal: AnsiString;
   savedCurTokIVal: Int64;
@@ -25572,7 +25572,10 @@ begin
   end;
   if isCompiled then Exit;
 
-  { Mark as compiled }
+  { Mark as compiled. Remembered so a SOFT miss (the fallback-import probe
+    below) can take the mark back off: nothing was loaded, so a later import of
+    the same name must search again rather than be skipped as done. }
+  savedCUC := CompiledUnitCount;
   if CompiledUnitCount < 256 then
   begin
     CompiledUnits[CompiledUnitCount] := strIdx;
@@ -25940,6 +25943,48 @@ begin
     if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
   end;
 
+  { NilPy SHIM MAPPING. A Python module we implement ourselves lives under OUR
+    name — `mimic_<module>` — so no file in the tree carries an upstream package
+    name and the tree says what each shim is. The mapping is consulted only
+    after every ordinary lookup has failed, so a real unit of that name (lib/rtl
+    /re.pas, a sibling .py) always wins and Pascal `uses` is untouched. A dotted
+    package arrives here already mangled by the frontend, which is what makes
+    `from reportlab.pdfgen import canvas` reach `mimic_reportlab_pdfgen` with no
+    package-directory machinery. Reported, so a build says which shims it used.
+    feature-nilpy-dotted-package-imports. }
+  if (Length(UnitContent) = 0) and isNilPy and (not isPath) and
+     (not softMissOK) and (Copy(lo, 1, 6) <> 'mimic_') then
+  begin
+    if NoShims then
+    begin
+      ConcatThree('import: no unit named ', lo,
+                  ' (--no-shims refuses the mimic_ substitution)', emsg);
+      Error(emsg);
+    end;
+    CurrentCLibrary := savedCurrentCLibrary;
+    { Record the substitution as a unit ALIAS as well, so a QUALIFIER still
+      resolves: `import pkga.sub as ps` registered ps -> pkga_sub, and the
+      symbols live in mimic_pkga_sub. FindCompiledUnitOrAlias chases the chain. }
+    if UnitAliasCount < 64 then
+    begin
+      UnitAliasName[UnitAliasCount] := InternStr(lo);
+      UnitAliasReal[UnitAliasCount] := InternStr('mimic_' + lo);
+      Inc(UnitAliasCount);
+    end;
+    ParseUsesUnit('mimic_' + lo);
+    if SoftUnitMissed then
+      { the shim was not there either: this import is a soft miss too, and the
+        name must go back to unresolved so the fallback branch can bind it }
+      CompiledUnitCount := savedCUC
+    else
+    begin
+      { say which shim answered — a build should state what it substituted }
+      ConcatThree('note: ', lo, ' -> mimic_' + lo + ' (shim, subset)', emsg);
+      WriteLn(emsg);
+    end;
+    Exit;
+  end;
+
   if Length(UnitContent) = 0 then
   begin
     { sysutils/baseunix/unix with no source on the path: pass as a no-op so
@@ -25949,7 +25994,23 @@ begin
       CurrentCLibrary := savedCurrentCLibrary;
       Exit;
     end;
-    ConcatThree('uses: unit source not found: ', lo, '', emsg);
+    { Probing the imports of a `try:` guarded by `except ImportError:` — report
+      the miss to the caller instead of failing the compile, and leave no trace
+      that this name was looked at. }
+    if SoftUnitResolve then
+    begin
+      SoftUnitMissed := True;
+      CompiledUnitCount := savedCUC;
+      CurrentCLibrary := savedCurrentCLibrary;
+      Exit;
+    end;
+    if Copy(lo, 1, 6) = 'mimic_' then
+      { reached through the shim mapping above: name the module the source
+        actually wrote, not our internal spelling }
+      ConcatThree('import: no unit named ', Copy(lo, 7, Length(lo) - 6),
+                  ' and no shim ' + lo, emsg)
+    else
+      ConcatThree('uses: unit source not found: ', lo, '', emsg);
     Error(emsg);
   end;
 

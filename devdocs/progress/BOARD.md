@@ -35,7 +35,7 @@ _none_
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
-| bug-cfront-fegetround-unresolved-float-printf | C | 55 | bug | cfront: __pxx_fegetround unresolved at runtime for any float-printf C program | — |
+| bug-cfront-unit-globals-unregistered | C | 70 | bug | cfront: a file-scope global in a .c compiled as a UNIT is never reserved — arrays fail to lower, scalars silently read 0 | — |
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |
 | bug-nilpy-comparison-return-type-from-operands | N | 70 | bug | An unannotated def returning a COMPARISON typed its result from the operands | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
@@ -272,7 +272,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (979)
+## done (980)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -486,6 +486,7 @@ _none_
 | bug-case-of-string-segfault-and-label-validation | A | 62 | bug | case-of-string: SEGFAULTS at runtime (worse than the missing diagnostics) | — |
 | bug-cast-deref-as-varparam-arg | A | 50 | bug | `PChar(s)^` / cast-derefs rejected as var/untyped method-call arguments | — |
 | bug-cdecl-indirect-over-6-integer-args | A | 50 | bug | `cdecl` indirect call with more than 6 integer args is rejected | — |
+| bug-cfront-fegetround-unresolved-float-printf | C | 55 | bug | cfront: __pxx_fegetround unresolved at runtime for any float-printf C program | — |
 | bug-char-literal-concat-in-const-expr | A | 50 | bug | Char-literal concatenation in a const expression fails (`const T = #65 + #66`) | — |
 | bug-char-literal-in-const-expr | A | 50 | bug | Char literal in a constant expression: `ConstEval` rejected `'a'` | — |
 | bug-chr-builtin-shadows-param-name | A | 50 | bug | Bug: `Chr` as parameter name treated as built-in function | — |
@@ -2699,6 +2700,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [C] bug-cfront-unit-globals-unregistered
 - [p 70] [N] bug-nilpy-comparison-return-type-from-operands
 - [p 70] [N] bug-nilpy-pydict-v-borrowed-reference
 - [p 70] [N] bug-nilpy-unannotated-return-infers-number-for-string-concat
@@ -2725,7 +2727,6 @@ _none_
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
-- [p 55] [C] bug-cfront-fegetround-unresolved-float-printf (unblocks 1)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
@@ -2861,7 +2862,6 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — feature-pcl-seam-seal
 - **2** — feature-web-track-w-bootstrap
-- **1** — bug-cfront-fegetround-unresolved-float-printf
 - **1** — decide-dns-libc-backend-shape
 - **1** — decide-gpc-as-corpus-target
 - **1** — decide-ilja-tui-render-model

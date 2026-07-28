@@ -2149,12 +2149,22 @@ begin
   lo := name;
   for j := 1 to Length(lo) do
     if lo[j] in ['A'..'Z'] then lo[j] := Chr(Ord(lo[j]) + 32);
-  for i := 0 to UnitAliasCount - 1 do
-    if Strs[UnitAliasName[i]].Text = lo then
-    begin
-      Result := UnitAliasReal[i];
-      Exit;
-    end;
+  { Chase the alias CHAIN, not one link: the NilPy shim mapping registers
+    `<module> -> mimic_<module>` as an alias too, so `import pkga.sub as ps`
+    is ps -> pkga_sub -> mimic_pkga_sub, and stopping at the first hop left the
+    qualifier pointing at a unit that was never compiled. Bounded by the table
+    size, so a cyclic pair cannot spin. }
+  j := 0;
+  while j < UnitAliasCount do
+  begin
+    i := 0;
+    while (i < UnitAliasCount) and (Strs[UnitAliasName[i]].Text <> lo) do Inc(i);
+    if i >= UnitAliasCount then Break;
+    Result := UnitAliasReal[i];
+    lo := Strs[Result].Text;
+    Inc(j);
+  end;
+  if j > 0 then Exit;
   Result := FindCompiledUnit(name);
 end;
 

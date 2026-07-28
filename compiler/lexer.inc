@@ -750,6 +750,9 @@ begin
   ThreadSafeMode := False;
   MatchQuiet := False;
   MimicFpc := False;
+  NoShims := False;
+  SoftUnitResolve := False;
+  SoftUnitMissed := False;
   InterfacesComMode := True;   { FPC/Delphi default: interfaces are COM (refcounted). {$interfaces corba} opts out. }
   ComInterfaceUsed := False;
   CStyleComments := False;

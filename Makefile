@@ -304,6 +304,18 @@ test-nilpy: $(COMPILER)
 	# a module whose FIRST line is an import: the pre-scan must not skip it
 	./$(COMPILER) test/test_nilpy_module_first_import.npy /tmp/test_nilpy_module_first_import26
 	test "$$(/tmp/test_nilpy_module_first_import26)" = "$$(printf 'D\n2')"
+	# a dotted package import: dots mangle to underscores, and an unresolved
+	# module falls back to the mimic_<module> shim (both import forms)
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_dotted_import.npy /tmp/test_nilpy_dotted_import26
+	test "$$(/tmp/test_nilpy_dotted_import26)" = "$$(printf 'hello world\nhello dotted')"
+	# --no-shims refuses that substitution, so "no shims" is a checked property
+	! ./$(COMPILER) --no-shims -Futest/nilpy_units test/test_nilpy_dotted_import.npy /tmp/test_nilpy_noshims26 > /tmp/test_nilpy_noshims.log 2>&1
+	grep -q "no-shims" /tmp/test_nilpy_noshims.log
+	# try/except ImportError picks a branch at COMPILE time, both directions
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import.npy /tmp/test_nilpy_fallback26
+	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
+	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
 	# an imported name shadows a builtin only in the module that imported it
 	./$(COMPILER) test/test_nilpy_import_scope.npy /tmp/test_nilpy_import_scope26
 	test "$$(/tmp/test_nilpy_import_scope26)" = "$$(printf '3\npage.size=A4\n8')"
@@ -3407,6 +3419,18 @@ test-core: $(COMPILER)
 	# a module whose FIRST line is an import: the pre-scan must not skip it
 	./$(COMPILER) test/test_nilpy_module_first_import.npy /tmp/test_nilpy_module_first_import26
 	test "$$(/tmp/test_nilpy_module_first_import26)" = "$$(printf 'D\n2')"
+	# a dotted package import: dots mangle to underscores, and an unresolved
+	# module falls back to the mimic_<module> shim (both import forms)
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_dotted_import.npy /tmp/test_nilpy_dotted_import26
+	test "$$(/tmp/test_nilpy_dotted_import26)" = "$$(printf 'hello world\nhello dotted')"
+	# --no-shims refuses that substitution, so "no shims" is a checked property
+	! ./$(COMPILER) --no-shims -Futest/nilpy_units test/test_nilpy_dotted_import.npy /tmp/test_nilpy_noshims26 > /tmp/test_nilpy_noshims.log 2>&1
+	grep -q "no-shims" /tmp/test_nilpy_noshims.log
+	# try/except ImportError picks a branch at COMPILE time, both directions
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import.npy /tmp/test_nilpy_fallback26
+	test "$$(/tmp/test_nilpy_fallback26)" = "hello fallback"
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy /tmp/test_nilpy_fallback_try26
+	test "$$(/tmp/test_nilpy_fallback_try26)" = "hello try branch"
 	# an imported name shadows a builtin only in the module that imported it
 	./$(COMPILER) test/test_nilpy_import_scope.npy /tmp/test_nilpy_import_scope26
 	test "$$(/tmp/test_nilpy_import_scope26)" = "$$(printf '3\npage.size=A4\n8')"

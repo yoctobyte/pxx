@@ -1,0 +1,5 @@
+from pkgprobe.sub import greet
+import pkgprobe.sub as ps
+
+print(greet("world"))
+print(ps.greet("dotted"))

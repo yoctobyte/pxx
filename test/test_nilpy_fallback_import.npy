@@ -1,0 +1,9 @@
+# The portability idiom, answered at COMPILE time: the try branch names a module
+# that does not exist here, so the except branch is compiled instead. Under
+# CPython this is ordinary Python and the try branch would win.
+try:
+    from nosuchpkg.nosuchmod import greet
+except ImportError:
+    from pkgprobe.sub import greet
+
+print(greet("fallback"))

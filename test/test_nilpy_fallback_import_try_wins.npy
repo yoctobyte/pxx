@@ -1,0 +1,8 @@
+# The mirror case: the try branch resolves, so the except branch is skipped
+# whole — its module never has to exist.
+try:
+    from pkgprobe.sub import greet
+except ImportError:
+    from totally.absent import greet
+
+print(greet("try branch"))

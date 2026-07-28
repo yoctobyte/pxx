@@ -6510,6 +6510,126 @@ end;
   matches Class and its descendants, the same chain `on E: TFoo do` uses. The
   binder in `except Class as e:` becomes an ordinary local typed as the class,
   which is what makes `except ForthThrow as e: ... e.code` work. }
+{ Is this `try:` the FALLBACK-IMPORT idiom — a block of nothing but imports,
+  guarded by `except ImportError:` whose body is also nothing but imports? That
+  shape is the most common portability construct in real Python, and under
+  NilPy it is answered at COMPILE time: a module that does not resolve is not a
+  runtime error we could catch, it is an import that cannot be compiled, so the
+  frontend takes the other branch instead. CurTok is on `try`.
+  feature-nilpy-fallback-import. }
+function PyImportOnlyBlockAt(var k: Integer): Boolean;
+{ k enters on the INDENT of a block; on True it leaves just past the matching
+  DEDENT and every statement in between was an import. }
+var stmtStart: Boolean;
+begin
+  PyImportOnlyBlockAt := False;
+  if (k >= TokCount) or (Tokens[k].Kind <> tkIndent) then Exit;
+  Inc(k);
+  stmtStart := True;
+  while k < TokCount do
+  begin
+    if Tokens[k].Kind = tkDedent then
+    begin
+      Inc(k);
+      PyImportOnlyBlockAt := True;
+      Exit;
+    end;
+    { a nested block cannot be a plain import run }
+    if Tokens[k].Kind = tkIndent then Exit;
+    if Tokens[k].Kind = tkNewline then stmtStart := True
+    else if stmtStart then
+    begin
+      if not ((Tokens[k].Kind = tkUses) or
+              ((Tokens[k].Kind = tkIdent) and CaseEqual(GetTokenStr(k), 'from'))) then Exit;
+      stmtStart := False;
+    end;
+    Inc(k);
+  end;
+end;
+
+function PyIsFallbackImportTry: Boolean;
+var i: Integer;
+begin
+  PyIsFallbackImportTry := False;
+  i := TokPos;                    { the ':' after `try` }
+  if (i + 1 >= TokCount) or (Tokens[i].Kind <> tkColon) or
+     (Tokens[i + 1].Kind <> tkNewline) then Exit;
+  Inc(i, 2);
+  while (i < TokCount) and (Tokens[i].Kind = tkNewline) do Inc(i);
+  if not PyImportOnlyBlockAt(i) then Exit;
+  while (i < TokCount) and (Tokens[i].Kind = tkNewline) do Inc(i);
+  if (i + 1 >= TokCount) or (Tokens[i].Kind <> tkExcept) then Exit;
+  if (Tokens[i + 1].Kind <> tkIdent) or
+     not CaseEqual(GetTokenStr(i + 1), 'ImportError') then Exit;
+  Inc(i, 2);
+  { `except ImportError as e:` — the binder is allowed and ignored }
+  if (i < TokCount) and (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'as') then
+    Inc(i, 2);
+  if (i + 1 >= TokCount) or (Tokens[i].Kind <> tkColon) or
+     (Tokens[i + 1].Kind <> tkNewline) then Exit;
+  Inc(i, 2);
+  while (i < TokCount) and (Tokens[i].Kind = tkNewline) do Inc(i);
+  if not PyImportOnlyBlockAt(i) then Exit;
+  { one except clause, nothing after it: anything richer keeps the normal path }
+  if (i < TokCount) and (Tokens[i].Kind in [tkExcept, tkFinally, tkElse]) then Exit;
+  PyIsFallbackImportTry := True;
+end;
+
+{ Skip an indented block whole, without parsing it — the branch not taken. }
+procedure PySkipIndentedBlock;
+var depth: Integer;
+begin
+  Expect(tkIndent, 'indent');
+  depth := 1;
+  while (depth > 0) and (CurTok.Kind <> tkEOF) do
+  begin
+    if CurTok.Kind = tkIndent then Inc(depth)
+    else if CurTok.Kind = tkDedent then Dec(depth);
+    Next;
+  end;
+end;
+
+{ `try: <imports> except ImportError: <imports>` resolved at compile time. The
+  try-branch imports are attempted with the resolver in soft mode; if every
+  module resolves, the except branch is skipped, and if any one misses, the
+  except branch is compiled instead. Under CPython the same source prefers the
+  try branch, so the file stays ordinary Python.
+
+  A module that DID resolve before the missing one stays loaded. Python would
+  have discarded that binding; here it costs an unused unit in the binary and
+  nothing else, because unit scope is flat and the fallback branch rebinds the
+  names it needs. }
+function PyParseFallbackImportTry: Integer;
+begin
+  Next;                                { `try` }
+  Expect(tkColon, ':');
+  Expect(tkNewline, 'newline');
+  PySkipNewlines;
+  Expect(tkIndent, 'indent');
+  SoftUnitResolve := True;
+  SoftUnitMissed := False;
+  PyParseImportRun;
+  SoftUnitResolve := False;
+  Expect(tkDedent, 'dedent');
+  PySkipNewlines;
+  Expect(tkExcept, 'except');
+  Next;                                { ImportError }
+  if PyIsIdent('as') then begin Next; Next; end;
+  Expect(tkColon, ':');
+  Expect(tkNewline, 'newline');
+  PySkipNewlines;
+  if SoftUnitMissed then
+  begin
+    Expect(tkIndent, 'indent');
+    PyParseImportRun;
+    Expect(tkDedent, 'dedent');
+  end
+  else
+    PySkipIndentedBlock;
+  PySkipNewlines;
+  PyParseFallbackImportTry := -1;      { no runtime statement }
+end;
+
 function PyParseTry: Integer;
 var node, innerNode, trySeq, finSeq, handlerHead, lastHandler, handlerNode: Integer;
     actionSeq, handlerVar, ci, recId: Integer;
@@ -8348,7 +8468,14 @@ begin
   if CurTok.Kind = tkFunction then begin Result := PyQueueNestedDef; Exit; end;
   if CurTok.Kind = tkIf then begin Result := PyParseIf; Exit; end;
   if CurTok.Kind = tkWhile then begin Result := PyParseWhile; Exit; end;
-  if CurTok.Kind = tkTry then begin Result := PyParseTry; Exit; end;
+  if CurTok.Kind = tkTry then
+  begin
+    { the fallback-import idiom is decided at compile time, not caught at
+      runtime — see PyParseFallbackImportTry }
+    if PyIsFallbackImportTry then Result := PyParseFallbackImportTry
+    else Result := PyParseTry;
+    Exit;
+  end;
   if PyIsIdent('with') then begin Result := PyParseWith; Exit; end;
   { `raise <expr>` and bare `raise` (re-raise inside a handler). }
   if CurTok.Kind = tkRaise then
@@ -11317,8 +11444,30 @@ end;
   after a try/except — those were silently IGNORED (no error, no registration),
   which surfaced much later as `undefined variable (tempfile)` at the first use.
   Silently dropping an import is the worst shape a gap can take. }
+{ Consume a module path — `reportlab` or `reportlab.pdfgen` — and return the
+  UNIT name it maps to: the dots become underscores, so `reportlab.lib.colors`
+  is the unit `reportlab_lib_colors` (and, failing that, `mimic_reportlab_lib_
+  colors`, which the resolver falls back to). A Pascal unit name cannot hold a
+  dot and a package DIRECTORY would buy nothing here, so the mangling is the
+  whole of it. rootName gets the first segment, which is what the
+  consume-and-defer stdlib checks are about (`import os.path` is as skipped as
+  `import os`). feature-nilpy-dotted-package-imports. }
+function PyConsumeDottedModule(var rootName: AnsiString): AnsiString;
+begin
+  rootName := CurTok.SVal;
+  Result := CurTok.SVal;
+  Next;
+  while (CurTok.Kind = tkDot) and (TokPos < TokCount) and
+        (Tokens[TokPos].Kind = tkIdent) do
+  begin
+    Next;
+    Result := Result + '_' + CurTok.SVal;
+    Next;
+  end;
+end;
+
 procedure PyParseImportRun;
-var impName, impAlias: AnsiString; isCount: Boolean; aStrIdx, realStrIdx: Integer;
+var impName, impAlias, impRoot: AnsiString; isCount: Boolean; aStrIdx, realStrIdx: Integer;
 begin
   while (CurTok.Kind = tkUses) or PyIsIdent('from') do
   begin
@@ -11327,8 +11476,7 @@ begin
       Next;
       if CurTok.Kind <> tkIdent then
         Error('Nil Python: expected a module name after from');
-      impName := CurTok.SVal;
-      Next;
+      impName := PyConsumeDottedModule(impRoot);
       if CurTok.Kind <> tkUses then
         Error('Nil Python: expected import after from ' + impName);
       Next;
@@ -11338,12 +11486,12 @@ begin
         ordinary pylib symbols (Counter -> pylib's TPyCounter constructors), so
         consuming the from-import is enough — an unsupported name from it walls
         visibly at its use site as an undefined variable, same as itertools. }
-      if CaseEqual(impName, 'dataclasses') or CaseEqual(impName, 'typing') or
-         CaseEqual(impName, 'itertools') or CaseEqual(impName, 'collections') then
+      if CaseEqual(impRoot, 'dataclasses') or CaseEqual(impRoot, 'typing') or
+         CaseEqual(impRoot, 'itertools') or CaseEqual(impRoot, 'collections') then
       begin
         while CurTok.Kind = tkIdent do
         begin
-          isCount := CaseEqual(impName, 'itertools') and
+          isCount := CaseEqual(impRoot, 'itertools') and
                      CaseEqual(CurTok.SVal, 'count');
           if isCount then PyCountAlias := CurTok.SVal;
           Next;
@@ -11384,6 +11532,20 @@ begin
               Next;
             end;
           end;
+          { A from-imported name may be a SUBMODULE rather than a value —
+            `from reportlab.pdfgen import canvas` then `canvas.Canvas(...)`,
+            `from tkinter import ttk` then `ttk.Notebook(...)`. Point the name
+            at the unit that answered the import so the qualifier resolves; a
+            name that is a plain value never gets qualified, so this is inert
+            for it. Skipped when a real unit already carries the name, which is
+            the only way this could hijack a genuine qualifier. }
+          if (UnitAliasCount < 64) and (not SoftUnitMissed) and
+             (FindCompiledUnit(impAlias) < 0) then
+          begin
+            UnitAliasName[UnitAliasCount] := InternStr(LowerCase(impAlias));
+            UnitAliasReal[UnitAliasCount] := InternStr(LowerCase(impName));
+            Inc(UnitAliasCount);
+          end;
           if PyImpNameCount < 256 then
           begin
             PyImpName[PyImpNameCount] := InternStr(LowerCase(impAlias));
@@ -11403,14 +11565,13 @@ begin
         { Python stdlib modules without a shim yet: consume-and-defer, use
           sites wall visibly (same policy as itertools above). Everything
           else goes through the unit resolver (sqlite3, C headers, ...). }
-        impName := CurTok.SVal;
-        if CaseEqual(impName, 'sys') or CaseEqual(impName, 'os') or
-           CaseEqual(impName, 'textwrap') or CaseEqual(impName, 'select') or
-           CaseEqual(impName, 'itertools') then
+        impName := PyConsumeDottedModule(impRoot);
+        if CaseEqual(impRoot, 'sys') or CaseEqual(impRoot, 'os') or
+           CaseEqual(impRoot, 'textwrap') or CaseEqual(impRoot, 'select') or
+           CaseEqual(impRoot, 'itertools') then
           { skip }
         else
           ParseUsesUnit(impName);
-        Next;
         { `import X as Y` — Python's module alias, and the same thing a Pascal
           `uses X as Y` already does (feature-uses-alias-as): register the alias
           with the unit resolver so a `Y.Sym` qualifier resolves onto X's

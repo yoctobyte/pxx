@@ -8,7 +8,7 @@ prio: 55
 # cfront: `__pxx_fegetround` unresolved on any float-`printf`
 
 - **Type:** bug (C frontend / crtl link ordering) — **Track C**
-- **Status:** backlog
+- **Status:** done
 - **Found / Opened:** 2026-07-25 — surfaced while checking whether
   AndreRenaud/pdfgen compiles under cfront (songformatter PDF backend probe,
   [[feature-demo-songformatter-pxx-target]]). A demanding consumer found a
@@ -80,3 +80,15 @@ EXCEPTION masking for the Pascal runtime; this is a cfront symbol-resolution bug
 ## Log
 - 2026-07-25 — filed. Root cause located, repro minimized, awaiting latest-master
   confirmation + fix.
+
+## Resolution (2026-07-28) — no longer reproduces
+
+The "FIRST STEP" above was carried out: rebuilt current master and ran the
+three-line repro. It compiles AND runs, printing `1.50`. The link-ordering
+problem the root-cause section describes was fixed by later `cparser.inc` work,
+not by anything filed here, so this closes as already-fixed rather than as a
+change of its own.
+
+The `M_SQRT2` half was NOT re-checked and does not belong to the symptom this
+ticket is named for; it is folded into the crtl math-constants work instead.
+- 2026-07-28 — resolved, commit verified-on-master.

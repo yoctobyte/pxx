@@ -1166,6 +1166,9 @@ var
   BuiltinUnitIdxCache : Integer;  { cached InternStr('builtin') idx; the builtin intrinsic unit is fallback-only in MatchProcCall (see BuiltinUnitIdx). }
   BuiltinUnitIdxSet   : Boolean;  { BSS -> False: the cache above is computed lazily once per process. }
   MimicFpc : Boolean;  { --mimic-fpc / {$MIMIC FPC}: install a curated FPC 3.2.2 define set so identity-probing library headers pick their FPC path. Opt-in only, NEVER default (the compiler's own {$ifdef FPC} means real FPC; mimic during self-build = broken bootstrap). }
+  SoftUnitResolve : Boolean;  { while resolving the imports in a `try:` that has an `except ImportError:` — a module that cannot be found sets SoftUnitMissed instead of erroring, so the fallback branch can be compiled instead (feature-nilpy-fallback-import). }
+  SoftUnitMissed : Boolean;
+  NoShims : Boolean;  { --no-shims: refuse the mimic_<module> substitution the NilPy import resolver falls back on, so a build that succeeds provably used no compatibility shim (feature-nilpy-dotted-package-imports). }
   InterfacesComMode : Boolean; { {$interfaces com}: interfaces declared while on are COM/ARC (reference-counted). Default off = CORBA (no refcount). }
   ComInterfaceUsed : Boolean; { set when any COM/ARC interface is declared; forces the builtinheap unit (PXXIntfAddRef/Release live there) and the ARC cleanup path. }
   EnableAutoVar : Boolean;

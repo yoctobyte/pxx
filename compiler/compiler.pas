@@ -484,6 +484,14 @@ begin
       ThreadSafeMode := True;
       Inc(i);
     end
+    else if option = '--no-shims' then
+    begin
+      { Refuse every mimic_<module> substitution: an import must resolve to a
+        real unit of that name or fail. This is what turns "compiled without
+        compatibility shims" from a claim into a checked property. }
+      NoShims := True;
+      Inc(i);
+    end
     else if option = '--mimic-fpc' then
     begin
       MimicFpc := True;
