@@ -1480,6 +1480,30 @@ begin
       ASTRight[node] := zeroNode;
       ASTTk[node] := Ord(tyBoolean);
     end
+    else if opTk = tyClass then
+    begin
+      { Any OTHER object (a user class, an re match object — anything that is
+        not a pylib container handled above). Python: an instance is truthy
+        unless it is None, so `not o` is `o = nil`. AN_NOT here complemented
+        the object HANDLE, which is never nil, so `not o` was True for every
+        live object — the same shape as the string and container cases above,
+        and just as silent: `if o:` was right all along.
+
+        This is what made songformatter's key analysis return wrong keys.
+        `_quality_bucket` opens with `if not match: return None, "unknown"`
+        over an `re.match` result, so EVERY chord came back unclassified, every
+        key scored identically, and the detector ranked ALL_KEYS in insertion
+        order. No crash, no diagnostic — just plausible wrong answers.
+        [[bug-nilpy-not-on-object-always-true]] }
+      zeroNode := AllocNode(AN_INT_LIT);
+      ASTIVal[zeroNode] := 0;
+      ASTTk[zeroNode] := Ord(tyPointer);
+      node := AllocNode(AN_BINOP);
+      ASTIVal[node] := Ord(tkEq);
+      ASTLeft[node] := operand;
+      ASTRight[node] := zeroNode;
+      ASTTk[node] := Ord(tyBoolean);
+    end
     else if (opTk = tyBoolean) or not PyNumeric(opTk) then
     begin
       node := AllocNode(AN_NOT);
