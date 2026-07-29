@@ -949,6 +949,36 @@ begin
   DbgEnsureVoidPtr := off;
 end;
 
+function DbgEnsureScalar(tkOrd, recId: Integer): Integer; forward;
+
+{ Shared `^Char` DIE. A managed string HANDLE points straight at the character
+  data and PXXStrFromLit NUL-terminates it (the length and refcount live BELOW
+  the handle), so "pointer to char" is not a cheat here — it is the literal
+  truth, and it is what makes gdb print
+
+      $1 = 0x7fffe7e00018 "point"
+
+  instead of the bare pointer a void* typedef produced. Strings are everywhere
+  in this codebase, so this one DIE is most of the practical difference between
+  a usable and an unusable `print`. }
+function DbgEnsureCharPtr: Integer;
+var off, chOff: Integer;
+begin
+  off := DbgTypeLookup(9001, 0, 0);
+  if off >= 0 then begin DbgEnsureCharPtr := off; Exit; end;
+  chOff := DbgEnsureScalar(3, 0);          { Char base_type }
+  off := DbgLen - DbgInfoSecOff;
+  DbgTypeRegister(9001, 0, 0, off);
+  DbgPutULEB(13); DbgPutB(DbgPtrSize); DbgPutU32(chOff);   { pointer_type -> Char }
+  DbgEnsureCharPtr := off;
+end;
+
+{ TRUE for the kinds whose runtime value is a managed-string handle. }
+function DbgIsStringKind(tkOrd: Integer): Boolean;
+begin
+  DbgIsStringKind := (tkOrd = 4) or (tkOrd = 23) or (tkOrd = 25) or (tkOrd = 26);
+end;
+
 { A runtime-layout type that gets a labeled typedef over the void pointer, so gdb
   shows the Pascal name (`string`, `array of Integer`, …) instead of `void *`,
   while `x/s` / handle inspection still work. }
@@ -980,11 +1010,24 @@ begin
     DbgEnsureScalar := off; Exit;
   end;
 
-  if (tkOrd = 5) and (recId >= REC_UCLASS_BASE) and ((recId - REC_UCLASS_BASE) < UClsCount)
+  { A record is a structure_type by value; a CLASS variable holds a POINTER to
+    the same structure, so it gets the identical body wrapped in a pointer DIE.
+    Without the class case every object was a typedef over void*, and gdb
+    answered `Type void is not a structure or union type` to `print n.name` —
+    which is most of what you want a debugger for in a NilPy program. }
+  if ((tkOrd = 5) or (tkOrd = 6)) and (recId >= REC_UCLASS_BASE) and
+     ((recId - REC_UCLASS_BASE) < UClsCount)
      and not UClsIsInterface[recId - REC_UCLASS_BASE] then
   begin
-    { record by value → structure_type. Ensure each field's type first so member
-      ref4s point backward. }
+    if tkOrd = 6 then
+    begin
+      { emit (or reuse) the struct body under tkOrd 5, then point at it }
+      i := DbgEnsureScalar(5, recId);
+      off := DbgLen - DbgInfoSecOff;
+      DbgTypeRegister(tkOrd, recId, 0, off);
+      DbgPutULEB(13); DbgPutB(DbgPtrSize); DbgPutU32(i);
+      DbgEnsureScalar := off; Exit;
+    end;
     ci := recId - REC_UCLASS_BASE;
     fb := UClsFBase[ci]; fc := UClsFCount[ci];
     for i := 0 to fc - 1 do
@@ -1018,7 +1061,18 @@ begin
     DbgEnsureScalar := off; Exit;
   end;
 
-  { Everything with runtime/heap layout → named typedef over a void pointer. }
+  { A managed string is a real ^Char (see DbgEnsureCharPtr), so it gets a
+    typedef over THAT rather than over void* — gdb then prints the text. }
+  if DbgIsStringKind(tkOrd) then
+  begin
+    i := DbgEnsureCharPtr;
+    off := DbgLen - DbgInfoSecOff;
+    DbgTypeRegister(tkOrd, recId, 0, off);
+    DbgPutULEB(11); DbgPutStrZ(DbgTypeDisplayName(tkOrd, recId)); DbgPutU32(i);
+    DbgEnsureScalar := off; Exit;
+  end;
+
+  { Everything else with runtime/heap layout → named typedef over a void pointer. }
   off := DbgEmitNamedCheat(DbgTypeDisplayName(tkOrd, recId));
   DbgTypeRegister(tkOrd, recId, 0, off);
   DbgEnsureScalar := off;
@@ -1329,6 +1383,12 @@ begin
   { abbrev 12: anonymous pointer_type (pointer to void — the cheat's base) }
   DbgPutULEB(12); DbgPutULEB($0f); DbgPutB(0);  { DW_TAG_pointer_type }
   DbgPutULEB($0b); DbgPutULEB($0b);  { DW_AT_byte_size, DW_FORM_data1 }
+  DbgPutULEB(0); DbgPutULEB(0);
+  { abbrev 13: TYPED pointer_type — the ^Char a managed string really is, so
+    gdb prints the text rather than the handle (see DbgEnsureCharPtr) }
+  DbgPutULEB(13); DbgPutULEB($0f); DbgPutB(0);  { DW_TAG_pointer_type }
+  DbgPutULEB($0b); DbgPutULEB($0b);  { DW_AT_byte_size, DW_FORM_data1 }
+  DbgPutULEB($49); DbgPutULEB($13);  { DW_AT_type, DW_FORM_ref4 }
   DbgPutULEB(0); DbgPutULEB(0);
   DbgPutULEB(0);                     { end of abbrev table }
   DbgAbbrevSecSize := DbgLen - DbgAbbrevSecOff;

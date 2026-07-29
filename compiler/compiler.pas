@@ -777,6 +777,12 @@ begin
   begin
     PyExpandFStrings;
     PyLexAll(False);
+    { -g: main-file token boundary, exactly as the Pascal branch below sets it.
+      Without it DbgMainTokEnd stayed MAX_TOKENS, so every appended unit token
+      counted as main-file and stamped ITS line number onto the nodes — a
+      19-line .py reported `dbg1.py:5754` (a pylib line) for every frame, which
+      made the line table useless and stepping meaningless. }
+    DbgMainTokEnd := TokCount;
     MainProgramTokCount := TokCount;
     TokPos := 0;
     Next;

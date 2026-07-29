@@ -10909,6 +10909,9 @@ begin
   CompileAST(seqNode);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
+    ProcBodyEnd[procIdx] := CodeLen;   { DWARF -g — see PyParseDef's note }
+  ProcDbgMain[procIdx] := TokPos <= DbgMainTokEnd;
+  if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
   SymRollbackTo(savedSC);
   FrameSize := savedFS;
   CurProc := -1;
@@ -11078,6 +11081,15 @@ begin
   CompileAST(bodyNode);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
+    { DWARF -g: same three lines every Pascal routine body ends with
+    (parser.inc's routine-body tail). Without them a NilPy def had NO
+    DW_TAG_subprogram at all — `break combine` in gdb answered "Function not
+    defined", so the frontend where the hard bugs live was the one frontend you
+    could not debug. ProcBodyEnd must be taken here, after the epilogue, and
+    the locals snapshot before the scope is rolled back. }
+  ProcBodyEnd[procIdx] := CodeLen;
+  ProcDbgMain[procIdx] := TokPos <= DbgMainTokEnd;
+  if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
   SymRollbackTo(savedSC);
   { Anything the BODY left on the hoist queue names this routine's locals, and
     they have just been rolled back. The queue is global, so the residue was
@@ -12557,6 +12569,9 @@ begin
   bodyNode := PyParseBlock; Expect(tkDedent, 'dedent');
   bodyNode := PyPrependResultZero(procIdx, bodyNode);
   CompileAST(bodyNode); EmitProcEpilog(Procs[procIdx].RetSymIdx); PatchProcPrologue(patchPos, FrameSize);
+    ProcBodyEnd[procIdx] := CodeLen;   { DWARF -g — see PyParseDef's note }
+  ProcDbgMain[procIdx] := TokPos <= DbgMainTokEnd;
+  if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
   { Whatever the BODY left queued names this method's locals, which the
     rollback above has just discarded. The queue is global, so the residue was
@@ -12669,6 +12684,9 @@ begin
   CompileAST(seqHead);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
+    ProcBodyEnd[procIdx] := CodeLen;   { DWARF -g — see PyParseDef's note }
+  ProcDbgMain[procIdx] := TokPos <= DbgMainTokEnd;
+  if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
 end;
 
@@ -13328,6 +13346,7 @@ end;
 
 procedure ParsePyUnit(const uname: AnsiString);
 var stmt, seqNode, lastSeq, procIdx, patchPos, savedSC, savedFS: Integer;
+    dbgI: Integer;
     savedScanLo, savedMainTok, savedNest, savedLam, savedHoist, savedFloor: Integer;
     savedExprMode: Boolean;
     dummyNames: array[0..0] of AnsiString;
@@ -13416,6 +13435,20 @@ begin
   Procs[procIdx].FramePatch := patchPos;
   CompileAST(seqNode);
   EmitProcEpilog(-1);
+  { DWARF -g: the module's import-time body is a real proc, so give it a
+    subprogram DIE too — without one gdb showed the outermost NilPy frame as
+    `?? ()` and no module-level name was in scope anywhere. Its own top-level
+    names are GLOBALS (Python module scope), recorded as CU-level variable DIEs
+    exactly like a Pascal program's globals. Main module only: an imported .py
+    lexes past DbgMainTokEnd, and the Tier 1 line table describes one file. }
+  ProcBodyEnd[procIdx] := CodeLen;
+  ProcDbgMain[procIdx] := TokPos <= DbgMainTokEnd;
+  { NOT DbgMainBodyStart/End: those drive a SECOND, anonymous program-body
+    subprogram in DbgEmitSubprograms, which would overlap this proc's DIE on
+    the same address range. The named proc DIE is the better of the two. }
+  if DebugInfo and ProcDbgMain[procIdx] then
+    for dbgI := savedSC to SymCount - 1 do
+      if Syms[dbgI].Kind = skGlobal then DbgRecordVar(-1, dbgI, True);
   PatchProcPrologue(patchPos, FrameSize);
   { The symbols this body allocated are NOT rolled back. The IR it emitted
     still names them, and the IR buffer outlives the proc — a later verify then
@@ -13585,6 +13618,11 @@ begin
   PyAllocModuleGlobals;           { a def may read a global assigned further down }
   PyExprMode := True;   { Pascal RTL units are loaded; from here on, .npy expression
                           parsing uses Python and/or/not precedence }
+  { -g: module-level names declared from here on are the PROGRAM's own globals,
+    not the runtime units' — the same boundary Pascal's DbgGlobalScopeBase
+    marks. PyAllocModuleGlobals runs first because the names it pre-creates are
+    the program's too. }
+  DbgGlobalScopeBase := SymCount;
   mainNode := -1;
   PySkipNewlines;
   { The program's own statement list is live until the body is compiled at the
@@ -13638,6 +13676,13 @@ begin
     `ensure_default_settings()` there, and a module-level name has no value
     until it has run), so without this an importer read zeroes and crashed on
     the first module-level list (feature-nilpy-py-module-loader). }
+  { -g: the module's own top-level code is the program body — the range that
+    becomes the main DW_TAG_subprogram. Without it gdb had no subprogram
+    covering module-level addresses, so a breakpoint there reported `?? ()`
+    and no module-level name was in scope. The main module is compiled INLINE
+    here (ParsePyUnit handles imported .py files), which is why the def/method
+    wiring alone did not cover it. }
+  DbgMainBodyStart := CodeLen;
   for i := 0 to InitProcCount - 1 do
     EmitCallProc(InitProcs[i]);
   blockNode := AllocNode(AN_BLOCK);
@@ -13651,6 +13696,12 @@ begin
   if (FiniProcCount > 0) or (FiniRunnerProc >= 0) then
     EmitCallProc(GetFiniRunnerProc);
   EmitExit(0);
+  DbgMainBodyEnd := CodeLen;
+  { -g: the program's module-level names, as CU-level globals (Python module
+    scope IS global scope). Same snapshot Pascal's ParseProgram takes. }
+  if DebugInfo then
+    for i := DbgGlobalScopeBase to SymCount - 1 do
+      if Syms[i].Kind = skGlobal then DbgRecordVar(-1, i, True);
   { A lambda LIFTED at module level queues its body like one inside a def does,
     and nothing else drains the module's queue. Emitted after the exit on
     purpose: the code below is only ever reached by a call, and EmitExit never
