@@ -56,13 +56,29 @@ yields a TPyList). Previously only the string INDEX form was handled, so
 Verified against CPython on nine repros, including the app's exact shape
 `d.get(k, [])[:6] if w else []` inside a def.
 
-**NOT SUFFICIENT for songformatter** — see below. Its `violation_count`
-detector still reads its `evidence` field back as garbage, so a SECOND defect is
-in play; every repro of the expression shape (annotated `dict[str, list[str]]`,
-keyword arguments, a trailing `debug=` kwarg, the `winner is None` arm) now
-matches CPython. What the real detector has and the repros do not: ~84 dict
-keys built in a nested loop, `del` statements, set literals in the conditions.
-Bisect the real detector down rather than building the repro up.
+**NOT SUFFICIENT for songformatter** — a SECOND defect is in play, and a
+top-down bisect of the real detector (a scratch copy at `/tmp/sfx`, rebuilt each
+step) pins it to the METHOD, not the expression:
+
+| `evidence=` in ViolationCountDetector.analyze | field reads back |
+| --- | --- |
+| `[]` | correct (0) |
+| `penalty_evidence.get(winner.label, []) if winner else []` (no slice) | correct (0) |
+| `penalty_evidence.get(winner.label, [])[:6] if winner else []` | **garbage** (1751084129) |
+| `penalty_evidence.get("C", [])[:6] if winner else []` (literal key) | **garbage** |
+
+So: the slice is the trigger, the key is irrelevant, and the SAME expression in
+a small method is fine — every bottom-up repro matches CPython (annotated
+`dict[str, list[str]]`, inside a method, Optional winner, a stored EMPTY list
+under an existing key, keyword arguments with a trailing `debug=`).
+
+What is different about the real one is its SIZE: `ViolationCountDetector.analyze`
+is ~90 lines with many locals, two nested loops over 84 keys, `del` statements
+and set literals. Prime suspect is a per-method locals/temporaries cap: the
+hidden temp the slice needs lands in a slot past the limit and is written
+somewhere else. Next step is to check the locals/temp allocation limits for a
+method that big (see [[project_nilpy_variant_container_landmines]], which
+records a 255-local truncation), NOT to keep growing the repro.
 
 ## Why it matters
 
