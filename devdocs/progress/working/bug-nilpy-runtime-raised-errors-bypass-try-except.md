@@ -85,3 +85,50 @@ exceptions.
 
 `make test-nilpy` + self-host byte-identical, plus a regression test that
 catches `x % 0`, `x // 0` and `x / 0` and keeps running.
+
+## RESOLVED — the runtime raises instead of halting
+
+Four halt sites in `compiler/builtin/pylib.pas` became raises of the classes
+declared at the top of that same unit:
+
+| was | now |
+| --- | --- |
+| `PyIndexError` — `writeln` + `Halt(1)` | `raise IndexError.Create('list index out of range')` |
+| `PyKeyError` — `writeln` + `Halt(1)` | `raise KeyError.Create('key not found')` |
+| `int("abc")` — `writeln` + `Halt(219)` | `raise ValueError.Create('invalid literal for int() with base 10: ' + quoted)` |
+| `x // 0`, `x % 0` — bare Pascal `div`, trapping as runtime error 200 | `raise ZeroDivisionError` from `pyfloordiv_i` / `pyfloormod_i` / `pyfloordiv_f` |
+
+`ZeroDivisionError` had no class at all and was added beside the others.
+
+**True division needed more than a guard.** `3 / 0` was not trapping — it
+produced a saturated Int64 that the large-float formatter printed as garbage
+BYTES on stdout. Plain IEEE division can neither raise nor yield Python's
+always-float result, so NilPy's `/` now routes through a new `pytruediv_f`.
+That makes every NilPy division a call: a real cost, accepted because the
+alternative is a silently wrong answer. Promotable-int operands stay on the old
+path — their rvalue is a frame SLOT ADDRESS
+([[project_promotable_int_stages123]]), so handing one to a Double parameter
+would pass the address as a number.
+
+Verified against CPython: `x % 0`, `x // 0`, `x / 0` and `int("abc")` each
+caught by their own exception type and by a bare `except:`, with execution
+continuing afterwards; message text matches CPython's for all four. Ordinary
+division unaffected (`7/2`, `-7/2`, `7.5/2.5`, `10/5`, `//` and `%` over
+int/float pairings all match).
+
+This also closes [[bug-nilpy-int-parse-halts-instead-of-raising]].
+
+## Two findings the fix exposed, filed separately
+
+Both were invisible before, because the process died first:
+
+- [[bug-nilpy-str-of-mixed-mod-prints-double-bits]] — `str(3 % 2.5)` prints the
+  double's bit pattern. Parse-time typing of `%` ignores a float RIGHT operand,
+  so `str()` binds the Int64 overload before ir.inc retypes the node.
+- [[bug-nilpy-print-emits-arguments-before-evaluating-later-ones]] — `print`
+  writes each argument as it goes, so a raise in a later argument leaves
+  partial output.
+
+### Gate
+
+`tools/gate.sh full`.
