@@ -260,6 +260,12 @@ const
     ESP static-arena build can afford too. }
   HEAP_BIN_MAX   = 512;                     { largest size with its own bin }
   HEAP_BIN_COUNT = HEAP_BIN_MAX div 8;      { 64: classes 8,16,...,512 }
+  { -dPXX_HEAP_DEBUG only: how many freed blocks are held out of the free list
+    before one is really reused. Big enough that a dangling read almost always
+    lands on poison rather than on a recycled block; small enough that the ring
+    is 8 KiB of BSS. }
+  HEAP_QUAR_MAX  = 1024;
+  HEAP_POISON    = $DD;                     { freed-payload fill byte }
 
 var
   HeapPtr  : Int64;   { next free byte in the current arena (0 = none yet) }
@@ -282,6 +288,34 @@ var
     use __pxxatomic_* instead of the lock (see PXXStrIncRef & friends).
     BSS-zeroed = free. }
   PXXHeapSpin : Integer;
+{$endif}
+{$ifdef PXX_HEAP_DEBUG}
+  { ===== Debug heap: poison-on-free + quarantine =====
+    Build with -dPXX_HEAP_DEBUG. Off by default and entirely inside ifdefs, so
+    the shipped allocator is byte-identical without it.
+
+    Why it exists: a use-after-free in this runtime presents as a PLAUSIBLE
+    value, never as a fault. PXXAlloc zeroes a reused block, so a dangling read
+    sees either zeros or whatever the block's new owner wrote — e.g. a freed
+    TPyList whose header words had been recycled into a string, giving
+    len() = 1751084129 (ASCII bytes read as an integer). Nothing in that number
+    says "freed", which is what made
+    bug-nilpy-slice-of-variant-local-returned-is-unusable cost three sessions.
+
+    With this on, a freed payload is filled with $DD and held OUT of the free
+    list for HEAP_QUAR_MAX further frees, so the dangling reader sees $DDDD...
+    — an obviously absurd value at the point of the read rather than a plausible
+    one far away. Two more bugs fall out of the same bookkeeping for free:
+    a WRITE after free (the poison is verified when a block leaves quarantine)
+    and a DOUBLE free (the payload is already fully poisoned on the way in). }
+  HeapQuar      : array[0..HEAP_QUAR_MAX-1] of Int64;   { payload addrs }
+  HeapQuarHead  : Integer;                 { index of the OLDEST entry }
+  HeapQuarCount : Integer;
+  { A report is RECORDED under the allocator lock and EMITTED after it is
+    released — formatting a message can touch the heap, and doing that while
+    holding the spinlock would deadlock the PXX_TS_SOFTLOCK build. }
+  HeapDbgPend   : Integer;                 { 0 none, 1 double free, 2 write-after-free }
+  HeapDbgAddr   : Int64;
 {$endif}
   { A single shared, read-only NUL byte. PChar of an empty managed string (a nil
     handle) returns its address so the C boundary sees a valid empty C string, as
@@ -540,21 +574,141 @@ begin
 {$endif}
 end;
 
-procedure PXXFree(p: Pointer);
-var
-  addr, sz: Int64;
-  bin: Integer;
-{$ifdef PXX_TS_SOFTLOCK}
-  tsIgnore: Int64;
-{$endif}
+{$ifdef PXX_HEAP_DEBUG}
+function PXXSysWrite(fd, buf, count: NativeInt): Int64; forward;
+
+{ Emit a pending report. Called with the allocator lock RELEASED — reporting
+  formats a message and may itself touch the heap, and doing that under the
+  spinlock would deadlock the PXX_TS_SOFTLOCK build against itself. }
+procedure PXXDbgFlush;
+var i: NativeInt; b: Byte; r: Int64; v: Int64; d: Integer; msg: string;
 begin
-  addr := Int64(p);
-  if addr = 0 then Exit;
-{$ifdef PXX_TS_SOFTLOCK}
-  tsIgnore := 0;
-  while Integer(__pxxatomic_xchg(@PXXHeapSpin, 1)) <> 0 do
-    tsIgnore := tsIgnore + 1;
+  if HeapDbgPend = 0 then Exit;
+  if HeapDbgPend = 1 then msg := 'pxx-heap: DOUBLE FREE of 0x'
+  else if HeapDbgPend = 2 then msg := 'pxx-heap: WRITE AFTER FREE in 0x'
+  else if HeapDbgPend = 3 then msg := 'pxx-heap: RETAIN of a FREED object 0x'
+  else msg := 'pxx-heap: RELEASE of a FREED object 0x';
+  HeapDbgPend := 0;
+  for i := 1 to Length(msg) do
+  begin
+    b := Byte(msg[i]);
+    r := PXXSysWrite(2, Int64(@b), 1);
+  end;
+  { address in hex, high nibble first, no leading-zero suppression so the width
+    is constant and greppable }
+  i := (SizeOf(Pointer) * 8) - 4;
+  while i >= 0 do
+  begin
+    v := HeapDbgAddr;
+    d := Integer((v shr i) and 15);
+    if d < 10 then b := Byte(48 + d) else b := Byte(87 + d);
+    r := PXXSysWrite(2, Int64(@b), 1);
+    i := i - 4;
+  end;
+  b := 10;
+  r := PXXSysWrite(2, Int64(@b), 1);
+end;
+
+{ TRUE when a whole machine word reads as poison — i.e. the block it came from
+  is in quarantine. Used on the object MAGIC word, which is never $DDDD... for
+  a live object. }
+function PXXDbgIsPoisonWord(w: Int64): Boolean;
+var i: Integer; ok: Boolean;
+begin
+  ok := True;
+  for i := 0 to SizeOf(Pointer) - 1 do
+    if ((w shr (i * 8)) and 255) <> HEAP_POISON then ok := False;
+  PXXDbgIsPoisonWord := ok;
+end;
+
+{ TRUE when the whole payload still reads as poison. }
+function PXXDbgPoisonIntact(addr, sz: Int64): Boolean;
+var i: Int64;
+begin
+  i := 0;
+  while i < sz do
+  begin
+    if PByte(addr + i)^ <> HEAP_POISON then
+    begin
+      PXXDbgPoisonIntact := False;
+      Exit;
+    end;
+    i := i + 1;
+  end;
+  PXXDbgPoisonIntact := True;
+end;
+
+{ Poison `addr` and put it in quarantine. Returns the block EVICTED by that
+  push (which the caller must really free), or 0 while the ring is filling.
+  The caller holds the allocator lock. }
+function PXXDbgQuarantine(addr: Int64): Int64;
+var sz, vic, vsz, i: Int64; slot: Integer;
+begin
+  sz := PWord(addr - 8)^;
+  { A header we cannot trust (never allocated here, or already corrupted):
+    poison only the one word the free list would overwrite anyway. }
+  if (sz < 8) or (sz > (HeapHigh - HeapLow)) then sz := 8;
+
+  { Freeing a block that is ALREADY entirely poison means it is still in
+    quarantine — i.e. a double free. Report it and drop the second free, which
+    is also what stops the ring holding one address twice. }
+  if PXXDbgPoisonIntact(addr, sz) then
+  begin
+    HeapDbgPend := 1;
+    HeapDbgAddr := addr;
+    PXXDbgQuarantine := 0;
+    Exit;
+  end;
+
+  vic := 0;
+  if HeapQuarCount >= HEAP_QUAR_MAX then
+  begin
+    vic := HeapQuar[HeapQuarHead];
+    { The victim has sat poisoned since it was freed. Anything that changed it
+      wrote through a dangling pointer. }
+    vsz := PWord(vic - 8)^;
+    if (vsz < 8) or (vsz > (HeapHigh - HeapLow)) then vsz := 8;
+    if not PXXDbgPoisonIntact(vic, vsz) then
+    begin
+      HeapDbgPend := 2;
+      HeapDbgAddr := vic;
+    end;
+    HeapQuar[HeapQuarHead] := addr;
+    HeapQuarHead := HeapQuarHead + 1;
+    if HeapQuarHead >= HEAP_QUAR_MAX then HeapQuarHead := 0;
+  end
+  else
+  begin
+    slot := HeapQuarHead + HeapQuarCount;
+    if slot >= HEAP_QUAR_MAX then slot := slot - HEAP_QUAR_MAX;
+    HeapQuar[slot] := addr;
+    HeapQuarCount := HeapQuarCount + 1;
+  end;
+
+  { Poison AFTER the victim was read out — the two blocks are distinct, but
+    doing it in this order keeps the "in quarantine == fully poison" invariant
+    the double-free check above relies on. }
+  i := 0;
+  while i < sz do
+  begin
+    PByte(addr + i)^ := HEAP_POISON;
+    i := i + 1;
+  end;
+  PXXDbgQuarantine := vic;
+end;
 {$endif}
+
+{$ifdef PXX_HEAP_DEBUG}
+{ The free-list push, WITHOUT the lock — the caller holds it. Exists only for
+  the debug heap, which runs a block through quarantine first and then releases
+  the EVICTED victim through exactly this code. The default build keeps the
+  push inline in PXXFree: a call per free is not worth paying for a facility
+  that is off. }
+procedure PXXFreePush(addr: Int64);
+var
+  sz: Int64;
+  bin: Integer;
+begin
   { The header carries the block's exact (already 8-rounded) size, so its size
     class is recoverable here — that is what lets alloc skip the walk entirely.
     Both pushes are O(1); the next link lives in the payload at [addr]. }
@@ -570,8 +724,56 @@ begin
     PWord(addr)^ := FreeList;               { large (or a header we cannot trust) }
     FreeList := addr;
   end;
+end;
+{$endif}
+
+procedure PXXFree(p: Pointer);
+var
+  addr: Int64;
+{$ifdef PXX_HEAP_DEBUG}
+  victim: Int64;
+{$else}
+  sz: Int64;
+  bin: Integer;
+{$endif}
+{$ifdef PXX_TS_SOFTLOCK}
+  tsIgnore: Int64;
+{$endif}
+begin
+  addr := Int64(p);
+  if addr = 0 then Exit;
+{$ifdef PXX_TS_SOFTLOCK}
+  tsIgnore := 0;
+  while Integer(__pxxatomic_xchg(@PXXHeapSpin, 1)) <> 0 do
+    tsIgnore := tsIgnore + 1;
+{$endif}
+{$ifdef PXX_HEAP_DEBUG}
+  { Poison and quarantine; only the EVICTED block (if any) really goes back on
+    the free list. Returns 0 while the ring is still filling. }
+  victim := PXXDbgQuarantine(addr);
+  if victim <> 0 then PXXFreePush(victim);
+{$else}
+  { The header carries the block's exact (already 8-rounded) size, so its size
+    class is recoverable here — that is what lets alloc skip the walk entirely.
+    Both pushes are O(1); the next link lives in the payload at [addr]. }
+  sz := PWord(addr - 8)^;
+  if (sz >= 8) and (sz <= HEAP_BIN_MAX) then
+  begin
+    bin := Integer(sz div 8) - 1;
+    PWord(addr)^ := FreeBins[bin];
+    FreeBins[bin] := addr;
+  end
+  else
+  begin
+    PWord(addr)^ := FreeList;               { large (or a header we cannot trust) }
+    FreeList := addr;
+  end;
+{$endif}
 {$ifdef PXX_TS_SOFTLOCK}
   PXXHeapSpin := 0;
+{$endif}
+{$ifdef PXX_HEAP_DEBUG}
+  PXXDbgFlush;                              { lock released — see PXXDbgFlush }
 {$endif}
 end;
 
@@ -1200,6 +1402,70 @@ end;
   PXXObjRelease at rc=0 currently just frees the block; the recursive
   per-type finalizer (VMT `__finalize__` slot) is a later slice of
   feature-nilpy-object-reclamation and hooks in right before the free. }
+{$ifdef PXX_OBJTRACE}
+{ One line per refcount event, to stderr:  `objtrace <op> <hex addr> <rc>`.
+  Ops: A alloc, R retain, r release, F free (rc reached 0).
+
+  Build with -dPXX_OBJTRACE. Every bug in the NilPy object-reclamation family
+  is the same question — who took a reference and who dropped it — and today
+  that is answered by inferring backwards from a corrupted value. This answers
+  it by reading the log:  `./prog 2>&1 | grep '<the address>'` gives the whole
+  life of one object in order.
+
+  Allocation-free on purpose: the line is built in a local byte buffer from
+  character constants and emitted with ONE raw write. A trace that allocated
+  would perturb the very heap it is reporting on, and would re-enter the
+  allocator from inside PXXObjRelease -> PXXFree. }
+procedure PXXObjTrace(op: NativeInt; p: Pointer; rc: Int64);
+var buf: array[0..63] of Byte; n, i, d: Integer; v, r: Int64; neg: Boolean;
+begin
+  buf[0] := Ord('o'); buf[1] := Ord('b'); buf[2] := Ord('j');
+  buf[3] := Ord('t'); buf[4] := Ord('r'); buf[5] := Ord('a');
+  buf[6] := Ord('c'); buf[7] := Ord('e'); buf[8] := 32;
+  buf[9] := Byte(op); buf[10] := 32;
+  n := 11;
+  buf[n] := Ord('0'); n := n + 1;
+  buf[n] := Ord('x'); n := n + 1;
+  i := (SizeOf(Pointer) * 8) - 4;
+  v := Int64(p);
+  while i >= 0 do
+  begin
+    d := Integer((v shr i) and 15);
+    if d < 10 then buf[n] := Byte(48 + d) else buf[n] := Byte(87 + d);
+    n := n + 1;
+    i := i - 4;
+  end;
+  buf[n] := 32; n := n + 1;
+  neg := rc < 0;
+  if neg then rc := -rc;
+  d := n;                                  { remember where the digits start }
+  if rc = 0 then
+  begin
+    buf[n] := Ord('0'); n := n + 1;
+  end
+  else
+    while rc > 0 do
+    begin
+      buf[n] := Byte(48 + Integer(rc mod 10));
+      n := n + 1;
+      rc := rc div 10;
+    end;
+  { the digits went out backwards — reverse them in place }
+  i := n - 1;
+  while d < i do
+  begin
+    v := buf[d]; buf[d] := buf[i]; buf[i] := Byte(v);
+    d := d + 1; i := i - 1;
+  end;
+  if neg then
+  begin
+    buf[n] := Ord('-'); n := n + 1;        { sign trails; an rc below 0 is a bug anyway }
+  end;
+  buf[n] := 10; n := n + 1;
+  r := PXXSysWrite(2, Int64(@buf[0]), n);
+end;
+{$endif}
+
 function PXXObjAlloc(size: NativeInt): Pointer;
 var base: Int64;
 begin
@@ -1208,6 +1474,9 @@ begin
   PWord(base)^ := 1;                    { refcount }
   PWord(base + 8)^ := PXX_OBJ_MAGIC;    { population tag, see the interface }
   Result := Pointer(base + 16);
+{$ifdef PXX_OBJTRACE}
+  PXXObjTrace(Ord('A'), Result, 1);
+{$endif}
 end;
 
 function PXXObjAllocRaw(size: NativeInt): Pointer;
@@ -1218,6 +1487,9 @@ begin
   PWord(base)^ := 1;                        { refcount }
   PWord(base + 8)^ := PXX_OBJ_MAGIC_RAW;    { VMT-less block (bound pairs) }
   Result := Pointer(base + 16);
+{$ifdef PXX_OBJTRACE}
+  PXXObjTrace(Ord('A'), Result, 1);
+{$endif}
 end;
 
 { TRUE iff p can be one of our headered payloads: 8-aligned and inside the
@@ -1238,6 +1510,9 @@ begin
   PWord(base)^ := 1;                         { refcount }
   PWord(base + 8)^ := PXX_OBJ_MAGIC_RAW2;    { pyeval closure object }
   Result := Pointer(base + 16);
+{$ifdef PXX_OBJTRACE}
+  PXXObjTrace(Ord('A'), Result, 1);
+{$endif}
 end;
 
 procedure PXXObjRetain(p: Pointer);
@@ -1251,11 +1526,30 @@ begin
   base := Int64(p) - 16;
   t := PWord(base + 8)^;
   if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) and
-     (t <> PXX_OBJ_MAGIC_RAW2) then Exit;  { not ours }
+     (t <> PXX_OBJ_MAGIC_RAW2) then
+  begin
+{$ifdef PXX_HEAP_DEBUG}
+    { The magic reads as poison: this object is in quarantine, so somebody is
+      retaining a pointer they already dropped. Without the debug heap this
+      block would have been recycled and the magic would be whatever its new
+      owner wrote — which is exactly why the ownership bugs in this runtime are
+      invisible. Reported here rather than silently no-oped. }
+    if PXXDbgIsPoisonWord(t) then
+    begin
+      HeapDbgPend := 3;
+      HeapDbgAddr := Int64(p);
+      PXXDbgFlush;
+    end;
+{$endif}
+    Exit;                                  { not ours }
+  end;
 {$ifdef PXX_TS_SOFTLOCK}
   tsIgnore := __pxxatomic_add(Pointer(base), 1);
 {$else}
   PWord(base)^ := PWord(base)^ + 1;
+{$endif}
+{$ifdef PXX_OBJTRACE}
+  PXXObjTrace(Ord('R'), p, PWord(base)^);
 {$endif}
 end;
 
@@ -1267,15 +1561,34 @@ begin
   base := Int64(p) - 16;
   t := PWord(base + 8)^;
   if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) and
-     (t <> PXX_OBJ_MAGIC_RAW2) then Exit;  { not ours }
+     (t <> PXX_OBJ_MAGIC_RAW2) then
+  begin
+{$ifdef PXX_HEAP_DEBUG}
+    { Releasing an object that is already in quarantine — a double release, the
+      other half of the retain case above. }
+    if PXXDbgIsPoisonWord(t) then
+    begin
+      HeapDbgPend := 4;
+      HeapDbgAddr := Int64(p);
+      PXXDbgFlush;
+    end;
+{$endif}
+    Exit;                                  { not ours }
+  end;
 {$ifdef PXX_TS_SOFTLOCK}
   rc := __pxxatomic_add(Pointer(base), -1) - 1;   { returns the OLD value }
 {$else}
   rc := PWord(base)^ - 1;
   PWord(base)^ := rc;
 {$endif}
+{$ifdef PXX_OBJTRACE}
+  PXXObjTrace(Ord('r'), p, rc);
+{$endif}
   if rc = 0 then
   begin
+{$ifdef PXX_OBJTRACE}
+    PXXObjTrace(Ord('F'), p, 0);
+{$endif}
     { Run the type finalizer (releases children, recursing back through here)
       before the block goes away. Installed by pylib; nil in programs that
       never construct a refcounted object. }

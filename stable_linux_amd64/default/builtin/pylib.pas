@@ -22,6 +22,10 @@ unit pylib;
 
 interface
 
+{ NilPy's PAL — the one place a NilPy primitive reaches the kernel.
+  See decide-runtime-primitive-layering. }
+uses pypal;
+
 const
   { An omitted slice bound, as emitted by the frontend for `b[:hi]` / `b[lo:]`.
     See the slice functions below for why a sentinel is safe here. }
@@ -65,6 +69,11 @@ type
     FLen: Integer;
     FCap: Integer;
     FItems: Pointer;
+    { A TUPLE is a TPyList too — NilPy has one sequence representation — so the
+      only thing separating `(1, 2)` from `[1, 2]` at render time is this flag,
+      set by the frontend when a tuple DISPLAY was written. Without it every
+      tuple printed with brackets (bug-nilpy-str-of-tuple-is-empty). }
+    FIsTuple: Boolean;
     constructor Create;
     function append(const v: Variant): TPyList;
     { set-style insert: append only when the value is not already present.
@@ -83,6 +92,16 @@ type
       than renamed because the corpus writes both. }
     function count: Integer; overload;
     function count(const v: Variant): Integer; overload;
+    { Python's list.index / list.remove: both find the FIRST element equal to
+      v, by PyVarEq — the same content rule count() and `in` already use. index
+      RAISES ValueError when absent and remove REMOVES it; a find-style -1
+      return would be a different function (feature-nilpy-container-method-gaps). }
+    function index(const v: Variant): Integer;
+    procedure remove(const v: Variant);
+    { A SHALLOW copy, like Python's: a new list holding the same element
+      values, so appending to the copy leaves the original alone while a
+      mutable ELEMENT stays shared. }
+    function copy: TPyList;
     function pop: Variant; overload;
     function pop(i: Integer): Variant; overload;   { list.pop(index) — Python removes at i }
     function pop_at(i: Integer): Variant;
@@ -136,7 +155,13 @@ type
     procedure remove(const k: Variant);
     { dict.pop(key, default): remove the key and return its value, or return
       `default` if absent (never raises in the two-argument form uforth uses). }
-    function pop(const k: Variant; const d: Variant): Variant;
+    { Both Python arities. The one-argument form RAISES KeyError when the key
+      is absent and the two-argument form returns the default — that difference
+      is the whole reason Python has both, and requiring the default made the
+      one-argument form a PARSE error
+      (feature-nilpy-container-method-gaps). }
+    function pop(const k: Variant): Variant; overload;
+    function pop(const k: Variant; const d: Variant): Variant; overload;
     { Python's dict.setdefault: return the existing value, or insert the
       default and return THAT — the returned slot is the one now in the dict,
       which is what makes `d.setdefault(k, ...)[k2] = v` mutate the dict rather
@@ -218,6 +243,11 @@ type
     property HelpContext: Integer read FHelpContext write FHelpContext;
   end;
   ValueError        = class(Exception) end;
+  { Python raises this for x/0, x//0 and x%0. It had no class at all, so the
+    integer paths fell through to the Pascal runtime's error 200 (which no
+    `except` can see) and true division produced garbage
+    (bug-nilpy-runtime-raised-errors-bypass-try-except). }
+  ZeroDivisionError = class(Exception) end;
   TypeError         = class(Exception) end;
   IndexError        = class(Exception) end;
   KeyError          = class(Exception) end;
@@ -349,6 +379,9 @@ function pyrepr_of(const v: Variant): AnsiString; overload;
   fell through to the integer path (bug-a-nilpy-print-of-a-list-prints-a-pointer).
   Recursive: a nested list/dict element is reprd as a container, not as its
   object tag. }
+{ Mark a list as a TUPLE, for rendering only — the frontend calls it on the temp
+  a tuple display builds. }
+function pylist_mark_tuple(l: TPyList): TPyList;
 function pylist_repr(l: TPyList): AnsiString;
 function pybytes_repr(b: TPyBytes): AnsiString;
 function pydict_repr(d: TPyDict): AnsiString;
@@ -373,6 +406,11 @@ function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
   (`{name}`) and index fields (`{0}`) are NOT here: they fail loudly rather
   than being dropped, because a format spec decides what is PRINTED. }
 function pystr_format(const fmt: AnsiString; const a: Variant): AnsiString;
+{ Python's `"%s=%d" % args` — the printf-style operator, translated placeholder
+  by placeholder into the {}-spec grammar below so padding, precision and base
+  conversion have ONE implementation rather than two that drift. args is a single
+  value, or a TPyList when a tuple was written, which is Python's own rule. }
+function pypercent_format(const fmt: AnsiString; const args: Variant): AnsiString;
 function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; overload;
 function PyFmtFixed(d: Double; prec: Integer): AnsiString;
 function pyformat_of(d: Double; const spec: AnsiString): AnsiString; overload;
@@ -431,6 +469,14 @@ function pyint_parse(const s: AnsiString; base: Integer): Int64;
   has no overload resolution there. pyfloat_parse RAISES ValueError on a bad
   parse, for the same reason pyint_parse does. }
 function pyfloat_parse(const s: AnsiString): Double;
+{ `float(x)` where x is a VARIANT — the tag is only known at run time, so the
+  string case has to be decided there. Python parses a str and widens a number;
+  the compile-time route picks pyfloat_parse or pyfloat_ofint from the STATIC
+  type, and a variant fell to the latter, whose Int64 parameter unboxed through
+  pyvar_to_float and raised "expected a number, got str". Anything a config
+  file, a dict or a *args list carries is a variant, so that was most real
+  code. }
+function pyfloat_any(const v: Variant): Double;
 function pyfloat_ofint(v: Int64): Double;
 { os.path / os / sys shims. Reached by NAME from the frontend's stdlib table
   (`os.path.join(...)` -> pyos_path_join), because `os` and `sys` are deferred
@@ -520,6 +566,14 @@ function pycallback_call0(const cb: Variant): Int64;
 function pycallback_call1(const cb: Variant; const a0: Variant): Int64;
 { True for a value that pycallback_call* can invoke. }
 function pycallback_is(const cb: Variant): Boolean;
+{ The same call with the RESULT kept — `f = obj.method` / `f = some_def` and then
+  `f(a, b)` as an expression. Arities 0..3 cover every dynamic call NilPy emits a
+  guard for; beyond that a receiver-less pair still runs through the plain
+  indirect path (pyvar_callee_addr unwraps it). }
+function pybound_callv0(const cb: Variant): Variant;
+function pybound_callv1(const cb: Variant; const a0: Variant): Variant;
+function pybound_callv2(const cb: Variant; const a0, a1: Variant): Variant;
+function pybound_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
 { Finalizer for dying refcounted objects, installed into builtinheap's
   PXXObjFinalizeHook by the container constructors and pybound_new: releases
   the object's children recursively before the block is freed
@@ -690,12 +744,21 @@ function pyfile_open(const path, mode: AnsiString): TPyFile;
   (it never truncates), and the fill defaults to a space. }
 function pystr_rjust(const s: AnsiString; w: Int64): AnsiString;
 function pystr_rjust_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
+function pytruediv_f(a: Double; b: Double): Double;
 function pyfloordiv_i(a: Int64; b: Int64): Int64;
 function pyfloormod_i(a: Int64; b: Int64): Int64;
 function pyfloordiv_f(a: Double; b: Double): Double;
 function pyfloormod_f(a: Double; b: Double): Double;
-function min(a: Int64; b: Int64): Int64;
+{ The VARIANT arm comes FIRST in each set, and that ordering is the fix, not a
+  style choice: a subscript (`d["n"]`) is a variant RVALUE, matches no scalar
+  arm, and resolution then bound the first declared one — the Int64 arm, handed
+  a 16-byte variant unconverted, so `max(d["n"], 1)` printed a pointer while
+  `v = d["n"]; max(v, 1)` was right. Declared first, the variant arm is what an
+  unmatched argument falls back to, and it dispatches on the tag. }
+function min(const a: Variant; const b: Variant): Variant;
+function min(a: Int64; b: Int64): Int64; overload;
 function min(a: Double; b: Double): Double; overload;
+function max(const a: Variant; const b: Variant): Variant; overload;
 function max(a: Int64; b: Int64): Int64; overload;
 function max(a: Double; b: Double): Double; overload;
 { `list(x)` — a shallow COPY, as Python's list() constructor makes. Overloads
@@ -791,6 +854,14 @@ function pylist_eq(a: TPyList; b: TPyList): Boolean;
   cached_key` where the cache starts as None is ordinary Python, and comparing
   a tuple with a non-list is simply False — never an error. }
 function pylist_eq_v(a: TPyList; const v: Variant): Boolean;
+{ Python compares dicts by CONTENTS too — same length, and every key present in
+  the other with an equal value. Order does NOT participate: `{"a":1,"b":2}`
+  equals `{"b":2,"a":1}`, which is why this looks each key up rather than
+  walking the two in parallel. Without it `{"k":1} == {"k":1}` was a pointer
+  compare and answered False, so `if cfg == defaults:` never fired
+  (bug-nilpy-dict-equality-compares-identity). Element equality is PyVarEq, the
+  same rule pylist_eq uses, so nested lists and dicts compare by content too. }
+function pydict_eq(a: TPyDict; b: TPyDict): Boolean;
 function len(const s: AnsiString): Integer; overload;
 { len() of a VARIANT — a dynamically-typed value (a list element, a dataclass
   field, anything the frontend could not pin to a class). Without it, `len(x)`
@@ -808,6 +879,20 @@ function pyvar_contains(const c: Variant; const v: Variant): Boolean;
 function pystr_contains(const s: AnsiString; const sub: AnsiString): Boolean;
 function pyvartag(const v: Variant): Int64;
 function pyvarobj(const v: Variant): Pointer;
+{ pyvarobj plus a RETAIN. Use where the unboxed pointer is STORED into a
+  class-typed slot (a field, a class-typed local, a ctor argument that lands in
+  a field): that slot is a new owning reference, but unlike a variant slot it is
+  never released, so without the retain the object dies with the variant temp
+  the value came out of and the slot dangles. The visible shape was a list built
+  by `d.get(k, [])[:6]` passed to a dataclass ctor: correct at the call, garbage
+  (a recycled block) by the time the field was read. }
+function pyvarobj_owned(const v: Variant): Pointer;
+{ The callee address of `<variant>(args)`, CHECKED. A name bound to None — an
+  optional import that did not resolve, a value never assigned — has a nil
+  payload, and calling it jumped to address 0: a segfault with no diagnostic,
+  inside whatever routine happened to contain the call. Python raises TypeError
+  there; so do we. }
+function pyvar_callee_addr(const v: Variant; const what: AnsiString): Pointer;
 { `v[key]` / `v[key] = val` where v is a VARIANT holding a container — a dict
   entry that was itself a `.get()` result, so its container type is only known
   at run time. Dispatch on the boxed object: dict fetch/store by key, list index
@@ -862,6 +947,29 @@ function pystr_split_ws(const s: AnsiString): TPyList;
 function pystr_split_sep(const s: AnsiString; const sep: AnsiString): TPyList;
 function pystr_split_sep_max(const s: AnsiString; const sep: AnsiString; maxsplit: Integer): TPyList;
 function pystr_splitlines(const s: AnsiString): TPyList;
+{ str.replace(old, new[, count]) — CPython semantics: non-overlapping, left to
+  right, a NEGATIVE count means "every occurrence", and an EMPTY pattern inserts
+  the replacement between every character and at both ends
+  ("abc".replace("", "-") = "-a-b-c-"). }
+function pystr_replace(const s: AnsiString; const pat: AnsiString; const rep: AnsiString): AnsiString;
+function pystr_replace_n(const s: AnsiString; const pat: AnsiString; const rep: AnsiString; count: Integer): AnsiString;
+{ str.count(sub) — non-overlapping occurrences; an empty sub counts the gaps,
+  Length(s)+1, as CPython does. }
+function pystr_count(const s: AnsiString; const sub: AnsiString): Integer;
+{ str.rfind(sub) — last occurrence, -1 when absent. }
+function pystr_rfind(const s: AnsiString; const sub: AnsiString): Integer;
+function pystr_title(const s: AnsiString): AnsiString;
+function pystr_capitalize(const s: AnsiString): AnsiString;
+function pystr_swapcase(const s: AnsiString): AnsiString;
+function pystr_isalnum(const s: AnsiString): Boolean;
+function pystr_ljust(const s: AnsiString; w: Int64): AnsiString;
+function pystr_ljust_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
+function pystr_center(const s: AnsiString; w: Int64): AnsiString;
+function pystr_center_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
+{ str.zfill(width) — left-pad with '0', keeping a leading sign in front. }
+function pystr_zfill(const s: AnsiString; w: Int64): AnsiString;
+function pystr_removeprefix(const s: AnsiString; const pre: AnsiString): AnsiString;
+function pystr_removesuffix(const s: AnsiString; const suf: AnsiString): AnsiString;
 
 implementation
 
@@ -1245,6 +1353,231 @@ begin
   if st <= n then Result.append(Copy(s, st, n - st + 1));
 end;
 
+{ Does `pat` sit at s[i]? Shared by replace/count/rfind. i is 1-based and the
+  caller has already checked that pat FITS at i. }
+function PyStrMatchAt(const s: AnsiString; i: Integer; const pat: AnsiString): Boolean;
+var j, m: Integer;
+begin
+  m := Length(pat);
+  for j := 1 to m do
+    if s[i + j - 1] <> pat[j] then begin Result := False; Exit; end;
+  Result := True;
+end;
+
+function pystr_replace_n(const s: AnsiString; const pat: AnsiString; const rep: AnsiString; count: Integer): AnsiString;
+var n, m, k, i, j, hits, outLen, o, used: Integer;
+begin
+  n := Length(s); m := Length(pat); k := Length(rep);
+  if m = 0 then
+  begin
+    { empty pattern: rep goes before every character and once at the end }
+    hits := n + 1;
+    if (count >= 0) and (count < hits) then hits := count;
+    SetLength(Result, n + hits * k);
+    o := 1; used := 0;
+    for i := 1 to n + 1 do
+    begin
+      if used < hits then
+      begin
+        for j := 1 to k do begin Result[o] := rep[j]; Inc(o); end;
+        Inc(used);
+      end;
+      if i <= n then begin Result[o] := s[i]; Inc(o); end;
+    end;
+    Exit;
+  end;
+  { pass 1: how many non-overlapping matches will be taken }
+  hits := 0; i := 1;
+  while i <= n - m + 1 do
+  begin
+    if (count >= 0) and (hits >= count) then Break;
+    if PyStrMatchAt(s, i, pat) then begin Inc(hits); i := i + m; end
+    else Inc(i);
+  end;
+  if hits = 0 then begin Result := s; Exit; end;
+  { pass 2: write the result in one preallocated buffer (no per-byte realloc) }
+  outLen := n + hits * (k - m);
+  SetLength(Result, outLen);
+  o := 1; i := 1; used := 0;
+  while i <= n do
+  begin
+    if (used < hits) and (i <= n - m + 1) and PyStrMatchAt(s, i, pat) then
+    begin
+      for j := 1 to k do begin Result[o] := rep[j]; Inc(o); end;
+      Inc(used);
+      i := i + m;
+    end
+    else
+    begin
+      Result[o] := s[i]; Inc(o); Inc(i);
+    end;
+  end;
+end;
+
+function pystr_replace(const s: AnsiString; const pat: AnsiString; const rep: AnsiString): AnsiString;
+begin
+  Result := pystr_replace_n(s, pat, rep, -1);
+end;
+
+function pystr_count(const s: AnsiString; const sub: AnsiString): Integer;
+var n, m, i: Integer;
+begin
+  n := Length(s); m := Length(sub);
+  if m = 0 then begin Result := n + 1; Exit; end;
+  Result := 0;
+  i := 1;
+  while i <= n - m + 1 do
+    if PyStrMatchAt(s, i, sub) then begin Inc(Result); i := i + m; end
+    else Inc(i);
+end;
+
+function pystr_rfind(const s: AnsiString; const sub: AnsiString): Integer;
+var n, m, i: Integer;
+begin
+  n := Length(s); m := Length(sub);
+  if m = 0 then begin Result := n; Exit; end;   { CPython: "abc".rfind("") = 3 }
+  i := n - m + 1;
+  while i >= 1 do
+  begin
+    if PyStrMatchAt(s, i, sub) then begin Result := i - 1; Exit; end;   { 0-based }
+    Dec(i);
+  end;
+  Result := -1;
+end;
+
+function PyIsWordCh(c: Char): Boolean;
+begin
+  Result := ((c >= 'a') and (c <= 'z')) or ((c >= 'A') and (c <= 'Z')) or
+            ((c >= '0') and (c <= '9'));
+end;
+
+function pystr_title(const s: AnsiString): AnsiString;
+{ CPython: the first cased character of each run of word characters is upper,
+  the rest lower. Digits count as word characters but are not cased. }
+var i: Integer; c: Char; atStart: Boolean;
+begin
+  SetLength(Result, Length(s));
+  atStart := True;
+  for i := 1 to Length(s) do
+  begin
+    c := s[i];
+    if atStart then
+    begin
+      if (c >= 'a') and (c <= 'z') then c := Chr(Ord(c) - 32);
+    end
+    else if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
+    Result[i] := c;
+    atStart := not PyIsWordCh(s[i]);
+  end;
+end;
+
+function pystr_capitalize(const s: AnsiString): AnsiString;
+var i: Integer; c: Char;
+begin
+  SetLength(Result, Length(s));
+  for i := 1 to Length(s) do
+  begin
+    c := s[i];
+    if i = 1 then
+    begin
+      if (c >= 'a') and (c <= 'z') then c := Chr(Ord(c) - 32);
+    end
+    else if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
+    Result[i] := c;
+  end;
+end;
+
+function pystr_swapcase(const s: AnsiString): AnsiString;
+var i: Integer; c: Char;
+begin
+  SetLength(Result, Length(s));
+  for i := 1 to Length(s) do
+  begin
+    c := s[i];
+    if (c >= 'a') and (c <= 'z') then c := Chr(Ord(c) - 32)
+    else if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
+    Result[i] := c;
+  end;
+end;
+
+function pystr_isalnum(const s: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if Length(s) = 0 then Exit;   { "".isalnum() is False, like the other is* }
+  for i := 1 to Length(s) do
+    if not PyIsWordCh(s[i]) then Exit;
+  Result := True;
+end;
+
+function pystr_ljust_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
+var n, i: Integer; f: Char;
+begin
+  n := Length(s);
+  if (w <= n) or (Length(fill) = 0) then begin Result := s; Exit; end;
+  f := fill[1];
+  SetLength(Result, Integer(w));
+  for i := 1 to n do Result[i] := s[i];
+  for i := n + 1 to Integer(w) do Result[i] := f;
+end;
+
+function pystr_ljust(const s: AnsiString; w: Int64): AnsiString;
+begin
+  Result := pystr_ljust_c(s, w, ' ');
+end;
+
+function pystr_center_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
+var n, i, left: Integer; f: Char;
+begin
+  n := Length(s);
+  if (w <= n) or (Length(fill) = 0) then begin Result := s; Exit; end;
+  f := fill[1];
+  { CPython's exact rule (Objects/unicodeobject.c pad()):
+      marg = width - len;  left = marg div 2 + (marg and width and 1)
+    — so the odd extra pad lands on the LEFT only when both marg and width are
+    odd. "ab".center(5) = "  ab ", "abc".center(6) = " abc  ". }
+  left := (Integer(w) - n) div 2 + ((Integer(w) - n) and Integer(w) and 1);
+  SetLength(Result, Integer(w));
+  for i := 1 to left do Result[i] := f;
+  for i := 1 to n do Result[left + i] := s[i];
+  for i := left + n + 1 to Integer(w) do Result[i] := f;
+end;
+
+function pystr_center(const s: AnsiString; w: Int64): AnsiString;
+begin
+  Result := pystr_center_c(s, w, ' ');
+end;
+
+function pystr_zfill(const s: AnsiString; w: Int64): AnsiString;
+var n, i, pad, signLen: Integer;
+begin
+  n := Length(s);
+  if w <= n then begin Result := s; Exit; end;
+  signLen := 0;
+  if (n > 0) and ((s[1] = '-') or (s[1] = '+')) then signLen := 1;
+  pad := Integer(w) - n;
+  SetLength(Result, Integer(w));
+  for i := 1 to signLen do Result[i] := s[i];
+  for i := signLen + 1 to signLen + pad do Result[i] := '0';
+  for i := signLen + 1 to n do Result[i + pad] := s[i];
+end;
+
+function pystr_removeprefix(const s: AnsiString; const pre: AnsiString): AnsiString;
+begin
+  if (Length(pre) > 0) and pystr_startswith(s, pre) then
+    Result := Copy(s, Length(pre) + 1, Length(s) - Length(pre))
+  else
+    Result := s;
+end;
+
+function pystr_removesuffix(const s: AnsiString; const suf: AnsiString): AnsiString;
+begin
+  if (Length(suf) > 0) and pystr_endswith(s, suf) then
+    Result := Copy(s, 1, Length(s) - Length(suf))
+  else
+    Result := s;
+end;
+
 { sep.join(list). CPython requires every item to BE a str and raises TypeError
   otherwise — it does not stringify. Matched here rather than quietly calling
   VariantToStr on an int, which would turn a real type error into plausible
@@ -1274,6 +1607,35 @@ end;
 function pyvarobj(const v: Variant): Pointer;
 begin
   Result := Pointer(PPyVarRec(@v)^.Payload);
+end;
+
+function pyvar_callee_addr(const v: Variant; const what: AnsiString): Pointer;
+var nm: AnsiString;
+begin
+  { A FUNCTION VALUE (VT_BOUNDMETHOD, tag 8) carries a {code, recv} PAIR pointer,
+    not a code address — jumping to the payload landed in the pair's own bytes.
+    Unwrap it. A pair with a receiver cannot be called through this path at all
+    (the receiver has to be prepended to the argument list); the dynamic-call
+    guard routes those to pybound_callv*, so reaching here with one means an
+    arity past that guard — say so instead of calling the method without Self. }
+  if PPyVarRec(@v)^.VType = 8 then
+  begin
+    if pybound_recv(v) <> nil then
+    begin
+      if what = '' then nm := 'object' else nm := what;
+      raise Exception.Create('TypeError: ' + nm + ' is a bound method taking too '
+        + 'many arguments to call through a name (max 3)');
+    end;
+    Result := pybound_code(v);
+  end
+  else
+    Result := Pointer(PPyVarRec(@v)^.Payload);
+  if Result = nil then
+  begin
+    if what = '' then nm := 'object' else nm := what;
+    raise Exception.Create('TypeError: ' + nm + ' is not callable — the name is '
+      + 'None (an import that did not resolve, or a value never assigned)');
+  end;
 end;
 
 var
@@ -1401,9 +1763,16 @@ begin
 end;
 
 procedure PyIndexError;
+{ RAISE, do not halt. The exception classes are declared at the top of this
+  unit and a NilPy `raise IndexError(...)` is already caught correctly, but the
+  runtime's own error paths wrote a line and called Halt — so NOTHING the
+  runtime raised was catchable, not even by a bare `except:`, and ordinary
+  defensive Python (`try: v = xs[i] except IndexError:`) could not be written
+  at all (bug-nilpy-runtime-raised-errors-bypass-try-except). Uncaught, this
+  still ends the process with the same exit code and a message naming the same
+  class, via the unhandled-exception handler. }
 begin
-  writeln('IndexError: list index out of range');
-  Halt(1);
+  raise IndexError.Create('list index out of range');
 end;
 
 constructor TPyList.Create;
@@ -1413,6 +1782,42 @@ begin
   FLen := 0;
   FCap := 0;
   FItems := nil;
+end;
+
+function TPyList.index(const v: Variant): Integer;
+var i: Integer;
+begin
+  for i := 0 to FLen - 1 do
+    if PyVarEq(PPyVarRec(NativeInt(FItems) + i * 16), PPyVarRec(@v)) then
+    begin
+      Result := i;
+      Exit;
+    end;
+  Result := -1;
+  { CPython's exact wording is `<value> is not in list` — the VALUE, not a
+    placeholder, and it differs from list.remove's message. }
+  raise ValueError.Create(pyrepr_of(v) + ' is not in list');
+end;
+
+procedure TPyList.remove(const v: Variant);
+var i: Integer;
+begin
+  for i := 0 to FLen - 1 do
+    if PyVarEq(PPyVarRec(NativeInt(FItems) + i * 16), PPyVarRec(@v)) then
+    begin
+      pop_at(i);
+      Exit;
+    end;
+  raise ValueError.Create('list.remove(x): x not in list');
+end;
+
+function TPyList.copy: TPyList;
+var i: Integer;
+begin
+  Result := TPyList.Create;
+  Result.FIsTuple := FIsTuple;
+  for i := 0 to FLen - 1 do
+    Result.append(at(i));
 end;
 
 function TPyList.count(const v: Variant): Integer;
@@ -1483,6 +1888,12 @@ end;
 function PyVarSlotIsObj(t: Int64): Boolean;
 begin
   PyVarSlotIsObj := (t = 7) or (t = 8) or (t = 9);   { 9 = pyeval closure }
+end;
+
+function pyvarobj_owned(const v: Variant): Pointer;
+begin
+  Result := Pointer(PPyVarRec(@v)^.Payload);
+  if PyVarSlotIsObj(PPyVarRec(@v)^.VType) then PXXObjRetain(Result);
 end;
 
 procedure PyVarSlotClear(dst: PPyVarRec);
@@ -1719,7 +2130,15 @@ begin
         if not PyVarEq(PPyVarRec(NativeInt(TPyList(pl).FItems) + k * 16),
                        PPyVarRec(NativeInt(TPyList(ql).FItems) + k * 16)) then Exit;
       Result := True;
-    end;
+    end
+    else if (pl is TPyDict) and (ql is TPyDict) then
+      { …and two DICTS by contents, for the same reason. This is what makes a
+        NESTED dict compare correctly: the outer pydict_eq reaches its values
+        through PyVarEq, so without this arm `{"n": {"m": 1}} == {"n": {"m": 1}}`
+        was False while the list-valued `{"n": [1, 2]}` form was already True.
+        Mutually recursive with pydict_eq, which is why that one is
+        forward-declared. }
+      Result := pydict_eq(TPyDict(pl), TPyDict(ql));
     Exit;
   end;
   if p^.VType = 8193 then
@@ -1795,9 +2214,9 @@ begin
 end;
 
 procedure PyKeyError;
+{ RAISE — see PyIndexError. }
 begin
-  WriteLn('KeyError');
-  Halt(1);
+  raise KeyError.Create('key not found');
 end;
 
 constructor TPyDict.Create;
@@ -2124,6 +2543,17 @@ begin
     dict.clear() does too }
   Self.FLen := 0;
   PyDictRehash(Self, Self.FHashCap);
+end;
+
+function TPyDict.pop(const k: Variant): Variant;
+var i: Integer; src, dst: PPyVarRec;
+begin
+  i := indexof(k);
+  if i < 0 then PyKeyError;
+  src := PPyVarRec(NativeInt(FVals) + i * 16);
+  dst := PPyVarRec(@Result);
+  PyVarSlotInit(dst, src);
+  remove(k);
 end;
 
 function TPyDict.pop(const k: Variant; const d: Variant): Variant;
@@ -2557,6 +2987,58 @@ end;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
 begin
   Result := d.indexof(k) >= 0;
+end;
+
+function PyDictIndexOfPtr(d: TPyDict; q: PPyVarRec): Integer;
+{ TPyDict.indexof by SLOT POINTER. The method itself takes `const k: Variant`
+  and immediately takes its address, so calling it from a walk over another
+  dict's key storage would mean copying each key into a local Variant purely to
+  have its address taken again. Same open-addressing probe, same linear
+  fallback for the never-indexed dict. }
+var
+  i: Integer;
+  mask, pos: NativeUInt;
+  idx: Integer;
+begin
+  Result := -1;
+  if d.FLen = 0 then Exit;
+  if d.FHashCap = 0 then
+  begin
+    for i := 0 to d.FLen - 1 do
+      if PyVarEq(PPyVarRec(NativeInt(d.FKeys) + i * 16), q) then
+      begin Result := i; Exit; end;
+    Exit;
+  end;
+  mask := NativeUInt(d.FHashCap) - 1;
+  pos := PyVarHashKey(q) and mask;
+  while True do
+  begin
+    idx := PInteger(NativeInt(d.FHash) + NativeInt(pos) * 4)^;
+    if idx < 0 then Exit;              { empty slot -> key absent }
+    if PyVarEq(PPyVarRec(NativeInt(d.FKeys) + idx * 16), q) then
+    begin Result := idx; Exit; end;
+    pos := (pos + 1) and mask;
+  end;
+end;
+
+function pydict_eq(a: TPyDict; b: TPyDict): Boolean;
+{ See the declaration for why this is a per-key LOOKUP rather than a parallel
+  walk: dict equality ignores insertion order. }
+var
+  i, j: Integer;
+begin
+  Result := False;
+  if a = b then begin Result := True; Exit; end;
+  if (a = nil) or (b = nil) then Exit;
+  if a.FLen <> b.FLen then Exit;
+  for i := 0 to a.FLen - 1 do
+  begin
+    j := PyDictIndexOfPtr(b, PPyVarRec(NativeInt(a.FKeys) + i * 16));
+    if j < 0 then Exit;
+    if not PyVarEq(PPyVarRec(NativeInt(a.FVals) + i * 16),
+                   PPyVarRec(NativeInt(b.FVals) + j * 16)) then Exit;
+  end;
+  Result := True;
 end;
 
 function PyVarIsFloat(p: PPyVarRec): Boolean;
@@ -3060,15 +3542,30 @@ begin
   Val(t, v, code);
   if (code <> 0) or (t = '') then
   begin
-    writeln('Runtime error: int() got a string that is not a number: ', s);
-    Halt(219);
+    { RAISE — see PyIndexError. `int("abc")` is the shape
+      bug-nilpy-int-parse-halts-instead-of-raising was opened for, and Python
+      raises ValueError here. }
+    raise ValueError.Create('invalid literal for int() with base 10: ' + Chr(39) + s + Chr(39));
   end;
   Result := v;
+end;
+
+{ Python's `/` ALWAYS yields a float and raises ZeroDivisionError on a zero
+  divisor. Plain IEEE division does neither — `3 / 0` produced a saturated
+  Int64 formatted through the large-float path, i.e. garbage bytes on stdout
+  (bug-nilpy-runtime-raised-errors-bypass-try-except). }
+function pytruediv_f(a: Double; b: Double): Double;
+begin
+  if b = 0 then raise ZeroDivisionError.Create('division by zero');
+  pytruediv_f := a / b;
 end;
 
 function pyfloordiv_i(a: Int64; b: Int64): Int64;
 var q, r: Int64;
 begin
+  { Python raises ZeroDivisionError; the bare `div` below traps as Pascal
+    runtime error 200, which unwinds nothing and no handler can catch. }
+  if b = 0 then raise ZeroDivisionError.Create('integer division or modulo by zero');
   q := a div b;
   r := a mod b;
   if (r <> 0) and ((r < 0) <> (b < 0)) then q := q - 1;
@@ -3078,6 +3575,7 @@ end;
 function pyfloormod_i(a: Int64; b: Int64): Int64;
 var r: Int64;
 begin
+  if b = 0 then raise ZeroDivisionError.Create('integer modulo by zero');
   r := a mod b;
   if (r <> 0) and ((r < 0) <> (b < 0)) then r := r + b;
   Result := r;
@@ -3086,6 +3584,7 @@ end;
 function pyfloordiv_f(a: Double; b: Double): Double;
 var q: Double;
 begin
+  if b = 0 then raise ZeroDivisionError.Create('float floor division by zero');
   q := Int(a / b);
   { Int() truncates toward zero; step down when the true quotient was negative
     and inexact, so the result floors like Python's. }
@@ -3116,6 +3615,16 @@ end;
 function max(a: Double; b: Double): Double; overload;
 begin
   if a > b then Result := a else Result := b;
+end;
+
+function min(const a: Variant; const b: Variant): Variant; overload;
+begin
+  if pyvar_gt(a, b) then Result := b else Result := a;
+end;
+
+function max(const a: Variant; const b: Variant): Variant; overload;
+begin
+  if pyvar_gt(a, b) then Result := a else Result := b;
 end;
 
 
@@ -3459,6 +3968,14 @@ begin
   Result := acc;
 end;
 
+function pyfloat_any(const v: Variant): Double;
+var t: Int64;
+begin
+  t := pyvartag(v);
+  if (t = 5) or (t = 6) then pyfloat_any := pyfloat_parse(pystr_of(v))
+  else pyfloat_any := pyvar_to_float(v);
+end;
+
 function pyfloat_ofint(v: Int64): Double;
 begin
   Result := v;
@@ -3718,25 +4235,7 @@ begin
   Result := False;
   if Length(p) = 0 then Exit;
   cs := p + #0;
-  r := -1;
-{$ifdef CPUX86_64}
-  r := __pxxrawsyscall(21, Int64(@cs[1]), 0, 0, 0, 0, 0);
-{$endif}
-{$ifdef CPUAARCH64}
-  r := __pxxrawsyscall(48, -100, Int64(@cs[1]), 0, 0, 0, 0);
-{$endif}
-{$ifdef CPU_ARM32}
-  r := __pxxrawsyscall(33, Int64(@cs[1]), 0, 0, 0, 0, 0);
-{$endif}
-{$ifdef CPU_I386}
-  r := __pxxrawsyscall(33, Int64(@cs[1]), 0, 0, 0, 0, 0);
-{$endif}
-{$ifdef CPU_RISCV32}
-{$ifndef PXX_ESP}
-  r := __pxxrawsyscall(48, -100, Int64(@cs[1]), 0, 0, 0, 0);
-{$endif}
-{$endif}
-  Result := r = 0;
+  Result := PyPalAccessOk(@cs[1]);
 end;
 
 { ---- environment ---------------------------------------------------------- }
@@ -3754,24 +4253,10 @@ begin
   if PyEnvLoaded then Exit;
   PyEnvLoaded := True;
   PyEnvRaw := '';
-  fd := -1;
-{$ifdef CPUX86_64}
-  { openat(AT_FDCWD, path, O_RDONLY) }
-  fd := __pxxrawsyscall(257, Int64(-100), Int64(PChar('/proc/self/environ')), 0, 0, 0, 0);
-{$endif}
-{$ifdef CPUAARCH64}
-  fd := __pxxrawsyscall(56, Int64(-100), Int64(PChar('/proc/self/environ')), 0, 0, 0, 0);
-{$endif}
+  fd := PyPalOpen(PChar('/proc/self/environ'), PYPAL_O_RDONLY, 0);
   if fd < 0 then Exit;
-  r := 0;
-{$ifdef CPUX86_64}
-  r := __pxxrawsyscall(0, fd, Int64(@buf[0]), 16384, 0, 0, 0);
-  closed := __pxxrawsyscall(3, fd, 0, 0, 0, 0, 0);
-{$endif}
-{$ifdef CPUAARCH64}
-  r := __pxxrawsyscall(63, fd, Int64(@buf[0]), 16384, 0, 0, 0);
-  closed := __pxxrawsyscall(57, fd, 0, 0, 0, 0, 0);
-{$endif}
+  r := PyPalRead(fd, @buf[0], 16384);
+  closed := PyPalClose(fd);
   if r <= 0 then Exit;
   for i := 0 to Integer(r) - 1 do
     if buf[i] = #0 then PyEnvRaw := PyEnvRaw + #1
@@ -3867,24 +4352,7 @@ var buf: array[0..4095] of Char; r: Int64; i: Integer;
 begin
   Result := '';
   buf[0] := #0;
-  r := -1;
-{$ifdef CPUX86_64}
-  r := __pxxrawsyscall(79, Int64(@buf[0]), 4096, 0, 0, 0, 0);
-{$endif}
-{$ifdef CPUAARCH64}
-  r := __pxxrawsyscall(17, Int64(@buf[0]), 4096, 0, 0, 0, 0);
-{$endif}
-{$ifdef CPU_ARM32}
-  r := __pxxrawsyscall(183, Int64(@buf[0]), 4096, 0, 0, 0, 0);
-{$endif}
-{$ifdef CPU_I386}
-  r := __pxxrawsyscall(183, Int64(@buf[0]), 4096, 0, 0, 0, 0);
-{$endif}
-{$ifdef CPU_RISCV32}
-{$ifndef PXX_ESP}
-  r := __pxxrawsyscall(17, Int64(@buf[0]), 4096, 0, 0, 0, 0);
-{$endif}
-{$endif}
+  r := PyPalGetcwd(@buf[0], 4096);
   if r <= 0 then Exit;
   { the kernel returns a NUL-terminated path; length is read from the bytes so
     the differing return conventions (length vs pointer) do not matter }
@@ -3939,40 +4407,19 @@ end;
   is used everywhere for portability. }
 function pyfile_slurp(const path: AnsiString; var ok: Boolean): AnsiString;
 var cs: AnsiString; fd, nread: Int64; buf: array[0..8191] of Char; i: Integer;
-    nrOpenat, nrRead, nrClose: Integer;
     rlen, rcap: Integer;
 begin
   Result := '';
   ok := False;
   rlen := 0; rcap := 0;
-  { syscall numbers resolved once, so the read loop below has no ifdefs in it.
-    openat(AT_FDCWD) everywhere for portability (aarch64/riscv lack open). }
-  nrOpenat := 0; nrRead := 0; nrClose := 0;
-{$ifdef CPUX86_64}
-  nrOpenat := 257; nrRead := 0; nrClose := 3;
-{$endif}
-{$ifdef CPUAARCH64}
-  nrOpenat := 56; nrRead := 63; nrClose := 57;
-{$endif}
-{$ifdef CPU_ARM32}
-  nrOpenat := 322; nrRead := 3; nrClose := 6;
-{$endif}
-{$ifdef CPU_I386}
-  nrOpenat := 295; nrRead := 3; nrClose := 6;
-{$endif}
-{$ifdef CPU_RISCV32}
-{$ifndef PXX_ESP}
-  nrOpenat := 56; nrRead := 63; nrClose := 57;
-{$endif}
-{$endif}
-  if nrOpenat = 0 then Exit;   { unsupported target }
+  if not PyPalSupported then Exit;   { unsupported target }
   cs := path + #0;
-  fd := __pxxrawsyscall(nrOpenat, -100, Int64(@cs[1]), 0, 0, 0, 0);
+  fd := PyPalOpen(@cs[1], PYPAL_O_RDONLY, 0);
   if fd < 0 then Exit;
   nread := 8192;
   while nread = 8192 do
   begin
-    nread := __pxxrawsyscall(nrRead, fd, Int64(@buf[0]), 8192, 0, 0, 0);
+    nread := PyPalRead(fd, @buf[0], 8192);
     if nread > 0 then
     begin
       { Amortised-doubling append, NOT `Result := Result + buf[i]` per byte
@@ -3991,67 +4438,30 @@ begin
     end;
   end;
   SetLength(Result, rlen);   { trim to the exact length read }
-  nread := __pxxrawsyscall(nrClose, fd, 0, 0, 0, 0, 0);  { result discarded }
+  nread := PyPalClose(fd);   { result discarded }
   ok := True;
 end;
 
 function pystdin_read(n: Integer): AnsiString;
 var nread: Int64; buf: array[0..8191] of Char; i, want: Integer;
-    nrRead: Integer; supported: Boolean;
 begin
   Result := '';
   if n <= 0 then Exit;
-  nrRead := 0; supported := False;
-{$ifdef CPUX86_64}
-  nrRead := 0; supported := True;
-{$endif}
-{$ifdef CPUAARCH64}
-  nrRead := 63; supported := True;
-{$endif}
-{$ifdef CPU_ARM32}
-  nrRead := 3; supported := True;
-{$endif}
-{$ifdef CPU_I386}
-  nrRead := 3; supported := True;
-{$endif}
-{$ifdef CPU_RISCV32}
-{$ifndef PXX_ESP}
-  nrRead := 63; supported := True;
-{$endif}
-{$endif}
-  if not supported then Exit;
+  if not PyPalSupported then Exit;
   want := n;
   if want > 8192 then want := 8192;
-  nread := __pxxrawsyscall(nrRead, 0, Int64(@buf[0]), want, 0, 0, 0);
+  nread := PyPalRead(0, @buf[0], want);
   if nread > 0 then
     for i := 0 to nread - 1 do Result := Result + buf[i];
 end;
 
 function pyos_remove(const path: AnsiString): Integer;
-var cs: AnsiString; r: Int64; nrUnlinkat: Integer;
+var cs: AnsiString; r: Int64;
 begin
   Result := 0;
-  nrUnlinkat := 0;
-{$ifdef CPUX86_64}
-  nrUnlinkat := 263;
-{$endif}
-{$ifdef CPUAARCH64}
-  nrUnlinkat := 35;
-{$endif}
-{$ifdef CPU_ARM32}
-  nrUnlinkat := 328;
-{$endif}
-{$ifdef CPU_I386}
-  nrUnlinkat := 301;
-{$endif}
-{$ifdef CPU_RISCV32}
-{$ifndef PXX_ESP}
-  nrUnlinkat := 35;
-{$endif}
-{$endif}
-  if nrUnlinkat = 0 then Exit;
+  if not PyPalSupported then Exit;
   cs := path + #0;
-  r := __pxxrawsyscall(nrUnlinkat, -100, Int64(@cs[1]), 0, 0, 0, 0);   { AT_FDCWD }
+  r := PyPalUnlink(@cs[1]);
   { CPython os.remove RAISES on failure (deleting a missing file must be a
     catchable error — Forth-2012 DELETE-FILE expects a nonzero ior, not 0). }
   if r < 0 then
@@ -4060,30 +4470,12 @@ begin
 end;
 
 function pyos_rename(const src: AnsiString; const dst: AnsiString): Integer;
-var cs, cd: AnsiString; r: Int64; nrRenameat: Integer;
+var cs, cd: AnsiString; r: Int64;
 begin
   Result := 0;
-  nrRenameat := 0;
-{$ifdef CPUX86_64}
-  nrRenameat := 264;
-{$endif}
-{$ifdef CPUAARCH64}
-  nrRenameat := 38;
-{$endif}
-{$ifdef CPU_ARM32}
-  nrRenameat := 329;
-{$endif}
-{$ifdef CPU_I386}
-  nrRenameat := 302;
-{$endif}
-{$ifdef CPU_RISCV32}
-{$ifndef PXX_ESP}
-  nrRenameat := 38;
-{$endif}
-{$endif}
-  if nrRenameat = 0 then Exit;
+  if not PyPalSupported then Exit;
   cs := src + #0; cd := dst + #0;
-  r := __pxxrawsyscall(nrRenameat, -100, Int64(@cs[1]), -100, Int64(@cd[1]), 0, 0);
+  r := PyPalRename(@cs[1], @cd[1]);
   { CPython os.rename raises on failure, same as os.remove above }
   if r < 0 then
     raise OSError.Create('FileNotFoundError: ' + src);
@@ -4100,7 +4492,7 @@ begin
 {$ifdef CPUX86_64}
   cs := path + #0;
   FillChar(buf[0], SizeOf(buf), 0);
-  r := __pxxrawsyscall(4, Int64(@cs[1]), Int64(@buf[0]), 0, 0, 0, 0);  { stat }
+  r := PyPalStat(@cs[1], @buf[0]);
   if r < 0 then
     raise OSError.Create('FileNotFoundError: ' + path);
   Result.st_mode := PInt64(@buf[24])^ and $FFFFFFFF;   { u32 st_mode (uid sits above) }
@@ -4240,10 +4632,19 @@ begin
 end;
 
 type
-  TPyCbM0 = function(recv: Pointer): Int64;
-  TPyCbM1 = function(recv: Pointer; const a0: Variant): Int64;
-  TPyCbF0 = function: Int64;
-  TPyCbF1 = function(const a0: Variant): Int64;
+  { A NilPy def/method with no `-> ann` returns a VARIANT, and a Variant result
+    travels through a hidden destination pointer the callee copies into on the
+    way out. Calling one through a `: Int64` pointer left that register holding
+    whatever the previous call put there, and the epilogue wrote 16 bytes to it.
+    A `-> None` callee ignores the destination, so this shape is right for both. }
+  TPyCbM0 = function(recv: Pointer): Variant;
+  TPyCbM1 = function(recv: Pointer; const a0: Variant): Variant;
+  TPyCbM2 = function(recv: Pointer; const a0, a1: Variant): Variant;
+  TPyCbM3 = function(recv: Pointer; const a0, a1, a2: Variant): Variant;
+  TPyCbF0 = function: Variant;
+  TPyCbF1 = function(const a0: Variant): Variant;
+  TPyCbF2 = function(const a0, a1: Variant): Variant;
+  TPyCbF3 = function(const a0, a1, a2: Variant): Variant;
 
 function pycallback_is(const cb: Variant): Boolean;
 begin
@@ -4251,9 +4652,14 @@ begin
 end;
 
 function pycallback_call0(const cb: Variant): Int64;
-var code, recv: Pointer; m0: TPyCbM0; f0: TPyCbF0;
+{ NOTE the empty parens on f0(): a bare procedural-variable NAME is not a call
+  here, it is the pointer value — `pycallback_call0 := f0` silently assigned the
+  code address and never invoked the callback, which is why a zero-argument
+  `command=`/`after` handler did nothing at all. }
+var code, recv: Pointer; m0: TPyCbM0; f0: TPyCbF0; r: Variant;
 begin
   pycallback_call0 := 0;
+  r := pynone;
   if not pycallback_is(cb) then Exit;
   code := pybound_code(cb);
   recv := pybound_recv(cb);
@@ -4261,19 +4667,20 @@ begin
   if recv = nil then
   begin
     f0 := TPyCbF0(code);
-    pycallback_call0 := f0;
+    r := f0();
   end
   else
   begin
     m0 := TPyCbM0(code);
-    pycallback_call0 := m0(recv);
+    r := m0(recv);
   end;
 end;
 
 function pycallback_call1(const cb: Variant; const a0: Variant): Int64;
-var code, recv: Pointer; m1: TPyCbM1; f1: TPyCbF1;
+var code, recv: Pointer; m1: TPyCbM1; f1: TPyCbF1; r: Variant;
 begin
   pycallback_call1 := 0;
+  r := pynone;
   if not pycallback_is(cb) then Exit;
   code := pybound_code(cb);
   recv := pybound_recv(cb);
@@ -4281,18 +4688,72 @@ begin
   if recv = nil then
   begin
     f1 := TPyCbF1(code);
-    pycallback_call1 := f1(a0);
+    r := f1(a0);
   end
   else
   begin
     m1 := TPyCbM1(code);
-    pycallback_call1 := m1(recv, a0);
+    r := m1(recv, a0);
   end;
 end;
 
 function pybound_recv(const v: Variant): Pointer;
 begin
   pybound_recv := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.Recv;
+end;
+
+{ CALL a function value and KEEP its result — what an expression `f(x)` needs and
+  pycallback_call* (a void event handler) cannot give. Both halves of the pair
+  are honoured: a nil receiver is a plain def, a non-nil one a bound method whose
+  receiver goes in as the hidden first argument. Every callee reached this way
+  uses NilPy's function-object ABI (variant params, variant result — see
+  PyDefUsedAsValue), which is exactly what these signatures declare. }
+function pybound_callv0(const cb: Variant): Variant;
+var code, recv: Pointer; m0: TPyCbM0; f0: TPyCbF0;
+begin
+  Result := pynone;
+  if not pycallback_is(cb) then Exit;
+  code := pybound_code(cb);
+  if code = nil then Exit;
+  recv := pybound_recv(cb);
+  if recv = nil then begin f0 := TPyCbF0(code); Result := f0(); end
+  else begin m0 := TPyCbM0(code); Result := m0(recv); end;
+end;
+
+function pybound_callv1(const cb: Variant; const a0: Variant): Variant;
+var code, recv: Pointer; m1: TPyCbM1; f1: TPyCbF1;
+begin
+  Result := pynone;
+  if not pycallback_is(cb) then Exit;
+  code := pybound_code(cb);
+  if code = nil then Exit;
+  recv := pybound_recv(cb);
+  if recv = nil then begin f1 := TPyCbF1(code); Result := f1(a0); end
+  else begin m1 := TPyCbM1(code); Result := m1(recv, a0); end;
+end;
+
+function pybound_callv2(const cb: Variant; const a0, a1: Variant): Variant;
+var code, recv: Pointer; m2: TPyCbM2; f2: TPyCbF2;
+begin
+  Result := pynone;
+  if not pycallback_is(cb) then Exit;
+  code := pybound_code(cb);
+  if code = nil then Exit;
+  recv := pybound_recv(cb);
+  if recv = nil then begin f2 := TPyCbF2(code); Result := f2(a0, a1); end
+  else begin m2 := TPyCbM2(code); Result := m2(recv, a0, a1); end;
+end;
+
+function pybound_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
+var code, recv: Pointer; m3: TPyCbM3; f3: TPyCbF3;
+begin
+  Result := pynone;
+  if not pycallback_is(cb) then Exit;
+  code := pybound_code(cb);
+  if code = nil then Exit;
+  recv := pybound_recv(cb);
+  if recv = nil then begin f3 := TPyCbF3(code); Result := f3(a0, a1, a2); end
+  else begin m3 := TPyCbM3(code); Result := m3(recv, a0, a1, a2); end;
 end;
 
 { input(): read one line from stdin and drop the trailing newline, as Python's
@@ -4629,6 +5090,136 @@ begin
   pystr_format := PyFormatApply(fmt, a, a, 1);
 end;
 
+function pypercent_format(const fmt: AnsiString; const args: Variant): AnsiString;
+var i, width, prec, argi, nargs: Integer;
+    zero, leftAlign, hasPrec: Boolean;
+    outS, spec: AnsiString;
+    conv: Char;
+    lst: TPyList;
+    cur: Variant;
+begin
+  { TUPLE OR SINGLE VALUE — Python's rule: a tuple is a sequence of arguments, a
+    list is ONE value (`"[%s]" % [1,2]` prints `[[1, 2]]`). Both are a TPyList
+    here, so the answer comes from the list's own tuple flag, which the frontend
+    set where the syntax was still visible and which travels with the object
+    through variables and calls. }
+  lst := nil;
+  if PPyVarRec(@args)^.VType = 7 then
+    if TObject(pyvarobj(args)) is TPyList then
+      if TPyList(pyvarobj(args)).FIsTuple then lst := TPyList(pyvarobj(args));
+  if lst <> nil then nargs := lst.count else nargs := 1;
+  outS := '';
+  argi := 0;
+  i := 1;
+  while i <= Length(fmt) do
+  begin
+    if fmt[i] <> '%' then
+    begin
+      outS := outS + fmt[i];
+      Inc(i);
+      Continue;
+    end;
+    Inc(i);
+    if (i <= Length(fmt)) and (fmt[i] = '%') then
+    begin
+      outS := outS + '%';
+      Inc(i);
+      Continue;
+    end;
+    leftAlign := False;
+    zero := False;
+    width := 0;
+    prec := 0;
+    hasPrec := False;
+    while (i <= Length(fmt)) and ((fmt[i] = '-') or (fmt[i] = '0') or (fmt[i] = '+') or (fmt[i] = ' ')) do
+    begin
+      if fmt[i] = '-' then leftAlign := True
+      else if fmt[i] = '0' then zero := True;
+      Inc(i);
+    end;
+    while (i <= Length(fmt)) and (fmt[i] >= '0') and (fmt[i] <= '9') do
+    begin
+      width := width * 10 + (Ord(fmt[i]) - Ord('0'));
+      Inc(i);
+    end;
+    if (i <= Length(fmt)) and (fmt[i] = '.') then
+    begin
+      hasPrec := True;
+      Inc(i);
+      while (i <= Length(fmt)) and (fmt[i] >= '0') and (fmt[i] <= '9') do
+      begin
+        prec := prec * 10 + (Ord(fmt[i]) - Ord('0'));
+        Inc(i);
+      end;
+    end;
+    if i > Length(fmt) then
+    begin
+      WriteLn('ValueError: incomplete format');
+      Halt(1);
+    end;
+    conv := fmt[i];
+    Inc(i);
+    { the argument this placeholder consumes }
+    if lst <> nil then
+    begin
+      if argi >= nargs then
+      begin
+        WriteLn('TypeError: not enough arguments for format string');
+        Halt(1);
+      end;
+      cur := lst.at(argi);
+    end
+    else
+    begin
+      if argi >= 1 then
+      begin
+        WriteLn('TypeError: not enough arguments for format string');
+        Halt(1);
+      end;
+      cur := args;
+    end;
+    Inc(argi);
+    { translate into the {}-spec grammar and reuse its formatter }
+    spec := '';
+    if leftAlign then spec := '<';
+    if zero and (not leftAlign) then spec := spec + '0';
+    if width > 0 then spec := spec + pystr_of(Int64(width));
+    case conv of
+      'd', 'i', 'u': spec := spec + 'd';
+      'x': spec := spec + 'x';
+      'X': spec := spec + 'X';
+      'o': spec := spec + 'o';
+      'f', 'F', 'e', 'E', 'g', 'G':
+        begin
+          if not hasPrec then prec := 6;
+          spec := spec + '.' + pystr_of(Int64(prec)) + 'f';
+        end;
+      's', 'r':
+        begin
+          { a str conversion of ANY value, then the same padding.
+            pyvar_print_of, not pystr_of: %s of a LIST prints it the way Python
+            does (`"[%s]" % [1,2]` -> `[[1, 2]]`), and pystr_of renders a
+            container as empty. It falls back to str for every scalar. }
+          outS := outS + PyFmtPad(pyvar_print_of(cur), width, False, leftAlign);
+          Continue;
+        end;
+    else
+      begin
+        WriteLn('ValueError: unsupported format character "', conv, '"');
+        Halt(1);
+      end;
+    end;
+    outS := outS + pyformat_of(cur, spec);
+  end;
+  if lst <> nil then
+    if argi < nargs then
+    begin
+      WriteLn('TypeError: not all arguments converted during string formatting');
+      Halt(1);
+    end;
+  Result := outS;
+end;
+
 function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
 var p, width: Integer; zero, leftAlign: Boolean; kind: Char; body: AnsiString;
 begin
@@ -4779,6 +5370,11 @@ begin
     Halt(1);
   end;
   if (kind = 'f') or (kind = 'F') then body := PyFmtFixed(d, prec)
+  else if kind = '%' then
+    { Python's percentage form: multiply by 100, format fixed with the given
+      precision (6 by default, as for `f`), append the sign. `{x:.0%}` is how a
+      confidence or agreement ratio is spelled everywhere. }
+    body := PyFmtFixed(d * 100.0, prec) + '%'
   else if (kind = 'g') or (kind = 'G') then body := FloatToStr(d)
   else if kind = 's' then body := FloatToStr(d)
   else
@@ -5283,11 +5879,11 @@ begin
     if mode[i] = 'w' then wantCreate := True;
     if mode[i] = '+' then wantRW := True;
   end;
-  if wantCreate then flags := 2 + 64 + 512        { O_RDWR|O_CREAT|O_TRUNC }
-  else if wantRW then flags := 2                  { O_RDWR }
-  else flags := 0;                                { O_RDONLY }
+  if wantCreate then flags := PYPAL_O_RDWR + PYPAL_O_CREAT + PYPAL_O_TRUNC
+  else if wantRW then flags := PYPAL_O_RDWR
+  else flags := PYPAL_O_RDONLY;
   z := path + #0;
-  fd := __pxxrawsyscall(2, Int64(NativeInt(PChar(z))), flags, 420, 0, 0, 0);  { open, 0644 }
+  fd := PyPalOpen(PChar(z), flags, 420);          { 0644 }
   if fd < 0 then
     { CPython open() raises a CATCHABLE OSError (uforth's OPEN-FILE wraps the
       call in try/except and turns it into a nonzero ior — the Forth-2012
@@ -5302,7 +5898,7 @@ var r: TPyBytes; got: Int64;
 begin
   if u < 0 then u := 0;
   r := TPyBytes.Create(u);
-  got := __pxxrawsyscall(0, FFd, Int64(NativeInt(r.FData)), u, 0, 0, 0);
+  got := PyPalRead(FFd, r.FData, u);
   if got < 0 then got := 0;
   r.FLen := got;
   Result := r;
@@ -5315,7 +5911,7 @@ begin
   r := TPyBytes.Create(0);
   while True do
   begin
-    got := __pxxrawsyscall(0, FFd, Int64(NativeInt(@ch)), 1, 0, 0, 0);
+    got := PyPalRead(FFd, @ch, 1);
     if got <= 0 then Break;
     r.append(ch);
     if ch = 10 then Break;
@@ -5326,30 +5922,30 @@ end;
 function TPyFile.write(b: TPyBytes): Int64;
 begin
   if (b = nil) or (b.FLen = 0) then begin Result := 0; Exit; end;
-  Result := __pxxrawsyscall(1, FFd, Int64(NativeInt(b.FData)), b.FLen, 0, 0, 0);
+  Result := PyPalWrite(FFd, b.FData, b.FLen);
 end;
 
 procedure TPyFile.seek(pos: Int64);
 var r: Int64;
 begin
-  r := __pxxrawsyscall(8, FFd, pos, 0, 0, 0, 0);   { lseek SEEK_SET }
+  r := PyPalLseek(FFd, pos, 0);   { SEEK_SET }
 end;
 
 procedure TPyFile.seek(pos: Int64; whence: Int64);
 var r: Int64;
 begin
-  r := __pxxrawsyscall(8, FFd, pos, whence, 0, 0, 0);
+  r := PyPalLseek(FFd, pos, whence);
 end;
 
 function TPyFile.tell: Int64;
 begin
-  Result := __pxxrawsyscall(8, FFd, 0, 1, 0, 0, 0);   { lseek SEEK_CUR }
+  Result := PyPalLseek(FFd, 0, 1);   { SEEK_CUR }
 end;
 
 procedure TPyFile.truncate(sz: Int64);
 var r: Int64;
 begin
-  r := __pxxrawsyscall(77, FFd, sz, 0, 0, 0, 0);   { ftruncate }
+  r := PyPalFtruncate(FFd, sz);
 end;
 
 procedure TPyFile.flush;
@@ -5360,7 +5956,7 @@ end;
 procedure TPyFile.close;
 var r: Int64;
 begin
-  r := __pxxrawsyscall(3, FFd, 0, 0, 0, 0, 0);
+  r := PyPalClose(FFd);
 end;
 
 { repr() dispatching on the RUNTIME tag, so a container element nested inside a
@@ -5405,17 +6001,26 @@ begin
   end;
 end;
 
+function pylist_mark_tuple(l: TPyList): TPyList;
+begin
+  if l <> nil then l.FIsTuple := True;
+  pylist_mark_tuple := l;
+end;
+
 function pylist_repr(l: TPyList): AnsiString;
 var i: Integer;
 begin
   if l = nil then begin Result := '[]'; Exit; end;
-  Result := '[';
+  if l.FIsTuple then Result := '(' else Result := '[';
   for i := 0 to l.count - 1 do
   begin
     if i > 0 then Result := Result + ', ';
     Result := Result + pyvar_repr(l.at(i));
   end;
-  Result := Result + ']';
+  { Python's one-element tuple keeps its comma — `(1,)` — because `(1)` is just
+    a parenthesised value. }
+  if l.FIsTuple and (l.count = 1) then Result := Result + ',';
+  if l.FIsTuple then Result := Result + ')' else Result := Result + ']';
 end;
 
 function pydict_repr(d: TPyDict): AnsiString;
