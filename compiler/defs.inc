@@ -41,6 +41,7 @@ const
   MAX_CPREP_ARGS = 4096;
   STRING_CAP  = 8388608;      { 8 MB }
   MAX_TOKENS  = 2097152;
+  MAX_UNIT_ALIASES = 256;   { unit aliases: `import x as y`, and every shim substitution }
   MAX_AST     = 524288;   { legacy sizing constant; the AST arrays are now dynamic }
   { LOW slice of the (now dynamic) AST pool reserved for retained inline-routine
     bodies (feature-inline-routines). AllocInlineNode fills [0..INLINE_AST_RESERVE)
@@ -1606,8 +1607,14 @@ var
   { `uses 'name' as alias` table: a qualifier `alias.Sym` resolves to the real
     unit's symbols. UnitAliasName[k] = Strs[] idx of the (lowercased) alias,
     UnitAliasReal[k] = Strs[] idx of the real unit (= its SymUnitIdx tag). }
-  UnitAliasName : array[0..63] of Integer;
-  UnitAliasReal : array[0..63] of Integer;
+  { 256, not 64: a real application's imports plus the shim substitutions fill
+    the table, and an alias that does not fit is silently DROPPED — `from
+    tkinter import ttk` then stopped registering, so every `ttk.Widget(...)`
+    resolved somewhere else and failed at RUN time with no diagnostic. The
+    overflow is now also reported (see ParseUsesUnit / PyParseOneImport).
+    MAX_UNIT_ALIASES so the bound is named in one place. }
+  UnitAliasName : array[0..MAX_UNIT_ALIASES-1] of Integer;
+  UnitAliasReal : array[0..MAX_UNIT_ALIASES-1] of Integer;
   UnitAliasCount : Integer;
   { Multidim `SetLength(a, d1, d2, ...)` scratch: the parsed size-expr AST nodes
     for one SetLength call (not nested, so a single shared buffer is safe). }

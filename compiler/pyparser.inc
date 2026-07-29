@@ -5402,7 +5402,7 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
       candidate classes to dispatch at runtime" }
     dualCis, dualMmis: array[0..15] of Integer;
     nDual, di, kwIdx, kwDepth, swapCi, swapMmi, dualArgs: Integer;
-    anyKw: Boolean;
+    anyKw: Boolean; dualRetMixed: Boolean;
     argExprs: array[0..15] of Integer;
 begin
   { A receiver that came from an optional module which did not resolve — the
@@ -5766,6 +5766,17 @@ begin
   LastExprTk := Procs[mpi].RetType;
   Result := callNode;
 
+  { Do the candidates agree on a return type? Computed ONCE, before any arm is
+    built — see the note where it is used. }
+  dualRetMixed := False;
+  for di := 0 to nDual - 1 do
+  begin
+    mmi := FindUMethArity(dualCis[di], mname, i);
+    if mmi < 0 then mmi := dualMmis[di];
+    if mmi < 0 then Continue;
+    if Procs[UMthProc_[mmi]].RetType <> Procs[mpi].RetType then dualRetMixed := True;
+  end;
+
   { RUNTIME dual dispatch: the receiver may be one of the remembered pylib
     CONTAINERS rather than the statically-preferred class. For each container
     candidate, wrap: `pyvar_holds(recv, k) ? <container call> : <fallback>` —
@@ -5874,10 +5885,17 @@ begin
       tern := AllocNode(AN_TERNARY);
       ASTLeft[tern] := condN;
       ASTRight[tern] := pairN;
-      if Procs[dualPi].RetType = Procs[mpi].RetType then
-        ASTTk[tern] := Ord(Procs[mpi].RetType)
+      { The type of the WHOLE chain, not of this arm: if ANY candidate returns
+        something else, the expression is dynamic. Set per-arm, one arm that
+        happened to agree with the static pick re-typed the chain — a variant
+        LIST coming back from TPyDict.get was then assigned into an AnsiString
+        and stringified to nothing, while an int survived (it stringifies to
+        its digits). `d.get(k)` on a json value silently returned '' in any
+        program that also imported a module exporting `get`. }
+      if dualRetMixed then
+        ASTTk[tern] := Ord(tyVariant)
       else
-        ASTTk[tern] := Ord(tyVariant);
+        ASTTk[tern] := Ord(Procs[mpi].RetType);
       LastExprTk := IntToTypeKind(ASTTk[tern]);
       Result := tern;
     end;
@@ -9738,10 +9756,13 @@ begin
         later `x.name` had no class to resolve against and read the object
         pointer as the field (bug-nilpy-class-typed-field-loses-identity). }
       Syms[symIdx].RecName := ResolveNodeRec(rhsNode);
+
     { Trial parse: every assignment widens the local, not just the first one
       (the symbol only remembers the first). }
     if PyTypingPass then
+    begin
       PyNoteLocalType(name, IntToTypeKind(ASTTk[rhsNode]), ResolveNodeRec(rhsNode));
+    end;
     lhsNode := PyMakeIdent(symIdx);
     PyNoteOptionalTaint(symIdx, rhsNode);
     PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, rhsNode);
@@ -10089,6 +10110,7 @@ begin
   PyModuleLocalCount := PyLocalCount;
   for i := 0 to PyLocalCount - 1 do
     PyModuleLocals[i] := PyLocals[i];
+
 end;
 
 { Parse one `def` header into the PyHdr* globals, leaving the cursor just
@@ -12475,6 +12497,14 @@ end;
 procedure PyParseOneImport;
 var impName, impAlias, impRoot: AnsiString; aStrIdx, realStrIdx: Integer;
 begin
+  { SoftUnitMissed describes THIS import, and nothing else. It is a global, and
+    a soft miss recorded by an earlier one — a module's own `try: from PIL
+    import Image / except ImportError:` — used to still be set here: the alias
+    for a LATER import was then skipped and its name bound to None, so
+    `from tkinter import ttk` left `ttk` unbound and every `ttk.Widget(...)`
+    raised at RUN time with no diagnostic. Clear it at the start of each
+    import; the fallback-import path sets it again for the block it guards. }
+  SoftUnitMissed := False;
   if PyIsIdent('from') then
   begin
     Next;
@@ -12515,7 +12545,7 @@ begin
           Error('Nil Python: expected a name after `as` in an import');
         aStrIdx := InternStr(LowerCase(CurTok.SVal));
         realStrIdx := InternStr(LowerCase(impName));
-        if (UnitAliasCount < 64) and (aStrIdx <> realStrIdx) then
+        if (UnitAliasCount < MAX_UNIT_ALIASES) and (aStrIdx <> realStrIdx) then
         begin
           UnitAliasName[UnitAliasCount] := aStrIdx;
           UnitAliasReal[UnitAliasCount] := realStrIdx;
@@ -12607,7 +12637,7 @@ begin
             `from reportlab.pdfgen import canvas`. Python keeps them apart
             because it is case-sensitive; here the class is the one that is
             certainly not a submodule, so it is the one that does not register. }
-          if (UnitAliasCount < 64) and (not SoftUnitMissed) and
+          if (UnitAliasCount < MAX_UNIT_ALIASES) and (not SoftUnitMissed) and
              (FindCompiledUnit(impAlias) < 0) and
              (not UnitDeclaresClassExactly(impAlias, FindCompiledUnit(impName))) then
           begin
@@ -12666,7 +12696,7 @@ begin
             Error('Nil Python: expected a name after `as` in an import');
           aStrIdx := InternStr(LowerCase(CurTok.SVal));
           realStrIdx := InternStr(LowerCase(impName));
-          if (UnitAliasCount < 64) and (aStrIdx <> realStrIdx) then
+          if (UnitAliasCount < MAX_UNIT_ALIASES) and (aStrIdx <> realStrIdx) then
           begin
             UnitAliasName[UnitAliasCount] := aStrIdx;
             UnitAliasReal[UnitAliasCount] := realStrIdx;

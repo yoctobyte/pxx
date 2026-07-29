@@ -173,9 +173,11 @@ type
 
   Frame = class(Widget)
   public
+    { `padding` is ttk's, and an application writes it as a tuple:
+      `ttk.Frame(root, padding=(8, 6))`. }
     constructor Create(master: Widget; highlightthickness: Integer = -1;
                        const background: AnsiString = ''; width: Integer = -1;
-                       height: Integer = -1);
+                       height: Integer = -1; const padding: Variant = 0);
   end;
 
   { ttk's PanedWindow — songformatter's editor is a horizontal split. Written
@@ -188,6 +190,35 @@ type
                        width: Integer = -1; height: Integer = -1);
     { `paned.add(child, weight=1)` — a pane, optionally with a resize weight }
     procedure add(child: Widget; weight: Integer = -1);
+  end;
+
+  { ttk's Notebook — a tab strip. songformatter's whole multi-document UI is
+    this widget: one tab per open song, plus a Settings tab.
+
+    A tab is identified by the CHILD WIDGET in Python (`nb.select(doc)`), and
+    Tcl identifies it by the child's PATH, so the two are the same thing once
+    `.path` is read. `tabs()` gives those paths back as a Python list of
+    strings, and `nametowidget` turns one into the widget again — which is why
+    this unit keeps a path -> Widget registry. }
+  Notebook = class(Widget)
+  public
+    constructor Create(master: Widget; width: Integer = -1; height: Integer = -1);
+    { `nb.add(child, text="Documents")` }
+    procedure add(child: Widget; const text: AnsiString = '');
+    { `nb.select()` reads the current tab's path; `nb.select(child)` switches. }
+    function select: AnsiString; overload;
+    procedure select(child: Widget); overload;
+    { `nb.tab(child, text=...)` renames a tab — how a title follows its
+      document. The read form is not modelled. }
+    procedure tab(child: Widget; const text: AnsiString);
+    { every tab's path, in order }
+    function tabs: TPyList;
+    { `nb.index("current")` — the selected tab's position, or the count for
+      "end". Any other index expression is passed to Tcl as written. }
+    function index(const which: AnsiString): Integer;
+    procedure forget(child: Widget);
+    { the Widget a path names — the inverse of what tabs() yields }
+    function nametowidget(const path_: AnsiString): Widget;
   end;
 
   { A menu, and the popup an application posts on right-click. }
@@ -333,7 +364,14 @@ type
       applications write — `font=("TkDefaultFont", 10, "bold")`. Variant takes
       both; see TkiOptFont. }
     constructor Create(master: Widget; const text: AnsiString = '';
-                       const anchor: AnsiString = ''; const font: Variant = 0);
+                       const anchor: AnsiString = ''; const font: Variant = 0;
+                       { `textvariable=` follows a StringVar — a caption that
+                         updates when the variable does, which is how a status
+                         line is written. }
+                       const textvariable: Variant = 0;
+                       const foreground: AnsiString = '';
+                       const background: AnsiString = '';
+                       const padding: Variant = 0);
     procedure set_text(const value: AnsiString);
   end;
 
@@ -344,6 +382,25 @@ type
                        width: Integer = -1);
     function get: AnsiString;
     procedure insert(index: Integer; const value: AnsiString);
+  end;
+
+  { A push button — `ttk.Button(panel, text="New", command=fn)`. Every toolbar
+    in songformatter is these. `textvariable=` follows a StringVar, which is
+    how a caption that changes (a BPM readout) is written. }
+  Button = class(Widget)
+  public
+    constructor Create(master: Widget; const text: AnsiString = '';
+                       const command: Variant = 0;
+                       const textvariable: Variant = 0;
+                       const state: AnsiString = '';
+                       width: Integer = -1);
+    procedure invoke;
+  end;
+
+  { `ttk.Separator(panel, orient="vertical")` — a divider line. }
+  Separator = class(Widget)
+  public
+    constructor Create(master: Widget; const orient: AnsiString = '');
   end;
 
   Checkbutton = class(Widget)
@@ -977,14 +1034,22 @@ end;
 
 constructor Frame.Create(master: Widget; highlightthickness: Integer;
                         const background: AnsiString; width: Integer;
-                        height: Integer);
+                        height: Integer; const padding: Variant);
 begin
   TkiEnsureStarted;
   path := TkiNextPath(master);
   kind := 'frame';
-  TkEval('frame ' + path + TkiOptInt('highlightthickness', highlightthickness) +
-         TkiOptStr('background', background) + TkiOptInt('width', width) +
-         TkiOptInt('height', height));
+  { `padding` is a ttk option and the classic `frame` rejects it, so a frame
+    that asks for one IS a ttk::frame — which is what the application wrote
+    (`ttk.Frame(root, padding=(8, 6))`). Without padding the classic widget is
+    kept, so every frame that already worked is byte-identical. }
+  if pyvartag(padding) <> 0 then
+    TkEval('ttk::frame ' + path + TkiOptPadding(padding) +
+           TkiOptInt('width', width) + TkiOptInt('height', height))
+  else
+    TkEval('frame ' + path + TkiOptInt('highlightthickness', highlightthickness) +
+           TkiOptStr('background', background) + TkiOptInt('width', width) +
+           TkiOptInt('height', height));
 end;
 
 { ---- PhotoImage ---------------------------------------------------------- }
@@ -1326,6 +1391,27 @@ end;
 
 { ---- Label / Entry / Checkbutton ---------------------------------------- }
 
+{ ttk's `-padding`: one number, or the (left, top[, right, bottom]) tuple an
+  application writes. Tcl takes both spellings as a list. }
+function TkiOptPadding(const p: Variant): AnsiString;
+var i, n: Integer; r: AnsiString;
+begin
+  r := '';
+  case pyvartag(p) of
+    0: ;                                   { omitted }
+    7:
+      begin
+        n := pylen_v(p);
+        for i := 0 to n - 1 do
+          r := r + ' ' + pystr_of(pyvar_getitem(p, i));
+        if r <> '' then r := ' -padding {' + Copy(r, 2, Length(r) - 1) + '}';
+      end;
+  else
+    r := ' -padding ' + pystr_of(p);       { a bare number }
+  end;
+  TkiOptPadding := r;
+end;
+
 function TkiOptFont(const f: Variant): AnsiString;
 { A font option: absent, a NAME, or the (family, size, style) tuple. Tk spells
   the tuple as a braced list, `-font {TkDefaultFont 10 bold}`. }
@@ -1353,13 +1439,27 @@ begin
 end;
 
 constructor Label.Create(master: Widget; const text, anchor: AnsiString;
-                        const font: Variant);
+                        const font: Variant; const textvariable: Variant;
+                        const foreground, background: AnsiString;
+                        const padding: Variant);
+var vn: AnsiString;
 begin
   TkiEnsureStarted;
   path := TkiNextPath(master);
   kind := 'label';
-  TkEval('label ' + path + ' -text {' + text + '}' + TkiOptStr('anchor', anchor) +
-         TkiOptFont(font));
+  vn := TkiVarName(textvariable);
+  { ttk options (padding) and a ttk look go with ttk::label; the classic label
+    is kept otherwise so existing callers emit the same command as before }
+  if pyvartag(padding) <> 0 then
+    TkEval('ttk::label ' + path + ' -text {' + text + '}' +
+           TkiOptStr('anchor', anchor) + TkiOptFont(font) +
+           TkiOptStr('textvariable', vn) + TkiOptStr('foreground', foreground) +
+           TkiOptStr('background', background) + TkiOptPadding(padding))
+  else
+    TkEval('label ' + path + ' -text {' + text + '}' + TkiOptStr('anchor', anchor) +
+           TkiOptFont(font) + TkiOptStr('textvariable', vn) +
+           TkiOptStr('foreground', foreground) +
+           TkiOptStr('background', background));
 end;
 
 procedure Label.set_text(const value: AnsiString);
@@ -1416,6 +1516,39 @@ begin
   else
     Result := ' -' + name + ' ' + TkiIntStr(pyvar_to_int(v));
   end;
+end;
+
+constructor Button.Create(master: Widget; const text: AnsiString;
+                         const command, textvariable: Variant;
+                         const state: AnsiString; width: Integer);
+var idx: Integer; vn: AnsiString;
+begin
+  TkiEnsureStarted;
+  path := TkiNextPath(master);
+  kind := 'button';
+  vn := TkiVarName(textvariable);
+  TkEval('ttk::button ' + path + TkiOptStr('text', text) +
+         TkiOptStr('textvariable', vn) + TkiOptStr('state', state) +
+         TkiOptInt('width', width));
+  if pyvartag(command) <> 0 then
+  begin
+    idx := TkiRegisterCallback(command);
+    if idx >= 0 then
+      TkEval(path + ' configure -command {' + TkiCbScript(idx) + '}');
+  end;
+end;
+
+procedure Button.invoke;
+begin
+  TkEval(path + ' invoke');
+end;
+
+constructor Separator.Create(master: Widget; const orient: AnsiString);
+begin
+  TkiEnsureStarted;
+  path := TkiNextPath(master);
+  kind := 'separator';
+  TkEval('ttk::separator ' + path + TkiOptStr('orient', orient));
 end;
 
 constructor Checkbutton.Create(master: Widget; const text: AnsiString;
@@ -1555,6 +1688,107 @@ begin
   TkEval('grab release ' + path);
 end;
 
+{ ---- Notebook ----------------------------------------------------------- }
+
+{ Every widget this unit builds, by Tcl path. Tk hands an application back a
+  PATH (a notebook tab, a bind's %W) and the application expects the WIDGET, so
+  the mapping has to live somewhere; Tcl's own widget commands cannot rebuild a
+  Pascal object. }
+const TKI_MAX_REG = 4096;
+var
+  gTkRegPath: array[0..TKI_MAX_REG - 1] of AnsiString;
+  gTkRegW: array[0..TKI_MAX_REG - 1] of Widget;
+  gTkRegCount: Integer;
+
+procedure TkiRegisterWidget(w: Widget);
+begin
+  if (w = nil) or (gTkRegCount >= TKI_MAX_REG) then Exit;
+  gTkRegPath[gTkRegCount] := w.path;
+  gTkRegW[gTkRegCount] := w;
+  Inc(gTkRegCount);
+end;
+
+function TkiWidgetByPath(const p: AnsiString): Widget;
+var i: Integer;
+begin
+  TkiWidgetByPath := nil;
+  for i := gTkRegCount - 1 downto 0 do
+    if gTkRegPath[i] = p then
+    begin
+      TkiWidgetByPath := gTkRegW[i];
+      Exit;
+    end;
+end;
+
+constructor Notebook.Create(master: Widget; width, height: Integer);
+begin
+  TkiEnsureStarted;
+  path := TkiNextPath(master);
+  kind := 'notebook';
+  TkEval('ttk::notebook ' + path + TkiOptInt('width', width) +
+         TkiOptInt('height', height));
+  TkiRegisterWidget(Self);
+end;
+
+procedure Notebook.add(child: Widget; const text: AnsiString);
+begin
+  if child = nil then exit;
+  TkiRegisterWidget(child);
+  TkEval(path + ' add ' + child.path + TkiOptStr('text', text));
+end;
+
+function Notebook.select: AnsiString;
+begin
+  select := TkEval(path + ' select');
+end;
+
+procedure Notebook.select(child: Widget);
+begin
+  if child <> nil then TkEval(path + ' select ' + child.path);
+end;
+
+procedure Notebook.tab(child: Widget; const text: AnsiString);
+begin
+  if child <> nil then
+    TkEval(path + ' tab ' + child.path + TkiOptStr('text', text));
+end;
+
+function Notebook.tabs: TPyList;
+var raw, one: AnsiString; i: Integer; l: TPyList;
+begin
+  { Tcl returns a space-separated list of paths; no path contains a space, so
+    splitting on the space is exact here. }
+  l := TPyList.Create;
+  raw := TkEval(path + ' tabs');
+  one := '';
+  for i := 1 to Length(raw) do
+  begin
+    if raw[i] = ' ' then
+    begin
+      if one <> '' then l.append(one);
+      one := '';
+    end
+    else one := one + raw[i];
+  end;
+  if one <> '' then l.append(one);
+  tabs := l;
+end;
+
+function Notebook.index(const which: AnsiString): Integer;
+begin
+  index := TkiStrInt(TkEval(path + ' index ' + which));
+end;
+
+procedure Notebook.forget(child: Widget);
+begin
+  if child <> nil then TkEval(path + ' forget ' + child.path);
+end;
+
+function Notebook.nametowidget(const path_: AnsiString): Widget;
+begin
+  nametowidget := TkiWidgetByPath(path_);
+end;
+
 procedure mainloop;
 begin
   TkiEnsureStarted;
@@ -1673,5 +1907,6 @@ end;
 begin
   gTkWidgetSeq := 0;
   gTkVarSeq := 0;
+  gTkRegCount := 0;
   gTkStarted := False;
 end.

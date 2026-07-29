@@ -2474,17 +2474,24 @@ begin
     ASTTk[exprNode] := Ord(tySet);
   end
   else if isNilPy and (Procs[mpi].Params[k].TypeKind = tyVariant) and
-          ProcParamDefaultIsNone[mpi * MAX_PROC_PARAMS + k] then
+          (ProcParamDefaultIsNone[mpi * MAX_PROC_PARAMS + k] or
+           (ProcUnitIdx[mpi] >= 0)) then
     { A variant parameter is passed by REFERENCE — the callee reads a 16-byte
       slot through a pointer — so a `= None` default cannot be a bare ordinal:
       the callee dereferences it the moment it touches the parameter.
       `def go(self, x, s=None)` called as `A().go(1)` segfaulted on it.
 
-      Only for the defaults that really ARE None. A declared value falls
-      through to the ordinal node below and is boxed into a variant temp by
-      IRLowerCallArg, exactly as a WRITTEN literal argument is — passing None
-      for every default meant `def f(a=1)` called as `f()` ran with a=None,
-      silently. }
+      A NilPy def's declared value falls through to the ordinal node below and
+      is boxed by IRLowerCallArg, exactly as a WRITTEN literal argument is —
+      passing None for every default meant `def f(a=1)` called as `f()` ran
+      with a=None, silently.
+
+      A LIBRARY routine (ProcUnitIdx >= 0) is the other way round. Its
+      `const opt: Variant = 0` spells "not supplied", and every façade in
+      lib/pcl tests `pyvartag(v) <> 0` to find out. Boxing the 0 as an INTEGER
+      made an omitted option look GIVEN: `canvas.configure(yscrollcommand=...)`
+      passed a filled xscrollcommand too, and tkinter refused it — the first
+      thing songformatter did at run time. }
     exprNode := PyMakeNone
   else
   begin
@@ -26319,12 +26326,16 @@ begin
     { Record the substitution as a unit ALIAS as well, so a QUALIFIER still
       resolves: `import pkga.sub as ps` registered ps -> pkga_sub, and the
       symbols live in mimic_pkga_sub. FindCompiledUnitOrAlias chases the chain. }
-    if UnitAliasCount < 64 then
+    if UnitAliasCount < MAX_UNIT_ALIASES then
     begin
       UnitAliasName[UnitAliasCount] := InternStr(lo);
       UnitAliasReal[UnitAliasCount] := InternStr('mimic_' + lo);
       Inc(UnitAliasCount);
-    end;
+    end
+    else
+      { silently dropping one is how `ttk` stopped resolving in a program with
+        enough imports — the failure then lands at RUN time, far away }
+      Error('too many unit aliases (raise MAX_UNIT_ALIASES)');
     ParseUsesUnit('mimic_' + lo);
     if SoftUnitMissed then
       { the shim was not there either: this import is a soft miss too, and the
@@ -26585,7 +26596,7 @@ begin
     if isPath then realLo := LowerCase(GetFileBaseName(uname)) else realLo := LowerCase(uname);
     realStrIdx := InternStr(realLo);
     aStrIdx := InternStr(LowerCase(alias));
-    if (UnitAliasCount < 64) and (aStrIdx <> realStrIdx) then
+    if (UnitAliasCount < MAX_UNIT_ALIASES) and (aStrIdx <> realStrIdx) then
     begin
       UnitAliasName[UnitAliasCount] := aStrIdx;
       UnitAliasReal[UnitAliasCount] := realStrIdx;
