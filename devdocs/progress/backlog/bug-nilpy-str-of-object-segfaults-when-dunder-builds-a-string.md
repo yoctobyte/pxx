@@ -64,6 +64,14 @@ and dispatches `__str__` on the integer 1 as if it were an instance, which is
 why the crash is inside `V.__str__` itself, one frame below the outer call, and
 why the backtrace is short rather than a recursion blowup.
 
+The two programs differ ONLY in the extra `print(a.v)` line, and the same IR
+node differs with them:
+
+```
+crashing : 3: field a=2 ival=8 [offset=8]  tk=6    (tyClass)
+working  : 3: field a=2 ival=8 [offset=8]  tk=13   (tyInt64)
+```
+
 That also explains the "fix" of touching the instance first: `print(a.v)` on an
 earlier line resolves the field's type before this method is lowered. It is the
 class-pipeline ordering hazard — names early, members late
