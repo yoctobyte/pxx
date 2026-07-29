@@ -115,3 +115,6 @@ Any change to `compiler/builtin/**` therefore needs `make stabilize` + `make pin
 `stable_linux_amd64/**` committed with it. None of tonight's earlier fixes hit
 this: `pylib.pas` is also frozen there, but the compiler itself does not `use`
 it, so only a `builtin.pas` change moves the seed.
+
+## Log
+- 2026-07-30 — resolved, commit 1c8d09b71.

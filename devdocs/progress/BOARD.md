@@ -8,14 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (7)
+## working (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | HANDOFF-allnight-bughunt | A | 50 | HANDOFF | Handoff — all-night bug hunt, all tracks (rewritten 2026-07-29, second night) | — |
 | HANDOFF-nilpy-bughunt | A | 50 | HANDOFF | Handoff — NilPy bug hunt, with the new debugging toolkit | — |
 | HANDOFF-nilpy-songformatter | A | 50 | HANDOFF | Handoff prompt — NilPy bughunt, songformatter (2026-07-29) | — |
-| bug-nilpy-large-float-str-overruns-into-garbage | N | 70 | bug | `str()` of a float whose integer part exceeds Int64 writes garbage bytes | — |
 | bug-nilpy-songformatter-first-render-walls | N | 75 | bug | songformatter: the walls between "GUI builds" and "first document renders" | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
@@ -300,7 +299,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1031)
+## done (1032)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -655,6 +654,7 @@ _none_
 | bug-nilpy-int-equals-string-segfaults | N | 80 | bug | `3 == "ab"` SEGFAULTS | — |
 | bug-nilpy-int-parse-halts-instead-of-raising | N | 55 | bug | nilpy: int(\"abc\") halts the program instead of raising a catchable ValueError | — |
 | bug-nilpy-key-analysis-compiles-but-segfaults | N | 70 | bug | nilpy: songformatter's key_analysis.py COMPILES but segfaults at run time | — |
+| bug-nilpy-large-float-str-overruns-into-garbage | N | 70 | bug | `str()` of a float whose integer part exceeds Int64 writes garbage bytes | — |
 | bug-nilpy-locals-list-pointer-truncated-32bit | N | 55 | bug | NilPy: a list passed to a method truncates its pointer to 32-bit (SIGSEGV) | — |
 | bug-nilpy-method-chaining-on-a-call-result | N | 65 | bug | Chaining a method call on the RESULT of a method call does not parse | — |
 | bug-nilpy-method-result-copied-to-var-undefined | N | 60 | bug | NilPy: `x = obj.method()` immediately followed by `y = x` leaves x undefined | — |
