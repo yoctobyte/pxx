@@ -453,7 +453,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_dedent.npy /tmp/test_nilpy_dedent26
 	test "$$(/tmp/test_nilpy_dedent26)" = "$$(printf '%b' 'a\n  b\nc\n')"
 	./$(COMPILER) test/test_nilpy_percent_format.npy /tmp/test_nilpy_percent_format26
-	test "$$(/tmp/test_nilpy_percent_format26)" = "$$(printf '%%b' 'bob is 42\n     3.142|\nbob       |\n5\n50%\n[[1, 2]]\n1-2\n   42|42   |00042\nff FF 10\n3.14\n1 2')"
+	test "$$(/tmp/test_nilpy_percent_format26)" = "$$(printf '%b' 'bob is 42\n     3.142|\nbob       |\n5\n50%\n[[1, 2]]\n1-2\n   42|42   |00042\nff FF 10\n3.14\n1 2')"
 	./$(COMPILER) test/test_nilpy_chaining.npy /tmp/test_nilpy_chaining26
 	test "$$(/tmp/test_nilpy_chaining26)" = "$$(printf '%b' '6 3\n5\nA\nA,B\nB\n0012')"
 	./$(COMPILER) test/test_nilpy_unknown_method.npy /tmp/test_nilpy_unknown_method26
