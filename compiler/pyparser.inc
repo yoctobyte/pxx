@@ -5220,6 +5220,36 @@ begin
   PyWrapClosureFieldCall := tern;
 end;
 
+{ `g = lambda ...` — box the lambda's value so the NAME is typed tyVariant.
+  Both lambda lowerings hand back a heap OBJECT pointer (a pyeval closure, or a
+  lifted bound-fn), and a pointer-typed local never reaches ParsePostfix's
+  dynamic-call path, which keys on tyVariant — so `g(5)` compiled to nothing at
+  all. Returns the node unchanged for anything that is not one of those calls;
+  argument positions are deliberately untouched, since a callee's `const x:
+  Variant` parameter already boxes the pointer for them. }
+function PyBoxCallableValue(node: Integer): Integer;
+var pi, boxPi: Integer; nm: AnsiString;
+begin
+  PyBoxCallableValue := node;
+  if node < 0 then Exit;
+  if ASTKind[node] <> AN_CALL then Exit;
+  if IntToTypeKind(ASTTk[node]) <> tyPointer then Exit;
+  pi := ASTIVal[node];
+  if pi < 0 then Exit;
+  nm := LowerCase(Procs[pi].Name);
+  if (nm <> 'pyclosure_src_new') and (nm <> 'pyclosure_src_cap') and
+     (nm <> 'pyboundfn_new') and (nm <> 'pyboundfn_bind') and
+     (nm <> 'pyboundfn_bind_var') then Exit;
+  boxPi := FindProc('pyvar_of_callable');
+  if boxPi < 0 then Exit;
+  pi := AllocNode(AN_ARG);
+  ASTLeft[pi] := node; ASTRight[pi] := -1;
+  PyBoxCallableValue := AllocNode(AN_CALL);
+  ASTIVal[PyBoxCallableValue] := boxPi;
+  ASTLeft[PyBoxCallableValue] := pi;
+  ASTTk[PyBoxCallableValue] := Ord(tyVariant);
+end;
+
 { Wrap a dynamic call so a FUNCTION VALUE callee (VT_BOUNDMETHOD, tag 8 — what
   `f = some_def` / `f = obj.method` stores) routes to pybound_callv<n> instead of
   being unboxed as a code address. The payload of a tag-8 variant is the
@@ -5289,7 +5319,7 @@ end;
   synthetic all-variant signature. CurTok is the '('. }
 function PyMakeDynCall(baseNode: Integer): Integer;
 var unboxArg, unboxCall, argsHead, lastArg, argNode, n, sigPi: Integer;
-    nmArg, nmLit: Integer; calleeNm: AnsiString;
+    nmArg, nmLit, dispPi, dispArg: Integer; calleeNm: AnsiString;
 begin
   { the callee code address = the variant's payload as a pointer }
   unboxArg := AllocNode(AN_ARG);
@@ -5341,6 +5371,29 @@ begin
     if CurTok.Kind = tkComma then Next else Break;
   end;
   Expect(tkRParen, ')');
+
+  { ONE runtime dispatcher when pyeval offers it — and for a .npy program it
+    always does. pyvar_callv<n>(callee, args...) tells the four callable shapes
+    apart ITSELF (see its comment in pyeval.pas), replacing unbox-then-indirect
+    plus a stack of compile-time tag guesses. It is also what makes a LAMBDA
+    bound to a name callable: a lambda's value is a closure or bound-fn OBJECT,
+    which no tag guard recognised. Arities past 3 keep the old lowering. }
+  dispPi := -1;
+  if n = 0 then dispPi := FindProc('pyvar_callv0')
+  else if n = 1 then dispPi := FindProc('pyvar_callv1')
+  else if n = 2 then dispPi := FindProc('pyvar_callv2')
+  else if n = 3 then dispPi := FindProc('pyvar_callv3');
+  if dispPi >= 0 then
+  begin
+    dispArg := AllocNode(AN_ARG);
+    ASTLeft[dispArg] := baseNode;
+    ASTRight[dispArg] := argsHead;
+    Result := AllocNode(AN_CALL);
+    ASTIVal[Result] := dispPi;
+    ASTLeft[Result] := dispArg;
+    ASTTk[Result] := Ord(tyVariant);
+    Exit;
+  end;
 
   sigPi := PyDynCallSig(n);
   Result := AllocNode(AN_CALL_IND);
@@ -10228,6 +10281,9 @@ begin
       begin
         PyParseBoolExpr;
         rhsNode := CurASTNode;
+        { `g = lambda ...`: box the closure/bound-fn pointer so the name is a
+          variant and `g(...)` reaches the dynamic-call path at all. }
+        rhsNode := PyBoxCallableValue(rhsNode);
       end;
     end;
     if symIdx < 0 then

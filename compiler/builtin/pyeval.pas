@@ -109,6 +109,25 @@ function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
   this unit can recognise. }
 procedure pycall_value(const cb: Variant; const arg: Variant; withArg: Boolean);
 
+{ The same dispatch, as an EXPRESSION — `f = <anything callable>` then `f(a, b)`.
+  pycall_value answers "run this handler"; these answer "what does calling it
+  give me", which is what a NilPy dynamic call site needs. All four shapes are
+  covered, so the compiler no longer has to guess from the variant's tag which
+  bridge to emit: PyMakeDynCall lowers `<variant>(args)` straight to these for
+  arities 0..3. A nil payload raises TypeError, as Python does.
+
+  Lives here, not in pylib, because two of the four shapes are objects only this
+  unit can recognise — and pyeval is always loaded for a .npy program. }
+function pyvar_callv0(const cb: Variant): Variant;
+function pyvar_callv1(const cb: Variant; const a0: Variant): Variant;
+function pyvar_callv2(const cb: Variant; const a0, a1: Variant): Variant;
+function pyvar_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
+
+{ Box a callable OBJECT pointer (a lambda's pyeval closure or lifted bound-fn)
+  as a variant, so a lambda bound to a NAME is typed tyVariant and the name's
+  call site takes the dynamic-call path at all. }
+function pyvar_of_callable(p: Pointer): Variant;
+
 implementation
 
 const
@@ -1679,6 +1698,8 @@ type
     is safe for both shapes (the caller's slot is a zeroed local either way). }
   TPyCallFn0 = function: Variant;
   TPyCallFn1 = function(const a0: Variant): Variant;
+  TPyCallFn2 = function(const a0, a1: Variant): Variant;
+  TPyCallFn3 = function(const a0, a1, a2: Variant): Variant;
   { Variant results, not Int64: an unannotated NilPy def returns its value
     through a hidden destination pointer the callee always copies into. Through
     an Int64-typed pointer that register held stale data and the callee's
@@ -3465,6 +3486,139 @@ begin
   if Length(LclNames) < sLclN then begin SetLength(LclNames, sLclN); SetLength(LclVals, sLclN); end;
   for i := 0 to sLclN - 1 do begin LclNames[i] := sLclNames[i]; LclVals[i] := sLclVals[i]; end;
   ReturnFlag := sRF; ReturnValue := sRV; Executing := sExec; BreakFlag := sBreak;
+end;
+
+{ ONE dispatcher for `<variant>(args)`, keeping the result. The four shapes a
+  NilPy callable value can have — a {code, recv} pair (tag 8), a pyeval closure
+  object, a lifted bound-fn object, and a plain compiled code address — are told
+  apart HERE, at run time, instead of by guessing the tag at compile time. The
+  var-out calls into Result sidestep the Variant-fn-return NRVO corruption, the
+  same reason PyClosureCall1 is written that way.
+
+  A closure object may arrive either as a tag-9 variant or as a bare payload
+  pointer (a lambda bound to a name), so both are probed. }
+function PyCallableObj(const cb: Variant): Pointer;
+{ The callable OBJECT a variant carries, or nil when the payload is a plain code
+  address (or nothing at all). }
+begin
+  PyCallableObj := nil;
+  if PPyRec(@cb)^.Payload = 0 then Exit;
+  PyCallableObj := Pointer(NativeInt(PPyRec(@cb)^.Payload));
+  if pyclosure_is(PyCallableObj) or pyboundfn_is(PyCallableObj) then Exit;
+  PyCallableObj := nil;
+end;
+
+procedure PyNotCallable(const cb: Variant);
+{ A name bound to None (an import that did not resolve, a value never assigned)
+  used as a callee. Python raises TypeError; the older pyvar_callee_addr path
+  says the same thing, so the message stays recognisable. }
+begin
+  if PPyRec(@cb)^.Payload = 0 then
+    raise Exception.Create('TypeError: object is not callable — the name is '
+      + 'None (an import that did not resolve, or a value never assigned)');
+end;
+
+function pyvar_callv0(const cb: Variant): Variant;
+var o: Pointer; f0: TPyCallFn0; args: TPyList;
+begin
+  Result := pynone;
+  if pycallback_is(cb) then begin Result := pybound_callv0(cb); Exit; end;
+  PyNotCallable(cb);
+  o := PyCallableObj(cb);
+  if o <> nil then
+  begin
+    if pyclosure_is(o) then
+    begin
+      args := TPyList.Create;
+      PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
+      args.Free;
+    end
+    else pyboundfn_call_ptr(o, pynone);   { a lifted lambda: result discarded }
+    Exit;
+  end;
+  f0 := TPyCallFn0(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  Result := f0();
+end;
+
+function pyvar_callv1(const cb: Variant; const a0: Variant): Variant;
+var o: Pointer; f1: TPyCallFn1; args: TPyList;
+begin
+  Result := pynone;
+  if pycallback_is(cb) then begin Result := pybound_callv1(cb, a0); Exit; end;
+  PyNotCallable(cb);
+  o := PyCallableObj(cb);
+  if o <> nil then
+  begin
+    if pyclosure_is(o) then
+    begin
+      args := TPyList.Create;
+      args.append(a0);
+      PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
+      args.Free;
+    end
+    else pyboundfn_call_ptr(o, a0);
+    Exit;
+  end;
+  f1 := TPyCallFn1(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  Result := f1(a0);
+end;
+
+function pyvar_callv2(const cb: Variant; const a0, a1: Variant): Variant;
+var o: Pointer; f2: TPyCallFn2; args: TPyList;
+begin
+  Result := pynone;
+  if pycallback_is(cb) then begin Result := pybound_callv2(cb, a0, a1); Exit; end;
+  PyNotCallable(cb);
+  o := PyCallableObj(cb);
+  if o <> nil then
+  begin
+    if pyclosure_is(o) then
+    begin
+      args := TPyList.Create;
+      args.append(a0); args.append(a1);
+      PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
+      args.Free;
+    end
+    else pyboundfn_call_ptr(o, a0);   { a lifted lambda takes exactly one }
+    Exit;
+  end;
+  f2 := TPyCallFn2(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  Result := f2(a0, a1);
+end;
+
+function pyvar_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
+var o: Pointer; f3: TPyCallFn3; args: TPyList;
+begin
+  Result := pynone;
+  if pycallback_is(cb) then begin Result := pybound_callv3(cb, a0, a1, a2); Exit; end;
+  PyNotCallable(cb);
+  o := PyCallableObj(cb);
+  if o <> nil then
+  begin
+    if pyclosure_is(o) then
+    begin
+      args := TPyList.Create;
+      args.append(a0); args.append(a1); args.append(a2);
+      PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
+      args.Free;
+    end
+    else pyboundfn_call_ptr(o, a0);
+    Exit;
+  end;
+  f3 := TPyCallFn3(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  Result := f3(a0, a1, a2);
+end;
+
+function pyvar_of_callable(p: Pointer): Variant;
+{ A lambda's value is a heap OBJECT pointer, and a pointer-typed local never
+  reaches the dynamic-call path (that path keys on tyVariant). Box it, tagging a
+  pyeval closure as VT_PYCLOSURE so the existing tag-9 consumers keep working;
+  a lifted bound-fn has no tag of its own and rides as a bare payload, which
+  pyvar_callv* probes for. }
+begin
+  PPyRec(@Result)^.Payload := Int64(NativeInt(p));
+  if pyclosure_is(p) then PPyRec(@Result)^.VType := 9
+  else PPyRec(@Result)^.VType := 0;
 end;
 
 { Reverse bridge, 1-arg form: NilPy's PyMakeDynCall calls this when the callee
