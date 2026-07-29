@@ -54,3 +54,48 @@ regardless.
 
 `make test-nilpy` + self-host byte-identical, plus a float-printing regression
 table diffed against CPython.
+
+## PARTIALLY RESOLVED — `str()` is exact; `print()` is a separate path
+
+`str(1e19)` now yields `1e+19`, matching CPython exactly. So does `1e+300`,
+`-1e+19`, and the same through a variable.
+
+### What produced the invalid byte
+
+`compiler/builtin/builtin.pas`, `FloatToStr`: `intpart := Trunc(v)` SATURATES
+at High(Int64) past 2^63, and every digit below is then derived from the
+saturated value — `d` leaves 0..9 and `Chr(Ord('0') + d)` emits a byte that is
+not a digit. That is the `o` in `9223372036854775809.o72036854775808`.
+
+Fixed by handling the three cases the Int64 split cannot represent, before it
+runs: NaN, ±Inf, and |v| > 9.2e18 → a new `FloatToExpStr`, which normalises the
+mantissa into [1,10) and formats it with FloatToStr itself (in range by
+construction, so there is one formatting rule rather than two). The mantissa
+drops a trailing `.0` and the exponent is padded to two digits, so the result
+reads `1e+19` the way Python writes it rather than `1.0E+19`.
+
+The same three guards went into `lib/rtl/sysutils.pas`'s `FloatToStr` and
+`FloatToStrF`, which had the identical saturation.
+
+### The residue: `print()` does not use FloatToStr
+
+`print(1e19)` still prints the garbage, because a float argument to print goes
+to the BACKEND float writer (`EmitWriteFloatNat`, hand-written per target), not
+through pystr_of. So `print(x)` and `print(str(x))` disagree — which Python
+never does.
+
+The hook is identified: pyparser.inc, `PyParsePrint`, at the line
+`CurASTNode := PyReprContainer(CurASTNode);` — wrapping a tyDouble/tySingle
+argument in the `pystr_of` Double overload there would route print through the
+same formatter `str()` uses, fix the garbage on every target at once, and make
+the two agree by construction. That is the better fix than repairing
+EmitWriteFloatNat in six backends. Filed as
+[[bug-nilpy-print-of-a-float-bypasses-str-formatting]].
+
+The remaining formatting divergences (`1.5e18` printed in full, `0.1 + 0.2`
+short by a digit, `%e`, `1e-20` printing `0.0`) are unchanged and stay in this
+ticket — they are cosmetic, not corrupt.
+
+### Gate
+
+`tools/gate.sh full`.
