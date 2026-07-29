@@ -109,6 +109,16 @@ function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
   this unit can recognise. }
 procedure pycall_value(const cb: Variant; const arg: Variant; withArg: Boolean);
 
+{ The same four-way dispatch, but as a CALL that yields the result — what
+  `cb(...)` on a variable holding a callable compiles to (PyMakeDynCall). The
+  old lowering was a raw indirect call on the variant's payload, which is a
+  heap-object pointer for three of the four shapes: `cb = handler; cb(x)`
+  jumped somewhere meaningless and, in practice, silently did nothing. }
+function pyvar_call0(const cb: Variant): Variant;
+function pyvar_call1(const cb: Variant; const a0: Variant): Variant;
+function pyvar_call2(const cb: Variant; const a0, a1: Variant): Variant;
+function pyvar_call3(const cb: Variant; const a0, a1, a2: Variant): Variant;
+
 implementation
 
 const
@@ -3486,6 +3496,132 @@ end;
 function pyclosure_is(p: Pointer): Boolean;
 begin
   pyclosure_is := (p <> nil) and (PClosureObj(p)^.Magic = @PyClosureMagicMarker);
+end;
+
+{ ---- calling a callable held in a variable ------------------------------
+  Every shape, with a result. Variant-returning code pointers throughout: an
+  unannotated def returns through a hidden destination pointer, and an
+  Int64-typed pointer leaves that register stale (see TPyCallFn0). }
+type
+  TPyCbM0v = function(recv: Pointer): Variant;
+  TPyCbM1v = function(recv: Pointer; const a0: Variant): Variant;
+  TPyCbM2v = function(recv: Pointer; const a0, a1: Variant): Variant;
+  TPyCbM3v = function(recv: Pointer; const a0, a1, a2: Variant): Variant;
+  TPyCbF2v = function(const a0, a1: Variant): Variant;
+  TPyCbF3v = function(const a0, a1, a2: Variant): Variant;
+
+function pyvar_call0(const cb: Variant): Variant;
+var p, code, recv: Pointer; f0: TPyCallFn0; m0: TPyCbM0v; args: TPyList;
+begin
+  Result := pynone;
+  if pycallback_is(cb) then
+  begin
+    code := pybound_code(cb); recv := pybound_recv(cb);
+    if code = nil then Exit;
+    if recv = nil then begin f0 := TPyCallFn0(code); Result := f0(); end
+    else begin m0 := TPyCbM0v(code); Result := m0(recv); end;
+    Exit;
+  end;
+  p := Pointer(NativeInt(PPyRec(@cb)^.Payload));
+  if p = nil then Exit;
+  if pyclosure_is(p) then
+  begin
+    args := TPyList.Create;
+    PyClosureInvoke(PClosureObj(p)^.Cidx, args, Result);
+    args.Free;
+    Exit;
+  end;
+  if pyboundfn_is(p) then
+  begin
+    { a lifted lambda: its own parameter is the one the bridge passes }
+    pyboundfn_call_ptr(p, pynone);
+    Exit;
+  end;
+  f0 := TPyCallFn0(p);
+  Result := f0();
+end;
+
+function pyvar_call1(const cb: Variant; const a0: Variant): Variant;
+var p, code, recv: Pointer; f1: TPyCallFn1; m1: TPyCbM1v; args: TPyList;
+begin
+  Result := pynone;
+  if pycallback_is(cb) then
+  begin
+    code := pybound_code(cb); recv := pybound_recv(cb);
+    if code = nil then Exit;
+    if recv = nil then begin f1 := TPyCallFn1(code); Result := f1(a0); end
+    else begin m1 := TPyCbM1v(code); Result := m1(recv, a0); end;
+    Exit;
+  end;
+  p := Pointer(NativeInt(PPyRec(@cb)^.Payload));
+  if p = nil then Exit;
+  if pyclosure_is(p) then
+  begin
+    args := TPyList.Create;
+    args.append(a0);
+    PyClosureInvoke(PClosureObj(p)^.Cidx, args, Result);
+    args.Free;
+    Exit;
+  end;
+  if pyboundfn_is(p) then
+  begin
+    pyboundfn_call_ptr(p, a0);
+    Exit;
+  end;
+  f1 := TPyCallFn1(p);
+  Result := f1(a0);
+end;
+
+function pyvar_call2(const cb: Variant; const a0, a1: Variant): Variant;
+var p, code, recv: Pointer; f2: TPyCbF2v; m2: TPyCbM2v; args: TPyList;
+begin
+  Result := pynone;
+  if pycallback_is(cb) then
+  begin
+    code := pybound_code(cb); recv := pybound_recv(cb);
+    if code = nil then Exit;
+    if recv = nil then begin f2 := TPyCbF2v(code); Result := f2(a0, a1); end
+    else begin m2 := TPyCbM2v(code); Result := m2(recv, a0, a1); end;
+    Exit;
+  end;
+  p := Pointer(NativeInt(PPyRec(@cb)^.Payload));
+  if p = nil then Exit;
+  if pyclosure_is(p) then
+  begin
+    args := TPyList.Create;
+    args.append(a0); args.append(a1);
+    PyClosureInvoke(PClosureObj(p)^.Cidx, args, Result);
+    args.Free;
+    Exit;
+  end;
+  f2 := TPyCbF2v(p);
+  Result := f2(a0, a1);
+end;
+
+function pyvar_call3(const cb: Variant; const a0, a1, a2: Variant): Variant;
+var p, code, recv: Pointer; f3: TPyCbF3v; m3: TPyCbM3v; args: TPyList;
+begin
+  Result := pynone;
+  if pycallback_is(cb) then
+  begin
+    code := pybound_code(cb); recv := pybound_recv(cb);
+    if code = nil then Exit;
+    if recv = nil then begin f3 := TPyCbF3v(code); Result := f3(a0, a1, a2); end
+    else begin m3 := TPyCbM3v(code); Result := m3(recv, a0, a1, a2); end;
+    Exit;
+  end;
+  p := Pointer(NativeInt(PPyRec(@cb)^.Payload));
+  if p = nil then Exit;
+  if pyclosure_is(p) then
+  begin
+    args := TPyList.Create;
+    args.append(a0); args.append(a1); args.append(a2);
+    PyClosureInvoke(PClosureObj(p)^.Cidx, args, Result);
+    args.Free;
+    Exit;
+  end;
+  f3 := TPyCbF3v(p);
+  Result := f3(a0, a1, a2);
 end;
 
 { Reverse bridge, POINTER form: `word.native(vm2)` where the Callable field holds
