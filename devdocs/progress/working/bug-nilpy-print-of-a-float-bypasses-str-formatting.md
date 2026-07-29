@@ -46,3 +46,26 @@ arrive as strings.
 `make test-nilpy` + self-host byte-identical, plus `print` vs `print(str(...))`
 over 1e19, 1e300, 1e-20, 0.1+0.2, 2.5, -0.0, inf and nan, diffed against
 CPython.
+
+## RESOLVED — one hook, no per-backend work
+
+`PyParsePrint` now wraps a tyDouble/tySingle argument in `pystr_of`, on the line
+after the container repr wrap and for exactly the same reason. `print` and
+`str` therefore share one formatter, which is Python's rule, and the fix lands
+on every target at once rather than in six hand-written `EmitWriteFloatNat`
+implementations.
+
+Verified against CPython: `1e19`, `1e300`, `-1e19`, `2.5`, `7/2`, `0.1+0.2`, a
+float variable, a float as a second print argument, a float inside a list, and
+`1.0`. The garbage byte is gone from every one, and `print(x)` now equals
+`print(str(x))` throughout.
+
+Three FORMATTING divergences remain and belong to
+[[bug-nilpy-large-float-str-overruns-into-garbage]], not here: `0.1 + 0.2`
+prints `0.3` (shortest-round-trip repr), `-0.0` loses its sign, and `1e300`
+comes back `1.000000000000001e+300` because FloatToExpStr normalises by
+dividing by 10 in a loop. None of them is corrupt output.
+
+### Gate
+
+`tools/gate.sh full`.
