@@ -73,3 +73,6 @@ recognised as an instance at the second access, rather than being absent. That
 also rules out the class-attribute initialiser failing to run at all.
 
 Still reproduces at 287b1b34d.
+
+## Log
+- 2026-07-29 — resolved, commit adcdc02e0.

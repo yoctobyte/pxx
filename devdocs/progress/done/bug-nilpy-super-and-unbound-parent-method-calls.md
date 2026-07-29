@@ -69,3 +69,6 @@ route.
 `make test-nilpy` plus a `.npy` with a two-level hierarchy exercising
 `super().__init__()`, `super().m()` and `Parent.m(self)`, diffed against
 CPython.
+
+## Log
+- 2026-07-29 — resolved, commit 97f352214.
