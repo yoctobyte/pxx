@@ -174,11 +174,35 @@ type
     function focus_get: Widget;
     { the raw Tcl answer, for a caller that wants the paths }
     function winfo_children_paths: AnsiString;
+    { Tk's timer queue. `after(ms, cb)` and `after_idle(cb)` return the Tcl id
+      the application stores to cancel with — a debounce (`self._preview_job =
+      cv.after(120, redraw)`) re-arms on every keystroke, so the id round trip
+      has to work or the registry fills up. The callback slot is ONE-SHOT: it is
+      handed back when the timer fires or is cancelled. }
+    function after(ms: Integer; const callback: Variant): AnsiString;
+    function after_idle(const callback: Variant): AnsiString;
+    procedure after_cancel(const id: Variant);
+    { the window-stacking and icon-state calls a secondary window needs to be
+      brought back up (`analysis_window.deiconify(); analysis_window.lift()`) }
+    procedure lift;
+    procedure lower_;                      { `lower` would shadow str.lower }
+    procedure deiconify;
+    procedure iconify;
+    { the X selection, as tkinter exposes it on every widget }
+    function clipboard_get: AnsiString;
+    procedure clipboard_clear;
+    procedure clipboard_append(const text: AnsiString);
     procedure destroy_;                    { `destroy` is a Pascal-ish trap }
     { process pending events without entering the main loop — what a test (and
       plenty of real code) uses to make geometry and bindings take effect }
     procedure update;
     procedure update_idletasks;
+    { tkinter puts mainloop/quit on EVERY widget, and `root.mainloop()` is how
+      an application spells its event loop. Without the method the call fell
+      through closed-world dispatch to a nil code pointer — a SIGSEGV the
+      instant the loop was entered, with no diagnostic. }
+    procedure mainloop;
+    procedure quit;
   end;
 
   Frame = class(Widget)
@@ -279,6 +303,10 @@ type
       caller records where a run STARTED before inserting it. }
     function index(const idx: AnsiString): AnsiString;
     procedure event_generate(const sequence: AnsiString);
+    { scroll an index into view, and move a MARK (`insert` is the caret) —
+      what "paste, then put the caret at the top" is made of }
+    procedure see(const idx: AnsiString);
+    procedure mark_set(const markName, idx: AnsiString);
   end;
 
   { An image Tk can draw on a canvas. THE SUBSET: `PhotoImage(data=<base64
@@ -627,12 +655,18 @@ begin
   else TkiOptNum := ' -' + name + ' ' + TkiNumStr(d);
 end;
 
+procedure TkiEnsureCbCommand; forward;
+
 procedure TkiEnsureStarted;
 begin
   if not gTkStarted then
   begin
     TkInit;
     gTkStarted := True;
+    { the callback command must exist from the moment the interpreter does: a
+      binding created later names `pxxcb`, and any event that reaches Tcl before
+      the command is defined raises "invalid command name" in the background }
+    TkiEnsureCbCommand;
   end;
 end;
 
@@ -817,7 +851,11 @@ procedure Widget.configure(const state, scrollregion: AnsiString;
                            const postcommand: Variant);
 var o: AnsiString; cbIdx: Integer;
 begin
-  cbIdx := TkiRegisterCallback(postcommand);
+  { only when the caller actually passed one: registering the DEFAULT (0) burnt
+    a registry slot on every plain `configure(state=...)` and put a
+    `-postcommand` naming an uncallable value on the widget }
+  cbIdx := -1;
+  if pyvartag(postcommand) <> 0 then cbIdx := TkiRegisterCallback(postcommand);
   if cbIdx >= 0 then
     TkEval(path + ' configure -postcommand {' + TkiCbScript(cbIdx) + '}');
   o := TkiOptStr('state', state) + TkiOptStr('scrollregion', scrollregion)
@@ -841,7 +879,7 @@ end;
   A `-command` option has no event, so it registers `{pxxcb 3}` and the handler
   is called with no argument. }
 const
-  TKI_MAX_CALLBACKS = 512;
+  TKI_MAX_CALLBACKS = 4096;
 
 type
   TTkiFn0 = function: Int64;
@@ -849,6 +887,15 @@ type
 
 var
   gTkCb: array[0..TKI_MAX_CALLBACKS - 1] of Variant;
+  { A ONE-SHOT slot (an `after` timer) is handed back when it fires or is
+    cancelled. Without that a 300ms re-arming timer walked the registry to its
+    end in minutes and every later binding silently failed to register. }
+  gTkCbOnce: array[0..TKI_MAX_CALLBACKS - 1] of Boolean;
+  { the Tcl `after` id a one-shot slot is armed under, so after_cancel can find
+    the slot again; '' when the slot is not a timer }
+  gTkCbAfterId: array[0..TKI_MAX_CALLBACKS - 1] of AnsiString;
+  gTkCbFree: array[0..TKI_MAX_CALLBACKS - 1] of Integer;
+  gTkCbFreeCount: Integer;
   gTkCbCount: Integer;
   gTkCbReady: Boolean;
 
@@ -872,6 +919,8 @@ begin
   else TkiCbArgInt := TkiStrInt(s);
 end;
 
+procedure TkiReleaseCb(idx: Integer); forward;
+
 function TkiCbDispatch(clientData: Pointer; interp: Pointer;
                        argc: Integer; argv: PPAnsiChar): Integer; cdecl;
 var idx: Integer; ev: Event; evv: Variant;
@@ -881,8 +930,11 @@ begin
   if (idx < 0) or (idx >= gTkCbCount) then Exit;
   if argc <= 2 then
   begin
-    { a `-command` callback: no event argument }
+    { a `-command` callback (or a fired `after` timer): no event argument.
+      The slot is released AFTER the call — clearing it first drops the last
+      reference to the callable that is about to run. }
     TkiCallValue(gTkCb[idx], pynone, False);
+    TkiReleaseCb(idx);
     Exit;
   end;
   ev := Event.Create;
@@ -898,26 +950,69 @@ begin
   PPyVarRec(@evv)^.Payload := Int64(NativeInt(Pointer(ev)));
   PXXObjRetain(Pointer(ev));
   TkiCallValue(gTkCb[idx], evv, True);
+  TkiReleaseCb(idx);
+end;
+
+procedure TkiEnsureCbCommand;
+begin
+  if gTkCbReady then Exit;
+  TkRegisterCommand('pxxcb', @TkiCbDispatch);
+  gTkCbReady := True;
+  { CPython's tkinter reports a callback error by printing the traceback to
+    stderr; Tk's default handler pops a modal dialog instead, which in a
+    compiled app is both wrong and unreadable. Match CPython. }
+  TkEval('proc bgerror {m} { puts stderr "Exception in Tk callback: $m"; ' +
+         'puts stderr $::errorInfo }');
+end;
+
+function TkiRegisterCallbackEx(const cb: Variant; once: Boolean): Integer;
+{ Store the callable and return its index. A PERMANENT slot holds the value for
+  the process's lifetime — a widget's binding outlives every local that built
+  it. A ONE-SHOT slot (an `after` timer) returns to the free list once it has
+  fired or been cancelled.
+  TkiEnsureStarted first: registering `pxxcb` needs a live interpreter, and
+  TkRegisterCommand is a silent no-op without one — which would leave every
+  binding pointing at a command Tcl does not have. }
+begin
+  TkiEnsureStarted;
+  if gTkCbFreeCount > 0 then
+  begin
+    gTkCbFreeCount := gTkCbFreeCount - 1;
+    TkiRegisterCallbackEx := gTkCbFree[gTkCbFreeCount];
+  end
+  else
+  begin
+    if gTkCbCount >= TKI_MAX_CALLBACKS then
+    begin
+      TkiRegisterCallbackEx := -1;
+      Exit;
+    end;
+    TkiRegisterCallbackEx := gTkCbCount;
+    gTkCbCount := gTkCbCount + 1;
+  end;
+  gTkCb[TkiRegisterCallbackEx] := cb;
+  gTkCbOnce[TkiRegisterCallbackEx] := once;
+  gTkCbAfterId[TkiRegisterCallbackEx] := '';
 end;
 
 function TkiRegisterCallback(const cb: Variant): Integer;
-{ Store the callable and return its index. The registry holds the value for the
-  process's lifetime — a widget's binding outlives every local that built it,
-  and a Tk application's callbacks are few and permanent. }
 begin
-  if not gTkCbReady then
+  TkiRegisterCallback := TkiRegisterCallbackEx(cb, False);
+end;
+
+procedure TkiReleaseCb(idx: Integer);
+{ Hand a one-shot slot back. Permanent slots are left alone. }
+begin
+  if (idx < 0) or (idx >= gTkCbCount) then Exit;
+  if not gTkCbOnce[idx] then Exit;
+  gTkCbOnce[idx] := False;
+  gTkCbAfterId[idx] := '';
+  gTkCb[idx] := pynone;
+  if gTkCbFreeCount < TKI_MAX_CALLBACKS then
   begin
-    TkRegisterCommand('pxxcb', @TkiCbDispatch);
-    gTkCbReady := True;
+    gTkCbFree[gTkCbFreeCount] := idx;
+    gTkCbFreeCount := gTkCbFreeCount + 1;
   end;
-  if gTkCbCount >= TKI_MAX_CALLBACKS then
-  begin
-    TkiRegisterCallback := -1;
-    Exit;
-  end;
-  gTkCb[gTkCbCount] := cb;
-  TkiRegisterCallback := gTkCbCount;
-  gTkCbCount := gTkCbCount + 1;
 end;
 
 { The script Tk runs for a BOUND event: index plus the substitutions the event
@@ -926,6 +1021,102 @@ function TkiCbScript(idx: Integer): AnsiString;
 begin
   TkiCbScript := 'pxxcb ' + TkiIntStr(idx) +
                  ' %x %y %D %b %w %h %K %W';
+end;
+
+procedure Widget.mainloop;
+begin
+  TkiEnsureStarted;
+  TkMainLoop;
+end;
+
+procedure Widget.quit;
+{ Tcl's `destroy .` ends Tk_MainLoop — there is no separate quit primitive
+  bound here, and tkinter's quit also just leaves the loop. }
+begin
+  TkEval('destroy .');
+end;
+
+{ ---- timers -------------------------------------------------------------
+
+  Tk's `after` queue. The slot is one-shot, and the Tcl id it was armed under is
+  recorded so after_cancel can hand the slot back — an editor debounces its
+  redraw by cancelling and re-arming on every keystroke. }
+
+function Widget.after(ms: Integer; const callback: Variant): AnsiString;
+var idx: Integer;
+begin
+  after := '';
+  if pyvartag(callback) = 0 then Exit;
+  idx := TkiRegisterCallbackEx(callback, True);
+  if idx < 0 then Exit;
+  after := TkEval('after ' + TkiIntStr(ms) + ' {pxxcb ' + TkiIntStr(idx) + '}');
+  gTkCbAfterId[idx] := after;
+end;
+
+function Widget.after_idle(const callback: Variant): AnsiString;
+var idx: Integer;
+begin
+  after_idle := '';
+  if pyvartag(callback) = 0 then Exit;
+  idx := TkiRegisterCallbackEx(callback, True);
+  if idx < 0 then Exit;
+  after_idle := TkEval('after idle {pxxcb ' + TkiIntStr(idx) + '}');
+  gTkCbAfterId[idx] := after_idle;
+end;
+
+procedure Widget.after_cancel(const id: Variant);
+var s: AnsiString; i: Integer;
+begin
+  if pyvartag(id) = 0 then Exit;
+  s := pystr_of(id);
+  if s = '' then Exit;
+  TkEval('after cancel ' + s);
+  for i := 0 to gTkCbCount - 1 do
+    if gTkCbAfterId[i] = s then
+    begin
+      TkiReleaseCb(i);
+      Exit;
+    end;
+end;
+
+{ ---- stacking, icon state, selection ------------------------------------- }
+
+procedure Widget.lift;
+begin
+  TkEval('raise ' + path);
+end;
+
+procedure Widget.lower_;
+begin
+  TkEval('lower ' + path);
+end;
+
+procedure Widget.deiconify;
+begin
+  TkEval('wm deiconify ' + path);
+end;
+
+procedure Widget.iconify;
+begin
+  TkEval('wm iconify ' + path);
+end;
+
+function Widget.clipboard_get: AnsiString;
+{ Tk raises when the selection is empty or holds a type we did not ask for;
+  Python's clipboard_get raises TclError there and callers guard it. We have no
+  Tcl error channel here, so an empty answer stands in for both. }
+begin
+  clipboard_get := TkEval('clipboard get');
+end;
+
+procedure Widget.clipboard_clear;
+begin
+  TkEval('clipboard clear -displayof ' + path);
+end;
+
+procedure Widget.clipboard_append(const text: AnsiString);
+begin
+  TkEval('clipboard append -displayof ' + path + ' -- {' + text + '}');
 end;
 
 constructor Event.Create;
@@ -1249,6 +1440,16 @@ end;
 function Text.index(const idx: AnsiString): AnsiString;
 begin
   index := TkEval(path + ' index ' + idx);
+end;
+
+procedure Text.see(const idx: AnsiString);
+begin
+  TkEval(path + ' see ' + idx);
+end;
+
+procedure Text.mark_set(const markName, idx: AnsiString);
+begin
+  TkEval(path + ' mark set ' + markName + ' ' + idx);
 end;
 
 procedure Text.event_generate(const sequence: AnsiString);

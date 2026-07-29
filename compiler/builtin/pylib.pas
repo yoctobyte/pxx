@@ -4488,10 +4488,15 @@ begin
 end;
 
 type
-  TPyCbM0 = function(recv: Pointer): Int64;
-  TPyCbM1 = function(recv: Pointer; const a0: Variant): Int64;
-  TPyCbF0 = function: Int64;
-  TPyCbF1 = function(const a0: Variant): Int64;
+  { A NilPy def/method with no `-> ann` returns a VARIANT, and a Variant result
+    travels through a hidden destination pointer the callee copies into on the
+    way out. Calling one through a `: Int64` pointer left that register holding
+    whatever the previous call put there, and the epilogue wrote 16 bytes to it.
+    A `-> None` callee ignores the destination, so this shape is right for both. }
+  TPyCbM0 = function(recv: Pointer): Variant;
+  TPyCbM1 = function(recv: Pointer; const a0: Variant): Variant;
+  TPyCbF0 = function: Variant;
+  TPyCbF1 = function(const a0: Variant): Variant;
 
 function pycallback_is(const cb: Variant): Boolean;
 begin
@@ -4499,9 +4504,14 @@ begin
 end;
 
 function pycallback_call0(const cb: Variant): Int64;
-var code, recv: Pointer; m0: TPyCbM0; f0: TPyCbF0;
+{ NOTE the empty parens on f0(): a bare procedural-variable NAME is not a call
+  here, it is the pointer value — `pycallback_call0 := f0` silently assigned the
+  code address and never invoked the callback, which is why a zero-argument
+  `command=`/`after` handler did nothing at all. }
+var code, recv: Pointer; m0: TPyCbM0; f0: TPyCbF0; r: Variant;
 begin
   pycallback_call0 := 0;
+  r := pynone;
   if not pycallback_is(cb) then Exit;
   code := pybound_code(cb);
   recv := pybound_recv(cb);
@@ -4509,19 +4519,20 @@ begin
   if recv = nil then
   begin
     f0 := TPyCbF0(code);
-    pycallback_call0 := f0;
+    r := f0();
   end
   else
   begin
     m0 := TPyCbM0(code);
-    pycallback_call0 := m0(recv);
+    r := m0(recv);
   end;
 end;
 
 function pycallback_call1(const cb: Variant; const a0: Variant): Int64;
-var code, recv: Pointer; m1: TPyCbM1; f1: TPyCbF1;
+var code, recv: Pointer; m1: TPyCbM1; f1: TPyCbF1; r: Variant;
 begin
   pycallback_call1 := 0;
+  r := pynone;
   if not pycallback_is(cb) then Exit;
   code := pybound_code(cb);
   recv := pybound_recv(cb);
@@ -4529,12 +4540,12 @@ begin
   if recv = nil then
   begin
     f1 := TPyCbF1(code);
-    pycallback_call1 := f1(a0);
+    r := f1(a0);
   end
   else
   begin
     m1 := TPyCbM1(code);
-    pycallback_call1 := m1(recv, a0);
+    r := m1(recv, a0);
   end;
 end;
 
