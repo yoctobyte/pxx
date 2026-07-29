@@ -21,7 +21,29 @@ found. The bug itself, once seen, was one retain.
 Two switches in `compiler/builtin/builtinheap.pas` would have made it a
 one-run diagnosis.
 
-## 1. `PXX_HEAP_DEBUG` — poison + quarantine
+## Status
+
+**Part 1 SHIPPED** (2026-07-29) as a COMPILE-TIME define, `-dPXX_HEAP_DEBUG`,
+not an env var: `builtinheap` is below sysutils (no `GetEnvironmentVariable`
+without a dependency inversion), has no `/proc` on ESP, and the allocator hot
+path must cost exactly zero when the facility is off. A define gives all three
+and makes "default byte-identical" trivially checkable — verified: the compiler
+self-compiles to the same binary bit for bit with the change in.
+
+Also shipped beyond the original sketch, because the quarantine bookkeeping
+gives them away for free: **double-free** detection (the block is already fully
+poison on the way in) and **write-after-free** detection (poison is verified
+when a block is evicted), plus retain/release-of-a-freed-object reports on the
+`PXXObj*` side. Usage: `devdocs/dev/debug-heap.md`.
+
+Validated against the real bug: with today's retain fix disabled, songformatter's
+`DetectorResult.evidence` reads `-572662307` (`0xDDDDDDDD`) under the flag,
+where without it the same field read `1751084129` — a recycled allocation's
+ASCII bytes, which is what made the bug cost three sessions.
+
+Part 2 (`PXX_OBJTRACE`) still open.
+
+## 1. `PXX_HEAP_DEBUG` — poison + quarantine (SHIPPED)
 
 On `PXXFree`: fill the payload with `$DD` and hold the block off the free list
 for N frees (a small ring) before really releasing it. A dangling read then
