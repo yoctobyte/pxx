@@ -120,6 +120,13 @@ the cheap one and call the family closed.
 - **Editing by slicing on a bare function signature** matches the INTERFACE
   declaration in a unit and eats the section. Anchor edits on body text and
   assert the match count is 1.
+- **Never write `until ! pgrep -f "make X"; do sleep; done`.** `pgrep -f`
+  matches the WAITER'S OWN command line, so it waits for itself and spins
+  forever. The session that wrote this left 57 such orphans on the box, oldest
+  20.6 hours, across several sessions. The loop is also unnecessary: a
+  backgrounded command notifies on completion. If you must match a process, use
+  `pgrep -f 'ma[k]e X'` so the pattern cannot match itself — that trick is also
+  how you verify the cleanup worked, because a naive count counts itself.
 
 ## State
 
