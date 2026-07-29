@@ -1,137 +1,151 @@
-# Handoff — all-night bug hunt, all tracks (written 2026-07-29, late)
+# Handoff — all-night bug hunt, all tracks (rewritten 2026-07-29, second night)
 
 Paste the block below as the opening prompt of a fresh session.
 
 ---
 
-You are running an **overnight bug hunt on `master`** in `/home/rene/frankonpiler`,
-across every track. The user has confirmed you are **sole Track A** — you may edit
-the shared `compiler/parser.inc`, `ir*.inc`, `symtab.inc`, `defs.inc` and the
+You are running an **overnight bug hunt on `master`** in `/home/rene/frankonpiler`.
+The user has confirmed you are **sole Track A** — you may edit the shared
+`compiler/parser.inc`, `pyparser.inc`, `ir*.inc`, `symtab.inc`, `defs.inc` and the
 backends. Re-confirm if another agent appears. Work directly on master, commit in
-small units, push after each green gate. Do not create worktrees or clones.
+small units, push after each green gate. No worktrees, no clones.
 
 ## Read before touching anything
 
 - `devdocs/dev/debugging-playbook.md` — which tool, in which order.
 - `CLAUDE.md` — tracks, gates, the claims discipline.
-- `tools/progress.sh next` — the ranked queue is the work list; `ready --track X`
-  for one lane.
+- `tools/progress.sh next` — the ranked queue is the work list.
 
-The one rule the toolkit exists for: **the expensive bugs here do not crash, they
-produce a plausible wrong value far from the cause.** Measure before theorising —
-`tools/pydiff.py run|bisect|probe` against CPython, `PXXDBG=n.locals|a.ir:<proc>`
-for what the compiler inferred, `-g` + gdb for where it actually died. A crash has
-a location and is the cheap case.
+The rule the toolkit exists for: **the expensive bugs here do not crash, they
+produce a plausible wrong value far from the cause.** Measure before theorising.
+A crash has a location and is the cheap case.
 
-## Start here — the top item is already reduced to 15 lines
+## The single highest-value habit: sweep against CPython
 
-**Cross-module `Callable` ABI.** A def passed as a value into an IMPORTED
-function's `Callable` parameter arrives as garbage. This is the standing wall in
-songformatter's key analysis (`~/songformatter`, `kadrv.py` segfaults where
-CPython prints `C / weighted / 8`), and it is NOT a regression — verified against
-a compiler built from `b7c524a89`.
+Last night's eight fixes came from tickets; the ~20 findings that filled the
+queue came from **sweeping**. The recipe, which is cheap and repeatable:
 
-```python
-# kalib2.py
-from typing import Callable
-def run2(chords: list[str], cb: Callable[[str], list[str]]) -> list[str]:
-    return cb(chords[0])
-# drv2.py
-from kalib2 import run2
-def notes_of(ch: str) -> list[str]: return [ch, ch]
-print(run2(["C"], notes_of))     # SIGSEGV — CPython prints ['C', 'C']
-```
+> generate one small `.py` per operator / builtin / method, with `try/except`
+> around each case, run under CPython and under pxx, diff.
 
-Measured facts, do not re-derive:
-- gdb names it: `NoteCountingDetector.analyze (..., chord_to_notes=0x2, ...)` —
-  the callable arrives as a variant TAG word, not a value.
-- The identical shape **inside one module works**. Cross-module is the trigger;
-  the keyword-only `*` and the comprehension in the real code are incidental.
-- `PXXDBG=a.ir:run2` shows the imported unit taking `cb` as a plain `tyPointer`
-  and doing a direct `call_ind` — a raw code address — while the caller hands
-  over a function VALUE.
-- Why: `PyDefUsedAsValue` (pyparser.inc) decides the def's ABI by scanning
-  **MainProgramTokCount**, i.e. the main program's tokens. When the consumer of
-  the callable lives in an imported unit, the two sides settle on different
-  conventions. Look there first, and at `PyAnnTypeAt`'s `callable` branch.
+Two things make it work:
 
-File it as a Track N bug before fixing, so the finding survives even if the fix
-does not land.
+- **Run every binary under `timeout`.** One finding (`2.5 * "ab"`) was an
+  infinite hang, which a plain test run cannot tell from a slow one.
+- **Compile from the repo root.** The compiler resolves `lib/rtl` relative to
+  cwd, so `pascal26 /tmp/x.py` from elsewhere dies with "no unit named
+  builtinheap". This also breaks `tools/pydiff.py`, which writes its temporaries
+  elsewhere — worth fixing if you touch it.
 
-## Then: the ranked queue, any track
+Areas already swept and **matching CPython exactly** — do not re-sweep: string
+methods, slices, list/dict methods (bar three), f-strings / `%` / `.format`
+(bar `%e`), iteration and comprehensions, inheritance / `super()` /
+`isinstance` / `@property` / `@dataclass`, user-raised exceptions, closures /
+defaults / kwargs / recursion / `global`, numerics, `in`, truthiness and
+short-circuit, mutation and aliasing, nested-container printing, `json`, `re`.
+
+Not yet swept, and where I would look next: `with`, `del`, nested functions
+inside classes, `bytes`/`bytearray`, deep recursion, very large containers,
+multiple inheritance, iterator invalidation, `sys.argv`/stdin, and the same
+operator sweep with VARIABLES rather than literals (everything above used
+literals, so the static-type paths were exercised and the variant paths were
+not — that is a whole second surface).
+
+## Start here — the queue is stocked and honest
 
 `tools/progress.sh next`, claim, fix, gate, resolve, `board-md`, push, repeat.
-Known-good candidates if the queue looks thin:
+The top of Track N as of this handoff, all filed with measured repros:
 
-- **N** — `bug-nilpy-tk-pxxcb-invalid-command-name` (p65, Tk error dialog still
-  appears), `bug-nilpy-object-reclamation-disabled-inside-py-modules` (p65),
-  `bug-nilpy-bound-method-coerced-to-string` (p65 — a callable passed to a string
-  parameter must be REFUSED at the call site, not coerced),
-  `bug-nilpy-pyeval-host-kwargs-positional` (p60).
-- **Sweeps beat tickets** when the queue thins: take an OPERATOR or a builtin and
-  diff every operand-type combination against CPython. Today `min/max` of a
-  subscript printed a POINTER and `"%.2f" % x` printed `0.0` — both silent, both
-  found by sweeping, neither by reading code.
-- **A/P** — `bug-compiler-selfdebug-lines-index-expanded-source` (p45).
+- `bug-nilpy-str-of-object-segfaults-when-dunder-builds-a-string` (75) — **fix
+  written and gating** when this was handed off; verify it landed before
+  redoing it. Root cause: a field whose name matches a CLASS name
+  (case-insensitively) was typed as that class.
+- `bug-nilpy-dict-equality-compares-identity` (70) — `{"k":1} == {"k":1}` is
+  False. Lists are already right; pylib has `pylist_eq` and needs `pydict_eq`
+  beside it, plus an arm in ir.inc mirroring the list one.
+- `bug-nilpy-eq-dunder-ignored` (70) — `__eq__` never called. `__lt__` and
+  `__len__` DO dispatch, so it is wiring, not machinery.
+- `bug-nilpy-runtime-raised-errors-bypass-try-except` (65) — **the best
+  value-for-effort item on the board.** NOTHING the runtime raises is catchable
+  (index, key, division by zero, `int("abc")`), not even by bare `except:`,
+  while user `raise` works. `PyIndexError`/`PyKeyError` in `pylib.pas` are
+  `writeln` + `Halt(1)` and the exception classes are declared a few lines
+  above. Folds in `bug-nilpy-int-parse-halts-instead-of-raising` (55).
+- `feature-nilpy-container-method-gaps` (60) — `list.index` is the LAST compile
+  blocker for songformatter's remaining two modules. `list.remove`, `list.copy`
+  and one-argument `dict.pop` are in the same ticket.
+- `bug-nilpy-zip-over-a-string-yields-nothing-or-segfaults` (70),
+  `bug-nilpy-returning-a-nested-def-yields-none` (70),
+  `bug-nilpy-large-float-str-overruns-into-garbage` (70 — writes invalid UTF-8
+  bytes to stdout).
 
-## Gate discipline — this is where the session lost time
+One Track U item is waiting on the user: `decide-nilpy-mixed-type-operand-policy`
+— what NilPy should do when an operator gets operand types Python rejects. Three
+crashes/hangs hang off it. Do not guess the policy; the individual crashes are
+filed as bugs and can be fixed without it.
 
-- `tools/gate.sh quick` (or `full` for frontend/shared-IR changes). **Background
-  the script itself and wait for the notification.** It takes 8-15 min because
-  Track T's watcher saturates this box.
-- **NEVER pipe a gate or a build through `tail` when you care about its status.**
-  A pipeline exits with `tail`'s status, so a FAILED `make ... | tail -5` reports
-  exit 0 and the completion notification says "completed". That happened twice
-  today and one push went out on a red suite. Run `gate.sh` bare, or capture
-  `${PIPESTATUS[0]}` and print it.
-- **Do not edit compiler sources while a gate runs** — it invalidates the run.
-  Either wait, or kill the gate deliberately and say so.
-- Never write `until ! pgrep -f "make X"`: `pgrep -f` matches the waiter's own
-  command line and spins forever. Use `pgrep -f 'ma[k]e X'`.
-- Per-fix confirm is cheap and mandatory: self-host fixedpoint (compile the
-  compiler twice, `cmp` the two) + `tools/pydiff.py probe`. ~25s.
+## Gate discipline — where time is actually lost
+
+- `tools/gate.sh quick` (or `full` for frontend / shared-IR changes).
+  **Background the script and wait for the notification.** With Track T's
+  watcher on this box a full gate took **~20 minutes**; budget for it and do
+  useful read-only work meanwhile.
+- **Background it with an absolute path** (`/home/rene/frankonpiler/tools/gate.sh
+  full`). A backgrounded relative path silently failed with exit 127 and no gate
+  ran at all — the notification said "failed", which is easy to skim past.
+- **Never pipe a gate or build through `tail`** when you care about the status:
+  a pipeline exits with `tail`'s status, so a FAILED `make ... | tail -5` reports
+  exit 0.
+- **Do not edit compiler sources while a gate runs.** Ticket and memory writing
+  is the right work for that window, and there is always plenty.
+- Never write `until ! pgrep -f "make X"` — `pgrep -f` matches the waiter's own
+  command line and spins forever.
 - A **stale binary** silently no-ops: `cp` onto `compiler/pascal26` fails with
-  "Text file busy" while a gate is running, and you then test the OLD compiler.
-  Check the `cp` succeeded.
+  "Text file busy" during a gate, and you then test the OLD compiler.
 
-## What landed today, so you do not redo it
+## What landed, so you do not redo it
 
-Eleven fixes, all pushed, all self-host byte-identical. The callable-value family
-is CLOSED: a def or lambda in a name, in a container, as a bound method, and
-zero-parameter lambdas, all callable — behind ONE runtime dispatcher
-(`pyvar_callv0..3` in pyeval.pas) that tells the four callable shapes apart at run
-time instead of the frontend guessing from a tag. Also: `min/max` of a subscript,
-class attributes with non-literal initialisers, `super().m()` in expressions and
-`Parent.m(self)`, unknown-method as a compile error, method chaining (which was
-also RUNNING THE RECEIVER TWICE — the parse error hid a wrong answer), `%`
-string formatting, and `str()` of a container.
+- **242b96878** — `from m import f` no longer forces the function-object ABI on
+  every def an imported module exports.
+- **33db0107d** — NilPy object reclamation now runs inside imported `.py`
+  modules, behind ONE predicate, `NilPyUserCode` (symtab.inc). **Grep for that
+  predicate before adding any new NilPy-only rule**; the nine rules must move
+  together.
+- **9b4b9d36c** — `3 == "ab"` no longer segfaults.
+- **e63a59747** (previous night) — the C cross-namespace arity warning. Found
+  STALE at the top of the global queue this night: the fix had landed, the
+  ticket had not moved. Its rung 2 is unblocked, since the same commit measured
+  zero warnings across the whole C suite.
 
-Two patterns worth carrying forward:
-1. **The reported symptom is often the smaller half.** The chaining ticket said
-   "does not parse"; measuring first found the shape that DID parse computing 7
-   where CPython says 5.
-2. **Ask the object, not the syntax.** The `%` operator shipped with a
-   parser-side heuristic for tuple-vs-list; hours later `TPyList.FIsTuple` made it
-   exact and the heuristic (and its documented divergence) were deleted.
+Together the first two took down songformatter's standing `Callable` wall:
+`kadrv.py` now prints `C / weighted / 8`, matching CPython, and three of its
+five modules compile.
 
 ## Traps that produced confident wrong readings
 
-- Piping to `tail` (above). The worst one — it converts "verified" into "assumed".
-- `PyMethodUsedAsValue` / `PyDefUsedAsValue` are NAME-keyed, module-wide scans.
-  That is deliberate (it keeps an override and its base in step) but it means a
-  same-named attribute elsewhere normalises a method that did not need it.
-- A ticket's "already fixed, do not re-do" section can be WRONG. Two today
-  claimed helpers that were never written. Verify against the source.
-- Duplicate ticket slugs exist (two `feature-nilpy-function-values`). Check
-  `ls devdocs/progress/*/<slug>.md` before assuming which one you resolved.
+- **Three wrong root causes in a row on one bug.** "`__repr__` is
+  unimplemented", "`str(self.v)` recurses", "the managed Result slot is
+  uninitialised" — each plausible, each wrong, each a round. What settled it in
+  ONE command was `PXXDBG=a.ir:<proc>` on a crashing and a working program,
+  diffed: one node differed, `tk=6` against `tk=13`. When two programs differ by
+  one line and one crashes, diff their IR before forming a theory.
+- **Vary the NAME.** The same bug's trigger turned out to be the CLASS NAME, not
+  the code. Holding the body fixed and changing identifiers is a cheap axis that
+  nothing else would have found.
+- **A generator bug looks like a compiler bug.** Two "findings" were my own
+  test-generator emitting `"len("abc")"` with nested quotes. Read the generated
+  source before believing a parse error.
+- **A ticket can be stale in either direction.** One claimed helpers that were
+  never written; another described as unfixed work that had landed the day
+  before. Check the code, and `git log -S` the symbol.
 
 ## Cadence
 
-Land one fix, gate, push, resolve the ticket, regenerate the board, take the next.
-Push OFTEN — Track T only sees origin/master, so unpushed work is untested work.
-When you hit a design or intent fork you cannot settle from code or a sane
-default, file a Track U ticket (`decide-<topic>`: fork, options, trade-offs, your
-recommendation) and move on rather than guessing.
+Land one fix, gate, push, resolve the ticket, regenerate the board, take the
+next. Push OFTEN — Track T only sees origin/master, so unpushed work is untested
+work. When you hit a design or intent fork you cannot settle from code or a sane
+default, file a Track U ticket (`decide-<topic>`) and move on rather than
+guessing.
 
 Stop when the queue is dry for every lane, or the user says so. Leave a handoff
 of the same shape as this one.
