@@ -10936,6 +10936,16 @@ function PyDefUsedAsValue(const nm: AnsiString): Boolean;
   passed around as a function object, typically into a `Callable[...]`
   parameter.
 
+  An IMPORT statement does not count. `from m import run2` names the def with a
+  bare identifier, which used to make every def an imported module exports take
+  the function-object ABI — variant result AND every parameter boxed. For most
+  parameter types that is only wasteful; for a `Callable[...]` parameter it is
+  fatal, since the callee then holds a variant (by reference) where the caller
+  passed a function VALUE and `call_ind` jumped to the variant's tag word
+  (bug-nilpy-import-name-forces-function-object-abi). The scan is NOT narrowed
+  to the current unit instead: a def defined in a module and passed as a value
+  by the main program is the genuine case, and that lives outside PyScanLo.
+
   Such a def must use the one ABI every Callable signature marshals against.
   A `Callable[..., R]` cannot know which def it will receive, so both sides are
   normalised to the VARIANT (hidden-destination) result convention here and in
@@ -10946,12 +10956,27 @@ function PyDefUsedAsValue(const nm: AnsiString): Boolean;
   variant through whatever the caller happened to leave in the destination
   register. See bug-nilpy-callable-return-abi-mismatch. }
 var j: Integer;
+    atStmtStart, inImport: Boolean;
 begin
   Result := False;
   j := 0;
+  atStmtStart := True;
+  inImport := False;
   while j < MainProgramTokCount do
   begin
-    if (Tokens[j].Kind = tkIdent) and CaseEqual(GetTokenStr(j), nm) then
+    if Tokens[j].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon] then
+    begin
+      atStmtStart := True;
+      inImport := False;
+    end
+    else if atStmtStart then
+    begin
+      inImport := (Tokens[j].Kind = tkUses) or
+                  ((Tokens[j].Kind = tkIdent) and CaseEqual(GetTokenStr(j), 'from'));
+      atStmtStart := False;
+    end;
+    if (not inImport) and
+       (Tokens[j].Kind = tkIdent) and CaseEqual(GetTokenStr(j), nm) then
     begin
       if not (((j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkLParen)) or
               ((j > 0) and (Tokens[j - 1].Kind = tkDot)) or
