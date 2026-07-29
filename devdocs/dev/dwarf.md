@@ -82,7 +82,7 @@ object is hard to kill on purpose. Marked here rather than claimed as verified.)
 ## Recommended combination for an ownership bug
 
 1. `-g -O2 -dPXX_HEAP_DEBUG` — poison tells you *that* there is a
-   use-after-free and which read hits it (see `devdocs/dev/debug-heap.md`).
+   use-after-free and which read hits it (see `devdocs/dev/debug-switches.md`).
 2. `pxxrc` at the suspect points — who is holding a reference, and how many.
 3. `-dPXX_OBJTRACE` if it is still not obvious — the full retain/release log
    for one address.
@@ -111,6 +111,6 @@ object is hard to kill on purpose. Marked here rather than claimed as verified.)
 
 ## Related
 
-- `devdocs/dev/debug-heap.md` — the `-dPXX_HEAP_DEBUG` / `-dPXX_OBJTRACE`
+- `devdocs/dev/debug-switches.md` — the `-dPXX_HEAP_DEBUG` / `-dPXX_OBJTRACE`
   switches.
 - `devdocs/progress/backlog/feature-debuggability-umbrella.md`.

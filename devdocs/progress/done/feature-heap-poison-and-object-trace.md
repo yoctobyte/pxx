@@ -34,7 +34,7 @@ Also shipped beyond the original sketch, because the quarantine bookkeeping
 gives them away for free: **double-free** detection (the block is already fully
 poison on the way in) and **write-after-free** detection (poison is verified
 when a block is evicted), plus retain/release-of-a-freed-object reports on the
-`PXXObj*` side. Usage: `devdocs/dev/debug-heap.md`.
+`PXXObj*` side. Usage: `devdocs/dev/debug-switches.md`.
 
 Validated against the real bug: with today's retain fix disabled, songformatter's
 `DetectorResult.evidence` reads `-572662307` (`0xDDDDDDDD`) under the flag,

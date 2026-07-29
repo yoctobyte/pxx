@@ -1,7 +1,8 @@
-# Debug heap and object trace — `-dPXX_HEAP_DEBUG`, `-dPXX_OBJTRACE`
+# Debug switches — `-dPXX_HEAP_DEBUG`, `-dPXX_OBJTRACE`, `PXXDBG=`
 
-Two independent compile-time switches. They compose; both are off by default
-and neither changes the shipped binary.
+Three independent switches, all off by default. The first two are compile-time
+defines affecting the emitted PROGRAM; the third is an environment variable
+read by the COMPILER. See also `devdocs/dev/dwarf.md` for gdb.
 
 # 1. The debug heap — `-dPXX_HEAP_DEBUG`
 
@@ -116,6 +117,59 @@ the trace shows the release that should not have happened, and the poison shows
 where the freed block is subsequently read. Start with poison (it tells you
 there IS a use-after-free and which read hits it), then add the trace (it tells
 you which release caused it).
+
+# 3. Compiler-side topics — `PXXDBG=`
+
+```sh
+PXXDBG=help              compiler/pascal26 prog.py out   # where to look
+PXXDBG=n.locals          compiler/pascal26 prog.py out
+PXXDBG=n.locals,n.ctorargs compiler/pascal26 prog.py out
+PXXDBG=n.*               compiler/pascal26 prog.py out   # a whole lane
+PXXDBG=all               compiler/pascal26 prog.py out
+```
+
+## Topics
+
+**This table is the authority.** The compiler does NOT carry a hardcoded topic
+list — `PXXDBG=help` just points here. A list duplicated in source drifts, and a
+drifted list is worse than none.
+
+Topics are namespaced by owning lane, using the track letters from CLAUDE.md, so
+a frontend can add a probe without colliding with another's. A trailing `.*`
+enables a whole lane.
+
+| topic | lane | what it prints |
+| --- | --- | --- |
+| `n.locals` | N (NilPy) | the inferred local table per routine, after the inference fixed point — "what type did NilPy actually give this local" |
+| `n.ctorargs` | N (NilPy) | every NilPy construction's argument AST kind + type kind |
+| `n.*` | N | everything NilPy |
+| `all` | — | everything |
+
+Adding a topic: pick `<lane>.<name>`, call `PxxDbgEnabled('<lane>.<name>')` at
+the probe, and add the row above. There is nothing else to update.
+
+Why namespaced at all: the first two topics were `locals` and `ctorargs`, flat.
+The moment Track C wants "dump the local table" that name is taken, and
+`PXXDBG=locals` printing nothing tells you neither "wrong topic" nor "no NilPy
+routine was compiled". A lane prefix makes a typo visible.
+
+**Why it exists.** Until 2026-07-29 there was no `GetEnv` anywhere in the
+compiler, so every parser/typing probe cost edit-source + a ~90s self-compile +
+remembering to strip it. That round trip is why a wrong root-cause premise ended
+up recorded in `bug-nilpy-slice-of-variant-local-returned-is-unusable`: the
+cheap move was to reason rather than measure. Both topics above are probes that
+were hand-patched in during that hunt; `ctorargs` is the one that eventually
+disproved the premise.
+
+Notes:
+
+- Matching is on comma-separated TOKENS, not a raw substring — a substring test
+  would make `locals` silently match a future `modulelocals`.
+- Read once from `/proc/self/environ` via the `sysopen`/`sysread`/`sysclose`
+  intrinsics, so one implementation serves the FPC-bootstrap and self-hosted
+  builds.
+- With `PXXDBG` unset the emitted output is byte-identical (verified for a
+  NilPy and a Pascal program) and the self-host fixedpoint holds.
 
 ## Related
 

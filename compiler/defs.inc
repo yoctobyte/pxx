@@ -2525,6 +2525,104 @@ begin
 end;
 {$endif}
 
+{ ===== PXXDBG — compiler-side debug topics ==================================
+
+    PXXDBG=locals ./compiler/pascal26 prog.py out
+    PXXDBG=help   ./compiler/pascal26 prog.py out     (lists the topics)
+
+  Why this exists: until now there was NO GetEnv anywhere in the compiler, so
+  every parser/typing probe cost edit-source + a ~90s self-compile + remember
+  to strip it. That round trip is how a wrong root-cause premise ended up
+  recorded in bug-nilpy-slice-of-variant-local-returned-is-unusable: the cheap
+  move was to reason instead of measure. Both topics below are probes that were
+  hand-patched in during that hunt.
+
+  sysopen/sysread/sysclose are compiler INTRINSICS (tkSysOpen &c), so one
+  implementation serves the FPC-bootstrap and self-hosted builds alike.
+
+  Matching is on comma-separated TOKENS, not a raw substring: a substring test
+  would make `locals` silently match a future `modulelocals`, which is the same
+  class of surprise this project keeps paying for. `all` enables everything.
+
+  Off by default and read once — with PXXDBG unset the compiler is
+  byte-identical, which the self-host fixedpoint gate would catch anyway. }
+var
+  PxxDbgTopics : AnsiString;
+  PxxDbgLoaded : Boolean;
+
+{ PXXDBG=help. Deliberately does NOT enumerate the topics: a list duplicated in
+  source drifts from the real probes, and a drifted list is worse than none.
+  devdocs/dev/debug-switches.md is the authority. }
+procedure PxxDbgHelp;
+begin
+  WriteLn('PXXDBG: comma-separated topics, `<lane>.*` for a whole lane, or `all`.');
+  WriteLn('Topics are listed in devdocs/dev/debug-switches.md');
+end;
+
+procedure PxxDbgLoad;
+var buf: array[0..16383] of Byte; fd, n, i, j, k: Integer; nm, pth: AnsiString;
+begin
+  if PxxDbgLoaded then Exit;
+  PxxDbgLoaded := True;
+  PxxDbgTopics := '';
+  pth := '/proc/self/environ';   { sysopen takes a string VAR, not a literal }
+  fd := sysopen(pth, 0);
+  if fd < 0 then Exit;
+  n := sysread(fd, buf, SizeOf(buf));
+  sysclose(fd);                  { statement form, like elfwriter's LoadFile }
+  if n <= 0 then Exit;
+  { NUL-separated NAME=VALUE records }
+  i := 0;
+  while i < n do
+  begin
+    j := i;
+    while (j < n) and (buf[j] <> 0) do Inc(j);
+    { does this record start with PXXDBG= ? }
+    if j - i > 7 then
+    begin
+      nm := '';
+      for k := i to i + 5 do nm := nm + Chr(buf[k]);
+      if (nm = 'PXXDBG') and (buf[i + 6] = Ord('=')) then
+      begin
+        PxxDbgTopics := '';
+        for k := i + 7 to j - 1 do PxxDbgTopics := PxxDbgTopics + Chr(buf[k]);
+      end;
+    end;
+    i := j + 1;
+  end;
+  if PxxDbgTopics = 'help' then PxxDbgHelp;
+end;
+
+function PxxDbgEnabled(const topic: AnsiString): Boolean;
+var i, start: Integer; cur: AnsiString;
+begin
+  PxxDbgEnabled := False;
+  PxxDbgLoad;
+  if PxxDbgTopics = '' then Exit;
+  start := 1;
+  for i := 1 to Length(PxxDbgTopics) + 1 do
+    if (i > Length(PxxDbgTopics)) or (PxxDbgTopics[i] = ',') then
+    begin
+      cur := Copy(PxxDbgTopics, start, i - start);
+      { exact topic, the catch-all, or a LANE wildcard `n.*` matching n.<x>.
+        Namespaced by owning lane so a frontend can add a probe without
+        colliding with another's — see debug-switches.md. }
+      if (cur = topic) or (cur = 'all') then
+      begin
+        PxxDbgEnabled := True;
+        Exit;
+      end;
+      if (Length(cur) > 2) and (cur[Length(cur)] = '*') and
+         (cur[Length(cur) - 1] = '.') and
+         (Copy(topic, 1, Length(cur) - 1) = Copy(cur, 1, Length(cur) - 1)) then
+      begin
+        PxxDbgEnabled := True;
+        Exit;
+      end;
+      start := i + 1;
+    end;
+end;
+
 function IntToTokenKind(val: Integer): TTokenKind;
 begin
   {$ifdef FPC}

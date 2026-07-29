@@ -3193,6 +3193,25 @@ begin
       end;
   end;
   Result := node;
+  { PXXDBG=n.ctorargs — every construction's slot kinds and types. This is the
+    probe that disproved the recorded root cause of
+    bug-nilpy-slice-of-variant-local-returned-is-unusable (the argument was
+    tyVariant in BOTH passes, not mis-tagged tyClass); it cost a source patch
+    and a self-compile to ask that question then. }
+  if PxxDbgEnabled('n.ctorargs') then
+  begin
+    Write('PXXDBG n.ctorargs ', name, ' trial=', Ord(PyTypingPass));
+    argNode := ASTRight[ASTLeft[node]];
+    k := 0;
+    while argNode >= 0 do
+    begin
+      Write(' [', k, ']kind=', ASTKind[ASTLeft[argNode]],
+            ',tk=', ASTTk[ASTLeft[argNode]]);
+      argNode := ASTRight[argNode];
+      Inc(k);
+    end;
+    WriteLn;
+  end;
   { CLASS ATTRIBUTES (`name = "note_counting"` at class level): give the new
     instance its own copy. Python attaches them to the CLASS and reads them
     through the instance, which is indistinguishable from this for every read —
@@ -10269,6 +10288,18 @@ end;
   are rolled back here. }
 const PY_INFER_ROUNDS = 4;
 
+{ PXXDBG=n.locals — the inferred local table, after the fixed-point rounds.
+  The other probe hand-patched during the same hunt: "what type did NilPy
+  actually give this local" was previously unanswerable without a rebuild. }
+procedure PyDbgDumpLocals(const whose: AnsiString);
+var i: Integer;
+begin
+  if not PxxDbgEnabled('n.locals') then Exit;
+  for i := 0 to PyLocalCount - 1 do
+    WriteLn('PXXDBG n.locals ', whose, ' ', PyLocals[i].Name,
+            ' tk=', Ord(PyLocals[i].TypeKind), ' rec=', PyLocals[i].RecCi);
+end;
+
 procedure PyCollectLocalsAST(bodyStart: Integer);
 var rnd, i, si, savedTok, savedAST, savedSC, savedCur, savedFS: Integer;
     changed: Boolean;
@@ -11058,6 +11089,7 @@ begin
     end;
   end;
   PyCollectLocalsAST(bodyStart);
+  PyDbgDumpLocals(Procs[procIdx].Name);
   for i := 0 to PyLocalCount - 1 do
     if PyProgSym(PyLocals[i].Name) < 0 then
     begin
@@ -12542,6 +12574,7 @@ begin
     def/method asymmetry that made `-> str` methods a separate bug from `-> str`
     defs. One pre-pass now serves both. }
   PyCollectLocalsAST(bodyStart);
+  PyDbgDumpLocals(Procs[procIdx].Name);
   for i := 0 to PyLocalCount - 1 do
     if PyProgSym(PyLocals[i].Name) < 0 then
     begin
