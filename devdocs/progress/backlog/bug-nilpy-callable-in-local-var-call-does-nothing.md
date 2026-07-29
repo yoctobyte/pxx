@@ -4,21 +4,13 @@ prio: 70
 type: bug
 ---
 
-# `cb = handler` then `cb(x)` compiles and does NOTHING
+# `cb = lambda ...` then `cb(x)` compiles and does NOTHING
 
-A callable assigned to a **plain local/global name** and then called is a silent
+A **lambda** assigned to a plain local/global name and then called is a silent
 no-op. No diagnostic, no crash — the call simply does not happen.
 
-```python
-def hi(x):
-    print("hi", x)
-
-g = hi
-g(5)            # <- nothing is printed
-print("after")  # <- runs
-```
-
-Same for a lambda:
+The `def` half of this is FIXED (the assignment RHS now goes through
+PyMakeFuncValue, so `g = hi; g(5)` runs `hi`). What is left is the lambda:
 
 ```python
 g = lambda x: print("got", x)
@@ -46,22 +38,26 @@ f2 = d["a"];   f2(9)            # ok — f2 IS a variant
 ## Where it goes wrong
 
 `ParsePostfix` (parser.inc ~12386) turns `<expr>(` into `PyMakeDynCall` **only
-when `ASTTk[CurASTNode] = tyVariant`**. `g = hi` does not give `g` a variant
-type:
+when `ASTTk[CurASTNode] = tyVariant`**.
 
-- `PyMakeFuncValue` (pyparser.inc ~5286) is what boxes a bare def name as a
-  Python function object (a `pybound_new` pair, `tyVariant`). It is called from
-  ARGUMENT positions and from list literals — not from the assignment
-  right-hand side, so `g = hi` parses the name as an ordinary read.
-- `PyInferExprType`'s bare-identifier branch has no case for "this name is a
-  PROC used as a value", so the inferred local type is not variant either.
+`PyParseLambdaStub` (pyparser.inc ~3582) yields **`tyPointer`** on both of its
+paths — the lifted one (`pyboundfn_new` + binds) and the pyeval-closure
+fallback (`pyclosure_src_new`) — because both helpers return a Pointer. So the
+local is typed pointer, the postfix loop never fires, and the call is dropped.
+In an ARGUMENT position the same pointer is boxed into the callee's
+`const x: Variant` parameter, which is why `command=lambda: ...` works and
+`g = lambda: ...; g()` does not.
 
-Two edits were tried and did NOT fix it (so the real site is a third one — the
-plain `NAME = expr` statement path is not the `rhsNode :=` site at pyparser.inc
-~9825, which is where the attempt was made): adding `PyMakeFuncValue` to that
-RHS branch, and adding a `FindProc(name) >= 0 -> tyVariant` case to
-`PyInferExprType`. Find the statement path that actually handles `NAME = expr`
-first; expect SIBLING sites (the usual NilPy pattern).
+Fix sketch: box the lambda value into a variant so the expression's type is
+`tyVariant`. Doing it inside `PyParseLambdaStub` changes what every argument
+position receives (they currently get a pointer and rely on the parameter
+coercion), so either box there AND check the arg paths, or box only at the
+assignment site — note `PyCoerceAssignmentRHS` does NOT box pointer -> variant
+today, so that path needs the boxing call added explicitly.
+
+The `def` case was fixed by calling `PyMakeFuncValue` from the plain
+`NAME = expr` RHS branch (pyparser.inc ~10010) — the same hook a lambda fix
+would sit next to.
 
 ## Already fixed on the way here (do not re-do)
 

@@ -10008,8 +10008,22 @@ begin
       rhsNode := PyParseCountCreate
     else
     begin
-      PyParseBoolExpr;
-      rhsNode := CurASTNode;
+      { `cb = handler` — a bare def NAME as the whole right-hand side is
+        Python's function object, the same value an ARGUMENT position already
+        builds (PyMakeFuncValue: a pybound_new pair, tyVariant). Parsed as an
+        ordinary read the local came out non-variant, so the later `cb(...)`
+        never reached the dynamic-call path and the call did nothing at all.
+        PyMakeFuncValue returns -1 (consuming nothing) unless the token really
+        is a def name in a value position. }
+      rhsNode := -1;
+      if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind in [tkNewline, tkDedent, tkEOF]) then
+        rhsNode := PyMakeFuncValue;
+      if rhsNode < 0 then
+      begin
+        PyParseBoolExpr;
+        rhsNode := CurASTNode;
+      end;
     end;
     if symIdx < 0 then
     begin
