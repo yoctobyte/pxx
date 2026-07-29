@@ -42,19 +42,42 @@ So it needs all of: dispatch through `str(obj)` (not a direct method call), a
 managed — i.e. built, not literal — result, and no earlier statement touching
 the instance. Crash is inside `V.__str__ + 0x50` itself, per the `.map`.
 
-That combination is the signature of an uninitialised managed Result slot: the
-slot holds stack garbage, the first assignment RELEASES that wild handle, and
-any preceding statement changes what garbage is there — which is exactly why
-adding an unrelated `print(a.v)` "fixes" it. Same shape as the already-fixed
-`bug-nilpy-method-returning-str-garbage`, and the note in
-[[project_nilpy_method_result_not_zeroed_landmine]] (a method Result reached
-through the class PRE-PASS is registered skGlobal, and skLocal is what gates
-the prologue zero-init) says where to look first.
+## The IR says it plainly — a field typed as a CLASS
 
-Very likely the SAME root as
-[[bug-nilpy-method-returning-a-fresh-string-leaks]], where the method path's
-`$pyresult` is a managed slot that gets a raw `store_sym` of a frozen string
-instead of an ARC assign. Check that first: one fix may close both.
+`PXXDBG=a.ir:V.__str__` on the crashing program:
+
+```
+0: zero_sym  a=264                       tk=23    <- $pyresult IS zero-initialised
+1: const_str a=37 b=1                    tk=4
+2: load_sym  a=263 [sym=self]            tk=6
+3: field     a=2 ival=8 [offset=8]       tk=6     <- self.v typed tyClass (6), not int
+4: load_mem  a=3                         tk=6
+5: arg       a=4                         tk=6
+6: call      a=945 b=5                   tk=23    <- the OBJECT str path
+7: binop     a=1 b=6 c=70                tk=23
+8: store_sym a=264 b=7 [sym=$pyresult]   tk=23
+```
+
+`self.v` is `int`, assigned from an annotated `__init__` parameter, and inside
+`__str__` it carries tk=6 — tyClass. So `str(self.v)` takes the object route
+and dispatches `__str__` on the integer 1 as if it were an instance, which is
+why the crash is inside `V.__str__` itself, one frame below the outer call, and
+why the backtrace is short rather than a recursion blowup.
+
+That also explains the "fix" of touching the instance first: `print(a.v)` on an
+earlier line resolves the field's type before this method is lowered. It is the
+class-pipeline ordering hazard — names early, members late
+([[project_nilpy_class_pipeline_ordering]]) — with tyClass as the silent
+default for a field whose type is not yet known.
+
+(The earlier reading in this ticket — an uninitialised managed Result slot —
+was WRONG: `$pyresult` is zero-initialised right there at IR 0. Recorded
+because the wrong theory was plausible and cost a round; the IR settled it in
+one command.)
+
+So the fix is about field-type resolution order, not about ARC. It may still
+share a root with [[bug-nilpy-method-returning-a-fresh-string-leaks]], but that
+now looks like a separate defect rather than the same one.
 
 Found by the OOP sweep against CPython.
 
