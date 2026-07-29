@@ -49,3 +49,40 @@ sits at 60 rather than 40.
 
 `make test-nilpy` + self-host byte-identical, plus the list/dict method sweep
 diffed against CPython.
+
+## RESOLVED — four methods in pylib
+
+- `TPyList.index(v)` — first element equal to v by PyVarEq, RAISING ValueError
+  when absent, with CPython's exact wording (`<repr> is not in list`, the value
+  itself, and deliberately different from remove's message).
+- `TPyList.remove(v)` — same scan, then `pop_at`; ValueError when absent.
+- `TPyList.copy` — a SHALLOW copy, like Python's: same element values, so
+  appending to the copy leaves the original alone while a mutable element stays
+  shared.
+- `TPyDict.pop(k)` — the one-argument overload, raising KeyError. The two-arg
+  form already existed; requiring the default is what made `d.pop("a")` a PARSE
+  error rather than a missing method.
+
+All four raise properly rather than halting, because
+[[bug-nilpy-runtime-raised-errors-bypass-try-except]] landed first — otherwise
+this would have added three more `writeln` + `Halt` sites.
+
+Verified against CPython: index of a present and a duplicated element, remove
+of the first match, copy independence, and each of the four failure modes
+caught by its own exception type with matching message text.
+
+## The songformatter wall moved
+
+Before: `convertrawtext.py` and `SongFormatter.py` both stopped at line 334,
+`TPyList has no method index`. Now both reach **line 1198**, and the wall there
+is a LIBRARY gap, not a compiler one:
+
+```
+Nil Python: PDFTextObject has no method setTextOrigin
+```
+
+That is the reportlab shim, so it belongs to Track B rather than N.
+
+### Gate
+
+`tools/gate.sh full`.
