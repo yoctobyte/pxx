@@ -1873,6 +1873,26 @@ begin
   Result := (Ord(tk) = 18) or (Ord(tk) = 19) or (Ord(tk) = 20);  { tySingle or tyDouble or tyExtended }
 end;
 
+function TypeIsPyNumeric(tk: TTypeKind): Boolean;
+{ The integer and float kinds — a NUMBER in the Python sense, and nothing else.
+  Used to decide whether NilPy's `/` is arithmetic. It must exclude tyClass:
+  `Path("a") / "b"` is pathlib's join operator, and routing that through the
+  arithmetic helper compiled a path handle as a Double and SEGFAULTED. tyChar,
+  tyPointer, tyVariant and the string kinds are excluded for the same reason —
+  each has its own `/` meaning or none at all. Booleans are numbers in Python
+  (`True / 2` is 0.5), so they are in. }
+begin
+  Result := False;
+  case Ord(tk) of
+    1, 2,            { tyInteger, tyBoolean }
+    7, 8, 9, 10,     { tyInt8..tyUInt16 }
+    11, 12, 13, 14,  { tyInt32..tyUInt64 }
+    15, 16,          { tyNativeInt, tyNativeUInt }
+    18, 19, 20:      { tySingle, tyDouble, tyExtended }
+      Result := True;
+  end;
+end;
+
 function PyEqDisjointFromString(tk: TTypeKind): Boolean;
 { True for a type that can NEVER compare equal to a string in Python, for
   NilPy's `==`/`!=` string-vs-other fold in parser.inc. Numbers, booleans,

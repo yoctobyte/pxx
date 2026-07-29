@@ -227,6 +227,11 @@ type
     property HelpContext: Integer read FHelpContext write FHelpContext;
   end;
   ValueError        = class(Exception) end;
+  { Python raises this for x/0, x//0 and x%0. It had no class at all, so the
+    integer paths fell through to the Pascal runtime's error 200 (which no
+    `except` can see) and true division produced garbage
+    (bug-nilpy-runtime-raised-errors-bypass-try-except). }
+  ZeroDivisionError = class(Exception) end;
   TypeError         = class(Exception) end;
   IndexError        = class(Exception) end;
   KeyError          = class(Exception) end;
@@ -723,6 +728,7 @@ function pyfile_open(const path, mode: AnsiString): TPyFile;
   (it never truncates), and the fill defaults to a space. }
 function pystr_rjust(const s: AnsiString; w: Int64): AnsiString;
 function pystr_rjust_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
+function pytruediv_f(a: Double; b: Double): Double;
 function pyfloordiv_i(a: Int64; b: Int64): Int64;
 function pyfloormod_i(a: Int64; b: Int64): Int64;
 function pyfloordiv_f(a: Double; b: Double): Double;
@@ -1741,9 +1747,16 @@ begin
 end;
 
 procedure PyIndexError;
+{ RAISE, do not halt. The exception classes are declared at the top of this
+  unit and a NilPy `raise IndexError(...)` is already caught correctly, but the
+  runtime's own error paths wrote a line and called Halt — so NOTHING the
+  runtime raised was catchable, not even by a bare `except:`, and ordinary
+  defensive Python (`try: v = xs[i] except IndexError:`) could not be written
+  at all (bug-nilpy-runtime-raised-errors-bypass-try-except). Uncaught, this
+  still ends the process with the same exit code and a message naming the same
+  class, via the unhandled-exception handler. }
 begin
-  writeln('IndexError: list index out of range');
-  Halt(1);
+  raise IndexError.Create('list index out of range');
 end;
 
 constructor TPyList.Create;
@@ -2149,9 +2162,9 @@ begin
 end;
 
 procedure PyKeyError;
+{ RAISE — see PyIndexError. }
 begin
-  WriteLn('KeyError');
-  Halt(1);
+  raise KeyError.Create('key not found');
 end;
 
 constructor TPyDict.Create;
@@ -3466,15 +3479,30 @@ begin
   Val(t, v, code);
   if (code <> 0) or (t = '') then
   begin
-    writeln('Runtime error: int() got a string that is not a number: ', s);
-    Halt(219);
+    { RAISE — see PyIndexError. `int("abc")` is the shape
+      bug-nilpy-int-parse-halts-instead-of-raising was opened for, and Python
+      raises ValueError here. }
+    raise ValueError.Create('invalid literal for int() with base 10: ' + Chr(39) + s + Chr(39));
   end;
   Result := v;
+end;
+
+{ Python's `/` ALWAYS yields a float and raises ZeroDivisionError on a zero
+  divisor. Plain IEEE division does neither — `3 / 0` produced a saturated
+  Int64 formatted through the large-float path, i.e. garbage bytes on stdout
+  (bug-nilpy-runtime-raised-errors-bypass-try-except). }
+function pytruediv_f(a: Double; b: Double): Double;
+begin
+  if b = 0 then raise ZeroDivisionError.Create('division by zero');
+  pytruediv_f := a / b;
 end;
 
 function pyfloordiv_i(a: Int64; b: Int64): Int64;
 var q, r: Int64;
 begin
+  { Python raises ZeroDivisionError; the bare `div` below traps as Pascal
+    runtime error 200, which unwinds nothing and no handler can catch. }
+  if b = 0 then raise ZeroDivisionError.Create('integer division or modulo by zero');
   q := a div b;
   r := a mod b;
   if (r <> 0) and ((r < 0) <> (b < 0)) then q := q - 1;
@@ -3484,6 +3512,7 @@ end;
 function pyfloormod_i(a: Int64; b: Int64): Int64;
 var r: Int64;
 begin
+  if b = 0 then raise ZeroDivisionError.Create('integer modulo by zero');
   r := a mod b;
   if (r <> 0) and ((r < 0) <> (b < 0)) then r := r + b;
   Result := r;
@@ -3492,6 +3521,7 @@ end;
 function pyfloordiv_f(a: Double; b: Double): Double;
 var q: Double;
 begin
+  if b = 0 then raise ZeroDivisionError.Create('float floor division by zero');
   q := Int(a / b);
   { Int() truncates toward zero; step down when the true quotient was negative
     and inexact, so the result floors like Python's. }

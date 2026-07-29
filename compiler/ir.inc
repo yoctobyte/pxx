@@ -5623,6 +5623,40 @@ begin
         Result := IRAppendCall(cpi, first, -1, Ord(tyVariant));
         Exit;
       end;
+      { Python's `/` is TRUE division: always a float, and ZeroDivisionError on
+        a zero divisor. Plain IEEE division gave neither — `3 / 0` produced a
+        saturated Int64 that the large-float formatter then printed as garbage
+        BYTES on stdout, and no `except` could see it
+        (bug-nilpy-runtime-raised-errors-bypass-try-except).
+
+        BOTH operands must be numbers. `Path("a") / "b"` is pathlib's join
+        operator, and routing that here compiled a path handle as a Double and
+        segfaulted — caught by test_nilpy_pathlib, which is exactly what that
+        test is for.
+
+        Routed through a helper, so every NUMERIC NilPy `/` is now a call: a real cost,
+        accepted because the alternative is a silently wrong answer, and an
+        inline zero test plus a raise is the only other way to get the
+        exception out. Promotable-int operands are left on the old path — their
+        rvalue is a frame SLOT ADDRESS (project_promotable_int_stages123), so
+        handing one to a Double parameter would pass the address as a number. }
+      if PyProgramMode and (Integer(ASTIVal[node]) = Ord(tkSlash)) and
+         TypeIsPyNumeric(IntToTypeKind(ASTTk[ASTLeft[node]])) and
+         TypeIsPyNumeric(IntToTypeKind(ASTTk[ASTRight[node]])) and
+         (not TypeIsPromoInt(IntToTypeKind(ASTTk[ASTLeft[node]]))) and
+         (not TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]]))) then
+      begin
+        cpi := FindProc('pytruediv_f');
+        if cpi < 0 then Error('Nil Python: pytruediv_f (pylib) not loaded');
+        left := IRLowerCallArg(cpi, 0, ASTLeft[node], False);
+        first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyDouble));
+        right := IRLowerCallArg(cpi, 1, ASTRight[node], False);
+        last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyDouble));
+        IRB[first] := last;
+        ASTTk[node] := Ord(tyDouble);
+        Result := IRAppendCall(cpi, first, -1, Ord(tyDouble));
+        Exit;
+      end;
       if PyProgramMode and
          ((Integer(ASTIVal[node]) = Ord(tkDiv)) or (Integer(ASTIVal[node]) = Ord(tkMod))) then
       begin
