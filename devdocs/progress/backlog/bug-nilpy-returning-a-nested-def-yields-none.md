@@ -43,6 +43,15 @@ missing is the one route where a nested def's NAME is the returned expression:
 the return path evidently does not resolve it to a function value the way the
 lambda path does.
 
+## History — it used to be a documented gap, now it is silent
+
+[[feature-nilpy-nested-def-as-value]] (prio 15, SUPERSEDED) described exactly
+this shape as "not supported", and its successor
+[[feature-nilpy-function-values]] landed the function-value machinery. So the
+support arrived — a nested def as a value now COMPILES — but the returned value
+is None. That is a worse failure than the old one: the diagnostic went away and
+the wrong answer stayed. Hence a bug at prio 70 rather than a feature at 15.
+
 Found by sweeping functions/closures/defaults/keyword-args/recursion/globals
 against CPython; everything else in that sweep matched, including
 `add(b=3, a=4)`, a default argument, recursion, `global`, a lambda in a name,
