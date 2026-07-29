@@ -33,7 +33,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (179)
+## backlog (178)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -48,7 +48,6 @@ _none_
 | bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
 | bug-nilpy-method-call-on-fresh-construction | N | 45 | bug | nilpy: Cls().method() — a method call directly on a construction expression | — |
 | bug-nilpy-object-reclamation-disabled-inside-py-modules | N | 65 | bug | NilPy object reclamation is switched off inside an imported `.py` module | — |
-| bug-nilpy-percent-string-format-garbage | N | 60 | bug | nilpy: printf-style % on a string yields garbage instead of formatting (silent wrong output) | — |
 | bug-nilpy-pyeval-host-kwargs-positional | N | 60 | bug | pyeval passes a host method's KEYWORD arguments POSITIONALLY (silent wrong option) | — |
 | bug-nilpy-pyeval-prints-bool-as-number | N | 30 | bug | pyeval prints a Boolean as 1/0 where CPython prints True/False | — |
 | bug-nilpy-qualified-proc-omitted-default | N | 35 | bug | A qualified UNIT-LEVEL proc call cannot omit a defaulted parameter | — |
@@ -279,7 +278,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1019)
+## done (1020)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -642,6 +641,7 @@ _none_
 | bug-nilpy-omitted-variant-default-segfaults | N | 65 | bug | nilpy: reading a DEFAULTED variant parameter segfaults (by-ref seen as by-value) | — |
 | bug-nilpy-param-spill-width | N | 60 | bug | NilPy: bool/char param spill wrote 4 bytes into a 1-byte slot (SILENT, then SIGSEGV) | — |
 | bug-nilpy-param-with-string-default-reads-garbage | N | 75 | bug | A parameter with a STRING default is read as garbage | — |
+| bug-nilpy-percent-string-format-garbage | N | 60 | bug | nilpy: printf-style % on a string yields garbage instead of formatting (silent wrong output) | — |
 | bug-nilpy-print-variant-holding-list-shows-object | N | 30 | bug | NilPy: print() of a variant holding a list/dict shows `<object>` not its repr | — |
 | bug-nilpy-pydict-v-borrowed-reference | N | 70 | bug | `pydict_v` handed back a BORROWED dict — use-after-free, heap corruption | — |
 | bug-nilpy-range-for-variant-loop-var | N | 30 | bug | NilPy: range for-loop with a pre-existing VARIANT loop variable corrupts it | — |
@@ -2756,7 +2756,6 @@ _none_
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [A] feature-a-typeref-handle
 - [p 65] [B] feature-nilpy-tk-callbacks
-- [p 60] [N] bug-nilpy-percent-string-format-garbage
 - [p 60] [N] bug-nilpy-pyeval-host-kwargs-positional
 - [p 60] [N] bug-nilpy-str-of-tuple-is-empty
 - [p 60] [A] feature-a-abi-oracle

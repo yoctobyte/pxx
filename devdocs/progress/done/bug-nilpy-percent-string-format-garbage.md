@@ -8,7 +8,7 @@ prio: 60
 # nilpy: `"%.2f" % value` produces garbage
 
 - **Type:** bug (Nil-Python frontend, lowering) — **Track N**
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-26 — probing songformatter under nilpy
   ([[feature-demo-songformatter-pxx-target]]).
 
@@ -123,3 +123,23 @@ start from the runtime; that part is done.
 TUPLE as the argument sequence and a LIST as one value, and a tuple lowers to a
 TPyList here, so the sequence reading has to win (it is what `"%d,%d" % (a, b)`
 needs). Tracked by [[bug-nilpy-str-of-tuple-is-empty]].
+
+## Resolved 2026-07-29 (commits ee6a990f3, d468e887e)
+
+Hooked in the shared parser's multiplicative loop on the LEFT operand being a str
+(sole-A confirmed with the user, as this ticket's lane note asked), lowered to
+pylib's `pypercent_format`, which translates each placeholder into the {}-spec
+grammar the f-strings and `.format()` already use.
+
+The tuple-vs-list question is the part worth remembering: Python takes a tuple as
+a list of ARGUMENTS and a list as ONE value, but a NilPy tuple IS a TPyList, so
+run-time type cannot decide it. The parser passes whether a tuple DISPLAY was
+written (PyMakeTupleFrom's hidden `__py_tup_*` temp is the marker) and the
+placeholder count covers a tuple arriving through a variable. Documented
+divergence: `"%s %s" % [a, b]` walks the list where CPython raises.
+
+Verified against CPython: width, precision, flags, %x/%X/%o, %%, tuples, a list
+value, a tuple through a variable, and numeric `%` left untouched.
+
+## Log
+- 2026-07-29 — resolved, commit ee6a990f3.
