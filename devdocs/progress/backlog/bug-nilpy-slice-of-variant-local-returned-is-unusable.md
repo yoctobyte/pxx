@@ -90,10 +90,28 @@ That also explains why every small repro passes: the freed block simply is not
 recycled before the read. In the real detector the 84-key nested loop churns the
 heap in between, so the field comes back as ASCII bytes read as an integer.
 
-Fix belongs in the slice lowering: its result must be OWNED like any other
-call result (see [[project_nilpy_object_reclamation_arc]] — "owned=call-results")
-so the store into a local or a field retains it. Check `pylist_slice` /
-`pystr_slice` / `pybytes_slice` alike.
+### CONFIRMED: a VARIANT-held list stored into a class-typed field is not retained
+
+Two more steps settle it. Neither the ternary nor the slice is the real
+condition — what matters is that the value is a **variant** rather than a real
+TPyList:
+
+| in ViolationCountDetector.analyze | field reads back |
+| --- | --- |
+| `ev_local = <slice>` (no ternary at all), `evidence=ev_local` | garbage |
+| `evidence=list(ev_local)` — same value, wrapped | **0, correct** |
+
+`penalty_evidence.get(...)` yields a VARIANT (the dict-value type is not known
+statically), so the slice of it is variant-held too. Storing that into a
+`list[str]` field copies the payload without taking a reference; the variant
+temp is then released and the field dangles. `list(x)` materialises a real
+owned TPyList, so it survives — that is both the confirmation and the
+application-side workaround.
+
+`PyUnboxVariantToClass` already exists for a plain assignment to a class-typed
+target (pyparser.inc ~9861). The CONSTRUCTOR keyword-argument path does not use
+it. That is where the fix goes; check the plain field-store path (`obj.f = v`)
+for the same gap while you are there.
 
 ## Why it matters
 
