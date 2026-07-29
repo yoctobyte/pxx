@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 70
+prio: 30
 type: bug
 ---
 
@@ -24,7 +24,29 @@ compiled anyway and the failure is a crash somewhere else entirely:
 Both were found only by disassembling. A one-line arity comparison would have
 named either in seconds.
 
-## What to do
+## RUNG 1 LANDED @ e63a59747 (2026-07-28) — this ticket is now rung 2 only
+
+`WarnCrossNamespaceArity` (cparser.inc) is in place at BOTH bind sites: the C
+declaration path and the undeclared-CALL path (the dangerous one — a `.c` that
+calls `time()` without including `<time.h>` still binds the Pascal routine).
+C-declared and variadic procs are skipped; the warning honours `-Werror`:
+
+```
+warning: C call to 'time' binds to the Pascal routine 'Time' which takes
+0 parameter(s), not 1 — the argument list will not arrive as written
+```
+
+So the multi-week-hunt hazard is closed: a mismatched bind now names itself at
+compile time. Prio drops 70 → 30 accordingly — what remains is hardening, not a
+live silent-crash risk. (Found stale at the top of the global queue on
+2026-07-29; the fix had landed the day before without the ticket being moved.)
+
+**The evidence rung 2 was waiting for already exists.** e63a59747 measured the
+whole C suite — 220/220 c-conformance plus lua, sqlite, quickjs, tcc and zlib —
+and got **ZERO warnings**. No corpus needs a mismatched bind, so the escalation
+below is unblocked; it just needs doing and re-measuring.
+
+## What to do (original, rung 1 now done)
 
 At the bind site in `cparser.inc` (the `procIdx := FindProc(name)` fallback,
 around the `forceSystemExternal` block), when the found proc is a PASCAL proc
