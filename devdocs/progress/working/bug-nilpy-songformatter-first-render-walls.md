@@ -121,3 +121,33 @@ the class — would have saved most of the bisecting on this ticket.
 
 `make test-nilpy`, plus songformatter's window actually opening under Xvfb with
 one empty document.
+
+## 2026-07-29 (third pass): the evidence wall is DOWN, and two more behind it
+
+`DetectorResult.evidence` reading back `1751084129` is fixed — see
+[[bug-nilpy-slice-of-variant-local-returned-is-unusable]]. It was an OWNERSHIP
+bug (a variant-held object unboxed into a class field without a retain), not the
+type-tagging bug the previous pass had recorded; that ticket now carries the
+correction.
+
+Two things this session changed about METHOD, both worth keeping:
+
+- **Drive it headless.** `key_analysis` needs no GUI. A four-line driver in the
+  scratch copy (`from key_analysis import ViolationCountDetector; ... print
+  r.to_text(True)`) reproduces the wall in ~1s per compile, against a `python3`
+  run of the same file as the oracle. Xvfb is only needed for the tk walls.
+- **Diff against CPython field by field, not end to end.** The wall AFTER this
+  one produced no error at all — just the wrong keys — and was invisible until a
+  probe printed `_quality_bucket` output side by side with CPython.
+
+Still open behind this ticket:
+
+- [[bug-nilpy-not-on-object-always-true]] — FIXED this session. `if not match:`
+  over an `re.match` result was always True, so every chord was unclassified and
+  the detector ranked keys in insertion order. Silent wrong answers.
+- [[bug-nilpy-def-value-in-a-variable-is-not-callable]] — `analyze_key(chords,
+  chord_to_notes=notes_of)` segfaults: a def boxed by `PyMakeFuncValue` is a
+  `{Code,Recv}` pair, and `PyMakeDynCall` jumps to the pair. This is the next
+  wall on the full key-analysis entry point.
+- [[feature-debuggability-umbrella]] — filed off the back of this campaign. The
+  "insert print markers and bisect by hand" method above is what needs replacing.

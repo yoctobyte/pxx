@@ -108,7 +108,33 @@ temp is then released and the field dangles. `list(x)` materialises a real
 owned TPyList, so it survives — that is both the confirmation and the
 application-side workaround.
 
-### Attempted fix, REVERTED — and what it ruled out
+### FIXED (2026-07-29, b9f7a82f9) — it was OWNERSHIP, not typing
+
+`pyvarobj_owned` (pylib: `pyvarobj` + `PXXObjRetain`), plus an AST-level unbox
+at the dataclass keyword-argument site in `PyClassCreate`, so the field owns
+what it holds.
+
+`IRLowerCallArg` (ir.inc ~2214) already unboxed a variant argument bound for a
+class-typed parameter — but into a **bare** pointer. A class slot is never
+released, so nothing balances that reference, while the variant TEMP the value
+came out of IS released at the end of the statement and takes the object with
+it. The field then pointed at a freed block. `list(x)` worked because it
+materialises a separately-owned TPyList; `ev_local = []` worked because a real
+TPyList local is never released either, so it simply leaked and survived.
+
+**The premise recorded below is WRONG and is kept only as a record of what was
+ruled out.** Instrumenting `PyClassCreate` directly shows slot 4 at
+`ViolationCountDetector.analyze` is `tk=tyVariant` in BOTH the typing and the
+emitting pass (`kind=67` = the ternary). Nothing is mis-tagged tyClass; the
+"4 of 8 tyClass" count was over sites that legitimately pass a real list. That
+is also why adding `PyUnboxVariantToClass` at the call site changed nothing —
+it replaced ir.inc's unbox with an identical one. The retain is the whole fix.
+
+Verified headless (no GUI needed): a `cp -r` of `~/songformatter` plus a
+four-line driver calling `ViolationCountDetector().analyze(...)` directly and
+printing `to_text(True)`.
+
+### Earlier attempted fix, REVERTED — and what it ruled out (premise now known wrong)
 
 Adding `PyUnboxVariantToClass` to the constructor keyword-argument path
 (`PyClassCreate`'s re-emit loop) was tried and reverted: it changes nothing for
