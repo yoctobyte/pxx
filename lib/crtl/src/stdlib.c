@@ -47,7 +47,52 @@ void abort(void)     { __pxx_exit(134); }   /* 128 + SIGABRT(6) */
 
 /* ---- environment / conversions -------------------------------------------- */
 
-char *getenv(const char *name) { (void)name; return 0; }   /* no environment yet */
+/* The environment, read once from /proc/self/environ — the same source (and
+   the same reasoning) as the Pascal RTL's sysutils.EnvLoad: the records are
+   NUL-separated, so this is not text, and a failed open leaves the table empty
+   so every lookup answers "unset" rather than erroring. A program that cannot
+   see its environment should behave like one started without one.
+
+   Was `return 0` with the comment "no environment yet", which meant C code
+   compiled by pxx silently saw an empty environment — configuration read
+   through getenv() just never took effect. */
+extern int __pxx_open(const char *path, int flags, int mode);
+extern long __pxx_read(int fd, void *buf, unsigned long n);
+extern int __pxx_close(int fd);
+
+#define PXX_ENV_BUFSZ 16384
+
+static char pxx_env_buf[PXX_ENV_BUFSZ];
+static long pxx_env_len = 0;
+static int pxx_env_loaded = 0;
+
+static void pxx_env_load(void) {
+  int fd;
+  long got;
+  if (pxx_env_loaded) return;
+  pxx_env_loaded = 1;
+  fd = __pxx_open("/proc/self/environ", 0, 0);   /* O_RDONLY */
+  if (fd < 0) return;
+  got = __pxx_read(fd, pxx_env_buf, PXX_ENV_BUFSZ);
+  __pxx_close(fd);
+  if (got > 0) pxx_env_len = got;
+}
+
+char *getenv(const char *name) {
+  long i = 0;
+  if (!name || !*name) return 0;
+  pxx_env_load();
+  while (i < pxx_env_len) {
+    /* one NUL-terminated "NAME=VALUE" record at pxx_env_buf[i] */
+    long j = 0;
+    while (name[j] && pxx_env_buf[i + j] == name[j]) j++;
+    if (!name[j] && pxx_env_buf[i + j] == '=')
+      return &pxx_env_buf[i + j + 1];
+    while (i < pxx_env_len && pxx_env_buf[i]) i++;
+    i++;                                        /* past the NUL */
+  }
+  return 0;
+}
 
 int abs(int v) { return v < 0 ? -v : v; }
 long labs(long v) { return v < 0 ? -v : v; }

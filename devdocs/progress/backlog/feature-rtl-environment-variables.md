@@ -6,9 +6,33 @@ type: feature
 
 # No access to environment variables anywhere in the RTL
 
-`grep -rn "getenv\|environ" lib/rtl compiler/builtin` finds nothing: pxx programs
-cannot read their environment. Neither Pascal (`GetEnvironmentVariable`) nor
-NilPy (`os.environ`, `os.getenv`) has anything to bind to.
+## STATUS 2026-07-29: two of the three surfaces were already DONE
+
+The description below was stale. Measured, not assumed:
+
+| surface | state |
+| --- | --- |
+| Pascal `GetEnvironmentVariable` / `Count` / `String(i)` | **works** — sysutils reads `/proc/self/environ` through the PAL |
+| NilPy `os.environ.get` / `os.getenv` | **works**, matches CPython |
+| C `getenv` | **was still `return 0`** — fixed here |
+
+`lib/crtl/src/stdlib.c` had `char *getenv(const char *name) { return 0; }` with
+the comment "no environment yet", so C code compiled by pxx silently saw an
+EMPTY environment: configuration read through `getenv()` simply never took
+effect, with no diagnostic. It now reads `/proc/self/environ` once through
+`__pxx_open`/`__pxx_read`/`__pxx_close` — the same source and the same
+empty-on-failure rule as sysutils' `EnvLoad`, so a program that cannot see its
+environment behaves like one started without one.
+
+Verified against a gcc-built oracle on set / unset / empty-value and on the
+prefix collisions a naive matcher gets wrong (`FOO` vs `FOOBAR` vs `FO` vs `""`).
+
+Still open (see below): the `putenv` / write side was never decided, and the
+implementation route note about reading envp off the initial stack was NOT
+taken — everything goes through `/proc/self/environ`, which needs no codegen
+and no per-target entry-stub work. That is a better answer than the one
+sketched here; the stack route is only worth revisiting if a target without
+`/proc` needs it (ESP has neither).
 
 Found on songformatter's `convertrawtext.py`, which gates its debug chatter on
 `os.environ.get("SONGFORMATTER_DEBUG")` — the wall the module now stops at
