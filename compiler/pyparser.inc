@@ -7762,6 +7762,29 @@ begin
         TPyList/TPyDict instance pointer — silently, in the single most natural
         debugging line there is (bug-a-nilpy-print-of-a-list-prints-a-pointer). }
       CurASTNode := PyReprContainer(CurASTNode);
+      { A FLOAT argument goes through pystr_of too, for the same reason the
+        container line above exists: otherwise print reaches the BACKEND float
+        writer (EmitWriteFloatNat, hand-written per target) while `str()` uses
+        FloatToStr, and the two disagree. They did — `print(1e19)` wrote
+        `9223372036854775809.o72036854775808`, a byte that is not a digit,
+        while `print(str(1e19))` was already correct
+        (bug-nilpy-print-of-a-float-bypasses-str-formatting). Routing here fixes
+        every target at once and makes print(x) and print(str(x)) agree by
+        construction, which is Python's actual rule. }
+      if (IntToTypeKind(ASTTk[CurASTNode]) = tyDouble) or
+         (IntToTypeKind(ASTTk[CurASTNode]) = tySingle) then
+      begin
+        starProc := IRFindProc1ByArgTk('pystr_of', tyDouble);
+        if starProc >= 0 then
+        begin
+          starArg := AllocNode(AN_ARG);
+          ASTLeft[starArg] := CurASTNode;
+          CurASTNode := AllocNode(AN_CALL);
+          ASTIVal[CurASTNode] := starProc;
+          ASTTk[CurASTNode] := Ord(tyAnsiString);
+          ASTLeft[CurASTNode] := starArg;
+        end;
+      end;
       argNode := AllocNode(AN_ARG);
       ASTLeft[argNode] := CurASTNode;
       ASTRight[argNode] := -1;
