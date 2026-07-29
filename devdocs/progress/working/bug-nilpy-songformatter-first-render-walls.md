@@ -43,12 +43,32 @@ the link-time `@proc` check). Cleared in order:
 | `TypeError: expected a number, got str` from `settings.getF` | `float(<variant holding a str>)` routed to `pyfloat_ofint` from the STATIC type; a variant needs the run-time split — added `pyfloat_any` |
 | `unsupported f-string format spec ".0%"` | added Python's `%` presentation type (x100, fixed precision, `%` suffix), verified against CPython |
 
-Now dies inside `KeyAnalysisResult.to_text` / `DetectorResult.to_text`
-(`pystr_join` / `TPyList.at` on the stack) — so the key analysis itself
-completes and the failure is in rendering it. Minimal genexpr-of-method-calls
-and keyword-arg-in-genexpr repros do NOT reproduce it; the next step is the
-dataclass shapes those two use (`candidates[:5]` slicing a list of objects,
-`field(default_factory=list)` members).
+**Current wall, localised exactly.** With a print-instrumented copy of the app
+(`/tmp/sfx`), `DetectorResult.to_text(verbose=True)` renders detector after
+detector correctly and then, on `violation_count`, prints
+
+```
+DBG joining evidence det= violation_count n= 1751084129
+```
+
+`len(self.evidence)` is GARBAGE (0x685F6C61-ish — ASCII bytes read as an
+integer), so that field does not hold a list at all; the join then walks it and
+segfaults. Every other detector's evidence list is fine.
+
+`violation_count` is the one detector whose field is built as
+
+```python
+evidence=penalty_evidence.get(winner.label, [])[:6] if winner else [],
+```
+
+i.e. a SLICE of a `dict.get()` result inside a TERNARY, into a
+`field(default_factory=list)` member. Isolated repros of that exact shape —
+including a variant key taken from an attribute, and the `winner is None` arm —
+all match CPython, so the trigger needs more of the real context (that detector
+builds `penalty_evidence` as a dict of ~84 lists inside the method). Next step:
+narrow with the instrumented copy still in place — print `len()` of the value
+BEFORE it is passed, then inside `__init__`, to find which side of the
+constructor loses it.
 
 - [[bug-nilpy-zero-param-lambda-cannot-call-a-def]] — this is what leaves the
   preview blank and the status bar on `Key: unknown`: the redraw is armed as
