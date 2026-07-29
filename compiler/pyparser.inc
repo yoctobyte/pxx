@@ -2020,6 +2020,33 @@ begin
             (lo = 'bytearray');
 end;
 
+{ Is the bracket group opening at lbIdx a SLICE (`[a:b]`) rather than an index?
+  A ':' at depth 1 is the whole test; a nested subscript or call keeps its own
+  colons at a deeper level. }
+function PySliceBracketAt(lbIdx, endIdx: Integer): Boolean;
+var k, depth: Integer;
+begin
+  Result := False;
+  depth := 0;
+  k := lbIdx;
+  while k < endIdx do
+  begin
+    if Tokens[k].Kind in [tkLBrack, tkLParen, tkBegin] then Inc(depth)
+    else if Tokens[k].Kind in [tkRParen, tkEnd] then Dec(depth)
+    else if Tokens[k].Kind = tkRBrack then
+    begin
+      Dec(depth);
+      if depth = 0 then Exit;
+    end
+    else if (depth = 1) and (Tokens[k].Kind = tkColon) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(k);
+  end;
+end;
+
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     name, lo, smPName: AnsiString;
@@ -2348,6 +2375,38 @@ begin
           begin
             if Tokens[i].Kind = tkLParen then Inc(depth)
             else if Tokens[i].Kind = tkRParen then
+            begin
+              Dec(depth);
+              if depth = 0 then Break;
+            end;
+            Inc(i);
+          end;
+          Result := PyWiden(Result, tk);
+          Inc(i);
+          Continue;
+        end;
+        { A SLICE `name[a:b]` is not an index: it yields a container of the
+          same kind as the receiver — a str slice is a str, and slicing a list
+          OR a variant holding one yields a list. Without this a def whose body
+          ended in `return b[:6]` fell to the Integer default and the caller got
+          an object where a list was expected ("expected a number, got object"
+          from len()) — bug-nilpy-slice-of-variant-local-returned-is-unusable.
+          Detected by a ':' at bracket depth 1. }
+        if (i + 1 < endIdx) and (Tokens[i + 1].Kind = tkLBrack) and
+           PySliceBracketAt(i + 1, endIdx) then
+        begin
+          if (tk = tyString) or (tk = tyAnsiString) or (tk = tyChar) then
+            tk := tyAnsiString
+          else
+          begin
+            tk := tyClass;
+            PyInferLastCi := FindUClass('TPyList');
+          end;
+          i := i + 1; depth := 0;
+          while i < endIdx do
+          begin
+            if Tokens[i].Kind = tkLBrack then Inc(depth)
+            else if Tokens[i].Kind = tkRBrack then
             begin
               Dec(depth);
               if depth = 0 then Break;

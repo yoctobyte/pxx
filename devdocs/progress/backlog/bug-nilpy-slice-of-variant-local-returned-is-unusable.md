@@ -47,9 +47,22 @@ right; what is wrong is the type NilPy infers for a body whose `return` is a
 slice of a variant-typed local. The returned value then goes out through the
 wrong coercion and reaches the caller as a bare object.
 
-Fix: teach the return-type inference (`PyInferExprType`, the subscript/slice
-case) that slicing a VARIANT yields a container — or fall back to `tyVariant`,
-which also works, since `len()` of a variant-held list is already correct.
+**FIXED** (2026-07-29): `PyInferExprType` now recognises a SLICE — a ':' at
+bracket depth 1, via the new `PySliceBracketAt` — and types it as the receiver's
+container kind (a str slice is a str; slicing a list or a variant holding one
+yields a TPyList). Previously only the string INDEX form was handled, so
+`return b[:6]` fell to the Integer default.
+
+Verified against CPython on nine repros, including the app's exact shape
+`d.get(k, [])[:6] if w else []` inside a def.
+
+**NOT SUFFICIENT for songformatter** — see below. Its `violation_count`
+detector still reads its `evidence` field back as garbage, so a SECOND defect is
+in play; every repro of the expression shape (annotated `dict[str, list[str]]`,
+keyword arguments, a trailing `debug=` kwarg, the `winner is None` arm) now
+matches CPython. What the real detector has and the repros do not: ~84 dict
+keys built in a nested loop, `del` statements, set literals in the conditions.
+Bisect the real detector down rather than building the repro up.
 
 ## Why it matters
 
