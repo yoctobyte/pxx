@@ -27,11 +27,32 @@ before 2026-07-29 — every other frontend answered "Function not defined" to
 | `next` / `step` / `finish` | yes |
 | expression evaluation (`print a+b`) | yes |
 | fields through an object (`print n.name`) | yes |
+| breakpoints INSIDE an imported `.py` module | yes |
+| backtraces spanning several modules | yes |
 | strings | print their text, not the handle |
 | Variants | `{VType=6, Payload=...}`, or decoded with the printer |
 
 Pascal syntax notes: dereference is `p^`, not `*p`; `ptype x` shows the record
 layout.
+
+## Multi-module NilPy
+
+An imported `.py` gets its own `.debug_line` file entry, so breakpoints resolve
+inside it and backtraces span modules:
+
+```
+(gdb) break scale
+Breakpoint 1 at 0x50b587: file helper.py, line 2.
+(gdb) bt
+#0  scale (v=...) at helper.py:2
+#1  0x50d211 in run (n=4) at app.py:7
+#2  0x50dc21 in main () at app.py:11
+(gdb) info sources
+  .../app.py, .../helper.py
+```
+
+All five of songformatter's modules show up in `info sources`, and
+`break ViolationCountDetector.analyze` resolves to `key_analysis.py:582`.
 
 ## The pretty-printer — `tools/pxx-gdb.py`
 
@@ -68,11 +89,12 @@ object is hard to kill on purpose. Marked here rather than claimed as verified.)
 
 ## Limits
 
-- **One file per CU.** The line table describes the main source file only;
-  imported `.py` modules and Pascal units lex past `DbgMainTokEnd` and get line
-  0, so you cannot break on a line inside an imported module. This is the
-  Tier 1 design, not an oversight — but it is the biggest remaining gap for a
-  multi-module app like songformatter.
+- **Pascal units and the RTL are still line-0.** Only sources registered with
+  `DbgRegisterFile` join the line table — today that means imported `.py`
+  modules. The Pascal RTL and pylib are appended the same way and are left out
+  ON PURPOSE: they would swamp the table, and nobody wants to single-step
+  `pystr_upper`. Registering a Pascal `uses` unit is the same one-line call at
+  its lex-append site if it ever becomes worth it.
 - **C line numbers index the PREPROCESSED text.** Breakpoints, args, locals
   and stepping are correct, but `break addup` reports `dbgc.c:2068` for an
   18-line file — `CPreprocess` inlines every `#include` and the lexer numbers

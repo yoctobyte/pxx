@@ -10910,7 +10910,7 @@ begin
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
     ProcBodyEnd[procIdx] := CodeLen;   { DWARF -g — see PyParseDef's note }
-  ProcDbgMain[procIdx] := TokPos <= DbgMainTokEnd;
+  ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
   SymRollbackTo(savedSC);
   FrameSize := savedFS;
@@ -11088,7 +11088,7 @@ begin
     could not debug. ProcBodyEnd must be taken here, after the epilogue, and
     the locals snapshot before the scope is rolled back. }
   ProcBodyEnd[procIdx] := CodeLen;
-  ProcDbgMain[procIdx] := TokPos <= DbgMainTokEnd;
+  ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
   SymRollbackTo(savedSC);
   { Anything the BODY left on the hoist queue names this routine's locals, and
@@ -12570,7 +12570,7 @@ begin
   bodyNode := PyPrependResultZero(procIdx, bodyNode);
   CompileAST(bodyNode); EmitProcEpilog(Procs[procIdx].RetSymIdx); PatchProcPrologue(patchPos, FrameSize);
     ProcBodyEnd[procIdx] := CodeLen;   { DWARF -g — see PyParseDef's note }
-  ProcDbgMain[procIdx] := TokPos <= DbgMainTokEnd;
+  ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
   { Whatever the BODY left queued names this method's locals, which the
@@ -12685,7 +12685,7 @@ begin
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
     ProcBodyEnd[procIdx] := CodeLen;   { DWARF -g — see PyParseDef's note }
-  ProcDbgMain[procIdx] := TokPos <= DbgMainTokEnd;
+  ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
 end;
@@ -13442,7 +13442,7 @@ begin
     exactly like a Pascal program's globals. Main module only: an imported .py
     lexes past DbgMainTokEnd, and the Tier 1 line table describes one file. }
   ProcBodyEnd[procIdx] := CodeLen;
-  ProcDbgMain[procIdx] := TokPos <= DbgMainTokEnd;
+  ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   { NOT DbgMainBodyStart/End: those drive a SECOND, anonymous program-body
     subprogram in DbgEmitSubprograms, which would overlap this proc's DIE on
     the same address range. The named proc DIE is the better of the two. }

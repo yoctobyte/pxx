@@ -1276,7 +1276,7 @@ end;
 { Build all .debug_* section bytes into DbgBuf. entry = runtime VA of code start
   (LOAD_ADDR+codeOffset); codeBytes = CodeLen. DWARF version 3, DWARF32. }
 procedure BuildDwarfSections(entry: Int64; codeBytes: Integer);
-var i, lenPos, hdrPos, progStart, curLine, curAddr, dLine, dAddr: Integer;
+var i, lenPos, hdrPos, progStart, curLine, curAddr, dLine, dAddr, curFile: Integer;
     nm: AnsiString;
 begin
   DbgSetArchParams;
@@ -1299,8 +1299,14 @@ begin
   DbgPutB(0); DbgPutB(0); DbgPutB(1); DbgPutB(0); DbgPutB(0); DbgPutB(1);
   { include_directories: none → just the terminating NUL }
   DbgPutB(0);
-  { file_names: one entry, then terminating NUL }
+  { file_names: the main file is entry 1, then every source registered with
+    DbgRegisterFile (imported `.py` modules). DWARF numbers these from 1, which
+    is why DbgFileOfTok returns i+2 for registered range i. }
   DbgPutStrZ(nm); DbgPutULEB(0); DbgPutULEB(0); DbgPutULEB(0);
+  for i := 0 to DbgFileCount - 1 do
+  begin
+    DbgPutStrZ(DbgFileName[i]); DbgPutULEB(0); DbgPutULEB(0); DbgPutULEB(0);
+  end;
   DbgPutB(0);
   { header_length = distance from the byte after header_length to here }
   progStart := DbgLen;
@@ -1311,6 +1317,7 @@ begin
   if DwarfRowCount > 0 then curAddr := DwarfRowAddr[0] else curAddr := 0;
   DbgPutB(0); DbgPutULEB(1 + DbgPtrSize); DbgPutB(2); DbgPutAddr(entry + curAddr); { extended set_address }
   curLine := 1;
+  curFile := 1;                          { the line program starts in file 1 }
   for i := 0 to DwarfRowCount - 1 do
   begin
     dAddr := DwarfRowAddr[i] - curAddr;
@@ -1318,6 +1325,14 @@ begin
     begin
       DbgPutB(2); DbgPutULEB(dAddr);    { DW_LNS_advance_pc }
       curAddr := DwarfRowAddr[i];
+    end;
+    { A row from another source: switch files before the line delta, since the
+      line number is relative to whichever file is current. }
+    if DwarfRowFile[i] <> curFile then
+    begin
+      curFile := DwarfRowFile[i];
+      if curFile < 1 then curFile := 1;
+      DbgPutB(4); DbgPutULEB(curFile);  { DW_LNS_set_file }
     end;
     dLine := DwarfRowLine[i] - curLine;
     if dLine <> 0 then

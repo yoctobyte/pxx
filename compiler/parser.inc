@@ -33,6 +33,56 @@ function ByRefArgStartsExpression: Boolean; forward;
 function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer; forward;
 
 
+{ ===== DWARF -g: the multi-file line table =====================================
+  An appended source registers its token range and gets its own .debug_line
+  file entry. Today that is an imported `.py` module: without this you could
+  not put a breakpoint inside one, which for a multi-module app (songformatter
+  is nine files) meant the debugger stopped at the front door.
+
+  Only REGISTERED ranges join the table. The Pascal RTL and pylib are appended
+  the same way and are deliberately left out — they would swamp the line table
+  and nobody wants to single-step pystr_upper. }
+procedure DbgRegisterFile(const name: AnsiString; startTok, endTok: Integer);
+begin
+  if not DebugInfo then Exit;
+  if DbgFileCount >= MAX_DBG_FILES then Exit;   { silently stop: -g is not worth failing a build over }
+  DbgFileName[DbgFileCount] := name;
+  DbgFileStartTok[DbgFileCount] := startTok;
+  DbgFileEndTok[DbgFileCount] := endTok;
+  Inc(DbgFileCount);
+end;
+
+{ The .debug_line file index for a token, or 1 (the main file) when the token
+  is in no registered range. Scans BACKWARD because the range being parsed is
+  almost always the one most recently registered — an import parses straight
+  after it is lexed. }
+function DbgFileOfTok(t: Integer): Integer;
+var i: Integer;
+begin
+  DbgFileOfTok := 1;
+  if not DebugInfo then Exit;
+  for i := DbgFileCount - 1 downto 0 do
+    { end is INCLUSIVE: a routine's body-end TokPos can sit exactly on the
+      module's last token, which is how the LAST def in an imported module lost
+      its subprogram DIE while every earlier one had it. Ranges abut (one
+      module's end is the next one's start) and the scan runs backward, so the
+      later registration wins the shared boundary — no ambiguity. }
+    if (t >= DbgFileStartTok[i]) and (t <= DbgFileEndTok[i]) then
+    begin
+      DbgFileOfTok := i + 2;    { 1 = main file, so registered files start at 2 }
+      Exit;
+    end;
+end;
+
+{ TRUE when a token belongs to a source the line table describes — the main
+  file, or an appended source registered with DbgRegisterFile. Drives
+  ProcDbgMain, i.e. whether a routine gets a DW_TAG_subprogram: an imported
+  `.py` module's defs need one or `break scale` finds nothing. }
+function DbgTokIsDebuggable(t: Integer): Boolean;
+begin
+  DbgTokIsDebuggable := (t <= DbgMainTokEnd) or (DbgFileOfTok(t) > 1);
+end;
+
 procedure EnsureASTCapacity(need: Integer);
 { Grow the per-node AST arrays so index `need-1` is in bounds. Doubling from a base
   that already covers the low inline reserve; capacity never shrinks. ALL parallel
@@ -47,6 +97,7 @@ begin
   SetLength(ASTSLen, n);       SetLength(ASTCLongRank, n); SetLength(ASTLeft, n);
   SetLength(ASTRight, n);      SetLength(ASTTk, n);        SetLength(ASTLiftedVar, n);
   SetLength(ASTEnumId, n);     SetLength(ASTLine, n);      SetLength(ASTQChk, n);
+  SetLength(ASTFile, n);
   SetLength(ASTRChk, n);       SetLength(ASTIChk, n);
   ASTCapacity := n;
 end;
@@ -73,13 +124,24 @@ begin
   ASTRChk[ASTNodeCount]    := ((kind = AN_ASSIGN) or (kind = AN_INDEX)) and
                               StmtRChecks;
   ASTIChk[ASTNodeCount]    := (kind = AN_CALL) and StmtIChecks;
-  { DWARF -g: only stamp lines for nodes from the main source file. Tokens from
-    appended units (builtin/RTL, lexed past DbgMainTokEnd) get line 0 so they
-    contribute no rows — the Tier 1 line table describes one file. }
+  { DWARF -g: stamp the line for nodes from the main source file, and for any
+    APPENDED source whose token range was registered with DbgRegisterFile (an
+    imported `.py` module). Everything else — the Pascal RTL, pylib, the unit
+    bodies nobody wants to step through — still gets line 0 and contributes no
+    rows, which is what keeps the whole runtime out of the line table. }
   if TokPos <= DbgMainTokEnd then
-    ASTLine[ASTNodeCount] := CurTok.Line
+  begin
+    ASTLine[ASTNodeCount] := CurTok.Line;
+    ASTFile[ASTNodeCount] := 1;
+  end
   else
-    ASTLine[ASTNodeCount] := 0;
+  begin
+    ASTFile[ASTNodeCount] := DbgFileOfTok(TokPos);
+    if ASTFile[ASTNodeCount] > 1 then
+      ASTLine[ASTNodeCount] := CurTok.Line
+    else
+      ASTLine[ASTNodeCount] := 0;
+  end;
   Result := ASTNodeCount;
   Inc(ASTNodeCount);
 end;
@@ -99,6 +161,7 @@ begin
   ASTTk[Result]       := ASTTk[node];
   ASTLiftedVar[Result] := ASTLiftedVar[node];
   ASTLine[Result]     := ASTLine[node];
+  ASTFile[Result]     := ASTFile[node];
   ASTQChk[Result]     := ASTQChk[node];
   ASTRChk[Result]     := ASTRChk[node];
   ASTIChk[Result]     := ASTIChk[node];
@@ -222,6 +285,7 @@ begin
   ASTTk[InlineASTNext]       := 0;
   ASTLiftedVar[InlineASTNext] := -1;
   ASTLine[InlineASTNext]     := 0;
+  ASTFile[InlineASTNext]     := 1;
   AllocInlineNode := InlineASTNext;
   Inc(InlineASTNext);
 end;
@@ -25682,7 +25746,7 @@ begin
   { DWARF -g: this proc is in the main source file iff we are still parsing main-
     file tokens (units lex past DbgMainTokEnd). Drives DW_TAG_subprogram emission.
     Snapshot its params+locals now, before the scope (Syms[]) is torn down. }
-  ProcDbgMain[procIdx] := TokPos <= DbgMainTokEnd;
+  ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
 
   { Patch frame size }
@@ -26435,6 +26499,11 @@ begin
     CurrentUnitIdx := strIdx;
 
     startPos := PyLexAppend(UnitContent);
+    { -g: give the module its own .debug_line file entry, so a breakpoint
+      inside it resolves and its frames show real lines instead of the line-0
+      treatment every appended source otherwise gets. Registered BEFORE the
+      parse: AllocNode consults the range as it builds the module's nodes. }
+    DbgRegisterFile(path, startPos, TokCount);
     TokPos := startPos;
     Next;
     ParsePyUnit(lo);

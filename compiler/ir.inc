@@ -18,6 +18,7 @@ begin
   IRLabelCount := 0;
   IRLoopStackDepth := 0;
   CurLowerLine := 0;
+  CurLowerFile := 1;
 end;
 
 procedure EnsureIRCapacity(need: Integer);
@@ -34,7 +35,7 @@ begin
   SetLength(IRKind, n);         SetLength(IRA, n);         SetLength(IRB, n);
   SetLength(IRC, n);            SetLength(IRIVal, n);      SetLength(IRTk, n);
   SetLength(IRCallDest, n);     SetLength(IRCtorProc, n);  SetLength(IRSetLenBaseRec, n);
-  SetLength(IRStmtRoot, n);     SetLength(IRLine, n);
+  SetLength(IRStmtRoot, n);     SetLength(IRLine, n);      SetLength(IRFile, n);
   IRCapacity := n;
 end;
 
@@ -49,6 +50,7 @@ begin
   IRTk[IRCount] := tk;
   IRStmtRoot[IRCount] := False;
   IRLine[IRCount] := CurLowerLine;
+  IRFile[IRCount] := CurLowerFile;
   IRCallDest[IRCount] := -1;
   IRCtorProc[IRCount] := -1;
   Result := IRCount;
@@ -3921,7 +3923,11 @@ begin
     Exit;
   end;
 
-  if ASTLine[node] <> 0 then CurLowerLine := ASTLine[node];
+  if ASTLine[node] <> 0 then
+  begin
+    CurLowerLine := ASTLine[node];
+    CurLowerFile := ASTFile[node];   { DWARF -g: line and file travel together }
+  end;
 
   case ASTKind[node] of
     AN_INT_LIT, AN_BOOL_LIT:
@@ -8994,6 +9000,7 @@ begin
   begin
     DwarfRowAddr[DwarfRowCount] := Procs[CurProc].BodyAddr;
     DwarfRowLine[DwarfRowCount] := IRLine[i];
+    DwarfRowFile[DwarfRowCount] := IRFile[i];
     DwarfRowPrologueEnd[DwarfRowCount] := False;
     Inc(DwarfRowCount);
   end;
@@ -9001,6 +9008,7 @@ begin
   begin
     DwarfRowAddr[DwarfRowCount] := CodeLen;
     DwarfRowLine[DwarfRowCount] := IRLine[i];
+    DwarfRowFile[DwarfRowCount] := IRFile[i];
     DwarfRowPrologueEnd[DwarfRowCount] := DwarfProcFirstRow;
     Inc(DwarfRowCount);
     DwarfProcFirstRow := False;

@@ -2565,7 +2565,7 @@ begin
       absence NilPy had before 58937b717. ProcBodyEnd must be taken after the
       epilogue; the locals snapshot before the scope is rolled back. }
     ProcBodyEnd[procIdx] := CodeLen;
-    ProcDbgMain[procIdx] := TokPos <= DbgMainTokEnd;
+    ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
     if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
     SymRollbackTo(savedSC);
     FrameSize := savedFS;
@@ -2674,7 +2674,7 @@ begin
     absence NilPy had before 58937b717. ProcBodyEnd must be taken after the
     epilogue; the locals snapshot before the scope is rolled back. }
   ProcBodyEnd[procIdx] := CodeLen;
-  ProcDbgMain[procIdx] := TokPos <= DbgMainTokEnd;
+  ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
   SymRollbackTo(savedSC);
   FrameSize := savedFS;

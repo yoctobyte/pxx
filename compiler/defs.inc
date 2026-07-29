@@ -76,6 +76,7 @@ const
                                     user code hitting the large-array shape. }
   MAX_DWARF      = 1048576;   { DWARF -g: byte buffer for all .debug_* section content }
   MAX_DWARF_ROWS = 131072;    { DWARF -g: (code-offset, line) rows for the .debug_line program }
+  MAX_DBG_FILES  = 256;       { DWARF -g: source files in the line table (main + registered appends) }
   MAX_DBG_VARS   = 16384;     { DWARF -g: snapshotted params/locals/globals (Tier 3) }
   MAX_DBG_TYPES  = 4096;      { DWARF -g: distinct type DIEs }
   MAX_LOOP_FIXUPS = 256;
@@ -1188,6 +1189,7 @@ var
   SrcPos  : Integer;
   SrcLine : Integer;
   CurLowerLine : Integer; { current AST source line being lowered → stamped onto IR (DWARF -g) }
+  CurLowerFile : Integer; { and which FILE that line is in — see DbgFileOfTok }
   DebugInfo : Boolean;    { -g: emit DWARF .debug_* sections + section header table }
   CurTok  : TToken;
   PasDefineChars   : array[0..MAX_PAS_DEFINE_CHARS-1] of Char;
@@ -2125,6 +2127,7 @@ var
   ASTLiftedVar : array of Integer; { symbol index of compiler-lifted variable, or -1 }
   ASTEnumId : array of Integer; { enum type of an ENUM-MEMBER literal, else -1. A member const folds to an AN_INT_LIT (its ordinal), which drops the symbol — and with it the only evidence of WHICH enum it came from. Kept here so cross-enum assignment stays diagnosable. }
   ASTLine    : array of Integer; { source line of this node (CurTok.Line at alloc), 0 if unknown — DWARF -g }
+  ASTFile    : array of Integer; { .debug_line file index for that line (1 = main file); see DbgFileOfTok }
   ASTQChk    : array of Boolean; { arithmetic BINOP built inside a {$Q+} region: overflow-checked (+,-,*). Reset in AllocNode, copied by the AST deep-copy — feature-pascal-overflow-checks-q-plus }
   ASTRChk    : array of Boolean; { AN_ASSIGN built inside a {$R+} region: the value is range-checked against the DEST's ordinal bounds before the store (set centrally in AllocNode from TokRChecks; copied by CloneAST) — feature-pascal-range-checks-r-plus }
   ASTIChk    : array of Boolean; { AN_CALL built inside a {$I+} region: a Text-I/O callee gets a PXXIoCheck sequenced after it at IR lowering }
@@ -2171,6 +2174,7 @@ var
     slot and so cannot double as the IR_CALL=1 statement flag. }
   IRStmtRoot : array of Boolean;
   IRLine  : array of Integer; { source line of this IR instr (from CurLowerLine), 0 if unknown — DWARF -g }
+  IRFile  : array of Integer; { .debug_line file index of that line (from CurLowerFile) }
   IRCount : Integer;
   IRCapacity : Integer;   { current allocated length of the per-node IR arrays (grown by EnsureIRCapacity) }
 
@@ -2180,6 +2184,7 @@ var
   DwarfRowAddr : array[0..MAX_DWARF_ROWS-1] of Integer; { raw Code[] offset of the statement }
   DwarfRowLine : array[0..MAX_DWARF_ROWS-1] of Integer; { source line at that offset }
   DwarfRowPrologueEnd : array[0..MAX_DWARF_ROWS-1] of Boolean; { first row of a proc body → DW_LNS_set_prologue_end (gdb skips the prologue to here) }
+  DwarfRowFile : array[0..MAX_DWARF_ROWS-1] of Integer; { .debug_line file index (1 = the main file) }
   DwarfRowCount : Integer;
   DwarfLastLine : Integer;   { dedup tracker, reset per proc }
   DwarfProcFirstRow : Boolean;  { next recorded row is this body's first → mark prologue_end }
@@ -2196,7 +2201,18 @@ var
   DbgNmText, DbgNmData, DbgNmBss : Integer;
   DbgShFlags, DbgShAddr, DbgShAlign : Int64;  { per-section header fields for writeShdr64 (avoids the >6-param call landmine) }
   DbgSrcName : AnsiString;   { source filename recorded in the line table + CU DIE }
-  DbgMainTokEnd : Integer;   { token index just past the main source file; nodes from appended units (TokPos beyond this) get ASTLine 0 so the single-file line table stays unambiguous }
+  DbgMainTokEnd : Integer;   { token index just past the main source file; nodes from appended units (TokPos beyond this) get ASTLine 0 UNLESS the range was registered with DbgRegisterFile }
+  { Multi-file line table. An appended source (an imported `.py` module today)
+    registers its token range here and gets its own .debug_line file entry, so
+    a breakpoint inside it resolves and its frames show real lines. Ranges that
+    are NOT registered — the Pascal RTL, pylib, every appended unit we do not
+    want in the table — keep the old line-0 treatment, which is what stops the
+    whole runtime landing in the line table. Index 1 is the main file (DWARF
+    numbers file entries from 1). }
+  DbgFileCount    : Integer;
+  DbgFileName     : array[0..MAX_DBG_FILES-1] of AnsiString;
+  DbgFileStartTok : array[0..MAX_DBG_FILES-1] of Integer;
+  DbgFileEndTok   : array[0..MAX_DBG_FILES-1] of Integer;
   DbgProgName : AnsiString;  { program name → main-body DW_TAG_subprogram }
   DbgMainBodyStart, DbgMainBodyEnd : Integer;  { Code[] range of the program body }
   DbgGlobalScopeBase : Integer;  { Syms[] index after runtime units, before main decls — globals above this are the program's own }
