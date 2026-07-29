@@ -33,7 +33,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (187)
+## backlog (186)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -124,7 +124,6 @@ _none_
 | feature-nilpy-aggregate-builtins | N | 50 | feature | nilpy: sum/max/min/any/all/sorted/set/map/filter/type builtins | — |
 | feature-nilpy-arc-cross-parity | A | 35 | feature | NilPy object-ARC cross-target parity (aarch64 inline arms + scope-exit) | — |
 | feature-nilpy-augmented-subscript-assign | N | 55 | feature | nilpy: augmented assignment to a subscript — d[k] += 1, xs[i] += 5 — does not parse | — |
-| feature-nilpy-bound-method-value | N | 65 | feature | NilPy: a BOUND METHOD as a value (`self.push` carries self) | — |
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-catchable-runtime-errors | N | 55 | feature | nilpy: builtin runtime errors must raise catchable exceptions (int(), division by zero) | — |
 | feature-nilpy-class-field-infer-from-ctor | N | 50 | feature | nilpy: infer a class field's type from the ctor parameter assigned to it | — |
@@ -287,7 +286,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1011)
+## done (1012)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1064,6 +1063,7 @@ _none_
 | feature-nested-routines | A | 50 | feature | feature: nested (local) functions and procedures | — |
 | feature-net-lib-cross-target | A | 50 | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
 | feature-nil-python-frontend | A | 50 | feature | Nil Python frontend (`.npy`) | — |
+| feature-nilpy-bound-method-value | N | 65 | feature | NilPy: a BOUND METHOD as a value (`self.push` carries self) | — |
 | feature-nilpy-builtin-exceptions | N | 55 | feature | NilPy: Python's builtin exception classes, and `int(s, base)` that raises | — |
 | feature-nilpy-bytes-and-slices | N | 55 | feature | NilPy: bytearray + slices (uforth's memory emulation) | — |
 | feature-nilpy-classvar-counter | N | 55 | feature | NilPy: ClassVar storage, next(), counter shim, lambda default_factory | — |
@@ -2762,7 +2762,6 @@ _none_
 - [p 65] [A] bug-pascal-uses-is-transitive
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [A] feature-a-typeref-handle
-- [p 65] [N] feature-nilpy-bound-method-value
 - [p 65] [B] feature-nilpy-tk-callbacks
 - [p 60] [N] bug-nilpy-percent-string-format-garbage
 - [p 60] [N] bug-nilpy-pyeval-host-kwargs-positional

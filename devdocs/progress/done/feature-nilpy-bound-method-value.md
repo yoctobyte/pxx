@@ -150,3 +150,6 @@ test code through pxx-uforth (preliminary SOURCE/TYPE/CR/comment tests run) but
 fails early in prelimtest with an uncaught exception (empty message — a ForthThrow
 or bare raise) where CPython passes all 57. That is the next multi-session Track N
 push: driving the conformance suite to match CPython's oracle output.
+
+## Log
+- 2026-07-29 — resolved, commit 2531e5398.
