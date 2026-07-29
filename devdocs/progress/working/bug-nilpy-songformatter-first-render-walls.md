@@ -31,9 +31,10 @@ a modal dialog.
 **What is left** (both filed separately, this ticket stays open behind them):
 - [[bug-nilpy-tk-pxxcb-invalid-command-name]] — Tk's error dialog still appears.
 - [[bug-nilpy-callable-in-local-var-call-does-nothing]] — `cb = handler; cb(x)`.
-- The preview pane is still blank and the status bar reads `Key: unknown`;
-  re-check both once the two above are fixed, since they gate the redraw
-  callback and the analysis call.
+- [[bug-nilpy-zero-param-lambda-cannot-call-a-def]] — this is what leaves the
+  preview blank and the status bar on `Key: unknown`: the redraw is armed as
+  `cv.after(120, lambda: draw(...))` and a zero-parameter lambda cannot call a
+  compiled def.
 
 
 The application compiles, starts, and builds its ENTIRE interface — menus,

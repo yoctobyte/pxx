@@ -31,14 +31,14 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (183)
+## backlog (184)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 70 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |
-| bug-nilpy-callable-in-local-var-call-does-nothing | N | 70 | bug | `cb = handler` then `cb(x)` compiles and does NOTHING | — |
+| bug-nilpy-callable-in-local-var-call-does-nothing | N | 70 | bug | `cb = lambda ...` then `cb(x)` compiles and does NOTHING | — |
 | bug-nilpy-class-attr-instance-traversal-crashes | N | 70 | bug | A class attribute holding an INSTANCE crashes when traversed | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-int-parse-halts-instead-of-raising | N | 55 | bug | nilpy: int(\"abc\") halts the program instead of raising a catchable ValueError | — |
@@ -55,6 +55,7 @@ _none_
 | bug-nilpy-super-and-unbound-parent-method-calls | N | 70 | bug | Neither `super().m()` nor `Parent.m(self)` reaches an overridden method | — |
 | bug-nilpy-tk-pxxcb-invalid-command-name | N | 65 | bug | Tk: `invalid command name "pxxcb"` in a long-running app | — |
 | bug-nilpy-unknown-method-segfaults | N | 70 | bug | nilpy: calling a method that does not exist compiles and SEGFAULTS instead of erroring | — |
+| bug-nilpy-zero-param-lambda-cannot-call-a-def | N | 70 | bug | `lambda: f()` — a zero-parameter lambda cannot call a compiled def | — |
 | bug-pascal-defines-leak-across-units | A | 55 | bug | Pascal: {$define} in one unit stays visible in units parsed afterwards, so {$ifdef} compiles different code depending on uses ORDER | — |
 | bug-pascal-duplicate-class-name-silently-shadows | P | 50 | bug | Pascal: a duplicate class declaration silently binds to the earlier one instead of erroring | — |
 | bug-pascal-uses-is-transitive | A | 65 | bug | Pascal: uses is transitive — a unit's own uses leak into everything that uses IT, for routines and classes alike (one flat global namespace) | — |
@@ -2739,6 +2740,7 @@ _none_
 - [p 70] [N] bug-nilpy-class-attr-instance-traversal-crashes
 - [p 70] [N] bug-nilpy-super-and-unbound-parent-method-calls
 - [p 70] [N] bug-nilpy-unknown-method-segfaults
+- [p 70] [N] bug-nilpy-zero-param-lambda-cannot-call-a-def
 - [p 70] [N] feature-nilpy-function-values
 - [p 65] [N] bug-nilpy-bound-method-coerced-to-string
 - [p 65] [N] bug-nilpy-method-chaining-on-a-call-result
