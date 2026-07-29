@@ -808,6 +808,12 @@ function pyvar_contains(const c: Variant; const v: Variant): Boolean;
 function pystr_contains(const s: AnsiString; const sub: AnsiString): Boolean;
 function pyvartag(const v: Variant): Int64;
 function pyvarobj(const v: Variant): Pointer;
+{ The callee address of `<variant>(args)`, CHECKED. A name bound to None — an
+  optional import that did not resolve, a value never assigned — has a nil
+  payload, and calling it jumped to address 0: a segfault with no diagnostic,
+  inside whatever routine happened to contain the call. Python raises TypeError
+  there; so do we. }
+function pyvar_callee_addr(const v: Variant; const what: AnsiString): Pointer;
 { `v[key]` / `v[key] = val` where v is a VARIANT holding a container — a dict
   entry that was itself a `.get()` result, so its container type is only known
   at run time. Dispatch on the boxed object: dict fetch/store by key, list index
@@ -1522,6 +1528,18 @@ end;
 function pyvarobj(const v: Variant): Pointer;
 begin
   Result := Pointer(PPyVarRec(@v)^.Payload);
+end;
+
+function pyvar_callee_addr(const v: Variant; const what: AnsiString): Pointer;
+var nm: AnsiString;
+begin
+  Result := Pointer(PPyVarRec(@v)^.Payload);
+  if Result = nil then
+  begin
+    if what = '' then nm := 'object' else nm := what;
+    raise Exception.Create('TypeError: ' + nm + ' is not callable — the name is '
+      + 'None (an import that did not resolve, or a value never assigned)');
+  end;
 end;
 
 var

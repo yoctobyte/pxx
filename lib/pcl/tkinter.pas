@@ -369,6 +369,12 @@ type
                             const fill: AnsiString = '';
                             const text: AnsiString = '');
     procedure delete_all;
+    { tkinter's own spelling: `canvas.delete("all")` / `canvas.delete(item_id)`.
+      Only delete_all existed, so the standard call fell through to a dynamic
+      attribute that was None and jumped to address 0 — songformatter's preview
+      redraw starts with exactly this line. Variant so an item ID works too
+      (same reason as bbox below). }
+    procedure delete(const item: Variant);
     { An item is named by its ID or by a TAG — `canvas.bbox("all")` is the
       commonest call in the whole widget, so an Integer parameter refused the
       normal spelling. Variant takes both (see TkiItemSpec). }
@@ -1570,6 +1576,16 @@ end;
 procedure Canvas.itemconfigure_raw(const item: Variant; const opts: AnsiString);
 begin
   TkEval(path + ' itemconfigure ' + TkiItemSpec(item) + ' ' + opts);
+end;
+
+procedure Canvas.delete(const item: Variant);
+{ a TAG (`"all"`, a 1-char tag) or a numeric item ID — never coerce a string
+  through pyvar_to_int, which raises "expected a number, got str" }
+var t: Int64;
+begin
+  t := pyvartag(item);
+  if (t = 5) or (t = 6) then TkEval(path + ' delete ' + pystr_of(item))
+  else TkEval(path + ' delete ' + TkiIntStr(Integer(pyvar_to_int(item))));
 end;
 
 procedure Canvas.delete_all;

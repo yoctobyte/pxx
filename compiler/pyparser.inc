@@ -5099,13 +5099,40 @@ end;
   synthetic all-variant signature. CurTok is the '('. }
 function PyMakeDynCall(baseNode: Integer): Integer;
 var unboxArg, unboxCall, argsHead, lastArg, argNode, n, sigPi: Integer;
+    nmArg, nmLit: Integer; calleeNm: AnsiString;
 begin
   { the callee code address = the variant's payload as a pointer }
   unboxArg := AllocNode(AN_ARG);
   ASTLeft[unboxArg] := baseNode;
   ASTRight[unboxArg] := -1;
   unboxCall := AllocNode(AN_CALL);
-  ASTIVal[unboxCall] := FindProc('pyvarobj');
+  { the CHECKED unbox: a nil payload (the name is None) raises TypeError instead
+    of calling address 0 }
+  ASTIVal[unboxCall] := FindProc('pyvar_callee_addr');
+  if ASTIVal[unboxCall] >= 0 then
+  begin
+    { name the callee when it is a plain variable, so the message points at the
+      culprit rather than at "object" }
+    nmArg := AllocNode(AN_ARG);
+    nmLit := AllocNode(AN_STR_LIT);
+    if ASTKind[baseNode] = AN_IDENT then
+      calleeNm := Syms[ASTIVal[baseNode]].Name
+    else if ASTKind[baseNode] = AN_FIELD then
+      calleeNm := PyRawName(ASTSOffset[baseNode], ASTSLen[baseNode])
+    else if (TokPos >= 2) and (Tokens[TokPos - 2].Kind = tkIdent) then
+      { last resort: the token right before the '(' — a subscript or call-result
+        receiver has no name of its own, but the source text does }
+      calleeNm := GetTokenStr(TokPos - 2)
+    else
+      calleeNm := '';
+    ASTSOffset[nmLit] := PyStoredName(calleeNm);
+    ASTSLen[nmLit] := Length(calleeNm);
+    ASTTk[nmLit] := Ord(tyString);
+    ASTLeft[nmArg] := nmLit;
+    ASTRight[nmArg] := -1;
+    ASTRight[unboxArg] := nmArg;
+  end
+  else ASTIVal[unboxCall] := FindProc('pyvarobj');
   if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
   ASTTk[unboxCall] := Ord(tyPointer);
   ASTLeft[unboxCall] := unboxArg;
