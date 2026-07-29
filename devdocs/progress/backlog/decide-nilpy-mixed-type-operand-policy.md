@@ -26,7 +26,7 @@ not just the ones the sweep happened to reach.
    check on the dynamic path (those helpers already switch on the tag, so it is
    close to free where it matters). Needs the exception to be a real NilPy
    exception, not a Pascal runtime trap — the same requirement as
-   [[bug-nilpy-division-by-zero-is-not-catchable]].
+   [[bug-nilpy-runtime-raised-errors-bypass-try-except]].
 3. **Define it away.** Give the operators a total semantics (None as 0,
    handle-as-number, etc.) and document the divergence. Rejected as written:
    a result derived from a heap address is not a semantics, it is a different

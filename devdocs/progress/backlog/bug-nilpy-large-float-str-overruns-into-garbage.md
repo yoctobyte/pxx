@@ -19,7 +19,7 @@ happens to surface as text.
 
 It is reachable from ordinary arithmetic, not just from a literal: `3 / 0`
 yields the same string (see
-[[bug-nilpy-division-by-zero-is-not-catchable]]), so any program that divides
+[[bug-nilpy-runtime-raised-errors-bypass-try-except]]), so any program that divides
 by zero prints corrupted bytes to stdout.
 
 The conversion clearly saturates the integer part at `High(Int64)` and then
