@@ -38,6 +38,17 @@ oracle on ordinary values:
 | `123456789012345678.0` | `1.2345678901234568e+17` | `123456789012345680.0` |
 | `0.1 + 0.2` | `0.30000000000000004` | `0.3` |
 | `"%e" % 3.14159` | `3.141590e+00` | `3.141590` |
+| `1e300` | `1e+300` | `1.000000000000001e+300` |
+| `-0.0` | `-0.0` | `0.0` |
+
+`1e300`'s drift is introduced by `FloatToExpStr`'s normalisation, which divides
+by 10 in a LOOP — ~300 divisions, each rounding. Scaling by descending POWERS
+(1e256, 1e128, … 1e1) would cost a handful of operations and lose far less.
+Worth doing in the next pass that touches `compiler/builtin/**`, since each such
+change needs its own stabilize + pin
+([[project_builtin_change_needs_repin_for_gate_fixedpoint]]) and they should be
+batched. These three are FORMATTING divergences, not corrupt output — the
+garbage byte this ticket was opened for is gone from both `str()` and `print()`.
 
 (`%e` was the ONLY divergence in a 21-case sweep of f-strings, `%`-formatting
 and `.format()` — everything else matched CPython exactly, so it is a
