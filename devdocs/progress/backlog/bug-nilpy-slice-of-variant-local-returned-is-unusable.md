@@ -72,13 +72,28 @@ a small method is fine — every bottom-up repro matches CPython (annotated
 `dict[str, list[str]]`, inside a method, Optional winner, a stored EMPTY list
 under an existing key, keyword arguments with a trailing `debug=`).
 
-What is different about the real one is its SIZE: `ViolationCountDetector.analyze`
-is ~90 lines with many locals, two nested loops over 84 keys, `del` statements
-and set literals. Prime suspect is a per-method locals/temporaries cap: the
-hidden temp the slice needs lands in a slot past the limit and is written
-somewhere else. Next step is to check the locals/temp allocation limits for a
-method that big (see [[project_nilpy_variant_container_landmines]], which
-records a 255-local truncation), NOT to keep growing the repro.
+Continuing the bisect INSIDE that method settles what it is — **the slice
+result is an unowned temporary, i.e. a use-after-free**:
+
+| in ViolationCountDetector.analyze | `len()` right after | field reads back |
+| --- | --- | --- |
+| `ev_local = []` then `evidence=ev_local` | 0 | **0, correct** |
+| `ev_local = <the slice>` then `evidence=ev_local` | **0, correct** | **garbage** |
+
+Same local, same field, same constructor — only the *provenance* of the value
+differs. So the list `pylist_slice` hands back is correct when it is made and
+still correct one line later, and is gone by the time the field is read: nobody
+takes a reference to it. Dropping the neighbouring `debug=` kwarg changes
+nothing, and the dict key is irrelevant.
+
+That also explains why every small repro passes: the freed block simply is not
+recycled before the read. In the real detector the 84-key nested loop churns the
+heap in between, so the field comes back as ASCII bytes read as an integer.
+
+Fix belongs in the slice lowering: its result must be OWNED like any other
+call result (see [[project_nilpy_object_reclamation_arc]] — "owned=call-results")
+so the store into a local or a field retains it. Check `pylist_slice` /
+`pystr_slice` / `pybytes_slice` alike.
 
 ## Why it matters
 
