@@ -142,6 +142,9 @@ type
       which is what makes `d.setdefault(k, ...)[k2] = v` mutate the dict rather
       than a throwaway copy. }
     function setdefault(const k: Variant; const d: Variant): Variant;
+    { dict.clear() — Python's, and what a tkinter application calls on a
+      widget's `children` after destroying them. }
+    procedure clear;
     { `d.items()` as a VALUE — a list of [key, value] pairs, which is what
       `sorted(d.items(), key=...)` and `list(d.items())` need. NOT named `items`:
       that collides with the default indexed property `Items[k]` above (Pascal is
@@ -2113,6 +2116,14 @@ begin
   { the tail shift renumbered every entry after the hole, so the stored slot
     indices are stale — rebuild the index from the new layout. }
   if FHashCap > 0 then PyDictRehash(Self, FHashCap);
+end;
+
+procedure TPyDict.clear;
+begin
+  { drop every entry; the storage arrays stay for reuse, which is what Python's
+    dict.clear() does too }
+  Self.FLen := 0;
+  PyDictRehash(Self, Self.FHashCap);
 end;
 
 function TPyDict.pop(const k: Variant; const d: Variant): Variant;

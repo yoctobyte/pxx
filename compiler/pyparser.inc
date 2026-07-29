@@ -2943,10 +2943,22 @@ begin
             ASTSLen[kwVal] := ProcParamDefaultSLen[kwCtorPi * MAX_PROC_PARAMS + kwPk];
             ASTTk[kwVal] := Ord(tyString);
           end
+          else if Procs[kwCtorPi].Params[kwPk].TypeKind = tyVariant then
+            { A VARIANT hole. Two things go wrong with a bare ordinal here: the
+              parameter is passed by REFERENCE, so the callee dereferences it
+              (`tk.Label(root, textvariable=sv)` skipped `font` and segfaulted),
+              and a library's `= 0` means "not supplied", which every façade
+              reads as `pyvartag(v) <> 0`. None is both — an addressable empty
+              variant. Same rule as DefaultArgValueNode, which the non-ctor
+              paths use. }
+            kwVal := PyMakeNone
           else
           begin
             kwVal := AllocNode(AN_INT_LIT);
             ASTIVal[kwVal] := ProcParamDefaultVal[kwCtorPi * MAX_PROC_PARAMS + kwPk];
+            { the LITERAL's type, not the parameter's: tagged as the parameter's
+              it looked like a value that needed no conversion, and the
+              call-argument boxing never ran }
             ASTTk[kwVal] := Ord(Procs[kwCtorPi].Params[kwPk].TypeKind);
           end;
           argNode := AllocNode(AN_ARG);

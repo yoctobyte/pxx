@@ -153,12 +153,22 @@ type
       shows the open document's name there }
     function winfo_toplevel: Widget;
     procedure title(const text: AnsiString);
+    { `root.protocol("WM_DELETE_WINDOW", on_close)` — the window-manager hook an
+      application uses to save its session before the window closes. }
+    procedure protocol(const name: AnsiString; const callback: Variant);
     function winfo_width: Integer;
     function winfo_height: Integer;
     { Python hands back a LIST OF WIDGETS, and applications call methods on the
       elements (`for w in frame.winfo_children(): w.destroy()`). Returning the
       raw Tcl string made those elements strings. }
     function winfo_children: TPyList;
+    { tkinter keeps a `children` dict on every widget, keyed by the child's
+      name, and an application clears it after destroying the children to drop
+      the stale references (`pane.children.clear()`). Built on demand from Tk's
+      own answer: clearing the returned dict drops OUR references, which is all
+      the application is after — Tk's bookkeeping went with destroy(). }
+    function GetChildren: TPyDict;
+    property children: TPyDict read GetChildren;
     { the widget that has keyboard focus, or nil — applications compare it to
       themselves (`if self.focus_get() == self`) }
     function focus_get: Widget;
@@ -190,6 +200,10 @@ type
                        width: Integer = -1; height: Integer = -1);
     { `paned.add(child, weight=1)` — a pane, optionally with a resize weight }
     procedure add(child: Widget; weight: Integer = -1);
+    { `paned.sashpos(0, 300)` places the divider; the one-argument form reads
+      it. An editor sets this to give the source pane its share on startup. }
+    function sashpos(index: Integer): Integer; overload;
+    procedure sashpos(index, newpos: Integer); overload;
   end;
 
   { ttk's Notebook — a tab strip. songformatter's whole multi-document UI is
@@ -783,6 +797,14 @@ begin
   if menu <> nil then TkEval(path + ' configure -menu ' + menu.path);
 end;
 
+procedure Widget.protocol(const name: AnsiString; const callback: Variant);
+var idx: Integer;
+begin
+  idx := TkiRegisterCallback(callback);
+  if idx >= 0 then
+    TkEval('wm protocol ' + path + ' ' + name + ' {' + TkiCbScript(idx) + '}');
+end;
+
 procedure Widget.configure_raw(const opts: AnsiString);
 begin
   TkEval(path + ' configure ' + opts);
@@ -977,6 +999,20 @@ begin
   winfo_children_paths := TkEval('winfo children ' + path);
 end;
 
+function Widget.GetChildren: TPyDict;
+var kids: TPyList; i: Integer; d: TPyDict; k: AnsiString; v: Variant;
+begin
+  d := TPyDict.Create;
+  kids := winfo_children;
+  for i := 0 to kids.count - 1 do
+  begin
+    v := kids.at(i);
+    k := pystr_of(v);
+    d.store(k, v);
+  end;
+  GetChildren := d;
+end;
+
 function Widget.winfo_children: TPyList;
 var raw, cur: AnsiString; i: Integer; w: Widget; v: Variant;
 begin
@@ -1101,6 +1137,16 @@ begin
 end;
 
 { ---- Menu ---------------------------------------------------------------- }
+
+function PanedWindow.sashpos(index: Integer): Integer;
+begin
+  sashpos := TkiStrInt(TkEval(path + ' sashpos ' + TkiIntStr(index)));
+end;
+
+procedure PanedWindow.sashpos(index, newpos: Integer);
+begin
+  TkEval(path + ' sashpos ' + TkiIntStr(index) + ' ' + TkiIntStr(newpos));
+end;
 
 constructor Menu.Create(master: Widget; tearoff: Integer);
 begin
