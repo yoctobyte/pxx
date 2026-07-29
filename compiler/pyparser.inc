@@ -1561,13 +1561,15 @@ end;
   reader sees garbage (a class object round-tripped through a dict, then assigned
   back to `self.field`, lost its identity and read empty fields — uforth's INCLUDE
   input-source restore across nested files). }
-function PyUnboxVariantToClass(varNode, ci: Integer): Integer;
+function PyUnboxVariantToClassEx(varNode, ci: Integer; owned: Boolean): Integer;
 var unboxArg, unboxCall, castNode: Integer;
+    fn: AnsiString;
 begin
   unboxArg := AllocNode(AN_ARG); ASTLeft[unboxArg] := varNode; ASTRight[unboxArg] := -1;
   unboxCall := AllocNode(AN_CALL);
-  ASTIVal[unboxCall] := FindProc('pyvarobj');
-  if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+  if owned then fn := 'pyvarobj_owned' else fn := 'pyvarobj';
+  ASTIVal[unboxCall] := FindProc(fn);
+  if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (' + fn + ') not loaded');
   ASTTk[unboxCall] := Ord(tyPointer);
   ASTLeft[unboxCall] := unboxArg;
   castNode := AllocNode(AN_CLASS_CAST);
@@ -1575,6 +1577,11 @@ begin
   ASTIVal[castNode] := ci;
   ASTTk[castNode]   := Ord(tyClass);
   Result := castNode;
+end;
+
+function PyUnboxVariantToClass(varNode, ci: Integer): Integer;
+begin
+  Result := PyUnboxVariantToClassEx(varNode, ci, False);
 end;
 
 
@@ -3016,7 +3023,25 @@ begin
     for kwI := 0 to kwMax do
     begin
       if kwSlot[kwI] >= 0 then
-        argNode := kwSlot[kwI]
+      begin
+        argNode := kwSlot[kwI];
+        { A VARIANT argument landing in a CLASS-typed dataclass FIELD. The call
+          lowering already unboxes it (IRLowerCallArg's pyvarobj block), but an
+          unboxed pointer is a bare reference: the field slot is never released,
+          so nothing balances it, while the variant TEMP the value came out of is
+          released at the end of the statement and takes the object with it. The
+          field then points at a freed block — correct at the call, garbage (or a
+          recycled neighbour's list) at the first read. Unbox HERE instead, with
+          a retain, so the field owns what it holds.
+          [[bug-nilpy-slice-of-variant-local-returned-is-unusable]] }
+        if (ci < PY_MAX_DC_FIELDS) and PyDcClassIsDc[ci] and
+           (kwI < UClsFCount[ci]) and
+           (IntToTypeKind(ASTTk[ASTLeft[argNode]]) = tyVariant) and
+           (UFldTk[UClsFBase[ci] + kwI] = Ord(tyClass)) and
+           (UFldRec_[UClsFBase[ci] + kwI] >= REC_UCLASS_BASE) then
+          ASTLeft[argNode] := PyUnboxVariantToClassEx(ASTLeft[argNode],
+            UFldRec_[UClsFBase[ci] + kwI] - REC_UCLASS_BASE, True);
+      end
       else
       begin
         kwDcBase := -1;

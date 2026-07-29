@@ -816,6 +816,14 @@ function pyvar_contains(const c: Variant; const v: Variant): Boolean;
 function pystr_contains(const s: AnsiString; const sub: AnsiString): Boolean;
 function pyvartag(const v: Variant): Int64;
 function pyvarobj(const v: Variant): Pointer;
+{ pyvarobj plus a RETAIN. Use where the unboxed pointer is STORED into a
+  class-typed slot (a field, a class-typed local, a ctor argument that lands in
+  a field): that slot is a new owning reference, but unlike a variant slot it is
+  never released, so without the retain the object dies with the variant temp
+  the value came out of and the slot dangles. The visible shape was a list built
+  by `d.get(k, [])[:6]` passed to a dataclass ctor: correct at the call, garbage
+  (a recycled block) by the time the field was read. }
+function pyvarobj_owned(const v: Variant): Pointer;
 { The callee address of `<variant>(args)`, CHECKED. A name bound to None — an
   optional import that did not resolve, a value never assigned — has a nil
   payload, and calling it jumped to address 0: a segfault with no diagnostic,
@@ -1757,6 +1765,12 @@ end;
 function PyVarSlotIsObj(t: Int64): Boolean;
 begin
   PyVarSlotIsObj := (t = 7) or (t = 8) or (t = 9);   { 9 = pyeval closure }
+end;
+
+function pyvarobj_owned(const v: Variant): Pointer;
+begin
+  Result := Pointer(PPyVarRec(@v)^.Payload);
+  if PyVarSlotIsObj(PPyVarRec(@v)^.VType) then PXXObjRetain(Result);
 end;
 
 procedure PyVarSlotClear(dst: PPyVarRec);
