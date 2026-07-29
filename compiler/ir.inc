@@ -3746,6 +3746,19 @@ begin
     IRNodePyListRec := REC_UCLASS_BASE + ci;
 end;
 
+function IRNodePyDictRec(n: Integer): Integer;
+{ The rec id when n is a TPyDict, else -1. Sibling of IRNodePyListRec. }
+var ci: Integer;
+begin
+  IRNodePyDictRec := -1;
+  if n < 0 then Exit;
+  if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
+  ci := FindUClass('TPyDict');
+  if ci < 0 then Exit;
+  if ResolveNodeRec(n) = REC_UCLASS_BASE + ci then
+    IRNodePyDictRec := REC_UCLASS_BASE + ci;
+end;
+
 function IRNodeIsFloatThroughNeg(n: Integer): Boolean;
 { Is this operand floating point, seeing through unary minus? AN_NEG does not
   carry its operand's type, so `-x // y` with a float x looked integer and
@@ -5510,6 +5523,28 @@ begin
       begin
         cpi := FindProc('pylist_eq');
         if cpi < 0 then Error('Nil Python: pylist_eq (pylib) not loaded');
+        left := IRLowerAST(ASTLeft[node]);
+        first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyClass));
+        right := IRLowerAST(ASTRight[node]);
+        last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyClass));
+        IRB[first] := last;
+        Result := IRAppendCall(cpi, first, -1, Ord(tyBoolean));
+        if Integer(ASTIVal[node]) = Ord(tkNeq) then
+          Result := IRAppend(IR_NOT, Result, -1, -1, 0, Ord(tyBoolean));
+        Exit;
+      end;
+      { Dicts compare by CONTENTS too, and for the same reason — this was still
+        a pointer compare, so `{"k": 1} == {"k": 1}` answered False and
+        `if cfg == defaults:` never fired
+        (bug-nilpy-dict-equality-compares-identity). pydict_eq ignores
+        insertion order, which is what Python's rule requires. }
+      if PyProgramMode and
+         ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
+         (IRNodePyDictRec(ASTLeft[node]) >= 0) and
+         (IRNodePyDictRec(ASTLeft[node]) = IRNodePyDictRec(ASTRight[node])) then
+      begin
+        cpi := FindProc('pydict_eq');
+        if cpi < 0 then Error('Nil Python: pydict_eq (pylib) not loaded');
         left := IRLowerAST(ASTLeft[node]);
         first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyClass));
         right := IRLowerAST(ASTRight[node]);

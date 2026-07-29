@@ -832,6 +832,14 @@ function pylist_eq(a: TPyList; b: TPyList): Boolean;
   cached_key` where the cache starts as None is ordinary Python, and comparing
   a tuple with a non-list is simply False — never an error. }
 function pylist_eq_v(a: TPyList; const v: Variant): Boolean;
+{ Python compares dicts by CONTENTS too — same length, and every key present in
+  the other with an equal value. Order does NOT participate: `{"a":1,"b":2}`
+  equals `{"b":2,"a":1}`, which is why this looks each key up rather than
+  walking the two in parallel. Without it `{"k":1} == {"k":1}` was a pointer
+  compare and answered False, so `if cfg == defaults:` never fired
+  (bug-nilpy-dict-equality-compares-identity). Element equality is PyVarEq, the
+  same rule pylist_eq uses, so nested lists and dicts compare by content too. }
+function pydict_eq(a: TPyDict; b: TPyDict): Boolean;
 function len(const s: AnsiString): Integer; overload;
 { len() of a VARIANT — a dynamically-typed value (a list element, a dataclass
   field, anything the frontend could not pin to a class). Without it, `len(x)`
@@ -2057,7 +2065,15 @@ begin
         if not PyVarEq(PPyVarRec(NativeInt(TPyList(pl).FItems) + k * 16),
                        PPyVarRec(NativeInt(TPyList(ql).FItems) + k * 16)) then Exit;
       Result := True;
-    end;
+    end
+    else if (pl is TPyDict) and (ql is TPyDict) then
+      { …and two DICTS by contents, for the same reason. This is what makes a
+        NESTED dict compare correctly: the outer pydict_eq reaches its values
+        through PyVarEq, so without this arm `{"n": {"m": 1}} == {"n": {"m": 1}}`
+        was False while the list-valued `{"n": [1, 2]}` form was already True.
+        Mutually recursive with pydict_eq, which is why that one is
+        forward-declared. }
+      Result := pydict_eq(TPyDict(pl), TPyDict(ql));
     Exit;
   end;
   if p^.VType = 8193 then
@@ -2895,6 +2911,58 @@ end;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
 begin
   Result := d.indexof(k) >= 0;
+end;
+
+function PyDictIndexOfPtr(d: TPyDict; q: PPyVarRec): Integer;
+{ TPyDict.indexof by SLOT POINTER. The method itself takes `const k: Variant`
+  and immediately takes its address, so calling it from a walk over another
+  dict's key storage would mean copying each key into a local Variant purely to
+  have its address taken again. Same open-addressing probe, same linear
+  fallback for the never-indexed dict. }
+var
+  i: Integer;
+  mask, pos: NativeUInt;
+  idx: Integer;
+begin
+  Result := -1;
+  if d.FLen = 0 then Exit;
+  if d.FHashCap = 0 then
+  begin
+    for i := 0 to d.FLen - 1 do
+      if PyVarEq(PPyVarRec(NativeInt(d.FKeys) + i * 16), q) then
+      begin Result := i; Exit; end;
+    Exit;
+  end;
+  mask := NativeUInt(d.FHashCap) - 1;
+  pos := PyVarHashKey(q) and mask;
+  while True do
+  begin
+    idx := PInteger(NativeInt(d.FHash) + NativeInt(pos) * 4)^;
+    if idx < 0 then Exit;              { empty slot -> key absent }
+    if PyVarEq(PPyVarRec(NativeInt(d.FKeys) + idx * 16), q) then
+    begin Result := idx; Exit; end;
+    pos := (pos + 1) and mask;
+  end;
+end;
+
+function pydict_eq(a: TPyDict; b: TPyDict): Boolean;
+{ See the declaration for why this is a per-key LOOKUP rather than a parallel
+  walk: dict equality ignores insertion order. }
+var
+  i, j: Integer;
+begin
+  Result := False;
+  if a = b then begin Result := True; Exit; end;
+  if (a = nil) or (b = nil) then Exit;
+  if a.FLen <> b.FLen then Exit;
+  for i := 0 to a.FLen - 1 do
+  begin
+    j := PyDictIndexOfPtr(b, PPyVarRec(NativeInt(a.FKeys) + i * 16));
+    if j < 0 then Exit;
+    if not PyVarEq(PPyVarRec(NativeInt(a.FVals) + i * 16),
+                   PPyVarRec(NativeInt(b.FVals) + j * 16)) then Exit;
+  end;
+  Result := True;
 end;
 
 function PyVarIsFloat(p: PPyVarRec): Boolean;
