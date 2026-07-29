@@ -13090,6 +13090,45 @@ begin
       CurASTNode := node;
       Exit;
     end;
+    { A user class that defines `__eq__` is compared BY IT — Python's own rule,
+      and the same shape as PyStrOfValue dispatching `__str__`. Without it `==`
+      fell through to a pointer compare, so `V(1) == V(1)` was False with the
+      method sitting right there unused, and `!=` was wrong from the same cause.
+      The failure direction is the bad one: two equal values report unequal, so
+      a membership test or an `if got == expected` takes the wrong branch
+      silently (bug-nilpy-eq-dunder-ignored).
+
+      `__lt__` and `__len__` already dispatched, so this is wiring rather than
+      machinery. Built at AST level through PyCallMeth1, NOT as hand-rolled IR:
+      the `other` parameter is normally unannotated, i.e. a by-reference
+      variant, and a hand-built IR_ARG skips IRLowerCallArg
+      (project_irlowercallarg_hand_built_args_landmine).
+
+      The result keeps the METHOD's own return type rather than being forced to
+      Boolean — the callee's ABI decides, and an annotated `-> bool` or an
+      inferred boolean body both land there anyway. Non-virtual, exactly like
+      the `__str__` dispatch: it resolves against the operand's static class. }
+    if PyExprMode and (op in [tkEq, tkNeq]) and
+       (IntToTypeKind(ASTTk[left]) = tyClass) and
+       (IntToTypeKind(ASTTk[right]) = tyClass) and
+       (ResolveNodeRec(left) >= REC_UCLASS_BASE) and
+       (FindUMeth(ResolveNodeRec(left) - REC_UCLASS_BASE, '__eq__') >= 0) then
+    begin
+      node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__eq__',
+                          left, right);
+      if node >= 0 then
+      begin
+        if op = tkNeq then
+        begin
+          right := AllocNode(AN_NOT);
+          ASTLeft[right] := node;
+          ASTTk[right] := Ord(tyBoolean);
+          node := right;
+        end;
+        CurASTNode := node;
+        Exit;
+      end;
+    end;
     { `3 == "ab"` — a STRING compared with a NUMBER under ==/!=. In Python that
       is simply False (True for !=): objects of different types are unequal, it
       is not an error. Here it reached the string comparison with the NUMBER as
