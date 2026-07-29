@@ -26,6 +26,31 @@ So it is the slice of a **variant-typed local** that produces the bad value: the
 result reaches the caller as something `len()` then coerces through
 `pyvar_to_int` ("expected a number, got object") instead of a list.
 
+## It is the INFERRED RETURN TYPE
+
+Two probes pin it:
+
+```python
+def mk(d, k) -> list:      # annotated: WORKS
+    b = d.get(k, [])
+    return b[:6]
+```
+
+```python
+b = d.get("C", [])         # inline, no function: WORKS
+s = b[:6]
+print(len(s))              # 2
+```
+
+So the slice value itself is right and `len()` on a variant holding a list is
+right; what is wrong is the type NilPy infers for a body whose `return` is a
+slice of a variant-typed local. The returned value then goes out through the
+wrong coercion and reaches the caller as a bare object.
+
+Fix: teach the return-type inference (`PyInferExprType`, the subscript/slice
+case) that slicing a VARIANT yields a container — or fall back to `tyVariant`,
+which also works, since `len()` of a variant-held list is already correct.
+
 ## Why it matters
 
 This is the wall songformatter's key analysis dies on, and it is worth noting
