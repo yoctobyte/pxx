@@ -47,7 +47,6 @@ _none_
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-float-times-string-hangs | N | 65 | bug | `2.5 * "ab"` hangs forever | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
-| bug-nilpy-int-parse-halts-instead-of-raising | N | 55 | bug | nilpy: int(\"abc\") halts the program instead of raising a catchable ValueError | — |
 | bug-nilpy-is-on-two-lists-compares-contents | N | 55 | bug | `is` on two lists compares CONTENTS, so distinct lists are "identical" | — |
 | bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
 | bug-nilpy-large-float-str-overruns-into-garbage | N | 70 | bug | `str()` of a float whose integer part exceeds Int64 writes garbage bytes | — |
@@ -56,15 +55,16 @@ _none_
 | bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math | N | 60 | bug | Arithmetic on mismatched operand types silently does POINTER math | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-none-equals-zero-is-true | N | 65 | bug | `0 == None` is True, and `None == 0` does not parse | — |
+| bug-nilpy-print-emits-arguments-before-evaluating-later-ones | N | 45 | bug | `print` writes each argument as it goes, so an exception mid-list leaves partial output | — |
 | bug-nilpy-pyeval-host-kwargs-positional | N | 60 | bug | pyeval passes a host method's KEYWORD arguments POSITIONALLY (silent wrong option) | — |
 | bug-nilpy-pyeval-prints-bool-as-number | N | 30 | bug | pyeval prints a Boolean as 1/0 where CPython prints True/False | — |
 | bug-nilpy-qualified-proc-omitted-default | N | 35 | bug | A qualified UNIT-LEVEL proc call cannot omit a defaulted parameter | — |
 | bug-nilpy-returning-a-construction-leaks-one-ref | N | 60 | bug | `return Node(...)` leaks one object ref per call; `x = Node(...); return x` does not | — |
 | bug-nilpy-returning-a-nested-def-yields-none | N | 70 | bug | `return inner` — a nested def returned as a value — yields None | — |
-| bug-nilpy-runtime-raised-errors-bypass-try-except | N | 65 | bug | Runtime-raised errors bypass try/except entirely (division by zero, index, key) | — |
 | bug-nilpy-set-literal-does-not-deduplicate | N | 60 | bug | A set LITERAL keeps duplicates; `set().add()` removes them | — |
 | bug-nilpy-sorted-over-tuples-or-lists-fails | N | 55 | bug | `sorted()` over a list of tuples or lists dies with "expected a number, got object" | — |
 | bug-nilpy-str-of-literal-none-prints-zero | N | 65 | bug | `str(None)` prints `0`, but `str(x)` with `x = None` prints `None` | — |
+| bug-nilpy-str-of-mixed-mod-prints-double-bits | N | 65 | bug | `str(3 % 2.5)` prints the double's BIT PATTERN | — |
 | bug-nilpy-tk-pxxcb-invalid-command-name | N | 65 | bug | Tk: `invalid command name "pxxcb"` in a long-running app | — |
 | bug-nilpy-zip-over-a-string-yields-nothing-or-segfaults | N | 70 | bug | `zip(list, str)` yields nothing — and segfaults if any loop ran before it | — |
 | bug-pascal-defines-leak-across-units | A | 55 | bug | Pascal: {$define} in one unit stays visible in units parsed afterwards, so {$ifdef} compiles different code depending on uses ORDER | — |
@@ -300,7 +300,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1027)
+## done (1029)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -653,6 +653,7 @@ _none_
 | bug-nilpy-import-name-forces-function-object-abi | N | 70 | bug | `from m import f` makes every def in an imported module use the function-object ABI | — |
 | bug-nilpy-in-on-a-string-segfaults | N | 70 | bug | NilPy: `sub in s` on a STRING segfaults | — |
 | bug-nilpy-int-equals-string-segfaults | N | 80 | bug | `3 == "ab"` SEGFAULTS | — |
+| bug-nilpy-int-parse-halts-instead-of-raising | N | 55 | bug | nilpy: int(\"abc\") halts the program instead of raising a catchable ValueError | — |
 | bug-nilpy-key-analysis-compiles-but-segfaults | N | 70 | bug | nilpy: songformatter's key_analysis.py COMPILES but segfaults at run time | — |
 | bug-nilpy-locals-list-pointer-truncated-32bit | N | 55 | bug | NilPy: a list passed to a method truncates its pointer to 32-bit (SIGSEGV) | — |
 | bug-nilpy-method-chaining-on-a-call-result | N | 65 | bug | Chaining a method call on the RESULT of a method call does not parse | — |
@@ -673,6 +674,7 @@ _none_
 | bug-nilpy-pydict-v-borrowed-reference | N | 70 | bug | `pydict_v` handed back a BORROWED dict — use-after-free, heap corruption | — |
 | bug-nilpy-range-for-variant-loop-var | N | 30 | bug | NilPy: range for-loop with a pre-existing VARIANT loop variable corrupts it | — |
 | bug-nilpy-rtl-exception-surface-shadowed | N | 60 | bug | nilpy: pylib's Exception shadows sysutils' identical declaration, so RTL units fail on CreateFmt/FMessage | — |
+| bug-nilpy-runtime-raised-errors-bypass-try-except | N | 65 | bug | Runtime-raised errors bypass try/except entirely (division by zero, index, key) | — |
 | bug-nilpy-settings-editor-segfaults-on-bound-method-field | N | 80 | bug | SettingsEditor segfaults reading a bound method off a field | — |
 | bug-nilpy-slice-of-variant-local-returned-is-unusable | N | 75 | bug | Returning a SLICE of a variant local gives the caller an unusable value | — |
 | bug-nilpy-statement-after-for-in-a-def | N | 60 | bug | NilPy: any statement after a `for` inside a def failed to parse | — |
@@ -2783,8 +2785,8 @@ _none_
 - [p 65] [N] bug-nilpy-bound-method-coerced-to-string
 - [p 65] [N] bug-nilpy-float-times-string-hangs
 - [p 65] [N] bug-nilpy-none-equals-zero-is-true
-- [p 65] [N] bug-nilpy-runtime-raised-errors-bypass-try-except
 - [p 65] [N] bug-nilpy-str-of-literal-none-prints-zero
+- [p 65] [N] bug-nilpy-str-of-mixed-mod-prints-double-bits
 - [p 65] [N] bug-nilpy-tk-pxxcb-invalid-command-name
 - [p 65] [A] bug-pascal-uses-is-transitive
 - [p 65] [U] decide-class-namespace-scoping
@@ -2812,7 +2814,6 @@ _none_
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
 - [p 55] [N] bug-nilpy-annotated-module-global-invisible-in-kwarg
-- [p 55] [N] bug-nilpy-int-parse-halts-instead-of-raising
 - [p 55] [N] bug-nilpy-is-on-two-lists-compares-contents
 - [p 55] [N] bug-nilpy-method-returning-a-fresh-string-leaks
 - [p 55] [N] bug-nilpy-sorted-over-tuples-or-lists-fails
@@ -2860,6 +2861,7 @@ _none_
 - [p 45] [U] decide-ilja-tui-render-model (unblocks 1)
 - [p 45] [A] bug-compiler-selfdebug-lines-index-expanded-source
 - [p 45] [N] bug-nilpy-method-call-on-fresh-construction
+- [p 45] [N] bug-nilpy-print-emits-arguments-before-evaluating-later-ones
 - [p 45] [A] bug-pascal-uses-order-breaks-pylib-exception
 - [p 45] [T] bug-t-watcher-dev-contention-false-newred
 - [p 45] [A] chore-makefile-selfhost-iterate-to-convergence

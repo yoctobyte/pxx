@@ -57,3 +57,6 @@ at the same time, and match CPython's message text.
 The tuple form `except (ValueError, TypeError):` in that snippet already parses —
 checked 2026-07-27 — so the halt is the only thing standing between that idiom and
 working code.
+
+## Log
+- 2026-07-30 — resolved, commit e91ea31a0.

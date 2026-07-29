@@ -140,3 +140,6 @@ Both were invisible before, because the process died first:
 ### Gate
 
 `tools/gate.sh full`.
+
+## Log
+- 2026-07-30 — resolved, commit e91ea31a0.
