@@ -532,6 +532,14 @@ function pycallback_call0(const cb: Variant): Int64;
 function pycallback_call1(const cb: Variant; const a0: Variant): Int64;
 { True for a value that pycallback_call* can invoke. }
 function pycallback_is(const cb: Variant): Boolean;
+{ The same call with the RESULT kept — `f = obj.method` / `f = some_def` and then
+  `f(a, b)` as an expression. Arities 0..3 cover every dynamic call NilPy emits a
+  guard for; beyond that a receiver-less pair still runs through the plain
+  indirect path (pyvar_callee_addr unwraps it). }
+function pybound_callv0(const cb: Variant): Variant;
+function pybound_callv1(const cb: Variant; const a0: Variant): Variant;
+function pybound_callv2(const cb: Variant; const a0, a1: Variant): Variant;
+function pybound_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
 { Finalizer for dying refcounted objects, installed into builtinheap's
   PXXObjFinalizeHook by the container constructors and pybound_new: releases
   the object's children recursively before the block is freed
@@ -1553,7 +1561,24 @@ end;
 function pyvar_callee_addr(const v: Variant; const what: AnsiString): Pointer;
 var nm: AnsiString;
 begin
-  Result := Pointer(PPyVarRec(@v)^.Payload);
+  { A FUNCTION VALUE (VT_BOUNDMETHOD, tag 8) carries a {code, recv} PAIR pointer,
+    not a code address — jumping to the payload landed in the pair's own bytes.
+    Unwrap it. A pair with a receiver cannot be called through this path at all
+    (the receiver has to be prepended to the argument list); the dynamic-call
+    guard routes those to pybound_callv*, so reaching here with one means an
+    arity past that guard — say so instead of calling the method without Self. }
+  if PPyVarRec(@v)^.VType = 8 then
+  begin
+    if pybound_recv(v) <> nil then
+    begin
+      if what = '' then nm := 'object' else nm := what;
+      raise Exception.Create('TypeError: ' + nm + ' is a bound method taking too '
+        + 'many arguments to call through a name (max 3)');
+    end;
+    Result := pybound_code(v);
+  end
+  else
+    Result := Pointer(PPyVarRec(@v)^.Payload);
   if Result = nil then
   begin
     if what = '' then nm := 'object' else nm := what;
@@ -4422,8 +4447,12 @@ type
     A `-> None` callee ignores the destination, so this shape is right for both. }
   TPyCbM0 = function(recv: Pointer): Variant;
   TPyCbM1 = function(recv: Pointer; const a0: Variant): Variant;
+  TPyCbM2 = function(recv: Pointer; const a0, a1: Variant): Variant;
+  TPyCbM3 = function(recv: Pointer; const a0, a1, a2: Variant): Variant;
   TPyCbF0 = function: Variant;
   TPyCbF1 = function(const a0: Variant): Variant;
+  TPyCbF2 = function(const a0, a1: Variant): Variant;
+  TPyCbF3 = function(const a0, a1, a2: Variant): Variant;
 
 function pycallback_is(const cb: Variant): Boolean;
 begin
@@ -4479,6 +4508,60 @@ end;
 function pybound_recv(const v: Variant): Pointer;
 begin
   pybound_recv := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.Recv;
+end;
+
+{ CALL a function value and KEEP its result — what an expression `f(x)` needs and
+  pycallback_call* (a void event handler) cannot give. Both halves of the pair
+  are honoured: a nil receiver is a plain def, a non-nil one a bound method whose
+  receiver goes in as the hidden first argument. Every callee reached this way
+  uses NilPy's function-object ABI (variant params, variant result — see
+  PyDefUsedAsValue), which is exactly what these signatures declare. }
+function pybound_callv0(const cb: Variant): Variant;
+var code, recv: Pointer; m0: TPyCbM0; f0: TPyCbF0;
+begin
+  Result := pynone;
+  if not pycallback_is(cb) then Exit;
+  code := pybound_code(cb);
+  if code = nil then Exit;
+  recv := pybound_recv(cb);
+  if recv = nil then begin f0 := TPyCbF0(code); Result := f0(); end
+  else begin m0 := TPyCbM0(code); Result := m0(recv); end;
+end;
+
+function pybound_callv1(const cb: Variant; const a0: Variant): Variant;
+var code, recv: Pointer; m1: TPyCbM1; f1: TPyCbF1;
+begin
+  Result := pynone;
+  if not pycallback_is(cb) then Exit;
+  code := pybound_code(cb);
+  if code = nil then Exit;
+  recv := pybound_recv(cb);
+  if recv = nil then begin f1 := TPyCbF1(code); Result := f1(a0); end
+  else begin m1 := TPyCbM1(code); Result := m1(recv, a0); end;
+end;
+
+function pybound_callv2(const cb: Variant; const a0, a1: Variant): Variant;
+var code, recv: Pointer; m2: TPyCbM2; f2: TPyCbF2;
+begin
+  Result := pynone;
+  if not pycallback_is(cb) then Exit;
+  code := pybound_code(cb);
+  if code = nil then Exit;
+  recv := pybound_recv(cb);
+  if recv = nil then begin f2 := TPyCbF2(code); Result := f2(a0, a1); end
+  else begin m2 := TPyCbM2(code); Result := m2(recv, a0, a1); end;
+end;
+
+function pybound_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
+var code, recv: Pointer; m3: TPyCbM3; f3: TPyCbF3;
+begin
+  Result := pynone;
+  if not pycallback_is(cb) then Exit;
+  code := pybound_code(cb);
+  if code = nil then Exit;
+  recv := pybound_recv(cb);
+  if recv = nil then begin f3 := TPyCbF3(code); Result := f3(a0, a1, a2); end
+  else begin m3 := TPyCbM3(code); Result := m3(recv, a0, a1, a2); end;
 end;
 
 { input(): read one line from stdin and drop the trailing newline, as Python's

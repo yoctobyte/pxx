@@ -5220,6 +5220,69 @@ begin
   PyWrapClosureFieldCall := tern;
 end;
 
+{ Wrap a dynamic call so a FUNCTION VALUE callee (VT_BOUNDMETHOD, tag 8 — what
+  `f = some_def` / `f = obj.method` stores) routes to pybound_callv<n> instead of
+  being unboxed as a code address. The payload of a tag-8 variant is the
+  {code, recv} PAIR, so the plain indirect path jumped into the pair's own bytes,
+  and a bound method needs its receiver prepended besides. Builds
+  `pycallback_is(callee) ? pybound_callv<n>(callee, args...) : <defCall>`.
+
+  calleeNode is re-used across the guard and the call, so this is only applied
+  when re-reading it is free of side effects (a name or a field — the same rule
+  PyWrapClosureDynCall/PyMakeTruthy follow). argsHead is the AN_ARG chain of the
+  already-parsed arguments; those nodes are shared between the arms, which is
+  safe because a ternary evaluates exactly one arm. }
+function PyWrapBoundDynCall(calleeNode, argsHead, n, defCall: Integer): Integer;
+var isArg, isCall, cArgs, cArg, thenCall, pair, tern, i, a: Integer;
+    isPi, callPi: Integer;
+    argNodes: array[0..2] of Integer;
+begin
+  PyWrapBoundDynCall := defCall;
+  if n > 3 then Exit;
+  if (ASTKind[calleeNode] <> AN_IDENT) and (ASTKind[calleeNode] <> AN_FIELD) then Exit;
+  isPi := FindProc('pycallback_is');
+  case n of
+    0: callPi := FindProc('pybound_callv0');
+    1: callPi := FindProc('pybound_callv1');
+    2: callPi := FindProc('pybound_callv2');
+  else callPi := FindProc('pybound_callv3');
+  end;
+  if (isPi < 0) or (callPi < 0) then Exit;
+
+  { pycallback_is(callee) }
+  isArg := AllocNode(AN_ARG); ASTLeft[isArg] := calleeNode; ASTRight[isArg] := -1;
+  isCall := AllocNode(AN_CALL);
+  ASTIVal[isCall] := isPi; ASTLeft[isCall] := isArg; ASTTk[isCall] := Ord(tyBoolean);
+
+  { pybound_callv<n>(callee, a0..) — a FRESH AN_ARG chain over the same argument
+    expressions; the defCall arm owns the original chain and the two must not
+    share link fields. }
+  a := argsHead; i := 0;
+  while (a >= 0) and (i < n) do
+  begin
+    argNodes[i] := ASTLeft[a];
+    a := ASTRight[a];
+    Inc(i);
+  end;
+  cArgs := -1;
+  for i := n - 1 downto 0 do
+  begin
+    cArg := AllocNode(AN_ARG);
+    ASTLeft[cArg] := argNodes[i]; ASTRight[cArg] := cArgs;
+    cArgs := cArg;
+  end;
+  cArg := AllocNode(AN_ARG);
+  ASTLeft[cArg] := calleeNode; ASTRight[cArg] := cArgs;
+  thenCall := AllocNode(AN_CALL);
+  ASTIVal[thenCall] := callPi; ASTLeft[thenCall] := cArg; ASTTk[thenCall] := Ord(tyVariant);
+
+  pair := AllocNode(AN_PAIR);
+  ASTLeft[pair] := thenCall; ASTRight[pair] := defCall;
+  tern := AllocNode(AN_TERNARY);
+  ASTLeft[tern] := isCall; ASTRight[tern] := pair; ASTTk[tern] := Ord(tyVariant);
+  PyWrapBoundDynCall := tern;
+end;
+
 { `<value>(args)` where the value is a VARIANT holding a callable — the function
   `exec()` stored in a namespace dict, called as `ns["__body__"]()`. Unbox the
   variant to its payload (the code pointer) and emit an indirect call with a
@@ -5298,6 +5361,11 @@ begin
     path. baseNode is re-used across the guard and both arms — it is a field/var
     read here, so evaluating it more than once is safe (same idiom as
     PyMakeTruthy / PyMakeBoolOpValue). }
+  { A function VALUE (tag 8) reaches the same place with a {code, recv} pair
+    payload — see PyWrapBoundDynCall. Applied first so the closure guard, when
+    it fires, wraps the whole thing. }
+  Result := PyWrapBoundDynCall(baseNode, argsHead, n, Result);
+
   if n = 1 then
     Result := PyWrapClosureDynCall(baseNode, ASTLeft[argsHead], Result);
 end;

@@ -59,13 +59,21 @@ The `def` case was fixed by calling `PyMakeFuncValue` from the plain
 `NAME = expr` RHS branch (pyparser.inc ~10010) — the same hook a lambda fix
 would sit next to.
 
-## Already fixed on the way here (do not re-do)
+## State of the call side (MEASURED 2026-07-29, an earlier note here was wrong)
 
-`PyMakeDynCall` now lowers to `pyvar_call0..3` (compiler/builtin/pyeval.pas),
-which dispatches on what the variant ACTUALLY holds — bound pair (tag 8),
-pyeval closure, lifted bound-fn, or a plain code address. The old lowering was a
-raw indirect call on the payload, which is a heap-object pointer for three of
-the four shapes. So once `g` is typed variant, the call will dispatch correctly.
+There is no `pyvar_call0..3`; that helper was proposed, never written. What
+`PyMakeDynCall` actually emits is `pyvar_callee_addr(v)` + `AN_CALL_IND` on the
+result, plus two ternary guards bolted on top: tag 9 (pyeval closure, 1 arg) →
+`PyClosureCall1`, and tag 8 (function value) → `pybound_callv<n>`, the latter
+added by the def-value fix. `pyvar_callee_addr` now unwraps a tag-8 pair to its
+Code, so a receiver-less function value is callable at any arity.
+
+Still true: once `g` is typed variant the call site fires. What it will NOT yet
+dispatch is a lambda's payload — a pyeval closure object or a lifted bound-fn
+object reached as a bare POINTER (tag 7/0, not tag 9), which the guards do not
+test. `pycall_value` (pyeval.pas) is the one routine that already discriminates
+all four shapes; a result-keeping `pyvar_callv0..3` in its image is the missing
+piece.
 
 ## Gate
 

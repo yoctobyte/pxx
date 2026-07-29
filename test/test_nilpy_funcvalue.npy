@@ -1,0 +1,32 @@
+def hi(n):
+    print("hi", n)
+
+def two(a, b):
+    return a * b
+
+def zero():
+    print("zero")
+
+g = hi
+g(5)
+funcs = [hi]
+funcs[0](7)
+d = {"a": hi}
+d["a"](8)
+f2 = d["a"]
+f2(9)
+t = two
+print(t(3, 4))
+z = zero
+z()
+
+def use(cb):
+    return cb("x")
+
+def cat(ch):
+    return "hi " + ch
+
+print(use(cat))
+q = cat
+print(use(q))
+print(q("y"))
