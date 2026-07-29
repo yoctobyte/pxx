@@ -204,6 +204,7 @@ begin
         ' ', #9, #11, #12, #13: Inc(SrcPos);   { C6.4 whitespace incl. vtab #11 / form-feed #12 }
         #1: Inc(SrcPos);   { preprocessor blue-paint marker — not a token }
         #10: begin Inc(SrcLine); Inc(SrcPos); end;
+        '#': CLexLineMarker;   { -g origin marker, see below }
         '/':
         begin
           if (SrcPos < Length(Source)) and (Source[SrcPos+1] = '/') then
@@ -383,6 +384,61 @@ begin
   fs := Copy(Source, numStart, valEnd - numStart);
   CurTok.Kind := tkFloat;
   CurTok.IVal := StrToDoubleBits(fs);
+end;
+
+{ A `# <line> "<path>"` origin marker left by the preprocessor under -g.
+
+  The preprocessor inlines every #include into one buffer, so counting newlines
+  here gave the line within the PREPROCESSED text — an 18-line prog.c reported
+  line 2068, most of the buffer being stdio.h. The marker says where the
+  following line really came from.
+
+  gcc semantics: the marker names the line of the text AFTER it, and the
+  marker's own newline is not counted. Anything that does not parse is skipped
+  to end of line — a stray `#` cannot be a C token anyway, and guessing would
+  be worse than dropping it. }
+procedure CLexLineMarker;
+var n: Integer; path: AnsiString; ok: Boolean;
+begin
+  ok := False;
+  n := 0;
+  path := '';
+  Inc(SrcPos);                                   { the '#' }
+  while (SrcPos <= Length(Source)) and (Source[SrcPos] in [' ', #9]) do Inc(SrcPos);
+  if (SrcPos <= Length(Source)) and (Source[SrcPos] >= '0') and (Source[SrcPos] <= '9') then
+  begin
+    while (SrcPos <= Length(Source)) and (Source[SrcPos] >= '0') and (Source[SrcPos] <= '9') do
+    begin
+      n := n * 10 + (Ord(Source[SrcPos]) - Ord('0'));
+      Inc(SrcPos);
+    end;
+    while (SrcPos <= Length(Source)) and (Source[SrcPos] in [' ', #9]) do Inc(SrcPos);
+    if (SrcPos <= Length(Source)) and (Source[SrcPos] = '"') then
+    begin
+      Inc(SrcPos);
+      while (SrcPos <= Length(Source)) and (Source[SrcPos] <> '"') and
+            (Source[SrcPos] <> #10) do
+      begin
+        path := path + Source[SrcPos];
+        Inc(SrcPos);
+      end;
+      if (SrcPos <= Length(Source)) and (Source[SrcPos] = '"') then
+      begin
+        Inc(SrcPos);
+        ok := True;
+      end;
+    end;
+  end;
+  { swallow the rest of the marker line, its newline included and UNCOUNTED }
+  while (SrcPos <= Length(Source)) and (Source[SrcPos] <> #10) do Inc(SrcPos);
+  if SrcPos <= Length(Source) then Inc(SrcPos);
+  if not ok then Exit;
+  SrcLine := n;
+  { tokens from here belong to `path`. The main translation unit keeps file 1;
+    a header interns its own id, so its code lands in the line table as itself
+    rather than as a wrong line of the .c file. }
+  if path = DbgSrcName then DbgMarkTokFile(TokCount, 1)
+  else DbgMarkTokFile(TokCount, DbgFileId(path));
 end;
 
 procedure CLexOne;

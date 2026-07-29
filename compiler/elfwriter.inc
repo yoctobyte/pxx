@@ -1300,7 +1300,7 @@ begin
   { include_directories: none → just the terminating NUL }
   DbgPutB(0);
   { file_names: the main file is entry 1, then every source registered with
-    DbgRegisterFile (imported `.py` modules). DWARF numbers these from 1, which
+    DbgMarkTokFile (imported `.py` modules, C headers). DWARF numbers these from 1, which
     is why DbgFileOfTok returns i+2 for registered range i. }
   DbgPutStrZ(nm); DbgPutULEB(0); DbgPutULEB(0); DbgPutULEB(0);
   for i := 0 to DbgFileCount - 1 do

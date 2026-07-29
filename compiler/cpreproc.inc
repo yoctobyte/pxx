@@ -36,6 +36,33 @@ end;
   Ensures the per-char SetLength(len+1) O(n^2) reallocation storm is replaced by
   doubling growth — one realloc per ~log2(n) appends. CPreprocess trims CPrepOut
   back to CPrepOutLen before handing it out. }
+{ ===== -g line markers ======================================================
+  The preprocessor inlines every #include into ONE buffer and the C lexer counts
+  lines in that buffer, so an 18-line prog.c reported `dbgc.c:2068` — a real
+  line, of the preprocessed text, most of which came from stdio.h.
+
+  Fix: emit gcc-style `# <line> "<path>"` markers so the lexer can recover the
+  ORIGIN of each line. Emitted only when they would actually change the answer
+  (an include spliced lines in, a continuation join swallowed some), which keeps
+  the output close to what it was and costs nothing on the common path.
+
+  Only under -g: without it the preprocessed text is byte-for-byte what it
+  always was, so nothing that reads --dump-cpp changes. }
+var
+  CPOutLine    : Integer;   { line number the NEXT emitted content lands on }
+  { path of the file being processed at each recursion depth (0 = the main
+    translation unit); CPProcessText reads its own depth's entry }
+  CPPathAtDepth: array[0..17] of AnsiString;
+  CPCurFileId  : Integer;   { .debug_line id of the file being read }
+  CPCurPath    : AnsiString;
+  CPCurLine    : Integer;   { line within that file — the last one CONSUMED }
+  CPStmtLine   : Integer;   { line the logical line being emitted STARTED on;
+                              a 3-line macro invocation is labelled with its
+                              first line, as gcc does, not its last }
+  CPMarkFile   : Integer;   { state of the last marker emitted }
+  CPMarkLine   : Integer;
+  CPMarkOutLine: Integer;
+
 procedure CPrepOutEnsure(extra: NativeInt);
 var need, cap: NativeInt;
 begin
@@ -54,7 +81,10 @@ begin
   if n <= 0 then Exit;
   CPrepOutEnsure(n);
   for i := 1 to n do
+  begin
     CPrepOut[CPrepOutLen + i] := s[i];
+    if s[i] = #10 then Inc(CPOutLine);
+  end;
   CPrepOutLen := CPrepOutLen + n;
 end;
 
@@ -63,6 +93,7 @@ begin
   CPrepOutEnsure(1);
   CPrepOut[CPrepOutLen + 1] := c;
   CPrepOutLen := CPrepOutLen + 1;
+  if c = #10 then Inc(CPOutLine);   { -g: CPSyncLine tracks output line numbers }
 end;
 
 function CPStoreRange(const src: AnsiString; a, b: Integer): Integer;
@@ -321,6 +352,21 @@ begin
     n := n div 10;
   end;
   Result := r;
+end;
+
+{ Emit a marker iff the consumer would otherwise infer the wrong origin.
+  It infers  line = CPMarkLine + (outLine - CPMarkOutLine), so a marker is
+  needed exactly when that disagrees with where we really are. }
+procedure CPSyncLine;
+begin
+  if not DebugInfo then Exit;
+  if (CPCurFileId = CPMarkFile) and
+     (CPStmtLine = CPMarkLine + (CPOutLine - CPMarkOutLine)) then Exit;
+  CPrepOutAppendStr('# ' + CPSmallIntStr(CPStmtLine) + ' "' + CPCurPath + '"');
+  CPrepOutAppendCh(#10);
+  CPMarkFile := CPCurFileId;
+  CPMarkLine := CPStmtLine;
+  CPMarkOutLine := CPOutLine;
 end;
 
 procedure CPPragmaRestore(mi: Integer; const line: AnsiString; nameA, nameB: Integer);
@@ -1693,6 +1739,7 @@ begin
           multi-line block comment within a `#define` body (duktape's refzero
           macros). Splice without ending the line. }
         Inc(pos); Inc(pos);
+        Inc(CPCurLine);   { -g: a PHYSICAL line vanished into this logical one }
       end
       else
       begin
@@ -1719,6 +1766,7 @@ begin
     begin
       AppendChar(line, ' ');
       Inc(pos); Inc(pos);
+      Inc(CPCurLine);     { -g: ditto — see the in-comment splice above }
     end
     else if c = #10 then
     begin
@@ -1788,6 +1836,10 @@ end;
 
 procedure CPProcessInclude(depth: Integer; const baseDir: AnsiString);
 begin
+  { -g: the file just loaded is processed one level down; record its path there
+    so CPProcessText can name it in a line marker. CPrepPath holds whatever the
+    include search finally resolved to. }
+  if depth + 1 <= 17 then CPPathAtDepth[depth + 1] := CPrepPath;
   case depth of
     0: CPProcessText(CPrepInclude0, baseDir, depth + 1);
     1: CPProcessText(CPrepInclude1, baseDir, depth + 1);
@@ -2265,12 +2317,22 @@ end;
 
 procedure CPProcessText(const src, baseDir: AnsiString; depth: Integer);
 var pos, p, q: Integer; inComment, emitted: Boolean; cont: AnsiString;
+    savedFileId, savedLine: Integer; savedPath: AnsiString;
 begin
   pos := 1;
   inComment := False;
+  { -g: this text is one FILE. Save the enclosing file's origin and restore it
+    on the way out, so returning from an #include resumes the outer line count
+    (the marker for that is emitted by the next CPSyncLine, which sees drift). }
+  savedFileId := CPCurFileId; savedLine := CPCurLine; savedPath := CPCurPath;
+  CPCurPath := CPPathAtDepth[depth];
+  CPCurFileId := DbgFileId(CPCurPath);
+  CPCurLine := 0;
   while pos <= Length(src) do
   begin
     CPReadLine(src, pos, inComment, CPrepLine);
+    Inc(CPCurLine);
+    CPStmtLine := CPCurLine;   { before any continuation join extends CPCurLine }
     emitted := False;
     p := 1;
     while p <= Length(CPrepLine) do
@@ -2286,6 +2348,7 @@ begin
       while (pos <= Length(src)) and (CPLineParenDepth(CPrepLine) > 0) do
       begin
         CPReadLine(src, pos, inComment, cont);
+        Inc(CPCurLine);        { -g: the join swallowed a physical line }
         q := 1;
         while q <= Length(cont) do
         begin
@@ -2320,6 +2383,7 @@ begin
       begin
         SetLength(CPrepLineExp, 0);
         CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
+        CPSyncLine;
         CPrepOutAppendStr(CPrepLineExp);
         CPrepOutAppendCh(#10);
       end;
@@ -2328,10 +2392,12 @@ begin
     begin
       SetLength(CPrepLineExp, 0);
       CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
+      CPSyncLine;
       CPrepOutAppendStr(CPrepLineExp);
       CPrepOutAppendCh(#10);
     end;
   end;
+  CPCurFileId := savedFileId; CPCurLine := savedLine; CPCurPath := savedPath;
 end;
 
 { Seed the C `-D`/`-U` command-line predefines (captured raw at arg-parse time).
@@ -2400,6 +2466,9 @@ begin
     an explicit undefine beats any define of the same name. `-D<name>` with no
     `=` defaults the value to `1` (cpp convention). }
   CPApplyCmdlineDefines;
+  CPPathAtDepth[0] := DbgSrcName;      { -g: the translation unit itself }
+  CPOutLine := 1;
+  CPMarkFile := -1; CPMarkLine := 0; CPMarkOutLine := 1;
   CPProcessText(src, baseDir, 0);
   if CPCondCount <> 0 then Error('unterminated C conditional');
   SetLength(CPrepOut, CPrepOutLen);   { trim geometric spare capacity to the live length }

@@ -76,7 +76,8 @@ const
                                     user code hitting the large-array shape. }
   MAX_DWARF      = 1048576;   { DWARF -g: byte buffer for all .debug_* section content }
   MAX_DWARF_ROWS = 131072;    { DWARF -g: (code-offset, line) rows for the .debug_line program }
-  MAX_DBG_FILES  = 256;       { DWARF -g: source files in the line table (main + registered appends) }
+  MAX_DBG_FILES  = 256;       { DWARF -g: distinct source files in the line table }
+  MAX_DBG_RANGES = 65536;     { DWARF -g: token ranges mapping onto those files (C headers interleave) }
   MAX_DBG_VARS   = 16384;     { DWARF -g: snapshotted params/locals/globals (Tier 3) }
   MAX_DBG_TYPES  = 4096;      { DWARF -g: distinct type DIEs }
   MAX_LOOP_FIXUPS = 256;
@@ -2201,7 +2202,7 @@ var
   DbgNmText, DbgNmData, DbgNmBss : Integer;
   DbgShFlags, DbgShAddr, DbgShAlign : Int64;  { per-section header fields for writeShdr64 (avoids the >6-param call landmine) }
   DbgSrcName : AnsiString;   { source filename recorded in the line table + CU DIE }
-  DbgMainTokEnd : Integer;   { token index just past the main source file; nodes from appended units (TokPos beyond this) get ASTLine 0 UNLESS the range was registered with DbgRegisterFile }
+  DbgMainTokEnd : Integer;   { token index just past the main source file; nodes from appended units (TokPos beyond this) get ASTLine 0 UNLESS the range was marked with DbgMarkTokFile }
   { Multi-file line table. An appended source (an imported `.py` module today)
     registers its token range here and gets its own .debug_line file entry, so
     a breakpoint inside it resolves and its frames show real lines. Ranges that
@@ -2211,8 +2212,14 @@ var
     numbers file entries from 1). }
   DbgFileCount    : Integer;
   DbgFileName     : array[0..MAX_DBG_FILES-1] of AnsiString;
-  DbgFileStartTok : array[0..MAX_DBG_FILES-1] of Integer;
-  DbgFileEndTok   : array[0..MAX_DBG_FILES-1] of Integer;
+  { Token RANGES, separate from the file table. A NilPy import is one contiguous
+    range per module, but a C header's tokens INTERLEAVE with the main file's —
+    every #include boundary starts a new range — so ranges must be far more
+    numerous than files. Sorted ascending by StartTok; the file of a token is
+    the file of the last range that starts at or before it. }
+  DbgRangeCount   : Integer;
+  DbgRangeStart   : array[0..MAX_DBG_RANGES-1] of Integer;
+  DbgRangeFile    : array[0..MAX_DBG_RANGES-1] of Integer;
   DbgProgName : AnsiString;  { program name → main-body DW_TAG_subprogram }
   DbgMainBodyStart, DbgMainBodyEnd : Integer;  { Code[] range of the program body }
   DbgGlobalScopeBase : Integer;  { Syms[] index after runtime units, before main decls — globals above this are the program's own }

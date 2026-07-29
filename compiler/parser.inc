@@ -34,50 +34,75 @@ function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): 
 
 
 { ===== DWARF -g: the multi-file line table =====================================
-  An appended source registers its token range and gets its own .debug_line
-  file entry. Today that is an imported `.py` module: without this you could
-  not put a breakpoint inside one, which for a multi-module app (songformatter
-  is nine files) meant the debugger stopped at the front door.
+  A source other than the main file joins the line table by INTERNING its path
+  (DbgFileId) and MARKING the token index where its tokens start
+  (DbgMarkTokFile). Two shapes use it:
 
-  Only REGISTERED ranges join the table. The Pascal RTL and pylib are appended
-  the same way and are deliberately left out — they would swamp the line table
-  and nobody wants to single-step pystr_upper. }
-procedure DbgRegisterFile(const name: AnsiString; startTok, endTok: Integer);
+    NilPy  an imported module is one contiguous run of appended tokens, so it
+           marks once at its start.
+    C      the preprocessor inlines every #include, so a header's tokens
+           interleave with the main file's — a mark at every boundary, which is
+           why ranges are a separate, much larger table than files.
+
+  Sources that are NOT marked keep the line-0 treatment (no rows). The Pascal
+  RTL and pylib are appended the same way and are left out on purpose: they
+  would swamp the table and nobody wants to single-step pystr_upper. }
+
+{ Intern a path, returning its .debug_line file index. 1 is the main file, so
+  interned files start at 2. Repeated paths return the same id — a header
+  included twice is one file entry with many ranges. }
+function DbgFileId(const path: AnsiString): Integer;
+var i: Integer;
 begin
+  DbgFileId := 1;
   if not DebugInfo then Exit;
-  if DbgFileCount >= MAX_DBG_FILES then Exit;   { silently stop: -g is not worth failing a build over }
-  DbgFileName[DbgFileCount] := name;
-  DbgFileStartTok[DbgFileCount] := startTok;
-  DbgFileEndTok[DbgFileCount] := endTok;
+  for i := 0 to DbgFileCount - 1 do
+    if DbgFileName[i] = path then begin DbgFileId := i + 2; Exit; end;
+  if DbgFileCount >= MAX_DBG_FILES then Exit;   { silently stop: -g must not fail a build }
+  DbgFileName[DbgFileCount] := path;
   Inc(DbgFileCount);
+  DbgFileId := DbgFileCount + 1;
 end;
 
-{ The .debug_line file index for a token, or 1 (the main file) when the token
-  is in no registered range. Scans BACKWARD because the range being parsed is
-  almost always the one most recently registered — an import parses straight
-  after it is lexed. }
+{ From token `startTok` on, tokens come from file `fileId`. Ranges must arrive
+  in ascending token order (both callers lex forward). A mark identical to the
+  current one is dropped, so a run of boundaries that do not actually change
+  file costs nothing. }
+procedure DbgMarkTokFile(startTok, fileId: Integer);
+begin
+  if not DebugInfo then Exit;
+  if DbgRangeCount >= MAX_DBG_RANGES then Exit;
+  if (DbgRangeCount > 0) and (DbgRangeFile[DbgRangeCount - 1] = fileId) then Exit;
+  if (DbgRangeCount > 0) and (DbgRangeStart[DbgRangeCount - 1] = startTok) then
+  begin
+    DbgRangeFile[DbgRangeCount - 1] := fileId;   { same index: overwrite, do not stack }
+    Exit;
+  end;
+  DbgRangeStart[DbgRangeCount] := startTok;
+  DbgRangeFile[DbgRangeCount] := fileId;
+  Inc(DbgRangeCount);
+end;
+
+{ The .debug_line file index for a token: the file of the last range starting at
+  or before it, or 1 (the main file) when no range does. Backward scan — the
+  token being asked about is nearly always in the most recent range. }
 function DbgFileOfTok(t: Integer): Integer;
 var i: Integer;
 begin
   DbgFileOfTok := 1;
   if not DebugInfo then Exit;
-  for i := DbgFileCount - 1 downto 0 do
-    { end is INCLUSIVE: a routine's body-end TokPos can sit exactly on the
-      module's last token, which is how the LAST def in an imported module lost
-      its subprogram DIE while every earlier one had it. Ranges abut (one
-      module's end is the next one's start) and the scan runs backward, so the
-      later registration wins the shared boundary — no ambiguity. }
-    if (t >= DbgFileStartTok[i]) and (t <= DbgFileEndTok[i]) then
+  for i := DbgRangeCount - 1 downto 0 do
+    if t >= DbgRangeStart[i] then
     begin
-      DbgFileOfTok := i + 2;    { 1 = main file, so registered files start at 2 }
+      DbgFileOfTok := DbgRangeFile[i];
       Exit;
     end;
 end;
 
 { TRUE when a token belongs to a source the line table describes — the main
-  file, or an appended source registered with DbgRegisterFile. Drives
-  ProcDbgMain, i.e. whether a routine gets a DW_TAG_subprogram: an imported
-  `.py` module's defs need one or `break scale` finds nothing. }
+  file, or a marked one. Drives ProcDbgMain, i.e. whether a routine gets a
+  DW_TAG_subprogram: an imported `.py` module's defs need one or `break scale`
+  finds nothing. }
 function DbgTokIsDebuggable(t: Integer): Boolean;
 begin
   DbgTokIsDebuggable := (t <= DbgMainTokEnd) or (DbgFileOfTok(t) > 1);
@@ -125,23 +150,21 @@ begin
                               StmtRChecks;
   ASTIChk[ASTNodeCount]    := (kind = AN_CALL) and StmtIChecks;
   { DWARF -g: stamp the line for nodes from the main source file, and for any
-    APPENDED source whose token range was registered with DbgRegisterFile (an
+    MARKED source whose token range was recorded with DbgMarkTokFile (an
     imported `.py` module). Everything else — the Pascal RTL, pylib, the unit
     bodies nobody wants to step through — still gets line 0 and contributes no
     rows, which is what keeps the whole runtime out of the line table. }
-  if TokPos <= DbgMainTokEnd then
-  begin
-    ASTLine[ASTNodeCount] := CurTok.Line;
-    ASTFile[ASTNodeCount] := 1;
-  end
+  ASTFile[ASTNodeCount] := DbgFileOfTok(TokPos);
+  if ASTFile[ASTNodeCount] > 1 then
+    { a MARKED source: real line, its own file entry. Checked before the
+      main-file bound because C's header tokens sit BELOW DbgMainTokEnd — the
+      preprocessor inlines them, so they are not "appended" the way a NilPy
+      import or a Pascal unit is. }
+    ASTLine[ASTNodeCount] := CurTok.Line
+  else if TokPos <= DbgMainTokEnd then
+    ASTLine[ASTNodeCount] := CurTok.Line
   else
-  begin
-    ASTFile[ASTNodeCount] := DbgFileOfTok(TokPos);
-    if ASTFile[ASTNodeCount] > 1 then
-      ASTLine[ASTNodeCount] := CurTok.Line
-    else
-      ASTLine[ASTNodeCount] := 0;
-  end;
+    ASTLine[ASTNodeCount] := 0;
   Result := ASTNodeCount;
   Inc(ASTNodeCount);
 end;
@@ -26503,7 +26526,7 @@ begin
       inside it resolves and its frames show real lines instead of the line-0
       treatment every appended source otherwise gets. Registered BEFORE the
       parse: AllocNode consults the range as it builds the module's nodes. }
-    DbgRegisterFile(path, startPos, TokCount);
+    DbgMarkTokFile(startPos, DbgFileId(path));
     TokPos := startPos;
     Next;
     ParsePyUnit(lo);
