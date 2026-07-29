@@ -5578,10 +5578,9 @@ begin
           class written in the main file worked; a method CALL on the same
           field was fine, so the field's class identity was never the problem
           (bug-nilpy-settings-editor-segfaults-on-bound-method-field).
-          PyExprMode is what ParsePyUnit turns on for a module body and Pascal
-          RTL units do not have, so it is the discriminator the other NilPy-only
-          rules should be reading here too. }
-        if isNilPy and ((CurrentUnitIdx < 0) or PyExprMode) and
+          NilPyUserCode (symtab.inc) is that predicate — the whole NilPy-only
+          rule set now shares it. }
+        if NilPyUserCode and
            (CurTok.Kind <> tkLParen) and
            (mci >= 0) and not UClsIsInterface[mci] then
         begin
@@ -7998,7 +7997,7 @@ begin
           (a garbage IMT would dispatch _Release into nowhere). }
         zeroBytes := RecSize(Syms[i].RecName)
       else if (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
-              isNilPy and (CurrentUnitIdx < 0) then
+              NilPyUserCode then
         { NilPy-user class local: refcounted binding — must start nil so the
           rebind release and the scope-exit release see an empty slot
           (feature-nilpy-object-reclamation slice 4). }

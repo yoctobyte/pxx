@@ -6896,7 +6896,7 @@ begin
     never reads stale stack bytes. Watermarked so a local is nil'd exactly
     once — re-zeroing would wipe values across statements
     (feature-nilpy-object-reclamation slice 4). }
-  if isNilPy and (CurrentUnitIdx < 0) and (CurProc >= 0) then
+  if NilPyUserCode and (CurProc >= 0) then
   begin
     if PyZeroedProc <> CurProc then
     begin

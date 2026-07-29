@@ -1,6 +1,30 @@
 { SPDX-License-Identifier: MPL-2.0 }
 { ===== User-class helpers (must precede hardcoded record helpers) ===== }
 
+function NilPyUserCode: Boolean;
+{ True while compiling code the NilPy USER wrote — the main `.npy`/`.py` program
+  OR an imported `.py` module — and false for the Pascal RTL units that are
+  loaded into the same compilation.
+
+  The whole NilPy object-reclamation set (zero-init, rebind release, field-store
+  ARC, scope-exit release, return-ownership retain) keys on this. It used to be
+  spelled `isNilPy and (CurrentUnitIdx < 0)` at each site, which means "the main
+  program only": a class defined in an imported `.py` module compiles with
+  CurrentUnitIdx >= 0, so NONE of those rules fired for it and its instances
+  were never reclaimed. songformatter is exactly that shape — every class lives
+  in an imported module — so it got no reclamation at all
+  (bug-nilpy-object-reclamation-disabled-inside-py-modules).
+
+  `PyExprMode` is the discriminator that tells a `.py` module from a Pascal
+  unit: ParsePyUnit turns it on for a module body, and the Pascal unit path
+  (parser.inc, CompileUnit) explicitly turns it off. The rules MUST move
+  together — zero-init without release leaks, release without zero-init frees
+  garbage — which is why they share one predicate instead of nine copies of the
+  condition. }
+begin
+  NilPyUserCode := isNilPy and ((CurrentUnitIdx < 0) or PyExprMode);
+end;
+
 procedure IREmitCodeCall(addr: Integer); forward;
 procedure EmitDynArrayReleaseForSym(symIdx: Integer); forward;
 procedure EmitVariantClear; forward;
@@ -5700,7 +5724,7 @@ begin
         EmitVariantClear;
       end
       else if (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
-              isNilPy and (CurrentUnitIdx < 0) and
+              NilPyUserCode and
               PyClassSymArcEligible(i) then
       begin
         { NilPy-user class local: drop the binding's ref at scope exit — the

@@ -1978,7 +1978,7 @@ begin
         the top per-iteration doloop leak found via DHAT). Both spill to the
         same owning temp whose inline release-of-previous drops the prior trip's
         object each loop iteration. }
-  if isNilPy and (CurrentUnitIdx < 0) and (not isRefArg) and
+  if NilPyUserCode and (not isRefArg) and
      (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
      (ASTKind[argAST] = AN_CALL) and
      ( { A construction / tyClass-tagged arg keeps the pathIdx>=1 receiver guard:
@@ -6191,7 +6191,7 @@ begin
       { `d = None` (or any scalar) over a class binding: the old object's ref
         must still drop, then the sentinel stores raw through the generic path
         (the scope-exit release no-ops on it via the plausibility guard). }
-      if isNilPy and (CurrentUnitIdx < 0) and
+      if NilPyUserCode and
          (ASTKind[ASTLeft[node]] = AN_IDENT) and
          (Integer(ASTIVal[ASTLeft[node]]) >= 0) and
          PyClassSymArcEligible(ASTIVal[ASTLeft[node]]) and
@@ -6210,7 +6210,7 @@ begin
         end;
       end;
 
-      if isNilPy and (CurrentUnitIdx < 0) and
+      if NilPyUserCode and
          (ASTKind[ASTLeft[node]] = AN_IDENT) and
          (Integer(ASTIVal[ASTLeft[node]]) >= 0) and
          PyClassSymArcEligible(ASTIVal[ASTLeft[node]]) and
@@ -6258,7 +6258,7 @@ begin
         released, retain-first order. Class-typed fields are not walked by the
         finalizer yet, so the field's ref leaks when the instance dies —
         leak-over-UAF until the finalizer grows a class-field kind. }
-      if isNilPy and (CurrentUnitIdx < 0) and
+      if NilPyUserCode and
          (ASTKind[ASTLeft[node]] = AN_FIELD) and
          (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyClass) and
          (IntToTypeKind(ASTTk[ASTRight[node]]) = tyClass) then
@@ -6828,7 +6828,7 @@ begin
               end;
             end
             else if (Syms[varIdx].TypeKind = tyClass) and
-                    isNilPy and (CurrentUnitIdx < 0) then
+                    NilPyUserCode then
             begin
               { Returning an object TRANSFERS ownership to the caller
                 (feature-nilpy-object-reclamation slice 4): take +1 here,
@@ -8386,7 +8386,7 @@ begin
         at every proc exit, including exits where no exception ever bound it.
         Nil the slot here, before the try body, so that release sees nil, not
         stale stack bytes (the t.c freelist-corruption repro). }
-      if isNilPy and (CurrentUnitIdx < 0) then
+      if NilPyUserCode then
       begin
         handlerNode := ASTRight[node];
         while handlerNode <> -1 do
