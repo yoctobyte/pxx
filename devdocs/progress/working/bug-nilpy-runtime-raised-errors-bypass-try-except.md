@@ -110,6 +110,14 @@ path — their rvalue is a frame SLOT ADDRESS
 ([[project_promotable_int_stages123]]), so handing one to a Double parameter
 would pass the address as a number.
 
+**The first attempt at that routing was RED, and the gate caught it.** The arm
+fired for every `/` in PyProgramMode, including `Path("a") / "b"` — pathlib's
+join operator — which compiled a path handle as a Double and segfaulted
+`test_nilpy_pathlib`. Both operands must be NUMBERS: `TypeIsPyNumeric`
+(symtab.inc) now gates it, excluding tyClass, tyPointer, tyChar, tyVariant and
+the string kinds, each of which has its own `/` meaning or none. Booleans are
+in, since `True / 2` is 0.5 in Python.
+
 Verified against CPython: `x % 0`, `x // 0`, `x / 0` and `int("abc")` each
 caught by their own exception type and by a bare `except:`, with execution
 continuing afterwards; message text matches CPython's for all four. Ordinary
