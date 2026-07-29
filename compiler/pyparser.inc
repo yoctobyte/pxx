@@ -5099,7 +5099,6 @@ end;
   synthetic all-variant signature. CurTok is the '('. }
 function PyMakeDynCall(baseNode: Integer): Integer;
 var unboxArg, unboxCall, argsHead, lastArg, argNode, n, sigPi: Integer;
-    dynPi, cbArg: Integer;
 begin
   { the callee code address = the variant's payload as a pointer }
   unboxArg := AllocNode(AN_ARG);
@@ -5125,29 +5124,6 @@ begin
     if CurTok.Kind = tkComma then Next else Break;
   end;
   Expect(tkRParen, ')');
-
-  { Up to three arguments, hand the whole thing to pyeval's pyvar_callN: it
-    dispatches on what the variant ACTUALLY holds (bound pair / closure /
-    lifted bound-fn / plain code address) instead of assuming the payload is a
-    code address. Three of the four shapes box a heap object there, so the raw
-    indirect call below was right only for a plain def — `cb = handler; cb(x)`
-    jumped into a heap record and silently did nothing. }
-  dynPi := -1;
-  if n = 0 then dynPi := FindProc('pyvar_call0')
-  else if n = 1 then dynPi := FindProc('pyvar_call1')
-  else if n = 2 then dynPi := FindProc('pyvar_call2')
-  else if n = 3 then dynPi := FindProc('pyvar_call3');
-  if dynPi >= 0 then
-  begin
-    cbArg := AllocNode(AN_ARG);
-    ASTLeft[cbArg] := baseNode;
-    ASTRight[cbArg] := argsHead;
-    Result := AllocNode(AN_CALL);
-    ASTIVal[Result] := dynPi;
-    ASTLeft[Result] := cbArg;
-    ASTTk[Result]   := Ord(tyVariant);
-    Exit;
-  end;
 
   sigPi := PyDynCallSig(n);
   Result := AllocNode(AN_CALL_IND);
