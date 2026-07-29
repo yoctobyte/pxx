@@ -1,0 +1,27 @@
+class A:
+    def __init__(self, n):
+        self.n = n
+    def who(self):
+        return "A"
+    def val(self):
+        return self.n * 2
+
+class B(A):
+    def __init__(self, n):
+        super().__init__(n)
+        self.m = n * 3
+    def who(self):
+        return "B" + super().who()
+    def val(self):
+        return super().val() + 1
+
+class C(A):
+    def who(self):
+        return "C" + A.who(self)
+    def val(self):
+        return A.val(self) + 10
+
+b = B(3)
+print(b.who(), b.val(), b.n, b.m)
+c = C(4)
+print(c.who(), c.val())

@@ -801,6 +801,7 @@ end;
 
 procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
+function PyMakeSuperCall(const name: AnsiString): Integer; forward;  { `super().m(args)` as a value (pyparser.inc) }
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 function PyMakeDynCall(baseNode: Integer): Integer; forward; { Nil Python: call a callable stored in a variant (pyparser.inc) }
@@ -4376,6 +4377,41 @@ begin
             Exit;
           end;
 
+          { Python's UNBOUND method call: `A.who(self)` names the parent's own
+            implementation and passes the receiver as the first argument. It is
+            one of the two spellings Python offers for reaching an overridden
+            method (super() is the other), and it was rejected outright.
+            Direct, non-virtual: naming the class is what says "this body, not
+            the override" (bug-nilpy-super-and-unbound-parent-method-calls). }
+          if PyExprMode and (not UMthIsStatic[mmi]) and (CurTok.Kind = tkLParen) then
+          begin
+            Next;
+            margSeq := -1; mlastArg := -1;
+            while CurTok.Kind <> tkRParen do
+            begin
+              ParseExpr;
+              mexprNode := AllocNode(AN_ARG);
+              ASTLeft[mexprNode] := CurASTNode;
+              ASTRight[mexprNode] := -1;
+              if margSeq = -1 then margSeq := mexprNode
+              else ASTRight[mlastArg] := mexprNode;
+              mlastArg := mexprNode;
+              if CurTok.Kind = tkComma then Next else Break;
+            end;
+            Expect(tkRParen, ')');
+            mcallNode := AllocNode(AN_CALL);
+            ASTIVal[mcallNode] := mpi;
+            ASTLeft[mcallNode] := margSeq;
+            ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+            tk := Procs[mpi].RetType;
+            if (tk = tyClass) and (ProcRetRecId[mpi] >= REC_UCLASS_BASE) then
+              recName := ProcRetRecId[mpi]
+            else
+              recName := REC_NONE;
+            LastExprTk := tk;
+            Result := mcallNode;
+            Exit;
+          end;
           if not UMthIsStatic[mmi] then
             Error('cannot call non-static method on class type directly');
 
@@ -12273,6 +12309,26 @@ begin
     body would only run through exec()/native dispatch, which is stubbed
     (feature-lib-pyexec). So a lambda parses and yields None, keeping the file
     compiling; its body does not execute yet (feature-nilpy-lambda). }
+  { `super().m(args)` as a VALUE — `return "B" + super().who()`. super() was
+    recognised in STATEMENT position only, so an overridden method reached from
+    inside an expression failed with "undefined variable (super)". The node is
+    the same inherited call the statement path builds; only the position is new
+    (bug-nilpy-super-and-unbound-parent-method-calls). }
+  if PyExprMode and PyIsIdent('super') and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    Next; Expect(tkLParen, '('); Expect(tkRParen, ')');
+    Expect(tkDot, '.');
+    if CurTok.Kind <> tkIdent then Error('Nil Python: expected method after super().');
+    sdName := CurTok.SVal;
+    Next;
+    Expect(tkLParen, '(');
+    CurASTNode := PyMakeSuperCall(sdName);
+    if CurASTNode < 0 then
+      Error('Nil Python: super().' + sdName + ' — no such method on the parent class');
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+    Exit;
+  end;
   if PyExprMode and PyIsIdent('lambda') then
   begin
     PyParseLambdaStub;

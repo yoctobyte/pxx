@@ -7206,6 +7206,83 @@ begin
 end;
 
 function PyParseBlock: Integer; forward;
+function PyMakeSuperCall(const name: AnsiString): Integer;
+{ `super().<name>(args)` — Pascal's `inherited <name>(args)`. CurTok is the '('
+  that opens the argument list; the caller has consumed `super ( ) . name`.
+  Extracted from PyParseStatement so the EXPRESSION position can build the same
+  node: `super()` was recognised in statement position only, so
+  `return "B" + super().who()` died with "undefined variable (super)" — the two
+  spellings Python offers for reaching an overridden method, and one of them
+  parsed (bug-nilpy-super-and-unbound-parent-method-calls). }
+var symIdx, ci, mmi, mpi, selfArg, lastArg, argNode, node, kwIdx, j, k: Integer;
+begin
+  { A REAL inherited call — Pascal's `inherited M(args)`. `super().__init__(p)`
+    is how a class that extends a library widget gets built (songformatter's
+    SettingsEditor extends tk.Frame), and discarding it left the base's own
+    fields unset: the Tk path was empty, so every later command addressed a
+    widget that had never been created. Direct call (not virtual): `super()`
+    names the PARENT's body, which is what inherited means. }
+  symIdx := PyProgSym('self');
+  ci := -1;
+  if CurSelfClass >= REC_UCLASS_BASE then ci := UClsParent[CurSelfClass - REC_UCLASS_BASE];
+  if (ci >= 0) and (symIdx >= 0) then
+  begin
+    mmi := FindUMeth(ci, PyMethodName(name));
+    if mmi >= 0 then
+    begin
+      mpi := UMthProc_[mmi];
+      selfArg := AllocNode(AN_ARG);
+      ASTLeft[selfArg] := PyMakeIdent(symIdx);
+      ASTRight[selfArg] := -1;
+      lastArg := selfArg;
+      k := 1;
+      while CurTok.Kind <> tkRParen do
+      begin
+        kwIdx := PyKwArgIndex(mpi, 1);
+        PyParseBoolExpr;
+        argNode := AllocNode(AN_ARG);
+        ASTLeft[argNode] := CurASTNode;
+        ASTIVal[argNode] := kwIdx;
+        ASTRight[argNode] := -1;
+        ASTRight[lastArg] := argNode;
+        lastArg := argNode;
+        Inc(k);
+        if CurTok.Kind = tkComma then Next else Break;
+      end;
+      Expect(tkRParen, ')');
+      j := 0;
+      PyBindKwArgs(mpi, selfArg, lastArg, j);
+      if j > 0 then k := j;
+      { the base's remaining defaulted parameters }
+      while (k < Procs[mpi].ParamCount) and (k < MAX_PROC_PARAMS) and
+            ProcParamHasDefault[mpi * MAX_PROC_PARAMS + k] do
+      begin
+        argNode := AllocNode(AN_ARG);
+        ASTLeft[argNode] := DefaultArgValueNode(mpi, k);
+        ASTRight[argNode] := -1;
+        ASTRight[lastArg] := argNode;
+        lastArg := argNode;
+        Inc(k);
+      end;
+      node := AllocNode(AN_CALL);
+      ASTIVal[node] := mpi;
+      ASTTk[node] := Ord(Procs[mpi].RetType);
+      ASTLeft[node] := selfArg;
+      Result := node;
+      Exit;
+    end;
+  end;
+  { fallback: no such method on the parent — consume and discard, as before }
+  ci := 1;
+  while (ci > 0) and (CurTok.Kind <> tkEOF) do
+  begin
+    if CurTok.Kind = tkLParen then Inc(ci)
+    else if CurTok.Kind = tkRParen then Dec(ci);
+    Next;
+  end;
+  Result := -1;
+end;
+
 function PyParseStatement: Integer; forward;
 procedure PyParseImportRun; forward;   { `import` / `from ... import`, wherever it appears (pyparser.inc) }
 procedure PyParseOneImport; forward;   { ONE import statement, inside a block (pyparser.inc) }
@@ -10051,71 +10128,9 @@ begin
       Result := node;
       Exit;
     end;
-    { A REAL inherited call — Pascal's `inherited M(args)`. `super().__init__(p)`
-      is how a class that extends a library widget gets built (songformatter's
-      SettingsEditor extends tk.Frame), and discarding it left the base's own
-      fields unset: the Tk path was empty, so every later command addressed a
-      widget that had never been created. Direct call (not virtual): `super()`
-      names the PARENT's body, which is what inherited means. }
-    symIdx := PyProgSym('self');
-    ci := -1;
-    if CurSelfClass >= REC_UCLASS_BASE then ci := UClsParent[CurSelfClass - REC_UCLASS_BASE];
-    if (ci >= 0) and (symIdx >= 0) then
-    begin
-      mmi := FindUMeth(ci, PyMethodName(name));
-      if mmi >= 0 then
-      begin
-        mpi := UMthProc_[mmi];
-        selfArg := AllocNode(AN_ARG);
-        ASTLeft[selfArg] := PyMakeIdent(symIdx);
-        ASTRight[selfArg] := -1;
-        lastArg := selfArg;
-        k := 1;
-        while CurTok.Kind <> tkRParen do
-        begin
-          kwIdx := PyKwArgIndex(mpi, 1);
-          PyParseBoolExpr;
-          argNode := AllocNode(AN_ARG);
-          ASTLeft[argNode] := CurASTNode;
-          ASTIVal[argNode] := kwIdx;
-          ASTRight[argNode] := -1;
-          ASTRight[lastArg] := argNode;
-          lastArg := argNode;
-          Inc(k);
-          if CurTok.Kind = tkComma then Next else Break;
-        end;
-        Expect(tkRParen, ')');
-        j := 0;
-        PyBindKwArgs(mpi, selfArg, lastArg, j);
-        if j > 0 then k := j;
-        { the base's remaining defaulted parameters }
-        while (k < Procs[mpi].ParamCount) and (k < MAX_PROC_PARAMS) and
-              ProcParamHasDefault[mpi * MAX_PROC_PARAMS + k] do
-        begin
-          argNode := AllocNode(AN_ARG);
-          ASTLeft[argNode] := DefaultArgValueNode(mpi, k);
-          ASTRight[argNode] := -1;
-          ASTRight[lastArg] := argNode;
-          lastArg := argNode;
-          Inc(k);
-        end;
-        node := AllocNode(AN_CALL);
-        ASTIVal[node] := mpi;
-        ASTTk[node] := Ord(Procs[mpi].RetType);
-        ASTLeft[node] := selfArg;
-        Result := node;
-        Exit;
-      end;
-    end;
-    { fallback: no such method on the parent — consume and discard, as before }
-    ci := 1;
-    while (ci > 0) and (CurTok.Kind <> tkEOF) do
-    begin
-      if CurTok.Kind = tkLParen then Inc(ci)
-      else if CurTok.Kind = tkRParen then Dec(ci);
-      Next;
-    end;
-    Result := -1;
+    { The inherited call itself — shared with the EXPRESSION position, where
+      `return "B" + super().who()` needs the identical node. }
+    Result := PyMakeSuperCall(name);
     Exit;
   end;
   if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
