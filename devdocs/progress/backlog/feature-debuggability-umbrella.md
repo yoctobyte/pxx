@@ -43,25 +43,45 @@ PyLocals table after `PyCollectLocalsAST`), `ctorargs` (each `PyClassCreate`
 slot's AST kind and type), `ir:<proc>` (the IR for one routine), `ast:<proc>`.
 Keep it a plain topic-substring test, not a registry.
 
-### 3. DWARF that a real debugger accepts
-We already emit some DWARF (`elfwriter.inc` writes field offsets, class layout,
-line info). What is missing is the level at which `gdb ./prog` is actually
-useful:
+### 3. DWARF that a real debugger accepts — LARGELY DONE (2026-07-29)
 
-- line table accurate enough to STEP (currently `-g` implies `-O0`; stepping at
-  `-O2` needs is_stmt / discriminator handling)
-- locals and parameters with correct frame-base expressions, so `info locals`
-  and `p someVar` work
-- the NilPy/Pascal type graph deep enough for `p self.evidence` to print a list
-  rather than a pointer — for a managed AnsiString, a TPyList, and a Variant
-  this means synthetic/pretty-printable types
-- a gdb pretty-printer script shipped alongside (`pxx-gdb.py`) that knows
-  `TPyVarRec` tags, `TPyList`, `TPyDict`, and the `[inst-16]` object header
-  (refcount + magic) — so `p obj` shows the REFCOUNT, which is half of every
-  bug in this family
+**The framing here was written without measuring, and two of its claims were
+wrong.** Corrected against real gdb:
 
-With that, breakpoints, stepping, and register/memory inspection come free from
-gdb and from the IDE integrations that speak DAP — we do not need to write a
+- *"stepping at `-O2` needs is_stmt / discriminator handling"* — **wrong**.
+  `-g` only forces `-O0` when no `-O` is given, so `-g -O2` already works:
+  breakpoints, correct lines, args, locals and stepping all verified at `-O2`.
+- *"locals and parameters need correct frame-base expressions"* — **already
+  worked** for Pascal. `break`, `bt`, `info args`, `info locals`, `next`,
+  `finish` and expression evaluation were all fine before this session.
+
+What was ACTUALLY missing, found by running gdb instead of reasoning about it:
+
+- **NilPy had no debug info at all.** `break combine` answered "Function not
+  defined". Three causes: `DbgMainTokEnd` was never set on the NilPy path (so
+  every appended RTL token stamped its own line — a 19-line `.py` reported line
+  5754 on every frame); `ProcBodyEnd`/`ProcDbgMain` were set only in
+  `parser.inc`, so no def/method/lambda got a `DW_TAG_subprogram`; and the main
+  module body is compiled inline in `ParsePyProgram`, needing its own body
+  range and globals snapshot. Fixed — `58937b717`.
+- **Strings and classes degraded to `void*`.** A managed string is now the
+  `^Char` it really is (so gdb prints the text), and a class is a pointer to
+  the same `structure_type` a record emits, so `print n.name` works. This
+  improved PASCAL debugging too. Fixed — `58937b717`.
+- **Variants printed as `0x6`** — the tag misread as a pointer, which *looks
+  like an address*, i.e. worse than no answer. Now a real `{VType, Payload}`
+  structure_type.
+- **`tools/pxx-gdb.py`** ships: Variant decoding and `pxxrc EXPR`, which reads
+  the refcount at `[inst-16]` — below the pointer gdb shows you, hence
+  previously invisible, and half of every bug in this family.
+
+Remaining (full list in `devdocs/dev/dwarf.md`): the line table is ONE file per
+CU, so you cannot break inside an imported `.py` — the biggest gap for a
+multi-module app like songformatter. Only Pascal and NilPy set `DbgMainTokEnd`;
+C/Rust/Zig still have the line-number bug NilPy had (one line each in
+`compiler.pas`). No `TPyList`/`TPyDict` pretty-printer yet.
+
+The original conclusion stands and is worth keeping: we do not need to write a
 debugger, we need to emit what one reads.
 
 ### 4. Debugging the COMPILER itself, not just its output

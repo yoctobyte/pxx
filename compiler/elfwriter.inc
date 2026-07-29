@@ -1061,6 +1061,27 @@ begin
     DbgEnsureScalar := off; Exit;
   end;
 
+  { A VARIANT is a real two-word record {VType, Payload} — the layout pylib's
+    TPyVarRec declares and every NilPy value rides in. As a void* typedef gdb
+    printed the TAG as a pointer (`$1 = 0x6` for a variant holding a string),
+    which is worse than useless: it looks like an address. Emitted as a
+    structure_type it reads as {VType = 6, Payload = 0x7fff...}, and the tag
+    tells you how to read the payload (see devdocs/dev/debug-heap.md and
+    pylib's PyVarSlot* for the tag values). }
+  if tkOrd = 22 then
+  begin
+    i := DbgEnsureScalar(13, 0);                 { Int64 members }
+    off := DbgLen - DbgInfoSecOff;
+    DbgTypeRegister(tkOrd, recId, 0, off);
+    DbgPutULEB(7);                               { structure_type }
+    DbgPutStrZ('Variant');
+    DbgPutU16(2 * DbgPtrSize);
+    DbgPutULEB(8); DbgPutStrZ('VType');   DbgPutU32(i); DbgPutU16(0);
+    DbgPutULEB(8); DbgPutStrZ('Payload'); DbgPutU32(i); DbgPutU16(DbgPtrSize);
+    DbgPutB(0);
+    DbgEnsureScalar := off; Exit;
+  end;
+
   { A managed string is a real ^Char (see DbgEnsureCharPtr), so it gets a
     typedef over THAT rather than over void* — gdb then prints the text. }
   if DbgIsStringKind(tkOrd) then
