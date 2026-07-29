@@ -92,6 +92,16 @@ type
       than renamed because the corpus writes both. }
     function count: Integer; overload;
     function count(const v: Variant): Integer; overload;
+    { Python's list.index / list.remove: both find the FIRST element equal to
+      v, by PyVarEq — the same content rule count() and `in` already use. index
+      RAISES ValueError when absent and remove REMOVES it; a find-style -1
+      return would be a different function (feature-nilpy-container-method-gaps). }
+    function index(const v: Variant): Integer;
+    procedure remove(const v: Variant);
+    { A SHALLOW copy, like Python's: a new list holding the same element
+      values, so appending to the copy leaves the original alone while a
+      mutable ELEMENT stays shared. }
+    function copy: TPyList;
     function pop: Variant; overload;
     function pop(i: Integer): Variant; overload;   { list.pop(index) — Python removes at i }
     function pop_at(i: Integer): Variant;
@@ -145,7 +155,13 @@ type
     procedure remove(const k: Variant);
     { dict.pop(key, default): remove the key and return its value, or return
       `default` if absent (never raises in the two-argument form uforth uses). }
-    function pop(const k: Variant; const d: Variant): Variant;
+    { Both Python arities. The one-argument form RAISES KeyError when the key
+      is absent and the two-argument form returns the default — that difference
+      is the whole reason Python has both, and requiring the default made the
+      one-argument form a PARSE error
+      (feature-nilpy-container-method-gaps). }
+    function pop(const k: Variant): Variant; overload;
+    function pop(const k: Variant; const d: Variant): Variant; overload;
     { Python's dict.setdefault: return the existing value, or insert the
       default and return THAT — the returned slot is the one now in the dict,
       which is what makes `d.setdefault(k, ...)[k2] = v` mutate the dict rather
@@ -1768,6 +1784,42 @@ begin
   FItems := nil;
 end;
 
+function TPyList.index(const v: Variant): Integer;
+var i: Integer;
+begin
+  for i := 0 to FLen - 1 do
+    if PyVarEq(PPyVarRec(NativeInt(FItems) + i * 16), PPyVarRec(@v)) then
+    begin
+      Result := i;
+      Exit;
+    end;
+  Result := -1;
+  { CPython's exact wording is `<value> is not in list` — the VALUE, not a
+    placeholder, and it differs from list.remove's message. }
+  raise ValueError.Create(pyrepr_of(v) + ' is not in list');
+end;
+
+procedure TPyList.remove(const v: Variant);
+var i: Integer;
+begin
+  for i := 0 to FLen - 1 do
+    if PyVarEq(PPyVarRec(NativeInt(FItems) + i * 16), PPyVarRec(@v)) then
+    begin
+      pop_at(i);
+      Exit;
+    end;
+  raise ValueError.Create('list.remove(x): x not in list');
+end;
+
+function TPyList.copy: TPyList;
+var i: Integer;
+begin
+  Result := TPyList.Create;
+  Result.FIsTuple := FIsTuple;
+  for i := 0 to FLen - 1 do
+    Result.append(at(i));
+end;
+
 function TPyList.count(const v: Variant): Integer;
 var i: Integer;
 begin
@@ -2491,6 +2543,17 @@ begin
     dict.clear() does too }
   Self.FLen := 0;
   PyDictRehash(Self, Self.FHashCap);
+end;
+
+function TPyDict.pop(const k: Variant): Variant;
+var i: Integer; src, dst: PPyVarRec;
+begin
+  i := indexof(k);
+  if i < 0 then PyKeyError;
+  src := PPyVarRec(NativeInt(FVals) + i * 16);
+  dst := PPyVarRec(@Result);
+  PyVarSlotInit(dst, src);
+  remove(k);
 end;
 
 function TPyDict.pop(const k: Variant; const d: Variant): Variant;
