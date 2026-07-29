@@ -3791,11 +3791,19 @@ begin
   newPi := FindProc('pyboundfn_new');
   bindPi := FindProc('pyboundfn_bind');
   varBindPi := FindProc('pyboundfn_bind_var');
-  if (not PyTypingPass) and (nParams = 1) and (newPi >= 0) and (bindPi >= 0) and
+  if (not PyTypingPass) and (nParams <= 1) and (newPi >= 0) and (bindPi >= 0) and
      (varBindPi >= 0) and PyLambdaBodyIsDiscardableCall(bStart, bEnd) then
   begin
     lamN := 0;
-    lamNames[0] := pNames[0];        { the one own parameter, unannotated }
+    { A ZERO-parameter lambda is lifted too, under a DUMMY own parameter nothing
+      references. The bound-fn bridge always passes one argument, so a proc with
+      no parameter at all would be called with an extra register argument and a
+      shifted capture list; a name no Python source can spell absorbs it. Without
+      the lift, `root.after(300, lambda: draw())` fell to the pyeval closure,
+      which cannot call a COMPILED def — "pyeval: unknown call: draw()", and the
+      Tk event loop never came back (bug-nilpy-zero-param-lambda-cannot-call-a-def). }
+    if nParams = 1 then lamNames[0] := pNames[0]   { the one own parameter, unannotated }
+    else lamNames[0] := '$lamarg0';
     lamTypes[0] := tyVariant;
     lamSyms[0] := -1;
     lamRecs[0] := REC_NONE;
@@ -3838,9 +3846,12 @@ begin
     if PyPendLamCount < PY_MAX_NESTED then
     begin
       Inc(PyLamSeq);
-      { a PROCEDURE: the bridge discards a result, and the body test above
-        already restricted this path to a call whose value nobody reads }
-      lamProc := RegisterProc('$pylam' + AIntToStr(PyLamSeq), False, tyInteger,
+      { A FUNCTION returning a variant — the ABI every bridge that invokes a
+        lifted lambda declares (see PyCompileLambdaBody). Nobody reads the value;
+        what matters is that the callee obeys the result convention its callers
+        assume. As a procedure it did not, and the caller dereferenced a stale
+        result register. }
+      lamProc := RegisterProc('$pylam' + AIntToStr(PyLamSeq), True, tyVariant,
                               lamN, lamNames, lamTypes);
       Procs[lamProc].BodyAddr := -1;
       for j := 1 to lamN - 1 do
@@ -11078,6 +11089,25 @@ begin
       Syms[idx].RecName := ProcParamRecId[procIdx * MAX_PROC_PARAMS + i]
     else
       Syms[idx].RecName := REC_NONE;
+  end;
+  { A lifted lambda RETURNS a variant, because every bridge that invokes one
+    (pyboundfn_call_ptr, pyvar_callv*) declares the callee that way — a Variant
+    result rides a hidden destination the caller allocates AND comes back as a
+    pointer in the result register. Compiled as a procedure, that register held
+    whatever the body's last call left there, and the caller's `rv := f(...)`
+    dereferenced it: `lambda x: body()` crashed the moment the def it called
+    took no arguments, and survived by luck when it took one. The Result slot is
+    zero-initialised, so a lambda whose value nobody reads yields None. }
+  if Procs[procIdx].RetType = tyVariant then
+  begin
+    idx := AllocVar('$pyresult', tyVariant);
+    Procs[procIdx].RetSymIdx := idx;
+    Syms[idx].Kind := skLocal;       { gates the prologue zero-init }
+    if RetViaHiddenDest(tyVariant) then
+    begin
+      idx := AllocVar('', tyPointer);
+      ProcAggregateDestSym[procIdx] := idx;
+    end;
   end;
   Procs[procIdx].BodyAddr := CodeLen;
   patchPos := EmitProcPrologue;

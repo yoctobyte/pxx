@@ -58,3 +58,11 @@ bi = dd.intm
 print(bi(1, 2))
 bs = dd.strm
 print(bs("q"))
+
+def noargs():
+    print("noargs")
+
+za = lambda: noargs()
+za()
+zb = lambda x: noargs()
+zb(1)
