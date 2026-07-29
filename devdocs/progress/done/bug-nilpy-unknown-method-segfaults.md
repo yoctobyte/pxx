@@ -8,7 +8,7 @@ prio: 70
 # nilpy: an unknown method call compiles, then crashes
 
 - **Type:** bug (Nil-Python frontend, method resolution) — **Track N**
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-26, adding [[feature-nilpy-configparser]].
 
 ## Severity
@@ -52,6 +52,18 @@ So `set` cannot be used as a method name, which matters because Python's
 now, meaning `cfg.set(...)` from Python still does not work — songformatter's
 settings.py uses it.
 
+## Resolved 2026-07-29 (commit 80871015b)
+
+1. An undeclared method CALLED on a declared class is now a compile error naming
+   both — `Nil Python: ConfigParser has no method no_such_method_at_all`. A
+   dynamic attribute holding a callable still works: the refusal only fires when
+   nothing in the module ever writes `.name =` (or calls setattr), so the name
+   cannot be one.
+2. Both keyword cases were already fixed by the time this was picked up and are
+   re-verified here: `cfg.set("s","k","v")` reaches configparser's `set_` through
+   the trailing-underscore mapping, and a Pascal `procedure set(x: Integer)`
+   declared, called and printed correctly.
+
 ## Two fixes
 
 1. **An unresolved method must be a compile error** naming the class and method.
@@ -82,3 +94,6 @@ which is what every NilPy object is. `c.no_such_method_at_all("x")` on a NilPy
 class instance compiles clean and segfaults with nothing printed. The check has
 to happen where the dynamic dispatch is lowered, not in the Pascal member
 lookup that already rejects the static case.
+
+## Log
+- 2026-07-29 — resolved, commit 80871015b.
