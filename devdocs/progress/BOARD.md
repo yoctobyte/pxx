@@ -121,6 +121,7 @@ _none_
 | feature-lib-markdown | B | 45 | feature | A Markdown library — and the `markdown` Python shim over it | — |
 | feature-lib-pxxpdf-reportlab-compat | B | 50 | feature | pxxpdf — pxx pdfgen-backed, reportlab-compatible PDF library (nilpy) | bug-cfront-fegetround-unresolved-float-printf, feature-nilpy-fallback-import |
 | feature-lib-pyexec | B | 45 | feature | lib pyexec: a real exec() for Python-subset source (library, two engines) | feature-rtti-field-reflection |
+| feature-lib-reportlab-shim-pdftextobject | B | 45 | feature | reportlab shim: `PDFTextObject.setTextOrigin` (and whatever follows it) | — |
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | — |
 | feature-lib-tkinter-facade-widening-canvas-items | B | 40 | feature | tkinter façade: item specs, StringVar traces, and what settings.py still needs | — |
 | feature-mimic-fpc-compiler-define-profile | A | 50 | feature | FPC-compiler define profile (`fpcdefs.inc` build-config gates) | — |
@@ -137,7 +138,6 @@ _none_
 | feature-nilpy-closure-default-and-remaining | N | 45 | feature | NilPy: remaining uforth walls past ~88% (closure-captured defaults, then exec) | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-configparser | N | 45 | feature | nilpy: configparser module (INI settings) — songformatter's settings.py imports it | — |
-| feature-nilpy-container-method-gaps | N | 60 | feature | Container-method gaps: `list.remove`, `list.index`, `list.copy`, one-argument `dict.pop` | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-default-args-on-nested-defs | N | 55 | feature | NilPy: default arguments as explicit by-value capture | — |
 | feature-nilpy-dotted-package-imports | N | 55 | feature | nilpy: dotted package imports — `from reportlab.pdfgen import canvas`, so a shim can be NAMED for the module it implements | — |
@@ -299,7 +299,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1030)
+## done (1031)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1099,6 +1099,7 @@ _none_
 | feature-nilpy-classvar-counter | N | 55 | feature | NilPy: ClassVar storage, next(), counter shim, lambda default_factory | — |
 | feature-nilpy-comparison-chaining | N | 50 | feature | NilPy: comparison chaining (`0 <= i < n`) | — |
 | feature-nilpy-comprehension-if-filter | N | 30 | feature | NilPy: comprehension `if` filters — `[x for x in xs if x > 1]` | — |
+| feature-nilpy-container-method-gaps | N | 60 | feature | Container-method gaps: `list.remove`, `list.index`, `list.copy`, one-argument `dict.pop` | — |
 | feature-nilpy-decorators-dataclass | N | 55 | feature | NilPy: @dataclass v1 (decorator syntax, annotated scalar fields, defaults) | — |
 | feature-nilpy-def-params | N | 55 | feature | NilPy: raise def/method parameter limit past 4 | — |
 | feature-nilpy-dict | N | 60 | feature | NilPy: dict v1 — TPyDict | — |
@@ -2800,7 +2801,6 @@ _none_
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
 - [p 60] [A] feature-inline-asm-xtensa
-- [p 60] [N] feature-nilpy-container-method-gaps
 - [p 60] [N] feature-nilpy-nested-comprehension
 - [p 60] [B] feature-nilpy-tkinter-facade-widening
 - [p 60] [O] feature-opt-store-reload-elimination
@@ -2880,6 +2880,7 @@ _none_
 - [p 45] [O] feature-inline-nonleaf-and-branch-locals
 - [p 45] [B] feature-lib-markdown
 - [p 45] [B] feature-lib-pyexec
+- [p 45] [B] feature-lib-reportlab-shim-pdftextobject
 - [p 45] [A] feature-move-fillchar-intrinsics
 - [p 45] [N] feature-nilpy-closure-default-and-remaining
 - [p 45] [N] feature-nilpy-configparser

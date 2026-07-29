@@ -86,3 +86,6 @@ That is the reportlab shim, so it belongs to Track B rather than N.
 ### Gate
 
 `tools/gate.sh full`.
+
+## Log
+- 2026-07-30 — resolved, commit 8cef67f5c.
