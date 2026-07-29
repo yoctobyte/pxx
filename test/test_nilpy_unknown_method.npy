@@ -1,0 +1,15 @@
+class V:
+    def __init__(self):
+        self.n = 1
+    def m(self, x):
+        return x + self.n
+
+def hi(x):
+    print("cb", x)
+
+v = V()
+print(v.m(4))
+v.cb = hi
+v.cb(5)
+v.extra = 7
+print(v.extra)

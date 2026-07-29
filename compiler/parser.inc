@@ -802,6 +802,7 @@ end;
 procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 function PyMakeSuperCall(const name: AnsiString): Integer; forward;  { `super().m(args)` as a value (pyparser.inc) }
+function PyDynAttrEverAssigned(const nm: AnsiString): Boolean; forward;  { is `.nm =` written anywhere? (pyparser.inc) }
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 function PyMakeDynCall(baseNode: Integer): Integer; forward; { Nil Python: call a callable stored in a variant (pyparser.inc) }
@@ -5037,8 +5038,19 @@ begin
           node := PyMakeDynAttrSet(node, fieldName, callIndNode);
           tk := tyUnknown; Result := node; Exit;
         end;
-                ' clsname=', PyRawName(UClsNOff[recName - REC_UCLASS_BASE], UClsNLen[recName - REC_UCLASS_BASE]),
-                ' findCanvas=', FindUClass('Canvas'), ' UClsCount=', UClsCount);
+        { A CALL of a name the class does not declare. Python would raise
+          AttributeError; NilPy used to build a dynamic-attribute read, get None,
+          and call it — a segfault before pyvar_callee_addr started checking, a
+          runtime TypeError since, and either way no hint of which method. The
+          class is a CLOSED world here, so the only way the name could be legal
+          is a dynamic attribute holding a callable — which means some `.name =`
+          exists somewhere in the module. If none does, say so at compile time
+          (bug-nilpy-unknown-method-segfaults). }
+        if (CurTok.Kind = tkLParen) and (not PyDynAttrEverAssigned(fieldName)) then
+          Error('Nil Python: ' +
+                PyRawName(UClsNOff[recName - REC_UCLASS_BASE],
+                          UClsNLen[recName - REC_UCLASS_BASE])
+                + ' has no method ' + fieldName);
         node := PyMakeDynAttrGet(node, fieldName);
         tk := tyVariant; recName := REC_NONE;
         Continue;

@@ -5692,6 +5692,34 @@ begin
   Result := callNode;
 end;
 
+function PyDynAttrEverAssigned(const nm: AnsiString): Boolean;
+{ Does the module write `<expr>.nm = ...` anywhere, or call setattr at all? Then
+  `nm` may legitimately be a DYNAMIC attribute on an instance — Python adds them
+  at run time — and a call through it cannot be refused at compile time. Used the
+  other way round from PyMethodUsedAsValue: this one licenses a name the class
+  does not declare, that one detects a value use of one it does. }
+var j: Integer;
+begin
+  Result := False;
+  j := 1;
+  while j < MainProgramTokCount do
+  begin
+    if (Tokens[j].Kind = tkIdent) and CaseEqual(GetTokenStr(j), 'setattr') then
+    begin
+      Result := True;
+      Exit;
+    end;
+    if (Tokens[j].Kind = tkIdent) and (Tokens[j - 1].Kind = tkDot) and
+       (j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkAssign) and
+       CaseEqual(GetTokenStr(j), nm) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(j);
+  end;
+end;
+
 function PyMethodUsedAsValue(const nm: AnsiString): Boolean;
 { True iff the module reads `<something>.nm` WITHOUT calling it — `cb = self.on_key`,
   `root.after(50, self.tick)`. That is a bound-method value, and calling one back
