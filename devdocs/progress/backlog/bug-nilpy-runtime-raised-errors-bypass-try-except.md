@@ -43,6 +43,27 @@ runtime is catchable, while everything raised by user code is:
 | same under bare `except:` | `bare caught` / `after` | `KeyError`, exit 1 |
 | `raise IndexError("mine")` under `except IndexError:` | caught | **caught** — correct |
 
+[[bug-nilpy-int-parse-halts-instead-of-raising]] (opened 2026-07-27) is the
+SAME defect seen through `int("abc")` — one more entry in the table, not a
+separate bug. Fix them in one pass.
+
+The mechanism is visible in `compiler/builtin/pylib.pas`:
+
+```pascal
+procedure PyIndexError;
+begin
+  writeln('IndexError: list index out of range');
+  Halt(1);
+end;
+```
+
+`PyKeyError` is the same three lines. Meanwhile the exception CLASSES are
+already declared right there (`ValueError`, `TypeError`, `IndexError`,
+`KeyError`, `OSError`, … all `class(Exception)`), pylib already raises
+elsewhere (`raise Exception.Create('TypeError: ...')`), and a NilPy
+`raise IndexError("mine")` is caught correctly. So the fix is to turn these
+halt-helpers into raises of the class they already name.
+
 So the exception machinery works; the runtime's own error paths simply do not
 go through it. They print a message and exit instead of unwinding to the
 enclosing handler. Ordinary defensive Python — `try: v = d[k] except KeyError:`

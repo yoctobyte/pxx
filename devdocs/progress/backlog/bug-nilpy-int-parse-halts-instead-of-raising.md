@@ -12,6 +12,12 @@ prio: 55
   ([[bug-nilpy-rtl-exception-surface-shadowed]]). Pre-existing and unrelated to
   it — reproduces with no import at all.
 
+> **Same defect as [[bug-nilpy-runtime-raised-errors-bypass-try-except]]**
+> (filed 2026-07-29): NOTHING the runtime raises is catchable — index, key and
+> division by zero behave identically, and bare `except:` does not catch them
+> either. `PyIndexError`/`PyKeyError` in pylib.pas are `writeln` + `Halt(1)`
+> while the exception classes are declared a few lines above. Fix in one pass.
+
 ## Repro
 
 ```python
