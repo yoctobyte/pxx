@@ -107,3 +107,6 @@ rather than an overload set, precisely because
 [[bug-a-len-of-variant-picks-wrong-overload]] showed a Variant argument picks
 arbitrarily — a `pymax_v`/`pymin_v` pair selected by the frontend when either
 operand is a variant would follow that precedent.
+
+## Log
+- 2026-07-29 — resolved, commit 4736360b0.

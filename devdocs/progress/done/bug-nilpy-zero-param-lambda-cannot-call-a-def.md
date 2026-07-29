@@ -61,3 +61,6 @@ change and does not help the other interpreted-body limits.
 
 `make test-nilpy` + self-host fixedpoint, plus the snippet above printing
 `in lam` and exiting cleanly, and `lambda: obj.method()` still working.
+
+## Log
+- 2026-07-29 — resolved, commit cab5a5179.
