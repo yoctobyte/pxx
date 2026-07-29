@@ -41,7 +41,15 @@ Validated against the real bug: with today's retain fix disabled, songformatter'
 where without it the same field read `1751084129` — a recycled allocation's
 ASCII bytes, which is what made the bug cost three sessions.
 
-Part 2 (`PXX_OBJTRACE`) still open.
+**Part 2 SHIPPED** (2026-07-29) as `-dPXX_OBJTRACE`: one line per refcount
+event (`objtrace A|R|r|F <hex addr> <rc>`) to stderr, allocation-free so it
+cannot perturb the heap it reports on or re-enter the allocator from inside
+`PXXObjRelease`. Composes with the debug heap. Default build byte-identical.
+
+Both switches done; this ticket is ready to resolve. Follow-ups worth their own
+tickets rather than scope creep here: tracing managed AnsiString refcounts
+(`PXXStrIncRef`/`DecRef`) as well, and a filter if trace volume ever becomes
+the limiting factor (it has not yet).
 
 ## 1. `PXX_HEAP_DEBUG` — poison + quarantine (SHIPPED)
 
@@ -54,7 +62,7 @@ also becomes visible: the quarantined block's poison is checked on real release.
 ~30 lines, one file, no compiler change. Highest value/effort ratio of anything
 on this list.
 
-## 2. `PXX_OBJTRACE` — refcount trace
+## 2. `PXX_OBJTRACE` — refcount trace (SHIPPED)
 
 `PXXObjRetain` / `PXXObjRelease` / `PXXObjAlloc*` log `op addr rc` (and the
 magic tag) to stderr. Every bug in this family is the same question — "who took

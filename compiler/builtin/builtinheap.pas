@@ -1402,6 +1402,70 @@ end;
   PXXObjRelease at rc=0 currently just frees the block; the recursive
   per-type finalizer (VMT `__finalize__` slot) is a later slice of
   feature-nilpy-object-reclamation and hooks in right before the free. }
+{$ifdef PXX_OBJTRACE}
+{ One line per refcount event, to stderr:  `objtrace <op> <hex addr> <rc>`.
+  Ops: A alloc, R retain, r release, F free (rc reached 0).
+
+  Build with -dPXX_OBJTRACE. Every bug in the NilPy object-reclamation family
+  is the same question — who took a reference and who dropped it — and today
+  that is answered by inferring backwards from a corrupted value. This answers
+  it by reading the log:  `./prog 2>&1 | grep '<the address>'` gives the whole
+  life of one object in order.
+
+  Allocation-free on purpose: the line is built in a local byte buffer from
+  character constants and emitted with ONE raw write. A trace that allocated
+  would perturb the very heap it is reporting on, and would re-enter the
+  allocator from inside PXXObjRelease -> PXXFree. }
+procedure PXXObjTrace(op: NativeInt; p: Pointer; rc: Int64);
+var buf: array[0..63] of Byte; n, i, d: Integer; v, r: Int64; neg: Boolean;
+begin
+  buf[0] := Ord('o'); buf[1] := Ord('b'); buf[2] := Ord('j');
+  buf[3] := Ord('t'); buf[4] := Ord('r'); buf[5] := Ord('a');
+  buf[6] := Ord('c'); buf[7] := Ord('e'); buf[8] := 32;
+  buf[9] := Byte(op); buf[10] := 32;
+  n := 11;
+  buf[n] := Ord('0'); n := n + 1;
+  buf[n] := Ord('x'); n := n + 1;
+  i := (SizeOf(Pointer) * 8) - 4;
+  v := Int64(p);
+  while i >= 0 do
+  begin
+    d := Integer((v shr i) and 15);
+    if d < 10 then buf[n] := Byte(48 + d) else buf[n] := Byte(87 + d);
+    n := n + 1;
+    i := i - 4;
+  end;
+  buf[n] := 32; n := n + 1;
+  neg := rc < 0;
+  if neg then rc := -rc;
+  d := n;                                  { remember where the digits start }
+  if rc = 0 then
+  begin
+    buf[n] := Ord('0'); n := n + 1;
+  end
+  else
+    while rc > 0 do
+    begin
+      buf[n] := Byte(48 + Integer(rc mod 10));
+      n := n + 1;
+      rc := rc div 10;
+    end;
+  { the digits went out backwards — reverse them in place }
+  i := n - 1;
+  while d < i do
+  begin
+    v := buf[d]; buf[d] := buf[i]; buf[i] := Byte(v);
+    d := d + 1; i := i - 1;
+  end;
+  if neg then
+  begin
+    buf[n] := Ord('-'); n := n + 1;        { sign trails; an rc below 0 is a bug anyway }
+  end;
+  buf[n] := 10; n := n + 1;
+  r := PXXSysWrite(2, Int64(@buf[0]), n);
+end;
+{$endif}
+
 function PXXObjAlloc(size: NativeInt): Pointer;
 var base: Int64;
 begin
@@ -1410,6 +1474,9 @@ begin
   PWord(base)^ := 1;                    { refcount }
   PWord(base + 8)^ := PXX_OBJ_MAGIC;    { population tag, see the interface }
   Result := Pointer(base + 16);
+{$ifdef PXX_OBJTRACE}
+  PXXObjTrace(Ord('A'), Result, 1);
+{$endif}
 end;
 
 function PXXObjAllocRaw(size: NativeInt): Pointer;
@@ -1420,6 +1487,9 @@ begin
   PWord(base)^ := 1;                        { refcount }
   PWord(base + 8)^ := PXX_OBJ_MAGIC_RAW;    { VMT-less block (bound pairs) }
   Result := Pointer(base + 16);
+{$ifdef PXX_OBJTRACE}
+  PXXObjTrace(Ord('A'), Result, 1);
+{$endif}
 end;
 
 { TRUE iff p can be one of our headered payloads: 8-aligned and inside the
@@ -1440,6 +1510,9 @@ begin
   PWord(base)^ := 1;                         { refcount }
   PWord(base + 8)^ := PXX_OBJ_MAGIC_RAW2;    { pyeval closure object }
   Result := Pointer(base + 16);
+{$ifdef PXX_OBJTRACE}
+  PXXObjTrace(Ord('A'), Result, 1);
+{$endif}
 end;
 
 procedure PXXObjRetain(p: Pointer);
@@ -1475,6 +1548,9 @@ begin
 {$else}
   PWord(base)^ := PWord(base)^ + 1;
 {$endif}
+{$ifdef PXX_OBJTRACE}
+  PXXObjTrace(Ord('R'), p, PWord(base)^);
+{$endif}
 end;
 
 procedure PXXObjRelease(p: Pointer);
@@ -1505,8 +1581,14 @@ begin
   rc := PWord(base)^ - 1;
   PWord(base)^ := rc;
 {$endif}
+{$ifdef PXX_OBJTRACE}
+  PXXObjTrace(Ord('r'), p, rc);
+{$endif}
   if rc = 0 then
   begin
+{$ifdef PXX_OBJTRACE}
+    PXXObjTrace(Ord('F'), p, 0);
+{$endif}
     { Run the type finalizer (releases children, recursing back through here)
       before the block goes away. Installed by pylib; nil in programs that
       never construct a refcounted object. }

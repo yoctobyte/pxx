@@ -1,4 +1,9 @@
-# The debug heap — `-dPXX_HEAP_DEBUG`
+# Debug heap and object trace — `-dPXX_HEAP_DEBUG`, `-dPXX_OBJTRACE`
+
+Two independent compile-time switches. They compose; both are off by default
+and neither changes the shipped binary.
+
+# 1. The debug heap — `-dPXX_HEAP_DEBUG`
 
 Compile any program (Pascal, NilPy, C — it is the shared allocator) with
 
@@ -64,6 +69,53 @@ grep and sort.
 - Poison is `$DD` on purpose: non-zero, non-ASCII, and the same byte in every
   position, so it is recognisable however it is misread — as an integer, a
   pointer, a length, or a float.
+
+# 2. The object trace — `-dPXX_OBJTRACE`
+
+```sh
+compiler/pascal26 -dPXX_OBJTRACE prog.py out
+./out 2>trace.log
+```
+
+One line per refcount event on stderr:
+
+```
+objtrace A 0x000070a88de00018 1      # allocated, rc = 1
+objtrace R 0x000070a88de00018 2      # retained
+objtrace r 0x000070a88de00018 1      # released
+objtrace F 0x000070a88de00018 0      # rc hit 0, about to be freed
+```
+
+`grep 0x000070a88de00018 trace.log` gives one object's whole life, in order.
+
+**Why it exists:** every bug in the NilPy object-reclamation family is the same
+question — *who took a reference and who dropped it* — and it is normally
+answered by inferring backwards from a corrupted value. This answers it by
+reading. The trace above is from a three-line program and already shows the
+current model plainly: two retains, no release, so a class slot holds the last
+reference forever (class slots are never released — which is exactly why the
+missing retain in `pyvarobj` was fatal while an unretained *list local* merely
+leaked).
+
+Notes:
+
+- **Allocation-free by construction.** The line is built in a local byte buffer
+  from character constants and emitted with one raw write. A trace that
+  allocated would perturb the heap it reports on and would re-enter the
+  allocator from inside `PXXObjRelease` -> `PXXFree`.
+- No filtering: a real app emits a lot. Redirect stderr and grep. If volume
+  becomes the problem, add the filter at the point of need rather than a
+  general mechanism.
+- Covers `PXXObj*` refcounting only — headered NilPy objects. Managed
+  AnsiString handles use `PXXStrIncRef`/`DecRef` and are not traced yet.
+
+## Using the two together
+
+`-dPXX_HEAP_DEBUG -dPXX_OBJTRACE` is the combination for an ownership bug:
+the trace shows the release that should not have happened, and the poison shows
+where the freed block is subsequently read. Start with poison (it tells you
+there IS a use-after-free and which read hits it), then add the trace (it tells
+you which release caused it).
 
 ## Related
 
