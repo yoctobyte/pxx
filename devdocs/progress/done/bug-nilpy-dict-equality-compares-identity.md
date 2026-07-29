@@ -68,3 +68,6 @@ level), a dict against an int / list / str / None / a None-valued variable, and
 ### Gate
 
 `tools/gate.sh full`.
+
+## Log
+- 2026-07-29 — resolved, commit c4cbf2ea5.

@@ -34,7 +34,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (200)
+## backlog (199)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -44,7 +44,6 @@ _none_
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
 | bug-nilpy-annotated-module-global-invisible-in-kwarg | N | 55 | bug | A module-level ANNOTATED global is not visible in a keyword argument | — |
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |
-| bug-nilpy-dict-equality-compares-identity | N | 70 | bug | `{"k": 1} == {"k": 1}` is False — dict equality compares identity, not value | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-eq-dunder-ignored | N | 70 | bug | `__eq__` is ignored — `==` on user objects compares identity | — |
 | bug-nilpy-float-times-string-hangs | N | 65 | bug | `2.5 * "ab"` hangs forever | — |
@@ -301,7 +300,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1025)
+## done (1026)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -645,6 +644,7 @@ _none_
 | bug-nilpy-comparison-return-type-from-operands | N | 70 | bug | An unannotated def returning a COMPARISON typed its result from the operands | — |
 | bug-nilpy-comprehension-as-for-iterable-segfaults | N | 35 | bug | NilPy: a comprehension used directly as a for-loop iterable segfaults | — |
 | bug-nilpy-def-value-in-a-variable-is-not-callable | N | 75 | bug | A def stored in a NAME and then called SEGFAULTS | — |
+| bug-nilpy-dict-equality-compares-identity | N | 70 | bug | `{"k": 1} == {"k": 1}` is False — dict equality compares identity, not value | — |
 | bug-nilpy-dict-insert-lookup-linear-not-hashed | N | 45 | bug | NilPy: dict insert/lookup is O(N), not O(1) — quadratic build, drives uforth O(N²) | — |
 | bug-nilpy-dict-views-and-result-alias | N | 75 | bug | nilpy: d.values()/d.keys() jumped to address 0, and a local named `result` aliased the function result | — |
 | bug-nilpy-function-level-import-drops-body | N | 70 | bug | An import inside a function body — and the fix that silently emptied the body | — |
@@ -2774,7 +2774,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [N] bug-nilpy-dict-equality-compares-identity
 - [p 70] [N] bug-nilpy-eq-dunder-ignored
 - [p 70] [N] bug-nilpy-large-float-str-overruns-into-garbage
 - [p 70] [N] bug-nilpy-returning-a-nested-def-yields-none
