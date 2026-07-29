@@ -3,6 +3,7 @@
 
 procedure EmitExceptionRuntime;
 var unhandledJmp, si, cbzOffset, pos, bOffset: Integer;
+    siColon, jo1, jo2, jc1, jc2, jc3, jc4, jm1, jm2, jm3, jm4: Integer;
 begin
   if TargetArch = TARGET_X86_64 then
   begin
@@ -51,6 +52,65 @@ begin
       MovRaxImm(SYS_WRITE); MovRdiImm(2);
       EmitB($48); EmitB($BE); EmitDataRef(Strs[si].Offset + 8);
       MovRdxImm(Strs[si].Len); EmitSyscall;
+
+      { Detail line: `Unhandled exception: <ClassName>: <Message>`. r13 = the
+        object, r12 = its class RTTI blob ([[obj+0] - 8], i.e. __pxxRttiOf; note
+        BSS_EXC_CLS is a compile-time class INDEX, not a blob, so it is useless
+        here). Every field read is range-guarded, so raising something that is
+        NOT an Exception degrades to the bare line rather than faulting.
+        Layouts: blob+0 -> frozen name (Int64 length, chars at +8); an
+        Exception's `msg` is its first field (obj+8) and holds a managed
+        AnsiString pointer whose length sits at ptr-8. }
+      siColon := InternStr(': ');
+      EmitB($4C); EmitB($8B); EmitB($2C); EmitB($25); EmitGlobRef(BSS_EXC_OBJ); { mov r13, [BSS_EXC_OBJ] }
+      EmitB($4D); EmitB($31); EmitB($E4);                         { xor r12, r12 }
+      EmitB($49); EmitB($81); EmitB($FD); EmitI32(65536);         { cmp r13, 65536 }
+      EmitB($0F); EmitB($82); jo1 := CodeLen; EmitI32(0);         { jb  objbad }
+      EmitB($49); EmitB($8B); EmitB($45); EmitB($00);             { mov rax, [r13] }
+      EmitB($48); EmitB($85); EmitB($C0);                         { test rax, rax }
+      EmitB($0F); EmitB($84); jo2 := CodeLen; EmitI32(0);         { jz  objbad }
+      EmitB($4C); EmitB($8B); EmitB($60); EmitB($F8);             { mov r12, [rax-8] }
+      Patch32(jo1, CodeLen - (jo1 + 4)); Patch32(jo2, CodeLen - (jo2 + 4));
+
+      EmitB($4D); EmitB($85); EmitB($E4);                         { test r12, r12 }
+      EmitB($0F); EmitB($84); jc1 := CodeLen; EmitI32(0);         { jz  noclass }
+      EmitB($49); EmitB($8B); EmitB($34); EmitB($24);             { mov rsi, [r12] }
+      EmitB($48); EmitB($85); EmitB($F6);                         { test rsi, rsi }
+      EmitB($0F); EmitB($84); jc2 := CodeLen; EmitI32(0);         { jz  noclass }
+      EmitB($48); EmitB($8B); EmitB($16);                         { mov rdx, [rsi] }
+      EmitB($48); EmitB($85); EmitB($D2);                         { test rdx, rdx }
+      EmitB($0F); EmitB($8E); jc3 := CodeLen; EmitI32(0);         { jle noclass }
+      EmitB($48); EmitB($81); EmitB($FA); EmitI32(256);           { cmp rdx, 256 }
+      EmitB($0F); EmitB($83); jc4 := CodeLen; EmitI32(0);         { jae noclass }
+      MovRaxImm(SYS_WRITE); MovRdiImm(2);
+      EmitB($48); EmitB($BE); EmitDataRef(Strs[siColon].Offset + 8);
+      MovRdxImm(Strs[siColon].Len); EmitSyscall;
+      EmitB($49); EmitB($8B); EmitB($34); EmitB($24);             { mov rsi, [r12] }
+      EmitB($48); EmitB($8B); EmitB($16);                         { mov rdx, [rsi] }
+      EmitB($48); EmitB($83); EmitB($C6); EmitB($08);             { add rsi, 8 }
+      MovRaxImm(SYS_WRITE); MovRdiImm(2); EmitSyscall;
+      Patch32(jc1, CodeLen - (jc1 + 4)); Patch32(jc2, CodeLen - (jc2 + 4));
+      Patch32(jc3, CodeLen - (jc3 + 4)); Patch32(jc4, CodeLen - (jc4 + 4));
+
+      EmitB($49); EmitB($81); EmitB($FD); EmitI32(65536);         { cmp r13, 65536 }
+      EmitB($0F); EmitB($82); jm1 := CodeLen; EmitI32(0);         { jb  nomsg }
+      EmitB($49); EmitB($8B); EmitB($75); EmitB($08);             { mov rsi, [r13+8] }
+      EmitB($48); EmitB($81); EmitB($FE); EmitI32(65536);         { cmp rsi, 65536 }
+      EmitB($0F); EmitB($82); jm2 := CodeLen; EmitI32(0);         { jb  nomsg }
+      EmitB($48); EmitB($8B); EmitB($56); EmitB($F8);             { mov rdx, [rsi-8] }
+      EmitB($48); EmitB($85); EmitB($D2);                         { test rdx, rdx }
+      EmitB($0F); EmitB($8E); jm3 := CodeLen; EmitI32(0);         { jle nomsg }
+      EmitB($48); EmitB($81); EmitB($FA); EmitI32(4096);          { cmp rdx, 4096 }
+      EmitB($0F); EmitB($83); jm4 := CodeLen; EmitI32(0);         { jae nomsg }
+      MovRaxImm(SYS_WRITE); MovRdiImm(2);
+      EmitB($48); EmitB($BE); EmitDataRef(Strs[siColon].Offset + 8);
+      MovRdxImm(Strs[siColon].Len); EmitSyscall;
+      EmitB($49); EmitB($8B); EmitB($75); EmitB($08);             { mov rsi, [r13+8] }
+      EmitB($48); EmitB($8B); EmitB($56); EmitB($F8);             { mov rdx, [rsi-8] }
+      MovRaxImm(SYS_WRITE); MovRdiImm(2); EmitSyscall;
+      Patch32(jm1, CodeLen - (jm1 + 4)); Patch32(jm2, CodeLen - (jm2 + 4));
+      Patch32(jm3, CodeLen - (jm3 + 4)); Patch32(jm4, CodeLen - (jm4 + 4));
+
       MovRaxImm(SYS_WRITE); MovRdiImm(2);
       EmitB($48); EmitB($BE); EmitDataRef(NEWLINE_OFFSET);
       MovRdxImm(1); EmitSyscall;
