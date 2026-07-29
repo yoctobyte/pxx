@@ -34,7 +34,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (198)
+## backlog (199)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -46,6 +46,7 @@ _none_
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-float-times-string-hangs | N | 65 | bug | `2.5 * "ab"` hangs forever | — |
+| bug-nilpy-function-value-call-gaps | N | 55 | bug | Two function-value shapes that do not COMPILE | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
 | bug-nilpy-is-on-two-lists-compares-contents | N | 55 | bug | `is` on two lists compares CONTENTS, so distinct lists are "identical" | — |
 | bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
@@ -2814,6 +2815,7 @@ _none_
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
 - [p 55] [N] bug-nilpy-annotated-module-global-invisible-in-kwarg
+- [p 55] [N] bug-nilpy-function-value-call-gaps
 - [p 55] [N] bug-nilpy-is-on-two-lists-compares-contents
 - [p 55] [N] bug-nilpy-method-returning-a-fresh-string-leaks
 - [p 55] [N] bug-nilpy-sorted-over-tuples-or-lists-fails
