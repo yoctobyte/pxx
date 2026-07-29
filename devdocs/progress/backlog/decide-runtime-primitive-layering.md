@@ -54,57 +54,30 @@ per primitive asserting Pascal, NilPy and C answer the same, against a
 gcc/CPython oracle where one exists. This is the failure that actually bites —
 a copy fixed in one surface and not the others — and it is cheap.
 
-## Windows and BSD are coming — the boundary must be SEMANTIC, not mechanism
+## Windows/BSD: a note, not a work item
 
-(User, 2026-07-29: Windows and BSD may become targets, so the PAL stays
-relevant.) This sharpens the invariant, and it invalidates one of my earlier
-judgements.
+(User, 2026-07-29: Windows and BSD may become targets one day — the point being
+that the PAL stays relevant, not that either is scheduled. **Nothing here is
+planned work.**)
 
-**The problem is not only raw syscall numbers. It is Linux-only MECHANISMS
-leaking above the PAL.** `/proc/self/*` appears at **9 sites across 5 files**
-(`pylib.pas`, `sysutils.pas`, `crtl/stdlib.c`, `unix.pas`, `palparallel.pas`) —
-and `/proc` is a **Linux** interface, not a POSIX one:
+One fact worth having written down, because it is cheap to record and would be
+expensive to rediscover: `/proc/self/*` appears at 9 sites across 5 files, and
+`/proc` is a **Linux** interface, not a POSIX one — FreeBSD does not mount
+procfs by default, Windows has no equivalent. All of them treat a failed open
+as "no environment", so on such a target they would return a plausible empty
+answer rather than an error.
 
-- **FreeBSD** deprecated procfs; it is not mounted by default (`linprocfs` is
-  opt-in). So `/proc/self/environ` fails there and every caller silently gets
-  "no environment", because all three copies treat a failed open as "empty".
-- **Windows** has no equivalent at all; the environment comes from
-  `GetEnvironmentStringsW`.
+That suggests one sharpening of the rule above, which costs nothing to adopt
+now and is the whole lesson here:
 
-Today's backends are only `posix` and `esp` — and `posix` is already the wrong
-name for these callers, because what they actually require is *Linux*.
+> **A PAL entry point should name a CAPABILITY ("get the environment"), not a
+> mechanism ("read /proc/self/environ").**
 
-So the rule is not "raw syscalls only in the PAL". It is:
-
-> **A PAL entry point names a CAPABILITY ("get the environment"), never a
-> mechanism ("read /proc/self/environ"). Any OS-specific mechanism — syscall
-> numbers, `/proc` paths, `GetEnvironmentStringsW` — lives below that boundary
-> and nowhere else.**
-
-Under that rule the three env copies are ALL wrong today, not just the NilPy
-one: each hardcodes the mechanism, so all three break on the same day BSD or
-Windows arrives, and the per-language PAL cannot absorb it because the
-mechanism leaked above the boundary.
-
-### Correction: the envp-on-the-stack route was the better one
-
-`feature-rtl-environment-variables` proposed reading `envp` off the initial
-stack (`BSS_INITIAL_RSP + 8*(argc+2)`). I dismissed that as unnecessary because
-`/proc/self/environ` "needs no codegen". **That was short-sighted.** `envp` on
-the initial stack is the ELF/SysV convention and works on Linux AND the BSDs
-with one implementation; `/proc` works on Linux only. Windows needs its own
-path either way, which is exactly what a PAL is for.
-
-Recommend: the environment capability is implemented once per language PAL over
-`envp`, with `/proc` retired rather than extended. The codegen cost I used to
-argue against it buys BSD support outright.
-
-### Backend split to plan for
-
-`platform/posix` should become `platform/linux` + `platform/bsd` (sharing what
-is genuinely POSIX), plus `platform/win`, alongside the existing
-`platform/esp`. Worth doing the rename BEFORE a second OS lands, while there is
-one caller set to fix.
+Everything else this implies — splitting `platform/posix` into `linux`/`bsd`,
+adding `platform/win`, moving the environment onto `envp` from the initial
+stack — is work for the day a second OS is actually on the roadmap. Recorded
+here so it is not rediscovered; **not** proposed as work now, and the existing
+`/proc` implementations are fine as they stand.
 
 ## Eyes open: what the duplication does cost
 
