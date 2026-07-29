@@ -2576,6 +2576,63 @@ begin
   end;
 end;
 
+{ The hidden GLOBAL that holds a non-literal class attribute's one value —
+  `mode = Inner()` evaluated once, as Python evaluates a class body once. Named
+  rather than tracked in a side table on purpose: the symbol table already is
+  the registry, and the construction path finds the value by rebuilding the same
+  name from the class and field it is copying. }
+function PyClsAttrGlobalName(ci: Integer; const nm: AnsiString): AnsiString;
+begin
+  Result := '$clsattr.' + PyRawName(UClsNOff[ci], UClsNLen[ci]) + '.' + nm;
+end;
+
+{ Is the class-body line at CurTok an attribute whose initialiser needs REAL
+  evaluation? CurTok is the name, Tokens[TokPos] the '='. A single literal
+  followed by the end of the line is the folded-constant case the pre-pass
+  already took. }
+function PyClsAttrExprAhead: Boolean;
+var k: Integer;
+begin
+  Result := False;
+  k := TokPos + 1;                { the token after '=' }
+  if k >= TokCount then Exit;
+  if (Tokens[k].Kind in [tkInteger, tkFloat, tkString, tkTrue, tkFalse, tkNil]) and
+     (k + 1 < TokCount) and (Tokens[k + 1].Kind in [tkNewline, tkDedent, tkEOF]) then
+    Exit;
+  Result := True;
+end;
+
+{ Evaluate one such attribute into its hidden global, at the point the class
+  statement runs. CurTok is the attribute name. }
+procedure PyEmitClassAttrExpr(ci: Integer);
+var nm, gname: AnsiString; gsym, valNode, asgn, fi: Integer;
+begin
+  nm := CurTok.SVal;
+  Next;                            { onto '=' }
+  Next;                            { onto the expression }
+  PyParseBoolExpr;
+  valNode := CurASTNode;
+  gname := PyClsAttrGlobalName(ci, nm);
+  gsym := AllocVar(gname, IntToTypeKind(ASTTk[valNode]));
+  Syms[gsym].RecName := ResolveNodeRec(valNode);
+  { RETYPE the field to what the initialiser actually produced. The pre-pass had
+    only the tokens to go on and defaulted to a variant; a list or dict literal
+    yields a CLASS handle, and storing one into a variant slot left the tag
+    garbage — `Cfg().LIMITS[1]` read None. The slot was laid out variant-sized
+    (16 bytes), so a narrower kind always fits. }
+  fi := FindUField(ci, nm);
+  if fi >= 0 then
+  begin
+    UFldTk[fi] := ASTTk[valNode];
+    UFldRec_[fi] := Syms[gsym].RecName;
+  end;
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(gsym);
+  ASTRight[asgn] := valNode;
+  PyHoistStmt(asgn);
+  while not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) do Next;
+end;
+
 { That constant as an expression node. }
 function PyClsAttrNode(ai: Integer): Integer;
 begin
@@ -2944,7 +3001,7 @@ var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     kwI, kwJ, kwFld, kwMax, kwPos, kwDcBase: Integer; kwName: AnsiString;
     kwCtorMi, kwCtorPi, kwPk, kwVal: Integer;
     kwAny: Boolean; kwSlot: array[0..PY_MAX_DC_KW - 1] of Integer;
-    attrAny: Boolean; attrSym, attrAsgn, attrFld, attrFi: Integer;
+    attrAny: Boolean; attrSym, attrAsgn, attrFld, attrFi, attrGSym: Integer;
 begin
   name := CurTok.SVal;
   ci := -1;
@@ -3225,6 +3282,13 @@ begin
   attrAny := False;
   for i := 0 to PyClsAttrCount - 1 do
     if PyClsAttrCi[i] = ci then attrAny := True;
+  { ...and the NON-literal ones, which live in a hidden global apiece rather
+    than in the constant table (PyEmitClassAttrExpr). They are found by name,
+    from the class's own field list. }
+  for i := 0 to UClsFCount[ci] - 1 do
+    if FindSym(PyClsAttrGlobalName(ci,
+         PyRawName(UFldNOff[UClsFBase[ci] + i], UFldNLen[UClsFBase[ci] + i]))) >= 0 then
+      attrAny := True;
   if attrAny then
   begin
     if FindUMeth(ci, 'create') >= 0 then
@@ -3252,6 +3316,23 @@ begin
         ASTRight[attrAsgn] := PyClsAttrNode(i);
         PyHoistStmt(attrAsgn);
       end;
+    { the non-literal ones: copy the shared value out of its hidden global }
+    for i := 0 to UClsFCount[ci] - 1 do
+    begin
+      attrFi := UClsFBase[ci] + i;
+      attrGSym := FindSym(PyClsAttrGlobalName(ci,
+                    PyRawName(UFldNOff[attrFi], UFldNLen[attrFi])));
+      if attrGSym < 0 then Continue;
+      attrFld := AllocNode(AN_FIELD);
+      ASTLeft[attrFld] := PyMakeIdent(attrSym);
+      ASTSOffset[attrFld] := UFldNOff[attrFi];
+      ASTSLen[attrFld] := UFldNLen[attrFi];
+      ASTTk[attrFld] := UFldTk[attrFi];
+      attrAsgn := AllocNode(AN_ASSIGN);
+      ASTLeft[attrAsgn] := attrFld;
+      ASTRight[attrAsgn] := PyMakeIdent(attrGSym);
+      PyHoistStmt(attrAsgn);
+    end;
     Result := PyMakeIdent(attrSym);
   end;
 end;
@@ -11962,6 +12043,43 @@ begin
       Inc(i);
       continue;
     end
+    else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
+            (i + 2 < bodyEnd) and (Tokens[i + 1].Kind = tkAssign) and
+            ((i = bodyStart) or
+             (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) then
+    begin
+      { A class attribute whose initialiser is NOT a literal — `mode = Inner()`,
+        the attribute-namespace idiom (songformatter's render backend declares
+        reportlab's blend modes exactly this way). The literal branch above
+        cannot hold it: there is no constant to fold. Registered here as an
+        ordinary FIELD, and PyParseClass evaluates the expression ONCE into a
+        hidden global that construction copies in — so every instance shares the
+        one object, as Python's class attribute does.
+
+        Before this, the line matched no branch at all: no field, no constant,
+        and `self.mode.NORMAL` then compiled against nothing and SEGFAULTED at
+        run time (bug-nilpy-class-attr-instance-traversal-crashes). }
+      if FindUField(ci, GetTokenStr(i)) < 0 then
+      begin
+        tk := tyVariant;
+        k := REC_NONE;
+        { `name = Cls(...)` — the field carries Cls's identity, which is what
+          makes the traversal `self.name.attr` resolve to a real field. }
+        if (Tokens[i + 2].Kind = tkIdent) and (i + 3 < bodyEnd) and
+           (Tokens[i + 3].Kind = tkLParen) then
+        begin
+          j := FindUClass(GetTokenStr(i + 2));
+          if j >= 0 then begin tk := tyClass; k := REC_UCLASS_BASE + j; end;
+        end;
+        sz := TypeSize(tk);
+        curOff := AlignTo(curOff, TypeAlign(tk));
+        AddUField(ci, Tokens[i].SOffset, Tokens[i].SLen, curOff, Ord(tk), k);
+        Inc(curOff, sz);
+      end;
+      while (i < bodyEnd) and (Tokens[i].Kind <> tkNewline) do Inc(i);
+      Inc(i);
+      continue;
+    end
     else if isDC and (depth = 0) and (Tokens[i].Kind = tkIdent) and
             (i + 2 < bodyEnd) and (Tokens[i + 1].Kind = tkColon) and
             ((i = bodyStart) or
@@ -13078,8 +13196,18 @@ begin
     else if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
             (Tokens[TokPos].Kind = tkAssign) then
     begin
-      { class-attribute line — registered as a constant by the pre-pass }
-      while not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) do Next;
+      { class-attribute line. A LITERAL one is already a folded constant from
+        the pre-pass and only has to be stepped over; anything else — `mode =
+        Inner()` — is evaluated HERE, at the point the class statement runs,
+        which is where Python evaluates a class body too. The value goes into a
+        hidden global named after the class and the attribute, and construction
+        copies it into the instance field the pre-pass registered, so every
+        instance shares the one object. }
+      if PyClsAttrExprAhead then PyEmitClassAttrExpr(ci)
+      else
+      begin
+        while not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) do Next;
+      end;
       PySkipNewlines;
     end
     else if CurTok.Kind = tkAt then

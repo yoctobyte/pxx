@@ -1,0 +1,26 @@
+class Inner:
+    NORMAL = "Normal"
+    LEVEL = 3
+
+class Outer:
+    mode = Inner()
+    tag = "t"
+    n = 5
+    def get(self):
+        return self.mode.NORMAL + self.tag + str(self.n + self.mode.LEVEL)
+
+class Cfg:
+    LIMITS = [1, 2, 3]
+    NAMES = {"a": 1}
+    TOTAL = 2 + 3
+
+class Shared:
+    box = []
+
+print(Outer().get())
+print(Outer().mode.NORMAL)
+print(Cfg().LIMITS[1], Cfg().NAMES["a"], Cfg().TOTAL)
+s1 = Shared()
+s2 = Shared()
+s1.box.append(9)
+print(len(s2.box))
