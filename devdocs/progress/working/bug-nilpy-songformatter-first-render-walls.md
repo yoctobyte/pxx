@@ -62,13 +62,10 @@ evidence=penalty_evidence.get(winner.label, [])[:6] if winner else [],
 ```
 
 i.e. a SLICE of a `dict.get()` result inside a TERNARY, into a
-`field(default_factory=list)` member. Isolated repros of that exact shape —
-including a variant key taken from an attribute, and the `winner is None` arm —
-all match CPython, so the trigger needs more of the real context (that detector
-builds `penalty_evidence` as a dict of ~84 lists inside the method). Next step:
-narrow with the instrumented copy still in place — print `len()` of the value
-BEFORE it is passed, then inside `__init__`, to find which side of the
-constructor loses it.
+`field(default_factory=list)` member. Narrowed to a minimal repro and filed as
+[[bug-nilpy-slice-of-variant-local-returned-is-unusable]]: returning `b[:6]`
+where `b` is a variant-typed local gives the caller a value `len()` cannot use.
+Returning the `.get()` result WITHOUT the slice is fine.
 
 - [[bug-nilpy-zero-param-lambda-cannot-call-a-def]] — this is what leaves the
   preview blank and the status bar on `Key: unknown`: the redraw is armed as
