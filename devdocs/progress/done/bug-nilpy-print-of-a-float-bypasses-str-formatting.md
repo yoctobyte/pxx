@@ -69,3 +69,6 @@ dividing by 10 in a loop. None of them is corrupt output.
 ### Gate
 
 `tools/gate.sh full`.
+
+## Log
+- 2026-07-30 — resolved, commit 8b9820919.
