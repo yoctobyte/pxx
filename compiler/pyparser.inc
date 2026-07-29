@@ -5297,7 +5297,14 @@ begin
   if CurTok.Kind <> tkIdent then Exit;
   if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then Exit;  { a CALL }
   if FindSym(CurTok.SVal) >= 0 then Exit;                                 { a variable }
-  pi := FindProc(CurTok.SVal);
+  { A NESTED def is registered under its enclosing qualifier (`A.build.on_resize`),
+    so an unqualified FindProc lands on the bodyless shell the pre-pass made —
+    and its address is a plausible-looking pointer one byte below the entry
+    point, which crashes the first time the callback fires. Look up the
+    qualified name first. }
+  pi := -1;
+  if PyNestPrefix <> '' then pi := FindProc(PyNestPrefix + '.' + CurTok.SVal);
+  if pi < 0 then pi := FindProc(CurTok.SVal);
   if pi < 0 then Exit;
   boundPi := FindProc('pybound_new');
   if boundPi < 0 then Exit;

@@ -38,7 +38,35 @@ invalid command name "pxxcb"
   `WriteLn` to the startup path makes it come and go. That points at a WILD
   WRITE corrupting Tcl's command hash rather than a logic error.
 
-## Prime suspect
+## ROOT CAUSE FOUND (2026-07-29)
+
+A **nested `def` inside a method**, taken as a VALUE, resolved to the bodyless
+shell the pre-pass registers under the UNqualified name — the real routine is
+registered as `Class.method.name`. `@shell` then linked as `entry + BodyAddr`
+with `BodyAddr = -1`, i.e. one byte below the entry point (0x4000E7 here): a
+plausible-looking pointer that crashes the first time the callback fires.
+
+songformatter hits it with `cv.bind("<Configure>", on_resize)` where `on_resize`
+is nested inside `FormatText.convert_text`. The wild jump is what leaves Tcl's
+command table unusable, which is why the SYMPTOM was `invalid command name
+"pxxcb"` on every later event, hundreds of widgets away from the cause — and
+why adding a single extra `TkEval` at startup flipped the app between "runs with
+an error dialog" and "SIGILL at startup": both are the same corruption seen
+through different heap layouts.
+
+Two fixes landed:
+- `PyMakeFuncValue` looks the qualified name up first (`PyNestPrefix + '.' + n`).
+- The ELF writer now REFUSES `@proc` when `BodyAddr < 0` and names the routine,
+  so this class of bug is a link-time diagnostic instead of silent corruption.
+
+With those in, songformatter gets further: `on_resize`/`draw` now really run,
+and the crash moves INSIDE the preview redraw — a 1-argument dynamic call
+(`AN_CALL_IND`, `pyvarobj` unbox then `call *r11`) whose callee variant is NIL.
+Tracked as the next wall on
+[[bug-nilpy-songformatter-first-render-walls]]; a nil guard on the dynamic-call
+path would turn that one into a diagnostic too.
+
+## Earlier suspect (kept for the record)
 
 The callable-ABI class of bug fixed in 45fc761: an unannotated NilPy `def`
 returns a Variant through a hidden destination pointer, and calling one through

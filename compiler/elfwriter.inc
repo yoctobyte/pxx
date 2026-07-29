@@ -1444,6 +1444,15 @@ begin
   { @proc: patch each `mov rax, imm64` with the routine's absolute code address }
   for i := 0 to ProcAddrFixCount-1 do
   begin
+    { A routine with NO BODY has BodyAddr = -1, and `entry + (-1)` is a
+      perfectly plausible-looking address one byte below the entry point. The
+      program then jumps there the first time the value is called — a crash
+      with no diagnostic, arbitrarily far from the cause (songformatter reached
+      it through a Tk callback registered 500 widgets earlier). Say so at LINK
+      time instead. }
+    if Procs[ProcAddrFix[i].ProcIdx].BodyAddr < 0 then
+      Error('@' + Procs[ProcAddrFix[i].ProcIdx].Name +
+            ': the address of a routine with no body was taken');
     addr := entry + Procs[ProcAddrFix[i].ProcIdx].BodyAddr;
     PatchAddr8(ProcAddrFix[i].CodePos, addr);
   end;
@@ -1569,6 +1578,15 @@ begin
     the routine's absolute code address. }
   for i := 0 to ProcAddrFixCount-1 do
   begin
+    { A routine with NO BODY has BodyAddr = -1, and `entry + (-1)` is a
+      perfectly plausible-looking address one byte below the entry point. The
+      program then jumps there the first time the value is called — a crash
+      with no diagnostic, arbitrarily far from the cause (songformatter reached
+      it through a Tk callback registered 500 widgets earlier). Say so at LINK
+      time instead. }
+    if Procs[ProcAddrFix[i].ProcIdx].BodyAddr < 0 then
+      Error('@' + Procs[ProcAddrFix[i].ProcIdx].Name +
+            ': the address of a routine with no body was taken');
     addr := entry + Procs[ProcAddrFix[i].ProcIdx].BodyAddr;
     PatchAddr8(ProcAddrFix[i].CodePos, addr);
   end;
