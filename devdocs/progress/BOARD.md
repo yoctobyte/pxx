@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-nilpy-songformatter-first-render-walls | N | 75 | bug | songformatter: the walls between "GUI builds" and "first document renders" | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
@@ -30,13 +31,14 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (181)
+## backlog (183)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 70 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |
+| bug-nilpy-callable-in-local-var-call-does-nothing | N | 70 | bug | `cb = handler` then `cb(x)` compiles and does NOTHING | — |
 | bug-nilpy-class-attr-instance-traversal-crashes | N | 70 | bug | A class attribute holding an INSTANCE crashes when traversed | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-int-parse-halts-instead-of-raising | N | 55 | bug | nilpy: int(\"abc\") halts the program instead of raising a catchable ValueError | — |
@@ -51,6 +53,7 @@ _none_
 | bug-nilpy-str-of-tuple-is-empty | N | 60 | bug | `str()` of a tuple/list returns the container's POINTER | — |
 | bug-nilpy-subscript-argument-boxes-wrong-into-variant-param | N | 75 | bug | A SUBSCRIPT argument passed to a variant parameter arrives as garbage | — |
 | bug-nilpy-super-and-unbound-parent-method-calls | N | 70 | bug | Neither `super().m()` nor `Parent.m(self)` reaches an overridden method | — |
+| bug-nilpy-tk-pxxcb-invalid-command-name | N | 65 | bug | Tk: `invalid command name "pxxcb"` in a long-running app | — |
 | bug-nilpy-unknown-method-segfaults | N | 70 | bug | nilpy: calling a method that does not exist compiles and SEGFAULTS instead of erroring | — |
 | bug-pascal-defines-leak-across-units | A | 55 | bug | Pascal: {$define} in one unit stays visible in units parsed afterwards, so {$ifdef} compiles different code depending on uses ORDER | — |
 | bug-pascal-duplicate-class-name-silently-shadows | P | 50 | bug | Pascal: a duplicate class declaration silently binds to the earlier one instead of erroring | — |
@@ -2732,6 +2735,7 @@ _none_
 
 - [p 75] [N] bug-nilpy-subscript-argument-boxes-wrong-into-variant-param
 - [p 70] [A] bug-cfront-silent-bind-to-pascal-proc-of-different-arity
+- [p 70] [N] bug-nilpy-callable-in-local-var-call-does-nothing
 - [p 70] [N] bug-nilpy-class-attr-instance-traversal-crashes
 - [p 70] [N] bug-nilpy-super-and-unbound-parent-method-calls
 - [p 70] [N] bug-nilpy-unknown-method-segfaults
@@ -2739,6 +2743,7 @@ _none_
 - [p 65] [N] bug-nilpy-bound-method-coerced-to-string
 - [p 65] [N] bug-nilpy-method-chaining-on-a-call-result
 - [p 65] [N] bug-nilpy-object-reclamation-disabled-inside-py-modules
+- [p 65] [N] bug-nilpy-tk-pxxcb-invalid-command-name
 - [p 65] [A] bug-pascal-uses-is-transitive
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [A] feature-a-typeref-handle
