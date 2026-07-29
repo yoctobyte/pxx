@@ -141,3 +141,6 @@ reason.
 ### Gate
 
 `tools/gate.sh full`.
+
+## Log
+- 2026-07-29 — resolved, commit ee6e310b2.
