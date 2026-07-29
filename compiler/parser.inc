@@ -12720,6 +12720,22 @@ begin
       ASTTk[node] := Ord(tySet)
     else if op = tkSlash then
       ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))  { '/' produces native-depth float }
+    else if PyExprMode and ((op = tkDiv) or (op = tkMod)) and
+            (TypeIsFloat(IntToTypeKind(ASTTk[left])) or
+             TypeIsFloat(IntToTypeKind(ASTTk[right]))) then
+      { Python's `//` and `%` yield a FLOAT as soon as either operand is one.
+        Typing from the LEFT operand alone made `3 % 2.5` an integer-typed
+        node, and ir.inc's retype to tyDouble (when it routes to pyfloormod_f)
+        came too late for anything that had already bound an overload from the
+        node's type: `str(3 % 2.5)` picked the Int64 str() and printed
+        4602678819172646912, the double's BIT PATTERN, while a bare
+        `print(3 % 2.5)` was right because print reads the type after lowering
+        (bug-nilpy-str-of-mixed-mod-prints-double-bits).
+
+        PyExprMode-only: Pascal's own `div`/`mod` are integer spellings, so the
+        Pascal dialect and the self-host binary are untouched. }
+      ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[left]),
+                                            IntToTypeKind(ASTTk[right])))
     else if op = tkDiv then
       ASTTk[node] := Ord(TypeDivideResult(IntToTypeKind(ASTTk[left])))
     else if op = tkMod then
