@@ -30,3 +30,13 @@ print(use(cat))
 q = cat
 print(use(q))
 print(q("y"))
+lam = lambda x: x * 2
+print(lam(5))
+add2 = lambda a, b: a + b
+print(add2(2, 3))
+plain = lambda: 42
+print(plain())
+lams = [lambda x: x + 1]
+print(lams[0](4))
+dl = {"k": lambda x: x * 3}
+print(dl["k"](5))
