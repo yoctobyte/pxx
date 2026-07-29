@@ -5692,6 +5692,25 @@ begin
   Result := callNode;
 end;
 
+function PyEvalOnce(node: Integer): Integer;
+{ Bind an expression to a hidden temp through a hoisted assignment and yield the
+  temp. For a value used in more than one place: the AST is a TREE, so a node
+  referenced twice is EMITTED twice — a call receiver in a chain ran its call
+  once per link (`b.add(2).add(3)` performed add(2) twice). The temp also pins
+  Python's evaluation order: the receiver is computed before the member. }
+var sym, asgn: Integer;
+begin
+  PyEvalOnce := node;
+  if node < 0 then Exit;
+  sym := AllocVar(PyHiddenName('recv'), IntToTypeKind(ASTTk[node]));
+  Syms[sym].RecName := ResolveNodeRec(node);
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(sym);
+  ASTRight[asgn] := node;
+  PyHoistStmt(asgn);
+  PyEvalOnce := PyMakeIdent(sym);
+end;
+
 function PyDynAttrEverAssigned(const nm: AnsiString): Boolean;
 { Does the module write `<expr>.nm = ...` anywhere, or call setattr at all? Then
   `nm` may legitimately be a DYNAMIC attribute on an instance — Python adds them
@@ -11865,6 +11884,72 @@ end;
   CPython ignores annotations entirely, and uforth's finalize_definition is
   annotated `-> None` yet returns the new Word — trusting the annotation
   compiled it as a procedure and the caller read garbage (the :NONAME xt). }
+function PyMethodReturnsSelf(defIdx: Integer): Boolean;
+{ Does this method's body `return self`? That is the fluent-builder idiom —
+  `def add(self, x): ...; return self` — and its result type is the method's own
+  class. Inferred by the scanner alone: `self` is a parameter whose class only
+  the enclosing class knows, so the general expression inference answers unknown,
+  the method registered an Integer result, and the SECOND link of a chain
+  (`B().add(1).add(2)`) had no class to resolve against — "expected expression"
+  (bug-nilpy-method-chaining-on-a-call-result). Nested defs are skipped, as in
+  PyDefHasValueReturn, so an inner helper's `return self` is not read as this
+  method's. }
+var j, pdepth, bdepth, k, e2: Integer;
+begin
+  Result := False;
+  j := defIdx + 2;
+  pdepth := 0;
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind = tkLParen then Inc(pdepth)
+    else if Tokens[j].Kind = tkRParen then
+    begin
+      Dec(pdepth);
+      if pdepth = 0 then begin Inc(j); Break; end;
+    end;
+    Inc(j);
+  end;
+  bdepth := 0;
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind = tkIndent then Inc(bdepth)
+    else if Tokens[j].Kind = tkDedent then
+    begin
+      Dec(bdepth);
+      if bdepth <= 0 then Exit;
+    end
+    else if Tokens[j].Kind = tkFunction then
+    begin
+      k := j;
+      while (k < TokCount) and (Tokens[k].Kind <> tkIndent) do Inc(k);
+      e2 := 0;
+      while k < TokCount do
+      begin
+        if Tokens[k].Kind = tkIndent then Inc(e2)
+        else if Tokens[k].Kind = tkDedent then
+        begin
+          Dec(e2);
+          if e2 = 0 then begin Inc(k); Break; end;
+        end;
+        Inc(k);
+      end;
+      j := k;
+      Continue;
+    end
+    else if (Tokens[j].Kind = tkExit) and (bdepth >= 1) then
+    begin
+      if (j + 2 < TokCount) and (Tokens[j + 1].Kind = tkIdent) and
+         CaseEqual(GetTokenStr(j + 1), 'self') and
+         (Tokens[j + 2].Kind in [tkNewline, tkDedent, tkEOF]) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+    Inc(j);
+  end;
+end;
+
 function PyDefHasValueReturn(defIdx: Integer): Boolean;
 var j, pdepth, bdepth, k, e2: Integer;
 begin
@@ -12371,6 +12456,15 @@ begin
       for k := 1 to Length(name) do AppendChar(fullName, name[k]);
       mRet := PyMethodRetType(methodStart, mRetRec);
       if mRet = tyUnknown then mRet := tyInteger;   { `-> None` / unannotated }
+      { `return self` types the method as its OWN class — the fluent-builder
+        idiom, and the only way a chain's second link has something to resolve
+        against. The scanner cannot get there on its own: `self` is a parameter
+        whose class only this pre-pass knows. }
+      if (not fieldsOnly) and (not isCtor) and PyMethodReturnsSelf(methodStart) then
+      begin
+        mRet := tyClass;
+        mRetRec := REC_UCLASS_BASE + ci;
+      end;
       { An OVERRIDE takes the base method's signature. Python overrides need no
         annotations, so `def optionxform(self, s): return s` infers a variant
         result — but the inherited method occupies a VMT slot with the base's

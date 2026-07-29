@@ -803,6 +803,7 @@ procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 function PyMakeSuperCall(const name: AnsiString): Integer; forward;  { `super().m(args)` as a value (pyparser.inc) }
 function PyDynAttrEverAssigned(const nm: AnsiString): Boolean; forward;  { is `.nm =` written anywhere? (pyparser.inc) }
+function PyEvalOnce(node: Integer): Integer; forward;  { bind a value to a hidden temp so it is evaluated once (pyparser.inc) }
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 function PyMakeDynCall(baseNode: Integer): Integer; forward; { Nil Python: call a callable stored in a variant (pyparser.inc) }
@@ -5806,6 +5807,15 @@ begin
           node := mcallNode;
           tk := Procs[mpi].RetType;
           recName := ProcRetRecId[mpi];
+          { ...but a CALL carried into the next iteration becomes the receiver of
+            the next link, and a virtual dispatch reads the receiver twice (VMT,
+            then Self) — from the same AST node, which re-EMITS the call. So
+            `b.add(2).add(3)` ran add(2) twice and printed 7 where CPython prints
+            5: silent, and worse the longer the chain. Bind it once.
+            PyExprMode-only, so Pascal's codegen (and the self-host binary) is
+            untouched (bug-nilpy-method-chaining-on-a-call-result). }
+          if PyExprMode and (CurTok.Kind in [tkDot, tkLBrack]) then
+            node := PyEvalOnce(node);
           Continue;
         end;
       end;
@@ -6737,8 +6747,33 @@ var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
     pri, i, w, margIdx: Integer; isAssign: Boolean;
 begin
   tk := IntToTypeKind(ASTTk[node]);
+  { EVALUATE THE RECEIVER ONCE. `f(args).m()` arrives here with the CALL as the
+    base, and an AST value node used in two places is re-emitted, not shared — so
+    `b.add(2).add(3)` ran add(2) TWICE and printed 7 where CPython prints 5.
+    Silent, and the more links a chain has the further the answer drifts. Bound
+    to a hidden temp, which is also what Python's evaluation order says. Guarded
+    on PyExprMode: the identical shape in Pascal keeps its current codegen, so
+    the self-host binary is untouched. }
+  if PyExprMode and (ASTKind[node] = AN_CALL) and
+     (CurTok.Kind in [tkDot, tkLBrack]) then
+    node := PyEvalOnce(node);
   while CurTok.Kind in [tkDot, tkLBrack] do
   begin
+    { The chain has reached a VARIANT — `make()[0]` yields one, a list holding
+      variants — and a method on it dispatches at run time, not through this
+      class machinery. Without this the '.' was left unconsumed and reported as
+      an unexpected token, so `make()[0].upper()` did not compile at all. }
+    if PyExprMode and (tk = tyVariant) and (CurTok.Kind = tkDot) and
+       (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+       (Tokens[TokPos + 1].Kind = tkLParen) then
+    begin
+      Next;                       { consume '.'; CurTok = the method name }
+      i := TokPos - 1;
+      Next;                       { consume the name; CurTok = '(' }
+      node := PyParseVariantMethod(node, GetTokenStr(i));
+      tk := IntToTypeKind(ASTTk[node]);
+      Continue;
+    end;
     if CurTok.Kind = tkDot then
     begin
       Next;
@@ -12534,6 +12569,22 @@ begin
       smNameTok := TokPos - 1;
       Next;
       CurASTNode := PyParseStrMethod(CurASTNode, GetTokenStr(smNameTok));
+      LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+    end;
+    { A subscript of a CONTAINER yields a VARIANT, not a str — a list holds
+      variants — so the str-method loop above never fired for `make()[0].upper()`
+      and the '.' was left for whoever came next: "unexpected token". Routed to
+      the runtime-dispatching variant method path, which is what an ident
+      receiver of the same shape already gets. }
+    while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
+          (Tokens[TokPos].Kind = tkIdent) and
+          (Tokens[TokPos + 1].Kind = tkLParen) and
+          (IntToTypeKind(ASTTk[CurASTNode]) = tyVariant) do
+    begin
+      Next;
+      smNameTok := TokPos - 1;
+      Next;
+      CurASTNode := PyParseVariantMethod(CurASTNode, GetTokenStr(smNameTok));
       LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
     end;
   end;

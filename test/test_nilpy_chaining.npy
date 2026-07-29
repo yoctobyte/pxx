@@ -1,0 +1,21 @@
+class B:
+    def __init__(self):
+        self.n = 0
+        self.items = []
+    def add(self, x):
+        self.n = self.n + x
+        self.items.append(x)
+        return self
+
+def make():
+    return ["a", "b"]
+
+b = B().add(1).add(2).add(3)
+print(b.n, len(b.items))
+c = B()
+d = c.add(2).add(3)
+print(d.n)
+print(make()[0].upper())
+print(",".join(make()).upper())
+print("a,b".split(",")[1].upper())
+print(str(12).zfill(4))

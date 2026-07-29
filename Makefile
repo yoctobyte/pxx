@@ -452,6 +452,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_file_read26)" = "$$(printf '%b' 'abc\n  abc\nabc  \nhello\nxxhello\nhelloxx\nline')"
 	./$(COMPILER) test/test_nilpy_dedent.npy /tmp/test_nilpy_dedent26
 	test "$$(/tmp/test_nilpy_dedent26)" = "$$(printf '%b' 'a\n  b\nc\n')"
+	./$(COMPILER) test/test_nilpy_chaining.npy /tmp/test_nilpy_chaining26
+	test "$$(/tmp/test_nilpy_chaining26)" = "$$(printf '%b' '6 3\n5\nA\nA,B\nB\n0012')"
 	./$(COMPILER) test/test_nilpy_unknown_method.npy /tmp/test_nilpy_unknown_method26
 	test "$$(/tmp/test_nilpy_unknown_method26)" = "$$(printf '%b' '5\ncb 5\n7')"
 	./$(COMPILER) test/test_nilpy_super.npy /tmp/test_nilpy_super26
