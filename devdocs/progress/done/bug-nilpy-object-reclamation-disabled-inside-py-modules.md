@@ -111,3 +111,6 @@ this change:
 
 `tools/gate.sh full` GREEN: `make test-nilpy`, self-host fixedpoint
 (byte-identical), `testmgr --tier quick`, `make test`.
+
+## Log
+- 2026-07-29 — resolved, commit 33db0107d.
