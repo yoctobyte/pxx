@@ -46,3 +46,20 @@ error: expected expression
 Loud rather than silent, so it is a gap and not a defect of this ticket's
 class, but it belongs to the same tuple-literal surface and is cheap to take in
 the same pass.
+
+## Resolved 2026-07-29 (commit d8c66ae2f)
+
+Both halves. `str()` now routes a container — class handle or variant — through
+PyReprContainer, the routine print() has always used, so the two spellings cannot
+drift apart again. And TPyList carries an FIsTuple flag the frontend sets where
+the syntax is still visible (parenthesised display and the bare `a, b` form),
+which pylist_repr honours including Python's `(1,)` comma.
+
+The flag also replaced the tuple-vs-list heuristic the `%` operator had shipped
+with hours earlier: asking the object is exact where a parser-side name check was
+approximate, so `"%s" % (t,)` is right and `"%s %s" % [a, b]` raises as CPython
+does.
+
+
+## Log
+- 2026-07-29 — resolved, commit d8c66ae2f.
