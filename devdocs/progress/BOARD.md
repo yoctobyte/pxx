@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| HANDOFF-nilpy-bughunt | A | 50 | HANDOFF | Handoff — NilPy bug hunt, with the new debugging toolkit | — |
 | HANDOFF-nilpy-songformatter | A | 50 | HANDOFF | Handoff prompt — NilPy bughunt, songformatter (2026-07-29) | — |
 | bug-nilpy-songformatter-first-render-walls | N | 75 | bug | songformatter: the walls between "GUI builds" and "first document renders" | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
@@ -32,7 +33,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (189)
+## backlog (188)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -44,7 +45,6 @@ _none_
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |
 | bug-nilpy-callable-in-local-var-call-does-nothing | N | 70 | bug | `cb = lambda ...` then `cb(x)` compiles and does NOTHING | — |
 | bug-nilpy-class-attr-instance-traversal-crashes | N | 70 | bug | A class attribute holding an INSTANCE crashes when traversed | — |
-| bug-nilpy-def-value-in-a-variable-is-not-callable | N | 75 | bug | A def stored in a NAME and then called SEGFAULTS | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-int-parse-halts-instead-of-raising | N | 55 | bug | nilpy: int(\"abc\") halts the program instead of raising a catchable ValueError | — |
 | bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
@@ -288,7 +288,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1009)
+## done (1010)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -629,6 +629,7 @@ _none_
 | bug-nilpy-closure-capture-assigned-later | N | 60 | bug | A nested def cannot capture a name the enclosing function assigns LATER | — |
 | bug-nilpy-comparison-return-type-from-operands | N | 70 | bug | An unannotated def returning a COMPARISON typed its result from the operands | — |
 | bug-nilpy-comprehension-as-for-iterable-segfaults | N | 35 | bug | NilPy: a comprehension used directly as a for-loop iterable segfaults | — |
+| bug-nilpy-def-value-in-a-variable-is-not-callable | N | 75 | bug | A def stored in a NAME and then called SEGFAULTS | — |
 | bug-nilpy-dict-insert-lookup-linear-not-hashed | N | 45 | bug | NilPy: dict insert/lookup is O(N), not O(1) — quadratic build, drives uforth O(N²) | — |
 | bug-nilpy-dict-views-and-result-alias | N | 75 | bug | nilpy: d.values()/d.keys() jumped to address 0, and a local named `result` aliased the function result | — |
 | bug-nilpy-function-level-import-drops-body | N | 70 | bug | An import inside a function body — and the fix that silently emptied the body | — |
@@ -2745,7 +2746,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 75] [N] bug-nilpy-def-value-in-a-variable-is-not-callable
 - [p 75] [N] bug-nilpy-subscript-argument-boxes-wrong-into-variant-param
 - [p 70] [A] bug-cfront-silent-bind-to-pascal-proc-of-different-arity
 - [p 70] [N] bug-nilpy-callable-in-local-var-call-does-nothing

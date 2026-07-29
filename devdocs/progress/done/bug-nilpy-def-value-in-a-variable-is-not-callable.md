@@ -82,3 +82,6 @@ def notes_of(ch: str) -> list[str]:
 res = analyze_key(["C", "F", "G", "C", "Am", "F", "G", "C"], chord_to_notes=notes_of)
 print(res.final.winner.label)   # CPython: C
 ```
+
+## Log
+- 2026-07-29 — resolved, commit 170cde9e2.
