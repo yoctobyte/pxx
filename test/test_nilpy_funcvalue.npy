@@ -40,3 +40,21 @@ lams = [lambda x: x + 1]
 print(lams[0](4))
 dl = {"k": lambda x: x * 3}
 print(dl["k"](5))
+
+class D:
+    def __init__(self):
+        self.n = 7
+    def voidm(self, ch):
+        print("void", ch)
+    def intm(self, a, b):
+        return a + b + self.n
+    def strm(self, s):
+        return "s:" + s
+
+dd = D()
+bv = dd.voidm
+bv("x")
+bi = dd.intm
+print(bi(1, 2))
+bs = dd.strm
+print(bs("q"))

@@ -453,7 +453,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_dedent.npy /tmp/test_nilpy_dedent26
 	test "$$(/tmp/test_nilpy_dedent26)" = "$$(printf '%b' 'a\n  b\nc\n')"
 	./$(COMPILER) test/test_nilpy_funcvalue.npy /tmp/test_nilpy_funcvalue26
-	test "$$(/tmp/test_nilpy_funcvalue26)" = "$$(printf '%b' 'hi 5\nhi 7\nhi 8\nhi 9\n12\nzero\nhi x\nhi x\nhi y\n10\n5\n42\n5\n15')"
+	test "$$(/tmp/test_nilpy_funcvalue26)" = "$$(printf '%b' 'hi 5\nhi 7\nhi 8\nhi 9\n12\nzero\nhi x\nhi x\nhi y\n10\n5\n42\n5\n15\nvoid x\n10\ns:q')"
 	./$(COMPILER) test/test_nilpy_dict_pop.npy /tmp/test_nilpy_dict_pop26
 	test "$$(/tmp/test_nilpy_dict_pop26)" = "$$(printf '%b' '1\n99\n1\n0')"
 	./$(COMPILER) test/test_nilpy_raise_from.npy /tmp/test_nilpy_raise_from26

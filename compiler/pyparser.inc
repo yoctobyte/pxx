@@ -5600,6 +5600,41 @@ begin
   Result := callNode;
 end;
 
+function PyMethodUsedAsValue(const nm: AnsiString): Boolean;
+{ True iff the module reads `<something>.nm` WITHOUT calling it — `cb = self.on_key`,
+  `root.after(50, self.tick)`. That is a bound-method value, and calling one back
+  goes through the function-object ABI (variant parameters, variant result), the
+  same normalisation PyDefUsedAsValue applies to a plain def. Without it the pair
+  carried a method whose result came back in a register while the caller expected
+  the hidden-destination convention: a bound method returning a value crashed,
+  and one returning None happened to work.
+
+  Keyed on the NAME alone, not on the class, which is what keeps an override and
+  its base in step — both are normalised or neither is. A same-named ATTRIBUTE
+  read elsewhere in the module normalises a method that did not need it; the cost
+  is boxing, and the two passes still agree, so it stays correct. }
+var j: Integer;
+begin
+  Result := False;
+  if nm = '' then Exit;
+  j := 1;
+  while j < MainProgramTokCount do
+  begin
+    if (Tokens[j].Kind = tkIdent) and (Tokens[j - 1].Kind = tkDot) and
+       CaseEqual(GetTokenStr(j), nm) then
+    begin
+      { a CALL (`o.m(...)`) or an attribute STORE (`o.m = x`) is not a value read }
+      if (j + 1 >= MainProgramTokCount) or
+         (not (Tokens[j + 1].Kind in [tkLParen, tkAssign])) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+    Inc(j);
+  end;
+end;
+
 function PyNoClassDeclares(const mname: AnsiString): Boolean;
 { True when no declared class has a method of this name. }
 var ci: Integer;
@@ -12171,6 +12206,21 @@ begin
       { str is managed here as everywhere else in NilPy }
       if mRet = tyString then mRet := tyAnsiString;
       if mRet <> tyClass then mRetRec := REC_NONE;
+      { A method taken as a BOUND VALUE (`cb = self.on_key`) is called back
+        through the function-object ABI, so it is normalised exactly as
+        PyDefUsedAsValue normalises a def: variant result, variant parameters.
+        Without it the pair held a method returning in a register while
+        pybound_callv* passed a hidden destination — a value-returning bound
+        method crashed, a `-> None` one worked, which is why this looked like a
+        receiver bug rather than an ABI one. Applied AFTER the override block so
+        a normalised base and its override still agree (both share the name, so
+        both normalise). }
+      if (not fieldsOnly) and (not isCtor) and PyMethodUsedAsValue(origName) then
+      begin
+        if mRet <> tyVariant then begin mRet := tyVariant; mRetRec := REC_NONE; end;
+        for k := 1 to nparams - 1 do
+          if (k <> mStarIdx) and (k <> mKwIdx) then ptypes[k] := tyVariant;
+      end;
       { An aggregate/managed return from a METHOD is not wired up: a managed
         str return segfaults and a hidden-destination return has no caller-side
         destination. Reject with a diagnostic rather than ship the silent
