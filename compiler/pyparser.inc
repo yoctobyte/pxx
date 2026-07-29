@@ -7482,6 +7482,36 @@ begin
   ASTLeft[Result] := arg0;
 end;
 
+{ `<str> % <args>` — Python's printf-style interpolation, lowered to the pylib
+  formatter. The argument travels as a VARIANT, which is what lets one helper
+  take both shapes Python allows: a single value, or the TPyList a written tuple
+  builds (bug-nilpy-percent-string-format-garbage). }
+function PyMakePercentFormat(fmtNode, argsNode: Integer): Integer;
+var procIdx, arg0, arg1, arg2, tupLit: Integer; isTup: Int64;
+begin
+  procIdx := FindProc('pypercent_format');
+  if procIdx < 0 then Error('Nil Python: pylib (pypercent_format) not loaded');
+  { Was a TUPLE DISPLAY written? A tuple is a list of arguments and a list is one
+    value, and both are a TPyList at run time — so the distinction has to travel
+    from here. PyMakeTupleFrom yields a hidden `__py_tup_*` temp, which is the
+    marker; a tuple reaching us through a variable is recognised at run time by
+    the placeholder count instead (see pypercent_format). }
+  isTup := 0;
+  if (ASTKind[argsNode] = AN_IDENT) and (ASTIVal[argsNode] >= 0) and
+     (Copy(Syms[ASTIVal[argsNode]].Name, 1, 9) = '__py_tup_') then isTup := 1;
+  arg0 := AllocNode(AN_ARG); ASTLeft[arg0] := fmtNode;
+  arg1 := AllocNode(AN_ARG); ASTLeft[arg1] := argsNode;
+  tupLit := AllocNode(AN_INT_LIT);
+  ASTIVal[tupLit] := isTup; ASTTk[tupLit] := Ord(tyInt64);
+  arg2 := AllocNode(AN_ARG); ASTLeft[arg2] := tupLit; ASTRight[arg2] := -1;
+  ASTRight[arg1] := arg2;
+  ASTRight[arg0] := arg1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyAnsiString);
+  ASTLeft[Result] := arg0;
+end;
+
 { Wrap a TPyList / TPyDict expression in the pylib repr call, so it prints as
   Python spells a container. Anything else is returned unchanged. }
 function PyReprContainer(n: Integer): Integer;

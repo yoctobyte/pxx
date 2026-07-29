@@ -1,0 +1,15 @@
+name = "bob"
+age = 42
+pi = 3.14159
+vals = (1, 2)
+print("%s is %d" % (name, age))
+print("%10.3f|" % pi)
+print("%-10s|" % name)
+print("%s" % 5)
+print("%d%%" % 50)
+print("[%s]" % [1, 2])
+print("%d-%d" % vals)
+print("%5d|%-5d|%05d" % (42, 42, 42))
+print("%x %X %o" % (255, 255, 8))
+print("%.2f" % 3.14159)
+print(7 % 3, age % 5)

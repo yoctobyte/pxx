@@ -804,6 +804,7 @@ procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pypa
 function PyMakeSuperCall(const name: AnsiString): Integer; forward;  { `super().m(args)` as a value (pyparser.inc) }
 function PyDynAttrEverAssigned(const nm: AnsiString): Boolean; forward;  { is `.nm =` written anywhere? (pyparser.inc) }
 function PyEvalOnce(node: Integer): Integer; forward;  { bind a value to a hidden temp so it is evaluated once (pyparser.inc) }
+function PyMakePercentFormat(fmtNode, argsNode: Integer): Integer; forward;  { `str % args` (pyparser.inc) }
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 function PyMakeDynCall(baseNode: Integer): Integer; forward; { Nil Python: call a callable stored in a variant (pyparser.inc) }
@@ -12671,6 +12672,19 @@ begin
     begin
       { `bytes([ch]) * u` — bytes repetition (uforth FILL) }
       node := PyMakeBytesRepeat(left, right);
+      CurASTNode := node;
+      continue;
+    end
+    { Python's `"%s=%d" % args` — string INTERPOLATION, not arithmetic. With no
+      case for it the node kept the numeric `mod` typing and the lowering applied
+      integer mod to a string handle: `"%.2f" % 3.14159` printed 0.0 and
+      `"%s" % s` printed a pointer, compiling clean either way
+      (bug-nilpy-percent-string-format-garbage). Recognised on the LEFT operand
+      being a str, which is what Python dispatches on too. }
+    else if PyExprMode and (op = tkMod) and
+            PyIsStrBaseTk(IntToTypeKind(ASTTk[left])) then
+    begin
+      node := PyMakePercentFormat(left, right);
       CurASTNode := node;
       continue;
     end

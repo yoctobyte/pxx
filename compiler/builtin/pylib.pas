@@ -377,6 +377,11 @@ function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
   (`{name}`) and index fields (`{0}`) are NOT here: they fail loudly rather
   than being dropped, because a format spec decides what is PRINTED. }
 function pystr_format(const fmt: AnsiString; const a: Variant): AnsiString;
+{ Python's `"%s=%d" % args` — the printf-style operator, translated placeholder
+  by placeholder into the {}-spec grammar below so padding, precision and base
+  conversion have ONE implementation rather than two that drift. args is a single
+  value, or a TPyList when a tuple was written, which is Python's own rule. }
+function pypercent_format(const fmt: AnsiString; const args: Variant; isTuple: Int64): AnsiString;
 function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; overload;
 function PyFmtFixed(d: Double; prec: Integer): AnsiString;
 function pyformat_of(d: Double; const spec: AnsiString): AnsiString; overload;
@@ -4914,6 +4919,164 @@ end;
 function pystr_format(const fmt: AnsiString; const a: Variant): AnsiString;
 begin
   pystr_format := PyFormatApply(fmt, a, a, 1);
+end;
+
+function PyPercentHoles(const fmt: AnsiString): Integer;
+{ How many conversions `%...c` the format string has, `%%` excluded. }
+var i: Integer;
+begin
+  Result := 0;
+  i := 1;
+  while i <= Length(fmt) do
+  begin
+    if fmt[i] = '%' then
+    begin
+      Inc(i);
+      if (i <= Length(fmt)) and (fmt[i] = '%') then Inc(i)
+      else
+      begin
+        while (i <= Length(fmt)) and
+              (((fmt[i] >= '0') and (fmt[i] <= '9')) or (fmt[i] = '.') or
+               (fmt[i] = '-') or (fmt[i] = '+') or (fmt[i] = ' ')) do Inc(i);
+        if i <= Length(fmt) then Inc(i);
+        Inc(Result);
+      end;
+    end
+    else Inc(i);
+  end;
+end;
+
+function pypercent_format(const fmt: AnsiString; const args: Variant; isTuple: Int64): AnsiString;
+var i, width, prec, argi, nargs: Integer;
+    zero, leftAlign, hasPrec: Boolean;
+    outS, spec: AnsiString;
+    conv: Char;
+    lst: TPyList;
+    cur: Variant;
+begin
+  { TUPLE OR SINGLE VALUE. Python decides by TYPE — a tuple is a sequence of
+    arguments, a list is one value (`"[%s]" % [1,2]` prints `[[1, 2]]`) — but a
+    NilPy tuple IS a TPyList, so the type cannot answer it here. Two sources
+    instead: isTuple, set when the source WROTE a tuple display, and, for a tuple
+    that arrived through a variable, the placeholder count. One conversion means
+    the value is the argument; several mean it is being walked.
+    Divergence, deliberate and small: `"%s %s" % [a, b]` walks the list where
+    CPython raises. }
+  lst := nil;
+  if PPyVarRec(@args)^.VType = 7 then
+    if TObject(pyvarobj(args)) is TPyList then lst := TPyList(pyvarobj(args));
+  if (lst <> nil) and (isTuple = 0) and (PyPercentHoles(fmt) < 2) then lst := nil;
+  if lst <> nil then nargs := lst.count else nargs := 1;
+  outS := '';
+  argi := 0;
+  i := 1;
+  while i <= Length(fmt) do
+  begin
+    if fmt[i] <> '%' then
+    begin
+      outS := outS + fmt[i];
+      Inc(i);
+      Continue;
+    end;
+    Inc(i);
+    if (i <= Length(fmt)) and (fmt[i] = '%') then
+    begin
+      outS := outS + '%';
+      Inc(i);
+      Continue;
+    end;
+    leftAlign := False;
+    zero := False;
+    width := 0;
+    prec := 0;
+    hasPrec := False;
+    while (i <= Length(fmt)) and ((fmt[i] = '-') or (fmt[i] = '0') or (fmt[i] = '+') or (fmt[i] = ' ')) do
+    begin
+      if fmt[i] = '-' then leftAlign := True
+      else if fmt[i] = '0' then zero := True;
+      Inc(i);
+    end;
+    while (i <= Length(fmt)) and (fmt[i] >= '0') and (fmt[i] <= '9') do
+    begin
+      width := width * 10 + (Ord(fmt[i]) - Ord('0'));
+      Inc(i);
+    end;
+    if (i <= Length(fmt)) and (fmt[i] = '.') then
+    begin
+      hasPrec := True;
+      Inc(i);
+      while (i <= Length(fmt)) and (fmt[i] >= '0') and (fmt[i] <= '9') do
+      begin
+        prec := prec * 10 + (Ord(fmt[i]) - Ord('0'));
+        Inc(i);
+      end;
+    end;
+    if i > Length(fmt) then
+    begin
+      WriteLn('ValueError: incomplete format');
+      Halt(1);
+    end;
+    conv := fmt[i];
+    Inc(i);
+    { the argument this placeholder consumes }
+    if lst <> nil then
+    begin
+      if argi >= nargs then
+      begin
+        WriteLn('TypeError: not enough arguments for format string');
+        Halt(1);
+      end;
+      cur := lst.at(argi);
+    end
+    else
+    begin
+      if argi >= 1 then
+      begin
+        WriteLn('TypeError: not enough arguments for format string');
+        Halt(1);
+      end;
+      cur := args;
+    end;
+    Inc(argi);
+    { translate into the {}-spec grammar and reuse its formatter }
+    spec := '';
+    if leftAlign then spec := '<';
+    if zero and (not leftAlign) then spec := spec + '0';
+    if width > 0 then spec := spec + pystr_of(Int64(width));
+    case conv of
+      'd', 'i', 'u': spec := spec + 'd';
+      'x': spec := spec + 'x';
+      'X': spec := spec + 'X';
+      'o': spec := spec + 'o';
+      'f', 'F', 'e', 'E', 'g', 'G':
+        begin
+          if not hasPrec then prec := 6;
+          spec := spec + '.' + pystr_of(Int64(prec)) + 'f';
+        end;
+      's', 'r':
+        begin
+          { a str conversion of ANY value, then the same padding.
+            pyvar_print_of, not pystr_of: %s of a LIST prints it the way Python
+            does (`"[%s]" % [1,2]` -> `[[1, 2]]`), and pystr_of renders a
+            container as empty. It falls back to str for every scalar. }
+          outS := outS + PyFmtPad(pyvar_print_of(cur), width, False, leftAlign);
+          Continue;
+        end;
+    else
+      begin
+        WriteLn('ValueError: unsupported format character "', conv, '"');
+        Halt(1);
+      end;
+    end;
+    outS := outS + pyformat_of(cur, spec);
+  end;
+  if lst <> nil then
+    if argi < nargs then
+    begin
+      WriteLn('TypeError: not all arguments converted during string formatting');
+      Halt(1);
+    end;
+  Result := outS;
 end;
 
 function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
