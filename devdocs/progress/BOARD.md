@@ -32,12 +32,14 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (189)
+## backlog (191)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
+| bug-c-dwarf-lines-index-the-preprocessed-text | C | 55 | bug | `-g` on a C file gives line numbers from the PREPROCESSED text | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 70 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
+| bug-cfront-vla-stack-corruption | C | 65 | bug | C VLA (`int arr[n]` with runtime `n`) silently corrupts adjacent stack slots | — |
 | bug-nilpy-annotated-module-global-invisible-in-kwarg | N | 55 | bug | A module-level ANNOTATED global is not visible in a keyword argument | — |
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |
 | bug-nilpy-callable-in-local-var-call-does-nothing | N | 70 | bug | `cb = lambda ...` then `cb(x)` compiles and does NOTHING | — |
@@ -2753,6 +2755,7 @@ _none_
 - [p 70] [N] bug-nilpy-unknown-method-segfaults
 - [p 70] [N] bug-nilpy-zero-param-lambda-cannot-call-a-def
 - [p 70] [N] feature-nilpy-function-values
+- [p 65] [C] bug-cfront-vla-stack-corruption
 - [p 65] [N] bug-nilpy-bound-method-coerced-to-string
 - [p 65] [N] bug-nilpy-method-chaining-on-a-call-result
 - [p 65] [N] bug-nilpy-object-reclamation-disabled-inside-py-modules
@@ -2780,6 +2783,7 @@ _none_
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
+- [p 55] [C] bug-c-dwarf-lines-index-the-preprocessed-text
 - [p 55] [N] bug-nilpy-annotated-module-global-invisible-in-kwarg
 - [p 55] [N] bug-nilpy-int-parse-halts-instead-of-raising
 - [p 55] [A] bug-pascal-defines-leak-across-units

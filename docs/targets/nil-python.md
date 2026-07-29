@@ -5,10 +5,10 @@ order: 63
 
 # Nil Python (`.npy`)
 
-Nil Python is an experimental, statically compiled Python-shaped frontend for the PXX compiler. It compiles `.npy` source files directly to native machine code through the shared AST and backend, achieving high performance without the overhead of a Python interpreter or runtime.
+Nil Python is a statically compiled Python-shaped frontend for the PXX compiler. It compiles `.npy` source files directly to native machine code through the shared AST and backend, achieving high performance without the overhead of a Python interpreter or runtime.
 
 > [!NOTE]
-> Nil Python is not a full Python implementation. It is a compiled dialect designed for close interop with Pascal and C. The `.py` extension is intentionally unsupported to prevent confusion with standard Python.
+> Nil Python is not a full Python implementation. It is a compiled dialect designed for close interop with Pascal and C. Source files can use either the `.npy` extension or plain `.py` — both compile through the same frontend; PXX does not require CPython-standard syntax, so a `.py` file that leans on dynamic-typing features CPython allows may not compile as-is.
 
 ---
 
@@ -82,3 +82,140 @@ Since Nil Python has no pointer or address-of (`&`) operators, the compiler auto
 
 ### 3. Macro Constant Mapping
 Preprocessor integer `#define` macros in the C header (such as `SQLITE_ROW` or `SQLITE_OK`) are parsed and made available directly as ordinary constants in Nil Python.
+
+---
+
+## Classes
+
+Single inheritance only — `class C(A, B):` (multiple bases) is not accepted.
+Only `__init__`, `__str__`, and `__repr__` are special-cased dunder methods;
+there is no operator-overload protocol yet (`__eq__`, `__len__`, `__iter__`,
+`__getitem__`, `__call__`, `__enter__`/`__exit__` are not hooked in).
+
+`super().method(args)` is recognized specifically as its own call
+**statement** — most commonly `super().__init__(...)` chaining a parent
+constructor — not as a general expression whose result you can use further
+(`x = super().method()` or embedding it in a larger expression is not
+supported):
+
+```python
+class Animal:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+class Dog(Animal):
+    def __init__(self, name: str) -> None:
+        super().__init__(name)
+```
+
+`@property` and its matching `@x.setter` are supported on methods:
+
+```python
+class Box:
+    def __init__(self, v: int) -> None:
+        self._v = v
+
+    @property
+    def v(self) -> int:
+        return self._v
+
+    @v.setter
+    def v(self, val: int) -> None:
+        self._v = val
+```
+
+At module level, only `@dataclass` is accepted as a decorator — it generates
+an `__init__` from the annotated fields:
+
+```python
+@dataclass
+class Point:
+    x: int
+    y: int
+```
+
+There is no `@staticmethod` or `@classmethod`.
+
+## Functions: defaults, `*args`, `**kwargs`, lambdas
+
+Default parameter values, `*args` (collected as a list), and `**kwargs`
+(collected as a dict) are supported on the callee side:
+
+```python
+def total(*args):
+    s = 0
+    for a in args:
+        s = s + a
+    return s
+
+def opts(a, **kw):
+    for k in kw:
+        print(k, kw[k])
+```
+
+`lambda` is a real, compiled closure (not restricted to trivial expressions),
+though the language has no `yield`/generators — a generator expression like
+`(x for x in it)` is accepted as sugar but desugars eagerly into a list, not a
+lazy iterator.
+
+## Control flow
+
+`if`/`elif`/`else`, `while`, `for … in`, `break`/`continue`/`pass`, and
+`try`/`except (A, B):`/`finally` (including multiple `except` clauses) all
+work as expected. `with` is parsed as scoping sugar only — it does **not**
+call `__enter__`/`__exit__`, so it does not guarantee cleanup on an exception;
+use `try`/`finally` where that matters.
+
+List/dict/set comprehensions, including nested and filtered (`if`) forms, are
+supported and compile down to an imperative build:
+
+```python
+squares = [x * x for x in range(10) if x % 2 == 0]
+```
+
+Not present: `match`/`case`, `assert`, `async`/`await`.
+
+## f-strings
+
+`f"{value!r}"`/`f"{value!s}"` conversions and a plain format spec are
+supported. Triple-quoted f-strings are not.
+
+## Standard-library surface
+
+`import` resolves against a real backing Pascal unit for a growing list of
+module names: `re`, `json`, `math`, `random`, `collections`, `configparser`,
+`base64`, `pathlib`, `subprocess`. `sys`, `os`, `textwrap`, `select`, and
+`itertools` are recognized and partially supported without a dedicated shim
+unit. `tkinter` has its own facade (`lib/pcl/tkinter.pas`) for GUI programs.
+Not yet present: `socket`, `threading`, `struct`, `enum`, `csv`, `pickle`,
+`logging`, `hashlib`, `uuid`, `datetime`.
+
+## Known gotchas
+
+These are open, tracked issues — real-world `.py`/`.npy` programs can still
+hit them:
+
+- A `def`/`lambda` stored in a plain variable and then called through that
+  variable can silently do nothing instead of running the function, or
+  segfault.
+- Calling a method that doesn't exist on an object compiles clean and
+  segfaults at runtime instead of raising `AttributeError`.
+- `int("abc")` halts the program rather than raising a catchable
+  `ValueError`.
+- `"%d" % value`-style printf formatting on a string can yield garbage.
+- `str()` of a tuple/list can print the container's pointer instead of its
+  contents.
+- `not some_object` can evaluate `True` for every live object.
+- `str.encode`/`bytes.decode` currently ignore the codec argument.
+- A keyword argument resolves against only one overload of an overload set —
+  it can fail on a sibling overload that has the same parameter name.
+- `super().method()` / `Parent.method(self)` do not currently reach an
+  overridden method in all shapes.
+- Object reclamation (reference counting) is disabled inside an imported
+  `.py` module specifically — a module compiled as the main program does not
+  have this restriction.
+
+If a real-world program hits one of these, check
+[compatibility status](../reference/status.md) and the project's ticket board
+before assuming it's a project-specific bug.

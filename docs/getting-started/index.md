@@ -61,6 +61,18 @@ Pass `--target=` to build for another CPU:
 
 Run cross binaries under QEMU user-mode (see the repo's `tools/run_target.sh`).
 
+## Other frontends
+
+The same compiler also accepts `.c` and `.npy` source directly — the frontend
+is chosen by extension, no separate tool:
+
+```sh
+./pxx hello.c hello_c
+./pxx hello.npy hello_npy   # or hello.py — same frontend, either extension
+```
+
+See [C Frontend](../targets/c-frontend.md) and [Nil Python](../targets/nil-python.md).
+
 ## Next
 
 - [Language](../language/)

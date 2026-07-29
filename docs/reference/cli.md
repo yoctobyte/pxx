@@ -23,6 +23,11 @@ library roots. The underlying compiler executable is still named
 
 ## Source and output
 
+The frontend is selected by the source file's extension: `.pas`/`.pp` for
+Pascal, `.c` for [C](../targets/c-frontend.md), `.npy` or `.py` for
+[Nil Python](../targets/nil-python.md), and `.asm` for the assembly-source
+frontend.
+
 With an output path, PXX writes the executable there and emits a matching map
 file. Without an output path, it derives one from the source name and refuses to
 overwrite the source.

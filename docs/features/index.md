@@ -34,8 +34,14 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
 - Concurrency on two axes: a single-thread cooperative coroutine scheduler, plus
   real OS threads (`TThread`) and a data-parallel `parallel for` loop over a
   libc-free worker pool (build threaded code with `--threadsafe`).
-- Inline assembly and experimental alternate frontends are available, but should
-  be treated as advanced or unstable surfaces.
+- Inline assembly and an assembly-source (`.asm`) frontend are available, but
+  should be treated as advanced or unstable surfaces.
+- Alternate high-level frontends: a [C frontend](../targets/c-frontend.md)
+  (C99-class, passes the full c-testsuite conformance battery, and compiles
+  real corpora such as SQLite, Lua, zlib, and tcc) and
+  [Nil Python](../targets/nil-python.md), a statically-typed Python-shaped
+  dialect. Both are mainline, gated frontends, not experiments — see
+  [compatibility status](../reference/status.md).
 
 ## Libraries and tools
 

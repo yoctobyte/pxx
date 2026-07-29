@@ -5,8 +5,11 @@ order: 62
 
 # Cross languages
 
-PXX is centered on Pascal, but the compiler has experimental alternate
-frontends that share backend infrastructure.
+PXX is centered on Pascal, but several frontends share one backend, one symbol
+table, and one `uses`/`import` resolver — the project's working nickname for
+this is **Frankonpiler**. Pascal and C are mainline, gated frontends; Nil
+Python is also mainline (see [Nil Python](./nil-python.md)); BASIC and Rust
+remain experimental research paths.
 
 ## Frontends by suffix
 
@@ -16,11 +19,12 @@ frontends that share backend infrastructure.
 | `.c` | C |
 | `.asm` | Assembly source (assemble + link to executable, `.o`, or `.so`) |
 | `.bas` | BASIC, experimental |
-| `.npy` | Nil Python, experimental |
+| `.npy`, `.py` | Nil Python |
 | `.rs` | Rust, experimental |
 
-The Pascal frontend is the supported user-facing path. The other frontends exist
-to test interop and backend reuse, and their accepted language subsets are still
+The Pascal frontend is the original, most complete surface. C and Nil Python
+are full peer frontends with their own gates; BASIC and Rust exist to test
+interop and backend reuse, and their accepted language subsets are still
 moving.
 
 BASIC (`.bas`) was PXX's first proof of this idea — a lexer/parser with a
@@ -58,10 +62,76 @@ full C ABI compatibility layer.
 
 ## Nil Python
 
-Nil Python is an experimental Python-like frontend designed to call imported C
-APIs directly through the same compiler backend. It supports strict local type inference and automatic C-parameter return-lifting (autotyping).
+Nil Python calls imported C APIs directly through the same compiler backend. It
+supports strict local type inference and automatic C-parameter return-lifting
+(autotyping).
 
-See the dedicated [Nil Python](./nil-python.md) page for detailed syntax, type inference rules, and C-interop capabilities.
+See the dedicated [Nil Python](./nil-python.md) page for detailed syntax, type
+inference rules, and C-interop capabilities.
+
+## The Frankonpiler part: cross-frontend interop
+
+Pascal, C, and Nil Python are not three separate compilers glued together —
+they lex and parse into the **same** AST/IR and register into the **same**
+symbol table. A `uses` (Pascal) or `import` (Nil Python) resolves through one
+shared unit-search chain that tries `.pas`/`.pp` first, then `.c`/`.h`, at
+each search root. Whichever extension is found is parsed by that language's
+own frontend and dropped into the same symbol table as everything already
+compiled — no wrapper generation step, no IDL, no FFI declarations to hand-write.
+
+### What works today
+
+**Pascal reaching straight into a C header**, no Pascal wrapper unit written by
+hand — `lib/pcl/gtk3.pas` does this for GTK3:
+
+```pascal
+uses gtk3_c;   { resolves to lib/pcl/gtk3_c.h — a plain C header }
+```
+
+**Nil Python importing a genuine Pascal unit** — `lib/rtl/re.pas` is a real
+Pascal regex unit. `import re` in a `.npy`/`.py` file finds it through the same
+resolver Pascal uses, once a same-directory `.py`/`.npy` module doesn't shadow
+the name first:
+
+```python
+import re
+```
+
+**Nil Python calling a C library directly**, with return-lifting/autotyping
+smoothing over `T**` out-parameters, string marshalling, and `#define` constant
+mapping (see [architecture](../reference/architecture.md) for the mechanism):
+
+```python
+import sqlite3
+
+db = sqlite3_open("/tmp/users.db")
+sqlite3_exec(db, "CREATE TABLE users(id INT, name TEXT);", 0, 0, 0)
+```
+
+### What doesn't work yet
+
+- **No C-to-Pascal direction.** The C frontend has no `uses`/`import`
+  resolution at all — a `.c` file can only pull in other C headers, never a
+  `.pas` unit. Interop from the C side has to go through Nil Python or Pascal
+  calling C, not the reverse.
+- **Pascal is deliberately blocked from finding `.py`/`.npy`.** A Pascal `uses`
+  will never accidentally start pulling in Python-shaped source.
+- **Namespace collisions are the sharp edge.** Because everything lands in one
+  symbol table, a Pascal wrapper unit and a raw C package can want the same
+  name (`uses zlib` — is that the hand-written Pascal binding or the C header
+  directly?). There is no settled namespace syntax for "give me the C package,
+  not the Pascal wrapper" yet.
+- **No cross-frontend symbol mangling convention or type-mapping table.**
+  Types that are frontend-specific (Pascal's managed `AnsiString`, for
+  instance) don't cross the boundary uninterpreted — headers only expose
+  plain pointers (`PChar`) across the C boundary, not a managed string type.
+  A silent-bind hazard exists too: a C call can bind to a Pascal routine of a
+  different arity without an error, so double-check signatures by hand at a
+  language boundary rather than assuming it'll be caught.
+
+These are open, tracked gaps (not implementation bugs to route around) — most
+of the current cross-frontend friction is exactly here, in naming and library
+boundaries, rather than in whether a call reaches the other language at all.
 
 ## Next
 
