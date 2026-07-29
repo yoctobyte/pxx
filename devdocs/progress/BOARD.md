@@ -15,8 +15,8 @@ _none_
 | HANDOFF-allnight-bughunt | A | 50 | HANDOFF | Handoff — all-night bug hunt, all tracks (written 2026-07-29, late) | — |
 | HANDOFF-nilpy-bughunt | A | 50 | HANDOFF | Handoff — NilPy bug hunt, with the new debugging toolkit | — |
 | HANDOFF-nilpy-songformatter | A | 50 | HANDOFF | Handoff prompt — NilPy bughunt, songformatter (2026-07-29) | — |
-| bug-nilpy-import-name-forces-function-object-abi | N | 70 | bug | `from m import f` makes every def in an imported module use the function-object ABI | — |
 | bug-nilpy-songformatter-first-render-walls | N | 75 | bug | songformatter: the walls between "GUI builds" and "first document renders" | — |
+| bug-nilpy-str-of-object-segfaults-when-dunder-builds-a-string | N | 75 | bug | `str(obj)` SEGFAULTS when `__str__`/`__repr__` builds a string and nothing touched the instance first | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
@@ -35,7 +35,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (198)
+## backlog (197)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -66,7 +66,6 @@ _none_
 | bug-nilpy-set-literal-does-not-deduplicate | N | 60 | bug | A set LITERAL keeps duplicates; `set().add()` removes them | — |
 | bug-nilpy-sorted-over-tuples-or-lists-fails | N | 55 | bug | `sorted()` over a list of tuples or lists dies with "expected a number, got object" | — |
 | bug-nilpy-str-of-literal-none-prints-zero | N | 65 | bug | `str(None)` prints `0`, but `str(x)` with `x = None` prints `None` | — |
-| bug-nilpy-str-of-object-segfaults-when-dunder-builds-a-string | N | 75 | bug | `str(obj)` SEGFAULTS when `__str__`/`__repr__` builds a string and nothing touched the instance first | — |
 | bug-nilpy-tk-pxxcb-invalid-command-name | N | 65 | bug | Tk: `invalid command name "pxxcb"` in a long-running app | — |
 | bug-nilpy-zip-over-a-string-yields-nothing-or-segfaults | N | 70 | bug | `zip(list, str)` yields nothing — and segfaults if any loop ran before it | — |
 | bug-pascal-defines-leak-across-units | A | 55 | bug | Pascal: {$define} in one unit stays visible in units parsed afterwards, so {$ifdef} compiles different code depending on uses ORDER | — |
@@ -300,7 +299,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1023)
+## done (1024)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -648,6 +647,7 @@ _none_
 | bug-nilpy-dict-views-and-result-alias | N | 75 | bug | nilpy: d.values()/d.keys() jumped to address 0, and a local named `result` aliased the function result | — |
 | bug-nilpy-function-level-import-drops-body | N | 70 | bug | An import inside a function body — and the fix that silently emptied the body | — |
 | bug-nilpy-import-lost-after-a-fallback-import-block | N | 70 | bug | A C library's function name shadows a Python module name as a qualifier | — |
+| bug-nilpy-import-name-forces-function-object-abi | N | 70 | bug | `from m import f` makes every def in an imported module use the function-object ABI | — |
 | bug-nilpy-in-on-a-string-segfaults | N | 70 | bug | NilPy: `sub in s` on a STRING segfaults | — |
 | bug-nilpy-int-equals-string-segfaults | N | 80 | bug | `3 == "ab"` SEGFAULTS | — |
 | bug-nilpy-key-analysis-compiles-but-segfaults | N | 70 | bug | nilpy: songformatter's key_analysis.py COMPILES but segfaults at run time | — |
@@ -2771,7 +2771,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 75] [N] bug-nilpy-str-of-object-segfaults-when-dunder-builds-a-string
 - [p 70] [A] bug-cfront-silent-bind-to-pascal-proc-of-different-arity
 - [p 70] [N] bug-nilpy-dict-equality-compares-identity
 - [p 70] [N] bug-nilpy-eq-dunder-ignored

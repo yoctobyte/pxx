@@ -60,3 +60,22 @@ statement (a logical line opening with `tkUses` (`import`) or the ident `from`).
 Narrowing its scan to `PyScanLo..MainProgramTokCount` instead would ALSO cut the
 false positive, but it would lose the genuine case — a def in a module passed as
 a value by the main program — so the import-line skip is the right cut.
+
+## RESOLVED @ 242b96878
+
+`PyDefUsedAsValue` now skips a logical line that opens with `import` (tkUses)
+or the ident `from`. The scan is deliberately NOT narrowed to the current unit:
+a def defined in a module and passed as a value by the main program is the
+genuine case, and it lives outside PyScanLo.
+
+The repro stopped crashing but still returned `[]` — a SECOND, independent
+defect in the same wall: module code got no return-ownership retain, so the
+caller received a reference the callee's scope exit had already dropped. Fixed
+in 33db0107d ([[bug-nilpy-object-reclamation-disabled-inside-py-modules]]).
+With both, seven cross-module callable shapes match CPython exactly.
+
+Gate: tools/gate.sh quick GREEN at the time of the fix; the follow-up landed
+under tools/gate.sh full GREEN.
+
+## Log
+- 2026-07-29 — resolved, commit 242b96878.
