@@ -1,0 +1,12 @@
+d = {"a": 1}
+t = (1, 2)
+one = (5,)
+print(str(t))
+print(str([1, 2]))
+print(str(d))
+print(t)
+print(one)
+print([str(k) for k in d.keys()])
+print("%s" % (t,))
+print([(1, 2), (3, 4)])
+print(str(t) + "!")

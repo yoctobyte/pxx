@@ -6677,6 +6677,22 @@ begin
       elemNode := CurASTNode;
     end;
   end;
+  { Mark it a TUPLE, for rendering. A tuple and a list are the same TPyList here,
+    so `print((1, 2))` printed `[1, 2]` — the one visible place the shared
+    representation leaks (bug-nilpy-str-of-tuple-is-empty). The flag is set on
+    the temp, so every later read of it renders with parentheses. }
+  mpi := FindProc('pylist_mark_tuple');
+  if mpi >= 0 then
+  begin
+    selfArg := AllocNode(AN_ARG);
+    ASTLeft[selfArg] := PyMakeIdent(tmpSym);
+    ASTRight[selfArg] := -1;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := mpi;
+    ASTTk[callNode] := Ord(tyClass);
+    ASTLeft[callNode] := selfArg;
+    PyHoistStmt(callNode);
+  end;
   Result := PyMakeIdent(tmpSym);
 end;
 
@@ -7131,6 +7147,26 @@ begin
     if not Eat(tkComma) then break;
   end;
   Expect(closer, ']/}');
+  { A parenthesised display is a TUPLE, and a tuple is the same TPyList as a
+    list here — so the only thing that can tell them apart when rendering is a
+    flag set now, at the one place the syntax is still visible. Without it
+    `print((1, 2))` printed `[1, 2]`
+    (bug-nilpy-str-of-tuple-is-empty). Set-literal braces stay lists. }
+  if opener = tkLParen then
+  begin
+    mpi := FindProc('pylist_mark_tuple');
+    if mpi >= 0 then
+    begin
+      selfArg := AllocNode(AN_ARG);
+      ASTLeft[selfArg] := PyMakeIdent(tmpSym);
+      ASTRight[selfArg] := -1;
+      callNode := AllocNode(AN_CALL);
+      ASTIVal[callNode] := mpi;
+      ASTTk[callNode] := Ord(tyClass);
+      ASTLeft[callNode] := selfArg;
+      PyHoistStmt(callNode);
+    end;
+  end;
   CurASTNode := PyMakeIdent(tmpSym);
 end;
 
@@ -7487,24 +7523,12 @@ end;
   take both shapes Python allows: a single value, or the TPyList a written tuple
   builds (bug-nilpy-percent-string-format-garbage). }
 function PyMakePercentFormat(fmtNode, argsNode: Integer): Integer;
-var procIdx, arg0, arg1, arg2, tupLit: Integer; isTup: Int64;
+var procIdx, arg0, arg1: Integer;
 begin
   procIdx := FindProc('pypercent_format');
   if procIdx < 0 then Error('Nil Python: pylib (pypercent_format) not loaded');
-  { Was a TUPLE DISPLAY written? A tuple is a list of arguments and a list is one
-    value, and both are a TPyList at run time — so the distinction has to travel
-    from here. PyMakeTupleFrom yields a hidden `__py_tup_*` temp, which is the
-    marker; a tuple reaching us through a variable is recognised at run time by
-    the placeholder count instead (see pypercent_format). }
-  isTup := 0;
-  if (ASTKind[argsNode] = AN_IDENT) and (ASTIVal[argsNode] >= 0) and
-     (Copy(Syms[ASTIVal[argsNode]].Name, 1, 9) = '__py_tup_') then isTup := 1;
   arg0 := AllocNode(AN_ARG); ASTLeft[arg0] := fmtNode;
-  arg1 := AllocNode(AN_ARG); ASTLeft[arg1] := argsNode;
-  tupLit := AllocNode(AN_INT_LIT);
-  ASTIVal[tupLit] := isTup; ASTTk[tupLit] := Ord(tyInt64);
-  arg2 := AllocNode(AN_ARG); ASTLeft[arg2] := tupLit; ASTRight[arg2] := -1;
-  ASTRight[arg1] := arg2;
+  arg1 := AllocNode(AN_ARG); ASTLeft[arg1] := argsNode; ASTRight[arg1] := -1;
   ASTRight[arg0] := arg1;
   Result := AllocNode(AN_CALL);
   ASTIVal[Result] := procIdx;

@@ -69,6 +69,11 @@ type
     FLen: Integer;
     FCap: Integer;
     FItems: Pointer;
+    { A TUPLE is a TPyList too — NilPy has one sequence representation — so the
+      only thing separating `(1, 2)` from `[1, 2]` at render time is this flag,
+      set by the frontend when a tuple DISPLAY was written. Without it every
+      tuple printed with brackets (bug-nilpy-str-of-tuple-is-empty). }
+    FIsTuple: Boolean;
     constructor Create;
     function append(const v: Variant): TPyList;
     { set-style insert: append only when the value is not already present.
@@ -353,6 +358,9 @@ function pyrepr_of(const v: Variant): AnsiString; overload;
   fell through to the integer path (bug-a-nilpy-print-of-a-list-prints-a-pointer).
   Recursive: a nested list/dict element is reprd as a container, not as its
   object tag. }
+{ Mark a list as a TUPLE, for rendering only — the frontend calls it on the temp
+  a tuple display builds. }
+function pylist_mark_tuple(l: TPyList): TPyList;
 function pylist_repr(l: TPyList): AnsiString;
 function pybytes_repr(b: TPyBytes): AnsiString;
 function pydict_repr(d: TPyDict): AnsiString;
@@ -381,7 +389,7 @@ function pystr_format(const fmt: AnsiString; const a: Variant): AnsiString;
   by placeholder into the {}-spec grammar below so padding, precision and base
   conversion have ONE implementation rather than two that drift. args is a single
   value, or a TPyList when a tuple was written, which is Python's own rule. }
-function pypercent_format(const fmt: AnsiString; const args: Variant; isTuple: Int64): AnsiString;
+function pypercent_format(const fmt: AnsiString; const args: Variant): AnsiString;
 function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; overload;
 function PyFmtFixed(d: Double; prec: Integer): AnsiString;
 function pyformat_of(d: Double; const spec: AnsiString): AnsiString; overload;
@@ -4921,32 +4929,7 @@ begin
   pystr_format := PyFormatApply(fmt, a, a, 1);
 end;
 
-function PyPercentHoles(const fmt: AnsiString): Integer;
-{ How many conversions `%...c` the format string has, `%%` excluded. }
-var i: Integer;
-begin
-  Result := 0;
-  i := 1;
-  while i <= Length(fmt) do
-  begin
-    if fmt[i] = '%' then
-    begin
-      Inc(i);
-      if (i <= Length(fmt)) and (fmt[i] = '%') then Inc(i)
-      else
-      begin
-        while (i <= Length(fmt)) and
-              (((fmt[i] >= '0') and (fmt[i] <= '9')) or (fmt[i] = '.') or
-               (fmt[i] = '-') or (fmt[i] = '+') or (fmt[i] = ' ')) do Inc(i);
-        if i <= Length(fmt) then Inc(i);
-        Inc(Result);
-      end;
-    end
-    else Inc(i);
-  end;
-end;
-
-function pypercent_format(const fmt: AnsiString; const args: Variant; isTuple: Int64): AnsiString;
+function pypercent_format(const fmt: AnsiString; const args: Variant): AnsiString;
 var i, width, prec, argi, nargs: Integer;
     zero, leftAlign, hasPrec: Boolean;
     outS, spec: AnsiString;
@@ -4954,18 +4937,15 @@ var i, width, prec, argi, nargs: Integer;
     lst: TPyList;
     cur: Variant;
 begin
-  { TUPLE OR SINGLE VALUE. Python decides by TYPE — a tuple is a sequence of
-    arguments, a list is one value (`"[%s]" % [1,2]` prints `[[1, 2]]`) — but a
-    NilPy tuple IS a TPyList, so the type cannot answer it here. Two sources
-    instead: isTuple, set when the source WROTE a tuple display, and, for a tuple
-    that arrived through a variable, the placeholder count. One conversion means
-    the value is the argument; several mean it is being walked.
-    Divergence, deliberate and small: `"%s %s" % [a, b]` walks the list where
-    CPython raises. }
+  { TUPLE OR SINGLE VALUE — Python's rule: a tuple is a sequence of arguments, a
+    list is ONE value (`"[%s]" % [1,2]` prints `[[1, 2]]`). Both are a TPyList
+    here, so the answer comes from the list's own tuple flag, which the frontend
+    set where the syntax was still visible and which travels with the object
+    through variables and calls. }
   lst := nil;
   if PPyVarRec(@args)^.VType = 7 then
-    if TObject(pyvarobj(args)) is TPyList then lst := TPyList(pyvarobj(args));
-  if (lst <> nil) and (isTuple = 0) and (PyPercentHoles(fmt) < 2) then lst := nil;
+    if TObject(pyvarobj(args)) is TPyList then
+      if TPyList(pyvarobj(args)).FIsTuple then lst := TPyList(pyvarobj(args));
   if lst <> nil then nargs := lst.count else nargs := 1;
   outS := '';
   argi := 0;
@@ -5860,17 +5840,26 @@ begin
   end;
 end;
 
+function pylist_mark_tuple(l: TPyList): TPyList;
+begin
+  if l <> nil then l.FIsTuple := True;
+  pylist_mark_tuple := l;
+end;
+
 function pylist_repr(l: TPyList): AnsiString;
 var i: Integer;
 begin
   if l = nil then begin Result := '[]'; Exit; end;
-  Result := '[';
+  if l.FIsTuple then Result := '(' else Result := '[';
   for i := 0 to l.count - 1 do
   begin
     if i > 0 then Result := Result + ', ';
     Result := Result + pyvar_repr(l.at(i));
   end;
-  Result := Result + ']';
+  { Python's one-element tuple keeps its comma — `(1,)` — because `(1)` is just
+    a parenthesised value. }
+  if l.FIsTuple and (l.count = 1) then Result := Result + ',';
+  if l.FIsTuple then Result := Result + ')' else Result := Result + ']';
 end;
 
 function pydict_repr(d: TPyDict): AnsiString;

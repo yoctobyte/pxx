@@ -9703,7 +9703,34 @@ begin
                   Exit;
                 end;
               end;
+              { ...and a pylib CONTAINER renders as its Python repr. print() has
+                gone through PyReprContainer all along; str() had no arm for a
+                list/dict/bytes handle, so it fell through to the numeric path
+                and returned the POINTER as a number — silently
+                (bug-nilpy-str-of-tuple-is-empty). One routine for both, so the
+                two spellings cannot drift. }
+              atDflt := PyReprContainer(CurASTNode);
+              if atDflt <> CurASTNode then
+              begin
+                Expect(tkRParen, ')');
+                CurASTNode := atDflt; LastExprTk := tyAnsiString;
+                Exit;
+              end;
             end;
+          end;
+        end;
+        { A VARIANT argument may hold a container at run time, and the variant
+          arm of pystr_of renders one as empty — which is what made
+          `[str(k) for k in d.keys()]` a list of empty strings. pyvar_print_of
+          dispatches on the tag: container to repr, scalar to str. }
+        if isNilPy and (IntToTypeKind(ASTTk[CurASTNode]) = tyVariant) then
+        begin
+          atDflt := PyReprContainer(CurASTNode);
+          if atDflt <> CurASTNode then
+          begin
+            Expect(tkRParen, ')');
+            CurASTNode := atDflt; LastExprTk := tyAnsiString;
+            Exit;
           end;
         end;
         Expect(tkRParen, ')');
