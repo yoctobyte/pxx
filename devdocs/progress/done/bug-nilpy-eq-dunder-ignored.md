@@ -74,3 +74,6 @@ still comparing by identity.
 ### Gate
 
 `tools/gate.sh full`.
+
+## Log
+- 2026-07-29 — resolved, commit 14473b5ec.
