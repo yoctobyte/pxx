@@ -1,0 +1,8 @@
+d = {"n": 42}
+l = [7, 3]
+print(max(3, 7), min(3, 7))
+print(max(d["n"], 1), min(d["n"], 100))
+print(max(l[0], l[1]), min(l[0], l[1]))
+v = d["n"]
+print(max(v, 1))
+print(max([4, 9, 2]), min([4, 9, 2]))

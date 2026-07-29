@@ -714,8 +714,16 @@ function pyfloordiv_i(a: Int64; b: Int64): Int64;
 function pyfloormod_i(a: Int64; b: Int64): Int64;
 function pyfloordiv_f(a: Double; b: Double): Double;
 function pyfloormod_f(a: Double; b: Double): Double;
-function min(a: Int64; b: Int64): Int64;
+{ The VARIANT arm comes FIRST in each set, and that ordering is the fix, not a
+  style choice: a subscript (`d["n"]`) is a variant RVALUE, matches no scalar
+  arm, and resolution then bound the first declared one — the Int64 arm, handed
+  a 16-byte variant unconverted, so `max(d["n"], 1)` printed a pointer while
+  `v = d["n"]; max(v, 1)` was right. Declared first, the variant arm is what an
+  unmatched argument falls back to, and it dispatches on the tag. }
+function min(const a: Variant; const b: Variant): Variant;
+function min(a: Int64; b: Int64): Int64; overload;
 function min(a: Double; b: Double): Double; overload;
+function max(const a: Variant; const b: Variant): Variant; overload;
 function max(a: Int64; b: Int64): Int64; overload;
 function max(a: Double; b: Double): Double; overload;
 { `list(x)` — a shallow COPY, as Python's list() constructor makes. Overloads
@@ -3433,6 +3441,16 @@ end;
 function max(a: Double; b: Double): Double; overload;
 begin
   if a > b then Result := a else Result := b;
+end;
+
+function min(const a: Variant; const b: Variant): Variant; overload;
+begin
+  if pyvar_gt(a, b) then Result := b else Result := a;
+end;
+
+function max(const a: Variant; const b: Variant): Variant; overload;
+begin
+  if pyvar_gt(a, b) then Result := a else Result := b;
 end;
 
 
