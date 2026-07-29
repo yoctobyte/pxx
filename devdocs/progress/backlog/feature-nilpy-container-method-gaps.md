@@ -4,18 +4,19 @@ prio: 40
 type: feature
 ---
 
-# Container-method gaps: `list.remove`, `list.index`, one-argument `dict.pop`
+# Container-method gaps: `list.remove`, `list.index`, `list.copy`, one-argument `dict.pop`
 
 Found by sweeping every list and dict method against CPython. Everything else
 in both sweeps matched exactly — `append`, `pop`, `pop(i)`, `insert`, `count`,
-`extend`, `reverse`, `sort`, `clear`, `copy`, `len`, `get`, `get` with a
-default, `keys`, `values`, `items`, `setdefault`, `in` — so this is a short,
+`extend`, `reverse`, `sort`, `clear`, `len`, `get`, `get` with a
+default, `dict.copy`, `keys`, `values`, `items`, `setdefault`, `in` — so this is a short,
 well-bounded list.
 
 | gap | error |
 | --- | --- |
 | `x.remove(2)` | `Nil Python: TPyList has no method remove` |
 | `x.index(3)` | `Nil Python: TPyList has no method index` |
+| `x.copy()` | `Nil Python: TPyList has no method copy` |
 | `d.pop("a")` | `Expected: ,, but got:` — a PARSE error |
 
 `d.pop("a", 0)` (two arguments) works and is correct, so the one-argument form
