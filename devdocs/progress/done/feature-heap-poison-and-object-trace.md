@@ -88,3 +88,6 @@ timing that CAUSES this bug class — which is why these two come first.
 default path must be unchanged — the poison fill and the trace must sit behind
 the flag, not behind a runtime `if` in the hot allocator path where it costs).
 Then a regression test that a deliberately dangling read returns poison.
+
+## Log
+- 2026-07-29 — resolved, commit eafec69b4.

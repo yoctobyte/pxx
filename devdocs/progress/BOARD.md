@@ -32,7 +32,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (190)
+## backlog (189)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -107,7 +107,6 @@ _none_
 | feature-emission-size-dce | A | 45 | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
 | feature-esp-hardware-flash-validation | A | 45 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 | feature-float-exception-mask-control | A | 60 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
-| feature-heap-poison-and-object-trace | A | 78 | feature | Debug heap: poison-on-free, quarantine, and an object retain/release trace | — |
 | feature-ilja-tui | B | 45 | feature | Ilja — TUI (ANSI) face | decide-ilja-tui-render-model |
 | feature-inline-asm-xmm-operands | A | 55 | feature | Inline asm cannot express float or vector code (no xmm operands, no packed SSE, no VEX, no cpuid) | — |
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
@@ -289,7 +288,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1004)
+## done (1005)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1017,6 +1016,7 @@ _none_
 | feature-generators-yield | A | 50 | feature | Generators and `yield` (the coroutine on-ramp) | feature-unified-heap-allocator |
 | feature-gui-real-window-xvfb-smoke | B | 53 | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
 | feature-hashing-library | B | 50 | feature | Hashing library — CRC32 / MD5 / SHA-256 (known-vector test app) | — |
+| feature-heap-poison-and-object-trace | A | 78 | feature | Debug heap: poison-on-free, quarantine, and an object retain/release trace | — |
 | feature-high-low-of-type | A | 50 | feature | `High`/`Low` of an ordinal TYPE (e.g. `High(Byte)`, `Low(ShortInt)`) | — |
 | feature-hint-directives-deprecated-platform | A | 50 | feature | Hint directives (`deprecated` / `platform` / `experimental` / …) on const/type/proc | — |
 | feature-i386-asm-emitter | A | 50 | feature | i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen | — |
@@ -2743,7 +2743,6 @@ _none_
 
 - [p 80] [N] bug-nilpy-not-on-object-always-true
 - [p 78] [A] feature-debuggability-umbrella
-- [p 78] [A] feature-heap-poison-and-object-trace
 - [p 75] [N] bug-nilpy-def-value-in-a-variable-is-not-callable
 - [p 75] [N] bug-nilpy-slice-of-variant-local-returned-is-unusable
 - [p 75] [N] bug-nilpy-subscript-argument-boxes-wrong-into-variant-param
