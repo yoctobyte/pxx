@@ -79,6 +79,20 @@ The top of Track N as of this handoff, all filed with measured repros:
   `bug-nilpy-large-float-str-overruns-into-garbage` (70 — writes invalid UTF-8
   bytes to stdout).
 
+Two items were deliberately PARKED with their measurements written down rather
+than guessed at — read those sections before restarting either:
+
+- `bug-nilpy-returning-a-nested-def-yields-none` (70) — the IR diff is in the
+  ticket: a top-level def returns its ADDRESS and works; a nested def gets
+  WRAPPED (`f(addr, 0, 1)`) and the wrapper is what the call site cannot
+  invoke. Two neighbouring compile-level gaps were split out into
+  `bug-nilpy-function-value-call-gaps`.
+- `bug-nilpy-str-of-literal-none-prints-zero` (65) — the fix site is named
+  (`ParseFactor`'s `tkNil` arm builds an integer 0), along with why the
+  one-line blanket version is unsafe: the ARC rebind arm and the
+  `Optional[int]` sentinel both depend on that literal being a scalar. Do it
+  with `bug-nilpy-none-equals-zero-is-true`, in one audited pass.
+
 One Track U item is waiting on the user: `decide-nilpy-mixed-type-operand-policy`
 — what NilPy should do when an operator gets operand types Python rejects. Three
 crashes/hangs hang off it. Do not guess the policy; the individual crashes are
@@ -121,6 +135,7 @@ byte-identical, all pushed:
 | 8cef67f5c | `list.index` / `list.remove` / `list.copy` / one-argument `dict.pop` |
 | 1c8d09b71 | `FloatToStr` wrote a NON-DIGIT byte past Int64 (`1e19` → `…809.o72036…`) |
 | 3c90daa64 | the re-pin that fix required (v230) |
+| eaf0490e4 | `zip(list, str)` walked a string as a TPyList — silently empty, or a SEGFAULT after any earlier loop |
 
 **`NilPyUserCode` (symtab.inc) is the one to know about**: every NilPy-only ARC
 rule reads it. Grep for it before adding another — the nine rules must move
