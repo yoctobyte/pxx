@@ -57,6 +57,45 @@ against CPython; everything else in that sweep matched, including
 `add(b=3, a=4)`, a default argument, recursion, `global`, a lambda in a name,
 and a list of lambdas indexed and called.
 
+## Measured 2026-07-30 — the value is WRAPPED, and the wrapper is what fails
+
+`PXXDBG=a.ir:mk` on two programs that differ only in whether the returned def
+is nested:
+
+```
+returning a TOP-LEVEL def (works, prints 2):
+  0: unknown  a=952                 tk=17     <- AN_PROCADDR
+  1: lea      a=263 [sym=$pyresult]
+  2: var_store a=1 b=0 c=17                   <- the ADDRESS goes straight out
+
+returning a NESTED def (prints None):
+  0: unknown  a=953                 tk=17     <- AN_PROCADDR
+  1: arg a=0 b=3
+  2: const_int ival=0  tk=13
+  3: arg a=2 b=5
+  4: const_int ival=1  tk=13
+  5: arg a=4
+  6: call a=799 b=1                 tk=17     <- WRAPPED: f(addr, 0, 1)
+```
+
+So `mk` does build and return something; the plain-address path is the one that
+works, and the wrapper's result is what the call site then cannot invoke. The
+capture count is 0 in this program (the middle argument), so the wrapper is
+being built even with nothing to capture — `PyMakeBoundFnValue` (pyparser.inc)
+is the shape to look at, and whether the call site knows the resulting tag.
+
+`print(mk()(1))` fails identically, so it is not about binding to a name.
+
+## Two neighbouring gaps found while narrowing, worth their own tickets
+
+- `def mkl(): return lambda x: x + 1` then `f = mkl(); f(1)` does NOT COMPILE
+  ("unexpected token"), while the same with a parameter
+  (`def mk(n): return lambda x: x + n`) does. The zero-parameter enclosing form
+  is the difference.
+- Calling a function-valued LOCAL inside a def — `def go(): g = mkl(); g(1)` —
+  does not compile either ("unexpected token near g"), while the identical code
+  at module level does.
+
 ## Gate
 
 `make test-nilpy` + self-host byte-identical, plus returning a nested def with
