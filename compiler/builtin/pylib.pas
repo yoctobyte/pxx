@@ -862,6 +862,29 @@ function pystr_split_ws(const s: AnsiString): TPyList;
 function pystr_split_sep(const s: AnsiString; const sep: AnsiString): TPyList;
 function pystr_split_sep_max(const s: AnsiString; const sep: AnsiString; maxsplit: Integer): TPyList;
 function pystr_splitlines(const s: AnsiString): TPyList;
+{ str.replace(old, new[, count]) — CPython semantics: non-overlapping, left to
+  right, a NEGATIVE count means "every occurrence", and an EMPTY pattern inserts
+  the replacement between every character and at both ends
+  ("abc".replace("", "-") = "-a-b-c-"). }
+function pystr_replace(const s: AnsiString; const pat: AnsiString; const rep: AnsiString): AnsiString;
+function pystr_replace_n(const s: AnsiString; const pat: AnsiString; const rep: AnsiString; count: Integer): AnsiString;
+{ str.count(sub) — non-overlapping occurrences; an empty sub counts the gaps,
+  Length(s)+1, as CPython does. }
+function pystr_count(const s: AnsiString; const sub: AnsiString): Integer;
+{ str.rfind(sub) — last occurrence, -1 when absent. }
+function pystr_rfind(const s: AnsiString; const sub: AnsiString): Integer;
+function pystr_title(const s: AnsiString): AnsiString;
+function pystr_capitalize(const s: AnsiString): AnsiString;
+function pystr_swapcase(const s: AnsiString): AnsiString;
+function pystr_isalnum(const s: AnsiString): Boolean;
+function pystr_ljust(const s: AnsiString; w: Int64): AnsiString;
+function pystr_ljust_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
+function pystr_center(const s: AnsiString; w: Int64): AnsiString;
+function pystr_center_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
+{ str.zfill(width) — left-pad with '0', keeping a leading sign in front. }
+function pystr_zfill(const s: AnsiString; w: Int64): AnsiString;
+function pystr_removeprefix(const s: AnsiString; const pre: AnsiString): AnsiString;
+function pystr_removesuffix(const s: AnsiString; const suf: AnsiString): AnsiString;
 
 implementation
 
@@ -1243,6 +1266,231 @@ begin
     Inc(i);
   end;
   if st <= n then Result.append(Copy(s, st, n - st + 1));
+end;
+
+{ Does `pat` sit at s[i]? Shared by replace/count/rfind. i is 1-based and the
+  caller has already checked that pat FITS at i. }
+function PyStrMatchAt(const s: AnsiString; i: Integer; const pat: AnsiString): Boolean;
+var j, m: Integer;
+begin
+  m := Length(pat);
+  for j := 1 to m do
+    if s[i + j - 1] <> pat[j] then begin Result := False; Exit; end;
+  Result := True;
+end;
+
+function pystr_replace_n(const s: AnsiString; const pat: AnsiString; const rep: AnsiString; count: Integer): AnsiString;
+var n, m, k, i, j, hits, outLen, o, used: Integer;
+begin
+  n := Length(s); m := Length(pat); k := Length(rep);
+  if m = 0 then
+  begin
+    { empty pattern: rep goes before every character and once at the end }
+    hits := n + 1;
+    if (count >= 0) and (count < hits) then hits := count;
+    SetLength(Result, n + hits * k);
+    o := 1; used := 0;
+    for i := 1 to n + 1 do
+    begin
+      if used < hits then
+      begin
+        for j := 1 to k do begin Result[o] := rep[j]; Inc(o); end;
+        Inc(used);
+      end;
+      if i <= n then begin Result[o] := s[i]; Inc(o); end;
+    end;
+    Exit;
+  end;
+  { pass 1: how many non-overlapping matches will be taken }
+  hits := 0; i := 1;
+  while i <= n - m + 1 do
+  begin
+    if (count >= 0) and (hits >= count) then Break;
+    if PyStrMatchAt(s, i, pat) then begin Inc(hits); i := i + m; end
+    else Inc(i);
+  end;
+  if hits = 0 then begin Result := s; Exit; end;
+  { pass 2: write the result in one preallocated buffer (no per-byte realloc) }
+  outLen := n + hits * (k - m);
+  SetLength(Result, outLen);
+  o := 1; i := 1; used := 0;
+  while i <= n do
+  begin
+    if (used < hits) and (i <= n - m + 1) and PyStrMatchAt(s, i, pat) then
+    begin
+      for j := 1 to k do begin Result[o] := rep[j]; Inc(o); end;
+      Inc(used);
+      i := i + m;
+    end
+    else
+    begin
+      Result[o] := s[i]; Inc(o); Inc(i);
+    end;
+  end;
+end;
+
+function pystr_replace(const s: AnsiString; const pat: AnsiString; const rep: AnsiString): AnsiString;
+begin
+  Result := pystr_replace_n(s, pat, rep, -1);
+end;
+
+function pystr_count(const s: AnsiString; const sub: AnsiString): Integer;
+var n, m, i: Integer;
+begin
+  n := Length(s); m := Length(sub);
+  if m = 0 then begin Result := n + 1; Exit; end;
+  Result := 0;
+  i := 1;
+  while i <= n - m + 1 do
+    if PyStrMatchAt(s, i, sub) then begin Inc(Result); i := i + m; end
+    else Inc(i);
+end;
+
+function pystr_rfind(const s: AnsiString; const sub: AnsiString): Integer;
+var n, m, i: Integer;
+begin
+  n := Length(s); m := Length(sub);
+  if m = 0 then begin Result := n; Exit; end;   { CPython: "abc".rfind("") = 3 }
+  i := n - m + 1;
+  while i >= 1 do
+  begin
+    if PyStrMatchAt(s, i, sub) then begin Result := i - 1; Exit; end;   { 0-based }
+    Dec(i);
+  end;
+  Result := -1;
+end;
+
+function PyIsWordCh(c: Char): Boolean;
+begin
+  Result := ((c >= 'a') and (c <= 'z')) or ((c >= 'A') and (c <= 'Z')) or
+            ((c >= '0') and (c <= '9'));
+end;
+
+function pystr_title(const s: AnsiString): AnsiString;
+{ CPython: the first cased character of each run of word characters is upper,
+  the rest lower. Digits count as word characters but are not cased. }
+var i: Integer; c: Char; atStart: Boolean;
+begin
+  SetLength(Result, Length(s));
+  atStart := True;
+  for i := 1 to Length(s) do
+  begin
+    c := s[i];
+    if atStart then
+    begin
+      if (c >= 'a') and (c <= 'z') then c := Chr(Ord(c) - 32);
+    end
+    else if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
+    Result[i] := c;
+    atStart := not PyIsWordCh(s[i]);
+  end;
+end;
+
+function pystr_capitalize(const s: AnsiString): AnsiString;
+var i: Integer; c: Char;
+begin
+  SetLength(Result, Length(s));
+  for i := 1 to Length(s) do
+  begin
+    c := s[i];
+    if i = 1 then
+    begin
+      if (c >= 'a') and (c <= 'z') then c := Chr(Ord(c) - 32);
+    end
+    else if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
+    Result[i] := c;
+  end;
+end;
+
+function pystr_swapcase(const s: AnsiString): AnsiString;
+var i: Integer; c: Char;
+begin
+  SetLength(Result, Length(s));
+  for i := 1 to Length(s) do
+  begin
+    c := s[i];
+    if (c >= 'a') and (c <= 'z') then c := Chr(Ord(c) - 32)
+    else if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
+    Result[i] := c;
+  end;
+end;
+
+function pystr_isalnum(const s: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if Length(s) = 0 then Exit;   { "".isalnum() is False, like the other is* }
+  for i := 1 to Length(s) do
+    if not PyIsWordCh(s[i]) then Exit;
+  Result := True;
+end;
+
+function pystr_ljust_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
+var n, i: Integer; f: Char;
+begin
+  n := Length(s);
+  if (w <= n) or (Length(fill) = 0) then begin Result := s; Exit; end;
+  f := fill[1];
+  SetLength(Result, Integer(w));
+  for i := 1 to n do Result[i] := s[i];
+  for i := n + 1 to Integer(w) do Result[i] := f;
+end;
+
+function pystr_ljust(const s: AnsiString; w: Int64): AnsiString;
+begin
+  Result := pystr_ljust_c(s, w, ' ');
+end;
+
+function pystr_center_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
+var n, i, left: Integer; f: Char;
+begin
+  n := Length(s);
+  if (w <= n) or (Length(fill) = 0) then begin Result := s; Exit; end;
+  f := fill[1];
+  { CPython's exact rule (Objects/unicodeobject.c pad()):
+      marg = width - len;  left = marg div 2 + (marg and width and 1)
+    — so the odd extra pad lands on the LEFT only when both marg and width are
+    odd. "ab".center(5) = "  ab ", "abc".center(6) = " abc  ". }
+  left := (Integer(w) - n) div 2 + ((Integer(w) - n) and Integer(w) and 1);
+  SetLength(Result, Integer(w));
+  for i := 1 to left do Result[i] := f;
+  for i := 1 to n do Result[left + i] := s[i];
+  for i := left + n + 1 to Integer(w) do Result[i] := f;
+end;
+
+function pystr_center(const s: AnsiString; w: Int64): AnsiString;
+begin
+  Result := pystr_center_c(s, w, ' ');
+end;
+
+function pystr_zfill(const s: AnsiString; w: Int64): AnsiString;
+var n, i, pad, signLen: Integer;
+begin
+  n := Length(s);
+  if w <= n then begin Result := s; Exit; end;
+  signLen := 0;
+  if (n > 0) and ((s[1] = '-') or (s[1] = '+')) then signLen := 1;
+  pad := Integer(w) - n;
+  SetLength(Result, Integer(w));
+  for i := 1 to signLen do Result[i] := s[i];
+  for i := signLen + 1 to signLen + pad do Result[i] := '0';
+  for i := signLen + 1 to n do Result[i + pad] := s[i];
+end;
+
+function pystr_removeprefix(const s: AnsiString; const pre: AnsiString): AnsiString;
+begin
+  if (Length(pre) > 0) and pystr_startswith(s, pre) then
+    Result := Copy(s, Length(pre) + 1, Length(s) - Length(pre))
+  else
+    Result := s;
+end;
+
+function pystr_removesuffix(const s: AnsiString; const suf: AnsiString): AnsiString;
+begin
+  if (Length(suf) > 0) and pystr_endswith(s, suf) then
+    Result := Copy(s, 1, Length(s) - Length(suf))
+  else
+    Result := s;
 end;
 
 { sep.join(list). CPython requires every item to BE a str and raises TypeError

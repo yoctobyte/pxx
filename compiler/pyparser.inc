@@ -1950,11 +1950,64 @@ begin
     begin pname := 'pystr_rjust'; wantArgs := -2; end
   else if CaseEqual(mname, 'splitlines') then
     begin pname := 'pystr_splitlines'; retTk := tyClass; end
+  else if CaseEqual(mname, 'replace') then
+    { .replace(old, new) and .replace(old, new, count) — see the -7 case in
+      PyParseStrMethod. Its absence is what made songformatter's
+      `song_text = song_text.replace(...)` fall through to the unresolved-import
+      raise (bug-nilpy-songformatter-first-render-walls). }
+    begin pname := 'pystr_replace'; wantArgs := -7; end
+  else if CaseEqual(mname, 'count') then
+    begin pname := 'pystr_count'; retTk := tyInteger; wantArgs := 1; end
+  else if CaseEqual(mname, 'rfind') then
+    begin pname := 'pystr_rfind'; retTk := tyInteger; wantArgs := 1; end
+  else if CaseEqual(mname, 'title') then pname := 'pystr_title'
+  else if CaseEqual(mname, 'capitalize') then pname := 'pystr_capitalize'
+  else if CaseEqual(mname, 'swapcase') then pname := 'pystr_swapcase'
+  { casefold is lower() for the byte strings we have — no Unicode folding }
+  else if CaseEqual(mname, 'casefold') then pname := 'pystr_lower'
+  else if CaseEqual(mname, 'isalnum') then
+    begin pname := 'pystr_isalnum'; retTk := tyBoolean; end
+  else if CaseEqual(mname, 'ljust') then
+    { width, plus an OPTIONAL fill character — the -2 form, like rjust }
+    begin pname := 'pystr_ljust'; wantArgs := -2; end
+  else if CaseEqual(mname, 'center') then
+    begin pname := 'pystr_center'; wantArgs := -2; end
+  else if CaseEqual(mname, 'zfill') then
+    begin pname := 'pystr_zfill'; wantArgs := 1; end
+  else if CaseEqual(mname, 'removeprefix') then
+    begin pname := 'pystr_removeprefix'; wantArgs := 1; end
+  else if CaseEqual(mname, 'removesuffix') then
+    begin pname := 'pystr_removesuffix'; wantArgs := 1; end
   else
   begin
     pname := '';
     Result := False;
   end;
+end;
+
+{ Does ANY user class declare this method? (Records excluded — the closed-world
+  dispatch below skips them too.) }
+function PyAnyClassDeclaresMeth(const mname: AnsiString): Boolean;
+var ci: Integer;
+begin
+  Result := False;
+  for ci := 0 to UClsCount - 1 do
+  begin
+    if UClsIsRecord[ci] then Continue;
+    if FindUMeth(ci, mname) >= 0 then begin Result := True; Exit; end;
+  end;
+end;
+
+{ str methods whose NAME is also a common object method: `title` is str.title()
+  and tkinter's window title, `count` is str.count() and a container's. On a
+  VARIANT receiver a declared class method wins for these — `root.title("x")` is
+  what real code means, and the str spelling is reached anyway whenever the
+  receiver is statically a string. Every other str method keeps str-first
+  priority, which is what the dynamically-typed corpus relies on. }
+function PyStrMethodLosesToClass(const mname: AnsiString): Boolean;
+begin
+  Result := (CaseEqual(mname, 'title') or CaseEqual(mname, 'count')) and
+            PyAnyClassDeclaresMeth(mname);
 end;
 
 { A name that is BOTH a type name and a builtin conversion call. }
@@ -3241,8 +3294,10 @@ begin
   if not PyStrMethodInfo(mname, pname, retTk, wantArgs) then
     Error('Nil Python: unsupported str method .' + mname + '() (have: upper, '
       + 'lower, strip, lstrip, rstrip, startswith, endswith, find, isspace, '
-      + 'isdigit, isalpha, isupper, islower, format, '
-      + 'join, split, splitlines)');
+      + 'isdigit, isalpha, isalnum, isupper, islower, format, '
+      + 'join, split, splitlines, replace, count, rfind, title, capitalize, '
+      + 'swapcase, casefold, ljust, rjust, center, zfill, removeprefix, '
+      + 'removesuffix)');
 
   procIdx := FindProc(pname);
   if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
@@ -3340,6 +3395,15 @@ begin
     if i = 1 then pname := pname + '_chars'
     else if i <> 0 then
       Error('Nil Python: str method .' + mname + '() takes at most one argument');
+    procIdx := FindProc(pname);
+    if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  end
+  else if wantArgs = -7 then
+  begin
+    { old + new, plus an OPTIONAL occurrence count — replace }
+    if i = 3 then pname := pname + '_n'
+    else if i <> 2 then
+      Error('Nil Python: str method .' + mname + '() takes two or three arguments');
     procIdx := FindProc(pname);
     if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   end
@@ -5313,6 +5377,166 @@ begin
   end;
 end;
 
+{ `obj.m(*xs)` — a STARRED argument in a method call, expanded into the callee's
+  remaining declared parameters. Unlike the free-function forwarding path
+  (PyStarForwardCall in parser.inc, which dispatches on len(args) at run time to
+  keep defaults working), the arity here is settled at compile time: each
+  remaining parameter becomes one pystar_arg(list, k) read into a hidden variant
+  local, guarded by a single pystar_check_arity. A callee with DEFAULTS in the
+  starred range is refused rather than filled with None — silently dropping a
+  default would be wrong output, not a missing feature.
+  `selfSlots` is 1 for a method (Self is parameter 0), 0 for a plain proc;
+  `given` is the number of arguments already parsed, and is advanced.
+  The caller has NOT yet consumed the '*'. }
+procedure PyStarExpandCallArgs(procIdx, firstSlot: Integer;
+                               var headArg, lastArg: Integer);
+var listCi, listSym, asgn, total, required, wanted, k: Integer;
+    slotSym, elemNode, idxArg, callNode, argNode, a2, a3, chkArg: Integer;
+begin
+  listCi := FindUClass('TPyList');
+  if listCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  Next;                          { the '*' }
+  PyParseBoolExpr;
+  listSym := AllocVar(PyHiddenName('starl'), tyClass);
+  Syms[listSym].RecName := REC_UCLASS_BASE + listCi;
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(listSym);
+  ASTRight[asgn] := CurASTNode;
+  PyHoistStmt(asgn);
+
+  total := Procs[procIdx].ParamCount;
+  required := total;
+  while (required > 0) and (required - 1 < MAX_PROC_PARAMS) and
+        ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + (required - 1)] do
+    Dec(required);
+  wanted := total - firstSlot;
+  if wanted <= 0 then
+    Error('Nil Python: *unpacking has no parameter left to fill in .'
+          + Procs[procIdx].Name + '()');
+  if required < total then
+    Error('Nil Python: *unpacking into ' + Procs[procIdx].Name
+          + ' is not supported — it has parameters with defaults, whose values '
+          + 'a compile-time expansion cannot preserve');
+
+  { one guard: the list must hold exactly the slots being filled }
+  chkArg := AllocNode(AN_ARG);
+  ASTLeft[chkArg] := PyMakeIdent(listSym);
+  a2 := AllocNode(AN_ARG);
+  ASTLeft[a2] := AllocNode(AN_INT_LIT);
+  ASTIVal[ASTLeft[a2]] := wanted;
+  ASTTk[ASTLeft[a2]] := Ord(tyInteger);
+  a3 := AllocNode(AN_ARG);
+  ASTLeft[a3] := AllocNode(AN_INT_LIT);
+  ASTIVal[ASTLeft[a3]] := wanted;
+  ASTTk[ASTLeft[a3]] := Ord(tyInteger);
+  ASTRight[chkArg] := a2;
+  ASTRight[a2] := a3;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := FindProc('pystar_check_arity');
+  if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pystar_check_arity) not loaded');
+  ASTTk[callNode] := Ord(tyInteger);
+  ASTLeft[callNode] := chkArg;
+  PyHoistStmt(callNode);
+
+  for k := 0 to wanted - 1 do
+  begin
+    slotSym := AllocVar(PyHiddenName('stara'), tyVariant);
+    elemNode := AllocNode(AN_ARG);
+    ASTLeft[elemNode] := PyMakeIdent(listSym);
+    idxArg := AllocNode(AN_ARG);
+    ASTLeft[idxArg] := AllocNode(AN_INT_LIT);
+    ASTIVal[ASTLeft[idxArg]] := k;
+    ASTTk[ASTLeft[idxArg]] := Ord(tyInteger);
+    ASTRight[elemNode] := idxArg;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := FindProc('pystar_arg');
+    if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pystar_arg) not loaded');
+    ASTTk[callNode] := Ord(tyVariant);
+    ASTLeft[callNode] := elemNode;
+    asgn := AllocNode(AN_ASSIGN);
+    ASTLeft[asgn] := PyMakeIdent(slotSym);
+    ASTRight[asgn] := callNode;
+    PyHoistStmt(asgn);
+
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := PyMakeIdent(slotSym);
+    ASTIVal[argNode] := 0;
+    ASTRight[argNode] := -1;
+    if lastArg < 0 then headArg := argNode else ASTRight[lastArg] := argNode;
+    if headArg < 0 then headArg := argNode;
+    lastArg := argNode;
+  end;
+end;
+
+{ Is there a top-level `*expr` (single star, not `**`) left in the argument list
+  being parsed? Scanned from the current token to the ')' that closes it, so a
+  star anywhere in the list — not only in first position — routes the whole call
+  through the unpacking path. }
+function PyStarArgAhead: Boolean;
+var i, depth: Integer;
+begin
+  Result := (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+            (Tokens[TokPos].Kind <> tkStar);
+  if Result then Exit;
+  depth := 0;
+  i := TokPos;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRBrack, tkEnd] then Dec(depth)
+    else if Tokens[i].Kind = tkRParen then
+    begin
+      if depth = 0 then Exit;
+      Dec(depth);
+    end
+    else if (depth = 0) and (Tokens[i].Kind = tkStar) and
+            (i + 1 < TokCount) and (Tokens[i + 1].Kind <> tkStar) and
+            (i > 0) and (Tokens[i - 1].Kind in [tkComma, tkLParen]) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
+{ A METHOD call whose argument list contains a `*expr` unpack. The arity-driven
+  Pascal loop in parser.inc cannot parse it (a star is not an expression), so it
+  hands the whole list here — the mirror of PyParseStarMethodArgs, which does the
+  same for a callee that DECLARES *args. }
+procedure PyStarUnpackMethodArgs(mpi, mcallNode: Integer; var mlastArg, mai: Integer);
+var argNode, kwIdx, head, cnt: Integer;
+begin
+  head := ASTLeft[mcallNode];
+  cnt := 1;                          { Self occupies parameter 0 }
+  while CurTok.Kind <> tkRParen do
+  begin
+    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind <> tkStar) then
+    begin
+      PyStarExpandCallArgs(mpi, cnt, head, mlastArg);
+      cnt := Procs[mpi].ParamCount;
+      if CurTok.Kind = tkComma then
+        Error('Nil Python: an argument after *unpacking is not supported yet');
+      Break;
+    end;
+    kwIdx := PyKwArgIndex(mpi, 1);
+    ParseArgExpr;
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := CurASTNode;
+    ASTIVal[argNode] := kwIdx;
+    ASTRight[argNode] := -1;
+    if mlastArg < 0 then ASTLeft[mcallNode] := argNode
+    else ASTRight[mlastArg] := argNode;
+    if head < 0 then head := argNode;
+    mlastArg := argNode;
+    Inc(cnt);
+    if CurTok.Kind = tkComma then Next else Break;
+  end;
+  ASTLeft[mcallNode] := head;
+  mai := Procs[mpi].ParamCount;
+end;
+
 function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer;
 var mmi, mpi, selfArg, lastArg, argNode, callNode, n, k, kwIdx: Integer;
     anyKw: Boolean;
@@ -5334,6 +5558,16 @@ begin
     { keyword arguments here too — `WeightedDetector().analyze(rs, weights=w)`.
       Slot 0 is Self, so the name scan starts at 1, exactly as the ordinary
       method path does. }
+    { `c.setStrokeColorRGB(*rgb)` — a starred argument is not an expression, so
+      it is diverted before ParseArgExpr ever sees the '*'. }
+    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind <> tkStar) and (ProcPyStarIdx[mpi] < 0) then
+    begin
+      k := selfArg;
+      PyStarExpandCallArgs(mpi, n + 1, k, lastArg);
+      n := Procs[mpi].ParamCount - 1;
+      Break;
+    end;
     kwIdx := PyKwArgIndex(mpi, 1);
     if kwIdx <> 0 then anyKw := True;
     ParseArgExpr;
@@ -5431,7 +5665,8 @@ begin
     loop variable is a variant holding a string. Render the receiver with
     pystr_of (which spells every tag Python's way) and hand it to the ordinary
     str-method desugar, rather than looking for a class that declares `upper`. }
-  if PyStrMethodInfo(mname, smPName, smTk, smArgs) then
+  if PyStrMethodInfo(mname, smPName, smTk, smArgs) and
+     not PyStrMethodLosesToClass(mname) then
   begin
     i := FindProc('pystr_of');
     if i < 0 then Error('Nil Python: pylib (pystr_of) not loaded');
@@ -5693,6 +5928,16 @@ begin
       method; a runtime candidate re-uses the reordered argument list, which is
       right as long as the candidates agree on parameter order, and they do
       when they agree on the name and arity that got them here. }
+    { a starred argument on a dynamically-dispatched receiver — same expansion
+      as the statically-bound method path above }
+    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind <> tkStar) and (ProcPyStarIdx[hitPi] < 0) then
+    begin
+      kwIdx := selfArg;
+      PyStarExpandCallArgs(hitPi, i + 1, kwIdx, lastArg);
+      i := Procs[hitPi].ParamCount - 1;
+      Break;
+    end;
     kwIdx := PyKwArgIndex(hitPi, 1);
     if kwIdx <> 0 then anyKw := True;
     ParseArgExpr;

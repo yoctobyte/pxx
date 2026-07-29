@@ -780,6 +780,8 @@ function PyKwArgIndex(mpi, firstParam: Integer): Integer; forward; { Nil Python 
 procedure PyBindKwArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer); forward; { Nil Python keyword-argument reorder (pyparser.inc) }
 procedure PyPackStarArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer); forward; { Nil Python `*args`/`**kwargs` call-site packing (pyparser.inc) }
 procedure PyParseStarMethodArgs(mpi, mcallNode: Integer; var mlastArg, mai: Integer); forward; { Nil Python varargs METHOD call (pyparser.inc) }
+function PyStarArgAhead: Boolean; forward; { Nil Python: a `*expr` unpack left in this argument list (pyparser.inc) }
+procedure PyStarUnpackMethodArgs(mpi, mcallNode: Integer; var mlastArg, mai: Integer); forward; { Nil Python `obj.m(*xs)` call-site unpack (pyparser.inc) }
 function PyIsSetCall: Boolean; forward;   { Nil Python `set(...)` builtin, user definition permitting (pyparser.inc) }
 function PyParseEmptySet: Integer; forward; { Nil Python set() / set(iterable) (pyparser.inc) }
 
@@ -5476,6 +5478,12 @@ begin
                 FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
               mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
             end;
+            { `obj.m(*xs)` — a call-site UNPACK (the callee declares ordinary
+              parameters; the star is on the CALL). A star is not an expression, so
+              the arity loop below cannot parse it: hand the whole argument list to
+              the NilPy path, which expands the list across the remaining slots. }
+            if isNilPy and (mai <= Procs[mpi].ParamCount-1) and PyStarArgAhead then
+              PyStarUnpackMethodArgs(mpi, mcallNode, mlastArg, mai);
             while mai <= Procs[mpi].ParamCount-1 do
             begin
               if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
@@ -5569,6 +5577,12 @@ begin
             if isNilPy and (mai <= Procs[mpi].ParamCount-1) and
                ((ProcPyStarIdx[mpi] >= 0) or (ProcPyKwIdx[mpi] >= 0)) then
               PyParseStarMethodArgs(mpi, mcallNode, mlastArg, mai);
+            { `obj.m(*xs)` — a call-site UNPACK (the callee declares ordinary
+              parameters; the star is on the CALL). A star is not an expression, so
+              the arity loop below cannot parse it: hand the whole argument list to
+              the NilPy path, which expands the list across the remaining slots. }
+            if isNilPy and (mai <= Procs[mpi].ParamCount-1) and PyStarArgAhead then
+              PyStarUnpackMethodArgs(mpi, mcallNode, mlastArg, mai);
             while mai <= Procs[mpi].ParamCount-1 do
             begin
               { NilPy `key=expr` on the METHOD path. Params[0] is Self, so names
@@ -5799,6 +5813,12 @@ begin
         FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
       mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
     end;
+    { `obj.m(*xs)` — a call-site UNPACK (the callee declares ordinary
+      parameters; the star is on the CALL). A star is not an expression, so
+      the arity loop below cannot parse it: hand the whole argument list to
+      the NilPy path, which expands the list across the remaining slots. }
+    if isNilPy and (mai <= Procs[mpi].ParamCount-1) and PyStarArgAhead then
+      PyStarUnpackMethodArgs(mpi, mcallNode, mlastArg, mai);
     while mai <= Procs[mpi].ParamCount-1 do
     begin
       if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
@@ -8334,6 +8354,12 @@ begin
                   FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
                 mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
               end;
+              { `obj.m(*xs)` — a call-site UNPACK (the callee declares ordinary
+                parameters; the star is on the CALL). A star is not an expression, so
+                the arity loop below cannot parse it: hand the whole argument list to
+                the NilPy path, which expands the list across the remaining slots. }
+              if isNilPy and (mai <= Procs[mpi].ParamCount-1) and PyStarArgAhead then
+                PyStarUnpackMethodArgs(mpi, mcallNode, mlastArg, mai);
               while mai <= Procs[mpi].ParamCount-1 do
               begin
                 if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
