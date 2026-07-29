@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-28T18:10:25Z",
-   "fixed": [],
-   "new_red": [
-    "test-arm32#src:examples/net/httpdemo.pas",
-    "test-i386#src:examples/net/httpdemo.pas"
-   ],
-   "sha": "89e07d3cfa98e54ffd6f7fd3ccb2f193181b731f",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-07-28T18:14:22Z",
    "fixed": [],
    "new_red": [],
@@ -408,6 +397,14 @@
    "new_red": [],
    "sha": "5a02ada8d054266c6a3510b50e14f20a0d2559b5",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-29T09:09:44Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "52fecab2fe0bc3d0d3b2e7c31ee07245c43452e0",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -2042,11 +2039,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-29T08:38:55Z",
-  "sha": "5a02ada8d054266c6a3510b50e14f20a0d2559b5",
-  "tier": "opt",
+  "date": "2026-07-29T09:09:44Z",
+  "sha": "52fecab2fe0bc3d0d3b2e7c31ee07245c43452e0",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 177.0
+  "wall": 127.2
  },
  "last_bench": {
   "conf_rows": 550,
