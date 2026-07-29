@@ -1292,18 +1292,43 @@ begin
   end;
 end;
 
+{$ifndef PXX_ESP}
+{ Forward only where the BODY exists — PXXClassFinalize is itself inside
+  {$ifndef PXX_ESP}, so an unconditional forward left it unresolved on the
+  ESP profile (test-emit-obj: "unresolved forward: PXXClassFinalize"). }
+procedure PXXClassFinalize(inst: Pointer); forward;
+{$endif}
+
 { Free an instance whichever population it belongs to: headered -> release
   (rc discipline), plain GetMem -> ordinary free. This is what the FreeMem
   tail of a `.Free` desugar lowers to in a NilPy compilation, so hand-written
   Pascal units (pyeval's TPyList arg lists, a user unit's obj.Free) stay
-  correct when construction is rerouted through PXXObjAlloc. }
+  correct when construction is rerouted through PXXObjAlloc.
+
+  It owns the managed-field finalization for BOTH populations, and that is
+  not a detail: the desugar used to emit PXXClassFinalize itself and then
+  call here, so a headered instance was finalized twice — once inline, once
+  again through PXXObjRelease's rc=0 hook (PyObjFinalize -> PXXClassFinalize).
+  Every AnsiString field was released twice, so a string the CALLER still
+  owned died at the second release (bug-heap-dict-literal-then-two-parses-
+  corrupts: json.pas's `rd.FSrc := src` dropped the caller's own reference,
+  and the freed block came back from the allocator while still in use).
+  One destruction, one finalize:
+    - headered -> PXXObjRelease only; it finalizes at rc=0 and NOT before, so
+      an instance still referenced elsewhere also stops being finalized early;
+    - plain GetMem -> finalize here, then free, exactly the old inline order. }
 procedure PXXObjFree(p: Pointer);
 begin
   if p = nil then Exit;
   if PXXObjPlausible(p) and (PWord(Int64(p) - 8)^ = PXX_OBJ_MAGIC) then
     PXXObjRelease(p)
   else
+  begin
+{$ifndef PXX_ESP}
+    PXXClassFinalize(p);   { ESP has no class-layout finalizer to run }
+{$endif}
     PXXFree(p);
+  end;
 end;
 
 { COM/ARC interface refcount helpers. `fatptr` is the ADDRESS of a 16-/8-byte

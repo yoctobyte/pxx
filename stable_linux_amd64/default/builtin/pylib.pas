@@ -142,6 +142,9 @@ type
       which is what makes `d.setdefault(k, ...)[k2] = v` mutate the dict rather
       than a throwaway copy. }
     function setdefault(const k: Variant; const d: Variant): Variant;
+    { dict.clear() — Python's, and what a tkinter application calls on a
+      widget's `children` after destroying them. }
+    procedure clear;
     { `d.items()` as a VALUE — a list of [key, value] pairs, which is what
       `sorted(d.items(), key=...)` and `list(d.items())` need. NOT named `items`:
       that collides with the default indexed property `Items[k]` above (Pascal is
@@ -227,6 +230,48 @@ type
   NotImplementedError = class(RuntimeError) end;
   StopIteration     = class(Exception) end;
   OverflowError     = class(Exception) end;
+  { CPython 3 makes IOError and EnvironmentError aliases of OSError, and
+    FileNotFoundError / PermissionError subclasses of it. Real code catches
+    them by name — songformatter has `except IOError:` around a file read. }
+  IOError           = class(OSError) end;
+  EnvironmentError  = class(OSError) end;
+  FileNotFoundError = class(OSError) end;
+  PermissionError   = class(OSError) end;
+  FileExistsError   = class(OSError) end;
+  IsADirectoryError = class(OSError) end;
+  NotADirectoryError = class(OSError) end;
+  InterruptedError  = class(OSError) end;
+  ArithmeticError   = class(Exception) end;
+  FloatingPointError = class(ArithmeticError) end;
+  LookupError       = class(Exception) end;
+  NameError         = class(Exception) end;
+  UnboundLocalError = class(NameError) end;
+  RecursionError    = class(RuntimeError) end;
+  UnicodeError      = class(ValueError) end;
+  UnicodeDecodeError = class(UnicodeError) end;
+  UnicodeEncodeError = class(UnicodeError) end;
+  MemoryError       = class(Exception) end;
+  BufferError       = class(Exception) end;
+  AssertionError    = class(Exception) end;
+  SystemError       = class(Exception) end;
+  SystemExit        = class(Exception) end;
+  GeneratorExit     = class(Exception) end;
+  TimeoutError      = class(OSError) end;
+  ConnectionError   = class(OSError) end;
+  BrokenPipeError   = class(ConnectionError) end;
+  ConnectionResetError = class(ConnectionError) end;
+  ConnectionRefusedError = class(ConnectionError) end;
+  ConnectionAbortedError = class(ConnectionError) end;
+  BlockingIOError   = class(OSError) end;
+  ChildProcessError = class(OSError) end;
+  ProcessLookupError = class(OSError) end;
+  ImportError       = class(Exception) end;
+  ModuleNotFoundError = class(ImportError) end;
+  IndentationError  = class(Exception) end;
+  SyntaxError       = class(Exception) end;
+  TabError          = class(IndentationError) end;
+  ReferenceError    = class(Exception) end;
+  StopAsyncIteration = class(Exception) end;
 
   TPyBytes = class
   public
@@ -323,6 +368,11 @@ function pyprint_star(l: TPyList; leadSep: Boolean): AnsiString;
   literal text between ':' and the closing brace; this unit is the ONE place
   that interprets it, so the lexer never has to know what "05x" means. }
 function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
+{ `"...{}...{:.1f}".format(a, b)` — the positional placeholders, with the same
+  spec grammar the f-strings use (pyformat_of below). Named fields
+  (`{name}`) and index fields (`{0}`) are NOT here: they fail loudly rather
+  than being dropped, because a format spec decides what is PRINTED. }
+function pystr_format(const fmt: AnsiString; const a: Variant): AnsiString;
 function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; overload;
 function PyFmtFixed(d: Double; prec: Integer): AnsiString;
 function pyformat_of(d: Double; const spec: AnsiString): AnsiString; overload;
@@ -401,6 +451,29 @@ procedure pysys_exit(code: Integer);
 function pyos_remove(const path: AnsiString): Integer;
 function pyos_rename(const src: AnsiString; const dst: AnsiString): Integer;
 function pyos_stat(const path: AnsiString): TPyStat;
+{ os.environ.get(name[, default]) and os.getenv(name[, default]). The process
+  environment comes from /proc/self/environ (NUL-separated NAME=VALUE records);
+  reaching the real block on the initial stack needs an intrinsic that does not
+  exist yet — feature-rtl-environment-variables. An UNSET variable yields None,
+  not '', because that is what Python does and what `if os.environ.get(X):`
+  depends on. }
+{ os.startfile(path) — Windows only in CPython, and the branch that calls it is
+  guarded by `sys.platform.startswith("win")`. It has to COMPILE on a file that
+  supports Windows, and it must not pretend to work if reached. }
+{ `s[::-1]` — a reversed STRING. `reversed(s)` yields a LIST of characters,
+  which is right for `for c in reversed(s)` but wrong for a slice: a slice of a
+  string is a string. }
+function pystr_reverse(const s: AnsiString): AnsiString;
+{ A name that came from an optional import whose module was not available.
+  Binding it to None lets the file COMPILE, exactly as CPython compiles a
+  module whose `try: import X` failed; this is what happens if such a name is
+  actually USED, and it names the module so the message is actionable. }
+function pyoptional_missing(const what: AnsiString): Variant;
+function pyos_startfile(const path: AnsiString): Integer;
+function pyos_environ_get(const name: AnsiString): Variant;
+function pyos_environ_get_d(const name: AnsiString; const dflt: Variant): Variant;
+function pyos_getenv(const name: AnsiString): Variant;
+function pyos_getenv_d(const name: AnsiString; const dflt: Variant): Variant;
 { sys.stdin.read(n): read up to n bytes from fd 0, returned as a byte string.
   Returns '' at EOF (Python's read at EOF gives ''), which is exactly what
   uforth's KEY word tests for. }
@@ -565,6 +638,11 @@ function pyeq_v(const a: Variant; const b: Variant): Boolean;
 function pyint_v(const v: Variant): Variant;      { int(v) as a variant }
 function pyvar_of_int(v: Int64): Variant;
 function pyvar_of_bool(b: Boolean): Variant;
+{ Identity on a Variant. Its use is the ARGUMENT side: passing a scalar here
+  boxes it through the ordinary call-argument path, which is the one place that
+  knows how to make a variant out of any value — so an Integer field read and a
+  Variant one can be the two arms of one expression. }
+function pyvar_id(const v: Variant): Variant;
 function pystr_repeat_v(const v: Variant; n: Int64): AnsiString;
 { `xs * n` on a LIST: a new list whose slots are the original's, repeated.
   Python copies REFERENCES, not elements — `[[0]] * 3` gives three aliases of the
@@ -651,6 +729,14 @@ procedure pydict_merge(dst: TPyDict; src: TPyDict);
   everywhere else (feature-nilpy-aggregate-builtins). }
 { a > b: numbers by value, strings by text — the comparison the aggregate
   builtins and pyeval's sorted() share. }
+{ `map(int, xs)` / `map(str, xs)` / `map(float, xs)` — the conversion forms,
+  which is what real code uses (`w, h = map(int, s.split("x"))`). A general
+  map() over an arbitrary callable is separate work; the frontend refuses
+  anything but a type name rather than guessing.
+  feature-nilpy-aggregate-builtins. }
+function pymap_int(l: TPyList): TPyList;
+function pymap_str(l: TPyList): TPyList;
+function pymap_float(l: TPyList): TPyList;
 function pyvar_gt(const a: Variant; const b: Variant): Boolean;
 { `next(it)` / `next(it, default)` over a materialised sequence. NOT named
   `next`: itertools' counter already owns that name for its own argument type,
@@ -666,6 +752,15 @@ function pyvar_gt(const a: Variant; const b: Variant): Boolean;
   input, which is Python's rule. The for-header form never comes here: it walks
   both containers by index (PyParseForZip). }
 function pyzip(a: TPyList; b: TPyList): TPyList;
+{ `enumerate(xs)` as a VALUE — `for i, s in reversed(list(enumerate(t)))`. The
+  for-HEADER form is a counted loop and never comes here; this is the
+  materialised list of [index, item] pairs, the same shape pyzip builds. }
+function pyenumerate(a: TPyList): TPyList;
+{ Python's TWO-argument round(x, ndigits) — a float rounded to that many
+  decimals, unlike the one-argument form which yields an int. Half-away-from-
+  zero rather than CPython's banker's rounding: the difference shows only on an
+  exact .5 at the last digit, and matching it needs decimal arithmetic. }
+function pyround_n(x: Double; n: Integer): Double;
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
@@ -692,6 +787,10 @@ function pydictcontains(d: TPyDict; const k: Variant): Boolean;
 { Python compares lists by CONTENTS. Element equality is PyVarEq, which
   already compares strings by text rather than by which copy you hold. }
 function pylist_eq(a: TPyList; b: TPyList): Boolean;
+{ …and the MIXED form: a list against a dynamically-typed value. `key ==
+  cached_key` where the cache starts as None is ordinary Python, and comparing
+  a tuple with a non-list is simply False — never an error. }
+function pylist_eq_v(a: TPyList; const v: Variant): Boolean;
 function len(const s: AnsiString): Integer; overload;
 { len() of a VARIANT — a dynamically-typed value (a list element, a dataclass
   field, anything the frontend could not pin to a class). Without it, `len(x)`
@@ -747,6 +846,12 @@ function pystr_find(const s: AnsiString; const sub: AnsiString): Integer;
   ORIGINAL string, as Python does. }
 function pystr_find_from(const s: AnsiString; const sub: AnsiString; start: Integer): Integer;
 function pystr_isspace(const s: AnsiString): Boolean;
+{ CPython: "".isdigit()/.isalpha()/.isupper()/.islower() are all FALSE — the
+  all-quantifier does not hold vacuously for any of them. }
+function pystr_isdigit(const s: AnsiString): Boolean;
+function pystr_isalpha(const s: AnsiString): Boolean;
+function pystr_isupper(const s: AnsiString): Boolean;
+function pystr_islower(const s: AnsiString): Boolean;
 function pystr_ofchar(c: Char): AnsiString;
 function pystr_at(const s: AnsiString; i: Integer): Char;
 { Length() as a real Proc. The for-in desugar builds its AST directly and so
@@ -953,6 +1058,50 @@ begin
   tail := Copy(s, start + 1, Length(s) - start);
   r := pystr_find(tail, sub);
   if r < 0 then Result := -1 else Result := r + start;
+end;
+
+function pystr_isdigit(const s: AnsiString): Boolean;
+var i: Integer;
+begin
+  if Length(s) = 0 then begin pystr_isdigit := False; Exit; end;
+  for i := 1 to Length(s) do
+    if not (s[i] in ['0'..'9']) then begin pystr_isdigit := False; Exit; end;
+  pystr_isdigit := True;
+end;
+
+function pystr_isalpha(const s: AnsiString): Boolean;
+var i: Integer;
+begin
+  if Length(s) = 0 then begin pystr_isalpha := False; Exit; end;
+  for i := 1 to Length(s) do
+    if not (s[i] in ['A'..'Z', 'a'..'z']) then begin pystr_isalpha := False; Exit; end;
+  pystr_isalpha := True;
+end;
+
+{ CPython: a string with no CASED characters is neither upper nor lower, so
+  "123".isupper() is False while "A1".isupper() is True. }
+function pystr_isupper(const s: AnsiString): Boolean;
+var i: Integer; cased: Boolean;
+begin
+  cased := False;
+  for i := 1 to Length(s) do
+  begin
+    if s[i] in ['a'..'z'] then begin pystr_isupper := False; Exit; end;
+    if s[i] in ['A'..'Z'] then cased := True;
+  end;
+  pystr_isupper := cased;
+end;
+
+function pystr_islower(const s: AnsiString): Boolean;
+var i: Integer; cased: Boolean;
+begin
+  cased := False;
+  for i := 1 to Length(s) do
+  begin
+    if s[i] in ['A'..'Z'] then begin pystr_islower := False; Exit; end;
+    if s[i] in ['a'..'z'] then cased := True;
+  end;
+  pystr_islower := cased;
 end;
 
 { CPython: "".isspace() is FALSE — an empty string has no characters to be
@@ -1534,6 +1683,7 @@ var
   k: Integer;
   la, lb: Int64;
   a, b: PChar;
+  pl, ql: TObject;
 begin
   Result := False;
   { The int-family tags (VT_INT/VT_INT64/VT_BOOL) are ONE Python number and
@@ -1548,6 +1698,30 @@ begin
     Exit;
   end;
   if p^.VType <> q^.VType then Exit;
+  if p^.VType = 7 then
+  begin
+    { Two OBJECTS. Identity settles it first (and covers every class this unit
+      does not compare by value). A tuple lowers to a TPyList, so
+      `("Options", "Debug") in BOOLEAN_SETTINGS` compares two DISTINCT list
+      objects and identity alone answered False where Python says True —
+      Python compares sequences ELEMENT BY ELEMENT. }
+    Result := p^.Payload = q^.Payload;
+    if Result then Exit;
+    if (p^.Payload = 0) or (q^.Payload = 0) then Exit;
+    pl := TObject(Pointer(NativeInt(p^.Payload)));
+    ql := TObject(Pointer(NativeInt(q^.Payload)));
+    if (pl is TPyList) and (ql is TPyList) then
+    begin
+      la := TPyList(pl).FLen;
+      lb := TPyList(ql).FLen;
+      if la <> lb then Exit;
+      for k := 0 to Integer(la) - 1 do
+        if not PyVarEq(PPyVarRec(NativeInt(TPyList(pl).FItems) + k * 16),
+                       PPyVarRec(NativeInt(TPyList(ql).FItems) + k * 16)) then Exit;
+      Result := True;
+    end;
+    Exit;
+  end;
   if p^.VType = 8193 then
   begin
     { VT_PROMO_INT64: payload is the exact decimal in a managed string —
@@ -1707,9 +1881,15 @@ function PyVarHashKey(p: PPyVarRec): NativeUInt;
   - int-family VT_INT/VT_INT64/VT_BOOL (1/2/4): by payload, tag-independent
     (PyVarEq compares these cross-tag by value);
   - VT_PROMO_INT64 (8193) and VT_STRING (6): by string CONTENT;
+  - VT_OBJECT (7) holding a TPyList: by ELEMENT CONTENT, recursively. A tuple
+    lowers to a TPyList, so `d[(1, 2)]` hashed the list HANDLE while PyVarEq
+    compares two distinct lists element by element — every tuple key stored fine
+    and then missed on lookup with a KeyError
+    (bug-nilpy-tuple-dict-key-never-matches). Any other object keeps the
+    identity hash, which is what PyVarEq's identity compare needs;
   - else: same VType required by PyVarEq, so hash (VType, payload).
   A wrong hash here silently loses keys, so this mirrors PyVarEq arm-for-arm. }
-var h: NativeUInt; sp: PPyAnsiString;
+var h: NativeUInt; sp: PPyAnsiString; ol: TObject; k: Integer;
 begin
   if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
     h := NativeUInt(p^.Payload)
@@ -1723,6 +1903,18 @@ begin
     if Pointer(p^.Payload) = nil then h := PyStrBytesHash(nil, 0)
     else h := PyStrBytesHash(PChar(p^.Payload),
                              Integer(PInt64(NativeInt(p^.Payload) - 8)^));
+  end
+  else if (p^.VType = 7) and (p^.Payload <> 0) and
+          (TObject(Pointer(NativeInt(p^.Payload))) is TPyList) then
+  begin
+    { sequence hash over the elements, seeded by the length — the same shape
+      CPython uses for tuples, and consistent with PyVarEq's element-wise
+      compare. Recurses, so a nested tuple key hashes by its contents too. }
+    ol := TObject(Pointer(NativeInt(p^.Payload)));
+    h := NativeUInt(TPyList(ol).FLen) * NativeUInt($9E3779B97F4A7C15);
+    for k := 0 to Integer(TPyList(ol).FLen) - 1 do
+      h := (h xor PyVarHashKey(PPyVarRec(NativeInt(TPyList(ol).FItems) + k * 16)))
+           * NativeUInt($100000001b3);
   end
   else
     h := (NativeUInt(p^.VType) * NativeUInt($100000001b3)) xor NativeUInt(p^.Payload);
@@ -1926,6 +2118,14 @@ begin
   if FHashCap > 0 then PyDictRehash(Self, FHashCap);
 end;
 
+procedure TPyDict.clear;
+begin
+  { drop every entry; the storage arrays stay for reuse, which is what Python's
+    dict.clear() does too }
+  Self.FLen := 0;
+  PyDictRehash(Self, Self.FHashCap);
+end;
+
 function TPyDict.pop(const k: Variant; const d: Variant): Variant;
 var i: Integer; src, dst: PPyVarRec;
 begin
@@ -1946,6 +2146,40 @@ end;
 { a > b for the aggregate builtins: numbers by value, strings by text, which is
   the pair Python orders and the corpus uses. A mixed number/string comparison
   is a TypeError in CPython and halts here rather than inventing an order. }
+function pymap_int(l: TPyList): TPyList;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  if l <> nil then
+    for i := 0 to l.count - 1 do
+      { int("200") PARSES, as CPython's int() does — the elements of a
+        `s.split(...)` are strings, which is the common source for map(int, …) }
+      if pyvartag(l.at(i)) = 6 then r.append(pystr_to_int(pystr_of(l.at(i))))   { 6 = VT_STRING }
+      else r.append(pyvar_to_int(l.at(i)));
+  pymap_int := r;
+end;
+
+function pymap_str(l: TPyList): TPyList;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  if l <> nil then
+    for i := 0 to l.count - 1 do r.append(pystr_of(l.at(i)));
+  pymap_str := r;
+end;
+
+function pymap_float(l: TPyList): TPyList;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  if l <> nil then
+    for i := 0 to l.count - 1 do
+      { float("1.5") PARSES, as CPython's float() does }
+      if pyvartag(l.at(i)) = 6 then r.append(pyfloat_parse(pystr_of(l.at(i))))
+      else r.append(pyvar_to_float(l.at(i)));
+  pymap_float := r;
+end;
+
 function pyvar_gt(const a: Variant; const b: Variant): Boolean;
 var pa, pb: PPyVarRec;
 begin
@@ -1964,6 +2198,33 @@ begin
     pyvar_gt := PyVarAsFloat(pa) > PyVarAsFloat(pb)
   else
     pyvar_gt := pyvar_to_int(a) > pyvar_to_int(b);
+end;
+
+function pyround_n(x: Double; n: Integer): Double;
+var scale: Double; i: Integer;
+begin
+  scale := 1.0;
+  for i := 1 to n do scale := scale * 10.0;
+  if x >= 0.0 then pyround_n := Trunc(x * scale + 0.5) / scale
+  else pyround_n := -(Trunc(-x * scale + 0.5) / scale);
+end;
+
+function pyenumerate(a: TPyList): TPyList;
+var r, pair: TPyList; i: Integer; pv: Variant;
+begin
+  r := TPyList.Create;
+  pyenumerate := r;
+  if a = nil then Exit;
+  for i := 0 to a.count - 1 do
+  begin
+    pair := TPyList.Create;
+    pair.append(i);
+    pair.append(a.at(i));
+    PPyVarRec(@pv)^.VType := 7;
+    PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
+    PXXObjRetain(Pointer(pair));
+    r.append(pv);
+  end;
 end;
 
 function pyzip(a: TPyList; b: TPyList): TPyList;
@@ -2270,6 +2531,13 @@ begin
     Result.append(tmp);
     PyVarSlotClear(dst);   { tmp is reused next pass -- drop this retain }
   end;
+end;
+
+function pylist_eq_v(a: TPyList; const v: Variant): Boolean;
+begin
+  { a list equals only another list; None, a number or a string never does }
+  if pyvartag(v) <> 7 then pylist_eq_v := (a = nil) and (pyvartag(v) = 0)
+  else pylist_eq_v := pylist_eq(a, TPyList(pyvarobj(v)));
 end;
 
 function pylist_eq(a: TPyList; b: TPyList): Boolean;
@@ -2603,6 +2871,11 @@ begin
   r := PPyVarRec(@Result);
   r^.VType := 4;
   if b then r^.Payload := 1 else r^.Payload := 0;
+end;
+
+function pyvar_id(const v: Variant): Variant;
+begin
+  Result := v;
 end;
 
 function pyint_v(const v: Variant): Variant;
@@ -3466,6 +3739,129 @@ begin
   Result := r = 0;
 end;
 
+{ ---- environment ---------------------------------------------------------- }
+
+var
+  PyEnvLoaded: Boolean;
+  PyEnvRaw: AnsiString;    { the whole file, NULs replaced by #1 separators }
+
+procedure PyEnvLoad;
+{ Read /proc/self/environ once. Linux-only, like pyos_getcwd's syscall set; on a
+  target without it the table stays empty and every lookup is None, which is the
+  honest answer for "this program has no environment". }
+var buf: array[0..16383] of Char; fd, r, closed: Int64; i: Integer;
+begin
+  if PyEnvLoaded then Exit;
+  PyEnvLoaded := True;
+  PyEnvRaw := '';
+  fd := -1;
+{$ifdef CPUX86_64}
+  { openat(AT_FDCWD, path, O_RDONLY) }
+  fd := __pxxrawsyscall(257, Int64(-100), Int64(PChar('/proc/self/environ')), 0, 0, 0, 0);
+{$endif}
+{$ifdef CPUAARCH64}
+  fd := __pxxrawsyscall(56, Int64(-100), Int64(PChar('/proc/self/environ')), 0, 0, 0, 0);
+{$endif}
+  if fd < 0 then Exit;
+  r := 0;
+{$ifdef CPUX86_64}
+  r := __pxxrawsyscall(0, fd, Int64(@buf[0]), 16384, 0, 0, 0);
+  closed := __pxxrawsyscall(3, fd, 0, 0, 0, 0, 0);
+{$endif}
+{$ifdef CPUAARCH64}
+  r := __pxxrawsyscall(63, fd, Int64(@buf[0]), 16384, 0, 0, 0);
+  closed := __pxxrawsyscall(57, fd, 0, 0, 0, 0, 0);
+{$endif}
+  if r <= 0 then Exit;
+  for i := 0 to Integer(r) - 1 do
+    if buf[i] = #0 then PyEnvRaw := PyEnvRaw + #1
+    else PyEnvRaw := PyEnvRaw + buf[i];
+  if Length(PyEnvRaw) > 0 then
+    if PyEnvRaw[Length(PyEnvRaw)] <> #1 then PyEnvRaw := PyEnvRaw + #1;
+end;
+
+function PyEnvLookup(const name: AnsiString; var found: Boolean): AnsiString;
+var i, j, recStart, n: Integer; matched: Boolean;
+begin
+  PyEnvLookup := '';
+  found := False;
+  if name = '' then Exit;
+  PyEnvLoad;
+  n := Length(name);
+  recStart := 1;
+  i := 1;
+  while i <= Length(PyEnvRaw) do
+  begin
+    if PyEnvRaw[i] = #1 then
+    begin
+      { record is PyEnvRaw[recStart .. i-1] }
+      if (i - recStart) > n then
+        if PyEnvRaw[recStart + n] = '=' then
+        begin
+          matched := True;
+          for j := 0 to n - 1 do
+            if PyEnvRaw[recStart + j] <> name[j + 1] then begin matched := False; Break; end;
+          if matched then
+          begin
+            for j := recStart + n + 1 to i - 1 do
+              PyEnvLookup := PyEnvLookup + PyEnvRaw[j];
+            found := True;
+            Exit;
+          end;
+        end;
+      recStart := i + 1;
+    end;
+    Inc(i);
+  end;
+end;
+
+function pystr_reverse(const s: AnsiString): AnsiString;
+var i: Integer; r: AnsiString;
+begin
+  r := '';
+  for i := Length(s) downto 1 do r := r + s[i];
+  pystr_reverse := r;
+end;
+
+function pyoptional_missing(const what: AnsiString): Variant;
+begin
+  pyoptional_missing := pynone;
+  raise Exception.Create('this build has no ' + what
+    + ': the import it came from could not be resolved, and the code guarding '
+    + 'that (the flag its except-branch sets) let this call through anyway');
+end;
+
+function pyos_startfile(const path: AnsiString): Integer;
+begin
+  pyos_startfile := 0;
+  raise Exception.Create('os.startfile is Windows-only and is not implemented; '
+    + 'guard the call with sys.platform or use subprocess');
+end;
+
+function pyos_environ_get(const name: AnsiString): Variant;
+var v: AnsiString; found: Boolean;
+begin
+  v := PyEnvLookup(name, found);
+  if found then pyos_environ_get := v else pyos_environ_get := pynone;
+end;
+
+function pyos_environ_get_d(const name: AnsiString; const dflt: Variant): Variant;
+var v: AnsiString; found: Boolean;
+begin
+  v := PyEnvLookup(name, found);
+  if found then pyos_environ_get_d := v else pyos_environ_get_d := dflt;
+end;
+
+function pyos_getenv(const name: AnsiString): Variant;
+begin
+  pyos_getenv := pyos_environ_get(name);
+end;
+
+function pyos_getenv_d(const name: AnsiString; const dflt: Variant): Variant;
+begin
+  pyos_getenv_d := pyos_environ_get_d(name, dflt);
+end;
+
 function pyos_getcwd: AnsiString;
 var buf: array[0..4095] of Char; r: Int64; i: Integer;
 begin
@@ -4174,6 +4570,65 @@ end;
     [ '<' | '>' ] [ '0' ] [ width ] [ 'd' | 'x' | 'X' | 'o' | 'b' | 's' ]
   Anything else halts with the spec quoted, because a format spec decides what
   is PRINTED and silently ignoring one produces wrong output. }
+{ The placeholder walk. Two variants rather than an open array: an open array
+  of Variant is not marshalled correctly here and crashed on the second
+  argument. }
+function PyFormatApply(const fmt: AnsiString; const a: Variant; const b: Variant;
+                       nArgs: Integer): AnsiString;
+var i, j, argi: Integer; spec, outS: AnsiString;
+begin
+  outS := '';
+  argi := 0;
+  i := 1;
+  while i <= Length(fmt) do
+  begin
+    if (fmt[i] = '{') and (i < Length(fmt)) and (fmt[i + 1] = '{') then
+    begin outS := outS + '{'; Inc(i, 2); Continue; end;
+    if (fmt[i] = '}') and (i < Length(fmt)) and (fmt[i + 1] = '}') then
+    begin outS := outS + '}'; Inc(i, 2); Continue; end;
+    if fmt[i] = '{' then
+    begin
+      j := i + 1;
+      spec := '';
+      while (j <= Length(fmt)) and (fmt[j] <> '}') do
+      begin
+        if fmt[j] = ':' then
+        begin
+          Inc(j);
+          spec := '';
+          while (j <= Length(fmt)) and (fmt[j] <> '}') do
+          begin spec := spec + fmt[j]; Inc(j); end;
+          Break;
+        end;
+        Inc(j);
+      end;
+      if argi >= nArgs then
+        raise Exception.Create('str.format: more placeholders than arguments');
+      if argi = 0 then
+      begin
+        if spec = '' then outS := outS + pystr_of(a)
+        else outS := outS + pyformat_of(a, spec);
+      end
+      else
+      begin
+        if spec = '' then outS := outS + pystr_of(b)
+        else outS := outS + pyformat_of(b, spec);
+      end;
+      Inc(argi);
+      i := j + 1;
+      Continue;
+    end;
+    outS := outS + fmt[i];
+    Inc(i);
+  end;
+  PyFormatApply := outS;
+end;
+
+function pystr_format(const fmt: AnsiString; const a: Variant): AnsiString;
+begin
+  pystr_format := PyFormatApply(fmt, a, a, 1);
+end;
+
 function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
 var p, width: Integer; zero, leftAlign: Boolean; kind: Char; body: AnsiString;
 begin
@@ -4509,7 +4964,19 @@ begin
   if pyvartag(v) = 7 then
   begin
     o := TObject(pyvarobj(v));
-    if o is TPyDict then begin Result := TPyDict(o); Exit; end;
+    if o is TPyDict then
+    begin
+      { The dict INSIDE the variant is handed back as-is (unlike pylist_v, which
+        copies), so the reference leaving this function is a second owner: the
+        caller releases the temporary when the statement ends, and without this
+        retain that release drops the variant's own reference. It freed the live
+        dict under `for k, v in outer[key].items()` — a use-after-free that
+        corrupted the free list and crashed a later PXXAlloc
+        (bug-nilpy-pydict-v-borrowed-reference). }
+      PXXObjRetain(Pointer(o));
+      Result := TPyDict(o);
+      Exit;
+    end;
   end;
   PyTypeError(pyvartag(v), 'a dict');
   Result := TPyDict.Create;
