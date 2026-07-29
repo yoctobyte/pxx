@@ -66,3 +66,6 @@ of [[bug-nilpy-print-emits-arguments-before-evaluating-later-ones]].
 ### Gate
 
 `tools/gate.sh full`.
+
+## Log
+- 2026-07-30 — resolved, commit 382cf7a90.
