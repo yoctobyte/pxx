@@ -4,7 +4,7 @@ prio: 45
 type: feature
 ---
 
-# The `**` operator and `divmod()` are missing
+# The `**` and `/=` operators and `divmod()` are missing
 
 ```python
 print(2 ** 10)     # error: expected expression
@@ -19,6 +19,18 @@ important of the two.
 `divmod` is a plain builtin returning a tuple; `//` and `%` are both already
 correct on negative operands (`-7 // 2 == -4`, `7 % -2 == -1`), so it is those
 two results in a tuple.
+
+`/=` is missing too, and independently of `**`:
+
+```python
+f = 1.5
+f /= 2            # error: expected expression
+```
+
+Every other augmented assignment works and matches CPython exactly — `+=`,
+`-=`, `*=`, `//=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=`, over ints, floats,
+strings, lists and a dict element. So `/=` is one missing token mapping, not a
+missing mechanism: `/` itself works.
 
 Semantics to match: integer `**` with a non-negative exponent is exact (pxx has
 promotable ints, so `10 ** 20` should be exact rather than a double); a
