@@ -5432,7 +5432,18 @@ begin
           this to STORE without dropping self and segfaulting.
           (feature-nilpy-bound-method-value.) Virtual methods bind now off the
           receiver's VMT is a later refinement; uforth's push/pop are direct. }
-        if isNilPy and (CurrentUnitIdx < 0) and (CurTok.Kind <> tkLParen) and
+        { The gate is "NilPy USER code", which is the main program OR a `.py`
+          MODULE — not `CurrentUnitIdx < 0`, which means the main program only.
+          A class defined in an imported `.py` therefore fell through to the
+          call path and `self.canvas.yview` SEGFAULTED, while the identical
+          class written in the main file worked; a method CALL on the same
+          field was fine, so the field's class identity was never the problem
+          (bug-nilpy-settings-editor-segfaults-on-bound-method-field).
+          PyExprMode is what ParsePyUnit turns on for a module body and Pascal
+          RTL units do not have, so it is the discriminator the other NilPy-only
+          rules should be reading here too. }
+        if isNilPy and ((CurrentUnitIdx < 0) or PyExprMode) and
+           (CurTok.Kind <> tkLParen) and
            (mci >= 0) and not UClsIsInterface[mci] then
         begin
           node := PyMakeBoundMethod(mpi, node);

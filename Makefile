@@ -343,6 +343,9 @@ test-nilpy: $(COMPILER)
 	# a TUPLE as a dict key must hash by CONTENT, not by the list handle
 	./$(COMPILER) test/test_nilpy_tuple_dict_key.npy /tmp/test_nilpy_tupkey26
 	test "$$(/tmp/test_nilpy_tupkey26)" = "$$(python3 test/test_nilpy_tuple_dict_key.npy)"
+	# a bound method captured inside an imported .py MODULE, not just in main
+	./$(COMPILER) -Futest test/test_nilpy_bound_method_in_module.npy /tmp/test_nilpy_boundmod26
+	test "$$(/tmp/test_nilpy_boundmod26)" = "$$(printf 'built\nw:3\ncaptured in main\npanel')"
 	# a bare name is never a method; str.format with a spec; qualified except
 	./$(COMPILER) examples/tk/shadow_format_except.npy /tmp/test_nilpy_sfe26
 	test "$$(/tmp/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"
@@ -3530,6 +3533,9 @@ test-core: $(COMPILER)
 	# a TUPLE as a dict key must hash by CONTENT, not by the list handle
 	./$(COMPILER) test/test_nilpy_tuple_dict_key.npy /tmp/test_nilpy_tupkey26
 	test "$$(/tmp/test_nilpy_tupkey26)" = "$$(python3 test/test_nilpy_tuple_dict_key.npy)"
+	# a bound method captured inside an imported .py MODULE, not just in main
+	./$(COMPILER) -Futest test/test_nilpy_bound_method_in_module.npy /tmp/test_nilpy_boundmod26
+	test "$$(/tmp/test_nilpy_boundmod26)" = "$$(printf 'built\nw:3\ncaptured in main\npanel')"
 	# a bare name is never a method; str.format with a spec; qualified except
 	./$(COMPILER) examples/tk/shadow_format_except.npy /tmp/test_nilpy_sfe26
 	test "$$(/tmp/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"

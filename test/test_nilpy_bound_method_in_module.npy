@@ -1,0 +1,11 @@
+# Bound-method capture must work in an imported .py module exactly as it does in
+# the main program. bug-nilpy-settings-editor-segfaults-on-bound-method-field
+from boundfield_mod import Panel, Widget
+
+p = Panel()
+print("built")
+print(p.inner.scroll(3))      # a call through the field still works
+w = Widget("z")
+cb = w.scroll                 # the same capture in the MAIN program
+print("captured in main")
+print(p.describe())
