@@ -64,3 +64,19 @@ of them handling a call suffix and another not.
 
 `make test-nilpy` plus a `.npy` with a `return self` builder chained three deep,
 in BOTH statement and comprehension position, diffed against CPython.
+
+## Resolved 2026-07-29 (commit c896cb882) — the parse error hid a WRONG ANSWER
+
+Measuring before fixing found the worse half: the chain shape that DID parse,
+`b.add(2).add(3)` on a named receiver, compiled and called add(2) TWICE — 7
+where CPython prints 5. A value node referenced twice in the AST is re-emitted,
+and a virtual dispatch reads its receiver twice (VMT, then Self). So the ticket's
+"does not parse" and a silent miscomputation were the same bug seen from two
+sides.
+
+Fixed by binding the receiver to a hidden temp (PyEvalOnce), typing `return self`
+as the method's own class, and routing a variant link (`make()[0].upper()`) to
+the runtime-dispatch path.
+
+## Log
+- 2026-07-29 — resolved, commit c896cb882.
