@@ -105,21 +105,47 @@ filed as bugs and can be fixed without it.
 
 ## What landed, so you do not redo it
 
-- **242b96878** — `from m import f` no longer forces the function-object ABI on
-  every def an imported module exports.
-- **33db0107d** — NilPy object reclamation now runs inside imported `.py`
-  modules, behind ONE predicate, `NilPyUserCode` (symtab.inc). **Grep for that
-  predicate before adding any new NilPy-only rule**; the nine rules must move
-  together.
-- **9b4b9d36c** — `3 == "ab"` no longer segfaults.
-- **e63a59747** (previous night) — the C cross-namespace arity warning. Found
-  STALE at the top of the global queue this night: the fix had landed, the
-  ticket had not moved. Its rung 2 is unblocked, since the same commit measured
-  zero warnings across the whole C suite.
+Eleven changes, each `tools/gate.sh full` GREEN with the self-host fixedpoint
+byte-identical, all pushed:
 
-Together the first two took down songformatter's standing `Callable` wall:
-`kadrv.py` now prints `C / weighted / 8`, matching CPython, and three of its
-five modules compile.
+| commit | fix |
+| --- | --- |
+| 242b96878 | `from m import f` forced the function-object ABI on every def an imported module exports |
+| 33db0107d | object reclamation was dead inside imported `.py` modules — nine sites now share one predicate, `NilPyUserCode` |
+| 9b4b9d36c | `3 == "ab"` segfaulted |
+| ee6e310b2 | a field named like a CLASS bound to that class, so `str(obj)` segfaulted |
+| c4cbf2ea5 | dict `==` compared identity (+ the `TPyDict` arm in `PyVarEq` that nested dicts exposed) |
+| 6735ad34e | `__eq__` was never dispatched by `==`/`!=` |
+| e91ea31a0 | NOTHING the runtime raised was catchable — index, key, `int("abc")`, and a new `ZeroDivisionError` |
+| 382cf7a90 | `str(3 % 2.5)` printed the double's bit pattern |
+| 8cef67f5c | `list.index` / `list.remove` / `list.copy` / one-argument `dict.pop` |
+| 1c8d09b71 | `FloatToStr` wrote a NON-DIGIT byte past Int64 (`1e19` → `…809.o72036…`) |
+| 3c90daa64 | the re-pin that fix required (v230) |
+
+**`NilPyUserCode` (symtab.inc) is the one to know about**: every NilPy-only ARC
+rule reads it. Grep for it before adding another — the nine rules must move
+together, and nine copies of the condition is exactly how they drifted apart.
+
+Together these took down songformatter's standing `Callable` wall: `kadrv.py`
+prints `C / weighted / 8`, matching CPython, and four of its five modules
+compile. The last two stop on a reportlab shim gap, filed for Track B.
+
+## A gate rule that cost a full cycle
+
+**A change to `compiler/builtin/**` makes `gate.sh`'s self-host fixedpoint
+report RED even when nothing is broken.** That step seeds from the PINNED
+binary, and `make pin` FREEZES `compiler/builtin/*.pas` into
+`stable_linux_amd64/default/builtin/`, which the pinned binary prefers over the
+live tree. So stage A links the OLD builtin and B/C the new one: A != B, B == C.
+
+The tell that it is not a regression: `make test`'s own self-host seeds from the
+CURRENT compiler and passes on the first generation. Compare the sh-A/sh-B/sh-C
+sizes in the gate's log dir.
+
+Remedy: `make stabilize` → `make pin` (host only) → re-run `gate.sh quick` to
+confirm A == B == C → commit `stable_linux_amd64/**` WITH the source change, and
+check `git status` for a newly-frozen UNTRACKED file. `pylib.pas` is frozen there
+too but never triggers this, because the compiler does not `use` it.
 
 ## Traps that produced confident wrong readings
 
