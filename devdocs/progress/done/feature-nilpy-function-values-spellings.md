@@ -44,6 +44,13 @@ program that builds a dispatch table writes `handlers = {"x": on_x}`. It is also
 the shape [[feature-nilpy-lambda-compiled-closure]] needs: once a lambda lifts to
 a real proc, the value it produces has to be storable and callable.
 
+## Resolved 2026-07-29 (commits 170cde9e2, 4cb96a3b6, cab5a5179)
+
+All three spellings verified against CPython, plus a call through a dict and a
+list element. NOTE: this ticket carried the SAME slug as an older, narrower
+`feature-nilpy-function-values` (already in done/); renamed on resolution so the
+two files stop colliding in the board.
+
 ## Gate
 
 `make test-nilpy` with a case covering all three spellings, CPython-diffed, plus

@@ -33,7 +33,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (184)
+## backlog (183)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -135,7 +135,6 @@ _none_
 | feature-nilpy-fallback-import | N | 50 | feature | nilpy: fallback import (try/except ImportError) — soft-fail an unresolvable import, take the alternative | — |
 | feature-nilpy-file-io-and-comprehensions | N | 55 | feature | NilPy: file I/O (`with open`), list comprehensions, and dict literals-in-args | — |
 | feature-nilpy-fstring-format-spec | N | 50 | feature | nilpy: f-string format specs — {x:.2f}, alignment/width {s:>5} | — |
-| feature-nilpy-function-values | N | 45→70 | feature | NilPy: a function is a VALUE — bind it to a name, store it, call it back | — |
 | feature-nilpy-generator-expression-arg | N | 45 | feature | NilPy: a generator expression as a call argument | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nilpy-lambda-compiled-closure | N | 45 | feature | nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics) | — |
@@ -284,7 +283,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1014)
+## done (1015)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1075,6 +1074,7 @@ _none_
 | feature-nilpy-exception-message-text | N | 30 | feature | NilPy: exception message text — super().__init__(msg) discarded, str(e) empty | — |
 | feature-nilpy-exceptions | N | 60 | feature | NilPy: `raise` and `try` / `except` | — |
 | feature-nilpy-fstrings | N | 55 | feature | NilPy: f-strings | — |
+| feature-nilpy-function-values-spellings | N | 45 | feature | NilPy: a function is a VALUE — bind it to a name, store it, call it back | — |
 | feature-nilpy-function-values | N | 70 | feature | NilPy: a def as a VALUE (procedure pointer) | — |
 | feature-nilpy-keyword-args | N | 65 | feature | NilPy: keyword arguments at call sites | — |
 | feature-nilpy-len-of-str | N | 50 | feature | NilPy: len() on a str (only TPyList is accepted today) | — |
@@ -2751,7 +2751,6 @@ _none_
 - [p 70] [N] bug-nilpy-super-and-unbound-parent-method-calls
 - [p 70] [N] bug-nilpy-unknown-method-segfaults
 - [p 70] [U] decide-runtime-primitive-layering
-- [p 70] [N] feature-nilpy-function-values
 - [p 65] [C] bug-cfront-vla-stack-corruption
 - [p 65] [N] bug-nilpy-bound-method-coerced-to-string
 - [p 65] [N] bug-nilpy-method-chaining-on-a-call-result
