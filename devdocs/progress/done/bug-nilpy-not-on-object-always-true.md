@@ -76,3 +76,6 @@ The family rule is "truthiness keyed on a HANDLE". `PyMakeTruthy` and
 drifted three times. Fold them into one helper, and check every remaining
 operand kind against CPython: `tyPointer`, a variant holding an object, a
 bound-method value, `None`, a record, an interface.
+
+## Log
+- 2026-07-29 — resolved, commit 638e4a82e.

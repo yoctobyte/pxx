@@ -185,3 +185,6 @@ The snippet at the top, matching CPython. Then songformatter's
 Instrumented copy still at `/tmp/sfx` (a `cp -r` of `~/songformatter` with
 prints in `key_analysis.py`); rebuild it with
 `pascal26 SongFormatter.py <out>` and run under `DISPLAY=:99`.
+
+## Log
+- 2026-07-29 — resolved, commit b9f7a82f9.
