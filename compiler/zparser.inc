@@ -1811,6 +1811,14 @@ begin
   CompileAST(bodyNode);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
+    { DWARF -g: the routine-body tail every Pascal proc ends with (parser.inc).
+    Without it this frontend's functions had NO DW_TAG_subprogram, so
+    `break <fn>` in gdb answered "Function not defined" — the same total
+    absence NilPy had before 58937b717. ProcBodyEnd must be taken after the
+    epilogue; the locals snapshot before the scope is rolled back. }
+  ProcBodyEnd[procIdx] := CodeLen;
+  ProcDbgMain[procIdx] := TokPos <= DbgMainTokEnd;
+  if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
   SymRollbackTo(savedSC);
   FrameSize := savedFS;
   CurProc := -1;

@@ -792,6 +792,7 @@ begin
   begin
     BLexAll(True);
     MainProgramTokCount := TokCount;
+    DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseBProgram;
@@ -802,6 +803,7 @@ begin
     CPreprocess(Source, SourceFileDir);
     if DumpCpp then begin write(Source); Halt(0); end;
     CLexAll;
+    DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseCProgram;
@@ -812,6 +814,7 @@ begin
   begin
     RLexAll;
     MainProgramTokCount := TokCount;
+    DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseRustProgram;
@@ -820,6 +823,7 @@ begin
   begin
     ALexAll;
     MainProgramTokCount := TokCount;
+    DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseAProgram;
@@ -828,6 +832,7 @@ begin
   begin
     ZLexAll;
     MainProgramTokCount := TokCount;
+    DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseZigProgram;
@@ -836,6 +841,7 @@ begin
   begin
     LLexAll;
     MainProgramTokCount := TokCount;
+    DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseLProgram;
@@ -848,6 +854,7 @@ begin
   begin
     FLexAll;
     MainProgramTokCount := TokCount;
+    DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseFProgram;
@@ -856,6 +863,7 @@ begin
   begin
     GLexAll;
     MainProgramTokCount := TokCount;
+    DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseGProgram;
@@ -864,6 +872,7 @@ begin
   begin
     ELexAll;
     MainProgramTokCount := TokCount;
+    DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseEProgram;

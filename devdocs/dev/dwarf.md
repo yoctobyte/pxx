@@ -15,7 +15,9 @@ work at `-O2`.
 
 ## What works
 
-Pascal and **NilPy** both (NilPy had no debug info at all before 2026-07-29):
+Pascal, **NilPy**, **C**, **Rust** and **Zig** (only Pascal had any debug info
+before 2026-07-29 — every other frontend answered "Function not defined" to
+`break`):
 
 | | |
 | --- | --- |
@@ -71,11 +73,14 @@ object is hard to kill on purpose. Marked here rather than claimed as verified.)
   0, so you cannot break on a line inside an imported module. This is the
   Tier 1 design, not an oversight — but it is the biggest remaining gap for a
   multi-module app like songformatter.
-- **Only Pascal and NilPy set `DbgMainTokEnd`.** C, Rust, Zig, Basic and the
-  other frontends still leave it at `MAX_TOKENS`, which means their line
-  numbers come out of whatever unit was appended last — the exact bug NilPy
-  had. One line each in `compiler.pas` to fix; not done yet because none of
-  them has been exercised under gdb.
+- **C line numbers index the PREPROCESSED text.** Breakpoints, args, locals
+  and stepping are correct, but `break addup` reports `dbgc.c:2068` for an
+  18-line file — `CPreprocess` inlines every `#include` and the lexer numbers
+  lines in that buffer. Needs an origin map in `cpreproc.inc` (which keeps no
+  line information at all today) AND multi-file CU support, since headers are
+  legitimately other files. See
+  `bug-c-dwarf-lines-index-the-preprocessed-text`. Rust and Zig have no
+  preprocessor and are correct.
 - `TPyList` / `TPyDict` have no pretty-printer yet, so a list prints as an
   object pointer. `pxxrc` at least gives its refcount.
 - Managed AnsiString refcounts are not traced by `-dPXX_OBJTRACE` (it covers
