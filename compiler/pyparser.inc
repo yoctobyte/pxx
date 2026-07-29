@@ -9281,6 +9281,40 @@ end;
 { `for x, y in zip(A, B):` — iterate two containers in parallel. Desugared to a
   counted while loop over min(len(A), len(B)), binding x=A[i], y=B[i]. CurTok is
   at `zip`; the two names are already parsed. }
+function PyZipAsList(n: Integer): Integer;
+{ zip's desugar walks its operands as TPyList — hidden tyClass locals, then
+  TPyList.count and TPyList.at. A STRING operand is not one: its handle landed
+  in a tyClass slot and `count` read it as a list, so `zip(xs, "abc")` produced
+  NO iterations at all, and with any earlier loop in the program it SEGFAULTED
+  (bug-nilpy-zip-over-a-string-yields-nothing-or-segfaults).
+
+  Python's zip takes any iterable, so convert instead of rejecting: a string
+  goes through pylib's `list(AnsiString)` — the same conversion `list("abc")`
+  already uses, one character per element — and a VARIANT through pylist_v,
+  which dispatches on the run-time tag. Anything already a list is returned
+  untouched, so the common path is unchanged. }
+var pi, argN, callN: Integer;
+begin
+  Result := n;
+  if n < 0 then Exit;
+  pi := -1;
+  if IntToTypeKind(ASTTk[n]) in [tyString, tyAnsiString, tyShortString, tyFixedString] then
+  begin
+    pi := IRFindProc1ByArgTk('list', tyAnsiString);
+    if pi < 0 then pi := IRFindProc1ByArgTk('list', tyString);
+  end
+  else if IntToTypeKind(ASTTk[n]) = tyVariant then
+    pi := IRFindProc1ByArgTk('pylist_v', tyVariant);
+  if pi < 0 then Exit;
+  argN := AllocNode(AN_ARG);
+  ASTLeft[argN] := n;
+  callN := AllocNode(AN_CALL);
+  ASTIVal[callN] := pi;
+  ASTLeft[callN] := argN;
+  ASTTk[callN] := Ord(tyClass);
+  Result := callN;
+end;
+
 function PyParseForZip(const name, name2: AnsiString): Integer;
 var listCi, caSym, cbSym, caN, cbN, nSym, iSym, xSym, ySym: Integer;
     aNode, bNode, node, cnd, thenElse, seq, bodyNode, whileNode, incN, oneN: Integer;
@@ -9288,9 +9322,9 @@ begin
   listCi := FindUClass('TPyList');
   if listCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
   Next; Expect(tkLParen, '(');           { consume `zip` and `(` }
-  PyParseBoolExpr; aNode := CurASTNode;
+  PyParseBoolExpr; aNode := PyZipAsList(CurASTNode);
   Expect(tkComma, ',');
-  PyParseBoolExpr; bNode := CurASTNode;
+  PyParseBoolExpr; bNode := PyZipAsList(CurASTNode);
   Expect(tkRParen, ')');
   Expect(tkColon, ':');
 
