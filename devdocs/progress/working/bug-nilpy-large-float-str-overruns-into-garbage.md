@@ -96,6 +96,22 @@ The remaining formatting divergences (`1.5e18` printed in full, `0.1 + 0.2`
 short by a digit, `%e`, `1e-20` printing `0.0`) are unchanged and stay in this
 ticket — they are cosmetic, not corrupt.
 
-### Gate
+### Gate — and the re-pin this needed
 
-`tools/gate.sh full`.
+First `tools/gate.sh full` came back RED on ONE step: `self-host fixedpoint`.
+Everything else passed, including `make test`'s own self-host.
+
+Not a regression. `tools/gate.sh`'s fixedpoint seeds from the PINNED binary,
+and `make pin` FREEZES `compiler/builtin/*.pas` into
+`stable_linux_amd64/default/builtin/` — the pinned compiler resolves
+`uses builtin` from that frozen copy, in preference to the live tree
+([[project_pinned_stable_builtin_isolation_fix]]). So stage A linked the OLD
+builtin and stages B and C the new one: A != B, but B == C, i.e. the fixedpoint
+converges one generation later. `make test`'s self-host seeds from the CURRENT
+compiler and passed on the first generation, which is what confirms the reading.
+
+Any change to `compiler/builtin/**` therefore needs `make stabilize` + `make pin`
+(host only, per [[feedback_pin_host_only_fast_roundtrips]]) and the refreshed
+`stable_linux_amd64/**` committed with it. None of tonight's earlier fixes hit
+this: `pylib.pas` is also frozen there, but the compiler itself does not `use`
+it, so only a `builtin.pas` change moves the seed.

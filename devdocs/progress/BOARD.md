@@ -8,13 +8,14 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (7)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | HANDOFF-allnight-bughunt | A | 50 | HANDOFF | Handoff — all-night bug hunt, all tracks (rewritten 2026-07-29, second night) | — |
 | HANDOFF-nilpy-bughunt | A | 50 | HANDOFF | Handoff — NilPy bug hunt, with the new debugging toolkit | — |
 | HANDOFF-nilpy-songformatter | A | 50 | HANDOFF | Handoff prompt — NilPy bughunt, songformatter (2026-07-29) | — |
+| bug-nilpy-large-float-str-overruns-into-garbage | N | 70 | bug | `str()` of a float whose integer part exceeds Int64 writes garbage bytes | — |
 | bug-nilpy-songformatter-first-render-walls | N | 75 | bug | songformatter: the walls between "GUI builds" and "first document renders" | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
@@ -49,13 +50,13 @@ _none_
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
 | bug-nilpy-is-on-two-lists-compares-contents | N | 55 | bug | `is` on two lists compares CONTENTS, so distinct lists are "identical" | — |
 | bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
-| bug-nilpy-large-float-str-overruns-into-garbage | N | 70 | bug | `str()` of a float whose integer part exceeds Int64 writes garbage bytes | — |
 | bug-nilpy-method-call-on-fresh-construction | N | 45 | bug | nilpy: Cls().method() — a method call directly on a construction expression | — |
 | bug-nilpy-method-returning-a-fresh-string-leaks | N | 55 | bug | A METHOD returning a freshly built string leaks it; the same def does not | — |
 | bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math | N | 60 | bug | Arithmetic on mismatched operand types silently does POINTER math | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-none-equals-zero-is-true | N | 65 | bug | `0 == None` is True, and `None == 0` does not parse | — |
 | bug-nilpy-print-emits-arguments-before-evaluating-later-ones | N | 45 | bug | `print` writes each argument as it goes, so an exception mid-list leaves partial output | — |
+| bug-nilpy-print-of-a-float-bypasses-str-formatting | N | 60 | bug | `print(x)` and `print(str(x))` disagree for a float | — |
 | bug-nilpy-pyeval-host-kwargs-positional | N | 60 | bug | pyeval passes a host method's KEYWORD arguments POSITIONALLY (silent wrong option) | — |
 | bug-nilpy-pyeval-prints-bool-as-number | N | 30 | bug | pyeval prints a Boolean as 1/0 where CPython prints True/False | — |
 | bug-nilpy-qualified-proc-omitted-default | N | 35 | bug | A qualified UNIT-LEVEL proc call cannot omit a defaulted parameter | — |
@@ -2778,7 +2779,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [N] bug-nilpy-large-float-str-overruns-into-garbage
 - [p 70] [N] bug-nilpy-returning-a-nested-def-yields-none
 - [p 70] [N] bug-nilpy-zip-over-a-string-yields-nothing-or-segfaults
 - [p 70] [U] decide-runtime-primitive-layering
@@ -2793,6 +2793,7 @@ _none_
 - [p 65] [A] feature-a-typeref-handle
 - [p 65] [B] feature-nilpy-tk-callbacks
 - [p 60] [N] bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math
+- [p 60] [N] bug-nilpy-print-of-a-float-bypasses-str-formatting
 - [p 60] [N] bug-nilpy-pyeval-host-kwargs-positional
 - [p 60] [N] bug-nilpy-returning-a-construction-leaks-one-ref
 - [p 60] [N] bug-nilpy-set-literal-does-not-deduplicate
