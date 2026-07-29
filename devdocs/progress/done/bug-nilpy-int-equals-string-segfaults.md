@@ -33,3 +33,6 @@ diffing against CPython (see [[feedback_sweep_operators_against_oracle_not_just_
 
 `make test-nilpy` + self-host byte-identical, plus a regression test covering
 `==`/`!=`/`<`/`>` across int, float, str, list, dict and None operands.
+
+## Log
+- 2026-07-29 — resolved, commit 9b4b9d36c.
