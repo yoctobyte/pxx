@@ -13090,6 +13090,44 @@ begin
       CurASTNode := node;
       Exit;
     end;
+    { `3 == "ab"` — a STRING compared with a NUMBER under ==/!=. In Python that
+      is simply False (True for !=): objects of different types are unequal, it
+      is not an error. Here it reached the string comparison with the NUMBER as
+      the string handle and dereferenced 3 as a pointer, so the one-liner
+      `print(3 == "ab")` SEGFAULTED (bug-nilpy-int-equals-string-segfaults).
+      A string against a bool, a class handle or None crashed the same way.
+
+      Answered at parse time, since both static types are known: a `str` is
+      equal only to a `str`. PyEqDisjointFromString (symtab.inc) says which
+      types qualify and, more importantly, which do not — tyChar (a
+      one-character literal can carry it, so `"a" == c` must stay a real
+      comparison) and tyVariant (not known until run time).
+
+      The operands are still EVALUATED, through a right-nested comma, because
+      `f() == "x"` must still call f. Folding to a bare literal would have
+      dropped the call. Ordering comparisons (`3 < "ab"`) are a different
+      question — Python raises TypeError there — and are left to
+      decide-nilpy-mixed-type-operand-policy. }
+    if PyExprMode and (op in [tkEq, tkNeq]) and
+       ((IntToTypeKind(ASTTk[left]) in [tyString, tyAnsiString, tyShortString, tyFixedString]) <>
+        (IntToTypeKind(ASTTk[right]) in [tyString, tyAnsiString, tyShortString, tyFixedString])) and
+       (PyEqDisjointFromString(IntToTypeKind(ASTTk[left])) or
+        PyEqDisjointFromString(IntToTypeKind(ASTTk[right]))) then
+    begin
+      node := AllocNode(AN_BOOL_LIT);
+      ASTIVal[node] := Ord(op = tkNeq);
+      ASTTk[node] := Ord(tyBoolean);
+      chSeq := AllocNode(AN_COMMA);
+      ASTLeft[chSeq] := right;
+      ASTRight[chSeq] := node;
+      ASTTk[chSeq] := Ord(tyBoolean);
+      node := AllocNode(AN_COMMA);
+      ASTLeft[node] := left;
+      ASTRight[node] := chSeq;
+      ASTTk[node] := Ord(tyBoolean);
+      CurASTNode := node;
+      Exit;
+    end;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
 

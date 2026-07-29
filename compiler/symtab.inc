@@ -1873,6 +1873,32 @@ begin
   Result := (Ord(tk) = 18) or (Ord(tk) = 19) or (Ord(tk) = 20);  { tySingle or tyDouble or tyExtended }
 end;
 
+function PyEqDisjointFromString(tk: TTypeKind): Boolean;
+{ True for a type that can NEVER compare equal to a string in Python, for
+  NilPy's `==`/`!=` string-vs-other fold in parser.inc. Numbers, booleans,
+  pointers, class handles and nil all qualify: a `str` is equal only to a
+  `str`, so the answer is False (True for `!=`) without any comparison.
+
+  Three kinds are deliberately EXCLUDED, and each exclusion is load-bearing:
+    - the string kinds themselves — that is the real comparison;
+    - tyChar, because a one-character literal can be typed tyChar, so
+      `"a" == c` must stay a real comparison rather than fold to False;
+    - tyVariant and tyUnknown, because the type is not known until run time
+      and a static answer would be a guess. }
+begin
+  Result := False;
+  case Ord(tk) of
+    1, 2,            { tyInteger, tyBoolean }
+    5, 6,            { tyRecord, tyClass }
+    7, 8, 9, 10,     { tyInt8..tyUInt16 }
+    11, 12, 13, 14,  { tyInt32..tyUInt64 }
+    15, 16, 17,      { tyNativeInt, tyNativeUInt, tyPointer }
+    18, 19, 20,      { tySingle, tyDouble, tyExtended }
+    21:              { tySet }
+      Result := True;
+  end;
+end;
+
 function TypeIsAggregate(tk: TTypeKind): Boolean;
 begin
   Result := (tk = tyRecord) or (tk = tySet);
