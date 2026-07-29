@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 40
+prio: 60
 type: feature
 ---
 
@@ -26,6 +26,19 @@ the two-argument form does not — which is the whole reason both exist.
 
 All three fail loudly at compile time, so nothing silently computes a wrong
 answer. Filed as a feature.
+
+**`list.index` is a live wall.** With the cross-module `Callable` fixes landed
+(242b96878, 33db0107d), songformatter's key analysis now matches CPython
+exactly, and of its five modules `key_analysis`, `render_backend` and
+`settings` all compile — `convertrawtext.py` and `SongFormatter.py` stop on
+exactly one line each:
+
+```
+pascal26:334: error: Nil Python: TPyList has no method index
+```
+
+That is the whole remaining distance to compiling the app, which is why this
+sits at 60 rather than 40.
 
 `str.index()` is the same shape and is already reported by its own diagnostic
 (`unsupported str method .index()`); worth doing in the same pass since

@@ -151,3 +151,23 @@ Still open behind this ticket:
   wall on the full key-analysis entry point.
 - [[feature-debuggability-umbrella]] — filed off the back of this campaign. The
   "insert print markers and bisect by hand" method above is what needs replacing.
+
+## 2026-07-29 — the cross-module `Callable` wall is DOWN
+
+`kadrv.py` now prints `C / weighted / 8`, matching CPython exactly, where it
+previously SEGFAULTED (`chord_to_notes=0x2` in gdb). Two independent defects
+made that one wall:
+
+- [[bug-nilpy-import-name-forces-function-object-abi]] (242b96878) — the name in
+  `from m import f` counted as "used as a value", so every def an imported
+  module exports took the function-object ABI and a `Callable` parameter became
+  a variant where the caller passed a function value.
+- [[bug-nilpy-object-reclamation-disabled-inside-py-modules]] (33db0107d) — the
+  NilPy ARC rules were gated to the main program only, so a module function
+  returning an object handed back a reference its own scope exit had dropped.
+  With the crash gone this showed as `[]` instead of `['C', 'C']`.
+
+Module status now: `key_analysis`, `render_backend` and `settings` COMPILE.
+`convertrawtext.py` and `SongFormatter.py` each stop on one line, both the same
+missing method — `TPyList has no method index`, tracked by
+[[feature-nilpy-container-method-gaps]] (raised to prio 60 for this reason).
