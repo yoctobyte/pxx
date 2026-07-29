@@ -12779,17 +12779,37 @@ begin
                 tk := tyClass;
                 fldRec := REC_UCLASS_BASE + FindUClass(GetTokenStr(rhsAt + 2));
               end;
-              if tk = tyUnknown then
-              begin
-                tk := PyTypeFromTokenIndex(rhsAt);
-                fldRec := PyRecFromTokenIndex(rhsAt);
-              end;
+              { A bare identifier that names a PARAMETER of this method is a
+                VALUE, and that reading has to win before the type scanners see
+                it. PyTypeFromTokenIndex maps an identifier that names a class
+                to tyClass, case-INSENSITIVELY (Pascal rules), so in
+
+                    class Node:
+                        def __init__(self, node: int):
+                            self.node = node
+
+                the right-hand `node` matched the class `Node` and the field was
+                registered as an instance of its own class. `str(self.node)`
+                then took the object route and dispatched __str__ on the
+                integer, which SEGFAULTED — with the name being the only
+                trigger, so the identical class called `A` with a field `v` was
+                fine (bug-nilpy-str-of-object-segfaults-when-dunder-builds-a-
+                string). Any field whose name matches ANY class name, not only
+                its own, hit it.
+
+                Order only: a right-hand side that is not a parameter still
+                falls through to exactly the scanners it used before. }
               if (tk = tyUnknown) and (Tokens[rhsAt].Kind = tkIdent) then
               begin
                 rhsName := GetTokenStr(rhsAt);
                 tk := PyHeaderParamType(methodStart, j, rhsName);
                 fldSig := PyAnnLastProcSig;
                 fldRec := PyHeaderParamRec(methodStart, j, rhsName);
+              end;
+              if tk = tyUnknown then
+              begin
+                tk := PyTypeFromTokenIndex(rhsAt);
+                fldRec := PyRecFromTokenIndex(rhsAt);
               end;
               if tk = tyUnknown then
               begin
