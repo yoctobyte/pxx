@@ -69,3 +69,6 @@ iteration sweep that used to dump core.
 ### Gate
 
 `tools/gate.sh full`.
+
+## Log
+- 2026-07-30 — resolved, commit eaf0490e4.
