@@ -44,3 +44,28 @@ Measured with the compiler at 33db0107d.
 `make test-nilpy` + self-host byte-identical, plus zip over every operand pair
 of (list, str, dict, range) — with and without a preceding loop, since the
 preceding loop is what turns the silent case into the crash.
+
+## RESOLVED — convert the operand instead of walking it as a list
+
+`PyParseForZip` desugars to hidden tyClass locals plus `TPyList.count` and
+`TPyList.at`. A STRING operand's handle went into that tyClass slot and `count`
+read it as a list — hence zero iterations in the quiet case, and a crash once
+any earlier loop had changed what that memory held.
+
+New `PyZipAsList` wraps each operand at parse time when it is not already a
+list: a string through pylib's `list(AnsiString)` — the same conversion
+`list("abc")` already uses, one character per element — and a VARIANT through
+`pylist_v`, which dispatches on the run-time tag. An operand that is already a
+list is returned untouched, so the common path is unchanged.
+
+Python's zip takes any iterable, so converting is the faithful answer; rejecting
+would have been the lazy one.
+
+Verified against CPython: `zip(list, str)`, `zip(str, list)`, `zip(str, str)`,
+`zip(list, list)`, `zip(list, list(dict))`, each with and without a preceding
+loop — all match, and so do the three earlier repro programs plus the full
+iteration sweep that used to dump core.
+
+### Gate
+
+`tools/gate.sh full`.
