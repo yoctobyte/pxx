@@ -31,6 +31,25 @@ a modal dialog.
 **What is left** (both filed separately, this ticket stays open behind them):
 - [[bug-nilpy-tk-pxxcb-invalid-command-name]] — Tk's error dialog still appears.
 - [[bug-nilpy-callable-in-local-var-call-does-nothing]] — `cb = handler; cb(x)`.
+### 2026-07-29 (later): the redraw path runs
+
+Since the nested-def fix the preview/analysis code really executes, and each
+wall now surfaces as a NAMED error instead of a crash (the nil-callee guard and
+the link-time `@proc` check). Cleared in order:
+
+| wall | fix |
+| --- | --- |
+| jump to address 0 in the redraw | `Canvas.delete("all")` did not exist (only `delete_all`), so the standard spelling was a None attribute |
+| `TypeError: expected a number, got str` from `settings.getF` | `float(<variant holding a str>)` routed to `pyfloat_ofint` from the STATIC type; a variant needs the run-time split — added `pyfloat_any` |
+| `unsupported f-string format spec ".0%"` | added Python's `%` presentation type (x100, fixed precision, `%` suffix), verified against CPython |
+
+Now dies inside `KeyAnalysisResult.to_text` / `DetectorResult.to_text`
+(`pystr_join` / `TPyList.at` on the stack) — so the key analysis itself
+completes and the failure is in rendering it. Minimal genexpr-of-method-calls
+and keyword-arg-in-genexpr repros do NOT reproduce it; the next step is the
+dataclass shapes those two use (`candidates[:5]` slicing a list of objects,
+`field(default_factory=list)` members).
+
 - [[bug-nilpy-zero-param-lambda-cannot-call-a-def]] — this is what leaves the
   preview blank and the status bar on `Key: unknown`: the redraw is armed as
   `cv.after(120, lambda: draw(...))` and a zero-parameter lambda cannot call a

@@ -9404,6 +9404,9 @@ begin
         if (LastExprTk = tyString) or (LastExprTk = tyAnsiString) or
            (LastExprTk = tyChar) then
           ASTIVal[node] := FindProc('pyfloat_parse')
+        else if LastExprTk = tyVariant then
+          { the tag is a RUN-TIME fact: parse a str, widen a number }
+          ASTIVal[node] := FindProc('pyfloat_any')
         else
           ASTIVal[node] := FindProc('pyfloat_ofint');
         if ASTIVal[node] < 0 then Error('Nil Python: pylib (pyfloat_*) not loaded');

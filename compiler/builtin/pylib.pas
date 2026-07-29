@@ -431,6 +431,14 @@ function pyint_parse(const s: AnsiString; base: Integer): Int64;
   has no overload resolution there. pyfloat_parse RAISES ValueError on a bad
   parse, for the same reason pyint_parse does. }
 function pyfloat_parse(const s: AnsiString): Double;
+{ `float(x)` where x is a VARIANT — the tag is only known at run time, so the
+  string case has to be decided there. Python parses a str and widens a number;
+  the compile-time route picks pyfloat_parse or pyfloat_ofint from the STATIC
+  type, and a variant fell to the latter, whose Int64 parameter unboxed through
+  pyvar_to_float and raised "expected a number, got str". Anything a config
+  file, a dict or a *args list carries is a variant, so that was most real
+  code. }
+function pyfloat_any(const v: Variant): Double;
 function pyfloat_ofint(v: Int64): Double;
 { os.path / os / sys shims. Reached by NAME from the frontend's stdlib table
   (`os.path.join(...)` -> pyos_path_join), because `os` and `sys` are deferred
@@ -3725,6 +3733,14 @@ begin
   Result := acc;
 end;
 
+function pyfloat_any(const v: Variant): Double;
+var t: Int64;
+begin
+  t := pyvartag(v);
+  if (t = 5) or (t = 6) then pyfloat_any := pyfloat_parse(pystr_of(v))
+  else pyfloat_any := pyvar_to_float(v);
+end;
+
 function pyfloat_ofint(v: Int64): Double;
 begin
   Result := v;
@@ -5056,6 +5072,11 @@ begin
     Halt(1);
   end;
   if (kind = 'f') or (kind = 'F') then body := PyFmtFixed(d, prec)
+  else if kind = '%' then
+    { Python's percentage form: multiply by 100, format fixed with the given
+      precision (6 by default, as for `f`), append the sign. `{x:.0%}` is how a
+      confidence or agreement ratio is spelled everywhere. }
+    body := PyFmtFixed(d * 100.0, prec) + '%'
   else if (kind = 'g') or (kind = 'G') then body := FloatToStr(d)
   else if kind = 's' then body := FloatToStr(d)
   else
