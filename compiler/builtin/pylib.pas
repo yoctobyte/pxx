@@ -22,6 +22,10 @@ unit pylib;
 
 interface
 
+{ NilPy's PAL — the one place a NilPy primitive reaches the kernel.
+  See decide-runtime-primitive-layering. }
+uses pypal;
+
 const
   { An omitted slice bound, as emitted by the frontend for `b[:hi]` / `b[lo:]`.
     See the slice functions below for why a sentinel is safe here. }
@@ -4014,25 +4018,7 @@ begin
   Result := False;
   if Length(p) = 0 then Exit;
   cs := p + #0;
-  r := -1;
-{$ifdef CPUX86_64}
-  r := __pxxrawsyscall(21, Int64(@cs[1]), 0, 0, 0, 0, 0);
-{$endif}
-{$ifdef CPUAARCH64}
-  r := __pxxrawsyscall(48, -100, Int64(@cs[1]), 0, 0, 0, 0);
-{$endif}
-{$ifdef CPU_ARM32}
-  r := __pxxrawsyscall(33, Int64(@cs[1]), 0, 0, 0, 0, 0);
-{$endif}
-{$ifdef CPU_I386}
-  r := __pxxrawsyscall(33, Int64(@cs[1]), 0, 0, 0, 0, 0);
-{$endif}
-{$ifdef CPU_RISCV32}
-{$ifndef PXX_ESP}
-  r := __pxxrawsyscall(48, -100, Int64(@cs[1]), 0, 0, 0, 0);
-{$endif}
-{$endif}
-  Result := r = 0;
+  Result := PyPalAccessOk(@cs[1]);
 end;
 
 { ---- environment ---------------------------------------------------------- }
@@ -4050,24 +4036,10 @@ begin
   if PyEnvLoaded then Exit;
   PyEnvLoaded := True;
   PyEnvRaw := '';
-  fd := -1;
-{$ifdef CPUX86_64}
-  { openat(AT_FDCWD, path, O_RDONLY) }
-  fd := __pxxrawsyscall(257, Int64(-100), Int64(PChar('/proc/self/environ')), 0, 0, 0, 0);
-{$endif}
-{$ifdef CPUAARCH64}
-  fd := __pxxrawsyscall(56, Int64(-100), Int64(PChar('/proc/self/environ')), 0, 0, 0, 0);
-{$endif}
+  fd := PyPalOpen(PChar('/proc/self/environ'), PYPAL_O_RDONLY, 0);
   if fd < 0 then Exit;
-  r := 0;
-{$ifdef CPUX86_64}
-  r := __pxxrawsyscall(0, fd, Int64(@buf[0]), 16384, 0, 0, 0);
-  closed := __pxxrawsyscall(3, fd, 0, 0, 0, 0, 0);
-{$endif}
-{$ifdef CPUAARCH64}
-  r := __pxxrawsyscall(63, fd, Int64(@buf[0]), 16384, 0, 0, 0);
-  closed := __pxxrawsyscall(57, fd, 0, 0, 0, 0, 0);
-{$endif}
+  r := PyPalRead(fd, @buf[0], 16384);
+  closed := PyPalClose(fd);
   if r <= 0 then Exit;
   for i := 0 to Integer(r) - 1 do
     if buf[i] = #0 then PyEnvRaw := PyEnvRaw + #1
@@ -4163,24 +4135,7 @@ var buf: array[0..4095] of Char; r: Int64; i: Integer;
 begin
   Result := '';
   buf[0] := #0;
-  r := -1;
-{$ifdef CPUX86_64}
-  r := __pxxrawsyscall(79, Int64(@buf[0]), 4096, 0, 0, 0, 0);
-{$endif}
-{$ifdef CPUAARCH64}
-  r := __pxxrawsyscall(17, Int64(@buf[0]), 4096, 0, 0, 0, 0);
-{$endif}
-{$ifdef CPU_ARM32}
-  r := __pxxrawsyscall(183, Int64(@buf[0]), 4096, 0, 0, 0, 0);
-{$endif}
-{$ifdef CPU_I386}
-  r := __pxxrawsyscall(183, Int64(@buf[0]), 4096, 0, 0, 0, 0);
-{$endif}
-{$ifdef CPU_RISCV32}
-{$ifndef PXX_ESP}
-  r := __pxxrawsyscall(17, Int64(@buf[0]), 4096, 0, 0, 0, 0);
-{$endif}
-{$endif}
+  r := PyPalGetcwd(@buf[0], 4096);
   if r <= 0 then Exit;
   { the kernel returns a NUL-terminated path; length is read from the bytes so
     the differing return conventions (length vs pointer) do not matter }
@@ -4235,40 +4190,19 @@ end;
   is used everywhere for portability. }
 function pyfile_slurp(const path: AnsiString; var ok: Boolean): AnsiString;
 var cs: AnsiString; fd, nread: Int64; buf: array[0..8191] of Char; i: Integer;
-    nrOpenat, nrRead, nrClose: Integer;
     rlen, rcap: Integer;
 begin
   Result := '';
   ok := False;
   rlen := 0; rcap := 0;
-  { syscall numbers resolved once, so the read loop below has no ifdefs in it.
-    openat(AT_FDCWD) everywhere for portability (aarch64/riscv lack open). }
-  nrOpenat := 0; nrRead := 0; nrClose := 0;
-{$ifdef CPUX86_64}
-  nrOpenat := 257; nrRead := 0; nrClose := 3;
-{$endif}
-{$ifdef CPUAARCH64}
-  nrOpenat := 56; nrRead := 63; nrClose := 57;
-{$endif}
-{$ifdef CPU_ARM32}
-  nrOpenat := 322; nrRead := 3; nrClose := 6;
-{$endif}
-{$ifdef CPU_I386}
-  nrOpenat := 295; nrRead := 3; nrClose := 6;
-{$endif}
-{$ifdef CPU_RISCV32}
-{$ifndef PXX_ESP}
-  nrOpenat := 56; nrRead := 63; nrClose := 57;
-{$endif}
-{$endif}
-  if nrOpenat = 0 then Exit;   { unsupported target }
+  if not PyPalSupported then Exit;   { unsupported target }
   cs := path + #0;
-  fd := __pxxrawsyscall(nrOpenat, -100, Int64(@cs[1]), 0, 0, 0, 0);
+  fd := PyPalOpen(@cs[1], PYPAL_O_RDONLY, 0);
   if fd < 0 then Exit;
   nread := 8192;
   while nread = 8192 do
   begin
-    nread := __pxxrawsyscall(nrRead, fd, Int64(@buf[0]), 8192, 0, 0, 0);
+    nread := PyPalRead(fd, @buf[0], 8192);
     if nread > 0 then
     begin
       { Amortised-doubling append, NOT `Result := Result + buf[i]` per byte
@@ -4287,67 +4221,30 @@ begin
     end;
   end;
   SetLength(Result, rlen);   { trim to the exact length read }
-  nread := __pxxrawsyscall(nrClose, fd, 0, 0, 0, 0, 0);  { result discarded }
+  nread := PyPalClose(fd);   { result discarded }
   ok := True;
 end;
 
 function pystdin_read(n: Integer): AnsiString;
 var nread: Int64; buf: array[0..8191] of Char; i, want: Integer;
-    nrRead: Integer; supported: Boolean;
 begin
   Result := '';
   if n <= 0 then Exit;
-  nrRead := 0; supported := False;
-{$ifdef CPUX86_64}
-  nrRead := 0; supported := True;
-{$endif}
-{$ifdef CPUAARCH64}
-  nrRead := 63; supported := True;
-{$endif}
-{$ifdef CPU_ARM32}
-  nrRead := 3; supported := True;
-{$endif}
-{$ifdef CPU_I386}
-  nrRead := 3; supported := True;
-{$endif}
-{$ifdef CPU_RISCV32}
-{$ifndef PXX_ESP}
-  nrRead := 63; supported := True;
-{$endif}
-{$endif}
-  if not supported then Exit;
+  if not PyPalSupported then Exit;
   want := n;
   if want > 8192 then want := 8192;
-  nread := __pxxrawsyscall(nrRead, 0, Int64(@buf[0]), want, 0, 0, 0);
+  nread := PyPalRead(0, @buf[0], want);
   if nread > 0 then
     for i := 0 to nread - 1 do Result := Result + buf[i];
 end;
 
 function pyos_remove(const path: AnsiString): Integer;
-var cs: AnsiString; r: Int64; nrUnlinkat: Integer;
+var cs: AnsiString; r: Int64;
 begin
   Result := 0;
-  nrUnlinkat := 0;
-{$ifdef CPUX86_64}
-  nrUnlinkat := 263;
-{$endif}
-{$ifdef CPUAARCH64}
-  nrUnlinkat := 35;
-{$endif}
-{$ifdef CPU_ARM32}
-  nrUnlinkat := 328;
-{$endif}
-{$ifdef CPU_I386}
-  nrUnlinkat := 301;
-{$endif}
-{$ifdef CPU_RISCV32}
-{$ifndef PXX_ESP}
-  nrUnlinkat := 35;
-{$endif}
-{$endif}
-  if nrUnlinkat = 0 then Exit;
+  if not PyPalSupported then Exit;
   cs := path + #0;
-  r := __pxxrawsyscall(nrUnlinkat, -100, Int64(@cs[1]), 0, 0, 0, 0);   { AT_FDCWD }
+  r := PyPalUnlink(@cs[1]);
   { CPython os.remove RAISES on failure (deleting a missing file must be a
     catchable error — Forth-2012 DELETE-FILE expects a nonzero ior, not 0). }
   if r < 0 then
@@ -4356,30 +4253,12 @@ begin
 end;
 
 function pyos_rename(const src: AnsiString; const dst: AnsiString): Integer;
-var cs, cd: AnsiString; r: Int64; nrRenameat: Integer;
+var cs, cd: AnsiString; r: Int64;
 begin
   Result := 0;
-  nrRenameat := 0;
-{$ifdef CPUX86_64}
-  nrRenameat := 264;
-{$endif}
-{$ifdef CPUAARCH64}
-  nrRenameat := 38;
-{$endif}
-{$ifdef CPU_ARM32}
-  nrRenameat := 329;
-{$endif}
-{$ifdef CPU_I386}
-  nrRenameat := 302;
-{$endif}
-{$ifdef CPU_RISCV32}
-{$ifndef PXX_ESP}
-  nrRenameat := 38;
-{$endif}
-{$endif}
-  if nrRenameat = 0 then Exit;
+  if not PyPalSupported then Exit;
   cs := src + #0; cd := dst + #0;
-  r := __pxxrawsyscall(nrRenameat, -100, Int64(@cs[1]), -100, Int64(@cd[1]), 0, 0);
+  r := PyPalRename(@cs[1], @cd[1]);
   { CPython os.rename raises on failure, same as os.remove above }
   if r < 0 then
     raise OSError.Create('FileNotFoundError: ' + src);
@@ -4396,7 +4275,7 @@ begin
 {$ifdef CPUX86_64}
   cs := path + #0;
   FillChar(buf[0], SizeOf(buf), 0);
-  r := __pxxrawsyscall(4, Int64(@cs[1]), Int64(@buf[0]), 0, 0, 0, 0);  { stat }
+  r := PyPalStat(@cs[1], @buf[0]);
   if r < 0 then
     raise OSError.Create('FileNotFoundError: ' + path);
   Result.st_mode := PInt64(@buf[24])^ and $FFFFFFFF;   { u32 st_mode (uid sits above) }
@@ -5595,11 +5474,11 @@ begin
     if mode[i] = 'w' then wantCreate := True;
     if mode[i] = '+' then wantRW := True;
   end;
-  if wantCreate then flags := 2 + 64 + 512        { O_RDWR|O_CREAT|O_TRUNC }
-  else if wantRW then flags := 2                  { O_RDWR }
-  else flags := 0;                                { O_RDONLY }
+  if wantCreate then flags := PYPAL_O_RDWR + PYPAL_O_CREAT + PYPAL_O_TRUNC
+  else if wantRW then flags := PYPAL_O_RDWR
+  else flags := PYPAL_O_RDONLY;
   z := path + #0;
-  fd := __pxxrawsyscall(2, Int64(NativeInt(PChar(z))), flags, 420, 0, 0, 0);  { open, 0644 }
+  fd := PyPalOpen(PChar(z), flags, 420);          { 0644 }
   if fd < 0 then
     { CPython open() raises a CATCHABLE OSError (uforth's OPEN-FILE wraps the
       call in try/except and turns it into a nonzero ior — the Forth-2012
@@ -5614,7 +5493,7 @@ var r: TPyBytes; got: Int64;
 begin
   if u < 0 then u := 0;
   r := TPyBytes.Create(u);
-  got := __pxxrawsyscall(0, FFd, Int64(NativeInt(r.FData)), u, 0, 0, 0);
+  got := PyPalRead(FFd, r.FData, u);
   if got < 0 then got := 0;
   r.FLen := got;
   Result := r;
@@ -5627,7 +5506,7 @@ begin
   r := TPyBytes.Create(0);
   while True do
   begin
-    got := __pxxrawsyscall(0, FFd, Int64(NativeInt(@ch)), 1, 0, 0, 0);
+    got := PyPalRead(FFd, @ch, 1);
     if got <= 0 then Break;
     r.append(ch);
     if ch = 10 then Break;
@@ -5638,30 +5517,30 @@ end;
 function TPyFile.write(b: TPyBytes): Int64;
 begin
   if (b = nil) or (b.FLen = 0) then begin Result := 0; Exit; end;
-  Result := __pxxrawsyscall(1, FFd, Int64(NativeInt(b.FData)), b.FLen, 0, 0, 0);
+  Result := PyPalWrite(FFd, b.FData, b.FLen);
 end;
 
 procedure TPyFile.seek(pos: Int64);
 var r: Int64;
 begin
-  r := __pxxrawsyscall(8, FFd, pos, 0, 0, 0, 0);   { lseek SEEK_SET }
+  r := PyPalLseek(FFd, pos, 0);   { SEEK_SET }
 end;
 
 procedure TPyFile.seek(pos: Int64; whence: Int64);
 var r: Int64;
 begin
-  r := __pxxrawsyscall(8, FFd, pos, whence, 0, 0, 0);
+  r := PyPalLseek(FFd, pos, whence);
 end;
 
 function TPyFile.tell: Int64;
 begin
-  Result := __pxxrawsyscall(8, FFd, 0, 1, 0, 0, 0);   { lseek SEEK_CUR }
+  Result := PyPalLseek(FFd, 0, 1);   { SEEK_CUR }
 end;
 
 procedure TPyFile.truncate(sz: Int64);
 var r: Int64;
 begin
-  r := __pxxrawsyscall(77, FFd, sz, 0, 0, 0, 0);   { ftruncate }
+  r := PyPalFtruncate(FFd, sz);
 end;
 
 procedure TPyFile.flush;
@@ -5672,7 +5551,7 @@ end;
 procedure TPyFile.close;
 var r: Int64;
 begin
-  r := __pxxrawsyscall(3, FFd, 0, 0, 0, 0, 0);
+  r := PyPalClose(FFd);
 end;
 
 { repr() dispatching on the RUNTIME tag, so a container element nested inside a
