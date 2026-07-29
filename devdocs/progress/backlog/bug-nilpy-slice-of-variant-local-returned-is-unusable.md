@@ -108,10 +108,31 @@ temp is then released and the field dangles. `list(x)` materialises a real
 owned TPyList, so it survives — that is both the confirmation and the
 application-side workaround.
 
-`PyUnboxVariantToClass` already exists for a plain assignment to a class-typed
-target (pyparser.inc ~9861). The CONSTRUCTOR keyword-argument path does not use
-it. That is where the fix goes; check the plain field-store path (`obj.f = v`)
-for the same gap while you are there.
+### Attempted fix, REVERTED — and what it ruled out
+
+Adding `PyUnboxVariantToClass` to the constructor keyword-argument path
+(`PyClassCreate`'s re-emit loop) was tried and reverted: it changes nothing for
+this bug and had no demonstrable benefit elsewhere, so it does not belong in
+shared construction code on spec. What the instrumented compiler showed, which
+narrows the search a lot:
+
+- Of the 8 `DetectorResult(...)` sites in the EMITTING pass, 4 pass slot 4
+  (`evidence`) as **tyVariant** and 4 as **tyClass**. `violation_count` is a
+  class-tagged one — so at the constructor its argument is already typed
+  tyClass while the value it carries at run time is a variant. **The mis-typing
+  is upstream of the call**, which is why an unbox at the call site cannot help.
+- The typing pass and the emitting pass DISAGREE on that argument (8 vs 4
+  variant-tagged), which is itself worth chasing — a two-pass type disagreement
+  is exactly the shape of the ABI mismatches recorded elsewhere in NilPy.
+- `PyWiden(tyVariant, tyClass) = tyVariant`, so the ternary is not where the
+  class tag comes from; `PyMakeSlice` correctly returns tyVariant for a variant
+  base (`pyvar_slice`). Look instead at how the LOCAL / the argument re-acquires
+  a tyClass tag on the second parse (PyNoteLocalType widening, or the field's
+  declared type flowing back onto the expression).
+- Incidental wart found on the way: the synthesised dataclass `create`
+  parameter is class-TYPED but carries no record id (`ProcParamRecId` = 0); the
+  class identity lives only in the field table (`UFldRec_`). Anything that needs
+  the identity of a ctor parameter has to fall back to the field.
 
 ## Why it matters
 
