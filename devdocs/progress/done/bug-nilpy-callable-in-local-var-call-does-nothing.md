@@ -79,3 +79,6 @@ piece.
 
 `make test-nilpy` + self-host fixedpoint, plus the four snippets above matching
 CPython.
+
+## Log
+- 2026-07-29 — resolved, commit 4cb96a3b6.

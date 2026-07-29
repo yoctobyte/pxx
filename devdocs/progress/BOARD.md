@@ -33,7 +33,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (188)
+## backlog (187)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -43,7 +43,6 @@ _none_
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
 | bug-nilpy-annotated-module-global-invisible-in-kwarg | N | 55 | bug | A module-level ANNOTATED global is not visible in a keyword argument | — |
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |
-| bug-nilpy-callable-in-local-var-call-does-nothing | N | 70 | bug | `cb = lambda ...` then `cb(x)` compiles and does NOTHING | — |
 | bug-nilpy-class-attr-instance-traversal-crashes | N | 70 | bug | A class attribute holding an INSTANCE crashes when traversed | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-int-parse-halts-instead-of-raising | N | 55 | bug | nilpy: int(\"abc\") halts the program instead of raising a catchable ValueError | — |
@@ -288,7 +287,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1010)
+## done (1011)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -623,6 +622,7 @@ _none_
 | bug-nilpy-bytes-literal-escapes-not-decoded | N | 30 | bug | NilPy: `\xHH` (and presumably `\0`-style) escapes in a BYTES literal are not decoded | — |
 | bug-nilpy-bytes-of-slice-leaks-intermediate | A | 45 | bug | NilPy: `bytes(seq[a:b])` leaks the intermediate slice object every call | — |
 | bug-nilpy-call-returning-class-loses-identity | N | 55 | bug | NilPy: a call returning a CLASS lost its class identity (silent, then SIGSEGV) | — |
+| bug-nilpy-callable-in-local-var-call-does-nothing | N | 70 | bug | `cb = lambda ...` then `cb(x)` compiles and does NOTHING | — |
 | bug-nilpy-callable-return-abi-mismatch | N | 75 | bug | nilpy: a def passed to a Callable[...] parameter marshalled by the ANNOTATION, not by the def | — |
 | bug-nilpy-class-typed-field-loses-identity | N | 70 | bug | NilPy: a class-typed field loses its class identity | — |
 | bug-nilpy-class-value-into-variant-local-mistagged | N | 65 | bug | NilPy: storing a class value into a variant-typed local mis-tags it VT_INT64 | — |
@@ -2748,7 +2748,6 @@ _none_
 
 - [p 75] [N] bug-nilpy-subscript-argument-boxes-wrong-into-variant-param
 - [p 70] [A] bug-cfront-silent-bind-to-pascal-proc-of-different-arity
-- [p 70] [N] bug-nilpy-callable-in-local-var-call-does-nothing
 - [p 70] [N] bug-nilpy-class-attr-instance-traversal-crashes
 - [p 70] [N] bug-nilpy-super-and-unbound-parent-method-calls
 - [p 70] [N] bug-nilpy-unknown-method-segfaults
