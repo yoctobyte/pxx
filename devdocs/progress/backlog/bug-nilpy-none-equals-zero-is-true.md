@@ -31,6 +31,11 @@ Expected: ), but got:  (Kind: 64, Line: N)
 
 ...but the identical expression inside a call (`str(None == 0)`) parses and
 returns True. So the asymmetry is in the statement-level expression path only.
+
+`None` as the LEFT operand of `or` fails the same way — `print(None or "n")`
+does not compile, while every other short-circuit case matches CPython exactly
+(`[] or [1]`, `1 and 2 and 3`, `0 or "" or [] or "last"`, `"" or "def"`,
+`0 and 5`). So it is `None`-on-the-left in general, not something about `==`.
 Both belong to the same fix: `None` must be a first-class operand of `==`/`!=`
 on either side, comparing equal to nothing but None.
 
