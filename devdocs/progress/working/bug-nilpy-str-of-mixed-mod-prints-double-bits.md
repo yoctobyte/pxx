@@ -45,3 +45,24 @@ same reason it survived the plain `print` tests.
 
 `make test-nilpy` + self-host byte-identical, plus `str()`/`print()`/f-string
 of `%` and `//` over every int/float operand pairing.
+
+## RESOLVED — type `//` and `%` from BOTH operands under PyExprMode
+
+One arm in parser.inc's binop typing, ahead of the two `TypeDivideResult(left)`
+arms: under PyExprMode, `tkDiv`/`tkMod` with either operand float yields
+`FloatBinopResultTk(left, right)`. Pascal's own `div`/`mod` are integer
+spellings, so the Pascal dialect and the self-host binary are untouched, and
+ir.inc's retype to tyDouble becomes an agreement rather than a correction.
+
+Verified against CPython: `str()` of `//` and `%` over every int/float pairing,
+f-string interpolation, `%`-formatting, and the same through variables — all
+match. `str(3 % 2.5)` is `0.5` instead of `4602678819172646912`.
+
+The operator sweep's `%` divergence count fell from 166 lines to 148; what
+remains there is the mixed-type operand family
+([[decide-nilpy-mixed-type-operand-policy]]) plus the partial-output artifact
+of [[bug-nilpy-print-emits-arguments-before-evaluating-later-ones]].
+
+### Gate
+
+`tools/gate.sh full`.
