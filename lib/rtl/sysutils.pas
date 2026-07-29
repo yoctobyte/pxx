@@ -272,6 +272,7 @@ function CurrToStr(C: Currency): AnsiString;
 { Float -> string. FloatToStr gives a compact representation; FloatToStrF
   gives fixed-point with precision digits after the decimal point. }
 function FloatToStr(value: Double): AnsiString;
+function FloatToExpStr(value: Double): AnsiString;
 function FloatToStrF(value: Double; precision: Integer): AnsiString;
 
 { String -> float. StrToFloatDef returns def on malformed; StrToFloat returns 0. }
@@ -883,10 +884,42 @@ begin
   Result := 0;
 end;
 
+{ Decimal exponent form, for magnitudes the Int64 split below cannot hold.
+  The mantissa is normalised into [1,10) and then formatted by FloatToStr
+  itself, which is in-range by construction, so there is one formatting rule
+  rather than two. }
+function FloatToExpStr(value: Double): AnsiString;
+var neg: Boolean; e: Integer; m: AnsiString;
+begin
+  neg := value < 0.0;
+  if neg then value := -value;
+  e := 0;
+  while value >= 10.0 do begin value := value / 10.0; e := e + 1; end;
+  while (value > 0.0) and (value < 1.0) do begin value := value * 10.0; e := e - 1; end;
+  m := FloatToStr(value);
+  if e >= 0 then Result := m + 'E+' + IntToStr(e)
+  else Result := m + 'E-' + IntToStr(-e);
+  if neg then Result := '-' + Result;
+end;
+
 function FloatToStr(value: Double): AnsiString;
 var intPart, fracPart: Int64; neg: Boolean; s, fs: AnsiString; i: Integer;
 begin
   if value <> value then begin Result := 'NaN'; Exit; end;
+  { Infinity first: the normalise loop in FloatToExpStr would not terminate on
+    it, and Trunc below would saturate. }
+  if value > 1.7976931348623157e308 then begin Result := 'Inf'; Exit; end;
+  if value < -1.7976931348623157e308 then begin Result := '-Inf'; Exit; end;
+  { Past Int64 the Trunc below SATURATES at High(Int64), and the fraction
+    digits are then computed from the saturated value: 1e19 printed
+    `9223372036854775809.o72036854775808` — a byte that is not even a digit,
+    written to stdout (bug-nilpy-large-float-str-overruns-into-garbage). It is
+    reachable from plain arithmetic, not just from a literal. }
+  if (value > 9.2e18) or (value < -9.2e18) then
+  begin
+    Result := FloatToExpStr(value);
+    Exit;
+  end;
   neg := value < 0.0;
   if neg then value := -value;
   intPart := Trunc(value);
@@ -918,6 +951,14 @@ var scale: Double; intPart, fracPart: Int64; neg: Boolean; s, fs: AnsiString; i:
 begin
   if precision < 0 then precision := 0;
   if value <> value then begin Result := 'NaN'; Exit; end;
+  { same saturation hazard as FloatToStr — see the note there }
+  if value > 1.7976931348623157e308 then begin Result := 'Inf'; Exit; end;
+  if value < -1.7976931348623157e308 then begin Result := '-Inf'; Exit; end;
+  if (value > 9.2e18) or (value < -9.2e18) then
+  begin
+    Result := FloatToExpStr(value);
+    Exit;
+  end;
   neg := value < 0.0;
   if neg then value := -value;
   intPart := Trunc(value);

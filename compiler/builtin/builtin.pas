@@ -20,6 +20,7 @@ interface
 function StrInt(v: Int64; width: Integer): AnsiString;
 function StrQWord(v: QWord; width: Integer): AnsiString;
 function FloatToStr(v: Double): AnsiString;
+function FloatToExpStr(v: Double): AnsiString;
 function StrFloat(v: Double; width: Integer; decimals: Integer): AnsiString;
 procedure Val(const s: AnsiString; var v: Int64; var code: Integer);
 procedure ValQWord(const s: AnsiString; var v: QWord; var code: Integer);
@@ -606,6 +607,29 @@ begin
     Result := ' ' + Result;
 end;
 
+function FloatToExpStr(v: Double): AnsiString;
+{ Decimal exponent form, for magnitudes the Int64 digit split cannot hold. The
+  mantissa is normalised into [1,10) and formatted by FloatToStr itself, which
+  is then in range by construction — one formatting rule, not two. A mantissa
+  of exactly `1.0` loses its `.0` so the result reads `1e+19` the way Python
+  writes it rather than `1.0e+19`, and the exponent is padded to two digits for
+  the same reason. }
+var neg: Boolean; e, i: Integer; m, es: AnsiString;
+begin
+  neg := v < 0;
+  if neg then v := -v;
+  e := 0;
+  while v >= 10.0 do begin v := v / 10.0; e := e + 1; end;
+  while (v > 0.0) and (v < 1.0) do begin v := v * 10.0; e := e - 1; end;
+  m := FloatToStr(v);
+  i := Length(m);
+  if (i > 2) and (m[i] = '0') and (m[i - 1] = '.') then m := Copy(m, 1, i - 2);
+  if e >= 0 then es := StrInt(e, 0) else es := StrInt(-e, 0);
+  if Length(es) < 2 then es := '0' + es;
+  if e >= 0 then Result := m + 'e+' + es else Result := m + 'e-' + es;
+  if neg then Result := '-' + Result;
+end;
+
 function FloatToStr(v: Double): AnsiString;
 { Python-style natural decimal: [-]int.frac with trailing zeros trimmed but at
   least one fractional digit (5.0 -> "5.0"). Uses the Trunc/Frac/Round float
@@ -617,6 +641,22 @@ var
   digits: string;
   i: Integer;
 begin
+  { NaN and infinities first — neither survives the Trunc/Frac split below, and
+    the normalise loop in FloatToExpStr would not terminate on an infinity. }
+  if v <> v then begin Result := 'NaN'; Exit; end;
+  if v > 1.7976931348623157e308 then begin Result := 'Inf'; Exit; end;
+  if v < -1.7976931348623157e308 then begin Result := '-Inf'; Exit; end;
+  { Past Int64, Trunc SATURATES at High(Int64) and every digit below is then
+    derived from the saturated value — `d` goes out of 0..9 and
+    Chr(Ord('0') + d) emits a byte that is not a digit at all. `1e19` printed
+    9223372036854775809.o72036854775808, i.e. invalid UTF-8 on stdout, and it
+    is reachable from plain arithmetic rather than only from a literal
+    (bug-nilpy-large-float-str-overruns-into-garbage). }
+  if (v > 9.2e18) or (v < -9.2e18) then
+  begin
+    Result := FloatToExpStr(v);
+    Exit;
+  end;
   neg := v < 0;
   if neg then v := -v;
   intpart := Trunc(v);
