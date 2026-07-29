@@ -37,9 +37,9 @@ _none_
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
-| bug-c-dwarf-lines-index-the-preprocessed-text | C | 55 | bug | `-g` on a C file gives line numbers from the PREPROCESSED text | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 70 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-cfront-vla-stack-corruption | C | 65 | bug | C VLA (`int arr[n]` with runtime `n`) silently corrupts adjacent stack slots | — |
+| bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
 | bug-nilpy-annotated-module-global-invisible-in-kwarg | N | 55 | bug | A module-level ANNOTATED global is not visible in a keyword argument | — |
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |
 | bug-nilpy-callable-in-local-var-call-does-nothing | N | 70 | bug | `cb = lambda ...` then `cb(x)` compiles and does NOTHING | — |
@@ -83,6 +83,7 @@ _none_
 | decide-nilpy-hasattr-per-instance-semantics | U | 35 | decide | decide: should NilPy's hasattr answer per-INSTANCE or per-CLASS? | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-nilpy-transitive-nested-def-capture | U | 40 | decide | decide: NilPy transitive capture for sibling nested-def calls | — |
+| decide-runtime-primitive-layering | U | 70 | decide | Where does a runtime primitive live? — DECIDED: a PAL per language | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
@@ -95,7 +96,6 @@ _none_
 | feature-cdecl-bodied-sysv-prologue | A | 40 | feature | Bodied Pascal `cdecl` procs: genuine SysV prologue (float params, >6 args) | — |
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
 | feature-crtl-implement-libc-assumptions | B | 10 | feature | crtl: implement the libc assumptions real-world C leans on | — |
-| feature-debuggability-umbrella | A | 78 | feature | Umbrella: make pxx programs (and the compiler) DEBUGGABLE | — |
 | feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | feature-nilpy-break-continue, feature-nilpy-tk-binding |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 50 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade |
@@ -290,7 +290,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1005)
+## done (1007)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -394,6 +394,7 @@ _none_
 | bug-c-double-value-model | A | 50 | bug | C `double` value model broken — lua floats all garbage | — |
 | bug-c-double-vararg | C | 50 | bug | C: double passed as a variadic arg reads 0 | — |
 | bug-c-duktape-double-formatting | A | 55 | bug | duktape: JS number formatting wrong (doubles scaled by ~5^13) | — |
+| bug-c-dwarf-lines-index-the-preprocessed-text | C | 55 | bug | `-g` on a C file gives line numbers from the PREPROCESSED text | — |
 | bug-c-exit-shadows-pascal-exit | A | 70 | bug | crtl's C `exit()` shadows Pascal's `Exit` — order-dependent | — |
 | bug-c-expr-result-type-model | C | 55 | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
 | bug-c-external-func-address-indirect-call | A | 50 | bug | C: address of an EXTERNAL function called through a pointer does nothing | — |
@@ -942,6 +943,7 @@ _none_
 | feature-crtl-libm-correctly-rounded-transcendentals | B | 40 | feature | crtl libm: correctly-rounded (or <1ulp) transcendentals — cbrt/log/pow/exp | — |
 | feature-crtl-strtok-missing | B | 60 | feature | crtl: `strtok` not implemented (undeclared function) | — |
 | feature-crtl-trig-payne-hanek | B | 15 | feature | crtl libm: Payne-Hanek reduction for \|x\| >= 1e8 trig (sin/cos/tan) | — |
+| feature-debuggability-umbrella | A | 78 | feature | Umbrella: make pxx programs (and the compiler) DEBUGGABLE | — |
 | feature-declaration-prescan | A | 50 | feature | Declaration pre-scan — whole-section symbol visibility (kill declare-before-use) | — |
 | feature-default-parameters | A | 50 | feature | feature: default parameter values | — |
 | feature-default-params-on-methods | A | 50 | feature | Default parameter values on class/interface methods (works on free routines) | — |
@@ -2744,7 +2746,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 80] [N] bug-nilpy-not-on-object-always-true
-- [p 78] [A] feature-debuggability-umbrella
 - [p 75] [N] bug-nilpy-def-value-in-a-variable-is-not-callable
 - [p 75] [N] bug-nilpy-slice-of-variant-local-returned-is-unusable
 - [p 75] [N] bug-nilpy-subscript-argument-boxes-wrong-into-variant-param
@@ -2754,6 +2755,7 @@ _none_
 - [p 70] [N] bug-nilpy-super-and-unbound-parent-method-calls
 - [p 70] [N] bug-nilpy-unknown-method-segfaults
 - [p 70] [N] bug-nilpy-zero-param-lambda-cannot-call-a-def
+- [p 70] [U] decide-runtime-primitive-layering
 - [p 70] [N] feature-nilpy-function-values
 - [p 65] [C] bug-cfront-vla-stack-corruption
 - [p 65] [N] bug-nilpy-bound-method-coerced-to-string
@@ -2783,7 +2785,6 @@ _none_
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
-- [p 55] [C] bug-c-dwarf-lines-index-the-preprocessed-text
 - [p 55] [N] bug-nilpy-annotated-module-global-invisible-in-kwarg
 - [p 55] [N] bug-nilpy-int-parse-halts-instead-of-raising
 - [p 55] [A] bug-pascal-defines-leak-across-units
@@ -2827,6 +2828,7 @@ _none_
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [U] decide-gpc-as-corpus-target (unblocks 1)
 - [p 45] [U] decide-ilja-tui-render-model (unblocks 1)
+- [p 45] [A] bug-compiler-selfdebug-lines-index-expanded-source
 - [p 45] [N] bug-nilpy-method-call-on-fresh-construction
 - [p 45] [A] bug-pascal-uses-order-breaks-pylib-exception
 - [p 45] [T] bug-t-watcher-dev-contention-false-newred

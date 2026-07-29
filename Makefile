@@ -38,6 +38,7 @@ DEMO_OUT   ?= build/demos
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
+.PHONY: pxx-debug
 .PHONY: fuzz-csmith
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
 .PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
@@ -46,6 +47,20 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
 
 all: $(COMPILER)
+
+# Debug build of the COMPILER itself, for gdb'ing pascal26 while it compiles
+# something. Written to a SEPARATE path: compiler/pascal26 and the pinned
+# stable are untouched, so a debug session cannot contaminate a gate run or the
+# binary every other track builds on.
+#
+#   make pxx-debug
+#   gdb --args compiler/pascal26-debug prog.py /tmp/out
+#
+# -g here is the compiler's own DWARF (it is a pxx-built binary like any other),
+# which is why `break PyClassCreate` works. See devdocs/dev/debug-switches.md.
+pxx-debug: $(COMPILER)
+	$(COMPILER) -g $(COMPILER_SRC) $(COMPILER)-debug
+	@echo "built $(COMPILER)-debug  —  gdb --args $(COMPILER)-debug <in> <out>"
 
 # Regenerate SYMBOLS.md — concise routine index (universal-ctags). Navigation
 # aid for humans and agents; re-run after code changes.

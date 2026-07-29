@@ -142,8 +142,19 @@ enables a whole lane.
 | --- | --- | --- |
 | `n.locals` | N (NilPy) | the inferred local table per routine, after the inference fixed point — "what type did NilPy actually give this local" |
 | `n.ctorargs` | N (NilPy) | every NilPy construction's argument AST kind + type kind |
-| `n.*` | N | everything NilPy |
+| `a.ir:<proc>` | A (core) | the IR of ONE routine (`a.ir:*` = `--dump-ir`) |
+| `a.ast:<proc>` | A (core) | that routine's AST tree before lowering |
+| `n.*` / `a.*` | — | everything in a lane |
 | `all` | — | everything |
+
+A topic ending in `:<name>` takes an argument — the routine to dump. That is the
+difference between 19 lines and 83,046: `--dump-ir` dumps every body in the
+program, `a.ir:combine` dumps the one you asked about.
+
+`a.ast` is STRUCTURAL, not pretty-printed — kind and type-kind are numbers.
+There are 127 `AN_` constants and no name table; adding one would be a second
+list to keep in step, which is the drift this file exists to avoid. Read the
+`AN_` constants in `defs.inc` alongside it.
 
 Adding a topic: pick `<lane>.<name>`, call `PxxDbgEnabled('<lane>.<name>')` at
 the probe, and add the row above. There is nothing else to update.
@@ -170,6 +181,26 @@ Notes:
   builds.
 - With `PXXDBG` unset the emitted output is byte-identical (verified for a
   NilPy and a Pascal program) and the self-host fixedpoint holds.
+
+# 4. Debugging the COMPILER itself — `make pxx-debug`
+
+```sh
+make pxx-debug
+gdb --args compiler/pascal26-debug prog.py /tmp/out
+(gdb) break PyClassCreate
+(gdb) bt
+```
+
+Written to `compiler/pascal26-debug`, a SEPARATE path: `compiler/pascal26` and
+the pinned stable are untouched, so a debug session cannot contaminate a gate
+run or the binary other tracks build on.
+
+**Function-level only.** `break <routine>`, backtraces, `info args`/`locals`
+work. Line numbers do NOT: `ExpandIncludes` splices every `.inc` into one buffer
+and the lexer numbers lines in that, so `info line IRDump` says
+`compiler.pas:61871` for a 1001-line file. Same bug as C had one layer up —
+see `bug-compiler-selfdebug-lines-index-expanded-source`, which carries the fix
+shape (the C one is done and most of it is reusable).
 
 ## Related
 

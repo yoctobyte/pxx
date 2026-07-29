@@ -6841,9 +6841,35 @@ begin
   writeln(StdErr, 'INLINE-MEASURE: loose(leaf+size only)      procs=', eLoose, ' sites=', sLoose);
 end;
 
+{ PXXDBG=a.ast:<proc> — the routine's AST as a tree, before lowering.
+
+  STRUCTURAL, not pretty-printed: kind and type-kind are numbers. There are 127
+  AN_ constants and no name table for them; adding one would be a second list to
+  keep in step with the constants, which is the drift PXXDBG=help was
+  deliberately designed out of. A number that is always right beats a name that
+  silently goes stale — read the AN_ constants in defs.inc alongside. }
+procedure AstDumpTree(node, depth: Integer);
+var i: Integer; pad: AnsiString;
+begin
+  if node < 0 then Exit;
+  pad := '';
+  for i := 1 to depth do pad := pad + '  ';
+  WriteLn('PXXDBG a.ast ', pad, '#', node,
+          ' kind=', ASTKind[node], ' tk=', ASTTk[node],
+          ' ival=', ASTIVal[node], ' line=', ASTLine[node], ':', ASTFile[node]);
+  if depth > 40 then Exit;             { a malformed tree must not hang the dump }
+  AstDumpTree(ASTLeft[node], depth + 1);
+  AstDumpTree(ASTRight[node], depth + 1);
+end;
+
 procedure CompileAST(node: Integer);
 var iZeroTmp: Integer;
 begin
+  if (CurProc >= 0) and PxxDbgWants('a.ast', Procs[CurProc].Name) then
+  begin
+    WriteLn('PXXDBG a.ast ', Procs[CurProc].Name);
+    AstDumpTree(node, 0);
+  end;
   IRReset;
   IRLowerAST(node);
   { Nil the COM-interface temps that lowering just allocated (e.g. an `as`-cast
@@ -6901,6 +6927,13 @@ begin
   FloatPoolBoundaryAssign;
   FloatPoolBoundaryAssignA64;
   CalleeScratchAssign;
-  if DumpIR then IRDump;
+  { PXXDBG=a.ir:<proc> — the IR of ONE routine, no rebuild and no wading through
+    every body in the program. IRDump already runs per body with CurProc in
+    scope, so this is a condition rather than a refactor. `a.ir:*` is --dump-ir. }
+  if DumpIR or ((CurProc >= 0) and PxxDbgWants('a.ir', Procs[CurProc].Name)) then
+  begin
+    if CurProc >= 0 then WriteLn('PXXDBG a.ir ', Procs[CurProc].Name);
+    IRDump;
+  end;
   IREmitMachineCode;
 end;

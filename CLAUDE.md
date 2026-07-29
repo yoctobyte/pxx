@@ -356,6 +356,33 @@ Applies to: `docs/**`, the website, release notes, README, any promo/launch copy
 Write public claims **uncompressed** — the qualifying words ("output", "oracle",
 "built with") carry the entire distinction, and terse styles drop them first.
 
+## Debugging — measure, do not reason
+
+**Read `devdocs/dev/debugging-playbook.md` before hand-patching a probe or
+print-bisecting anything.** The tools exist; the failure mode is not reaching
+for them.
+
+The rule they are built on: **the expensive bugs here do not crash, they produce
+a plausible wrong value far from the cause.** A crash has a location and is the
+cheap case. So reach for the tool that makes a wrong VALUE visible:
+
+| question | tool |
+| --- | --- |
+| does it disagree with the oracle? | `tools/pydiff.py run\|bisect\|probe` (CPython), `tools/fpc_diff_probe.sh` (FPC) |
+| is memory read after free? | `-dPXX_HEAP_DEBUG` — freed bytes become `$DD`, not a recycled neighbour's |
+| who retained/released it? | `-dPXX_OBJTRACE`, then `grep <addr>` |
+| step through it | `-g -O2` + gdb, `source tools/pxx-gdb.py`, `pxxrc <obj>` for the refcount |
+| what did the COMPILER infer? | `PXXDBG=n.locals`, `n.ctorargs`, `a.ir:<proc>`, `a.ast:<proc>`; `make pxx-debug` |
+
+`PXXDBG` exists specifically because editing a probe into the compiler and
+self-compiling (~90s) is how a **wrong root cause got recorded in a ticket** —
+reasoning was cheaper than measuring, so reasoning won, and it was wrong. Do not
+theorise about an inferred type; print it.
+
+Before writing a conclusion into a ticket, check it against a second source.
+Every wrong root cause in this repo's history was a plausible story nobody
+diffed against an oracle.
+
 ## Workflow norms (all tracks)
 - **All tracks work directly on `master`** (no worktrees/clones). Commit in small
   units. (Historic: C used a `feat/cfront` worktree until it merged at v80; that

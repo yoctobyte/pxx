@@ -2600,6 +2600,32 @@ begin
   if PxxDbgTopics = 'help' then PxxDbgHelp;
 end;
 
+{ The ARGUMENT of a parameterised topic: PxxDbgArg('a.ir') returns 'foo' for
+  PXXDBG=a.ir:foo, '*' for a.ir:*, and '' when the topic is absent. Lets a topic
+  name one routine instead of dumping every body in the program — the whole
+  point of `--dump-ir <proc>` over `--dump-ir`. }
+function PxxDbgArg(const prefix: AnsiString): AnsiString;
+var i, start, plen: Integer; cur: AnsiString;
+begin
+  PxxDbgArg := '';
+  PxxDbgLoad;
+  if PxxDbgTopics = '' then Exit;
+  plen := Length(prefix);
+  start := 1;
+  for i := 1 to Length(PxxDbgTopics) + 1 do
+    if (i > Length(PxxDbgTopics)) or (PxxDbgTopics[i] = ',') then
+    begin
+      cur := Copy(PxxDbgTopics, start, i - start);
+      if (Length(cur) > plen + 1) and (Copy(cur, 1, plen) = prefix) and
+         (cur[plen + 1] = ':') then
+      begin
+        PxxDbgArg := Copy(cur, plen + 2, Length(cur) - plen - 1);
+        Exit;
+      end;
+      start := i + 1;
+    end;
+end;
+
 function PxxDbgEnabled(const topic: AnsiString): Boolean;
 var i, start: Integer; cur: AnsiString;
 begin
@@ -2667,6 +2693,16 @@ begin
     Result := match;
   end;
 end;
+
+{ TRUE when a parameterised topic selects `name` — an exact (case-insensitive)
+  match or `*`. }
+function PxxDbgWants(const prefix, name: AnsiString): Boolean;
+var a: AnsiString;
+begin
+  a := PxxDbgArg(prefix);
+  PxxDbgWants := (a <> '') and ((a = '*') or CaseEqual(a, name));
+end;
+
 
 const
   MAX_WS_STACK = 64;   { Whitespace frontend compile-time expression stack }

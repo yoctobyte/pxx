@@ -97,9 +97,42 @@ improvises: run a `.py` under CPython and under pxx, diff stdout, and on a
 mismatch bisect the source. Track T owns the tool; findings file into the owning
 lane as usual.
 
+## Outcome (2026-07-29)
+
+All five children landed in one campaign. What the toolkit is now, and which of
+the three motivating bugs each would have caught:
+
+| child | shipped as | would have caught |
+| --- | --- | --- |
+| 1 | `-dPXX_HEAP_DEBUG`, `-dPXX_OBJTRACE` | the ownership bug, in one run: `0xDDDDDDDD` instead of `1751084129` |
+| 2 | `PXXDBG=<lane>.<topic>` | the wrong PREMISE — `n.ctorargs` is the probe that disproved it |
+| 3 | DWARF for NilPy/C/Rust/Zig, multi-file, `tools/pxx-gdb.py` | the SIGSEGV, directly |
+| 4 | `PXXDBG=a.ir:<proc>` / `a.ast:<proc>`, `make pxx-debug` | compiler-side questions, no rebuild |
+| 5 | `tools/pydiff.py` | the truthiness bug — the only method that could |
+
+The three bugs at the top of this ticket are each covered by a different tool,
+which is the argument for having built all five rather than the cheapest one.
+
+Two claims in the original text were WRONG and are corrected in child 3 below:
+`-g -O2` already worked, and Pascal frame-base expressions already worked. Both
+were written without measuring. The general lesson is worth keeping: the tools
+that mattered were the ones that made a WRONG VALUE visible, not the ones that
+made a crash easier to locate — crashes were never the expensive case.
+
 ## Order and gate
 
-1 → 2 → 5 → 3 → 4. Each child lands independently under Track A's gate
-(`tools/gate.sh quick` + self-host byte-identical), and every switch must be OFF
-by default with the default path byte-identical — a debug facility that changes
-the shipped binary is a debug facility nobody trusts.
+Actual order run: 1 → 3 → 2 → 5 → 4 (3 moved up once NilPy turned out to have
+no debug info at all).
+
+**Gate correction.** This said `tools/gate.sh quick`. That is WRONG for anything
+touching a frontend: `--tier quick` covers ZERO C/Rust/Zig jobs, so it would
+have passed the frontend DWARF work without testing a line of it. Use
+`tools/gate.sh full` when the change touches a frontend or shared IR.
+
+Every switch is OFF by default with the default path byte-identical — verified
+per child, not assumed: emitted binaries compared for C, NilPy and Pascal, and
+the preprocessed text compared for the C line markers. A debug facility that
+changes the shipped binary is a debug facility nobody trusts.
+
+## Log
+- 2026-07-29 — resolved, commit f74df6bfb.

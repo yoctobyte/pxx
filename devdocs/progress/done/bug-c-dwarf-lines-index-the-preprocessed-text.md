@@ -6,6 +6,25 @@ type: bug
 
 # `-g` on a C file gives line numbers from the PREPROCESSED text
 
+**FIXED 2026-07-29 (`ee6ef36ac`).** All three parts landed together, and the
+dependency below turned out to be the cheap half:
+
+1. cpreproc emits gcc-style `# <line> "<path>"` markers, DRIFT-based (only when
+   the origin would otherwise be inferred wrongly), `-g` only.
+2. Headers became real files in the line table. The multi-file CU support this
+   ticket said it depended on had landed for NilPy meanwhile; what it still
+   needed was generalising RANGES — a NilPy import is one contiguous run, a C
+   header's tokens interleave at every `#include` boundary — so files and ranges
+   are now separate tables and `AllocNode` consults ranges before the
+   `DbgMainTokEnd` test.
+3. Physical-line accounting: `CPReadLine` splices `\`-continued lines internally
+   and consumed those newlines silently, so a 4-line `#define` counted as one.
+
+`break addup` -> `dbgc.c:4` (was 2068); `break strlen` -> `string.c:72`.
+Breakpoint lines match gcc EXACTLY; `info line <func>` still differs by one
+because gcc emits a prologue row at the `{` and we start at the first statement
+— where a function's first row sits, not a mapping error.
+
 ```sh
 compiler/pascal26 -g prog.c out    # prog.c is 18 lines
 gdb ./out
@@ -59,3 +78,6 @@ int main(void) { printf("r=%d\n", addup(3, 4)); return 0; }
 
 `gdb -batch -ex 'break addup' -ex run -ex bt ./out` must name the line in the
 ORIGINAL file.
+
+## Log
+- 2026-07-29 — resolved, commit ee6ef36ac.
