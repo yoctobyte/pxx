@@ -63,3 +63,6 @@ table from the sweep, diffed against CPython.
    say it is provable, and name both operand types.
 
 `-Werror` is deliberately not the opt-in for step 3; see the decide ticket.
+
+## Log
+- 2026-07-30 — resolved, commit e3412dda6.
