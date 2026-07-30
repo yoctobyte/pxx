@@ -72,3 +72,6 @@ Two honest options for whoever picks this up:
 `make test-nilpy` + self-host byte-identical, plus a regression covering
 `str(None)`, `str(x)`, `"" + str(None)` and f-string/`%` interpolation of a
 literal None.
+
+## Log
+- 2026-07-30 — resolved, commit d68612d6e.

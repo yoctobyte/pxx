@@ -46,3 +46,6 @@ Found by the operator × operand-type sweep against CPython.
 `make test-nilpy` + self-host byte-identical, plus `==`/`!=` between None and
 each of 0, 0.0, False, "", [], {} and None, in both operand orders, at
 statement level and inside a call.
+
+## Log
+- 2026-07-30 — resolved, commit d68612d6e.
