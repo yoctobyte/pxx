@@ -59,3 +59,6 @@ Found while measuring
 ## Gate
 
 `make test-nilpy` + self-host byte-identical, plus the table above going flat.
+
+## Log
+- 2026-07-30 — resolved, commit c13328cb5.
