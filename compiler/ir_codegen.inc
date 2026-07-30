@@ -6905,9 +6905,22 @@ begin
     end;
     for iZeroTmp := PyZeroedUpTo to SymCount - 1 do
       if (Syms[iZeroTmp].Kind = skLocal) and
-         (Syms[iZeroTmp].TypeKind = tyClass) and
          (not Syms[iZeroTmp].IsArray) and (not Syms[iZeroTmp].IsRef) then
-        EmitZeroFrameSlot(Syms[iZeroTmp].Offset, TARGET_PTR_SIZE);
+      begin
+        if Syms[iZeroTmp].TypeKind = tyClass then
+          EmitZeroFrameSlot(Syms[iZeroTmp].Offset, TARGET_PTR_SIZE)
+        else if Syms[iZeroTmp].TypeKind = tyVariant then
+          { A VARIANT temp minted during LOWERING has the same hazard as the
+            class locals above, and PyInitVariantLocals only ran at the
+            prologue: a temp created inside a branch the run skips is never
+            assigned, and the scope-exit clear then reads its stale bytes as a
+            live tag+payload. Observed as `decq -0x10(%rax)` with rax = 80 —
+            a page margin released as if it were an object — when
+            songformatter's renderer took the branch that materialises one.
+            16 bytes: the tag AND the payload, or the clear reads a live tag
+            over a stale pointer. }
+          EmitZeroFrameSlot(Syms[iZeroTmp].Offset, 16);
+      end;
     PyZeroedUpTo := SymCount;
   end;
   IRVerify;
