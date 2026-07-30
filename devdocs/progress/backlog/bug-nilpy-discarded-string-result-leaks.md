@@ -55,6 +55,28 @@ attempt does not re-walk them.
       bug-nilpy-method-returning-a-fresh-string-leaks work says call results are
       moved into stores; the argument path was not checked).
 
+## Attempt 2026-07-30 — IRDiscardValue is NOT the hook (measured, reverted)
+
+Tried and REVERTED, so the next attempt does not repeat it. The idea was sound
+and needs no new IR op: store the discarded result into a hidden temp belonging
+to that SITE, because the managed store releases the slot's previous value
+before taking the new one — so a loop keeps at most one handle alive and the
+scope-exit release frees the last.
+
+The hook was wrong. `IRDiscardValue` (ir.inc), which the AN_BLOCK statement-list
+arm calls for every item, looked like the place; a branch there for
+`PyProgramMode` + `tyAnsiString` + a call kind, placed BEFORE
+`IRMarkStatementNode` and returning, compiled and self-hosted byte-identical —
+and changed nothing. The RSS slope was identical (952 KB -> 10296 KB), and
+`PXXDBG=a.ir:<routine>` still shows the call with `ival=1`, i.e. something ELSE
+marks a NilPy statement call as a statement.
+
+So the first job for the next attempt is to find who sets `IRIVal := 1` on a
+NilPy statement-level call — it is not `IRDiscardValue`. Put the store there
+instead, and keep the "before the mark, then return" discipline: a store is
+itself a statement root that drags its operand tree in, so marking the call as a
+statement TOO would emit it twice.
+
 ## Where to look
 
 The statement-expression path: when an expression statement's value is a managed
