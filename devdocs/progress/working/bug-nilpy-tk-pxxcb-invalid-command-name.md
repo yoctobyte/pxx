@@ -85,6 +85,30 @@ Second candidate: run the app under a Tcl built with `TCL_MEM_DEBUG`, or add a
 `trace add command pxxcb delete` (an earlier attempt produced no output, which
 is itself consistent with corruption rather than a real delete).
 
+## 2026-07-30: VERIFIED GONE
+
+Rebuilt songformatter and drove it under Xvfb with the exact event classes the
+failing scripts came from — window resizes (six, each a `<Configure>` on the
+canvas), mouse-wheel scrolling in both the editor and the preview pane, and tab
+switches. The app restores its three-document session, renders the song, the
+preview and the key analysis (`Key: F | Alt: C dorian | Agree: 1/7`), and
+survives all of it with an EMPTY stderr: no `invalid command name "pxxcb"`, no
+background-error dialog. Screenshot-verified.
+
+The two fixes already recorded above are what did it — the qualified lookup in
+`PyMakeFuncValue` and the ELF writer refusing `@proc` on a bodyless routine. The
+`@shell` wild jump was the corruption; with it gone Tcl's command table survives.
+Confirmed against a compiler built from the commit BEFORE this session's changes
+as well, so nothing landed today is load-bearing for it.
+
+The "audit every `: Int64` callable typedef" step recorded below was NOT needed
+for this symptom. It stays worth doing on its own merits — and one more member
+of exactly that family did turn up today, in a different place: a lifted lambda
+never stashed its hidden Variant-result pointer, so its epilogue copied 16 bytes
+to stale stack garbage (fixed under
+[[bug-nilpy-nested-def-capture-sets-are-not-final]]). Same profile, same class,
+different site.
+
 ## Repro
 
 Build songformatter (`~/songformatter`) and run it under Xvfb; the dialog
