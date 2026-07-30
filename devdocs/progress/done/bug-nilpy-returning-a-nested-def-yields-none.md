@@ -101,3 +101,6 @@ is the shape to look at, and whether the call site knows the resulting tag.
 `make test-nilpy` + self-host byte-identical, plus returning a nested def with
 and without capture, storing one in a container, and passing one to a
 `Callable[...]` parameter.
+
+## Log
+- 2026-07-30 — resolved, commit 575c69e08.
