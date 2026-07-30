@@ -1,0 +1,30 @@
+# A module-level ANNOTATED global must be visible to every later statement,
+# including one whose right-hand side is TRIAL-PARSED to type the target. The
+# pre-pass noted the name for the NEXT round only, so `y = pe.get(...)` died
+# with "undefined variable (pe)" — fatally, so the next round never ran.
+# bug-nilpy-annotated-module-global-invisible-in-kwarg
+
+from dataclasses import dataclass, field
+
+@dataclass
+class R:
+    evidence: list[str] = field(default_factory=list)
+
+pe: dict[str, list[str]] = {}
+pe["C"] = ["a", "b"]
+a = R(evidence=pe.get("C", []))
+print(len(a.evidence))
+
+d: dict = {"x": 5}
+n: int = 7
+s: str = "ab"
+xs: list = [1, 2, 2]
+
+got = d.get("x", 0)
+plus = n + 1
+up = s.upper()
+cnt = xs.count(2)
+alias = d
+
+print(got, plus, up, cnt, len(alias))
+print(len(pe), len(d), n, s, len(xs))

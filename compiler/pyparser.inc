@@ -11402,6 +11402,20 @@ begin
             PyNoteLocalType(GetTokenStr(i), tk, REC_UCLASS_BASE + PyAnnLastCi)
           else
             PyNoteLocalType(GetTokenStr(i), tk, REC_NONE);
+          { …and put it in THIS round's scratch scope too. Noting it only
+            records it for the NEXT round's seeding loop, so a later statement
+            in the SAME round that trial-parses an expression mentioning the
+            name died with "undefined variable" — and that error is fatal, so
+            round 2 never ran. Every module-level assignment whose right-hand
+            side read an annotated global failed that way, while `print(pe)`
+            and `pe[k] = v` (which are not trial-parsed) were fine
+            (bug-nilpy-annotated-module-global-invisible-in-kwarg). }
+          if PyProgSym(GetTokenStr(i)) < 0 then
+          begin
+            si := AllocVar(GetTokenStr(i), tk);
+            if PyAnnLastCi >= 0 then
+              Syms[si].RecName := REC_UCLASS_BASE + PyAnnLastCi;
+          end;
           while (bodyIx < MainProgramTokCount) and
                 not (Tokens[bodyIx].Kind in [tkNewline, tkDedent]) do Inc(bodyIx);
           i := bodyIx;
