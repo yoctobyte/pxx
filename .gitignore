@@ -84,3 +84,4 @@ devdocs/progress/BOARD.html
 devdocs/progress/tstate/*.html
 .testmgr/
 fred.txt
+twatch.conf

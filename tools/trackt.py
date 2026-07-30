@@ -16,7 +16,9 @@ devdocs/progress/tstate/**) — the daemon (tools/twatch.py) stays the engine.
                          each finished suite run leaves a timestamped result
                          line incl. commit hash (--no-sha to omit it)
   trackt run [tier]      manual testmgr run in THIS checkout (default quick)
-  trackt setup           box prerequisites + git fetch/push access check
+  trackt setup           box prerequisites + git access + role profile wizard
+                         (dedicated / limited / restricted — first run asks;
+                          also asked on the first `trackt up` if unconfigured)
   trackt config [k [v]]  show / set daemon config (applies live where safe)
   trackt log             follow the daemon log
   trackt web on|off      enable/disable the Flask UI (spawned by start)
@@ -141,6 +143,9 @@ def cmd_up(clone, a):
         print("no watcher clone at %s — running setup" % clone)
         if cmd_setup(clone, fetch_corpus=False):
             return 1
+    # first run on this box: pick a role profile before the daemon starts, so
+    # its very first gate already honours the box's resource ceilings.
+    configure_profile(clone)
     preexisting, _ = daemon_pid(clone)
     if not a.no_daemon and not preexisting:
         if cmd_start(clone, a.remote, local_code=a.local_code):
@@ -576,6 +581,85 @@ def cmd_config(clone, key=None, val=None):
 
 
 # ----------------------------------------------------------------- setup ---
+# Profiles the first-run wizard offers. Each is a set of overrides onto
+# CONF_DEFAULTS (everything-on, dedicated). max_cores/max_mem_mb are filled in
+# per-box at wizard time (they depend on this box's cpu/ram), so they're None
+# here as "compute from the box".
+PROFILES = {
+    "dedicated": {
+        "_blurb": "this box exists to test. Full matrix, all idle work "
+                  "(opt/bench/fuzz), all cores. (a borg-style watcher box)",
+        # all defaults — the box is ours
+    },
+    "limited": {
+        "_blurb": "shares the box with other work. Full matrix but polite: "
+                  "no spare-cycle fuzzing, leaves cores free, slower cadence.",
+        "idle_fuzz": False, "interval": 120, "fuzz_backoff_minutes": 180,
+        "_leave_cores": 2,          # cap = nproc - 2
+    },
+    "restricted": {
+        "_blurb": "spare cycles only, minimal footprint. Own-arch fast "
+                  "verdicts only (no heavy cross-matrix), no idle work, half "
+                  "the cores. (a Pi that also serves web, etc.)",
+        "tier": "native", "idle_opt": False, "idle_bench": False,
+        "idle_fuzz": False, "interval": 300, "web": False,
+        "_half_cores": True,        # cap = max(1, nproc//2)
+        "_mem_frac": 0.5,           # cap mem to half the box
+    },
+}
+
+
+def configure_profile(clone):
+    """First-run wizard: write <clone>/twatch.conf from a chosen role profile.
+
+    Runs only when no conf exists yet. Non-interactive (no TTY) defaults to
+    'dedicated' and says so — a cron/headless setup must not block on a prompt.
+    """
+    conf_path = os.path.join(clone, twatch.CONF_NAME)
+    if os.path.exists(conf_path):
+        return
+    nproc = os.cpu_count() or 1
+    total_mb = 0
+    try:
+        total_mb = twatch.meminfo().get("MemTotal", 0) >> 20
+    except Exception:
+        pass
+    if not ISATTY:
+        _write_profile(conf_path, "dedicated", nproc, total_mb)
+        print("trackt: no twatch.conf — defaulted to 'dedicated' "
+              "(non-interactive). Edit %s or run `trackt config` to change."
+              % conf_path)
+        return
+    print("\ntrackt: first run on this box (%d cores, %d MB). How should it be "
+          "used as a Track T runner?\n" % (nproc, total_mb))
+    order = ["dedicated", "limited", "restricted"]
+    for i, name in enumerate(order, 1):
+        print("  %d) %-11s %s" % (i, name, PROFILES[name]["_blurb"]))
+    try:
+        ans = input("\nChoose [1/2/3] (default 1): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        ans = ""
+    pick = order[int(ans) - 1] if ans in ("1", "2", "3") else "dedicated"
+    _write_profile(conf_path, pick, nproc, total_mb)
+    print("trackt: wrote %s profile -> %s "
+          "(tune any key later with `trackt config <key> <val>`)"
+          % (pick, conf_path))
+
+
+def _write_profile(conf_path, pick, nproc, total_mb):
+    prof = PROFILES[pick]
+    conf = {k: v for k, v in prof.items() if not k.startswith("_")}
+    if prof.get("_leave_cores"):
+        conf["max_cores"] = max(1, nproc - prof["_leave_cores"])
+    if prof.get("_half_cores"):
+        conf["max_cores"] = max(1, nproc // 2)
+    if prof.get("_mem_frac") and total_mb:
+        conf["max_mem_mb"] = int(total_mb * prof["_mem_frac"])
+    os.makedirs(os.path.dirname(conf_path), exist_ok=True)
+    with open(conf_path, "w") as f:
+        json.dump(conf, f, indent=1, sort_keys=True)
+
+
 def cmd_setup(clone, fetch_corpus=False):
     if not os.path.isdir(clone):
         remote = subprocess.run(["git", "-C", CHECKOUT, "remote", "get-url",
@@ -598,6 +682,8 @@ def cmd_setup(clone, fetch_corpus=False):
                           capture_output=True, text=True)
     print("  push  : %s" % (GRN + "ok" + OFF if push.returncode == 0
                             else RED + "FAIL" + OFF + " — " + push.stderr.strip()[:200]))
+    print("-- role profile --")
+    configure_profile(clone)
     return rc
 
 

@@ -63,6 +63,10 @@ CONF_DEFAULTS = {"tier": "full", "fast_tier": "native", "interval": 60,
                  # re-finding what we already reported. Zero open findings = no
                  # throttle at all. See run_fuzz_idle.
                  "fuzz_backoff_minutes": 90,
+                 # resource ceilings for a shared/small box (the wizard's
+                 # limited/restricted profiles). 0 = no cap (use the box).
+                 "max_cores": 0,       # cap testmgr concurrency (--jobs N)
+                 "max_mem_mb": 0,      # cap the cgroup MemoryMax (env override)
                  "web": True, "web_port": 8377}   # everything ON by default;
                                        # ./trackt flags / config opt OUT
 CONF = dict(CONF_DEFAULTS)            # effective config, set in main()
@@ -318,7 +322,14 @@ def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False):
            "--tier", tier, "--report-json", rep_path]
     if job_glob:
         cmd += ["--job", job_glob]
-    proc = subprocess.Popen(cmd, cwd=clone.path, start_new_session=True)
+    # resource ceilings (limited/restricted profiles). Concurrency is a testmgr
+    # CLI arg; the mem cap is an env override read by reexec_scoped().
+    env = dict(os.environ)
+    if CONF.get("max_cores"):
+        cmd += ["--jobs", str(int(CONF["max_cores"]))]
+    if CONF.get("max_mem_mb"):
+        env["TESTMGR_MEM_CAP_MB"] = str(int(CONF["max_mem_mb"]))
+    proc = subprocess.Popen(cmd, cwd=clone.path, start_new_session=True, env=env)
     last_check = time.monotonic()
     wp = os.path.join(clone.path, WATCH_REL)
     while proc.poll() is None:

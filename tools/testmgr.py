@@ -1887,6 +1887,16 @@ def reexec_scoped():
     if not total:
         return
     cap = min(SCOPE_MAX_ABS, int(total * SCOPE_MAX_FRAC))
+    # a shared/small box (twatch limited/restricted profile) can pin a HARD
+    # ceiling below the fraction-of-total default, so the watcher never claims
+    # more than its share. Only ever LOWERS the cap, never raises it above the
+    # box-proportional default.
+    mem_cap_mb = os.environ.get("TESTMGR_MEM_CAP_MB")
+    if mem_cap_mb:
+        try:
+            cap = min(cap, int(mem_cap_mb) << 20)
+        except ValueError:
+            pass
     os.environ["TESTMGR_SCOPED"] = "1"
     print("testmgr: scoped — MemoryMax=%dM MemorySwapMax=%dM"
           % (cap >> 20, SCOPE_SWAP_MAX >> 20), flush=True)
