@@ -97,6 +97,12 @@ function pyclosure_src_cap(obj: Pointer; const name: AnsiString; const v: Varian
 function pyboundfn_new(code: Pointer; n: Int64; a0var: Int64): Pointer;
 function pyboundfn_bind(obj: Pointer; idx: Int64; v: Int64): Pointer;
 function pyboundfn_is(p: Pointer): Boolean;
+{ Is this pointer a heap CALLABLE — a pyeval closure or a lifted bound-fn —
+  rather than a bare code address? The call-through-a-Callable-parameter path
+  needs the question before it jumps: a lambda's value is an OBJECT, and the
+  typed indirect call jumped into the object's own bytes
+  (bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable). }
+function pycallable_obj_is(p: Pointer): Boolean;
 function pyboundfn_bind_var(obj: Pointer; idx: Int64; const v: Variant): Pointer;
 function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
 { Same call, but the callee's Variant RESULT is handed back. pyvar_callv* used
@@ -1749,6 +1755,11 @@ end;
 function pyboundfn_is(p: Pointer): Boolean;
 begin
   pyboundfn_is := (p <> nil) and (PBoundFnObj(p)^.Magic = @PyBoundFnMagicMarker);
+end;
+
+function pycallable_obj_is(p: Pointer): Boolean;
+begin
+  pycallable_obj_is := (p <> nil) and (pyclosure_is(p) or pyboundfn_is(p));
 end;
 
 { Bind a VARIANT capture: variant params travel BY ADDRESS, and the enclosing

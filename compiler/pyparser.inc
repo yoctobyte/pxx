@@ -5648,6 +5648,51 @@ begin
     Result := PyWrapClosureDynCall(baseNode, ASTLeft[argsHead], Result);
 end;
 
+{ Wrap a call through a `Callable[...]`-annotated PARAMETER so a heap callable
+  works. The annotation registers a $proctype signature and the call lowers to a
+  typed INDIRECT call — correct for a compiled def, fatal for a lambda or a
+  closure, whose value is an OBJECT pointer: the call jumped into the object's
+  own bytes. Builds `pycallable_obj_is(f) ? pyvar_callv<n>(f, args...) :
+  <the indirect call>`, so the fast path is untouched and the object path goes
+  to the same universal dispatcher a variant callee already uses
+  (bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable).
+
+  calleeNode is re-read across the guard and both arms — it is a plain variable
+  here, so evaluating it twice is free of side effects (the same rule
+  PyWrapClosureFieldCall / PyMakeTruthy follow). Returns defCall unchanged for
+  arities past 3 or when pylib is not loaded. }
+function PyWrapHeapCallableCall(calleeNode, argsHead, n, defCall: Integer): Integer;
+var isArg, isCall, dispArg, thenCall, pair, tern, isPi, dispPi: Integer;
+begin
+  PyWrapHeapCallableCall := defCall;
+  if n > 3 then Exit;
+  isPi := FindProc('pycallable_obj_is');
+  if isPi < 0 then Exit;
+  dispPi := -1;
+  if n = 0 then dispPi := FindProc('pyvar_callv0')
+  else if n = 1 then dispPi := FindProc('pyvar_callv1')
+  else if n = 2 then dispPi := FindProc('pyvar_callv2')
+  else if n = 3 then dispPi := FindProc('pyvar_callv3');
+  if dispPi < 0 then Exit;
+
+  isArg := AllocNode(AN_ARG); ASTLeft[isArg] := calleeNode; ASTRight[isArg] := -1;
+  isCall := AllocNode(AN_CALL);
+  ASTIVal[isCall] := isPi; ASTLeft[isCall] := isArg; ASTTk[isCall] := Ord(tyBoolean);
+
+  dispArg := AllocNode(AN_ARG);
+  ASTLeft[dispArg] := calleeNode;
+  ASTRight[dispArg] := argsHead;
+  thenCall := AllocNode(AN_CALL);
+  ASTIVal[thenCall] := dispPi; ASTLeft[thenCall] := dispArg;
+  ASTTk[thenCall] := Ord(tyVariant);
+
+  pair := AllocNode(AN_PAIR);
+  ASTLeft[pair] := thenCall; ASTRight[pair] := defCall;
+  tern := AllocNode(AN_TERNARY);
+  ASTLeft[tern] := isCall; ASTRight[tern] := pair; ASTTk[tern] := Ord(tyVariant);
+  PyWrapHeapCallableCall := tern;
+end;
+
 { `obj.method` used as a VALUE (no following call): capture it as a bound-method
   variant so the receiver is not dropped. pybound_new(@method, self) boxes
   {code, recv}; the receiver is passed by ADDRESS-as-value (an object reference is

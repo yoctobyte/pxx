@@ -803,6 +803,7 @@ procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 function PyMakeNone: Integer; forward;  { the None VALUE (a VT_EMPTY variant) — pyparser.inc }
 function PyNodeIsCallableValue(n: Integer): Boolean; forward;  { a bound method / lambda / function value — pyparser.inc }
+function PyWrapHeapCallableCall(calleeNode, argsHead, n, defCall: Integer): Integer; forward;  { Callable-param call through a heap callable — pyparser.inc }
 function PyBareNoneHere: Boolean; forward;  { a `None` with nothing after it that could continue an expression — pyparser.inc }
 function PyMakeSuperCall(const name: AnsiString): Integer; forward;  { `super().m(args)` as a value (pyparser.inc) }
 function PyDynAttrEverAssigned(const nm: AnsiString): Boolean; forward;  { is `.nm =` written anywhere? (pyparser.inc) }
@@ -7386,6 +7387,12 @@ begin
   ASTIVal[node]  := sigPi;
   ASTTk[node]    := Ord(Procs[sigPi].RetType);
   if isMethod then ASTSLen[node] := 1 else ASTSLen[node] := 0;
+  { NilPy: the value in a `Callable[...]` parameter may be a lambda or a closure
+    — a heap OBJECT, not a code address — and the typed indirect call above
+    jumps straight into it. Branch at run time; a compiled def keeps this exact
+    path (bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable). }
+  if PyExprMode and (not isMethod) and (Procs[sigPi].RetType = tyVariant) then
+    node := PyWrapHeapCallableCall(calleeNode, argsHead, nArgs, node);
   Result := node;
 end;
 
@@ -12163,6 +12170,36 @@ begin
                     + Procs[procIdx].Params[i].Name
                     + '", but the argument is a callable — call it, or declare '
                     + 'the parameter as a Callable');
+            { A `Callable[...]` parameter is tyPointer (the annotation registers a
+              $proctype signature), and a callable VALUE is a 16-byte variant. The
+              plain coercion took the variant's first word — its TAG — as the code
+              address, so passing a lambda to a Callable parameter jumped to 9.
+              pyvar_callee_addr yields the payload, unwrapping a {code, recv}
+              function value on the way
+              (bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable). }
+            if (Procs[procIdx].Params[i].TypeKind = tyPointer) and
+               (IntToTypeKind(ASTTk[ASTLeft[currArg]]) = tyVariant) then
+            begin
+              capSym := FindProc('pyvar_callable_ptr');
+              if capSym >= 0 then
+              begin
+                identNode := AllocNode(AN_STR_LIT);
+                ASTSOffset[identNode] := PyStoredName(Procs[procIdx].Params[i].Name);
+                ASTSLen[identNode] := Length(Procs[procIdx].Params[i].Name);
+                ASTTk[identNode] := Ord(tyString);
+                argSeq := AllocNode(AN_ARG);
+                ASTLeft[argSeq] := identNode;
+                ASTRight[argSeq] := -1;
+                lastArg := AllocNode(AN_ARG);
+                ASTLeft[lastArg] := ASTLeft[currArg];
+                ASTRight[lastArg] := argSeq;
+                exprNode := AllocNode(AN_CALL);
+                ASTIVal[exprNode] := capSym;
+                ASTLeft[exprNode] := lastArg;
+                ASTTk[exprNode] := Ord(tyPointer);
+                ASTLeft[currArg] := exprNode;
+              end;
+            end;
             currArg := ASTRight[currArg];
             Inc(i);
           end;

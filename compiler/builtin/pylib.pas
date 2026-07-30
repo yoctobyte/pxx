@@ -898,6 +898,11 @@ function pyvarobj_owned(const v: Variant): Pointer;
   inside whatever routine happened to contain the call. Python raises TypeError
   there; so do we. }
 function pyvar_callee_addr(const v: Variant; const what: AnsiString): Pointer;
+{ The same unwrap for a `Callable[...]` PARAMETER, which is a bare pointer: it
+  has no room for a receiver, so a BOUND METHOD cannot travel through one and
+  says so plainly instead of borrowing the dynamic-call path's arity message
+  (bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable). }
+function pyvar_callable_ptr(const v: Variant; const what: AnsiString): Pointer;
 { `v[key]` / `v[key] = val` where v is a VARIANT holding a container — a dict
   entry that was itself a `.get()` result, so its container type is only known
   at run time. Dispatch on the boxed object: dict fetch/store by key, list index
@@ -1612,6 +1617,21 @@ end;
 function pyvarobj(const v: Variant): Pointer;
 begin
   Result := Pointer(PPyVarRec(@v)^.Payload);
+end;
+
+function pyvar_callable_ptr(const v: Variant; const what: AnsiString): Pointer;
+var nm: AnsiString;
+begin
+  if what = '' then nm := 'this argument' else nm := 'parameter ' + what;
+  if (PPyVarRec(@v)^.VType = 8) and (pybound_recv(v) <> nil) then
+    raise Exception.Create('TypeError: ' + nm + ' is declared Callable[...], '
+      + 'which carries a code address only, and a BOUND METHOD also needs its '
+      + 'receiver — pass a plain function, a lambda, or declare the parameter '
+      + 'without an annotation');
+  Result := Pointer(PPyVarRec(@v)^.Payload);
+  if Result = nil then
+    raise Exception.Create('TypeError: ' + nm + ' is not callable — the value '
+      + 'is None (an import that did not resolve, or a name never assigned)');
 end;
 
 function pyvar_callee_addr(const v: Variant; const what: AnsiString): Pointer;

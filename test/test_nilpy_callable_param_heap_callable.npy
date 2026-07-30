@@ -1,0 +1,46 @@
+# Every callable KIND passed through a `Callable[...]`-annotated parameter: a
+# plain def, a lambda (a pyeval closure), a returned nested def (a lifted
+# bound-fn), and arities 0/1/2. The annotation makes the parameter a code
+# ADDRESS, and a callable value is a 16-byte variant — the coercion used to hand
+# over the variant's TAG word, so anything but a plain def jumped to 9.
+# A BOUND METHOD is deliberately absent: a bare pointer has no room for the
+# receiver, and that case raises a named TypeError (see the ticket).
+# bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable
+
+from typing import Callable
+
+def apply1(f: Callable[[int], int], v: int) -> int:
+    return f(v)
+
+def apply2(f: Callable[[int, int], int], a: int, b: int) -> int:
+    return f(a, b)
+
+def apply0(f: Callable[[], int]) -> int:
+    return f()
+
+def top(x: int) -> int:
+    return x + 1
+
+def two(a: int, b: int) -> int:
+    return a * b
+
+def zero() -> int:
+    return 42
+
+class C:
+    def m(self, x: int) -> int:
+        return x + 100
+
+def mk(n: int):
+    def inner(x: int) -> int:
+        return x + n
+    return inner
+
+c = C()
+g = lambda x: x + 2
+print(apply1(top, 5))
+print(apply1(g, 5))
+print(apply1(mk(1000), 5))
+print(apply2(two, 6, 7))
+print(apply2(lambda a, b: a - b, 6, 7))
+print(apply0(zero))
