@@ -118,3 +118,6 @@ appears within seconds of the first document rendering. See
 ## Gate
 
 `make test-nilpy` + the songformatter window opening with NO error dialog.
+
+## Log
+- 2026-07-30 — resolved, commit 5c046ce63.
