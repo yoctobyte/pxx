@@ -8029,6 +8029,7 @@ var intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiSt
     helperPi, wrapperArg, wrapperCall, sci: Integer;
     isLiftedCall, isCStringCall: Boolean;
     capSym: Integer;   { NilPy nested-def capture actual (feature-nilpy-nested-defs) }
+    capIdx: Integer;   { PXXDBG=n.caps probe cursor }
     bitNot, opIsArith: Boolean; notOp: Integer; notOrdTk: TTypeKind;
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec: Integer; szElemTk: TTypeKind;
     seEtid, seOrd: Integer;
@@ -12135,8 +12136,21 @@ begin
           begin
             capSym := FindSym(PyCapName[procIdx * PY_MAX_CAPS + i]);
             if capSym < 0 then
+            begin
+              if PxxDbgEnabled('n.caps') then
+              begin
+                Write('PXXDBG n.caps MISS ', PyCapName[procIdx * PY_MAX_CAPS + i],
+                      ' callee=', Procs[procIdx].Name, ' in=');
+                if CurProc >= 0 then Write(Procs[CurProc].Name) else Write('<main>');
+                Write(' params=');
+                if CurProc >= 0 then
+                  for capIdx := 0 to Procs[CurProc].ParamCount - 1 do
+                    Write(Procs[CurProc].Params[capIdx].Name, ' ');
+                WriteLn;
+              end;
               Error('nested def captures ' + PyCapName[procIdx * PY_MAX_CAPS + i]
                     + ', which is not in scope at this call');
+            end;
             identNode := AllocNode(AN_IDENT);
             ASTIVal[identNode] := capSym;
             ASTTk[identNode] := Ord(Syms[capSym].TypeKind);

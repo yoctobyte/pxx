@@ -1,0 +1,76 @@
+# A lambda that forwards a SIBLING nested def's captures, in both definition
+# orders, through a multi-level chain, and invoked more than once.
+# bug-nilpy-nested-def-capture-sets-are-not-final
+
+def later(fn):
+    fn()
+
+
+def build_fwd(tag):
+    cv = 10
+    msg = "fwd"
+
+    # on_resize is queued BEFORE draw exists, yet its lambda must still forward
+    # what draw captures
+    def on_resize():
+        later(lambda: draw(cv + 1))
+
+    def draw(w):
+        print(tag, w, msg)
+
+    on_resize()
+    on_resize()
+
+
+def build_back(tag):
+    cv = 20
+    msg = "back"
+
+    def draw(w):
+        print(tag, w, msg)
+
+    def on_resize():
+        later(lambda: draw(cv + 1))
+
+    on_resize()
+    on_resize()
+
+
+def build_chain(tag):
+    a = 1
+    b = 2
+    c = 3
+
+    # top -> mid -> bot, every callee defined after its caller: the capture set
+    # only settles as a fixpoint
+    def top():
+        mid()
+
+    def mid():
+        bot()
+
+    def bot():
+        print(tag, a, b, c)
+
+    top()
+
+
+def build_repeat(tag):
+    cv = 5
+
+    def draw(w):
+        print(tag, w)
+
+    def once():
+        h = lambda: draw(cv)
+        h()
+        h()
+
+    once()
+    once()
+
+
+build_fwd("F")
+build_back("B")
+build_chain("C")
+build_repeat("R")

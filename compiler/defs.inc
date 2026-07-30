@@ -1558,6 +1558,15 @@ var
   PyClsAttrSLen : array[0..255] of Integer;
   PyClsAttrCount: Integer;
   PyCapName  : array[0..MAX_PROCS*PY_MAX_CAPS-1] of AnsiString;
+  { Scratch for PyCollectCalleeCaps — the names a call to a sibling nested def
+    must forward, computed from TOKENS so a callee defined LATER in the same
+    body answers as well as one already registered
+    (bug-nilpy-nested-def-capture-sets-are-not-final). Single-use: the scan runs
+    inside PyQueueNestedDef's capture loop and is not reentrant. }
+  PyFwdCapN  : Integer;
+  PyFwdCapNm : array[0..PY_MAX_CAPS-1] of AnsiString;
+  PyFwdWlN   : Integer;                          { def-name worklist of that scan }
+  PyFwdWl    : array[0..15] of AnsiString;
 
   { Candidate list built by MatchProcCall when overload resolution fails, so the
     caller can append it AFTER its own error line instead of MatchProcCall

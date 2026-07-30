@@ -647,6 +647,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_unpack26)" = "$$(printf '1 2\n2 1\np 2 3.5\n7 8\na 1\nb 2\nc 3\n6\na 1\nb 2\nc 3')"
 	./$(COMPILER) test/test_nilpy_comparison_chaining.npy /tmp/test_nilpy_comparison_chaining26
 	test "$$(/tmp/test_nilpy_comparison_chaining26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nTrue\nFalse\nTrue\ncall\nTrue')"
+	./$(COMPILER) test/test_nilpy_lambda_sibling_capture.npy /tmp/test_nilpy_lambda_sibling_capture26
+	test "$$(/tmp/test_nilpy_lambda_sibling_capture26)" = "$$(printf 'F 11 fwd\nF 11 fwd\nB 21 back\nB 21 back\nC 1 2 3\nR 5\nR 5\nR 5\nR 5')"
 	./$(COMPILER) test/test_nilpy_nested_def.npy /tmp/test_nilpy_nested_def26
 	./$(COMPILER) test/test_nilpy_nested_def_capture.npy /tmp/test_nilpy_nested_def_capture26
 	test "$$(/tmp/test_nilpy_nested_def_capture26)" = "$$(printf '11\n|x||y|\n11\n223\n13')"

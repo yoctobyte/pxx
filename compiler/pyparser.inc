@@ -4046,6 +4046,17 @@ begin
         Inc(lamN);
       end;
 
+    { PXXDBG=n.caps — the lambda's lifted parameter list (own arg first, then
+      every captured/forwarded name). The capture set is what a forwarded
+      sibling call needs, so when a call reports "captures X, which is not in
+      scope", this is the list to look at first. }
+    if PxxDbgEnabled('n.caps') then
+    begin
+      Write('PXXDBG n.caps lambda@', bStart, ' nest=', PyNestPrefix, ' params=');
+      for j := 0 to lamN - 1 do Write(lamNames[j], ' ');
+      WriteLn;
+    end;
+
     if PyPendLamCount < PY_MAX_NESTED then
     begin
       Inc(PyLamSeq);
@@ -9930,6 +9941,166 @@ begin
   end;
 end;
 
+{ The token index of a sibling nested `def <nm>` that appears LATER in the
+  enclosing body. Scanned exactly like PyEnclosingAssigns — forward from fromTok
+  until the enclosing block's own DEDENT — so it never leaves the scope. -1 when
+  the enclosing body has no such def ahead. }
+function PyFindSiblingDefTok(fromTok: Integer; const nm: AnsiString): Integer;
+var i, depth: Integer;
+begin
+  PyFindSiblingDefTok := -1;
+  i := fromTok;
+  while (i < MainProgramTokCount) and (Tokens[i].Kind in [tkDedent, tkNewline]) do Inc(i);
+  depth := 0;
+  while i < MainProgramTokCount do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then
+    begin
+      Dec(depth);
+      if depth < 0 then Exit;          { left the enclosing body }
+    end
+    else if (depth = 0) and (Tokens[i].Kind = tkFunction) and
+            (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkIdent) and
+            (GetTokenStr(i + 1) = nm) then
+    begin
+      PyFindSiblingDefTok := i;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
+{ The INDENT that opens the body of the def whose `def` keyword is at defTok —
+  the same index PyParseDefHeader leaves behind, so PyFindBodyEnd agrees. }
+function PySiblingDefBodyStart(defTok: Integer): Integer;
+var i, depth: Integer;
+begin
+  PySiblingDefBodyStart := -1;
+  i := defTok;
+  depth := 0;
+  while i < MainProgramTokCount do
+  begin
+    if Tokens[i].Kind in [tkLParen, tkLBrack] then Inc(depth)
+    else if Tokens[i].Kind in [tkRParen, tkRBrack] then Dec(depth)
+    else if (depth = 0) and (Tokens[i].Kind = tkIndent) then
+    begin
+      PySiblingDefBodyStart := i;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
+{ The names a call to nested def `calleeName` must forward, into PyFwdCapNm.
+  Why this is not simply `PyCapName[FindProc(callee)]`: a nested def's capture
+  set is read when the CALLER is queued, and the callee may not be registered
+  yet — it is defined later in the same body — so the set read was empty and the
+  forwarded arguments were missing, making a legal program compile or fail on
+  definition ORDER alone. Worse, the chain is multi-level (a lambda inside one
+  sibling calling another), so one parse round per level never settles it.
+  This walks the transitive closure of sibling-def bodies from tokens in one go:
+  a registered callee contributes its final set, an unregistered one contributes
+  its body's free names and queues the siblings IT calls. The caller filters
+  every name against the enclosing scope, so over-collecting a name that is not
+  an enclosing local costs nothing (bug-nilpy-nested-def-capture-sets-are-not-final). }
+procedure PyCollectCalleeCaps(const calleeName: AnsiString; searchFrom: Integer);
+const PAR_MAX = 32;
+var wlAt, i, j, k, q, pi, dt, bS, bE, depth, nPar: Integer;
+    pars: array[0..PAR_MAX-1] of AnsiString;
+    nm, s, c: AnsiString; dup: Boolean;
+begin
+  PyFwdCapN := 0;
+  PyFwdWlN := 1; PyFwdWl[0] := calleeName;
+  wlAt := 0;
+  while wlAt < PyFwdWlN do
+  begin
+    nm := PyFwdWl[wlAt];
+    Inc(wlAt);
+    { already registered — its capture set is final, take it verbatim }
+    pi := FindProc(PyQualifyNested(nm));
+    if (pi >= 0) and (PyCapCount[pi] > 0) then
+    begin
+      for k := 0 to PyCapCount[pi] - 1 do
+      begin
+        c := PyCapName[pi * PY_MAX_CAPS + k];
+        dup := False;
+        for q := 0 to PyFwdCapN - 1 do
+          if PyFwdCapNm[q] = c then dup := True;
+        if (not dup) and (PyFwdCapN < PY_MAX_CAPS) then
+        begin
+          PyFwdCapNm[PyFwdCapN] := c;
+          Inc(PyFwdCapN);
+        end;
+      end;
+      Continue;
+    end;
+    if pi >= 0 then Continue;          { registered and captures nothing }
+    dt := PyFindSiblingDefTok(searchFrom, nm);
+    if dt < 0 then Continue;
+    bS := PySiblingDefBodyStart(dt);
+    if bS < 0 then Continue;
+    bE := PyFindBodyEnd(bS);
+    { the callee's OWN parameters are bound at its call site, never captured }
+    nPar := 0;
+    i := dt + 2;                       { past `def` `name` }
+    depth := 0;
+    while i < bS do
+    begin
+      if Tokens[i].Kind = tkLParen then Inc(depth)
+      else if Tokens[i].Kind = tkRParen then
+      begin
+        Dec(depth);
+        if depth = 0 then Break;
+      end
+      else if (depth = 1) and (Tokens[i].Kind = tkIdent) and
+              (Tokens[i - 1].Kind in [tkLParen, tkComma]) then
+      begin
+        if nPar < PAR_MAX then
+        begin
+          pars[nPar] := GetTokenStr(i);
+          Inc(nPar);
+        end;
+      end;
+      Inc(i);
+    end;
+    for i := bS to bE - 1 do
+      if (Tokens[i].Kind = tkIdent) and (Tokens[i - 1].Kind <> tkDot) then
+      begin
+        s := GetTokenStr(i);
+        if s = nm then Continue;
+        dup := False;
+        for j := 0 to nPar - 1 do
+          if pars[j] = s then dup := True;
+        if dup then Continue;
+        { a name that is itself a sibling def: what IT captures must travel too }
+        if (FindProc(PyQualifyNested(s)) >= 0) or
+           (PyFindSiblingDefTok(searchFrom, s) >= 0) then
+        begin
+          dup := False;
+          for q := 0 to PyFwdWlN - 1 do
+            if PyFwdWl[q] = s then dup := True;
+          if (not dup) and (PyFwdWlN <= 15) then
+          begin
+            PyFwdWl[PyFwdWlN] := s;
+            Inc(PyFwdWlN);
+          end;
+        end
+        else
+        begin
+          dup := False;
+          for q := 0 to PyFwdCapN - 1 do
+            if PyFwdCapNm[q] = s then dup := True;
+          if (not dup) and (PyFwdCapN < PY_MAX_CAPS) then
+          begin
+            PyFwdCapNm[PyFwdCapN] := s;
+            Inc(PyFwdCapN);
+          end;
+        end;
+      end;
+  end;
+end;
+
 function PyQueueNestedDef: Integer;
 var defTok, procIdx, bodyStart, bodyEnd, i, j, k, nCaps, nOwn, csym, csym2, capCi: Integer;
     qname, cname, cn2: AnsiString; already: Boolean;
@@ -9997,10 +10168,12 @@ begin
               (uforth's _open_file_common -> _file_open_mode -> FAM_RO).
               Filed decide-nilpy-transitive-nested-def-capture. }
             csym := FindProc(PyQualifyNested(cname));
-            if (csym >= 0) and (PyCapCount[csym] > 0) then
-              for k := 0 to PyCapCount[csym] - 1 do
+            if (csym >= 0) or (PyFindSiblingDefTok(bodyEnd, cname) >= 0) then
+            begin
+              PyCollectCalleeCaps(cname, bodyEnd);
+              for k := 0 to PyFwdCapN - 1 do
               begin
-                cn2 := PyCapName[csym * PY_MAX_CAPS + k];
+                cn2 := PyFwdCapNm[k];
                 already := False;
                 for j := 0 to PyHdrNParams - 1 do
                   if PyHdrPNames[j] = cn2 then already := True;
@@ -10024,9 +10197,16 @@ begin
                   end;
                 end;
               end;
+            end;
           end;
         end;
       end;
+  if PxxDbgEnabled('n.caps') then
+  begin
+    Write('PXXDBG n.caps def ', qname, ' caps=');
+    for j := 0 to nCaps - 1 do Write(capNames[j], ' ');
+    WriteLn;
+  end;
   procIdx := FindProc(qname);
   if procIdx < 0 then
   begin
@@ -11613,6 +11793,16 @@ begin
   Procs[procIdx].BodyAddr := CodeLen;
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
+  { Stash the hidden destination pointer the caller passed for the Variant
+    result. Every other NilPy body path emits this; the lambda path did not, so
+    the epilogue's 16-byte result copy went to whatever stale stack bytes sat in
+    the dest slot. The text segment is writable, so on the first call that
+    garbage happened to be a RETURN ADDRESS and the copy zeroed 16 bytes of the
+    runtime's own code (pynone's); the program then died on the NEXT call into
+    the clobbered routine, arbitrarily far from here — which is why this read as
+    "a lambda crashes the second time it runs"
+    (bug-nilpy-nested-def-capture-sets-are-not-final, face 2). }
+  EmitAggregateDestStash(procIdx);
   PyEmitParamSpills(procIdx, nparams);
   PyInitVariantLocals(Procs[procIdx].ScopeBase);
   EmitManagedLocalsZeroInit(Procs[procIdx].ScopeBase);
