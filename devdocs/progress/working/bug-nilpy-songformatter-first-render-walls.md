@@ -198,3 +198,46 @@ session, creates a document tab, runs the key analysis and creates the preview
 canvas — then SEGFAULTS drawing the preview (`convert_text`, after
 `cv.pack(...)`, in `format_song_text_as_pdf` through `TkCanvasBackend`). That is
 the render path itself: the drawing calls, not the plumbing around them.
+
+### 2026-07-30 (later): into the render, and what stops it now
+
+`stringWidth("")` **segfaulted**. An empty AnsiString is a nil handle, so the
+`const char *` parameter reached vendored pdfgen as NULL and the C walked it —
+and `render_backend._text` measures the EMPTY PREFIX before placing the first
+word of every line, so the live preview died on the first string it drew. The
+shim now answers 0.0 for an empty string (and an empty font name), which is the
+right answer anyway. Fixed in `lib/pcl/mimic_reportlab_pdfbase.pas`.
+
+With that gone the render RUNS: it draws the analysis header word by word
+(`Suggested Key: F`, `Analysis: note_countin…`), finishes the line, and gets
+into the header block.
+
+**Where it stops now — and it is not the allocator.** SIGSEGV at
+
+```
+=> 0x4003f2:  decq   -0x10(%rax)      # the ARC refcount, at [inst-16]
+```
+
+with `%rax` pointing at garbage: a RELEASE of a slot that was never
+initialised. `-dPXX_LIBC_HEAP` makes no difference, so this is ownership, not
+the allocator. gdb puts it under `format_song_text_as_pdf.printHeaders` — a
+nested def in an imported MODULE with 16 captured parameters, several of them
+managed strings and one a variant holding the canvas backend. Its capture
+bookkeeping checks out (`caps=16 params=16` at every call site, all four), and
+the surrounding frames in the trace are nonsense, so the stack is already
+corrupt by the time gdb unwinds.
+
+The suspicion to check first: this is module code, and
+[[bug-nilpy-object-reclamation-disabled-inside-py-modules]] turned reclamation
+ON for module code the same day (33db0107d, measured). A capture parameter holds
+a BORROWED reference — the call site passes the enclosing local by value without
+a retain — so a scope-exit release on it is one too many. Worth testing a nested
+def in a module with a managed capture, called twice.
+
+Reproduced in isolation so far: none of the obvious shapes (16 captures, mixed
+kinds, variant receiver, module-resident, called repeatedly) crash on their own.
+
+Also found and filed while narrowing this:
+[[bug-nilpy-nonlocal-write-never-reaches-the-enclosing-scope]] — `nonlocal y; y
+= pagetop` updates the callee's copy only, so the whole page layout would be
+misplaced even once the crash is fixed.

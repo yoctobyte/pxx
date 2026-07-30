@@ -31,6 +31,16 @@ function stringWidth(const text: AnsiString; const fontName: AnsiString;
                      fontSize: Double): Double;
 var sz, w: Single;
 begin
+  { An EMPTY string is zero wide, and asking pdfgen would crash: an empty
+    AnsiString is a nil handle here, so the `const char *` parameter arrives as
+    NULL and the C walks it. songformatter measures the empty prefix before
+    placing the first word of every line, which is how a live preview turned
+    into a SIGSEGV on the first string it drew. }
+  if (Length(text) = 0) or (Length(fontName) = 0) then
+  begin
+    stringWidth := 0.0;
+    exit;
+  end;
   sz := fontSize;
   w := 0.0;
   { the width comes back through an out-parameter; the result is a status }
