@@ -90,19 +90,48 @@ file, because there the name `c` had already been used for `expr[j]` earlier.
 That is worth noting on its own — the bug only appears when a file is long
 enough to reuse a name, which is exactly when a human stops noticing.
 
-## Cause (to confirm)
+## ROOT CAUSE — one cause, three symptom clusters
 
-A NilPy name has one slot with one static type, widened across rebindings
-(see [[bug-nilpy-int-prints-as-float-when-the-name-is-widened-later]] for the
-same machinery producing `5.0` for `5`). A `for` variable is a VARIANT, but when
-the name already exists with a scalar type the loop appears to store the
-variant's payload into the old slot without converting — an int slot receives a
-boxed pointer, a Char slot receives the low byte of one.
+Iterating a **string** types the loop variable `tyChar`, a SCALAR slot.
+Iterating a **list** gives a variant. That single difference explains every row
+measured:
 
-Confirm with `PXXDBG=n.locals` on the two failing shapes before fixing rather
-than assuming; the widening story predicts a wrong VALUE, and the observed
-`X`/`x` for a char slot looks more like a truncated pointer than a widened
-character.
+| iterating | loop var slot | consequence |
+| --- | --- | --- |
+| a list | variant | any prior/later binding is fine — every list row above passes |
+| a string | tyChar (scalar) | conflicts with any non-char binding, in either direction |
+
+Confirmed by the reverse matrix:
+
+| sequence | pxx |
+| --- | --- |
+| `for c in "ab"` then `c = "z"` (str) | correct ✓ |
+| `for i in [1,2]` then `i = 5` | correct ✓ |
+| `for w in ["a","b"]` then `w = 5` | correct ✓ — list iteration gives a variant |
+| **`for c in "ab"` then `c = 5`** | **SIGSEGV** |
+| **`for c in "ab"` then `c = 1.5`** | **SIGSEGV** |
+
+and by the fact that a function PARAMETER reused as a loop variable is fine —
+its slot is already a variant.
+
+## Fix
+
+Type a string-iteration loop variable the way a list-iteration one is typed: a
+variant, letting the runtime tag carry the character. That removes the scalar
+slot the conflict needs, in both directions, and matches Python — where
+iterating a str yields str objects of length 1, not a distinct character type.
+
+This is the same `tyChar` overreach behind
+[[bug-nilpy-char-vs-string-literal-ordering-compares-an-address]] and
+[[bug-nilpy-subscript-and-slice-of-a-variant-get-the-wrong-static-type]]:
+pxx has a character type and Python does not, and every place that lets
+`tyChar` escape into a slot or a static type is a divergence. Worth considering
+whether the three should be fixed together by not producing `tyChar` for NilPy
+at all.
+
+Watch the paths that currently depend on the char typing — `ord(c)`,
+`c == "a"`, `chr()` round-trips and the digit-range comparisons — all covered by
+`test/test_nilpy_char_ordering.npy` and `test/test_nilpy_variant_str_index.npy`.
 
 ## Gate
 
