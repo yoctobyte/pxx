@@ -12430,6 +12430,17 @@ begin
         PyInferLastCi := FindUClass('TPyList');
         if PyInferLastCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
       end
+      { `return lambda ...` is a CALLABLE VALUE, which travels as a variant.
+        The scanner had no case for it and fell to the Integer default, so the
+        boxed callable was converted to a number on the way out and the caller
+        could not call what it got back. It only showed when the lambda
+        captures NOTHING — a capturing one reaches the variant answer by
+        another route — which is why the ticket had this recorded as being
+        about the enclosing def's empty parameter list
+        (bug-nilpy-function-value-call-gaps). }
+      else if (Tokens[j + 1].Kind = tkIdent) and
+              CaseEqual(GetTokenStr(j + 1), 'lambda') then
+        cur := tyVariant
       else
         cur := PyInferExprType(j + 1, e);
       { `return w` — a bare ident the scanner cannot type: chase the ident's

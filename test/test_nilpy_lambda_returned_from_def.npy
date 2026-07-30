@@ -1,0 +1,39 @@
+# `return lambda ...` is a CALLABLE VALUE, whatever it captures and whatever the
+# enclosing def's parameter list looks like. A capture-free lambda fell to the
+# Integer default and the boxed callable was converted to a number on the way
+# out. bug-nilpy-function-value-call-gaps
+
+def mk_nocap():
+    return lambda x: x + 1
+
+def mk_cap(n):
+    return lambda x: x + n
+
+def mk_local():
+    z = 5
+    return lambda x: x + z
+
+def mk_local_nocap():
+    z = 5
+    return lambda x: x + 1
+
+def call_it(g, v):
+    return g(v)
+
+a = mk_nocap()
+b = mk_cap(10)
+c = mk_local()
+d = mk_local_nocap()
+print(a(1), b(1), c(1), d(1))
+print(mk_nocap()(1), mk_cap(100)(1))
+print(call_it(mk_nocap(), 5), call_it(mk_cap(1000), 5))
+
+def go() -> None:
+    g = mk_cap(7)
+    h = mk_nocap()
+    print(g(1), h(1))
+
+go()
+
+fs = [mk_nocap(), mk_cap(20)]
+print(fs[0](1), fs[1](1))
