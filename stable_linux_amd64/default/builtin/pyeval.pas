@@ -96,9 +96,30 @@ function pyclosure_src_cap(obj: Pointer; const name: AnsiString; const v: Varian
   The body runs NATIVELY — no pyeval subset limits. }
 function pyboundfn_new(code: Pointer; n: Int64; a0var: Int64): Pointer;
 function pyboundfn_bind(obj: Pointer; idx: Int64; v: Int64): Pointer;
+{ Declare how many OWN parameters the compiled body takes before its captures.
+  Without it the bridge assumes one — see the NOwn note on TBoundFnObj. }
+function pyboundfn_setown(obj: Pointer; nown: Int64): Pointer;
+{ Bind a CLASS capture, taking a reference so it outlives the enclosing call. }
+function pyboundfn_bind_obj(obj: Pointer; idx: Int64; p: Pointer): Pointer;
 function pyboundfn_is(p: Pointer): Boolean;
+{ Is this pointer a heap CALLABLE — a pyeval closure or a lifted bound-fn —
+  rather than a bare code address? The call-through-a-Callable-parameter path
+  needs the question before it jumps: a lambda's value is an OBJECT, and the
+  typed indirect call jumped into the object's own bytes
+  (bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable). }
+function pycallable_obj_is(p: Pointer): Boolean;
 function pyboundfn_bind_var(obj: Pointer; idx: Int64; const v: Variant): Pointer;
 function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
+{ Same call, but the callee's Variant RESULT is handed back. pyvar_callv* used
+  the discarding form, so a lifted def reached through a VALUE always answered
+  None — `return inner` then `f(1)`
+  (bug-nilpy-returning-a-nested-def-yields-none). Var-out rather than a Variant
+  function result: that return convention corrupts through this bridge. }
+procedure pyboundfn_callv(objptr: Pointer; const a0: Variant; var res: Variant);
+{ The general form: up to three OWN arguments before the bound captures. The
+  one-argument wrapper above is the historic entry point. }
+procedure pyboundfn_callvn(objptr: Pointer; const a0, a1, a2: Variant;
+                           nargs: Int64; var res: Variant);
 
 { Invoke whatever kind of Python callable a value holds, with one argument or
   none. NilPy has four shapes — a BOUND METHOD (tag 8, {code, receiver}), a
@@ -1683,6 +1704,15 @@ type
     Code:   Pointer;
     NBound: Int64;
     A0Var:  Int64;   { 1 = the user argument is a VARIANT param (pass its address) }
+    { How many OWN (user-visible) parameters the compiled body takes before its
+      lifted capture parameters. The bridge used to assume exactly one and
+      always pass a leading argument, so a `def b():` with captures had every
+      capture land one register too far right and read garbage
+      (bug-nilpy-escaping-closure-captures-unbound-unless-arity-is-one).
+      Defaults to 1 in pyboundfn_new, which is what the lambda lifter relies on
+      — it injects a dummy own parameter for exactly this reason — so only the
+      nested-def path needs to say otherwise, via pyboundfn_setown. }
+    NOwn:   Int64;
     Bound:  array[0..19] of Int64;
   end;
   PBoundFnObj = ^TBoundFnObj;
@@ -1706,6 +1736,7 @@ type
     epilogue wrote 16 bytes over whatever it pointed at — a wild store on every
     lifted-bound-fn callback, which is how Tcl's own command table ended up
     corrupted ("invalid command name pxxcb") in a long-running Tk app. }
+  TBF0  = function: Variant;
   TBF1  = function(a0: Int64): Variant;
   TBF2  = function(a0, a1: Int64): Variant;
   TBF3  = function(a0, a1, a2: Int64): Variant;
@@ -1728,8 +1759,36 @@ begin
   o^.Code := code;
   o^.NBound := n;
   o^.A0Var := a0var;
+  o^.NOwn := 1;   { the historic assumption; pyboundfn_setown overrides it }
   for i := 0 to 19 do o^.Bound[i] := 0;
   pyboundfn_new := Pointer(o);
+end;
+
+function pyboundfn_setown(obj: Pointer; nown: Int64): Pointer;
+{ Chained after pyboundfn_new like the binds are, rather than added as a fourth
+  parameter to it: the existing call sites build that call as an AST by hand and
+  one of them passes only two arguments, so widening the signature is a bigger
+  change than the fix warrants. }
+var o: PBoundFnObj;
+begin
+  o := PBoundFnObj(obj);
+  o^.NOwn := nown;
+  pyboundfn_setown := obj;
+end;
+
+function pyboundfn_bind_obj(obj: Pointer; idx: Int64; p: Pointer): Pointer;
+{ Bind a CLASS capture, taking a reference. The enclosing scope releases its own
+  reference when it returns, so binding the bare handle left the closure holding
+  a freed object — `def b(): return len(L)` over a captured list answered 0
+  once the parent had returned. Never released again, like the heap slot
+  pyboundfn_bind_var leaks: the bound-fn object has no destructor, and the
+  closures that reach this path are few. }
+var o: PBoundFnObj;
+begin
+  if p <> nil then PXXObjRetain(p);
+  o := PBoundFnObj(obj);
+  o^.Bound[idx] := Int64(NativeInt(p));
+  pyboundfn_bind_obj := obj;
 end;
 
 function pyboundfn_bind(obj: Pointer; idx: Int64; v: Int64): Pointer;
@@ -1743,6 +1802,11 @@ end;
 function pyboundfn_is(p: Pointer): Boolean;
 begin
   pyboundfn_is := (p <> nil) and (PBoundFnObj(p)^.Magic = @PyBoundFnMagicMarker);
+end;
+
+function pycallable_obj_is(p: Pointer): Boolean;
+begin
+  pycallable_obj_is := (p <> nil) and (pyclosure_is(p) or pyboundfn_is(p));
 end;
 
 { Bind a VARIANT capture: variant params travel BY ADDRESS, and the enclosing
@@ -1798,44 +1862,92 @@ begin
 end;
 
 function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
-var o: PBoundFnObj; p0: Int64; b: PInt64; code: Pointer;
-    va0: Variant;
-    f1: TBF1; f2: TBF2; f3: TBF3; f4: TBF4; f5: TBF5; f6: TBF6; f7: TBF7;
-    f8: TBF8; f9: TBF9; f11: TBF11; f13: TBF13;
+var rvd: Variant;
+begin
+  rvd := pynone;
+  pyboundfn_callv(objptr, a0, rvd);
+  pyboundfn_call_ptr := 0;
+end;
+
+{ Marshal ONE own argument the way the bridge always has: a variant own param
+  travels by address, an object variant yields its instance pointer, None is 0,
+  anything else coerces to an integer. Factored out so the multi-argument form
+  below cannot drift from the single-argument one. }
+function PyBoundFnArgWord(o: PBoundFnObj; const a: Variant; slot: PVariant): Int64;
+begin
+  if o^.A0Var <> 0 then
+  begin
+    slot^ := a;
+    PyBoundFnArgWord := Int64(NativeInt(Pointer(slot)));
+    Exit;
+  end;
+  case PPyRec(@a)^.VType of
+    7: PyBoundFnArgWord := PPyRec(@a)^.Payload;
+    0: PyBoundFnArgWord := 0;
+  else PyBoundFnArgWord := pyvar_to_int(a);
+  end;
+end;
+
+procedure pyboundfn_callvn(objptr: Pointer; const a0, a1, a2: Variant;
+                           nargs: Int64; var res: Variant);
+{ Call code(own..., bound...). The own arguments come first because that is the
+  order the compiled body declares them in — its capture parameters were LIFTED
+  onto the end of its own signature by the frontend.
+
+  This used to hardcode one own argument. A closure with none (`def b():`, the
+  commonest shape in Python) therefore had a spurious leading argument inserted
+  and read every capture one register too far right; a closure with two or three
+  had its extra arguments dropped by pyvar_callv2/3 and the captures shifted the
+  other way. Only arity 1 lined up
+  (bug-nilpy-escaping-closure-captures-unbound-unless-arity-is-one). }
+var o: PBoundFnObj; b: PInt64; code: Pointer;
+    va0, va1, va2: Variant;
+    p: array[0..15] of Int64;
+    n, i: Integer;
+    f0: TBF0; f1: TBF1; f2: TBF2; f3: TBF3; f4: TBF4; f5: TBF5; f6: TBF6;
+    f7: TBF7; f8: TBF8; f9: TBF9; f11: TBF11; f13: TBF13;
     rv: Variant;
 begin
   rv := pynone;
   o := PBoundFnObj(objptr);
   code := o^.Code;
-  if o^.A0Var <> 0 then
-  begin
-    { an unannotated (variant) first param travels BY ADDRESS }
-    va0 := a0;
-    p0 := Int64(NativeInt(Pointer(@va0)));
-  end
-  else
-  case PPyRec(@a0)^.VType of
-    7: p0 := PPyRec(@a0)^.Payload;
-    0: p0 := 0;
-  else p0 := pyvar_to_int(a0);
-  end;
+  { the body takes what it declares, not what the caller happened to supply }
+  n := o^.NOwn;
+  if n > nargs then n := nargs;
+  if n > 3 then n := 3;
+  for i := 0 to 15 do p[i] := 0;
+  if n > 0 then p[0] := PyBoundFnArgWord(o, a0, @va0);
+  if n > 1 then p[1] := PyBoundFnArgWord(o, a1, @va1);
+  if n > 2 then p[2] := PyBoundFnArgWord(o, a2, @va2);
+  { a body declaring MORE own params than the caller passed still gets a slot
+    per parameter -- zeroed, which is what an unsupplied argument reads as }
+  n := o^.NOwn;
+  if n > 12 then n := 12;
   b := @o^.Bound[0];
-  case o^.NBound of
-    0: begin f1 := TBF1(code); rv := f1(p0); end;
-    1: begin f2 := TBF2(code); rv := f2(p0, b[0]); end;
-    2: begin f3 := TBF3(code); rv := f3(p0, b[0], b[1]); end;
-    3: begin f4 := TBF4(code); rv := f4(p0, b[0], b[1], b[2]); end;
-    4: begin f5 := TBF5(code); rv := f5(p0, b[0], b[1], b[2], b[3]); end;
-    5: begin f6 := TBF6(code); rv := f6(p0, b[0], b[1], b[2], b[3], b[4]); end;
-    6: begin f7 := TBF7(code); rv := f7(p0, b[0], b[1], b[2], b[3], b[4], b[5]); end;
-    7: begin f8 := TBF8(code); rv := f8(p0, b[0], b[1], b[2], b[3], b[4], b[5], b[6]); end;
-    8: begin f9 := TBF9(code); rv := f9(p0, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]); end;
-    9, 10:
-      begin f11 := TBF11(code); rv := f11(p0, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9]); end;
+  for i := 0 to o^.NBound - 1 do
+    if n + i <= 15 then p[n + i] := b[i];
+  case n + o^.NBound of
+    0: begin f0 := TBF0(code); rv := f0(); end;
+    1: begin f1 := TBF1(code); rv := f1(p[0]); end;
+    2: begin f2 := TBF2(code); rv := f2(p[0], p[1]); end;
+    3: begin f3 := TBF3(code); rv := f3(p[0], p[1], p[2]); end;
+    4: begin f4 := TBF4(code); rv := f4(p[0], p[1], p[2], p[3]); end;
+    5: begin f5 := TBF5(code); rv := f5(p[0], p[1], p[2], p[3], p[4]); end;
+    6: begin f6 := TBF6(code); rv := f6(p[0], p[1], p[2], p[3], p[4], p[5]); end;
+    7: begin f7 := TBF7(code); rv := f7(p[0], p[1], p[2], p[3], p[4], p[5], p[6]); end;
+    8: begin f8 := TBF8(code); rv := f8(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]); end;
+    9: begin f9 := TBF9(code); rv := f9(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]); end;
+    10, 11:
+      begin f11 := TBF11(code); rv := f11(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10]); end;
     else
-      begin f13 := TBF13(code); rv := f13(p0, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11]); end;
+      begin f13 := TBF13(code); rv := f13(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12]); end;
   end;
-  pyboundfn_call_ptr := 0;
+  res := rv;
+end;
+
+procedure pyboundfn_callv(objptr: Pointer; const a0: Variant; var res: Variant);
+begin
+  pyboundfn_callvn(objptr, a0, pynone, pynone, 1, res);
 end;
 
 
@@ -3533,7 +3645,7 @@ begin
       PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
       args.Free;
     end
-    else pyboundfn_call_ptr(o, pynone);   { a lifted lambda: result discarded }
+    else pyboundfn_callvn(o, pynone, pynone, pynone, 0, Result);
     Exit;
   end;
   f0 := TPyCallFn0(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
@@ -3556,7 +3668,7 @@ begin
       PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
       args.Free;
     end
-    else pyboundfn_call_ptr(o, a0);
+    else pyboundfn_callvn(o, a0, pynone, pynone, 1, Result);
     Exit;
   end;
   f1 := TPyCallFn1(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
@@ -3579,7 +3691,7 @@ begin
       PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
       args.Free;
     end
-    else pyboundfn_call_ptr(o, a0);   { a lifted lambda takes exactly one }
+    else pyboundfn_callvn(o, a0, a1, pynone, 2, Result);
     Exit;
   end;
   f2 := TPyCallFn2(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
@@ -3602,7 +3714,7 @@ begin
       PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
       args.Free;
     end
-    else pyboundfn_call_ptr(o, a0);
+    else pyboundfn_callvn(o, a0, a1, a2, 3, Result);
     Exit;
   end;
   f3 := TPyCallFn3(Pointer(NativeInt(PPyRec(@cb)^.Payload)));

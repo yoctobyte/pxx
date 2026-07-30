@@ -228,3 +228,4 @@
 2026-07-28T06:39:34Z  v228  d7b9cf2c4b9667c1564915ae85631b5783d760df9c351d8dba794d647fac6d57  b5b3902d252055f1f56890766b5dd95f5ebbaa5d  feat(nilpy,pcl): tkinter callbacks, and the frontend gaps behind them
 2026-07-29T07:32:49Z  v229  a80cb8b2a118e5bd6f17a39d533854507e680003757f95db345b8ce4e0341586  8fd69a981d96bcf3e3c826b6c8c68027e47fdf11  tstate(borg): a751f080e601 GREEN (full)
 2026-07-29T23:10:53Z  v230  962204f5328eb27680fa5715e500271ebf36faec1a7de6f3f4372b5eb4269f03  ade48b3d264eefa6623473da9d911e03085c1089  tickets(nilpy): str() float path fixed; print() float path filed with the exact hook
+2026-07-30T17:20:06Z  v231  1c0292c5fcfef9056fbbaa878c81976de2cc3865ee3b04a14314acbc1a005ecf  18a7dc3fee62e160f25e8d649e241223b272717a  chore(progress): resolve mixed-type operand bug; file closure, += aliasing and tuple-flag finds
