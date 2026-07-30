@@ -687,6 +687,11 @@ test-nilpy: $(COMPILER)
 	@# of the expectation is CPython's own output for the same file
 	./$(COMPILER) test/test_nilpy_mixed_type_operands.npy /tmp/test_nilpy_mixed_type_operands26
 	test "$$(/tmp/test_nilpy_mixed_type_operands26)" = "$$(printf 'sub TypeError\ndiv TypeError\nlt TypeError\nle TypeError\ngt TypeError\nge TypeError\nmul-dict TypeError\nsub-list TypeError\nababab ababab\n2 1.5 1 1\nTrue True False True\n[1, 2, 1, 2]\n[1, 2, 1, 2]\nTrue True False True True\n5 apples\na-b\n[1, 2, 1, 3]\n[1]\nleftover TypeError\nno specifier\nfloat sub TypeError\nfloat lt TypeError\n5.0 1.5 True')"
+	@# a BARE `return` must not end the return-type inference scan -- it is
+	@# `return None` in Python, and ending there let tyInteger win over the
+	@# real returns that followed
+	./$(COMPILER) test/test_nilpy_return_type_inference.npy /tmp/test_nilpy_ret_infer26
+	test "$$(/tmp/test_nilpy_ret_infer26)" = "$$(printf 'str\n[1, 2]\n2.5\n5\ndeep\nstr\nouter')"
 	@# a managed STRING local minted after the prologue zero-init pass was never
 	@# nil'd, so the loop's first store released stale frame bytes -> SIGSEGV
 	./$(COMPILER) test/test_nilpy_str_local_loop_zeroinit.npy /tmp/test_nilpy_str_local_zi26

@@ -12514,8 +12514,27 @@ begin
     end
     else if (Tokens[j].Kind = tkExit) and (bdepth >= 1) then
     begin
-      if (j + 1 >= TokCount) or
-         (Tokens[j + 1].Kind in [tkNewline, tkDedent, tkEOF]) then Exit;
+      if j + 1 >= TokCount then Exit;
+      { A BARE `return` is exactly `return None` in Python, so it says nothing
+        about the type either -- keep scanning, the same way the None case
+        below does. Exiting here let the value-less default (tyInteger) win
+        over the REAL returns that followed it, so
+
+            if n == 0:
+                return
+            return "str"
+
+        handed the string back as an address, and a later `return [1]` came
+        back as one too. A later `return 5` survived only by coincidence
+        (bug-nilpy-return-type-inference-mistypes-several-expression-shapes).
+        A def whose returns are ALL value-less still ends at the DEDENT below
+        with the tyInteger default intact, which is the harmless case the
+        comment above describes. }
+      if Tokens[j + 1].Kind in [tkNewline, tkDedent, tkEOF] then
+      begin
+        Inc(j);
+        Continue;
+      end;
       { `return None` says nothing about the type — None is compatible with
         every result — so keep scanning for a return that does. uforth's
         _parse_compound_string returns None on its guard paths and the TUPLE

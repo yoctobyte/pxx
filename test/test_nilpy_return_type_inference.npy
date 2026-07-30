@@ -1,0 +1,62 @@
+# An unannotated def's return type is inferred from its FIRST `return <expr>`.
+# A BARE `return` used to END that scan, so the value-less default (tyInteger)
+# won over the real returns that FOLLOWED it -- a later str or list came back
+# as an address. `return None` already kept scanning; a bare return is exactly
+# `return None` in Python.
+# bug-nilpy-return-type-inference-mistypes-several-expression-shapes
+# Every expectation is CPython's own output.
+
+def s_after_bare(n):
+    if n == 0:
+        return
+    return "str"
+print(s_after_bare(1))
+
+def list_after_bare(n):
+    if n == 0:
+        return
+    return [1, 2]
+print(list_after_bare(1))
+
+def float_after_bare(n):
+    if n == 0:
+        return
+    return 2.5
+print(float_after_bare(1))
+
+def int_after_bare(n):
+    if n == 0:
+        return
+    return 5
+print(int_after_bare(1))
+
+# two bare returns before the real one
+def s_after_two_bare(n):
+    if n == 0:
+        return
+    if n == 1:
+        return
+    return "deep"
+print(s_after_two_bare(2))
+
+# `return None` first already worked and must keep working
+def s_after_none(n):
+    if n == 0:
+        return None
+    return "str"
+print(s_after_none(1))
+
+# NOTE: the value TAKEN by a bare `return` is deliberately absent here. It
+# yields '' now that the def types as str (it yielded 0 when the def typed as
+# int), and CPython yields None -- that is the separate, pre-existing
+# bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float, not this fix.
+# Add it here once a value-less return produces a real None.
+
+# a nested def's returns must not be read as the enclosing def's
+def outer(n):
+    def helper():
+        return 99
+    if n == 0:
+        return
+    return "outer"
+print(outer(1))
