@@ -223,3 +223,6 @@ the pre-existing container/parameter cases that must keep working. Gate:
 make test-nilpy green, self-host fixedpoint, testmgr --tier quick.
 
 Ticket closed.
+
+## Log
+- 2026-07-31 — resolved, commit 710a830e6.
