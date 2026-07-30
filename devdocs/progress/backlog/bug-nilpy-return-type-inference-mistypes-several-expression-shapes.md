@@ -142,8 +142,27 @@ Two distinct causes behind one symptom:
    Same root as the `chr` case above and as
    [[bug-nilpy-subscript-and-slice-of-a-variant-get-the-wrong-static-type]]:
    the inference reads a container element as a scalar instead of leaving it a
-   variant. The token scanner can chase a bare `return <ident>` back to its last
-   assignment; `return <ident>[...]` has no such path and lands on the default.
+   variant.
+
+   **The missing arm, located.** `PyInferExprType` (pyparser.inc ~2093) tests
+   for `[` only at the START of the expression — a list LITERAL:
+
+   ```pascal
+   if ... ((Tokens[startIdx].Kind = tkLBrack) or (Tokens[startIdx].Kind = tkBegin)) then
+   ```
+
+   There is no arm for `<ident> [ ... ]`, i.e. a SUBSCRIPT, so the expression
+   comes back `tyUnknown` and `PyInferDefRetType`'s `Result := tyInteger`
+   default stands. That is why assigning to a temp first works — a bare
+   `return <ident>` DOES have a chase path, back to the ident's last
+   assignment.
+
+   Suggested shape: give the scanner an `<ident>[...]` arm that answers
+   `tyVariant` rather than falling through. A variant is what the value
+   actually is at run time (the temp-variable form proves it round-trips
+   correctly), and it costs nothing on the paths that already work. Check the
+   DICT form while doing it — `d["k"]` is typed correctly today by some other
+   route, and must not regress.
 
 Every other chain checked infers correctly — float, str-from-int, list, bool
 and dict accumulations all round-trip — so this is not general breakage; it is
