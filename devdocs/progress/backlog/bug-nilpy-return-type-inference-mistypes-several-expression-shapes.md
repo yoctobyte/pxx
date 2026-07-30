@@ -95,9 +95,9 @@ more shapes get it wrong, all silently:
 
 | shape | CPython | pxx |
 | --- | --- | --- |
-| a bare `return` first, then `return "str"` | `str` | **`5302411`** |
-| a bare `return` first, then `return [1]` | `[1]` | **`123731992`** |
-| a bare `return` first, then `return 5` | `5` | `5` ✓ |
+| a bare `return` first, then `return "str"` | `str` | FIXED ✓ |
+| a bare `return` first, then `return [1]` | `[1]` | FIXED ✓ |
+| a bare `return` first, then `return 5` | `5` | FIXED ✓ |
 | `xs = ["a","b"]` then **`return xs[0]`** | `a` | **TypeError: expected a number, got str** |
 | `xs = [1,2]` then `return xs[0]` | `1` | `1` ✓ |
 | `v = xs[0]` then `return v` | `a` | `a` ✓ |
@@ -108,19 +108,42 @@ more shapes get it wrong, all silently:
 
 Two distinct causes behind one symptom:
 
-1. **A value-less `return` decides the type.** A def with no value-returning
+1. **A value-less `return` decides the type — FIXED.** The scanner already
+   kept looking past `return None`; a bare `return` hit an `Exit` instead. In
+   Python they are the same statement, so it now takes the same path. Covered by
+   `test/test_nilpy_return_type_inference.npy`.
+
+   Original description: A def with no value-returning
    `return` is deliberately `tyInteger` ("the harmless case", per pyparser) —
    but when a BARE `return` is merely the first of several, that integer wins
    over the real returns that follow. Only the later-int case survives, by
    coincidence. The first return should not count as value-typing when it
    carries no value.
 
-2. **`return <list element>` is typed from the wrong thing.** Returning
-   `xs[0]` where the list holds strings raises; where it holds ints it is
-   fine; assigning to a temp first is fine. Same shape as the `chr` case above
-   and as [[bug-nilpy-subscript-and-slice-of-a-variant-get-the-wrong-static-type]]:
-   the inference reads a container element as a scalar of the wrong kind
-   instead of leaving it a variant.
+2. **`return <list element>` always infers INT**, whatever the list holds.
+   Measured across element types:
+
+   | returned expression | CPython | pxx |
+   | --- | --- | --- |
+   | `xs = ["a","b"]` -> `return xs[0]` | `a` | **TypeError: expected a number, got str** |
+   | `xs = [1.5]` -> `return xs[0]` | `1.5` | **`1`** (truncated) |
+   | `xs = [True]` -> `return xs[0]` | `True` | **`1`** |
+   | `xs = [[1]]` -> `return xs[0]` | `[1]` | **TypeError: ... got object** |
+   | `g = [["a"]]` -> `return g[0][0]` | `a` | **TypeError** |
+   | `xs = [1,2]` -> `return xs[0]` | `1` | `1` ✓ (coincidence) |
+   | `d = {"k":"v"}` -> `return d["k"]` | `v` | `v` ✓ |
+   | `v = xs[0]` then `return v` | correct | correct ✓ |
+
+   So it is not "strings raise" — the subscript form falls to the tyInteger
+   default for every element type, and only a list of ints comes out right by
+   accident. A DICT lookup is typed correctly, which is the useful clue: the
+   scanner has a path for one container form and not the other.
+
+   Same root as the `chr` case above and as
+   [[bug-nilpy-subscript-and-slice-of-a-variant-get-the-wrong-static-type]]:
+   the inference reads a container element as a scalar instead of leaving it a
+   variant. The token scanner can chase a bare `return <ident>` back to its last
+   assignment; `return <ident>[...]` has no such path and lands on the default.
 
 Every other chain checked infers correctly — float, str-from-int, list, bool
 and dict accumulations all round-trip — so this is not general breakage; it is
