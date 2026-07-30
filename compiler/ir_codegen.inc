@@ -6981,6 +6981,17 @@ begin
       begin
         if Syms[iZeroTmp].TypeKind = tyClass then
           EmitZeroFrameSlot(Syms[iZeroTmp].Offset, TARGET_PTR_SIZE)
+        else if Syms[iZeroTmp].TypeKind = tyAnsiString then
+          { A managed STRING local minted after the prologue has exactly the
+            same hazard as the class and variant ones below, and was the one
+            kind this pass did not cover. `for ch in s` over a string local
+            inside a def mints both `ch` and the desugar's hidden `__py_c`, and
+            the loop's first store released whatever the frame happened to
+            hold — the same `decq -0x10(%rax)` the variant note below records.
+            It only bit when the frame layout put those slots on non-zero
+            bytes, which is why adding any other local made it disappear
+            (bug-nilpy-printing-the-loop-var-of-a-str-local-in-a-function-segfaults). }
+          EmitZeroFrameSlot(Syms[iZeroTmp].Offset, TARGET_PTR_SIZE)
         else if Syms[iZeroTmp].TypeKind = tyVariant then
           { A VARIANT temp minted during LOWERING has the same hazard as the
             class locals above, and PyInitVariantLocals only ran at the

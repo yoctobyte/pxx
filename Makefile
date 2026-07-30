@@ -687,6 +687,10 @@ test-nilpy: $(COMPILER)
 	@# of the expectation is CPython's own output for the same file
 	./$(COMPILER) test/test_nilpy_mixed_type_operands.npy /tmp/test_nilpy_mixed_type_operands26
 	test "$$(/tmp/test_nilpy_mixed_type_operands26)" = "$$(printf 'sub TypeError\ndiv TypeError\nlt TypeError\nle TypeError\ngt TypeError\nge TypeError\nmul-dict TypeError\nsub-list TypeError\nababab ababab\n2 1.5 1 1\nTrue True False True\n[1, 2, 1, 2]\n[1, 2, 1, 2]\nTrue True False True True\n5 apples\na-b\n[1, 2, 1, 3]\n[1]\nleftover TypeError\nno specifier\nfloat sub TypeError\nfloat lt TypeError\n5.0 1.5 True')"
+	@# a managed STRING local minted after the prologue zero-init pass was never
+	@# nil'd, so the loop's first store released stale frame bytes -> SIGSEGV
+	./$(COMPILER) test/test_nilpy_str_local_loop_zeroinit.npy /tmp/test_nilpy_str_local_zi26
+	test "$$(/tmp/test_nilpy_str_local_zi26)" = "$$(printf 'a\nb\nx\nx\ny\nz\ny\nz\n65\n66\ng\nh\n1\n2\ni\nj\nk\nl')"
 	@# chr() of a VARIANT read the 16-byte slot as an ordinal -- Ord grew a
 	@# route-to-pylib arm for non-ordinal operands and Chr never did
 	./$(COMPILER) test/test_nilpy_chr_of_variant.npy /tmp/test_nilpy_chr_of_variant26

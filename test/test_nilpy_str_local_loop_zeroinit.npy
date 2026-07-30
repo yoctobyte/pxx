@@ -1,0 +1,60 @@
+# A managed STRING local minted AFTER the prologue zero-init pass was never
+# nil'd, so the loop's first store released whatever the frame happened to hold.
+# `for ch in s` over a string local inside a def mints both `ch` and the
+# desugar's hidden `__py_c`; the crash only appeared when the frame layout put
+# those slots on non-zero bytes, which is why adding any other local hid it.
+# bug-nilpy-printing-the-loop-var-of-a-str-local-in-a-function-segfaults
+# Every expectation is CPython's own output.
+
+# the exact repro: a str local, iterated, body of print statements only
+def f():
+    s = "ab"
+    for ch in s:
+        print(ch)
+f()
+
+# the loop variable need not be used at all -- it was the frame shape, not the
+# variable, that decided this
+def g():
+    s = "cd"
+    for ch in s:
+        print("x")
+g()
+
+# two prints, still no assignment in the body
+def h():
+    s = "ef"
+    for ch in s:
+        print("y")
+        print("z")
+h()
+
+# using the loop variable through a call
+def k():
+    s = "AB"
+    for ch in s:
+        print(ord(ch))
+k()
+
+# the shapes that always worked must keep working
+def with_assign():
+    s = "gh"
+    for ch in s:
+        n = 1
+        print(ch)
+with_assign()
+
+def over_list():
+    xs = [1, 2]
+    for v in xs:
+        print(v)
+over_list()
+
+def over_param(s):
+    for ch in s:
+        print(ch)
+over_param("ij")
+
+top = "kl"
+for ch in top:
+    print(ch)
