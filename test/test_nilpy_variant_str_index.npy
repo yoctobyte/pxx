@@ -1,0 +1,65 @@
+# pyvar_getitem cast the variant to TObject BEFORE checking its tag, so a
+# variant holding a STRING had its character data dereferenced as an object and
+# the `is TPyDict` test read a VMT pointer out of string bytes -> SIGSEGV.
+# Its sibling pyvar_slice has always checked the tag first.
+# bug-nilpy-indexing-an-unannotated-str-parameter-segfaults
+# Every expectation is CPython's own output.
+
+# an unannotated parameter -- the default way to write Python
+def first(s):
+    c = s[0]
+    return c
+print(first("ab"))
+
+# a for-loop variable is a variant, so this is the commonest reachable shape
+for w in ["apple", "banana"]:
+    print(w[0])
+
+# a string that came out of a container
+xs = ["ab", "cd"]
+print(xs[0][0], xs[1][1])
+
+# negative indices keep Python's from-the-end rule
+def last(s):
+    c = s[-1]
+    return c
+print(last("abc"))
+
+# out of range raises IndexError rather than crashing
+def at(s, i):
+    c = s[i]
+    return c
+try:
+    print(at("ab", 9))
+except IndexError:
+    print("caught index")
+
+# end to end: a palindrome check, which crashed outright
+def pal(s):
+    i = 0
+    j = len(s) - 1
+    while i < j:
+        if s[i] != s[j]:
+            return False
+        i = i + 1
+        j = j - 1
+    return True
+print(pal("racecar"), pal("abc"))
+
+# grouping by first letter -- a realistic program that crashed
+groups = {}
+for w in ["apple", "avocado", "banana", "blueberry"]:
+    k = w[0]
+    if k in groups:
+        groups[k] = groups[k] + [w]
+    else:
+        groups[k] = [w]
+for k in sorted(groups.keys()):
+    print(k, groups[k])
+
+# the paths that already worked must stay working
+def gl(xs2):
+    return xs2[0]
+def gd(d):
+    return d["k"]
+print(gl([7, 8]), gd({"k": 5}))

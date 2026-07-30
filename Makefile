@@ -687,6 +687,10 @@ test-nilpy: $(COMPILER)
 	@# of the expectation is CPython's own output for the same file
 	./$(COMPILER) test/test_nilpy_mixed_type_operands.npy /tmp/test_nilpy_mixed_type_operands26
 	test "$$(/tmp/test_nilpy_mixed_type_operands26)" = "$$(printf 'sub TypeError\ndiv TypeError\nlt TypeError\nle TypeError\ngt TypeError\nge TypeError\nmul-dict TypeError\nsub-list TypeError\nababab ababab\n2 1.5 1 1\nTrue True False True\n[1, 2, 1, 2]\n[1, 2, 1, 2]\nTrue True False True True\n5 apples\na-b\n[1, 2, 1, 3]\n[1]\nleftover TypeError\nno specifier\nfloat sub TypeError\nfloat lt TypeError\n5.0 1.5 True')"
+	@# a variant holding a STRING must be subscriptable -- pyvar_getitem cast to
+	@# TObject before checking the tag, so `for w in words: w[0]` SEGFAULTED
+	./$(COMPILER) test/test_nilpy_variant_str_index.npy /tmp/test_nilpy_variant_str_index26
+	test "$$(/tmp/test_nilpy_variant_str_index26)" = "$$(printf 'a\na\nb\na d\nc\ncaught index\nTrue False\na [%s]\nb [%s]\n7 5')" "'apple', 'avocado'" "'banana', 'blueberry'"
 	@# f.write("text") must write the TEXT -- it resolved to the TPyBytes overload
 	@# and wrote ~18 KB of adjacent process memory into the file instead
 	./$(COMPILER) test/test_nilpy_file_write_text.npy /tmp/test_nilpy_file_write26

@@ -1714,8 +1714,29 @@ begin
 end;
 
 function pyvar_getitem(const v: Variant; const key: Variant): Variant;
-var o: TObject; ki: Int64;
+var o: TObject; ki: Int64; tg: Int64;
 begin
+  { CHECK THE TAG BEFORE CASTING. This cast to TObject was unconditional, so a
+    variant holding a STRING had its character data dereferenced as an object
+    and the `is TPyDict` test read a VMT pointer out of string bytes ->
+    SIGSEGV. Reached by three of the commonest shapes in Python:
+      def f(s): return s[0]      (an unannotated str parameter)
+      for w in words: w[0]       (a for-loop variable is a variant)
+      xs[0][0]                   (a string that came out of a container)
+    pyvar_slice, ten lines below, has always tested `pyvartag(v) = 6` first --
+    the same predicate written in two places, and only one of them grew the
+    string case (bug-nilpy-indexing-an-unannotated-str-parameter-segfaults). }
+  tg := pyvartag(v);
+  if (tg = 6) or (tg = 5) then
+  begin
+    ki := PPyVarRec(@key)^.Payload;
+    { pystr_at applies Python's negative-index rule and raises IndexError out
+      of range, so this arm inherits both }
+    Result := pystr_ofchar(pystr_at(pystr_of(v), ki));
+    Exit;
+  end;
+  if tg <> 7 then
+    raise TypeError.Create('object is not subscriptable');
   o := TObject(pyvarobj(v));
   if o is TPyDict then
     Result := TPyDict(o).fetch(key)
