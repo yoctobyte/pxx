@@ -49,3 +49,6 @@ inform diagnostics and arity, not the ABI.
 `make test-nilpy` plus a `.npy` passing a plain def, a lambda, a returned nested
 def and a bound method through a `Callable[...]` parameter, diffed against
 CPython.
+
+## Log
+- 2026-07-30 — resolved, commit 634937d31.

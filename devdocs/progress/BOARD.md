@@ -44,7 +44,7 @@ _none_
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
 | bug-lib-tkinter-trailing-underscore-params-block-kwargs | B | 40 | bug | tkinter facade parameters named with a trailing underscore cannot be passed by name | — |
 | bug-nilpy-annotated-module-global-invisible-in-kwarg | N | 55 | bug | A module-level ANNOTATED global is not visible in a keyword argument | — |
-| bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable | N | 55 | bug | A `Callable[...]`-annotated parameter segfaults when the argument is a heap callable | — |
+| bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-function-value-call-gaps | N | 55 | bug | Two function-value shapes that do not COMPILE | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
@@ -294,7 +294,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1046)
+## done (1047)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -630,6 +630,7 @@ _none_
 | bug-nilpy-bytes-literal-escapes-not-decoded | N | 30 | bug | NilPy: `\xHH` (and presumably `\0`-style) escapes in a BYTES literal are not decoded | — |
 | bug-nilpy-bytes-of-slice-leaks-intermediate | A | 45 | bug | NilPy: `bytes(seq[a:b])` leaks the intermediate slice object every call | — |
 | bug-nilpy-call-returning-class-loses-identity | N | 55 | bug | NilPy: a call returning a CLASS lost its class identity (silent, then SIGSEGV) | — |
+| bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable | N | 55 | bug | A `Callable[...]`-annotated parameter segfaults when the argument is a heap callable | — |
 | bug-nilpy-callable-in-local-var-call-does-nothing | N | 70 | bug | `cb = lambda ...` then `cb(x)` compiles and does NOTHING | — |
 | bug-nilpy-callable-return-abi-mismatch | N | 75 | bug | nilpy: a def passed to a Callable[...] parameter marshalled by the ANNOTATION, not by the def | — |
 | bug-nilpy-class-attr-instance-traversal-crashes | N | 70 | bug | A class attribute holding an INSTANCE crashes when traversed | — |
@@ -2812,7 +2813,6 @@ _none_
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
 - [p 55] [N] bug-nilpy-annotated-module-global-invisible-in-kwarg
-- [p 55] [N] bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable
 - [p 55] [N] bug-nilpy-function-value-call-gaps
 - [p 55] [N] bug-nilpy-is-on-two-lists-compares-contents
 - [p 55] [N] bug-nilpy-method-returning-a-fresh-string-leaks
@@ -2907,6 +2907,7 @@ _none_
 - [p 40] [U] decide-dns-libc-backend-shape (unblocks 1)
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
 - [p 40] [B] bug-lib-tkinter-trailing-underscore-params-block-kwargs
+- [p 40] [N] bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter
 - [p 40] [N] bug-nilpy-pytypeerror-halts-instead-of-raising
 - [p 40] [U] decide-nilpy-transitive-nested-def-capture
 - [p 40] [A] feature-a-promoint-variant-esp-targets
