@@ -1,10 +1,10 @@
 ---
 track: N
-prio: 70
+prio: 75
 type: bug
 ---
 
-# A def returning a string that was built with `chr()` infers the wrong return type
+# An unannotated def's inferred return type is wrong for several common expression shapes
 
 ```python
 def f():
@@ -87,3 +87,41 @@ HEAD.
 against CPython's own output and a rot13 round trip (`rot13(rot13(s)) == s`) as
 the end-to-end case. Keep the working rows — several of them are the workarounds
 people will have written, and they must not break.
+
+## MORE SHAPES, measured after the first write-up
+
+An unannotated def's return type comes from its FIRST `return <expr>`. Three
+more shapes get it wrong, all silently:
+
+| shape | CPython | pxx |
+| --- | --- | --- |
+| a bare `return` first, then `return "str"` | `str` | **`5302411`** |
+| a bare `return` first, then `return [1]` | `[1]` | **`123731992`** |
+| a bare `return` first, then `return 5` | `5` | `5` ✓ |
+| `xs = ["a","b"]` then **`return xs[0]`** | `a` | **TypeError: expected a number, got str** |
+| `xs = [1,2]` then `return xs[0]` | `1` | `1` ✓ |
+| `v = xs[0]` then `return v` | `a` | `a` ✓ |
+| `d = {"k":"v"}` then `return d["k"]` | `v` | `v` ✓ |
+| `return g()` / `return k.m()` (a call) | correct | correct ✓ |
+| mixed `return 1` / `return "a"` in two branches | correct | correct ✓ |
+| `xs = [1,2,3]` then `return xs[0:2]` (slice) | correct | correct ✓ |
+
+Two distinct causes behind one symptom:
+
+1. **A value-less `return` decides the type.** A def with no value-returning
+   `return` is deliberately `tyInteger` ("the harmless case", per pyparser) —
+   but when a BARE `return` is merely the first of several, that integer wins
+   over the real returns that follow. Only the later-int case survives, by
+   coincidence. The first return should not count as value-typing when it
+   carries no value.
+
+2. **`return <list element>` is typed from the wrong thing.** Returning
+   `xs[0]` where the list holds strings raises; where it holds ints it is
+   fine; assigning to a temp first is fine. Same shape as the `chr` case above
+   and as [[bug-nilpy-subscript-and-slice-of-a-variant-get-the-wrong-static-type]]:
+   the inference reads a container element as a scalar of the wrong kind
+   instead of leaving it a variant.
+
+Every other chain checked infers correctly — float, str-from-int, list, bool
+and dict accumulations all round-trip — so this is not general breakage; it is
+these specific shapes.
