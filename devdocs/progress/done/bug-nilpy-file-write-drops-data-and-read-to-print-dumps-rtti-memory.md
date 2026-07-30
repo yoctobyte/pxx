@@ -121,3 +121,47 @@ Remaining from this ticket, NOT fixed here: `f.close()` and `f.readlines()` on a
 READ-mode handle still report `TPyList has no method ...`, because read mode
 really does yield a list of lines. That is a separate shape and keeps this
 ticket open.
+
+## CLOSED — the two remaining causes, both found and fixed
+
+1. **`close()`/`readlines()` missing on `TPyList`.** Added both:
+   `close` is a no-op (the read-slurp model already holds the whole file), and
+   `readlines` returns `Self`. Trivial once named.
+
+2. **The real remaining disclosure vector, and it reproduces the RTTI blob
+   independently of the write() overload above.** `PyAllocModuleGlobals`
+   decides whether a module-level name was "used inside a routine before its
+   own assignment" (the shape that needs pre-creating the symbol so an
+   earlier-defined `def` can read it) by tracking generic INDENT/DEDENT
+   depth — but a `with open(p, "w") as f: f.write(...)` block's suite indents
+   exactly the same way a `def` body does. A later module-level
+   `f = open(p, "r")` (SAME name reused, no `with` this time) made the scan
+   see the with-block's own `f.write(...)` reference and conclude `f` was
+   "used earlier", pre-creating `f` as a bare `tyVariant` symbol before the
+   with-statement's real parse ever ran. `PyParseWith` then stored the raw
+   `TPyFile` pointer straight into that unboxed variant slot (no boxing step),
+   and every later use of `f` — `write`, `len`, `readlines` — dispatched
+   against a variant whose "tag" was really just pointer bytes: write did
+   nothing, and reading it back printed `0` or the class-name/RTTI blob
+   depending on what got picked up. This is a SECOND, independent trigger for
+   the exact disclosure shape the ticket is named for — no `TPyBytes`
+   overload involved at all.
+
+   Fixed by tracking which indent levels genuinely descend from a `def`
+   header (a small per-level "inside a def" stack) instead of counting any
+   indented block as "inside a routine".
+
+Also needed, and correct standalone: two class-identity staleness bugs where
+reassigning a name to a call returning a DIFFERENT class only updated the
+stored RecName/RecCi if it had been unset before — so `f`'s identity from its
+FIRST class stuck forever once anything had claimed it, even on an ordinary
+rebind. Fixed to always take the latest class.
+
+Tests: `test/test_nilpy_file_close_readlines.npy`,
+`test/test_nilpy_with_name_reuse.npy`. Gate: `make test-nilpy` green,
+self-host fixedpoint, `testmgr --tier quick` — all green.
+
+Ticket closed.
+
+## Log
+- 2026-07-31 — resolved, commit 7a64a582d.

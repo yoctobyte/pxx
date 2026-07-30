@@ -1,0 +1,85 @@
+# `return <subscript>` / `return <slice>` on an unannotated def used to infer
+# the WRONG static type from the receiver: a string subscript typed itself
+# tyChar (an ordinal), so `return s[0]` came back as the character CODE, and
+# an unconstrained/variant receiver's SLICE was assumed to be a list, so a
+# string slice came back empty or the caller's len()/concat SIGSEGV'd.
+# bug-nilpy-subscript-and-slice-of-a-variant-get-the-wrong-static-type
+# bug-nilpy-return-type-inference-mistypes-several-expression-shapes
+# Every expectation is CPython's own output.
+
+def local_index():
+    s = "ab"
+    return s[0]
+print(local_index())
+
+def param_index(s):
+    return s[0]
+print(param_index("ab"))
+
+def param_slice(s):
+    return s[0:2]
+print(param_slice("abcd"))
+
+# the SIGSEGV case: a string built via slicing, returned through a local
+def common_prefix(a, b):
+    i = 0
+    while i < len(a) and i < len(b) and a[i] == b[i]:
+        i = i + 1
+    r = a[0:i]
+    return r
+print(common_prefix("prefix_one", "prefix_two"))
+
+# list/dict subscript-return, every element kind (not just int, by accident)
+def list_str_elem():
+    xs = ["a", "b"]
+    return xs[0]
+print(list_str_elem())
+
+def list_float_elem():
+    xs = [1.5]
+    return xs[0]
+print(list_float_elem())
+
+def list_bool_elem():
+    xs = [True]
+    return xs[0]
+print(list_bool_elem())
+
+def list_of_list_elem():
+    xs = [[1]]
+    return xs[0]
+print(list_of_list_elem())
+
+def nested_subscript():
+    g = [["a"]]
+    return g[0][0]
+print(nested_subscript())
+
+def list_int_elem():
+    xs = [1, 2]
+    return xs[0]
+print(list_int_elem())
+
+def dict_elem():
+    d = {"k": "v"}
+    return d["k"]
+print(dict_elem())
+
+# a list slice through a local return must keep working (not just direct)
+def list_slice():
+    xs = [1, 2, 3]
+    return xs[0:2]
+print(list_slice())
+
+# self-referential accumulator built with chr(): the returned string used to
+# truncate to one byte because the leading self-reference in `acc = acc +
+# chr(o)` read as unknown and the chain's type came from chr() alone
+def rot13(s):
+    acc = ""
+    for c in s:
+        o = ord(c)
+        if o >= 97 and o <= 122:
+            o = ((o - 97 + 13) % 26) + 97
+        acc = acc + chr(o)
+    return acc
+print(rot13(rot13("hello world")))

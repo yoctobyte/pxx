@@ -113,3 +113,34 @@ today precisely because they do not force a scalar type onto the result.
 Watch the paths that currently depend on the char typing — `ord(s[i])`,
 `s[i] == "a"` and `chr()` round-trips all work now and must keep working; they
 are covered by `test/test_nilpy_variant_str_index.npy`.
+
+## CLOSED — both halves fixed as suggested
+
+**Subscript half**: `PyInferExprType` now gives `<ident>[...]` on a
+list/dict/unconstrained-variant receiver a `tyVariant` arm (shared with
+[[bug-nilpy-return-type-inference-mistypes-several-expression-shapes]], the
+same root cause seen from the def-return side). A plain string receiver keeps
+its existing char-yielding arm, which is fine — `s[0]`'s bare-return path now
+resolves through the SAME re-chase fix as that sibling ticket rather than
+landing on tyChar directly, so `return s[0]` (local str) and `return s[0]`
+(unannotated param) both now print the character, not its ordinal or a
+TypeError.
+
+**Slice half**: the slice-detection arm assumed any non-string receiver was a
+list (`tk := tyClass; PyInferLastCi := FindUClass('TPyList')`), which is
+exactly the wrong guess for a variant that holds a string at runtime —
+`pyvar_slice` already dispatches on the tag correctly, so the fix removes the
+guess: a receiver whose STATIC type is genuinely tyClass keeps the list
+answer, but a variant/unknown receiver now gets `tyVariant` and lets the
+runtime tag decide, matching what `pyvar_slice` already returns. This also
+fixes the `common_prefix`-shaped SIGSEGV in this ticket (a string built via
+slicing, returned through a local) — confirmed the same repro no longer
+crashes and prints the correct prefix.
+
+Tests: test/test_nilpy_bare_return_subscript_slice.npy covers every row in
+both tables above (including the SIGSEGV repro) against CPython's own output;
+test/test_nilpy_variant_str_index.npy (ord/chr/comparison round-trips) stays
+green. Gate: make test-nilpy green, self-host fixedpoint, testmgr --tier
+quick.
+
+Ticket closed.

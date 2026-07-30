@@ -2429,21 +2429,35 @@ begin
           Continue;
         end;
         { A SLICE `name[a:b]` is not an index: it yields a container of the
-          same kind as the receiver — a str slice is a str, and slicing a list
-          OR a variant holding one yields a list. Without this a def whose body
-          ended in `return b[:6]` fell to the Integer default and the caller got
-          an object where a list was expected ("expected a number, got object"
-          from len()) — bug-nilpy-slice-of-variant-local-returned-is-unusable.
-          Detected by a ':' at bracket depth 1. }
+          same kind as the receiver — a str slice is a str, and slicing a
+          KNOWN list yields a list. A variant/unknown receiver's slice used to
+          be assumed to be a list too, but a variant can just as easily hold a
+          str at runtime — `pyvar_slice` already dispatches on the tag and
+          returns whichever is correct, so forcing tyClass/TPyList on the
+          STATIC side made a string-holding variant's slice get unboxed as an
+          object on return, coming back `[]` (empty) or, worse, SIGSEGV
+          (bug-nilpy-subscript-and-slice-of-a-variant-get-the-wrong-static-type).
+          Without any receiver-kind arm at all, a def whose body ended in
+          `return b[:6]` fell to the Integer default instead
+          (bug-nilpy-slice-of-variant-local-returned-is-unusable) — tyVariant
+          for an unknown/variant receiver keeps that original fix (any
+          non-Integer answer already unblocked it) while also handling the
+          string case now that pyvar_slice's tag dispatch is trusted instead
+          of guessed. Detected by a ':' at bracket depth 1. }
         if (i + 1 < endIdx) and (Tokens[i + 1].Kind = tkLBrack) and
            PySliceBracketAt(i + 1, endIdx) then
         begin
           if (tk = tyString) or (tk = tyAnsiString) or (tk = tyChar) then
             tk := tyAnsiString
-          else
+          else if tk = tyClass then
           begin
             tk := tyClass;
             PyInferLastCi := FindUClass('TPyList');
+          end
+          else
+          begin
+            tk := tyVariant;
+            PyInferLastCi := -1;
           end;
           i := i + 1; depth := 0;
           while i < endIdx do

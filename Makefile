@@ -692,6 +692,10 @@ test-nilpy: $(COMPILER)
 	@# real returns that followed
 	./$(COMPILER) test/test_nilpy_return_type_inference.npy /tmp/test_nilpy_ret_infer26
 	test "$$(/tmp/test_nilpy_ret_infer26)" = "$$(printf 'str\n[1, 2]\n2.5\n5\ndeep\nstr\nouter')"
+	@# `return <subscript>`/`return <slice>` on a variant/string receiver, and a
+	@# self-referential chr() accumulator's return type
+	./$(COMPILER) test/test_nilpy_bare_return_subscript_slice.npy /tmp/test_nilpy_bare_ret_subslice26
+	test "$$(/tmp/test_nilpy_bare_ret_subslice26)" = "$$(printf 'a\na\nab\nprefix_\na\n1.5\nTrue\n[1]\na\n1\nv\n[1, 2]\nhello world')"
 	@# a managed STRING local minted after the prologue zero-init pass was never
 	@# nil'd, so the loop's first store released stale frame bytes -> SIGSEGV
 	./$(COMPILER) test/test_nilpy_str_local_loop_zeroinit.npy /tmp/test_nilpy_str_local_zi26

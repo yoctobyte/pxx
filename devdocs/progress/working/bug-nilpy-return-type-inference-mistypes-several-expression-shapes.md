@@ -167,3 +167,33 @@ Two distinct causes behind one symptom:
 Every other chain checked infers correctly — float, str-from-int, list, bool
 and dict accumulations all round-trip — so this is not general breakage; it is
 these specific shapes.
+
+## CLOSED — the missing arm, plus the chr-accumulator half
+
+Added the suggested arm: `<ident>[...]` on a list/dict/unconstrained-variant
+receiver now answers `tyVariant` and skips the whole bracket group, instead of
+falling through to the token walk that widened on the INDEX/KEY token's own
+type. Verified against every element kind in the table above (str/float/
+bool/nested-list/dict) plus the double-subscript `g[0][0]` shape — all now
+match CPython. The DICT form's pre-existing correct behaviour is unchanged
+(it now goes through the same tyVariant arm as everything else, rather than
+reaching the right answer by the token-walk accident described above).
+
+Separately, the `acc = acc + chr(97)` shape at the top of this ticket needed a
+second fix in `PyInferDefRetType`'s bare-`return <ident>` re-chase: it
+re-scanned each prior assignment to the returned name from scratch with no
+memory of the CHAIN's running type, so a self-referential accumulator's
+leading `acc` on the RHS resolved to tyUnknown (this raw re-scan has no
+PyLocals) and the assignment's inferred type came from `chr()` alone
+(tyChar) — throwing away that `acc` already held a string built up by an
+earlier assignment. Fixed by folding the chain's running type in via PyWiden
+instead of re-deriving each assignment in isolation. `rot13`/`caesar`-shaped
+functions now round-trip correctly end to end.
+
+Tests: test/test_nilpy_bare_return_subscript_slice.npy (every row above,
+CPython's own output), plus the pre-existing
+test/test_nilpy_return_type_inference.npy (bare-return-first family) stays
+green. Gate: make test-nilpy green, self-host fixedpoint, testmgr --tier
+quick.
+
+Ticket closed.
