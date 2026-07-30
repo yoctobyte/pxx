@@ -1,0 +1,43 @@
+# chr() of a VARIANT read the 16-byte variant SLOT as an ordinal, so chr(xs[0])
+# for 97 gave `X` and a loop-built string came out empty. Ord had a
+# route-to-pylib arm for non-ordinal operands; Chr never grew one.
+# bug-nilpy-chr-of-a-variant-reads-the-slot-not-the-value
+# Every expectation is CPython's own output.
+
+codes = [97, 98, 99]
+
+# a list element, a loop variable, and arithmetic on one
+print(chr(codes[0]), chr(codes[1]))
+print(chr(codes[0] + 1))
+
+out = ""
+for o in codes:
+    out = out + chr(o)
+print(out)
+
+# an unannotated parameter
+def ch(o):
+    return chr(o)
+print(ch(97))
+
+# the literal and int-variable paths must stay inline and correct
+print(chr(97), chr(65))
+n = 122
+print(chr(n))
+
+# ord is unaffected and must stay so
+names = ["a"]
+print(ord(names[0]), ord("b"))
+
+# a non-number raises rather than producing a character
+try:
+    print(chr(names[0]))
+except TypeError:
+    print("caught chr")
+
+# NOTE: the end-to-end rot13 (`for c in s` over a parameter, building a string
+# with chr) is deliberately absent. It fails for a DIFFERENT, pre-existing
+# reason -- iterating a string inside a function and consuming the loop
+# variable -- tracked in
+# bug-nilpy-printing-the-loop-var-of-a-str-local-in-a-function-segfaults.
+# Add it here once that one is fixed; it is the natural end-to-end case.

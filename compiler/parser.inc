@@ -10737,6 +10737,24 @@ begin
           CurASTNode := node; LastExprTk := tyInt64;
           Exit;
         end;
+        { Chr's mirror of the Ord arm above. A VARIANT argument -- a list
+          element, a for-loop variable, an unannotated parameter -- fell
+          through to the -tkChr intrinsic, which reads the 16-byte variant SLOT
+          as an ordinal, so chr(xs[0]) for 97 gave `X` and a loop-built string
+          came out empty. Unbox first; pyvar_to_int already applies Python's
+          numeric rules and raises TypeError for a non-number. The literal and
+          int-typed paths are untouched, so ordinary chr(65) stays inline
+          (bug-nilpy-chr-of-a-variant-reads-the-slot-not-the-value). }
+        if (op = Ord(tkChr)) and PyExprMode and
+           (IntToTypeKind(ASTTk[CurASTNode]) = tyVariant) then
+        begin
+          idx := FindProc('pyvar_to_int');
+          if idx < 0 then Error('Nil Python: pylib (pyvar_to_int) not loaded');
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+          node := AllocNode(AN_CALL); ASTIVal[node] := idx;
+          ASTTk[node] := Ord(tyInt64); ASTLeft[node] := argSeq;
+          CurASTNode := node;
+        end;
         node := AllocNode(AN_CALL); ASTIVal[node] := -op;
         if op = Ord(tkChr) then ASTTk[node] := Ord(tyChar) else ASTTk[node] := Ord(tyInteger);
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;

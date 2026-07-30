@@ -687,6 +687,10 @@ test-nilpy: $(COMPILER)
 	@# of the expectation is CPython's own output for the same file
 	./$(COMPILER) test/test_nilpy_mixed_type_operands.npy /tmp/test_nilpy_mixed_type_operands26
 	test "$$(/tmp/test_nilpy_mixed_type_operands26)" = "$$(printf 'sub TypeError\ndiv TypeError\nlt TypeError\nle TypeError\ngt TypeError\nge TypeError\nmul-dict TypeError\nsub-list TypeError\nababab ababab\n2 1.5 1 1\nTrue True False True\n[1, 2, 1, 2]\n[1, 2, 1, 2]\nTrue True False True True\n5 apples\na-b\n[1, 2, 1, 3]\n[1]\nleftover TypeError\nno specifier\nfloat sub TypeError\nfloat lt TypeError\n5.0 1.5 True')"
+	@# chr() of a VARIANT read the 16-byte slot as an ordinal -- Ord grew a
+	@# route-to-pylib arm for non-ordinal operands and Chr never did
+	./$(COMPILER) test/test_nilpy_chr_of_variant.npy /tmp/test_nilpy_chr_of_variant26
+	test "$$(/tmp/test_nilpy_chr_of_variant26)" = "$$(printf 'a b\nb\nabc\na\na A\nz\n97 98\ncaught chr')"
 	@# a CHAR ordered against a STRING compared an ordinal with an ADDRESS, so
 	@# every < was True and every > False whatever the characters were
 	./$(COMPILER) test/test_nilpy_char_ordering.npy /tmp/test_nilpy_char_ordering26
