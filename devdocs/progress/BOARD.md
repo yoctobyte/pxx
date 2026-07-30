@@ -34,7 +34,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (191)
+## backlog (189)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -47,7 +47,6 @@ _none_
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
 | bug-nilpy-discarded-string-result-leaks | N | 50 | bug | A call whose managed-string result is DISCARDED leaks it | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
-| bug-nilpy-function-value-call-gaps | N | 55 | bug | Two function-value shapes that do not COMPILE | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
 | bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
 | bug-nilpy-method-call-on-fresh-construction | N | 45 | bug | nilpy: Cls().method() — a method call directly on a construction expression | — |
@@ -59,7 +58,6 @@ _none_
 | bug-nilpy-pytypeerror-halts-instead-of-raising | N | 40 | bug | `PyTypeError` halts the process, so `except TypeError:` cannot catch it | — |
 | bug-nilpy-qualified-proc-omitted-default | N | 35 | bug | A qualified UNIT-LEVEL proc call cannot omit a defaulted parameter | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
-| bug-nilpy-zero-param-def-returning-a-lambda-does-not-compile | N | 45 | bug | A zero-parameter def returning a lambda does not compile | — |
 | bug-pascal-defines-leak-across-units | A | 55 | bug | Pascal: {$define} in one unit stays visible in units parsed afterwards, so {$ifdef} compiles different code depending on uses ORDER | — |
 | bug-pascal-duplicate-class-name-silently-shadows | P | 50 | bug | Pascal: a duplicate class declaration silently binds to the earlier one instead of erroring | — |
 | bug-pascal-uses-is-transitive | A | 65 | bug | Pascal: uses is transitive — a unit's own uses leak into everything that uses IT, for routines and classes alike (one flat global namespace) | — |
@@ -292,7 +290,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1051)
+## done (1052)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -645,6 +643,7 @@ _none_
 | bug-nilpy-eq-dunder-ignored | N | 70 | bug | `__eq__` is ignored — `==` on user objects compares identity | — |
 | bug-nilpy-float-times-string-hangs | N | 65 | bug | `2.5 * "ab"` hangs forever | — |
 | bug-nilpy-function-level-import-drops-body | N | 70 | bug | An import inside a function body — and the fix that silently emptied the body | — |
+| bug-nilpy-function-value-call-gaps | N | 55 | bug | Two function-value shapes that do not COMPILE | — |
 | bug-nilpy-import-lost-after-a-fallback-import-block | N | 70 | bug | A C library's function name shadows a Python module name as a qualifier | — |
 | bug-nilpy-import-name-forces-function-object-abi | N | 70 | bug | `from m import f` makes every def in an imported module use the function-object ABI | — |
 | bug-nilpy-in-on-a-string-segfaults | N | 70 | bug | NilPy: `sub in s` on a STRING segfaults | — |
@@ -2814,7 +2813,6 @@ _none_
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
-- [p 55] [N] bug-nilpy-function-value-call-gaps
 - [p 55] [A] bug-pascal-defines-leak-across-units
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
@@ -2862,7 +2860,6 @@ _none_
 - [p 45] [N] bug-nilpy-method-call-on-fresh-construction
 - [p 45] [N] bug-nilpy-print-emits-arguments-before-evaluating-later-ones
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
-- [p 45] [N] bug-nilpy-zero-param-def-returning-a-lambda-does-not-compile
 - [p 45] [A] bug-pascal-uses-order-breaks-pylib-exception
 - [p 45] [T] bug-t-watcher-dev-contention-false-newred
 - [p 45] [A] chore-makefile-selfhost-iterate-to-convergence

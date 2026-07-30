@@ -49,3 +49,6 @@ prio suggests: the feature is largely unusable inside functions without them.
 `make test-nilpy` + self-host byte-identical, plus a matrix of {top-level def,
 nested def, lambda} x {returned, stored in a local, stored in a global} x
 {called at module level, called inside a def}.
+
+## Log
+- 2026-07-30 — resolved, commit 284bb3558.
