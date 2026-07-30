@@ -58,3 +58,6 @@ in one arithmetic expression, and fresh constructions as list elements — all
 diffed against CPython. Gated by
 `test/test_nilpy_method_on_fresh_construction.npy` so it cannot silently regress
 the way it silently fixed.
+
+## Log
+- 2026-07-30 — resolved, commit 83d708d74.
