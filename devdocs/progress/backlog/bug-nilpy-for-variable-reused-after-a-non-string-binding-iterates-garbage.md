@@ -48,7 +48,38 @@ coercion, exactly the "handle read as a number" family as
 [[bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math]].
 
 Reusing `i`, `n` or `x` as a loop variable after using it as a counter is the
-everyday shape that hits this.
+everyday shape that hits this, and it is not hypothetical:
+
+```python
+n = 0
+for n in ["a", "b"]:      # TypeError: expected a number, got str
+    print(n)
+
+i = 0
+while i < 2:
+    i = i + 1
+for i in ["x", "y"]:      # TypeError
+    print(i)
+```
+
+The REVERSE direction crashes outright:
+
+```python
+for c in "ab":
+    pass
+c = 5
+print(c)                  # CPython: 5     pxx: SIGSEGV
+```
+
+so the conflict is symmetric — a slot typed by one side and written by the
+other — not specific to the loop being second. A function PARAMETER reused as a
+loop variable is fine (`def f(n): for n in [...]`), which is a useful clue: the
+parameter's slot is already a variant.
+
+Several of these now raise a TypeError rather than printing an address, which is
+a side effect of the operand-coercion work
+([[bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math]]) turning silent
+handle-arithmetic into a diagnostic. The underlying slot conflict is unchanged.
 
 ## How it was found
 
