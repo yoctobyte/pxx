@@ -46,3 +46,6 @@ print(f(c.m))     # compiles; prints garbage
 `make test-nilpy` with a `{%FAIL}`-style case: passing a bound method (and a
 plain def) where a `str` parameter is declared must be a compile error naming
 the parameter.
+
+## Log
+- 2026-07-30 — resolved, commit 42a9544c9.
