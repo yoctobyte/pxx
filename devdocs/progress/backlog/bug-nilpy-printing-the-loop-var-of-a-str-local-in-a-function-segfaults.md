@@ -34,26 +34,50 @@ CONSTANT crashes just as well, and any ASSIGNMENT anywhere in the body cures it.
 So: a loop body consisting ONLY of print statements. One assignment, before or
 after, in any position, makes it work.
 
-## What the crash actually is
+## What the crash actually is — an UNINITIALISED managed local being released
 
-`rip = 0x400181` — a jump to a bogus address inside the ELF header region, so
-this is a bad CALL TARGET, not a data dereference. Compare the recorded
-landmine `project_bodyless_procaddr_links_to_entry_minus_one`: "@proc on a
-BODYLESS routine links as entry-1 -> plausible ptr, crashes far away".
+CORRECTION to an earlier reading in this ticket: `rip = 0x400181` looked like a
+jump into the ELF header, i.e. a bad call target. Disassembling there shows it
+is nothing of the sort — it is the managed-string RELEASE helper, which simply
+lives at a low address in this ELF layout:
 
-`PXXDBG=n.locals` shows both `s` and `ch` as tk=23 (managed string) locals, and
-`PXXDBG=a.ir:f` shows the two variants are structurally identical apart from
-the extra `store_sym z` — same calls, same order, same blocks. Only the frame
-layout differs, which is why adding any local shifts it out of the failure.
+```
+=> 0x400181:  decq   -0x10(%rax)     ; refcount at [handle-16]
+   0x400185:  jne    0x4001ab
+   0x400187:  sub    $0x10,%rax      ; ...else fall through to free
+   0x40018b:  push   %rsi
+```
 
-Together those point at the function's prologue/epilogue or its local-init
-sequence rather than at the loop desugar itself: the IR is right and something
-below it is emitting or linking a wrong address for this frame shape.
+So the fault is a DATA dereference with a garbage `%rax`: a managed string is
+being released through an uninitialised handle. `PXXDBG=n.locals` shows both
+`s` and `ch` as tk=23 managed locals, and the loop desugar adds a managed
+hidden local (`__py_c_N`) as well.
 
-Next step for whoever picks it up: build with `-g` and single-step the prologue
-(`make pxx-debug`, `source tools/pxx-gdb.py`), and compare the emitted prologue
-of the two variants — the difference should be visible directly, since the IR
-is identical.
+That puts it squarely in the recorded zero-init landmine family
+(`project_nilpy_method_result_not_zeroed_landmine`,
+`project_nilpy_object_reclamation_arc`'s "mid-body-local zero-init landmine"):
+a managed slot that the prologue does not zero, so the first store's release of
+the "previous" value dereferences whatever the frame happened to contain.
+
+It is frame-layout dependent, which is why every neighbouring shape works —
+adding ANY other local shifts the slot onto bytes that happen to be zero:
+
+| change | pxx |
+| --- | --- |
+| the repro | **SIGSEGV** |
+| add `t2 = "cd"` (a second managed local) | correct ✓ |
+| add `z = 1` (an int local) anywhere in the body | correct ✓ |
+| iterate a LIST local instead | correct ✓ |
+| iterate a str PARAMETER instead | correct ✓ |
+| `while i < len(s)` instead of `for ch in s` | correct ✓ |
+
+`PXXDBG=a.ir:f` confirms the crashing and working variants are structurally
+IDENTICAL apart from the extra `store_sym`, so the IR is right and the defect is
+in what the prologue zero-initialises for this frame shape.
+
+Next step: `-dPXX_HEAP_DEBUG` makes freed bytes `$DD` rather than a recycled
+neighbour's, which should show whether the handle is stale-freed or never
+written; then compare the two prologues under `-g` in gdb.
 
 ## The shape is very narrow — and every neighbour works
 
