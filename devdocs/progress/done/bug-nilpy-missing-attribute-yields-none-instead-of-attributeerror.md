@@ -113,3 +113,6 @@ working path). Gate: make test-nilpy green, self-host fixedpoint, testmgr
 --tier quick.
 
 Ticket closed.
+
+## Log
+- 2026-07-31 — resolved, commit 096035190.
