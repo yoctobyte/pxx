@@ -114,10 +114,57 @@ Confirmed by the reverse matrix:
 and by the fact that a function PARAMETER reused as a loop variable is fine —
 its slot is already a variant.
 
-## Fix
+## The exact line, and TWO DEAD ENDS — do not retry either blind
 
-Type a string-iteration loop variable the way a list-iteration one is typed: a
-variant, letting the runtime tag carry the character. That removes the scalar
+`pyparser.inc`, `PyParseForIn`:
+
+```pascal
+  symIdx := PyProgSym(name);
+  if symIdx < 0 then
+  begin
+    if enumMode then symIdx := AllocVar(name, tyInteger)
+    else if isStr then symIdx := AllocVar(name, tyAnsiString)
+    else symIdx := AllocVar(name, tyVariant);
+  end;
+```
+
+The loop DOES pick the right type — but only for a NEW name. An existing name
+keeps whatever slot it already had, and the loop stores string elements or
+variant slots into it. That is the whole bug, in one `if`.
+
+The obvious repair — re-type the existing symbol — was tried twice and reverted
+both times, because a slot cannot be re-typed after it already holds a value of
+the old type:
+
+1. **Widen the existing slot to `tyVariant`.** Fixes every CONTAINER case
+   (`n = 0` then `for n in ["a","b"]` starts working), but breaks string
+   iteration: the desugar reads the loop variable's own slot type when storing
+   each character, and a variant slot desynchronises the index/length
+   bookkeeping — the loop yielded one element and then raised
+   `IndexError: string index out of range`.
+2. **Re-type to `tyAnsiString` for a string loop** (the kind a fresh name would
+   get). Fixes the char-bound case, but an int-bound or float-bound name then
+   SEGFAULTS: the earlier `c = 5` already wrote an 8-byte integer into that
+   slot, and the string machinery now treats those bytes as a managed string
+   handle and releases it.
+
+Both failures are the same lesson: the earlier assignments have ALREADY been
+emitted against the old type, so changing the symbol's type afterwards
+corrupts what is in the slot. Retroactive re-typing is not available here.
+
+## Fix — what it actually needs
+
+Give the loop its own hidden slot of the correct type and ASSIGN the user's
+name from it each iteration, so the user's name is rebound rather than
+reinterpreted. The desugar already allocates hidden locals right above this
+(`__py_c`, `__py_n`, `__py_i`), so the machinery is there; the loop variable is
+the one that was left sharing the user's slot.
+
+That also settles the reverse direction (`for c in "ab"` then `c = 5`, which
+segfaults today) for free, since the user's name would carry a type that the
+later assignment can widen normally.
+
+Longer term this is the same `tyChar` overreach as That removes the scalar
 slot the conflict needs, in both directions, and matches Python — where
 iterating a str yields str objects of length 1, not a distinct character type.
 
