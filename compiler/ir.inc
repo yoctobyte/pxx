@@ -535,6 +535,33 @@ begin
   end;
 end;
 
+{ A discarded MANAGED STRING result is an owned handle nobody stores, so nothing
+  ever releases it: `flabel(7)` as a statement leaked ~32 bytes per call, for
+  plain defs and methods alike (bug-nilpy-discarded-string-result-leaks).
+
+  Bind it to a hidden temp belonging to THIS SITE and return the STORE. The
+  managed store releases the slot's previous value before taking the new one, so
+  a loop through this site keeps at most one handle alive and the scope-exit
+  release frees the last — no new IR op (which every backend would then have to
+  implement) and no ownership transfer to invent.
+
+  Returning the store, rather than emitting it and keeping the call as the
+  statement, is what keeps the call from being emitted TWICE: the store is
+  itself a statement root and drags its operand tree in with it. Callers pass
+  the result straight on to IRMarkStatementNode, which ignores a store. }
+function IRDropManagedStrResult(irNode: Integer): Integer;
+var tmp: Integer;
+begin
+  IRDropManagedStrResult := irNode;
+  if (irNode < 0) or (irNode >= IRCount) then Exit;
+  if not PyProgramMode then Exit;
+  if IntToTypeKind(IRTk[irNode]) <> tyAnsiString then Exit;
+  if not (((IRKind[irNode] = IR_CALL) and (IRA[irNode] >= 0)) or
+          (IRKind[irNode] = IR_VIRTUAL_CALL) or (IRKind[irNode] = IR_CALL_IND)) then Exit;
+  tmp := AllocVar('', tyAnsiString);
+  IRDropManagedStrResult := IRAppend(IR_STORE_SYM, tmp, irNode, -1, 0, Ord(tyAnsiString));
+end;
+
 procedure IRDiscardValue(irNode: Integer);
 { A value computed at STATEMENT level and thrown away -- but which must still be
   EVALUATED, because the expression may contain calls.
@@ -8759,13 +8786,13 @@ begin
       begin
         if ASTKind[seq] = AN_SEQ then
         begin
-          item := IRLowerAST(ASTLeft[seq]);
+          item := IRDropManagedStrResult(IRLowerAST(ASTLeft[seq]));
           IRDiscardValue(item);
           seq := ASTRight[seq];
         end
         else
         begin
-          item := IRLowerAST(seq);
+          item := IRDropManagedStrResult(IRLowerAST(seq));
           IRDiscardValue(item);
           seq := -1;
         end;
@@ -9034,9 +9061,9 @@ begin
     end;
     AN_PAIR, AN_SEQ:
     begin
-      left := IRLowerAST(ASTLeft[node]);
+      left := IRDropManagedStrResult(IRLowerAST(ASTLeft[node]));
       IRMarkStatementNode(left);
-      right := IRLowerAST(ASTRight[node]);
+      right := IRDropManagedStrResult(IRLowerAST(ASTRight[node]));
       IRMarkStatementNode(right);
       Result := IRAppend(IR_BLOCK, left, right, -1, 0, 0);
     end;

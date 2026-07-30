@@ -1,0 +1,44 @@
+# A call whose managed-string result is DISCARDED must be released, and must
+# still run EXACTLY ONCE — the fix binds the result to a hidden temp, and a
+# store is itself a statement root, so a careless version would emit the call
+# twice. bug-nilpy-discarded-string-result-leaks
+
+calls = []
+
+def side(v: int) -> str:
+    calls.append(v)
+    return "s" + str(v)
+
+
+class C:
+    def __init__(self):
+        self.n = 0
+
+    def m(self, v: int) -> str:
+        self.n = self.n + 1
+        return "m" + str(v)
+
+
+c = C()
+
+i = 0
+while i < 5:
+    side(i)          # discarded
+    c.m(i)           # discarded, method
+    i = i + 1
+
+print(len(calls), calls)
+print(c.n)
+
+# the same calls consumed, not discarded, still answer correctly
+kept = side(99)
+km = c.m(99)
+print(kept, km, len(calls), c.n)
+
+# discarded in a branch and in a nested block
+j = 0
+while j < 3:
+    if j > 0:
+        side(100 + j)
+    j = j + 1
+print(len(calls), calls[6], calls[7])
