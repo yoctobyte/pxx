@@ -95,3 +95,6 @@ identically.
 `make test-nilpy` + self-host byte-identical, plus RSS-slope pairs for a
 discarded string result from a def, from a method, and a discarded object
 result — all flat.
+
+## Log
+- 2026-07-30 — resolved, commit c67dfd9c0.

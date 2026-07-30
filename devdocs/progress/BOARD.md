@@ -33,7 +33,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (189)
+## backlog (188)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -43,7 +43,6 @@ _none_
 | bug-lib-tkinter-trailing-underscore-params-block-kwargs | B | 40 | bug | tkinter facade parameters named with a trailing underscore cannot be passed by name | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
-| bug-nilpy-discarded-string-result-leaks | N | 50 | bug | A call whose managed-string result is DISCARDED leaks it | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
 | bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
@@ -289,7 +288,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1054)
+## done (1055)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -640,6 +639,7 @@ _none_
 | bug-nilpy-dict-equality-compares-identity | N | 70 | bug | `{"k": 1} == {"k": 1}` is False — dict equality compares identity, not value | — |
 | bug-nilpy-dict-insert-lookup-linear-not-hashed | N | 45 | bug | NilPy: dict insert/lookup is O(N), not O(1) — quadratic build, drives uforth O(N²) | — |
 | bug-nilpy-dict-views-and-result-alias | N | 75 | bug | nilpy: d.values()/d.keys() jumped to address 0, and a local named `result` aliased the function result | — |
+| bug-nilpy-discarded-string-result-leaks | N | 50 | bug | A call whose managed-string result is DISCARDED leaks it | — |
 | bug-nilpy-eq-dunder-ignored | N | 70 | bug | `__eq__` is ignored — `==` on user objects compares identity | — |
 | bug-nilpy-float-times-string-hangs | N | 65 | bug | `2.5 * "ab"` hangs forever | — |
 | bug-nilpy-function-level-import-drops-body | N | 70 | bug | An import inside a function body — and the fix that silently emptied the body | — |
@@ -2834,7 +2834,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [N] feature-nilpy-fallback-import (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
-- [p 50] [N] bug-nilpy-discarded-string-result-leaks
 - [p 50] [N] bug-nilpy-in-over-objects-ignores-eq
 - [p 50] [N] bug-nilpy-keyword-arg-vs-overload-set
 - [p 50] [P] bug-pascal-duplicate-class-name-silently-shadows
