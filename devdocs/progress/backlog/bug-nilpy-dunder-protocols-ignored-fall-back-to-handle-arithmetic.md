@@ -87,3 +87,20 @@ recorded here so the OO surface is described in one place:
 (`class K: n = 0`), multiple inheritance, a class body that is just `pass`
 (`class MyErr(Exception): pass` — the standard custom-exception spelling),
 `try/else`, and the `repr` / `iter` builtins.
+
+## Also measured: a @dataclass gets no generated `__eq__`
+
+```python
+from dataclasses import dataclass
+@dataclass
+class P:
+    x: int
+print(P(1) == P(1))     # CPython: True     pxx: False
+```
+
+CPython's `@dataclass` generates `__eq__` comparing the fields; pxx compares by
+identity, so two structurally equal dataclasses are unequal. Same root as the
+`__eq__` row in the table above (a hand-written `__eq__` IS honoured — it is the
+GENERATED one that is missing), so it belongs with this ticket rather than on
+its own. Worth doing with `__eq__` since dataclasses are the shape most likely
+to be compared by value.
