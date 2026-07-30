@@ -647,6 +647,12 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_unpack26)" = "$$(printf '1 2\n2 1\np 2 3.5\n7 8\na 1\nb 2\nc 3\n6\na 1\nb 2\nc 3')"
 	./$(COMPILER) test/test_nilpy_comparison_chaining.npy /tmp/test_nilpy_comparison_chaining26
 	test "$$(/tmp/test_nilpy_comparison_chaining26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nTrue\nFalse\nTrue\ncall\nTrue')"
+	./$(COMPILER) test/test_pascal_forward_class_ok.pas /tmp/test_pascal_forward_class_ok26
+	test "$$(/tmp/test_pascal_forward_class_ok26)" = "7"
+	@# a SECOND class of the same name in one unit must be refused, naming it
+	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas /tmp/test_pascal_dup_class26 2>&1 \
+	  | grep -q 'duplicate class name TFoo' \
+	  || { echo 'test_pascal_duplicate_class_fail: FAIL - expected a duplicate-class-name error'; exit 1; }
 	./$(COMPILER) test/test_nilpy_method_on_fresh_construction.npy /tmp/test_nilpy_method_fresh_ctor26
 	test "$$(/tmp/test_nilpy_method_fresh_ctor26)" = "$$(printf '5\n7\na9\n6\n3 a3\n[1, 2]')"
 	./$(COMPILER) test/test_nilpy_discarded_string_result.npy /tmp/test_nilpy_discarded_string_result26

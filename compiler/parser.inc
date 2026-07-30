@@ -22251,7 +22251,34 @@ begin
           UClsForward[ci] := False;
         end
         else
+        begin
+          { A SECOND class of this name in the same unit. It is accepted today
+            and every USE of the name binds to the FIRST declaration, so the
+            diagnostics land far away: implementing collections.Counter as
+            `TPyCounter = class(TPyDict)` in pylib — where TPyCounter already
+            existed — reported its methods' own fields as undefined and its own
+            constructor as taking arguments it was not given. Each message was
+            true about the OTHER class, which is what made it a long detour in a
+            4000-line unit (bug-pascal-duplicate-class-name-silently-shadows).
+
+            Scoped to the DECLARING UNIT: the same name in two units is the
+            separate, deliberate arrangement ClassNameIsDeliberatelyShared
+            covers, and the real answer to that is
+            bug-pascal-uses-is-transitive. A FORWARD stub is not a duplicate and
+            is handled above. TObject and TGuid are pre-registered by the
+            compiler before any source is parsed, with whatever CurrentUnitIdx
+            holds at the time, so a program declaring its own — which
+            test_object_ref_array_identity.pas does, legitimately — must not
+            read as one. }
+          if (ci >= 0) and (UClsUnitIdx[ci] = CurrentUnitIdx) and
+             not UClsIsRecord[ci] and
+             not ClassNameIsDeliberatelyShared(LowerCase(tname)) and
+             not CaseEqual(tname, 'TObject') and not CaseEqual(tname, 'TGuid') then
+            Error('duplicate class name ' + tname
+                  + ' — one of that name is already declared in this unit, and'
+                  + ' every use of the name binds to the FIRST declaration');
           ci := AddUClass(tnOff, tnLen);
+        end;
         UClsSealed[ci] := clsSealed;
         UClsAbstractCls[ci] := clsAbstract;
         { `sealed` is a promise that the class has no descendants — so deriving from one

@@ -2492,7 +2492,15 @@ begin
   for i := PyScanLo to MainProgramTokCount - 2 do
     if (Tokens[i].Kind = tkClass) and (Tokens[i + 1].Kind = tkIdent) and
        (FindUClass(GetTokenStr(i + 1)) < 0) then
-      AddUClass(Tokens[i + 1].SOffset, Tokens[i + 1].SLen);
+      { Marked FORWARD, because that is what these rows are: a stub so a class
+        can be NAMED before its declaration is parsed, which the full parse then
+        fills. Left unmarked they are indistinguishable from a real declaration,
+        so the full parse looked like a SECOND class of the same name — which
+        is what a duplicate-name diagnostic has to be able to tell apart
+        (bug-pascal-duplicate-class-name-silently-shadows). The Pascal forward
+        stub `TFoo = class;` already carries this flag and the class-declaration
+        path already knows to reuse such a row rather than shadow it. }
+      UClsForward[AddUClass(Tokens[i + 1].SOffset, Tokens[i + 1].SLen)] := True;
 end;
 
 { (PyCollectLocals and PyCollectModuleLocals, the token-scanning local-typing
