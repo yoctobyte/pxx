@@ -682,7 +682,7 @@ test-nilpy: $(COMPILER)
 	@# ...and the same diagnostics are CATCHABLE — PyTypeError raises, it no
 	@# longer Halt(219)s (bug-nilpy-pytypeerror-halts-instead-of-raising)
 	./$(COMPILER) test/test_nilpy_typeerror_is_catchable.npy /tmp/test_nilpy_typeerror_catch26
-	test "$$(/tmp/test_nilpy_typeerror_catch26)" = "$$(printf 'caught repeat\ncaught len\ncaught int\ncaught fmt\ncaught sep\ncaught max\nas Exception\nafter')"
+	test "$$(/tmp/test_nilpy_typeerror_catch26)" = "$$(printf 'caught repeat\ncaught len\ncaught int\ncaught fmt\ncaught sep\ncaught max\ncaught call-None\nas Exception\nafter')"
 	@# mismatched operand types raise instead of doing pointer math; every line
 	@# of the expectation is CPython's own output for the same file
 	./$(COMPILER) test/test_nilpy_mixed_type_operands.npy /tmp/test_nilpy_mixed_type_operands26

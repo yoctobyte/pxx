@@ -33,6 +33,14 @@ try:
 except ValueError:
     print("caught max")
 
+# calling a None binding: the one raise of this family that lived in pyeval
+# rather than pylib, so it was catchable only as `except Exception:`
+nothing = None
+try:
+    nothing()
+except TypeError:
+    print("caught call-None")
+
 # TypeError is a subclass of Exception, so a bare handler still sees it
 try:
     print(len(3))

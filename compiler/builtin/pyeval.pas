@@ -3625,8 +3625,14 @@ procedure PyNotCallable(const cb: Variant);
   used as a callee. Python raises TypeError; the older pyvar_callee_addr path
   says the same thing, so the message stays recognisable. }
 begin
+  { TypeError, not a bare Exception: `except TypeError:` must see it. This was
+    the one raise site of the family left in pyeval when the pylib ones were
+    converted (bug-nilpy-pytypeerror-halts-instead-of-raising), so `n()` on a
+    None binding was catchable only as `except Exception:` while every other
+    NilPy TypeError matched by name. The class name is printed by the unhandled
+    handler, so the text stays identical without the literal prefix. }
   if PPyRec(@cb)^.Payload = 0 then
-    raise Exception.Create('TypeError: object is not callable — the name is '
+    raise TypeError.Create('object is not callable — the name is '
       + 'None (an import that did not resolve, or a value never assigned)');
 end;
 
