@@ -647,6 +647,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_unpack26)" = "$$(printf '1 2\n2 1\np 2 3.5\n7 8\na 1\nb 2\nc 3\n6\na 1\nb 2\nc 3')"
 	./$(COMPILER) test/test_nilpy_comparison_chaining.npy /tmp/test_nilpy_comparison_chaining26
 	test "$$(/tmp/test_nilpy_comparison_chaining26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nTrue\nFalse\nTrue\ncall\nTrue')"
+	./$(COMPILER) test/test_nilpy_is_identity.npy /tmp/test_nilpy_is_identity26
+	test "$$(/tmp/test_nilpy_is_identity26)" = "$$(printf 'False True True False\nTrue False\nFalse True True\nTrue\nFalse True\nTrue\nTrue False False True\nFalse True\ncopied same')"
 	./$(COMPILER) test/test_nilpy_callable_param_heap_callable.npy /tmp/test_nilpy_callable_param26
 	test "$$(/tmp/test_nilpy_callable_param26)" = "$$(printf '6\n7\n1005\n42\n-1\n42')"
 	./$(COMPILER) test/test_nilpy_return_ownership.npy /tmp/test_nilpy_return_ownership26

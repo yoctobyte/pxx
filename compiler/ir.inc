@@ -5553,7 +5553,7 @@ begin
         lists was a pointer compare and answered False for equal lists
         (bug-a-nilpy-container-equality-compares-identity). pylib's PyVarEq
         already compares strings by content, so the element rule is settled. }
-      if PyProgramMode and
+      if PyProgramMode and (ASTSLen[node] <> PY_BINOP_IDENTITY) and
          ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
          (IRNodePyListRec(ASTLeft[node]) >= 0) and
          (IRNodePyListRec(ASTLeft[node]) = IRNodePyListRec(ASTRight[node])) then
@@ -5575,7 +5575,7 @@ begin
         `if cfg == defaults:` never fired
         (bug-nilpy-dict-equality-compares-identity). pydict_eq ignores
         insertion order, which is what Python's rule requires. }
-      if PyProgramMode and
+      if PyProgramMode and (ASTSLen[node] <> PY_BINOP_IDENTITY) and
          ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
          (IRNodePyDictRec(ASTLeft[node]) >= 0) and
          (IRNodePyDictRec(ASTLeft[node]) = IRNodePyDictRec(ASTRight[node])) then
@@ -5599,7 +5599,7 @@ begin
         ordinary-Python idiom of caching a tuple against None failed to
         compile. A list never equals a non-list, which is the rule pylib's
         pylist_eq_v applies. }
-      if PyProgramMode and
+      if PyProgramMode and (ASTSLen[node] <> PY_BINOP_IDENTITY) and
          ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
          (((IRNodePyListRec(ASTLeft[node]) >= 0) and
            (IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant)) or

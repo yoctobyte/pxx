@@ -1,0 +1,43 @@
+# `is` is IDENTITY, always — it must not be swept into the by-CONTENTS rewrite
+# that `==` uses for lists and dicts.
+# bug-nilpy-is-on-two-lists-compares-contents
+
+class K:
+    def __init__(self, v: int):
+        self.v = v
+
+a = [1]
+c = [1]
+b = a
+print(a is c, a is not c, a is b, a is not b)
+print(a == c, a != c)
+
+d1 = {"x": 1}
+d2 = {"x": 1}
+d3 = d1
+print(d1 is d2, d1 is d3, d1 is not d2)
+print(d1 == d2)
+
+k1 = K(1)
+k2 = K(1)
+k3 = k1
+print(k1 is k2, k1 is k3)
+
+s1 = "ab"
+s2 = "ab"
+print(s1 == s2)
+
+n = None
+print(n is None, n is not None, a is None, a is not None)
+
+e1 = []
+e2 = []
+print(e1 is e2, e1 == e2)
+
+# the standard guard: only copy when they are different objects
+def maybe_copy(dst, src):
+    if dst is not src:
+        return "copied"
+    return "same"
+
+print(maybe_copy(a, c), maybe_copy(a, b))

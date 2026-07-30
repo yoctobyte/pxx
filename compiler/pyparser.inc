@@ -1349,6 +1349,13 @@ begin
       if neg then ASTIVal[node] := Ord(tkNeq) else ASTIVal[node] := Ord(tkEq);
       ASTLeft[node] := left; ASTRight[node] := right;
       ASTTk[node] := Ord(tyBoolean);
+      { `is` lowers to the same tkEq node `==` does, so the CONTENT comparisons
+        ir.inc added for `==` (pylist_eq / pydict_eq) swept it along: two
+        distinct lists with equal elements answered `a is c` -> True, inverting
+        the one thing `is` exists for. Mark the node as an IDENTITY compare so
+        those arms decline it and the pointer compare stands
+        (bug-nilpy-is-on-two-lists-compares-contents). }
+      ASTSLen[node] := PY_BINOP_IDENTITY;
       left := node;
     end
     else

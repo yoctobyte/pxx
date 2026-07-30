@@ -543,6 +543,11 @@ const
   { Variant tag (VType) values, stored in the first 8 bytes of a tyVariant slot.
     Payload (next 8 bytes) interpreted per tag. Closed scalar set; vtObject is a
     reserved seam for the future class-boxing tier (see lib/rtl/anybox.pas). }
+  { AN_BINOP marker in ASTSLen: this tkEq/tkNeq came from Python's `is`, so it
+    is an IDENTITY comparison and must NOT be rewritten into a by-contents
+    compare (bug-nilpy-is-on-two-lists-compares-contents). }
+  PY_BINOP_IDENTITY = 1;
+
   VT_EMPTY   = 0;   { unassigned slot; payload ignored }
   VT_INT     = 1;   { payload = sign-extended Int64 }
   VT_INT64   = 2;   { payload = Int64 }
