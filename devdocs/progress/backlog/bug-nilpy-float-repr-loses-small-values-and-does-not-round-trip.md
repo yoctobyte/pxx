@@ -86,3 +86,13 @@ number of decimals (`%.15f`, `{:.3f}`, `FloatToStrF(v, n)`) — those paths are
 a contract, and they currently test correct. Deprioritised accordingly; the
 value-LOSS half (a nonzero number printing as `0`) is the part that was worth
 fixing and is done for the NilPy renderer.
+
+## Also in this family (found later, same low priority)
+
+`print(1e308 * 10)` prints `Inf`; CPython prints `inf` (lower case). One word,
+but NOT a one-word fix: the spelling comes from `FloatToStr` in
+`compiler/builtin/builtin.pas`, which the PASCAL frontend also uses, and there
+`Inf` is the FPC-correct spelling. So it needs a NilPy-specific rendering path
+rather than an edit to the shared routine — which is more machinery than the
+divergence is worth on its own. Fold it into whichever change gives NilPy its
+own float repr (step 3 above).
