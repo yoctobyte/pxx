@@ -3744,13 +3744,35 @@ begin
 end;
 
 function pystr_repeat(const s: AnsiString; n: Int64): AnsiString;
+{ Sized ONCE and filled, not accumulated. `Result := Result + s` in the loop
+  reallocated and re-copied everything built so far on every iteration, so the
+  total work was 1+2+...+n characters -- quadratic. `"x" * 80000` took 19
+  seconds and `"x" * 100000` did not finish, while the very same string built by
+  an explicit `s = s + "x"` loop in NilPy completed fine: the idiom that LOOKS
+  like the fast one was the slow one (bug-nilpy-str-repeat-is-quadratic).
+  Found by a scaling curve -- every small case was fine and the failure read as
+  a hang, not a wrong answer. }
 var
-  i: Int64;
+  i, k, m, total: Int64;
+  j: Int64;
 begin
   Result := '';
-  if n <= 0 then Exit;
+  m := Length(s);
+  if (n <= 0) or (m = 0) then Exit;
+  { Python raises rather than trying to build something that cannot exist; a
+    silent wrap here would ask SetLength for a negative or tiny buffer and then
+    write past it. }
+  if n > (High(Int64) div m) then
+    raise OverflowError.Create('repeated string is too long');
+  total := m * n;
+  SetLength(Result, total);
+  k := 1;
   for i := 1 to n do
-    Result := Result + s;
+    for j := 1 to m do
+    begin
+      Result[k] := s[j];
+      k := k + 1;
+    end;
 end;
 
 function pystr_to_int(const s: AnsiString): Int64;

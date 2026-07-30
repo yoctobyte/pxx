@@ -1,0 +1,22 @@
+# `"x" * n` accumulated with `Result := Result + s`, so it re-copied everything
+# built so far on every iteration: 80k characters took 19 SECONDS and 100k never
+# finished. Content was always right, which is why only a scaling curve found it.
+# bug-nilpy-str-repeat-is-quadratic
+#
+# The large sizes below are the actual regression guard -- under the old
+# quadratic routine this file would not complete. Keep them large.
+
+# content first: every shape must be byte-identical to CPython's
+print("x" * 5, "ab" * 3, "abc" * 2)
+print(3 * "ab")
+print("[" + "ab" * 0 + "]", "[" + "ab" * -1 + "]", "[" + "" * 5 + "]")
+print(len("x" * 1), len("abcd" * 250))
+
+# ...then the sizes that were intolerable
+print(len("x" * 80000))
+print(len("ab" * 100000))
+print(len("x" * 1000000))
+
+# a repeated multi-character string must still be correct at size, not just long
+big = "abc" * 100000
+print(len(big), big[0], big[1], big[2], big[299999])
