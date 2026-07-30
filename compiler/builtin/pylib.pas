@@ -116,6 +116,12 @@ type
       reproduces the file byte for byte — which is what CPython's read()
       returns. Lives here because that list IS the file object in this model. }
     function read: AnsiString;
+    { close()/readlines() on a read-mode handle: the read-slurp model already
+      loaded the whole file into this list, so close is a no-op and readlines
+      is just the list itself (bug-nilpy-file-write-drops-data-and-read-to-
+      print-dumps-rtti-memory). }
+    procedure close;
+    function readlines: TPyList;
     property Items[i: Integer]: Variant read at write put; default;
   end;
 
@@ -2137,6 +2143,16 @@ end;
 function TPyList.read: AnsiString;
 begin
   read := pyfile_read(Self);
+end;
+
+procedure TPyList.close;
+begin
+  { no-op: nothing held open under the read-slurp model }
+end;
+
+function TPyList.readlines: TPyList;
+begin
+  readlines := Self;
 end;
 
 { Python `in` over a list/set-as-list. Same-tag equality only: ints/bools/

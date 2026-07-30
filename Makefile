@@ -712,6 +712,12 @@ test-nilpy: $(COMPILER)
 	@# and wrote ~18 KB of adjacent process memory into the file instead
 	./$(COMPILER) test/test_nilpy_file_write_text.npy /tmp/test_nilpy_file_write26
 	test "$$(/tmp/test_nilpy_file_write26)" = "$$(printf 'hello\n6\n5 a\nbb\n[]\n5000\nfirst\nsecond')"
+	# close()/readlines() on a read-mode handle (still a TPyList under the read-slurp model)
+	./$(COMPILER) test/test_nilpy_file_close_readlines.npy /tmp/test_nilpy_file_closerl26
+	test "$$(/tmp/test_nilpy_file_closerl26)" = "$$(printf '3\none\ntwo\nthree')"
+	# a name bound by `with open(...) as f:` reused later for a plain `f = open(...)`
+	./$(COMPILER) test/test_nilpy_with_name_reuse.npy /tmp/test_nilpy_with_name_reuse26
+	test "$$(/tmp/test_nilpy_with_name_reuse26)" = "$$(printf '2\n[one\ntwo\n]')"
 	@# `"x" * n` must be LINEAR -- the large sizes here are the regression guard,
 	@# the old quadratic routine could not finish this file
 	./$(COMPILER) test/test_nilpy_str_repeat_linear.npy /tmp/test_nilpy_str_repeat26

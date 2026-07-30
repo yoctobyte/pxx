@@ -1,0 +1,18 @@
+# close()/readlines() on a read-mode handle reported "TPyList has no method
+# close/readlines" because the read-slurp model yields a TPyList of lines, not
+# a TPyFile. Remaining half of
+# bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory.
+# Expectations are CPython's own output.
+
+p = "/tmp/pxx_test_close_readlines.txt"
+with open(p, "w") as f:
+    f.write("one\n")
+    f.write("two\n")
+    f.write("three\n")
+
+rf = open(p, "r")
+lines = rf.readlines()
+print(len(lines))
+for line in lines:
+    print(line.strip())
+rf.close()

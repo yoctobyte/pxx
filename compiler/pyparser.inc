@@ -2460,6 +2460,39 @@ begin
           Inc(i);
           Continue;
         end;
+        { Subscript form `name[...]` on a list/dict/unconstrained variant: the
+          element could be anything (a str, a float, a bool, another
+          container), so the result is a VARIANT — not the tyInteger the
+          fallthrough token walk below produced by mistakenly widening on the
+          INDEX expression's own type (an int literal index made every
+          `xs[i]` infer Integer, a string key happened to make `d[k]` infer
+          string by the same accident). Skip the bracket group entirely so
+          neither the index nor the element tokens reach that walk
+          (bug-nilpy-return-type-inference-mistypes-several-expression-shapes,
+          bug-nilpy-subscript-and-slice-of-a-variant-get-the-wrong-static-type).
+          String/AnsiString/Char receivers are handled by the char-yielding arm
+          right below instead. }
+        if ((tk = tyClass) or (tk = tyVariant) or (tk = tyUnknown)) and
+           (i + 1 < endIdx) and (Tokens[i + 1].Kind = tkLBrack) and
+           not PySliceBracketAt(i + 1, endIdx) then
+        begin
+          tk := tyVariant;
+          PyInferLastCi := -1;
+          i := i + 1; depth := 0;
+          while i < endIdx do
+          begin
+            if Tokens[i].Kind = tkLBrack then Inc(depth)
+            else if Tokens[i].Kind = tkRBrack then
+            begin
+              Dec(depth);
+              if depth = 0 then Break;
+            end;
+            Inc(i);
+          end;
+          Result := PyWiden(Result, tk);
+          Inc(i);
+          Continue;
+        end;
         { Subscript form `name[...]` on a string yields a char; skip the
           bracket group so the index expression's int does not widen the
           result to variant. }
@@ -11021,12 +11054,21 @@ begin
       through the DYNAMIC receiver path instead of a direct call. Correctness now
       rests elsewhere (the wild dereference this was first written to chase was
       really [[bug-nativeuint-cast-widens-load]]); what it buys is the direct
-      call and the class identity a later field access needs. }
+      call and the class identity a later field access needs.
+
+      NOT guarded on RecName already being REC_NONE (the original form of this
+      rule): a name REBOUND to a call returning a DIFFERENT class kept its
+      stale identity from an earlier binding — `with open(p,"w") as f: ...`
+      then a later plain `f = open(p, "r")` left f's RecName at TPyFile while
+      the runtime value was now a TPyList, so `f.readlines()` / `len(f)`
+      dispatched against the wrong class and read the wrong memory (the same
+      RTTI-blob disclosure shape as
+      bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory, via
+      a different trigger). A genuine class-returning call always wins. }
     else if (ASTKind[lhsNode] = AN_IDENT) and
             (ASTKind[rhsNode] = AN_CALL) and (Integer(ASTIVal[rhsNode]) >= 0) and
             (Integer(ASTIVal[rhsNode]) < ProcCount) and
             (IntToTypeKind(ASTTk[rhsNode]) = tyClass) and
-            (Syms[ASTIVal[lhsNode]].RecName = REC_NONE) and
             (ProcRetRecId[Integer(ASTIVal[rhsNode])] >= REC_UCLASS_BASE) then
       Syms[ASTIVal[lhsNode]].RecName := ProcRetRecId[Integer(ASTIVal[rhsNode])];
     { Storing a VARIANT (dict/list element, dynamically typed) into a tyClass slot
@@ -11410,7 +11452,18 @@ begin
           PyLocals[si].TypeKind := w;
           changed := True;
         end;
-        if (PyLocals[si].RecCi < 0) and (Syms[i].RecName >= REC_UCLASS_BASE) then
+        { NOT guarded on RecCi already being SET (the original form of this
+          rule): a name reassigned across ROUNDS to a call returning a
+          DIFFERENT class kept its FIRST round's class identity forever, so
+          `with open(p,"w") as f: ...` then a later plain `f = open(p, "r")`
+          left f dispatching as a TPyFile while it now held a TPyList --
+          .readlines() / len() read the wrong class's layout and printed the
+          RTTI blob (the same disclosure shape as
+          bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory,
+          via a different trigger than that ticket's write() overload). Take
+          the latest resolved class whenever it differs. }
+        if (Syms[i].RecName >= REC_UCLASS_BASE) and
+           (PyLocals[si].RecCi <> Syms[i].RecName - REC_UCLASS_BASE) then
         begin
           PyLocals[si].RecCi := Syms[i].RecName - REC_UCLASS_BASE;
           changed := True;
@@ -11608,7 +11661,18 @@ begin
           PyLocals[si].TypeKind := w;
           changed := True;
         end;
-        if (PyLocals[si].RecCi < 0) and (Syms[i].RecName >= REC_UCLASS_BASE) then
+        { NOT guarded on RecCi already being SET (the original form of this
+          rule): a name reassigned across ROUNDS to a call returning a
+          DIFFERENT class kept its FIRST round's class identity forever, so
+          `with open(p,"w") as f: ...` then a later plain `f = open(p, "r")`
+          left f dispatching as a TPyFile while it now held a TPyList --
+          .readlines() / len() read the wrong class's layout and printed the
+          RTTI blob (the same disclosure shape as
+          bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory,
+          via a different trigger than that ticket's write() overload). Take
+          the latest resolved class whenever it differs. }
+        if (Syms[i].RecName >= REC_UCLASS_BASE) and
+           (PyLocals[si].RecCi <> Syms[i].RecName - REC_UCLASS_BASE) then
         begin
           PyLocals[si].RecCi := Syms[i].RecName - REC_UCLASS_BASE;
           changed := True;
@@ -11628,7 +11692,6 @@ begin
   PyModuleLocalCount := PyLocalCount;
   for i := 0 to PyLocalCount - 1 do
     PyModuleLocals[i] := PyLocals[i];
-
 end;
 
 { Parse one `def` header into the PyHdr* globals, leaving the cursor just
@@ -12458,7 +12521,7 @@ end;
 function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
 var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
     tupDepth: Integer;
-    t2, cur: TTypeKind;
+    t2, cur, chainCur: TTypeKind;
     seenAny, tupComma: Boolean;
 begin
   Result := tyInteger;
@@ -12603,6 +12666,7 @@ begin
           TypeIsPromoInt(cur)) and
          (e = j + 2) and (Tokens[j + 1].Kind = tkIdent) then
       begin
+        chainCur := tyUnknown;
         for k := bodyScanStart to j - 1 do
           if (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount) and
              (Tokens[k + 1].Kind = tkAssign) and
@@ -12612,9 +12676,23 @@ begin
             while (e2 < TokCount) and not (Tokens[e2].Kind in [tkNewline, tkDedent, tkEOF]) do
               Inc(e2);
             t2 := PyInferExprType(k + 2, e2);
+            { Self-referential accumulator (`acc = acc + chr(97)`): this raw
+              re-scan has no PyLocals here, so the leading `acc` on the RHS
+              resolves to tyUnknown and contributes nothing, and the type comes
+              from the REST of the expression alone — `acc + chr(97)` inferred
+              tyChar from chr() and threw away that acc already held a string
+              built up by an earlier assignment, truncating the returned value
+              to one byte
+              (bug-nilpy-return-type-inference-mistypes-several-expression-shapes).
+              Fold in the type accumulated across the chain so far instead. }
+            if (chainCur <> tyUnknown) and (k + 2 < e2) and
+               (Tokens[k + 2].Kind = tkIdent) and
+               CaseEqual(GetTokenStr(k + 2), GetTokenStr(j + 1)) then
+              t2 := PyWiden(chainCur, t2);
             if (t2 <> tyUnknown) and (t2 <> tyInteger) and (t2 <> tyVariant) then
             begin
               cur := t2;
+              chainCur := t2;
               rec2 := PyInferLastCi;
             end;
           end;
@@ -14658,7 +14736,9 @@ begin
 end;
 
 procedure PyAllocModuleGlobals;
-var i, j, k, depth, idx, ci: Integer; nm: AnsiString; usedEarlier: Boolean;
+const PY_ALLOCMOD_MAXDEPTH = 255;
+var i, j, k, depth, idx, ci: Integer; nm: AnsiString; usedEarlier, pendingDef: Boolean;
+    inDefStack: array[0..PY_ALLOCMOD_MAXDEPTH] of Boolean;
 begin
   { ONLY the names a routine ABOVE them reads — the shape that fails outright:
     `def refresh(): bpm_label.set(...)` at the top of the file,
@@ -14683,17 +14763,43 @@ begin
       nm := GetTokenStr(i);
       if (PyProgSym(nm) < 0) and not PyIsModuleUnpackTarget(nm) then
       begin
-        { the read has to be INSIDE a routine (depth > 0): a module-level use
-          before the assignment is a genuine "used before defined", and
-          pre-creating the symbol would hide it }
+        { the read has to be INSIDE A DEF (a routine), not merely inside any
+          indented block: a module-level use before the assignment is a
+          genuine "used before defined", and pre-creating the symbol would
+          hide it — but plain generic indent-depth tracking (k > 0) also
+          counts an `if`/`while`/`for`/`with` suite, which indents exactly
+          like a def body does. `with open(p, "w") as f: f.write(...)`
+          followed later at module level by `f = open(p, "r")` then read
+          the WITH block's own `f` reference as "used earlier", pre-created
+          `f` as a bare tyVariant BEFORE the with-statement's real parse ever
+          ran, and PyParseWith stored the raw TPyFile pointer into that
+          variant slot with no boxing — write() dispatched against garbage
+          and silently wrote nothing
+          (bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory,
+          a second trigger for the same disclosure shape). Track which
+          indent levels actually descend from a `def` header, not just any
+          block. }
         usedEarlier := False;
         k := 0;
+        pendingDef := False;
+        inDefStack[0] := False;
         for j := PyScanLo to i - 1 do
         begin
-          if Tokens[j].Kind = tkIndent then Inc(k)
+          if Tokens[j].Kind = tkFunction then pendingDef := True
+          else if Tokens[j].Kind = tkIndent then
+          begin
+            if k < PY_ALLOCMOD_MAXDEPTH then
+            begin
+              if pendingDef then inDefStack[k + 1] := True
+              else if k > 0 then inDefStack[k + 1] := inDefStack[k]
+              else inDefStack[k + 1] := False;
+            end;
+            Inc(k);
+            pendingDef := False;
+          end
           else if Tokens[j].Kind = tkDedent then Dec(k)
-          else if (k > 0) and (Tokens[j].Kind = tkIdent) and
-                  (GetTokenStr(j) = nm) then
+          else if (k > 0) and (k <= PY_ALLOCMOD_MAXDEPTH) and inDefStack[k] and
+                  (Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = nm) then
           begin
             usedEarlier := True;
             Break;

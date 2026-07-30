@@ -1,0 +1,19 @@
+# a name bound by `with open(...) as f:` reused later for a plain
+# `f = open(..., "r")` at module level: PyAllocModuleGlobals's "used before
+# assignment" scan counted the WITH block's own `f.write(...)` reference as
+# "used inside a routine" (it only tracked generic indent depth, not whether
+# the indent was a def body), pre-creating f as a bare tyVariant before the
+# with-statement ever ran for real. PyParseWith then stored the raw class
+# pointer into that unboxed variant slot: the write silently did nothing, and
+# reading the file back either printed 0 or dumped the RTTI blob.
+# bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory
+# Expectations are CPython's own output.
+
+p = "/tmp/pxx_test_with_name_reuse.txt"
+with open(p, "w") as f:
+    f.write("one\n")
+    f.write("two\n")
+f = open(p, "r")
+print(len(f.readlines()))
+f = open(p, "r")
+print("[" + f.read() + "]")
