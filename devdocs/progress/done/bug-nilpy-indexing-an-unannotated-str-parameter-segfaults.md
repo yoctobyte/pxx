@@ -77,3 +77,6 @@ session's work.
 above with CPython's own output, and the palindrome function end to end. Keep
 the list, dict, annotated and top-level rows as guards that the working paths
 are untouched.
+
+## Log
+- 2026-07-30 — resolved, commit ab2a9ecd7.

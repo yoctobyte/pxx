@@ -101,3 +101,6 @@ The key is stored and looked up correctly (len is 1, the value reads back), so
 this is rendering only — `pyrepr_of` has a `Char` overload that returns the bare
 character where the `AnsiString` one adds quotes. Same tyChar-is-not-a-str
 family as the ordering bug above, and cheap to fix alongside it.
+
+## Log
+- 2026-07-30 — resolved, commit 54f7ae5b7.
