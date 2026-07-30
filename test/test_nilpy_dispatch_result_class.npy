@@ -1,0 +1,41 @@
+# A method dispatched on a dynamically-typed receiver, where the candidates
+# return DIFFERENT CLASSES. The result must stay dynamic: typed from the static
+# pick, the next method call on it compiled as a static call into the wrong
+# class and jumped through that class's layout — songformatter's preview died
+# on `tx.setFont(...)` exactly this way, where `beginText` yields the reportlab
+# shim's text object or the Tk backend's depending on which canvas is in hand.
+
+class PdfText:
+    def __init__(self):
+        self.kind = "pdf"
+
+    def label(self):
+        return "pdf-text"
+
+
+class TkText:
+    def __init__(self):
+        self.kind = "tk"
+        self.extra = 1          # a different layout
+
+    def label(self):
+        return "tk-text"
+
+
+class PdfCanvas:
+    def begin(self):
+        return PdfText()
+
+
+class TkCanvas:
+    def begin(self):
+        return TkText()
+
+
+def draw(canvas):
+    t = canvas.begin()          # the receiver's class is only known at run time
+    return t.label() + "/" + t.kind
+
+
+print(draw(PdfCanvas()))
+print(draw(TkCanvas()))

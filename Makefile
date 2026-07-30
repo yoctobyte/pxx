@@ -356,6 +356,14 @@ test-nilpy: $(COMPILER)
 	# keyword argument that is not a module assignment
 	./$(COMPILER) test/test_nilpy_class_attrs_with_ctor.npy /tmp/test_nilpy_clsattr26
 	test "$$(/tmp/test_nilpy_clsattr26)" = "$$(python3 test/test_nilpy_class_attrs_with_ctor.npy)"
+	# a dispatched method whose candidates return DIFFERENT classes: the result
+	# stays dynamic, so the next call on it dispatches too
+	./$(COMPILER) test/test_nilpy_dispatch_result_class.npy /tmp/test_nilpy_dispres26
+	test "$$(/tmp/test_nilpy_dispres26)" = "$$(python3 test/test_nilpy_dispatch_result_class.npy)"
+	# a comprehension whose target is also its source, float defaults, round()
+	# of a dynamic expression, and a nonlocal write reaching the enclosing frame
+	./$(COMPILER) test/test_nilpy_selfassigned_comprehension.npy /tmp/test_nilpy_selfcomp26
+	test "$$(/tmp/test_nilpy_selfcomp26)" = "$$(python3 test/test_nilpy_selfassigned_comprehension.npy)"
 	# a Pascal unit's .Free must finalize managed fields ONCE, not twice
 	./$(COMPILER) test/test_nilpy_json_reparse_heap.npy /tmp/test_nilpy_jsonrep26
 	test "$$(/tmp/test_nilpy_jsonrep26)" = "$$(python3 test/test_nilpy_json_reparse_heap.npy)"
@@ -3566,6 +3574,14 @@ test-core: $(COMPILER)
 	# keyword argument that is not a module assignment
 	./$(COMPILER) test/test_nilpy_class_attrs_with_ctor.npy /tmp/test_nilpy_clsattr26
 	test "$$(/tmp/test_nilpy_clsattr26)" = "$$(python3 test/test_nilpy_class_attrs_with_ctor.npy)"
+	# a dispatched method whose candidates return DIFFERENT classes: the result
+	# stays dynamic, so the next call on it dispatches too
+	./$(COMPILER) test/test_nilpy_dispatch_result_class.npy /tmp/test_nilpy_dispres26
+	test "$$(/tmp/test_nilpy_dispres26)" = "$$(python3 test/test_nilpy_dispatch_result_class.npy)"
+	# a comprehension whose target is also its source, float defaults, round()
+	# of a dynamic expression, and a nonlocal write reaching the enclosing frame
+	./$(COMPILER) test/test_nilpy_selfassigned_comprehension.npy /tmp/test_nilpy_selfcomp26
+	test "$$(/tmp/test_nilpy_selfcomp26)" = "$$(python3 test/test_nilpy_selfassigned_comprehension.npy)"
 	# a Pascal unit's .Free must finalize managed fields ONCE, not twice
 	./$(COMPILER) test/test_nilpy_json_reparse_heap.npy /tmp/test_nilpy_jsonrep26
 	test "$$(/tmp/test_nilpy_jsonrep26)" = "$$(python3 test/test_nilpy_json_reparse_heap.npy)"

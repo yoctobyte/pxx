@@ -1,0 +1,56 @@
+# A comprehension whose TARGET is also its SOURCE, and the float/round/nonlocal
+# shapes that ride along with it. Every one of these was a silent wrong answer
+# (an empty list, a stack address, an unpropagated write), never a diagnostic.
+
+def normalise(text):
+    lines = text.split('\n')
+    lines = [line.strip() for line in lines]
+    lines = [line if line else '' for line in lines]
+    return '\n'.join(lines)
+
+
+def rgb_to_hex(r, g, b):
+    r = max(0, min(255, int(round(r * 255))))
+    g = max(0, min(255, int(round(g * 255))))
+    b = max(0, min(255, int(round(b * 255))))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+class Zoomer:
+    def __init__(self, fit, page, max_zoom=2.0):
+        self.zoom = min(max_zoom, fit / page)
+
+
+def counted():
+    n = 0
+    label = None
+
+    def bump(t):
+        nonlocal n, label
+        n = n + 2
+        label = t
+
+    bump("done")
+    return n, label
+
+
+src = "  a  \n\n b\n"
+print(normalise(src).split('\n'))
+print(len(src))
+
+xs = ["a ", " b", "c"]
+xs = [x.strip() for x in xs]
+print(xs)
+
+nums = [1, 2, 3]
+nums = [v * 2 for v in nums]
+print(nums)
+
+print(rgb_to_hex(0.2, 0.5, 0.9), rgb_to_hex(0, 0, 0), rgb_to_hex(1, 1, 1))
+
+r = 0.5
+print(round(r * 255), round(r), round(2.5), int(round(r * 255)))
+
+print(round(Zoomer(797.0, 595.0).zoom, 4), Zoomer(797.0, 595.0, 1.1).zoom)
+
+print(counted())

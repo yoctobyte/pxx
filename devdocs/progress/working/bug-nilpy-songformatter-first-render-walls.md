@@ -241,3 +241,24 @@ Also found and filed while narrowing this:
 [[bug-nilpy-nonlocal-write-never-reaches-the-enclosing-scope]] — `nonlocal y; y
 = pagetop` updates the callee's copy only, so the whole page layout would be
 misplaced even once the crash is fixed.
+
+### 2026-07-30: the PREVIEW renders
+
+The live preview pane draws the page — title, artist, chord lines, lyrics,
+page/margin rules — verified by screenshot under Xvfb. Four bugs stood between
+"the app runs" and "the page appears", each a silent wrong answer:
+
+| wall | cause | fix |
+| --- | --- | --- |
+| the whole page drawn into a 128x76 corner | a FLOAT default (`max_zoom=2.0`) had no case in `PyParamDefaultAt`, so the parameter arrived as None; `min(None, 1.0046)` collapsed to 0 and the 0.05 zoom floor took over | `ProcParamDefaultIsFloat` + the AN_FLOAT_LIT fill on all three default paths (plain call, ctor keyword hole, ctor trailing hole) |
+| every text item drawn in WHITE | `int(round(r * 255))` — `round()` of an expression that is a VARIANT at run time converted the 16-byte slot's ADDRESS, so `_rgb_to_hex` always returned `#ffffff` | the 203-206 float intrinsics unbox a `tyVariant` operand first (ir_codegen) |
+| `create_text(font=(family, size))` SEGFAULTED | the shim's `font` parameter was an AnsiString, so the tuple's object word was read as a string pointer | `font: Variant` + the existing `TkiOptFont` |
+| only the header drawn — every song line missing | `lines = [l.strip() for l in lines]` produced `[]`: the comprehension assigned a fresh empty list to the TARGET before the loop read it, and here the target IS the source | `PyBuildComp` builds into a hidden temp and assigns at the end |
+
+And [[bug-nilpy-nonlocal-write-never-reaches-the-enclosing-scope]] is fixed:
+a capture the nested body declares `nonlocal` is now a by-REF trailing
+parameter (`ProcParamCapRef`, so the flag survives the deferred body parse).
+That surfaced a second bug — `PyEmitParamSpills` sized the spill from the
+POINTEE's type, truncating a 64-bit address to 32 bits for a by-ref int param.
+
+Gated by test/test_nilpy_selfassigned_comprehension.npy.

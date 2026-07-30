@@ -116,7 +116,7 @@ type
     { yscrollcommand / xscrollcommand are VARIANT because Python passes a
       CALLABLE — `canvas.configure(yscrollcommand=self.scrollbar.set)` is the
       one spelling every scrollable widget uses. See TkiOptScrollCmd. }
-    procedure configure(const state: AnsiString = ''; const scrollregion: AnsiString = '';
+    procedure configure(const state: AnsiString = ''; const scrollregion: Variant = 0;
                         const yscrollcommand: Variant = 0;
                         const xscrollcommand: Variant = 0;
                         const text: AnsiString = ''; const background: AnsiString = '';
@@ -131,7 +131,7 @@ type
                         const postcommand: Variant = 0);
     { `w.config(...)` — tkinter's own short spelling of configure, and what a
       real application writes about as often as the long one. }
-    procedure config(const state: AnsiString = ''; const scrollregion: AnsiString = '';
+    procedure config(const state: AnsiString = ''; const scrollregion: Variant = 0;
                      const yscrollcommand: Variant = 0;
                      const xscrollcommand: Variant = 0;
                      const text: AnsiString = ''; const background: AnsiString = '';
@@ -172,6 +172,13 @@ type
     { the widget that has keyboard focus, or nil — applications compare it to
       themselves (`if self.focus_get() == self`) }
     function focus_get: Widget;
+    { `w.focus_set()` — give this widget the keyboard focus; `focus_force` takes
+      it even when the window manager has not given the toplevel focus yet, and
+      `focus()` is tkinter's short spelling of the same thing. An editor calls
+      these every time it opens or switches a document. }
+    procedure focus_set;
+    procedure focus_force;
+    procedure focus;
     { the raw Tcl answer, for a caller that wants the paths }
     function winfo_children_paths: AnsiString;
     { Tk's timer queue. `after(ms, cb)` and `after_idle(cb)` return the Tcl id
@@ -353,9 +360,12 @@ type
                            const anchor: AnsiString = ''): Integer; overload;
     function create_window(x, y: Integer; window: Widget;
                            const anchor: AnsiString = ''): Integer; overload;
+    { font is a Variant: apps pass either a name or the (family, size, style)
+      tuple _map_font-style helpers build. An AnsiString parameter took the
+      tuple's object word as a string pointer and SEGFAULTED. }
     function create_text(x, y: Double; const text: AnsiString;
                          const anchor: AnsiString = ''; const fill: AnsiString = '';
-                         const font: AnsiString = ''): Integer;
+                         const font: Variant = 0): Integer;
     function create_line(x1, y1, x2, y2: Double;
                          const fill: AnsiString = '';
                          width: Double = -1): Integer;
@@ -389,7 +399,14 @@ type
     { An item is named by its ID or by a TAG — `canvas.bbox("all")` is the
       commonest call in the whole widget, so an Integer parameter refused the
       normal spelling. Variant takes both (see TkiItemSpec). }
-    function bbox(const item: Variant): AnsiString;
+    { Python gets a 4-TUPLE of integers (x0, y0, x1, y1), or None when the tag
+      matches nothing — `bbox[1]` is a coordinate, and applications index it.
+      Returned as the raw Tcl string, indexing gave a CHARACTER and comparing it
+      to a number raised "comparison of a string with a number" (songformatter's
+      scrollregion fit). `bbox_str` keeps the raw form for a caller that wants
+      it. }
+    function bbox(const item: Variant): Variant;
+    function bbox_str(const item: Variant): AnsiString;
     procedure yview(const args: AnsiString);
     procedure yview_scroll(n: Integer; const what: AnsiString);
     procedure xview(const args: AnsiString);
@@ -603,6 +620,7 @@ function TkiIntStr(n: Integer): AnsiString; forward;
 function TkiNumStr(d: Double): AnsiString; forward;
 function TkiOptNum(const name: AnsiString; d: Double): AnsiString; forward;
 function TkiStrInt(const s: AnsiString): Integer; forward;
+function TkiOptFont(const f: Variant): AnsiString; forward;
 
 function TkiNextPath(master: Widget): AnsiString;
 var base: AnsiString;
@@ -835,7 +853,7 @@ begin
          TkiOptInt('pad', pad));
 end;
 
-procedure Widget.config(const state, scrollregion: AnsiString;
+procedure Widget.config(const state: AnsiString; const scrollregion: Variant;
                         const yscrollcommand, xscrollcommand: Variant;
                         const text, background: AnsiString;
                         width, height: Integer; menu: Widget;
@@ -861,7 +879,7 @@ begin
   TkEval(path + ' configure ' + opts);
 end;
 
-procedure Widget.configure(const state, scrollregion: AnsiString;
+procedure Widget.configure(const state: AnsiString; const scrollregion: Variant;
                            const yscrollcommand, xscrollcommand: Variant;
                            const text, background: AnsiString;
                            width, height: Integer;
@@ -875,7 +893,7 @@ begin
   if pyvartag(postcommand) <> 0 then cbIdx := TkiRegisterCallback(postcommand);
   if cbIdx >= 0 then
     TkEval(path + ' configure -postcommand {' + TkiCbScript(cbIdx) + '}');
-  o := TkiOptStr('state', state) + TkiOptStr('scrollregion', scrollregion)
+  o := TkiOptStr('state', state) + TkiOptRegion('scrollregion', scrollregion)
      + TkiOptScrollCmd('yscrollcommand', yscrollcommand, 'set')
      + TkiOptScrollCmd('xscrollcommand', xscrollcommand, 'set')
      + TkiOptStr('text', text) + TkiOptStr('background', background)
@@ -1189,6 +1207,21 @@ end;
 function Widget.winfo_height: Integer;
 begin
   winfo_height := TkiStrInt(TkEval('winfo height ' + path));
+end;
+
+procedure Widget.focus_set;
+begin
+  TkEval('focus ' + path);
+end;
+
+procedure Widget.focus_force;
+begin
+  TkEval('focus -force ' + path);
+end;
+
+procedure Widget.focus;
+begin
+  focus_set;
 end;
 
 function Widget.focus_get: Widget;
@@ -1523,13 +1556,13 @@ begin
     create_window := create_window(x, y, window.path, anchor);
 end;
 
-function Canvas.create_text(x, y: Double; const text, anchor, fill,
-                            font: AnsiString): Integer;
+function Canvas.create_text(x, y: Double; const text, anchor, fill: AnsiString;
+                            const font: Variant): Integer;
 begin
   create_text := TkiStrInt(TkEval(path + ' create text ' + TkiNumStr(x) + ' ' +
                  TkiNumStr(y) + ' -text {' + text + '}' +
                  TkiOptStr('anchor', anchor) + TkiOptStr('fill', fill) +
-                 TkiOptStr('font', font)));
+                 TkiOptFont(font)));
 end;
 
 function Canvas.create_line(x1, y1, x2, y2: Double;
@@ -1604,9 +1637,32 @@ begin
   TkEval(path + ' delete all');
 end;
 
-function Canvas.bbox(const item: Variant): AnsiString;
+function Canvas.bbox_str(const item: Variant): AnsiString;
 begin
-  bbox := TkEval(path + ' bbox ' + TkiItemSpec(item));
+  bbox_str := TkEval(path + ' bbox ' + TkiItemSpec(item));
+end;
+
+function Canvas.bbox(const item: Variant): Variant;
+var raw, one: AnsiString; i: Integer; l: TPyList;
+begin
+  raw := TkEval(path + ' bbox ' + TkiItemSpec(item));
+  if raw = '' then
+  begin
+    bbox := pynone;          { Tk answers empty when nothing matches }
+    exit;
+  end;
+  l := TPyList.Create;
+  one := '';
+  for i := 1 to Length(raw) + 1 do
+  begin
+    if (i > Length(raw)) or (raw[i] = ' ') then
+    begin
+      if one <> '' then l.append(TkiStrInt(one));
+      one := '';
+    end
+    else one := one + raw[i];
+  end;
+  bbox := l;
 end;
 
 procedure Canvas.yview(const args: AnsiString);
@@ -1667,6 +1723,32 @@ end;
 
 { ttk's `-padding`: one number, or the (left, top[, right, bottom]) tuple an
   application writes. Tcl takes both spellings as a list. }
+{ `scrollregion=` takes the Tcl string "x0 y0 x1 y1" — and an application
+  writes the 4-TUPLE tkinter accepts (`cv.configure(scrollregion=(0, 0, w,
+  h))`). Declared AnsiString, the tuple arrived as a list handle reinterpreted
+  as text and the widget command was built from garbage. }
+function TkiOptRegion(const name: AnsiString; const v: Variant): AnsiString;
+var i, n: Integer; r: AnsiString;
+begin
+  r := '';
+  case pyvartag(v) of
+    0: ;                                    { omitted }
+    7:
+      begin
+        n := pylen_v(v);
+        for i := 0 to n - 1 do
+          r := r + ' ' + pystr_of(pyvar_getitem(v, i));
+        if r <> '' then r := ' -' + name + ' {' + Copy(r, 2, Length(r) - 1) + '}';
+      end;
+  else
+    begin
+      r := pystr_of(v);
+      if r <> '' then r := ' -' + name + ' {' + r + '}' else r := '';
+    end;
+  end;
+  TkiOptRegion := r;
+end;
+
 function TkiOptPadding(const p: Variant): AnsiString;
 var i, n: Integer; r: AnsiString;
 begin

@@ -4982,12 +4982,14 @@ begin
   begin
     ProcParamPtrDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamIsConst[ProcCount * MAX_PROC_PARAMS + i] := False;
+    ProcParamCapRef[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamExplicitByRef[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamUntyped[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamHasDefault[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamDefaultVal[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamDefaultIsStr[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamDefaultIsNone[ProcCount * MAX_PROC_PARAMS + i] := False;
+    ProcParamDefaultIsFloat[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamDefaultSOff[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamDefaultSLen[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamRecId[ProcCount * MAX_PROC_PARAMS + i] := REC_NONE;

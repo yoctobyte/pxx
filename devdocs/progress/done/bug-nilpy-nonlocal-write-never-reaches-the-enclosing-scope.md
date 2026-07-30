@@ -56,3 +56,21 @@ rather than accepting it and dropping the write.
 
 `make test-nilpy` plus a `.npy` covering read-only capture, a `nonlocal` write,
 and a `nonlocal` write in a def called twice, diffed against CPython.
+
+## Fixed 2026-07-30
+
+A capture the nested body declares `nonlocal` is registered as a by-REFERENCE
+trailing parameter. The flag lives in `ProcParamCapRef` because the def's body
+is parsed later and that parse rebuilds `Params[].IsRef` from the header types
+alone (variant = by-ref, everything else by value), which wiped a flag set only
+on the Proc record.
+
+Fixing it exposed a second, older bug: `PyEmitParamSpills` chose the spill width
+from the parameter's own type, so a by-ref INT param stored the incoming
+64-bit address with `mov [rbp+off], eax` — truncated to 32 bits, and the first
+write through it faulted. By-ref params now always spill 8 bytes.
+
+Gated by test/test_nilpy_selfassigned_comprehension.npy.
+
+## Log
+- 2026-07-30 — resolved, commit pending.

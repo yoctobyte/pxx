@@ -2558,6 +2558,13 @@ begin
     ASTSLen[exprNode] := ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + k];
     ASTTk[exprNode] := Ord(tyString);
   end
+  else if ProcParamDefaultIsFloat[mpi * MAX_PROC_PARAMS + k] then
+  begin
+    { the stored ordinal IS the double's IEEE bits — see PyParamDefaultAt }
+    exprNode := AllocNode(AN_FLOAT_LIT);
+    ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k];
+    ASTTk[exprNode] := Ord(tyDouble);
+  end
   else if ProcParamDefaultIsSet[mpi * MAX_PROC_PARAMS + k] then
   begin
     { a SET default: the value is the Data[] offset of the mask baked at the
@@ -9765,6 +9772,27 @@ begin
         else if CaseEqual(name, 'frac') then prevTok := -205
         else prevTok := -206;
         Next; Expect(tkLParen, '('); ParseExpr;
+        { NilPy hands these intrinsics whatever the expression's static type is,
+          and an inferred local or parameter is a VARIANT. The lowering below is
+          a raw SSE conversion of a double, so a variant argument converted its
+          16-byte slot instead of the number it holds — `round(r * 255)` on a
+          parameter printed a stack address. Unbox first. (An expression whose
+          STATIC type came out non-variant can still be a variant at run time —
+          `x * 255` types integer but lowers to a variant multiply — so the
+          codegen's own IRTk = tyVariant check is the real backstop; this one
+          only covers the plainly-typed cases.) }
+        if isNilPy and (LastExprTk = tyVariant) then
+        begin
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := FindProc('pyvar_to_float');
+          if ASTIVal[node] < 0 then Error('Nil Python: pylib (pyvar_to_float) not loaded');
+          ASTTk[node] := Ord(tyDouble);
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+          ASTRight[argSeq] := -1;
+          ASTLeft[node] := argSeq;
+          CurASTNode := node;
+          LastExprTk := tyDouble;
+        end;
         { Python's `round(x, ndigits)` — a FLOAT rounded to that many decimals,
           a different operation from the one-argument form (which yields an
           int). songformatter writes `round(pct, 2)` when normalising scores. }

@@ -101,7 +101,9 @@ var
   PyHdrDefHas: array[0..31] of Boolean;
   PyHdrDefIsStr: array[0..31] of Boolean;
   PyHdrDefIsNone: array[0..31] of Boolean;
+  PyHdrDefIsFloat: array[0..31] of Boolean;
   PyDefaultWasNone: Boolean;   { set by PyParamDefaultAt — see there }
+  PyDefaultWasFloat: Boolean;
   PyHdrDefVal: array[0..31] of Int64;
   PyHdrDefSOff: array[0..31] of Integer;
   PyHdrDefSLen: array[0..31] of Integer;
@@ -2734,8 +2736,17 @@ begin
     through a global rather than another var parameter, since every caller of
     this function wants the same answer right after the call. }
   PyDefaultWasNone := True;
+  PyDefaultWasFloat := False;
   case Tokens[j].Kind of
     tkNil:     begin Inc(j); Exit; end;
+    { A FLOAT default (`max_zoom=2.0`). The token already carries the IEEE 754
+      bits in IVal, which is what ProcParamDefaultVal stores, so the value
+      travels as-is and only needs to be FLAGGED. Without this it fell through
+      to the non-constant branch and became None — `min(max_zoom, ...)` then
+      compared against 0 and songformatter's preview rendered its whole page
+      into a 128x76 corner at the minimum zoom. }
+    tkFloat:   begin Result := Tokens[j].IVal; PyDefaultWasNone := False;
+                     PyDefaultWasFloat := True; Inc(j); Exit; end;
     tkTrue:    begin Result := 1; PyDefaultWasNone := False; Inc(j); Exit; end;
     tkFalse:   begin PyDefaultWasNone := False; Inc(j); Exit; end;
     tkInteger: begin Result := Tokens[j].IVal; PyDefaultWasNone := False; Inc(j); Exit; end;
@@ -2753,6 +2764,15 @@ begin
       begin
         Result := -Tokens[j + 1].IVal;
         PyDefaultWasNone := False;
+        j := j + 2;
+        Exit;
+      end
+      else if Tokens[j + 1].Kind = tkFloat then
+      begin
+        { negate by flipping the IEEE sign bit — the bits are the value here }
+        Result := Tokens[j + 1].IVal xor Int64($8000000000000000);
+        PyDefaultWasNone := False;
+        PyDefaultWasFloat := True;
         j := j + 2;
         Exit;
       end;
@@ -3164,6 +3184,12 @@ begin
             ASTSLen[kwVal] := ProcParamDefaultSLen[kwCtorPi * MAX_PROC_PARAMS + kwPk];
             ASTTk[kwVal] := Ord(tyString);
           end
+          else if ProcParamDefaultIsFloat[kwCtorPi * MAX_PROC_PARAMS + kwPk] then
+          begin
+            kwVal := AllocNode(AN_FLOAT_LIT);
+            ASTIVal[kwVal] := ProcParamDefaultVal[kwCtorPi * MAX_PROC_PARAMS + kwPk];
+            ASTTk[kwVal] := Ord(tyDouble);
+          end
           else if Procs[kwCtorPi].Params[kwPk].TypeKind = tyVariant then
             { A VARIANT hole. Two things go wrong with a bare ordinal here: the
               parameter is passed by REFERENCE, so the callee dereferences it
@@ -3212,6 +3238,15 @@ begin
         ASTSOffset[valNode] := ProcParamDefaultSOff[ctorPi * MAX_PROC_PARAMS + k];
         ASTSLen[valNode] := ProcParamDefaultSLen[ctorPi * MAX_PROC_PARAMS + k];
         ASTTk[valNode] := Ord(tyString);
+      end
+      else if ProcParamDefaultIsFloat[ctorPi * MAX_PROC_PARAMS + k] then
+      begin
+        { a FLOAT default (max_zoom=2.0): IVal holds the IEEE bits, and only
+          AN_FLOAT_LIT tags them tyDouble — an AN_INT_LIT here handed the body
+          the bit pattern as an integer. }
+        valNode := AllocNode(AN_FLOAT_LIT);
+        ASTIVal[valNode] := ProcParamDefaultVal[ctorPi * MAX_PROC_PARAMS + k];
+        ASTTk[valNode] := Ord(tyDouble);
       end
       else if Procs[ctorPi].Params[k].TypeKind = tyVariant then
         { A VARIANT parameter's omitted default has to be a real variant, not a
@@ -3984,8 +4019,13 @@ begin
               if capSym < 0 then Continue;
               if not (Syms[capSym].Kind in [skLocal, skParam]) then Continue;
               if Syms[capSym].IsArray or (Syms[capSym].TypeKind = tyRecord) then Continue;
-              if (Syms[capSym].TypeKind = tyAnsiString) or
-                 (Syms[capSym].TypeKind = tyString) then Continue;
+              { A managed STRING is skipped by the direct scan above (a bound
+                slot holds an Int64, and a borrowed handle there would outlive
+                its owner). It cannot be skipped HERE: this capture is not for
+                the lambda's own use, it is an ARGUMENT the callee's call site
+                must supply, and leaving it out makes that call fail with
+                "captures <name>, which is not in scope at this call" — which
+                is what stopped songformatter's redraw. }
               if lamN >= PY_MAX_CAPS then Break;
               lamNames[lamN] := LowerCase(cn2);
               lamTypes[lamN] := Syms[capSym].TypeKind;
@@ -5926,6 +5966,34 @@ end;
   `selfSlots` is 1 for a method (Self is parameter 0), 0 for a plain proc;
   `given` is the number of arguments already parsed, and is advanced.
   The caller has NOT yet consumed the '*'. }
+{ The star operand as a TPyList. A VARIANT holding a list must be UNBOXED
+  first: stored straight into a class slot it lands there as the variant's raw
+  tag+payload, and the arity guard then read a nonsense count
+  (`forwarded call got -2102166800 arguments`). `*ast.literal_eval(...)` is the
+  shape — anything dynamic is a variant, and only a statically-typed list
+  worked. }
+function PyStarOperandAsList(node, listCi: Integer): Integer;
+var unboxArg, unboxCall: Integer;
+begin
+  if IntToTypeKind(ASTTk[node]) <> tyVariant then
+  begin
+    PyStarOperandAsList := node;
+    Exit;
+  end;
+  unboxArg := AllocNode(AN_ARG);
+  ASTLeft[unboxArg] := node;
+  ASTRight[unboxArg] := -1;
+  unboxCall := AllocNode(AN_CALL);
+  ASTIVal[unboxCall] := FindProc('pyvarobj');
+  if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+  ASTTk[unboxCall] := Ord(tyPointer);
+  ASTLeft[unboxCall] := unboxArg;
+  PyStarOperandAsList := AllocNode(AN_CLASS_CAST);
+  ASTLeft[PyStarOperandAsList] := unboxCall;
+  ASTIVal[PyStarOperandAsList] := listCi;
+  ASTTk[PyStarOperandAsList] := Ord(tyClass);
+end;
+
 procedure PyStarExpandCallArgs(procIdx, firstSlot: Integer;
                                var headArg, lastArg: Integer);
 var listCi, listSym, asgn, total, required, wanted, k: Integer;
@@ -5939,7 +6007,7 @@ begin
   Syms[listSym].RecName := REC_UCLASS_BASE + listCi;
   asgn := AllocNode(AN_ASSIGN);
   ASTLeft[asgn] := PyMakeIdent(listSym);
-  ASTRight[asgn] := CurASTNode;
+  ASTRight[asgn] := PyStarOperandAsList(CurASTNode, listCi);
   PyHoistStmt(asgn);
 
   total := Procs[procIdx].ParamCount;
@@ -6569,7 +6637,14 @@ begin
     mmi := FindUMethArity(dualCis[di], mname, i);
     if mmi < 0 then mmi := dualMmis[di];
     if mmi < 0 then Continue;
-    if Procs[UMthProc_[mmi]].RetType <> Procs[mpi].RetType then dualRetMixed := True;
+    { The KIND is not enough: two candidates can both return tyClass and return
+      DIFFERENT classes (`beginText` gives the reportlab shim's PDFTextObject or
+      render_backend's _TkTextObject). Typed from the static pick, the next
+      method call on the result compiled as a STATIC call into the wrong class
+      and jumped through its layout — songformatter's preview died on
+      `tx.setFont(...)` that way. Compare the returned RECORD too. }
+    if (Procs[UMthProc_[mmi]].RetType <> Procs[mpi].RetType) or
+       (ProcRetRecId[UMthProc_[mmi]] <> ProcRetRecId[mpi]) then dualRetMixed := True;
   end;
 
   { RUNTIME dual dispatch: the receiver may be one of the remembered pylib
@@ -7477,7 +7552,10 @@ begin
   for i := 0 to nparams - 1 do
   begin
     idx := Procs[procIdx].Params[i].SymIdx;
-    sz := TypeSize(Syms[idx].TypeKind);
+    { a BY-REF param holds an ADDRESS, whatever it points at: spilling it at the
+      pointee's width truncated a 64-bit stack address to 32 bits and the first
+      write through it faulted (a `nonlocal` capture of an int local). }
+    if Syms[idx].IsRef then sz := 8 else sz := TypeSize(Syms[idx].TypeKind);
     if nparams > 6 then
     begin
       { all-stack convention: load via rax }
@@ -9213,6 +9291,7 @@ end;
 
 function PyBuildComp(targetSym, exprStart: Integer): Integer;
 var seq, node, sizeNode, createNode, aSeq, savedTarget, savedStart, listCiN: Integer;
+    buildSym: Integer;
 begin
   if PyCompIsDict then listCiN := FindUClass('TPyDict')
   else listCiN := FindUClass('TPyList');
@@ -9228,18 +9307,29 @@ begin
   ASTLeft[aSeq] := sizeNode;
   ASTLeft[createNode] := aSeq;
   Syms[targetSym].RecName := REC_UCLASS_BASE + listCiN;
+  { Build into a HIDDEN list and assign it at the end. Emptying the target
+    first is fatal when the target is also the SOURCE — `lines = [l.strip()
+    for l in lines]` re-binds a name Python evaluates on the right first, and
+    building in place cleared the list the loop was about to read, so the
+    comprehension always produced []. }
+  buildSym := AllocVar(PyHiddenName('comp'), tyClass);
+  Syms[buildSym].RecName := REC_UCLASS_BASE + listCiN;
   node := AllocNode(AN_ASSIGN);
-  ASTLeft[node] := PyMakeIdent(targetSym);
+  ASTLeft[node] := PyMakeIdent(buildSym);
   ASTRight[node] := createNode;
   seq := PySeqAppend(-1, node);
 
   savedTarget := PyCompTarget;
   savedStart := PyCompExprStart;
-  PyCompTarget := targetSym;
+  PyCompTarget := buildSym;
   PyCompExprStart := exprStart;
   node := PyParseFor;               { range/container both honour PyCompTarget }
   PyCompTarget := savedTarget;
   PyCompExprStart := savedStart;    { a NESTED build clobbers it otherwise }
+  seq := PySeqAppend(seq, node);
+  node := AllocNode(AN_ASSIGN);
+  ASTLeft[node] := PyMakeIdent(targetSym);
+  ASTRight[node] := PyMakeIdent(buildSym);
   seq := PySeqAppend(seq, node);
   { PyParseFor sets PyStmtAteBlock (it normally eats an indented block); a
     comprehension is a one-line expression, so clear it. }
@@ -9813,6 +9903,33 @@ begin
   end;
 end;
 
+{ Does the body span declare `nonlocal <name>`? Scanned from tokens, like the
+  capture scan itself, because the body is not parsed until later. A `global`
+  declaration is NOT this: that one names a module global, which the nested body
+  already reaches directly. }
+function PyBodyDeclaresNonlocal(bodyStart, bodyEnd: Integer;
+                                const nm: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  i := bodyStart;
+  while i < bodyEnd do
+  begin
+    if (Tokens[i].Kind = tkIdent) and (GetTokenStr(i) = 'nonlocal') then
+    begin
+      Inc(i);
+      while (i < bodyEnd) and (Tokens[i].Kind = tkIdent) do
+      begin
+        if GetTokenStr(i) = nm then begin Result := True; Exit; end;
+        Inc(i);
+        if (i < bodyEnd) and (Tokens[i].Kind = tkComma) then Inc(i) else Break;
+      end;
+    end
+    else
+      Inc(i);
+  end;
+end;
+
 function PyQueueNestedDef: Integer;
 var defTok, procIdx, bodyStart, bodyEnd, i, j, k, nCaps, nOwn, csym, csym2, capCi: Integer;
     qname, cname, cn2: AnsiString; already: Boolean;
@@ -9945,6 +10062,17 @@ begin
           restore PyHdrPCis (TParam has no rec-id field of its own) }
         if capRecs[j] >= REC_UCLASS_BASE then
           ProcParamRecId[procIdx * MAX_PROC_PARAMS + nOwn + j] := capRecs[j];
+        { `nonlocal x` in the body means a WRITE must land in the enclosing
+          frame. A capture is normally a by-VALUE trailing parameter, so the
+          write went to the callee's copy and the enclosing local never changed
+          (songformatter's parseParams set `song_title`, and the renderer still
+          saw None). Declaring THAT parameter by-ref makes the store write
+          through to the enclosing local the call site passes. }
+        if PyBodyDeclaresNonlocal(bodyStart, bodyEnd, capNames[j]) then
+        begin
+          Procs[procIdx].Params[nOwn + j].IsRef := True;
+          ProcParamCapRef[procIdx * MAX_PROC_PARAMS + nOwn + j] := True;
+        end;
       end;
     end;
   end;
@@ -11249,6 +11377,7 @@ begin
                          PyHdrDefSOff[PyHdrNParams],
                          PyHdrDefSLen[PyHdrNParams]);
       PyHdrDefIsNone[PyHdrNParams] := PyDefaultWasNone;
+      PyHdrDefIsFloat[PyHdrNParams] := PyDefaultWasFloat;
       TokPos := annIdx;
       Next;
     end;
@@ -11354,6 +11483,7 @@ begin
       ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefVal[i];
       ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefIsStr[i];
       ProcParamDefaultIsNone[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefIsNone[i];
+      ProcParamDefaultIsFloat[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefIsFloat[i];
       ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefSOff[i];
       ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefSLen[i];
     end;
@@ -11530,7 +11660,7 @@ procedure PyParseDef;
 var name, savedPfx, savedPfx2: AnsiString;
     nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyNode: Integer;
     savedNest, savedTok, savedLam, savedHoist: Integer;
-    retType: TTypeKind; isProc: Boolean;
+    retType: TTypeKind; isProc, capByRef: Boolean;
 begin
   savedHoist := PyHoistHead;
   PyParseDefHeader;
@@ -11614,10 +11744,13 @@ begin
   begin
     { Any/variant params are const-by-ref (the internal convention passes a
       variant's ADDRESS), so the 8-byte slot holds the pointer }
-    idx := AllocParam(PyHdrPNames[i], PyHdrPTypes[i],
-                      PyHdrPTypes[i] = tyVariant, False);
+    { a `nonlocal` capture is by-ref whatever its type — see ProcParamCapRef }
+    capByRef := (PyHdrPTypes[i] = tyVariant) or
+                ((i < MAX_PROC_PARAMS) and
+                 ProcParamCapRef[procIdx * MAX_PROC_PARAMS + i]);
+    idx := AllocParam(PyHdrPNames[i], PyHdrPTypes[i], capByRef, False);
     Procs[procIdx].Params[i].SymIdx := idx;
-    Procs[procIdx].Params[i].IsRef := PyHdrPTypes[i] = tyVariant;
+    Procs[procIdx].Params[i].IsRef := capByRef;
     if i < MAX_PROC_PARAMS then
       ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := PyHdrPTypes[i] = tyVariant;
     if (PyHdrPTypes[i] = tyClass) and (PyHdrPCis[i] >= 0) then
@@ -12311,7 +12444,7 @@ var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, al
     mStarIdx, mKwIdx, starCi: Integer;   { `*args` / `**kwargs` parameter slots }
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
     pdefHas: array[0..15] of Boolean; pdefIsStr: array[0..15] of Boolean;
-    pdefIsNone: array[0..15] of Boolean;
+    pdefIsNone: array[0..15] of Boolean; pdefIsFloat: array[0..15] of Boolean;
     pdefVal: array[0..15] of Int64;
     pdefSOff: array[0..15] of Integer; pdefSLen: array[0..15] of Integer;
     tk: TTypeKind; defKind: Integer; defIVal: Int64; defSOff, defSLen: Integer;
@@ -12674,6 +12807,7 @@ begin
                                                  pdefSOff[nparams],
                                                  pdefSLen[nparams]);
             pdefIsNone[nparams] := PyDefaultWasNone;
+            pdefIsFloat[nparams] := PyDefaultWasFloat;
           end;
         end;
         Inc(nparams);
@@ -12792,6 +12926,7 @@ begin
             ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + k] := pdefVal[k];
             ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + k] := pdefIsStr[k];
             ProcParamDefaultIsNone[procIdx * MAX_PROC_PARAMS + k] := pdefIsNone[k];
+            ProcParamDefaultIsFloat[procIdx * MAX_PROC_PARAMS + k] := pdefIsFloat[k];
             ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + k] := pdefSOff[k];
             ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + k] := pdefSLen[k];
           end;

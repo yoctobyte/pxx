@@ -4882,7 +4882,32 @@ begin
             arg1Node := IRB[node];
             val1Node := IRA[arg1Node];
             IREmitNode(val1Node);                                        { arg -> rax }
-            if TypeIsFloat(IntToTypeKind(IRTk[val1Node])) then
+            if IntToTypeKind(IRTk[val1Node]) = tyVariant then
+            begin
+              { A VARIANT operand: rax holds the 16-byte slot's ADDRESS, not a
+                number, and the float path below converted that address —
+                `round(r * 255)` on an inferred parameter printed a stack
+                address. Unbox to the double bits first (an int-tagged payload
+                is already the integer part, so it converts the same way the
+                integer branch below would). Same sequence int() (200) uses. }
+              EmitB($53);                                      { push rbx }
+              EmitB($48); EmitB($89); EmitB($C3);              { mov rbx, rax }
+              EmitB($48); EmitB($8B); EmitB($03);              { mov rax, [rbx]  ; tag }
+              EmitB($48); EmitB($3D); EmitI32(VT_DOUBLE);      { cmp rax, VT_DOUBLE }
+              EmitB($75); pNotDouble := CodeLen; EmitB(0);     { jne .not_double }
+              EmitB($48); EmitB($8B); EmitB($43); EmitB($08);  { mov rax, [rbx+8] ; payload }
+              EmitB($EB); pDone := CodeLen; EmitB(0);          { jmp .done }
+              { .not_double: an integer payload -> its double bits }
+              Code[pNotDouble] := Byte(CodeLen - (pNotDouble + 1));
+              EmitB($48); EmitB($8B); EmitB($43); EmitB($08);  { mov rax, [rbx+8] }
+              EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0);  { cvtsi2sd xmm0, rax }
+              EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);  { movq rax, xmm0 }
+              { .done: }
+              Code[pDone] := Byte(CodeLen - (pDone + 1));
+              EmitB($5B);                                      { pop rbx }
+            end;
+            if TypeIsFloat(IntToTypeKind(IRTk[val1Node])) or
+               (IntToTypeKind(IRTk[val1Node]) = tyVariant) then
             begin
               EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
               if specialId = 203 then

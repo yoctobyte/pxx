@@ -7580,7 +7580,15 @@ begin
           if (Procs[cpi].Params[pathIdx].TypeKind = tyVariant) and
              (not Procs[cpi].Params[pathIdx].IsArray) then
           begin
-            if ProcParamDefaultIsNone[cpi * MAX_PROC_PARAMS + pathIdx] then
+            if ProcParamDefaultIsFloat[cpi * MAX_PROC_PARAMS + pathIdx] then
+          begin
+            { a FLOAT default: the stored ordinal is its IEEE 754 bits }
+            dfltAST := AllocNode(AN_FLOAT_LIT);
+            ASTIVal[dfltAST] := ProcParamDefaultVal[cpi * MAX_PROC_PARAMS + pathIdx];
+            ASTTk[dfltAST] := Ord(tyDouble);
+            value := IRLowerCallArg(cpi, pathIdx, dfltAST, False);
+          end
+          else if ProcParamDefaultIsNone[cpi * MAX_PROC_PARAMS + pathIdx] then
             begin
               { `= None` is not the ordinal 0 it is recorded as. pynone()
                 yields the empty variant, and its result needs a slot of its
@@ -7642,6 +7650,15 @@ begin
             end
             else
               argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyString));
+          end
+          else if ProcParamDefaultIsFloat[cpi * MAX_PROC_PARAMS + pathIdx] then
+          begin
+            { a float literal is IR_CONST_INT carrying the IEEE bits, tagged
+              tyDouble — the same lowering AN_FLOAT_LIT gets }
+            value := IRAppend(IR_CONST_INT, -1, -1, -1,
+                              ProcParamDefaultVal[cpi * MAX_PROC_PARAMS + pathIdx],
+                              Ord(tyDouble));
+            argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyDouble));
           end
           else if ProcParamDefaultIsSet[cpi * MAX_PROC_PARAMS + pathIdx] then
             { A SET default (`Options: TFormatOptions = DefaultFormat`). The value is not
