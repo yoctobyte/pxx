@@ -37,3 +37,6 @@ lists and dicts, tuple unpacking, swap, unpacking in a for-loop, `join`,
 `make test-nilpy` + self-host byte-identical, plus set literals with duplicate
 ints, strings and mixed types, and a literal followed by `add` of an element it
 already contains.
+
+## Log
+- 2026-07-30 — resolved, commit 16c94927b.
