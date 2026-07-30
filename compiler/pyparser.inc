@@ -4314,17 +4314,50 @@ begin
   Result := node;
 end;
 
+procedure PyWarnUnbindableClosure(procIdx: Integer; const why: AnsiString);
+{ A nested def taken AS A VALUE whose captures cannot be bound falls back to
+  the bare code address — and the compiled body then reads its lifted capture
+  parameters out of whatever the registers happen to hold. That fallback is a
+  silently wrong program, so it says so. A warning and not an error because the
+  shape is legal Python and the value may never actually be called; the
+  diagnostic is what turns a plausible number into something greppable. }
+begin
+  if PyCapCount[procIdx] <= 0 then Exit;   { nothing to bind: the address IS the value }
+  WarnAt(CurTok.Line,
+         'Nil Python: the nested def ' + Procs[procIdx].Name +
+         ' captures enclosing names but cannot carry them as a value because ' +
+         why + ' — calling it after the enclosing call returns will read garbage');
+end;
+
 function PyNestedDefClosureValue(procIdx: Integer): Integer;
 var defTok, i, j, k, depth: Integer;
     pNames: array[0..15] of AnsiString;
     pDefS, pDefE: array[0..15] of Integer;
-    nP, nDef, nOwn, bindIdx, savedTok: Integer;
+    nP, nDef, nOwn, bindIdx, savedTok, ownPi: Integer;
     node, argA, argB, argC, vNode, newPi, bindPi, varBindPi, symIdx: Integer;
+    objBindPi: Integer;
     nm: AnsiString;
     anyBind: Boolean;
 
-  { chain one pyboundfn_bind / _bind_var call: node := bind(node, idx, valNode) }
-  procedure ChainBind(valNode: Integer; isVar: Boolean);
+  { Which parameter of the lifted body does bound value `bi` land in? The
+    captures were appended AFTER the def's own parameters, so it is own-count +
+    bi. This used to be spelled `bindIdx + 1` inline at both call sites — the
+    same "exactly one own argument" assumption the call bridge made, and it
+    misread the type of a NEIGHBOURING parameter once the arity was not 1,
+    binding an integer capture as a variant address
+    (bug-nilpy-escaping-closure-captures-unbound-unless-arity-is-one). Named so
+    the two sites cannot drift apart again. }
+  function BoundParamIsVariant(bi: Integer): Boolean;
+  var pidx: Integer;
+  begin
+    pidx := nOwn + bi;
+    BoundParamIsVariant := (pidx < Procs[procIdx].ParamCount) and
+                           (Procs[procIdx].Params[pidx].TypeKind = tyVariant);
+  end;
+
+  { chain one pyboundfn_bind / _bind_var / _bind_obj call:
+    node := bind(node, idx, valNode) }
+  procedure ChainBind(valNode: Integer; isVar: Boolean; isObj: Boolean);
   begin
     argA := AllocNode(AN_ARG);
     ASTLeft[argA] := node;
@@ -4337,7 +4370,9 @@ var defTok, i, j, k, depth: Integer;
     ASTLeft[argC] := valNode;
     ASTRight[argB] := argC;
     node := AllocNode(AN_CALL);
-    if isVar then ASTIVal[node] := varBindPi else ASTIVal[node] := bindPi;
+    if isObj and (objBindPi >= 0) then ASTIVal[node] := objBindPi
+    else if isVar then ASTIVal[node] := varBindPi
+    else ASTIVal[node] := bindPi;
     ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
     Inc(bindIdx);
   end;
@@ -4357,6 +4392,7 @@ begin
   newPi := FindProc('pyboundfn_new');
   bindPi := FindProc('pyboundfn_bind');
   varBindPi := FindProc('pyboundfn_bind_var');
+  objBindPi := FindProc('pyboundfn_bind_obj');
   if (newPi < 0) or (bindPi < 0) or (varBindPi < 0) then Exit;
 
   { scan the header straight off the tokens: def NAME ( params ) ... }
@@ -4420,24 +4456,58 @@ begin
   if not anyBind then
     if (nOwn <> 1) or (nDef > 0) or (Procs[procIdx].ParamCount < 1) or
        (Procs[procIdx].Params[0].TypeKind <> tyVariant) then Exit;
-  { the bridge passes exactly ONE user argument before the bound values }
-  if nOwn <> 1 then Exit;
-  if nDef + PyCapCount[procIdx] > 12 then Exit;
-  { defaulted params must come after the single own param (Python guarantees) }
+  { The bridge marshals up to THREE own arguments before the bound values, so
+    every ordinary closure arity is representable. It used to assume exactly
+    one and this read `if nOwn <> 1 then Exit` — and that Exit did not fall
+    back to anything safe: it emitted the bare code address with NO captures
+    bound, so `def b():` capturing an enclosing local read its captures out of
+    the dead parent frame and printed an address
+    (bug-nilpy-escaping-closure-captures-unbound-unless-arity-is-one).
+    Past three, there is still no way to pass the arguments — WARN rather than
+    silently produce that wrong value. }
+  if nOwn > 3 then
+  begin
+    PyWarnUnbindableClosure(procIdx, 'it takes ' + PyIntLiteralText(nOwn) +
+                            ' arguments and the call bridge marshals at most 3');
+    Exit;
+  end;
+  if nDef + PyCapCount[procIdx] > 12 then
+  begin
+    PyWarnUnbindableClosure(procIdx, 'it has more than 12 values to bind');
+    Exit;
+  end;
 
   { every capture must resolve to a value symbol we can bind }
   for j := 0 to PyCapCount[procIdx] - 1 do
   begin
     nm := PyCapName[procIdx * PY_MAX_CAPS + j];
     symIdx := PyProgSym(nm);
-    if symIdx < 0 then Exit;
-    if not (Syms[symIdx].Kind in [skGlobal, skLocal, skParam]) then Exit;
-    if (Syms[symIdx].TypeKind = tyAnsiString) or (Syms[symIdx].TypeKind = tyString) then Exit;
-    if Syms[symIdx].IsArray or (Syms[symIdx].TypeKind = tyRecord) then Exit;
+    if symIdx < 0 then
+    begin
+      PyWarnUnbindableClosure(procIdx, 'it captures ' + nm + ', which does not resolve here');
+      Exit;
+    end;
+    if not (Syms[symIdx].Kind in [skGlobal, skLocal, skParam]) then
+    begin
+      PyWarnUnbindableClosure(procIdx, 'it captures ' + nm + ', which is not a value');
+      Exit;
+    end;
+    if (Syms[symIdx].TypeKind = tyAnsiString) or (Syms[symIdx].TypeKind = tyString) then
+    begin
+      PyWarnUnbindableClosure(procIdx, 'it captures the string ' + nm +
+                              ', which cannot travel as a register word');
+      Exit;
+    end;
+    if Syms[symIdx].IsArray or (Syms[symIdx].TypeKind = tyRecord) then
+    begin
+      PyWarnUnbindableClosure(procIdx, 'it captures ' + nm +
+                              ', an array or record, which cannot travel as a register word');
+      Exit;
+    end;
   end;
 
-  { pyboundfn_new(addr, n, a0var) — a0var says whether the single own param
-    is a VARIANT (unannotated) and must travel by address }
+  { pyboundfn_new(addr, n, a0var) — a0var says whether the own params are
+    VARIANT (unannotated) and must travel by address }
   argA := AllocNode(AN_ARG);
   node := AllocNode(AN_PROCADDR);
   ASTIVal[node] := procIdx; ASTTk[node] := Ord(tyPointer);
@@ -4449,7 +4519,10 @@ begin
   ASTRight[argA] := argB;
   argC := AllocNode(AN_ARG);
   node := AllocNode(AN_INT_LIT);
-  if (Procs[procIdx].ParamCount > 0) and
+  { nOwn > 0 guard: with no own parameters, Params[0] is the first LIFTED
+    CAPTURE, and testing its type would set the by-address flag off a value the
+    caller never passes. }
+  if (nOwn > 0) and (Procs[procIdx].ParamCount > 0) and
      (Procs[procIdx].Params[0].TypeKind = tyVariant) then
     ASTIVal[node] := 1
   else
@@ -4459,6 +4532,24 @@ begin
   ASTRight[argB] := argC;
   node := AllocNode(AN_CALL);
   ASTIVal[node] := newPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+
+  { ...then say how many OWN parameters the body takes, so the bridge knows how
+    many argument slots precede the captures. pyboundfn_new defaults it to 1 for
+    the lambda lifter, which injects a dummy own parameter precisely because the
+    bridge used to have no way to be told otherwise. }
+  ownPi := FindProc('pyboundfn_setown');
+  if ownPi >= 0 then
+  begin
+    argA := AllocNode(AN_ARG);
+    ASTLeft[argA] := node;
+    argB := AllocNode(AN_ARG);
+    vNode := AllocNode(AN_INT_LIT);
+    ASTIVal[vNode] := nOwn; ASTTk[vNode] := Ord(tyInt64);
+    ASTLeft[argB] := vNode;
+    ASTRight[argA] := argB;
+    node := AllocNode(AN_CALL);
+    ASTIVal[node] := ownPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+  end;
   bindIdx := 0;
 
   { bind each DEFAULTED param: its default expression re-parsed HERE, in the
@@ -4475,8 +4566,7 @@ begin
       Next;
       { pass mode follows the CALLEE PARAM's type: a variant param reads an
         ADDRESS (bind_var heap-boxes the value), a concrete one a raw word }
-      ChainBind(k, (bindIdx + 1 < Procs[procIdx].ParamCount) and
-                   (Procs[procIdx].Params[bindIdx + 1].TypeKind = tyVariant));
+      ChainBind(k, BoundParamIsVariant(bindIdx), False);
     end;
 
   { then each scanned CAPTURE, by current value }
@@ -4484,9 +4574,10 @@ begin
   begin
     nm := PyCapName[procIdx * PY_MAX_CAPS + j];
     symIdx := PyProgSym(nm);
-    ChainBind(PyMakeIdent(symIdx),
-              (bindIdx + 1 < Procs[procIdx].ParamCount) and
-              (Procs[procIdx].Params[bindIdx + 1].TypeKind = tyVariant));
+    { a CLASS capture binds through the retaining form: the enclosing scope
+      releases its own reference on return, and the closure outlives it }
+    ChainBind(PyMakeIdent(symIdx), BoundParamIsVariant(bindIdx),
+              Syms[symIdx].TypeKind = tyClass);
   end;
 
   Result := node;
@@ -5497,7 +5588,8 @@ begin
   nm := LowerCase(Procs[pi].Name);
   if (nm <> 'pyclosure_src_new') and (nm <> 'pyclosure_src_cap') and
      (nm <> 'pyboundfn_new') and (nm <> 'pyboundfn_bind') and
-     (nm <> 'pyboundfn_bind_var') then Exit;
+     (nm <> 'pyboundfn_setown') and
+     (nm <> 'pyboundfn_bind_var') and (nm <> 'pyboundfn_bind_obj') then Exit;
   boxPi := FindProc('pyvar_of_callable');
   if boxPi < 0 then Exit;
   pi := AllocNode(AN_ARG);
@@ -6977,7 +7069,8 @@ begin
     (nm = 'pybound_new') or (nm = 'pyvar_of_callable') or
     (nm = 'pyclosure_src_new') or (nm = 'pyclosure_src_cap') or
     (nm = 'pyboundfn_new') or (nm = 'pyboundfn_bind') or
-    (nm = 'pyboundfn_bind_var');
+    (nm = 'pyboundfn_setown') or
+    (nm = 'pyboundfn_bind_var') or (nm = 'pyboundfn_bind_obj');
 end;
 
 function PyBareNoneHere: Boolean;

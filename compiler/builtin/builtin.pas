@@ -619,6 +619,15 @@ begin
   neg := v < 0;
   if neg then v := -v;
   e := 0;
+  { DEAD END, do not retry as-is: normalising by binary decomposition of the
+    exponent (step 256,128,…,1 through 10^step) was tried to cut the rounding
+    these one-decade loops accumulate. It improved some values (1e-16, 1.5e-25
+    became exact) and made others WORSE — 1e300 went from 1.000000000000001e+300
+    to 9.999999999999995e+299, because dividing by an inexact 10^n lands the
+    mantissa just under 1.0 and the settling step then borrows a decade. Any
+    real fix has to round the DIGITS from an integer representation rather than
+    scale the double first; that is the shortest-round-trip work recorded as
+    step 3 on bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip. }
   while v >= 10.0 do begin v := v / 10.0; e := e + 1; end;
   while (v > 0.0) and (v < 1.0) do begin v := v * 10.0; e := e - 1; end;
   m := FloatToStr(v);
@@ -657,6 +666,25 @@ begin
     Result := FloatToExpStr(v);
     Exit;
   end;
+  { ...and the MIRROR of that guard, which was missing. The split below keeps
+    15 DECIMAL places, so a value smaller than one unit in the last of them has
+    intpart 0 and rounds fracpart to 0 as well: `1e-20` and `1e-300` both
+    printed `0.0`, destroying the value silently. Route those to the same
+    exponential form the large end already uses. The threshold is exactly where
+    the fixed form stops being able to represent anything, so every value that
+    already rendered correctly still takes the old path and its output is
+    byte-identical (bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip).
+    FloatToExpStr normalises the mantissa into [1,10) before calling back here,
+    so it cannot re-enter this branch. }
+  if (v <> 0.0) and (v < 1.0e-15) and (v > -1.0e-15) then
+  begin
+    Result := FloatToExpStr(v);
+    Exit;
+  end;
+  { NOTE: -0.0 still prints as `0.0` here. `v < 0` is False for negative zero,
+    so only the sign BIT distinguishes it, and this unit declares no pointer
+    type to read it through. Left deliberately — it is a display divergence,
+    not value loss, and is recorded on the ticket above. }
   neg := v < 0;
   if neg then v := -v;
   intpart := Trunc(v);

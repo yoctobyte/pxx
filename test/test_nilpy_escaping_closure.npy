@@ -1,0 +1,88 @@
+# A nested def that CAPTURES an enclosing local and then ESCAPES (returned, or
+# stored) used to read its captures out of the dead parent frame, because the
+# bound-fn bridge always passed exactly one user argument before them. Only
+# arity 1 happened to line up; every other arity printed a plausible address.
+# bug-nilpy-escaping-closure-captures-unbound-unless-arity-is-one
+# Every expectation here is CPython's own output.
+
+def mk0():
+    n = 41
+    def b():
+        return n + 1
+    return b
+
+def mk1():
+    n = 41
+    def b(x):
+        return n + x
+    return b
+
+def mk2():
+    n = 10
+    def b(x, y):
+        return n + x + y
+    return b
+
+def mk3():
+    n = 10
+    def b(x, y, z):
+        return n + x + y + z
+    return b
+
+print(mk0()())
+print(mk1()(1))
+print(mk2()(1, 2))
+print(mk3()(1, 2, 3))
+
+# capture a PARAMETER rather than a local
+def mkp(n):
+    def b():
+        return n * 2
+    return b
+print(mkp(21)())
+
+# capture a LIST — the handle must survive the parent frame
+def mkl():
+    L = [1, 2, 3]
+    def b():
+        return len(L)
+    return b
+print(mkl()())
+
+# several captures at once
+def mkm():
+    a = 1
+    b2 = 2
+    c = 3
+    def inner():
+        return a + b2 + c
+    return inner
+print(mkm()())
+
+# NOTE: the `nonlocal` counter shape is deliberately absent. A capture the body
+# writes to is lifted as a BY-REF parameter, and that shape still fails to parse
+# at the call site — a loud error, not a wrong value, tracked separately in
+# bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse.
+
+# called while the parent frame is still ALIVE (this always worked)
+def inside():
+    n = 41
+    def b():
+        return n + 1
+    return b()
+print(inside())
+
+# no capture at all, escaped (plain-address path, always worked)
+def nocap():
+    def b(x):
+        return x * 2
+    return b
+print(nocap()(21))
+
+# stored in a container rather than returned directly
+def mkstore():
+    n = 7
+    def b():
+        return n
+    return [b]
+print(mkstore()[0]())
