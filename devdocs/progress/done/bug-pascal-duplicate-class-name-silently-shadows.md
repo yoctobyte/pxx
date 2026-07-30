@@ -8,7 +8,7 @@ prio: 50
 # Pascal: a second class with the same name is not diagnosed
 
 - **Type:** bug (Pascal frontend, class registration / diagnostics) — **Track P**
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-26.
 
 ## This ticket REPLACES a wrong one
@@ -93,7 +93,29 @@ convertrawtext.py does. That module is blocked here.
 > names are visible program-wide, so the first registration wins and the answer
 > depends on import order. Fixed here at the call site; the root is that ticket.
 
-## 2026-07-30 — attempted and REVERTED; the missing piece is a "compiler-provided" flag
+## FIXED 2026-07-30 — and it caught a live duplicate in our own pylib
+
+On its first full-gate run the check rejected `ZeroDivisionError`, declared
+TWICE in `compiler/builtin/pylib.pas` eight lines apart (255 and 263). Nothing
+had ever said so. Removed with the fix.
+
+The design below (a "compiler-provided" flag) turned out NOT to be needed — that
+note was written from a first attempt that misread the second false positive.
+The two things to distinguish from a duplicate are:
+
+- a FORWARD stub. Pascal's `TFoo = class;` already carried `UClsForward` and the
+  declaration path already reuses such a row; NilPy's shell pre-pass
+  (pyparser.inc) did not set it, so a `.npy` class looked like a redeclaration
+  of its own stub. Those rows ARE forward stubs — marking them so is right on
+  its own merits, and it removes the whole apparent "open-ended set of
+  compiler-registered classes" problem.
+- `TObject` / `TGuid`, pre-registered before any source is parsed. A closed set
+  of two, excluded by name.
+
+Kept below for the record, since the first attempt's TWO failures are what
+pointed at the forward-stub reading.
+
+## First attempt (superseded) — reverted; misdiagnosed as needing a flag
 
 The check itself is a three-line addition at the class-declaration site
 (parser.inc, the `else ci := AddUClass(tnOff, tnLen)` arm): if `FindUClass(tname)`
@@ -126,3 +148,6 @@ pyparser.inc 2495, cparser.inc and rparser.inc sites) when doing it.
 
 Gate for the next attempt: `tools/gate.sh full` — `make test` is what caught both
 of these, and `--tier quick` alone does not.
+
+## Log
+- 2026-07-30 — resolved, commit 508eb7bc3.

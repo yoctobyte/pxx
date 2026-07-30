@@ -33,7 +33,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (187)
+## backlog (186)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -55,7 +55,6 @@ _none_
 | bug-nilpy-qualified-proc-omitted-default | N | 35 | bug | A qualified UNIT-LEVEL proc call cannot omit a defaulted parameter | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
 | bug-pascal-defines-leak-across-units | A | 55 | bug | Pascal: {$define} in one unit stays visible in units parsed afterwards, so {$ifdef} compiles different code depending on uses ORDER | — |
-| bug-pascal-duplicate-class-name-silently-shadows | P | 50 | bug | Pascal: a duplicate class declaration silently binds to the earlier one instead of erroring | — |
 | bug-pascal-uses-is-transitive | A | 65 | bug | Pascal: uses is transitive — a unit's own uses leak into everything that uses IT, for routines and classes alike (one flat global namespace) | — |
 | bug-pascal-uses-order-breaks-pylib-exception | A | 45 | bug | `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
@@ -287,7 +286,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1056)
+## done (1057)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -732,6 +731,7 @@ _none_
 | bug-pascal-class-const-visibility | P | 60 | bug | class CONSTS parse as UNSCOPED GLOBALS: same-named consts in two classes silently clobber (both read the last decl), and a class const clobbers a same-named GLOBAL const — silent wrong values in valid FPC code; visibility (tclass12b) is the minor residual | — |
 | bug-pascal-deref-managed-string-ptr | A | 40 | bug | `^string` — dereferencing a pointer to a managed string segfaults (all targets) | — |
 | bug-pascal-directive-inside-paren-star-comment | A | 65 | bug | {$...} directives are processed inside (* ... *) comments | — |
+| bug-pascal-duplicate-class-name-silently-shadows | P | 50 | bug | Pascal: a duplicate class declaration silently binds to the earlier one instead of erroring | — |
 | bug-pascal-except-on-class-open-world | A | 45 | bug | `on E: T` descendant matching is closed-world per UNIT — later units' classes escape | — |
 | bug-pascal-exceptaddr-returns-nil | A | 35 | bug | ExceptAddr is a STUB returning nil — the raise site is never recorded | — |
 | bug-pascal-field-access-through-interface-var | A | 45 | bug | pxx accepts (and miscompiles to a crash) class-FIELD access through an interface-typed variable; FPC rejects it | — |
@@ -2836,7 +2836,6 @@ _none_
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [N] bug-nilpy-in-over-objects-ignores-eq
 - [p 50] [N] bug-nilpy-keyword-arg-vs-overload-set
-- [p 50] [P] bug-pascal-duplicate-class-name-silently-shadows
 - [p 50] [A] decide-abi-portable-vs-target-split
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [C] feature-c-vla-via-alloca
