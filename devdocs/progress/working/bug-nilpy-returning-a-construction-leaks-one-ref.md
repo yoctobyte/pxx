@@ -58,6 +58,29 @@ are stating one invariant (call results and constructions are owned; lvalues
 are borrows), so they should read from ONE predicate rather than two copies
 that can drift — which is exactly how they drifted here.
 
+## Fixed 2026-07-30 — measured both ways
+
+One predicate now, `IRNodeYieldsOwnedRef` in ir.inc, read by the return arm and
+by BOTH assignment arms (there were two copies of the exclusion, not one — which
+is how far the drift had already gone).
+
+RSS slope, same driver, 20k vs 320k iterations:
+
+| build | `return Node(...)` | `x = Node(...); return x` |
+| --- | --- | --- |
+| before | 1972 KB -> 25396 KB | flat |
+| after  | 436 KB -> 436 KB | 436 KB -> 436 KB |
+
+The "before" column is a compiler built from the commit preceding the fix, run
+in the same shell — so the slope is the evidence, not the absolute number.
+
+`test/test_nilpy_return_ownership.npy` is the correctness half: a construction,
+a call result, a local, a field and an index are each returned and then read
+back AFTER 200 further allocations have had the chance to reuse a freed block,
+so an over-release shows up as wrong data rather than as luck. The RSS pair
+stays a manual measurement — a byte threshold in `make` would be a machine-
+specific number, and the correctness test is what a regression would trip first.
+
 ## Gate
 
 `make test-nilpy` + self-host byte-identical, plus the RSS-slope pair above

@@ -1,0 +1,65 @@
+# Returning an object: a CONSTRUCTION and a CALL RESULT are already owned, a
+# name/field/index is a borrow. Getting that wrong either leaks one ref per call
+# or frees the object under the caller.
+# bug-nilpy-returning-a-construction-leaks-one-ref
+
+class Node:
+    def __init__(self, name: str, i: int):
+        self.name = name
+        self.i = i
+
+
+def make_ctor(i: int) -> Node:
+    return Node("ctor", i)
+
+
+def make_local(i: int) -> Node:
+    x = Node("local", i)
+    return x
+
+
+def make_call(i: int) -> Node:
+    return make_ctor(i)
+
+
+class Holder:
+    def __init__(self):
+        self.node = Node("field", 7)
+        self.items = [Node("elem", 8)]
+
+    def get_field(self) -> Node:
+        return self.node
+
+    def get_elem(self) -> Node:
+        return self.items[0]
+
+
+# every returned object must still be readable, and readable AGAIN after the
+# next allocations have had a chance to reuse a freed block
+a = make_ctor(1)
+b = make_local(2)
+c = make_call(3)
+h = Holder()
+d = h.get_field()
+e = h.get_elem()
+
+junk = []
+i = 0
+while i < 200:
+    junk.append(Node("junk", i))
+    i = i + 1
+
+print(a.name, a.i)
+print(b.name, b.i)
+print(c.name, c.i)
+print(d.name, d.i)
+print(e.name, e.i)
+# the borrowed sources are still owned by the holder
+print(h.node.name, h.items[0].name)
+
+# a returned construction consumed in a loop must not accumulate
+n = 0
+while n < 500:
+    t = make_ctor(n)
+    n = n + 1
+print(n, t.i)

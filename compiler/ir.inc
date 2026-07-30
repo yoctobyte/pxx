@@ -3722,6 +3722,23 @@ begin
     end;
 end;
 
+{ Does this expression hand back an object reference that is ALREADY OWNED?
+  A construction is rc=1 out of PXXObjAlloc and a call result carries the
+  callee's return-retain, so retaining either again leaks one ref per call;
+  everything else (a name, a field, an index) is a BORROW and must be retained
+  by whoever keeps it. ONE predicate, because the assignment arms and the return
+  arm state the same invariant — and drifted: the assign arms carried the
+  exclusion, the return arm took an unconditional +1, so `return Node(...)`
+  leaked ~78 bytes an iteration while `x = Node(...); return x` was flat
+  (bug-nilpy-returning-a-construction-leaks-one-ref). }
+function IRNodeYieldsOwnedRef(n: Integer): Boolean;
+begin
+  IRNodeYieldsOwnedRef := (n >= 0) and
+    ((ASTKind[n] = AN_CALL) or (ASTKind[n] = AN_VIRTUAL_CALL) or
+     (ASTKind[n] = AN_INTF_CALL) or (ASTKind[n] = AN_CALL_IND) or
+     (ASTKind[n] = AN_METACLASS_NEW));
+end;
+
 function IRNodeIsPyStr(n: Integer): Boolean;
 { A Python str operand: pxx spells a one-character literal tyChar, but Python
   has no character type -- "a" * 3 must repeat, not multiply a code point. }
@@ -6311,11 +6328,7 @@ begin
         { A construction OR any call result is OWNED (+1 already: rc=1 from
           PXXObjAlloc, or the callee's return-retain) — retaining it again
           would leak one ref per call. Only lvalue-ish sources are borrows. }
-        if not ((ASTKind[ASTRight[node]] = AN_CALL) or
-                (ASTKind[ASTRight[node]] = AN_VIRTUAL_CALL) or
-                (ASTKind[ASTRight[node]] = AN_INTF_CALL) or
-                (ASTKind[ASTRight[node]] = AN_CALL_IND) or
-                (ASTKind[ASTRight[node]] = AN_METACLASS_NEW)) then
+        if not IRNodeYieldsOwnedRef(ASTRight[node]) then
         begin
           procIdx := FindProc('PXXObjRetain');
           if procIdx < 0 then Error('Nil Python: PXXObjRetain (builtinheap) not loaded');
@@ -6356,11 +6369,7 @@ begin
         IRAppend(IR_STORE_SYM, seq, IRLowerAST(ASTRight[node]), -1, 0, Ord(tyPointer));
         varIdx := AllocVar('', tyPointer);     { the field slot address }
         IRAppend(IR_STORE_SYM, varIdx, IRLowerAddress(ASTLeft[node]), -1, 0, Ord(tyPointer));
-        if not ((ASTKind[ASTRight[node]] = AN_CALL) or
-                (ASTKind[ASTRight[node]] = AN_VIRTUAL_CALL) or
-                (ASTKind[ASTRight[node]] = AN_INTF_CALL) or
-                (ASTKind[ASTRight[node]] = AN_CALL_IND) or
-                (ASTKind[ASTRight[node]] = AN_METACLASS_NEW)) then
+        if not IRNodeYieldsOwnedRef(ASTRight[node]) then
         begin
           procIdx := FindProc('PXXObjRetain');
           if procIdx < 0 then Error('Nil Python: PXXObjRetain (builtinheap) not loaded');
@@ -6930,13 +6939,19 @@ begin
                 value node re-evaluates its subtree (the b346 landmine). }
               seq := AllocVar('', tyPointer);
               IRAppend(IR_STORE_SYM, seq, value, -1, 0, Ord(tyPointer));
-              procIdx := FindProc('PXXObjRetain');
-              if procIdx < 0 then Error('Nil Python: PXXObjRetain (builtinheap) not loaded');
-              first := IRAppend(IR_ARG,
-                         IRAppend(IR_LOAD_SYM, seq, -1, -1, 0, Ord(tyPointer)),
-                         -1, -1, 0, Ord(tyPointer));
-              last := IRAppendCall(procIdx, first, -1, Ord(tyUnknown));
-              IRIVal[last] := 1;
+              { ...but only when the returned expression is a BORROW. A
+                construction or another call's result is already owned and has
+                no local binding, so nothing balances a second +1. }
+              if not IRNodeYieldsOwnedRef(ASTLeft[node]) then
+              begin
+                procIdx := FindProc('PXXObjRetain');
+                if procIdx < 0 then Error('Nil Python: PXXObjRetain (builtinheap) not loaded');
+                first := IRAppend(IR_ARG,
+                           IRAppend(IR_LOAD_SYM, seq, -1, -1, 0, Ord(tyPointer)),
+                           -1, -1, 0, Ord(tyPointer));
+                last := IRAppendCall(procIdx, first, -1, Ord(tyUnknown));
+                IRIVal[last] := 1;
+              end;
               last := IRAppend(IR_STORE_SYM, varIdx,
                         IRAppend(IR_LOAD_SYM, seq, -1, -1, 0, Ord(tyPointer)),
                         -1, 0, Ord(Syms[varIdx].TypeKind));
