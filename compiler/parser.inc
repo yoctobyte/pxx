@@ -801,6 +801,8 @@ end;
 
 procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
+function PyMakeNone: Integer; forward;  { the None VALUE (a VT_EMPTY variant) — pyparser.inc }
+function PyBareNoneHere: Boolean; forward;  { a `None` with nothing after it that could continue an expression — pyparser.inc }
 function PyMakeSuperCall(const name: AnsiString): Integer; forward;  { `super().m(args)` as a value (pyparser.inc) }
 function PyDynAttrEverAssigned(const nm: AnsiString): Boolean; forward;  { is `.nm =` written anywhere? (pyparser.inc) }
 function PyEvalOnce(node: Integer): Integer; forward;  { bind a value to a hidden temp so it is evaluated once (pyparser.inc) }
@@ -8165,7 +8167,24 @@ begin
     end;
     tkNil:
     begin
-      node := AllocNode(AN_INT_LIT); ASTIVal[node] := 0; ASTTk[node] := Ord(tyPointer); CurASTNode := node; Next; LastExprTk := tyPointer;
+      { In NilPy `None` is a VALUE (pylib's VT_EMPTY variant), not the nil cell.
+        As integer 0 it compared equal to every falsy number (`0 == None` was
+        True) and `str(None)` formatted as `0`. A dozen call sites already
+        substituted PyMakeNone by hand wherever they could see the token
+        coming — list elements, dict values, tuple members, the `or`/`and`
+        arms, print — which is why most of the language looked right; the
+        positions nobody had enumerated were the wrong ones. Doing it HERE
+        covers every position at once (bug-nilpy-none-equals-zero-is-true,
+        bug-nilpy-str-of-literal-none-prints-zero). Pascal keeps the nil cell:
+        the switch is PyExprMode. }
+      if PyExprMode then
+      begin
+        CurASTNode := PyMakeNone; Next; LastExprTk := tyVariant;
+      end
+      else
+      begin
+        node := AllocNode(AN_INT_LIT); ASTIVal[node] := 0; ASTTk[node] := Ord(tyPointer); CurASTNode := node; Next; LastExprTk := tyPointer;
+      end;
     end;
     tkPlusPlus, tkMinusMinus:
     begin

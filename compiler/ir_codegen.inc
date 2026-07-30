@@ -1537,6 +1537,7 @@ var pDbl1, pDbl2, pDoneInt, pLi, pRi, pLd, pRd, pForceDbl: Integer;
     pLhsOk, pRhsOk, pDiffTags1, pDiffTags2: Integer;
     pLhsStrCmp, pLhsCharCmp, pLhsDoneCmp, pLhsDone2Cmp, pLhsDone3Cmp, pLhsNilCmp: Integer;
     pRhsStrCmp, pRhsCharCmp, pRhsDoneCmp, pRhsDone2Cmp, pRhsDone3Cmp, pRhsNilCmp: Integer;
+    pNoneA, pNoneB, pNoneDone, pNotNone: Integer;
     pLhsStrConcat, pLhsCharConcat, pLhsDoneConcat, pLhsDone2Concat, pLhsDone3Concat, pLhsNilConcat: Integer;
     pRhsStrConcat, pRhsCharConcat, pRhsDoneConcat, pRhsDone2Concat, pRhsDone3Concat, pRhsNilConcat: Integer;
     pDoneStr1, pDoneStr2, pDoneStr3: Integer;
@@ -1544,6 +1545,39 @@ begin
   pIsStr1 := -1; pIsStr2 := -1; pIsStr3 := -1; pIsStr4 := -1;
   pNumericPath := -1;
   pDoneStr1 := -1; pDoneStr2 := -1; pDoneStr3 := -1;
+  pNoneDone := -1;
+
+  { --- None (VT_EMPTY) equality, ahead of every other dispatch ---
+    Python's None equals None and NOTHING else. Both the string and the numeric
+    arms below read the PAYLOAD, and a None slot's payload is 0, so `x == 0`
+    with x None answered True and every falsy number "equalled" None — the
+    0-sentinel showing through where it is the answer, and the exact failure the
+    sentinel was meant to avoid: `if x == None` fired for a legitimate zero
+    (bug-nilpy-none-equals-zero-is-true). Tags settle it without touching a
+    payload. }
+  if isCompare and ((opTk = Ord(tkEq)) or (opTk = Ord(tkNeq))) then
+  begin
+    EmitB($48); EmitB($8B); EmitB($07);                       { mov rax, [rdi] }
+    EmitB($48); EmitB($8B); EmitB($0E);                       { mov rcx, [rsi] }
+    EmitB($48); EmitB($85); EmitB($C0);                       { test rax, rax }
+    EmitB($0F); EmitB($84); pNoneA := CodeLen; EmitI32(0);    { jz L_none }
+    EmitB($48); EmitB($85); EmitB($C9);                       { test rcx, rcx }
+    EmitB($0F); EmitB($84); pNoneB := CodeLen; EmitI32(0);    { jz L_none }
+    EmitB($E9); pNotNone := CodeLen; EmitI32(0);              { jmp L_not_none }
+    { L_none: one side is None — equal only when the other is None too }
+    Patch32(pNoneA, CodeLen - (pNoneA + 4));
+    Patch32(pNoneB, CodeLen - (pNoneB + 4));
+    EmitB($48); EmitB($39); EmitB($C8);                       { cmp rax, rcx }
+    EmitB($0F); EmitB($94); EmitB($C0);                       { sete al }
+    EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);           { movzx rax, al }
+    if opTk = Ord(tkNeq) then
+    begin
+      EmitB($48); EmitB($83); EmitB($F0); EmitB($01);         { xor rax, 1 }
+    end;
+    EmitB($E9); pNoneDone := CodeLen; EmitI32(0);             { jmp L_all_done }
+    { L_not_none: }
+    Patch32(pNotNone, CodeLen - (pNotNone + 4));
+  end;
 
   if isCompare or (opTk = Ord(tkPlus)) then
   begin
@@ -1910,6 +1944,9 @@ begin
       Patch32(pDoneStr3, CodeLen - (pDoneStr3 + 4));
     end;
   end;
+
+  { L_all_done — the None-equality arm above jumps straight here }
+  if pNoneDone >= 0 then Patch32(pNoneDone, CodeLen - (pNoneDone + 4));
 end;
 
 procedure EmitWriteCStr;

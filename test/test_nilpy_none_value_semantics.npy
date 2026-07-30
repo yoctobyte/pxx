@@ -1,0 +1,24 @@
+n = None
+z = 0
+f = 0.0
+b = False
+s = ""
+L = []
+D = {}
+print(0 == None, None == 0, 0 != None, None != 0)
+print(0.0 == None, None == 0.0, 0.0 != None)
+print(False == None, None == False)
+print("" == None, None == "")
+print([] == None, None == [])
+print({} == None, None == {})
+print(None == None, None != None)
+print(n == None, n != None, n == 0, n == "", n == [])
+print(z == n, s == n, L == n, D == n)
+print(str(None), str(n), "v=" + str(None), str(None == 0))
+print(None)
+print(None or "n", None and "n", "a" or None, "" or None)
+print(1 == 1.0, 1 == True, "a" == "a", [1] == [1], {1: 2} == {1: 2})
+if None == 0:
+    print("bad")
+else:
+    print("good")

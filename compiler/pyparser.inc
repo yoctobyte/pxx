@@ -1305,7 +1305,7 @@ begin
       { `x is None` / `x is not None`. The lowering depends on the STATIC type of
         the left side — comparing a managed string or a scalar directly against a
         None variant read the wrong bytes and crashed. }
-      if CurTok.Kind = tkNil then
+      if PyBareNoneHere then
       begin
         Next;
         rTk := IntToTypeKind(ASTTk[left]);
@@ -1550,7 +1550,7 @@ begin
   while CurTok.Kind = tkAnd do
   begin
     Next;
-    if CurTok.Kind = tkNil then          { `x and None` — see the or-path note }
+    if PyBareNoneHere then          { `x and None` — see the or-path note }
     begin
       Next;
       right := PyMakeNone;
@@ -1771,7 +1771,7 @@ begin
       cell a bare literal parses to; without this the fallback arm printed EMPTY
       where CPython prints None (the feature-nilpy-none-variant family, same
       treatment the conditional expression already gives its else arm). }
-    if CurTok.Kind = tkNil then
+    if PyBareNoneHere then
     begin
       Next;
       right := PyMakeNone;
@@ -1812,7 +1812,7 @@ begin
     { `A if C else None`: None is a real value (VT_EMPTY variant) — the nil
       literal boxed integer 0 and the consumer's `is None` tag-test failed
       (feature-nilpy-none-variant, sibling of the literal/setter routes). }
-    if CurTok.Kind = tkNil then
+    if PyBareNoneHere then
     begin
       Next;
       CurASTNode := PyMakeNone;
@@ -6865,6 +6865,25 @@ begin
 end;
 
 { A None VALUE: pylib's pynone() yields a variant tagged VT_EMPTY. }
+{ Is the CURRENT token a `None` that stands alone — nothing after it that could
+  continue an expression? A dozen sites substitute PyMakeNone the moment they
+  see tkNil and consume it unconditionally, which is why `None == 0`,
+  `None or "n"` and friends died with "unexpected token" while the identical
+  expression one paren deeper parsed fine: the token was eaten before the
+  operator could be seen. ParseFactor now yields the None VALUE itself under
+  PyExprMode, so those sites only need to keep their shortcut for the bare case
+  and hand anything else to the ordinary expression parser
+  (bug-nilpy-none-equals-zero-is-true). }
+function PyBareNoneHere: Boolean;
+begin
+  PyBareNoneHere := False;
+  if CurTok.Kind <> tkNil then Exit;
+  if TokPos >= TokCount then begin PyBareNoneHere := True; Exit; end;
+  PyBareNoneHere := Tokens[TokPos].Kind in
+    [tkNewline, tkDedent, tkIndent, tkEOF, tkComma, tkRParen, tkRBrack,
+     tkEnd, tkColon, tkSemicolon];
+end;
+
 function PyMakeNone: Integer;
 var procIdx: Integer;
 begin
@@ -7295,7 +7314,7 @@ begin
       if not Eat(tkComma) then break;
       Continue;
     end;
-    if CurTok.Kind = tkNil then
+    if PyBareNoneHere then
     begin
       Next;
       CurASTNode := PyMakeNone;
@@ -7410,7 +7429,7 @@ begin
       literal it boxes as integer 0, `is None` tag-tests false, and the usual
       `if d[k] is None:` miss-branch is skipped (same fix the list-literal
       element path carries, feature-nilpy-none-variant). }
-    if CurTok.Kind = tkNil then
+    if PyBareNoneHere then
     begin
       Next;
       CurASTNode := PyMakeNone;
@@ -7917,7 +7936,7 @@ begin
         ASTTk[CurASTNode] := Ord(tyAnsiString);
         ASTLeft[CurASTNode] := starArg;
       end
-      else if CurTok.Kind = tkNil then
+      else if PyBareNoneHere then
       begin
         Next;
         noneLit := AllocNode(AN_STR_LIT);
@@ -10739,7 +10758,7 @@ begin
         field (`self.x: Optional[int] = None`), where Optional[int] mapped to
         tyInt64 and None is that type's 0 sentinel. Storing a variant None there
         would coerce via pyvar_to_int and raise 'expected a number'. }
-      if CurTok.Kind = tkNil then
+      if PyBareNoneHere then
       begin
         Next;
         if PyNumeric(IntToTypeKind(ASTTk[lhsNode])) then
@@ -10942,7 +10961,7 @@ begin
       `res = <int>` failed to widen — "annotate the type / too dynamic" on the
       ordinary Python idiom of seeding a result with None
       (bug-nilpy-none-assign-to-plain-local). Sibling branches again. }
-    if CurTok.Kind = tkNil then
+    if PyBareNoneHere then
     begin
       Next;
       rhsNode := PyMakeNone;
