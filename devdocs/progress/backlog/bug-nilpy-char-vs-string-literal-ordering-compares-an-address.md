@@ -87,3 +87,17 @@ predicate, correctly, since char vs str IS legal Python).
 against CPython's own output, and the tokenizer program as an end-to-end case —
 it must produce `['12', '+', '34', '*', '2']` and `92`. Keep the char-vs-char
 and whole-string rows as guards that the working paths are untouched.
+
+## Sibling found in the same sweep: a char DICT KEY renders unquoted
+
+```python
+s = "ab"
+d = {}
+d[s[0]] = 1
+print(d)          # CPython: {'a': 1}     pxx: {a: 1}
+```
+
+The key is stored and looked up correctly (len is 1, the value reads back), so
+this is rendering only — `pyrepr_of` has a `Char` overload that returns the bare
+character where the `AnsiString` one adds quotes. Same tyChar-is-not-a-str
+family as the ordering bug above, and cheap to fix alongside it.
