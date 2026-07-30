@@ -26,3 +26,6 @@ count must be bounded before the loop, not trusted.
 
 `make test-nilpy` + self-host byte-identical, plus a regression test that runs
 under a timeout.
+
+## Log
+- 2026-07-30 — resolved, commit 844c0540d.
