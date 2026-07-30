@@ -32,7 +32,11 @@ lowering's handling of an enclosing routine with no parameters.
 
 Reported in [[bug-nilpy-returning-a-nested-def-yields-none]] as a neighbouring
 gap found while narrowing it; that ticket's own subject is fixed and this one is
-not.
+not. The OTHER gap that ticket reported — calling a function-valued local inside
+a def — was re-checked after it landed and now works
+(`def go(): g = mkl(1); print(g(1))` prints 2), so only this one survives:
+the earlier reproducer for it used a zero-parameter maker and was tripping
+THIS bug.
 
 ## Gate
 

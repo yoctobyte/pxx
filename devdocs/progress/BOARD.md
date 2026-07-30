@@ -35,7 +35,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (199)
+## backlog (198)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -46,7 +46,6 @@ _none_
 | bug-nilpy-annotated-module-global-invisible-in-kwarg | N | 55 | bug | A module-level ANNOTATED global is not visible in a keyword argument | — |
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |
 | bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable | N | 55 | bug | A `Callable[...]`-annotated parameter segfaults when the argument is a heap callable | — |
-| bug-nilpy-calling-a-function-valued-local-inside-a-def | N | 45 | bug | Calling a function-valued LOCAL inside a def does not compile | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-float-times-string-hangs | N | 65 | bug | `2.5 * "ab"` hangs forever | — |
 | bug-nilpy-function-value-call-gaps | N | 55 | bug | Two function-value shapes that do not COMPILE | — |
@@ -2866,7 +2865,6 @@ _none_
 - [p 45] [U] decide-gpc-as-corpus-target (unblocks 1)
 - [p 45] [U] decide-ilja-tui-render-model (unblocks 1)
 - [p 45] [A] bug-compiler-selfdebug-lines-index-expanded-source
-- [p 45] [N] bug-nilpy-calling-a-function-valued-local-inside-a-def
 - [p 45] [N] bug-nilpy-method-call-on-fresh-construction
 - [p 45] [N] bug-nilpy-print-emits-arguments-before-evaluating-later-ones
 - [p 45] [N] bug-nilpy-zero-param-def-returning-a-lambda-does-not-compile
