@@ -802,6 +802,7 @@ end;
 procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 function PyMakeNone: Integer; forward;  { the None VALUE (a VT_EMPTY variant) — pyparser.inc }
+function PyNodeIsCallableValue(n: Integer): Boolean; forward;  { a bound method / lambda / function value — pyparser.inc }
 function PyBareNoneHere: Boolean; forward;  { a `None` with nothing after it that could continue an expression — pyparser.inc }
 function PyMakeSuperCall(const name: AnsiString): Integer; forward;  { `super().m(args)` as a value (pyparser.inc) }
 function PyDynAttrEverAssigned(const nm: AnsiString): Boolean; forward;  { is `.nm =` written anywhere? (pyparser.inc) }
@@ -12141,6 +12142,30 @@ begin
           procIdx := TryFillTrailingDefaults(name, qUnit, nArgs, argsHead, lastArg);
           if procIdx < 0 then
             Error('no overload of ' + name + ' matches these arguments' + OverloadReport);
+        end;
+
+        { A CALLABLE where a STRING parameter is declared. The bound-method
+          variant coerces into an AnsiString silently, and the callee then
+          passed the {code, receiver} pair on as text — Tk evaluated it as a
+          script and hung inside the event loop, with nothing pointing back
+          here. A plain def argument was already refused (its node is a raw
+          Pointer and no overload matches); this closes the callable VALUES
+          that ride a variant (bug-nilpy-bound-method-coerced-to-string). }
+        if PyExprMode and (procIdx >= 0) then
+        begin
+          currArg := argsHead;
+          i := 0;
+          while (currArg <> -1) and (i < Procs[procIdx].ParamCount) do
+          begin
+            if (Procs[procIdx].Params[i].TypeKind in [tyAnsiString, tyString]) and
+               PyNodeIsCallableValue(ASTLeft[currArg]) then
+              Error('Nil Python: ' + name + ' expects text for parameter "'
+                    + Procs[procIdx].Params[i].Name
+                    + '", but the argument is a callable — call it, or declare '
+                    + 'the parameter as a Callable');
+            currArg := ASTRight[currArg];
+            Inc(i);
+          end;
         end;
 
         { NilPy nested def: fill the trailing parameters that stand for the

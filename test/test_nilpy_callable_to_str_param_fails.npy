@@ -1,0 +1,14 @@
+# A bound method where a `str` parameter is declared must be a COMPILE ERROR.
+# It used to coerce silently: the {code, receiver} pair travelled on as text and
+# Tk evaluated it as a script, hanging inside the event loop.
+# bug-nilpy-bound-method-coerced-to-string
+
+def f(s: str) -> str:
+    return s
+
+class C:
+    def m(self):
+        return 1
+
+c = C()
+print(f(c.m))

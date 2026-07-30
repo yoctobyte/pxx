@@ -6874,6 +6874,34 @@ end;
   PyExprMode, so those sites only need to keep their shortcut for the bare case
   and hand anything else to the ordinary expression parser
   (bug-nilpy-none-equals-zero-is-true). }
+{ Is this node a CALLABLE value — a bound method, a lifted lambda, a pyeval
+  closure, a boxed function value or a bare code address? Used to refuse one
+  where a STRING parameter is declared: the variant a bound method produces
+  coerces into an AnsiString without complaint, and the {code, receiver} pair
+  then travelled on as text. Tk was handed that as a script and evaluated
+  garbage on every scroll update — a HANG inside root.update(), four layers from
+  the cause, with no diagnostic anywhere
+  (bug-nilpy-bound-method-coerced-to-string). }
+function PyNodeIsCallableValue(n: Integer): Boolean;
+var nm: AnsiString;
+begin
+  PyNodeIsCallableValue := False;
+  if n < 0 then Exit;
+  if ASTKind[n] = AN_PROCADDR then
+  begin
+    PyNodeIsCallableValue := True;
+    Exit;
+  end;
+  if ASTKind[n] <> AN_CALL then Exit;
+  if ASTIVal[n] < 0 then Exit;
+  nm := LowerCase(Procs[ASTIVal[n]].Name);
+  PyNodeIsCallableValue :=
+    (nm = 'pybound_new') or (nm = 'pyvar_of_callable') or
+    (nm = 'pyclosure_src_new') or (nm = 'pyclosure_src_cap') or
+    (nm = 'pyboundfn_new') or (nm = 'pyboundfn_bind') or
+    (nm = 'pyboundfn_bind_var');
+end;
+
 function PyBareNoneHere: Boolean;
 begin
   PyBareNoneHere := False;
