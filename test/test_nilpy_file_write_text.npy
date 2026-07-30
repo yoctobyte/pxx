@@ -1,0 +1,48 @@
+# open(p, "w") returns a real TPyFile whose write() took TPyBytes, so the
+# ordinary Python spelling f.write("text") resolved to it and passed the
+# STRING's handle as a byte buffer: FData became a pointer into the RTTI area
+# and FLen its length, and ~18 KB of adjacent process memory was written INTO
+# THE FILE. Reading it back then printed that memory.
+# bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory
+# Every expectation is CPython's own output.
+
+p = "/tmp/pxx_test_write_text.txt"
+
+# the plain text round-trip: this printed the RTTI blob and left an 18690-byte
+# file where CPython leaves 6 bytes
+with open(p, "w") as f:
+    f.write("hello\n")
+with open(p, "r") as f:
+    print(f.read().strip())
+
+# the length is the real assertion -- a wrong buffer shows up here first
+with open(p, "r") as f:
+    print(len(f.read()))
+
+# several writes must append within the handle, not overwrite
+p2 = "/tmp/pxx_test_write_text2.txt"
+with open(p2, "w") as f:
+    f.write("a\n")
+    f.write("bb\n")
+with open(p2, "r") as f:
+    d = f.read()
+print(len(d), d.strip())
+
+# an EMPTY write must produce an empty file, not a memory dump
+p3 = "/tmp/pxx_test_write_text3.txt"
+with open(p3, "w") as f:
+    f.write("")
+with open(p3, "r") as f:
+    print("[" + f.read() + "]")
+
+# NOTE: `f.write(<bytes>)` in TEXT mode is deliberately absent. It was the only
+# spelling that worked before this fix and it still does, but CPython REJECTS it
+# ("write() argument must be str, not bytes"), so it cannot be part of an
+# expectation taken from CPython. pxx stays lax there.
+
+# a long text write, so a truncated or over-long buffer is visible
+p5 = "/tmp/pxx_test_write_text5.txt"
+with open(p5, "w") as f:
+    f.write("x" * 5000)
+with open(p5, "r") as f:
+    print(len(f.read()))

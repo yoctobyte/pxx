@@ -82,3 +82,42 @@ that writes a report and reads it back produces neither the data nor an error.
 reads it back and prints it in all four forms above, with CPython's own output
 as the expectation — and an explicit check that the file on disk has the
 expected byte length.
+
+## ROOT CAUSE — measured, and the guess above was wrong
+
+The "two `open` result types confuse `print`" theory in this ticket was wrong.
+The real mechanism is a single overload miss, and it is worse than described:
+
+`open(p, "w")` correctly returns a real `TPyFile` (parser.inc routes any
+non-"r" mode to `pyfile_open`). `TPyFile` declared exactly one write:
+
+```pascal
+function write(b: TPyBytes): Int64;
+```
+
+so `f.write("hello\n")` — the ordinary Python spelling — resolved to it and
+passed the **AnsiString's handle where a TPyBytes object was expected**. The
+body then read `b.FData` as a buffer pointer and `b.FLen` as a length out of
+whatever the string handle pointed at, and wrote THAT region to the file.
+
+Before/after on the same program:
+
+| | stdout | file size |
+| --- | --- | --- |
+| pinned (pre-fix) | the RTTI blob | **18 690 bytes** |
+| fixed | `hello` | 6 bytes |
+
+So it was not a print-time rendering problem at all: ~18 KB of adjacent process
+memory was written INTO THE FILE and persisted, and printing it back is what
+showed the class-name table. The earlier "writes 0 bytes" observations were the
+same bug with a garbage length that happened to read as 0.
+
+Fixed by declaring the text-mode overload `TPyFile.write(const s: AnsiString)`,
+which writes `Length(s)` bytes from `@s[1]`. The bytes overload is unchanged.
+Covered by `test/test_nilpy_file_write_text.npy`, whose expectations are
+CPython's own output.
+
+Remaining from this ticket, NOT fixed here: `f.close()` and `f.readlines()` on a
+READ-mode handle still report `TPyList has no method ...`, because read mode
+really does yield a list of lines. That is a separate shape and keeps this
+ticket open.

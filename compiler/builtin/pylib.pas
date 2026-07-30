@@ -347,7 +347,13 @@ type
     constructor Create;
     function read(u: Int64): TPyBytes;
     function readline: TPyBytes;
-    function write(b: TPyBytes): Int64;
+    function write(b: TPyBytes): Int64; overload;
+    { Python's TEXT-mode write takes a str, and that is how every ordinary
+      program spells it. Without this overload `f.write("hello")` resolved to
+      the TPyBytes one, passed the string's handle as a buffer and wrote ZERO
+      bytes -- the file was created and left empty, with no error
+      (bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory). }
+    function write(const s: AnsiString): Int64; overload;
     procedure seek(pos: Int64); overload;
     procedure seek(pos: Int64; whence: Int64); overload;
     function tell: Int64;
@@ -6165,6 +6171,14 @@ function TPyFile.write(b: TPyBytes): Int64;
 begin
   if (b = nil) or (b.FLen = 0) then begin Result := 0; Exit; end;
   Result := PyPalWrite(FFd, b.FData, b.FLen);
+end;
+
+function TPyFile.write(const s: AnsiString): Int64;
+begin
+  { our strings are byte strings, so a text write is the bytes of s -- no
+    encode step, matching how pyopen treats latin-1/utf-8 of ASCII as identity }
+  if Length(s) = 0 then begin Result := 0; Exit; end;
+  Result := PyPalWrite(FFd, @s[1], Length(s));
 end;
 
 procedure TPyFile.seek(pos: Int64);
