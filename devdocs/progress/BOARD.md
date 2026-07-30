@@ -33,7 +33,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (206)
+## backlog (203)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -52,7 +52,6 @@ _none_
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
 | bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic | N | 60 | bug | User-defined dunders are ignored, and the operator then does arithmetic on the object HANDLE | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
-| bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory | N | 75 | bug | `f.write()` silently writes nothing, and once a "w" open exists, `print(f.read())` dumps RTTI MEMORY to stdout | — |
 | bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip | N | 20 | bug | `print(1e-20)` prints `0.0` — NilPy's float repr has no small-magnitude exponential form | — |
 | bug-nilpy-for-variable-reused-after-a-non-string-binding-iterates-garbage | N | 70 | bug | A `for` variable that was previously bound to a non-string value iterates GARBAGE | — |
 | bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float | N | 40 | bug | A function with no `return` yields 0, not None — and `math.floor` yields a float, not an int | — |
@@ -66,13 +65,11 @@ _none_
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
 | bug-nilpy-percent-e-and-g-silently-render-as-fixed-point | N | 55 | bug | `%e` and `%g` silently render as `%f` — a wrong answer to an EXPLICITLY requested format | — |
 | bug-nilpy-print-emits-arguments-before-evaluating-later-ones | N | 45 | bug | `print` writes each argument as it goes, so an exception mid-list leaves partial output | — |
-| bug-nilpy-printing-the-loop-var-of-a-str-local-in-a-function-segfaults | N | 75 | bug | `def f(): s = "ab"; for ch in s: print(ch)` SEGFAULTS | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pyeval-prints-bool-as-number | N | 30 | bug | pyeval prints a Boolean as 1/0 where CPython prints True/False | — |
 | bug-nilpy-qualified-proc-omitted-default | N | 35 | bug | A qualified UNIT-LEVEL proc call cannot omit a defaulted parameter | — |
 | bug-nilpy-redefining-a-def-is-ignored-the-first-body-still-runs | N | 60 | bug | Redefining a `def` silently does nothing — the FIRST body still runs | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
-| bug-nilpy-subscript-and-slice-of-a-variant-get-the-wrong-static-type | N | 75 | bug | `return s[0]` gives back the character CODE — a subscript return infers an int type | — |
 | bug-pascal-defines-leak-across-units | A | 55 | bug | Pascal: {$define} in one unit stays visible in units parsed afterwards, so {$ifdef} compiles different code depending on uses ORDER | — |
 | bug-pascal-uses-is-transitive | A | 65 | bug | Pascal: uses is transitive — a unit's own uses leak into everything that uses IT, for routines and classes alike (one flat global namespace) | — |
 | bug-pascal-uses-order-breaks-pylib-exception | A | 45 | bug | `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine | — |
@@ -306,7 +303,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1065)
+## done (1069)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -662,6 +659,7 @@ _none_
 | bug-nilpy-discarded-string-result-leaks | N | 50 | bug | A call whose managed-string result is DISCARDED leaks it | — |
 | bug-nilpy-eq-dunder-ignored | N | 70 | bug | `__eq__` is ignored — `==` on user objects compares identity | — |
 | bug-nilpy-escaping-closure-captures-unbound-unless-arity-is-one | N | 65 | bug | A returned closure reads GARBAGE for its captures unless it takes exactly one argument | — |
+| bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory | N | 75 | bug | `f.write()` silently writes nothing, and once a "w" open exists, `print(f.read())` dumps RTTI MEMORY to stdout | — |
 | bug-nilpy-float-times-string-hangs | N | 65 | bug | `2.5 * "ab"` hangs forever | — |
 | bug-nilpy-function-level-import-drops-body | N | 70 | bug | An import inside a function body — and the fix that silently emptied the body | — |
 | bug-nilpy-function-value-call-gaps | N | 55 | bug | Two function-value shapes that do not COMPILE | — |
@@ -697,10 +695,12 @@ _none_
 | bug-nilpy-percent-string-format-garbage | N | 60 | bug | nilpy: printf-style % on a string yields garbage instead of formatting (silent wrong output) | — |
 | bug-nilpy-print-of-a-float-bypasses-str-formatting | N | 60 | bug | `print(x)` and `print(str(x))` disagree for a float | — |
 | bug-nilpy-print-variant-holding-list-shows-object | N | 30 | bug | NilPy: print() of a variant holding a list/dict shows `<object>` not its repr | — |
+| bug-nilpy-printing-the-loop-var-of-a-str-local-in-a-function-segfaults | N | 75 | bug | `def f(): s = "ab"; for ch in s: print(ch)` SEGFAULTS | — |
 | bug-nilpy-pydict-v-borrowed-reference | N | 70 | bug | `pydict_v` handed back a BORROWED dict — use-after-free, heap corruption | — |
 | bug-nilpy-pyeval-host-kwargs-positional | N | 60 | bug | pyeval passes a host method's KEYWORD arguments POSITIONALLY (silent wrong option) | — |
 | bug-nilpy-pytypeerror-halts-instead-of-raising | N | 40 | bug | `PyTypeError` halts the process, so `except TypeError:` cannot catch it | — |
 | bug-nilpy-range-for-variant-loop-var | N | 30 | bug | NilPy: range for-loop with a pre-existing VARIANT loop variable corrupts it | — |
+| bug-nilpy-return-type-inference-mistypes-several-expression-shapes | N | 75 | bug | An unannotated def's inferred return type is wrong for several common expression shapes | — |
 | bug-nilpy-returning-a-construction-leaks-one-ref | N | 60 | bug | `return Node(...)` leaks one object ref per call; `x = Node(...); return x` does not | — |
 | bug-nilpy-returning-a-nested-def-yields-none | N | 70 | bug | `return inner` — a nested def returned as a value — yields None | — |
 | bug-nilpy-rtl-exception-surface-shadowed | N | 60 | bug | nilpy: pylib's Exception shadows sysutils' identical declaration, so RTL units fail on CreateFmt/FMessage | — |
@@ -721,6 +721,7 @@ _none_
 | bug-nilpy-str-repeat-is-quadratic | N | 50 | bug | `"x" * n` is QUADRATIC — 80k characters takes 19 seconds | — |
 | bug-nilpy-string-class-field | N | 60 | bug | NilPy: str class field registered as tyString = inline string[N] semantics (garbage reads) | — |
 | bug-nilpy-string-local-truncates-at-255 | N | 65 | bug | NilPy: a string local TRUNCATES at 255 characters, silently | — |
+| bug-nilpy-subscript-and-slice-of-a-variant-get-the-wrong-static-type | N | 75 | bug | `return s[0]` gives back the character CODE — a subscript return infers an int type | — |
 | bug-nilpy-subscript-argument-boxes-wrong-into-variant-param | N | 75 | bug | A SUBSCRIPT argument passed to a variant parameter arrives as garbage | — |
 | bug-nilpy-subscript-on-literal | N | 35 | bug | NilPy: cannot subscript a string LITERAL — `"abc"[1]` | — |
 | bug-nilpy-super-and-unbound-parent-method-calls | N | 70 | bug | Neither `super().m()` nor `Parent.m(self)` reaches an overridden method | — |
@@ -2819,9 +2820,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 75] [N] bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory
-- [p 75] [N] bug-nilpy-printing-the-loop-var-of-a-str-local-in-a-function-segfaults
-- [p 75] [N] bug-nilpy-subscript-and-slice-of-a-variant-get-the-wrong-static-type
 - [p 70] [N] bug-nilpy-for-variable-reused-after-a-non-string-binding-iterates-garbage
 - [p 70] [U] decide-runtime-primitive-layering
 - [p 65] [N] bug-nilpy-callable-value-abi-sorted-key-and-builtins
