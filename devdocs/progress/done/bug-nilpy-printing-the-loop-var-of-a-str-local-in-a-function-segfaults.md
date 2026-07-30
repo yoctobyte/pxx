@@ -129,3 +129,6 @@ covered anywhere in the suite — worth adding regardless of who fixes it.
 `make test-nilpy` + self-host byte-identical, plus a `.npy` with the table above
 against CPython's own output. Keep the neighbour rows: they are what makes the
 shape identifiable if it regresses again.
+
+## Log
+- 2026-07-30 — resolved, commit f81334384.
