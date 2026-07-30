@@ -171,3 +171,30 @@ Module status now: `key_analysis`, `render_backend` and `settings` COMPILE.
 `convertrawtext.py` and `SongFormatter.py` each stop on one line, both the same
 missing method — `TPyList has no method index`, tracked by
 [[feature-nilpy-container-method-gaps]] (raised to prio 60 for this reason).
+
+### 2026-07-30: through the GUI, the session load and the analysis — into the RENDER
+
+Starting from the Track B report (`PDFTextObject.setTextOrigin`), six walls in a
+row, of which exactly one was reportlab:
+
+| wall | fix |
+| --- | --- |
+| `PDFTextObject.setTextOrigin` | added, with the rest of the text-object surface censused in one pass (Track B) |
+| `file.read()` on `open(p, "r")`'s line list | `TPyList.read` — `pyfile_read` already joined them, the list had no method |
+| a lambda calling a nested def that captures `self` | TRANSITIVE capture for lambdas; nested defs already forwarded a callee's captures, lambdas did not |
+| `blendmode = _BlendModes()` beside an `__init__` | class attributes are applied at the HEAD OF THE CONSTRUCTOR — Python's order, so `__init__` overwrites them. Was refused outright, because the only order available was "after", which is the wrong one |
+| `command=lambda: ...` → "annotate the type / too dynamic" | a KEYWORD ARGUMENT was read as a module-level assignment: parens do not change indent depth, so `command=` looked like `command = <lambda>`, and two such calls widened that phantom global from a procedure pointer to a variant |
+| `doc.get_document_text()` after `nametowidget` | it returns a VARIANT now, so the tab's real class comes back with it |
+
+Plus `Notebook.select`: its overloads disagreed on whether they return anything,
+which a runtime-dispatched receiver cannot type — all three spellings return the
+path now, and an INDEX form was added for the session restore.
+
+`test/test_nilpy_class_attrs_with_ctor.npy` covers the class-attribute order and
+the keyword-name case against CPython.
+
+**Where it stops now.** The application builds its whole interface, restores the
+session, creates a document tab, runs the key analysis and creates the preview
+canvas — then SEGFAULTS drawing the preview (`convert_text`, after
+`cv.pack(...)`, in `format_song_text_as_pdf` through `TkCanvasBackend`). That is
+the render path itself: the drawing calls, not the plumbing around them.

@@ -352,6 +352,10 @@ test-nilpy: $(COMPILER)
 	# .field off a variant when several classes declare it at different offsets
 	./$(COMPILER) test/test_nilpy_ambiguous_variant_field.npy /tmp/test_nilpy_ambfld26
 	test "$$(/tmp/test_nilpy_ambfld26)" = "$$(python3 test/test_nilpy_ambiguous_variant_field.npy)"
+	# class attributes BESIDE an __init__ (applied first, overwritable), and a
+	# keyword argument that is not a module assignment
+	./$(COMPILER) test/test_nilpy_class_attrs_with_ctor.npy /tmp/test_nilpy_clsattr26
+	test "$$(/tmp/test_nilpy_clsattr26)" = "$$(python3 test/test_nilpy_class_attrs_with_ctor.npy)"
 	# a Pascal unit's .Free must finalize managed fields ONCE, not twice
 	./$(COMPILER) test/test_nilpy_json_reparse_heap.npy /tmp/test_nilpy_jsonrep26
 	test "$$(/tmp/test_nilpy_jsonrep26)" = "$$(python3 test/test_nilpy_json_reparse_heap.npy)"
@@ -3558,6 +3562,10 @@ test-core: $(COMPILER)
 	# .field off a variant when several classes declare it at different offsets
 	./$(COMPILER) test/test_nilpy_ambiguous_variant_field.npy /tmp/test_nilpy_ambfld26
 	test "$$(/tmp/test_nilpy_ambfld26)" = "$$(python3 test/test_nilpy_ambiguous_variant_field.npy)"
+	# class attributes BESIDE an __init__ (applied first, overwritable), and a
+	# keyword argument that is not a module assignment
+	./$(COMPILER) test/test_nilpy_class_attrs_with_ctor.npy /tmp/test_nilpy_clsattr26
+	test "$$(/tmp/test_nilpy_clsattr26)" = "$$(python3 test/test_nilpy_class_attrs_with_ctor.npy)"
 	# a Pascal unit's .Free must finalize managed fields ONCE, not twice
 	./$(COMPILER) test/test_nilpy_json_reparse_heap.npy /tmp/test_nilpy_jsonrep26
 	test "$$(/tmp/test_nilpy_jsonrep26)" = "$$(python3 test/test_nilpy_json_reparse_heap.npy)"

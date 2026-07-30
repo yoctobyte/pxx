@@ -243,9 +243,16 @@ type
     constructor Create(master: Widget; width: Integer = -1; height: Integer = -1);
     { `nb.add(child, text="Documents")` }
     procedure add(child: Widget; const text: AnsiString = '');
-    { `nb.select()` reads the current tab's path; `nb.select(child)` switches. }
+    { `nb.select()` reads the current tab's path; `nb.select(child)` switches;
+      `nb.select(2)` switches by INDEX (what a session restore hands back).
+      All three are FUNCTIONS returning the path: a receiver whose class is
+      only known at run time dispatches by name, and overloads that disagree on
+      whether they return anything cannot be given one type — the call then
+      failed with "annotate the type / too dynamic". Tk's own `select` answers
+      with the path in every form, so this is also what tkinter does. }
     function select: AnsiString; overload;
-    procedure select(child: Widget); overload;
+    function select(child: Widget): AnsiString; overload;
+    function select(index: Integer): AnsiString; overload;
     { `nb.tab(child, text=...)` renames a tab — how a title follows its
       document. The read form is not modelled. }
     procedure tab(child: Widget; const text: AnsiString);
@@ -255,8 +262,12 @@ type
       "end". Any other index expression is passed to Tcl as written. }
     function index(const which: AnsiString): Integer;
     procedure forget(child: Widget);
-    { the Widget a path names — the inverse of what tabs() yields }
-    function nametowidget(const path_: AnsiString): Widget;
+    { The widget a path names — the inverse of what tabs() yields. VARIANT, not
+      Widget: the caller gets back whatever class was added (songformatter's
+      tabs hold FormatText editors and it calls their own methods), and only a
+      dynamic value can carry that. Typed `Widget` the result answered to the
+      base class alone. }
+    function nametowidget(const path_: AnsiString): Variant;
   end;
 
   { A menu, and the popup an application posts on right-click. }
@@ -2005,9 +2016,15 @@ begin
   select := TkEval(path + ' select');
 end;
 
-procedure Notebook.select(child: Widget);
+function Notebook.select(child: Widget): AnsiString;
 begin
-  if child <> nil then TkEval(path + ' select ' + child.path);
+  select := '';
+  if child <> nil then select := TkEval(path + ' select ' + child.path);
+end;
+
+function Notebook.select(index: Integer): AnsiString;
+begin
+  select := TkEval(path + ' select ' + TkiIntStr(index));
 end;
 
 procedure Notebook.tab(child: Widget; const text: AnsiString);
@@ -2047,9 +2064,12 @@ begin
   if child <> nil then TkEval(path + ' forget ' + child.path);
 end;
 
-function Notebook.nametowidget(const path_: AnsiString): Widget;
+function Notebook.nametowidget(const path_: AnsiString): Variant;
+var w: Widget;
 begin
-  nametowidget := TkiWidgetByPath(path_);
+  w := TkiWidgetByPath(path_);
+  if w = nil then nametowidget := pynone
+  else nametowidget := w;      { boxes as VT_OBJECT — its real class comes with it }
 end;
 
 procedure mainloop;

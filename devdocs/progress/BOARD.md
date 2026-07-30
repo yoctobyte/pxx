@@ -34,7 +34,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (197)
+## backlog (196)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -120,7 +120,6 @@ _none_
 | feature-lib-markdown | B | 45 | feature | A Markdown library — and the `markdown` Python shim over it | — |
 | feature-lib-pxxpdf-reportlab-compat | B | 50 | feature | pxxpdf — pxx pdfgen-backed, reportlab-compatible PDF library (nilpy) | bug-cfront-fegetround-unresolved-float-printf, feature-nilpy-fallback-import |
 | feature-lib-pyexec | B | 45 | feature | lib pyexec: a real exec() for Python-subset source (library, two engines) | feature-rtti-field-reflection |
-| feature-lib-reportlab-shim-pdftextobject | B | 45 | feature | reportlab shim: `PDFTextObject.setTextOrigin` (and whatever follows it) | — |
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | — |
 | feature-lib-tkinter-facade-widening-canvas-items | B | 40 | feature | tkinter façade: item specs, StringVar traces, and what settings.py still needs | — |
 | feature-mimic-fpc-compiler-define-profile | A | 50 | feature | FPC-compiler define profile (`fpcdefs.inc` build-config gates) | — |
@@ -298,7 +297,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1034)
+## done (1035)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1076,6 +1075,7 @@ _none_
 | feature-lazycasing-c-imports | A | 50 | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
 | feature-lib-bignum-operators | B | 42 | feature | bignum operator layer: TBigInt + - * div mod comparisons — Track B | — |
 | feature-lib-regex-engine | B | 50 | feature | regex engine library — backtracking matcher, the substrate for nilpy's re module | — |
+| feature-lib-reportlab-shim-pdftextobject | B | 45 | feature | reportlab shim: `PDFTextObject.setTextOrigin` (and whatever follows it) | — |
 | feature-lib-vecmath | B | 42 | feature | vecmath library: TVec2/3/4 + TMat with operator overloads — Track B | — |
 | feature-library-test-suite | A+B | 50 | feature | Track B library test suite | — |
 | feature-library-var-out-lvalue-actuals | A | 50 | feature | Inc/Dec intrinsic rejects non-bare-symbol lvalue actuals | — |
@@ -2881,7 +2881,6 @@ _none_
 - [p 45] [O] feature-inline-nonleaf-and-branch-locals
 - [p 45] [B] feature-lib-markdown
 - [p 45] [B] feature-lib-pyexec
-- [p 45] [B] feature-lib-reportlab-shim-pdftextobject
 - [p 45] [A] feature-move-fillchar-intrinsics
 - [p 45] [N] feature-nilpy-closure-default-and-remaining
 - [p 45] [N] feature-nilpy-configparser

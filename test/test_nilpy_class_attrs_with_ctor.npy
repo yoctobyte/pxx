@@ -1,0 +1,44 @@
+# A class may have BOTH class attributes and an __init__. Python creates the
+# class attributes when the class is defined, so an instance sees them before
+# __init__ runs and __init__ may overwrite them. NilPy used to refuse the
+# combination outright, because it applied the attributes to a FINISHED object
+# — the one order that is wrong.
+#
+# Also here: a keyword argument spelled at the top level of a call
+# (`f(command=..., label=...)`) is NOT an assignment to a module global, which
+# is how the type pre-pass used to read it — two such calls then "widened" the
+# keyword's name from one type to another and the file was rejected as too
+# dynamic.
+
+class Modes:
+    NORMAL = "Normal"
+    MULTIPLY = "Multiply"
+
+
+class Backend:
+    blendmode = Modes()          # a class attribute holding an instance
+    scale = 2
+    label = "class-level"
+
+    def __init__(self, name):
+        self.name = name
+        self.label = "init-level"      # wins over the class attribute
+
+    def describe(self):
+        return (self.name + "/" + self.label + "/" + str(self.scale)
+                + "/" + self.blendmode.NORMAL)
+
+
+def takes_kw(label="", command=None, width=0):
+    return label + ":" + str(width)
+
+
+b = Backend("first")
+print(b.describe())
+print(Backend("second").label)
+print(Backend("third").scale)
+
+# the keyword name `command` is bound to two different kinds of value here;
+# neither is a module global
+print(takes_kw(label="a", command=None, width=1))
+print(takes_kw(label="b", command="text", width=2))

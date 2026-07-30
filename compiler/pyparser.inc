@@ -771,16 +771,19 @@ end;
 
 var
   PyInferName: AnsiString;  { name under type inference, for diagnostics }
+  PyWidenA, PyWidenB: TTypeKind;
   PyInferLastCi: Integer;   { class index of the last tyClass inference result }
 
 function PyWidenErr: AnsiString;
 begin
-  Result := 'Nil Python: annotate the type / too dynamic';
+  Result := 'Nil Python: annotate the type / too dynamic [a=' +
+            AIntToStr(Ord(PyWidenA)) + ' b=' + AIntToStr(Ord(PyWidenB)) + ']';
   if PyInferName <> '' then Result := Result + ' (inferring ' + PyInferName + ')';
 end;
 
 function PyWiden(a, b: TTypeKind): TTypeKind;
 begin
+  PyWidenA := a; PyWidenB := b;
   if a = tyUnknown then begin Result := b; Exit; end;
   if b = tyUnknown then begin Result := a; Exit; end;
   if a = b then begin Result := a; Exit; end;
@@ -3289,12 +3292,14 @@ begin
     if FindSym(PyClsAttrGlobalName(ci,
          PyRawName(UFldNOff[UClsFBase[ci] + i], UFldNLen[UClsFBase[ci] + i]))) >= 0 then
       attrAny := True;
+  { A class WITH a constructor applies its class attributes at the head of that
+    constructor (PyClassAttrInitSeq), which is Python's order — before
+    `__init__` runs, so `__init__` can overwrite them. Only a class without one
+    needs the hoisted-temp form below, where "after" is the only order there is
+    and nothing can be overwritten. }
+  if attrAny and (FindUMeth(ci, 'create') >= 0) then attrAny := False;
   if attrAny then
   begin
-    if FindUMeth(ci, 'create') >= 0 then
-      Error('Nil Python: ' + name + ' has both a class attribute and an '
-        + '__init__; NilPy would apply the class attributes after the '
-        + 'constructor. Assign them in __init__ instead.');
     attrSym := AllocVar(PyHiddenName('clsattr'), tyClass);
     Syms[attrSym].RecName := recId;
     attrAsgn := AllocNode(AN_ASSIGN);
@@ -3335,6 +3340,51 @@ begin
     end;
     Result := PyMakeIdent(attrSym);
   end;
+end;
+
+{ The class attributes of `ci`, as assignments onto SELF, for the head of the
+  constructor. Python creates class attributes when the CLASS is defined, so an
+  instance sees them before `__init__` runs and `__init__` may overwrite them —
+  which is the opposite of applying them to a finished object. Emitting them
+  here is what lets a class have both (`class TkCanvasBackend: blendmode =
+  _BlendModes()` beside an `__init__`), where the construction path had to
+  refuse. Returns -1 when the class has none. }
+function PyClassAttrInitSeq(ci, selfSym: Integer): Integer;
+var i, fi, gsym, fldNode, asgn, seq: Integer;
+begin
+  seq := -1;
+  for i := 0 to PyClsAttrCount - 1 do
+    if PyClsAttrCi[i] = ci then
+    begin
+      fldNode := AllocNode(AN_FIELD);
+      ASTLeft[fldNode] := PyMakeIdent(selfSym);
+      ASTSOffset[fldNode] := PyClsAttrNOff[i];
+      ASTSLen[fldNode] := PyClsAttrNLen[i];
+      fi := FindUField(ci, PyRawName(PyClsAttrNOff[i], PyClsAttrNLen[i]));
+      if fi >= 0 then ASTTk[fldNode] := UFldTk[fi]
+      else ASTTk[fldNode] := Ord(tyVariant);
+      asgn := AllocNode(AN_ASSIGN);
+      ASTLeft[asgn] := fldNode;
+      ASTRight[asgn] := PyClsAttrNode(i);
+      seq := PySeqAppend(seq, asgn);
+    end;
+  { the non-literal ones live in a hidden global apiece }
+  for i := 0 to UClsFCount[ci] - 1 do
+  begin
+    fi := UClsFBase[ci] + i;
+    gsym := FindSym(PyClsAttrGlobalName(ci, PyRawName(UFldNOff[fi], UFldNLen[fi])));
+    if gsym < 0 then Continue;
+    fldNode := AllocNode(AN_FIELD);
+    ASTLeft[fldNode] := PyMakeIdent(selfSym);
+    ASTSOffset[fldNode] := UFldNOff[fi];
+    ASTSLen[fldNode] := UFldNLen[fi];
+    ASTTk[fldNode] := UFldTk[fi];
+    asgn := AllocNode(AN_ASSIGN);
+    ASTLeft[asgn] := fldNode;
+    ASTRight[asgn] := PyMakeIdent(gsym);
+    seq := PySeqAppend(seq, asgn);
+  end;
+  PyClassAttrInitSeq := seq;
 end;
 
 { Nil Python str methods: `s.upper()` -> pylib pystr_upper(s).
@@ -3803,6 +3853,7 @@ var depth, bStart, bEnd, i, j, pi, capPi, symIdx: Integer;
     dcCount: Integer;
     { the LIFTED path: this lambda's own proc and the values bound into it }
     lamProc, lamN, bindIdx, argC, vNode, capSym: Integer;
+    lamCallee, k: Integer; cn2: AnsiString;
     lamNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
     lamTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     lamSyms: array[0..MAX_PROC_PARAMS-1] of Integer;
@@ -3912,7 +3963,38 @@ begin
           if lamNames[j] = nm then dup := True;
         if dup then Continue;
         capSym := PyProgSym(GetTokenStr(i));
-        if capSym < 0 then Continue;
+        if capSym < 0 then
+        begin
+          { TRANSITIVE capture, the same rule a nested def already follows: the
+            name is a sibling NESTED DEF, and calling it forwards ITS captures —
+            which this lambda must therefore hold too. songformatter's redraw is
+            exactly this: `cv.after(120, lambda: draw(cv.winfo_width()))`, where
+            `draw` captures `self`; the lambda never mentions self, so without
+            this the call reported "captures self, which is not in scope". }
+          lamCallee := FindProc(PyQualifyNested(GetTokenStr(i)));
+          if (lamCallee >= 0) and (PyCapCount[lamCallee] > 0) then
+            for k := 0 to PyCapCount[lamCallee] - 1 do
+            begin
+              cn2 := PyCapName[lamCallee * PY_MAX_CAPS + k];
+              dup := False;
+              for j := 0 to lamN - 1 do
+                if lamNames[j] = LowerCase(cn2) then dup := True;
+              if dup then Continue;
+              capSym := PyProgSym(cn2);
+              if capSym < 0 then Continue;
+              if not (Syms[capSym].Kind in [skLocal, skParam]) then Continue;
+              if Syms[capSym].IsArray or (Syms[capSym].TypeKind = tyRecord) then Continue;
+              if (Syms[capSym].TypeKind = tyAnsiString) or
+                 (Syms[capSym].TypeKind = tyString) then Continue;
+              if lamN >= PY_MAX_CAPS then Break;
+              lamNames[lamN] := LowerCase(cn2);
+              lamTypes[lamN] := Syms[capSym].TypeKind;
+              lamSyms[lamN] := capSym;
+              lamRecs[lamN] := Syms[capSym].RecName;
+              Inc(lamN);
+            end;
+          Continue;
+        end;
         if not (Syms[capSym].Kind in [skLocal, skParam]) then Continue;
         if Syms[capSym].IsArray or (Syms[capSym].TypeKind = tyRecord) then Continue;
         if (Syms[capSym].TypeKind = tyAnsiString) or (Syms[capSym].TypeKind = tyString) then Continue;
@@ -10902,7 +10984,17 @@ begin
         end;
       end
       else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
-              (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkAssign) then
+              (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkAssign) and
+              { …and at a STATEMENT BOUNDARY. Parentheses do not change `depth`
+                (only INDENT/DEDENT do), so a KEYWORD ARGUMENT spelled at the
+                top level of a call — `menu.add_command(label="x",
+                command=lambda: f())` — looked exactly like `command = <lambda>`
+                and made a module local out of the keyword's NAME. Two such
+                calls with different argument kinds then "widened" that
+                phantom local from a procedure pointer to a variant and the
+                file was rejected as too dynamic. }
+              ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent,
+                                                         tkDedent, tkSemicolon])) then
       begin
         { Only a BARE-NAME assignment is trial-parsed: it is the only form
           that declares a module local, and staying off the others keeps the
@@ -13017,7 +13109,7 @@ begin
 end;
 
 procedure PyParseMethod(ci: Integer);
-var savedHoist: Integer;
+var savedHoist: Integer; clsAttrSeq: Integer;
     origName, name, fullName: AnsiString; procIdx, i, idx, nparams, savedSC, savedFS,
     savedSelf, patchPos, bodyNode, bodyStart, annIdx: Integer; pnames: array[0..15] of AnsiString;
     ptypes: array[0..15] of TTypeKind; pcis: array[0..15] of Integer;
@@ -13216,6 +13308,13 @@ begin
   EmitManagedLocalsZeroInit(Procs[procIdx].ScopeBase);
   bodyNode := PyParseBlock; Expect(tkDedent, 'dedent');
   bodyNode := PyPrependResultZero(procIdx, bodyNode);
+  { A CONSTRUCTOR applies the class attributes first — see PyClassAttrInitSeq.
+    Prepended to the body so `__init__`'s own writes win, as in Python. }
+  if isCtor and (nparams > 0) then
+  begin
+    clsAttrSeq := PyClassAttrInitSeq(ci, Procs[procIdx].Params[0].SymIdx);
+    if clsAttrSeq >= 0 then bodyNode := PySeqAppend(clsAttrSeq, bodyNode);
+  end;
   CompileAST(bodyNode); EmitProcEpilog(Procs[procIdx].RetSymIdx); PatchProcPrologue(patchPos, FrameSize);
     ProcBodyEnd[procIdx] := CodeLen;   { DWARF -g — see PyParseDef's note }
   ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
@@ -13970,7 +14069,11 @@ begin
     if Tokens[i].Kind = tkIndent then Inc(depth)
     else if Tokens[i].Kind = tkDedent then Dec(depth)
     else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
-            (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkAssign) then
+            (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkAssign) and
+            { a STATEMENT BOUNDARY — see the note in PyCollectModuleLocalsAST:
+              a keyword argument inside a call is not an assignment }
+            ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent,
+                                                       tkDedent, tkSemicolon])) then
     begin
       nm := GetTokenStr(i);
       if (PyProgSym(nm) < 0) and not PyIsModuleUnpackTarget(nm) then

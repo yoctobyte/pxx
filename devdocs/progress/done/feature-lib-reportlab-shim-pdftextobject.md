@@ -25,6 +25,25 @@ object returned by `beginText`).
 The rest of songformatter — `key_analysis`, `render_backend`, `settings` —
 already compiles, and `kadrv.py` matches CPython exactly.
 
+## Resolved 2026-07-30
+
+Censused the text-object surface both files use rather than adding one method
+per error: `setFont`, `setTextOrigin`, `textLine`, `textOut` — three existed, so
+only `setTextOrigin` was missing (plus `moveCursor` / `getX` / `getY`, which
+reportlab pairs with it and which cost nothing).
+
+reportlab's `setTextOrigin` resets the LINE START as well as the cursor, so the
+next `textLine()` returns to that x rather than to the origin `beginText()` was
+given — songformatter opens a text object at one margin and then moves it.
+
+Five more walls stood behind it, none of them reportlab: `TPyList.read`,
+transitive capture for LAMBDAS, class attributes beside an `__init__`, a keyword
+argument being read as a module assignment, and `nametowidget` losing the tab's
+class. All fixed; `SongFormatter.py` compiles and runs to the preview render.
+
 ## Gate
 
 Both files compile with `$(PXX_STABLE)`; `make lib-test` green.
+
+## Log
+- 2026-07-30 — resolved, commit HEAD.

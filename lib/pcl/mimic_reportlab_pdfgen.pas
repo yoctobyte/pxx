@@ -64,6 +64,15 @@ type
     destructor Destroy; override;
     procedure setFont(const name: AnsiString; size: Double);
     procedure setLeading(l: Double);
+    { Move the text cursor. reportlab resets the LINE START too, so the next
+      textLine() returns to this x rather than to the origin beginText() was
+      given — songformatter opens a text object at one margin and then moves it
+      (`beginText(m, top)` … `setTextOrigin(m, top - 1.2*size)`). }
+    procedure setTextOrigin(ax, ay: Double);
+    { relative move, reportlab's other spelling of the same thing }
+    procedure moveCursor(dx, dy: Double);
+    function getX: Double;
+    function getY: Double;
     procedure textLine(const s: AnsiString);
     procedure textOut(const s: AnsiString);
   end;
@@ -176,6 +185,32 @@ end;
 procedure PDFTextObject.setLeading(l: Double);
 begin
   leading := l;
+end;
+
+procedure PDFTextObject.setTextOrigin(ax, ay: Double);
+begin
+  x := ax;
+  y := ay;
+  startX := ax;
+end;
+
+procedure PDFTextObject.moveCursor(dx, dy: Double);
+begin
+  { reportlab's moveCursor is relative to the LINE START and moves DOWN for a
+    positive dy (it is a text-space cursor, not a page coordinate). }
+  x := startX + dx;
+  y := y - dy;
+  startX := x;
+end;
+
+function PDFTextObject.getX: Double;
+begin
+  getX := x;
+end;
+
+function PDFTextObject.getY: Double;
+begin
+  getY := y;
 end;
 
 procedure PDFTextObject.textOut(const s: AnsiString);

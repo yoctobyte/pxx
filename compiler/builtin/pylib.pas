@@ -111,6 +111,11 @@ type
       (bug-a-nilpy-list-augmented-add-segfaults). }
     function extend(other: TPyList): TPyList;
     procedure clear;
+    { `with open(p, "r") as f: f.read()`. The read-slurp model makes open()
+      yield the file's LINES, and each keeps its newline, so joining them
+      reproduces the file byte for byte — which is what CPython's read()
+      returns. Lives here because that list IS the file object in this model. }
+    function read: AnsiString;
     property Items[i: Integer]: Variant read at write put; default;
   end;
 
@@ -2079,6 +2084,11 @@ end;
 procedure TPyList.clear;
 begin
   FLen := 0;
+end;
+
+function TPyList.read: AnsiString;
+begin
+  read := pyfile_read(Self);
 end;
 
 { Python `in` over a list/set-as-list. Same-tag equality only: ints/bools/
