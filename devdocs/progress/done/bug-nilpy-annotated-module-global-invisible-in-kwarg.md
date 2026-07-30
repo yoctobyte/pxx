@@ -35,6 +35,24 @@ the dataclass keyword-argument parser does not consult.
 Found while building a repro for
 [[bug-nilpy-slice-of-variant-local-returned-is-unusable]]; unrelated to it.
 
+## Fixed 2026-07-30 — and it was never about kwargs
+
+Narrowed before fixing: `pe2 = pe` fails identically, and so does every
+annotation kind including a bare `int`. The rule is "a module-level statement
+whose RIGHT-HAND SIDE is trial-parsed cannot see an annotated global"; the
+dataclass keyword argument in the original repro was simply the first such
+statement in that file. `print(len(pe))` and `pe["C"] = []` are not trial-parsed,
+which is why they looked fine and made this read as a kwarg bug.
+
+Cause: `PyCollectModuleLocalsAST`'s annotated arm called `PyNoteLocalType`,
+which records the name for the NEXT round's seeding loop, and nothing put it in
+the CURRENT round's scratch scope. The "undefined variable" that followed is a
+fatal Error, so the round that would have known the name never ran. The arm now
+allocates it as well, exactly as the seeding loop does.
+
 ## Gate
 
 The snippet above compiling and printing `0`, plus `make test-nilpy`.
+
+## Log
+- 2026-07-30 — resolved, commit 6eaacb53e.
