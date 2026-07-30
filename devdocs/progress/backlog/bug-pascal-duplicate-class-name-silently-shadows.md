@@ -8,7 +8,7 @@ prio: 50
 # Pascal: a second class with the same name is not diagnosed
 
 - **Type:** bug (Pascal frontend, class registration / diagnostics) — **Track P**
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-26.
 
 ## This ticket REPLACES a wrong one
@@ -92,3 +92,37 @@ convertrawtext.py does. That module is blocked here.
 > Instance of [[decide-unit-local-names-leak-to-global-scope]] — unit-local
 > names are visible program-wide, so the first registration wins and the answer
 > depends on import order. Fixed here at the call site; the root is that ticket.
+
+## 2026-07-30 — attempted and REVERTED; the missing piece is a "compiler-provided" flag
+
+The check itself is a three-line addition at the class-declaration site
+(parser.inc, the `else ci := AddUClass(tnOff, tnLen)` arm): if `FindUClass(tname)`
+already returns a row whose `UClsUnitIdx` is the current unit, that is a
+redeclaration. It works — `TFoo` declared twice in one program is rejected and
+names the collision, and a forward stub (`TBar = class;` … `TBar = class`) is
+correctly NOT flagged.
+
+It does not survive `make test`, and the two failures are the interesting part:
+
+1. `test/test_object_ref_array_identity.pas` declares its own `TObject`. The
+   compiler pre-registers `TObject` and `TGuid` (parser.inc ~27733/27756) before
+   any source is parsed, with whatever `CurrentUnitIdx` holds at the time — so a
+   user's own `TObject` reads as a duplicate of the built-in.
+2. `test/test_nil_python_core.npy` declares `ZeroDivisionError`, and the NilPy
+   frontend pre-registers the Python exception classes the same way.
+
+Excluding names by hand (I tried `TObject`/`TGuid`) just moves the whack-a-mole:
+the set of compiler-pre-registered classes is not enumerable at the check site,
+and every future one silently re-breaks it. Shipping that would reject legitimate
+programs to diagnose a rarer mistake — strictly worse than the silence.
+
+**What it needs:** a `UClsCompilerProvided` flag on the class row, set True at
+every pre-registration site (the two Pascal roots, the NilPy exception family,
+and anything else that calls AddUClass before user source), with the duplicate
+check skipping a row that carries it. Then the rule is exact — "the USER declared
+this name twice in this unit" — and it stays exact as new built-ins are added.
+Audit the AddUClass callers (symtab.inc 710, parser.inc 19196/27733/27756,
+pyparser.inc 2495, cparser.inc and rparser.inc sites) when doing it.
+
+Gate for the next attempt: `tools/gate.sh full` — `make test` is what caught both
+of these, and `--tier quick` alone does not.
