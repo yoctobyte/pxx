@@ -5501,6 +5501,26 @@ begin
         begin argVal := ASTLeft[node]; item := ASTRight[node]; end
         else
         begin argVal := ASTRight[node]; item := ASTLeft[node]; end;
+        { A non-integer repeat count is a TypeError in Python, and pystr_repeat
+          takes an Int64: a DOUBLE arrived as its raw bit pattern, so `2.5 *
+          "ab"` asked for ~4.6e18 copies and the program never came back — a
+          hang, which an ordinary test run cannot even diff
+          (bug-nilpy-float-times-string-hangs). Hand those to pymul_v, which
+          already raises the right TypeError, instead of bounding a count that
+          should never have been accepted. }
+        if not TypeIsOrdinal(IntToTypeKind(ASTTk[item])) then
+        begin
+          cpi := FindProc('pymul_v');
+          if cpi < 0 then Error('Nil Python: pymul_v (pylib) not loaded');
+          left := IRLowerCallArg(cpi, 0, ASTLeft[node], Procs[cpi].Params[0].IsRef);
+          first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyVariant));
+          right := IRLowerCallArg(cpi, 1, ASTRight[node], Procs[cpi].Params[1].IsRef);
+          last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyVariant));
+          IRB[first] := last;
+          ASTTk[node] := Ord(tyVariant);
+          Result := IRAppendCall(cpi, first, -1, Ord(tyVariant));
+          Exit;
+        end;
         cpi := FindProc('pystr_repeat');
         if cpi < 0 then Error('Nil Python: pystr_repeat (pylib) not loaded');
         left := IRLowerCallArg(cpi, 0, argVal, Procs[cpi].Params[0].IsRef);

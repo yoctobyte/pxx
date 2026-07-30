@@ -1,0 +1,7 @@
+# A non-integer repeat count is a TypeError, not a 4.6e18-iteration hang.
+# bug-nilpy-float-times-string-hangs
+n = 3
+print("ab" * 3, 3 * "ab", "ab" * n)
+x = 2.5
+print("ab" * x)          # halts here with TypeError
+print("unreachable")

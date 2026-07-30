@@ -647,6 +647,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_unpack26)" = "$$(printf '1 2\n2 1\np 2 3.5\n7 8\na 1\nb 2\nc 3\n6\na 1\nb 2\nc 3')"
 	./$(COMPILER) test/test_nilpy_comparison_chaining.npy /tmp/test_nilpy_comparison_chaining26
 	test "$$(/tmp/test_nilpy_comparison_chaining26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nTrue\nFalse\nTrue\ncall\nTrue')"
+	./$(COMPILER) test/test_nilpy_float_repeat_typeerror.npy /tmp/test_nilpy_float_repeat_typeerror26
+	test "$$(timeout 20 /tmp/test_nilpy_float_repeat_typeerror26 2>&1 || true)" = "$$(printf 'ababab ababab ababab\nTypeError: expected an integer to repeat a str by, got float')"
 	./$(COMPILER) test/test_nilpy_none_value_semantics.npy /tmp/test_nilpy_none_value_semantics26
 	test "$$(/tmp/test_nilpy_none_value_semantics26)" = "$$(printf 'False False True True\nFalse False True\nFalse False\nFalse False\nFalse False\nFalse False\nTrue False\nTrue False False False False\nFalse False False False\nNone None v=None False\nNone\nn None a None\nTrue True True True True\ngood')"
 	./$(COMPILER) test/test_nilpy_return_nested_def.npy /tmp/test_nilpy_return_nested_def26
