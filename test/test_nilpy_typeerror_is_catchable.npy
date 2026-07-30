@@ -41,6 +41,35 @@ try:
 except TypeError:
     print("caught call-None")
 
+# the second sweep of the same family: diagnostics that still printed and
+# Halt(1)'d after the first pass converted PyTypeError and the ValueError ones
+try:
+    print(ord("ab"))
+except TypeError:
+    print("caught ord")
+try:
+    print("abc"[9])
+except IndexError:
+    print("caught strindex")
+try:
+    print(set(5))
+except TypeError:
+    print("caught set")
+try:
+    print(",".join([1, 2]))
+except TypeError:
+    print("caught join")
+buf = bytearray(2)
+try:
+    print(buf[9])
+except IndexError:
+    print("caught bytearray")
+try:
+    with open("/tmp/pxx_absent_file_zz.txt", "r") as fh:
+        print(fh.read())
+except FileNotFoundError:
+    print("caught fnf")
+
 # TypeError is a subclass of Exception, so a bare handler still sees it
 try:
     print(len(3))

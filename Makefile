@@ -682,7 +682,7 @@ test-nilpy: $(COMPILER)
 	@# ...and the same diagnostics are CATCHABLE — PyTypeError raises, it no
 	@# longer Halt(219)s (bug-nilpy-pytypeerror-halts-instead-of-raising)
 	./$(COMPILER) test/test_nilpy_typeerror_is_catchable.npy /tmp/test_nilpy_typeerror_catch26
-	test "$$(/tmp/test_nilpy_typeerror_catch26)" = "$$(printf 'caught repeat\ncaught len\ncaught int\ncaught fmt\ncaught sep\ncaught max\ncaught call-None\nas Exception\nafter')"
+	test "$$(/tmp/test_nilpy_typeerror_catch26)" = "$$(printf 'caught repeat\ncaught len\ncaught int\ncaught fmt\ncaught sep\ncaught max\ncaught call-None\ncaught ord\ncaught strindex\ncaught set\ncaught join\ncaught bytearray\ncaught fnf\nas Exception\nafter')"
 	@# mismatched operand types raise instead of doing pointer math; every line
 	@# of the expectation is CPython's own output for the same file
 	./$(COMPILER) test/test_nilpy_mixed_type_operands.npy /tmp/test_nilpy_mixed_type_operands26
@@ -690,7 +690,7 @@ test-nilpy: $(COMPILER)
 	@# f.write("text") must write the TEXT -- it resolved to the TPyBytes overload
 	@# and wrote ~18 KB of adjacent process memory into the file instead
 	./$(COMPILER) test/test_nilpy_file_write_text.npy /tmp/test_nilpy_file_write26
-	test "$$(/tmp/test_nilpy_file_write26)" = "$$(printf 'hello\n6\n5 a\nbb\n[]\n5000')"
+	test "$$(/tmp/test_nilpy_file_write26)" = "$$(printf 'hello\n6\n5 a\nbb\n[]\n5000\nfirst\nsecond')"
 	@# `"x" * n` must be LINEAR -- the large sizes here are the regression guard,
 	@# the old quadratic routine could not finish this file
 	./$(COMPILER) test/test_nilpy_str_repeat_linear.npy /tmp/test_nilpy_str_repeat26

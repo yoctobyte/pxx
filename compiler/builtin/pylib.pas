@@ -1071,9 +1071,8 @@ function pyord_s(const s: AnsiString): Int64;
 begin
   if Length(s) <> 1 then
   begin
-    writeln('TypeError: ord() expected a character, but string of length ',
-            Length(s), ' found');
-    Halt(1);
+    raise TypeError.Create('ord() expected a character, but string of length ' +
+                           pystr_of(Int64(Length(s))) + ' found');
   end;
   Result := Ord(s[1]);
 end;
@@ -1085,8 +1084,7 @@ begin
   if i < 0 then i := n + i;
   if (i < 0) or (i >= n) then
   begin
-    writeln('IndexError: string index out of range');
-    Halt(1);
+    raise IndexError.Create('string index out of range');
   end;
   Result := s[i + 1];
 end;
@@ -1625,8 +1623,8 @@ begin
     tag := pyvartag(v);
     if (tag <> 6) and (tag <> 5) then
     begin
-      writeln('TypeError: sequence item ', i, ': expected str instance');
-      Halt(1);
+      raise TypeError.Create('sequence item ' + pystr_of(Int64(i)) +
+                             ': expected str instance');
     end;
     if i > 0 then Result := Result + sep;
     Result := Result + VariantToStr(v);
@@ -1769,8 +1767,7 @@ begin
   end
   else
   begin
-    WriteLn('TypeError: object does not support item assignment');
-    Halt(1);
+    raise TypeError.Create('object does not support item assignment');
   end;
 end;
 
@@ -2834,8 +2831,7 @@ begin
   end;
   if pyvartag(v) <> 7 then
   begin
-    WriteLn('TypeError: set() argument must be iterable');
-    Halt(1);
+    raise TypeError.Create('set() argument must be iterable');
   end;
   o := TObject(pyvarobj(v));
   if o is TPyList then
@@ -2849,8 +2845,7 @@ begin
     for i := 0 to kl.count - 1 do r.add(kl.at(i));
     Exit;
   end;
-  WriteLn('TypeError: set() argument must be iterable');
-  Halt(1);
+  raise TypeError.Create('set() argument must be iterable');
 end;
 
 function pydict_fromkeys(l: TPyList): TPyDict;
@@ -3885,8 +3880,7 @@ end;
 
 procedure PyBytesIndexError;
 begin
-  WriteLn('IndexError: bytearray index out of range');
-  Halt(1);
+  raise IndexError.Create('bytearray index out of range');
 end;
 
 constructor TPyBytes.Create(n: Integer);
@@ -4133,8 +4127,7 @@ begin
     o := TObject(pyvarobj(src));
     if o is TPyBytes then begin pybytes_setslice(b, lo, hi, TPyBytes(o)); Exit; end;
   end;
-  WriteLn('TypeError: byte slice assignment requires bytes');
-  Halt(1);
+  raise TypeError.Create('byte slice assignment requires bytes');
 end;
 
 { Little-endian, two's complement — the same layout the machine already uses,
@@ -4157,8 +4150,7 @@ begin
       pattern genuinely overflows. }
     if n < 8 then
     begin
-      WriteLn('OverflowError: can''t convert negative int to unsigned');
-      Halt(1);
+      raise OverflowError.Create('can''t convert negative int to unsigned');
     end;
     Result := TPyBytes.Create(n);
     u := v;
@@ -4181,8 +4173,7 @@ begin
   end;
   if not fits then
   begin
-    WriteLn('OverflowError: int too big to convert');
-    Halt(1);
+    raise OverflowError.Create('int too big to convert');
   end;
   Result := TPyBytes.Create(n);
   u := v;
@@ -4712,7 +4703,7 @@ begin
   { CPython os.remove RAISES on failure (deleting a missing file must be a
     catchable error — Forth-2012 DELETE-FILE expects a nonzero ior, not 0). }
   if r < 0 then
-    raise OSError.Create('FileNotFoundError: ' + path);
+    raise FileNotFoundError.Create(path);
   Result := Integer(r);
 end;
 
@@ -4725,7 +4716,7 @@ begin
   r := PyPalRename(@cs[1], @cd[1]);
   { CPython os.rename raises on failure, same as os.remove above }
   if r < 0 then
-    raise OSError.Create('FileNotFoundError: ' + src);
+    raise FileNotFoundError.Create(src);
   Result := Integer(r);
 end;
 
@@ -4741,7 +4732,7 @@ begin
   FillChar(buf[0], SizeOf(buf), 0);
   r := PyPalStat(@cs[1], @buf[0]);
   if r < 0 then
-    raise OSError.Create('FileNotFoundError: ' + path);
+    raise FileNotFoundError.Create(path);
   Result.st_mode := PInt64(@buf[24])^ and $FFFFFFFF;   { u32 st_mode (uid sits above) }
   Result.st_size := PInt64(@buf[48])^;
 {$endif}
@@ -5046,8 +5037,7 @@ begin
   content := pyfile_slurp(path, ok);
   if not ok then
   begin
-    WriteLn('FileNotFoundError: ', path);
-    Halt(1);
+    raise FileNotFoundError.Create(path);
   end;
   { split into lines, each KEEPING its trailing newline — Python's file
     iteration yields lines that way, and uforth strips the '\n' itself }
@@ -5782,8 +5772,9 @@ begin
   if l <> nil then n := l.count;
   if (n < lo) or (n > hi) then
   begin
-    WriteLn('TypeError: forwarded call got ', n, ' arguments, expected ', lo, ' to ', hi);
-    Halt(1);
+    raise TypeError.Create('forwarded call got ' + pystr_of(Int64(n)) +
+                           ' arguments, expected ' + pystr_of(Int64(lo)) +
+                           ' to ' + pystr_of(Int64(hi)));
   end;
 end;
 
@@ -5791,8 +5782,7 @@ procedure pystar_no_kwargs(d: TPyDict);
 begin
   if (d <> nil) and (d.count > 0) then
   begin
-    WriteLn('TypeError: forwarding **kwargs into a callee with named parameters is not supported');
-    Halt(1);
+    raise TypeError.Create('forwarding **kwargs into a callee with named parameters is not supported');
   end;
 end;
 
@@ -6119,15 +6109,22 @@ begin
 end;
 
 function pyfile_open(const path, mode: AnsiString): TPyFile;
-var flags, fd: Int64; z: AnsiString; i: Integer; wantCreate, wantRW: Boolean;
+var flags, fd: Int64; z: AnsiString; i: Integer; wantCreate, wantRW, wantAppend: Boolean;
 begin
-  wantCreate := False; wantRW := False;
+  wantCreate := False; wantRW := False; wantAppend := False;
   for i := 1 to Length(mode) do
   begin
     if mode[i] = 'w' then wantCreate := True;
+    if mode[i] = 'a' then wantAppend := True;
     if mode[i] = '+' then wantRW := True;
   end;
-  if wantCreate then flags := PYPAL_O_RDWR + PYPAL_O_CREAT + PYPAL_O_TRUNC
+  { 'a' was not checked at all, so append mode fell through to O_RDONLY and
+    every write to it failed silently -- `open(p,"a")` then f.write(...) kept
+    the earlier content and dropped the new
+    (bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory). }
+  if wantAppend then
+    flags := PYPAL_O_RDWR + PYPAL_O_CREAT + PYPAL_O_APPEND
+  else if wantCreate then flags := PYPAL_O_RDWR + PYPAL_O_CREAT + PYPAL_O_TRUNC
   else if wantRW then flags := PYPAL_O_RDWR
   else flags := PYPAL_O_RDONLY;
   z := path + #0;
@@ -6136,7 +6133,7 @@ begin
     { CPython open() raises a CATCHABLE OSError (uforth's OPEN-FILE wraps the
       call in try/except and turns it into a nonzero ior — the Forth-2012
       DELETE-FILE test reopens a deleted file expecting failure, not a halt). }
-    raise OSError.Create('FileNotFoundError: ' + path);
+    raise FileNotFoundError.Create(path);
   Result := TPyFile.Create;
   Result.FFd := fd;
 end;

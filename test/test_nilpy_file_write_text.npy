@@ -46,3 +46,13 @@ with open(p5, "w") as f:
     f.write("x" * 5000)
 with open(p5, "r") as f:
     print(len(f.read()))
+
+# APPEND mode: 'a' was not checked at all in pyfile_open, so it fell through to
+# O_RDONLY and every write to it failed silently -- the new content was dropped
+p6 = "/tmp/pxx_test_write_append.txt"
+with open(p6, "w") as f:
+    f.write("first\n")
+with open(p6, "a") as f:
+    f.write("second\n")
+with open(p6, "r") as f:
+    print(f.read().strip())
