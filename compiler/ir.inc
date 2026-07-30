@@ -3777,6 +3777,37 @@ begin
   IRNodeIsPyStr := (tk = tyString) or (tk = tyAnsiString) or (tk = tyChar);
 end;
 
+{ A CHAR compared against a STRING with an ordering operator. pxx spells a
+  one-character value tyChar, an ORDINAL, while the other side is a string
+  POINTER -- so `<` compared a character code (~48-57) against an address and
+  answered True for every pair, `>` False for every pair, whatever the
+  characters actually were. `==`/`!=` escaped because they are routed to a
+  content compare first, which is exactly why this survived: the equality tests
+  people write first all pass.
+
+  It silently breaks the commonest character-scanning idiom in Python --
+  `while src[i] >= "0" and src[i] <= "9"` never enters, so hand-written
+  tokenizers accumulate nothing and produce wrong tokens without any error
+  (bug-nilpy-char-vs-string-literal-ordering-compares-an-address).
+
+  Char-vs-char (both ordinals) and str-vs-str (both content) are already
+  correct and must stay on their own paths -- this fires ONLY for the mixed
+  pair, which routes through pycmp_v, where tags 5 and 6 share the text arm. }
+function IRPyCharStrOrderClash(node: Integer): Boolean;
+var lc, rc, ls, rs: Boolean; lt, rt: TTypeKind;
+begin
+  IRPyCharStrOrderClash := False;
+  if not NilPyUserCode then Exit;
+  if (ASTLeft[node] < 0) or (ASTRight[node] < 0) then Exit;
+  lt := IntToTypeKind(ASTTk[ASTLeft[node]]);
+  rt := IntToTypeKind(ASTTk[ASTRight[node]]);
+  lc := lt = tyChar;
+  rc := rt = tyChar;
+  ls := (lt = tyString) or (lt = tyAnsiString);
+  rs := (rt = tyString) or (rt = tyAnsiString);
+  IRPyCharStrOrderClash := (lc and rs) or (ls and rc);
+end;
+
 { A PROVABLE operand-type clash: one side is statically a str and the other
   statically a number, for an operator that accepts neither pairing. The
   runtime helpers already raise TypeError for this
@@ -5801,7 +5832,13 @@ begin
             ordinary scalar types and would otherwise compile to a raw IR_BINOP
             over the str's handle. The warning above says so at compile time;
             this makes the run agree with it. }
-          IRPyNumStrClash(node)) then
+          IRPyNumStrClash(node) or
+          { ...and a CHAR ordered against a STRING, which compared an ordinal
+            with an address -- see IRPyCharStrOrderClash. Ordering operators
+            only; `=`/`<>` already content-compare correctly. }
+          (IRPyCharStrOrderClash(node) and
+           ((Integer(ASTIVal[node]) = Ord(tkLt)) or (Integer(ASTIVal[node]) = Ord(tkLe)) or
+            (Integer(ASTIVal[node]) = Ord(tkGt)) or (Integer(ASTIVal[node]) = Ord(tkGe))))) then
       begin
         { `+` is in this list too: pyadd_v concatenates two strs and two lists
           and adds two numbers, and coerces through pyvar_to_int otherwise, so

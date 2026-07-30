@@ -1,0 +1,76 @@
+# A char ordered against a string compared an ORDINAL with an ADDRESS, so every
+# `<` answered True and every `>` answered False whatever the characters were.
+# `==`/`!=` escaped because they content-compare, which is why it survived.
+# bug-nilpy-char-vs-string-literal-ordering-compares-an-address
+# Every expectation is CPython's own output.
+
+s = "5"
+
+# the four orderings against a literal -- these were constant-valued before
+print(s[0] < "0", s[0] < "9", s[0] > "0", s[0] > "9")
+print(s[0] <= "5", s[0] >= "5", s[0] <= "4", s[0] >= "6")
+
+# against a string VARIABLE, and with the char on either side
+z = "0"
+print(s[0] > z, s[0] < z, z < s[0], z > s[0])
+
+# equality was always right and must stay right
+print(s[0] == "5", s[0] != "5")
+
+# char-vs-char and str-vs-str are separate paths that were already correct
+a = "5"
+b = "3"
+print(a[0] > b[0], a[0] < b[0])
+print("b" > "a", "abc" < "abd")
+
+# a char reprs WITH quotes inside a container -- it is a str of length 1
+d = {}
+d[s[0]] = 1
+print(d)
+print([a[0], b[0]])
+
+# the idiom this actually broke: a digit scan that never entered its loop
+src = "123x"
+i = 0
+num = ""
+while i < len(src) and src[i] >= "0" and src[i] <= "9":
+    num = num + src[i]
+    i = i + 1
+print(num, i)
+
+# end to end: a tokenizer, which returned [1, 2, +, 3, 4, *, 2] and 5478200
+expr = "12 + 34 * 2"
+toks = []
+j = 0
+n = len(expr)
+while j < n:
+    c = expr[j]
+    if c == " ":
+        j = j + 1
+        continue
+    if c >= "0" and c <= "9":
+        acc = ""
+        while j < n and expr[j] >= "0" and expr[j] <= "9":
+            acc = acc + expr[j]
+            j = j + 1
+        toks.append(acc)
+        continue
+    toks.append(c)
+    j = j + 1
+print(toks)
+
+# a character classifier, the other shape that silently answered wrong
+def kind(c):
+    if c >= "0" and c <= "9":
+        return "digit"
+    if c >= "a" and c <= "z":
+        return "lower"
+    if c >= "A" and c <= "Z":
+        return "upper"
+    return "other"
+# NOTE: a fresh name. Reusing `c` here (it is bound to a char above) hits a
+# SEPARATE bug -- a for-variable previously bound to a non-string type
+# iterates garbage -- tracked in
+# bug-nilpy-for-variable-reused-after-a-non-string-binding-iterates-garbage.
+for ch in "aZ9!":
+    print(ch, kind(ch))

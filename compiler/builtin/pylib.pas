@@ -5754,8 +5754,12 @@ end;
 
 function pyrepr_of(const v: Variant): AnsiString; overload;
 begin
-  { only a STRING payload gains quotes; every other tag reprs as it strs }
-  if pyvartag(v) = 6 then
+  { A STRING payload gains quotes -- and so does a CHAR, which is tag 5 and was
+    missing here. Python has no character type: `s[0]` is a str of length 1 and
+    reprs with quotes like any other, so `{s[0]: 1}` printed `{a: 1}` where
+    CPython prints `{'a': 1}`
+    (bug-nilpy-char-vs-string-literal-ordering-compares-an-address). }
+  if (pyvartag(v) = 6) or (pyvartag(v) = 5) then
   begin
     Result := PyReprQuote(VariantToStr(v));
     Exit;
