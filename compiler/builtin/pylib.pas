@@ -2642,8 +2642,42 @@ end;
 
 function pyvar_gt(const a: Variant; const b: Variant): Boolean;
 var pa, pb: PPyVarRec;
+    la, lb, k, n: Int64;
+    ea, eb: Variant;
+    oa, ob: TObject;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
+  { Two SEQUENCES compare LEXICOGRAPHICALLY: the first index where the elements
+    differ decides, and if one runs out first the shorter is smaller. Without
+    this arm both fell through to pyvar_to_int and `sorted([("b", 2),
+    ("a", 1)])` aborted with "expected a number, got object" — the standard
+    sort-by-first-field idiom (bug-nilpy-sorted-over-tuples-or-lists-fails).
+    Recursive, so a list OF pairs sorts by the pair, then within it. A tuple is
+    the same TPyList here, so both spellings land in one rule. }
+  if (pa^.VType = 7) and (pb^.VType = 7) and
+     (pa^.Payload <> 0) and (pb^.Payload <> 0) then
+  begin
+    oa := TObject(Pointer(NativeInt(pa^.Payload)));
+    ob := TObject(Pointer(NativeInt(pb^.Payload)));
+    if (oa is TPyList) and (ob is TPyList) then
+    begin
+      la := TPyList(oa).FLen;
+      lb := TPyList(ob).FLen;
+      if la < lb then n := la else n := lb;
+      for k := 0 to n - 1 do
+      begin
+        ea := TPyList(oa).at(k);
+        eb := TPyList(ob).at(k);
+        if not PyVarEq(PPyVarRec(@ea), PPyVarRec(@eb)) then
+        begin
+          pyvar_gt := pyvar_gt(ea, eb);
+          Exit;
+        end;
+      end;
+      pyvar_gt := la > lb;
+      Exit;
+    end;
+  end;
   if ((pa^.VType = 6) or (pa^.VType = 5)) and ((pb^.VType = 6) or (pb^.VType = 5)) then
   begin
     pyvar_gt := PyVarText(pa) > PyVarText(pb);

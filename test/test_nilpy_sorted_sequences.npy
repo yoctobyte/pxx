@@ -1,0 +1,14 @@
+# sorted()/max()/min() over lists of tuples or lists: Python compares sequences
+# LEXICOGRAPHICALLY, and without that rule the element comparison fell through
+# to a numeric conversion and aborted with "expected a number, got object".
+# bug-nilpy-sorted-over-tuples-or-lists-fails
+
+print(sorted([("b", 2), ("a", 1)]))
+print(sorted([[2, "b"], [1, "a"]]))
+print(sorted([("a", 2), ("a", 1)]))
+print(sorted([(1, 2), (1,), (1, 2, 3)]))
+print(sorted([3, 1, 2]))
+print(sorted(["b", "a"]))
+print(sorted([[1, [2, 3]], [1, [2, 1]]]))
+print(max([("a", 1), ("b", 0)]), min([("a", 1), ("b", 0)]))
+print(sorted([("b", 2), ("a", 1)], reverse=True))
