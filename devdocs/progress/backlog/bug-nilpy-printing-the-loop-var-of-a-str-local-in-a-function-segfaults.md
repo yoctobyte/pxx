@@ -15,6 +15,46 @@ f()
 # CPython: a / b     pxx: SIGSEGV
 ```
 
+## The trigger is the BODY SHAPE, not the loop variable
+
+Refined after the first pass: the loop variable is irrelevant. `print` of a
+CONSTANT crashes just as well, and any ASSIGNMENT anywhere in the body cures it.
+
+| loop body (inside a def, iterating a str local) | pxx |
+| --- | --- |
+| `print(ch)` | **SIGSEGV** |
+| `print("x")` — the loop variable is not even used | **SIGSEGV** |
+| `print("x")` then `print("y")` | **SIGSEGV** |
+| `print(ord(ch))` | **SIGSEGV** |
+| `z = 1` then `print("x")` | correct ✓ |
+| `print("x")` then `z = 1` | correct ✓ |
+| `c2 = ch` then `print(c2)` | correct ✓ |
+| `out = out + ch` (no print at all) | correct ✓ |
+
+So: a loop body consisting ONLY of print statements. One assignment, before or
+after, in any position, makes it work.
+
+## What the crash actually is
+
+`rip = 0x400181` — a jump to a bogus address inside the ELF header region, so
+this is a bad CALL TARGET, not a data dereference. Compare the recorded
+landmine `project_bodyless_procaddr_links_to_entry_minus_one`: "@proc on a
+BODYLESS routine links as entry-1 -> plausible ptr, crashes far away".
+
+`PXXDBG=n.locals` shows both `s` and `ch` as tk=23 (managed string) locals, and
+`PXXDBG=a.ir:f` shows the two variants are structurally identical apart from
+the extra `store_sym z` — same calls, same order, same blocks. Only the frame
+layout differs, which is why adding any local shifts it out of the failure.
+
+Together those point at the function's prologue/epilogue or its local-init
+sequence rather than at the loop desugar itself: the IR is right and something
+below it is emitting or linking a wrong address for this frame shape.
+
+Next step for whoever picks it up: build with `-g` and single-step the prologue
+(`make pxx-debug`, `source tools/pxx-gdb.py`), and compare the emitted prologue
+of the two variants — the difference should be visible directly, since the IR
+is identical.
+
 ## The shape is very narrow — and every neighbour works
 
 | variant | pxx |
