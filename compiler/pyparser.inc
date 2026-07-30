@@ -10622,7 +10622,12 @@ begin
           { `return a, b` returns a tuple, which is a TPyList here }
           ASTLeft[node] := PyMakeTupleFrom(CurASTNode)
         else
-          ASTLeft[node] := CurASTNode;
+          { `return inner` — a nested def taken as a VALUE lowers to a heap
+            object pointer (pyboundfn_new + binds), and a raw pointer stored in
+            the Variant result is not a callable to the caller: `mk(100)(1)`
+            answered None with no diagnostic. Box it exactly as `g = lambda...`
+            does (bug-nilpy-returning-a-nested-def-yields-none). }
+          ASTLeft[node] := PyBoxCallableValue(CurASTNode);
       end;
     end;
     Result := node;

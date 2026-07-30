@@ -1,0 +1,39 @@
+# A nested def RETURNED as a value: the capture travels with it and calling the
+# returned value yields the callee's result, not None.
+# bug-nilpy-returning-a-nested-def-yields-none
+
+def mk(n: int):
+    def inner(x: int) -> int:
+        return x + n
+    return inner
+
+
+def mk0():
+    def inner(x: int) -> int:
+        return x + 1
+    return inner
+
+
+def mkl(n):
+    return lambda x: x + n
+
+
+def apply2(f, v):
+    return f(v)
+
+
+a = mk(10)
+b = mk(20)
+print(a(1), b(1))
+print(mk0()(1))
+print(mkl(100)(1))
+
+fs = [mk(1000), mk(2000)]
+print(fs[0](1), fs[1](2))
+
+print(apply2(mk(30), 5))
+print(apply2(mkl(40), 5))
+
+# the same returned value called more than once keeps its capture
+c = mk(7)
+print(c(1), c(2), c(3))

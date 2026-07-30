@@ -99,6 +99,12 @@ function pyboundfn_bind(obj: Pointer; idx: Int64; v: Int64): Pointer;
 function pyboundfn_is(p: Pointer): Boolean;
 function pyboundfn_bind_var(obj: Pointer; idx: Int64; const v: Variant): Pointer;
 function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
+{ Same call, but the callee's Variant RESULT is handed back. pyvar_callv* used
+  the discarding form, so a lifted def reached through a VALUE always answered
+  None — `return inner` then `f(1)`
+  (bug-nilpy-returning-a-nested-def-yields-none). Var-out rather than a Variant
+  function result: that return convention corrupts through this bridge. }
+procedure pyboundfn_callv(objptr: Pointer; const a0: Variant; var res: Variant);
 
 { Invoke whatever kind of Python callable a value holds, with one argument or
   none. NilPy has four shapes — a BOUND METHOD (tag 8, {code, receiver}), a
@@ -1798,6 +1804,14 @@ begin
 end;
 
 function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
+var rvd: Variant;
+begin
+  rvd := pynone;
+  pyboundfn_callv(objptr, a0, rvd);
+  pyboundfn_call_ptr := 0;
+end;
+
+procedure pyboundfn_callv(objptr: Pointer; const a0: Variant; var res: Variant);
 var o: PBoundFnObj; p0: Int64; b: PInt64; code: Pointer;
     va0: Variant;
     f1: TBF1; f2: TBF2; f3: TBF3; f4: TBF4; f5: TBF5; f6: TBF6; f7: TBF7;
@@ -1835,7 +1849,7 @@ begin
     else
       begin f13 := TBF13(code); rv := f13(p0, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11]); end;
   end;
-  pyboundfn_call_ptr := 0;
+  res := rv;
 end;
 
 
@@ -3533,7 +3547,7 @@ begin
       PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
       args.Free;
     end
-    else pyboundfn_call_ptr(o, pynone);   { a lifted lambda: result discarded }
+    else pyboundfn_callv(o, pynone, Result);
     Exit;
   end;
   f0 := TPyCallFn0(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
@@ -3556,7 +3570,7 @@ begin
       PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
       args.Free;
     end
-    else pyboundfn_call_ptr(o, a0);
+    else pyboundfn_callv(o, a0, Result);
     Exit;
   end;
   f1 := TPyCallFn1(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
@@ -3579,7 +3593,7 @@ begin
       PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
       args.Free;
     end
-    else pyboundfn_call_ptr(o, a0);   { a lifted lambda takes exactly one }
+    else pyboundfn_callv(o, a0, Result);   { a lifted lambda takes exactly one }
     Exit;
   end;
   f2 := TPyCallFn2(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
@@ -3602,7 +3616,7 @@ begin
       PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
       args.Free;
     end
-    else pyboundfn_call_ptr(o, a0);
+    else pyboundfn_callv(o, a0, Result);
     Exit;
   end;
   f3 := TPyCallFn3(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
