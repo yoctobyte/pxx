@@ -85,3 +85,6 @@ specific number, and the correctness test is what a regression would trip first.
 
 `make test-nilpy` + self-host byte-identical, plus the RSS-slope pair above
 (both must be flat afterwards) and the existing reclamation tests.
+
+## Log
+- 2026-07-30 — resolved, commit 4e4ff0d24.
