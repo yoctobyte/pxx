@@ -1,0 +1,42 @@
+# PyTypeError and the ValueError diagnostics next to it RAISE; they used to
+# writeln + Halt, so no handler could see them.
+# bug-nilpy-pytypeerror-halts-instead-of-raising
+x = 2.5
+try:
+    print("ab" * x)
+except TypeError:
+    print("caught repeat")
+
+try:
+    print(len(3))
+except TypeError:
+    print("caught len")
+
+try:
+    print(int("junk"))
+except ValueError:
+    print("caught int")
+
+try:
+    print("%q" % (1,))
+except ValueError:
+    print("caught fmt")
+
+try:
+    print("a,b".split(""))
+except ValueError:
+    print("caught sep")
+
+empty = []
+try:
+    print(max(empty))
+except ValueError:
+    print("caught max")
+
+# TypeError is a subclass of Exception, so a bare handler still sees it
+try:
+    print(len(3))
+except Exception:
+    print("as Exception")
+
+print("after")

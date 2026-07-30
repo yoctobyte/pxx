@@ -1279,8 +1279,7 @@ begin
   m := Length(sep);
   if m = 0 then
   begin
-    writeln('ValueError: empty separator');
-    Halt(1);
+    raise ValueError.Create('empty separator');
   end;
   st := 1;
   i := 1;
@@ -1315,8 +1314,7 @@ begin
   m := Length(sep);
   if m = 0 then
   begin
-    writeln('ValueError: empty separator');
-    Halt(1);
+    raise ValueError.Create('empty separator');
   end;
   if maxsplit < 0 then begin Result := pystr_split_sep(s, sep); Exit; end;
   st := 1; i := 1; done := 0;
@@ -1623,13 +1621,13 @@ var nm: AnsiString;
 begin
   if what = '' then nm := 'this argument' else nm := 'parameter ' + what;
   if (PPyVarRec(@v)^.VType = 8) and (pybound_recv(v) <> nil) then
-    raise Exception.Create('TypeError: ' + nm + ' is declared Callable[...], '
+    raise TypeError.Create(nm + ' is declared Callable[...], '
       + 'which carries a code address only, and a BOUND METHOD also needs its '
       + 'receiver — pass a plain function, a lambda, or declare the parameter '
       + 'without an annotation');
   Result := Pointer(PPyVarRec(@v)^.Payload);
   if Result = nil then
-    raise Exception.Create('TypeError: ' + nm + ' is not callable — the value '
+    raise TypeError.Create(nm + ' is not callable — the value '
       + 'is None (an import that did not resolve, or a name never assigned)');
 end;
 
@@ -1647,7 +1645,7 @@ begin
     if pybound_recv(v) <> nil then
     begin
       if what = '' then nm := 'object' else nm := what;
-      raise Exception.Create('TypeError: ' + nm + ' is a bound method taking too '
+      raise TypeError.Create(nm + ' is a bound method taking too '
         + 'many arguments to call through a name (max 3)');
     end;
     Result := pybound_code(v);
@@ -1657,7 +1655,7 @@ begin
   if Result = nil then
   begin
     if what = '' then nm := 'object' else nm := what;
-    raise Exception.Create('TypeError: ' + nm + ' is not callable — the name is '
+    raise TypeError.Create(nm + ' is not callable — the name is '
       + 'None (an import that did not resolve, or a value never assigned)');
   end;
 end;
@@ -2765,8 +2763,7 @@ var i: Integer;
 begin
   if (l = nil) or (l.count = 0) then
   begin
-    WriteLn('ValueError: max() arg is an empty sequence');
-    Halt(1);
+    raise ValueError.Create('max() arg is an empty sequence');
   end;
   Result := l.at(0);
   for i := 1 to l.count - 1 do
@@ -2778,8 +2775,7 @@ var i: Integer;
 begin
   if (l = nil) or (l.count = 0) then
   begin
-    WriteLn('ValueError: min() arg is an empty sequence');
-    Halt(1);
+    raise ValueError.Create('min() arg is an empty sequence');
   end;
   Result := l.at(0);
   for i := 1 to l.count - 1 do
@@ -3126,10 +3122,18 @@ begin
   else Result := '<unknown>';
 end;
 
+{ RAISES, it does not halt. It used to writeln + Halt(219), which no
+  `except TypeError:` could see — the one member of the diagnostic family
+  nobody converted when pystr_to_int started raising ValueError
+  (bug-nilpy-pytypeerror-halts-instead-of-raising). Every call site is an
+  ordinary value-returning function (pyvar_to_int/_float/_char, pyord_v,
+  pylen_v, pymul_v, len, pyabs_v, pydict_v, pylist_v), never a callback frame
+  or an ARC finaliser, so unwinding out of one is safe. The message text is
+  unchanged so an UNCAUGHT one still reads
+  `TypeError: expected <want>, got <type>` — tests match on it. }
 procedure PyTypeError(t: Int64; const want: AnsiString);
 begin
-  writeln('TypeError: expected ', want, ', got ', PyVarTypeName(t));
-  Halt(219);
+  raise TypeError.Create('expected ' + want + ', got ' + PyVarTypeName(t));
 end;
 
 function pyvar_to_int(const v: Variant): Int64;
@@ -3574,11 +3578,10 @@ var
   p: PPyVarRec;
 begin
   p := PPyVarRec(@v);
+  { raises for the same reason PyTypeError does — a halt here is invisible to
+    `except TypeError:`. }
   if p^.VType <> 6 then
-  begin
-    writeln('Runtime error: cannot repeat a non-string value');
-    Halt(219);
-  end;
+    raise TypeError.Create('cannot repeat a non-string value');
   { the `PPyAnsiString(@p^.Payload)^` deref arg is owned by the isNilPy arg
     lowering (bug-a-nilpy-managed-deref-to-const-arg-leaks), so no per-site
     bind is needed. }
@@ -3750,8 +3753,7 @@ begin
     accept 256 as 0, so it is rejected }
   if (v < 0) or (v > 255) then
   begin
-    WriteLn('ValueError: byte must be in range(0, 256)');
-    Halt(1);
+    raise ValueError.Create('byte must be in range(0, 256)');
   end;
   p^ := v;
 end;
@@ -3810,8 +3812,7 @@ var p: PByte;
 begin
   if (v < 0) or (v > 255) then
   begin
-    WriteLn('ValueError: byte must be in range(0, 256)');
-    Halt(1);
+    raise ValueError.Create('byte must be in range(0, 256)');
   end;
   PyBytesEnsure(Self, FLen + 1);
   p := PByte(NativeInt(FData) + (FLen - 1));
@@ -5217,8 +5218,7 @@ begin
     end;
     if i > Length(fmt) then
     begin
-      WriteLn('ValueError: incomplete format');
-      Halt(1);
+      raise ValueError.Create('incomplete format');
     end;
     conv := fmt[i];
     Inc(i);
@@ -5268,8 +5268,7 @@ begin
         end;
     else
       begin
-        WriteLn('ValueError: unsupported format character "', conv, '"');
-        Halt(1);
+        raise ValueError.Create('unsupported format character "' + conv + '"');
       end;
     end;
     outS := outS + pyformat_of(cur, spec);

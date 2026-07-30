@@ -678,7 +678,11 @@ test-nilpy: $(COMPILER)
 	  | grep -q 'expects text for parameter "s"' \
 	  || { echo 'test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter'; exit 1; }
 	./$(COMPILER) test/test_nilpy_float_repeat_typeerror.npy /tmp/test_nilpy_float_repeat_typeerror26
-	test "$$(timeout 20 /tmp/test_nilpy_float_repeat_typeerror26 2>&1 || true)" = "$$(printf 'ababab ababab ababab\nTypeError: expected an integer to repeat a str by, got float')"
+	test "$$(timeout 20 /tmp/test_nilpy_float_repeat_typeerror26 2>&1 || true)" = "$$(printf 'ababab ababab ababab\nUnhandled exception: TypeError: expected an integer to repeat a str by, got float')"
+	@# ...and the same diagnostics are CATCHABLE — PyTypeError raises, it no
+	@# longer Halt(219)s (bug-nilpy-pytypeerror-halts-instead-of-raising)
+	./$(COMPILER) test/test_nilpy_typeerror_is_catchable.npy /tmp/test_nilpy_typeerror_catch26
+	test "$$(/tmp/test_nilpy_typeerror_catch26)" = "$$(printf 'caught repeat\ncaught len\ncaught int\ncaught fmt\ncaught sep\ncaught max\nas Exception\nafter')"
 	./$(COMPILER) test/test_nilpy_none_value_semantics.npy /tmp/test_nilpy_none_value_semantics26
 	test "$$(/tmp/test_nilpy_none_value_semantics26)" = "$$(printf 'False False True True\nFalse False True\nFalse False\nFalse False\nFalse False\nFalse False\nTrue False\nTrue False False False False\nFalse False False False\nNone None v=None False\nNone\nn None a None\nTrue True True True True\ngood')"
 	./$(COMPILER) test/test_nilpy_return_nested_def.npy /tmp/test_nilpy_return_nested_def26
