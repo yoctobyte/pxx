@@ -1,0 +1,51 @@
+# A `for` variable already bound to a SCALAR (int/float/bool/char) kept its
+# scalar slot when reused as a string-loop target, and the string element's
+# handle got stored into it -- printed as an address, rejected as a
+# TypeError, or read as the wrong bytes. The reverse direction (a string-loop
+# target reassigned to a scalar afterward) SIGSEGV'd outright.
+# bug-nilpy-for-variable-reused-after-a-non-string-binding-iterates-garbage
+# Every expectation is CPython's own output.
+
+c1 = 5
+for c1 in "aZ":
+    print(c1)
+
+c2 = 1.5
+for c2 in "aZ":
+    print(c2)
+
+c3 = True
+for c3 in "aZ":
+    print(c3)
+
+s = "x"
+c4 = s[0]
+for c4 in "aZ":
+    print(c4)
+
+# the container case already worked, and must keep working
+n = 0
+for n in ["a", "b"]:
+    print(n)
+
+# the reverse direction: a str-loop target reassigned to a scalar afterward
+for c5 in "ab":
+    pass
+c5 = 5
+print(c5)
+
+for c6 in "ab":
+    pass
+c6 = 1.5
+print(c6)
+
+for c7 in "ab":
+    pass
+c7 = True
+print(c7)
+
+# a function PARAMETER reused as a loop variable was already fine -- guard it
+def f(n2):
+    for n2 in [1, 2]:
+        print(n2)
+f(0)

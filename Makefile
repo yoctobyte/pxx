@@ -696,6 +696,9 @@ test-nilpy: $(COMPILER)
 	@# self-referential chr() accumulator's return type
 	./$(COMPILER) test/test_nilpy_bare_return_subscript_slice.npy /tmp/test_nilpy_bare_ret_subslice26
 	test "$$(/tmp/test_nilpy_bare_ret_subslice26)" = "$$(printf 'a\na\nab\nprefix_\na\n1.5\nTrue\n[1]\na\n1\nv\n[1, 2]\nhello world')"
+	@# a `for` target reused after a non-string binding (and the reverse order)
+	./$(COMPILER) test/test_nilpy_for_variable_reuse.npy /tmp/test_nilpy_for_var_reuse26
+	test "$$(/tmp/test_nilpy_for_var_reuse26)" = "$$(printf 'a\nZ\na\nZ\na\nZ\na\nZ\na\nb\n5\n1.5\nTrue\n1\n2')"
 	@# a managed STRING local minted after the prologue zero-init pass was never
 	@# nil'd, so the loop's first store released stale frame bytes -> SIGSEGV
 	./$(COMPILER) test/test_nilpy_str_local_loop_zeroinit.npy /tmp/test_nilpy_str_local_zi26

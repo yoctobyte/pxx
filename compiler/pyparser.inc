@@ -9088,8 +9088,8 @@ var contNode, ci, dictCi, listCi, symIdx, cSym, iSym, nSym: Integer;
     elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
     compSaved, keyN, savedHoist, innerHoist: Integer;
     filtIdx, fj, fdepth, filtPair, filtN: Integer;  { comprehension `if` filter }
-    isStr, pairMode: Boolean; contTk: TTypeKind;
-    elemNode2, pairSym, plistSym, xi, nExtra: Integer;
+    isStr, pairMode: Boolean; contTk, tk: TTypeKind;
+    elemNode2, pairSym, plistSym, xi, nExtra, cci: Integer;
     extraSyms: array[0..5] of Integer;
 begin
   pairMode := False;
@@ -9246,6 +9246,46 @@ begin
   else if (name2 <> '') and not enumMode then
     Error('Nil Python: a two-name for target needs a dict (.items()) or enumerate()');
 
+  { Feed the loop target's element type into the SAME whole-program widening
+    table a bare assignment feeds via PyNoteLocalType — only during a typing
+    pre-pass round, never the real pass. Without this, a name already bound
+    to a SCALAR (`c = 5`) that is later used as a `for c in <string>:` target
+    kept its scalar slot forever: the pre-pass token scanner only recognises
+    bare `name = expr` assignments as note-worthy, so it never learned that
+    `c` also needs to hold a str, and the real pass created `c` as tyInteger
+    at its first (and only, as far as the scanner knew) assignment. Widening
+    the SLOT after code already targets it corrupts what is in the slot (two
+    naive attempts at exactly that were tried and reverted — see the ticket) ;
+    feeding the WHOLE-PROGRAM inference before either statement is really
+    compiled is what already makes an ordinary `c = "x"; c = 5` rebind widen
+    to a variant correctly, and the for-loop target was simply invisible to
+    that mechanism
+    (bug-nilpy-for-variable-reused-after-a-non-string-binding-iterates-garbage). }
+  if PyTypingPass then
+  begin
+    if enumMode then
+    begin
+      PyNoteLocalType(name, tyInteger, REC_NONE);
+      if name2 <> '' then
+      begin
+        if isStr then PyNoteLocalType(name2, tyAnsiString, REC_NONE)
+        else PyNoteLocalType(name2, tyVariant, REC_NONE);
+      end;
+    end
+    else if pairMode then
+    begin
+      PyNoteLocalType(name, tyVariant, REC_NONE);
+      if name2 <> '' then PyNoteLocalType(name2, tyVariant, REC_NONE);
+    end
+    else if isStr then
+      PyNoteLocalType(name, tyAnsiString, REC_NONE)
+    else
+    begin
+      PyNoteLocalType(name, tyVariant, REC_NONE);
+      if name2 <> '' then PyNoteLocalType(name2, tyVariant, REC_NONE);  { dict values }
+    end;
+  end;
+
   { a comprehension ends its header at ']', not ':' — the body is synthetic }
   if PyCompTarget < 0 then Expect(tkColon, ':');
   { body suite (indented block or one-liner) is parsed below, after the
@@ -9260,9 +9300,28 @@ begin
   symIdx := PyProgSym(name);
   if symIdx < 0 then
   begin
-    if enumMode then symIdx := AllocVar(name, tyInteger)
-    else if isStr then symIdx := AllocVar(name, tyAnsiString)
-    else symIdx := AllocVar(name, tyVariant);
+    if enumMode then tk := tyInteger
+    else if isStr then tk := tyAnsiString
+    else tk := tyVariant;
+    { A MODULE-level for-target created here for the first time must consult
+      the whole-program widening table too, exactly like a bare assignment
+      does a few lines up in PyParseStatement — otherwise the ORDER the two
+      binding forms happen to appear in decides the outcome: `for c in "ab":
+      pass` before `c = 5` created `c` as tyAnsiString right here (ignoring
+      that PyModuleLocals already knows `c` is also assigned an int later),
+      and the later `c = 5` stored a scalar int into a managed-string slot —
+      SIGSEGV on release. Function-local targets do not need this: every
+      local is pre-seeded from the converged PyLocals table before the body's
+      real parse begins (see the `for i := 0 to PyLocalCount - 1` loop next to
+      each PyCollectLocalsAST call), so `symIdx` is essentially never < 0
+      there for a name the pre-pass already saw.
+      (bug-nilpy-for-variable-reused-after-a-non-string-binding-iterates-garbage) }
+    if CurProc < 0 then
+    begin
+      cci := PyFindModuleConstraint(name);
+      if cci >= 0 then tk := PyWiden(tk, PyModuleLocals[cci].TypeKind);
+    end;
+    symIdx := AllocVar(name, tk);
   end;
   nExtra := PyForExtraCount;
   for xi := 0 to nExtra - 1 do
@@ -11531,11 +11590,11 @@ end;
   AllocVar allocates a BSS global, so without the BSSSize restore every
   iteration would leak the whole module's globals again. }
 procedure PyCollectModuleLocalsAST;
-var rnd, i, si, depth, bodyIx: Integer;
+var rnd, i, si, depth, bodyIx, forJ, forCi: Integer;
     savedTok, savedAST, savedSC, savedCur, savedFS, savedBSS: Integer;
     changed, savedExprMode: Boolean;
-    tk, w: TTypeKind;
-    nm: AnsiString;
+    tk, w, forElemTk: TTypeKind;
+    nm, forName: AnsiString;
 begin
   PyLocalCount := 0;
   rnd := 0;
@@ -11642,6 +11701,77 @@ begin
         PyParseStatement;
         i := TokPos - 1;      { the statement's terminating token }
         continue;
+      end
+      else if (depth = 0) and
+              ((Tokens[i].Kind = tkFor) or
+               ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'for'))) and
+              { a STATEMENT BOUNDARY, exactly like the bare-assignment match
+                above — a comprehension/generator's inline `for` (`next((c for
+                c in cs if ...), ...)`) is the SAME token at depth 0 (parens
+                do not change depth) but mid-expression, not a new statement. }
+              ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent,
+                                                         tkDedent, tkSemicolon])) and
+              (i + 2 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkIdent) and
+              (Tokens[i + 2].Kind = tkIn) then
+      begin
+        { `for name in ITER:` at module level: fold the loop TARGET's element
+          type into the SAME whole-program widening table a bare assignment
+          feeds via PyNoteLocalType. Without this, a name already bound to a
+          SCALAR elsewhere (`c = 5`) and later used as a for-TARGET over a
+          STRING (or any element-typed container) never got that binding's
+          type folded in — the flat scanner only recognises `name = expr`,
+          and `for` is a different shape entirely. The real pass then created
+          the name from its ONLY known assignment (the scalar one) and the
+          loop stored a str/variant element into that fixed scalar slot
+          (bug-nilpy-for-variable-reused-after-a-non-string-binding-iterates-garbage).
+
+          Deliberately NOT a trial-parse of the statement (unlike the bare-
+          assignment branch above): `Error` calls `Halt` directly, so a real
+          PyParseStatement/PyParseForIn call here that referenced a name only
+          a construct this scanner does not enter (`with`, `if`, `try`, a
+          class body — anything but a bare assignment) would abort the WHOLE
+          COMPILE the instant the pre-pass reached it, not just skip the one
+          statement — hit immediately by `test_nilpy_file_open.npy`'s
+          `with open(...) as f: lines = [...]` followed by `for ln in
+          lines:`. So this only ever PEEKS at tokens and never calls into the
+          parser: only the two cheap, safe-to-recognise iterable shapes get
+          noted (a string literal, or a name already resolvable to a type);
+          anything else — a call, a subscript, `d.items()`, a comprehension —
+          is silently left alone, same as before this fix, and the real pass
+          (which runs after every earlier statement has actually executed)
+          sorts it out as it always did. Single-name targets only — a
+          two-name target (dict.items()/enumerate/pair-unpack) is rarer for
+          this specific conflict and stays unhandled rather than guessed at. }
+        forName := GetTokenStr(i + 1);
+        forJ := i + 3;
+        forElemTk := tyUnknown;
+        if (forJ < MainProgramTokCount) and (Tokens[forJ].Kind = tkString) then
+          forElemTk := tyAnsiString
+        else if (forJ < MainProgramTokCount) and
+                (Tokens[forJ].Kind in [tkLBrack, tkBegin]) then
+          forElemTk := tyVariant
+        else if (forJ < MainProgramTokCount) and (Tokens[forJ].Kind = tkIdent) and
+                (forJ + 1 < MainProgramTokCount) and
+                (Tokens[forJ + 1].Kind in [tkColon, tkNewline]) then
+        begin
+          forCi := PyFindModuleConstraint(GetTokenStr(forJ));
+          if forCi >= 0 then
+          begin
+            if PyModuleLocals[forCi].TypeKind in [tyString, tyAnsiString] then
+              forElemTk := tyAnsiString
+            else
+              forElemTk := tyVariant;
+          end
+          else if PyProgSym(GetTokenStr(forJ)) >= 0 then
+          begin
+            si := PyProgSym(GetTokenStr(forJ));
+            if Syms[si].TypeKind in [tyString, tyAnsiString] then
+              forElemTk := tyAnsiString
+            else
+              forElemTk := tyVariant;
+          end;
+        end;
+        if forElemTk <> tyUnknown then PyNoteLocalType(forName, forElemTk, REC_NONE);
       end;
       Inc(i);
     end;
