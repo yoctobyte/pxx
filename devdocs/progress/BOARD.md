@@ -33,7 +33,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (205)
+## backlog (206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -169,6 +169,7 @@ _none_
 | feature-nilpy-staticmethod-and-classmethod | N | 35 | feature | `@staticmethod` and `@classmethod` are rejected | — |
 | feature-nilpy-stdlib-coverage-gaps-measured | N | 30 | feature | Measured stdlib coverage: json and re are solid; os, time and math.fabs are absent | — |
 | feature-nilpy-str-format-multiarg | N | 40 | feature | `str.format` with more than one argument | — |
+| feature-nilpy-thirdparty-libraries-as-targets | N | 60 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
 | feature-nilpy-tk-callbacks | B | 65 | feature | nilpy/PCL: tkinter callbacks — a bound method as command=/bind(), via Tcl_CreateCommand | — |
 | feature-nilpy-tkinter-facade-widening | B | 60 | feature | tkinter façade: the surface a real GUI app needs (callables, ttk, Menu, Text, tuple coords) | — |
 | feature-nilpy-tkinter-facade | N | 50 | feature | nilpy: tkinter-shaped façade over lib/pcl/tk.pas — widget objects, kwargs, command callbacks | feature-nilpy-star-args-kwargs |
@@ -2839,6 +2840,7 @@ _none_
 - [p 60] [A] feature-float-exception-mask-control
 - [p 60] [A] feature-inline-asm-xtensa
 - [p 60] [N] feature-nilpy-nested-comprehension
+- [p 60] [N] feature-nilpy-thirdparty-libraries-as-targets
 - [p 60] [B] feature-nilpy-tkinter-facade-widening
 - [p 60] [O] feature-opt-store-reload-elimination
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
