@@ -48,6 +48,30 @@ def rot13(s):
 caesar and rot13 both return garbage or raise
 `TypeError: expected a str or a list, got str` because of this line.
 
+## What the IR shows
+
+The failing and working forms lower to the SAME shape — only the callee kind
+differs:
+
+```
+acc + chr(97)     (empty)          acc + s[0]        (correct)
+  load_sym acc      tk=23            load_sym acc      tk=23
+  const_int 97      tk=1             call 446 pystr_at tk=3     <- a real proc
+  call -48          tk=3   <- the    binop  ... tkPlus tk=23
+  binop ... tkPlus  tk=23     Chr    store_sym acc     tk=23
+  store_sym acc     tk=23     INTRINSIC (negative proc index)
+```
+
+Both produce a `tk=3` (tyChar) value feeding a `tk=23` (tyAnsiString) `+`. So
+the concat lowering is identical and the difference is that one operand comes
+from the `-tkChr` INTRINSIC rather than from a call. Whatever the string-concat
+codegen does with a char operand, it works for a value returned by a proc and
+not for one produced inline by the intrinsic — and only inside a function,
+since the same expression at top level is correct.
+
+That is where to look: the tkPlus/string-concat path's handling of a tyChar
+operand whose producer is an intrinsic, in a frame context.
+
 ## Not a regression
 
 Reproduced identically on the 2026-07-27 stable, on pinned v231, and on current
