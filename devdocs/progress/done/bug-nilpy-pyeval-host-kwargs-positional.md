@@ -55,7 +55,49 @@ A method whose params are all Variant hits the same cap (`TVFn5` is the widest).
    POSITION should FAIL rather than silently mis-bind — the project's own rule
    (fail loudly outside the subset).
 
+## 2026-07-30 — fix 1 landed; the reported shape is CORRECT now
+
+[[feature-nilpy-lambda-compiled-closure]] is in, and it does what this ticket
+predicted it would. Measured, not assumed — the option is read back off the
+widget rather than inferred from "no error":
+
+```python
+f = lambda event: cv.configure(scrollregion="0 0 42 24")
+cv.bind("<Configure>", f)
+...
+print(cv.cget("scrollregion"))   # 0 0 42 24
+print(cv.cget("state"))          # normal   <- untouched
+```
+
+Before, that value went to `state`. The five-argument trampoline cap is gone on
+the same path for the same reason: `configure` has eight parameters and now
+compiles and runs, because the lifted lambda calls it through the ordinary call
+path with no arity cap.
+
+The lifted path also REJECTS a name it cannot bind, which is the loud failure
+option 3 asked for: `txt.insert(chars=..., index=...)` stops with
+`Text.insert has no parameter named 'index'`.
+
+## What is LEFT — the pyeval fallback still binds by position
+
+A lambda the lifter refuses (more than one parameter, or a body that is not a
+discardable call) still runs in pyeval, and that path is unchanged. Demonstrated:
+
+```python
+g = lambda a, b: txt.insert(chars="HELLO", index="end")
+g(1, 2)                      # inserts NOTHING — bound as insert("HELLO", "end")
+```
+
+Written in the correct declaration order it inserts `HELLO`, which is exactly
+the positional assumption this ticket was opened about. Filed as
+[[bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position]] with that
+repro, so this ticket closes on the shape it was written for and the residual
+keeps its own record. Fix 2 (param NAMES in the method RTTI) is the route for it.
+
 ## Repro
 
 `examples/tk/callbacks.npy` with a lambda calling `canvas.configure(
 scrollregion=...)`, or settings.py's `_build_layout` under Xvfb.
+
+## Log
+- 2026-07-30 — resolved, commit ac5ac0fbc.

@@ -34,7 +34,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (192)
+## backlog (193)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -42,6 +42,7 @@ _none_
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-cfront-vla-stack-corruption | C | 65 | bug | C VLA (`int arr[n]` with runtime `n`) silently corrupts adjacent stack slots | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
+| bug-lib-tkinter-trailing-underscore-params-block-kwargs | B | 40 | bug | tkinter facade parameters named with a trailing underscore cannot be passed by name | — |
 | bug-nilpy-annotated-module-global-invisible-in-kwarg | N | 55 | bug | A module-level ANNOTATED global is not visible in a keyword argument | — |
 | bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable | N | 55 | bug | A `Callable[...]`-annotated parameter segfaults when the argument is a heap callable | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
@@ -54,7 +55,7 @@ _none_
 | bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math | N | 60 | bug | Arithmetic on mismatched operand types silently does POINTER math | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-print-emits-arguments-before-evaluating-later-ones | N | 45 | bug | `print` writes each argument as it goes, so an exception mid-list leaves partial output | — |
-| bug-nilpy-pyeval-host-kwargs-positional | N | 60 | bug | pyeval passes a host method's KEYWORD arguments POSITIONALLY (silent wrong option) | — |
+| bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pyeval-prints-bool-as-number | N | 30 | bug | pyeval prints a Boolean as 1/0 where CPython prints True/False | — |
 | bug-nilpy-pytypeerror-halts-instead-of-raising | N | 40 | bug | `PyTypeError` halts the process, so `except TypeError:` cannot catch it | — |
 | bug-nilpy-qualified-proc-omitted-default | N | 35 | bug | A qualified UNIT-LEVEL proc call cannot omit a defaulted parameter | — |
@@ -293,7 +294,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1045)
+## done (1046)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -672,6 +673,7 @@ _none_
 | bug-nilpy-print-of-a-float-bypasses-str-formatting | N | 60 | bug | `print(x)` and `print(str(x))` disagree for a float | — |
 | bug-nilpy-print-variant-holding-list-shows-object | N | 30 | bug | NilPy: print() of a variant holding a list/dict shows `<object>` not its repr | — |
 | bug-nilpy-pydict-v-borrowed-reference | N | 70 | bug | `pydict_v` handed back a BORROWED dict — use-after-free, heap corruption | — |
+| bug-nilpy-pyeval-host-kwargs-positional | N | 60 | bug | pyeval passes a host method's KEYWORD arguments POSITIONALLY (silent wrong option) | — |
 | bug-nilpy-range-for-variant-loop-var | N | 30 | bug | NilPy: range for-loop with a pre-existing VARIANT loop variable corrupts it | — |
 | bug-nilpy-returning-a-construction-leaks-one-ref | N | 60 | bug | `return Node(...)` leaks one object ref per call; `x = Node(...); return x` does not | — |
 | bug-nilpy-returning-a-nested-def-yields-none | N | 70 | bug | `return inner` — a nested def returned as a value — yields None | — |
@@ -2793,7 +2795,6 @@ _none_
 - [p 65] [A] feature-a-typeref-handle
 - [p 65] [B] feature-nilpy-tk-callbacks
 - [p 60] [N] bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math
-- [p 60] [N] bug-nilpy-pyeval-host-kwargs-positional
 - [p 60] [U] decide-nilpy-mixed-type-operand-policy
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
@@ -2861,6 +2862,7 @@ _none_
 - [p 45] [A] bug-compiler-selfdebug-lines-index-expanded-source
 - [p 45] [N] bug-nilpy-method-call-on-fresh-construction
 - [p 45] [N] bug-nilpy-print-emits-arguments-before-evaluating-later-ones
+- [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [N] bug-nilpy-zero-param-def-returning-a-lambda-does-not-compile
 - [p 45] [A] bug-pascal-uses-order-breaks-pylib-exception
 - [p 45] [T] bug-t-watcher-dev-contention-false-newred
@@ -2904,6 +2906,7 @@ _none_
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [U] decide-dns-libc-backend-shape (unblocks 1)
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
+- [p 40] [B] bug-lib-tkinter-trailing-underscore-params-block-kwargs
 - [p 40] [N] bug-nilpy-pytypeerror-halts-instead-of-raising
 - [p 40] [U] decide-nilpy-transitive-nested-def-capture
 - [p 40] [A] feature-a-promoint-variant-esp-targets
