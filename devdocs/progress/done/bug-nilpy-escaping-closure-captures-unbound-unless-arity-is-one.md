@@ -96,3 +96,6 @@ arity 1. Same silent-fallback mechanism, same fix 1 covers it.
 `make test-nilpy` + self-host byte-identical, plus a `.npy` covering the table
 above (arity 0/1/2, capture of int, str, list and a param, called inside the
 parent and after escaping), expectation taken from CPython's own output.
+
+## Log
+- 2026-07-30 — resolved, commit aad020a59.
