@@ -262,3 +262,34 @@ That surfaced a second bug — `PyEmitParamSpills` sized the spill from the
 POINTEE's type, truncating a 64-bit address to 32 bits for a by-ref int param.
 
 Gated by test/test_nilpy_selfassigned_comprehension.npy.
+
+## 2026-07-30: GATE MET — the app runs, and survives being used
+
+This ticket's gate was "songformatter's window actually opening under Xvfb with
+one empty document". Measured today, it is well past that:
+
+- Rebuilt from `SongFormatter.py`, run under Xvfb: it restores its THREE-document
+  session, renders the song source in the editor, draws the formatted preview
+  (title, artist, chord lines, lyrics) and reports the key analysis in the status
+  bar — `Key: F | Alt: C dorian | Agree: 1/7`. Screenshot-verified.
+- Then DRIVEN with the event classes that used to kill it: six window resizes
+  (each a `<Configure>` on the canvas), mouse-wheel scrolling in both the editor
+  and the preview pane, and tab switches. It scrolls, re-lays out and keeps
+  running, with an EMPTY stderr — no `invalid command name "pxxcb"`, no
+  background-error dialog.
+
+Every wall named in this ticket is in `done/`:
+`bug-nilpy-tk-pxxcb-invalid-command-name` (verified gone under the same event
+load), `bug-nilpy-callable-in-local-var-call-does-nothing`,
+`bug-nilpy-zero-param-lambda-cannot-call-a-def`,
+`bug-nilpy-def-value-in-a-variable-is-not-callable`,
+`feature-nilpy-container-method-gaps`, `feature-debuggability-umbrella`,
+`bug-nilpy-not-on-object-always-true`,
+`bug-nilpy-slice-of-variant-local-returned-is-unusable`.
+
+Checked honestly against a compiler built from the commit BEFORE this session:
+it renders identically, so this campaign was already complete — the ticket was
+simply never closed. Nothing landed today is load-bearing for it.
+
+Further songformatter work should open a NEW ticket against a specific
+divergence; this one closes on the milestone it was written for.

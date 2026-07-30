@@ -31,6 +31,30 @@ different mechanism in a different place.
 side effect that happens to return a string (`buf.append_line(...)` returning
 the new text, a logger returning what it logged).
 
+## Recon 2026-07-30 — why the obvious hook does not work
+
+Picked up and put back down deliberately; recording the dead ends so the next
+attempt does not re-walk them.
+
+- `IRDiscardValue` (ir.inc) is the statement-level "value thrown away" hook, but
+  its wrapping half is `CProgramMode` only and it wraps into a plain temp. A
+  hidden MANAGED temp does not fix the slope either: its release happens at
+  SCOPE exit, so a 320k-iteration loop inside one routine still accumulates
+  320k handles before anything is freed. The release has to be per-statement.
+- There is no Pascal-callable string release to emit a call to:
+  `AnsiStrReleaseAddr` is a raw code stub in ir_codegen.inc (handle in rax), not
+  a Proc, so ir.inc cannot `IRAppendCall` it.
+- That leaves two routes, and picking between them is the first real decision:
+  (a) a new IR op (`IR_STR_DROP`: evaluate operand to rax, call the stub) —
+      clean, but every backend must implement it or a cross-compiled NilPy
+      program breaks, so it is not the small change it looks like;
+  (b) a pylib `procedure pystr_drop(s: AnsiString)` with a BY-VALUE managed
+      parameter, whose scope exit does the release — no new op, but it depends
+      on whether the by-value managed-param convention MOVES the caller's owned
+      handle or retains it. Measure that first (today's
+      bug-nilpy-method-returning-a-fresh-string-leaks work says call results are
+      moved into stores; the argument path was not checked).
+
 ## Where to look
 
 The statement-expression path: when an expression statement's value is a managed

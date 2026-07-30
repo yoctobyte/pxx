@@ -37,3 +37,13 @@ Split out of [[bug-nilpy-eq-dunder-ignored]] when that landed.
 
 `make test-nilpy` + self-host byte-identical, plus `in`, `count` and `index`
 over a list of objects with and without `__eq__`, and an object as a dict key.
+
+## Recon 2026-07-30 — sized, not started
+
+Confirmed the shape above is still the blocker: pylib's `PyVarEq` decides
+membership and cannot reach a user method, so this needs a per-class `__eq__`
+entry that pylib can call — i.e. a CLASS-RECORD / RTTI change, which is Track A
+shared ground, not a pylib-local fix. That makes it a two-track item (A for the
+slot, N for the dispatch), which is why it was left rather than started at the
+tail of a long session. Note the stride landmine on that table:
+[[project_rtti_method_table_multi_consumer_stride_landmine]].
