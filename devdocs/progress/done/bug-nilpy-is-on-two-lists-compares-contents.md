@@ -32,3 +32,6 @@ and the `acc=None` mutable-default idiom.
 
 `make test-nilpy` + self-host byte-identical, plus `is` / `is not` over equal
 lists, aliased lists, dicts, user objects, strings, small ints and None.
+
+## Log
+- 2026-07-30 — resolved, commit e164d2619.
