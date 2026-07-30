@@ -42,3 +42,6 @@ Found by the data-structure sweep against CPython.
 `make test-nilpy` + self-host byte-identical, plus `sorted` over lists of
 tuples, lists, mixed-length tuples and equal first elements, diffed against
 CPython.
+
+## Log
+- 2026-07-30 — resolved, commit ba5641291.

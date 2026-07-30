@@ -34,7 +34,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (193)
+## backlog (192)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -60,7 +60,6 @@ _none_
 | bug-nilpy-pytypeerror-halts-instead-of-raising | N | 40 | bug | `PyTypeError` halts the process, so `except TypeError:` cannot catch it | — |
 | bug-nilpy-qualified-proc-omitted-default | N | 35 | bug | A qualified UNIT-LEVEL proc call cannot omit a defaulted parameter | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
-| bug-nilpy-sorted-over-tuples-or-lists-fails | N | 55 | bug | `sorted()` over a list of tuples or lists dies with "expected a number, got object" | — |
 | bug-nilpy-zero-param-def-returning-a-lambda-does-not-compile | N | 45 | bug | A zero-parameter def returning a lambda does not compile | — |
 | bug-pascal-defines-leak-across-units | A | 55 | bug | Pascal: {$define} in one unit stays visible in units parsed afterwards, so {$ifdef} compiles different code depending on uses ORDER | — |
 | bug-pascal-duplicate-class-name-silently-shadows | P | 50 | bug | Pascal: a duplicate class declaration silently binds to the earlier one instead of erroring | — |
@@ -294,7 +293,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1048)
+## done (1049)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -684,6 +683,7 @@ _none_
 | bug-nilpy-set-literal-does-not-deduplicate | N | 60 | bug | A set LITERAL keeps duplicates; `set().add()` removes them | — |
 | bug-nilpy-settings-editor-segfaults-on-bound-method-field | N | 80 | bug | SettingsEditor segfaults reading a bound method off a field | — |
 | bug-nilpy-slice-of-variant-local-returned-is-unusable | N | 75 | bug | Returning a SLICE of a variant local gives the caller an unusable value | — |
+| bug-nilpy-sorted-over-tuples-or-lists-fails | N | 55 | bug | `sorted()` over a list of tuples or lists dies with "expected a number, got object" | — |
 | bug-nilpy-statement-after-for-in-a-def | N | 60 | bug | NilPy: any statement after a `for` inside a def failed to parse | — |
 | bug-nilpy-stdlib-name-binds-pascal-unit | N | 60 | bug | nilpy: a Python stdlib import silently binds to a same-named Pascal RTL unit (import json -> lib/rtl/json.pas) | — |
 | bug-nilpy-str-index-off-by-one | N | 75 | bug | NilPy string subscripts are 1-BASED — silently off by one vs CPython | — |
@@ -2816,7 +2816,6 @@ _none_
 - [p 55] [N] bug-nilpy-annotated-module-global-invisible-in-kwarg
 - [p 55] [N] bug-nilpy-function-value-call-gaps
 - [p 55] [N] bug-nilpy-method-returning-a-fresh-string-leaks
-- [p 55] [N] bug-nilpy-sorted-over-tuples-or-lists-fails
 - [p 55] [A] bug-pascal-defines-leak-across-units
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
