@@ -44,3 +44,17 @@ selector loop instead of exiting — the same shape `PyParseStrMethod` uses to l
 
 Bind the instance to a name first (`a = A()` then `a.get()`), which is what the
 tests do.
+
+## 2026-07-30: already fixed — closed with a test, not just a re-check
+
+`A().get()` compiles and answers correctly today, on HEAD. The fix landed with
+the construction-vs-receiver split in the assignment path (pyparser.inc names
+this ticket in the comment: "`x = Cls().method(...)` is not a construction
+ASSIGNMENT: the construction is the RECEIVER").
+
+Verified across the positions the one-line repro did not cover — a constructor
+with and without arguments, a string-returning method, two fresh constructions
+in one arithmetic expression, and fresh constructions as list elements — all
+diffed against CPython. Gated by
+`test/test_nilpy_method_on_fresh_construction.npy` so it cannot silently regress
+the way it silently fixed.

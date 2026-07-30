@@ -647,6 +647,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_unpack26)" = "$$(printf '1 2\n2 1\np 2 3.5\n7 8\na 1\nb 2\nc 3\n6\na 1\nb 2\nc 3')"
 	./$(COMPILER) test/test_nilpy_comparison_chaining.npy /tmp/test_nilpy_comparison_chaining26
 	test "$$(/tmp/test_nilpy_comparison_chaining26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nTrue\nFalse\nTrue\ncall\nTrue')"
+	./$(COMPILER) test/test_nilpy_method_on_fresh_construction.npy /tmp/test_nilpy_method_fresh_ctor26
+	test "$$(/tmp/test_nilpy_method_fresh_ctor26)" = "$$(printf '5\n7\na9\n6\n3 a3\n[1, 2]')"
 	./$(COMPILER) test/test_nilpy_discarded_string_result.npy /tmp/test_nilpy_discarded_string_result26
 	test "$$(/tmp/test_nilpy_discarded_string_result26)" = "$$(printf '5 [0, 1, 2, 3, 4]\n5\ns99 m99 6 6\n8 101 102')"
 	./$(COMPILER) test/test_nilpy_lambda_returned_from_def.npy /tmp/test_nilpy_lambda_returned26

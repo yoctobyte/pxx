@@ -1,0 +1,20 @@
+# `Cls().method()` — a method call on a FRESH construction, in statement,
+# expression, argument and list-element position.
+# bug-nilpy-method-call-on-fresh-construction
+
+class A:
+    def __init__(self, v: int = 5):
+        self.v = v
+    def get(self) -> int:
+        return self.v
+    def name(self) -> str:
+        return "a" + str(self.v)
+
+print(A().get())
+print(A(7).get())
+print(A(9).name())
+print(A().get() + A(1).get())
+a = A(3)
+print(a.get(), a.name())
+xs = [A(1).get(), A(2).get()]
+print(xs)
