@@ -409,6 +409,22 @@ diffed against an oracle.
   the old rules apply — run your lane's full gate (`tools/testmgr.py --tier
   full`, or `--tier limited` + the targets your change touches) before pushing
   anything risky.
+- **Don't idle on a gate — snapshot and proceed, but verify against a KNOWN
+  sha.** The gate/pin/matrix runs in the background; you keep bughunting the
+  next thing. Fire the background job (`tools/gate.sh` — background *that*, never
+  poll a `make`) and move on; act on callbacks as they land. The trap this opens
+  is **provenance**: while you hunt, the compiler binary on disk drifts — a gate
+  reseeds it, a sibling's fix lands, the watcher's clone is mid-bisect at some
+  ancient sha. So *forward motion* against a snapshot is fine, but any **result
+  you report — a measurement, a "fixed"/"still broken" verdict, a benchmark
+  number — must name the sha of the binary it came from**, and you must confirm
+  that binary is the one you think it is (a self-hosted build at HEAD, not the
+  daemon's mid-bisect artifact). When an async callback arrives tagged to an old
+  sha, **re-check it against current HEAD before acting** — it may already be
+  fixed or have moved. Real incident: a leak was measured against the watcher's
+  mid-bisect binary and read as "still 552 MB" when HEAD was already flat;
+  rebuilding a fixedpoint at HEAD showed the truth. The one-line discipline:
+  **hunt async, verify against a known sha.**
 - `git pull --rebase` before pushing; push promptly. Stay in your lane's files.
 - **Push only your own lane.** Each track pushes the commits it made. During a
   sync, do **not** push, commit, or rebase another track's branch or in-flight
