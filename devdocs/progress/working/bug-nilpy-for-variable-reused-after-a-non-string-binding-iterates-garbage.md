@@ -187,3 +187,39 @@ against CPython's own output. Include the fresh-name and prior-str rows as
 guards, and re-run `test/test_nilpy_char_ordering.npy` with its loop variable
 renamed back to `c` — that file documents the interaction and should stop
 needing the workaround.
+
+## CLOSED
+
+Root-caused to the type-inference PRE-PASS, not the loop desugar itself: the
+loop DOES pick the right element type for a brand-new name (as the ticket's
+"exact line" section already showed) — the bug was that the whole-program
+widening table never learned a for-target's contributed type at all, because
+`for` doesn't look anything like the `name = expr` shape the pre-pass's flat
+scanner recognises. A name's FIRST creation (at either the scalar assignment
+or the for-loop, whichever comes first in program order) then permanently
+fixed a slot type the OTHER side later wrote through.
+
+Fixed with three changes (see the commit for the full reasoning): `PyParseForIn`
+now feeds its target name(s) into the same `PyNoteLocalType` table a bare
+assignment feeds, whenever a typing pre-pass is running; the module-level
+scanner gained a narrow, NON-PARSING peek at `for name in ITER:` headers (string
+literal / list-or-set-literal / an already-typed name) that cannot itself
+error out (`Error` halts the whole compiler, so actually trial-PARSING a
+for-loop whose iterable depends on a `with`/`if`/`try`/class-body statement
+the pre-pass doesn't otherwise enter was not safe — confirmed by two real
+regressions this fix surfaced and fixed along the way,
+`test_nilpy_sorted_pairs.npy`'s generator expression and
+`test_nilpy_file_open.npy`'s `with`-block); and `PyParseForIn`'s real-pass
+creation of a brand-new MODULE-level target now also consults the converged
+table before deciding, closing the REVERSE-order case
+(`for c in "ab": pass` before `c = 5`, previously a SIGSEGV).
+
+`test/test_nilpy_char_ordering.npy`'s loop variable is renamed back to `c` as
+the gate asked — output unchanged, confirmed against CPython.
+
+Test: test/test_nilpy_for_variable_reuse.npy, the full matrix from this
+ticket (every prior scalar binding x string-loop target, both orders) plus
+the pre-existing container/parameter cases that must keep working. Gate:
+make test-nilpy green, self-host fixedpoint, testmgr --tier quick.
+
+Ticket closed.

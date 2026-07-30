@@ -68,9 +68,8 @@ def kind(c):
     if c >= "A" and c <= "Z":
         return "upper"
     return "other"
-# NOTE: a fresh name. Reusing `c` here (it is bound to a char above) hits a
-# SEPARATE bug -- a for-variable previously bound to a non-string type
-# iterates garbage -- tracked in
-# bug-nilpy-for-variable-reused-after-a-non-string-binding-iterates-garbage.
-for ch in "aZ9!":
-    print(ch, kind(ch))
+# reusing `c` here (it is bound to a char above, from `c = expr[j]`) used to
+# hit bug-nilpy-for-variable-reused-after-a-non-string-binding-iterates-garbage
+# -- fixed, so this no longer needs a fresh name.
+for c in "aZ9!":
+    print(c, kind(c))
