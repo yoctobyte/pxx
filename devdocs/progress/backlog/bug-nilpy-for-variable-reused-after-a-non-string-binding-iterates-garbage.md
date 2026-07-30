@@ -23,17 +23,32 @@ Reusing a name as a loop variable is ordinary Python — the loop rebinds it —
 here the name keeps its EARLIER static type and the iteration writes through it,
 so the loop yields values of the wrong type entirely.
 
-## Boundary
+## Boundary — MEASURED, and narrower than it first looked
 
-| prior binding of the loop name | pxx |
-| --- | --- |
-| none (fresh name) | correct ✓ |
-| a **str** (`c = "hello"`) | correct ✓ |
-| a **char** (`c = s[0]`) | **wrong characters** (`X`, `x`) |
-| an **int** (`c = 5`) | **addresses** (`945815608`) |
+The discriminator is the loop name's EXISTING scalar type versus the element
+type, not "non-string" as this ticket first said. Full matrix:
 
-So only a prior STRING binding is compatible; anything else and the loop
-silently produces nonsense. No error, no warning.
+| prior binding | iterating | pxx |
+| --- | --- | --- |
+| none (fresh name) | anything | correct ✓ |
+| `c = "hello"` (str) | a string | correct ✓ |
+| `c = None` | a string | correct ✓ |
+| `c = s[0]` (char) | a LIST of str | correct ✓ |
+| `c = 5` (int) | a LIST of int | correct ✓ |
+| **`c = 5`** (int) | **a string** | **addresses** (`-379584456`) |
+| **`c = 5`** (int) | **a list of str** | **TypeError: expected a number, got str** |
+| **`c = 1.5`** (float) | **a string** | **`137307623522360.0`** |
+| **`c = s[0]`** (char) | **a string** | **wrong chars** (`X`, `x`) |
+| **`c = True`** (bool) | **a string** | **`True`, `True`** |
+
+So: a name already bound to a NUMERIC or CHAR scalar, then reused as the loop
+variable over STRING elements. The slot keeps its scalar type and the string
+element's handle is stored into it — printed as an address, or rejected by the
+coercion, exactly the "handle read as a number" family as
+[[bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math]].
+
+Reusing `i`, `n` or `x` as a loop variable after using it as a counter is the
+everyday shape that hits this.
 
 ## How it was found
 
