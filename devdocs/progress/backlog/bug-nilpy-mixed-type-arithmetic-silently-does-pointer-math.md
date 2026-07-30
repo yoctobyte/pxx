@@ -53,3 +53,13 @@ type errors generally, not just for these operators.
 
 `make test-nilpy` + self-host byte-identical, plus the operator × operand-type
 table from the sweep, diffed against CPython.
+
+## Policy settled 2026-07-30 — see [[decide-nilpy-mixed-type-operand-policy]]
+
+1. `PyTypeError` raises instead of halting (the mechanism already works; only
+   these call sites were never converted).
+2. The operator arms reach the type dispatch `+` and `and`/`or` already use.
+3. Statically provable mismatches WARN — they do not abort. Warning text should
+   say it is provable, and name both operand types.
+
+`-Werror` is deliberately not the opt-in for step 3; see the decide ticket.

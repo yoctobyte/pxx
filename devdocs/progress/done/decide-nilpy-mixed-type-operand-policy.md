@@ -110,3 +110,42 @@ operator x operand-type table diffed against CPython.
 
 ## Log
 - 2026-07-30 — resolved, commit user-decision.
+
+## Refinement 2026-07-30 (user): option 1 WARNS, it does not abort
+
+Static rejection is a WARNING by default, not a compile error. Settled after
+noting that option 1 is the one place where pxx would be STRICTER than its
+reference implementation — normally strictness here means matching FPC or
+CPython, never exceeding them.
+
+Why warn and not error:
+
+- `if False: <buggy code>` is legal CPython and compiles. So is anything behind
+  a version, platform or `if TYPE_CHECKING:` guard that never runs on this
+  target. Aborting on a provably-wrong expression inside one is defensible in
+  theory and infuriating in practice when it is a vendored library.
+- The check only sees a SUBSET anyway. In NilPy nearly every value is a variant,
+  so "both operand types statically known" is roughly literals and annotated
+  locals. It catches less than it sounds like — which also means erroring buys
+  less than it costs.
+- Cost asymmetry: an abort that is wrong stops a real file compiling and someone
+  has to hunt for why; a warning that is wrong is a grep-able line.
+
+Deliberately NOT the answer: `-Werror`. It exists (`compiler.pas`, `WarnAsError`)
+and promotes warnings to fatal, but it promotes ALL of them — too blunt to serve
+as the opt-in for this one check. If a dedicated opt-in is ever wanted, the right
+shape is a per-feature strict flag in the existing family (`--strict-case`,
+`--strict-overload`), i.e. `--strict-types`. Not building it now: no evidence yet
+that anyone wants it, and the warning is the whole value.
+
+Status of that: a NOTE, not a task. Revisit only if the warning turns out to be
+something people want promoted. Do not file a ticket for `--strict-types` on the
+strength of this paragraph.
+
+### Open, not decided: the other frontends
+
+Raised and left open. For the PASCAL and C frontends the same static check has no
+compat question — Pascal already errors on type mismatches and there is no lax
+reference implementation to match. If the check lands in shared AST/IR ground it
+may be worth defaulting to ERROR there and warning only on the NilPy path. Decide
+that when the implementation makes the sharing concrete, not before.
