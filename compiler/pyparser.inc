@@ -12377,12 +12377,33 @@ begin
   { Reuse the shell PyRegisterDefShells registered for this def. A shell has
     BodyAddr = -1; anything else means the name is being DEFINED AGAIN, which
     Python allows, so that gets its own Proc rather than overwriting the first
-    one's body address out from under earlier callers. }
+    one's body address out from under earlier callers -- UNLESS the new def
+    has the SAME arity as the existing one (below), in which case it is the
+    SAME name bound to a new value (Python has no function declarations, only
+    assignments), and it must WIN: FindProc's hash chain returns the OLDEST
+    registration for a name, so a second same-arity Proc is one no call site
+    can ever reach, and every call kept running the FIRST body forever
+    (bug-nilpy-redefining-a-def-is-ignored-the-first-body-still-runs). A
+    DIFFERENT arity is left to the existing path (its own Proc): that shape
+    already resolves correctly today, by whatever call-site arity matching
+    picks it out from the chain, and must keep working. }
   { A NESTED def registers under its enclosing def's qualifier, which is what
     PyParseStatement already put in the queue entry — see PyNestPrefix. }
   if PyNestPrefix <> '' then name := PyNestPrefix + '.' + name;
   procIdx := FindProc(name);
-  if (procIdx < 0) or (Procs[procIdx].BodyAddr >= 0) then
+  if (procIdx >= 0) and (Procs[procIdx].BodyAddr >= 0) and
+     (Procs[procIdx].ParamCount = nparams) then
+  begin
+    for i := 0 to nparams - 1 do
+    begin
+      Procs[procIdx].Params[i].Name := PyHdrPNames[i];
+      Procs[procIdx].Params[i].TypeKind := PyHdrPTypes[i];
+    end;
+    Procs[procIdx].RetType := retType;
+    Procs[procIdx].IsFunc := not isProc;
+    PyApplyDefSignature(procIdx);
+  end
+  else if (procIdx < 0) or (Procs[procIdx].BodyAddr >= 0) then
   begin
     procIdx := RegisterProc(name, not isProc, retType, nparams,
                             PyHdrPNames, PyHdrPTypes);

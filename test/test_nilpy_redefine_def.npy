@@ -1,0 +1,33 @@
+# A `def` is an ASSIGNMENT to a name in Python, so redefining it replaces the
+# earlier body -- pxx kept calling the FIRST body, silently, because FindProc
+# returns the OLDEST registration for a name and a redefinition used to
+# always get its own new (unreachable) Proc entry.
+# bug-nilpy-redefining-a-def-is-ignored-the-first-body-still-runs
+# Every expectation is CPython's own output.
+
+def f():
+    return 1
+def f():
+    return 2
+print(f())
+
+# a genuinely different arity must still resolve by argument count
+def i(a):
+    return a
+def i(a, b):
+    return a + b
+print(i(1, 2))
+
+# a class method redefinition already worked (a different registration path)
+class C:
+    def m(self):
+        return 1
+    def m(self):
+        return 2
+print(C().m())
+
+# rebinding a def'd name to a plain value already worked
+def j():
+    return 1
+j = 5
+print(j)
