@@ -647,6 +647,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_unpack26)" = "$$(printf '1 2\n2 1\np 2 3.5\n7 8\na 1\nb 2\nc 3\n6\na 1\nb 2\nc 3')"
 	./$(COMPILER) test/test_nilpy_comparison_chaining.npy /tmp/test_nilpy_comparison_chaining26
 	test "$$(/tmp/test_nilpy_comparison_chaining26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nTrue\nFalse\nTrue\ncall\nTrue')"
+	./$(COMPILER) test/test_nilpy_method_string_result_ownership.npy /tmp/test_nilpy_method_string_result26
+	test "$$(/tmp/test_nilpy_method_string_result26)" = "$$(printf 'lit 7 kk-7 kk 9\n3 1 4 2 1\nzz 99 zz\n300 zz-99')"
 	./$(COMPILER) test/test_nilpy_sorted_sequences.npy /tmp/test_nilpy_sorted_sequences26
 	test "$$(/tmp/test_nilpy_sorted_sequences26)" = "$$(printf '[('"'"'a'"'"', 1), ('"'"'b'"'"', 2)]\n[[1, '"'"'a'"'"'], [2, '"'"'b'"'"']]\n[('"'"'a'"'"', 1), ('"'"'a'"'"', 2)]\n[(1,), (1, 2), (1, 2, 3)]\n[1, 2, 3]\n['"'"'a'"'"', '"'"'b'"'"']\n[[1, [2, 1]], [1, [2, 3]]]\n('"'"'b'"'"', 0) ('"'"'a'"'"', 1)\n[('"'"'b'"'"', 2), ('"'"'a'"'"', 1)]')"
 	./$(COMPILER) test/test_nilpy_is_identity.npy /tmp/test_nilpy_is_identity26

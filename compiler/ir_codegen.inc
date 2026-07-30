@@ -914,6 +914,22 @@ begin
   ]);
 end;
 
+{ Does this IR node produce a managed string that is ALREADY owned (+1) by
+  whoever receives it, so storing it MOVES rather than retains? A concat result
+  and a user CALL result both are — and a call is a call whether it is direct,
+  virtual or indirect. Three stores carried this discrimination and all three
+  listed IR_CALL only, so a METHOD's freshly built string was retained a second
+  time and leaked ~32 bytes per call while the identical plain def was flat
+  (bug-nilpy-method-returning-a-fresh-string-leaks). One predicate, so the next
+  call kind is added in one place. }
+function IRNodeOwnsManagedStr(n: Integer): Boolean;
+begin
+  IRNodeOwnsManagedStr := (n >= 0) and
+    (((IRKind[n] = IR_BINOP) and (IntToTypeKind(IRTk[n]) = tyAnsiString)) or
+     ((IRKind[n] = IR_CALL) and (IRA[n] >= 0)) or
+     (IRKind[n] = IR_VIRTUAL_CALL) or (IRKind[n] = IR_CALL_IND));
+end;
+
 procedure EmitObjRetainRaxGuarded;
 { rax = object pointer (or nil). Retain via the object blob; the Pascal callee
   carries the nil check and the population-tag guard, so a manual-lifetime
@@ -2754,9 +2770,7 @@ begin
                 bogus retain path and stored an empty/garbage handle. }
               EmitAnsiStrFromInlineString;
             end
-            else if not (((IRKind[valueNode] = IR_BINOP) and
-                          (IntToTypeKind(IRTk[valueNode]) = tyAnsiString)) or
-                         ((IRKind[valueNode] = IR_CALL) and (IRA[valueNode] >= 0))) then
+            else if not IRNodeOwnsManagedStr(valueNode) then
             begin
               { A concat result (BINOP) or a fresh user-function result (IR_CALL,
                 IRA >= 0) is already refcount 1 for this owner — move it instead
@@ -3374,9 +3388,7 @@ begin
                 bogus retain path and stored an empty/garbage handle. }
               EmitAnsiStrFromInlineString;
             end
-            else if not (((IRKind[valueNode] = IR_BINOP) and
-                          (IntToTypeKind(IRTk[valueNode]) = tyAnsiString)) or
-                         ((IRKind[valueNode] = IR_CALL) and (IRA[valueNode] >= 0))) then
+            else if not IRNodeOwnsManagedStr(valueNode) then
             begin
               { A concat result (BINOP) or a fresh user-function result (IR_CALL,
                 IRA >= 0) is already refcount 1 for this owner — move it instead
@@ -5475,9 +5487,7 @@ begin
               (`v = f()` into a variant in a loop; uforth's PYTHON-word path).
               Same discrimination IR_STORE_SYM applies
               (bug-a-runtime-variant-heap-grows-unbounded). }
-            if not (((IRKind[IRB[node]] = IR_BINOP) and
-                     (IntToTypeKind(IRTk[IRB[node]]) = tyAnsiString)) or
-                    ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0))) then
+            if not IRNodeOwnsManagedStr(IRB[node]) then
               IREmitCodeCall(AnsiStrRetainAddr);
           end
           else if tk = tyClass then

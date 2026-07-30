@@ -1,0 +1,57 @@
+# A method's managed-string result is OWNED by the caller — retaining it again
+# leaked one handle per call. Removing that retain must not under-retain the
+# BORROW cases, so each shape is read back after its source has been overwritten
+# and after further allocations have had a chance to reuse a freed block.
+# bug-nilpy-method-returning-a-fresh-string-leaks
+
+class Node:
+    def __init__(self, k: str, v: int):
+        self.k = k
+        self.v = v
+
+    def fresh_lit(self) -> str:
+        return "lit"
+
+    def fresh_str(self) -> str:
+        return str(self.v)
+
+    def fresh_cat(self) -> str:
+        return self.k + "-" + str(self.v)
+
+    def borrow(self) -> str:
+        return self.k
+
+
+def f_fresh(v: int) -> str:
+    return str(v)
+
+
+x = Node("kk", 7)
+
+a = x.fresh_lit()
+b = x.fresh_str()
+c = x.fresh_cat()
+d = x.borrow()
+e = f_fresh(9)
+
+# overwrite the SOURCE of the borrow: `d` must still be its own valid string
+x.k = "zz"
+x.v = 99
+
+junk = []
+i = 0
+while i < 200:
+    junk.append(str(i) + "-pad")
+    i = i + 1
+
+print(a, b, c, d, e)
+print(len(a), len(b), len(c), len(d), len(e))
+print(x.k, x.v, x.borrow())
+
+# repeated calls of each shape keep answering correctly
+n = 0
+last = ""
+while n < 300:
+    last = x.fresh_cat()
+    n = n + 1
+print(n, last)
