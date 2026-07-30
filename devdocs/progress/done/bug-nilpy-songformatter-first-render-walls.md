@@ -293,3 +293,6 @@ simply never closed. Nothing landed today is load-bearing for it.
 
 Further songformatter work should open a NEW ticket against a specific
 divergence; this one closes on the milestone it was written for.
+
+## Log
+- 2026-07-30 — resolved, commit 54de57558.
