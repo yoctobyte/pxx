@@ -1577,6 +1577,12 @@ var
     caller can append it AFTER its own error line instead of MatchProcCall
     writing raw internals to stdout ahead of the diagnostic
     (bug-overload-mismatch-dumps-internals-to-stdout). }
+  { Set by the C constant-expression evaluator when it met a name that is not
+    a compile-time constant. Callers that cannot accept a runtime value — an
+    array DIMENSION above all — check it and reject, instead of silently taking
+    the 0 the evaluator contributes (bug-cfront-vla-stack-corruption). }
+  CConstExprSawNonConst : Boolean;
+
   OverloadReport : AnsiString;
   WarnCount : Integer;     { number of non-fatal warnings emitted via Warn }
   WarnAsError : Boolean;   { -Werror: promote the next Warn to a fatal Error }

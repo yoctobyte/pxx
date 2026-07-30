@@ -3922,7 +3922,23 @@ begin
       begin
         Next;
         if CurTok.Kind = tkRBrack then dimVal := -1
-        else dimVal := CEvalConstExpr;
+        else
+        begin
+          { A VARIABLE-LENGTH array. The evaluator contributes 0 for a name that
+            is not a compile-time constant, so `int arr[n]` used to be sized at
+            NOTHING and sat on top of the next stack slot: a loop over it
+            clobbered its own counter and stopped after two iterations, with
+            correct-looking output for the first ones and no diagnostic at all.
+            Refuse it — the subset does not implement VLAs, and a gap fails
+            loudly here rather than corrupting the frame
+            (bug-cfront-vla-stack-corruption). }
+          CConstExprSawNonConst := False;
+          dimVal := CEvalConstExpr;
+          if CConstExprSawNonConst then
+            Error('C: variable-length array (a dimension that is not a compile-'
+                  + 'time constant) is not supported — use a fixed bound, malloc'
+                  + ' or alloca');
+        end;
         Expect(tkRBrack, ']');
         if dimCount >= MAX_ARR_DIMS then Error('too many C array dimensions');
         dimSpan[dimCount] := dimVal;
@@ -8989,7 +9005,16 @@ begin
   else if CurTok.Kind = tkIdent then
   begin
     idx := FindSym(CurTok.SVal);
-    if (idx >= 0) and (Syms[idx].Kind = skConst) then Result := Syms[idx].ConstVal;
+    if (idx >= 0) and (Syms[idx].Kind = skConst) then Result := Syms[idx].ConstVal
+    else
+      { A name that is not a compile-time constant contributes 0, and the
+        caller cannot tell that from a genuine zero. In an array DIMENSION that
+        is a VLA, and the silent 0 sized the array at nothing: `int arr[n]`
+        then overlapped the next stack slot, so a loop over it clobbered its
+        own counter and exited after two iterations — wrong output, no error
+        (bug-cfront-vla-stack-corruption). Record it; the dimension reader
+        decides what to do. }
+      CConstExprSawNonConst := True;
     Next;
   end;
 end;
