@@ -68,3 +68,6 @@ and int-typed paths untouched so ordinary `chr(65)` stays a single instruction.
 against CPython's own output, and a caesar-cipher round trip
 (`chr(((ord(c) - 97 + k) % 26) + 97)` over a loop variable) as the end-to-end
 case — that is the program this was found in.
+
+## Log
+- 2026-07-30 — resolved, commit f6f5e1838.
