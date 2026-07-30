@@ -1,0 +1,23 @@
+s = {1, 2, 2, 3}
+print(len(s))
+t = {"a", "b", "a", "b", "c"}
+print(len(t))
+m = {1, "a", 1, "a", 2.5, 2.5}
+print(len(m))
+u = set()
+u.add(1)
+u.add(2)
+u.add(2)
+print(len(u))
+v = {1, 2, 3}
+v.add(2)
+v.add(9)
+print(len(v))
+print(2 in s, 5 in s, "a" in t)
+xs = [1, 2, 2, 3]
+print(len(xs))
+tup = (1, 2, 2, 3)
+print(len(tup))
+d = {"k": 1, "k": 2}
+print(len(d), d["k"])
+print(sorted(list(s)))

@@ -852,7 +852,7 @@ function PyStoredName(const s: AnsiString): Integer; forward; { Nil Python: inte
 function PyAttrFieldIdx(recvNode: Integer; const attr: AnsiString): Integer; forward; { Nil Python hasattr/getattr field lookup (pyparser.inc) }
 function PyParseAttrName: AnsiString; forward; { Nil Python: the literal attr name in hasattr/getattr (pyparser.inc) }
 function PyTupleParenAhead: Boolean; forward; { Nil Python: is this '(' a tuple? (pyparser.inc) }
-procedure PyParseListLiteralT(opener, closer: TTokenKind); forward; { Nil Python list/tuple literal (pyparser.inc) }
+procedure PyParseListLiteralT(opener, closer: TTokenKind; dedup: Boolean); forward; { Nil Python list/tuple literal (pyparser.inc) }
 function PyIsListCompAhead: Boolean; forward; { Nil Python: is `[ ... for ... ]` a comprehension? (pyparser.inc) }
 function PyParseCompExprValue(bracketed: Boolean): Integer; forward;
 function PyIsParenCompAhead: Boolean; forward;      { `(x for x in xs)` (pyparser.inc) }
@@ -12558,7 +12558,7 @@ begin
       Built as the same TPyList a `[...]` literal produces, which is what makes
       the existing tuple-unpack assignment consume it. A plain `(expr)` has no
       top-level comma and still parses as grouping. }
-    PyParseListLiteralT(tkLParen, tkRParen)
+    PyParseListLiteralT(tkLParen, tkRParen, False)
   else if PyExprMode and PyIsSysStreamAhead then
   begin
     { `sys.stderr` is a VALUE (its fd), not a member access on a variable —

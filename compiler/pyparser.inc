@@ -1362,7 +1362,7 @@ begin
         container dispatch below are all shared rather than special-cased.
         A plain `(expr)` has no top-level comma and still parses as grouping. }
       if PyTupleParenAhead then
-        PyParseListLiteralT(tkLParen, tkRParen)
+        PyParseListLiteralT(tkLParen, tkRParen, False)
       else
         PyParseBitOr;
       right := CurASTNode;
@@ -7287,7 +7287,12 @@ end;
 { List literal [a, b, c] -> TPyList create + chained .append() calls, one
   expression tree (append returns Self). Reached from ParseFactor's PyExprMode
   tkLBrack branch, so nested literals in argument positions work too. }
-procedure PyParseListLiteralT(opener, closer: TTokenKind);
+procedure PyParseListLiteralT(opener, closer: TTokenKind; dedup: Boolean);
+{ dedup = this is a SET literal. A set is a TPyList here, and TPyList.add is the
+  method that carries the set contract (append only when absent) — but the
+  literal built the list directly with append, so `{1, 2, 2, 3}` kept its
+  duplicate while `set().add(2)` twice did not. The design was intact and one
+  construction path skipped it (bug-nilpy-set-literal-does-not-deduplicate). }
 var ci, recId, node, argNode, sizeNode, callNode, selfArg, valArg, mmi, mpi,
     tmpSym, asgn, starExt: Integer;
 begin
@@ -7319,8 +7324,16 @@ begin
   ASTLeft[asgn] := PyMakeIdent(tmpSym);
   ASTRight[asgn] := node;
   PyHoistStmt(asgn);
-  mmi := FindUMeth(ci, 'append');
-  if mmi < 0 then Error('Nil Python: TPyList.append not found');
+  if dedup then
+  begin
+    mmi := FindUMeth(ci, 'add');
+    if mmi < 0 then Error('Nil Python: TPyList.add not found');
+  end
+  else
+  begin
+    mmi := FindUMeth(ci, 'append');
+    if mmi < 0 then Error('Nil Python: TPyList.append not found');
+  end;
   mpi := UMthProc_[mmi];
   while CurTok.Kind <> closer do
   begin
@@ -7387,7 +7400,7 @@ end;
 
 procedure PyParseListLiteral;
 begin
-  PyParseListLiteralT(tkLBrack, tkRBrack);
+  PyParseListLiteralT(tkLBrack, tkRBrack, False);
 end;
 
 { `{a, b}` set literal — desugared to a TPyList (the corpus uses sets only
@@ -7486,7 +7499,7 @@ end;
 procedure PyParseSetLiteral;
 begin
   if PyDictLiteralAhead then PyParseDictLiteral
-  else PyParseListLiteralT(tkBegin, tkEnd);
+  else PyParseListLiteralT(tkBegin, tkEnd, True);
 end;
 
 procedure PyCoerceAssignmentRHS(lhsTk: TTypeKind; rhsNode: Integer);
@@ -8896,7 +8909,7 @@ begin
   { `for pfx in ("a", "b"):` — a TUPLE to iterate, built as the same TPyList a
     `[...]` literal produces, exactly as the `in` OPERATOR does. }
   if PyTupleParenAhead then
-    PyParseListLiteralT(tkLParen, tkRParen)
+    PyParseListLiteralT(tkLParen, tkRParen, False)
   else
     PyParseBoolExpr;
   if itemsDot >= 0 then

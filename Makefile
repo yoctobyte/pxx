@@ -647,6 +647,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_unpack26)" = "$$(printf '1 2\n2 1\np 2 3.5\n7 8\na 1\nb 2\nc 3\n6\na 1\nb 2\nc 3')"
 	./$(COMPILER) test/test_nilpy_comparison_chaining.npy /tmp/test_nilpy_comparison_chaining26
 	test "$$(/tmp/test_nilpy_comparison_chaining26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nTrue\nFalse\nTrue\ncall\nTrue')"
+	./$(COMPILER) test/test_nilpy_set_literal_dedup.npy /tmp/test_nilpy_set_literal_dedup26
+	test "$$(/tmp/test_nilpy_set_literal_dedup26)" = "$$(printf '3\n3\n3\n2\n4\nTrue False True\n4\n4\n1 2\n[1, 2, 3]')"
 	@# a callable where a str parameter is declared must be REFUSED, naming the parameter
 	@./$(COMPILER) test/test_nilpy_callable_to_str_param_fails.npy /tmp/test_nilpy_callable_to_str_param26 2>&1 \
 	  | grep -q 'expects text for parameter "s"' \
