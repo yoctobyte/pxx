@@ -70,3 +70,6 @@ shape.
 the point is that 80 000 drops from ~19 s to milliseconds AND that the timing
 grows LINEARLY, not that one case got faster. Content must be byte-identical to
 the old routine for a range of n and multi-character `s`.
+
+## Log
+- 2026-07-30 — resolved, commit 5f522fbbd.

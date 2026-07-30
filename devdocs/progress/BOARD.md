@@ -33,7 +33,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (191)
+## backlog (199)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -42,22 +42,30 @@ _none_
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
 | bug-lib-tkinter-trailing-underscore-params-block-kwargs | B | 40 | bug | tkinter facade parameters named with a trailing underscore cannot be passed by name | — |
 | bug-nilpy-augmented-add-on-variant-list-is-not-in-place | N | 55 | bug | `xs += ys` on a VARIANT-typed list rebinds instead of extending, so the caller never sees it | — |
+| bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-builtin-pairs-are-not-flagged-as-tuples | N | 35 | bug | `enumerate`, `zip`, `dict.items` and `most_common` build pairs that print as lists | — |
+| bug-nilpy-callable-value-abi-sorted-key-and-builtins | N | 65 | bug | `sorted(key=...)` ignores most keys, and a callable passed as a VALUE has no common ABI | — |
+| bug-nilpy-caught-exception-objects-are-never-freed | N | 60 | bug | Every caught exception leaks its object — 640k raises cost 105 MB | — |
 | bug-nilpy-comprehension-variable-leaks-and-clobbers-the-enclosing-scope | N | 60 | bug | A comprehension's loop variable leaks and OVERWRITES the enclosing binding — and can segfault | — |
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
 | bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic | N | 60 | bug | User-defined dunders are ignored, and the operator then does arithmetic on the object HANDLE | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
+| bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory | N | 75 | bug | `f.write()` silently writes nothing, and once a "w" open exists, `print(f.read())` dumps RTTI MEMORY to stdout | — |
 | bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip | N | 20 | bug | `print(1e-20)` prints `0.0` — NilPy's float repr has no small-magnitude exponential form | — |
+| bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float | N | 40 | bug | A function with no `return` yields 0, not None — and `math.floor` yields a float, not an int | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
 | bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
 | bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
+| bug-nilpy-missing-attribute-yields-none-instead-of-attributeerror | N | 65 | bug | Reading an attribute that does not exist yields None — and on None it can yield a STRING | — |
+| bug-nilpy-mixed-type-and-or-returns-a-bool-not-the-operand | N | 45 | bug | `0 or "x"` returns True — a mixed str/number `and`/`or` yields a bool instead of the operand | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
 | bug-nilpy-print-emits-arguments-before-evaluating-later-ones | N | 45 | bug | `print` writes each argument as it goes, so an exception mid-list leaves partial output | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pyeval-prints-bool-as-number | N | 30 | bug | pyeval prints a Boolean as 1/0 where CPython prints True/False | — |
 | bug-nilpy-qualified-proc-omitted-default | N | 35 | bug | A qualified UNIT-LEVEL proc call cannot omit a defaulted parameter | — |
+| bug-nilpy-redefining-a-def-is-ignored-the-first-body-still-runs | N | 60 | bug | Redefining a `def` silently does nothing — the FIRST body still runs | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
 | bug-pascal-defines-leak-across-units | A | 55 | bug | Pascal: {$define} in one unit stays visible in units parsed afterwards, so {$ifdef} compiles different code depending on uses ORDER | — |
 | bug-pascal-uses-is-transitive | A | 65 | bug | Pascal: uses is transitive — a unit's own uses leak into everything that uses IT, for routines and classes alike (one flat global namespace) | — |
@@ -291,7 +299,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1061)
+## done (1062)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -700,6 +708,7 @@ _none_
 | bug-nilpy-str-of-object-segfaults-when-dunder-builds-a-string | N | 75 | bug | `str(obj)` SEGFAULTS when `__str__`/`__repr__` builds a string and nothing touched the instance first | — |
 | bug-nilpy-str-of-tuple-is-empty | N | 60 | bug | `str()` of a tuple/list returns the container's POINTER | — |
 | bug-nilpy-str-param-length-index | A | 55 | bug | NilPy: `str` parameter breaks Length / indexing / codegen | — |
+| bug-nilpy-str-repeat-is-quadratic | N | 50 | bug | `"x" * n` is QUADRATIC — 80k characters takes 19 seconds | — |
 | bug-nilpy-string-class-field | N | 60 | bug | NilPy: str class field registered as tyString = inline string[N] semantics (garbage reads) | — |
 | bug-nilpy-string-local-truncates-at-255 | N | 65 | bug | NilPy: a string local TRUNCATES at 255 characters, silently | — |
 | bug-nilpy-subscript-argument-boxes-wrong-into-variant-param | N | 75 | bug | A SUBSCRIPT argument passed to a variant parameter arrives as garbage | — |
@@ -2800,14 +2809,19 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 75] [N] bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory
 - [p 70] [U] decide-runtime-primitive-layering
+- [p 65] [N] bug-nilpy-callable-value-abi-sorted-key-and-builtins
+- [p 65] [N] bug-nilpy-missing-attribute-yields-none-instead-of-attributeerror
 - [p 65] [A] bug-pascal-uses-is-transitive
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [A] feature-a-typeref-handle
 - [p 65] [B] feature-nilpy-tk-callbacks
+- [p 60] [N] bug-nilpy-caught-exception-objects-are-never-freed
 - [p 60] [N] bug-nilpy-comprehension-variable-leaks-and-clobbers-the-enclosing-scope
 - [p 60] [N] bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
+- [p 60] [N] bug-nilpy-redefining-a-def-is-ignored-the-first-body-still-runs
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
@@ -2824,6 +2838,7 @@ _none_
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
 - [p 55] [N] bug-nilpy-augmented-add-on-variant-list-is-not-in-place
+- [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [A] bug-pascal-defines-leak-across-units
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
@@ -2867,6 +2882,7 @@ _none_
 - [p 45] [U] decide-gpc-as-corpus-target (unblocks 1)
 - [p 45] [U] decide-ilja-tui-render-model (unblocks 1)
 - [p 45] [A] bug-compiler-selfdebug-lines-index-expanded-source
+- [p 45] [N] bug-nilpy-mixed-type-and-or-returns-a-bool-not-the-operand
 - [p 45] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 45] [N] bug-nilpy-print-emits-arguments-before-evaluating-later-ones
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
@@ -2914,6 +2930,7 @@ _none_
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
 - [p 40] [B] bug-lib-tkinter-trailing-underscore-params-block-kwargs
 - [p 40] [N] bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter
+- [p 40] [N] bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float
 - [p 40] [U] decide-nilpy-transitive-nested-def-capture
 - [p 40] [A] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision
