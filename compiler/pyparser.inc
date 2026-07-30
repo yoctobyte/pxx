@@ -4645,17 +4645,28 @@ begin
   ASTLeft[Result] := argNode;
 end;
 
-{ `obj.name` (dynamic attribute read) -> pydynattr_get(obj, "name"). }
+{ `obj.name` (dynamic attribute read) -> pydynattr_get(obj, "name") for a
+  receiver STATICALLY known to be a class (obj is a genuine object pointer,
+  or nil), else pydynattr_get_v(v, "name") for a VARIANT receiver — its
+  runtime tag decides whether the payload is even an object pointer at all,
+  and pydynattr_get(pyvarobj(v), ...)'s naive unwrap would ClassName garbage
+  for a scalar (str/int/float/bool) variant on a miss. }
 function PyMakeDynAttrGet(baseNode: Integer; const fname: AnsiString): Integer;
-var procIdx, a0, a1, nameNode: Integer;
+var procIdx, a0, a1, nameNode: Integer; isVariantRecv: Boolean;
 begin
-  procIdx := FindProc('pydynattr_get');
-  if procIdx < 0 then Error('Nil Python: pylib (pydynattr_get) not loaded');
+  isVariantRecv := IntToTypeKind(ASTTk[baseNode]) = tyVariant;
+  if isVariantRecv then
+    procIdx := FindProc('pydynattr_get_v')
+  else
+    procIdx := FindProc('pydynattr_get');
+  if procIdx < 0 then Error('Nil Python: pylib (pydynattr_get/_v) not loaded');
   nameNode := AllocNode(AN_STR_LIT);
   ASTSOffset[nameNode] := PyStoredName(fname);
   ASTSLen[nameNode] := Length(fname);
   ASTTk[nameNode] := Ord(tyString);
-  a0 := AllocNode(AN_ARG); ASTLeft[a0] := PyMakeObjPtr(baseNode);
+  a0 := AllocNode(AN_ARG);
+  if isVariantRecv then ASTLeft[a0] := baseNode
+  else ASTLeft[a0] := PyMakeObjPtr(baseNode);
   a1 := AllocNode(AN_ARG); ASTLeft[a1] := nameNode;
   ASTRight[a0] := a1; ASTRight[a1] := -1;
   Result := AllocNode(AN_CALL);
@@ -6484,6 +6495,8 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     nDual, di, kwIdx, kwDepth, swapCi, swapMmi, dualArgs: Integer;
     anyKw: Boolean; dualRetMixed: Boolean;
     argExprs: array[0..15] of Integer;
+    smTmpSym, smAsgn, smGuardArg, smGuardCall, smNotNode, smNameArg,
+    smArg1, smArg2, smRaiseCall, smIfNode, smPairNode: Integer;
 begin
   { A receiver that came from an optional module which did not resolve — the
     name itself, or anything assigned from it. Checked BEFORE class dispatch:
@@ -6498,10 +6511,54 @@ begin
   { A STR method on a variant receiver — `for s in ["ab"]: s.upper()`, where the
     loop variable is a variant holding a string. Render the receiver with
     pystr_of (which spells every tag Python's way) and hand it to the ordinary
-    str-method desugar, rather than looking for a class that declares `upper`. }
+    str-method desugar, rather than looking for a class that declares `upper`.
+
+    But ONLY when the receiver's runtime tag actually IS a string: pystr_of
+    also spells None/int/float/bool as plausible TEXT ('None', '5', ...), so
+    unconditionally stringifying first turned `None.upper()` into `'NONE'`
+    instead of raising AttributeError
+    (bug-nilpy-missing-attribute-yields-none-instead-of-attributeerror).
+    baseNode is hoisted into a hidden temp first since it is now read TWICE
+    (once for the tag guard, once for the str conversion) and may not be
+    side-effect-free (`d.get(k).upper()`). }
   if PyStrMethodInfo(mname, smPName, smTk, smArgs) and
      not PyStrMethodLosesToClass(mname) then
   begin
+    smTmpSym := AllocVar(PyHiddenName('sm'), tyVariant);
+    smAsgn := AllocNode(AN_ASSIGN);
+    ASTLeft[smAsgn] := PyMakeIdent(smTmpSym);
+    ASTRight[smAsgn] := baseNode;
+    PyHoistStmt(smAsgn);
+    baseNode := PyMakeIdent(smTmpSym);
+
+    i := FindProc('pyvar_is_strtag');
+    if i < 0 then Error('Nil Python: pylib (pyvar_is_strtag) not loaded');
+    smGuardArg := AllocNode(AN_ARG); ASTLeft[smGuardArg] := PyMakeIdent(smTmpSym);
+    smGuardCall := AllocNode(AN_CALL);
+    ASTIVal[smGuardCall] := i; ASTTk[smGuardCall] := Ord(tyBoolean);
+    ASTLeft[smGuardCall] := smGuardArg;
+    smNotNode := AllocNode(AN_NOT);
+    ASTLeft[smNotNode] := smGuardCall; ASTTk[smNotNode] := Ord(tyBoolean);
+
+    i := FindProc('pydynattr_no_method');
+    if i < 0 then Error('Nil Python: pylib (pydynattr_no_method) not loaded');
+    smNameArg := AllocNode(AN_STR_LIT);
+    ASTSOffset[smNameArg] := PyStoredName(mname);
+    ASTSLen[smNameArg] := Length(mname);
+    ASTTk[smNameArg] := Ord(tyString);
+    smArg2 := AllocNode(AN_ARG); ASTLeft[smArg2] := smNameArg; ASTRight[smArg2] := -1;
+    smArg1 := AllocNode(AN_ARG); ASTLeft[smArg1] := PyMakeIdent(smTmpSym); ASTRight[smArg1] := smArg2;
+    smRaiseCall := AllocNode(AN_CALL);
+    ASTIVal[smRaiseCall] := i; ASTTk[smRaiseCall] := Ord(tyUnknown);
+    ASTLeft[smRaiseCall] := smArg1;
+
+    smIfNode := AllocNode(AN_IF);
+    ASTLeft[smIfNode] := smNotNode;
+    smPairNode := AllocNode(AN_PAIR);
+    ASTLeft[smPairNode] := smRaiseCall; ASTRight[smPairNode] := -1;
+    ASTRight[smIfNode] := smPairNode;
+    PyHoistStmt(smIfNode);
+
     i := FindProc('pystr_of');
     if i < 0 then Error('Nil Python: pylib (pystr_of) not loaded');
     unboxArg := AllocNode(AN_ARG);

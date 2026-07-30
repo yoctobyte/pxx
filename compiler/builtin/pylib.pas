@@ -1708,15 +1708,76 @@ end;
 
 function pydynattr_get(obj: Pointer; const name: AnsiString): Variant;
 begin
+  { Reached with a receiver STATICALLY known to be a real class instance (or
+    nil, a class-typed field/local defaulting to None) — never an int/str/etc
+    scalar, so ClassName on a non-nil `obj` is always safe here. A miss is a
+    genuinely missing attribute, not a "maybe dynamic, maybe not" ambiguity:
+    hasattr/getattr(o, n, default) both resolve through pydynattr_has FIRST
+    and never reach this branch on a miss (see their call sites in
+    parser.inc), so raising cannot break either. Silently answering None
+    instead let a typo'd attribute name travel arbitrarily far as a plausible
+    value before anything noticed
+    (bug-nilpy-missing-attribute-yields-none-instead-of-attributeerror). }
   if pydynattr_has(obj, name) then
     Result := PyDynAttrStore.fetch(PyDynAttrKey(obj, name))
+  else if obj = nil then
+    raise AttributeError.Create('''NoneType'' object has no attribute ''' + name + '''')
   else
+    raise AttributeError.Create('''' + TObject(obj).ClassName +
+      ''' object has no attribute ''' + name + '''');
+end;
+
+function PyVarTypeName(t: Int64): AnsiString; forward;
+
+function pydynattr_get_v(const v: Variant; const name: AnsiString): Variant;
+var obj: Pointer; tg: Int64; cn: AnsiString;
+begin
+  { Reached with a receiver that is a VARIANT — a for-loop element, `d.get(k)`,
+    a plain unannotated parameter — whose runtime tag is NOT known at compile
+    time. Unlike pydynattr_get above, `pyvarobj(v)`'s raw payload is only a
+    real object pointer when the tag says so (VT_OBJECT); for any other tag
+    (str/int/float/bool) it is scalar bits reinterpreted as an address, and
+    ClassName on that would dereference garbage. Check the tag first. }
+  obj := pyvarobj(v);
+  if pydynattr_has(obj, name) then
   begin
-    { Python raises AttributeError; None is returned here because uforth always
-      guards a dynamic read with hasattr first. }
-    PPyVarRec(@Result)^.VType := 0;
-    PPyVarRec(@Result)^.Payload := 0;
+    Result := PyDynAttrStore.fetch(PyDynAttrKey(obj, name));
+    Exit;
   end;
+  tg := pyvartag(v);
+  if tg = 7 then
+  begin
+    if obj = nil then cn := 'NoneType' else cn := TObject(obj).ClassName;
+  end
+  else
+    cn := PyVarTypeName(tg);
+  raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + name + '''');
+end;
+
+function pyvar_is_strtag(const v: Variant): Boolean;
+begin
+  Result := pyvartag(v) in [5, 6];
+end;
+
+{ ALWAYS raises. `None.upper()` (or any str method on a non-str variant) used
+  to render the receiver through pystr_of first — a None/int/float/bool
+  receiver stringifies to plausible-looking TEXT ('None', '5', ...) and the
+  method then ran on THAT, so `None.upper()` answered 'NONE' instead of
+  raising (bug-nilpy-missing-attribute-yields-none-instead-of-attributeerror).
+  The call site guards with pyvar_is_strtag first and only reaches this on a
+  genuine non-str receiver. }
+procedure pydynattr_no_method(const v: Variant; const mname: AnsiString);
+var obj: Pointer; tg: Int64; cn: AnsiString;
+begin
+  tg := pyvartag(v);
+  if tg = 7 then
+  begin
+    obj := pyvarobj(v);
+    if obj = nil then cn := 'NoneType' else cn := TObject(obj).ClassName;
+  end
+  else
+    cn := PyVarTypeName(tg);
+  raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + mname + '''');
 end;
 
 function pyvar_getitem(const v: Variant; const key: Variant): Variant;

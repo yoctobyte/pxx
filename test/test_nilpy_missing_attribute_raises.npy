@@ -1,0 +1,46 @@
+# Reading an attribute that does not exist used to answer None -- and on
+# None, a string METHOD went further and stringified the receiver first, so
+# `None.upper()` answered 'NONE' instead of raising. A typo'd attribute name
+# (or a dict.get() miss chained with `.x`) then travelled arbitrarily far as
+# plausible data before anything noticed.
+# bug-nilpy-missing-attribute-yields-none-instead-of-attributeerror
+# Every expectation is CPython's own output.
+
+x = None
+try:
+    print(x.foo)
+except AttributeError:
+    print("caught foo")
+
+try:
+    print(x.upper())
+except AttributeError:
+    print("caught upper")
+
+class K:
+    pass2 = 1
+k = K()
+try:
+    print(k.nope)
+except AttributeError:
+    print("caught nope")
+
+d = {}
+try:
+    print(d.get("k").x)
+except AttributeError:
+    print("caught getx")
+
+# hasattr/getattr must keep working -- neither raises
+print(hasattr(k, "pass2"))
+print(hasattr(k, "nope"))
+print(getattr(k, "pass2", "def"))
+print(getattr(k, "nope", "def"))
+
+# a dynamic attribute set then read back must keep working
+k.dynval = 42
+print(k.dynval)
+
+# str methods on a variant that genuinely IS a string must keep working
+for s in ["ab"]:
+    print(s.upper())
