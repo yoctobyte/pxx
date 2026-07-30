@@ -692,6 +692,22 @@ function pyshr_v(const a: Variant; const b: Variant): Variant;
 function pyinvert_v(const a: Variant): Variant;   { ~a }
 function pyneg_v(const a: Variant): Variant;      { -a }
 function pycmp_v(const a: Variant; const b: Variant): Int64;   { -1/0/1 }
+{ Python's `/` over two VARIANTS: always a float, ZeroDivisionError on a zero
+  divisor, TypeError when either tag is not a number. pytruediv_f is the
+  statically-numeric sibling and takes two Doubles — it cannot serve here,
+  because coercing a variant to a Double at the call site is exactly the step
+  that turned a str handle into a number
+  (bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math). }
+function pytruediv_v(const a: Variant; const b: Variant): Variant;
+{ The ORDERING operators over variants. Each is pycmp_v plus a test, exposed as
+  its own function so the lowering emits one call returning a Boolean rather
+  than hand-building a compare against pycmp_v's Int64. pycmp_v raises for a
+  pair Python will not order (int vs str, int vs list), which is the point:
+  `3 < [1, 2]` used to answer True off a heap address. }
+function pylt_v(const a: Variant; const b: Variant): Boolean;
+function pyle_v(const a: Variant; const b: Variant): Boolean;
+function pygt_v(const a: Variant; const b: Variant): Boolean;
+function pyge_v(const a: Variant; const b: Variant): Boolean;
 function pyeq_v(const a: Variant; const b: Variant): Boolean;
 function pyint_v(const v: Variant): Variant;      { int(v) as a variant }
 function pyvar_of_int(v: Int64): Variant;
@@ -1714,10 +1730,7 @@ begin
     Result := pyvar_of_int(TPyBytes(o).at(ki));
   end
   else
-  begin
-    WriteLn('TypeError: object is not subscriptable');
-    Halt(1);
-  end;
+    raise TypeError.Create('object is not subscriptable');
 end;
 
 function pyvar_slice(const v: Variant; lo, hi: Integer): Variant;
@@ -1731,16 +1744,10 @@ begin
     if o is TPyList then Result := pylist_slice(TPyList(o), lo, hi)
     else if o is TPyBytes then Result := pybytes_slice(TPyBytes(o), lo, hi)
     else
-    begin
-      WriteLn('TypeError: object is not subscriptable');
-      Halt(1);
-    end;
+      raise TypeError.Create('object is not subscriptable');
   end
   else
-  begin
-    WriteLn('TypeError: object is not subscriptable');
-    Halt(1);
-  end;
+    raise TypeError.Create('object is not subscriptable');
 end;
 
 procedure pyvar_setitem(const v: Variant; const key: Variant; const val: Variant);
@@ -2682,11 +2689,10 @@ begin
   end;
   if ((pa^.VType = 6) or (pa^.VType = 5)) or ((pb^.VType = 6) or (pb^.VType = 5)) then
   begin
-    WriteLn('TypeError: comparison of a string with a number');
-    Halt(1);
+    raise TypeError.Create('comparison of a string with a number');
   end;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
-    pyvar_gt := PyVarAsFloat(pa) > PyVarAsFloat(pb)
+    pyvar_gt := pyvar_to_float(a) > pyvar_to_float(b)
   else
     pyvar_gt := pyvar_to_int(a) > pyvar_to_int(b);
 end;
@@ -3105,6 +3111,14 @@ begin
   PyVarIsFloat := p^.VType = 3;
 end;
 
+{ UNCHECKED: a non-float tag's raw payload is read as an integer, so a str,
+  list or dict HANDLE comes back as an address. Only safe where the tag is
+  already known to be numeric. Every BINARY arithmetic and ordering arm now
+  coerces with pyvar_to_float instead, which raises TypeError on a tag Python
+  will not accept — the six of them each spelled this check inline, and one
+  gaining a case the others lacked is exactly how
+  bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math survived. The one
+  remaining caller is unary negation, whose operand it has already tested. }
 function PyVarAsFloat(p: PPyVarRec): Double;
 begin
   if p^.VType = 3 then PyVarAsFloat := PPyDouble(@p^.Payload)^
@@ -3188,6 +3202,11 @@ begin
     Result := PPyDouble(@p^.Payload)^
   else if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
     Result := p^.Payload
+  else if p^.VType = 8193 then
+    { VT_PROMO_INT64 is a NUMBER; it was missing here, so a heap-tier
+      promotable int reaching a float context raised "expected a number, got
+      <unknown>". pyvar_to_int owns the decimal-payload narrowing rule. }
+    Result := pyvar_to_int(v)
   else
   begin
     PyTypeError(p^.VType, 'a number');
@@ -3307,9 +3326,42 @@ function pymul_v(const a: Variant; const b: Variant): Variant;
 var
   pa, pb, sp, np, r: PPyVarRec;
   txt: AnsiString;
+  lo: TObject;
+  src, rep: TPyList;
+  k, cnt, li: Integer;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
+  { A SEQUENCE repeats too — `[0] * n` is how Python allocates a fixed-size
+    list, so this arm is not an exotic case. Same shape as the str arm below;
+    it was missing, and the numeric fallthrough then multiplied the list's
+    HANDLE. }
+  lo := nil;
+  np := nil;
+  if pa^.VType = 7 then begin lo := TObject(pyvarobj(a)); np := pb; end
+  else if pb^.VType = 7 then begin lo := TObject(pyvarobj(b)); np := pa; end;
+  if (lo <> nil) and (lo is TPyList) then
+  begin
+    if (np^.VType <> 1) and (np^.VType <> 2) and (np^.VType <> 4) then
+      PyTypeError(np^.VType, 'an integer to repeat a list by');
+    src := TPyList(lo);
+    cnt := np^.Payload;
+    rep := TPyList.Create;
+    rep.FIsTuple := src.FIsTuple;   { (1, 2) * 2 is a tuple, not a list }
+    k := 0;
+    while k < cnt do
+    begin
+      li := 0;
+      while li < src.count do
+      begin
+        rep.append(src.at(li));
+        Inc(li);
+      end;
+      Inc(k);
+    end;
+    Result := rep;
+    Exit;
+  end;
   sp := nil; np := nil;
   if (pa^.VType = 6) or (pa^.VType = 5) then begin sp := pa; np := pb; end
   else if (pb^.VType = 6) or (pb^.VType = 5) then begin sp := pb; np := pa; end;
@@ -3327,12 +3379,12 @@ begin
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
   begin
     r^.VType := 3;
-    PPyDouble(@r^.Payload)^ := PyVarAsFloat(pa) * PyVarAsFloat(pb);
+    PPyDouble(@r^.Payload)^ := pyvar_to_float(a) * pyvar_to_float(b);
   end
   else
   begin
     r^.VType := 2;
-    r^.Payload := pa^.Payload * pb^.Payload;
+    r^.Payload := pyvar_to_int(a) * pyvar_to_int(b);
   end;
 end;
 
@@ -3361,7 +3413,7 @@ begin
   r^.VType := 0; r^.Payload := 0;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
   begin
-    dv := pyfloordiv_f(PyVarAsFloat(pa), PyVarAsFloat(pb));
+    dv := pyfloordiv_f(pyvar_to_float(a), pyvar_to_float(b));
     r^.VType := 3;
     PPyDouble(@r^.Payload)^ := dv;
   end
@@ -3383,9 +3435,20 @@ var
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
+  { A str LEFT operand makes `%` printf-style FORMATTING, not modulo — the
+    single most common `%` in Python. Statically-typed `"%d" % n` already
+    reached pypercent_format, but the variant form (a format string out of a
+    list, a dict or a parameter) landed here and coerced the format string to a
+    number, so `f % 5` died with "expected a number, got str". }
+  if (pa^.VType = 6) or (pa^.VType = 5) then
+  begin
+    r^.VType := 6;
+    PPyAnsiString(@r^.Payload)^ := pypercent_format(PyVarText(pa), b);
+    Exit;
+  end;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
   begin
-    dv := pyfloormod_f(PyVarAsFloat(pa), PyVarAsFloat(pb));
+    dv := pyfloormod_f(pyvar_to_float(a), pyvar_to_float(b));
     r^.VType := 3;
     PPyDouble(@r^.Payload)^ := dv;
   end
@@ -3434,9 +3497,26 @@ end;
 
 function pyadd_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec; concat: AnsiString;
+    oa, ob: TObject; joined: TPyList; ji: Integer;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
+  { list + list -> a NEW list holding both, like Python. `xs += ys` is separate
+    and in-place (TPyList.extend); this is the value form, and without it the
+    numeric fallthrough added the two class HANDLES. }
+  if (pa^.VType = 7) and (pb^.VType = 7) then
+  begin
+    oa := TObject(pyvarobj(a)); ob := TObject(pyvarobj(b));
+    if (oa is TPyList) and (ob is TPyList) then
+    begin
+      joined := TPyList.Create;
+      joined.FIsTuple := TPyList(oa).FIsTuple;
+      for ji := 0 to TPyList(oa).count - 1 do joined.append(TPyList(oa).at(ji));
+      for ji := 0 to TPyList(ob).count - 1 do joined.append(TPyList(ob).at(ji));
+      Result := joined;
+      Exit;
+    end;
+  end;
   { str/char + str/char -> concat }
   if ((pa^.VType = 6) or (pa^.VType = 5)) and ((pb^.VType = 6) or (pb^.VType = 5)) then
   begin
@@ -3448,7 +3528,7 @@ begin
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
   begin
     r^.VType := 3;
-    PPyDouble(@r^.Payload)^ := PyVarAsFloat(pa) + PyVarAsFloat(pb);
+    PPyDouble(@r^.Payload)^ := pyvar_to_float(a) + pyvar_to_float(b);
   end
   else
   begin
@@ -3465,7 +3545,7 @@ begin
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
   begin
     r^.VType := 3;
-    PPyDouble(@r^.Payload)^ := PyVarAsFloat(pa) - PyVarAsFloat(pb);
+    PPyDouble(@r^.Payload)^ := pyvar_to_float(a) - pyvar_to_float(b);
   end
   else
   begin
@@ -3534,10 +3614,50 @@ begin
     Result := pyvar_of_int(-pyvar_to_int(a));
 end;
 
+{ Two SEQUENCES compare lexicographically in Python: element by element, and
+  the shorter one loses if it is a prefix. Without this, ordering two lists fell
+  through to pyvar_to_int and — before that coercion was in place — compared
+  their HANDLES, so `xs < ys` answered by heap address. }
+function pylist_cmp(x: TPyList; y: TPyList): Int64;
+var i, n: Integer; c: Int64;
+begin
+  if x = nil then n := 0 else n := x.count;
+  if y <> nil then
+    if y.count < n then n := y.count;
+  i := 0;
+  while i < n do
+  begin
+    c := pycmp_v(x.at(i), y.at(i));
+    if c <> 0 then begin Result := c; Exit; end;
+    Inc(i);
+  end;
+  { a common prefix: the shorter sequence sorts first }
+  if x = nil then i := 0 else i := x.count;
+  if y = nil then n := 0 else n := y.count;
+  if i < n then Result := -1
+  else if i > n then Result := 1
+  else Result := 0;
+end;
+
 function pycmp_v(const a: Variant; const b: Variant): Int64;
 var pa, pb: PPyVarRec; sa, sb: AnsiString; fa, fb: Double; ia, ib: Int64;
+    oa, ob: TObject;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
+  if (pa^.VType = 7) and (pb^.VType = 7) then
+  begin
+    oa := TObject(pyvarobj(a)); ob := TObject(pyvarobj(b));
+    if (oa is TPyList) and (ob is TPyList) then
+    begin
+      Result := pylist_cmp(TPyList(oa), TPyList(ob));
+      Exit;
+    end;
+    { any other object pair: no ordering defined, and reading the handles as
+      numbers is what this whole family was fixed to stop doing }
+    PyTypeError(pa^.VType, 'a number or a sequence');
+    Result := 0;
+    Exit;
+  end;
   if ((pa^.VType = 6) or (pa^.VType = 5)) and ((pb^.VType = 6) or (pb^.VType = 5)) then
   begin
     sa := PyVarText(pa); sb := PyVarText(pb);
@@ -3548,7 +3668,7 @@ begin
   end;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
   begin
-    fa := PyVarAsFloat(pa); fb := PyVarAsFloat(pb);
+    fa := pyvar_to_float(a); fb := pyvar_to_float(b);
     if fa < fb then Result := -1
     else if fa > fb then Result := 1
     else Result := 0;
@@ -3558,6 +3678,41 @@ begin
   if ia < ib then Result := -1
   else if ia > ib then Result := 1
   else Result := 0;
+end;
+
+function pytruediv_v(const a: Variant; const b: Variant): Variant;
+var r: PPyVarRec; da, db: Double;
+begin
+  { pyvar_to_float RAISES TypeError for a str/list/dict/None tag, so the
+    coercion is the type check — there is no arm that reads a handle as a
+    number. Divisor first is deliberate only in that both must be numbers
+    before the zero test means anything. }
+  da := pyvar_to_float(a);
+  db := pyvar_to_float(b);
+  if db = 0.0 then raise ZeroDivisionError.Create('division by zero');
+  r := PPyVarRec(@Result);
+  r^.VType := 3;
+  PPyDouble(@r^.Payload)^ := da / db;
+end;
+
+function pylt_v(const a: Variant; const b: Variant): Boolean;
+begin
+  Result := pycmp_v(a, b) < 0;
+end;
+
+function pyle_v(const a: Variant; const b: Variant): Boolean;
+begin
+  Result := pycmp_v(a, b) <= 0;
+end;
+
+function pygt_v(const a: Variant; const b: Variant): Boolean;
+begin
+  Result := pycmp_v(a, b) > 0;
+end;
+
+function pyge_v(const a: Variant; const b: Variant): Boolean;
+begin
+  Result := pycmp_v(a, b) >= 0;
 end;
 
 function pyeq_v(const a: Variant; const b: Variant): Boolean;
@@ -5226,19 +5381,13 @@ begin
     if lst <> nil then
     begin
       if argi >= nargs then
-      begin
-        WriteLn('TypeError: not enough arguments for format string');
-        Halt(1);
-      end;
+        raise TypeError.Create('not enough arguments for format string');
       cur := lst.at(argi);
     end
     else
     begin
       if argi >= 1 then
-      begin
-        WriteLn('TypeError: not enough arguments for format string');
-        Halt(1);
-      end;
+        raise TypeError.Create('not enough arguments for format string');
       cur := args;
     end;
     Inc(argi);
@@ -5273,12 +5422,21 @@ begin
     end;
     outS := outS + pyformat_of(cur, spec);
   end;
-  if lst <> nil then
-    if argi < nargs then
-    begin
-      WriteLn('TypeError: not all arguments converted during string formatting');
-      Halt(1);
-    end;
+  { LEFTOVER arguments are a TypeError in Python, and this only tested the
+    tuple form. `"ab" % 5` -- a format string with no placeholder at all --
+    fell through and returned the format unchanged, so a real bug (usually a
+    `%` that was meant to be modulo, or a lost specifier) produced plausible
+    output instead of an error. nargs is 1 for the single-value form, so the
+    same comparison covers both.
+
+    A SUBSCRIPTABLE right-hand side is exempt, and that is CPython's own rule,
+    not a shortcut: it skips the check whenever PyMapping_Check passes, which
+    is true for a dict AND for a list, so `"ab" % {"k": 1}` and `"ab" % [1, 2]`
+    both yield "ab" while `"ab" % (1, 2)` and `"ab" % 5` raise. Measured
+    against CPython rather than reasoned from the docs. }
+  if (argi < nargs) and
+     ((lst <> nil) or (PPyVarRec(@args)^.VType <> 7)) then
+    raise TypeError.Create('not all arguments converted during string formatting');
   Result := outS;
 end;
 

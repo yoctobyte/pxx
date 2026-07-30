@@ -3777,6 +3777,82 @@ begin
   IRNodeIsPyStr := (tk = tyString) or (tk = tyAnsiString) or (tk = tyChar);
 end;
 
+{ A PROVABLE operand-type clash: one side is statically a str and the other
+  statically a number, for an operator that accepts neither pairing. The
+  runtime helpers already raise TypeError for this
+  (bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math), but where both
+  types are known at compile time the program is simply wrong and pxx can say
+  so without running it.
+
+  It WARNS rather than errors, by decision
+  (decide-nilpy-mixed-type-operand-policy): `if False: 3 - "ab"` is legal
+  CPython and compiles there, as does anything behind a version, platform or
+  `if TYPE_CHECKING:` guard, and aborting on a vendored file that never
+  executes the line costs more than it saves. -Werror is deliberately NOT the
+  opt-in — it promotes every warning, far too blunt for this one check.
+
+  Deliberately narrow. Only the str-vs-number pair is reported, because it is
+  the one with no legal reading:
+    - `*` is excluded entirely: `"ab" * 3` and `[0] * n` REPEAT.
+    - `%` with a str on the left is excluded: that is printf formatting.
+    - tyClass is not considered at all — `Path("a") / "b"` is pathlib's join,
+      and an overloaded operator is not a clash.
+  In NilPy nearly every value is a variant, so this sees roughly literals and
+  annotated locals. That is the point: few cases, no false positives.
+
+  NilPyUserCode, not isNilPy: the Pascal RTL units compiled into the same
+  program are ordinary Pascal, where Char-vs-Integer arithmetic is legal
+  (project_pyeval_arc_state_and_wiring_blocker — a whole-compilation flag must
+  not police a unit the NilPy user did not write). }
+function IRPyNumStrClash(node: Integer): Boolean;
+var op: Integer; lStr, rStr, lNum, rNum: Boolean;
+begin
+  IRPyNumStrClash := False;
+  if not NilPyUserCode then Exit;
+  if (ASTLeft[node] < 0) or (ASTRight[node] < 0) then Exit;
+  op := Integer(ASTIVal[node]);
+  if (op <> Ord(tkMinus)) and (op <> Ord(tkSlash)) and (op <> Ord(tkDiv)) and
+     (op <> Ord(tkMod)) and (op <> Ord(tkPlus)) and
+     (op <> Ord(tkLt)) and (op <> Ord(tkLe)) and
+     (op <> Ord(tkGt)) and (op <> Ord(tkGe)) then Exit;
+  lStr := IRNodeIsPyStr(ASTLeft[node]);
+  rStr := IRNodeIsPyStr(ASTRight[node]);
+  { `"%d items" % n` is formatting, not modulo }
+  if (op = Ord(tkMod)) and lStr then Exit;
+  lNum := TypeIsPyNumeric(IntToTypeKind(ASTTk[ASTLeft[node]]));
+  rNum := TypeIsPyNumeric(IntToTypeKind(ASTTk[ASTRight[node]]));
+  IRPyNumStrClash := (lStr and rNum) or (lNum and rStr);
+end;
+
+function IRPyOpSpelling(op: Integer): AnsiString;
+begin
+  if op = Ord(tkMinus) then IRPyOpSpelling := '-'
+  else if op = Ord(tkSlash) then IRPyOpSpelling := '/'
+  else if op = Ord(tkDiv) then IRPyOpSpelling := '//'
+  else if op = Ord(tkMod) then IRPyOpSpelling := '%'
+  else if op = Ord(tkPlus) then IRPyOpSpelling := '+'
+  else if op = Ord(tkLt) then IRPyOpSpelling := '<'
+  else if op = Ord(tkLe) then IRPyOpSpelling := '<='
+  else if op = Ord(tkGt) then IRPyOpSpelling := '>'
+  else if op = Ord(tkGe) then IRPyOpSpelling := '>='
+  else IRPyOpSpelling := '?';
+end;
+
+{ The operand type as PYTHON spells it — the warning names both sides, so
+  `tyAnsiString` would be leaking pxx's own vocabulary into a NilPy diagnostic. }
+function IRPyOperandTypeName(n: Integer): AnsiString;
+var tk: TTypeKind;
+begin
+  tk := IntToTypeKind(ASTTk[n]);
+  if (tk = tyString) or (tk = tyAnsiString) or (tk = tyChar) then
+    IRPyOperandTypeName := 'str'
+  else if tk = tyBoolean then IRPyOperandTypeName := 'bool'
+  else if (tk = tySingle) or (tk = tyDouble) or (tk = tyExtended) then
+    IRPyOperandTypeName := 'float'
+  else if TypeIsPyNumeric(tk) then IRPyOperandTypeName := 'int'
+  else IRPyOperandTypeName := 'that type';
+end;
+
 function IRNodePyListRec(n: Integer): Integer;
 { The rec id when n is a TPyList, else -1. }
 var ci: Integer;
@@ -5444,6 +5520,15 @@ begin
 
     AN_BINOP:
     begin
+      { Both operand types provable and the pair meaningless: say so now rather
+        than letting the runtime helper raise when (and if) the line executes.
+        A warning, not an error — see IRPyNumStrClash. }
+      if IRPyNumStrClash(node) then
+        WarnAt(ASTLine[node],
+               'Nil Python: operator ''' + IRPyOpSpelling(Integer(ASTIVal[node])) +
+               ''' is not defined for ' + IRPyOperandTypeName(ASTLeft[node]) +
+               ' and ' + IRPyOperandTypeName(ASTRight[node]) +
+               ' — both operand types are provable here, so this raises TypeError if it runs');
       { Fold a compile-time concat of two string/char literals (`'a' + 'b'`) to a
         single interned literal — constant folding, target-independent. Besides
         avoiding a runtime concat, this is the correctness fix for
@@ -5665,7 +5750,10 @@ begin
       if PyProgramMode and
          ((Integer(ASTIVal[node]) = Ord(tkDiv)) or (Integer(ASTIVal[node]) = Ord(tkMod))) and
          ((IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant) or
-          (IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant)) then
+          (IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant) or
+          { a provable str-vs-number pair too, so `3 // "ab"` raises instead of
+            dividing by a handle — see the block below and IRPyNumStrClash }
+          IRPyNumStrClash(node)) then
       begin
         { A VARIANT operand -- which a for-in loop variable always is. The
           payload's type is unknown here, so the helper dispatches on the tag
@@ -5685,6 +5773,64 @@ begin
         IRB[first] := last;
         ASTTk[node] := Ord(tyVariant);
         Result := IRAppendCall(cpi, first, -1, Ord(tyVariant));
+        Exit;
+      end;
+      { The REST of the arithmetic and ordering family over a VARIANT operand.
+        `*`, `//` and `%` got their tag dispatch above one bug at a time; `-`,
+        `/` and the four orderings never did, so the operand's HANDLE was used
+        as a number and `3 - "ab"` returned an address difference — a different
+        plausible-looking value on every run
+        (bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math). The
+        helpers coerce through pyvar_to_int / pyvar_to_float, which RAISE
+        TypeError for a tag Python will not accept, so the check is the
+        coercion and costs nothing extra on the paths that were already correct.
+
+        `=` / `<>` are NOT here: pyeq_v is value equality across tags and the
+        container-equality blocks above already route them. `+` is not here
+        either — it needs a str/list concat arm pyadd_v does not have yet, and
+        is tracked separately. }
+      if PyProgramMode and
+         ((Integer(ASTIVal[node]) = Ord(tkMinus)) or
+          (Integer(ASTIVal[node]) = Ord(tkSlash)) or
+          (Integer(ASTIVal[node]) = Ord(tkPlus)) or
+          (Integer(ASTIVal[node]) = Ord(tkLt)) or (Integer(ASTIVal[node]) = Ord(tkLe)) or
+          (Integer(ASTIVal[node]) = Ord(tkGt)) or (Integer(ASTIVal[node]) = Ord(tkGe))) and
+         ((IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant) or
+          (IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant) or
+          { ...and the STATICALLY provable clash, which reaches here with two
+            ordinary scalar types and would otherwise compile to a raw IR_BINOP
+            over the str's handle. The warning above says so at compile time;
+            this makes the run agree with it. }
+          IRPyNumStrClash(node)) then
+      begin
+        { `+` is in this list too: pyadd_v concatenates two strs and two lists
+          and adds two numbers, and coerces through pyvar_to_int otherwise, so
+          a mixed pair raises instead of returning one operand. It was the last
+          arm still answering `3 + "ab"` with "ab". }
+        fdTk := tyBoolean;
+        if Integer(ASTIVal[node]) = Ord(tkPlus) then
+        begin fdName := 'pyadd_v'; fdTk := tyVariant; end
+        else if Integer(ASTIVal[node]) = Ord(tkMinus) then
+        begin fdName := 'pysub_v'; fdTk := tyVariant; end
+        else if Integer(ASTIVal[node]) = Ord(tkSlash) then
+        begin fdName := 'pytruediv_v'; fdTk := tyVariant; end
+        else if Integer(ASTIVal[node]) = Ord(tkLt) then fdName := 'pylt_v'
+        else if Integer(ASTIVal[node]) = Ord(tkLe) then fdName := 'pyle_v'
+        else if Integer(ASTIVal[node]) = Ord(tkGt) then fdName := 'pygt_v'
+        else fdName := 'pyge_v';
+        cpi := FindProc(fdName);
+        if cpi < 0 then Error('Nil Python: ' + fdName + ' (pylib) not loaded');
+        { `const v: Variant` is by REFERENCE — lower through IRLowerCallArg with
+          the signature's own IsRef, as the neighbouring pylib calls do, or the
+          callee dereferences the value as a pointer. IRLowerCallArg also boxes
+          a scalar operand of a mixed pair. }
+        left := IRLowerCallArg(cpi, 0, ASTLeft[node], Procs[cpi].Params[0].IsRef);
+        first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyVariant));
+        right := IRLowerCallArg(cpi, 1, ASTRight[node], Procs[cpi].Params[1].IsRef);
+        last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyVariant));
+        IRB[first] := last;
+        ASTTk[node] := Ord(fdTk);
+        Result := IRAppendCall(cpi, first, -1, Ord(fdTk));
         Exit;
       end;
       { Python's `/` is TRUE division: always a float, and ZeroDivisionError on

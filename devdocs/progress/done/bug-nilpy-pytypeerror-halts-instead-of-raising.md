@@ -49,3 +49,6 @@ stay recognisable — tests match on it.
 `make test-nilpy` plus a `.npy` catching TypeError from a float repeat count, a
 string in a numeric context, and an uncaught one still terminating with the same
 message.
+
+## Log
+- 2026-07-30 — resolved, commit 7e90f99e3.

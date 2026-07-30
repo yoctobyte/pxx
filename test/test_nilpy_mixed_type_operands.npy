@@ -1,0 +1,88 @@
+# Arithmetic and ordering on mismatched operand types raised nothing: the second
+# operand's HANDLE was used as a number, so `3 - "ab"` returned an address
+# difference -- a different plausible value on every run.
+# bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math
+# Every expectation below is CPython's own answer.
+vals = [3, "ab", [1, 2], {"k": 1}]
+a = vals[0]
+s = vals[1]
+xs = vals[2]
+d = vals[3]
+
+try:
+    print(a - s)
+except TypeError:
+    print("sub TypeError")
+try:
+    print(a / s)
+except TypeError:
+    print("div TypeError")
+try:
+    print(a < s)
+except TypeError:
+    print("lt TypeError")
+try:
+    print(a <= s)
+except TypeError:
+    print("le TypeError")
+try:
+    print(a > s)
+except TypeError:
+    print("gt TypeError")
+try:
+    print(a >= s)
+except TypeError:
+    print("ge TypeError")
+try:
+    print(a * d)
+except TypeError:
+    print("mul-dict TypeError")
+try:
+    print(a - xs)
+except TypeError:
+    print("sub-list TypeError")
+
+# ...and the arms that were already right must stay right
+print(a * s, s * a)
+print(a - 1, a / 2, a // 2, a % 2)
+print(a < 4, a <= 3, a > 4, a >= 3)
+
+# a sequence repeats, it does not multiply a handle
+print(xs * 2)
+print(2 * xs)
+
+# lists order lexicographically, they do not compare by address
+ys = [1, 3]
+print(xs < ys, xs <= xs, xs > ys, xs >= xs, [1] < [1, 0])
+
+# `%` on a str is FORMATTING even when the format arrives as a variant
+fmts = ["%d apples", "%s-%s"]
+f = fmts[0]
+g = fmts[1]
+print(f % 5)
+print(g % ("a", "b"))
+
+# lists concatenate by VALUE; `+` used to add the two handles
+print(xs + ys)
+print([1] + [])
+
+# `%` leftover-argument rules, which are CPython's own quirk: a tuple or a
+# scalar with nothing to convert raises, but a SUBSCRIPTABLE right-hand side
+# (list or dict, both pass PyMapping_Check) does not
+try:
+    print("no specifier" % 5)
+except TypeError:
+    print("leftover TypeError")
+print("no specifier" % xs)
+
+# a float operand must not let a handle through either
+h = 2.5
+try:
+    print(h - s)
+except TypeError:
+    print("float sub TypeError")
+try:
+    print(h < s)
+except TypeError:
+    print("float lt TypeError")
+print(h * 2, h - 1, h < 3)

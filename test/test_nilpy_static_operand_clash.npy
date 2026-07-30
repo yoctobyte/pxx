@@ -1,0 +1,40 @@
+# Where BOTH operand types are provable at compile time, pxx warns -- and the
+# run still raises TypeError, so the warning and the program agree.
+# The warning is NOT an error by decision (decide-nilpy-mixed-type-operand-policy):
+# `if False: 3 - "ab"` is legal CPython, so aborting would make pxx stricter
+# than its own reference implementation.
+# bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math
+n = 3
+s = "ab"
+f = 2.5
+
+try:
+    print(n - s)
+except TypeError:
+    print("sub TE")
+try:
+    print(n + s)
+except TypeError:
+    print("add TE")
+try:
+    print(n / s)
+except TypeError:
+    print("div TE")
+try:
+    print(n // s)
+except TypeError:
+    print("fdiv TE")
+try:
+    print(s < n)
+except TypeError:
+    print("lt TE")
+try:
+    print(s >= f)
+except TypeError:
+    print("ge TE")
+
+# NOT clashes, and none of these may warn:
+#   `*` repeats, `%` on a str formats, and same-family operands are ordinary
+print(s * n, n * s)
+print("%d/%s" % (n, s))
+print(n + 1, n - 1, f / 2, s + "c", s < "b", n < 4)

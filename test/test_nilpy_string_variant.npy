@@ -17,10 +17,21 @@ print(x <= z)
 print(x >= z)
 
 a = 123
+# EQUALITY across types is defined in Python -- a str simply never equals an
+# int -- but ORDERING a str against an int is a TypeError. This file used to
+# record False/False for the two comparisons below, which was pxx reading the
+# string's handle as a number, not Python's answer
+# (bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math).
 print(x == a)
 print(x != a)
-print(x < a)
-print(x > a)
+try:
+    print(x < a)
+except TypeError:
+    print("lt TypeError")
+try:
+    print(x > a)
+except TypeError:
+    print("gt TypeError")
 
 s1 = "hello "
 s2 = "world"

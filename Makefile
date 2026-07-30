@@ -423,7 +423,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_str_float.npy /tmp/test_nilpy_str_float26
 	test "$$(/tmp/test_nilpy_str_float26)" = "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
 	./$(COMPILER) test/test_nilpy_string_variant.npy /tmp/test_nilpy_string_variant26
-	test "$$(/tmp/test_nilpy_string_variant26)" = "$$(printf '5\napple\nTrue\nFalse\nFalse\nTrue\nTrue\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nFalse\nFalse\nhello world\nhello potato\ngreen world')"
+	test "$$(/tmp/test_nilpy_string_variant26)" = "$$(printf '5\napple\nTrue\nFalse\nFalse\nTrue\nTrue\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nlt TypeError\ngt TypeError\nhello world\nhello potato\ngreen world')"
 	./$(COMPILER) test/test_nilpy_optional_param.npy /tmp/test_nilpy_optional_param26
 	test "$$(/tmp/test_nilpy_optional_param26)" = "$$(printf '%b' '5\n7\n10')"
 	./$(COMPILER) test/test_nilpy_stmt_semicolon.npy /tmp/test_nilpy_stmt_semicolon26
@@ -683,6 +683,17 @@ test-nilpy: $(COMPILER)
 	@# longer Halt(219)s (bug-nilpy-pytypeerror-halts-instead-of-raising)
 	./$(COMPILER) test/test_nilpy_typeerror_is_catchable.npy /tmp/test_nilpy_typeerror_catch26
 	test "$$(/tmp/test_nilpy_typeerror_catch26)" = "$$(printf 'caught repeat\ncaught len\ncaught int\ncaught fmt\ncaught sep\ncaught max\nas Exception\nafter')"
+	@# mismatched operand types raise instead of doing pointer math; every line
+	@# of the expectation is CPython's own output for the same file
+	./$(COMPILER) test/test_nilpy_mixed_type_operands.npy /tmp/test_nilpy_mixed_type_operands26
+	test "$$(/tmp/test_nilpy_mixed_type_operands26)" = "$$(printf 'sub TypeError\ndiv TypeError\nlt TypeError\nle TypeError\ngt TypeError\nge TypeError\nmul-dict TypeError\nsub-list TypeError\nababab ababab\n2 1.5 1 1\nTrue True False True\n[1, 2, 1, 2]\n[1, 2, 1, 2]\nTrue True False True True\n5 apples\na-b\n[1, 2, 1, 3]\n[1]\nleftover TypeError\nno specifier\nfloat sub TypeError\nfloat lt TypeError\n5.0 1.5 True')"
+	@# a PROVABLE operand-type clash warns at compile time -- and still raises at
+	@# run time, so the diagnostic and the program agree. It must NOT abort:
+	@# `if False: 3 - "ab"` is legal CPython (decide-nilpy-mixed-type-operand-policy).
+	./$(COMPILER) test/test_nilpy_static_operand_clash.npy /tmp/test_nilpy_static_clash26 2>&1 \
+	  | grep -c "warning: Nil Python: operator" | grep -qx 6 \
+	  || { echo 'test_nilpy_static_operand_clash: FAIL - expected 6 provable-clash warnings'; exit 1; }
+	test "$$(/tmp/test_nilpy_static_clash26)" = "$$(printf 'sub TE\nadd TE\ndiv TE\nfdiv TE\nlt TE\nge TE\nababab ababab\n3/ab\n4 2 1.25 abc True True')"
 	./$(COMPILER) test/test_nilpy_none_value_semantics.npy /tmp/test_nilpy_none_value_semantics26
 	test "$$(/tmp/test_nilpy_none_value_semantics26)" = "$$(printf 'False False True True\nFalse False True\nFalse False\nFalse False\nFalse False\nFalse False\nTrue False\nTrue False False False False\nFalse False False False\nNone None v=None False\nNone\nn None a None\nTrue True True True True\ngood')"
 	./$(COMPILER) test/test_nilpy_return_nested_def.npy /tmp/test_nilpy_return_nested_def26
