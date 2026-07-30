@@ -97,3 +97,6 @@ renders its text and dies here.
 `make test-nilpy` plus a `.npy` with (a) a lambda forwarding a sibling's
 captures in both definition orders and (b) the same lambda invoked through
 `after`, diffed against CPython.
+
+## Log
+- 2026-07-30 — resolved, commit 8cae8770b.

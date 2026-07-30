@@ -34,7 +34,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (197)
+## backlog (196)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -53,7 +53,6 @@ _none_
 | bug-nilpy-method-call-on-fresh-construction | N | 45 | bug | nilpy: Cls().method() — a method call directly on a construction expression | — |
 | bug-nilpy-method-returning-a-fresh-string-leaks | N | 55 | bug | A METHOD returning a freshly built string leaks it; the same def does not | — |
 | bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math | N | 60 | bug | Arithmetic on mismatched operand types silently does POINTER math | — |
-| bug-nilpy-nested-def-capture-sets-are-not-final | N | 85 | bug | A nested def's capture set is read before it is final | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-none-equals-zero-is-true | N | 65 | bug | `0 == None` is True, and `None == 0` does not parse | — |
 | bug-nilpy-print-emits-arguments-before-evaluating-later-ones | N | 45 | bug | `print` writes each argument as it goes, so an exception mid-list leaves partial output | — |
@@ -298,7 +297,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1036)
+## done (1037)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -661,6 +660,7 @@ _none_
 | bug-nilpy-mixed-str-int-return-segfault | N | 35 | bug | NilPy: def returning both a str and an int literal SIGSEGVs on the int arm | — |
 | bug-nilpy-module-ast-recycled-by-nested-unit-compile | N | 85 | bug | A .py module's statement list is RECYCLED while it is still being built | — |
 | bug-nilpy-module-class-vmtaddr | N | 60 | bug | A class in an imported `.py` module: "invalid class index in vmtaddr" | — |
+| bug-nilpy-nested-def-capture-sets-are-not-final | N | 85 | bug | A nested def's capture set is read before it is final | — |
 | bug-nilpy-nested-def-nonint-result-garbage | N | 75 | bug | A nested def's non-integer result is read as a number — silent garbage | — |
 | bug-nilpy-nonlocal-write-never-reaches-the-enclosing-scope | N | 80 | bug | `nonlocal x` — the write never reaches the enclosing function | — |
 | bug-nilpy-not-on-object-always-true | N | 80 | bug | `not <object>` was TRUE for every live object — silently wrong answers | — |
@@ -2782,7 +2782,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 85] [N] bug-nilpy-nested-def-capture-sets-are-not-final
 - [p 70] [N] bug-nilpy-returning-a-nested-def-yields-none
 - [p 70] [U] decide-runtime-primitive-layering
 - [p 65] [C] bug-cfront-vla-stack-corruption
