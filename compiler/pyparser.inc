@@ -3459,7 +3459,7 @@ end;
   missing was binding by name at the call site. }
 function PyKwArgIndex(mpi, firstParam: Integer): Integer;
 var nm: AnsiString;
-    i: Integer;
+    i, kwSib: Integer;
 begin
   PyKwArgIndex := 0;
   if not isNilPy then Exit;
@@ -3487,6 +3487,24 @@ begin
     PyKwArgIndex := -(i + 1);
     Exit;
   end;
+  { …or a SIBLING OVERLOAD has it, and the call site simply resolved to the wrong
+    member: the keyword name is checked against the ONE proc already chosen, not
+    against the overload SET (bug-nilpy-keyword-arg-vs-overload-set). Say that,
+    instead of the flatly untrue "has no parameter named" — the name exists, it
+    is on another arity, and the reader has no way to guess that from the old
+    message. }
+  for i := 0 to ProcCount - 1 do
+    if (i <> mpi) and CaseEqual(Procs[i].Name, Procs[mpi].Name) then
+      for kwSib := 0 to Procs[i].ParamCount - 1 do
+        if CaseEqual(Procs[i].Params[kwSib].Name, nm) then
+          Error('Nil Python: ' + Procs[mpi].Name + ' has no parameter named '''
+                + nm + ''' in the overload taking '
+                + PyIntLiteralText(Procs[mpi].ParamCount)
+                + ' argument(s) — a sibling overload taking '
+                + PyIntLiteralText(Procs[i].ParamCount)
+                + ' does. Keyword names are resolved against the chosen overload,'
+                + ' not the whole set: pass it positionally for now'
+                + ' (bug-nilpy-keyword-arg-vs-overload-set)');
   Error('Nil Python: ' + Procs[mpi].Name + ' has no parameter named ''' + nm + '''');
 end;
 
