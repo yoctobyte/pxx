@@ -40,7 +40,6 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
-| bug-cfront-vla-stack-corruption | C | 65 | bug | C VLA (`int arr[n]` with runtime `n`) silently corrupts adjacent stack slots | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
 | bug-lib-tkinter-trailing-underscore-params-block-kwargs | B | 40 | bug | tkinter facade parameters named with a trailing underscore cannot be passed by name | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
@@ -89,6 +88,7 @@ _none_
 | feature-c-esp-conformance-coverage | C | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
 | feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
 | feature-c-package-namespace-decision | A | 40 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
+| feature-c-vla-via-alloca | C | 50 | feature | C variable-length arrays, lowered through alloca | — |
 | feature-cdecl-bodied-sysv-prologue | A | 40 | feature | Bodied Pascal `cdecl` procs: genuine SysV prologue (float params, >6 args) | — |
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
 | feature-crtl-implement-libc-assumptions | B | 10 | feature | crtl: implement the libc assumptions real-world C leans on | — |
@@ -290,7 +290,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1052)
+## done (1053)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -512,6 +512,7 @@ _none_
 | bug-cdecl-indirect-over-6-integer-args | A | 50 | bug | `cdecl` indirect call with more than 6 integer args is rejected | — |
 | bug-cfront-fegetround-unresolved-float-printf | C | 55 | bug | cfront: __pxx_fegetround unresolved at runtime for any float-printf C program | — |
 | bug-cfront-unit-globals-unregistered | C | 70 | bug | cfront: a file-scope global in a .c compiled as a UNIT is never reserved — arrays fail to lower, scalars silently read 0 | — |
+| bug-cfront-vla-stack-corruption | C | 65 | bug | C VLA (`int arr[n]` with runtime `n`) silently corrupts adjacent stack slots | — |
 | bug-char-literal-concat-in-const-expr | A | 50 | bug | Char-literal concatenation in a const expression fails (`const T = #65 + #66`) | — |
 | bug-char-literal-in-const-expr | A | 50 | bug | Char literal in a constant expression: `ConstEval` rejected `'a'` | — |
 | bug-chr-builtin-shadows-param-name | A | 50 | bug | Bug: `Chr` as parameter name treated as built-in function | — |
@@ -2791,7 +2792,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [U] decide-runtime-primitive-layering
-- [p 65] [C] bug-cfront-vla-stack-corruption
 - [p 65] [A] bug-pascal-uses-is-transitive
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [A] feature-a-typeref-handle
@@ -2840,6 +2840,7 @@ _none_
 - [p 50] [P] bug-pascal-duplicate-class-name-silently-shadows
 - [p 50] [A] decide-abi-portable-vs-target-split
 - [p 50] [D] docs-devnotes-ai-assisted-build
+- [p 50] [C] feature-c-vla-via-alloca
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile
 - [p 50] [N] feature-nilpy-aggregate-builtins
 - [p 50] [N] feature-nilpy-class-field-infer-from-ctor

@@ -60,6 +60,26 @@ Silent wrong output, not a compile error or a crash — the dangerous kind. Any
 C corpus using a runtime-sized local array (`char buf[len]`-style code is
 common in real-world C) can silently misbehave under pxx today.
 
+## Fixed 2026-07-30 — the silence, not the VLA
+
+Root cause, one line: `CEvalConstPrimary` (cparser.inc) answers with the running
+`Result` — 0 — for an identifier that is not `skConst`, and the dimension reader
+had no way to tell that from a genuine zero. So `int arr[n]` was an array of
+ZERO elements, overlapping whatever the frame put next; the loop counter was
+that neighbour, which is why the loops "exited early" and why isolated writes
+looked fine. Not a loop-codegen bug and not a re-evaluated size expression —
+both hypotheses in the note below are wrong.
+
+The evaluator now sets `CConstExprSawNonConst`, and the dimension reader refuses
+with a named error. That converts a silent frame corruption into a diagnostic,
+which is this ticket's subject; it does NOT implement VLAs, filed separately as
+[[feature-c-vla-via-alloca]] with a worked-out design.
+
+`00207.c` returns to `test/c-conformance/pxx.skip` tagged VLA — this ticket's
+own predecessor sanctioned exactly that ("or re-tag skip as VLA-only"). It was
+passing only because its `char test[argc]` is never meaningfully used: the pass
+was luck on top of the corruption, not support.
+
 ## Suggested next step
 
 Compare the VLA branch's stack-frame layout/offset allocation in
@@ -71,3 +91,6 @@ re-clobbers a fixed offset) on each loop entry instead of once at declaration.
 
 `docs/targets/c-frontend.md` does NOT claim VLA support (deliberately, pending
 this) — keep it that way until this is fixed and gated by a test.
+
+## Log
+- 2026-07-30 — resolved, commit 5f3e82811.
