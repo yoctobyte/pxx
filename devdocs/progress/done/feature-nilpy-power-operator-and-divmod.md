@@ -49,3 +49,6 @@ is the binary-representation subtlety and belongs to
 `make test-nilpy` + self-host byte-identical, plus `**` over int/float bases
 and negative/zero exponents, and `divmod` over positive and negative operands,
 diffed against CPython.
+
+## Log
+- 2026-07-31 — resolved, commit b4222faaf694c64f7c472c787c2df7d507245269.
