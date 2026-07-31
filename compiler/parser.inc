@@ -10992,6 +10992,20 @@ begin
           ASTTk[node] := Ord(tyInt64); ASTLeft[node] := argSeq;
           CurASTNode := node;
         end;
+        { chr() out of the byte range NilPy strings actually represent used to
+          silently TRUNCATE via the raw intrinsic's mod-256 cast (`chr(8364)`
+          gave the wrong byte 172, no error) — worse than the ticket's own
+          repro. Loudly refuse instead of guessing
+          (bug-nilpy-non-ascii-string-surface-measured). }
+        if (op = Ord(tkChr)) and PyExprMode then
+        begin
+          idx := FindProc('PyChrRangeCheck');
+          if idx < 0 then Error('Nil Python: pylib (PyChrRangeCheck) not loaded');
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+          node := AllocNode(AN_CALL); ASTIVal[node] := idx;
+          ASTTk[node] := Ord(tyInt64); ASTLeft[node] := argSeq;
+          CurASTNode := node;
+        end;
         node := AllocNode(AN_CALL); ASTIVal[node] := -op;
         if op = Ord(tkChr) then ASTTk[node] := Ord(tyChar) else ASTTk[node] := Ord(tyInteger);
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;

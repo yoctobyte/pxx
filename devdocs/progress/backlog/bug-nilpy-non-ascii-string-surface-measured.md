@@ -43,6 +43,32 @@ the strength of this table. Two things are worth doing WITHIN it:
 Whether `len` should count code points is the real fork, and it belongs with
 the string model rather than here.
 
+## Partially addressed (this session) — `chr`/`ord` coherence, `upper` still open
+
+Measured (not assumed): `chr` and `ord` were already self-consistent under
+the byte model (`ord(chr(233))` round-trips to `233` today, before any
+change here) — the incoherence in the original framing was really about a
+2-byte UTF-8 SOURCE LITERAL (`"é"`, 2 bytes) vs `chr`'s 1-byte OUTPUT, which
+is the byte-vs-codepoint model question this ticket correctly defers, not a
+`chr`/`ord` disagreement to fix in isolation.
+
+What WAS a real, narrowly-scoped bug, found while checking the above:
+`chr()` outside 0..255 (`chr(8364)`, the € sign) silently TRUNCATED via the
+raw `Chr` intrinsic's mod-256 cast — `chr(8364)` gave the wrong byte `172`,
+no error — worse than this ticket's own repro (`chr(233)`, which is at least
+in-range). Fixed: `chr()` in NilPy now raises `ValueError` outside 0..255
+(new `PyChrRangeCheck` in pylib.pas, wired into the `Chr` intrinsic dispatch
+in parser.inc, gated on `PyExprMode` so the Pascal frontend's own `Chr` is
+untouched). This doesn't resolve the byte-vs-codepoint fork — it just stops
+the byte model from silently lying about a value it cannot represent.
+Regression: `test/test_nilpy_chr_range_check.npy`.
+
+Still open, deliberately not attempted here (all belong with the real fork
+noted above): `len()` counting bytes not code points, `upper`/`lower` only
+handling ASCII (the ticket's own suggested cheap win — a latin-1 256-entry
+table — not done this pass), and `chr(233)`/`ord("é")`'s underlying
+byte-vs-codepoint mismatch with actual UTF-8 source text.
+
 ## Gate
 
 `make test-nilpy` + self-host byte-identical, plus the table above.

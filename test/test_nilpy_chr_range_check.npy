@@ -1,0 +1,19 @@
+# chr() used to silently TRUNCATE an out-of-byte-range argument via the raw
+# Chr intrinsic's mod-256 cast (chr(8364) gave the wrong byte 172, no error)
+# instead of raising -- NilPy strings are byte strings, so chr()'s honest
+# range is 0..255, matching what ord() already accepts.
+# bug-nilpy-non-ascii-string-surface-measured
+# ord(chr(n)) round-trips within range; out-of-range raises loudly.
+
+print(chr(65))
+print(ord(chr(233)))
+
+try:
+    chr(8364)
+except ValueError:
+    print("caught: chr out of range")
+
+try:
+    chr(-1)
+except ValueError:
+    print("caught: chr negative")

@@ -673,6 +673,7 @@ function pyvar_to_int(const v: Variant): Int64;
 function pylen_v(const v: Variant): Int64;
 function pyord_v(const v: Variant): Int64;
 function pyord_s(const s: AnsiString): Int64;
+function PyChrRangeCheck(n: Int64): Int64;
 function pymul_v(const a: Variant; const b: Variant): Variant;
 { Python's `**`. int**non-negative-int is exact within Int64 (exponentiation
   by squaring, so it inherits whatever overflow behaviour chained `*` already
@@ -1103,6 +1104,22 @@ begin
                            pystr_of(Int64(Length(s))) + ' found');
   end;
   Result := Ord(s[1]);
+end;
+
+{ NilPy strings are byte strings (bug-nilpy-encode-ignores-the-codec), so
+  chr()'s honest range is a single byte, 0..255 -- the same range ord()
+  already agrees with (pyord_s takes exactly one byte). The underlying `Chr`
+  intrinsic has no bounds check of its own and silently truncated (`chr(8364)`
+  gave a wrong byte instead of an error), a silent-wrong-value bug worse than
+  the ticket's own repro
+  (bug-nilpy-non-ascii-string-surface-measured). Loudly refusing what the byte
+  model cannot represent, rather than truncating, needs no resolution of the
+  larger byte-vs-codepoint string-model question that ticket defers. }
+function PyChrRangeCheck(n: Int64): Int64;
+begin
+  if (n < 0) or (n > 255) then
+    raise ValueError.Create('chr() arg not in range(256) -- NilPy strings are byte strings');
+  Result := n;
 end;
 
 function pystr_at(const s: AnsiString; i: Integer): Char;

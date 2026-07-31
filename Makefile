@@ -646,6 +646,9 @@ test-nilpy: $(COMPILER)
 	@# enumerate/zip/items/most_common pairs print with parens, like real tuples
 	./$(COMPILER) test/test_nilpy_builtin_pairs_are_tuples.npy /tmp/test_nilpy_pairtuples26
 	test "$$(/tmp/test_nilpy_pairtuples26)" = "$$(printf '%b' "[(0, 'a'), (1, 'b')]\n[(1, 'a'), (2, 'b')]\n[('a', 1), ('b', 2)]\n[('a', 3), ('b', 1), ('c', 1)]")"
+	@# chr() refuses an out-of-byte-range argument instead of silently truncating
+	./$(COMPILER) test/test_nilpy_chr_range_check.npy /tmp/test_nilpy_chrrange26
+	test "$$(/tmp/test_nilpy_chrrange26)" = "$$(printf '%b' 'A\n233\ncaught: chr out of range\ncaught: chr negative')"
 	./$(COMPILER) test/test_nilpy_return_none_variant.npy /tmp/test_nilpy_return_none_variant26
 	test "$$(/tmp/test_nilpy_return_none_variant26)" = "$$(printf 'a NONE\nb NONE\nc 9')"
 	./$(COMPILER) test/test_nilpy_none_str_field.npy /tmp/test_nilpy_none_str_field26
