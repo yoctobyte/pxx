@@ -71,3 +71,6 @@ not yet match CPython).
 `make test-nilpy` + self-host byte-identical, plus a `.npy` covering integer
 `**` including a result past 64 bits and the right-associativity of
 `2 ** 3 ** 2`, diffed against CPython.
+
+## Log
+- 2026-07-31 — resolved, commit cbf38779c.

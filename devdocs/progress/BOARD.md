@@ -53,6 +53,7 @@ _none_
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
+| bug-nilpy-pypow-integer-overflow-does-not-promote | N | 35 | bug | `pypow_v`'s integer path silently wraps past 64 bits instead of promoting | — |
 | bug-nilpy-qualified-proc-omitted-default | N | 35 | bug | A qualified UNIT-LEVEL proc call cannot omit a defaulted parameter | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
 | bug-nilpy-void-def-assigned-and-called-crashes | N | 55 | bug | NilPy: a `-> None` def assigned to a name, then called directly, segfaults | — |
@@ -180,7 +181,6 @@ _none_
 | feature-port-windows-pe | A | 25→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
 | feature-promo-launch-plan | A | 25 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
 | feature-pyeval-closure-as-native-word | N | 50 | feature | pyeval: a nested `def` passed to a host method, called back later (closure-as-native-word) | — |
-| feature-pyeval-power-operator | N | 30 | feature | pyeval: `**` is not in the expression grammar — `2 ** 70` is a parse error inside exec() | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-inline-asm-xmm-operands |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
@@ -300,7 +300,7 @@ _none_
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1095)
+## done (1096)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1234,6 +1234,7 @@ _none_
 | feature-progress-check-makefile | A | 50 | feature | Wire `progress.sh check` into a make target | — |
 | feature-progress-transition-helpers | A | 50 | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
+| feature-pyeval-power-operator | N | 30 | feature | pyeval: `**` is not in the expression grammar — `2 ** 70` is a parse error inside exec() | — |
 | feature-range-checks-nd-bases | A | 25 | feature | {$R+} follow-up: N-D static-array bases — per-dimension index checks (a[i,j] checks i and j against their own lo..hi) | — |
 | feature-real-cross-target-consistency | A | 50 | feature | Verify `real`/Double bit-consistency across targets (x87 divergence?) | — |
 | feature-relative-path-units | A | 50 | feature | Relative/absolute path support in `uses`/`includes` | — |
@@ -2963,6 +2964,7 @@ _none_
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
+- [p 35] [N] bug-nilpy-pypow-integer-overflow-does-not-promote
 - [p 35] [N] bug-nilpy-qualified-proc-omitted-default
 - [p 35] [U] decide-nilpy-hasattr-per-instance-semantics
 - [p 35] [C] feature-c-esp-conformance-coverage
@@ -2979,7 +2981,6 @@ _none_
 - [p 30] [N] feature-nilpy-min-max-over-a-string
 - [p 30] [N] feature-nilpy-stdlib-coverage-gaps-measured
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
-- [p 30] [N] feature-pyeval-power-operator
 - [p 30] [D] idea-public-status-page
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 30] [N] perf-nilpy-remaining-perbyte-string-builders
