@@ -358,18 +358,28 @@ Before deciding what to work on: `git pull --rebase` first, every time.
 - **Push only your own commits.** Never push, rebase, or "helpfully"
   fast-forward the other box's in-flight work.
 
-## BOARD.md always conflicts. Don't merge it — regenerate it.
+## Landing: use `tools/sync.sh`, not `git pull --rebase`
 
-`devdocs/progress/BOARD.md` is generated, so two boxes touching tickets
-conflict on it constantly (three times in one afternoon). The resolution is
-mechanical, never a manual merge:
+`devdocs/progress/BOARD.md` is **generated**, so any two agents that both
+touched tickets conflict on it every single time (four times in one afternoon).
+Merging the two halves by hand produces a board matching neither box; the only
+correct resolution is discard-both-and-regenerate.
 
+```sh
+tools/sync.sh              # pull --rebase, auto-resolve BOARD.md, push
+tools/sync.sh --no-push    # just get current
 ```
-git checkout --ours devdocs/progress/BOARD.md   # either side; content is discarded
-tools/progress.sh board-md                      # regenerate from the tickets
-git add devdocs/progress/BOARD.md
-git rebase --continue
-```
+
+It **only** auto-resolves `BOARD.md`. Any other conflict is real content: it
+stops, names the files, and leaves the rebase in place for a human. It also
+refuses to run on a dirty tree.
+
+It additionally avoids a quieter failure: a background `git fetch` in the same
+repo races a foreground `git pull` and corrupts `FETCH_HEAD`, producing
+`fatal: Cannot rebase onto multiple branches`. `sync.sh` always fetches with an
+explicit refspec and `--no-write-fetch-head`, and never relies on `FETCH_HEAD`.
+**Any long-lived tooling that polls this repo must use `--no-write-fetch-head`
+for the same reason.**
 
 ## Escalation: the human may be at either box
 
