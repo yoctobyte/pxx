@@ -53,3 +53,6 @@ Test: test/test_nilpy_print_arg_eval_order.npy. Gate: make test-nilpy green,
 self-host fixedpoint, testmgr --tier quick.
 
 Ticket closed.
+
+## Log
+- 2026-07-31 — resolved, commit e8d0ebb990923e7e015756533eeea0eaa4588485.
