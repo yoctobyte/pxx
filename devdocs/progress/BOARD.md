@@ -31,7 +31,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (184)
+## backlog (185)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -210,6 +210,7 @@ _none_
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | regression-cascade-b45c759f9e65 | T | 70 | regression | regression CASCADE: 15 jobs newly red at b45c759f9e65 (auto-filed by twatch) | — |
+| regression-optdiff-shard0-6 | T | 70 | regression | regression: optdiff#shard0/6 red at 0ceeeaa004dc (auto-filed by twatch) | — |
 | regression-optdiff-shard5-6 | T | 70 | regression | regression: optdiff#shard5/6 red at 2add2ebb487b (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
@@ -2893,6 +2894,7 @@ _none_
 - [p 70] [C] bug-c-wide-string-literal-narrow-in-value-context
 - [p 70] [T] bug-t-full-tier-wipes-other-tiers-job-status
 - [p 70] [T] regression-cascade-b45c759f9e65
+- [p 70] [T] regression-optdiff-shard0-6
 - [p 70] [T] regression-optdiff-shard5-6
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
