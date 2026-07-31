@@ -8865,11 +8865,28 @@ begin
     begin
       Next; ParseFactor;
       left := CurASTNode;
-      node := AllocNode(AN_NEG); ASTLeft[node] := left;
-      { Carry the operand's type, as the additive-level sign in ParseSimpleExpr
-        does. Left untagged, `-(a // b)` on an Int64-returning helper printed
-        18446744073709551613 instead of -3 — the untyped node read unsigned. }
-      ASTTk[node] := ASTTk[left];
+      if PyExprMode and (IntToTypeKind(ASTTk[left]) = tyClass) and
+         (ResolveNodeRec(left) >= REC_UCLASS_BASE) then
+      begin
+        { `-n` on a user class's own `__neg__` dunder — same silent-garbage
+          root cause as the binary +/-/*// dunder dispatch
+          (bug-nilpy-arithmetic-operator-dunders-not-dispatched): with no
+          check here, a tyClass operand fell straight into the untyped AN_NEG
+          below and printed the class HANDLE negated as if it were an
+          integer. }
+        node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__neg__', left, -1);
+        if node < 0 then
+          Error('Nil Python: class has no __neg__() for unary minus');
+      end
+      else
+      begin
+        node := AllocNode(AN_NEG); ASTLeft[node] := left;
+        { Carry the operand's type, as the additive-level sign in
+          ParseSimpleExpr does. Left untagged, `-(a // b)` on an
+          Int64-returning helper printed 18446744073709551613 instead of -3
+          — the untyped node read unsigned. }
+        ASTTk[node] := ASTTk[left];
+      end;
       CurASTNode := node;
     end;
     tkNot:

@@ -965,6 +965,9 @@ test-nilpy: $(COMPILER)
 	# a class with no matching dunder used to silently compute garbage instead of erroring
 	! ./$(COMPILER) test/test_nilpy_operator_dunder_missing_fail.npy /tmp/test_nilpy_nodunder_fail26 > /tmp/test_nilpy_nodunder_fail.log 2>&1
 	grep -q "class has no __add__" /tmp/test_nilpy_nodunder_fail.log
+	# unary minus dunder (__neg__) on a user class; expectation is CPython's own output
+	./$(COMPILER) test/test_nilpy_neg_dunder.npy /tmp/test_nilpy_negdunder26
+	test "$$(/tmp/test_nilpy_negdunder26)" = "$$(printf '%b' 'Neg(-5)\nNeg(3)\n-5\n-6\n-4')"
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING
