@@ -315,3 +315,37 @@ test says so at that line, because the next person will be tempted to write it
 the short way.
 
 **Gated:** `test/crtl_libc_oracle.c` is now 97 lines, byte-identical to gcc.
+
+## Collected gap: `div`/`ldiv`/`lldiv`/`llabs` absent (2026-07-31, Track B — CLOSED)
+
+Fifth oracle batch, over `<stdlib.h>` and `<time.h>`.
+
+**Was:** `abs` and `labs` only. `div`, `ldiv`, `lldiv` and `llabs` were declared
+nowhere, along with the `div_t` / `ldiv_t` / `lldiv_t` structs — all C89 except
+`lldiv`/`llabs`, which are C99. The benign kind of missing (a hard "call to
+undeclared function"), not the silent kind.
+
+**Now:** declared in `<stdlib.h>` and implemented in `lib/crtl/src/stdlib.c`.
+The bodies just compute the pair with `/` and `%`, because those already satisfy
+C99 7.20.6.2 on this target — quotient truncates toward zero, remainder takes
+the numerator's sign — and re-deriving the rule by hand would be a second place
+for it to be wrong. That equivalence is now asserted rather than assumed: the
+oracle prints `7/2, -7/2, 7/-2, -7/-2` and the matching `%` row beside the
+`div_t` results.
+
+**Everything else in the batch already agreed with gcc**, including the parts
+that are easy to get subtly wrong and would be silent:
+
+- Negative-operand division and modulo in all four sign combinations, and
+  `lldiv` on a numerator one away from `INT64_MIN`.
+- `qsort` with duplicate keys and on a single-element array.
+- `calloc` actually zeroing; `realloc` preserving the prefix across a grow.
+- `gmtime` on fixed epochs — chosen for where calendar arithmetic breaks: a
+  leap day (2000-02-29), a year boundary (2015-12-31 23:59:59), and the epoch
+  itself — checking `tm_wday` and `tm_yday`, not just the date.
+- `strftime` including `%j` and a literal `%%`.
+
+Fixed epochs and `gmtime` rather than `localtime` on purpose: the test must not
+depend on the machine's timezone.
+
+**Gated:** `test/crtl_libc_oracle.c` is now 113 lines, byte-identical to gcc.

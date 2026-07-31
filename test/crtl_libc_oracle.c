@@ -20,6 +20,7 @@
 #include <wctype.h>
 #include <wchar.h>
 #include <ctype.h>
+#include <time.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <stdint.h>
@@ -27,6 +28,10 @@
 #include <errno.h>
 #include <ctype.h>
 
+static int icmp(const void *a, const void *b) {
+  int x = *(const int*)a, y = *(const int*)b;
+  return (x > y) - (x < y);
+}
 static int sgn(int v) { return v < 0 ? -1 : (v > 0 ? 1 : 0); }
 static int cmp(const void *x, const void *y) { return *(const int*)x - *(const int*)y; }
 
@@ -269,6 +274,75 @@ int main(void) {
   }
   fclose(f);
   remove("/tmp/crtl_stdio_probe.txt");
+
+  /* <stdlib.h> integer division for NEGATIVE operands (C99 truncates toward
+     zero and the remainder takes the numerator's sign -- a classic silent
+     divergence), div/ldiv/lldiv, qsort on duplicates, calloc zeroing and
+     realloc preserving the prefix; then <time.h> on FIXED epochs so it is
+     deterministic and TZ-independent, including a leap day, a year boundary
+     and the epoch itself, where day-of-year arithmetic goes wrong. */
+  { /* <stdlib.h> and <time.h> */
+
+  /* integer division/modulo for NEGATIVE operands: C99 truncates toward zero,
+     and div()/ldiv() must agree with / and %. A classic silent divergence. */
+  printf("divmod %d %d %d %d\n", 7/2, -7/2, 7/-2, -7/-2);
+  printf("mod    %d %d %d %d\n", 7%2, -7%2, 7%-2, -7%-2);
+  div_t d = div(-7, 2);
+  printf("div_t  %d %d\n", d.quot, d.rem);
+  ldiv_t l = ldiv(-7L, 2L);
+  printf("ldiv_t %ld %ld\n", l.quot, l.rem);
+  lldiv_t ll = lldiv(-9223372036854775807LL, 3LL);
+  printf("lldiv  %lld %lld\n", ll.quot, ll.rem);
+  printf("abs    %d %ld %lld\n", abs(-5), labs(-6L), llabs(-7LL));
+
+  /* qsort: correctness on duplicates and on an already-sorted array */
+  int a[] = {5, 3, 9, 1, 3, 7, 0, 3};
+  qsort(a, 8, sizeof(int), icmp);
+  printf("qsort ");
+  for (int i = 0; i < 8; i++) printf("%d", a[i]);
+  printf("\n");
+  int one[] = {42};
+  qsort(one, 1, sizeof(int), icmp);
+  printf("qsort1 %d\n", one[0]);
+
+  /* calloc zeroes; realloc preserves the prefix and can grow */
+  int *p = (int*)calloc(4, sizeof(int));
+  printf("calloc %d%d%d%d\n", p[0]==0, p[1]==0, p[2]==0, p[3]==0);
+  p[0] = 11; p[1] = 22;
+  p = (int*)realloc(p, 8 * sizeof(int));
+  printf("realloc %d %d\n", p[0], p[1]);
+  free(p);
+
+  /* time: gmtime on a FIXED epoch, so it is deterministic and TZ-independent */
+  time_t t = 1234567890;               /* 2009-02-13 23:31:30 UTC, a Friday */
+  struct tm *g = gmtime(&t);
+  printf("gmtime %04d-%02d-%02d %02d:%02d:%02d wday=%d yday=%d\n",
+    g->tm_year + 1900, g->tm_mon + 1, g->tm_mday,
+    g->tm_hour, g->tm_min, g->tm_sec, g->tm_wday, g->tm_yday);
+
+  /* a leap day and a year boundary, where day-of-year arithmetic goes wrong */
+  time_t leap = 951868800;             /* 2000-02-29 16:00:00 UTC */
+  g = gmtime(&leap);
+  printf("leap   %04d-%02d-%02d wday=%d yday=%d\n",
+    g->tm_year + 1900, g->tm_mon + 1, g->tm_mday, g->tm_wday, g->tm_yday);
+  time_t nye = 1451606399;             /* 2015-12-31 23:59:59 UTC */
+  g = gmtime(&nye);
+  printf("nye    %04d-%02d-%02d %02d:%02d:%02d yday=%d\n",
+    g->tm_year + 1900, g->tm_mon + 1, g->tm_mday,
+    g->tm_hour, g->tm_min, g->tm_sec, g->tm_yday);
+  time_t epoch = 0;
+  g = gmtime(&epoch);
+  printf("epoch  %04d-%02d-%02d wday=%d\n",
+    g->tm_year + 1900, g->tm_mon + 1, g->tm_mday, g->tm_wday);
+
+  /* strftime on the fixed epoch */
+  char buf[128];
+  g = gmtime(&t);
+  strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", g);
+  printf("strf1  %s\n", buf);
+  strftime(buf, sizeof(buf), "%d/%m/%y %j %%", g);
+  printf("strf2  %s\n", buf);
+  }
 
   /* PRI/SCN round trip */
   int64_t v = -1234567890123LL;
