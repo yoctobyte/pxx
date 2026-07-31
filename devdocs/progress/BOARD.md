@@ -77,6 +77,7 @@ _none_
 | decide-env-write-side | U | 40 | decide | Policy: does pxx support WRITING the environment (setenv/putenv, os.environ[k]=v) — and does a write reach a child? | — |
 | decide-gpc-as-corpus-target | U | 45 | decide | Track U: reject the GPC corpus wish, or keep it? Two sweeps have called it a rejection candidate. | — |
 | decide-ilja-tui-render-model | U | 45 | decide | Track U: four render/input questions Ilja (TUI IDE face) must answer before any code | — |
+| decide-ipv6-dualstack-and-aaaa-ordering | U | 40 | decide | Policy: IPV6_V6ONLY on a :: listener, and which address wins when a host has both A and AAAA | — |
 | decide-nilpy-hasattr-per-instance-semantics | U | 35 | decide | decide: should NilPy's hasattr answer per-INSTANCE or per-CLASS? | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-nilpy-transitive-nested-def-capture | U | 40 | decide | decide: NilPy transitive capture for sibling nested-def calls | — |
@@ -110,7 +111,6 @@ _none_
 | feature-inline-asm-xmm-operands | A | 55 | feature | Inline asm cannot express float or vector code (no xmm operands, no packed SSE, no VEX, no cpuid) | — |
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
-| feature-ipv6-complete-surface | B | 40 | feature | Finish IPv6: PalAcceptIpv6, UDP v6, asyncnet, AAAA lookups, dual-stack listeners | — |
 | feature-lib-pxxpdf-reportlab-compat | B | 50 | feature | pxxpdf — pxx pdfgen-backed, reportlab-compatible PDF library (nilpy) | bug-cfront-fegetround-unresolved-float-printf, feature-nilpy-fallback-import |
 | feature-lib-pyexec | B | 45 | feature | lib pyexec: a real exec() for Python-subset source (library, two engines) | feature-rtti-field-reflection |
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | — |
@@ -301,7 +301,7 @@ _none_
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1083)
+## done (1084)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1106,6 +1106,7 @@ _none_
 | feature-int-to-float-assign | A | 50 | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
 | feature-interface-refcounting | A | 50 | feature | Interface reference counting (IInterface / ARC) | — |
 | feature-interfaces | A | 50 | feature | Interfaces | — |
+| feature-ipv6-complete-surface | B | 40 | feature | Finish IPv6: PalAcceptIpv6, UDP v6, asyncnet, AAAA lookups, dual-stack listeners | — |
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-json-library | B | 50 | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
 | feature-language-gaps-from-demos | A | 50 | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
@@ -2937,11 +2938,11 @@ _none_
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
 - [p 40] [N] bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter
 - [p 40] [U] decide-env-write-side
+- [p 40] [U] decide-ipv6-dualstack-and-aaaa-ordering
 - [p 40] [U] decide-nilpy-transitive-nested-def-capture
 - [p 40] [A] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
-- [p 40] [B] feature-ipv6-complete-surface
 - [p 40] [B] feature-lib-tkinter-callable-options-with-args
 - [p 40] [N] feature-nilpy-lambda
 - [p 40] [N] feature-nilpy-map-and-filter-over-a-lambda

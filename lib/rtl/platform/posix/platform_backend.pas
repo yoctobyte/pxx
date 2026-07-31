@@ -70,6 +70,10 @@ function PalBackendShutdown(handle, how: Integer): Integer;
 function PalBackendSocketClose(handle: Integer): Integer;
 function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
 function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
+function PalBackendSendToIpv6(handle: Integer; buf: Pointer; len: Integer;
+                              const addr: TPalIn6Addr; port, scopeId: Integer): Int64;
+function PalBackendRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer;
+                                var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
 function PalBackendPoll(handle, events, timeoutMs: Integer): Integer;
 function PalBackendGetSockError(handle: Integer): Integer;
 function PalBackendGetSockNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
@@ -77,6 +81,8 @@ function PalBackendGetPeerNameIpv4(handle: Integer; var outAddr: LongWord; var o
 function PalBackendGetSockOpt(handle, level, optname: Integer; valPtr: Pointer; lenPtr: Pointer): Integer;
 function PalBackendIoctl(handle: Integer; cmd: NativeInt; argp: Pointer): Integer;
 function PalBackendAcceptIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
+function PalBackendAcceptIpv6(handle: Integer; var outAddr: TPalIn6Addr;
+                              var outPort, outScopeId: Integer): Integer;
 
 function PalBackendMonotonicMillis: Int64;
 procedure PalBackendYield;
@@ -653,6 +659,21 @@ begin
   PB(Pointer(Int64(sa) + 27))^ := (scopeId shr 24) and $FF;
 end;
 
+{ The inverse of FillSockAddrIpv6. Reads back only what a peer address means:
+  the 16 address bytes, the wire-order port, and the scope id a link-local
+  address needs to be usable at all. }
+procedure ParseSockAddrIpv6(sa: Pointer; var addr: TPalIn6Addr;
+                            var port, scopeId: Integer);
+var i: Integer;
+begin
+  port := (Integer(PB(Pointer(Int64(sa) + 2))^) shl 8) or Integer(PB(Pointer(Int64(sa) + 3))^);
+  for i := 0 to 15 do addr.Bytes[i] := PB(Pointer(Int64(sa) + 8 + i))^;
+  scopeId := Integer(PB(Pointer(Int64(sa) + 24))^)
+             or (Integer(PB(Pointer(Int64(sa) + 25))^) shl 8)
+             or (Integer(PB(Pointer(Int64(sa) + 26))^) shl 16)
+             or (Integer(PB(Pointer(Int64(sa) + 27))^) shl 24);
+end;
+
 function PalBackendBindIpv6(handle: Integer; const addr: TPalIn6Addr;
                             port, scopeId: Integer): Integer;
 var sa: array[0..27] of Byte;
@@ -749,6 +770,39 @@ begin
     ParseSockAddrIpv4(@sa[0], outAddr, outPort);
 end;
 
+function PalBackendSendToIpv6(handle: Integer; buf: Pointer; len: Integer;
+                              const addr: TPalIn6Addr; port, scopeId: Integer): Int64;
+var sa: array[0..27] of Byte;
+begin
+  FillSockAddrIpv6(@sa[0], addr, port, scopeId);
+{$ifdef CPU_I386}
+  Result := SockCall6(SC_SENDTO, handle, Int64(buf), len, 0, Int64(@sa[0]), 28);
+{$else}
+  Result := __pxxrawsyscall(SYS_sendto, handle, Int64(buf), len, 0, Int64(@sa[0]), 28);
+{$endif}
+end;
+
+function PalBackendRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer;
+                                var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
+var
+  sa: array[0..27] of Byte;
+  addrlen: Integer;
+  i: Integer;
+begin
+  for i := 0 to 27 do sa[i] := 0;
+  addrlen := 28;
+{$ifdef CPU_I386}
+  Result := SockCall6(SC_RECVFROM, handle, Int64(buf), len, 0, Int64(@sa[0]), Int64(@addrlen));
+{$else}
+  Result := __pxxrawsyscall(SYS_recvfrom, handle, Int64(buf), len, 0, Int64(@sa[0]), Int64(@addrlen));
+{$endif}
+  for i := 0 to 15 do outAddr.Bytes[i] := 0;
+  outPort := 0;
+  outScopeId := 0;
+  if Result >= 0 then
+    ParseSockAddrIpv6(@sa[0], outAddr, outPort, outScopeId);
+end;
+
 type
   TTimeSpec = record
     Sec: NativeInt;
@@ -825,6 +879,29 @@ begin
   outPort := 0;
   if rc >= 0 then
     ParseSockAddrIpv4(@sa[0], outAddr, outPort);
+  Result := Integer(rc);
+end;
+
+function PalBackendAcceptIpv6(handle: Integer; var outAddr: TPalIn6Addr;
+                              var outPort, outScopeId: Integer): Integer;
+var
+  sa: array[0..27] of Byte;
+  addrlen: Integer;
+  i: Integer;
+  rc: Int64;
+begin
+  for i := 0 to 27 do sa[i] := 0;
+  addrlen := 28;
+{$ifdef CPU_I386}
+  rc := SockCall(SC_ACCEPT4, handle, Int64(@sa[0]), Int64(@addrlen), 0, 0);
+{$else}
+  rc := __pxxrawsyscall(SYS_accept4, handle, Int64(@sa[0]), Int64(@addrlen), 0, 0, 0);
+{$endif}
+  for i := 0 to 15 do outAddr.Bytes[i] := 0;
+  outPort := 0;
+  outScopeId := 0;
+  if rc >= 0 then
+    ParseSockAddrIpv6(@sa[0], outAddr, outPort, outScopeId);
   Result := Integer(rc);
 end;
 

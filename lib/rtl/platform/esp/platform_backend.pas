@@ -65,6 +65,10 @@ function PalBackendShutdown(handle, how: Integer): Integer;
 function PalBackendSocketClose(handle: Integer): Integer;
 function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
 function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
+function PalBackendSendToIpv6(handle: Integer; buf: Pointer; len: Integer;
+                              const addr: TPalIn6Addr; port, scopeId: Integer): Int64;
+function PalBackendRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer;
+                                var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
 function PalBackendPoll(handle, events, timeoutMs: Integer): Integer;
 function PalBackendGetSockError(handle: Integer): Integer;
 function PalBackendGetSockNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
@@ -72,6 +76,8 @@ function PalBackendGetPeerNameIpv4(handle: Integer; var outAddr: LongWord; var o
 function PalBackendGetSockOpt(handle, level, optname: Integer; valPtr: Pointer; lenPtr: Pointer): Integer;
 function PalBackendIoctl(handle: Integer; cmd: NativeInt; argp: Pointer): Integer;
 function PalBackendAcceptIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
+function PalBackendAcceptIpv6(handle: Integer; var outAddr: TPalIn6Addr;
+                              var outPort, outScopeId: Integer): Integer;
 
 function PalBackendMonotonicMillis: Int64;
 procedure PalBackendYield;
@@ -593,6 +599,35 @@ end;
 function PalBackendConnectIpv6(handle: Integer; const addr: TPalIn6Addr;
                                port, scopeId: Integer): Integer;
 begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+{ Same rule as bind/connect above: refuse honestly rather than hand lwIP a
+  sockaddr_in6 it may not have been built to understand. A zeroed peer address
+  reported as real would be worse than no peer address. }
+function PalBackendAcceptIpv6(handle: Integer; var outAddr: TPalIn6Addr;
+                              var outPort, outScopeId: Integer): Integer;
+var i: Integer;
+begin
+  for i := 0 to 15 do outAddr.Bytes[i] := 0;
+  outPort := 0;
+  outScopeId := 0;
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendSendToIpv6(handle: Integer; buf: Pointer; len: Integer;
+                              const addr: TPalIn6Addr; port, scopeId: Integer): Int64;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer;
+                                var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
+var i: Integer;
+begin
+  for i := 0 to 15 do outAddr.Bytes[i] := 0;
+  outPort := 0;
+  outScopeId := 0;
   Result := PAL_ERR_UNSUPPORTED;
 end;
 

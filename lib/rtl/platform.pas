@@ -151,6 +151,10 @@ function PalShutdown(handle, how: Integer): Integer;
 function PalSocketClose(handle: Integer): Integer;
 function PalSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
 function PalRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
+function PalSendToIpv6(handle: Integer; buf: Pointer; len: Integer;
+                       const addr: TPalIn6Addr; port, scopeId: Integer): Int64;
+function PalRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer;
+                         var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
 function PalPoll(handle, events, timeoutMs: Integer): Integer;
 function PalGetSockError(handle: Integer): Integer;
 function PalGetSockNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
@@ -158,6 +162,8 @@ function PalGetPeerNameIpv4(handle: Integer; var outAddr: LongWord; var outPort:
 function PalGetSockOpt(handle, level, optname: Integer; valPtr: Pointer; lenPtr: Pointer): Integer;
 function PalIoctl(handle: Integer; cmd: NativeInt; argp: Pointer): Integer;
 function PalAcceptIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
+function PalAcceptIpv6(handle: Integer; var outAddr: TPalIn6Addr;
+                       var outPort, outScopeId: Integer): Integer;
 
 function PalMonotonicMillis: Int64;
 procedure PalYield;
@@ -465,6 +471,24 @@ end;
 function PalSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
 begin
   Result := PalBackendSendToIpv4(handle, buf, len, hostAddr, port);
+end;
+
+function PalSendToIpv6(handle: Integer; buf: Pointer; len: Integer;
+                       const addr: TPalIn6Addr; port, scopeId: Integer): Int64;
+begin
+  Result := PalBackendSendToIpv6(handle, buf, len, addr, port, scopeId);
+end;
+
+function PalRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer;
+                         var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
+begin
+  Result := PalBackendRecvFromIpv6(handle, buf, len, outAddr, outPort, outScopeId);
+end;
+
+function PalAcceptIpv6(handle: Integer; var outAddr: TPalIn6Addr;
+                       var outPort, outScopeId: Integer): Integer;
+begin
+  Result := PalBackendAcceptIpv6(handle, outAddr, outPort, outScopeId);
 end;
 
 function PalRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;

@@ -152,21 +152,21 @@ begin
   Result := fd;
 end;
 
-{ The peer address is reported as IPv4 shape: the PAL has no accept() that fills
-  a sockaddr_in6 yet, so on a v6 listener the peer's Host/Port are not
-  meaningful. Family is still set honestly to INET6 so a caller can SEE that
-  rather than read a zero as a real address. Filling it properly needs a
-  PalAcceptIpv6 — noted on feature-networking. }
 function NetTcpAccept(listener: TNetSocket; var peer: TNetAddress): TNetSocket;
 begin
   peer := NetAddress(0, 0);
   Result := PalAcceptIpv4(listener, peer.Host, peer.Port);
 end;
 
+{ The v6 peer address is REAL now: PalAcceptIpv6 fills a sockaddr_in6 and the
+  scope id comes back with it, which a link-local peer needs to be answerable
+  at all. Before this the family was set honestly to INET6 and the address left
+  zero, because reporting a zeroed peer as if it were real is worse than
+  reporting nothing. }
 function NetTcpAccept6(listener: TNetSocket; var peer: TNetAddress): TNetSocket;
 begin
   peer := NetAddress6(PalIn6Any, 0, 0);
-  Result := PalAccept(listener);
+  Result := PalAcceptIpv6(listener, peer.V6, peer.Port, peer.ScopeId);
 end;
 
 function NetTcpConnect(const addr: TNetAddress): TNetSocket;
@@ -262,17 +262,23 @@ begin
   Result := PalRecv(sock, buf, len);
 end;
 
+{ UDP branches on the bound address's FAMILY, exactly as the TCP path does —
+  the socket is created for that family, so a v6 address gets an AF_INET6
+  socket and a sockaddr_in6 on every subsequent send. }
 function NetUdpBind(const addr: TNetAddress): TNetSocket;
 var fd, rc: Integer;
 begin
-  fd := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_DGRAM, 0);
+  fd := PalSocket(addr.Family, PAL_NET_SOCK_DGRAM, 0);
   if fd < 0 then
   begin
     Result := fd;
     Exit;
   end;
   rc := PalSetSocketReuseAddr(fd, 1);
-  rc := PalBindIpv4(fd, addr.Host, addr.Port);
+  if NetIsV6(addr) then
+    rc := PalBindIpv6(fd, addr.V6, addr.Port, addr.ScopeId)
+  else
+    rc := PalBindIpv4(fd, addr.Host, addr.Port);
   if rc < 0 then
   begin
     PalSocketClose(fd);
@@ -284,12 +290,21 @@ end;
 
 function NetUdpSendTo(sock: TNetSocket; buf: Pointer; len: Integer; const dst: TNetAddress): Int64;
 begin
-  Result := PalSendToIpv4(sock, buf, len, dst.Host, dst.Port);
+  if NetIsV6(dst) then
+    Result := PalSendToIpv6(sock, buf, len, dst.V6, dst.Port, dst.ScopeId)
+  else
+    Result := PalSendToIpv4(sock, buf, len, dst.Host, dst.Port);
 end;
 
+{ The CALLER's `src` says which family to read back — a v6 socket's datagrams
+  come with a sockaddr_in6 and nothing else fits. Pre-set it (NetAddress6) the
+  same way the address you bound with was built. }
 function NetUdpRecvFrom(sock: TNetSocket; buf: Pointer; len: Integer; var src: TNetAddress): Int64;
 begin
-  Result := PalRecvFromIpv4(sock, buf, len, src.Host, src.Port);
+  if NetIsV6(src) then
+    Result := PalRecvFromIpv6(sock, buf, len, src.V6, src.Port, src.ScopeId)
+  else
+    Result := PalRecvFromIpv4(sock, buf, len, src.Host, src.Port);
 end;
 
 function NetGetSockName(sock: TNetSocket; var addr: TNetAddress): Integer;

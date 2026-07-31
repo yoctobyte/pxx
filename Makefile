@@ -6283,6 +6283,10 @@ lib-test: pxx-stable-check
 	# TNetAddress gained a Family field
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_net6.pas /tmp/lib_net6
 	/tmp/lib_net6 | tail -n 1 | grep -qE '^NET6 (OK|SKIP)'
+	# asyncnet over ::1 — the coroutine reactor is family-agnostic, so this runs
+	# the v6 socket calls against the SAME accept/recv/send the v4 tests use
+	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_asyncnet6.pas /tmp/lib_asyncnet6
+	/tmp/lib_asyncnet6 | tail -n 1 | grep -qE '^ASYNCNET6 (OK|SKIP)'
 	# NilPy -> Tcl/Tk embed, headless. Needs xvfb-run + the system libtcl/libtk
 	# 8.6, so it SKIPS cleanly when either is missing rather than reddening a gate
 	# over an absent GUI stack. The .npy auto-closes via `after`, so it terminates
@@ -6584,7 +6588,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_markdown.pas /tmp/lib_markdown
 	test "$$(/tmp/lib_markdown | grep -c '=ok')" = "17"
 	test "$$(/tmp/lib_markdown | tail -1)" = "MARKDOWN OK"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + namevalue + markdown) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + namevalue + markdown) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check

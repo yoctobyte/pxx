@@ -3,13 +3,19 @@ unit asyncnet;
 { Async TCP sockets over PAL sockets plus the coroutine scheduler's reactor.
   Every call is non-blocking: on EAGAIN the coroutine parks on the reactor
   (WaitReadable/WaitWritable) and yields, so one OS thread serves many
-  connections. Loopback IPv4 only; minimal on purpose.
+  connections. Minimal on purpose: listen and connect-by-port are LOOPBACK,
+  IPv4 and IPv6 both.
 
-  TcpListen(port)  -> a listening fd
-  TcpAccept(lfd)   -> a connected fd (blocks the coroutine, not the thread)
-  TcpConnect(port) -> a connected fd
-  TcpRecv/TcpSend  -> byte counts (0 = peer closed); -1 on error
-  TcpClose(fd) }
+  TcpListen(port)   -> a listening fd            TcpListen6(port)
+  TcpAccept(lfd)    -> a connected fd (blocks the coroutine, not the thread)
+  TcpConnect(port)  -> a connected fd            TcpConnect6(port)
+  TcpConnectAddr(host, port)                     TcpConnectAddr6(addr, port, scopeId)
+  TcpRecv/TcpSend   -> byte counts (0 = peer closed); -1 on error
+  TcpClose(fd)
+
+  TcpAccept, TcpRecv, TcpSend and TcpClose are family-agnostic — they take an
+  fd, and the family was decided when it was created. Only the four that build
+  a socket come in pairs. }
 
 interface
 
@@ -22,6 +28,11 @@ function TcpConnect(port: Integer): Integer;
   non-blocking-connect/park-on-writable pattern as TcpConnect (which is the
   loopback special case). }
 function TcpConnectAddr(host: LongWord; port: Integer): Integer;
+{ The IPv6 halves. Same reactor, same parking; only the address family and the
+  bind/connect primitive differ. }
+function TcpListen6(port: Integer): Integer;
+function TcpConnect6(port: Integer): Integer;
+function TcpConnectAddr6(const addr: TPalIn6Addr; port, scopeId: Integer): Integer;
 function TcpRecv(fd: Integer; buf: Pointer; len: Integer): Int64;
 function TcpSend(fd: Integer; buf: Pointer; len: Integer): Int64;
 procedure TcpClose(fd: Integer);
@@ -88,6 +99,45 @@ begin
   if fd < 0 then begin Result := fd; Exit; end;
   rc := PalSetSocketNonBlocking(fd, 1);
   rc := PalConnectIpv4(fd, host, port);
+  if rc = PAL_NET_EINPROGRESS then
+    WaitWritable(fd);
+  Result := fd;
+end;
+
+function TcpListen6(port: Integer): Integer;
+var fd: Integer; rc: Integer;
+begin
+  fd := PalSocket(PAL_NET_AF_INET6, PAL_NET_SOCK_STREAM, 0);
+  if fd < 0 then
+  begin
+    Result := fd;
+    Exit;
+  end;
+  rc := PalSetSocketNonBlocking(fd, 1);
+  rc := PalSetSocketReuseAddr(fd, 1);
+  rc := PalBindIpv6(fd, PalIn6Loopback, port, 0);
+  if rc >= 0 then rc := PalListen(fd, TCP_BACKLOG);
+  if rc < 0 then
+  begin
+    TcpClose(fd);
+    Result := rc;
+    Exit;
+  end;
+  Result := fd;
+end;
+
+function TcpConnect6(port: Integer): Integer;
+begin
+  Result := TcpConnectAddr6(PalIn6Loopback, port, 0);
+end;
+
+function TcpConnectAddr6(const addr: TPalIn6Addr; port, scopeId: Integer): Integer;
+var fd: Integer; rc: Integer;
+begin
+  fd := PalSocket(PAL_NET_AF_INET6, PAL_NET_SOCK_STREAM, 0);
+  if fd < 0 then begin Result := fd; Exit; end;
+  rc := PalSetSocketNonBlocking(fd, 1);
+  rc := PalConnectIpv6(fd, addr, port, scopeId);
   if rc = PAL_NET_EINPROGRESS then
     WaitWritable(fd);
   Result := fd;
