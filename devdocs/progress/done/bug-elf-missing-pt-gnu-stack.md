@@ -67,3 +67,6 @@ keeping hosts on differing kernels rather than homogenising them.
 - Blocks nothing on the xeon enrollment: it is a real red that the new host is
   correctly reporting, and it should stay red until fixed rather than be
   skipped. Track T is NOT adding a skip for this.
+
+## Log
+- 2026-07-31 — resolved, commit 8db798e92.
