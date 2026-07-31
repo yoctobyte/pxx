@@ -327,6 +327,29 @@ before the ed25519 runs, so certs minted later for the new runs had a
 `notBefore` after it and were correctly rejected as not-yet-valid — which
 initially looked like a signature failure. The clock is now re-read per scheme.
 
+### Follow-on: rsassaPss CERTIFICATES (same day)
+
+Having a PSS verifier raised the mirror question — were we REJECTING legitimate
+certificates? Measured: yes. `X509VerifySig` knew `sha256WithRSAEncryption`,
+`ecdsa-with-SHA256` and Ed25519, so a chain signed with **rsassaPss**
+(1.2.840.113549.1.1.10), which is what a modern CA signs with, failed to verify.
+
+That direction was fail-CLOSED — an unknown OID falls through to `Result :=
+False` — so it was safe, just unusable. Now handled with the same verifier.
+
+Worth stating because the two halves look alike and are not: the rsassaPss
+AlgorithmIdentifier carries parameters (hash, MGF, salt length) which are NOT
+parsed; we verify under SHA-256 / MGF1-SHA256 / salt 32. **Verifying under
+assumed parameters fails closed** — a signature made with different ones simply
+does not verify — whereas *skipping* the check fails open, which is what the
+CertificateVerify path was doing. A SHA-384 PSS cert is therefore rejected
+rather than mis-accepted; supporting it means widening the verifier, not
+loosening this.
+
+`test/lib_x509.pas` gains five cases: parse, verify, self-verify, a tampered
+signature rejected, and verification under the WRONG issuer key rejected —
+the last two because "it returned True once" proves nothing.
+
 ### Still open from the list above
 
 kTLS RX (control-record `recvmsg`) · ciphersuite negotiation / HelloRetryRequest

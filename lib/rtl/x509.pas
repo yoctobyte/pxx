@@ -68,6 +68,8 @@ const
   OID_RSA_SHA256 = #$2a#$86#$48#$86#$f7#$0d#$01#$01#$0b;
   OID_ECDSA_SHA256 = #$2a#$86#$48#$ce#$3d#$04#$03#$02;
   OID_ED25519 = #$2b#$65#$70;
+  { 1.2.840.113549.1.1.10 rsassaPss — what a modern CA signs with. }
+  OID_RSA_PSS = #$2a#$86#$48#$86#$f7#$0d#$01#$01#$0a;
   OID_SAN = #$55#$1d#$11;       { 2.5.29.17 subjectAltName }
 
 { Parse a DER tag-length-value at 1-based `pos`. Returns the tag byte, the
@@ -266,6 +268,20 @@ begin
   begin
     RsaKey(issuer.PubBits, n, e);
     Result := RsaVerifyPkcs1Sha256(n, e, cert.TbsRaw, cert.SigValue);
+  end
+  else if cert.SigAlgOid = OID_RSA_PSS then
+  begin
+    { rsassaPss. Its AlgorithmIdentifier carries parameters (hash, MGF, salt
+      length) which are NOT parsed here: we verify under SHA-256 / MGF1-SHA256 /
+      salt 32. That is safe rather than sloppy, and the distinction matters —
+      verifying under assumed parameters FAILS CLOSED, because a signature made
+      with different ones simply will not verify. (Contrast skipping the check
+      entirely, which is what the TLS CertificateVerify path used to do and
+      which fails OPEN.) A SHA-384/512 PSS cert is therefore rejected rather
+      than mis-accepted; supporting it means widening the verifier, not
+      loosening this. }
+    RsaKey(issuer.PubBits, n, e);
+    Result := RsaVerifyPssSha256(n, e, cert.TbsRaw, cert.SigValue);
   end
   else if cert.SigAlgOid = OID_ECDSA_SHA256 then
   begin
