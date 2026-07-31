@@ -1,0 +1,24 @@
+# sorted(key=...) only recognized ONE of NilPy's callable shapes (a pyeval
+# closure via pyclosure_is), so a lifted lambda, a plain def, or a bound
+# method used as `key=` silently sorted by the natural element order instead
+# -- wrong, not a crash, which is how it survived. Fixed via a new unified
+# pointer-based dispatcher (PyCallKey1 in pyeval.pas) covering all three
+# reachable shapes; a raw BUILTIN used as key (`key=len`) still crashes and
+# is intentionally NOT covered here -- see
+# bug-nilpy-callable-value-abi-sorted-key-and-builtins for that remaining
+# piece (the builtin-as-value ABI wrapper).
+# bug-nilpy-callable-value-abi-sorted-key-and-builtins
+# Every expectation is CPython's own output.
+
+# a lambda whose body is a single call gets LIFTED (compiled), not interpreted
+print(sorted(["bbb", "a", "cc"], key=lambda s: len(s)))
+
+def kint(s):
+    return len(s)
+print(sorted(["bbb", "a", "cc"], key=kint))
+
+def kstr(s):
+    return s
+print(sorted(["bbb", "a", "cc"], key=kstr))
+
+print(sorted([3, 1, 2], key=lambda x: -x))

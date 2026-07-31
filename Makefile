@@ -525,6 +525,9 @@ test-nilpy: $(COMPILER)
 	@# value unconditionally -- fixed for scalar/string results
 	./$(COMPILER) test/test_nilpy_lifted_lambda_return_value.npy /tmp/test_nilpy_liftedret26
 	test "$$(/tmp/test_nilpy_liftedret26)" = "$$(printf '%b' '5\n('"'"'hello'"'"', '"'"'hello world'"'"')\n49\nABC\n['"'"'hi'"'"']')"
+	@# sorted(key=...) now recognizes a lifted lambda / plain def / bound method
+	./$(COMPILER) test/test_nilpy_sorted_key_dispatch.npy /tmp/test_nilpy_sortedkey26
+	test "$$(/tmp/test_nilpy_sortedkey26)" = "$$(printf '%b' '['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n['"'"'a'"'"', '"'"'bbb'"'"', '"'"'cc'"'"']\n[3, 2, 1]')"
 	./$(COMPILER) test/test_nilpy_dynattr.npy /tmp/test_nilpy_dynattr26
 	test "$$(/tmp/test_nilpy_dynattr26)" = "$$(printf '%b' '105\n110')"
 	./$(COMPILER) test/test_nilpy_dynattr_class.npy /tmp/test_nilpy_dynattr_class26
