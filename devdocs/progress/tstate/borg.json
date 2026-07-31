@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-31T04:09:20Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "ef88f873c97657e85dfb8bb67f5d37296581b31a",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-31T04:13:04Z",
    "fixed": [],
    "new_red": [],
@@ -401,6 +393,16 @@
    "sha": "cf0558ea37d2b095338865b84bdd3a0732e210b7",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-31T12:53:16Z",
+   "fixed": [
+    "test-smoke#src:compiler/compiler.pas"
+   ],
+   "new_red": [],
+   "sha": "7285246b3d2a421a8d86b9aeda4d7df6411c31c5",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -1975,7 +1977,7 @@
   "test-riscv32#src:test/test_u64_to_double.pas": "pass",
   "test-riscv32#src:test/test_uint32_write.pas": "pass",
   "test-riscv32#src:test/test_uint64_ops.pas": "pass",
-  "test-smoke#src:compiler/compiler.pas": "fail",
+  "test-smoke#src:compiler/compiler.pas": "pass",
   "test-smoke#src:test/test_ansistring.pas": "pass",
   "test-smoke#src:test/test_class_of.pas": "pass",
   "test-smoke#src:test/test_const_record_method_prebody.pas": "pass",
@@ -2025,11 +2027,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-31T12:46:31Z",
-  "sha": "cf0558ea37d2b095338865b84bdd3a0732e210b7",
+  "date": "2026-07-31T12:53:16Z",
+  "sha": "7285246b3d2a421a8d86b9aeda4d7df6411c31c5",
   "tier": "native",
-  "verdict": "RED",
-  "wall": 399.3
+  "verdict": "GREEN",
+  "wall": 368.2
  },
  "last_bench": {
   "conf_rows": 550,
@@ -2060,20 +2062,6 @@
     "b1976742df2c57eca84cd069d4e8b16a43a204cf"
    ],
    "src": "compiler/compiler.pas"
-  },
-  {
-   "bad": "cf0558ea37d2b095338865b84bdd3a0732e210b7",
-   "good": "57690966374e83842f70e569c60963e99c357d3d",
-   "job": "test-smoke#src:compiler/compiler.pas",
-   "name": "test-smoke#11",
-   "opened": "2026-07-31T12:46:30Z",
-   "range": [
-    "ff439149e52791ca48d9782ed68ddc56398a8062",
-    "e1c8b0e4c1a1660efdc9403f5c573b0e13cfb28c",
-    "aa3f561a7876ea3a4d9f6c2f92f5cebfc788c5f2",
-    "cf0558ea37d2b095338865b84bdd3a0732e210b7"
-   ],
-   "src": "compiler/compiler.pas test/bootstrap_features.pas"
   }
  ]
 }
