@@ -73,3 +73,68 @@ A CommonMark parser is exactly the kind of C the frontend should be able to eat:
 heavy pointer arithmetic, tables of function pointers, `#define` machinery, and
 a large switch-driven state machine — with an oracle (python-markdown, or md4c
 built by gcc) to diff against, which is the same shape as the zlib work.
+
+## 2026-07-31 — the fallback renderer is DONE and now VERIFIED against two oracles
+
+The Pascal fallback this ticket names was already written
+(`lib/rtl/markdown.pas`, plus `lib/pcl/tkhtmlview.pas` and `lib/rtl/html.pas`).
+What was missing is the half that makes it trustworthy: the differential this
+ticket's acceptance asks for. It has now been run, and it found two real bugs.
+
+### The differential
+
+An 18-document corpus covering exactly the claimed subset — ATX headings,
+paragraphs with soft line breaks, fenced and indented code, unordered and
+ordered lists, blockquotes, horizontal rules in all three spellings, and the
+inline forms — rendered by `markdown.pas` and diffed against **two** oracles:
+python-markdown 3.10.3 (with `fenced_code`, since base python-markdown has no
+fences) and markdown-it-py in `commonmark` mode. Whitespace between tags is
+normalised; nothing else is.
+
+**Result: 18/18 identical to the CommonMark reference. 17/18 identical to
+python-markdown** — the one exception is `doc1.md`, where python-markdown merges
+an ordered list that immediately follows an unordered one into the same `<ul>`;
+CommonMark keeps them separate, and so do we. Checked against markdown-it rather
+than argued from the spec.
+
+`markdown.markdown(...)` — the Python entry point — was checked separately from
+a `.npy` and is byte-identical to python-markdown on the plain call and on both
+extensions the shim claims (`nl2br`, `toc`).
+
+### Two bugs the oracle found, both fixed here
+
+1. **A blockquote collapsed its soft line breaks.** `> one` / `> two` joined
+   with a SPACE, where a paragraph in the same renderer already preserved the
+   newline. Both oracles keep it. Now it does too, and honours `nl2br` the way
+   the paragraph path does.
+2. **Emphasis had no flanking rule, so ordinary prose was mangled.**
+   `2 * 3 * 4` came back as `2 <em> 3 </em> 4`, and `a_b_c` as
+   `a<em>b</em>c`. CommonMark's rule is that a delimiter opens only when what
+   follows is not whitespace and closes only when what precedes is not, and that
+   `_` never works inside a word. Implemented for `*`, `_` and `**` — `2 ** 3`
+   is arithmetic again.
+
+The second one is the kind this repo cares about most: silent, and it corrupted
+text that contains no markup at all.
+
+### Regression
+
+`test/lib_markdown.pas` — the corpus and its expectations, GENERATED from
+markdown-it's output rather than from reading our own back — wired into
+`lib-test`. 17 cases plus a summary line.
+
+### What is still open, and where it lives
+
+- **md4c.** Vendoring a real CommonMark implementation and compiling it with
+  cfront is the better long-term answer this ticket recommends, and it is still
+  governed by [[decide-3rd-party-vendor-vs-fetch]]. Not settled here, by design.
+  The bar it now has to clear is higher than when this ticket was written: the
+  fallback matches the CommonMark reference on everything it claims.
+- **"SongFormatter.py's help window opens under pxx"** is not blocked on
+  markdown. That module compiles; the app stops earlier, in
+  `FormatText.set_document_text` — see
+  [[feature-demo-songformatter-pxx-target]]. That acceptance line rides with
+  the demo ticket.
+
+## Log
+- 2026-07-31 — resolved, commit 64fd3be14.

@@ -8,11 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
+| feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
 ## unfinished (2)
 
@@ -28,7 +29,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 
-## backlog (182)
+## backlog (180)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -109,7 +110,6 @@ _none_
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-ipv6-complete-surface | B | 40 | feature | Finish IPv6: PalAcceptIpv6, UDP v6, asyncnet, AAAA lookups, dual-stack listeners | — |
-| feature-lib-markdown | B | 45 | feature | A Markdown library — and the `markdown` Python shim over it | — |
 | feature-lib-pxxpdf-reportlab-compat | B | 50 | feature | pxxpdf — pxx pdfgen-backed, reportlab-compatible PDF library (nilpy) | bug-cfront-fegetround-unresolved-float-printf, feature-nilpy-fallback-import |
 | feature-lib-pyexec | B | 45 | feature | lib pyexec: a real exec() for Python-subset source (library, two engines) | feature-rtti-field-reflection |
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | — |
@@ -183,7 +183,6 @@ _none_
 | feature-promo-launch-plan | A | 25 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
 | feature-pyeval-closure-as-native-word | N | 50 | feature | pyeval: a nested `def` passed to a host method, called back later (closure-as-native-word) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-inline-asm-xmm-operands |
-| feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
@@ -301,7 +300,7 @@ _none_
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1082)
+## done (1083)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1111,6 +1110,7 @@ _none_
 | feature-language-gaps-from-demos | A | 50 | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
 | feature-lazycasing-c-imports | A | 50 | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
 | feature-lib-bignum-operators | B | 42 | feature | bignum operator layer: TBigInt + - * div mod comparisons — Track B | — |
+| feature-lib-markdown | B | 45 | feature | A Markdown library — and the `markdown` Python shim over it | — |
 | feature-lib-regex-engine | B | 50 | feature | regex engine library — backtracking matcher, the substrate for nilpy's re module | — |
 | feature-lib-reportlab-shim-pdftextobject | B | 45 | feature | reportlab shim: `PDFTextObject.setTextOrigin` (and whatever follows it) | — |
 | feature-lib-tkinter-facade-widening-canvas-items | B | 40 | feature | tkinter façade: item specs, StringVar traces, and what settings.py still needs | — |
@@ -2912,7 +2912,6 @@ _none_
 - [p 45] [A] feature-emission-size-dce
 - [p 45] [A] feature-esp-hardware-flash-validation
 - [p 45] [O] feature-inline-nonleaf-and-branch-locals
-- [p 45] [B] feature-lib-markdown
 - [p 45] [B] feature-lib-pyexec
 - [p 45] [A] feature-move-fillchar-intrinsics
 - [p 45] [N] feature-nilpy-closure-default-and-remaining
@@ -2924,7 +2923,6 @@ _none_
 - [p 45] [N] feature-nilpy-process-exec-binding
 - [p 45] [P] feature-pascal-corpus-passrc
 - [p 45] [A] feature-pascal-exitcode-finalization-halt
-- [p 45] [B] feature-real-dynlib-loader
 - [p 45] [T] feature-t-uforth-benchmark-harness
 - [p 45] [A] feature-toolchain-cli-ux
 - [p 45] [A] feature-writeln-as-library

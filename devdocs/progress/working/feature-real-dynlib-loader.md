@@ -6,8 +6,8 @@ blocked-by: [bug-cdecl-indirect-over-6-integer-args]
 # Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy
 
 - **Type:** feature / design decision (runtime infrastructure)
-- **Status:** backlog
-- **Owner:** — (**Track B** lead — `lib/rtl` PAL; needs Track A coordination for
+- **Status:** working
+- **Owner:** trackB-agent
   the link-libc profile / loader-vs-link decision)
 - **Opened:** 2026-06-24
 - **Found-by:** Synapse recon ([[feature-synapse-compile-check]]) — `dynlibs`

@@ -233,11 +233,27 @@ begin
   MdInlineLink := k - i + 1;
 end;
 
+{ CommonMark's flanking rules, in the only two forms this subset needs: a
+  delimiter run OPENS emphasis only when the character after it is not
+  whitespace, and CLOSES only when the character before it is not whitespace.
+  `_` additionally never works INSIDE a word, so `a_b_c` is a name and not
+  emphasis. Without these, ordinary prose was mangled: `2 * 3 * 4` came back as
+  `2 <em> 3 </em> 4`. }
+function MdIsSpaceCh(c: Char): Boolean;
+begin
+  MdIsSpaceCh := (c = ' ') or (c = #9);
+end;
+
+function MdIsWordCh(c: Char): Boolean;
+begin
+  MdIsWordCh := (c in ['A'..'Z', 'a'..'z', '0'..'9', '_']);
+end;
+
 { Inline markup inside one already-block-classified run of text. Emphasis is
   handled by pairing: an opener with no closer stays literal, which is what
   keeps a lone `*` in prose from eating the rest of the paragraph. }
 function MdInline(const s: AnsiString): AnsiString;
-var i, j, n: Integer; r, piece: AnsiString; c: Char;
+var i, j, n: Integer; r, piece: AnsiString; c: Char; canOpen: Boolean;
 begin
   r := '';
   i := 1;
@@ -275,9 +291,17 @@ begin
     end
     else if (c = '*') and (i < Length(s)) and (s[i + 1] = '*') then
     begin
-      j := i + 2;
-      while (j < Length(s)) and not ((s[j] = '*') and (s[j + 1] = '*')) do Inc(j);
-      if j >= Length(s) then
+      { `2 ** 3` is arithmetic: an opener followed by a space opens nothing }
+      if (i + 1 >= Length(s)) or MdIsSpaceCh(s[i + 2]) then j := 0
+      else
+      begin
+        j := i + 2;
+        while (j < Length(s)) and
+              not ((s[j] = '*') and (s[j + 1] = '*') and (not MdIsSpaceCh(s[j - 1]))) do
+          Inc(j);
+        if j >= Length(s) then j := 0;
+      end;
+      if j = 0 then
       begin
         r := r + HtmlEscape('*');
         Inc(i);
@@ -290,9 +314,21 @@ begin
     end
     else if (c = '*') or (c = '_') then
     begin
-      j := i + 1;
-      while (j <= Length(s)) and (s[j] <> c) do Inc(j);
-      if (j > Length(s)) or (j = i + 1) then
+      canOpen := (i < Length(s)) and (not MdIsSpaceCh(s[i + 1]));
+      if (c = '_') and (i > 1) and MdIsWordCh(s[i - 1]) then canOpen := False;
+      j := 0;
+      if canOpen then
+      begin
+        j := i + 2;   { an empty span (`**` handled above, `__` / `*` `*`) never closes }
+        while j <= Length(s) do
+        begin
+          if (s[j] = c) and (not MdIsSpaceCh(s[j - 1])) and
+             not ((c = '_') and (j < Length(s)) and MdIsWordCh(s[j + 1])) then Break;
+          Inc(j);
+        end;
+        if j > Length(s) then j := 0;
+      end;
+      if j = 0 then
       begin
         r := r + HtmlEscape(Copy(s, i, 1));
         Inc(i);
@@ -493,7 +529,13 @@ begin
       while (i < nLines) and (Copy(MdTrimLeft(lines[i]), 1, 1) = '>') do
       begin
         cur := MdTrimLeft(lines[i]);
-        if body <> '' then body := body + ' ';
+        { a soft line break inside a quote survives, exactly as it does inside
+          a paragraph — joining with a space collapsed two source lines into
+          one and diverged from python-markdown on the commonest quote shape }
+        if body <> '' then
+        begin
+          if nl2br then body := body + '<br />' + #10 else body := body + #10;
+        end;
         body := body + MdTrim(Copy(cur, 2, Length(cur) - 1));
         Inc(i);
       end;
