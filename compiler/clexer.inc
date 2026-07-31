@@ -1,6 +1,8 @@
 { SPDX-License-Identifier: MPL-2.0 }
 { ===== C Lexer ===== }
 
+procedure CLexLineMarker; forward;   { defined below in this file, used above its definition (regression-fpc-seed-drift-b1976-stale) }
+
 function CKeyword(const s: AnsiString): TTokenKind;
 begin
   Result := tkIdent;

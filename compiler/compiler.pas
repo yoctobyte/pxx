@@ -44,6 +44,8 @@ uses asmcore_base, asmcore_x64;
 {$include defs.inc}
 {$include zdefs.inc}
 {$include lexer.inc}
+function DbgFileId(const path: AnsiString): Integer; forward;   { real body in parser.inc, included after clexer.inc uses it (regression-fpc-seed-drift-b1976-stale) }
+procedure DbgMarkTokFile(startTok, fileId: Integer); forward;   { real body in parser.inc, ditto }
 {$include clexer.inc}
 {$include blexer.inc}
 {$include pylexer.inc}

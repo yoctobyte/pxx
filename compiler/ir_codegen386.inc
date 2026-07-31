@@ -1572,7 +1572,7 @@ begin
           if TypeSigned(tk) then
           begin
             case TypeSize(tk) of
-              1: begin EmitB($0F); EmitB($BE); EmitB($C8); end  { movsx ecx, al }
+              1: begin EmitB($0F); EmitB($BE); EmitB($C8); end;  { movsx ecx, al }
               2: begin EmitB($0F); EmitB($BF); EmitB($C8); end  { movsx ecx, ax }
             else begin EmitB($89); EmitB($C1); end;             { mov ecx, eax }
             end;
@@ -1588,7 +1588,7 @@ begin
           else
           begin
             case TypeSize(tk) of
-              1: begin EmitB($0F); EmitB($B6); EmitB($C8); end  { movzx ecx, al }
+              1: begin EmitB($0F); EmitB($B6); EmitB($C8); end;  { movzx ecx, al }
               2: begin EmitB($0F); EmitB($B7); EmitB($C8); end  { movzx ecx, ax }
             else begin EmitB($89); EmitB($C1); end;             { mov ecx, eax }
             end;

@@ -839,12 +839,18 @@ function PyMakeBytesBinCall(const fname: AnsiString; a, b: Integer; retTk: TType
 function PyMakeListBinCall(const fname: AnsiString; a, b: Integer): Integer; forward; { list binop -> TPyList call (pyparser.inc) }
 function PyMakeDictBinCall(const fname: AnsiString; a, b: Integer): Integer; forward; { dict binop -> TPyDict call, PEP 584 `|` (pyparser.inc) }
 function PyNodeIsPyDict(n: Integer): Boolean; forward;                   { Nil Python: node typed TPyDict? (pyparser.inc) }
-function PyMakeNone: Integer; forward;
 procedure ParsePyUnit(const uname: AnsiString); forward;   { a `.py` MODULE pulled in by an import (pyparser.inc) }
-function PyCallMeth1(ci: Integer; const mname: AnsiString;
-                     selfNode, argNode: Integer): Integer; forward;   { one-arg method call (pyparser.inc) }
+{ PyCallMeth1's forward lives in forwards.inc (FPC-seed catch-all, gated on
+  PXX_NEED_FORWARDS) — a second one here duplicated it and FPC rejects a
+  Function declared Public/Forward twice (regression-fpc-seed-drift-b1976-
+  stale). PXX itself needs neither copy (lenient prescan). }
 function PyCallMeth2(ci: Integer; const mname: AnsiString;
                      selfNode, arg1, arg2: Integer): Integer; forward;   { two-arg method call (pyparser.inc) }
+function PyMakeTupleFrom(firstNode: Integer): Integer; forward;   { build a tuple from an existing first element (pyparser.inc) }
+function PyBareGenExprAhead: Boolean; forward;   { bare genexpr as a call arg (pyparser.inc) }
+function PyStarForwardCall(procIdx, listNode, dictNode: Integer): Integer; forward;   { *args/**kwargs forwarding call (pyparser.inc) }
+function PyReprContainer(n: Integer): Integer; forward;   { repr() of a container node (pyparser.inc) }
+function AIntToStr(n: Integer): AnsiString; forward;   { real body in aparser.inc, included after pyparser.inc uses it (regression-fpc-seed-drift-b1976-stale) }
 function PyRawName(off, len: Integer): AnsiString; forward;           { name text from the token pool (pyparser.inc) }                                   { Nil Python None literal node (pyparser.inc) }
 function PyNodeIsPyList(n: Integer): Boolean; forward;                   { Nil Python: node typed TPyList? (pyparser.inc) }
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
@@ -8632,7 +8638,6 @@ begin
             mci := baseRec - REC_UCLASS_BASE;
             if FindUProp(mci, fieldName) < 0 then
               mmi := FindUMethOverloadAhead(mci, fieldName, CountCallArgsAhead);
-                      ' params=', Procs[UMthProc_[mmi]].ParamCount);
           end;
           if (mmi >= 0) and (mci >= 0) then EnforceMethVis(mmi, fieldName);
           if (mmi >= 0) and (mci >= 0) and UClsIsInterface[mci] then

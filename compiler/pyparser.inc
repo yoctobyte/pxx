@@ -178,12 +178,17 @@ begin
 end;
 
 function PyBuildComp(targetSym, exprStart: Integer): Integer; forward; { comprehension core (pyparser.inc) }
-function PyMakeIdent(symIdx: Integer): Integer; forward; { (pyparser.inc) }
-function PyHiddenName(const stem: AnsiString): AnsiString; forward; { hidden temp name (pyparser.inc) }
-function PyCallMeth1(ci: Integer; const mname: AnsiString;
-                     selfNode, argNode: Integer): Integer; forward; { one-arg method call (pyparser.inc) }
+function PyMakeTruthy(n: Integer): Integer; forward; { defined below in this file, used above its definition (regression-fpc-seed-drift-b1976-stale) }
+function PyMethodName(const name: AnsiString): AnsiString; forward; { ditto }
+{ PyMakeIdent and PyHiddenName are likewise forward-declared in parser.inc
+  now (same duplicate-forward issue as PyCallMeth1 below). }
+{ PyCallMeth1 is forward-declared in parser.inc (included before this file),
+  which already makes it visible here — a second forward decl of the same
+  signature is a genuine duplicate FPC rejects even though PXX tolerates it
+  (regression-fpc-seed-drift-b1976-stale). }
 function PyParseFor: Integer; forward;
-function PyBareGenExprAhead: Boolean; forward; { bare genexpr as a call arg (pyparser.inc) }
+{ PyBareGenExprAhead is likewise forward-declared in parser.inc now (same
+  duplicate-forward issue as PyCallMeth1 above). }
 
 { Queue a setup statement to run before the current one — see PyHoistHead. }
 procedure PyHoistStmt(node: Integer);
@@ -14883,7 +14888,7 @@ begin
     if isCtor then Expect(tkNil, 'None')
     else if CurTok.Kind = tkNil then Next
     else PyParseType;
-  end
+  end;
   { An UNANNOTATED `__init__` is ordinary Python — `def __init__(self, parent):`
     is what songformatter's SettingsEditor writes — and it registers exactly as
     the annotated form does: PyMethodRetType yields tyUnknown for both, which
