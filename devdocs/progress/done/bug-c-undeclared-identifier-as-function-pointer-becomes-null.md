@@ -91,3 +91,6 @@ identifier used as a value" should be an ERROR by default in C at all, with the
 warning kept behind a flag for the code that genuinely relies on implicit
 declaration. That is a dialect call with corpus consequences, so it may deserve
 a Track U `decide-` rather than being settled in this ticket.
+
+## Log
+- 2026-07-31 — resolved, commit e6b928036.
