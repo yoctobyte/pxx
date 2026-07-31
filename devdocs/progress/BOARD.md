@@ -32,12 +32,13 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (168)
+## backlog (169)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-c-line-file-func-and-predefined-macros-missing | C | 55 | bug | C: __LINE__ is 0, __FILE__ is empty and __func__ is empty; __unix__, __BYTE_ORDER__, __SIZEOF_* and __CHAR_BIT__ are absent | — |
+| bug-c-main-missing-implicit-return-zero | C | 65 | bug | C: main() falling off the end returns stack garbage instead of 0 (i386) | — |
 | bug-c-undeclared-identifier-as-function-pointer-becomes-null | C | 45 | bug | C: an undeclared identifier used where a function POINTER is expected becomes 0 with only a warning — the program then jumps to null | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
@@ -2850,6 +2851,7 @@ lives in git, not in a timestamp._
 
 - [urgent p 55] [A] regression-fpc-seed-drift-b1976-stale
 - [p 70] [T] regression-cascade-b45c759f9e65
+- [p 65] [C] bug-c-main-missing-implicit-return-zero
 - [p 65] [A] bug-pascal-uses-is-transitive
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [A] feature-a-typeref-handle

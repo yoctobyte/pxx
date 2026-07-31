@@ -33,3 +33,32 @@ prio: 70
 *Cascade stub: one signal for one event. Track T agent (face 2) or the owning
 dev track triages the root; individual tickets only for whatever remains red
 after the root is fixed.*
+
+---
+
+## Triage (2026-07-31, Track T)
+
+Still red in all three full runs today (`b45c759`, `78847f9`, `6104264`) — the
+same 15-job set, no drift.
+
+**The c-conformance leg is explained and now split out** to
+[[bug-c-main-missing-implicit-return-zero]]: `00211.c`'s `main` falls off the
+end without a `return`, and the C frontend emits no implicit `return 0`, so the
+exit status is stack garbage. It reported `exit=188`, `140`, `76` across the
+three runs above — a genuine nondeterministic bug, not the flake it looks like.
+That contradicts this ticket's "ONE root cause" framing for that leg, hence the
+separate ticket; the split is deliberate.
+
+**Still unexplained:** `test-sqlite-threads-*` (all four targets, x86-64
+included) and `test-lua-cross`. The x86-64 sqlite-threads failure is the
+interesting one — it rules out a purely cross-target/qemu explanation.
+
+**Separately, a phantom episode worth recording:** at `8b98dc33c6b9` the full
+tier reported NEW-RED for five unrelated core jobs (`test_class.pas`,
+`cagg_init_local_b41.c`, `c_lua_opcode_decode_b132.c`,
+`test_cross_param_2darray.pas`, `test_managed_store_via_addr_b279.pas`), all
+FIXED at the next native run. Only four commits landed between — three
+progress-docs edits and one `perf(nilpy)` change scoped to
+`compiler/builtin/pylib.pas`, which cannot touch any of them. The `opt` tier at
+that same sha was GREEN. That is a harness/build event, and it is the second
+today. Tracked as Track T tooling work, not a compiler bug.
