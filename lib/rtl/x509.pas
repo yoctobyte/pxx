@@ -47,6 +47,19 @@ function X509HostMatch(const cert: TCert; const host: AnsiString): Boolean;
   root in the store) is the caller's responsibility. }
 function X509VerifyChain(const leaf, issuer: TCert; const nowStr, host: AnsiString): Boolean;
 
+{ ---- SPKI / signature decoding, exported because a TLS client needs them ----
+  A TLS 1.3 CertificateVerify is signed by the LEAF's key over the transcript,
+  not over a certificate, so the handshake has to reach the same key material
+  and signature encoding this unit already decodes. Exported rather than
+  duplicated: a second DER parser is a second place to get DER wrong. }
+
+{ RSA SubjectPublicKeyInfo bits -> modulus and public exponent, big-endian. }
+procedure RsaKey(const pubBits: AnsiString; var n, e: AnsiString);
+
+{ DER Ecdsa-Sig-Value (SEQUENCE { r INTEGER, s INTEGER }) -> the raw 64-byte
+  r||s pair EcdsaP256Verify expects. }
+procedure EcdsaRS(const sigValue: AnsiString; var rs: AnsiString);
+
 implementation
 
 uses rsa, ecdsa_p256, ed25519;

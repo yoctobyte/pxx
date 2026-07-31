@@ -11,7 +11,7 @@ program devtest_tls13_handshake;
   NB the trusted CA is read from a FILE, not a command-line arg: a long argv entry
   corrupts memory in this large program (couldn't reduce to a minimal repro; see
   track-b-workarounds.md). }
-uses sysutils, net, platform, x25519, sha256, tls13_keys, tls13_record, tls13_hs, x509, ed25519, tls13_ktls;
+uses sysutils, net, platform, x25519, sha256, tls13_keys, tls13_record, tls13_hs, x509, ed25519, ecdsa_p256, rsa, tls13_ktls;
 
 function ToHex(const r: AnsiString): AnsiString;
 const HEX = '0123456789abcdef';
@@ -112,6 +112,8 @@ var
   cApp, sApp, cAppKey, cAppIv, sAppKey, sAppIv: AnsiString;
   getMsg, getRec, resp: AnsiString;
   leaf: TCert; certVerifyHash, leafDer, signedContent, cvScheme, cvSig: AnsiString;
+  cvRS, cvN, cvE: AnsiString;
+  cvOk: Boolean;
   cp, ctxLen, certLen, sl: Integer;
   ktlsTx: Boolean;
   caCert: TCert; caHex, nowStr, caDer: AnsiString;
@@ -221,14 +223,41 @@ begin
           signedContent := '';
           for cp := 1 to 64 do signedContent := signedContent + Chr($20);
           signedContent := signedContent + 'TLS 1.3, server CertificateVerify' + Chr(0) + certVerifyHash;
-          if (Ord(cvScheme[1]) = $08) and (Ord(cvScheme[2]) = $07) then  { ed25519 }
+          { Dispatch on the signature scheme, and FAIL CLOSED on anything we
+            cannot check. This used to print "verifier not wired here" and
+            CARRY ON for every scheme except ed25519 -- so a server that chose
+            rsa_pss_rsae_sha256, which is what most real RSA servers choose,
+            was accepted without ever proving possession of its private key.
+            The ClientHello advertises four schemes; a client must be able to
+            verify every one it offers, or not offer it.
+
+            rsa_pkcs1_sha256 (0401) is deliberately NOT accepted here: RFC 8446
+            4.4.3 allows the rsa_pkcs1_* codepoints in signature_algorithms
+            (they describe signatures in CERTIFICATES) but forbids them in
+            CertificateVerify outright. }
+          cvOk := False;
+          if (Ord(cvScheme[1]) = $08) and (Ord(cvScheme[2]) = $07) then       { ed25519 }
           begin
-            if Ed25519Verify(leaf.PubBits, signedContent, cvSig) then
-              writeln('certverify=ok (ed25519)')
-            else Fail('CertificateVerify signature invalid');
+            cvOk := Ed25519Verify(leaf.PubBits, signedContent, cvSig);
+            if cvOk then writeln('certverify=ok (ed25519)');
+          end
+          else if (Ord(cvScheme[1]) = $04) and (Ord(cvScheme[2]) = $03) then  { ecdsa_secp256r1_sha256 }
+          begin
+            EcdsaRS(cvSig, cvRS);
+            { EC SPKI key bits = 04 || X || Y; drop the 0x04 prefix }
+            cvOk := EcdsaP256Verify(Copy(leaf.PubBits, 2, 64), signedContent, cvRS);
+            if cvOk then writeln('certverify=ok (ecdsa_p256)');
+          end
+          else if (Ord(cvScheme[1]) = $08) and (Ord(cvScheme[2]) = $04) then  { rsa_pss_rsae_sha256 }
+          begin
+            RsaKey(leaf.PubBits, cvN, cvE);
+            cvOk := RsaVerifyPssSha256(cvN, cvE, signedContent, cvSig);
+            if cvOk then writeln('certverify=ok (rsa_pss_sha256)');
           end
           else
-            writeln('certverify=skip (scheme ', ToHex(cvScheme), ', verifier not wired here)');
+            Fail('CertificateVerify scheme ' + ToHex(cvScheme) +
+                 ' is not one this client can verify (it must not be offered)');
+          if not cvOk then Fail('CertificateVerify signature invalid');
         end;
       end;
       parsePos := parsePos + 4 + np;

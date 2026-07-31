@@ -259,3 +259,76 @@ https GET against `openssl s_server` works today via `make tls13-handshake-devte
 The next slices (RSA-PSS scheme dispatch, kTLS RX, ciphersuite negotiation) are
 listed in the ticket and can be pulled individually if one becomes urgent — that
 does not require un-deferring the umbrella.
+
+## 2026-08-01 (Track B) — CertificateVerify now verifies ALL the schemes it offers
+
+The "next steps" list above named *"RSA-PSS + ECDSA CertificateVerify scheme
+dispatch"*. Working it turned up that it was not merely missing — it was
+**failing open**.
+
+### What was wrong
+
+`test/devtest_tls13_handshake.pas` — which is where the client's handshake logic
+lives — verified **ed25519 only**. Every other scheme hit:
+
+```pascal
+else
+  writeln('certverify=skip (scheme ', ToHex(cvScheme), ', verifier not wired here)');
+```
+
+and the handshake **carried on**. The ClientHello advertises four schemes
+(ed25519, ecdsa_secp256r1_sha256, rsa_pss_rsae_sha256, rsa_pkcs1_sha256), so a
+server was free to pick any of them — and for three of the four the client
+accepted the connection **without the server ever proving possession of its
+private key**. That is the whole point of CertificateVerify: a valid certificate
+chain proves the name belongs to a key, and CertificateVerify proves the peer
+HAS that key. Skipping it means anyone holding a copy of the (public)
+certificate could complete the handshake.
+
+The devtest was green throughout, because it generates **ed25519** keys — the
+one scheme that worked. A test whose fixture happens to avoid the broken path.
+
+### What landed
+
+- **`RsaVerifyPssSha256` in `lib/rtl/rsa.pas`** — RSASSA-PSS with MGF1-SHA256
+  and a 32-byte salt (RFC 8017 §8.1.2/§9.1.2), including the `emBits = modBits-1`
+  derivation, the top-bit check and the `0xBC` trailer. This did not exist at
+  all, and TLS 1.3 (RFC 8446 §4.4.3) **requires** PSS for an RSA
+  CertificateVerify — it forbids the PKCS#1 v1.5 schemes there outright. So a
+  from-scratch client could not authenticate an RSA server, which is most of
+  them.
+- **Dispatch, failing CLOSED.** ed25519, ecdsa_secp256r1_sha256 and
+  rsa_pss_rsae_sha256 are verified; anything else is a hard failure naming the
+  scheme. `rsa_pkcs1_sha256` (0401) is deliberately rejected here even though we
+  advertise it — RFC 8446 permits the codepoint in `signature_algorithms`
+  (it describes signatures in CERTIFICATES) but not in CertificateVerify.
+- **`RsaKey` / `EcdsaRS` exported from `x509.pas`.** The handshake needs the same
+  SPKI and DER-signature decoding the chain code already does; a second DER
+  parser is a second place to get DER wrong.
+
+### Proven, not assumed
+
+- `test/lib_rsa_pss.pas` (in `lib-test`, hermetic): the positive vector is
+  **OpenSSL's own signature**, pinned rather than regenerated — PSS is
+  randomised, so the point is that we accept a signature we did not make. Six
+  negative cases beside it (wrong message, flipped signature bit, corrupted
+  trailer, truncated, empty, and a PKCS#1 signature offered as PSS), because a
+  verifier that returns True unconditionally passes any single positive test.
+- `tools/tls13_handshake_devtest.sh` now runs the full handshake against **three**
+  servers — ed25519, RSA and ECDSA-P256 — and asserts the specific
+  `certverify=ok (<scheme>)` line for each, so a future regression to "skip"
+  cannot pass.
+- The fail-closed path was verified by BUILDING a client with ed25519
+  verification disabled and confirming it refuses:
+  `CertificateVerify scheme 0807 is not one this client can verify`.
+
+One harness bug found on the way and fixed here: the script computed `NOW` once,
+before the ed25519 runs, so certs minted later for the new runs had a
+`notBefore` after it and were correctly rejected as not-yet-valid — which
+initially looked like a signature failure. The clock is now re-read per scheme.
+
+### Still open from the list above
+
+kTLS RX (control-record `recvmsg`) · ciphersuite negotiation / HelloRetryRequest
+/ session tickets. The system trust store is **done**
+([[feature-tls-system-trust-store]]) — the list above predates it.
