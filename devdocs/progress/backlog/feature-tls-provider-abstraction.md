@@ -230,3 +230,49 @@ trust store") is the **OpenSSL** backend's trust, via
 client's chain against `/etc/ssl/certs`. Two different backends, two different
 trust paths; neither supersedes the other.
 
+
+## 2026-08-01 (Track B) — measured: the NATIVE backend is the only thing missing
+
+Slice 1 (the seam) shipped. Slice 2, the OpenSSL backend, ships as
+`lib/rtl/tls_openssl.pas` and registers itself. **The native backend does not
+exist as a unit at all** — `grep TlsRegisterBackend lib/` finds only
+`tls_openssl.pas` and the two tests.
+
+So the from-scratch TLS 1.3 client, which now does a real
+server-authenticated handshake against ed25519, RSA and ECDSA-P256 servers
+([[feature-tls13-from-scratch]]), **cannot be reached from library code**. Its
+handshake logic lives in `test/devtest_tls13_handshake.pas`, a devtest program.
+Today an `https://` caller's only option is the OpenSSL backend, which needs
+`dlopen` + libssl — and that path is itself blocked on two Track A crashes
+(see [[feature-real-dynlib-loader]]). The libc-free client that works is the one
+you cannot call.
+
+That is the gap between "the handshake works" and "TLS is usable", and it is
+this ticket's slice, not the from-scratch ticket's.
+
+### What the extraction involves (for whoever takes it)
+
+Not a wiring job — roughly 300 lines of handshake driving move out of the
+devtest into a `tls13_native.pas` implementing `TTlsBackend`:
+
+- `Handshake(fd, role, host, var c)` — currently a straight-line script over a
+  connected socket; becomes a state machine, or at minimum a blocking call that
+  returns `tlsError` rather than calling `Fail()` and halting.
+- `Read`/`Write` — over `tls13_record`, with the kTLS-TX path chosen as it is
+  today, and the seam's `tlsWantRead`/`tlsWantWrite` semantics respected so the
+  async reactor can drive it.
+- `Close`, and registration in `initialization`.
+
+Two properties must survive the move, and both are the kind a refactor drops:
+
+1. **The fail-closed CertificateVerify dispatch.** It rejects any scheme it
+   cannot verify. Until 2026-08-01 that path silently ACCEPTED three of the four
+   schemes we advertise; do not let it regress to a warning.
+2. **Chain verification against the trust store**, not just against a CA handed
+   in as a parameter ([[feature-tls-system-trust-store]] is done and has its own
+   devtest).
+
+`tools/tls13_handshake_devtest.sh` should keep passing UNCHANGED across the
+extraction — it is the proof that nothing was lost, so it is worth leaving it
+driving the devtest program rather than rewriting it onto the new API in the
+same pass.
