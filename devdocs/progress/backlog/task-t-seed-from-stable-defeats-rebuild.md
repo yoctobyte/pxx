@@ -38,6 +38,29 @@ Only `selfhost-fixedpoint` can detect it (property 2, the anti-Thompson
 agreement check) — and when it does, it reads as a scary self-host regression
 rather than "your seed is stale".
 
+## What is already guarded (do not re-implement)
+
+`twatch.run_gate()` **already knows about this** and backdates the seed:
+
+```py
+if not os.path.exists(comp):
+    subprocess.run(["make", "--no-print-directory", "seed-from-stable"], ...)
+    os.utime(comp, (0, 0))      # "55 false reds on the first live deploy, 2026-07-07"
+```
+
+So the daemon's own fresh-clone path is safe. The hole is everywhere else:
+
+- the guard is under `if not os.path.exists(comp)`, so a clone that **already
+  has** a binary — every clone after the first cycle — is never re-backdated;
+- `tools/testmgr.py` has no such guard at all, so any **manual** run is exposed;
+- the deploy documentation tells a human to run `make seed-from-stable` directly
+  (`devdocs/dev/track-t.md`, `fpc-optional-workflow.md`), which is precisely how
+  xeon hit it during enrollment.
+
+The 2026-07-07 fix treated the symptom at one call site. The invariant — *never
+run the matrix against a binary that is byte-identical to `pinned`* — belongs
+where the matrix runs.
+
 ## Fix (Track T's own file)
 
 `tools/testmgr.py`, at the point it builds the compiler: before trusting make's

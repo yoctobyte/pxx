@@ -32,7 +32,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (176)
+## backlog (177)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -69,6 +69,7 @@ lives in git, not in a timestamp._
 | bug-pascal-uses-is-transitive | A | 65 | bug | Pascal: uses is transitive — a unit's own uses leak into everything that uses IT, for routines and classes alike (one flat global namespace) | — |
 | bug-pascal-uses-order-breaks-pylib-exception | A | 45 | bug | `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine | — |
 | bug-t-corpus-regex-invents-phantom-tree | T | 55 | bug | CORPUS_RE matches prose in a SKIP message and invents corpus 'stb)', permanently skipping a job that also carries a non-corpus regression test | — |
+| bug-t-tstate-index-conflicts-between-watcher-hosts | T | 70 | bug | TSTATE.md is regenerated wholesale by every host, so two live watchers rebase-conflict on it and silently drop verdicts | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -2861,6 +2862,7 @@ lives in git, not in a timestamp._
 ## Ready (no unmet blocker)
 
 - [urgent p 55] [A] regression-fpc-seed-drift-b1976-stale
+- [p 70] [T] bug-t-tstate-index-conflicts-between-watcher-hosts
 - [p 70] [T] regression-cascade-b45c759f9e65
 - [p 65] [C] bug-c-main-missing-implicit-return-zero
 - [p 65] [A] bug-pascal-uses-is-transitive
