@@ -8,7 +8,7 @@ prio: 50
 # nilpy: fallback import (`try/except ImportError`)
 
 - **Type:** feature (Nil-Python frontend, import system) — **Track N**
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-25 — songformatter planning session. Replaces the earlier
   `feature-nilpy-dotted-from-import` (Rene: don't impersonate reportlab; give
   nilpy the honest portability primitive instead). See
@@ -88,3 +88,4 @@ if wanted (try/except is the standard idiom and covers the need).
   directions compile and bind correctly. `--no-shims` (mentioned in the
   sibling dotted-imports ticket) also already exists and is gated. Closing
   — nothing left open.
+- 2026-07-31 — resolved, commit dcdb77a69.

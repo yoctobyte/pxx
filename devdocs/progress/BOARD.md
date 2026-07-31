@@ -32,7 +32,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (172)
+## backlog (171)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -129,7 +129,6 @@ lives in git, not in a timestamp._
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-default-args-on-nested-defs | N | 55 | feature | NilPy: default arguments as explicit by-value capture | — |
-| feature-nilpy-fallback-import | N | 50 | feature | nilpy: fallback import (try/except ImportError) — soft-fail an unresolvable import, take the alternative | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nilpy-lambda-compiled-closure | N | 45 | feature | nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics) | — |
 | feature-nilpy-map-and-filter-over-a-lambda | N | 40 | feature | `map(lambda ...)` is unimplemented and `filter` does not exist | — |
@@ -295,7 +294,7 @@ lives in git, not in a timestamp._
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1105)
+## done (1106)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1158,6 +1157,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-exception-message-text | N | 30 | feature | NilPy: exception message text — super().__init__(msg) discarded, str(e) empty | — |
 | feature-nilpy-exception-message | N | 55 | feature | NilPy: `Exception(msg)` — the root class takes no arguments | — |
 | feature-nilpy-exceptions | N | 60 | feature | NilPy: `raise` and `try` / `except` | — |
+| feature-nilpy-fallback-import | N | 50 | feature | nilpy: fallback import (try/except ImportError) — soft-fail an unresolvable import, take the alternative | — |
 | feature-nilpy-file-io-and-comprehensions | N | 55 | feature | NilPy: file I/O (`with open`), list comprehensions, and dict literals-in-args | — |
 | feature-nilpy-fstring-format-spec | N | 50 | feature | nilpy: f-string format specs — {x:.2f}, alignment/width {s:>5} | — |
 | feature-nilpy-fstrings | N | 55 | feature | NilPy: f-strings | — |
@@ -2891,7 +2891,7 @@ lives in git, not in a timestamp._
 - [p 55] [T] feature-pasmith-multi-unit-programs
 - [p 55] [A] feature-signal-siginfo-ucontext
 - [p 53] [A] feature-threadsafe-heap-optimize
-- [p 50] [N] feature-nilpy-fallback-import (unblocks 1)
+- [p 50] [B] feature-lib-pxxpdf-reportlab-compat (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [N] bug-nilpy-in-over-objects-ignores-eq
 - [p 50] [N] bug-nilpy-int-prints-as-float-when-the-name-is-widened-later
@@ -3014,7 +3014,6 @@ lives in git, not in a timestamp._
 - **1** — feature-inline-asm-xmm-operands
 - **1** — feature-lib-pxxpdf-reportlab-compat
 - **1** — feature-nilpy-break-continue
-- **1** — feature-nilpy-fallback-import
 - **1** — feature-nilpy-star-args-kwargs
 - **1** — feature-nilpy-tkinter-facade
 - **1** — feature-os-targets-bsd-mac
