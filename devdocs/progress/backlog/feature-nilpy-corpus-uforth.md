@@ -33,6 +33,20 @@ already shows across multiple prior sessions) — the line-3887 wall is the
 next actionable item for whoever picks this up next, isolate it into its
 own minimal repro first per this ticket's own established practice.
 
+Attempted to isolate line 3887 directly and ruled out the obvious
+suspects: a bytes-slice assignment with EXPRESSION bounds
+(`mem[res_addr:res_addr+length] = mem[tib_base+start:tib_base+pos]`), a
+hex-literal slice bound (`mem[0x0100:0x0100+8]`), and
+`int(x).to_bytes(8, 'little', signed=True)` (a keyword argument on a
+chained method call) ALL compile fine in isolation, matching CPython (one
+repr difference noted in passing: pxx prints a bytearray as `b'...'`,
+CPython as `bytearray(b'...')` — a separate, minor, non-blocking
+divergence). So the actual trigger is something else nearby in the real
+file that a hand-assembled repro didn't reproduce — narrows the search but
+does not close it; whoever picks this up next should bisect the REAL file
+(comment it out top-down, or binary-search the token range) rather than
+guess at another synthetic repro.
+
 ## MILESTONE 2026-07-21 (session 5g): DO/LOOP runs, prelim suite BYTE-IDENTICAL to CPython; core.fr arithmetic green
 
 Full tier-2 promotable-int adoption landed (commits f058b95b + e2eb2ade; the
