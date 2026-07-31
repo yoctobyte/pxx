@@ -82,6 +82,14 @@
    "sha": "c562f4f1cf1cea41ad8dc7cfa735916a8e99b751",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-31T17:55:13Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "1bd8825800a1193ec5fc8ee408ea2c393d1c1d7b",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "xeon",
@@ -1717,11 +1725,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "fail"
  },
  "last": {
-  "date": "2026-07-31T17:35:09Z",
-  "sha": "c562f4f1cf1cea41ad8dc7cfa735916a8e99b751",
-  "tier": "opt",
-  "verdict": "GREEN",
-  "wall": 259.5
+  "date": "2026-07-31T17:55:13Z",
+  "sha": "1bd8825800a1193ec5fc8ee408ea2c393d1c1d7b",
+  "tier": "native",
+  "verdict": "RED",
+  "wall": 99.9
  },
  "last_bench": {
   "conf_rows": 550,
