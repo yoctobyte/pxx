@@ -1,0 +1,55 @@
+# `and`/`or` on a mixed str/number pair returned a Boolean instead of the
+# operand -- correct for two operands of the same/compatible kind, wrong
+# specifically for str-vs-number. Two bugs, found together: the arm-
+# compatibility check refused the pair outright (so this printed True/False),
+# and PyMakeBoolOpValue's own result-type decision (fixed alongside) used OR
+# instead of AND for "both arms are string-like", so a scalar arm paired with
+# a string sibling stored a raw int into a string-typed slot once the pair
+# stopped being refused -- SIGSEGV on `1 or "x"` specifically.
+# bug-nilpy-mixed-type-and-or-returns-a-bool-not-the-operand
+# Every expectation is CPython's own output.
+
+print(0 or 5)
+print([] or "x")
+print(None or "x")
+print("a" or "b")
+print(0 or "x")
+print(1 or "x")
+print("" or 5)
+print(0.0 or "x")
+print(0 and "x")
+
+if 0 or "x":
+    print("truthy")
+else:
+    print("falsy")
+
+def f(given):
+    return given or "default"
+print(f(0))
+print(f(""))
+print(f(None))
+print(f("val"))
+print(f(5))
+
+# a nested `and`-chain over a comparison result must keep short-circuiting
+# (regression guard for a hoisting approach that was tried and reverted)
+expr = "12 + 34 * 2"
+toks = []
+j = 0
+n = len(expr)
+while j < n:
+    c = expr[j]
+    if c == " ":
+        j = j + 1
+        continue
+    if c >= "0" and c <= "9":
+        acc = ""
+        while j < n and expr[j] >= "0" and expr[j] <= "9":
+            acc = acc + expr[j]
+            j = j + 1
+        toks.append(acc)
+        continue
+    toks.append(c)
+    j = j + 1
+print(toks)

@@ -1719,10 +1719,28 @@ begin
     reinterprets the other one (a Boolean read as a string pointer SEGFAULTS,
     which is how this rule was found). The operands are truthiness-tested there,
     so an empty string is still falsy; what is lost is only the VALUE identity of
-    a mixed-type `or`, and that shape does not occur outside a condition. }
+    a mixed-type `or`, and that shape does not occur outside a condition.
+
+    A str-vs-NUMBER pair (int or float, NOT Boolean) is admitted separately
+    below: `name = given or "default"` is the ordinary Python default-value
+    idiom, and it mixes a str with whatever `given` actually is whenever that
+    is not itself a str — `0 or "x"`, `"" or 5` — which is exactly this shape
+    OUTSIDE a condition, falsifying the "does not occur" premise above
+    (bug-nilpy-mixed-type-and-or-returns-a-bool-not-the-operand).
+    PyMakeBoolOpValue's own type decision already has a `tyVariant` fallback
+    for a genuinely mixed pair (boxing each arm rather than reinterpreting
+    it), which is what makes this safe now in a way the original comment's
+    "typing the ternary as either arm's type" concern does not apply to —
+    the ternary is typed VARIANT, not str or int, so neither arm is read
+    through the other's representation. Boolean is deliberately NOT included
+    here (PyIsIntLikeTk already excludes it) — a str-vs-Boolean pair is
+    exactly the segfault repro the original rule was written to avoid, and
+    stays on the boolean lowering. }
   Result := (ta = tyVariant) or (tb = tyVariant) or (ta = tyClass) or (tb = tyClass)
             or (PyIsStrBaseTk(ta) and PyIsStrBaseTk(tb))
             or (PyIsIntLikeTk(ta) and PyIsIntLikeTk(tb))
+            or (PyIsStrBaseTk(ta) and (PyIsIntLikeTk(tb) or TypeIsFloat(tb)))
+            or (PyIsStrBaseTk(tb) and (PyIsIntLikeTk(ta) or TypeIsFloat(ta)))
             or (ta = tb);
 end;
 
@@ -1752,7 +1770,21 @@ begin
   ASTLeft[node] := condNode;
   ASTRight[node] := pairNode;
   ta := IntToTypeKind(ASTTk[a]); tb := IntToTypeKind(ASTTk[b]);
-  if PyIsStrBaseTk(ta) or PyIsStrBaseTk(tb) then
+  { BOTH arms, not either — this used to fire whenever ONE side was a str and
+    typed the WHOLE result AnsiString even when the other side was a plain
+    scalar (int/float), so `1 or "x"` stored a raw integer into a slot the
+    rest of the program treated as a managed string handle and dereferenced
+    it as one: SIGSEGV. Only reachable once PyBoolOpReturnsOperand started
+    admitting str-vs-number pairs into this value path at all — a LATENT bug
+    in this function, not something the admit-the-pair fix introduced, since
+    that pairing never reached here before
+    (bug-nilpy-mixed-type-and-or-returns-a-bool-not-the-operand). A
+    genuinely mixed pair now falls through to the tyVariant arm below, which
+    boxes each arm instead of reinterpreting one as the other's
+    representation — matching the conditional-expression parser's own
+    `PyIsStrBaseTk(ta) and PyIsStrBaseTk(tb)` rule just above it in this
+    file. }
+  if PyIsStrBaseTk(ta) and PyIsStrBaseTk(tb) then
     ASTTk[node] := Ord(tyAnsiString)
   else if PyIsIntLikeTk(ta) and PyIsIntLikeTk(tb) then
     { two integer widths — the wider one carries both arms }

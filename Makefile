@@ -725,6 +725,9 @@ test-nilpy: $(COMPILER)
 	@# print() evaluates every argument before writing any of them
 	./$(COMPILER) test/test_nilpy_print_arg_eval_order.npy /tmp/test_nilpy_printorder26
 	test "$$(/tmp/test_nilpy_printorder26)" = "$$(printf '%b' 'label = ERR\n1 2 3\na b c\n[1, 2] {'"'"'k'"'"': 1}\nx 5 3.14 True None\nbefore side\n1 2 3\nlead 1 2 3')"
+	@# mixed str/number `and`/`or` returns the operand, not a Boolean
+	./$(COMPILER) test/test_nilpy_mixed_type_bool_op.npy /tmp/test_nilpy_boolop26
+	test "$$(/tmp/test_nilpy_boolop26)" = "$$(printf '%b' '5\nx\nx\na\nx\n1\n5\nx\n0\ntruthy\ndefault\ndefault\ndefault\nval\n5\n['"'"'12'"'"', '"'"'+'"'"', '"'"'34'"'"', '"'"'*'"'"', '"'"'2'"'"']')"
 	@# a managed STRING local minted after the prologue zero-init pass was never
 	@# nil'd, so the loop's first store released stale frame bytes -> SIGSEGV
 	./$(COMPILER) test/test_nilpy_str_local_loop_zeroinit.npy /tmp/test_nilpy_str_local_zi26
