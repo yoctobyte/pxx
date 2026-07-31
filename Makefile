@@ -679,6 +679,9 @@ test-nilpy: $(COMPILER)
 	@# a bare generator expression as a call argument and in a return statement
 	./$(COMPILER) test/test_nilpy_genexpr_arg.npy /tmp/test_nilpy_genexprarg26
 	test "$$(/tmp/test_nilpy_genexprarg26)" = "$$(printf '%b' 'def __body__():\n    a\n    b\n    c\n12\n[2, 3, 4]\nTrue')"
+	@# a DOTTED package import (from a.b import c / import a.b / import a.b as x)
+	./$(COMPILER) test/test_nilpy_dotted_package_import.npy /tmp/test_nilpy_dottedimport26
+	test "$$(/tmp/test_nilpy_dottedimport26)" = "dotted imports ok"
 	./$(COMPILER) test/test_nilpy_return_none_variant.npy /tmp/test_nilpy_return_none_variant26
 	test "$$(/tmp/test_nilpy_return_none_variant26)" = "$$(printf 'a NONE\nb NONE\nc 9')"
 	./$(COMPILER) test/test_nilpy_none_str_field.npy /tmp/test_nilpy_none_str_field26

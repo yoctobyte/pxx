@@ -8,7 +8,7 @@ prio: 55
 # nilpy: dotted package imports
 
 - **Type:** feature (Nil-Python frontend, import resolution) — **Track N**
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-26. The one concrete blocker for the naming strategy in
   `devdocs/dev/python-compat-tiers.md`.
 
@@ -58,6 +58,23 @@ function. This ticket is about the IMPORT resolving to a unit.
 `pxxpdf` gets renamed to `reportlab` (or a `reportlab` package of shims over the
 same pdfgen backend), and songformatter's fallback import comes OUT — the app goes
 back to unmodified source, which is the point.
+
+## Already fixed — verified 2026-07-31, closing
+
+The decided `mimic_<mangled>` mapping landed since this ticket was filed.
+Re-measured directly against the real `mimic_reportlab_*` shims already in
+`lib/pcl`: `from reportlab.pdfgen import canvas`, `import reportlab.lib.colors`
+and `import reportlab.lib.pagesizes as pagesizes` all resolve correctly,
+each printing the exact substitution report the "Shape" section above asked
+for (`reportlab_pdfgen -> mimic_reportlab_pdfgen (shim, subset)`). Checked
+the failure mode too, to make sure it's the right kind: `import
+xml.etree.ElementTree` fails with "no shim mimic_xml_etree_elementtree" —
+i.e. the RESOLUTION mechanism works and the failure is a missing individual
+shim (nobody has written an ElementTree mimic), not a mechanism gap.
+
+Added `test/test_nilpy_dotted_package_import.npy` — no test previously
+pinned this mechanism directly (songformatter's own gate is elsewhere and
+not part of `make test-nilpy`).
 
 ## Gate
 

@@ -1,0 +1,13 @@
+# A dotted package import (`from a.b import c`, `import a.b`, `import a.b as
+# ab`) used to have no resolution path at all -- a Pascal unit name cannot
+# contain a dot. feature-nilpy-dotted-package-imports.
+# Resolved by mangling the dotted path onto a `mimic_<mangled>` unit name
+# (a.b -> mimic_a_b), reported at compile time. Uses the already-shipped
+# reportlab shim as a real multi-segment case, since the mechanism itself
+# (not any one shim's completeness) is what this test pins.
+
+from reportlab.pdfgen import canvas
+import reportlab.lib.colors
+import reportlab.lib.pagesizes as pagesizes
+
+print("dotted imports ok")
