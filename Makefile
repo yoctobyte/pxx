@@ -664,6 +664,9 @@ test-nilpy: $(COMPILER)
 	@# a unit-level proc called qualified can omit a trailing defaulted parameter
 	./$(COMPILER) test/test_nilpy_qualified_proc_omitted_default.npy /tmp/test_nilpy_qualdefault26
 	test "$$(/tmp/test_nilpy_qualdefault26)" = "$$(printf 'a 0\nb 5\nc 0 False\nd 7 True')"
+	@# a lambda value stored in a name and CALLED, not just passed around
+	./$(COMPILER) test/test_nilpy_lambda_real_value.npy /tmp/test_nilpy_lambdareal26
+	test "$$(/tmp/test_nilpy_lambdareal26)" = "$$(printf '6\n12')"
 	./$(COMPILER) test/test_nilpy_return_none_variant.npy /tmp/test_nilpy_return_none_variant26
 	test "$$(/tmp/test_nilpy_return_none_variant26)" = "$$(printf 'a NONE\nb NONE\nc 9')"
 	./$(COMPILER) test/test_nilpy_none_str_field.npy /tmp/test_nilpy_none_str_field26

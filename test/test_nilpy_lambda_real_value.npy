@@ -1,0 +1,11 @@
+# A `lambda` used to parse but reduce to a None placeholder (yielding None
+# instead of a callable) -- feature-nilpy-lambda. Real first-class lambda
+# values landed since, but this specific invocation shape (call the value
+# stored from a lambda, not just pass it around) was never directly gated.
+# feature-nilpy-lambda
+
+f = lambda x: x + 1
+print(f(5))
+
+g = lambda a, b: a * b
+print(g(3, 4))
