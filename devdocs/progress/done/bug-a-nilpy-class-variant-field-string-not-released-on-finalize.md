@@ -79,3 +79,19 @@ blast radius than the exception-specific ticket that surfaced it.
 of the table above (40k/160k/640k, `/usr/bin/time -f %M`, per the debugging
 playbook — a single run proves nothing): the string-field row must go flat,
 matching the already-flat int-field row.
+
+## RESOLVED — verified no longer leaks (smart sweep, 2026-07-31 @a3dda2e3c)
+
+Fresh fixedpoint compiler at HEAD. 640k iterations of `e = K("hello")` with an
+unannotated (tyVariant) string field, `e` used each iter (`total += len(e.msg)`,
+output 3,200,000 confirms the loop ran and the construction was NOT dead-code-
+eliminated): **peak RSS flat at ~1MB**. The variant field's managed string is
+released on reassign/finalize now.
+
+Fixed as part of the 2026-07-22/23 object-reclamation campaign (variant box
+lifetime + managed-string reclamation, feature-nilpy-object-reclamation and the
+container/owned-object frees). Same lineage that took the uforth microbench
+552MB->flat.
+
+## Log
+- 2026-07-31 — resolved, commit a3dda2e3c.

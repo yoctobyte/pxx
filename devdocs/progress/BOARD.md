@@ -35,11 +35,10 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (187)
+## backlog (186)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-nilpy-class-variant-field-string-not-released-on-finalize | A | 55 | bug | A class's variant-typed field holding a managed string is not released on finalize — general, not Exception-specific | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
@@ -289,7 +288,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1087)
+## done (1088)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -313,6 +312,7 @@ _none_
 | bug-a-managed-string-arg-temp-leaks-on-loop-reuse | A | 45 | bug | Managed-string arg-materialization temp leaks one handle per loop iteration | — |
 | bug-a-method-pointer-virtual-captures-static-address | A | 45 | bug | @baseref.VirtualMethod binds the STATIC base method address, not the virtual override — a method pointer to a virtual method via a base-typed ref calls the wrong method (silent), and contradicts pxx's own direct virtual dispatch | — |
 | bug-a-nilpy-and-or-in-unavailable-in-call-arguments | A | 65 | bug | NilPy `and` / `or` / `in` / `is` do not work in a CALL ARGUMENT | — |
+| bug-a-nilpy-class-variant-field-string-not-released-on-finalize | A | 55 | bug | A class's variant-typed field holding a managed string is not released on finalize — general, not Exception-specific | — |
 | bug-a-nilpy-container-equality-compares-identity | A | 55 | bug | NilPy: `==` on a list or dict compares IDENTITY, not contents | — |
 | bug-a-nilpy-floordiv-and-modulo-wrong-for-negatives | A | 75 | bug | NilPy: `//` and `%` are WRONG for negative operands, silently | — |
 | bug-a-nilpy-int-of-string-returns-a-pointer | A | 80 | bug | NilPy `int("42")` returns a POINTER, silently — and `float()` does not exist | — |
@@ -2849,7 +2849,6 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
-- [p 55] [A] bug-a-nilpy-class-variant-field-string-not-released-on-finalize
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [N] bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float
