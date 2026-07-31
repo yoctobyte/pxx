@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-31T11:04:03Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "190a4ad5bb7a7014ab642be37616285fe49fd47b",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-31T11:14:35Z",
    "fixed": [],
    "new_red": [],
@@ -431,6 +423,20 @@
    "sha": "8b98dc33c6b9a0c19a45d4efde4bf0d9f5652f0e",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-31T16:15:01Z",
+   "fixed": [
+    "test-core#src:test/c_lua_opcode_decode_b132.c",
+    "test-core#src:test/cagg_init_local_b41.c",
+    "test-core#src:test/test_class.pas",
+    "test-core#src:test/test_cross_param_2darray.pas",
+    "test-core#src:test/test_managed_store_via_addr_b279.pas"
+   ],
+   "new_red": [],
+   "sha": "6104264a4d1e6dc8ef09f16f57e76b5d71454d61",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -756,12 +762,12 @@
   "test-core#src:examples/tk/tkinter_facade.npy": "pass",
   "test-core#src:test/arrays.pas": "pass",
   "test-core#src:test/bootstrap_features.pas@1": "pass",
-  "test-core#src:test/c_lua_opcode_decode_b132.c": "fail",
+  "test-core#src:test/c_lua_opcode_decode_b132.c": "pass",
   "test-core#src:test/c_lua_tvalue_int_b131.c": "pass",
   "test-core#src:test/caddr_array_field_b16.c": "pass",
   "test-core#src:test/caddr_float_field_b190.c": "pass",
   "test-core#src:test/caddr_func_b21.c": "pass",
-  "test-core#src:test/cagg_init_local_b41.c": "fail",
+  "test-core#src:test/cagg_init_local_b41.c": "pass",
   "test-core#src:test/caggregate_double_return_b82.c": "pass",
   "test-core#src:test/canon_agg_global_b45.c": "pass",
   "test-core#src:test/canon_bitfield_b310.c": "pass",
@@ -1166,7 +1172,7 @@
   "test-core#src:test/test_channel.pas": "pass",
   "test-core#src:test/test_char_arg_ansistring.pas": "pass",
   "test-core#src:test/test_char_to_string.pas": "pass",
-  "test-core#src:test/test_class.pas": "fail",
+  "test-core#src:test/test_class.pas": "pass",
   "test-core#src:test/test_class_cast_field.pas": "pass",
   "test-core#src:test/test_class_const_b263.pas": "pass",
   "test-core#src:test/test_class_const_scope.pas": "pass",
@@ -1220,7 +1226,7 @@
   "test-core#src:test/test_cross_multidim.pas": "pass",
   "test-core#src:test/test_cross_multidim3d.pas": "pass",
   "test-core#src:test/test_cross_named_array.pas": "pass",
-  "test-core#src:test/test_cross_param_2darray.pas": "fail",
+  "test-core#src:test/test_cross_param_2darray.pas": "pass",
   "test-core#src:test/test_cross_ptr_arith.pas": "pass",
   "test-core#src:test/test_cross_record_2darray.pas": "pass",
   "test-core#src:test/test_cross_setlen_varparam.pas": "pass",
@@ -1405,7 +1411,7 @@
   "test-core#src:test/test_managed_result_move.pas": "pass",
   "test-core#src:test/test_managed_setlength_growth.pas": "pass",
   "test-core#src:test/test_managed_setlength_var.pas": "pass",
-  "test-core#src:test/test_managed_store_via_addr_b279.pas": "fail",
+  "test-core#src:test/test_managed_store_via_addr_b279.pas": "pass",
   "test-core#src:test/test_managed_string_flip.pas": "pass",
   "test-core#src:test/test_managed_var_param.pas": "pass",
   "test-core#src:test/test_many_local_names.pas": "pass",
@@ -2066,11 +2072,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-31T16:05:41Z",
-  "sha": "8b98dc33c6b9a0c19a45d4efde4bf0d9f5652f0e",
-  "tier": "opt",
+  "date": "2026-07-31T16:15:01Z",
+  "sha": "6104264a4d1e6dc8ef09f16f57e76b5d71454d61",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 207.9
+  "wall": 159.1
  },
  "last_bench": {
   "conf_rows": 550,
