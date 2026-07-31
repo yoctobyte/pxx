@@ -4756,30 +4756,38 @@ begin
             else mcallNode := AllocNode(AN_CALL);
             ASTIVal[mcallNode] := mpi; ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
             mselfArg := AllocNode(AN_ARG); ASTLeft[mselfArg] := node; ASTLeft[mcallNode] := mselfArg;
-            { The setter is an ordinary Pascal PROCEDURE (no result) — store
-              the value into a hidden temp FIRST, pass THAT as the setter's
-              argument, then yield the temp as this store's own "value".
-              Returning the void setter-call node directly silently dropped
-              the value whenever this store nested inside another
-              assignment's RHS (`xs[0] = xs[1] = 3`, right-associative);
-              this gives Python's actual chained-assignment semantics instead
-              (bug-nilpy-chained-subscript-assignment-writes-only-the-last-target). }
-            tk := IntToTypeKind(UPropTk[pri]);
-            setTmpSym := AllocVar(PyHiddenName('setval'), tk);
-            setTmpAssign := AllocNode(AN_ASSIGN);
-            ASTLeft[setTmpAssign] := PyMakeIdent(setTmpSym);
-            ASTRight[setTmpAssign] := CurASTNode;
-            margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := PyMakeIdent(setTmpSym);
+            if PyExprMode then
+            begin
+              { The setter is an ordinary Pascal PROCEDURE (no result) — store
+                the value into a hidden temp FIRST, pass THAT as the setter's
+                argument, then yield the temp as this store's own "value".
+                Returning the void setter-call node directly silently dropped
+                the value whenever this store nested inside another
+                assignment's RHS (`xs[0] = xs[1] = 3`, right-associative);
+                this gives Python's actual chained-assignment semantics
+                instead. NilPy only: Pascal has no chained assignment and its
+                own statement-level caller expects the plain call node below
+                (bug-nilpy-chained-subscript-assignment-writes-only-the-last-target). }
+              tk := IntToTypeKind(UPropTk[pri]);
+              setTmpSym := AllocVar(PyHiddenName('setval'), tk);
+              setTmpAssign := AllocNode(AN_ASSIGN);
+              ASTLeft[setTmpAssign] := PyMakeIdent(setTmpSym);
+              ASTRight[setTmpAssign] := CurASTNode;
+              margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := PyMakeIdent(setTmpSym);
+              ASTRight[mselfArg] := margIdx; ASTRight[mlastArg] := margSeq;
+              setInnerComma := AllocNode(AN_COMMA);
+              ASTLeft[setInnerComma] := mcallNode;
+              ASTRight[setInnerComma] := PyMakeIdent(setTmpSym);
+              ASTTk[setInnerComma] := Ord(tk);
+              node := AllocNode(AN_COMMA);
+              ASTLeft[node] := setTmpAssign;
+              ASTRight[node] := setInnerComma;
+              ASTTk[node] := Ord(tk);
+              Result := node; Exit;
+            end;
+            margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := CurASTNode;  { value }
             ASTRight[mselfArg] := margIdx; ASTRight[mlastArg] := margSeq;
-            setInnerComma := AllocNode(AN_COMMA);
-            ASTLeft[setInnerComma] := mcallNode;
-            ASTRight[setInnerComma] := PyMakeIdent(setTmpSym);
-            ASTTk[setInnerComma] := Ord(tk);
-            node := AllocNode(AN_COMMA);
-            ASTLeft[node] := setTmpAssign;
-            ASTRight[node] := setInnerComma;
-            ASTTk[node] := Ord(tk);
-            Result := node; Exit;
+            node := mcallNode; Result := node; Exit;
           end
           else
           begin
