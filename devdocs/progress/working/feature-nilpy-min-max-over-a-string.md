@@ -26,6 +26,16 @@ set and a generator are all in scope for the same gap.
 A compile error, so it is a gap rather than a silent wrong answer — filed as a
 feature, not a bug. Found by the builtin × argument-type sweep against CPython.
 
+## FIXED (this session)
+
+Added `max(const s: AnsiString): AnsiString` / `min(const s: AnsiString):
+AnsiString` overloads to pylib.pas — byte-ordinal comparison, consistent with
+this frontend's byte-string model. Checked dict and set (mentioned in the
+ticket as "same gap"): both ALREADY worked before this fix — a dict iterates
+its keys and a set is represented as a TPyList, so both already hit the
+existing `max(l: TPyList)` overload. Only the bare-string case was actually
+missing. Verified str/list/dict/set all match CPython.
+
 ## Gate
 
 `make test-nilpy` + self-host byte-identical, plus min/max over str, list, dict

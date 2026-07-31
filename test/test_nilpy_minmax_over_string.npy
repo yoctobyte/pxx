@@ -1,0 +1,11 @@
+# min()/max() only accepted a TPyList or two scalars, not a bare string --
+# CPython's min/max take any iterable, and a str iterates its characters.
+# feature-nilpy-min-max-over-a-string
+# Every expectation is CPython's own output.
+
+print(max("cab"))
+print(min("cab"))
+print(max([3, 1, 2]))
+print(min([3, 1, 2]))
+print(max(3, 7))
+print(min(3.5, 2.1))

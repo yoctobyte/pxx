@@ -652,6 +652,9 @@ test-nilpy: $(COMPILER)
 	@# chr() refuses an out-of-byte-range argument instead of silently truncating
 	./$(COMPILER) test/test_nilpy_chr_range_check.npy /tmp/test_nilpy_chrrange26
 	test "$$(/tmp/test_nilpy_chrrange26)" = "$$(printf '%b' 'A\n233\ncaught: chr out of range\ncaught: chr negative')"
+	@# min()/max() over a bare string (any iterable), not just a list or two scalars
+	./$(COMPILER) test/test_nilpy_minmax_over_string.npy /tmp/test_nilpy_minmax26
+	test "$$(/tmp/test_nilpy_minmax26)" = "$$(printf '%b' 'c\na\n3\n1\n7\n2.1')"
 	./$(COMPILER) test/test_nilpy_return_none_variant.npy /tmp/test_nilpy_return_none_variant26
 	test "$$(/tmp/test_nilpy_return_none_variant26)" = "$$(printf 'a NONE\nb NONE\nc 9')"
 	./$(COMPILER) test/test_nilpy_none_str_field.npy /tmp/test_nilpy_none_str_field26

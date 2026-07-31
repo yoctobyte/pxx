@@ -884,6 +884,8 @@ function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
 function max(l: TPyList): Variant; overload;
 function min(l: TPyList): Variant; overload;
+function max(const s: AnsiString): AnsiString; overload;
+function min(const s: AnsiString): AnsiString; overload;
 function any(l: TPyList): Boolean;
 function all(l: TPyList): Boolean;
 
@@ -2940,6 +2942,30 @@ begin
   Result := l.at(0);
   for i := 1 to l.count - 1 do
     if pyvar_gt(Result, l.at(i)) then Result := l.at(i);
+end;
+
+{ Python's min()/max() take ANY iterable, not just a list -- a str iterates
+  its characters. Byte-ordinal comparison, consistent with this frontend's
+  byte-string model everywhere else (bug-nilpy-non-ascii-string-surface-
+  measured). feature-nilpy-min-max-over-a-string. }
+function max(const s: AnsiString): AnsiString;
+var i: Integer; best: Char;
+begin
+  if Length(s) = 0 then raise ValueError.Create('max() arg is an empty sequence');
+  best := s[1];
+  for i := 2 to Length(s) do
+    if s[i] > best then best := s[i];
+  Result := best;
+end;
+
+function min(const s: AnsiString): AnsiString;
+var i: Integer; best: Char;
+begin
+  if Length(s) = 0 then raise ValueError.Create('min() arg is an empty sequence');
+  best := s[1];
+  for i := 2 to Length(s) do
+    if s[i] < best then best := s[i];
+  Result := best;
 end;
 
 function any(l: TPyList): Boolean;
