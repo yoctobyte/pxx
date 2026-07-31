@@ -8,7 +8,7 @@ prio: 45
 # nilpy: `configparser`
 
 - **Type:** feature (Nil-Python frontend, stdlib surface) — **Track N**
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-26 — `settings.py` is songformatter's smallest module and
   this is its only wall ([[feature-demo-songformatter-pxx-target]]):
   `pascal26:1: error: uses: unit source not found: configparser`.
@@ -63,3 +63,13 @@ one program, and the subclass would still have to parse.
 
 Order of work: fix the subclass bug, then this becomes the dull INI unit it looks
 like.
+
+## Already fixed — verified 2026-07-31, closing
+
+Landed since this ticket's last update: `lib/rtl/configparser.pas` exists,
+and `test/test_nilpy_configparser.npy` (already gated in the Makefile)
+exercises exactly the blocking case — a subclass overriding
+`optionxform` to preserve option case — and passes: `subclass keeps case:
+True`, `and rejects folded: False`, confirming the dotted-base-class +
+inherited-override blocker described above is also resolved. Re-ran the
+existing test directly to confirm; no new work needed.
