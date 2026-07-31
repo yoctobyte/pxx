@@ -8,7 +8,7 @@ prio: 50
 # nilpy: the aggregate builtins
 
 - **Type:** feature (Nil-Python frontend, builtins) — **Track N**
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-26 — probing songformatter under nilpy
   ([[feature-demo-songformatter-pxx-target]]). Follows the earlier
   `feature-nilpy-missing-builtins` (done) — these are the ones still absent.
@@ -50,3 +50,6 @@ returning something plausible-but-wrong.
 
 `make test-nilpy` green with a `.npy` case per builtin diffed against CPython, +
 `--tier quick` + self-host byte-identical.
+
+## Log
+- 2026-07-31 — resolved, commit 2bbb344c8066be398cde61d386139db7347c3bf7.
