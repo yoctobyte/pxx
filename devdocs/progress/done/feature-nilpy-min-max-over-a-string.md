@@ -40,3 +40,6 @@ missing. Verified str/list/dict/set all match CPython.
 
 `make test-nilpy` + self-host byte-identical, plus min/max over str, list, dict
 and set diffed against CPython.
+
+## Log
+- 2026-07-31 — resolved, commit 74f83fb98.
