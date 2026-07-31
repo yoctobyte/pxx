@@ -262,3 +262,47 @@ whether `IR_VAR_STORE`'s `tyVariant` branch is even reached for `f = mk()` at
 the generic copy path this fix targets. Do not re-attempt the same
 `isFreshCallSrc` patch without first confirming (via gdb, not reasoning) that
 the branch it modifies is the one actually executing for this repro.
+
+## 2026-08-01, second same-round check — a claimed "fixed, verified" commit does NOT reproduce as fixed
+
+A continuation of the same claude-N4 agent session (worktree
+`agent-ad4bb44fc9fe98142`) went on past the round documented above, revised its
+diagnosis (claims the real leaking object is `TBoundFnObj`/`pyboundfn_new`, not
+`TClosureObj` — attributes the earlier `TClosureObj` conclusion to a gdb
+methodology error, reading `$rdx` instead of `$rax` after `finish` for a
+hidden-dest Variant return), and committed a three-part fix (`8df1cd2c8`):
+`pyboundfn_new` routed through `PXXObjAllocRaw2` with a real finalizer,
+`VT_BOUNDFN_TAG` added to `EmitVariantRetain`/`EmitVariantClear`, plus the SAME
+`IR_VAR_STORE` release-the-temp change from the round above. The agent's own
+summary claims: self-host fixedpoint byte-identical, RSS flat at 384 KB for
+BOTH 20k and 320k iterations (was 8960 KB -> 137856 KB), `-dPXX_HEAP_DEBUG`
+clean, full `make test-nilpy` green, all 294 `test/*.npy` byte-identical
+pre/post.
+
+**Independently re-verified before merging, per this repo's own
+measure-don't-trust-reasoning rule — and the claim does not reproduce.**
+Built fresh from the exact final committed source (`8df1cd2c8`, clean tree,
+self-host fixedpoint confirmed byte-identical independently), then:
+
+- RSS-slope repro (`def mk(): ...; def b(): ...; return b`, wrapped in
+  `def run(n): while i<n: f=mk()`), default `-O2` build: **8320 KB @ 20k,
+  125440 KB @ 320k** — indistinguishable from the unfixed baseline (125344 KB
+  @ 320k measured in the prior round), NOT the claimed flat 384 KB.
+- `-dPXX_OBJTRACE` on a fresh 3-iteration build of the SAME final commit:
+  identical imbalance pattern to every prior round — each object allocated
+  once, retained twice, released twice, settling at rc=1 forever, finalize
+  never fires.
+
+**Not merged, second time.** The `ir_codegen.inc` diff in this "final" commit
+is byte-identical to the one measured as ineffective in the round above — only
+`pyeval.pas`/`defs.inc` differ (the `TBoundFnObj` refcounting wiring). Neither
+one, alone or together, changes the measured slope. Whatever the actual leak
+mechanism is, it survived two independently-committed, confidently-verified
+fix attempts and two independent re-measurements by a DIFFERENT session
+(fresh build both times, not reusing any cached artifact) — this is now
+strong evidence the bug is somewhere neither attempt has looked yet, not that
+the fix "mostly works." Treat any future agent's self-reported RSS/objtrace
+numbers on this ticket as unverified until reproduced independently, ideally
+by someone OTHER than the agent that wrote the fix, with a byte-for-byte-fresh
+build (not the agent's own build artifacts) — this round's numbers could not
+be reproduced even from the exact same commit.
