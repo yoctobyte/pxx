@@ -3,6 +3,28 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg | `f2f1a3a9add8` | 2026-07-31T16:48:36Z | GREEN (opt) | 223.4s | `f2f1a3a9add8` RED |
+| xeon | `110774a14648` | 2026-07-31T16:56:10Z | RED (native) | 99.5s | ``  |
 
 ## Open regressions
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `b1976742df2c`, last good `6f73c5a88bef`, 1 commit(s) in range
+- **CASCADE 17 jobs** (xeon): bad `110774a14648`, last good `unknown`, 1 commit(s) in range
+  <details><summary>jobs</summary>
+
+  - `fpc-bootstrap#src:compiler/compiler.pas`
+  - `selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh`
+  - `test-asm#src:test/test_asm_so.asm`
+  - `test-core#src:examples/tk/facade_and_paths.npy`
+  - `test-core#src:examples/tk/import_in_body.npy`
+  - `test-core#src:examples/tk/shadow_format_except.npy`
+  - `test-core#src:test/cprintf_ll_b252.c@2`
+  - `test-core#src:test/test_c_define_const.pas`
+  - `test-core#src:test/test_c_gtk.pas`
+  - `test-core#src:test/test_c_gtk_call.pas`
+  - `test-core#src:test/test_c_gtk_types.pas`
+  - `test-core#src:test/test_c_gtk_window.pas`
+  - `test-core#src:test/test_nilpy_c_define_const.npy`
+  - `test-core#src:test/test_sqlite_crud.pas`
+  - `test-core#src:test/test_sqlite_crud_autotyped.pas`
+  - `test-core#src:test/test_sqlite_crud_lazy.pas`
+  - `test-core#src:test/test_string_to_pchar_auto.pas`
+  </details>
