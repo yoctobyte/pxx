@@ -515,6 +515,9 @@ test-nilpy: $(COMPILER)
 	@# a class body consisting of ONLY `pass` used to error "expected def"
 	./$(COMPILER) test/test_nilpy_class_pass_body.npy /tmp/test_nilpy_clspass26
 	test "$$(/tmp/test_nilpy_clspass26)" = "$$(printf '%b' 'caught: custom\nMyErr\nmade empty')"
+	@# a class field's type inferred from self.x = <ctor param>, incl. inherited
+	./$(COMPILER) test/test_nilpy_class_field_infer_from_ctor.npy /tmp/test_nilpy_fieldinfer26
+	test "$$(/tmp/test_nilpy_fieldinfer26)" = "$$(printf '%b' '5 five\n1 one 3.14\n4 8')"
 	./$(COMPILER) test/test_nilpy_dynattr.npy /tmp/test_nilpy_dynattr26
 	test "$$(/tmp/test_nilpy_dynattr26)" = "$$(printf '%b' '105\n110')"
 	./$(COMPILER) test/test_nilpy_dynattr_class.npy /tmp/test_nilpy_dynattr_class26

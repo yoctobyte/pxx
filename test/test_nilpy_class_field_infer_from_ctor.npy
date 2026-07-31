@@ -1,0 +1,33 @@
+# A class field's type inferred from `self.x = <ctor param>` -- annotated,
+# unannotated, and inherited (via super().__init__, the idiomatic form) --
+# already works. Field values are usable in arithmetic (not just tyVariant
+# passthrough), which is the case the ticket's own repro didn't even need
+# inheritance to hit.
+# feature-nilpy-class-field-infer-from-ctor
+# Every expectation is CPython's own output.
+
+class Base:
+    def __init__(self, n, name):
+        self.n = n
+        self.name = name
+
+    def describe(self):
+        return str(self.n) + " " + self.name
+
+class Sub(Base):
+    def __init__(self, n, name, extra):
+        super().__init__(n, name)
+        self.extra = extra
+
+b = Base(5, "five")
+print(b.describe())
+s = Sub(1, "one", 3.14)
+print(s.describe(), s.extra)
+
+class Point:
+    def __init__(self, x: int, y):
+        self.x = x
+        self.y = y
+
+p = Point(3, 4)
+print(p.x + 1, p.y * 2)
