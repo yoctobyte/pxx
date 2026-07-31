@@ -232,3 +232,10 @@ replacing the dev-side quick gate.
     (renumbering does blend), but it was not the cause of anything observed
     here. **Lesson: verify the mechanism before asserting it in a commit
     message — the numbers were re-measurable in one command and I did not.**
+
+## POSTPONED 2026-07-31 (user)
+Moved to rainy-day/. The user prefers to keep a MANUAL eye on the Track T
+process for now rather than run the fully-autonomous cron agent — the
+supervised watcher + manual triage workflow stays in use. Revisit when there's
+appetite to automate the agentic loop. The watcher daemon itself keeps running;
+this only defers the unattended face-2 automation.

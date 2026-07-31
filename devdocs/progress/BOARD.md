@@ -8,15 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| HANDOFF-allnight-bughunt | B | 50 | HANDOFF | Handoff — all-night bug hunt, all tracks (rewritten 2026-07-29, second night) | — |
-| HANDOFF-nilpy-bughunt | A | 50 | HANDOFF | Handoff — NilPy bug hunt, with the new debugging toolkit | — |
-| HANDOFF-nilpy-songformatter | A | 50 | HANDOFF | Handoff prompt — NilPy bughunt, songformatter (2026-07-29) | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
-| feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
 ## unfinished (2)
 
@@ -250,7 +246,7 @@ _none_
 | feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
 | feature-zig-frontend | B | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
-## rainy-day (25)
+## rainy-day (26)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -274,6 +270,7 @@ _none_
 | feature-stackful-coro-port | A | 50 | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | A | 50 | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-tls13-from-scratch | B | 53 | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
+| feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 | goal-compile-fpc-compiler | A | 50 | goal | 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX | — |
 | goal-compile-linux-tinyconfig | C | 50 | goal | 🗼 Lighthouse — boot a Linux tinyconfig kernel built with PXX's C frontend | — |
 | idea-demo-app-candidates | E | 50 | idea | Demo / test application candidates — selection criteria + catalog | — |
