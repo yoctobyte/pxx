@@ -69,3 +69,45 @@ otherwise for this leg: the c-conformance shards are a genuine, reproducible
 frontend bug and are **separable** from the rest of that cascade
 (`test-sqlite-threads-*`, `test-lua-cross`), which remain unexplained. Splitting
 this one out is deliberate, not a violation of that instruction.
+
+---
+
+## The conformance shards went GREEN — that is a MASKING, not a fix (2026-07-31)
+
+`test-c-conformance-*` reported FIXED at `4790e38cdd9f`. **This bug is not
+fixed.** The green came from `3f90af303`, an honest revert of `lib/crtl`
+(div/ldiv/lldiv/llabs and the sscanf field-width fix) that removed the
+*perturbation*, not the defect. The revert commit says so itself: the
+functionality is "lost for now and wanted back once the i386 bug is fixed".
+
+So the current green costs real crtl functionality — including the sscanf fix,
+which mattered (`%15s` silently abandoned the scan). Do not close this ticket on
+the strength of a green matrix, and do not let an auto-pin rule treat that green
+as proof (see [[decide-track-t-autopin-criteria]]).
+
+## Same defect as [[bug-c-i386-crtl-growth-corrupts-main-exit-code]]
+
+That ticket (Track C, claimed) describes the same failure from the other end:
+*"adding ANY code to lib/crtl corrupts an unrelated program's exit code"*,
+bisected across four Track B commits, with output staying correct and only the
+exit code going wrong. It calls the shape "alarming" and concludes crtl
+*growing at all* disturbs something on i386.
+
+**These are one bug, and this ticket explains the other's mystery.** If the C
+frontend emits no implicit `return 0`, `main`'s exit value is simply never set —
+so it is whatever the last executed code happened to leave in the return
+register. Then:
+
+- growing `lib/crtl` changes which code ran last ⇒ the exit code changes,
+  without crtl corrupting anything at all;
+- programs that never call the new functions are still affected — no puzzle,
+  since the value was never theirs to begin with;
+- the *output* stays correct, because only the return value is unspecified;
+- x86-64 and arm32 "pass" by luck, the register happening to hold 0.
+
+Measured evidence for the mechanism (i386, same binary three runs each):
+explicit `return 0` ⇒ 0, 0, 0; implicit ⇒ 220, 172, 188. gcc oracle: 0.
+
+**Consequence for sequencing:** fixing this unblocks restoring the reverted
+crtl work. Chasing "what in crtl corrupts the exit code" would be chasing a
+symptom — nothing corrupts it; nothing ever set it.
