@@ -1232,6 +1232,27 @@ begin
             ASTIVal[node] := procIdx;
             ASTTk[node] := Ord(tyPointer);
           end
+          else if (name = '__func__') and (CurProc >= 0) then
+          begin
+            { C99 6.4.2.2: __func__ is not a macro — it behaves as if
+              `static const char __func__[] = "<enclosing-function-name>";`
+              were declared at the start of the function body, so it needs the
+              CURRENT function's name at parse time, not a preprocessor
+              substitution (__LINE__/__FILE__ ARE handled at that level, in
+              CPExpandRange). bug-c-line-file-func-and-predefined-macros-missing:
+              this identifier fell all the way through to the generic
+              undefined-identifier-degrades-to-0 path below, so `__func__`
+              silently became a NULL pointer rather than the function's name —
+              worse than the direct-use case, since any caller that
+              printf("%s", __func__)s or strlen()s it without a null guard has
+              a crash waiting. PyStoredName is a generic "intern a new string
+              into the shared token-char pool" helper (despite its name/home
+              in pyparser.inc) — reused here rather than duplicating it. }
+            node := AllocNode(AN_STR_LIT);
+            ASTSOffset[node] := PyStoredName(Procs[CurProc].Name);
+            ASTSLen[node] := Length(Procs[CurProc].Name);
+            ASTTk[node] := Ord(tyString);
+          end
           else
           begin
             { An unresolved identifier used as a value degrades to integer 0 — a

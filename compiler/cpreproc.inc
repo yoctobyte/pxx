@@ -1229,6 +1229,19 @@ begin
   end;
 end;
 
+function CPRangeIsLit(const src: AnsiString; a, b: Integer; const lit: AnsiString): Boolean;
+{ Does src[a..b] spell exactly `lit`? For the small, fixed set of dynamic
+  predefines (__LINE__/__FILE__) that must be re-evaluated at every use
+  rather than looked up once in the macro table like an ordinary #define. }
+var i: Integer;
+begin
+  Result := False;
+  if b - a + 1 <> Length(lit) then Exit;
+  for i := 1 to Length(lit) do
+    if src[a + i - 1] <> lit[i] then Exit;
+  Result := True;
+end;
+
 procedure CPExpandRange(const src: AnsiString; first, last, level: Integer;
   var dst: AnsiString);
 var
@@ -1236,7 +1249,7 @@ var
   q2, grpEnd, tailMi: Integer;
   expanded, combined: AnsiString;
   quote: Char;
-  quotedDone: Boolean;
+  quotedDone, dynMacroHit: Boolean;
 begin
   if level > 32 then Error('C macro recursion');
   p := first;
@@ -1285,6 +1298,26 @@ begin
       while (p <= last) and CPIsIdentChar(src[p]) do Inc(p);
       b := p - 1;
       mi := CPFindMacro(src, a, b);
+      { __LINE__/__FILE__ (C 6.10.8.1): dynamic predefines that must carry the
+        CURRENT line/file at each point of use, not a fixed value looked up
+        once — unlike every other predefine (__STDC__, __x86_64__, ...), which
+        really are constant for the whole translation unit and so live as
+        ordinary CPAddLiteral entries in CPreprocess. Neither was defined at
+        all before this fix: an identifier the macro table has no entry for
+        falls through to plain text below and the C parser reads it as an
+        undefined identifier, silently treated as 0 / empty
+        (bug-c-line-file-func-and-predefined-macros-missing). Checked only
+        when no user #define/#undef shadows the name, same precedence a real
+        macro table entry would have. }
+      dynMacroHit := True;
+      if (mi < 0) and CPRangeIsLit(src, a, b, '__LINE__') then
+        dst := dst + AIntToStr(CPCurLine)
+      else if (mi < 0) and CPRangeIsLit(src, a, b, '__FILE__') then
+        dst := dst + '"' + CPCurPath + '"'
+      else
+        dynMacroHit := False;
+      if not dynMacroHit then
+      begin
       { Object-macro alias of a function macro `#define A FUNC` used as `A(args)`:
         redirect to FUNC so the function-macro path below pulls the args that
         follow in the source (lua's setsvalue2n / setobj2n). }
@@ -1419,6 +1452,7 @@ begin
           p := q;
         end;
       end;
+      end;   { if not dynMacroHit }
     end
     else
     begin
@@ -2473,6 +2507,12 @@ begin
   CPActiveMacroCount := 0;
   CPPushCount := 0;
   CPAddLiteral('__linux__', '01');
+  CPAddLiteral('__unix__', '01');   { bug-c-line-file-func-and-predefined-macros-missing:
+                                      the most commonly tested of the missing config
+                                      macros; every currently-supported target is a
+                                      hosted-Linux or bare-metal POSIX-shaped build,
+                                      never Windows/macOS, so this is as unconditional
+                                      as __linux__ right above it. }
   CPAddLiteral('__x86_64__', '01');
   { Data-model predefines (C 5.2.4.2): real code branches on these to size long
     (c-testsuite 00212). 64-bit targets are LP64 (long/pointer = 8), 32-bit are
@@ -2482,12 +2522,35 @@ begin
   begin
     CPAddLiteral('__LP64__', '01');
     CPAddLiteral('_LP64', '01');
+    CPAddLiteral('__SIZEOF_LONG__', '8');
+    CPAddLiteral('__SIZEOF_POINTER__', '8');
   end
   else
   begin
     CPAddLiteral('__ILP32__', '01');
     CPAddLiteral('_ILP32', '01');
+    CPAddLiteral('__SIZEOF_LONG__', '4');
+    CPAddLiteral('__SIZEOF_POINTER__', '4');
   end;
+  { Fixed across every data model above (C 5.2.4.2.1's minimums, and what this
+    target's C frontend actually emits for these types regardless of LP64 vs
+    ILP32 — only long/pointer vary with the data model). }
+  CPAddLiteral('__SIZEOF_INT__', '4');
+  CPAddLiteral('__SIZEOF_SHORT__', '2');
+  CPAddLiteral('__SIZEOF_LONG_LONG__', '8');
+  CPAddLiteral('__SIZEOF_FLOAT__', '4');
+  CPAddLiteral('__SIZEOF_DOUBLE__', '8');
+  CPAddLiteral('__CHAR_BIT__', '8');
+  { Byte order: every currently-supported target (x86-64/i386/aarch64/arm32/
+    riscv32/xtensa) runs little-endian in this compiler's configuration — no
+    big-endian target exists to make this conditional on. __BYTE_ORDER__ gates
+    real branches in hash libraries, compression and wire-format parsers
+    (bug-c-line-file-func-and-predefined-macros-missing): absent, those
+    silently took whatever fallback branch the source picked for an
+    unrecognized/undefined byte order, sometimes the wrong one. }
+  CPAddLiteral('__ORDER_LITTLE_ENDIAN__', '1234');
+  CPAddLiteral('__ORDER_BIG_ENDIAN__', '4321');
+  CPAddLiteral('__BYTE_ORDER__', '__ORDER_LITTLE_ENDIAN__');
   CPAddLiteral('__STDC__', '01');
   CPAddLiteral('__STDC_VERSION__', '199901L');   { C99 — crtl ships C99 stdint/inttypes }
   CPAddLiteral('__STDC_HOSTED__', '01');

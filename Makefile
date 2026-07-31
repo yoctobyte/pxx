@@ -2313,6 +2313,8 @@ test-core: $(COMPILER)
 	/tmp/cglobal_fnptr_addressof_b16126; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccrtl_hand_declared_proto_b162.c /tmp/ccrtl_hand_declared_proto_b16226
 	/tmp/ccrtl_hand_declared_proto_b16226; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cpredefined_macros_b166.c /tmp/cpredefined_macros_b16626
+	/tmp/cpredefined_macros_b16626; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cstr_literal_binop_b163.c /tmp/cstr_literal_binop_b16326
 	/tmp/cstr_literal_binop_b16326; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cconst_logical_ternary_b164.c /tmp/cconst_logical_ternary_b16426
