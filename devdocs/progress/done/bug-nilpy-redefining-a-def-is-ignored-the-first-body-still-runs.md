@@ -107,3 +107,12 @@ are left for whoever picks up the nested-def relocation work and the
 callable-value ABI ticket respectively — this ticket stays open until both
 land. Gate: make test-nilpy green, self-host fixedpoint, testmgr --tier
 quick.
+
+## RESOLVED — verified fixed (sweep, 2026-07-31 @c75fff21c)
+
+Fresh fixedpoint at HEAD: `def f(): return 1` then `def f(): return 2; print(f())`
+now prints **2**, matching CPython (was 1 — the first body). The redefinition
+relocation fix landed. Moving out of unfinished/ to done.
+
+## Log
+- 2026-07-31 — resolved, commit c75fff21c.
