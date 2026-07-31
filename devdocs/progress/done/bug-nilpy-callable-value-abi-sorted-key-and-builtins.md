@@ -88,3 +88,6 @@ by the element is wrong, but it is not a crash.
 `make test-nilpy` + self-host byte-identical, plus a `.npy` covering the table
 above against CPython's own output. Pick test data where the key order and the
 natural order DIFFER — otherwise the test passes without the key being called.
+
+## Log
+- 2026-07-31 — resolved, commit 4f5864fe053f4fee8eef53901419c1e1d489e45b.
