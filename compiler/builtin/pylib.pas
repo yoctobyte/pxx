@@ -422,6 +422,7 @@ function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
   (`{name}`) and index fields (`{0}`) are NOT here: they fail loudly rather
   than being dropped, because a format spec decides what is PRINTED. }
 function pystr_format(const fmt: AnsiString; const a: Variant): AnsiString;
+function pystr_format2(const fmt: AnsiString; const a: Variant; const b: Variant): AnsiString;
 { Python's `"%s=%d" % args` — the printf-style operator, translated placeholder
   by placeholder into the {}-spec grammar below so padding, precision and base
   conversion have ONE implementation rather than two that drift. args is a single
@@ -5690,6 +5691,22 @@ end;
 function pystr_format(const fmt: AnsiString; const a: Variant): AnsiString;
 begin
   pystr_format := PyFormatApply(fmt, a, a, 1);
+end;
+
+{ `"{} and {}".format(a, b)` — a SEPARATE proc, not a second pystr_format
+  overload: the caller (pyparser.inc) looks procs up by bare NAME via
+  FindProc, which is not arity-aware, so a same-named 1-arg/2-arg overload
+  pair resolved to whichever was registered first regardless of how many
+  arguments were actually parsed — the second Variant arrived through a
+  1-param ABI and the call segfaulted. Every other multi-arity str method
+  (split/rjust/replace) already sidesteps this the same way, with its own
+  arity-suffixed proc name (bug-nilpy-str-format-multiarg /
+  feature-nilpy-str-format-multiarg). PyFormatApply already supported two
+  positional args; only this entry point and the frontend's arity gate were
+  missing. }
+function pystr_format2(const fmt: AnsiString; const a: Variant; const b: Variant): AnsiString;
+begin
+  pystr_format2 := PyFormatApply(fmt, a, b, 2);
 end;
 
 function pypercent_format(const fmt: AnsiString; const args: Variant): AnsiString;

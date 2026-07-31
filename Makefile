@@ -655,6 +655,9 @@ test-nilpy: $(COMPILER)
 	@# min()/max() over a bare string (any iterable), not just a list or two scalars
 	./$(COMPILER) test/test_nilpy_minmax_over_string.npy /tmp/test_nilpy_minmax26
 	test "$$(/tmp/test_nilpy_minmax26)" = "$$(printf '%b' 'c\na\n3\n1\n7\n2.1')"
+	@# "{} and {}".format(a, b) -- two positional placeholders, not just one
+	./$(COMPILER) test/test_nilpy_str_format_multiarg.npy /tmp/test_nilpy_fmtmulti26
+	test "$$(/tmp/test_nilpy_fmtmulti26)" = "$$(printf 'a and 2\n3.1 then x\n5')"
 	./$(COMPILER) test/test_nilpy_return_none_variant.npy /tmp/test_nilpy_return_none_variant26
 	test "$$(/tmp/test_nilpy_return_none_variant26)" = "$$(printf 'a NONE\nb NONE\nc 9')"
 	./$(COMPILER) test/test_nilpy_none_str_field.npy /tmp/test_nilpy_none_str_field26

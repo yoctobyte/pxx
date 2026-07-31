@@ -1,0 +1,10 @@
+# "{} and {}".format(a, b) segfaulted: the 2-arg pylib overload existed but
+# FindProc looks a proc up by bare name (not arity-aware), so it resolved to
+# the 1-arg overload regardless of how many arguments were actually parsed,
+# and the second Variant arrived through a 1-param ABI.
+# feature-nilpy-str-format-multiarg
+# Every expectation is CPython's own output.
+
+print("{} and {}".format("a", 2))
+print("{:.1f} then {}".format(3.14159, "x"))
+print("{}".format(5))

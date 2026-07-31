@@ -3863,15 +3863,20 @@ begin
   end
   else if wantArgs = -6 then
   begin
-    { .format(a) / .format(a, b) — pylib overloads by arity, so the call just
-      has to pass the arguments through }
-    { ONE argument. The two-argument overload is written and does not marshal
-      correctly (the second Variant arrives wrong and the call segfaults), so
-      it is refused rather than shipped: a crash is worse than a diagnostic.
-      feature-nilpy-str-format-multiarg. }
-    if i <> 1 then
-      Error('Nil Python: str method .format() takes exactly one argument here; '
-            + 'several placeholders are not implemented yet — use an f-string');
+    { .format(a) / .format(a, b) — one or two positional placeholders.
+      pystr_format2 is a SEPARATE proc name for the 2-arg case, not a second
+      pystr_format overload: FindProc below looks a proc up by bare name and
+      is not arity-aware, so a same-named overload pair resolved to whichever
+      was registered first regardless of how many arguments were actually
+      parsed — the second Variant arrived through a 1-param ABI and the call
+      segfaulted. Every other multi-arity str method already sidesteps this
+      the same way (split/rjust/replace's own arity-suffixed names above)
+      (feature-nilpy-str-format-multiarg). Three or more placeholders are
+      still refused loudly rather than guessed at. }
+    if i = 2 then pname := pname + '2'
+    else if i <> 1 then
+      Error('Nil Python: str method .format() takes one or two arguments here; '
+            + 'three or more placeholders are not implemented yet — use an f-string');
     procIdx := FindProc(pname);
     if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   end
