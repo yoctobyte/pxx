@@ -6,3 +6,4 @@
 {"date": "2026-07-31T17:59:27Z", "fixed": [], "full": true, "new_red": [], "sha": "1bd8825800a1193ec5fc8ee408ea2c393d1c1d7b", "tier": "full", "verdict": "RED", "wall": 245.0}
 {"date": "2026-07-31T18:03:51Z", "fixed": [], "full": false, "new_red": [], "sha": "1bd8825800a1193ec5fc8ee408ea2c393d1c1d7b", "tier": "opt", "verdict": "GREEN", "wall": 258.3}
 {"date": "2026-07-31T18:14:54Z", "fixed": [], "full": false, "new_red": [], "sha": "d4c1e5519290cb0a03aee7cd1e66afecf4337767", "tier": "native", "verdict": "RED", "wall": 100.5}
+{"date": "2026-07-31T18:19:06Z", "fixed": [], "full": true, "new_red": [], "sha": "d4c1e5519290cb0a03aee7cd1e66afecf4337767", "tier": "full", "verdict": "RED", "wall": 242.6}
