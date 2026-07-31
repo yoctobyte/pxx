@@ -102,8 +102,26 @@ expect_refused "hostname mismatch" 28825 "$D.rsa.leaf" "$D.rsa.key" "$D.rsa.ca" 
 expect_refused "empty trust file"  28826 "$D.rsa.leaf" "$D.rsa.key" /dev/null   localhost
 expect_refused "missing trust file" 28827 "$D.rsa.leaf" "$D.rsa.key" "$D.nope"  localhost
 
+# The whole chain: HttpGet over https:// -> tls.pas seam -> native backend.
+# The seam runs above prove the backend; this proves an ordinary caller reaches
+# it through http.pas without naming a TLS unit beyond the registrar.
+HTTPSCLI=/tmp/pxx_devtest_https_native
+if "$PXX_STABLE" -Fu"$ROOT/lib/rtl" -Fu"$ROOT/lib/rtl/platform/posix" \
+      "$ROOT/test/devtest_https_native.pas" "$HTTPSCLI" >/tmp/pxx_https_build.log 2>&1; then
+  serve 28828 "$D.rsa.leaf" "$D.rsa.key"
+  out=$(SSL_CERT_FILE="$D.rsa.ca" timeout 40 "$HTTPSCLI" "https://localhost:28828/" 2>&1)
+  kill "$SRV_PID" 2>/dev/null; SRV_PID=""
+  if printf '%s' "$out" | grep -q '^HTTPS OK'; then
+    say "OK    HttpGet over https (no libssl in the process)"
+  else
+    say "FAIL  HttpGet over https"; printf '%s\n' "$out" | sed 's/^/      /'; fail=1
+  fi
+else
+  say "FAIL  https client build"; tail -3 /tmp/pxx_https_build.log; fail=1
+fi
+
 if [ "$fail" -eq 0 ]; then
-  say "tls-native-seam-devtest OK (3 schemes through the seam; 4 refusals)"
+  say "tls-native-seam-devtest OK (3 schemes, 4 refusals, https via http.pas)"
   exit 0
 fi
 say "tls-native-seam-devtest FAILED"

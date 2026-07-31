@@ -9,8 +9,11 @@ unit http;
 
   Capabilities: HTTP + https through the pluggable TLS seam (tls.pas) — bytes
   route via the active backend when the URL is https and a backend is registered,
-  else an https request fails cleanly (no backend ships in-tree yet — see
-  feature-tls-provider-abstraction);
+  else an https request fails cleanly. TWO backends ship in-tree, and neither
+  registers itself — the caller picks:
+    tls13_native.Tls13NativeRegister   syscall-only, no libssl, no dlopen
+    tls_openssl.OpenSslTlsRegisterEx   dlopen libssl (needs the real loader)
+  See feature-tls-provider-abstraction;
   GET/POST/HEAD/PUT/DELETE + generic HttpExec with custom headers; blocking and
   async (reactor) transports; hostname resolution (blocking dns / async
   dns_async); response framing (Transfer-Encoding: chunked decode, else
@@ -861,9 +864,9 @@ end;
   registered, an https request fails cleanly (HttpTlsConnect returns False ->
   caller returns Ok=False) rather than crashing.
 
-  Handshake is treated as completing within one TlsHandshake call (the mock and a
-  blocking OpenSSL backend do; a future fully-async handshake will need a resume
-  step added to the seam). The want-read/want-write retry loop lives on the data
+  Handshake is treated as completing within one TlsHandshake call (the mock, the
+  blocking OpenSSL backend and tls13_native all do; a fully-async handshake will
+  need the resume step driven here — the seam already carries it). The want-read/want-write retry loop lives on the data
   path (Read/Write), where it is resumable on the same connection and where async
   yielding actually matters. }
 

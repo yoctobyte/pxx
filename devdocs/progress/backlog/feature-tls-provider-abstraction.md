@@ -369,3 +369,25 @@ the absence of the side effect is tested rather than assumed.
 which is blocked on two Track A crashes. The remaining work to make it the
 default for `http.pas` is choosing a backend when both are registered — not
 covered here.
+
+### End to end: `HttpGet` over `https://` with no OpenSSL in the process
+
+`http.pas` already routed https through the seam and already treated the
+handshake as completing within one `TlsHandshake` call — which is exactly what
+this backend does — so nothing there needed changing. Verified rather than
+assumed:
+
+```
+backend=native-tls13
+status=200 reason=ok
+HTTPS OK
+```
+
+Asserted in the seam devtest as `HttpGet over https (no libssl in the
+process)`, driven by `test/devtest_https_native.pas`, which names no TLS unit
+beyond the registrar.
+
+Two stale claims in `http.pas`'s header fixed while there: it said "no backend
+ships in-tree yet" (two do now, and it now names both registrars and what each
+costs), and that only "the mock and a blocking OpenSSL backend" complete the
+handshake in one call.
