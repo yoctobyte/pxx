@@ -64,7 +64,7 @@ const
   { `END` is what an application writes (`text.delete("1.0", tk.END)`); Pascal
     reserves the word, so the constant is END_ and the frontend maps the
     qualified spelling onto it — the trailing-underscore convention the
-    reserved METHOD names already use (set, destroy). }
+    reserved METHOD name `destroy_` also uses. }
   END_ = 'end';
   NW = 'nw';
   NE = 'ne';
@@ -199,7 +199,11 @@ type
     function clipboard_get: AnsiString;
     procedure clipboard_clear;
     procedure clipboard_append(const text: AnsiString);
-    procedure destroy;                    { Python's name; no destructor is shadowed here }
+    { NOT `destroy`: Pascal is case-insensitive, so that name is every
+      `destructor Destroy` in the RTL and PCL at once, and a dynamically-typed
+      `widget.destroy()` then has too many candidate classes to dispatch. The
+      frontend maps Python's spelling onto this one (pyparser.inc). }
+    procedure destroy_;
     { process pending events without entering the main loop — what a test (and
       plenty of real code) uses to make geometry and bindings take effect }
     procedure update;
@@ -1281,7 +1285,7 @@ begin
   end;
 end;
 
-procedure Widget.destroy;
+procedure Widget.destroy_;
 begin
   TkEval('destroy ' + path);
 end;
