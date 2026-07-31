@@ -289,7 +289,7 @@ lives in git, not in a timestamp._
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (18)
+## decided (19)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -308,6 +308,7 @@ lives in git, not in a timestamp._
 | decide-pyeval-bignum-strategy | U | 40 | decide | decide: how should pyeval handle arbitrary-precision (bignum) integers? | — |
 | decide-rtti-none-semantics | A | 40 | decide | decide: `--rtti=none` semantics — what happens to the FUNCTIONAL parts of the RTTI blob? | — |
 | decide-runtime-primitive-layering | U | 70 | decide | Where does a runtime primitive live? — DECIDED: a PAL per language | — |
+| decide-two-track-model-dev-and-regression-testing | T | 60 | decide | DECIDED: two operational tracks — development, and regression testing | — |
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
