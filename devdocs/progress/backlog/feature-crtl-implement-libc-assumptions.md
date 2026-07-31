@@ -349,3 +349,42 @@ Fixed epochs and `gmtime` rather than `localtime` on purpose: the test must not
 depend on the machine's timezone.
 
 **Gated:** `test/crtl_libc_oracle.c` is now 113 lines, byte-identical to gcc.
+
+## Swept: feature-test macros (2026-07-31, Track B — NOT a library gap)
+
+The last assumption class this ticket names — "feature-test macros & config
+that gate which code path a project compiles" — is swept, and it turned out to
+be entirely on the COMPILER side, so nothing lands here.
+
+`__STDC__`, `__STDC_VERSION__`, `__linux__` and `__x86_64__` are correct.
+Missing: `__unix__`, `__SIZEOF_POINTER__`, `__SIZEOF_LONG__`, `__CHAR_BIT__`,
+and `__BYTE_ORDER__` / `__ORDER_LITTLE_ENDIAN__`. The last is the one that
+matters — endianness is decided at compile time by hash libraries, compression
+and every wire-format parser, and with the macro absent a project silently takes
+its fallback branch, which is sometimes slower and sometimes wrong.
+
+Worse, found in the same sweep: **`__LINE__` expands to 0, `__FILE__` to an
+empty string, and `__func__` to an empty string** — and when passed as
+ARGUMENTS all three arrive as NULL/0. Those three are the entire content of
+every `assert` and logging macro in real C, so a corpus that builds and runs
+still reports `:0` from an unnamed file, or hands a logger a null pointer.
+
+Filed as [[bug-c-line-file-func-and-predefined-macros-missing]] (Track C).
+Deliberately not worked around in `lib/crtl`: a header cannot supply `__LINE__`,
+and faking the rest would hide the real gap.
+
+## Sweep status of the classes this ticket lists
+
+| class | state |
+| --- | --- |
+| header symbols declared-but-unimplemented | swept — census misleading, link-probe instead; `strnlen`, `div`/`ldiv`/`lldiv`/`llabs` were the real gaps |
+| `<limits.h>` / `<stdint.h>` / `<inttypes.h>` completeness | swept — correct; inttypes closed earlier |
+| errno values + names | swept — **39 of 71 missing**, fixed |
+| `<ctype.h>` assumptions | swept — correct |
+| struct layouts (stat, off_t width) | swept — `struct stat` diverges but is self-consistent and correct; recorded, not a bug |
+| feature-test macros & config | swept — a COMPILER gap, filed for Track C |
+| math edge functions | swept — correct |
+| stdio / printf / scanf | swept — **3 bugs**, fixed |
+
+All of it is now gated by `test/crtl_libc_oracle.c` against gcc's build of the
+same file (113 lines), so the next divergence is caught rather than discovered.
