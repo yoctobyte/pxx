@@ -37,10 +37,11 @@ not relax just because the boxes can now talk directly.
 
 Set by the user 2026-07-31:
 
-- **borg = the dev box.** Holds **1-3 tracks** concurrently; the user decides how
-  many, and the binding constraint is token budget, not file safety. The user
-  also **guards the lane split** (A+ vs B+) when several run at once — agents do
-  not self-assign overlapping lanes.
+- **borg = the dev box.** Development is **one broadly linear stream**, not a
+  set of concurrent lanes ([[decide-two-track-model-dev-and-regression-testing]]
+  — this supersedes an earlier "1-3 concurrent tracks" reading recorded here).
+  Where genuine concurrency is wanted the user calls it, and the binding
+  constraint is token budget rather than file safety.
 - **xeon = Track T.** Its job is to *find regressions*, continuously, across the
   matrix. Future: **pin when stable** — promoting a blessed binary automatically
   once a sha proves itself (criteria unsettled, see
@@ -95,28 +96,26 @@ model, not less. Run native locally only when you have reason to distrust the
 change (a bootstrap/ABI/codegen edit you expect to bite), or when the watcher is
 down (`twatch --status`).
 
-This is safe by construction, not by optimism: native already carries the
-self-host fixedpoint gate —
+For reference, the tier split that makes this work:
 
 ```python
 SELFHOST_GATE_TIERS = ("native", "limited", "full")   # testmgr.py
 # NOT advisory — byte-identical self-host is the gate the stable binary rests on.
 ```
 
-— so the one property that is genuinely not offloadable (a broken fixedpoint
-poisons the next `pin` for *every* track) is already inside the bar. `quick` is
-the inner loop and does **not** carry it; that is the difference between the two
-tiers and the reason the push bar is native, not quick.
+`quick` is the inner loop and does not carry the fixedpoint; `native` does. So
+the guarantee is **deferred to the watcher's native run**, not skipped — which
+is the whole trade, and why the watcher going down changes the rules (below).
 
-Non-compiler changes (docs, tickets, libs built against `$(PXX_STABLE)`) do not
-need even that.
+Non-compiler changes (docs, tickets, libs built against `$(PXX_STABLE)`) carry
+no such concern at all.
 
 ### Fast-forward, fix later — including on the same target
 
-Green native does **not** mean nothing will break. Track T may later file
-regressions for other targets *and for the target you just tested* — native is a
-subset of native-plus-breadth, and the matrix reruns things your run never
-touched.
+Green quick does **not** mean nothing will break — nor does the watcher's
+native that follows it. Track T may later file regressions for other targets
+*and for the target you just tested*: native is a subset of
+native-plus-breadth, and the matrix reruns things your run never touched.
 
 That is the deal, not a defect: **a later red becomes a ticket, never a reason
 to have waited.** Land, move to the next thing, and treat incoming reds as new
@@ -124,8 +123,8 @@ work items ranked against everything else in the queue. The alternative —
 serialising every significant change behind a 10-minute matrix, across several
 agents — costs far more than the occasional fix-forward.
 
-Two things this does *not* license: skipping native, and pushing a state you
-already know is broken or mid-refactor.
+Two things this does *not* license: skipping the quick tier, and pushing a
+state you already know is broken or mid-refactor.
 
 ### Callbacks arrive tagged to a sha that may already be stale
 
@@ -141,10 +140,11 @@ already flat).
 File-lanes make parallel tracks *safe*; the usage cap makes them *expensive*.
 `autonomy.md` records the measured position: **two concurrent sessions trip the
 cap even under light load**, and one worker cycling lanes gets more done per
-5-hour block than three concurrent lane-workers. That is a real tension with
-running 1-3 tracks on borg, and the user owns the trade: concurrency buys
-wall-clock latency and costs block lifetime. Spend it knowingly — for scheduled
-and unattended work the default stays **one worker cycling lanes**.
+5-hour block than three concurrent lane-workers. This reinforces the linear-development
+model above rather than competing with it: the cap makes concurrency expensive
+exactly where the two-track decision already says it buys little. Where the user
+does call for genuine concurrency, spend it knowingly — for scheduled and
+unattended work the default stays **one worker cycling lanes**.
 
 ## The anti-recursion rule (the thing to actually worry about)
 
@@ -217,31 +217,39 @@ declarations an error). So:
 - borg is the box that answers "did this EVER work?" — it is the older
   toolchain and the historical baseline.
 
-## Terse dispatch — "proceed on bugs track A+*"
+## Terse dispatch — one stream, not concurrent lanes
 
-The user may drop a one-liner on **any box, any checkout**, and expects both
-agents to sort it out. Read it as `<verb> on <type> track <lanes>`:
+**Superseded 2026-07-31 by [[decide-two-track-model-dev-and-regression-testing]].**
+An earlier draft of this section defined an `A+C` / `A+*` lane grammar. The user
+struck it: *"A+ waters down"* — the expressions imply development is several
+concurrent lanes when in practice it is **one broadly linear stream** (one IR,
+one self-host gate, one history). Do not dispatch the letters as if they were
+concurrency lanes.
 
-| form | means |
-|---|---|
-| `track A` | only Track A |
-| `track A+C` | A and C, both in scope |
-| `track A+*` | **A first**, then anything else once A's queue is dry |
-| `track *` | any lane, global top |
-| `on bugs` | restrict to `type: bug` / `regression` tickets |
-| (no type) | any type |
+Operationally there are **two** things, and the axis is **what parallelizes**,
+not who owns which file:
 
-`progress.sh next` takes **one** `--track` and has no type filter, so expand it
-yourself — do not wait for tooling:
+| | development | Track T |
+|---|---|---|
+| shape | linear — one IR, one gate, one history | 1617 jobs × 6 targets, embarrassingly parallel |
+| scales by | not easily parallelized | cores, straightforwardly |
+| box | borg | xeon |
+
+So read a terse instruction as **a filter on the queue, not a set of parallel
+lanes**. "proceed on bugs, track A" means: work the highest-effective-prio bug
+whose gate is A, one at a time.
 
 ```sh
-for T in A C P B N; do tools/progress.sh next --track $T; done
-# each prints "effective prio N" — take the highest; ties break toward the
-# named-first lane (the A in A+*), then toward urgent/.
+tools/progress.sh next --track A      # or omit --track for the global top
+tools/progress.sh claim <slug> claude@<box>
+tools/progress.sh board-md
+tools/sync.sh                         # push the claim BEFORE editing code
 ```
 
-Then the normal loop: `claim` → **push the claim** → work → your lane's gate →
-`resolve` → `board-md` → push.
+The frontend letters stay useful as **labels** — which gate must be green, what
+context to hold, who owns a ticket. C/P/N/Z/R sharing Track A is *by design*:
+frontends lower to a shared IR, and lexer/parser work usually reaches the IR
+layer anyway. **Track A is the single mutex; everything else works around it.**
 
 **The sole-A guard is now checkable, not a guess.** Before taking a Track A
 ticket — or a Track P edit touching the shared `lexer.inc`/`parser.inc` — look
@@ -256,9 +264,14 @@ for f in $(git ls-tree -r --name-only origin/master devdocs/progress/working); d
 done
 ```
 
-Clear ⇒ claim it. Someone holds A ⇒ take the next lane in the expression
-instead. That is what `A+*` is *for*: a fallback order, so a blocked lane never
-idles you.
+Clear ⇒ claim it. Someone holds A ⇒ **do not queue behind it** — take the next
+ready ticket whose gate is not A (`progress.sh next` with no `--track`), so a
+held mutex never idles you. Track A is the single mutex; everything else works
+around it.
+
+Corollary the peer got right and worth repeating: **never infer lane ownership
+from filesystem state** (which checkouts exist, what is in a working tree).
+`working/` on origin is the only answer, which is what the query above asks.
 
 **"Two boxes" is shorthand — do not assume exactly two agents.** Owner ids in
 `working/` today include identities beyond `claude@borg` / `claude@xeon` (e.g.
