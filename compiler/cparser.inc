@@ -786,6 +786,106 @@ begin
   end;
 end;
 
+{ Decode ONE UTF-8 sequence from a wide string token's source span (soff/slen
+  into TokChars, ei the byte offset to start at) into its codepoint, and report
+  how many source bytes it advances by (advBy). Shared by the wide literal's
+  value-context builder below and the local `wchar_t buf[] = L"..."` array-init
+  path (bug-c-wide-string-literal-narrow-in-value-context) — same decode, two
+  call sites, so a fix to one no longer needs a matching fix to the other. }
+function CWideDecodeNext(soff, slen, ei: Integer; var advBy: Integer): Integer;
+var wb0, wb1, wb2, wcp, wnb: Integer;
+begin
+  wb0 := Ord(TokChars[soff + ei]) and 255;
+  if wb0 < $80 then begin wcp := wb0; wnb := 1; end
+  else if (wb0 and $E0) = $C0 then begin wcp := wb0 and $1F; wnb := 2; end
+  else if (wb0 and $F0) = $E0 then begin wcp := wb0 and $0F; wnb := 3; end
+  else begin wcp := wb0 and $07; wnb := 4; end;
+  wb1 := 1;
+  while (wb1 < wnb) and (ei + wb1 < slen) do
+  begin
+    wb2 := Ord(TokChars[soff + ei + wb1]) and 255;
+    wcp := (wcp shl 6) or (wb2 and $3F);
+    Inc(wb1);
+  end;
+  advBy := wnb;
+  Result := wcp;
+end;
+
+{ Count the wchar_t codepoints (UTF-8 decoded, NOT including a NUL terminator)
+  a single wide string token's source span decodes to — used by sizeof(L"...")
+  to report the wide byte length instead of the narrow one. }
+function CWideCodepointCount(soff, slen: Integer): Integer;
+var ei, advBy, n: Integer;
+begin
+  n := 0; ei := 0;
+  while ei < slen do
+  begin
+    CWideDecodeNext(soff, slen, ei, advBy);
+    Inc(ei, advBy);
+    Inc(n);
+  end;
+  Result := n;
+end;
+
+{ `L"..."` used as a VALUE (assigned to a wchar_t*, passed as an argument,
+  embedded in a struct initializer — anywhere but the array-initializer shape
+  `wchar_t arr[] = L"..."`, which ParseCLocalDeclAST already widens directly)
+  was reaching codegen as raw narrow UTF-8 bytes: sizeof(L"abcde") read 6
+  instead of gcc's 24, and wcslen()/pointer walks ran off the end
+  (bug-c-wide-string-literal-narrow-in-value-context). Build a static-shaped
+  `wchar_t` (tyInteger, 4 bytes) array temp from the UTF-8-decoded codepoints
+  — same decode as the array-init path — wide-NUL terminate it, and hand back
+  an AN_COMPOUND_LITERAL that decays to its address, exactly the mechanism a
+  C99 array compound literal already uses to get an addressable value
+  (CParseCompoundLiteralArr below). Adjacent `L"a" L"b"` wide literals
+  concatenate, mirroring the plain AN_STR_LIT path's adjacent-string rule.
+  CurTok must be the wide string token on entry; consumes it (and any
+  adjacent wide-string tokens) same as the AN_STR_LIT path does. }
+function CParseWideStringLit: Integer;
+const MAX_WIDE_CODEPOINTS = 1023;
+var cps: array[0..MAX_WIDE_CODEPOINTS] of Integer;
+    ncp, wsoff, wslen, ei, advBy, tmpSym, i, idn, idxLit, valLit, inode, asn,
+    seq, tail, node: Integer;
+begin
+  ncp := 0;
+  while CurTok.Kind = tkString do
+  begin
+    wsoff := Tokens[TokPos - 1].SOffset;
+    wslen := Tokens[TokPos - 1].SLen;
+    ei := 0;
+    while ei < wslen do
+    begin
+      if ncp > MAX_WIDE_CODEPOINTS - 1 then Error('wide string literal too long');
+      cps[ncp] := CWideDecodeNext(wsoff, wslen, ei, advBy);
+      Inc(ei, advBy);
+      Inc(ncp);
+    end;
+    Next;
+  end;
+  cps[ncp] := 0;   { wide NUL terminator }
+  Inc(ncp);
+
+  tmpSym := AllocArray('', tyInteger, 0, ncp - 1);
+  seq := CMakeZeroLocal(tmpSym, tyInteger);
+  tail := seq;
+  for i := 0 to ncp - 1 do
+  begin
+    idn := AllocNode(AN_IDENT); ASTIVal[idn] := tmpSym; ASTTk[idn] := Ord(tyInteger);
+    idxLit := AllocNode(AN_INT_LIT); ASTIVal[idxLit] := i; ASTTk[idxLit] := Ord(tyInteger);
+    inode := AllocNode(AN_INDEX); ASTLeft[inode] := idn; ASTRight[inode] := idxLit; ASTTk[inode] := Ord(tyInteger);
+    valLit := AllocNode(AN_INT_LIT); ASTIVal[valLit] := cps[i]; ASTTk[valLit] := Ord(tyInteger);
+    asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := inode; ASTRight[asn] := valLit;
+    ASTTk[asn] := Ord(tyInteger);
+    node := AllocNode(AN_SEQ); ASTLeft[node] := asn; ASTRight[node] := -1;
+    ASTRight[tail] := node; tail := node;
+  end;
+  node := AllocNode(AN_COMPOUND_LITERAL);
+  ASTIVal[node] := tmpSym;
+  ASTLeft[node] := seq;
+  ASTTk[node] := Ord(tyPointer);   { decays to a pointer to the first codepoint }
+  Result := node;
+end;
+
 function ParseCPrimary: Integer;
 var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     apNode, addrNode, callNode, helper, a2, a3, a4, a5, a5arg: Integer;
@@ -858,6 +958,19 @@ begin
     end;
     tkString:
     begin
+      { Wide string L"..." used as a VALUE (not the `wchar_t arr[] = L"..."`
+        array-initializer shape, which ParseCLocalDeclAST widens directly): a
+        plain AN_STR_LIT here would carry the raw narrow UTF-8 source bytes,
+        so sizeof/wcslen/pointer walks read garbage
+        (bug-c-wide-string-literal-narrow-in-value-context). The builder needs
+        a function scope to materialise its temp array in (CurProc >= 0); a
+        wide literal reached in a global initializer falls through to the old
+        narrow AN_STR_LIT below rather than risk a temp with no frame. }
+      if (Tokens[TokPos - 1].IVal = 1) and (CurProc >= 0) then
+      begin
+        Result := CParseWideStringLit;
+        Exit;
+      end;
       node := AllocNode(AN_STR_LIT);
       ASTSOffset[node] := Tokens[TokPos - 1].SOffset;
       ASTSLen[node] := Tokens[TokPos - 1].SLen;
@@ -1819,7 +1932,19 @@ begin
         registered under a 7-char garbage name and every `self` reference inside
         the body resolved to a nil global. The string token carries its decoded
         length in SLen (escapes already folded). }
-      sz := Tokens[TokPos - 1].SLen + 1;
+      if Tokens[TokPos - 1].IVal = 1 then
+        { `sizeof(L"lit")` — wide: (codepoints + 1 NUL) * sizeof(wchar_t). Byte
+          SLen is the wrong unit for a wide literal (bug-c-wide-string-literal-
+          narrow-in-value-context) — count UTF-8-decoded codepoints instead, the
+          same decode CParseWideStringLit/ParseCLocalDeclAST's array-init path use.
+          TypeSize (not CTypeSizeBytes) — CTypeSizeBytes reads CTypePtrDepth, state
+          left over from whatever ParseCDeclType call happened to run last (e.g. a
+          PRECEDING `const wchar_t *ptr = ...;` declaration), so it silently
+          returned the POINTER size (8) instead of sizeof(wchar_t) (4) here. }
+        sz := (CWideCodepointCount(Tokens[TokPos - 1].SOffset, Tokens[TokPos - 1].SLen) + 1)
+              * TypeSize(tyInteger)
+      else
+        sz := Tokens[TokPos - 1].SLen + 1;
     end
     else if (CurTok.Kind = tkIdent) and CSizeofIdentOperandIsWhole then
     begin
@@ -3712,7 +3837,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     beStack: array[0..MAX_ARR_DIMS-1] of Integer;
     recBase, fldI, fTk, fieldNode, recArrInitCount: Integer;
     dimCount, dimVal, flatLen, di, tdArrLen: Integer;
-    wcp, wb0, wb1, wb2, wnb, wsoff, wslen: Integer;
+    wcp, wnb, wsoff, wslen: Integer;
     curElemIdx, rangeHi, maxElemIdx, dk: Integer;
     hadArrDesig: Boolean;
     arrElems: array[0..255] of Integer;
@@ -4174,19 +4299,11 @@ begin
             if Tokens[TokPos - 1].IVal = 1 then
             begin
               { wide string L"..." — UTF-8 decode the source bytes to one wchar_t
-                (int) codepoint per element (00220). }
-              wb0 := Ord(TokChars[wsoff + ei]) and 255;
-              if wb0 < $80 then begin wcp := wb0; wnb := 1; end
-              else if (wb0 and $E0) = $C0 then begin wcp := wb0 and $1F; wnb := 2; end
-              else if (wb0 and $F0) = $E0 then begin wcp := wb0 and $0F; wnb := 3; end
-              else begin wcp := wb0 and $07; wnb := 4; end;
-              wb1 := 1;
-              while (wb1 < wnb) and (ei + wb1 < wslen) do
-              begin
-                wb2 := Ord(TokChars[wsoff + ei + wb1]) and 255;
-                wcp := (wcp shl 6) or (wb2 and $3F);
-                Inc(wb1);
-              end;
+                (int) codepoint per element (00220). Shared with the value-context
+                builder (CParseWideStringLit) via CWideDecodeNext, so this and the
+                `= expr` (pointer/argument/sizeof) shape decode identically
+                (bug-c-wide-string-literal-narrow-in-value-context). }
+              wcp := CWideDecodeNext(wsoff, wslen, ei, wnb);
               Inc(ei, wnb);
               idxLit := AllocNode(AN_INT_LIT);
               ASTIVal[idxLit] := wcp;
