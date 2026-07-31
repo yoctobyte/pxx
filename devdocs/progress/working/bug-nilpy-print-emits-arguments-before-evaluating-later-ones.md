@@ -35,3 +35,21 @@ That is also what `sep=`/`end=` will want when they land
 
 `make test-nilpy` + self-host byte-identical, plus a print whose second
 argument raises, under a handler that prints a fallback.
+
+## CLOSED
+
+Fixed exactly along the suggested direction: PyParsePrint now evaluates each
+argument into a hidden temp (hoisted, run before the print statement, in
+parse order) instead of handing AN_WRITELN the live expression — so nothing
+AN_WRITELN's own lowering does can raise mid-emission, since every value is
+already sitting in a slot by the time it runs. Scoped to PyParsePrint's own
+AST construction; the shared AN_WRITELN/Pascal writeln codegen is untouched.
+
+Confirmed against the ticket's own repro plus multi-argument, container,
+float/bool/None, function-call-argument, and `print(*xs)` shapes — all match
+CPython.
+
+Test: test/test_nilpy_print_arg_eval_order.npy. Gate: make test-nilpy green,
+self-host fixedpoint, testmgr --tier quick.
+
+Ticket closed.
