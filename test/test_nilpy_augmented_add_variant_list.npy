@@ -1,0 +1,37 @@
+# `xs += ys` on a VARIANT-typed list (an unannotated parameter, an element
+# pulled out of a list/dict) rebuilt a NEW list and rebound the local instead
+# of extending in place -- the caller/aliaser never saw the mutation.
+# bug-nilpy-augmented-add-on-variant-list-is-not-in-place
+# Every expectation is CPython's own output.
+
+def grow(l):
+    l += [9]
+c = [1]
+grow(c)
+print(c)
+
+vs = [[1]]
+e = vs[0]
+e += [5]
+print(vs[0])
+
+# an ANNOTATED parameter (statically tyClass) already worked -- must keep working
+def grow2(l: list):
+    l += [9]
+c2 = [1]
+grow2(c2)
+print(c2)
+
+# the METHOD forms already dispatched correctly through a variant
+l3 = [1]
+l3.extend([9])
+print(l3)
+
+l4 = [1]
+l4.append(9)
+print(l4)
+
+d = {"k": [1]}
+g = d["k"]
+g += [8]
+print(d["k"])

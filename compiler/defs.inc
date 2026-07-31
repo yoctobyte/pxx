@@ -547,6 +547,13 @@ const
     is an IDENTITY comparison and must NOT be rewritten into a by-contents
     compare (bug-nilpy-is-on-two-lists-compares-contents). }
   PY_BINOP_IDENTITY = 1;
+  { AN_BINOP marker in ASTSLen: this `+` came from an AUGMENTED assignment
+    (`l += [9]`) whose target's STATIC type is a variant, not a known
+    TPyList — the arithmetic lowering picks pyaugadd_v instead of pyadd_v so a
+    list target is extended IN PLACE (every alias sees the mutation) rather
+    than rebound to a new list the caller never sees
+    (bug-nilpy-augmented-add-on-variant-list-is-not-in-place). }
+  PY_BINOP_AUGADD = 2;
 
   VT_EMPTY   = 0;   { unassigned slot; payload ignored }
   VT_INT     = 1;   { payload = sign-extended Int64 }

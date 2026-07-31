@@ -11117,6 +11117,16 @@ begin
       end;
       node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(augTk);
       ASTLeft[node] := lhsNode; ASTRight[node] := CurASTNode;
+      { `l += y` where l's STATIC type is a variant (an unannotated parameter,
+        a list out of a list/dict, ...): PyNodeListCi above only recognises a
+        STATICALLY tyClass/TPyList target, so this is the variant case the
+        in-place `extend` above cannot reach. Mark the node so the IR's
+        variant-dispatch arm for `+` picks pyaugadd_v, which extends IN PLACE
+        when the runtime value turns out to hold a list (mutating the object
+        every alias shares) and otherwise behaves exactly like pyadd_v
+        (bug-nilpy-augmented-add-on-variant-list-is-not-in-place). }
+      if (augTk = tkPlus) and (IntToTypeKind(ASTTk[lhsNode]) = tyVariant) then
+        ASTSLen[node] := PY_BINOP_AUGADD;
       { widen, don't copy the lhs type: `n -= 0x10000000000000000` on an int
         target must type the binop PROMO or the wide literal is machine-lowered
         (out of range); the promo->int store then narrows mod 2^64 }
@@ -11236,6 +11246,11 @@ begin
     PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(augTk);
     ASTLeft[node] := PyMakeIdent(symIdx); ASTRight[node] := CurASTNode;
+    { see the twin lhs-expression site's note: a variant target's `+=` must
+      extend a runtime list IN PLACE rather than rebind
+      (bug-nilpy-augmented-add-on-variant-list-is-not-in-place). }
+    if (augTk = tkPlus) and (Syms[symIdx].TypeKind = tyVariant) then
+      ASTSLen[node] := PY_BINOP_AUGADD;
     { widen, don't copy the target type: `n -= 0x10000000000000000` on an int
       target must type the binop PROMO (see the twin lhs-expression site) }
     ASTTk[node] := Ord(PyWiden(Syms[symIdx].TypeKind,

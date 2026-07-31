@@ -5846,7 +5846,11 @@ begin
           arm still answering `3 + "ab"` with "ab". }
         fdTk := tyBoolean;
         if Integer(ASTIVal[node]) = Ord(tkPlus) then
-        begin fdName := 'pyadd_v'; fdTk := tyVariant; end
+        begin
+          if ASTSLen[node] = PY_BINOP_AUGADD then fdName := 'pyaugadd_v'
+          else fdName := 'pyadd_v';
+          fdTk := tyVariant;
+        end
         else if Integer(ASTIVal[node]) = Ord(tkMinus) then
         begin fdName := 'pysub_v'; fdTk := tyVariant; end
         else if Integer(ASTIVal[node]) = Ord(tkSlash) then

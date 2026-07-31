@@ -694,6 +694,7 @@ function pyfloormod_v(const a: Variant; const b: Variant): Variant;
   boolean `and`/`or`; these are `&`/`|`). pycmp_v returns -1/0/1 with Python
   cross-type numeric rules; pyeq_v is value equality across tags. }
 function pyadd_v(const a: Variant; const b: Variant): Variant;
+function pyaugadd_v(const a: Variant; const b: Variant): Variant;
 function pysub_v(const a: Variant; const b: Variant): Variant;
 function pymod_v(const a: Variant; const b: Variant): Variant;
 function pybitand_v(const a: Variant; const b: Variant): Variant;
@@ -3634,6 +3635,43 @@ begin
     r^.VType := 2;
     r^.Payload := pyvar_to_int(a) + pyvar_to_int(b);
   end;
+end;
+
+{ `l += y` where `l`'s STATIC type is a variant (an unannotated parameter, an
+  element pulled out of a list/dict, ...) — the compile-time PyNodeListCi
+  check that lowers a STATICALLY-known list target's `+=` to `TPyList.extend`
+  cannot see through a variant, so this is the run-time fallback. When the
+  variant holds a TPyList, extend it IN PLACE (every alias sees the new
+  elements, exactly like the statically-typed case and like Python's
+  `list.__iadd__`) and hand back the SAME object rather than a new one, so the
+  caller's `l := pyaugadd_v(l, y)` rebinds `l` to what it already pointed at.
+  Anything else falls through to ordinary `pyadd_v` (numbers add, strings
+  concatenate, and a genuine type mismatch raises there)
+  (bug-nilpy-augmented-add-on-variant-list-is-not-in-place). }
+function pyaugadd_v(const a: Variant; const b: Variant): Variant;
+var pa, pb: PPyVarRec; oa, ob: TObject; i: Integer;
+begin
+  pa := PPyVarRec(@a); pb := PPyVarRec(@b);
+  if pa^.VType = 7 then
+  begin
+    oa := TObject(pyvarobj(a));
+    if oa is TPyList then
+    begin
+      if (pb^.VType = 7) and (TObject(pyvarobj(b)) is TPyList) then
+      begin
+        ob := TObject(pyvarobj(b));
+        for i := 0 to TPyList(ob).count - 1 do TPyList(oa).append(TPyList(ob).at(i));
+      end
+      else
+        TPyList(oa).append(b);
+      { hand back the SAME object, retained -- PyVarSlotInit is the shared
+        "copy a variant slot, retaining a managed payload" step pyor_v/pyand_v
+        already use for returning an OPERAND as-is. }
+      PyVarSlotInit(PPyVarRec(@Result), pa);
+      Exit;
+    end;
+  end;
+  Result := pyadd_v(a, b);
 end;
 
 function pysub_v(const a: Variant; const b: Variant): Variant;
