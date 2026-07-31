@@ -32,7 +32,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (177)
+## backlog (178)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -45,6 +45,7 @@ lives in git, not in a timestamp._
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
 | bug-crtl-headers-lost-when-cwd-is-not-the-repo-root | C | 60 | bug | C: pxx's own crtl headers are found only from the repo root — elsewhere <stdarg.h>/<math.h> silently come from /usr/include | — |
+| bug-elf-missing-pt-gnu-stack | A | 70 | bug | ELF writer emits no PT_GNU_STACK, so our .so files are refused by newer kernels | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
@@ -2862,6 +2863,7 @@ lives in git, not in a timestamp._
 ## Ready (no unmet blocker)
 
 - [urgent p 55] [A] regression-fpc-seed-drift-b1976-stale
+- [p 70] [A] bug-elf-missing-pt-gnu-stack
 - [p 70] [T] bug-t-tstate-index-conflicts-between-watcher-hosts
 - [p 70] [T] regression-cascade-b45c759f9e65
 - [p 65] [C] bug-c-main-missing-implicit-return-zero
