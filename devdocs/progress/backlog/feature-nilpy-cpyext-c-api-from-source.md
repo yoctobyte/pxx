@@ -22,6 +22,37 @@ extension then **links into a static binary**, which is exactly what a wheel
 can never give you. "Just compile the library" stays useful forever; a
 per-library mimic never does.
 
+## Why loading a prebuilt `.so` is not a shortcut (measured 2026-07-31)
+
+`PIL/_imaging.cpython-312-x86_64-linux-gnu.so` has **82 undefined `Py*`
+symbols** (several private: `_PyArg_ParseTuple_SizeT`, `_PyBytes_Resize`) and
+does NOT link `libpython` — they resolve from the HOST executable at load time.
+Exporting 82 functions is the easy half and not the problem.
+
+What the extension's machine code already contains, inlined and unreachable:
+
+- `Py_INCREF`/`Py_DECREF` write `ob_refcnt` **at offset 0** of the object. Not
+  a call — not interceptable. Our heap objects would have to carry that header.
+- fixed struct offsets: `PyTypeObject`'s ~80 slots, `ob_size`, direct
+  `((PyListObject*)o)->ob_item[i]` indexing.
+- `PyGC_Head` immediately BEFORE the object, because `PyObject_GC_Track` links it.
+- 3.12 specifics: immortal-refcount encoding, the reworked `PyLongObject` layout.
+
+So loading a wheel is not "implement an API", it is **replicate a binary object
+model per CPython minor version** — and an extension's init often imports
+Python modules (`import_array()`), dragging in the import machinery, unicode
+objects, exception and thread state, the GIL. C++ and CUDA are the irrelevant
+part: `libstdc++`/`libcudart` are ordinary shared libraries.
+
+For reference, the tiers that were weighed and rejected: (A) full ABI clone —
+bigger than pxx, chases a moving target; (B) limited API / abi3 only — bounded
+by design, but `PyObject`'s header and refcounts are still inlined, and the
+libraries this would be for do not ship abi3; (C) out-of-process CPython over
+RPC — works today, kept as an escape hatch, no compiler-design damage;
+(D) bind the NATIVE library directly under our own surface — the preferred
+answer for the CUDA/C++ tier, since we are a native compiler and their Python
+layer is a thin wrapper anyway.
+
 ## Shape of the work
 
 Two halves that meet at a header:
@@ -84,6 +115,8 @@ family (`test_cpyext_*.npy` + its `.c`) gated in the Makefile, exactly as the
 NilPy tests are.
 
 ## Notes
+
+- Ladder position and the recipe/install policy: **`devdocs/dev/python-libraries.md`**.
 
 - The C source is compiled by **cfront**, so every extension is also a cfront
   corpus stressor — expect the first walls to be ordinary C-frontend gaps

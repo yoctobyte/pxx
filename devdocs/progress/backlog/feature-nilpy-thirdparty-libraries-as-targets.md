@@ -16,6 +16,12 @@ Driving corpus: **neuzelaar** (`~/neuzelaar2`, `git@github.com:yoctobyte/neuzela
 tests green in 12s**, three shells (headless / console / tk). It is the right
 forcing target because its dependency set contains one of every class below.
 
+**Design note: [`devdocs/dev/python-libraries.md`](../../dev/python-libraries.md)** —
+the classification, the strategy ladder (compile-source > cpyext > bind-native >
+mimic > own), the per-library RECIPE format, and the install policy (pip at
+development time for source and oracle; nothing at run time). Read that first;
+this ticket tracks the work.
+
 ## The classification (this is the whole point of the ticket)
 
 A dependency is NOT "pure Python or C bindings". There are four kinds, and they
