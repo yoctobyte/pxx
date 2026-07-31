@@ -136,6 +136,14 @@ function PXXObjAllocRaw2(size: NativeInt): Pointer;
 procedure PXXObjRetain(p: Pointer);
 procedure PXXObjRelease(p: Pointer);
 procedure PXXObjFree(p: Pointer);
+{ TRUE iff p is a live PXX_OBJ_MAGIC_RAW block -- today that means exactly one
+  thing, a pybound_new {code,recv} pair (see the constant's own comment) --
+  so this doubles as "is this bare POINTER a bound-method/def-value object",
+  usable anywhere only the unwrapped pointer survives (a callable-typed
+  parameter boxed as Pointer, not Variant, loses the VType=8 tag that would
+  normally answer this question).
+  feature-nilpy-callable-value-unified-dispatch }
+function PXXObjIsBoundPair(p: Pointer): Boolean;
 { COM/ARC interface ARC helpers dispatch through the IMT via an indirect call,
   which the ESP (xtensa/riscv32) backends cannot lower yet; ESP has no COM
   interfaces anyway, so exclude them there (their RegisterProc is likewise
@@ -1500,6 +1508,12 @@ function PXXObjPlausible(p: Pointer): Boolean;
 begin
   PXXObjPlausible := (HeapLow <> 0) and ((Int64(p) and 7) = 0) and
                      (Int64(p) >= HeapLow + 24) and (Int64(p) < HeapHigh);
+end;
+
+function PXXObjIsBoundPair(p: Pointer): Boolean;
+begin
+  PXXObjIsBoundPair := (p <> nil) and PXXObjPlausible(p) and
+                       (PWord(Int64(p) - 8)^ = PXX_OBJ_MAGIC_RAW);
 end;
 
 function PXXObjAllocRaw2(size: NativeInt): Pointer;

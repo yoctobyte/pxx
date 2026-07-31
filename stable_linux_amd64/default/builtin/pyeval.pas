@@ -3625,8 +3625,14 @@ procedure PyNotCallable(const cb: Variant);
   used as a callee. Python raises TypeError; the older pyvar_callee_addr path
   says the same thing, so the message stays recognisable. }
 begin
+  { TypeError, not a bare Exception: `except TypeError:` must see it. This was
+    the one raise site of the family left in pyeval when the pylib ones were
+    converted (bug-nilpy-pytypeerror-halts-instead-of-raising), so `n()` on a
+    None binding was catchable only as `except Exception:` while every other
+    NilPy TypeError matched by name. The class name is printed by the unhandled
+    handler, so the text stays identical without the literal prefix. }
   if PPyRec(@cb)^.Payload = 0 then
-    raise Exception.Create('TypeError: object is not callable — the name is '
+    raise TypeError.Create('object is not callable — the name is '
       + 'None (an import that did not resolve, or a value never assigned)');
 end;
 
@@ -3766,6 +3772,61 @@ begin
   args.Free;
 end;
 
+type
+  { Local to this dispatcher: a callable value reaching `key: Pointer` has
+    already lost its Variant wrapper (and with it, for a bound-method-shaped
+    value, the VType=8 tag that would normally answer pycallback_is) -- these
+    match pylib.pas's own private TPyCbF1/TPyCbM1, redeclared here since that
+    pair lives in pylib's implementation section, not its interface. }
+  TPyKeyCbF1 = function(const a0: Variant): Variant;
+  TPyKeyCbM1 = function(recv: Pointer; const a0: Variant): Variant;
+  { matches pylib.pas's own private TPyBoundRec -- the {code,recv} pair
+    pybound_new allocates; also private to that unit's implementation. }
+  TPyKeyBoundRec = record Code, Recv: Pointer; end;
+  PPyKeyBoundRec = ^TPyKeyBoundRec;
+
+{ Call an arbitrary callable VALUE reaching a Pointer-typed parameter (a
+  `key=`/`cmp=`-style callback argument) with one Variant argument, keeping
+  the result -- unlike pyclosure_call_ptr/pyboundfn_call_ptr, which exist for
+  the discard-the-result (event-handler) callers and answer 0. Covers all
+  four shapes a NilPy callable value can take:
+    - a bound method / a builtin or plain def used as a bare value
+      (`f = len`, `f = obj.method`) -- pybound_new's {code,recv} pair,
+      identified on the bare pointer via PXXObjIsBoundPair (the Variant-level
+      VType=8 tag that pycallback_is normally reads is not available here);
+    - a pyeval closure (an interpreted lambda/nested-def) -- pyclosure_is;
+    - a lifted bound-fn (a compiled lambda/nested-def with captures) --
+      pyboundfn_is;
+    - a plain compiled def's bare code address (the one shape with no tag at
+      all, identified purely by elimination of the other three).
+  feature-nilpy-callable-value-unified-dispatch }
+function PyCallKey1(key: Pointer; const a0: Variant): Variant;
+var code, recv: Pointer; m1: TPyKeyCbM1; f1: TPyKeyCbF1; res: Variant;
+begin
+  Result := pynone;
+  if key = nil then Exit;
+  if PXXObjIsBoundPair(key) then
+  begin
+    code := PPyKeyBoundRec(key)^.Code;
+    recv := PPyKeyBoundRec(key)^.Recv;
+    if code = nil then Exit;
+    if recv = nil then begin f1 := TPyKeyCbF1(code); Result := f1(a0); end
+    else begin m1 := TPyKeyCbM1(code); Result := m1(recv, a0); end;
+    Exit;
+  end;
+  if pyclosure_is(key) then begin Result := pyclosure_call1(key, a0); Exit; end;
+  if pyboundfn_is(key) then
+  begin
+    res := pynone;
+    pyboundfn_callv(key, a0, res);
+    Result := res;
+    Exit;
+  end;
+  { shape D: a bare compiled def's code address, no tag to check }
+  f1 := TPyKeyCbF1(key);
+  Result := f1(a0);
+end;
+
 function sorted(l: TPyList; key: Pointer; reverse: Boolean): TPyList;
 var r, keys: TPyList; i, j: Integer; kv, ev: Variant; swapped: Boolean;
 begin
@@ -3777,7 +3838,7 @@ begin
   begin
     ev := l.at(i);
     r.append(ev);
-    if (key <> nil) and pyclosure_is(key) then keys.append(pyclosure_call1(key, ev))
+    if key <> nil then keys.append(PyCallKey1(key, ev))
     else keys.append(ev);
   end;
   { insertion sort, moving the key list in lockstep so a key is computed once }

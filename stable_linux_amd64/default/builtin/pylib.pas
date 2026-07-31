@@ -116,6 +116,12 @@ type
       reproduces the file byte for byte — which is what CPython's read()
       returns. Lives here because that list IS the file object in this model. }
     function read: AnsiString;
+    { close()/readlines() on a read-mode handle: the read-slurp model already
+      loaded the whole file into this list, so close is a no-op and readlines
+      is just the list itself (bug-nilpy-file-write-drops-data-and-read-to-
+      print-dumps-rtti-memory). }
+    procedure close;
+    function readlines: TPyList;
     property Items[i: Integer]: Variant read at write put; default;
   end;
 
@@ -347,7 +353,13 @@ type
     constructor Create;
     function read(u: Int64): TPyBytes;
     function readline: TPyBytes;
-    function write(b: TPyBytes): Int64;
+    function write(b: TPyBytes): Int64; overload;
+    { Python's TEXT-mode write takes a str, and that is how every ordinary
+      program spells it. Without this overload `f.write("hello")` resolved to
+      the TPyBytes one, passed the string's handle as a buffer and wrote ZERO
+      bytes -- the file was created and left empty, with no error
+      (bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory). }
+    function write(const s: AnsiString): Int64; overload;
     procedure seek(pos: Int64); overload;
     procedure seek(pos: Int64; whence: Int64); overload;
     function tell: Int64;
@@ -662,6 +674,20 @@ function pylen_v(const v: Variant): Int64;
 function pyord_v(const v: Variant): Int64;
 function pyord_s(const s: AnsiString): Int64;
 function pymul_v(const a: Variant; const b: Variant): Variant;
+{ Python's `**`. int**non-negative-int is exact within Int64 (exponentiation
+  by squaring, so it inherits whatever overflow behaviour chained `*` already
+  has, rather than a separate wrapping rule); a negative exponent or either
+  operand a float goes through the float path (also squaring when the
+  exponent is a whole number, even a negative or float-typed one, so a
+  negative BASE with a whole exponent -- `(-2.0) ** 3` -- stays exact rather
+  than routing through Ln of a negative number). A genuinely fractional
+  exponent on a negative base is the one shape CPython answers with a complex
+  number; there is no complex type here, so it degrades to NaN.
+  feature-nilpy-power-operator-and-divmod }
+function pypow_v(const a: Variant; const b: Variant): Variant;
+{ Python's `divmod(a, b)` -- (a // b, a % b) as a 2-tuple, both of which are
+  already correct on negative operands via pyfloordiv_v/pyfloormod_v. }
+function pydivmod_v(const a: Variant; const b: Variant): TPyList;
 function pyvar_to_float(const v: Variant): Double;
 function pyvar_to_bool(const v: Variant): Boolean;
 function pyvar_to_char(const v: Variant): Char;
@@ -682,6 +708,7 @@ function pyfloormod_v(const a: Variant; const b: Variant): Variant;
   boolean `and`/`or`; these are `&`/`|`). pycmp_v returns -1/0/1 with Python
   cross-type numeric rules; pyeq_v is value equality across tags. }
 function pyadd_v(const a: Variant; const b: Variant): Variant;
+function pyaugadd_v(const a: Variant; const b: Variant): Variant;
 function pysub_v(const a: Variant; const b: Variant): Variant;
 function pymod_v(const a: Variant; const b: Variant): Variant;
 function pybitand_v(const a: Variant; const b: Variant): Variant;
@@ -844,6 +871,13 @@ function pyenumerate(a: TPyList): TPyList;
   zero rather than CPython's banker's rounding: the difference shows only on an
   exact .5 at the last digit, and matching it needs decimal arithmetic. }
 function pyround_n(x: Double; n: Integer): Double;
+{ Python's math.floor/math.ceil return an int, unlike the RTL Math unit's
+  Floor/Ceil (Double->Double, shared with the Pascal frontend and left alone
+  here) -- these are the NilPy-specific int-returning shims, dispatched by
+  name ahead of ordinary qualified-call resolution so `import math` never
+  reaches the RTL's own Floor/Ceil for these two names. }
+function pymath_floor(x: Double): Int64;
+function pymath_ceil(x: Double): Int64;
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
@@ -1065,9 +1099,8 @@ function pyord_s(const s: AnsiString): Int64;
 begin
   if Length(s) <> 1 then
   begin
-    writeln('TypeError: ord() expected a character, but string of length ',
-            Length(s), ' found');
-    Halt(1);
+    raise TypeError.Create('ord() expected a character, but string of length ' +
+                           pystr_of(Int64(Length(s))) + ' found');
   end;
   Result := Ord(s[1]);
 end;
@@ -1079,8 +1112,7 @@ begin
   if i < 0 then i := n + i;
   if (i < 0) or (i >= n) then
   begin
-    writeln('IndexError: string index out of range');
-    Halt(1);
+    raise IndexError.Create('string index out of range');
   end;
   Result := s[i + 1];
 end;
@@ -1619,8 +1651,8 @@ begin
     tag := pyvartag(v);
     if (tag <> 6) and (tag <> 5) then
     begin
-      writeln('TypeError: sequence item ', i, ': expected str instance');
-      Halt(1);
+      raise TypeError.Create('sequence item ' + pystr_of(Int64(i)) +
+                             ': expected str instance');
     end;
     if i > 0 then Result := Result + sep;
     Result := Result + VariantToStr(v);
@@ -1698,20 +1730,102 @@ end;
 
 function pydynattr_get(obj: Pointer; const name: AnsiString): Variant;
 begin
+  { Reached with a receiver STATICALLY known to be a real class instance (or
+    nil, a class-typed field/local defaulting to None) — never an int/str/etc
+    scalar, so ClassName on a non-nil `obj` is always safe here. A miss is a
+    genuinely missing attribute, not a "maybe dynamic, maybe not" ambiguity:
+    hasattr/getattr(o, n, default) both resolve through pydynattr_has FIRST
+    and never reach this branch on a miss (see their call sites in
+    parser.inc), so raising cannot break either. Silently answering None
+    instead let a typo'd attribute name travel arbitrarily far as a plausible
+    value before anything noticed
+    (bug-nilpy-missing-attribute-yields-none-instead-of-attributeerror). }
   if pydynattr_has(obj, name) then
     Result := PyDynAttrStore.fetch(PyDynAttrKey(obj, name))
+  else if obj = nil then
+    raise AttributeError.Create('''NoneType'' object has no attribute ''' + name + '''')
   else
+    raise AttributeError.Create('''' + TObject(obj).ClassName +
+      ''' object has no attribute ''' + name + '''');
+end;
+
+function PyVarTypeName(t: Int64): AnsiString; forward;
+
+function pydynattr_get_v(const v: Variant; const name: AnsiString): Variant;
+var obj: Pointer; tg: Int64; cn: AnsiString;
+begin
+  { Reached with a receiver that is a VARIANT — a for-loop element, `d.get(k)`,
+    a plain unannotated parameter — whose runtime tag is NOT known at compile
+    time. Unlike pydynattr_get above, `pyvarobj(v)`'s raw payload is only a
+    real object pointer when the tag says so (VT_OBJECT); for any other tag
+    (str/int/float/bool) it is scalar bits reinterpreted as an address, and
+    ClassName on that would dereference garbage. Check the tag first. }
+  obj := pyvarobj(v);
+  if pydynattr_has(obj, name) then
   begin
-    { Python raises AttributeError; None is returned here because uforth always
-      guards a dynamic read with hasattr first. }
-    PPyVarRec(@Result)^.VType := 0;
-    PPyVarRec(@Result)^.Payload := 0;
+    Result := PyDynAttrStore.fetch(PyDynAttrKey(obj, name));
+    Exit;
   end;
+  tg := pyvartag(v);
+  if tg = 7 then
+  begin
+    if obj = nil then cn := 'NoneType' else cn := TObject(obj).ClassName;
+  end
+  else
+    cn := PyVarTypeName(tg);
+  raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + name + '''');
+end;
+
+function pyvar_is_strtag(const v: Variant): Boolean;
+begin
+  Result := pyvartag(v) in [5, 6];
+end;
+
+{ ALWAYS raises. `None.upper()` (or any str method on a non-str variant) used
+  to render the receiver through pystr_of first — a None/int/float/bool
+  receiver stringifies to plausible-looking TEXT ('None', '5', ...) and the
+  method then ran on THAT, so `None.upper()` answered 'NONE' instead of
+  raising (bug-nilpy-missing-attribute-yields-none-instead-of-attributeerror).
+  The call site guards with pyvar_is_strtag first and only reaches this on a
+  genuine non-str receiver. }
+procedure pydynattr_no_method(const v: Variant; const mname: AnsiString);
+var obj: Pointer; tg: Int64; cn: AnsiString;
+begin
+  tg := pyvartag(v);
+  if tg = 7 then
+  begin
+    obj := pyvarobj(v);
+    if obj = nil then cn := 'NoneType' else cn := TObject(obj).ClassName;
+  end
+  else
+    cn := PyVarTypeName(tg);
+  raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + mname + '''');
 end;
 
 function pyvar_getitem(const v: Variant; const key: Variant): Variant;
-var o: TObject; ki: Int64;
+var o: TObject; ki: Int64; tg: Int64;
 begin
+  { CHECK THE TAG BEFORE CASTING. This cast to TObject was unconditional, so a
+    variant holding a STRING had its character data dereferenced as an object
+    and the `is TPyDict` test read a VMT pointer out of string bytes ->
+    SIGSEGV. Reached by three of the commonest shapes in Python:
+      def f(s): return s[0]      (an unannotated str parameter)
+      for w in words: w[0]       (a for-loop variable is a variant)
+      xs[0][0]                   (a string that came out of a container)
+    pyvar_slice, ten lines below, has always tested `pyvartag(v) = 6` first --
+    the same predicate written in two places, and only one of them grew the
+    string case (bug-nilpy-indexing-an-unannotated-str-parameter-segfaults). }
+  tg := pyvartag(v);
+  if (tg = 6) or (tg = 5) then
+  begin
+    ki := PPyVarRec(@key)^.Payload;
+    { pystr_at applies Python's negative-index rule and raises IndexError out
+      of range, so this arm inherits both }
+    Result := pystr_ofchar(pystr_at(pystr_of(v), ki));
+    Exit;
+  end;
+  if tg <> 7 then
+    raise TypeError.Create('object is not subscriptable');
   o := TObject(pyvarobj(v));
   if o is TPyDict then
     Result := TPyDict(o).fetch(key)
@@ -1763,8 +1877,7 @@ begin
   end
   else
   begin
-    WriteLn('TypeError: object does not support item assignment');
-    Halt(1);
+    raise TypeError.Create('object does not support item assignment');
   end;
 end;
 
@@ -2113,6 +2226,16 @@ end;
 function TPyList.read: AnsiString;
 begin
   read := pyfile_read(Self);
+end;
+
+procedure TPyList.close;
+begin
+  { no-op: nothing held open under the read-slurp model }
+end;
+
+function TPyList.readlines: TPyList;
+begin
+  readlines := Self;
 end;
 
 { Python `in` over a list/set-as-list. Same-tag equality only: ints/bools/
@@ -2706,6 +2829,18 @@ begin
   else pyround_n := -(Trunc(-x * scale + 0.5) / scale);
 end;
 
+function pymath_floor(x: Double): Int64;
+begin
+  Result := Trunc(x);
+  if (Frac(x) <> 0.0) and (x < 0.0) then Dec(Result);
+end;
+
+function pymath_ceil(x: Double): Int64;
+begin
+  Result := Trunc(x);
+  if (Frac(x) <> 0.0) and (x > 0.0) then Inc(Result);
+end;
+
 function pyenumerate(a: TPyList): TPyList;
 var r, pair: TPyList; i: Integer; pv: Variant;
 begin
@@ -2828,8 +2963,7 @@ begin
   end;
   if pyvartag(v) <> 7 then
   begin
-    WriteLn('TypeError: set() argument must be iterable');
-    Halt(1);
+    raise TypeError.Create('set() argument must be iterable');
   end;
   o := TObject(pyvarobj(v));
   if o is TPyList then
@@ -2843,8 +2977,7 @@ begin
     for i := 0 to kl.count - 1 do r.add(kl.at(i));
     Exit;
   end;
-  WriteLn('TypeError: set() argument must be iterable');
-  Halt(1);
+  raise TypeError.Create('set() argument must be iterable');
 end;
 
 function pydict_fromkeys(l: TPyList): TPyDict;
@@ -3388,6 +3521,104 @@ begin
   end;
 end;
 
+{ Self-contained double-precision ln/exp, used ONLY by pypow_v's fractional-
+  exponent path (`2 ** 0.5`). Deliberately hand-rolled rather than `uses Math`:
+  that unit declares its OWN `Max`/`Min` overloads (Integer/Integer and
+  Double/Double), and pulling it in here shadowed pylib's own `max`/`min`
+  overload set for the two-argument scalar form -- `max(d["n"], 1)` started
+  returning garbage (test_nilpy_minmax regressed). Precision is bounded by the
+  series/reduction below, not IEEE-exact, which is fine for a value that is
+  about to be str()'d through this compiler's own (separately, already
+  known-truncated) float formatter anyway. }
+function PyMathLn(x: Double): Double;
+const Ln2 = 0.6931471805599453;
+var e: Integer; m, t, tt, term, sum: Double; i: Integer;
+begin
+  e := 0; m := x;
+  while m >= 2.0 do begin m := m / 2.0; Inc(e); end;
+  while m < 1.0 do begin m := m * 2.0; Dec(e); end;
+  t := (m - 1.0) / (m + 1.0);
+  tt := t * t;
+  sum := t; term := t;
+  for i := 1 to 40 do
+  begin
+    term := term * tt;
+    sum := sum + term / (2 * i + 1);
+  end;
+  Result := 2.0 * sum + e * Ln2;
+end;
+
+function PyMathExp(x: Double): Double;
+const Ln2 = 0.6931471805599453;
+var n, i: Integer; r, term, sum: Double; neg: Boolean;
+begin
+  neg := x < 0.0;
+  if neg then x := -x;
+  n := Trunc(x / Ln2 + 0.5);
+  r := x - n * Ln2;
+  term := 1.0; sum := 1.0;
+  for i := 1 to 25 do
+  begin
+    term := term * r / i;
+    sum := sum + term;
+  end;
+  for i := 1 to n do sum := sum * 2.0;
+  if neg then Result := 1.0 / sum else Result := sum;
+end;
+
+function pypow_v(const a: Variant; const b: Variant): Variant;
+var pa, pb, r: PPyVarRec;
+    n: Int64; ir, ibase: Int64;
+    fr, fbase, fexp: Double; negExp: Boolean;
+begin
+  pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
+  if (not PyVarIsFloat(pa)) and (not PyVarIsFloat(pb)) and
+     (pyvar_to_int(b) >= 0) then
+  begin
+    n := pyvar_to_int(b);
+    ibase := pyvar_to_int(a);
+    ir := 1;
+    while n > 0 do
+    begin
+      if (n and 1) = 1 then ir := ir * ibase;
+      ibase := ibase * ibase;
+      n := n shr 1;
+    end;
+    r^.VType := 2;
+    r^.Payload := ir;
+    Exit;
+  end;
+  fbase := pyvar_to_float(a);
+  fexp := pyvar_to_float(b);
+  if (fbase = 0.0) and (fexp < 0.0) then
+    raise ZeroDivisionError.Create('0.0 cannot be raised to a negative power');
+  if Frac(fexp) = 0.0 then
+  begin
+    negExp := fexp < 0.0;
+    n := Trunc(Abs(fexp));
+    fr := 1.0;
+    while n > 0 do
+    begin
+      if (n and 1) = 1 then fr := fr * fbase;
+      fbase := fbase * fbase;
+      n := n shr 1;
+    end;
+    if negExp then fr := 1.0 / fr;
+  end
+  else
+    fr := PyMathExp(fexp * PyMathLn(fbase));
+  r^.VType := 3;
+  PPyDouble(@r^.Payload)^ := fr;
+end;
+
+function pydivmod_v(const a: Variant; const b: Variant): TPyList;
+begin
+  Result := TPyList.Create;
+  Result.FIsTuple := True;
+  Result.append(pyfloordiv_v(a, b));
+  Result.append(pyfloormod_v(a, b));
+end;
+
 function pyor_v(const a: Variant; const b: Variant): Variant;
 var src, dst: PPyVarRec;
 begin
@@ -3535,6 +3766,43 @@ begin
     r^.VType := 2;
     r^.Payload := pyvar_to_int(a) + pyvar_to_int(b);
   end;
+end;
+
+{ `l += y` where `l`'s STATIC type is a variant (an unannotated parameter, an
+  element pulled out of a list/dict, ...) — the compile-time PyNodeListCi
+  check that lowers a STATICALLY-known list target's `+=` to `TPyList.extend`
+  cannot see through a variant, so this is the run-time fallback. When the
+  variant holds a TPyList, extend it IN PLACE (every alias sees the new
+  elements, exactly like the statically-typed case and like Python's
+  `list.__iadd__`) and hand back the SAME object rather than a new one, so the
+  caller's `l := pyaugadd_v(l, y)` rebinds `l` to what it already pointed at.
+  Anything else falls through to ordinary `pyadd_v` (numbers add, strings
+  concatenate, and a genuine type mismatch raises there)
+  (bug-nilpy-augmented-add-on-variant-list-is-not-in-place). }
+function pyaugadd_v(const a: Variant; const b: Variant): Variant;
+var pa, pb: PPyVarRec; oa, ob: TObject; i: Integer;
+begin
+  pa := PPyVarRec(@a); pb := PPyVarRec(@b);
+  if pa^.VType = 7 then
+  begin
+    oa := TObject(pyvarobj(a));
+    if oa is TPyList then
+    begin
+      if (pb^.VType = 7) and (TObject(pyvarobj(b)) is TPyList) then
+      begin
+        ob := TObject(pyvarobj(b));
+        for i := 0 to TPyList(ob).count - 1 do TPyList(oa).append(TPyList(ob).at(i));
+      end
+      else
+        TPyList(oa).append(b);
+      { hand back the SAME object, retained -- PyVarSlotInit is the shared
+        "copy a variant slot, retaining a managed payload" step pyor_v/pyand_v
+        already use for returning an OPERAND as-is. }
+      PyVarSlotInit(PPyVarRec(@Result), pa);
+      Exit;
+    end;
+  end;
+  Result := pyadd_v(a, b);
 end;
 
 function pysub_v(const a: Variant; const b: Variant): Variant;
@@ -3744,13 +4012,35 @@ begin
 end;
 
 function pystr_repeat(const s: AnsiString; n: Int64): AnsiString;
+{ Sized ONCE and filled, not accumulated. `Result := Result + s` in the loop
+  reallocated and re-copied everything built so far on every iteration, so the
+  total work was 1+2+...+n characters -- quadratic. `"x" * 80000` took 19
+  seconds and `"x" * 100000` did not finish, while the very same string built by
+  an explicit `s = s + "x"` loop in NilPy completed fine: the idiom that LOOKS
+  like the fast one was the slow one (bug-nilpy-str-repeat-is-quadratic).
+  Found by a scaling curve -- every small case was fine and the failure read as
+  a hang, not a wrong answer. }
 var
-  i: Int64;
+  i, k, m, total: Int64;
+  j: Int64;
 begin
   Result := '';
-  if n <= 0 then Exit;
+  m := Length(s);
+  if (n <= 0) or (m = 0) then Exit;
+  { Python raises rather than trying to build something that cannot exist; a
+    silent wrap here would ask SetLength for a negative or tiny buffer and then
+    write past it. }
+  if n > (High(Int64) div m) then
+    raise OverflowError.Create('repeated string is too long');
+  total := m * n;
+  SetLength(Result, total);
+  k := 1;
   for i := 1 to n do
-    Result := Result + s;
+    for j := 1 to m do
+    begin
+      Result[k] := s[j];
+      k := k + 1;
+    end;
 end;
 
 function pystr_to_int(const s: AnsiString): Int64;
@@ -3857,8 +4147,7 @@ end;
 
 procedure PyBytesIndexError;
 begin
-  WriteLn('IndexError: bytearray index out of range');
-  Halt(1);
+  raise IndexError.Create('bytearray index out of range');
 end;
 
 constructor TPyBytes.Create(n: Integer);
@@ -4105,8 +4394,7 @@ begin
     o := TObject(pyvarobj(src));
     if o is TPyBytes then begin pybytes_setslice(b, lo, hi, TPyBytes(o)); Exit; end;
   end;
-  WriteLn('TypeError: byte slice assignment requires bytes');
-  Halt(1);
+  raise TypeError.Create('byte slice assignment requires bytes');
 end;
 
 { Little-endian, two's complement — the same layout the machine already uses,
@@ -4129,8 +4417,7 @@ begin
       pattern genuinely overflows. }
     if n < 8 then
     begin
-      WriteLn('OverflowError: can''t convert negative int to unsigned');
-      Halt(1);
+      raise OverflowError.Create('can''t convert negative int to unsigned');
     end;
     Result := TPyBytes.Create(n);
     u := v;
@@ -4153,8 +4440,7 @@ begin
   end;
   if not fits then
   begin
-    WriteLn('OverflowError: int too big to convert');
-    Halt(1);
+    raise OverflowError.Create('int too big to convert');
   end;
   Result := TPyBytes.Create(n);
   u := v;
@@ -4684,7 +4970,7 @@ begin
   { CPython os.remove RAISES on failure (deleting a missing file must be a
     catchable error — Forth-2012 DELETE-FILE expects a nonzero ior, not 0). }
   if r < 0 then
-    raise OSError.Create('FileNotFoundError: ' + path);
+    raise FileNotFoundError.Create(path);
   Result := Integer(r);
 end;
 
@@ -4697,7 +4983,7 @@ begin
   r := PyPalRename(@cs[1], @cd[1]);
   { CPython os.rename raises on failure, same as os.remove above }
   if r < 0 then
-    raise OSError.Create('FileNotFoundError: ' + src);
+    raise FileNotFoundError.Create(src);
   Result := Integer(r);
 end;
 
@@ -4713,7 +4999,7 @@ begin
   FillChar(buf[0], SizeOf(buf), 0);
   r := PyPalStat(@cs[1], @buf[0]);
   if r < 0 then
-    raise OSError.Create('FileNotFoundError: ' + path);
+    raise FileNotFoundError.Create(path);
   Result.st_mode := PInt64(@buf[24])^ and $FFFFFFFF;   { u32 st_mode (uid sits above) }
   Result.st_size := PInt64(@buf[48])^;
 {$endif}
@@ -5018,8 +5304,7 @@ begin
   content := pyfile_slurp(path, ok);
   if not ok then
   begin
-    WriteLn('FileNotFoundError: ', path);
-    Halt(1);
+    raise FileNotFoundError.Create(path);
   end;
   { split into lines, each KEEPING its trailing newline — Python's file
     iteration yields lines that way, and uforth strips the '\n' itself }
@@ -5246,8 +5531,34 @@ begin
     Result := pad + s;
 end;
 
+{ `{x:*^10}`-style: an explicit fill char (any char, defaulting to space)
+  followed by an alignment char, INCLUDING '^' (center) which the plain
+  zero/leftAlign PyFmtPad has no notion of. Kept as a separate function rather
+  than folded into PyFmtPad so every existing caller of PyFmtPad (the bare
+  '<'/'>'/'0' forms) stays on its byte-identical old path; only a spec that
+  actually names a fill char or '^' reaches this one.
+  feature-nilpy-fstring-format-spec }
+function PyFmtPadEx(const s: AnsiString; width: Integer; fillCh: Char;
+                    align: Char): AnsiString;
+var pad: AnsiString; i, need, leftN, rightN: Integer;
+begin
+  Result := s;
+  need := width - Length(s);
+  if need <= 0 then Exit;
+  pad := '';
+  for i := 1 to need do pad := pad + fillCh;
+  if align = '<' then Result := s + pad
+  else if align = '^' then
+  begin
+    leftN := need div 2;
+    rightN := need - leftN;
+    Result := Copy(pad, 1, leftN) + s + Copy(pad, 1, rightN);
+  end
+  else Result := pad + s;   { '>' or unset: right-align, same default as before }
+end;
+
 { Supported spec grammar, deliberately small and checked rather than guessed:
-    [ '<' | '>' ] [ '0' ] [ width ] [ 'd' | 'x' | 'X' | 'o' | 'b' | 's' ]
+    [ [fill] ('<' | '>' | '^') ] [ '0' ] [ width ] [ 'd' | 'x' | 'X' | 'o' | 'b' | 's' ]
   Anything else halts with the spec quoted, because a format spec decides what
   is PRINTED and silently ignoring one produces wrong output. }
 { The placeholder walk. Two variants rather than an open array: an open array
@@ -5401,10 +5712,27 @@ begin
       'x': spec := spec + 'x';
       'X': spec := spec + 'X';
       'o': spec := spec + 'o';
-      'f', 'F', 'e', 'E', 'g', 'G':
+      'f', 'F':
         begin
           if not hasPrec then prec := 6;
           spec := spec + '.' + pystr_of(Int64(prec)) + 'f';
+        end;
+      'e', 'E', 'g', 'G':
+        begin
+          { `e`/`g` have no equivalent in the {}-spec grammar `spec` targets
+            (an f-string `{x:e}` correctly refuses at compile time rather than
+            silently rendering fixed-point), so build the text directly here
+            and apply the same width/pad step `%s` uses just below, instead of
+            routing through pyformat_of's fixed-point-only case
+            (bug-nilpy-percent-e-and-g-silently-render-as-fixed-point). }
+          if not hasPrec then prec := 6;
+          if (conv = 'e') or (conv = 'E') then
+            outS := outS + PyFmtPad(PyFmtExp(pyvar_to_float(cur), prec, conv = 'E'),
+                                    width, zero, leftAlign)
+          else
+            outS := outS + PyFmtPad(PyFmtG(pyvar_to_float(cur), prec, conv = 'G'),
+                                    width, zero, leftAlign);
+          Continue;
         end;
       's', 'r':
         begin
@@ -5441,16 +5769,23 @@ begin
 end;
 
 function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
-var p, width: Integer; zero, leftAlign: Boolean; kind: Char; body: AnsiString;
+var p, width: Integer; zero, leftAlign: Boolean; kind, fillCh, align: Char;
+    body: AnsiString;
 begin
   p := 1;
   zero := False;
   leftAlign := False;
   width := 0;
   kind := 'd';
-  if (p <= Length(spec)) and ((spec[p] = '<') or (spec[p] = '>')) then
+  fillCh := ' '; align := #0;
+  if (p + 1 <= Length(spec)) and (spec[p + 1] in ['<', '>', '^']) then
   begin
-    leftAlign := spec[p] = '<';
+    fillCh := spec[p]; align := spec[p + 1]; leftAlign := align = '<';
+    Inc(p, 2);
+  end
+  else if (p <= Length(spec)) and (spec[p] in ['<', '>', '^']) then
+  begin
+    align := spec[p]; leftAlign := align = '<';
     Inc(p);
   end;
   if (p <= Length(spec)) and (spec[p] = '0') then
@@ -5498,18 +5833,29 @@ begin
       Halt(1);
     end;
   end;
-  Result := PyFmtPad(body, width, zero, leftAlign);
+  if align = '^' then Result := PyFmtPadEx(body, width, fillCh, '^')
+  else if fillCh <> ' ' then Result := PyFmtPadEx(body, width, fillCh, align)
+  else Result := PyFmtPad(body, width, zero, leftAlign);
 end;
 
 function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; overload;
-var p, width: Integer; leftAlign: Boolean;
+var p, width: Integer; leftAlign, explicitAlign: Boolean; fillCh, align: Char;
 begin
   p := 1;
   leftAlign := False;
+  explicitAlign := False;
   width := 0;
-  if (p <= Length(spec)) and ((spec[p] = '<') or (spec[p] = '>')) then
+  fillCh := ' '; align := #0;
+  if (p + 1 <= Length(spec)) and (spec[p + 1] in ['<', '>', '^']) then
   begin
-    leftAlign := spec[p] = '<';
+    fillCh := spec[p]; align := spec[p + 1]; leftAlign := align = '<';
+    explicitAlign := True;
+    Inc(p, 2);
+  end
+  else if (p <= Length(spec)) and (spec[p] in ['<', '>', '^']) then
+  begin
+    align := spec[p]; leftAlign := align = '<';
+    explicitAlign := True;
     Inc(p);
   end;
   while (p <= Length(spec)) and (spec[p] >= '0') and (spec[p] <= '9') do
@@ -5523,10 +5869,12 @@ begin
     WriteLn('Nil Python: unsupported f-string format spec "', spec, '" for a string');
     Halt(1);
   end;
-  { a string left-aligns by default, unlike a number }
-  if width > Length(s) then leftAlign := leftAlign or (spec = '') or
-                                         ((Length(spec) > 0) and (spec[1] <> '>'));
-  Result := PyFmtPad(s, width, False, leftAlign);
+  { a string left-aligns by default, unlike a number, UNLESS an align/fill was
+    given explicitly (a bare `{s:>5}` must still right-align) }
+  if (not explicitAlign) and (width > Length(s)) then leftAlign := True;
+  if align = '^' then Result := PyFmtPadEx(s, width, fillCh, '^')
+  else if fillCh <> ' ' then Result := PyFmtPadEx(s, width, fillCh, align)
+  else Result := PyFmtPad(s, width, False, leftAlign);
 end;
 
 function PyFmtFixed(d: Double; prec: Integer): AnsiString;
@@ -5554,17 +5902,109 @@ begin
   if neg then Result := '-' + Result;
 end;
 
+{ `%e`/`%E`: mantissa normalised to [1,10) via the SAME loop FloatToExpStr
+  uses, but the digit rule is PyFmtFixed's (exactly `prec` fractional digits,
+  half-up rounding) rather than FloatToExpStr's own trimmed natural form --
+  `"%.2e" % 1234.5` must print `1.23e+03`, not whatever digit count
+  FloatToStr's trim-trailing-zeros rule happens to leave.
+  bug-nilpy-percent-e-and-g-silently-render-as-fixed-point. }
+function PyFmtExp(v: Double; prec: Integer; upper: Boolean): AnsiString;
+var neg: Boolean; e: Integer; ms, es: AnsiString;
+begin
+  if v <> v then begin Result := 'nan'; Exit; end;
+  if v > 1.7976931348623157e308 then begin Result := 'inf'; Exit; end;
+  if v < -1.7976931348623157e308 then begin Result := '-inf'; Exit; end;
+  neg := v < 0.0;
+  if neg then v := -v;
+  e := 0;
+  if v <> 0.0 then
+  begin
+    while v >= 10.0 do begin v := v / 10.0; e := e + 1; end;
+    while v < 1.0 do begin v := v * 10.0; e := e - 1; end;
+  end;
+  ms := PyFmtFixed(v, prec);
+  { rounding to `prec` digits may have carried the mantissa up to 10.xxx --
+    e.g. 9.9999996 at prec=6 rounds to "10.000000" }
+  if (Length(ms) >= 2) and (ms[1] = '1') and (ms[2] = '0') then
+  begin
+    e := e + 1;
+    ms := PyFmtFixed(v / 10.0, prec);
+  end;
+  if e >= 0 then es := PyFmtBase(e, 10, False) else es := PyFmtBase(-e, 10, False);
+  while Length(es) < 2 do es := '0' + es;
+  if upper then Result := ms + 'E' else Result := ms + 'e';
+  if e >= 0 then Result := Result + '+' + es else Result := Result + '-' + es;
+  if neg then Result := '-' + Result;
+end;
+
+{ Trailing zeros (and a now-bare trailing '.') stripped from a PLAIN decimal
+  string -- `%g`'s own rule, applied to whichever of the fixed/exponential
+  forms it picked. }
+function PyStripTrailingZerosPlain(const s: AnsiString): AnsiString;
+var i: Integer;
+begin
+  if Pos('.', s) = 0 then begin Result := s; Exit; end;
+  i := Length(s);
+  while (i > 1) and (s[i] = '0') do Dec(i);
+  if (i > 1) and (s[i] = '.') then Dec(i);
+  Result := Copy(s, 1, i);
+end;
+
+{ Same, but for an EXPONENTIAL string -- strip only the mantissa (before
+  'e'/'E'), leaving the exponent suffix untouched. }
+function PyStripTrailingZerosExp(const s: AnsiString): AnsiString;
+var epos: Integer;
+begin
+  epos := Pos('e', s);
+  if epos = 0 then epos := Pos('E', s);
+  if epos = 0 then begin Result := PyStripTrailingZerosPlain(s); Exit; end;
+  Result := PyStripTrailingZerosPlain(Copy(s, 1, epos - 1)) +
+            Copy(s, epos, Length(s) - epos + 1);
+end;
+
+{ `%g`/`%G`: C's rule -- `%e` when the decimal exponent is < -4 or >= the
+  (significant-digit) precision, else `%f`; trailing zeros stripped either
+  way. `prec` is SIGNIFICANT digits (Python defaults it to 6, and 0/absent
+  means 1), unlike `%e`/`%f` where it counts digits after the point. }
+function PyFmtG(v: Double; prec: Integer; upper: Boolean): AnsiString;
+var e: Integer; av: Double; useExp: Boolean;
+begin
+  if prec <= 0 then prec := 1;
+  if v <> v then begin Result := 'nan'; Exit; end;
+  if v > 1.7976931348623157e308 then begin Result := 'inf'; Exit; end;
+  if v < -1.7976931348623157e308 then begin Result := '-inf'; Exit; end;
+  av := v;
+  if av < 0.0 then av := -av;
+  e := 0;
+  if av <> 0.0 then
+  begin
+    while av >= 10.0 do begin av := av / 10.0; e := e + 1; end;
+    while av < 1.0 do begin av := av * 10.0; e := e - 1; end;
+  end;
+  useExp := (e < -4) or (e >= prec);
+  if useExp then
+    Result := PyStripTrailingZerosExp(PyFmtExp(v, prec - 1, upper))
+  else
+    Result := PyStripTrailingZerosPlain(PyFmtFixed(v, prec - 1 - e));
+end;
+
 function pyformat_of(d: Double; const spec: AnsiString): AnsiString; overload;
 { `{x:.2f}` and friends. Same grammar as the integer spec plus a `.precision`
   group; `f` is fixed point, `g` is FloatToStr's compact form. }
 var p, width, prec: Integer; zero, leftAlign, hasPrec: Boolean;
-    kind: Char; body: AnsiString;
+    kind, fillCh, align: Char; body: AnsiString;
 begin
   p := 1; zero := False; leftAlign := False; width := 0;
   prec := 6; hasPrec := False; kind := 'f';
-  if (p <= Length(spec)) and ((spec[p] = '<') or (spec[p] = '>')) then
+  fillCh := ' '; align := #0;
+  if (p + 1 <= Length(spec)) and (spec[p + 1] in ['<', '>', '^']) then
   begin
-    leftAlign := spec[p] = '<';
+    fillCh := spec[p]; align := spec[p + 1]; leftAlign := align = '<';
+    Inc(p, 2);
+  end
+  else if (p <= Length(spec)) and (spec[p] in ['<', '>', '^']) then
+  begin
+    align := spec[p]; leftAlign := align = '<';
     Inc(p);
   end;
   if (p <= Length(spec)) and (spec[p] = '0') then begin zero := True; Inc(p); end;
@@ -5590,6 +6030,7 @@ begin
     Halt(1);
   end;
   if (kind = 'f') or (kind = 'F') then body := PyFmtFixed(d, prec)
+  else if (kind = 'e') or (kind = 'E') then body := PyFmtExp(d, prec, kind = 'E')
   else if kind = '%' then
     { Python's percentage form: multiply by 100, format fixed with the given
       precision (6 by default, as for `f`), append the sign. `{x:.0%}` is how a
@@ -5602,7 +6043,9 @@ begin
     WriteLn('Nil Python: unsupported f-string format spec "', spec, '"');
     Halt(1);
   end;
-  Result := PyFmtPad(body, width, zero, leftAlign);
+  if align = '^' then Result := PyFmtPadEx(body, width, fillCh, '^')
+  else if fillCh <> ' ' then Result := PyFmtPadEx(body, width, fillCh, align)
+  else Result := PyFmtPad(body, width, zero, leftAlign);
 end;
 
 function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; overload;
@@ -5715,8 +6158,12 @@ end;
 
 function pyrepr_of(const v: Variant): AnsiString; overload;
 begin
-  { only a STRING payload gains quotes; every other tag reprs as it strs }
-  if pyvartag(v) = 6 then
+  { A STRING payload gains quotes -- and so does a CHAR, which is tag 5 and was
+    missing here. Python has no character type: `s[0]` is a str of length 1 and
+    reprs with quotes like any other, so `{s[0]: 1}` printed `{a: 1}` where
+    CPython prints `{'a': 1}`
+    (bug-nilpy-char-vs-string-literal-ordering-compares-an-address). }
+  if (pyvartag(v) = 6) or (pyvartag(v) = 5) then
   begin
     Result := PyReprQuote(VariantToStr(v));
     Exit;
@@ -5754,8 +6201,9 @@ begin
   if l <> nil then n := l.count;
   if (n < lo) or (n > hi) then
   begin
-    WriteLn('TypeError: forwarded call got ', n, ' arguments, expected ', lo, ' to ', hi);
-    Halt(1);
+    raise TypeError.Create('forwarded call got ' + pystr_of(Int64(n)) +
+                           ' arguments, expected ' + pystr_of(Int64(lo)) +
+                           ' to ' + pystr_of(Int64(hi)));
   end;
 end;
 
@@ -5763,8 +6211,7 @@ procedure pystar_no_kwargs(d: TPyDict);
 begin
   if (d <> nil) and (d.count > 0) then
   begin
-    WriteLn('TypeError: forwarding **kwargs into a callee with named parameters is not supported');
-    Halt(1);
+    raise TypeError.Create('forwarding **kwargs into a callee with named parameters is not supported');
   end;
 end;
 
@@ -6091,15 +6538,22 @@ begin
 end;
 
 function pyfile_open(const path, mode: AnsiString): TPyFile;
-var flags, fd: Int64; z: AnsiString; i: Integer; wantCreate, wantRW: Boolean;
+var flags, fd: Int64; z: AnsiString; i: Integer; wantCreate, wantRW, wantAppend: Boolean;
 begin
-  wantCreate := False; wantRW := False;
+  wantCreate := False; wantRW := False; wantAppend := False;
   for i := 1 to Length(mode) do
   begin
     if mode[i] = 'w' then wantCreate := True;
+    if mode[i] = 'a' then wantAppend := True;
     if mode[i] = '+' then wantRW := True;
   end;
-  if wantCreate then flags := PYPAL_O_RDWR + PYPAL_O_CREAT + PYPAL_O_TRUNC
+  { 'a' was not checked at all, so append mode fell through to O_RDONLY and
+    every write to it failed silently -- `open(p,"a")` then f.write(...) kept
+    the earlier content and dropped the new
+    (bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory). }
+  if wantAppend then
+    flags := PYPAL_O_RDWR + PYPAL_O_CREAT + PYPAL_O_APPEND
+  else if wantCreate then flags := PYPAL_O_RDWR + PYPAL_O_CREAT + PYPAL_O_TRUNC
   else if wantRW then flags := PYPAL_O_RDWR
   else flags := PYPAL_O_RDONLY;
   z := path + #0;
@@ -6108,7 +6562,7 @@ begin
     { CPython open() raises a CATCHABLE OSError (uforth's OPEN-FILE wraps the
       call in try/except and turns it into a nonzero ior — the Forth-2012
       DELETE-FILE test reopens a deleted file expecting failure, not a halt). }
-    raise OSError.Create('FileNotFoundError: ' + path);
+    raise FileNotFoundError.Create(path);
   Result := TPyFile.Create;
   Result.FFd := fd;
 end;
@@ -6143,6 +6597,14 @@ function TPyFile.write(b: TPyBytes): Int64;
 begin
   if (b = nil) or (b.FLen = 0) then begin Result := 0; Exit; end;
   Result := PyPalWrite(FFd, b.FData, b.FLen);
+end;
+
+function TPyFile.write(const s: AnsiString): Int64;
+begin
+  { our strings are byte strings, so a text write is the bytes of s -- no
+    encode step, matching how pyopen treats latin-1/utf-8 of ASCII as identity }
+  if Length(s) = 0 then begin Result := 0; Exit; end;
+  Result := PyPalWrite(FFd, @s[1], Length(s));
 end;
 
 procedure TPyFile.seek(pos: Int64);
