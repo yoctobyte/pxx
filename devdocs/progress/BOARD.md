@@ -32,7 +32,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (174)
+## backlog (173)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -126,7 +126,6 @@ lives in git, not in a timestamp._
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-closure-default-and-remaining | N | 45 | feature | NilPy: remaining uforth walls past ~88% (closure-captured defaults, then exec) | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
-| feature-nilpy-configparser | N | 45 | feature | nilpy: configparser module (INI settings) — songformatter's settings.py imports it | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-default-args-on-nested-defs | N | 55 | feature | NilPy: default arguments as explicit by-value capture | — |
@@ -297,7 +296,7 @@ lives in git, not in a timestamp._
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1103)
+## done (1104)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1151,6 +1150,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-classvar-counter | N | 55 | feature | NilPy: ClassVar storage, next(), counter shim, lambda default_factory | — |
 | feature-nilpy-comparison-chaining | N | 50 | feature | NilPy: comparison chaining (`0 <= i < n`) | — |
 | feature-nilpy-comprehension-if-filter | N | 30 | feature | NilPy: comprehension `if` filters — `[x for x in xs if x > 1]` | — |
+| feature-nilpy-configparser | N | 45 | feature | nilpy: configparser module (INI settings) — songformatter's settings.py imports it | — |
 | feature-nilpy-container-method-gaps | N | 60 | feature | Container-method gaps: `list.remove`, `list.index`, `list.copy`, one-argument `dict.pop` | — |
 | feature-nilpy-decorators-dataclass | N | 55 | feature | NilPy: @dataclass v1 (decorator syntax, annotated scalar fields, defaults) | — |
 | feature-nilpy-def-params | N | 55 | feature | NilPy: raise def/method parameter limit past 4 | — |
@@ -2935,7 +2935,6 @@ lives in git, not in a timestamp._
 - [p 45] [O] feature-inline-nonleaf-and-branch-locals
 - [p 45] [A] feature-move-fillchar-intrinsics
 - [p 45] [N] feature-nilpy-closure-default-and-remaining
-- [p 45] [N] feature-nilpy-configparser
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [N] feature-nilpy-lambda-compiled-closure
 - [p 45] [N] feature-nilpy-process-exec-binding

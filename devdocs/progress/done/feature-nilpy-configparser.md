@@ -8,7 +8,7 @@ prio: 45
 # nilpy: `configparser`
 
 - **Type:** feature (Nil-Python frontend, stdlib surface) — **Track N**
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-26 — `settings.py` is songformatter's smallest module and
   this is its only wall ([[feature-demo-songformatter-pxx-target]]):
   `pascal26:1: error: uses: unit source not found: configparser`.
@@ -73,3 +73,6 @@ exercises exactly the blocking case — a subclass overriding
 True`, `and rejects folded: False`, confirming the dotted-base-class +
 inherited-override blocker described above is also resolved. Re-ran the
 existing test directly to confirm; no new work needed.
+
+## Log
+- 2026-07-31 — resolved, commit 64de91f7e.
