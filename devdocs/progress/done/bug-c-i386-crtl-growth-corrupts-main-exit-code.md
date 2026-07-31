@@ -85,3 +85,6 @@ against gcc on x86-64, and are in git at the SHAs above):
 C tests green + self-host byte-identical, plus `test-c-conformance-i386` and
 `-riscv32` green with the reverted crtl work restored — the restoration is the
 regression test.
+
+## Log
+- 2026-07-31 — resolved, commit a4dd22b3b.
