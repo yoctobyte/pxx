@@ -31,7 +31,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (179)
+## backlog (180)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -81,6 +81,7 @@ _none_
 | decide-ipv6-dualstack-and-aaaa-ordering | U | 40 | decide | Policy: IPV6_V6ONLY on a :: listener, and which address wins when a host has both A and AAAA | — |
 | decide-nilpy-arithmetic-dunder-scope | U | 60 | decide | Decide: how far does NilPy follow Python's arithmetic/ordering dunder protocol? | — |
 | decide-nilpy-hasattr-per-instance-semantics | U | 35 | decide | decide: should NilPy's hasattr answer per-INSTANCE or per-CLASS? | — |
+| decide-nilpy-int-promotion-default | U | 60 | decide | Decide: should NilPy `int` bindings default to promotable, not native int64? | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-nilpy-transitive-nested-def-capture | U | 40 | decide | decide: NilPy transitive capture for sibling nested-def calls | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
@@ -2847,6 +2848,7 @@ _none_
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [A] bug-pascal-transitive-unit-crashes-at-startup-unless-named-first
 - [p 60] [U] decide-nilpy-arithmetic-dunder-scope
+- [p 60] [U] decide-nilpy-int-promotion-default
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
