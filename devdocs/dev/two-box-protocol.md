@@ -1,43 +1,95 @@
-# Two boxes, one repo — how the borg and xeon agents stay out of each other's way
+# Two boxes, one repo — how the borg and xeon agents self-organise
 
-Written 2026-07-31, the day xeon became sole watcher coverage and two agents
-first ran concurrently on separate machines. Read with
+Written 2026-07-31, the day xeon became sole watcher coverage, two agents first
+ran concurrently on separate machines, and the ssh link was made symmetric. Read with
 [`parallel-tracks.md`](parallel-tracks.md) (which lane owns which file) and
 [`track-t.md`](track-t.md) (what the watcher is). This doc is only about the
 *fleet*: two boxes, two agent sessions, one origin.
 
-## Topology, and the asymmetry that shapes everything
+## Topology — peer to peer, one shared truth
 
 ```
-   borg  ──ssh──▶  xeon          borg can drive xeon.
-   borg  ◀──────   xeon          xeon CANNOT reach borg. Deliberate:
-     │               │           the user lives on borg.
-     └──── origin ───┘           the ONLY symmetric channel.
+   borg  ◀──ssh──▶  xeon         symmetric since 2026-07-31
+     │                │          borg 192.168.1.99 · xeon 192.168.1.191
+     └───── origin ───┘          the SHARED TRUTH. state lives here, only here.
 ```
 
-Consequences, and they are not symmetric — do not pretend otherwise:
+Two peers, one project, one repo. Neither is the master. The user may be
+sitting at **either** box — borg is a workstation, xeon has a tmux session; an
+instruction can arrive on either one, and whichever agent receives it acts on
+it.
 
-- **origin is the bus.** Anything xeon wants borg to know must be *committed
-  and pushed*. A finding that exists only in xeon's session transcript does not
-  exist.
-- **borg is the only box that can push work to the other.** It has ssh and the
-  `gh` credentials (GitHub API: deploy keys, issues, PRs). xeon has a
-  repo-scoped deploy key and nothing else.
-- **the user is reachable only from borg.** xeon has no path to a human. Its
-  escalation route is a Track U `decide-*` ticket, which the borg agent is
-  expected to surface. If xeon blocks silently, nobody finds out.
+The two channels are **not interchangeable**, and keeping them distinct is what
+stops the boxes fighting:
 
-## Who does what — split by capability, not by letter
+| | origin (git) | ssh |
+|---|---|---|
+| carries | **state**: claims, tickets, tstate, code, decisions | **notification only**: "look at X", "I'm taking Y" |
+| ordered | yes — commits serialize | no |
+| durable | yes — survives restarts, visible to the user | no, ephemeral |
+| use for | anything another agent must *act* on later | cutting latency on something already in the repo |
 
-The track letters still decide file ownership. The *box* split is about what
-each machine can physically do:
+**State goes through git. Always.** ssh may tell a peer to look sooner; it must
+never *be* the record. If it is not pushed, it did not happen — that rule does
+not relax just because the boxes can now talk directly.
+
+## The anti-recursion rule (the thing to actually worry about)
+
+Two peers that can each poke the other can ping-pong forever. One rule prevents
+it, and it costs nothing:
+
+> **An agent may send a direct message triggered by human input, or by its own
+> work reaching a result. NEVER as a reaction to receiving one.**
+
+Receiving a message may cause you to *do work*, pull, read the repo, change what
+you are doing — but it may not, by itself, cause you to send a message back. So
+every chain is at most one hop, and every chain traces to a human or to real
+work completing. There is no cycle to enter.
+
+Corollaries:
+- No acknowledgements. If the peer needs to know you acted, the *commit* tells
+  them.
+- No "are you there?" polling over ssh. Liveness is `tstate` and the daemon's
+  own heartbeat.
+- A message is a hint with no reply channel. Treat it as advisory; the repo is
+  the authority.
+
+## Self-organising: who takes what, decided by the boxes
+
+There is no dispatcher. Both agents run the same loop, and the **push is the
+arbiter**:
+
+```
+git pull --rebase
+progress.sh next            # highest effective-prio ready ticket
+progress.sh claim <slug> claude@<box>
+progress.sh board-md
+git commit && git push      # ← wins or loses HERE
+```
+
+If the push lands, the ticket is yours. If it rejects because the peer claimed
+the same slug first, **rebase, drop it, and run `next` again** — do not fight
+for it. Optimistic concurrency, one authority, no negotiation protocol needed.
+
+Two standing biases keep them out of each other's way without anyone deciding:
+
+- **xeon is Track T** — it *is* the watcher; the matrix, fuzzing and the test
+  tooling live there.
+- **borg leads the dev lanes** — it holds the `gh` credentials and it is where
+  the interactive work usually happens.
+
+These are defaults, not fences. Either box may take any ticket its capabilities
+allow; the claim is what matters. Capabilities that genuinely differ:
 
 | | xeon | borg |
 |---|---|---|
-| role | **Track T** — it IS the watcher | dev lanes (A/P/C/B/N/…) |
 | toolchain | kernel 7.0, gcc 15.2 | kernel 6.17, gcc 13.3 |
-| strengths | 12 threads, 60GB, runs the matrix; newer toolchain finds portability bugs | interactive, user present, `gh` creds, can drive xeon |
-| weakness | ~40-90% slower per core; no human | contends with the user's own work |
+| capacity | 12 threads, 60GB — the matrix, long parallel work | 8 threads, 15GB, shared with the user's own use |
+| speed | ~40-90% slower per core (serial work suffers) | faster per core |
+| GitHub API | deploy key (push only) | full `gh` (issues, PRs, keys) |
+
+A ticket needing the GitHub API belongs on borg. A ticket needing hours of
+parallel compute belongs on xeon. Everything else: whoever claims first.
 
 **Use the toolchain gap on purpose.** It is not noise to be normalised away —
 on day one it found two real bugs that borg called green:
@@ -101,37 +153,49 @@ git add devdocs/progress/BOARD.md
 git rebase --continue
 ```
 
-## Escalation: xeon → user runs through the repo and through borg
+## Escalation: the human may be at either box
 
-xeon cannot ask the user anything. When it hits a fork it cannot settle:
+Neither agent should assume it has the user. An instruction can arrive on
+borg's terminal or in xeon's tmux; the user moves between them.
 
-1. xeon files a Track U `decide-<topic>` ticket — fork, options, trade-offs,
-   its recommendation — and **moves on to the next queue item**. It does not
-   block and does not guess.
-2. borg's agent surfaces open `decide-*` tickets to the user.
-3. The user decides; the answer lands as a ticket edit; xeon picks it up on its
-   next pull.
+So escalation is **posted, not sent**: when an agent hits a fork it cannot
+settle from the code, the request, or a sane default, it files a Track U
+`decide-<topic>` ticket (fork, options, trade-offs, recommendation) and **moves
+on to the next queue item**. It does not block and does not guess.
 
-The borg agent should treat "are there new `decide-*` tickets?" as part of
-routine monitoring, not something to be asked for.
+Whichever agent currently has a human in front of it is responsible for
+surfacing open `decide-*`. Both should treat "any new `decide-*`?" as routine
+monitoring. A decision the user gives verbally on one box must be **written
+back into the ticket**, or the other box never learns it — this is the most
+likely way for the two to drift apart.
 
-## Direct drive: borg → xeon
+## Direct messaging between peers
 
-borg can `ssh neo@xeon` and can send a prompt into the running Claude session
-(`tmux send-keys -t claude-T`). This is a **loud** channel — it interrupts
-whatever that session is mid-way through. Use it for things the repo cannot
-carry in time, not as the default. The default is: commit, push, let the other
-side pull.
+Each box can `ssh` the other and inject a prompt into the peer's Claude session:
+
+```
+# from borg                      # from xeon
+ssh neo@xeon \                   ssh rene@borg.home \
+  'tmux send-keys -t claude-T "…" Enter'   'tmux send-keys -t <session> "…" Enter'
+```
+
+This **interrupts** the peer mid-task. Governed by the anti-recursion rule
+above: send on human input or a completed result, never in reply. Keep it to
+things where latency actually matters — a claim collision about to waste a
+build, a red the peer should see now. The default remains: commit, push, let
+the peer pull.
 
 Read-only probing over ssh (inspecting logs, reproducing a build in `/tmp`) is
-fine and needs no coordination — but **never run jobs inside `~/trackt-watch`
-while the daemon is live**: it checks out shas underneath you, and your run
-races its working tree. Copy what you need to `/tmp` and work there.
+fine and needs no coordination — but **never run jobs inside the peer's
+`~/trackt-watch` while its daemon is live**: it checks out shas underneath you
+and your run races its working tree. Copy what you need to `/tmp` and work there.
 
 ## The short version
 
-- origin is the only thing both boxes share — if it is not pushed, it did not happen
-- claim, push the claim, *then* work
-- say which box a result came from
-- disagreement between the boxes is a finding, not noise
-- xeon escalates by filing `decide-*`; borg is the one who tells the human
+- two peers, no master; the user may be at either box
+- **state through git, notifications through ssh** — never the reverse
+- claim by pushing; if the push loses, drop it and pick again
+- never send a message *because* you received one — that is the whole
+  anti-recursion rule
+- say which box a result came from; disagreement between boxes is a finding
+- a verbal decision must be written back into its ticket, or the peer never sees it
