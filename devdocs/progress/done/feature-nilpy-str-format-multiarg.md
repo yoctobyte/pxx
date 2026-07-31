@@ -41,3 +41,6 @@ which is more machinery than this fix's segfault-elimination scope).
 Named/index fields (`{name}`, `{0}`) remain unimplemented — unchanged, not
 attempted here; the placeholder walk in pylib's `PyFormatApply` still
 handles positional `{}` and `{:spec}` only.
+
+## Log
+- 2026-07-31 — resolved, commit bb7395a21.
