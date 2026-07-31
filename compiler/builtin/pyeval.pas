@@ -2794,10 +2794,19 @@ begin
 
   if IsHostName(callee) then
   begin
-    if (EnvG = nil) or (EnvG.indexof('vm') < 0) then
-      EvalError('host call ' + callee + ' but no "vm" in globals');
-    vmv := EnvG.fetch('vm');
-    vmobj := pyvarobj(vmv);
+    { The receiver is not a separate "vm" global -- it is already IN the
+      bound method `callee` itself resolves to (`env = {"push": b.push}`
+      boxes b as push's `recv`). Reading it from a hardcoded "vm" key was
+      uforth's own variable name leaking into the general exec() contract:
+      any other caller's env (`{"draw": c.draw}`, no "vm" key at all)
+      failed every host call with a message naming an identifier it never
+      wrote (bug-pyeval-exec-requires-a-globals-key-named-vm). }
+    if (EnvG = nil) or (EnvG.indexof(callee) < 0) then
+      EvalError('host call ' + callee + ' but "' + callee + '" not in globals');
+    vmv := EnvG.fetch(callee);
+    if not pycallback_is(vmv) then
+      EvalError('host call ' + callee + ' is not a bound method');
+    vmobj := pybound_recv(vmv);
     PyHostCall(vmobj, callee, args, res);
     args.Free;
     Exit;

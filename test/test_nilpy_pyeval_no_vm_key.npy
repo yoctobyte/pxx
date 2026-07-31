@@ -1,0 +1,22 @@
+# exec(src, env)'s host-call dispatch looked the receiver up by a HARDCODED
+# "vm" key in env instead of reading it from the bound method `callee` itself
+# already resolves to (env["push"] = b.push already carries b as push's own
+# receiver) -- any env without a literal "vm" key failed every host call with
+# a message naming an identifier the caller never wrote. Not part of
+# exec()'s real contract (CPython's explicit-dict form has no such rule);
+# "vm" was uforth's own variable name leaking into the general surface.
+# bug-pyeval-exec-requires-a-globals-key-named-vm
+# Every expectation is CPython's own output.
+
+class B:
+    def __init__(self):
+        self.stack = []
+    def push(self, v):
+        self.stack.append(v)
+
+b = B()
+env1 = {"push": b.push}
+env2 = {"vm": b, "push": b.push}
+exec("push(41 + 1)", env2)
+exec("push(41 + 2)", env1)
+print(b.stack)

@@ -548,6 +548,10 @@ test-nilpy: $(COMPILER)
 	@# top-level assignment's RHS; def/class bodies stay real scopes
 	./$(COMPILER) test/test_nilpy_module_block_scope.npy /tmp/test_nilpy_modblockscope26
 	test "$$(/tmp/test_nilpy_modblockscope26)" = "$$(printf '%b' '3\n4\n4\n5\n7')"
+	@# exec()'s host-call dispatch reads the receiver from the bound method
+	@# itself, not a hardcoded "vm" key
+	./$(COMPILER) test/test_nilpy_pyeval_no_vm_key.npy /tmp/test_nilpy_novmkey26
+	test "$$(/tmp/test_nilpy_novmkey26)" = "[42, 43]"
 	./$(COMPILER) test/test_nilpy_dynattr.npy /tmp/test_nilpy_dynattr26
 	test "$$(/tmp/test_nilpy_dynattr26)" = "$$(printf '%b' '105\n110')"
 	./$(COMPILER) test/test_nilpy_dynattr_class.npy /tmp/test_nilpy_dynattr_class26
