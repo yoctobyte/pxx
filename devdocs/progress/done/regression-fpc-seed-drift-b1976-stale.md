@@ -8,7 +8,7 @@ prio: 55
 # FPC seed drift: `fpc compiler/compiler.pas` fails with 8 errors
 
 - **Type:** regression (cold-start bootstrap path) — **Track A** (`compiler/**` drift)
-- **Status:** urgent *by filing location, not by blast radius* — see "How urgent
+- **Status:** done
   is this really" below.
 - **Filed:** 2026-07-31 by Track T (face 2) from tstate `open_regressions`.
 - **Job:** `fpc-bootstrap#src:compiler/compiler.pas` — open since 2026-07-22.
@@ -83,3 +83,6 @@ underneath it. Worth teaching twatch to re-bisect (or at least re-hash the log
 tail and flag a mismatch) when an open regression's output stops matching what
 was bisected. That is a Track T tooling change, filed separately — it does not
 belong to this ticket.
+
+## Log
+- 2026-07-31 — resolved, commit 8dc18d143.
