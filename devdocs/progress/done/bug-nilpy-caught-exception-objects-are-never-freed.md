@@ -121,3 +121,6 @@ class/field-finalize investigation, not to the exception-specific mechanism
 this ticket was about.
 
 Ticket closed (see the follow-on for the remaining, unrelated leak).
+
+## Log
+- 2026-07-31 — resolved, commit 365d46028.

@@ -38,6 +38,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-nilpy-class-variant-field-string-not-released-on-finalize | A | 55 | bug | A class's variant-typed field holding a managed string is not released on finalize — general, not Exception-specific | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
@@ -46,7 +47,6 @@ _none_
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-builtin-pairs-are-not-flagged-as-tuples | N | 35 | bug | `enumerate`, `zip`, `dict.items` and `most_common` build pairs that print as lists | — |
 | bug-nilpy-callable-value-abi-sorted-key-and-builtins | N | 65 | bug | `sorted(key=...)` ignores most keys, and a callable passed as a VALUE has no common ABI | — |
-| bug-nilpy-caught-exception-objects-are-never-freed | N | 60 | bug | Every caught exception leaks its object — 640k raises cost 105 MB | — |
 | bug-nilpy-chained-subscript-assignment-writes-only-the-last-target | N | 50 | bug | `xs[0] = xs[1] = 3` writes only `xs[1]` — the other target is silently skipped | — |
 | bug-nilpy-comprehension-variable-leaks-and-clobbers-the-enclosing-scope | N | 60 | bug | A comprehension's loop variable leaks and OVERWRITES the enclosing binding — and can segfault | — |
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
@@ -299,7 +299,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1073)
+## done (1074)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -641,6 +641,7 @@ _none_
 | bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable | N | 55 | bug | A `Callable[...]`-annotated parameter segfaults when the argument is a heap callable | — |
 | bug-nilpy-callable-in-local-var-call-does-nothing | N | 70 | bug | `cb = lambda ...` then `cb(x)` compiles and does NOTHING | — |
 | bug-nilpy-callable-return-abi-mismatch | N | 75 | bug | nilpy: a def passed to a Callable[...] parameter marshalled by the ANNOTATION, not by the def | — |
+| bug-nilpy-caught-exception-objects-are-never-freed | N | 60 | bug | Every caught exception leaks its object — 640k raises cost 105 MB | — |
 | bug-nilpy-char-vs-string-literal-ordering-compares-an-address | N | 80 | bug | `s[0] >= "0"` is ALWAYS False and `s[0] < "0"` ALWAYS True — a char is ordered against the literal's ADDRESS | — |
 | bug-nilpy-chr-of-a-variant-reads-the-slot-not-the-value | N | 65 | bug | `chr()` of a variant returns the wrong character — the slot is read as an ordinal | — |
 | bug-nilpy-class-attr-instance-traversal-crashes | N | 70 | bug | A class attribute holding an INSTANCE crashes when traversed | — |
@@ -2826,7 +2827,6 @@ _none_
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [A] feature-a-typeref-handle
 - [p 65] [B] feature-nilpy-tk-callbacks
-- [p 60] [N] bug-nilpy-caught-exception-objects-are-never-freed
 - [p 60] [N] bug-nilpy-comprehension-variable-leaks-and-clobbers-the-enclosing-scope
 - [p 60] [N] bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
@@ -2845,6 +2845,7 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
+- [p 55] [A] bug-a-nilpy-class-variant-field-string-not-released-on-finalize
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [A] bug-pascal-defines-leak-across-units
