@@ -388,3 +388,22 @@ and faking the rest would hide the real gap.
 
 All of it is now gated by `test/crtl_libc_oracle.c` against gcc's build of the
 same file (113 lines), so the next divergence is caught rather than discovered.
+
+## Swept clean: `<setjmp.h>` and `<fenv.h>` (2026-07-31, Track B — no gap)
+
+Sixth oracle batch. **Nothing was broken** — every case matched gcc first time:
+`longjmp` unwinding across frames, the C99 rule that `longjmp(buf, 0)` arrives
+as `1`, a volatile local surviving the jump, `fegetround`/`fesetround` round
+trips, and `round`/`trunc`/`nearbyint` on the halfway cases.
+
+Gated anyway, as `test/crtl_setjmp_oracle.c`, for a reason the rest of the C
+library does not have: **setjmp is codegen-sensitive**. It saves and restores
+the frame, so a register-allocation or prologue change can break it while every
+other test stays green, and the failure mode is a wild jump rather than a wrong
+value. `test/crtl_header_smoke.c` only proved the header COMPILES; nothing
+exercised the behaviour, and no Makefile target referenced it.
+
+Kept as a separate file from `crtl_libc_oracle.c` on purpose: `longjmp` unwinds
+out of the middle of the enclosing function, so folding it into a large `main()`
+with many live locals would make the test about that `main()` rather than about
+`longjmp`.
