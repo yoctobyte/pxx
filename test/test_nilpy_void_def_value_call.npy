@@ -1,0 +1,16 @@
+"""bug-nilpy-void-def-assigned-and-called-crashes: an explicit `-> None` def
+assigned to a plain name and then called through it, generic-dispatch style
+(no Callable-typed field/param signature to fall back on), used to segfault
+right after the callee's body finished — pybound_callv1 unconditionally cast
+the code pointer through a Variant-returning function type, which a real
+Pascal procedure (what a `-> None` def compiles to) never sets up.
+"""
+
+
+def hit(vm) -> None:
+    print("native ran")
+
+
+f = hit
+f(1)
+print("done")

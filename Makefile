@@ -584,6 +584,11 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_for_variant26)" = "$$(printf '%b' '10\n20\n30')"
 	./$(COMPILER) test/test_nilpy_unpack_callable.npy /tmp/test_nilpy_unpack_callable26
 	test "$$(/tmp/test_nilpy_unpack_callable26)" = "$$(printf '%b' 'native ran\n5\n6\n7\n8')"
+	# bug-nilpy-void-def-assigned-and-called-crashes: a `-> None` def assigned to
+	# a plain name, then called through the generic dynamic-call bridge (no
+	# Callable-typed field/param signature involved)
+	./$(COMPILER) test/test_nilpy_void_def_value_call.npy /tmp/test_nilpy_voiddefval26
+	test "$$(/tmp/test_nilpy_voiddefval26)" = "$$(printf '%b' 'native ran\ndone')"
 	./$(COMPILER) test/test_nilpy_optional_return.npy /tmp/test_nilpy_optional_return26
 	test "$$(/tmp/test_nilpy_optional_return26)" = "$$(printf '%b' 'native\nternary ok\n7')"
 	./$(COMPILER) test/test_nilpy_encode.npy /tmp/test_nilpy_encode26

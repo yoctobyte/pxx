@@ -580,9 +580,16 @@ function pyvar_box(const v: Variant): Variant;   { box a value into a variant }
 var
   PyClosureFinalizeHook: TPyClosureFinalize;
 
-function pybound_new(code, recv: Pointer): Variant;
+function pybound_new(code, recv: Pointer; isFunc: Boolean): Variant;
 function pybound_code(const v: Variant): Pointer;
 function pybound_recv(const v: Variant): Pointer;
+{ True when Code is a genuine Variant-returning FUNCTION (NilPy's default def
+  ABI); False when Code is a real Pascal PROCEDURE (an explicit `-> None` def)
+  that never sets up the hidden-destination-pointer return convention. Lets
+  the generic dynamic-call bridge (pybound_callv*/pycallback_call*) pick the
+  matching call shape at runtime instead of unconditionally assuming a
+  function (bug-nilpy-void-def-assigned-and-called-crashes). }
+function pybound_isfunc(const v: Variant): Boolean;
 { CALL a function value from library code — the piece a callback-taking façade
   needs. `self.handler` reaches a library as a VT_BOUNDMETHOD variant (a
   {code, receiver} pair); a plain def reaches it as the same pair with a nil
@@ -5468,7 +5475,7 @@ begin
 end;
 
 type
-  TPyBoundRec = record Code, Recv: Pointer; end;
+  TPyBoundRec = record Code, Recv: Pointer; IsFunc: Boolean; end;
   PPyBoundRec = ^TPyBoundRec;
 
 procedure PyObjFinalize(objp: Pointer; rawKind: NativeInt);
@@ -5534,7 +5541,7 @@ begin
   PXXClassFinalize(objp);
 end;
 
-function pybound_new(code, recv: Pointer): Variant;
+function pybound_new(code, recv: Pointer; isFunc: Boolean): Variant;
 var b: PPyBoundRec; r: PPyVarRec;
 begin
   { RAW refcounted block (no VMT): rc at [b-16], PXX_OBJ_MAGIC_RAW at [b-8].
@@ -5544,6 +5551,7 @@ begin
   b := PPyBoundRec(PXXObjAllocRaw(SizeOf(TPyBoundRec)));
   b^.Code := code;
   b^.Recv := recv;
+  b^.IsFunc := isFunc;
   PXXObjRetain(code);   { a closure-obj code is refcounted; plain addresses no-op }
   PXXObjRetain(recv);
   r := PPyVarRec(@Result);
@@ -5556,6 +5564,11 @@ end;
 function pybound_code(const v: Variant): Pointer;
 begin
   pybound_code := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.Code;
+end;
+
+function pybound_isfunc(const v: Variant): Boolean;
+begin
+  pybound_isfunc := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.IsFunc;
 end;
 
 type
@@ -5572,6 +5585,22 @@ type
   TPyCbF1 = function(const a0: Variant): Variant;
   TPyCbF2 = function(const a0, a1: Variant): Variant;
   TPyCbF3 = function(const a0, a1, a2: Variant): Variant;
+  { PROCEDURE-shaped siblings of the above: an explicit `-> None` def compiles
+    as a genuine Pascal procedure (Procs[pi].IsFunc = False), which never sets
+    up the Variant-hidden-destination-pointer convention TPyCbM*/TPyCbF*
+    assume. Casting through those instead just reads back whatever garbage was
+    left in that register and, worse, the callee's own epilogue writes 16
+    bytes through it — hence the segfault this pair of types fixes
+    (bug-nilpy-void-def-assigned-and-called-crashes). Selected at runtime via
+    pybound_isfunc, which TPyBoundRec now carries per capture. }
+  TPyCbMP0 = procedure(recv: Pointer);
+  TPyCbMP1 = procedure(recv: Pointer; const a0: Variant);
+  TPyCbMP2 = procedure(recv: Pointer; const a0, a1: Variant);
+  TPyCbMP3 = procedure(recv: Pointer; const a0, a1, a2: Variant);
+  TPyCbFP0 = procedure;
+  TPyCbFP1 = procedure(const a0: Variant);
+  TPyCbFP2 = procedure(const a0, a1: Variant);
+  TPyCbFP3 = procedure(const a0, a1, a2: Variant);
 
 function pycallback_is(const cb: Variant): Boolean;
 begin
@@ -5583,7 +5612,8 @@ function pycallback_call0(const cb: Variant): Int64;
   here, it is the pointer value — `pycallback_call0 := f0` silently assigned the
   code address and never invoked the callback, which is why a zero-argument
   `command=`/`after` handler did nothing at all. }
-var code, recv: Pointer; m0: TPyCbM0; f0: TPyCbF0; r: Variant;
+var code, recv: Pointer; m0: TPyCbM0; f0: TPyCbF0; mp0: TPyCbMP0; fp0: TPyCbFP0;
+    r: Variant; isFn: Boolean;
 begin
   pycallback_call0 := 0;
   r := pynone;
@@ -5591,20 +5621,22 @@ begin
   code := pybound_code(cb);
   recv := pybound_recv(cb);
   if code = nil then Exit;
+  isFn := pybound_isfunc(cb);
   if recv = nil then
   begin
-    f0 := TPyCbF0(code);
-    r := f0();
+    if isFn then begin f0 := TPyCbF0(code); r := f0(); end
+    else begin fp0 := TPyCbFP0(code); fp0(); end;
   end
   else
   begin
-    m0 := TPyCbM0(code);
-    r := m0(recv);
+    if isFn then begin m0 := TPyCbM0(code); r := m0(recv); end
+    else begin mp0 := TPyCbMP0(code); mp0(recv); end;
   end;
 end;
 
 function pycallback_call1(const cb: Variant; const a0: Variant): Int64;
-var code, recv: Pointer; m1: TPyCbM1; f1: TPyCbF1; r: Variant;
+var code, recv: Pointer; m1: TPyCbM1; f1: TPyCbF1; mp1: TPyCbMP1; fp1: TPyCbFP1;
+    r: Variant; isFn: Boolean;
 begin
   pycallback_call1 := 0;
   r := pynone;
@@ -5612,15 +5644,16 @@ begin
   code := pybound_code(cb);
   recv := pybound_recv(cb);
   if code = nil then Exit;
+  isFn := pybound_isfunc(cb);
   if recv = nil then
   begin
-    f1 := TPyCbF1(code);
-    r := f1(a0);
+    if isFn then begin f1 := TPyCbF1(code); r := f1(a0); end
+    else begin fp1 := TPyCbFP1(code); fp1(a0); end;
   end
   else
   begin
-    m1 := TPyCbM1(code);
-    r := m1(recv, a0);
+    if isFn then begin m1 := TPyCbM1(code); r := m1(recv, a0); end
+    else begin mp1 := TPyCbMP1(code); mp1(recv, a0); end;
   end;
 end;
 
@@ -5636,51 +5669,91 @@ end;
   uses NilPy's function-object ABI (variant params, variant result — see
   PyDefUsedAsValue), which is exactly what these signatures declare. }
 function pybound_callv0(const cb: Variant): Variant;
-var code, recv: Pointer; m0: TPyCbM0; f0: TPyCbF0;
+var code, recv: Pointer; m0: TPyCbM0; f0: TPyCbF0; mp0: TPyCbMP0; fp0: TPyCbFP0;
+    isFn: Boolean;
 begin
   Result := pynone;
   if not pycallback_is(cb) then Exit;
   code := pybound_code(cb);
   if code = nil then Exit;
   recv := pybound_recv(cb);
-  if recv = nil then begin f0 := TPyCbF0(code); Result := f0(); end
-  else begin m0 := TPyCbM0(code); Result := m0(recv); end;
+  isFn := pybound_isfunc(cb);
+  if recv = nil then
+  begin
+    if isFn then begin f0 := TPyCbF0(code); Result := f0(); end
+    else begin fp0 := TPyCbFP0(code); fp0(); Result := pynone; end;
+  end
+  else
+  begin
+    if isFn then begin m0 := TPyCbM0(code); Result := m0(recv); end
+    else begin mp0 := TPyCbMP0(code); mp0(recv); Result := pynone; end;
+  end;
 end;
 
 function pybound_callv1(const cb: Variant; const a0: Variant): Variant;
-var code, recv: Pointer; m1: TPyCbM1; f1: TPyCbF1;
+var code, recv: Pointer; m1: TPyCbM1; f1: TPyCbF1; mp1: TPyCbMP1; fp1: TPyCbFP1;
+    isFn: Boolean;
 begin
   Result := pynone;
   if not pycallback_is(cb) then Exit;
   code := pybound_code(cb);
   if code = nil then Exit;
   recv := pybound_recv(cb);
-  if recv = nil then begin f1 := TPyCbF1(code); Result := f1(a0); end
-  else begin m1 := TPyCbM1(code); Result := m1(recv, a0); end;
+  isFn := pybound_isfunc(cb);
+  if recv = nil then
+  begin
+    if isFn then begin f1 := TPyCbF1(code); Result := f1(a0); end
+    else begin fp1 := TPyCbFP1(code); fp1(a0); Result := pynone; end;
+  end
+  else
+  begin
+    if isFn then begin m1 := TPyCbM1(code); Result := m1(recv, a0); end
+    else begin mp1 := TPyCbMP1(code); mp1(recv, a0); Result := pynone; end;
+  end;
 end;
 
 function pybound_callv2(const cb: Variant; const a0, a1: Variant): Variant;
-var code, recv: Pointer; m2: TPyCbM2; f2: TPyCbF2;
+var code, recv: Pointer; m2: TPyCbM2; f2: TPyCbF2; mp2: TPyCbMP2; fp2: TPyCbFP2;
+    isFn: Boolean;
 begin
   Result := pynone;
   if not pycallback_is(cb) then Exit;
   code := pybound_code(cb);
   if code = nil then Exit;
   recv := pybound_recv(cb);
-  if recv = nil then begin f2 := TPyCbF2(code); Result := f2(a0, a1); end
-  else begin m2 := TPyCbM2(code); Result := m2(recv, a0, a1); end;
+  isFn := pybound_isfunc(cb);
+  if recv = nil then
+  begin
+    if isFn then begin f2 := TPyCbF2(code); Result := f2(a0, a1); end
+    else begin fp2 := TPyCbFP2(code); fp2(a0, a1); Result := pynone; end;
+  end
+  else
+  begin
+    if isFn then begin m2 := TPyCbM2(code); Result := m2(recv, a0, a1); end
+    else begin mp2 := TPyCbMP2(code); mp2(recv, a0, a1); Result := pynone; end;
+  end;
 end;
 
 function pybound_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
-var code, recv: Pointer; m3: TPyCbM3; f3: TPyCbF3;
+var code, recv: Pointer; m3: TPyCbM3; f3: TPyCbF3; mp3: TPyCbMP3; fp3: TPyCbFP3;
+    isFn: Boolean;
 begin
   Result := pynone;
   if not pycallback_is(cb) then Exit;
   code := pybound_code(cb);
   if code = nil then Exit;
   recv := pybound_recv(cb);
-  if recv = nil then begin f3 := TPyCbF3(code); Result := f3(a0, a1, a2); end
-  else begin m3 := TPyCbM3(code); Result := m3(recv, a0, a1, a2); end;
+  isFn := pybound_isfunc(cb);
+  if recv = nil then
+  begin
+    if isFn then begin f3 := TPyCbF3(code); Result := f3(a0, a1, a2); end
+    else begin fp3 := TPyCbFP3(code); fp3(a0, a1, a2); Result := pynone; end;
+  end
+  else
+  begin
+    if isFn then begin m3 := TPyCbM3(code); Result := m3(recv, a0, a1, a2); end
+    else begin mp3 := TPyCbMP3(code); mp3(recv, a0, a1, a2); Result := pynone; end;
+  end;
 end;
 
 { input(): read one line from stdin and drop the trailing newline, as Python's

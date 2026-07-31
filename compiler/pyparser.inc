@@ -6120,7 +6120,7 @@ end;
   binds `self.push`/`self.pop` this way. mpi is the method proc (param 0 = Self);
   selfNode supplies the receiver. }
 function PyMakeBoundMethod(mpi, selfNode: Integer): Integer;
-var procAddr, recvArg, selfArg, callNode, boundPi: Integer;
+var procAddr, recvArg, selfArg, callNode, boundPi, isFuncNode, isFuncArg: Integer;
 begin
   boundPi := FindProc('pybound_new');
   if boundPi < 0 then Error('Nil Python: pylib (pybound_new) not loaded');
@@ -6132,7 +6132,16 @@ begin
   ASTTk[callNode]   := Ord(tyVariant);
   selfArg := AllocNode(AN_ARG);  ASTLeft[selfArg] := procAddr;   { code }
   recvArg := AllocNode(AN_ARG);  ASTLeft[recvArg] := selfNode;   { recv }
-  ASTRight[selfArg] := recvArg;  ASTRight[recvArg] := -1;
+  { isFunc: whether mpi is a genuine Variant-returning function or a real
+    procedure (explicit `-> None`) — lets pybound_callv*/pycallback_call*
+    pick the matching call shape at runtime instead of always assuming a
+    function (bug-nilpy-void-def-assigned-and-called-crashes). }
+  isFuncNode := AllocNode(AN_INT_LIT);
+  ASTIVal[isFuncNode] := Ord(Procs[mpi].IsFunc);
+  ASTTk[isFuncNode]   := Ord(tyBoolean);
+  isFuncArg := AllocNode(AN_ARG); ASTLeft[isFuncArg] := isFuncNode;
+  ASTRight[selfArg] := recvArg;  ASTRight[recvArg] := isFuncArg;
+  ASTRight[isFuncArg] := -1;
   ASTLeft[callNode] := selfArg;
   Result := callNode;
 end;
@@ -6337,7 +6346,8 @@ function PyMakeFuncValue: Integer;
   a nil receiver and every consumer (pycallback_call*, the tkinter dispatcher)
   handles both. Returns -1 when the token is not a def name, so callers fall
   through to their existing handling. CurTok is the identifier. }
-var pi, procAddr, argA, argB, callNode, nilNode, boundPi, altPi, wpj: Integer;
+var pi, procAddr, argA, argB, argC, callNode, nilNode, isFuncNode, boundPi,
+    altPi, wpj: Integer;
     paramsAllVariant: Boolean;
 begin
   Result := -1;
@@ -6391,7 +6401,16 @@ begin
   ASTIVal[nilNode] := 0;
   ASTTk[nilNode] := Ord(tyPointer);
   argA := AllocNode(AN_ARG); ASTLeft[argA] := procAddr;
-  argB := AllocNode(AN_ARG); ASTLeft[argB] := nilNode; ASTRight[argB] := -1;
+  argB := AllocNode(AN_ARG); ASTLeft[argB] := nilNode;
+  { isFunc: whether pi (the resolved callee, possibly PyGetOrMakeCallableWrapper's
+    synthesized wrapper) is a genuine Variant-returning function or a real
+    procedure (explicit `-> None`) — see PyMakeBoundMethod for why this matters
+    (bug-nilpy-void-def-assigned-and-called-crashes). }
+  isFuncNode := AllocNode(AN_INT_LIT);
+  ASTIVal[isFuncNode] := Ord(Procs[pi].IsFunc);
+  ASTTk[isFuncNode]   := Ord(tyBoolean);
+  argC := AllocNode(AN_ARG); ASTLeft[argC] := isFuncNode; ASTRight[argC] := -1;
+  ASTRight[argB] := argC;
   ASTRight[argA] := argB;
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := boundPi;
