@@ -88,3 +88,22 @@ Watch the ARC side: the returned variant must retain the way `pyor_v`'s
 `make test-nilpy` + self-host byte-identical, plus the table above re-diffed
 against CPython, and `xs += ys` where the target is statically a list must
 still lower to `extend` (unchanged path).
+
+## CLOSED
+
+Implemented exactly as suggested: `pyaugadd_v` (extends a TPyList target in
+place, returns the same retained object via `PyVarSlotInit`, falls through to
+`pyadd_v` otherwise), a new `PY_BINOP_AUGADD` marker set at both pyparser.inc
+`+=` sites (the lhs-expression one and the bare-name one — the ticket's own
+`def grow(l): l += [9]` repro goes through the SECOND, which needed the same
+marker) when the target's static type is `tyVariant`, and `ir.inc`'s
+variant-`+` dispatch picks the new helper when it sees the marker.
+
+Every row in the ticket's table now matches CPython, and the statically-typed
+`xs += ys` path (an annotated parameter) is unchanged — confirmed still lowers
+straight to `TPyList.extend`, no new dispatch involved.
+
+Test: test/test_nilpy_augmented_add_variant_list.npy. Gate: make test-nilpy
+green, self-host fixedpoint, testmgr --tier quick.
+
+Ticket closed.
