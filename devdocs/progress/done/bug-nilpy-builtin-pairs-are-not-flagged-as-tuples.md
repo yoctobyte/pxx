@@ -59,3 +59,6 @@ divergence.
 
 `make test-nilpy` + a `.npy` printing `enumerate`, `zip`, `items` and
 `most_common` results, expectation taken from CPython's own output.
+
+## Log
+- 2026-07-31 — resolved, commit 0049c17e8.
