@@ -276,3 +276,80 @@ Two properties must survive the move, and both are the kind a refactor drops:
 extraction — it is the proof that nothing was lost, so it is worth leaving it
 driving the devtest program rather than rewriting it onto the new API in the
 same pass.
+
+## Slice 2 landed — the NATIVE backend (2026-08-01, Track B)
+
+`lib/rtl/tls13_native.pas` implements `TTlsBackend` over the from-scratch TLS
+1.3 stack and registers itself. The from-scratch client is now reachable from
+library code: `TlsHandshake` / `TlsWrite` / `TlsRead` / `TlsClose` work with no
+libssl and no `dlopen`.
+
+### What moved, and what got better on the way
+
+The handshake came out of `test/devtest_tls13_handshake.pas` largely as-is, but
+three things are deliberately NOT a straight copy, because the devtest's
+versions were fine for a loopback test and wrong for a real client:
+
+1. **Key material is from the OS CSPRNG.** The devtest used FIXED bytes — the
+   private key was `Chr(1)..Chr(32)` and the client random `Chr(101)..Chr(132)`.
+   Reproducible is the right call for a test and a catastrophe in a client: a
+   predictable ephemeral key hands the session to anyone who guesses it. Now
+   `OSEntropyBytes` (getrandom(2)), and **failure to get entropy is fatal**
+   rather than falling back to a PRNG.
+2. **The chain is anchored in the system trust store**, via
+   `truststore.VerifyServerChain`, instead of against a single CA handed in as
+   `ParamStr(2)`. That also means the whole `certificate_list` is collected and
+   walked — the devtest parsed only the leaf — so intermediates work, in any
+   order.
+3. **`now` comes from the clock**, not from argv.
+
+Errors return `tlsError` and set `Tls13NativeLastError`; nothing calls `Halt`.
+The seam reports one failure value and a TLS failure has many distinct causes,
+so "it didn't work" is not a diagnosis.
+
+### Limits, stated rather than left to be discovered
+
+- **The handshake is blocking**, and `HandshakeResume` is a no-op. The seam
+  explicitly permits this ("a backend over a blocking fd simply returns
+  tlsOk/tlsError and never wants"). Driving it from the async reactor needs a
+  real state machine — a separate slice. Faking want-read/want-write would be a
+  lie the reactor would trip over.
+- Client role only; `tlsServer` returns `tlsError`.
+- X25519 + AES-128-GCM / ChaCha20-Poly1305, matching what `BuildClientHello`
+  offers. No HelloRetryRequest, no resumption.
+- kTLS TX offload when available (AES-GCM only); RX always uses the Pascal
+  record layer.
+
+### Also landed: `SSL_CERT_FILE`
+
+`LoadSystemTrust` now honours `SSL_CERT_FILE` before the system bundles — the
+convention OpenSSL and curl already use, and the way a caller points at a
+private CA. **Set-but-unreadable is a hard failure, not a fallback**: someone
+who named a trust file meant it, and quietly trusting a different set of roots
+than the one they asked for is exactly the surprise a trust store must not
+spring. It is also what makes the backend testable without weakening the
+default.
+
+### Proven
+
+`tools/tls_native_seam_devtest.sh` (`make tls-native-seam-devtest`), driving a
+client that names no `tls13_*` unit beyond the `uses` that registers the
+backend:
+
+- **3 accepted** — RSA (rsa_pss_rsae_sha256), ed25519 and ECDSA-P256 servers,
+  each a full HTTPS GET returning `HTTP/1.0 200`.
+- **4 refused** — untrusted root, hostname mismatch, empty trust file, missing
+  trust file. These carry as much weight as the positives: a client that
+  accepts everything passes every positive test.
+
+Both existing devtests pass **unchanged**, which is the evidence the extraction
+lost nothing: `tls13-handshake-devtest` (ed25519 + rsa_pss + ecdsa_p256, kTLS-TX
+and Pascal fallback) and `truststore-devtest` (10 assertions, still green after
+the `SSL_CERT_FILE` change).
+
+### What this unblocks
+
+`https://` over the native stack no longer needs [[feature-real-dynlib-loader]],
+which is blocked on two Track A crashes. The remaining work to make it the
+default for `http.pas` is choosing a backend when both are registered — not
+covered here.

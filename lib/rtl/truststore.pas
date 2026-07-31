@@ -68,8 +68,16 @@ function PemSplit(const pem: AnsiString; var ders: array of AnsiString): Integer
 { Read and parse a concatenated-PEM bundle. Unparseable entries are skipped. }
 function LoadTrustFile(const path: AnsiString; var store: TTrustStore): Boolean;
 
-{ Try the known system bundle locations in order. An unreadable store is not an
-  error here — the caller gets an empty store, which trusts nothing. }
+{ Try SSL_CERT_FILE, then the known system bundle locations in order. An
+  unreadable store is not an error here — the caller gets an empty store, which
+  trusts nothing.
+
+  SSL_CERT_FILE is the convention OpenSSL and curl already use, and it is how a
+  caller points at a private CA. If it is SET but unreadable this returns False
+  with an empty store rather than falling back to the system bundle: someone who
+  named a trust file meant it, and silently trusting a different set of roots
+  than the one they asked for is exactly the kind of surprise a trust store must
+  not spring. }
 function LoadSystemTrust(var store: TTrustStore): Boolean;
 
 { Find a root by exact Subject DN. Returns its index, or -1. }
@@ -90,7 +98,7 @@ function VerifyServerChain(const store: TTrustStore;
 
 implementation
 
-uses base64, hashing, platform;
+uses base64, hashing, platform, sysutils;
 
 const
   PEM_BEGIN = '-----BEGIN CERTIFICATE-----';
@@ -197,9 +205,17 @@ begin
 end;
 
 function LoadSystemTrust(var store: TTrustStore): Boolean;
+var envPath: AnsiString;
 begin
   store.Count := 0;
   store.Source := '';
+  envPath := GetEnvironmentVariable('SSL_CERT_FILE');
+  if envPath <> '' then
+  begin
+    { set-but-unreadable is a hard no, not a fallback — see the header }
+    LoadSystemTrust := LoadTrustFile(envPath, store);
+    Exit;
+  end;
   if LoadTrustFile('/etc/ssl/certs/ca-certificates.crt', store) then
   begin
     LoadSystemTrust := True;

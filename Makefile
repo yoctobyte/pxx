@@ -43,7 +43,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
 .PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
-        pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest \
+        pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest tls-native-seam-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
 
 all: $(COMPILER)
@@ -6740,3 +6740,9 @@ truststore-devtest: pxx-stable-check
 # non-hermetic; not in the lib-test gate.
 tls13-handshake-devtest: pxx-stable-check
 	tools/tls13_handshake_devtest.sh
+
+# The native TLS 1.3 backend through the tls.pas seam: three server signature
+# schemes accepted, four refusals (untrusted root, hostname mismatch, empty and
+# missing trust file). Opt-in / non-hermetic; not in the lib-test gate.
+tls-native-seam-devtest: pxx-stable-check
+	tools/tls_native_seam_devtest.sh
