@@ -13408,6 +13408,21 @@ begin
       CurASTNode := node;
       continue;
     end
+    else if PyExprMode and (op = tkPlus) and
+            (PyNodeIsPyList(left) or PyNodeIsPyList(right)) then
+    begin
+      { `[1,2] + "x"` — one side is a list and the other is not: CPython
+        raises TypeError at RUN time (`can only concatenate list (not "str")
+        to list`); NilPy's list-concat branch above already requires BOTH
+        sides typed as a list, so a mismatched pair fell through into the
+        tyString-concat branch below, which only checks "either side is a
+        string" and ignores that the OTHER side is a raw class/list POINTER —
+        silently reinterpreting it as string data instead of raising
+        (bug-nilpy-list-plus-nonlist-silently-corrupts-instead-of-typeerror).
+        NilPy resolves types statically, so this is caught here as a compile
+        error rather than deferred to a run-time exception. }
+      Error('Nil Python: can only concatenate list with another list (+)');
+    end
     else if (op = tkPlus) and ((ASTTk[left] = Ord(tyAnsiString)) or (ASTTk[right] = Ord(tyAnsiString))) then
       ASTTk[node] := Ord(tyAnsiString)
     else if (op = tkPlus) and ((ASTTk[left] = Ord(tyString)) or (ASTTk[right] = Ord(tyString)) or

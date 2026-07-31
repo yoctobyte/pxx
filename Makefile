@@ -952,6 +952,10 @@ test-nilpy: $(COMPILER)
 	# str.rsplit()/partition()/rpartition(); expectation is CPython's own output
 	./$(COMPILER) test/test_nilpy_str_rsplit_partition.npy /tmp/test_nilpy_rsplit26
 	test "$$(/tmp/test_nilpy_rsplit26)" = "$$(printf '%b' '[\047hell\047, \047 w\047, \047rld\047]\n[\047hello w\047, \047rld\047]\n[\047a,b\047, \047c\047, \047d\047]\n(\047hello\047, \047 \047, \047world\047)\n(\047hello w\047, \047o\047, \047rld\047)\n(\047hello world\047, \047\047, \047\047)\n(\047\047, \047\047, \047hello world\047)\n[\047\047]')"
+	# list + non-list used to silently corrupt (reinterpreting the list pointer
+	# as string data) instead of erroring -- now a clear compile error
+	! ./$(COMPILER) test/test_nilpy_list_plus_nonlist_fail.npy /tmp/test_nilpy_lpnl_fail26 > /tmp/test_nilpy_lpnl_fail.log 2>&1
+	grep -q "can only concatenate list with another list" /tmp/test_nilpy_lpnl_fail.log
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING

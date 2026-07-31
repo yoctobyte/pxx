@@ -1,0 +1,6 @@
+# a list concatenated with a non-list via `+` -- CPython raises TypeError at
+# run time; NilPy resolves types statically and catches it as a compile error
+# instead of silently corrupting the result (bug-nilpy-list-plus-nonlist-
+# silently-corrupts-instead-of-typeerror).
+a = [1, 2, 3]
+print(a + "x")
