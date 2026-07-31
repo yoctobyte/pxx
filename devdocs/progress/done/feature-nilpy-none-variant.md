@@ -104,3 +104,4 @@ then re-drive.
   Added `test/test_nilpy_none_variant_residuals.npy` for direct coverage
   (previously covered only incidentally by other tests). Closing — nothing
   left open on this ticket.
+- 2026-07-31 — resolved, commit 7614ee4d5.
