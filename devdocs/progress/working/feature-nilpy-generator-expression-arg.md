@@ -41,3 +41,13 @@ Immediately after this, uforth.py:1289 is `exec(wrapper, env, ns)` — the
 runtime Python evaluator described in [[feature-lib-pyexec]]. That is a whole
 subsystem (parse-once AST + tree-walker), so this genexpr and pyexec should
 probably be scheduled together: getting past 1286 only reaches 1289.
+
+## Already fixed — verified 2026-07-31, closing
+
+Option (2) (general expression-position comprehension/genexpr, via a
+synthesized nested build lifted into a hidden temp — `PyParseCompExprValue`
+in pyparser.inc) landed since this ticket was filed. Re-measured the exact
+uforth repro (`"\n".join("    " + line for line in clean)`) plus `return
+sum(... for ...)`, `list(... for ...)` and `any(... for ...)` — all match
+CPython exactly. Added `test/test_nilpy_genexpr_arg.npy` for direct
+regression coverage.

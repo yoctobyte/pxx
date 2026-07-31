@@ -1,0 +1,18 @@
+# A bare generator expression (no brackets) as a call argument -- uforth's
+# own wall ("\n".join(line for line in ...)) -- and in a return statement,
+# feature-nilpy-generator-expression-arg. Already landed via the general
+# expression-position comprehension/genexpr support (PyParseCompExprValue);
+# verified directly against CPython.
+
+clean = ["a", "b", "c"]
+wrapper = "def __body__():\n" + "\n".join(
+    "    " + line for line in clean
+)
+print(wrapper)
+
+def f(xs):
+    return sum(x * 2 for x in xs)
+
+print(f([1, 2, 3]))
+print(list(x + 1 for x in [1, 2, 3]))
+print(any(x > 2 for x in [1, 2, 3]))
