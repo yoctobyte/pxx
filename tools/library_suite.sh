@@ -105,7 +105,7 @@ run_green() {
     $'5 6 6 2 6 4 2 5 \n5 6 6 2 6 4 2 5 \n359 891 105 979 687 ' \
     "$ROOT/test/lib_random.pas"
   run_expect platform_posix \
-    $'posix\nfiles\nsockets\nthreads\ndynlib\npal-write=3\nflush=0\ntell=2\nfile=io:2:2\nrename=0\nold-missing\nnew-readable\ndelete=0\nmkdir=0\nrmdir=0\nunsupported=-38' \
+    $'posix\nfiles\nsockets\nthreads\npal-write=3\nflush=0\ntell=2\nfile=io:2:2\nrename=0\nold-missing\nnew-readable\ndelete=0\nmkdir=0\nrmdir=0\nunsupported=-38' \
     -Fu"$ROOT/lib/rtl/platform/posix" "$ROOT/test/lib_platform.pas"
   run_expect platform_net_posix \
     $'tcp=ok\nunsupported=-38' \
@@ -123,7 +123,7 @@ run_green() {
     $'5! = 120\n10! = 3628800\n20! = 2432902008176640000\n1000! digits      = 2568\n1000! first 10    = 4023872600\n1000! trailing 0s = 249' \
     "$ROOT/examples/bignum/factorial.pas"
   run_expect zlib \
-    $'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type' \
+    $'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type\nOK gzip\nOK gzip bad crc\nOK raw deflate' \
     "$ROOT/test/lib_zlib.pas"
   run_expect png \
     $'86\n137 80 78 71\nTRUE\n2x2\n255,0,0,255\n0,255,0,128\n0,0,255,64\n255,255,255,0\nFALSE\nbad chunk crc' \
