@@ -6,6 +6,6 @@ import configparser as cp
 
 cfg = cp.ConfigParser()
 cfg.add_section("UI")
-cfg.set_("UI", "size", "1280x800")
+cfg.set("UI", "size", "1280x800")
 print(cfg.get("UI", "size"))
 print(cfg.has_section("UI"), cfg.has_section("nope"))

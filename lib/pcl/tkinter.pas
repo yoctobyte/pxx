@@ -64,7 +64,7 @@ const
   { `END` is what an application writes (`text.delete("1.0", tk.END)`); Pascal
     reserves the word, so the constant is END_ and the frontend maps the
     qualified spelling onto it — the trailing-underscore convention the
-    reserved METHOD names already use (set_, destroy_). }
+    reserved METHOD names already use (set, destroy). }
   END_ = 'end';
   NW = 'nw';
   NE = 'ne';
@@ -192,14 +192,14 @@ type
     { the window-stacking and icon-state calls a secondary window needs to be
       brought back up (`analysis_window.deiconify(); analysis_window.lift()`) }
     procedure lift;
-    procedure lower_;                      { `lower` would shadow str.lower }
+    procedure lower;                      { Python's name; PXX parses it contextually }
     procedure deiconify;
     procedure iconify;
     { the X selection, as tkinter exposes it on every widget }
     function clipboard_get: AnsiString;
     procedure clipboard_clear;
     procedure clipboard_append(const text: AnsiString);
-    procedure destroy_;                    { `destroy` is a Pascal-ish trap }
+    procedure destroy;                    { Python's name; no destructor is shadowed here }
     { process pending events without entering the main loop — what a test (and
       plenty of real code) uses to make geometry and bindings take effect }
     procedure update;
@@ -274,7 +274,7 @@ type
       tabs hold FormatText editors and it calls their own methods), and only a
       dynamic value can carry that. Typed `Widget` the result answered to the
       base class alone. }
-    function nametowidget(const path_: AnsiString): Variant;
+    function nametowidget(const path: AnsiString): Variant;
   end;
 
   { A menu, and the popup an application posts on right-click. }
@@ -302,10 +302,10 @@ type
                        const background: AnsiString = '');
     { Tk indices are strings ("1.0", "end"); an application writes them
       verbatim, so they stay strings here rather than being modelled. }
-    procedure insert(const index_: AnsiString; const chars: AnsiString);
-    procedure delete(const first_: AnsiString; const last_: AnsiString = '');
-    function get(const first_: AnsiString; const last_: AnsiString = ''): AnsiString;
-    procedure tag_add(const tagName, first_, last_: AnsiString);
+    procedure insert(const index: AnsiString; const chars: AnsiString);
+    procedure delete(const first: AnsiString; const last: AnsiString = '');
+    function get(const first: AnsiString; const last: AnsiString = ''): AnsiString;
+    procedure tag_add(const tagName, first, last: AnsiString);
     { Style a tag: the options a rendered document needs. A tag is applied to a
       RANGE by tag_add, so text inserted between two `index` reads can be given
       a font, a colour, margins or spacing. }
@@ -334,7 +334,7 @@ type
   PhotoImage = class
   public
     name: AnsiString;         { the Tcl image name }
-    constructor Create(const data: Variant; const file_: AnsiString = '');
+    constructor Create(const data: Variant; const file: AnsiString = '');
     function width: Integer;
     function height: Integer;
   end;
@@ -421,10 +421,10 @@ type
     { the orientation it was built with, so a LATER `sb.config(command=...)`
       still knows whether the scrolled widget's yview or xview is meant —
       the callable itself carries only {code, receiver}, not the method name }
-    orient_: AnsiString;
+    fOrient: AnsiString;
     constructor Create(master: Widget; const orient: AnsiString = '';
                        const command: Variant = 0);
-    procedure set_(const first, last: AnsiString);
+    procedure set(const first, last: AnsiString);
     { `yscroll.config(command=cv.yview)` — the other half of the scrollbar
       wiring, written after both widgets exist. }
     procedure config(const command: Variant); overload;
@@ -517,7 +517,7 @@ type
     { `StringVar(value="x")` — tkinter's initial value, by keyword }
     constructor Create(const value: AnsiString = '');
     function get: AnsiString;
-    procedure set_(const value: AnsiString);
+    procedure set(const value: AnsiString);
     { the Python spelling of a variable trace: `var.trace_add("write", cb)` }
     procedure trace_add(const mode: AnsiString; const callback: Variant);
   end;
@@ -529,7 +529,7 @@ type
       False, which the Tcl variable must not start as when nothing was asked. }
     constructor Create(const value: Variant = 0);
     function get: Boolean;
-    procedure set_(value: Boolean);
+    procedure set(value: Boolean);
     { the Python spelling of a variable trace: `var.trace_add("write", cb)` }
     procedure trace_add(const mode: AnsiString; const callback: Variant);
   end;
@@ -1121,7 +1121,7 @@ begin
   TkEval('raise ' + path);
 end;
 
-procedure Widget.lower_;
+procedure Widget.lower;
 begin
   TkEval('lower ' + path);
 end;
@@ -1281,7 +1281,7 @@ begin
   end;
 end;
 
-procedure Widget.destroy_;
+procedure Widget.destroy;
 begin
   TkEval('destroy ' + path);
 end;
@@ -1331,14 +1331,14 @@ end;
 
 { ---- PhotoImage ---------------------------------------------------------- }
 
-constructor PhotoImage.Create(const data: Variant; const file_: AnsiString);
+constructor PhotoImage.Create(const data: Variant; const file: AnsiString);
 var payload: AnsiString;
 begin
   TkiEnsureStarted;
   Inc(gTkWidgetSeq);
   name := 'pxximg' + TkiIntStr(gTkWidgetSeq);
-  if file_ <> '' then
-    TkEval('image create photo ' + name + ' -file {' + file_ + '}')
+  if file <> '' then
+    TkEval('image create photo ' + name + ' -file {' + file + '}')
   else
   begin
     payload := pystr_of(data);
@@ -1446,26 +1446,26 @@ begin
          TkiOptInt('height', height) + TkiOptStr('background', background));
 end;
 
-procedure Text.insert(const index_: AnsiString; const chars: AnsiString);
+procedure Text.insert(const index: AnsiString; const chars: AnsiString);
 begin
-  TkEval(path + ' insert ' + index_ + ' {' + chars + '}');
+  TkEval(path + ' insert ' + index + ' {' + chars + '}');
 end;
 
-procedure Text.delete(const first_: AnsiString; const last_: AnsiString);
+procedure Text.delete(const first: AnsiString; const last: AnsiString);
 begin
-  if last_ = '' then TkEval(path + ' delete ' + first_)
-  else TkEval(path + ' delete ' + first_ + ' ' + last_);
+  if last = '' then TkEval(path + ' delete ' + first)
+  else TkEval(path + ' delete ' + first + ' ' + last);
 end;
 
-function Text.get(const first_: AnsiString; const last_: AnsiString): AnsiString;
+function Text.get(const first: AnsiString; const last: AnsiString): AnsiString;
 begin
-  if last_ = '' then get := TkEval(path + ' get ' + first_)
-  else get := TkEval(path + ' get ' + first_ + ' ' + last_);
+  if last = '' then get := TkEval(path + ' get ' + first)
+  else get := TkEval(path + ' get ' + first + ' ' + last);
 end;
 
-procedure Text.tag_add(const tagName, first_, last_: AnsiString);
+procedure Text.tag_add(const tagName, first, last: AnsiString);
 begin
-  TkEval(path + ' tag add ' + tagName + ' ' + first_ + ' ' + last_);
+  TkEval(path + ' tag add ' + tagName + ' ' + first + ' ' + last);
 end;
 
 procedure Text.tag_configure(const tagName: AnsiString;
@@ -1697,7 +1697,7 @@ begin
   kind := 'scrollbar';
   { a vertical scrollbar drives the widget's yview, a horizontal one its xview }
   if orient = 'horizontal' then sub := 'xview' else sub := 'yview';
-  orient_ := orient;
+  fOrient := orient;
   TkEval('scrollbar ' + path + TkiOptStr('orient', orient) +
          TkiOptScrollCmd('command', command, sub));
 end;
@@ -1705,7 +1705,7 @@ end;
 procedure Scrollbar.config(const command: Variant);
 var sub: AnsiString;
 begin
-  if orient_ = 'horizontal' then sub := 'xview' else sub := 'yview';
+  if fOrient = 'horizontal' then sub := 'xview' else sub := 'yview';
   TkEval(path + ' configure' + TkiOptScrollCmd('command', command, sub));
 end;
 
@@ -1714,7 +1714,7 @@ begin
   config(command);
 end;
 
-procedure Scrollbar.set_(const first, last: AnsiString);
+procedure Scrollbar.set(const first, last: AnsiString);
 begin
   TkEval(path + ' set ' + first + ' ' + last);
 end;
@@ -1948,7 +1948,7 @@ begin
   get := TkEval('set ' + name);
 end;
 
-procedure StringVar.set_(const value: AnsiString);
+procedure StringVar.set(const value: AnsiString);
 begin
   TkEval('set ' + name + ' {' + value + '}');
 end;
@@ -1991,7 +1991,7 @@ begin
   get := TkEval('set ' + name) = '1';
 end;
 
-procedure BooleanVar.set_(value: Boolean);
+procedure BooleanVar.set(value: Boolean);
 begin
   if value then TkEval('set ' + name + ' 1')
   else TkEval('set ' + name + ' 0');
@@ -2146,10 +2146,10 @@ begin
   if child <> nil then TkEval(path + ' forget ' + child.path);
 end;
 
-function Notebook.nametowidget(const path_: AnsiString): Variant;
+function Notebook.nametowidget(const path: AnsiString): Variant;
 var w: Widget;
 begin
-  w := TkiWidgetByPath(path_);
+  w := TkiWidgetByPath(path);
   if w = nil then nametowidget := pynone
   else nametowidget := w;      { boxes as VT_OBJECT — its real class comes with it }
 end;

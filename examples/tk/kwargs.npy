@@ -1,0 +1,29 @@
+# Every façade parameter and method is spelled the way CPython spells it, so a
+# keyword argument binds by NAME and a method is reached without a Pascal-side
+# alias. The names that Pascal also uses for something else (`set`, `file`,
+# `destroy`, `lower`, `index`, `first`, `last`) are the interesting ones: PXX
+# parses a member name contextually, so the API carries the Python name.
+# See bug-lib-tkinter-trailing-underscore-params-block-kwargs.
+import tkinter as tk
+
+root = tk.Tk()
+
+txt = tk.Text(root, width=20, height=4)
+txt.insert(index="end", chars="HELLO")
+print("get", txt.get(first="1.0", last="1.5"))
+txt.delete(first="1.0", last="1.3")
+print("after-delete", txt.get(first="1.0", last="end"))
+txt.tag_add(tagName="hot", first="1.0", last="1.2")
+
+v = tk.StringVar(value="a")
+v.set(value="b")
+print("var", v.get())
+
+f = tk.Frame(root, width=30, height=30)
+f.pack()
+f.lower()
+f.lift()
+root.update()
+f.destroy()
+
+print("kwargs ok")

@@ -65,7 +65,7 @@ type
     procedure add_section(const section: AnsiString);
     function has_option(const section, option: AnsiString): Boolean;
     function get(const section, option: AnsiString): AnsiString;
-    procedure set_(const section, option, value: AnsiString);
+    procedure set(const section, option, value: AnsiString);
     { CPython returns a LIST of section names, and applications iterate it
       (`for s in cfg.sections()`); the newline-joined string made that iterate
       CHARACTERS. sections_text keeps the old spelling for Pascal callers. }
@@ -171,10 +171,10 @@ begin
   get := res;
 end;
 
-{ CPython spells this `set`, which is a Pascal reserved word; the frontend maps
-  the Python name onto set_ (see PyStdlibCallProc is NOT involved — the method
-  lookup does it), and Pascal callers use set_ directly. }
-procedure ConfigParser.set_(const section, option, value: AnsiString);
+{ CPython's own spelling. `set` is a type keyword in Pascal, but PXX parses a
+  member name contextually, so the API can carry the name the application
+  writes — no underscore, no frontend mapping. }
+procedure ConfigParser.set(const section, option, value: AnsiString);
 var i, j, si: Integer; key: AnsiString; done: Boolean;
 begin
   if not has_section(section) then add_section(section);
@@ -310,7 +310,7 @@ begin
   if cur = '' then exit;       { a value before any section header }
   key := CpTrim(Copy(line, 1, eq - 1));
   val := CpTrim(Copy(line, eq + 1, Length(line) - eq));
-  set_(cur, key, val);
+  set(cur, key, val);
 end;
 
 procedure ConfigParser.read_string(const text: AnsiString);

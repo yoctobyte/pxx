@@ -6298,6 +6298,10 @@ lib-test: pxx-stable-check
 	  test "$$(xvfb-run -a /tmp/lib_tk_hello)" = "ok: nilpy tk window shown and closed" && \
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/widgets.npy /tmp/lib_tk_widgets >/dev/null && \
 	  test "$$(xvfb-run -a /tmp/lib_tk_widgets | tail -n 4)" = "$$(printf 'entry = typed into an entry\ntext  = and into a text widget\nlabel = widgets, one TkEval each\nok: nilpy tk widgets shown and closed')" && \
+	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/kwargs.npy /tmp/lib_tk_kwargs >/dev/null && \
+	  test "$$(xvfb-run -a /tmp/lib_tk_kwargs | tr -d '\n')" = "get HELLOafter-delete LOvar bkwargs ok" && \
+	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/callbacks.npy /tmp/lib_tk_callbacks >/dev/null && \
+	  test "$$(xvfb-run -a /tmp/lib_tk_callbacks | tail -n 6)" = "$$(printf 'configure 200 100\nlifted 200 100\ntrace fired\nstr trace fired\nbbox [1, 1, 10, 10]\nhits 1')" && \
 	  echo "  tk-nilpy: ok"; \
 	else \
 	  echo "  tk-nilpy: SKIP (no xvfb-run or no libtk8.6)"; \
