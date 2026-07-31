@@ -509,6 +509,9 @@ test-nilpy: $(COMPILER)
 	@# missing key) raise CATCHABLE exceptions, bare except: and typed
 	./$(COMPILER) test/test_nilpy_catchable_runtime_errors.npy /tmp/test_nilpy_catchable26
 	test "$$(/tmp/test_nilpy_catchable26)" = "$$(printf '%b' 'caught div (bare)\ncaught floordiv ZeroDivisionError\ncaught truediv ZeroDivisionError\ncaught int() ValueError\ncaught float() ValueError\ncaught IndexError\ncaught KeyError')"
+	@# sum/max/min/any/all/sorted/set (already worked) + type(x).__name__ (new)
+	./$(COMPILER) test/test_nilpy_aggregate_builtins.npy /tmp/test_nilpy_aggbuiltins26
+	test "$$(/tmp/test_nilpy_aggbuiltins26)" = "$$(printf '%b' '6\n3\n1\nTrue\nTrue\n[1, 2, 3]\n3\n[1, 2, 3]\nValueError\nFoo')"
 	./$(COMPILER) test/test_nilpy_dynattr.npy /tmp/test_nilpy_dynattr26
 	test "$$(/tmp/test_nilpy_dynattr26)" = "$$(printf '%b' '105\n110')"
 	./$(COMPILER) test/test_nilpy_dynattr_class.npy /tmp/test_nilpy_dynattr_class26

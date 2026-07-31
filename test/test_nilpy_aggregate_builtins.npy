@@ -1,0 +1,34 @@
+# sum/max/min/any/all/sorted/set were already implemented (undocumented) --
+# only type() was genuinely missing. Added the one shape songformatter needs,
+# `type(x).__name__` on a class instance, lowered onto the same
+# __pxxRttiOf/__pxxClassName pair `x.ClassName` already uses. map/filter over
+# an arbitrary callable value remain open (tied to
+# bug-nilpy-callable-value-abi-sorted-key-and-builtins).
+# feature-nilpy-aggregate-builtins
+# Every expectation is CPython's own output.
+
+xs = [3, 1, 2]
+print(sum(xs))
+print(max(xs))
+print(min(xs))
+print(any(xs))
+print(all(xs))
+print(sorted(xs))
+
+s = set([1, 2, 2, 3])
+print(len(s))
+print(sorted(s))
+
+try:
+    raise ValueError("x")
+except Exception as e:
+    print(type(e).__name__)
+
+class Foo(Exception):
+    def __init__(self, m):
+        pass
+
+try:
+    raise Foo("boom")
+except Exception as e2:
+    print(type(e2).__name__)

@@ -12515,10 +12515,41 @@ end;
   Applying this after the additive layer made `"a" + "b".upper()` parse as
   `("a" + "b").upper()` and silently print AB where CPython prints aB. }
 procedure ParseFactor;
-var smNameTok, smBase, sdTok: Integer;
+var smNameTok, smBase, sdTok, tpObjNode, tpBlobNode, tpCallNode: Integer;
     sdName: AnsiString;
-    smTk: TTypeKind;   { receiver kind for a suffix on a fresh construction }
+    smTk, tpTk: TTypeKind;   { receiver kind for a suffix on a fresh construction }
 begin
+  { `type(x).__name__` -- the ONLY shape of Python's `type()` builtin this
+    frontend accepts (not a general type-object value: no bare `type(x)`,
+    no equality/printing of it). Lowered straight onto the existing FPC
+    class-reference machinery a NilPy class instance already has: the same
+    __pxxRttiOf + __pxxClassName pair `obj.ClassName` uses.
+    feature-nilpy-aggregate-builtins }
+  if PyExprMode and isNilPy and PyIsIdent('type') and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkLParen) and (FindSym('type') < 0) then
+  begin
+    Next; Expect(tkLParen, '(');
+    ParseExpr;
+    tpObjNode := CurASTNode;
+    Expect(tkRParen, ')');
+    if (CurTok.Kind <> tkDot) or (TokPos >= TokCount) or
+       (Tokens[TokPos].Kind <> tkIdent) or
+       (not CaseEqual(GetTokenStr(TokPos), '__name__')) then
+      Error('Nil Python: type(x) is only supported as type(x).__name__');
+    Next; Next;                { '.', '__name__' }
+    if IntToTypeKind(ASTTk[tpObjNode]) <> tyClass then
+      Error('Nil Python: type(x).__name__ needs x to be a class instance ' +
+            '(a scalar has no RTTI blob to read)');
+    tpBlobNode := GenMakeRttiOfCall(tpObjNode);
+    if tpBlobNode < 0 then
+      Error('Nil Python: type(x).__name__ needs RTTI linked (__pxxRttiOf)');
+    tpCallNode := GenMakeClassRefOp(tpBlobNode, 'ClassName', tpTk);
+    if tpCallNode < 0 then
+      Error('Nil Python: type(x).__name__ needs RTTI linked (__pxxClassName)');
+    CurASTNode := tpCallNode;
+    LastExprTk := tpTk;
+    Exit;
+  end;
   { A `lambda` expression. Consumed and reduced to a placeholder None value:
     full lambda support is function-value synthesis (like nested defs), and the
     body would only run through exec()/native dispatch, which is stubbed
