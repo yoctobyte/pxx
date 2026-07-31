@@ -8,7 +8,7 @@ prio: 50
 # nilpy: infer field types from `self.x = <param>`
 
 - **Type:** feature (Nil-Python frontend, typing) — **Track N**
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-26 — probing songformatter under nilpy
   ([[feature-demo-songformatter-pxx-target]]).
 
@@ -43,3 +43,6 @@ with defaults already works, which suggests the machinery is close.
 `make test-nilpy` green with a `.npy` case (inherited + overridden methods,
 annotated and unannotated ctor params) diffed against CPython, + `--tier quick` +
 self-host byte-identical.
+
+## Log
+- 2026-07-31 — resolved, commit 31ea7274fb78809178a254c9625542d1178a612f.
