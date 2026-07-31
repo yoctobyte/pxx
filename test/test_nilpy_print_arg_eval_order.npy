@@ -1,0 +1,23 @@
+# print() wrote each argument to stdout as it was evaluated, so an exception
+# raised by a LATER argument left EARLIER ones already on stdout -- the
+# classic `try: print(...) except: print(fallback)` idiom then printed both.
+# bug-nilpy-print-emits-arguments-before-evaluating-later-ones
+# Every expectation is CPython's own output.
+
+try:
+    print("label =", str(3 % 0))
+except:
+    print("label = ERR")
+
+print(1, 2, 3)
+print("a", "b", "c")
+print([1, 2], {"k": 1})
+print("x", 5, 3.14, True, None)
+
+def f():
+    return "side"
+print("before", f())
+
+xs = [1, 2, 3]
+print(*xs)
+print("lead", *xs)

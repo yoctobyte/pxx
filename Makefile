@@ -722,6 +722,9 @@ test-nilpy: $(COMPILER)
 	@# `target[key] op= value` on a dict/list/Counter subscript (found already fixed)
 	./$(COMPILER) test/test_nilpy_augmented_subscript_assign.npy /tmp/test_nilpy_augsubassign26
 	test "$$(/tmp/test_nilpy_augsubassign26)" = "$$(printf '{'"'"'a'"'"': 2}\n[6, 2]\n2\n14\n[1, 1, 30]')"
+	@# print() evaluates every argument before writing any of them
+	./$(COMPILER) test/test_nilpy_print_arg_eval_order.npy /tmp/test_nilpy_printorder26
+	test "$$(/tmp/test_nilpy_printorder26)" = "$$(printf '%b' 'label = ERR\n1 2 3\na b c\n[1, 2] {'"'"'k'"'"': 1}\nx 5 3.14 True None\nbefore side\n1 2 3\nlead 1 2 3')"
 	@# a managed STRING local minted after the prologue zero-init pass was never
 	@# nil'd, so the loop's first store released stale frame bytes -> SIGSEGV
 	./$(COMPILER) test/test_nilpy_str_local_loop_zeroinit.npy /tmp/test_nilpy_str_local_zi26

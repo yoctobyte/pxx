@@ -8160,6 +8160,8 @@ var node, argNode, lastArg, sepLit, noneLit, endLit, writeFd: Integer;
     starProc, starArg, leadLit: Integer;
     kw, endText: AnsiString;
     haveEnd, isStar, sawStar: Boolean;
+    pargTmp, pargAsgn: Integer;
+    pargTk: TTypeKind;
 begin
   Next;
   Expect(tkLParen, '(');
@@ -8291,6 +8293,26 @@ begin
           ASTLeft[CurASTNode] := starArg;
         end;
       end;
+      { Evaluate this argument into a hidden temp NOW, rather than letting
+        AN_WRITELN's own lowering evaluate-and-emit each argument in turn.
+        Python evaluates every argument before print writes anything; pxx
+        wrote each one as it was computed, so `print("label =", str(3 % 0))`
+        raising on its SECOND argument left the first already on stdout, and
+        the handler's own fallback print appended to it instead of replacing
+        it (bug-nilpy-print-emits-arguments-before-evaluating-later-ones).
+        Hoisted (run before this whole print statement, in the same
+        left-to-right order the arguments are parsed in), so by the time
+        AN_WRITELN's lowering runs, every value is already sitting in a slot
+        and nothing it does can raise. }
+      pargTk := IntToTypeKind(ASTTk[CurASTNode]);
+      pargTmp := AllocVar(PyHiddenName('parg'), pargTk);
+      if pargTk = tyClass then Syms[pargTmp].RecName := ResolveNodeRec(CurASTNode);
+      pargAsgn := AllocNode(AN_ASSIGN);
+      ASTLeft[pargAsgn] := PyMakeIdent(pargTmp);
+      ASTRight[pargAsgn] := CurASTNode;
+      PyHoistStmt(pargAsgn);
+      CurASTNode := PyMakeIdent(pargTmp);
+
       argNode := AllocNode(AN_ARG);
       ASTLeft[argNode] := CurASTNode;
       ASTRight[argNode] := -1;
