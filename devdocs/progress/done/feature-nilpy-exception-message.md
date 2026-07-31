@@ -78,3 +78,6 @@ returning tyString at 189/355 but the value lowering is elsewhere). Next: find
 where `str(<classinstance>)` lowers and apply the same Exception→.msg rewrite (or
 give the frontend Exception UClass a real str path). Keep this ticket open until
 str(e)/f-string parity lands.
+
+## Log
+- 2026-07-31 — resolved, commit c94f7ba7e2df10bc6d1ed623e6201969f6a9ac78.
