@@ -108,3 +108,6 @@ gcc -w -o /tmp/o test/crtl_libc_oracle.c -lm && /tmp/o | sed -n 13p   # wcslen=5
 ```
 
 Track T filed this and does not fix it (T owns the tool, never the bug).
+
+## Log
+- 2026-08-01 — resolved, commit 6491f0c30.

@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-wide-string-literal-narrow-in-value-context | C | 70 | bug | L\"...\" stays narrow bytes outside an array initializer, so wchar_t* reads 4 chars per element and walks off the end | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 
 ## unfinished (2)
@@ -311,7 +310,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1132)
+## done (1133)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -528,6 +527,7 @@ _none_
 | bug-c-va-arg-local-fnptr-typedef-sqlite | C | 50 | bug | C: va_arg with local function-pointer typedef in sqlite | — |
 | bug-c-vararg-overflow-area | A | 50 | bug | C: 6+ variadic args (overflow area) segfault | — |
 | bug-c-vararg-vastart-named-fp-stack | A | 50 | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
+| bug-c-wide-string-literal-narrow-in-value-context | C | 70 | bug | L\"...\" stays narrow bytes outside an array initializer, so wchar_t* reads 4 chars per element and walks off the end | — |
 | bug-capital-write-undefined-in-compiler-selfbuild | A | 50 | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
 | bug-cardinal-expr-promotion-shr-orphan | A | 50 | bug | bug: cardinal/signed 32-bit expression width (orphan addendum) | — |
 | bug-cardinal-expr-promotion | A | 50 | bug | bug: cardinal/longword binary-op promotes to uint64 (FPC: int64) | — |
