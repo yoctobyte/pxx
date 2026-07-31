@@ -9088,6 +9088,81 @@ begin
   Result := '__py_' + stem + '_' + PyIntLiteralText(PyHiddenSeq);
 end;
 
+{ Rewrite every identifier token spelled `oldName` within [lo, hi) to
+  `newName`. Used to give a comprehension's loop variable its OWN hidden
+  binding: a comprehension's target is scoped to itself in Python (unlike a
+  plain `for`, which deliberately leaks into the enclosing scope), and this
+  compiler has no real block-scoping to fall back on, so the loop variable's
+  references are re-spelled to a fresh hidden name instead
+  (bug-nilpy-comprehension-variable-leaks-and-clobbers-the-enclosing-scope). }
+procedure PyRenameIdentRange(lo, hi: Integer; const oldName, newName: AnsiString);
+{ A raw token (TRawToken) has no string field of its own — its text is
+  SOffset/SLen into the shared TokChars buffer, which existing tokens' bytes
+  may overlap or alias. Point a matching token at a FRESH copy of `newName`
+  interned via PyStoredName (memoised: every renamed token in this range
+  shares the one copy) rather than writing through a field that does not
+  exist on the raw token record. }
+var k, newOff: Integer;
+begin
+  if (lo < 0) or (hi < 0) then Exit;
+  newOff := -1;
+  for k := lo to hi - 1 do
+    if (Tokens[k].Kind = tkIdent) and (Tokens[k].SLen = Length(oldName)) and
+       (GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen) = oldName) then
+    begin
+      if newOff < 0 then newOff := PyStoredName(newName);
+      Tokens[k].SOffset := newOff;
+      Tokens[k].SLen := Length(newName);
+    end;
+end;
+
+{ A comprehension's loop-variable hidden name must be STABLE across repeated
+  parses of the same source tokens: the typing pre-pass
+  (PyCollectModuleLocalsAST) and the real pass both call PyParseForIn over
+  the SAME token stream, and PyRenameIdentRange's rewrite of the identifier
+  tokens is a PERMANENT mutation (raw tokens have no independent text of
+  their own, see PyRenameIdentRange) — so a counter-based name (PyHiddenName)
+  would rename 'x' to, say, '__py_x_2' on the pre-pass, then find no more
+  literal 'x' tokens to rename on the real pass (they already read
+  '__py_x_2') while allocating a DIFFERENT symbol name for that pass,
+  leaving the token pointing at a symbol from the discarded pre-pass table
+  ("undefined variable"). Deriving the name from the `for` token's own
+  position instead of a counter makes the rename idempotent: pass two sees
+  the token already renamed, matches nothing, and simply allocates its own
+  fresh symbol under the same deterministic name the token already reads. }
+function PyCompHiddenLoopName(tokIdx, slot: Integer): AnsiString;
+begin
+  Result := '__py_cv' + PyIntLiteralText(tokIdx) + '_' + PyIntLiteralText(slot);
+end;
+
+{ Find the depth-0 closing bracket of a comprehension/filter header starting
+  at `fromTok`, tracking nested brackets so an inner `[...]`/`{...}` isn't
+  mistaken for the outer one's closer. Also records the first depth-0 `if`
+  (a filter clause) into `filtIdx`, without stopping there — the real closer
+  sits AFTER the filter condition. }
+function PyCompFindClose(fromTok: Integer; var filtIdx: Integer): Integer;
+var fj, fdepth: Integer;
+begin
+  fj := fromTok;
+  fdepth := 0;
+  filtIdx := -1;
+  Result := -1;
+  while fj < TokCount do
+  begin
+    case Tokens[fj].Kind of
+      tkLParen, tkLBrack, tkBegin: Inc(fdepth);
+      tkRParen, tkRBrack, tkEnd:
+        begin
+          if fdepth = 0 then begin Result := fj; Exit; end;
+          Dec(fdepth);
+        end;
+      tkNewline, tkEOF: Exit;
+      tkIf: if (fdepth = 0) and (filtIdx < 0) then filtIdx := fj;
+    end;
+    Inc(fj);
+  end;
+end;
+
 { Build `container.<meth>(args...)` as an AN_CALL, given the container's class
   index. Returns -1 when the method is absent. }
 function PyNodeListCi(n: Integer): Integer;
@@ -9412,23 +9487,29 @@ begin
   end;
 end;
 
-function PyParseForIn(const name: AnsiString; const name2: AnsiString; enumMode: Boolean): Integer;
+function PyParseForIn(const name: AnsiString; const name2: AnsiString; enumMode: Boolean;
+                       forTokIdx: Integer): Integer;
 var contNode, ci, dictCi, listCi, symIdx, cSym, iSym, nSym: Integer;
     sym2, vSym, vListNode, itemsDot: Integer;   { two-name target: `for k, v in d.items()` }
     elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
     compSaved, keyN, savedHoist, innerHoist: Integer;
-    filtIdx, fj, fdepth, filtPair, filtN: Integer;  { comprehension `if` filter }
+    filtIdx, fj, fdepth, filtPair, filtN, closerPos: Integer;  { comprehension `if` filter }
     isStr, pairMode: Boolean; contTk, tk: TTypeKind;
     elemNode2, pairSym, plistSym, xi, nExtra, cci: Integer;
     extraSyms: array[0..5] of Integer;
+    hName, hName2: AnsiString;
+    hExtraNames: array[0..5] of AnsiString;
 begin
   pairMode := False;
   { A comprehension filter — `[EXPR for V in ITER if COND]` — must not let the
     ITER expression parser see the `if`: it parses as a ternary head and dies
     on the missing else. Hide the depth-0 `if` behind a fake ':' while ITER
     parses (the .items() trick below); the body build restores and consumes
-    it (feature-nilpy-comprehension-if-filter). }
+    it (feature-nilpy-comprehension-if-filter). Also locates the header's real
+    closing bracket (AFTER the filter, not at it) so the loop-variable rename
+    below can cover the filter condition too. }
   filtIdx := -1;
+  closerPos := -1;
   if PyCompTarget >= 0 then
   begin
     fj := TokPos - 1;                  { CurTok's index = first ITER token }
@@ -9439,15 +9520,42 @@ begin
         tkLParen, tkLBrack, tkBegin: Inc(fdepth);
         tkRParen, tkRBrack, tkEnd:
           begin
-            if fdepth = 0 then break;  { the comprehension's own closer }
+            if fdepth = 0 then begin closerPos := fj; break; end;  { the comprehension's own closer }
             Dec(fdepth);
           end;
         tkNewline, tkEOF: break;
-        tkIf: if fdepth = 0 then begin filtIdx := fj; break; end;
+        tkIf: if (fdepth = 0) and (filtIdx < 0) then filtIdx := fj;
       end;
       Inc(fj);
     end;
     if filtIdx >= 0 then Tokens[filtIdx].Kind := tkColon;
+  end;
+  { Give the comprehension's loop variable(s) their OWN hidden binding rather
+    than reusing/creating a program symbol under the user's spelled name:
+    Python scopes a comprehension's target to itself, so an outer `x` must
+    survive `[x for x in ...]` untouched. Re-spell every reference to the
+    name within the ELEMENT expression (before the `for`) and the filter
+    condition (if any) to a fresh hidden name, then bind THAT name below —
+    see PyRenameIdentRange
+    (bug-nilpy-comprehension-variable-leaks-and-clobbers-the-enclosing-scope). }
+  if PyCompTarget >= 0 then
+  begin
+    hName := PyCompHiddenLoopName(forTokIdx, 0);
+    PyRenameIdentRange(PyCompExprStart, forTokIdx, name, hName);
+    if filtIdx >= 0 then PyRenameIdentRange(filtIdx + 1, closerPos, name, hName);
+    if name2 <> '' then
+    begin
+      hName2 := PyCompHiddenLoopName(forTokIdx, 1);
+      PyRenameIdentRange(PyCompExprStart, forTokIdx, name2, hName2);
+      if filtIdx >= 0 then PyRenameIdentRange(filtIdx + 1, closerPos, name2, hName2);
+    end;
+    for xi := 0 to PyForExtraCount - 1 do
+    begin
+      hExtraNames[xi] := PyCompHiddenLoopName(forTokIdx, 2 + xi);
+      PyRenameIdentRange(PyCompExprStart, forTokIdx, PyForExtraName[xi], hExtraNames[xi]);
+      if filtIdx >= 0 then
+        PyRenameIdentRange(filtIdx + 1, closerPos, PyForExtraName[xi], hExtraNames[xi]);
+    end;
   end;
   { `d.items()`: hide the suffix behind a fake ':' so the expression parser stops
     at the dict, then step over the four suffix tokens and restore. }
@@ -9591,7 +9699,11 @@ begin
     to a variant correctly, and the for-loop target was simply invisible to
     that mechanism
     (bug-nilpy-for-variable-reused-after-a-non-string-binding-iterates-garbage). }
-  if PyTypingPass then
+  { A comprehension's loop variable is a fresh hidden binding (see above), not
+    the spelled `name` at all, so it must not feed the whole-program widening
+    table under the outer name — that would widen an outer binding of the
+    same spelling based on the comprehension's own internal usage. }
+  if PyTypingPass and (PyCompTarget < 0) then
   begin
     if enumMode then
     begin
@@ -9627,48 +9739,74 @@ begin
   if not isStr then Syms[cSym].RecName := REC_UCLASS_BASE + ci;
   nSym := AllocVar(PyHiddenName('n'), tyInteger);
   iSym := AllocVar(PyHiddenName('i'), tyInteger);
-  symIdx := PyProgSym(name);
-  if symIdx < 0 then
+  if PyCompTarget >= 0 then
   begin
+    { A fresh hidden symbol every time — never reused across comprehensions,
+      never resolved via PyProgSym — so the loop variable cannot clobber (or
+      be clobbered by) any outer binding of the same spelled name. }
     if enumMode then tk := tyInteger
     else if isStr then tk := tyAnsiString
     else tk := tyVariant;
-    { A MODULE-level for-target created here for the first time must consult
-      the whole-program widening table too, exactly like a bare assignment
-      does a few lines up in PyParseStatement — otherwise the ORDER the two
-      binding forms happen to appear in decides the outcome: `for c in "ab":
-      pass` before `c = 5` created `c` as tyAnsiString right here (ignoring
-      that PyModuleLocals already knows `c` is also assigned an int later),
-      and the later `c = 5` stored a scalar int into a managed-string slot —
-      SIGSEGV on release. Function-local targets do not need this: every
-      local is pre-seeded from the converged PyLocals table before the body's
-      real parse begins (see the `for i := 0 to PyLocalCount - 1` loop next to
-      each PyCollectLocalsAST call), so `symIdx` is essentially never < 0
-      there for a name the pre-pass already saw.
-      (bug-nilpy-for-variable-reused-after-a-non-string-binding-iterates-garbage) }
-    if CurProc < 0 then
+    symIdx := AllocVar(hName, tk);
+  end
+  else
+  begin
+    symIdx := PyProgSym(name);
+    if symIdx < 0 then
     begin
-      cci := PyFindModuleConstraint(name);
-      if cci >= 0 then tk := PyWiden(tk, PyModuleLocals[cci].TypeKind);
+      if enumMode then tk := tyInteger
+      else if isStr then tk := tyAnsiString
+      else tk := tyVariant;
+      { A MODULE-level for-target created here for the first time must consult
+        the whole-program widening table too, exactly like a bare assignment
+        does a few lines up in PyParseStatement — otherwise the ORDER the two
+        binding forms happen to appear in decides the outcome: `for c in "ab":
+        pass` before `c = 5` created `c` as tyAnsiString right here (ignoring
+        that PyModuleLocals already knows `c` is also assigned an int later),
+        and the later `c = 5` stored a scalar int into a managed-string slot —
+        SIGSEGV on release. Function-local targets do not need this: every
+        local is pre-seeded from the converged PyLocals table before the body's
+        real parse begins (see the `for i := 0 to PyLocalCount - 1` loop next to
+        each PyCollectLocalsAST call), so `symIdx` is essentially never < 0
+        there for a name the pre-pass already saw.
+        (bug-nilpy-for-variable-reused-after-a-non-string-binding-iterates-garbage) }
+      if CurProc < 0 then
+      begin
+        cci := PyFindModuleConstraint(name);
+        if cci >= 0 then tk := PyWiden(tk, PyModuleLocals[cci].TypeKind);
+      end;
+      symIdx := AllocVar(name, tk);
     end;
-    symIdx := AllocVar(name, tk);
   end;
   nExtra := PyForExtraCount;
   for xi := 0 to nExtra - 1 do
   begin
-    extraSyms[xi] := PyProgSym(PyForExtraName[xi]);
-    if extraSyms[xi] < 0 then extraSyms[xi] := AllocVar(PyForExtraName[xi], tyVariant);
+    if PyCompTarget >= 0 then
+      extraSyms[xi] := AllocVar(hExtraNames[xi], tyVariant)
+    else
+    begin
+      extraSyms[xi] := PyProgSym(PyForExtraName[xi]);
+      if extraSyms[xi] < 0 then extraSyms[xi] := AllocVar(PyForExtraName[xi], tyVariant);
+    end;
   end;
   sym2 := -1;
   if name2 <> '' then
   begin
-    sym2 := PyProgSym(name2);
-    if sym2 < 0 then
+    if PyCompTarget >= 0 then
     begin
-      { enumerate over a STRING yields 1-character strs, like the single-name
-        str loop; a container yields variant slots }
-      if isStr then sym2 := AllocVar(name2, tyAnsiString)
-      else sym2 := AllocVar(name2, tyVariant);
+      if isStr then sym2 := AllocVar(hName2, tyAnsiString)
+      else sym2 := AllocVar(hName2, tyVariant);
+    end
+    else
+    begin
+      sym2 := PyProgSym(name2);
+      if sym2 < 0 then
+      begin
+        { enumerate over a STRING yields 1-character strs, like the single-name
+          str loop; a container yields variant slots }
+        if isStr then sym2 := AllocVar(name2, tyAnsiString)
+        else sym2 := AllocVar(name2, tyVariant);
+      end;
     end;
   end;
 
@@ -10270,7 +10408,10 @@ var name, name2: AnsiString;
     pair1, pair2, pair3, bodyNode, oneNode, limitNode, compSaved: Integer;
     rngStep, cmpNode, incNode, whileNode, keyN, hoistPre: Integer;
     parenTarget: Boolean; pDepth, pScan: Integer;
+    forTokIdx: Integer;   { token index of the `for` keyword itself }
+    hName: AnsiString; ifCondStart, closerPos2, filtDummy: Integer;
 begin
+  forTokIdx := TokPos - 1;   { CurTok is `for` at entry }
   Next;
   { A PARENTHESISED target list — `for (x, y, text, font, pf) in self.lines:`.
     Python allows the parens and songformatter's render backend writes them;
@@ -10347,12 +10488,25 @@ begin
         enumMode := True;
         Next; Expect(tkLParen, '(');
       end;
-    Result := PyParseForIn(name, name2, enumMode);
+    Result := PyParseForIn(name, name2, enumMode, forTokIdx);
     Exit;
   end;
   if name2 <> '' then Error('Nil Python: a two-name for target needs a dict (.items())');
-  symIdx := PyProgSym(name);
-  if symIdx < 0 then symIdx := AllocVar(name, tyInteger);
+  if PyCompTarget >= 0 then
+  begin
+    { Same hidden-binding treatment as PyParseForIn: a comprehension over
+      range() must not clobber an outer binding of the same spelled name
+      (bug-nilpy-comprehension-variable-leaks-and-clobbers-the-enclosing-scope).
+      Deterministic name (see PyCompHiddenLoopName) — stable across the
+      typing pre-pass and the real pass over the same tokens. }
+    hName := PyCompHiddenLoopName(forTokIdx, 0);
+    symIdx := AllocVar(hName, tyInteger);
+  end
+  else
+  begin
+    symIdx := PyProgSym(name);
+    if symIdx < 0 then symIdx := AllocVar(name, tyInteger);
+  end;
   PyExpectIdent('range');
   Expect(tkLParen, '(');
   PyParseBoolExpr;
@@ -10387,6 +10541,7 @@ begin
       comprehension, target.store(KEY, VALUE). EXPR re-parsed from before the
       `for`, the same shape PyParseForIn uses. Header ends at a bracket. }
     compSaved := TokPos - 1;
+    PyRenameIdentRange(PyCompExprStart, forTokIdx, name, hName);
     TokPos := PyCompExprStart; Next;
     if PyCompIsDict then
     begin
@@ -10412,6 +10567,9 @@ begin
     if CurTok.Kind = tkIf then
     begin
       Next;
+      ifCondStart := TokPos - 1;
+      closerPos2 := PyCompFindClose(ifCondStart, filtDummy);
+      PyRenameIdentRange(ifCondStart, closerPos2, name, hName);
       PyParseBoolExpr;
       node := AllocNode(AN_IF);
       ASTLeft[node] := PyMakeTruthy(CurASTNode);

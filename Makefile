@@ -552,6 +552,10 @@ test-nilpy: $(COMPILER)
 	@# itself, not a hardcoded "vm" key
 	./$(COMPILER) test/test_nilpy_pyeval_no_vm_key.npy /tmp/test_nilpy_novmkey26
 	test "$$(/tmp/test_nilpy_novmkey26)" = "[42, 43]"
+	@# a comprehension's loop variable is scoped to itself, not the enclosing
+	@# scope: an outer binding of the same name must survive untouched
+	./$(COMPILER) test/test_nilpy_comprehension_scope.npy /tmp/test_nilpy_compscope26
+	test "$$(/tmp/test_nilpy_compscope26)" = "$$(printf '%b' '5 [1, 2, 3]\nouter {'"'"'a'"'"': 1, '"'"'b'"'"': 1}\n99 [1, 2]\nouter [[1, 2]]\n[1, 2, 3] [9]\n7 [0, 2, 4]')"
 	./$(COMPILER) test/test_nilpy_dynattr.npy /tmp/test_nilpy_dynattr26
 	test "$$(/tmp/test_nilpy_dynattr26)" = "$$(printf '%b' '105\n110')"
 	./$(COMPILER) test/test_nilpy_dynattr_class.npy /tmp/test_nilpy_dynattr_class26

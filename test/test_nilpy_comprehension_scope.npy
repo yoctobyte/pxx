@@ -1,0 +1,30 @@
+# A comprehension gives its loop variable its OWN scope in Python 3 -- the
+# name is local to the comprehension and the enclosing binding is untouched.
+# pxx used to run the loop in the enclosing scope, silently overwriting an
+# outer variable of the same name (and crashing when the types disagreed).
+# bug-nilpy-comprehension-variable-leaks-and-clobbers-the-enclosing-scope
+# Every expectation is CPython's own output.
+
+x = 5
+ys = [x for x in [1, 2, 3]]
+print(x, ys)
+
+k = "outer"
+d = {k: 1 for k in ["a", "b"]}
+print(k, d)
+
+v = 99
+s = {v for v in [1, 2]}
+print(v, sorted(s))
+
+a = "outer"
+nested = [[a for a in [1, 2]] for b in [1]]
+print(a, nested)
+
+xs = [1, 2, 3]
+r = [xs for xs in [9]]
+print(xs, r)
+
+n = 7
+ev = [n for n in range(5) if n % 2 == 0]
+print(n, ev)
