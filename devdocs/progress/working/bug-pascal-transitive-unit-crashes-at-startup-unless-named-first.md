@@ -8,6 +8,8 @@ prio: 60
 # A unit reached only TRANSITIVELY crashes the program at startup
 
 - **Type:** bug (compiler core — unit emission / initialization order — **Track A**)
+- **Status:** working
+- **Owner:** claude-A2
 - **Opened:** 2026-07-31 by Track B, wiring the Synapse SSL end-to-end for
   [[feature-real-dynlib-loader]]. Filed, not fixed: this is `compiler/**`.
 
