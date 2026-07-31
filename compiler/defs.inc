@@ -2525,6 +2525,19 @@ var
   ArrTypeHi     : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeElemTk : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeElemRec: array[0..MAX_TYPEALIAS-1] of Integer;
+  { A named array type whose element is itself a POINTER (`TPropList = array[..]
+    of PPropInfo`) needs the pointee record id too -- ArrTypeElemRec above only
+    ever holds a record id for a RECORD element. Without a dedicated slot, the
+    pointee id computed by ParseTypeKind while parsing the element type
+    (LastTypePointerElemRec) was simply dropped at alias-definition time, and
+    every later consumer of this alias (`var lst: TPropList`, a field, a param)
+    read whatever LastTypePointerElemRec happened to still hold from the LAST
+    unrelated pointer-typed declaration parsed anywhere earlier -- a global
+    leaking across the alias's definition and every one of its uses
+    (bug-pascal-array-of-pointer-deref-loses-the-record-type: `lst[j]^.Kind`
+    resolved against whatever pointer type was parsed last in the unit, e.g. a
+    local var in the last routine, instead of the array's real element type). }
+  ArrTypePtrElemRec: array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeNDims  : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeDimLo  : array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;
   ArrTypeDimSpan: array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;

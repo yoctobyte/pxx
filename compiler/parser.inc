@@ -20221,6 +20221,7 @@ begin
       isArr := True;
       elemTk := IntToTypeKind(ArrTypeElemTk[ai]); tk := elemTk;
       LastTypeRecId := ArrTypeElemRec[ai];
+      LastTypePointerElemRec := ArrTypePtrElemRec[ai];
       if ArrTypeIsDyn[ai] then
       begin
         { dynamic-array alias -> AllocDynArray below }
@@ -20315,6 +20316,7 @@ begin
           begin
             elemTk := IntToTypeKind(ArrTypeElemTk[ai]);
             LastTypeRecId := ArrTypeElemRec[ai];
+            LastTypePointerElemRec := ArrTypePtrElemRec[ai];
             dynDepth := dynDepth + ArrTypeDynDepth[ai];
             Next;                 { consume the alias name }
             tk := elemTk;
@@ -20333,6 +20335,7 @@ begin
               Error('array of array of <fixed array type> not supported');
             elemTk := IntToTypeKind(ArrTypeElemTk[ai]);
             LastTypeRecId := ArrTypeElemRec[ai];
+            LastTypePointerElemRec := ArrTypePtrElemRec[ai];
             if (elemTk = tyAnsiString) or (elemTk = tyString) or
                (elemTk = tyFixedString) or (elemTk = tyShortString) or
                ((elemTk = tyRecord) and RecordHasManagedFields(LastTypeRecId)) then
@@ -20358,6 +20361,7 @@ begin
         begin
           elemTk := IntToTypeKind(ArrTypeElemTk[ai]);
           LastTypeRecId := ArrTypeElemRec[ai];
+          LastTypePointerElemRec := ArrTypePtrElemRec[ai];
           elemDynDepth := ArrTypeDynDepth[ai];
           Next;                 { consume the alias name }
           tk := elemTk;
@@ -20393,6 +20397,7 @@ begin
           arrLo := 0; arrHi := flatLen - 1;
           elemTk := IntToTypeKind(ArrTypeElemTk[ai]);
           LastTypeRecId := ArrTypeElemRec[ai];
+          LastTypePointerElemRec := ArrTypePtrElemRec[ai];
           tk := elemTk;
           elemResolved := True;
           Next;                 { consume the named array type }
@@ -20932,6 +20937,7 @@ begin
           end;
           cElemTk := IntToTypeKind(ArrTypeElemTk[cAi]);
           LastTypeRecId := ArrTypeElemRec[cAi];
+          LastTypePointerElemRec := ArrTypePtrElemRec[cAi];
         end
         else
         begin
@@ -22163,6 +22169,10 @@ begin
           fDynDepth := ArrTypeDynDepth[fAi];
           fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
           fRec := ArrTypeElemRec[fAi];
+          { AddUField reads the pointee record for a tyPointer field straight off
+            the LastTypePointerElemRec global -- prime it here (see
+            ArrTypePtrElemRec's comment in defs.inc for the general landmine). }
+          LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
           Next;   { consume the named array type }
         end
         else if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
@@ -22175,6 +22185,7 @@ begin
           isArr := True;
           fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
           fRec := ArrTypeElemRec[fAi];
+          LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
           if ArrTypeNDims[fAi] >= 2 then
           begin
             fNDims := ArrTypeNDims[fAi];
@@ -23525,6 +23536,7 @@ begin
                 fDynDepth := ArrTypeDynDepth[fAi];
                 fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
                 fRec := ArrTypeElemRec[fAi];
+                LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
                 Next;   { consume the named array type }
               end
               else if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
@@ -23537,6 +23549,7 @@ begin
                 isArr := True;
                 fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
                 fRec := ArrTypeElemRec[fAi];
+                LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
                 if ArrTypeNDims[fAi] >= 2 then
                 begin
                   fNDims := ArrTypeNDims[fAi];
@@ -23867,6 +23880,7 @@ begin
           ArrTypeHi[ArrTypeCount] := aHi;
           ArrTypeElemTk[ArrTypeCount] := Ord(aElemTk);
           ArrTypeElemRec[ArrTypeCount] := LastTypeRecId;
+          ArrTypePtrElemRec[ArrTypeCount] := LastTypePointerElemRec;
           if tdCnt >= 2 then ArrTypeNDims[ArrTypeCount] := tdCnt
           else ArrTypeNDims[ArrTypeCount] := 0;
           for tdi := 0 to tdCnt - 1 do
@@ -23902,6 +23916,7 @@ begin
               Error('array of array of <fixed array type> not supported');
             aElemTk := IntToTypeKind(ArrTypeElemTk[fAi]);
             LastTypeRecId := ArrTypeElemRec[fAi];
+            LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
             if (aElemTk = tyAnsiString) or (aElemTk = tyString) or
                (aElemTk = tyFixedString) or (aElemTk = tyShortString) or
                ((aElemTk = tyRecord) and RecordHasManagedFields(LastTypeRecId)) then
@@ -23915,6 +23930,7 @@ begin
           ArrTypeName[ArrTypeCount] := tname;
           ArrTypeElemTk[ArrTypeCount] := Ord(aElemTk);
           ArrTypeElemRec[ArrTypeCount] := LastTypeRecId;
+          ArrTypePtrElemRec[ArrTypeCount] := LastTypePointerElemRec;
           ArrTypeNDims[ArrTypeCount] := 0;
           ArrTypeIsDyn[ArrTypeCount] := True;
           ArrTypeDynDepth[ArrTypeCount] := tdCnt;
@@ -25059,6 +25075,7 @@ begin
           param was scalar and indexing it read garbage.) }
         tk := IntToTypeKind(ArrTypeElemTk[paramAi]);
         LastTypeRecId := ArrTypeElemRec[paramAi];
+        LastTypePointerElemRec := ArrTypePtrElemRec[paramAi];
         isArr := True;
         { Named dynamic-array type param (`TDynArr = array of T`): mark it a real
           dynamic array so SetLength routes to -102 and (when var/out) the
@@ -25118,6 +25135,7 @@ begin
           begin
             tk := IntToTypeKind(ArrTypeElemTk[paramAi]);
             LastTypeRecId := ArrTypeElemRec[paramAi];
+            LastTypePointerElemRec := ArrTypePtrElemRec[paramAi];
             if (tk = tyAnsiString) or (tk = tyString) or
                (tk = tyFixedString) or (tk = tyShortString) or
                ((tk = tyRecord) and RecordHasManagedFields(LastTypeRecId)) then
@@ -25226,6 +25244,7 @@ begin
       retIsDynArr := True;
       retElemTk := IntToTypeKind(ArrTypeElemTk[paramAi]);
       retElemRec := ArrTypeElemRec[paramAi];
+      retPtrElemRec := ArrTypePtrElemRec[paramAi];
     end
     else
     begin
