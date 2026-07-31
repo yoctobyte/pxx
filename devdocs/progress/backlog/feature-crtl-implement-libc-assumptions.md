@@ -223,3 +223,35 @@ being handed to the kernel short. It is a self-consistent divergence, not a
 smash. It matters only to C that hard-codes offsets or moves the struct across
 an ABI boundary; the layout numbers are deliberately NOT in the oracle test,
 since they would fail for a benign reason.
+
+## Collected gap: `strnlen` absent (2026-07-31, Track B — CLOSED)
+
+Third oracle batch, over `<ctype.h>` and `<string.h>` — the two headers where a
+wrong answer is silent because the caller is a loop, not a check.
+
+**Was:** `strnlen` declared nowhere and implemented nowhere. That one is a HARD
+error at the call site ("call to undeclared function"), so it is the benign
+kind — unlike the errno case above, it cannot silently do the wrong thing.
+
+**Now:** in `<string.h>` and `lib/crtl/src/string.c`, stopping at `maxlen` and
+returning `maxlen` when no NUL is found, which is the whole reason the function
+exists: reading a fixed-width field that may not be terminated.
+
+**Everything else in the batch already agreed with gcc**, including the places
+where agreement is not obvious and where drifting would be invisible:
+
+- ctype on `EOF` (all predicates false) and on high-bit bytes — `isalpha(0xE9)`,
+  `isspace(0xA0)`, `isalnum(0x80)` — plus the full `isspace` set including `\v`
+  and `\f`, `ispunct('_')` and `ispunct('$')`, `iscntrl(0x7F)`, and
+  `toupper`/`tolower` passing non-letters and `EOF` through unchanged.
+- Comparison SIGN in both directions for `strcmp`/`strncmp`/`memcmp`, and the
+  classic trap: `strcmp("\xff", "\x01")` is POSITIVE, because the comparison is
+  unsigned.
+- `strncpy`'s two-faced contract — it does NOT terminate when it fills the
+  buffer, and it DOES zero-pad the whole remainder when it is short.
+- `memmove` with overlap in both directions.
+- `strchr(s, '\0')` finding the terminator, `strstr(s, "")` returning `s`,
+  `strtok` on an empty field, `memchr` searching past an embedded NUL.
+
+**Gated:** all of the above is in `test/crtl_libc_oracle.c` — now 65 lines,
+byte-identical to gcc's build of the same file.

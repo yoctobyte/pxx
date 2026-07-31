@@ -75,6 +75,17 @@ size_t strlen(const char *s)
     return n;
 }
 
+/* POSIX. Reads at most `maxlen` bytes and never past them, which is the whole
+   point: it is what code uses on a fixed-width field that may not be
+   terminated. Returns maxlen when no NUL is found. */
+size_t strnlen(const char *s, size_t maxlen)
+{
+    size_t n = 0;
+    while (n < maxlen && s[n] != '\0')
+        n++;
+    return n;
+}
+
 int strcmp(const char *a, const char *b)
 {
     while (*a != '\0' && *a == *b) {

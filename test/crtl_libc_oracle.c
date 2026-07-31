@@ -25,7 +25,9 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <errno.h>
+#include <ctype.h>
 
+static int sgn(int v) { return v < 0 ? -1 : (v > 0 ? 1 : 0); }
 static int cmp(const void *x, const void *y) { return *(const int*)x - *(const int*)y; }
 
 int main(void) {
@@ -110,6 +112,66 @@ int main(void) {
     ECONNRESET, ENOBUFS, EISCONN, ENOTCONN, ETIMEDOUT, ECONNREFUSED,
     EHOSTDOWN, EHOSTUNREACH, EALREADY, EINPROGRESS);
   printf("errno8 %d\n", ECANCELED);
+
+  /* <ctype.h> and <string.h> on the inputs where a wrong answer is silent:
+     EOF and high-bit bytes through the ctype predicates, comparison SIGN
+     (0xff must compare as unsigned), strncpy's split behaviour (it does NOT
+     terminate when it fills, and DOES zero-pad when short), memmove overlap
+     in both directions, and strtok on an empty field. */
+
+  /* ctype on the awkward inputs: EOF, the high-bit bytes, the boundaries */
+  printf("ct-eof %d%d%d%d%d\n", !!isalpha(EOF), !!isdigit(EOF), !!isspace(EOF),
+                                !!isupper(EOF), !!ispunct(EOF));
+  printf("ct-hi %d%d%d%d\n", !!isalpha(0xE9), !!isprint(0xE9), !!isspace(0xA0), !!isalnum(0x80));
+  printf("ct-sp %d%d%d%d%d%d\n", !!isspace(' '), !!isspace('\t'), !!isspace('\n'),
+                                 !!isspace('\v'), !!isspace('\f'), !!isspace('\r'));
+  printf("ct-punct %d%d%d%d\n", !!ispunct('_'), !!ispunct('$'), !!ispunct('~'), !!ispunct(' '));
+  printf("ct-xd %d%d%d\n", !!isxdigit('f'), !!isxdigit('F'), !!isxdigit('g'));
+  printf("ct-cn %d%d%d\n", !!iscntrl(0x7F), !!iscntrl(0x1F), !!iscntrl(' '));
+  printf("ct-case %d %d %d %d\n", toupper('a'), tolower('A'), toupper('1'), tolower(EOF));
+  printf("ct-gr %d%d\n", !!isgraph(' '), !!isgraph('!'));
+
+  /* memcmp / strcmp SIGN, which code compares against 0 in both directions */
+  printf("cmp %d %d %d\n", sgn(strcmp("abc","abd")), sgn(strcmp("abd","abc")), sgn(strcmp("abc","abc")));
+  printf("ncmp %d %d\n", sgn(strncmp("abcXX","abcYY",3)), sgn(strncmp("abcXX","abcYY",4)));
+  printf("mcmp %d %d\n", sgn(memcmp("\x01\x02","\x01\x03",2)), sgn(memcmp("\xff","\x01",1)));
+  /* high-bit bytes compare as UNSIGNED in both, which is the classic trap */
+  printf("cmp-hi %d\n", sgn(strcmp("\xff", "\x01")));
+
+  /* strchr / strrchr with the NUL terminator, which IS findable */
+  const char *s = "hello";
+  printf("chr %d %d %d\n", (int)(strchr(s,'l') - s), (int)(strrchr(s,'l') - s),
+                           (int)(strchr(s,'\0') - s));
+  printf("chr-miss %d\n", strchr(s,'z') == NULL);
+
+  /* strncpy does NOT terminate when it fills, and DOES zero-pad when short */
+  char b[8];
+  memset(b, '#', sizeof(b));
+  strncpy(b, "abcdefgh", 4);
+  printf("ncpy-fill %c%c%c%c%c\n", b[0],b[1],b[2],b[3],b[4]);
+  memset(b, '#', sizeof(b));
+  strncpy(b, "ab", 6);
+  printf("ncpy-pad %d%d%d%d\n", b[2]==0, b[3]==0, b[4]==0, b[5]==0);
+
+  /* memmove overlap, both directions */
+  char m[12]; strcpy(m, "0123456789");
+  memmove(m+2, m, 5); printf("mv-fwd %s\n", m);
+  strcpy(m, "0123456789");
+  memmove(m, m+2, 5); printf("mv-bwd %s\n", m);
+
+  /* strstr / strspn / strcspn / strtok edges */
+  printf("str %d %d\n", strstr("hello","ll") != NULL, strstr("hello","") == "hello");
+  printf("spn %d %d\n", (int)strspn("abcde","abc"), (int)strcspn("abcde","cd"));
+  char t[] = "a,,b";
+  char *p = strtok(t, ",");
+  printf("tok1 %s\n", p);
+  p = strtok(NULL, ",");
+  printf("tok2 %s\n", p);
+  printf("tok3 %d\n", strtok(NULL, ",") == NULL);
+
+  /* memchr past a NUL, and strnlen */
+  printf("mchr %d\n", memchr("ab\0cd", 'c', 5) != NULL);
+  printf("len %d %d\n", (int)strlen("abc"), (int)strnlen("abcdef", 3));
 
   /* PRI/SCN round trip */
   int64_t v = -1234567890123LL;
