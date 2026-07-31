@@ -111,3 +111,6 @@ cd /tmp && pxx -I<root>/lib/crtl/include -I<root>/lib/crtl/include/sys \
 C tests green + self-host byte-identical; plus a regression that compiles a
 `.c`-as-unit from a CWD that is NOT the repo root and asserts pxx's own
 `<stdarg.h>` was the one used.
+
+## Log
+- 2026-07-31 — resolved, commit 4215e1675.
