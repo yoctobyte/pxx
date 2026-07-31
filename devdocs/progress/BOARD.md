@@ -30,12 +30,13 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (188)
+## backlog (189)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
+| bug-c-i386-crtl-growth-corrupts-main-exit-code | C | 65 | bug | i386: adding ANY code to lib/crtl corrupts an unrelated program's exit code — output stays right, main's implicit return 0 becomes garbage | — |
 | bug-c-line-file-func-and-predefined-macros-missing | C | 55 | bug | C: __LINE__ is 0, __FILE__ is empty and __func__ is empty; __unix__, __BYTE_ORDER__, __SIZEOF_* and __CHAR_BIT__ are absent | — |
 | bug-c-main-missing-implicit-return-zero | C | 65 | bug | C: main() falling off the end returns stack garbage instead of 0 (i386) | — |
 | bug-c-undeclared-identifier-as-function-pointer-becomes-null | C | 45 | bug | C: an undeclared identifier used where a function POINTER is expected becomes 0 with only a warning — the program then jumps to null | — |
@@ -70,7 +71,7 @@ _none_
 | bug-pascal-uses-order-breaks-pylib-exception | A | 45 | bug | `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine | — |
 | bug-t-corpus-regex-invents-phantom-tree | T | 55 | bug | CORPUS_RE matches prose in a SKIP message and invents corpus 'stb)', permanently skipping a job that also carries a non-corpus regression test | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
-| bug-tstate-xeon-cross-jobs-red-missing-corpora | T | 50 | bug | tstate: xeon's 18 red jobs are all corpus-dependent cross targets; the blamed files are the FETCH scripts, i.e. library_candidates/ is missing on that host | — |
+| bug-tstate-xeon-cross-jobs-red-missing-corpora | T | 50 | bug | tstate: xeon's red set is PART missing-corpora and PART a real i386 regression of mine (now reverted) — the corpora half still stands | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -2882,6 +2883,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [T] regression-cascade-b45c759f9e65
+- [p 65] [C] bug-c-i386-crtl-growth-corrupts-main-exit-code
 - [p 65] [C] bug-c-main-missing-implicit-return-zero
 - [p 65] [N] bug-nilpy-container-literal-default-arg-segfaults
 - [p 65] [U] decide-class-namespace-scoping

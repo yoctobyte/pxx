@@ -323,35 +323,3 @@ int __pxx_builtin_popcount64(unsigned long long x) {
   while (x) { n += (int)(x & 1ull); x >>= 1; }
   return n;
 }
-
-long long llabs(long long n)
-{
-    return n < 0 ? -n : n;
-}
-
-/* C99 7.20.6.2: quotient truncates toward zero, remainder has the numerator's
-   sign, and quot*den + rem == num. `/` and `%` already satisfy that on this
-   target, so these compute the pair rather than re-deriving the rule. */
-div_t div(int num, int den)
-{
-    div_t r;
-    r.quot = num / den;
-    r.rem  = num % den;
-    return r;
-}
-
-ldiv_t ldiv(long num, long den)
-{
-    ldiv_t r;
-    r.quot = num / den;
-    r.rem  = num % den;
-    return r;
-}
-
-lldiv_t lldiv(long long num, long long den)
-{
-    lldiv_t r;
-    r.quot = num / den;
-    r.rem  = num % den;
-    return r;
-}

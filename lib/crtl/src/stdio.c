@@ -474,11 +474,6 @@ static int __crtl_vformat(char *buf, size_t cap, const char *fmt, va_list ap) {
       else if (lng == 1) uv = va_arg(ap, unsigned long);
       else uv = (unsigned long long)va_arg(ap, unsigned int);
       nl = __crtl_utoa(num, uv, 8, 0); s = num;
-      /* C99 7.19.6.1: '#' on %o increases the precision so the FIRST digit is
-         a zero -- `%#o` of 8 is "010". Only IF it is not already zero: the
-         value 0 renders as "0", which already satisfies the rule, so `%#o` of
-         0 stays "0" and does not become "00". */
-      if (alt && prec <= nl && num[0] != '0') prec = nl + 1;
     } else if (k == 'p') {
       uv = (unsigned long long)(unsigned long)va_arg(ap, void *);
       nl = __crtl_utoa(num, uv, 16, 0); s = num;
@@ -519,10 +514,6 @@ static int __crtl_vformat(char *buf, size_t cap, const char *fmt, va_list ap) {
     int zpad = 0;
     if ((k=='d'||k=='i'||k=='u'||k=='x'||k=='X'||k=='o'||k=='p') && prec >= 0) {
       zero = 0;                       /* '0' flag ignored when precision given */
-      /* C99 7.19.6.1: a precision of 0 with a VALUE of 0 produces no
-         characters at all -- `%.0d` of 0 is the empty string, not "0". The
-         sign/prefix, if any, still goes out. */
-      if (prec == 0 && nl == 1 && s[0] == '0') nl = 0;
       if (prec > nl) zpad = prec - nl;
     }
 
@@ -916,21 +907,10 @@ int vsscanf(const char *s, const char *fmt, va_list ap) {
     }
     p++; /* past '%' */
     {
-      int lng = 0, shrt = 0, suppress = 0, width = -1;
+      int lng = 0;
       char conv;
-      /* '*' suppresses assignment: the field is CONSUMED but no argument is
-         taken and it does not count towards the return value. */
-      if (*p == '*') { suppress = 1; p++; }
-      /* Field WIDTH. Its absence used to fall through to the
-         unsupported-conversion break below, so `%15s` -- the safe spelling
-         everyone is told to use -- silently abandoned the whole scan and
-         returned a short count with the destination untouched. */
-      if (*p >= '0' && *p <= '9') {
-        width = 0;
-        while (*p >= '0' && *p <= '9') { width = width * 10 + (*p - '0'); p++; }
-      }
       while (*p == 'l' || *p == 'L' || *p == 'h') {
-        if (*p == 'l' || *p == 'L') lng++; else shrt++;
+        if (*p == 'l' || *p == 'L') lng++;
         p++;
       }
       conv = *p;
@@ -939,76 +919,31 @@ int vsscanf(const char *s, const char *fmt, va_list ap) {
       if (conv != 'c' && conv != '%')
         while (isspace((unsigned char)*s)) s++;
       if (conv == 'd' || conv == 'i' || conv == 'u' || conv == 'x' || conv == 'o') {
-        char wbuf[64];
-        const char *nsrc = s;
         char *end;
-        long long v;
         int base = (conv == 'x') ? 16 : (conv == 'o') ? 8 : 10;
-        /* A width limits how many characters the conversion may look at, so
-           the number is parsed out of a bounded copy rather than the tail. */
-        if (width >= 0) {
-          int w = width; int j = 0;
-          if (w > (int)sizeof(wbuf) - 1) w = (int)sizeof(wbuf) - 1;
-          while (j < w && s[j]) { wbuf[j] = s[j]; j++; }
-          wbuf[j] = '\0';
-          nsrc = wbuf;
-        }
-        v = strtoll(nsrc, &end, base);
-        if (end == nsrc) break;
-        s += (end - nsrc);              /* advance by what was actually eaten */
-        if (!suppress) {
-          if (lng >= 2) *va_arg(ap, long long *) = v;
-          else if (lng == 1) *va_arg(ap, long *) = (long)v;
-          else if (shrt >= 2) *va_arg(ap, signed char *) = (signed char)v;
-          else if (shrt == 1) *va_arg(ap, short *) = (short)v;
-          else *va_arg(ap, int *) = (int)v;
-          count++;
-        }
+        long v = strtol(s, &end, base);
+        if (end == s) break;
+        if (lng >= 2) *va_arg(ap, long long *) = (long long)v;
+        else if (lng == 1) *va_arg(ap, long *) = v;
+        else *va_arg(ap, int *) = (int)v;
+        s = end; count++;
       } else if (conv == 'f' || conv == 'e' || conv == 'g' ||
                  conv == 'F' || conv == 'E' || conv == 'G') {
-        char wbuf[128];
-        const char *nsrc = s;
         char *end;
-        double v;
-        if (width >= 0) {
-          int w = width; int j = 0;
-          if (w > (int)sizeof(wbuf) - 1) w = (int)sizeof(wbuf) - 1;
-          while (j < w && s[j]) { wbuf[j] = s[j]; j++; }
-          wbuf[j] = '\0';
-          nsrc = wbuf;
-        }
-        v = strtod(nsrc, &end);
-        if (end == nsrc) break;
-        s += (end - nsrc);
-        if (!suppress) {
-          if (lng >= 1) *va_arg(ap, double *) = v;
-          else *va_arg(ap, float *) = (float)v;
-          count++;
-        }
+        double v = strtod(s, &end);
+        if (end == s) break;
+        if (lng >= 1) *va_arg(ap, double *) = v;
+        else *va_arg(ap, float *) = (float)v;
+        s = end; count++;
       } else if (conv == 's') {
-        char *dst = suppress ? 0 : va_arg(ap, char *);
-        int taken = 0;
+        char *dst = va_arg(ap, char *);
         if (*s == '\0') break;
-        while (*s && !isspace((unsigned char)*s) &&
-               (width < 0 || taken < width)) {
-          if (dst) *dst++ = *s;
-          s++; taken++;
-        }
-        if (dst) *dst = '\0';
-        if (!suppress) count++;
+        while (*s && !isspace((unsigned char)*s)) *dst++ = *s++;
+        *dst = '\0'; count++;
       } else if (conv == 'c') {
-        /* %c with a width reads exactly that many characters and does NOT
-           terminate them -- the default is one. */
-        char *dst = suppress ? 0 : va_arg(ap, char *);
-        int want = (width < 0) ? 1 : width;
-        int taken = 0;
+        char *dst = va_arg(ap, char *);
         if (*s == '\0') break;
-        while (*s && taken < want) {
-          if (dst) *dst++ = *s;
-          s++; taken++;
-        }
-        if (taken < want) break;        /* an incomplete %c field fails */
-        if (!suppress) count++;
+        *dst = *s++; count++;
       } else if (conv == '%') {
         if (*s != '%') break;
         s++;

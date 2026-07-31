@@ -28,19 +28,6 @@ unsigned long long strtoull(const char *s, char **end, int base);
 
 int abs(int n);
 long labs(long n);
-long long llabs(long long n);
-
-/* C89 div/ldiv, C99 lldiv. The quotient truncates TOWARD ZERO and the
-   remainder takes the sign of the numerator, which is what `/` and `%` already
-   do here -- the point of these is that the pair is computed together and the
-   struct is what a caller destructures. */
-typedef struct { int quot; int rem; } div_t;
-typedef struct { long quot; long rem; } ldiv_t;
-typedef struct { long long quot; long long rem; } lldiv_t;
-
-div_t div(int num, int den);
-ldiv_t ldiv(long num, long den);
-lldiv_t lldiv(long long num, long long den);
 
 int rand(void);
 void srand(unsigned int seed);
