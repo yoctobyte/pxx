@@ -7,7 +7,7 @@ prio: 20
 # macOS native target — BLOCKED on Apple hardware
 
 - **Type:** feature (Track A — new object format + ABI + signing). Portability campaign.
-- **Status:** **blocked** — external constraint, not a ticket dependency.
+- **Status:** rainy-day — postponed, needs Apple hardware (external, indefinite)
 - **Owner:** —
 - **Opened:** 2026-07-17, OS-portability mapping session. Full map in
   [`devdocs/dev/portability-axes.md`](../../dev/portability-axes.md).

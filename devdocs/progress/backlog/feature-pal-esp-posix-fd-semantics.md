@@ -5,7 +5,7 @@ prio: 30  # ESP parked (user 2026-07-12): Pascal has prio; also runtime-blocked 
 # ESP PAL: exact POSIX fd semantics over ESP-IDF VFS
 
 - **Type:** feature (Track B PAL / ESP-IDF)
-- **Status:** backlog
+- **Status:** backlog — unblocked (bug-esp-idf-heap-linux-mmap-ecall resolved 2026)
 - **Owner:** —
 - **Opened:** 2026-06-21 (PAL file IO expansion)
 - **Relation:** follows `feature-platform-abstraction-layer`

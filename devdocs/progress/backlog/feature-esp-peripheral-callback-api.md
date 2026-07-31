@@ -5,7 +5,7 @@ prio: 53  # auto
 # ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt"
 
 - **Type:** feature (library / Track B)
-- **Status:** backlog
+- **Status:** backlog — unblocked (bug-esp-idf-heap-linux-mmap-ecall resolved 2026)
 - **Owner:** opus-night
 - **Opened:** 2026-06-21 (out of the ISR layering discussion; see
   `feature-esp32-isr-iram` for why the `interrupt;` *keyword* is NOT this)
