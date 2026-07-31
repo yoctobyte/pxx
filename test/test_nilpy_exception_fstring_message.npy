@@ -1,0 +1,16 @@
+# f"{e}" of a caught exception must show its message, the same as print(e) and
+# str(e) already did -- verifying the f-string-hole rewrite (pystr_of ->
+# Exception.msg in parser.inc) covers a bare Exception AND a builtin subclass.
+# feature-nilpy-exception-message
+# Every expectation is CPython's own output.
+
+try:
+    raise Exception("boom")
+except Exception as e:
+    print(f"{e}")
+    print(f"got: {e} and {e}")
+
+try:
+    raise ValueError("bad value")
+except ValueError as e:
+    print(f"{e}")
