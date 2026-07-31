@@ -3283,6 +3283,16 @@ begin
   raise TypeError.Create('expected ' + want + ', got ' + PyVarTypeName(t));
 end;
 
+{ `x in obj` where obj's class defines no `__contains__` -- a genuine runtime
+  TypeError (catchable), not a compile-time halt: the frontend's own Error()
+  aborts the WHOLE COMPILATION, which made `try: ... in obj ... except:` fail
+  to even build instead of running its handler, unlike CPython.
+  bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic }
+procedure PyNotContainerError;
+begin
+  raise TypeError.Create('argument is not a container (no __contains__)');
+end;
+
 function pyvar_to_int(const v: Variant): Int64;
 var
   p: PPyVarRec;

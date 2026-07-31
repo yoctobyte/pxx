@@ -534,6 +534,10 @@ test-nilpy: $(COMPILER)
 	@# map(f, xs) / filter(f, xs) over an arbitrary callable, and filter(None, xs)
 	./$(COMPILER) test/test_nilpy_map_filter_callable.npy /tmp/test_nilpy_mapfilter26
 	test "$$(/tmp/test_nilpy_mapfilter26)" = "$$(printf '%b' '[2, 4, 6]\n[1, 2, 3]\n[3, 6, 9]\n[1, 2, 3]\n[2, 3]\n[2, 3]\n[1, 2, 3]')"
+	@# a class defining __len__/__contains__ is measured/searched BY IT, not
+	@# read as raw bytes off the wrong builtin-container overload
+	./$(COMPILER) test/test_nilpy_dunder_len_contains.npy /tmp/test_nilpy_dunderlc26
+	test "$$(/tmp/test_nilpy_dunderlc26)" = "$$(printf '%b' '3\nTrue\nFalse\nFalse\n3\n5\n2\nTrue\nTrue\ncaught len: TypeError\ncaught in: TypeError')"
 	./$(COMPILER) test/test_nilpy_dynattr.npy /tmp/test_nilpy_dynattr26
 	test "$$(/tmp/test_nilpy_dynattr26)" = "$$(printf '%b' '105\n110')"
 	./$(COMPILER) test/test_nilpy_dynattr_class.npy /tmp/test_nilpy_dynattr_class26

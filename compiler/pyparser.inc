@@ -1289,7 +1289,7 @@ begin
 end;
 
 procedure PyParseIsCmp;
-var left, right, node, i, j: Integer; neg: Boolean; rTk: TTypeKind;
+var left, right, node, i, j, ucCi, ucMmi: Integer; neg, dunderBuilt: Boolean; rTk: TTypeKind;
 begin
   PyParseBitOr;
   left := CurASTNode;
@@ -1379,6 +1379,7 @@ begin
           dict   -> key membership
           str    -> SUBSTRING containment, which is what `in` means in Python
           else   -> list element membership }
+      dunderBuilt := False;
       rTk := IntToTypeKind(ASTTk[right]);
       if (rTk = tyString) or (rTk = tyAnsiString) then
         node := FindProc('pystr_contains')
@@ -1388,34 +1389,73 @@ begin
         node := FindProc('pyvar_contains')
       else if ResolveNodeRec(right) = REC_UCLASS_BASE + FindUClass('TPyDict') then
         node := FindProc('pydictcontains')
+      else if (ResolveNodeRec(right) >= REC_UCLASS_BASE) and
+              (ResolveNodeRec(right) <> REC_UCLASS_BASE + FindUClass('TPyList')) and
+              (ResolveNodeRec(right) <> REC_UCLASS_BASE + FindUClass('TPyBytes')) then
+      begin
+        { A USER class (not one of pylib's own containers): `x in obj` must
+          call obj.__contains__(x) when it declares one -- the fallback below
+          (pycontains, a TPyList-only scan) otherwise read the instance's raw
+          bytes as if they were list-element slots, a silent wrong answer, not
+          a crash (bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-
+          arithmetic — same failure family as that ticket's `len()` fix just
+          above). No `__contains__` at all is not a container and should say
+          so loudly rather than guess. }
+        ucCi := ResolveNodeRec(right) - REC_UCLASS_BASE;
+        ucMmi := FindUMeth(ucCi, '__contains__');
+        if ucMmi >= 0 then
+        begin
+          right := PyCallMeth1(ucCi, PyRawName(UMthNOff[ucMmi], UMthNLen[ucMmi]), right, left);
+          if right >= 0 then dunderBuilt := True
+          else Error('Nil Python: "in" could not call __contains__');
+        end
+        else
+        begin
+          { A genuine RUNTIME error (a `try/except` around this must still
+            compile and run its handler), not the compile-time Error() a
+            first attempt used here -- that aborted the whole compilation
+            instead. }
+          node := FindProc('PyNotContainerError');
+          if node < 0 then Error('Nil Python: pylib (PyNotContainerError) not loaded');
+          right := AllocNode(AN_CALL);
+          ASTIVal[right] := node;
+          ASTTk[right] := Ord(tyBoolean);
+          ASTLeft[right] := -1;
+          dunderBuilt := True;
+        end;
+      end
       else
         node := FindProc('pycontains');
-      if node < 0 then Error('Nil Python: pylib (pycontains) not loaded');
-      { A tyChar value (`s[0] in ("a","b")`, a subscript yields tyChar) is boxed
-        VT_CHAR, but the collection holds VT_STRING elements, so the tag never
-        matched and membership was always False. In Python a char IS a 1-char
-        str; promote it via pystr_ofchar so it compares as one. See the same
-        receiver coercion in PyParseStrMethod. }
-      if IntToTypeKind(ASTTk[left]) = tyChar then
+      if (not dunderBuilt) and (node < 0) then
+        Error('Nil Python: pylib (pycontains) not loaded');
+      if not dunderBuilt then
       begin
-        j := FindProc('pystr_ofchar');
-        if j < 0 then Error('Nil Python: pylib (pystr_ofchar) not loaded');
-        i := AllocNode(AN_ARG);
-        ASTLeft[i] := left;
-        left := AllocNode(AN_CALL);
-        ASTIVal[left] := j;
-        ASTTk[left] := Ord(tyAnsiString);
-        ASTLeft[left] := i;
+        { A tyChar value (`s[0] in ("a","b")`, a subscript yields tyChar) is boxed
+          VT_CHAR, but the collection holds VT_STRING elements, so the tag never
+          matched and membership was always False. In Python a char IS a 1-char
+          str; promote it via pystr_ofchar so it compares as one. See the same
+          receiver coercion in PyParseStrMethod. }
+        if IntToTypeKind(ASTTk[left]) = tyChar then
+        begin
+          j := FindProc('pystr_ofchar');
+          if j < 0 then Error('Nil Python: pylib (pystr_ofchar) not loaded');
+          i := AllocNode(AN_ARG);
+          ASTLeft[i] := left;
+          left := AllocNode(AN_CALL);
+          ASTIVal[left] := j;
+          ASTTk[left] := Ord(tyAnsiString);
+          ASTLeft[left] := i;
+        end;
+        i := AllocNode(AN_ARG);            { the container, arg 0 }
+        ASTLeft[i] := right;
+        j := AllocNode(AN_ARG);            { the value, arg 1 }
+        ASTLeft[j] := left;
+        ASTRight[i] := j;
+        right := AllocNode(AN_CALL);
+        ASTIVal[right] := node;
+        ASTTk[right] := Ord(tyBoolean);
+        ASTLeft[right] := i;
       end;
-      i := AllocNode(AN_ARG);            { the container, arg 0 }
-      ASTLeft[i] := right;
-      j := AllocNode(AN_ARG);            { the value, arg 1 }
-      ASTLeft[j] := left;
-      ASTRight[i] := j;
-      right := AllocNode(AN_CALL);
-      ASTIVal[right] := node;
-      ASTTk[right] := Ord(tyBoolean);
-      ASTLeft[right] := i;
       if neg then
       begin
         node := AllocNode(AN_NOT);

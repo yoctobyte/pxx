@@ -9304,6 +9304,69 @@ begin
         { no class rewrite: rewind and take the ordinary overload path }
         TokPos := intBaseArg - 1; Next;
       end;
+      if isNilPy and CaseEqual(name, 'len') and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { A class that defines `__len__` must be measured BY IT:
+          `len(C())` otherwise falls through to len's ordinary Pascal
+          overloads (TPyList/TPyDict/TPyBytes/AnsiString/Variant), none of
+          which match a plain class instance -- yet the compiler's overload
+          matcher still silently picks SOME overload (observed: the
+          TPyList-only one, reading FLen off whatever bytes happen to sit
+          at that offset in the instance -- a plausible-looking but WRONG
+          number, no diagnostic
+          (bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic).
+          Parse the argument; a pylib CONTAINER class (TPyList/TPyDict/
+          TPyBytes, which DO have a matching overload) REWINDS and takes the
+          ordinary overload path unchanged. Any OTHER class -- with or
+          without `__len__` -- is handled HERE and never rewound: the
+          overload matcher's silent-wrong-pick for an unmatched tyClass
+          argument is not safe to fall back on, unlike a genuinely absent
+          overload for a scalar type. First attempt rewound unconditionally
+          and depended on which OTHER classes happened to exist elsewhere in
+          the same file for whether the no-`__len__` case raised or read
+          garbage -- confirmed with PXXDBG=a.ir: the same wrong proc index
+          got called either way; it only LOOKED fixed by coincidence. }
+        intBaseArg := TokPos;
+        Next; Expect(tkLParen, '('); ParseArgExpr;
+        if IntToTypeKind(ASTTk[CurASTNode]) = tyClass then
+        begin
+          atRecv := ResolveNodeRec(CurASTNode);
+          if (atRecv >= REC_UCLASS_BASE) and
+             (atRecv <> REC_UCLASS_BASE + FindUClass('TPyList')) and
+             (atRecv <> REC_UCLASS_BASE + FindUClass('TPyDict')) and
+             (atRecv <> REC_UCLASS_BASE + FindUClass('TPyBytes')) then
+          begin
+            atFld := FindUMeth(atRecv - REC_UCLASS_BASE, '__len__');
+            if atFld >= 0 then
+            begin
+              atDflt := PyCallMeth1(atRecv - REC_UCLASS_BASE,
+                                    PyRawName(UMthNOff[atFld], UMthNLen[atFld]),
+                                    CurASTNode, -1);
+              if atDflt < 0 then Error('Nil Python: len() could not call __len__');
+              Expect(tkRParen, ')');
+              CurASTNode := atDflt; LastExprTk := IntToTypeKind(ASTTk[atDflt]);
+              Exit;
+            end;
+            { no __len__ on a non-container class: a genuine RUNTIME error
+              (try/except around this must still compile and run its
+              handler), not a compile-time Error() or a rewind into the
+              overload matcher's unsafe fallback. }
+            prevTok := FindProc('PyNotContainerError');
+            if prevTok < 0 then Error('Nil Python: pylib (PyNotContainerError) not loaded');
+            Expect(tkRParen, ')');
+            atDflt := AllocNode(AN_CALL);
+            ASTIVal[atDflt] := prevTok;
+            ASTTk[atDflt] := Ord(tyInt64);
+            ASTLeft[atDflt] := -1;
+            CurASTNode := atDflt; LastExprTk := tyInt64;
+            Exit;
+          end;
+        end;
+        { a pylib container class, or a non-class argument: rewind and take
+          the ordinary overload path, unchanged byte for byte }
+        TokPos := intBaseArg - 1; Next;
+      end;
       if isNilPy and (name = 'int') then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr;

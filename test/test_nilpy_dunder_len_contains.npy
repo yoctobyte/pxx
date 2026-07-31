@@ -1,0 +1,44 @@
+# A user class defining __len__/__contains__ must be measured/searched BY IT.
+# Both previously fell through to len()'s/`in`'s builtin-container overloads
+# (TPyList specifically), silently reading the instance's raw bytes as if
+# they were list-element slots -- a different plausible-looking WRONG number
+# every run, no diagnostic. A class with NEITHER dunder now raises a genuine
+# catchable runtime error instead (a compile-time Error() first attempt at
+# __contains__ broke `try/except` around it -- it aborted the whole
+# compilation rather than letting the handler run).
+# bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic
+# Every expectation is CPython's own output.
+
+class Box:
+    def __init__(self):
+        self.items = [1, 2, 3]
+    def __len__(self):
+        return len(self.items)
+    def __contains__(self, x):
+        return x in self.items
+
+b = Box()
+print(len(b))
+print(2 in b)
+print(5 in b)
+print(2 not in b)
+
+print(len([1, 2, 3]))
+print(len("hello"))
+print(len({"a": 1, "b": 2}))
+print(2 in [1, 2, 3])
+print("ab" in "xabz")
+
+class Empty:
+    pass
+
+e = Empty()
+try:
+    print(len(e))
+except Exception as ex:
+    print("caught len:", type(ex).__name__)
+
+try:
+    print(2 in e)
+except Exception as ex:
+    print("caught in:", type(ex).__name__)
