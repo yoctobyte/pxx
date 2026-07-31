@@ -33,6 +33,57 @@ stops the boxes fighting:
 never *be* the record. If it is not pushed, it did not happen — that rule does
 not relax just because the boxes can now talk directly.
 
+## Operating model — what each box is FOR
+
+Set by the user 2026-07-31:
+
+- **borg = the dev box.** Holds **1-3 tracks** concurrently; the user decides how
+  many, and the binding constraint is token budget, not file safety. The user
+  also **guards the lane split** (A+ vs B+) when several run at once — agents do
+  not self-assign overlapping lanes.
+- **xeon = Track T.** Its job is to *find regressions*, continuously, across the
+  matrix. Future: **pin when stable** — promoting a blessed binary automatically
+  once a sha proves itself (criteria unsettled, see
+  [[decide-track-t-autopin-criteria]]).
+
+**The point of the split is speed: dev does not wait for the gate.** Push on a
+fast local confirm and let Track T's report come back tagged to your sha. A red
+arrives as an asynchronous callback minutes later; that is accepted, and it is
+cheaper than every agent serialising on a 10-minute matrix.
+
+### The one gate you still cannot offload
+
+Everything about that is breadth. **Self-host fixedpoint is different**: it is
+the property every other track's ground rests on, and a compiler change that
+breaks it poisons the next `pin` for everyone. So for any `compiler/**` change:
+
+```
+tools/testmgr.py --tier quick        # ~40s
++ self-host fixedpoint (byte-identical)
+```
+
+then push. That is the floor, not the gate — skip the matrix, never skip this.
+Non-compiler changes (docs, tickets, libs under `$(PXX_STABLE)`) do not need it.
+
+### Callbacks arrive tagged to a sha that may already be stale
+
+You will be moving while the matrix runs, so a red comes back pointing at a
+commit that is no longer HEAD. Before acting on any callback: **re-check it at
+current HEAD.** It may already be fixed, or moved. Report every verdict with the
+sha of the binary it came from (`gating-and-waiting.md` — a leak was once
+measured against a mid-bisect binary and read as "still broken" when HEAD was
+already flat).
+
+### Concurrency costs tokens, not correctness
+
+File-lanes make parallel tracks *safe*; the usage cap makes them *expensive*.
+`autonomy.md` records the measured position: **two concurrent sessions trip the
+cap even under light load**, and one worker cycling lanes gets more done per
+5-hour block than three concurrent lane-workers. That is a real tension with
+running 1-3 tracks on borg, and the user owns the trade: concurrency buys
+wall-clock latency and costs block lifetime. Spend it knowingly — for scheduled
+and unattended work the default stays **one worker cycling lanes**.
+
 ## The anti-recursion rule (the thing to actually worry about)
 
 Two peers that can each poke the other can ping-pong forever. One rule prevents

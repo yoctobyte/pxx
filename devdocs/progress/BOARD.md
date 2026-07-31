@@ -32,7 +32,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (185)
+## backlog (186)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -95,6 +95,7 @@ lives in git, not in a timestamp._
 | decide-nilpy-int-promotion-default | U | 60 | decide | Decide: should NilPy `int` bindings default to promotable, not native int64? | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-nilpy-transitive-nested-def-capture | U | 40 | decide | decide: NilPy transitive capture for sibling nested-def calls | — |
+| decide-track-t-autopin-criteria | U | 55 | decide | What criteria justify Track T auto-pinning a stable binary? | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
@@ -2910,6 +2911,7 @@ lives in git, not in a timestamp._
 - [p 55] [A] bug-pascal-array-of-pointer-deref-loses-the-record-type
 - [p 55] [A] bug-pascal-defines-leak-across-units
 - [p 55] [T] bug-t-corpus-regex-invents-phantom-tree
+- [p 55] [U] decide-track-t-autopin-criteria
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
