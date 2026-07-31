@@ -541,3 +541,59 @@ itself is fine under the same conditions.
 | `render_backend.py` | **compiles** as an import; standalone ends in "invalid symbol in lea" |
 | `kadrv.py` | `import key_analysis` — the module loader landed; unverified since |
 | `SongFormatter.py` | **compiles** (2026-07-28); runs into [[bug-heap-dict-literal-then-two-parses-corrupts]] |
+
+## 2026-07-31 (Track B) — all five modules COMPILE; the app now gets as far as its session loader
+
+Re-measured from the app's own directory, which is the only way a user would
+invoke it:
+
+| module | state |
+| --- | --- |
+| `key_analysis.py` | compiles and runs |
+| `settings.py` | compiles |
+| `render_backend.py` | compiles |
+| `convertrawtext.py` | compiles |
+| `SongFormatter.py` | **compiles and STARTS** — builds its window, then dies in `load_session()` |
+
+Two things had to be true for that, and only one of them was about this app:
+
+1. **`widget.destroy()`** briefly stopped dispatching, from a Track B rename the
+   same day; reverted, see
+   [[bug-lib-tkinter-trailing-underscore-params-block-kwargs]].
+2. **The C headers.** Three of the five failed with `IR_UNSUPPORTED` near
+   `va_list` — but ONLY when the compiler ran from `~/songformatter` rather than
+   the pxx repo root. pxx's crtl include root resolves CWD-relatively for the
+   shipped binary, so `<stdarg.h>` and `<math.h>` came from `/usr/include`,
+   silently, with `M_SQRT2` becoming `0`. Filed as
+   [[bug-crtl-headers-lost-when-cwd-is-not-the-repo-root]] (Track C). Passing
+   `-Ilib/crtl/include …` is the interim; **any measurement of this app must
+   pass it** or it is measuring glibc's headers.
+
+### Where it stops now
+
+`Unhandled exception: TypeError: expected a number, got object`, with no other
+output. Located by bisecting the module's top-level statements and then
+instrumenting a COPY (never the app):
+
+```
+top-level line 589   load_session()
+  -> create_document_tab(...)          reached, FormatText built, notebook.add ok
+     -> doc.set_document_text(...)     <-- raises here
+```
+
+The data path itself is clean — a separate probe reads `session.json` through
+`Path.open` / `json.load` and walks all three documents' `text`, `file_path`,
+`last_saved_text` and `is_dirty` with the right values. So the fault is inside
+`FormatText.set_document_text` (`convertrawtext.py:1702`) or the
+`convert_text()` it calls, not in the JSON or the façade's `add`.
+
+Next step for whoever picks this up: instrument `set_document_text` the same way
+and find which coercion sees an object. Do NOT edit the app to get past it.
+
+### Found on the way, filed separately
+
+[[bug-nilpy-module-level-name-bound-in-a-block-is-invisible-to-a-later-assignment]]
+— at module level a name first bound inside `if`/`for`/`with` is "undefined
+variable" on the RHS of a later top-level assignment. It hides in this app
+because the same lines sit inside `def load_session()`, which is the working
+case; a three-line probe reproduces it.

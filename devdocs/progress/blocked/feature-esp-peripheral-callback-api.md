@@ -143,3 +143,21 @@ it: a C3/S3 board or a working qemu-esp32 harness. A host-side compile-only
 smoke (riscv32 `.o` + `readelf -sW` import assertions) is possible without
 hardware and would be worth doing, but it proves linkage, not behaviour — do not
 mistake it for acceptance.
+
+## Back to blocked/ 2026-07-31 (Track B sweep) — still no way to RUN it
+
+Re-checked rather than assumed: this box has no `qemu-system-riscv32` and no
+`qemu-system-xtensa`, `IDF_PATH` is unset, and there is no board. An ESP-IDF
+checkout exists at `~/esp/esp-idf`, which is enough to LINK and nothing more.
+
+Every remaining item here — the qemu acceptance run, dropping the interim
+`iram;`, and the GPIO and ADC slices — has "it runs on the target" as its
+acceptance. Writing more of it would add code nobody has ever executed, which
+is the one thing this ticket already says not to do.
+
+**Tagged for later testing.** When a C3/S3 board or a working qemu-IDF harness
+appears, the first action is the slice-1 acceptance run that was never done, not
+more slices. The existing compile-only smoke in `lib-test` (riscv32 `.o` +
+`readelf -sW` import assertions) stays where it is — it proves linkage, and it
+must not be read as acceptance. Nothing further from this ticket goes into the
+regression suite until something can execute it.
