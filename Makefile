@@ -949,6 +949,9 @@ test-nilpy: $(COMPILER)
 	# bin()/oct() builtins, and enumerate(xs, start) / enumerate(xs, start=N); expectation is CPython's own output
 	./$(COMPILER) test/test_nilpy_bin_oct_enumerate_start.npy /tmp/test_nilpy_bome26
 	test "$$(/tmp/test_nilpy_bome26)" = "$$(printf '%b' '0b1010 0o12 0xa\n-0b101 -0o5\n0b0 0o0\n[(1, \047a\047), (2, \047b\047)]\n[(5, \047a\047), (6, \047b\047)]\n[(0, \047a\047), (1, \047b\047)]')"
+	# str.rsplit()/partition()/rpartition(); expectation is CPython's own output
+	./$(COMPILER) test/test_nilpy_str_rsplit_partition.npy /tmp/test_nilpy_rsplit26
+	test "$$(/tmp/test_nilpy_rsplit26)" = "$$(printf '%b' '[\047hell\047, \047 w\047, \047rld\047]\n[\047hello w\047, \047rld\047]\n[\047a,b\047, \047c\047, \047d\047]\n(\047hello\047, \047 \047, \047world\047)\n(\047hello w\047, \047o\047, \047rld\047)\n(\047hello world\047, \047\047, \047\047)\n(\047\047, \047\047, \047hello world\047)\n[\047\047]')"
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING

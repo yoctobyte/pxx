@@ -1025,6 +1025,12 @@ function pystr_join(const sep: AnsiString; l: TPyList): AnsiString;
 function pystr_split_ws(const s: AnsiString): TPyList;
 function pystr_split_sep(const s: AnsiString; const sep: AnsiString): TPyList;
 function pystr_split_sep_max(const s: AnsiString; const sep: AnsiString; maxsplit: Integer): TPyList;
+{ str.rsplit(sep, maxsplit) — splits counted from the right end. }
+function pystr_rsplit_sep_max(const s: AnsiString; const sep: AnsiString; maxsplit: Integer): TPyList;
+{ str.partition(sep) / str.rpartition(sep) — a 3-tuple (before, sep, after) at
+  the first/last occurrence, or (s,'','') / ('','',s) when sep is absent. }
+function pystr_partition(const s: AnsiString; const sep: AnsiString): TPyList;
+function pystr_rpartition(const s: AnsiString; const sep: AnsiString): TPyList;
 function pystr_splitlines(const s: AnsiString): TPyList;
 { str.replace(old, new[, count]) — CPython semantics: non-overlapping, left to
   right, a NEGATIVE count means "every occurrence", and an EMPTY pattern inserts
@@ -1420,6 +1426,95 @@ begin
       Inc(i);
   end;
   Result.append(Copy(s, st, n - st + 1));
+end;
+
+{ s.rsplit(sep, maxsplit): like split(sep, maxsplit) but the splits are taken
+  from the RIGHT end — the fields nearest the end are separated first, and
+  whatever remains at the front (including further separators) is the FIRST
+  field, e.g. "a,b,c".rsplit(",", 1) is ["a,b", "c"]. maxsplit < 0 behaves like
+  the unlimited split(sep). }
+function pystr_rsplit_sep_max(const s: AnsiString; const sep: AnsiString; maxsplit: Integer): TPyList;
+var i, j, n, m, en, done: Integer; hit: Boolean; parts: TPyList; k: Integer;
+begin
+  n := Length(s);
+  m := Length(sep);
+  if m = 0 then
+  begin
+    raise ValueError.Create('empty separator');
+  end;
+  if maxsplit < 0 then begin Result := pystr_split_sep(s, sep); Exit; end;
+  { collect fields walking backward, then reverse into Result }
+  parts := TPyList.Create;
+  en := n; i := n; done := 0;
+  while (i >= 1) and (done < maxsplit) do
+  begin
+    hit := False;
+    if i - m + 1 >= 1 then
+    begin
+      hit := True;
+      for j := 1 to m do
+        if s[i - m + j] <> sep[j] then begin hit := False; Break; end;
+    end;
+    if hit then
+    begin
+      parts.append(Copy(s, i + 1, en - i));
+      i := i - m; en := i; Inc(done);
+    end
+    else
+      Dec(i);
+  end;
+  parts.append(Copy(s, 1, en));
+  Result := TPyList.Create;
+  for k := parts.count - 1 downto 0 do Result.append(parts.at(k));
+end;
+
+{ s.partition(sep) — a 3-tuple (before, sep, after) at the FIRST occurrence, or
+  (s, '', '') when sep is absent. }
+function pystr_partition(const s: AnsiString; const sep: AnsiString): TPyList;
+var idx: Integer;
+begin
+  Result := TPyList.Create;
+  Result.FIsTuple := True;
+  idx := Pos(sep, s);
+  if idx = 0 then
+  begin
+    Result.append(s); Result.append(''); Result.append('');
+  end
+  else
+  begin
+    Result.append(Copy(s, 1, idx - 1));
+    Result.append(sep);
+    Result.append(Copy(s, idx + Length(sep), Length(s) - idx - Length(sep) + 1));
+  end;
+end;
+
+{ s.rpartition(sep) — same shape as partition, at the LAST occurrence, or
+  ('', '', s) when sep is absent. }
+function pystr_rpartition(const s: AnsiString; const sep: AnsiString): TPyList;
+var idx, i, n, m, j: Integer; hit: Boolean;
+begin
+  Result := TPyList.Create;
+  Result.FIsTuple := True;
+  n := Length(s); m := Length(sep);
+  idx := 0;
+  if m > 0 then
+    for i := n - m + 1 downto 1 do
+    begin
+      hit := True;
+      for j := 1 to m do
+        if s[i + j - 1] <> sep[j] then begin hit := False; Break; end;
+      if hit then begin idx := i; Break; end;
+    end;
+  if idx = 0 then
+  begin
+    Result.append(''); Result.append(''); Result.append(s);
+  end
+  else
+  begin
+    Result.append(Copy(s, 1, idx - 1));
+    Result.append(sep);
+    Result.append(Copy(s, idx + m, n - idx - m + 1));
+  end;
 end;
 
 { s.splitlines(): split on newlines, and a TRAILING newline does not produce a

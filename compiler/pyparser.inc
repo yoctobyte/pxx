@@ -2094,6 +2094,16 @@ begin
     { 0 or 1 args, and the two forms are DIFFERENT algorithms — see pylib.
       PyParseStrMethod picks the concrete function from the arg count. }
     begin pname := 'pystr_split_sep'; retTk := tyClass; wantArgs := -1; end
+  else if CaseEqual(mname, 'rsplit') then
+    { same three arg-count shapes as split — see the -8 case in
+      PyParseStrMethod: 0/1 args give the SAME result as split() (only a
+      maxsplit changes which end the limit anchors to), so only the 2-arg
+      form needs its own right-anchored algorithm. }
+    begin pname := 'pystr_split_sep'; retTk := tyClass; wantArgs := -8; end
+  else if CaseEqual(mname, 'partition') then
+    begin pname := 'pystr_partition'; retTk := tyClass; wantArgs := 1; end
+  else if CaseEqual(mname, 'rpartition') then
+    begin pname := 'pystr_rpartition'; retTk := tyClass; wantArgs := 1; end
   else if CaseEqual(mname, 'rjust') then
     { 1 or 2 args: rjust(width) pads with spaces, rjust(width, fill) with the
       first character of fill. PyParseStrMethod picks the concrete function
@@ -3776,7 +3786,8 @@ begin
     Error('Nil Python: unsupported str method .' + mname + '() (have: upper, '
       + 'lower, strip, lstrip, rstrip, startswith, endswith, find, isspace, '
       + 'isdigit, isalpha, isalnum, isupper, islower, format, '
-      + 'join, split, splitlines, replace, count, rfind, title, capitalize, '
+      + 'join, split, rsplit, partition, rpartition, splitlines, replace, '
+      + 'count, rfind, title, capitalize, '
       + 'swapcase, casefold, ljust, rjust, center, zfill, removeprefix, '
       + 'removesuffix)');
 
@@ -3846,6 +3857,17 @@ begin
       separate functions. }
     if i = 0 then pname := 'pystr_split_ws'
     else if i = 2 then pname := 'pystr_split_sep_max'
+    else if i <> 1 then
+      Error('Nil Python: str method .' + mname + '() takes at most two arguments');
+    procIdx := FindProc(pname);
+    if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  end
+  else if wantArgs = -8 then
+  begin
+    { rsplit()/rsplit(sep) give the SAME result as split()/split(sep) — only
+      rsplit(sep, maxsplit) needs the right-anchored algorithm. }
+    if i = 0 then pname := 'pystr_split_ws'
+    else if i = 2 then pname := 'pystr_rsplit_sep_max'
     else if i <> 1 then
       Error('Nil Python: str method .' + mname + '() takes at most two arguments');
     procIdx := FindProc(pname);
