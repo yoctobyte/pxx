@@ -71,3 +71,29 @@ to N args + captured free vars + persistence.
 prints 42; `100 8192 ! 5 8192 +! 8192 @ .` = 105; `BL .` = 32; STD.UFO loads all
 10 files. Gate: self-host byte-identical + pyeval standalone + test-nilpy +
 quick, then `make test-uforth`.
+
+## Recon 2026-07-31 — part 1 (this ticket's own load-time abort) fixed; part 2 confirmed still open
+
+Part 1 — "resolve a bare `def` name to a value" inside `exec()`, so
+`vm.define_word(name, native=_w)` no longer aborts the load with `name not
+defined: _w` — is FIXED. Measured directly: the exact repro shape (a
+closure-over-`name` nested def, passed by name as a keyword arg to a host
+method inside `exec()`) now compiles and the `exec()` call itself
+completes without error.
+
+Part 2 — "persist + reverse-bridge the closure" so the LATER call
+(`word.native(vm2)`, from ordinary compiled NilPy code, not from inside
+exec()) actually runs the closure with its captured state — is confirmed
+STILL open, exactly as this ticket's own analysis predicted. Measured the
+concrete failure: with the `native` field/parameter properly annotated
+`Callable[[Any], None]` (needed just to get past compilation), the call
+reaches pyeval's host-call marshaling and fails at RUNTIME: `pyeval: host
+method define_word has an unsupported param shape` — i.e. passing a
+pyeval-internal closure value AS AN ARGUMENT to a host method call is the
+piece that doesn't exist yet, matching this ticket's own "closure must be
+snapshotted... boxed as a stateful callable variant" analysis. Not
+attempted this pass — it is the same closure/trampoline architecture
+class already deferred elsewhere this session
+(`bug-nilpy-bound-fn-closure-objects-are-never-freed`,
+`bug-nilpy-void-def-assigned-and-called-crashes`), needing a genuine
+runtime tag + trampoline, not a quick patch.
