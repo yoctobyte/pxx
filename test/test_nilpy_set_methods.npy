@@ -1,0 +1,22 @@
+# set methods: issubset/issuperset/union/intersection/difference/add/discard/
+# remove. Printed via sorted(...) to sidestep the separate, tracked cosmetic
+# gap where a set currently displays with list brackets. Every expectation is
+# CPython's own output.
+
+a = {1, 2, 3}
+b = {2, 3}
+print(a.issubset(b))
+print(b.issubset(a))
+print(a.issuperset(b))
+print(sorted(a.union(b)))
+print(sorted(a.intersection(b)))
+print(sorted(a.difference(b)))
+
+a.add(4)
+print(sorted(a))
+a.discard(1)
+print(sorted(a))
+a.discard(99)
+print(sorted(a))
+a.remove(2)
+print(sorted(a))
