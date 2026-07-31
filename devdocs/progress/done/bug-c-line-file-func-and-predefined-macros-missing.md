@@ -88,3 +88,6 @@ C tests green + self-host byte-identical, plus a regression compiling the probe
 above and asserting `__LINE__` is the real line, `__FILE__` is non-empty both
 directly and when passed as an argument, and `__BYTE_ORDER__` matches the
 target.
+
+## Log
+- 2026-07-31 — resolved, commit 68ebab2fc.

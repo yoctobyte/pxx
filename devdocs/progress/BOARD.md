@@ -30,13 +30,12 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (184)
+## backlog (183)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
-| bug-c-line-file-func-and-predefined-macros-missing | C | 55 | bug | C: __LINE__ is 0, __FILE__ is empty and __func__ is empty; __unix__, __BYTE_ORDER__, __SIZEOF_* and __CHAR_BIT__ are absent | — |
 | bug-c-undeclared-identifier-as-function-pointer-becomes-null | C | 45 | bug | C: an undeclared identifier used where a function POINTER is expected becomes 0 with only a warning — the program then jumps to null | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
@@ -307,7 +306,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1127)
+## done (1128)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -451,6 +450,7 @@ _none_
 | bug-c-int-mod-unsigned-uses-signed-conversion | C | 50 | bug | C `int op unsigned` does SIGNED arithmetic — the usual arithmetic conversions don't convert the signed operand to unsigned, so `-13 % 61u` yields -13 (should be 3); silent wrong values for %, /, and comparisons | — |
 | bug-c-large-record-byval-param | C | 50 | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
 | bug-c-libc-data-symbol-stdio | C | 50 | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
+| bug-c-line-file-func-and-predefined-macros-missing | C | 55 | bug | C: __LINE__ is 0, __FILE__ is empty and __func__ is empty; __unix__, __BYTE_ORDER__, __SIZEOF_* and __CHAR_BIT__ are absent | — |
 | bug-c-local-fnptr-array-initializer | C | 35 | bug | C LOCAL function-pointer array with brace initializer `int (*fp[2])(int) = {inc, dbl};` rejected ('expected C expression'); global form works | — |
 | bug-c-local-nested-aggregate-init | C | 55 | bug | C: LOCAL nested aggregate initializers fail ("expected C expression") — extend the elision walker to locals | — |
 | bug-c-local-static-const-multidim-array-init-sqlite | C | 50 | bug | C: local static const multidimensional array initializer in sqlite | — |
@@ -2908,7 +2908,6 @@ _none_
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
-- [p 55] [C] bug-c-line-file-func-and-predefined-macros-missing
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [N] bug-nilpy-void-def-assigned-and-called-crashes
 - [p 55] [A] bug-pascal-array-of-pointer-deref-loses-the-record-type
