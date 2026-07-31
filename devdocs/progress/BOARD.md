@@ -127,7 +127,7 @@ _none_
 | feature-n-nilpy-ast-typing-module-scope | N | 55 | feature | NilPy: type MODULE locals from the AST too | — |
 | feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
 | feature-networking | B | 20 | feature | Networking runtime | — |
-| feature-nilpy-aggregate-builtins | N | 50 | feature | nilpy: sum/max/min/any/all/sorted/set/map/filter/type builtins | — |
+| feature-nilpy-aggregate-builtins | N | 50 | feature | nilpy: map/filter over an arbitrary callable value | — |
 | feature-nilpy-arc-cross-parity | A | 35 | feature | NilPy object-ARC cross-target parity (aarch64 inline arms + scope-exit) | — |
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-class-field-infer-from-ctor | N | 50 | feature | nilpy: infer a class field's type from the ctor parameter assigned to it | — |

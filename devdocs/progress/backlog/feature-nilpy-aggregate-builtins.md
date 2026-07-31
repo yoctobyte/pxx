@@ -1,5 +1,5 @@
 ---
-summary: "nilpy: sum/max/min/any/all/sorted/set/map/filter/type builtins"
+summary: "nilpy: map/filter over an arbitrary callable value"
 type: feature
 track: N
 prio: 50
@@ -13,23 +13,38 @@ prio: 50
   ([[feature-demo-songformatter-pxx-target]]). Follows the earlier
   `feature-nilpy-missing-builtins` (done) — these are the ones still absent.
 
-## Missing (each `undefined variable`)
+## 2026-07-31 — mostly done
 
-`sum` · `max` · `min` · `any` · `all` · `sorted` · `set` · `map` · `filter` ·
-`type` (songformatter uses `type(exc).__name__`)
+`sum` · `max` · `min` · `any` · `all` · `sorted` · `set` were all already
+implemented (undocumented — no `undefined variable` for any of them, verified
+against CPython, no code change needed). Regression added:
+`test/test_nilpy_aggregate_builtins.npy`.
 
-`len`, `str`, `int`, `range`, `enumerate`, `zip`, `list` already work.
+`type` was genuinely missing. Rather than a general type-object builtin
+(comparable, printable as `<class 'X'>`, the 3-arg dynamic-class-creation
+form — none of which any censused corpus needs), implemented the one shape
+that's actually used: `type(x).__name__` recognized as a whole unit in
+`ParseFactor` (parser.inc), lowered onto the class instance's existing RTTI
+pair — `GenMakeRttiOfCall` + `GenMakeClassRefOp(.., 'ClassName', ..)`, the
+same machinery `x.ClassName` already uses. `x` must be statically `tyClass`;
+a scalar or a variant-boxed instance errors loudly (`type(x).__name__ needs x
+to be a class instance`) rather than reading a nonexistent RTTI blob, which is
+what happened on the first attempt (segfault on `type(5).__name__` with no
+such check). Bare `type(x)` with no `.__name__` also errors loudly rather than
+returning something plausible-but-wrong.
 
-## Notes
+**Still open:**
 
-- `sorted(xs, key=..., reverse=...)` and `list.sort(key=...)` need a callable
-  value, so the `key=` form waits on [[feature-nilpy-lambda]]; the plain forms
-  don't and are worth having first. `list.sort(key=lambda ...)` currently fails
-  with `undefined variable (key)`.
-- `any`/`all` over a generator expression additionally needs
-  [[feature-nilpy-generator-expression-arg]]; over a list they don't.
-- `set` needs a set type: membership, `add`, `len`, iteration in sorted order for
-  determinism. songformatter uses sets for note collections.
+- `map(f, xs)` / `filter(f, xs)` over an arbitrary callable value. `map`
+  partially exists (works for `int`/`str`/`float` conversion only — the
+  error message says as much); `filter` is entirely `undefined variable`.
+  Both need a value-callable ABI to invoke an arbitrary `f`, which is exactly
+  [[bug-nilpy-callable-value-abi-sorted-key-and-builtins]]'s bigger gap —
+  fixing THAT ticket's "shape of a fix" (a fixed-ABI wrapper for a def/lambda
+  used as a value) unblocks both `map`/`filter` here and `sorted(key=...)`
+  there for free, per that ticket's own note. Not worth a narrower
+  special-case: `map`/`filter` need the exact same wrapper `sorted` does.
+- `list.sort(key=...)` — same blocker, same note.
 
 ## Gate
 
