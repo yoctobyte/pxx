@@ -8,7 +8,7 @@ prio: 50
 # nilpy: fallback import (`try/except ImportError`)
 
 - **Type:** feature (Nil-Python frontend, import system) — **Track N**
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-25 — songformatter planning session. Replaces the earlier
   `feature-nilpy-dotted-from-import` (Rene: don't impersonate reportlab; give
   nilpy the honest portability primitive instead). See
@@ -79,3 +79,12 @@ if wanted (try/except is the standard idiom and covers the need).
 
 ## Log
 - 2026-07-25 — filed, replacing feature-nilpy-dotted-from-import.
+- 2026-07-31 — already landed and gated (no landing entry was recorded
+  here): `test/test_nilpy_fallback_import.npy` and
+  `test/test_nilpy_fallback_import_try_wins.npy` cover both directions
+  ("try wins" and "fallback wins"), already in the Makefile ("try/except
+  ImportError picks a branch at COMPILE time, both directions"). Re-verified
+  directly against the ticket's own reportlab->fallback shape: both
+  directions compile and bind correctly. `--no-shims` (mentioned in the
+  sibling dotted-imports ticket) also already exists and is gated. Closing
+  — nothing left open.
