@@ -706,6 +706,9 @@ test-nilpy: $(COMPILER)
 	@# different arity, methods, and rebind-to-value already worked)
 	./$(COMPILER) test/test_nilpy_redefine_def.npy /tmp/test_nilpy_redefdef26
 	test "$$(/tmp/test_nilpy_redefdef26)" = "$$(printf '2\n3\n2\n5')"
+	@# %e/%E/%g/%G no longer collapse onto %f
+	./$(COMPILER) test/test_nilpy_percent_e_g_format.npy /tmp/test_nilpy_pctformat26
+	test "$$(/tmp/test_nilpy_pctformat26)" = "$$(printf '1.500000e+03\n1.500000E+03\n1.23e+03\n1.5e+06\n0.0001\n100\n0\n0.000000e+00\n-1.500000e+03\n1.23457e+08\n3.141592654\n1\n1.500000\n1.50')"
 	@# a managed STRING local minted after the prologue zero-init pass was never
 	@# nil'd, so the loop's first store released stale frame bytes -> SIGSEGV
 	./$(COMPILER) test/test_nilpy_str_local_loop_zeroinit.npy /tmp/test_nilpy_str_local_zi26

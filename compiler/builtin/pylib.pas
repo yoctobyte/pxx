@@ -5517,10 +5517,27 @@ begin
       'x': spec := spec + 'x';
       'X': spec := spec + 'X';
       'o': spec := spec + 'o';
-      'f', 'F', 'e', 'E', 'g', 'G':
+      'f', 'F':
         begin
           if not hasPrec then prec := 6;
           spec := spec + '.' + pystr_of(Int64(prec)) + 'f';
+        end;
+      'e', 'E', 'g', 'G':
+        begin
+          { `e`/`g` have no equivalent in the {}-spec grammar `spec` targets
+            (an f-string `{x:e}` correctly refuses at compile time rather than
+            silently rendering fixed-point), so build the text directly here
+            and apply the same width/pad step `%s` uses just below, instead of
+            routing through pyformat_of's fixed-point-only case
+            (bug-nilpy-percent-e-and-g-silently-render-as-fixed-point). }
+          if not hasPrec then prec := 6;
+          if (conv = 'e') or (conv = 'E') then
+            outS := outS + PyFmtPad(PyFmtExp(pyvar_to_float(cur), prec, conv = 'E'),
+                                    width, zero, leftAlign)
+          else
+            outS := outS + PyFmtPad(PyFmtG(pyvar_to_float(cur), prec, conv = 'G'),
+                                    width, zero, leftAlign);
+          Continue;
         end;
       's', 'r':
         begin
@@ -5668,6 +5685,92 @@ begin
     Result := Result + '.' + fs;
   end;
   if neg then Result := '-' + Result;
+end;
+
+{ `%e`/`%E`: mantissa normalised to [1,10) via the SAME loop FloatToExpStr
+  uses, but the digit rule is PyFmtFixed's (exactly `prec` fractional digits,
+  half-up rounding) rather than FloatToExpStr's own trimmed natural form --
+  `"%.2e" % 1234.5` must print `1.23e+03`, not whatever digit count
+  FloatToStr's trim-trailing-zeros rule happens to leave.
+  bug-nilpy-percent-e-and-g-silently-render-as-fixed-point. }
+function PyFmtExp(v: Double; prec: Integer; upper: Boolean): AnsiString;
+var neg: Boolean; e: Integer; ms, es: AnsiString;
+begin
+  if v <> v then begin Result := 'nan'; Exit; end;
+  if v > 1.7976931348623157e308 then begin Result := 'inf'; Exit; end;
+  if v < -1.7976931348623157e308 then begin Result := '-inf'; Exit; end;
+  neg := v < 0.0;
+  if neg then v := -v;
+  e := 0;
+  if v <> 0.0 then
+  begin
+    while v >= 10.0 do begin v := v / 10.0; e := e + 1; end;
+    while v < 1.0 do begin v := v * 10.0; e := e - 1; end;
+  end;
+  ms := PyFmtFixed(v, prec);
+  { rounding to `prec` digits may have carried the mantissa up to 10.xxx --
+    e.g. 9.9999996 at prec=6 rounds to "10.000000" }
+  if (Length(ms) >= 2) and (ms[1] = '1') and (ms[2] = '0') then
+  begin
+    e := e + 1;
+    ms := PyFmtFixed(v / 10.0, prec);
+  end;
+  if e >= 0 then es := PyFmtBase(e, 10, False) else es := PyFmtBase(-e, 10, False);
+  while Length(es) < 2 do es := '0' + es;
+  if upper then Result := ms + 'E' else Result := ms + 'e';
+  if e >= 0 then Result := Result + '+' + es else Result := Result + '-' + es;
+  if neg then Result := '-' + Result;
+end;
+
+{ Trailing zeros (and a now-bare trailing '.') stripped from a PLAIN decimal
+  string -- `%g`'s own rule, applied to whichever of the fixed/exponential
+  forms it picked. }
+function PyStripTrailingZerosPlain(const s: AnsiString): AnsiString;
+var i: Integer;
+begin
+  if Pos('.', s) = 0 then begin Result := s; Exit; end;
+  i := Length(s);
+  while (i > 1) and (s[i] = '0') do Dec(i);
+  if (i > 1) and (s[i] = '.') then Dec(i);
+  Result := Copy(s, 1, i);
+end;
+
+{ Same, but for an EXPONENTIAL string -- strip only the mantissa (before
+  'e'/'E'), leaving the exponent suffix untouched. }
+function PyStripTrailingZerosExp(const s: AnsiString): AnsiString;
+var epos: Integer;
+begin
+  epos := Pos('e', s);
+  if epos = 0 then epos := Pos('E', s);
+  if epos = 0 then begin Result := PyStripTrailingZerosPlain(s); Exit; end;
+  Result := PyStripTrailingZerosPlain(Copy(s, 1, epos - 1)) +
+            Copy(s, epos, Length(s) - epos + 1);
+end;
+
+{ `%g`/`%G`: C's rule -- `%e` when the decimal exponent is < -4 or >= the
+  (significant-digit) precision, else `%f`; trailing zeros stripped either
+  way. `prec` is SIGNIFICANT digits (Python defaults it to 6, and 0/absent
+  means 1), unlike `%e`/`%f` where it counts digits after the point. }
+function PyFmtG(v: Double; prec: Integer; upper: Boolean): AnsiString;
+var e: Integer; av: Double; useExp: Boolean;
+begin
+  if prec <= 0 then prec := 1;
+  if v <> v then begin Result := 'nan'; Exit; end;
+  if v > 1.7976931348623157e308 then begin Result := 'inf'; Exit; end;
+  if v < -1.7976931348623157e308 then begin Result := '-inf'; Exit; end;
+  av := v;
+  if av < 0.0 then av := -av;
+  e := 0;
+  if av <> 0.0 then
+  begin
+    while av >= 10.0 do begin av := av / 10.0; e := e + 1; end;
+    while av < 1.0 do begin av := av * 10.0; e := e - 1; end;
+  end;
+  useExp := (e < -4) or (e >= prec);
+  if useExp then
+    Result := PyStripTrailingZerosExp(PyFmtExp(v, prec - 1, upper))
+  else
+    Result := PyStripTrailingZerosPlain(PyFmtFixed(v, prec - 1 - e));
 end;
 
 function pyformat_of(d: Double; const spec: AnsiString): AnsiString; overload;

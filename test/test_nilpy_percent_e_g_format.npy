@@ -1,0 +1,21 @@
+# `%e`/`%E`/`%g`/`%G` collapsed onto the fixed-point (`%f`) formatter -- an
+# EXPLICIT request for scientific notation silently got fixed-point instead.
+# bug-nilpy-percent-e-and-g-silently-render-as-fixed-point
+# Every expectation is CPython's own output.
+
+print("%e" % 1500.0)
+print("%E" % 1500.0)
+print("%.2e" % 1234.5)
+print("%g" % 1500000.0)
+print("%g" % 0.0001)
+print("%g" % 100.0)
+print("%g" % 0.0)
+print("%e" % 0.0)
+print("%e" % -1500.0)
+print("%g" % 123456789.0)
+print("%.10g" % 3.14159265358979)
+print("%g" % 1.0)
+
+# %f must be unaffected -- the shared fixed-point path stays untouched
+print("%f" % 1.5)
+print("%.2f" % 1.5)
