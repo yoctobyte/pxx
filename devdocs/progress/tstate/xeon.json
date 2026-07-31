@@ -1723,6 +1723,13 @@
   "verdict": "GREEN",
   "wall": 259.5
  },
+ "last_bench": {
+  "conf_rows": 550,
+  "date": "2026-07-31T17:43:39Z",
+  "rc": 0,
+  "rows": 29,
+  "sha": "c562f4f1cf1cea41ad8dc7cfa735916a8e99b751"
+ },
  "last_full": {
   "date": "2026-07-31T17:30:38Z",
   "sha": "c562f4f1cf1cea41ad8dc7cfa735916a8e99b751",
