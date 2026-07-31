@@ -6586,6 +6586,21 @@ lib-test: pxx-stable-check
 	# FPC-built copy of the same program, so this compiles under FPC too.
 	$(PXX_STABLE) -Fulib/rtl test/lib_floattostr.pas /tmp/lib_floattostr
 	test "$$(/tmp/lib_floattostr | tail -1)" = "FLOATTOSTR OK"
+	# crtl against gcc's libc, which is the oracle for this surface: the whole
+	# output is diffed against the SAME file built by gcc, so there are no
+	# recorded expectations to drift.
+	$(PXX_STABLE) test/crtl_libc_oracle.c /tmp/crtl_libc_oracle
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -o /tmp/crtl_libc_oracle_gcc test/crtl_libc_oracle.c -lm 2>/dev/null; \
+	  /tmp/crtl_libc_oracle_gcc > /tmp/crtl_libc_gcc.txt; \
+	  /tmp/crtl_libc_oracle > /tmp/crtl_libc_pxx.txt; \
+	  if diff /tmp/crtl_libc_gcc.txt /tmp/crtl_libc_pxx.txt >/dev/null; then \
+	    echo "  crtl-oracle: ok (byte-identical to gcc's libc)"; \
+	  else \
+	    echo "  crtl-oracle: FAIL (diverges from gcc)"; \
+	    diff /tmp/crtl_libc_gcc.txt /tmp/crtl_libc_pxx.txt; exit 1; \
+	  fi; \
+	else echo "  crtl-oracle: SKIP (no gcc to diff against)"; fi
 	# exec() as a library, driven from a .npy: the whole output is diffed
 	# against CPython's for the same file (test/lib_pyexec.npy is valid .py)
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_pyexec.npy /tmp/lib_pyexec
@@ -6615,7 +6630,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_markdown.pas /tmp/lib_markdown
 	test "$$(/tmp/lib_markdown | grep -c '=ok')" = "17"
 	test "$$(/tmp/lib_markdown | tail -1)" = "MARKDOWN OK"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + pyexec + format-ge + namevalue + markdown) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + pyexec + format-ge + namevalue + markdown) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check

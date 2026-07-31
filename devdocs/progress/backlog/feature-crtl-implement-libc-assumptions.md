@@ -127,3 +127,55 @@ did. The currently-collected batch (inttypes completeness + this sweep) is
 closed. File the next batch against it when a project trips over something; the
 sweep above is cheap to re-run and worth repeating after any header change.
 
+
+## Collected sweep: declared-but-unimplemented census + a gcc DIFFERENTIAL (2026-07-31, Track B)
+
+The first assumption class this ticket lists is "header symbols
+declared-but-unimplemented (functions real code calls)". Swept it.
+
+**A textual census of `lib/crtl/include/**.h` against `lib/crtl/src` suggested 58
+missing symbols. Empirically, 36 of the plausible ones all compile and link.**
+The census was mostly false positives — bodies live in places a regex over
+`src/` does not see. Worth recording because the next person will run the same
+grep and reach the same wrong conclusion: **link-probe the candidates, do not
+grep for definitions.**
+
+### What replaced the census: an oracle test
+
+Linking is not agreement, and this ticket already says gcc's libc is the oracle
+for behaviour — but nothing gated that. `test/crtl_libc_oracle.c` now does, and
+it is in `lib-test`: **the same file is built by gcc and by pxx and the entire
+output is diffed**, so there are no recorded expectations to drift. A recorded
+expectation for a libc surface is just our own behaviour written down.
+
+The batch, chosen as the places a wrong answer would be silent:
+
+- `strtoll` / `strtoull` — base 10/16/0, leading space, sign, `endptr`
+  placement, the max values, the overflow clamp, and `strtoull("-1")` (which is
+  `ULLONG_MAX`, not an error).
+- `atoll` / `atof` with trailing garbage.
+- The whole wide-ctype family — 12 `isw*` predicates on deliberately awkward
+  inputs (`iswgraph(L' ')`, `iswprint(L'\t')`, `iswspace(L'\v')`), plus
+  `towlower`/`towupper` including the no-op case, and `wcslen`.
+- Math edges where sign and rounding are the interesting part: `fmod` with each
+  sign combination, `hypot`, `log2` below 1, `exp2` negative, `sinh`/`cosh`/
+  `tanh`, `fabsf`, and `ceil`/`floor` on both signs.
+- `bsearch` hit AND miss.
+- A `PRId64` -> `sscanf("%" SCNd64)` round trip — because a wrong length
+  modifier is varargs, so it reads the wrong bytes off the stack with no
+  diagnostic anywhere. (That is exactly how the `<inttypes.h>` item above went
+  wrong the first time.)
+
+**Result: 25 lines, byte-identical to gcc.** No gap to close in this batch — the
+value landed is the gate, not a fix.
+
+### One real bug found on the way
+
+The first draft used a GNU nested function as the `bsearch` comparator. pxx
+warned "undeclared identifier 'cmp' used as value (treated as 0)", built the
+program anyway, and it **segfaulted calling through null**. Filed as
+[[bug-c-undeclared-identifier-as-function-pointer-becomes-null]] (Track C).
+Nested functions are an extension and not supporting them is defensible; turning
+an undeclared identifier into a null callback and building it is not. Same
+"treated as 0" recovery that silently made `M_SQRT2` zero in
+[[bug-crtl-headers-lost-when-cwd-is-not-the-repo-root]].

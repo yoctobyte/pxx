@@ -31,11 +31,12 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (181)
+## backlog (182)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
+| bug-c-undeclared-identifier-as-function-pointer-becomes-null | C | 45 | bug | C: an undeclared identifier used where a function POINTER is expected becomes 0 with only a warning — the program then jumps to null | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
 | bug-crtl-headers-lost-when-cwd-is-not-the-repo-root | C | 60 | bug | C: pxx's own crtl headers are found only from the repo root — elsewhere <stdarg.h>/<math.h> silently come from /usr/include | — |
@@ -2904,6 +2905,7 @@ _none_
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [U] decide-gpc-as-corpus-target (unblocks 1)
 - [p 45] [U] decide-ilja-tui-render-model (unblocks 1)
+- [p 45] [C] bug-c-undeclared-identifier-as-function-pointer-becomes-null
 - [p 45] [A] bug-compiler-selfdebug-lines-index-expanded-source
 - [p 45] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
