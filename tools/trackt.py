@@ -200,7 +200,10 @@ def print_tstate(clone):
     """
     repo = clone if os.path.isdir(os.path.join(clone, ".git")) else CHECKOUT
     try:
-        subprocess.run(["git", "fetch", "--quiet", "origin"], cwd=repo,
+        # --no-write-fetch-head: `trackt status` is run repeatedly (and from
+        # watch loops) in a repo where a pull may be in flight; see Clone.fetch.
+        subprocess.run(["git", "fetch", "--quiet", "--no-write-fetch-head",
+                        "origin"], cwd=repo,
                        timeout=30, check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         tmp = tempfile.mkdtemp(prefix="trackt-tstate.")
@@ -681,8 +684,8 @@ def cmd_setup(clone, fetch_corpus=False):
     subprocess.run(["git", "config", "merge.ours.driver", "true"], cwd=clone,
                    check=False)
     print("  merge : ok — merge.ours.driver set (generated files self-heal)")
-    ok = subprocess.run(["git", "fetch", "--quiet", "origin"], cwd=clone
-                        ).returncode == 0
+    ok = subprocess.run(["git", "fetch", "--quiet", "--no-write-fetch-head",
+                         "origin"], cwd=clone).returncode == 0
     print("  fetch : %s" % (GRN + "ok" + OFF if ok else RED + "FAIL" + OFF))
     push = subprocess.run(["git", "push", "--dry-run", "--quiet", "origin",
                            "HEAD:refs/heads/master"], cwd=clone,

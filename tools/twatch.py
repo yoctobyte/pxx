@@ -169,7 +169,20 @@ class Clone:
         return sh(["git", "status", "--porcelain", "-uno"], cwd=self.path)
 
     def fetch(self):
-        sh(["git", "fetch", "--quiet", "origin"], cwd=self.path)
+        """Poll origin WITHOUT touching FETCH_HEAD.
+
+        The daemon fetches every `interval` seconds, forever, in a clone a human
+        or agent also runs git in (deploying new tooling, inspecting a report).
+        A background fetch that writes FETCH_HEAD while a foreground
+        `git pull --rebase` is reading it leaves a truncated/multi-line file and
+        the pull dies with `fatal: Cannot rebase onto multiple branches`.
+        Nothing here ever reads FETCH_HEAD — we resolve `origin/<branch>` — so
+        writing it is pure downside. Explicit refspec for the same reason:
+        never depend on the clone's fetch config.  (Diagnosed on borg
+        2026-07-31; the rule is in two-box-protocol.md.)"""
+        sh(["git", "fetch", "--quiet", "--no-write-fetch-head", "origin",
+            "+refs/heads/%s:refs/remotes/origin/%s" % (self.branch, self.branch)],
+           cwd=self.path)
 
     def remote_head(self):
         return sh(["git", "rev-parse", "origin/%s" % self.branch], cwd=self.path)
