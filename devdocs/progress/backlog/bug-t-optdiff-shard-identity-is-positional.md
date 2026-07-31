@@ -34,6 +34,20 @@ and `autoticket` filed a **second ticket for the same bug**:
 `regression-optdiff-shard4-6` exists too — so this has almost certainly happened
 before and been absorbed as noise.
 
+## It recurred twice more within the hour
+
+| opt run | job reported | test files added since previous run |
+|---|---|---|
+| 22:00Z `f9396231e2e1` | `optdiff#shard5/6` | — |
+| 22:25Z `0ceeeaa004dc` | `optdiff#shard0/6` | 1 (`test_arr_of_ptr_elemrec_b354.pas`) |
+| 22:5xZ `d87301219197` | `optdiff#shard2/6` | 2 (`test_uses_order_pylib_exception_{a,b}.pas`) |
+
+Same program every time — `test/crtl_libc_oracle.c` at `-O3`. **Three tickets
+now exist for one bug** (`regression-optdiff-shard{0,2,5}-6`), plus the historic
+`shard4-6` in `done/`. The rate is set by how often anyone adds a test file,
+which on an active night is roughly every opt cycle — so this does not
+self-limit, it accumulates.
+
 ## This is the exact class `job_key()` was written to prevent
 
 From `twatch.py`:
