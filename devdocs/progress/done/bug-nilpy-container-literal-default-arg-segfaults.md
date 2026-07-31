@@ -77,3 +77,6 @@ Either fix touches `compiler/parser.inc`/`compiler/pyparser.inc` under the
 self-host gate. Scoped as its own ticket rather than attempted inline while
 sweeping — a crash-class bug deserves a careful, dedicated pass rather than a
 quick patch to default-arg machinery shared with every other parameter kind.
+
+## Log
+- 2026-07-31 — resolved, commit 8aa45e194.
