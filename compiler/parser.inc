@@ -839,6 +839,8 @@ function PyMakeNone: Integer; forward;
 procedure ParsePyUnit(const uname: AnsiString); forward;   { a `.py` MODULE pulled in by an import (pyparser.inc) }
 function PyCallMeth1(ci: Integer; const mname: AnsiString;
                      selfNode, argNode: Integer): Integer; forward;   { one-arg method call (pyparser.inc) }
+function PyCallMeth2(ci: Integer; const mname: AnsiString;
+                     selfNode, arg1, arg2: Integer): Integer; forward;   { two-arg method call (pyparser.inc) }
 function PyRawName(off, len: Integer): AnsiString; forward;           { name text from the token pool (pyparser.inc) }                                   { Nil Python None literal node (pyparser.inc) }
 function PyNodeIsPyList(n: Integer): Boolean; forward;                   { Nil Python: node typed TPyList? (pyparser.inc) }
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
@@ -3651,6 +3653,7 @@ var
   isMethodPtr: Boolean;
   autoDeref, peRec: Integer;
   ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { qualified TClass.Const }
+  keyNode: Integer;   { __getitem__/__setitem__ subscript key }
 begin
   prevTok := identTokIdx;
   if DebugTrace then writeln('ParseLValueAST: idx = ', idx, ' prevTok = ', prevTok, ' TokenStr = "', GetTokenStr(prevTok), '" CurTok.Line = ', CurTok.Line, ' TokPos = ', TokPos);
@@ -4770,6 +4773,66 @@ begin
             node := mcallNode;
             tk := IntToTypeKind(UPropTk[pri]); recName := UPropRec[pri];
             ASTTk[node] := StrValTk(tk);
+            continue;   { allow further postfix on the getter result }
+          end;
+        end
+        else if FindUMeth(mci, '__getitem__') >= 0 then
+        begin
+          { A user class with NO Pascal default property (pylib's own
+            TPyList/TPyDict declare one; a plain user class never does) but
+            defining Python's `__getitem__`/`__setitem__`. Without this,
+            `obj[i]` fell all the way through to the generic AN_INDEX
+            fallback below — raw array/pointer arithmetic on the instance,
+            a silent WRONG value (`0` observed), not even a crash.
+            Single-key subscript only (no `obj[a, b]` tuple key, no `+=`
+            augmented form) -- the common shape; either loudly errors below
+            rather than guessing.
+            bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic }
+          isAssign := False;
+          i := TokPos - 1; w := 0;   { TokPos-1 = the '[' }
+          while i < TokCount do
+          begin
+            if Tokens[i].Kind = tkLBrack then Inc(w)
+            else if Tokens[i].Kind = tkRBrack then
+            begin Dec(w); if w = 0 then begin Inc(i); Break; end; end;
+            Inc(i);
+          end;
+          if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True
+          else if (i < TokCount) and (PyAugBinTok(Tokens[i].Kind) <> tkEOF) then
+            Error('Nil Python: augmented assignment to a __getitem__/__setitem__ '
+                  + 'subscript is not supported');
+          Next;                       { consume '[' }
+          PyParseBoolExpr;
+          keyNode := CurASTNode;
+          if CurTok.Kind = tkComma then
+            Error('Nil Python: __getitem__/__setitem__ with a tuple key is not supported');
+          Expect(tkRBrack, ']');
+          if isAssign then
+          begin
+            Expect(tkAssign, ':=');
+            if PyExprMode then PyParseBoolExpr else ParseExpr;
+            if FindUMeth(mci, '__setitem__') < 0 then
+            begin
+              { A genuine runtime error (a `try/except` around this must
+                still compile and run its handler), not a compile-time
+                Error() -- same reasoning as PyNotContainerError /
+                PyNotCallableError above. The value is still parsed/
+                evaluated first, matching Python's left-to-right order. }
+              prevTok := FindProc('PyNoSetitemError');
+              if prevTok < 0 then Error('Nil Python: pylib (PyNoSetitemError) not loaded');
+              node := AllocNode(AN_CALL);
+              ASTIVal[node] := prevTok;
+              ASTTk[node] := Ord(tyInteger);
+              ASTLeft[node] := -1;
+              Result := node; Exit;
+            end;
+            node := PyCallMeth2(mci, '__setitem__', node, keyNode, CurASTNode);
+            Result := node; Exit;
+          end
+          else
+          begin
+            node := PyCallMeth1(mci, '__getitem__', node, keyNode);
+            tk := IntToTypeKind(ASTTk[node]); recName := ResolveNodeRec(node);
             continue;   { allow further postfix on the getter result }
           end;
         end;

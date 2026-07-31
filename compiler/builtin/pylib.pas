@@ -3301,6 +3301,13 @@ begin
   raise TypeError.Create('object is not callable (no __call__)');
 end;
 
+{ `obj[i] = v` where obj's class defines `__getitem__` but not `__setitem__`
+  -- CPython's own error shape ("does not support item assignment"). }
+procedure PyNoSetitemError;
+begin
+  raise TypeError.Create('object does not support item assignment (no __setitem__)');
+end;
+
 function pyvar_to_int(const v: Variant): Int64;
 var
   p: PPyVarRec;
