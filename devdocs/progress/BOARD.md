@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
-| bug-pascal-uses-order-breaks-pylib-exception | A | 45 | bug | `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 
 ## unfinished (2)
@@ -32,7 +31,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (186)
+## backlog (187)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -213,6 +212,7 @@ _none_
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | regression-cascade-b45c759f9e65 | T | 70 | regression | regression CASCADE: 15 jobs newly red at b45c759f9e65 (auto-filed by twatch) | — |
 | regression-optdiff-shard0-6 | T | 70 | regression | regression: optdiff#shard0/6 red at 0ceeeaa004dc (auto-filed by twatch) | — |
+| regression-optdiff-shard2-6 | T | 70 | regression | regression: optdiff#shard2/6 red at d87301219197 (auto-filed by twatch) | — |
 | regression-optdiff-shard5-6 | T | 70 | regression | regression: optdiff#shard5/6 red at 2add2ebb487b (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
@@ -311,7 +311,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1131)
+## done (1132)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -844,6 +844,7 @@ _none_
 | bug-pascal-unknown-type-silently-integer | P | 65 | bug | An UNKNOWN type name silently becomes a 4-byte Integer (pointers truncate) | — |
 | bug-pascal-unqualified-call-binds-builtin-over-used-unit | P | 40 | bug | SILENT: a builtin System routine (Random) OVERLOAD-COMPETES with a same-named routine from an explicitly-used unit instead of being HIDDEN by it (FPC: a non-`overload` unit routine hides System). Differing param widths (unit Integer vs builtin Int64) let the arg TYPE steer the pick — a literal binds the unit, a wider expression binds the builtin | — |
 | bug-pascal-uses-is-transitive | A | 65 | bug | Pascal: uses is transitive — a unit's own uses leak into everything that uses IT, for routines and classes alike (one flat global namespace) | — |
+| bug-pascal-uses-order-breaks-pylib-exception | A | 45 | bug | `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine | — |
 | bug-pascal-widechar-var-to-string-other-contexts | A | 48 | bug | WideChar var → string still broken in CONCAT (segfault) and as a string ARG (overload error) — only assign was fixed | — |
 | bug-pascal-widechar-var-to-string-segfault | A | 50 | bug | SEGFAULT: assigning a WideChar VARIABLE to an AnsiString crashes (direct widechar(x) value works) | — |
 | bug-pascal-writeln-shortstring-param | A | 40 | bug | writeln of a ShortString/frozen-string PARAM prints wild memory | — |
@@ -2899,6 +2900,7 @@ _none_
 - [p 70] [T] bug-t-optdiff-positional-sharding-migrates-job-identity
 - [p 70] [T] regression-cascade-b45c759f9e65
 - [p 70] [T] regression-optdiff-shard0-6
+- [p 70] [T] regression-optdiff-shard2-6
 - [p 70] [T] regression-optdiff-shard5-6
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
