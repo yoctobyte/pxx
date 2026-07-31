@@ -31,7 +31,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (185)
+## backlog (186)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -66,6 +66,7 @@ _none_
 | bug-pascal-array-of-pointer-deref-loses-the-record-type | A | 55 | bug | Pascal: `lst[j]^.Field` on a TPropList resolves only the FIRST field — every other one is 'no such member'; via a local variable it works | — |
 | bug-pascal-defines-leak-across-units | A | 55 | bug | Pascal: {$define} in one unit stays visible in units parsed afterwards, so {$ifdef} compiles different code depending on uses ORDER | — |
 | bug-pascal-uses-order-breaks-pylib-exception | A | 45 | bug | `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine | — |
+| bug-progress-claim-silently-drops-owner-without-template-line | T | 30 | bug | `progress.sh claim`/`resolve` silently no-op when a ticket lacks the expected body line | — |
 | bug-t-corpus-regex-invents-phantom-tree | T | 55 | bug | CORPUS_RE matches prose in a SKIP message and invents corpus 'stb)', permanently skipping a job that also carries a non-corpus regression test | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | bug-tstate-xeon-cross-jobs-red-missing-corpora | T | 50 | bug | tstate: xeon's red set is PART missing-corpora and PART a real i386 regression of mine (now reverted) — the corpora half still stands | — |
@@ -3021,6 +3022,7 @@ _none_
 - [p 30] [N] bug-nilpy-bitwise-op-rejects-boolean-variable-operand
 - [p 30] [N] bug-nilpy-construction-on-the-right-of-is-does-not-parse
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
+- [p 30] [T] bug-progress-claim-silently-drops-owner-without-template-line
 - [p 30] [N] feature-nilpy-list-sort-inplace-key-reverse
 - [p 30] [N] feature-nilpy-min-max-variadic-more-than-two-args
 - [p 30] [N] feature-nilpy-stdlib-coverage-gaps-measured
