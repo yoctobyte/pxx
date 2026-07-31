@@ -301,18 +301,20 @@
    "sha": "734f1dcea8bae3a47c720a74c4b2a915585416bb",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-31T20:33:52Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "734f1dcea8bae3a47c720a74c4b2a915585416bb",
+   "tier": "full",
+   "verdict": "RED"
   }
  ],
  "host": "xeon",
  "jobs": {
   "fpc-bootstrap#src:compiler/compiler.pas": "pass",
   "lib-fpc-clean#00": "pass",
-  "optdiff#shard0/6": "pass",
-  "optdiff#shard1/6": "pass",
-  "optdiff#shard2/6": "pass",
-  "optdiff#shard3/6": "pass",
-  "optdiff#shard4/6": "pass",
-  "optdiff#shard5/6": "pass",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "pass",
   "test-aarch64#src:test/ccross_args.c": "pass",
   "test-aarch64#src:test/ccross_double_to_int.c": "pass",
@@ -1779,11 +1781,6 @@
   "test-i386#src:test/test_variant_class_cross.pas": "pass",
   "test-lua#src:test/lua/runner.c": "pass",
   "test-lua-cross#src:test/lua/runner.c": "pass",
-  "test-opt#00": "pass",
-  "test-opt#src:compiler/compiler.pas@1": "pass",
-  "test-opt#src:compiler/compiler.pas@2": "pass",
-  "test-opt#src:compiler/compiler.pas@3": "pass",
-  "test-opt#src:test/test_atomic64.pas": "pass",
   "test-riscv32#00": "pass",
   "test-riscv32#src:test/ccross_args.c@1": "pass",
   "test-riscv32#src:test/ccross_args.c@2": "pass",
@@ -1936,11 +1933,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "fail"
  },
  "last": {
-  "date": "2026-07-31T20:30:16Z",
+  "date": "2026-07-31T20:33:52Z",
   "sha": "734f1dcea8bae3a47c720a74c4b2a915585416bb",
-  "tier": "native",
-  "verdict": "GREEN",
-  "wall": 103.2
+  "tier": "full",
+  "verdict": "RED",
+  "wall": 206.9
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1950,11 +1947,11 @@
   "sha": "4790e38cdd9f6b6a12a966a9eaebe5aa309e8fd9"
  },
  "last_full": {
-  "date": "2026-07-31T20:09:50Z",
-  "sha": "4790e38cdd9f6b6a12a966a9eaebe5aa309e8fd9",
+  "date": "2026-07-31T20:33:52Z",
+  "sha": "734f1dcea8bae3a47c720a74c4b2a915585416bb",
   "tier": "full",
   "verdict": "RED",
-  "wall": 207.0
+  "wall": 206.9
  },
  "last_opt": {
   "date": "2026-07-31T20:14:21Z",
