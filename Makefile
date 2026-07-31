@@ -518,6 +518,9 @@ test-nilpy: $(COMPILER)
 	@# a class field's type inferred from self.x = <ctor param>, incl. inherited
 	./$(COMPILER) test/test_nilpy_class_field_infer_from_ctor.npy /tmp/test_nilpy_fieldinfer26
 	test "$$(/tmp/test_nilpy_fieldinfer26)" = "$$(printf '%b' '5 five\n1 one 3.14\n4 8')"
+	@# `**`, `/=` (true division augmented-assign, distinct from `//=`), divmod()
+	./$(COMPILER) test/test_nilpy_power_divmod_truediv.npy /tmp/test_nilpy_powdivmod26
+	test "$$(/tmp/test_nilpy_powdivmod26)" = "$$(printf '%b' '1024\n0.25\n1\n-4\n-8\n512\n8.0\n9.0\n0.75\n3.5\n(3, 1)\n(-4, 1)\n(3.0, 1.5)')"
 	./$(COMPILER) test/test_nilpy_dynattr.npy /tmp/test_nilpy_dynattr26
 	test "$$(/tmp/test_nilpy_dynattr26)" = "$$(printf '%b' '105\n110')"
 	./$(COMPILER) test/test_nilpy_dynattr_class.npy /tmp/test_nilpy_dynattr_class26

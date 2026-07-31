@@ -737,6 +737,7 @@ type
     tkAmp, tkPipe,
     tkPlusPlus, tkMinusMinus,
     tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq, tkModEq,
+    tkTrueDivEq,   { Python `/=` -- true division, distinct from `//=` (tkSlashEq) }
     tkAmpEq, tkPipeEq, tkXorEq, tkShlEq, tkShrEq,
     tkQuestion,
     tkLogNot,  { C `!` (logical not); distinct from `~` which stays tkNot }

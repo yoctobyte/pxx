@@ -11153,6 +11153,31 @@ begin
         Exit;
       end;
 
+      { divmod(a, b) -> (a // b, a % b), both already correct on negative
+        operands via pyfloordiv_v/pyfloormod_v.
+        feature-nilpy-power-operator-and-divmod }
+      if isNilPy and CaseEqual(name, 'divmod') and (procIdx < 0) and
+         (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; node := CurASTNode;
+        Expect(tkComma, ',');
+        ParseExpr; left := CurASTNode;
+        Expect(tkRParen, ')');
+        helperPi := FindProc('pydivmod_v');
+        if helperPi < 0 then Error('Nil Python: pylib (pydivmod_v) not loaded');
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
+        argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := left; ASTRight[argSeq2] := -1;
+        ASTRight[argSeq] := argSeq2;
+        CurASTNode := AllocNode(AN_CALL);
+        ASTIVal[CurASTNode] := helperPi;
+        ASTLeft[CurASTNode] := argSeq;
+        ASTTk[CurASTNode] := Ord(Procs[helperPi].RetType);
+        ASTRight[CurASTNode] := ProcRetRecId[helperPi];
+        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+        Exit;
+      end;
+
       { Concat(s1, s2, ..., sn): the System string-concatenation intrinsic, just
         chained `+`. Folded here so it needs no `uses` and reuses the working
         string-concat codegen. A user `Concat` (procIdx>=0) shadows it. }
@@ -12518,6 +12543,7 @@ procedure ParseFactor;
 var smNameTok, smBase, sdTok, tpObjNode, tpBlobNode, tpCallNode: Integer;
     sdName: AnsiString;
     smTk, tpTk: TTypeKind;   { receiver kind for a suffix on a fresh construction }
+    ppBase, ppExp, ppPi, ppArgSeq, ppArgSeq2: Integer;   { `**` power operator }
 begin
   { `type(x).__name__` -- the ONLY shape of Python's `type()` builtin this
     frontend accepts (not a general type-object value: no bare `type(x)`,
@@ -12795,6 +12821,36 @@ begin
         (IntToTypeKind(ASTTk[CurASTNode]) = tyVariant) do
   begin
     CurASTNode := PyMakeDynCall(CurASTNode);
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+  end;
+  { `**` -- Python's power operator: right-associative, and binding TIGHTER
+    than unary minus (`-2 ** 2` is `-(2**2)` = -4, not `(-2)**2`). Recognized
+    here, at the very end of ParseFactor, rather than in ParseTerm alongside
+    `*`/`/`: a unary-minus operand recurses into THIS SAME ParseFactor (see
+    ParseFactorCore's tkMinus case), so checking for `**` here means the
+    unary minus wraps the WHOLE power expression, and the exponent's own
+    recursive ParseFactor call gives right-associativity
+    (`2**3**2` = `2**(3**2)` = 512) for free -- no separate precedence
+    plumbing needed. Lexed as two adjacent tkStar tokens; the NilPy lexer has
+    no dedicated `**` token (the same shape `**kwargs` already relies on, in
+    the unrelated parameter-list grammar).
+    feature-nilpy-power-operator-and-divmod }
+  if PyExprMode and (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkStar) then
+  begin
+    Next; Next;                { the two '*' tokens }
+    ppBase := CurASTNode;
+    ParseFactor;
+    ppExp := CurASTNode;
+    ppPi := FindProc('pypow_v');
+    if ppPi < 0 then Error('Nil Python: pylib (pypow_v) not loaded');
+    ppArgSeq := AllocNode(AN_ARG); ASTLeft[ppArgSeq] := ppBase;
+    ppArgSeq2 := AllocNode(AN_ARG); ASTLeft[ppArgSeq2] := ppExp; ASTRight[ppArgSeq2] := -1;
+    ASTRight[ppArgSeq] := ppArgSeq2;
+    CurASTNode := AllocNode(AN_CALL);
+    ASTIVal[CurASTNode] := ppPi;
+    ASTLeft[CurASTNode] := ppArgSeq;
+    ASTTk[CurASTNode] := Ord(Procs[ppPi].RetType);
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
   end;
 end;

@@ -674,6 +674,20 @@ function pylen_v(const v: Variant): Int64;
 function pyord_v(const v: Variant): Int64;
 function pyord_s(const s: AnsiString): Int64;
 function pymul_v(const a: Variant; const b: Variant): Variant;
+{ Python's `**`. int**non-negative-int is exact within Int64 (exponentiation
+  by squaring, so it inherits whatever overflow behaviour chained `*` already
+  has, rather than a separate wrapping rule); a negative exponent or either
+  operand a float goes through the float path (also squaring when the
+  exponent is a whole number, even a negative or float-typed one, so a
+  negative BASE with a whole exponent -- `(-2.0) ** 3` -- stays exact rather
+  than routing through Ln of a negative number). A genuinely fractional
+  exponent on a negative base is the one shape CPython answers with a complex
+  number; there is no complex type here, so it degrades to NaN.
+  feature-nilpy-power-operator-and-divmod }
+function pypow_v(const a: Variant; const b: Variant): Variant;
+{ Python's `divmod(a, b)` -- (a // b, a % b) as a 2-tuple, both of which are
+  already correct on negative operands via pyfloordiv_v/pyfloormod_v. }
+function pydivmod_v(const a: Variant; const b: Variant): TPyList;
 function pyvar_to_float(const v: Variant): Double;
 function pyvar_to_bool(const v: Variant): Boolean;
 function pyvar_to_char(const v: Variant): Char;
@@ -3505,6 +3519,104 @@ begin
     r^.VType := 2;
     r^.Payload := pyvar_to_int(a) * pyvar_to_int(b);
   end;
+end;
+
+{ Self-contained double-precision ln/exp, used ONLY by pypow_v's fractional-
+  exponent path (`2 ** 0.5`). Deliberately hand-rolled rather than `uses Math`:
+  that unit declares its OWN `Max`/`Min` overloads (Integer/Integer and
+  Double/Double), and pulling it in here shadowed pylib's own `max`/`min`
+  overload set for the two-argument scalar form -- `max(d["n"], 1)` started
+  returning garbage (test_nilpy_minmax regressed). Precision is bounded by the
+  series/reduction below, not IEEE-exact, which is fine for a value that is
+  about to be str()'d through this compiler's own (separately, already
+  known-truncated) float formatter anyway. }
+function PyMathLn(x: Double): Double;
+const Ln2 = 0.6931471805599453;
+var e: Integer; m, t, tt, term, sum: Double; i: Integer;
+begin
+  e := 0; m := x;
+  while m >= 2.0 do begin m := m / 2.0; Inc(e); end;
+  while m < 1.0 do begin m := m * 2.0; Dec(e); end;
+  t := (m - 1.0) / (m + 1.0);
+  tt := t * t;
+  sum := t; term := t;
+  for i := 1 to 40 do
+  begin
+    term := term * tt;
+    sum := sum + term / (2 * i + 1);
+  end;
+  Result := 2.0 * sum + e * Ln2;
+end;
+
+function PyMathExp(x: Double): Double;
+const Ln2 = 0.6931471805599453;
+var n, i: Integer; r, term, sum: Double; neg: Boolean;
+begin
+  neg := x < 0.0;
+  if neg then x := -x;
+  n := Trunc(x / Ln2 + 0.5);
+  r := x - n * Ln2;
+  term := 1.0; sum := 1.0;
+  for i := 1 to 25 do
+  begin
+    term := term * r / i;
+    sum := sum + term;
+  end;
+  for i := 1 to n do sum := sum * 2.0;
+  if neg then Result := 1.0 / sum else Result := sum;
+end;
+
+function pypow_v(const a: Variant; const b: Variant): Variant;
+var pa, pb, r: PPyVarRec;
+    n: Int64; ir, ibase: Int64;
+    fr, fbase, fexp: Double; negExp: Boolean;
+begin
+  pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
+  if (not PyVarIsFloat(pa)) and (not PyVarIsFloat(pb)) and
+     (pyvar_to_int(b) >= 0) then
+  begin
+    n := pyvar_to_int(b);
+    ibase := pyvar_to_int(a);
+    ir := 1;
+    while n > 0 do
+    begin
+      if (n and 1) = 1 then ir := ir * ibase;
+      ibase := ibase * ibase;
+      n := n shr 1;
+    end;
+    r^.VType := 2;
+    r^.Payload := ir;
+    Exit;
+  end;
+  fbase := pyvar_to_float(a);
+  fexp := pyvar_to_float(b);
+  if (fbase = 0.0) and (fexp < 0.0) then
+    raise ZeroDivisionError.Create('0.0 cannot be raised to a negative power');
+  if Frac(fexp) = 0.0 then
+  begin
+    negExp := fexp < 0.0;
+    n := Trunc(Abs(fexp));
+    fr := 1.0;
+    while n > 0 do
+    begin
+      if (n and 1) = 1 then fr := fr * fbase;
+      fbase := fbase * fbase;
+      n := n shr 1;
+    end;
+    if negExp then fr := 1.0 / fr;
+  end
+  else
+    fr := PyMathExp(fexp * PyMathLn(fbase));
+  r^.VType := 3;
+  PPyDouble(@r^.Payload)^ := fr;
+end;
+
+function pydivmod_v(const a: Variant; const b: Variant): TPyList;
+begin
+  Result := TPyList.Create;
+  Result.FIsTuple := True;
+  Result.append(pyfloordiv_v(a, b));
+  Result.append(pyfloormod_v(a, b));
 end;
 
 function pyor_v(const a: Variant; const b: Variant): Variant;

@@ -3940,7 +3940,8 @@ begin
     tkPlusEq:  Result := '+=';
     tkMinusEq: Result := '-=';
     tkStarEq:  Result := '*=';
-    tkSlashEq: Result := '/=';
+    tkSlashEq: Result := '//=';
+    tkTrueDivEq: Result := '/=';
     tkModEq:   Result := '%=';
     tkAmpEq:   Result := '&=';
     tkPipeEq:  Result := '|=';
@@ -10323,6 +10324,7 @@ begin
     tkMinusEq: Result := tkMinus;
     tkStarEq:  Result := tkStar;
     tkSlashEq: Result := tkDiv;   { //= — integer division, like // }
+    tkTrueDivEq: Result := tkSlash;   { /= — true division, like / }
     tkModEq:   Result := tkMod;
     tkAmpEq:   Result := tkAnd;
     tkPipeEq:  Result := tkOr;
@@ -11188,11 +11190,34 @@ begin
         (bug-nilpy-augmented-add-on-variant-list-is-not-in-place). }
       if (augTk = tkPlus) and (IntToTypeKind(ASTTk[lhsNode]) = tyVariant) then
         ASTSLen[node] := PY_BINOP_AUGADD;
-      { widen, don't copy the lhs type: `n -= 0x10000000000000000` on an int
-        target must type the binop PROMO or the wide literal is machine-lowered
-        (out of range); the promo->int store then narrows mod 2^64 }
-      ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[lhsNode]),
-                                 IntToTypeKind(ASTTk[CurASTNode])));
+      { `/=` is TRUE division: always a float, regardless of operand types
+        (`4 /= 2` is 2.0, not 2) -- same rule the plain `/` binop already has
+        via FloatBinopResultTk. Falling through to the generic PyWiden below
+        (as every other augmented op does) would keep an int-typed node
+        storing a float bit pattern: the same class of bug as
+        bug-nilpy-str-of-mixed-mod-prints-double-bits, just for `/=`.
+        feature-nilpy-power-operator-and-divmod }
+      if augTk = tkSlash then
+      begin
+        { a bare-NAME target reuses its EXISTING symbol rather than allocating
+          a fresh one, so the widening harvest (which unions types across
+          MULTIPLE Syms[] entries for the same name) never learns this name
+          needs to be a float -- see the twin name-fast-path site's note. }
+        if PyTypingPass and (ASTKind[lhsNode] = AN_IDENT) and
+           (Syms[Integer(ASTIVal[lhsNode])].TypeKind <> tyDouble) then
+          PyNoteLocalType(Syms[Integer(ASTIVal[lhsNode])].Name,
+                          FloatBinopResultTk(IntToTypeKind(ASTTk[lhsNode]),
+                                             IntToTypeKind(ASTTk[CurASTNode])),
+                          REC_NONE);
+        ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[lhsNode]),
+                                              IntToTypeKind(ASTTk[CurASTNode])));
+      end
+      else
+        { widen, don't copy the lhs type: `n -= 0x10000000000000000` on an int
+          target must type the binop PROMO or the wide literal is machine-lowered
+          (out of range); the promo->int store then narrows mod 2^64 }
+        ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[lhsNode]),
+                                   IntToTypeKind(ASTTk[CurASTNode])));
       rhsNode := node;
     end
     else
@@ -11303,6 +11328,19 @@ begin
       if Result < 0 then Error('Nil Python: pylib TPyList.extend not loaded');
       Exit;
     end;
+    { `n = 7; n /= 2` -- unlike a plain rebind (`n = n / 2`), an augmented
+      assignment reuses the EXISTING symIdx rather than allocating a fresh
+      Syms[] entry, so the widening harvest in PyCollectLocalsAST/
+      PyCollectModuleLocalsAST -- which unions types by seeing MULTIPLE
+      entries for the same name -- never learns `n` needs to be a float:
+      the frame slot stayed Int64 and `print(n)` read the Double's raw bits
+      through an integer formatter. Note the constraint explicitly, the same
+      way a for-loop target does, so the target's OWN declared type widens
+      across trial-parse rounds rather than only the local node's.
+      feature-nilpy-power-operator-and-divmod }
+    if PyTypingPass and (augTk = tkSlash) and (Syms[symIdx].TypeKind <> tyDouble) then
+      PyNoteLocalType(name, FloatBinopResultTk(Syms[symIdx].TypeKind,
+                                               IntToTypeKind(ASTTk[CurASTNode])), REC_NONE);
     PyNoteOptionalTaint(symIdx, CurASTNode);
     PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(augTk);
@@ -11312,10 +11350,15 @@ begin
       (bug-nilpy-augmented-add-on-variant-list-is-not-in-place). }
     if (augTk = tkPlus) and (Syms[symIdx].TypeKind = tyVariant) then
       ASTSLen[node] := PY_BINOP_AUGADD;
-    { widen, don't copy the target type: `n -= 0x10000000000000000` on an int
-      target must type the binop PROMO (see the twin lhs-expression site) }
-    ASTTk[node] := Ord(PyWiden(Syms[symIdx].TypeKind,
-                               IntToTypeKind(ASTTk[CurASTNode])));
+    { `/=` is always a float (see the twin lhs-expression site's note); widen,
+      don't copy the target type otherwise: `n -= 0x10000000000000000` on an
+      int target must type the binop PROMO (see the twin lhs-expression site) }
+    if augTk = tkSlash then
+      ASTTk[node] := Ord(FloatBinopResultTk(Syms[symIdx].TypeKind,
+                                            IntToTypeKind(ASTTk[CurASTNode])))
+    else
+      ASTTk[node] := Ord(PyWiden(Syms[symIdx].TypeKind,
+                                 IntToTypeKind(ASTTk[CurASTNode])));
     rhsNode := node;
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := PyMakeIdent(symIdx);

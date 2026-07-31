@@ -882,6 +882,8 @@ begin
             begin Inc(P); PyEmitToken(tkSlashEq, 0, SrcLine, ''); end
             else PyEmitToken(tkDiv, 0, SrcLine, '');
           end
+          else if (P <= Length(Source)) and (Source[P] = '=') then
+          begin Inc(P); PyEmitToken(tkTrueDivEq, 0, SrcLine, ''); end
           else
             PyEmitToken(tkSlash, 0, SrcLine, '');
           end;
