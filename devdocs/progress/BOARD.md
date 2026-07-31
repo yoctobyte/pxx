@@ -32,7 +32,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (178)
+## backlog (182)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -50,13 +50,16 @@ lives in git, not in a timestamp._
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
+| bug-nilpy-container-literal-default-arg-segfaults | N | 65 | bug | `def f(a, b=[])` SEGFAULTS the moment the default is used as a container | — |
 | bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic | N | 60 | bug | User-defined dunders are ignored, and the operator then does arithmetic on the object HANDLE | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
+| bug-nilpy-float-print-loses-precision-vs-cpython | N | 40 | bug | Float printing loses the last 1-2 significant digits vs CPython's shortest round-trip repr | — |
 | bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip | N | 20 | bug | `print(1e-20)` prints `0.0` — NilPy's float repr has no small-magnitude exponential form | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
 | bug-nilpy-int-prints-as-float-when-the-name-is-widened-later | N | 50 | bug | An int prints as `5.0` because the SAME NAME is assigned a float later in the file | — |
 | bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
 | bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
+| bug-nilpy-list-of-custom-objects-loses-repr-str | N | 40 | bug | A user class instance boxed in a list/dict prints as empty, losing `__repr__`/`__str__` | — |
 | bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
@@ -138,6 +141,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nilpy-lambda-compiled-closure | N | 45 | feature | nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics) | — |
 | feature-nilpy-map-and-filter-over-a-lambda | N | 40 | feature | `map(lambda ...)` is unimplemented and `filter` does not exist | — |
+| feature-nilpy-min-max-variadic-more-than-two-args | N | 30 | feature | `min(a, b, c)` / `max(a, b, c)` — only the 2-argument and iterable forms exist | — |
 | feature-nilpy-multi-arg-callback-bridges | N | 35 | feature | nilpy runtime: pycallback_call2/3 and a multi-parameter bound-fn call, so a callable can receive more than one own argument | — |
 | feature-nilpy-nested-def-as-value | N | 15 | feature | SUPERSEDED: nested def as a VALUE (stored, passed, returned) | — |
 | feature-nilpy-parallel-for-in | A | 5 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
@@ -301,7 +305,7 @@ lives in git, not in a timestamp._
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1112)
+## done (1113)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -683,6 +687,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-key-analysis-compiles-but-segfaults | N | 70 | bug | nilpy: songformatter's key_analysis.py COMPILES but segfaults at run time | — |
 | bug-nilpy-large-float-str-overruns-into-garbage | N | 70 | bug | `str()` of a float whose integer part exceeds Int64 writes garbage bytes | — |
 | bug-nilpy-lifted-lambda-discards-its-return-value | N | 60 | bug | NilPy: a lifted lambda always discarded its own return value | — |
+| bug-nilpy-list-plus-nonlist-silently-corrupts-instead-of-typeerror | N | 55 | bug | `[list] + non-list` silently corrupted instead of raising TypeError | — |
 | bug-nilpy-locals-list-pointer-truncated-32bit | N | 55 | bug | NilPy: a list passed to a method truncates its pointer to 32-bit (SIGSEGV) | — |
 | bug-nilpy-method-call-on-fresh-construction | N | 45 | bug | nilpy: Cls().method() — a method call directly on a construction expression | — |
 | bug-nilpy-method-chaining-on-a-call-result | N | 65 | bug | Chaining a method call on the RESULT of a method call does not parse | — |
@@ -2867,6 +2872,7 @@ lives in git, not in a timestamp._
 - [p 70] [T] bug-t-tstate-index-conflicts-between-watcher-hosts
 - [p 70] [T] regression-cascade-b45c759f9e65
 - [p 65] [C] bug-c-main-missing-implicit-return-zero
+- [p 65] [N] bug-nilpy-container-literal-default-arg-segfaults
 - [p 65] [A] bug-pascal-uses-is-transitive
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [A] feature-a-typeref-handle
@@ -2969,6 +2975,8 @@ lives in git, not in a timestamp._
 - [p 40] [U] decide-dns-libc-backend-shape (unblocks 1)
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
 - [p 40] [N] bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter
+- [p 40] [N] bug-nilpy-float-print-loses-precision-vs-cpython
+- [p 40] [N] bug-nilpy-list-of-custom-objects-loses-repr-str
 - [p 40] [U] decide-env-write-side
 - [p 40] [U] decide-ipv6-dualstack-and-aaaa-ordering
 - [p 40] [U] decide-nilpy-transitive-nested-def-capture
@@ -2998,6 +3006,7 @@ lives in git, not in a timestamp._
 - [p 30] [N] bug-nilpy-bitwise-op-rejects-boolean-variable-operand
 - [p 30] [N] bug-nilpy-construction-on-the-right-of-is-does-not-parse
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
+- [p 30] [N] feature-nilpy-min-max-variadic-more-than-two-args
 - [p 30] [N] feature-nilpy-stdlib-coverage-gaps-measured
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
 - [p 30] [D] idea-public-status-page
