@@ -72,6 +72,33 @@ this one out is deliberate, not a violation of that instruction.
 
 ---
 
+## Resolved — root cause was NOT a missing implicit return 0 (2026-07-31)
+
+The "same defect" theory directly below (no implicit `return 0` emitted, so
+`main`'s exit value is whatever register garbage is left over) turned out to
+be wrong about the MECHANISM, even though it correctly linked this ticket to
+[[bug-c-i386-crtl-growth-corrupts-main-exit-code]]. The actual cause, found by
+measurement (gdb at the `call main` return in `_start`, `readelf -l` diffing a
+good vs. bad binary): `strtoll`/`strtoull` were declared in `stdlib.h` but
+never defined, so pxx's real-but-narrow "prototype with no in-tree body falls
+back to a dynamic `libc.so.6` import" path fired for a phantom symbol nothing
+at runtime calls. That silently turned a static i386 executable into a broken
+hybrid static+dynamic one (PT_INTERP + PT_DYNAMIC where none should exist),
+and the exit code became ASLR-dependent register garbage from the botched
+dynamic-linker handoff — not an unset return value.
+
+Fixed by implementing `strtoll`/`strtoull`/`atoll` for real
+(commit a4dd22b3b, cherry-picked from an isolated agent worktree). Verified
+this ticket's own minimal-pair repro directly: `main(){ printf("x\n"); }`
+`--target=i386`, 5/5 runs deterministic exit 0, LOAD+GNU_STACK-only program
+headers (no PT_INTERP/PT_DYNAMIC). The nondeterminism this ticket measured
+(220/172/188) is exactly what ASLR-dependent register garbage from a broken
+dynamic handoff looks like — consistent with, not contradicting, the nulled
+diagnosis below.
+
+So: closing on the strength of a real, verified regression test (not "the
+matrix went green"), per this ticket's own caution.
+
 ## The conformance shards went GREEN — that is a MASKING, not a fix (2026-07-31)
 
 `test-c-conformance-*` reported FIXED at `4790e38cdd9f`. **This bug is not
@@ -111,3 +138,9 @@ explicit `return 0` ⇒ 0, 0, 0; implicit ⇒ 220, 172, 188. gcc oracle: 0.
 **Consequence for sequencing:** fixing this unblocks restoring the reverted
 crtl work. Chasing "what in crtl corrupts the exit code" would be chasing a
 symptom — nothing corrupts it; nothing ever set it.
+
+(See "Resolved" section above: the sequencing conclusion held even though the
+"nothing ever set it" mechanism was superseded by the actual measured cause.)
+
+## Log
+- 2026-07-31 — resolved, commit a4dd22b3b.

@@ -31,14 +31,13 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (186)
+## backlog (185)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-c-line-file-func-and-predefined-macros-missing | C | 55 | bug | C: __LINE__ is 0, __FILE__ is empty and __func__ is empty; __unix__, __BYTE_ORDER__, __SIZEOF_* and __CHAR_BIT__ are absent | — |
-| bug-c-main-missing-implicit-return-zero | C | 65 | bug | C: main() falling off the end returns stack garbage instead of 0 (i386) | — |
 | bug-c-undeclared-identifier-as-function-pointer-becomes-null | C | 45 | bug | C: an undeclared identifier used where a function POINTER is expected becomes 0 with only a warning — the program then jumps to null | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
@@ -310,7 +309,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1123)
+## done (1124)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -462,6 +461,7 @@ _none_
 | bug-c-lshift-promotion-aarch64 | C | 50 | bug | bug: left-shift result type / integer promotion wrong on aarch64 (00200.c) | — |
 | bug-c-lua-tests-regressed-segfault | C | 50 | bug | C: lua runner tests regressed (segfault on most scripts) | — |
 | bug-c-main-argc-argv-not-wired | C | 50 | bug | C `main(argc, argv)` gets real argc/argv | — |
+| bug-c-main-missing-implicit-return-zero | C | 65 | bug | C: main() falling off the end returns stack garbage instead of 0 (i386) | — |
 | bug-c-math-round-undefined-symbol | A+B | 50 | bug | C `math.h` `round()`/`trunc()` — undefined symbol at link (compiles clean, fails at load) | — |
 | bug-c-missing-lp64-predefines | C | 55 | bug | C predefined macros: __LP64__ / _LP64 (and arch predefines) missing | — |
 | bug-c-multidim-array-field-partial-row | A | 50 | bug | C: 2D array struct field — partial-index row decay broken | — |
@@ -2884,7 +2884,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [T] regression-cascade-b45c759f9e65
-- [p 65] [C] bug-c-main-missing-implicit-return-zero
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
