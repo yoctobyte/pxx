@@ -7,4 +7,4 @@
 ## Open regressions
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `b1976742df2c`, last good `6f73c5a88bef`, 1 commit(s) in range
 - **test-core#src:test/test_indexed_property.pas** — test/test_indexed_property.pas (borg): bad `d9c5eb4fadbf`, last good `9d3f9123b1c4`, 1 commit(s) in range
-- **test-core#src:test/test_property_redecl_b283.pas** — test/test_property_redecl_b283.pas (borg): bad `0344760405e1`, last good `ff85c6468764`, 4 commit(s) in range
+- **test-core#src:test/test_property_redecl_b283.pas** — test/test_property_redecl_b283.pas (borg): bad `d9c5eb4fadbf`, last good `ff85c6468764`, 2 commit(s) in range
