@@ -31,12 +31,13 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (181)
+## backlog (182)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
+| bug-c-wide-string-literal-narrow-in-value-context | C | 70 | bug | L\"...\" stays narrow bytes outside an array initializer, so wchar_t* reads 4 chars per element and walks off the end | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
@@ -2885,6 +2886,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [C] bug-c-wide-string-literal-narrow-in-value-context
 - [p 70] [T] regression-cascade-b45c759f9e65
 - [p 70] [T] regression-optdiff-shard5-6
 - [p 65] [U] decide-class-namespace-scoping
