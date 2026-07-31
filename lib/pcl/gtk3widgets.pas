@@ -56,11 +56,41 @@ type
     function StartTimer(AInterval: Integer; ACallback: Pointer; AData: Pointer): LongWord; override;
     procedure StopTimer(AId: LongWord); override;
     function SetFormMenu(AForm: TComponent; AMenu: TComponent): Integer; override;
+
+    { ---- the sealed seam (feature-pcl-seam-seal) ---- }
+    procedure ShowHandle(AWidget: Pointer); override;
+    procedure HideHandle(AWidget: Pointer); override;
+    function HandleWidth(AWidget: Pointer): Integer; override;
+    function HandleHeight(AWidget: Pointer): Integer; override;
+
+    function CreatePaned(AVertical: Boolean): Pointer; override;
+    procedure PanedSetPosition(APaned: Pointer; APos: Integer); override;
+    function PanedGetPosition(APaned: Pointer): Integer; override;
+    function PanedChild(APaned: Pointer; APane: Integer): Pointer; override;
+
+    function CreateBox(AVertical: Boolean; ASpacing: Integer): Pointer; override;
+    procedure BoxPack(ABox, AChild: Pointer; AExpand, AFill: Boolean; APadding: Integer); override;
+
+    function CreateNotebook: Pointer; override;
+    function NotebookAddPage(ANotebook: Pointer; const ACaption: string): Pointer; override;
+    function NotebookGetPage(ANotebook: Pointer): Integer; override;
+    procedure NotebookSetPage(ANotebook: Pointer; AIndex: Integer); override;
+
+    procedure MessageBox(const AText: string); override;
+    procedure DismissMessageBox; override;
+
+
   end;
 
 implementation
 
 uses gtk3_c, gtk3, controls, typinfo, graphics, extctrls, menus;
+
+var
+  { The dialog gtk_dialog_run is currently spinning on, so a test harness can
+    tear it down from a timer. Lives here now rather than in dialogs.pas —
+    the handle is GTK's, so it belongs to the GTK widgetset. }
+  ActiveDialogHandle: Pointer;
 
 function PCharToStr(p: Pointer): string;
 var
@@ -1183,6 +1213,133 @@ begin
   gtk_box_reorder_child(vbox, menubar, 0);
   gtk_widget_show(menubar);
   Result := 0;
+end;
+
+
+{ ================= the sealed seam: GTK bodies =============================
+  These moved here verbatim from extctrls.pas, dialogs.pas and glarea.pas.
+  Those units used to call GTK raw, which meant a second widgetset could only
+  implement PART of PCL. Nothing about the GTK behaviour changed. }
+
+{ GTK's orientation enum: 0 = horizontal, 1 = vertical. }
+function Gtk3Orient(AVertical: Boolean): Integer;
+begin
+  if AVertical then Gtk3Orient := 1 else Gtk3Orient := 0;
+end;
+
+procedure TGtk3WidgetSet.ShowHandle(AWidget: Pointer);
+begin
+  if AWidget <> nil then gtk_widget_show(AWidget);
+end;
+
+procedure TGtk3WidgetSet.HideHandle(AWidget: Pointer);
+begin
+  if AWidget <> nil then gtk_widget_hide(AWidget);
+end;
+
+function TGtk3WidgetSet.HandleWidth(AWidget: Pointer): Integer;
+begin
+  if AWidget = nil then HandleWidth := 0
+  else HandleWidth := gtk_widget_get_allocated_width(AWidget);
+end;
+
+function TGtk3WidgetSet.HandleHeight(AWidget: Pointer): Integer;
+begin
+  if AWidget = nil then HandleHeight := 0
+  else HandleHeight := gtk_widget_get_allocated_height(AWidget);
+end;
+
+function TGtk3WidgetSet.CreatePaned(AVertical: Boolean): Pointer;
+begin
+  CreatePaned := gtk_paned_new(Gtk3Orient(AVertical));
+end;
+
+procedure TGtk3WidgetSet.PanedSetPosition(APaned: Pointer; APos: Integer);
+begin
+  if APaned <> nil then gtk_paned_set_position(APaned, APos);
+end;
+
+function TGtk3WidgetSet.PanedGetPosition(APaned: Pointer): Integer;
+begin
+  if APaned = nil then PanedGetPosition := 0
+  else PanedGetPosition := gtk_paned_get_position(APaned);
+end;
+
+function TGtk3WidgetSet.PanedChild(APaned: Pointer; APane: Integer): Pointer;
+begin
+  PanedChild := nil;
+  if APaned = nil then Exit;
+  if APane = 2 then PanedChild := gtk_paned_get_child2(APaned)
+  else PanedChild := gtk_paned_get_child1(APaned);
+end;
+
+function TGtk3WidgetSet.CreateBox(AVertical: Boolean; ASpacing: Integer): Pointer;
+begin
+  CreateBox := gtk_box_new(Gtk3Orient(AVertical), ASpacing);
+end;
+
+procedure TGtk3WidgetSet.BoxPack(ABox, AChild: Pointer; AExpand, AFill: Boolean; APadding: Integer);
+var e, f: Integer;
+begin
+  if (ABox = nil) or (AChild = nil) then Exit;
+  if AExpand then e := 1 else e := 0;
+  if AFill then f := 1 else f := 0;
+  gtk_box_pack_start(ABox, AChild, e, f, APadding);
+end;
+
+function TGtk3WidgetSet.CreateNotebook: Pointer;
+begin
+  CreateNotebook := gtk_notebook_new();
+end;
+
+{ Returns the page's content box — the caller packs into it and never sees the
+  label widget, which is what keeps the toolkit out of extctrls. }
+function TGtk3WidgetSet.NotebookAddPage(ANotebook: Pointer; const ACaption: string): Pointer;
+var box, lbl: Pointer;
+begin
+  NotebookAddPage := nil;
+  if ANotebook = nil then Exit;
+  box := gtk_box_new(0, 2);                    { a horizontal row of children }
+  lbl := gtk_label_new(PChar(ACaption));
+  gtk_notebook_append_page(ANotebook, box, lbl);
+  gtk_widget_show(box);
+  NotebookAddPage := box;
+end;
+
+function TGtk3WidgetSet.NotebookGetPage(ANotebook: Pointer): Integer;
+begin
+  if ANotebook = nil then NotebookGetPage := 0
+  else NotebookGetPage := gtk_notebook_get_current_page(ANotebook);
+end;
+
+procedure TGtk3WidgetSet.NotebookSetPage(ANotebook: Pointer; AIndex: Integer);
+begin
+  if ANotebook <> nil then gtk_notebook_set_current_page(ANotebook, AIndex);
+end;
+
+{ gtk_dialog_run spins its own nested main loop, so a test harness cannot click
+  OK — it dismisses from a g_timeout via DismissMessageBox, which returns
+  control from the run exactly as a real click would. }
+procedure TGtk3WidgetSet.MessageBox(const AText: string);
+var dlg: Pointer;
+begin
+  dlg := gtk_message_dialog_new(nil, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO,
+                                GTK_BUTTONS_OK, PC('%s'), PC(AText));
+  ActiveDialogHandle := dlg;
+  gtk_dialog_run(dlg);
+  { a timeout may already have destroyed it — do not free it twice }
+  if ActiveDialogHandle = dlg then
+  begin
+    gtk_widget_destroy(dlg);
+    ActiveDialogHandle := nil;
+  end;
+end;
+
+procedure TGtk3WidgetSet.DismissMessageBox;
+begin
+  if ActiveDialogHandle <> nil then
+    gtk_widget_destroy(ActiveDialogHandle);
+  ActiveDialogHandle := nil;
 end;
 
 initialization

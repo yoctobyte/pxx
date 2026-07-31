@@ -1,22 +1,24 @@
 { SPDX-License-Identifier: Zlib }
 unit dialogs;
 
-{ Minimal PCL-compatible Dialogs unit over GTK message dialogs.
+{ PCL-compatible Dialogs.
 
-  ShowMessage pops a modal "info + OK" dialog and blocks (via gtk_dialog_run)
-  until the user closes it, matching the PCL contract.
+  ShowMessage pops a modal "info + OK" box and blocks until it is closed,
+  matching the PCL contract. It goes through the WidgetSet seam like every
+  other control, so this unit names no toolkit and a second widgetset gets
+  dialogs by implementing two methods rather than not having them at all
+  (feature-pcl-seam-seal).
 
-  Because gtk_dialog_run runs its own nested main loop, automated tests can't
-  click OK. The active dialog is tracked in ActiveDialog and can be torn down
-  from a g_timeout callback via DismissActiveDialog — that returns control to
-  gtk_dialog_run exactly as a real OK click would. }
+  A modal box runs its own nested event loop, so an automated test cannot
+  click OK. DismissActiveDialog tears it down from a timer callback, which
+  returns control from that loop exactly as a real OK click would. The dialog
+  HANDLE now lives in the widgetset, because it is the widgetset's — the
+  `ActiveDialog` variable this unit used to export is gone with it; callers
+  only ever used DismissActiveDialog. }
 
 interface
 
-uses gtk3;
-
-var
-  ActiveDialog: Pointer;
+uses uwidgetset;
 
 procedure ShowMessage(const Msg: AnsiString);
 
@@ -27,26 +29,13 @@ procedure DismissActiveDialog;
 implementation
 
 procedure ShowMessage(const Msg: AnsiString);
-var dlg: Pointer;
 begin
-  dlg := gtk_message_dialog_new(nil, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO,
-                                GTK_BUTTONS_OK, PC('%s'), PC(Msg));
-  ActiveDialog := dlg;
-  gtk_dialog_run(dlg);
-  { If a timeout already dismissed (destroyed) it, ActiveDialog was cleared —
-    don't destroy a freed widget. }
-  if ActiveDialog = dlg then
-  begin
-    gtk_widget_destroy(dlg);
-    ActiveDialog := nil;
-  end;
+  WidgetSet.MessageBox(Msg);
 end;
 
 procedure DismissActiveDialog;
 begin
-  if ActiveDialog <> nil then
-    gtk_widget_destroy(ActiveDialog);
-  ActiveDialog := nil;
+  WidgetSet.DismissMessageBox;
 end;
 
 end.

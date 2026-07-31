@@ -3,7 +3,7 @@ unit extctrls;
 
 interface
 
-uses classes_lite, controls, uwidgetset, typinfo, graphics, gtk3_c, stdctrls;
+uses classes_lite, controls, uwidgetset, typinfo, graphics, stdctrls;
 
 type
   TPanel = class(TWinControl)
@@ -76,7 +76,7 @@ type
     property Vertical: Boolean read FVertical write FVertical;
   end;
 
-  { TBox — a gtk_box stacking container: children are packed in order along one
+  { TBox — a stacking container: children are packed in order along one
     axis (no absolute coords, no draggable handle — unlike TPaned, any number of
     children). Horizontal by default; set Vertical before adding children (the
     handle is built lazily at CreateHandle). Each child packs with Expand=False,
@@ -94,9 +94,9 @@ type
     property Spacing: Integer read FSpacing write FSpacing;
   end;
 
-  { TTabBar — a Lazarus-style tabbed component bar: a GtkNotebook whose pages
-    are horizontal button rows (feature-eliah-component-tabbar). Built directly
-    on gtk3_c like graphics.pas. AddTab appends a named tab; AddButton drops a
+  { TTabBar — a Lazarus-style tabbed component bar: a notebook whose pages
+    are horizontal button rows (feature-eliah-component-tabbar). Built on the
+    WidgetSet seam. AddTab appends a named tab; AddButton drops a
     real TButton into a tab's row (so the normal OnClick trampoline serves it)
     and returns it. Buttons keep their natural size and pack left-to-right;
     icons are caption placeholders until per-component glyphs exist. }
@@ -141,16 +141,13 @@ begin
   FRestorePos := 0;
 end;
 
+{ Through the WidgetSet, not gtk directly. The old comment here said new
+  TWidgetSet virtuals miscompiled their object argument — that bug
+  (bug-widgetset-virtual-arg-corruption) is resolved, so the avoidance it
+  justified is retired and this unit no longer knows what a toolkit is. }
 procedure TPaned.CreateHandle;
-var orient: Integer;
 begin
-  { Talk to gtk directly here (like graphics.pas) rather than through a
-    WidgetSet method: adding new virtual methods to TWidgetSet currently
-    miscompiles their object argument — see
-    devdocs/progress/backlog/bug-widgetset-virtual-arg-corruption.md. gtk
-    orientation: 0 = horizontal (side-by-side, vertical handle), 1 = vertical. }
-  if FVertical then orient := 1 else orient := 0;
-  Self.Handle := gtk_paned_new(orient);
+  Self.Handle := WidgetSet.CreatePaned(FVertical);
 end;
 
 function TPaned.Realize: Integer;
@@ -159,20 +156,20 @@ begin
     setting it on an empty paned crashes gtk. }
   Result := inherited Realize;
   if (FPosition <> 0) and (Self.Handle <> nil) then
-    gtk_paned_set_position(Self.Handle, FPosition);
+    WidgetSet.PanedSetPosition(Self.Handle, FPosition);
 end;
 
 procedure TPaned.SetPosition(v: Integer);
 begin
   FPosition := v;
   if Self.Handle <> nil then
-    gtk_paned_set_position(Self.Handle, v);
+    WidgetSet.PanedSetPosition(Self.Handle, v);
 end;
 
 function TPaned.ActualPosition: Integer;
 begin
   if Self.Handle <> nil then
-    Result := gtk_paned_get_position(Self.Handle)
+    Result := WidgetSet.PanedGetPosition(Self.Handle)
   else
     Result := 0;
 end;
@@ -181,8 +178,8 @@ end;
 function TPaned.AxisSize: Integer;
 begin
   if Self.Handle = nil then Result := 0
-  else if FVertical then Result := gtk_widget_get_allocated_height(Self.Handle)
-  else Result := gtk_widget_get_allocated_width(Self.Handle);
+  else if FVertical then Result := WidgetSet.HandleHeight(Self.Handle)
+  else Result := WidgetSet.HandleWidth(Self.Handle);
 end;
 
 procedure TPaned.Collapse(APane: Integer; AStrip: Integer);
@@ -190,7 +187,7 @@ var sz: Integer; ch: Pointer;
 begin
   if Self.Handle = nil then Exit;
   if FCollapsedPane <> 0 then Restore;          { only one collapse at a time }
-  FRestorePos := gtk_paned_get_position(Self.Handle);
+  FRestorePos := WidgetSet.PanedGetPosition(Self.Handle);
   if AStrip > 0 then
   begin
     { strip collapse: leave AStrip px visible by moving the handle to the edge }
@@ -206,9 +203,8 @@ begin
   begin
     { full collapse: hide the pane's child so the sibling takes all the space
       (robust regardless of shrink / allocation) }
-    ch := gtk_paned_get_child1(Self.Handle);
-    if APane = 2 then ch := gtk_paned_get_child2(Self.Handle);
-    if ch <> nil then gtk_widget_hide(ch);
+    ch := WidgetSet.PanedChild(Self.Handle, APane);
+    WidgetSet.HideHandle(ch);
   end;
   FCollapsedPane := APane;
 end;
@@ -217,9 +213,8 @@ procedure TPaned.Restore;
 var ch: Pointer;
 begin
   if FCollapsedPane = 0 then Exit;
-  ch := gtk_paned_get_child1(Self.Handle);
-  if FCollapsedPane = 2 then ch := gtk_paned_get_child2(Self.Handle);
-  if ch <> nil then gtk_widget_show(ch);        { no-op if it was a strip collapse }
+  ch := WidgetSet.PanedChild(Self.Handle, FCollapsedPane);
+  WidgetSet.ShowHandle(ch);                     { no-op if it was a strip collapse }
   SetPosition(FRestorePos);
   FCollapsedPane := 0;
 end;
@@ -245,10 +240,8 @@ begin
 end;
 
 procedure TBox.CreateHandle;
-var orient: Integer;
 begin
-  if FVertical then orient := 1 else orient := 0;
-  Self.Handle := gtk_box_new(orient, FSpacing);
+  Self.Handle := WidgetSet.CreateBox(FVertical, FSpacing);
 end;
 
 { TTimer }
@@ -329,17 +322,16 @@ end;
 
 procedure TTabBar.CreateHandle;
 begin
-  Self.Handle := gtk_notebook_new();
+  Self.Handle := WidgetSet.CreateNotebook;
 end;
 
 function TTabBar.AddTab(const ACaption: string): Integer;
 var
-  box, lbl: Pointer;
+  box: Pointer;
 begin
-  box := gtk_box_new(0, 2);   { horizontal row of component buttons }
-  lbl := gtk_label_new(PChar(ACaption));
-  gtk_notebook_append_page(Self.Handle, box, lbl);
-  gtk_widget_show(box);
+  { the widgetset builds the page's content row AND its label; this unit never
+    sees a label widget, which is the whole point of the seam }
+  box := WidgetSet.NotebookAddPage(Self.Handle, ACaption);
   SetLength(FPages, Length(FPages) + 1);
   FPages[Length(FPages) - 1] := box;
   AddTab := Length(FPages) - 1;
@@ -356,8 +348,8 @@ begin
   { pack into the tab's row instead of a fixed-coord parent; the button's
     handle already exists (TButton.Create does HandleNeeded) and is wired to
     the click trampoline, so OnClick works as on any button }
-  gtk_box_pack_start(FPages[ATab], b.Handle, 0, 0, 2);
-  gtk_widget_show(b.Handle);
+  WidgetSet.BoxPack(FPages[ATab], b.Handle, False, False, 2);
+  WidgetSet.ShowHandle(b.Handle);
   b.OnClick := AOnClick;
   AddButton := b;
 end;
@@ -369,12 +361,12 @@ end;
 
 function TTabBar.ActiveTab: Integer;
 begin
-  ActiveTab := gtk_notebook_get_current_page(Self.Handle);
+  ActiveTab := WidgetSet.NotebookGetPage(Self.Handle);
 end;
 
 procedure TTabBar.SetActiveTab(AIndex: Integer);
 begin
-  gtk_notebook_set_current_page(Self.Handle, AIndex);
+  WidgetSet.NotebookSetPage(Self.Handle, AIndex);
 end;
 
 end.

@@ -23,7 +23,7 @@ type
 
 implementation
 
-uses gl_c, gtk3;
+uses uwidgetset, gtk3gl;   { gtk3gl only INSTALLS the backend; nothing here names it }
 
 { Inline asm helper: calls a Pascal method(Self, Width, Height) from C context.
   On entry: data=Self, code=method code ptr, w/h=dimensions.
@@ -71,7 +71,7 @@ begin
   end;
   Result := 0;
   gl := TGLArea(userdata);
-  gtk_gl_area_make_current(widget);
+  GLBackend.MakeCurrent(widget);
   m := gl.OnRender;
   if m.Code <> nil then
     CallRenderMethod(m.Code, m.Data, gl.GLWidth, gl.GLHeight);
@@ -114,26 +114,26 @@ begin
   Self.HandleNeeded;
 end;
 
+{ The GL surface is the allowed sparse point of the seam: a widgetset with no
+  GL returns nil from CreateGLArea and the rest degrades to no-ops, rather than
+  every backend being forced to implement a GL context. }
 procedure TGLArea.CreateHandle;
 var widget: Pointer;
 begin
-  widget := gtk_gl_area_new();
-  gtk_gl_area_set_required_version(widget, 3, 3);
-  SignalConnectData(widget, 'render', @GLAreaRenderTramp, Pointer(Self));
-  SignalConnectData(widget, 'resize', @GLAreaResizeTramp, Pointer(Self));
+  widget := GLBackend.CreateArea(3, 3);
+  GLBackend.OnRender(widget, @GLAreaRenderTramp, Pointer(Self));
+  GLBackend.OnResize(widget, @GLAreaResizeTramp, Pointer(Self));
   Self.Handle := widget;
 end;
 
 procedure TGLArea.MakeCurrent;
 begin
-  if Self.Handle <> nil then
-    gtk_gl_area_make_current(Self.Handle);
+  GLBackend.MakeCurrent(Self.Handle);
 end;
 
 procedure TGLArea.QueueRender;
 begin
-  if Self.Handle <> nil then
-    gtk_gl_area_queue_render(Self.Handle);
+  GLBackend.QueueRender(Self.Handle);
 end;
 
 end.
