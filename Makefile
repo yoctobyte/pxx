@@ -719,6 +719,9 @@ test-nilpy: $(COMPILER)
 	  rss=$$(grep -oE 'Maximum resident set size .kbytes.: [0-9]+' /tmp/excnoleak.time | grep -oE '[0-9]+$$'); \
 	  if [ -n "$$rss" ] && [ "$$rss" -gt 90000 ]; then echo "caught-exception-object leak regressed: RSS $${rss}KB (>90MB over 640k raises; pre-fix was ~105MB, fixed is ~75MB)"; exit 1; else echo "exception-no-leak: OK (RSS $${rss}KB)"; fi; \
 	else echo "/usr/bin/time absent; exception-object RSS leak guard skipped"; fi
+	@# `target[key] op= value` on a dict/list/Counter subscript (found already fixed)
+	./$(COMPILER) test/test_nilpy_augmented_subscript_assign.npy /tmp/test_nilpy_augsubassign26
+	test "$$(/tmp/test_nilpy_augsubassign26)" = "$$(printf '{'"'"'a'"'"': 2}\n[6, 2]\n2\n14\n[1, 1, 30]')"
 	@# a managed STRING local minted after the prologue zero-init pass was never
 	@# nil'd, so the loop's first store released stale frame bytes -> SIGSEGV
 	./$(COMPILER) test/test_nilpy_str_local_loop_zeroinit.npy /tmp/test_nilpy_str_local_zi26

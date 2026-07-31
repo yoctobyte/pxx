@@ -1,0 +1,30 @@
+# `target[key] op= value` on a dict/list/Counter subscript. This ticket's own
+# repro ("assignment target is not an lvalue") no longer reproduces -- found
+# already fixed while re-checking the backlog; this is the regression guard
+# the ticket's gate asked for, since none existed yet.
+# feature-nilpy-augmented-subscript-assign
+# Every expectation is CPython's own output.
+
+d = {"a": 1}
+d["a"] += 1
+print(d)
+
+xs = [1, 2]
+xs[0] += 5
+print(xs)
+
+from collections import Counter
+c = Counter()
+c["x"] += 1
+c["x"] += 1
+print(c["x"])
+
+d2 = {"a": 10}
+d2["a"] -= 3
+d2["a"] *= 2
+print(d2["a"])
+
+xs2 = [1, 2, 3]
+xs2[1] -= 1
+xs2[2] *= 10
+print(xs2)
