@@ -124,3 +124,6 @@ above. The three deliberately-deferred items (`from X import *`, relative
 imports, packages) remain genuinely open but are smaller, separate asks —
 worth their own tickets if a corpus hits them, not reasons to keep this one
 open.
+
+## Log
+- 2026-07-31 — resolved, commit afa8e8b81.
