@@ -524,6 +524,20 @@ def reg_slug(sel):
     return "regression-" + re.sub(r"[^a-z0-9]+", "-", sel.lower()).strip("-")
 
 
+def covered_tiers(tier):
+    """Which tiers' JOBS a run at `tier` actually contains.
+
+    testmgr's tiers nest for the regression matrix — full includes what native
+    includes, and so on — but `opt` is DISJOINT: `optdiff#*` / `test-opt#*` are
+    built only under `tier == "opt"` and appear in no other tier. That asymmetry
+    is the whole reason a full run must not evict opt's verdicts.
+    """
+    nested = ["quick", "native", "limited", "full"]
+    if tier in nested:
+        return set(nested[:nested.index(tier) + 1])
+    return {tier}                     # opt (and any future disjoint tier)
+
+
 def job_key(j):
     """Identity of a job ACROSS commits.
 
@@ -748,10 +762,34 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     st["last"] = {"sha": sha, "date": utcnow(), "verdict": report["verdict"],
                   "wall": report["wall"], "tier": report["tier"]}
     if full:
-        st["jobs"] = now
+        # Evict by COVERAGE, not wholesale.
+        #
+        # The intent of replacing here is to drop jobs that no longer exist in
+        # the suite. But a full run's job set contains no `optdiff#*` /
+        # `test-opt#*` at all — those are built only under `tier == "opt"` — so
+        # a blind replace evicted every opt verdict. The next opt run then found
+        # them absent, and `prev_jobs.get(n, "pass")` counts an absent job as
+        # having PASSED, so a red that never changed re-reported as NEW-RED,
+        # once per cycle, forever. (Observed 2026-08-01: optdiff#shard5/6 NEW-RED
+        # at 21:33 and again at 22:00 with nothing in between but a full run.)
+        #
+        # A run may only evict jobs it was CAPABLE of running. Keys last written
+        # by a tier this run does not cover are carried forward untouched.
+        # Unknown tier (state written before job_tier existed) defaults to
+        # "covered", i.e. the old evict-it behaviour — so legacy keys can never
+        # become sticky-forever, and the map self-heals as tiers get recorded.
+        cov = covered_tiers(report["tier"])
+        keep = {k: v for k, v in st["jobs"].items()
+                if k not in now
+                and st.get("job_tier", {}).get(k, report["tier"]) not in cov}
+        st["jobs"] = dict(keep, **now)
         st["last_full"] = dict(st["last"])
     else:
         st["jobs"] = dict(st["jobs"], **now)
+    # remember which tier last spoke for each job, so the rule above can tell
+    # "this run could have run it and didn't -> gone" from "not my tier".
+    st["job_tier"] = dict(st.get("job_tier", {}),
+                          **{k: report["tier"] for k in now})
     st["history"] = (st["history"] +
                      [{"sha": sha, "date": st["last"]["date"],
                        "verdict": report["verdict"], "tier": report["tier"],
