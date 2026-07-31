@@ -275,65 +275,85 @@ def render_uforth_bench(rows):
     uf = [r for r in rows if r["workload"].startswith("uforth-")]
     if not uf:
         return ""
-    latest, order = {}, []
+    # per-host, for the same reason as the pxx opt-level table: the runtime
+    # comparison (pxx vs cpython) divides two timings, and both must come off
+    # the SAME box or the ratio measures the hardware gap instead.
+    latest, order, hosts = {}, [], {}
     src = ""
     for r in uf:
         w = r["workload"][len("uforth-"):]
         if w not in order:
             order.append(w)
-        latest[(w, r["level"])] = r
+        if r["date"] > hosts.get(r["host"], ""):
+            hosts[r["host"]] = r["date"]
+        latest[(r["host"], w, r["level"])] = r
         if r["src_sha"]:
             src = r["src_sha"]
     # only render columns for runtimes actually present, in a sensible order
     known = ["cpython", "cpython-O", "pypy", "pxx"]
-    levels = [l for l in known
-              if any((w, l) in latest for w in order)]
-    head = "<tr><th>workload" + "".join("<th>%s" % l for l in levels)
-    head += "<th>pxx vs cpython<th>pxx peak RSS</tr>"
-    tab = head
-    for w in order:
-        cells = ["<td><code>%s</code>" % html.escape(w)]
-        vals = {}
-        for l in levels:
-            r = latest.get((w, l))
-            if r:
-                vals[l] = r["ms"]
-                cells.append("<td class=num>%.0f" % r["ms"])
+    tab = ""
+    for h in sorted(hosts, key=lambda x: hosts[x], reverse=True):
+        levels = [l for l in known
+                  if any((h, w, l) in latest for w in order)]
+        if not levels:
+            continue
+        head = "<tr><th>workload" + "".join("<th>%s" % l for l in levels)
+        head += "<th>pxx vs cpython<th>pxx peak RSS</tr>"
+        sub = head
+        for w in order:
+            cells = ["<td><code>%s</code>" % html.escape(w)]
+            vals = {}
+            for l in levels:
+                r = latest.get((h, w, l))
+                if r:
+                    vals[l] = r["ms"]
+                    cells.append("<td class=num>%.0f" % r["ms"])
+                else:
+                    cells.append("<td class=dim>—")
+            if not vals:
+                continue
+            # pxx vs cpython: <1x = pxx slower (the current reality); flag it
+            if "cpython" in vals and "pxx" in vals and vals["pxx"]:
+                ratio = vals["cpython"] / vals["pxx"]
+                cls = "win" if ratio >= 1.0 else "lose"
+                spd = "<span class=%s>%.2fx</span>" % (cls, ratio)
             else:
-                cells.append("<td class=dim>—")
-        # pxx vs cpython: <1x = pxx slower (the current reality); flag it
-        if "cpython" in vals and "pxx" in vals and vals["pxx"]:
-            ratio = vals["cpython"] / vals["pxx"]
-            cls = "win" if ratio >= 1.0 else "lose"
-            spd = "<span class=%s>%.2fx</span>" % (cls, ratio)
-        else:
-            spd = "—"
-        cells.append("<td class=num>%s" % spd)
-        pxx_row = latest.get((w, "pxx"))
-        rss = pxx_row["rss"] if pxx_row else 0
-        cells.append("<td class=num>%s"
-                     % ("%.0f MB" % (rss / 1024) if rss else "—"))
-        tab += "<tr>" + "".join(cells) + "</tr>"
+                spd = "—"
+            cells.append("<td class=num>%s" % spd)
+            pxx_row = latest.get((h, w, "pxx"))
+            rss = pxx_row["rss"] if pxx_row else 0
+            cells.append("<td class=num>%s"
+                         % ("%.0f MB" % (rss / 1024) if rss else "—"))
+            sub += "<tr>" + "".join(cells) + "</tr>"
+        tab += ("<h3>%s</h3><table>%s</table>" % (html.escape(h), sub))
     note = ("<p class=dim>Same <code>uforth.py</code> (a real ~4300-line NilPy "
             "program) on each runtime, same Forth workloads. ms = min wall over "
             "repeated runs. <code>pxx vs cpython</code> &lt;1x means pxx is "
             "slower than CPython (the current Track&nbsp;O gap). Source: "
             "uforth@%s.</p>" % (html.escape(src) or "?"))
-    return ("<h2>uforth — cross-runtime</h2>%s<table>%s</table>" % (note, tab))
+    return ("<h2>uforth — cross-runtime</h2>%s%s" % (note, tab))
 
 
 def render_bench(tdir, links):
     rows = read_bench(tdir)
-    # latest ms per (workload, level), preserving first-seen workload order.
-    # uforth-* rows are a different axis (runtimes, not opt levels) — pulled
-    # into their own section so they don't render as all-blank here.
-    latest, order = {}, []
+    # latest ms per (host, workload, level), preserving first-seen workload
+    # order. uforth-* rows are a different axis (runtimes, not opt levels) —
+    # pulled into their own section so they don't render as all-blank here.
+    # Keyed by (HOST, workload, level). Grouping by host is not cosmetic: two
+    # watcher hosts publish into one bench.tsv and differ by 40-90% on identical
+    # work (borg i7-6700 @3.4GHz vs xeon E5-2620v2 @2.1GHz). Keyed only by
+    # (workload, level), whichever host reported LAST silently won the cell, and
+    # the ratio columns could divide one machine's number by another's. A ratio
+    # is only meaningful within a single host.
+    latest, order, hosts = {}, [], {}
     for r in rows:
         if r["workload"].startswith("uforth-"):
             continue
         if r["workload"] not in order:
             order.append(r["workload"])
-        latest[(r["workload"], r["level"])] = r
+        if r["date"] > hosts.get(r["host"], ""):
+            hosts[r["host"]] = r["date"]
+        latest[(r["host"], r["workload"], r["level"])] = r
     # Hide a workload if its FPC-comparable portable twin exists: `mandelbrot`
     # and `raytracer` depend on pxx-only units (ansiterm / image / png) so FPC
     # cannot build them and they carry no `fpc` column — a bare blank a reader
@@ -343,46 +363,63 @@ def render_bench(tdir, links):
     names = set(order)
     order = [w for w in order if (w + "-p") not in names]
     levels = ["-O0", "-O2", "-O3", "fpc"]
-    head = "<tr><th>workload" + "".join("<th>%s" % l for l in levels)
-    head += "<th>-O3 vs -O0<th>pxx-O2 vs fpc</tr>"
-    tab = head
-    for w in order:
-        cells = ["<td><code>%s</code>" % html.escape(w)]
-        vals = {}
-        for l in levels:
-            r = latest.get((w, l))
-            if r:
-                vals[l] = r["ms"]
-                cells.append("<td class=num>%.1f" % r["ms"])
+    # most recently active host first — the primary watcher leads the page
+    host_order = sorted(hosts, key=lambda h: hosts[h], reverse=True)
+    tabs = ""
+    for h in host_order:
+        head = "<tr><th>workload" + "".join("<th>%s" % l for l in levels)
+        head += "<th>-O3 vs -O0<th>pxx-O2 vs fpc</tr>"
+        tab = head
+        nrows = 0
+        for w in order:
+            cells = ["<td><code>%s</code>" % html.escape(w)]
+            vals = {}
+            for l in levels:
+                r = latest.get((h, w, l))
+                if r:
+                    vals[l] = r["ms"]
+                    cells.append("<td class=num>%.1f" % r["ms"])
+                else:
+                    cells.append("<td class=dim>—")
+            if not vals:
+                continue        # this host never ran this workload
+            o3 = ("%.2fx" % (vals["-O0"] / vals["-O3"])
+                  if "-O0" in vals and "-O3" in vals and vals["-O3"] else "—")
+            if "-O2" in vals and "fpc" in vals and vals["fpc"]:
+                ratio = vals["-O2"] / vals["fpc"]
+                cls = "win" if ratio <= 1.0 else "lose"
+                fpc = "<span class=%s>%.2fx</span>" % (
+                    cls, ratio) if ratio >= 1 else "<span class=win>%.2fx faster</span>" % (
+                    1 / ratio)
             else:
-                cells.append("<td class=dim>—")
-        o3 = ("%.2fx" % (vals["-O0"] / vals["-O3"])
-              if "-O0" in vals and "-O3" in vals and vals["-O3"] else "—")
-        if "-O2" in vals and "fpc" in vals and vals["fpc"]:
-            ratio = vals["-O2"] / vals["fpc"]
-            cls = "win" if ratio <= 1.0 else "lose"
-            fpc = "<span class=%s>%.2fx</span>" % (
-                cls, ratio) if ratio >= 1 else "<span class=win>%.2fx faster</span>" % (
-                1 / ratio)
-        else:
-            fpc = "—"
-        cells.append("<td class=num>%s" % o3)
-        cells.append("<td class=num>%s" % fpc)
-        tab += "<tr>" + "".join(cells) + "</tr>"
+                fpc = "—"
+            cells.append("<td class=num>%s" % o3)
+            cells.append("<td class=num>%s" % fpc)
+            tab += "<tr>" + "".join(cells) + "</tr>"
+            nrows += 1
+        if nrows:
+            tabs += ("<h3>%s <span class=dim>(last run %s)</span></h3>"
+                     "<table>%s</table>"
+                     % (html.escape(h), html.escape(hosts[h][:19]), tab))
     # history (last 60 rows)
-    hist = "<tr><th>date<th>sha<th>workload<th>level<th>ms</tr>"
+    hist = "<tr><th>date<th>host<th>sha<th>workload<th>level<th>ms</tr>"
     for r in rows[-60:][::-1]:
-        hist += ("<tr><td>%s<td><code>%s</code><td>%s<td>%s<td class=num>%.1f</tr>"
-                 % (html.escape(r["date"]), html.escape(r["sha"][:12]),
+        hist += ("<tr><td>%s<td>%s<td><code>%s</code><td>%s<td>%s"
+                 "<td class=num>%.1f</tr>"
+                 % (html.escape(r["date"]), html.escape(r["host"]),
+                    html.escape(r["sha"][:12]),
                     html.escape(r["workload"]), html.escape(r["level"]), r["ms"]))
-    note = ("<p class=dim>ms = min wall over repeated runs, same host. "
+    note = ("<p class=dim>ms = min wall over repeated runs. Tables are split "
+            "PER HOST and timings are never comparable across hosts — the "
+            "watcher fleet's boxes differ by 40-90%% on identical work, so a "
+            "cross-host delta is hardware, not a regression. "
             "<code>-O3 vs -O0</code> = pxx speedup; <code>pxx-O2 vs fpc</code> "
             "compares pxx -O2 against FPC -O2 on the same source "
             "(&gt;1x = slower than FPC). Only FPC-comparable workloads carry an "
             "<code>fpc</code> column.</p>")
     uforth = render_uforth_bench(rows)
-    body = ("<h1>Benchmarks</h1>%s<h2>Latest per workload</h2><table>%s</table>"
-            "%s<h2>History</h2><table>%s</table>" % (note, tab, uforth, hist))
+    body = ("<h1>Benchmarks</h1>%s<h2>Latest per workload</h2>%s"
+            "%s<h2>History</h2><table>%s</table>" % (note, tabs, uforth, hist))
     return _page("Track T benchmarks", body, links)
 
 
