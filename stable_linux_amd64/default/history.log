@@ -231,3 +231,4 @@
 2026-07-30T17:20:06Z  v231  1c0292c5fcfef9056fbbaa878c81976de2cc3865ee3b04a14314acbc1a005ecf  18a7dc3fee62e160f25e8d649e241223b272717a  chore(progress): resolve mixed-type operand bug; file closure, += aliasing and tuple-flag finds
 2026-07-31T07:52:20Z  v232  d7086333cd630d6f360c7d4f7b67046912be4c352e03803abf2697d9be94d620  d606c75757f3080c9dc92a595c8c3056188faee6  docs(progress): file and resolve the lifted-lambda-discards-value ticket
 2026-07-31T21:11:18Z  v233  37044541a90693bc6223e9c98fe0abcf5becff5b48ee4acfbec2bbd4f0f56108  8eee0f4f73c55d328ad5496883fe925a576c7a58  chore(progress): claim bug-nilpy-void-def-assigned-and-called-crashes
+2026-07-31T22:11:14Z  v234  cbe9d66cfaf76c4cf84d341c749ddb0f28398084768e472e3a4220d7a1b0300f  f828572ca57d27f74b60fd4bedcaa664edccd3e3  chore(progress): re-claim bug-nilpy-bound-fn-closure-objects-are-never-freed with corrected diagnosis
