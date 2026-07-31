@@ -1,0 +1,17 @@
+# math.floor/math.ceil must return an int (CPython, since 3.0), not the RTL
+# Math unit's own Floor/Ceil (Double->Double, shared with the Pascal frontend
+# and correct there -- `import math` must not let math.floor/math.ceil reach
+# it). round() already matched CPython's int/float split and needed no fix.
+# bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float
+# Every expectation is CPython's own output.
+
+import math
+
+print(math.floor(2.7), math.ceil(2.1))
+print(math.floor(-2.1), math.ceil(-2.7))
+print(math.floor(2.0), math.ceil(2.0))
+
+x = math.floor(2.7)
+print(x + 1)
+
+print(round(2.7), round(2.4), round(2.7, 2))

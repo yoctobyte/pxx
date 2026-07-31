@@ -857,6 +857,13 @@ function pyenumerate(a: TPyList): TPyList;
   zero rather than CPython's banker's rounding: the difference shows only on an
   exact .5 at the last digit, and matching it needs decimal arithmetic. }
 function pyround_n(x: Double; n: Integer): Double;
+{ Python's math.floor/math.ceil return an int, unlike the RTL Math unit's
+  Floor/Ceil (Double->Double, shared with the Pascal frontend and left alone
+  here) -- these are the NilPy-specific int-returning shims, dispatched by
+  name ahead of ordinary qualified-call resolution so `import math` never
+  reaches the RTL's own Floor/Ceil for these two names. }
+function pymath_floor(x: Double): Int64;
+function pymath_ceil(x: Double): Int64;
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
@@ -2806,6 +2813,18 @@ begin
   for i := 1 to n do scale := scale * 10.0;
   if x >= 0.0 then pyround_n := Trunc(x * scale + 0.5) / scale
   else pyround_n := -(Trunc(-x * scale + 0.5) / scale);
+end;
+
+function pymath_floor(x: Double): Int64;
+begin
+  Result := Trunc(x);
+  if (Frac(x) <> 0.0) and (x < 0.0) then Dec(Result);
+end;
+
+function pymath_ceil(x: Double): Int64;
+begin
+  Result := Trunc(x);
+  if (Frac(x) <> 0.0) and (x > 0.0) then Inc(Result);
 end;
 
 function pyenumerate(a: TPyList): TPyList;

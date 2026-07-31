@@ -728,6 +728,10 @@ test-nilpy: $(COMPILER)
 	@# mixed str/number `and`/`or` returns the operand, not a Boolean
 	./$(COMPILER) test/test_nilpy_mixed_type_bool_op.npy /tmp/test_nilpy_boolop26
 	test "$$(/tmp/test_nilpy_boolop26)" = "$$(printf '%b' '5\nx\nx\na\nx\n1\n5\nx\n0\ntruthy\ndefault\ndefault\ndefault\nval\n5\n['"'"'12'"'"', '"'"'+'"'"', '"'"'34'"'"', '"'"'*'"'"', '"'"'2'"'"']')"
+	@# math.floor/math.ceil must return an int, not the RTL Math unit's own
+	@# Double->Double Floor/Ceil that `import math` would otherwise reach
+	./$(COMPILER) test/test_nilpy_math_floor_ceil_int.npy /tmp/test_nilpy_mathfloor26
+	test "$$(/tmp/test_nilpy_mathfloor26)" = "$$(printf '%b' '2 3\n-3 -2\n2 2\n3\n3 2 2.7')"
 	@# a managed STRING local minted after the prologue zero-init pass was never
 	@# nil'd, so the loop's first store released stale frame bytes -> SIGSEGV
 	./$(COMPILER) test/test_nilpy_str_local_loop_zeroinit.npy /tmp/test_nilpy_str_local_zi26

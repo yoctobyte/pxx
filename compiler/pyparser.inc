@@ -5291,6 +5291,13 @@ begin
     songformatter uses `list(dict.fromkeys(xs))`, the standard order-preserving
     dedupe. }
   else if dotted = 'dict.fromkeys' then Result := 'pydict_fromkeys'
+  { math.floor/math.ceil must NOT reach the RTL Math unit's own Floor/Ceil
+    (Double->Double, correct for the Pascal frontend, wrong for Python's int
+    contract) -- intercepted here by name, ahead of the ordinary qualified-
+    call resolution that `import math` would otherwise hit.
+    bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float }
+  else if dotted = 'math.floor' then Result := 'pymath_floor'
+  else if dotted = 'math.ceil' then Result := 'pymath_ceil'
   else Result := '';
 end;
 
@@ -5303,7 +5310,7 @@ begin
   if TokPos < 1 then Exit;
   base := LowerCase(GetTokenStr(TokPos - 1));
   if (base <> 'os') and (base <> 'sys') and (base <> 'textwrap') and
-     (base <> 'select') and (base <> 'dict') then Exit;
+     (base <> 'select') and (base <> 'dict') and (base <> 'math') then Exit;
   if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot) then Exit;
   if TokPos + 1 >= TokCount then Exit;
   d2 := base + '.' + LowerCase(GetTokenStr(TokPos + 1));
