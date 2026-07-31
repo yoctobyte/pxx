@@ -35,7 +35,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (191)
+## backlog (190)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -138,7 +138,6 @@ _none_
 | feature-nilpy-default-args-on-nested-defs | N | 55 | feature | NilPy: default arguments as explicit by-value capture | — |
 | feature-nilpy-dotted-package-imports | N | 55 | feature | nilpy: dotted package imports — `from reportlab.pdfgen import canvas`, so a shim can be NAMED for the module it implements | — |
 | feature-nilpy-fallback-import | N | 50 | feature | nilpy: fallback import (try/except ImportError) — soft-fail an unresolvable import, take the alternative | — |
-| feature-nilpy-file-io-and-comprehensions | N | 55 | feature | NilPy: file I/O (`with open`), list comprehensions, and dict literals-in-args | — |
 | feature-nilpy-generator-expression-arg | N | 45 | feature | NilPy: a generator expression as a call argument | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nilpy-lambda-compiled-closure | N | 45 | feature | nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics) | — |
@@ -293,7 +292,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1080)
+## done (1081)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1147,6 +1146,7 @@ _none_
 | feature-nilpy-exception-message-text | N | 30 | feature | NilPy: exception message text — super().__init__(msg) discarded, str(e) empty | — |
 | feature-nilpy-exception-message | N | 55 | feature | NilPy: `Exception(msg)` — the root class takes no arguments | — |
 | feature-nilpy-exceptions | N | 60 | feature | NilPy: `raise` and `try` / `except` | — |
+| feature-nilpy-file-io-and-comprehensions | N | 55 | feature | NilPy: file I/O (`with open`), list comprehensions, and dict literals-in-args | — |
 | feature-nilpy-fstring-format-spec | N | 50 | feature | nilpy: f-string format specs — {x:.2f}, alignment/width {s:>5} | — |
 | feature-nilpy-fstrings | N | 55 | feature | NilPy: f-strings | — |
 | feature-nilpy-function-values-spellings | N | 45 | feature | NilPy: a function is a VALUE — bind it to a name, store it, call it back | — |
@@ -2856,7 +2856,6 @@ _none_
 - [p 55] [N] feature-nilpy-corpus-uforth
 - [p 55] [N] feature-nilpy-default-args-on-nested-defs
 - [p 55] [N] feature-nilpy-dotted-package-imports
-- [p 55] [N] feature-nilpy-file-io-and-comprehensions
 - [p 55] [N] feature-nilpy-py-module-loader
 - [p 55] [O] feature-opt-heap-per-thread-cache
 - [p 55] [P] feature-pascal-corpus-generics

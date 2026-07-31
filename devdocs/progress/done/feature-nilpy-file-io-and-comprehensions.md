@@ -51,3 +51,6 @@ Each piece lands green independently with a CPython-diffed `.npy` case +
 `--tier quick` + self-host byte-identical + `make fpc-check` clean. The file
 object in particular needs a test that reads a real temp file and matches
 CPython line for line.
+
+## Log
+- 2026-07-31 — resolved, commit 017b73df30cf6b31633b684d5163c0f5f80bb809.
