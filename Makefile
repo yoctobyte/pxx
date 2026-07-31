@@ -6088,6 +6088,8 @@ test-quick: $(COMPILER)
 	test "$$(/tmp/smoke_mutex26 | tail -1)" = "MUTEX OK"
 	./$(COMPILER) --threadsafe test/test_tthread_sync.pas /tmp/smoke_tthread26
 	test "$$(/tmp/smoke_tthread26 | tail -1)" = "TTHREAD SYNC OK"
+	./$(COMPILER) test/test_fwd_ptr_alias_field.pas /tmp/smoke_fwdptralias26
+	test "$$(/tmp/smoke_fwdptralias26)" = "11 22"
 
 # test-smoke: the pre-commit iteration gate = test-quick + the full self-host
 # byte-identity chain (the artifacts stabilize-core pins). Catches self-host
