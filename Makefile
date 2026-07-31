@@ -486,6 +486,9 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_raise_from26)" = "$$(printf '%b' '5\ncaught wrapped')"
 	./$(COMPILER) test/test_nilpy_file_open.npy /tmp/test_nilpy_file_open26
 	test "$$(/tmp/test_nilpy_file_open26)" = "$$(printf '%b' 'alpha\nbeta\ngamma\n3\n3')"
+	@# whole-file read() past `with open` + a dict literal as a call argument
+	./$(COMPILER) test/test_nilpy_file_io_and_comprehensions.npy /tmp/test_nilpy_fileiocompr26
+	test "$$(/tmp/test_nilpy_fileiocompr26)" = "$$(printf '%b' 'alpha\nbeta\ngamma\n\n17\nsource 3')"
 	./$(COMPILER) test/test_nilpy_or_and_value.npy /tmp/test_nilpy_or_and_value26
 	test "$$(/tmp/test_nilpy_or_and_value26)" = "$$(printf '%b' 'hello\ndefault\ndefault\n2\n0\nin range\nout')"
 	./$(COMPILER) test/test_nilpy_ternary_arg.npy /tmp/test_nilpy_ternary_arg26

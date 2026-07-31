@@ -1,0 +1,16 @@
+# Two of the four uforth-corpus pieces this ticket named are not covered by
+# test_nilpy_file_open.npy (which only covers line-iteration + comprehension):
+# a whole-file read() past a `with open(...) as f:` and a dict literal passed
+# directly as a call argument. Both already work.
+# feature-nilpy-file-io-and-comprehensions
+# Every expectation is CPython's own output.
+
+with open("test/nilpy_data.txt", "r", encoding="utf-8") as f:
+    content = f.read()
+print(content)
+print(len(content))
+
+def describe(rec):
+    print(rec["kind"], len(rec["lines"]))
+
+describe({"kind": "source", "path": "test/nilpy_data.txt", "lines": ["alpha", "beta", "gamma"]})
