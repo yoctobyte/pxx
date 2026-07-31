@@ -1,0 +1,41 @@
+# Builtin runtime errors (division by zero, int()/float() conversion, bad
+# subscript, missing key) must raise CATCHABLE exceptions, not abort the
+# process -- both a bare `except:` and the typed handler.
+# feature-nilpy-catchable-runtime-errors
+# Every expectation is CPython's own output.
+
+try:
+    x = 1 // 0
+except:
+    print("caught div (bare)")
+
+try:
+    x = 1 // 0
+except ZeroDivisionError:
+    print("caught floordiv ZeroDivisionError")
+
+try:
+    x = 1 / 0
+except ZeroDivisionError:
+    print("caught truediv ZeroDivisionError")
+
+try:
+    x = int("nope")
+except ValueError:
+    print("caught int() ValueError")
+
+try:
+    x = float("nope")
+except ValueError:
+    print("caught float() ValueError")
+
+try:
+    x = [1, 2][5]
+except IndexError:
+    print("caught IndexError")
+
+try:
+    d = {"a": 1}
+    x = d["b"]
+except KeyError:
+    print("caught KeyError")

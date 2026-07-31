@@ -502,6 +502,10 @@ test-nilpy: $(COMPILER)
 	@# f"{e}" of a caught exception shows its message, like print(e)/str(e)
 	./$(COMPILER) test/test_nilpy_exception_fstring_message.npy /tmp/test_nilpy_excfstr26
 	test "$$(/tmp/test_nilpy_excfstr26)" = "$$(printf '%b' 'boom\ngot: boom and boom\nbad value')"
+	@# builtin runtime errors (div-by-zero, int()/float(), bad subscript,
+	@# missing key) raise CATCHABLE exceptions, bare except: and typed
+	./$(COMPILER) test/test_nilpy_catchable_runtime_errors.npy /tmp/test_nilpy_catchable26
+	test "$$(/tmp/test_nilpy_catchable26)" = "$$(printf '%b' 'caught div (bare)\ncaught floordiv ZeroDivisionError\ncaught truediv ZeroDivisionError\ncaught int() ValueError\ncaught float() ValueError\ncaught IndexError\ncaught KeyError')"
 	./$(COMPILER) test/test_nilpy_dynattr.npy /tmp/test_nilpy_dynattr26
 	test "$$(/tmp/test_nilpy_dynattr26)" = "$$(printf '%b' '105\n110')"
 	./$(COMPILER) test/test_nilpy_dynattr_class.npy /tmp/test_nilpy_dynattr_class26
