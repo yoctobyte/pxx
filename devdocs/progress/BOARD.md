@@ -240,7 +240,7 @@ _none_
 | feature-rust-rtl-core-types | R | 45 | feature | Rust frontend RTL — `Option<T>` / `Result<T,E>` / `Box<T>` / `Vec<T>` | — |
 | feature-rust-rtl-macros-io | R | 45 | feature | Rust frontend RTL — `println!`/`format!`/`vec!`/`assert!`/`panic!` runtime | — |
 | feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
-| feature-zig-frontend | B | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
+| feature-zig-frontend | Z | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
 ## rainy-day (27)
 

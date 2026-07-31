@@ -1,10 +1,16 @@
 ---
+track: Z
 prio: 45  # auto
 ---
 
 # Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental
 
-- **Type:** feature — umbrella (spans Track A + Track B)
+- **Type:** feature — umbrella. **Track Z** (the Zig frontend's own lane:
+  `zlexer`/`zparser`, Zig->IR lowering, `lib/zrtl`, Zig tests). The older
+  "spans Track A + Track B" reading predates the Z lane; what it was pointing at
+  is that the REMAINING items are not frontend work — the comptime VM, record-ABI
+  shapes and real tySlice/tagged-union primitives are Track A shared machinery,
+  and `lib/zrtl` breadth is Track B on demand. The frontend itself is Z.
 - **Status:** experimental — everything reachable by pure parse-time
   desugaring onto the existing IR is DONE and tested (2026-07-08); what
   remains needs shared machinery (see below) and is low-prio by the
