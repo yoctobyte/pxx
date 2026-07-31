@@ -94,6 +94,7 @@ _none_
 | feature-c-package-namespace-decision | A | 40 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
 | feature-c-vla-via-alloca | C | 50 | feature | C variable-length arrays, lowered through alloca | — |
 | feature-cdecl-bodied-sysv-prologue | A | 40 | feature | Bodied Pascal `cdecl` procs: genuine SysV prologue (float params, >6 args) | — |
+| feature-cli-widgetset-flag | A | 20 | feature | CLI: --widgetset=<name> as sugar for -dWIDGETSET_<NAME>, so the flag reads like Lazarus' -ws | — |
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
 | feature-crtl-implement-libc-assumptions | B | 10 | feature | crtl: implement the libc assumptions real-world C leans on | — |
 | feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | feature-nilpy-break-continue, feature-nilpy-tk-binding |
@@ -175,7 +176,6 @@ _none_
 | feature-pasmith-qplus-rplus-rungs | T | 30 | feature | pasmith rungs for {$Q+}/{$R+}: generate checked regions + try/except EIntOverflow/ERangeError harnesses, differential vs FPC | — |
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-pcl-tk-windows-compat | B | 25 | feature | NilPy tk on Windows — quarantine the Tcl/Tk-DLL-swarm problem behind a {$ifdef WINDOWS} include in tk.pas; emulate/wrap, stub now fill later. Linux keeps the real embed | feature-port-windows-pe |
-| feature-pcl-widgetset-select | B | 25→30 | feature | PCL: compile-time widgetset selection (--widgetset=) + sparse widgetset×OS matrix that HARD-FAILS unsupported cells with a clear reason (copy LCL -ws) | — |
 | feature-pcl-win32-widgetset | B | 25→30 | feature | PCL: native Win32 widgetset — a 2nd TWidgetSet subclass over user32/gdi32, zero-dep (no GTK bundle). Best-effort, UN-GATED (no Windows box, Wine-smoke only) | feature-pcl-seam-seal, feature-port-windows-pe |
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | — |
 | feature-port-multi-os-abstraction | A | 55 | feature | UMBRELLA: abstract the target-OS axis — FreeBSD (native) + Windows (PE, Wine-tested), phased | feature-port-freebsd-native, feature-port-rtl-over-libc, feature-port-windows-pe |
@@ -302,7 +302,7 @@ _none_
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1085)
+## done (1086)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1220,6 +1220,7 @@ _none_
 | feature-pcl-input-events | B | 50 | feature | PCL: mouse-coordinate + keyboard input events | — |
 | feature-pcl-opengl-glarea-demo | B | 50 | feature | PCL OpenGL GLArea demo | — |
 | feature-pcl-seam-seal | B | 25→30 | feature | PCL: seal the TWidgetSet seam — route extctrls/dialogs/glarea through the widgetset so ZERO raw gtk_ lives outside gtk3widgets.pas (enabler for any 2nd backend) | — |
+| feature-pcl-widgetset-select | B | 25→30 | feature | PCL: compile-time widgetset selection (--widgetset=) + sparse widgetset×OS matrix that HARD-FAILS unsupported cells with a clear reason (copy LCL -ws) | — |
 | feature-platform-abstraction-layer | B | 50 | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 | feature-png-decoder-library | B | 50 | feature | PNG decoder library | feature-compression-library, feature-hashing-library, feature-rtl-image-bitmap-library |
 | feature-procedural-types | A | 50 | feature | Procedural types and method pointers | — |
@@ -2967,7 +2968,6 @@ _none_
 - [p 35] [N] feature-nilpy-yield-outside-a-for-loop
 - [p 35] [O] feature-opt-complex-packed-double
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
-- [p 30] [B] feature-pcl-widgetset-select (unblocks 1)
 - [p 30] [A] bug-cfront-silent-bind-to-pascal-proc-of-different-arity
 - [p 30] [N] bug-nilpy-construction-on-the-right-of-is-does-not-parse
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
@@ -2986,6 +2986,7 @@ _none_
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 20] [N] bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip
 - [p 20] [P] compat-pascal-method-impl-without-declaration
+- [p 20] [A] feature-cli-widgetset-flag
 - [p 20] [B] feature-networking
 - [p 20] [O] feature-opt-float-register-temporaries
 - [p 20] [T] feature-t-gcc-torture-runner
@@ -3014,7 +3015,6 @@ _none_
 - **1** — feature-nilpy-star-args-kwargs
 - **1** — feature-nilpy-tkinter-facade
 - **1** — feature-os-targets-bsd-mac
-- **1** — feature-pcl-widgetset-select
 - **1** — feature-pcl-win32-widgetset
 - **1** — feature-port-freebsd-native
 - **1** — feature-tls13-from-scratch

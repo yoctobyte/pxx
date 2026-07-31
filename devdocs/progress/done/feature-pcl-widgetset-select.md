@@ -8,10 +8,10 @@ prio: 25
 
 - **Type:** feature (**Track B** — `lib/pcl` + a small compiler CLI/define touch).
   Gate = `make lib-test` green; the default (gtk3/linux) unchanged.
-- **Status:** backlog. Child of [[feature-pcl-cross-platform-gui]]. Best after
+- **Status:** done
   [[feature-pcl-seam-seal]] (so there's a real seam to select against), but the CLI +
   matrix scaffolding can land alongside.
-- **Owner:** —
+- **Owner:** trackB-agent
 - **Opened:** 2026-07-21, GUI-scope session.
 
 ## Problem
@@ -61,3 +61,55 @@ one binary (matches pxx's zero-dep, no-runtime-plugin identity). Copy that.
 The compiler touch is tiny (parse `--widgetset`, set a define, thread it to the OS×ws
 guard). If that guard is cleaner as a Track A CLI addition, file the CLI slice as a
 small Track A ticket per lane rules; the `lib/pcl` side stays Track B.
+
+## RESOLVED 2026-07-31 — selection + the matrix, with no compiler change at all
+
+`lib/pcl/interfaces.pas` was `uses uwidgetset, gtk3widgets;` and nothing else.
+It is now the single place that decides the backend, and it needed no compiler
+touch: an ordinary define does the whole job.
+
+```sh
+pxx -dWIDGETSET_GTK3 ...      # also the default when none is given
+pxx -dWIDGETSET_WIN32 ...     # refused, by name, at compile time
+```
+
+### The matrix is a table in one file
+
+Each cell asserts itself before its backend is pulled in, so an unsupported
+combination is a HARD COMPILE ERROR naming the reason — never a silent build
+that dies in the linker or at run time. Measured, not asserted:
+
+```
+$ pxx -dWIDGETSET_WIN32 ... test_pcl_widgets.pas
+pascal26:32: error: widgetset win32 exists only on windows. On this target use -dWIDGETSET_GTK3.
+
+$ pxx -dWIDGETSET_QT ... test_pcl_widgets.pas
+pascal26:32: error: widgetset qt is not delivered yet. Supported today: gtk3 on linux.
+```
+
+and gtk3-on-windows carries the refusal this ticket asked for — the 30-40 MB DLL
+bundle, refused by design rather than by omission.
+
+### Acceptance, checked
+
+- `-dWIDGETSET_GTK3` and no flag produce a **byte-identical** binary (`cmp`, in
+  the suite — not just "both compiled").
+- Every unsupported cell fails at compile time with a reason that names the
+  widgetset.
+- Adding a widgetset is one arm here plus one `TWidgetSet` subclass. That is
+  only true because [[feature-pcl-seam-seal]] landed first — before it, a new
+  backend could not have implemented all of PCL no matter how it was selected.
+
+Asserted in `tools/gui_suite.sh` as `widgetset selection + matrix`, ahead of the
+per-widget tests, and the whole suite is otherwise unchanged.
+
+### Filed rather than done here
+
+`--widgetset=<name>`, the Lazarus-style spelling, is pure CLI sugar over the
+define and is the only part that needs a compiler change — filed as
+[[feature-cli-widgetset-flag]] (Track A) per this ticket's own note. Keeping the
+matrix out of the compiler is deliberate: teaching the compiler about widgetsets
+would put half the rule in the wrong layer and break the one-arm property.
+
+## Log
+- 2026-07-31 — resolved, commit ffb8794a7.

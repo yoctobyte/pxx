@@ -33,7 +33,38 @@ run_gui_test() {
   say "OK    $name"
 }
 
+# Widgetset selection + the sparse (widgetset x OS) matrix
+# (feature-pcl-widgetset-select): the default must be byte-identical to an
+# explicit gtk3, and every unsupported cell must be a COMPILE error naming the
+# reason rather than a silent build.
+widgetset_matrix() {
+  local src="$ROOT/test/gui/test_pcl_widgets.pas"
+  local a="/tmp/gui_ws_default" b="/tmp/gui_ws_gtk3"
+  local log="/tmp/gui_ws.log"
+  if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl "$src" "$a" >"$log" 2>&1; then
+    say "FAIL  widgetset -- default build: $(tail -1 "$log")"; fail=1; return
+  fi
+  if ! "$PXX_STABLE" -dWIDGETSET_GTK3 -Fulib/pcl -Fulib/rtl "$src" "$b" >"$log" 2>&1; then
+    say "FAIL  widgetset -- explicit gtk3: $(tail -1 "$log")"; fail=1; return
+  fi
+  if ! cmp -s "$a" "$b"; then
+    say "FAIL  widgetset -- default is not byte-identical to explicit gtk3"; fail=1; return
+  fi
+  # every unsupported cell refuses, and says why
+  local ws
+  for ws in WIDGETSET_WIN32 WIDGETSET_QT; do
+    if "$PXX_STABLE" "-d$ws" -Fulib/pcl -Fulib/rtl "$src" /tmp/gui_ws_bad >"$log" 2>&1; then
+      say "FAIL  widgetset -- -d$ws built instead of refusing"; fail=1; return
+    fi
+    if ! grep -q 'widgetset' "$log"; then
+      say "FAIL  widgetset -- -d$ws refused without naming the widgetset: $(tail -1 "$log")"; fail=1; return
+    fi
+  done
+  say "OK    widgetset selection + matrix"
+}
+
 say "=== running GUI test suite (PCL) ==="
+widgetset_matrix
 run_gui_test test_gtk_ffi
 run_gui_test test_pcl_click
 run_gui_test test_pcl_event_rtti
