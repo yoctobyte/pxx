@@ -640,7 +640,10 @@ const
   LOAD_ADDR        = $400000;
   ELF_HEADER_SIZE  = 64;
   PROG_HEADER_SIZE = 56;
-  CODE_OFFSET      = ELF_HEADER_SIZE + PROG_HEADER_SIZE;
+  { PT_LOAD + PT_GNU_STACK (bug-elf-missing-pt-gnu-stack: every image we emit
+    carries a GNU_STACK header now, RW/no-X, so newer kernels don't refuse to
+    load it for wanting an executable stack). }
+  CODE_OFFSET      = ELF_HEADER_SIZE + PROG_HEADER_SIZE + PROG_HEADER_SIZE;
 
   { Compile targets. x86-64 is the native/self-host target; others are
     cross-only and grow op-by-op (unsupported constructs error, never
@@ -677,12 +680,15 @@ const
                                      valid IRAM on both C3 and S3 }
   ELF32_HEADER_SIZE  = 52;
   PROG32_HEADER_SIZE = 32;
-  CODE_OFFSET32      = ELF32_HEADER_SIZE + PROG32_HEADER_SIZE;
-  { Dynamic i386: ehdr + PT_LOAD + PT_INTERP + PT_DYNAMIC program headers. }
+  { PT_LOAD + PT_GNU_STACK, see CODE_OFFSET above. }
+  CODE_OFFSET32      = ELF32_HEADER_SIZE + PROG32_HEADER_SIZE + PROG32_HEADER_SIZE;
+  { Dynamic i386: ehdr + PT_LOAD + PT_INTERP + PT_DYNAMIC + PT_GNU_STACK. }
   DYNAMIC_CODE_OFFSET32 = ELF32_HEADER_SIZE + PROG32_HEADER_SIZE +
-                          PROG32_HEADER_SIZE + PROG32_HEADER_SIZE;
+                          PROG32_HEADER_SIZE + PROG32_HEADER_SIZE +
+                          PROG32_HEADER_SIZE;
   DYNAMIC_CODE_OFFSET = ELF_HEADER_SIZE + PROG_HEADER_SIZE +
-                        PROG_HEADER_SIZE + PROG_HEADER_SIZE;
+                        PROG_HEADER_SIZE + PROG_HEADER_SIZE +
+                        PROG_HEADER_SIZE;
 
   INTBUF_OFFSET   = 0;
   INTBUF_SIZE     = 24;

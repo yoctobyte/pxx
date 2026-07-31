@@ -1483,12 +1483,12 @@ begin
     machine := 183
   else
     machine := 62;
-  phCount := 1;
+  phCount := 2;   { PT_LOAD + PT_GNU_STACK }
   codeOffset := CODE_OFFSET;
   if ExternalCount > 0 then
   begin
     PrepareDynamicData;
-    phCount := 3;
+    phCount := 4;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET;
   end;
   dataBase := LOAD_ADDR + codeOffset + CodeLen;
@@ -1588,6 +1588,11 @@ begin
     writeU64(f,dataBase + DynamicOff);writeU64(f,dataBase + DynamicOff);
     writeU64(f,DynamicSize);writeU64(f,DynamicSize);writeU64(f,8);
   end;
+  writeU32(f,$6474E551);writeU32(f,6); { PT_GNU_STACK, RW (no X): no executable
+    stack request, else newer kernels refuse to load the image entirely
+    (bug-elf-missing-pt-gnu-stack) }
+  writeU64(f,0);writeU64(f,0);writeU64(f,0);
+  writeU64(f,0);writeU64(f,0);writeU64(f,$10);
 
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
   if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
@@ -1613,12 +1618,12 @@ begin
     machine := 183
   else
     machine := 62;
-  phCount := 1;
+  phCount := 2;   { PT_LOAD + PT_GNU_STACK }
   codeOffset := CODE_OFFSET;
   if ExternalCount > 0 then
   begin
     PrepareDynamicData;
-    phCount := 3;
+    phCount := 4;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET;
   end;
   dataBase := LOAD_ADDR + codeOffset + CodeLen;
@@ -1723,6 +1728,11 @@ begin
     writeU64(f,dataBase + DynamicOff);writeU64(f,dataBase + DynamicOff);
     writeU64(f,DynamicSize);writeU64(f,DynamicSize);writeU64(f,8);
   end;
+  writeU32(f,$6474E551);writeU32(f,6); { PT_GNU_STACK, RW (no X): no executable
+    stack request, else newer kernels refuse to load the image entirely
+    (bug-elf-missing-pt-gnu-stack) }
+  writeU64(f,0);writeU64(f,0);writeU64(f,0);
+  writeU64(f,0);writeU64(f,0);writeU64(f,$10);
 
   if CodeLen > 0 then syswrite(f,Code,CodeLen);
   if DataLen > 0 then syswrite(f,Data,DataLen);
@@ -1772,12 +1782,12 @@ begin
       same as i386/arm32. Nothing esp-specific remains. }
   end;
 
-  phnum := 1;
+  phnum := 2;   { PT_LOAD + PT_GNU_STACK }
   codeOffset := CODE_OFFSET32;
   if isDyn then
   begin
     PrepareDynamicData32;          { appends interp/dynstr/dynsym/hash/rel/dynamic }
-    phnum := 3;
+    phnum := 4;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET32;
   end;
   { Bare-metal ESP image loads into the SoC SRAM (one RWX region under qemu);
@@ -1923,6 +1933,11 @@ begin
     writeU32(f,DynamicSize);                            { p_memsz }
     writeU32(f,6);writeU32(f,4);                        { flags=RW, align }
   end;
+  { PT_GNU_STACK (RW, no X): see bug-elf-missing-pt-gnu-stack. }
+  writeU32(f,$6474E551);                                { p_type }
+  writeU32(f,0);writeU32(f,0);writeU32(f,0);            { offset, vaddr, paddr }
+  writeU32(f,0);writeU32(f,0);                          { filesz, memsz }
+  writeU32(f,6);writeU32(f,$10);                        { flags=RW, align }
 
 {$ifdef FPC}
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
@@ -2611,7 +2626,7 @@ begin
   dynamicSize := (neededCount + 9) * 16;
 
   phOff := ELF_HEADER_SIZE;
-  textOff := phOff + 2 * PROG_HEADER_SIZE;
+  textOff := phOff + 3 * PROG_HEADER_SIZE;   { PT_LOAD + PT_DYNAMIC + PT_GNU_STACK }
   dataOff := AlignTo(textOff + CodeLen, 8);
   dynstrOff := dataOff + DataLen;
   dynsymOff := AlignTo(dynstrOff + dynstrSize, 8);
@@ -2648,7 +2663,7 @@ begin
   writeU16(f,3);writeU16(f,62);writeU32(f,1);           { ET_DYN, EM_X86_64 }
   writeU64(f,0);writeU64(f,phOff);writeU64(f,0);        { entry=0, phoff, shoff=0 }
   writeU32(f,0);                                        { e_flags }
-  writeU16(f,ELF_HEADER_SIZE);writeU16(f,PROG_HEADER_SIZE);writeU16(f,2);
+  writeU16(f,ELF_HEADER_SIZE);writeU16(f,PROG_HEADER_SIZE);writeU16(f,3);
   writeU16(f,0);writeU16(f,0);writeU16(f,0);   { shentsize/shnum/shstrndx = 0 }
 
   { PT_LOAD: whole file, RWX (same single-segment simplification the ET_EXEC
@@ -2661,6 +2676,13 @@ begin
   writeU32(f,2);writeU32(f,6);
   writeU64(f,dynamicOff);writeU64(f,dynamicOff);writeU64(f,dynamicOff);
   writeU64(f,dynamicSize);writeU64(f,dynamicSize);writeU64(f,8);
+
+  { PT_GNU_STACK (RW, no X): without it a modern kernel refuses to dlopen this
+    .so at all, since the absent header defaults to "requires an executable
+    stack" (bug-elf-missing-pt-gnu-stack). }
+  writeU32(f,$6474E551);writeU32(f,6);
+  writeU64(f,0);writeU64(f,0);writeU64(f,0);
+  writeU64(f,0);writeU64(f,0);writeU64(f,$10);
 
 {$ifdef FPC}
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
