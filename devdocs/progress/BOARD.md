@@ -31,7 +31,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (182)
+## backlog (181)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -65,7 +65,6 @@ _none_
 | bug-pascal-transitive-unit-crashes-at-startup-unless-named-first | A | 60 | bug | Pascal: `uses blcksock;` segfaults before main() in the string-release helper — naming a transitively-used unit FIRST fixes it | — |
 | bug-pascal-uses-is-transitive | A | 65 | bug | Pascal: uses is transitive — a unit's own uses leak into everything that uses IT, for routines and classes alike (one flat global namespace) | — |
 | bug-pascal-uses-order-breaks-pylib-exception | A | 45 | bug | `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine | — |
-| bug-pyeval-exec-requires-a-globals-key-named-vm | N | 45 | bug | pyeval: exec()'s env must contain a key literally named \"vm\" or every host call fails — CPython has no such rule | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -304,7 +303,7 @@ _none_
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1089)
+## done (1090)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -830,6 +829,7 @@ _none_
 | bug-procedure-typed-procvalue | A | 50 | bug | `@Proc` / proc-value of a `procedure`-typed routine rejected ("unexpected token") | — |
 | bug-procptr-record-field-call | A | 50 | bug | Calling a procedural-pointer record/class field (`v.Run(args)`) | — |
 | bug-property-setter-resolution-uses-order | A | 52 | bug | Class-typed property WRITE mis-parses ("Expected: [") depending on uses order | — |
+| bug-pyeval-exec-requires-a-globals-key-named-vm | N | 45 | bug | pyeval: exec()'s env must contain a key literally named \"vm\" or every host call fails — CPython has no such rule | — |
 | bug-qplus-narrow-32bit-backends | A | 35 | bug | {$Q+} narrow-width overflow still unchecked on the 32-bit backends | — |
 | bug-r-directive-toggle-treated-as-resource | A | 50 | bug | `{$R-}` / `{$R+}` range-check toggle misread as a resource directive | — |
 | bug-read-preserves-line-remainder | A | 50 | bug | `read` consumes a whole line like `readln` | — |
@@ -2910,7 +2910,6 @@ _none_
 - [p 45] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [A] bug-pascal-uses-order-breaks-pylib-exception
-- [p 45] [N] bug-pyeval-exec-requires-a-globals-key-named-vm
 - [p 45] [T] bug-t-watcher-dev-contention-false-newred
 - [p 45] [A] chore-makefile-selfhost-iterate-to-convergence
 - [p 45] [A] chore-makefile-testtmp-parameterize

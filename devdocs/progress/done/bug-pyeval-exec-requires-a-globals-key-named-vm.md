@@ -55,3 +55,6 @@ happens.
 
 `make test-nilpy` + self-host byte-identical, plus a `.npy` running the repro
 above with env keys that are NOT called `vm`, diffed against CPython.
+
+## Log
+- 2026-07-31 — resolved, commit 6ec550c1f274448d6a5c944b01f100ab1320af7c.
