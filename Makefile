@@ -673,6 +673,9 @@ test-nilpy: $(COMPILER)
 	@# list.sort() -- the in-place method, not just the sorted() function
 	./$(COMPILER) test/test_nilpy_list_sort_method.npy /tmp/test_nilpy_sortmethod26
 	test "$$(/tmp/test_nilpy_sortmethod26)" = "$$(printf '%b' '[1, 1, 2, 3, 4, 5, 6, 9]\n[1, 1, 2, 3, 4, 5, 6, 9, 0]\n'"['apple', 'banana', 'cherry']")"
+	@# d[k] = None stores a real None, and a def with no return annotation parses
+	./$(COMPILER) test/test_nilpy_none_variant_residuals.npy /tmp/test_nilpy_noneresid26
+	test "$$(/tmp/test_nilpy_noneresid26)" = "$$(printf 'None\nTrue\nhi')"
 	./$(COMPILER) test/test_nilpy_return_none_variant.npy /tmp/test_nilpy_return_none_variant26
 	test "$$(/tmp/test_nilpy_return_none_variant26)" = "$$(printf 'a NONE\nb NONE\nc 9')"
 	./$(COMPILER) test/test_nilpy_none_str_field.npy /tmp/test_nilpy_none_str_field26

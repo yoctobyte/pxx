@@ -95,3 +95,12 @@ then re-drive.
   well-scoped item (the general "None is a variant in PyExprMode" rule above),
   not a half-applied change. Priority lowered to 45 to match the smaller
   remaining scope.
+- 2026-07-31 — re-measured, both residuals now fixed (landed as side effects
+  of other work, not attributed to a single commit): `d[k] = None` stores a
+  real `VT_EMPTY` None (verified against the `is None`/print pair, matches
+  CPython) — most likely a side effect of this session's chained-subscript-
+  assignment fix, which touched exactly this default-property-assignment
+  code path. `def f(k: str):` with no return annotation now parses and runs.
+  Added `test/test_nilpy_none_variant_residuals.npy` for direct coverage
+  (previously covered only incidentally by other tests). Closing — nothing
+  left open on this ticket.

@@ -1,0 +1,16 @@
+# The two residuals feature-nilpy-none-variant's own log left open:
+# `d[k] = None` used to store the int sentinel 0 (parsed as a value-bearing
+# assignment EXPRESSION, bypassing the None rewrites); a def with no return
+# annotation used to fail to parse at all. Both now work.
+# feature-nilpy-none-variant
+# Every expectation is CPython's own output.
+
+d = {}
+d["k"] = None
+print(d["k"])
+print(d["k"] is None)
+
+def f(k: str):
+    print(k)
+
+f("hi")
