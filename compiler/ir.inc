@@ -4055,7 +4055,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     beforeCount, handlerLabel, handlerNode, handlerNextLabel, savedDepth: Integer;
     raiseValueNode, raiseClass: Integer;
     excTargetCi, excBodyLabel, excDescCi: Integer;
-    excObjSym, excMatched, excSkipLabel: Integer;
+    excObjSym, excMatched, excSkipLabel, excOwnTmp, excReleaseProc: Integer;
     eaSym: Integer;
     narrowSize: Integer; castIsSigned: Boolean;
     i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize: Integer;
@@ -8796,10 +8796,41 @@ begin
           last := IRAppend(IR_EXC_MATCH, handlerNextLabel, -1, -1, ASTIVal[handlerNode], 0);
           last := IRAppend(IR_LABEL, -1, -1, -1, excBodyLabel, 0);
         end;
+        excOwnTmp := -1;
         if ASTSOffset[handlerNode] >= 0 then
-          last := IRAppend(IR_EXC_STORE, ASTSOffset[handlerNode], -1, -1, 0, 0);
+          last := IRAppend(IR_EXC_STORE, ASTSOffset[handlerNode], -1, -1, 0, 0)
+        else if NilPyUserCode then
+        begin
+          { No `except ... as e:` binder: the exception object still has the
+            ONE owning reference its constructor gave it (raise transfers that
+            reference, it does not add another), and when a handler binds it
+            to a real local, that local's own scope-exit release is what
+            finally drops it. With no binder, nothing anywhere holds a
+            reference to release -- every caught exception leaked its object
+            forever, and the leak did not care whether the exception was
+            named (bug-nilpy-caught-exception-objects-are-never-freed). Store
+            it into a hidden, release-only temp so IR_EXC_CLEAR below (which
+            only zeroes bookkeeping globals, never releases) has something to
+            hand to PXXObjRelease first. }
+          excOwnTmp := AllocVar('', tyPointer);
+          last := IRAppend(IR_EXC_STORE, excOwnTmp, -1, -1, 0, 0);
+        end;
         last := IRLowerAST(ASTLeft[handlerNode]);
         IRMarkStatementNode(last);
+        if excOwnTmp >= 0 then
+        begin
+          excReleaseProc := FindProc('PXXObjRelease');
+          if excReleaseProc >= 0 then
+          begin
+            last := IRAppendCall(excReleaseProc,
+                      IRAppend(IR_ARG,
+                        IRAppend(IR_LOAD_SYM, excOwnTmp, -1, -1, 0, Ord(tyPointer)),
+                        -1, -1, 0, Ord(tyPointer)),
+                      -1, Ord(tyUnknown));
+            IRIVal[last] := 1;   { statement: emit for effect, not a value }
+            IRMarkStatementNode(last);
+          end;
+        end;
         last := IRAppend(IR_EXC_CLEAR, -1, -1, -1, 0, 0);
         last := IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
         if handlerNextLabel >= 0 then

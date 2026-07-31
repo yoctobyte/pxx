@@ -1,0 +1,15 @@
+# Every caught exception used to leak its object -- nothing released it
+# whether or not `except ... as e:` named it. Fixed by releasing the
+# unbound case's single owning reference at handler-exit (the bound case
+# already relied on `e`'s own scope-exit release).
+# bug-nilpy-caught-exception-objects-are-never-freed
+i = 0
+n = 640000
+c = 0
+while i < n:
+    try:
+        v = int("notanumber")
+    except ValueError:
+        c = c + 1
+    i = i + 1
+print(c)
