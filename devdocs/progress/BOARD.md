@@ -30,7 +30,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (181)
+## backlog (180)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -43,7 +43,6 @@ _none_
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-builtin-pairs-are-not-flagged-as-tuples | N | 35 | bug | `enumerate`, `zip`, `dict.items` and `most_common` build pairs that print as lists | — |
-| bug-nilpy-chained-subscript-assignment-writes-only-the-last-target | N | 50 | bug | `xs[0] = xs[1] = 3` writes only `xs[1]` — the other target is silently skipped | — |
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
 | bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic | N | 60 | bug | User-defined dunders are ignored, and the operator then does arithmetic on the object HANDLE | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
@@ -302,7 +301,7 @@ _none_
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1093)
+## done (1094)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -648,6 +647,7 @@ _none_
 | bug-nilpy-callable-return-abi-mismatch | N | 75 | bug | nilpy: a def passed to a Callable[...] parameter marshalled by the ANNOTATION, not by the def | — |
 | bug-nilpy-callable-value-abi-sorted-key-and-builtins | N | 65 | bug | `sorted(key=...)` ignores most keys, and a callable passed as a VALUE has no common ABI | — |
 | bug-nilpy-caught-exception-objects-are-never-freed | N | 60 | bug | Every caught exception leaks its object — 640k raises cost 105 MB | — |
+| bug-nilpy-chained-subscript-assignment-writes-only-the-last-target | N | 50 | bug | `xs[0] = xs[1] = 3` writes only `xs[1]` — the other target is silently skipped | — |
 | bug-nilpy-char-vs-string-literal-ordering-compares-an-address | N | 80 | bug | `s[0] >= "0"` is ALWAYS False and `s[0] < "0"` ALWAYS True — a char is ordered against the literal's ADDRESS | — |
 | bug-nilpy-chr-of-a-variant-reads-the-slot-not-the-value | N | 65 | bug | `chr()` of a variant returns the wrong character — the slot is read as an ordinal | — |
 | bug-nilpy-class-attr-instance-traversal-crashes | N | 70 | bug | A class attribute holding an INSTANCE crashes when traversed | — |
@@ -2888,7 +2888,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [N] feature-nilpy-fallback-import (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
-- [p 50] [N] bug-nilpy-chained-subscript-assignment-writes-only-the-last-target
 - [p 50] [N] bug-nilpy-in-over-objects-ignores-eq
 - [p 50] [N] bug-nilpy-int-prints-as-float-when-the-name-is-widened-later
 - [p 50] [N] bug-nilpy-keyword-arg-vs-overload-set

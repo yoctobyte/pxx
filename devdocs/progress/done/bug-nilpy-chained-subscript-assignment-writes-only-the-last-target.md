@@ -95,3 +95,6 @@ chained-assign, a chained assign through an instance field, and the
 existing `xs[0] += 5` / `d["n"] += 5` augmented forms — all diffed against
 CPython (keys/values compared directly rather than dict iteration order,
 per the residual above).
+
+## Log
+- 2026-07-31 — resolved, commit b4166ff14.
