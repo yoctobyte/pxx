@@ -18,11 +18,12 @@ _none_
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
-## unfinished (2)
+## unfinished (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-redefining-a-def-is-ignored-the-first-body-still-runs | N | 60 | bug | Redefining a `def` silently does nothing — the FIRST body still runs | — |
+| feature-nilpy-optional-string-param-accepts-none | N | 50 | feature | nilpy: passing None to an Optional[str] / str\|None PARAMETER does not match the overload | — |
 | feature-nilpy-star-args-kwargs | N | 50 | feature | nilpy: *args / **kwargs in a def signature | — |
 
 ## blocked (4)
@@ -34,7 +35,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (196)
+## backlog (195)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -151,7 +152,6 @@ _none_
 | feature-nilpy-nested-comprehension | N | 60 | feature | nilpy: a comprehension INSIDE another comprehension's expression | — |
 | feature-nilpy-nested-def-as-value | N | 15 | feature | SUPERSEDED: nested def as a VALUE (stored, passed, returned) | — |
 | feature-nilpy-none-variant | N | 45 | feature | NilPy: `None` as a first-class variant value (VT_EMPTY) | — |
-| feature-nilpy-optional-string-param-accepts-none | N | 50 | feature | nilpy: passing None to an Optional[str] / str\|None PARAMETER does not match the overload | — |
 | feature-nilpy-parallel-for-in | A | 5 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
 | feature-nilpy-power-operator-and-divmod | N | 45 | feature | The `**` and `/=` operators and `divmod()` are missing | — |
 | feature-nilpy-process-exec-binding | N | 45 | feature | nilpy: os.system / subprocess-shaped process spawning over the RTL's libc-free execve | — |
@@ -2880,7 +2880,6 @@ _none_
 - [p 50] [N] feature-nilpy-class-field-infer-from-ctor
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [N] feature-nilpy-fstring-format-spec
-- [p 50] [N] feature-nilpy-optional-string-param-accepts-none
 - [p 50] [N] feature-nilpy-runtime-method-dispatch-on-variant
 - [p 50] [N] feature-nilpy-tuple-return
 - [p 50] [A] feature-pascal-asmmode-directive-tolerance
