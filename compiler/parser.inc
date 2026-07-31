@@ -26939,6 +26939,10 @@ var
   isPyUnit, savedPyExprMode: Boolean;
   savedNestedComments: Boolean;
   unitNeedsText: Boolean;
+  savedPasDefineCount, savedPasDefineCharLen, pdi: Integer;
+  savedPasDefineActive: array[0..MAX_PAS_DEFINES-1] of Boolean;
+  savedPasDefineHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
+  savedPasDefineValue: array[0..MAX_PAS_DEFINES-1] of Int64;
 begin
   isPath := False;
   isPyUnit := False;
@@ -27544,6 +27548,32 @@ begin
     savedCurrentUnitIdx := CurrentUnitIdx;
     CurrentUnitIdx := strIdx;
 
+    { Pascal `{$define}` is scoped to the UNIT that writes it (like FPC/Delphi
+      and like a C translation unit) — save the define table now and restore
+      it once this unit is fully lexed AND parsed, below. Snapshotting here
+      (before ExpandIncludes) rather than resetting anything means a nested
+      `{$i}` still inherits the INCLUDING unit's ambient defines, which is the
+      one case top-down visibility is correct for
+      (bug-pascal-defines-leak-across-units): without this, `{$define}` in one
+      unit stayed visible in every unit parsed afterward, so `{$ifdef}`
+      compiled different code depending on `uses` ORDER, silently. Command-
+      line/target-seeded defines (PasInitDefines, called once before any unit
+      parses) are untouched by this — they are added before the first save and
+      so survive every restore, same as an FPC/Delphi unit inherits its `-d`
+      defines. Only Active/HasValue/Value + Count/CharLen are saved, matching
+      ExpandIncludes' own save/restore shape below: PasDefineNameOff/NameLen
+      are write-once per slot and only ever read up to Count, so rolling Count
+      back is enough to also undo any NEW names this unit's own {$define}s
+      registered. }
+    savedPasDefineCount := PasDefineCount;
+    savedPasDefineCharLen := PasDefineCharLen;
+    for pdi := 0 to MAX_PAS_DEFINES - 1 do
+    begin
+      savedPasDefineActive[pdi] := PasDefineActive[pdi];
+      savedPasDefineHasValue[pdi] := PasDefineHasValue[pdi];
+      savedPasDefineValue[pdi] := PasDefineValue[pdi];
+    end;
+
     ExpandIncludes(UnitContent, GetFilePath(path));
     ExpandPasMacros(UnitContent);
 
@@ -27598,6 +27628,16 @@ begin
 
     { Parse the unit }
     ParseUnit;
+
+    { Undo every {$define}/{$undef} this unit made — see the save above. }
+    PasDefineCount := savedPasDefineCount;
+    PasDefineCharLen := savedPasDefineCharLen;
+    for pdi := 0 to MAX_PAS_DEFINES - 1 do
+    begin
+      PasDefineActive[pdi] := savedPasDefineActive[pdi];
+      PasDefineHasValue[pdi] := savedPasDefineHasValue[pdi];
+      PasDefineValue[pdi] := savedPasDefineValue[pdi];
+    end;
 
     { Restore parser position }
     TokPos := savedTokPos;

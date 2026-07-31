@@ -8,7 +8,7 @@ prio: 55
 # Pascal: conditional defines leak across unit boundaries
 
 - **Type:** bug (lexer / conditional compilation) — **Track A**
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-28, while investigating [[decide-class-namespace-scoping]]
   (an `{$ifndef}` guard was floated as a way to let two units cooperate on one
   class declaration — it appeared to work only BECAUSE of this bug).
