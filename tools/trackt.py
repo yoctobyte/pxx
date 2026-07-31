@@ -674,6 +674,13 @@ def cmd_setup(clone, fetch_corpus=False):
     rc = subprocess.run([os.path.join(clone, "tools/twatch-setup.sh")] + args,
                         cwd=clone).returncode
     print("-- git access --")
+    # Per-checkout, not committable, and silently absent on every fresh clone:
+    # .gitattributes marks BOARD.md merge=ours, but without this the driver is
+    # unknown and git falls back to a real merge — i.e. a conflict on a file
+    # that is generated and whose content is discarded anyway.
+    subprocess.run(["git", "config", "merge.ours.driver", "true"], cwd=clone,
+                   check=False)
+    print("  merge : ok — merge.ours.driver set (generated files self-heal)")
     ok = subprocess.run(["git", "fetch", "--quiet", "origin"], cwd=clone
                         ).returncode == 0
     print("  fetch : %s" % (GRN + "ok" + OFF if ok else RED + "FAIL" + OFF))

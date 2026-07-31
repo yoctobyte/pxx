@@ -47,6 +47,7 @@ import tempfile
 import time
 
 TSTATE_REL = "devdocs/progress/tstate"
+INDEX_REL = TSTATE_REL + "/TSTATE.md"  # generated; the ONE co-written tstate file
 WATCH_REL = ".testmgr/watch.json"     # daemon phase heartbeat for frontends
 PUBHEALTH_REL = ".testmgr/pubhealth.json"  # publish outcome: quiet vs stuck
 CONF_NAME = "twatch.conf"             # per-clone config (JSON, untracked)
@@ -182,20 +183,61 @@ class Clone:
                  cwd=self.path)
         return out.splitlines() if out else []
 
-    def _pull_rebase(self):
+    def _pull_rebase(self, resolve_index=False):
         """pull --rebase, but never leave a half-applied rebase behind: on any
         conflict/failure, `git rebase --abort` so the daemon can't wedge in a
         UU state (observed 2026-07-11: committed generated html conflicted and
         the publish loop span forever). Returns True on a clean rebase, False
         on conflict/failure (already aborted) — the caller decides how to
-        recover; it must NOT strand the local commit (see _drop_to_origin)."""
+        recover; it must NOT strand the local commit (see _drop_to_origin).
+
+        `resolve_index=True` first tries the one conflict that is expected and
+        meaningless (the generated TSTATE.md index) before giving up."""
         try:
             sh(["git", "pull", "--rebase", "--quiet", "origin", self.branch],
                cwd=self.path)
             return True
         except RuntimeError:
+            if resolve_index and self._resolve_index_conflict():
+                return True
             sh(["git", "rebase", "--abort"], cwd=self.path, check=False)
             return False
+
+    def _resolve_index_conflict(self):
+        """Regenerate TSTATE.md instead of merging it, then continue the rebase.
+
+        Every watcher host rewrites the WHOLE index table, including the other
+        hosts' rows, so with two hosts live the index conflicts on essentially
+        every overlapping publish — and `_drop_to_origin` then throws away a
+        perfectly good verdict (xeon lost the f3d420def527 RED this way,
+        2026-07-31). The per-host `<host>.json` / `runs-<host>.ndjson` files
+        never conflict; they are single-writer.
+
+        The index is a PURE FUNCTION of those json files, so there is nothing
+        to merge: take origin's side wholesale by rebuilding it from whatever
+        state won the race. Deliberately narrow — if anything other than the
+        index is unmerged, this refuses and the caller drops as before, because
+        a real conflict in published state is a bug we want to see, not
+        silently paper over."""
+        try:
+            unmerged = sh(["git", "diff", "--name-only", "--diff-filter=U"],
+                          cwd=self.path).split()
+        except RuntimeError:
+            return False
+        if unmerged != [INDEX_REL]:
+            return False
+        try:
+            regen_index(self)
+            sh(["git", "add", "--", INDEX_REL], cwd=self.path)
+            # -c core.editor=true: --continue must never wait on an editor
+            sh(["git", "-c", "core.editor=true", "rebase", "--continue"],
+               cwd=self.path)
+        except RuntimeError:
+            return False
+        print("twatch: regenerated %s over a rebase conflict (expected with "
+              "two hosts) — verdict kept" % os.path.basename(INDEX_REL),
+              flush=True)
+        return True
 
     def _behind(self):
         """How many commits the clone is behind origin (0 when caught up).
@@ -279,7 +321,7 @@ class Clone:
             return
         sh(["git", "commit", "--quiet", "-m", message, "--"] + paths,
            cwd=self.path)
-        if not self._pull_rebase():
+        if not self._pull_rebase(resolve_index=True):
             self._drop_to_origin("rebase conflict onto origin")
             return
         for attempt in range(5):
@@ -289,7 +331,7 @@ class Clone:
                 return
             except RuntimeError:
                 time.sleep(2 + attempt * 3)
-                if not self._pull_rebase():
+                if not self._pull_rebase(resolve_index=True):
                     self._drop_to_origin("rebase conflict onto origin")
                     return
         # push kept being rejected without a rebase conflict (origin racing us
