@@ -9,7 +9,7 @@ prio: 85
 
 - **Type:** bug (Pascal frontend / shared `parser.inc`) — **Track P** (edits A's
   shared ground: `compiler/parser.inc`, so obeys A's gate + no-concurrent-edit)
-- **Status:** urgent — native tier is RED on master
+- **Status:** done
 - **Opened:** 2026-07-31, from Track T tstate.
 
 ## What is red
@@ -46,7 +46,53 @@ tools/testmgr.py --tier native --job 'test-core#src:test/test_property_redecl_b2
 target, not just the last"* — a **Track N** fix that edited the **shared**
 `compiler/parser.inc` (plus `pyparser.inc`, `Makefile`, a `.npy` test).
 
-## Hypothesis (NOT yet measured — verify before acting)
+## Root cause (measured)
+
+Hypothesis 1 below, confirmed by reading the actual dispatch rather than by
+inference from the diff:
+
+`compiler/parser.inc:19367` — the statement-level call site — decides whether
+`ParseLValueAST`'s result is *already a statement* purely by node kind:
+
+```pascal
+valNode := ParseLValueAST(idx, TokPos - 2);
+if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) or
+   (ASTKind[valNode] = AN_INTF_CALL) or (ASTKind[valNode] = AN_CALL_IND) or
+   (ASTKind[valNode] = AN_IF) then
+  node := valNode
+else
+begin
+  Expect(tkAssign, ':=');    { <-- the `:=` was already consumed by the setter path }
+```
+
+The default-indexed-property setter path consumes its own `:=` and value. It
+used to return the setter `AN_CALL`, which that test accepted. Since
+`d9c5eb4fadbf` it returns an `AN_COMMA`, so `c[4] := 11;` falls to the `else`
+and the parser demands a second `:=` — landing on the next token, `writeln`.
+Exactly the observed diagnostic.
+
+**Hypothesis 2 (the `tk` clobber) is dead**: `tk` is assigned immediately before
+`Result := node; Exit`, so nothing reads it afterwards.
+
+## Fix
+
+Landed as **`e09febaf6`** — *"fix(core): gate chained-subscript-assign value
+wrapping to NilPy only"*. `PyExprMode` gates the temp/`AN_COMMA` rewrite: NilPy
+keeps Python's chained-assignment semantics, Pascal gets its plain setter
+`AN_CALL` back. Pascal has no chained assignment, so the hidden temp bought it
+nothing in the first place.
+
+Confirmed by Track T: `f575b59cfde2` GREEN (native), with
+`FIXED:test-core#src:test/test_indexed_property.pas,test-core#src:test/test_property_redecl_b283.pas`.
+
+**Coordination note.** Two Track A agents worked this concurrently and produced
+the same `PyExprMode` gate independently; `e09febaf6` is the one that landed, the
+duplicate was discarded unpushed. The sole-A guard did not hold here — worth
+remembering that a tstate RED is visible to every agent at once, so an unclaimed
+regression attracts duplicate work. Claiming the ticket *before* touching shared
+files is what would have caught it.
+
+## Original hypotheses (kept for the record)
 
 The changed hunk is in `ParseLValueAST`'s default indexed-property **setter**
 path, which is shared: Pascal's `obj[i] := v` reaches it too, not only NilPy
@@ -81,3 +127,6 @@ call. Do not simply revert `d9c5eb4fadbf`.
   (bad `b1976742df2c`) is also STILL-RED, and the cross-target
   `test-c-conformance-*` / `test-sqlite-threads-*` / `test-lua-cross` reds in
   the `full` tier at `a9e9528c7f84` are pre-existing, not from this commit.
+
+## Log
+- 2026-07-31 — resolved, commit e09febaf6.
