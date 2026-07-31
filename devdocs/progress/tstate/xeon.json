@@ -2072,10 +2072,10 @@
  },
  "last_bench": {
   "conf_rows": 550,
-  "date": "2026-07-31T21:42:53Z",
+  "date": "2026-07-31T22:09:06Z",
   "rc": 0,
   "rows": 30,
-  "sha": "2add2ebb487b2791784b7538dfe21df144ce856e"
+  "sha": "f9396231e2e1155226241cc12e9a591d7fe20a2f"
  },
  "last_full": {
   "date": "2026-07-31T21:49:29Z",
