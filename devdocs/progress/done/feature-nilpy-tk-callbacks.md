@@ -67,3 +67,24 @@ a mechanism, not more surface.
 `make test-nilpy` (compile-only for the façade, as the other tkinter tests are),
 an `examples/tk/` demo that runs under Xvfb and prints what the callback saw,
 and `settings.py` getting past line 144.
+
+## VERIFIED and CLOSED 2026-07-31
+
+`examples/tk/callbacks.npy` was compile-only in `test-nilpy`, and RUNNING it
+showed the feature was not actually whole: it died with `'Scrollbar' object has
+no attribute 'set'` — the scrollbar wiring (`yscrollcommand=self.bar.set`) takes
+a bound method as a VALUE, and the frontend's trailing-underscore fallback only
+fires when a call follows. Fixed by naming the method what CPython names it
+([[bug-lib-tkinter-trailing-underscore-params-block-kwargs]]).
+
+The example now runs clean under Xvfb — bound method, plain def, lifted lambda,
+two variable traces, a canvas tag query — and its full output is ASSERTED in
+`lib-test`'s `tk-nilpy` step rather than merely compiled, so the next regression
+of this kind is caught by Track B's own gate.
+
+The remaining item named above, a lambda calling a method on a captured object,
+is [[feature-nilpy-lambda-compiled-closure]] (Track N) and works today via the
+lift path — `callbacks.npy` exercises it.
+
+## Log
+- 2026-07-31 — resolved, commit 2c9dc2317.

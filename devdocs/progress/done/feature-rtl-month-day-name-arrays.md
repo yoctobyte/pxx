@@ -8,7 +8,7 @@ prio: 55
 # RTL: month and day name arrays
 
 - **Type:** feature (library / RTL date formatting) — **Track B**
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-26 — found while wiring [[feature-lib-regex-engine]] into
   `make lib-test`: the target is ALREADY red before that change, and the red was
   not ticketed.
@@ -44,3 +44,14 @@ callers expect the `sysutils` spelling.
 
 `make lib-test` reaches and passes the `lib_synapse` step (Track B: build with
 `$(PXX_STABLE)`, never rebuild the compiler).
+
+## RESOLVED — verified 2026-07-31
+
+`lib/rtl/sysutils.pas` declares all four arrays as writable module variables
+(`ShortMonthNames` / `LongMonthNames` / `ShortDayNames` / `LongDayNames`) and
+initialises them to the English table, which is what Synapse's `CustomMonthNames`
+copies out of. `test/lib_synapse.pas` compiles with `--mimic-fpc` and passes; the
+step is asserted in `lib-test` and the gate is green.
+
+## Log
+- 2026-07-31 — resolved, commit 2c9dc2317.

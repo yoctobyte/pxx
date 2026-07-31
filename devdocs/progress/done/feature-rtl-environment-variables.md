@@ -76,3 +76,21 @@ The data is already reachable; nothing needs a syscall.
 
 `make test` + a test that reads a variable the harness sets, and a `.npy` doing
 the same through `os.environ.get`, both diffed against CPython.
+
+## RESOLVED 2026-07-31 — read side verified on all three surfaces
+
+Re-measured end to end with one variable set in the parent shell:
+
+| surface | probe | result |
+| --- | --- | --- |
+| NilPy | `os.environ.get(...)` / `os.getenv(...)` | both return the value |
+| Pascal | `sysutils.GetEnvironmentVariable` | returns the value |
+| C | `getenv` via `lib/crtl` | returns the value |
+
+The write side (`setenv`/`putenv`, `os.environ[k] = v`) is deliberately NOT part
+of this ticket — the question of whether a write should be visible to a spawned
+child is a policy call and is now filed as [[decide-env-write-side]] rather than
+half-answered here.
+
+## Log
+- 2026-07-31 — resolved, commit 2c9dc2317.

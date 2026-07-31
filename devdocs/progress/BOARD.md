@@ -27,14 +27,13 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (186)
+## backlog (183)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
-| bug-lib-tkinter-trailing-underscore-params-block-kwargs | B | 40 | bug | tkinter facade parameters named with a trailing underscore cannot be passed by name | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-builtin-pairs-are-not-flagged-as-tuples | N | 35 | bug | `enumerate`, `zip`, `dict.items` and `most_common` build pairs that print as lists | — |
@@ -70,6 +69,7 @@ _none_
 | decide-abi-portable-vs-target-split | A | 50 | decide |  | — |
 | decide-class-namespace-scoping | U | 65 | decide | Decide: how should two libraries be allowed to export the same class name? | — |
 | decide-dns-libc-backend-shape | U | 40 | decide | Track U: how should a libc-backed DNS resolver be reached from libc-free static ELF? | — |
+| decide-env-write-side | U | 40 | decide | Policy: does pxx support WRITING the environment (setenv/putenv, os.environ[k]=v) — and does a write reach a child? | — |
 | decide-gpc-as-corpus-target | U | 45 | decide | Track U: reject the GPC corpus wish, or keep it? Two sweeps have called it a rejection candidate. | — |
 | decide-ilja-tui-render-model | U | 45 | decide | Track U: four render/input questions Ilja (TUI IDE face) must answer before any code | — |
 | decide-nilpy-hasattr-per-instance-semantics | U | 35 | decide | decide: should NilPy's hasattr answer per-INSTANCE or per-CLASS? | — |
@@ -144,7 +144,6 @@ _none_
 | feature-nilpy-stdlib-coverage-gaps-measured | N | 30 | feature | Measured stdlib coverage: json and re are solid; os, time and math.fabs are absent | — |
 | feature-nilpy-str-format-multiarg | N | 40 | feature | `str.format` with more than one argument | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 60 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
-| feature-nilpy-tk-callbacks | B | 65 | feature | nilpy/PCL: tkinter callbacks — a bound method as command=/bind(), via Tcl_CreateCommand | — |
 | feature-nilpy-tkinter-facade-widening | B | 60 | feature | tkinter façade: the surface a real GUI app needs (callables, ttk, Menu, Text, tuple coords) | — |
 | feature-nilpy-tkinter-facade | N | 50 | feature | nilpy: tkinter-shaped façade over lib/pcl/tk.pas — widget objects, kwargs, command callbacks | feature-nilpy-star-args-kwargs |
 | feature-nilpy-yield-outside-a-for-loop | N | 35 | feature | `yield` only works inside a `for` — a while-loop generator does not compile | — |
@@ -186,8 +185,6 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-inline-asm-xmm-operands |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
-| feature-rtl-environment-variables | B | 45 | feature | No access to environment variables anywhere in the RTL | — |
-| feature-rtl-month-day-name-arrays | B | 55 | feature | RTL: ShortMonthNames / LongMonthNames / day-name arrays — lib-test's synapse step is red on them | — |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 40 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
@@ -304,7 +301,7 @@ _none_
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1075)
+## done (1079)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -609,6 +606,7 @@ _none_
 | bug-length-rejects-non-variable | A | 50 | bug | bug: Length() rejects a non-variable argument (literal / expression) | — |
 | bug-lfm-streaming-skips-constructors | B | 50 | bug | bug: RTTI .lfm streaming skips constructors → widgets with constructor state broke | — |
 | bug-lib-test-console-solitaire-flaky | B | 45 | bug | lib-test flaky: console_solitaire 'aq' smoke prints moves=0/1/2 across runs despite fixed seed NewGame(1) — input-read timing, fails the moves=2 expectation intermittently | — |
+| bug-lib-tkinter-trailing-underscore-params-block-kwargs | B | 40 | bug | tkinter facade parameters named with a trailing underscore cannot be passed by name | — |
 | bug-low-missing-high-wrong-nonzero-array | A | 50 | bug | bug: Low() missing; High() wrong on non-zero-based arrays | — |
 | bug-managed-byref-string-param-store | A | 50 | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
 | bug-managed-length-via-pointer-deref | A | 50 | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
@@ -1171,6 +1169,7 @@ _none_
 | feature-nilpy-re-module | N | 50 | feature | nilpy: re module (match/search/sub/findall/fullmatch/compile) over the regex engine | feature-lib-regex-engine |
 | feature-nilpy-str-methods | N | 55 | feature | NilPy: string methods (.upper/.lower/.strip/.split/.join/.startswith...) | — |
 | feature-nilpy-tk-binding | B | 45 | feature | Thin Tcl/Tk embed for pxx (lib/pcl/tk.pas) + a tkinter-shaped NilPy surface — v1 landed | — |
+| feature-nilpy-tk-callbacks | B | 65 | feature | nilpy/PCL: tkinter callbacks — a bound method as command=/bind(), via Tcl_CreateCommand | — |
 | feature-nilpy-tuple-return | N | 50 | feature | nilpy: return a tuple — `return 1, 2` (and unpack at the call site) | — |
 | feature-nilpy-tuple-unpack | N | 55 | feature | NilPy: sequence unpacking (`a, b = ...`, `for k, v in ...`) | — |
 | feature-nilpy-wire-pyeval-exec | A | 55 | feature | Wire pyeval into NilPy exec() — auto-use triggers an unrelated str-index segfault | — |
@@ -1230,7 +1229,9 @@ _none_
 | feature-riscv32-record-function-results | A | 50 | feature | riscv32: support record (by-value struct) function results | — |
 | feature-riscv32-var-param-forwarding | A | 50 | feature | riscv32: a var parameter forwarded to a nested var parameter loses its address | — |
 | feature-rtl-conversion-and-bitset-library | B | 50 | feature | RTL gaps — string/number conversion + a bit-set type (surfaced by the demos) | — |
+| feature-rtl-environment-variables | B | 45 | feature | No access to environment variables anywhere in the RTL | — |
 | feature-rtl-image-bitmap-library | B | 50 | feature | RTL image bitmap library | — |
+| feature-rtl-month-day-name-arrays | B | 55 | feature | RTL: ShortMonthNames / LongMonthNames / day-name arrays — lib-test's synapse step is red on them | — |
 | feature-rtl-terminal-raw-mode | B | 50 | feature | Terminal raw mode and unbuffered input support (libc-free) | — |
 | feature-rtti-field-reflection | A | 45 | feature | RTTI: field get/set by name (extends the VMT-8 method-reflection blob) | — |
 | feature-rtti-layout-table | A | 50 | feature | Target-independent layout RTTI (Tier B) | feature-cross-bootstrap |
@@ -2831,7 +2832,6 @@ _none_
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [A] feature-a-typeref-handle
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
-- [p 65] [B] feature-nilpy-tk-callbacks
 - [p 60] [N] bug-nilpy-comprehension-variable-leaks-and-clobbers-the-enclosing-scope
 - [p 60] [N] bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
@@ -2866,7 +2866,6 @@ _none_
 - [p 55] [P] feature-pascal-corpus-generics
 - [p 55] [A] feature-pascal-type-helpers
 - [p 55] [T] feature-pasmith-multi-unit-programs
-- [p 55] [B] feature-rtl-month-day-name-arrays
 - [p 55] [A] feature-signal-siginfo-ucontext
 - [p 53] [B] feature-esp-peripheral-callback-api
 - [p 53] [A] feature-threadsafe-heap-optimize
@@ -2923,7 +2922,6 @@ _none_
 - [p 45] [P] feature-pascal-corpus-passrc
 - [p 45] [A] feature-pascal-exitcode-finalization-halt
 - [p 45] [B] feature-real-dynlib-loader
-- [p 45] [B] feature-rtl-environment-variables
 - [p 45] [T] feature-t-uforth-benchmark-harness
 - [p 45] [A] feature-toolchain-cli-ux
 - [p 45] [A] feature-writeln-as-library
@@ -2934,8 +2932,8 @@ _none_
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [U] decide-dns-libc-backend-shape (unblocks 1)
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
-- [p 40] [B] bug-lib-tkinter-trailing-underscore-params-block-kwargs
 - [p 40] [N] bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter
+- [p 40] [U] decide-env-write-side
 - [p 40] [U] decide-nilpy-transitive-nested-def-capture
 - [p 40] [A] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision

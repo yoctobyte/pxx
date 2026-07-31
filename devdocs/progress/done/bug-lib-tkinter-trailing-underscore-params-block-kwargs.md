@@ -94,3 +94,6 @@ merely compiled.
 renamed parameter passed BY KEYWORD, plus `set`/`lower`/`destroy` called by
 CPython's name — asserted in `lib-test`'s `tk-nilpy` step under Xvfb, alongside
 `callbacks.npy`'s full output.
+
+## Log
+- 2026-07-31 — resolved, commit 2c9dc2317.
