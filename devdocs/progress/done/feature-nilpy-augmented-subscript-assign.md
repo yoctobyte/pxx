@@ -8,7 +8,7 @@ prio: 55
 # nilpy: `d[k] += 1` is not an lvalue
 
 - **Type:** feature (Nil-Python frontend, assignment lowering) — **Track N**
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-26 — found while adding `collections.Counter`
   ([[feature-nilpy-collections-and-string-methods]]); pre-existing, reproduced on
   the pinned stable, unrelated to Counter.
@@ -68,3 +68,6 @@ faith alone: test/test_nilpy_augmented_subscript_assign.npy. Gate: make
 test-nilpy green, self-host fixedpoint, testmgr --tier quick.
 
 Ticket closed.
+
+## Log
+- 2026-07-31 — resolved, commit 412e08b6d.
