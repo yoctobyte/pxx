@@ -32,7 +32,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (170)
+## backlog (169)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -128,7 +128,6 @@ lives in git, not in a timestamp._
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
-| feature-nilpy-default-args-on-nested-defs | N | 55 | feature | NilPy: default arguments as explicit by-value capture | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nilpy-lambda-compiled-closure | N | 45 | feature | nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics) | — |
 | feature-nilpy-map-and-filter-over-a-lambda | N | 40 | feature | `map(lambda ...)` is unimplemented and `filter` does not exist | — |
@@ -293,7 +292,7 @@ lives in git, not in a timestamp._
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1107)
+## done (1108)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1151,6 +1150,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-container-method-gaps | N | 60 | feature | Container-method gaps: `list.remove`, `list.index`, `list.copy`, one-argument `dict.pop` | — |
 | feature-nilpy-decorators-dataclass | N | 55 | feature | NilPy: @dataclass v1 (decorator syntax, annotated scalar fields, defaults) | — |
 | feature-nilpy-def-params | N | 55 | feature | NilPy: raise def/method parameter limit past 4 | — |
+| feature-nilpy-default-args-on-nested-defs | N | 55 | feature | NilPy: default arguments as explicit by-value capture | — |
 | feature-nilpy-dict | N | 60 | feature | NilPy: dict v1 — TPyDict | — |
 | feature-nilpy-dotted-package-imports | N | 55 | feature | nilpy: dotted package imports — `from reportlab.pdfgen import canvas`, so a shim can be NAMED for the module it implements | — |
 | feature-nilpy-exception-message-text | N | 30 | feature | NilPy: exception message text — super().__init__(msg) discarded, str(e) empty | — |
@@ -2883,7 +2883,6 @@ lives in git, not in a timestamp._
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
 - [p 55] [N] feature-nilpy-corpus-uforth
-- [p 55] [N] feature-nilpy-default-args-on-nested-defs
 - [p 55] [O] feature-opt-heap-per-thread-cache
 - [p 55] [P] feature-pascal-corpus-generics
 - [p 55] [A] feature-pascal-type-helpers

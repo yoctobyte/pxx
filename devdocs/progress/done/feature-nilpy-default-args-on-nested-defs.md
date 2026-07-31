@@ -48,3 +48,6 @@ regression coverage until now). Added
 two functions made in sequence capturing different values, and the captured
 value surviving after the enclosing def returns — plus `--tier quick` +
 self-host byte-identical.
+
+## Log
+- 2026-07-31 — resolved, commit 7c0c68492.
