@@ -6,7 +6,7 @@ prio: 45
 
 - **Type:** docs
 - **Track:** D (docs) — with a Track W follow-on
-- **Status:** **blocked** — the domain is **`pxxc.org`** (registered 2026-07). Blocked not on the
+- **Status:** backlog — UNBLOCKED 2026-07-31: pxxc.org verified live and serving content. The "do when live" wiring (canonical URL in docs/README/installers) is now ready to do; NOT yet done (0 refs in-repo).
   name but on the site being **live**: publishing a canonical URL that does not resolve is worse
   than publishing none — a 404 on our own link teaches the first visitors the domain is dead.
   Unblock = site serves something real. Opened 2026-07-12.
