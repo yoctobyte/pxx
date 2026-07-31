@@ -58,3 +58,6 @@ self-host byte-identical.
 It is the last known wall in `key_analysis.py` (the module has cleared a dozen
 already), and dict-of-list comprehensions are ordinary Python — this will show up
 again in any real corpus.
+
+## Log
+- 2026-07-31 — resolved, commit b30f724e8.
