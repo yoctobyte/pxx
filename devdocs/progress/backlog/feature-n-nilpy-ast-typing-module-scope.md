@@ -52,7 +52,29 @@ parseable block of its own — fields must exist before any body is parsed. See
 [[project_nilpy_class_pipeline_ordering]]. Closing that is the same
 declaration-phase work as (2).
 
-## Gate
+## Recon 2026-07-31 — confirmed still genuinely open, not stale
 
-`test-nilpy` green + `--tier quick` + self-host byte-identical + `make
-fpc-check` (see [[feedback_fpc_bootstrap_advisory_invisible_to_local_gate]]).
+Given how many other tickets this session turned out to already be fixed,
+re-checked this one for real rather than assuming. It is NOT stale — the
+exact "x = c.two(1)" repro from item (2) above still reproduces:
+
+```python
+class C:
+    def two(self, v): return v * 2
+c = C()
+x = c.two(1)
+print(x)      # CPython: 2      pxx: 2.0
+x = 3.5
+print(x)      # both: 3.5
+```
+
+`x`'s first binding (`c.two(1)`, an int) gets silently widened to float
+because the module pre-pass never saw it as a note-worthy assignment (the
+method-call RHS is skipped, per item 2), so the LATER `x = 3.5` binding is
+the only one the widening table learns about, and the whole slot renders
+as float from the start — the exact "no WIDENING for that name" defect
+this ticket already predicted, still present. Not attempted this pass:
+the fix needs untangling `PyRegisterClassMembers`'s dual dataclass-table
+role first (a real, if bounded, refactor of the class-member registration
+pipeline), which is more than a quick patch and carries real risk of
+subtly breaking dataclass defaults if rushed.
