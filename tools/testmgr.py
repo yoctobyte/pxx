@@ -29,6 +29,7 @@ import argparse
 import atexit
 import filecmp
 import fnmatch
+import glob
 import json
 import os
 import re
@@ -363,6 +364,59 @@ def reap_stale(info):
         pass
 
 
+def drop_run_tmp():
+    """Remove THIS run's scratch dir. Registered atexit — see sweep_orphan_tmp.
+
+    Safe to delete on exit: RUN_TMP holds built test binaries, not the per-job
+    logs a report points at (those live in `logdir`, kept deliberately).
+    """
+    shutil.rmtree(RUN_TMP, ignore_errors=True)
+
+
+def sweep_orphan_tmp():
+    """Reclaim scratch dirs belonging to runs that no longer exist.
+
+    Cleanup previously existed ONLY on the abnormal path: reap_stale() removes
+    a scratch dir, but only when a *live* run notices a wedged predecessor
+    through the lock file. A normal exit released the lock and left its
+    ~375 MB scratch dir behind forever.
+
+    That is not a slow leak on a watcher box. `/tmp` on xeon is a **31 GB
+    tmpfs — RAM** — and the daemon starts a run every cycle: 7.3 GB
+    accumulated in under three hours (2026-07-31), on track to exhaust the
+    whole tmpfs overnight and to compete for the very memory testmgr's
+    scheduler packs jobs against. A full /tmp then fails jobs that are
+    perfectly healthy, i.e. it manufactures reds.
+
+    Liveness is the pid in the directory name: if the process is gone the dir
+    is garbage, whoever created it and however it died (including SIGKILL and
+    power cuts, which no atexit can cover).
+    """
+    for p in glob.glob("/tmp/testmgr-scratch-*"):
+        try:
+            pid = int(p.rsplit("-", 1)[1])
+        except (ValueError, IndexError):
+            continue                      # not ours / not pid-suffixed
+        if pid == os.getpid():
+            continue
+        try:
+            os.kill(pid, 0)               # alive: leave it strictly alone
+        except ProcessLookupError:
+            shutil.rmtree(p, ignore_errors=True)
+        except PermissionError:
+            pass                          # another user's live run
+    # Per-job log dirs are KEPT (reports cite their paths) but not forever.
+    cutoff = time.time() - LOGDIR_KEEP_SECS
+    for p in glob.glob("/tmp/testmgr-*"):
+        if p.startswith("/tmp/testmgr-scratch-"):
+            continue
+        try:
+            if os.path.isdir(p) and os.path.getmtime(p) < cutoff:
+                shutil.rmtree(p, ignore_errors=True)
+        except OSError:
+            pass
+
+
 def start_heartbeat(tier):
     """Beat from a daemon thread, for the WHOLE process lifetime.
 
@@ -484,6 +538,10 @@ CORPUS_RE = re.compile(r"library_candidates/([^/\s\"']+)")
 # Job.script); created in main(), world-unreadable is not needed — /tmp
 # hygiene only, the OS reaps it
 RUN_TMP = "/tmp/testmgr-scratch-%d" % os.getpid()
+# How long a finished run's per-job log dir survives for post-mortem. Reports
+# cite these paths, so they outlive the run — but not indefinitely (see
+# sweep_orphan_tmp; /tmp is a tmpfs on the watcher box).
+LOGDIR_KEEP_SECS = 24 * 3600
 
 # A whole /tmp path token — including the bare DIRECTORY form.  The old plain
 # str.replace of "/tmp/" missed `LD_LIBRARY_PATH=/tmp`, so recipes that built a
@@ -2087,7 +2145,9 @@ def main():
         print("total: %d jobs" % len(jobs))
         return 0
 
+    sweep_orphan_tmp()                  # reclaim dead runs' scratch first
     os.makedirs(RUN_TMP, exist_ok=True)
+    atexit.register(drop_run_tmp)       # ...and never become one ourselves
     scale = calibrate()
     # propagate to child scripts with their own inner `timeout` calls
     os.environ["TESTMGR_TIME_SCALE"] = "%.2f" % scale
