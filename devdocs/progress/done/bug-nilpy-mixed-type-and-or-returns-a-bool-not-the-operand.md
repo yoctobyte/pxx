@@ -71,3 +71,6 @@ the comment names.
 `make test-nilpy` + self-host byte-identical, plus a `.npy` of the table above
 against CPython's own output, and specifically a mixed `or` used AS A CONDITION
 (`if 0 or "x":`) to confirm the truthiness path is unchanged.
+
+## Log
+- 2026-07-31 — resolved, commit 83ef062fcea265fd31239a08bd739546abfa0234.
