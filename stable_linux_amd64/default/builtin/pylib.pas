@@ -111,6 +111,8 @@ type
       (bug-a-nilpy-list-augmented-add-segfaults). }
     function extend(other: TPyList): TPyList;
     procedure clear;
+    { list.sort() -- in place, no key=/reverse= yet (see the implementation). }
+    function sort: TPyList;
     { `with open(p, "r") as f: f.read()`. The read-slurp model makes open()
       yield the file's LINES, and each keeps its newline, so joining them
       reproduces the file byte for byte — which is what CPython's read()
@@ -122,6 +124,19 @@ type
       print-dumps-rtti-memory). }
     procedure close;
     function readlines: TPyList;
+    { set methods. NilPy backs `set` with the same TPyList as `list`, built via
+      .add() instead of .append() (one sequence representation, see FIsTuple's
+      comment above), so these are ordinary instance methods rather than a
+      distinct set class — set(x).union(set(y)) and the OPERATOR forms
+      (pyset_and/or/sub/xor in this unit) share the same pycontains-based
+      membership test. }
+    function issubset(other: TPyList): Boolean;
+    function issuperset(other: TPyList): Boolean;
+    function union(other: TPyList): TPyList;
+    function intersection(other: TPyList): TPyList;
+    function difference(other: TPyList): TPyList;
+    { set.discard: like remove(), but does NOT raise when the value is absent. }
+    procedure discard(const v: Variant);
     property Items[i: Integer]: Variant read at write put; default;
   end;
 
@@ -422,6 +437,7 @@ function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
   (`{name}`) and index fields (`{0}`) are NOT here: they fail loudly rather
   than being dropped, because a format spec decides what is PRINTED. }
 function pystr_format(const fmt: AnsiString; const a: Variant): AnsiString;
+function pystr_format2(const fmt: AnsiString; const a: Variant; const b: Variant): AnsiString;
 { Python's `"%s=%d" % args` — the printf-style operator, translated placeholder
   by placeholder into the {}-spec grammar below so padding, precision and base
   conversion have ONE implementation rather than two that drift. args is a single
@@ -504,6 +520,7 @@ function pyfloat_ofint(v: Int64): Double;
 function pyos_path_isabs(const p: AnsiString): Boolean;
 function pyos_path_join(const a: AnsiString; const b: AnsiString): AnsiString;
 function pyos_path_dirname(const p: AnsiString): AnsiString;
+function pyos_path_basename(const p: AnsiString): AnsiString;
 function pyos_path_exists(const p: AnsiString): Boolean;
 function pyos_path_abspath(const p: AnsiString): AnsiString;
 function pyos_getcwd: AnsiString;
@@ -673,6 +690,7 @@ function pyvar_to_int(const v: Variant): Int64;
 function pylen_v(const v: Variant): Int64;
 function pyord_v(const v: Variant): Int64;
 function pyord_s(const s: AnsiString): Int64;
+function PyChrRangeCheck(n: Int64): Int64;
 function pymul_v(const a: Variant; const b: Variant): Variant;
 { Python's `**`. int**non-negative-int is exact within Int64 (exponentiation
   by squaring, so it inherits whatever overflow behaviour chained `*` already
@@ -866,6 +884,9 @@ function pyzip(a: TPyList; b: TPyList): TPyList;
   for-HEADER form is a counted loop and never comes here; this is the
   materialised list of [index, item] pairs, the same shape pyzip builds. }
 function pyenumerate(a: TPyList): TPyList;
+{ `enumerate(xs, start)` / `enumerate(xs, start=N)` — same as pyenumerate with
+  the index offset by `start`. }
+function pyenumerate2(a: TPyList; start: Integer): TPyList;
 { Python's TWO-argument round(x, ndigits) — a float rounded to that many
   decimals, unlike the one-argument form which yields an int. Half-away-from-
   zero rather than CPython's banker's rounding: the difference shows only on an
@@ -878,11 +899,14 @@ function pyround_n(x: Double; n: Integer): Double;
   reaches the RTL's own Floor/Ceil for these two names. }
 function pymath_floor(x: Double): Int64;
 function pymath_ceil(x: Double): Int64;
+function pymath_fabs(x: Double): Double;
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
 function max(l: TPyList): Variant; overload;
 function min(l: TPyList): Variant; overload;
+function max(const s: AnsiString): AnsiString; overload;
+function min(const s: AnsiString): AnsiString; overload;
 function any(l: TPyList): Boolean;
 function all(l: TPyList): Boolean;
 
@@ -898,6 +922,10 @@ function reversed(const s: AnsiString): TPyList; overload;
 { `hex(n)` — Python spells it with the 0x prefix and lower-case digits, and
   spells a negative as -0x… rather than in two's complement. }
 function hex(n: Int64): AnsiString;
+{ `oct(n)` / `bin(n)` — same 0-prefix-and-sign convention as hex: 0o/0b, a
+  leading '-' for a negative magnitude, and '0o0'/'0b0' for zero. }
+function oct(n: Int64): AnsiString;
+function bin(n: Int64): AnsiString;
 function len(l: TPyList): Integer;
 function len(d: TPyDict): Integer; overload;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
@@ -926,6 +954,11 @@ function next(c: TPyCounter): Int64;
 function pyvar_holds(const v: Variant; k: Int64): Boolean;
 function pycontains(l: TPyList; const v: Variant): Boolean;
 function pyvar_contains(const c: Variant; const v: Variant): Boolean;
+function pyset_and(a: TPyList; b: TPyList): TPyList;
+function pyset_or(a: TPyList; b: TPyList): TPyList;
+function pyset_sub(a: TPyList; b: TPyList): TPyList;
+function pyset_xor(a: TPyList; b: TPyList): TPyList;
+function pydict_or(a: TPyDict; b: TPyDict): TPyDict;
 { `sub in s` on a STRING is SUBSTRING containment in Python, not element
   membership. Without a case of its own it reached pycontains, which read the
   string handle as a TPyList and scanned its header words as variant slots —
@@ -1005,6 +1038,12 @@ function pystr_join(const sep: AnsiString; l: TPyList): AnsiString;
 function pystr_split_ws(const s: AnsiString): TPyList;
 function pystr_split_sep(const s: AnsiString; const sep: AnsiString): TPyList;
 function pystr_split_sep_max(const s: AnsiString; const sep: AnsiString; maxsplit: Integer): TPyList;
+{ str.rsplit(sep, maxsplit) — splits counted from the right end. }
+function pystr_rsplit_sep_max(const s: AnsiString; const sep: AnsiString; maxsplit: Integer): TPyList;
+{ str.partition(sep) / str.rpartition(sep) — a 3-tuple (before, sep, after) at
+  the first/last occurrence, or (s,'','') / ('','',s) when sep is absent. }
+function pystr_partition(const s: AnsiString; const sep: AnsiString): TPyList;
+function pystr_rpartition(const s: AnsiString; const sep: AnsiString): TPyList;
 function pystr_splitlines(const s: AnsiString): TPyList;
 { str.replace(old, new[, count]) — CPython semantics: non-overlapping, left to
   right, a NEGATIVE count means "every occurrence", and an EMPTY pattern inserts
@@ -1103,6 +1142,22 @@ begin
                            pystr_of(Int64(Length(s))) + ' found');
   end;
   Result := Ord(s[1]);
+end;
+
+{ NilPy strings are byte strings (bug-nilpy-encode-ignores-the-codec), so
+  chr()'s honest range is a single byte, 0..255 -- the same range ord()
+  already agrees with (pyord_s takes exactly one byte). The underlying `Chr`
+  intrinsic has no bounds check of its own and silently truncated (`chr(8364)`
+  gave a wrong byte instead of an error), a silent-wrong-value bug worse than
+  the ticket's own repro
+  (bug-nilpy-non-ascii-string-surface-measured). Loudly refusing what the byte
+  model cannot represent, rather than truncating, needs no resolution of the
+  larger byte-vs-codepoint string-model question that ticket defers. }
+function PyChrRangeCheck(n: Int64): Int64;
+begin
+  if (n < 0) or (n > 255) then
+    raise ValueError.Create('chr() arg not in range(256) -- NilPy strings are byte strings');
+  Result := n;
 end;
 
 function pystr_at(const s: AnsiString; i: Integer): Char;
@@ -1386,6 +1441,95 @@ begin
   Result.append(Copy(s, st, n - st + 1));
 end;
 
+{ s.rsplit(sep, maxsplit): like split(sep, maxsplit) but the splits are taken
+  from the RIGHT end — the fields nearest the end are separated first, and
+  whatever remains at the front (including further separators) is the FIRST
+  field, e.g. "a,b,c".rsplit(",", 1) is ["a,b", "c"]. maxsplit < 0 behaves like
+  the unlimited split(sep). }
+function pystr_rsplit_sep_max(const s: AnsiString; const sep: AnsiString; maxsplit: Integer): TPyList;
+var i, j, n, m, en, done: Integer; hit: Boolean; parts: TPyList; k: Integer;
+begin
+  n := Length(s);
+  m := Length(sep);
+  if m = 0 then
+  begin
+    raise ValueError.Create('empty separator');
+  end;
+  if maxsplit < 0 then begin Result := pystr_split_sep(s, sep); Exit; end;
+  { collect fields walking backward, then reverse into Result }
+  parts := TPyList.Create;
+  en := n; i := n; done := 0;
+  while (i >= 1) and (done < maxsplit) do
+  begin
+    hit := False;
+    if i - m + 1 >= 1 then
+    begin
+      hit := True;
+      for j := 1 to m do
+        if s[i - m + j] <> sep[j] then begin hit := False; Break; end;
+    end;
+    if hit then
+    begin
+      parts.append(Copy(s, i + 1, en - i));
+      i := i - m; en := i; Inc(done);
+    end
+    else
+      Dec(i);
+  end;
+  parts.append(Copy(s, 1, en));
+  Result := TPyList.Create;
+  for k := parts.count - 1 downto 0 do Result.append(parts.at(k));
+end;
+
+{ s.partition(sep) — a 3-tuple (before, sep, after) at the FIRST occurrence, or
+  (s, '', '') when sep is absent. }
+function pystr_partition(const s: AnsiString; const sep: AnsiString): TPyList;
+var idx: Integer;
+begin
+  Result := TPyList.Create;
+  Result.FIsTuple := True;
+  idx := Pos(sep, s);
+  if idx = 0 then
+  begin
+    Result.append(s); Result.append(''); Result.append('');
+  end
+  else
+  begin
+    Result.append(Copy(s, 1, idx - 1));
+    Result.append(sep);
+    Result.append(Copy(s, idx + Length(sep), Length(s) - idx - Length(sep) + 1));
+  end;
+end;
+
+{ s.rpartition(sep) — same shape as partition, at the LAST occurrence, or
+  ('', '', s) when sep is absent. }
+function pystr_rpartition(const s: AnsiString; const sep: AnsiString): TPyList;
+var idx, i, n, m, j: Integer; hit: Boolean;
+begin
+  Result := TPyList.Create;
+  Result.FIsTuple := True;
+  n := Length(s); m := Length(sep);
+  idx := 0;
+  if m > 0 then
+    for i := n - m + 1 downto 1 do
+    begin
+      hit := True;
+      for j := 1 to m do
+        if s[i + j - 1] <> sep[j] then begin hit := False; Break; end;
+      if hit then begin idx := i; Break; end;
+    end;
+  if idx = 0 then
+  begin
+    Result.append(''); Result.append(''); Result.append(s);
+  end
+  else
+  begin
+    Result.append(Copy(s, 1, idx - 1));
+    Result.append(sep);
+    Result.append(Copy(s, idx + m, n - idx - m + 1));
+  end;
+end;
+
 { s.splitlines(): split on newlines, and a TRAILING newline does not produce a
   final empty field — "a\n".splitlines() is ["a"], not ["a",""]. "" is []. That
   trailing rule is what separates it from split("\n"). }
@@ -1640,12 +1784,22 @@ end;
   str in Python terms, so both are accepted.
   Python's join takes any iterable; only TPyList is supported for now. }
 function pystr_join(const sep: AnsiString; l: TPyList): AnsiString;
-var i: Integer;
+{ Preallocate to the known final length (sum of item lengths + sep*(n-1))
+  and write in place. The old `Result := Result + sep`/`+ item` reallocated
+  the whole string on every item — O(n^2) in the joined length, the same
+  PXXStrConcat pattern pystr_upper/lower were fixed for
+  (perf-nilpy-remaining-perbyte-string-builders). Each item is materialised
+  ONCE into `items` (VariantToStr is not idempotent-cheap to call twice)
+  and its length summed before the single allocation. }
+var i, j, n, totalLen, pos: Integer;
     v: Variant;
     tag: Int64;
+    items: array of AnsiString;
 begin
-  Result := '';
-  for i := 0 to l.count - 1 do
+  n := l.count;
+  SetLength(items, n);
+  totalLen := 0;
+  for i := 0 to n - 1 do
   begin
     v := l.at(i);
     tag := pyvartag(v);
@@ -1654,8 +1808,25 @@ begin
       raise TypeError.Create('sequence item ' + pystr_of(Int64(i)) +
                              ': expected str instance');
     end;
-    if i > 0 then Result := Result + sep;
-    Result := Result + VariantToStr(v);
+    items[i] := VariantToStr(v);
+    Inc(totalLen, Length(items[i]));
+    if i > 0 then Inc(totalLen, Length(sep));
+  end;
+  SetLength(Result, totalLen);
+  pos := 1;
+  for i := 0 to n - 1 do
+  begin
+    if i > 0 then
+      for j := 1 to Length(sep) do
+      begin
+        Result[pos] := sep[j];
+        Inc(pos);
+      end;
+    for j := 1 to Length(items[i]) do
+    begin
+      Result[pos] := items[i][j];
+      Inc(pos);
+    end;
   end;
 end;
 
@@ -1779,6 +1950,20 @@ end;
 function pyvar_is_strtag(const v: Variant): Boolean;
 begin
   Result := pyvartag(v) in [5, 6];
+end;
+
+{ True iff v's payload is a real object pointer (VT_OBJECT, tag 7) -- the only
+  tag pyvarobj's raw payload may safely be dereferenced/cast for. Any other
+  tag (None/int/float/str/bool) is scalar bits or a null placeholder
+  reinterpreted as an address; a hard class-cast on it derefs garbage.
+  bug-nilpy-container-literal-default-arg-segfaults: a class-typed method call
+  on a VARIANT receiver (`b.append(a)` where `b`'s declared default `= []`
+  never evaluates and falls through as None) cast that receiver unconditionally
+  -- pydynattr_get_v/pyvar_getitem already guard the same way for attribute
+  reads and subscripting; the method-dispatch cast in pyparser.inc did not. }
+function pyvar_is_objtag(const v: Variant): Boolean;
+begin
+  Result := pyvartag(v) = 7;
 end;
 
 { ALWAYS raises. `None.upper()` (or any str method on a non-str variant) used
@@ -2223,6 +2408,35 @@ begin
   FLen := 0;
 end;
 
+{ Python's list.sort() — IN PLACE, unlike sorted() (pyeval.pas), which
+  returns a new list. No `key=`/`reverse=` yet: those need PyCallKey1's
+  generic-callable dispatch, which lives in pyeval.pas and cannot be called
+  from here (pyeval `uses pylib`, not the reverse) — refused loudly rather
+  than guessed at; a plain `.sort()` needs no callable at all, just the
+  `pyvar_gt` content-order comparison this unit already has (see max()/min()
+  above). bug-nilpy-list-sort-method-missing. }
+function TPyList.sort: TPyList;
+var i, j: Integer; v: Variant; swapped: Boolean;
+begin
+  for i := 1 to Self.count - 1 do
+  begin
+    j := i;
+    swapped := True;
+    while (j > 0) and swapped do
+    begin
+      swapped := pyvar_gt(Self.at(j - 1), Self.at(j));
+      if swapped then
+      begin
+        v := Self.at(j);
+        Self.put(j, Self.at(j - 1));
+        Self.put(j - 1, v);
+        Dec(j);
+      end;
+    end;
+  end;
+  Result := Self;
+end;
+
 function TPyList.read: AnsiString;
 begin
   read := pyfile_read(Self);
@@ -2236,6 +2450,42 @@ end;
 function TPyList.readlines: TPyList;
 begin
   readlines := Self;
+end;
+
+function TPyList.issubset(other: TPyList): Boolean;
+var i: Integer;
+begin
+  Result := True;
+  if Self = nil then Exit;
+  for i := 0 to Self.count - 1 do
+    if not pycontains(other, Self.at(i)) then begin Result := False; Exit; end;
+end;
+
+function TPyList.issuperset(other: TPyList): Boolean;
+begin
+  if other = nil then begin Result := True; Exit; end;
+  Result := other.issubset(Self);
+end;
+
+function TPyList.union(other: TPyList): TPyList;
+begin
+  Result := pyset_or(Self, other);
+end;
+
+function TPyList.intersection(other: TPyList): TPyList;
+begin
+  Result := pyset_and(Self, other);
+end;
+
+function TPyList.difference(other: TPyList): TPyList;
+begin
+  Result := pyset_sub(Self, other);
+end;
+
+procedure TPyList.discard(const v: Variant);
+begin
+  if Self = nil then Exit;
+  if pycontains(Self, v) then Self.remove(v);
 end;
 
 { Python `in` over a list/set-as-list. Same-tag equality only: ints/bools/
@@ -2351,6 +2601,82 @@ begin
       Result := True;
       Exit;
     end;
+end;
+
+{ Python's set operators (`&`/`|`/`-`/`^`) -- NilPy has one sequence
+  representation, so a "set" is a TPyList built through `.add()` (the
+  duplicate-skipping insert). These four operators were entirely
+  unhandled: `&`/`|`/`-`/`^` between two class-typed (tyClass) operands
+  fell through every arm of the operator-typing chain in parser.inc and
+  landed on the bare-integer default, so codegen did a raw bitwise/
+  subtract op on the two operands' HEAP POINTERS -- silently producing a
+  huge garbage integer (`&`/`|`) or a small, meaningless one (`-`/`^`,
+  pointer difference), never an error. Lists don't support any of these
+  four operators in Python, so a `TPyList & TPyList` (etc.) shape is
+  unambiguously a set operation once dict is ruled out first — see
+  pydict_or below for dict's own use of `|`.
+  bug-nilpy-set-and-dict-operators-do-raw-pointer-arithmetic }
+function pyset_and(a: TPyList; b: TPyList): TPyList;
+var i: Integer;
+begin
+  Result := TPyList.Create;
+  if (a = nil) or (b = nil) then Exit;
+  for i := 0 to a.count - 1 do
+    if pycontains(b, a.at(i)) then Result.add(a.at(i));
+end;
+
+function pyset_or(a: TPyList; b: TPyList): TPyList;
+var i: Integer;
+begin
+  Result := TPyList.Create;
+  if a <> nil then
+    for i := 0 to a.count - 1 do Result.add(a.at(i));
+  if b <> nil then
+    for i := 0 to b.count - 1 do Result.add(b.at(i));
+end;
+
+function pyset_sub(a: TPyList; b: TPyList): TPyList;
+var i: Integer;
+begin
+  Result := TPyList.Create;
+  if a = nil then Exit;
+  for i := 0 to a.count - 1 do
+    if (b = nil) or not pycontains(b, a.at(i)) then Result.add(a.at(i));
+end;
+
+function pyset_xor(a: TPyList; b: TPyList): TPyList;
+var i: Integer;
+begin
+  Result := TPyList.Create;
+  if a <> nil then
+    for i := 0 to a.count - 1 do
+      if (b = nil) or not pycontains(b, a.at(i)) then Result.add(a.at(i));
+  if b <> nil then
+    for i := 0 to b.count - 1 do
+      if (a = nil) or not pycontains(a, b.at(i)) then Result.add(b.at(i));
+end;
+
+{ Python's dict union operator, PEP 584: `d1 | d2` -- a NEW dict, `d1`'s
+  entries first (in order), then `d2`'s (in order), with `d2` winning any
+  key collision. Same "fell through to raw pointer arithmetic" bug as the
+  set operators above; dict rules out set's own `|` since both are
+  distinct tyClass identities, checked before the set arm in the caller. }
+function pydict_or(a: TPyDict; b: TPyDict): TPyDict;
+var i: Integer; keys: TPyList;
+begin
+  Result := TPyDict.Create;
+  if a <> nil then
+  begin
+    keys := a.keylist;
+    for i := 0 to keys.count - 1 do
+      Result.store(keys.at(i), a.fetch(keys.at(i)));
+  end;
+  if b <> nil then
+  begin
+    keys := b.keylist;
+    for i := 0 to keys.count - 1 do
+      Result.store(keys.at(i), b.fetch(keys.at(i)));
+  end;
 end;
 
 { `v in container` where the container is a VARIANT (its type is only known at
@@ -2841,6 +3167,15 @@ begin
   if (Frac(x) <> 0.0) and (x > 0.0) then Inc(Result);
 end;
 
+{ math.fabs — a plain float abs. No int/float contract mismatch like floor/
+  ceil (Python's fabs always returns a float, same as Abs on a Double), so
+  this exists only because `import math` otherwise has no `fabs` name to
+  resolve to at all (feature-nilpy-stdlib-coverage-gaps-measured). }
+function pymath_fabs(x: Double): Double;
+begin
+  Result := Abs(x);
+end;
+
 function pyenumerate(a: TPyList): TPyList;
 var r, pair: TPyList; i: Integer; pv: Variant;
 begin
@@ -2850,7 +3185,30 @@ begin
   for i := 0 to a.count - 1 do
   begin
     pair := TPyList.Create;
+    pair.FIsTuple := True;   { enumerate() yields (index, value) tuples }
     pair.append(i);
+    pair.append(a.at(i));
+    PPyVarRec(@pv)^.VType := 7;
+    PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
+    PXXObjRetain(Pointer(pair));
+    r.append(pv);
+  end;
+end;
+
+{ `enumerate(xs, start)` / `enumerate(xs, start=N)` — same pairs as
+  pyenumerate, indices offset by `start` instead of counting from 0. }
+function pyenumerate2(a: TPyList; start: Integer): TPyList;
+var r, pair: TPyList; i, idx: Integer; pv: Variant;
+begin
+  r := TPyList.Create;
+  pyenumerate2 := r;
+  if a = nil then Exit;
+  for i := 0 to a.count - 1 do
+  begin
+    pair := TPyList.Create;
+    pair.FIsTuple := True;
+    idx := start + i;
+    pair.append(idx);
     pair.append(a.at(i));
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
@@ -2870,6 +3228,7 @@ begin
   for i := 0 to n - 1 do
   begin
     pair := TPyList.Create;
+    pair.FIsTuple := True;   { zip() yields tuples }
     pair.append(a.at(i));
     pair.append(b.at(i));
     PPyVarRec(@pv)^.VType := 7;
@@ -2921,6 +3280,30 @@ begin
   Result := l.at(0);
   for i := 1 to l.count - 1 do
     if pyvar_gt(Result, l.at(i)) then Result := l.at(i);
+end;
+
+{ Python's min()/max() take ANY iterable, not just a list -- a str iterates
+  its characters. Byte-ordinal comparison, consistent with this frontend's
+  byte-string model everywhere else (bug-nilpy-non-ascii-string-surface-
+  measured). feature-nilpy-min-max-over-a-string. }
+function max(const s: AnsiString): AnsiString;
+var i: Integer; best: Char;
+begin
+  if Length(s) = 0 then raise ValueError.Create('max() arg is an empty sequence');
+  best := s[1];
+  for i := 2 to Length(s) do
+    if s[i] > best then best := s[i];
+  Result := best;
+end;
+
+function min(const s: AnsiString): AnsiString;
+var i: Integer; best: Char;
+begin
+  if Length(s) = 0 then raise ValueError.Create('min() arg is an empty sequence');
+  best := s[1];
+  for i := 2 to Length(s) do
+    if s[i] < best then best := s[i];
+  Result := best;
 end;
 
 function any(l: TPyList): Boolean;
@@ -3064,6 +3447,7 @@ begin
   for i := 0 to cnt - 1 do
   begin
     pair := TPyList.Create;
+    pair.FIsTuple := True;   { most_common() yields (key, count) tuples }
     pair.append(ks.at(idx[i]));
     pair.append(vs.at(idx[i]));
     res.append(pair);
@@ -3115,6 +3499,7 @@ begin
   for i := 0 to kl.count - 1 do
   begin
     pair := TPyList.Create;
+    pair.FIsTuple := True;   { dict.items() yields (key, value) tuples }
     pair.append(kl.at(i));
     pair.append(vl.at(i));
     { box the pair as a VT_OBJECT slot and retain it — the same shape a nested
@@ -3281,6 +3666,31 @@ end;
 procedure PyTypeError(t: Int64; const want: AnsiString);
 begin
   raise TypeError.Create('expected ' + want + ', got ' + PyVarTypeName(t));
+end;
+
+{ `x in obj` where obj's class defines no `__contains__` -- a genuine runtime
+  TypeError (catchable), not a compile-time halt: the frontend's own Error()
+  aborts the WHOLE COMPILATION, which made `try: ... in obj ... except:` fail
+  to even build instead of running its handler, unlike CPython.
+  bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic }
+procedure PyNotContainerError;
+begin
+  raise TypeError.Create('argument is not a container (no __contains__)');
+end;
+
+{ `obj(...)` where obj's class defines no `__call__` -- a genuine runtime
+  TypeError, matching CPython's "'X' object is not callable" (just without
+  the class name, which is not available here). }
+procedure PyNotCallableError;
+begin
+  raise TypeError.Create('object is not callable (no __call__)');
+end;
+
+{ `obj[i] = v` where obj's class defines `__getitem__` but not `__setitem__`
+  -- CPython's own error shape ("does not support item assignment"). }
+procedure PyNoSetitemError;
+begin
+  raise TypeError.Create('object does not support item assignment (no __setitem__)');
 end;
 
 function pyvar_to_int(const v: Variant): Int64;
@@ -4730,6 +5140,18 @@ begin
   Result := Copy(p, 1, i - 1);
 end;
 
+{ os.path.basename — everything after the last '/', or the whole string if
+  there is none; a trailing '/' yields '' (matching CPython: dirname/basename
+  always concatenate, with the separator, back to the original path).
+  feature-nilpy-stdlib-coverage-gaps-measured. }
+function pyos_path_basename(const p: AnsiString): AnsiString;
+var i: Integer;
+begin
+  i := Length(p);
+  while (i > 0) and (p[i] <> '/') do Dec(i);
+  Result := Copy(p, i + 1, Length(p) - i);
+end;
+
 { access(path, F_OK) — "does the name exist". Per-arch numbers, the same shape
   Randomize uses. aarch64 and riscv have no access(2), only faccessat(2), which
   takes AT_FDCWD (-100) as its first argument. A target with no number here
@@ -5620,6 +6042,22 @@ begin
   pystr_format := PyFormatApply(fmt, a, a, 1);
 end;
 
+{ `"{} and {}".format(a, b)` — a SEPARATE proc, not a second pystr_format
+  overload: the caller (pyparser.inc) looks procs up by bare NAME via
+  FindProc, which is not arity-aware, so a same-named 1-arg/2-arg overload
+  pair resolved to whichever was registered first regardless of how many
+  arguments were actually parsed — the second Variant arrived through a
+  1-param ABI and the call segfaulted. Every other multi-arity str method
+  (split/rjust/replace) already sidesteps this the same way, with its own
+  arity-suffixed proc name (bug-nilpy-str-format-multiarg /
+  feature-nilpy-str-format-multiarg). PyFormatApply already supported two
+  positional args; only this entry point and the frontend's arity gate were
+  missing. }
+function pystr_format2(const fmt: AnsiString; const a: Variant; const b: Variant): AnsiString;
+begin
+  pystr_format2 := PyFormatApply(fmt, a, b, 2);
+end;
+
 function pypercent_format(const fmt: AnsiString; const args: Variant): AnsiString;
 var i, width, prec, argi, nargs: Integer;
     zero, leftAlign, hasPrec: Boolean;
@@ -6404,6 +6842,36 @@ begin
     m := m div 16;
   end;
   if n < 0 then Result := '-0x' + d else Result := '0x' + d;
+end;
+
+function oct(n: Int64): AnsiString;
+var m: Int64; d: AnsiString;
+begin
+  if n = 0 then begin Result := '0o0'; Exit; end;
+  m := n;
+  if m < 0 then m := -m;
+  d := '';
+  while m > 0 do
+  begin
+    d := HexDigitChar(m mod 8) + d;
+    m := m div 8;
+  end;
+  if n < 0 then Result := '-0o' + d else Result := '0o' + d;
+end;
+
+function bin(n: Int64): AnsiString;
+var m: Int64; d: AnsiString;
+begin
+  if n = 0 then begin Result := '0b0'; Exit; end;
+  m := n;
+  if m < 0 then m := -m;
+  d := '';
+  while m > 0 do
+  begin
+    d := HexDigitChar(m mod 2) + d;
+    m := m div 2;
+  end;
+  if n < 0 then Result := '-0b' + d else Result := '0b' + d;
 end;
 
 { A list slice is a SHALLOW copy, as in Python: the new list holds the same

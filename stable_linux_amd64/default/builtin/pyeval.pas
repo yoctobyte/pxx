@@ -79,6 +79,12 @@ function pyclosure_call1(objptr: Pointer; const a0: Variant): Variant;
   key = nil means sort by the elements themselves. }
 function sorted(l: TPyList; key: Pointer = nil; reverse: Boolean = False): TPyList;
 
+{ `map(f, xs)` / `filter(f, xs)` over an arbitrary callable VALUE -- the
+  general form beside the existing map(int|str|float, xs) conversion shims.
+  Same PyCallKey1 dispatch sorted()'s key= already uses. }
+function pymap_call(key: Pointer; l: TPyList): TPyList;
+function pyfilter_call(key: Pointer; l: TPyList): TPyList;
+
 { Build a closure from raw SOURCE text — the compiled frontend's lowering of a
   Python `lambda`: `lambda vm: vm.push(A)` becomes
   pyclosure_src_new('vm', 'return vm.push(A)') with each free name's VALUE
@@ -2055,6 +2061,7 @@ begin
 end;
 
 procedure ParseExpr(var res: Variant); forward;   { conditional/ternary — lowest }
+procedure ParsePower(var res: Variant); forward;  { `**`, tighter than unary minus }
 procedure ParseCall(const callee: AnsiString; var res: Variant); forward;
 procedure ParseMethodCall(const recv: Variant; const mname: AnsiString;
                           var res: Variant); forward;
@@ -2279,7 +2286,29 @@ begin
     res := pyinvert_v(t);
     Exit;
   end;
+  ParsePower(res);
+end;
+
+{ `**` — Python's power operator: right-associative, and binding TIGHTER than
+  unary minus (`-2 ** 2` is `-(2**2)` = -4, not `(-2)**2`). ParseUnary calls
+  here rather than straight to ParsePrimary, and the exponent recurses into
+  ParseUnary (not ParsePower) so it can itself start with a unary op
+  (`2 ** -1`) while still getting right-associativity for `2 ** 3 ** 2`
+  through that same recursion. Mirrors the compiled frontend's `**`
+  (parser.inc, ParseFactor) which lexes/parses the identical shape and lowers
+  to the same pypow_v — this exec()-side grammar was simply missing
+  (feature-pyeval-power-operator). }
+procedure ParsePower(var res: Variant);
+var b: Variant;
+begin
   ParsePrimary(res);
+  if IsOp('**') then
+  begin
+    Advance;
+    ParseUnary(b);
+    if not Executing then res := MakeNone
+    else res := pypow_v(res, b);
+  end;
 end;
 
 procedure ParseMul(var res: Variant);
@@ -2788,10 +2817,19 @@ begin
 
   if IsHostName(callee) then
   begin
-    if (EnvG = nil) or (EnvG.indexof('vm') < 0) then
-      EvalError('host call ' + callee + ' but no "vm" in globals');
-    vmv := EnvG.fetch('vm');
-    vmobj := pyvarobj(vmv);
+    { The receiver is not a separate "vm" global -- it is already IN the
+      bound method `callee` itself resolves to (`env = {"push": b.push}`
+      boxes b as push's `recv`). Reading it from a hardcoded "vm" key was
+      uforth's own variable name leaking into the general exec() contract:
+      any other caller's env (`{"draw": c.draw}`, no "vm" key at all)
+      failed every host call with a message naming an identifier it never
+      wrote (bug-pyeval-exec-requires-a-globals-key-named-vm). }
+    if (EnvG = nil) or (EnvG.indexof(callee) < 0) then
+      EvalError('host call ' + callee + ' but "' + callee + '" not in globals');
+    vmv := EnvG.fetch(callee);
+    if not pycallback_is(vmv) then
+      EvalError('host call ' + callee + ' is not a bound method');
+    vmobj := pybound_recv(vmv);
     PyHostCall(vmobj, callee, args, res);
     args.Free;
     Exit;
@@ -3859,6 +3897,39 @@ begin
     end;
   end;
   keys.Free;
+end;
+
+{ `map(f, xs)` over an arbitrary callable VALUE -- the general form beside
+  the existing map(int|str|float, xs) conversion shims. Same PyCallKey1
+  dispatch sorted()'s key= already uses, so every callable shape (a lifted
+  lambda, a plain def, a bound method, and a builtin via
+  PyGetOrMakeCallableWrapper) works here for free.
+  feature-nilpy-aggregate-builtins }
+function pymap_call(key: Pointer; l: TPyList): TPyList;
+var i: Integer;
+begin
+  Result := TPyList.Create;
+  if (l = nil) or (key = nil) then Exit;
+  for i := 0 to l.count - 1 do
+    Result.append(PyCallKey1(key, l.at(i)));
+end;
+
+{ `filter(f, xs)` -- keep the elements where f(x) is truthy. `filter(None,
+  xs)` (Python's own "keep the truthy elements" shorthand) is key=nil here. }
+function pyfilter_call(key: Pointer; l: TPyList): TPyList;
+var i: Integer; ev: Variant;
+begin
+  Result := TPyList.Create;
+  if l = nil then Exit;
+  for i := 0 to l.count - 1 do
+  begin
+    ev := l.at(i);
+    if key = nil then
+    begin
+      if pyvar_to_bool(ev) then Result.append(ev);
+    end
+    else if pyvar_to_bool(PyCallKey1(key, ev)) then Result.append(ev);
+  end;
 end;
 
 function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;
