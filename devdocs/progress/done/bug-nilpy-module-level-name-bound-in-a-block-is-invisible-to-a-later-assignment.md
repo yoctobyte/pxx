@@ -75,3 +75,6 @@ bug; whichever view is the fuller one is presumably the right answer for both.
 `make test-nilpy` green + self-host byte-identical, plus a `.npy` covering the
 table above (each of `if` / `for` / `with`, read from both an expression
 statement and an assignment RHS) diffed against CPython.
+
+## Log
+- 2026-07-31 — resolved, commit b2e19af2b.

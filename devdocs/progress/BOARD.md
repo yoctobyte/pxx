@@ -31,7 +31,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (180)
+## backlog (179)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -53,7 +53,6 @@ _none_
 | bug-nilpy-int-prints-as-float-when-the-name-is-widened-later | N | 50 | bug | An int prints as `5.0` because the SAME NAME is assigned a float later in the file | — |
 | bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
 | bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
-| bug-nilpy-module-level-name-bound-in-a-block-is-invisible-to-a-later-assignment | N | 55 | bug | nilpy: at module level, a name first bound inside if/for/with is 'undefined variable' on the RHS of a later top-level assignment | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
@@ -302,7 +301,7 @@ _none_
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1087)
+## done (1088)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -691,6 +690,7 @@ _none_
 | bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math | N | 60 | bug | Arithmetic on mismatched operand types silently does POINTER math | — |
 | bug-nilpy-module-ast-recycled-by-nested-unit-compile | N | 85 | bug | A .py module's statement list is RECYCLED while it is still being built | — |
 | bug-nilpy-module-class-vmtaddr | N | 60 | bug | A class in an imported `.py` module: "invalid class index in vmtaddr" | — |
+| bug-nilpy-module-level-name-bound-in-a-block-is-invisible-to-a-later-assignment | N | 55 | bug | nilpy: at module level, a name first bound inside if/for/with is 'undefined variable' on the RHS of a later top-level assignment | — |
 | bug-nilpy-nested-def-capture-sets-are-not-final | N | 85 | bug | A nested def's capture set is read before it is final | — |
 | bug-nilpy-nested-def-nonint-result-garbage | N | 75 | bug | A nested def's non-integer result is read as a number — silent garbage | — |
 | bug-nilpy-none-equals-zero-is-true | N | 65 | bug | `0 == None` is True, and `None == 0` does not parse | — |
@@ -2864,7 +2864,6 @@ _none_
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [N] bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float
-- [p 55] [N] bug-nilpy-module-level-name-bound-in-a-block-is-invisible-to-a-later-assignment
 - [p 55] [N] bug-nilpy-void-def-assigned-and-called-crashes
 - [p 55] [A] bug-pascal-array-of-pointer-deref-loses-the-record-type
 - [p 55] [A] bug-pascal-defines-leak-across-units
