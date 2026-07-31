@@ -71,3 +71,6 @@ except the `publish:` line in `trackt status`.
 Not a blocker for the borg→xeon cutover: with a single live watcher there is no
 second writer and the conflict cannot occur. It *is* a blocker for ever running
 two watchers, which the deploy documentation currently advertises as supported.
+
+## Log
+- 2026-07-31 — resolved, commit a06e520f2.
