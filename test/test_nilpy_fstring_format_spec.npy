@@ -1,0 +1,23 @@
+# f-string format specs: precision on floats, exponential notation, integer
+# width, and </>/^ alignment with an explicit fill char.
+# feature-nilpy-fstring-format-spec
+# Every expectation is CPython's own output.
+
+print(f"{3.14159:.2f}")
+print(f"{'F':>5}")
+print(f"{42:5}")
+print(f"{3.14159:.0f}")
+print(f"{1234.5:.2e}")
+print(f"{'hi':^10}")
+print(f"{'hi':^11}")
+print(f"{'hi':*>10}")
+print(f"{'hi':*<10}")
+print(f"{'hi':*^10}")
+print(f"{7:^5}")
+print(f"{7:0>5}")
+print(f"{-3:05}")
+print(f"{-3:0>5}")
+print(f"{3.14159:.3f}")
+print(f"{3.14:*^10.1f}")
+print(f"{'x':5}|")
+print(f"{3:5}|")

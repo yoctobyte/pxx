@@ -735,6 +735,10 @@ test-nilpy: $(COMPILER)
 	@# Double->Double Floor/Ceil that `import math` would otherwise reach
 	./$(COMPILER) test/test_nilpy_math_floor_ceil_int.npy /tmp/test_nilpy_mathfloor26
 	test "$$(/tmp/test_nilpy_mathfloor26)" = "$$(printf '%b' '2 3\n-3 -2\n2 2\n3\n3 2 2.7')"
+	@# f-string format specs: precision, exponential, width/alignment incl. ^
+	@# (center) and an explicit fill char
+	./$(COMPILER) test/test_nilpy_fstring_format_spec.npy /tmp/test_nilpy_fmtspec26
+	test "$$(/tmp/test_nilpy_fmtspec26)" = "$$(printf '%b' '3.14\n    F\n   42\n3\n1.23e+03\n    hi    \n    hi     \n********hi\nhi********\n****hi****\n  7  \n00007\n-0003\n000-3\n3.142\n***3.1****\nx    |\n    3|')"
 	@# a managed STRING local minted after the prologue zero-init pass was never
 	@# nil'd, so the loop's first store released stale frame bytes -> SIGSEGV
 	./$(COMPILER) test/test_nilpy_str_local_loop_zeroinit.npy /tmp/test_nilpy_str_local_zi26

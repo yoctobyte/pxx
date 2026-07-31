@@ -5419,8 +5419,34 @@ begin
     Result := pad + s;
 end;
 
+{ `{x:*^10}`-style: an explicit fill char (any char, defaulting to space)
+  followed by an alignment char, INCLUDING '^' (center) which the plain
+  zero/leftAlign PyFmtPad has no notion of. Kept as a separate function rather
+  than folded into PyFmtPad so every existing caller of PyFmtPad (the bare
+  '<'/'>'/'0' forms) stays on its byte-identical old path; only a spec that
+  actually names a fill char or '^' reaches this one.
+  feature-nilpy-fstring-format-spec }
+function PyFmtPadEx(const s: AnsiString; width: Integer; fillCh: Char;
+                    align: Char): AnsiString;
+var pad: AnsiString; i, need, leftN, rightN: Integer;
+begin
+  Result := s;
+  need := width - Length(s);
+  if need <= 0 then Exit;
+  pad := '';
+  for i := 1 to need do pad := pad + fillCh;
+  if align = '<' then Result := s + pad
+  else if align = '^' then
+  begin
+    leftN := need div 2;
+    rightN := need - leftN;
+    Result := Copy(pad, 1, leftN) + s + Copy(pad, 1, rightN);
+  end
+  else Result := pad + s;   { '>' or unset: right-align, same default as before }
+end;
+
 { Supported spec grammar, deliberately small and checked rather than guessed:
-    [ '<' | '>' ] [ '0' ] [ width ] [ 'd' | 'x' | 'X' | 'o' | 'b' | 's' ]
+    [ [fill] ('<' | '>' | '^') ] [ '0' ] [ width ] [ 'd' | 'x' | 'X' | 'o' | 'b' | 's' ]
   Anything else halts with the spec quoted, because a format spec decides what
   is PRINTED and silently ignoring one produces wrong output. }
 { The placeholder walk. Two variants rather than an open array: an open array
@@ -5631,16 +5657,23 @@ begin
 end;
 
 function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
-var p, width: Integer; zero, leftAlign: Boolean; kind: Char; body: AnsiString;
+var p, width: Integer; zero, leftAlign: Boolean; kind, fillCh, align: Char;
+    body: AnsiString;
 begin
   p := 1;
   zero := False;
   leftAlign := False;
   width := 0;
   kind := 'd';
-  if (p <= Length(spec)) and ((spec[p] = '<') or (spec[p] = '>')) then
+  fillCh := ' '; align := #0;
+  if (p + 1 <= Length(spec)) and (spec[p + 1] in ['<', '>', '^']) then
   begin
-    leftAlign := spec[p] = '<';
+    fillCh := spec[p]; align := spec[p + 1]; leftAlign := align = '<';
+    Inc(p, 2);
+  end
+  else if (p <= Length(spec)) and (spec[p] in ['<', '>', '^']) then
+  begin
+    align := spec[p]; leftAlign := align = '<';
     Inc(p);
   end;
   if (p <= Length(spec)) and (spec[p] = '0') then
@@ -5688,18 +5721,29 @@ begin
       Halt(1);
     end;
   end;
-  Result := PyFmtPad(body, width, zero, leftAlign);
+  if align = '^' then Result := PyFmtPadEx(body, width, fillCh, '^')
+  else if fillCh <> ' ' then Result := PyFmtPadEx(body, width, fillCh, align)
+  else Result := PyFmtPad(body, width, zero, leftAlign);
 end;
 
 function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; overload;
-var p, width: Integer; leftAlign: Boolean;
+var p, width: Integer; leftAlign, explicitAlign: Boolean; fillCh, align: Char;
 begin
   p := 1;
   leftAlign := False;
+  explicitAlign := False;
   width := 0;
-  if (p <= Length(spec)) and ((spec[p] = '<') or (spec[p] = '>')) then
+  fillCh := ' '; align := #0;
+  if (p + 1 <= Length(spec)) and (spec[p + 1] in ['<', '>', '^']) then
   begin
-    leftAlign := spec[p] = '<';
+    fillCh := spec[p]; align := spec[p + 1]; leftAlign := align = '<';
+    explicitAlign := True;
+    Inc(p, 2);
+  end
+  else if (p <= Length(spec)) and (spec[p] in ['<', '>', '^']) then
+  begin
+    align := spec[p]; leftAlign := align = '<';
+    explicitAlign := True;
     Inc(p);
   end;
   while (p <= Length(spec)) and (spec[p] >= '0') and (spec[p] <= '9') do
@@ -5713,10 +5757,12 @@ begin
     WriteLn('Nil Python: unsupported f-string format spec "', spec, '" for a string');
     Halt(1);
   end;
-  { a string left-aligns by default, unlike a number }
-  if width > Length(s) then leftAlign := leftAlign or (spec = '') or
-                                         ((Length(spec) > 0) and (spec[1] <> '>'));
-  Result := PyFmtPad(s, width, False, leftAlign);
+  { a string left-aligns by default, unlike a number, UNLESS an align/fill was
+    given explicitly (a bare `{s:>5}` must still right-align) }
+  if (not explicitAlign) and (width > Length(s)) then leftAlign := True;
+  if align = '^' then Result := PyFmtPadEx(s, width, fillCh, '^')
+  else if fillCh <> ' ' then Result := PyFmtPadEx(s, width, fillCh, align)
+  else Result := PyFmtPad(s, width, False, leftAlign);
 end;
 
 function PyFmtFixed(d: Double; prec: Integer): AnsiString;
@@ -5834,13 +5880,19 @@ function pyformat_of(d: Double; const spec: AnsiString): AnsiString; overload;
 { `{x:.2f}` and friends. Same grammar as the integer spec plus a `.precision`
   group; `f` is fixed point, `g` is FloatToStr's compact form. }
 var p, width, prec: Integer; zero, leftAlign, hasPrec: Boolean;
-    kind: Char; body: AnsiString;
+    kind, fillCh, align: Char; body: AnsiString;
 begin
   p := 1; zero := False; leftAlign := False; width := 0;
   prec := 6; hasPrec := False; kind := 'f';
-  if (p <= Length(spec)) and ((spec[p] = '<') or (spec[p] = '>')) then
+  fillCh := ' '; align := #0;
+  if (p + 1 <= Length(spec)) and (spec[p + 1] in ['<', '>', '^']) then
   begin
-    leftAlign := spec[p] = '<';
+    fillCh := spec[p]; align := spec[p + 1]; leftAlign := align = '<';
+    Inc(p, 2);
+  end
+  else if (p <= Length(spec)) and (spec[p] in ['<', '>', '^']) then
+  begin
+    align := spec[p]; leftAlign := align = '<';
     Inc(p);
   end;
   if (p <= Length(spec)) and (spec[p] = '0') then begin zero := True; Inc(p); end;
@@ -5866,6 +5918,7 @@ begin
     Halt(1);
   end;
   if (kind = 'f') or (kind = 'F') then body := PyFmtFixed(d, prec)
+  else if (kind = 'e') or (kind = 'E') then body := PyFmtExp(d, prec, kind = 'E')
   else if kind = '%' then
     { Python's percentage form: multiply by 100, format fixed with the given
       precision (6 by default, as for `f`), append the sign. `{x:.0%}` is how a
@@ -5878,7 +5931,9 @@ begin
     WriteLn('Nil Python: unsupported f-string format spec "', spec, '"');
     Halt(1);
   end;
-  Result := PyFmtPad(body, width, zero, leftAlign);
+  if align = '^' then Result := PyFmtPadEx(body, width, fillCh, '^')
+  else if fillCh <> ' ' then Result := PyFmtPadEx(body, width, fillCh, align)
+  else Result := PyFmtPad(body, width, zero, leftAlign);
 end;
 
 function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; overload;
