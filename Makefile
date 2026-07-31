@@ -2923,6 +2923,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_sysutils_datetime26)" = "$$(printf '2026-7-2\n2000-2-29\n1900-2-28\n1899-12-30 0.0\n1899-12-29 -1.0\n1969-12-31\n1800-1-1\n2026-7-2 14:30:15.500\n1899-12-30 18:0:0.0')"
 	./$(COMPILER) -Futest/case_units test/test_case_unit_lookup.pas /tmp/test_case_unit_lookup26
 	/tmp/test_case_unit_lookup26; test "$$?" = "42"
+	./$(COMPILER) -Futest/units_defscope test/test_pascal_define_unit_scope_order1.pas /tmp/test_pascal_define_unit_scope_order126
+	test "$$(/tmp/test_pascal_define_unit_scope_order126)" = "$$(printf 'ua\nub does not see it')"
+	./$(COMPILER) -Futest/units_defscope test/test_pascal_define_unit_scope_order2.pas /tmp/test_pascal_define_unit_scope_order226
+	test "$$(/tmp/test_pascal_define_unit_scope_order226)" = "$$(printf 'ub does not see it\nua')"
 	./$(COMPILER) test/test_float_str_val.pas /tmp/test_float_str_val26
 	test "$$(/tmp/test_float_str_val26)" = "$$(printf '[3.14]\n[    3.1416]\n[-2.750]\n[1000.5]\n42.7500 code=0\n-1.5000 code=0\n100.00 code=0\n350.00 code=0\n0.1250 code=0\ncode=1\n[   42]\n-99 code=0')"
 	./$(COMPILER) test/test_float_result_loop.pas /tmp/test_float_result_loop26
