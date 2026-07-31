@@ -8,11 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-i386-crtl-growth-corrupts-main-exit-code | C | 65 | bug | i386: adding ANY code to lib/crtl corrupts an unrelated program's exit code — output stays right, main's implicit return 0 becomes garbage | — |
+| bug-pascal-transitive-unit-crashes-at-startup-unless-named-first | A | 60 | bug | Pascal: `uses blcksock;` segfaults before main() in the string-release helper — naming a transitively-used unit FIRST fixes it | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 
 ## unfinished (2)
@@ -31,7 +32,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (187)
+## backlog (186)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -66,7 +67,6 @@ _none_
 | bug-nilpy-void-def-assigned-and-called-crashes | N | 55 | bug | NilPy: a `-> None` def assigned to a name, then called directly, segfaults | — |
 | bug-pascal-array-of-pointer-deref-loses-the-record-type | A | 55 | bug | Pascal: `lst[j]^.Field` on a TPropList resolves only the FIRST field — every other one is 'no such member'; via a local variable it works | — |
 | bug-pascal-defines-leak-across-units | A | 55 | bug | Pascal: {$define} in one unit stays visible in units parsed afterwards, so {$ifdef} compiles different code depending on uses ORDER | — |
-| bug-pascal-transitive-unit-crashes-at-startup-unless-named-first | A | 60 | bug | Pascal: `uses blcksock;` segfaults before main() in the string-release helper — naming a transitively-used unit FIRST fixes it | — |
 | bug-pascal-uses-order-breaks-pylib-exception | A | 45 | bug | `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine | — |
 | bug-t-corpus-regex-invents-phantom-tree | T | 55 | bug | CORPUS_RE matches prose in a SKIP message and invents corpus 'stb)', permanently skipping a job that also carries a non-corpus regression test | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
@@ -2891,7 +2891,6 @@ _none_
 - [p 60] [C] bug-crtl-headers-lost-when-cwd-is-not-the-repo-root
 - [p 60] [N] bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
-- [p 60] [A] bug-pascal-transitive-unit-crashes-at-startup-unless-named-first
 - [p 60] [U] decide-nilpy-arithmetic-dunder-scope
 - [p 60] [U] decide-nilpy-int-promotion-default
 - [p 60] [A] feature-a-abi-oracle
