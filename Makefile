@@ -959,6 +959,12 @@ test-nilpy: $(COMPILER)
 	# set methods: issubset/issuperset/union/intersection/difference/add/discard/remove; expectation is CPython's own output
 	./$(COMPILER) test/test_nilpy_set_methods.npy /tmp/test_nilpy_setmeth26
 	test "$$(/tmp/test_nilpy_setmeth26)" = "$$(printf '%b' 'False\nTrue\nTrue\n[1, 2, 3]\n[2, 3]\n[1]\n[1, 2, 3, 4]\n[2, 3, 4]\n[2, 3, 4]\n[3, 4]')"
+	# arithmetic operator dunders (__add__/__sub__/__mul__/__truediv__) on a user class; expectation is CPython's own output
+	./$(COMPILER) test/test_nilpy_operator_dunders.npy /tmp/test_nilpy_opdunder26
+	test "$$(/tmp/test_nilpy_opdunder26)" = "$$(printf '%b' '(5, 8)\n(3, 4)\n(12, 18)\n(2.0, 3.0)')"
+	# a class with no matching dunder used to silently compute garbage instead of erroring
+	! ./$(COMPILER) test/test_nilpy_operator_dunder_missing_fail.npy /tmp/test_nilpy_nodunder_fail26 > /tmp/test_nilpy_nodunder_fail.log 2>&1
+	grep -q "class has no __add__" /tmp/test_nilpy_nodunder_fail.log
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING

@@ -1,0 +1,24 @@
+# arithmetic operator dunders (__add__/__sub__/__mul__/__truediv__) on a user
+# class -- every expectation is CPython's own output.
+
+class Vector:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+    def __add__(self, other):
+        return Vector(self.x + other.x, self.y + other.y)
+    def __sub__(self, other):
+        return Vector(self.x - other.x, self.y - other.y)
+    def __mul__(self, k):
+        return Vector(self.x * k, self.y * k)
+    def __truediv__(self, k):
+        return Vector(self.x / k, self.y / k)
+    def __str__(self):
+        return f"({self.x}, {self.y})"
+
+a = Vector(4, 6)
+b = Vector(1, 2)
+print(a + b)
+print(a - b)
+print(a * 3)
+print(a / 2)

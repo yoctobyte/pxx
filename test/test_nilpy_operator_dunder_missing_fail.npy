@@ -1,0 +1,9 @@
+# an operator on a user class with no matching dunder -- used to silently
+# compute garbage on the raw class handles instead of erroring
+# (bug-nilpy-arithmetic-operator-dunders-not-dispatched).
+class NoOp:
+    def __init__(self):
+        self.x = 1
+a = NoOp()
+b = NoOp()
+print(a + b)

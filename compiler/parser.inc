@@ -13228,6 +13228,26 @@ begin
       CurASTNode := node;
       continue;
     end
+    else if PyExprMode and (op in [tkStar, tkSlash]) and (opci < 0) and
+            (IntToTypeKind(ASTTk[left]) = tyClass) and
+            (ResolveNodeRec(left) >= REC_UCLASS_BASE) then
+    begin
+      { `Vector(1,2) * 3` — a user class's own `__mul__`/`__truediv__` dunder.
+        Neither the list-repeat nor bytes-repeat branch above matched, so a
+        bare tyClass LEFT operand is a genuine user object — dispatch to its
+        dunder rather than falling through to the arithmetic AN_BINOP built
+        above, which silently computed garbage on the class HANDLE as if it
+        were a number (bug-nilpy-arithmetic-operator-dunders-not-dispatched,
+        same root cause as the +/- fix in ParseSimpleExpr). Only the LEFT
+        operand's class is consulted, matching Python's left-operand-first
+        dunder lookup — no `__rmul__`/`__rtruediv__` fallback. }
+      if op = tkStar then node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__mul__', left, right)
+      else node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__truediv__', left, right);
+      if node < 0 then
+        Error('Nil Python: class has no __mul__()/__truediv__() for this operator');
+      CurASTNode := node;
+      continue;
+    end
     { Python's `"%s=%d" % args` — string INTERPOLATION, not arithmetic. With no
       case for it the node kept the numeric `mod` typing and the lowering applied
       integer mod to a string handle: `"%.2f" % 3.14159` printed 0.0 and
@@ -13422,6 +13442,27 @@ begin
         NilPy resolves types statically, so this is caught here as a compile
         error rather than deferred to a run-time exception. }
       Error('Nil Python: can only concatenate list with another list (+)');
+    end
+    else if PyExprMode and (op in [tkPlus, tkMinus]) and
+            (IntToTypeKind(ASTTk[left]) = tyClass) and
+            (ResolveNodeRec(left) >= REC_UCLASS_BASE) then
+    begin
+      { `Vector(1,2) + Vector(3,4)` — a user class's own operator dunder
+        (`__add__`/`__sub__`). Neither operand reached here as a TPyList/
+        TPyDict (those branches above already `continue`d), so a bare tyClass
+        LEFT operand is a genuine user object: dispatch to its dunder method
+        rather than falling through to the arithmetic/pointer typing below,
+        which silently computed garbage on the two class HANDLES as if they
+        were integers (bug-nilpy-arithmetic-operator-dunders-not-dispatched).
+        Only the LEFT operand's class is consulted — matching Python's
+        left-operand-first dunder lookup; the right-operand `__radd__`/
+        `__rsub__` fallback (e.g. `3 * Vector(...)`) is not implemented. }
+      if op = tkPlus then node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__add__', left, right)
+      else node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__sub__', left, right);
+      if node < 0 then
+        Error('Nil Python: class has no __add__()/__sub__() for this operator');
+      CurASTNode := node;
+      continue;
     end
     else if (op = tkPlus) and ((ASTTk[left] = Ord(tyAnsiString)) or (ASTTk[right] = Ord(tyAnsiString))) then
       ASTTk[node] := Ord(tyAnsiString)
