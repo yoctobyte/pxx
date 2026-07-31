@@ -1894,6 +1894,22 @@ begin
   begin
     ConcatThree(ExeDir, '../lib/crtl/include/', '', d);
     AddCIncludeDir(d);
+    { ... and the STABLE/PINNED layout everyone actually runs:
+      <root>/stable_linux_amd64/<variant>/pxx, one directory deeper than the
+      in-place `compiler/pascal26` this procedure's ExeDir comment describes.
+      `../lib/crtl/include/` from there resolves to
+      `<root>/stable_linux_amd64/lib/crtl/include/`, which does not exist, so
+      the anchor silently missed for the ONE binary users invoke and fell
+      through all the way to a bare CWD-relative check below — which only
+      matches when run from the repo root. Any OTHER cwd (a real user's own
+      project directory) got pxx's own <stdarg.h>/<math.h>/... replaced by
+      whatever /usr/include ships, with the wrong ABI, no error, sometimes not
+      even a warning (bug-crtl-headers-lost-when-cwd-is-not-the-repo-root).
+      Registering both anchors is harmless when only one resolves (AddCIncludeDir
+      does not check existence — a miss here is just an unproductive search
+      entry, same as the CWD-relative one below when run elsewhere). }
+    ConcatThree(ExeDir, '../../lib/crtl/include/', '', d);
+    AddCIncludeDir(d);
   end;
   { ... and CWD-relative (run from repo root), like the Pascal PAL dir auto-add.
     Both are appended after user -I, so -I still wins; harmless if absent. }
@@ -2076,6 +2092,20 @@ begin
       CPAppendRange(CPrepPath, '/usr/include/', 1, 13);
       CPAppendRange(CPrepPath, line, a, p - 1);
       CPLoadInclude(depth);
+      { A header pxx has no `-I`/crtl-anchored match for fell all the way through
+        to the bare host system root. Harmless for a genuinely host-only header
+        (X11, GTK, ...) but silently wrong for a libc header pxx SHIPS its own
+        version of (stdarg.h, math.h, ...): the host's va_list/gcc-builtin
+        spellings pxx does not understand, or a constant like M_SQRT2 the host
+        header defines a way pxx's preprocessor cannot follow, both degrade to
+        "undefined identifier, treated as 0" with no further diagnostic
+        (bug-crtl-headers-lost-when-cwd-is-not-the-repo-root). This is exactly
+        the case that anchor was supposed to prevent — warn so a user sees why,
+        instead of chasing a wrong VALUE with no lead back to its cause. }
+      if CPIncludeLength(depth) > 0 then
+        Warn('#include <' + Copy(line, a, p - a) +
+             '> resolved from the host system (/usr/include), not pxx''s own headers — ' +
+             'ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave');
     end;
     if CPIncludeLength(depth) = 0 then
     begin
