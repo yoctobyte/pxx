@@ -51,3 +51,6 @@ uforth repro (`"\n".join("    " + line for line in clean)`) plus `return
 sum(... for ...)`, `list(... for ...)` and `any(... for ...)` — all match
 CPython exactly. Added `test/test_nilpy_genexpr_arg.npy` for direct
 regression coverage.
+
+## Log
+- 2026-07-31 — resolved, commit 1c07cdf15.
