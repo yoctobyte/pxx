@@ -76,3 +76,6 @@ Added `test/test_nilpy_lambda_real_value.npy` — the existing
 `test_nilpy_lambda_stub.npy` never actually CALLED a stored lambda value,
 so this gap had no direct regression coverage despite the underlying
 capability already working.
+
+## Log
+- 2026-07-31 — resolved, commit fba0429bd.
