@@ -8,9 +8,11 @@ program devtest_tls_native_seam;
   an https:// caller had no way to reach it. If this file works, the stack is
   usable.
 
-  `uses tls13_native` is what REGISTERS the backend; nothing else here knows
-  which backend it is talking to, which is why the first line printed is the
-  backend name.
+  Tls13NativeRegister is what installs the backend, and it is an explicit call
+  rather than a side effect of `uses` — linking a unit must not silently decide
+  which TLS stack a program trusts. After that line nothing here knows which
+  backend it is talking to, which is why the first thing printed is the backend
+  name.
 
   Usage: devtest_tls_native_seam <port> <hostname>
   Trust anchors come from SSL_CERT_FILE when set, else the system bundle.
@@ -22,6 +24,8 @@ var
   got, put, i, port: Integer;
 begin
   port := StrToInt(ParamStr(1));
+  if TlsAvailable then begin WriteLn('a backend was registered behind our back'); Halt(1); end;
+  Tls13NativeRegister;
   WriteLn('backend=', TlsActiveBackend.Name);
   fd := NetTcpConnect(NetLoopback(port));
   if fd < 0 then begin WriteLn('connect failed'); Halt(1); end;

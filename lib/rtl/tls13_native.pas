@@ -62,8 +62,15 @@ type
   a diagnosis. Empty when the last handshake succeeded. }
 function Tls13NativeLastError: AnsiString;
 
-{ Install this backend. Called from the initialization section, but exposed so a
-  test can re-register after swapping in a mock. }
+{ Install this backend as the process-global default.
+
+  EXPLICIT on purpose, and NOT called from this unit's initialization. Merely
+  linking a unit must not change which TLS stack a program trusts: that is a
+  process-global, and a link-order artifact is the wrong way to decide it. It
+  also matches the only other backend — tls_openssl registers only when
+  OpenSslTlsRegisterEx is called — so "who is the backend" is always something
+  a caller decided, and calling one after the other is a deterministic override
+  rather than a race between two initialization sections. }
 procedure Tls13NativeRegister;
 
 implementation
@@ -538,5 +545,5 @@ end;
 initialization
   gLastError := '';
   gBackend := nil;
-  Tls13NativeRegister;
+  { deliberately NOT registering here — see Tls13NativeRegister }
 end.

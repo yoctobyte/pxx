@@ -347,6 +347,22 @@ lost nothing: `tls13-handshake-devtest` (ed25519 + rsa_pss + ecdsa_p256, kTLS-TX
 and Pascal fallback) and `truststore-devtest` (10 assertions, still green after
 the `SSL_CERT_FILE` change).
 
+### Registration is EXPLICIT (corrected after review)
+
+The first cut registered the backend from `tls13_native`'s `initialization`.
+That was wrong and was caught by comparing against the only other backend:
+`tls_openssl` registers only when `OpenSslTlsRegisterEx` is called. Merely
+LINKING a unit must not change which TLS stack a program trusts — that is a
+process-global, and deciding it by link order is exactly the kind of thing that
+is invisible until it bites.
+
+So `Tls13NativeRegister` is an explicit call and the initialization section
+registers nothing. That also happens to be the mechanism the "which backend
+when both are present" question needs: calling one registrar after the other is
+a deterministic override rather than a race between two initialization
+sections. The seam devtest asserts `not TlsAvailable` before it registers, so
+the absence of the side effect is tested rather than assumed.
+
 ### What this unblocks
 
 `https://` over the native stack no longer needs [[feature-real-dynlib-loader]],
