@@ -1,0 +1,12 @@
+# str.rsplit()/partition()/rpartition() — every expectation is CPython's own
+# output.
+
+s = "hello world"
+print(s.rsplit("o"))
+print(s.rsplit("o", 1))
+print("a,b,c,d".rsplit(",", 2))
+print(s.partition(" "))
+print(s.rpartition("o"))
+print(s.partition("z"))
+print(s.rpartition("z"))
+print("".rsplit(","))
