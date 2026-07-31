@@ -6,6 +6,33 @@ type: feature
 
 # NilPy corpus: uforth — a real Python Forth system as Track N's forcing target
 
+## RECHECK 2026-07-31 — the line-640 tick/EXECUTE wall is CLEAR; a new wall found further in
+
+Isolated the exact `tick`/`EXECUTE` repro this ticket's log names as the
+next wall (`vm.dict.get(name.upper())` -> a `Word` object -> `push()` ->
+`isinstance(value, Word)` -> `value.xt_id`) and it now matches CPython
+exactly — this specific wall is gone (landed as a side effect of other
+session work, not attributed to one commit).
+
+Compiled the real `/home/rene/projects/uforth/uforth.py` directly (not
+just the isolated repro) to see how far the corpus actually gets now:
+reaches line 3887 before erroring `expected newline after statement`
+(context: `res_addr res_addr length` — needs its own isolated repro to
+pin down, not done this pass). Also surfaced, not fatal but worth noting:
+two `NIL PYTHON` warnings that a nested def (`w_traverse_wordlist`,
+`w_name_to_string`) captures MORE THAN 12 enclosing values and so "cannot
+carry them as a value... will read garbage" if called after the enclosing
+call returns — this is the SAME closure-capture-limit family already
+tracked elsewhere this session (closure-ABI representation gaps), not a
+new bug, but a concrete data point on where the corpus actually presses on
+it.
+
+Not chased further this pass: a real corpus drive is a "fix one wall,
+recompile, hit the next" campaign by nature (as this ticket's own log
+already shows across multiple prior sessions) — the line-3887 wall is the
+next actionable item for whoever picks this up next, isolate it into its
+own minimal repro first per this ticket's own established practice.
+
 ## MILESTONE 2026-07-21 (session 5g): DO/LOOP runs, prelim suite BYTE-IDENTICAL to CPython; core.fr arithmetic green
 
 Full tier-2 promotable-int adoption landed (commits f058b95b + e2eb2ade; the
