@@ -70,3 +70,22 @@ keeping hosts on differing kernels rather than homogenising them.
 
 ## Log
 - 2026-07-31 — resolved, commit 8db798e92.
+
+---
+
+## Correction (2026-07-31, after the fix landed)
+
+This ticket attributed the borg/xeon split to the **kernel** (6.17 vs 7.0). That
+was not established. Both boxes differ in kernel *and* glibc:
+
+| host | glibc | kernel | result |
+|---|---|---|---|
+| borg | 2.39 | 6.17.0-35 | dlopen OK |
+| xeon | 2.43 | 7.0.0-28 | refused |
+
+The message `cannot enable executable stack as shared object requires` is
+emitted by **glibc's loader**, so the proximate cause is the glibc bump, not the
+kernel — the independent duplicate [[bug-a-elf-so-missing-pt-gnu-stack]] said
+glibc >= 2.41 and was better supported. Two variables moved together and only
+one was named; the fix (emit `PT_GNU_STACK` always) is correct either way, but
+the recorded cause should be right.

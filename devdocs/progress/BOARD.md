@@ -30,12 +30,11 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (188)
+## backlog (187)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
-| bug-a-elf-so-missing-pt-gnu-stack | A | 60 | bug | pxx-emitted .so has no PT_GNU_STACK, so glibc >= 2.41 refuses to dlopen it: cannot enable executable stack | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-c-line-file-func-and-predefined-macros-missing | C | 55 | bug | C: __LINE__ is 0, __FILE__ is empty and __func__ is empty; __unix__, __BYTE_ORDER__, __SIZEOF_* and __CHAR_BIT__ are absent | — |
 | bug-c-main-missing-implicit-return-zero | C | 65 | bug | C: main() falling off the end returns stack garbage instead of 0 (i386) | — |
@@ -1435,10 +1434,11 @@ _none_
 | track-c-ternary-string-literal-segfault | C | 50 | track | C: ternary with two string-literal arms segfaults at runtime | — |
 | track-c-va-arg-nonint-lea | C | 50 | track | C: va_arg of any non-`int` type -> "invalid symbol in lea" | — |
 
-## rejected (1437)
+## rejected (1438)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-elf-so-missing-pt-gnu-stack | A | 60 | bug | pxx-emitted .so has no PT_GNU_STACK, so glibc >= 2.41 refuses to dlopen it: cannot enable executable stack | — |
 | bug-a-nilpy-subscript-of-a-string-literal | A | 40 | bug | NilPy: subscripting a string LITERAL is a parse error | — |
 | bug-a-threadsafe-heap-parallel-for-managed-string-race | A | 70 | bug | REJECTED — not a heap bug: was a shared captured-variable data race | — |
 | bug-c-invalid-symbol-in-lea-sqlite | C | 50 | bug | C: `invalid symbol in lea` lowering sqlite amalgamation | — |
@@ -2887,7 +2887,6 @@ _none_
 - [p 65] [A] feature-a-typeref-handle
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
-- [p 60] [A] bug-a-elf-so-missing-pt-gnu-stack
 - [p 60] [C] bug-crtl-headers-lost-when-cwd-is-not-the-repo-root
 - [p 60] [N] bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps

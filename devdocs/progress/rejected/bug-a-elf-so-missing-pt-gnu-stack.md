@@ -68,3 +68,20 @@ tools/testmgr.py --tier full --job 'test-asm#src:test/test_asm_so.asm'
 ```
 
 Track T filed this and does not fix it (T owns the tool, never the bug).
+
+---
+
+## Closed as duplicate (2026-07-31)
+
+Same bug as [[bug-elf-missing-pt-gnu-stack]], filed independently the same day —
+two agents both spotted it in the xeon-vs-borg comparison. Fixed by `fc62fa4e4`
+(emit `PT_GNU_STACK` on every ELF image) and resolved under the other slug;
+`test-asm` went green at `894ba2aad55a`.
+
+Kept for the record because **this ticket's diagnosis was the better one**: it
+named glibc >= 2.41, where the twin blamed the kernel. Verified afterwards —
+borg glibc 2.39 / xeon 2.43, and the error comes from glibc's loader. The
+correction is recorded on the surviving ticket.
+
+Not a wasted filing: it is the duplicate-work pattern the two-box protocol warns
+about, and the reason the rule is *push the claim before you work*.
