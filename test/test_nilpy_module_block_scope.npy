@@ -1,0 +1,36 @@
+# A name FIRST bound inside a module-level if/for block (no pre-declaration)
+# must be visible to a LATER top-level assignment's RHS -- Python has no
+# block scope, so `if True: payload = 3` followed by `documents = payload + 1`
+# is ordinary code. The module-level type-inference pre-pass only recognized
+# a bare-name assignment at INDENT DEPTH 0, so a block-nested one was invisible
+# to it; a later statement referencing that name from an assignment RHS
+# trial-parsed against a pre-pass that had never seen it and Halted the whole
+# compile with "undefined variable". `print(name)` (an expression statement,
+# not trial-parsed the same way) already worked, which is what made this easy
+# to miss. def/class bodies are genuinely new scopes and must NOT leak their
+# locals into module scope, unlike if/for/while/with/try.
+# bug-nilpy-module-level-name-bound-in-a-block-is-invisible-to-a-later-assignment
+# Every expectation is CPython's own output.
+
+if True:
+    payload = 3
+print(payload)
+documents = payload + 1
+print(documents)
+
+for i in [1]:
+    looped = 3
+counted = looped + 1
+print(counted)
+
+def helper():
+    local_only = 5
+    return local_only
+
+class C:
+    def __init__(self):
+        self.class_only = 7
+
+print(helper())
+c = C()
+print(c.class_only)

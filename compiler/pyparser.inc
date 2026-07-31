@@ -11982,6 +11982,9 @@ var rnd, i, si, depth, bodyIx, forJ, forCi: Integer;
     changed, savedExprMode: Boolean;
     tk, w, forElemTk: TTypeKind;
     nm, forName: AnsiString;
+    blockIsDef: array[0..255] of Boolean;   { blockIsDef[d] = body at depth d is a def/class, not if/for/while/with/try }
+    pendingDefClass: Boolean;
+    blkJ: Integer; blkTk: TTypeKind; blkName: AnsiString;
 begin
   PyLocalCount := 0;
   rnd := 0;
@@ -12009,15 +12012,86 @@ begin
     PyExprMode := True;
     i := savedTok - 1;
     depth := 0;
+    pendingDefClass := False;
+    blockIsDef[0] := False;
     while i < MainProgramTokCount do
     begin
-      if Tokens[i].Kind = tkIndent then Inc(depth)
+      { Track, for the block about to be entered, whether its HEADER was
+        `def`/`class` (a real new scope: names bound inside are NOT module
+        globals) versus `if`/`for`/`while`/`with`/`try`/… (control flow only:
+        Python has no block scope, so a name bound inside IS the same module
+        global a statement after the block reads). Reset at every statement
+        BOUNDARY so it reflects the line about to end, then pushed the
+        moment its INDENT actually arrives — a one-line-ahead flag, not a
+        parse of anything. }
+      if (i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]) then
+        pendingDefClass := (Tokens[i].Kind = tkFunction) or (Tokens[i].Kind = tkClass);
+      if Tokens[i].Kind = tkIndent then
+      begin
+        Inc(depth);
+        if depth <= 255 then blockIsDef[depth] := pendingDefClass;
+      end
       else if Tokens[i].Kind = tkDedent then Dec(depth)
       { No explicit skip for `def` / `class`: their bodies raise depth, and a
         def or class HEADER is not tkIdent-then-assign, so neither can match
         the statement tests below. Skipping them with PyFindBodyEnd instead
         cost an O(n) scan per construct — quadratic on a real file, and
         uforth.py went from an instant parse error to 107 seconds. }
+      else if (depth > 0) and (depth <= 255) and (not blockIsDef[depth]) and
+              (Tokens[i].Kind = tkIdent) and
+              (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkAssign) and
+              ((Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon])) then
+      begin
+        { `if/for/while/with/try: ... name = <safe-shape>` — a name FIRST
+          bound inside a control-flow block, read by a LATER top-level
+          bare-name assignment's RHS
+          (bug-nilpy-module-level-name-bound-in-a-block-is-invisible-to-a-
+          later-assignment). The depth=0 branch below safely TRIAL-PARSES a
+          bare assignment's RHS (PyParseStatement) to learn its type — unsafe
+          to do here: this name's own block has not run for real yet, so
+          referencing anything the pre-pass cannot ALSO see would call
+          Error() and Halt the whole compile, the same landmine documented
+          on the `for`-loop branch below. Only the same handful of SAFE,
+          non-parsing shapes that branch already trusts: a literal, or a
+          name already resolvable to a type. Anything else (a call —
+          including the ticket's own motivating `json.load(f)`) is left
+          alone; the deeper fix (a pre-pass that does not Halt on an
+          as-yet-unseen name) is a separate, larger change. }
+        blkName := GetTokenStr(i);
+        blkJ := i + 2;
+        blkTk := tyUnknown;
+        if (blkJ < MainProgramTokCount) and (Tokens[blkJ].Kind = tkString) then
+          blkTk := tyAnsiString
+        else if (blkJ < MainProgramTokCount) and (Tokens[blkJ].Kind = tkInteger) then
+          blkTk := tyInt64
+        else if (blkJ < MainProgramTokCount) and
+                (Tokens[blkJ].Kind in [tkLBrack, tkBegin]) then
+          blkTk := tyVariant
+        else if (blkJ < MainProgramTokCount) and (Tokens[blkJ].Kind = tkIdent) and
+                (blkJ + 1 < MainProgramTokCount) and
+                (Tokens[blkJ + 1].Kind in [tkNewline, tkDedent]) then
+        begin
+          if PyFindModuleConstraint(GetTokenStr(blkJ)) >= 0 then
+            blkTk := tyVariant
+          else if PyProgSym(GetTokenStr(blkJ)) >= 0 then
+          begin
+            si := PyProgSym(GetTokenStr(blkJ));
+            if Syms[si].TypeKind in [tyString, tyAnsiString] then blkTk := tyAnsiString
+            else blkTk := tyVariant;
+          end;
+        end;
+        if blkTk <> tyUnknown then
+        begin
+          PyNoteLocalType(blkName, blkTk, REC_NONE);
+          { Noting it only records it for the NEXT round's seeding loop (see
+            the annotated-assignment branch's own note just below) -- a
+            LATER statement in THIS SAME round's linear scan (`documents =
+            payload + 1`, right after `payload`'s own block in the same
+            file) trial-parses before that seeding ever runs, and died
+            "undefined variable" before this. }
+          if PyProgSym(blkName) < 0 then si := AllocVar(blkName, blkTk);
+        end;
+      end
       else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
               (i + 3 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkColon) then
       begin

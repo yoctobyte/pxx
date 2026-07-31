@@ -544,6 +544,10 @@ test-nilpy: $(COMPILER)
 	@# a class defining __getitem__/__setitem__ routes subscript read/write
 	./$(COMPILER) test/test_nilpy_dunder_getitem_setitem.npy /tmp/test_nilpy_dundergetset26
 	test "$$(/tmp/test_nilpy_dundergetset26)" = "$$(printf '%b' '20\n99\n[10, 99, 30]\n42\n-1\n10\ncaught: TypeError')"
+	@# a name first bound inside an if/for block is visible to a later
+	@# top-level assignment's RHS; def/class bodies stay real scopes
+	./$(COMPILER) test/test_nilpy_module_block_scope.npy /tmp/test_nilpy_modblockscope26
+	test "$$(/tmp/test_nilpy_modblockscope26)" = "$$(printf '%b' '3\n4\n4\n5\n7')"
 	./$(COMPILER) test/test_nilpy_dynattr.npy /tmp/test_nilpy_dynattr26
 	test "$$(/tmp/test_nilpy_dynattr26)" = "$$(printf '%b' '105\n110')"
 	./$(COMPILER) test/test_nilpy_dynattr_class.npy /tmp/test_nilpy_dynattr_class26
