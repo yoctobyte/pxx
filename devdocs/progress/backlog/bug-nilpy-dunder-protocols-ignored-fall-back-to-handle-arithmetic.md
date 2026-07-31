@@ -56,19 +56,40 @@ rather than an addendum to that one.
 
 ## Suggested order
 
-1. **`__len__` and `__contains__`.** Both are already funnelled through a single
-   pylib entry point (`pylen_v`, `pycontains`/`pydictcontains`) that dispatches
-   on the tag, and tag 7 already branches on `is TPyList` / `is TPyDict`. Adding
-   "otherwise, if the class defines the method, call it" is a contained change
-   at one site each, and it covers the two commonest protocols.
-2. **`__call__`.** `obj(x)` currently produces the handle. The dynamic-call
-   machinery for a callable value already exists (`pyvar_callv*`); this is
-   routing an instance with a `__call__` into it.
-3. **`__getitem__` / `__setitem__`.** Needs the parse gap closed first —
-   `C()[1]` does not currently parse at all.
+1. **`__len__` and `__contains__`.** DONE (commit 3a3204d876d3f07fe94a2727713d79074d36ba58). Both are dispatched to the
+   user method when the resolved receiver is a non-pylib class; a class with
+   NEITHER dunder now raises a genuine runtime TypeError (a new
+   `PyNotContainerError`/the existing `pylen_v` Variant fallback) instead of
+   silently reading garbage. One real wrinkle found along the way: the
+   `len()` case's first attempt REWOUND unconditionally for the no-`__len__`
+   shape and depended on which OTHER classes happened to exist elsewhere in
+   the file for whether it raised or read garbage — confirmed with
+   `PXXDBG=a.ir` that the compiler's overload matcher silently picks the
+   TPyList overload for ANY unmatched tyClass argument, not just the one
+   with `__len__`. Fixed by never rewinding for a non-pylib-container class,
+   dunder present or not. Regression: `test/test_nilpy_dunder_len_contains.npy`.
+2. **`__call__`.** DONE (commit 1536e5901e50d992011c302d8ae722346269c1ac). `a(x)` dispatches to `__call__` via a new
+   `PyMakeCallDunder`, arbitrary arity, looped so a returned callable composes.
+   No `__call__` raises `PyNotCallableError` (a genuine runtime TypeError)
+   rather than the pre-existing hard parse error. Regression:
+   `test/test_nilpy_dunder_call.npy`.
+3. **`__getitem__` / `__setitem__`.** STILL OPEN. `C()[1]` no longer fails
+   to parse (that changed since this ticket was opened) but now silently
+   returns a WRONG value (`0` instead of the real element) — `b[1]` on an
+   ident-based class value routes through the SHARED `ParseLValueAST`
+   (parser.inc), not the expression-postfix chain `__len__`/`__contains__`/
+   `__call__` were fixed in. That function is large, shared with every OTHER
+   frontend's lvalue parsing, and historically fragile — a different ticket
+   this same session (bug-nilpy-chained-subscript-assignment-writes-only-
+   the-last-target) explicitly backed away from editing it blind. Needs a
+   dedicated pass: find where it falls through to Pascal's default-indexed-
+   property machinery for a tyClass base with no default property declared,
+   and add the same "resolve FindUMeth('__getitem__'/'__setitem__') on a
+   non-pylib class" check the three landed dunders use, on BOTH the read and
+   the write (`x[i] = v`) sides.
 4. **Arithmetic and ordering dunders** (`__add__`, `__lt__`, …), together with
    the class-operand question above. Largest, and the one that wants a Track U
-   decision about how far NilPy follows Python's operator protocol.
+   decision about how far NilPy follows Python's operator protocol. STILL OPEN.
 
 Until each is dispatched, the corresponding operator should say so rather than
 compute off a handle — the mixed-type work's rule (warn where provable, raise at
