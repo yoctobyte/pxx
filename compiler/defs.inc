@@ -1537,6 +1537,15 @@ var
   PyPendLamProc: array[0..PY_MAX_NESTED-1] of Integer;   { the proc registered for it }
   PyPendLamCount: Integer;
   PyLamSeq: Integer;                        { serial for the synthetic lambda name }
+  { A CALLABLE-VALUE WRAPPER's body, queued on the SAME lambda queue (same
+    timing requirement: CurProc must be safely restorable, i.e. after the
+    enclosing routine's own compile finishes). PyPendLamTok[i] = -1 marks a
+    wrapper entry (a real lambda's token span is always >= 0): its body is
+    hand-built AST (`return REALPROC(a0)`), not parsed from source, and
+    PyPendLamWrapReal[i] names the real proc the wrapper calls.
+    feature-nilpy-callable-value-unified-dispatch }
+  PyPendLamWrapReal: array[0..PY_MAX_NESTED-1] of Integer;
+  PyWrapSeq: Integer;                       { serial for the synthetic wrapper name }
   PyStmtAteBlock: Boolean;   { last statement consumed its own indented block AND the DEDENT (nested def) }
   { Enclosing locals a nested def READS, lifted to trailing by-value parameters
     the call site fills in (feature-nilpy-nested-defs). Python reads a closed-over

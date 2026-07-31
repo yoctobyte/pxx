@@ -870,6 +870,9 @@ function PyParseSysStream: Integer; forward; { Nil Python sys.stdout/sys.stderr 
 function PyIsToBytesSuffixAhead: Boolean; forward; { Nil Python: at a `.to_bytes(` suffix? (pyparser.inc) }
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python obj.meth() on a VARIANT receiver (pyparser.inc) }
 function PyMakeFuncValue: Integer; forward; { Nil Python bare def NAME as a value (pyparser.inc) }
+function PyFindVariantParamOverload(const nm: AnsiString; wantArity: Integer): Integer; forward; { Nil Python: same-arity all-Variant-param overload of nm (pyparser.inc) }
+function PyGetOrMakeCallableWrapper(realPi: Integer): Integer; forward; { Nil Python: Variant-ABI wrapper around realPi, cached by name (pyparser.inc) }
+function PyScalarWrappableRetType(tk: TTypeKind): Boolean; forward; { Nil Python: is tk a genuine scalar/string result worth wrapping (pyparser.inc) }
 function PyMakeVariantField(baseNode: Integer; const fname: AnsiString; var tk: TTypeKind; var recName: Integer): Integer; forward; { Nil Python obj.field on a VARIANT receiver (pyparser.inc) }
 function PyKwArgIndex(mpi, firstParam: Integer): Integer; forward; { Nil Python `name=expr` call argument (pyparser.inc) }
 procedure PyBindKwArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer); forward; { Nil Python keyword-argument reorder (pyparser.inc) }
@@ -8048,6 +8051,7 @@ var intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiSt
     mapProc: Integer; mapKind: AnsiString;   { NilPy map(<type>, xs) }
     rndArg: Integer;   { first operand of NilPy round(x, n) }
     fwdList, fwdDict: Integer;   { `f(*args, **kwargs)` forwarded into fixed parameters }
+    altPi, wpj: Integer; paramsAllVariant: Boolean;   { callable-value wrapper selection }
 begin
   LastExprTk := tyInteger;
   { Nil Python: ClassName(args) in ANY expression position is construction
@@ -9147,6 +9151,31 @@ begin
          (FindProc(PyQualifyNested(name)) >= 0) then
       begin
         idx := FindProc(PyQualifyNested(name));
+        { Same fix as PyMakeFuncValue's twin case, needed here too since a
+          bare callable in an ordinary expression position (a `key=`/`cmp=`
+          keyword argument, not an assignment RHS) reaches THIS handler
+          instead: the first FindProc match may not be the SAFE overload
+          (`len`'s first declared one takes a TPyBytes, not a Variant), and
+          even the safe one's RETURN isn't the Variant-hidden-destination-
+          pointer convention every callable-value dispatcher assumes --
+          `sorted(xs, key=len)` crashed even though `f = len; sorted(xs,
+          key=f)` (going through PyMakeFuncValue) already worked.
+          feature-nilpy-callable-value-unified-dispatch }
+        altPi := PyFindVariantParamOverload(name, Procs[idx].ParamCount);
+        if altPi >= 0 then idx := altPi;
+        if Procs[idx].RetType <> tyVariant then
+        begin
+          paramsAllVariant := True;
+          for wpj := 0 to Procs[idx].ParamCount - 1 do
+            if Procs[idx].Params[wpj].TypeKind <> tyVariant then
+            begin
+              paramsAllVariant := False;
+              Break;
+            end;
+          if paramsAllVariant and (Procs[idx].ParamCount = 1) and
+             Procs[idx].IsFunc and PyScalarWrappableRetType(Procs[idx].RetType) then
+            idx := PyGetOrMakeCallableWrapper(idx);
+        end;
         Next;
         { A nested def whose meaning depends on values live NOW (default-arg
           expressions, captured enclosing locals) cannot travel as a bare

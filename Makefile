@@ -528,6 +528,9 @@ test-nilpy: $(COMPILER)
 	@# sorted(key=...) now recognizes a lifted lambda / plain def / bound method
 	./$(COMPILER) test/test_nilpy_sorted_key_dispatch.npy /tmp/test_nilpy_sortedkey26
 	test "$$(/tmp/test_nilpy_sortedkey26)" = "$$(printf '%b' '['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n['"'"'a'"'"', '"'"'bbb'"'"', '"'"'cc'"'"']\n[3, 2, 1]')"
+	@# a builtin (`f = len`) captured as a bare value no longer segfaults
+	./$(COMPILER) test/test_nilpy_builtin_value_wrapper.npy /tmp/test_nilpy_builtinval26
+	test "$$(/tmp/test_nilpy_builtinval26)" = "$$(printf '%b' '['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n3\n5\n3\n['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n['"'"'a'"'"', '"'"'bbb'"'"', '"'"'cc'"'"']')"
 	./$(COMPILER) test/test_nilpy_dynattr.npy /tmp/test_nilpy_dynattr26
 	test "$$(/tmp/test_nilpy_dynattr26)" = "$$(printf '%b' '105\n110')"
 	./$(COMPILER) test/test_nilpy_dynattr_class.npy /tmp/test_nilpy_dynattr_class26

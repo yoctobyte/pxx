@@ -4187,6 +4187,7 @@ begin
           ProcParamRecId[lamProc * MAX_PROC_PARAMS + j] := lamRecs[j];
       PyPendLamTok[PyPendLamCount] := bStart;
       PyPendLamProc[PyPendLamCount] := lamProc;
+      PyPendLamWrapReal[PyPendLamCount] := -1;   { not a callable-value wrapper }
       Inc(PyPendLamCount);
 
       { pyboundfn_new(addr, nBound, a0var=1) — the own param is a variant and
@@ -6051,6 +6052,88 @@ begin
     end;
 end;
 
+{ Find an overload of `nm` whose every parameter is ALREADY tyVariant --
+  i.e. one that dispatches correctly regardless of what shape the argument
+  actually is at runtime, the way `len`'s `(const v: Variant): Integer`
+  overload does. FindProc alone is first-match, arity-blind: `len`'s FIRST
+  declared overload is `(b: TPyBytes): Integer`, so a naive
+  `FindProc('len')` used as `f = len; f("hi")` would silently misread a
+  string as a TPyBytes handle. Only the return type may still be non-Variant
+  (that half is what PyGetOrMakeCallableWrapper adapts).
+  feature-nilpy-callable-value-unified-dispatch }
+function PyFindVariantParamOverload(const nm: AnsiString; wantArity: Integer): Integer;
+var i, j: Integer; ok: Boolean;
+begin
+  Result := -1;
+  for i := 0 to ProcCount - 1 do
+  begin
+    if not CaseEqual(Procs[i].Name, nm) then Continue;
+    if Procs[i].ParamCount <> wantArity then Continue;
+    ok := True;
+    for j := 0 to wantArity - 1 do
+      if Procs[i].Params[j].TypeKind <> tyVariant then begin ok := False; Break; end;
+    if ok then begin Result := i; Exit; end;
+  end;
+end;
+
+{ TRUE for a return type that is meaningful to box into a Variant result --
+  a genuine scalar/string value a real FUNCTION computed. A `-> None` def
+  (or any procedure with nothing to return) types tyUnknown here, and
+  wrapping THAT crashed: `def hit(vm) -> None: print(...)` used as a
+  dataclass field value (`native=hit`) got wrapped, the wrapper's
+  `return hit(a0)` tried to store hit's (nonexistent) result into
+  $pyresult, and calling it through the field (`w.native(x)`) segfaulted
+  right after hit's own body ran. A void proc already has a working
+  calling convention through the EXISTING mechanisms (PyWrapClosureFieldCall
+  and friends); only a genuine value-returning non-Variant result needs
+  this wrapper at all.
+  feature-nilpy-callable-value-unified-dispatch }
+function PyScalarWrappableRetType(tk: TTypeKind): Boolean;
+begin
+  Result := tk in [tyInteger, tyInt64, tyDouble, tySingle, tyExtended,
+                   tyBoolean, tyAnsiString, tyString, tyChar];
+end;
+
+{ realPi already has an all-Variant PARAMETER list (the caller found it via
+  PyFindVariantParamOverload, or it is a NilPy-source def PyDefUsedAsValue
+  already normalised) but its RETURN type is not tyVariant -- a plain Pascal
+  scalar/string/class result, returned in a register or via its OWN type's
+  convention, not the Variant hidden-destination-pointer one every callable-
+  value dispatcher (pyvar_callv1, PyCallKey1, pycallback_call1, ...) assumes.
+  Synthesizes (and caches, by NAME, so repeated captures of the same proc
+  share one wrapper) a `function $pycallwrap_N(const a0: Variant): Variant`
+  whose body is `return realPi(a0)` -- built as AST, not parsed source, by
+  PyCompileLambdaBody's bStart=-1 branch, queued on the SAME lambda-body
+  queue (same timing requirement: compiled once CurProc is safely
+  restorable). The ordinary call-argument coercion (Variant -> whatever
+  realPi's own param type is) and return coercion (whatever it returns ->
+  Variant) apply completely unchanged; nothing here does any unboxing
+  itself. Only arity 1 today -- covers `key=`/`cmp=`-shaped single-argument
+  callables, which is everything this ticket's own repro and the sorted()
+  fix need; a multi-arg builtin captured as a bare value still gets the
+  unsafe direct address (unchanged pre-existing behaviour) rather than a
+  half-finished wrapper.
+  feature-nilpy-callable-value-unified-dispatch }
+function PyGetOrMakeCallableWrapper(realPi: Integer): Integer;
+var wrapName: AnsiString; wrapPi: Integer;
+    pnames: array[0..0] of AnsiString; ptypes: array[0..0] of TTypeKind;
+begin
+  wrapName := '$pycallwrap_' + AIntToStr(realPi);
+  wrapPi := FindProc(wrapName);
+  if wrapPi >= 0 then begin Result := wrapPi; Exit; end;
+  pnames[0] := 'a0';
+  ptypes[0] := tyVariant;
+  wrapPi := RegisterProc(wrapName, True, tyVariant, 1, pnames, ptypes);
+  Procs[wrapPi].BodyAddr := -1;
+  if PyPendLamCount >= PY_MAX_NESTED then
+    Error('Nil Python: too many pending callable-value wrappers/lambdas');
+  PyPendLamTok[PyPendLamCount] := -1;    { sentinel: hand-built body, not parsed }
+  PyPendLamProc[PyPendLamCount] := wrapPi;
+  PyPendLamWrapReal[PyPendLamCount] := realPi;
+  Inc(PyPendLamCount);
+  Result := wrapPi;
+end;
+
 function PyMakeFuncValue: Integer;
 { A bare def NAME in a value position — `w.bind(seq, on_plain)`, `sorted(l,
   key=cmp)`. Python's function object; NilPy already builds one for a bound
@@ -6058,7 +6141,8 @@ function PyMakeFuncValue: Integer;
   a nil receiver and every consumer (pycallback_call*, the tkinter dispatcher)
   handles both. Returns -1 when the token is not a def name, so callers fall
   through to their existing handling. CurTok is the identifier. }
-var pi, procAddr, argA, argB, callNode, nilNode, boundPi: Integer;
+var pi, procAddr, argA, argB, callNode, nilNode, boundPi, altPi, wpj: Integer;
+    paramsAllVariant: Boolean;
 begin
   Result := -1;
   if not isNilPy then Exit;
@@ -6074,6 +6158,34 @@ begin
   if PyNestPrefix <> '' then pi := FindProc(PyNestPrefix + '.' + CurTok.SVal);
   if pi < 0 then pi := FindProc(CurTok.SVal);
   if pi < 0 then Exit;
+  { The first FindProc match may not be the SAFE overload: `len`'s first
+    declared one takes a TPyBytes, not a Variant, and a wrapper built around
+    the wrong overload would silently misread a string argument as a bytes
+    handle. Prefer a same-arity, all-Variant-parameter overload of the same
+    name if one exists (a NilPy-source def has only one registration, so
+    this is a no-op for it). If its return isn't ALSO already tyVariant --
+    the shape a plain Pascal builtin like `len` always has, since the
+    Variant-hidden-destination-pointer convention every callable-value
+    dispatcher assumes is a NilPy-def-only convention -- synthesize a
+    wrapper that adapts just the return side. A proc with no all-Variant-
+    parameter overload at all (or the wrong arity) is left exactly as
+    before: still the pre-existing, unwrapped, possibly-unsafe value.
+    feature-nilpy-callable-value-unified-dispatch }
+  altPi := PyFindVariantParamOverload(CurTok.SVal, Procs[pi].ParamCount);
+  if altPi >= 0 then pi := altPi;
+  if Procs[pi].RetType <> tyVariant then
+  begin
+    paramsAllVariant := True;
+    for wpj := 0 to Procs[pi].ParamCount - 1 do
+      if Procs[pi].Params[wpj].TypeKind <> tyVariant then
+      begin
+        paramsAllVariant := False;
+        Break;
+      end;
+    if paramsAllVariant and (Procs[pi].ParamCount = 1) and
+       Procs[pi].IsFunc and PyScalarWrappableRetType(Procs[pi].RetType) then
+      pi := PyGetOrMakeCallableWrapper(pi);
+  end;
   boundPi := FindProc('pybound_new');
   if boundPi < 0 then Exit;
   procAddr := AllocNode(AN_PROCADDR);
@@ -12368,8 +12480,9 @@ end;
   half — a lambda has no statements, no locals and no nested defs, so what is
   left is the prologue, the expression, and the epilogue.
   (feature-nilpy-lambda-compiled-closure) }
-procedure PyCompileLambdaBody(procIdx, bStart: Integer);
-var i, idx, patchPos, savedSC, savedFS, nparams, node, seqNode, exitNode: Integer;
+procedure PyCompileLambdaBody(procIdx, bStart, realProcIdx: Integer);
+var i, idx, patchPos, savedSC, savedFS, nparams, node, seqNode, exitNode,
+    wArgSeq, wArgLast, wArgNode, wIdentNode, wCallNode: Integer;
     savedExprMode: Boolean;
 begin
   { NilPy expression rules must be ON while this body parses — the module-level
@@ -12439,9 +12552,38 @@ begin
   PyEmitParamSpills(procIdx, nparams);
   PyInitVariantLocals(Procs[procIdx].ScopeBase);
   EmitManagedLocalsZeroInit(Procs[procIdx].ScopeBase);
-  TokPos := bStart;
-  Next;
-  PyParseBoolExpr;
+  if bStart = -1 then
+  begin
+    { A CALLABLE-VALUE WRAPPER (feature-nilpy-callable-value-unified-dispatch):
+      no source span to parse -- hand-build `return REALPROC(a0, a1, ...)`,
+      one AN_IDENT per own Variant parameter feeding the real proc's call
+      exactly the way a genuine `return realproc(a0)` would parse, so the
+      ordinary argument/return coercion (Variant param -> the real proc's
+      actual param type, and back) applies unchanged. }
+    wArgSeq := -1; wArgLast := -1;
+    for i := 0 to nparams - 1 do
+    begin
+      wIdentNode := AllocNode(AN_IDENT);
+      ASTIVal[wIdentNode] := Procs[procIdx].Params[i].SymIdx;
+      ASTTk[wIdentNode] := Ord(tyVariant);
+      wArgNode := AllocNode(AN_ARG);
+      ASTLeft[wArgNode] := wIdentNode; ASTRight[wArgNode] := -1;
+      if wArgLast < 0 then wArgSeq := wArgNode else ASTRight[wArgLast] := wArgNode;
+      wArgLast := wArgNode;
+    end;
+    wCallNode := AllocNode(AN_CALL);
+    ASTIVal[wCallNode] := realProcIdx;
+    ASTTk[wCallNode] := Ord(Procs[realProcIdx].RetType);
+    ASTRight[wCallNode] := ProcRetRecId[realProcIdx];
+    ASTLeft[wCallNode] := wArgSeq;
+    CurASTNode := wCallNode;
+  end
+  else
+  begin
+    TokPos := bStart;
+    Next;
+    PyParseBoolExpr;
+  end;
   { the expression IS the whole lambda body, so its VALUE is what the lambda
     evaluates to -- wrap it in a real AN_EXIT (exactly what a written
     `return <expr>` produces) so it stores into $pyresult through the SAME
@@ -12501,7 +12643,8 @@ begin
   begin
     Dec(PyPendLamCount);
     savedTok := TokPos;
-    PyCompileLambdaBody(PyPendLamProc[PyPendLamCount], PyPendLamTok[PyPendLamCount]);
+    PyCompileLambdaBody(PyPendLamProc[PyPendLamCount], PyPendLamTok[PyPendLamCount],
+                        PyPendLamWrapReal[PyPendLamCount]);
     TokPos := savedTok - 1;
     Next;
   end;

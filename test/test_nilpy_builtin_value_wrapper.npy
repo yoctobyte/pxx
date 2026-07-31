@@ -1,0 +1,38 @@
+# A builtin captured as a bare VALUE (`f = len`) used to segfault: pybound_new
+# wrapped the raw code address of `len`'s FIRST overload (a TPyBytes one, not
+# even the right one for a list/string argument) with no Variant-ABI
+# adaptation, and every callable-value dispatcher assumes the Variant
+# hidden-destination-pointer return convention every NilPy def already has
+# but a plain Pascal builtin does not. Fixed via PyGetOrMakeCallableWrapper:
+# prefer the same-arity all-Variant-PARAMETER overload (so the argument shape
+# dispatches correctly, e.g. len's `(const v: Variant): Integer`), then wrap
+# ONLY the return side if it isn't already Variant.
+#
+# A `-> None` def (no value to return) used as a callable VALUE must NOT be
+# wrapped -- wrapping a void proc crashed right after its body ran, since
+# there was no return value to propagate. Guarded on Procs[pi].IsFunc, not
+# just its RetType placeholder (a `-> None` def with no value-returning
+# `return` registers IsFunc=False but still carries a tyInteger RetType
+# fallback). test_nilpy_unpack_callable.npy (already gated) covers the shape
+# that first caught this, a `-> None` def stored in a dataclass field and
+# called through it.
+# bug-nilpy-callable-value-abi-sorted-key-and-builtins
+# Every expectation is CPython's own output.
+
+print(sorted(["bbb", "a", "cc"], key=len))
+print(sorted(["bbb", "a", "cc"], key=lambda s: len(s)))
+
+f = len
+print(f([1, 2, 3]))
+print(f("hello"))
+
+g = lambda s: len(s)
+print(g("abc"))
+
+def kint(s):
+    return len(s)
+print(sorted(["bbb", "a", "cc"], key=kint))
+
+def kstr(s):
+    return s
+print(sorted(["bbb", "a", "cc"], key=kstr))
