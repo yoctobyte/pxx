@@ -51,19 +51,46 @@ fast local confirm and let Track T's report come back tagged to your sha. A red
 arrives as an asynchronous callback minutes later; that is accepted, and it is
 cheaper than every agent serialising on a 10-minute matrix.
 
-### The one gate you still cannot offload
-
-Everything about that is breadth. **Self-host fixedpoint is different**: it is
-the property every other track's ground rests on, and a compiler change that
-breaks it poisons the next `pin` for everyone. So for any `compiler/**` change:
+### The bar is NATIVE. Green native = the edit is done.
 
 ```
-tools/testmgr.py --tier quick        # ~40s
-+ self-host fixedpoint (byte-identical)
+tools/testmgr.py --tier native      # ~100s on xeon, ~150-220s on borg
 ```
 
-then push. That is the floor, not the gate — skip the matrix, never skip this.
-Non-compiler changes (docs, tickets, libs under `$(PXX_STABLE)`) do not need it.
+Green ⇒ **call the edit a success, push, move on.** Do not wait for the matrix,
+do not wait for cross-targets, do not wait for a peer.
+
+This is safe by construction, not by optimism: native already carries the
+self-host fixedpoint gate —
+
+```python
+SELFHOST_GATE_TIERS = ("native", "limited", "full")   # testmgr.py
+# NOT advisory — byte-identical self-host is the gate the stable binary rests on.
+```
+
+— so the one property that is genuinely not offloadable (a broken fixedpoint
+poisons the next `pin` for *every* track) is already inside the bar. `quick` is
+the inner loop and does **not** carry it; that is the difference between the two
+tiers and the reason the push bar is native, not quick.
+
+Non-compiler changes (docs, tickets, libs built against `$(PXX_STABLE)`) do not
+need even that.
+
+### Fast-forward, fix later — including on the same target
+
+Green native does **not** mean nothing will break. Track T may later file
+regressions for other targets *and for the target you just tested* — native is a
+subset of native-plus-breadth, and the matrix reruns things your run never
+touched.
+
+That is the deal, not a defect: **a later red becomes a ticket, never a reason
+to have waited.** Land, move to the next thing, and treat incoming reds as new
+work items ranked against everything else in the queue. The alternative —
+serialising every significant change behind a 10-minute matrix, across several
+agents — costs far more than the occasional fix-forward.
+
+Two things this does *not* license: skipping native, and pushing a state you
+already know is broken or mid-refactor.
 
 ### Callbacks arrive tagged to a sha that may already be stale
 
