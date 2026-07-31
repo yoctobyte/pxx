@@ -512,6 +512,9 @@ test-nilpy: $(COMPILER)
 	@# sum/max/min/any/all/sorted/set (already worked) + type(x).__name__ (new)
 	./$(COMPILER) test/test_nilpy_aggregate_builtins.npy /tmp/test_nilpy_aggbuiltins26
 	test "$$(/tmp/test_nilpy_aggbuiltins26)" = "$$(printf '%b' '6\n3\n1\nTrue\nTrue\n[1, 2, 3]\n3\n[1, 2, 3]\nValueError\nFoo')"
+	@# a class body consisting of ONLY `pass` used to error "expected def"
+	./$(COMPILER) test/test_nilpy_class_pass_body.npy /tmp/test_nilpy_clspass26
+	test "$$(/tmp/test_nilpy_clspass26)" = "$$(printf '%b' 'caught: custom\nMyErr\nmade empty')"
 	./$(COMPILER) test/test_nilpy_dynattr.npy /tmp/test_nilpy_dynattr26
 	test "$$(/tmp/test_nilpy_dynattr26)" = "$$(printf '%b' '105\n110')"
 	./$(COMPILER) test/test_nilpy_dynattr_class.npy /tmp/test_nilpy_dynattr_class26

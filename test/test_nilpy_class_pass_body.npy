@@ -1,0 +1,21 @@
+# `class Foo(Exception): pass` (a whole-body pass, no methods, no fields) --
+# any class body consisting of ONLY `pass` fell into the unconditional
+# PyParseMethod call and errored "expected def"; fixed by giving pass its
+# own skip in the class-body loop, matching every other `pass` site.
+# bug-nilpy-class-with-pass-body-fails-to-parse
+# Every expectation is CPython's own output.
+
+class MyErr(Exception):
+    pass
+
+try:
+    raise MyErr("custom")
+except MyErr as e:
+    print("caught:", e)
+    print(type(e).__name__)
+
+class Empty:
+    pass
+
+x = Empty()
+print("made empty")

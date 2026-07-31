@@ -14560,6 +14560,16 @@ begin
       Next;
       PySkipNewlines;
     end
+    else if PyIsIdent('pass') then
+    begin
+      { `class Foo(Exception): pass` -- a whole-body `pass` (no fields, no
+        methods) fell into the unconditional PyParseMethod branch below and
+        errored "expected def"; every OTHER `pass` site in the grammar already
+        has its own skip (see the statement-level one a few hundred lines up).
+        bug-nilpy-class-with-pass-body-fails-to-parse }
+      Next;
+      PySkipNewlines;
+    end
     else if isDC and (CurTok.Kind = tkIdent) then
     begin
       { dataclass field line — already registered; skip to end of line }
