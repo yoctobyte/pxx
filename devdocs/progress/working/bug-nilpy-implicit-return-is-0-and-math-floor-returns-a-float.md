@@ -50,30 +50,58 @@ real Result-zero-init mechanism in the shared codegen, and NilPy's `def` with
 an empty/no-return body is not going through it, or is skipping it for this
 shape specifically.
 
-## Shape of a fix
+## FIXED — commit (this session)
 
-Root-cause where a NilPy `def`'s IR body is finalized (`pyparser.inc`, the
-same neighbourhood as `PyDefReturnType`/`PyMethodRetType`'s "harmless case"
-comments at the three sites documented previously) and where the proc epilogue
-is emitted (`ir.inc`) to find why Pascal's Result-zero-init doesn't reach this
-NilPy shape — the `IR count=0` finding says the body never lowers a store at
-all, so either the zero-init pass silently excludes this local/slot, or NilPy
-defs don't route through the same prologue mechanism at all for a body with no
-top-level statements. Do NOT reuse the two prior "harmless case" comments as
-evidence this is already handled — they justify the REGISTERED type choice
-(tyInteger for the signature), not that a value is ever actually stored.
+The premise that "Plain Pascal does not have this gap" / "there is a real
+Result-zero-init mechanism in the shared codegen" was ITSELF wrong — measured,
+not assumed. Under `-g`/`-O0` a plain `function Empty: Integer; begin end;`
+called right after a function that sets `rax` to a large value ALSO returns
+that garbage value (confirmed with gdb: the stack slot at `[rbp-4]` genuinely
+still held the prior call's `0x4000cccc` when Empty's epilogue read it). The
+"reliable 0" observed at the DEFAULT `-O2` was an OPTIMIZER ARTIFACT specific
+to `-O2` (a function that never stores to Result gets its Result load folded
+to a constant at that optimization level) — not a deliberate zero-init
+contract, and NilPy's `def` body structure just doesn't happen to trigger the
+same fold. `bug-a-nilpy-...` sibling investigations elsewhere in this codebase
+already document exactly this kind of misattributed-to-a-mechanism-that-
+doesn't-exist trap; this is another instance of it.
 
-This is a plain uninitialized-read bug (the class this project's own
-debugging playbook calls the expensive kind — plausible wrong value, no
-crash), not a design question, so no Track U ticket is needed; it stays here
-once someone has time to trace the epilogue/zero-init path with `-g` + gdb or
-`PXXDBG=a.ir`/`a.ast` rather than reasoning about it.
+The REAL, narrowly-scoped fix: `PyPrependResultZero` (pyparser.inc) already
+existed to zero a MANAGED Result slot (AnsiString/Variant) at body entry for
+methods — its own comment explicitly called a scalar (Integer) Result
+"harmless" to leave uninitialized. Extended it (new `PyZeroLitFor` helper) to
+also emit an explicit `Result := 0`-shaped assignment for the plain scalar
+kinds (Integer family, Boolean, Single/Double), and wired the call into
+`PyParseDef`'s own body (previously only the method-body path called it) so a
+plain top-level/nested `def` gets the same guarantee a method already did for
+its managed kinds. Verified with `-g`/gdb that the fix holds at BOTH `-O0` and
+`-O2` (deterministic `0`, not a lucky optimizer fold), and that `f() is None`
+now correctly returns `True` off that deterministic value (it already did
+before, coincidentally — see below).
+
+## What's NOT fixed, and is out of scope here
+
+`print(f())` still prints `0`, not the CPython text `None`. This is NOT new:
+even an EXPLICIT `return None` in a def whose registered return type ends up
+SCALAR (e.g. a def some caller uses in an int-returning position) already
+prints `0` today, while `f() is None` still correctly says `True` — confirmed
+by direct testing (`def g(): return None; print(g())` prints `0`, `g() is
+None` prints `True`, both BEFORE and AFTER this fix). NilPy already has a
+None-detection mechanism independent of print/repr formatting for a
+scalar-typed slot; making `print()` show `None` for a scalar-shaped return
+is a wider, pre-existing gap (real None-carrying Variant return values), not
+something this fix's narrower undefined-behaviour scope introduced or was
+meant to close. That gap tracks with `feature-nilpy-none-variant` — do not
+reopen this ticket for it; file/point there instead.
 
 ## Gate
 
-`make test-nilpy` + self-host byte-identical, plus a `.npy` that calls a
-value-returning function FIRST (to load a nonzero value into whatever
-register/slot the empty-bodied `def` would otherwise leak), then calls the
-empty-bodied `def` and checks BOTH `print(f())` prints `None` (not `0`, not
-garbage) and `f() is None` is `True`. A test that only calls the empty-bodied
-def in isolation will not catch a regression — see how this one survived.
+`make test-nilpy` + self-host byte-identical (confirmed), plus
+`test/test_nilpy_implicit_return_none.npy`: a value-returning function runs
+FIRST (to load a nonzero value into whatever register/slot an uninitialized
+Result would otherwise leak), then a bodyless top-level `def` AND a bodyless
+method both report a deterministic `0` and `is None` `True` — verified at
+both `-O0` and the default `-O2`, and re-verified after fixing an unrelated
+comprehension-scope regression (`bug-nilpy-comprehension-variable-leaks-and-
+clobbers-the-enclosing-scope`) landed in the same session to make sure the
+two didn't interact.
