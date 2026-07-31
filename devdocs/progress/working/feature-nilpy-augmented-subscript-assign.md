@@ -53,3 +53,18 @@ unit is reported against the main file with a fictional line number.
 `make test-nilpy` green with a `.npy` case covering dict, list and Counter targets
 and every augmented operator, diffed against CPython, + `--tier quick` +
 self-host byte-identical.
+
+## CLOSED — found already fixed
+
+Re-checked directly against current HEAD: `d["a"] += 1`, `xs[0] += 5`, a
+`Counter` target, and `-=`/`*=` on both dict and list subscripts all work and
+match CPython. Whatever landed the general subscript-assignment lowering
+work since this was filed (2026-07-26) evidently covered the augmented form
+too — no specific commit identified, and none was worth archaeology-hunting
+for since the behavior is simply correct now.
+
+No test existed to guard this shape, so one was added rather than closing on
+faith alone: test/test_nilpy_augmented_subscript_assign.npy. Gate: make
+test-nilpy green, self-host fixedpoint, testmgr --tier quick.
+
+Ticket closed.
