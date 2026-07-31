@@ -1,0 +1,44 @@
+# A lambda whose body is a single call gets LIFTED (compiled), not
+# interpreted -- but the lifter, built for side-effect-only handlers, always
+# discarded the compiled body's value: `h = lambda s: len(s); h("x")`
+# answered None even called directly, nothing to do with sorted() or any
+# other caller. Fixed for scalar and managed-STRING results (return now
+# routes through a real AN_EXIT, same as a written `return expr`); a
+# tyClass/tyRecord result (e.g. `lambda s: some_list.append(s)`, which
+# returns Self) is a KNOWN remaining gap -- returning the aliased captured
+# object through this path over-released it (traced with -dPXX_OBJTRACE),
+# tied to bug-nilpy-bound-fn-closure-objects-are-never-freed's ownership
+# gap -- so the side-effect-only shape keeps its old discard-only behavior,
+# unchanged and still correct.
+# bug-nilpy-lifted-lambda-discards-its-return-value
+# Every expectation is CPython's own output.
+
+def value_case():
+    h = lambda s: len(s)
+    return h("abcde")
+print(value_case())
+
+def string_case():
+    s = "hello"
+    h = lambda x: s + x
+    r = h(" world")
+    return s, r
+print(string_case())
+
+def arith_case(n):
+    sq = lambda x: x * x
+    return sq(n)
+print(arith_case(7))
+
+def upper_case():
+    h = lambda s: s.upper()
+    return h("abc")
+print(upper_case())
+
+# the side-effect-only shape (a class-typed / Self return) must still work
+def side_effect_case():
+    log = []
+    h = lambda s: log.append(s)
+    h("hi")
+    return log
+print(side_effect_case())

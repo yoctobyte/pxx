@@ -521,6 +521,10 @@ test-nilpy: $(COMPILER)
 	@# `**`, `/=` (true division augmented-assign, distinct from `//=`), divmod()
 	./$(COMPILER) test/test_nilpy_power_divmod_truediv.npy /tmp/test_nilpy_powdivmod26
 	test "$$(/tmp/test_nilpy_powdivmod26)" = "$$(printf '%b' '1024\n0.25\n1\n-4\n-8\n512\n8.0\n9.0\n0.75\n3.5\n(3, 1)\n(-4, 1)\n(3.0, 1.5)')"
+	@# a LIFTED lambda (compiled, not interpreted) discarded its own return
+	@# value unconditionally -- fixed for scalar/string results
+	./$(COMPILER) test/test_nilpy_lifted_lambda_return_value.npy /tmp/test_nilpy_liftedret26
+	test "$$(/tmp/test_nilpy_liftedret26)" = "$$(printf '%b' '5\n('"'"'hello'"'"', '"'"'hello world'"'"')\n49\nABC\n['"'"'hi'"'"']')"
 	./$(COMPILER) test/test_nilpy_dynattr.npy /tmp/test_nilpy_dynattr26
 	test "$$(/tmp/test_nilpy_dynattr26)" = "$$(printf '%b' '105\n110')"
 	./$(COMPILER) test/test_nilpy_dynattr_class.npy /tmp/test_nilpy_dynattr_class26

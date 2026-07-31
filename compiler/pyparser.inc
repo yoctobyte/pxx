@@ -12369,7 +12369,7 @@ end;
   left is the prologue, the expression, and the epilogue.
   (feature-nilpy-lambda-compiled-closure) }
 procedure PyCompileLambdaBody(procIdx, bStart: Integer);
-var i, idx, patchPos, savedSC, savedFS, nparams, node, seqNode: Integer;
+var i, idx, patchPos, savedSC, savedFS, nparams, node, seqNode, exitNode: Integer;
     savedExprMode: Boolean;
 begin
   { NilPy expression rules must be ON while this body parses — the module-level
@@ -12442,9 +12442,37 @@ begin
   TokPos := bStart;
   Next;
   PyParseBoolExpr;
-  node := CurASTNode;
-  { the expression IS the statement (`obj.method()` is a statement node here),
-    but any temporaries the expression hoisted must be emitted before it, and
+  { the expression IS the whole lambda body, so its VALUE is what the lambda
+    evaluates to -- wrap it in a real AN_EXIT (exactly what a written
+    `return <expr>` produces) so it stores into $pyresult through the SAME
+    coercion CompileAST already gives every other `return`, rather than being
+    evaluated for its side effect alone and thrown away. Before this, ANY
+    lifted lambda whose value was actually read back answered None
+    unconditionally -- `h = lambda s: len(s); h("abcde")` -- since nothing
+    ever wrote $pyresult; only a lambda used purely for its side effect (the
+    shape the lifter was first built for) happened to look correct.
+
+    EXCLUDES a tyClass/tyRecord result: `lambda s: log.append(s)` (append
+    returns Self) boxed into $pyresult and released by a caller that discards
+    it drove the SAME captured `log` to refcount 0 and freed it out from under
+    the enclosing scope that still owned it (traced with -dPXX_OBJTRACE: 4
+    retains/5 releases where the scalar/string case balances at 2/2) --
+    an aliased captured object's ownership around the bound-fn bridge is not
+    accounted for correctly here, and is the ARC gap
+    bug-nilpy-bound-fn-closure-objects-are-never-freed already tracks. Keep
+    the old discard-only behaviour for that shape rather than risk it; every
+    scalar and managed-STRING result (checked with -dPXX_OBJTRACE too, and
+    balances) is fixed.
+    bug-nilpy-lifted-lambda-discards-its-return-value }
+  if IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord] then
+    node := CurASTNode
+  else
+  begin
+    exitNode := AllocNode(AN_EXIT);
+    ASTLeft[exitNode] := CurASTNode;
+    node := exitNode;
+  end;
+  { any temporaries the expression hoisted must be emitted before it, and
     CompileAST wants a BLOCK the way every other body path hands it one }
   node := PySeqAppend(PyFlushHoist(-1), node);
   seqNode := AllocNode(AN_BLOCK);
