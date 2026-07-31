@@ -2,9 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `a9e9528c7f84` | 2026-07-31T14:45:26Z | GREEN (opt) | 213.3s | `a9e9528c7f84` RED |
+| borg | `f575b59cfde2` | 2026-07-31T14:56:47Z | GREEN (native) | 245.2s | `a9e9528c7f84` RED |
 
 ## Open regressions
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `b1976742df2c`, last good `6f73c5a88bef`, 1 commit(s) in range
-- **test-core#src:test/test_indexed_property.pas** — test/test_indexed_property.pas (borg): bad `d9c5eb4fadbf`, last good `9d3f9123b1c4`, 1 commit(s) in range
-- **test-core#src:test/test_property_redecl_b283.pas** — test/test_property_redecl_b283.pas (borg): bad `d9c5eb4fadbf`, last good `ff85c6468764`, 2 commit(s) in range
