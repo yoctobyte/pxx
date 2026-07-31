@@ -2061,6 +2061,7 @@ begin
 end;
 
 procedure ParseExpr(var res: Variant); forward;   { conditional/ternary — lowest }
+procedure ParsePower(var res: Variant); forward;  { `**`, tighter than unary minus }
 procedure ParseCall(const callee: AnsiString; var res: Variant); forward;
 procedure ParseMethodCall(const recv: Variant; const mname: AnsiString;
                           var res: Variant); forward;
@@ -2285,7 +2286,29 @@ begin
     res := pyinvert_v(t);
     Exit;
   end;
+  ParsePower(res);
+end;
+
+{ `**` — Python's power operator: right-associative, and binding TIGHTER than
+  unary minus (`-2 ** 2` is `-(2**2)` = -4, not `(-2)**2`). ParseUnary calls
+  here rather than straight to ParsePrimary, and the exponent recurses into
+  ParseUnary (not ParsePower) so it can itself start with a unary op
+  (`2 ** -1`) while still getting right-associativity for `2 ** 3 ** 2`
+  through that same recursion. Mirrors the compiled frontend's `**`
+  (parser.inc, ParseFactor) which lexes/parses the identical shape and lowers
+  to the same pypow_v — this exec()-side grammar was simply missing
+  (feature-pyeval-power-operator). }
+procedure ParsePower(var res: Variant);
+var b: Variant;
+begin
   ParsePrimary(res);
+  if IsOp('**') then
+  begin
+    Advance;
+    ParseUnary(b);
+    if not Executing then res := MakeNone
+    else res := pypow_v(res, b);
+  end;
 end;
 
 procedure ParseMul(var res: Variant);

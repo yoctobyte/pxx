@@ -552,6 +552,9 @@ test-nilpy: $(COMPILER)
 	@# itself, not a hardcoded "vm" key
 	./$(COMPILER) test/test_nilpy_pyeval_no_vm_key.npy /tmp/test_nilpy_novmkey26
 	test "$$(/tmp/test_nilpy_novmkey26)" = "[42, 43]"
+	@# exec()'s expression grammar had no rule for ** at all
+	./$(COMPILER) test/test_nilpy_pyeval_power_operator.npy /tmp/test_nilpy_pyevalpow26
+	test "$$(/tmp/test_nilpy_pyevalpow26)" = "[1024, 512, -4, 0.5]"
 	@# a comprehension's loop variable is scoped to itself, not the enclosing
 	@# scope: an outer binding of the same name must survive untouched
 	./$(COMPILER) test/test_nilpy_comprehension_scope.npy /tmp/test_nilpy_compscope26

@@ -1,0 +1,22 @@
+# exec()'s expression grammar had no rule for `**` at all -- `2 ** 10` inside
+# an exec()'d string was a parse error ("expected , or ) in call"), pointing
+# at the call rather than the missing operator.
+# feature-pyeval-power-operator
+# Every expectation is CPython's own output. Known residual, NOT covered
+# here: an integer result past 64 bits wraps instead of promoting to a
+# bignum -- a pre-existing gap in pypow_v shared with the COMPILED frontend
+# (`2 ** 70` also wraps there), not something this fix introduces or closes.
+
+class VM:
+    def __init__(self):
+        self.stack = []
+    def push(self, v):
+        self.stack.append(v)
+
+vm = VM()
+env = {"push": vm.push}
+exec("push(2 ** 10)", env)
+exec("push(2 ** 3 ** 2)", env)
+exec("push(-2 ** 2)", env)
+exec("push(2 ** -1)", env)
+print(vm.stack)
