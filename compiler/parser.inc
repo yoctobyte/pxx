@@ -24989,7 +24989,21 @@ begin
       GenericMethodBuffered := True;
       Exit;
     end;
-      methOwnerCi := FindUClass(name);
+      { A `ClassName.MethodName` impl header always implements a class declared
+        in THIS unit -- Pascal has no syntax for implementing another unit's
+        method from outside it. So the lookup must prefer a same-unit class
+        even for a name ClassNameIsDeliberatelyShared exempts from the general
+        per-unit preference (bug-pascal-uses-order-breaks-pylib-exception):
+        pylib and sysutils both declare `Exception`, and FindUClass's flat
+        first-match (needed so `except Exception:` keeps working regardless of
+        uses order) was also catching this header, so whichever unit registered
+        second had its OWN constructor bodies bound to the OTHER unit's class
+        -- e.g. pylib's `Exception.Create` resolving fields against sysutils'
+        `Exception` and reporting them undefined. FindUClassInUnit sidesteps
+        the shared-name bypass entirely; only fall back to the flat search for
+        the (non-existent in practice, but harmless) case of no local match. }
+      methOwnerCi := FindUClassInUnit(name, CurrentUnitIdx);
+      if methOwnerCi < 0 then methOwnerCi := FindUClass(name);
       if methOwnerCi >= 0 then
       begin
         methOwnerRec := REC_UCLASS_BASE + methOwnerCi;

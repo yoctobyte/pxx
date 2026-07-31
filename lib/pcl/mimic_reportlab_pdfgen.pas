@@ -40,8 +40,15 @@ interface
   lib/vendor/, which is not on the unit search chain, and naming the file keeps
   the dependency visible. A `.c` (not `.h`) is compiled INTO this binary,
   statically, so nothing is loaded at runtime. }
-{ pylib BEFORE sysutils: the other order fails to compile pylib's own
-  Exception (bug-pascal-uses-order-breaks-pylib-exception). }
+{ Historically pylib had to come BEFORE sysutils: the other order failed to
+  compile pylib's own Exception (bug-pascal-uses-order-breaks-pylib-exception,
+  fixed) -- a `ClassName.MethodName` impl header now always binds to a class
+  declared in the CURRENT unit instead of following the flat, shared-name
+  resolution that external references to `Exception` still use (that part is
+  deliberate, so `except Exception:` keeps catching either RTL regardless of
+  uses order; see decide-class-namespace-scoping for the broader question).
+  Order verified to genuinely not matter anymore; kept as-is since it was
+  already working and there is no reason to churn it. }
 uses pxxcio, pylib, sysutils, mimic_reportlab_lib_colors,
      '../vendor/pdfgen/pdfgen.c';
 

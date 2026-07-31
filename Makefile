@@ -228,6 +228,14 @@ test-nilpy: $(COMPILER)
 	# one Exception class serving both the Python and the sysutils surface
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
 	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	# uses order must not change whether pylib's own Exception.Create compiles
+	# (bug-pascal-uses-order-breaks-pylib-exception): sysutils named first, then
+	# reversed. Each also checks that the shared `Exception` name's CreateFmt
+	# body wasn't corrupted onto the wrong unit's class row.
+	./$(COMPILER) test/test_uses_order_pylib_exception_a.pas /tmp/test_uses_order_pylib_exc_a26
+	test "$$(/tmp/test_uses_order_pylib_exc_a26)" = "$$(printf '%b' 'pylib hi\ncaught: \042abc\042 is an invalid integer\n[    3]\nend')"
+	./$(COMPILER) test/test_uses_order_pylib_exception_b.pas /tmp/test_uses_order_pylib_exc_b26
+	test "$$(/tmp/test_uses_order_pylib_exc_b26)" = "$$(printf '%b' 'pylib hi\ncaught: \042abc\042 is an invalid integer\n[%5d]\nend')"
 	# a method on a fresh construction: class return, and omitted defaults filled
 	./$(COMPILER) test/test_nilpy_ctor_suffix_defaults.npy /tmp/test_nilpy_ctorsfx26
 	test "$$(/tmp/test_nilpy_ctorsfx26)" = "$$(printf 'a\nba\na 1\nba 1')"
@@ -3737,6 +3745,14 @@ test-core: $(COMPILER)
 	# one Exception class serving both the Python and the sysutils surface
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
 	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	# uses order must not change whether pylib's own Exception.Create compiles
+	# (bug-pascal-uses-order-breaks-pylib-exception): sysutils named first, then
+	# reversed. Each also checks that the shared `Exception` name's CreateFmt
+	# body wasn't corrupted onto the wrong unit's class row.
+	./$(COMPILER) test/test_uses_order_pylib_exception_a.pas /tmp/test_uses_order_pylib_exc_a26
+	test "$$(/tmp/test_uses_order_pylib_exc_a26)" = "$$(printf '%b' 'pylib hi\ncaught: \042abc\042 is an invalid integer\n[    3]\nend')"
+	./$(COMPILER) test/test_uses_order_pylib_exception_b.pas /tmp/test_uses_order_pylib_exc_b26
+	test "$$(/tmp/test_uses_order_pylib_exc_b26)" = "$$(printf '%b' 'pylib hi\ncaught: \042abc\042 is an invalid integer\n[%5d]\nend')"
 	# a method on a fresh construction: class return, and omitted defaults filled
 	./$(COMPILER) test/test_nilpy_ctor_suffix_defaults.npy /tmp/test_nilpy_ctorsfx26
 	test "$$(/tmp/test_nilpy_ctorsfx26)" = "$$(printf 'a\nba\na 1\nba 1')"
