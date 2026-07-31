@@ -210,3 +210,55 @@ exercised via a wrapping `def run():` (so `PXXDBG=a.ir:run` / `a.ast:mk` can
 actually show the IR/AST — top-level module statements aren't a `Proc` and
 `PXXDBG` can't dump them), plus `-dPXX_OBJTRACE` on a 3-iteration version to see
 the per-object retain/release trace directly rather than only the RSS slope.
+
+## 2026-08-01 re-investigation — a candidate B fix was BUILT but did NOT move the slope
+
+Picked up as claude-N4, armed with the corrected diagnosis above. An agent (in
+an isolated worktree, uncommitted — not merged) implemented BOTH candidate
+fixes at once: (1) gave `TBoundFnObj` real refcounting (a new `VT_BOUNDFN_TAG`,
+routed through the same `PXXObjAllocRaw2`/finalize-hook machinery
+`TClosureObj` uses, with a per-slot ownership-kind array so the finalizer
+knows what to release) — this is real, independently-motivated hardening for
+the OTHER object family, not what this ticket's own repro exercises, but
+harmless to have; and (2) patched `IR_VAR_STORE`'s `tyVariant`
+variant-to-variant copy branch (`compiler/ir_codegen.inc` ~5451-5503) to
+release a call-result temp's own extra reference after copying it into the
+destination (`isFreshCallSrc` — true for `IR_CALL`/`IR_VIRTUAL_CALL`/
+`IR_CALL_IND` sources), reasoning that a call-site temp slot reused across many
+loop iterations only gets swept once at the CALLER's own scope exit, not per
+iteration — exactly candidate (b) from the prior round.
+
+**Measured, not assumed: this did NOT fix the leak for the ticket's own
+gate.** Self-hosted the fix cleanly (fixedpoint byte-identical), then measured
+the RSS slope with the DEFAULT build (no `-O` flag, i.e. the `-O2` default
+every real invocation uses) on the exact `def mk(): L=[1,2,3]; def b(): return
+len(L); return b` repro, wrapped in `def run(n): while i<n: f=mk()`:
+
+| build | 20k | 320k |
+| --- | --- | --- |
+| pre-fix (current pinned) | — | 125344 KB |
+| "fixed" (this attempt) | 8320 KB | 125440 KB |
+
+Essentially identical to the unfixed baseline — the slope is unchanged.
+`-dPXX_OBJTRACE` on a 3-iteration repro against the "fixed" binary shows the
+EXACT SAME imbalance pattern as the ticket's own pre-fix trace (retain twice,
+release twice, settle at rc=1, finalize never fires) — meaning the
+`isFreshCallSrc` branch is either not being reached for this repro's exact
+compiled shape at `-O2`, or the extra release it performs isn't landing on the
+object actually leaking. (An `-O0` build showed a DIFFERENT trace shape with
+more distinct allocations per iteration and at least one reaching rc=0 — but
+that's a different code path from the default build the gate cares about, and
+is not evidence the fix works; codegen shape at `-O0` differs enough that it
+may simply be exercising a different branch entirely.)
+
+**Not merged.** The fix's reasoning reads as sound on paper but the measured
+behavior contradicts it, and I was not able to determine WHY within this
+round's budget — the natural next step is exactly what the immediately-prior
+round already recommended and neither round has done yet: a gdb breakpoint on
+`PXXObjRetain`/`PXXObjRelease` for the specific leaking address, to see the
+ACTUAL call sites participating (not just aggregate counts), and to confirm
+whether `IR_VAR_STORE`'s `tyVariant` branch is even reached for `f = mk()` at
+`-O2` in the first place — an optimizer pass could plausibly be short-circuiting
+the generic copy path this fix targets. Do not re-attempt the same
+`isFreshCallSrc` patch without first confirming (via gdb, not reasoning) that
+the branch it modifies is the one actually executing for this repro.
