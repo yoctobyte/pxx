@@ -40,3 +40,6 @@ lane by lane behind existing gates. Do NOT cut over — this sits under
 byte-identical self-host.
 
 Blocks [[feature-a-abi-oracle]] (the oracle takes a TypeRef).
+
+## Log
+- 2026-07-31 — resolved, commit 1e1814ef0.
