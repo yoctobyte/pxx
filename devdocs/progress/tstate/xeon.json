@@ -1730,6 +1730,10 @@
   "verdict": "RED",
   "wall": 249.6
  },
+ "last_opt": {
+  "date": "2026-07-31T17:35:13Z",
+  "sha": "c562f4f1cf1cea41ad8dc7cfa735916a8e99b751"
+ },
  "open_regressions": [
   {
    "bad": "110774a1464878920dcdf27d2afae7ca36dae219",
