@@ -685,6 +685,9 @@ test-nilpy: $(COMPILER)
 	@# a nested def's own default parameter captures by value, at definition time
 	./$(COMPILER) test/test_nilpy_nested_def_default_capture.npy /tmp/test_nilpy_defcap26
 	test "$$(/tmp/test_nilpy_defcap26)" = "$$(printf '11\n21\n15')"
+	@# a def parameter default naming an ENCLOSING local, and mem[a:b] = mem[c:d]
+	./$(COMPILER) test/test_nilpy_closure_captured_default_and_slice_assign.npy /tmp/test_nilpy_closuredefslice26
+	test "$$(/tmp/test_nilpy_closuredefslice26)" = "$$(printf 'hi\n97 98 99 97 98 99')"
 	./$(COMPILER) test/test_nilpy_return_none_variant.npy /tmp/test_nilpy_return_none_variant26
 	test "$$(/tmp/test_nilpy_return_none_variant26)" = "$$(printf 'a NONE\nb NONE\nc 9')"
 	./$(COMPILER) test/test_nilpy_none_str_field.npy /tmp/test_nilpy_none_str_field26

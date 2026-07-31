@@ -1,0 +1,26 @@
+# Two of uforth's own walls, both fixed:
+# 1. A nested def's parameter default that names an ENCLOSING local (Python's
+#    by-value capture idiom), not just a constant -- feature-nilpy-closure-
+#    default-and-remaining, the uforth.py:3829 wall.
+# 2. A variant slice ASSIGN, `mem[a:b] = src`, including a slice-of-the-same-
+#    variant RHS.
+# Every expectation is CPython's own output.
+
+class Word:
+    def __init__(self, name):
+        self.name = name
+
+
+def make(w):
+    def _compile_name_xt(target=w):
+        return target.name
+    return _compile_name_xt
+
+
+f = make(Word("hi"))
+print(f())
+
+mem = bytearray(10)
+mem[2:5] = b"abc"
+mem[7:10] = mem[2:5]
+print(mem[2], mem[3], mem[4], mem[7], mem[8], mem[9])
