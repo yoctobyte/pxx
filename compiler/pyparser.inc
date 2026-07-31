@@ -4851,18 +4851,42 @@ end;
 
 { `v[key] = val` on a variant -> pyvar_setitem(v, key, val), a statement. }
 function PyMakeVariantSetItem(baseNode, idxNode, valNode: Integer): Integer;
-var procIdx, a0, a1, a2: Integer;
+var procIdx, a0, a1, a2, callNode, tmpSym, tmpAssign, innerComma: Integer;
 begin
   procIdx := FindProc('pyvar_setitem');
   if procIdx < 0 then Error('Nil Python: pylib (pyvar_setitem) not loaded');
+  { pyvar_setitem is a void PROCEDURE, so its own call carries no result --
+    but `v[key] = val` is used as a VALUE-BEARING expression wherever a
+    chained assignment nests one subscript store inside another
+    (`xs[0] = xs[1] = 3`, right-associative). Store the value into a hidden
+    temp FIRST, call pyvar_setitem with it, then yield the temp: gives
+    Python's actual semantics (every target gets the ORIGINAL value) instead
+    of silently dropping the outer store, which is what returning the void
+    call node itself did
+    (bug-nilpy-chained-subscript-assignment-writes-only-the-last-target). }
+  tmpSym := AllocVar(PyHiddenName('setval'), tyVariant);
+  tmpAssign := AllocNode(AN_ASSIGN);
+  ASTLeft[tmpAssign] := PyMakeIdent(tmpSym);
+  ASTRight[tmpAssign] := valNode;
+
   a0 := AllocNode(AN_ARG); ASTLeft[a0] := baseNode;
   a1 := AllocNode(AN_ARG); ASTLeft[a1] := idxNode;
-  a2 := AllocNode(AN_ARG); ASTLeft[a2] := valNode;
+  a2 := AllocNode(AN_ARG); ASTLeft[a2] := PyMakeIdent(tmpSym);
   ASTRight[a0] := a1; ASTRight[a1] := a2; ASTRight[a2] := -1;
-  Result := AllocNode(AN_CALL);
-  ASTIVal[Result] := procIdx;
-  ASTTk[Result] := Ord(tyUnknown);
-  ASTLeft[Result] := a0;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := procIdx;
+  ASTTk[callNode] := Ord(tyUnknown);
+  ASTLeft[callNode] := a0;
+
+  innerComma := AllocNode(AN_COMMA);
+  ASTLeft[innerComma] := callNode;
+  ASTRight[innerComma] := PyMakeIdent(tmpSym);
+  ASTTk[innerComma] := Ord(tyVariant);
+
+  Result := AllocNode(AN_COMMA);
+  ASTLeft[Result] := tmpAssign;
+  ASTRight[Result] := innerComma;
+  ASTTk[Result] := Ord(tyVariant);
 end;
 
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer;

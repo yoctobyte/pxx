@@ -824,6 +824,8 @@ function PyAugBinTok(k: TTokenKind): TTokenKind; forward; { Nil Python augmented
 function PyMakeDynAttrGet(baseNode: Integer; const fname: AnsiString): Integer; forward; { Nil Python obj.name dynamic read (pyparser.inc) }
 function PyMakeDynAttrSet(baseNode: Integer; const fname: AnsiString; valNode: Integer): Integer; forward; { Nil Python obj.name = v dynamic write (pyparser.inc) }
 function PyMakeVariantSetItem(baseNode, idxNode, valNode: Integer): Integer; forward; { Nil Python v[key]=val on a variant (pyparser.inc) }
+function PyMakeIdent(symIdx: Integer): Integer; forward; { Nil Python: ident AST node for a symbol (pyparser.inc) }
+function PyHiddenName(const stem: AnsiString): AnsiString; forward; { hidden temp name (pyparser.inc) }
 function PyMakeSubscriptRead(selfNode, idxArgs, ci, pri: Integer): Integer; forward; { the read half of `d[k] += v` (pyparser.inc) }
 function PyCloneArgChain(head: Integer): Integer; forward;
 function PyMakeStrIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python s[i] (pyparser.inc) }
@@ -3654,6 +3656,7 @@ var
   autoDeref, peRec: Integer;
   ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { qualified TClass.Const }
   keyNode: Integer;   { __getitem__/__setitem__ subscript key }
+  setTmpSym, setTmpAssign, setInnerComma: Integer;   { chained subscript-assign value }
 begin
   prevTok := identTokIdx;
   if DebugTrace then writeln('ParseLValueAST: idx = ', idx, ' prevTok = ', prevTok, ' TokenStr = "', GetTokenStr(prevTok), '" CurTok.Line = ', CurTok.Line, ' TokPos = ', TokPos);
@@ -4753,9 +4756,30 @@ begin
             else mcallNode := AllocNode(AN_CALL);
             ASTIVal[mcallNode] := mpi; ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
             mselfArg := AllocNode(AN_ARG); ASTLeft[mselfArg] := node; ASTLeft[mcallNode] := mselfArg;
-            margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := CurASTNode;  { value }
+            { The setter is an ordinary Pascal PROCEDURE (no result) — store
+              the value into a hidden temp FIRST, pass THAT as the setter's
+              argument, then yield the temp as this store's own "value".
+              Returning the void setter-call node directly silently dropped
+              the value whenever this store nested inside another
+              assignment's RHS (`xs[0] = xs[1] = 3`, right-associative);
+              this gives Python's actual chained-assignment semantics instead
+              (bug-nilpy-chained-subscript-assignment-writes-only-the-last-target). }
+            tk := IntToTypeKind(UPropTk[pri]);
+            setTmpSym := AllocVar(PyHiddenName('setval'), tk);
+            setTmpAssign := AllocNode(AN_ASSIGN);
+            ASTLeft[setTmpAssign] := PyMakeIdent(setTmpSym);
+            ASTRight[setTmpAssign] := CurASTNode;
+            margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := PyMakeIdent(setTmpSym);
             ASTRight[mselfArg] := margIdx; ASTRight[mlastArg] := margSeq;
-            node := mcallNode; Result := node; Exit;
+            setInnerComma := AllocNode(AN_COMMA);
+            ASTLeft[setInnerComma] := mcallNode;
+            ASTRight[setInnerComma] := PyMakeIdent(setTmpSym);
+            ASTTk[setInnerComma] := Ord(tk);
+            node := AllocNode(AN_COMMA);
+            ASTLeft[node] := setTmpAssign;
+            ASTRight[node] := setInnerComma;
+            ASTTk[node] := Ord(tk);
+            Result := node; Exit;
           end
           else
           begin

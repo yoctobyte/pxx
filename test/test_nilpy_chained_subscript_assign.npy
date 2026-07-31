@@ -1,0 +1,27 @@
+# `a[i] = b[j] = v` used to write only the RIGHTMOST target and silently
+# drop the others -- the subscript-assign lowering built a call to a void
+# Pascal setter/pylib procedure and returned THAT call node as if it were
+# the assignment's value, so nesting one store inside another's RHS lost
+# the outer store entirely.
+# bug-nilpy-chained-subscript-assignment-writes-only-the-last-target
+# Every expectation is CPython's own output.
+
+xs = [0, 0]
+xs[0] = xs[1] = 3
+print(xs)
+
+d = {}
+d["x"] = d["y"] = 7
+print(sorted(d.keys()), d["x"], d["y"])
+
+class C:
+    def __init__(self):
+        self.d = {0: 0, 1: 0}
+
+c = C()
+c.d[0] = c.d[1] = 42
+print(c.d[0], c.d[1])
+
+ys = [1, 2, 3]
+ys[0] += 5
+print(ys)

@@ -640,6 +640,9 @@ test-nilpy: $(COMPILER)
 	@# whatever garbage a prior call left in the return register/slot
 	./$(COMPILER) test/test_nilpy_implicit_return_none.npy /tmp/test_nilpy_implret26
 	test "$$(/tmp/test_nilpy_implret26)" = "$$(printf '1073794252\n0\nTrue\n0\nTrue')"
+	@# a[i] = b[j] = v must store into EVERY target, not just the rightmost
+	./$(COMPILER) test/test_nilpy_chained_subscript_assign.npy /tmp/test_nilpy_chainedsub26
+	test "$$(/tmp/test_nilpy_chainedsub26)" = "$$(printf '[3, 3]\n%s\n42 42\n[6, 2, 3]' "['x', 'y'] 7 7")"
 	./$(COMPILER) test/test_nilpy_return_none_variant.npy /tmp/test_nilpy_return_none_variant26
 	test "$$(/tmp/test_nilpy_return_none_variant26)" = "$$(printf 'a NONE\nb NONE\nc 9')"
 	./$(COMPILER) test/test_nilpy_none_str_field.npy /tmp/test_nilpy_none_str_field26
