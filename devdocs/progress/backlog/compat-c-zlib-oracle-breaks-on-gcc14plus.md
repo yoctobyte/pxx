@@ -45,18 +45,41 @@ to the gcc-built zlib's output**. (Behavioral parity against the oracle — not
 a claim about matching gcc's machine code. See the claims-discipline table in
 CLAUDE.md.) Nothing is wrong with the compiler here.
 
-## Fix
-
-Add the minimal escape to the oracle's `gcc` line in the `test-zlib` recipe:
+## Fix — `-DHAVE_UNISTD_H` on the oracle's gcc line
 
 ```make
-gcc -w -Wno-error=implicit-function-declaration -Ilibrary_candidates/zlib ...
+gcc -w -DHAVE_UNISTD_H -Ilibrary_candidates/zlib ...
 ```
 
-Measured alternatives that also build: `-fpermissive`, `-std=gnu89`. Prefer
-`-Wno-error=implicit-function-declaration` — it restores the pre-gcc-14
-default without changing the language dialect the oracle is compiled under,
-which matters because that binary IS the reference the comparison trusts.
+**Corrected 2026-07-31** (raised by `claude@borg`, re-measured on xeon before
+adopting). An earlier revision of this ticket recommended
+`-Wno-error=implicit-function-declaration`. That builds, but it is the wrong
+fix: it *silences the diagnostic* while leaving `lseek`/`close`/`read`/`write`
+genuinely undeclared, so they keep defaulting to `int` — on LP64 that truncates
+`lseek`'s `off_t` return, which is a real latent miscompile in the binary we
+then trust as the reference.
+
+`-DHAVE_UNISTD_H` is zlib's **own** configuration macro: it makes `zutil.h`
+include `<unistd.h>`, so the declarations are real and the errors disappear
+because the cause is gone. This is what autoconf defines on every normal zlib
+build, so the oracle ends up configured the way upstream intends rather than
+patched around.
+
+Measured on xeon (gcc 15.2.0, kernel 7.0):
+
+| oracle gcc flags | result |
+|---|---|
+| *(none)* | fails — `implicit declaration of 'lseek'` |
+| `-std=gnu17` | **fails** — gcc 14+ makes this an error regardless of `-std` |
+| `-Wno-error=implicit-function-declaration` | builds, but leaves the decls missing |
+| **`-DHAVE_UNISTD_H`** | **builds cleanly — adopted** |
+
+Output parity re-confirmed with the `-DHAVE_UNISTD_H` oracle: the program pxx
+builds from the zlib sources produces output byte-identical to the gcc-built
+zlib's output.
+
+Note for anyone reaching for `-std=`: it does not help. The promotion to error
+in gcc 14 is independent of the language dialect.
 
 Any other corpus target that builds a pinned third-party C tree with a modern
 gcc is exposed to the same promotion — worth a sweep of the oracle build lines
