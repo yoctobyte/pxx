@@ -74,3 +74,10 @@ input or the codegen moved before bisecting the compiler.
 
 Filed/enriched by Track T, not fixed — owning lane is A/O (codegen) or C
 (frontend) depending on which of the above it lands on.
+
+---
+
+**Same bug as its shard-twin.** `optdiff#shard5/6` and `optdiff#shard0/6` are
+both `test/crtl_libc_oracle.c` failing at `-O3`; the shard index moved because
+one test file was added. See [[bug-t-optdiff-shard-identity-is-positional]].
+Work the compiler defect once, in [[regression-optdiff-shard5-6]].

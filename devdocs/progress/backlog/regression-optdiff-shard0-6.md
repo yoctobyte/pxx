@@ -25,3 +25,10 @@ optdiff shard 0/6: pass=179 skip=31 diff=1
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+---
+
+**Same bug as its shard-twin.** `optdiff#shard5/6` and `optdiff#shard0/6` are
+both `test/crtl_libc_oracle.c` failing at `-O3`; the shard index moved because
+one test file was added. See [[bug-t-optdiff-shard-identity-is-positional]].
+Work the compiler defect once, in [[regression-optdiff-shard5-6]].
