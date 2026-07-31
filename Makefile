@@ -538,6 +538,9 @@ test-nilpy: $(COMPILER)
 	@# read as raw bytes off the wrong builtin-container overload
 	./$(COMPILER) test/test_nilpy_dunder_len_contains.npy /tmp/test_nilpy_dunderlc26
 	test "$$(/tmp/test_nilpy_dunderlc26)" = "$$(printf '%b' '3\nTrue\nFalse\nFalse\n3\n5\n2\nTrue\nTrue\ncaught len: TypeError\ncaught in: TypeError')"
+	@# a class defining __call__ is callable as obj(args); no __call__ raises
+	./$(COMPILER) test/test_nilpy_dunder_call.npy /tmp/test_nilpy_dundercall26
+	test "$$(/tmp/test_nilpy_dundercall26)" = "$$(printf '%b' '15\n25\nhi\n6\ncaught: TypeError')"
 	./$(COMPILER) test/test_nilpy_dynattr.npy /tmp/test_nilpy_dynattr26
 	test "$$(/tmp/test_nilpy_dynattr26)" = "$$(printf '%b' '105\n110')"
 	./$(COMPILER) test/test_nilpy_dynattr_class.npy /tmp/test_nilpy_dynattr_class26

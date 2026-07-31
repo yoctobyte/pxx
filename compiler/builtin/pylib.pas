@@ -3293,6 +3293,14 @@ begin
   raise TypeError.Create('argument is not a container (no __contains__)');
 end;
 
+{ `obj(...)` where obj's class defines no `__call__` -- a genuine runtime
+  TypeError, matching CPython's "'X' object is not callable" (just without
+  the class name, which is not available here). }
+procedure PyNotCallableError;
+begin
+  raise TypeError.Create('object is not callable (no __call__)');
+end;
+
 function pyvar_to_int(const v: Variant): Int64;
 var
   p: PPyVarRec;

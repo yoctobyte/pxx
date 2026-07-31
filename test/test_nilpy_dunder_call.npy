@@ -1,0 +1,39 @@
+# A class defining __call__ must be callable as `obj(args)` -- Python's
+# callable-object protocol. Previously either a hard parse error or a
+# garbage value read off the instance pointer, never the method
+# (bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic).
+# Arbitrary arity (0, 1, 3 args tested); a class with no __call__ raises a
+# genuine catchable runtime error rather than failing to compile.
+# bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic
+# Every expectation is CPython's own output.
+
+class Adder:
+    def __init__(self, n):
+        self.n = n
+    def __call__(self, x):
+        return x + self.n
+
+a = Adder(5)
+print(a(10))
+print(a(20))
+
+class Greeter:
+    def __call__(self):
+        return "hi"
+g = Greeter()
+print(g())
+
+class Multi:
+    def __call__(self, x, y, z):
+        return x + y + z
+m = Multi()
+print(m(1, 2, 3))
+
+class Plain:
+    def __init__(self):
+        self.v = 5
+p = Plain()
+try:
+    print(p(1))
+except Exception as e:
+    print("caught:", type(e).__name__)

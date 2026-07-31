@@ -5802,6 +5802,65 @@ begin
   PyWrapBoundDynCall := tern;
 end;
 
+{ `<value>(args)` where the value is a CLASS INSTANCE defining `__call__` --
+  Python's callable-object protocol. Without this, a class instance followed
+  by '(' produced either a hard parse error or (depending on the shape) a
+  garbage value read off the instance pointer, never the method
+  (bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic).
+  Returns baseNode unchanged when the class has no `__call__`, so the caller
+  falls through to whatever ordinarily happens to a class value followed by
+  '(' (a parse error today — there is no other legitimate reading). CurTok is
+  the '('; arbitrary arity, unlike PyCallMeth1/2's fixed 0/1/2 args. }
+function PyMakeCallDunder(baseNode: Integer): Integer;
+var ci, mmi, mpi, selfArg, lastArg, argNode, notCallablePi: Integer;
+begin
+  Result := baseNode;
+  ci := ResolveNodeRec(baseNode);
+  if ci < REC_UCLASS_BASE then Exit;
+  mmi := FindUMeth(ci - REC_UCLASS_BASE, '__call__');
+  Expect(tkLParen, '(');
+  if mmi < 0 then
+  begin
+    { No `__call__`: consume the argument list (still evaluated, matching
+      Python's own left-to-right argument evaluation before the TypeError)
+      and raise a genuine runtime error -- a `try/except` around this must
+      still compile and run its handler, the same reasoning as
+      PyNotContainerError just above. }
+    while CurTok.Kind <> tkRParen do
+    begin
+      PyParseBoolExpr;
+      if not Eat(tkComma) then Break;
+    end;
+    Expect(tkRParen, ')');
+    notCallablePi := FindProc('PyNotCallableError');
+    if notCallablePi < 0 then Error('Nil Python: pylib (PyNotCallableError) not loaded');
+    Result := AllocNode(AN_CALL);
+    ASTIVal[Result] := notCallablePi;
+    ASTTk[Result] := Ord(tyInteger);
+    ASTLeft[Result] := -1;
+    Exit;
+  end;
+  mpi := UMthProc_[mmi];
+  selfArg := AllocNode(AN_ARG);
+  ASTLeft[selfArg] := baseNode; ASTRight[selfArg] := -1;
+  lastArg := selfArg;
+  while CurTok.Kind <> tkRParen do
+  begin
+    PyParseBoolExpr;
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := CurASTNode; ASTRight[argNode] := -1;
+    ASTRight[lastArg] := argNode;
+    lastArg := argNode;
+    if not Eat(tkComma) then Break;
+  end;
+  Expect(tkRParen, ')');
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := mpi;
+  ASTTk[Result] := Ord(Procs[mpi].RetType);
+  ASTRight[Result] := ProcRetRecId[mpi];
+  ASTLeft[Result] := selfArg;
+end;
+
 { `<value>(args)` where the value is a VARIANT holding a callable — the function
   `exec()` stored in a namespace dict, called as `ns["__body__"]()`. Unbox the
   variant to its payload (the code pointer) and emit an indirect call with a

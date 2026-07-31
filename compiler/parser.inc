@@ -812,6 +812,7 @@ function PyMakePercentFormat(fmtNode, argsNode: Integer): Integer; forward;  { `
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 function PyMakeDynCall(baseNode: Integer): Integer; forward; { Nil Python: call a callable stored in a variant (pyparser.inc) }
+function PyMakeCallDunder(baseNode: Integer): Integer; forward; { Nil Python: call a class instance's __call__ (pyparser.inc) }
 function PyWrapClosureFieldCall(fieldNode, argExpr, defCall: Integer): Integer; forward; { Nil Python: a Callable field may hold a pyeval closure (pyparser.inc) }
 function PyMakeBoundMethod(mpi, selfNode: Integer): Integer; forward; { Nil Python: `obj.method` (no call) -> a bound-method value (pyparser.inc) }
 procedure PyParseLambdaStub; forward; { Nil Python: lambda -> pyeval closure value (pyparser.inc) }
@@ -12970,6 +12971,17 @@ begin
         (IntToTypeKind(ASTTk[CurASTNode]) = tyVariant) do
   begin
     CurASTNode := PyMakeDynCall(CurASTNode);
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+  end;
+  { A CLASS INSTANCE followed by '(' -- Python's callable-object protocol,
+    `a(10)` where `a`'s class defines `__call__`. Loops so a `__call__`
+    that itself returns another callable instance composes.
+    feature-nilpy-dunder-call-protocol }
+  while PyExprMode and (CurTok.Kind = tkLParen) and
+        (IntToTypeKind(ASTTk[CurASTNode]) = tyClass) and
+        (ResolveNodeRec(CurASTNode) >= REC_UCLASS_BASE) do
+  begin
+    CurASTNode := PyMakeCallDunder(CurASTNode);
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
   end;
   { `**` -- Python's power operator: right-associative, and binding TIGHTER
