@@ -7,6 +7,7 @@ const
   LINE_BUF_SIZE = 4096;    { readln stdin line buffer }
   MAX_DATA    = 2097152;      { 2 MB }
   MAX_STRS    = 8192;
+  MAX_USES_EDGES = 16384;  { one slot per `uses X` clause parsed across the whole compile }
   MAX_FIXUPS  = 131072;
   MAX_SYMS    = 131072;
   MAX_PROCS   = 16384;
@@ -1245,6 +1246,19 @@ var
   Strs     : array[0..MAX_STRS-1]    of TStrEntry;
   StrCount : Integer;
 
+  { `uses` edge table (bug-pascal-uses-is-transitive measurement step): one
+    entry per `uses X` clause actually parsed, recorded even when X was
+    already compiled by an earlier importer (dedup does not happen here — a
+    warn/count pass wants every clause, not just first-loads). From/To are
+    Strs[] indices (-1 = the main program, which is never a valid To). Iface
+    is True when the clause sits in an INTERFACE section (or is the program's
+    own top-level `uses`, semantically the same: it re-exports nothing further
+    since nothing ever imports "the program"). }
+  UsesEdgeFrom  : array[0..MAX_USES_EDGES-1] of Integer;
+  UsesEdgeTo    : array[0..MAX_USES_EDGES-1] of Integer;
+  UsesEdgeIface : array[0..MAX_USES_EDGES-1] of Boolean;
+  UsesEdgeCount : Integer;
+
   Fixups   : array[0..MAX_FIXUPS-1]  of TFixup;
   FixCount : Integer;
 
@@ -1626,6 +1640,14 @@ var
                              default — the compiler's own source uses the idiom. }
   LastExprTk : TTypeKind;
   InInterface : Boolean;
+  WarnUsesLeak : Boolean; { --warn-uses-leak: warn whenever a name resolves through
+                            a unit not reachable from the resolving unit's own
+                            `uses` (transitively closed over INTERFACE-section
+                            uses only). Measurement step for
+                            bug-pascal-uses-is-transitive — `uses` is one flat
+                            global namespace today; this counts what a real
+                            non-transitive rule would break, without changing
+                            resolution. Opt-in: an ordinary build is unaffected. }
   { Declaration pre-scan (whole-section forward visibility): pass 1 registers
     every top-level routine header (and all types/consts/vars) with bodies
     skipped, so a routine may call another declared later (and mutual recursion

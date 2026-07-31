@@ -389,6 +389,83 @@ begin
   end;
 end;
 
+procedure RecordUsesEdge(fromUnit, toUnit: Integer; iface: Boolean);
+{ bug-pascal-uses-is-transitive measurement step: append one `uses` clause to
+  the edge table. Called unconditionally (cheap array append) so the table is
+  always complete regardless of whether --warn-uses-leak is on; only the WARN
+  itself is gated behind the flag. Silently drops past MAX_USES_EDGES — a
+  saturated table degrades the count, it must never abort a build. }
+begin
+  if UsesEdgeCount >= MAX_USES_EDGES then Exit;
+  UsesEdgeFrom[UsesEdgeCount] := fromUnit;
+  UsesEdgeTo[UsesEdgeCount] := toUnit;
+  UsesEdgeIface[UsesEdgeCount] := iface;
+  Inc(UsesEdgeCount);
+end;
+
+function VisibilityAllows(curUnit, declUnit: Integer): Boolean;
+{ True iff `declUnit` is visible from `curUnit` under the REAL (non-transitive)
+  Pascal uses rule: declUnit = curUnit, or declUnit is reachable from curUnit by
+  one `uses` edge of EITHER section, followed by INTERFACE-section edges only,
+  transitively (an implementation-section `uses` is private to the unit that
+  wrote it — it is not re-exported to that unit's own importers).
+  Strs[] indices offset by 1 so curUnit = -1 (the main program) indexes slot 0.
+  Read-only measurement helper (bug-pascal-uses-is-transitive) — never called
+  outside a --warn-uses-leak check, so a full array-clear + BFS per query is
+  fine; nothing here runs in an ordinary build. }
+var
+  visited: array[0..MAX_STRS] of Boolean;
+  queue: array[0..MAX_USES_EDGES-1] of Integer;
+  qHead, qTail, i, u, v: Integer;
+begin
+  if declUnit = curUnit then begin VisibilityAllows := True; Exit; end;
+  for i := 0 to MAX_STRS do visited[i] := False;
+  visited[curUnit + 1] := True;
+  qHead := 0; qTail := 0;
+  { direct edges out of curUnit: either section is visible to curUnit itself }
+  for i := 0 to UsesEdgeCount - 1 do
+    if UsesEdgeFrom[i] = curUnit then
+    begin
+      v := UsesEdgeTo[i];
+      if not visited[v + 1] then
+      begin
+        visited[v + 1] := True;
+        if qTail < MAX_USES_EDGES then begin queue[qTail] := v; Inc(qTail); end;
+      end;
+    end;
+  { closure: from every unit already visible, only ITS OWN interface-section
+    uses re-export further — an implementation-section uses stays private. }
+  while qHead < qTail do
+  begin
+    u := queue[qHead]; Inc(qHead);
+    for i := 0 to UsesEdgeCount - 1 do
+      if (UsesEdgeFrom[i] = u) and UsesEdgeIface[i] then
+      begin
+        v := UsesEdgeTo[i];
+        if not visited[v + 1] then
+        begin
+          visited[v + 1] := True;
+          if qTail < MAX_USES_EDGES then begin queue[qTail] := v; Inc(qTail); end;
+        end;
+      end;
+  end;
+  VisibilityAllows := visited[declUnit + 1];
+end;
+
+procedure WarnUsesLeakHit(const kind, name: AnsiString; curUnit, declUnit: Integer);
+{ One line per name that resolved through a unit not reachable from the
+  resolving unit's own (transitively-closed, interface-only) uses graph —
+  exactly what a real non-transitive uses rule would turn into "undefined
+  identifier". Named the (importer, provider) pair, not the call site, per the
+  ticket's counting goal: DISTINCT pairs matter more than call-site count. }
+var fromName, toName: AnsiString;
+begin
+  if curUnit < 0 then fromName := '<program>' else fromName := Strs[curUnit].Text;
+  if declUnit < 0 then toName := '<program>' else toName := Strs[declUnit].Text;
+  Warn('uses-leak: ' + kind + ' ''' + name + ''' resolved from unit ''' +
+       fromName + ''' through unreachable unit ''' + toName + '''');
+end;
+
 function FindUClassInUnit(const name: AnsiString; unitIdx: Integer): Integer;
 var i: Integer; lo, name2: AnsiString;
 begin
@@ -433,7 +510,13 @@ begin
   i := 0;
   while i < UClsCount do
   begin
-    if UNameMatch(UClsNOff[i], UClsNLen[i], lo) then begin Result := i; Exit; end;
+    if UNameMatch(UClsNOff[i], UClsNLen[i], lo) then
+    begin
+      if WarnUsesLeak and (CurrentUnitIdx >= 0) and (UClsUnitIdx[i] <> CurrentUnitIdx) and
+         not VisibilityAllows(CurrentUnitIdx, UClsUnitIdx[i]) then
+        WarnUsesLeakHit('class', name, CurrentUnitIdx, UClsUnitIdx[i]);
+      Result := i; Exit;
+    end;
     Inc(i);
   end;
   { class-name alias (`TOptionList = TList;`) — resolve to the target row }
@@ -4091,7 +4174,12 @@ begin
       ProcHdrTok = 0 (builtins/units/interface/methods/nested) always passes. }
     if (Procs[i].Name = lo) and
        not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) then
-      begin Result := i; Exit; end;
+      begin
+        if WarnUsesLeak and (CurrentUnitIdx >= 0) and (ProcUnitIdx[i] <> CurrentUnitIdx) and
+           not VisibilityAllows(CurrentUnitIdx, ProcUnitIdx[i]) then
+          WarnUsesLeakHit('routine', name, CurrentUnitIdx, ProcUnitIdx[i]);
+        Result := i; Exit;
+      end;
     i := ProcHashNext[i];
   end;
   { Case-insensitive fallback for case-insensitive symbols only (default Pascal).
@@ -4106,7 +4194,12 @@ begin
     if (not ProcCaseSensitive[i]) and (not ProcExternal[i]) and
        CaseEqual(Procs[i].Name, lo) and
        not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) then
-    begin Result := i; Exit; end;
+    begin
+      if WarnUsesLeak and (CurrentUnitIdx >= 0) and (ProcUnitIdx[i] <> CurrentUnitIdx) and
+         not VisibilityAllows(CurrentUnitIdx, ProcUnitIdx[i]) then
+        WarnUsesLeakHit('routine', name, CurrentUnitIdx, ProcUnitIdx[i]);
+      Result := i; Exit;
+    end;
     i := ProcHashNext[i];
   end;
   { LAZYCASING fallback: only for C-import symbols (external), only when the

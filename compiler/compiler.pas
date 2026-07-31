@@ -148,6 +148,8 @@ begin
   CSystemLibCount := 0;
   CrtlSrcPulledCount := 0;
   WarnSelfResult := False;
+  WarnUsesLeak := False;
+  UsesEdgeCount := 0;
   DumpRTTI := False;
   TargetArch := TARGET_X86_64;
   XtensaABI := XTENSA_ABI_CALL0;
@@ -445,6 +447,15 @@ begin
         (FPC reads its Result; a recursive-descent author usually meant Name()).
         Opt-in: the compiler's own source uses the bare-name=Result idiom. }
       WarnSelfResult := True;
+      Inc(i);
+    end
+    else if option = '--warn-uses-leak' then
+    begin
+      { bug-pascal-uses-is-transitive measurement step: warn whenever a name
+        resolves through a unit not reachable via the real (non-transitive)
+        Pascal uses rule. Opt-in and read-only — resolution itself is
+        unchanged, this only counts what a real rule would break. }
+      WarnUsesLeak := True;
       Inc(i);
     end
     else if option = '--strict-overload' then

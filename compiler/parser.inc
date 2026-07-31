@@ -26961,6 +26961,11 @@ begin
 
   { Check if already compiled }
   strIdx := InternStr(lo);
+  { Record the edge for EVERY `uses X` clause, even one that hits the
+    already-compiled guard below — a warn/count pass over
+    bug-pascal-uses-is-transitive wants every clause, not just first-loads,
+    since visibility is per-importer, not per-load. }
+  RecordUsesEdge(CurrentUnitIdx, strIdx, InInterface);
   isCompiled := False;
   for i := 0 to CompiledUnitCount - 1 do
   begin
