@@ -34,7 +34,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (200)
+## backlog (199)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -62,7 +62,6 @@ _none_
 | bug-nilpy-mixed-type-and-or-returns-a-bool-not-the-operand | N | 45 | bug | `0 or "x"` returns True — a mixed str/number `and`/`or` yields a bool instead of the operand | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
-| bug-nilpy-percent-e-and-g-silently-render-as-fixed-point | N | 55 | bug | `%e` and `%g` silently render as `%f` — a wrong answer to an EXPLICITLY requested format | — |
 | bug-nilpy-print-emits-arguments-before-evaluating-later-ones | N | 45 | bug | `print` writes each argument as it goes, so an exception mid-list leaves partial output | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pyeval-prints-bool-as-number | N | 30 | bug | pyeval prints a Boolean as 1/0 where CPython prints True/False | — |
@@ -301,7 +300,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1071)
+## done (1072)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -692,6 +691,7 @@ _none_
 | bug-nilpy-omitted-variant-default-segfaults | N | 65 | bug | nilpy: reading a DEFAULTED variant parameter segfaults (by-ref seen as by-value) | — |
 | bug-nilpy-param-spill-width | N | 60 | bug | NilPy: bool/char param spill wrote 4 bytes into a 1-byte slot (SILENT, then SIGSEGV) | — |
 | bug-nilpy-param-with-string-default-reads-garbage | N | 75 | bug | A parameter with a STRING default is read as garbage | — |
+| bug-nilpy-percent-e-and-g-silently-render-as-fixed-point | N | 55 | bug | `%e` and `%g` silently render as `%f` — a wrong answer to an EXPLICITLY requested format | — |
 | bug-nilpy-percent-string-format-garbage | N | 60 | bug | nilpy: printf-style % on a string yields garbage instead of formatting (silent wrong output) | — |
 | bug-nilpy-print-of-a-float-bypasses-str-formatting | N | 60 | bug | `print(x)` and `print(str(x))` disagree for a float | — |
 | bug-nilpy-print-variant-holding-list-shows-object | N | 30 | bug | NilPy: print() of a variant holding a list/dict shows `<object>` not its repr | — |
@@ -2848,7 +2848,6 @@ _none_
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
 - [p 55] [N] bug-nilpy-augmented-add-on-variant-list-is-not-in-place
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
-- [p 55] [N] bug-nilpy-percent-e-and-g-silently-render-as-fixed-point
 - [p 55] [A] bug-pascal-defines-leak-across-units
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland

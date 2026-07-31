@@ -93,3 +93,6 @@ Test: test/test_nilpy_percent_e_g_format.npy. Gate: make test-nilpy green,
 self-host fixedpoint, testmgr --tier quick.
 
 Ticket closed.
+
+## Log
+- 2026-07-31 — resolved, commit a8f37c62a.
