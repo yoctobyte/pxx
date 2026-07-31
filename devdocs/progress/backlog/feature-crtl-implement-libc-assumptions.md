@@ -255,3 +255,63 @@ where agreement is not obvious and where drifting would be invisible:
 
 **Gated:** all of the above is in `test/crtl_libc_oracle.c` — now 65 lines,
 byte-identical to gcc's build of the same file.
+
+## Collected gaps: three printf/scanf bugs (2026-07-31, Track B — CLOSED)
+
+Fourth oracle batch, over `<stdio.h>` — formatting and scanning, which every C
+project leans on and where a wrong answer is silent because the caller is
+building a string, not checking a result.
+
+### 1. `sscanf("%15s")` abandoned the whole scan — the serious one
+
+`vsscanf` never parsed a field WIDTH. `%15s` therefore reached the
+unsupported-conversion `break`, so the call returned a SHORT count and left the
+destination untouched:
+
+```
+gcc:  scan-n=3 a=17 b=42 s=word
+pxx:  scan-n=2 a=17 b=42 s=          <- destination never written
+```
+
+`%Ns` is the *safe* spelling every C programmer is told to use instead of bare
+`%s`, so this failed precisely on the code that was being careful. A caller who
+checks the return sees a mysterious short count; one who does not reads a stale
+buffer. Assignment suppression (`%*d`) and a width on any other conversion were
+broken the same way, for the same reason.
+
+Now parsed: `*` suppression, a decimal width applied to `%s` (max characters),
+`%c` (exact count, no terminator, incomplete field fails), and the numeric
+conversions (parsed out of a bounded copy so the width really limits what is
+looked at, then `s` advanced by what was actually consumed). `%hd`/`%hhd` now
+write `short`/`signed char` rather than `int`, which was a live stack-overwrite
+of the adjacent variable.
+
+### 2. `%#o` ignored the `#` flag
+
+`printf("%#o", 8)` gave `10`, gcc gives `010`. Expressed as C99's rule — `#`
+raises the precision so the first digit is a zero — rather than as a literal
+`"0"` prefix, because the value 0 already satisfies the rule and must stay `0`
+rather than becoming `00`. Both cases are pinned.
+
+### 3. `%.0d` of zero printed `0`
+
+C99 7.19.6.1: a precision of 0 with a value of 0 produces NO characters. We
+printed `0`. Niche, but it is the kind of thing a column-formatting loop depends
+on.
+
+### Everything else in the batch already agreed
+
+Flag/width/precision combinations across `d/u/x/X/o/f/s/c` including `%*d` and
+`%.*f`, the length modifiers (`h`, `hh`, `l`, `ll`, `z`), `snprintf`'s return
+contract (what WOULD have been written, and truncation without overflow),
+`snprintf(NULL, 0, ...)` for sizing, and a file round trip — `fgets`, `ftell`,
+`fseek(SEEK_END)`, `ungetc`, `feof`.
+
+**One non-finding worth recording:** the first draft appeared to show a `feof`
+divergence. It did not — `printf("...", feof(f), fgetc(f), feof(f))` has
+UNSPECIFIED argument evaluation order, so the two builds were legitimately
+reading different sequences. Rewritten as statements, both agree. The oracle
+test says so at that line, because the next person will be tempted to write it
+the short way.
+
+**Gated:** `test/crtl_libc_oracle.c` is now 97 lines, byte-identical to gcc.

@@ -173,6 +173,103 @@ int main(void) {
   printf("mchr %d\n", memchr("ab\0cd", 'c', 5) != NULL);
   printf("len %d %d\n", (int)strlen("abc"), (int)strnlen("abcdef", 3));
 
+  /* <stdio.h>: printf flag/width/precision combinations, snprintf's return
+     contract (what WOULD have been written, and truncation without
+     overflow), sscanf conversions including WIDTH and assignment
+     suppression, and a file round trip with ftell/fseek/ungetc/feof.
+     The feof sequence is written out as statements on purpose: printf
+     argument evaluation order is unspecified, so reading feof/fgetc/feof
+     as arguments compares nothing meaningful. */
+
+  char pb[256];
+  int n;
+  /* width, flags, precision -- the combinations real code formats tables with */
+  printf("[%5d][%-5d][%05d][%+d][% d]\n", 42, 42, 42, 42, 42);
+  printf("[%5d][%-5d][%05d]\n", -42, -42, -42);
+  printf("[%x][%X][%#x][%#X][%o][%#o]\n", 255, 255, 255, 255, 8, 8);
+  printf("[%8.3f][%-8.3f][%08.3f][%.0f]\n", 3.14159, 3.14159, 3.14159, 2.5);
+  printf("[%.3s][%8s][%-8s]\n", "abcdef", "hi", "hi");
+  printf("[%c][%%]\n", 'Z');
+  printf("[%u][%lu][%llu]\n", 4294967295u, 4294967295UL, 18446744073709551615ULL);
+  printf("[%ld][%lld]\n", -2147483648L, -9223372036854775807LL);
+  printf("[%zu][%zd]\n", (size_t)123, (ptrdiff_t)-123);
+  printf("[%hd][%hhd]\n", (short)-5, (signed char)-5);
+  /* star width and precision */
+  printf("[%*d][%-*d][%.*f]\n", 6, 42, 6, 42, 2, 3.14159);
+  /* zero and empty edge cases */
+  printf("[%d][%s][%.0d]\n", 0, "", 0);
+
+  /* snprintf: the RETURN VALUE is what would have been written, and it
+     truncates without overflowing -- both are what callers size buffers on */
+  int pn = snprintf(pb, 8, "%s", "abcdefghij");
+  printf("snp-ret=%d snp-buf=[%s] snp-len=%d\n", pn, pb, (int)strlen(pb));
+  pn = snprintf(NULL, 0, "%d-%s", 1234, "xy");
+  printf("snp-size=%d\n", pn);
+  pn = sprintf(pb, "%d", 12345);
+  printf("spr-ret=%d\n", pn);
+
+  /* sscanf: conversions, whitespace skipping, the assignment COUNT */
+  int a1 = 0, a2 = 0; char s1[16] = {0};
+  n = sscanf("  17 42 word", "%d %d %15s", &a1, &a2, s1);
+  printf("scan-n=%d a=%d b=%d s=%s\n", n, a1, a2, s1);
+  double d = 0;
+  n = sscanf("3.5e2", "%lf", &d);
+  printf("scan-f n=%d d=%.1f\n", n, d);
+  unsigned u = 0;
+  n = sscanf("ff", "%x", &u);
+  printf("scan-x n=%d u=%u\n", n, u);
+  n = sscanf("abc", "%d", &a1);
+  printf("scan-fail=%d\n", n);
+
+  /* width and assignment-suppression in scanf, both newly supported */
+  { int q1 = 0, q2 = 0; char w[8] = "ZZ";
+    n = sscanf("12345 67", "%3d %d", &q1, &q2);
+    printf("scan-wd n=%d q1=%d q2=%d\n", n, q1, q2);
+    n = sscanf("11 22 33", "%d %*d %d", &q1, &q2);
+    printf("scan-sup n=%d q1=%d q2=%d\n", n, q1, q2);
+    n = sscanf("abcdefgh", "%4s", w);
+    printf("scan-s4 n=%d w=[%s]\n", n, w);
+    n = sscanf("xy", "%2c", w); w[2] = 0;
+    printf("scan-c2 n=%d w=[%s]\n", n, w);
+    short sh = 0; signed char sc = 0;
+    n = sscanf("-7 -8", "%hd %hhd", &sh, &sc);
+    printf("scan-h n=%d sh=%d sc=%d\n", n, (int)sh, (int)sc);
+  }
+
+  /* fputs/fprintf to stdout, and the return contract of puts */
+  fputs("fputs-ok\n", stdout);
+  n = fprintf(stdout, "fprintf-%d\n", 7);
+  printf("fprintf-ret=%d\n", n);
+
+  /* file round trip: write, seek, read back, EOF, ungetc */
+  FILE *f = fopen("/tmp/crtl_stdio_probe.txt", "w");
+  if (!f) { printf("fopen-w-fail\n"); return 1; }
+  fprintf(f, "line1\nline2\n");
+  fclose(f);
+  f = fopen("/tmp/crtl_stdio_probe.txt", "r");
+  if (!f) { printf("fopen-r-fail\n"); return 1; }
+  char line[32];
+  fgets(line, sizeof(line), f);
+  printf("fgets1=[%s]", line);
+  long pos = ftell(f);
+  printf("ftell=%ld\n", pos);
+  fseek(f, 0, SEEK_END);
+  printf("size=%ld\n", ftell(f));
+  fseek(f, 0, SEEK_SET);
+  int c = fgetc(f);
+  ungetc(c, f);
+  printf("ungetc=%c%c\n", c, fgetc(f));
+  fseek(f, 0, SEEK_END);
+  { /* SEQUENCED: printf argument evaluation order is unspecified in C, so
+       reading feof/fgetc/feof as arguments compares nothing meaningful. */
+    int e1 = feof(f) ? 1 : 0;
+    int ec = fgetc(f);
+    int e2 = feof(f) ? 1 : 0;
+    printf("eof-before=%d c=%d eof-after=%d\n", e1, ec, e2);
+  }
+  fclose(f);
+  remove("/tmp/crtl_stdio_probe.txt");
+
   /* PRI/SCN round trip */
   int64_t v = -1234567890123LL;
   char buf[64];
