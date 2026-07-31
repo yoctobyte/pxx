@@ -1,0 +1,16 @@
+# enumerate(), zip(), dict.items() and Counter.most_common() all build pairs
+# as a TPyList with no FIsTuple flag set, so they printed with brackets
+# instead of Python's parentheses.
+# bug-nilpy-builtin-pairs-are-not-flagged-as-tuples
+# Every expectation is CPython's own output.
+
+from collections import Counter
+
+print(list(enumerate(["a", "b"])))
+print(list(zip([1, 2], ["a", "b"])))
+
+d = {"a": 1, "b": 2}
+print(list(d.items()))
+
+c = Counter(["a", "b", "a", "a", "c"])
+print(c.most_common())

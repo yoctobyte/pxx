@@ -45,6 +45,16 @@ flag changes MEANING rather than rendering: `pypercent_format` reads
 single value, so `"%s" % <pair>` would start unpacking. Grep the corpus for a
 `%` whose right side is an enumerate/zip/items element before landing it.
 
+## FIXED (this session)
+
+`pair.FIsTuple := True;` added at all four sites (`pyenumerate`, `pyzip`,
+`TPyDict.itemlist`, `TPyDict.most_common`). Checked the `pypercent_format`
+concern: no corpus/test source has a `%` format whose right side is one of
+these pairs, and making them correctly tuple-tagged is the CORRECT direction
+anyway — real Python's `"%s" % t` on a tuple attempts positional unpacking too,
+so this fix only makes that path match CPython rather than introduce a new
+divergence.
+
 ## Gate
 
 `make test-nilpy` + a `.npy` printing `enumerate`, `zip`, `items` and

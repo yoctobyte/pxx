@@ -2850,6 +2850,7 @@ begin
   for i := 0 to a.count - 1 do
   begin
     pair := TPyList.Create;
+    pair.FIsTuple := True;   { enumerate() yields (index, value) tuples }
     pair.append(i);
     pair.append(a.at(i));
     PPyVarRec(@pv)^.VType := 7;
@@ -2870,6 +2871,7 @@ begin
   for i := 0 to n - 1 do
   begin
     pair := TPyList.Create;
+    pair.FIsTuple := True;   { zip() yields tuples }
     pair.append(a.at(i));
     pair.append(b.at(i));
     PPyVarRec(@pv)^.VType := 7;
@@ -3064,6 +3066,7 @@ begin
   for i := 0 to cnt - 1 do
   begin
     pair := TPyList.Create;
+    pair.FIsTuple := True;   { most_common() yields (key, count) tuples }
     pair.append(ks.at(idx[i]));
     pair.append(vs.at(idx[i]));
     res.append(pair);
@@ -3115,6 +3118,7 @@ begin
   for i := 0 to kl.count - 1 do
   begin
     pair := TPyList.Create;
+    pair.FIsTuple := True;   { dict.items() yields (key, value) tuples }
     pair.append(kl.at(i));
     pair.append(vl.at(i));
     { box the pair as a VT_OBJECT slot and retain it — the same shape a nested
