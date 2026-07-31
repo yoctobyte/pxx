@@ -32,10 +32,11 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (169)
+## backlog (171)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-c-line-file-func-and-predefined-macros-missing | C | 55 | bug | C: __LINE__ is 0, __FILE__ is empty and __func__ is empty; __unix__, __BYTE_ORDER__, __SIZEOF_* and __CHAR_BIT__ are absent | — |
 | bug-c-main-missing-implicit-return-zero | C | 65 | bug | C: main() falling off the end returns stack garbage instead of 0 (i386) | — |
@@ -43,6 +44,7 @@ lives in git, not in a timestamp._
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
 | bug-crtl-headers-lost-when-cwd-is-not-the-repo-root | C | 60 | bug | C: pxx's own crtl headers are found only from the repo root — elsewhere <stdarg.h>/<math.h> silently come from /usr/include | — |
+| bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
@@ -292,7 +294,7 @@ lives in git, not in a timestamp._
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1109)
+## done (1111)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -715,6 +717,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-returning-a-nested-def-yields-none | N | 70 | bug | `return inner` — a nested def returned as a value — yields None | — |
 | bug-nilpy-rtl-exception-surface-shadowed | N | 60 | bug | nilpy: pylib's Exception shadows sysutils' identical declaration, so RTL units fail on CreateFmt/FMessage | — |
 | bug-nilpy-runtime-raised-errors-bypass-try-except | N | 65 | bug | Runtime-raised errors bypass try/except entirely (division by zero, index, key) | — |
+| bug-nilpy-set-and-dict-operators-do-raw-pointer-arithmetic | N | 45 | bug | `&`/`\|`/`-`/`^` on sets, `\|` on dicts silently did raw pointer arithmetic | — |
 | bug-nilpy-set-literal-does-not-deduplicate | N | 60 | bug | A set LITERAL keeps duplicates; `set().add()` removes them | — |
 | bug-nilpy-settings-editor-segfaults-on-bound-method-field | N | 80 | bug | SettingsEditor segfaults reading a bound method off a field | — |
 | bug-nilpy-slice-of-variant-local-returned-is-unusable | N | 75 | bug | Returning a SLICE of a variant local gives the caller an unusable value | — |
@@ -1138,6 +1141,7 @@ lives in git, not in a timestamp._
 | feature-nil-python-frontend | A | 50 | feature | Nil Python frontend (`.npy`) | — |
 | feature-nilpy-aggregate-builtins | N | 50 | feature | nilpy: map/filter over an arbitrary callable value | — |
 | feature-nilpy-augmented-subscript-assign | N | 55 | feature | nilpy: augmented assignment to a subscript — d[k] += 1, xs[i] += 5 — does not parse | — |
+| feature-nilpy-bin-oct-and-enumerate-start-offset | N | 35 | feature | bin()/oct() missing; enumerate(xs, start) had no offset form | — |
 | feature-nilpy-bound-method-value | N | 65 | feature | NilPy: a BOUND METHOD as a value (`self.push` carries self) | — |
 | feature-nilpy-builtin-exceptions | N | 55 | feature | NilPy: Python's builtin exception classes, and `int(s, base)` that raises | — |
 | feature-nilpy-bytes-and-slices | N | 55 | feature | NilPy: bytearray + slices (uforth's memory emulation) | — |
@@ -2973,7 +2977,9 @@ lives in git, not in a timestamp._
 - [p 35] [N] feature-nilpy-yield-outside-a-for-loop
 - [p 35] [O] feature-opt-complex-packed-double
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
+- [p 30] [A] bug-a-const-variant-arg-expression-fails-outside-pyexprmode
 - [p 30] [A] bug-cfront-silent-bind-to-pascal-proc-of-different-arity
+- [p 30] [N] bug-nilpy-bitwise-op-rejects-boolean-variable-operand
 - [p 30] [N] bug-nilpy-construction-on-the-right-of-is-does-not-parse
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
 - [p 30] [N] feature-nilpy-stdlib-coverage-gaps-measured

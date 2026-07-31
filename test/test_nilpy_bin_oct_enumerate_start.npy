@@ -1,0 +1,11 @@
+# bin()/oct() int-to-string builtins, and enumerate(xs, start) / enumerate(xs,
+# start=N) — the counting offset form of enumerate() as a VALUE.
+# Every expectation is CPython's own output.
+
+print(bin(10), oct(10), hex(10))
+print(bin(-5), oct(-5))
+print(bin(0), oct(0))
+
+print(list(enumerate(["a", "b"], 1)))
+print(list(enumerate(["a", "b"], start=5)))
+print(list(enumerate(["a", "b"])))

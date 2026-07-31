@@ -871,6 +871,9 @@ function pyzip(a: TPyList; b: TPyList): TPyList;
   for-HEADER form is a counted loop and never comes here; this is the
   materialised list of [index, item] pairs, the same shape pyzip builds. }
 function pyenumerate(a: TPyList): TPyList;
+{ `enumerate(xs, start)` / `enumerate(xs, start=N)` — same as pyenumerate with
+  the index offset by `start`. }
+function pyenumerate2(a: TPyList; start: Integer): TPyList;
 { Python's TWO-argument round(x, ndigits) — a float rounded to that many
   decimals, unlike the one-argument form which yields an int. Half-away-from-
   zero rather than CPython's banker's rounding: the difference shows only on an
@@ -906,6 +909,10 @@ function reversed(const s: AnsiString): TPyList; overload;
 { `hex(n)` — Python spells it with the 0x prefix and lower-case digits, and
   spells a negative as -0x… rather than in two's complement. }
 function hex(n: Int64): AnsiString;
+{ `oct(n)` / `bin(n)` — same 0-prefix-and-sign convention as hex: 0o/0b, a
+  leading '-' for a negative magnitude, and '0o0'/'0b0' for zero. }
+function oct(n: Int64): AnsiString;
+function bin(n: Int64): AnsiString;
 function len(l: TPyList): Integer;
 function len(d: TPyDict): Integer; overload;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
@@ -3022,6 +3029,28 @@ begin
     pair := TPyList.Create;
     pair.FIsTuple := True;   { enumerate() yields (index, value) tuples }
     pair.append(i);
+    pair.append(a.at(i));
+    PPyVarRec(@pv)^.VType := 7;
+    PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
+    PXXObjRetain(Pointer(pair));
+    r.append(pv);
+  end;
+end;
+
+{ `enumerate(xs, start)` / `enumerate(xs, start=N)` — same pairs as
+  pyenumerate, indices offset by `start` instead of counting from 0. }
+function pyenumerate2(a: TPyList; start: Integer): TPyList;
+var r, pair: TPyList; i, idx: Integer; pv: Variant;
+begin
+  r := TPyList.Create;
+  pyenumerate2 := r;
+  if a = nil then Exit;
+  for i := 0 to a.count - 1 do
+  begin
+    pair := TPyList.Create;
+    pair.FIsTuple := True;
+    idx := start + i;
+    pair.append(idx);
     pair.append(a.at(i));
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
@@ -6655,6 +6684,36 @@ begin
     m := m div 16;
   end;
   if n < 0 then Result := '-0x' + d else Result := '0x' + d;
+end;
+
+function oct(n: Int64): AnsiString;
+var m: Int64; d: AnsiString;
+begin
+  if n = 0 then begin Result := '0o0'; Exit; end;
+  m := n;
+  if m < 0 then m := -m;
+  d := '';
+  while m > 0 do
+  begin
+    d := HexDigitChar(m mod 8) + d;
+    m := m div 8;
+  end;
+  if n < 0 then Result := '-0o' + d else Result := '0o' + d;
+end;
+
+function bin(n: Int64): AnsiString;
+var m: Int64; d: AnsiString;
+begin
+  if n = 0 then begin Result := '0b0'; Exit; end;
+  m := n;
+  if m < 0 then m := -m;
+  d := '';
+  while m > 0 do
+  begin
+    d := HexDigitChar(m mod 2) + d;
+    m := m div 2;
+  end;
+  if n < 0 then Result := '-0b' + d else Result := '0b' + d;
 end;
 
 { A list slice is a SHALLOW copy, as in Python: the new list holds the same

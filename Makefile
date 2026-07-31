@@ -946,6 +946,9 @@ test-nilpy: $(COMPILER)
 	# set operators (&, |, -, ^) and PEP 584 dict union (|); expectation is CPython's own output
 	./$(COMPILER) test/test_nilpy_set_ops.npy /tmp/test_nilpy_setops26
 	test "$$(/tmp/test_nilpy_setops26)" = "$$(printf '%b' '[2, 3]\n[1, 2, 3, 4]\n[1]\n[1, 4]\n[(\047x\047, 1), (\047y\047, 20), (\047z\047, 3)]')"
+	# bin()/oct() builtins, and enumerate(xs, start) / enumerate(xs, start=N); expectation is CPython's own output
+	./$(COMPILER) test/test_nilpy_bin_oct_enumerate_start.npy /tmp/test_nilpy_bome26
+	test "$$(/tmp/test_nilpy_bome26)" = "$$(printf '%b' '0b1010 0o12 0xa\n-0b101 -0o5\n0b0 0o0\n[(1, \047a\047), (2, \047b\047)]\n[(5, \047a\047), (6, \047b\047)]\n[(0, \047a\047), (1, \047b\047)]')"
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING

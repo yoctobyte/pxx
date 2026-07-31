@@ -12805,6 +12805,7 @@ var smNameTok, smBase, sdTok, tpObjNode, tpBlobNode, tpCallNode: Integer;
     sdName: AnsiString;
     smTk, tpTk: TTypeKind;   { receiver kind for a suffix on a fresh construction }
     ppBase, ppExp, ppPi, ppArgSeq, ppArgSeq2: Integer;   { `**` power operator }
+    enStart, enArg0, enArg1: Integer;   { enumerate(xs, start=N) }
 begin
   { `type(x).__name__` -- the ONLY shape of Python's `type()` builtin this
     frontend accepts (not a general type-object value: no bare `type(x)`,
@@ -12882,22 +12883,48 @@ begin
   else if PyExprMode and PyIsIdent('enumerate') and (TokPos < TokCount) and
           (Tokens[TokPos].Kind = tkLParen) and (FindSym('enumerate') < 0) then
   begin
-    { `enumerate(xs)` as a VALUE — `for i, s in reversed(list(enumerate(t)))`.
-      The for-HEADER form is recognised earlier and walks by index; here the
-      pairs have to exist as a list, exactly as for zip. }
+    { `enumerate(xs)` / `enumerate(xs, N)` / `enumerate(xs, start=N)` as a
+      VALUE — `for i, s in reversed(list(enumerate(t)))`. The for-HEADER form
+      is recognised earlier and walks by index; here the pairs have to exist
+      as a list, exactly as for zip. }
     Next; Expect(tkLParen, '(');
     ParseArgExpr;
     smBase := CurASTNode;
+    enStart := -1;
+    if Eat(tkComma) then
+    begin
+      if PyIsIdent('start') and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind = tkAssign) then
+      begin
+        Next; Next;   { 'start', '=' }
+      end;
+      ParseArgExpr;
+      enStart := CurASTNode;
+    end;
     Expect(tkRParen, ')');
-    smNameTok := FindProc('pyenumerate');
-    if smNameTok < 0 then Error('Nil Python: pylib (pyenumerate) not loaded');
-    CurASTNode := AllocNode(AN_ARG);
-    ASTLeft[CurASTNode] := smBase;
-    ASTRight[CurASTNode] := -1;
-    smBase := CurASTNode;
-    CurASTNode := AllocNode(AN_CALL);
-    ASTIVal[CurASTNode] := smNameTok;
-    ASTLeft[CurASTNode] := smBase;
+    if enStart >= 0 then
+    begin
+      smNameTok := FindProc('pyenumerate2');
+      if smNameTok < 0 then Error('Nil Python: pylib (pyenumerate2) not loaded');
+      enArg0 := AllocNode(AN_ARG); ASTLeft[enArg0] := smBase;
+      enArg1 := AllocNode(AN_ARG); ASTLeft[enArg1] := enStart; ASTRight[enArg1] := -1;
+      ASTRight[enArg0] := enArg1;
+      CurASTNode := AllocNode(AN_CALL);
+      ASTIVal[CurASTNode] := smNameTok;
+      ASTLeft[CurASTNode] := enArg0;
+    end
+    else
+    begin
+      smNameTok := FindProc('pyenumerate');
+      if smNameTok < 0 then Error('Nil Python: pylib (pyenumerate) not loaded');
+      CurASTNode := AllocNode(AN_ARG);
+      ASTLeft[CurASTNode] := smBase;
+      ASTRight[CurASTNode] := -1;
+      smBase := CurASTNode;
+      CurASTNode := AllocNode(AN_CALL);
+      ASTIVal[CurASTNode] := smNameTok;
+      ASTLeft[CurASTNode] := smBase;
+    end;
     ASTTk[CurASTNode] := Ord(tyClass);
     ASTRight[CurASTNode] := REC_UCLASS_BASE + FindUClass('TPyList');
     LastExprTk := tyClass;
