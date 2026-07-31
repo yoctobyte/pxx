@@ -32,7 +32,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (175)
+## backlog (176)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -52,6 +52,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-int-prints-as-float-when-the-name-is-widened-later | N | 50 | bug | An int prints as `5.0` because the SAME NAME is assigned a float later in the file | — |
 | bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
 | bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
+| bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
@@ -2965,6 +2966,7 @@ lives in git, not in a timestamp._
 - [p 40] [T] feature-twatch-full-tier-coverage-age
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
+- [p 35] [N] bug-nilpy-list-sort-method-missing
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
 - [p 35] [N] bug-nilpy-pypow-integer-overflow-does-not-promote
 - [p 35] [U] decide-nilpy-hasattr-per-instance-semantics
