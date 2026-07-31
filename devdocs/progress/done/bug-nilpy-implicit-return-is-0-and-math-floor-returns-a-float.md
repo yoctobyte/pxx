@@ -105,3 +105,6 @@ both `-O0` and the default `-O2`, and re-verified after fixing an unrelated
 comprehension-scope regression (`bug-nilpy-comprehension-variable-leaks-and-
 clobbers-the-enclosing-scope`) landed in the same session to make sure the
 two didn't interact.
+
+## Log
+- 2026-07-31 — resolved, commit fd5bf5825.
