@@ -112,22 +112,59 @@ is also reusable: every future app wants most of it.
 Do **not** rewrite any of these libraries to Pascal. The mission is compiling
 the real source as-is; a rewrite proves nothing (see the mission note).
 
-## Forks for Track U (escalate, do not guess)
+## DECIDED 2026-07-31 (user, Track U) — compile the C SOURCE, never load a wheel
 
-- `decide-pil-mimic-vs-cfront-codecs` — for a class-3 dependency, do we (a)
-  mimic the module surface in `lib/`, (b) compile the underlying C library with
-  cfront and write our own binding, or (c) declare the app's feature optional?
-  Pillow is the first instance and sets the precedent.
-- `decide-cpython-c-api-support` — is implementing (a subset of) the CPython
-  C-API ever on the table? Answering "no" permanently is a legitimate and
-  probably correct answer; it just needs to be recorded, because it decides the
-  fate of every class-3 dependency.
+**Verdict: the CPython C-API is supported by compiling the extension's C
+SOURCE with cfront against OUR OWN `Python.h`** (option 2.c below). Dynamic
+loading of a prebuilt `.so` (2.b) is REJECTED, permanently. Mimicking a
+module's surface in `lib/` is a stopgap for a blocked milestone, not the
+strategy.
+
+The reasoning, recorded so it does not get relitigated:
+
+- A `cp312-manylinux_x86_64` artifact is machine code pinned to one CPython
+  version's ABI on one architecture. Loading it would require pxx to BE
+  CPython — real `PyObject` layout, refcount semantics, `tp_*` slots, the GIL —
+  and it would still yield nothing on any cross target. Every dependency would
+  re-open the version question.
+- Compiling the SOURCE against our own `Python.h` uses OUR ABI: no CPython
+  version pinning, works on every backend, and **the extension links into a
+  STATIC BINARY**. That is the outcome we want and the one thing a wheel can
+  never deliver.
+- It generalises. Cython-, PyO3- and pybind11-generated modules all emit
+  C/C++ against the same API, so one layer unlocks a large fraction of the
+  ecosystem — "just compile the library" is a killer feature that stays
+  useful forever, which no per-library mimic ever is.
+
+**Scope correction that follows from this:** neuzelaar is NOT a goal. It is one
+random test target that happens to exercise all four dependency classes. The
+goal is compiling Python libraries. Judge progress by libraries that compile
+and pass their own upstream suites, not by neuzelaar milestones.
+
+**And Pillow stops being special.** Under this verdict its own C sources are
+compiled like any other class-3 package; only the C libraries BENEATH it
+(libjpeg/zlib/lcms2 — plain C, no `Python.h`) are cfront corpus work. The
+`mimic_PIL` idea survives only as a stopgap if an image-dependent milestone is
+blocked while cpyext is still young.
+
+Child: [[feature-nilpy-cpyext-c-api-from-source]].
+
+## Forks (1 open; 2 is decided above)
+
+- `decide-image-stopgap-while-cpyext-is-young` — narrowed by the verdict above.
+  The END STATE is settled (compile Pillow's own C via cpyext, its underlying
+  libjpeg/zlib via cfront). Open only: while cpyext does not exist yet, does an
+  image-dependent milestone get a `mimic_PIL` stopgap, or does it simply wait?
+  Cheap either way; ask only when something is actually blocked on it.
+- ~~`decide-cpython-c-api-support`~~ — **DECIDED, see above: compile the source
+  (2.c), never load a wheel (2.b).**
 - where do compiled third-party libraries LIVE? A vendored corpus dir vs
   compiling from the user's site-packages in place. Affects how the frontend
   resolves `import html5lib`.
 
 ## Children (file as they start)
 
+- [[feature-nilpy-cpyext-c-api-from-source]] — the strategic one
 - [[feature-nilpy-future-import-noop]]
 - [[feature-nilpy-dataclasses]]
 - [[feature-nilpy-corpus-html5lib]]
