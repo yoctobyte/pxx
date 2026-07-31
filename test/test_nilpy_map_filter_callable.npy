@@ -1,0 +1,26 @@
+# map(f, xs) / filter(f, xs) over an arbitrary callable VALUE -- a lifted
+# lambda, a plain def, and a builtin (len) -- beside map's existing
+# int/str/float conversion shims, which stay on their own path unchanged.
+# filter(None, xs) is Python's own "keep the truthy elements" shorthand.
+# Both reuse the PyCallKey1 dispatch sorted(key=...) already established.
+# feature-nilpy-aggregate-builtins
+# Every expectation is CPython's own output.
+
+xs = [1, 2, 3]
+
+def dbl(x):
+    return x * 2
+print(list(map(dbl, xs)))
+
+print(list(map(int, ["1", "2", "3"])))
+print(list(map(lambda x: x * 3, xs)))
+print(list(map(len, ["a", "bb", "ccc"])))
+
+print(list(filter(lambda x: x > 1, xs)))
+
+def gt1(x):
+    return x > 1
+print(list(filter(gt1, xs)))
+
+ys = [0, 1, 0, 2, 3, 0]
+print(list(filter(None, ys)))

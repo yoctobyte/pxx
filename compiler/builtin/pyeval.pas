@@ -79,6 +79,12 @@ function pyclosure_call1(objptr: Pointer; const a0: Variant): Variant;
   key = nil means sort by the elements themselves. }
 function sorted(l: TPyList; key: Pointer = nil; reverse: Boolean = False): TPyList;
 
+{ `map(f, xs)` / `filter(f, xs)` over an arbitrary callable VALUE -- the
+  general form beside the existing map(int|str|float, xs) conversion shims.
+  Same PyCallKey1 dispatch sorted()'s key= already uses. }
+function pymap_call(key: Pointer; l: TPyList): TPyList;
+function pyfilter_call(key: Pointer; l: TPyList): TPyList;
+
 { Build a closure from raw SOURCE text — the compiled frontend's lowering of a
   Python `lambda`: `lambda vm: vm.push(A)` becomes
   pyclosure_src_new('vm', 'return vm.push(A)') with each free name's VALUE
@@ -3859,6 +3865,39 @@ begin
     end;
   end;
   keys.Free;
+end;
+
+{ `map(f, xs)` over an arbitrary callable VALUE -- the general form beside
+  the existing map(int|str|float, xs) conversion shims. Same PyCallKey1
+  dispatch sorted()'s key= already uses, so every callable shape (a lifted
+  lambda, a plain def, a bound method, and a builtin via
+  PyGetOrMakeCallableWrapper) works here for free.
+  feature-nilpy-aggregate-builtins }
+function pymap_call(key: Pointer; l: TPyList): TPyList;
+var i: Integer;
+begin
+  Result := TPyList.Create;
+  if (l = nil) or (key = nil) then Exit;
+  for i := 0 to l.count - 1 do
+    Result.append(PyCallKey1(key, l.at(i)));
+end;
+
+{ `filter(f, xs)` -- keep the elements where f(x) is truthy. `filter(None,
+  xs)` (Python's own "keep the truthy elements" shorthand) is key=nil here. }
+function pyfilter_call(key: Pointer; l: TPyList): TPyList;
+var i: Integer; ev: Variant;
+begin
+  Result := TPyList.Create;
+  if l = nil then Exit;
+  for i := 0 to l.count - 1 do
+  begin
+    ev := l.at(i);
+    if key = nil then
+    begin
+      if pyvar_to_bool(ev) then Result.append(ev);
+    end
+    else if pyvar_to_bool(PyCallKey1(key, ev)) then Result.append(ev);
+  end;
 end;
 
 function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;

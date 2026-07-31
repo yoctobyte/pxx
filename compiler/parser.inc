@@ -9656,33 +9656,90 @@ begin
               (Tokens[TokPos].Kind = tkLParen) and (FindSym(name) < 0) then
       begin
         { `map(int, xs)` — the CONVERSION forms, which is what real code writes
-          (`w, h = map(int, s.split("x"))`). The first argument must be a type
-          NAME; a general map over an arbitrary callable is separate work, and
-          refusing it by name beats guessing. }
+          (`w, h = map(int, s.split("x"))`) — beside `map(f, xs)` over an
+          arbitrary callable VALUE (a lifted lambda, a plain def, a bound
+          method, or a builtin via PyGetOrMakeCallableWrapper), which reuses
+          the same PyCallKey1 dispatch sorted()'s key= already does.
+          feature-nilpy-aggregate-builtins }
         Next; Expect(tkLParen, '(');
-        if CurTok.Kind <> tkIdent then
-          Error('Nil Python: map() takes a type name as its first argument '
-                + '(int, str or float) in this implementation');
-        mapKind := LowerCase(CurTok.SVal);
-        if mapKind = 'int' then mapProc := FindProc('pymap_int')
-        else if mapKind = 'str' then mapProc := FindProc('pymap_str')
-        else if mapKind = 'float' then mapProc := FindProc('pymap_float')
+        mapKind := '';
+        if CurTok.Kind = tkIdent then mapKind := LowerCase(CurTok.SVal);
+        if (mapKind = 'int') or (mapKind = 'str') or (mapKind = 'float') then
+        begin
+          if mapKind = 'int' then mapProc := FindProc('pymap_int')
+          else if mapKind = 'str' then mapProc := FindProc('pymap_str')
+          else mapProc := FindProc('pymap_float');
+          if mapProc < 0 then Error('Nil Python: pylib (pymap_*) not loaded');
+          Next;
+          Expect(tkComma, ',');
+          { the NilPy expression parser: the argument is normally a call with a
+            string-method suffix (`get(...).split("x")`), which the Pascal chain
+            does not apply }
+          PyParseBoolExpr;
+          Expect(tkRParen, ')');
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := mapProc;
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := CurASTNode;
+          ASTRight[argSeq] := -1;
+          ASTLeft[node] := argSeq;
+          ASTTk[node] := Ord(tyClass);
+          ASTRight[node] := ProcRetRecId[mapProc];
+          CurASTNode := node;
+          LastExprTk := tyClass;
+          Exit;
+        end
         else
-          Error('Nil Python: map() over ' + CurTok.SVal + ' is not implemented '
-                + '(int, str and float are)');
-        if mapProc < 0 then Error('Nil Python: pylib (pymap_*) not loaded');
-        Next;
+        begin
+          mapProc := FindProc('pymap_call');
+          if mapProc < 0 then Error('Nil Python: pylib (pymap_call) not loaded');
+          PyParseBoolExpr;
+          exprNode := CurASTNode;
+          Expect(tkComma, ',');
+          PyParseBoolExpr;
+          Expect(tkRParen, ')');
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := mapProc;
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
+          argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := CurASTNode; ASTRight[argSeq2] := -1;
+          ASTRight[argSeq] := argSeq2;
+          ASTLeft[node] := argSeq;
+          ASTTk[node] := Ord(tyClass);
+          ASTRight[node] := ProcRetRecId[mapProc];
+          CurASTNode := node;
+          LastExprTk := tyClass;
+          Exit;
+        end;
+      end
+      else if isNilPy and (name = 'filter') and (TokPos < TokCount) and
+              (Tokens[TokPos].Kind = tkLParen) and (FindSym(name) < 0) then
+      begin
+        { `filter(f, xs)` / `filter(None, xs)` (Python's own "keep the truthy
+          elements" shorthand). Same callable dispatch as map(), above.
+          feature-nilpy-aggregate-builtins }
+        Next; Expect(tkLParen, '(');
+        mapProc := FindProc('pyfilter_call');
+        if mapProc < 0 then Error('Nil Python: pylib (pyfilter_call) not loaded');
+        if CurTok.Kind = tkNil then
+        begin
+          Next;
+          exprNode := AllocNode(AN_INT_LIT);
+          ASTIVal[exprNode] := 0;
+          ASTTk[exprNode] := Ord(tyPointer);
+        end
+        else
+        begin
+          PyParseBoolExpr;
+          exprNode := CurASTNode;
+        end;
         Expect(tkComma, ',');
-        { the NilPy expression parser: the argument is normally a call with a
-          string-method suffix (`get(...).split("x")`), which the Pascal chain
-          does not apply }
         PyParseBoolExpr;
         Expect(tkRParen, ')');
         node := AllocNode(AN_CALL);
         ASTIVal[node] := mapProc;
-        argSeq := AllocNode(AN_ARG);
-        ASTLeft[argSeq] := CurASTNode;
-        ASTRight[argSeq] := -1;
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
+        argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := CurASTNode; ASTRight[argSeq2] := -1;
+        ASTRight[argSeq] := argSeq2;
         ASTLeft[node] := argSeq;
         ASTTk[node] := Ord(tyClass);
         ASTRight[node] := ProcRetRecId[mapProc];

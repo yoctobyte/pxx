@@ -531,6 +531,9 @@ test-nilpy: $(COMPILER)
 	@# a builtin (`f = len`) captured as a bare value no longer segfaults
 	./$(COMPILER) test/test_nilpy_builtin_value_wrapper.npy /tmp/test_nilpy_builtinval26
 	test "$$(/tmp/test_nilpy_builtinval26)" = "$$(printf '%b' '['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n3\n5\n3\n['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n['"'"'a'"'"', '"'"'bbb'"'"', '"'"'cc'"'"']')"
+	@# map(f, xs) / filter(f, xs) over an arbitrary callable, and filter(None, xs)
+	./$(COMPILER) test/test_nilpy_map_filter_callable.npy /tmp/test_nilpy_mapfilter26
+	test "$$(/tmp/test_nilpy_mapfilter26)" = "$$(printf '%b' '[2, 4, 6]\n[1, 2, 3]\n[3, 6, 9]\n[1, 2, 3]\n[2, 3]\n[2, 3]\n[1, 2, 3]')"
 	./$(COMPILER) test/test_nilpy_dynattr.npy /tmp/test_nilpy_dynattr26
 	test "$$(/tmp/test_nilpy_dynattr26)" = "$$(printf '%b' '105\n110')"
 	./$(COMPILER) test/test_nilpy_dynattr_class.npy /tmp/test_nilpy_dynattr_class26
