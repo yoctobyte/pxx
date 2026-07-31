@@ -6845,6 +6845,8 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     argExprs: array[0..15] of Integer;
     smTmpSym, smAsgn, smGuardArg, smGuardCall, smNotNode, smNameArg,
     smArg1, smArg2, smRaiseCall, smIfNode, smPairNode: Integer;
+    vtTmpSym, vtAsgn, vtGuardArg, vtGuardCall, vtNotNode, vtNameArg,
+    vtArg1, vtArg2, vtRaiseCall, vtIfNode, vtPairNode: Integer;
 begin
   { A receiver that came from an optional module which did not resolve — the
     name itself, or anything assigned from it. Checked BEFORE class dispatch:
@@ -7139,6 +7141,53 @@ begin
     hitMmi := PyPromoteOverloadByKw(hitCi, hitMmi, mname);
     if hitMmi >= 0 then hitPi := UMthProc_[hitMmi];
   end;
+
+  { Runtime tag guard, same shape as the str-method guard above: this hard
+    cast assumes VT_OBJECT and dereferences the raw payload as an instance
+    pointer. A receiver whose declared default never evaluates (`def f(a,
+    b=[])`, where the container literal falls through as a genuine None —
+    PyParamDefaultAt's own "non-constant default" comment) reaches here
+    holding VT_EMPTY, and an unchecked cast dereferences a null/garbage
+    pointer the moment the callee's method body touches Self
+    (bug-nilpy-container-literal-default-arg-segfaults). Hoist the receiver
+    once (read twice below: the tag check, then the cast) and raise a clean
+    AttributeError via the existing pydynattr_no_method instead of crashing —
+    mirrors pydynattr_get_v/pyvar_getitem, which already guard the tag before
+    their own casts; this dispatch path did not. }
+  vtTmpSym := AllocVar(PyHiddenName('vt'), tyVariant);
+  vtAsgn := AllocNode(AN_ASSIGN);
+  ASTLeft[vtAsgn] := PyMakeIdent(vtTmpSym);
+  ASTRight[vtAsgn] := baseNode;
+  PyHoistStmt(vtAsgn);
+  baseNode := PyMakeIdent(vtTmpSym);
+
+  i := FindProc('pyvar_is_objtag');
+  if i < 0 then Error('Nil Python: pylib (pyvar_is_objtag) not loaded');
+  vtGuardArg := AllocNode(AN_ARG); ASTLeft[vtGuardArg] := PyMakeIdent(vtTmpSym);
+  vtGuardCall := AllocNode(AN_CALL);
+  ASTIVal[vtGuardCall] := i; ASTTk[vtGuardCall] := Ord(tyBoolean);
+  ASTLeft[vtGuardCall] := vtGuardArg;
+  vtNotNode := AllocNode(AN_NOT);
+  ASTLeft[vtNotNode] := vtGuardCall; ASTTk[vtNotNode] := Ord(tyBoolean);
+
+  i := FindProc('pydynattr_no_method');
+  if i < 0 then Error('Nil Python: pylib (pydynattr_no_method) not loaded');
+  vtNameArg := AllocNode(AN_STR_LIT);
+  ASTSOffset[vtNameArg] := PyStoredName(mname);
+  ASTSLen[vtNameArg] := Length(mname);
+  ASTTk[vtNameArg] := Ord(tyString);
+  vtArg2 := AllocNode(AN_ARG); ASTLeft[vtArg2] := vtNameArg; ASTRight[vtArg2] := -1;
+  vtArg1 := AllocNode(AN_ARG); ASTLeft[vtArg1] := PyMakeIdent(vtTmpSym); ASTRight[vtArg1] := vtArg2;
+  vtRaiseCall := AllocNode(AN_CALL);
+  ASTIVal[vtRaiseCall] := i; ASTTk[vtRaiseCall] := Ord(tyUnknown);
+  ASTLeft[vtRaiseCall] := vtArg1;
+
+  vtIfNode := AllocNode(AN_IF);
+  ASTLeft[vtIfNode] := vtNotNode;
+  vtPairNode := AllocNode(AN_PAIR);
+  ASTLeft[vtPairNode] := vtRaiseCall; ASTRight[vtPairNode] := -1;
+  ASTRight[vtIfNode] := vtPairNode;
+  PyHoistStmt(vtIfNode);
 
   { VT_OBJECT payload -> instance pointer -> hard cast to the owning class }
   unboxArg := AllocNode(AN_ARG);

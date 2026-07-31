@@ -1952,6 +1952,20 @@ begin
   Result := pyvartag(v) in [5, 6];
 end;
 
+{ True iff v's payload is a real object pointer (VT_OBJECT, tag 7) -- the only
+  tag pyvarobj's raw payload may safely be dereferenced/cast for. Any other
+  tag (None/int/float/str/bool) is scalar bits or a null placeholder
+  reinterpreted as an address; a hard class-cast on it derefs garbage.
+  bug-nilpy-container-literal-default-arg-segfaults: a class-typed method call
+  on a VARIANT receiver (`b.append(a)` where `b`'s declared default `= []`
+  never evaluates and falls through as None) cast that receiver unconditionally
+  -- pydynattr_get_v/pyvar_getitem already guard the same way for attribute
+  reads and subscripting; the method-dispatch cast in pyparser.inc did not. }
+function pyvar_is_objtag(const v: Variant): Boolean;
+begin
+  Result := pyvartag(v) = 7;
+end;
+
 { ALWAYS raises. `None.upper()` (or any str method on a non-str variant) used
   to render the receiver through pystr_of first — a None/int/float/bool
   receiver stringifies to plausible-looking TEXT ('None', '5', ...) and the
