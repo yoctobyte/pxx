@@ -10541,7 +10541,22 @@ begin
       comprehension, target.store(KEY, VALUE). EXPR re-parsed from before the
       `for`, the same shape PyParseForIn uses. Header ends at a bracket. }
     compSaved := TokPos - 1;
+    { Rename BOTH the element expression and the filter condition (if any)
+      BEFORE parsing either — same order PyParseForIn uses. Renaming the
+      filter lazily, only once its own `if` is reached (after the element
+      expression has already been parsed and compiled), let some interposed
+      hidden-temp bookkeeping between the two steps invalidate the loop
+      variable's slot for a NEVER-otherwise-bound name specifically
+      (measured: reordering to rename both up front, mirroring the container
+      path, fixed it — see
+      bug-nilpy-comprehension-variable-leaks-and-clobbers-the-enclosing-scope). }
     PyRenameIdentRange(PyCompExprStart, forTokIdx, name, hName);
+    if Tokens[compSaved].Kind = tkIf then
+    begin
+      ifCondStart := compSaved + 1;
+      closerPos2 := PyCompFindClose(ifCondStart, filtDummy);
+      PyRenameIdentRange(ifCondStart, closerPos2, name, hName);
+    end;
     TokPos := PyCompExprStart; Next;
     if PyCompIsDict then
     begin
@@ -10563,13 +10578,11 @@ begin
     TokPos := compSaved; Next;
     { `... if COND]`: gate the append on the filter — the range path sees the
       `if` directly (no ITER expression ahead of it), same wrap as the
-      container path (feature-nilpy-comprehension-if-filter). }
+      container path (feature-nilpy-comprehension-if-filter). Tokens were
+      already renamed above; just parse. }
     if CurTok.Kind = tkIf then
     begin
       Next;
-      ifCondStart := TokPos - 1;
-      closerPos2 := PyCompFindClose(ifCondStart, filtDummy);
-      PyRenameIdentRange(ifCondStart, closerPos2, name, hName);
       PyParseBoolExpr;
       node := AllocNode(AN_IF);
       ASTLeft[node] := PyMakeTruthy(CurASTNode);
@@ -13149,6 +13162,7 @@ begin
   EmitManagedLocalsZeroInit(Procs[procIdx].ScopeBase);
   bodyNode := PyParseBlock;
   Expect(tkDedent, 'dedent');
+  bodyNode := PyPrependResultZero(procIdx, bodyNode);
   CompileAST(bodyNode);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
@@ -14874,7 +14888,40 @@ end;
 
 { Emit the synthesized @dataclass ctor body: spill params, then
   self.field_i := param_i for every field, via the ordinary AST path. }
-{ Zero a MANAGED Result slot at body entry.
+{ An AST node for type tk's zero value, or -1 if tk isn't one of the plain
+  scalar kinds this covers (see PyPrependResultZero). }
+function PyZeroLitFor(tk: TTypeKind): Integer;
+var node: Integer;
+begin
+  case tk of
+    tyInteger, tyInt8, tyUInt8, tyInt16, tyUInt16, tyInt32, tyUInt32,
+    tyInt64, tyUInt64, tyNativeInt, tyNativeUInt:
+      begin
+        node := AllocNode(AN_INT_LIT);
+        ASTIVal[node] := 0;
+        ASTTk[node] := Ord(tk);
+        Result := node;
+      end;
+    tyBoolean:
+      begin
+        node := AllocNode(AN_BOOL_LIT);
+        ASTIVal[node] := 0;
+        ASTTk[node] := Ord(tyBoolean);
+        Result := node;
+      end;
+    tySingle, tyDouble:
+      begin
+        node := AllocNode(AN_FLOAT_LIT);
+        ASTIVal[node] := 0;
+        ASTTk[node] := Ord(tk);
+        Result := node;
+      end;
+  else
+    Result := -1;
+  end;
+end;
+
+{ Zero (or otherwise deterministically init) a Result slot at body entry.
 
   A method's Result is allocated by the class-member pre-pass, where CurProc is
   not yet set, so AllocVar marks it skGlobal -- and IR_ZERO_SYM's codegen only
@@ -14885,23 +14932,45 @@ end;
   constructor before `-> str` crashed (bug-nilpy-method-returning-str-garbage).
 
   Emitting an ordinary AN_VAR_DECL at the head of the body reuses the normal
-  local zero-init path rather than adding a second mechanism. Managed kinds
-  only: an integer Result reading stale bytes is harmless and zeroing it would
-  change existing output. }
+  local zero-init path for the managed kinds (AnsiString/Variant).
+
+  A plain SCALAR Result (Integer/Boolean/Float) that falls off the end with no
+  explicit return used to be left alone here on the theory that reading stale
+  stack bytes was "harmless" — measured (not assumed) to be false: it is
+  genuine uninitialized-read undefined behaviour, and an unrelated later
+  change (a sibling proc using more registers before this one runs) turned a
+  reliably-looking `0` into an arbitrary garbage integer with no visible cause
+  (bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float). An explicit
+  `Result := 0`-shaped assignment closes exactly that gap, prepended the same
+  way the managed-kind AN_VAR_DECL is. }
 function PyPrependResultZero(procIdx, bodyNode: Integer): Integer;
-var rs, declNode, seqNode, rtk: Integer;
+var rs, declNode, seqNode, rtk, zeroNode, assignNode: Integer;
 begin
   PyPrependResultZero := bodyNode;
   rs := Procs[procIdx].RetSymIdx;
   if rs < 0 then Exit;
   rtk := Ord(Syms[rs].TypeKind);
-  if (rtk <> Ord(tyAnsiString)) and (rtk <> Ord(tyVariant)) then Exit;
-  Syms[rs].Kind := skLocal;      { it IS a frame slot; the pre-pass mislabelled it }
-  declNode := AllocNode(AN_VAR_DECL);
-  ASTIVal[declNode] := rs;
-  ASTLeft[declNode] := -1;
+  if (rtk = Ord(tyAnsiString)) or (rtk = Ord(tyVariant)) then
+  begin
+    Syms[rs].Kind := skLocal;      { it IS a frame slot; the pre-pass mislabelled it }
+    declNode := AllocNode(AN_VAR_DECL);
+    ASTIVal[declNode] := rs;
+    ASTLeft[declNode] := -1;
+    seqNode := AllocNode(AN_SEQ);
+    ASTLeft[seqNode] := declNode;
+    ASTRight[seqNode] := AllocNode(AN_SEQ);
+    ASTLeft[ASTRight[seqNode]] := bodyNode;
+    PyPrependResultZero := seqNode;
+    Exit;
+  end;
+  zeroNode := PyZeroLitFor(Syms[rs].TypeKind);
+  if zeroNode < 0 then Exit;
+  Syms[rs].Kind := skLocal;
+  assignNode := AllocNode(AN_ASSIGN);
+  ASTLeft[assignNode] := PyMakeIdent(rs);
+  ASTRight[assignNode] := zeroNode;
   seqNode := AllocNode(AN_SEQ);
-  ASTLeft[seqNode] := declNode;
+  ASTLeft[seqNode] := assignNode;
   ASTRight[seqNode] := AllocNode(AN_SEQ);
   ASTLeft[ASTRight[seqNode]] := bodyNode;
   PyPrependResultZero := seqNode;

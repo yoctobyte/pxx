@@ -636,6 +636,10 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_escape_decode26)" = "$$(printf '2\n0 255\n3 65 99\n3\n1\n5\n4')"
 	./$(COMPILER) test/test_nilpy_comp_filter.npy /tmp/test_nilpy_comp_filter26
 	test "$$(/tmp/test_nilpy_comp_filter26)" = "$$(printf '4 2 5\n3 0 4 8\n0\n4 16\n2 ab cde\n3\n3')"
+	@# a def with no return, or one falling off the end, must not leak
+	@# whatever garbage a prior call left in the return register/slot
+	./$(COMPILER) test/test_nilpy_implicit_return_none.npy /tmp/test_nilpy_implret26
+	test "$$(/tmp/test_nilpy_implret26)" = "$$(printf '1073794252\n0\nTrue\n0\nTrue')"
 	./$(COMPILER) test/test_nilpy_return_none_variant.npy /tmp/test_nilpy_return_none_variant26
 	test "$$(/tmp/test_nilpy_return_none_variant26)" = "$$(printf 'a NONE\nb NONE\nc 9')"
 	./$(COMPILER) test/test_nilpy_none_str_field.npy /tmp/test_nilpy_none_str_field26

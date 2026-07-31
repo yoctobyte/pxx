@@ -1,0 +1,29 @@
+# A def with no `return` (or one that falls off the end) implicitly returns
+# None in Python. pxx's scalar Result slot for such a def was never
+# initialized at all -- genuinely UNINITIALIZED stack content, not a
+# deliberate default. It read as 0 by chance until an unrelated, isolated
+# change (adding two new pylib helpers, nothing touching proc epilogues)
+# perturbed register state enough to turn it into an arbitrary garbage
+# integer instead.
+# bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float
+# A value-returning call runs FIRST, to load a nonzero value into whatever
+# register/slot an uninitialized Result would otherwise leak.
+
+def big():
+    return 1073794252
+
+def f():
+    pass
+
+class C:
+    def method_no_return(self):
+        pass
+
+x = big()
+print(x)
+print(f())
+print(f() is None)
+
+c = C()
+print(c.method_no_return())
+print(c.method_no_return() is None)
