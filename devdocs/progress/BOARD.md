@@ -8,11 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
+| bug-pascal-uses-order-breaks-pylib-exception | A | 45 | bug | `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 
 ## unfinished (2)
@@ -31,7 +32,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (186)
+## backlog (185)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -60,7 +61,6 @@ _none_
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pypow-integer-overflow-does-not-promote | N | 35 | bug | `pypow_v`'s integer path silently wraps past 64 bits instead of promoting | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
-| bug-pascal-uses-order-breaks-pylib-exception | A | 45 | bug | `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine | — |
 | bug-progress-claim-silently-drops-owner-without-template-line | T | 30 | bug | `progress.sh claim`/`resolve` silently no-op when a ticket lacks the expected body line | — |
 | bug-t-corpus-regex-invents-phantom-tree | T | 55 | bug | CORPUS_RE matches prose in a SKIP message and invents corpus 'stb)', permanently skipping a job that also carries a non-corpus regression test | — |
 | bug-t-full-run-evicts-opt-verdicts-perpetual-new-red | T | 75 | bug | a full run replaces the whole job map and evicts opt-tier verdicts, so every opt-only red re-reports as NEW-RED forever | — |
@@ -2958,7 +2958,6 @@ _none_
 - [p 45] [A] bug-compiler-selfdebug-lines-index-expanded-source
 - [p 45] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
-- [p 45] [A] bug-pascal-uses-order-breaks-pylib-exception
 - [p 45] [T] bug-t-watcher-dev-contention-false-newred
 - [p 45] [A] chore-makefile-selfhost-iterate-to-convergence
 - [p 45] [A] chore-makefile-testtmp-parameterize
