@@ -505,6 +505,7 @@ function pyfloat_ofint(v: Int64): Double;
 function pyos_path_isabs(const p: AnsiString): Boolean;
 function pyos_path_join(const a: AnsiString; const b: AnsiString): AnsiString;
 function pyos_path_dirname(const p: AnsiString): AnsiString;
+function pyos_path_basename(const p: AnsiString): AnsiString;
 function pyos_path_exists(const p: AnsiString): Boolean;
 function pyos_path_abspath(const p: AnsiString): AnsiString;
 function pyos_getcwd: AnsiString;
@@ -880,6 +881,7 @@ function pyround_n(x: Double; n: Integer): Double;
   reaches the RTL's own Floor/Ceil for these two names. }
 function pymath_floor(x: Double): Int64;
 function pymath_ceil(x: Double): Int64;
+function pymath_fabs(x: Double): Double;
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
@@ -2861,6 +2863,15 @@ begin
   if (Frac(x) <> 0.0) and (x > 0.0) then Inc(Result);
 end;
 
+{ math.fabs — a plain float abs. No int/float contract mismatch like floor/
+  ceil (Python's fabs always returns a float, same as Abs on a Double), so
+  this exists only because `import math` otherwise has no `fabs` name to
+  resolve to at all (feature-nilpy-stdlib-coverage-gaps-measured). }
+function pymath_fabs(x: Double): Double;
+begin
+  Result := Abs(x);
+end;
+
 function pyenumerate(a: TPyList): TPyList;
 var r, pair: TPyList; i: Integer; pv: Variant;
 begin
@@ -4801,6 +4812,18 @@ begin
   if i = 0 then Exit;              { no separator: dirname is empty }
   if i = 1 then begin Result := '/'; Exit; end;   { keep the root slash }
   Result := Copy(p, 1, i - 1);
+end;
+
+{ os.path.basename — everything after the last '/', or the whole string if
+  there is none; a trailing '/' yields '' (matching CPython: dirname/basename
+  always concatenate, with the separator, back to the original path).
+  feature-nilpy-stdlib-coverage-gaps-measured. }
+function pyos_path_basename(const p: AnsiString): AnsiString;
+var i: Integer;
+begin
+  i := Length(p);
+  while (i > 0) and (p[i] <> '/') do Dec(i);
+  Result := Copy(p, i + 1, Length(p) - i);
 end;
 
 { access(path, F_OK) — "does the name exist". Per-arch numbers, the same shape

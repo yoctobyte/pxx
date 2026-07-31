@@ -658,6 +658,9 @@ test-nilpy: $(COMPILER)
 	@# "{} and {}".format(a, b) -- two positional placeholders, not just one
 	./$(COMPILER) test/test_nilpy_str_format_multiarg.npy /tmp/test_nilpy_fmtmulti26
 	test "$$(/tmp/test_nilpy_fmtmulti26)" = "$$(printf 'a and 2\n3.1 then x\n5')"
+	@# math.fabs and os.path.basename were unresolvable names
+	./$(COMPILER) test/test_nilpy_math_fabs_os_basename.npy /tmp/test_nilpy_mathos26
+	test "$$(/tmp/test_nilpy_mathos26)" = "$$(printf '3.5\n2.0\nc.txt\n\nnoslash')"
 	./$(COMPILER) test/test_nilpy_return_none_variant.npy /tmp/test_nilpy_return_none_variant26
 	test "$$(/tmp/test_nilpy_return_none_variant26)" = "$$(printf 'a NONE\nb NONE\nc 9')"
 	./$(COMPILER) test/test_nilpy_none_str_field.npy /tmp/test_nilpy_none_str_field26

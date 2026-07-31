@@ -5344,6 +5344,7 @@ begin
   else if dotted = 'os.path.exists' then Result := 'pyos_path_exists'
   else if dotted = 'os.path.abspath' then Result := 'pyos_path_abspath'
   else if dotted = 'os.path.dirname' then Result := 'pyos_path_dirname'
+  else if dotted = 'os.path.basename' then Result := 'pyos_path_basename'
   else if dotted = 'os.getcwd' then Result := 'pyos_getcwd'
   else if dotted = 'os.environ.get' then Result := 'pyos_environ_get'
   else if dotted = 'os.getenv' then Result := 'pyos_getenv'
@@ -5369,6 +5370,10 @@ begin
     bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float }
   else if dotted = 'math.floor' then Result := 'pymath_floor'
   else if dotted = 'math.ceil' then Result := 'pymath_ceil'
+  { math.fabs has no Pascal RTL counterpart under that name at all --
+    `import math` had nothing to resolve `fabs` to (feature-nilpy-stdlib-
+    coverage-gaps-measured), unlike floor/ceil which reached the WRONG thing. }
+  else if dotted = 'math.fabs' then Result := 'pymath_fabs'
   else Result := '';
 end;
 

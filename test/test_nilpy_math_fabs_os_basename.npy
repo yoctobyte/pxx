@@ -1,0 +1,14 @@
+# math.fabs and os.path.basename were both unresolvable names -- `import
+# math`/`import os` had nothing to bind them to at all, unlike math.floor/
+# math.ceil which reached the wrong (Double->Double) RTL routine.
+# feature-nilpy-stdlib-coverage-gaps-measured
+# Every expectation is CPython's own output.
+
+import math
+import os
+
+print(math.fabs(-3.5))
+print(math.fabs(2.0))
+print(os.path.basename("/a/b/c.txt"))
+print(os.path.basename("/a/b/"))
+print(os.path.basename("noslash"))

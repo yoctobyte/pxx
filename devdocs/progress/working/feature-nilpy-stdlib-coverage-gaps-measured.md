@@ -30,6 +30,31 @@ One thing worth checking while doing this: `open()` binding to TPyList suggests
 the name resolves to something unrelated rather than being absent, which is the
 shape [[bug-nilpy-stdlib-name-binds-pascal-unit]] describes.
 
+## Partially fixed (this session)
+
+`math.fabs` and `os.path.basename`: both added to `PyStdlibCallProc`'s
+dotted-name table (pyparser.inc), pointing to new `pymath_fabs`/
+`pyos_path_basename` in pylib.pas — the same one-line-per-name shape
+`os.path.dirname` etc. already use. Note that `os.path.exists` was ALREADY
+in the table and already worked — re-measuring found the original repro's
+"undefined variable (os)" was actually `os.path.basename` failing first
+inside the same statement, not `os` itself being unbound; the table just
+had a gap for that one name.
+
+`time.time()` NOT fixed: `time` collides with `sysutils.Time` (a Pascal
+`TDateTime`-returning RTL function, wrong shape for Python's Unix-epoch
+float) — same wrong-target problem `math.floor`/`math.ceil` had — but
+unlike those two, there is no existing epoch-seconds syscall wrapper
+anywhere in this codebase to point `time.time` at (checked: no
+`gettimeofday`/`clock_gettime` call site exists). Needs real per-arch
+syscall plumbing (the same shape `pyos_path_exists`'s own comment
+describes for `access`/`faccessat`), which is a different-sized task than
+the other two names in this ticket — left open rather than folded in.
+
+`open()`/file-I/O binding to TPyList: not investigated this pass: tracks
+with the separate `feature-nilpy-file-io-and-comprehensions` ticket already
+referenced above.
+
 ## Gate
 
 `make test-nilpy` + self-host byte-identical, plus the table above.
