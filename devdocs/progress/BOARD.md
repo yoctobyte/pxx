@@ -35,7 +35,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (190)
+## backlog (189)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -159,7 +159,6 @@ _none_
 | feature-nilpy-tk-callbacks | B | 65 | feature | nilpy/PCL: tkinter callbacks — a bound method as command=/bind(), via Tcl_CreateCommand | — |
 | feature-nilpy-tkinter-facade-widening | B | 60 | feature | tkinter façade: the surface a real GUI app needs (callables, ttk, Menu, Text, tuple coords) | — |
 | feature-nilpy-tkinter-facade | N | 50 | feature | nilpy: tkinter-shaped façade over lib/pcl/tk.pas — widget objects, kwargs, command callbacks | feature-nilpy-star-args-kwargs |
-| feature-nilpy-tuple-return | N | 50 | feature | nilpy: return a tuple — `return 1, 2` (and unpack at the call site) | — |
 | feature-nilpy-yield-outside-a-for-loop | N | 35 | feature | `yield` only works inside a `for` — a while-loop generator does not compile | — |
 | feature-opt-alloc-intent-hint | O | 25 | feature | Allocation-intent hint: tell the RTL growth policy how a buffer will be used | — |
 | feature-opt-complex-packed-double | O | 35 | feature | Complex as a packed-double XMM value (SSE2/SSE3) | — |
@@ -292,7 +291,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1082)
+## done (1083)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1167,6 +1166,7 @@ _none_
 | feature-nilpy-re-module | N | 50 | feature | nilpy: re module (match/search/sub/findall/fullmatch/compile) over the regex engine | feature-lib-regex-engine |
 | feature-nilpy-str-methods | N | 55 | feature | NilPy: string methods (.upper/.lower/.strip/.split/.join/.startswith...) | — |
 | feature-nilpy-tk-binding | B | 45 | feature | Thin Tcl/Tk embed for pxx (lib/pcl/tk.pas) + a tkinter-shaped NilPy surface — v1 landed | — |
+| feature-nilpy-tuple-return | N | 50 | feature | nilpy: return a tuple — `return 1, 2` (and unpack at the call site) | — |
 | feature-nilpy-tuple-unpack | N | 55 | feature | NilPy: sequence unpacking (`a, b = ...`, `for k, v in ...`) | — |
 | feature-nilpy-wire-pyeval-exec | A | 55 | feature | Wire pyeval into NilPy exec() — auto-use triggers an unrelated str-index segfault | — |
 | feature-object-reference-type | A | 50 | feature | `object` — a rooted object-reference type | — |
@@ -2879,7 +2879,6 @@ _none_
 - [p 50] [N] feature-nilpy-class-field-infer-from-ctor
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [N] feature-nilpy-runtime-method-dispatch-on-variant
-- [p 50] [N] feature-nilpy-tuple-return
 - [p 50] [A] feature-pascal-asmmode-directive-tolerance
 - [p 50] [A] feature-pascal-initialize-finalize-intrinsics
 - [p 50] [N] feature-pyeval-closure-as-native-word

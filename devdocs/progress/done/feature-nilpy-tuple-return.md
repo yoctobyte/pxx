@@ -8,7 +8,7 @@ prio: 50
 # nilpy: tuple return
 
 - **Type:** feature (Nil-Python frontend) — **Track N**
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-26 — probing songformatter under nilpy
   ([[feature-demo-songformatter-pxx-target]]).
 
@@ -36,3 +36,6 @@ parsing helpers return pairs.
 `make test-nilpy` green with a `.npy` case returning and unpacking pairs
 (including mixed types) diffed against CPython, + `--tier quick` + self-host
 byte-identical.
+
+## Log
+- 2026-07-31 — resolved, commit 83c2cb0e5.
