@@ -267,11 +267,12 @@ type
     Pascal Script's CurrToStr). }
   Currency = Double;
 
-function CurrToStr(C: Currency): AnsiString;
-
 { Float -> string. FloatToStr gives a compact representation; FloatToStrF
   gives fixed-point with precision digits after the decimal point. }
 function FloatToStr(value: Double): AnsiString;
+{ FloatToStr with an explicit significant-digit count (1..15). Format's `%.Ng`
+  is the caller that needs it; FloatToStr is this with FPC's fifteen. }
+function FloatToStrSig(value: Double; sigDigits: Integer): AnsiString;
 function FloatToExpStr(value: Double): AnsiString;
 function FloatToStrF(value: Double; precision: Integer): AnsiString;
 
@@ -914,19 +915,21 @@ end;
   Significant digits are counted off a normalised mantissa. Scaling by powers
   of ten costs a unit or two in the last place on awkward values; that is the
   representation half, which is explicitly not worth chasing here. }
-function FloatToStr(value: Double): AnsiString;
-const
-  SIGDIG   = 15;
-  SCALE14  = 100000000000000;    { 10^(SIGDIG-1) — mantissa [1,10) scales into }
-  SCALE15  = 1000000000000000;   { 10^SIGDIG     — rounding may reach this     }
+{ FloatToStr is this with FPC's fifteen; Format's `%.Ng` asks for N. The
+  fixed/exponential window is `[-3, sig]`, which is FPC's ffGeneral rule and
+  therefore moves with the requested precision. }
+function FloatToStrSig(value: Double; sigDigits: Integer): AnsiString;
 var
   neg: Boolean;
-  e10, p, i, k: Integer;
-  m: Double;
+  e10, p, i, k, sig: Integer;
+  m, scaleLo, scaleHi: Double;
   p10: array[0..8] of Double;
   digits: Int64;
   ds, s: AnsiString;
 begin
+  sig := sigDigits;
+  if sig < 1 then sig := 1;
+  if sig > 15 then sig := 15;      { past 15 a double scaled in doubles lies }
   if value <> value then begin Result := 'NaN'; Exit; end;
   { Infinity first: the normalise loop below would not terminate on it. }
   if value > 1.7976931348623157e308 then begin Result := 'Inf'; Exit; end;
@@ -968,10 +971,13 @@ begin
   while m >= 10.0 do begin m := m / 10.0; e10 := e10 + 1; end;
   while m < 1.0 do begin m := m * 10.0; e10 := e10 - 1; end;
 
-  { SIGDIG significant digits as an integer. Rounding can carry into the next
+  { `sig` significant digits as an integer. Rounding can carry into the next
     power of ten (9.9999999999999999 -> 10), which is a shift, not a digit. }
-  digits := Round(m * SCALE14);
-  if digits >= SCALE15 then
+  scaleLo := 1.0;
+  for i := 2 to sig do scaleLo := scaleLo * 10.0;   { 10^(sig-1) }
+  scaleHi := scaleLo * 10.0;                        { 10^sig     }
+  digits := Round(m * scaleLo);
+  if digits >= Round(scaleHi) then
   begin
     digits := digits div 10;
     e10 := e10 + 1;
@@ -985,7 +991,7 @@ begin
   { `p` is where the decimal point sits: the count of digits before it. }
   p := e10 + 1;
 
-  if (p > SIGDIG) or (p < -3) then
+  if (p > sig) or (p < -3) then
   begin
     { exponential. FPC writes `1E20` / `1.23E-7` — a sign only when negative,
       and no zero padding of the exponent. }
@@ -1013,6 +1019,11 @@ begin
 
   if neg then s := '-' + s;
   Result := s;
+end;
+
+function FloatToStr(value: Double): AnsiString;
+begin
+  Result := FloatToStrSig(value, 15);
 end;
 
 function CurrToStr(C: Currency): AnsiString;
@@ -1458,6 +1469,71 @@ begin
   if neg then Result := '-' + Result;
 end;
 
+{ ---- %g and %e ------------------------------------------------------------
+  FPC's `%g` is ffGeneral and its `%e` is ffExponent, and both honour an
+  explicit precision. Ours ignored `%.3g` entirely and had no `%e` branch at
+  all — an unknown specifier is emitted literally AND does not advance the
+  argument index, so a single `%e` shifted every argument after it.
+
+  What these do NOT reproduce is FPC's DIGIT COUNT with no precision given:
+  FPC's `%g` prints 17 significant digits and its `%e` 16 decimals, which needs
+  an exact big-integer conversion (a real dtoa) rather than scaling a double.
+  We render what we can render correctly — 15 significant digits, the same rule
+  FloatToStr uses — and the divergence is recorded in
+  compat-pascal-format-g-and-e-specifiers rather than faked. The
+  explicitly-requested-precision paths, which are a contract, are exact. }
+
+{ `sig` significant digits, in the general form: fixed when the decimal point
+  lands inside [-3, sig], exponential otherwise, exactly as FloatToStr. }
+function FmtGeneral(v: Double; sig: Integer): AnsiString;
+begin
+  { FPC's precision for %g and %e counts SIGNIFICANT DIGITS, not decimals, and
+    clamps at a minimum of two — `%.1g` of 1/3 is `0.33`, not `0.3`. Measured
+    against an FPC build; the rule is the same for both specifiers. }
+  if sig < 2 then sig := 2;
+  if sig > 15 then sig := 15;
+  FmtGeneral := FloatToStrSig(v, sig);
+end;
+
+{ FPC's exponential SPELLING, which is a THIRD one, distinct from FloatToStr's
+  `1E20` and FloatToExpStr's `1E+20`: a mantissa, then `E`, then a sign that is
+  always present, then at least three exponent digits —
+  `3.3333333333333331E-001`. Measured against an FPC build, not assumed. }
+function FmtExponent(v: Double; sig: Integer): AnsiString;
+var neg: Boolean; e10, i, dec: Integer; m: Double; mant, es: AnsiString;
+begin
+  { `sig` is significant digits (FPC's rule, min 2); the mantissa carries one
+    before the point, so it needs sig-1 decimals. }
+  if sig < 2 then sig := 2;
+  if sig > 15 then sig := 15;
+  dec := sig - 1;
+  if v <> v then begin FmtExponent := 'NaN'; Exit; end;
+  neg := v < 0.0;
+  if neg then v := -v;
+  e10 := 0;
+  if v <> 0.0 then
+  begin
+    m := v;
+    while m >= 10.0 do begin m := m / 10.0; e10 := e10 + 1; end;
+    while m < 1.0 do begin m := m * 10.0; e10 := e10 - 1; end;
+  end
+  else
+    m := 0.0;
+  mant := FmtFixed(m, dec);
+  { rounding the mantissa can carry it to 10.x — that is a shift, not a digit }
+  if (Length(mant) > 1) and (mant[1] = '1') and (mant[2] = '0') and (m <> 0.0) then
+  begin
+    m := m / 10.0;
+    e10 := e10 + 1;
+    mant := FmtFixed(m, dec);
+  end;
+  es := IntToStr(Abs(e10));
+  while Length(es) < 3 do es := '0' + es;
+  if e10 < 0 then es := '-' + es else es := '+' + es;
+  if neg then mant := '-' + mant;
+  FmtExponent := mant + 'E' + es;
+end;
+
 function FmtPad(const s: AnsiString; width: Integer; leftAlign, zeroPad: Boolean): AnsiString;
 var pad: AnsiString; need, k: Integer;
 begin
@@ -1538,7 +1614,20 @@ begin
         end;
       'g':
         begin
-          if argIdx < Length(args) then piece := FloatToStr(FmtArgFloat(args[argIdx]));
+          if argIdx < Length(args) then
+          begin
+            if hasPrec then piece := FmtGeneral(FmtArgFloat(args[argIdx]), prec)
+            else piece := FloatToStr(FmtArgFloat(args[argIdx]));
+          end;
+          Inc(argIdx);
+        end;
+      'e':
+        begin
+          if argIdx < Length(args) then
+          begin
+            if hasPrec then piece := FmtExponent(FmtArgFloat(args[argIdx]), prec)
+            else piece := FmtExponent(FmtArgFloat(args[argIdx]), 15);
+          end;
           Inc(argIdx);
         end;
       'c':

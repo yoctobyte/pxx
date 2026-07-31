@@ -42,3 +42,29 @@ songformatter's settings.py writes both canonical spellings
 into the façade's former `AnsiString` option compiled silently and handed Tcl a
 garbage script; the event loop then hung inside `update`. See
 [[bug-nilpy-bound-method-coerced-to-string]].
+
+## Moved to blocked/ 2026-07-31 — the missing piece is runtime, not façade
+
+Re-read against the code rather than the ticket text. Of the three things listed
+under "what is missing", the first two are façade work Track B owns — a registry
+flag and a dispatcher branch. The third is not:
+
+> call bridges for 2 and 3 arguments — `pycallback_call2/3` for a bound method,
+> and a bound-fn / closure that accepts more than one own parameter (today
+> `pyboundfn_call_ptr` passes exactly one).
+
+`pycallback_call0/1` live in `compiler/builtin/pylib.pas:581` and
+`pyboundfn_call_ptr` in `pyeval.pas:1870` — shared NilPy runtime, which Track B
+does not edit. Without them the façade half has nothing to call, so building
+the registry and the dispatcher branch first would land dead code.
+
+Split and filed as [[feature-nilpy-multi-arg-callback-bridges]] (Track N).
+**Tagged for later:** when that lands, the remaining work here is small and
+entirely in `lib/pcl/tkinter.pas`.
+
+Nothing regresses in the meantime. The case that motivated this ticket — the
+scrollbar pair — turned out not to need it at all: CPython's tkinter does not
+call back into Python for `yscrollcommand` either, it wires Tcl straight to the
+other widget's subcommand, and `TkiOptScrollCmd` now does the same and refuses
+loudly for anything that is not a widget method. Nothing enters the regression
+suite from here until the bridges exist.

@@ -71,3 +71,52 @@ every following specifier.
 `make lib-test`, plus a `.pas` diffed against an FPC build of the same file —
 the way `test/lib_floattostr.pas` is built, where every expectation came from
 the oracle rather than from reading pxx's own output back.
+
+## RESOLVED 2026-07-31 (in part) — every explicit precision now matches FPC exactly
+
+The measured rule, which was not what this ticket assumed: FPC's precision for
+**both** `%g` and `%e` counts **significant digits**, not decimals, and clamps
+at a minimum of **two**. `%.4e` of 1/3 is `3.333E-001` (four significant
+digits, three decimals) and `%.1g` is `0.33`, not `0.3`. Read off an FPC build,
+not derived.
+
+### Landed
+
+- **`%g` honours its precision.** It ignored it entirely before, so `%.3g` and
+  `%g` produced the same string. `FloatToStr` is now the fifteen-digit case of a
+  parameterised `FloatToStrSig(value, sigDigits)`, and the fixed/exponential
+  window `[-3, sig]` moves with the requested precision the way FPC's ffGeneral
+  does.
+- **`%e` exists.** It had no branch at all, so it fell to the unknown-specifier
+  path: the literal text `%e` was emitted AND the argument index did not
+  advance, which silently shifted every argument after it.
+  `Format('%d then %.2e', [7, 1.5])` was wrong in two ways at once.
+- The exponential spelling is FPC's third one — always-signed, at least three
+  exponent digits (`3.333E-001`), matching neither `FloatToStr`'s `1E20` nor
+  `FloatToExpStr`'s `1E+20`.
+
+### Gated
+
+`test/lib_format_ge.pas`, 20 rows, in `lib-test`. It compiles under FPC too and
+every expectation came from running it there — including the two clamp cases
+(`%.1g`, `%.0e`) that nobody would have guessed, and both argument-advance
+cases.
+
+### Still open, and it is one thing now instead of three
+
+With **no** precision given, FPC prints **17** significant digits (`%g` of 1/3 is
+`0.33333333333333331`) and we print 15. Producing 17 correct significant digits
+from a double needs an exact big-integer conversion — a real dtoa — not a double
+scaled by powers of ten, which is what every path here uses today. That is the
+same missing piece [[bug-rtl-floattostr-caps-at-six-decimals-and-zeroes-small-values]]
+bounded and measured (459/490 exact, the rest one unit in the 15th digit), and
+it is squarely the float-REPRESENTATION divergence the user has twice called low
+value.
+
+So this ticket closes on the contract half, which is exact, and the digit-count
+half stays as the one honest remaining gap — reopen it only if something needs
+round-trip-exact float text, at which point the answer is a dtoa and not a patch
+here.
+
+## Log
+- 2026-07-31 — resolved, commit 29035276a.

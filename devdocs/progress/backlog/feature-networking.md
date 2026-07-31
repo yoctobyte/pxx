@@ -256,3 +256,17 @@ peer address, UDP v6, asyncnet v6, AAAA, dual-stack, scopeId). Prio dropped to
 20 to reflect that: rank the children, not the umbrella, so it stops presenting
 as available work while its actual tasks live elsewhere.
 
+
+## 2026-07-31 — the IPv6 child is closed
+
+[[feature-ipv6-complete-surface]] is resolved: v6 accept returns a real peer
+(address, port and scope id), UDP branches on family through both the PAL and
+`net.pas`, and `asyncnet` gained `TcpListen6` / `TcpConnect6` /
+`TcpConnectAddr6`. Gated by `lib_net6` (extended) and the new `lib_asyncnet6`,
+both SKIP-clean on a host without `AF_INET6`.
+
+Two items came back out of it as a Track U question rather than plumbing —
+`IPV6_V6ONLY` on a `::` listener, and A-vs-AAAA ordering — filed as
+[[decide-ipv6-dualstack-and-aaaa-ordering]]. Both are choices this umbrella's
+design section never made, and both change observable behaviour, so they wait
+for a human.
