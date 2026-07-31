@@ -2094,16 +2094,14 @@
    "src": "compiler/compiler.pas"
   },
   {
-   "bad": "0344760405e1908c20cd13a812a123a5d8c347f0",
+   "bad": "d9c5eb4fadbf116fece52fabea0685e0da1c89c2",
    "good": "ff85c6468764b33096ac67d8e29f0f9efa350838",
    "job": "test-core#src:test/test_indexed_property.pas",
    "name": "test-core#115",
    "opened": "2026-07-31T13:47:18Z",
    "range": [
     "9d3f9123b1c4ebf4e10197cbe8c19c2fbe99122d",
-    "d9c5eb4fadbf116fece52fabea0685e0da1c89c2",
-    "844f899d3ff4d04ed45e938a610f62f1f1360444",
-    "0344760405e1908c20cd13a812a123a5d8c347f0"
+    "d9c5eb4fadbf116fece52fabea0685e0da1c89c2"
    ],
    "src": "test/test_indexed_property.pas"
   },
