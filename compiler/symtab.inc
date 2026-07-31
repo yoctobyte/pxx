@@ -7370,6 +7370,27 @@ begin
         begin
           AliasPtrBaseTk[i] := AliasPtrBaseTk[targetAlias];
           AliasPtrBaseRec[i] := AliasPtrBaseRec[targetAlias];
+        end
+        else if (targetAlias >= 0) and (AliasTk[targetAlias] <> Ord(tyPointer)) and
+                (AliasElemRec[targetAlias] <> REC_NONE) then
+        begin
+          { Forward pointee resolved to a plain (non-pointer) type alias — e.g. a
+            cross-unit record alias `TRec3 = urec.TRec;`. The classic self-
+            referential-record patch above (FindUClass) only covers a pointee that
+            is itself a fresh `record`/`class` declaration; it misses a pointee
+            that is an ALIAS to one. Left unpatched, AliasPtrBaseTk/BaseRec[i] keep
+            the placeholder stashed when `PRec3 = ^TRec3;` was first parsed (before
+            TRec3 existed), so every later `PRec3`-typed param/var is bound to the
+            wrong record — self-consistent through that pointer, but disagreeing
+            with the correctly-resolved TRec3 alias used by direct field access.
+            bug-pascal-transitive-unit-crashes-at-startup-unless-named-first. }
+          AliasElemTk[i] := AliasTk[targetAlias];
+          AliasElemRec[i] := AliasElemRec[targetAlias];
+          if AliasPtrDepth[i] = 1 then
+          begin
+            AliasPtrBaseTk[i] := AliasElemTk[i];
+            AliasPtrBaseRec[i] := AliasElemRec[i];
+          end;
         end;
       end;
     end;
