@@ -71,3 +71,25 @@ digits `prec` asks for, so honouring `prec` is independent of it.
 `make test-nilpy` + self-host byte-identical, plus a `.npy` of the table above
 with CPython's own output, and the `%f` rows kept as the guard that the shared
 fixed-point path is untouched.
+
+## CLOSED
+
+Implemented as suggested: `PyFmtExp` (mantissa normalised into [1,10) via
+FloatToExpStr's own loop, digits via `PyFmtFixed`'s half-up rule so `prec` is
+honoured exactly, with a re-normalise step for the 9.9999996-rounds-to-10.xxx
+edge) and `PyFmtG` (the C `%g` threshold rule, trailing zeros stripped via two
+small split-at-`e` helpers). Both bypass `pyformat_of`'s `{}`-spec grammar
+entirely — it has no `e`/`g` kind and correctly refuses `{x:e}` at compile
+time — and reuse the same `PyFmtPad` width/zero/align step `%s` already goes
+through.
+
+Every row in the ticket's table now matches CPython, plus zero/negative/large-
+exponent/explicit-precision cases checked while writing the test. The `%.0f %
+1.5` → `1` (CPython: `2`) oddity noticed while testing is NOT this ticket —
+confirmed present on the pre-fix binary too, unrelated pre-existing rounding
+behavior in `PyFmtFixed` untouched by this change.
+
+Test: test/test_nilpy_percent_e_g_format.npy. Gate: make test-nilpy green,
+self-host fixedpoint, testmgr --tier quick.
+
+Ticket closed.
