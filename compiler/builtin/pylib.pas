@@ -111,6 +111,8 @@ type
       (bug-a-nilpy-list-augmented-add-segfaults). }
     function extend(other: TPyList): TPyList;
     procedure clear;
+    { list.sort() -- in place, no key=/reverse= yet (see the implementation). }
+    function sort: TPyList;
     { `with open(p, "r") as f: f.read()`. The read-slurp model makes open()
       yield the file's LINES, and each keeps its newline, so joining them
       reproduces the file byte for byte — which is what CPython's read()
@@ -2243,6 +2245,35 @@ end;
 procedure TPyList.clear;
 begin
   FLen := 0;
+end;
+
+{ Python's list.sort() — IN PLACE, unlike sorted() (pyeval.pas), which
+  returns a new list. No `key=`/`reverse=` yet: those need PyCallKey1's
+  generic-callable dispatch, which lives in pyeval.pas and cannot be called
+  from here (pyeval `uses pylib`, not the reverse) — refused loudly rather
+  than guessed at; a plain `.sort()` needs no callable at all, just the
+  `pyvar_gt` content-order comparison this unit already has (see max()/min()
+  above). bug-nilpy-list-sort-method-missing. }
+function TPyList.sort: TPyList;
+var i, j: Integer; v: Variant; swapped: Boolean;
+begin
+  for i := 1 to Self.count - 1 do
+  begin
+    j := i;
+    swapped := True;
+    while (j > 0) and swapped do
+    begin
+      swapped := pyvar_gt(Self.at(j - 1), Self.at(j));
+      if swapped then
+      begin
+        v := Self.at(j);
+        Self.put(j, Self.at(j - 1));
+        Self.put(j - 1, v);
+        Dec(j);
+      end;
+    end;
+  end;
+  Result := Self;
 end;
 
 function TPyList.read: AnsiString;

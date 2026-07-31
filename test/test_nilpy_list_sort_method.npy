@@ -1,0 +1,18 @@
+# list.sort() -- the in-place METHOD -- did not exist at all ("TPyList has
+# no method sort"), while the standalone sorted() function already worked.
+# bug-nilpy-list-sort-method-missing
+# No key=/reverse= yet (needs the generic-callable dispatch that lives in a
+# different unit) -- refused at compile time rather than guessed at.
+# Every expectation is CPython's own output.
+
+xs = [3, 1, 4, 1, 5, 9, 2, 6]
+xs.sort()
+print(xs)
+
+ys = xs        # same object: sort must mutate in place, not rebind
+ys.append(0)
+print(xs)
+
+words = ["banana", "apple", "cherry"]
+words.sort()
+print(words)

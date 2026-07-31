@@ -670,6 +670,9 @@ test-nilpy: $(COMPILER)
 	@# map()/filter() over a lambda and a named def, via list() and via for
 	./$(COMPILER) test/test_nilpy_map_filter_lambda_def.npy /tmp/test_nilpy_mapfilterld26
 	test "$$(/tmp/test_nilpy_mapfilterld26)" = "$$(printf '%b' '[2, 3, 4]\n[2, 3, 4]\n[2, 3]\n2\n4\n6\n2\n3')"
+	@# list.sort() -- the in-place method, not just the sorted() function
+	./$(COMPILER) test/test_nilpy_list_sort_method.npy /tmp/test_nilpy_sortmethod26
+	test "$$(/tmp/test_nilpy_sortmethod26)" = "$$(printf '%b' '[1, 1, 2, 3, 4, 5, 6, 9]\n[1, 1, 2, 3, 4, 5, 6, 9, 0]\n'"['apple', 'banana', 'cherry']")"
 	./$(COMPILER) test/test_nilpy_return_none_variant.npy /tmp/test_nilpy_return_none_variant26
 	test "$$(/tmp/test_nilpy_return_none_variant26)" = "$$(printf 'a NONE\nb NONE\nc 9')"
 	./$(COMPILER) test/test_nilpy_none_str_field.npy /tmp/test_nilpy_none_str_field26

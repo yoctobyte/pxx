@@ -32,6 +32,25 @@ write the result back into the SAME `TPyList` instead of returning a new
 one (Python's `list.sort()` returns `None` and mutates in place, unlike
 `sorted()`).
 
+## Partially fixed (this session) — plain `.sort()` only
+
+Added `TPyList.sort` (pylib.pas) as a genuine method — no-key insertion sort
+using `pyvar_gt`, mutating `Self` in place (confirmed: a second reference to
+the same list object sees the sort, matching Python's identity guarantee).
+Diffed against CPython for both numbers and strings; exact match.
+
+`key=`/`reverse=` NOT done: the original "shape of a fix" assumption (thin
+wrapper around `sorted()`) turned out not to work — `sorted()`'s key=
+dispatch goes through `PyCallKey1`, which lives in `pyeval.pas`, and
+`pyeval` `uses pylib` (not the reverse), so `pylib.pas` cannot call back
+into it. A real `key=`/`reverse=` implementation needs either moving the
+generic-callable-invoke primitive down into `pylib.pas` (shared by both
+units) or a frontend-level rewrite of `.sort(key=...)` into a build-then-
+swap sequence around the existing `sorted()` — either is more than this
+pass's scope. `xs.sort(key=...)` still fails to PARSE (a compile error,
+not a crash — `sort` genuinely takes no parameters today), which is the
+safe direction to fail in the meantime.
+
 ## Gate
 
 `make test-nilpy` + self-host byte-identical, plus `.sort()` with no key,
