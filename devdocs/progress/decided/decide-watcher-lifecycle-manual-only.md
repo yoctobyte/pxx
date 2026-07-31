@@ -40,6 +40,41 @@ The state as of this decision: PID detached (PPID 1, own session), so it is
 immune to the terminal and to the tmux session going away. It is only exposed
 to reboot, crash, and full logout.
 
+## The stakes changed the same day — the decision has NOT been revisited
+
+This was decided when the watcher was *coverage*: if it stopped, the fleet lost
+breadth and someone eventually noticed. Hours later the operating model made
+xeon's `fast_tier` **the project gate** (`two-box-protocol.md`, "Do not RUN
+native on the dev box"): dev boxes now push after a ~15 s `--tier quick` and
+rely on xeon's native run arriving ~3 min later.
+
+`quick` does **not** carry the self-host fixedpoint (`SELFHOST_GATE_TIERS =
+native/limited/full`). So a hand-started, unsupervised watcher is now the only
+thing running the gate that the stable binary rests on.
+
+The failure window is bounded but real, and it is the *false UP* direction:
+
+- `twatch --status` counts T as UP iff every commit older than the grace window
+  (default **45 min**) was tested by some host. A watcher that died a minute ago
+  therefore still reads **UP**.
+- During that window a dev box pushes on quick, believing native will follow.
+  It will not, and nothing says so.
+- The opposite error (false DOWN, the known `--status` bug) is merely wasteful:
+  dev boxes run their own full gate unnecessarily. That direction is safe.
+
+So the exposure is roughly *one grace window of pushes landing with no
+fixedpoint check, with no signal*. Not an argument against the decision — the
+user owns this call and it stands. Recorded because:
+
+1. it is new information relative to when the call was made, and
+2. it moves [[bug-t-twatch-status-false-down]] / watcher-liveness detection from
+   "annoying" to "the compensating control" — with no supervision, *detection*
+   is the entire safety net, and it is the piece that does not work yet.
+
+Practical mitigation available today, costing nothing and needing no
+automation: **check `trackt status` when you sit down at either box.** One line,
+and it closes the window that matters.
+
 ## For the peer box
 
 `claude@borg`: this is a standing user preference for the fleet's watcher host,
