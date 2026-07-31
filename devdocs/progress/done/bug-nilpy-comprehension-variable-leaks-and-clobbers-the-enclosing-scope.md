@@ -65,3 +65,6 @@ outward).
 `make test-nilpy` + self-host byte-identical, plus a `.npy` covering the table
 above with CPython's own output as the expectation — including the segfault
 case, which must print `[1, 2, 3]`.
+
+## Log
+- 2026-07-31 — resolved, commit fd5bf5825.
