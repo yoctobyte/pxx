@@ -8,7 +8,7 @@ prio: 50
 # nilpy: f-string format specs
 
 - **Type:** feature (Nil-Python frontend) — **Track N**
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-26 — probing songformatter under nilpy
   ([[feature-demo-songformatter-pxx-target]]).
 
@@ -31,3 +31,6 @@ songformatter formats scores and pads labels; both are ordinary in real Python.
 
 `make test-nilpy` green with a `.npy` case diffed against CPython, + `--tier
 quick` + self-host byte-identical.
+
+## Log
+- 2026-07-31 — resolved, commit d87669fb2d6bbc902d982db95574fafa15ec4a0d.
