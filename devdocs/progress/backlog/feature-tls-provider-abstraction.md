@@ -391,3 +391,23 @@ Two stale claims in `http.pas`'s header fixed while there: it said "no backend
 ships in-tree yet" (two do now, and it now names both registrars and what each
 costs), and that only "the mock and a blocking OpenSSL backend" complete the
 handshake in one call.
+
+### Slice 3 is the ASYNC handshake — user-prioritised (2026-08-01)
+
+Rene, asked which of the remaining TLS items matters: **"async is a primary
+feature."** So this is not a nice-to-have behind interop breadth — it is the
+next slice, and it is pre-approved: a fresh session should start it without
+re-asking for scope.
+
+Today `Handshake` is blocking and `HandshakeResume` is a no-op. The seam permits
+that and `http.pas` is happy with it, but the coroutine reactor cannot drive it,
+so every https request occupies a thread for the length of a handshake. Making
+it real means a state machine over the flight parser — the loop that currently
+blocks in `ReadRecord` becomes a resumable step returning `tlsWantRead` — and
+`HandshakeResume` picking up where it left off.
+
+Do NOT fake it: returning a want the backend cannot honour is worse than
+blocking, because the reactor will believe it. The two properties in the header
+above (fail-closed CertificateVerify, trust-store anchoring) must survive the
+rewrite, and `tls13-handshake-devtest` + `truststore-devtest` must keep passing
+unchanged as the evidence they did.
