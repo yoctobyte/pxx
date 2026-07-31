@@ -73,3 +73,6 @@ neither is a single edit.
 This ticket's own two items are done; the corpus's ACTUAL remaining walls
 (now past line 3829) are tracked in `feature-nilpy-corpus-uforth`'s own
 2026-07-31 recheck (next wall found near line 3887, not yet isolated).
+
+## Log
+- 2026-07-31 — resolved, commit f8dd8453b.

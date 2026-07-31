@@ -32,7 +32,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (169)
+## backlog (168)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -124,7 +124,6 @@ lives in git, not in a timestamp._
 | feature-networking | B | 20 | feature | Networking runtime | — |
 | feature-nilpy-arc-cross-parity | A | 35 | feature | NilPy object-ARC cross-target parity (aarch64 inline arms + scope-exit) | — |
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
-| feature-nilpy-closure-default-and-remaining | N | 45 | feature | NilPy: remaining uforth walls past ~88% (closure-captured defaults, then exec) | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
@@ -292,7 +291,7 @@ lives in git, not in a timestamp._
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1108)
+## done (1109)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1144,6 +1143,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-catchable-runtime-errors | N | 55 | feature | nilpy: builtin runtime errors must raise catchable exceptions (int(), division by zero) | — |
 | feature-nilpy-class-field-infer-from-ctor | N | 50 | feature | nilpy: infer a class field's type from the ctor parameter assigned to it | — |
 | feature-nilpy-classvar-counter | N | 55 | feature | NilPy: ClassVar storage, next(), counter shim, lambda default_factory | — |
+| feature-nilpy-closure-default-and-remaining | N | 45 | feature | NilPy: remaining uforth walls past ~88% (closure-captured defaults, then exec) | — |
 | feature-nilpy-comparison-chaining | N | 50 | feature | NilPy: comparison chaining (`0 <= i < n`) | — |
 | feature-nilpy-comprehension-if-filter | N | 30 | feature | NilPy: comprehension `if` filters — `[x for x in xs if x > 1]` | — |
 | feature-nilpy-configparser | N | 45 | feature | nilpy: configparser module (INI settings) — songformatter's settings.py imports it | — |
@@ -2931,7 +2931,6 @@ lives in git, not in a timestamp._
 - [p 45] [A] feature-esp-hardware-flash-validation
 - [p 45] [O] feature-inline-nonleaf-and-branch-locals
 - [p 45] [A] feature-move-fillchar-intrinsics
-- [p 45] [N] feature-nilpy-closure-default-and-remaining
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [N] feature-nilpy-lambda-compiled-closure
 - [p 45] [N] feature-nilpy-process-exec-binding
