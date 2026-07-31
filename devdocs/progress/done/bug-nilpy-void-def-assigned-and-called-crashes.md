@@ -122,3 +122,6 @@ than shipped half-tested this session.
 `make test-nilpy` + self-host byte-identical, plus a `.npy` matching the
 repro above AND `test_nilpy_unpack_callable.npy` (the field-call shape) both
 passing, diffed against CPython.
+
+## Log
+- 2026-07-31 — resolved, commit 6781f706c.
