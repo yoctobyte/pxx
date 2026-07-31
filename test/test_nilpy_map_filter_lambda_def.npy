@@ -1,0 +1,20 @@
+# map()/filter() over a lambda and a named def -- feature-nilpy-map-and-
+# filter-over-a-lambda. NOT covered here: a BOUND METHOD as the callable
+# segfaults (a separate representation gap, see
+# bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter) -- left
+# out deliberately rather than asserting a crash.
+# Every expectation is CPython's own output.
+
+xs = [1, 2, 3]
+
+def inc(x):
+    return x + 1
+
+print(list(map(lambda v: v + 1, xs)))
+print(list(map(inc, xs)))
+print(list(filter(lambda v: v > 1, xs)))
+
+for v in map(lambda v: v * 2, xs):
+    print(v)
+for v in filter(lambda v: v > 1, xs):
+    print(v)

@@ -667,6 +667,9 @@ test-nilpy: $(COMPILER)
 	@# a lambda value stored in a name and CALLED, not just passed around
 	./$(COMPILER) test/test_nilpy_lambda_real_value.npy /tmp/test_nilpy_lambdareal26
 	test "$$(/tmp/test_nilpy_lambdareal26)" = "$$(printf '6\n12')"
+	@# map()/filter() over a lambda and a named def, via list() and via for
+	./$(COMPILER) test/test_nilpy_map_filter_lambda_def.npy /tmp/test_nilpy_mapfilterld26
+	test "$$(/tmp/test_nilpy_mapfilterld26)" = "$$(printf '%b' '[2, 3, 4]\n[2, 3, 4]\n[2, 3]\n2\n4\n6\n2\n3')"
 	./$(COMPILER) test/test_nilpy_return_none_variant.npy /tmp/test_nilpy_return_none_variant26
 	test "$$(/tmp/test_nilpy_return_none_variant26)" = "$$(printf 'a NONE\nb NONE\nc 9')"
 	./$(COMPILER) test/test_nilpy_none_str_field.npy /tmp/test_nilpy_none_str_field26
