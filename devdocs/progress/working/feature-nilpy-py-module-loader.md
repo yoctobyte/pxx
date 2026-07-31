@@ -113,3 +113,14 @@ program body). Test: `test/test_nilpy_py_module_import.npy`.
 
 Still open, and deliberately not done here: `from X import *`, relative imports
 (`from . import y`), and packages (a directory with `__init__.py`).
+
+## Closing (2026-07-31)
+
+Already landed and gated (`test/test_nilpy_py_module_import.npy`, in the
+Makefile) — re-verified directly (`from helper import add` across a
+sibling `.py`, `add(2, 3)` -> `5`, matching CPython). This ticket just
+never got moved out of `backlog`/marked done despite the LANDED entry
+above. The three deliberately-deferred items (`from X import *`, relative
+imports, packages) remain genuinely open but are smaller, separate asks —
+worth their own tickets if a corpus hits them, not reasons to keep this one
+open.
