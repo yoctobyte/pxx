@@ -43,3 +43,6 @@ the order. Any library in the same position has to know this folklore.
 
 `make test` + a regression test with both orders, and the pylib/sysutils
 Exception surfaces both reachable.
+
+## Log
+- 2026-08-01 — resolved, commit 382b75e54.
