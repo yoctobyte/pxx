@@ -305,7 +305,7 @@ lives in git, not in a timestamp._
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1113)
+## done (1114)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1199,6 +1199,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-py-module-loader | N | 55 | feature | NilPy: `import <sibling>.py` — compile a real Python module as a unit | — |
 | feature-nilpy-qualified-class-construction | N | 55 | feature | nilpy: unit-qualified class construction (`tk.Frame(...)`) | — |
 | feature-nilpy-re-module | N | 50 | feature | nilpy: re module (match/search/sub/findall/fullmatch/compile) over the regex engine | feature-lib-regex-engine |
+| feature-nilpy-set-methods-issubset-union-etc | N | 35 | feature | set methods missing: issubset/issuperset/union/intersection/difference/discard | — |
 | feature-nilpy-str-format-multiarg | N | 40 | feature | `str.format` with more than one argument | — |
 | feature-nilpy-str-methods | N | 55 | feature | NilPy: string methods (.upper/.lower/.strip/.split/.join/.startswith...) | — |
 | feature-nilpy-str-rsplit-partition-rpartition | N | 35 | feature | str.rsplit()/partition()/rpartition() missing | — |

@@ -956,6 +956,9 @@ test-nilpy: $(COMPILER)
 	# as string data) instead of erroring -- now a clear compile error
 	! ./$(COMPILER) test/test_nilpy_list_plus_nonlist_fail.npy /tmp/test_nilpy_lpnl_fail26 > /tmp/test_nilpy_lpnl_fail.log 2>&1
 	grep -q "can only concatenate list with another list" /tmp/test_nilpy_lpnl_fail.log
+	# set methods: issubset/issuperset/union/intersection/difference/add/discard/remove; expectation is CPython's own output
+	./$(COMPILER) test/test_nilpy_set_methods.npy /tmp/test_nilpy_setmeth26
+	test "$$(/tmp/test_nilpy_setmeth26)" = "$$(printf '%b' 'False\nTrue\nTrue\n[1, 2, 3]\n[2, 3]\n[1]\n[1, 2, 3, 4]\n[2, 3, 4]\n[2, 3, 4]\n[3, 4]')"
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING

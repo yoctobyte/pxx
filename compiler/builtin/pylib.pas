@@ -124,6 +124,19 @@ type
       print-dumps-rtti-memory). }
     procedure close;
     function readlines: TPyList;
+    { set methods. NilPy backs `set` with the same TPyList as `list`, built via
+      .add() instead of .append() (one sequence representation, see FIsTuple's
+      comment above), so these are ordinary instance methods rather than a
+      distinct set class — set(x).union(set(y)) and the OPERATOR forms
+      (pyset_and/or/sub/xor in this unit) share the same pycontains-based
+      membership test. }
+    function issubset(other: TPyList): Boolean;
+    function issuperset(other: TPyList): Boolean;
+    function union(other: TPyList): TPyList;
+    function intersection(other: TPyList): TPyList;
+    function difference(other: TPyList): TPyList;
+    { set.discard: like remove(), but does NOT raise when the value is absent. }
+    procedure discard(const v: Variant);
     property Items[i: Integer]: Variant read at write put; default;
   end;
 
@@ -2423,6 +2436,42 @@ end;
 function TPyList.readlines: TPyList;
 begin
   readlines := Self;
+end;
+
+function TPyList.issubset(other: TPyList): Boolean;
+var i: Integer;
+begin
+  Result := True;
+  if Self = nil then Exit;
+  for i := 0 to Self.count - 1 do
+    if not pycontains(other, Self.at(i)) then begin Result := False; Exit; end;
+end;
+
+function TPyList.issuperset(other: TPyList): Boolean;
+begin
+  if other = nil then begin Result := True; Exit; end;
+  Result := other.issubset(Self);
+end;
+
+function TPyList.union(other: TPyList): TPyList;
+begin
+  Result := pyset_or(Self, other);
+end;
+
+function TPyList.intersection(other: TPyList): TPyList;
+begin
+  Result := pyset_and(Self, other);
+end;
+
+function TPyList.difference(other: TPyList): TPyList;
+begin
+  Result := pyset_sub(Self, other);
+end;
+
+procedure TPyList.discard(const v: Variant);
+begin
+  if Self = nil then Exit;
+  if pycontains(Self, v) then Self.remove(v);
 end;
 
 { Python `in` over a list/set-as-list. Same-tag equality only: ints/bools/
