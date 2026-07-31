@@ -30,7 +30,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (185)
+## backlog (184)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -62,7 +62,6 @@ _none_
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
 | bug-nilpy-void-def-assigned-and-called-crashes | N | 55 | bug | NilPy: a `-> None` def assigned to a name, then called directly, segfaults | — |
 | bug-pascal-array-of-pointer-deref-loses-the-record-type | A | 55 | bug | Pascal: `lst[j]^.Field` on a TPropList resolves only the FIRST field — every other one is 'no such member'; via a local variable it works | — |
-| bug-pascal-defines-leak-across-units | A | 55 | bug | Pascal: {$define} in one unit stays visible in units parsed afterwards, so {$ifdef} compiles different code depending on uses ORDER | — |
 | bug-pascal-uses-order-breaks-pylib-exception | A | 45 | bug | `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine | — |
 | bug-progress-claim-silently-drops-owner-without-template-line | T | 30 | bug | `progress.sh claim`/`resolve` silently no-op when a ticket lacks the expected body line | — |
 | bug-t-corpus-regex-invents-phantom-tree | T | 55 | bug | CORPUS_RE matches prose in a SKIP message and invents corpus 'stb)', permanently skipping a job that also carries a non-corpus regression test | — |
@@ -308,7 +307,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1126)
+## done (1127)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -792,6 +791,7 @@ _none_
 | bug-pascal-byvalue-variant-param | A | 40 | bug | By-VALUE Variant parameters are miscompiled (silent garbage) | — |
 | bug-pascal-case-selector-multiple-evaluation | A | 75 | bug | `case` evaluated its selector expression ONCE PER LABEL, not once | — |
 | bug-pascal-class-const-visibility | P | 60 | bug | class CONSTS parse as UNSCOPED GLOBALS: same-named consts in two classes silently clobber (both read the last decl), and a class const clobbers a same-named GLOBAL const — silent wrong values in valid FPC code; visibility (tclass12b) is the minor residual | — |
+| bug-pascal-defines-leak-across-units | A | 55 | bug | Pascal: {$define} in one unit stays visible in units parsed afterwards, so {$ifdef} compiles different code depending on uses ORDER | — |
 | bug-pascal-deref-managed-string-ptr | A | 40 | bug | `^string` — dereferencing a pointer to a managed string segfaults (all targets) | — |
 | bug-pascal-directive-inside-paren-star-comment | A | 65 | bug | {$...} directives are processed inside (* ... *) comments | — |
 | bug-pascal-duplicate-class-name-silently-shadows | P | 50 | bug | Pascal: a duplicate class declaration silently binds to the earlier one instead of erroring | — |
@@ -2912,7 +2912,6 @@ _none_
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [N] bug-nilpy-void-def-assigned-and-called-crashes
 - [p 55] [A] bug-pascal-array-of-pointer-deref-loses-the-record-type
-- [p 55] [A] bug-pascal-defines-leak-across-units
 - [p 55] [T] bug-t-corpus-regex-invents-phantom-tree
 - [p 55] [U] decide-pascal-uses-campaign-scope
 - [p 55] [U] decide-track-t-autopin-criteria
