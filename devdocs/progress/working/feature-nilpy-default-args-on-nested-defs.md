@@ -30,6 +30,18 @@ Parameter defaults already parse for plain defs (`PyParamDefaultAt`,
 EXPRESSION of an enclosing local rather than a constant — today's table stores a
 folded ordinal or a string literal.
 
+## Already fixed — verified 2026-07-31, closing
+
+Re-measured the exact repro from this ticket's own header comment
+(`w_field_colon`/`_field(v, _offset=offset)`) directly against CPython: two
+functions made in sequence from different `offset` values, each keeping its
+own captured value after the enclosing def returns, both match exactly.
+Landed since filing via the general nested-def-as-value / default-argument
+capture work (the lambda form of this was already gated via
+`test_nilpy_lambda_capture.npy`; the plain-`def` form had no direct
+regression coverage until now). Added
+`test/test_nilpy_nested_def_default_capture.npy`.
+
 ## Gate
 
 `test-nilpy` green with a `.npy` case diffed against CPython — the shape above,

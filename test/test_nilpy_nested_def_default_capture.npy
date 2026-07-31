@@ -1,0 +1,16 @@
+# A nested def's own DEFAULT parameter, not a lambda's -- Python's idiom for
+# pinning an enclosing value at DEFINITION time (evaluated once, stored on
+# the function), so two functions made in sequence capture different
+# values and the captured value survives after the enclosing def returns.
+# feature-nilpy-default-args-on-nested-defs
+
+def w_field_colon(offset):
+    def _field(v, _offset=offset):
+        return v + _offset
+    return _field
+
+f1 = w_field_colon(10)
+f2 = w_field_colon(20)
+print(f1(1))
+print(f2(1))
+print(f1(5))

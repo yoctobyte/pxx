@@ -682,6 +682,9 @@ test-nilpy: $(COMPILER)
 	@# a DOTTED package import (from a.b import c / import a.b / import a.b as x)
 	./$(COMPILER) test/test_nilpy_dotted_package_import.npy /tmp/test_nilpy_dottedimport26
 	test "$$(/tmp/test_nilpy_dottedimport26)" = "dotted imports ok"
+	@# a nested def's own default parameter captures by value, at definition time
+	./$(COMPILER) test/test_nilpy_nested_def_default_capture.npy /tmp/test_nilpy_defcap26
+	test "$$(/tmp/test_nilpy_defcap26)" = "$$(printf '11\n21\n15')"
 	./$(COMPILER) test/test_nilpy_return_none_variant.npy /tmp/test_nilpy_return_none_variant26
 	test "$$(/tmp/test_nilpy_return_none_variant26)" = "$$(printf 'a NONE\nb NONE\nc 9')"
 	./$(COMPILER) test/test_nilpy_none_str_field.npy /tmp/test_nilpy_none_str_field26
