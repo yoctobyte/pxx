@@ -795,6 +795,8 @@ var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     vaRecId, ptrNode: Integer;
     vt: TTypeKind;
     name: AnsiString;
+    argUndecl: array[0..31] of Boolean;
+    argN: Integer;
 begin
   Result := -1;
   case CurTok.Kind of
@@ -1137,11 +1139,19 @@ begin
         { call — direct (named function) or indirect (fn-pointer variable) }
         Next;
         argHead := -1; argTail := -1;
+        argN := 0;
         if CurTok.Kind <> tkRParen then
         begin
           while True do
           begin
+            CLastExprUndeclared := False;
             valNode := ParseCExpr;
+            { Recorded per position (not just the last arg) so the
+              function-pointer-parameter check below, once procIdx is known,
+              can tell WHICH argument was an undeclared identifier —
+              bug-c-undeclared-identifier-as-function-pointer-becomes-null. }
+            if argN <= 31 then argUndecl[argN] := CLastExprUndeclared;
+            Inc(argN);
             argNode := AllocNode(AN_ARG);
             ASTLeft[argNode] := valNode;
             ASTRight[argNode] := -1;
@@ -1188,6 +1198,22 @@ begin
         if procIdx >= 0 then
         begin
           WarnCrossNamespaceArity(procIdx, CProcArgCount(argHead), name);
+          { An undeclared identifier passed where a POINTER parameter is
+            declared degrades to a warning-plus-0 above — reasonable for an
+            unused value, wrong here: the callee (bsearch, qsort, signal, any
+            comparator/callback-taking API) will likely CALL through it, and
+            "warning that scrolls past" plus "segfault somewhere else
+            entirely" is not a survivable combination.
+            bug-c-undeclared-identifier-as-function-pointer-becomes-null.
+            Scoped to a KNOWN callee's declared parameter type (not a blanket
+            "undeclared identifier is always an error", which is a separate,
+            wider dialect question the ticket explicitly leaves to Track U). }
+          for vaK := 0 to argN - 1 do
+            if (vaK <= 31) and argUndecl[vaK] and (vaK < Procs[procIdx].ParamCount) and
+               (Procs[procIdx].Params[vaK].TypeKind = tyPointer) then
+              Error('undeclared identifier passed as argument ' + AIntToStr(vaK + 1) +
+                    ' of ''' + name + ''', where a pointer is expected — ' +
+                    'this would call/dereference through NULL');
           node := AllocNode(AN_CALL);
           ASTIVal[node] := procIdx;
           ASTTk[node] := Ord(Procs[procIdx].RetType);
@@ -1265,6 +1291,7 @@ begin
               file-VFS null-call. Reserved `__`-names stay silent to avoid spam. }
             if (Length(name) < 2) or (name[1] <> '_') or (name[2] <> '_') then
               Warn('undeclared identifier ''' + name + ''' used as value (treated as 0)');
+            CLastExprUndeclared := True;   { see the flag's declaration (defs.inc) }
             node := AllocNode(AN_INT_LIT);
             ASTIVal[node] := 0;
             ASTTk[node] := Ord(tyInteger);

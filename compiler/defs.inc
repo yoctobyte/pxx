@@ -1223,6 +1223,7 @@ var
   SoftUnitMissed : Boolean;
   CRuntimeStubsEmitted : Boolean;  { the C runtime primitive stubs (__pxx_setjmp/longjmp, __pxx_fe*round) are emitted once per compile, from whichever path first needs them — the C program driver or a pulled .c unit. }
   DefaultCIncludeDirsAdded : Boolean;  { AddDefaultCIncludeDirs has run: it is called both from the C-program path and from every C unit pull, and must register the crtl header root exactly once. }
+  CLastExprUndeclared : Boolean;  { set True the instant an undeclared C identifier degrades to a 0 literal (cparser.inc); checked+reset by the call-argument loop right after each ParseCExpr, so a known callee's function-pointer parameter can upgrade this from a warning to a hard error — bug-c-undeclared-identifier-as-function-pointer-becomes-null. }
   NoShims : Boolean;  { --no-shims: refuse the mimic_<module> substitution the NilPy import resolver falls back on, so a build that succeeds provably used no compatibility shim (feature-nilpy-dotted-package-imports). }
   InterfacesComMode : Boolean; { {$interfaces com}: interfaces declared while on are COM/ARC (reference-counted). Default off = CORBA (no refcount). }
   ComInterfaceUsed : Boolean; { set when any COM/ARC interface is declared; forces the builtinheap unit (PXXIntfAddRef/Release live there) and the ARC cleanup path. }
