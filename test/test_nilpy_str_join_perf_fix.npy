@@ -1,0 +1,15 @@
+# str.join preallocated to the known final length instead of reallocating
+# the whole string per item (O(n) instead of O(n^2) in the joined length).
+# perf-nilpy-remaining-perbyte-string-builders
+# Every expectation is CPython's own output.
+
+print(",".join(["a", "bb", "ccc"]))
+print("".join(["x", "y", "z"]))
+print("-".join([]))
+print(",".join(["single"]))
+print(", ".join(["one", "two", "three", "four"]))
+
+try:
+    ",".join(["a", 5, "c"])
+except TypeError:
+    print("caught type error")

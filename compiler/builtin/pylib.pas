@@ -1664,12 +1664,22 @@ end;
   str in Python terms, so both are accepted.
   Python's join takes any iterable; only TPyList is supported for now. }
 function pystr_join(const sep: AnsiString; l: TPyList): AnsiString;
-var i: Integer;
+{ Preallocate to the known final length (sum of item lengths + sep*(n-1))
+  and write in place. The old `Result := Result + sep`/`+ item` reallocated
+  the whole string on every item — O(n^2) in the joined length, the same
+  PXXStrConcat pattern pystr_upper/lower were fixed for
+  (perf-nilpy-remaining-perbyte-string-builders). Each item is materialised
+  ONCE into `items` (VariantToStr is not idempotent-cheap to call twice)
+  and its length summed before the single allocation. }
+var i, j, n, totalLen, pos: Integer;
     v: Variant;
     tag: Int64;
+    items: array of AnsiString;
 begin
-  Result := '';
-  for i := 0 to l.count - 1 do
+  n := l.count;
+  SetLength(items, n);
+  totalLen := 0;
+  for i := 0 to n - 1 do
   begin
     v := l.at(i);
     tag := pyvartag(v);
@@ -1678,8 +1688,25 @@ begin
       raise TypeError.Create('sequence item ' + pystr_of(Int64(i)) +
                              ': expected str instance');
     end;
-    if i > 0 then Result := Result + sep;
-    Result := Result + VariantToStr(v);
+    items[i] := VariantToStr(v);
+    Inc(totalLen, Length(items[i]));
+    if i > 0 then Inc(totalLen, Length(sep));
+  end;
+  SetLength(Result, totalLen);
+  pos := 1;
+  for i := 0 to n - 1 do
+  begin
+    if i > 0 then
+      for j := 1 to Length(sep) do
+      begin
+        Result[pos] := sep[j];
+        Inc(pos);
+      end;
+    for j := 1 to Length(items[i]) do
+    begin
+      Result[pos] := items[i][j];
+      Inc(pos);
+    end;
   end;
 end;
 
