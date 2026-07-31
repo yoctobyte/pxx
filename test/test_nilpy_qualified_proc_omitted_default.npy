@@ -1,0 +1,12 @@
+# A unit-level proc called qualified (unit.proc(...)) used to require every
+# parameter filled, even a trailing DEFAULTED one -- "no overload matches
+# these arguments" even though the same signature on a METHOD already
+# filled its defaults. Fixed alongside TryFillTrailingDefaults.
+# bug-nilpy-qualified-proc-omitted-default
+
+import qualified_default_unit
+
+qualified_default_unit.show("a")
+qualified_default_unit.show("b", 5)
+qualified_default_unit.show2("c")
+qualified_default_unit.show2("d", 7, True)

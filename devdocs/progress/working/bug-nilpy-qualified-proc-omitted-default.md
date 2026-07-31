@@ -32,6 +32,19 @@ site: the same declaration behaves differently depending on where it lives, and
 the diagnostic ("no overload matches") points at the caller rather than at the
 real cause.
 
+## Already fixed — verified 2026-07-31, closing
+
+Re-measured rather than assumed still-broken: `TryFillTrailingDefaults`
+(parser.inc) already scopes its overload probe by `qUnit` and already fills
+trailing defaults for a qualified unit-level call — confirmed directly with
+the ticket's own repro shape (a unit exposing `procedure show(const text:
+AnsiString; const opts: Variant = 0);`, called qualified with and without
+the optional argument, and a two-defaulted-parameter variant) — both work
+today. Landed by an earlier, unrelated commit (the `TryFillTrailingDefaults`
+introduction) without this ticket being closed alongside it. Added a
+regression test so a future regression here is caught rather than silently
+re-opening this exact gap.
+
 ## Gate
 
 `make test-nilpy` with a unit exposing a defaulted parameter on a free
