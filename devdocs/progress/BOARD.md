@@ -27,13 +27,14 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (183)
+## backlog (182)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
+| bug-crtl-headers-lost-when-cwd-is-not-the-repo-root | C | 60 | bug | C: pxx's own crtl headers are found only from the repo root — elsewhere <stdarg.h>/<math.h> silently come from /usr/include | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-builtin-pairs-are-not-flagged-as-tuples | N | 35 | bug | `enumerate`, `zip`, `dict.items` and `most_common` build pairs that print as lists | — |
@@ -57,13 +58,13 @@ _none_
 | bug-pascal-defines-leak-across-units | A | 55 | bug | Pascal: {$define} in one unit stays visible in units parsed afterwards, so {$ifdef} compiles different code depending on uses ORDER | — |
 | bug-pascal-uses-is-transitive | A | 65 | bug | Pascal: uses is transitive — a unit's own uses leak into everything that uses IT, for routines and classes alike (one flat global namespace) | — |
 | bug-pascal-uses-order-breaks-pylib-exception | A | 45 | bug | `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine | — |
-| bug-rtl-floattostr-caps-at-six-decimals-and-zeroes-small-values | B | 35 | bug | `FloatToStr` keeps SIX decimal places, so it loses 9 digits FPC keeps — and returns `0` below 5e-7 | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
 | compat-pascal-binop-operand-eval-order | A | 15 | compat | pxx evaluates binary-operator operands left-to-right; FPC evaluates right-to-left | — |
 | compat-pascal-const-expr-ord-chr-succ | P | 45 | compat | `Ord()` / `Chr()` / `Length()` / `Succ()` are not folded in constant expressions | — |
+| compat-pascal-format-g-and-e-specifiers | B | 25 | compat | compat: Format's %g ignores its precision and uses 15 digits where FPC uses 17; %e is not implemented at all | — |
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
 | decide-3rd-party-vendor-vs-fetch | U | 45 | decide | Policy: how to carry dependency-grade third-party source — vendor in-tree vs fetch-gitignored vs system-dynamic | — |
 | decide-abi-portable-vs-target-split | A | 50 | decide |  | — |
@@ -111,7 +112,6 @@ _none_
 | feature-lib-pxxpdf-reportlab-compat | B | 50 | feature | pxxpdf — pxx pdfgen-backed, reportlab-compatible PDF library (nilpy) | bug-cfront-fegetround-unresolved-float-printf, feature-nilpy-fallback-import |
 | feature-lib-pyexec | B | 45 | feature | lib pyexec: a real exec() for Python-subset source (library, two engines) | feature-rtti-field-reflection |
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | — |
-| feature-lib-tkinter-facade-widening-canvas-items | B | 40 | feature | tkinter façade: item specs, StringVar traces, and what settings.py still needs | — |
 | feature-mimic-fpc-compiler-define-profile | A | 50 | feature | FPC-compiler define profile (`fpcdefs.inc` build-config gates) | — |
 | feature-move-fillchar-intrinsics | A | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-n-nilpy-ast-typing-module-scope | N | 55 | feature | NilPy: type MODULE locals from the AST too | — |
@@ -144,7 +144,6 @@ _none_
 | feature-nilpy-stdlib-coverage-gaps-measured | N | 30 | feature | Measured stdlib coverage: json and re are solid; os, time and math.fabs are absent | — |
 | feature-nilpy-str-format-multiarg | N | 40 | feature | `str.format` with more than one argument | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 60 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
-| feature-nilpy-tkinter-facade-widening | B | 60 | feature | tkinter façade: the surface a real GUI app needs (callables, ttk, Menu, Text, tuple coords) | — |
 | feature-nilpy-tkinter-facade | N | 50 | feature | nilpy: tkinter-shaped façade over lib/pcl/tk.pas — widget objects, kwargs, command callbacks | feature-nilpy-star-args-kwargs |
 | feature-nilpy-yield-outside-a-for-loop | N | 35 | feature | `yield` only works inside a `for` — a while-loop generator does not compile | — |
 | feature-opt-alloc-intent-hint | O | 25 | feature | Allocation-intent hint: tell the RTL growth policy how a buffer will be used | — |
@@ -301,7 +300,7 @@ _none_
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1079)
+## done (1082)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -837,6 +836,7 @@ _none_
 | bug-riscv32-hosted-writeln-hello-hangs | A | 50 | bug | riscv32 hosted: plain `writeln` hello hangs under qemu-user (pre-existing) | — |
 | bug-riscv32-p256field-coredump | A | 45 | bug | riscv32: p256field core-dumps (and bignum will not compile there at all) | — |
 | bug-riscv32-string-literal-to-class-field | A | 55 | bug | riscv32: storing a string LITERAL into a class field gives an empty string | — |
+| bug-rtl-floattostr-caps-at-six-decimals-and-zeroes-small-values | B | 35 | bug | `FloatToStr` keeps SIX decimal places, so it loses 9 digits FPC keeps — and returns `0` below 5e-7 | — |
 | bug-rtti-offset-static-array | A | 50 | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
 | bug-selfhost-multifn-ifelse-miscompile | R | 50 | bug | Self-host miscompilation: 3-function program with `if`/`else if` gives wrong result | — |
 | bug-set-of-char-const-corrupts-char-codegen | A | 50 | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |
@@ -1112,6 +1112,7 @@ _none_
 | feature-lib-bignum-operators | B | 42 | feature | bignum operator layer: TBigInt + - * div mod comparisons — Track B | — |
 | feature-lib-regex-engine | B | 50 | feature | regex engine library — backtracking matcher, the substrate for nilpy's re module | — |
 | feature-lib-reportlab-shim-pdftextobject | B | 45 | feature | reportlab shim: `PDFTextObject.setTextOrigin` (and whatever follows it) | — |
+| feature-lib-tkinter-facade-widening-canvas-items | B | 40 | feature | tkinter façade: item specs, StringVar traces, and what settings.py still needs | — |
 | feature-lib-vecmath | B | 42 | feature | vecmath library: TVec2/3/4 + TMat with operator overloads — Track B | — |
 | feature-library-test-suite | A+B | 50 | feature | Track B library test suite | — |
 | feature-library-var-out-lvalue-actuals | A | 50 | feature | Inc/Dec intrinsic rejects non-bare-symbol lvalue actuals | — |
@@ -1170,6 +1171,7 @@ _none_
 | feature-nilpy-str-methods | N | 55 | feature | NilPy: string methods (.upper/.lower/.strip/.split/.join/.startswith...) | — |
 | feature-nilpy-tk-binding | B | 45 | feature | Thin Tcl/Tk embed for pxx (lib/pcl/tk.pas) + a tkinter-shaped NilPy surface — v1 landed | — |
 | feature-nilpy-tk-callbacks | B | 65 | feature | nilpy/PCL: tkinter callbacks — a bound method as command=/bind(), via Tcl_CreateCommand | — |
+| feature-nilpy-tkinter-facade-widening | B | 60 | feature | tkinter façade: the surface a real GUI app needs (callables, ttk, Menu, Text, tuple coords) | — |
 | feature-nilpy-tuple-return | N | 50 | feature | nilpy: return a tuple — `return 1, 2` (and unpack at the call site) | — |
 | feature-nilpy-tuple-unpack | N | 55 | feature | NilPy: sequence unpacking (`a, b = ...`, `for k, v in ...`) | — |
 | feature-nilpy-wire-pyeval-exec | A | 55 | feature | Wire pyeval into NilPy exec() — auto-use triggers an unrelated str-index segfault | — |
@@ -2832,6 +2834,7 @@ _none_
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [A] feature-a-typeref-handle
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
+- [p 60] [C] bug-crtl-headers-lost-when-cwd-is-not-the-repo-root
 - [p 60] [N] bug-nilpy-comprehension-variable-leaks-and-clobbers-the-enclosing-scope
 - [p 60] [N] bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
@@ -2841,7 +2844,6 @@ _none_
 - [p 60] [A] feature-inline-asm-xtensa
 - [p 60] [N] feature-nilpy-nested-comprehension
 - [p 60] [N] feature-nilpy-thirdparty-libraries-as-targets
-- [p 60] [B] feature-nilpy-tkinter-facade-widening
 - [p 60] [O] feature-opt-store-reload-elimination
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
 - [p 60] [P] feature-pascal-corpus-oop
@@ -2940,7 +2942,6 @@ _none_
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
 - [p 40] [B] feature-ipv6-complete-surface
 - [p 40] [B] feature-lib-tkinter-callable-options-with-args
-- [p 40] [B] feature-lib-tkinter-facade-widening-canvas-items
 - [p 40] [N] feature-nilpy-lambda
 - [p 40] [N] feature-nilpy-map-and-filter-over-a-lambda
 - [p 40] [N] feature-nilpy-str-format-multiarg
@@ -2952,7 +2953,6 @@ _none_
 - [p 35] [N] bug-nilpy-builtin-pairs-are-not-flagged-as-tuples
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
 - [p 35] [N] bug-nilpy-qualified-proc-omitted-default
-- [p 35] [B] bug-rtl-floattostr-caps-at-six-decimals-and-zeroes-small-values
 - [p 35] [U] decide-nilpy-hasattr-per-instance-semantics
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [A] feature-nested-routine-fixed-array-capture
@@ -2974,6 +2974,7 @@ _none_
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 30] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 25] [N] bug-nilpy-repr-of-a-function-value-prints-none
+- [p 25] [B] compat-pascal-format-g-and-e-specifiers
 - [p 25] [O] feature-opt-alloc-intent-hint
 - [p 25] [A] feature-promo-launch-plan
 - [p 25] [T] feature-t-windows-wine-harness

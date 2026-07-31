@@ -902,41 +902,115 @@ begin
   if neg then Result := '-' + Result;
 end;
 
+{ FPC's `FloatToStr` IS `FloatToStrF(value, ffGeneral, 15, 0)`: fifteen
+  SIGNIFICANT digits, not a fixed number of decimal places, switching to
+  exponential form when the decimal point falls outside the window
+  [-3, 15]. The old implementation kept six DECIMAL places, which silently
+  dropped nine digits from `1/3` and — far worse — returned the string `'0'`
+  for every magnitude below 5e-7, because both the integer part and the
+  rounded six-place fraction were zero. A nonzero number printing as zero is
+  the value-LOSS half of that bug and the half worth fixing.
+
+  Significant digits are counted off a normalised mantissa. Scaling by powers
+  of ten costs a unit or two in the last place on awkward values; that is the
+  representation half, which is explicitly not worth chasing here. }
 function FloatToStr(value: Double): AnsiString;
-var intPart, fracPart: Int64; neg: Boolean; s, fs: AnsiString; i: Integer;
+const
+  SIGDIG   = 15;
+  SCALE14  = 100000000000000;    { 10^(SIGDIG-1) — mantissa [1,10) scales into }
+  SCALE15  = 1000000000000000;   { 10^SIGDIG     — rounding may reach this     }
+var
+  neg: Boolean;
+  e10, p, i, k: Integer;
+  m: Double;
+  p10: array[0..8] of Double;
+  digits: Int64;
+  ds, s: AnsiString;
 begin
   if value <> value then begin Result := 'NaN'; Exit; end;
-  { Infinity first: the normalise loop in FloatToExpStr would not terminate on
-    it, and Trunc below would saturate. }
+  { Infinity first: the normalise loop below would not terminate on it. }
   if value > 1.7976931348623157e308 then begin Result := 'Inf'; Exit; end;
   if value < -1.7976931348623157e308 then begin Result := '-Inf'; Exit; end;
-  { Past Int64 the Trunc below SATURATES at High(Int64), and the fraction
-    digits are then computed from the saturated value: 1e19 printed
-    `9223372036854775809.o72036854775808` — a byte that is not even a digit,
-    written to stdout (bug-nilpy-large-float-str-overruns-into-garbage). It is
-    reachable from plain arithmetic, not just from a literal. }
-  if (value > 9.2e18) or (value < -9.2e18) then
-  begin
-    Result := FloatToExpStr(value);
-    Exit;
-  end;
+  if value = 0.0 then begin Result := '0'; Exit; end;
   neg := value < 0.0;
   if neg then value := -value;
-  intPart := Trunc(value);
-  fracPart := Round(Frac(value) * 1000000);
-  if fracPart >= 1000000 then begin intPart := intPart + 1; fracPart := 0; end;
-  s := IntToStr(intPart);
-  if fracPart > 0 then
+
+  { Normalise into [1,10) and record the decimal exponent. Scaling one decade
+    at a time would round up to 300 times on a denormal and lose the last
+    digits outright (1e-300 came out as 9.99999999999999E-301); stepping by
+    powers of two decades costs at most nine roundings for any finite double. }
+  p10[0] := 1.0e1;   p10[1] := 1.0e2;   p10[2] := 1.0e4;   p10[3] := 1.0e8;
+  p10[4] := 1.0e16;  p10[5] := 1.0e32;  p10[6] := 1.0e64;  p10[7] := 1.0e128;
+  p10[8] := 1.0e256;
+  m := value;
+  e10 := 0;
+  if m >= 10.0 then
   begin
-    fs := IntToStr(fracPart);
-    { left-pad fractional digits to 6 places }
-    while Length(fs) < 6 do fs := '0' + fs;
-    { trim trailing zeros }
-    i := Length(fs);
-    while (i > 0) and (fs[i] = '0') do i := i - 1;
-    fs := Copy(fs, 1, i);
-    s := s + '.' + fs;
+    k := 256;
+    for i := 8 downto 0 do
+    begin
+      if m >= p10[i] then begin m := m / p10[i]; e10 := e10 + k; end;
+      k := k div 2;
+    end;
+  end
+  else if m < 1.0 then
+  begin
+    { multiply up. `m * p10[i] < 10` keeps the mantissa from overshooting the
+      window; the residual decade is settled by the loops below. }
+    k := 256;
+    for i := 8 downto 0 do
+    begin
+      if m * p10[i] < 10.0 then begin m := m * p10[i]; e10 := e10 - k; end;
+      k := k div 2;
+    end;
   end;
+  { A scaled value can land a hair outside [1,10) — settle it exactly. }
+  while m >= 10.0 do begin m := m / 10.0; e10 := e10 + 1; end;
+  while m < 1.0 do begin m := m * 10.0; e10 := e10 - 1; end;
+
+  { SIGDIG significant digits as an integer. Rounding can carry into the next
+    power of ten (9.9999999999999999 -> 10), which is a shift, not a digit. }
+  digits := Round(m * SCALE14);
+  if digits >= SCALE15 then
+  begin
+    digits := digits div 10;
+    e10 := e10 + 1;
+  end;
+  ds := IntToStr(digits);
+  { trailing zeros carry no information in either form }
+  i := Length(ds);
+  while (i > 1) and (ds[i] = '0') do i := i - 1;
+  ds := Copy(ds, 1, i);
+
+  { `p` is where the decimal point sits: the count of digits before it. }
+  p := e10 + 1;
+
+  if (p > SIGDIG) or (p < -3) then
+  begin
+    { exponential. FPC writes `1E20` / `1.23E-7` — a sign only when negative,
+      and no zero padding of the exponent. }
+    if Length(ds) > 1 then s := Copy(ds, 1, 1) + '.' + Copy(ds, 2, Length(ds) - 1)
+    else s := ds;
+    if p - 1 >= 0 then s := s + 'E' + IntToStr(p - 1)
+    else s := s + 'E-' + IntToStr(1 - p);
+  end
+  else if p <= 0 then
+  begin
+    { 0.000123456 — the leading zeros are part of the fixed form }
+    s := '0.';
+    for i := 1 to -p do s := s + '0';
+    s := s + ds;
+  end
+  else if p >= Length(ds) then
+  begin
+    { the significant digits ran out before the decimal point: pad with zeros
+      and emit no fraction at all (100.0 -> `100`, not `100.0`) }
+    s := ds;
+    for i := Length(ds) + 1 to p do s := s + '0';
+  end
+  else
+    s := Copy(ds, 1, p) + '.' + Copy(ds, p + 1, Length(ds) - p);
+
   if neg then s := '-' + s;
   Result := s;
 end;

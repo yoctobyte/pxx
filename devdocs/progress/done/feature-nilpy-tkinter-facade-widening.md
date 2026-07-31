@@ -120,3 +120,58 @@ index into a table of NilPy callables, plus `command=` on Button/ttk.Button and
 the `event` object (`.delta`, `.num`, `.width`, `.widget`) the handlers read.
 That single feature unblocks `settings.py`, `convertrawtext.py`'s editor and the
 whole GUI MVP — it is the biggest remaining item on the tkinter side.
+
+## RESOLVED 2026-07-31 — all five songformatter modules compile
+
+Every item this ticket enumerates is present in `lib/pcl/tkinter.pas`, checked
+one name at a time and then proved against the corpus that motivated the list:
+
+| item | state |
+| --- | --- |
+| 1. callable options (`command=`, `bind`, `yscrollcommand`) | done — [[feature-nilpy-tk-callbacks]], now with its example's output ASSERTED in `lib-test` |
+| 2. tuple coordinates (`create_window((0,0), window=…)`) | done — `decide-pcl-may-use-pylib` resolved it; the façade `uses pylib` |
+| 3. `Menu`, `Toplevel`, `Text`, `PhotoImage`, the ttk family | done — ttk is not a separate unit: `ttk` resolves onto `tkinter` and the ttk widgets sit beside the classic ones behind the `ttk::` prefix |
+| 4. module constants and `tk.TclError` | done |
+| 5. `filedialog` and `messagebox` | done |
+| 6. geometry / selection methods, `event_generate`, Notebook `tabs`/`select`/`index` | done |
+
+The measure that matters is not the census. All five of songformatter's modules
+— `settings.py`, `convertrawtext.py`, `key_analysis.py`, `render_backend.py` and
+`SongFormatter.py` — now COMPILE unmodified, which is the whole point of the
+mission this ticket serves.
+
+### Two things found on the way, both filed rather than worked around
+
+- `SongFormatter.py` stopped at `widget.destroy()` with "too many candidate
+  classes to dispatch". That was self-inflicted, from renaming `destroy_` to
+  `destroy` earlier the same day: Pascal is case-insensitive, so `destroy` is
+  every `destructor Destroy` in the RTL and PCL at once. Reverted, with the
+  reason recorded at the declaration —
+  [[bug-lib-tkinter-trailing-underscore-params-block-kwargs]].
+- Three of the five modules failed with `IR_UNSUPPORTED` near `va_list`, but
+  ONLY when the compiler was invoked from their own directory. pxx's crtl
+  headers resolve CWD-relatively for the shipped binary, so `<stdarg.h>` and
+  `<math.h>` came from `/usr/include` — silently, with `M_SQRT2` becoming `0`.
+  Filed for Track C as
+  [[bug-crtl-headers-lost-when-cwd-is-not-the-repo-root]]. With `-I` pointing at
+  `lib/crtl/include`, all five compile.
+
+### The naming rule this ticket states, restated after the fact
+
+"A façade class must carry the name the application writes" is right, and the
+same goes for its members — but the collision that justifies a different
+spelling is not only a Pascal KEYWORD. `set`, `file`, `lower` and `index` are
+reserved or overloaded words that PXX nevertheless parses fine as member names,
+so those carry Python's spelling. `destroy` is not reserved at all and still
+cannot be used, because a name that is merely COMMON in the RTL is just as
+blocking under case-insensitive dispatch. Check for competing declarations, not
+just for keywords.
+
+### Gate
+
+`tools/gate.sh lib` GREEN, with `examples/tk/kwargs.npy` and
+`examples/tk/callbacks.npy` both RUN under Xvfb and asserted output-and-all in
+the `tk-nilpy` step.
+
+## Log
+- 2026-07-31 — resolved, commit bc2a960ce.

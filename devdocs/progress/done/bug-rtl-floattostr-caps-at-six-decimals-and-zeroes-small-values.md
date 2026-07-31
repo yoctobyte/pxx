@@ -102,3 +102,48 @@ number of decimals (`%.15f`, `{:.3f}`, `FloatToStrF(v, n)`) — those paths are
 a contract, and they currently test correct. Deprioritised accordingly; the
 value-LOSS half (a nonzero number printing as `0`) is the part that was worth
 fixing and is done for the NilPy renderer.
+
+## RESOLVED 2026-07-31 — the value-loss half is fixed, and the rest came with it
+
+`FloatToStr` now implements FPC's actual rule — `FloatToStrF(value, ffGeneral,
+15, 0)`: fifteen SIGNIFICANT digits, exponential form when the decimal point
+falls outside `[-3, 15]`, and FPC's exponent spelling (`1E20`, `1.23E-7` — a
+sign only when negative, no zero padding).
+
+The normalisation deliberately steps by powers of TWO decades (1e1, 1e2, 1e4 …
+1e256) rather than one at a time. One decade at a time meant up to 300 roundings
+on a denormal, and that alone printed `1e-300` as `9.99999999999999E-301`; nine
+roundings is enough for any finite double and gives `1E-300` exactly.
+
+### Measured against FPC, not against pxx
+
+Every expectation in the new `test/lib_floattostr.pas` was produced by an
+FPC-built copy of that same program — the file compiles under both. All 22 rows
+match, including the three that used to return the string `0`.
+
+A wider differential over 490 values (400 random bit patterns reinterpreted as
+doubles, plus a sweep of `1.0e-320` … `1.0e308`) diffed against an FPC build of
+the identical generated program:
+
+- **459 of 490 byte-identical.**
+- **31 differ, all by exactly one unit in the 15th significant digit.**
+- **0 structural divergences** — no zeros, no wrong exponents, no wrong form.
+
+That residue is the representation half the priority note above calls explicitly
+not worth chasing, and it is now bounded and measured rather than assumed.
+
+### Left open, deliberately
+
+`Format`'s `%g` inherits `FloatToStr` and so moved from 6 digits to 15, where
+FPC gives 17; it also ignores an explicit `%.3g`, and `%e` has no branch at all
+and is emitted literally. Those are a different rule from `FloatToStr`'s and are
+split out as [[compat-pascal-format-g-and-e-specifiers]] rather than guessed at
+here. `FloatToStrF`'s incompatible SIGNATURE remains its own item, as this
+ticket already said.
+
+### Gate
+
+`tools/gate.sh lib` GREEN with `test/lib_floattostr.pas` wired into `lib-test`.
+
+## Log
+- 2026-07-31 — resolved, commit bc2a960ce.
