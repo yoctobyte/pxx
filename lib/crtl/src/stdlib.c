@@ -155,6 +155,86 @@ unsigned long strtoul(const char *s, char **end, int base) {
   return (unsigned long)strtol(s, end, base);
 }
 
+/* strtoll/strtoull/atoll were declared in stdlib.h (C99) but, until now, never
+   defined. Nothing called them, so the gap was invisible: the C frontend's
+   unresolved-extern fallback (any prototype with no in-tree body defaults to a
+   dynamic `libc.so.6` import, compiler/cparser.inc CPullCrtlForPrototypes) let
+   the program "link" anyway. On i386 that silently turned a self-contained
+   static executable into a broken hybrid static+dynamic one (adding PT_INTERP/
+   PT_DYNAMIC for a symbol nothing at runtime even calls) whose exit code came
+   back ASLR-dependent garbage while stdout stayed correct — the exact shape of
+   bug-c-i386-crtl-growth-corrupts-main-exit-code. sscanf's field-width fix
+   (ea07b041c) was the first real caller, via its 64-bit numeric conversion.
+
+   Not simple forwards to strtol/strtoul: those don't clamp on overflow or
+   auto-detect an octal `0` prefix for base 0, and the gcc oracle (below)
+   checks both — 64-bit range makes overflow reachable with an ordinary
+   literal ("9223372036854775808") in a way `long` on this LP64 target masks
+   for strtol's own callers so far. */
+long long strtoll(const char *s, char **end, int base) {
+  long long sign = 1, v = 0;
+  const char *p = s;
+  int overflow = 0;
+  if (!p) { if (end) *end = (char *)s; return 0; }
+  while (*p == ' ' || *p == '\t' || *p == '\n') p++;
+  if (*p == '-') { sign = -1; p++; } else if (*p == '+') p++;
+  if ((base == 0 || base == 16) && p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) { p += 2; base = 16; }
+  else if (base == 0 && p[0] == '0') { base = 8; }
+  if (base == 0) base = 10;
+  for (;;) {
+    int d;
+    char c = *p;
+    if (c >= '0' && c <= '9') d = c - '0';
+    else if (c >= 'a' && c <= 'z') d = c - 'a' + 10;
+    else if (c >= 'A' && c <= 'Z') d = c - 'A' + 10;
+    else break;
+    if (d >= base) break;
+    if (!overflow) {
+      if (v > (9223372036854775807LL - d) / base) overflow = 1;
+      else v = v * base + d;
+    }
+    p++;
+  }
+  if (end) *end = (char *)p;
+  if (overflow) return sign < 0 ? (-9223372036854775807LL - 1) : 9223372036854775807LL;
+  return v * sign;
+}
+
+unsigned long long strtoull(const char *s, char **end, int base) {
+  unsigned long long v = 0;
+  const char *p = s;
+  int neg = 0, overflow = 0;
+  if (!p) { if (end) *end = (char *)s; return 0; }
+  while (*p == ' ' || *p == '\t' || *p == '\n') p++;
+  if (*p == '-') { neg = 1; p++; } else if (*p == '+') p++;
+  if ((base == 0 || base == 16) && p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) { p += 2; base = 16; }
+  else if (base == 0 && p[0] == '0') { base = 8; }
+  if (base == 0) base = 10;
+  for (;;) {
+    int d;
+    char c = *p;
+    if (c >= '0' && c <= '9') d = c - '0';
+    else if (c >= 'a' && c <= 'z') d = c - 'a' + 10;
+    else if (c >= 'A' && c <= 'Z') d = c - 'A' + 10;
+    else break;
+    if (d >= base) break;
+    if (!overflow) {
+      if (v > (18446744073709551615ULL - (unsigned long long)d) / (unsigned long long)base) overflow = 1;
+      else v = v * (unsigned long long)base + (unsigned long long)d;
+    }
+    p++;
+  }
+  if (end) *end = (char *)p;
+  if (overflow) return 18446744073709551615ULL;
+  /* C99 7.20.1.4p4: a leading '-' negates in unsigned arithmetic, not an
+     error — strtoull("-1", ...) is ULLONG_MAX, same as glibc. */
+  return neg ? (0ULL - v) : v;
+}
+
+long long atoll(const char *s) {
+  return strtoll(s, (char **)0, 10);
+}
+
 /* ---- <inttypes.h> greatest-width conversions ------------------------------
    LP64, so intmax_t is long and these are one-line forwards. They exist as
    real symbols rather than macros because <inttypes.h> declares them as
@@ -322,4 +402,36 @@ int __pxx_builtin_popcount64(unsigned long long x) {
   int n = 0;
   while (x) { n += (int)(x & 1ull); x >>= 1; }
   return n;
+}
+
+long long llabs(long long n)
+{
+    return n < 0 ? -n : n;
+}
+
+/* C99 7.20.6.2: quotient truncates toward zero, remainder has the numerator's
+   sign, and quot*den + rem == num. `/` and `%` already satisfy that on this
+   target, so these compute the pair rather than re-deriving the rule. */
+div_t div(int num, int den)
+{
+    div_t r;
+    r.quot = num / den;
+    r.rem  = num % den;
+    return r;
+}
+
+ldiv_t ldiv(long num, long den)
+{
+    ldiv_t r;
+    r.quot = num / den;
+    r.rem  = num % den;
+    return r;
+}
+
+lldiv_t lldiv(long long num, long long den)
+{
+    lldiv_t r;
+    r.quot = num / den;
+    r.rem  = num % den;
+    return r;
 }
