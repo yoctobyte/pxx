@@ -49,3 +49,6 @@ re-opening this exact gap.
 
 `make test-nilpy` with a unit exposing a defaulted parameter on a free
 procedure, called both with and without the optional argument.
+
+## Log
+- 2026-07-31 — resolved, commit 51c25fb5a.

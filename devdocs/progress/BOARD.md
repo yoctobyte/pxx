@@ -32,7 +32,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (177)
+## backlog (176)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -56,7 +56,6 @@ lives in git, not in a timestamp._
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pypow-integer-overflow-does-not-promote | N | 35 | bug | `pypow_v`'s integer path silently wraps past 64 bits instead of promoting | — |
-| bug-nilpy-qualified-proc-omitted-default | N | 35 | bug | A qualified UNIT-LEVEL proc call cannot omit a defaulted parameter | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
 | bug-nilpy-void-def-assigned-and-called-crashes | N | 55 | bug | NilPy: a `-> None` def assigned to a name, then called directly, segfaults | — |
 | bug-pascal-array-of-pointer-deref-loses-the-record-type | A | 55 | bug | Pascal: `lst[j]^.Field` on a TPropList resolves only the FIRST field — every other one is 'no such member'; via a local variable it works | — |
@@ -300,7 +299,7 @@ lives in git, not in a timestamp._
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 
-## done (1099)
+## done (1100)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -715,6 +714,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-pyeval-host-kwargs-positional | N | 60 | bug | pyeval passes a host method's KEYWORD arguments POSITIONALLY (silent wrong option) | — |
 | bug-nilpy-pyeval-prints-bool-as-number | N | 30 | bug | pyeval prints a Boolean as 1/0 where CPython prints True/False | — |
 | bug-nilpy-pytypeerror-halts-instead-of-raising | N | 40 | bug | `PyTypeError` halts the process, so `except TypeError:` cannot catch it | — |
+| bug-nilpy-qualified-proc-omitted-default | N | 35 | bug | A qualified UNIT-LEVEL proc call cannot omit a defaulted parameter | — |
 | bug-nilpy-range-for-variant-loop-var | N | 30 | bug | NilPy: range for-loop with a pre-existing VARIANT loop variable corrupts it | — |
 | bug-nilpy-redefining-a-def-is-ignored-the-first-body-still-runs | N | 60 | bug | Redefining a `def` silently does nothing — the FIRST body still runs | — |
 | bug-nilpy-return-type-inference-mistypes-several-expression-shapes | N | 75 | bug | An unannotated def's inferred return type is wrong for several common expression shapes | — |
@@ -2968,7 +2968,6 @@ lives in git, not in a timestamp._
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
 - [p 35] [N] bug-nilpy-pypow-integer-overflow-does-not-promote
-- [p 35] [N] bug-nilpy-qualified-proc-omitted-default
 - [p 35] [U] decide-nilpy-hasattr-per-instance-semantics
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [A] feature-nested-routine-fixed-array-capture
