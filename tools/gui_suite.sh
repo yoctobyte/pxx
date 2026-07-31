@@ -17,7 +17,11 @@ run_gui_test() {
   local src="$ROOT/test/gui/$name.pas"
   local out="/tmp/gui_test_$name"
   local log="/tmp/gui_test_$name.log"
-  
+
+  # Remove the output FIRST. A failed compile must leave nothing runnable, or
+  # a previous run's binary gets tested and the suite reports on code that is
+  # no longer there.
+  rm -f "$out"
   if ! "$PXX_STABLE" -Fulib/pcl "$src" "$out" >"$log" 2>&1; then
     say "FAIL  $name -- compile: $(tail -1 "$log")"
     fail=1
@@ -79,12 +83,15 @@ run_gui_test test_pcl_tabbar
 
 # Solitaire GUI demo (engine in examples/solitaire_gui): compile + headless
 # --smoke run (renders the board + a few engine moves, prints SMOKE OK).
+solitaire_built=0
 solitaire_smoke() {
   local src="$ROOT/examples/solitaire_gui/solitaire_gui.pas"
   local out="/tmp/gui_test_solitaire" log="/tmp/gui_test_solitaire.log"
+  rm -f "$out"
   if ! "$PXX_STABLE" -Fulib/pcl -Fuexamples/solitaire_gui "$src" "$out" >"$log" 2>&1; then
     say "FAIL  solitaire_gui -- compile: $(tail -1 "$log")"; fail=1; return
   fi
+  solitaire_built=1
   if [ "$("$out" --smoke 2>"$log" | tail -1)" != "SMOKE OK" ]; then
     say "FAIL  solitaire_gui -- smoke: $(tail -1 "$log")"; fail=1; return
   fi
@@ -110,7 +117,9 @@ gui_window_smoke() {
   say "OK    $name (real window)"
 }
 
-gui_window_smoke solitaire_gui /tmp/gui_test_solitaire "GUI SMOKE OK"
+if [ "$solitaire_built" = "1" ]; then
+  gui_window_smoke solitaire_gui /tmp/gui_test_solitaire "GUI SMOKE OK"
+fi
 
 # Real-window ASSERTION: the --gui-smoke line only proves "didn't crash in 400ms";
 # it says nothing about a window actually mapping. Two real regressions slipped
@@ -156,13 +165,18 @@ gui_realwindow() {
   say "OK    $name (real window ${geo})"
 }
 
-gui_realwindow solitaire_gui /tmp/gui_test_solitaire 400 300
+if [ "$solitaire_built" = "1" ]; then
+  gui_realwindow solitaire_gui /tmp/gui_test_solitaire 400 300
+else
+  say "SKIP  solitaire_gui (window checks) -- it did not build"
+fi
 
 # life: the original real-window self-closing GUI run (its --smoke maps a GTK
 # window and auto-quits after ~9 generations) — the reference case.
 life_smoke() {
   local src="$ROOT/examples/life/life.pas"
   local out="/tmp/gui_test_life" log="/tmp/gui_test_life.log"
+  rm -f "$out"
   if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl "$src" "$out" >"$log" 2>&1; then
     say "FAIL  life -- compile: $(tail -1 "$log")"; fail=1; return
   fi
@@ -179,23 +193,38 @@ life_smoke
 
 # Eliah IDE (apps/ide/eliah): compile + headless --smoke (tree populates, opens a
 # file in the editor, compiles it, prints SMOKE OK).
+eliah_built=0
 eliah_smoke() {
   local src="$ROOT/apps/ide/eliah/main.pas"
   local out="$ROOT/apps/ide/eliah/eliah" log="/tmp/gui_test_eliah.log"
+  # eliah's binary lives in the TREE, not /tmp, so a stale one survives for
+  # weeks. Before this, a failed compile was followed by two window checks
+  # against the OLD binary and the suite printed
+  #   FAIL  eliah_ide -- compile: ...
+  #   OK    eliah_ide (real window 1100x727)
+  # two lines apart -- a red that reads half-green.
+  rm -f "$out"
   if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl -Fuapps/ide/garin "$src" "$out" >"$log" 2>&1; then
     say "FAIL  eliah_ide -- compile: $(tail -1 "$log")"; fail=1; return
   fi
+  eliah_built=1
   if [ "$(cd "$ROOT" && "$out" --smoke 2>"$log" | tail -1)" != "SMOKE OK" ]; then
     say "FAIL  eliah_ide -- smoke: $(tail -1 "$log")"; fail=1; return
   fi
   say "OK    eliah_ide"
 }
 eliah_smoke
-gui_window_smoke eliah_ide "$ROOT/apps/ide/eliah/eliah" "GUI SMOKE OK"
+if [ "$eliah_built" = "1" ]; then
+  gui_window_smoke eliah_ide "$ROOT/apps/ide/eliah/eliah" "GUI SMOKE OK"
+fi
 # eliah is the app that regressed (startup EInOutError under the {$I+} flip); a
 # real-window assertion is exactly what would have caught it -- a crash leaves no
 # 'Eliah - IDE' toplevel.
-gui_realwindow eliah_ide "$ROOT/apps/ide/eliah/eliah" 800 500
+if [ "$eliah_built" = "1" ]; then
+  gui_realwindow eliah_ide "$ROOT/apps/ide/eliah/eliah" 800 500
+else
+  say "SKIP  eliah_ide (window checks) -- it did not build"
+fi
 
 if [ "$fail" -ne 0 ]; then
   say "GUI suite finished with some failures (compiler bugs pending)."

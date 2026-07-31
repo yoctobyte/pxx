@@ -75,11 +75,20 @@ It blocks the **eliah IDE** build, which is the one red in `tools/gui_suite.sh`:
 FAIL  eliah_ide -- compile:   near: plist  j    >>> Kind
 ```
 
-`apps/ide/eliah/main.pas:784` is `plist[j]^.Kind`, i.e. exactly this. Worse, the
-suite then runs the STALE binary from a previous build and reports
-`OK eliah_ide (real window 1100x727)` two lines later — so the failure looks
-half-green. That reporting gap is worth fixing on the Track T side regardless of
-this bug.
+`apps/ide/eliah/main.pas:784` is `plist[j]^.Kind`, i.e. exactly this.
+
+The suite USED to run the stale binary from a previous build after that FAIL and
+report `OK eliah_ide (real window 1100x727)` two lines later, so the red read
+half-green. Fixed on the Track B side (`tools/gui_suite.sh` is Track B's file):
+every build now removes its output before compiling, and eliah's window checks
+are gated on the build succeeding, so the run ends
+
+```
+FAIL  eliah_ide -- compile:   near: plist  j    >>> Kind
+SKIP  eliah_ide (window checks) -- it did not build
+```
+
+The compile failure itself is unchanged and still belongs to this ticket.
 
 The failure is at least LOUD. But "only the first field of a record is
 reachable" is one typo away from being silent: a record whose first field
