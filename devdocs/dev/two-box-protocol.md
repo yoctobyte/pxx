@@ -51,14 +51,49 @@ fast local confirm and let Track T's report come back tagged to your sha. A red
 arrives as an asynchronous callback minutes later; that is accepted, and it is
 cheaper than every agent serialising on a 10-minute matrix.
 
-### The bar is NATIVE. Green native = the edit is done.
+### Do not RUN native on the dev box — let the watcher be your native run
+
+Testing was eating ~80% of the dev loop. The fix is not less testing, it is
+**moving native off the critical path** — the fleet already does this and
+nobody was using it.
+
+The watcher's `fast_tier` is `native`, triggered on every push
+(`interval: 60`, `debounce: 20`, ~100s on xeon). So:
+
+| | blocking cost on the dev box |
+|---|---|
+| old: run native locally, then push | **150-220 s** |
+| new: `--tier quick --fail-fast`, push | **~15 s** (measured) |
+
+Native still runs — on xeon, ~3 minutes after your push, while you are already
+on the next thing. You did not skip it, you stopped *waiting* for it. That is
+roughly a **10x cut in blocking time per iteration**, with the same coverage.
 
 ```
-tools/testmgr.py --tier native      # ~100s on xeon, ~150-220s on borg
+tools/testmgr.py --tier quick --fail-fast    # ~15s: catches the obvious
+git push                                     # the watcher's native IS your gate
+# keep working; the verdict arrives tagged to your sha
 ```
 
-Green ⇒ **call the edit a success, push, move on.** Do not wait for the matrix,
-do not wait for cross-targets, do not wait for a peer.
+Green quick ⇒ **call the edit a success, push, move on.** Do not wait for the
+matrix, do not wait for cross-targets, do not wait for a peer, and now: do not
+wait for native either.
+
+### …but the fixedpoint guarantee moved, it did not vanish
+
+`quick` does **not** carry the self-host fixedpoint
+(`SELFHOST_GATE_TIERS = native/limited/full`). Pushing on quick therefore means
+master may briefly carry a broken fixedpoint until the watcher says so ~3
+minutes later. Accepted — *fix forward* — with one hard consequence:
+
+> **Rigor moves from before-push to before-PIN.** Landing is cheap and
+> reversible; pinning moves the ground every other track builds on. A pin must
+> never rest on an unverified sha, no matter how relaxed the landing bar gets.
+
+This is exactly why [[decide-track-t-autopin-criteria]] matters more under this
+model, not less. Run native locally only when you have reason to distrust the
+change (a bootstrap/ABI/codegen edit you expect to bite), or when the watcher is
+down (`twatch --status`).
 
 This is safe by construction, not by optimism: native already carries the
 self-host fixedpoint gate —
