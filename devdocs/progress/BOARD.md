@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-pascal-transitive-unit-crashes-at-startup-unless-named-first | A | 60 | bug | Pascal: `uses blcksock;` segfaults before main() in the string-release helper — naming a transitively-used unit FIRST fixes it | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 
 ## unfinished (2)
@@ -310,7 +309,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1124)
+## done (1125)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -831,6 +830,7 @@ _none_
 | bug-pascal-string-const-not-scoped | P | 55 | bug | bug: untyped string constants are not SCOPED — a method's local const leaks to every later routine | — |
 | bug-pascal-tinterfacedobject-missing-silent-segfault | A | 60 | bug | `TInterfacedObject` does not exist — inheriting from it compiles, then segfaults under ARC | — |
 | bug-pascal-toperator93-runtime-segfault | A | 50 | bug | toperator93.pp compiles but the pxx binary SEGFAULTS (exit 139) — class-operator shape crashes at runtime | — |
+| bug-pascal-transitive-unit-crashes-at-startup-unless-named-first | A | 60 | bug | Pascal: `uses blcksock;` segfaults before main() in the string-release helper — naming a transitively-used unit FIRST fixes it | — |
 | bug-pascal-undefined-field-on-empty-record-compiles | A | 55 | bug | Undefined field access on an empty record COMPILES silently (reads garbage) | — |
 | bug-pascal-unicodestring-widestring-type-missing | A | 40 | bug | unicodestring/widestring: types not really supported (decls "work", semantics don't) | — |
 | bug-pascal-unknown-type-silently-integer | P | 65 | bug | An UNKNOWN type name silently becomes a 4-byte Integer (pointers truncate) | — |

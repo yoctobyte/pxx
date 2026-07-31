@@ -8,7 +8,7 @@ prio: 60
 # A unit reached only TRANSITIVELY crashes the program at startup
 
 - **Type:** bug (compiler core — unit emission / initialization order — **Track A**)
-- **Status:** working
+- **Status:** done
 - **Owner:** claude-A2
 - **Opened:** 2026-07-31 by Track B, wiring the Synapse SSL end-to-end for
   [[feature-real-dynlib-loader]]. Filed, not fixed: this is `compiler/**`.
@@ -98,3 +98,6 @@ startup. They may share a cause — worth checking together.
 `make test` + self-host byte-identical, plus a regression that compiles
 `program t; uses blcksock; begin WriteLn('ok') end.` and asserts it prints `ok`
 — the three-line form above, with no unit named ahead of it.
+
+## Log
+- 2026-07-31 — resolved, commit 97be04eba.
