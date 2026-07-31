@@ -8,7 +8,7 @@ prio: 55
 # nilpy: dotted package imports
 
 - **Type:** feature (Nil-Python frontend, import resolution) — **Track N**
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-26. The one concrete blocker for the naming strategy in
   `devdocs/dev/python-compat-tiers.md`.
 
@@ -81,3 +81,6 @@ not part of `make test-nilpy`).
 `make test-nilpy` green with a `.npy` importing a two-segment package shim from
 `test/nilpy_units`, in both the `from a.b import c` and `import a.b` forms, +
 `--tier quick` + self-host byte-identical.
+
+## Log
+- 2026-07-31 — resolved, commit ade766a5b.
