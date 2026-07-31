@@ -69,3 +69,25 @@ actually demands it. Note this repro does NOT need them: the same code with
 
 C tests green + self-host byte-identical, plus a regression asserting the
 repro above is REJECTED rather than built.
+
+## 2026-07-31 — a THIRD victim, and it argues for widening the fix
+
+Same "treated as 0" recovery, three different consequences now measured:
+
+| what was undeclared | became | consequence |
+| --- | --- | --- |
+| `M_SQRT2` (math.h not found) | `0` | a wrong NUMBER in geometry code — [[bug-crtl-headers-lost-when-cwd-is-not-the-repo-root]] |
+| `cmp` (a callback) | `0` | a CRASH, calling through null — this ticket |
+| `ECONNREFUSED` and 38 other errno names | `0` | a wrong BRANCH, and the worst kind: `0` is errno's SUCCESS value, so `if (errno == ECONNREFUSED)` fired exactly when the call had succeeded. Found and fixed under [[feature-crtl-implement-libc-assumptions]] |
+
+The third is the one that should change the shape of the fix. A wrong number is
+visible if you look; a null call crashes immediately; but a comparison against a
+missing constant is silently INVERTED, keeps running, and looks like working
+code. All three were a warning in a build log that nobody reads.
+
+So the narrow fix proposed above — error in pointer contexts — is right but not
+enough on its own. The question worth answering is whether "undeclared
+identifier used as a value" should be an ERROR by default in C at all, with the
+warning kept behind a flag for the code that genuinely relies on implicit
+declaration. That is a dialect call with corpus consequences, so it may deserve
+a Track U `decide-` rather than being settled in this ticket.

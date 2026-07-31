@@ -21,6 +21,10 @@
 #include <wchar.h>
 #include <ctype.h>
 #include <inttypes.h>
+#include <limits.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <errno.h>
 
 static int cmp(const void *x, const void *y) { return *(const int*)x - *(const int*)y; }
 
@@ -64,6 +68,48 @@ int main(void) {
   key = 8;
   hit = (int*)bsearch(&key, a, 6, sizeof(int), cmp);
   printf("bsearch-miss=%d\n", hit ? *hit : -1);
+
+  /* Widths and limits: what real C branches on. A wrong one here is an ABI
+     mismatch, not a wrong answer, so it is worth pinning against gcc. */
+  printf("sz int=%d long=%d llong=%d ptr=%d size_t=%d ptrdiff=%d\n",
+    (int)sizeof(int), (int)sizeof(long), (int)sizeof(long long),
+    (int)sizeof(void*), (int)sizeof(size_t), (int)sizeof(ptrdiff_t));
+  printf("sz int8=%d int16=%d int32=%d int64=%d intptr=%d intmax=%d wchar=%d\n",
+    (int)sizeof(int8_t), (int)sizeof(int16_t), (int)sizeof(int32_t),
+    (int)sizeof(int64_t), (int)sizeof(intptr_t), (int)sizeof(intmax_t),
+    (int)sizeof(wchar_t));
+  printf("CHAR_BIT=%d CHAR_MIN=%d CHAR_MAX=%d char-signed=%d\n",
+    CHAR_BIT, CHAR_MIN, CHAR_MAX, (char)-1 < 0);
+  printf("INT=%d/%d UINT=%u\n", INT_MIN, INT_MAX, UINT_MAX);
+  printf("LONG=%lld/%lld ULONG=%llu\n",
+    (long long)LONG_MIN, (long long)LONG_MAX, (unsigned long long)ULONG_MAX);
+  printf("LLONG=%lld/%lld ULLONG=%llu\n", LLONG_MIN, LLONG_MAX, ULLONG_MAX);
+  printf("INT64=%lld/%lld UINT64=%llu SIZE_MAX=%llu\n",
+    (long long)INT64_MIN, (long long)INT64_MAX,
+    (unsigned long long)UINT64_MAX, (unsigned long long)SIZE_MAX);
+
+  /* errno NAMES. These are an ABI, and a MISSING one is worse than a wrong
+     one: an undeclared identifier is "treated as 0", so `errno == ECONNREFUSED`
+     became `errno == 0` -- the SUCCESS value, so the branch fired exactly when
+     it should not have. 39 of these were in that state. */
+  printf("errno1 %d %d %d %d %d %d %d %d %d %d\n",
+    EPERM, ENOENT, ESRCH, EINTR, EIO, ENXIO, E2BIG, ENOEXEC, EBADF, ECHILD);
+  printf("errno2 %d %d %d %d %d %d %d %d %d %d\n",
+    EAGAIN, ENOMEM, EACCES, EFAULT, ENOTBLK, EBUSY, EEXIST, EXDEV, ENODEV, ENOTDIR);
+  printf("errno3 %d %d %d %d %d %d %d %d %d %d\n",
+    EISDIR, EINVAL, ENFILE, EMFILE, ENOTTY, ETXTBSY, EFBIG, ENOSPC, ESPIPE, EROFS);
+  printf("errno4 %d %d %d %d %d %d %d %d %d %d\n",
+    EMLINK, EPIPE, EDOM, ERANGE, EDEADLK, ENAMETOOLONG, ENOLCK, ENOSYS, ENOTEMPTY, ELOOP);
+  printf("errno5 %d %d %d %d %d %d %d %d %d %d\n",
+    EWOULDBLOCK, ENOMSG, EIDRM, EOVERFLOW, EILSEQ, ENOTSOCK, EDESTADDRREQ,
+    EMSGSIZE, EPROTOTYPE, ENOPROTOOPT);
+  printf("errno6 %d %d %d %d %d %d %d %d %d %d\n",
+    EPROTONOSUPPORT, EOPNOTSUPP, ENOTSUP, EAFNOSUPPORT, EADDRINUSE,
+    EADDRNOTAVAIL, ENETDOWN, ENETUNREACH, ENETRESET, ECONNABORTED);
+  printf("errno7 %d %d %d %d %d %d %d %d %d %d\n",
+    ECONNRESET, ENOBUFS, EISCONN, ENOTCONN, ETIMEDOUT, ECONNREFUSED,
+    EHOSTDOWN, EHOSTUNREACH, EALREADY, EINPROGRESS);
+  printf("errno8 %d\n", ECANCELED);
 
   /* PRI/SCN round trip */
   int64_t v = -1234567890123LL;

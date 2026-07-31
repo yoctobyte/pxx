@@ -179,3 +179,47 @@ Nested functions are an extension and not supporting them is defensible; turning
 an undeclared identifier into a null callback and building it is not. Same
 "treated as 0" recovery that silently made `M_SQRT2` zero in
 [[bug-crtl-headers-lost-when-cwd-is-not-the-repo-root]].
+
+## Collected gap: `<errno.h>` was missing 39 of 71 names (2026-07-31, Track B — CLOSED)
+
+Second oracle batch, over the assumption classes this ticket lists: widths,
+`<limits.h>`/`<stdint.h>` completeness, struct layouts, and errno.
+
+**Was:** 36 errno names. A census against the set real code uses found **39 of
+71 missing**, including the ENTIRE socket family — `ECONNREFUSED`,
+`ECONNRESET`, `EINPROGRESS`, `EADDRINUSE`, `EHOSTUNREACH`, `ENOTCONN` … — plus
+`EDOM`, `EILSEQ`, `ENAMETOOLONG`, `ELOOP`, `ENOSYS`, `EWOULDBLOCK`, `ENOTSUP`.
+
+**Why missing is worse than wrong here.** An undeclared identifier in C is
+"treated as 0" with only a warning, so
+
+```c
+if (errno == ECONNREFUSED) { ... }   /* compiled to  errno == 0  */
+```
+
+— and `0` is the SUCCESS value. The branch fired exactly when it should not
+have, on every net-facing path, with a warning that scrolls past in a build log.
+That is the same "treated as 0" recovery that silently made `M_SQRT2` zero
+([[bug-crtl-headers-lost-when-cwd-is-not-the-repo-root]]) and that builds a null
+callback ([[bug-c-undeclared-identifier-as-function-pointer-becomes-null]]).
+Three separate victims of one recovery rule; it is worth revisiting on its own.
+
+**Now:** all 71, every value printed by a gcc-built program on this target
+rather than copied from documentation — these numbers are an ABI. Both glibc
+aliases are kept (`EWOULDBLOCK == EAGAIN`, `ENOTSUP == EOPNOTSUPP`) and the
+header says so at the declaration.
+
+**Gated:** `test/crtl_libc_oracle.c` grew the full errno set plus the widths and
+limits (`sizeof` for every integer type, `CHAR_BIT`, plain-`char` signedness,
+the INT/LONG/LLONG/INT64/SIZE_MAX bounds). 40 lines, byte-identical to gcc.
+
+### Recorded, NOT a bug: `struct stat` has a different layout
+
+`sizeof(struct stat)` is 96 here and 144 under glibc, with `st_mode` at offset
+16 rather than 24. Checked before concluding: our `stat()` fills OUR layout
+correctly — size, `S_ISREG`, `S_ISDIR` and the permission bits all match gcc on
+the same files, and a guard buffer around the struct is untouched, so nothing is
+being handed to the kernel short. It is a self-consistent divergence, not a
+smash. It matters only to C that hard-codes offsets or moves the struct across
+an ABI boundary; the layout numbers are deliberately NOT in the oracle test,
+since they would fail for a benign reason.
