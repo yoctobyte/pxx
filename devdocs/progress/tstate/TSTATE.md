@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `f3d420def527` | 2026-07-31T17:46:27Z | RED (full) | 346.5s | `f3d420def527` RED |
+| borg | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | xeon | `c562f4f1cf1c` | 2026-07-31T17:35:09Z | GREEN (opt) | 259.5s | `c562f4f1cf1c` RED |
 
 ## Open regressions
