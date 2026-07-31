@@ -8,7 +8,7 @@ prio: 55
 # nilpy: builtin runtime errors are not catchable
 
 - **Type:** feature (Nil-Python frontend, exception model) — **Track N**
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-26 — probing songformatter under nilpy
   ([[feature-demo-songformatter-pxx-target]]).
 
@@ -48,3 +48,6 @@ existing handler path catches them, including a bare `except:`.
 
 `make test-nilpy` green with a `.npy` case per error type diffed against CPython,
 + `--tier quick` + self-host byte-identical.
+
+## Log
+- 2026-07-31 — resolved, commit 8f658852bdd1c721d5b530c6d48d9a8e245033bd.

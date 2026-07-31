@@ -35,7 +35,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (192)
+## backlog (191)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -130,7 +130,6 @@ _none_
 | feature-nilpy-aggregate-builtins | N | 50 | feature | nilpy: sum/max/min/any/all/sorted/set/map/filter/type builtins | — |
 | feature-nilpy-arc-cross-parity | A | 35 | feature | NilPy object-ARC cross-target parity (aarch64 inline arms + scope-exit) | — |
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
-| feature-nilpy-catchable-runtime-errors | N | 55 | feature | nilpy: builtin runtime errors must raise catchable exceptions (int(), division by zero) | — |
 | feature-nilpy-class-field-infer-from-ctor | N | 50 | feature | nilpy: infer a class field's type from the ctor parameter assigned to it | — |
 | feature-nilpy-closure-default-and-remaining | N | 45 | feature | NilPy: remaining uforth walls past ~88% (closure-captured defaults, then exec) | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
@@ -294,7 +293,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (1079)
+## done (1080)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1137,6 +1136,7 @@ _none_
 | feature-nilpy-bound-method-value | N | 65 | feature | NilPy: a BOUND METHOD as a value (`self.push` carries self) | — |
 | feature-nilpy-builtin-exceptions | N | 55 | feature | NilPy: Python's builtin exception classes, and `int(s, base)` that raises | — |
 | feature-nilpy-bytes-and-slices | N | 55 | feature | NilPy: bytearray + slices (uforth's memory emulation) | — |
+| feature-nilpy-catchable-runtime-errors | N | 55 | feature | nilpy: builtin runtime errors must raise catchable exceptions (int(), division by zero) | — |
 | feature-nilpy-classvar-counter | N | 55 | feature | NilPy: ClassVar storage, next(), counter shim, lambda default_factory | — |
 | feature-nilpy-comparison-chaining | N | 50 | feature | NilPy: comparison chaining (`0 <= i < n`) | — |
 | feature-nilpy-comprehension-if-filter | N | 30 | feature | NilPy: comprehension `if` filters — `[x for x in xs if x > 1]` | — |
@@ -2853,7 +2853,6 @@ _none_
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
-- [p 55] [N] feature-nilpy-catchable-runtime-errors
 - [p 55] [N] feature-nilpy-corpus-uforth
 - [p 55] [N] feature-nilpy-default-args-on-nested-defs
 - [p 55] [N] feature-nilpy-dotted-package-imports
