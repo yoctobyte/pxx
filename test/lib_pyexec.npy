@@ -1,0 +1,70 @@
+# exec() as a LIBRARY, from NilPy (feature-lib-pyexec). CPython's
+# explicit-dict form: no ambient scope capture, the host passes name -> value
+# bindings, and the values include BOUND METHODS of a compiled class — which is
+# exactly how uforth's PYTHON blocks call back into their VM.
+#
+# Every expectation here is what CPython prints for this same file: it is a
+# valid .py and is diffed against python3, not against our own output.
+
+
+class VM:
+    def __init__(self):
+        self.stack = []
+        self.here = 100
+        self.memory = [0, 0, 0, 0, 0, 0, 0, 0]
+
+    def push(self, v):
+        self.stack.append(v)
+
+    def pop(self):
+        return self.stack.pop()
+
+    def store(self, addr, v):
+        self.memory[addr] = v
+
+
+vm = VM()
+env = {"vm": vm, "push": vm.push, "pop": vm.pop, "store": vm.store}
+
+# arithmetic and the host stack
+vm.push(3)
+vm.push(4)
+exec("a = pop()\nb = pop()\npush(a + b)", env)
+print("add", vm.stack)
+
+# control flow: a loop with an accumulator
+exec("x = 0\nfor i in range(5):\n    x = x + i\npush(x)", env)
+print("loop", vm.stack)
+
+# a conditional, and comparison operators
+exec("t = pop()\nif t > 5:\n    push(1)\nelse:\n    push(0)", env)
+print("cond", vm.stack)
+
+# bit operations, which the Forth stdlib leans on hard
+exec("push((255 >> 4) | 0x30)", env)
+print("bits", vm.stack)
+
+# a host FIELD read, and a host METHOD called through the OBJECT (which takes
+# any arity through the generalized trampoline). The same call through a
+# BOUND METHOD in env -- `store(0, vm.here)` -- does not work yet: the
+# bound-method invoke path passes exactly one argument. See
+# feature-nilpy-multi-arg-callback-bridges; `push`/`pop` below are the 1-arg
+# and 0-arg cases that do.
+exec("vm.store(0, vm.here)\npush(vm.memory[0])", env)
+print("field", vm.stack)
+
+# a def inside the exec'd source, with its own scope
+exec("def dbl(n):\n    return n * 2\npush(dbl(21))", env)
+print("def", vm.stack)
+
+# strings and an f-string
+exec("s = 'ab' + 'cd'\npush(f'{s}-{len(s)}')", env)
+print("str", vm.stack)
+
+# an integer wider than 32 bits, computed inside the exec'd source and printed
+# THERE. It is deliberately not pushed onto the host stack: a field whose
+# initialiser was a small literal is a 32-bit Integer and truncates anything
+# larger on the way out — bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps,
+# which is a NilPy field-typing bug and not an exec() one. Inside the
+# interpreter the value is correct, which is what this row pins.
+exec("n = 1\nfor i in range(40):\n    n = n * 2\nprint('inner', n)", env)

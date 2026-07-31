@@ -354,3 +354,55 @@ them back to two 64-bit cells. [[decide-pyeval-bignum-strategy]] resolved (B′)
 So the interpreter is now correct across the whole censused corpus, modulo the
 few import/try blocks. Only the exec()-into-NilPy WIRING
 ([[feature-nilpy-wire-pyeval-exec]]) remains before uforth actually runs on it.
+
+## 2026-07-31 (Track B) — the last blocker is gone; the public surface is now GATED
+
+[[feature-nilpy-wire-pyeval-exec]], the exec()-into-NilPy wiring this ticket was
+waiting on, is resolved. So the whole chain works from a `.npy` today, and it is
+proven the way this ticket asked for — against CPython, not against our own
+output.
+
+`test/lib_pyexec.npy` is a valid `.py`. `lib-test` compiles and runs it, then
+**diffs the entire output against `python3` running the same file** and fails
+loudly on any divergence. It covers what the contract promises: the explicit-dict
+form with no ambient capture, bound methods of a compiled class in `env`,
+arithmetic, `for`/`range`, `if`/`else`, bit operations, a host field read, a host
+method call, a `def` with its own scope inside the exec'd source, string
+concatenation and an f-string, and arbitrary-precision integers. Byte-identical.
+
+### Three gaps this found, all filed rather than absorbed
+
+Driving the surface from outside uforth is exactly what surfaces the
+assumptions that came in with it:
+
+1. **[[bug-pyeval-exec-requires-a-globals-key-named-vm]]** — `exec(src, env)`
+   refuses every host call unless `env` has a key literally named `"vm"`.
+   That is uforth's variable name, not the contract; any other consumer writing
+   `{"canvas": c, "draw": c.draw}` fails with a message naming an identifier they
+   never wrote.
+2. **[[feature-nilpy-multi-arg-callback-bridges]]** — a bound method in `env` can
+   be called with zero or one argument and no more, so `store(0, vm.here)` fails
+   while `vm.store(0, vm.here)` works. Same missing runtime piece the tkinter
+   callable-with-args ticket needs, which is why it is filed once, in Track N.
+3. **[[feature-pyeval-power-operator]]** — `**` is not in the expression grammar,
+   so `2 ** 70` is a parse error. The bignum tail already landed, so the value has
+   somewhere to go; only the grammar is missing.
+
+And one that turned out NOT to be a pyeval bug at all: an integer wider than
+32 bits truncates on the way OUT of exec, through every route — bound method,
+qualified call, field assignment, even a value the host itself put in `env`.
+`print(y)` inside the exec'd source prints it correctly, which is what
+identifies it: pyeval holds the value fine and a NilPy FIELD initialised
+`self.v = 0` is a 32-bit Integer. Measured onto
+[[bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps]], whose
+table had the boundary at 2^63 — for a field it is 2^31.
+
+### Where the ticket stands
+
+Engine 1 is feature-complete, correct across the censused corpus, wired, and now
+gated from the outside. What remains under this umbrella is Engine 2, the JIT,
+which the 2026-07-21 architecture note puts on rainy-day by decision and gives
+its own ticket when that phase starts. Nothing else here is Track B work.
+
+## Log
+- 2026-07-31 — resolved, commit a366d5945.

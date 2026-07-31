@@ -76,3 +76,50 @@ it here.
 `make test-nilpy` + self-host byte-identical, plus a `.npy` of the table above
 against CPython's own output, and a benchmark check that ordinary integer loops
 have not regressed (that is the whole cost of option 1).
+
+## 2026-07-31 (Track B) — a FIELD is much narrower than 2^63: it wraps at 2^31
+
+Found gating [[feature-lib-pyexec]]'s `exec()` surface from a `.npy`. The table
+above measures locals wrapping at 2^63; a FIELD whose initialiser is a small
+literal wraps at **2^31**, signed:
+
+```python
+class B:
+    def __init__(self):
+        self.v = 0
+b = B()
+b.v = 4294967296
+print(b.v)          # CPython: 4294967296     pxx: 0
+```
+
+A ladder pins it exactly — `2^30` is right, `2^31` comes back
+**-2147483648** (the sign flip), and every value from `2^32` up comes back
+**0**:
+
+| assigned | CPython | pxx |
+| --- | --- | --- |
+| 2^30 | 1073741824 | 1073741824 |
+| 2^31 | 2147483648 | **-2147483648** |
+| 2^32 | 4294967296 | **0** |
+| 2^40 … 2^62 | correct | **0** |
+
+Same cause as the ticket's — the static type comes from the initialising
+literal, and `self.v = 0` makes the field a 32-bit Integer — but two orders of
+magnitude sooner than 2^63, and a field is exactly where an accumulator lives.
+
+### It is inherited by everything that crosses the host bridge
+
+The value is fine INSIDE `exec()` — `y = 4294967296; print(y)` prints it
+correctly — and truncates on the way out, through every route:
+
+| route | result |
+| --- | --- |
+| `push(4294967296)` (bound method in env) | 0 |
+| `vm.push(4294967296)` (qualified, generalized trampoline) | 0 |
+| `vm.w = 4294967296` (field assignment) | 0 |
+| `env["big"] = 4294967296` then `push(big)` (value supplied BY the host) | 0 |
+| `print(y)` inside the exec'd source | **4294967296, correct** |
+
+That last row is what identifies it: pyeval holds the value correctly, so this
+is not an interpreter bug and there is no separate pyeval ticket for it. The
+32-bit field is the whole story, and every host-bridge path merely reports it.
