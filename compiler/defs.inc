@@ -854,6 +854,34 @@ type
 
   TSymKind  = (skLocal, skGlobal, skParam, skConst);
 
+  { feature-a-typeref-handle / devdocs/dev/type-identity-as-substrate.md item 1.
+    ~90+ sites across this compiler store "which type is this" as the SAME
+    8-field tuple redeclared per entity kind (SymPtrBaseTk/Rec,
+    AliasPtrBaseTk/Rec, UFldPtrElemTk/Rec, ProcRetPtrElemTk/Rec,
+    CTypeFnRetPBaseTk/Rec, LiftCapPtrTk/Rec, ... and the same again for *Tk,
+    *Rec, *ElemTk/*ElemRec, *ProcSig, *DynDepth, *ArrLen). One of six parallel
+    arrays not written is a real bug class (four landed in one session per the
+    design note). TTypeRef names the tuple so it can eventually be carried as
+    ONE value instead of reset piecemeal across parallel arrays — see
+    project_symtab_alloc_parallel_array_landmine.
+
+    LANDING RULE (do not violate): additive only. Nothing reads this type yet.
+    Existing parallel arrays (SymPtrBaseTk, UFldPtrElemTk, ProcRetPtrElemTk,
+    ...) remain the source of truth until a consumer is migrated to it lane by
+    lane, each migration under the self-host byte-identical gate. Do NOT cut
+    any existing site over in the same change that introduces this type. }
+  TTypeRef = record
+    Kind      : TTypeKind;  { the value's own type }
+    RecId     : Integer;    { record/class id when Kind is a record/class kind, REC_NONE otherwise }
+    ElemTk    : Integer;    { array ELEMENT's TTypeKind ordinal, tyUnknown if not an array }
+    ElemRec   : Integer;    { array ELEMENT's record id, REC_NONE if not set }
+    PtrBaseTk : Integer;    { typed pointer's pointed-at TTypeKind ordinal, tyUnknown if unset }
+    PtrBaseRec: Integer;    { typed pointer's pointed-at record id, REC_NONE if unset }
+    ProcSig   : Integer;    { procedural-type signature: Procs[] index (BodyAddr=-1), -1 if not proc-typed }
+    DynDepth  : Integer;    { dynamic-array nesting depth: 0 = not dynamic, 1 = array of T, 2 = array of array of T, ... }
+    ArrLen    : Integer;    { fixed-array element count, -1 = not a fixed array }
+  end;
+
   TSymbol = record
     Name     : AnsiString;
     TypeKind : TTypeKind;
