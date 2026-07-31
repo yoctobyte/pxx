@@ -104,6 +104,111 @@ declarations an error). So:
 - borg is the box that answers "did this EVER work?" — it is the older
   toolchain and the historical baseline.
 
+## Terse dispatch — "proceed on bugs track A+*"
+
+The user may drop a one-liner on **any box, any checkout**, and expects both
+agents to sort it out. Read it as `<verb> on <type> track <lanes>`:
+
+| form | means |
+|---|---|
+| `track A` | only Track A |
+| `track A+C` | A and C, both in scope |
+| `track A+*` | **A first**, then anything else once A's queue is dry |
+| `track *` | any lane, global top |
+| `on bugs` | restrict to `type: bug` / `regression` tickets |
+| (no type) | any type |
+
+`progress.sh next` takes **one** `--track` and has no type filter, so expand it
+yourself — do not wait for tooling:
+
+```sh
+for T in A C P B N; do tools/progress.sh next --track $T; done
+# each prints "effective prio N" — take the highest; ties break toward the
+# named-first lane (the A in A+*), then toward urgent/.
+```
+
+Then the normal loop: `claim` → **push the claim** → work → your lane's gate →
+`resolve` → `board-md` → push.
+
+**The sole-A guard is now checkable, not a guess.** Before taking a Track A
+ticket — or a Track P edit touching the shared `lexer.inc`/`parser.inc` — look
+at what the peer holds:
+
+```sh
+git fetch -q origin master
+for f in $(git ls-tree -r --name-only origin/master devdocs/progress/working); do
+  t=$(git show "origin/master:$f" | sed -n 's/^track: *//p' | head -1)
+  o=$(git show "origin/master:$f" | sed -n 's/^owner: *//p' | head -1)
+  [ "$t" = "A" ] && echo "A HELD by ${o:-?}: $(basename "$f" .md)"
+done
+```
+
+Clear ⇒ claim it. Someone holds A ⇒ take the next lane in the expression
+instead. That is what `A+*` is *for*: a fallback order, so a blocked lane never
+idles you.
+
+**"Two boxes" is shorthand — do not assume exactly two agents.** Owner ids in
+`working/` today include identities beyond `claude@borg` / `claude@xeon` (e.g.
+`fable-a-n`), and more than one agent can run per box. The check above asks
+*"does anyone hold this lane?"*, never *"does the other box hold it?"* — the
+`owner:` field is the answer, whoever it names.
+
+## Lazy sync — pull at decision points, not continuously
+
+Synchronise only where a stale view would cause wrong work:
+
+1. **before `next`** — so you pick against the peer's current claims
+2. **before `push`** — `git pull --rebase`
+3. **when a peer notification arrives** — that is what it is for
+
+Nothing else. No polling loop, no watching the peer's branch. Between those
+points, work from your snapshot: it is allowed to be stale, because the claim
+you pushed is what protects you.
+
+Push rejected ⇒ rebase, regenerate `BOARD.md` (see above), and **re-check the
+claim is still yours**. If the peer won it, drop it without argument and run
+`next` again.
+
+## Using the cores — split tiers across boxes, never duplicate
+
+Two boxes, ~20 threads. The waste mode is both of them compiling the same thing.
+
+**Never start a run blind:**
+
+```sh
+tools/testmgr.py --status      # live run in this repo, or anywhere on this box?
+```
+
+**Split by tier, not by duplication.** Breadth belongs to the watcher box; the
+interactive box stays in the inner loop:
+
+| | interactive box | watcher box |
+|---|---|---|
+| tier | `--tier quick --fail-fast` (seconds) + self-host fixedpoint | `native` / `full` / `opt` — the matrix |
+| why | you need a verdict now | it already runs breadth for everyone |
+
+**Do not run `--tier full` on a box whose daemon is already running the
+matrix**, and never on both boxes at once — it is duplicate work that also
+starves the daemon. Confirm native yourself, push, and let the watcher's report
+come back tagged to your sha (`gating-and-waiting.md`).
+
+**Leave the daemon its cores.** On the watcher box an agent's own run must cap
+itself (`--jobs N`) rather than compete adaptively — the daemon's scheduler
+packs by measured RSS/cores and cannot see your run. On a box where the *user*
+is working, cap to roughly half the threads so the machine stays usable.
+`--deadline` bounds anything you cannot babysit.
+
+**Send heavy work to the box with free cores.** Checking a peer's load over ssh
+is read-only and needs no coordination:
+
+```sh
+ssh <peer> 'uptime; tools/testmgr.py --status'
+```
+
+If a long parallel job would contend locally and the peer is idle, that is what
+the peer is for — but run it in a *scratch clone or `/tmp`*, never inside a live
+`~/trackt-watch`.
+
 ## The claim is the lock. Push it before you work.
 
 `tools/progress.sh claim <slug> <agent-id>` sets `Owner` and moves the ticket
