@@ -153,3 +153,51 @@ Remaining: (b) other-target run verification, (d) Synapse SSL end-to-end
   Item (b) (other-target run verification) is unchanged and needs the cross
   runners.
 
+
+## 2026-07-31 (Track B) — item (d) is UNBLOCKED and half-done; a new Track A wall behind it
+
+The Track A blocker named in the 2026-07-20 note,
+[[bug-cdecl-indirect-over-6-integer-args]], is resolved (in `done/`), and the
+consequence was measured rather than assumed:
+
+- **`ssl_openssl3_lib.pas` COMPILES.** The `more than 6 integer args` error is
+  gone.
+- **OpenSSL loads and answers through our `dlopen`.** `InitSSLInterface` returns
+  True and `OpenSSLVersion(0)` prints `OpenSSL 3.0.13 30 Jan 2024` — real
+  symbols, resolved at run time, called through function pointers. That is the
+  loader itself proven end-to-end on a real third-party `.so`, which is what
+  this ticket exists for.
+
+`lib/rtl/classes.pas` gained what Synapse's HTTP layer needed on the way: the
+**`Name=Value` surface on TStrings** (`Values`, `Names`, `ValueFromIndex`,
+`IndexOfName`, `NameValueSeparator`). `httpsend`'s cookie jar is
+`FCookies.Values[name] := v` and nothing else, so the unit could not compile at
+all. Semantics were read off an FPC build of the test rather than guessed —
+including two quirks nobody would have invented (a line with no separator has an
+empty `Name` but its whole text as the value; an empty value deletes through
+`ValueFromIndex` yet keeps `Name=` through `Values`). Regression:
+`test/lib_strings_namevalue.pas`, in `lib-test`, compiles under FPC too.
+
+### Where item (d) stops now, and it is NOT this ticket's fault
+
+Two separate crashes, both below Track B:
+
+1. **`uses blcksock;` segfaults before `main`.** Three lines, no SSL, no
+   network. Naming `synaip` (or `synautil`) in the program's own uses clause
+   FIRST makes it go away. Filed as
+   [[bug-pascal-transitive-unit-crashes-at-startup-unless-named-first]] (Track
+   A). `test/lib_synapse.pas` is only accidentally green — it happens to write
+   `synautil` before `blcksock`.
+2. With that worked around, TCP connect succeeds and **`SSLDoConnect` segfaults
+   INSIDE libssl** — `call *0xb8(%r12)` with `rdi`/`rsi` both `0`, i.e. we
+   handed OpenSSL a null where a context belongs. That is a marshalling or
+   symbol-resolution fault on the indirect-call path, i.e. Track A again, and it
+   needs its own investigation before it can be filed with a real root cause
+   rather than a guess.
+
+**Deliberately NOT added to the regression suite.** An SSL end-to-end test today
+would have to name `synaip` first to survive startup, which would bake in a
+workaround and hide the very bug that blocks it. It goes in when (1) is fixed.
+
+Item (b), other-target run verification, is unchanged and still needs the cross
+runners.

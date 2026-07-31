@@ -235,10 +235,31 @@ type
     procedure SaveToStream(Stream: TStream);
     procedure Assign(Source: TStrings); virtual;
     procedure AddStrings(Source: TStrings);
+    { ---- the Name=Value surface ----
+      A TStrings doubles as a string-keyed map in FPC and Delphi, and real
+      source leans on it hard: Synapse's cookie jar is
+      `FCookies.Values[name] := v` and nothing else. The separator is a
+      settable field because FPC exposes it and `:` shows up in header
+      parsers; the constructor gives it FPC's default. Name matching is
+      CASE-INSENSITIVE, as FPC's is. }
+    NameValueSeparator: Char;
+    constructor Create;
+    function IndexOfName(const Name: string): Integer; virtual;
+    function GetName(Index: Integer): string;
+    function GetValue(const Name: string): string;
+    procedure SetValue(const Name, Value: string);
+    function GetValueFromIndex(Index: Integer): string;
+    procedure SetValueFromIndex(Index: Integer; const Value: string);
     property Count: Integer read GetCount;
     property Strings[Index: Integer]: string read Get write Put; default;
     property Objects[Index: Integer]: TObject read GetObject write PutObject;
     property Text: string read GetText write SetText;
+    property Names[Index: Integer]: string read GetName;
+    { Assigning an empty value here keeps `Name=` with an empty value; it is
+      ValueFromIndex that deletes. Both follow FPC, measured. }
+    property Values[const Name: string]: string read GetValue write SetValue;
+    property ValueFromIndex[Index: Integer]: string
+      read GetValueFromIndex write SetValueFromIndex;
   end;
 
   { ---- TStringList: concrete string list with paired objects ---- }
@@ -727,6 +748,73 @@ begin
       line := line + c;
   end;
   if line <> '' then Add(line);
+end;
+
+constructor TStrings.Create;
+begin
+  NameValueSeparator := '=';
+end;
+
+{ FPC's own rule, measured against an FPC build rather than assumed: the
+  separator is looked for from position 1, and a line with NO separator has an
+  empty Name — its whole text is then the Value. }
+function TStrings.GetName(Index: Integer): string;
+var s: string; p: Integer;
+begin
+  s := Get(Index);
+  p := Pos(NameValueSeparator, s);
+  if p = 0 then GetName := ''
+  else GetName := Copy(s, 1, p - 1);
+end;
+
+function TStrings.GetValueFromIndex(Index: Integer): string;
+var s, n: string;
+begin
+  s := Get(Index);
+  n := GetName(Index);
+  if n = '' then GetValueFromIndex := s
+  else GetValueFromIndex := Copy(s, Length(n) + 2, Length(s));
+end;
+
+{ Note the asymmetry with SetValue below, which is FPC's and not a slip:
+  assigning an empty value THROUGH THE INDEX deletes the line, while assigning
+  one through the NAME keeps `Name=` with an empty value. }
+procedure TStrings.SetValueFromIndex(Index: Integer; const Value: string);
+begin
+  if Value = '' then Delete(Index)
+  else Put(Index, GetName(Index) + NameValueSeparator + Value);
+end;
+
+function TStrings.IndexOfName(const Name: string): Integer;
+var i, p: Integer; s: string;
+begin
+  IndexOfName := -1;
+  for i := 0 to GetCount - 1 do
+  begin
+    s := Get(i);
+    p := Pos(NameValueSeparator, s);
+    if (p > 0) and SameText(Copy(s, 1, p - 1), Name) then
+    begin
+      IndexOfName := i;
+      Exit;
+    end;
+  end;
+end;
+
+function TStrings.GetValue(const Name: string): string;
+var i: Integer;
+begin
+  i := IndexOfName(Name);
+  if i < 0 then GetValue := ''
+  else GetValue := GetValueFromIndex(i);
+end;
+
+procedure TStrings.SetValue(const Name, Value: string);
+var i: Integer;
+begin
+  i := IndexOfName(Name);
+  if i < 0 then Add(Name + NameValueSeparator + Value)
+  else Put(i, Name + NameValueSeparator + Value);
 end;
 
 procedure TStrings.Assign(Source: TStrings);

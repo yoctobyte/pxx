@@ -6575,12 +6575,16 @@ lib-test: pxx-stable-check
 	# FPC-built copy of the same program, so this compiles under FPC too.
 	$(PXX_STABLE) -Fulib/rtl test/lib_floattostr.pas /tmp/lib_floattostr
 	test "$$(/tmp/lib_floattostr | tail -1)" = "FLOATTOSTR OK"
+	# TStrings' Name=Value surface, every row read off an FPC build of the
+	# same file (it compiles under both)
+	$(PXX_STABLE) -Fulib/rtl test/lib_strings_namevalue.pas /tmp/lib_namevalue
+	test "$$(/tmp/lib_namevalue | tail -1)" = "NAMEVALUE OK"
 	# markdown against the CommonMark reference (expectations came from
 	# markdown-it-py; python-markdown agrees on all but its ul/ol merge quirk)
 	$(PXX_STABLE) -Fulib/rtl test/lib_markdown.pas /tmp/lib_markdown
 	test "$$(/tmp/lib_markdown | grep -c '=ok')" = "17"
 	test "$$(/tmp/lib_markdown | tail -1)" = "MARKDOWN OK"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + markdown) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + namevalue + markdown) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
