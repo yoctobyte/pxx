@@ -8,7 +8,7 @@ prio: 65
 # Pascal: `uses` is transitive, so every unit's imports leak to its consumers
 
 - **Type:** bug (name resolution / unit visibility) — **Track A**
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-28, from [[decide-class-namespace-scoping]]. This is the
   root cause that ticket is a symptom of.
 
@@ -147,3 +147,69 @@ Shape of that work, so it can be picked up in one sitting:
 Only after that number exists is it worth deciding between "one ticket" and
 "a campaign" — and the enforcement itself should land behind the same flag
 before it becomes the default.
+
+## Measurement step LANDED (2026-07-31)
+
+Implemented exactly as designed above, plus one correction: `InInterface`
+(`compiler/defs.inc`) already existed as a global — the parser did NOT lack
+section state, contrary to point 1's premise. No new state-threading needed;
+`ParseUsesUnitBody` reads it directly at the point it interns each `uses`
+clause's target.
+
+- `UsesEdgeFrom`/`UsesEdgeTo`/`UsesEdgeIface` (`compiler/defs.inc`) + one
+  `RecordUsesEdge` call in `ParseUsesUnitBody` (`compiler/parser.inc`), placed
+  BEFORE the already-compiled guard so every clause is counted, not just
+  first-loads.
+- `VisibilityAllows(curUnit, declUnit)` (`compiler/symtab.inc`): direct edges
+  (either section) from `curUnit`, then BFS closure over INTERFACE-only edges.
+- `--warn-uses-leak` (`compiler/compiler.pas`) gates `WarnUsesLeakHit` calls
+  wired into `FindProc`'s two flat lookup loops and `FindUClass`'s flat
+  fallback loop (`compiler/symtab.inc`). Opt-in, read-only: resolution is
+  unchanged, self-host fixedpoint reached at generation 1 (this is NOT an
+  ELF-layout-style change), `make test`-equivalent smoke (the ticket's own
+  routine repro + a handful of `test/*.pas`) compiles clean with the flag off
+  and warns-but-still-compiles with it on.
+
+**Known gap, not yet instrumented:** the ticket's own headline repro
+(`IntToStr(9)` reached through `priv`'s implementation-section `uses
+sysutils`) does **not** warn. `FindProc` is not the lookup a direct call site
+resolves through — per the ticket's own Cause section, that is
+`IRFindProc1ByArgTk` / the general call-classification path
+(`MatchProcCall` and friends), which is a different, more tangled entry point
+this pass didn't reach in one sitting. `FindProc` still caught real leaks
+(class lookups, `@proc`-style routine references), so the instrument is
+functional but under-counts — the real number is higher than what's below.
+
+**Counts, sample run** (not the full `make test` + `make lib-test` sweep the
+design called for — that's real time; this is the first 80 files of
+`test/*.pas`, 923 total, to unblock the sizing decision tonight):
+
+- 81 distinct (importer, provider) pairs from 80 files alone.
+- Top offenders by hit count — confirms "RTL is the biggest consumer":
+  `pylib -> builtinheap` (6894), `sysutils -> builtinheap` (4522),
+  `pylib -> builtin` (4145), `http -> builtinheap` (3808),
+  `pylib -> <program>` (3276, class lookups), `ecdsa_p256 -> builtinheap`
+  (2980), `bignum -> builtinheap` (2548), `pylib -> sysutils` (1717),
+  `zlib -> builtinheap` (1596) — and dozens more in the hundreds.
+- Every RTL/pylib unit reaches `builtinheap`/`builtin` without declaring it —
+  those two are the ambient intrinsic surface every unit implicitly gets
+  today, so on a real non-transitive rule EVERY unit in `lib/rtl` would need
+  an explicit `uses builtin[heap]` added. That is likely mechanical
+  (`decide-class-namespace-scoping` already names this shape) but it is
+  hundreds of files, not one.
+
+**Sizing verdict: this is a campaign, not one ticket** — 81 distinct pairs
+from a fifth of the routine test corpus, before touching `lib/rtl` itself or
+NilPy's `.npy` corpus, and before the call-classification gap above is closed
+(which will only raise the count). Filed **[[decide-pascal-uses-campaign-scope]]**
+(Track U) with this data for the sizing/sequencing call — resolving this bug
+outright is not a one-sitting job and guessing the shape is exactly what
+Track U exists to prevent.
+
+**What ships now:** the instrument itself (edge table, `VisibilityAllows`,
+`--warn-uses-leak`) — inert by default, safe to land, and the tool the
+campaign (whichever shape it takes) will keep using to track progress toward
+zero warnings.
+
+## Log
+- 2026-07-31 — resolved, commit d86bc20ec.
