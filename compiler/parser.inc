@@ -837,6 +837,8 @@ function PyMakeBytesRepeat(a, b: Integer): Integer; forward;             { Nil P
 function PyNodeIsPyBytes(n: Integer): Boolean; forward;                  { Nil Python: node typed TPyBytes? (pyparser.inc) }
 function PyMakeBytesBinCall(const fname: AnsiString; a, b: Integer; retTk: TTypeKind): Integer; forward; { bytes binop helper call (pyparser.inc) }
 function PyMakeListBinCall(const fname: AnsiString; a, b: Integer): Integer; forward; { list binop -> TPyList call (pyparser.inc) }
+function PyMakeDictBinCall(const fname: AnsiString; a, b: Integer): Integer; forward; { dict binop -> TPyDict call, PEP 584 `|` (pyparser.inc) }
+function PyNodeIsPyDict(n: Integer): Boolean; forward;                   { Nil Python: node typed TPyDict? (pyparser.inc) }
 function PyMakeNone: Integer; forward;
 procedure ParsePyUnit(const uname: AnsiString); forward;   { a `.py` MODULE pulled in by an import (pyparser.inc) }
 function PyCallMeth1(ci: Integer; const mname: AnsiString;
@@ -13351,6 +13353,31 @@ begin
     begin
       { xs + ys — list concatenation (uforth {: :} locals: list(a)+list(b)) }
       node := PyMakeListBinCall('pylist_concat', left, right);
+      CurASTNode := node;
+      continue;
+    end
+    else if PyExprMode and (op = tkPipe) and PyNodeIsPyDict(left) and PyNodeIsPyDict(right) then
+    begin
+      { d1 | d2 — PEP 584 dict union. Checked before the set arm below since
+        a dict is a distinct tyClass identity from TPyList, and only dict
+        needs `|` disambiguated from set's own use of it. }
+      node := PyMakeDictBinCall('pydict_or', left, right);
+      CurASTNode := node;
+      continue;
+    end
+    else if PyExprMode and (op in [tkAmp, tkPipe, tkMinus, tkXor]) and
+            PyNodeIsPyList(left) and PyNodeIsPyList(right) then
+    begin
+      { Python's set operators: & (intersection), | (union), - (difference),
+        ^ (symmetric difference). A list supports NONE of these four, so two
+        TPyList operands here are unambiguously a set operation — see
+        pyset_and's own comment for why this silently did raw pointer
+        arithmetic before (bug-nilpy-set-and-dict-operators-do-raw-pointer-
+        arithmetic). }
+      if op = tkAmp then node := PyMakeListBinCall('pyset_and', left, right)
+      else if op = tkPipe then node := PyMakeListBinCall('pyset_or', left, right)
+      else if op = tkMinus then node := PyMakeListBinCall('pyset_sub', left, right)
+      else node := PyMakeListBinCall('pyset_xor', left, right);
       CurASTNode := node;
       continue;
     end

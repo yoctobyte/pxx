@@ -934,6 +934,11 @@ function next(c: TPyCounter): Int64;
 function pyvar_holds(const v: Variant; k: Int64): Boolean;
 function pycontains(l: TPyList; const v: Variant): Boolean;
 function pyvar_contains(const c: Variant; const v: Variant): Boolean;
+function pyset_and(a: TPyList; b: TPyList): TPyList;
+function pyset_or(a: TPyList; b: TPyList): TPyList;
+function pyset_sub(a: TPyList; b: TPyList): TPyList;
+function pyset_xor(a: TPyList; b: TPyList): TPyList;
+function pydict_or(a: TPyDict; b: TPyDict): TPyDict;
 { `sub in s` on a STRING is SUBSTRING containment in Python, not element
   membership. Without a case of its own it reached pycontains, which read the
   string handle as a TPyList and scanned its header words as variant slots —
@@ -2431,6 +2436,82 @@ begin
       Result := True;
       Exit;
     end;
+end;
+
+{ Python's set operators (`&`/`|`/`-`/`^`) -- NilPy has one sequence
+  representation, so a "set" is a TPyList built through `.add()` (the
+  duplicate-skipping insert). These four operators were entirely
+  unhandled: `&`/`|`/`-`/`^` between two class-typed (tyClass) operands
+  fell through every arm of the operator-typing chain in parser.inc and
+  landed on the bare-integer default, so codegen did a raw bitwise/
+  subtract op on the two operands' HEAP POINTERS -- silently producing a
+  huge garbage integer (`&`/`|`) or a small, meaningless one (`-`/`^`,
+  pointer difference), never an error. Lists don't support any of these
+  four operators in Python, so a `TPyList & TPyList` (etc.) shape is
+  unambiguously a set operation once dict is ruled out first — see
+  pydict_or below for dict's own use of `|`.
+  bug-nilpy-set-and-dict-operators-do-raw-pointer-arithmetic }
+function pyset_and(a: TPyList; b: TPyList): TPyList;
+var i: Integer;
+begin
+  Result := TPyList.Create;
+  if (a = nil) or (b = nil) then Exit;
+  for i := 0 to a.count - 1 do
+    if pycontains(b, a.at(i)) then Result.add(a.at(i));
+end;
+
+function pyset_or(a: TPyList; b: TPyList): TPyList;
+var i: Integer;
+begin
+  Result := TPyList.Create;
+  if a <> nil then
+    for i := 0 to a.count - 1 do Result.add(a.at(i));
+  if b <> nil then
+    for i := 0 to b.count - 1 do Result.add(b.at(i));
+end;
+
+function pyset_sub(a: TPyList; b: TPyList): TPyList;
+var i: Integer;
+begin
+  Result := TPyList.Create;
+  if a = nil then Exit;
+  for i := 0 to a.count - 1 do
+    if (b = nil) or not pycontains(b, a.at(i)) then Result.add(a.at(i));
+end;
+
+function pyset_xor(a: TPyList; b: TPyList): TPyList;
+var i: Integer;
+begin
+  Result := TPyList.Create;
+  if a <> nil then
+    for i := 0 to a.count - 1 do
+      if (b = nil) or not pycontains(b, a.at(i)) then Result.add(a.at(i));
+  if b <> nil then
+    for i := 0 to b.count - 1 do
+      if (a = nil) or not pycontains(a, b.at(i)) then Result.add(b.at(i));
+end;
+
+{ Python's dict union operator, PEP 584: `d1 | d2` -- a NEW dict, `d1`'s
+  entries first (in order), then `d2`'s (in order), with `d2` winning any
+  key collision. Same "fell through to raw pointer arithmetic" bug as the
+  set operators above; dict rules out set's own `|` since both are
+  distinct tyClass identities, checked before the set arm in the caller. }
+function pydict_or(a: TPyDict; b: TPyDict): TPyDict;
+var i: Integer; keys: TPyList;
+begin
+  Result := TPyDict.Create;
+  if a <> nil then
+  begin
+    keys := a.keylist;
+    for i := 0 to keys.count - 1 do
+      Result.store(keys.at(i), a.fetch(keys.at(i)));
+  end;
+  if b <> nil then
+  begin
+    keys := b.keylist;
+    for i := 0 to keys.count - 1 do
+      Result.store(keys.at(i), b.fetch(keys.at(i)));
+  end;
 end;
 
 { `v in container` where the container is a VARIANT (its type is only known at

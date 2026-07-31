@@ -943,6 +943,9 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_variant_return_to_class26)" = "$$(printf '%b' 'none-ok\nfound-ok')"
 	./$(COMPILER) examples/shell/shell0.npy /tmp/test_nilpy_shell026
 	/tmp/test_nilpy_shell026 | grep -q "hello portable userland"
+	# set operators (&, |, -, ^) and PEP 584 dict union (|); expectation is CPython's own output
+	./$(COMPILER) test/test_nilpy_set_ops.npy /tmp/test_nilpy_setops26
+	test "$$(/tmp/test_nilpy_setops26)" = "$$(printf '%b' '[2, 3]\n[1, 2, 3, 4]\n[1]\n[1, 4]\n[(\047x\047, 1), (\047y\047, 20), (\047z\047, 3)]')"
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING

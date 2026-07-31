@@ -1221,7 +1221,19 @@ begin
   left := CurASTNode;
   while CurTok.Kind = tkAmp do
   begin
-    PyBitGuard(left); Next; PyParseShift; right := CurASTNode; PyBitGuard(right);
+    Next; PyParseShift; right := CurASTNode;
+    { `a & b` on two sets is intersection, not a bitwise AND on their heap
+      pointers — see pyset_and's own comment
+      (bug-nilpy-set-and-dict-operators-do-raw-pointer-arithmetic). Checked
+      before PyBitGuard, which has nothing useful to say about a class
+      operand either way. }
+    if PyNodeIsPyList(left) and PyNodeIsPyList(right) then
+    begin
+      node := PyMakeListBinCall('pyset_and', left, right);
+      left := node;
+      Continue;
+    end;
+    PyBitGuard(left); PyBitGuard(right);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkAnd);
     ASTLeft[node] := left; ASTRight[node] := right;
     ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
@@ -1237,7 +1249,15 @@ begin
   left := CurASTNode;
   while CurTok.Kind = tkXor do
   begin
-    PyBitGuard(left); Next; PyParseBitAnd; right := CurASTNode; PyBitGuard(right);
+    Next; PyParseBitAnd; right := CurASTNode;
+    { `a ^ b` on two sets is symmetric difference — see pyset_xor. }
+    if PyNodeIsPyList(left) and PyNodeIsPyList(right) then
+    begin
+      node := PyMakeListBinCall('pyset_xor', left, right);
+      left := node;
+      Continue;
+    end;
+    PyBitGuard(left); PyBitGuard(right);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkXor);
     ASTLeft[node] := left; ASTRight[node] := right;
     ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
@@ -1253,7 +1273,23 @@ begin
   left := CurASTNode;
   while CurTok.Kind = tkPipe do
   begin
-    PyBitGuard(left); Next; PyParseBitXor; right := CurASTNode; PyBitGuard(right);
+    Next; PyParseBitXor; right := CurASTNode;
+    { `d1 | d2` — PEP 584 dict union, checked first since dict is a distinct
+      tyClass identity from set's own TPyList use of `|` (union). See
+      pydict_or / pyset_or. }
+    if PyNodeIsPyDict(left) and PyNodeIsPyDict(right) then
+    begin
+      node := PyMakeDictBinCall('pydict_or', left, right);
+      left := node;
+      Continue;
+    end;
+    if PyNodeIsPyList(left) and PyNodeIsPyList(right) then
+    begin
+      node := PyMakeListBinCall('pyset_or', left, right);
+      left := node;
+      Continue;
+    end;
+    PyBitGuard(left); PyBitGuard(right);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkOr);
     ASTLeft[node] := left; ASTRight[node] := right;
     ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
@@ -8219,6 +8255,16 @@ begin
   Result := (listCi >= 0) and (ResolveNodeRec(n) = REC_UCLASS_BASE + listCi);
 end;
 
+function PyNodeIsPyDict(n: Integer): Boolean;
+var dictCi: Integer;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
+  dictCi := FindUClass('TPyDict');
+  Result := (dictCi >= 0) and (ResolveNodeRec(n) = REC_UCLASS_BASE + dictCi);
+end;
+
 function PyListRepeatPair(a, b: Integer): Boolean;
 begin
   Result := (PyNodeIsPyList(a) and TypeIsOrdinal(IntToTypeKind(ASTTk[b]))) or
@@ -8273,6 +8319,24 @@ begin
   ASTTk[Result] := Ord(tyClass);
   ASTLeft[Result] := arg0;
   ci := FindUClass('TPyList');
+  if ci >= 0 then ASTRight[Result] := REC_UCLASS_BASE + ci;
+end;
+
+{ dict binop helper call, tagging the result with TPyDict class identity —
+  mirrors PyMakeListBinCall for `d1 | d2` (PEP 584 dict union). }
+function PyMakeDictBinCall(const fname: AnsiString; a, b: Integer): Integer;
+var procIdx, arg0, arg1, ci: Integer;
+begin
+  procIdx := FindProc(fname);
+  if procIdx < 0 then Error('Nil Python: pylib (' + fname + ') not loaded');
+  arg0 := AllocNode(AN_ARG); ASTLeft[arg0] := a;
+  arg1 := AllocNode(AN_ARG); ASTLeft[arg1] := b;
+  ASTRight[arg0] := arg1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyClass);
+  ASTLeft[Result] := arg0;
+  ci := FindUClass('TPyDict');
   if ci >= 0 then ASTRight[Result] := REC_UCLASS_BASE + ci;
 end;
 
