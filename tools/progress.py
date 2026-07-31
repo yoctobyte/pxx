@@ -33,6 +33,7 @@ STATUSES = [
     "experimental",
     "rainy-day",
     "done-followup",
+    "decided",
     "done",
     "rejected",
 ]
@@ -390,6 +391,15 @@ class Board:
     def done_slugs(self) -> set[str]:
         return {t.slug for t in self.by_status["done"]}
 
+    @property
+    def resolved_slugs(self) -> set[str]:
+        """Slugs that SATISFY a blocker: work that's done, OR a decision that's
+        been made. A `decide-` ticket answered and filed in `decided/` unblocks
+        its dependents exactly like a `done/` ticket — a decision is a reference
+        later work builds on, not 'work complete', so it lives in decided/ not
+        done/, but it counts the same for dependency purposes."""
+        return self.done_slugs | {t.slug for t in self.by_status["decided"]}
+
     def track_matches(self, track: str, filt: str) -> bool:
         return not filt or filt in track
 
@@ -401,7 +411,7 @@ class Board:
         Only OPEN dependents pull a blocker up (a done/rejected dependent no
         longer needs it). The graph is a DAG (check() enforces); a stray cycle
         is guarded so this can't recurse forever."""
-        terminal = {"done", "rejected"}
+        terminal = {"done", "rejected", "decided"}
         dependents: dict[str, list[str]] = defaultdict(list)
         for t in self.tickets:
             if t.status in terminal:
@@ -425,7 +435,7 @@ class Board:
         return {s: eff(s, frozenset()) for s in self.by_slug}
 
     def ready_tickets(self, track_filter: str = "") -> list[Ticket]:
-        done = self.done_slugs
+        done = self.resolved_slugs        # done/ OR decided/ satisfies a blocker
         eff = self.effective_prio()
         lev = self.leverage_counts()
         out = []
@@ -511,7 +521,7 @@ class Board:
         done = self.done_slugs
         c: Counter[str] = Counter()
         for t in self.tickets:
-            if t.status in {"done", "rejected"}:
+            if t.status in {"done", "rejected", "decided"}:
                 continue
             for b in t.blockers:
                 if b not in done:
@@ -833,24 +843,26 @@ pre code{background:none;padding:0}
                     continue
                 lines.append(
                     f"DECIDED-NOT-MOVED: {t.slug} records a decision but is still in {st}/ — "
-                    f"resolve it so its dependents unblock, or set `keep-open: <why>` "
-                    f"if it deliberately gates something"
+                    f"move it to decided/ (it unblocks dependents like done/, but stays a "
+                    f"reference, not 'work complete'), or set `keep-open: <why>` if it "
+                    f"deliberately gates something"
                 )
                 problems = 1
 
-        # The mirror: moved without writing DOWN the answer. Dependents reach
-        # the decision by following their blocked-by slug into done/, so a
-        # decide- ticket that closes without recording the call leaves them
-        # pointing at nothing.
-        for t in self.by_status["done"]:
-            if t.slug.startswith("decide-") and not decision_re.search(t.text):
-                warning_count += 1
-                if strict:
-                    lines.append(
-                        f"WARN-NO-DECISION: {t.slug} is a decide- ticket in done/ with no "
-                        f"'## DECISION' section — dependents cannot learn what was decided"
-                    )
-                    problems = 1
+        # The mirror: filed as a decision without writing DOWN the answer.
+        # Dependents reach the decision by following their blocked-by slug into
+        # decided/ (or legacy done/), so a decide- ticket parked there without
+        # recording the call leaves them pointing at nothing.
+        for st in ("decided", "done"):
+            for t in self.by_status[st]:
+                if t.slug.startswith("decide-") and not decision_re.search(t.text):
+                    warning_count += 1
+                    if strict:
+                        lines.append(
+                            f"WARN-NO-DECISION: {t.slug} is a decide- ticket in {st}/ with no "
+                            f"'## DECISION' section — dependents cannot learn what was decided"
+                        )
+                        problems = 1
 
         # A REJECTED blocker never unblocks anything: ready_tickets() gates on
         # done_slugs (done only), while effective_prio() treats {done,rejected}
@@ -966,19 +978,26 @@ def cmd_claim(args: argparse.Namespace) -> int:
 
 def cmd_resolve(args: argparse.Namespace) -> int:
     src = find_ticket(args.slug)
-    dst = PROG / "done" / f"{args.slug}.md"
+    # A decide- ticket resolves into decided/, not done/: a decision is a
+    # reference later work builds on, not "work complete". It unblocks
+    # dependents identically (see resolved_slugs), but it stays findable as a
+    # decision rather than being buried in the done pile.
+    bucket = "decided" if args.slug.startswith("decide-") else "done"
+    status = "decided" if bucket == "decided" else "done"
+    dst = PROG / bucket / f"{args.slug}.md"
     if src == dst:
-        print(f"{args.slug} already in done/", file=sys.stderr)
+        print(f"{args.slug} already in {bucket}/", file=sys.stderr)
         return 1
     move_ticket(src, dst)
-    set_field(dst, "Status", "done")
+    set_field(dst, "Status", status)
     text = dst.read_text(encoding="utf-8")
     if not re.search(r"^## Log", text, re.M):
         text += "\n## Log\n"
-    text += f"- {_dt.date.today().isoformat()} — resolved, commit {args.commit}.\n"
+    verb = "decided" if bucket == "decided" else "resolved"
+    text += f"- {_dt.date.today().isoformat()} — {verb}, commit {args.commit}.\n"
     dst.write_text(text, encoding="utf-8")
     subprocess.run(["git", "add", str(dst)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print(f"resolved {args.slug} -> done/ (commit {args.commit}).", file=sys.stderr)
+    print(f"{verb} {args.slug} -> {bucket}/ (commit {args.commit}).", file=sys.stderr)
     print(f"staged, not committed. regenerate the board ({Path(sys.argv[0]).name} board-md) and commit.", file=sys.stderr)
     return 0
 
