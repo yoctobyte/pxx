@@ -8,14 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
-| test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | — |
 
 ## unfinished (2)
 
@@ -308,7 +307,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1139)
+## done (1140)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1445,6 +1444,7 @@ _none_
 | task-sqlite-libc-free-runtime-bringup | B | 64 | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | test-c-crypt | C | 50 | test | Implement a C interop regression test for passphrase hashing (`crypt.h`) | — |
 | test-c-dlopen | C | 50 | test | Implement C interop regression test for dynamic loading and runtime symbol invocation (`dlopen`/`dlsym`) | — |
+| test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | — |
 | tooling-nested-comment-brace-selfhost-guard | A | 40 | tooling | Nested-comment brace hazard in compiler source — investigation + lint guard | — |
 | track-a-c-frontend-shared-ir-touchpoints | A | 50 | track | C frontend — shared-IR touch points that belong to Track A | — |
 | track-a-c-stdio-needs-pascal-import-and-data-relocs | A | 50 | track | C stdio (printf family) blocked — needs Pascal import + global data relocs | — |
