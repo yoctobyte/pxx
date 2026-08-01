@@ -145,6 +145,18 @@ doesn't collide (`hello_ext.c` → `hello_ext_module.c`).
 Next: M2 (arguments/errors — more `PyArg_ParseTuple` formats,
 `Py_BuildValue`, `PyErr_SetString` → NilPy `except`).
 
+## 2026-08-01 — M2 "arguments and errors" landed (commit `22515d725`)
+
+`PyArg_ParseTuple`/`Py_BuildValue` widened to `i l d s s# O`;
+`PyErr_SetString`/`PyErr_Occurred`/`PyErr_Clear` propagate into a NilPy
+`except`. `test/nilpy_units/argerr_ext_module.c` + `argerr_ext.pas` +
+`test/test_cpyext_args_errors.npy`, wired into `make test-nilpy`.
+Verified: self-host fixedpoint byte-identical, `testmgr --tier quick`
+green, new test's actual output spot-checked directly (not the full
+`make test-nilpy` sweep — per the "confirm native, offload the matrix"
+rule, Track T is up and covers the full suite asynchronously).
+Next: M3 (strings and containers).
+
 ## Notes
 
 - Ladder position and the recipe/install policy: **`devdocs/dev/python-libraries.md`**.
