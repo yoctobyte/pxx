@@ -5,8 +5,8 @@ prio: 40  # auto
 # SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation
 
 - **Type:** test / milestone validation — Track C+A
-- **Status:** backlog
-- **Owner:** unassigned
+- **Status:** working
+- **Owner:** claude-C
 - **Found / Opened:** 2026-06-28, while checking sqlite amalgamation progress
   after granular system-library selection.
 
