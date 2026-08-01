@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-01T03:03:36Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "a8c53ac07822f3c64397aead864fdad3a9a029fb",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-01T03:08:19Z",
    "fixed": [],
    "new_red": [],
@@ -399,6 +391,16 @@
    "fixed": [],
    "new_red": [],
    "sha": "ac372419dbea2ff27b30c4dc6b93139728f79f9b",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-01T10:31:37Z",
+   "fixed": [],
+   "new_red": [
+    "fpc-bootstrap#src:compiler/compiler.pas"
+   ],
+   "sha": "d45edc3e2b01565950342e2833bc0801028c81a3",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -2044,7 +2046,7 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "full"
  },
  "jobs": {
-  "fpc-bootstrap#src:compiler/compiler.pas": "pass",
+  "fpc-bootstrap#src:compiler/compiler.pas": "fail",
   "lib-fpc-clean#00": "pass",
   "optdiff#shard0/6": "pass",
   "optdiff#shard1/6": "pass",
@@ -3683,8 +3685,8 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-01T10:27:59Z",
-  "sha": "ac372419dbea2ff27b30c4dc6b93139728f79f9b",
+  "date": "2026-08-01T10:31:37Z",
+  "sha": "d45edc3e2b01565950342e2833bc0801028c81a3",
   "tier": "native",
   "verdict": "GREEN",
   "wall": 103.1
@@ -3707,5 +3709,18 @@
   "date": "2026-08-01T10:01:38Z",
   "sha": "273a12bfdb0b09d75f5b4acd616e12a1f01345af"
  },
- "open_regressions": []
+ "open_regressions": [
+  {
+   "bad": "d45edc3e2b01565950342e2833bc0801028c81a3",
+   "good": "ac372419dbea2ff27b30c4dc6b93139728f79f9b",
+   "job": "fpc-bootstrap#src:compiler/compiler.pas",
+   "name": "fpc-bootstrap#00",
+   "opened": "2026-08-01T10:31:37Z",
+   "range": [
+    "9d02d69cce81eed12f56c36f2c3ee883c1662875",
+    "d45edc3e2b01565950342e2833bc0801028c81a3"
+   ],
+   "src": "compiler/compiler.pas"
+  }
+ ]
 }
