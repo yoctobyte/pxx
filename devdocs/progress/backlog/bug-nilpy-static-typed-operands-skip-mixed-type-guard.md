@@ -120,3 +120,36 @@ STATICALLY-typed operands (literals and single-type locals) — not via a
 heterogeneous list, which is what hid this. Keep the existing variant-typed
 cases as-is so both paths are covered. Diff against CPython's own output, and
 re-run the operator×operand sweep afterwards rather than only the listed rows.
+
+## 2026-08-01 — the static path is not ONE path: two different typings, measured
+
+Reading `PyWiden` (`compiler/pyparser.inc`) suggested a single root, and
+measuring killed that idea. Recorded because it would otherwise be re-derived.
+
+`PyWiden(a, b)` ends with a rule widening any class-meets-scalar pair to
+`tyVariant`. That rule is right for the job it was written for — unifying the
+possible types of one LOCAL across rebindings (`temp_file = 'tmp.pdf'` then
+`temp_file = NamedTemporaryFile(...)`, which Python allows). It is meaningless
+as a binop RESULT type, and `PyWiden(tyClass, tyInteger)` → `tyVariant` is
+exactly what made `obj & 1` SEGFAULT: the handle was stored through the variant
+path and dereferenced as a variant record
+([[bug-nilpy-bitwise-shift-on-class-operand-segfaults]], now fixed by
+dispatching before the widening is reached).
+
+**But that is NOT the mechanism for the operators in this ticket.** Measured
+with `PXXDBG=a.ir:g` on `y = 7 - xs`:
+
+```
+47: binop a=45 b=46 c=71 ival=0 tk=1        <- tk=1 is tyInteger, not tyVariant
+```
+
+So `-` types its result as a plain integer and does pointer arithmetic in
+registers; it never reaches `PyWiden` at all. The bitwise operators call
+`PyWiden` explicitly from `pyparser.inc`; `+ - * /` and the comparisons are
+typed by the shared `parser.inc` expression chain.
+
+**Consequence for the fix:** there is no single entry point to guard. The
+per-operator legality check has to be added where each family is typed — the
+`parser.inc` binop typing for arithmetic and comparison, and (already handled)
+the `pyparser.inc` bitwise routines. Anyone starting from "just fix PyWiden"
+will fix the bitwise family only and conclude the rest is unrelated.

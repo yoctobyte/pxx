@@ -1,0 +1,68 @@
+# Bitwise/shift operators on a user class dispatch __and__/__or__/__xor__/
+# __lshift__/__rshift__. Before this they fell through to the generic bitwise
+# typing, where PyWiden(tyClass, tyInteger) produced a VARIANT: the class handle
+# was then stored through the variant path, which dereferenced it — so `obj & 1`
+# SEGFAULTED (exit 139, core dumped) rather than merely computing garbage the
+# way the arithmetic operators do. It crashed with OR without the dunder
+# declared. bug-nilpy-bitwise-shift-on-class-operand-segfaults.
+#
+# Expectation is CPython's own output.
+
+
+class Ops:
+    def __and__(self, rhs):
+        return "AND" + str(rhs)
+
+    def __or__(self, rhs):
+        return "OR" + str(rhs)
+
+    def __xor__(self, rhs):
+        return "XOR" + str(rhs)
+
+    def __lshift__(self, rhs):
+        return "LSHIFT" + str(rhs)
+
+    def __rshift__(self, rhs):
+        return "RSHIFT" + str(rhs)
+
+
+class Bare:
+    pass
+
+
+# NOTE the parameter is `rhs`, not `o`: a method parameter whose name matches a
+# module-level variable silently strips that variable's class type at operator
+# sites, so `o & 1` would stop dispatching for a reason unrelated to this test
+# (bug-nilpy-global-shadowed-by-method-param-name-loses-class-type, pre-existing
+# and reproduced on the pinned v239 binary). Keep the names distinct until that
+# is fixed.
+o = Ops()
+print(o & 1)
+print(o | 2)
+print(o ^ 3)
+print(o << 4)
+print(o >> 5)
+
+# no dunder at all: a genuine RUNTIME TypeError, catchable — NOT a crash, and
+# not a compile error either (a try/except around it must still build).
+b = Bare()
+try:
+    print(b & 1)
+except TypeError:
+    print("caught and")
+try:
+    print(b << 1)
+except TypeError:
+    print("caught lshift")
+
+# pylib's own rows keep their real semantics: set ops and dict union must not
+# be captured by the new dispatch.
+print(sorted({1, 2, 3} & {2, 3, 4}))
+print(sorted({1, 2} | {3}))
+print(sorted({1, 2} ^ {2, 3}))
+# length rather than the dict itself: the dict repr contains single quotes,
+# which cannot be escaped inside the Makefile's single-quoted printf expectation
+print(len({"a": 1} | {"b": 2}))
+
+# plain integers are untouched
+print(6 & 3, 6 | 3, 6 ^ 3, 1 << 4, 32 >> 2)

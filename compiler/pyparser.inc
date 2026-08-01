@@ -911,6 +911,45 @@ begin
     Error('Nil Python: parenthesize the comparison next to a bitwise operator');
 end;
 
+function PyBitDunder(const mname: AnsiString; left, right: Integer): Integer;
+{ `obj & 1`, `obj << 2`, ... on a USER class: dispatch to the class's own
+  __and__/__or__/__xor__/__lshift__/__rshift__, or -1 when the operand is not a
+  user class at all (caller keeps its existing path).
+
+  Without this the operands fell through to the generic bitwise AN_BINOP, whose
+  type came out of PyWiden(tyClass, tyInteger) = tyVariant. The class HANDLE was
+  then stored through the variant path, which dereferenced it as a variant
+  record — so `obj & 1` did not merely compute garbage the way the arithmetic
+  operators do, it SEGFAULTED (measured: exit 139, core dumped, with or without
+  the dunder declared). bug-nilpy-bitwise-shift-on-class-operand-segfaults.
+
+  When the class declares no such dunder this raises a genuine RUNTIME
+  TypeError, matching CPython and keeping a try/except around the expression
+  compilable — the same shape the ordering dunders use. pylib's own rows are
+  excluded so set `&`/`|`/`^` and dict `|` keep their real semantics; those are
+  checked by the callers before this is reached, and the guard here is
+  belt-and-braces for any container this frontend grows later. }
+var ci, errIdx, node: Integer;
+begin
+  PyBitDunder := -1;
+  if IntToTypeKind(ASTTk[left]) <> tyClass then Exit;
+  if ResolveNodeRec(left) < REC_UCLASS_BASE then Exit;
+  if PyRecIsPylibOwnClass(ResolveNodeRec(left)) then Exit;
+  ci := ResolveNodeRec(left) - REC_UCLASS_BASE;
+  if FindUMeth(ci, mname) >= 0 then
+  begin
+    node := PyCallMeth1(ci, mname, left, right);
+    if node >= 0 then begin PyBitDunder := node; Exit; end;
+  end;
+  errIdx := FindProc('PyNotBitOperandError');
+  if errIdx < 0 then Error('Nil Python: pylib (PyNotBitOperandError) not loaded');
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := errIdx;
+  ASTTk[node] := Ord(tyBoolean);
+  ASTLeft[node] := -1;
+  PyBitDunder := node;
+end;
+
 { Names bound to None because the optional import they came from did not
   resolve. Kept so a USE of such a name can be turned into a runtime failure
   that names the module, instead of a compile error about a missing method —
@@ -1202,7 +1241,14 @@ begin
   while (CurTok.Kind = tkShl) or (CurTok.Kind = tkShr) do
   begin
     op := CurTok.Kind;
-    PyBitGuard(left); Next; PyParseBitOperand; right := CurASTNode; PyBitGuard(right);
+    Next; PyParseBitOperand; right := CurASTNode;
+    { a user class dispatches its own __lshift__/__rshift__ before the generic
+      bitwise typing, which would otherwise widen tyClass to a variant and
+      segfault -- see PyBitDunder. }
+    if op = tkShl then node := PyBitDunder('__lshift__', left, right)
+    else node := PyBitDunder('__rshift__', left, right);
+    if node >= 0 then begin left := node; Continue; end;
+    PyBitGuard(left); PyBitGuard(right);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op);
     ASTLeft[node] := left; ASTRight[node] := right;
     { A shift of machine ints is typed PROMO: `1 << 64` must promote past
@@ -1238,6 +1284,8 @@ begin
       left := node;
       Continue;
     end;
+    node := PyBitDunder('__and__', left, right);
+    if node >= 0 then begin left := node; Continue; end;
     PyBitGuard(left); PyBitGuard(right);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkAnd);
     ASTLeft[node] := left; ASTRight[node] := right;
@@ -1262,6 +1310,8 @@ begin
       left := node;
       Continue;
     end;
+    node := PyBitDunder('__xor__', left, right);
+    if node >= 0 then begin left := node; Continue; end;
     PyBitGuard(left); PyBitGuard(right);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkXor);
     ASTLeft[node] := left; ASTRight[node] := right;
@@ -1294,6 +1344,8 @@ begin
       left := node;
       Continue;
     end;
+    node := PyBitDunder('__or__', left, right);
+    if node >= 0 then begin left := node; Continue; end;
     PyBitGuard(left); PyBitGuard(right);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkOr);
     ASTLeft[node] := left; ASTRight[node] := right;

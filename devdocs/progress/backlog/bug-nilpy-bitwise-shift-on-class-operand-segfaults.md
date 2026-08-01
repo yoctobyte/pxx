@@ -73,3 +73,52 @@ Investigate the segfault separately even after dispatch lands — a class with
 `make test-nilpy` + self-host byte-identical, plus a `.npy` diffed against
 CPython for each of the five operators declared, and each one **not** declared
 (must raise a catchable `TypeError`, not crash).
+
+## FIXED 2026-08-01
+
+### Why it crashed rather than computing garbage
+
+Measured with `PXXDBG=a.ir:<proc>`: `x & 1` on a class operand produced
+`binop ... tk=22` — the result typed **tyVariant**, because
+`PyWiden(tyClass, tyInteger)` widens to a variant. The class HANDLE was then
+stored through the variant path (`var_store`), which dereferences it as a
+variant record. That is the segfault. The arithmetic operators merely compute on
+the handle, which is why they return a wrong number where these die.
+
+So the crash was a *consequence* of the missing dispatch, not a separate defect
+— the ticket's "investigate the segfault separately even after dispatch lands"
+note is answered: with dispatch (or a raise) in front, the variant-typed binop
+is never built.
+
+### The fix
+
+`PyBitDunder` (`compiler/pyparser.inc`), called from all five operators —
+`PyParseShift` (`<<`/`>>`), `PyParseBitAnd`, `PyParseBitXor`, `PyParseBitOr`.
+Dispatches `__and__`/`__or__`/`__xor__`/`__lshift__`/`__rshift__` when declared;
+otherwise raises `PyNotBitOperandError`, a new pylib helper — a genuine runtime
+TypeError, so `try/except` around the expression still compiles and runs.
+
+Carries the `PyRecIsPylibOwnClass` exclusion, and the callers' existing
+set/dict arms (`pyset_and`/`pyset_or`/`pyset_xor`/`pydict_or`) are checked
+first, so `{1,2} & {2,3}` and `{"a":1} | {"b":2}` are untouched.
+
+A first cut reused `PyNotOrderableError` and produced a message about
+`__lt__/__gt__` for a bitwise operator — corrected to its own helper before
+landing.
+
+### Verification
+
+`test/test_nilpy_dunder_bitwise.npy`, byte-identical to CPython: all five
+dunders, the no-dunder case for `&` and `<<` caught as `TypeError` (not a crash,
+and not a compile error), set `&`/`|`/`^`, dict `|`, and plain integer bitwise
+ops unaffected.
+
+### Found while writing that test — a separate, pre-existing bug
+
+The test initially failed for an unrelated reason: its dunder parameter was
+named `o` and so was the module-level variable. A method parameter whose name
+matches a module-level variable silently strips that variable's class type at
+operator-dispatch sites, so no dunder dispatches at all. Reproduced on the
+pinned v239 binary, so it long predates this work — filed as
+[[bug-nilpy-global-shadowed-by-method-param-name-loses-class-type]] (prio 75).
+The test now uses `rhs`, with a comment saying why.

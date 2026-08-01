@@ -3704,6 +3704,15 @@ begin
   raise TypeError.Create('comparison not supported between these instances (no __lt__/__le__/__gt__/__ge__)');
 end;
 
+{ `obj & 1` / `obj << 2` on a class declaring none of the bitwise/shift dunders.
+  Before this existed the operands fell through to the generic bitwise typing,
+  which widened tyClass to a variant and dereferenced the handle -- a SEGFAULT,
+  not a wrong value. bug-nilpy-bitwise-shift-on-class-operand-segfaults. }
+procedure PyNotBitOperandError;
+begin
+  raise TypeError.Create('unsupported operand type for a bitwise or shift operator (no __and__/__or__/__xor__/__lshift__/__rshift__)');
+end;
+
 { `obj[i] = v` where obj's class defines `__getitem__` but not `__setitem__`
   -- CPython's own error shape ("does not support item assignment"). }
 procedure PyNoSetitemError;

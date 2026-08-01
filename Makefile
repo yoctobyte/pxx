@@ -576,6 +576,10 @@ test-nilpy: $(COMPILER)
 	@# a class defining __getitem__/__setitem__ routes subscript read/write
 	./$(COMPILER) test/test_nilpy_dunder_getitem_setitem.npy /tmp/test_nilpy_dundergetset26
 	test "$$(/tmp/test_nilpy_dundergetset26)" = "$$(printf '%b' '20\n99\n[10, 99, 30]\n42\n-1\n10\ncaught: TypeError')"
+	@# bitwise/shift dunders on a user class; no dunder = catchable TypeError,
+	@# NOT the segfault this used to be. Set/dict operators must stay intact.
+	./$(COMPILER) test/test_nilpy_dunder_bitwise.npy /tmp/test_nilpy_dunderbit26
+	test "$$(/tmp/test_nilpy_dunderbit26)" = "$$(printf '%b' 'AND1\nOR2\nXOR3\nLSHIFT4\nRSHIFT5\ncaught and\ncaught lshift\n[2, 3]\n[1, 2, 3]\n[1, 3]\n2\n2 7 5 16 8')"
 	@# `!=` prefers a declared __ne__ (CPython calls it rather than negating
 	@# __eq__); with only __eq__ the negation is still derived
 	./$(COMPILER) test/test_nilpy_dunder_ne.npy /tmp/test_nilpy_dunderne26
