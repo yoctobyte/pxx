@@ -1,5 +1,6 @@
 ---
 track: A
+owner: claude-A
 prio: 40
 type: feature
 ---

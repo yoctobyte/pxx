@@ -1,5 +1,6 @@
 ---
 track: N
+owner: claude-A
 prio: 65
 type: feature
 blocked-by: [bug-c-uses-path-basename-collides-with-enclosing-unit-name]
