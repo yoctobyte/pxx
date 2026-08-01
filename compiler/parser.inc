@@ -14055,6 +14055,54 @@ begin
       Error('High/Low in a constant expression: expected an ordinal type name');
     Expect(tkRParen, ')');
   end
+  else if (CurTok.Kind = tkIdent) and
+          (CaseEqual(CurTok.SVal, 'ord') or CaseEqual(CurTok.SVal, 'succ') or
+           CaseEqual(CurTok.SVal, 'pred')) and
+          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    { Ord(x)/Succ(x)/Pred(x) as compile-time constants
+      (compat-pascal-const-expr-ord-chr-succ): `case KeyCode of Ord('q'): ...`
+      is the ordinary way to write a key handler and none of these folded, so
+      it had to be spelled as a bare numeric literal with a comment instead.
+      This evaluator already represents every ordinal value (char, enum,
+      bool) as a bare Int64 — a char literal folds to its own ordinal via the
+      tkString branch above, an enum member via the TEnum.member branch — so
+      Ord(x) needs no conversion at all: it IS whatever x already evaluates
+      to here. Succ/Pred are the same value +/-1, same as the runtime
+      intrinsics. }
+    cName := LowerCase(CurTok.SVal);
+    Next; Expect(tkLParen, '(');
+    r := ConstEval();
+    Expect(tkRParen, ')');
+    if cName = 'succ' then r := r + 1
+    else if cName = 'pred' then r := r - 1;
+  end
+  else if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'chr') and
+          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    { Chr(x): the inverse of Ord above, and for the same reason a no-op on the
+      underlying Int64 value here — this evaluator has no separate
+      char/integer representation, only the eventual type annotation on the
+      const/case-label distinguishes them. }
+    Next; Expect(tkLParen, '(');
+    r := ConstEval();
+    Expect(tkRParen, ')');
+  end
+  else if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'length') and
+          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+          (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkString) then
+  begin
+    { Length('literal') as a compile-time constant — the only const-foldable
+      shape (a variable's length is not known until runtime, and this
+      evaluator has no string representation beyond a literal's own token).
+      Only entered when the very next token IS a string literal, so
+      Length(someConstStringVariable) falls through to the ordinary "not a
+      constant" diagnostic below rather than being silently mishandled. }
+    Next; Expect(tkLParen, '(');
+    r := Length(CurTok.SVal);
+    Next;
+    Expect(tkRParen, ')');
+  end
   else if CurTok.Kind = tkIdent then
   begin
     { A `Unit.Const` qualifier (e.g. `termio.FIONREAD`) — ConsumeUnitQualifier
@@ -14085,18 +14133,12 @@ begin
     if (idx >= 0) and (Syms[idx].Kind = skConst) then
       r := Syms[idx].ConstVal
     else
-    begin
-      writeln('ConstEval error at SrcLine ', SrcLine, ': SVal = ', CurTok.SVal, ' Kind = ', Ord(CurTok.Kind), ' TokPos = ', TokPos);
-      writeln('Tokens nearby:');
-      for idx := TokPos - 5 to TokPos + 5 do
-      begin
-        if (idx >= 0) and (idx < TokCount) then
-        begin
-          writeln('  Token ', idx, ': Line = ', Tokens[idx].Line, ' Kind = ', Ord(Tokens[idx].Kind), ' SOffset = ', Tokens[idx].SOffset, ' SLen = ', Tokens[idx].SLen);
-        end;
-      end;
+      { compat-pascal-const-expr-ord-chr-succ: this used to dump raw lexer
+        token state (line/kind/offset for a 10-token window) to stderr before
+        erroring — internal debugging output that leaked onto every failing
+        const expression, not just this fold's own development. The error
+        message alone already names the offending token. }
       Error('not a constant');
-    end;
     Next;
   end
   else if CurTok.Kind = tkLParen then
@@ -16161,7 +16203,7 @@ end;
   The IR lowering (ir.inc AN_CASE) picks the char/ordinal or string path from
   the selector's type and validates label kinds against it. }
 function ParseCaseLabelValue(const what: AnsiString): Integer;
-var node, si, prevTok: Integer; neg: Boolean;
+var node, si, prevTok: Integer; neg, isChrFold: Boolean;
 begin
   neg := False;
   if CurTok.Kind = tkMinus then
@@ -16192,6 +16234,30 @@ begin
     end;
     ASTSOffset[node] := Tokens[prevTok].SOffset;
     ASTSLen[node] := Tokens[prevTok].SLen;
+  end
+  else if (CurTok.Kind = tkIdent) and
+          (CaseEqual(CurTok.SVal, 'ord') or CaseEqual(CurTok.SVal, 'chr') or
+           CaseEqual(CurTok.SVal, 'succ') or CaseEqual(CurTok.SVal, 'pred') or
+           CaseEqual(CurTok.SVal, 'length') or CaseEqual(CurTok.SVal, 'high') or
+           CaseEqual(CurTok.SVal, 'low')) and
+          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    { Ord('q')/Chr(n)/Length('s')/Succ(n)/Pred(n)/High(T)/Low(T) as a case
+      label (compat-pascal-const-expr-ord-chr-succ) — `case KeyCode of
+      Ord('q'): ...` is the ordinary way to write a key handler, and this
+      function (unlike ConstEvalFactor, the const-DECLARATION evaluator
+      those five already fold in) parses case labels with its own narrow
+      grammar that never called into it. Delegate to ConstEval — same
+      Int64-valued fold, no AST built for the inner expression — rather than
+      duplicating the fold logic here. Only Chr's result is tagged tyChar,
+      matching the single-char-string-literal case label a few lines up;
+      everything else defaults like the plain-integer branch above. }
+    isChrFold := CaseEqual(CurTok.SVal, 'chr');
+    node := AllocNode(AN_INT_LIT);
+    ASTIVal[node] := ConstEval();
+    if isChrFold then ASTTk[node] := Ord(tyChar);
+    Result := node;
+    Exit;
   end
   else if CurTok.Kind = tkIdent then
   begin

@@ -2014,6 +2014,9 @@ test-core: $(COMPILER)
 	# FPC-compat batch: System.-qualifier, Assigned, resourcestring, method directives, unqualified indexed properties
 	./$(COMPILER) test/test_fpc_compat_batch.pas /tmp/test_fpc_compat_batch26
 	test "$$(/tmp/test_fpc_compat_batch26 | tail -1)" = "total ok 11 / 11"
+	# Ord/Chr/Length/Succ/Pred/Low/High fold in const decls, case labels, array bounds
+	./$(COMPILER) test/test_const_expr_builtins.pas /tmp/test_const_expr_builtins26
+	test "$$(/tmp/test_const_expr_builtins26)" = "ok"
 	# FPC-compat batch 2: method overloads, method pointers, setter-prop writes, nested class types, CreateFmt, mem builtins
 	./$(COMPILER) -Fulib/rtl test/test_fpc_compat_batch2.pas /tmp/test_fpc_compat_batch226
 	test "$$(/tmp/test_fpc_compat_batch226 | tail -1)" = "total ok 13 / 13"

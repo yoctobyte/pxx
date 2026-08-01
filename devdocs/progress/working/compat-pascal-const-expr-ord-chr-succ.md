@@ -7,7 +7,7 @@ track: P
 
 - **Type:** compat — **Track P** (Pascal frontend; constant-expression
   evaluation in the shared `parser.inc`, so it lands under Track A's gate).
-- **Status:** backlog — filed 2026-07-20.
+- **Status:** working
 - **Found by:** Track E, building `examples/mandelbrot/mandelbrot_gui.pas`
   ([[feature-demo-mandelbrot-gui-threaded]]) — `case KeyCode of Ord('q'): ...`
   is the natural way to write a key handler and it does not compile.
