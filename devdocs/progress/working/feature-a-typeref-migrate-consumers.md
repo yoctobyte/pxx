@@ -47,3 +47,49 @@ can be read from one place instead of per-backend `Syms[]` probing.
 `make test` + self-host byte-identical per lane; `make test-nilpy` too for any
 lane NilPy code touches (2 and 3 especially, given the design note's NilPy
 divergence evidence).
+
+## 2026-08-01 — lane 1 (TSymbol) in progress; REVERTED two backend read-site
+migrations, real sync gap found
+
+`SymTR` (additive, `54b5684bc`) landed, and several read sites migrated
+cleanly: `ir.inc`'s managed-record-copy and char-pointer-check (`93ebb9377`,
+`e9d1522c6`) — both safe because the fields they read (`RecName`/`PtrElemTk`
+for those specific symbols) are only ever written at the symbol's creation
+chokepoint, so `SymSyncTypeRef` (called there) keeps `SymTR` correct.
+
+**Then a real gap was caught before more damage landed**: `SymSyncTypeRef` is
+only called at the 5 `symtab.inc` creation chokepoints
+(`AllocVar`/`AllocParam`/`AllocArray`/`AllocDynArray`/`AddConst`), but
+`parser.inc`/`cparser.inc`/`pyparser.inc`/`ir.inc` also mutate the SAME old
+fields **after** creation — e.g. `compiler/parser.inc:26006` (and :20565,
+:21058) does `idx := AllocArray(...)` then immediately
+`Syms[idx].ElemRecName := LastTypeRecId` for **any `array of <record>`
+parameter or local** — a hot, common pattern, not an edge case. None of
+those ~132 post-creation write sites call `SymSyncTypeRef`, so `SymTR` goes
+stale for any symbol they touch.
+
+Two already-merged backend migrations were exposed to exactly this:
+`573e1c4e7` (x86-64 `ir_codegen.inc`, migrated `ElemRecName`/`ElemType`/
+`RecName` reads for anon-dynarray registration + managed-array-element
+copy) and `e3497fc73` (i386/arm32/aarch64/riscv32/xtensa RecName reads for
+managed-record dynarray-append growth) — both read `SymTR[...].ElemRec`/
+`.RecId` for exactly the array-of-record symbols the parser.inc sites above
+mutate post-creation. **Reverted** (`9b73ff4d6`, `e484fde67`) rather than
+leave a known, plausibly-widely-triggered stale-read gap live on master —
+this is the same bug shape as the `pconst`-shift regression from the night
+before (a parallel-array sync miss that a happy-path test corpus doesn't
+happen to exercise), and that one only surfaced in a full `test-core` run,
+not fixedpoint or `testmgr --tier quick`, so "tests passed" was not
+sufficient evidence to keep it.
+
+**Next**: before migrating any more reads (especially anything touching
+`RecName`/`ElemRecName`/`TypeKind`/`PtrElemTk`/`PtrElemRec`/`SymProcSig`),
+add `SymSyncTypeRef` calls after every post-creation write site — full
+inventory (grep for `Syms[<idx>].<field> :=` outside `symtab.inc`'s
+Alloc*/AddConst) is roughly: `RecName`/`ElemRecName` ~58 sites (`ir.inc` 3,
+`pyparser.inc` ~42, `parser.inc` ~13), `TypeKind` ~9 (`parser.inc`),
+`PtrElemTk`/`PtrElemRec` ~17+17 (`cparser.inc`, `parser.inc`),
+`SymProcSig` ~11, `ElemType`/`IsArray`/`ArrLen` ~16. That write-side sync
+is real, distinct work — do it before trusting any more `SymTR` reads, and
+re-land the two reverted backend migrations only after it's done and
+re-verified.
