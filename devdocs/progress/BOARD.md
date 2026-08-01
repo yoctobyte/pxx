@@ -37,7 +37,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (183)
+## backlog (182)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -50,7 +50,6 @@ _none_
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
 | bug-eliah-ide-win-caption-no-such-member | B | 40 | bug | `apps/ide/eliah/main.pas:1431` — `EliahForm.Win.Caption`: no `Win` member exists | — |
 | bug-n-nilpy-missing-dunder-expect-fail-assertion-is-stale | N | 55 | bug | test_nilpy_operator_dunder_missing_fail still expects a COMPILE error; the missing-dunder case now raises a runtime TypeError like CPython, so the assertion is stale | — |
-| bug-n-static-operand-clash-diagnostic-and-guard-test-escaping | N | 70 | bug | 7f111d229 landed with both its new tests red: the static clash diagnostic fires 1 of 6 times, and the mixed-type-guard expectation is double-escaped (%% vs %) | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
@@ -328,7 +327,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1174)
+## done (1175)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -663,6 +662,7 @@ _none_
 | bug-n-nilpy-import-sqlite-asserts-host-sqlite-version | N | 60 | bug | test-nilpy hard-codes sqlite 3.45.1's version number, so the suite is red on any box with a different system sqlite | — |
 | bug-n-nilpy-subscript-of-split-on-a-variable-receiver | N | 60 | bug | s.split(sep)[i] fails IR_UNSUPPORTED when s is a variable, while \"lit\".split(sep)[i] compiles — the frontend loses the result type in subscript position | — |
 | bug-n-pyeval-per-exec-leaks | N | 45 | bug | pyeval leaks per exec() call — forensics from the object-reclamation night | — |
+| bug-n-static-operand-clash-diagnostic-and-guard-test-escaping | N | 70 | bug | 7f111d229 landed with both its new tests red: the static clash diagnostic fires 1 of 6 times, and the mixed-type-guard expectation is double-escaped (%% vs %) | — |
 | bug-named-dynarray-field-setlength | A | 50 | bug | SetLength on a named dyn-array-alias class/record field misrouted to string path | — |
 | bug-narrowing-typecast-rvalue-no-truncate | A | 50 | bug | Narrowing ordinal typecast doesn't truncate in rvalue position | — |
 | bug-nativeuint-cast-widens-load | A | 80 | bug | core: NativeUInt/NativeInt(field) loads EIGHT bytes from a four-byte field | — |
@@ -2954,7 +2954,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
-- [p 70] [N] bug-n-static-operand-clash-diagnostic-and-guard-test-escaping
 - [p 70] [N] bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] feature-t-trackt-setup-autodetect-box-role

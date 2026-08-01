@@ -1087,7 +1087,7 @@ test-nilpy: $(COMPILER)
 	# receiver: the route cleared recName so the subscript had no class to
 	# resolve against and the AN_CALL reached IR lowering unlowered
 	./$(COMPILER) test/test_nilpy_str_method_subscript.npy /tmp/test_nilpy_strmsub26
-	test "$$(/tmp/test_nilpy_strmsub26)" = "$$(printf '%b' 'World\nHello\nc\n['a', 'b', 'c']\nb\ny\nH\nhello,world\nPAD\nb\n72\ntwo')"
+	test "$$(/tmp/test_nilpy_strmsub26)" = "$$(printf '%b' 'World\nHello\nc\n[\047a\047, \047b\047, \047c\047]\nb\ny\nH\nhello,world\nPAD\nb\n72\ntwo')"
 	# bool(x) is Python truthiness and must consult __bool__/__len__, agreeing
 	# with `if x:` and `not x` — it had no NilPy arm and never reached them
 	./$(COMPILER) test/test_nilpy_bool_protocol.npy /tmp/test_nilpy_boolproto26
@@ -1098,7 +1098,7 @@ test-nilpy: $(COMPILER)
 	# here are DIRECT literals, never unpacked from a container — that is what
 	# test_nilpy_mixed_type_operands could not reach.
 	./$(COMPILER) test/test_nilpy_static_mixed_type_guard.npy /tmp/test_nilpy_statguard26
-	test "$$(/tmp/test_nilpy_statguard26)" = "$$(printf '%b' 'int-list  TypeError\nint/list  TypeError\nint//list TypeError\nint%%list  TypeError\nint<list  TypeError\nint>=list TypeError\nstr-list  TypeError\nstr<int   TypeError\nlist//int TypeError\nlist%%int  TypeError\n[1, 3]\n[1, 2, 1, 2] abab\n5 ok\n5 3.5 3 1\n2.5 2 True\nTrue True True\n[1, 2] ab\nTrue')"
+	test "$$(/tmp/test_nilpy_statguard26)" = "$$(printf '%b' 'int-list  TypeError\nint/list  TypeError\nint//list TypeError\nint%list  TypeError\nint<list  TypeError\nint>=list TypeError\nstr-list  TypeError\nstr<int   TypeError\nlist//int TypeError\nlist%int  TypeError\n[1, 3]\n[1, 2, 1, 2] abab\n5 ok\n5 3.5 3 1\n2.5 2 True\nTrue True True\n[1, 2] ab\nTrue')"
 	# ordering two statically-typed sequences must compare CONTENTS: the static
 	# binop path lowered to a raw handle compare and answered from HEAP
 	# ADDRESSES. Every case is written so allocation order DISAGREES with

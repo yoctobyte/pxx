@@ -86,3 +86,57 @@ not str`). Track T's own bug, introduced the same day and fixed in `7911dc603`;
 `systemd` restarted the daemon 30s later and the health observer caught the
 window. Recorded here only so the delay is not mistaken for the watcher missing
 the failure — it detected it, then died filing it.
+
+## 2026-08-01 — both FIXED
+
+Both were mine, from `7f111d229`, and T's diagnosis was exactly right on both.
+
+### 1. Diagnostic fired 1 of 6 — an ORDERING mistake
+
+I put the new raise arm BEFORE the existing `IRPyNumStrClash` warning, and the
+raise arm `Exit`s. So every pair it claimed lost its diagnostic; the one warning
+that survived was the `+` case, the only one of the six the arm deliberately
+does not claim. Six was not aspirational — the pass was silencing itself.
+
+Fixed by warning FIRST, from ONE site, with the two predicates combined:
+
+```pascal
+if IRPyNumStrClash(node) or IRPyStaticPairUndefined(node) then
+  WarnAt(...);
+if IRPyStaticPairUndefined(node) then
+  ... raise ...
+```
+
+Combining them in the condition matters: the two overlap on str-vs-number pairs,
+so warning inside each arm separately would double-report those. Now exactly one
+warning per clash — measured 6 — with the runtime output unchanged
+(`sub TE / add TE / div TE / fdiv TE / lt TE / ge TE`), so diagnostic and
+program agree again, which is what the recipe's comment asks for.
+
+### 2. `%%` in the expectation — and a SECOND escaping bug T could not yet see
+
+`%` is literal in a make recipe and not special in a `printf` *argument*, so my
+`%%` survived doubled. Fixed to `%` in both places.
+
+Running the recipe properly then exposed a second one I had introduced the same
+way: `test_nilpy_str_method_subscript`'s expectation contains `['a', 'b', 'c']`,
+i.e. single quotes inside a single-quoted shell string. Re-escaped as `\047`,
+the convention already used elsewhere in this recipe.
+
+**Root cause of both, worth recording:** I verified each expectation with a
+Python re-derivation that applied *my own* escaping rules, so it agreed with my
+mistake instead of catching it. The fix is to execute make's real expansion:
+
+```
+make -n test-nilpy | grep <the tmp names> | bash -e
+```
+
+All 8 of the assertions I added today now pass under make's own expanded recipe,
+not a re-derivation of it.
+
+Native: build + byte-identical self-host fixedpoint, `testmgr --tier quick`
+GREEN, and **`make bootstrap` exit 0** (the FPC seed build, after the
+declaration-order lesson earlier tonight).
+
+## Log
+- 2026-08-01 — resolved, commit PENDING.

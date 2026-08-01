@@ -5639,6 +5639,21 @@ begin
       { Both operand types provable and the pair meaningless: say so now rather
         than letting the runtime helper raise when (and if) the line executes.
         A warning, not an error — see IRPyNumStrClash. }
+      { WARN first, then raise — in that order, and from ONE site. The raise arm
+        below Exits, so putting it first swallowed the diagnostic for every pair
+        it handled: test_nilpy_static_operand_clash counts six provable clashes
+        and saw one, the `+` case, which is the only one of the six this arm
+        does not claim (bug-n-static-operand-clash-diagnostic-and-guard-test-escaping).
+        Combining the two predicates in the condition keeps it to exactly one
+        warning per clash — IRPyNumStrClash and IRPyStaticPairUndefined overlap
+        on the str-vs-number pairs, so warning inside each arm separately would
+        double-report them. }
+      if IRPyNumStrClash(node) or IRPyStaticPairUndefined(node) then
+        WarnAt(ASTLine[node],
+               'Nil Python: operator ''' + IRPyOpSpelling(Integer(ASTIVal[node])) +
+               ''' is not defined for ' + IRPyOperandTypeName(ASTLeft[node]) +
+               ' and ' + IRPyOperandTypeName(ASTRight[node]) +
+               ' — both operand types are provable here, so this raises TypeError if it runs');
       { ...and where the pair is provably undefined, RAISE rather than compute.
         A genuine runtime TypeError via pylib, not a build abort, so
         `try: a - b / except TypeError:` — the normal Python way to probe for
@@ -5650,12 +5665,6 @@ begin
         Result := IRAppendCall(cpi, -1, -1, ASTTk[node]);
         Exit;
       end;
-      if IRPyNumStrClash(node) then
-        WarnAt(ASTLine[node],
-               'Nil Python: operator ''' + IRPyOpSpelling(Integer(ASTIVal[node])) +
-               ''' is not defined for ' + IRPyOperandTypeName(ASTLeft[node]) +
-               ' and ' + IRPyOperandTypeName(ASTRight[node]) +
-               ' — both operand types are provable here, so this raises TypeError if it runs');
       { Fold a compile-time concat of two string/char literals (`'a' + 'b'`) to a
         single interned literal — constant folding, target-independent. Besides
         avoiding a runtime concat, this is the correctness fix for
