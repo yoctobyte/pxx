@@ -6,9 +6,9 @@
 # nothing. Background THIS script instead — it exits when the gate is done, so
 # the completion notification IS the result. One task, one answer.
 #
-#   tools/gate.sh quick     test-nilpy + self-host fixedpoint + testmgr quick
+#   tools/gate.sh quick     self-host fixedpoint + testmgr quick  (~30s)
 #   tools/gate.sh lib       lib-test (Track B/E)
-#   tools/gate.sh full      quick + make test  (only when Track T is down)
+#   tools/gate.sh full      quick + test-nilpy + make test  (only when T is down)
 #   tools/gate.sh check     print what would run, and the box's state
 #
 # Exit status is the gate's: 0 = green. The summary names every step and its
@@ -68,9 +68,9 @@ note_contention
 if [ "$MODE" = check ]; then
   echo "gate: would run:"
   case "${2:-quick}" in *) :;; esac
-  echo "  quick -> make test-nilpy | self-host fixedpoint (pinned seed) | testmgr --tier quick"
+  echo "  quick -> self-host fixedpoint (pinned seed) | testmgr --tier quick   (~30s)"
   echo "  lib   -> make lib-test"
-  echo "  full  -> quick + make test"
+  echo "  full  -> quick + make test-nilpy + make test   (only when Track T is down)"
   tools/twatch.py --status 2>/dev/null | sed 's/^/  /' || echo "  (twatch status unavailable)"
   exit 0
 fi
@@ -78,11 +78,27 @@ fi
 RC=0
 case "$MODE" in
   quick|full)
-    step "make test-nilpy"      "$LOGDIR/test-nilpy.log" make test-nilpy || RC=1
+    # QUICK = the native confirm CLAUDE.md actually prescribes: testmgr --tier
+    # quick + self-host byte-identical, ~30s. It used to also run
+    # `make test-nilpy`, which spent 625 of its 649 seconds in one suite -- a
+    # full gate wearing the fast gate's name, in the mode agents are told to
+    # reach for BETWEEN EDITS. Two 554s runs in one session, both green, both
+    # finding nothing, is what filed this.
+    #
+    # Dropping it is safe now in a way it was not before:
+    #   - `testmgr --tier quick` carries dense NilPy and C canaries as of
+    #     feature-t-quick-canary-for-nilpy-and-c, so a gross NilPy break is
+    #     still caught here, in ~1s;
+    #   - the whole test-nilpy suite is enrolled in Track T's limited/full
+    #     matrix, so it IS run -- offloaded, which is the entire point;
+    #   - ten minutes is also long enough to overlap another build, which is
+    #     the window bug-t-selfhost-build-uses-fixed-tmp-paths-colliding and
+    #     feature-t-snapshot-compiler-binary-per-run are about.
     step "self-host fixedpoint" "$LOGDIR/fixedpoint.log" fixedpoint      || RC=1
     step "testmgr --tier quick" "$LOGDIR/quick.log" \
          tools/testmgr.py --tier quick                                   || RC=1
     if [ "$MODE" = full ]; then
+      step "make test-nilpy"    "$LOGDIR/test-nilpy.log" make test-nilpy || RC=1
       step "make test"          "$LOGDIR/test.log" make test             || RC=1
     fi
     ;;
