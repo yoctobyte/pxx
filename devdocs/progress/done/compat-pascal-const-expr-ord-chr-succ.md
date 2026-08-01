@@ -7,7 +7,7 @@ track: P
 
 - **Type:** compat — **Track P** (Pascal frontend; constant-expression
   evaluation in the shared `parser.inc`, so it lands under Track A's gate).
-- **Status:** working
+- **Status:** done
 - **Found by:** Track E, building `examples/mandelbrot/mandelbrot_gui.pas`
   ([[feature-demo-mandelbrot-gui-threaded]]) — `case KeyCode of Ord('q'): ...`
   is the natural way to write a key handler and it does not compile.
@@ -77,3 +77,4 @@ Numeric literals with a comment (`113,  { 'q' }`), which is what the demo does.
 
 ## Log
 - 2026-07-20 — Filed from Track E with the folding survey above.
+- 2026-08-01 — resolved, commit e4995a457.
