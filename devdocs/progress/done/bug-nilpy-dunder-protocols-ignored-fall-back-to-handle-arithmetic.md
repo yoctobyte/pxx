@@ -120,3 +120,6 @@ identity, so two structurally equal dataclasses are unequal. Same root as the
 GENERATED one that is missing), so it belongs with this ticket rather than on
 its own. Worth doing with `__eq__` since dataclasses are the shape most likely
 to be compared by value.
+
+## Log
+- 2026-08-01 — resolved, commit already-landed-earlier-this-session.
