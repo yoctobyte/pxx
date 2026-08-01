@@ -1039,9 +1039,11 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_str_rsplit_partition.npy /tmp/test_nilpy_rsplit26
 	test "$$(/tmp/test_nilpy_rsplit26)" = "$$(printf '%b' '[\047hell\047, \047 w\047, \047rld\047]\n[\047hello w\047, \047rld\047]\n[\047a,b\047, \047c\047, \047d\047]\n(\047hello\047, \047 \047, \047world\047)\n(\047hello w\047, \047o\047, \047rld\047)\n(\047hello world\047, \047\047, \047\047)\n(\047\047, \047\047, \047hello world\047)\n[\047\047]')"
 	# list + non-list used to silently corrupt (reinterpreting the list pointer
-	# as string data) instead of erroring -- now a clear compile error
-	! ./$(COMPILER) test/test_nilpy_list_plus_nonlist_fail.npy /tmp/test_nilpy_lpnl_fail26 > /tmp/test_nilpy_lpnl_fail.log 2>&1
-	grep -q "can only concatenate list with another list" /tmp/test_nilpy_lpnl_fail.log
+	# as string data); then became a COMPILE error, which was loud but still
+	# diverged from CPython -- a try/except around it could not build. Now a
+	# genuine runtime TypeError, so this COMPILES and the handler runs.
+	./$(COMPILER) test/test_nilpy_list_plus_nonlist_fail.npy /tmp/test_nilpy_lpnl_fail26
+	test "$$(/tmp/test_nilpy_lpnl_fail26)" = "$$(printf '%b' 'caught list+str\nstill running')"
 	# set methods: issubset/issuperset/union/intersection/difference/add/discard/remove; expectation is CPython's own output
 	./$(COMPILER) test/test_nilpy_set_methods.npy /tmp/test_nilpy_setmeth26
 	test "$$(/tmp/test_nilpy_setmeth26)" = "$$(printf '%b' 'False\nTrue\nTrue\n[1, 2, 3]\n[2, 3]\n[1]\n[1, 2, 3, 4]\n[2, 3, 4]\n[2, 3, 4]\n[3, 4]')"

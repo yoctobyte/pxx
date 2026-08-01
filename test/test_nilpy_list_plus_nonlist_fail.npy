@@ -1,6 +1,16 @@
-# a list concatenated with a non-list via `+` -- CPython raises TypeError at
-# run time; NilPy resolves types statically and catches it as a compile error
-# instead of silently corrupting the result (bug-nilpy-list-plus-nonlist-
-# silently-corrupts-instead-of-typeerror).
+# A list concatenated with a non-list via `+`. CPython raises TypeError at RUN
+# time; this used to silently corrupt the result (reinterpreting the list
+# pointer as string data) — bug-nilpy-list-plus-nonlist-silently-corrupts-
+# instead-of-typeerror.
+#
+# It was then made a COMPILE error, which was loud but still diverged from
+# CPython: a `try/except TypeError` around it could not build. As of
+# bug-nilpy-missing-arith-dunder-aborts-compile-instead-of-raising it is a
+# genuine runtime TypeError, so the file COMPILES and raises when run — which
+# is what this test now asserts, together with the handler actually running.
 a = [1, 2, 3]
-print(a + "x")
+try:
+    print(a + "x")
+except TypeError:
+    print("caught list+str")
+print("still running")
