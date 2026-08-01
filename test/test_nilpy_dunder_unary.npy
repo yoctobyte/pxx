@@ -39,6 +39,16 @@ try:
 except TypeError:
     print("caught invert")
 
+# __index__: an object used where an INTEGER is required is asked for one.
+# Subscript site only so far — slice bounds, range() and repeat counts still
+# pass the handle (same ticket).
+class Idx:
+    def __index__(self):
+        return 2
+
+
+print([10, 20, 30][Idx()])
+
 # plain numeric abs / bitwise-not are untouched
 print(abs(-9), abs(9), abs(-2.5))
 print(~0, ~5, ~-1)

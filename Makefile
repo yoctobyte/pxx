@@ -590,7 +590,7 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_dunderar226)" = "$$(printf '%b' '2\n1\n343\nFLOORDIV\nMOD\nPOW\n2 -3 1 2 1024\n3.0 1.5\n5 apples')"
 	@# unary dunders: abs() -> __abs__, ~ -> __invert__; no dunder = TypeError
 	./$(COMPILER) test/test_nilpy_dunder_unary.npy /tmp/test_nilpy_dunderun26
-	test "$$(/tmp/test_nilpy_dunderun26)" = "$$(printf '%b' '5\n7\nINVERTED\ncaught invert\n9 9 2.5\n-1 -6 0')"
+	test "$$(/tmp/test_nilpy_dunderun26)" = "$$(printf '%b' '5\n7\nINVERTED\ncaught invert\n30\n9 9 2.5\n-1 -6 0')"
 	@# bitwise/shift dunders on a user class; no dunder = catchable TypeError,
 	@# NOT the segfault this used to be. Set/dict operators must stay intact.
 	./$(COMPILER) test/test_nilpy_dunder_bitwise.npy /tmp/test_nilpy_dunderbit26

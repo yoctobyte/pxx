@@ -72,7 +72,7 @@ up, and a reason not to fold it silently into an `__abs__` fix.
 CPython for each dunder declared and not declared (must raise a catchable
 `TypeError`, never a handle-valued number).
 
-## PARTIALLY FIXED 2026-08-01 — __abs__ and __invert__ done, __index__ remains
+## PARTIALLY FIXED 2026-08-01 — __abs__, __invert__ done; __index__ done for SUBSCRIPTS only
 
 - `__invert__`: `PyParseBitOperand`'s `~` arm (`compiler/pyparser.inc`) now goes
   through `PyBitDunder`, the same helper the binary bitwise operators use — so
@@ -91,10 +91,15 @@ being unaffected.
 Native confirm: self-host fixedpoint A==B==C from the pinned seed, testmgr
 --tier quick GREEN; matrix offloaded to Track T.
 
-### Still open: `__index__`
+### `__index__` — subscripts done, other coercion sites still open
 
-Deliberately not attempted here. As the ticket's own scope note says, it needs
-wiring at every integer-coercion site (subscripts, slice bounds, `range()`,
-repeat counts), not just the one subscript case the sweep measured — that is a
-different, wider change and folding it in silently would have left most sites
-wrong. Ticket stays open for it.
+`PyIndexCoerce` (`compiler/pyparser.inc`) asks a user class for `__index__` and
+is applied at `PyMakeSuffixIndex`, the subscript site. `[10,20,30][Idx()]` now
+returns `30` (was `IndexError` — and note it raised only by LUCK: the handle
+happened to exceed the length, and a smaller one would have silently indexed the
+wrong element).
+
+**Still passing the raw handle**: slice bounds, `range()`, and sequence repeat
+counts. `PyIndexCoerce` is the piece to reuse at each — it is a one-line call
+per site — but each needs its own CPython-diffed case, so they are left for a
+follow-up rather than wired blind. Ticket stays open for them.

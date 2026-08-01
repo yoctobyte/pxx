@@ -5093,9 +5093,37 @@ begin
   ASTTk[Result] := Ord(tyVariant);
 end;
 
+function PyIndexCoerce(n: Integer): Integer;
+{ Python's `__index__`: an object used where an INTEGER is required is asked for
+  one. Returns the dunder call when `n` is a user class declaring it, otherwise
+  `n` unchanged.
+
+  Without this a class instance used as a subscript passed its HANDLE as the
+  index — measured: `[10,20,30][C()]` raised IndexError (the handle exceeded the
+  length) where CPython returned 30. It raised only by luck; a smaller handle
+  would have silently indexed the wrong element.
+  bug-nilpy-unary-numeric-dunders-return-raw-handle.
+
+  Applied at the SUBSCRIPT site only so far. The other integer-coercion sites —
+  slice bounds, range(), sequence repeat counts — still pass the handle; see
+  that ticket. }
+var ci: Integer;
+begin
+  PyIndexCoerce := n;
+  if n < 0 then Exit;
+  if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
+  if ResolveNodeRec(n) < REC_UCLASS_BASE then Exit;
+  if PyRecIsPylibOwnClass(ResolveNodeRec(n)) then Exit;
+  ci := ResolveNodeRec(n) - REC_UCLASS_BASE;
+  if FindUMeth(ci, '__index__') < 0 then Exit;
+  ci := PyCallMeth1(ci, '__index__', n, -1);
+  if ci >= 0 then PyIndexCoerce := ci;
+end;
+
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer;
 var rec, listCi, dictCi, procIdx, a0, a1: Integer;
 begin
+  idxNode := PyIndexCoerce(idxNode);   { obj-as-subscript asks its __index__ }
   if PyIsStrBaseTk(IntToTypeKind(ASTTk[baseNode])) then
   begin
     Result := PyMakeStrIndex(baseNode, idxNode);
