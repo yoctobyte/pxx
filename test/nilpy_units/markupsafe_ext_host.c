@@ -1,6 +1,6 @@
 /* M4 "a real extension" driver: same embedding shape as hello_ext_host.c /
  * argerr_ext_host.c / container_ext_host.c, but for a vendored, unmodified
- * real PyPI extension (test/nilpy_units/vendor/markupsafe_speedups.c).
+ * real PyPI extension (test/nilpy_units/vendor/_speedups.c).
  * Discovers PyInit__speedups (the module's real PyInit_<name> symbol — its
  * "as if pip-installed" name is markupsafe._speedups, unrelated to this
  * file's own name), calls its single method "_escape_inner" under the real

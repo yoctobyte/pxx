@@ -2,6 +2,7 @@
 track: N
 prio: 65
 type: feature
+blocked-by: [bug-c-uses-path-basename-collides-with-enclosing-unit-name]
 ---
 
 # cpyext: compile a CPython C extension's SOURCE against our own `Python.h`
@@ -271,6 +272,20 @@ fallback path plus this M4 slice already covers a fair amount of real-world
 API; M5 will likely demand a much larger `Python.h` surface (Cython emits
 extensive boilerplate: type objects, `tp_*` slots, `PyType_Ready`,
 weak references) and deserves its own scoping pass before starting.
+
+## 2026-08-01 — reverted two same-basename workarounds, platonic code instead
+
+M1 and M4 had each renamed a C module source to dodge
+`bug-c-uses-path-basename-collides-with-enclosing-unit-name` instead of
+leaving it blocked (`hello_ext.c` → `hello_ext_module.c`, and
+MarkupSafe's own `_speedups.c` → `markupsafe_speedups.c`, the latter
+turning out to not even collide — verified directly, reverted
+regardless for the accurate filename). Both reverted to their platonic
+names. M1's test now genuinely hits the bug (`undefined symbol:
+PyInit_hello_ext`) and is skipped in `make test-nilpy` with a message
+pointing here; `blocked-by` added above. M4 didn't actually need the
+rename (`_speedups` never collided with `markupsafe_ext`) so it stays
+green under its real upstream filename.
 
 ## Notes
 

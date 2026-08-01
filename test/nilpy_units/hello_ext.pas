@@ -2,20 +2,17 @@ unit hello_ext;
 { M1 "hello-ext" milestone (feature-nilpy-cpyext-c-api-from-source): the
   runtime bridge a NilPy `import hello_ext` binds to. Pulls pxx's own
   Python.h-backed runtime (lib/cpyext/src/pyruntime.c), the hand-written
-  extension module in real CPython boilerplate shape (./hello_ext_module.c: a
+  extension module in real CPython boilerplate shape (./hello_ext.c: a
   PyMethodDef table + PyModuleDef + PyInit_hello_ext), and the embedding-side
   driver that discovers PyInit_hello_ext and calls through the method table
   (./hello_ext_host.c).
 
-  The module source is NOT named hello_ext.c on purpose
-  (bug-pascal-uses-path-form-basename-collides-with-unit-name, filed
-  alongside this ticket): a path-form `uses './x.c'` resolves by basename
-  only (extension stripped), so a C file sharing this unit's own name
-  ("hello_ext") collides with the "already compiled" guard `ParseUsesUnitBody`
-  sets for the enclosing unit itself — the .c file's body is silently never
-  loaded (its declarations appear only as unresolved externs, CodePos -1;
-  confirmed with `--debug`, not guessed). Renaming the module source
-  sidesteps it for M1; the resolver bug is real and separately reported.
+  BLOCKED on bug-c-uses-path-basename-collides-with-enclosing-unit-name:
+  `./hello_ext.c` shares this unit's own basename, so its body is silently
+  never loaded (declarations appear only as unresolved externs). This is the
+  platonic shape (module source named after the module, as any real
+  extension's would be) — left as-is rather than renamed to dodge the bug.
+  `make test-nilpy` skips this test until the bug is fixed.
 
   No special NilPy-side registration is needed for `add_one` to become
   callable as `hello_ext.add_one(x)`: unit scope is flat for a NilPy `import`
@@ -26,7 +23,7 @@ unit hello_ext;
 
 interface
 
-uses pxxcio, '../../lib/cpyext/src/pyruntime.c', './hello_ext_module.c', './hello_ext_host.c';
+uses pxxcio, '../../lib/cpyext/src/pyruntime.c', './hello_ext.c', './hello_ext_host.c';
 
 function add_one(x: Integer): Integer;
 

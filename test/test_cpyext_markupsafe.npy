@@ -1,6 +1,6 @@
 # M4 "a real extension from PyPI" (feature-nilpy-cpyext-c-api-from-source):
 # MarkupSafe 3.0.3's real, unmodified _speedups.c
-# (test/nilpy_units/vendor/markupsafe_speedups.c), compiled by cfront against
+# (test/nilpy_units/vendor/_speedups.c), compiled by cfront against
 # pxx's own Python.h and imported from NilPy. Expectation is the SAME
 # extension's own output under real CPython (verified with
 # `PYTHONPATH=<sdist target> python3 -c "from markupsafe._speedups import

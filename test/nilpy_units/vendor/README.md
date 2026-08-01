@@ -1,12 +1,10 @@
 # Vendored extension source (cpyext M4)
 
-`markupsafe_speedups.c` is an **unmodified** copy of
+`_speedups.c` is an **unmodified** copy of
 [MarkupSafe](https://pypi.org/project/MarkupSafe/) 3.0.3's
-`src/markupsafe/_speedups.c` (renamed only — the file's own C content,
-including its `PyInit__speedups` symbol, is untouched; see
-`bug-c-uses-path-basename-collides-with-enclosing-unit-name` for why the
-rename is necessary). Fetched via `pip download markupsafe==3.0.3 --no-deps
---no-binary :all:` on 2026-08-01.
+`src/markupsafe/_speedups.c`, same filename, byte-identical content.
+Fetched via `pip download markupsafe==3.0.3 --no-deps --no-binary :all:` on
+2026-08-01.
 
 License: BSD-3-Clause, Copyright 2010 Pallets — see `markupsafe_LICENSE.txt`
 (copied verbatim from the same sdist).
