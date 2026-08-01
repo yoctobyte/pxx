@@ -1,7 +1,14 @@
 ---
 prio: 45  # auto
-blocked-by: [decide-gpc-as-corpus-target]
+status: rejected
 ---
+
+## REJECTED 2026-08-01
+
+**User's call**: reject. GPC's codebase is stale, on top of the ticket's
+own case (not standalone-buildable, tcc self-compile already proves what
+this would have proven, ISO-Pascal overlap with our FPC/Delphi-shaped
+frontend is partial at best). See [[decide-gpc-as-corpus-target]].
 
 # Wish: compile GPC
 

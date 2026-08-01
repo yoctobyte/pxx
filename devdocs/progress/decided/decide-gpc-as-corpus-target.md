@@ -3,7 +3,14 @@ summary: "Track U: reject the GPC corpus wish, or keep it? Two sweeps have calle
 type: decide
 prio: 45
 track: U
+status: resolved
+resolved: 2026-08-01
 ---
+
+## DECIDED 2026-08-01 — reject
+
+**User's call**: reject, codebase is stale. [[wish-compile-gnu-pascal]] moved
+to `rejected/`.
 
 # decide: reject `wish-compile-gnu-pascal`, or keep it open?
 

@@ -3,7 +3,15 @@ summary: "Track U: four render/input questions Ilja (TUI IDE face) must answer b
 type: decide
 prio: 45
 track: U
+status: postponed
 ---
+
+## POSTPONED 2026-08-01
+
+**User's call**: not priority — better GUI test candidates exist, and an
+IDE isn't currently needed. The four sub-questions below are left
+unanswered rather than decided; revisit when [[feature-ilja-tui]] actually
+becomes work. Both moved to `rainy-day/`.
 
 # decide: Ilja's render model — canvas seam, resize input, colour depth, px→cell mapping
 

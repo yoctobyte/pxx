@@ -1,7 +1,12 @@
 ---
 prio: 45  # auto
-blocked-by: [decide-ilja-tui-render-model]
+status: postponed
 ---
+
+## POSTPONED 2026-08-01
+
+Not priority — better GUI test candidates exist, no current need for an
+IDE. See [[decide-ilja-tui-render-model]] (also postponed).
 
 # Ilja — TUI (ANSI) face
 
