@@ -1,9 +1,19 @@
-# an operator on a user class with no matching dunder -- used to silently
-# compute garbage on the raw class handles instead of erroring
-# (bug-nilpy-arithmetic-operator-dunders-not-dispatched).
+# An operator on a user class with no matching dunder. CPython raises TypeError
+# at RUN time; this used to silently compute garbage on the raw class handles
+# instead of erroring (bug-nilpy-arithmetic-operator-dunders-not-dispatched).
+#
+# It was then made a COMPILE error, which was loud but still diverged from
+# CPython: a `try/except TypeError` around it could not build. As of
+# bug-nilpy-missing-arith-dunder-aborts-compile-instead-of-raising it is a
+# genuine runtime TypeError, so the file COMPILES and raises when run -- which
+# is what this test now asserts, together with the handler actually running.
 class NoOp:
     def __init__(self):
         self.x = 1
 a = NoOp()
 b = NoOp()
-print(a + b)
+try:
+    print(a + b)
+except TypeError:
+    print("caught missing __add__")
+print("still running")
