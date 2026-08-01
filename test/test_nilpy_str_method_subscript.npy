@@ -1,0 +1,35 @@
+# A str method that returns a CONTAINER, subscripted immediately, on a VARIABLE
+# receiver: `s.split(",")[1]`.
+#
+# The variable-receiver route cleared the result's class identity
+# (`recName := REC_NONE`) after calling PyParseStrMethod, so a following
+# subscript had no class to resolve against and the AN_CALL reached IR lowering
+# unlowered — a hard `IR_UNSUPPORTED: frontend could not lower AST node (kind 8)`
+# (bug-n-nilpy-subscript-of-split-on-a-variable-receiver).
+#
+# The neighbouring forms all worked, which is what made it narrow: a LITERAL
+# receiver, the two-step `p = s.split(","); p[1]`, `g()[1]`, `xs.copy()[0]` and
+# `s.upper()[0]` were all fine. Only variable-receiver + container-returning
+# method + immediate subscript failed. `parts = line.split(",")` then indexing is
+# the most common line of string-handling Python there is, and the one-liner is
+# what people write first.
+#
+# Expectation is CPython's own output.
+
+s = "Hello,World"
+print(s.split(",")[1])
+print(s.split(",")[0])
+line = "a:b:c"
+print(line.split(":")[2])
+print(line.split(":"))
+p = line.split(":")
+print(p[1])
+print("x,y".split(",")[1])
+print(s.upper()[0])
+print(s.lower())
+w = "  pad  "
+print(w.strip().upper())
+print("a-b".partition("-")[2])
+print(s.encode()[0])
+words = "one two three"
+print(words.split()[1])

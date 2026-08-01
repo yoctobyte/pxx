@@ -5219,7 +5219,18 @@ begin
         Next;   { consume the method name; CurTok is now the '(' }
         node := PyParseStrMethod(node, fieldName);
         tk := IntToTypeKind(ASTTk[node]);
-        recName := REC_NONE;
+        { CARRY the result's class identity. A str method that returns a
+          CONTAINER — split/rsplit/partition/rpartition (tyClass = TPyList),
+          encode (TPyBytes) — left `tk` as tyClass with recName cleared to
+          REC_NONE, so an immediately following subscript had no class to
+          resolve against and the AN_CALL reached IR lowering unlowered:
+          `s.split(",")[1]` failed IR_UNSUPPORTED while `"a,b".split(",")[1]`
+          and the two-step `p = s.split(","); p[1]` both worked
+          (bug-n-nilpy-subscript-of-split-on-a-variable-receiver). The literal
+          route resolves the rec off the node with ResolveNodeRec, and the
+          to_bytes route just below already carries it; this is the same thing.
+          A str-returning method still yields REC_NONE, so nothing else moves. }
+        recName := ResolveNodeRec(node);
         Continue;
       end;
 

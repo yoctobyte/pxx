@@ -1083,6 +1083,11 @@ test-nilpy: $(COMPILER)
 	# runtime TypeError, so this COMPILES and the handler runs.
 	./$(COMPILER) test/test_nilpy_operator_dunder_missing_fail.npy /tmp/test_nilpy_nodunder_fail26
 	test "$$(/tmp/test_nilpy_nodunder_fail26)" = "$$(printf '%b' 'caught missing __add__\nstill running')"
+	# a str method returning a CONTAINER, subscripted immediately, on a VARIABLE
+	# receiver: the route cleared recName so the subscript had no class to
+	# resolve against and the AN_CALL reached IR lowering unlowered
+	./$(COMPILER) test/test_nilpy_str_method_subscript.npy /tmp/test_nilpy_strmsub26
+	test "$$(/tmp/test_nilpy_strmsub26)" = "$$(printf '%b' 'World\nHello\nc\n['a', 'b', 'c']\nb\ny\nH\nhello,world\nPAD\nb\n72\ntwo')"
 	# bool(x) is Python truthiness and must consult __bool__/__len__, agreeing
 	# with `if x:` and `not x` — it had no NilPy arm and never reached them
 	./$(COMPILER) test/test_nilpy_bool_protocol.npy /tmp/test_nilpy_boolproto26
