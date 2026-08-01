@@ -402,8 +402,25 @@ diffed against an oracle.
   units. (Historic: C used a `feat/cfront` worktree until it merged at v80; that
   worktree is retired. Exception: Track T's watcher daemon runs in its own
   dedicated clone — it's infra, not a dev agent.)
+- **Proceed optimistic (user, 2026-08-01, `decide-gate-line-convention`).** The
+  default gate for a push is the **native confirm**: `tools/testmgr.py --tier
+  quick` + self-host byte-identical. *The fix worked and the native test shows
+  it did* is sufficient — push, and let Track T's report come back tied to your
+  sha. **Do NOT run a suite by hand.** A ticket `Gate:` line naming
+  `make test-nilpy` (or any long local suite) is superseded by this rule.
+  The one exception is Track T being **proven** down — `tools/twatch.py
+  --status` exit 1, or `tools/trackt.py health` reporting DOWN — and then the
+  old rule applies: run your lane's full gate first. Slow, quiet or "feels
+  stale" is not proven; those two commands are what answer it.
+  Hear back with `tools/twatch.py --follow` (it reports your sha as covered as
+  soon as any descendant is judged). Safe by construction: the one property a
+  bad push could poison for everyone — a compiler that cannot reproduce itself —
+  cannot leave your tree, because `make compiler/pascal26` IS the fixedpoint.
+  `pin` stays the deliberate brake.
 - **Run the gate with `tools/gate.sh` (quick | lib | full | check), and background
-  THAT — never poll a `make` you started.** It runs the whole gate to completion,
+  THAT — never poll a `make` you started.** `gate.sh quick` is the native
+  confirm above (~30s idle); `gate.sh full` adds the local suites and is for
+  when T is down. It runs the whole gate to completion,
   prints one line per step, and exits with the result, so the completion
   notification is the answer. Polling a long run with repeated `sleep N; tail log`
   burns a turn per poll and learns nothing; and `until ! pgrep -f "make test"`

@@ -37,7 +37,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (189)
+## backlog (188)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -98,7 +98,6 @@ _none_
 | compat-pascal-binop-operand-eval-order | A | 15 | compat | pxx evaluates binary-operator operands left-to-right; FPC evaluates right-to-left | — |
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
 | decide-abi-portable-vs-target-split | A | 50 | decide |  | — |
-| decide-gate-line-convention | U | 60 | decide | Should ticket Gate: lines prescribe the long local suite, or the 40s native confirm plus Track T offload? Today they say the former while CLAUDE.md says the latter. | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-nilpy-runtime-dunder-dispatch-mechanism | U | 60 | decide | Decide: how should NilPy dispatch dunders on an instance whose class is known only at RUN time (container elements)? | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
@@ -297,7 +296,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (31)
+## decided (32)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -308,6 +307,7 @@ _none_
 | decide-crtl-libm-glibc-bit-parity | A | 50 | decide |  | — |
 | decide-dns-libc-backend-shape | U | 40 | decide | Track U: how should a libc-backed DNS resolver be reached from libc-free static ELF? | — |
 | decide-env-write-side | U | 40 | decide | Policy: does pxx support WRITING the environment (setenv/putenv, os.environ[k]=v) — and does a write reach a child? | — |
+| decide-gate-line-convention | U | 60 | decide | Should ticket Gate: lines prescribe the long local suite, or the 40s native confirm plus Track T offload? Today they say the former while CLAUDE.md says the latter. | — |
 | decide-gpc-as-corpus-target | U | 45 | decide | Track U: reject the GPC corpus wish, or keep it? Two sweeps have called it a rejection candidate. | — |
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | decide-ipv6-dualstack-and-aaaa-ordering | U | 40 | decide | Policy: IPV6_V6ONLY on a :: listener, and which address wins when a host has both A and AAAA | — |
@@ -2967,7 +2967,6 @@ _none_
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [N] bug-nilpy-str-format-ignores-positional-indices
 - [p 60] [N] bug-nilpy-typed-const-import-reads-zero
-- [p 60] [U] decide-gate-line-convention
 - [p 60] [U] decide-nilpy-runtime-dunder-dispatch-mechanism
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing

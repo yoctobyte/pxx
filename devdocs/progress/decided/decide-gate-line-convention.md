@@ -79,3 +79,52 @@ under U.
 Whether to keep the self-host fixedpoint in the local confirm — keep it. It is
 22s, it is the gate that protects the stable binary every track builds on, and
 nothing about relying on T changes that.
+
+---
+
+## DECIDED — Option A, unqualified (user, 2026-08-01, at the xeon box)
+
+> "unless track T is proven to be down, we just proceed optimistic
+> (`fix worked - native test shows it did`). "
+
+**The rule:**
+
+> **Gate:** `testmgr --tier quick` + self-host byte-identical locally — the
+> local native confirm showing the fix works is sufficient to push. The suite
+> comes back from Track T afterwards, tied to your sha.
+>
+> **The only exception is Track T being PROVEN down** (`twatch --status` exit 1,
+> or `trackt health` reporting DOWN). Then the pre-existing rule applies: run
+> your lane's full gate before pushing anything risky.
+
+"Proven" is deliberate. A slow report, a quiet repo, or a hunch is not down —
+`--status` and `trackt health` are the two things that answer it, and both now
+read from `origin/master` rather than a stale worktree.
+
+### Option C's escape hatch was recommended and NOT adopted
+
+I recommended A *with* C's carve-out — keep the local suite for changes touching
+shared core (`ir*.inc`, `symtab.inc`, `defs.inc`, the backends, the P-shared
+`lexer`/`parser`). The user chose plain A. Recorded so a later reader knows the
+carve-out was considered and declined, not overlooked.
+
+The reasoning that makes plain A defensible: the one property a bad push could
+poison for everyone — a compiler that cannot reproduce itself — **cannot escape
+the working tree**, because `make compiler/pascal26` IS the fixedpoint (it
+compiles twice and `cmp`s, and refuses to install without convergence). So the
+native confirm already covers the catastrophic case, and everything else is a
+red on master that tstate reports and someone fixes forward. `pin` remains the
+one deliberate brake.
+
+### What this changes in practice
+
+- Existing ticket `Gate:` lines naming `make test-nilpy` are **superseded by
+  this convention** — they are not individually rewritten. New tickets should
+  use the wording above.
+- `gate.sh quick` already matches (`ed7b401b8`: 649s → 58s; `test-nilpy` moved
+  to `full`, which is the T-is-down mode).
+- Roundtrip per fix: ~11 min → **~24s build + optional 41s gate, verdict in
+  ~161s asynchronously** (measured end to end today).
+
+## Log
+- 2026-08-01 — decided, commit 73eb0c76d.
