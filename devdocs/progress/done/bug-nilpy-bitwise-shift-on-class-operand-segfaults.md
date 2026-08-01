@@ -122,3 +122,26 @@ operator-dispatch sites, so no dunder dispatches at all. Reproduced on the
 pinned v239 binary, so it long predates this work — filed as
 [[bug-nilpy-global-shadowed-by-method-param-name-loses-class-type]] (prio 75).
 The test now uses `rhs`, with a comment saying why.
+
+## 2026-08-01 — VERIFIED FIXED, resolving
+
+Fixed earlier today (the bitwise/shift dunder dispatch plus pylib's
+`PyUnsupportedOperandError` raise) but never moved out of the backlog.
+Re-verified rather than taken on trust:
+
+| case | pxx | CPython |
+| --- | --- | --- |
+| `c & 1`, `c \| 1`, `c ^ 1`, `c << 1`, `c >> 1` with all five dunders defined | `AND OR XOR LSH RSH` | same |
+| a class with NO such dunder | catchable `TypeError` | `TypeError` |
+| plain ints `6&3 6\|3 6^3 1<<3 16>>2` | `2 7 5 8 4` | same |
+
+No segfault in any form; the no-dunder case is a genuine runtime TypeError that
+`try/except` catches, not a crash and not a build abort. No code change needed.
+
+**Found while verifying:** the ticket's own repro could not be run as written,
+because it uses one-line def bodies (`def __and__(self, o): return "AND"`) and
+NilPy does not parse those. Filed as
+[[bug-nilpy-one-line-def-and-class-bodies-do-not-parse]].
+
+## Log
+- 2026-08-01 — resolved, commit VERIFIED.
