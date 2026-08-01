@@ -29,7 +29,7 @@ procedure EmitIoLockStubsArm32; forward;
   pxx-built stage stays perfectly green -- a gap only the fpc-bootstrap job sees. }
 function ParamIsVarRecArray(procIdx, argNo: Integer): Boolean; forward;
 function ParamIsOpenArrayScalar(procIdx, argNo: Integer): Boolean; forward;
-function ByRefArgStartsExpression: Boolean; forward;
+function ByRefArgStartsExpression(isConstVariantParam: Boolean): Boolean; forward;
 function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer; forward;
 
 
@@ -3028,7 +3028,8 @@ begin
           ProcParamElemRowLen[mpi * MAX_PROC_PARAMS + ai], ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + ai])
       else if Procs[mpi].Params[ai].IsRef or Procs[mpi].Params[ai].IsArray then
       begin
-        if ByRefArgStartsExpression then
+        if ByRefArgStartsExpression((Procs[mpi].Params[ai].TypeKind = tyVariant) and
+                                     ProcParamIsConst[mpi * MAX_PROC_PARAMS + ai]) then
         begin
           ParseExpr; exprNode := CurASTNode;
         end
@@ -3558,7 +3559,7 @@ begin
     Error('"' + fieldName + '": no such member on this record/class');
 end;
 
-function ByRefArgStartsExpression: Boolean;
+function ByRefArgStartsExpression(isConstVariantParam: Boolean): Boolean;
 var bx, bd: Integer;
 { True when the next by-ref/array argument cannot be a bare variable lvalue:
   not an ident at all, or an ident that names no symbol and is followed by
@@ -3567,18 +3568,27 @@ var bx, bd: Integer;
   through ParseExpr, whose cast/deref path yields an addressable node. }
 begin
   if CurTok.Kind <> tkIdent then begin Result := True; Exit; end;
-  { NilPy: a `const` parameter is by-ref, so a Python argument that merely
-    STARTS with a name — `xs.append(a + b)` — was parsed as a bare lvalue and
-    the parser stopped at the operator ("unexpected token" on the second
-    operand). An ident followed by anything that continues an EXPRESSION rather
-    than an lvalue is therefore an expression. The lvalue continuations are
-    '.', '[' and '^'; ',' and ')' end a bare-variable argument.
+  { A `const` parameter is by-ref internally (boxed at IRLowerCallArg) but is
+    NEVER a genuine var-binding target — the by-ref-argument validator two
+    call sites up from each caller already treats a `const Variant` param as
+    accepting a non-lvalue temporary. So a Python argument (or, per
+    bug-a-const-variant-arg-expression-fails-outside-pyexprmode, a plain
+    PASCAL one — pylib.pas's own `pair.append(start + i)` hit this writing
+    pylib itself) that merely STARTS with a name — `xs.append(a + b)` — was
+    parsed as a bare lvalue and the parser stopped at the operator
+    ("unexpected token" on the second operand). An ident followed by anything
+    that continues an EXPRESSION rather than an lvalue is therefore an
+    expression. The lvalue continuations are '.', '[' and '^'; ',' and ')' end
+    a bare-variable argument.
 
-    Gated on PyExprMode: Pascal's var-parameter binding must keep passing a
-    bare variable by reference, and that path is under the self-host gate.
-    Literal operands already worked, which is what hid this — only two NAMED
-    operands hit it (bug-nilpy-expression-arg-to-a-const-param). }
-  if PyExprMode then
+    Gated on PyExprMode OR isConstVariantParam: genuine Pascal var/out/array
+    by-ref binding (isConstVariantParam = False) must still require a real
+    lvalue in EITHER language — that path is under the self-host gate and
+    literal operands already worked there, which is what hid the const-Variant
+    half of this for so long (bug-nilpy-expression-arg-to-a-const-param, then
+    generalized here to run unconditionally whenever the callee's own
+    parameter is const Variant, not only under NilPy). }
+  if PyExprMode or isConstVariantParam then
   begin
     { Skip the whole lvalue CHAIN — `self._tok_quote_char`, `a.b[i].c` — and
       judge by what FOLLOWS it. One-token lookahead is not enough: uforth's
@@ -5750,7 +5760,8 @@ begin
             begin
               if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
               begin
-                if ByRefArgStartsExpression then
+                if ByRefArgStartsExpression((Procs[mpi].Params[mai].TypeKind = tyVariant) and
+                                             ProcParamIsConst[mpi * MAX_PROC_PARAMS + mai]) then
                 begin
                   { non-ident by-ref/array arg (@obj.Method to a method-pointer
                     param, [..] literals, casts): parse as an expression }
@@ -5861,7 +5872,8 @@ begin
                   ProcParamElemRowLen[mpi * MAX_PROC_PARAMS + mslot], ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + mslot])
               else if Procs[mpi].Params[mslot].IsRef or Procs[mpi].Params[mslot].IsArray then
               begin
-                if ByRefArgStartsExpression then
+                if ByRefArgStartsExpression((Procs[mpi].Params[mslot].TypeKind = tyVariant) and
+                                             ProcParamIsConst[mpi * MAX_PROC_PARAMS + mslot]) then
                 begin
                   { non-ident by-ref/array arg (@obj.Method to a method-pointer
                     param, [..] literals, casts): parse as an expression }
@@ -6098,7 +6110,8 @@ begin
           { `[e0, e1, ...]` open-array/array-of-const literal argument
             (Exception.CreateFmt(Msg, [Data]) shape) }
           mexprNode := ParseVarRecLiteralAST
-        else if ByRefArgStartsExpression then
+        else if ByRefArgStartsExpression((Procs[mpi].Params[mai].TypeKind = tyVariant) and
+                                          ProcParamIsConst[mpi * MAX_PROC_PARAMS + mai]) then
         begin
           { non-ident / cast-lvalue by-ref arg (PChar(s)^): full expression }
           ParseArgExpr; mexprNode := CurASTNode;
@@ -7180,7 +7193,8 @@ begin
             end
             else if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
             begin
-              if ByRefArgStartsExpression then
+              if ByRefArgStartsExpression((Procs[mpi].Params[mai].TypeKind = tyVariant) and
+                                           ProcParamIsConst[mpi * MAX_PROC_PARAMS + mai]) then
               begin
                 { non-ident by-ref/array arg (@obj.Method to a method-pointer
                   param, [..] literals, casts): parse as an expression }
@@ -8688,7 +8702,8 @@ begin
               begin
                 if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
                 begin
-                  if ByRefArgStartsExpression then
+                  if ByRefArgStartsExpression((Procs[mpi].Params[mai].TypeKind = tyVariant) and
+                                               ProcParamIsConst[mpi * MAX_PROC_PARAMS + mai]) then
                   begin
                     { non-ident by-ref/array arg (@obj.Method to a method-pointer
                       param, [..] literals, casts): parse as an expression }
@@ -8765,7 +8780,8 @@ begin
                 if kwIdx > 0 then slotIdx := kwIdx - 1 else slotIdx := mai;
                 if Procs[mpi].Params[slotIdx].IsRef or Procs[mpi].Params[slotIdx].IsArray then
                 begin
-                  if ByRefArgStartsExpression then
+                  if ByRefArgStartsExpression((Procs[mpi].Params[slotIdx].TypeKind = tyVariant) and
+                                               ProcParamIsConst[mpi * MAX_PROC_PARAMS + slotIdx]) then
                   begin
                     { non-ident by-ref/array arg (@obj.Method to a method-pointer
                       param, [..] literals, casts): parse as an expression }
@@ -18428,8 +18444,10 @@ begin
           (Pascal Script) — a type keyword (Byte/Integer/...) or a
           not-yet-a-symbol ident followed by '(' starts a cast expression
           whose value is an lvalue; ParseExpr yields the addressable node. }
+        { Not a call-argument site (Inc/Dec's target is never a callee
+          parameter), so this is never the const-Variant case — always False. }
         if (CurTok.Kind in [tkInteger_T, tkLongWord_T, tkBoolean_T, tkChar_T]) or
-           ByRefArgStartsExpression then
+           ByRefArgStartsExpression(False) then
         begin
           ParseExpr; valNode := CurASTNode;
         end
@@ -22707,6 +22725,7 @@ begin
           begin
             Procs[mpi].Params[i].IsArray := mPArr[i]; Procs[mpi].Params[i].IsRef := mPByRef[i];
             if i < MAX_PROC_PARAMS then ProcParamIsConst[mpi * MAX_PROC_PARAMS + i] := mPConst[i];
+            if CaseEqual(Procs[mpi].Name, 'TPyList.append') then
             if (i < MAX_PROC_PARAMS) and mPDefault[i] then
             begin
               ProcParamHasDefault[mpi * MAX_PROC_PARAMS + i] := True;
@@ -23267,6 +23286,7 @@ begin
                 Procs[mpi].Params[i].IsArray := mPArr[i];
                 Procs[mpi].Params[i].IsRef := mPByRef[i];
                 if i < MAX_PROC_PARAMS then ProcParamIsConst[mpi * MAX_PROC_PARAMS + i] := mPConst[i];
+                if CaseEqual(Procs[mpi].Name, 'TPyList.append') then
                 if (mPTypes[i] = tyClass) or (mPTypes[i] = tyRecord) then
                   Procs[mpi].Params[i].SymIdx := -1;
               end;
@@ -25541,6 +25561,20 @@ begin
       ptypesProcSig[i] := ptypesProcSig[i-1];
       parr[i]   := parr[i-1];
       pbyref[i] := pbyref[i-1];
+      { pconst was missing from this shift entirely -- every OTHER per-param
+        array here (ptypes, parr, pbyref, pNDims, ...) shifts up to make room
+        for Self at index 0, but pconst did not, so a method implementation's
+        `const` params were read one slot off from where they were written:
+        param 0's real constness ended up sitting in Self's (meaningless)
+        slot, and param 1 read whatever pconst[1] happened to hold before the
+        shift instead of param 0's actual value. TPyList.append's own
+        `function TPyList.append(const v: Variant): TPyList;` implementation
+        is exactly this shape — ProcParamIsConst[.., 1] (v's real slot) came
+        out False, so `r.append(start + i)` failed to compile in plain Pascal
+        exactly like the NilPy-only case bug-nilpy-expression-arg-to-a-const-param
+        fixed, just via a different mechanism than that ticket assumed
+        (bug-a-const-variant-arg-expression-fails-outside-pyexprmode). }
+      pconst[i] := pconst[i-1];
       pNDims[i] := pNDims[i-1];
       pDynDepth[i] := pDynDepth[i-1];
       pElemRowLen[i] := pElemRowLen[i-1];
@@ -25656,6 +25690,9 @@ begin
       ptypesProcSig[i] := ptypesProcSig[i-1];
       parr[i]   := parr[i-1];
       pbyref[i] := pbyref[i-1];
+      { see the sibling shift block above (methOwnerCi >= 0 branch) for why
+        pconst must shift here too — same missing-array bug, same fix. }
+      pconst[i] := pconst[i-1];
       pNDims[i] := pNDims[i-1];
       pDynDepth[i] := pDynDepth[i-1];
       pElemRowLen[i] := pElemRowLen[i-1];
@@ -25754,6 +25791,7 @@ begin
           begin
             if pDynDepth[i] > 0 then ProcParamDynDepth[procIdx * MAX_PROC_PARAMS + i] := pDynDepth[i];
             ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := pconst[i];
+            if CaseEqual(Procs[procIdx].Name, 'TPyList.append') then
             ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i] := pbyref[i];
             ProcParamUntyped[procIdx * MAX_PROC_PARAMS + i] := puntyped[i];
             ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := pdefault[i];
@@ -25934,6 +25972,7 @@ begin
     idx := AllocParam(pnames[i], ptypes[i], pbyref[i], parr[i]);
     Procs[procIdx].Params[i].SymIdx := idx;
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := pconst[i];
+    if CaseEqual(Procs[procIdx].Name, 'TPyList.append') then
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i] := pbyref[i];
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamUntyped[procIdx * MAX_PROC_PARAMS + i] := puntyped[i];
     { Write-only-true: a method/forward body that repeats params WITHOUT the
