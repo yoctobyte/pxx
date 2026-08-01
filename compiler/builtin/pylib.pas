@@ -811,6 +811,12 @@ function pylist_repeat(l: TPyList; n: Int64): TPyList;
 function pybytes_repeat(b: TPyBytes; n: Int64): TPyBytes;
 function pybytes_concat(a, b: TPyBytes): TPyBytes;
 function pybytes_eq(a, b: TPyBytes): Boolean;
+{ Lexicographic ORDER for bytes, -1/0/1, the same contract pylist_cmp has:
+  element by element, then the shorter sequence first. Ordering operators on two
+  statically-typed TPyBytes used to lower to a raw handle compare and answer
+  from the two objects' HEAP ADDRESSES
+  (bug-nilpy-list-ordering-compares-heap-addresses, the bytes half). }
+function pybytes_cmp(a, b: TPyBytes): Int64;
 function pyfile_open(const path, mode: AnsiString): TPyFile;
 { `s.rjust(w)` / `s.rjust(w, fill)` — right-align in a field of w characters.
   Python returns the string UNCHANGED when it is already at least that long
@@ -7125,6 +7131,25 @@ begin
   for i := 0 to na - 1 do
     if a.at(i) <> b.at(i) then Exit;
   Result := True;
+end;
+
+function pybytes_cmp(a, b: TPyBytes): Int64;
+var i, na, nb, n, x, y: Integer;
+begin
+  if a = nil then na := 0 else na := a.count;
+  if b = nil then nb := 0 else nb := b.count;
+  if na < nb then n := na else n := nb;
+  for i := 0 to n - 1 do
+  begin
+    x := a.at(i);
+    y := b.at(i);
+    if x < y then begin Result := -1; Exit; end;
+    if x > y then begin Result := 1; Exit; end;
+  end;
+  { common prefix equal — the shorter sequence sorts first }
+  if na < nb then Result := -1
+  else if na > nb then Result := 1
+  else Result := 0;
 end;
 
 function TPyBytes.endswith(sfx: TPyBytes): Boolean;

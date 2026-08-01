@@ -38,7 +38,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (186)
+## backlog (185)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -67,7 +67,6 @@ _none_
 | bug-nilpy-int-prints-as-float-when-the-name-is-widened-later | N | 50 | bug | An int prints as `5.0` because the SAME NAME is assigned a float later in the file | — |
 | bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
 | bug-nilpy-list-of-custom-objects-loses-repr-str | N | 40 | bug | A user class instance boxed in a list/dict prints as empty, losing `__repr__`/`__str__` | — |
-| bug-nilpy-list-ordering-compares-heap-addresses | N | 70 | bug | NilPy: ordering two statically-typed lists compares their HEAP ADDRESSES, not their contents — `[9,9] < [1,1]` is True; no comparison helper is called at all | — |
 | bug-nilpy-list-sort-ignores-lt-dunder-on-objects | N | 35 | bug | `list.sort()` on user objects with `__lt__` raises a runtime TypeError instead of using it | — |
 | bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
 | bug-nilpy-missing-builtins-step-slicing-range-into-list | N | 45 | bug | NilPy survey: step slicing (x[::2]), list(range(...)), pow(), str.index/expandtabs, sorted(d.keys()) all fail to COMPILE — 13 of 133 method-surface cases | — |
@@ -332,7 +331,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1166)
+## done (1167)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -729,6 +728,7 @@ _none_
 | bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
 | bug-nilpy-large-float-str-overruns-into-garbage | N | 70 | bug | `str()` of a float whose integer part exceeds Int64 writes garbage bytes | — |
 | bug-nilpy-lifted-lambda-discards-its-return-value | N | 60 | bug | NilPy: a lifted lambda always discarded its own return value | — |
+| bug-nilpy-list-ordering-compares-heap-addresses | N | 70 | bug | NilPy: ordering two statically-typed lists compares their HEAP ADDRESSES, not their contents — `[9,9] < [1,1]` is True; no comparison helper is called at all | — |
 | bug-nilpy-list-plus-nonlist-silently-corrupts-instead-of-typeerror | N | 55 | bug | `[list] + non-list` silently corrupted instead of raising TypeError | — |
 | bug-nilpy-locals-list-pointer-truncated-32bit | N | 55 | bug | NilPy: a list passed to a method truncates its pointer to 32-bit (SIGSEGV) | — |
 | bug-nilpy-method-call-on-fresh-construction | N | 45 | bug | nilpy: Cls().method() — a method call directly on a construction expression | — |
@@ -2951,7 +2951,6 @@ _none_
 
 - [p 80] [A] bug-a-overload-resolution-ignores-class-identity (unblocks 1)
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
-- [p 70] [N] bug-nilpy-list-ordering-compares-heap-addresses
 - [p 70] [N] bug-nilpy-static-typed-operands-skip-mixed-type-guard
 - [p 70] [N] bug-nilpy-with-statement-skips-enter-and-exit
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro

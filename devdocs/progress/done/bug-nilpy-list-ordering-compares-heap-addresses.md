@@ -124,3 +124,49 @@ and still silently computes here — that is
 [[bug-nilpy-static-typed-operands-skip-mixed-type-guard]], a different ending
 (raise) for the same static-lowering hole, and is NOT fixed by this change.
 Strings were already correct. `bytes` ordering not verified either way.
+
+## 2026-08-01 (later) — the BYTES half, which the Scope section asked to check
+
+The list/tuple fix above is confirmed working. Verified the rest of the Scope
+list rather than assuming, and **bytes still had the identical bug**:
+
+```python
+print(b"zz" < b"aa")   # CPython False   pxx True
+print(b"zz" > b"aa")   # CPython True    pxx False
+```
+
+Same asymmetry that identified the list half — `b"ab" == b"ab"` was already
+correct (equality consults contents on another path), while ordering answered
+from the two objects' heap addresses. Tuples were already covered by the list
+arm (same `TPyList` row), and strings were correct all along, as the ticket
+said.
+
+Fixed by mirroring the `pylist_cmp` arm exactly:
+
+- new `pybytes_cmp(a, b: TPyBytes): Int64` in `compiler/builtin/pylib.pas` —
+  element by element, then the shorter sequence first, matching `pylist_cmp`'s
+  -1/0/1 contract. There was no bytes comparator at all; `pybytes_eq` existed
+  but only answers equality.
+- new `IRNodePyBytesRec` in `compiler/ir.inc`, sibling of `IRNodePyListRec` /
+  `IRNodePyDictRec`.
+- an ordering arm beside the list one, comparing the helper's result against 0
+  with the SOURCE operator so `<`, `<=`, `>`, `>=` all stay correct at equality.
+
+### Test
+
+`test/test_nilpy_sequence_ordering.npy`, wired into `make test-nilpy`,
+byte-identical to CPython. **Every case is written so allocation order
+DISAGREES with content order** — the left operand is allocated first but must
+compare greater — because a test whose expected order coincides with allocation
+order proves nothing here. That coincidence is exactly what hid this for so
+long, and why `test_nilpy_mixed_type_operands`' `[1] < [1, 0]` passed all along.
+
+Covers lists (all four operators), equal-contents distinct objects, both prefix
+directions, nested lists, tuples, bytes, and strings as the known-good model.
+Confirmed RED pre-fix on the bytes lines (`True False / True / True` where
+CPython gives `False True / True / False`).
+
+Native: build + byte-identical self-host fixedpoint, `testmgr --tier quick` GREEN.
+
+## Log
+- 2026-08-01 — resolved, commit PENDING.

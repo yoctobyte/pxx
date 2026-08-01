@@ -1,0 +1,55 @@
+# Ordering two statically-typed sequences must compare CONTENTS, lexicographically.
+#
+# On the static path a binop with both operand types known lowers straight to a
+# machine compare and never reaches the pyvar_* runtime helpers where the real
+# semantics live — so `a < b` on two lists answered from the two objects' HEAP
+# ADDRESSES and ignored their contents entirely
+# (bug-nilpy-list-ordering-compares-heap-addresses).
+#
+# EVERY case here is written so that allocation order DISAGREES with content
+# order: the left operand is allocated first (lower address) but must compare
+# GREATER. A test whose expected order coincides with allocation order proves
+# nothing about this bug — that coincidence is precisely what hid it, and why
+# test_nilpy_mixed_type_operands' `[1] < [1, 0]` passed all along.
+#
+# `==`/`!=` were already right (wired to pylist_eq), which is the asymmetry that
+# pointed at the ordering operators being unwired. Expectation is CPython's own
+# output.
+
+# --- lists: allocated first, must compare greater ---
+a = [9, 9]
+b = [1, 1]
+print(a < b)
+print(a > b)
+print(a <= b)
+print(a >= b)
+
+# equal contents, distinct objects: every operator must answer from contents
+c = [1, 2]
+d = [1, 2]
+print(c < d, c <= d, c > d, c >= d, c == d)
+
+# prefix rule: the shorter sequence sorts first
+print([1] < [1, 0])
+print([1, 0] < [1])
+
+# nested
+print([[1, 2], [3]] < [[1, 2], [4]])
+
+# --- tuples (same TPyList row) ---
+t1 = (9, 9)
+t2 = (1, 1)
+print(t1 < t2, t1 > t2)
+
+# --- bytes: the half the original fix missed ---
+u1 = b"zz"
+u2 = b"aa"
+print(u1 < u2, u1 > u2)
+print(b"ab" < b"abc")
+print(b"abc" < b"ab")
+print(b"ab" == b"ab", b"ab" != b"ac")
+
+# --- strings were already correct; kept as the working model ---
+s1 = "zz"
+s2 = "aa"
+print(s1 < s2, s1 > s2)

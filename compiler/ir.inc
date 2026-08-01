@@ -3900,6 +3900,19 @@ begin
     IRNodePyListRec := REC_UCLASS_BASE + ci;
 end;
 
+function IRNodePyBytesRec(n: Integer): Integer;
+{ The rec id when n is a TPyBytes, else -1. Sibling of IRNodePyListRec. }
+var ci: Integer;
+begin
+  IRNodePyBytesRec := -1;
+  if n < 0 then Exit;
+  if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
+  ci := FindUClass('TPyBytes');
+  if ci < 0 then Exit;
+  if ResolveNodeRec(n) = REC_UCLASS_BASE + ci then
+    IRNodePyBytesRec := REC_UCLASS_BASE + ci;
+end;
+
 function IRNodePyDictRec(n: Integer): Integer;
 { The rec id when n is a TPyDict, else -1. Sibling of IRNodePyListRec. }
 var ci: Integer;
@@ -5746,6 +5759,34 @@ begin
       begin
         cpi := FindProc('pylist_cmp');
         if cpi < 0 then Error('Nil Python: pylist_cmp (pylib) not loaded');
+        left := IRLowerAST(ASTLeft[node]);
+        first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyClass));
+        right := IRLowerAST(ASTRight[node]);
+        last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyClass));
+        IRB[first] := last;
+        Result := IRAppendCall(cpi, first, -1, Ord(tyInt64));
+        Result := IRAppend(IR_BINOP, Result,
+                           IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyInt64)),
+                           Integer(ASTIVal[node]), 0, Ord(tyBoolean));
+        Exit;
+      end;
+      { BYTES order lexicographically too, and had the identical hole: two
+        statically-typed TPyBytes lowered to a raw handle compare, so
+        `b"zz" < b"aa"` answered True off the heap addresses. `==` was already
+        right (it consults contents on another path), which is exactly the
+        asymmetry the list half of this bug had — equality correct, ordering
+        answering from allocation order. Same wiring as the list arm above, with
+        the new pybytes_cmp providing the -1/0/1 (bug-nilpy-list-ordering-
+        compares-heap-addresses, the bytes half its Scope section asked to
+        check). }
+      if PyProgramMode and
+         ((Integer(ASTIVal[node]) = Ord(tkLt)) or (Integer(ASTIVal[node]) = Ord(tkLe)) or
+          (Integer(ASTIVal[node]) = Ord(tkGt)) or (Integer(ASTIVal[node]) = Ord(tkGe))) and
+         (IRNodePyBytesRec(ASTLeft[node]) >= 0) and
+         (IRNodePyBytesRec(ASTLeft[node]) = IRNodePyBytesRec(ASTRight[node])) then
+      begin
+        cpi := FindProc('pybytes_cmp');
+        if cpi < 0 then Error('Nil Python: pybytes_cmp (pylib) not loaded');
         left := IRLowerAST(ASTLeft[node]);
         first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyClass));
         right := IRLowerAST(ASTRight[node]);

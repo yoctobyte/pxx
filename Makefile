@@ -1083,6 +1083,12 @@ test-nilpy: $(COMPILER)
 	# runtime TypeError, so this COMPILES and the handler runs.
 	./$(COMPILER) test/test_nilpy_operator_dunder_missing_fail.npy /tmp/test_nilpy_nodunder_fail26
 	test "$$(/tmp/test_nilpy_nodunder_fail26)" = "$$(printf '%b' 'caught missing __add__\nstill running')"
+	# ordering two statically-typed sequences must compare CONTENTS: the static
+	# binop path lowered to a raw handle compare and answered from HEAP
+	# ADDRESSES. Every case is written so allocation order DISAGREES with
+	# content order, which a coincidental test cannot catch.
+	./$(COMPILER) test/test_nilpy_sequence_ordering.npy /tmp/test_nilpy_seqord26
+	test "$$(/tmp/test_nilpy_seqord26)" = "$$(printf '%b' 'False\nTrue\nFalse\nTrue\nFalse True False True True\nTrue\nFalse\nTrue\nFalse True\nFalse True\nTrue\nFalse\nTrue True\nFalse True')"
 	# Pascal TYPED constants (`const N: T = v`) must hold their value under a
 	# NilPy main: CompilePendingGlobalInits was called by ParseProgram and by the
 	# C frontend's main, but never by the NilPy driver, so every typed constant
