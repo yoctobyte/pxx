@@ -168,3 +168,20 @@ open as a follow-up rather than being half-implemented.
 
 Multi-item `with A() as a, B() as b:` is also untested — check whether it parses
 at all before assuming it works.
+
+## 2026-08-01 — VERIFIED FIXED (by fd13045eb), resolving
+
+Fixed by `fd13045eb` ("fix(N): run the context-manager protocol in `with`") but
+the ticket was never moved. Re-verified rather than taken on trust, including
+the two paths beyond the ticket's own repro:
+
+| case | pxx | CPython |
+| --- | --- | --- |
+| plain `with` | `enter / body / exit` | same |
+| **exception raised in the body** — `__exit__` must still run, then the exception propagates | `enter / body / exit / caught` | same |
+| **nested** `with` — exits in reverse order | `enter / enter / inner / exit / exit` | same |
+
+Byte-identical in all three. No code change needed here.
+
+## Log
+- 2026-08-01 — resolved, commit fd13045eb.

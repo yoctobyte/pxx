@@ -38,7 +38,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (185)
+## backlog (184)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -81,7 +81,6 @@ _none_
 | bug-nilpy-str-format-ignores-positional-indices | N | 60 | bug | NilPy: `\"{1}{0}\".format(a, b)` ignores the explicit indices and substitutes left-to-right — silently prints the arguments in the WRONG ORDER | — |
 | bug-nilpy-unary-numeric-dunders-return-raw-handle | N | 55 | bug | NilPy: abs(obj), ~obj and obj-as-index ignore __abs__/__invert__/__index__ — they return the raw instance HANDLE as a number, silently | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
-| bug-nilpy-with-statement-skips-enter-and-exit | N | 70 | bug | NilPy: `with` is desugared to a plain assignment — the context-manager protocol is deliberately not modelled, so a user __enter__/__exit__ silently never runs | — |
 | bug-progress-claim-silently-drops-owner-without-template-line | T | 30 | bug | `progress.sh claim`/`resolve` silently no-op when a ticket lacks the expected body line | — |
 | bug-subprocess-spawns-child-with-empty-environment | B | 45 | bug | Every spawned child process gets a completely empty environment | — |
 | bug-t-claim-silently-no-ops-owner-on-yaml-only-tickets | T | 45 | bug | `progress.sh claim`/`resolve` silently no-op Owner/Status on YAML-only tickets | — |
@@ -331,7 +330,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1168)
+## done (1169)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -806,6 +805,7 @@ _none_
 | bug-nilpy-user-class-bytes-method-loses-identity | N | 45 | bug | NilPy: a USER class method `-> bytes` result loses its TPyBytes identity | — |
 | bug-nilpy-void-def-assigned-and-called-crashes | N | 55 | bug | NilPy: a `-> None` def assigned to a name, then called directly, segfaults | — |
 | bug-nilpy-wide-int-literal-and-unsigned-mask-not-promoted | A | 55 | bug | NilPy: wide int literals + the `& 0xFFFF...` unsigned-mask idiom don't promote to bignum | — |
+| bug-nilpy-with-statement-skips-enter-and-exit | N | 70 | bug | NilPy: `with` is desugared to a plain assignment — the context-manager protocol is deliberately not modelled, so a user __enter__/__exit__ silently never runs | — |
 | bug-nilpy-zero-param-lambda-cannot-call-a-def | N | 70 | bug | `lambda: f()` — a zero-parameter lambda cannot call a compiled def | — |
 | bug-nilpy-zip-over-a-string-yields-nothing-or-segfaults | N | 70 | bug | `zip(list, str)` yields nothing — and segfaults if any loop ran before it | — |
 | bug-not-on-int64-is-boolean | A | 50 | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |
@@ -2952,7 +2952,6 @@ _none_
 
 - [p 80] [A] bug-a-overload-resolution-ignores-class-identity (unblocks 1)
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
-- [p 70] [N] bug-nilpy-with-statement-skips-enter-and-exit
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] feature-t-trackt-setup-autodetect-box-role
 - [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
