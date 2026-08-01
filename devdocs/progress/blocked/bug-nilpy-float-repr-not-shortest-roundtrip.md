@@ -65,3 +65,44 @@ A `.npy` diffed against CPython covering: `0.1 + 0.2`, `1/3`, `25.4`, `0.1`,
 integral floats (`5.0`), very large and very small magnitudes, negative zero,
 and `inf`/`nan` spellings. Plus confirmation that Pascal's own `writeln` of a
 Double is unchanged.
+
+## 2026-08-01 — investigated; BLOCKED on the RTL, and the shared-path risk is real
+
+Both questions the ticket raised are now answered by measurement.
+
+**1. Is Pascal's float output a shared path? YES.** `pystr_of(d: Double)` in
+`compiler/builtin/pylib.pas` is literally `Result := FloatToStr(d)`. So this
+must gain a NilPy-only entry point; changing `FloatToStr` in place would move
+every Pascal program's `writeln` and a lot of expected output with it.
+
+**2. Can shortest-round-trip be built on today's RTL? NO.**
+`FloatToStrSig` caps at 15 significant digits by design
+(`if sig > 15 then sig := 15; { past 15 a double scaled in doubles lies }`) —
+it normalises by scaling in doubles, so further digits would be fiction. A
+double needs up to 17 to round-trip. Probed with
+`StrToFloat(FloatToStrSig(d, p)) = d` for p = 1..17:
+
+| value | shortest p | at p=17 |
+| --- | --- | --- |
+| `25.4` | 3 (`25.4`) | — |
+| `0.1` | 1 (`0.1`) | — |
+| `0.1 + 0.2` | **never** | `0.3` |
+| `1/3` | **never** | `0.333333333333333` |
+
+So the exact values this ticket is about are precisely the ones the RTL cannot
+express. **blocked-by:** [[bug-b-floattostrsig-caps-at-15-significant-digits]].
+
+### A partial fix is possible and was deliberately NOT taken
+
+A 1..15 round-trip loop would fix `25.4` (→ `25.4`) and leave the rest no worse.
+Rejected for now on blast radius: float output changes ripple into every
+expected-output that contains one, and it would still get the *dangerous* case
+wrong — `0.1 + 0.2` would keep printing `0.3`, hiding the artifact CPython
+shows, which is the half of this bug that actually misleads. Better to land it
+once, correctly, after the RTL gains exact digits. Whoever picks this up can
+revisit that call.
+
+### Also needs handling on the NilPy side once unblocked
+
+`FloatToStrSig` spells several things Pascal's way: `5.0`→`5`, `1.0e20`→`1E20`,
+`-0.0`→`0`, `NaN`/`Inf`. Python needs `5.0`, `1e+20`, `-0.0`, `nan`/`inf`.
