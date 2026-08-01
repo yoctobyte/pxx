@@ -406,7 +406,10 @@ def sweep_orphan_tmp():
     # its own over-budget jobs, which is exactly why the EXIT trap inside
     # run_c_conformance.sh cannot be relied on (a trap never runs on SIGKILL).
     for pat, sep in (("/tmp/testmgr-scratch-*", "-"),
-                     ("/tmp/pxx_c_conformance.*", ".")):
+                     ("/tmp/pxx_c_conformance.*", "."),
+                     # the self-host build's per-invocation root (Makefile
+                     # PXX_TMP); pid-keyed for exactly this reason
+                     ("/tmp/pxx-build-*", "-")):
         for p in glob.glob(pat):
             try:
                 pid = int(p.rsplit(sep, 1)[1])

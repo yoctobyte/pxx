@@ -15,11 +15,29 @@ COMPILER     := compiler/pascal26
 COMPILER_MANAGED := compiler/pascal26-managed
 COMPILER_SRC := compiler/compiler.pas
 COMPILER_INC := $(wildcard compiler/*.inc) $(wildcard compiler/builtin/*.pas) $(wildcard lib/rtl/*.pas) $(wildcard lib/asmcore/*.pas)
-FPC_COMPILER := /tmp/pascal26-fpc
-BUILD_COMPILER := /tmp/pascal26-build
-VERIFY_COMPILER := /tmp/pascal26-verify
-BUILD_COMPILER_MANAGED  := /tmp/pascal26-managed-build
-VERIFY_COMPILER_MANAGED := /tmp/pascal26-managed-verify
+# Per-invocation scratch root for the self-host build's intermediates.
+#
+# These were fixed absolute paths (/tmp/pascal26-build etc). /tmp is NOT
+# per-clone, so the watcher's dedicated clone and a dev checkout on the same box
+# resolved them to the SAME files: two concurrent self-host builds wrote each
+# other's intermediates. The dedicated-clone isolation was real for the git tree
+# and absent for the build — and what gets corrupted is the binary the
+# fixedpoint gate blesses, silently.
+#
+# Keyed on make's own pid ($$PPID of the shell make spawns), forced to expand
+# once, and EXPORTED so the recursive $(MAKE) calls share one root instead of
+# minting their own. Override to pin it somewhere stable/inspectable.
+PXX_TMP ?= /tmp/pxx-build-$(shell echo $$PPID)
+PXX_TMP := $(PXX_TMP)
+$(shell mkdir -p $(PXX_TMP))
+export PXX_TMP
+# Named with a -<pid> suffix on the ROOT so tools/testmgr.py's sweep can reap an
+# abandoned one by pid liveness, the same way it reaps its own scratch.
+FPC_COMPILER := $(PXX_TMP)/pascal26-fpc
+BUILD_COMPILER := $(PXX_TMP)/pascal26-build
+VERIFY_COMPILER := $(PXX_TMP)/pascal26-verify
+BUILD_COMPILER_MANAGED  := $(PXX_TMP)/pascal26-managed-build
+VERIFY_COMPILER_MANAGED := $(PXX_TMP)/pascal26-managed-verify
 
 STABLE_ROOT := stable_linux_amd64
 STABLE_DEFAULT_DIR := $(STABLE_ROOT)/default
