@@ -202,6 +202,76 @@ comments that reference multiple `Foo_*` prefixes back to back.
 
 Next: M4 (a real PyPI extension, verified against CPython's own output).
 
+## 2026-08-01 — M4 "a real extension from PyPI" landed
+
+Picked [MarkupSafe](https://pypi.org/project/MarkupSafe/) 3.0.3's
+`_speedups.c` (BSD-3-Clause): 200 lines, single file, no build magic, no
+numpy/buffer-protocol, widely used (a Jinja2/Flask dependency). Fetched via
+`pip download markupsafe==3.0.3 --no-deps --no-binary :all:`, vendored
+**unmodified** into `test/nilpy_units/vendor/markupsafe_speedups.c`
+(renamed from `_speedups.c` only — file content, including its
+`PyInit__speedups` symbol, untouched; the rename sidesteps
+[[bug-c-uses-path-basename-collides-with-enclosing-unit-name]]).
+
+This real extension immediately needed real API surface M1-M3's
+hand-written toys never touched — added to `Python.h`/`pyruntime.c`:
+
+- `PyUnicode_Check`, `PyUnicode_READY` (no-op), `PyUnicode_KIND` +
+  `PyUnicode_1BYTE_KIND`/`2BYTE_KIND`/`4BYTE_KIND`, `PyUnicode_1/2/4BYTE_DATA`,
+  `PyUnicode_GET_LENGTH`, `PyUnicode_IS_ASCII`, `PyUnicode_New`,
+  `Py_UCS1`/`Py_UCS2`/`Py_UCS4`, `PyUnicodeObject` (aliased to `PyObject` —
+  this runtime's object already carries everything a string needs). This
+  runtime is byte-only, so `PyUnicode_KIND` always reports
+  `PyUnicode_1BYTE_KIND`; the extension's kind2/kind4 code paths still
+  compile (so the link stays honest — see the header's own policy) but are
+  dead code, never exercised.
+- `METH_O` (arg passed directly as the second `PyCFunction` parameter, no
+  tuple — needed no special driver-side handling since this runtime's
+  `PyCFunction` signature was already uniform enough to just pass the bare
+  object through).
+- `PyModuleDef` gained an `m_slots` field + a new `PyModuleDef_Slot` type
+  (only so `.m_slots = module_slots` — a **designated initializer**, which
+  cfront was confirmed to already support — compiles) and
+  `PyModuleDef_Init`, which **collapses real CPython's multi-phase (PEP 489)
+  init straight to single-phase** (`PyModule_Create2`). Honest for this
+  extension, whose only slots are capability announcements
+  (`Py_mod_gil`/`Py_mod_multiple_interpreters`, both `#ifdef`-guarded and
+  never defined by this header, so those slot entries never even compile
+  in) with no `Py_mod_exec` — a real `Py_mod_exec` slot would need more work
+  and is explicitly not attempted here.
+- `<assert.h>` is now pulled into `Python.h` itself, matching real CPython's
+  `Python.h` (via `pyport.h`) doing the same — `_speedups.c` calls `assert()`
+  without its own `#include`, relying on exactly that transitive include.
+
+`test/nilpy_units/markupsafe_ext_host.c` (embedding driver, same shape as
+M1-M3's) + `markupsafe_ext.pas` (bridge unit) +
+`test/test_cpyext_markupsafe.npy`, wired into `make test-nilpy`.
+
+**Verified against CPython's own output, not against expectation** (the
+milestone's own bar): `pip install markupsafe==3.0.3 --target <dir>`, then
+`PYTHONPATH=<dir> python3 -c "from markupsafe._speedups import
+_escape_inner; ..."` on the exact same inputs the `.npy` test uses. Output
+is byte-identical between the pxx-compiled extension and the same extension
+running under real CPython (see the Makefile's `test_cpyext_markupsafe26`
+expectation for the exact escaped string); the plain-text input passes
+through unchanged, and an empty string round-trips to an empty string too.
+
+Verified otherwise: self-host fixedpoint byte-identical, `testmgr --tier
+quick` green, all four `test_cpyext_*.npy` tests (M1-M4) spot-checked
+directly against the freshly-rebuilt `compiler/pascal26` — lighter bar per
+CLAUDE.md's "confirm native, offload the matrix" (Track T's watcher
+confirmed up).
+
+No new Track A/C blocker filed this session (the one from M1 remains the
+only one).
+
+Next: M5 (a Cython-generated module) or M6 (buffer protocol) — M5 is
+probably next in ticket order, but note MarkupSafe's OWN pure-Python
+fallback path plus this M4 slice already covers a fair amount of real-world
+API; M5 will likely demand a much larger `Python.h` surface (Cython emits
+extensive boilerplate: type objects, `tp_*` slots, `PyType_Ready`,
+weak references) and deserves its own scoping pass before starting.
+
 ## Notes
 
 - Ladder position and the recipe/install policy: **`devdocs/dev/python-libraries.md`**.
