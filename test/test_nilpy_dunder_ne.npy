@@ -1,0 +1,54 @@
+# `!=` prefers a declared __ne__. CPython does NOT define != as `not __eq__`
+# when __ne__ is present — it calls __ne__ and returns its result as-is, which
+# need not even be a Boolean. Without dispatch the method was silently ignored
+# and the negated __eq__ answered instead.
+# bug-nilpy-ne-dunder-ignored-always-negates-eq.
+# Expectation is CPython's own output.
+
+
+class Both:
+    # __ne__ deliberately disagrees with `not __eq__` — the only way to prove
+    # which one was consulted.
+    def __init__(self, v):
+        self.v = v
+
+    def __eq__(self, o):
+        return self.v == o.v
+
+    def __ne__(self, o):
+        return "NE-CALLED"
+
+
+class OnlyEq:
+    # CPython DERIVES != as the negation of __eq__ here. This half already
+    # worked and must keep working.
+    def __init__(self, v):
+        self.v = v
+
+    def __eq__(self, o):
+        return self.v == o.v
+
+
+class Plain:
+    # neither declared: identity, and != is its negation
+    def __init__(self, v):
+        self.v = v
+
+
+print(Both(1) != Both(2))
+print(Both(1) != Both(1))
+print(Both(1) == Both(1))
+print(Both(1) == Both(2))
+
+print(OnlyEq(1) != OnlyEq(1))
+print(OnlyEq(1) != OnlyEq(2))
+print(OnlyEq(1) == OnlyEq(1))
+
+p = Plain(1)
+print(p != p)
+print(p == p)
+print(Plain(1) != Plain(1))
+
+# lists are pylib's own rows and must keep content equality, not reach __ne__
+print([1, 2] != [1, 2])
+print([1, 2] != [1, 3])

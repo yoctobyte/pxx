@@ -576,6 +576,10 @@ test-nilpy: $(COMPILER)
 	@# a class defining __getitem__/__setitem__ routes subscript read/write
 	./$(COMPILER) test/test_nilpy_dunder_getitem_setitem.npy /tmp/test_nilpy_dundergetset26
 	test "$$(/tmp/test_nilpy_dundergetset26)" = "$$(printf '%b' '20\n99\n[10, 99, 30]\n42\n-1\n10\ncaught: TypeError')"
+	@# `!=` prefers a declared __ne__ (CPython calls it rather than negating
+	@# __eq__); with only __eq__ the negation is still derived
+	./$(COMPILER) test/test_nilpy_dunder_ne.npy /tmp/test_nilpy_dunderne26
+	test "$$(/tmp/test_nilpy_dunderne26)" = "$$(printf '%b' 'NE-CALLED\nNE-CALLED\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue')"
 	@# list ordering is LEXICOGRAPHIC, not by heap address; cases deliberately
 	@# defeat allocation order (the list allocated first must sort last)
 	./$(COMPILER) test/test_nilpy_list_ordering.npy /tmp/test_nilpy_listord26

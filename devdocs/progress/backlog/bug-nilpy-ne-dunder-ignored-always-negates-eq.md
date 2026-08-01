@@ -66,3 +66,34 @@ general reflected-dunder work in
 `make test-nilpy` + self-host byte-identical, plus a `.npy` diffed against
 CPython covering: `__ne__` declared (it wins, including a non-Boolean result),
 only `__eq__` declared (negation still derived), and neither declared (identity).
+
+## FIXED 2026-08-01
+
+`compiler/parser.inc`: a `tkNeq` arm placed BEFORE the existing `__eq__` block —
+if the left operand's class declares `__ne__`, call it and return its result
+as-is (no `AN_NOT` wrapper, since CPython returns whatever `__ne__` yields and
+it need not be a Boolean). Falls through to the old negated-`__eq__` path
+otherwise, so the auto-derived case is unchanged.
+
+Carries the `PyRecIsPylibOwnClass` exclusion (`compiler/symtab.inc`). The
+existing `__eq__` block is safe without it only by accident — it additionally
+requires `__eq__` to be declared, and pylib's containers declare no such method
+— so the new arm does not rely on that coincidence.
+
+`test/test_nilpy_dunder_ne.npy`, byte-identical to CPython: a class where
+`__ne__` and `not __eq__` deliberately DISAGREE (the only way to prove which was
+consulted, and it returns a non-Boolean), a class with only `__eq__` (negation
+still derived), a class with neither (identity), and list `!=` (must stay
+content equality, not reach the new arm).
+
+Gate: `make test-nilpy` + self-host fixedpoint byte-identical.
+
+### Out of scope, unchanged
+
+Reflected `__ne__` on the RIGHT operand — belongs with the general reflected
+work in [[feature-nilpy-arithmetic-dunders-full-protocol]], where all seven
+reflected forms are measured broken.
+
+Static receivers only, like every other compile-time dunder dispatch: `a != b`
+where either side arrives as an untyped parameter is a variant and needs
+[[decide-nilpy-runtime-dunder-dispatch-mechanism]].

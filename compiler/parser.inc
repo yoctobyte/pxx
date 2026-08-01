@@ -13841,6 +13841,30 @@ begin
       Boolean — the callee's ABI decides, and an annotated `-> bool` or an
       inferred boolean body both land there anyway. Non-virtual, exactly like
       the `__str__` dispatch: it resolves against the operand's static class. }
+    { `!=` prefers a declared `__ne__`. CPython does NOT define `!=` as
+      `not __eq__` when `__ne__` is present — it calls `__ne__`, whose result is
+      returned as-is and need not even be a Boolean. Without this a class that
+      deliberately breaks the symmetry (three-valued comparisons, NaN-like
+      sentinels, "always unequal" wrappers) had its method silently ignored and
+      got the negated `__eq__` instead (bug-nilpy-ne-dunder-ignored-always-
+      negates-eq). The auto-derived case below stays: with only `__eq__`
+      declared, CPython DOES derive `!=` as its negation, and that already
+      matched. }
+    if PyExprMode and (op = tkNeq) and
+       (IntToTypeKind(ASTTk[left]) = tyClass) and
+       (IntToTypeKind(ASTTk[right]) = tyClass) and
+       (ResolveNodeRec(left) >= REC_UCLASS_BASE) and
+       not PyRecIsPylibOwnClass(ResolveNodeRec(left)) and
+       (FindUMeth(ResolveNodeRec(left) - REC_UCLASS_BASE, '__ne__') >= 0) then
+    begin
+      node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__ne__',
+                          left, right);
+      if node >= 0 then
+      begin
+        CurASTNode := node;
+        Exit;
+      end;
+    end;
     if PyExprMode and (op in [tkEq, tkNeq]) and
        (IntToTypeKind(ASTTk[left]) = tyClass) and
        (IntToTypeKind(ASTTk[right]) = tyClass) and
