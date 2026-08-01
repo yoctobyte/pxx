@@ -4329,13 +4329,13 @@ begin
       if SymIsHiddenArgTemp[i] and (Syms[i].Kind = skLocal) then
       begin
         if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-           (RecSize(SymTR[i].RecId) > TARGET_PTR_SIZE) then
+           (RecSize(Syms[i].RecName) > TARGET_PTR_SIZE) then
         begin
           { Managed-record temp: zero the full record (PXXMemZero) so every
             managed field starts nil, not just the first pointer-sized slot. }
           EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);          { lea eax, [ebp+off] }
           EmitB($50);                                               { push dest }
-          EmitB($68); EmitI32(RecSize(SymTR[i].RecId));            { push count }
+          EmitB($68); EmitI32(RecSize(Syms[i].RecName));            { push count }
           procIdx := FindProc('PXXMemZero');
           if procIdx < 0 then Error('compiler error: PXXMemZero not found');
           EmitCallProc(procIdx);
