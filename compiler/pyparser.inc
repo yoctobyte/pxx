@@ -16920,6 +16920,21 @@ begin
     here (ParsePyUnit handles imported .py files), which is why the def/method
     wiring alone did not cover it. }
   DbgMainBodyStart := CodeLen;
+  { TYPED CONSTANTS. `const Name: T = value` is writable storage with an initial
+    value, recorded into PendingInit at parse time and turned into real
+    assignments here. ParseProgram (Pascal) and the C frontend's `main` both did
+    this; the NilPy driver never did, so under a Nil Python main EVERY typed
+    constant in EVERY used Pascal unit read as the zero value of its type —
+    silently, with no diagnostic
+    (bug-nilpy-typed-const-import-reads-zero). It is not an import-boundary
+    bug: Pascal code INSIDE a unit reading its own typed constant got zero too,
+    because the initializers were simply never emitted for this main.
+
+    BEFORE the unit initialisation sections below, exactly as ParseProgram
+    orders it and for the reason recorded there: a constant's value cannot
+    depend on what an init section does, but an init section very much may read
+    a constant, and with the reverse order it reads zeros. }
+  CompilePendingGlobalInits;
   for i := 0 to InitProcCount - 1 do
     EmitCallProc(InitProcs[i]);
   blockNode := AllocNode(AN_BLOCK);

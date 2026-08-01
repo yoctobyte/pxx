@@ -1,0 +1,35 @@
+# Pascal TYPED constants (`const Name: T = value`) must hold their value under a
+# Nil Python main.
+#
+# They are writable storage with an initial value, recorded into PendingInit at
+# parse time and emitted as real assignments by CompilePendingGlobalInits.
+# ParseProgram (Pascal) and the C frontend's `main` both called it; the NilPy
+# driver never did — so under a NilPy main EVERY typed constant in EVERY used
+# Pascal unit read as the zero value of its type, silently, with no diagnostic
+# (bug-nilpy-typed-const-import-reads-zero).
+#
+# Not an import-boundary bug: Pascal code INSIDE a unit reading its own typed
+# constant got zero too, because the initializers were never emitted at all for
+# this main.
+#
+# The shipped reportlab units shim is the real-world exposure and is what this
+# asserts: it declares its units as typed constants precisely because a const
+# EXPRESSION would be folded by the integer evaluator. Before the fix every
+# measurement derived from them was 0.0 — a PDF laid out entirely at the origin,
+# with nothing to indicate why.
+
+from reportlab.lib.units import mm, inch, cm
+
+print(inch)
+print(mm)
+print(cm)
+
+# ...and they must be real VALUES, not just printable. Deliberately asserted
+# with comparisons rather than by printing a computed float: NilPy's float repr
+# is not CPython's shortest-round-trip form
+# (bug-nilpy-float-repr-not-shortest-roundtrip), and this test is about typed
+# constants, not formatting.
+print(inch == 72.0)
+print(inch > mm)
+print(2.8 < mm < 2.9)
+print(28.3 < cm < 28.4)

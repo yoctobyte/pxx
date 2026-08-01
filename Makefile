@@ -1083,6 +1083,13 @@ test-nilpy: $(COMPILER)
 	# runtime TypeError, so this COMPILES and the handler runs.
 	./$(COMPILER) test/test_nilpy_operator_dunder_missing_fail.npy /tmp/test_nilpy_nodunder_fail26
 	test "$$(/tmp/test_nilpy_nodunder_fail26)" = "$$(printf '%b' 'caught missing __add__\nstill running')"
+	# Pascal TYPED constants (`const N: T = v`) must hold their value under a
+	# NilPy main: CompilePendingGlobalInits was called by ParseProgram and by the
+	# C frontend's main, but never by the NilPy driver, so every typed constant
+	# in every used unit silently read as zero. The reportlab units shim is the
+	# real-world exposure (every measurement became 0.0).
+	./$(COMPILER) test/test_nilpy_typed_const_import.npy /tmp/test_nilpy_typedconst26
+	test "$$(/tmp/test_nilpy_typedconst26)" = "$$(printf '%b' '72.0\n2.834645669291339\n28.346456692913385\nTrue\nTrue\nTrue\nTrue')"
 	# a name bound as a LOCAL inside a def (assignment or for-target, nested
 	# blocks included) must not widen or pre-create the same-named MODULE
 	# global; `global nm` takes that back; and a def that only READS a global

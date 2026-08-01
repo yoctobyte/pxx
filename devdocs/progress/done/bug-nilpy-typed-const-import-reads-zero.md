@@ -146,3 +146,52 @@ produces plausible numbers that are wrong, with nothing to catch it.
 
 Not routed around anywhere: the shim keeps its platonic declaration, and the
 docs written alongside this ticket do not use `mm` in an example.
+
+## 2026-08-01 — FIXED
+
+The ticket's corrected scope was right, and the cause is one missing call.
+
+`const Name: T = value` is writable storage with an initial value: the parser
+records it into `PendingInit`, and `CompilePendingGlobalInits` turns those into
+real assignments emitted before the program body. Grepping the callers:
+
+- `parser.inc:29574` — Pascal `ParseProgram`
+- `cparser.inc:8956`, `10735` — the C frontend, guarded on `name = 'main'`
+- **`pyparser.inc` — nowhere**
+
+So under a Nil Python main the initializers were never emitted *at all*. That is
+exactly why it is not an import-boundary bug: Pascal code inside a unit reading
+its own typed constant got zero too, because nothing had ever written it.
+
+Fixed by calling `CompilePendingGlobalInits` in `ParsePyProgram`, immediately
+BEFORE the unit-initialisation loop — the same order `ParseProgram` uses, and
+for the reason recorded there: a constant's value cannot depend on what an init
+section does, but an init section may very well read a constant, and the reverse
+order hands it zeros.
+
+### Verified
+
+| case | before | after |
+| --- | --- | --- |
+| `TypedConst: Double = 2.5` via NilPy import | `0.0` | `2.5` |
+| `TypedInt: Integer = 7` via NilPy import | `0` | `7` |
+| record const read by a Pascal accessor in the same unit (`GetX`) | `0.0` | `1.5` |
+| `from reportlab.lib.units import mm, inch, cm` | `0.0` each | `2.834645669291339` / `72.0` / `28.346456692913385` |
+
+The reportlab shim is the shipped real-world exposure the ticket predicted:
+every measurement derived from those units was silently zero.
+
+Test: `test/test_nilpy_typed_const_import.npy`, wired into `make test-nilpy`,
+asserting the shim's values plus comparisons proving they are usable as values.
+Confirmed RED on the pre-fix binary (`0.0 / 0.0 / 0.0 / False`).
+
+Values are asserted by COMPARISON rather than by printing computed floats on
+purpose — NilPy's float repr is not CPython's shortest-round-trip form, found
+while writing this test and filed separately as
+[[bug-nilpy-float-repr-not-shortest-roundtrip]]. This test is about typed
+constants, not formatting.
+
+Native: build + byte-identical self-host fixedpoint, `testmgr --tier quick` GREEN.
+
+## Log
+- 2026-08-01 — resolved, commit PENDING.
