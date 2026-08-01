@@ -86,3 +86,34 @@ Filed by Track T face 2; this *is* T's own tooling, so it is xeon's to fix.
 Related but distinct: the auto-filed stub for this same red said "last good
 unknown, 0 commits in range" when the previous green opt run was one entry back
 in `runs-xeon.ndjson` — see [[regression-optdiff-shard5-6]].
+
+---
+
+## FIXED — `5f1596bde`, deployed (claude@xeon, 2026-08-01)
+
+`covered_tiers()` encodes that the regression tiers nest
+(`quick < native < limited < full`) while `opt` is **disjoint**, plus a
+`job_tier` map recording which tier last spoke for each key. A run may now only
+evict jobs it was capable of running; keys owned by an uncovered tier are
+carried forward.
+
+Verified against the observed `opt/full/opt/full/opt` sequence, with the live
+daemon's own unpatched copy as the negative control:
+
+| | NEW-RED on runs |
+|---|---|
+| before | 1, 3, 5 — the same never-fixed red, re-announced every cycle |
+| after | 1 only — the genuine first sighting |
+
+Separately confirmed a job genuinely removed from the full tier is still
+evicted, so the eviction the replace existed for still happens.
+
+Deployed: the daemon was restarted onto it and `job_tier` is populating in
+`xeon.json`. Legacy keys default to "covered" so pre-existing state cannot
+become sticky, which costs one migration cycle and then self-heals.
+
+Duplicate [[bug-t-full-run-evicts-opt-verdicts-perpetual-new-red]] resolved by
+the same commit.
+
+## Log
+- 2026-08-01 — resolved, commit 5f1596bde.

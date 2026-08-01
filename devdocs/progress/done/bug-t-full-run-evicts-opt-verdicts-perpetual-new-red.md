@@ -129,3 +129,6 @@ NEW-RED on runs 1, 3, 5 before; run 1 only after — and separately that a
 job genuinely removed from the full tier is still evicted. `twatch.py` is
 loaded once at daemon start, so it takes effect on the next deliberate
 restart.
+
+## Log
+- 2026-08-01 — resolved, commit 5f1596bde.
