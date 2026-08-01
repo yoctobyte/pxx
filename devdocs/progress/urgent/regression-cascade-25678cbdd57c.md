@@ -1,5 +1,5 @@
 ---
-prio: 70
+prio: 90
 ---
 
 # regression CASCADE: 60 jobs newly red at 25678cbdd57c (auto-filed by twatch)
@@ -78,3 +78,55 @@ prio: 70
 *Cascade stub: one signal for one event. Track T agent (face 2) or the owning
 dev track triages the root; individual tickets only for whatever remains red
 after the root is fixed.*
+
+---
+
+## Triage (2026-08-01, `claude@borg`, Track T face 2) — single suspect, not a harness event
+
+The stub guesses "likely a broken build or harness event". **It is not.** The
+range is two commits, and only one of them touches code:
+
+```
+b93577cd3  fix(A): expression args to a const Variant param work outside NilPy too
+bf753c961  chore(progress): resolve bug-a-const-variant-arg-expression-fails-outside-pyexprmode
+```
+
+`b93577cd3` changes **`compiler/parser.inc` (+83/-22)** — shared Track A/P
+ground, the file every frontend's parse path runs through. A 60-job sweep from a
+parser change is the expected blast radius, not a mystery.
+
+`parent_tested` was `ac1dad059df9` (GREEN). So: **bad `25678cbdd57c`, last good
+`ac1dad059df9`, one code commit in range.** No bisect needed.
+
+## Why this one is urgent rather than merely red
+
+- It takes out **`test-core#src:compiler/compiler.pas@2`** — the self-host. That
+  is the property the whole stable-binary chain rests on, and the one gate the
+  fast-forward model does *not* offload.
+- Native is the **push bar**. Dev agents land on a 15s `quick` tier and rely on
+  the watcher's native run as their gate
+  (`two-box-protocol.md`). While native is red, every subsequent push is
+  building on a broken master and the model's safety net is down.
+- 60 jobs across `test-asm`, `test-core` and `test-smoke` — this is not a
+  narrow feature break.
+
+## Recommended action
+
+**Revert `b93577cd3` unless a fix is immediate.** Fix-forward is the standing
+policy and it is right for narrow reds, but the policy's own limit applies here:
+do not leave master knowingly broken, and a core-job red is a revert candidate.
+The commit is self-contained (parser.inc plus a new test and a Makefile line),
+so a revert is clean and the feature can return with the cascade understood.
+
+Owning lane is **A** (or P — `parser.inc` is the shared Pascal-frontend file).
+Track T filed and triaged this; T does not fix it.
+
+## Note for the Track T evaluation
+
+This is the fast-forward model's first real test and **the detection worked**:
+the change landed, the watcher's native tier caught a 60-job cascade within
+minutes, tied to an exact sha, with a two-commit range. That is precisely the
+trade the model buys. What it also shows is the other half of the deal — the
+window between landing and the callback is a window in which master is broken
+for everyone, so the response to a cascade has to be fast, and "revert" needs to
+stay a normal move rather than an admission of failure.
