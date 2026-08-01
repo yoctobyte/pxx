@@ -1023,6 +1023,11 @@ test-nilpy: $(COMPILER)
 	# from PyUnicode_*
 	./$(COMPILER) -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_containers.npy /tmp/test_cpyext_containers26
 	test "$$(/tmp/test_cpyext_containers26)" = "$$(printf '10\n2,3,1\nb:1,a:3,n:2\n5:hello')"
+	# cpyext M4 "a real extension from PyPI": MarkupSafe 3.0.3's real,
+	# unmodified _speedups.c (test/nilpy_units/vendor/), verified against the
+	# SAME extension's own output under real CPython, not a hand-typed guess
+	./$(COMPILER) -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_markupsafe.npy /tmp/test_cpyext_markupsafe26
+	test "$$(/tmp/test_cpyext_markupsafe26)" = "$$(printf '&lt;b&gt;hi &amp; &#34;bye&#34; &#39;all&#39;&lt;/b&gt;\nplain text, no specials')"
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING
