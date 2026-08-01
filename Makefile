@@ -6270,6 +6270,14 @@ qemu-env-check: $(COMPILER)
 
 # test-quick: fastest inner-loop gate — curated programs, current binary only.
 test-quick: $(COMPILER)
+	# Quick-tier canaries for the OTHER two frontends (the Pascal ones follow).
+	# Broad-not-deep, self-summarising, ~1s each: a Track N or C change had no
+	# fast check at all between "it built" and the 554s suite.
+	# qc_* names deliberately avoid the smoke_* namespace these recipes share.
+	./$(COMPILER) test/quick_canary_nilpy.npy /tmp/qc_nilpy26
+	test "$$(/tmp/qc_nilpy26 | tail -1)" = "total ok 23 / 23"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/quick_canary_c.c /tmp/qc_c26
+	test "$$(/tmp/qc_c26 | tail -1)" = "total ok 22 / 22"
 	./$(COMPILER) test/test_dynarray_torture.pas /tmp/smoke_dyntorture26
 	test "$$(/tmp/smoke_dyntorture26 | tail -1)" = "total ok 27 / 27"
 	./$(COMPILER) test/test_dynarray_insert_delete.pas /tmp/smoke_dynid26

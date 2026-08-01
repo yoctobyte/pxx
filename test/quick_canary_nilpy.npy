@@ -1,0 +1,129 @@
+# Quick-tier NilPy canary (feature-t-quick-canary-for-nilpy-and-c).
+#
+# BROAD, not deep: one or two lines per layer that actually breaks, so a Track N
+# or shared-parser change gets a cheap signal inside the ~12s dev loop. It is a
+# CANARY, not coverage -- coverage is `make test-nilpy` and Track T's matrix.
+#
+# House rule for .npy: the expectation is CPython's own output, so this file
+# must run unmodified under `python3` and print exactly the same thing.
+#
+# Every section prints its own `ok <n>` BEFORE the summary, so a failure
+# localises instead of collapsing to one opaque mismatch. The last line is the
+# oracle the Makefile compares.
+
+ok = 0
+
+
+def chk(n, cond):
+    global ok
+    if cond:
+        ok = ok + 1
+        print("ok " + str(n))
+    else:
+        print("FAIL " + str(n))
+
+
+# --- containers -------------------------------------------------------------
+xs = [3, 1, 2]
+xs.append(4)
+chk(1, len(xs) == 4)
+chk(2, xs[0] == 3 and xs[-1] == 4)
+d = {"a": 1, "b": 2}
+d["c"] = 3
+chk(3, len(d) == 3 and d["b"] == 2)
+chk(4, "a" in d and "z" not in d)
+
+# --- str methods ------------------------------------------------------------
+s = "Hello,World"
+chk(5, s.upper() == "HELLO,WORLD")
+chk(6, s.lower() == "hello,world")
+parts = s.split(",")            # two-step: bug-n-nilpy-subscript-of-split-on-a-variable-receiver
+chk(7, parts[1] == "World")
+chk(8, s.replace(",", " ") == "Hello World")
+chk(9, len(s) == 11 and s[0] == "H")
+chk(10, "  pad  ".strip() == "pad")
+
+# --- int promotion / arithmetic ---------------------------------------------
+big = 1000000
+chk(11, big * big == 1000000000000)
+chk(12, 7 // 2 == 3 and 7 % 2 == 1)
+chk(13, -7 // 2 == -4)
+chk(14, 2 ** 10 == 1024)
+
+# --- classes and dunders ----------------------------------------------------
+class Vec:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def __add__(self, other):
+        return Vec(self.x + other.x, self.y + other.y)
+
+    def __eq__(self, other):
+        return self.x == other.x and self.y == other.y
+
+    def total(self):
+        return self.x + self.y
+
+
+a = Vec(1, 2)
+b = Vec(3, 4)
+c = a + b
+chk(15, c.x == 4 and c.y == 6)
+chk(16, c.total() == 10)
+chk(17, Vec(1, 2) == a)
+
+
+class Base:
+    def name(self):
+        return "base"
+
+
+class Derived(Base):
+    def name(self):
+        return "derived"
+
+
+chk(18, Base().name() == "base" and Derived().name() == "derived")
+
+# --- exceptions -------------------------------------------------------------
+caught = 0
+try:
+    raise ValueError("boom")
+except ValueError:
+    caught = 1
+chk(19, caught == 1)
+
+caught2 = 0
+try:
+    _ = [1, 2] + "x"
+except TypeError:
+    caught2 = 1
+chk(20, caught2 == 1)
+
+# --- closures ---------------------------------------------------------------
+def adder(n):
+    def add(v):
+        return v + n
+    return add
+
+
+add5 = adder(5)
+chk(21, add5(10) == 15)
+
+# --- control flow -----------------------------------------------------------
+tot = 0
+for i in range(5):
+    if i % 2 == 0:
+        continue
+    tot = tot + i
+chk(22, tot == 4)
+
+w = 0
+n = 0
+while n < 4:
+    w = w + n
+    n = n + 1
+chk(23, w == 6)
+
+print("total ok " + str(ok) + " / 23")
