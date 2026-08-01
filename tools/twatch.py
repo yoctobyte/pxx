@@ -1482,6 +1482,37 @@ def debounce(clone, secs, cap=300):
 
 
 # ---------------------------------------------------------------- status ---
+def states_at(repo, ref):
+    """Per-host tstate documents read from a GIT REF, not the working tree.
+
+    The daemon publishes to origin; the worktree is merely where it happened to
+    be standing. Reading the ref is therefore the only view that matches what
+    other boxes can see — and it is what `tools/trackt.py` has always done
+    (`git show origin/master:…`), which is why `trackt status` stayed accurate
+    while `twatch.py --status` did not.
+
+    Pure git plumbing: no network, no fetch. Returns [] if the ref has no tstate
+    (a fresh clone, a repo without the remote), so the caller can fall back.
+    """
+    out = []
+    try:
+        names = sh(["git", "ls-tree", "--name-only", "%s:%s" % (ref, TSTATE_REL)],
+                   cwd=repo, check=False).split()
+    except (RuntimeError, OSError):
+        return out
+    for n in sorted(names):
+        if not n.endswith(".json"):
+            continue
+        try:
+            blob = sh(["git", "show", "%s:%s/%s" % (ref, TSTATE_REL, n)],
+                      cwd=repo, check=False)
+            if blob:
+                out.append(json.loads(blob))
+        except (RuntimeError, OSError, ValueError):
+            continue                   # a half-written or absent blob is not fatal
+    return out
+
+
 def status(repo, grace_min, tdir=None, ref="HEAD"):
     """Is Track T covering this repo?  No ping, no network: a watcher is
     considered UP iff every commit older than the grace window is tested by
@@ -1519,19 +1550,36 @@ def status(repo, grace_min, tdir=None, ref="HEAD"):
                       "origin/master (run `git pull --rebase` to refresh it)"
                       % behind)
             ref = "origin/master"
-    tdir = tdir or os.path.join(repo, TSTATE_REL)
-    tested = set()
+    # BOTH inputs must come from the SAME ref. The walk above already prefers
+    # origin/master; taking the tested-set from the worktree instead is what
+    # made a healthy watcher report DOWN (2026-08-01, Track A). In the watcher's
+    # own clone the worktree is DETACHED at the sha under test for most of every
+    # cycle, so its tstate lags what the daemon has already pushed; in a dev
+    # checkout it is only as fresh as the last pull. Either way: fresh history +
+    # stale verdicts = commits that merely LOOK untested.
+    #
+    # No network — this reads whatever origin/master the checkout already has,
+    # exactly like the walk. A checkout that is behind then reports on a
+    # consistently old view rather than an incoherent mixed one.
     hosts = []
-    if os.path.isdir(tdir):
-        for fn in os.listdir(tdir):
-            if not fn.endswith(".json"):
-                continue
-            with open(os.path.join(tdir, fn)) as f:
-                st = json.load(f)
-            hosts.append(st)
-            if st.get("last"):
-                tested.add(st["last"]["sha"])
-            tested.update(h["sha"] for h in st.get("history", []))
+    if tdir is None:
+        hosts = states_at(repo, ref)
+    if not hosts:                      # explicit tdir, or no usable ref
+        tdir = tdir or os.path.join(repo, TSTATE_REL)
+        if os.path.isdir(tdir):
+            for fn in sorted(os.listdir(tdir)):
+                if not fn.endswith(".json"):
+                    continue
+                try:
+                    with open(os.path.join(tdir, fn)) as f:
+                        hosts.append(json.load(f))
+                except (OSError, ValueError):
+                    pass
+    tested = set()
+    for st in hosts:
+        if st.get("last"):
+            tested.add(st["last"]["sha"])
+        tested.update(h["sha"] for h in st.get("history", []))
     if not hosts:
         print("tstate: DOWN — no watcher state in %s (run your own full gate)"
               % TSTATE_REL)
