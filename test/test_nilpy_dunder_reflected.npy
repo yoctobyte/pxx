@@ -1,0 +1,65 @@
+# Reflected arithmetic dunders: `a <op> b` falls back to `b.__r<op>__(a)` when
+# the LEFT operand does not implement the operator. All seven were absent —
+# `3 + C(4)` computed on the class HANDLE and gave 1744830491, `3 * C(4)` gave
+# -1906311096, silently. feature-nilpy-arithmetic-dunders-full-protocol.
+#
+# Expectation is CPython's own output.
+
+
+class R:
+    # reflected only — the left operand (an int) has no idea what to do with us
+    def __radd__(self, lhs):
+        return "radd:" + str(lhs)
+
+    def __rsub__(self, lhs):
+        return "rsub:" + str(lhs)
+
+    def __rmul__(self, lhs):
+        return "rmul:" + str(lhs)
+
+    def __rtruediv__(self, lhs):
+        return "rtruediv:" + str(lhs)
+
+    def __rfloordiv__(self, lhs):
+        return "rfloordiv:" + str(lhs)
+
+    def __rmod__(self, lhs):
+        return "rmod:" + str(lhs)
+
+    def __rpow__(self, lhs):
+        return "rpow:" + str(lhs)
+
+
+class Both:
+    # declares BOTH directions: Python tries the LEFT operand first, so a Both
+    # on the left must use __add__, never __radd__. Getting the swap backwards
+    # yields a plausible wrong answer rather than an error, which is why this
+    # case is here.
+    def __add__(self, rhs):
+        return "direct"
+
+    def __radd__(self, lhs):
+        return "reflected"
+
+
+r = R()
+print(3 + r)
+print(3 - r)
+print(3 * r)
+print(3 / r)
+print(3 // r)
+print(3 % r)
+print(3 ** r)
+
+# the reflected method receives the LEFT operand as its argument
+print(10 + r)
+
+b = Both()
+print(b + 1)        # direct   — left operand wins
+print(1 + b)        # reflected — left operand (int) cannot, so fall back
+
+# plain arithmetic is untouched
+print(3 + 4, 3 - 4, 3 * 4, 8 / 2, 7 // 2, 7 % 2, 2 ** 5)
+
+# strings and lists keep their own meanings, not a reflected dunder
+print("a" + "b", [1] + [2], "ab" * 2)

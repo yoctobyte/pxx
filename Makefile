@@ -576,6 +576,10 @@ test-nilpy: $(COMPILER)
 	@# a class defining __getitem__/__setitem__ routes subscript read/write
 	./$(COMPILER) test/test_nilpy_dunder_getitem_setitem.npy /tmp/test_nilpy_dundergetset26
 	test "$$(/tmp/test_nilpy_dundergetset26)" = "$$(printf '%b' '20\n99\n[10, 99, 30]\n42\n-1\n10\ncaught: TypeError')"
+	@# reflected dunders: b.__r<op>__(a) when the left operand cannot; a class
+	@# declaring BOTH must use the DIRECT one when it is on the left
+	./$(COMPILER) test/test_nilpy_dunder_reflected.npy /tmp/test_nilpy_dunderrf26
+	test "$$(/tmp/test_nilpy_dunderrf26)" = "$$(printf '%b' 'radd:3\nrsub:3\nrmul:3\nrtruediv:3\nrfloordiv:3\nrmod:3\nrpow:3\nradd:10\ndirect\nreflected\n7 -1 12 4.0 3 1 32\nab [1, 2] abab')"
 	@# __floordiv__ / __mod__ / __pow__; str % stays FORMATTING, numeric // % **
 	@# unaffected (incl. negative-operand rules)
 	./$(COMPILER) test/test_nilpy_dunder_arith2.npy /tmp/test_nilpy_dunderar226

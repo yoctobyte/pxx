@@ -13273,6 +13273,15 @@ begin
       object" where CPython returned the method's result
       (feature-nilpy-arithmetic-dunders-full-protocol). pylib's own rows are
       excluded so container/scalar powers keep today's behaviour. }
+    { reflected `__rpow__`: `3 ** C(4)`. Tried first only when the BASE is not
+      itself a user class, so a class base keeps left-operand priority. }
+    if PyExprMode and (IntToTypeKind(ASTTk[ppBase]) <> tyClass) and
+       (PyReflectedDunder('__rpow__', ppBase, ppExp) >= 0) then
+    begin
+      CurASTNode := PyReflectedDunder('__rpow__', ppBase, ppExp);
+      LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+      Exit;
+    end;
     if PyExprMode and (IntToTypeKind(ASTTk[ppBase]) = tyClass) and
        (ResolveNodeRec(ppBase) >= REC_UCLASS_BASE) and
        not PyRecIsPylibOwnClass(ResolveNodeRec(ppBase)) and
@@ -13371,6 +13380,13 @@ begin
       { `bytes([ch]) * u` — bytes repetition (uforth FILL) }
       node := PyMakeBytesRepeat(left, right);
       CurASTNode := node;
+      continue;
+    end
+    else if PyExprMode and (op in [tkStar, tkSlash, tkDiv, tkMod]) and (opci < 0) and
+            (IntToTypeKind(ASTTk[left]) <> tyClass) and
+            (PyReflectedDunder(PyReflName(op), left, right) >= 0) then
+    begin
+      CurASTNode := PyReflectedDunder(PyReflName(op), left, right);
       continue;
     end
     else if PyExprMode and (op in [tkStar, tkSlash, tkDiv, tkMod]) and (opci < 0) and
@@ -13597,6 +13613,15 @@ begin
       Error('Nil Python: can only concatenate list with another list (+)');
     end
     else if PyExprMode and (op in [tkPlus, tkMinus]) and
+            (IntToTypeKind(ASTTk[left]) <> tyClass) and
+            (PyReflectedDunder(PyReflName(op), left, right) >= 0) then
+    begin
+      { reflected: the LEFT operand is not a user class, so try the RIGHT
+        operand's __radd__/__rsub__ with the operands swapped. }
+      CurASTNode := PyReflectedDunder(PyReflName(op), left, right);
+      continue;
+    end
+    else if PyExprMode and (op in [tkPlus, tkMinus]) and
             (IntToTypeKind(ASTTk[left]) = tyClass) and
             (ResolveNodeRec(left) >= REC_UCLASS_BASE) then
     begin
@@ -13685,6 +13710,50 @@ end;
 
 { Enum type index of an expression node, or -1. Ident-level only: enum
   identity lives on the SYMBOL (SymEnumId, tagged at var decls). }
+function PyReflName(op: TTokenKind): AnsiString;
+{ The reflected dunder for a binary operator: `a <op> b` falls back to
+  `b.__r<op>__(a)`. One table so the two call sites (ParseSimpleExpr for +/-,
+  ParseTerm for * / // %) cannot drift. }
+begin
+  case op of
+    tkPlus:  PyReflName := '__radd__';
+    tkMinus: PyReflName := '__rsub__';
+    tkStar:  PyReflName := '__rmul__';
+    tkSlash: PyReflName := '__rtruediv__';
+    tkDiv:   PyReflName := '__rfloordiv__';
+    tkMod:   PyReflName := '__rmod__';
+    else     PyReflName := '';
+  end;
+end;
+
+function PyReflectedDunder(const rname: AnsiString; left, right: Integer): Integer;
+{ Python's REFLECTED fallback: when the LEFT operand does not implement the
+  operator, the RIGHT operand's `__r<op>__` is tried with the operands swapped
+  (`3 + C(4)` -> `C(4).__radd__(3)`). Returns -1 when the right operand is not a
+  user class declaring that method, so the caller keeps its existing path.
+
+  Measured absent before this: all seven reflected forms fell through to the
+  numeric typing and computed on the class HANDLE — `3 + C(4)` gave 1744830491,
+  `3 * C(4)` gave -1906311096, silently
+  (feature-nilpy-arithmetic-dunders-full-protocol). The two comments in this
+  file that said the fallback "is not implemented" were the only trace of it;
+  there was no partially-wired path.
+
+  The RIGHT operand becomes the receiver and the LEFT becomes the argument —
+  that swap is the whole point, and getting it backwards yields a plausible
+  wrong answer rather than an error. }
+var ci: Integer;
+begin
+  PyReflectedDunder := -1;
+  if not PyExprMode then Exit;
+  if IntToTypeKind(ASTTk[right]) <> tyClass then Exit;
+  if ResolveNodeRec(right) < REC_UCLASS_BASE then Exit;
+  if PyRecIsPylibOwnClass(ResolveNodeRec(right)) then Exit;
+  ci := ResolveNodeRec(right) - REC_UCLASS_BASE;
+  if FindUMeth(ci, rname) < 0 then Exit;
+  PyReflectedDunder := PyCallMeth1(ci, rname, right, left);
+end;
+
 function NodeEnumIdOf(node: Integer): Integer;
 begin
   Result := -1;

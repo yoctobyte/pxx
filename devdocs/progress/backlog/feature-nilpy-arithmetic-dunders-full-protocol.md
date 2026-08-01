@@ -145,3 +145,51 @@ says so in a comment instead.
 `3 + C(4)` → `1744830491`, `3 * C(4)` → `-1906311096`. Note four of those names
 already appear in `compiler/**`, so check what the existing references do before
 writing new code — a partially-wired path is a different fix from an absent one.
+
+## 2026-08-01 — REFLECTED forms LANDED; this ticket's scope is now complete
+
+All seven, verified against CPython:
+
+| expression | was | now |
+| --- | --- | --- |
+| `3 + C(4)` | `1744830491` | `radd:3` |
+| `3 - C(4)` | (handle math) | `rsub:3` |
+| `3 * C(4)` | `-1906311096` | `rmul:3` |
+| `3 / C(4)` | `0.000000000022` | `rtruediv:3` |
+| `3 // C(4)` | `0` | `rfloordiv:3` |
+| `3 % C(4)` | `3` | `rmod:3` |
+| `3 ** C(4)` | `TypeError` | `rpow:3` |
+
+**The "partially wired" worry is resolved: they were simply absent.** Four
+reflected names did appear in `compiler/**`, which earlier notes flagged as a
+reason for caution — grepping showed all of them are in COMMENTS saying the
+fallback "is not implemented". No half-built path existed.
+
+`PyReflName` (operator → reflected method name) plus `PyReflectedDunder`
+(`compiler/parser.inc`) — one table and one dispatcher, so the three call sites
+(`ParseSimpleExpr` for `+`/`-`, `ParseTerm` for `*` `/` `//` `%`, the power arm
+of `ParseFactor` for `**`) cannot drift apart. Each reflected check is gated on
+the LEFT operand NOT being a user class, so left-operand priority is preserved
+by construction rather than by ordering luck.
+
+`test/test_nilpy_dunder_reflected.npy` is byte-identical to CPython and covers
+the precedence rule explicitly: a class declaring BOTH `__add__` and `__radd__`
+must answer `direct` when it is on the left and `reflected` when on the right.
+That case exists because getting the receiver/argument swap backwards produces a
+plausible wrong answer rather than an error. Also asserts that plain arithmetic,
+string concat/repeat and list concat are untouched.
+
+Native confirm: self-host fixedpoint A==B==C from the pinned seed, testmgr
+--tier quick GREEN; matrix offloaded to Track T.
+
+### Ticket status
+
+Direct and reflected forms for `+ - * / // % **` are all done. What is NOT here,
+and is tracked elsewhere:
+
+- missing dunder aborts COMPILATION instead of raising →
+  [[bug-nilpy-missing-arith-dunder-aborts-compile-instead-of-raising]]
+- operands reached through a container/parameter (runtime variant) →
+  [[decide-nilpy-runtime-dunder-dispatch-mechanism]]
+- mismatched static operand pairs computing instead of raising →
+  [[bug-nilpy-static-typed-operands-skip-mixed-type-guard]]
