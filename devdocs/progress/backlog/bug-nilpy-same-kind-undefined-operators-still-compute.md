@@ -61,3 +61,29 @@ If the set-vs-list modelling question is contested, escalate it as a Track U
 A `.npy` diffed against CPython covering the table above, plus proof that
 `set(...) - set(...)`, `set` union/intersection, list concat/repeat and string
 repeat all still work.
+
+## 2026-08-01 — the str-vs-str SLICE is fixed; list/dict/bytes remain
+
+This ticket itself identified str as the cheap safe slice, and that is what
+landed (`4e949bb9b`):
+
+| expression | before | after |
+| --- | --- | --- |
+| `"ab" - "ab"` | `0` | `TypeError` |
+| `"ab" / "ab"` | `1.0` | `TypeError` |
+| `"ab" // "ab"` | `1` | `TypeError` |
+
+`str` carries no set-like alter ego, so same-kind `str` is statically
+rejectable with no ambiguity. Ordering is untouched (`"aa" < "bb"` is defined)
+and `%` stays exempt as formatting. Covered in
+`test/test_nilpy_static_mixed_type_guard.npy`.
+
+**Still open, and still for the reason this ticket was filed:** the same-kind
+`list` / `dict` / `bytes` cases — `[1] // [2]`, `[1] % [2]` and friends. pxx
+backs a Python `set` with `TPyList` and `set([1,2,3]) - set([2])` works today
+and must keep working, so "list minus list is undefined" is not statically
+decidable. That still needs either a set-vs-list distinction in the type system
+or a runtime kind check, and the choice between them is the actual work — see
+the two directions costed above.
+
+Reduced in scope, not resolved.

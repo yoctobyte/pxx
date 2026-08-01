@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | bug-c-uses-path-basename-collides-with-enclosing-unit-name |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
@@ -39,7 +38,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (181)
+## backlog (183)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -75,6 +74,7 @@ _none_
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pypow-integer-overflow-does-not-promote | N | 35 | bug | `pypow_v`'s integer path silently wraps past 64 bits instead of promoting | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
+| bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | — |
 | bug-nilpy-unary-numeric-dunders-return-raw-handle | N | 55 | bug | NilPy: abs(obj), ~obj and obj-as-index ignore __abs__/__invert__/__index__ — they return the raw instance HANDLE as a number, silently | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-progress-claim-silently-drops-owner-without-template-line | T | 30 | bug | `progress.sh claim`/`resolve` silently no-op when a ticket lacks the expected body line | — |
@@ -218,6 +218,7 @@ _none_
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
+| regression-test-nilpy-test-nilpy-bytes-decode | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_bytes_decode.npy red at 74a925112afc (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
 | task-t-enroll-pascal-conformance-tier | T | 45 | task | Enroll test-pascal-conformance in testmgr tiers (sharded, like the C battery) | — |
@@ -2962,6 +2963,7 @@ _none_
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [N] feature-nilpy-runtime-dunder-dispatch-on-variants
 - [p 70] [T] feature-t-trackt-setup-autodetect-box-role
+- [p 70] [T] regression-test-nilpy-test-nilpy-bytes-decode
 - [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
 - [p 65] [B] bug-b-floattostrsig-caps-at-15-significant-digits
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
@@ -2969,6 +2971,7 @@ _none_
 - [p 60] [A] bug-a-fpc-seed-drift-pymaketruthy-forward-wrong-file
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [N] bug-nilpy-one-line-def-and-class-bodies-do-not-parse
+- [p 60] [N] bug-nilpy-same-kind-undefined-operators-still-compute
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [U] decide-nilpy-runtime-dunder-dispatch-mechanism
 - [p 60] [A] feature-a-abi-oracle
