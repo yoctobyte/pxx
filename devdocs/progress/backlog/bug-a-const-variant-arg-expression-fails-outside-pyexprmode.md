@@ -68,3 +68,61 @@ Scoped as its own ticket since it touches the shared Pascal/NilPy binop/call
 parsing in `parser.inc` at several sites and needs the self-host gate;
 deliberately not attempted inline while sweeping for the set/dict-operator fix
 (bug-nilpy-set-and-dict-operators-do-raw-pointer-arithmetic).
+
+## 2026-08-01 — attempted, REVERTED: broke promotable-int/bignum output
+
+Picked up as claude-A. Both halves of the fix direction above were
+implemented and landed (commit `b93577cd3`): the `isConstVariantParam`
+threading through all 8 `ByRefArgStartsExpression` call sites, AND a
+second, deeper bug found by tracing (not guessing) why `ProcParamIsConst`
+still read False for `TPyList.append`'s own `const v: Variant` even
+after the threading fix — a parameter-array SHIFT in `ParseSubroutine`
+(making room for the implicit `Self` at index 0 in a method
+IMPLEMENTATION header) was missing `pconst` from its shift list
+entirely, in BOTH of the two shift blocks that exist there. Every other
+per-param array (`ptypes`, `parr`, `pbyref`, `pNDims`, `pDynDepth`, the
+default-value arrays, ...) shifted correctly; `pconst` did not, so a
+method's real `const` parameter ended up written into Self's
+(meaningless) slot while the parameter's own slot read stale/default
+data. This is a GENERAL bug, not Variant-specific — any method
+implementation with a `const` parameter had `ProcParamIsConst`
+misregistered.
+
+**The ticket's own ~8-call-site repro was verified working** (both the
+Pascal `pair.append(start + i)` shape and the original NilPy shape),
+self-host fixedpoint reached (generation 2, expected for a change this
+broad), and a spot-check across const/overload/keyword-arg-heavy tests
+passed. **But `make stabilize`'s full `test-core` run caught what the
+spot-check missed**: `test/test_promoint.pas` (promotable-int / arbitrary-
+precision bignum arithmetic) started printing garbage — huge strings of
+leading zeros padded in front of otherwise-correct bignum values, and
+one comparison result flipped from `1` to `0`. Confirmed the fix was the
+cause (not a pre-existing issue) by running the SAME test against the
+previously-pinned binary (v238, predates this fix): correct output,
+`1`. The fix's own binary: wrong.
+
+**Reverted** (commits `f975e3fa7`, `447ad4c4c`) rather than debugged
+further in the moment — this was caught close to a `make stabilize` run
+that ran unattended for over an hour, and shipping ANY unverified state
+to the pinned binary is worse than losing this fix for a night. The
+`pconst`-shift fix almost certainly UNMASKS a second, pre-existing bug
+elsewhere (a downstream consumer of `ProcParamIsConst` — likely
+somewhere in the promotable-int/bignum value-copy or string-conversion
+path — that was implicitly relying on `const record`/`const Variant`
+parameters reading as non-const, and now that they correctly read as
+const, marshals/copies them differently and wrong). That second bug is
+real and needs finding before this ticket can land safely; the
+`pconst`-shift fix by itself is very likely correct (it matches the
+exact pattern the sibling `ProcParamHasDefault` comment two lines below
+already documents needing) but its downstream blast radius is larger
+than initially scoped and needs the SAME kind of careful measurement
+this session used to find it in the first place — starting from
+`test_promoint.pas`'s own wrong output, not from theorizing about which
+call site is affected.
+
+**Do not re-attempt without gating on a full `make stabilize`/
+`testmgr --tier full`-equivalent run before promoting the seed** — the
+regression here was invisible to self-host fixedpoint, a handful of
+targeted spot-checks, and even a broad-ish sweep of const/overload
+tests; it only surfaced in the full test-core suite, on a test file with
+no obvious connection to `const` parameter handling at the source level.
