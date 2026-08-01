@@ -2,7 +2,19 @@
 track: U
 prio: 65
 type: decide
+status: resolved
+resolved: 2026-08-01
 ---
+
+## RESOLVED-BY-CAUSE 2026-08-01
+
+Closing per this ticket's own 2026-07-28 "second look" conclusion: FPC's
+real answer (proper unit-scoped `uses`, not a merge-declaration language
+feature) is correct, and the fork here dissolves once
+[[bug-pascal-uses-is-transitive]] is fixed. That root fix is now sequenced
+via [[decide-pascal-uses-campaign-scope]] (option 2, combined effort). The
+five-faces checklist above stays as the acceptance list for the root fix —
+each per-site patch should be reverted as it lands, not kept.
 
 # Decide: how should two libraries be allowed to export the same class name?
 
