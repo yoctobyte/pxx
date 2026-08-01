@@ -62,3 +62,56 @@ can currently see a half-written binary or hit ETXTBSY.
 Start a full-tier run; midway, rebuild `compiler/pascal26` from a different
 source state. The run completes with every job attributed to the snapshot, and
 the result is identical to the same run with no concurrent rebuild.
+
+---
+
+## DONE — `a31aaffeb` (claude@xeon, 2026-08-01)
+
+testmgr copies `compiler/pascal26` into the run's scratch at start and rewrites
+the **1489** recipe invocations to that path. Falls back to the repo path if the
+snapshot cannot be taken — a missing snapshot must never fail a run.
+
+### The hardlink preference does not hold on this box — measured
+
+> A hardlink is preferable to a copy where the filesystem allows it… Confirm the
+> build actually renames rather than writing in place before relying on that.
+
+Confirmed, and it **does not rename**:
+
+```
+inode before rebuild : 270865
+inode after  rebuild : 270865      # a real rebuild — it converged and wrote a new binary
+/tmp  ->  tmpfs
+.     ->  /dev/sdb3 ext4
+```
+
+`mv $(BUILD_COMPILER) $(COMPILER)` crosses tmpfs → ext4, so coreutils cannot
+rename and falls back to copy+unlink, **writing the existing destination inode
+in place**. A hardlink would have tracked the rebuild rather than pinning the old
+bytes — the exact opposite of the intent. So: a copy, deliberately.
+
+This also confirms the ticket's conditional warning unconditionally for this
+box: because the destination is overwritten in place, a concurrent reader **can**
+observe a half-written compiler.
+
+### Gate
+
+> Start a full-tier run; midway, rebuild `compiler/pascal26` from a different
+> source state. The run completes with every job attributed to the snapshot.
+
+Raced with something stronger than a rebuild — `compiler/pascal26` was replaced
+mid-run by a stub that `exit 9`s, which would have failed every subsequent job:
+
+```
+testmgr: compiler snapshot /tmp/testmgr-scratch-2905992/pascal26 (sha256 f376298358bd)
+testmgr: NOTE compiler/pascal26 changed during this run (f376298358bd -> 94862798bf9d)
+         — jobs ran against the snapshot, results stand
+testmgr: GREEN
+```
+
+Provenance also comes free, as predicted: the report now carries
+`compiler_sha256`, so a result names the binary it came from instead of it being
+inferred from timestamps.
+
+## Log
+- 2026-08-01 — resolved, commit a31aaffeb.

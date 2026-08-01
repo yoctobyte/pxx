@@ -8,15 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-t-run-must-invalidate-when-compiler-changes-mid-run | T | 70 | bug | A test run that spans a compiler rebuild reports PASS/FAIL as if it were one binary; it should hash the binary at start and end and report INVALID on mismatch | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | bug-c-uses-path-basename-collides-with-enclosing-unit-name |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
-| feature-t-snapshot-compiler-binary-per-run | T | 70 | feature | A test run should snapshot the compiler binary into its own scratch dir at start and run against that copy, so a concurrent rebuild cannot swap the binary out mid-run | — |
 
 ## unfinished (4)
 
@@ -337,7 +335,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1150)
+## done (1152)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -936,6 +934,7 @@ _none_
 | bug-t-pasmith-with-rung-mutates-global-inside-function | T | 40 | bug | pasmith: wide rungs (`with`/`reccopy`/…) mutate a GLOBAL inside a function body → order-dependent program | — |
 | bug-t-progress-track-detection-prose-mention | T | 40 | bug | progress.py track() matches a prose 'Track T' mention in the Type/Track bullet before the authoritative frontmatter track: field — mis-tags tickets (3 hit in one session) | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
+| bug-t-run-must-invalidate-when-compiler-changes-mid-run | T | 70 | bug | A test run that spans a compiler rebuild reports PASS/FAIL as if it were one binary; it should hash the binary at start and end and report INVALID on mismatch | — |
 | bug-t-selfhost-build-uses-fixed-tmp-paths-colliding-across-clones | T | 75 | bug | The self-host build writes fixed /tmp/pascal26-build\|verify paths, so the watcher's dedicated clone and a dev checkout on the same box overwrite each other's in-flight compiler — /tmp is not per-clone | — |
 | bug-t-status-reads-worktree-tstate-false-down | T | 80 | bug | twatch --status reads tstate from the WORKTREE but walks history from origin/master, so a detached or unpulled checkout reports Track T DOWN while it is healthy | — |
 | bug-t-tstate-index-conflicts-between-watcher-hosts | T | 70 | bug | TSTATE.md is regenerated wholesale by every host, so two live watchers rebase-conflict on it and silently drop verdicts | — |
@@ -1367,6 +1366,7 @@ _none_
 | feature-sysutils-decodedate-missing | A | 50 | feature | SysUtils `DecodeDate` missing — next Synapse `synautil` wall | — |
 | feature-t-bench-portable-variants | T | 40 | feature | mandelbrot and raytracer have no FPC comparison — they depend on pxx-only units, not on dialect extensions | — |
 | feature-t-fuzz-findings-ledger | T | 70 | feature | Fuzz findings ledger: dedupe by signature, throttle fuzzing until the finding is fixed | — |
+| feature-t-snapshot-compiler-binary-per-run | T | 70 | feature | A test run should snapshot the compiler binary into its own scratch dir at start and run against that copy, so a concurrent rebuild cannot swap the binary out mid-run | — |
 | feature-target-aarch64 | A | 50 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | A | 50 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
 | feature-target-esp32 | A | 50 | feature | Compile target: ESP32 / embedded | — |
