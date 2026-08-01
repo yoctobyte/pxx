@@ -27,17 +27,18 @@ _none_
 | feature-nilpy-star-args-kwargs | N | 50 | feature | nilpy: *args / **kwargs in a def signature | — |
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 
-## blocked (5)
+## blocked (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-nilpy-dunders-not-dispatched-through-containers | N | 60 | bug | NilPy: __repr__/__str__ of a class instance held in a container silently print EMPTY; ordering/sorted raise — no runtime dunder dispatch on a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | bug-nilpy-float-repr-not-shortest-roundtrip | N | 70 | bug | NilPy float repr is fixed-precision, not CPython's shortest round-trip | — |
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | — |
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (182)
+## backlog (183)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -55,7 +56,6 @@ _none_
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
 | bug-nilpy-dataclass-no-generated-eq | N | 30 | bug | `@dataclass` gets no generated `__eq__` — compares by identity instead of fields | — |
-| bug-nilpy-dunders-not-dispatched-through-containers | N | 60 | bug | NilPy: __repr__/__str__ of a class instance held in a container silently print EMPTY; ordering/sorted raise — no runtime dunder dispatch on a Variant | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-float-print-loses-precision-vs-cpython | N | 40 | bug | Float printing loses the last 1-2 significant digits vs CPython's shortest round-trip repr | — |
 | bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip | N | 20 | bug | `print(1e-20)` prints `0.0` — NilPy's float repr has no small-magnitude exponential form | — |
@@ -94,6 +94,7 @@ _none_
 | decide-abi-portable-vs-target-split | U | 60 | decide |  | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-nilpy-runtime-dunder-dispatch-mechanism | U | 60 | decide | Decide: how should NilPy dispatch dunders on an instance whose class is known only at RUN time (container elements)? | — |
+| decide-nilpy-runtime-dunder-dispatch-strategy | U | 70 | decide | Decide: how should NilPy dispatch dunders on a Variant-held instance? | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
@@ -146,6 +147,7 @@ _none_
 | feature-nilpy-nested-def-as-value | N | 15 | feature | SUPERSEDED: nested def as a VALUE (stored, passed, returned) | — |
 | feature-nilpy-parallel-for-in | A | 5 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
 | feature-nilpy-process-exec-binding | N | 45 | feature | nilpy: os.system / subprocess-shaped process spawning over the RTL's libc-free execve | — |
+| feature-nilpy-runtime-dunder-dispatch-on-variants | N | 70 | feature | Runtime dunder dispatch for a user class held in a Variant | — |
 | feature-nilpy-runtime-method-dispatch-on-variant | N | 50 | feature | NilPy: dispatch a method call on a VARIANT receiver at RUNTIME | — |
 | feature-nilpy-set-needs-runtime-tag-for-display-and-equality | N | 40 | feature | A `set` needs its own runtime tag — two divergences from `list` share this root cause | — |
 | feature-nilpy-staticmethod-and-classmethod | N | 35 | feature | `@staticmethod` and `@classmethod` are rejected | — |
@@ -2954,15 +2956,16 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
+- [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 1)
 - [p 70] [N] bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
+- [p 70] [N] feature-nilpy-runtime-dunder-dispatch-on-variants
 - [p 70] [T] feature-t-trackt-setup-autodetect-box-role
 - [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
 - [p 65] [B] bug-b-floattostrsig-caps-at-15-significant-digits
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 60] [A] bug-a-fpc-seed-drift-pymaketruthy-forward-wrong-file
-- [p 60] [N] bug-nilpy-dunders-not-dispatched-through-containers
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [N] bug-nilpy-one-line-def-and-class-bodies-do-not-parse
 - [p 60] [N] bug-nilpy-same-kind-undefined-operators-still-compute
@@ -3127,6 +3130,7 @@ _none_
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-c-uses-path-basename-collides-with-enclosing-unit-name
 - **1** — decide-nilpy-parallel-capture-semantics
+- **1** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **1** — feature-inline-asm-xmm-operands
 - **1** — feature-lib-pxxpdf-reportlab-compat
 - **1** — feature-nilpy-break-continue

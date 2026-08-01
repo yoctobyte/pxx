@@ -71,3 +71,17 @@ here; pick it there first.
 `make test-nilpy` + self-host byte-identical, and the boundary script above
 diffed against CPython (`tools/pydiff.py`) — all five lines, not just the
 sorted one.
+
+## 2026-08-01 — consolidated: same root as two sibling tickets
+
+Reproduced exactly as filed (`[a, b]` -> `[, ]`, `str([a][0])` -> empty,
+`sorted()` -> TypeError, while direct `str(a)` and `a < b` are correct).
+
+This is NOT a separate mechanism from the arithmetic case: dunder dispatch is
+compile-time only, so ANY route that puts the instance in a Variant loses it —
+containers here, a widened global elsewhere, a Variant parameter next. Folded
+into [[feature-nilpy-runtime-dunder-dispatch-on-variants]] so the three do not
+each grow a private runtime path, which is precisely how the `not <x>` family
+came to need three separate fixes.
+
+**blocked-by:** [[decide-nilpy-runtime-dunder-dispatch-strategy]]
