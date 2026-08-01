@@ -704,6 +704,19 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
               "not recording a verdict" % rc, flush=True)
         return False
 
+    # INVALID: the compiler changed underneath the run, so its PASS/FAIL cannot
+    # be attributed to one binary. Treated exactly like "no report" — publish
+    # nothing, diff nothing, file nothing. A red from a mixed run is as
+    # untrustworthy as a green, and auto-filing from one is precisely how the
+    # phantom-red family gets fed. The sha stays untested, so the next cycle
+    # retests it honestly.
+    if report.get("verdict") == "INVALID":
+        print("twatch: %s INVALID — compiler changed mid-run (%s); discarding "
+              "this run's verdict and retesting next cycle"
+              % (sha[:12], (report.get("compiler_sha256") or "?")[:12]),
+              flush=True)
+        return False
+
     parent = (st["last"] or {}).get("sha")
     now, new_red, fixed, still_red = diff_jobs(st["jobs"], report)
 

@@ -29,6 +29,7 @@ import argparse
 import atexit
 import filecmp
 import fnmatch
+import hashlib
 import glob
 import json
 import os
@@ -373,6 +374,38 @@ def reap_stale(info):
         pass
 
 
+def file_sha256(path):
+    """Strong hash of a file, or None if it is not there / not readable."""
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return None
+
+
+def snapshot_compiler():
+    """Copy the compiler into the run's scratch and return (path, sha256).
+
+    Returns (None, None) if it cannot be taken, in which case jobs fall back to
+    the repo path unchanged — a missing snapshot must never fail a run.
+    """
+    src = os.path.join(REPO, "compiler/pascal26")
+    if not os.path.exists(src):
+        return None, None
+    try:
+        os.makedirs(RUN_TMP, exist_ok=True)
+        shutil.copy2(src, RUN_COMPILER)     # copy, deliberately: see RUN_COMPILER
+    except OSError as e:
+        print("testmgr: could not snapshot the compiler (%s) — running against "
+              "the repo path; a concurrent rebuild can still corrupt this run" % e,
+              flush=True)
+        return None, None
+    return RUN_COMPILER, file_sha256(RUN_COMPILER)
+
+
 def drop_run_tmp():
     """Remove THIS run's scratch dir. Registered atexit — see sweep_orphan_tmp.
 
@@ -579,6 +612,24 @@ CORPUS_RE = re.compile(r"library_candidates/([^/\s\"']+)")
 # Job.script); created in main(), world-unreadable is not needed — /tmp
 # hygiene only, the OS reaps it
 RUN_TMP = "/tmp/testmgr-scratch-%d" % os.getpid()
+# The run's OWN copy of the compiler. `compiler/pascal26` is a single mutable
+# path and a prerequisite of every test target, so any unrelated make (a
+# `make pxx-debug` for a gdb build, say) can replace it mid-run: observed
+# 2026-08-01 nine minutes into a test-nilpy, earlier jobs on the old binary and
+# later ones on the new. Jobs run against this snapshot instead, which makes a
+# concurrent rebuild structurally harmless rather than a discipline problem —
+# and makes provenance exact, since the run owns the bytes it tested.
+#
+# A COPY, not a hardlink. The hardlink trick needs the build to rename into
+# place (new inode, old bytes kept alive by the link). Measured on this box it
+# does NOT: `mv $(BUILD_COMPILER) $(COMPILER)` crosses from tmpfs to ext4, so
+# coreutils falls back to copy+unlink and writes the EXISTING destination inode
+# in place — inode 270865 before and after a real rebuild. A hardlink would
+# therefore have tracked the rebuild instead of pinning the old bytes, and a
+# reader can transiently see a half-written binary.
+RUN_COMPILER = os.path.join(RUN_TMP, "pascal26")
+# `./compiler/pascal26` but never `./compiler/pascal26-managed` / `-debug`.
+COMPILER_PATH_RE = re.compile(r"\./compiler/pascal26(?![-\w])")
 # How long a finished run's per-job log dir survives for post-mortem. Reports
 # cite these paths, so they outlive the run — but not indefinitely (see
 # sweep_orphan_tmp; /tmp is a tmpfs on the watcher box).
@@ -681,6 +732,9 @@ class Job:
             body = TMP_RE.sub(
                 lambda m: m.group(0) if m.group(0) in pinned
                 else RUN_TMP + m.group(0)[len("/tmp"):], ln)
+            # point every invocation at the run's snapshot (see RUN_COMPILER)
+            if os.path.exists(RUN_COMPILER):
+                body = COMPILER_PATH_RE.sub(RUN_COMPILER, body)
             parts.append("{\n%s\n} || exit $?" % body)
         return "\n".join(parts) + "\n"
 
@@ -2201,6 +2255,15 @@ def main():
     sweep_orphan_tmp()                  # reclaim dead runs' scratch first
     os.makedirs(RUN_TMP, exist_ok=True)
     atexit.register(drop_run_tmp)       # ...and never become one ourselves
+    # Snapshot BEFORE calibrate(), so even calibration measures the binary the
+    # jobs will actually use. repo_sha0 is kept only to report how often a
+    # concurrent rebuild happens — the frequency is the signal that says whether
+    # this snapshot and the PXX_TMP split actually fixed the race.
+    snap_path, snap_sha = snapshot_compiler()
+    repo_sha0 = file_sha256(os.path.join(REPO, "compiler/pascal26"))
+    if snap_path:
+        print("testmgr: compiler snapshot %s (sha256 %s)"
+              % (snap_path, (snap_sha or "?")[:12]), flush=True)
     scale = calibrate()
     # propagate to child scripts with their own inner `timeout` calls
     os.environ["TESTMGR_TIME_SCALE"] = "%.2f" % scale
@@ -2279,11 +2342,42 @@ def main():
             print("-- log (%s) --" % first_fail.logpath)
             with open(first_fail.logpath, errors="replace") as f:
                 sys.stdout.write(f.read())
-    print("\ntestmgr: %s" % ("GREEN" if rc == 0 else
-                             "INTERRUPTED" if rc == 130 else "RED"))
+    # ---- provenance: did the binary the jobs used change underneath them? ----
+    # A run that used binary A for its first 200 jobs and binary B for the rest
+    # has no honest single verdict, so it gets INVALID rather than GREEN or RED
+    # — a red from a mixed run is exactly as untrustworthy as a green, and
+    # auto-filing a regression from one manufactures phantom-red noise.
+    snap_sha_end = file_sha256(snap_path) if snap_path else None
+    repo_sha1 = file_sha256(os.path.join(REPO, "compiler/pascal26"))
+    invalid = bool(snap_path and snap_sha and snap_sha_end
+                   and snap_sha != snap_sha_end)
+    # With the snapshot in place the repo binary moving is HARMLESS — that is
+    # the whole point — so it is reported, not fatal. Without a snapshot it is
+    # the real thing and must invalidate.
+    repo_moved = bool(repo_sha0 and repo_sha1 and repo_sha0 != repo_sha1)
+    if repo_moved and not snap_path:
+        invalid = True
+    if repo_moved:
+        print("testmgr: NOTE compiler/pascal26 changed during this run "
+              "(%s -> %s)%s" % (repo_sha0[:12], repo_sha1[:12],
+                                " — jobs ran against the snapshot, results stand"
+                                if snap_path else ""), flush=True)
+    verdict = ("INVALID" if invalid else
+               "GREEN" if rc == 0 else
+               "INTERRUPTED" if rc == 130 else "RED")
+    if invalid:
+        print("testmgr: INVALID — the compiler changed mid-run (%s -> %s). "
+              "This run's PASS/FAIL cannot be attributed to one binary."
+              % ((snap_sha or repo_sha0 or "?")[:12],
+                 (snap_sha_end or repo_sha1 or "?")[:12]), flush=True)
+    print("\ntestmgr: %s" % verdict)
     if args.report_json:
         rep = {"tier": args.tier, "wall": round(wall, 1), "scale": round(scale, 2),
-               "verdict": "GREEN" if rc == 0 else "RED",
+               "verdict": verdict,
+               # the binary these results came from, so a report's provenance is
+               # identifiable after the fact instead of inferred from timestamps
+               "compiler_sha256": snap_sha or repo_sha0,
+               "compiler_changed_mid_run": repo_moved,
                "slow": slow,
                "flaky": [j.name for j in jobs if j.flaky],
                # "sel": the STABLE way to name this job again later (twatch

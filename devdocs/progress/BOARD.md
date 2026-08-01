@@ -36,7 +36,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (191)
+## backlog (194)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -193,11 +193,14 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-inline-asm-xmm-operands |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
+| feature-t-agent-side-tstate-watch | T | 65 | feature | An agent session has no way to hear Track T's verdict on a sha it just pushed; a small poll tool would deliver reds while the context that caused them is still warm | — |
 | feature-t-bench-hardware-provenance | T | 60 | feature | bench.tsv records a hostname but no hardware — the series silently changed machines today | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 40 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-per-invocation-tmp-namespace-for-make-recipes | T | 55 | feature | The Makefile's ~3700 fixed /tmp/test_* output paths make two concurrent `make test*` runs on one box clobber each other; route them through a per-invocation temp dir | — |
+| feature-t-publish-selfhost-red-immediately | T | 75 | feature | twatch publishes only when a whole tier finishes, so a self-host fixedpoint break — the one red that blocks every track — waits behind the entire native tier before anyone hears about it | — |
 | feature-t-quick-gate-must-be-quick-and-gate-lines-must-not-name-long-suites | T | 60 | feature | `gate.sh quick` runs the 625s make test-nilpy, and ticket Gate: lines name long local suites — both push agents into running locally what Track T exists to offload | — |
+| feature-t-testmgr-owns-pinning-interruptible | T | 60 | feature | Move the pin gate into testmgr so pinning is scheduled, resource-aware and INTERRUPTIBLE, instead of a long foreground gate.sh run a dev agent has to babysit | — |
 | feature-t-uforth-benchmark-harness | T | 45 | feature | Track T: uforth benchmark harness — pxx-compiled vs interpreted Python baselines | — |
 | feature-t-windows-wine-harness | T | 25 | feature | Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
@@ -2936,6 +2939,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 75] [T] bug-t-optdiff-shard-identity-is-positional
+- [p 75] [T] feature-t-publish-selfhost-red-immediately
 - [p 70] [N] bug-nilpy-def-local-assignment-widens-module-global-to-variant
 - [p 70] [N] bug-nilpy-dict-from-pairs-and-bytes-decode-segfault
 - [p 70] [N] bug-nilpy-list-ordering-compares-heap-addresses
@@ -2951,6 +2955,7 @@ _none_
 - [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
 - [p 65] [N] bug-nilpy-bool-protocol-ignored-object-always-truthy
 - [p 65] [N] bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch
+- [p 65] [T] feature-t-agent-side-tstate-watch
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 60] [N] bug-n-nilpy-import-sqlite-asserts-host-sqlite-version
 - [p 60] [N] bug-nilpy-bitwise-shift-on-class-operand-segfaults
@@ -2970,6 +2975,7 @@ _none_
 - [p 60] [P] feature-pascal-corpus-oop
 - [p 60] [T] feature-t-bench-hardware-provenance
 - [p 60] [T] feature-t-quick-gate-must-be-quick-and-gate-lines-must-not-name-long-suites
+- [p 60] [T] feature-t-testmgr-owns-pinning-interruptible
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [T] task-t-suppress-autoticket-until-host-baselined
 - [p 58] [O] feature-opt-o3-register-pressure
