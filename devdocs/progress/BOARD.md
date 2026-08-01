@@ -8,13 +8,14 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | bug-c-uses-path-basename-collides-with-enclosing-unit-name |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
+| feature-t-agent-side-tstate-watch | T | 65 | feature | An agent session has no way to hear Track T's verdict on a sha it just pushed; a small poll tool would deliver reds while the context that caused them is still warm | — |
 
 ## unfinished (4)
 
@@ -35,7 +36,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (194)
+## backlog (193)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -191,7 +192,6 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-inline-asm-xmm-operands |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
-| feature-t-agent-side-tstate-watch | T | 65 | feature | An agent session has no way to hear Track T's verdict on a sha it just pushed; a small poll tool would deliver reds while the context that caused them is still warm | — |
 | feature-t-bench-hardware-provenance | T | 60 | feature | bench.tsv records a hostname but no hardware — the series silently changed machines today | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 40 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
@@ -2959,7 +2959,6 @@ _none_
 - [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
 - [p 65] [N] bug-nilpy-bool-protocol-ignored-object-always-truthy
 - [p 65] [N] bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch
-- [p 65] [T] feature-t-agent-side-tstate-watch
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 60] [N] bug-nilpy-bitwise-shift-on-class-operand-segfaults
 - [p 60] [N] bug-nilpy-dunders-not-dispatched-through-containers
