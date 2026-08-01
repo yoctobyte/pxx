@@ -67,7 +67,7 @@ _none_
 | bug-nilpy-list-sort-ignores-lt-dunder-on-objects | N | 35 | bug | `list.sort()` on user objects with `__lt__` raises a runtime TypeError instead of using it | — |
 | bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
 | bug-nilpy-missing-builtins-step-slicing-range-into-list | N | 45 | bug | NilPy survey: step slicing (x[::2]), list(range(...)), pow(), str.index/expandtabs, sorted(d.keys()) all fail to COMPILE — 13 of 133 method-surface cases | — |
-| bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch | N | 65 | bug | NilPy: a module global assigned a scalar and LATER a class instance is typed tyVariant, so operator dunders never dispatch on it — no name collision involved | — |
+| bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch | N | 70 | bug | NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a user class — dispatch is compile-time only. Scalar-then-class rebinding is just one way to get a variant. | — |
 | bug-nilpy-ne-dunder-ignored-always-negates-eq | N | 50 | bug | NilPy: a user-defined __ne__ is never consulted — `!=` always negates __eq__, silently returning the wrong value when they differ | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
@@ -2951,11 +2951,11 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
+- [p 70] [N] bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] feature-t-trackt-setup-autodetect-box-role
 - [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
 - [p 65] [B] bug-b-floattostrsig-caps-at-15-significant-digits
-- [p 65] [N] bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 60] [N] bug-n-nilpy-subscript-of-split-on-a-variable-receiver

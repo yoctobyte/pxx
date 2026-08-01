@@ -1,8 +1,8 @@
 ---
-summary: "NilPy: a module global assigned a scalar and LATER a class instance is typed tyVariant, so operator dunders never dispatch on it — no name collision involved"
+summary: "NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a user class — dispatch is compile-time only. Scalar-then-class rebinding is just one way to get a variant."
 type: bug
 track: N
-prio: 65
+prio: 70
 ---
 
 # Rebinding a module global from a scalar to a class kills dunder dispatch
@@ -76,3 +76,63 @@ truthiness) on that name with a `TypeError` far from the cause.
 CPython covering: scalar-then-class rebinding, `None`-then-class rebinding,
 genuinely polymorphic use (both types actually reached at run time), and a
 single-binding control.
+
+## 2026-08-01 — scope CORRECTED and widened: it is not about rebinding
+
+Measured, and the original framing (mine) was too narrow. Rebinding is merely
+one way to end up with a variant; the actual rule is:
+
+> **Operator dunders never dispatch on a VARIANT operand, whatever put the class
+> in it.**
+
+No rebinding, no collision, both operands variants holding the same user class:
+
+```python
+class V:
+    def __init__(self, n): self.n = n
+    def __add__(self, q): return "ADD" + str(q.n)
+
+box = [V(1), V(2)]
+a, b = box[0], box[1]
+print(a + b)          # CPython ADD2   pxx TypeError: expected a number, got object
+```
+
+So `x = 0; x = V()` is one entry point; unpacking from a container, a variant
+field read, a variant-typed parameter and an unannotated def return are others.
+Retitled and re-prioritised accordingly (65 → 70): the surface is much larger
+than "an odd rebinding pattern".
+
+## Why this is FEATURE-sized, not a bug fix
+
+Dunder dispatch is **entirely compile-time**: `ir.inc` keys on the operand's
+static class (`IRNodePyListRec` and friends) and emits a direct call. There is
+no runtime path, and pylib has no by-name method dispatch to borrow —
+`pydynattr_get/set/has` resolve ATTRIBUTES, not method calls with arguments, so
+they cannot stand in for it.
+
+Making a variant operand dispatch therefore needs one of:
+
+1. **A runtime dunder dispatcher.** Given a boxed object, find `__add__` on its
+   actual class and call it. pxx has RTTI method reflection (the VMT-8 table),
+   so the lookup is feasible — but it needs an argument-passing convention and a
+   Variant-returning shim per dunder, and it puts a reflective call on an
+   arithmetic path.
+2. **A compile-time guarded dispatch.** Where a variant *might* hold a class,
+   emit `if tag = VT_OBJECT and class-has-__add__ then <dispatch> else
+   <numeric>`. Avoids reflection but needs the candidate class set, which is
+   exactly what the variant erased.
+3. **Narrow the widening** so these names stay `tyClass`. Fixes the rebinding
+   entry point only, and does nothing for containers or variant parameters —
+   the majority of the surface.
+
+Route 1 generalises; route 2 is cheaper but partial; route 3 does not address
+the corrected scope at all.
+
+**This wants a Track U decision before implementation** — it is a design choice
+about how far NilPy's dynamic dispatch goes, with a real cost on the arithmetic
+path, not something to pick while working a bug queue. Not filed as `decide-*`
+yet only because the recommendation (route 1) is clear; if that is contested,
+split it.
+
+Left claimed but NOT implemented tonight, deliberately: improvising a reflective
+dispatch path at this size is how a plausible-but-wrong design gets baked in.
