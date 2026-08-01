@@ -392,29 +392,58 @@ def sweep_orphan_tmp():
     is garbage, whoever created it and however it died (including SIGKILL and
     power cuts, which no atexit can cover).
     """
-    for p in glob.glob("/tmp/testmgr-scratch-*"):
-        try:
-            pid = int(p.rsplit("-", 1)[1])
-        except (ValueError, IndexError):
-            continue                      # not ours / not pid-suffixed
-        if pid == os.getpid():
-            continue
-        try:
-            os.kill(pid, 0)               # alive: leave it strictly alone
-        except ProcessLookupError:
-            shutil.rmtree(p, ignore_errors=True)
-        except PermissionError:
-            pass                          # another user's live run
-    # Per-job log dirs are KEPT (reports cite their paths) but not forever.
-    cutoff = time.time() - LOGDIR_KEEP_SECS
+    # (a) pid-suffixed dirs: liveness is the pid, so this also reclaims what a
+    # SIGKILL left behind — and SIGKILL is routine here, because testmgr kills
+    # its own over-budget jobs, which is exactly why the EXIT trap inside
+    # run_c_conformance.sh cannot be relied on (a trap never runs on SIGKILL).
+    for pat, sep in (("/tmp/testmgr-scratch-*", "-"),
+                     ("/tmp/pxx_c_conformance.*", ".")):
+        for p in glob.glob(pat):
+            try:
+                pid = int(p.rsplit(sep, 1)[1])
+            except (ValueError, IndexError):
+                continue                  # not ours / not pid-suffixed
+            if pid == os.getpid():
+                continue
+            try:
+                os.kill(pid, 0)           # alive: leave it strictly alone
+            except ProcessLookupError:
+                shutil.rmtree(p, ignore_errors=True)
+            except PermissionError:
+                pass                      # another user's live run
+
+    # (b) age-reaped dirs from the ENDLESS idle paths (bench/fuzz rounds). These
+    # carry no pid, and on a box left running overnight they are monotonic:
+    # ~130 MB/hour measured on xeon. Own cleanup landed alongside this, so the
+    # sweep is the backstop for rounds killed mid-flight.
+    now = time.time()
+    for pat, keep in (("/tmp/tbench-*", IDLE_KEEP_SECS),
+                      ("/tmp/pasmith.*", IDLE_KEEP_SECS),
+                      ("/tmp/pasmith-check.*", IDLE_KEEP_SECS)):
+        for p in glob.glob(pat):
+            try:
+                if os.path.isdir(p) and now - os.path.getmtime(p) > keep:
+                    shutil.rmtree(p, ignore_errors=True)
+            except OSError:
+                pass
+
+    # (c) Per-job log dirs are KEPT (reports cite their paths) but bounded both
+    # ways: by age, and by count, so a busy night cannot accumulate unboundedly
+    # inside the age window (128 dirs / 392 MB observed in well under 24h).
+    logdirs = []
     for p in glob.glob("/tmp/testmgr-*"):
         if p.startswith("/tmp/testmgr-scratch-"):
             continue
         try:
-            if os.path.isdir(p) and os.path.getmtime(p) < cutoff:
-                shutil.rmtree(p, ignore_errors=True)
+            if os.path.isdir(p):
+                logdirs.append((os.path.getmtime(p), p))
         except OSError:
             pass
+    logdirs.sort(reverse=True)                       # newest first
+    cutoff = now - LOGDIR_KEEP_SECS
+    for i, (mtime, p) in enumerate(logdirs):
+        if i >= LOGDIR_KEEP_MAX or mtime < cutoff:
+            shutil.rmtree(p, ignore_errors=True)
 
 
 def start_heartbeat(tier):
@@ -542,6 +571,13 @@ RUN_TMP = "/tmp/testmgr-scratch-%d" % os.getpid()
 # cite these paths, so they outlive the run — but not indefinitely (see
 # sweep_orphan_tmp; /tmp is a tmpfs on the watcher box).
 LOGDIR_KEEP_SECS = 24 * 3600
+# ...and a hard cap on how many, so a busy night cannot fill /tmp inside the age
+# window. Newest kept; a report older than this is triaged from git, not /tmp.
+LOGDIR_KEEP_MAX = 40
+# Scratch from the ENDLESS idle paths (bench rounds, fuzz rounds). They carry no
+# pid, so age is the only liveness proxy — generous enough that a long bench
+# round in flight is never reaped out from under itself.
+IDLE_KEEP_SECS = 2 * 3600
 
 # A whole /tmp path token — including the bare DIRECTORY form.  The old plain
 # str.replace of "/tmp/" missed `LD_LIBRARY_PATH=/tmp`, so recipes that built a
@@ -1773,7 +1809,12 @@ def run_bench():
     tsv = os.path.join(REPO, BENCH_TSV_REL)
     out_tsv = os.environ.get("TESTMGR_BENCH_TSV", tsv)   # twatch: detached
     prev = bench_prev(tsv, host)                          # checkout writes
+    # Disposed via atexit rather than a try/finally around this whole function:
+    # run_bench() has several early `return`s, and a bench dir is the single
+    # largest /tmp consumer on this box (768 MB across 20 leaked rounds before
+    # this was fixed) — on a tmpfs box that is RAM the scheduler is counting on.
     tmp = tempfile.mkdtemp(prefix="tbench-")              # elsewhere
+    atexit.register(shutil.rmtree, tmp, ignore_errors=True)
     timeout = 120 * float(os.environ.get("TESTMGR_TIME_SCALE", "1"))
     fpc_present = shutil.which(FPC_BIN) is not None
     if not fpc_present:

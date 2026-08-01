@@ -71,7 +71,7 @@ if [ ! -f "$SUITE/00001.c" ]; then
 fi
 
 mkdir -p "$WORK"
-trap 'rm -rf "$WORK"' EXIT
+trap 'rm -rf "$WORK"' EXIT INT TERM
 
 pass=0; fail=0; skip=0; failed=""; idx=-1
 

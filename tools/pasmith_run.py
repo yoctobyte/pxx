@@ -36,6 +36,7 @@ Usage:
 """
 
 import argparse
+import atexit
 import json
 import os
 import re
@@ -497,6 +498,11 @@ def check(nseeds, args):
     slower activity -- do not conflate them.
     """
     workdir = tempfile.mkdtemp(prefix="pasmith-check.")
+    # Reaped on exit: these rounds run ENDLESSLY as Track T idle work, and on
+    # a box where /tmp is tmpfs the leak is RAM the test scheduler is counting
+    # on (333 MB across 54 abandoned rounds measured on xeon). atexit rather
+    # than try/finally because both call sites have early returns.
+    atexit.register(shutil.rmtree, workdir, ignore_errors=True)
     fpc = Oracle("fpc-O0", "fpc", ["-O-"])
     bad = []
     t0 = time.time()
@@ -673,6 +679,11 @@ def main():
 
     oracles = build_oracles(a.cross)
     workdir = tempfile.mkdtemp(prefix="pasmith.")
+    # Reaped on exit: these rounds run ENDLESSLY as Track T idle work, and on
+    # a box where /tmp is tmpfs the leak is RAM the test scheduler is counting
+    # on (333 MB across 54 abandoned rounds measured on xeon). atexit rather
+    # than try/finally because both call sites have early returns.
+    atexit.register(shutil.rmtree, workdir, ignore_errors=True)
 
     if a.recheck:
         if led is None:
