@@ -53,10 +53,32 @@ NEWLINE INDENT that opens the body" — i.e. it hard-requires the indented form.
 `PyRegisterDefShells` and `PyRegisterClassMembers` also scan for a body `tkIndent`
 to find the span, so a one-line body has no INDENT for them to find either.
 
-**Measure before fixing**: three passes look for that INDENT (the header parse,
-the def-shell registration, and the class-member registration), so a fix that
-only teaches the header about the one-line form will leave the other two
-scanning for a body that isn't there. Check all three.
+**Measure before fixing — it is SIX sites, not three**, and two of them are
+subtle. Sized 2026-08-01:
+
+1. `PyParseDefHeader` — ends with `Expect(tkNewline); Expect(tkIndent);`, i.e.
+   the indented shape is mandatory.
+2. `PyParseDef` — takes `bodyStart := TokPos - 1` and parses a block, then a
+   DEDENT. `PyParseSuite` already handles BOTH shapes and is what `if`/`for`/
+   `while`/`with` use; this should use it too.
+3. `PyRegisterDefShells` — walks `while Tokens[j].Kind <> tkIndent` to find the
+   body.
+4. `PyRegisterClassMembers` — finds the body span the same way.
+5. **`PyCollectModuleLocalsAST`'s `blockIsDef` tracking.**
+6. **`PyAllocModuleGlobals`'s `inDefStack` tracking.**
+
+5 and 6 are the dangerous pair and are easy to miss. Both decide "is this name
+bound inside a def?" purely from INDENT depth — a one-line def body has NO
+INDENT, so every name it binds sits at depth 0 and would be harvested as a
+MODULE GLOBAL. That is exactly
+[[bug-nilpy-def-local-assignment-widens-module-global-to-variant]], which was
+fixed on 2026-08-01 by making those two scanners lexically def-aware. Landing
+one-line defs without teaching both scanners about them re-opens that bug in a
+new shape — silently, since it widens a global to a variant rather than
+erroring.
+
+So the fix is not "let the header accept one line"; it is "make the notion of a
+def BODY independent of INDENT everywhere it is currently inferred from INDENT".
 
 ## Why it matters
 
