@@ -813,7 +813,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
         msg += " FIXED:" + ",".join(fixed[:5])
     clone.publish(msg)
     if new_red and CONF.get("autoticket"):
-        file_stub_tickets(clone, host, st, sha, new_red, report)
+        file_stub_tickets(clone, host, st, sha, new_red, report, parent)
     print("twatch: %s %s%s" % (sha[:12], report["verdict"],
                                " report=" + rel if rel else ""), flush=True)
     return True
@@ -840,7 +840,84 @@ STATUS_REG_CAP = 12
 CASCADE_ROOT_JOBS = ("fpc-bootstrap", "selfhost-fixedpoint")
 
 
-def file_cascade_ticket(clone, host, st, sha, new_red, report):
+def revert_of_range(clone, sha, parent):
+    """Has anything in (parent, sha] already been REVERTED on origin/master?
+
+    Returns (revert_sha, reverted_subject) or None.
+
+    The case this exists for, measured 2026-08-01:
+
+        02:50:11Z  b93577cd3  fix(A): const Variant expr args   <- broke 60 jobs
+        02:52:11Z  610936615  Revert "fix(A): ..."              <- author caught it
+        02:56:29Z             watcher publishes the 60-job cascade
+        02:56:33Z             autoticket files it, reading as a live emergency
+
+    The report was CORRECT about the sha it named; the ticket was four minutes
+    stale on arrival, and cost two agents a triage cycle each — one recommended
+    reverting an already-reverted commit, the other concluded "transient, never
+    broken" from a green HEAD.
+
+    Note this deliberately does NOT use `merge-base --is-ancestor`, the obvious
+    check: a revert ADDS a commit, it never removes the bad one, so the tested
+    sha remains a perfectly good ancestor of origin/master and ancestry always
+    passes. Ancestry only catches a rebase/force-push. What distinguishes "still
+    broken" from "already fixed" is behaviour, and matching revert subjects is
+    the cheapest honest proxy for it — no checkout, no build, pure git.
+    """
+    if not parent:
+        return None
+    try:
+        suspects = {}
+        for ln in sh(["git", "log", "--format=%H\x1f%s",
+                      "%s..%s" % (parent, sha)], cwd=clone.path).splitlines():
+            h, _, subj = ln.partition("\x1f")
+            if subj:
+                suspects[subj.strip()] = h
+        if not suspects:
+            return None
+        for ln in sh(["git", "log", "--format=%H\x1f%s",
+                      "%s..origin/master" % sha],
+                     cwd=clone.path).splitlines():
+            h, _, subj = ln.partition("\x1f")
+            subj = subj.strip()
+            if not subj.startswith('Revert "'):
+                continue
+            undone = subj[len('Revert "'):].rstrip('"')
+            if undone in suspects:
+                return (h, undone)
+    except (RuntimeError, OSError):
+        return None                      # never let staleness checking break publishing
+    return None
+
+
+def staleness_note(clone, sha, parent):
+    """Markdown telling the reader how stale this ticket already is.
+
+    Cheap by construction: two `git log`s and a `rev-list --count`, no checkout
+    and no build, so it can sit in the publish path unconditionally.
+    """
+    try:
+        behind = sh(["git", "rev-list", "--count", "%s..origin/master" % sha],
+                    cwd=clone.path).strip()
+    except (RuntimeError, OSError):
+        behind = ""
+    rev = revert_of_range(clone, sha, parent)
+    if rev:
+        return ("> **LIKELY ALREADY FIXED — verify before acting.** `%s` on "
+                "origin/master reverts `%s`, which is in this sha's range. The "
+                "failures below were real at `%s`, but the cause may already be "
+                "gone. Re-check at current origin/master first; a green HEAD "
+                "here means *already fixed*, not *never broken*.\n"
+                % (rev[0][:12], rev[1], sha[:12]))
+    if behind and behind != "0":
+        return ("> **origin/master has advanced %s commit(s) since this sha.** "
+                "Re-verify at current HEAD before acting — the callback is "
+                "tagged to the sha that was tested, which may no longer be the "
+                "state of the tree.\n" % behind)
+    return ""
+
+
+def file_cascade_ticket(clone, host, st, sha, new_red, report, parent=None):
     """One ticket for a mass NEW-RED sweep.  Slug keyed on the bad sha, so a
     re-test of the same sha never files twice; a DIFFERENT sha cascading
     files its own (that is a new event worth a new signal)."""
@@ -853,10 +930,18 @@ def file_cascade_ticket(clone, host, st, sha, new_red, report):
              if any(j.startswith(r) for r in CASCADE_ROOT_JOBS)]
     joblist = "\n".join("- `%s`" % j for j in sorted(new_red))
     rel = os.path.join("devdocs/progress/backlog", slug + ".md")
+    # A cascade whose cause is already reverted on origin/master is not an
+    # emergency, and filing it at 70 is how one cost two agents a triage cycle
+    # each. It is still worth a record — the sha really was broken — so file it,
+    # but at a priority that matches "probably already handled".
+    stale = staleness_note(clone, sha, parent)
+    prio = 25 if stale.startswith("> **LIKELY ALREADY FIXED") else 70
     with open(os.path.join(clone.path, rel), "w") as f:
         f.write("""---
-prio: 70
+prio: %d
 ---
+
+%s""" % (prio, stale) + """
 
 # regression CASCADE: %d jobs newly red at %s (auto-filed by twatch)
 
@@ -885,7 +970,7 @@ after the root is fixed.*
           flush=True)
 
 
-def file_stub_tickets(clone, host, st, sha, new_red, report):
+def file_stub_tickets(clone, host, st, sha, new_red, report, parent=None):
     """Face-1 auto-ticket: deterministic stub per NEW-RED job — repro command,
     range, log tail.  No analysis (that's face 2); slug = the STABLE selector,
     so a job never gets a second ticket while one exists in any bucket (and a
@@ -893,7 +978,7 @@ def file_stub_tickets(clone, host, st, sha, new_red, report):
     A mass sweep (> CASCADE_THRESHOLD new reds) files ONE cascade ticket
     instead — see file_cascade_ticket."""
     if len(new_red) > CASCADE_THRESHOLD:
-        file_cascade_ticket(clone, host, st, sha, new_red, report)
+        file_cascade_ticket(clone, host, st, sha, new_red, report, parent)
         return
     filed = []
     advisory = {job_key(j) for j in report["jobs"] if j.get("advisory")}
@@ -921,6 +1006,7 @@ def file_stub_tickets(clone, host, st, sha, new_red, report):
 prio: %d
 ---
 
+""" + staleness_note(clone, sha, parent) + """
 # %s: %s red at %s (auto-filed by twatch)
 
 - **Type:** %s (auto-filed by Track T watcher, host %s). Untriaged.
