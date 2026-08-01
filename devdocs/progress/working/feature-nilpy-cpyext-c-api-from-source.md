@@ -157,6 +157,51 @@ green, new test's actual output spot-checked directly (not the full
 rule, Track T is up and covers the full suite asynchronously).
 Next: M3 (strings and containers).
 
+## 2026-08-01 — M3 "strings and containers" landed
+
+`PyBytes_FromStringAndSize`/`AsString`/`Size` (a type distinct from
+`PyUnicode_*`); `PyList_New`/`SetItem`/`GetItem`/`Append`/`Size`;
+`PyDict_New`/`SetItem`/`GetItem`/`Size`/`Next` (linear-scan association,
+insertion-order iteration — fine at extension/test scale); `'y'`/`'y#'`
+bytes format letters for `PyArg_ParseTuple`/`Py_BuildValue`, mirroring
+`'s'`/`'s#'`.
+
+`test/nilpy_units/container_ext_module.c` (`sum_range` via list
+construction+iteration, `join_lengths` via list append+iteration,
+`char_histogram` via dict construction+`PyDict_Next` iteration,
+`bytes_roundtrip` via `PyBytes_*`) + `container_ext.pas` +
+`test/test_cpyext_containers.npy`, wired into `make test-nilpy`.
+
+**Deliberate scope cut, flagged for whoever picks up M4+:** M3's
+containers are built and consumed ENTIRELY inside the extension's own C
+code — every `PyMethodDef` entry point still crosses the NilPy boundary
+as a scalar/string, same pattern as M1/M2's thin-driver approach. They
+do **not** yet round-trip as native NilPy `list`/`dict` Variants (e.g.
+an extension function returning a Python list does not yet appear as an
+actual NilPy list in the caller's hands) — that is the deeper
+`compiler/builtin/pylib.pas` integration the ticket's "Shape of the
+work" section calls out separately ("`PyObject*` handles resolving to
+NilPy variants/objects"), not attempted here. Filing this as an
+observation rather than a ticket since it's naturally part of M4/M5's
+"a real extension" milestones, where a real PyPI extension will very
+likely return a list/dict/str to Python code that needs to actually use
+it — at that point the cut becomes a hard requirement, not a
+convenience.
+
+Verified: self-host fixedpoint byte-identical, `testmgr --tier quick`
+green, new test's actual output spot-checked directly against the
+freshly-rebuilt `compiler/pascal26` (same lighter verification bar as
+M2 — Track T's watcher is up, `tools/twatch.py --status` confirmed).
+
+Landmine hit and fixed inline (not a compiler bug): a doc comment in
+`Python.h` containing the adjacent tokens `PyList_*/PyDict_*` contained
+a literal `*/` that closed the enclosing C block comment early,
+producing a real parse error at the very next line. Fixed by inserting
+a space (`PyList_* / PyDict_*`); worth remembering when writing header
+comments that reference multiple `Foo_*` prefixes back to back.
+
+Next: M4 (a real PyPI extension, verified against CPython's own output).
+
 ## Notes
 
 - Ladder position and the recipe/install policy: **`devdocs/dev/python-libraries.md`**.
