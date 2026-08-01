@@ -3,7 +3,19 @@ summary: "Policy: does pxx support WRITING the environment (setenv/putenv, os.en
 type: idea
 track: U
 prio: 40
+status: resolved
+resolved: 2026-08-01
 ---
+
+## DECIDED 2026-08-01 — option 3
+
+**User's call: 3.** Write to our own buffer, and teach the spawn path to
+pass it to `execve` — landed as one change, never option 2 alone. Turns out
+the spawn path currently passes NO environment to a child at all (hardcoded
+empty `envp` in both `lib/rtl/subprocess.pas` and `lib/rtl/sysutils.pas`),
+which is a real gap independent of this decision — filed as
+[[bug-subprocess-spawns-child-with-empty-environment]] and worth fixing
+first regardless, since it's the prerequisite either way.
 
 # decide: the environment's write side
 
