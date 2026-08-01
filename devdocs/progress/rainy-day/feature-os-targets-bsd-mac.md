@@ -1,4 +1,4 @@
-# Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized)
+# Additional OS targets (BSD / macOS via syscall mapping)
 
 - **Type:** feature
 - **Status:** rainy-day 
@@ -20,9 +20,14 @@ numbers + ABI**, not a userland/libc port.
   Mach-O object format (PXX currently emits ELF; macOS needs Mach-O, so a second
   object writer alongside `elfwriter.inc`). The codegen/backends are unchanged;
   it's an OS-ABI + container-format port.
-- **Windows:** **explicitly deprioritized.** Different model (PE + Win32/NT
-  syscalls are not a stable public contract), and out of the project's interest.
-  Community contribution welcome; not on the roadmap.
+- **Windows: a real future target, tracked separately** —
+  [[feature-port-windows-pe]] (Track W). Different shape from BSD/macOS: not
+  a static syscall-only binary (PE + Win32/NT syscalls aren't a stable public
+  contract), but a CRT-free thin binding against kernel32/ntdll — Windows'
+  own stable standard library, the same role libc.so plays for OpenBSD. This
+  note previously said "deprioritized, not on the roadmap" (2026-06-16),
+  predating and contradicting the detailed Windows ticket opened a month
+  later; corrected 2026-08-01.
 
 ## Notes
 
@@ -36,6 +41,14 @@ numbers + ABI**, not a userland/libc port.
     the fixed worker count), so this is a *feature-parity* item, not a blocker.
   - **CPU count** uses `sched_getaffinity` (`palparallel`); BSD/macOS →
     `sysctl hw.ncpu` / `hw.activecpu`.
+  - **Environment variables** (`GetEnvironmentVariable` in sysutils, NilPy
+    `os.environ`/`os.getenv`, C `getenv` — landed 2026-07-31) all read
+    `/proc/self/environ`. BSD/macOS have no `/proc` by default either — needs
+    the envp-off-the-initial-stack route the environment-variable ticket
+    considered and skipped for Linux (`/proc` was simpler there), or a
+    per-OS equivalent. Also note: `/proc` isn't guaranteed mounted even on
+    Linux (containers, minimal installs) — this is a live gap there too, not
+    only a porting concern.
   - Audit for any other `/proc/*` or Linux-specific `sysfs` reads when porting
     (grep `'/proc/'` across `lib/rtl/**`). Treat the sampler/affinity as part of
     the per-OS port, alongside the syscall table.
