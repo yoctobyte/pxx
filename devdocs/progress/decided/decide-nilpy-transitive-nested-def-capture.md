@@ -2,27 +2,27 @@
 track: U
 prio: 40
 type: decide
-status: resolved
+status: moot
 resolved: 2026-08-01
 ---
 
-## DECIDED 2026-08-01 — capture everything (naive transitive capture), not option 2
+## MOOT 2026-08-01 — already fixed, verified directly
 
-**User's call.** Neither option 1 nor 2 as literally written: capture ALL of
-the parent's locals into every sibling nested def, unconditionally, using
-the existing by-value lift-capture machinery (`LiftCap*`,
-`compiler/parser.inc`) — not narrowed to only-used names, and not the
-constants-only global-hoist of option 2 (which leaves a gap for a sibling
-capturing a *mutable* enclosing variable). This is a naive, unoptimized
-version of option 1's transitive capture: correct by construction (a strict
-superset of what's needed), no call-graph fixpoint analysis required, some
-wasted by-value copies for names a given sibling doesn't read.
+Before acting on a "capture everything" decision, tested the ticket's exact
+repro (`FAM_RO`/`FAM_WO`/`FAM_RW`/`FAM_BIN`, the `create` param, sibling
+call) against current master: it compiles and runs correctly, output
+matches CPython (`r`/`w+`/`rb`). [[bug-nilpy-nested-def-capture-sets-are-not-final]]
+(resolved 2026-07-30, commit `8cae8770b`) already implemented full
+fixpoint-based transitive capture — the ticket's own literal "option 1" —
+for exactly this shape (a lambda/nested-def calling a sibling that captures
+a name neither of them reads directly). This ticket's premise was stale by
+the time it was worked tonight.
 
-Any later optimization (the ticket's literal option 1, precise fixpoint) is
-strictly **subtractive** on top of this — prove a name is never read
-(directly or via a transitive sibling call) and drop it from that copy. It
-can only shrink the capture set, never needs to, and can land as a separate
-perf pass whenever it's worth it, not before. Simple and safe over clever.
+An earlier pass through this ticket (same session) resolved it as "capture
+everything, naive version of option 1" without checking whether the bug
+still reproduced first — exactly the "measure before concluding" mistake
+this project's own debugging discipline warns against. Caught and corrected
+before any code changed. No action needed; closing as moot.
 
 # decide: NilPy transitive capture for sibling nested-def calls
 
