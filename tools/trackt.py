@@ -24,6 +24,14 @@ devdocs/progress/tstate/**) — the daemon (tools/twatch.py) stays the engine.
   trackt web on|off      enable/disable the Flask UI (spawned by start)
   trackt dashboard       (re)generate the static tstate/*.html pages from the
                          committed data (one-liner; the html is gitignored)
+  trackt health [--json] is this watcher trustworthy right now? OK/DEGRADED/
+                         DOWN + exit code; detects a daemon that is alive but
+                         WEDGED, which coverage-based --status cannot
+  trackt install         make the daemon permanent (systemd user unit +
+                         linger). EXPLICIT on purpose: the default is an
+                         interactive foreground daemon an admin watches.
+                         Prints exactly what it changes. `trackt uninstall`
+                         reverses it.
 
 The watcher clone is found via --clone, $TRACKT_CLONE, ~/.config/trackt.path,
 or ~/trackt-watch.  `trackt run` never touches the clone — it tests the
@@ -697,6 +705,186 @@ def cmd_setup(clone, fetch_corpus=False):
     return rc
 
 
+# Wedged detection. testmgr rewrites live.json every second FOR THE WHOLE RUN,
+# so during `phase == testing` a stale live.json means the daemon is alive and
+# not working — a direct observation, unlike --status, which can only infer a
+# problem from coverage and takes up to its grace window to do it.
+LIVE_STALE_SECS = 180        # generous: the slowest single job is ~40s
+HEARTBEAT_STALE_SECS = 900   # watch.json only moves on phase change, so idle is fine
+PUB_DROPS_DEGRADED = 3       # consecutive dropped publishes before we care
+
+
+def health_check(clone):
+    """Is this watcher trustworthy right now? Returns (verdict, exit, reasons).
+
+    Portable ON PURPOSE: reads only files the daemon already writes, makes no
+    assumption about a desktop, a display, a mail transport or a network. The
+    DELIVERY of an alert is host-specific and deliberately lives outside the
+    repo — a box with a graphical session can pipe this into notify-send, a
+    headless one into mail or a webhook. See the ticket
+    feature-t-watcher-health-verdict-and-host-local-alerting.
+    """
+    now = time.time()
+    reasons = []
+    watch = read_json(os.path.join(clone, twatch.WATCH_REL))
+    live = read_json(os.path.join(clone, ".testmgr", "live.json"))
+    pub = read_json(os.path.join(clone, twatch.PUBHEALTH_REL))
+    pid, _ = daemon_pid(clone)
+
+    if not pid:
+        return "DOWN", 2, ["no watcher daemon is running"]
+
+    phase = watch.get("phase") or "?"
+    # A quiet repo is NOT a fault. Conflating "idle" with "broken" is exactly
+    # what made --status untrustworthy, so idle is only checked for a heartbeat.
+    if phase == "testing":
+        age = now - (live.get("ts") or 0)
+        if age > LIVE_STALE_SECS:
+            reasons.append("WEDGED: phase=testing but live.json has not moved "
+                           "in %ds (pct %s, %s/%s) — the daemon is alive and "
+                           "not progressing"
+                           % (age, live.get("pct"), live.get("done"),
+                              live.get("total")))
+            return "DOWN", 2, reasons
+    hb = now - (watch.get("ts") or 0)
+    if hb > HEARTBEAT_STALE_SECS:
+        reasons.append("no phase heartbeat for %dm (phase=%s)"
+                       % (hb / 60, phase))
+        return "DOWN", 2, reasons
+
+    drops = pub.get("consec_drops") or 0
+    if drops >= PUB_DROPS_DEGRADED:
+        reasons.append("publishing is dropping verdicts (%d consecutive; last: %s)"
+                       % (drops, pub.get("last_reason") or "?"))
+    behind = pub.get("behind") or 0
+    if behind:
+        reasons.append("clone is %s commit(s) behind origin" % behind)
+
+    if reasons:
+        return "DEGRADED", 1, reasons
+    return "OK", 0, ["daemon %s, phase=%s, publishing clean" % (pid, phase)]
+
+
+def cmd_health(clone, json_out=False):
+    verdict, rc, reasons = health_check(clone)
+    if json_out:
+        print(json.dumps({"verdict": verdict, "exit": rc, "reasons": reasons,
+                          "host": os.uname().nodename, "clone": clone}))
+        return rc
+    colour = {"OK": GRN, "DEGRADED": YEL, "DOWN": RED}.get(verdict, "")
+    print("trackt health: %s%s%s" % (colour, verdict, OFF))
+    for r in reasons:
+        print("  - %s" % r)
+    return rc
+
+
+UNIT_NAME = "trackt-watcher.service"
+UNIT_TEXT = """[Unit]
+# Installed by `trackt install`. Edit that, not this file.
+Description=Track T watcher daemon (pxx regression matrix)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={clone}
+ExecStart={python} {clone}/tools/twatch.py --clone {clone}
+
+# on-failure, NOT always: a crash or OOM kill restarts, but a deliberate
+# `trackt stop` (SIGTERM -> clean exit 0) stays stopped. Supervision must not
+# take the decision away from the operator.
+Restart=on-failure
+RestartSec=30s
+
+# Keep the existing log file so `trackt log` and the run history still work.
+StandardOutput=append:{log}
+StandardError=append:{log}
+
+# NO resource limits here on purpose: testmgr re-execs into
+# `systemd-run --user --scope` for its memory cgroup, and a nested scope under a
+# constrained service would inherit the tighter limit and silently undo the
+# per-run budget testmgr computes from MemTotal.
+
+[Install]
+WantedBy=default.target
+"""
+
+
+def unit_path():
+    return os.path.expanduser("~/.config/systemd/user/" + UNIT_NAME)
+
+
+def cmd_install(clone, uninstall=False):
+    """Install (or remove) the watcher as a permanent, reboot-surviving daemon.
+
+    Deliberately EXPLICIT. The default `trackt` / `trackt up` remains an
+    interactive foreground thing an admin can watch; making a machine start
+    testing by itself forever is a different decision and should be typed out.
+    """
+    user = os.environ.get("USER") or os.getlogin()
+    if not shutil_which("systemctl"):
+        print("trackt install: no systemctl on this box — nothing installed.\n"
+              "  This box needs its own mechanism (rc.local, cron @reboot, a\n"
+              "  supervisor). The watcher itself is portable; only persistence\n"
+              "  is platform-specific.")
+        return 1
+    path = unit_path()
+    if uninstall:
+        print("trackt uninstall — removing permanent-daemon setup:")
+        print("  1. systemctl --user disable --now %s" % UNIT_NAME)
+        subprocess.run(["systemctl", "--user", "disable", "--now", UNIT_NAME],
+                       check=False)
+        if os.path.exists(path):
+            os.unlink(path)
+            print("  2. removed %s" % path)
+        subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+        print("  3. linger LEFT AS IS (`loginctl disable-linger %s` to undo) —\n"
+              "     other user services may rely on it." % user)
+        print("\nThe watcher is no longer permanent. Start it by hand with "
+              "`trackt up`.")
+        return 0
+
+    print("trackt install — making this box's watcher permanent.")
+    print("It will do exactly four things:\n")
+    print("  1. write a systemd USER unit:")
+    print("       %s" % path)
+    print("     ExecStart = %s %s/tools/twatch.py --clone %s"
+          % (sys.executable, clone, clone))
+    print("  2. Restart=on-failure — a crash or OOM kill restarts after 30s;")
+    print("     a deliberate `trackt stop` STAYS stopped. You keep the switch.")
+    print("  3. systemctl --user enable %s" % UNIT_NAME)
+    print("     => starts on login. With auto-login, that means on boot.")
+    print("  4. loginctl enable-linger %s" % user)
+    print("     => starts at BOOT even before anyone logs in, AND keeps the")
+    print("        systemd user manager alive after logout. That second part")
+    print("        matters: testmgr re-execs into `systemd-run --user --scope`")
+    print("        for its memory cgroup, and without a user manager that call")
+    print("        fails and the run silently loses its memory limit.\n")
+    print("  logs stay at %s (so `trackt log` keeps working)" % logpath(clone))
+    print("  undo with: trackt uninstall\n")
+
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(UNIT_TEXT.format(clone=clone, python=sys.executable,
+                                 log=logpath(clone)))
+    print("wrote %s" % path)
+    for cmd in (["systemctl", "--user", "daemon-reload"],
+                ["systemctl", "--user", "enable", UNIT_NAME],
+                ["loginctl", "enable-linger", user]):
+        rc = subprocess.run(cmd, check=False).returncode
+        print("  %-52s %s" % (" ".join(cmd), "ok" if rc == 0 else "FAILED"))
+    print("\nNOT started. `systemctl --user start %s` now, or it comes up on "
+          "the next boot." % UNIT_NAME)
+    print("From here on, deploying new twatch.py is:")
+    print("  systemctl --user restart %s" % UNIT_NAME)
+    return 0
+
+
+def shutil_which(prog):
+    import shutil
+    return shutil.which(prog)
+
+
 # ------------------------------------------------------------------ main ---
 def main():
     ap = argparse.ArgumentParser(
@@ -705,7 +893,7 @@ def main():
     ap.add_argument("cmd", nargs="?", default="up",
                     choices=["up", "status", "start", "stop", "restart",
                              "watch", "run", "setup", "config", "log", "web",
-                             "dashboard"])
+                             "dashboard", "health", "install", "uninstall"])
     ap.add_argument("arg", nargs="*")
     ap.add_argument("--clone", help="watcher clone dir")
     ap.add_argument("--remote", help="start: clone URL if dir missing")
@@ -713,6 +901,8 @@ def main():
                     help="start/restart/up: run THIS checkout's twatch.py "
                          "instead of the clone's committed copy (for "
                          "deliberately testing an uncommitted change)")
+    ap.add_argument("--json", action="store_true",
+                    help="health: machine-readable output for a notifier")
     ap.add_argument("--fetch-corpus", action="store_true",
                     help="setup: also fetch gitignored corpus trees")
     ap.add_argument("--no-web", action="store_true", help="up: skip web UI")
@@ -728,6 +918,10 @@ def main():
 
     if a.cmd == "up":
         return cmd_up(clone, a)
+    if a.cmd in ("install", "uninstall"):
+        return cmd_install(clone, uninstall=(a.cmd == "uninstall"))
+    if a.cmd == "health":
+        return cmd_health(clone, json_out=a.json)
     if a.cmd == "status":
         return cmd_status(clone, attach_ok=False)
     if a.cmd == "start":
