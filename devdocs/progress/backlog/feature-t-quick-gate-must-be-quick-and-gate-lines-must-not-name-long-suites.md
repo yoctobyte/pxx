@@ -70,3 +70,28 @@ Half 1 can land without waiting for half 2.
 `gate.sh quick` completes in well under a minute on an idle box and still
 catches a deliberately broken compiler change. `gate.sh full` still runs the
 suites.
+
+## 2026-08-01 (same day) — correction: gate.sh is the PIN gate, not the dev gate
+
+Written above on a wrong premise. Corrected on the spot: **`tools/gate.sh` is
+for pinning.** So "gate.sh quick spends 625s in one suite" is not a bug in a
+fast gate — it is a heavyweight gate being reached for in a loop it was never
+meant for. Half 1 above should be re-read as: *stop routing the dev loop through
+gate.sh at all*, rather than *make gate.sh quick faster*.
+
+What actually changes:
+
+- **Dev loop** = `make compiler/pascal26` + run your repro. Measured today: one
+  self-compile 5.74s, so build+verify ≈ 12s — and that build ALREADY IS the
+  byte-identical self-host fixedpoint (the `$(COMPILER)` rule compiles twice and
+  `cmp`s, failing after 4 rounds). There is nothing to skip and nothing to add.
+- **gate.sh** = the pin gate, correctly heavy, and moving into testmgr per
+  [[feature-t-testmgr-owns-pinning-interruptible]].
+- **Breadth** = Track T, consumed via [[feature-t-agent-side-tstate-watch]].
+
+The doc fix matters more than the tooling fix here: CLAUDE.md's *"Run the gate
+with `tools/gate.sh` (quick | lib | full | check), and background THAT"* reads as
+the everyday instruction, and that line plus the `Gate:` lines on tickets are
+what pulled an agent into two 554s runs in one session. Half 2 (the Gate:-line
+convention, [[decide-gate-line-convention]]) is unaffected and still the Track U
+call.
