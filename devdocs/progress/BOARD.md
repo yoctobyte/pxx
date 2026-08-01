@@ -33,7 +33,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (178)
+## backlog (177)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -80,7 +80,6 @@ _none_
 | decide-3rd-party-vendor-vs-fetch | U | 45 | decide | Policy: how to carry dependency-grade third-party source — vendor in-tree vs fetch-gitignored vs system-dynamic | — |
 | decide-abi-portable-vs-target-split | A | 50 | decide |  | — |
 | decide-class-namespace-scoping | U | 65 | decide | Decide: how should two libraries be allowed to export the same class name? | — |
-| decide-dns-libc-backend-shape | U | 40 | decide | Track U: how should a libc-backed DNS resolver be reached from libc-free static ELF? | — |
 | decide-ipv6-dualstack-and-aaaa-ordering | U | 40 | decide | Policy: IPV6_V6ONLY on a :: listener, and which address wins when a host has both A and AAAA | — |
 | decide-nilpy-hasattr-per-instance-semantics | U | 35 | decide | decide: should NilPy's hasattr answer per-INSTANCE or per-CLASS? | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
@@ -104,7 +103,7 @@ _none_
 | feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | feature-nilpy-break-continue, feature-nilpy-tk-binding |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 50 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade |
-| feature-dns-backends-selection | B | 40 | feature | DNS backends beyond dns_wire: dns_libc / dns_resolved / dns_esp + selection | decide-dns-libc-backend-shape |
+| feature-dns-backends-selection | B | 40 | feature | DNS backends beyond dns_wire: dns_libc / dns_resolved / dns_esp + selection | — |
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-dynamic-include-paths-config | A | 45 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | 45 | feature | Dynamic soname discovery (no execve) | — |
@@ -282,13 +281,14 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (23)
+## decided (24)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | decide-1-0-scope-promise | A | 55 | decide | DECIDE: version scheme — pin count / N, not semver | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
 | decide-crtl-libm-glibc-bit-parity | A | 50 | decide |  | — |
+| decide-dns-libc-backend-shape | U | 40 | decide | Track U: how should a libc-backed DNS resolver be reached from libc-free static ELF? | — |
 | decide-env-write-side | U | 40 | decide | Policy: does pxx support WRITING the environment (setenv/putenv, os.environ[k]=v) — and does a write reach a child? | — |
 | decide-gpc-as-corpus-target | U | 45 | decide | Track U: reject the GPC corpus wish, or keep it? Two sweeps have called it a rejection candidate. | — |
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
@@ -2998,7 +2998,6 @@ _none_
 - [p 45] [T] task-t-enroll-libtest-demos-watcher
 - [p 45] [T] task-t-enroll-pascal-conformance-tier
 - [p 42] [A] feature-pascal-builtin-tobject-class
-- [p 40] [U] decide-dns-libc-backend-shape (unblocks 1)
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
 - [p 40] [B] bug-eliah-ide-win-caption-no-such-member
 - [p 40] [N] bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter
@@ -3009,6 +3008,7 @@ _none_
 - [p 40] [A] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
+- [p 40] [B] feature-dns-backends-selection
 - [p 40] [N] feature-nilpy-arithmetic-dunders-full-protocol
 - [p 40] [N] feature-nilpy-map-and-filter-over-a-lambda
 - [p 40] [N] feature-nilpy-set-needs-runtime-tag-for-display-and-equality
@@ -3071,7 +3071,6 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-c-uses-path-basename-collides-with-enclosing-unit-name
-- **1** — decide-dns-libc-backend-shape
 - **1** — decide-nilpy-parallel-capture-semantics
 - **1** — feature-inline-asm-xmm-operands
 - **1** — feature-lib-pxxpdf-reportlab-compat

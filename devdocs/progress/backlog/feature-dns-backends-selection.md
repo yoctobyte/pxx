@@ -1,6 +1,5 @@
 ---
 prio: 40
-blocked-by: [decide-dns-libc-backend-shape]
 ---
 
 # DNS backends beyond dns_wire: dns_libc / dns_resolved / dns_esp + selection
@@ -12,6 +11,25 @@ blocked-by: [decide-dns-libc-backend-shape]
   selection policy, defaults) lives in that ticket — this one carries the
   remaining work.
 
+## Sequencing, decided 2026-08-01 (see [[decide-dns-libc-backend-shape]])
+
+Build `dns_resolved` (item 2) first. `dns_libc` (item 1) is real follow-up
+work, not rejected — its gap (needs glibc) and `dns_resolved`'s gap (needs
+systemd+`resolved`+D-Bus) are roughly disjoint, so neither alone reaches
+every deployment (VPN split-DNS via nsswitch/custom NSS modules specifically
+need `dns_libc`). `dns_wire` stays the zero-dependency default throughout.
+
+## Selection mechanism, designed 2026-08-01
+
+`-d<DEFINE>` on the pxx command line, matching the existing convention
+(`-dPXX_MANAGED_STRING`, `-dPXX_HEAP_DEBUG`): no define → `dns_wire`;
+`-dPXX_DNS_RESOLVED` / `-dPXX_DNS_LIBC` → that backend. Both defined at
+once is a **compile-time error**, not silent precedence. `dns.pas` stays
+the stable facade; each backend is its own implementation unit picked via
+`{$ifdef}` in `dns.pas`'s `uses` clause, mirroring the existing
+`dns_wire_core`/`dns_wire_blocking`/`dns_async`/`dns_cache` split. A later
+scoped profile/config system is still future work, not this slice.
+
 ## Remaining work
 
 The `dns_wire` backend (pure Pascal over PAL) is DONE and is the de-facto
@@ -21,21 +39,16 @@ search/ndots candidates, CNAME chasing, and a process-wide TTL cache
 (A/AAAA/CNAME/negative). What's left from the design:
 
 1. **`dns_libc`** — `getaddrinfo()` for maximum system compatibility (NSS,
-   mDNS, nsswitch policy). **Blocked on a design decision:** PXX-emitted
-   executables are libc-free static ELF; linking libc statically is not the
-   model. Realistic shapes: (a) `dlopen("libc.so.6")` + `getaddrinfo` via the
-   existing dynlib machinery (the design notes call this `dns_libc_dyn` and
-   rank it low), or (b) a C-frontend-compiled shim linked in via crtl. Decide
-   with the user before building.
+   mDNS, nsswitch policy). Deferred behind `dns_resolved` (see sequencing
+   above), not rejected. Shape: `dlopen("libc.so.6")` + `getaddrinfo` via
+   the existing dynlib machinery ([[feature-real-dynlib-loader]]) — accept
+   the glibc-runtime dependency and version-sensitive struct binding as the
+   known cost of reaching real nsswitch/mDNS/VPN policy.
 2. **`dns_resolved`** — systemd-resolved over D-Bus (honors split DNS / VPN
    routing domains). Needs AF_UNIX in PAL + a minimal D-Bus client. Sizable;
-   possibly its own ticket when picked up.
+   possibly its own ticket when picked up. **Build this first.**
 3. **`dns_esp`** — ESP-IDF/lwIP resolver API after netif bring-up; ESP-only.
-4. **Selection mechanism** — per the design: crude first slice = compile
-   defines (`PXX_DNS_WIRE` / `PXX_DNS_LIBC` / ...), final shape = the scoped
-   profile/config system. `auto` = compile-time choice by target; runtime
-   fallback (`auto_fallback`) opt-in only. Public DNS fallback stays opt-in
-   and off by default (hard policy).
+4. **Selection mechanism** — see above, now designed.
 
 ## Acceptance
 

@@ -3,7 +3,46 @@ summary: "Track U: how should a libc-backed DNS resolver be reached from libc-fr
 type: decide
 prio: 40
 track: U
+status: resolved
+resolved: 2026-08-01
 ---
+
+## DECIDED 2026-08-01 — (c) first, (a) deferred not rejected
+
+**User's call.** Build `dns_resolved` first (no glibc/ABI dependency, fits
+the static-ELF model). `dns_libc` (option a, dlopen+`getaddrinfo`) is
+**deferred, not rejected** — real deployments (VPN split-DNS via nsswitch,
+custom NSS modules) need it and `dns_resolved` doesn't cover them, since
+its own dependency (systemd + `resolved` running + D-Bus reachable) is not
+universal either — musl distros, minimal containers, and plenty of systemd
+hosts without `resolved` enabled all miss it. The two backends' gaps are
+roughly disjoint, not one strictly subsuming the other. `dns_wire` (already
+done, zero dependencies) stays the default throughout, always.
+`feature-dns-backends-selection` updated: `dns_libc` re-ranked as real
+follow-up work, not left to rot like the GPC wish did.
+
+### Selection mechanism (designed here, since it was undesigned)
+
+Matches the existing `-d<DEFINE>` conditional-compile convention already
+used for build-time variants (`-dPXX_MANAGED_STRING`, `-dPXX_HEAP_DEBUG`,
+`-dPXX_OBJTRACE`):
+
+- No define → `dns_wire` (default, unconditionally available).
+- `-dPXX_DNS_RESOLVED` → `dns_resolved` backend.
+- `-dPXX_DNS_LIBC` → `dns_libc` backend (once built).
+- Both defined at once → **compile-time error**, not silent precedence —
+  ambiguous backend selection is exactly the kind of thing that should be
+  loud, matching this project's stance elsewhere (platonic code, no silent
+  workarounds).
+
+`dns.pas` (the facade unit) stays the stable public entrypoint; each
+backend is its own implementation unit (`dns_wire_core`/`dns_resolved_impl`/
+`dns_libc_impl`, mirroring how `dns_wire_core`/`dns_wire_blocking`/
+`dns_async`/`dns_cache` are already split), and `dns.pas`'s `uses` clause
+picks the right one under `{$ifdef}`. A later "scoped profile/config
+system" (mentioned in the original ticket as the eventual final shape) is
+still future work, not designed here — this is the crude-but-real
+first slice.
 
 # decide: the shape of a libc-backed DNS backend
 
