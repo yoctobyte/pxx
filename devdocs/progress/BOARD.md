@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -16,7 +16,6 @@ _none_
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | bug-c-uses-path-basename-collides-with-enclosing-unit-name |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-t-quick-canary-for-nilpy-and-c | T | 70 | feature | The 2-14s quick canary covers Pascal only; a NilPy change and a C change can both go out with no fast check at all. Add one dense .npy and one dense .c canary. | — |
-| feature-t-quick-gate-must-be-quick-and-gate-lines-must-not-name-long-suites | T | 60 | feature | `gate.sh quick` runs the 625s make test-nilpy, and ticket Gate: lines name long local suites — both push agents into running locally what Track T exists to offload | — |
 | feature-t-watcher-health-verdict-and-host-local-alerting | T | 70 | feature | Nothing detects a watcher that is running but wedged, and nothing pushes a problem at anyone. Split it: a portable health verdict in the repo, platform-specific delivery on the host. | — |
 
 ## unfinished (4)
@@ -333,7 +332,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1162)
+## done (1163)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1368,6 +1367,7 @@ _none_
 | feature-t-bench-portable-variants | T | 40 | feature | mandelbrot and raytracer have no FPC comparison — they depend on pxx-only units, not on dialect extensions | — |
 | feature-t-fuzz-findings-ledger | T | 70 | feature | Fuzz findings ledger: dedupe by signature, throttle fuzzing until the finding is fixed | — |
 | feature-t-publish-selfhost-red-immediately | T | 75 | feature | twatch publishes only when a whole tier finishes, so a self-host fixedpoint break — the one red that blocks every track — waits behind the entire native tier before anyone hears about it | — |
+| feature-t-quick-gate-must-be-quick-and-gate-lines-must-not-name-long-suites | T | 60 | feature | `gate.sh quick` runs the 625s make test-nilpy, and ticket Gate: lines name long local suites — both push agents into running locally what Track T exists to offload | — |
 | feature-t-snapshot-compiler-binary-per-run | T | 70 | feature | A test run should snapshot the compiler binary into its own scratch dir at start and run against that copy, so a concurrent rebuild cannot swap the binary out mid-run | — |
 | feature-target-aarch64 | A | 50 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | A | 50 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |

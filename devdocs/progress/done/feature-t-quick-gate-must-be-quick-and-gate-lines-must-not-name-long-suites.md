@@ -95,3 +95,56 @@ the everyday instruction, and that line plus the `Gate:` lines on tickets are
 what pulled an agent into two 554s runs in one session. Half 2 (the Gate:-line
 convention, [[decide-gate-line-convention]]) is unaffected and still the Track U
 call.
+
+---
+
+## HALF 1 DONE — `ed7b401b8` (claude@xeon, 2026-08-01)
+
+`gate.sh quick` is now self-host fixedpoint + `testmgr --tier quick`.
+`make test-nilpy` moved to `full`.
+
+```
+  PASS  self-host fixedpoint  (49s)
+  PASS  testmgr --tier quick  (9s)
+gate: GREEN                    58s total     (was 649s)
+```
+
+Measured with the watcher running concurrently on the same box — load 16.2, and
+`gate.sh` itself warns that makes things 2-3x slower. On an idle box this is the
+~30s the ticket asked for.
+
+### Why it is safe NOW and would not have been this morning
+
+Dropping the suite from the fast path only became honest once the fast path
+could still see NilPy at all:
+
+1. `testmgr --tier quick` now carries dense **NilPy and C canaries**
+   ([[feature-t-quick-canary-for-nilpy-and-c]]) — a gross NilPy break is still
+   caught here, in ~1s, with per-section lines.
+2. The whole `test-nilpy` suite is enrolled in Track T's limited/full matrix
+   ([[bug-t-xeon-job-set-covers-only-a-third-of-nilpy-tests]]) — it is not
+   skipped, it is **offloaded**, which is the entire point.
+
+Before those two landed, removing it would have created a real hole. Order
+mattered.
+
+### Side effect the ticket predicted
+
+> Ten minutes is also long enough to overlap another build
+
+58s of gate is a much smaller window for a concurrent rebuild than 649s, so this
+also shrinks the exposure that
+[[feature-t-snapshot-compiler-binary-per-run]] and
+[[bug-t-selfhost-build-uses-fixed-tmp-paths-colliding-across-clones]] address —
+both of which are now landed as well, so that class is closed from three sides.
+
+### Half 2 deliberately NOT done
+
+Ticket `Gate:` lines prescribing long local suites changes what **every** track
+does before pushing. You called it a Track U decision and I agree — it is filed
+as [[decide-gate-line-convention]] and is not Track T's to make unilaterally.
+`gate.sh check` now prints the new composition, so at least the tool no longer
+advertises the old one.
+
+## Log
+- 2026-08-01 — resolved, commit ed7b401b8.
