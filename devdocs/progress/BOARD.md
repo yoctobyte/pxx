@@ -45,7 +45,6 @@ _none_
 | bug-eliah-ide-win-caption-no-such-member | B | 40 | bug | `apps/ide/eliah/main.pas:1431` — `EliahForm.Win.Caption`: no `Win` member exists | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bitwise-shift-on-class-operand-segfaults | N | 60 | bug | NilPy: `obj & 1` / `obj << 1` on a class instance SEGFAULTS (core dump); __and__/__or__/__xor__/__lshift__/__rshift__ are never dispatched | — |
-| bug-nilpy-bool-operand-bypasses-mixed-type-guard-vs-container | N | 60 | bug | NilPy: a BOOL operand is not treated as an int — it bypasses the mixed-type TypeError guard vs containers AND forces UNSIGNED arithmetic, so `True // -7` prints 18446744073709551615 | — |
 | bug-nilpy-bool-protocol-ignored-object-always-truthy | N | 65 | bug | NilPy: __bool__ and __len__ are ignored in a truth test — every non-nil object is truthy, so `if obj:` takes the WRONG BRANCH silently | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
@@ -68,6 +67,7 @@ _none_
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pypow-integer-overflow-does-not-promote | N | 35 | bug | `pypow_v`'s integer path silently wraps past 64 bits instead of promoting | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
+| bug-nilpy-static-typed-operands-skip-mixed-type-guard | N | 70 | bug | NilPy: the mixed-type TypeError guard lives ONLY in the runtime variant path — when BOTH operands are statically typed, `7 - [1,2]` and `\"ab\" - \"ab\"` silently do pointer math (108 sweep cases) | — |
 | bug-nilpy-unary-numeric-dunders-return-raw-handle | N | 55 | bug | NilPy: abs(obj), ~obj and obj-as-index ignore __abs__/__invert__/__index__ — they return the raw instance HANDLE as a number, silently | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-progress-claim-silently-drops-owner-without-template-line | T | 30 | bug | `progress.sh claim`/`resolve` silently no-op when a ticket lacks the expected body line | — |
@@ -2915,6 +2915,7 @@ _none_
 
 - [p 75] [T] bug-t-full-run-evicts-opt-verdicts-perpetual-new-red
 - [p 75] [T] bug-t-optdiff-shard-identity-is-positional
+- [p 70] [N] bug-nilpy-static-typed-operands-skip-mixed-type-guard
 - [p 70] [T] bug-t-full-tier-wipes-other-tiers-job-status
 - [p 70] [T] bug-t-optdiff-positional-sharding-migrates-job-identity
 - [p 70] [T] regression-cascade-b45c759f9e65
@@ -2925,7 +2926,6 @@ _none_
 - [p 65] [N] bug-nilpy-bool-protocol-ignored-object-always-truthy
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 60] [N] bug-nilpy-bitwise-shift-on-class-operand-segfaults
-- [p 60] [N] bug-nilpy-bool-operand-bypasses-mixed-type-guard-vs-container
 - [p 60] [N] bug-nilpy-dunders-not-dispatched-through-containers
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [U] decide-nilpy-runtime-dunder-dispatch-mechanism
