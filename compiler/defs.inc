@@ -1352,6 +1352,19 @@ var
   SymIsHiddenArgTemp : array of Boolean; { compiler-synthesised owning managed local created during IR lowering (materialised managed-string call argument, or an `array of const` TVarRec dyn-array temp); allocated after the parser's prologue zero-init pass, so codegen nil-inits it before the body }
   SymBlockId : array of Integer;
   SymDeclTok : array of Integer; { token index where a global var was declared (decl-order gating); 0 = unstamped/always-visible }
+  { feature-a-typeref-migrate-consumers lane 1 (see devdocs/dev/type-identity-as-substrate.md).
+    ONE TTypeRef per symbol, mirroring TypeKind/RecName/ElemType/ElemRecName/
+    IsArray+ArrLen/PtrElemTk/PtrElemRec/SymProcSig/SymDynDepth. A PARALLEL ARRAY,
+    NOT a new TSymbol field: adding a field directly to TSymbol breaks the
+    self-hosting bootstrap (confirmed by measurement 2026-08-01 — a single new
+    TSymbol field, written through an indexed helper proc call from exactly one
+    Alloc* site, reproducibly corrupts the self-built binary's own symbol table
+    during its very first AddConst; writing an EXISTING field the same way is
+    fine, so the break is specific to a newly-declared TSymbol field, not the
+    call pattern. Matches the older project_tsymbol_field_landmine finding).
+    Kept in sync by SymSyncTypeRef at every site that writes the old fields it
+    covers. ADDITIVE ONLY: nothing reads SymTR yet. }
+  SymTR : array of TTypeRef;
   SymCount  : Integer;
   SymCapacity : Integer;   { allocated length of the dynamic Syms/Sym* parallel arrays (grown by EnsureSymCapacity) }
   FrameSize : Integer;

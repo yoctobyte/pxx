@@ -2456,6 +2456,34 @@ begin
     SymDeclTok[symIdx] := Tokens[TokPos].SOffset;
 end;
 
+procedure SymSyncTypeRef(idx: Integer);
+{ feature-a-typeref-migrate-consumers lane 1 (see devdocs/dev/type-identity-as-substrate.md
+  and devdocs/progress/working/feature-a-typeref-migrate-consumers.md). Mirrors the
+  existing per-symbol type-identity fields into SymTR[idx] as ONE literal, direct
+  copy — no re-derivation, no semantic reinterpretation. Call this after every site
+  that writes any of: TypeKind, RecName, ElemType, ElemRecName, IsArray, ArrLen,
+  PtrElemTk, PtrElemRec, SymProcSig[idx], SymDynDepth[idx]. ADDITIVE ONLY: nothing
+  reads SymTR yet, so this function existing/being called cannot change compiler
+  behaviour; it only keeps the new array from silently going stale ahead of the
+  read-migration step. Do NOT call this from a hot inner loop unrelated to symbol
+  type mutation — it's meant to sit right after the old-field writes it mirrors.
+  SymTR is a PARALLEL ARRAY, not a TSymbol field — see the SymTR declaration
+  comment in defs.inc for why a TSymbol field breaks the self-host bootstrap. }
+begin
+  SymTR[idx].Kind       := Syms[idx].TypeKind;
+  SymTR[idx].RecId      := Syms[idx].RecName;
+  SymTR[idx].ElemTk     := Ord(Syms[idx].ElemType);
+  SymTR[idx].ElemRec    := Syms[idx].ElemRecName;
+  SymTR[idx].PtrBaseTk  := Ord(Syms[idx].PtrElemTk);
+  SymTR[idx].PtrBaseRec := Syms[idx].PtrElemRec;
+  if Syms[idx].IsArray then
+    SymTR[idx].ArrLen := Syms[idx].ArrLen
+  else
+    SymTR[idx].ArrLen := -1;
+  SymTR[idx].ProcSig  := SymProcSig[idx];
+  SymTR[idx].DynDepth := SymDynDepth[idx];
+end;
+
 procedure EnsureSymCapacity(need: Integer);
 { Grow Syms + all ~30 parallel Sym* arrays (and SymHashPrev) so index `need-1` is in
   bounds. Called at each Alloc* chokepoint; doubling from 16384; capacity never shrinks
@@ -2476,7 +2504,7 @@ begin
   SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymArrNDims, n);
   SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymBlockId, n);
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
-  SetLength(SymCLongRank, n);
+  SetLength(SymCLongRank, n);      SetLength(SymTR, n);
   SymCapacity := n;
 end;
 
@@ -2582,6 +2610,7 @@ begin
       Syms[SymCount].Offset := -FrameSize;
     end;
   end;
+  SymSyncTypeRef(SymCount);
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
@@ -2699,6 +2728,7 @@ begin
     align := TypeAlign(tk);
   FrameSize := AlignTo(FrameSize + sz, align);
   Syms[SymCount].Offset := -FrameSize;
+  SymSyncTypeRef(SymCount);
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
@@ -2806,6 +2836,7 @@ begin
     Syms[SymCount].Offset := -FrameSize;
   end;
   LastTypeElemDynDepth := 0;   { consumed }
+  SymSyncTypeRef(SymCount);
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
@@ -2894,6 +2925,7 @@ begin
     Syms[SymCount].Kind   := skLocal;
     Syms[SymCount].Offset := -FrameSize;
   end;
+  SymSyncTypeRef(SymCount);
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
@@ -2916,6 +2948,7 @@ begin
   SymEnumId[SymCount] := -1;    { slot recycling — every Alloc* must reset EVERY parallel array }
   SymCaseSensitive[SymCount] := CaseSensitiveMode;
   SymUnitIdx[SymCount] := CurrentUnitIdx;
+  SymSyncTypeRef(SymCount);
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
