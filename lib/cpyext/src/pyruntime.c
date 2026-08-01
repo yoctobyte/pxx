@@ -7,7 +7,9 @@
  * PyModule_Create2.
  * M2 "arguments and errors": PyFloat_*, PyUnicode_*, PyArg_ParseTuple /
  * Py_BuildValue widened to "i l d s s# O", and a pending-error slot behind
- * PyErr_SetString/PyErr_Occurred/PyErr_Clear. */
+ * PyErr_SetString/PyErr_Occurred/PyErr_Clear.
+ * M3 "strings and containers": PyBytes_* (str-distinct type), PyList_*,
+ * PyDict_* (+ PyDict_Next iteration), and 'y'/'y#' bytes format letters. */
 
 #include <Python.h>
 #include <stdlib.h>
@@ -57,8 +59,9 @@ void Py_DecRef(PyObject *o) {
         o == &g_exc_typeerror || o == &g_exc_runtimeerror) return;
     o->ob_refcnt = o->ob_refcnt - 1;
     if (o->ob_refcnt <= 0) {
-        if ((o->ob_kind == PYOBJ_TUPLE || o->ob_kind == PYOBJ_STR) &&
-            o->ob_ptr != 0)
+        if ((o->ob_kind == PYOBJ_TUPLE || o->ob_kind == PYOBJ_STR ||
+             o->ob_kind == PYOBJ_BYTES || o->ob_kind == PYOBJ_LIST ||
+             o->ob_kind == PYOBJ_DICT) && o->ob_ptr != 0)
             free(o->ob_ptr);
         free(o);
     }
@@ -115,6 +118,29 @@ const char *PyUnicode_AsUTF8(PyObject *o) {
     return (const char *)o->ob_ptr;
 }
 
+PyObject *PyBytes_FromStringAndSize(const char *s, Py_ssize_t n) {
+    PyObject *o;
+    char *buf;
+    Py_ssize_t i;
+    o = py_alloc(PYOBJ_BYTES);
+    buf = (char *)malloc((size_t)(n + 1));
+    for (i = 0; i < n; i++) buf[i] = s[i];
+    buf[n] = 0;
+    o->ob_ptr = (void *)buf;
+    o->ob_size = n;
+    return o;
+}
+
+char *PyBytes_AsString(PyObject *o) {
+    if (o == 0 || o->ob_kind != PYOBJ_BYTES) return 0;
+    return (char *)o->ob_ptr;
+}
+
+Py_ssize_t PyBytes_Size(PyObject *o) {
+    if (o == 0 || o->ob_kind != PYOBJ_BYTES) return -1;
+    return o->ob_size;
+}
+
 PyObject *PyTuple_New(Py_ssize_t n) {
     PyObject *o;
     PyObject **items;
@@ -144,6 +170,117 @@ PyObject *PyTuple_GetItem(PyObject *t, Py_ssize_t i) {
     if (i < 0 || i >= t->ob_size) return 0;
     items = (PyObject **)t->ob_ptr;
     return items[i];
+}
+
+PyObject *PyList_New(Py_ssize_t n) {
+    PyObject *o;
+    PyObject **items;
+    Py_ssize_t cap;
+    Py_ssize_t i;
+    o = py_alloc(PYOBJ_LIST);
+    cap = (n > 0) ? n : 1;
+    items = (PyObject **)malloc(sizeof(PyObject *) * (size_t)cap);
+    for (i = 0; i < n; i++) items[i] = 0;
+    o->ob_ptr = (void *)items;
+    o->ob_size = n;
+    return o;
+}
+
+int PyList_SetItem(PyObject *l, Py_ssize_t i, PyObject *v) {
+    PyObject **items;
+    if (l == 0 || l->ob_kind != PYOBJ_LIST) return -1;
+    if (i < 0 || i >= l->ob_size) return -1;
+    items = (PyObject **)l->ob_ptr;
+    items[i] = v;
+    return 0;
+}
+
+PyObject *PyList_GetItem(PyObject *l, Py_ssize_t i) {
+    PyObject **items;
+    if (l == 0 || l->ob_kind != PYOBJ_LIST) return 0;
+    if (i < 0 || i >= l->ob_size) return 0;
+    items = (PyObject **)l->ob_ptr;
+    return items[i];
+}
+
+int PyList_Append(PyObject *l, PyObject *v) {
+    PyObject **items;
+    if (l == 0 || l->ob_kind != PYOBJ_LIST) return -1;
+    items = (PyObject **)realloc(l->ob_ptr, sizeof(PyObject *) * (size_t)(l->ob_size + 1));
+    items[l->ob_size] = v;
+    Py_IncRef(v);
+    l->ob_ptr = (void *)items;
+    l->ob_size = l->ob_size + 1;
+    return 0;
+}
+
+Py_ssize_t PyList_Size(PyObject *l) {
+    if (l == 0 || l->ob_kind != PYOBJ_LIST) return -1;
+    return l->ob_size;
+}
+
+static int py_obj_eq(PyObject *a, PyObject *b) {
+    if (a == b) return 1;
+    if (a == 0 || b == 0) return 0;
+    if (a->ob_kind != b->ob_kind) return 0;
+    if (a->ob_kind == PYOBJ_LONG) return a->ob_ival == b->ob_ival;
+    if (a->ob_kind == PYOBJ_STR || a->ob_kind == PYOBJ_BYTES)
+        return strcmp((char *)a->ob_ptr, (char *)b->ob_ptr) == 0;
+    return 0;
+}
+
+PyObject *PyDict_New(void) {
+    return py_alloc(PYOBJ_DICT);
+}
+
+int PyDict_SetItem(PyObject *d, PyObject *key, PyObject *value) {
+    PyDictEntry *pairs;
+    long i;
+    if (d == 0 || d->ob_kind != PYOBJ_DICT) return -1;
+    pairs = (PyDictEntry *)d->ob_ptr;
+    for (i = 0; i < d->ob_size; i++) {
+        if (py_obj_eq(pairs[i].key, key)) {
+            Py_IncRef(value);
+            Py_DecRef(pairs[i].value);
+            pairs[i].value = value;
+            return 0;
+        }
+    }
+    pairs = (PyDictEntry *)realloc(d->ob_ptr, sizeof(PyDictEntry) * (size_t)(d->ob_size + 1));
+    Py_IncRef(key);
+    Py_IncRef(value);
+    pairs[d->ob_size].key = key;
+    pairs[d->ob_size].value = value;
+    d->ob_ptr = (void *)pairs;
+    d->ob_size = d->ob_size + 1;
+    return 0;
+}
+
+PyObject *PyDict_GetItem(PyObject *d, PyObject *key) {
+    PyDictEntry *pairs;
+    long i;
+    if (d == 0 || d->ob_kind != PYOBJ_DICT) return 0;
+    pairs = (PyDictEntry *)d->ob_ptr;
+    for (i = 0; i < d->ob_size; i++) {
+        if (py_obj_eq(pairs[i].key, key)) return pairs[i].value;
+    }
+    return 0;
+}
+
+Py_ssize_t PyDict_Size(PyObject *d) {
+    if (d == 0 || d->ob_kind != PYOBJ_DICT) return -1;
+    return d->ob_size;
+}
+
+int PyDict_Next(PyObject *d, Py_ssize_t *ppos, PyObject **pkey, PyObject **pvalue) {
+    PyDictEntry *pairs;
+    if (d == 0 || d->ob_kind != PYOBJ_DICT) return 0;
+    if (*ppos < 0 || *ppos >= d->ob_size) return 0;
+    pairs = (PyDictEntry *)d->ob_ptr;
+    if (pkey != 0) *pkey = pairs[*ppos].key;
+    if (pvalue != 0) *pvalue = pairs[*ppos].value;
+    *ppos = *ppos + 1;
+    return 1;
 }
 
 int PyArg_ParseTuple(PyObject *args, const char *format, ...) {
@@ -187,9 +324,9 @@ int PyArg_ParseTuple(PyObject *args, const char *format, ...) {
                 ok = 0;
             }
             argIdx = argIdx + 1;
-        } else if (c == 's') {
+        } else if (c == 's' || c == 'y') {
             sdst = va_arg(ap, const char **);
-            if (item == 0 || item->ob_kind != PYOBJ_STR) {
+            if (item == 0 || item->ob_kind != ((c == 's') ? PYOBJ_STR : PYOBJ_BYTES)) {
                 ok = 0;
             } else {
                 *sdst = (const char *)item->ob_ptr;
@@ -245,14 +382,20 @@ PyObject *Py_BuildValue(const char *format, ...) {
             dval = va_arg(ap, double);
             items[n] = PyFloat_FromDouble(dval);
             n = n + 1;
-        } else if (c == 's') {
+        } else if (c == 's' || c == 'y') {
             sval = va_arg(ap, const char *);
             if (format[fi + 1] == '#') {
                 slen = va_arg(ap, Py_ssize_t);
-                items[n] = PyUnicode_FromStringAndSize(sval, slen);
+                items[n] = (c == 's') ? PyUnicode_FromStringAndSize(sval, slen)
+                                      : PyBytes_FromStringAndSize(sval, slen);
                 fi = fi + 1;
-            } else {
+            } else if (c == 's') {
                 items[n] = PyUnicode_FromString(sval);
+            } else {
+                Py_ssize_t blen;
+                blen = 0;
+                while (sval[blen] != 0) blen = blen + 1;
+                items[n] = PyBytes_FromStringAndSize(sval, blen);
             }
             n = n + 1;
         } else if (c == 'O') {
