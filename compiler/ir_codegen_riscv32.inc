@@ -2859,10 +2859,10 @@ begin
       if SymIsHiddenArgTemp[i] and (Syms[i].Kind = skLocal) then
       begin
         if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-           (RecSize(Syms[i].RecName) > TARGET_PTR_SIZE) then
+           (RecSize(SymTR[i].RecId) > TARGET_PTR_SIZE) then
         begin
           EmitSlotAddrRISCV32(reg_a0, i);
-          EmitLoadImmRISCV32(reg_a1, RecSize(Syms[i].RecName));
+          EmitLoadImmRISCV32(reg_a1, RecSize(SymTR[i].RecId));
           procIdx := FindProc('PXXMemZero');
           if procIdx < 0 then Error('compiler error: PXXMemZero not found');
           EmitCallProc(procIdx);

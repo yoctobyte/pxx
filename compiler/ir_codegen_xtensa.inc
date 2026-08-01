@@ -2087,7 +2087,7 @@ begin
       if SymIsHiddenArgTemp[i] and (Syms[i].Kind = skLocal) then
       begin
         if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-           (RecSize(Syms[i].RecName) > TARGET_PTR_SIZE) then
+           (RecSize(SymTR[i].RecId) > TARGET_PTR_SIZE) then
         begin
           EmitSlotAddrXtensa(reg_xtensa_a2, i);
           procIdx := FindProc('PXXMemZero');
@@ -2095,10 +2095,10 @@ begin
           if XtensaABI = XTENSA_ABI_WINDOWED then
           begin
             xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
-            EmitLoadConstXtensa(reg_xtensa_a11, RecSize(Syms[i].RecName));
+            EmitLoadConstXtensa(reg_xtensa_a11, RecSize(SymTR[i].RecId));
           end
           else
-            EmitLoadConstXtensa(reg_xtensa_a3, RecSize(Syms[i].RecName));
+            EmitLoadConstXtensa(reg_xtensa_a3, RecSize(SymTR[i].RecId));
           EmitCallProc(procIdx);
         end
         else
