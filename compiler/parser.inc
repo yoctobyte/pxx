@@ -13268,6 +13268,24 @@ begin
     ppBase := CurASTNode;
     ParseFactor;
     ppExp := CurASTNode;
+    { `obj ** n` on a user class dispatches its __pow__. Without this the base
+      went to pypow_v as a boxed handle and raised "expected a number, got
+      object" where CPython returned the method's result
+      (feature-nilpy-arithmetic-dunders-full-protocol). pylib's own rows are
+      excluded so container/scalar powers keep today's behaviour. }
+    if PyExprMode and (IntToTypeKind(ASTTk[ppBase]) = tyClass) and
+       (ResolveNodeRec(ppBase) >= REC_UCLASS_BASE) and
+       not PyRecIsPylibOwnClass(ResolveNodeRec(ppBase)) and
+       (FindUMeth(ResolveNodeRec(ppBase) - REC_UCLASS_BASE, '__pow__') >= 0) then
+    begin
+      CurASTNode := PyCallMeth1(ResolveNodeRec(ppBase) - REC_UCLASS_BASE,
+                                '__pow__', ppBase, ppExp);
+      if CurASTNode >= 0 then
+      begin
+        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+        Exit;
+      end;
+    end;
     ppPi := FindProc('pypow_v');
     if ppPi < 0 then Error('Nil Python: pylib (pypow_v) not loaded');
     ppArgSeq := AllocNode(AN_ARG); ASTLeft[ppArgSeq] := ppBase;
@@ -13355,9 +13373,10 @@ begin
       CurASTNode := node;
       continue;
     end
-    else if PyExprMode and (op in [tkStar, tkSlash]) and (opci < 0) and
+    else if PyExprMode and (op in [tkStar, tkSlash, tkDiv, tkMod]) and (opci < 0) and
             (IntToTypeKind(ASTTk[left]) = tyClass) and
-            (ResolveNodeRec(left) >= REC_UCLASS_BASE) then
+            (ResolveNodeRec(left) >= REC_UCLASS_BASE) and
+            not PyRecIsPylibOwnClass(ResolveNodeRec(left)) then
     begin
       { `Vector(1,2) * 3` — a user class's own `__mul__`/`__truediv__` dunder.
         Neither the list-repeat nor bytes-repeat branch above matched, so a
@@ -13368,10 +13387,17 @@ begin
         same root cause as the +/- fix in ParseSimpleExpr). Only the LEFT
         operand's class is consulted, matching Python's left-operand-first
         dunder lookup — no `__rmul__`/`__rtruediv__` fallback. }
+      { `//` and `%` join the same branch: measured, they were NOT dispatched —
+        C(7) // C(3) answered 0 and C(7) % C(3) answered 126959237464088, both
+        computed on the class HANDLE (feature-nilpy-arithmetic-dunders-full-
+        protocol). The pylib exclusion above matters more here than for `*`:
+        pylib's own rows must keep their real semantics. }
       if op = tkStar then node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__mul__', left, right)
+      else if op = tkDiv then node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__floordiv__', left, right)
+      else if op = tkMod then node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__mod__', left, right)
       else node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__truediv__', left, right);
       if node < 0 then
-        Error('Nil Python: class has no __mul__()/__truediv__() for this operator');
+        Error('Nil Python: class has no __mul__()/__truediv__()/__floordiv__()/__mod__() for this operator');
       CurASTNode := node;
       continue;
     end

@@ -101,3 +101,47 @@ pylib's own `TPyList`/`TPyDict` and broke `[1,2] < [1,3]`. Use
 `PyRecIsPylibOwnClass` (`compiler/symtab.inc`), not a class-name list. That trap
 is more dangerous here than for ordering, because pylib's containers have real
 `+` (concat) and `*` (repeat) semantics that a naive guard would capture.
+
+## 2026-08-01 — __floordiv__ / __mod__ / __pow__ LANDED
+
+The three measured-broken direct forms are done. All verified against CPython:
+
+| expression | was | now |
+| --- | --- | --- |
+| `C(7) // C(3)` | `0` | `2` |
+| `C(7) % C(3)` | `126959237464088` | `1` |
+| `C(7) ** C(3)` | `TypeError` | `343` |
+
+- `//` and `%` joined the existing `*` / `/` dunder branch in `ParseTerm`
+  (`compiler/parser.inc`) — `ParseTerm` already loops on `tkDiv`/`tkMod`, so it
+  was a widened condition plus two method names.
+- `**` is dispatched in the power arm of `ParseFactor`, ahead of the `pypow_v`
+  call the base was previously boxed into.
+- All three now carry the `PyRecIsPylibOwnClass` exclusion, and it was added to
+  the pre-existing `*` / `/` branch in the same change — that branch had none,
+  and it matters more for `%` than for `*` because pylib's rows have real
+  semantics on these operators.
+
+`test/test_nilpy_dunder_arith2.npy` is byte-identical to CPython: numeric
+results, a class returning NON-numeric tags (which proves the method ran rather
+than a numeric path coincidentally agreeing), plain `// % **` including the
+negative-operand rules, and `"%d apples" % 5` staying string FORMATTING rather
+than being captured as `__mod__`.
+
+Native confirm: self-host fixedpoint A==B==C from the pinned seed, testmgr
+--tier quick GREEN; matrix offloaded to Track T.
+
+### Deliberately not asserted in that test
+
+`[1, 2] // [3]` should raise `TypeError` and still returns `0`. That is
+[[bug-nilpy-static-typed-operands-skip-mixed-type-guard]], a different bug with
+a different fix; encoding today's answer either way would freeze it, so the test
+says so in a comment instead.
+
+### What remains on this ticket
+
+**The reflected forms — all seven still broken** (`__radd__`, `__rsub__`,
+`__rmul__`, `__rtruediv__`, `__rfloordiv__`, `__rmod__`, `__rpow__`). Measured:
+`3 + C(4)` → `1744830491`, `3 * C(4)` → `-1906311096`. Note four of those names
+already appear in `compiler/**`, so check what the existing references do before
+writing new code — a partially-wired path is a different fix from an absent one.

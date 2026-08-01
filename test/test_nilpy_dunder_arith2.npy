@@ -1,0 +1,64 @@
+# __floordiv__ / __mod__ / __pow__ on a user class. Measured before the fix:
+#   C(7) // C(3) -> 0                    (CPython 2)
+#   C(7) %  C(3) -> 126959237464088      (CPython 1)
+#   C(7) ** C(3) -> TypeError            (CPython 343)
+# The first two computed on the class HANDLE, silently.
+# feature-nilpy-arithmetic-dunders-full-protocol.
+#
+# Parameter names avoid module-level spellings on purpose — a method parameter
+# sharing a global's name still corrupts that global
+# (bug-nilpy-global-shadowed-by-method-param-name-loses-class-type, open).
+#
+# Expectation is CPython's own output.
+
+
+class N:
+    def __init__(self, v):
+        self.v = v
+
+    def __floordiv__(self, rhs):
+        return self.v // rhs.v
+
+    def __mod__(self, rhs):
+        return self.v % rhs.v
+
+    def __pow__(self, rhs):
+        return self.v ** rhs.v
+
+
+class Tagged:
+    # a non-numeric result proves the METHOD ran rather than some numeric path
+    # coincidentally agreeing
+    def __floordiv__(self, rhs):
+        return "FLOORDIV"
+
+    def __mod__(self, rhs):
+        return "MOD"
+
+    def __pow__(self, rhs):
+        return "POW"
+
+
+a = N(7)
+b = N(3)
+print(a // b)
+print(a % b)
+print(a ** b)
+
+t = Tagged()
+print(t // 2)
+print(t % 2)
+print(t ** 2)
+
+# plain numeric // % ** are untouched, including the negative-operand rules
+print(7 // 3, -7 // 3, 7 % 3, -7 % 3, 2 ** 10)
+print(7.5 // 2, 7.5 % 2)
+
+# str % is FORMATTING, not __mod__ — must not be captured
+print("%d apples" % 5)
+
+# NOT asserted here: `[1, 2] // [3]` should raise TypeError and currently
+# returns 0. That is the static-operand hole
+# (bug-nilpy-static-typed-operands-skip-mixed-type-guard), a different bug with
+# a different fix — encoding today's wrong answer would freeze it in place, so
+# it is left to that ticket rather than asserted either way.
