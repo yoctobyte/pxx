@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -16,6 +16,7 @@ _none_
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | bug-c-uses-path-basename-collides-with-enclosing-unit-name |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-t-quick-canary-for-nilpy-and-c | T | 70 | feature | The 2-14s quick canary covers Pascal only; a NilPy change and a C change can both go out with no fast check at all. Add one dense .npy and one dense .c canary. | — |
+| feature-t-watcher-health-verdict-and-host-local-alerting | T | 70 | feature | Nothing detects a watcher that is running but wedged, and nothing pushes a problem at anyone. Split it: a portable health verdict in the repo, platform-specific delivery on the host. | — |
 
 ## unfinished (4)
 
