@@ -192,3 +192,25 @@ Two parts, and the first is a prerequisite:
    That is the whole point of `PyClassTruthyDunder` existing.
 
 **blocked-by:** [[bug-a-overload-resolution-ignores-class-identity]]
+
+## 2026-08-01 (later) — UNBLOCKED; part 2 is all that remains
+
+[[bug-a-overload-resolution-ignores-class-identity]] is fixed, so `bool(obj)` no
+longer silently mis-binds to `bool(l: TPyList)`. It now behaves exactly as this
+ticket predicted for that state: with no overload matching a user class it falls
+to the variant path, which boxes the handle, so
+
+| class | pxx | CPython |
+| --- | --- | --- |
+| `__bool__` → False | **True** | False |
+| `__len__` → 0 | **True** | False |
+| `__len__` → 3 | True | True |
+| no protocol | True | True |
+
+i.e. it flipped from always-False to always-True and still never consults the
+dunders. Containers (`bool([])`, `bool({})`, `bool("")`) remain correct.
+
+Remaining work is only part 2: a NilPy arm for `bool(` in `parser.inc`'s factor,
+beside the existing `str(` one, routing a user-class argument through
+`PyMakeTruthy` — the shared rule `if` and `not` already use, so the three cannot
+drift apart again.

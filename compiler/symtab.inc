@@ -4765,10 +4765,25 @@ begin
   Result := False;
   if not MatchArgRecValid then Exit;
   if j >= MAX_PROC_PARAMS then Exit;
-  if (aTk <> tyRecord) or (Procs[i].Params[j].TypeKind <> tyRecord) then Exit;
+  { Records AND classes. Classes were excluded here, so an UNRELATED class bound
+    happily to any class-typed parameter — resolution took the first arity match
+    and the callee then read one object's memory through another class's shape:
+    silent wrong dispatch where the layouts happen to agree, a segfault where
+    they do not (`dict([("a",1)])` binding its TPyList to `dict(d: TPyDict)`,
+    `bool(obj)` binding to `bool(l: TPyList)`).
+    (bug-a-overload-resolution-ignores-class-identity)
+    The descendant tolerance below already did the right thing — it was simply
+    never reached for classes. }
+  if (aTk <> Procs[i].Params[j].TypeKind) then Exit;
+  if (aTk <> tyRecord) and (aTk <> tyClass) then Exit;
   pr := ProcParamRecId[i * MAX_PROC_PARAMS + j];
   ar := MatchArgRec[j];
   if not RecIdsDistinctNamed(ar, pr) then Exit;
+  { A TObject-typed parameter accepts anything — it is the root, and a user
+    class with no explicit parent has UClsParent = -1, so the ancestor walk
+    below would not reach it. }
+  if (pr >= REC_UCLASS_BASE) and (FindUClass('TObject') >= 0) and
+     (pr = REC_UCLASS_BASE + FindUClass('TObject')) then Exit;
   { Interface (and any future record) inheritance: an argument whose type
     DESCENDS from the param's type is a valid widening (IBar -> IFoo param),
     not a mismatch. Walk the arg's ancestor chain. }

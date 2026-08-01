@@ -193,3 +193,19 @@ Confirmed no regression from adding it: `dict(a_real_dict)` and `dict([])` behav
 exactly as before, `dict([pairs])` still crashes as before.
 
 **blocked-by:** [[bug-a-overload-resolution-ignores-class-identity]]
+
+## 2026-08-01 — FIXED by the blocker, with no further change here
+
+[[bug-a-overload-resolution-ignores-class-identity]] landed. The
+`dict(l: TPyList)` overload already in `pylib.pas` — added earlier and left
+deliberately unselected, because reordering only moved the crash — is now
+chosen correctly:
+
+```
+dict([("a", 1), ("b", 2)])   ->  1 2 2      (was SIGSEGV)
+dict({"x": 9})               ->  {'x': 9}   (unchanged)
+dict([])                     ->  {}         (unchanged)
+```
+
+Both halves of this ticket are now done: `.decode()` by b78988fe8, `dict(pairs)`
+by the resolution fix acting on the overload staged here for it.

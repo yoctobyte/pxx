@@ -7756,7 +7756,11 @@ begin
         method-pointer record — leave the record identity unconstrained so it binds
         to the `of object` param (its {Code,Data} pair is built at IR lowering). }
       if ASTKind[ASTLeft[currArg]] = AN_METHODREF then MatchArgRec[i] := REC_NONE
-      else if argTypes[i] = tyRecord then MatchArgRec[i] := ResolveNodeRec(ASTLeft[currArg])
+      else if (argTypes[i] = tyRecord) or (argTypes[i] = tyClass) then
+        { tyClass added with bug-a-overload-resolution-ignores-class-identity:
+          without the argument's class id the matcher stays blind and binds an
+          unrelated class to any class-typed parameter. }
+        MatchArgRec[i] := ResolveNodeRec(ASTLeft[currArg])
       else MatchArgRec[i] := REC_NONE;
     end;
     currArg := ASTRight[currArg];

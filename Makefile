@@ -1415,6 +1415,12 @@ test-core: $(COMPILER)
 	# method + ctor overloads resolve by ARGUMENT TYPE, not first-name-match (bug-pascal-method-overload-ignores-arg-types)
 	./$(COMPILER) test/test_method_overload_types_b248.pas /tmp/test_method_overload_types_b24826
 	test "$$(/tmp/test_method_overload_types_b24826)" = "$$(printf 'ctor=none\nint 1\nstr xy\nstr x\ntwice-int=42\ntwice-str=abab\nctor=str:zed\nctor=int\nsub-ctor=str:sub\nstr hi\nint 7')"
+	# FREE-FUNCTION overloads resolve by CLASS IDENTITY too, not first-arity-match:
+	# an unrelated class bound to any class-typed parameter and the callee read one
+	# object through another's layout. Descendants must still widen, and a TObject
+	# param must still accept anything (bug-a-overload-resolution-ignores-class-identity)
+	./$(COMPILER) test/test_overload_class_identity.pas /tmp/test_overload_class_identity26
+	test "$$(/tmp/test_overload_class_identity26)" = "$$(printf '1\n2\n1\n9\n9')"
 	# constref + untyped `out` in an interface method + cdecl directive + RTL IInterface/HResult
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_interface_constref_cdecl_b249.pas /tmp/test_interface_constref_cdecl_b24926
 	test "$$(/tmp/test_interface_constref_cdecl_b24926)" = "$$(printf 'ping\naddref=-1\nrelease=-1\nqi=-1\nn=7 s=hi')"
