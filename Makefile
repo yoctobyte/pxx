@@ -576,6 +576,10 @@ test-nilpy: $(COMPILER)
 	@# a class defining __getitem__/__setitem__ routes subscript read/write
 	./$(COMPILER) test/test_nilpy_dunder_getitem_setitem.npy /tmp/test_nilpy_dundergetset26
 	test "$$(/tmp/test_nilpy_dundergetset26)" = "$$(printf '%b' '20\n99\n[10, 99, 30]\n42\n-1\n10\ncaught: TypeError')"
+	@# context-manager protocol: __enter__ runs, `as` binds ITS RESULT, __exit__
+	@# runs on the normal AND exception paths; with open(...) unchanged
+	./$(COMPILER) test/test_nilpy_with_protocol.npy /tmp/test_nilpy_withproto26
+	test "$$(/tmp/test_nilpy_withproto26)" = "$$(printf '%b' 'enter one\nbody sees ENTERVAL-one\nexit one\nenter two\nexit two\ncaught after exit\nenter outer\nenter inner\nnested body\nexit inner\nexit outer\nenter bare\nbare body\nexit bare\nfiledata\ndone')"
 	@# an undefined operand pair raises a CATCHABLE TypeError at RUN time, not a
 	@# build abort — try/except around it must compile and execution continue
 	./$(COMPILER) test/test_nilpy_unsupported_operand_raises.npy /tmp/test_nilpy_unsupop26

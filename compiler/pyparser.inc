@@ -9505,13 +9505,137 @@ end;
   censused use is `with open(...) as f`, and pyopen reads the whole file
   eagerly, so there is nothing to close. A `with` without `as` runs the body
   after evaluating EXPR for its effect. }
+function PyCallMeth3(ci: Integer; const mname: AnsiString;
+                     selfNode, arg1, arg2, arg3: Integer): Integer;
+{ Three explicit args -- `__exit__(self, exc_type, exc_value, traceback)` is the
+  only caller today. Mirrors PyCallMeth2; kept as a fixed-arity helper because
+  that is what every dunder dispatch in this frontend already uses. }
+var mmi, mpi, selfArg, a1, a2, a3: Integer;
+begin
+  Result := -1;
+  if ci < 0 then Exit;
+  mmi := FindUMeth(ci, mname);
+  if mmi < 0 then Exit;
+  mpi := UMthProc_[mmi];
+  selfArg := AllocNode(AN_ARG); ASTLeft[selfArg] := selfNode;
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := arg1;
+  a2 := AllocNode(AN_ARG); ASTLeft[a2] := arg2;
+  a3 := AllocNode(AN_ARG); ASTLeft[a3] := arg3;
+  ASTRight[selfArg] := a1;
+  ASTRight[a1] := a2;
+  ASTRight[a2] := a3;
+  ASTRight[a3] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := mpi;
+  ASTTk[Result] := Ord(Procs[mpi].RetType);
+  ASTLeft[Result] := selfArg;
+end;
+
 function PyParseWith: Integer;
-var exprNode, node, seq, symIdx: Integer; varName: AnsiString;
+var exprNode, node, seq, symIdx, cmCi, cmSym, entNode, exitNode, bodyNode: Integer;
+    varName: AnsiString; usesProtocol: Boolean;
 begin
   Next;                                  { consume `with` }
   PyParseBoolExpr;
   exprNode := CurASTNode;
   seq := -1;
+
+  { CONTEXT-MANAGER protocol. Historically `with E as v:` was desugared to
+    `v = E` plus the body, on the grounds that the only censused use was
+    `with open(...) as f` and pyopen reads eagerly, so there was nothing to
+    close. That silently does NOTHING for a user-defined context manager:
+    __enter__ never runs, `as v` binds the EXPRESSION rather than what
+    __enter__ chose to return, and __exit__ never runs — so a lock is never
+    released and a rollback never happens, with no diagnostic.
+    bug-nilpy-with-statement-skips-enter-and-exit.
+
+    Only taken when the expression's class actually declares __enter__, so the
+    open()/file path and every other existing use keep their exact behaviour. }
+  cmCi := -1;
+  usesProtocol := False;
+  if (IntToTypeKind(ASTTk[exprNode]) = tyClass) and
+     (ResolveNodeRec(exprNode) >= REC_UCLASS_BASE) and
+     not PyRecIsPylibOwnClass(ResolveNodeRec(exprNode)) then
+  begin
+    cmCi := ResolveNodeRec(exprNode) - REC_UCLASS_BASE;
+    usesProtocol := (FindUMeth(cmCi, '__enter__') >= 0) or
+                    (FindUMeth(cmCi, '__exit__') >= 0);
+  end;
+
+  if usesProtocol then
+  begin
+    { hold the manager in a hidden temp: __exit__ must run on the SAME object
+      __enter__ ran on, and the `as` target may be rebound in the body. }
+    cmSym := AllocVar(PyHiddenName('cm'), tyClass);
+    Syms[cmSym].RecName := REC_UCLASS_BASE + cmCi;
+    SymSyncTypeRef(cmSym);
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(cmSym);
+    ASTRight[node] := exprNode;
+    seq := PySeqAppend(seq, node);
+
+    entNode := -1;
+    if FindUMeth(cmCi, '__enter__') >= 0 then
+      entNode := PyCallMeth1(cmCi, '__enter__', PyMakeIdent(cmSym), -1);
+
+    if PyIsIdent('as') then
+    begin
+      Next;
+      if CurTok.Kind <> tkIdent then Error('Nil Python: with ... as: expected a name');
+      varName := CurTok.SVal;
+      Next;
+      { `as v` binds __enter__'s RESULT, not the expression — a context manager
+        returning something other than self is exactly why the protocol has a
+        return value. }
+      if entNode >= 0 then
+      begin
+        symIdx := PyProgSym(varName);
+        if symIdx < 0 then symIdx := AllocVar(varName, IntToTypeKind(ASTTk[entNode]));
+        if IntToTypeKind(ASTTk[entNode]) = tyClass then
+        begin
+          Syms[symIdx].RecName := ResolveNodeRec(entNode);
+          SymSyncTypeRef(symIdx);
+        end;
+        node := AllocNode(AN_ASSIGN);
+        ASTLeft[node] := PyMakeIdent(symIdx);
+        ASTRight[node] := entNode;
+        seq := PySeqAppend(seq, node);
+      end;
+    end
+    else if entNode >= 0 then
+      seq := PySeqAppend(seq, entNode);   { run __enter__ for its effect }
+
+    Expect(tkColon, ':');
+    bodyNode := PyParseSuite;
+    PyStmtAteBlock := True;
+
+    { try/finally so __exit__ runs on the exception path and on break/return
+      too. NOT try/except: CPython lets a truthy __exit__ SUPPRESS the
+      exception, and that needs the exception triple plus a conditional
+      re-raise — filed as its own follow-up rather than faked here, because a
+      wrong suppression would swallow errors silently. Every non-suppressing
+      manager (the overwhelming majority — __exit__ returning None/False) is
+      exactly right with try/finally. }
+    if FindUMeth(cmCi, '__exit__') >= 0 then
+    begin
+      { exc_type / exc_value / traceback are None: try/FINALLY does not hand
+        the exception over, and CPython uses them only for suppression, which
+        is the follow-up. Documented on the ticket rather than faked. }
+      exitNode := PyCallMeth3(cmCi, '__exit__', PyMakeIdent(cmSym),
+                              PyMakeNone, PyMakeNone, PyMakeNone);
+      if exitNode >= 0 then
+      begin
+        node := AllocNode(AN_TRY_FINALLY);
+        ASTLeft[node] := bodyNode;
+        ASTRight[node] := exitNode;
+        bodyNode := node;
+      end;
+    end;
+    seq := PySeqAppend(seq, bodyNode);
+    Result := seq;
+    Exit;
+  end;
+
   if PyIsIdent('as') then
   begin
     Next;

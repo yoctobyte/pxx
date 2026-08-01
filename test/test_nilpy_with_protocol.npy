@@ -1,0 +1,58 @@
+# The context-manager protocol. `with E as v:` used to be desugared to `v = E`
+# plus the body — so __enter__ never ran, `as v` bound the EXPRESSION instead of
+# what __enter__ returned, and __exit__ never ran. A lock was never released and
+# a rollback never happened, with no diagnostic.
+# bug-nilpy-with-statement-skips-enter-and-exit.
+#
+# __enter__ here returns something OTHER than self on purpose: that is the only
+# way to prove `as v` binds the method's result rather than the expression.
+#
+# NOT covered: a truthy __exit__ SUPPRESSING the exception. The lowering is
+# try/FINALLY, so __exit__ always runs and the exception always propagates —
+# correct for every non-suppressing manager, which is the overwhelming majority.
+# Suppression needs the exception triple and a conditional re-raise; see the
+# ticket. __exit__ therefore receives None/None/None even on the exception path.
+#
+# Expectation is CPython's own output.
+
+
+class Ctx:
+    def __init__(self, tag):
+        self.tag = tag
+
+    def __enter__(self):
+        print("enter", self.tag)
+        return "ENTERVAL-" + self.tag
+
+    def __exit__(self, a, b, c):
+        print("exit", self.tag)
+        return False
+
+
+with Ctx("one") as v:
+    print("body sees", v)
+
+# the exception path: __exit__ must still run, and the exception must propagate
+try:
+    with Ctx("two") as v2:
+        raise ValueError("boom")
+except ValueError:
+    print("caught after exit")
+
+# nesting unwinds in reverse
+with Ctx("outer") as a:
+    with Ctx("inner") as b:
+        print("nested body")
+
+# no `as` clause: __enter__ still runs for its effect
+with Ctx("bare"):
+    print("bare body")
+
+# the pre-existing file path must be untouched — it declares neither dunder and
+# keeps the old plain-assignment desugar
+with open("/tmp/test_nilpy_with_protocol.txt", "w") as f:
+    f.write("filedata\n")
+with open("/tmp/test_nilpy_with_protocol.txt") as f:
+    print(f.read().strip())
+
+print("done")

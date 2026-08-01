@@ -118,3 +118,53 @@ what makes this landable incrementally.
 arriving as an untyped parameter is a variant and needs
 [[decide-nilpy-runtime-dunder-dispatch-mechanism]]. Say so in the test rather
 than leaving a red case.
+
+## FIXED 2026-08-01 — protocol runs; suppression deliberately deferred
+
+`PyParseWith` (`compiler/pyparser.inc`) now lowers, when the expression's class
+declares `__enter__` or `__exit__`:
+
+```
+__py_cm_N = EXPR                  { hidden temp — __exit__ must run on the SAME
+                                    object, and the `as` target may be rebound }
+v         = __py_cm_N.__enter__()
+try:
+    body
+finally:
+    __py_cm_N.__exit__(None, None, None)
+```
+
+- `as v` binds **`__enter__`'s return value**, not the expression. The test
+  proves this with a manager returning something other than `self` — the only
+  shape that can distinguish the two.
+- `try`/`finally` (`AN_TRY_FINALLY`, the node Pascal already lowers) so
+  `__exit__` runs on the exception path and on `break`/`return` out of the body.
+- Gated on the class actually declaring a dunder, so `with open(...) as f` and
+  every other existing use keep the old plain-assignment desugar byte for byte.
+  Asserted in the test.
+- `PyCallMeth3` added beside `PyCallMeth2` for the four-parameter `__exit__`.
+
+Verified against CPython, byte-identical: `as` binding, the exception path
+(`__exit__` runs, then the exception propagates and is caught outside), nesting
+unwinding in reverse, a bare `with` with no `as`, and `with open(...)`.
+
+Native confirm: FPC seed build clean, self-host fixedpoint A==B==C from the
+pinned seed, testmgr --tier quick GREEN.
+
+### NOT done, and deliberately not faked: `__exit__` suppression
+
+CPython lets a truthy `__exit__` SWALLOW the exception. `try/finally` cannot
+express that — it needs the exception triple handed to `__exit__` and a
+conditional re-raise. Consequences of the current shape, both recorded in the
+test file:
+
+- a truthy `__exit__` does **not** suppress; the exception still propagates.
+- `__exit__` receives `None, None, None` even on the exception path.
+
+Every non-suppressing manager (`__exit__` returning `None`/`False` — the
+overwhelming majority) is exactly right. Faking suppression would silently
+swallow errors, which is strictly worse than not supporting it, so it stays
+open as a follow-up rather than being half-implemented.
+
+Multi-item `with A() as a, B() as b:` is also untested — check whether it parses
+at all before assuming it works.
