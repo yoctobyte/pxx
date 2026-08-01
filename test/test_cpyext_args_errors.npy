@@ -1,0 +1,16 @@
+# M2 "arguments and errors" (feature-nilpy-cpyext-c-api-from-source): a
+# hand-written CPython extension exercising PyArg_ParseTuple/Py_BuildValue
+# across "i l d s s# O" and PyErr_SetString propagating into a NilPy
+# `except`, compiled by cfront against pxx's own Python.h and imported from
+# NilPy.
+import argerr_ext
+
+print(argerr_ext.scale(6, 1.5))
+print(argerr_ext.shout("hello"))
+print(argerr_ext.prefix_len("abcdef"))
+print(argerr_ext.identity(99))
+print(argerr_ext.check_positive(5))
+try:
+    argerr_ext.check_positive(-3)
+except Exception as e:
+    print("caught:", e)

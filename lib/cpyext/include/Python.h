@@ -11,8 +11,11 @@
  * tagged-object model, not CPython's. A prebuilt CPython .so cannot be
  * loaded against this header — only extension SOURCE compiled by cfront.
  *
- * M1 ("hello-ext") scope only: a one-int-argument, one-int-return function
- * exposed through a real PyModuleDef/PyMethodDef table and PyInit_<name>.
+ * M1 ("hello-ext") added: a one-int-argument, one-int-return function exposed
+ * through a real PyModuleDef/PyMethodDef table and PyInit_<name>.
+ * M2 ("arguments and errors") added: PyArg_ParseTuple/Py_BuildValue for
+ * "i l d s s# O", plus PyErr_SetString/PyErr_Occurred/PyErr_Clear so an
+ * extension's error propagates into a NilPy `except`.
  * Grow this header only as a later milestone's extension needs more surface;
  * an API this header does not implement should fail to LINK (undefined
  * symbol), never silently do nothing at runtime.
@@ -33,13 +36,18 @@ typedef long Py_ssize_t;
 #define PYOBJ_LONG   1
 #define PYOBJ_TUPLE  2
 #define PYOBJ_MODULE 3
+#define PYOBJ_FLOAT  4
+#define PYOBJ_STR    5
 
 typedef struct _object {
-    long  ob_refcnt;
-    int   ob_kind;   /* PYOBJ_* above */
-    long  ob_ival;   /* PYOBJ_LONG payload */
-    void *ob_ptr;    /* PYOBJ_TUPLE: PyObject** items; PYOBJ_MODULE: PyMethodDef* */
-    long  ob_size;   /* PYOBJ_TUPLE: item count; PYOBJ_MODULE: method count */
+    long   ob_refcnt;
+    int    ob_kind;   /* PYOBJ_* above */
+    long   ob_ival;   /* PYOBJ_LONG payload */
+    double ob_fval;   /* PYOBJ_FLOAT payload */
+    void  *ob_ptr;    /* PYOBJ_TUPLE: PyObject** items; PYOBJ_MODULE: PyMethodDef*;
+                          PYOBJ_STR: char* bytes (NUL-terminated) */
+    long   ob_size;   /* PYOBJ_TUPLE: item count; PYOBJ_MODULE: method count;
+                          PYOBJ_STR: byte length (excl. the NUL) */
 } PyObject;
 
 extern PyObject _Py_NoneStruct;
@@ -57,17 +65,48 @@ typedef struct _typeobject {
     const char *tp_name;
 } PyTypeObject;
 
-/* --- int conversion ------------------------------------------------------ */
+/* --- int / float / string conversion -------------------------------------- */
 PyObject *PyLong_FromLong(long v);
 long PyLong_AsLong(PyObject *o);
+
+PyObject *PyFloat_FromDouble(double v);
+double PyFloat_AsDouble(PyObject *o);
+
+PyObject *PyUnicode_FromString(const char *s);
+PyObject *PyUnicode_FromStringAndSize(const char *s, Py_ssize_t n);
+const char *PyUnicode_AsUTF8(PyObject *o);
 
 /* --- tuples: enough to carry PyArg_ParseTuple's positional args --------- */
 PyObject *PyTuple_New(Py_ssize_t n);
 int PyTuple_SetItem(PyObject *t, Py_ssize_t i, PyObject *v); /* steals v */
 PyObject *PyTuple_GetItem(PyObject *t, Py_ssize_t i);        /* borrowed */
 
-/* --- argument parsing: format spec "i" only for M1 ----------------------- */
+/* --- argument parsing / result building ----------------------------------
+ * M2 format letters: 'i' int*, 'l' long*, 'd' double*, 's' const char**,
+ * 's#' const char** + Py_ssize_t* (pointer+length), 'O' PyObject** (raw,
+ * borrowed, no conversion). Py_BuildValue mirrors the same letters, reading
+ * values instead of writing through pointers ('s'/'s#' both just take a
+ * const char* — '#' additionally consumes a Py_ssize_t length). Any other
+ * letter fails loudly (returns 0 / NULL), same M1 policy. */
 int PyArg_ParseTuple(PyObject *args, const char *format, ...);
+PyObject *Py_BuildValue(const char *format, ...);
+
+/* --- errors ---------------------------------------------------------------
+ * A single pending-error slot (pxx has no threads to race it). `type` is
+ * carried through unmodified — pxx's own runtime bridge (the NilPy import
+ * host) is what turns the stored message into a raised NilPy exception, so
+ * the extension-visible object identity of `type` is never inspected here. */
+extern PyObject *PyExc_Exception;
+extern PyObject *PyExc_ValueError;
+extern PyObject *PyExc_TypeError;
+extern PyObject *PyExc_RuntimeError;
+
+void PyErr_SetString(PyObject *type, const char *message);
+PyObject *PyErr_Occurred(void);
+void PyErr_Clear(void);
+/* pxx-internal: lets the embedding driver read the pending message without
+   exposing PyObject internals; not part of the real CPython API. */
+const char *__pxx_PyErr_Message(void);
 
 /* --- module definition ---------------------------------------------------- */
 typedef PyObject *(*PyCFunction)(PyObject *self, PyObject *args);

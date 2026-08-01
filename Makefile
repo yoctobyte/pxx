@@ -1014,6 +1014,10 @@ test-nilpy: $(COMPILER)
 	# from NilPy; see devdocs/progress/working/feature-nilpy-cpyext-c-api-from-source.md
 	./$(COMPILER) -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_hello.npy /tmp/test_cpyext_hello26
 	test "$$(/tmp/test_cpyext_hello26)" = "42"
+	# cpyext M2 "arguments and errors": PyArg_ParseTuple/Py_BuildValue over
+	# "i l d s s# O", PyErr_SetString propagating into a NilPy `except`
+	./$(COMPILER) -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_args_errors.npy /tmp/test_cpyext_args_errors26
+	test "$$(/tmp/test_cpyext_args_errors26)" = "$$(printf '9.0\nHELLO\n6\n99\n5\ncaught: x must be non-negative')"
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING
