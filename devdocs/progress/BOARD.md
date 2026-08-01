@@ -36,7 +36,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (196)
+## backlog (189)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -88,7 +88,6 @@ _none_
 | bug-t-gate-sh-contention-check-double-counts-zero | T | 25 | bug | tools/gate.sh: the watcher-contention check prints a shell error on every run because `pgrep -c` emits 0 AND exits 1, so the `\|\| echo 0` fallback appends a second 0 | — |
 | bug-t-gate-sh-pgrep-fc-double-zero-integer-error | T | 25 | bug | tools/gate.sh: pgrep -fc prints 0 AND exits 1, so `\|\| echo 0` makes others=\"0\\n0\" and every gate run emits a bogus 'integer expression expected' error | — |
 | bug-t-host-dependent-test-assertions-cross-distro | T | 70 | bug | Watcher and dev boxes run different distros, so tests that bake in host state (library versions, allocator behaviour, the host CPython) go permanently RED on the watcher while passing locally — and read as watcher bugs | — |
-| bug-t-optdiff-positional-sharding-migrates-job-identity | T | 70 | bug | DUPLICATE of bug-t-optdiff-shard-identity-is-positional — "optdiff shards by position in the test glob, so adding any test migrates failures between shard identities — a phantom NEW-RED plus a phantom FIXED, for an unchanged failure" | — |
 | bug-t-optdiff-shard-identity-is-positional | T | 75 | bug | optdiff jobs are identified by shard index, so adding one test file moves a failure to a new shard and manufactures a fresh NEW-RED + ticket | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | bug-tstate-xeon-cross-jobs-red-missing-corpora | T | 50 | bug | tstate: xeon's red set is PART missing-corpora and PART a real i386 regression of mine (now reverted) — the corpora half still stands | — |
@@ -224,12 +223,6 @@ _none_
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
-| regression-cascade-b45c759f9e65 | T | 70 | regression | regression CASCADE: 15 jobs newly red at b45c759f9e65 (auto-filed by twatch) | — |
-| regression-optdiff-shard0-6 | T | 70 | regression | regression: optdiff#shard0/6 red at 0ceeeaa004dc (auto-filed by twatch) | — |
-| regression-optdiff-shard2-6 | T | 70 | regression | regression: optdiff#shard2/6 red at d87301219197 (auto-filed by twatch) | — |
-| regression-optdiff-shard5-6 | T | 70 | regression | regression: optdiff#shard5/6 red at 2add2ebb487b (auto-filed by twatch) | — |
-| regression-test-nilpy-test-nilpy-import-sqlite | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_sqlite.npy red at 6840247771d5 (auto-filed by twatch) | — |
-| regression-test-nilpy-test-nilpy-operator-dunders | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_operator_dunders.npy red at 6840247771d5 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
 | task-t-enroll-pascal-conformance-tier | T | 45 | task | Enroll test-pascal-conformance in testmgr tiers (sharded, like the C battery) | — |
@@ -339,7 +332,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1155)
+## done (1162)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -935,6 +928,7 @@ _none_
 | bug-t-full-run-evicts-opt-verdicts-perpetual-new-red | T | 75 | bug | DUPLICATE of bug-t-full-tier-wipes-other-tiers-job-status — "a full run replaces the whole job map and evicts opt-tier verdicts, so every opt-only red re-reports as NEW-RED forever" | — |
 | bug-t-full-tier-wipes-other-tiers-job-status | T | 70 | bug | a full run replaces the whole jobs map, so opt-tier reds re-announce as NEW-RED forever | — |
 | bug-t-idle-work-leaks-tmp-on-tmpfs-boxes | T | 70 | bug | idle fuzz/bench leave ~130MB/hour in /tmp; on xeon /tmp is tmpfs, so it eats RAM the scheduler is counting on | — |
+| bug-t-optdiff-positional-sharding-migrates-job-identity | T | 70 | bug | DUPLICATE of bug-t-optdiff-shard-identity-is-positional — "optdiff shards by position in the test glob, so adding any test migrates failures between shard identities — a phantom NEW-RED plus a phantom FIXED, for an unchanged failure" | — |
 | bug-t-pasmith-order-dependent-programs | T | 60 | bug | pasmith emits order-dependent programs, and its printed repro line does not reproduce | — |
 | bug-t-pasmith-with-rung-mutates-global-inside-function | T | 40 | bug | pasmith: wide rungs (`with`/`reccopy`/…) mutate a GLOBAL inside a function body → order-dependent program | — |
 | bug-t-progress-track-detection-prose-mention | T | 40 | bug | progress.py track() matches a prose 'Track T' mention in the Type/Track bullet before the authoritative frontmatter track: field — mis-tags tickets (3 hit in one session) | — |
@@ -1420,13 +1414,17 @@ _none_
 | perf-compiler-hotspots-algorithmic | A | 50 | perf | Compiler self-compile hotspots — algorithmic wins (hash lookups, alloc, string append) | — |
 | perf-gtk-system-header-parse | A | 45 | perf | perf: real GTK2 system-header import is ~20s / 13619 procs — flaky-timeout candidate | — |
 | regression-cascade-25678cbdd57c | T | 90 | regression | regression CASCADE: 60 jobs newly red at 25678cbdd57c (auto-filed by twatch) | — |
+| regression-cascade-b45c759f9e65 | T | 70 | regression | regression CASCADE: 15 jobs newly red at b45c759f9e65 (auto-filed by twatch) | — |
 | regression-cfront-stmt-expr-25c1dded | C | 75 | regression | regression: 25c1dded (GNU statement expressions) — 150x cfront slowdown on GTK headers + cJSON/lua corpus breakage | — |
 | regression-fpc-bootstrap-canary-forwards-b310 | A | 40 | regression | advisory: fpc-bootstrap canary red at 603cf2bd — forwards drift + enum-arg from b310 | — |
 | regression-fpc-bootstrap-compiler | T | 40 | regression | advisory: fpc-bootstrap#src:compiler/compiler.pas red at 96b6bac331d9 (auto-filed by twatch) | — |
 | regression-fpc-seed-drift-b1976-stale | A | 55 | regression | FPC can no longer compile compiler.pas — 8 errors of accumulated seed drift | — |
 | regression-op-overload-class-eq-strict-operator | A | 50 | regression | regression: test_op_overload.pas red — b369 made class = / <> rejection unconditional | — |
 | regression-optdiff-o3-stack-frame-intrinsics | O | 70 | regression | -O3 differential: test_stack_frame_intrinsics_b270.pas (optdiff, persistent) | — |
+| regression-optdiff-shard0-6 | T | 70 | regression | regression: optdiff#shard0/6 red at 0ceeeaa004dc (auto-filed by twatch) | — |
+| regression-optdiff-shard2-6 | T | 70 | regression | regression: optdiff#shard2/6 red at d87301219197 (auto-filed by twatch) | — |
 | regression-optdiff-shard4-6 | T | 70 | regression | regression: optdiff#shard4/6 red at 6e0395e5495f (auto-filed by twatch) | — |
+| regression-optdiff-shard5-6 | T | 70 | regression | regression: optdiff#shard5/6 red at 2add2ebb487b (auto-filed by twatch) | — |
 | regression-test-aarch64-test-asyncecho | T | 70 | regression | regression: test-aarch64#src:test/test_asyncecho.pas red at 88986014e07d (auto-filed by twatch) | — |
 | regression-test-aarch64-test-lfm | T | 70 | regression | regression: test-aarch64#src:test/test_lfm.pas red at adaecd1206f3 (auto-filed by twatch) | — |
 | regression-test-aarch64-test-streaming-enumset | T | 70 | regression | regression: test-aarch64#src:test/test_streaming_enumset.pas red at adaecd1206f3 (auto-filed by twatch) | — |
@@ -1474,6 +1472,8 @@ _none_
 | regression-test-i386-test-timer | T | 70 | regression | regression: test-i386#src:test/test_timer.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | regression-test-lua-00 | T | 70 | regression | regression: test-lua#00 red at 074e902b62ef (auto-filed by twatch) | — |
 | regression-test-lua-cross-runner | T | 70 | regression | regression: test-lua-cross#src:test/lua/runner.c red at 940b261f8678 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-import-sqlite | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_sqlite.npy red at 6840247771d5 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-operator-dunders | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_operator_dunders.npy red at 6840247771d5 (auto-filed by twatch) | — |
 | regression-test-smoke-11 | T | 70 | regression | regression: test-smoke#11 red at 163ffea562fa (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-00 | T | 70 | regression | regression: test-sqlite-threads-aarch64#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-run-sqlite-thread-test | T | 70 | regression | regression: test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh red at 8766dccbd2dd (auto-filed by twatch) | — |
@@ -2953,14 +2953,7 @@ _none_
 - [p 70] [N] bug-nilpy-static-typed-operands-skip-mixed-type-guard
 - [p 70] [N] bug-nilpy-with-statement-skips-enter-and-exit
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
-- [p 70] [T] bug-t-optdiff-positional-sharding-migrates-job-identity
 - [p 70] [T] feature-t-trackt-setup-autodetect-box-role
-- [p 70] [T] regression-cascade-b45c759f9e65
-- [p 70] [T] regression-optdiff-shard0-6
-- [p 70] [T] regression-optdiff-shard2-6
-- [p 70] [T] regression-optdiff-shard5-6
-- [p 70] [T] regression-test-nilpy-test-nilpy-import-sqlite
-- [p 70] [T] regression-test-nilpy-test-nilpy-operator-dunders
 - [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
 - [p 65] [N] bug-nilpy-bool-protocol-ignored-object-always-truthy
 - [p 65] [N] bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch

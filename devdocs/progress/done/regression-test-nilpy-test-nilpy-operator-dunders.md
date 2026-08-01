@@ -23,3 +23,22 @@ ok: /tmp/testmgr-scratch-2734294/test_nilpy_opdunder26  [code=1190167B  data=327
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+---
+
+## CLOSED — the jobs are green (Track T, 2026-08-01)
+
+Verified against live tstate at full-tier sha `832a0ad03776` (GREEN, 345.5s):
+**every job this ticket names is passing, and xeon reports 0 failing jobs across
+the whole 1637-job matrix.**
+
+Closed as an auto-filed stub whose underlying failure is gone, not as work done
+here. Left in `done/` rather than deleted so the signal history stays readable.
+
+For the optdiff ones specifically: the compiler defect behind them was
+[[bug-c-wide-string-literal-narrow-in-value-context]], and the reason there are
+several tickets for one bug is
+[[bug-t-optdiff-shard-identity-is-positional]] — the failure migrated shard
+identity (5 -> 0 -> 2) as test files landed, re-filing itself each time. That
+ticket is still open and is the thing worth fixing; these stubs are its symptom.
+- 2026-08-01 — resolved, commit 832a0ad03.
