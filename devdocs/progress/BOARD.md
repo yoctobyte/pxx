@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic | N | 60 | bug | User-defined dunders are ignored, and the operator then does arithmetic on the object HANDLE | — |
-| bug-t-autoticket-files-emergencies-for-already-fixed-shas | T | 75 | bug | a cascade is auto-filed as a live emergency for a sha whose breakage was already reverted minutes earlier; ancestry alone cannot detect it | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
@@ -307,7 +306,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1140)
+## done (1141)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -893,6 +892,7 @@ _none_
 | bug-string-type-size-mismatch | A | 50 | bug | String type size mismatch in TypeSize vs codegen copies | — |
 | bug-subclass-field-offset-calculation | A | 50 | bug | bug-subclass-field-offset-calculation (Track A) | — |
 | bug-sysutils-unit-hard-skipped | A | 50 | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
+| bug-t-autoticket-files-emergencies-for-already-fixed-shas | T | 75 | bug | a cascade is auto-filed as a live emergency for a sha whose breakage was already reverted minutes earlier; ancestry alone cannot detect it | — |
 | bug-t-flaky-async-multithreaded-tests-false-newred | T | 45 | bug | Flaky async/multithreaded run-tests emit false NEW-REDs — reap() fails on first nonzero exit, no confirm-retry | — |
 | bug-t-idle-work-leaks-tmp-on-tmpfs-boxes | T | 70 | bug | idle fuzz/bench leave ~130MB/hour in /tmp; on xeon /tmp is tmpfs, so it eats RAM the scheduler is counting on | — |
 | bug-t-pasmith-order-dependent-programs | T | 60 | bug | pasmith emits order-dependent programs, and its printed repro line does not reproduce | — |

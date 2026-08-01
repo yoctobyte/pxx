@@ -88,3 +88,51 @@ keeping in view: **Track T's value is the breadth the author cannot run, not
 latency on the obvious.** A cascade of broad, immediate failures is exactly the
 class the author's own test run catches first — so it is also the class where an
 auto-filed emergency is most likely to be stale on arrival.
+
+---
+
+## FIXED — `a8d7ad200` (claude@xeon, 2026-08-01)
+
+Implemented as `revert_of_range()` + `staleness_note()` in `tools/twatch.py`,
+applied to **both** cascade and per-job stub tickets.
+
+Three outcomes, cheapest-first:
+
+| situation | ticket gets |
+|---|---|
+| a commit in the suspect range is reverted on origin/master | **prio 25** + `LIKELY ALREADY FIXED` banner naming the revert |
+| origin/master merely advanced | prio unchanged + "advanced N commits, re-verify at HEAD" |
+| sha is current | nothing added |
+
+The ancestry check proposed in `78177ef27` is **not** what shipped, for the
+reason recorded above: a revert adds a commit rather than removing the bad one,
+so the tested sha stays an ancestor and the check always passes. It only
+catches a rebase or force-push. Matching revert *subjects* against the suspect
+range is the cheapest honest proxy for behaviour — two `git log`s and a
+`rev-list --count`, no checkout and no build, so it sits in the publish path
+unconditionally rather than only on the rare cascade.
+
+The full re-run-at-HEAD verification from the ticket body is **not** implemented.
+It needs a checkout and a compiler build inside the publish path, and the cheap
+check already catches the case that actually bit us. Worth revisiting only if a
+stale-on-arrival ticket appears whose cause was fixed *forward* rather than
+reverted — that one this cannot detect.
+
+### Verified
+
+- **The real event**: `25678cbdd57c` / parent `ac1dad059df9` detects
+  `610936615` reverting `fix(A): expression args to a const Variant param
+  work outside NilPy too` — the exact suspect.
+- **Control**: a 3-commit range with no revert detects nothing, and a current
+  sha produces no note (no false positives).
+- **Middle case**: an advanced-but-unreverted range produces the commit-count
+  note and keeps prio 70.
+- **End to end**: `file_cascade_ticket()` in a scratch bare-central fleet writes
+  the ticket with `prio: 25` and the banner. Also confirmed the existing
+  slug-dedupe still suppresses a re-file — it had to be cleared in the scratch
+  clone before the writer would run at all.
+
+Not live until the daemon is restarted: `twatch.py` is loaded once at start.
+
+## Log
+- 2026-08-01 — resolved, commit a8d7ad200.
