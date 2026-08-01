@@ -3,7 +3,33 @@ summary: "Policy: IPV6_V6ONLY on a :: listener, and which address wins when a ho
 type: idea
 track: U
 prio: 40
+status: resolved
+resolved: 2026-08-01
 ---
+
+## DECIDED 2026-08-01 — do nothing (1), v4-first (2)
+
+**User's call, both against the ticket's own recommendation.**
+
+1. **Leave `IPV6_V6ONLY` inherited — do nothing.** Not indefensible-by-
+   omission as the ticket framed it: this is exactly what raw BSD sockets
+   already do by default (plain `bind()` on `::` with no `setsockopt`), so
+   it matches the underlying platform rather than second-guessing a
+   sysadmin's system-wide sysctl. A program written against raw sockets
+   already lives with this. One real gap either way: `NetTcpListen`/
+   `NetAny6` currently expose no way for a caller to explicitly pin V6ONLY
+   either direction — worth adding as a plain optional parameter later so
+   "do nothing" as the default doesn't also mean "no escape hatch" for a
+   caller who does care. Not a blocker to this decision.
+2. **A-first, AAAA fallback on failure. No Happy Eyeballs.** Not just
+   simpler — the timeout-on-first-try risk the ticket worried about is
+   symmetric regardless of which family goes first, and IPv4 connectivity
+   remains the more reliably-working leg in practice (CGNAT still
+   connects; broken/absent v6 routing is still the more common failure
+   mode). Leading with v4 is the safer default on reliability grounds
+   alone, independent of any v6-adoption argument, which this project does
+   not care about pushing. Happy Eyeballs' concurrency complexity buys
+   nothing without that goal.
 
 # decide: dual-stack listeners, and A-vs-AAAA ordering
 
