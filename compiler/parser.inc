@@ -13453,8 +13453,7 @@ begin
     end
     else if PyExprMode and (op in [tkStar, tkSlash, tkDiv, tkMod]) and (opci < 0) and
             (IntToTypeKind(ASTTk[left]) = tyClass) and
-            (ResolveNodeRec(left) >= REC_UCLASS_BASE) and
-            not PyRecIsPylibOwnClass(ResolveNodeRec(left)) then
+            (ResolveNodeRec(left) >= REC_UCLASS_BASE) then
     begin
       { `Vector(1,2) * 3` — a user class's own `__mul__`/`__truediv__` dunder.
         Neither the list-repeat nor bytes-repeat branch above matched, so a
@@ -13468,9 +13467,18 @@ begin
       { `//` and `%` join the same branch: measured, they were NOT dispatched —
         C(7) // C(3) answered 0 and C(7) % C(3) answered 126959237464088, both
         computed on the class HANDLE (feature-nilpy-arithmetic-dunders-full-
-        protocol). The pylib exclusion above matters more here than for `*`:
-        pylib's own rows must keep their real semantics. }
-      if op = tkStar then node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__mul__', left, right)
+        protocol).
+
+        pylib's OWN rows reach here only when no earlier branch claimed them —
+        list-repeat and bytes-repeat already handled the `*` forms — so for them
+        the operator has no Python meaning and the answer is the runtime
+        TypeError below, NOT the dunder lookup and NOT a fall-through. Excluding
+        them from the branch entirely was measured WRONG: `[1,2] / 3` then fell
+        past this arm into the generic arithmetic and silently computed on the
+        list HANDLE, where it had previously produced a loud (if compile-time)
+        error. Skip the lookup, keep the raise. }
+      if PyRecIsPylibOwnClass(ResolveNodeRec(left)) then node := -1
+      else if op = tkStar then node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__mul__', left, right)
       else if op = tkDiv then node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__floordiv__', left, right)
       else if op = tkMod then node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__mod__', left, right)
       else node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__truediv__', left, right);

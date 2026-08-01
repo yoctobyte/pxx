@@ -153,3 +153,30 @@ per-operator legality check has to be added where each family is typed — the
 `parser.inc` binop typing for arithmetic and comparison, and (already handled)
 the `pyparser.inc` bitwise routines. Anyone starting from "just fix PyWiden"
 will fix the bitwise family only and conclude the rest is unrelated.
+
+## 2026-08-01 — a self-inflicted regression here, caught by re-sweeping
+
+Landing the dunder work introduced, then removed, a case of THIS bug.
+
+Adding `not PyRecIsPylibOwnClass(...)` to `ParseTerm`'s dunder branch condition
+excluded pylib's containers from the branch **entirely** — so `[1,2] / 3` no
+longer reached the branch's error path and fell through to the generic
+arithmetic, silently computing on the list handle. It had previously produced a
+loud (if compile-time) error. One operator per `list_*` group, ~9 cases: the
+sweep's TypeError-family count went 108 → 117 while everything else improved.
+
+Fixed by moving the exclusion from the branch CONDITION into the branch BODY:
+pylib rows still skip the dunder lookup, but they now fall to the runtime
+`TypeError` rather than out of the branch. `[1,2] / 3` raises;
+`[1,2] * 3` still repeats (an earlier branch claims it).
+
+**The general lesson for whoever fixes this ticket**: a container operand that
+reaches an arithmetic branch with no earlier branch having claimed it has NO
+Python meaning for that operator — the correct answer is the raise, not a
+fall-through. Excluding pylib rows from a dispatch branch is right for the
+*dunder lookup* and wrong for the *error path*, and the two are easy to conflate
+because one guard sits in the condition of both.
+
+Only visible by re-running the sweep and comparing group counts against the
+previous run — the per-fix tests all passed, because none of them covered
+`list / int`.
