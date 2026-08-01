@@ -576,6 +576,11 @@ test-nilpy: $(COMPILER)
 	@# a class defining __getitem__/__setitem__ routes subscript read/write
 	./$(COMPILER) test/test_nilpy_dunder_getitem_setitem.npy /tmp/test_nilpy_dundergetset26
 	test "$$(/tmp/test_nilpy_dundergetset26)" = "$$(printf '%b' '20\n99\n[10, 99, 30]\n42\n-1\n10\ncaught: TypeError')"
+	@# ordering dunders: __lt__/__le__/__gt__/__ge__ decide </>, including
+	@# CPython's REFLECTED fallback (only __lt__ defined still answers `>`);
+	@# no dunder at all raises rather than comparing pointers
+	./$(COMPILER) test/test_nilpy_dunder_ordering.npy /tmp/test_nilpy_dunderord26
+	test "$$(/tmp/test_nilpy_dunderord26)" = "$$(printf '%b' 'False\nTrue\nFalse\nTrue\nTrue\nFalse\nFalse\nTrue\ncaught lt: TypeError\nFalse')"
 	@# a name first bound inside an if/for block is visible to a later
 	@# top-level assignment's RHS; def/class bodies stay real scopes
 	./$(COMPILER) test/test_nilpy_module_block_scope.npy /tmp/test_nilpy_modblockscope26

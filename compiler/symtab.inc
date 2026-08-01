@@ -463,6 +463,30 @@ begin
   ClassNameIsAmbientIntrinsic := (lo = 'tobject') or (lo = 'tguid');
 end;
 
+function PyRecIsPylibOwnClass(rec: Integer): Boolean;
+{ True when `rec` names a class declared by pylib itself (TPyList, TPyDict,
+  TPyBytes, TPyFile, ...) rather than by user NilPy code.
+
+  NilPy dunder dispatch keys on "the operand is a bare tyClass", but pylib's own
+  containers are tyClass too and already carry real semantics — a TPyList
+  compares LEXICOGRAPHICALLY, `[1,2] < [1,3]`. Any dispatch branch that means
+  "genuine user object" has to rule pylib's rows out first or it captures the
+  containers and breaks them.
+
+  Keyed on the DECLARING UNIT rather than a list of class names: the name list
+  the `__contains__` guard uses (TPyList/TPyDict/TPyBytes) is the kind of thing
+  that rots as pylib grows a container, and this covers every pylib class by
+  construction. }
+var ci: Integer;
+begin
+  PyRecIsPylibOwnClass := False;
+  if rec < REC_UCLASS_BASE then Exit;
+  ci := rec - REC_UCLASS_BASE;
+  if (ci < 0) or (ci >= UClsCount) then Exit;
+  if UClsUnitIdx[ci] < 0 then Exit;
+  PyRecIsPylibOwnClass := (Strs[UClsUnitIdx[ci]].Text = 'pylib');
+end;
+
 function VisibilityAllows(curUnit, declUnit: Integer): Boolean;
 { True iff `declUnit` is visible from `curUnit` under the REAL (non-transitive)
   Pascal uses rule: declUnit = curUnit, or declUnit is reachable from curUnit by

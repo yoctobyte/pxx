@@ -13656,6 +13656,7 @@ procedure ParseExpr;
 var op: TTokenKind; left, right, node, isci, isNode, isArg, isArg2: Integer; isIsTest: Boolean;
     chMid, chSym, chAssign, chSeq, chRight, chCmp, chAnd: Integer;   { Python comparison chaining }
     spDepth, spI: Integer;
+    ordDirect, ordRefl: AnsiString; ordLCi, ordRCi, ordErr: Integer;   { Python ordering dunders }
 begin
   { NilPy argument UNPACKING of a list literal: `f(*[a, b, c])` means
     `f(a, b, c)`, and with a literal that is purely syntactic — songformatter
@@ -13860,6 +13861,71 @@ begin
         CurASTNode := node;
         Exit;
       end;
+    end;
+    { ORDERING dunders — `<` `<=` `>` `>=` between two class instances. Without
+      this the operands fell through to a raw POINTER compare, so `C(3) < C(1)`
+      answered by allocation address with `__lt__` sitting right there unused —
+      silent and wrong, the same failure family as the `__eq__` case above
+      (measured: `a < b` -> True where CPython says False).
+
+      CPython's rule, measured rather than assumed: try the DIRECT dunder on the
+      left operand, else the REFLECTED partner on the right operand (`a > b`
+      falls back to `b.__lt__(a)`, which is why a class defining only `__lt__`
+      supports both `<` and `>`). Ordering has NO identity fallback the way `==`
+      does — when neither exists CPython raises TypeError, so a runtime raise is
+      the correct answer, not a pointer compare.
+
+      Built through PyCallMeth1 at AST level for the reason the `__eq__` block
+      records: the `other` parameter is normally an unannotated by-reference
+      variant, and a hand-built IR_ARG would skip IRLowerCallArg
+      (project_irlowercallarg_hand_built_args_landmine).
+
+      pylib's OWN containers are excluded, and that exclusion is load-bearing: a
+      TPyList is `tyClass` too, but it already compares LEXICOGRAPHICALLY further
+      down (`[1,2] < [1,3]`). A first version without the guard captured lists
+      here and, finding no `__lt__` on them, raised "comparison not supported" —
+      turning working list comparison into a runtime abort
+      (caught by test_nilpy_mixed_type_operands). Same exclusion the
+      `__contains__` dispatch makes in pyparser.inc, for the same reason: a bare
+      tyClass operand only means "genuine user object" AFTER pylib's own rows are
+      ruled out. }
+    if PyExprMode and (op in [tkLt, tkLe, tkGt, tkGe]) and
+       (IntToTypeKind(ASTTk[left]) = tyClass) and
+       (IntToTypeKind(ASTTk[right]) = tyClass) and
+       (ResolveNodeRec(left) >= REC_UCLASS_BASE) and
+       (ResolveNodeRec(right) >= REC_UCLASS_BASE) and
+       not PyRecIsPylibOwnClass(ResolveNodeRec(left)) and
+       not PyRecIsPylibOwnClass(ResolveNodeRec(right)) then
+    begin
+      case op of
+        tkLt: begin ordDirect := '__lt__'; ordRefl := '__gt__'; end;
+        tkLe: begin ordDirect := '__le__'; ordRefl := '__ge__'; end;
+        tkGt: begin ordDirect := '__gt__'; ordRefl := '__lt__'; end;
+        else  begin ordDirect := '__ge__'; ordRefl := '__le__'; end;
+      end;
+      ordLCi := ResolveNodeRec(left) - REC_UCLASS_BASE;
+      ordRCi := ResolveNodeRec(right) - REC_UCLASS_BASE;
+      node := -1;
+      if FindUMeth(ordLCi, ordDirect) >= 0 then
+        node := PyCallMeth1(ordLCi, ordDirect, left, right)
+      else if FindUMeth(ordRCi, ordRefl) >= 0 then
+        { reflected: the RIGHT operand is the receiver and the left the argument }
+        node := PyCallMeth1(ordRCi, ordRefl, right, left);
+      if node < 0 then
+      begin
+        { Neither dunder — a genuine RUNTIME TypeError (a try/except around it
+          must still compile and run its handler), not a compile-time Error()
+          that would abort the whole build. Same shape the `__contains__` miss
+          uses in pyparser.inc. }
+        ordErr := FindProc('PyNotOrderableError');
+        if ordErr < 0 then Error('Nil Python: pylib (PyNotOrderableError) not loaded');
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := ordErr;
+        ASTTk[node] := Ord(tyBoolean);
+        ASTLeft[node] := -1;
+      end;
+      CurASTNode := node;
+      Exit;
     end;
     { `3 == "ab"` — a STRING compared with a NUMBER under ==/!=. In Python that
       is simply False (True for !=): objects of different types are unequal, it

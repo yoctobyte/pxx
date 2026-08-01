@@ -3693,6 +3693,17 @@ begin
   raise TypeError.Create('object is not callable (no __call__)');
 end;
 
+{ `a < b` on two class instances where NEITHER the direct ordering dunder nor
+  its reflected partner exists -- CPython raises rather than falling back to
+  identity the way `==` does, so ordering has no silent answer. Matches
+  CPython's "'<' not supported between instances of 'X' and 'Y'" shape (minus
+  the class names, not available here).
+  bug-nilpy-comparison-dunders-not-dispatched. }
+procedure PyNotOrderableError;
+begin
+  raise TypeError.Create('comparison not supported between these instances (no __lt__/__le__/__gt__/__ge__)');
+end;
+
 { `obj[i] = v` where obj's class defines `__getitem__` but not `__setitem__`
   -- CPython's own error shape ("does not support item assignment"). }
 procedure PyNoSetitemError;

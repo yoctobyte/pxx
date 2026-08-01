@@ -1,0 +1,73 @@
+---
+summary: "NilPy: __repr__/__str__ of a class instance held in a container silently print EMPTY; ordering/sorted raise — no runtime dunder dispatch on a Variant"
+type: bug
+track: N
+prio: 60
+---
+
+# NilPy: dunders don't dispatch when the instance is reached through a container
+
+- **Type:** bug (NilPy runtime dispatch) — **Track N**
+- **Opened:** 2026-08-01, split out of
+  [[bug-nilpy-comparison-dunders-not-dispatched]] while landing the operator-level
+  ordering fix. That ticket's operator path is fixed; this is the OTHER route it
+  exposed, and it is a different mechanism, not a leftover.
+
+## Measured boundary (2026-08-01, self-hosted binary at `da085e9de` + the
+ordering-dunder fix)
+
+```python
+class C:
+    def __init__(self, v): self.v = v
+    def __repr__(self): return "C" + str(self.v)
+    def __str__(self):  return "S" + str(self.v)
+    def __lt__(self, o): return self.v < o.v
+a, b = C(1), C(2)
+print("direct str:", str(a))          # CPython S1     pxx S1     OK
+print("direct lt:",  a < b)           # CPython True   pxx True   OK (just fixed)
+print("in list:",    [a, b])          # CPython [C1, C2]  pxx "[, ]"   WRONG, SILENT
+print("str of elem:", str([a][0]))    # CPython S1     pxx ""     WRONG, SILENT
+print(sorted([b, a]))                 # CPython [C1, C2]  pxx TypeError
+```
+
+The split is exact and mechanical:
+
+- **Static class known at the call site** → the compile-time dispatch in
+  `parser.inc` / `pyparser.inc` fires and the dunder runs. Correct today.
+- **Instance reached through a container** (the element is a `Variant` holding
+  the handle, so the class is known only at RUN time) → no dispatch exists at
+  all. `pystr_of` yields an empty string and `pyvar_gt` falls through to
+  `pyvar_to_int` ("expected a number, got object").
+
+## Why this is the dangerous half
+
+`sorted()`/`min()`/`max()` at least RAISE. `print([obj])` does not — it prints
+`[, ]`, an empty string per element, which is a plausible-looking wrong value
+rather than a failure. That is exactly the repo's expensive-bug shape: no crash,
+no location, wrong output far from the cause.
+
+## Cause
+
+There is **no runtime dunder dispatch in pylib at all** — verified by reading
+`pyvar_gt` (`compiler/builtin/pylib.pas`, the sort/compare path) and by the
+`__repr__` measurement above. Both would need to look up a method BY NAME on an
+arbitrary `TObject` at run time. The machinery to do that plausibly exists (RTTI
+method reflection, VMT-8 — `project_rtti_reflection_and_overload_landmines`), but
+nothing wires it to the dunder names.
+
+## Blocked on a design call
+
+How container-element dispatch should work is a real fork (runtime RTTI lookup in
+pylib vs. compile-time monomorphisation vs. a per-class dunder vtable stamped
+into the handle), with different cost/generality trade-offs and a self-host
+blast radius that differs a lot between them. Filed as
+[[decide-nilpy-runtime-dunder-dispatch-mechanism]] — do NOT guess a direction
+here; pick it there first.
+
+`blocked-by: decide-nilpy-runtime-dunder-dispatch-mechanism`
+
+## Gate (when it lands)
+
+`make test-nilpy` + self-host byte-identical, and the boundary script above
+diffed against CPython (`tools/pydiff.py`) — all five lines, not just the
+sorted one.
