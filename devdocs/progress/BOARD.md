@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-t-status-reads-worktree-tstate-false-down | T | 80 | bug | twatch --status reads tstate from the WORKTREE but walks history from origin/master, so a detached or unpulled checkout reports Track T DOWN while it is healthy | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | bug-c-uses-path-basename-collides-with-enclosing-unit-name |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
@@ -326,7 +325,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1144)
+## done (1145)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -922,6 +921,7 @@ _none_
 | bug-t-pasmith-with-rung-mutates-global-inside-function | T | 40 | bug | pasmith: wide rungs (`with`/`reccopy`/…) mutate a GLOBAL inside a function body → order-dependent program | — |
 | bug-t-progress-track-detection-prose-mention | T | 40 | bug | progress.py track() matches a prose 'Track T' mention in the Type/Track bullet before the authoritative frontmatter track: field — mis-tags tickets (3 hit in one session) | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
+| bug-t-status-reads-worktree-tstate-false-down | T | 80 | bug | twatch --status reads tstate from the WORKTREE but walks history from origin/master, so a detached or unpulled checkout reports Track T DOWN while it is healthy | — |
 | bug-t-tstate-index-conflicts-between-watcher-hosts | T | 70 | bug | TSTATE.md is regenerated wholesale by every host, so two live watchers rebase-conflict on it and silently drop verdicts | — |
 | bug-test-core-oversized-job-6gb-flaky | A | 60 | bug | One test-core job needs ~6.8 GB and flakes under load (the recurring `Terminated`) | — |
 | bug-test-hardcoded-tmp-so-path | C | 40 | bug | bug: test_c_lazycasing.pas hardcodes /tmp/liblazycasing.so (non-hermetic test) | — |

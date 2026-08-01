@@ -96,3 +96,47 @@ rather than an incoherent mixed one, which is the honest answer.
 Worth adding while in here: when the verdict is DOWN, print the newest tested
 sha per host and the age of the *oldest untested* commit, so the reader can see
 at a glance whether the watcher is dead or the checkout is stale.
+
+---
+
+## FIXED — `c665a27ed` (claude@xeon, 2026-08-01)
+
+`states_at(repo, ref)` reads the per-host tstate json out of the ref with git
+plumbing, and `status()` now uses it so **both inputs come from the same ref**.
+Falls back to the worktree when the ref carries no tstate (fresh clone, no
+remote). No network and no fetch — same contract as before.
+
+### Verified on the exact failing condition
+
+A clone detached 25 commits back, worktree tstate stale, origin current:
+
+| | reads | verdict |
+|---|---|---|
+| before | worktree `ac372419dbea` (10:27:59Z) | **DOWN** — "b78988fe8977 untested for 206 min" |
+| after | origin `b78988fe8977` (11:40:40Z) | **UP** — "commits through b78988fe8977 tested" |
+
+Fallback separately confirmed: a clone with the remote removed still reports UP
+off its worktree.
+
+### A note on how this was nearly mis-tested
+
+The first attempt "failed" — the fix appeared not to work. The cause was the
+test, not the fix: `git checkout --detach` also reverted `tools/twatch.py` to
+the 25-commits-ago version, so the old code was being measured. Worth
+remembering when reproducing anything in a detached watcher clone: **you get
+that sha's tooling too**, which is the same trap as testing against a stale
+compiler binary.
+
+### Deliberately not changed
+
+The grace-window semantics are untouched. `--status` still means "every commit
+older than the grace window was tested by some host", and it will still report
+DOWN if the watcher genuinely stops. What is fixed is only the incoherent
+mixing of a fresh commit walk with stale verdicts.
+
+The DOWN message could still say more — newest tested sha per host, age of the
+oldest untested commit — so a reader can tell "watcher dead" from "checkout
+stale" at a glance. Left for a follow-up; it is presentation, not correctness.
+
+## Log
+- 2026-08-01 — resolved, commit c665a27ed.
