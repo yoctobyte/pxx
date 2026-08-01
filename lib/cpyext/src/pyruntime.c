@@ -118,6 +118,53 @@ const char *PyUnicode_AsUTF8(PyObject *o) {
     return (const char *)o->ob_ptr;
 }
 
+int PyUnicode_Check(PyObject *o) {
+    return o != 0 && o->ob_kind == PYOBJ_STR;
+}
+
+int PyUnicode_READY(PyObject *o) {
+    (void)o;
+    return 0;
+}
+
+int PyUnicode_KIND(PyObject *o) {
+    (void)o;
+    return PyUnicode_1BYTE_KIND;
+}
+
+Py_UCS1 *PyUnicode_1BYTE_DATA(PyObject *o) {
+    return (Py_UCS1 *)o->ob_ptr;
+}
+
+Py_UCS2 *PyUnicode_2BYTE_DATA(PyObject *o) {
+    return (Py_UCS2 *)o->ob_ptr; /* dead code on this runtime: KIND never says 2BYTE */
+}
+
+Py_UCS4 *PyUnicode_4BYTE_DATA(PyObject *o) {
+    return (Py_UCS4 *)o->ob_ptr; /* dead code on this runtime: KIND never says 4BYTE */
+}
+
+Py_ssize_t PyUnicode_GET_LENGTH(PyObject *o) {
+    return o->ob_size;
+}
+
+int PyUnicode_IS_ASCII(PyObject *o) {
+    (void)o;
+    return 1;
+}
+
+PyObject *PyUnicode_New(Py_ssize_t size, Py_UCS4 maxchar) {
+    PyObject *o;
+    char *buf;
+    (void)maxchar; /* always byte-width on this runtime */
+    o = py_alloc(PYOBJ_STR);
+    buf = (char *)malloc((size_t)(size + 1));
+    buf[size] = 0;
+    o->ob_ptr = (void *)buf;
+    o->ob_size = size;
+    return o;
+}
+
 PyObject *PyBytes_FromStringAndSize(const char *s, Py_ssize_t n) {
     PyObject *o;
     char *buf;
@@ -441,10 +488,17 @@ const char *__pxx_PyErr_Message(void) {
 PyObject *PyModule_Create2(PyModuleDef *def, int module_api_version) {
     PyObject *o;
     long count;
+    (void)module_api_version;
     o = py_alloc(PYOBJ_MODULE);
     o->ob_ptr = (void *)def->m_methods;
     count = 0;
     while (def->m_methods[count].ml_name != 0) count = count + 1;
     o->ob_size = count;
     return o;
+}
+
+PyObject *PyModuleDef_Init(PyModuleDef *def) {
+    /* Multi-phase (PEP 489) collapsed to single-phase — see the comment on
+       this declaration in Python.h. */
+    return PyModule_Create2(def, 0);
 }

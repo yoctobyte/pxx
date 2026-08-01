@@ -26,6 +26,18 @@
  * pylib.pas` work the ticket calls out separately ("PyObject* handles
  * resolving to NilPy variants/objects") and is left for a later milestone;
  * see the M3 note in the ticket file for the full reasoning.
+ * M4 ("a real extension") added: the slice MarkupSafe's `_speedups.c` (a
+ * real, unmodified, vendored PyPI extension — see
+ * test/nilpy_units/vendor/markupsafe_speedups.c) needs: PyUnicode_Check,
+ * PyUnicode_READY (no-op — nothing to "ready" in this runtime),
+ * PyUnicode_KIND/1BYTE_DATA/2BYTE_DATA/4BYTE_DATA/GET_LENGTH/IS_ASCII,
+ * PyUnicode_New, Py_UCS1/2/4, METH_O, PyModuleDef's `m_slots` field +
+ * PyModuleDef_Slot + PyModuleDef_Init (multi-phase init collapsed to
+ * single-phase — see the comment on PyModuleDef_Init). This runtime's
+ * strings are byte-oriented only (no wide-Unicode kind2/kind4 storage), so
+ * PyUnicode_KIND always reports PyUnicode_1BYTE_KIND — kind2/kind4 code
+ * paths in vendored source still compile (so linking stays honest) but are
+ * never exercised.
  * Grow this header only as a later milestone's extension needs more surface;
  * an API this header does not implement should fail to LINK (undefined
  * symbol), never silently do nothing at runtime.
@@ -33,6 +45,9 @@
 
 #include <stdarg.h>
 #include <stddef.h>
+#include <assert.h> /* real CPython's Python.h pulls this in transitively too —
+                        MarkupSafe's _speedups.c calls assert() without its own
+                        #include, relying on exactly that */
 
 typedef long Py_ssize_t;
 
@@ -98,6 +113,41 @@ PyObject *PyUnicode_FromString(const char *s);
 PyObject *PyUnicode_FromStringAndSize(const char *s, Py_ssize_t n);
 const char *PyUnicode_AsUTF8(PyObject *o);
 
+/* --- unicode "kind" internals (M4) ----------------------------------------
+ * Real CPython stores a string at whichever of 3 widths (1/2/4 bytes per
+ * char) fits its widest codepoint; this runtime only ever stores bytes, so
+ * PyUnicode_KIND is always PyUnicode_1BYTE_KIND and only *_1BYTE_DATA is
+ * ever live. The 2BYTE/4BYTE declarations exist so vendored source that
+ * mentions them still compiles and links (dead code on this runtime, never
+ * reached because KIND never reports those kinds). */
+typedef unsigned char  Py_UCS1;
+typedef unsigned short Py_UCS2;
+typedef unsigned int   Py_UCS4;
+
+/* Real CPython gives PyUnicodeObject its own layout (PyObject header +
+ * unicode-specific fields); this runtime's PyObject already carries
+ * everything a string needs, so PyUnicodeObject is just an alias — enough
+ * for vendored source's `(PyUnicodeObject *)` casts and parameter types. */
+typedef PyObject PyUnicodeObject;
+
+#define PyUnicode_1BYTE_KIND 1
+#define PyUnicode_2BYTE_KIND 2
+#define PyUnicode_4BYTE_KIND 4
+
+int PyUnicode_Check(PyObject *o);
+int PyUnicode_READY(PyObject *o); /* always succeeds (0); nothing to ready */
+int PyUnicode_KIND(PyObject *o);  /* always PyUnicode_1BYTE_KIND here */
+Py_UCS1 *PyUnicode_1BYTE_DATA(PyObject *o);
+Py_UCS2 *PyUnicode_2BYTE_DATA(PyObject *o); /* never actually reached */
+Py_UCS4 *PyUnicode_4BYTE_DATA(PyObject *o); /* never actually reached */
+Py_ssize_t PyUnicode_GET_LENGTH(PyObject *o);
+int PyUnicode_IS_ASCII(PyObject *o);
+/* size = length in CODE UNITS of the kind maxchar implies; since this
+ * runtime is byte-only, size is always treated as a byte count regardless
+ * of maxchar (accurate for the only kind we ever produce). Returns a
+ * NEW reference to a mutable buffer the caller fills via *_1BYTE_DATA. */
+PyObject *PyUnicode_New(Py_ssize_t size, Py_UCS4 maxchar);
+
 /* --- bytes: like PyUnicode_* but a distinct type (PYOBJ_BYTES) ---------- */
 PyObject *PyBytes_FromStringAndSize(const char *s, Py_ssize_t n);
 char *PyBytes_AsString(PyObject *o);
@@ -159,6 +209,7 @@ const char *__pxx_PyErr_Message(void);
 typedef PyObject *(*PyCFunction)(PyObject *self, PyObject *args);
 
 #define METH_VARARGS 0x0001
+#define METH_O       0x0008  /* ml_meth called as fn(self, theSingleArg) directly */
 
 typedef struct PyMethodDef {
     const char  *ml_name;
@@ -173,16 +224,37 @@ typedef struct PyModuleDef_Base {
 
 #define PyModuleDef_HEAD_INIT { 0 }
 
+/* M4: multi-phase init's slot table (PyModuleDef_Slot). This runtime only
+ * ever collapses multi-phase init to single-phase (see PyModuleDef_Init
+ * below), so slot VALUES are never interpreted — the field exists purely so
+ * a `.m_slots = ...` designated initializer in vendored source compiles. */
+typedef struct PyModuleDef_Slot {
+    int   slot;
+    void *value;
+} PyModuleDef_Slot;
+
 typedef struct PyModuleDef {
-    PyModuleDef_Base m_base;
-    const char      *m_name;
-    const char      *m_doc;
-    Py_ssize_t       m_size;
-    PyMethodDef     *m_methods;
+    PyModuleDef_Base  m_base;
+    const char       *m_name;
+    const char       *m_doc;
+    Py_ssize_t        m_size;
+    PyMethodDef      *m_methods;
+    PyModuleDef_Slot *m_slots;
 } PyModuleDef;
 
 PyObject *PyModule_Create2(PyModuleDef *def, int module_api_version);
 #define PyModule_Create(def) PyModule_Create2((def), 1013)
+
+/* Real CPython's multi-phase init (PEP 489) returns the PyModuleDef* itself
+ * from PyInit_<name>, and the import machinery later executes any
+ * Py_mod_exec slot to build the actual module. This runtime has no import
+ * machinery to hand that off to, and pxx's own embedding driver (whatever
+ * calls PyInit_<name>) wants a usable module object back immediately — so
+ * PyModuleDef_Init collapses straight to single-phase (PyModule_Create2).
+ * Honest for any extension whose slots are capability announcements only
+ * (no Py_mod_exec, e.g. MarkupSafe's Py_mod_gil/Py_mod_multiple_interpreters)
+ * — a real Py_mod_exec slot would need more work, not attempted here. */
+PyObject *PyModuleDef_Init(PyModuleDef *def);
 
 #define PyMODINIT_FUNC PyObject *
 
