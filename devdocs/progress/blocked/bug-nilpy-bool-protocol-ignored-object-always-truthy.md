@@ -133,3 +133,62 @@ parameter case and finding it red.
 So this ticket is fixed for the static case and stays open, reduced in scope, for
 the variant case. Reclassify to closed once the runtime-dispatch decision lands
 and its implementation covers truth tests.
+
+## 2026-08-01 — mostly fixed; the REMAINING half is `bool()` only, and it is inverted from this title
+
+Re-measured. The `if`/`not` half this ticket is named for now works, and the
+residue is narrower and points the other way.
+
+| expression | pxx | CPython |
+| --- | --- | --- |
+| `if obj:` with `__bool__` → False | falsy | falsy |
+| `if obj:` with `__len__` → 3 | truthy | truthy |
+| `if obj:` no protocol | truthy | truthy |
+| `not obj` (all three) | correct | correct |
+| **`bool(obj)`** — any user class | **False** | **True** |
+
+So the title is stale: objects are no longer "always truthy" in conditions;
+what remains is that **`bool()` reports every user-class instance as False**,
+including ones whose `__len__` says otherwise.
+
+### Cause — `bool()` has no NilPy arm at all, so it mis-binds
+
+`PyMakeTruthy` (`pyparser.inc:1827`) is correct: its user-class arm calls
+`PyClassTruthyDunder` (`__bool__`, then `__len__() <> 0`) and falls through to
+the raw handle — hence a protocol-less object is truthy in an `if`.
+
+But `bool(x)` never reaches it. Unlike `str(`, which has an explicit NilPy arm
+in `parser.inc` (`PyReprContainer`, ~10074), **`bool` has no special case
+anywhere** — `grep "'bool'" compiler/parser.inc` is empty. It resolves as a
+plain overloaded call into pylib, whose only class overload is
+
+```pascal
+function bool(l: TPyList): Boolean; overload;
+```
+
+so a user-class handle binds to the **TPyList** parameter and `count` is read
+off the wrong object layout. That is
+[[bug-a-overload-resolution-ignores-class-identity]] again — the same
+unrelated-class-binds-to-class-parameter hole that produced the `dict(pairs)`
+segfault.
+
+### Why it cannot be fixed in pylib
+
+Adding `bool(o: TObject)` does not help while resolution ignores class identity:
+whichever overload is declared first wins for every class argument, so it would
+just move the mis-binding, exactly as measured on `dict()`.
+
+### Fix shape
+
+Two parts, and the first is a prerequisite:
+
+1. **[[bug-a-overload-resolution-ignores-class-identity]]** — otherwise the
+   mis-binding stays silent. Note that fixing it ALONE turns this into a compile
+   error rather than correct behaviour, because no overload will match a user
+   class.
+2. **A NilPy arm for `bool(`** in `parser.inc`'s factor, beside the existing
+   `str(` one, routing a user-class argument through `PyMakeTruthy` — the shared
+   rule the `if` and `not` paths already use, so the three cannot drift again.
+   That is the whole point of `PyClassTruthyDunder` existing.
+
+**blocked-by:** [[bug-a-overload-resolution-ignores-class-identity]]

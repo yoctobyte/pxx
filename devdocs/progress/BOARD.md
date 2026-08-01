@@ -27,10 +27,11 @@ _none_
 | feature-nilpy-star-args-kwargs | N | 50 | feature | nilpy: *args / **kwargs in a def signature | — |
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 
-## blocked (6)
+## blocked (7)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-nilpy-bool-protocol-ignored-object-always-truthy | N | 65 | bug | NilPy: __bool__ and __len__ are ignored in a truth test — every non-nil object is truthy, so `if obj:` takes the WRONG BRANCH silently | bug-a-overload-resolution-ignores-class-identity |
 | bug-nilpy-dict-from-pairs-and-bytes-decode-segfault | N | 70 | bug | NilPy: `dict([(\"a\",1)])[\"a\"]` and `\"abc\".encode().decode()` both SEGFAULT (exit 139, core dumped) on ordinary one-liners | bug-a-overload-resolution-ignores-class-identity |
 | bug-nilpy-float-repr-not-shortest-roundtrip | N | 70 | bug | NilPy float repr is fixed-precision, not CPython's shortest round-trip | — |
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
@@ -38,7 +39,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (184)
+## backlog (183)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -54,7 +55,6 @@ _none_
 | bug-n-nilpy-subscript-of-split-on-a-variable-receiver | N | 60 | bug | s.split(sep)[i] fails IR_UNSUPPORTED when s is a variable, while \"lit\".split(sep)[i] compiles — the frontend loses the result type in subscript position | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bitwise-shift-on-class-operand-segfaults | N | 60 | bug | NilPy: `obj & 1` / `obj << 1` on a class instance SEGFAULTS (core dump); __and__/__or__/__xor__/__lshift__/__rshift__ are never dispatched | — |
-| bug-nilpy-bool-protocol-ignored-object-always-truthy | N | 65 | bug | NilPy: __bool__ and __len__ are ignored in a truth test — every non-nil object is truthy, so `if obj:` takes the WRONG BRANCH silently | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
@@ -2950,13 +2950,12 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 80] [A] bug-a-overload-resolution-ignores-class-identity (unblocks 1)
+- [p 80] [A] bug-a-overload-resolution-ignores-class-identity (unblocks 2)
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] feature-t-trackt-setup-autodetect-box-role
 - [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
 - [p 65] [B] bug-b-floattostrsig-caps-at-15-significant-digits
-- [p 65] [N] bug-nilpy-bool-protocol-ignored-object-always-truthy
 - [p 65] [N] bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
@@ -3123,8 +3122,8 @@ _none_
 
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
+- **2** — bug-a-overload-resolution-ignores-class-identity
 - **2** — feature-web-track-w-bootstrap
-- **1** — bug-a-overload-resolution-ignores-class-identity
 - **1** — bug-c-uses-path-basename-collides-with-enclosing-unit-name
 - **1** — decide-nilpy-parallel-capture-semantics
 - **1** — feature-inline-asm-xmm-operands
