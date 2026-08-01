@@ -76,3 +76,41 @@ Track T is enrolling `test-nilpy` regardless — 238 `.npy` files being invisibl
 is the larger problem, and one correctly-attributed red is better than that.
 Expect this single job to be RED on xeon until the assertion is fixed; it is
 **not** a compiler regression and should not be triaged as one.
+
+## 2026-08-01 — FIXED
+
+Confirmed the mechanism end to end: the box the assertion was written on runs
+sqlite **3.45.1**, and `3*1000000 + 45*1000 + 1 = 3045001` — exactly the
+hard-coded literal. Any box with a different system sqlite could never pass.
+
+This was the single STILL-RED entry in xeon's reports across many shas
+(`bad=6840247771d5`), and it is worth naming why it stayed unexplained so long:
+it was twice diagnosed as a *phantom* — first as the "full-tier wipes other
+tiers' job status" bug, then as generic watcher noise — because it PASSES on the
+authoring box both standalone and under T's own repro command. A test that is
+green on your machine and red on the watcher's reads exactly like a watcher bug.
+The tell that should have redirected the search sooner: the log tail always
+showed a clean `ok:` compile, so the failure was always the OUTPUT COMPARISON,
+never the build.
+
+Fix: assert the SHAPE rather than the value. The test's actual purpose is that
+`import sqlite3` resolves the C header, dynamically links `libsqlite3.so.0` and
+calls into it — the host's version is irrelevant to that.
+
+```make
+v=$$(/tmp/test_nilpy_import_sqlite26); case "$$v" in \
+  3[0-9][0-9][0-9][0-9][0-9][0-9]) ;; \
+  *) echo "FAIL: sqlite3_libversion_number() gave '$$v', not a 3.x.y version"; exit 1;; \
+esac
+```
+
+Guard verified non-vacuous rather than assumed: accepts `3045001`, `3050000`,
+`3008000`; rejects empty, `abc`, `12345678`, `2045001`. Job confirmed GREEN
+through T's own command,
+`testmgr --tier native --job 'test-nilpy#src:test/test_nilpy_import_sqlite.npy'`.
+
+Leaves the `./$(COMPILER) test/...npy` line untouched so testmgr's job
+enumeration is unchanged.
+
+## Log
+- 2026-08-01 — resolved, commit PENDING.

@@ -230,8 +230,17 @@ benchmark-opt-levels: $(COMPILER) benchmark-check
 test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nil_python_core.npy /tmp/test_nil_python_core26
 	test "$$(/tmp/test_nil_python_core26)" = "$$(printf '0\n1\n1\n2\n3\n5\n10')"
+	# What this proves is that `import sqlite3` resolves the C header, links
+	# libsqlite3.so.0 and CALLS it — not which sqlite the box happens to ship.
+	# It used to assert = "3045001", i.e. sqlite 3.45.1, the version on the
+	# machine it was written on, so it was permanently RED on every other box
+	# (bug-n-nilpy-import-sqlite-asserts-host-sqlite-version). Accept any
+	# well-formed 3.x.y: major*1000000 + minor*1000 + patch.
 	./$(COMPILER) test/test_nilpy_import_sqlite.npy /tmp/test_nilpy_import_sqlite26
-	test "$$(/tmp/test_nilpy_import_sqlite26)" = "3045001"
+	v=$$(/tmp/test_nilpy_import_sqlite26); case "$$v" in \
+	  3[0-9][0-9][0-9][0-9][0-9][0-9]) ;; \
+	  *) echo "FAIL: sqlite3_libversion_number() gave '$$v', not a 3.x.y version"; exit 1;; \
+	esac
 	rm -f /tmp/test_nilpy_sqlite_crud.db
 	./$(COMPILER) test/test_nilpy_sqlite_crud.npy /tmp/test_nilpy_sqlite_crud26
 	test "$$(/tmp/test_nilpy_sqlite_crud26)" = "$$(printf '1 alice\n2 bob')"

@@ -35,7 +35,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (196)
+## backlog (195)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -46,7 +46,6 @@ _none_
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
 | bug-eliah-ide-win-caption-no-such-member | B | 40 | bug | `apps/ide/eliah/main.pas:1431` — `EliahForm.Win.Caption`: no `Win` member exists | — |
-| bug-n-nilpy-import-sqlite-asserts-host-sqlite-version | N | 60 | bug | test-nilpy hard-codes sqlite 3.45.1's version number, so the suite is red on any box with a different system sqlite | — |
 | bug-n-nilpy-missing-dunder-expect-fail-assertion-is-stale | N | 55 | bug | test_nilpy_operator_dunder_missing_fail still expects a COMPILE error; the missing-dunder case now raises a runtime TypeError like CPython, so the assertion is stale | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bitwise-shift-on-class-operand-segfaults | N | 60 | bug | NilPy: `obj & 1` / `obj << 1` on a class instance SEGFAULTS (core dump); __and__/__or__/__xor__/__lshift__/__rshift__ are never dispatched | — |
@@ -338,7 +337,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1152)
+## done (1153)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -669,6 +668,7 @@ _none_
 | bug-movslq-on-64bit-pointer-load | A | 50 | bug | Bug — movslq instruction generated for 64-bit pointer/array field load | — |
 | bug-multi-interface-method-corruption | A | 50 | bug | Memory/String corruption when calling methods on secondary interfaces | — |
 | bug-n-nilpy-char-to-string-arg-leaks | N | 40 | bug | NilPy tyChar arg to a string parameter leaks one handle per call | — |
+| bug-n-nilpy-import-sqlite-asserts-host-sqlite-version | N | 60 | bug | test-nilpy hard-codes sqlite 3.45.1's version number, so the suite is red on any box with a different system sqlite | — |
 | bug-n-pyeval-per-exec-leaks | N | 45 | bug | pyeval leaks per exec() call — forensics from the object-reclamation night | — |
 | bug-named-dynarray-field-setlength | A | 50 | bug | SetLength on a named dyn-array-alias class/record field misrouted to string path | — |
 | bug-narrowing-typecast-rvalue-no-truncate | A | 50 | bug | Narrowing ordinal typecast doesn't truncate in rvalue position | — |
@@ -2962,7 +2962,6 @@ _none_
 - [p 65] [N] bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch
 - [p 65] [T] feature-t-agent-side-tstate-watch
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
-- [p 60] [N] bug-n-nilpy-import-sqlite-asserts-host-sqlite-version
 - [p 60] [N] bug-nilpy-bitwise-shift-on-class-operand-segfaults
 - [p 60] [N] bug-nilpy-dunders-not-dispatched-through-containers
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
