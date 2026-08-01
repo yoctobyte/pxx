@@ -91,3 +91,68 @@ bisect range meaningful, which a shard index never can be.
 the `-O3` segfault on `test/crtl_libc_oracle.c`. They should be merged, not
 worked twice. The underlying compiler defect is triaged in
 [[regression-optdiff-shard5-6]].
+
+---
+
+## FIXED — `6ba5d0e9e` (claude@xeon, 2026-08-01)
+
+Shard membership is now a **hash of the basename**, not position in the glob.
+
+### Verified by measurement, not argument
+
+The failure mode is "adding a test file migrates other files", so the test is:
+add one file, count how many others move.
+
+| sharding | files that change shard when ONE is added |
+|---|---|
+| positional (before) | **~1063** |
+| hash (after) | **0** |
+
+The partition is exact: the shards sum to 1276 with no duplicates and nothing
+missing. One `awk` pass builds the list — 1276 files × NSHARD would otherwise be
+thousands of forks.
+
+### It also unblocked a 2× speedup, which is why it was worth doing now
+
+The opt tier was structurally capped at **6-way parallelism on a 12-core box**:
+
+```
+work 1483s, wall 281s, longest single shard 280.6s
+```
+
+The wall *equalled* the longest shard — scheduling was already optimal, there
+was simply nothing else to run. `OPT_SHARDS` is now 12 (84–128 programs per
+shard, mean 106).
+
+Raising it reshuffles every program, which renames jobs — exactly the phantom
+NEW-RED/FIXED pair this ticket is about. Done **while the matrix was 100%
+green**, so no red migrated and no phantom pair was produced. That ordering is
+the whole reason the two changes shipped together, in this sequence.
+
+`OPT_SHARDS` is deliberately a **constant, not `os.cpu_count()`**: the shard
+index is part of the job name and tstate is shared between hosts, so a 12-core
+box publishing `optdiff#shard0/12` against a 4-core box's `shard0/6` would make
+every cross-host comparison meaningless and manufacture a NEW-RED/FIXED pair on
+every handover.
+
+### The ticket's preferred option is NOT what shipped
+
+> **Preferred — give optdiff real selectors.** Report the failing *program*…
+
+Not implemented. optdiff sweeps **1276 programs**, so per-program jobs would add
+~1276 jobs to the tier — a real cost for identity that hash-sharding already
+makes stable under the case that actually recurs (test files being added).
+
+What the preferred option would still buy, and this remains open as an ideal: a
+red would name the *program* rather than a shard, so a bisect could target one
+program and autoticket could dedupe on it. Worth revisiting if optdiff failures
+ever become frequent enough that "which shard" is a real triage cost. Today the
+DIFF line already prints the program, so the information is in the report even
+though it is not the job key.
+
+Changing `NSHARD` still reshuffles — unavoidable for any pure function of the
+name. The rule is now written into the constant: **only change it when the
+matrix is green.**
+
+## Log
+- 2026-08-01 — resolved, commit 6ba5d0e9e.
