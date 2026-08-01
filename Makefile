@@ -41,7 +41,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 .PHONY: pxx-debug
 .PHONY: fuzz-csmith
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest tls-native-seam-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -5685,6 +5685,39 @@ test-sqlite-threads-%: $(COMPILER)
 
 test-sqlite-threads: test-sqlite-threads-x86_64 test-sqlite-threads-i386 test-sqlite-threads-aarch64 test-sqlite-threads-arm32
 	@echo "test-sqlite-threads: all arches green (or skipped)"
+
+# test-sqlite-external-vs-self-compiled-parity: the same deterministic
+# CREATE TABLE / INSERT / SELECT ... ORDER BY workload run through TWO
+# independent SQLite builds and diffed byte-for-byte:
+#   1. test/test_sqlite_parity_external.pas  — the external libsqlite3.so.0
+#      import path (`uses sqlite3`, the same binding test_sqlite_crud.pas /
+#      test_sqlite_crud_autotyped.pas use).
+#   2. test/csqlite_parity_selfcompiled.c    — a self-compiled unity build of
+#      library_candidates/sqlite/sqlite3.c (the amalgamation) over the
+#      libc-free crtl, same shape as csqlite_file_probe.c/csqlite_thread_test.c.
+# Both databases are :memory: (no /tmp file, no cross-run race). Skips when
+# the gitignored sqlite amalgamation is absent, like test-cjson/test-sqlite-
+# threads. NOT in `make test` (large 3rd-party build); run explicitly.
+test-sqlite-parity: $(COMPILER)
+	@if [ ! -f "$(SQLITE_SRC)/sqlite3.c" ]; then \
+	  echo "test-sqlite-parity: SKIP — no sqlite amalgamation at $(SQLITE_SRC)/sqlite3.c"; \
+	  exit 0; \
+	fi; \
+	wd="$$(mktemp -d)"; trap 'rm -rf "$$wd"' EXIT; \
+	echo "test-sqlite-parity: building external-libsqlite3 path (Pascal, uses sqlite3) ..."; \
+	./$(COMPILER) test/test_sqlite_parity_external.pas "$$wd/ext" || exit 1; \
+	echo "test-sqlite-parity: building self-compiled amalgamation path (C, sqlite3.c unity build) ..."; \
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src -I$(SQLITE_SRC) \
+	  test/csqlite_parity_selfcompiled.c "$$wd/self" || exit 1; \
+	"$$wd/ext" > "$$wd/ext.out" || exit 1; \
+	"$$wd/self" > "$$wd/self.out" || exit 1; \
+	if diff -u "$$wd/ext.out" "$$wd/self.out" > "$$wd/diff.txt"; then \
+	  echo "test-sqlite-parity: PASS — external libsqlite3.so.0 and self-compiled amalgamation agree byte-for-byte"; \
+	else \
+	  echo "test-sqlite-parity: FAIL — external vs self-compiled output differs"; \
+	  cat "$$wd/diff.txt"; \
+	  exit 1; \
+	fi
 
 # cJSON integration suite (feature-c-source-frontend smoke). DISTINCT from `make
 # test`: the base gate carries no 3rd-party dependency. Amalgamates lib/crtl + the
