@@ -130,3 +130,44 @@ trade the model buys. What it also shows is the other half of the deal — the
 window between landing and the callback is a window in which master is broken
 for everyone, so the response to a cascade has to be fast, and "revert" needs to
 stay a normal move rather than an admission of failure.
+
+---
+
+## CORRECTION (2026-08-01) — already reverted before this ticket existed
+
+The triage above recommends reverting `b93577cd3`. **It had already been
+reverted**, ~25 minutes before that recommendation was written. Timeline (UTC):
+
+| time | event |
+|---|---|
+| 02:50:11 | `b93577cd3` lands |
+| **02:52:11** | **`610936615` reverts it** — dev agent's own testing, `test_promoint` |
+| 02:56:05 | `e8e08bb46` documents the revert |
+| 02:56:29 | watcher publishes the 60-job cascade for `25678cbdd57c` |
+| 02:56:33 | watcher auto-files this ticket |
+| 03:2x | Track T triage added — recommending an action already taken |
+
+Resolved by `610936615`. No further action; the cascade should close on the next
+native run over current HEAD.
+
+### Three conclusions, and one is about me
+
+1. **The dev agent's own loop beat the watcher by ~4 minutes.** It caught the
+   break via `test_promoint` and reverted before Track T reported anything. For
+   *this* class of break — broad, immediate, caught by a test the author already
+   runs — local testing is still faster than the callback. Track T's value is
+   the breadth the author cannot run, not latency on the obvious.
+2. **The watcher filed an urgent-looking cascade for an already-fixed sha.** It
+   tests a sha; by the time it reports, master has moved. Nothing is wrong with
+   the report — `25678cbdd57c` really was broken — but the *ticket* reads as a
+   live emergency. Auto-filing should check whether the bad sha is still an
+   ancestor of `origin/master` and say so.
+3. **I compounded it.** `two-box-protocol.md` says, in my own words: *"Before
+   acting on any callback: re-check it at current HEAD. It may already be fixed,
+   or moved."* I triaged the cascade, pinned the culprit, raised it to urgent at
+   prio 90 and recommended a revert — without once checking whether master had
+   already moved. The rule exists precisely because this is easy to get wrong,
+   and it was written the same day it was ignored.
+
+## Log
+- 2026-08-01 — resolved, commit 610936615.
