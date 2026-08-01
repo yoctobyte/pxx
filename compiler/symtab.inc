@@ -560,8 +560,9 @@ var ci: Integer;
 begin
   Result := False;
   if (symIdx < 0) or (Syms[symIdx].TypeKind <> tyRecord) or Syms[symIdx].IsArray then Exit;
-  if Syms[symIdx].RecName < REC_UCLASS_BASE then Exit;
-  ci := Syms[symIdx].RecName - REC_UCLASS_BASE;
+  { feature-a-typeref-migrate-consumers lane 1: RecName read via SymTR[..].RecId. }
+  if SymTR[symIdx].RecId < REC_UCLASS_BASE then Exit;
+  ci := SymTR[symIdx].RecId - REC_UCLASS_BASE;
   if (ci < 0) or (ci >= UClsCount) then Exit;
   Result := UClsIsInterface[ci] and UClsIsComInterface[ci];
 end;
@@ -1887,19 +1888,19 @@ begin
     { COM/ARC interface value: a fat pointer that the ARC path releases on
       overwrite and at scope exit, so it must start nil (all-zero) — otherwise the
       first release dispatches through a garbage IMT. }
-    zeroBytes := RecSize(Syms[i].RecName);
+    zeroBytes := RecSize(SymTR[i].RecId);
     Result := True;
   end
   else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-          RecordHasManagedFields(Syms[i].RecName) then
+          RecordHasManagedFields(SymTR[i].RecId) then
   begin
-    zeroBytes := RecSize(Syms[i].RecName);
+    zeroBytes := RecSize(SymTR[i].RecId);
     Result := True;
   end
   else if (Syms[i].TypeKind = tyRecord) and Syms[i].IsArray and
-          RecordHasManagedFields(Syms[i].ElemRecName) then
+          RecordHasManagedFields(SymTR[i].ElemRec) then
   begin
-    zeroBytes := Syms[i].ArrLen * RecSize(Syms[i].ElemRecName);
+    zeroBytes := Syms[i].ArrLen * RecSize(SymTR[i].ElemRec);
     Result := True;
   end;
 end;
@@ -2062,7 +2063,7 @@ function AggRetCopySize(retSymIdx: Integer): Integer;
 var tk: TTypeKind;
 begin
   tk := Syms[retSymIdx].TypeKind;
-  if tk = tyRecord then Result := RecSize(Syms[retSymIdx].RecName)
+  if tk = tyRecord then Result := RecSize(SymTR[retSymIdx].RecId)
   else if tk = tyString then Result := LOCAL_STR_CAP + 8
   else if (tk = tyFixedString) or (tk = tyShortString) then
     Result := FrozenStrSlotSize(tk, SymStrCap[retSymIdx])
@@ -4017,13 +4018,15 @@ procedure EmitArrElemAddr(arrIdx: Integer);
 { On entry: rax = array index. On exit: rax = element address. }
 var elemSize: Integer;
 begin
-  if Syms[arrIdx].ElemType = tyString then
+  { feature-a-typeref-migrate-consumers lane 1: ElemType/ElemRecName read via
+    SymTR[arrIdx].ElemTk/ElemRec (kept in sync by SymSyncTypeRef). }
+  if SymTR[arrIdx].ElemTk = Ord(tyString) then
   begin
     if Syms[arrIdx].Kind = skGlobal then elemSize := STRING_CAP + 8
     else elemSize := LOCAL_STR_CAP + 8;
   end
-  else if Syms[arrIdx].ElemType = tyRecord then elemSize := RecSize(Syms[arrIdx].ElemRecName)
-  else elemSize := TypeSize(Syms[arrIdx].ElemType);
+  else if SymTR[arrIdx].ElemTk = Ord(tyRecord) then elemSize := RecSize(SymTR[arrIdx].ElemRec)
+  else elemSize := TypeSize(IntToTypeKind(SymTR[arrIdx].ElemTk));
 
   if elemSize = 8 then
   begin
@@ -4061,8 +4064,8 @@ procedure EmitArrLoad(arrIdx: Integer);
 var sz: Integer; sgn: Boolean;
 begin
   EmitArrElemAddr(arrIdx);
-  sz := TypeSize(Syms[arrIdx].ElemType);
-  sgn := TypeSigned(Syms[arrIdx].ElemType);
+  sz := TypeSize(IntToTypeKind(SymTR[arrIdx].ElemTk));
+  sgn := TypeSigned(IntToTypeKind(SymTR[arrIdx].ElemTk));
   if sz = 1 then
   begin
     if sgn then
@@ -4102,7 +4105,7 @@ var sz: Integer;
 begin
   { addr was pushed before RHS eval }
   EmitB($59);                   { pop rcx -- element address }
-  sz := TypeSize(Syms[arrIdx].ElemType);
+  sz := TypeSize(IntToTypeKind(SymTR[arrIdx].ElemTk));
   if sz = 1 then
     begin EmitB($88); EmitB($01); end
   else if sz = 2 then
@@ -5828,7 +5831,7 @@ begin
   else if SymIsComInterface(i) then
     Result := True
   else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-          RecordHasManagedFields(Syms[i].RecName) then
+          RecordHasManagedFields(SymTR[i].RecId) then
     Result := True;
 end;
 
@@ -5882,7 +5885,7 @@ begin
         procIdx := FindProc('PXXIntfRelease');
         if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
         x64_lea_reg_mem(8, rRDI, rRBP, Syms[i].Offset, True);  { lea rdi, [rbp+off] }
-        x64_mov_reg_imm(8, rRSI, Syms[i].RecName - REC_UCLASS_BASE);  { rsi = interface id }
+        x64_mov_reg_imm(8, rRSI, SymTR[i].RecId - REC_UCLASS_BASE);  { rsi = interface id }
         EmitCallProc(procIdx);
       end
       else if Syms[i].TypeKind = tyAnsiString then
@@ -5932,14 +5935,14 @@ begin
         EmitDynArrayReleaseForSym(i);
       end
       else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-              RecordHasManagedFields(Syms[i].RecName) then
+              RecordHasManagedFields(SymTR[i].RecId) then
       begin
         { Record value local with managed fields (AnsiString, dynamic-array, or
           nested): release them under the heap lock. rbx = record address. }
         x64_push_reg(rRBX);                                      { push rbx }
         x64_lea_reg_mem(8, rRBX, rRBP, Syms[i].Offset, True);     { lea rbx, [rbp+off] }
         EmitAcquireHeapLock;
-        EmitManagedRecordReleaseLocked(Syms[i].RecName);
+        EmitManagedRecordReleaseLocked(SymTR[i].RecId);
         EmitReleaseHeapLock;
         x64_pop_reg(rRBX);                                       { pop rbx }
       end;
@@ -6124,7 +6127,7 @@ begin
             { COM/ARC interface local: _Release the held reference (nil-safe). }
             EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);  { lea eax, [ebp+off] }
             EmitB($50);                                        { push eax   (arg1 = slot) }
-            EmitB($B8); EmitI32(Syms[i].RecName - REC_UCLASS_BASE);  { mov eax, ifaceId }
+            EmitB($B8); EmitI32(SymTR[i].RecId - REC_UCLASS_BASE);  { mov eax, ifaceId }
             EmitB($50);                                        { push eax   (arg2 = id) }
             procIdx := FindProc('PXXIntfRelease');
             if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
@@ -6158,13 +6161,13 @@ begin
           destination (pointer the prologue stashed in the dest-sym slot from
           ecx), return that pointer in eax. Mirrors the x86-64 rep-movsb path. }
         if (Syms[retSymIdx].TypeKind = tyRecord) and not Syms[retSymIdx].IsArray and
-           RecordHasManagedFields(Syms[retSymIdx].RecName) then
+           RecordHasManagedFields(SymTR[retSymIdx].RecId) then
         begin
           { A reused destination still holds the previous value's managed
             handles; release them before the raw copy orphans them. }
           EmitB($8B); EmitB($85); EmitI32(Syms[ProcAggregateDestSym[CurProc]].Offset); { mov eax, [ebp+destOff] }
           EmitB($50);                                { push eax (arg0 recAddr) }
-          EmitB($68); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (Syms[retSymIdx].RecName - REC_UCLASS_BASE))); { push desc }
+          EmitB($68); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE))); { push desc }
           procIdx := FindProc('PXXRecordRelease');
           if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
           EmitCallProc(procIdx);
@@ -6238,7 +6241,7 @@ begin
           { COM/ARC interface local: _Release the held reference (nil-safe). }
           EmitLoadVarAddrArm32(i);                     { r0 = interface slot address }
           EmitI32($E92D000E);                          { push {r1,r2,r3} }
-          EmitLoadImmArm32(1, Syms[i].RecName - REC_UCLASS_BASE);   { r1 = interface id }
+          EmitLoadImmArm32(1, SymTR[i].RecId - REC_UCLASS_BASE);   { r1 = interface id }
           procIdx := FindProc('PXXIntfRelease');
           if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
           EmitCallProc(procIdx);
@@ -6267,13 +6270,13 @@ begin
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
                 (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-                RecordHasManagedFields(Syms[i].RecName) then
+                RecordHasManagedFields(SymTR[i].RecId) then
         begin
           { Record-with-managed-fields local: release each managed field via the
             portable helper. r0 = record address, r1 = layout descriptor. }
           EmitLoadVarAddrArm32(i);                     { r0 = record address }
           EmitLoadDataRefArm32(1,
-            -(RECORD_RTTI_DATAREF_BASE + (Syms[i].RecName - REC_UCLASS_BASE)));
+            -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
           EmitI32($E92D000C);                          { push {r2,r3} }
           procIdx := FindProc('PXXRecordRelease');
           if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
@@ -6292,13 +6295,13 @@ begin
           destination (pointer the prologue stashed from r12), return the
           pointer in r0. r5=src, r6=dst, r4=count for EmitArm32CopyBytes. }
         if (Syms[retSymIdx].TypeKind = tyRecord) and not Syms[retSymIdx].IsArray and
-           RecordHasManagedFields(Syms[retSymIdx].RecName) then
+           RecordHasManagedFields(SymTR[retSymIdx].RecId) then
         begin
           { A reused destination still holds the previous value's managed
             handles; release them before the raw copy orphans them. }
           EmitLoadVarArm32(ProcAggregateDestSym[CurProc]);  { r0 = dest ptr }
           EmitLoadDataRefArm32(1,
-            -(RECORD_RTTI_DATAREF_BASE + (Syms[retSymIdx].RecName - REC_UCLASS_BASE)));
+            -(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE)));
           procIdx := FindProc('PXXRecordRelease');
           if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
           EmitCallProc(procIdx);
@@ -6350,7 +6353,7 @@ begin
         begin
           EmitLoadImmA64(9, Syms[i].Offset);
           EmitI32($8B0903A0);  { add x0, x29, x9  (x0 = interface slot address) }
-          EmitLoadImmA64(1, Syms[i].RecName - REC_UCLASS_BASE);   { x1 = interface id }
+          EmitLoadImmA64(1, SymTR[i].RecId - REC_UCLASS_BASE);   { x1 = interface id }
           procIdx := FindProc('PXXIntfRelease');
           if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
           EmitCallProc(procIdx);
@@ -6389,14 +6392,14 @@ begin
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
                 (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-                RecordHasManagedFields(Syms[i].RecName) then
+                RecordHasManagedFields(SymTR[i].RecId) then
         begin
           { Record-with-managed-fields local: release each managed field via the
             portable helper. x0 = record address, x1 = layout descriptor. }
           EmitLoadImmA64(9, Syms[i].Offset);
           EmitI32($8B0903A0);  { add x0, x29, x9  (x0 = record address) }
           EmitLoadDataRefA64(1,
-            -(RECORD_RTTI_DATAREF_BASE + (Syms[i].RecName - REC_UCLASS_BASE)));
+            -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
           procIdx := FindProc('PXXRecordRelease');
           if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
           EmitCallProc(procIdx);
@@ -6411,13 +6414,13 @@ begin
           destination (pointer the prologue stashed from x8), return the pointer
           in x0. EmitA64CopyBytes uses x4/x5/x6 + w8, leaving x0 intact. }
         if (Syms[retSymIdx].TypeKind = tyRecord) and not Syms[retSymIdx].IsArray and
-           RecordHasManagedFields(Syms[retSymIdx].RecName) then
+           RecordHasManagedFields(SymTR[retSymIdx].RecId) then
         begin
           { A reused destination still holds the previous value's managed
             handles; release them before the raw copy orphans them. }
           EmitLoadVarA64(ProcAggregateDestSym[CurProc]);   { x0 = dest ptr }
           EmitLoadDataRefA64(1,
-            -(RECORD_RTTI_DATAREF_BASE + (Syms[retSymIdx].RecName - REC_UCLASS_BASE)));
+            -(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE)));
           procIdx := FindProc('PXXRecordRelease');
           if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
           EmitCallProc(procIdx);
@@ -6588,13 +6591,13 @@ begin
           hidden destination (the pointer the prologue stashed from t1), return
           that pointer in a0. PXXMemMove(dest, &Result, size). }
         if (Syms[retSymIdx].TypeKind = tyRecord) and not Syms[retSymIdx].IsArray and
-           RecordHasManagedFields(Syms[retSymIdx].RecName) then
+           RecordHasManagedFields(SymTR[retSymIdx].RecId) then
         begin
           { A reused destination still holds the previous value's managed
             handles; release them before the raw copy orphans them. }
           EmitLoadVarRISCV32(ProcAggregateDestSym[CurProc]); { a0 = dest ptr }
           EmitLoadDataRefRISCV32(reg_a1,
-            -(RECORD_RTTI_DATAREF_BASE + (Syms[retSymIdx].RecName - REC_UCLASS_BASE)));
+            -(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE)));
           procIdx := FindProc('PXXRecordRelease');
           if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
           EmitCallProc(procIdx);
@@ -6658,7 +6661,7 @@ begin
       { Aggregate results use a hidden caller-owned destination pointer in r10.
         The prologue saves it in a local so nested calls cannot clobber it. }
       if (Syms[retSymIdx].TypeKind = tyRecord) and not Syms[retSymIdx].IsArray and
-         RecordHasManagedFields(Syms[retSymIdx].RecName) then
+         RecordHasManagedFields(SymTR[retSymIdx].RecId) then
       begin
         { A reused destination (r := f(...) in a loop, or a re-executed hidden
           temp) still holds the previous value's managed handles; the raw copy
@@ -6669,7 +6672,7 @@ begin
         EmitLoadVar(ProcAggregateDestSym[CurProc]);
         x64_mov_reg_reg(8, rRBX, rRAX);            { rbx = dest }
         EmitAcquireHeapLock;
-        EmitManagedRecordReleaseLocked(Syms[retSymIdx].RecName);
+        EmitManagedRecordReleaseLocked(SymTR[retSymIdx].RecId);
         EmitReleaseHeapLock;
         x64_pop_reg(rRBX);
       end;
