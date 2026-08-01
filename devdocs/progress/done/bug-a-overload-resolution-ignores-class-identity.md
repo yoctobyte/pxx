@@ -146,3 +146,44 @@ by the changed resolver twice and compared.
 
 ## Log
 - 2026-08-01 — resolved, commit PENDING.
+
+## 2026-08-01 (follow-up) — one legitimate caller depended on the old looseness
+
+Track T reported `test-nilpy#src:test/test_nilpy_bytes_decode.npy` NEW-RED at
+`74a925112` (and, in the same report, both of my earlier reds FIXED):
+
+```
+error: no overload of bytes matches these arguments
+  argument types: (class)
+  candidates: bytes(class) / bytes(AnsiString)
+```
+
+`bytes([104, 105])` passes a `TPyList`, and pylib declared only
+`bytes(b: TPyBytes)` and `bytes(const s: AnsiString)`. It had been WORKING by
+relying on exactly the mis-binding this ticket removed — and the source said so
+out loud:
+
+```pascal
+{ A LIST argument binds to this overload too (class-arg overload resolution
+  is not identity-precise): hand it to the from-list builder. }
+if TObject(b) is TPyList then ...
+```
+
+So this is the predicted cost of correctness, landing on a caller that had been
+built around the defect. Fixed properly rather than by loosening the rule: a
+real `bytes(l: TPyList): TPyBytes` overload, the same shape as the
+`dict(l: TPyList)` one this ticket already unblocked. The runtime `is` rescue is
+kept as belt-and-braces with its comment corrected — it is unreachable from
+normal code now, and marked for removal once that is confirmed.
+
+**Swept for siblings rather than waiting for them one at a time.** Two sites in
+pylib documented this dependency; the other is `TPyBytes.extend(src: TPyBytes)`
+taking a list/tuple. That one is a METHOD, and method overload resolution
+(`FindUMethOverload`) is a different path this fix did not touch — verified
+still working (`out.extend((13, 10))` → `2 13 10`). Left alone deliberately;
+if method resolution is ever made identity-precise too, that site needs the
+same treatment and this note is the pointer.
+
+Verified: all five `bytes()` forms byte-identical to CPython (list literal, list
+variable, str, bytes copy, and `.decode()` off a list-built value), and
+`test_nilpy_bytes_decode.npy` matches CPython end to end.

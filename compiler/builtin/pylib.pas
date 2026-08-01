@@ -455,6 +455,12 @@ function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; over
 function bytearray: TPyBytes; overload;   { bytearray() — an EMPTY buffer }
 function bytearray(n: Integer): TPyBytes; overload;
 function bytes(b: TPyBytes): TPyBytes;
+{ bytes([104, 105]) — from a LIST of codepoints. A REAL overload since
+  bug-a-overload-resolution-ignores-class-identity: before that, a list
+  argument silently bound to the TPyBytes parameter above and was rescued by
+  a runtime `is` check inside it. Correct resolution now rejects that bind,
+  so the overload has to exist. }
+function bytes(l: TPyList): TPyBytes; overload;
 function pybytes_from_list(l: TPyList): TPyBytes;
 function bytes(const s: AnsiString): TPyBytes; overload;
 function pybytes_find(b: TPyBytes; sub: TPyBytes; start: Integer): Integer;
@@ -5945,11 +5951,21 @@ begin
   end;
 end;
 
+function bytes(l: TPyList): TPyBytes; overload;
+begin
+  Result := pybytes_from_list(l);
+end;
+
 function bytes(b: TPyBytes): TPyBytes;
 var k: Integer; src, dst: PByte;
 begin
-  { A LIST argument binds to this overload too (class-arg overload resolution
-    is not identity-precise): hand it to the from-list builder. }
+  { Belt and braces. A list argument used to bind HERE, because class-arg
+    overload resolution was not identity-precise, and this runtime `is` check
+    was the rescue. Since bug-a-overload-resolution-ignores-class-identity a
+    list binds to the real `bytes(l: TPyList)` overload above and never reaches
+    this, so the check is now unreachable in normal code — kept because it is
+    free and because a variant-typed argument can still arrive by another
+    route. Remove once that is confirmed impossible. }
   if TObject(b) is TPyList then
   begin
     Result := pybytes_from_list(TPyList(TObject(b)));
