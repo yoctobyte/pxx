@@ -5774,7 +5774,7 @@ test-zlib: $(COMPILER)
 	fi; \
 	command -v gcc >/dev/null 2>&1 || { echo "test-zlib: SKIP — gcc oracle not found"; exit 0; }; \
 	echo "building gcc oracle ..."; \
-	gcc -w -I$(ZLIB_SRC) -o /tmp/pxx_zlib_oracle \
+	gcc -w -DHAVE_UNISTD_H -I$(ZLIB_SRC) -o /tmp/pxx_zlib_oracle \
 	  $(ZLIB_SRC)/adler32.c $(ZLIB_SRC)/crc32.c $(ZLIB_SRC)/zutil.c \
 	  $(ZLIB_SRC)/inftrees.c $(ZLIB_SRC)/inffast.c $(ZLIB_SRC)/inflate.c \
 	  $(ZLIB_SRC)/infback.c $(ZLIB_SRC)/trees.c $(ZLIB_SRC)/deflate.c \
