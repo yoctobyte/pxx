@@ -33,7 +33,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (172)
+## backlog (171)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -80,7 +80,6 @@ _none_
 | decide-abi-portable-vs-target-split | A | 50 | decide |  | — |
 | decide-class-namespace-scoping | U | 65 | decide | Decide: how should two libraries be allowed to export the same class name? | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
-| decide-pascal-uses-campaign-scope | U | 55 | decide | Decide: how should the `uses`-is-transitive fix be scoped and sequenced? | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
@@ -276,7 +275,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (29)
+## decided (30)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -299,6 +298,7 @@ _none_
 | decide-nilpy-mixed-type-operand-policy | U | 60 | decide | Decide: what should NilPy do when an operator gets operand types Python rejects? | — |
 | decide-nilpy-optional-int-none-vs-zero | U | 60 | decide | decide: NilPy Optional[int] — None must be distinct from 0 | — |
 | decide-nilpy-transitive-nested-def-capture | U | 40 | decide | decide: NilPy transitive capture for sibling nested-def calls | — |
+| decide-pascal-uses-campaign-scope | U | 55 | decide | Decide: how should the `uses`-is-transitive fix be scoped and sequenced? | — |
 | decide-pcl-may-use-pylib | U | 55 | decide | decide: may a PCL library unit use pylib (Python runtime types) to accept Python-shaped arguments? | — |
 | decide-promoint-rvalue-representation | U | 85 | decide | Promotable int: what IS an rvalue once heap bignums exist? | — |
 | decide-pyeval-bignum-strategy | U | 40 | decide | decide: how should pyeval handle arbitrary-precision (bignum) integers? | — |
@@ -2935,7 +2935,6 @@ _none_
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [T] bug-t-corpus-regex-invents-phantom-tree
-- [p 55] [U] decide-pascal-uses-campaign-scope
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope

@@ -2,7 +2,23 @@
 track: U
 prio: 55
 type: decide
+status: resolved
+resolved: 2026-08-01
 ---
+
+## DECIDED 2026-08-01 — option 2, combined with the class-namespace fix
+
+**User's call: 2** (close the `builtin`/`builtinheap` instrumentation gap
+first, get a true count, then size the real campaign) — matches the
+2026-08-01 correction above. Also: this isn't really two separate future
+campaigns. [[decide-class-namespace-scoping]] already root-caused the
+`tkinter.Canvas`/reportlab `Canvas` collision to this exact same
+non-transitive-`uses` gap — fixing real `uses` scoping IS the
+class-namespace fix, viewed from a different symptom. Sequence as one
+effort: fix `VisibilityAllows` to exclude `builtin`/`builtinheap`, re-measure
+for a true count, then land the real non-transitive rule — which closes
+both the class-collision problem and the RTL leak problem together, not as
+two things to coordinate separately.
 
 # Decide: how should the `uses`-is-transitive fix be scoped and sequenced?
 
