@@ -27,6 +27,15 @@ documentation first.
 - **Multiple frontends.** Pascal is primary, but the same backend also compiles
   C, a Python-like dialect (Nil Python), and its own assembly-source frontend —
   see [Targets](./targets/).
+- **Zero-dependency output by default.** Programs link no libc and carry no
+  `DT_NEEDED` entries — a static ELF whose only runtime dependency is the Linux
+  kernel. That holds for every frontend, with no flag to remember.
+- **Imports cross language lines without wrappers.** One backend, one symbol
+  table, one import resolver: Nil Python can `import sqlite3` straight from the
+  system's C header, Pascal can `uses` a plain `.h`, and no FFI declarations,
+  IDL, or generated bindings are involved. Libraries can be linked from the
+  system or compiled in from source — the latter keeps the binary
+  dependency-free.
 - **Own RTL.** A from-scratch runtime and standard library with FPC-style naming.
 - **Debug info.** `-g` emits DWARF (line tables, function/frame info, locals,
   types) on all four Linux targets — step, breakpoint, and backtrace under gdb.
