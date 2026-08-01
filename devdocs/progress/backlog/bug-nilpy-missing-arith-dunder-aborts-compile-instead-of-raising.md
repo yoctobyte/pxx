@@ -2,7 +2,7 @@
 summary: "NilPy: a missing __add__/__sub__/__mul__/__truediv__/__neg__ ABORTS COMPILATION; CPython raises a catchable TypeError, so try/except around it cannot even build"
 type: bug
 track: N
-prio: 45
+prio: 55
 ---
 
 # Missing arithmetic dunder aborts the build instead of raising
@@ -71,3 +71,42 @@ and is much smaller.
 `make test-nilpy` + self-host byte-identical, plus a `.npy` per operator whose
 output is CPython's own (`caught`, not a build failure) for the missing-dunder
 case, and a check that the reflected/present cases are unchanged.
+
+## 2026-08-01 — measured scale, and a FOURTH site this ticket missed
+
+The CPython differential sweep (1094 cases, binary at `3f2c5b915`) produced 40
+compile failures. **36 of them are this defect** — a construct CPython answers
+with a catchable `TypeError` that pxx refuses to compile:
+
+| compile error | cases |
+| --- | --- |
+| `can only concatenate list with another list (+)` | 14 |
+| `class has no __mul__()/__truediv__() for this operator` | 13 |
+| `class has no __add__()/__sub__() for this operator` | 9 |
+
+The first row is a **site this ticket did not list**: it is not one of the three
+dunder-dispatch `Error()` calls, it is pylib's own list-concat type check
+(`[1,2] + 3`). Same defect, same fix, different place — so the ticket's original
+"three sites" framing was too narrow. Grep for the pattern rather than the three
+line numbers: any `Error(...)` reached from a NilPy *expression* whose CPython
+answer is an exception is one of these.
+
+The remaining 4 failures are genuinely unimplemented protocols, tracked in
+[[bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash]] (`repr`,
+`__iter__`/`__next__`, `__getattr__`, `__delitem__`) — not this bug.
+
+### Why the count matters
+
+At 36/40 this is the single largest source of compile-time divergence in the
+sweep, and every one of them is a program CPython runs fine. A NilPy program
+that probes for operator support the normal Python way — `try: a + b / except
+TypeError:` — cannot be built. That is a stronger case for the fix than the
+original three-site framing suggested; consider raising `prio` above 45 when
+scheduling.
+
+Note this is the *loud* half of the same story as
+[[bug-nilpy-static-typed-operands-skip-mixed-type-guard]]: where both operand
+types are static, some pairs abort the build (here) and others silently do
+pointer math (there). Whichever is picked up first should decide the shared
+answer — a runtime `TypeError` raise — so the two do not land inconsistent
+behaviour for neighbouring operand pairs.

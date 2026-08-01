@@ -87,3 +87,49 @@ second arm is wiring, not machinery.
 CPython covering: `__bool__` False/True, `__len__` 0/non-zero, both declared
 (`__bool__` wins), neither declared (non-nil ⇒ truthy), and each truth context
 above. Related: [[bug-nilpy-dunders-not-dispatched-through-containers]].
+
+## 2026-08-01 — FIXED for statically-typed receivers; variant receivers remain
+
+### What landed
+
+`PyClassTruthyDunder` (`compiler/pyparser.inc`): `__bool__` if declared, else
+`__len__() != 0`, else -1 so the caller keeps its existing answer. Called from
+**both** truth contexts — `PyParseBoolNot` (`not x`) and `PyMakeTruthy`
+(`if x:`, `while`, `and`/`or`, comprehension filters).
+
+One shared helper deliberately: those two are separate implementations of the
+same rule, and that duplication is exactly why the `not <x>` family needed three
+separate fixes (string, container, object —
+`project_nilpy_truthiness_keyed_on_handle_family`). Anything added to the helper
+now reaches both contexts.
+
+`test/test_nilpy_dunder_bool.npy` + `make test-nilpy` wiring; output is
+byte-identical to CPython, covering `__bool__` False/True, `__len__` 0/non-zero,
+both declared (`__bool__` wins — proven with a class where they disagree),
+neither declared, a temporary receiver, and `and`/`or`.
+
+### The boundary, measured
+
+```python
+o = BoolFalse()
+if o: ...              # local     -> falsy   FIXED
+if BoolFalse(): ...    # temporary -> falsy   FIXED
+def show(x):
+    if x: ...
+show(o)                # parameter -> TRUTHY  STILL WRONG
+```
+
+An untyped function parameter is a **variant** at run time, so the class is not
+known at the point the condition is lowered and compile-time dispatch cannot
+fire. Same wall as [[bug-nilpy-dunders-not-dispatched-through-containers]] —
+one missing capability (runtime dunder dispatch on a variant), reached here from
+a third direction.
+
+That half is **blocked on
+[[decide-nilpy-runtime-dunder-dispatch-mechanism]]** and is deliberately NOT in
+the regression test; a comment in the test says so, to stop someone adding a
+parameter case and finding it red.
+
+So this ticket is fixed for the static case and stays open, reduced in scope, for
+the variant case. Reclassify to closed once the runtime-dispatch decision lands
+and its implementation covers truth tests.

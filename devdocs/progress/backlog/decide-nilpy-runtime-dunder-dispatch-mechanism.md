@@ -71,3 +71,33 @@ ever demands it.
 ticket. `feature-nilpy-arithmetic-ordering-dunders` (the umbrella) will hit the
 identical wall for `__add__` and friends, so whatever is decided here sets that
 shape too.
+
+## 2026-08-01 — a THIRD symptom reached this same wall
+
+Landing the truthiness fix
+([[bug-nilpy-bool-protocol-ignored-object-always-truthy]]) fixed `if o:` for a
+statically-typed receiver but not for an untyped function PARAMETER:
+
+```python
+o = BoolFalse()
+if o: ...              # falsy   — correct
+def show(x):
+    if x: ...
+show(o)                # TRUTHY  — wrong, x is a variant at run time
+```
+
+So the mechanism decided here now gates three distinct symptoms, not two:
+
+1. dunders on a container ELEMENT (`print([obj])`, `sorted()`) — the original.
+2. `__hash__`/`__eq__` for an object used as a dict KEY
+   ([[bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash]]).
+3. any dunder on an object reached as an untyped PARAMETER — which is ordinary,
+   idiomatic Python and probably the most common of the three in real code.
+
+Point 3 raises the stakes on option 4 ("raise, don't guess"): raising for every
+truth test on a variant-typed parameter would break working programs, since
+"any instance is true" is the correct answer whenever the class declares no
+dunder. So option 4 is a viable stopgap for `print([obj])` but NOT for
+truthiness — the fallback there must stay silent and correct. Worth weighing
+when picking between 1 and 2: whatever lands has to answer "does this class
+declare `__bool__`?" cheaply at run time, for objects that mostly do not.
