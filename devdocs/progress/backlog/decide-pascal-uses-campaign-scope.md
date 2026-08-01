@@ -51,6 +51,47 @@ NilPy `.npy` corpus not yet run) already shows:
 No recommendation baked in here on purpose — this is a sizing/sequencing call,
 not a technical one; the measurement ticket already did the technical part.
 
+## 2026-08-01 — correction: the number above is inflated, real scope is smaller
+
+Verified directly (`compiler/symtab.inc`'s `VisibilityAllows`, and
+`compiler/builtin/pylib.pas`'s actual `uses` clause) rather than trusting
+the raw count:
+
+- `builtin`/`builtinheap` are pxx's own `System`-unit equivalent —
+  deliberately ambient everywhere by design (every Pascal dialect
+  auto-includes `System`), not a leak. `VisibilityAllows` has no special
+  case for this yet, so it counted these the same as any other pair —
+  meaning the `pylib -> builtinheap` (6894), `sysutils -> builtinheap`
+  (4522), `pylib -> builtin` (4145) etc. hits, which dominate the 81-pair
+  count, are measurement noise from an instrumentation gap, not real work.
+  **Fix the instrument first** (exclude `builtin`/`builtinheap` from
+  detection) before re-measuring — this changes the true number
+  substantially, likely by most of an order of magnitude given how much of
+  the raw count those three lines alone account for.
+- `pylib -> sysutils` (1717) isn't one thing either: `pylib.pas` has no
+  `uses sysutils` anywhere in its own code (confirmed by reading it) — most
+  of that count is genuine accidental leakage that closes for free once
+  real scoping lands. The one deliberate exception is `pylib.Exception`
+  merging with `sysutils.Exception`, already anticipated by
+  [[decide-class-namespace-scoping]]'s own resolution — needs exactly one
+  explicit `uses sysutils` added to `pylib.pas`, not a rewrite.
+- Full detail in [[bug-pascal-uses-is-transitive]]'s 2026-08-01 correction
+  note.
+
+**Guiding principle for the fix, regardless of which sequencing option is
+picked:** what matters is that USER programs get a clean namespace.
+Internal RTL-to-RTL sharing (like the `Exception` merge) is fine as long as
+it's deliberate, declared explicitly, and doesn't leak unrelated surface to
+callers — the fix does not need to eliminate every internal cross-unit
+reference, only the accidental, undeclared ones that reach a program's own
+namespace.
+
+This makes **option 2 (close the instrumentation gap, get a true count,
+then decide)** more clearly correct than it looked before — the
+`builtin`/`builtinheap` exclusion alone is small, well-scoped work that
+should land before any campaign-sizing decision, since it's likely to show
+the real problem is meaningfully smaller than "hundreds of files."
+
 ## What unblocks on this
 
 [[decide-class-namespace-scoping]] and `bug-nilpy-stdlib-name-binds-pascal-unit`

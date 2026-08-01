@@ -211,5 +211,40 @@ Track U exists to prevent.
 campaign (whichever shape it takes) will keep using to track progress toward
 zero warnings.
 
+## 2026-08-01 — correction: the `builtin`/`builtinheap` count was measuring the wrong thing
+
+The "hundreds of files need an explicit `uses builtin[heap]`" framing above
+is wrong. `builtin`/`builtinheap` are pxx's own equivalent of Pascal's
+`System` unit — `compiler/builtin/builtin.pas` says so directly ("System.X
+— pxx has no separate System unit (System IS the builtin layer)"), and
+every Pascal dialect auto-includes `System` everywhere with no `uses`
+needed. That's by design, not a leak. `VisibilityAllows`
+(`compiler/symtab.inc`) has no special case for this — it counts
+`builtin`/`builtinheap` references the same as any other unit pair, so the
+6894/4522/4145/etc. hit counts dominating the sample are measurement noise
+from a gap in the instrument, not real scope. The fix: special-case
+`builtin`/`builtinheap` as implicitly-always-visible in `VisibilityAllows`,
+excluded from leak detection entirely, before trusting any future count.
+
+Once that's fixed, the real remaining leak count (e.g. `pylib -> sysutils`,
+1717 hits) is what's actually left — and even that one is smaller than it
+looks: verified directly that `pylib.pas`'s own `uses` clause never
+mentions `sysutils` (only `uses pypal`, and `pypal` itself uses nothing).
+Most of that count is genuinely accidental leakage that will close on its
+own once real scoping lands. The one deliberate exception is `pylib.
+Exception` merging with `sysutils.Exception` (`CreateFmt`... "IMPLEMENTED
+BY sysutils") — already anticipated by
+[[decide-class-namespace-scoping]]'s resolution ("whichever of pylib/
+sysutils imports the other gets that one class by construction"): pylib
+needs one explicit `uses sysutils` added to keep that intentional merge
+working, everything else closes for free. Guiding principle for whatever
+internal `uses` wiring the fix ends up needing: what matters is that USER
+programs get a clean namespace — internal RTL-to-RTL sharing (like the
+Exception merge) is fine as long as it's deliberate and doesn't leak
+unrelated surface to callers.
+
+Folded into [[decide-pascal-uses-campaign-scope]] for the actual
+sizing/sequencing call, corrected.
+
 ## Log
 - 2026-07-31 — resolved, commit d86bc20ec.
