@@ -2,7 +2,19 @@
 track: U
 prio: 60
 type: decide
+status: resolved
+resolved: 2026-08-01
 ---
+
+## DECIDED 2026-08-01 — phased: option 3 first, option 1 later
+
+**User's call.** Comparisons first (no collision risk, covers the common
+`sorted()`/`min()`/`max()` case), full arithmetic protocol later, one
+operator at a time (real collision risk with pathlib and similar
+special-cased routes — confirmed "quite big work"). Filed as
+[[feature-nilpy-arithmetic-ordering-dunders]] (umbrella) with
+[[bug-nilpy-comparison-dunders-not-dispatched]] (phase 1, ready now) and
+[[feature-nilpy-arithmetic-dunders-full-protocol]] (phase 2, after phase 1).
 
 # Decide: how far does NilPy follow Python's arithmetic/ordering dunder protocol?
 
