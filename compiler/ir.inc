@@ -7101,13 +7101,16 @@ begin
                 right := IRLowerAddress(ASTLeft[node])
               else
                 right := value;
-              if RecordHasManagedFields(Syms[varIdx].RecName) then
+              { feature-a-typeref-migrate-consumers lane 1: read via SymTR[varIdx].RecId
+                (kept in sync with Syms[varIdx].RecName by SymSyncTypeRef) instead of
+                the old parallel field directly. }
+              if RecordHasManagedFields(SymTR[varIdx].RecId) then
                 last := IRAppend(IR_COPY_REC_MANAGED, leftAddr, right,
-                                 Syms[varIdx].RecName,
-                                 RecSize(Syms[varIdx].RecName), Ord(tyRecord))
+                                 SymTR[varIdx].RecId,
+                                 RecSize(SymTR[varIdx].RecId), Ord(tyRecord))
               else
                 last := IRAppend(IR_COPY_REC, leftAddr, right, -1,
-                                 RecSize(Syms[varIdx].RecName), Ord(tyRecord));
+                                 RecSize(SymTR[varIdx].RecId), Ord(tyRecord));
             end
             else if Syms[varIdx].TypeKind = tyVariant then
             begin
