@@ -71,3 +71,30 @@ up, and a reason not to fold it silently into an `__abs__` fix.
 `make test-nilpy` + self-host byte-identical, plus a `.npy` diffed against
 CPython for each dunder declared and not declared (must raise a catchable
 `TypeError`, never a handle-valued number).
+
+## PARTIALLY FIXED 2026-08-01 — __abs__ and __invert__ done, __index__ remains
+
+- `__invert__`: `PyParseBitOperand`'s `~` arm (`compiler/pyparser.inc`) now goes
+  through `PyBitDunder`, the same helper the binary bitwise operators use — so
+  it inherits the pylib exclusion and the runtime-`TypeError`-when-absent
+  behaviour for free.
+- `__abs__`: the `Abs`/`Sqr` builtin arm (`compiler/parser.inc`), dispatched
+  ahead of the existing variant (`pyabs_v`) and numeric helper paths so those
+  are untouched.
+
+Both verified against CPython: `abs(Num(-5))` → `5` (was `140450157559832`),
+`~Num()` → the method's result (was `123900459483161`).
+`test/test_nilpy_dunder_unary.npy` is byte-identical to CPython and also covers
+the no-dunder `~` raising a catchable TypeError, plus plain numeric `abs`/`~`
+being unaffected.
+
+Native confirm: self-host fixedpoint A==B==C from the pinned seed, testmgr
+--tier quick GREEN; matrix offloaded to Track T.
+
+### Still open: `__index__`
+
+Deliberately not attempted here. As the ticket's own scope note says, it needs
+wiring at every integer-coercion site (subscripts, slice bounds, `range()`,
+repeat counts), not just the one subscript case the sweep measured — that is a
+different, wider change and folding it in silently would have left most sites
+wrong. Ticket stays open for it.

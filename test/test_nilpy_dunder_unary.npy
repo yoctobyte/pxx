@@ -1,0 +1,44 @@
+# Unary dunders on a user class: __abs__ (via abs()) and __invert__ (via ~).
+# Without dispatch each fell through to the numeric path with the instance
+# HANDLE standing in for the value, returning a plausible large integer with no
+# error — abs(C(-5)) printed 140450157559832 and ~C() printed 123900459483161.
+# bug-nilpy-unary-numeric-dunders-return-raw-handle.
+#
+# Parameters are named `rhs`/none rather than reusing a module-level name: a
+# method parameter sharing a global's spelling still corrupts that global
+# (bug-nilpy-global-shadowed-by-method-param-name-loses-class-type, open).
+#
+# Expectation is CPython's own output.
+
+
+class Num:
+    def __init__(self, v):
+        self.v = v
+
+    def __abs__(self):
+        return abs(self.v)
+
+    def __invert__(self):
+        return "INVERTED"
+
+
+class Bare:
+    pass
+
+
+neg = Num(-5)
+pos = Num(7)
+print(abs(neg))
+print(abs(pos))
+print(~neg)
+
+# no dunder: a genuine runtime TypeError for `~`, catchable, never a handle
+b = Bare()
+try:
+    print(~b)
+except TypeError:
+    print("caught invert")
+
+# plain numeric abs / bitwise-not are untouched
+print(abs(-9), abs(9), abs(-2.5))
+print(~0, ~5, ~-1)

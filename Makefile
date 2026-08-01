@@ -576,6 +576,9 @@ test-nilpy: $(COMPILER)
 	@# a class defining __getitem__/__setitem__ routes subscript read/write
 	./$(COMPILER) test/test_nilpy_dunder_getitem_setitem.npy /tmp/test_nilpy_dundergetset26
 	test "$$(/tmp/test_nilpy_dundergetset26)" = "$$(printf '%b' '20\n99\n[10, 99, 30]\n42\n-1\n10\ncaught: TypeError')"
+	@# unary dunders: abs() -> __abs__, ~ -> __invert__; no dunder = TypeError
+	./$(COMPILER) test/test_nilpy_dunder_unary.npy /tmp/test_nilpy_dunderun26
+	test "$$(/tmp/test_nilpy_dunderun26)" = "$$(printf '%b' '5\n7\nINVERTED\ncaught invert\n9 9 2.5\n-1 -6 0')"
 	@# bitwise/shift dunders on a user class; no dunder = catchable TypeError,
 	@# NOT the segfault this used to be. Set/dict operators must stay intact.
 	./$(COMPILER) test/test_nilpy_dunder_bitwise.npy /tmp/test_nilpy_dunderbit26

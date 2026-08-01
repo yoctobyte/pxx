@@ -1223,6 +1223,18 @@ begin
   begin
     Next;
     PyParseBitOperand;
+    { `~obj` on a user class dispatches its __invert__. Without this a tyClass
+      operand fell into the integer AN_NOT below and complemented the class
+      HANDLE, printing a plausible large number (measured: 123900459483161
+      where CPython printed the method's result) — silent, no error.
+      bug-nilpy-unary-numeric-dunders-return-raw-handle. No dunder declared is
+      a genuine runtime TypeError, as with the binary bitwise operators. }
+    node := PyBitDunder('__invert__', CurASTNode, -1);
+    if node >= 0 then
+    begin
+      CurASTNode := node;
+      Exit;
+    end;
     PyBitGuard(CurASTNode);
     node := AllocNode(AN_NOT);
     ASTLeft[node] := CurASTNode;

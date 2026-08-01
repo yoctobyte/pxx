@@ -11485,6 +11485,25 @@ begin
           segfault as soon as a second expression shared the statement.
           pyabs_v dispatches on the tag and really does return a Variant
           (bug-a-len-of-variant-picks-wrong-overload). }
+        { `abs(obj)` on a user class dispatches its __abs__. Without this a
+          tyClass argument reached the integer helper and returned the class
+          HANDLE as a number (measured: 140450157559832 where CPython printed
+          5) — silent, no error.
+          bug-nilpy-unary-numeric-dunders-return-raw-handle. }
+        if PyExprMode and CaseEqual(name, 'Abs') and
+           (IntToTypeKind(ASTTk[node]) = tyClass) and
+           (ResolveNodeRec(node) >= REC_UCLASS_BASE) and
+           not PyRecIsPylibOwnClass(ResolveNodeRec(node)) and
+           (FindUMeth(ResolveNodeRec(node) - REC_UCLASS_BASE, '__abs__') >= 0) then
+        begin
+          CurASTNode := PyCallMeth1(ResolveNodeRec(node) - REC_UCLASS_BASE,
+                                    '__abs__', node, -1);
+          if CurASTNode >= 0 then
+          begin
+            LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+            Exit;
+          end;
+        end;
         if PyExprMode and CaseEqual(name, 'Abs') and
            (IntToTypeKind(ASTTk[node]) = tyVariant) and
            (FindProc('pyabs_v') >= 0) then
