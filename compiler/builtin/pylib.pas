@@ -353,6 +353,7 @@ type
       latin-1 is an exact identity mapping; the `errors` argument is accepted
       and ignored because latin-1 cannot fail. Named `errors` so the keyword
       form binds through the ordinary method keyword-argument path. }
+    function decode: AnsiString; overload;
     function decode(const encoding: AnsiString): AnsiString; overload;
     function decode(const encoding: AnsiString; const errors: AnsiString): AnsiString; overload;
     { bytes.endswith(suffix) — the READ-LINE CR/LF trim }
@@ -4710,6 +4711,16 @@ begin
   PyBytesEnsure(Self, FLen + 1);
   p := PByte(NativeInt(FData) + (FLen - 1));
   p^ := v;
+end;
+
+function TPyBytes.decode: AnsiString; overload;
+{ Python's `b.decode()` defaults to utf-8. Without this zero-argument overload a
+  bare `b.decode()` bound to the one-argument form with an UNINITIALISED
+  AnsiString for `encoding` and SEGFAULTED (exit 139) — `b.decode("utf-8")`
+  worked all along, which is what hid it.
+  bug-nilpy-dict-from-pairs-and-bytes-decode-segfault. }
+begin
+  Result := decode('utf-8');
 end;
 
 function TPyBytes.decode(const encoding: AnsiString): AnsiString; overload;

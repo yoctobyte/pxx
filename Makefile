@@ -576,6 +576,10 @@ test-nilpy: $(COMPILER)
 	@# a class defining __getitem__/__setitem__ routes subscript read/write
 	./$(COMPILER) test/test_nilpy_dunder_getitem_setitem.npy /tmp/test_nilpy_dundergetset26
 	test "$$(/tmp/test_nilpy_dundergetset26)" = "$$(printf '%b' '20\n99\n[10, 99, 30]\n42\n-1\n10\ncaught: TypeError')"
+	@# b.decode() with no arg (defaults to utf-8) used to segfault — no
+	@# zero-argument overload, so it bound to decode(encoding) uninitialised
+	./$(COMPILER) test/test_nilpy_bytes_decode.npy /tmp/test_nilpy_bytesdec26
+	test "$$(/tmp/test_nilpy_bytesdec26)" = "$$(printf '%b' 'abc\nabc\n3\nabc!\nTrue\nhi')"
 	@# context-manager protocol: __enter__ runs, `as` binds ITS RESULT, __exit__
 	@# runs on the normal AND exception paths; with open(...) unchanged
 	./$(COMPILER) test/test_nilpy_with_protocol.npy /tmp/test_nilpy_withproto26

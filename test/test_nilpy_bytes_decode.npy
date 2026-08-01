@@ -1,0 +1,24 @@
+# `b.decode()` with no argument SEGFAULTED (exit 139, core dumped). TPyBytes
+# declared decode(encoding) and decode(encoding, errors) but no zero-argument
+# form, while Python's decode() defaults to utf-8 — so the bare call bound to
+# the one-argument version with an UNINITIALISED AnsiString for `encoding`.
+# `b.decode("utf-8")` worked all along, which is exactly what hid it.
+# bug-nilpy-dict-from-pairs-and-bytes-decode-segfault.
+#
+# Expectation is CPython's own output.
+
+b = "abc".encode()
+print(b.decode())
+print(b.decode("utf-8"))
+# (the bytes repr itself is not asserted here: b'abc' contains single quotes,
+# which cannot be escaped inside the Makefile's single-quoted printf)
+print(len(b))
+
+# round-trip through a variable, and an empty payload
+s = b.decode()
+print(s + "!")
+print("".encode().decode() == "")
+
+# bytes built from a list of codepoints decodes the same way
+c = bytes([104, 105])
+print(c.decode())
