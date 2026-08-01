@@ -1,0 +1,8 @@
+# M1 "hello-ext" (feature-nilpy-cpyext-c-api-from-source): a hand-written
+# one-function CPython C extension (int in, int out), compiled by cfront
+# against pxx's own lib/cpyext/include/Python.h, imported from NilPy and
+# called. Proves the header, the PyModuleDef/PyMethodDef module table, and
+# PyInit_<name> import-time discovery/binding end to end.
+import hello_ext
+
+print(hello_ext.add_one(41))

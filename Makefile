@@ -1009,6 +1009,11 @@ test-nilpy: $(COMPILER)
 	# unary minus dunder (__neg__) on a user class; expectation is CPython's own output
 	./$(COMPILER) test/test_nilpy_neg_dunder.npy /tmp/test_nilpy_negdunder26
 	test "$$(/tmp/test_nilpy_negdunder26)" = "$$(printf '%b' 'Neg(-5)\nNeg(3)\n-5\n-6\n-4')"
+	# cpyext M1 "hello-ext": a hand-written CPython C extension (Python.h,
+	# PyModuleDef/PyMethodDef, PyInit_<name>) compiled by cfront and imported
+	# from NilPy; see devdocs/progress/working/feature-nilpy-cpyext-c-api-from-source.md
+	./$(COMPILER) -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_hello.npy /tmp/test_cpyext_hello26
+	test "$$(/tmp/test_cpyext_hello26)" = "42"
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING
