@@ -51,18 +51,43 @@ check (`$XDG_CURRENT_DESKTOP`, or a `loginctl` session of type x11/wayland).
 profile — what it lacks is a job-class allowlist (that gap is the sibling
 ticket's item 1).
 
-## Hard constraint that must be encoded, not discovered
+## MEASURED — and the constraint is the opposite of what the estimate says
 
-`testmgr` estimates the **selfhost job at 1200 MB** (`"selfhost": {"est_mem":
-1200 << 20}`). The `restricted` profile caps memory at **half the box**
-(`_mem_frac: 0.5`). So:
+Written first from `testmgr`'s own figure, then measured, and the measurement
+wins. Recorded in full because the wrong number would have shaped which boxes
+get bought and how they are provisioned.
 
-- a 1 GB Pi cannot run the selfhost fixedpoint **at all**
-- a 2 GB Pi capped to 1 GB cannot either
+`testmgr` estimates the selfhost job at **1200 MB** (`"selfhost": {"est_mem":
+1200 << 20}`). Actual peak RSS on x86_64, self-hosted binary at `19ee697d3`:
 
-A native-oracle profile must therefore exclude selfhost from its job set on
-small boxes rather than let it OOM or thrash — and the wizard should say so at
-setup time instead of leaving it to be discovered as a mysterious red.
+| workload | peak RSS |
+| --- | --- |
+| self-compile (`compiler.pas` + all `.inc`, 5.6 MB of source) | **156 MB** |
+| `test/hello.pas` | **24 MB** |
+
+So the estimate is **~8x the real cost**. The fixedpoint compiles twice but
+SEQUENTIALLY, so peak stays ~156 MB, not double.
+
+Consequences, all the opposite of the first draft of this section:
+
+- A **512 MB arm32 Pi should self-compile fine.** arm32 is ILP32, so the
+  pointer-heavy structures get *cheaper*, not dearer — the direction is
+  favourable, though this number is x86_64 and wants confirming on real
+  hardware before it is relied on.
+- Ordinary test-suite compiles are ~24 MB, so a small Pi runs the suite
+  comfortably. That much was already expected.
+- The thing to fix is therefore **the estimate, not the Pi**: at 1200 MB,
+  `est_mem` will exclude or serialise selfhost on boxes that could run it
+  perfectly well, and it under-packs concurrency on big ones. Filed as its own
+  item — see below.
+
+Note the `bss=151388300B` in every build line is a ~151 MB *reservation* of
+static arrays, not resident cost: only touched pages land in RSS, which is why
+`hello.pas` sits at 24 MB while a self-compile reaches 156 MB.
+
+**Follow-up for T:** re-derive `est_mem` for the `selfhost` class from
+measurement rather than a guess, and check the other job classes' estimates the
+same way — an 8x error in one suggests the others were not measured either.
 
 ## Asked for
 
