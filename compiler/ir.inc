@@ -6310,9 +6310,11 @@ begin
       if (not CProgramMode) and
          (ASTKind[ASTRight[node]] = AN_PROCADDR) and
          (ASTKind[ASTLeft[node]] = AN_IDENT) and
+         { feature-a-typeref-migrate-consumers lane 1: SymProcSig read via
+           SymTR[..].ProcSig (kept in sync by SymSyncTypeRef). }
          (Integer(ASTIVal[ASTLeft[node]]) >= 0) and
-         (SymProcSig[ASTIVal[ASTLeft[node]]] >= 0) and
-         ProcCdecl[SymProcSig[ASTIVal[ASTLeft[node]]]] and
+         (SymTR[ASTIVal[ASTLeft[node]]].ProcSig >= 0) and
+         ProcCdecl[SymTR[ASTIVal[ASTLeft[node]]].ProcSig] and
          (Integer(ASTIVal[ASTRight[node]]) >= 0) and
          (not ProcExternal[ASTIVal[ASTRight[node]]]) then
       begin
@@ -6456,10 +6458,12 @@ begin
           else
           begin
             varIdx := ASTIVal[ASTLeft[node]];
-            if Syms[varIdx].ElemType = tyRecord then
-              elemSize := RecSize(Syms[varIdx].ElemRecName)
+            { feature-a-typeref-migrate-consumers lane 1: ElemType/ElemRecName read
+              via SymTR[varIdx].ElemTk/ElemRec (kept in sync by SymSyncTypeRef). }
+            if SymTR[varIdx].ElemTk = Ord(tyRecord) then
+              elemSize := RecSize(SymTR[varIdx].ElemRec)
             else
-              elemSize := TypeSize(Syms[varIdx].ElemType);
+              elemSize := TypeSize(IntToTypeKind(SymTR[varIdx].ElemTk));
             Result := IRAppend(IR_DEFAULT_MEM, leftAddr, -1, REC_NONE,
                                Syms[varIdx].ArrLen * elemSize, ASTTk[ASTLeft[node]]);
           end;
@@ -7299,7 +7303,9 @@ begin
           Exit;
         end;
         slRootSym := NodeDynBaseSym(slTargetAST);
-        if (slRootSym >= 0) and (SymDynDepth[slRootSym] >= 2) then
+        { feature-a-typeref-migrate-consumers lane 1: SymDynDepth read via
+          SymTR[..].DynDepth (kept in sync by SymSyncTypeRef). }
+        if (slRootSym >= 0) and (SymTR[slRootSym].DynDepth >= 2) then
         begin
           slDepth := NodeDynDepth(slTargetAST);
           slTargetAddr := IRLowerAddress(slTargetAST);
