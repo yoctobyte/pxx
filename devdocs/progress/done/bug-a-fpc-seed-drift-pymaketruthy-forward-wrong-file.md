@@ -92,3 +92,31 @@ The mechanism to prevent it already exists and works; what is missing is that a
 that at the time of writing. A cheap guard would be worth more than the next
 three fixes: the canary already runs in `native`/`limited`/`full`, so the
 feedback exists — it is just advisory, so it is easy to walk past.
+
+---
+
+## FIXED by Track A — `9d2d98856` (verified by Track T, 2026-08-01)
+
+*"fix(A): forward-declare PyMakeTruthy in parser.inc — FPC seed build was red"*.
+
+Verified on this box at HEAD: `fpc -Mobjfpc -O2 -Tlinux -Px86_64 …
+compiler/compiler.pas` reports **0 errors**. The cold-start path is restored.
+
+Track A forward-declared it **in `parser.inc`**, above the use, rather than
+moving it to `forwards.inc` as this ticket proposed. Both work and the canary is
+green either way, so this is not a correction — but the difference is worth
+recording, because the two placements are not equivalent going forward:
+
+- `forwards.inc` is included **FPC-only** (`compiler.pas:72`,
+  `PXX_NEED_FORWARDS`), so declarations there cost PXX nothing and sit above
+  every use by construction.
+- a forward in `parser.inc` is compiled by **both** front ends and only covers
+  uses below that point in that file.
+
+Neither is wrong. The one that matters is that the *next* cross-file helper hits
+the same wall, which is the open half of this ticket and is not addressed by
+either placement: **nothing enforces registering a cross-file use at the time of
+writing**, and the canary that catches it is advisory by design.
+
+## Log
+- 2026-08-01 — resolved, commit 9d2d98856.
