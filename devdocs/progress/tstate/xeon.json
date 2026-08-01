@@ -3813,10 +3813,10 @@
  },
  "last_bench": {
   "conf_rows": 550,
-  "date": "2026-08-01T05:38:47Z",
+  "date": "2026-08-01T06:12:32Z",
   "rc": 0,
   "rows": 30,
-  "sha": "a8d7ad200e1fc82bfe016367b12aa8bfed3c1cea"
+  "sha": "bccb39fece275466a0ed6a634b0c512c9d2c353e"
  },
  "last_full": {
   "date": "2026-08-01T05:58:58Z",
