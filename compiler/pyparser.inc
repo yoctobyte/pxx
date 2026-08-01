@@ -15121,6 +15121,7 @@ begin
     if (ptypes[i] = tyClass) and (pcis[i] >= 0) then
       Syms[idx].RecName := REC_UCLASS_BASE + pcis[i];
     if psigs[i] >= 0 then SymProcSig[idx] := psigs[i];   { Callable parameter }
+    SymSyncTypeRef(idx);
   end;
   if not isCtor then
   begin
@@ -15152,7 +15153,10 @@ begin
     begin
       idx := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
       if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
+      begin
         Syms[idx].RecName := REC_UCLASS_BASE + PyLocals[i].RecCi;
+        SymSyncTypeRef(idx);
+      end;
     end;
   Procs[procIdx].BodyAddr := CodeLen;
   { A method may contain nested defs (`def helper(): ...` inside it). They queue
@@ -15326,6 +15330,7 @@ begin
     if i = 0 then Syms[idx].RecName := REC_UCLASS_BASE + ci
     else if Procs[procIdx].Params[i].TypeKind = tyClass then
       Syms[idx].RecName := UFldRec_[UClsFBase[ci] + i - 1];
+    SymSyncTypeRef(idx);
   end;
   Procs[procIdx].BodyAddr := CodeLen;
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
@@ -16056,6 +16061,7 @@ begin
         begin
           ci := AllocVar(nm, tyVariant);
           Syms[ci].RecName := REC_NONE;
+          SymSyncTypeRef(ci);
         end;
       end;
     end;
