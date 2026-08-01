@@ -3,9 +3,8 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| xeon | `6840247771d5` | 2026-08-01T15:32:49Z | GREEN (opt) | 277.2s | `6840247771d5` RED |
+| xeon | `2a2b478e6fbb` | 2026-08-01T16:06:27Z | RED (native) | 235.8s | `6840247771d5` RED |
 
 ## Open regressions
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `b1976742df2c`, last good `6f73c5a88bef`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_import_sqlite.npy** — test/test_nilpy_import_sqlite.npy (xeon): bad `6840247771d5`, last good `eeae1e4a3057`, 9 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_operator_dunders.npy** — test/test_nilpy_operator_dunders.npy test/test_nilpy_operator_dunder_missing_fail.npy (xeon): bad `6840247771d5`, last good `eeae1e4a3057`, 9 commit(s) in range
