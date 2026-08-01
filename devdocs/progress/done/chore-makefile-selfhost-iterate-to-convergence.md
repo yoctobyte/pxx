@@ -63,3 +63,6 @@ false failure here reads as a broken box.
 Low prio: the workaround (reseed from `pinned`, let it iterate) is easy once
 known, and the gate itself is correct. This is about the build rule and the
 gate script disagreeing, which costs whoever hits it an hour of confusion.
+
+## Log
+- 2026-08-01 — resolved, commit 6b1f71511.
