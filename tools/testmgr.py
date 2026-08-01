@@ -143,6 +143,8 @@ FPC_CANARY_TIERS = ("native", "limited", "full")
 # Not "quick": that is the inner loop, and this is a bootstrap chain. It is NOT
 # advisory — byte-identical self-host is the gate the stable binary rests on.
 SELFHOST_GATE_TIERS = ("native", "limited", "full")
+# The job whose red aborts the tier and publishes immediately (see Manager.run).
+SELFHOST_GATE_TARGET = "selfhost-fixedpoint"
 MEM_FLOOR = 1500 << 20          # never admit below this MemAvailable
 SWAP_FLOOR = 1000 << 20         # never admit with less free swap than this...
 SWAP_FLOOR_FRAC = 0.10          # ...but never demand more than this much of SwapTotal
@@ -1153,11 +1155,18 @@ class Manager:
         # conformance shards, selfhost chains) must start at t=0, not after
         # 600 unit jobs have churned through.  Report order stays generation
         # order — this only affects launch order.
-        self.queue = sorted(jobs, key=lambda j: -(j.exp_dur if j.exp_dur
-                                                  else CLASSES[j.cls]["timeout"]))
+        # The self-host fixedpoint launches FIRST, ahead of the longest-job
+        # heuristic. It is the one red that invalidates every other track's
+        # ground, and since dev tracks stopped running suites locally, T's
+        # report latency IS the dev loop's latency — a late self-host red now
+        # costs commits to unwind, not minutes.
+        self.queue = sorted(jobs, key=lambda j: (
+            0 if j.target == SELFHOST_GATE_TARGET else 1,
+            -(j.exp_dur if j.exp_dur else CLASSES[j.cls]["timeout"])))
         # cores/mem-aware admission does the real throttling; the cap is just
         # a runaway guard, and >nproc lets io/qemu-idle jobs keep cores busy
         self.hard_cap = 1 if args.serial else (args.jobs or self.nproc * 2)
+        self.selfhost_red = False
         self.prev_cpu = cpu_times()
         self.idle_frac = 1.0
         self.interrupted = False
@@ -1528,6 +1537,23 @@ class Manager:
                       flush=True)
                 if job.status != "pass" and not job.advisory:
                     failed = True
+                    # A broken self-host fixedpoint makes every other verdict at
+                    # this sha suspect — the binary under test cannot reproduce
+                    # itself. Tear down and let the caller publish NOW rather
+                    # than after the remaining tier. Aborting is what makes the
+                    # existing end-of-run publish immediate; no second publish
+                    # path, so twatch's hard-won rebase/conflict handling is not
+                    # exercised more often than it already is.
+                    if job.target == SELFHOST_GATE_TARGET:
+                        self.selfhost_red = True
+                        print("testmgr: SELF-HOST RED (%s) — tearing down the "
+                              "rest of the tier; every other verdict at this "
+                              "sha is suspect" % job.name, flush=True)
+                        self.teardown()
+                        for j in self.queue:
+                            j.status = "skipped"
+                        self.queue = []
+                        return 1
                     if self.args.fail_fast:
                         print("testmgr: fail-fast — tearing down", flush=True)
                         self.teardown()
@@ -2383,6 +2409,15 @@ def main():
                # "sel": the STABLE way to name this job again later (twatch
                # bisects and files tickets on it).  j.name is a positional
                # index that renumbers whenever a test is inserted above it.
+               "selfhost_red": mgr.selfhost_red,
+               # Only jobs that actually RAN. A self-host abort leaves the rest
+               # "skipped" (never launched) — distinct from "skip" (corpus
+               # absent, a real pass-equivalent outcome). Emitting them would be
+               # wrong in both directions: twatch maps "skip"->pass, so they
+               # would either launder into passes or, as the literal "skipped",
+               # read as a mass RED. Omitting them lets twatch's merge keep each
+               # job's previous verdict, which is the honest answer for a job
+               # this run never attempted.
                "jobs": [{"name": j.name, "cls": j.cls, "src": j.src,
                          "sel": j.sel or j.name,
                          "advisory": j.advisory,
@@ -2392,7 +2427,8 @@ def main():
                          "dur": round((j.t1 - j.t0), 1) if j.t0 and j.t1 else 0.0,
                          "mem": j.peak_rss, "cpu": round(j.cpu_sec, 1),
                          "log": j.logpath}
-                        for j in jobs]}
+                        for j in jobs
+                        if j.status not in ("queued", "skipped")]}
         with open(args.report_json, "w") as f:
             json.dump(rep, f, indent=1)
     return rc
