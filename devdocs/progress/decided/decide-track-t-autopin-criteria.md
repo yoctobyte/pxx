@@ -3,7 +3,22 @@ summary: "What criteria justify Track T auto-pinning a stable binary?"
 type: decide
 track: U
 prio: 55
+status: resolved
+resolved: 2026-08-01
 ---
+
+## DECIDED 2026-08-01 — option D (never auto-pin) for now
+
+**User's call.** No auto-pin machinery yet — a human runs `make pin`,
+matching current practice. Reasoning: the fact that a naive "all green"
+rule would never fire (18/16 permanently red jobs, all ticketed/advisory)
+is itself a sign the baseline isn't stable enough to safely automate
+against yet. Building the allowlist-plus-guards machinery (option A) on
+top of an unstable baseline is complexity in the wrong order — clear the
+ground first (work down the known-red list, close the advisory-vs-real
+gap), then revisit whether A's criteria are worth automating once "stable
+enough to pin" is a much shorter, more tractable list. Not rejected,
+deferred until the baseline justifies the machinery.
 
 # decide: what lets Track T pin automatically?
 
