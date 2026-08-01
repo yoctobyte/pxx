@@ -86,3 +86,6 @@ Also still open, from the note above: a unit-qualified call does not fill Pascal
 trailing DEFAULTS, which is the reason the html shim needs two arities at all.
 Check whether that is the same selection path before starting — if it is, both
 fall out of one change.
+
+## Log
+- 2026-08-01 — resolved, commit 7be01f05f.

@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 
 ## unfinished (2)
@@ -310,7 +309,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1133)
+## done (1134)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -699,6 +698,7 @@ _none_
 | bug-nilpy-int-parse-halts-instead-of-raising | N | 55 | bug | nilpy: int(\"abc\") halts the program instead of raising a catchable ValueError | — |
 | bug-nilpy-is-on-two-lists-compares-contents | N | 55 | bug | `is` on two lists compares CONTENTS, so distinct lists are "identical" | — |
 | bug-nilpy-key-analysis-compiles-but-segfaults | N | 70 | bug | nilpy: songformatter's key_analysis.py COMPILES but segfaults at run time | — |
+| bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
 | bug-nilpy-large-float-str-overruns-into-garbage | N | 70 | bug | `str()` of a float whose integer part exceeds Int64 writes garbage bytes | — |
 | bug-nilpy-lifted-lambda-discards-its-return-value | N | 60 | bug | NilPy: a lifted lambda always discarded its own return value | — |
 | bug-nilpy-list-plus-nonlist-silently-corrupts-instead-of-typeerror | N | 55 | bug | `[list] + non-list` silently corrupted instead of raising TypeError | — |
