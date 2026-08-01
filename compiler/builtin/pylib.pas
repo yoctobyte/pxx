@@ -6124,7 +6124,7 @@ end;
   argument. }
 function PyFormatApply(const fmt: AnsiString; const a: Variant; const b: Variant;
                        nArgs: Integer): AnsiString;
-var i, j, argi: Integer; spec, outS: AnsiString;
+var i, j, argi, useIdx, k: Integer; spec, fld, outS: AnsiString;
 begin
   outS := '';
   argi := 0;
@@ -6137,23 +6137,46 @@ begin
     begin outS := outS + '}'; Inc(i, 2); Continue; end;
     if fmt[i] = '{' then
     begin
+      { A replacement field is `{[field][:spec]}`. The FIELD was previously
+        scanned past and thrown away, so `"{1}{0}".format(a, b)` substituted
+        left-to-right and printed the arguments in the WRONG ORDER, silently —
+        `{}` and `{0}{1}` agree with sequential substitution, which is why it
+        stayed invisible until an index actually reordered
+        (bug-nilpy-str-format-ignores-positional-indices). }
       j := i + 1;
       spec := '';
-      while (j <= Length(fmt)) and (fmt[j] <> '}') do
+      fld := '';
+      while (j <= Length(fmt)) and (fmt[j] <> '}') and (fmt[j] <> ':') do
+      begin fld := fld + fmt[j]; Inc(j); end;
+      if (j <= Length(fmt)) and (fmt[j] = ':') then
       begin
-        if fmt[j] = ':' then
-        begin
-          Inc(j);
-          spec := '';
-          while (j <= Length(fmt)) and (fmt[j] <> '}') do
-          begin spec := spec + fmt[j]; Inc(j); end;
-          Break;
-        end;
         Inc(j);
+        while (j <= Length(fmt)) and (fmt[j] <> '}') do
+        begin spec := spec + fmt[j]; Inc(j); end;
       end;
-      if argi >= nArgs then
+      { An all-digits field is an explicit index and does NOT advance the
+        automatic counter — Python numbers `{}` and `{N}` independently, which
+        is what makes `"{0}-{0}"` repeat one argument. A non-numeric field (a
+        NAMED one, `{name}`) needs kwargs, which this path does not carry, so
+        it keeps the previous sequential behaviour rather than erroring. }
+      useIdx := -1;
+      if fld <> '' then
+      begin
+        useIdx := 0;
+        for k := 1 to Length(fld) do
+          if (fld[k] >= '0') and (fld[k] <= '9') then
+            useIdx := useIdx * 10 + (Ord(fld[k]) - Ord('0'))
+          else
+          begin useIdx := -1; Break; end;
+      end;
+      if useIdx < 0 then
+      begin
+        useIdx := argi;
+        Inc(argi);
+      end;
+      if useIdx >= nArgs then
         raise Exception.Create('str.format: more placeholders than arguments');
-      if argi = 0 then
+      if useIdx = 0 then
       begin
         if spec = '' then outS := outS + pystr_of(a)
         else outS := outS + pyformat_of(a, spec);
@@ -6163,7 +6186,6 @@ begin
         if spec = '' then outS := outS + pystr_of(b)
         else outS := outS + pyformat_of(b, spec);
       end;
-      Inc(argi);
       i := j + 1;
       Continue;
     end;

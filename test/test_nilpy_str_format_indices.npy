@@ -1,0 +1,24 @@
+# `str.format` must honour EXPLICIT positional indices.
+#
+# The replacement-field scanner walked from `{` to `}` collecting only an
+# optional `:spec` and threw the FIELD away, then substituted by a sequential
+# counter — so "{1}{0}".format(a, b) printed the arguments in the wrong order,
+# silently (bug-nilpy-str-format-ignores-positional-indices).
+#
+# `{}` and `{0}{1}` agree with sequential substitution, which is exactly why
+# this stayed invisible: the bug only shows when an index actually REORDERS or
+# REPEATS. Both are covered below.
+#
+# Expectation is CPython's own output.
+
+print("{1}{0}".format("a", "b"))
+print("{0}{1}".format("a", "b"))
+print("{}{}".format("a", "b"))
+print("{0}-{0}".format("x", "y"))
+print("{1}-{1}".format("x", "y"))
+print("{}".format(7))
+print("{0}".format(7))
+print("[{:>5}]".format("ab"))
+print("[{1:>5}]".format("ab", "cd"))
+print("{{literal}} {0}".format("v"))
+print("{0:.2f} and {1:.1f}".format(3.14159, 2.71828))

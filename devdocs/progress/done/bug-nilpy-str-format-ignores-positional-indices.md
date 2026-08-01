@@ -51,3 +51,42 @@ which is easy to mistake for a data problem rather than a compiler bug.
 CPython covering each bullet above — in particular a case whose expected output
 DIFFERS from left-to-right substitution, since that is the only shape that can
 distinguish the broken implementation from the correct one.
+
+## 2026-08-01 — FIXED
+
+`PyFormatApply` (`compiler/builtin/pylib.pas`) scanned a replacement field from
+`{` to `}` collecting only an optional `:spec`, and walked past the FIELD
+itself without keeping it — then substituted by a sequential counter. The index
+was not mis-parsed; it was never read.
+
+Rewritten to parse `{[field][:spec]}` properly:
+
+- an all-digits field is an **explicit index** and does **not** advance the
+  automatic counter, which is what makes `"{0}-{0}"` repeat one argument;
+- `{}` keeps using and advancing the counter, so Python's two numbering modes
+  stay independent;
+- a NON-numeric field (a named one, `{name}`) needs kwargs, which this path does
+  not carry — it keeps the previous sequential behaviour rather than starting to
+  error, so nothing that works today stops working.
+
+### Verified
+
+`test/test_nilpy_str_format_indices.npy`, wired into `make test-nilpy`,
+byte-identical to CPython. Confirmed RED pre-fix — `{1}{0}` gave `ab`, and both
+`{0}-{0}` and `{1}-{1}` gave `x-y`.
+
+Covers what the ticket said made it invisible (reordering and repetition) plus
+the neighbours that must not move: `{}`, `{0}{1}`, a bare `{}` with a number,
+alignment specs with and without an index (`[{:>5}]`, `[{1:>5}]`), literal
+`{{ }}` braces, and float precision on both indices.
+
+The assertion was checked by executing **make's own expanded recipe**
+(`make -n test-nilpy | grep test_nilpy_fmtidx26 | bash -e`) rather than by
+re-deriving the escaping — the lesson from
+[[bug-n-static-operand-clash-diagnostic-and-guard-test-escaping]] earlier tonight.
+
+Native: build + byte-identical self-host fixedpoint, `testmgr --tier quick`
+GREEN, `make bootstrap` exit 0 (FPC seed build — pylib.pas is a compiler input).
+
+## Log
+- 2026-08-01 — resolved, commit PENDING.
