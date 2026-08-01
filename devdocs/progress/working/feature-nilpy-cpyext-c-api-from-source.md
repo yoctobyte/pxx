@@ -114,6 +114,37 @@ each compiled extension against the same extension under CPython. A new test
 family (`test_cpyext_*.npy` + its `.c`) gated in the Makefile, exactly as the
 NilPy tests are.
 
+## 2026-08-01 — M1 "hello-ext" landed (commits `868dffae0`, `73446e7fa`)
+
+`lib/cpyext/include/Python.h` + `lib/cpyext/src/pyruntime.c`: a tiny
+bump-allocated tagged-object runtime (long/tuple/module/none) behind
+the M1-scoped API subset (`PyObject`, `Py_INCREF`/`DECREF`/`XDECREF`,
+`Py_None`, `PyModuleDef`+`PyModuleDef_HEAD_INIT`, `PyMethodDef`+
+`METH_VARARGS`, `PyModule_Create`, `PyArg_ParseTuple` format `"i"` only,
+`PyLong_From/AsLong`, enough `PyTuple_*` to carry positional args).
+`test/nilpy_units/hello_ext_module.c` (real CPython-extension-boilerplate
+shape) compiled by cfront, `hello_ext.pas` bridges it to NilPy's flat
+unit-scope `import`, `test/test_cpyext_hello.npy` calls
+`hello_ext.add_one(41)` and asserts `42`. Wired into `make test-nilpy`.
+Verified independently: self-host fixedpoint byte-identical, full
+`make test-nilpy` green (including the new test), rebuilt from the
+exact merged commit on master (not trusted from agent self-report).
+
+Note: this M1 runtime is a **standalone tagged-object model**, not yet
+routed through NilPy's own ARC (`PXXObjRetain`/`PXXObjRelease`) or
+variant representation — that integration is real work still ahead for
+M2+, deliberately deferred since M1's only job was proving the header +
+module-table + `PyInit_<name>` import-binding plumbing end to end.
+
+Found and filed (not fixed here, Track A):
+[[bug-c-uses-path-basename-collides-with-enclosing-unit-name]] — a
+path-form `uses './x.c'` sharing its unit's own base name silently
+fails to load. Workaround used: renamed the C module source so it
+doesn't collide (`hello_ext.c` → `hello_ext_module.c`).
+
+Next: M2 (arguments/errors — more `PyArg_ParseTuple` formats,
+`Py_BuildValue`, `PyErr_SetString` → NilPy `except`).
+
 ## Notes
 
 - Ladder position and the recipe/install policy: **`devdocs/dev/python-libraries.md`**.
