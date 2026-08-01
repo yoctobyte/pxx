@@ -358,38 +358,17 @@ Write public claims **uncompressed** — the qualifying words ("output", "oracle
 
 ## Platonic code — no compiler-appeasement workarounds (all tracks)
 
-This was previously only written down for Track B (`devdocs/dev/parallel-tracks.md`,
-`devdocs/dev/claude-B-prompt.md`: "write libraries as platonic Pascal, not as
-compiler workarounds") — it is a cross-track rule, not a library-only one, and
-applies equally to test authoring, demos, and any other code written against
-the compiler.
+Cross-track, not just Track B (`devdocs/dev/parallel-tracks.md`,
+`devdocs/dev/claude-B-prompt.md`). Hit a presumed compiler/language bug: file
+a ticket with a repro, leave the platonic code in place, `blocked-by:` the
+ticket if it stays blocked. Do not rename/reshape/reroute around it to make
+something pass today — that just hides the bug.
 
-**When you hit a presumed compiler/language bug: file a ticket with a real,
-minimal repro, and leave the platonic code in place** — the code you would
-write if the bug did not exist. Do not rename a file, reshape an expression,
-add a redundant temp, or otherwise reroute around the symptom to make a test
-or feature "work" today. If the platonic shape is blocked by the bug, it
-**stays blocked** — add `blocked-by: [the-bug-ticket]` to whatever ticket
-depends on it (or file one) and move on. A green test that only passes because
-the code was bent away from the bug's trigger shape is worse than a known-red
-one: it hides the bug from every future sweep of that same shape, and the
-"fix" has to be found and reverted later by someone who doesn't yet know it's
-there.
-
-**No exception for self-hosting either.** If a change breaks
-`compiler/compiler.pas`'s own self-host fixedpoint, the answer is the same as
-everywhere else: **revert the change**, keep/file the ticket describing the
-real bug, and wait for the actual fix — never patch around the break just to
-keep the build limping along. (This is what already happened in practice: a
-new `TSymbol` field broke the bootstrap, and the fix was a real architectural
-one — a parallel array, matching every other `Sym*` field's shape — not a
-workaround bolted on to tolerate the breakage. The const-Variant-arg fix that
-broke `test_promoint`'s bignum output was reverted outright, not patched.)
-Track B's `devdocs/dev/track-b-workarounds.md` tracks *library-side*
-workarounds for still-open compiler bugs (code that stays correct but avoids
-a construct the compiler mishandles) — that is different from a
-compiler-appeasement hack in the compiler's own source, which is never
-acceptable regardless of urgency.
+No exception for self-hosting: a change that breaks
+`compiler/compiler.pas`'s own fixedpoint gets **reverted**, not patched
+around. Track B's `devdocs/dev/track-b-workarounds.md` (library code that
+stays platonic but sidesteps an open bug, tracked with a revert-when-fixed
+lifecycle) is a separate, deliberate pattern and is unaffected.
 
 ## Debugging — measure, do not reason
 
