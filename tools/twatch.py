@@ -1650,6 +1650,17 @@ def status(repo, grace_min, tdir=None, ref="HEAD"):
     return 0
 
 
+def is_ancestor(repo, a, b):
+    """Is commit `a` reachable from `b`? (i.e. does b's tree contain a's change)"""
+    if a == b:
+        return True
+    try:
+        return subprocess.run(["git", "merge-base", "--is-ancestor", a, b],
+                              cwd=repo, capture_output=True).returncode == 0
+    except OSError:
+        return False
+
+
 def sha_verdicts(repo, ref="origin/master"):
     """{full sha: (verdict, tier, host, [new_red...])} for every judged sha."""
     out = {}
@@ -1709,10 +1720,29 @@ def follow(repo, shas, poll, branch="master", once=False, limit=20):
         sh(fetch_ref, cwd=repo, check=False)
         judged = sha_verdicts(repo, "origin/" + branch)
         for s in list(pending):
-            if s not in judged:
+            covered_by = None
+            if s in judged:
+                covered_by = s
+            else:
+                # The watcher tests HEAD, not every commit: it walks forward to
+                # the newest testable sha and skips what a burst pushed in
+                # between. So an exact-sha match hangs forever in the NORMAL
+                # case — and the watcher's own tstate commits guarantee
+                # something lands after yours. A commit is covered as soon as
+                # any DESCENDANT has been judged: that run built and tested a
+                # tree containing your change.
+                for j in judged:
+                    if is_ancestor(repo, s, j):
+                        covered_by = j
+                        break
+            if covered_by is None:
                 continue
-            verdict, tier, host, new_red = judged[s]
+            verdict, tier, host, new_red = judged[covered_by]
             pending.remove(s)
+            if covered_by != s:
+                print("follow: %s covered by %s (the watcher tests HEAD, not "
+                      "every commit)" % (s[:12], covered_by[:12]), flush=True)
+                s = covered_by
             if verdict == "GREEN":
                 print("follow: %s GREEN (%s, %s)" % (s[:12], tier, host),
                       flush=True)
