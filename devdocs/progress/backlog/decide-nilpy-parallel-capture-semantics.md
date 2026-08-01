@@ -70,3 +70,27 @@ CPython code silently races). Cheap to add, permanent to own.
 
 Whoever picks this up later: re-read the fork above before writing any code,
 and confirm with the user that the substrate is actually settled.
+
+---
+
+## POSTPONED — 2026-08-01 (user), and reclassified
+
+> "3 is totally for later (python does not support anything parallel — nothing
+> missed there, just our language feature)."
+
+The important half is the second clause, not the postponement. CPython has no
+real parallel `for`, so **this is not a compat gap** — there is no reference
+behaviour to match and nothing a Python program expects that NilPy lacks. It is
+a pxx language **extension**.
+
+That changes how it should be ranked, not just when. By CLAUDE.md's own
+taxonomy, "more than the spec" is the **X tag** (experimental: optional, never a
+prio, picked up on user request or for fun) — the mirror image of `compat`,
+which is "exactly the spec". Its `prio: 5` was already the right number by
+instinct; this records the *reason*, so a later sweep does not read the low
+priority as neglect and promote it.
+
+The recommendation in the ticket stands unchanged if it is ever built: option 3
+(reject what cannot be proven safe) evolving toward 1. Mirroring Pascal's
+by-reference capture stays rejected — a Python-shaped race is a parity trap, and
+here there is not even a parity argument to trade against it.

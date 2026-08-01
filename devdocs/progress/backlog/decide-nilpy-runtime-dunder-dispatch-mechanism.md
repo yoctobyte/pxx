@@ -101,3 +101,25 @@ dunder. So option 4 is a viable stopgap for `print([obj])` but NOT for
 truthiness — the fallback there must stay silent and correct. Worth weighing
 when picking between 1 and 2: whatever lands has to answer "does this class
 declare `__bool__`?" cheaply at run time, for objects that mostly do not.
+
+---
+
+## POSTPONED — 2026-08-01 (user)
+
+> "#1 needs a careful thought."
+
+Deliberately not answered today. Not blocked on information — blocked on
+judgement, which is what Track U is for.
+
+Carry forward when it is picked up: the **third symptom found on 2026-08-01
+(dunders via an untyped PARAMETER) narrowed the option space after the options
+were written.** Option 4 ("raise, don't guess") is still a fine stopgap for
+`print([obj])`, but it cannot be applied to truthiness — "any instance is true"
+is the *correct* answer when a class declares no `__bool__`, so raising there
+would break working programs. That means whichever of 1/2 lands must answer
+**"does this class declare `__bool__`?" cheaply at run time, for objects that
+mostly do not** — a constraint that did not exist when the options were drafted.
+
+Still `blocked-by` this: [[bug-nilpy-dunders-not-dispatched-through-containers]],
+and [[feature-nilpy-arithmetic-ordering-dunders]] will hit the identical wall for
+`__add__`.
