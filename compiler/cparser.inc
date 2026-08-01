@@ -3934,6 +3934,7 @@ begin
       SymPtrBaseRec[idx] := REC_NONE;
       if procSig >= 0 then SymProcSig[idx] := procSig;
     end;
+    SymSyncTypeRef(idx);
     head := -1; tail := -1;
     if CurTok.Kind = tkAssign then
     begin
@@ -4023,6 +4024,7 @@ begin
       SymPtrDepth[idx] := 1;
       SymPtrBaseTk[idx] := Ord(scalarTk);
       SymPtrBaseRec[idx] := scalarRec;
+      SymSyncTypeRef(idx);
       if CurTok.Kind = tkAssign then
       begin
         Next;
@@ -4370,6 +4372,7 @@ begin
         SymPtrDepth[idx] := declPtrDepth;
         SymPtrBaseTk[idx] := declBaseTk;
         SymPtrBaseRec[idx] := declBaseRec;
+        SymSyncTypeRef(idx);
       end;
       { C99 6.7.8p21: any brace initializer zero-fills the tail the list does
         not reach — zero the whole array before the element stores. }
@@ -4467,6 +4470,7 @@ begin
         { `ft *pf` — pointer to a fn-pointer: the pointee sig lets `(*pf)(args)`
           resolve (SymElemProcSig channel, shared with `pf[0](args)`). }
         if declPtrElemSig >= 0 then SymElemProcSig[idx] := declPtrElemSig;
+        SymSyncTypeRef(idx);
       end;
       initExpr := -1;
       if CurTok.Kind = tkAssign then
@@ -6438,6 +6442,7 @@ begin
         Syms[idx].PtrElemTk := tyUnknown;
         Syms[idx].PtrElemRec := REC_NONE;
         SymPtrDepth[idx] := 1;
+        SymSyncTypeRef(idx);
       end;
     end;
     for ei := 0 to nArrElems - 1 do
@@ -6717,6 +6722,7 @@ begin
       SymPtrBaseRec[idx] := CTypePtrBaseRec;
       { `ft *gpf` global — pointee sig so `(*gpf)(args)` resolves. }
       if CTypePtrElemProcSig >= 0 then SymElemProcSig[idx] := CTypePtrElemProcSig;
+      SymSyncTypeRef(idx);
     end;
     { 1-D pointer-array initializer the flat pre-scan bailed on: replay the
       whole brace through the recursive walker at main (see the defer note in
@@ -8412,6 +8418,7 @@ begin
           for pmi := 0 to pptrndims[i] - 1 do
             SymArrDimSpan[idx * MAX_ARR_DIMS + pmi] := pptrdims[i * MAX_ARR_DIMS + pmi];
       end;
+      SymSyncTypeRef(idx);
     end;
   end;
   
