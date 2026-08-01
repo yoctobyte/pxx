@@ -3713,6 +3713,18 @@ begin
   raise TypeError.Create('unsupported operand type for a bitwise or shift operator (no __and__/__or__/__xor__/__lshift__/__rshift__)');
 end;
 
+{ An operand pair Python does not define for the operator -- a missing
+  __add__/__sub__/__mul__/__truediv__/__floordiv__/__mod__/__neg__, or a list
+  concatenated with a non-list. CPython raises TypeError at RUN time; these
+  sites used the compiler's Error() instead, so a `try/except TypeError` around
+  the expression could not even BUILD -- which is the normal Python way to probe
+  for operator support.
+  bug-nilpy-missing-arith-dunder-aborts-compile-instead-of-raising. }
+procedure PyUnsupportedOperandError;
+begin
+  raise TypeError.Create('unsupported operand type(s) for this operator');
+end;
+
 { `obj[i] = v` where obj's class defines `__getitem__` but not `__setitem__`
   -- CPython's own error shape ("does not support item assignment"). }
 procedure PyNoSetitemError;

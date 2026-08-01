@@ -8898,7 +8898,7 @@ begin
           integer. }
         node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__neg__', left, -1);
         if node < 0 then
-          Error('Nil Python: class has no __neg__() for unary minus');
+          node := PyMakeUnsupportedOperand;   { runtime TypeError, not a build abort }
       end
       else
       begin
@@ -13413,7 +13413,7 @@ begin
       else if op = tkMod then node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__mod__', left, right)
       else node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__truediv__', left, right);
       if node < 0 then
-        Error('Nil Python: class has no __mul__()/__truediv__()/__floordiv__()/__mod__() for this operator');
+        node := PyMakeUnsupportedOperand;   { runtime TypeError, not a build abort }
       CurASTNode := node;
       continue;
     end
@@ -13610,7 +13610,10 @@ begin
         (bug-nilpy-list-plus-nonlist-silently-corrupts-instead-of-typeerror).
         NilPy resolves types statically, so this is caught here as a compile
         error rather than deferred to a run-time exception. }
-      Error('Nil Python: can only concatenate list with another list (+)');
+      { runtime TypeError, matching CPython, rather than a build abort — the
+        static type is known here but Python's answer is an exception. }
+      CurASTNode := PyMakeUnsupportedOperand;
+      continue;
     end
     else if PyExprMode and (op in [tkPlus, tkMinus]) and
             (IntToTypeKind(ASTTk[left]) <> tyClass) and
@@ -13638,7 +13641,7 @@ begin
       if op = tkPlus then node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__add__', left, right)
       else node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__sub__', left, right);
       if node < 0 then
-        Error('Nil Python: class has no __add__()/__sub__() for this operator');
+        node := PyMakeUnsupportedOperand;   { runtime TypeError, not a build abort }
       CurASTNode := node;
       continue;
     end
@@ -13710,6 +13713,24 @@ end;
 
 { Enum type index of an expression node, or -1. Ident-level only: enum
   identity lives on the SYMBOL (SymEnumId, tagged at var decls). }
+function PyMakeUnsupportedOperand: Integer;
+{ An AN_CALL to pylib's PyUnsupportedOperandError: a genuine RUNTIME TypeError
+  where these sites previously called the compiler's Error() and aborted the
+  build. CPython raises at run time, so `try: a + b / except TypeError:` — the
+  normal way to probe for operator support — must COMPILE and run its handler.
+  Same shape the __contains__ / ordering / bitwise misses already use.
+  bug-nilpy-missing-arith-dunder-aborts-compile-instead-of-raising. }
+var pi, node: Integer;
+begin
+  pi := FindProc('PyUnsupportedOperandError');
+  if pi < 0 then Error('Nil Python: pylib (PyUnsupportedOperandError) not loaded');
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := pi;
+  ASTTk[node] := Ord(tyBoolean);
+  ASTLeft[node] := -1;
+  PyMakeUnsupportedOperand := node;
+end;
+
 function PyReflName(op: TTokenKind): AnsiString;
 { The reflected dunder for a binary operator: `a <op> b` falls back to
   `b.__r<op>__(a)`. One table so the two call sites (ParseSimpleExpr for +/-,

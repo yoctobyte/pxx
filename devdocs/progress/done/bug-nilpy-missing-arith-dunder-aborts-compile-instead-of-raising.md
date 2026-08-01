@@ -110,3 +110,39 @@ types are static, some pairs abort the build (here) and others silently do
 pointer math (there). Whichever is picked up first should decide the shared
 answer — a runtime `TypeError` raise — so the two do not land inconsistent
 behaviour for neighbouring operand pairs.
+
+## FIXED 2026-08-01
+
+`PyUnsupportedOperandError` (`compiler/builtin/pylib.pas`) + `PyMakeUnsupportedOperand`
+(`compiler/parser.inc`), replacing the compiler `Error()` at **all four** sites —
+including the list-concat one this ticket originally missed:
+
+| site | was |
+| --- | --- |
+| `parser.inc` `__add__`/`__sub__` dispatch | `class has no __add__()/__sub__()` |
+| `parser.inc` `__mul__`/`__truediv__`/`__floordiv__`/`__mod__` dispatch | `class has no __mul__()/...` |
+| `parser.inc` `__neg__` (unary minus) | `class has no __neg__()` |
+| `parser.inc` list-concat check | `can only concatenate list with another list (+)` |
+
+All four now build an `AN_CALL` to the pylib helper — a genuine runtime
+`TypeError`, so `try: a + b / except TypeError:` compiles and runs its handler,
+and execution continues past it.
+
+`test/test_nilpy_unsupported_operand_raises.npy` is byte-identical to CPython:
+each of the five operator forms caught, the list-concat case caught, execution
+CONTINUING afterwards (the whole point of moving these to run time), and a class
+that does define the operator still working.
+
+Native confirm: self-host fixedpoint A==B==C from the pinned seed, testmgr
+--tier quick GREEN; matrix offloaded to Track T.
+
+### Note on what did NOT change
+
+This makes the diagnostic honest; it does not make the operand pair legal. A
+pair Python DOES define but pxx computes wrongly is a different ticket
+([[bug-nilpy-static-typed-operands-skip-mixed-type-guard]]) — that one needs a
+legality table, whereas this one only needed the existing "no dunder found"
+answer routed to a raise instead of an abort.
+
+## Log
+- 2026-08-01 — resolved, commit HEAD.

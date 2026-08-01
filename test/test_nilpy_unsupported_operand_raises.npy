@@ -1,0 +1,62 @@
+# An operand pair Python does not define must raise a CATCHABLE TypeError at
+# run time. These sites previously called the compiler's Error(), so a
+# `try/except TypeError` around the expression — the normal Python way to probe
+# for operator support — could not even BUILD.
+# bug-nilpy-missing-arith-dunder-aborts-compile-instead-of-raising.
+#
+# 36 of the 40 compile failures in the 2026-08-01 CPython differential sweep
+# were this defect, across four sites: the __add__/__sub__, __mul__/__truediv__
+# and __neg__ dispatches, and pylib's list-concat check.
+#
+# Expectation is CPython's own output.
+
+
+class Bare:
+    def __init__(self, v):
+        self.v = v
+
+
+a = Bare(1)
+b = Bare(2)
+
+try:
+    print(a + b)
+except TypeError:
+    print("caught add")
+try:
+    print(a - b)
+except TypeError:
+    print("caught sub")
+try:
+    print(a * b)
+except TypeError:
+    print("caught mul")
+try:
+    print(a / b)
+except TypeError:
+    print("caught truediv")
+try:
+    print(-a)
+except TypeError:
+    print("caught neg")
+
+# the list-concat site: a list plus a non-list
+try:
+    print([1, 2] + "x")
+except TypeError:
+    print("caught list concat")
+
+# execution CONTINUES past a caught operator error — the point of making these
+# runtime rather than compile-time
+print("still running")
+
+# a class that DOES define the operator is unaffected
+class Ok:
+    def __init__(self, v):
+        self.v = v
+
+    def __add__(self, rhs):
+        return self.v + rhs.v
+
+
+print(Ok(3) + Ok(4))
