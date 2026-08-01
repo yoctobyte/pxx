@@ -30,11 +30,10 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (184)
+## backlog (183)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
@@ -307,7 +306,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1136)
+## done (1137)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -320,6 +319,7 @@ _none_
 | bug-a-cfront-riscv32-byval-record-result-pxxmemmove | A | 70 | bug | bug: C→riscv32 by-value record result emits PXXMemMove but the C compile never injects builtinheap | — |
 | bug-a-class-managed-fields-not-finalized-on-destroy | A | 40 | bug | managed-field finalization gap + heap-lock hazard: a class finalizes NO managed fields on Free (leak), and a COM interface field of a RECORD cannot be finalized under the record heap lock without deadlocking — both need the interface release moved outside the non-reentrant heap lock | — |
 | bug-a-compiler-hang-on-valid-c-programs | A | 60 | bug | pxx compiler HANGS (non-termination, 100% CPU) compiling two valid C programs gcc builds in <1s — pr23324.c (bitfields+empty union) and pr44164.c (nested struct + empty compound literal); worst class: no output, no error | — |
+| bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
 | bug-a-csmith-o0-miscompile-seed31039 | A | 50 | bug | csmith seed 31039: pxx prints a wrong global (g_22) checksum vs gcc at -O0, consistent across -O levels. Pre-existing. Needs creduce (line-reducer floors ~90 lines). | — |
 | bug-a-csmith-o0-miscompile-seed5038 | A | 55 | bug | csmith seed 5038: pxx produces a WRONG global checksum vs gcc at -O0 (silent miscompile). Pre-existing (pinned reproduces). Needs creduce to reduce. | — |
 | bug-a-double-global-initializer-arithmetic-folds-to-zero | A | 65 | bug | any compile-time ARITHMETIC in a double global/static initializer folds to 0.0 (1.0/4.0, 2.0*3.0, 1024.0-0.5 all become 0.0); a bare literal is fine — silent, hits real C code | — |
@@ -3024,7 +3024,6 @@ _none_
 - [p 35] [N] feature-nilpy-yield-outside-a-for-loop
 - [p 35] [O] feature-opt-complex-packed-double
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
-- [p 30] [A] bug-a-const-variant-arg-expression-fails-outside-pyexprmode
 - [p 30] [A] bug-cfront-silent-bind-to-pascal-proc-of-different-arity
 - [p 30] [N] bug-nilpy-bitwise-op-rejects-boolean-variable-operand
 - [p 30] [N] bug-nilpy-construction-on-the-right-of-is-does-not-parse
