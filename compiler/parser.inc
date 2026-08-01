@@ -8143,6 +8143,68 @@ begin
     end;
 end;
 
+function PyMakeUnsupportedOperand: Integer;
+{ An AN_CALL to pylib's PyUnsupportedOperandError: a genuine RUNTIME TypeError
+  where these sites previously called the compiler's Error() and aborted the
+  build. CPython raises at run time, so `try: a + b / except TypeError:` — the
+  normal way to probe for operator support — must COMPILE and run its handler.
+  Same shape the __contains__ / ordering / bitwise misses already use.
+  bug-nilpy-missing-arith-dunder-aborts-compile-instead-of-raising. }
+var pi, node: Integer;
+begin
+  pi := FindProc('PyUnsupportedOperandError');
+  if pi < 0 then Error('Nil Python: pylib (PyUnsupportedOperandError) not loaded');
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := pi;
+  ASTTk[node] := Ord(tyBoolean);
+  ASTLeft[node] := -1;
+  PyMakeUnsupportedOperand := node;
+end;
+
+function PyReflName(op: TTokenKind): AnsiString;
+{ The reflected dunder for a binary operator: `a <op> b` falls back to
+  `b.__r<op>__(a)`. One table so the two call sites (ParseSimpleExpr for +/-,
+  ParseTerm for * / // %) cannot drift. }
+begin
+  case op of
+    tkPlus:  PyReflName := '__radd__';
+    tkMinus: PyReflName := '__rsub__';
+    tkStar:  PyReflName := '__rmul__';
+    tkSlash: PyReflName := '__rtruediv__';
+    tkDiv:   PyReflName := '__rfloordiv__';
+    tkMod:   PyReflName := '__rmod__';
+    else     PyReflName := '';
+  end;
+end;
+
+function PyReflectedDunder(const rname: AnsiString; left, right: Integer): Integer;
+{ Python's REFLECTED fallback: when the LEFT operand does not implement the
+  operator, the RIGHT operand's `__r<op>__` is tried with the operands swapped
+  (`3 + C(4)` -> `C(4).__radd__(3)`). Returns -1 when the right operand is not a
+  user class declaring that method, so the caller keeps its existing path.
+
+  Measured absent before this: all seven reflected forms fell through to the
+  numeric typing and computed on the class HANDLE — `3 + C(4)` gave 1744830491,
+  `3 * C(4)` gave -1906311096, silently
+  (feature-nilpy-arithmetic-dunders-full-protocol). The two comments in this
+  file that said the fallback "is not implemented" were the only trace of it;
+  there was no partially-wired path.
+
+  The RIGHT operand becomes the receiver and the LEFT becomes the argument —
+  that swap is the whole point, and getting it backwards yields a plausible
+  wrong answer rather than an error. }
+var ci: Integer;
+begin
+  PyReflectedDunder := -1;
+  if not PyExprMode then Exit;
+  if IntToTypeKind(ASTTk[right]) <> tyClass then Exit;
+  if ResolveNodeRec(right) < REC_UCLASS_BASE then Exit;
+  if PyRecIsPylibOwnClass(ResolveNodeRec(right)) then Exit;
+  ci := ResolveNodeRec(right) - REC_UCLASS_BASE;
+  if FindUMeth(ci, rname) < 0 then Exit;
+  PyReflectedDunder := PyCallMeth1(ci, rname, right, left);
+end;
+
 procedure ParseFactorCore;
 var intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
@@ -13713,68 +13775,6 @@ end;
 
 { Enum type index of an expression node, or -1. Ident-level only: enum
   identity lives on the SYMBOL (SymEnumId, tagged at var decls). }
-function PyMakeUnsupportedOperand: Integer;
-{ An AN_CALL to pylib's PyUnsupportedOperandError: a genuine RUNTIME TypeError
-  where these sites previously called the compiler's Error() and aborted the
-  build. CPython raises at run time, so `try: a + b / except TypeError:` — the
-  normal way to probe for operator support — must COMPILE and run its handler.
-  Same shape the __contains__ / ordering / bitwise misses already use.
-  bug-nilpy-missing-arith-dunder-aborts-compile-instead-of-raising. }
-var pi, node: Integer;
-begin
-  pi := FindProc('PyUnsupportedOperandError');
-  if pi < 0 then Error('Nil Python: pylib (PyUnsupportedOperandError) not loaded');
-  node := AllocNode(AN_CALL);
-  ASTIVal[node] := pi;
-  ASTTk[node] := Ord(tyBoolean);
-  ASTLeft[node] := -1;
-  PyMakeUnsupportedOperand := node;
-end;
-
-function PyReflName(op: TTokenKind): AnsiString;
-{ The reflected dunder for a binary operator: `a <op> b` falls back to
-  `b.__r<op>__(a)`. One table so the two call sites (ParseSimpleExpr for +/-,
-  ParseTerm for * / // %) cannot drift. }
-begin
-  case op of
-    tkPlus:  PyReflName := '__radd__';
-    tkMinus: PyReflName := '__rsub__';
-    tkStar:  PyReflName := '__rmul__';
-    tkSlash: PyReflName := '__rtruediv__';
-    tkDiv:   PyReflName := '__rfloordiv__';
-    tkMod:   PyReflName := '__rmod__';
-    else     PyReflName := '';
-  end;
-end;
-
-function PyReflectedDunder(const rname: AnsiString; left, right: Integer): Integer;
-{ Python's REFLECTED fallback: when the LEFT operand does not implement the
-  operator, the RIGHT operand's `__r<op>__` is tried with the operands swapped
-  (`3 + C(4)` -> `C(4).__radd__(3)`). Returns -1 when the right operand is not a
-  user class declaring that method, so the caller keeps its existing path.
-
-  Measured absent before this: all seven reflected forms fell through to the
-  numeric typing and computed on the class HANDLE — `3 + C(4)` gave 1744830491,
-  `3 * C(4)` gave -1906311096, silently
-  (feature-nilpy-arithmetic-dunders-full-protocol). The two comments in this
-  file that said the fallback "is not implemented" were the only trace of it;
-  there was no partially-wired path.
-
-  The RIGHT operand becomes the receiver and the LEFT becomes the argument —
-  that swap is the whole point, and getting it backwards yields a plausible
-  wrong answer rather than an error. }
-var ci: Integer;
-begin
-  PyReflectedDunder := -1;
-  if not PyExprMode then Exit;
-  if IntToTypeKind(ASTTk[right]) <> tyClass then Exit;
-  if ResolveNodeRec(right) < REC_UCLASS_BASE then Exit;
-  if PyRecIsPylibOwnClass(ResolveNodeRec(right)) then Exit;
-  ci := ResolveNodeRec(right) - REC_UCLASS_BASE;
-  if FindUMeth(ci, rname) < 0 then Exit;
-  PyReflectedDunder := PyCallMeth1(ci, rname, right, left);
-end;
-
 function NodeEnumIdOf(node: Integer): Integer;
 begin
   Result := -1;
