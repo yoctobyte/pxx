@@ -133,3 +133,63 @@ unverified.
 CPython covering `dict()` from a list of pairs (subscript, `len`, `in`, `.get`)
 and `str.encode().decode()` round-tripping, including a non-ASCII byte if the
 encoding path supports one.
+
+## 2026-08-01 (later) — the "typecast" diagnosis is WRONG; blocked on a Track A bug
+
+`.decode()` half confirmed fixed (b78988fe8, before this session) — `"abc".encode().decode()`
+prints `abc`. Only the `dict()` half remained, and its recorded cause does not
+survive measurement.
+
+### It is not a typecast — `dict` is an ordinary overload set
+
+```
+$ pxx -e 'print(dict())'        error: no overload of dict matches these arguments
+```
+
+"no overload of dict matches" comes from `parser.inc`'s overload reporter, not
+from a cast path. `compiler/builtin/pylib.pas` really declares:
+
+```pascal
+function dict(d: TPyDict): TPyDict;
+function dict(const v: Variant): TPyDict; overload;
+```
+
+The table in the original diagnosis is still accurate as *observation* — 0 and 3
+args rejected, 1 accepted — but it is **overload arity**, not cast arity, and
+the conclusion drawn from it sent the fix at the wrong target.
+
+### Actual cause: overload resolution ignores CLASS IDENTITY
+
+`dict([("a",1)])` passes a **TPyList**. Resolution takes the first candidate
+whose ARITY fits and never compares the argument's class to the parameter's, so
+the TPyList binds to `dict(d: TPyDict)` and the body calls `d.keylist` on it —
+one class's fields read through another's shape. Filed as
+[[bug-a-overload-resolution-ignores-class-identity]], with a **plain-Pascal**
+repro (two unrelated classes, wrong overload chosen, no NilPy involved). It is a
+Track A bug affecting every overload set with class-typed parameters, not
+anything specific to `dict`.
+
+### What landed here, and why it does not fix it yet
+
+`function dict(l: TPyList): TPyDict; overload;` added to `pylib.pas`, built on
+`TPyDict.update(TPyList)` which already walks (key, value) pairs correctly
+(verified: `d = {}; d.update([("a",1)])` gives `{'a': 1}`).
+
+It is **declared last and is not selected yet**. Measured, and this is the part
+that matters:
+
+| declaration order | `dict([pairs])` | `dict(a_real_dict)` |
+| --- | --- | --- |
+| TPyDict first (as shipped) | SIGSEGV | works |
+| TPyList first | works | **SIGSEGV** |
+
+Ordering only MOVES the crash, because resolution is first-arity-match either
+way. So there is no pylib-level fix, only a workaround that trades one broken
+call for another — and per the no-compiler-appeasement rule the platonic
+overload stays in place, unselected, `blocked-by` the Track A bug. When
+resolution is fixed it starts being chosen with no further change here.
+
+Confirmed no regression from adding it: `dict(a_real_dict)` and `dict([])` behave
+exactly as before, `dict([pairs])` still crashes as before.
+
+**blocked-by:** [[bug-a-overload-resolution-ignores-class-identity]]

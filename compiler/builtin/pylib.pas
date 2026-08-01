@@ -843,8 +843,22 @@ function list(const v: Variant): TPyList; overload;
 { `dict(x)` — a shallow COPY of a mapping, as Python's dict() constructor makes.
   Same overload-by-argument-type shape as list() (feature-nilpy-missing-builtins).
   uforth uses `dict(vm.dict)` to snapshot word-list state for MARKER. }
-function dict(d: TPyDict): TPyDict;
+function dict(d: TPyDict): TPyDict; overload;
 function dict(const v: Variant): TPyDict; overload;
+{ dict(pairs) — the standard way to build a dict from zip(), .items() or parsed
+  input, and platonically the overload that makes `dict([("a", 1)])` work.
+  It is NOT selected yet: overload resolution takes the first candidate whose
+  ARITY fits and never checks class identity for a class-typed parameter, so a
+  TPyList argument binds to `dict(d: TPyDict)` above and its body reads a
+  TPyList's fields as a TPyDict's — SIGSEGV
+  (bug-nilpy-dict-from-pairs-and-bytes-decode-segfault, blocked on
+  bug-a-overload-resolution-ignores-class-identity).
+  Left in place rather than reordered on purpose: putting it FIRST does fix
+  `dict(pairs)` but then breaks `dict(a_real_dict)` the same way, so ordering
+  only moves the crash. Per the no-compiler-appeasement rule this stays
+  platonic and waits for the resolution fix, at which point it starts being
+  selected with no further change here. }
+function dict(l: TPyList): TPyDict; overload;
 
 { dict.fromkeys(iterable): a dict with those keys, values None, insertion order
   preserved. `list(dict.fromkeys(xs))` is the standard order-preserving dedupe. }
@@ -6902,7 +6916,7 @@ begin
   Result := r;
 end;
 
-function dict(d: TPyDict): TPyDict;
+function dict(d: TPyDict): TPyDict; overload;
 var r: TPyDict; ks, vs: TPyList; i: Integer;
 begin
   r := TPyDict.Create;
@@ -6926,6 +6940,18 @@ begin
     if o is TPyDict then begin Result := dict(TPyDict(o)); Exit; end;
   end;
   Result := TPyDict.Create;   { None / non-mapping }
+end;
+
+{ dict(pairs): each element is a (key, value) sequence. TPyDict.update(TPyList)
+  already walks exactly that shape, so this is the constructor around it rather
+  than a second copy of the loop — a fresh dict has FCounterMode false, so it
+  takes update's pair branch, not the Counter branch. }
+function dict(l: TPyList): TPyDict; overload;
+var r: TPyDict;
+begin
+  r := TPyDict.Create;
+  r.update(l);
+  Result := r;
 end;
 
 function reversed(l: TPyList): TPyList;
