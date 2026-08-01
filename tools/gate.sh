@@ -72,6 +72,9 @@ if [ "$MODE" = check ]; then
   echo "  lib   -> make lib-test"
   echo "  full  -> quick + make test-nilpy + make test   (only when Track T is down)"
   tools/twatch.py --status 2>/dev/null | sed 's/^/  /' || echo "  (twatch status unavailable)"
+  # --status answers "is anyone covering the repo"; `trackt health` answers
+  # "is the watcher on THIS box trustworthy right now", incl. alive-but-wedged.
+  echo "  (watcher health on this box: tools/trackt.py health)"
   exit 0
 fi
 
