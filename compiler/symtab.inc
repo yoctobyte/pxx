@@ -329,6 +329,33 @@ begin
   Inc(EnumTypeCount);
 end;
 
+function RegisterTypeInfoReq(cat, key: Integer): Integer;
+{ Dedup a widened TypeInfo(T) use (T = a scalar/string/class/record, NOT an
+  enum -- those keep the legacy FindEnumType path). Same (cat, key) returns
+  the same request index every time, so a header is emitted once per distinct
+  type even if TypeInfo() is written many times over. The actual Data[]
+  header is built by EmitTypeInfoHeaders (rtti_emit.inc), which runs after
+  EmitRTTI (class/record TypeInfo needs UClsRTTIOff, only known by then). }
+var i: Integer;
+begin
+  i := 0;
+  while i < TypeInfoReqCount do
+  begin
+    if (TypeInfoReqCat[i] = cat) and (TypeInfoReqKey[i] = key) then
+    begin
+      Result := i;
+      Exit;
+    end;
+    Inc(i);
+  end;
+  if TypeInfoReqCount >= MAX_TYPEINFO_REQ then Error('too many distinct TypeInfo() uses (MAX_TYPEINFO_REQ)');
+  Result := TypeInfoReqCount;
+  TypeInfoReqCat[Result] := cat;
+  TypeInfoReqKey[Result] := key;
+  TypeInfoReqOff[Result] := -1;
+  Inc(TypeInfoReqCount);
+end;
+
 procedure AddEnumVal(noff, nlen, ordVal: Integer);
 begin
   if EnumValCount >= MAX_ENUMVAL then Error('too many enum values');

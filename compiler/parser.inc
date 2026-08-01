@@ -8168,6 +8168,7 @@ var intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiSt
     rndArg: Integer;   { first operand of NilPy round(x, n) }
     fwdList, fwdDict: Integer;   { `f(*args, **kwargs)` forwarded into fixed parameters }
     altPi, wpj: Integer; paramsAllVariant: Boolean;   { callable-value wrapper selection }
+    tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
 begin
   LastExprTk := tyInteger;
   { Nil Python: ClassName(args) in ANY expression position is construction
@@ -10614,11 +10615,18 @@ begin
         Exit;
       end;
 
-      { TypeInfo(TEnum) -- FPC's System intrinsic, the handle TypInfo's GetEnumName takes.
-        We already emit an RTTI blob per enum type {name, count, names[]}; this yields its
-        address. Enum types only for now: a class/record TypeInfo would hand back a blob
-        whose LAYOUT is ours, not FPC's, and code reading it as FPC's TTypeData would be
-        silently wrong -- so those are refused rather than guessed at. }
+      { TypeInfo(T) -- FPC's System intrinsic. Enum types (the original support) yield
+        the address of the enum RTTI blob {name, count, names[]} directly, unchanged --
+        that is what typinfo.pas's GetEnumName/GetEnumNameCount already take, and
+        fpjson's RTTI streaming is gated on it staying exactly as it was.
+
+        Scalars, strings, classes and records (feature-pascal-corpus-generics: rung 3
+        needs TypeInfo(T) for GENERIC PARAMETERS, e.g. Generics.Defaults selecting a
+        comparer by Kind) go through a SEPARATE, uniform "PTypeInfo" header --
+        {Kind, NamePtr, DataPtr} -- built by EmitTypeInfoHeaders once EmitRTTI has run
+        (rtti_emit.inc) and read generically by typinfo.pas regardless of category. No
+        FPC byte-layout parity is implied or needed (see feature-pascal-corpus-generics
+        "NO DECISION NEEDED" recon note) -- typinfo.pas owns the whole translation. }
       { __pxxExceptAddr: the raise site of the exception in flight. Zero-arg, and the
         reserved prefix keeps it out of the user's namespace — sysutils.ExceptAddr is a
         one-line wrapper over it. Parens optional, like any zero-arg Pascal function. }
@@ -10642,14 +10650,71 @@ begin
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
-        if CurTok.Kind <> tkIdent then Error('TypeInfo expects a type name');
-        i := FindEnumType(CurTok.SVal);
-        if i < 0 then
-          Error('TypeInfo is supported for ENUM types only (pxx RTTI blobs are not FPC''s TTypeData): ' + CurTok.SVal);
+        i := -1; ci := -1; tiTk := tyUnknown; tiName := '';
+        if CurTok.Kind = tkIdent then
+        begin
+          tiName := CurTok.SVal;
+          i := FindEnumType(tiName);
+          if i < 0 then
+          begin
+            ci := FindUClass(tiName);
+            if ci < 0 then
+            begin
+              tiTk := OrdinalNameToTk(tiName);
+              if tiTk = tyUnknown then
+              begin
+                if CaseEqual(tiName, 'string') or CaseEqual(tiName, 'ansistring') then tiTk := tyAnsiString
+                else if CaseEqual(tiName, 'shortstring') then tiTk := tyShortString
+                else if CaseEqual(tiName, 'single') then tiTk := tySingle
+                else if CaseEqual(tiName, 'double') or CaseEqual(tiName, 'real') then tiTk := tyDouble
+                else if CaseEqual(tiName, 'extended') then tiTk := tyExtended;
+              end;
+            end;
+          end;
+        end
+        else if CurTok.Kind in [tkInteger_T, tkBoolean_T, tkChar_T, tkString_T, tkReal_T,
+                                 tkLongWord_T, tkSingle_T, tkDouble_T, tkExtended_T] then
+        begin
+          { Type-keyword tokens (Integer/Boolean/Char/String/Real/LongWord/Single/
+            Double/Extended lex as their OWN token kind, not tkIdent -- SVal is
+            empty for these, read the spelling via GetTokenStr like the class-body
+            method-named-after-a-type-keyword path does, b332. }
+          tiName := GetTokenStr(TokPos);
+          case CurTok.Kind of
+            tkInteger_T:  tiTk := tyInteger;
+            tkBoolean_T:  tiTk := tyBoolean;
+            tkChar_T:     tiTk := tyChar;
+            tkString_T:   tiTk := tyAnsiString;
+            tkReal_T:     tiTk := tyDouble;
+            tkLongWord_T: tiTk := tyUInt32;
+            tkSingle_T:   tiTk := tySingle;
+            tkDouble_T:   tiTk := tyDouble;
+            tkExtended_T: tiTk := tyExtended;
+          end;
+        end
+        else
+          Error('TypeInfo expects a type name');
         Next;
         Expect(tkRParen, ')');
         node := AllocNode(AN_TYPEINFO);
-        ASTIVal[node] := i;
+        if i >= 0 then
+          { legacy enum path: ASTLeft stays -1, ASTIVal = enum type id, exactly as before }
+          ASTIVal[node] := i
+        else if ci >= 0 then
+        begin
+          ASTLeft[node] := 1;
+          if UClsIsRecord[ci] then
+            ASTIVal[node] := RegisterTypeInfoReq(TYPEINFO_REQ_CAT_RECORD, ci)
+          else
+            ASTIVal[node] := RegisterTypeInfoReq(TYPEINFO_REQ_CAT_CLASS, ci);
+        end
+        else if tiTk <> tyUnknown then
+        begin
+          ASTLeft[node] := 1;
+          ASTIVal[node] := RegisterTypeInfoReq(TYPEINFO_REQ_CAT_ORD, Ord(tiTk));
+        end
+        else
+          Error('TypeInfo is not supported for type: ' + tiName);
         ASTTk[node] := Ord(tyPointer);
         LastExprTk := tyPointer;
         CurASTNode := node;

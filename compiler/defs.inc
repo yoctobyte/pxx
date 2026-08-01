@@ -621,6 +621,17 @@ const
     EnumTypeRTTIOff[etid] after EmitRTTI. Must be the MOST negative base, and its fixup
     branch must be tested FIRST -- the classref branch matches everything <= -100000. }
   ENUM_RTTI_DATAREF_BASE = 400000;
+  { Widened TypeInfo(T) (scalar/string/class/record — see TypeInfoReq* above):
+    DataOff = -(TYPEINFO_REQ_DATAREF_BASE + reqIdx), patched to TypeInfoReqOff[reqIdx]
+    after EmitTypeInfoHeaders (which itself runs right after EmitRTTI). MUST be the
+    most negative base and tested FIRST of all of them -- otherwise the ENUM/
+    RECORD/CLASSREF branches below would swallow it. }
+  TYPEINFO_REQ_DATAREF_BASE = 500000;
+  { TypeInfoReq categories (see TypeInfoReqCat/Key/Off below) and cap. }
+  TYPEINFO_REQ_CAT_ORD    = 1;  { scalar/ordinal/string TTypeKind: key = Ord(TTypeKind) }
+  TYPEINFO_REQ_CAT_CLASS  = 2;  { class type: key = UCls index }
+  TYPEINFO_REQ_CAT_RECORD = 3;  { record type: key = UCls index (UClsIsRecord) }
+  MAX_TYPEINFO_REQ = 512;
 
   SYS_READ  = 0;
   SYS_WRITE = 1;
@@ -2499,6 +2510,26 @@ var
   EnumValNLen     : array[0..MAX_ENUMVAL-1] of Integer;
   EnumValOrd      : array[0..MAX_ENUMVAL-1] of Integer;   { member ordinal (explicit `= N` honored) }
   EnumValCount    : Integer;
+
+  { TypeInfo(T) widened beyond enums (feature-pascal-corpus-generics): one
+    request per DISTINCT (category, key) TypeInfo() use, deduped at parse
+    time by RegisterTypeInfoReq. AN_TYPEINFO's ASTLeft=1 marks a request-based
+    use (ASTIVal = reqIdx); EmitTypeInfoHeaders (rtti_emit.inc, runs right
+    after EmitRTTI so UClsRTTIOff is known) fills TypeInfoReqOff with the
+    Data[] address of a small, uniform "PTypeInfo" header {Kind:Int64;
+    NamePtr:PString; DataPtr:Pointer} that lib/rtl/typinfo.pas reads
+    generically regardless of category — see typinfo.pas TTypeInfoHdr.
+    Existing TypeInfo(TEnum) (ASTLeft stays -1, the legacy path) is
+    UNTOUCHED: it still yields the bare TEnumRTTI blob address, so fpjson's
+    GetEnumName/GetEnumNameCount keep working exactly as before (no
+    byte-layout parity needed, but also no reason to disturb a GREEN gate).
+    Category/base constants (TYPEINFO_REQ_CAT_*, MAX_TYPEINFO_REQ,
+    TYPEINFO_REQ_DATAREF_BASE) live in the const section above, by the other
+    *_DATAREF_BASE sentinels. }
+  TypeInfoReqCat : array[0..MAX_TYPEINFO_REQ-1] of Integer;
+  TypeInfoReqKey : array[0..MAX_TYPEINFO_REQ-1] of Integer;
+  TypeInfoReqOff : array[0..MAX_TYPEINFO_REQ-1] of Integer;  { Data[] off of the header, filled post-EmitRTTI }
+  TypeInfoReqCount : Integer;
 
   { Class variables (`class var x: T`): one shared global storage slot per class,
     addressed as TClass.x or instance.x. Registry maps (owning class ci, name) ->

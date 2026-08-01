@@ -105,6 +105,43 @@ type
   end;
   PEnumRTTI = ^TEnumRTTI;
 
+  { FPC's own TTypeKind, same declared order (rtl/inc/rttih.inc) -- no byte-layout
+    parity is needed anywhere in this unit (see feature-pascal-corpus-generics'
+    "NO DECISION NEEDED" recon note: nothing outside typinfo reads our RTTI bytes
+    directly), but keeping the ORDINAL values faithful costs nothing and is the
+    project default (FPC-faithful, lax only behind --strict-* flags) -- a vendor
+    unit doing `array[TTypeKind] of X` or comparing a raw Ord() against a literal
+    then just works unmodified. }
+  TTypeKind = (tkUnknown, tkInteger, tkChar, tkEnumeration, tkFloat,
+               tkSet, tkMethod, tkSString, tkLString, tkAString,
+               tkWString, tkVariant, tkArray, tkRecord, tkInterface,
+               tkClass, tkObject, tkWChar, tkBool, tkInt64, tkQWord,
+               tkDynArray, tkInterfaceRaw, tkProcVar, tkUString, tkUChar,
+               tkHelper, tkFile, tkClassRef, tkPointer);
+
+  { The uniform "PTypeInfo" header TypeInfo(T) now yields for anything OTHER
+    than an enum type (compiler/rtti_emit.inc EmitTypeInfoHeaders) — scalars,
+    strings, classes, records, and (the case this rung of the OOP corpus
+    actually needs) GENERIC PARAMETERS at specialization time, since pxx
+    generics substitute the type parameter's token textually before this ever
+    runs, so `TypeInfo(T)` inside a specialized body is just `TypeInfo(Integer)`
+    etc by the time the parser sees it — no separate generic-param path needed.
+    DataPtr is category-specific: nil for a plain scalar/string; the existing
+    TClassRTTI blob for a class (Kind=tkClass); the existing record LAYOUT
+    descriptor for a record with managed fields, else nil (Kind=tkRecord).
+    Enum TypeInfo() does NOT go through this header -- it still yields a bare
+    PEnumRTTI, unchanged, so GetEnumName/GetEnumNameCount below keep working
+    exactly as they did before this widening (fpjson's RTTI streaming gate). }
+  TTypeInfoHdr = record
+    Kind:    Int64;      { Ord(TTypeKind) }
+    NamePtr: PString;
+    {$ifdef CPU32} _pad_name: LongInt; {$endif}
+    DataPtr: Pointer;    { category-specific, see above; nil if none }
+    {$ifdef CPU32} _pad_data: LongInt; {$endif}
+  end;
+  PTypeInfo = ^TTypeInfoHdr;
+  PTypeData = PTypeInfo;   { same header for now — DataPtr carries anything extra }
+
   TPropInfo = record
     NamePtr: PString;
     {$ifdef CPU32} _pad_name: LongInt; {$endif}

@@ -540,6 +540,121 @@ begin
   end;
 end;
 
+{ Map pxx's internal TTypeKind onto FPC's TTypeKind ORDINAL (typinfo.pas
+  declares the same 30-member enum, in FPC's own declared order, purely so a
+  vendor source doing `array[TTypeKind] of X` or a stray numeric comparison
+  keeps working -- feature-pascal-corpus-generics settled that no BYTE-LAYOUT
+  parity is needed, but the ordinal values cost nothing to keep faithful and
+  the project default is FPC-faithful where it's free (see
+  devdocs/progress: FPC-faithful, lax behind --strict-*). Widening this table
+  to Extended-precision floats or Unicode variants can wait for a real corpus
+  need. }
+function PxxTkToFPCKind(tk: Integer): Integer;
+begin
+  case tk of
+    Ord(tyInteger), Ord(tyInt8), Ord(tyUInt8), Ord(tyInt16), Ord(tyUInt16),
+    Ord(tyInt32), Ord(tyUInt32), Ord(tyNativeInt), Ord(tyNativeUInt),
+    Ord(tyPromoInt32):
+      Result := 1;                                        { tkInteger }
+    Ord(tyChar): Result := 2;                              { tkChar }
+    Ord(tySingle), Ord(tyDouble), Ord(tyExtended): Result := 4; { tkFloat }
+    Ord(tySet): Result := 5;                               { tkSet }
+    Ord(tyShortString), Ord(tyFixedString), Ord(tyString): Result := 7; { tkSString }
+    Ord(tyAnsiString): Result := 9;                        { tkAString }
+    Ord(tyVariant): Result := 11;                          { tkVariant }
+    Ord(tyRecord): Result := 13;                           { tkRecord }
+    Ord(tyClass): Result := 15;                            { tkClass }
+    Ord(tyBoolean): Result := 18;                          { tkBool }
+    Ord(tyInt64), Ord(tyPromoInt64): Result := 19;         { tkInt64 }
+    Ord(tyUInt64): Result := 20;                           { tkQWord }
+    Ord(tyPointer): Result := 29;                          { tkPointer }
+    else Result := 0;                                      { tkUnknown }
+  end;
+end;
+
+{ Display name for an ordinal/scalar TypeInfoReq -- purely cosmetic (GetTypeName
+  in the facade), so one canonical spelling per pxx tk is fine even though
+  several source names alias to it (Integer/LongInt both -> tyInteger, etc). }
+function TypeInfoOrdName(tk: Integer): AnsiString;
+begin
+  case tk of
+    Ord(tyInteger):     Result := 'Integer';
+    Ord(tyInt8):        Result := 'ShortInt';
+    Ord(tyUInt8):       Result := 'Byte';
+    Ord(tyInt16):       Result := 'SmallInt';
+    Ord(tyUInt16):      Result := 'Word';
+    Ord(tyInt32):       Result := 'LongInt';
+    Ord(tyUInt32):      Result := 'LongWord';
+    Ord(tyNativeInt):   Result := 'NativeInt';
+    Ord(tyNativeUInt):  Result := 'NativeUInt';
+    Ord(tyInt64):       Result := 'Int64';
+    Ord(tyUInt64):      Result := 'QWord';
+    Ord(tyBoolean):     Result := 'Boolean';
+    Ord(tyChar):        Result := 'Char';
+    Ord(tySingle):      Result := 'Single';
+    Ord(tyDouble):      Result := 'Double';
+    Ord(tyExtended):    Result := 'Extended';
+    Ord(tySet):         Result := 'Set';
+    Ord(tyVariant):     Result := 'Variant';
+    Ord(tyAnsiString):  Result := 'AnsiString';
+    Ord(tyShortString), Ord(tyFixedString), Ord(tyString): Result := 'ShortString';
+    Ord(tyPointer):     Result := 'Pointer';
+    Ord(tyPromoInt32), Ord(tyPromoInt64): Result := 'Integer';
+    else Result := '';
+  end;
+end;
+
+{ Build the uniform "PTypeInfo" header -- {Kind:Int64; NamePtr:PString;
+  DataPtr:Pointer}, 24 bytes on every target -- for every widened TypeInfo(T)
+  request collected during parsing (RegisterTypeInfoReq). Runs right after
+  EmitRTTI so class/record requests can point DataPtr at the ALREADY-emitted
+  UClsRTTIOff[ci] blob (the same TClassRTTI/layout-descriptor typinfo.pas
+  already reads). Enum TypeInfo() does not go through here at all -- see the
+  parser.inc comment at the TypeInfo() call site. }
+procedure EmitTypeInfoHeaders;
+var i, hdr, strIdx, ci, kind: Integer; nm: AnsiString;
+begin
+  for i := 0 to TypeInfoReqCount - 1 do
+  begin
+    hdr := DataLen;
+    DataPutZeros(24);
+    if TypeInfoReqCat[i] = TYPEINFO_REQ_CAT_ORD then
+    begin
+      kind := PxxTkToFPCKind(TypeInfoReqKey[i]);
+      PatchDataU64(hdr + 0, kind);
+      nm := TypeInfoOrdName(TypeInfoReqKey[i]);
+      if nm <> '' then
+      begin
+        strIdx := InternStr(nm);
+        AddDataPtrFix(hdr + 8, Strs[strIdx].Offset);
+      end;
+      { DataPtr (hdr+16) stays nil: no extra TTypeData descriptor for scalars yet
+        (min/max/ordtype) -- add if/when a corpus target actually needs it. }
+    end
+    else if TypeInfoReqCat[i] = TYPEINFO_REQ_CAT_CLASS then
+    begin
+      ci := TypeInfoReqKey[i];
+      PatchDataU64(hdr + 0, 15); { tkClass }
+      nm := TokSliceStr(UClsNOff[ci], UClsNLen[ci]);
+      strIdx := InternStr(nm);
+      AddDataPtrFix(hdr + 8, Strs[strIdx].Offset);
+      if UClsRTTIOff[ci] >= 0 then
+        AddDataPtrFix(hdr + 16, UClsRTTIOff[ci]);   { -> TClassRTTI, same blob AN_CLASSREF points at }
+    end
+    else if TypeInfoReqCat[i] = TYPEINFO_REQ_CAT_RECORD then
+    begin
+      ci := TypeInfoReqKey[i];
+      PatchDataU64(hdr + 0, 13); { tkRecord }
+      nm := TokSliceStr(UClsNOff[ci], UClsNLen[ci]);
+      strIdx := InternStr(nm);
+      AddDataPtrFix(hdr + 8, Strs[strIdx].Offset);
+      if UClsRTTIOff[ci] >= 0 then
+        AddDataPtrFix(hdr + 16, UClsRTTIOff[ci]);   { -> the record's layout descriptor, if it has one }
+    end;
+    TypeInfoReqOff[i] := hdr;
+  end;
+end;
+
 procedure EmitLayoutRTTI;
 var
   ci, i, fi, base, cnt, mCount, dCount, mHdr, dynDescOff: Integer;

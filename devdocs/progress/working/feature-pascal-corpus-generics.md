@@ -116,3 +116,104 @@ Consequences:
 
 Same facade unblocks [[feature-embed-dwscript-rtti]] and the RTTI->streaming->LFM
 line, which is why it is worth doing properly rather than shimming per corpus.
+
+## 2026-08-01 — item 1+2 LANDED: TypeInfo(T) widened + typinfo.pas facade
+
+Both halves of the settled plan above are done and verified (self-host
+fixedpoint + `testmgr --tier quick` green; `make test` running as the fuller
+confirm since this touches shared RTTI emission).
+
+**Compiler side (Track A/P, `compiler/defs.inc`, `symtab.inc`, `parser.inc`,
+`ir.inc`, `rtti_emit.inc`, `compiler.pas`):**
+- `TypeInfo(T)` now accepts scalars (Integer/Boolean/Char/Int64/QWord/Single/
+  Double/Extended/...), `string`/`AnsiString`/`ShortString`, any user CLASS,
+  and any user RECORD — not just enums. Enum `TypeInfo(TEnum)` is byte-for-byte
+  UNCHANGED (still yields the bare `PEnumRTTI` address) specifically so
+  fpjson's `GetEnumName`/`GetEnumNameCount` gate stays untouched — verified by
+  a regression check in the smoke test below.
+- New machinery: `RegisterTypeInfoReq` dedups each distinct (category, key)
+  `TypeInfo(T)` use at parse time; `EmitTypeInfoHeaders` (rtti_emit.inc) runs
+  right after `EmitRTTI` and builds one uniform 24-byte "PTypeInfo" header per
+  request — `{Kind:Int64; NamePtr:PString; DataPtr:Pointer}` — with `Kind`
+  mapped onto FPC's actual `TTypeKind` ordinals (`PxxTkToFPCKind`, kept
+  faithful to FPC's declared order on purpose, even though no byte-layout
+  parity is required — costs nothing, avoids surprises). `DataPtr` is nil for
+  scalars, and for class/record points at the ALREADY-existing `UClsRTTIOff[ci]`
+  blob (the same `TClassRTTI` / layout-descriptor typinfo already read via
+  `AN_CLASSREF`) — no new class/record blob format, pure reuse.
+- New sentinel base `TYPEINFO_REQ_DATAREF_BASE = 500000` (most negative of the
+  data-ref sentinel family, tested first in `compiler.pas`'s post-EmitRTTI
+  fixup pass — same pre-link-fixup convention as `CLASSREF_DATAREF_BASE` /
+  `RECORD_RTTI_DATAREF_BASE` / `ENUM_RTTI_DATAREF_BASE`).
+- **Generic parameters needed NO special handling.** pxx generics specialize
+  by literal TOKEN-STREAM substitution (`SpecializeStream` in parser.inc) —
+  `T` inside a template body is textually replaced by the concrete type's
+  spelling before the parser ever sees the specialized body. So `TypeInfo(T)`
+  inside `TBox<Integer>` is just `TypeInfo(Integer)` by the time the widened
+  TypeInfo() parsing runs. Verified end-to-end with a hand-written generic
+  class (see smoke test below): `TBox<Integer>.KindOfT` and
+  `TBox<AnsiString>.KindOfT` each report the correct FPC `TTypeKind` ordinal
+  for their specialization.
+
+**Library side (Track B, `lib/rtl/typinfo.pas`):**
+- Added `TTypeKind` (FPC's own 30-member enum, same declared order — cheap
+  fidelity, not required by the "no parity" decision but avoids surprises for
+  any vendor code doing `array[TTypeKind] of X` or a raw `Ord()` compare).
+- Added `TTypeInfoHdr` / `PTypeInfo` / `PTypeData` (`PTypeData = PTypeInfo`
+  for now — one header, no separate TTypeData split yet; see "Known gaps"
+  below) matching the compiler's new header layout exactly.
+- `GetEnumName`/`GetEnumNameCount`/the whole existing enum facade is
+  UNTOUCHED — enum `TypeInfo()` still returns a bare `PEnumRTTI`, not this new
+  header, on purpose (see compiler-side note above).
+
+**Verified with hand-written smoke tests** (not yet checked into `test/` —
+follow-up, see below):
+```pascal
+TypeInfo(Integer)  -> Kind=1  (tkInteger),  NamePtr^='Integer'
+TypeInfo(Boolean)  -> Kind=18 (tkBool),     NamePtr^='Boolean'
+TypeInfo(TAnimal)  -> Kind=15 (tkClass),    DataPtr -> the class's real TClassRTTI (GetClassName works through it)
+TypeInfo(TPoint)   -> Kind=13 (tkRecord)
+TypeInfo(TColor)   -> unchanged PEnumRTTI path, GetEnumName/GetEnumNameCount still work (regression check)
+generic TBox<T>.KindOfT calling TypeInfo(T):
+  TBox<Integer>.KindOfT    = 1  (tkInteger)
+  TBox<AnsiString>.KindOfT = 9  (tkAString)
+```
+
+**Process note:** briefly mis-suspected `case x of Ord(EnumConst): ...` was
+broken in this compiler and reflexively rewrote two functions to if/elseif
+chains as a "workaround" without testing the actual claim first. Caught (by
+the user) before it shipped: a 4-line repro proved `case`/`Ord()` labels work
+completely correctly, and the real error was an unrelated `const`-declared-
+inside-a-`var`-block syntax mistake in `defs.inc`. Reverted to the natural
+`case` form. No compiler bug here, no ticket needed — noted only so the
+mistake (reasoning instead of measuring) isn't repeated.
+
+### Known gaps / natural follow-ups (not blocking, noted for the next session)
+- **No `TTypeData` fields beyond `DataPtr`.** `GetTypeData` doesn't exist yet
+  as an FPC-shaped function (min/max/ordinal size for scalars, `PropCount`
+  etc for classes read straight off the class blob today). Add when a real
+  corpus target reads a specific field FPC's `TTypeData` has and ours
+  doesn't.
+- **generics.defaults itself not yet retried.** This session's remaining
+  budget went to verifying the widening in isolation (hand-written smoke
+  tests + the generic-specialization check above) rather than restaging
+  `/tmp/generics-stage` (which no longer exists — `find` on this box turned
+  up nothing) and re-running the vendor tree. generics.defaults expects
+  `ATypeInfo.Kind` as a DIRECT field read (confirmed by reading
+  `packages/rtl-generics/src/generics.defaults.pas` from a local FPC source
+  checkout) plus `array[TTypeKind] of TInstance` lookup tables and
+  `GetTypeData(ATypeInfo)` for extra fields (e.g. ordinal size) — the `Kind`
+  field and the `array[TTypeKind]` shape are both now supported by this
+  landing; `GetTypeData` beyond `DataPtr` is the likely next wall. Re-stage
+  per `tools/install_lib_candidates.sh` and retry as the next step.
+- **No `test/test_typeinfo_widen*.pas` checked in yet.** The smoke tests
+  above were hand-run from `/tmp` scratch, not committed as a gated regression
+  test. Should land as a real `test/` file wired into `testmgr` before this
+  ticket is considered done, so the widening itself is gated going forward
+  (not just fpjson's enum-only regression).
+- `test-fpjson` SKIPped locally (no fcl-json tree staged on this box —
+  `tools/install_lib_candidates.sh fcl-json` was not re-run this session) so
+  the "fpjson stays green" claim above rests on the unchanged-enum-codepath
+  argument + the regression check in the smoke test, not a fresh fpjson run.
+  Track T's watcher (or the next session, if it re-stages fcl-json) should
+  confirm.

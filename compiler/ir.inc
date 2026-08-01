@@ -5237,11 +5237,18 @@ begin
     end;
 
     AN_TYPEINFO:
-      { TypeInfo(TEnum) -> the address of the enum's RTTI blob. The offset is not known
-        until EmitRTTI has run, so emit the sentinel and let the pre-link fixup pass
-        resolve it (exactly as AN_CLASSREF does for a class). }
-      Result := IRAppend(IR_CONST_DATA, -1, -1, -1,
-                  -(ENUM_RTTI_DATAREF_BASE + Integer(ASTIVal[node])), Ord(tyPointer));
+      if ASTLeft[node] = 1 then
+        { Widened TypeInfo(T): scalar/string/class/record, ASTIVal = the deduped
+          TypeInfoReq index. Header address resolved post-EmitTypeInfoHeaders,
+          same sentinel-then-fixup convention as the enum/class/record cases. }
+        Result := IRAppend(IR_CONST_DATA, -1, -1, -1,
+                    -(TYPEINFO_REQ_DATAREF_BASE + Integer(ASTIVal[node])), Ord(tyPointer))
+      else
+        { TypeInfo(TEnum) -> the address of the enum's RTTI blob. The offset is not known
+          until EmitRTTI has run, so emit the sentinel and let the pre-link fixup pass
+          resolve it (exactly as AN_CLASSREF does for a class). }
+        Result := IRAppend(IR_CONST_DATA, -1, -1, -1,
+                    -(ENUM_RTTI_DATAREF_BASE + Integer(ASTIVal[node])), Ord(tyPointer));
 
     AN_RTTIOF:
     begin

@@ -775,6 +775,7 @@ begin
   AnonDynArrayCount := 0;
   ResPendCount := 0; ResourceTableOff := -1; ResourceCount := 0;
   EnumTypeCount := 0; EnumValCount := 0; LastTypeEnumId := -1;
+  TypeInfoReqCount := 0;
   AliasCount := 0;
   AddConst('StdErr', tyInteger, 2);
   { Predefined System ordinal limits (FPC parity — System unit consts, always
@@ -903,6 +904,7 @@ begin
   if (not isC) and (not isBasic) and (not isAsm) and (not isRust) and (not isAda) and (not isZig) and (not isLol) and (not isWs) and (not isF90) and (not isAlgol) and (not isErl) then
   begin
     EmitRTTI;
+    EmitTypeInfoHeaders;
     if DumpRTTI then DumpRTTITables;
     EmitResources;
   end;
@@ -934,6 +936,20 @@ begin
         Dec(FixCount);
         continue;
       end;
+    end
+    else if Fixups[i].DataOff <= -TYPEINFO_REQ_DATAREF_BASE then
+    begin
+      { Widened TypeInfo(T) (scalar/string/class/record): resolve to the request's
+        PTypeInfo header (EmitTypeInfoHeaders). Tested BEFORE every other sentinel
+        base -- it is the most negative, and the ENUM branch below would otherwise
+        swallow it (every sentinel <= -ENUM_RTTI_DATAREF_BASE also satisfies
+        <= -TYPEINFO_REQ_DATAREF_BASE's neighbours, so order matters here exactly
+        as it does for ENUM vs CLASSREF). }
+      j := -Fixups[i].DataOff - TYPEINFO_REQ_DATAREF_BASE;
+      if (j >= 0) and (j < TypeInfoReqCount) and (TypeInfoReqOff[j] >= 0) then
+        Fixups[i].DataOff := TypeInfoReqOff[j]
+      else
+        Error('TypeInfo() of a type with no RTTI header')
     end
     else if Fixups[i].DataOff <= -ENUM_RTTI_DATAREF_BASE then
     begin
