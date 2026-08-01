@@ -33,7 +33,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (177)
+## backlog (176)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -77,7 +77,6 @@ _none_
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
 | compat-pascal-binop-operand-eval-order | A | 15 | compat | pxx evaluates binary-operator operands left-to-right; FPC evaluates right-to-left | — |
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
-| decide-3rd-party-vendor-vs-fetch | U | 45 | decide | Policy: how to carry dependency-grade third-party source — vendor in-tree vs fetch-gitignored vs system-dynamic | — |
 | decide-abi-portable-vs-target-split | A | 50 | decide |  | — |
 | decide-class-namespace-scoping | U | 65 | decide | Decide: how should two libraries be allowed to export the same class name? | — |
 | decide-ipv6-dualstack-and-aaaa-ordering | U | 40 | decide | Policy: IPV6_V6ONLY on a :: listener, and which address wins when a host has both A and AAAA | — |
@@ -260,7 +259,7 @@ _none_
 | feature-kernel-matrix-bootroom | E | 50 | feature | Kernel-matrix bootroom: one static PXX binary, swept across many Linux kernels | — |
 | feature-mode-delphi-remaining | A | 50 | feature | `{$mode delphi}` — remaining @-relax edge slices | — |
 | feature-no-ansistring-profile | A | 50 | feature | No-AnsiString / bounded-string profile | — |
-| feature-os-targets-bsd-mac | A | 50 | feature | Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized) | — |
+| feature-os-targets-bsd-mac | A | 50 | feature | Additional OS targets (BSD / macOS via syscall mapping) | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 | feature-rtl-math-on-crtl-dd-kernels | B | 10 | feature | RTL math.pas on the crtl dd kernels — correct rounding for Pascal too | — |
 | feature-rtl-optout-for-lcl | A+B | 45 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
@@ -281,11 +280,12 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (24)
+## decided (25)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | decide-1-0-scope-promise | A | 55 | decide | DECIDE: version scheme — pin count / N, not semver | — |
+| decide-3rd-party-vendor-vs-fetch | U | 45 | decide | Policy: how to carry dependency-grade third-party source — vendor in-tree vs fetch-gitignored vs system-dynamic | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
 | decide-crtl-libm-glibc-bit-parity | A | 50 | decide |  | — |
 | decide-dns-libc-backend-shape | U | 40 | decide | Track U: how should a libc-backed DNS resolver be reached from libc-free static ELF? | — |
@@ -2971,7 +2971,6 @@ _none_
 - [p 45] [T] bug-t-claim-silently-no-ops-owner-on-yaml-only-tickets
 - [p 45] [T] bug-t-watcher-dev-contention-false-newred
 - [p 45] [A] chore-makefile-testtmp-parameterize
-- [p 45] [U] decide-3rd-party-vendor-vs-fetch
 - [p 45] [D] docs-canonical-domain
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [A] feature-cross-frontend-interop-contract

@@ -3,7 +3,19 @@ summary: "Policy: how to carry dependency-grade third-party source — vendor in
 type: idea
 track: U
 prio: 45
+status: resolved
+resolved: 2026-08-01
 ---
+
+## DECIDED 2026-08-01 — the tiered policy, informally, no new ceremony
+
+**User's call**: corpus stays fetch-gitignored (unchanged, the default). The
+two existing exceptions (pdfgen, MarkupSafe's `_speedups.c`) are fine as
+precedent — they confirm the general rule rather than break it, since the
+alternative in both cases is reimplementing the thing ourselves. Keep doing
+what's already being done case-by-case (small, permissively-licensed,
+dependency-grade, license file + provenance note alongside) — no need to
+build a formal vendor/ directory system or write more policy than this.
 
 # decide: third-party source policy — vendor vs fetch vs system-dynamic
 
