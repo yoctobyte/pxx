@@ -37,7 +37,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (182)
+## backlog (183)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -50,6 +50,7 @@ _none_
 | bug-eliah-ide-win-caption-no-such-member | B | 40 | bug | `apps/ide/eliah/main.pas:1431` — `EliahForm.Win.Caption`: no `Win` member exists | — |
 | bug-n-nilpy-missing-dunder-expect-fail-assertion-is-stale | N | 55 | bug | test_nilpy_operator_dunder_missing_fail still expects a COMPILE error; the missing-dunder case now raises a runtime TypeError like CPython, so the assertion is stale | — |
 | bug-n-nilpy-subscript-of-split-on-a-variable-receiver | N | 60 | bug | s.split(sep)[i] fails IR_UNSUPPORTED when s is a variable, while \"lit\".split(sep)[i] compiles — the frontend loses the result type in subscript position | — |
+| bug-n-static-operand-clash-diagnostic-and-guard-test-escaping | N | 70 | bug | 7f111d229 landed with both its new tests red: the static clash diagnostic fires 1 of 6 times, and the mixed-type-guard expectation is double-escaped (%% vs %) | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bitwise-shift-on-class-operand-segfaults | N | 60 | bug | NilPy: `obj & 1` / `obj << 1` on a class instance SEGFAULTS (core dump); __and__/__or__/__xor__/__lshift__/__rshift__ are never dispatched | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
@@ -2951,6 +2952,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
+- [p 70] [N] bug-n-static-operand-clash-diagnostic-and-guard-test-escaping
 - [p 70] [N] bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] feature-t-trackt-setup-autodetect-box-role
