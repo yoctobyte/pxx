@@ -191,6 +191,70 @@ unit. `tkinter` has its own facade (`lib/pcl/tkinter.pas`) for GUI programs.
 Not yet present: `socket`, `threading`, `struct`, `enum`, `csv`, `pickle`,
 `logging`, `hashlib`, `uuid`, `datetime`.
 
+## Shims: standing in for a Python package
+
+Some module names resolve to a unit PXX wrote itself, presenting a familiar
+Python API over PXX's own code. These are **shims**, and they are deliberately
+visible rather than hidden.
+
+A shim lives under PXX's own name — `mimic_<module>` — never the upstream
+package's. So no file in the tree carries a name it did not earn, and listing
+the directory tells you exactly which packages are being stood in for:
+
+```
+lib/pcl/mimic_reportlab_pdfgen.pas          <- from reportlab.pdfgen import canvas
+lib/pcl/mimic_reportlab_lib_pagesizes.pas   <- from reportlab.lib.pagesizes import A4
+lib/pcl/mimic_tkinter_font.pas              <- import tkinter.font as tkfont
+```
+
+A dotted package name is flattened before lookup, which is why
+`from reportlab.pdfgen import canvas` reaches `mimic_reportlab_pdfgen` with no
+package-directory machinery involved.
+
+### The mapping is a last resort
+
+The `mimic_` substitution is consulted **only after every ordinary lookup has
+failed**. A real unit of that name always wins — a sibling `.py`, a Pascal unit
+such as `lib/rtl/re.pas`, a C header. It applies to Nil Python only; a Pascal
+`uses` never reaches the shim table at all.
+
+Not every Python-shaped facade is a shim, and the distinction is the filename.
+`lib/pcl/tkinter.pas` is a real unit *named* `tkinter`, so `import tkinter`
+resolves to it by ordinary lookup and no substitution happens. Only
+`import tkinter.font` — which has no unit of its own — falls through to
+`mimic_tkinter_font`.
+
+### A build says what it substituted
+
+Every substitution prints a line, because a program built on a subset should
+say so:
+
+```
+$ ./pxx report.npy report
+note: reportlab_lib_units -> mimic_reportlab_lib_units (shim, subset)
+ok: report  [code=1179172B  data=31684B  bss=8332B  procs=1036]
+```
+
+**`(shim, subset)` is the important part.** A shim implements what PXX needs of
+that API, not the package. Treat an unexercised call as unimplemented until you
+have run it.
+
+### `--no-shims`: turning the claim into a check
+
+Passing `--no-shims` refuses the substitution outright — every import must
+resolve to a real unit of that name or the build fails:
+
+```
+$ ./pxx --no-shims report.npy report
+pascal26:1: error: import: no unit named reportlab_lib_units (--no-shims refuses the mimic_ substitution)
+```
+
+This is what makes "compiled without compatibility shims" a checked property
+rather than a claim. Use it when you need to know that a binary contains no
+stand-in code — for a dependency audit, or to find out how much of a program
+actually rests on shimmed surface. It is not a hardening flag: a build that
+passes `--no-shims` is not more correct, only more honest about what it used.
+
 ## Known gotchas
 
 These are open, tracked issues — real-world `.py`/`.npy` programs can still
@@ -215,6 +279,11 @@ hit them:
 - Object reclamation (reference counting) is disabled inside an imported
   `.py` module specifically — a module compiled as the main program does not
   have this restriction.
+- Importing a **typed** constant from a Pascal unit (`const Name: T = value;`)
+  yields the zero value of `T` instead of the declared one, silently. Untyped
+  constants are unaffected, and Pascal reading the same unit is correct. This
+  currently hits `from reportlab.lib.units import mm` (and its siblings), which
+  are declared that way — so those measurements arrive as `0.0`.
 
 If a real-world program hits one of these, check
 [compatibility status](../reference/status.md) and the project's ticket board

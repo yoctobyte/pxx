@@ -98,7 +98,7 @@ effect where one exists.
 | `--no-strict-ir` | Opt out of the self-host IR guard (the hard error on any unlowered IR node). For an in-development frontend only. |
 | `--strict-ir` | Accepted no-op: the IR guard is the default now. Kept so existing invocations keep working. |
 | `--map` / `--no-map` | Force the map file next to the output on or off. A map is written by default when an output path is given. |
-| `--no-shims` | Refuse every `mimic_<module>` substitution — an import must resolve to a real unit of that name or fail. Turns "compiled without compatibility shims" from a claim into a checked property. |
+| `--no-shims` | Refuse every `mimic_<module>` substitution — an import must resolve to a real unit of that name or fail. Turns "compiled without compatibility shims" from a claim into a checked property. Nil Python only; see [shims](../targets/nil-python.md#shims-standing-in-for-a-python-package). |
 | `--max-stack-frame=N` | Set the oversized-stack-frame warning threshold in bytes (`=0` disables it). |
 | `--werror` / `-Werror` | Promote any warning to a fatal error. |
 | `--xtensa-soft-divide` / `--xtensa-cpu=lx6` | Route div/mod through software helpers (ESP32 classic LX6, no hardware divide). |
