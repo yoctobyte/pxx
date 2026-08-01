@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-t-idle-work-leaks-tmp-on-tmpfs-boxes | T | 70 | bug | idle fuzz/bench leave ~130MB/hour in /tmp; on xeon /tmp is tmpfs, so it eats RAM the scheduler is counting on | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
@@ -310,7 +309,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1137)
+## done (1138)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -897,6 +896,7 @@ _none_
 | bug-subclass-field-offset-calculation | A | 50 | bug | bug-subclass-field-offset-calculation (Track A) | — |
 | bug-sysutils-unit-hard-skipped | A | 50 | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
 | bug-t-flaky-async-multithreaded-tests-false-newred | T | 45 | bug | Flaky async/multithreaded run-tests emit false NEW-REDs — reap() fails on first nonzero exit, no confirm-retry | — |
+| bug-t-idle-work-leaks-tmp-on-tmpfs-boxes | T | 70 | bug | idle fuzz/bench leave ~130MB/hour in /tmp; on xeon /tmp is tmpfs, so it eats RAM the scheduler is counting on | — |
 | bug-t-pasmith-order-dependent-programs | T | 60 | bug | pasmith emits order-dependent programs, and its printed repro line does not reproduce | — |
 | bug-t-pasmith-with-rung-mutates-global-inside-function | T | 40 | bug | pasmith: wide rungs (`with`/`reccopy`/…) mutate a GLOBAL inside a function body → order-dependent program | — |
 | bug-t-progress-track-detection-prose-mention | T | 40 | bug | progress.py track() matches a prose 'Track T' mention in the Type/Track bullet before the authoritative frontmatter track: field — mis-tags tickets (3 hit in one session) | — |

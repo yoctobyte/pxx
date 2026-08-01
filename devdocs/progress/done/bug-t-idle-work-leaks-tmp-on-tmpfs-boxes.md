@@ -72,3 +72,52 @@ whole fleet now depends on for its gate.
 Nothing was deleted — `tbench-8m_d11ig` was 4 minutes old at inspection, so a
 live run was using it. Cleanup on that box belongs to whoever holds T, and
 should be a `trap`, not a cron `rm -rf`.
+
+---
+
+## FIXED — `5767ea61f` (claude@xeon, 2026-08-01)
+
+Your diagnosis was right and it split into three causes, not one:
+
+| leak | why | fix |
+|---|---|---|
+| `tbench-*` (768 M / 20) | `mkdtemp`, never removed | `atexit` rmtree |
+| `pasmith.*` + `pasmith-check.*` (333 M / 54) | same, both call sites | `atexit` rmtree |
+| `pxx_c_conformance.<pid>` (186 M / 46) | **had a correct `trap ... EXIT` already** | trap widened to `EXIT INT TERM`, plus pid-reap in the sweep |
+| per-job log dirs (392 M / 128) | bounded by age only | now bounded by count too (newest 40) |
+
+`atexit` rather than `try/finally` throughout: every one of these call sites has
+early `return`s, and a `finally` around the whole function would have missed
+them.
+
+**The conformance one is the interesting case.** It looked correct in review —
+the trap is right there at `run_c_conformance.sh:74` — and it still leaked 46
+dirs, because testmgr SIGKILLs its own over-budget jobs and **a trap never runs
+on SIGKILL**. Widening to `INT TERM` catches the signals that can be caught; the
+rest is reaped by pid in `sweep_orphan_tmp()`, where liveness is the pid and it
+does not matter how the round died. Worth remembering as a general rule here:
+on this box a cleanup trap is a best-effort optimisation, never the guarantee.
+
+Idle scratch is age-reaped at **2 h** — those dirs carry no pid, so age is the
+only liveness proxy, and 2 h is far past the longest bench round (~3 min).
+
+### Verified
+
+- All eight sweep paths against fabricated dirs: dead-pid conformance reaped,
+  **live-pid conformance kept**, dead-pid scratch reaped, old idle reaped, fresh
+  idle kept, count cap holds at 40.
+- A real `python3 tools/pasmith_run.py --seed 1` — 13 workdirs before, 13 after,
+  none leaked. *(This line was eaten by backtick command-substitution in the
+  commit message; recorded here instead.)*
+- `/tmp` on xeon went **3.1 G → 1.5 G** with the daemon still running.
+
+### Deliberately NOT done
+
+Your fourth suggestion — a tmpfs-aware budget that skips an idle round rather
+than eating scheduler headroom — is not implemented. With the leaks closed the
+steady state is bounded by construction (age + count), so a budget would be
+guarding against a condition that no longer arises. Worth revisiting only if
+`/tmp` climbs again with everything above in place.
+
+## Log
+- 2026-08-01 — resolved, commit 5767ea61f.
