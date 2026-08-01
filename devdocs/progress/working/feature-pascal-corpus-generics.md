@@ -6,7 +6,7 @@ prio: 55
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** backlog — recon done 2026-07-13 night (rungs 1+2 are green: fpcunit
+- **Status:** working
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
