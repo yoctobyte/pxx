@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-t-selfhost-build-uses-fixed-tmp-paths-colliding-across-clones | T | 75 | bug | The self-host build writes fixed /tmp/pascal26-build\|verify paths, so the watcher's dedicated clone and a dev checkout on the same box overwrite each other's in-flight compiler — /tmp is not per-clone | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | bug-c-uses-path-basename-collides-with-enclosing-unit-name |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
@@ -33,7 +34,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (195)
+## backlog (194)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -88,7 +89,6 @@ _none_
 | bug-t-optdiff-positional-sharding-migrates-job-identity | T | 70 | bug | DUPLICATE of bug-t-optdiff-shard-identity-is-positional — "optdiff shards by position in the test glob, so adding any test migrates failures between shard identities — a phantom NEW-RED plus a phantom FIXED, for an unchanged failure" | — |
 | bug-t-optdiff-shard-identity-is-positional | T | 75 | bug | optdiff jobs are identified by shard index, so adding one test file moves a failure to a new shard and manufactures a fresh NEW-RED + ticket | — |
 | bug-t-run-must-invalidate-when-compiler-changes-mid-run | T | 70 | bug | A test run that spans a compiler rebuild reports PASS/FAIL as if it were one binary; it should hash the binary at start and end and report INVALID on mismatch | — |
-| bug-t-selfhost-build-uses-fixed-tmp-paths-colliding-across-clones | T | 75 | bug | The self-host build writes fixed /tmp/pascal26-build\|verify paths, so the watcher's dedicated clone and a dev checkout on the same box overwrite each other's in-flight compiler — /tmp is not per-clone | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | bug-tstate-xeon-cross-jobs-red-missing-corpora | T | 50 | bug | tstate: xeon's red set is PART missing-corpora and PART a real i386 regression of mine (now reverted) — the corpora half still stands | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -2937,7 +2937,6 @@ _none_
 
 - [p 75] [N] bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults
 - [p 75] [T] bug-t-optdiff-shard-identity-is-positional
-- [p 75] [T] bug-t-selfhost-build-uses-fixed-tmp-paths-colliding-across-clones
 - [p 70] [N] bug-nilpy-def-local-assignment-widens-module-global-to-variant
 - [p 70] [N] bug-nilpy-dict-from-pairs-and-bytes-decode-segfault
 - [p 70] [N] bug-nilpy-list-ordering-compares-heap-addresses
