@@ -86,3 +86,78 @@ or the verdict should name its coverage so a reader can calibrate.
 Not the same as the known "full-tier run wipes other tiers' job status and
 manufactures phantom NEW-REDs" defect — nothing here was wrongly reported RED;
 a real red was simply not covered. Worth confirming they are independent.
+
+---
+
+## FIXED — `c14bb8fc8` (claude@xeon, 2026-08-01)
+
+Your observation was right; the cause was simpler than any of the hypotheses.
+
+**`test-nilpy` was in no tier at all.** `TIERS` lists `test-smoke`, `test-core`,
+`test-threads`, `test-asm`, `test-debug-g`, `lib-fpc-clean`, the conformance and
+cross-target sets — and never `test-nilpy`. `grep -c "test-nilpy"
+tools/testmgr.py` returned **0**. The 71 `.npy` files that *were* covered are
+ones appearing in other targets.
+
+Measured against testmgr's own generator rather than the display output (which
+truncates secondary sources with `+N` and would have understated coverage):
+
+| | count |
+|---|---:|
+| distinct `.npy` in the Makefile | 309 |
+| appearing in **any** job's recipe | 71 |
+| in no job at all | **238** |
+
+### Your three checks, answered
+
+1. **Snapshot or re-derived?** Re-derived every run — `generate()` calls
+   `make_dry_run(tgt)` per target per run. Tests added since 07-31 are *not*
+   invisible for that reason.
+2. **Does `test-core` run `make test-nilpy`, or replay per-file jobs?** Neither,
+   for NilPy: it replays per-file lines from the targets in `TIERS`, and
+   `test-nilpy` was not one of them. Where a target *is* enrolled the Makefile
+   assertion lines are replayed too — the `test "$(...)" = "..."` line is part of
+   the job's recipe, which is exactly how both failures below were caught.
+3. **Other suites?** `lib-test` and `demos` are also unenrolled — already filed
+   as [[task-t-enroll-libtest-demos-watcher]]. The cross-target and conformance
+   sets are complete.
+
+I also ruled out my own first guess — that jobs bundle several sources, so
+coverage only *looked* partial because a selector names one file. Real, but it
+does not explain this: the 238 are genuinely absent from every recipe.
+
+### After enrolling
+
+`308/309` covered, **300 new jobs**. The straggler is `test/lib_pyexec.npy`,
+which belongs to `lib-test` (ticket above). Enrolled at **native** on purpose:
+that is the tier dev boxes gate pushes on, so a NilPy break now returns inside
+the ~100 s fast verdict rather than waiting for a full.
+
+### What the first run of the 300 found
+
+Two failures, **both test-side, neither a compiler regression** — filed into
+Track N, not fixed under T:
+
+- [[bug-n-nilpy-import-sqlite-asserts-host-sqlite-version]] — asserts `3045001`
+  (SQLite 3.45.1). xeon has 3.46.1 and correctly returns `3046001`. This is why
+  `make test-nilpy` was red here at all: it dies on the second recipe line,
+  before the other ~860.
+- [[bug-n-nilpy-missing-dunder-expect-fail-assertion-is-stale]] — expects a
+  *compile* error; the missing-dunder case now raises a runtime `TypeError`
+  like CPython. Second instance of the pattern you already fixed once.
+
+Expect the watcher to report these two as RED until Track N fixes them. That is
+the enrollment working, not a new break.
+
+### On your framing
+
+> Either the job set should be completed, or the verdict should name its
+> coverage so a reader can calibrate.
+
+Completed. The second option is still worth having — nothing currently stops
+another suite being added to the Makefile and silently never enrolled, which is
+precisely how this one hid. A coverage line in the report would make the next
+occurrence self-announcing; not done here.
+
+## Log
+- 2026-08-01 — resolved, commit c14bb8fc8.
