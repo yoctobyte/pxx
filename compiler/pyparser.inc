@@ -12904,6 +12904,13 @@ begin
     Next;
     Inc(rnd);
   until (not changed) or (rnd >= PY_INFER_ROUNDS);
+  { PXXDBG=n.locals — PyDbgDumpLocals was already called for each PROC, but
+    never for the MODULE table, so `n.locals` printed nothing at all for a
+    module-scope name and the constraint that types every global was
+    unobservable. That gap is what made
+    bug-nilpy-global-shadowed-by-method-param-name-loses-class-type expensive
+    to chase. }
+  PyDbgDumpLocals('<module>');
   PyModuleLocalCount := PyLocalCount;
   for i := 0 to PyLocalCount - 1 do
     PyModuleLocals[i] := PyLocals[i];
