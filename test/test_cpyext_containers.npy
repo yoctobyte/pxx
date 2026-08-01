@@ -1,0 +1,11 @@
+# M3 "strings and containers" (feature-nilpy-cpyext-c-api-from-source): a
+# hand-written CPython extension exercising list/tuple/dict construction and
+# iteration (PyList_*/PyDict_*/PyDict_Next) and a Unicode/bytes round-trip
+# (PyBytes_* distinct from PyUnicode_*), compiled by cfront against pxx's own
+# Python.h and imported from NilPy.
+import container_ext
+
+print(container_ext.sum_range(5))
+print(container_ext.join_lengths("aa,bbb,c"))
+print(container_ext.char_histogram("banana"))
+print(container_ext.bytes_roundtrip("hello"))
