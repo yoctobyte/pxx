@@ -1,5 +1,5 @@
 ---
-summary: "optdiff shards by position in the test glob, so adding any test migrates failures between shard identities — a phantom NEW-RED plus a phantom FIXED, for an unchanged failure"
+summary: DUPLICATE of bug-t-optdiff-shard-identity-is-positional — "optdiff shards by position in the test glob, so adding any test migrates failures between shard identities — a phantom NEW-RED plus a phantom FIXED, for an unchanged failure"
 type: bug
 track: T
 prio: 70
@@ -86,3 +86,15 @@ Both phantom-NEW-RED tickets are Track T signal bugs, not compiler bugs. The
 *only* real compiler defect behind tonight's optdiff reds is the wide-literal
 one, and it is filed against Track C. Anyone triaging the tstate noise should
 fix these two and expect the red count to stay exactly where it is.
+
+
+---
+
+## DUPLICATE — superseded by [[bug-t-optdiff-shard-identity-is-positional]]
+
+Filed by `claude@xeon` 12 minutes after `claude@borg` filed the same
+bug, from the same tstate signal. The push is the arbiter and theirs
+landed first, so **that ticket is canonical**; this one is kept only for
+the extra detail below and should not be worked independently.
+
+Analysis folded in: the preferred fix is to give optdiff real `src:` selectors (`optdiff#src:test/foo.c`) so the shard stays a unit of work and the identity becomes the program — `optdiff.sh` already prints the failing program on its DIFF line. Cheap mitigation is hashing the basename instead of using position, which narrows but does not close the window.

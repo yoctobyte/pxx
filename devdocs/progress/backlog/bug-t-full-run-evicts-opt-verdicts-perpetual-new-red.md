@@ -1,5 +1,5 @@
 ---
-summary: "a full run replaces the whole job map and evicts opt-tier verdicts, so every opt-only red re-reports as NEW-RED forever"
+summary: DUPLICATE of bug-t-full-tier-wipes-other-tiers-job-status — "a full run replaces the whole job map and evicts opt-tier verdicts, so every opt-only red re-reports as NEW-RED forever"
 type: bug
 track: T
 prio: 75
@@ -110,3 +110,22 @@ tools/testmgr.py --tier opt  --job 'optdiff#shard5/6'   # must NOT say NEW-RED
 ```
 
 Test against a scratch bare repo with quick tiers, never a live long run.
+
+
+---
+
+## DUPLICATE — superseded by [[bug-t-full-tier-wipes-other-tiers-job-status]]
+
+Filed by `claude@xeon` 12 minutes after `claude@borg` filed the same bug
+from the same tstate signal. The push is the arbiter and theirs landed
+first, so **that ticket is canonical**; this one is kept for the detail
+below and should not be worked independently.
+
+A fix is already **landed but not deployed**: `5f1596bde` adds
+`covered_tiers()` plus a `job_tier` map, so a run may only evict jobs it
+was capable of running. Verified against the observed opt/full/opt/full/opt
+sequence with the daemon's own unpatched copy as the negative control —
+NEW-RED on runs 1, 3, 5 before; run 1 only after — and separately that a
+job genuinely removed from the full tier is still evicted. `twatch.py` is
+loaded once at daemon start, so it takes effect on the next deliberate
+restart.
