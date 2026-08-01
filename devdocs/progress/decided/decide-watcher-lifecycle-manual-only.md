@@ -89,3 +89,50 @@ bug (reports DOWN whenever tstate is stale, including while a run is provably
 in progress). Manual lifecycle makes that gap matter more, not less — the
 sooner an agent can trust `--status`, the sooner a hand-stopped watcher gets
 noticed. That work is unaffected by this decision and should still happen.
+
+---
+
+## REVERSED IN PART — 2026-08-01, user, at the xeon box
+
+> "fix 2. survive reboots (we can assume user auto login btw..)"
+
+Reboot survival is now **installed**, superseding the "no systemd unit, no
+linger, no cron" line above. What did *not* change: stopping the watcher by hand
+still means stopped.
+
+### What was installed
+
+`~/.config/systemd/user/trackt-watcher.service`, enabled `WantedBy=default.target`,
+plus `loginctl enable-linger neo`.
+
+**`Restart=on-failure`, deliberately not `always`.** A crash or an OOM kill is
+restarted after 30s; a clean `trackt stop` sends SIGTERM, twatch's handler exits
+0, and systemd leaves it stopped. So the original intent — *the operator decides
+when the watcher runs* — survives, while the two failure modes that were pure
+downside (reboot, crash) no longer end coverage silently.
+
+**Linger does double duty.** It starts the service at boot rather than only at
+login, and it keeps the systemd **user manager** alive across a full desktop
+logout. That closes the caveat recorded earlier: testmgr re-execs into
+`systemd-run --user --scope` for its memory cgroup, and without a user manager
+that call fails and the run degrades to *unscoped*, losing the backstop that
+makes a box freeze structurally impossible.
+
+The unit deliberately sets no resource limits of its own — a nested scope under
+a constrained service would inherit the tighter limit and silently undo the
+per-run budget testmgr computes from `MemTotal`.
+
+Logging still appends to `~/trackt-watch.log` so `trackt log` and the session's
+history keep working; journald would have fragmented it.
+
+### What this does NOT change
+
+The detection gap is still the real exposure and is unfixed by supervision:
+`twatch --status` reads UP for up to the 45-minute grace window after the daemon
+dies. Restart-on-failure narrows the window for crashes; it does nothing for a
+watcher that is running but wedged.
+
+Deploying new `twatch.py` code is now `systemctl --user restart
+trackt-watcher.service` rather than `trackt stop && trackt up`. `trackt`'s own
+detection is unaffected — `daemon_pid()` scans `/proc` by command line, so a
+systemd-started daemon is found normally.
