@@ -5,7 +5,7 @@ order: 89
 
 # Compatibility status
 
-This page summarises what PXX compiles and runs today, across both frontends and
+This page summarises what PXX compiles and runs today, across its frontends and
 the bundled libraries. It is a snapshot of the standing test suites and the
 real-world corpora PXX is exercised against; the automated gates are the source of
 truth, and current numbers may move ahead of this page.
@@ -81,6 +81,26 @@ Against the FPC test-suite conformance subset, the large majority of curated
 programs pass. Known gaps concentrate in `UnicodeString`/`WideString`
 conversions, some `ShortString` edge cases, parts of the generics corpus, and
 `{$Q+}` overflow semantics on 64-bit integers. These are tracked and shrinking.
+
+## Nil Python frontend
+
+Nil Python (`.npy`) is a compiled Python-shaped dialect, not a Python
+implementation — see [Nil Python](../targets/nil-python.md) for the language
+surface and its documented gaps. It carries its own gate rather than riding on
+the Pascal one.
+
+### Working
+
+| Area | What it demonstrates |
+| --- | --- |
+| **Standing `.npy` suite** | Several hundred test programs in-tree, covering classes and dunder methods, variants, `str`/`bytes`/`list`/`set`/`tuple`/`dict` surfaces, lambdas and capture, optionals, file I/O, and exceptions reaching the RTL. |
+| **CPython as the oracle** | For `re`, `collections.Counter`, `dataclasses` field defaults and PEP 604 annotation unions, the expected output in the gate *is* CPython's own output for the same program. |
+| **`import sqlite3`** | Resolves the C header, links `libsqlite3.so.0` and calls it — real C interop from Python source, not a reimplementation. CRUD against a file-backed database is part of the gate. |
+
+The claim here is narrower than for the C corpora: this is a standing suite plus
+a differential check against CPython on specific modules, not a conformance
+battery. Coverage of the language surface is deliberately partial, and the gaps
+are documented rather than implied.
 
 ## Cross-targets
 

@@ -75,6 +75,7 @@ effect where one exists.
 | Option | Effect | Directive |
 | --- | --- | --- |
 | `--strict` | FPC-parity strictness umbrella (currently the routine-visibility check below). | `{$STRICT ON}` |
+| `--strict-fpc` | The FPC-parity umbrella: `--strict-case`, `--strict-operator`, `--strict-visibility` and `--require-forward` together — the checks that match FPC *and* are proven against the real FPC corpora. `--strict-overload` is deliberately **not** included; see [modes](./modes.md). | `{$STRICT_FPC ON}` |
 | `--require-forward` | A routine must be defined above its call, `forward;`-declared, in an interface section, or be a class method — no whole-source pre-scan. First check under `--strict`. | `{$STRICT ON}` |
 | `--strict-overload` | Require explicit `overload;` on overloaded routines. | `{$STRICT_OVERLOAD ON}` |
 | `--permissive-overload` | Relax the overload marker requirement (the default). | `{$STRICT_OVERLOAD OFF}` |
@@ -95,6 +96,9 @@ effect where one exists.
 | `--no-signals` | Opt out of the default signal runtime (graceful `SIGINT`/`SIGTERM` dispatch + `SetSignalHandler`). PC targets only. |
 | `--no-unhandled-handler` | Do not install the default unhandled-exception handler. |
 | `--no-strict-ir` | Opt out of the self-host IR guard (the hard error on any unlowered IR node). For an in-development frontend only. |
+| `--strict-ir` | Accepted no-op: the IR guard is the default now. Kept so existing invocations keep working. |
+| `--map` / `--no-map` | Force the map file next to the output on or off. A map is written by default when an output path is given. |
+| `--no-shims` | Refuse every `mimic_<module>` substitution — an import must resolve to a real unit of that name or fail. Turns "compiled without compatibility shims" from a claim into a checked property. |
 | `--max-stack-frame=N` | Set the oversized-stack-frame warning threshold in bytes (`=0` disables it). |
 | `--werror` / `-Werror` | Promote any warning to a fatal error. |
 | `--xtensa-soft-divide` / `--xtensa-cpu=lx6` | Route div/mod through software helpers (ESP32 classic LX6, no hardware divide). |
@@ -115,6 +119,7 @@ them only when directed.
 | `--measure-inline` / `--measure-regcall` | Emit inline / register-call instrumentation. |
 | `--warn-missed-fold` | Warn on constant-fold opportunities the optimizer missed. |
 | `--warn-self-result` | Warn when a parameterless function's bare own name is read as its `Result`. |
+| `--warn-uses-leak` | Warn whenever a name resolves through a unit not reachable by the non-transitive `uses` rule. Read-only measurement — resolution itself is unchanged. |
 
 ## Search paths
 
