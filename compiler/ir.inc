@@ -1849,10 +1849,12 @@ begin
     symId := ASTIVal[node];
     if (symId >= 0) and (symId < SymCount) then
     begin
+      { feature-a-typeref-migrate-consumers lane 1: PtrElemTk read via
+        SymTR[symId].PtrBaseTk (kept in sync by SymSyncTypeRef). }
       if (Syms[symId].TypeKind = tyPointer) and
-         ((Syms[symId].PtrElemTk = tyChar) or
-          (Syms[symId].PtrElemTk = tyUInt8) or
-          (Syms[symId].PtrElemTk = tyInt8)) then
+         ((SymTR[symId].PtrBaseTk = Ord(tyChar)) or
+          (SymTR[symId].PtrBaseTk = Ord(tyUInt8)) or
+          (SymTR[symId].PtrBaseTk = Ord(tyInt8))) then
       begin
         Result := True;
         Exit;
