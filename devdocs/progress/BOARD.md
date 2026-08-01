@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -16,6 +16,7 @@ _none_
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | bug-c-uses-path-basename-collides-with-enclosing-unit-name |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-t-quick-canary-for-nilpy-and-c | T | 70 | feature | The 2-14s quick canary covers Pascal only; a NilPy change and a C change can both go out with no fast check at all. Add one dense .npy and one dense .c canary. | — |
+| feature-t-quick-gate-must-be-quick-and-gate-lines-must-not-name-long-suites | T | 60 | feature | `gate.sh quick` runs the 625s make test-nilpy, and ticket Gate: lines name long local suites — both push agents into running locally what Track T exists to offload | — |
 | feature-t-watcher-health-verdict-and-host-local-alerting | T | 70 | feature | Nothing detects a watcher that is running but wedged, and nothing pushes a problem at anyone. Split it: a portable health verdict in the repo, platform-specific delivery on the host. | — |
 
 ## unfinished (4)
@@ -37,7 +38,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (189)
+## backlog (188)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -199,7 +200,6 @@ _none_
 | feature-t-host-roles-native-vs-qemu-topology | T | 65 | feature | Track T is becoming multi-host with DIFFERENT PURPOSES per box — xeon runs the matrix, arm32/arm64 rPis exist only as native oracles against xeon's QEMU — but profiles express resource ceilings, not purpose, and nothing compares two hosts' results | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 40 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-per-invocation-tmp-namespace-for-make-recipes | T | 55 | feature | The Makefile's ~3700 fixed /tmp/test_* output paths make two concurrent `make test*` runs on one box clobber each other; route them through a per-invocation temp dir | — |
-| feature-t-quick-gate-must-be-quick-and-gate-lines-must-not-name-long-suites | T | 60 | feature | `gate.sh quick` runs the 625s make test-nilpy, and ticket Gate: lines name long local suites — both push agents into running locally what Track T exists to offload | — |
 | feature-t-testmgr-owns-pinning-interruptible | T | 60 | feature | Move the pin gate into testmgr so pinning is scheduled, resource-aware and INTERRUPTIBLE, instead of a long foreground gate.sh run a dev agent has to babysit | — |
 | feature-t-trackt-setup-autodetect-box-role | T | 70 | feature | trackt's profile wizard asks instead of detecting, and its NON-INTERACTIVE default is 'dedicated' — so a Pi provisioned headless over ssh enrols itself as a full-matrix fuzzing box, the exact opposite of its role | — |
 | feature-t-uforth-benchmark-harness | T | 45 | feature | Track T: uforth benchmark harness — pxx-compiled vs interpreted Python baselines | — |
@@ -2977,7 +2977,6 @@ _none_
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
 - [p 60] [P] feature-pascal-corpus-oop
 - [p 60] [T] feature-t-bench-hardware-provenance
-- [p 60] [T] feature-t-quick-gate-must-be-quick-and-gate-lines-must-not-name-long-suites
 - [p 60] [T] feature-t-testmgr-owns-pinning-interruptible
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [T] task-t-suppress-autoticket-until-host-baselined
