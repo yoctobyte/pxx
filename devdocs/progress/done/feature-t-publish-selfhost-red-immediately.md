@@ -65,3 +65,61 @@ look now*; the rest can keep batching.
 Break the self-host fixedpoint deliberately, push, and confirm the tstate RED and
 the ticket appear without waiting for the tier to finish — and that a
 green self-host leaves current timing unchanged.
+
+---
+
+## DONE — `6f76c32ce` (claude@xeon, 2026-08-01)
+
+All three asks, plus the measurement.
+
+1. **Fixedpoint launches first** — the queue sort now puts
+   `selfhost-fixedpoint` ahead of the longest-job heuristic.
+2. **Its red tears down the rest of the tier.** Aborting is *how* publication
+   becomes immediate: the existing end-of-run publish fires straight away. No
+   second publish path, so `twatch`'s hard-won rebase/conflict handling is not
+   exercised any more often than today — which is the trade you asked for when
+   you rejected per-job publishing.
+3. **Everything else still batches** at end of tier, unchanged.
+
+The report carries `selfhost_red` so a consumer can distinguish an aborted tier
+from a complete one.
+
+### Gate
+
+Replaced `compiler/pascal26` with the pinned stable, so the fixedpoint's
+anti-Thompson agreement check fails, then ran the native tier:
+
+```
+testmgr: tier=native jobs=1407 skip=2(corpus-absent) cap=6 scale=1.00
+testmgr: SELF-HOST RED (selfhost-fixedpoint#00) — tearing down the rest of the
+         tier; every other verdict at this sha is suspect
+== testmgr report (tier native, 22.4s wall) ==
+```
+
+**22.4 s against ~235 s** for a full native tier. Report: `verdict RED`,
+`selfhost_red true`, and **70 jobs (64 pass, 4 fail, 2 skip) rather than 1407**.
+Binary restored afterwards and the fixedpoint reconfirmed — converged in 1 round,
+agrees with `compiler/pascal26`.
+
+A green self-host is untouched: the abort is reached only from the failure
+branch, so timing is unchanged.
+
+### The subtle part — un-run jobs must not reach the report
+
+An abort leaves the remaining jobs `skipped` (never launched), which is **not**
+`skip` (corpus absent — a real, pass-equivalent outcome). Emitting them would
+have been wrong in both directions: `twatch` maps `skip`→`pass`, so they would
+either launder into passes or, as the literal `skipped`, read as a ~1300-job mass
+RED — manufacturing the very phantom-red cascade this ticket family exists to
+kill. The report now emits only jobs that actually ran, so twatch's merge keeps
+each untouched job's previous verdict, which is the honest answer for a job this
+run never attempted.
+
+### Not done here
+
+The `phase`/heartbeat marker for "self-host RED at <sha>" is not implemented;
+that belongs with [[feature-t-agent-side-tstate-watch]], which is the consumer
+for it.
+
+## Log
+- 2026-08-01 — resolved, commit 6f76c32ce.
