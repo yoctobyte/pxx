@@ -79,7 +79,7 @@ _none_
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
 | bug-nilpy-static-typed-operands-skip-mixed-type-guard | N | 70 | bug | NilPy: the mixed-type TypeError guard lives ONLY in the runtime variant path — when BOTH operands are statically typed, `7 - [1,2]` and `\"ab\" - \"ab\"` silently do pointer math (108 sweep cases) | — |
 | bug-nilpy-str-format-ignores-positional-indices | N | 60 | bug | NilPy: `\"{1}{0}\".format(a, b)` ignores the explicit indices and substitutes left-to-right — silently prints the arguments in the WRONG ORDER | — |
-| bug-nilpy-typed-const-import-reads-zero | N | 60 | bug | Nil Python importing a Pascal *typed* constant reads zero, not the initializer | — |
+| bug-nilpy-typed-const-import-reads-zero | N | 75 | bug | Typed-constant initializers are not applied in a Nil Python build | — |
 | bug-nilpy-unary-numeric-dunders-return-raw-handle | N | 55 | bug | NilPy: abs(obj), ~obj and obj-as-index ignore __abs__/__invert__/__index__ — they return the raw instance HANDLE as a number, silently | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-nilpy-with-statement-skips-enter-and-exit | N | 70 | bug | NilPy: `with` is desugared to a plain assignment — the context-manager protocol is deliberately not modelled, so a user __enter__/__exit__ silently never runs | — |
@@ -2949,6 +2949,7 @@ _none_
 
 - [p 80] [A] bug-a-overload-resolution-ignores-class-identity (unblocks 1)
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
+- [p 75] [N] bug-nilpy-typed-const-import-reads-zero
 - [p 75] [T] bug-t-optdiff-shard-identity-is-positional
 - [p 70] [N] bug-nilpy-def-local-assignment-widens-module-global-to-variant
 - [p 70] [N] bug-nilpy-list-ordering-compares-heap-addresses
@@ -2966,7 +2967,6 @@ _none_
 - [p 60] [N] bug-nilpy-dunders-not-dispatched-through-containers
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [N] bug-nilpy-str-format-ignores-positional-indices
-- [p 60] [N] bug-nilpy-typed-const-import-reads-zero
 - [p 60] [U] decide-nilpy-runtime-dunder-dispatch-mechanism
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing

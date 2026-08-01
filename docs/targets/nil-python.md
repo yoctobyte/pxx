@@ -279,11 +279,12 @@ hit them:
 - Object reclamation (reference counting) is disabled inside an imported
   `.py` module specifically — a module compiled as the main program does not
   have this restriction.
-- Importing a **typed** constant from a Pascal unit (`const Name: T = value;`)
-  yields the zero value of `T` instead of the declared one, silently. Untyped
-  constants are unaffected, and Pascal reading the same unit is correct. This
-  currently hits `from reportlab.lib.units import mm` (and its siblings), which
-  are declared that way — so those measurements arrive as `0.0`.
+- A **typed** constant in a Pascal unit (`const Name: T = value;`) reads as the
+  zero value of `T` in any build whose main program is Nil Python — silently,
+  and whether the constant is read from Python or by Pascal code inside the unit
+  itself. Untyped constants are unaffected, and the same unit under a Pascal
+  main is correct. This currently hits `from reportlab.lib.units import mm`
+  (measurements arrive as `0.0`) and `ucomplex`'s imaginary unit `i`.
 
 If a real-world program hits one of these, check
 [compatibility status](../reference/status.md) and the project's ticket board

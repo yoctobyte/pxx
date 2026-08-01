@@ -6,9 +6,18 @@ order: 89
 # Compatibility status
 
 This page summarises what PXX compiles and runs today, across its frontends and
-the bundled libraries. It is a snapshot of the standing test suites and the
-real-world corpora PXX is exercised against; the automated gates are the source of
-truth, and current numbers may move ahead of this page.
+the bundled libraries.
+
+> **For current numbers, read the live status pages, not this page.**
+> <https://pxxc.org/status/> is generated from the test manager's own output on
+> every content pull — [conformance](https://pxxc.org/status/conformance/) has
+> the exact per-category pass/fail counts,
+> [tests](https://pxxc.org/status/tests/) the watcher's per-revision verdicts,
+> and [benchmarks](https://pxxc.org/status/benchmarks/) the timings.
+>
+> What follows is the part that does *not* move week to week: what the claims
+> mean, and which corpora are exercised. Deliberately no figures — a number
+> written here is a number that starts going stale the day it is written.
 
 ## What "works" means here
 
@@ -77,10 +86,15 @@ The PXX RTL and standard libraries pass a broad smoke suite, including:
 
 ### Language conformance
 
-Against the FPC test-suite conformance subset, the large majority of curated
-programs pass. Known gaps concentrate in `UnicodeString`/`WideString`
-conversions, some `ShortString` edge cases, parts of the generics corpus, and
-`{$Q+}` overflow semantics on 64-bit integers. These are tracked and shrinking.
+PXX is run against Free Pascal's own test suite. The
+[live conformance page](https://pxxc.org/status/conformance/) carries the
+current pass/fail/skip counts per category, and distinguishes a real
+unimplemented feature (`gap`) from a probe of FPC internals or a deliberate
+divergence (`wontfix`) — the two should never be added together.
+
+Known gaps concentrate in `UnicodeString`/`WideString` conversions, some
+`ShortString` edge cases, parts of the generics corpus, and `{$Q+}` overflow
+semantics on 64-bit integers. These are tracked and shrinking.
 
 ## Nil Python frontend
 
@@ -104,7 +118,7 @@ are documented rather than implied.
 
 ## Cross-targets
 
-The figures above describe the x86-64 host. PXX also cross-compiles to i386,
+Everything above describes the x86-64 host. PXX also cross-compiles to i386,
 AArch64, and ARM32 (Linux), plus the ESP32-oriented `riscv32` and `xtensa`
 embedded targets — six backends in all. Most of the above runs on the Linux
 cross-targets too, but per-target status is a separate axis with its own gates.

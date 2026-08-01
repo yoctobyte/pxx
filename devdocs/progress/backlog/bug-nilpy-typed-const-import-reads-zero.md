@@ -1,19 +1,25 @@
 ---
 track: N
-prio: 60
+prio: 75
 type: bug
 blocked-by: []
 ---
 
-# Nil Python importing a Pascal *typed* constant reads zero, not the initializer
+# Typed-constant initializers are not applied in a Nil Python build
 
-A `.npy`/`.py` file importing a typed constant (`const Name: T = value;`) from a
-Pascal unit gets the zero value of `T` instead of the declared one. Untyped
-constants are fine, and **Pascal reading the same unit is fine** — so this is
-the Nil Python import path, not the unit or the constant itself.
+A typed constant (`const Name: T = value;`) in a Pascal unit reads as the zero
+value of `T` whenever the **main program is Nil Python** — regardless of who
+reads it. Untyped constants are fine. The same unit under a Pascal main is
+fine.
 
 Silent: no warning, no error, just a wrong value. Found while documenting the
 shims (Track D), not by a failing test.
+
+**This is not an import-boundary bug.** The first read of this ticket said it
+was — that was wrong, and the corrected scope is much wider. Pascal code *inside
+the unit* reading its own typed constant also gets zero, so any Pascal library
+that relies on one misbehaves under a NilPy main even when NilPy never touches
+the constant itself. The decisive experiment is below.
 
 ## Repro
 
@@ -83,13 +89,60 @@ entirely at the origin, with no diagnostic anywhere. `mimic_reportlab_lib_
 pagesizes` and the other `Double`-valued shims are worth checking for the same
 exposure once this is fixed.
 
-## Notes
+## The decisive experiment: same unit, same accessor, two mains
 
-Affects at least `Double` and `Integer`, so it reads like the initializer is
-simply not carried across the Nil Python import rather than a type-specific
-conversion fault. The untyped-const path working suggests the two are resolved
-by different mechanisms — the untyped one likely inlined as a literal at the use
-site, the typed one referenced as storage whose initializer never lands.
+The constant is never named by the Nil Python side here — a Pascal function in
+the unit reads it, and only the main program's language differs.
+
+`u/rec.pas`:
+
+```pascal
+unit rec;
+interface
+type
+  TPt = record x, y: Double; end;
+const
+  Origin: TPt = (x: 1.5; y: 2.5);
+function GetX: Double;
+implementation
+function GetX: Double; begin GetX := Origin.x; end;
+end.
+```
+
+```python
+from rec import GetX
+print(GetX())          # 0.0   <- WRONG
+```
+
+```pascal
+program rp;
+uses rec;
+begin
+  writeln(GetX:0:2);   { 1.50  <- correct }
+end.
+```
+
+So the initializer is not being emitted or not being applied for a NilPy main,
+rather than being lost in translation on the way across an import.
+
+## Blast radius
+
+Affects `Double`, `Integer` and record-typed constants — consistent with "the
+initializer never lands" rather than a type-specific conversion fault. Untyped
+constants work, which fits them being inlined as literals at the use site while
+a typed constant is storage that someone must initialize.
+
+Every typed constant reachable from a NilPy build is exposed. In-tree today:
+
+| unit | typed constants | why it matters |
+| --- | --- | --- |
+| `lib/pcl/mimic_reportlab_lib_units.pas` | `inch`, `cm`, `mm`, `pica` | every reportlab measurement becomes 0.0 |
+| `lib/rtl/ucomplex.pas` | `i`, `_0` | the imaginary unit reads as 0 — complex math silently wrong |
+| `lib/rtl/palparallel.pas` | `ParDefault`, `ParBalanced`, `ParPolite` | parallel policy presets silently become all-zero records |
+| `lib/rtl/dynlibs.pas` | `NilHandle` | harmless — its value *is* 0 |
+
+`ucomplex` is the one to look at after `reportlab`: a zeroed imaginary unit
+produces plausible numbers that are wrong, with nothing to catch it.
 
 Not routed around anywhere: the shim keeps its platonic declaration, and the
 docs written alongside this ticket do not use `mm` in an example.
