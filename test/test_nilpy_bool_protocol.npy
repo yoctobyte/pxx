@@ -1,0 +1,77 @@
+# `bool(x)` is Python's TRUTHINESS — the same rule `if x:` and `not x` use.
+#
+# It had no NilPy arm at all, so it resolved as a plain overloaded call into
+# pylib, whose only class overload is `bool(l: TPyList)`. A user-class handle
+# bound to that TPyList parameter and `count` was read off the wrong object
+# layout, so every instance came back False. Once class-identity overload
+# resolution was fixed (bug-a-overload-resolution-ignores-class-identity)
+# nothing matched a user class and it fell to the variant path instead — so it
+# flipped to answering True for every instance. Either way `__bool__` and
+# `__len__` were never consulted
+# (bug-nilpy-bool-protocol-ignored-object-always-truthy).
+#
+# `bool()` now goes through PyMakeTruthy, which is what keeps the three truth
+# contexts — bool(), `if`, `not` — from drifting apart again. That drift is
+# documented in the source as the reason the `not <x>` family needed three
+# separate fixes, so this test checks all three contexts, not just bool().
+
+
+class BoolFalse:
+    def __bool__(self):
+        return False
+
+
+class LenZero:
+    def __len__(self):
+        return 0
+
+
+class LenThree:
+    def __len__(self):
+        return 3
+
+
+class NoProto:
+    pass
+
+
+# --- the protocol, via bool() ---
+print(bool(BoolFalse()), bool(LenZero()), bool(LenThree()), bool(NoProto()))
+
+# --- the SAME objects in the other two truth contexts, which must agree ---
+bf = BoolFalse()
+lz = LenZero()
+l3 = LenThree()
+np = NoProto()
+print(not bf, not lz, not l3, not np)
+if bf:
+    print("if-bf: truthy")
+else:
+    print("if-bf: falsy")
+if l3:
+    print("if-l3: truthy")
+else:
+    print("if-l3: falsy")
+if np:
+    print("if-np: truthy")
+else:
+    print("if-np: falsy")
+
+# --- and the rest of the bool() surface must be unaffected ---
+print(bool(0), bool(1), bool(-1), bool(0.0), bool(2.5))
+print(bool(""), bool("a"), bool([]), bool([1]), bool({}), bool({"k": 1}))
+print(bool(True), bool(False))
+print(bool(None))
+print(bool(b""), bool(b"x"))
+
+# variants: type known only at run time
+vals = [0, "", [], 5, "z"]
+print(bool(vals[0]), bool(vals[1]), bool(vals[2]), bool(vals[3]), bool(vals[4]))
+
+
+def zero():
+    return 0
+
+
+print(bool(zero()))
+print(bool(len("abc")))

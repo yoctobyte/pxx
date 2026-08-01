@@ -214,3 +214,38 @@ Remaining work is only part 2: a NilPy arm for `bool(` in `parser.inc`'s factor,
 beside the existing `str(` one, routing a user-class argument through
 `PyMakeTruthy` — the shared rule `if` and `not` already use, so the three cannot
 drift apart again.
+
+## 2026-08-01 — FIXED (part 2)
+
+`bool(` now has a NilPy arm in `parser.inc`'s factor, beside the existing `str(`
+one, routing the argument through `PyMakeTruthy` — the same rule `if x:` and
+`not x` use. That shared routing is the point: the source already records that
+the `not <x>` family needed three separate fixes because these truth contexts
+were three implementations of one rule, and `PyClassTruthyDunder` exists
+precisely so they cannot drift again.
+
+One wrinkle handled explicitly: `PyMakeTruthy` returns the node UNCHANGED for
+operands it has no rule for (a number, or a class with neither dunder). That is
+correct in a *condition* — non-zero / non-nil is truthy — but `bool()` must
+yield an actual Boolean, so the arm wraps such a node in `<> 0`. For a
+protocol-less instance that is `handle <> nil`, which is Python's "any instance
+is true" while still evaluating the argument.
+
+### Verified
+
+`test/test_nilpy_bool_protocol.npy`, wired into `make test-nilpy`,
+byte-identical to CPython. Confirmed RED pre-fix (`True True True True` where
+the first two must be `False`).
+
+It deliberately checks the SAME objects in all three truth contexts — `bool()`,
+`not`, and `if` — rather than `bool()` alone, because agreement between them is
+the property that keeps regressing here.
+
+Surface re-checked and unchanged: ints, floats, empty/non-empty strings, list,
+dict, bytes, `True`/`False`, `None`, variants whose type is known only at run
+time, a function result, `bool()` inside a condition, and `bool(len(...))`.
+
+Native: build + byte-identical self-host fixedpoint, `testmgr --tier quick` GREEN.
+
+## Log
+- 2026-08-01 — resolved, commit PENDING.

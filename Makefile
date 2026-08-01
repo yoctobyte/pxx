@@ -1083,6 +1083,10 @@ test-nilpy: $(COMPILER)
 	# runtime TypeError, so this COMPILES and the handler runs.
 	./$(COMPILER) test/test_nilpy_operator_dunder_missing_fail.npy /tmp/test_nilpy_nodunder_fail26
 	test "$$(/tmp/test_nilpy_nodunder_fail26)" = "$$(printf '%b' 'caught missing __add__\nstill running')"
+	# bool(x) is Python truthiness and must consult __bool__/__len__, agreeing
+	# with `if x:` and `not x` — it had no NilPy arm and never reached them
+	./$(COMPILER) test/test_nilpy_bool_protocol.npy /tmp/test_nilpy_boolproto26
+	test "$$(/tmp/test_nilpy_boolproto26)" = "$$(printf '%b' 'False False True True\nTrue True False False\nif-bf: falsy\nif-l3: truthy\nif-np: truthy\nFalse True True False True\nFalse True False True False True\nTrue False\nFalse\nFalse True\nFalse False False True True\nFalse\nTrue')"
 	# mixed-type operands must raise TypeError even when BOTH types are known at
 	# compile time: the guard lives in the runtime pyvar_* helpers, which a
 	# fully-static binop never reaches, so `3 - [1,2]` did pointer math. Operands

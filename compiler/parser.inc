@@ -10047,6 +10047,44 @@ begin
         LastExprTk := tyVariant;
         Exit;
       end
+      else if isNilPy and (name = 'bool') then
+      begin
+        { `bool(x)` is Python's TRUTHINESS, the same rule `if x:` and `not x`
+          use — so it goes through PyMakeTruthy rather than resolving to pylib's
+          bool() overloads. It had NO NilPy arm at all, so a user-class argument
+          resolved as a plain overloaded call and bound to `bool(l: TPyList)`,
+          reading count off the wrong layout; once class-identity resolution was
+          fixed nothing matched and it fell to the variant path instead, so it
+          answered True for every instance. Either way `__bool__`/`__len__` were
+          never consulted (bug-nilpy-bool-protocol-ignored-object-always-truthy).
+          Routing through PyMakeTruthy is what stops the three truth contexts
+          drifting apart again — the whole reason PyClassTruthyDunder exists. }
+        Next; Expect(tkLParen, '('); ParseArgExpr;
+        atDflt := PyMakeTruthy(CurASTNode);
+        if (atDflt = CurASTNode) and (IntToTypeKind(ASTTk[CurASTNode]) <> tyBoolean) then
+        begin
+          { PyMakeTruthy has no rule for this operand and hands it back raw —
+            a number, or a class with neither dunder. As a CONDITION that is
+            already correct (non-zero / non-nil is truthy), but bool() must
+            yield an actual Boolean, so compare against zero explicitly. For a
+            protocol-less instance this is `handle <> nil`, which is Python's
+            "any instance is true" and still evaluates the argument. }
+          atRecv := AllocNode(AN_INT_LIT);
+          ASTIVal[atRecv] := 0;
+          ASTTk[atRecv] := ASTTk[CurASTNode];
+          atFld := AllocNode(AN_BINOP);
+          ASTIVal[atFld] := Ord(tkNeq);
+          ASTLeft[atFld] := CurASTNode;
+          ASTRight[atFld] := atRecv;
+          ASTTk[atFld] := Ord(tyBoolean);
+          atDflt := atFld;
+        end;
+        Expect(tkRParen, ')');
+        CurASTNode := atDflt;
+        ASTTk[CurASTNode] := Ord(tyBoolean);
+        LastExprTk := tyBoolean;
+        Exit;
+      end
       else if isNilPy and (name = 'str') then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr;
