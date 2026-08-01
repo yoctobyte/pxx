@@ -1,0 +1,104 @@
+# Truthiness protocol on a user class: __bool__, then __len__() != 0, then
+# "any instance is true". pxx implemented only the last step, so an object whose
+# __bool__ returns False took the TRUTHY branch of an `if` — silent, and the
+# WRONG BRANCH rather than a wrong value.
+# bug-nilpy-bool-protocol-ignored-object-always-truthy.
+#
+# Both truth contexts are exercised on purpose: `not x` and `if x:` are separate
+# implementations of one rule, which is why the `not <x>` family needed three
+# separate fixes (string, container, object).
+#
+# Every receiver here is STATICALLY typed (a local or a temporary), which is
+# what compile-time dispatch can see. An object reached as an untyped function
+# PARAMETER or as a container element is a variant at run time and still falls
+# back to "any instance is true" — that half needs runtime dunder dispatch and
+# is tracked by bug-nilpy-dunders-not-dispatched-through-containers, blocked on
+# decide-nilpy-runtime-dunder-dispatch-mechanism. Do not add a parameter case
+# here until that lands.
+#
+# Expectation is CPython's own output.
+
+
+class BoolFalse:
+    def __bool__(self):
+        return False
+
+
+class BoolTrue:
+    def __bool__(self):
+        return True
+
+
+class LenZero:
+    def __len__(self):
+        return 0
+
+
+class LenTwo:
+    def __len__(self):
+        return 2
+
+
+class BothDisagree:
+    # __bool__ WINS over __len__ in CPython; a class where the two disagree is
+    # the only way to prove which one was consulted.
+    def __bool__(self):
+        return False
+
+    def __len__(self):
+        return 5
+
+
+class Plain:
+    pass
+
+
+bf = BoolFalse()
+bt = BoolTrue()
+lz = LenZero()
+lt = LenTwo()
+bd = BothDisagree()
+pl = Plain()
+
+if bf:
+    print("boolfalse truthy")
+else:
+    print("boolfalse falsy")
+if bt:
+    print("booltrue truthy")
+else:
+    print("booltrue falsy")
+if lz:
+    print("lenzero truthy")
+else:
+    print("lenzero falsy")
+if lt:
+    print("lentwo truthy")
+else:
+    print("lentwo falsy")
+if bd:
+    print("both truthy")
+else:
+    print("both falsy")
+if pl:
+    print("plain truthy")
+else:
+    print("plain falsy")
+
+print("not boolfalse", not bf)
+print("not booltrue", not bt)
+print("not lenzero", not lz)
+print("not lentwo", not lt)
+print("not both", not bd)
+print("not plain", not pl)
+
+# a TEMPORARY receiver, not just a named local
+if BoolFalse():
+    print("temp truthy")
+else:
+    print("temp falsy")
+
+# and/or yield the OPERAND in Python, so they exercise the truth test
+# separately from the result value.
+print("or", (bf or "fallback"))
+print("and", (bt and "kept"))

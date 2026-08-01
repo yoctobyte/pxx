@@ -1511,8 +1511,48 @@ begin
   CurASTNode := left;
 end;
 
+function PyClassTruthyDunder(ci, operand: Integer): Integer;
+{ Truthiness of a user-class instance via Python's own protocol, as a BOOLEAN
+  node; -1 when the class declares neither dunder (caller keeps its existing
+  `o <> nil` answer).
+
+  CPython's rule, measured against the oracle rather than assumed: `__bool__`
+  first, else `__len__() != 0`, else "any instance is true". pxx implemented
+  only the last step, so `if c:` on a class whose `__bool__` returns False took
+  the TRUTHY branch — silently, no error, just the other branch
+  (bug-nilpy-bool-protocol-ignored-object-always-truthy).
+
+  One helper for both truth contexts on purpose. `not x` (PyParseBoolNot) and
+  `if x:` / and / or (PyMakeTruthy) are separate implementations of the same
+  rule, and that duplication is exactly why the `not <x>` family needed three
+  separate fixes (string, container, object — see
+  project_nilpy_truthiness_keyed_on_handle_family). Anything added here reaches
+  both. }
+var lenNode, zeroNode, node: Integer;
+begin
+  PyClassTruthyDunder := -1;
+  if ci < 0 then Exit;
+  if FindUMeth(ci, '__bool__') >= 0 then
+  begin
+    { __bool__ already yields a Boolean; use the call as the condition. }
+    PyClassTruthyDunder := PyCallMeth1(ci, '__bool__', operand, -1);
+    Exit;
+  end;
+  if FindUMeth(ci, '__len__') >= 0 then
+  begin
+    lenNode := PyCallMeth1(ci, '__len__', operand, -1);
+    if lenNode < 0 then Exit;
+    zeroNode := AllocNode(AN_INT_LIT);
+    ASTIVal[zeroNode] := 0; ASTTk[zeroNode] := Ord(tyInteger);
+    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkNeq);
+    ASTLeft[node] := lenNode; ASTRight[node] := zeroNode;
+    ASTTk[node] := Ord(tyBoolean);
+    PyClassTruthyDunder := node;
+  end;
+end;
+
 procedure PyParseBoolNot;
-var node, zeroNode, operand, lenNode, argNode: Integer; opTk: TTypeKind;
+var node, zeroNode, operand, lenNode, argNode, truthNode: Integer; opTk: TTypeKind;
 begin
   if CurTok.Kind = tkNot then
   begin
@@ -1587,7 +1627,25 @@ begin
         over an `re.match` result, so EVERY chord came back unclassified, every
         key scored identically, and the detector ranked ALL_KEYS in insertion
         order. No crash, no diagnostic — just plausible wrong answers.
-        [[bug-nilpy-not-on-object-always-true]] }
+        [[bug-nilpy-not-on-object-always-true]]
+
+        `o = nil` is only CPython's answer for a class declaring NEITHER
+        `__bool__` nor `__len__`; when one is declared it decides. Try that
+        first and fall back to the pointer test
+        (bug-nilpy-bool-protocol-ignored-object-always-truthy). }
+      truthNode := -1;
+      if ResolveNodeRec(operand) >= REC_UCLASS_BASE then
+        truthNode := PyClassTruthyDunder(ResolveNodeRec(operand) - REC_UCLASS_BASE, operand);
+      if truthNode >= 0 then
+      begin
+        { the dunder gives TRUTHY; `not` is its logical negation. AN_NOT on a
+          tyBoolean operand is logical here, per this routine's own note. }
+        node := AllocNode(AN_NOT);
+        ASTLeft[node] := truthNode;
+        ASTTk[node] := Ord(tyBoolean);
+        CurASTNode := node;
+        Exit;
+      end;
       zeroNode := AllocNode(AN_INT_LIT);
       ASTIVal[zeroNode] := 0;
       ASTTk[zeroNode] := Ord(tyPointer);
@@ -1774,6 +1832,18 @@ begin
       ASTLeft[ternNode] := guardNode; ASTRight[ternNode] := pairNode;
       ASTTk[ternNode] := Ord(tyBoolean);
       Result := ternNode;
+    end
+    else if rec >= REC_UCLASS_BASE then
+    begin
+      { A USER class: Python asks `__bool__`, then `__len__() != 0`, before
+        falling back to "any instance is true". Without this the raw handle was
+        the condition, so an object whose `__bool__` returns False took the
+        TRUTHY branch of an `if` — silent, and the wrong branch rather than a
+        wrong value (bug-nilpy-bool-protocol-ignored-object-always-truthy).
+        Shared with `not x` via PyClassTruthyDunder so the two truth contexts
+        cannot drift apart again. }
+      node := PyClassTruthyDunder(rec - REC_UCLASS_BASE, n);
+      if node >= 0 then Result := node;
     end;
   end;
 end;
