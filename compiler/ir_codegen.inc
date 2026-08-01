@@ -183,14 +183,14 @@ begin
   if AnonDynArrayCount >= 8192 then Error('too many anonymous dynamic arrays');
   anonIdx := AnonDynArrayCount;
   AnonDynArrayOff[anonIdx] := DataLen;
-  AnonDynArrayDepth[anonIdx] := SymTR[symIdx].DynDepth;
-  AnonDynArrayBaseTk[anonIdx] := Ord(IntToTypeKind(SymTR[symIdx].ElemTk));
-  AnonDynArrayBaseRec[anonIdx] := SymTR[symIdx].ElemRec;
+  AnonDynArrayDepth[anonIdx] := SymDynDepth[symIdx];
+  AnonDynArrayBaseTk[anonIdx] := Ord(Syms[symIdx].ElemType);
+  AnonDynArrayBaseRec[anonIdx] := Syms[symIdx].ElemRecName;
 
-  depth := SymTR[symIdx].DynDepth;
-  if IntToTypeKind(SymTR[symIdx].ElemTk) = tyAnsiString then
+  depth := SymDynDepth[symIdx];
+  if Syms[symIdx].ElemType = tyAnsiString then
     baseKind := 1
-  else if (IntToTypeKind(SymTR[symIdx].ElemTk) = tyRecord) and RecordHasManagedFields(SymTR[symIdx].ElemRec) then
+  else if (Syms[symIdx].ElemType = tyRecord) and RecordHasManagedFields(Syms[symIdx].ElemRecName) then
     baseKind := 3
   else
     baseKind := 0;
@@ -202,16 +202,16 @@ begin
     if baseKind = 1 then
       elSize := TARGET_PTR_SIZE
     else if baseKind = 3 then
-      elSize := UClsSize_[SymTR[symIdx].ElemRec - REC_UCLASS_BASE]
-    else if IntToTypeKind(SymTR[symIdx].ElemTk) = tyRecord then
+      elSize := UClsSize_[Syms[symIdx].ElemRecName - REC_UCLASS_BASE]
+    else if Syms[symIdx].ElemType = tyRecord then
       { Unmanaged record element: TypeSize(tyRecord) is only a pointer-width
         placeholder (8); the real stride is the full record size. Using 8 here
         under-allocates the dyn array (e.g. a 2-element `array of const`/TVarRec
         gets 16 bytes, so element 1 overruns into adjacent heap and is clobbered
         by the next allocation). }
-      elSize := RecSize(SymTR[symIdx].ElemRec)
+      elSize := RecSize(Syms[symIdx].ElemRecName)
     else
-      elSize := TypeSize(IntToTypeKind(SymTR[symIdx].ElemTk));
+      elSize := TypeSize(Syms[symIdx].ElemType);
     { fixed-array ROW element (`array of T`, T a named fixed array): stride =
       whole row (bug-pascal-openarray-of-array-param-marshal). baseKind 0 only —
       managed row elements are rejected at parse. }
@@ -5035,13 +5035,13 @@ begin
                     (Syms[IRA[val1Node]].TypeKind = tyAnsiString)) then
               Error('SetLength expects an array variable in IR codegen');
             symIdx := IRA[val1Node];
-            if (IntToTypeKind(SymTR[symIdx].ElemTk) = tyString) and
+            if (Syms[symIdx].ElemType = tyString) and
                (Syms[symIdx].TypeKind <> tyAnsiString) then
               Error('SetLength: dynamic array of record/string not yet supported');
-            if IntToTypeKind(SymTR[symIdx].ElemTk) = tyRecord then
-              elemSize := RecSize(SymTR[symIdx].ElemRec)
+            if Syms[symIdx].ElemType = tyRecord then
+              elemSize := RecSize(Syms[symIdx].ElemRecName)
             else
-              elemSize := TypeSize(IntToTypeKind(SymTR[symIdx].ElemTk));
+              elemSize := TypeSize(Syms[symIdx].ElemType);
             { fixed-array ROW element (`array of T`): stride = whole row }
             if SymDynElemRowLen[symIdx] > 0 then
               elemSize := elemSize * SymDynElemRowLen[symIdx];
@@ -5170,9 +5170,9 @@ begin
             EmitB($F3); EmitB($A4);          { rep movsb }
             Patch32(pDynNoOld, CodeLen - (pDynNoOld + 4));
             if Syms[symIdx].IsArray and
-               ((IntToTypeKind(SymTR[symIdx].ElemTk) = tyAnsiString) or
-                ((IntToTypeKind(SymTR[symIdx].ElemTk) = tyRecord) and
-                 RecordHasManagedFields(SymTR[symIdx].ElemRec))) then
+               ((Syms[symIdx].ElemType = tyAnsiString) or
+                ((Syms[symIdx].ElemType = tyRecord) and
+                 RecordHasManagedFields(Syms[symIdx].ElemRecName))) then
             begin
               { The copied array prefix owns its own references. }
               EmitB($48); EmitB($8B); EmitB($3C); EmitB($24);           { mov rdi, [rsp] = new data }
@@ -5188,7 +5188,7 @@ begin
               EmitB($48); EmitB($85); EmitB($C9);                       { test rcx, rcx }
               EmitB($0F); EmitB($84); pDynNoRetainCount := CodeLen; EmitI32(0);
               pDynKeepCopy := CodeLen;
-              if IntToTypeKind(SymTR[symIdx].ElemTk) = tyAnsiString then
+              if Syms[symIdx].ElemType = tyAnsiString then
               begin
                 EmitB($48); EmitB($8B); EmitB($07);                     { mov rax, [rdi] }
                 EmitAnsiStrRetainLocked;
@@ -5198,12 +5198,12 @@ begin
                 EmitB($51);                                             { push rcx }
                 EmitB($57);                                             { push rdi }
                 EmitB($48); EmitB($89); EmitB($FB);                     { mov rbx, rdi }
-                EmitManagedRecordRetain(SymTR[symIdx].ElemRec);
+                EmitManagedRecordRetain(Syms[symIdx].ElemRecName);
                 EmitB($5F);                                             { pop rdi }
                 EmitB($59);                                             { pop rcx }
               end;
               EmitB($48); EmitB($81); EmitB($C7);
-              if IntToTypeKind(SymTR[symIdx].ElemTk) = tyRecord then EmitI32(RecSize(SymTR[symIdx].ElemRec))
+              if Syms[symIdx].ElemType = tyRecord then EmitI32(RecSize(Syms[symIdx].ElemRecName))
               else EmitI32(8);                                         { add rdi, element size }
               EmitB($48); EmitB($FF); EmitB($C9);                       { dec rcx }
               EmitB($0F); EmitB($85); EmitI32(pDynKeepCopy - (CodeLen + 4));
@@ -5633,8 +5633,8 @@ begin
           non-symbol target such as a record/class field. }
         if symIdx >= 0 then
         begin
-          slBaseTk := IntToTypeKind(SymTR[symIdx].ElemTk);
-          slBaseRec := SymTR[symIdx].ElemRec;
+          slBaseTk := Syms[symIdx].ElemType;
+          slBaseRec := Syms[symIdx].ElemRecName;
         end
         else
         begin
@@ -6131,7 +6131,7 @@ begin
       if SymIsHiddenArgTemp[i] and (Syms[i].Kind = skLocal) then
       begin
         if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-           (RecSize(SymTR[i].RecId) > TARGET_PTR_SIZE) then
+           (RecSize(Syms[i].RecName) > TARGET_PTR_SIZE) then
         begin
           { Managed-record temp (e.g. a hidden aggregate-result dest): zero the
             full record so every managed field starts nil, not just the first
@@ -6139,7 +6139,7 @@ begin
           EmitAsmX64([
             'lea rdi, [rbp+%]', Syms[i].Offset,
             'xor rax, rax',
-            'mov rcx, %', RecSize(SymTR[i].RecId),
+            'mov rcx, %', RecSize(Syms[i].RecName),
             'rep stosb'
           ]);
         end
@@ -6959,7 +6959,7 @@ begin
     for iZeroTmp := Procs[CurProc].ScopeBase to SymCount - 1 do
       if (Syms[iZeroTmp].Kind = skLocal) and (Syms[iZeroTmp].Name = '') and
          SymIsComInterface(iZeroTmp) then
-        EmitZeroFrameSlot(Syms[iZeroTmp].Offset, RecSize(SymTR[iZeroTmp].RecId));
+        EmitZeroFrameSlot(Syms[iZeroTmp].Offset, RecSize(Syms[iZeroTmp].RecName));
   { NilPy: nil every tyClass local this proc has minted since the last
     statement (named comprehension targets, hidden desugar temps, handler
     binders — all created after the prologue zero-init pass). Same placement
