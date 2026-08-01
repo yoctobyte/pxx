@@ -33,7 +33,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (178)
+## backlog (179)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -45,6 +45,7 @@ _none_
 | bug-eliah-ide-win-caption-no-such-member | B | 40 | bug | `apps/ide/eliah/main.pas:1431` — `EliahForm.Win.Caption`: no `Win` member exists | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bitwise-shift-on-class-operand-segfaults | N | 60 | bug | NilPy: `obj & 1` / `obj << 1` on a class instance SEGFAULTS (core dump); __and__/__or__/__xor__/__lshift__/__rshift__ are never dispatched | — |
+| bug-nilpy-bool-operand-bypasses-mixed-type-guard-vs-container | N | 60 | bug | NilPy: a BOOL operand is not treated as an int — it bypasses the mixed-type TypeError guard vs containers AND forces UNSIGNED arithmetic, so `True // -7` prints 18446744073709551615 | — |
 | bug-nilpy-bool-protocol-ignored-object-always-truthy | N | 65 | bug | NilPy: __bool__ and __len__ are ignored in a truth test — every non-nil object is truthy, so `if obj:` takes the WRONG BRANCH silently | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
@@ -2924,6 +2925,7 @@ _none_
 - [p 65] [N] bug-nilpy-bool-protocol-ignored-object-always-truthy
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 60] [N] bug-nilpy-bitwise-shift-on-class-operand-segfaults
+- [p 60] [N] bug-nilpy-bool-operand-bypasses-mixed-type-guard-vs-container
 - [p 60] [N] bug-nilpy-dunders-not-dispatched-through-containers
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [U] decide-nilpy-runtime-dunder-dispatch-mechanism
