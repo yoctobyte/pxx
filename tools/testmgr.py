@@ -157,8 +157,17 @@ PSI_QUIET = 1.0                 # below this the box is demonstrably not stallin
 SWAP_GATE_AVAIL = 3 * MEM_FLOOR  # ...and with this much MemAvailable, free swap
                                 # is stale desktop pages, not memory pressure
 PSI_KILL = 45.0                 # kill+requeue the newest job above this PSI
-SCOPE_MAX_FRAC = 0.60           # cgroup MemoryMax = min(8G, this * MemTotal)
-SCOPE_MAX_ABS = 8 << 30
+SCOPE_MAX_FRAC = 0.60           # cgroup MemoryMax = this * MemTotal ...
+SCOPE_MIN_ABS = 8 << 30         # ... with 8G as a FLOOR, not a ceiling.
+# This was `min(8G, frac*MemTotal)`, i.e. 8G was an absolute CEILING. On borg
+# (15G) that was indistinguishable from the fraction, so it never showed. On
+# xeon (60G) it capped the run at 8G — 13% of the box — while the fraction
+# would have allowed 36G, and the 13 heaviest jobs alone sum to ~15.5G. The
+# consequence is not slowness but a mystery red: the kernel OOM-kills a job
+# INSIDE our own cgroup while 54G sits free, and a killed job looks like a
+# failed one. The fraction already does the "don't be greedy" job the absolute
+# was there for; the absolute now only protects small boxes from too tight a
+# budget, and never exceeds 75% of RAM on one.
 SCOPE_SWAP_MAX = 1 << 30
 PROBE_REF = 0.35                # seconds: hello.pas compile on reference box
 TICK = 0.5
@@ -2081,7 +2090,9 @@ def reexec_scoped():
     total = meminfo().get("MemTotal", 0)
     if not total:
         return
-    cap = min(SCOPE_MAX_ABS, int(total * SCOPE_MAX_FRAC))
+    cap = int(total * SCOPE_MAX_FRAC)
+    if cap < SCOPE_MIN_ABS:                 # small box: lift toward the floor,
+        cap = min(SCOPE_MIN_ABS, int(total * 0.75))   # but never past 75% of it
     # a shared/small box (twatch limited/restricted profile) can pin a HARD
     # ceiling below the fraction-of-total default, so the watcher never claims
     # more than its share. Only ever LOWERS the cap, never raises it above the
