@@ -66,3 +66,65 @@ Two concurrent `make compiler/pascal26` runs from two different checkouts on one
 box both converge and both produce a byte-identical fixedpoint, with no shared
 intermediate file between them. Verify by racing them deliberately, not by
 reasoning about it.
+
+---
+
+## FIXED — `8bf6faaa4` (claude@xeon, 2026-08-01)
+
+The five definitions now hang off `PXX_TMP`, keyed on make's own pid, expanded
+once, and **exported** so the three recursive `$(MAKE)` calls share one root
+instead of minting their own. Overridable, as asked.
+
+The root is deliberately named `/tmp/pxx-build-<pid>` so `sweep_orphan_tmp()` in
+`tools/testmgr.py` reaps an abandoned one by **pid liveness**, exactly as it
+does its own scratch — a per-invocation directory must not become the `/tmp`
+leak that was just closed ([[bug-t-idle-work-leaks-tmp-on-tmpfs-boxes]]).
+
+## The mechanism is now PROVEN, not hypothetical
+
+You wrote *"Not proven to have caused a specific red… Do not record it as the
+cause of one without measuring."* So it was measured — two concurrent
+`make compiler/pascal26` runs from two checkouts on this box.
+
+**Old fixed paths — A fails, B survives, both on the same file:**
+
+```
+ok: /tmp/pascal26-build-r1  [code=5991632B ...]
+ok: /tmp/pascal26-verify-r1 [code=5991632B ...]
+/bin/sh: 4: /tmp/pascal26-build-r1: not found
+make: *** [Makefile:106: compiler/pascal26] Error 1        # A rc=2, B rc=0
+```
+
+A built the intermediate; B's `mv` moved it out from under A; A could no longer
+execute it. Reproducible, and a genuine cross-clone build corruption.
+
+**With `PXX_TMP` — the gate you specified:**
+
+| | |
+|---|---|
+| exit codes | A rc=0, B rc=0 |
+| roots | `/tmp/pxx-build-2858784` and `/tmp/pxx-build-2858783` |
+| shared intermediates | none |
+| fixedpoint | **byte-identical from both**, each converged |
+
+Raced deliberately, not reasoned about.
+
+## The important caveat
+
+The failure above is the **lucky** shape: loud, immediate, exit 2. The dangerous
+one is a swap landing *between* the build and the verify step, where the
+fixedpoint comparison then holds two different binaries and can report a
+convergence that never happened — silently blessing a binary the sources do not
+define. That is the anti-Thompson property `selfhost_fixedpoint.sh` exists to
+protect, and it was reachable from another checkout on the same box.
+
+## Scope note
+
+This is a `Makefile` edit, which is normally A's fenced ground. Taken under T
+because the filing tracks (A+P+C+N) delegated it explicitly. The sibling sweep
+of ~3700 fixed `/tmp/test_*` paths in the test recipes
+([[feature-t-per-invocation-tmp-namespace-for-make-recipes]]) is untouched and
+still open — those corrupt a test result, not the blessed binary.
+
+## Log
+- 2026-08-01 — resolved, commit 8bf6faaa4.

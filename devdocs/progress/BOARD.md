@@ -8,19 +8,19 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-t-selfhost-build-uses-fixed-tmp-paths-colliding-across-clones | T | 75 | bug | The self-host build writes fixed /tmp/pascal26-build\|verify paths, so the watcher's dedicated clone and a dev checkout on the same box overwrite each other's in-flight compiler — /tmp is not per-clone | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | bug-c-uses-path-basename-collides-with-enclosing-unit-name |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 
-## unfinished (3)
+## unfinished (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults | N | 75 | bug | NilPy: calling a pylib CONTAINER method with too FEW arguments compiles and SEGFAULTS — xs.index(), d.get() both core-dump; too MANY args is correctly rejected | — |
 | feature-nilpy-optional-string-param-accepts-none | N | 50 | feature | nilpy: passing None to an Optional[str] / str\|None PARAMETER does not match the overload | — |
 | feature-nilpy-star-args-kwargs | N | 50 | feature | nilpy: *args / **kwargs in a def signature | — |
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
@@ -34,7 +34,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (194)
+## backlog (193)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -76,7 +76,6 @@ _none_
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
 | bug-nilpy-static-typed-operands-skip-mixed-type-guard | N | 70 | bug | NilPy: the mixed-type TypeError guard lives ONLY in the runtime variant path — when BOTH operands are statically typed, `7 - [1,2]` and `\"ab\" - \"ab\"` silently do pointer math (108 sweep cases) | — |
 | bug-nilpy-str-format-ignores-positional-indices | N | 60 | bug | NilPy: `\"{1}{0}\".format(a, b)` ignores the explicit indices and substitutes left-to-right — silently prints the arguments in the WRONG ORDER | — |
-| bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults | N | 75 | bug | NilPy: calling a pylib CONTAINER method with too FEW arguments compiles and SEGFAULTS — xs.index(), d.get() both core-dump; too MANY args is correctly rejected | — |
 | bug-nilpy-unary-numeric-dunders-return-raw-handle | N | 55 | bug | NilPy: abs(obj), ~obj and obj-as-index ignore __abs__/__invert__/__index__ — they return the raw instance HANDLE as a number, silently | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-nilpy-with-statement-skips-enter-and-exit | N | 70 | bug | NilPy: `with` is desugared to a plain assignment — the context-manager protocol is deliberately not modelled, so a user __enter__/__exit__ silently never runs | — |
@@ -335,7 +334,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1149)
+## done (1150)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -934,6 +933,7 @@ _none_
 | bug-t-pasmith-with-rung-mutates-global-inside-function | T | 40 | bug | pasmith: wide rungs (`with`/`reccopy`/…) mutate a GLOBAL inside a function body → order-dependent program | — |
 | bug-t-progress-track-detection-prose-mention | T | 40 | bug | progress.py track() matches a prose 'Track T' mention in the Type/Track bullet before the authoritative frontmatter track: field — mis-tags tickets (3 hit in one session) | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
+| bug-t-selfhost-build-uses-fixed-tmp-paths-colliding-across-clones | T | 75 | bug | The self-host build writes fixed /tmp/pascal26-build\|verify paths, so the watcher's dedicated clone and a dev checkout on the same box overwrite each other's in-flight compiler — /tmp is not per-clone | — |
 | bug-t-status-reads-worktree-tstate-false-down | T | 80 | bug | twatch --status reads tstate from the WORKTREE but walks history from origin/master, so a detached or unpulled checkout reports Track T DOWN while it is healthy | — |
 | bug-t-tstate-index-conflicts-between-watcher-hosts | T | 70 | bug | TSTATE.md is regenerated wholesale by every host, so two live watchers rebase-conflict on it and silently drop verdicts | — |
 | bug-t-xeon-job-set-covers-only-a-third-of-nilpy-tests | T | 55 | bug | xeon's tracked job set covers only 117 of 352 .npy Makefile invocations, so `make test-nilpy` can be RED while xeon reports the full tier GREEN — observed 2026-08-01 | — |
@@ -2935,7 +2935,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 75] [N] bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults
 - [p 75] [T] bug-t-optdiff-shard-identity-is-positional
 - [p 70] [N] bug-nilpy-def-local-assignment-widens-module-global-to-variant
 - [p 70] [N] bug-nilpy-dict-from-pairs-and-bytes-decode-segfault
