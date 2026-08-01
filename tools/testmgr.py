@@ -110,7 +110,22 @@ TIERS = {
 # pole as a single job: fan it out with the script's --shard support.
 CONFORMANCE_SHARDS = 6
 # Same idea for the ~900-program optdiff sweep (tier opt).
-OPT_SHARDS = 6
+OPT_SHARDS = 12
+# A CONSTANT, deliberately not derived from os.cpu_count(). The shard index is
+# part of the job name, and tstate is SHARED between hosts — a 12-core box
+# publishing `optdiff#shard0/12` while a 4-core box publishes `optdiff#shard0/6`
+# would make every cross-host comparison meaningless and manufacture NEW-RED /
+# FIXED pairs on every handover.
+#
+# Raised 6 -> 12 on 2026-08-01. The opt tier was structurally capped at 6-way
+# parallelism on a 12-core box: measured 1483s of work, wall 281s, and the wall
+# EQUALLED the longest single shard (280.6s) — scheduling was already optimal,
+# there was simply nothing else to run. Twelve shards halve the critical path.
+#
+# Changing this reshuffles every program's shard (unavoidable for any pure
+# function of the name), which renames jobs. Done while the matrix was 100%
+# green, so no red migrated and no phantom NEW-RED/FIXED pair was produced.
+# Do the same next time.
 
 # ---------------------------------------------------------- cost classes ---
 # est_mem: bytes we expect the job to occupy at peak (pascal26 maps a large

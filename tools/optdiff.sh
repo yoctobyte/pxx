@@ -36,11 +36,33 @@ skip_match() {
   return 1
 }
 
+# Shard membership is derived from a hash of the BASENAME, not from position.
+#
+# It used to be `n % NSHARD` over the glob, so adding any test file -- which
+# happens with nearly every fix -- shifted every later file into a different
+# shard. Since the shard index IS the job identity in tstate, one migration
+# manufactured a phantom NEW-RED on the shard a failure moved TO and a phantom
+# FIXED on the one it left. Observed 2026-08-01: the same unchanged
+# crtl_libc_oracle.c failure re-filed itself three times as it walked
+# shard 5 -> 0 -> 2, producing three tickets for one compiler bug.
+#
+# A name hash is stable under insertion: adding a file moves only that file.
+# (Changing NSHARD still reshuffles everything -- unavoidable for any pure
+# function of the name -- so change it only when the matrix is green.)
+#
+# One awk pass, no per-file process spawn: 1276 files x NSHARD shards would be
+# thousands of forks otherwise.
+FILES=$(ls test/*.pas test/*.c 2>/dev/null | awk -v s="$SHARD" -v n="$NSHARD" '
+  BEGIN { for (i = 32; i < 127; i++) ord[sprintf("%c", i)] = i }
+  { name = $0; sub(/^.*\//, "", name); h = 0
+    for (i = 1; i <= length(name); i++)
+      h = (h * 31 + ord[substr(name, i, 1)]) % 1000003
+    if (h % n == s) print }')
+
 n=0; pass=0; skip=0; diff=0
-for t in test/*.pas test/*.c; do
+for t in $FILES; do
   [ -e "$t" ] || continue
   n=$((n + 1))
-  [ $((n % NSHARD)) -eq "$SHARD" ] || continue
   b=$(basename "$t")
   if skip_match "$b"; then skip=$((skip + 1)); continue; fi
   if ! "./$CC" "$t" "$TMP/d0" >/dev/null 2>&1; then
