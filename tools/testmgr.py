@@ -56,20 +56,29 @@ COMPILER = os.environ.get("TESTMGR_COMPILER", "compiler/pascal26")
 # test` = test-core test-threads test-asm test-debug-g lib-fpc-clean.
 TIERS = {
     "quick": ["test-quick"],
+    # test-nilpy: MAINLINE and gated (CLAUDE.md puts Track N as a peer of C),
+    # but it was in no tier at all — so 238 of the 309 .npy files the Makefile
+    # compiles were invisible to the watcher and `make test-nilpy` could be RED
+    # while the full tier reported GREEN (measured 2026-08-01). Enrolled at
+    # native so a NilPy break comes back inside the ~100s fast verdict, which is
+    # the tier dev boxes now gate their pushes on.
     "native": [            # fast watcher verdict: all native, no qemu/
         "test-smoke",      # corpus/conformance — cross runs in the full
         "test-core", "test-threads", "test-asm", "test-debug-g",   # backfill
+        "test-nilpy",
         "lib-fpc-clean",
     ],
     "limited": [
         "test-smoke",          # test-quick + self-host byte-identity chain
         "test-core", "test-threads", "test-asm", "test-debug-g",
+        "test-nilpy",
         "lib-fpc-clean",
         "test-c-conformance",
     ],
     "full": [
         "test-smoke",
         "test-core", "test-threads", "test-asm", "test-debug-g",
+        "test-nilpy",
         "lib-fpc-clean",
         "test-c-conformance",
         "test-float-determinism", "test-emit-obj",
