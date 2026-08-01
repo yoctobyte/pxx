@@ -6,8 +6,8 @@ prio: 60
 
 - **Type:** feature (umbrella — Pascal frontend validation)
 - **Track:** P — tag: compat (FPC-parity on real OO code; see parallel-tracks.md)
-- **Status:** backlog — opened 2026-07-12 (user request).
-- **Owner:** —
+- **Status:** working
+- **Owner:** claude-P1
 - **Unblocks:** the whole OO surface's credibility (RTTI, streaming, generics×classes)
 
 ## Why

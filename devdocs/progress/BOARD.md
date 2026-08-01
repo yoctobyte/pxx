@@ -8,14 +8,17 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (7)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic | N | 60 | bug | User-defined dunders are ignored, and the operator then does arithmetic on the object HANDLE | — |
+| bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
 | bug-t-autoticket-files-emergencies-for-already-fixed-shas | T | 75 | bug | a cascade is auto-filed as a live emergency for a sha whose breakage was already reverted minutes earlier; ancestry alone cannot detect it | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
+| feature-pascal-corpus-oop | P | 60 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 
 ## unfinished (2)
 
@@ -33,7 +36,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (181)
+## backlog (178)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -47,13 +50,11 @@ _none_
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
-| bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic | N | 60 | bug | User-defined dunders are ignored, and the operator then does arithmetic on the object HANDLE | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-float-print-loses-precision-vs-cpython | N | 40 | bug | Float printing loses the last 1-2 significant digits vs CPython's shortest round-trip repr | — |
 | bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip | N | 20 | bug | `print(1e-20)` prints `0.0` — NilPy's float repr has no small-magnitude exponential form | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
 | bug-nilpy-int-prints-as-float-when-the-name-is-widened-later | N | 50 | bug | An int prints as `5.0` because the SAME NAME is assigned a float later in the file | — |
-| bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
 | bug-nilpy-list-of-custom-objects-loses-repr-str | N | 40 | bug | A user class instance boxed in a list/dict prints as empty, losing `__repr__`/`__str__` | — |
 | bug-nilpy-list-sort-ignores-lt-dunder-on-objects | N | 35 | bug | `list.sort()` on user objects with `__lt__` raises a runtime TypeError instead of using it | — |
 | bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
@@ -162,7 +163,6 @@ _none_
 | feature-pascal-corpus-expansion | P | 15 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-corpus-fpc-testsuite | P | 60 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
-| feature-pascal-corpus-oop | P | 60 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-pascal-corpus-passrc | P | 45 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
 | feature-pascal-exitcode-finalization-halt | A | 45 | feature | ExitCode global + unit finalization execution + FPC Halt semantics (Halt sets ExitCode, runs finalizations, exits with ExitCode) | — |
 | feature-pascal-initialize-finalize-intrinsics | A | 50 | feature | `Initialize()` / `Finalize()` standard procedures (managed-type intrinsics) | — |
@@ -2907,8 +2907,6 @@ _none_
 - [p 70] [T] regression-optdiff-shard5-6
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
-- [p 60] [N] bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic
-- [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [U] decide-nilpy-arithmetic-dunder-scope
 - [p 60] [U] decide-nilpy-int-promotion-default
 - [p 60] [A] feature-a-abi-oracle
@@ -2918,7 +2916,6 @@ _none_
 - [p 60] [N] feature-nilpy-thirdparty-libraries-as-targets
 - [p 60] [O] feature-opt-store-reload-elimination
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
-- [p 60] [P] feature-pascal-corpus-oop
 - [p 60] [T] feature-t-bench-hardware-provenance
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [T] task-t-suppress-autoticket-until-host-baselined
