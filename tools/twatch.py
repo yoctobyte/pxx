@@ -1650,6 +1650,91 @@ def status(repo, grace_min, tdir=None, ref="HEAD"):
     return 0
 
 
+def sha_verdicts(repo, ref="origin/master"):
+    """{full sha: (verdict, tier, host, [new_red...])} for every judged sha."""
+    out = {}
+    for st in states_at(repo, ref):
+        host = st.get("host", "?")
+        for h in st.get("history", []):
+            if h.get("sha"):
+                out[h["sha"]] = (h.get("verdict", "?"), h.get("tier", "?"),
+                                 host, h.get("new_red") or [])
+        last = st.get("last") or {}
+        if last.get("sha") and last["sha"] not in out:
+            out[last["sha"]] = (last.get("verdict", "?"), last.get("tier", "?"),
+                                host, [])
+    return out
+
+
+def follow(repo, shas, poll, branch="master", once=False, limit=20):
+    """Wait for Track T's verdict on shas, so the session that PUSHED them hears
+    back while its context is still warm.
+
+    The offload ("confirm native, offload the matrix") only pays if the finding
+    reaches the agent that caused it; otherwise the next session pays full
+    re-investigation cost, which is most of what the offload was meant to save.
+
+    Read-only with respect to the caller's tree: it FETCHES but never pulls,
+    rebases or checks anything out — an agent's working tree must not move
+    underneath it just because it asked a question.
+
+    Fetching every poll is mandatory, not an optimisation: verdicts are read
+    from `origin/master`, and without a fetch that ref is frozen at whatever the
+    checkout last saw, so this would confidently report "nothing yet" forever.
+    """
+    # Fetch BEFORE choosing the default set, not just inside the loop: the
+    # default is derived from origin/<branch>, so a stale (or absent) ref would
+    # otherwise pick the wrong shas — or none, and exit reporting success.
+    fetch_ref = ["git", "fetch", "--quiet", "--no-write-fetch-head", "origin",
+                 "+refs/heads/%s:refs/remotes/origin/%s" % (branch, branch)]
+    sh(fetch_ref, cwd=repo, check=False)
+    if not shas:
+        # default: what this checkout has pushed to the branch and T has not
+        # judged. Author-filtering is deliberately NOT used — every agent in
+        # this fleet commits as the same git identity, so it would select other
+        # agents' work too and mean nothing.
+        shas = sh(["git", "log", "--format=%H", "-n", str(limit),
+                   "origin/" + branch], cwd=repo, check=False).split()
+        shas = [s for s in shas if needs_test(repo, s)]
+        if not shas:
+            print("follow: nothing on origin/%s needs a verdict" % branch)
+            return 0
+    shas = [sh(["git", "rev-parse", s], cwd=repo, check=False).strip() or s
+            for s in shas]
+    pending = list(dict.fromkeys(shas))
+    print("follow: watching %d sha(s) for a Track T verdict (poll %ds)"
+          % (len(pending), poll), flush=True)
+    worst = 0
+    while pending:
+        sh(fetch_ref, cwd=repo, check=False)
+        judged = sha_verdicts(repo, "origin/" + branch)
+        for s in list(pending):
+            if s not in judged:
+                continue
+            verdict, tier, host, new_red = judged[s]
+            pending.remove(s)
+            if verdict == "GREEN":
+                print("follow: %s GREEN (%s, %s)" % (s[:12], tier, host),
+                      flush=True)
+            else:
+                worst = 1
+                print("follow: %s %s (%s, %s)%s" %
+                      (s[:12], verdict, tier, host,
+                       "".join("\n    NEW-RED %s" % j for j in new_red[:10])),
+                      flush=True)
+        if once or not pending:
+            break
+        time.sleep(poll)
+    if pending:
+        # NEVER let silence read as success — the trap --status already documents
+        print("follow: still unjudged (no verdict yet, NOT a pass): %s"
+              % ", ".join(s[:12] for s in pending), flush=True)
+        # a red already seen outranks "some are pending": it is the actionable
+        # one, and the caller should not have to parse text to find that out
+        return worst or 2
+    return worst
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--clone", help="dedicated clone dir (created if --remote); "
@@ -1660,6 +1745,13 @@ def main():
     ap.add_argument("--grace", type=float, default=45,
                     help="--status: minutes a commit may sit untested before "
                          "T counts as down (default 45)")
+    ap.add_argument("--follow", nargs="*", metavar="SHA",
+                    help="wait for Track T's verdict on these shas (default: "
+                         "unjudged commits on origin/<branch>). Fetches each "
+                         "poll; never pulls or rebases your tree. "
+                         "exit 0 all green, 1 a red, 2 still unjudged")
+    ap.add_argument("--poll", type=float, default=30,
+                    help="--follow: seconds between polls (default 30)")
     ap.add_argument("--remote", help="clone URL if the clone dir doesn't exist yet")
     ap.add_argument("--branch", default="master")
     ap.add_argument("--tier", default=None,
@@ -1676,7 +1768,8 @@ def main():
     ap.add_argument("--debounce", type=float, default=None,
                     help="repo must be quiet this long before testing")
     ap.add_argument("--once", action="store_true",
-                    help="single iteration (cron / smoke test)")
+                    help="single iteration (cron / smoke test); with --follow, "
+                         "check once and exit instead of waiting")
     ap.add_argument("--no-bisect", action="store_true")
     ap.add_argument("--fetch-corpus", action="store_true",
                     help="install any missing corpus trees at startup instead "
@@ -1684,12 +1777,14 @@ def main():
                          "and a skipped job is invisible in a GREEN verdict)")
     args = ap.parse_args()
 
-    if args.status:
+    if args.status or args.follow is not None:
         repo = os.path.abspath(os.path.expanduser(args.clone)) if args.clone \
             else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if args.follow is not None:
+            return follow(repo, args.follow, args.poll, args.branch, args.once)
         return status(repo, args.grace)
     if not args.clone:
-        ap.error("--clone is required (except with --status)")
+        ap.error("--clone is required (except with --status/--follow)")
 
     def stop(*_):
         global STOP

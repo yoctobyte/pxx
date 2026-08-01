@@ -36,7 +36,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (193)
+## backlog (195)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -86,6 +86,7 @@ _none_
 | bug-t-corpus-regex-invents-phantom-tree | T | 55 | bug | CORPUS_RE matches prose in a SKIP message and invents corpus 'stb)', permanently skipping a job that also carries a non-corpus regression test | — |
 | bug-t-gate-sh-contention-check-double-counts-zero | T | 25 | bug | tools/gate.sh: the watcher-contention check prints a shell error on every run because `pgrep -c` emits 0 AND exits 1, so the `\|\| echo 0` fallback appends a second 0 | — |
 | bug-t-gate-sh-pgrep-fc-double-zero-integer-error | T | 25 | bug | tools/gate.sh: pgrep -fc prints 0 AND exits 1, so `\|\| echo 0` makes others=\"0\\n0\" and every gate run emits a bogus 'integer expression expected' error | — |
+| bug-t-host-dependent-test-assertions-cross-distro | T | 70 | bug | Watcher and dev boxes run different distros, so tests that bake in host state (library versions, allocator behaviour, the host CPython) go permanently RED on the watcher while passing locally — and read as watcher bugs | — |
 | bug-t-optdiff-positional-sharding-migrates-job-identity | T | 70 | bug | DUPLICATE of bug-t-optdiff-shard-identity-is-positional — "optdiff shards by position in the test glob, so adding any test migrates failures between shard identities — a phantom NEW-RED plus a phantom FIXED, for an unchanged failure" | — |
 | bug-t-optdiff-shard-identity-is-positional | T | 75 | bug | optdiff jobs are identified by shard index, so adding one test file moves a failure to a new shard and manufactures a fresh NEW-RED + ticket | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
@@ -194,6 +195,7 @@ _none_
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-t-bench-hardware-provenance | T | 60 | feature | bench.tsv records a hostname but no hardware — the series silently changed machines today | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
+| feature-t-host-roles-native-vs-qemu-topology | T | 65 | feature | Track T is becoming multi-host with DIFFERENT PURPOSES per box — xeon runs the matrix, arm32/arm64 rPis exist only as native oracles against xeon's QEMU — but profiles express resource ceilings, not purpose, and nothing compares two hosts' results | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 40 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-per-invocation-tmp-namespace-for-make-recipes | T | 55 | feature | The Makefile's ~3700 fixed /tmp/test_* output paths make two concurrent `make test*` runs on one box clobber each other; route them through a per-invocation temp dir | — |
 | feature-t-quick-canary-for-nilpy-and-c | T | 70 | feature | The 2-14s quick canary covers Pascal only; a NilPy change and a C change can both go out with no fast check at all. Add one dense .npy and one dense .c canary. | — |
@@ -2948,6 +2950,7 @@ _none_
 - [p 70] [N] bug-nilpy-list-ordering-compares-heap-addresses
 - [p 70] [N] bug-nilpy-static-typed-operands-skip-mixed-type-guard
 - [p 70] [N] bug-nilpy-with-statement-skips-enter-and-exit
+- [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] bug-t-optdiff-positional-sharding-migrates-job-identity
 - [p 70] [T] feature-t-quick-canary-for-nilpy-and-c
 - [p 70] [T] regression-cascade-b45c759f9e65
@@ -2959,6 +2962,7 @@ _none_
 - [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
 - [p 65] [N] bug-nilpy-bool-protocol-ignored-object-always-truthy
 - [p 65] [N] bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch
+- [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 60] [N] bug-nilpy-bitwise-shift-on-class-operand-segfaults
 - [p 60] [N] bug-nilpy-dunders-not-dispatched-through-containers
