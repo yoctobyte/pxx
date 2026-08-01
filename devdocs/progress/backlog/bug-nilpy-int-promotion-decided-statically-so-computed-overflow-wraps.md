@@ -2,7 +2,6 @@
 track: N
 prio: 60
 type: bug
-blocked-by: [decide-nilpy-int-promotion-default]
 ---
 
 # Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently
@@ -153,10 +152,14 @@ options unilaterally:
   Track N-scoped change regardless.
 
 Did NOT touch `compiler/pyparser.inc`, `compiler/pylib.pas`, or any promotable-
-int runtime machinery. No code changes in this session. Moving this ticket
-`working/` → `blocked/` (status = "needs a user decision", per
-`devdocs/progress/README.md`) with `blocked-by:
-decide-nilpy-int-promotion-default` — it stays blocked until that ticket
-resolves, at which point re-file the resulting work into Track N (or Track A,
-if the chosen option needs new IR/symtab machinery beyond what
-`feature-a-promotable-int` already has).
+int runtime machinery. No code changes in this session. Moved to `blocked/`
+pending the Track U decision.
+
+## 2026-08-01 — DECIDED: option 1
+
+[[decide-nilpy-int-promotion-default]] resolved: default every NilPy `int`
+binding to promotable, native int64 only where the frontend can prove the
+range. Unblocked — moving back to `backlog/` for Track N (or A, if it needs
+new symtab/IR machinery). Gate unchanged: `make test-nilpy` + self-host
+byte-identical + the ticket's own measured table vs CPython + a benchmark
+check that ordinary integer loops haven't regressed.

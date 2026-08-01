@@ -2,7 +2,24 @@
 track: U
 prio: 60
 type: decide
+status: resolved
+resolved: 2026-08-01
 ---
+
+## DECIDED 2026-08-01 — Option 1
+
+**User's call: 1.** Default every NilPy `int` binding to promotable; native
+int64 only where the frontend can prove the range (loop induction vars,
+`len()`, indices). Matches CPython — `int` is always arbitrary-precision,
+so silent wraparound is a correctness bug, not an edge case. Native's whole
+point is tight/fast loops, and promotable-int's fixnum/heap-bignum hybrid
+should already keep ordinary small-int overhead minimal by design — so the
+benchmark gate isn't expected to be a real blocker, just confirmation.
+Gate from the ticket still applies (benchmark check + regression suite)
+before landing. Re-file the implementation into
+[[bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps]]
+(Track N, or A if it needs new symtab/IR machinery promotable-int doesn't
+already have).
 
 # Decide: should NilPy `int` bindings default to promotable, not native int64?
 

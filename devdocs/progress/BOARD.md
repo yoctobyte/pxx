@@ -24,11 +24,10 @@ _none_
 | feature-nilpy-star-args-kwargs | N | 50 | feature | nilpy: *args / **kwargs in a def signature | — |
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 
-## blocked (5)
+## blocked (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | decide-nilpy-int-promotion-default |
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | — |
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
@@ -54,6 +53,7 @@ _none_
 | bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip | N | 20 | bug | `print(1e-20)` prints `0.0` — NilPy's float repr has no small-magnitude exponential form | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
 | bug-nilpy-int-prints-as-float-when-the-name-is-widened-later | N | 50 | bug | An int prints as `5.0` because the SAME NAME is assigned a float later in the file | — |
+| bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
 | bug-nilpy-list-of-custom-objects-loses-repr-str | N | 40 | bug | A user class instance boxed in a list/dict prints as empty, losing `__repr__`/`__str__` | — |
 | bug-nilpy-list-sort-ignores-lt-dunder-on-objects | N | 35 | bug | `list.sort()` on user objects with `__lt__` raises a runtime TypeError instead of using it | — |
 | bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
@@ -85,7 +85,6 @@ _none_
 | decide-ipv6-dualstack-and-aaaa-ordering | U | 40 | decide | Policy: IPV6_V6ONLY on a :: listener, and which address wins when a host has both A and AAAA | — |
 | decide-nilpy-arithmetic-dunder-scope | U | 60 | decide | Decide: how far does NilPy follow Python's arithmetic/ordering dunder protocol? | — |
 | decide-nilpy-hasattr-per-instance-semantics | U | 35 | decide | decide: should NilPy's hasattr answer per-INSTANCE or per-CLASS? | — |
-| decide-nilpy-int-promotion-default | U | 60 | decide | Decide: should NilPy `int` bindings default to promotable, not native int64? | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-nilpy-transitive-nested-def-capture | U | 40 | decide | decide: NilPy transitive capture for sibling nested-def calls | — |
 | decide-pascal-uses-campaign-scope | U | 55 | decide | Decide: how should the `uses`-is-transitive fix be scoped and sequenced? | — |
@@ -283,7 +282,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (19)
+## decided (20)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -295,6 +294,7 @@ _none_
 | decide-nilpy-bigint-vs-64bit-cells | U | 40 | decide | decide: NilPy integer semantics — arbitrary precision vs 64-bit (uforth needs one) | — |
 | decide-nilpy-closure-model | A | 50 | decide |  | — |
 | decide-nilpy-gui-tk-vs-pcl | A | 25 | decide | RESOLVED 2026-07-21: keep the real Tcl/Tk embed on Linux (works); Windows = opt-in tk emulate/wrap via a platform include, later. Follow-up: feature-pcl-tk-windows-compat | — |
+| decide-nilpy-int-promotion-default | U | 60 | decide | Decide: should NilPy `int` bindings default to promotable, not native int64? | — |
 | decide-nilpy-mixed-type-operand-policy | U | 60 | decide | Decide: what should NilPy do when an operator gets operand types Python rejects? | — |
 | decide-nilpy-optional-int-none-vs-zero | U | 60 | decide | decide: NilPy Optional[int] — None must be distinct from 0 | — |
 | decide-pcl-may-use-pylib | U | 55 | decide | decide: may a PCL library unit use pylib (Python runtime types) to accept Python-shaped arguments? | — |
@@ -2910,7 +2910,7 @@ _none_
 - [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
 - [p 65] [U] decide-class-namespace-scoping
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
-- [p 60] [U] decide-nilpy-int-promotion-default (unblocks 1)
+- [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [U] decide-nilpy-arithmetic-dunder-scope
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
@@ -3070,7 +3070,6 @@ _none_
 - **1** — decide-dns-libc-backend-shape
 - **1** — decide-gpc-as-corpus-target
 - **1** — decide-ilja-tui-render-model
-- **1** — decide-nilpy-int-promotion-default
 - **1** — decide-nilpy-parallel-capture-semantics
 - **1** — feature-inline-asm-xmm-operands
 - **1** — feature-lib-pxxpdf-reportlab-compat
