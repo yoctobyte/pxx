@@ -1015,11 +1015,18 @@ def file_stub_tickets(clone, host, st, sha, new_red, report, parent=None):
                 "path; a notice for the owning track)" if job in advisory
                 else "regression")
         with open(os.path.join(clone.path, rel), "w") as f:
+            # The note is an ARGUMENT, never concatenated into the format
+            # string: it carries commit subjects and free text, and a literal
+            # `%` in there becomes a format spec once `%` is applied to the
+            # joined string. That crashed the daemon on 2026-08-01 with
+            # "TypeError: %d format: a real number is required, not str".
+            # file_cascade_ticket already passed it as an argument; this one
+            # did not, and only the stub path ever files a small-enough red.
             f.write("""---
 prio: %d
 ---
 
-""" + staleness_note(clone, sha, parent) + """
+%s
 # %s: %s red at %s (auto-filed by twatch)
 
 - **Type:** %s (auto-filed by Track T watcher, host %s). Untriaged.
@@ -1041,6 +1048,7 @@ by idle bisect; check tstate/TSTATE.md for the current range.
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
 """ % (40 if job in advisory else 70,
+                staleness_note(clone, sha, parent),
                 "advisory" if job in advisory else "regression",
                 job, sha[:12], kind, host, utcnow(),
                 j.get("src") or "unknown (see repro commands)",
