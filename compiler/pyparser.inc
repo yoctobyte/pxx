@@ -2805,6 +2805,7 @@ begin
   gname := PyClsAttrGlobalName(ci, nm);
   gsym := AllocVar(gname, IntToTypeKind(ASTTk[valNode]));
   Syms[gsym].RecName := ResolveNodeRec(valNode);
+  SymSyncTypeRef(gsym);
   { RETYPE the field to what the initialiser actually produced. The pre-pass had
     only the tokens to go on and defaulted to a variant; a list or dict literal
     yields a CLASS handle, and storing one into a variant slot left the tag
@@ -3522,6 +3523,7 @@ begin
   begin
     attrSym := AllocVar(PyHiddenName('clsattr'), tyClass);
     Syms[attrSym].RecName := recId;
+    SymSyncTypeRef(attrSym);
     attrAsgn := AllocNode(AN_ASSIGN);
     ASTLeft[attrAsgn] := PyMakeIdent(attrSym);
     ASTRight[attrAsgn] := node;
@@ -6440,6 +6442,7 @@ begin
   if node < 0 then Exit;
   sym := AllocVar(PyHiddenName('recv'), IntToTypeKind(ASTTk[node]));
   Syms[sym].RecName := ResolveNodeRec(node);
+  SymSyncTypeRef(sym);
   asgn := AllocNode(AN_ASSIGN);
   ASTLeft[asgn] := PyMakeIdent(sym);
   ASTRight[asgn] := node;
@@ -6693,6 +6696,7 @@ begin
   PyParseBoolExpr;
   listSym := AllocVar(PyHiddenName('starl'), tyClass);
   Syms[listSym].RecName := REC_UCLASS_BASE + listCi;
+  SymSyncTypeRef(listSym);
   asgn := AllocNode(AN_ASSIGN);
   ASTLeft[asgn] := PyMakeIdent(listSym);
   ASTRight[asgn] := PyStarOperandAsList(CurASTNode, listCi);
@@ -7582,6 +7586,7 @@ begin
   ASTLeft[node] := argNode;
   tmpSym := AllocVar(PyHiddenName('tup'), tyClass);
   Syms[tmpSym].RecName := recId;
+  SymSyncTypeRef(tmpSym);
   asgn := AllocNode(AN_ASSIGN);
   ASTLeft[asgn] := PyMakeIdent(tmpSym);
   ASTRight[asgn] := node;
@@ -7718,6 +7723,7 @@ begin
   ASTLeft[node] := argNode;
   tmpSym := AllocVar(PyHiddenName(tag), tyClass);
   Syms[tmpSym].RecName := recId;
+  SymSyncTypeRef(tmpSym);
   asgn := AllocNode(AN_ASSIGN);
   ASTLeft[asgn] := PyMakeIdent(tmpSym);
   ASTRight[asgn] := node;
@@ -7782,6 +7788,7 @@ begin
     expression must not be rebuilt per arm }
   listSym := AllocVar(PyHiddenName('fwd'), tyClass);
   Syms[listSym].RecName := REC_UCLASS_BASE + listCi;
+  SymSyncTypeRef(listSym);
   asgn := AllocNode(AN_ASSIGN);
   ASTLeft[asgn] := PyMakeIdent(listSym);
   ASTRight[asgn] := listNode;
@@ -7791,6 +7798,7 @@ begin
   begin
     dictSym := AllocVar(PyHiddenName('fwdkw'), tyClass);
     Syms[dictSym].RecName := REC_UCLASS_BASE + dictCi;
+    SymSyncTypeRef(dictSym);
     asgn := AllocNode(AN_ASSIGN);
     ASTLeft[asgn] := PyMakeIdent(dictSym);
     ASTRight[asgn] := dictNode;
@@ -8093,6 +8101,7 @@ begin
     hoist already runs this same statement-queue in every statement context. }
   tmpSym := AllocVar(PyHiddenName('lit'), tyClass);
   Syms[tmpSym].RecName := recId;
+  SymSyncTypeRef(tmpSym);
   asgn := AllocNode(AN_ASSIGN);
   ASTLeft[asgn] := PyMakeIdent(tmpSym);
   ASTRight[asgn] := node;
@@ -8204,6 +8213,7 @@ begin
   { bind-then-setitem via hoisted statements — see PyParseListLiteralT }
   tmpSym := AllocVar(PyHiddenName('lit'), tyClass);
   Syms[tmpSym].RecName := recId;
+  SymSyncTypeRef(tmpSym);
   asgn := AllocNode(AN_ASSIGN);
   ASTLeft[asgn] := PyMakeIdent(tmpSym);
   ASTRight[asgn] := node;
@@ -8835,7 +8845,11 @@ begin
         and nothing it does can raise. }
       pargTk := IntToTypeKind(ASTTk[CurASTNode]);
       pargTmp := AllocVar(PyHiddenName('parg'), pargTk);
-      if pargTk = tyClass then Syms[pargTmp].RecName := ResolveNodeRec(CurASTNode);
+      if pargTk = tyClass then
+      begin
+        Syms[pargTmp].RecName := ResolveNodeRec(CurASTNode);
+        SymSyncTypeRef(pargTmp);
+      end;
       pargAsgn := AllocNode(AN_ASSIGN);
       ASTLeft[pargAsgn] := PyMakeIdent(pargTmp);
       ASTRight[pargAsgn] := CurASTNode;
@@ -9246,6 +9260,7 @@ begin
         Next;
         handlerVar := AllocVar(handlerName, tyClass);
         Syms[handlerVar].RecName := recId;   { the first listed class }
+        SymSyncTypeRef(handlerVar);
       end;
     end;
     Expect(tkColon, ':');
@@ -9344,7 +9359,10 @@ begin
     symIdx := PyProgSym(varName);
     if symIdx < 0 then symIdx := AllocVar(varName, IntToTypeKind(ASTTk[exprNode]));
     if IntToTypeKind(ASTTk[exprNode]) = tyClass then
+    begin
       Syms[symIdx].RecName := ResolveNodeRec(exprNode);
+      SymSyncTypeRef(symIdx);
+    end;
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := PyMakeIdent(symIdx);
     ASTRight[node] := exprNode;
@@ -9945,6 +9963,7 @@ begin
       begin
         vSym := AllocVar(PyHiddenName('v'), tyClass);
         Syms[vSym].RecName := REC_UCLASS_BASE + listCi;
+        SymSyncTypeRef(vSym);
         vListNode := PyCallMeth1(dictCi, 'vallist', contNode, -1);
         if vListNode < 0 then Error('Nil Python: pylib (TPyDict.vallist) not loaded');
       end;
@@ -10014,7 +10033,11 @@ begin
   { hidden locals first, so the loop variable keeps the name the user wrote }
   if isStr then cSym := AllocVar(PyHiddenName('c'), tyAnsiString)
   else cSym := AllocVar(PyHiddenName('c'), tyClass);
-  if not isStr then Syms[cSym].RecName := REC_UCLASS_BASE + ci;
+  if not isStr then
+  begin
+    Syms[cSym].RecName := REC_UCLASS_BASE + ci;
+    SymSyncTypeRef(cSym);
+  end;
   nSym := AllocVar(PyHiddenName('n'), tyInteger);
   iSym := AllocVar(PyHiddenName('i'), tyInteger);
   if PyCompTarget >= 0 then
@@ -10401,6 +10424,7 @@ begin
   ASTLeft[aSeq] := sizeNode;
   ASTLeft[createNode] := aSeq;
   Syms[targetSym].RecName := REC_UCLASS_BASE + listCiN;
+  SymSyncTypeRef(targetSym);
   { Build into a HIDDEN list and assign it at the end. Emptying the target
     first is fatal when the target is also the SOURCE — `lines = [l.strip()
     for l in lines]` re-binds a name Python evaluates on the right first, and
@@ -10408,6 +10432,7 @@ begin
     comprehension always produced []. }
   buildSym := AllocVar(PyHiddenName('comp'), tyClass);
   Syms[buildSym].RecName := REC_UCLASS_BASE + listCiN;
+  SymSyncTypeRef(buildSym);
   node := AllocNode(AN_ASSIGN);
   ASTLeft[node] := PyMakeIdent(buildSym);
   ASTRight[node] := createNode;
@@ -10551,6 +10576,7 @@ begin
   savedDict := PyCompIsDict;
   tmpSym := AllocVar(PyHiddenName('gd'), tyClass);
   Syms[tmpSym].RecName := REC_UCLASS_BASE + FindUClass('TPyDict');
+  SymSyncTypeRef(tmpSym);
   Next;                                { consume the opening brace; CurTok = KEY }
   exprStart := TokPos - 1;
   PyScanToCompFor;
@@ -10618,8 +10644,8 @@ begin
   Expect(tkColon, ':');
 
   { hidden container / length / index locals }
-  caSym := AllocVar(PyHiddenName('za'), tyClass); Syms[caSym].RecName := REC_UCLASS_BASE + listCi;
-  cbSym := AllocVar(PyHiddenName('zb'), tyClass); Syms[cbSym].RecName := REC_UCLASS_BASE + listCi;
+  caSym := AllocVar(PyHiddenName('za'), tyClass); Syms[caSym].RecName := REC_UCLASS_BASE + listCi; SymSyncTypeRef(caSym);
+  cbSym := AllocVar(PyHiddenName('zb'), tyClass); Syms[cbSym].RecName := REC_UCLASS_BASE + listCi; SymSyncTypeRef(cbSym);
   caN := AllocVar(PyHiddenName('zna'), tyInteger);
   cbN := AllocVar(PyHiddenName('znb'), tyInteger);
   nSym := AllocVar(PyHiddenName('zn'), tyInteger);
@@ -12062,6 +12088,7 @@ begin
         if (tk = tyClass) and (ci >= 0) then
           Syms[symIdx].RecName := REC_UCLASS_BASE + ci;
         if annSig >= 0 then SymProcSig[symIdx] := annSig;
+        SymSyncTypeRef(symIdx);
       end;
       lhsNode := PyMakeIdent(symIdx);
       PyNoteOptionalTaint(symIdx, CurASTNode);
@@ -12100,6 +12127,7 @@ begin
           Build into a hidden list and assign it across instead. }
         cmpTmp := AllocVar(PyHiddenName('comp'), tyClass);
         Syms[cmpTmp].RecName := REC_UCLASS_BASE + FindUClass('TPyList');
+        SymSyncTypeRef(cmpTmp);
         cmpSeq := PyParseListComp(cmpTmp);
         cmpAsgn := AllocNode(AN_ASSIGN);
         ASTLeft[cmpAsgn] := PyMakeIdent(symIdx);
@@ -12115,6 +12143,7 @@ begin
     begin
       if symIdx < 0 then symIdx := AllocVar(name, tyClass);
       Syms[symIdx].RecName := REC_UCLASS_BASE + FindUClass('TPyDict');
+      SymSyncTypeRef(symIdx);
       Result := PyParseDictComp(symIdx);
       Exit;
     end;
@@ -12189,6 +12218,7 @@ begin
         later `x.name` had no class to resolve against and read the object
         pointer as the field (bug-nilpy-class-typed-field-loses-identity). }
       Syms[symIdx].RecName := ResolveNodeRec(rhsNode);
+    SymSyncTypeRef(symIdx);
 
     { Trial parse: every assignment widens the local, not just the first one
       (the symbol only remembers the first). }
@@ -12324,7 +12354,10 @@ begin
       begin
         si := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
         if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
+        begin
           Syms[si].RecName := REC_UCLASS_BASE + PyLocals[i].RecCi;
+          SymSyncTypeRef(si);
+        end;
       end;
     TokPos := bodyStart;
     Next;
@@ -12451,7 +12484,10 @@ begin
       begin
         si := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
         if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
+        begin
           Syms[si].RecName := REC_UCLASS_BASE + PyLocals[i].RecCi;
+          SymSyncTypeRef(si);
+        end;
       end;
     PyTypingPass := True;
     { The real parser turns PyExprMode on only AFTER this pre-pass, but a
@@ -12569,7 +12605,10 @@ begin
           begin
             si := AllocVar(GetTokenStr(i), tk);
             if PyAnnLastCi >= 0 then
+            begin
               Syms[si].RecName := REC_UCLASS_BASE + PyAnnLastCi;
+              SymSyncTypeRef(si);
+            end;
           end;
           while (bodyIx < MainProgramTokCount) and
                 not (Tokens[bodyIx].Kind in [tkNewline, tkDedent]) do Inc(bodyIx);
@@ -13138,6 +13177,7 @@ begin
       Syms[idx].RecName := ProcParamRecId[procIdx * MAX_PROC_PARAMS + i]
     else
       Syms[idx].RecName := REC_NONE;
+    SymSyncTypeRef(idx);
   end;
   { A lifted lambda RETURNS a variant, because every bridge that invokes one
     (pyboundfn_call_ptr, pyvar_callv*) declares the callee that way — a Variant
@@ -13396,6 +13436,7 @@ begin
       at a CALL SITE must become the routine's address rather than a call — both
       need the signature on the symbol (feature-nilpy-function-values). }
     if PyHdrPSigs[i] >= 0 then SymProcSig[idx] := PyHdrPSigs[i];
+    SymSyncTypeRef(idx);
   end;
   if not isProc then
   begin
@@ -13410,7 +13451,10 @@ begin
     Procs[procIdx].RetSymIdx := idx;
     Syms[idx].Kind := skLocal;   { gates prologue zero-init -- see the method path }
     if (retType = tyClass) and (PyHdrRetCi >= 0) then
+    begin
       Syms[idx].RecName := REC_UCLASS_BASE + PyHdrRetCi;
+      SymSyncTypeRef(idx);
+    end;
     if RetViaHiddenDest(retType) then
     begin
       { variant (Any) results ride the hidden-destination convention }
@@ -13425,7 +13469,10 @@ begin
     begin
       idx := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
       if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
+      begin
         Syms[idx].RecName := REC_UCLASS_BASE + PyLocals[i].RecCi;
+        SymSyncTypeRef(idx);
+      end;
     end;
 
   Procs[procIdx].BodyAddr := CodeLen;   { see the note above: AFTER the pre-pass }
