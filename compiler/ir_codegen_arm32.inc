@@ -1238,7 +1238,7 @@ begin
         end;
         if Is64BitArm32(tk) or
            ((tk = tyRecord) and not Syms[si].IsArray and
-            (RecSize(Syms[si].RecName) > 4) and (RecSize(Syms[si].RecName) <= 8)) then
+            (RecSize(SymTR[si].RecId) > 4) and (RecSize(SymTR[si].RecId) <= 8)) then
         begin
           { A 5-8 byte record VALUE (e.g. a by-value call argument load, or a
             whole-record read) needs both words -- EmitLoadVar64Arm32 is type-
@@ -3784,13 +3784,13 @@ begin
       if SymIsHiddenArgTemp[i] and (Syms[i].Kind = skLocal) then
       begin
         if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-           (RecSize(Syms[i].RecName) > TARGET_PTR_SIZE) then
+           (RecSize(SymTR[i].RecId) > TARGET_PTR_SIZE) then
         begin
           { Managed-record temp: zero the full record (PXXMemZero) so every
             managed field starts nil, not just the first pointer-sized slot. }
           EmitLoadImmArm32(0, Syms[i].Offset);
           EmitI32($E08B0000);    { add r0, fp, r0 (dest) }
-          EmitLoadImmArm32(1, RecSize(Syms[i].RecName));   { r1 = count }
+          EmitLoadImmArm32(1, RecSize(SymTR[i].RecId));   { r1 = count }
           procIdx := FindProc('PXXMemZero');
           if procIdx < 0 then Error('compiler error: PXXMemZero not found');
           EmitCallProc(procIdx);
