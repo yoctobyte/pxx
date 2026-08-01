@@ -48,3 +48,56 @@ TypeError, not silent pointer arithmetic.
 `make test-nilpy` + self-host byte-identical, `.npy` per operator vs
 CPython's own output, plus a regression confirming pathlib's `/` (and any
 other existing special-cased class-operand route) is unaffected.
+
+## 2026-08-01 — measured against CPython, whole scope quantified
+
+Differential sweep (1094 cases, self-hosted binary at `3f2c5b915`). Every row
+below is measured, not inferred. `C` is a plain user class; `v` is `7`/`3`.
+
+### Dunder declared but NOT dispatched
+
+| expression | CPython | pxx |
+| --- | --- | --- |
+| `C(7) // C(3)` (`__floordiv__`) | `2` | **`0`** |
+| `C(7) % C(3)` (`__mod__`) | `1` | **`126959237464088`** |
+| `C(7) ** C(3)` (`__pow__`) | `343` | `TypeError` |
+
+`__floordiv__`, `__mod__`, `__pow__` appear **nowhere** in `compiler/**`.
+
+### Dunder MISSING — must raise, instead computes on the handle
+
+| expression | CPython | pxx |
+| --- | --- | --- |
+| `C(7) // C(3)` | `TypeError` | **`0`** |
+| `C(7) % C(3)` | `TypeError` | **`138903256301592`** |
+| `C(7) + C(3)` | `TypeError` | *compile error* — see below |
+
+### Reflected forms — none work
+
+`3 <op> C(4)` where `C` declares only `__radd__`/`__rsub__`/`__rmul__`/
+`__rtruediv__`/`__rfloordiv__`/`__rmod__`/`__rpow__`: **all seven diverge.**
+Measured: `3 + C(4)` → `1744830491` (CPython `radd`), `3 * C(4)` →
+`-1906311096` (CPython `rmul`). Note `__radd__`/`__rmul__`/`__rsub__`/
+`__rtruediv__` *do* appear as strings in `compiler/**`, so the names are known
+but the dispatch does not fire — worth finding out why before writing new code,
+since a partially-wired path is a different fix from an absent one.
+
+### Already filed separately, do not re-file
+
+- Missing `__add__`/`__sub__`/`__mul__`/`__truediv__`/`__neg__` aborts
+  COMPILATION instead of raising →
+  [[bug-nilpy-missing-arith-dunder-aborts-compile-instead-of-raising]].
+- Bitwise/shift operators **segfault** →
+  [[bug-nilpy-bitwise-shift-on-class-operand-segfaults]].
+- `__abs__`/`__invert__`/`__index__` return the raw handle →
+  [[bug-nilpy-unary-numeric-dunders-return-raw-handle]].
+
+### Sequencing note
+
+The landed ordering-dunder fix
+([[bug-nilpy-comparison-dunders-not-dispatched]]) is the working template,
+**including the trap it hit**: guarding on "operand is `tyClass`" also captures
+pylib's own `TPyList`/`TPyDict` and broke `[1,2] < [1,3]`. Use
+`PyRecIsPylibOwnClass` (`compiler/symtab.inc`), not a class-name list. That trap
+is more dangerous here than for ordering, because pylib's containers have real
+`+` (concat) and `*` (repeat) semantics that a naive guard would capture.
