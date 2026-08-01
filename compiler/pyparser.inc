@@ -6998,7 +6998,7 @@ begin
 end;
 
 function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer;
-var mmi, mpi, selfArg, lastArg, argNode, callNode, n, k, kwIdx: Integer;
+var mmi, mpi, selfArg, lastArg, argNode, callNode, n, k, kwIdx, minArgs: Integer;
     anyKw: Boolean;
 begin
   mmi := FindUMeth(ci, mname);
@@ -7063,6 +7063,33 @@ begin
   k := FindUMethArity(ci, mname, n);
   if k >= 0 then mmi := k;
   mpi := UMthProc_[mmi];
+  { ARITY. FindUMethArity FALLS BACK to the plain first-name-match when no
+    overload accepts this argument count, so the `k >= 0` test above can never
+    reject a wrong-arity call — and the default-filling loop below only fills
+    parameters that HAVE a default, so a missing REQUIRED argument simply stayed
+    uninitialised and the callee read a garbage slot. `[1,2,3].index()` and
+    `d.get()` core-dumped; `[1,2,3].count()` quietly returned a WRONG VALUE,
+    which is the worse shape of the two. Too MANY arguments fell in the same
+    hole. Checked here rather than by tightening FindUMethArity, whose fallback
+    is deliberate and relied on by its other callers
+    (bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults).
+    `*args`/`**kwargs` methods are variadic by construction and were already
+    packed above, so they are exempt. }
+  if (ProcPyStarIdx[mpi] < 0) and (ProcPyKwIdx[mpi] < 0) and
+     (not ProcArityMatches(mpi, n + 1)) then
+  begin
+    { how many EXPLICIT arguments are required — parameters past Self, minus the
+      trailing run that carries defaults }
+    minArgs := Procs[mpi].ParamCount - 1;
+    while (minArgs > 0) and (minArgs < MAX_PROC_PARAMS) and
+          ProcParamHasDefault[mpi * MAX_PROC_PARAMS + minArgs] do Dec(minArgs);
+    if minArgs = Procs[mpi].ParamCount - 1 then
+      Error('Nil Python: ' + mname + '() takes exactly ' + AIntToStr(minArgs) +
+            ' argument(s), got ' + AIntToStr(n))
+    else
+      Error('Nil Python: ' + mname + '() takes ' + AIntToStr(minArgs) + ' to ' +
+            AIntToStr(Procs[mpi].ParamCount - 1) + ' arguments, got ' + AIntToStr(n));
+  end;
   k := n + 1;
   while (k < Procs[mpi].ParamCount) and (k < MAX_PROC_PARAMS) and
         ProcParamHasDefault[mpi * MAX_PROC_PARAMS + k] do
@@ -7548,6 +7575,31 @@ begin
   end;
 
   mpi := hitPi;
+  { ARITY, for the STATICALLY-RESOLVED arm only — same hole as the one guarded
+    in PyParseClassMethodCall, reached whenever the receiver is a NAME rather
+    than a literal (`xs = [1,2,3]` then `xs.index()`), which is the ordinary way
+    to write it. FindUMethArity falls back to the first name match, so the test
+    above cannot reject, and the default-fill below only fills parameters that
+    HAVE defaults — leaving a required argument uninitialised
+    (bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults).
+    Guarded on hitCi >= 0: only there is the class known at compile time. When
+    dispatch is genuinely dynamic (hitCi < 0, or the dual/runtime arms below,
+    where distinct candidate classes may legitimately take different counts) a
+    compile error would reject valid programs, so those keep today's behaviour
+    and want a RUNTIME arity check instead — filed separately. }
+  if (hitCi >= 0) and (ProcPyStarIdx[mpi] < 0) and (ProcPyKwIdx[mpi] < 0) and
+     (not ProcArityMatches(mpi, i + 1)) then
+  begin
+    k := Procs[mpi].ParamCount - 1;      { explicit params, Self dropped }
+    while (k > 0) and (k < MAX_PROC_PARAMS) and
+          ProcParamHasDefault[mpi * MAX_PROC_PARAMS + k] do Dec(k);
+    if k = Procs[mpi].ParamCount - 1 then
+      Error('Nil Python: ' + mname + '() takes exactly ' + AIntToStr(k) +
+            ' argument(s), got ' + AIntToStr(i))
+    else
+      Error('Nil Python: ' + mname + '() takes ' + AIntToStr(k) + ' to ' +
+            AIntToStr(Procs[mpi].ParamCount - 1) + ' arguments, got ' + AIntToStr(i));
+  end;
   { Fill the callee's remaining DEFAULTED parameters. The runtime arms below do
     this; the STATIC arm did not, so a dispatched `det.analyze(chords, fn)`
     against `analyze(self, chords, fn, sections=None)` called a 4-parameter
