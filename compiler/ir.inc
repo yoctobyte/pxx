@@ -3926,6 +3926,68 @@ begin
     IRNodePyDictRec := REC_UCLASS_BASE + ci;
 end;
 
+{ The Python "kind" of a STATICALLY typed operand, for the operator table in
+  IRPyStaticPairUndefined. 0 means "not confidently classifiable" — a variant, a
+  user class (which may define dunders), or anything else — and 0 always means
+  "leave today's behaviour alone".
+    1 = number (int/bool/float)   2 = str   3 = list/tuple   4 = dict   5 = bytes }
+function IRPyOperandKind(n: Integer): Integer;
+var tk: TTypeKind;
+begin
+  IRPyOperandKind := 0;
+  if n < 0 then Exit;
+  tk := IntToTypeKind(ASTTk[n]);
+  if (tk = tyString) or (tk = tyAnsiString) or (tk = tyChar) then
+    IRPyOperandKind := 2
+  else if TypeIsPyNumeric(tk) or (tk = tyBoolean) or
+          (tk = tySingle) or (tk = tyDouble) or (tk = tyExtended) then
+    IRPyOperandKind := 1
+  else if IRNodePyListRec(n) >= 0 then IRPyOperandKind := 3
+  else if IRNodePyDictRec(n) >= 0 then IRPyOperandKind := 4
+  else if IRNodePyBytesRec(n) >= 0 then IRPyOperandKind := 5;
+end;
+
+{ Both operand types provable AND the pair undefined in Python for this
+  operator. The mixed-type TypeError guard lives in the runtime pyvar_* helpers,
+  which a binop with BOTH types known at compile time never reaches — so
+  `3 - [1,2]` lowered to arithmetic on the container's HANDLE and printed a
+  plausible number, and `3 < [1,2]` returned a clean True/False decided by an
+  allocation address (bug-nilpy-static-typed-operands-skip-mixed-type-guard;
+  108 of that sweep's 174 divergences share this root).
+
+  DELIBERATELY NARROW: fires only when the two kinds DIFFER and both are
+  confidently classified. Two reasons, both measured rather than assumed:
+
+  - SAME-kind pairs are not safely rejectable here. pxx backs a Python `set`
+    with TPyList, and `set([1,2,3]) - set([2])` WORKS today and must keep
+    working — so "list minus list is undefined" would break set difference,
+    which is a real regression for a real feature. Same-kind holes that remain
+    (`"ab" - "ab"`, `[1] // [2]`) are recorded on the ticket rather than guessed
+    at here.
+  - kind 0 (user classes, variants) must never fire: a user class may define
+    __sub__/__lt__, and the variant path already raises correctly.
+
+  `"fmt" % args` is string formatting, not modulo, so a str on the left of % is
+  exempt — the same carve-out IRPyNumStrClash makes. }
+function IRPyStaticPairUndefined(node: Integer): Boolean;
+var op, lk, rk: Integer;
+begin
+  IRPyStaticPairUndefined := False;
+  if not NilPyUserCode then Exit;
+  if (ASTLeft[node] < 0) or (ASTRight[node] < 0) then Exit;
+  op := Integer(ASTIVal[node]);
+  if (op <> Ord(tkMinus)) and (op <> Ord(tkSlash)) and (op <> Ord(tkDiv)) and
+     (op <> Ord(tkMod)) and
+     (op <> Ord(tkLt)) and (op <> Ord(tkLe)) and
+     (op <> Ord(tkGt)) and (op <> Ord(tkGe)) then Exit;
+  lk := IRPyOperandKind(ASTLeft[node]);
+  rk := IRPyOperandKind(ASTRight[node]);
+  if (lk = 0) or (rk = 0) then Exit;
+  if lk = rk then Exit;                       { see the note above }
+  if (op = Ord(tkMod)) and (lk = 2) then Exit;    { `"%d" % n` is formatting }
+  IRPyStaticPairUndefined := True;
+end;
+
 function IRNodeIsFloatThroughNeg(n: Integer): Boolean;
 { Is this operand floating point, seeing through unary minus? AN_NEG does not
   carry its operand's type, so `-x // y` with a float x looked integer and
@@ -5577,6 +5639,17 @@ begin
       { Both operand types provable and the pair meaningless: say so now rather
         than letting the runtime helper raise when (and if) the line executes.
         A warning, not an error — see IRPyNumStrClash. }
+      { ...and where the pair is provably undefined, RAISE rather than compute.
+        A genuine runtime TypeError via pylib, not a build abort, so
+        `try: a - b / except TypeError:` — the normal Python way to probe for
+        operator support — still compiles and runs its handler. }
+      if IRPyStaticPairUndefined(node) then
+      begin
+        cpi := FindProc('PyUnsupportedOperandError');
+        if cpi < 0 then Error('Nil Python: pylib (PyUnsupportedOperandError) not loaded');
+        Result := IRAppendCall(cpi, -1, -1, ASTTk[node]);
+        Exit;
+      end;
       if IRPyNumStrClash(node) then
         WarnAt(ASTLine[node],
                'Nil Python: operator ''' + IRPyOpSpelling(Integer(ASTIVal[node])) +

@@ -180,3 +180,72 @@ because one guard sits in the condition of both.
 Only visible by re-running the sweep and comparing group counts against the
 previous run — the per-fix tests all passed, because none of them covered
 `list / int`.
+
+## 2026-08-01 — FIXED for DIFFERING operand kinds; same-kind residue recorded
+
+The static path now gets the general rule the variant path has, emitted as a
+genuine runtime `TypeError` via pylib's `PyUnsupportedOperandError` — so
+`try/except TypeError` still compiles and runs its handler, per the fix shape
+this ticket asked for.
+
+`compiler/ir.inc`:
+
+- `IRPyOperandKind(n)` — the Python kind of a statically typed operand:
+  1 number (int/bool/float), 2 str, 3 list/tuple, 4 dict, 5 bytes, and **0 =
+  not confidently classifiable**, which always means "leave today's behaviour".
+  Variants and user classes are 0: a user class may define `__sub__`/`__lt__`,
+  and the variant path already raises correctly.
+- `IRPyStaticPairUndefined(node)` — fires for `-` `/` `//` `%` `<` `<=` `>` `>=`
+  when both kinds are known and **DIFFER**, with `"fmt" % args` exempt (string
+  formatting, the same carve-out `IRPyNumStrClash` makes).
+- the `AN_BINOP` lowering raises instead of computing when it fires.
+
+### Why differing-kinds only, and NOT the whole table
+
+Deliberate, and measured rather than assumed: **pxx backs a Python `set` with
+`TPyList`**, and
+
+```python
+set([1, 2, 3]) - set([2])       # -> [1, 3] — WORKS today
+```
+
+so a blanket "list minus list is undefined" rule would break set difference, a
+real feature, for a real user. Since sets and lists share a row there is no
+static way to tell them apart, so same-kind pairs are left alone.
+
+**Residue, still silently computing** (same-kind, not covered here):
+`"ab" - "ab"` → `0`, `"ab" / "ab"`, `"ab" // "ab"`, `[1] // [2]`, `[1] % [2]`.
+Fixing those needs either a set-vs-list distinction in the type system or a
+runtime kind check on the same-kind path; worth its own ticket rather than a
+guess bolted on here.
+
+### Verified
+
+`test/test_nilpy_static_mixed_type_guard.npy`, wired into `make test-nilpy`,
+byte-identical to CPython.
+
+**The first version of this test was VACUOUS and was rewritten.** It wrapped
+each expression in `lambda: 3 - [1,2]` — and passed on the PRE-FIX binary,
+because the lambda routes its operands through the variant path, which always
+raised correctly. That is precisely the trap this ticket documents
+`test_nilpy_mixed_type_operands` falling into, reproduced while writing its
+replacement. The landed version uses direct literals in straight-line
+`try/except`, and is confirmed RED pre-fix:
+
+```
+int-list  1331691499        int/list  0.000000000000021
+int//list 0                 int%list  3
+int<list  True              int>=list False
+str-list  1337101271
+```
+
+(`str<int`, `list//int`, `list%int` already raised before this change.)
+
+Also confirmed unbroken: set difference, `[1,2]*2`, `"ab"*2`, `"%d" % 5`,
+ordinary numeric arithmetic, list/bytes/str ordering, `+` on lists and strs,
+dict equality, and `pathlib`'s `Path("a") / "b"` (a user class, kind 0).
+
+Native: build + byte-identical self-host fixedpoint, `testmgr --tier quick` GREEN.
+
+## Log
+- 2026-08-01 — resolved, commit PENDING.

@@ -1,0 +1,81 @@
+# Mixed-type operands must raise TypeError even when BOTH types are known at
+# compile time.
+#
+# The guard lives in the runtime pyvar_* helpers, which inspect VType and raise.
+# A binop with both operand types provable never routes through them, so it
+# lowered straight to IR arithmetic with the container's HANDLE as a number:
+# `3 - [1,2]` printed a plausible integer and `3 < [1,2]` returned a clean
+# True/False decided by an allocation address
+# (bug-nilpy-static-typed-operands-skip-mixed-type-guard).
+#
+# test_nilpy_mixed_type_operands asserts these same pairs and PASSES, because
+# its operands come from a heterogeneous list literal and are therefore all
+# VARIANTS — the path that already worked. It reads as full coverage while being
+# unable to reach the broken lowering. So every operand here is a DIRECT literal
+# or a directly-assigned name, never unpacked from a container.
+#
+# The errors must be catchable: CPython raises at run time, so `try/except
+# TypeError` — the normal way to probe for operator support — has to compile and
+# run its handler, not abort the build.
+#
+# NOTE ON SHAPE: the expressions are written INLINE inside try/except, not
+# wrapped in a lambda. A `lambda: 3 - [1,2]` version of this test PASSES ON THE
+# PRE-FIX BINARY — the lambda routes its operands through the variant path,
+# which always raised correctly — so it would have been exactly as vacuous as
+# the test this bug slipped past. Keep the operands as direct literals in
+# straight-line code.
+
+
+
+try:
+    print("int-list ", 3 - [1, 2])
+except TypeError:
+    print("int-list  TypeError")
+try:
+    print("int/list ", 3 / [1, 2])
+except TypeError:
+    print("int/list  TypeError")
+try:
+    print("int//list", 3 // [1, 2])
+except TypeError:
+    print("int//list TypeError")
+try:
+    print("int%list ", 3 % [1, 2])
+except TypeError:
+    print("int%list  TypeError")
+try:
+    print("int<list ", 3 < [1, 2])
+except TypeError:
+    print("int<list  TypeError")
+try:
+    print("int>=list", 3 >= [1, 2])
+except TypeError:
+    print("int>=list TypeError")
+try:
+    print("str-list ", "a" - [1, 2])
+except TypeError:
+    print("str-list  TypeError")
+try:
+    print("str<int  ", "a" < 3)
+except TypeError:
+    print("str<int   TypeError")
+try:
+    print("list//int", [1, 2] // 3)
+except TypeError:
+    print("list//int TypeError")
+try:
+    print("list%int ", [1] % 2)
+except TypeError:
+    print("list%int  TypeError")
+
+# --- and everything that is DEFINED must still work ---
+# set difference is `-` on two TPyList-backed sets: pxx backs a Python set with
+# TPyList, so a blanket "list minus list is undefined" rule would break this.
+print(sorted(set([1, 2, 3]) - set([2])))
+print([1, 2] * 2, "ab" * 2)
+print("%d ok" % 5)
+print(7 - 2, 7 / 2, 7 // 2, 7 % 2)
+print(3.5 - 1, True + 1, 2 < 3.5)
+print([1, 2] < [1, 3], b"aa" < b"bb", "aa" < "bb")
+print([1] + [2], "a" + "b")
+print({"k": 1} == {"k": 1})
