@@ -88,13 +88,37 @@ bootstrap-managed: bootstrap-check
 	cmp $(BUILD_COMPILER_MANAGED) $(VERIFY_COMPILER_MANAGED)
 	mv $(BUILD_COMPILER_MANAGED) $(COMPILER_MANAGED)
 
+
+# chore-makefile-selfhost-iterate-to-convergence: this rule used to demand
+# byte-identical convergence in exactly ONE pass from whatever local seed
+# happened to be on disk. tools/selfhost_fixedpoint.sh's own header comment
+# says that demand is simply wrong: "a stale seed legitimately needs an extra
+# round (stage2 came from the OLD compiler, stage3 from the new one) --
+# demanding one pass is what made a normal bootstrap look like a failure."
+# testmgr already iterates for exactly this reason. Mirror that here: iterate
+# up to MAX_ROUNDS, accept the first round where two consecutive stages agree,
+# and only fail if convergence genuinely never happens by then -- the
+# property enforced is still "the compiler reproduces itself," never weakened
+# to "in however many rounds it takes," just no longer mis-timed to the seed's
+# staleness.
 $(COMPILER): $(COMPILER_SRC) $(COMPILER_INC)
 	@test -x $(COMPILER) || \
 	  (echo "self-hosted compiler seed missing. Run: make bootstrap"; exit 1)
-	./$(COMPILER) $(PXXFLAGS) $(COMPILER_SRC) $(BUILD_COMPILER)
-	$(BUILD_COMPILER) $(PXXFLAGS) $(COMPILER_SRC) $(VERIFY_COMPILER)
-	cmp $(BUILD_COMPILER) $(VERIFY_COMPILER)
-	mv $(BUILD_COMPILER) $(COMPILER)
+	@cur="./$(COMPILER)"; max=4; \
+	for r in $$(seq 1 $$max); do \
+	  a="$(BUILD_COMPILER)-r$$r"; b="$(VERIFY_COMPILER)-r$$r"; \
+	  "$$cur" $(PXXFLAGS) $(COMPILER_SRC) "$$a" || exit 1; \
+	  "$$a" $(PXXFLAGS) $(COMPILER_SRC) "$$b" || exit 1; \
+	  if cmp -s "$$a" "$$b"; then \
+	    echo "converged after $$r round(s)"; \
+	    mv "$$a" $(COMPILER); \
+	    rm -f "$$b"; \
+	    exit 0; \
+	  fi; \
+	  cur="$$a"; \
+	done; \
+	echo "FAIL: no fixedpoint after $$max rounds -- a real self-host regression, not a stale seed"; \
+	exit 1
 
 $(COMPILER_MANAGED): $(COMPILER_SRC) $(COMPILER_INC)
 	@test -x $(COMPILER_MANAGED) || \
