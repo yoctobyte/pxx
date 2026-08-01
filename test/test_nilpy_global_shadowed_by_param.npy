@@ -1,0 +1,61 @@
+# A module-level global whose NAME is also a PARAMETER of some def declared
+# ABOVE it. The parameter shadows the global inside that def (Python scoping),
+# so uses of the name in the body are reads of the PARAMETER and must not make
+# the module global exist as a bare variant.
+#
+# PyAllocModuleGlobals pre-creates a global as tyVariant when a def above it
+# reads it ("def refresh(): bpm_label.set(...)" before "bpm_label = ..."). Its
+# "does a def above read this name" scan matched ANY identifier token in a def
+# body, including uses of a same-named PARAMETER -- so the global lost its class
+# identity and every compile-time dunder dispatch on it stopped firing, while
+# attribute access on the same variable still worked
+# (bug-nilpy-global-shadowed-by-method-param-name-loses-class-type).
+#
+# `def __add__(self, other)` beside a module-level `other` is the idiomatic
+# Python spelling of this collision. Expectation is CPython's own output.
+
+
+class V:
+    def __init__(self, n):
+        self.n = n
+
+    def __add__(self, other):          # parameter named `other`
+        return "ADD" + str(other.n)
+
+    def __eq__(self, other):           # a second dunder, same collision
+        return self.n == other.n
+
+
+# a PLAIN FUNCTION whose parameter collides, and which USES it in the body
+# (an unused parameter never triggered the bug)
+def scale(value):
+    return value * 2
+
+
+# a def that collides only via an ANNOTATION and a DEFAULT, neither of which
+# binds the name -- `limit` here is a genuine read of the module global, so it
+# must still be pre-created and must still work
+def clamped(x: int = 7):
+    return x
+
+
+other = V(1)
+p = V(2)
+value = V(10)
+w = V(3)                               # non-colliding control
+
+# attribute access and operator dispatch on the SAME shadowed variable
+print(other.n)
+print(other + p)
+print(p + other)
+print(other == p)
+print(other == V(1))
+
+# the plain-function collision
+print(value.n)
+print(value + p)
+
+# non-colliding control, and a nested-def collision
+print(w + p)
+print(scale(4))
+print(clamped())

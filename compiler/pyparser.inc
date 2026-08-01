@@ -12609,12 +12609,22 @@ const PY_INFER_ROUNDS = 4;
   The other probe hand-patched during the same hunt: "what type did NilPy
   actually give this local" was previously unanswerable without a rebuild. }
 procedure PyDbgDumpLocals(const whose: AnsiString);
-var i: Integer;
+var i, si: Integer;
 begin
   if not PxxDbgEnabled('n.locals') then Exit;
   for i := 0 to PyLocalCount - 1 do
-    WriteLn('PXXDBG n.locals ', whose, ' ', PyLocals[i].Name,
-            ' tk=', Ord(PyLocals[i].TypeKind), ' rec=', PyLocals[i].RecCi);
+  begin
+    si := PyProgSym(PyLocals[i].Name);
+    if si >= 0 then
+      WriteLn('PXXDBG n.locals ', whose, ' ', PyLocals[i].Name,
+              ' tk=', Ord(PyLocals[i].TypeKind), ' rec=', PyLocals[i].RecCi,
+              ' | sym=', si, ' symtk=', Ord(Syms[si].TypeKind),
+              ' symrec=', Syms[si].RecName, ' kind=', Ord(Syms[si].Kind))
+    else
+      WriteLn('PXXDBG n.locals ', whose, ' ', PyLocals[i].Name,
+              ' tk=', Ord(PyLocals[i].TypeKind), ' rec=', PyLocals[i].RecCi,
+              ' | sym=<none>');
+  end;
 end;
 
 procedure PyCollectLocalsAST(bodyStart: Integer);
@@ -16280,10 +16290,67 @@ begin
   end;
 end;
 
+{ Does the `def` header starting at token defTok bind `nm` as one of its
+  PARAMETERS? A parameter SHADOWS a module global of the same name for the whole
+  body (Python scoping, and unlike a plain local assignment no `global nm` can
+  take it back), so uses of that name inside the body are NOT reads of the
+  global — which is the question PyAllocModuleGlobals's scan below is asking.
+  Only the name POSITIONS count: `def f(other)` binds `other`, but the `int` in
+  `def f(x: int)` and the `other` in `def f(x = other)` are a type and a
+  DEFAULT-value expression evaluated in the ENCLOSING scope, so both must keep
+  reading as ordinary uses. }
+function PyDefHeaderBindsName(defTok: Integer; const nm: AnsiString): Boolean;
+var j, pdepth: Integer; expectName: Boolean;
+begin
+  Result := False;
+  j := defTok;
+  while (j < MainProgramTokCount) and (Tokens[j].Kind <> tkLParen) do
+  begin
+    { a `def` header's '(' is on its own line; a NEWLINE first means there is
+      no parameter list to read (a syntax error the real parse will report) }
+    if Tokens[j].Kind in [tkNewline, tkColon, tkEOF] then Exit;
+    Inc(j);
+  end;
+  if j >= MainProgramTokCount then Exit;
+  pdepth := 0;
+  expectName := False;
+  while j < MainProgramTokCount do
+  begin
+    if Tokens[j].Kind = tkLParen then
+    begin
+      Inc(pdepth);
+      if pdepth = 1 then expectName := True;
+    end
+    else if Tokens[j].Kind = tkRParen then
+    begin
+      Dec(pdepth);
+      if pdepth = 0 then Exit;
+    end
+    else if pdepth = 1 then
+    begin
+      if Tokens[j].Kind = tkComma then expectName := True
+      else if Tokens[j].Kind = tkIdent then
+      begin
+        { only the FIRST ident after '(' or ',' is the parameter's own name;
+          an annotation or default that follows is not a binding }
+        if expectName and (GetTokenStr(j) = nm) then begin Result := True; Exit; end;
+        expectName := False;
+      end
+      else if Tokens[j].Kind <> tkStar then
+        { `*args` / `**kwargs` (two tkStar): a star keeps the next ident in name
+          position; anything else (':', '=', a literal) ends it }
+        expectName := False;
+    end;
+    Inc(j);
+  end;
+end;
+
 procedure PyAllocModuleGlobals;
 const PY_ALLOCMOD_MAXDEPTH = 255;
-var i, j, k, depth, idx, ci: Integer; nm: AnsiString; usedEarlier, pendingDef: Boolean;
+var i, j, k, depth, idx, ci: Integer; nm: AnsiString;
+    usedEarlier, pendingDef, pendingShadow: Boolean;
     inDefStack: array[0..PY_ALLOCMOD_MAXDEPTH] of Boolean;
+    shadowStack: array[0..PY_ALLOCMOD_MAXDEPTH] of Boolean;
 begin
   { ONLY the names a routine ABOVE them reads — the shape that fails outright:
     `def refresh(): bpm_label.set(...)` at the top of the file,
@@ -16327,10 +16394,24 @@ begin
         usedEarlier := False;
         k := 0;
         pendingDef := False;
+        pendingShadow := False;
         inDefStack[0] := False;
+        shadowStack[0] := False;
         for j := PyScanLo to i - 1 do
         begin
-          if Tokens[j].Kind = tkFunction then pendingDef := True
+          if Tokens[j].Kind = tkFunction then
+          begin
+            pendingDef := True;
+            { A def whose PARAMETER list binds this very name: every use of the
+              name in its body reads the PARAMETER, not the module global, so
+              the body must not count as "used earlier" and must not force the
+              global into existence as a bare tyVariant. `def __add__(self,
+              other)` beside a module-level `other` is the idiomatic Python
+              collision this got wrong — the global lost its class and every
+              operator dunder on it stopped dispatching
+              (bug-nilpy-global-shadowed-by-method-param-name-loses-class-type). }
+            pendingShadow := PyDefHeaderBindsName(j, nm);
+          end
           else if Tokens[j].Kind = tkIndent then
           begin
             if k < PY_ALLOCMOD_MAXDEPTH then
@@ -16338,12 +16419,21 @@ begin
               if pendingDef then inDefStack[k + 1] := True
               else if k > 0 then inDefStack[k + 1] := inDefStack[k]
               else inDefStack[k + 1] := False;
+              { a nested def inherits the shadow: an inner body's use of the
+                name still resolves to the OUTER def's parameter, never to the
+                module global }
+              if pendingDef then shadowStack[k + 1] := pendingShadow or
+                                                       ((k > 0) and shadowStack[k])
+              else if k > 0 then shadowStack[k + 1] := shadowStack[k]
+              else shadowStack[k + 1] := False;
             end;
             Inc(k);
             pendingDef := False;
+            pendingShadow := False;
           end
           else if Tokens[j].Kind = tkDedent then Dec(k)
           else if (k > 0) and (k <= PY_ALLOCMOD_MAXDEPTH) and inDefStack[k] and
+                  (not shadowStack[k]) and
                   (Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = nm) then
           begin
             usedEarlier := True;

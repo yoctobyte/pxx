@@ -1056,6 +1056,12 @@ test-nilpy: $(COMPILER)
 	# runtime TypeError, so this COMPILES and the handler runs.
 	./$(COMPILER) test/test_nilpy_operator_dunder_missing_fail.npy /tmp/test_nilpy_nodunder_fail26
 	test "$$(/tmp/test_nilpy_nodunder_fail26)" = "$$(printf '%b' 'caught missing __add__\nstill running')"
+	# a module global whose name is also a PARAMETER of a def above it: the
+	# parameter shadows it, so the def's body must not force the global into
+	# existence as a bare variant and kill its class identity (and with it every
+	# compile-time dunder dispatch); expectation is CPython's own output
+	./$(COMPILER) test/test_nilpy_global_shadowed_by_param.npy /tmp/test_nilpy_gshadow26
+	test "$$(/tmp/test_nilpy_gshadow26)" = "$$(printf '%b' '1\nADD2\nADD1\nFalse\nTrue\n10\nADD2\nADD2\n8\n7')"
 	# unary minus dunder (__neg__) on a user class; expectation is CPython's own output
 	./$(COMPILER) test/test_nilpy_neg_dunder.npy /tmp/test_nilpy_negdunder26
 	test "$$(/tmp/test_nilpy_negdunder26)" = "$$(printf '%b' 'Neg(-5)\nNeg(3)\n-5\n-6\n-4')"
