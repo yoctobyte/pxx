@@ -38,7 +38,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (182)
+## backlog (183)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -223,6 +223,7 @@ _none_
 | task-t-enroll-pascal-conformance-tier | T | 45 | task | Enroll test-pascal-conformance in testmgr tiers (sharded, like the C battery) | — |
 | task-t-seed-from-stable-defeats-rebuild | T | 65 | task | seed-from-stable makes the whole matrix test the pinned binary; only selfhost-fixedpoint can see it | — |
 | task-t-suppress-autoticket-until-host-baselined | T | 60 | task | a new watcher host's first run auto-files a bogus 17-job cascade ticket; NEW-RED is meaningless without a per-host baseline | — |
+| task-t-worktree-is-not-current-state | T | 65 | task | In a watcher clone the working tree is a snapshot of the sha under test, not current state. Four separate bugs in one day came from reading it. | — |
 | task-t-xeon-agent-needs-its-own-dev-checkout | T | 55 | task | the xeon agent had no dev checkout, so its commits landed on the watcher clone's detached HEAD; protocol doc should say so | — |
 
 ## experimental (20)
@@ -2968,6 +2969,7 @@ _none_
 - [p 65] [B] bug-b-floattostrsig-caps-at-15-significant-digits
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
+- [p 65] [T] task-t-worktree-is-not-current-state
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [N] bug-nilpy-one-line-def-and-class-bodies-do-not-parse
 - [p 60] [N] bug-nilpy-same-kind-undefined-operators-still-compute
