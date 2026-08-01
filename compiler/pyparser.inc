@@ -9059,6 +9059,17 @@ begin
         AN_WRITELN's lowering runs, every value is already sitting in a slot
         and nothing it does can raise. }
       pargTk := IntToTypeKind(ASTTk[CurASTNode]);
+      { A string LITERAL argument carries tyString, which allocates a FROZEN
+        fixed-size slot — and with no explicit string[N] that slot came out
+        STRING_CAP (8 MB) wide. So every `print("literal")` reserved 8 MiB of
+        BSS, linearly: `print("x", "y")` reserved 16 MiB, and a test with a
+        dozen literals reserved 218 MB. Binding the literal to a variable first
+        never did this, because an assignment widens tyString to tyAnsiString —
+        the same widening rule recorded in
+        project_nilpy_ast_typing_and_string_kind_widen. Apply it here too: the
+        temp only has to HOLD the value, and managed is a pointer.
+        (bug-nilpy-print-string-literal-reserves-8mb-of-bss) }
+      if pargTk = tyString then pargTk := tyAnsiString;
       pargTmp := AllocVar(PyHiddenName('parg'), pargTk);
       if pargTk = tyClass then
       begin

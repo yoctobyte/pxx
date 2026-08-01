@@ -1103,7 +1103,7 @@ test-nilpy: $(COMPILER)
 	# here are DIRECT literals, never unpacked from a container — that is what
 	# test_nilpy_mixed_type_operands could not reach.
 	./$(COMPILER) test/test_nilpy_static_mixed_type_guard.npy /tmp/test_nilpy_statguard26
-	test "$$(/tmp/test_nilpy_statguard26)" = "$$(printf '%b' 'int-list  TypeError\nint/list  TypeError\nint//list TypeError\nint%list  TypeError\nint<list  TypeError\nint>=list TypeError\nstr-list  TypeError\nstr<int   TypeError\nlist//int TypeError\nlist%int  TypeError\n[1, 3]\n[1, 2, 1, 2] abab\n5 ok\n5 3.5 3 1\n2.5 2 True\nTrue True True\n[1, 2] ab\nTrue')"
+	test "$$(/tmp/test_nilpy_statguard26)" = "$$(printf '%b' 'int-list  TypeError\nint/list  TypeError\nint//list TypeError\nint%list  TypeError\nint<list  TypeError\nint>=list TypeError\nstr-list  TypeError\nstr<int   TypeError\nlist//int TypeError\nlist%int  TypeError\nstr-str  TypeError\nstr/str  TypeError\nstr//str TypeError\n[1, 3]\n[1, 2, 1, 2] abab\n5 ok\n5 3.5 3 1\n2.5 2 True\nTrue True True\n[1, 2] ab\nTrue')"
 	# ordering two statically-typed sequences must compare CONTENTS: the static
 	# binop path lowered to a raw handle compare and answered from HEAP
 	# ADDRESSES. Every case is written so allocation order DISAGREES with

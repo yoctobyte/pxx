@@ -3983,8 +3983,24 @@ begin
   lk := IRPyOperandKind(ASTLeft[node]);
   rk := IRPyOperandKind(ASTRight[node]);
   if (lk = 0) or (rk = 0) then Exit;
-  if lk = rk then Exit;                       { see the note above }
   if (op = Ord(tkMod)) and (lk = 2) then Exit;    { `"%d" % n` is formatting }
+  if lk = rk then
+  begin
+    { SAME kind is mostly not rejectable here — see the note above: pxx backs a
+      Python `set` with TPyList, so `list - list` may be a set difference and
+      there is no static way to tell. STR is the exception: it carries no
+      set-like alter ego, and `"ab" - "ab"` / `"ab" / "ab"` / `"ab" // "ab"` are
+      undefined in Python while pxx quietly computed 0, 1.0 and 1 off the string
+      HANDLES (bug-nilpy-same-kind-undefined-operators-still-compute — this is
+      the safe slice that ticket identifies; the list/dict/bytes same-kind cases
+      stay open there pending a set-vs-list distinction).
+      Ordering is NOT included: `"aa" < "bb"` is perfectly defined, and `%` is
+      already exempted above as formatting. }
+    if (lk = 2) and
+       ((op = Ord(tkMinus)) or (op = Ord(tkSlash)) or (op = Ord(tkDiv))) then
+      IRPyStaticPairUndefined := True;
+    Exit;
+  end;
   IRPyStaticPairUndefined := True;
 end;
 

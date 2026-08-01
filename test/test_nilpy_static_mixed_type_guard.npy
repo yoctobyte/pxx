@@ -68,6 +68,23 @@ try:
 except TypeError:
     print("list%int  TypeError")
 
+# --- SAME-kind str pairs: undefined in Python, and unlike list they carry no
+#     set-like alter ego, so they are statically rejectable. (list/dict/bytes
+#     same-kind cases stay open — pxx backs a set with TPyList and
+#     `set(...) - set(...)` must keep working.) ---
+try:
+    print("str-str ", "ab" - "ab")
+except TypeError:
+    print("str-str  TypeError")
+try:
+    print("str/str ", "ab" / "ab")
+except TypeError:
+    print("str/str  TypeError")
+try:
+    print("str//str", "ab" // "ab")
+except TypeError:
+    print("str//str TypeError")
+
 # --- and everything that is DEFINED must still work ---
 # set difference is `-` on two TPyList-backed sets: pxx backs a Python set with
 # TPyList, so a blanket "list minus list is undefined" rule would break this.
