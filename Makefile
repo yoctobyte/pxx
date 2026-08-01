@@ -576,6 +576,10 @@ test-nilpy: $(COMPILER)
 	@# a class defining __getitem__/__setitem__ routes subscript read/write
 	./$(COMPILER) test/test_nilpy_dunder_getitem_setitem.npy /tmp/test_nilpy_dundergetset26
 	test "$$(/tmp/test_nilpy_dundergetset26)" = "$$(printf '%b' '20\n99\n[10, 99, 30]\n42\n-1\n10\ncaught: TypeError')"
+	@# list ordering is LEXICOGRAPHIC, not by heap address; cases deliberately
+	@# defeat allocation order (the list allocated first must sort last)
+	./$(COMPILER) test/test_nilpy_list_ordering.npy /tmp/test_nilpy_listord26
+	test "$$(/tmp/test_nilpy_listord26)" = "$$(printf '%b' 'content < False\ncontent > True\ncontent <= False\ncontent >= True\neq < False\neq <= True\neq > False\neq >= True\nprefix < False\nprefix > True\nplain < True\nnested < False\neq == True\nne != True')"
 	@# truthiness protocol: __bool__ wins, else __len__() != 0, else "any
 	@# instance is true". Static receivers only — a parameter/container element
 	@# is a runtime variant and still needs runtime dunder dispatch.

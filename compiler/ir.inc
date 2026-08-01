@@ -5723,6 +5723,40 @@ begin
           Result := IRAppend(IR_NOT, Result, -1, -1, 0, Ord(tyBoolean));
         Exit;
       end;
+      { ORDERING two lists is LEXICOGRAPHIC in Python, and on this path it was a
+        raw handle compare — so the answer came from the two objects' HEAP
+        ADDRESSES and ignored their contents entirely. `[9,9] < [1,1]` answered
+        True. It looked correct in the corpus only because a list literal
+        written first is allocated first, so content order and address order
+        usually coincide; `test_nilpy_mixed_type_operands`' `[1] < [1, 0]`
+        passes for exactly that accidental reason
+        (bug-nilpy-list-ordering-compares-heap-addresses).
+
+        pylib's `pylist_cmp` already implements the real rule (element by
+        element, then the shorter sequence first) and returns -1/0/1, so this is
+        wiring — the same wiring `==`/`!=` got just above via pylist_eq, which
+        is why equality was right while ordering was not. Compare its result
+        against 0 with the SOURCE operator, which keeps <, <=, > and >= correct
+        including at equality. }
+      if PyProgramMode and
+         ((Integer(ASTIVal[node]) = Ord(tkLt)) or (Integer(ASTIVal[node]) = Ord(tkLe)) or
+          (Integer(ASTIVal[node]) = Ord(tkGt)) or (Integer(ASTIVal[node]) = Ord(tkGe))) and
+         (IRNodePyListRec(ASTLeft[node]) >= 0) and
+         (IRNodePyListRec(ASTLeft[node]) = IRNodePyListRec(ASTRight[node])) then
+      begin
+        cpi := FindProc('pylist_cmp');
+        if cpi < 0 then Error('Nil Python: pylist_cmp (pylib) not loaded');
+        left := IRLowerAST(ASTLeft[node]);
+        first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyClass));
+        right := IRLowerAST(ASTRight[node]);
+        last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyClass));
+        IRB[first] := last;
+        Result := IRAppendCall(cpi, first, -1, Ord(tyInt64));
+        Result := IRAppend(IR_BINOP, Result,
+                           IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyInt64)),
+                           Integer(ASTIVal[node]), 0, Ord(tyBoolean));
+        Exit;
+      end;
       { Dicts compare by CONTENTS too, and for the same reason — this was still
         a pointer compare, so `{"k": 1} == {"k": 1}` answered False and
         `if cfg == defaults:` never fired

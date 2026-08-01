@@ -52,13 +52,13 @@ _none_
 | bug-nilpy-dataclass-no-generated-eq | N | 30 | bug | `@dataclass` gets no generated `__eq__` — compares by identity instead of fields | — |
 | bug-nilpy-dunders-not-dispatched-through-containers | N | 60 | bug | NilPy: __repr__/__str__ of a class instance held in a container silently print EMPTY; ordering/sorted raise — no runtime dunder dispatch on a Variant | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
-| bug-nilpy-equal-lists-compare-as-less-than | N | 65 | bug | NilPy: `[1,2] < [1,2]` returns True and `[1,2] >= [1,2]` returns False — two EQUAL lists compare as less-than, silently inverting sort/threshold logic | — |
 | bug-nilpy-float-print-loses-precision-vs-cpython | N | 40 | bug | Float printing loses the last 1-2 significant digits vs CPython's shortest round-trip repr | — |
 | bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip | N | 20 | bug | `print(1e-20)` prints `0.0` — NilPy's float repr has no small-magnitude exponential form | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
 | bug-nilpy-int-prints-as-float-when-the-name-is-widened-later | N | 50 | bug | An int prints as `5.0` because the SAME NAME is assigned a float later in the file | — |
 | bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
 | bug-nilpy-list-of-custom-objects-loses-repr-str | N | 40 | bug | A user class instance boxed in a list/dict prints as empty, losing `__repr__`/`__str__` | — |
+| bug-nilpy-list-ordering-compares-heap-addresses | N | 70 | bug | NilPy: ordering two statically-typed lists compares their HEAP ADDRESSES, not their contents — `[9,9] < [1,1]` is True; no comparison helper is called at all | — |
 | bug-nilpy-list-sort-ignores-lt-dunder-on-objects | N | 35 | bug | `list.sort()` on user objects with `__lt__` raises a runtime TypeError instead of using it | — |
 | bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
 | bug-nilpy-missing-arith-dunder-aborts-compile-instead-of-raising | N | 55 | bug | NilPy: a missing __add__/__sub__/__mul__/__truediv__/__neg__ ABORTS COMPILATION; CPython raises a catchable TypeError, so try/except around it cannot even build | — |
@@ -2917,6 +2917,7 @@ _none_
 
 - [p 75] [T] bug-t-full-run-evicts-opt-verdicts-perpetual-new-red
 - [p 75] [T] bug-t-optdiff-shard-identity-is-positional
+- [p 70] [N] bug-nilpy-list-ordering-compares-heap-addresses
 - [p 70] [N] bug-nilpy-static-typed-operands-skip-mixed-type-guard
 - [p 70] [N] bug-nilpy-with-statement-skips-enter-and-exit
 - [p 70] [T] bug-t-full-tier-wipes-other-tiers-job-status
@@ -2927,7 +2928,6 @@ _none_
 - [p 70] [T] regression-optdiff-shard5-6
 - [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
 - [p 65] [N] bug-nilpy-bool-protocol-ignored-object-always-truthy
-- [p 65] [N] bug-nilpy-equal-lists-compare-as-less-than
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 60] [N] bug-nilpy-bitwise-shift-on-class-operand-segfaults
 - [p 60] [N] bug-nilpy-dunders-not-dispatched-through-containers
