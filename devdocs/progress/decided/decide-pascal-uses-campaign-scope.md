@@ -113,3 +113,39 @@ the real problem is meaningfully smaller than "hundreds of files."
 [[decide-class-namespace-scoping]] and `bug-nilpy-stdlib-name-binds-pascal-unit`
 both cite this as their root cause; resolving this decides whether they land as
 part of the same campaign or stay worked around individually.
+
+## 2026-08-01 — option 2 executed: instrument fixed, true count is 35 pairs
+
+The decided first step (close the instrumentation gap, re-measure, then size)
+is **done**. Full detail in [[bug-pascal-uses-is-transitive]]'s
+"instrument fixed, TRUE count" section; the sizing-relevant summary:
+
+- **Two** ambient-System artifacts were inflating the count, not one. Beyond the
+  `builtin`/`builtinheap` case this ticket already identified, classifying the
+  leftover `-> <program>` bucket showed it was **100% `TObject`/`TGuid`** —
+  compiler-minted System intrinsics stamped with `CurrentUnitIdx = -1`. Both are
+  now excluded from detection; the `-> <program>` bucket is 0.
+- Re-measured over **all 934** `test/*.pas` (the old figure came from 80):
+  **35 distinct pairs / 4721 hits**, against the previous headline of **81 pairs
+  from 80 files**. Less than half the pairs, from twelve times the code.
+
+**Re-sizing verdict: this is NOT a campaign.** The thing that made it look like
+one — "hundreds of files need a mechanical `uses builtin[heap]`" — was entirely
+the artifact and that work does not exist. What is actually left is 35 RTL-internal
+unit pairs, every one of them either a deliberate dependency needing one explicit
+`uses` line (the `pylib`/`sysutils` `Exception` merge being the known case) or
+accidental leakage that closes for free when real scoping lands. **No
+user-program-facing leak appears anywhere in the corpus.**
+
+That matches this ticket's own guiding principle (what matters is that USER
+programs get a clean namespace) — and by that standard the corpus is already
+clean; the remaining work is tidying RTL-internal wiring.
+
+### Suggested next step, not yet decided
+
+The remaining unknown is the instrument's OTHER gap, still open: it does not
+catch names resolved through `IRFindProc1ByArgTk`/`MatchProcCall` (the ticket's
+own headline `IntToStr` repro still does not warn), so 35 is a floor, not a
+ceiling. Closing that gap is the natural next measurement before enforcement
+lands. Worth doing before writing the real non-transitive rule, on the same
+"measure, don't reason" grounds that just cut this estimate in half twice.

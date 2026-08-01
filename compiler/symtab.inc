@@ -430,6 +430,39 @@ begin
   Inc(UsesEdgeCount);
 end;
 
+function UnitIsAmbient(unitIdx: Integer): Boolean;
+{ builtin/builtinheap are pxx's own System unit — `compiler/builtin/builtin.pas`
+  says so outright ("pxx has no separate System unit (System IS the builtin
+  layer)"), and every Pascal dialect auto-includes System everywhere with no
+  `uses` needed. They are injected by ParseProgram's epilogue
+  (`ParseUsesUnit('builtinheap')` / `('builtin')`, compiler/parser.inc), never
+  written by a user clause, so the edge table structurally cannot show them as
+  reachable from anywhere — without this, every unit in the tree reports a leak
+  to them and the raw hit counts drown out the real ones. Ambient by design, not
+  a leak. }
+var lo: AnsiString;
+begin
+  UnitIsAmbient := False;
+  if unitIdx < 0 then Exit;
+  lo := Strs[unitIdx].Text;
+  UnitIsAmbient := (lo = 'builtin') or (lo = 'builtinheap');
+end;
+
+function ClassNameIsAmbientIntrinsic(const lo: AnsiString): Boolean;
+{ TObject/TGuid are System-unit intrinsics minted by RegisterBuiltinTObject /
+  RegisterBuiltinTGuid (compiler/parser.inc) rather than declared by any unit,
+  so AddUClass stamps them with whatever CurrentUnitIdx is at ParseProgram time
+  (-1, "the program"). Every UNIT that names TObject then looks like it leaked
+  through the program — the same ambient-System artifact UnitIsAmbient handles
+  one level up, and measured to be 100% of the `-> <program>` bucket (TObject
+  and TGuid, nothing else). Filtered by NAME because the rows carry no marker
+  and adding a parallel array for an opt-in read-only instrument is not worth
+  the shared-state churn; these two names are System's by definition, so a user
+  re-declaration is not a leak case worth reporting either. }
+begin
+  ClassNameIsAmbientIntrinsic := (lo = 'tobject') or (lo = 'tguid');
+end;
+
 function VisibilityAllows(curUnit, declUnit: Integer): Boolean;
 { True iff `declUnit` is visible from `curUnit` under the REAL (non-transitive)
   Pascal uses rule: declUnit = curUnit, or declUnit is reachable from curUnit by
@@ -446,6 +479,7 @@ var
   qHead, qTail, i, u, v: Integer;
 begin
   if declUnit = curUnit then begin VisibilityAllows := True; Exit; end;
+  if UnitIsAmbient(declUnit) then begin VisibilityAllows := True; Exit; end;
   for i := 0 to MAX_STRS do visited[i] := False;
   visited[curUnit + 1] := True;
   qHead := 0; qTail := 0;
@@ -540,6 +574,7 @@ begin
     if UNameMatch(UClsNOff[i], UClsNLen[i], lo) then
     begin
       if WarnUsesLeak and (CurrentUnitIdx >= 0) and (UClsUnitIdx[i] <> CurrentUnitIdx) and
+         not ClassNameIsAmbientIntrinsic(lo) and
          not VisibilityAllows(CurrentUnitIdx, UClsUnitIdx[i]) then
         WarnUsesLeakHit('class', name, CurrentUnitIdx, UClsUnitIdx[i]);
       Result := i; Exit;

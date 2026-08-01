@@ -248,3 +248,73 @@ sizing/sequencing call, corrected.
 
 ## Log
 - 2026-07-31 — resolved, commit d86bc20ec.
+
+## 2026-08-01 — instrument fixed, TRUE count measured over the whole corpus
+
+The 2026-08-01 correction above was right, and there was a SECOND artifact of the
+same kind underneath it. Both are now fixed in the instrument, and the sweep was
+re-run over all 934 `test/*.pas` (not the 80-file sample the sizing decision was
+made on).
+
+### Two ambient-System artifacts, both removed
+
+1. **`builtin`/`builtinheap`** — pxx's System unit, injected by `ParseProgram`
+   (`ParseUsesUnit('builtinheap')` / `('builtin')`, `compiler/parser.inc`), never
+   written by a user clause, so the edge table structurally could not show them
+   reachable. Fixed: `UnitIsAmbient` in `compiler/symtab.inc`, consulted by
+   `VisibilityAllows`.
+2. **`TObject`/`TGuid`** — found by classifying the leftover `-> <program>`
+   bucket rather than assuming it was real. It was **100%** these two names and
+   nothing else (`TObject` 3601 hits, `TGuid` 1092). They are minted by
+   `RegisterBuiltinTObject`/`RegisterBuiltinTGuid`, so `AddUClass` stamps them
+   with whatever `CurrentUnitIdx` is at ParseProgram time (`-1`, "the program") —
+   making every unit that names `TObject` look like it leaked through the
+   program. Fixed: `ClassNameIsAmbientIntrinsic`, filtered by NAME (the rows
+   carry no marker, and adding a parallel array for an opt-in read-only
+   instrument is not worth the shared-state churn).
+
+Note `-1` is NOT blanket-excluded: a genuinely program-declared class referenced
+from a unit IS a real leak and must still be reported.
+
+### The true number
+
+Full corpus, 934 files, self-hosted binary at `da085e9de` + the instrument fix
+(snapshot binary, so no mid-sweep rebuild could drift it — the first attempt at
+this measurement WAS corrupted that way and was discarded):
+
+- **35 distinct (importer, provider) pairs, 4721 hits.** `-> <program>` bucket
+  is now **0**.
+- Previous headline was **81 pairs from 80 files**. So the real figure is *less
+  than half*, measured over *twelve times* as much code.
+- 113 of the 934 files don't compile standalone — they are helper `*_unit.pas`
+  units and `{%FAIL}` cases, not measurement failures.
+
+Top pairs:
+
+| pair | hits |
+| --- | --- |
+| `pylib -> sysutils` | 2628 |
+| `dns_wire_core -> sysutils` | 570 |
+| `x509 -> sysutils` | 265 |
+| `ecdsa_p256 -> rsa` | 170 |
+| `platform -> pylib` | 143 |
+| `platform_backend -> pylib` | 143 |
+| `pylib -> textfile` | 105 |
+| `ed25519 -> x25519` | 102 |
+| `sha512 -> sha256` | 100 |
+| `zlib -> sysutils` | 98 |
+
+…then a long tail in the tens (the full 35 are all RTL-to-RTL pairs of this
+shape).
+
+### What this means for the campaign
+
+The "hundreds of files, mechanical `uses builtin[heap]` additions" framing is
+**gone entirely** — that work does not exist, it was the artifact. What remains
+is 35 RTL-internal unit pairs, each needing either an explicit `uses` (where the
+dependency is deliberate, e.g. the `pylib`/`sysutils` `Exception` merge) or
+nothing at all (where it is accidental and closes for free once real scoping
+lands). No user-program-facing leak appears in the corpus at all.
+
+That is a tractable, boring list — not a campaign. Folded back into
+[[decide-pascal-uses-campaign-scope]] for the re-sizing call.
