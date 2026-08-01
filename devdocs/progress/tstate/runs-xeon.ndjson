@@ -180,3 +180,4 @@
 {"date": "2026-08-01T20:23:44Z", "fixed": [], "full": false, "new_red": [], "sha": "7f111d2298f0caf153d18d6feaf0d99cc7fe9c52", "tier": "native", "verdict": "GREEN", "wall": 106.7}
 {"date": "2026-08-01T20:30:01Z", "fixed": [], "full": true, "new_red": ["test-nilpy#src:test/test_nilpy_static_mixed_type_guard.npy", "test-nilpy#src:test/test_nilpy_static_operand_clash.npy"], "sha": "7f111d2298f0caf153d18d6feaf0d99cc7fe9c52", "tier": "full", "verdict": "RED", "wall": 341.2}
 {"date": "2026-08-01T20:36:27Z", "fixed": [], "full": false, "new_red": [], "sha": "7911dc6033010356570d0fc5c2cfe47f15749851", "tier": "native", "verdict": "GREEN", "wall": 109.6}
+{"date": "2026-08-01T20:39:40Z", "fixed": [], "full": false, "new_red": ["fpc-bootstrap#src:compiler/compiler.pas"], "sha": "2a3fd4404bdbe49cb37acc4744f4d7897470c6bb", "tier": "native", "verdict": "GREEN", "wall": 108.1}
