@@ -12857,12 +12857,26 @@ begin
         BOUNDARY so it reflects the line about to end, then pushed the
         moment its INDENT actually arrives — a one-line-ahead flag, not a
         parse of anything. }
-      if (i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]) then
+      { The layout tokens are NOT statement starts, and must not recompute the
+        flag: a body's tkIndent is itself preceded by tkNewline, so it passed
+        the boundary test below and reset pendingDefClass to False (an INDENT is
+        not tkFunction) in the SAME iteration that the indent branch then read
+        it. blockIsDef was therefore False for EVERY block, def bodies included,
+        and a def-local assignment was harvested as a module global — widening
+        the same-named module name to a variant and killing its class identity
+        (bug-nilpy-def-local-assignment-widens-module-global-to-variant). }
+      if ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon])) and
+         not (Tokens[i].Kind in [tkIndent, tkDedent, tkNewline]) then
         pendingDefClass := (Tokens[i].Kind = tkFunction) or (Tokens[i].Kind = tkClass);
       if Tokens[i].Kind = tkIndent then
       begin
         Inc(depth);
-        if depth <= 255 then blockIsDef[depth] := pendingDefClass;
+        { INHERIT: an `if`/`for`/`while` suite nested inside a def body is still
+          def scope, so a name bound there is not a module global either. Only
+          the OUTERMOST block's header decides, and everything under it follows.
+          blockIsDef[0] is False, so depth 1 reads the module level correctly. }
+        if depth <= 255 then
+          blockIsDef[depth] := pendingDefClass or blockIsDef[depth - 1];
       end
       else if Tokens[i].Kind = tkDedent then Dec(depth)
       { No explicit skip for `def` / `class`: their bodies raise depth, and a
@@ -16397,6 +16411,68 @@ begin
   end;
 end;
 
+{ Does the def whose header starts at defTok BIND `nm` in its BODY? Python's
+  rule is that an assignment ANYWHERE in a function makes the name local for the
+  WHOLE function — even textually before the assignment — so a body that assigns
+  `nm` never reads the module global, and its uses must not force that global
+  into existence. `global nm` takes it back: then the body really does write the
+  module global and its uses DO count, so that wins wherever it appears.
+  Covers plain `nm =` and `for nm in`; `with ... as nm` and comprehension
+  targets are not detected yet and stay conservative (treated as NOT binding,
+  i.e. today's behaviour). Cost note: def bodies do not overlap, so summing
+  these scans over one caller pass is still one pass over the tokens — this does
+  NOT reintroduce the PyFindBodyEnd-per-construct blowup. }
+function PyDefBindsNameLocally(defTok: Integer; const nm: AnsiString): Boolean;
+var j, k, bdepth: Integer; atStart: Boolean;
+begin
+  Result := False;
+  j := defTok;
+  while (j < MainProgramTokCount) and (Tokens[j].Kind <> tkIndent) do
+  begin
+    if Tokens[j].Kind = tkEOF then Exit;
+    Inc(j);
+  end;
+  if j >= MainProgramTokCount then Exit;
+  bdepth := 0;
+  while j < MainProgramTokCount do
+  begin
+    if Tokens[j].Kind = tkIndent then Inc(bdepth)
+    else if Tokens[j].Kind = tkDedent then
+    begin
+      Dec(bdepth);
+      if bdepth <= 0 then Exit;
+    end
+    else if (Tokens[j].Kind = tkIdent) or (Tokens[j].Kind = tkFor) then
+    begin
+      atStart := Tokens[j - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon];
+      if atStart and (Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = 'global') then
+      begin
+        { `global a, nm, b` — scan the whole name list }
+        k := j + 1;
+        while (k < MainProgramTokCount) and
+              (Tokens[k].Kind in [tkIdent, tkComma]) do
+        begin
+          if (Tokens[k].Kind = tkIdent) and (GetTokenStr(k) = nm) then
+          begin
+            Result := False;   { declared global — NOT a local binding }
+            Exit;
+          end;
+          Inc(k);
+        end;
+      end
+      else if atStart and (Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = nm) and
+              (j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkAssign) then
+        Result := True
+      else if atStart and
+              ((Tokens[j].Kind = tkFor) or CaseEqual(GetTokenStr(j), 'for')) and
+              (j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkIdent) and
+              (GetTokenStr(j + 1) = nm) then
+        Result := True;
+    end;
+    Inc(j);
+  end;
+end;
+
 procedure PyAllocModuleGlobals;
 const PY_ALLOCMOD_MAXDEPTH = 255;
 var i, j, k, depth, idx, ci: Integer; nm: AnsiString;
@@ -16462,7 +16538,8 @@ begin
               collision this got wrong — the global lost its class and every
               operator dunder on it stopped dispatching
               (bug-nilpy-global-shadowed-by-method-param-name-loses-class-type). }
-            pendingShadow := PyDefHeaderBindsName(j, nm);
+            pendingShadow := PyDefHeaderBindsName(j, nm) or
+                             PyDefBindsNameLocally(j, nm);
           end
           else if Tokens[j].Kind = tkIndent then
           begin

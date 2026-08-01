@@ -1083,6 +1083,12 @@ test-nilpy: $(COMPILER)
 	# runtime TypeError, so this COMPILES and the handler runs.
 	./$(COMPILER) test/test_nilpy_operator_dunder_missing_fail.npy /tmp/test_nilpy_nodunder_fail26
 	test "$$(/tmp/test_nilpy_nodunder_fail26)" = "$$(printf '%b' 'caught missing __add__\nstill running')"
+	# a name bound as a LOCAL inside a def (assignment or for-target, nested
+	# blocks included) must not widen or pre-create the same-named MODULE
+	# global; `global nm` takes that back; and a def that only READS a global
+	# assigned further down must still resolve
+	./$(COMPILER) test/test_nilpy_def_local_shadows_module_global.npy /tmp/test_nilpy_deflocal26
+	test "$$(/tmp/test_nilpy_deflocal26)" = "$$(printf '%b' 'hello\n1\nADD2\nfor-done\n11\nnested\n21\nwritten\nread-ok\nctrl-ok')"
 	# a module global whose name is also a PARAMETER of a def above it: the
 	# parameter shadows it, so the def's body must not force the global into
 	# existence as a bare variant and kill its class identity (and with it every

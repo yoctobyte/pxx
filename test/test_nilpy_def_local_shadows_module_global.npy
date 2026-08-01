@@ -1,0 +1,91 @@
+# A name bound as a LOCAL inside a def must not be confused with the
+# same-named MODULE GLOBAL. Python binds a name locally for the WHOLE function
+# if the function assigns it anywhere, so the def never reads the global and
+# must not influence its type.
+#
+# Two separate holes produced the same symptom
+# (bug-nilpy-def-local-assignment-widens-module-global-to-variant):
+#
+#  1. PyCollectModuleLocalsAST's harvest folded def-body assignments into the
+#     MODULE widening table, so `zz = "hello"` in a def widened a module-level
+#     `zz = V(1)` to a variant and killed its class identity — every
+#     compile-time dunder on it then stopped dispatching. The blockIsDef guard
+#     meant to prevent exactly this was never True for ANY block: a body's
+#     tkIndent is preceded by tkNewline, so it passed the statement-boundary
+#     test and reset the flag in the same iteration the indent branch read it.
+#
+#  2. PyAllocModuleGlobals counted a def-local assignment as a READ of the
+#     global and pre-created it as a bare variant.
+#
+# `global nm` must take BOTH back: then the def really does write the module
+# global, so it counts again. Expectation is CPython's own output.
+
+
+class V:
+    def __init__(self, n):
+        self.n = n
+
+    def __add__(self, q):
+        return "ADD" + str(q.n)
+
+
+# 1. def-LOCAL assignment, same name as a module global
+def local_str():
+    zz = "hello"
+    return zz
+
+
+# 2. for-loop target is a local binding too
+def local_for():
+    for it in [1, 2, 3]:
+        pass
+    return "for-done"
+
+
+# 3. a nested if inside a def is STILL def scope
+def local_nested():
+    if True:
+        nn = "nested"
+    return nn
+
+
+# 4. `global` takes the shadowing back — this really does write the module name
+def writes_global():
+    global gv
+    gv = "written"
+
+
+# 5. a def that only READS a global assigned further down must still work —
+#    this is the shape PyAllocModuleGlobals exists for, and the one most at
+#    risk of being broken by fixing the above
+def reads_later():
+    return label
+
+
+zz = V(1)
+p = V(2)
+it = 10
+nn = 20
+gv = 5
+label = "read-ok"
+
+# the shadowed module globals keep their real types
+print(local_str())
+print(zz.n)
+print(zz + p)
+print(local_for())
+print(it + 1)
+print(local_nested())
+print(nn + 1)
+
+# global writes through
+writes_global()
+print(gv)
+
+# and the read-a-later-global shape still resolves
+print(reads_later())
+
+# a control-flow block at module level is NOT a new scope — still harvested
+if True:
+    ctrl = "ctrl-ok"
+print(ctrl)
