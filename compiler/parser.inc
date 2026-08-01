@@ -755,6 +755,10 @@ begin
         Syms[symIdx].PtrElemRec := ResolveNodeRec(ASTLeft[node]);
     end;
   end;
+  { feature-a-typeref-migrate-consumers: every branch above mutates one of
+    TypeKind/RecName/PtrElemTk/PtrElemRec on symIdx; resync SymTR once at the
+    single exit point that follows all of them. }
+  SymSyncTypeRef(symIdx);
 end;
 
 procedure AllocateSymOffset(idx: Integer);
@@ -14644,6 +14648,7 @@ begin
   if eTk = tyRecord then LastTypeRecId := enumRec;   { AllocVar sizes tyRecord by RecSize(LastTypeRecId) }
   eSym := AllocVar('', eTk);
   Syms[eSym].RecName := enumRec;
+  SymSyncTypeRef(eSym);
 
   geCall := GenMakeMethodCall0(GenMakeIdent(contSym, contTk), contClassIdx, 'GetEnumerator');
   assignE := GenMakeAssign(GenMakeIdent(eSym, eTk), geCall);
@@ -14692,6 +14697,7 @@ begin
 
   eSym := AllocVar('', tyClass);
   Syms[eSym].RecName := enumRec;
+  SymSyncTypeRef(eSym);
 
   argSeq := AllocNode(AN_ARG);
   ASTLeft[argSeq] := GenMakeIdent(contSym, Syms[contSym].TypeKind);
@@ -14795,6 +14801,7 @@ begin
   begin
     if SymSetElemTk[setSym] = Ord(tyChar) then Syms[varIdx].TypeKind := tyChar
     else Syms[varIdx].TypeKind := tyInteger;
+    SymSyncTypeRef(varIdx);
   end;
   Expect(tkDo, 'do');
   bodyNode := ParseStatementAST;
@@ -14971,6 +14978,7 @@ begin
     Syms[varIdx].TypeKind := IntToTypeKind(elemTk);
     if (IntToTypeKind(elemTk) = tyRecord) and Syms[contSym].IsArray then
       Syms[varIdx].RecName := Syms[contSym].ElemRecName;
+    SymSyncTypeRef(varIdx);
   end;
 
   Expect(tkDo, 'do');
@@ -15026,6 +15034,7 @@ begin
     if IntToTypeKind(elemTk) = tyRecord then
       Error('for var .. in <implicit-Self record-array field>: inline loop variable not yet supported here — declare the variable explicitly (feature-inline-loop-var-rio)');
     Syms[varIdx].TypeKind := IntToTypeKind(elemTk);
+    SymSyncTypeRef(varIdx);
   end;
 
   Expect(tkDo, 'do');
@@ -15067,6 +15076,7 @@ begin
   begin
     fnSym := AllocVar('', tyClass);
     Syms[fnSym].RecName := fnRec;
+    SymSyncTypeRef(fnSym);
     fnAssign := GenMakeAssign(GenMakeIdent(fnSym, tyClass), contNode);
     fnLoop := ParseForInEnumeratorAST(varIdx, fnSym, fnRec - REC_UCLASS_BASE);
     Result := AllocNode(AN_SEQ);
@@ -15122,6 +15132,7 @@ begin
     begin
       if setElemTk = Ord(tyChar) then Syms[varIdx].TypeKind := tyChar
       else Syms[varIdx].TypeKind := tyInteger;
+      SymSyncTypeRef(varIdx);
     end;
     Expect(tkDo, 'do');
     bodyNode := ParseStatementAST;
@@ -15146,6 +15157,7 @@ begin
     Syms[varIdx].TypeKind := IntToTypeKind(elemTk);
     if (IntToTypeKind(elemTk) = tyRecord) and (ASTKind[contNode] = AN_IDENT) and isArr then
       Syms[varIdx].RecName := Syms[ASTIVal[contNode]].ElemRecName;
+    SymSyncTypeRef(varIdx);
   end;
 
   Expect(tkDo, 'do');
@@ -15167,7 +15179,11 @@ begin
     tyEnum), so backfilling x's type is just tyInteger, mirroring the
     resolution ParseTypeKind already uses for a named enum type
     (feature-inline-loop-var-rio). }
-  if Syms[varIdx].TypeKind = tyAuto then Syms[varIdx].TypeKind := tyInteger;
+  if Syms[varIdx].TypeKind = tyAuto then
+  begin
+    Syms[varIdx].TypeKind := tyInteger;
+    SymSyncTypeRef(varIdx);
+  end;
   Expect(tkDo, 'do');
   bodyNode := ParseStatementAST;
 
@@ -16125,6 +16141,7 @@ begin
     begin
       forcSym := AllocVar('', tyClass);
       Syms[forcSym].RecName := forcRec;
+      SymSyncTypeRef(forcSym);
       forcAssign := GenMakeAssign(GenMakeIdent(forcSym, tyClass), forcNode);
       forcLoop := ParseForInEnumeratorAST(varIdx, forcSym, forcRec - REC_UCLASS_BASE);
       Result := AllocNode(AN_SEQ);
@@ -16818,6 +16835,7 @@ begin
         Expect(tkDo, 'do');
         handlerVar := AllocVar(handlerName, tyClass);
         Syms[handlerVar].RecName := recId;
+        SymSyncTypeRef(handlerVar);
         Inc(ExceptionHandlerParseDepth);
         actionSeq := ParseStatementAST;
         Dec(ExceptionHandlerParseDepth);
@@ -16895,6 +16913,7 @@ begin
   begin
     wTmp := AllocVar('', tyClass);
     Syms[wTmp].RecName := ResolveNodeRec(varNode);
+    SymSyncTypeRef(wTmp);
     wIdent := AllocNode(AN_IDENT);
     ASTIVal[wIdent] := wTmp;
     ASTTk[wIdent] := Ord(tyClass);
@@ -16998,15 +17017,16 @@ begin
     begin
       Syms[idx].IsArray := True;
       Syms[idx].ArrLen := arrHi - arrLo + 1;
+      SymSyncTypeRef(idx);
     end;
-    
+
     if Syms[idx].TypeKind = tyAuto then
     begin
       if ASTKind[valueNode] = AN_DEFAULT then
         Error('cannot infer type from default; specify type explicitly');
       if (LastExprTk = tyUnknown) or (LastExprTk = tyAuto) then
         Error('cannot infer type for auto variable');
-      InferSymTypeFromNode(idx, valueNode);
+      InferSymTypeFromNode(idx, valueNode);   { syncs SymTR internally }
       AllocateSymOffset(idx);
     end;
 
@@ -17040,8 +17060,9 @@ begin
       begin
         Syms[idx].IsArray := True;
         Syms[idx].ArrLen := arrHi - arrLo + 1;
+        SymSyncTypeRef(idx);
       end;
-      
+
       declNode := AllocNode(AN_VAR_DECL);
       ASTIVal[declNode] := idx;
       ASTLeft[declNode] := -1;
@@ -20562,7 +20583,10 @@ begin
 	          LastTypeElemDynDepth := elemDynDepth;  { fixed array of a dyn-array element (consumed + reset by AllocArray) }
 	          idx := AllocArray(names[i], elemTk, arrLo, arrHi);
 	          if elemTk = tyRecord then
+	          begin
 	            Syms[idx].ElemRecName := LastTypeRecId;
+	            SymSyncTypeRef(idx);
+	          end;
 	          if isArrND then
 	          begin
 	            SymArrNDims[idx] := ndCnt;
@@ -20590,12 +20614,14 @@ begin
 	        begin
 	          Syms[idx].RecName := LastTypeRecId;
 	          SymProcSig[idx] := LastTypeProcSig;   { method-pointer record: callable }
+	          SymSyncTypeRef(idx);
 	        end
 	        else if tk = tyPointer then
 	        begin
 	          Syms[idx].PtrElemTk := LastTypePointerElemTk;
 	          Syms[idx].PtrElemRec := LastTypePointerElemRec;
 	          SymProcSig[idx] := LastTypeProcSig;
+	          SymSyncTypeRef(idx);
 	        end
 	        else if tk = tySet then
 	        begin
@@ -21055,7 +21081,11 @@ begin
         end;
         cHi := cLo + cFlatLen - 1;
         cIdx := AllocArray(name, cElemTk, cLo, cHi);
-        if cElemTk = tyRecord then Syms[cIdx].ElemRecName := LastTypeRecId;
+        if cElemTk = tyRecord then
+        begin
+          Syms[cIdx].ElemRecName := LastTypeRecId;
+          SymSyncTypeRef(cIdx);
+        end;
         if cnNDims >= 2 then
         begin
           SymArrNDims[cIdx] := cnNDims;
@@ -21339,6 +21369,7 @@ begin
             (SSLImplementation.Create) dispatch like a var of the type }
           Syms[cIdx].PtrElemTk := LastTypePointerElemTk;
           Syms[cIdx].PtrElemRec := LastTypePointerElemRec;
+          SymSyncTypeRef(cIdx);
         end;
         Expect(tkEq, '=');
         if (cTk <> tyRecord) and (CurTok.Kind = tkIdent) and
@@ -23013,7 +23044,11 @@ begin
               begin
                 if ClassVarCount >= MAX_TYPEALIAS then Error('too many class variables');
                 i := AllocVar('', fTk);
-                if (fTk = tyRecord) or (fTk = tyClass) then Syms[i].RecName := fRec;
+                if (fTk = tyRecord) or (fTk = tyClass) then
+                begin
+                  Syms[i].RecName := fRec;
+                  SymSyncTypeRef(i);
+                end;
                 ClassVarCi[ClassVarCount]   := ci;
                 ClassVarNOff[ClassVarCount] := fldNOffs[fni];
                 ClassVarNLen[ClassVarCount] := fldNLens[fni];
@@ -26034,10 +26069,18 @@ begin
       { method-pointer param ({Code,Data} record, `of object` type): callable —
         Compare(a, b) inside the body must see the signature (fgl QuickSort) }
       SymProcSig[idx] := ptypesProcSig[i];
+    { feature-a-typeref-migrate-consumers: this per-param body has several
+      independent mutation points above (ArrLen/SymDynDepth, ElemType/
+      ElemRecName, RecName, PtrElemTk/PtrElemRec, SymProcSig) — resync once
+      at the loop-body's single exit rather than after each. }
+    SymSyncTypeRef(idx);
   end;
   { Wire Self's RecName so field lookups resolve against the owner class }
   if (methOwnerCi >= 0) and not isStaticMethod then
+  begin
     Syms[Procs[procIdx].Params[0].SymIdx].RecName := methOwnerRec;
+    SymSyncTypeRef(Procs[procIdx].Params[0].SymIdx);
+  end;
 
   { Return value slot }
   if isFunc then
