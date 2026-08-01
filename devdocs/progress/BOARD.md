@@ -33,7 +33,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (175)
+## backlog (174)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -80,7 +80,6 @@ _none_
 | decide-abi-portable-vs-target-split | A | 50 | decide |  | — |
 | decide-class-namespace-scoping | U | 65 | decide | Decide: how should two libraries be allowed to export the same class name? | — |
 | decide-ipv6-dualstack-and-aaaa-ordering | U | 40 | decide | Policy: IPV6_V6ONLY on a :: listener, and which address wins when a host has both A and AAAA | — |
-| decide-nilpy-hasattr-per-instance-semantics | U | 35 | decide | decide: should NilPy's hasattr answer per-INSTANCE or per-CLASS? | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-pascal-uses-campaign-scope | U | 55 | decide | Decide: how should the `uses`-is-transitive fix be scoped and sequenced? | — |
 | decide-track-t-autopin-criteria | U | 55 | decide | What criteria justify Track T auto-pinning a stable binary? | — |
@@ -279,7 +278,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (26)
+## decided (27)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -296,6 +295,7 @@ _none_
 | decide-nilpy-bigint-vs-64bit-cells | U | 40 | decide | decide: NilPy integer semantics — arbitrary precision vs 64-bit (uforth needs one) | — |
 | decide-nilpy-closure-model | A | 50 | decide |  | — |
 | decide-nilpy-gui-tk-vs-pcl | A | 25 | decide | RESOLVED 2026-07-21: keep the real Tcl/Tk embed on Linux (works); Windows = opt-in tk emulate/wrap via a platform include, later. Follow-up: feature-pcl-tk-windows-compat | — |
+| decide-nilpy-hasattr-per-instance-semantics | U | 35 | decide | decide: should NilPy's hasattr answer per-INSTANCE or per-CLASS? | — |
 | decide-nilpy-int-promotion-default | U | 60 | decide | Decide: should NilPy `int` bindings default to promotable, not native int64? | — |
 | decide-nilpy-mixed-type-operand-policy | U | 60 | decide | Decide: what should NilPy do when an operator gets operand types Python rejects? | — |
 | decide-nilpy-optional-int-none-vs-zero | U | 60 | decide | decide: NilPy Optional[int] — None must be distinct from 0 | — |
@@ -3018,7 +3018,6 @@ _none_
 - [p 35] [N] bug-nilpy-list-sort-method-missing
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
 - [p 35] [N] bug-nilpy-pypow-integer-overflow-does-not-promote
-- [p 35] [U] decide-nilpy-hasattr-per-instance-semantics
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [A] feature-nested-routine-fixed-array-capture
 - [p 35] [A] feature-nilpy-arc-cross-parity

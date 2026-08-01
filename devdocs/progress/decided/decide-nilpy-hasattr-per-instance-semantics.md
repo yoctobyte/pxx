@@ -2,7 +2,39 @@
 track: U
 prio: 35
 type: decide
+status: resolved
+resolved: 2026-08-01
 ---
+
+## DECIDED 2026-08-01 — option 2, scoped by whole-program usage analysis
+
+**User's call: 2**, real per-instance "assigned" tracking — but not blanket
+cost on every field of every object. pxx is a whole-program compiler, so it
+can scan every `hasattr` call site first and only instrument what's
+actually reachable:
+
+1. Enumerate every `hasattr(obj, name)` call site in the program.
+2. Resolve `obj`'s static class per site. The common case (`hasattr(self,
+   ...)` inside a method) is unambiguous at compile time. A genuinely
+   ambiguous target (a base-class-typed value with several possible
+   subclasses, a `Variant`) falls back to tracking every class in that
+   ambiguity set — still bounded by what `hasattr` can reach, never the
+   whole program.
+3. Resolve `name` per site. A string literal (the common case) scopes
+   tracking to that one field. A non-constant name expression falls back to
+   tracking every field of the resolved class(es).
+4. Only classes/fields reached by step 2+3 get a per-instance "assigned"
+   bit and the extra write at assignment time. Everything else keeps
+   today's exact codegen — zero-cost unless `hasattr` is actually used on
+   it.
+
+Since `hasattr` is rare (4 sites in the current corpus), most programs pay
+nothing at all. Full CPython-correct semantics, cost paid only where
+exercised. Gate unchanged from the ticket's own text: `make test-nilpy` +
+self-host byte-identical + a `.npy` diffed against CPython (the uforth
+first-time-init idiom as the anchor case), plus confirm a class NOT reached
+by any `hasattr` call site compiles identically to today (the zero-cost
+claim, not just assumed).
 
 # decide: should NilPy's hasattr answer per-INSTANCE or per-CLASS?
 
