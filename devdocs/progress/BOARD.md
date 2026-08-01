@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 
@@ -92,7 +93,6 @@ _none_
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
 | feature-a-promoint-variant-esp-targets | A | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
-| feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-esp-conformance-coverage | C | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
 | feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
@@ -206,6 +206,7 @@ _none_
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
+| regression-cascade-25678cbdd57c | T | 70 | regression | regression CASCADE: 60 jobs newly red at 25678cbdd57c (auto-filed by twatch) | — |
 | regression-cascade-b45c759f9e65 | T | 70 | regression | regression CASCADE: 15 jobs newly red at b45c759f9e65 (auto-filed by twatch) | — |
 | regression-optdiff-shard0-6 | T | 70 | regression | regression: optdiff#shard0/6 red at 0ceeeaa004dc (auto-filed by twatch) | — |
 | regression-optdiff-shard2-6 | T | 70 | regression | regression: optdiff#shard2/6 red at d87301219197 (auto-filed by twatch) | — |
@@ -2897,6 +2898,7 @@ _none_
 - [p 75] [T] bug-t-optdiff-shard-identity-is-positional
 - [p 70] [T] bug-t-full-tier-wipes-other-tiers-job-status
 - [p 70] [T] bug-t-optdiff-positional-sharding-migrates-job-identity
+- [p 70] [T] regression-cascade-25678cbdd57c
 - [p 70] [T] regression-cascade-b45c759f9e65
 - [p 70] [T] regression-optdiff-shard0-6
 - [p 70] [T] regression-optdiff-shard2-6
@@ -3000,7 +3002,6 @@ _none_
 - [p 40] [U] decide-ipv6-dualstack-and-aaaa-ordering
 - [p 40] [U] decide-nilpy-transitive-nested-def-capture
 - [p 40] [A] feature-a-promoint-variant-esp-targets
-- [p 40] [A] feature-a-typeref-migrate-consumers
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
 - [p 40] [N] feature-nilpy-map-and-filter-over-a-lambda
