@@ -37,11 +37,12 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (182)
+## backlog (183)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
+| bug-a-fpc-seed-drift-pymaketruthy-forward-wrong-file | A | 60 | bug | FPC cold-start broken again: PyMakeTruthy is used in parser.inc but forward-declared in pyparser.inc, which is included 14 lines later. Verified one-line-move fix. | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-b-floattostrsig-caps-at-15-significant-digits | B | 65 | bug | `FloatToStrSig` caps at 15 significant digits, so no double round-trips | — |
 | bug-c-uses-path-basename-collides-with-enclosing-unit-name | A | 35→65 | bug | path-form `uses './x.c'` collides with the enclosing unit's OWN name | — |
@@ -2961,6 +2962,7 @@ _none_
 - [p 65] [B] bug-b-floattostrsig-caps-at-15-significant-digits
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
+- [p 60] [A] bug-a-fpc-seed-drift-pymaketruthy-forward-wrong-file
 - [p 60] [N] bug-nilpy-dunders-not-dispatched-through-containers
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [N] bug-nilpy-one-line-def-and-class-bodies-do-not-parse
