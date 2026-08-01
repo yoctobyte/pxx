@@ -2037,6 +2037,7 @@ begin
       Syms[tmpSym].RecName := ASTRight[argAST]
     else
       Syms[tmpSym].RecName := REC_NONE;   { generic owned object; PXXObjRelease is magic-guarded }
+    SymSyncTypeRef(tmpSym);
     value := IRLowerAST(argAST);
     arcCall := FindProc('PXXObjRelease');
     if arcCall >= 0 then
@@ -7704,6 +7705,7 @@ begin
           SymDynDepth[dynLenTmp] := 1;
           Syms[dynLenTmp].ElemType := ProcRetElemTk[dynLenPi];
           Syms[dynLenTmp].ElemRecName := ProcRetElemRec[dynLenPi];
+          SymSyncTypeRef(dynLenTmp);
           callVal := IRLowerAST(ASTLeft[item]);
           IRAppend(IR_STORE_SYM, dynLenTmp, callVal, -1, 0, Ord(tyPointer));
           value := IRAppend(IR_LEA, dynLenTmp, -1, -1, 0, Ord(tyPointer));
@@ -8330,7 +8332,11 @@ begin
       end;
       if argTk = tyRecord then LastTypeRecId := ResolveNodeRec(ASTLeft[pairNode]);
       varIdx := AllocVar('', argTk);
-      if argTk = tyRecord then Syms[varIdx].RecName := LastTypeRecId;
+      if argTk = tyRecord then
+      begin
+        Syms[varIdx].RecName := LastTypeRecId;
+        SymSyncTypeRef(varIdx);
+      end;
       { Managed/aggregate result temp: the per-arm AN_ASSIGN delegation below
         releases the dest's old managed fields before copy, so the temp must be
         nil-inited (allocated post-prologue) — same rule as other hidden temps. }
