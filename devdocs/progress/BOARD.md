@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-t-optdiff-shard-identity-is-positional | T | 75 | bug | optdiff jobs are identified by shard index, so adding one test file moves a failure to a new shard and manufactures a fresh NEW-RED + ticket | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | bug-c-uses-path-basename-collides-with-enclosing-unit-name |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
@@ -37,7 +38,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (188)
+## backlog (187)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -90,7 +91,6 @@ _none_
 | bug-t-gate-sh-contention-check-double-counts-zero | T | 25 | bug | tools/gate.sh: the watcher-contention check prints a shell error on every run because `pgrep -c` emits 0 AND exits 1, so the `\|\| echo 0` fallback appends a second 0 | — |
 | bug-t-gate-sh-pgrep-fc-double-zero-integer-error | T | 25 | bug | tools/gate.sh: pgrep -fc prints 0 AND exits 1, so `\|\| echo 0` makes others=\"0\\n0\" and every gate run emits a bogus 'integer expression expected' error | — |
 | bug-t-host-dependent-test-assertions-cross-distro | T | 70 | bug | Watcher and dev boxes run different distros, so tests that bake in host state (library versions, allocator behaviour, the host CPython) go permanently RED on the watcher while passing locally — and read as watcher bugs | — |
-| bug-t-optdiff-shard-identity-is-positional | T | 75 | bug | optdiff jobs are identified by shard index, so adding one test file moves a failure to a new shard and manufactures a fresh NEW-RED + ticket | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | bug-tstate-xeon-cross-jobs-red-missing-corpora | T | 50 | bug | tstate: xeon's red set is PART missing-corpora and PART a real i386 regression of mine (now reverted) — the corpora half still stands | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -2950,7 +2950,6 @@ _none_
 - [p 80] [A] bug-a-overload-resolution-ignores-class-identity (unblocks 1)
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 75] [N] bug-nilpy-typed-const-import-reads-zero
-- [p 75] [T] bug-t-optdiff-shard-identity-is-positional
 - [p 70] [N] bug-nilpy-def-local-assignment-widens-module-global-to-variant
 - [p 70] [N] bug-nilpy-list-ordering-compares-heap-addresses
 - [p 70] [N] bug-nilpy-static-typed-operands-skip-mixed-type-guard
