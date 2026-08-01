@@ -6221,19 +6221,27 @@ begin
             (ci = FindUClass('TPyBytes'));
 end;
 
-{ Does proc mpi declare a parameter with this name? Slot 0 is Self on a method,
-  so the scan starts at 1 — `self=` is not bindable by name. }
-function PyProcParamNamed(mpi: Integer; const nm: AnsiString): Boolean;
+{ Does proc mpi declare a parameter named nm, starting the scan at firstParam?
+  firstParam is 1 on a method (slot 0 is Self, not bindable by name) and 0 on a
+  plain/unit-qualified proc (no hidden receiver). }
+function PyProcParamNamedFrom(mpi: Integer; const nm: AnsiString; firstParam: Integer): Boolean;
 var i: Integer;
 begin
   Result := False;
   if mpi < 0 then Exit;
-  for i := 1 to Procs[mpi].ParamCount - 1 do
+  for i := firstParam to Procs[mpi].ParamCount - 1 do
     if CaseEqual(Procs[mpi].Params[i].Name, nm) then
     begin
       Result := True;
       Exit;
     end;
+end;
+
+{ Does proc mpi declare a parameter with this name? Slot 0 is Self on a method,
+  so the scan starts at 1 — `self=` is not bindable by name. }
+function PyProcParamNamed(mpi: Integer; const nm: AnsiString): Boolean;
+begin
+  Result := PyProcParamNamedFrom(mpi, nm, 1);
 end;
 
 { `<class expr>.name(args)` where the receiver's class is KNOWN — the suffix a
@@ -6515,7 +6523,25 @@ begin
     end;
 end;
 
-function PyPromoteOverloadByKw(ci, mmi: Integer; const mname: AnsiString): Integer;
+{ Locate the '(' that opens the call the parser is currently sitting at, from
+  whichever of the two conventions this file uses to reach that point: CurTok
+  already ON the '(', or CurTok the call/method NAME with the '(' one token
+  ahead (mirrors the same dual check CountCallArgsAhead already relies on).
+  Returns the '(' token's own index, or -1 when there is no call here (a bare
+  name read, a property, `obj.field` with no following parens…) — every
+  PromoteByKw* helper below no-ops on -1, so callers can pass this through
+  unconditionally instead of re-deriving parser state by hand at each site. }
+function PyKwNamesTokPos: Integer;
+begin
+  if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+    Result := TokPos
+  else if CurTok.Kind = tkLParen then
+    Result := TokPos - 1
+  else
+    Result := -1;
+end;
+
+function PyPromoteOverloadByKwAt(ci, mmi, parenTok: Integer; const mname: AnsiString): Integer;
 { Pick the same-class OVERLOAD a keyword argument names. `Widget.bind(seq,
   script)` and `Widget.bind(seq, callback, add)` are two methods of one name, and
   FindUMeth hands back whichever was declared first; a call written
@@ -6523,12 +6549,14 @@ function PyPromoteOverloadByKw(ci, mmi: Integer; const mname: AnsiString): Integ
   keyword identifies the intended signature, exactly as it does for the
   across-classes promotion in PyParseVariantMethod.
 
-  CurTok is the '(' of the call. Returns the better mmi, or the one given. }
+  parenTok is the call's '(' token index (PyKwNamesTokPos, or -1 for "no call
+  here" — a no-op). Returns the better mmi, or the one given. }
 var k, depth, di, cand, curr: Integer; pname: AnsiString;
 begin
   Result := mmi;
-  if (ci < 0) or (mmi < 0) or (CurTok.Kind <> tkLParen) then Exit;
-  k := TokPos; depth := 1;
+  if (ci < 0) or (mmi < 0) or (parenTok < 0) or (parenTok >= TokCount) or
+     (Tokens[parenTok].Kind <> tkLParen) then Exit;
+  k := parenTok + 1; depth := 1;
   while (k < TokCount) and (depth > 0) do
   begin
     if Tokens[k].Kind = tkLParen then Inc(depth)
@@ -6556,6 +6584,60 @@ begin
         end;
         if curr >= 0 then curr := UClsParent[curr];
       end;
+    end;
+    Inc(k);
+  end;
+end;
+
+function PyPromoteOverloadByKw(ci, mmi: Integer; const mname: AnsiString): Integer;
+{ CurTok is the '(' of the call — the original entry point, kept for the two
+  call sites that already have CurTok positioned there. New call sites should
+  prefer PyPromoteOverloadByKwAt with PyKwNamesTokPos, which does not require
+  a particular CurTok position. }
+begin
+  if CurTok.Kind <> tkLParen then begin Result := mmi; Exit; end;
+  Result := PyPromoteOverloadByKwAt(ci, mmi, TokPos - 1, mname);
+end;
+
+function PyPromoteProcOverloadByKwAt(procIdx, firstParam, parenTok: Integer): Integer;
+{ Generalization of PyPromoteOverloadByKwAt to the free / unit-qualified PROC
+  table (Procs[]/ProcCount) rather than one class's UMeth set —
+  `html.escape(s, quote=False)` resolved to the 1-argument `escape`
+  (FindProc/FindProcInUnit hands back whichever overload was declared first),
+  and the 1-argument form has no `quote`, even though the 2-argument sibling
+  does (bug-nilpy-keyword-arg-vs-overload-set).
+
+  Sibling search is scoped to the SAME UNIT as procIdx — that is what makes
+  two Procs[] entries one Pascal overload SET in the first place, and it keeps
+  this from promoting into an unrelated same-named routine from a different
+  unit (a real hazard: builtin/RTL overloads collide by name across units).
+  parenTok is the call's '(' token index (PyKwNamesTokPos); -1 is a no-op.
+  Returns the same procIdx unless a sibling declares a keyword the call
+  actually uses and procIdx does not. }
+var k, depth, cand, unitIdx: Integer; pname: AnsiString;
+begin
+  Result := procIdx;
+  if (procIdx < 0) or (parenTok < 0) or (parenTok >= TokCount) or
+     (Tokens[parenTok].Kind <> tkLParen) then Exit;
+  unitIdx := ProcUnitIdx[procIdx];
+  k := parenTok + 1; depth := 1;
+  while (k < TokCount) and (depth > 0) do
+  begin
+    if Tokens[k].Kind = tkLParen then Inc(depth)
+    else if Tokens[k].Kind = tkRParen then Dec(depth)
+    else if (depth = 1) and (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount) and
+            (Tokens[k + 1].Kind = tkAssign) and
+            (not PyProcParamNamedFrom(Result, GetTokenStr(k), firstParam)) then
+    begin
+      pname := GetTokenStr(k);
+      for cand := 0 to ProcCount - 1 do
+        if (cand <> Result) and (ProcUnitIdx[cand] = unitIdx) and
+           CaseEqual(Procs[cand].Name, Procs[Result].Name) and
+           PyProcParamNamedFrom(cand, pname, firstParam) then
+        begin
+          Result := cand;
+          Break;
+        end;
     end;
     Inc(k);
   end;
@@ -8232,6 +8314,9 @@ begin
     mmi := FindUMeth(ci, PyMethodName(name));
     if mmi >= 0 then
     begin
+      { keyword-name-aware overload re-target — `super().__init__(x, flag=1)`
+        (bug-nilpy-keyword-arg-vs-overload-set); CurTok is the '(' here. }
+      mmi := PyPromoteOverloadByKw(ci, mmi, PyMethodName(name));
       mpi := UMthProc_[mmi];
       selfArg := AllocNode(AN_ARG);
       ASTLeft[selfArg] := PyMakeIdent(symIdx);

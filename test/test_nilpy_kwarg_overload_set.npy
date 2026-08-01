@@ -1,0 +1,20 @@
+# A keyword argument used to resolve against the ONE overload the call site
+# had already picked (the first same-named routine found), so it failed
+# whenever the parameter it names only exists on a SIBLING arity --
+# `html.escape("it's", quote=False)` and the tkinter `configure()` facade both
+# hit this from opposite directions. Fixed by pre-scanning the call's `ident=`
+# pairs and letting them steer OVERLOAD SELECTION, before argument parsing.
+# bug-nilpy-keyword-arg-vs-overload-set
+import kwarg_overload_unit as ko
+
+# unit-qualified free-function overload set (the html.escape shape)
+print(ko.render("hi", False))
+print(ko.render("hi", loud=False))
+print(ko.render("hi", loud=True))
+print(ko.render("hi"))
+
+t = ko.TThing()
+# method overload set (the tkinter configure() shape)
+t.paint("a raw string")
+t.paint(color="red", width=3)
+t.paint(width=9)

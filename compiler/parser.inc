@@ -888,6 +888,9 @@ function PyGetOrMakeCallableWrapper(realPi: Integer): Integer; forward; { Nil Py
 function PyScalarWrappableRetType(tk: TTypeKind): Boolean; forward; { Nil Python: is tk a genuine scalar/string result worth wrapping (pyparser.inc) }
 function PyMakeVariantField(baseNode: Integer; const fname: AnsiString; var tk: TTypeKind; var recName: Integer): Integer; forward; { Nil Python obj.field on a VARIANT receiver (pyparser.inc) }
 function PyKwArgIndex(mpi, firstParam: Integer): Integer; forward; { Nil Python `name=expr` call argument (pyparser.inc) }
+function PyKwNamesTokPos: Integer; forward; { Nil Python: '(' token index of the call at the current parse position, or -1 (pyparser.inc) }
+function PyPromoteOverloadByKwAt(ci, mmi, parenTok: Integer; const mname: AnsiString): Integer; forward; { Nil Python: pick the UMeth overload a keyword argument names (pyparser.inc) }
+function PyPromoteProcOverloadByKwAt(procIdx, firstParam, parenTok: Integer): Integer; forward; { Nil Python: pick the Procs[] overload a keyword argument names (pyparser.inc) }
 procedure PyBindKwArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer); forward; { Nil Python keyword-argument reorder (pyparser.inc) }
 procedure PyPackStarArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer); forward; { Nil Python `*args`/`**kwargs` call-site packing (pyparser.inc) }
 procedure PyParseStarMethodArgs(mpi, mcallNode: Integer; var mlastArg, mai: Integer); forward; { Nil Python varargs METHOD call (pyparser.inc) }
@@ -5598,6 +5601,11 @@ begin
         mci := recName - REC_UCLASS_BASE;
         { overload-aware: pick the entry matching the call's arg count }
         mmi := FindUMethOverloadAhead(mci, fieldName, CountCallArgsAhead);
+        { …and re-target by KEYWORD name too — arity alone still picks the
+          first same-arity overload, which need not be the one declaring the
+          name a `key=expr` argument uses (bug-nilpy-keyword-arg-vs-overload-set) }
+        if isNilPy and (mmi >= 0) then
+          mmi := PyPromoteOverloadByKwAt(mci, mmi, PyKwNamesTokPos, fieldName);
       end;
 
       { FPC's TObject.MethodAddress(name) / MethodName(addr): published-method RTTI,
@@ -8637,7 +8645,11 @@ begin
           begin
             mci := baseRec - REC_UCLASS_BASE;
             if FindUProp(mci, fieldName) < 0 then
+            begin
               mmi := FindUMethOverloadAhead(mci, fieldName, CountCallArgsAhead);
+              if isNilPy and (mmi >= 0) then
+                mmi := PyPromoteOverloadByKwAt(mci, mmi, PyKwNamesTokPos, fieldName);
+            end;
           end;
           if (mmi >= 0) and (mci >= 0) then EnforceMethVis(mmi, fieldName);
           if (mmi >= 0) and (mci >= 0) and UClsIsInterface[mci] then
@@ -12350,6 +12362,11 @@ begin
       else if (procIdx >= 0) and (Procs[procIdx].IsFunc or isNilPy) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next;
+        { keyword-name-aware overload re-target — `html.escape(s, quote=False)`
+          (bug-nilpy-keyword-arg-vs-overload-set): FindProc/FindProcInUnit above
+          hands back whichever overload was declared first; a sibling in the
+          same unit may be the one that actually declares the keyword used. }
+        if isNilPy then procIdx := PyPromoteProcOverloadByKwAt(procIdx, 0, PyKwNamesTokPos);
         Expect(tkLParen, '(');
         argsHead := -1;
         lastArg := -1;
@@ -19016,6 +19033,9 @@ begin
         if (procIdx >= 0) and (Tokens[TokPos].Kind = tkLParen) then
         begin
           Next;
+          { keyword-name-aware overload re-target, statement-position twin of
+            the expression-position fix above (bug-nilpy-keyword-arg-vs-overload-set) }
+          if isNilPy then procIdx := PyPromoteProcOverloadByKwAt(procIdx, 0, PyKwNamesTokPos);
           Expect(tkLParen, '(');
           argsHead := -1;
           lastArg := -1;

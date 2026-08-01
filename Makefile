@@ -677,6 +677,10 @@ test-nilpy: $(COMPILER)
 	@# a unit-level proc called qualified can omit a trailing defaulted parameter
 	./$(COMPILER) test/test_nilpy_qualified_proc_omitted_default.npy /tmp/test_nilpy_qualdefault26
 	test "$$(/tmp/test_nilpy_qualdefault26)" = "$$(printf 'a 0\nb 5\nc 0 False\nd 7 True')"
+	@# a keyword argument resolves against the whole OVERLOAD SET, not just the
+	@# first same-named routine found (unit-qualified proc and class method)
+	./$(COMPILER) test/test_nilpy_kwarg_overload_set.npy /tmp/test_nilpy_kwovlset26
+	test "$$(/tmp/test_nilpy_kwovlset26)" = "$$(printf 'hi\nhi\nHI\nhi\nraw: a raw string\nnamed color=red width=3\nnamed color= width=9')"
 	@# a lambda value stored in a name and CALLED, not just passed around
 	./$(COMPILER) test/test_nilpy_lambda_real_value.npy /tmp/test_nilpy_lambdareal26
 	test "$$(/tmp/test_nilpy_lambdareal26)" = "$$(printf '6\n12')"
