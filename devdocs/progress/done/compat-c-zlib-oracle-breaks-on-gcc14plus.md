@@ -91,3 +91,6 @@ This is the second category the cutover comparison was meant to catch: a test
 that was **never host-portable**, silently green only because every watcher so
 far ran an older toolchain. It is not an xeon environment gap and installing
 packages will not fix it.
+
+## Log
+- 2026-08-01 — resolved, commit HEAD.
