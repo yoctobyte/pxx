@@ -178,7 +178,8 @@ begin
 end;
 
 function PyBuildComp(targetSym, exprStart: Integer): Integer; forward; { comprehension core (pyparser.inc) }
-function PyMakeTruthy(n: Integer): Integer; forward; { defined below in this file, used above its definition (regression-fpc-seed-drift-b1976-stale) }
+{ PyMakeTruthy is forward-declared in parser.inc (included FIRST): the bool()
+  arm there calls it too, and FPC rejects a second forward. }
 function PyMethodName(const name: AnsiString): AnsiString; forward; { ditto }
 { PyMakeIdent and PyHiddenName are likewise forward-declared in parser.inc
   now (same duplicate-forward issue as PyCallMeth1 below). }

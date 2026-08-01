@@ -854,6 +854,7 @@ function PyMakeTupleFrom(firstNode: Integer): Integer; forward;   { build a tupl
 function PyBareGenExprAhead: Boolean; forward;   { bare genexpr as a call arg (pyparser.inc) }
 function PyStarForwardCall(procIdx, listNode, dictNode: Integer): Integer; forward;   { *args/**kwargs forwarding call (pyparser.inc) }
 function PyReprContainer(n: Integer): Integer; forward;   { repr() of a container node (pyparser.inc) }
+function PyMakeTruthy(n: Integer): Integer; forward;   { Nil Python truthiness, shared by bool()/if/not (pyparser.inc) }
 function AIntToStr(n: Integer): AnsiString; forward;   { real body in aparser.inc, included after pyparser.inc uses it (regression-fpc-seed-drift-b1976-stale) }
 function PyRawName(off, len: Integer): AnsiString; forward;           { name text from the token pool (pyparser.inc) }                                   { Nil Python None literal node (pyparser.inc) }
 function PyNodeIsPyList(n: Integer): Boolean; forward;                   { Nil Python: node typed TPyList? (pyparser.inc) }
