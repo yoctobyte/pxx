@@ -2,6 +2,7 @@
 track: N
 prio: 60
 type: bug
+blocked-by: [decide-nilpy-int-promotion-default]
 ---
 
 # Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently
@@ -123,3 +124,39 @@ correctly — and truncates on the way out, through every route:
 That last row is what identifies it: pyeval holds the value correctly, so this
 is not an interpreter bug and there is no separate pyeval ticket for it. The
 32-bit field is the whole story, and every host-bridge path merely reports it.
+
+## 2026-08-01 (Track N, claude-N2) — parked on the existing Track U decision
+
+Picked this up to fix. Before touching `pyparser.inc`, checked whether the
+"probably wants a Track U call" note in this ticket had already been acted on:
+it has — `[[decide-nilpy-int-promotion-default]]` exists in
+`devdocs/progress/backlog/`, states this exact fork (the three options above,
+verbatim), and is **still unresolved** (sitting in `backlog/`, not `decided/`).
+
+Per the project's Track U rule ("escalate, don't guess" — a design/default
+call that can't be settled from the code or a sane default gets filed and left
+for the user, not picked by the agent), I am not implementing any of the three
+options unilaterally:
+
+- Option 1 (default every NilPy `int` to promotable) is a real perf-relevant
+  default change across all NilPy integer code — exactly the kind of call the
+  decide-ticket says needs a benchmark-backed decision, not an agent's guess.
+- Option 3 (propagate promotability through the assignment graph) is
+  containable inside `pyparser.inc` (Track N's own files, no Track A ask) and
+  would fix the "grows via assignment from a promotable expr" shape, but the
+  decide-ticket is explicit that it does **not** close the ticket's headline
+  case (`n = 1; n = n * 2` growing via native arithmetic alone) — landing a
+  partial fix here risks the ticket reading "fixed" when it isn't, and
+  pre-empts whichever option the user actually picks (1 supersedes 3 entirely).
+- Option 2 (runtime promote-on-overflow) needs a way to re-type a live binding
+  mid-lifetime, which nothing in the current model supports — bigger than a
+  Track N-scoped change regardless.
+
+Did NOT touch `compiler/pyparser.inc`, `compiler/pylib.pas`, or any promotable-
+int runtime machinery. No code changes in this session. Moving this ticket
+`working/` → `blocked/` (status = "needs a user decision", per
+`devdocs/progress/README.md`) with `blocked-by:
+decide-nilpy-int-promotion-default` — it stays blocked until that ticket
+resolves, at which point re-file the resulting work into Track N (or Track A,
+if the chosen option needs new IR/symtab machinery beyond what
+`feature-a-promotable-int` already has).
