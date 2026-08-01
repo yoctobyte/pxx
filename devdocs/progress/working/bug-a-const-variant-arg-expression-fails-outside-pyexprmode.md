@@ -68,6 +68,3 @@ Scoped as its own ticket since it touches the shared Pascal/NilPy binop/call
 parsing in `parser.inc` at several sites and needs the self-host gate;
 deliberately not attempted inline while sweeping for the set/dict-operator fix
 (bug-nilpy-set-and-dict-operators-do-raw-pointer-arithmetic).
-
-## Log
-- 2026-08-01 — resolved, commit 05b8ce4c5.
