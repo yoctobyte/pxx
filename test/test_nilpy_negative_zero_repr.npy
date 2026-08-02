@@ -1,0 +1,28 @@
+# bug-nilpy-float-print-loses-precision-vs-cpython, item 1 of the 2026-08-02 sweep
+#
+# `print(-0.0)` printed `0.0`. Not a rounding difference — a dropped IEEE 754
+# sign bit, so the value was exact and only the text was wrong. FloatToStr drops
+# it, and a comparison cannot detect it either, since `-0.0 == 0.0` is True; the
+# sign has to be read back from the bits.
+#
+# The other two divergences that sweep found — no scientific-notation threshold
+# (`1e-05` printed as `0.00001`), and inexact digits at extreme exponents — are
+# NOT fixed and stay on that ticket. The second of those needs shortest-
+# round-trip digit generation, which is a different order of work.
+
+print(-0.0)
+print(0.0)
+print(float("-0.0"))
+
+# the sign must survive every printing route, not just the direct one
+print(str(-0.0), str(0.0))
+print(f"{-0.0} {0.0}")
+print([-0.0, 0.0, 1.0])
+print({"z": -0.0})
+
+# ...and must not appear where it does not belong
+print(1.5, -1.5, 0.5, -0.5)
+print(-0.0 + 0.0, 0.0 - 0.0)
+
+# equality is unaffected: IEEE says -0.0 == 0.0
+print(-0.0 == 0.0, 0.0 == 0.0)

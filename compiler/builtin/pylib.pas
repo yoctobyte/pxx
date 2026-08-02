@@ -7521,8 +7521,21 @@ end;
   variant tag being a float before routing here
   (bug-nilpy-inf-and-nan-print-pascal-spelled). }
 function PyFloatStr(d: Double): AnsiString;
+var bits: Int64;
 begin
   Result := FloatToStr(d);
+  { NEGATIVE ZERO keeps its sign in Python: `print(-0.0)` is `-0.0`, and so is
+    `float("-0.0")`. FloatToStr drops it, so the sign bit is read back from the
+    IEEE 754 bits directly — a comparison cannot do this, since -0.0 = 0.0 is
+    True. Not a rounding difference: the value is exact either way, only the
+    printed text was wrong
+    (bug-nilpy-float-print-loses-precision-vs-cpython, item 1 of the
+    2026-08-02 sweep). }
+  if d = 0 then
+  begin
+    Move(d, bits, 8);
+    if bits <> 0 then Result := '-' + Result;
+  end;
   if Result = 'Inf' then Result := 'inf'
   else if Result = '-Inf' then Result := '-inf'
   else if (Result = 'Nan') or (Result = 'NaN') then Result := 'nan'
