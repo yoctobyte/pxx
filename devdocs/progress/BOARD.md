@@ -43,7 +43,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (204)
+## backlog (205)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -88,6 +88,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-nested-for-comprehension-not-supported | N | 45 | bug | A comprehension with TWO for-clauses — [c for r in rows for c in r] — fails with 'undefined variable (c)'; the flatten idiom is unavailable | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
+| bug-nilpy-print-stringifies-container-args-eagerly | N | 45 | bug | print() converts a container argument to text as it evaluates it, not after all arguments are evaluated — so `print(xs, xs.pop(), xs)` shows the list before AND after the pop. A user function with the identical shape is correct | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pypow-integer-overflow-does-not-promote | N | 35 | bug | `pypow_v`'s integer path silently wraps past 64 bits instead of promoting | — |
 | bug-nilpy-range-negative-runtime-step-yields-empty | N | 55 | bug | `range(a, b, s)` with a NEGATIVE step passed at runtime yields an empty range | — |
@@ -1711,6 +1712,7 @@ lives in git, not in a timestamp._
 - [p 45] [N] bug-nilpy-missing-builtins-step-slicing-range-into-list
 - [p 45] [N] bug-nilpy-nested-for-comprehension-not-supported
 - [p 45] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
+- [p 45] [N] bug-nilpy-print-stringifies-container-args-eagerly
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [T] bug-t-watcher-dev-contention-false-newred
 - [p 45] [A] chore-makefile-testtmp-parameterize
