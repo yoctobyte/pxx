@@ -509,6 +509,8 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_param_defaults_nonconstant26 | diff -u test/test_nilpy_param_defaults_nonconstant.expected -
 	./$(COMPILER) test/test_nilpy_method_param_defaults.npy /tmp/test_nilpy_method_param_defaults26
 	/tmp/test_nilpy_method_param_defaults26 | diff -u test/test_nilpy_method_param_defaults.expected -
+	! ./$(COMPILER) test/test_nilpy_dataclass_expr_default_fail.npy /tmp/test_nilpy_dcexpr26 > /tmp/test_nilpy_dcexpr.log 2>&1
+	grep -q "dataclass field default must be" /tmp/test_nilpy_dcexpr.log
 	./$(COMPILER) test/test_nilpy_class_attr_hoist_leak.npy /tmp/test_nilpy_class_attr_hoist_leak26
 	/tmp/test_nilpy_class_attr_hoist_leak26 | diff -u test/test_nilpy_class_attr_hoist_leak.expected -
 	./$(COMPILER) test/test_nilpy_annotated_class_attribute.npy /tmp/test_nilpy_annotated_class_attribute26

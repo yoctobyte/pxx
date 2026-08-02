@@ -15465,6 +15465,22 @@ begin
           else Error('Nil Python: unsupported dataclass field default (scalar literal only)');
         end;
         Inc(j);
+        { ...and the default must END here. Without this the scalar path claimed
+          the FIRST token and the rest of the line was skipped in silence, so
+          `x: int = 2 + 3` compiled and the field held 2 — a wrong VALUE, which
+          is worse than the refusal the neighbouring arms already give for the
+          forms they cannot take. Third sighting of this shape in one day: the
+          parameter-default path claimed the `1` of `b=1+2`, and the class-
+          attribute pre-pass claimed the `2` of `g = 2 + 3`. Both are fixed by
+          EVALUATING the expression; a dataclass default cannot follow yet
+          because it travels as a folded constant in the PyDc* tables that build
+          the generated ctor — feature-nilpy-dataclass-expression-field-default. }
+        if (j < bodyEnd) and
+           not (Tokens[j].Kind in [tkNewline, tkDedent, tkEOF]) then
+          Error('Nil Python: a dataclass field default must be a scalar literal, '
+                + 'field(default_factory=list/dict) or a zero-arg lambda — an '
+                + 'expression default is not evaluated, and silently using only '
+                + 'its first token would be worse than refusing it');
       end;
       if (defKind = PYDC_INT) and (tk = tyDouble) then
       begin
