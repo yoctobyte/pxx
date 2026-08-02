@@ -393,6 +393,16 @@ var i, depth: Integer;
 begin
   Result := False;
   if CurTok.Kind <> tkLParen then Exit;
+  { `()` — the EMPTY tuple. There is no comma to find, so the depth scan below
+    reached the ')' and reported "not a tuple", the '(' was taken as grouping,
+    and the empty parens died with "expected expression". `(1,)` worked because
+    it has a comma. Only reachable where a '(' starts a VALUE — a call's
+    argument parens never come here (bug-nilpy-empty-tuple-literal-does-not-parse). }
+  if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkRParen) then
+  begin
+    Result := True;
+    Exit;
+  end;
   i := TokPos - 1;
   depth := 0;
   while i < TokCount do

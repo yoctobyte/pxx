@@ -1,0 +1,49 @@
+# `()` -- the EMPTY tuple literal.
+# The tuple-vs-grouping decision scanned for a top-level COMMA, so `()` (which
+# has none) was taken as parentheses around nothing and died with "expected
+# expression". `(1,)` worked because it has a comma.
+# bug-nilpy-empty-tuple-literal-does-not-parse
+
+t = ()
+print(t)
+print(len(t))
+print(type(t).__name__)
+print(t == ())
+print(bool(t))
+
+# concatenation in both directions
+u = (1, 2)
+print(u + ())
+print(() + u)
+print(() + ())
+
+print(list(()))
+print(sorted(()))
+
+# iterating an empty tuple yields nothing rather than failing
+for x in ():
+    print("never")
+print("empty loop ok")
+
+# still distinguishable from the one- and two-element forms
+print(len((1,)), len((1, 2)))
+print((1,) == ())
+
+# as a return value and as an argument
+def empty():
+    return ()
+
+print(empty())
+print(len(empty()))
+
+# and the reason this surfaced: "%%" % () -- a percent format with no arguments
+print("%%" % ())
+print("100%%" % ())
+
+# zero-argument CALLS must be unaffected -- the same () shape
+def one():
+    return 1
+
+print(one())
+print(len([]))
+print("x".upper())
