@@ -176,7 +176,7 @@ Verified: both streams (stdout and stderr separately, since `perror` writes to
 stderr and a merged stream compares buffering rather than content) identical to
 gcc on **x86-64, i386, aarch64 and arm32**.
 
-## Round 3 — asking whether it BEHAVES, not whether it exists
+## Round 3 (commit 704d4ee20) — asking whether it BEHAVES, not whether it exists
 
 Rounds 1 and 2 asked "does the symbol compile". `strerror` compiled fine and was
 a stub, which is the argument for a third round asking whether the answers are
