@@ -3,7 +3,7 @@ summary: "trackt's profile wizard asks instead of detecting, and its NON-INTERAC
 type: feature
 track: T
 prio: 70
-status: working
+status: done
 owner: claude@xeon
 ---
 
@@ -110,3 +110,29 @@ On each of an x86_64 workstation with a desktop session, a headless many-core
 x86_64 box, and an arm64 Pi, `trackt setup` **with no TTY** writes the intended
 profile unprompted, prints what it detected and why, and a small-RAM Pi does not
 get a selfhost job it cannot run.
+
+## Log
+- 2026-08-02 — implemented in `ef2005e8e` (detection + native-oracle profile +
+  non-interactive uses it + caps printed), gated by
+  `tools/trackt_detect_role_devtest.py`.
+- Found while implementing: the wizard called `twatch.meminfo()`, which does
+  not exist (it is testmgr's). A bare `except Exception` hid it, so the box
+  RAM read 0 MB and `restricted`'s `_mem_frac` cap never applied — the memory
+  ceiling that profile advertises has never existed. Fixed here with a local
+  reader; this box now reads 61938 MB.
+- **Deliberately NOT done here** (the ticket's other half): re-deriving
+  `est_mem` from measurement. The ticket measured selfhost at 156 MB peak RSS
+  against testmgr's 1200 MB estimate — an 8x error that will exclude or
+  serialise selfhost on boxes that could run it fine. That is a testmgr
+  scheduling change, not a setup-wizard change, and it wants the other job
+  classes checked the same way. Filed as
+  [[feature-t-est-mem-from-measurement]].
+- **Open question for the fleet, not resolved here:** xeon detects as
+  `limited`, because it has a graphical session. That is what the ticket's
+  table specifies, and interactively it is one keystroke from `dedicated` —
+  but a headless re-provision of the fleet's main watcher would silently pick
+  the politer role. Whether a big-box escape hatch (desktop present, but >= N
+  cores and >= M RAM -> dedicated) belongs in the rule is a judgement call
+  about intent that detection cannot make; raised with the user.
+
+- 2026-08-02 — resolved, commit ef2005e8e.

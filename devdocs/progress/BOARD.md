@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
-| feature-t-trackt-setup-autodetect-box-role | T | 70 | feature | trackt's profile wizard asks instead of detecting, and its NON-INTERACTIVE default is 'dedicated' — so a Pi provisioned headless over ssh enrols itself as a full-matrix fuzzing box, the exact opposite of its role | — |
 
 ## unfinished (5)
 
@@ -37,7 +36,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (200)
+## backlog (201)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -206,6 +205,7 @@ _none_
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-t-bench-hardware-provenance | T | 60 | feature | bench.tsv records a hostname but no hardware — the series silently changed machines today | — |
 | feature-t-bench-idle-must-be-preemptible | T | 55 | feature | Every idle phase yields to a new push except bench — so worst-case time-to-verdict is ~2-3 min of benchmarking, an order of magnitude above the poll interval anyone would tune | — |
+| feature-t-est-mem-from-measurement | T | 55 | feature | testmgr estimates the selfhost job at 1200 MB; measured peak RSS is 156 MB. An 8x error in one class means none of them were measured — it both under-packs big boxes and will exclude small ones | — |
 | feature-t-host-roles-native-vs-qemu-topology | T | 65 | feature | Track T is becoming multi-host with DIFFERENT PURPOSES per box — xeon runs the matrix, arm32/arm64 rPis exist only as native oracles against xeon's QEMU — but profiles express resource ceilings, not purpose, and nothing compares two hosts' results | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 40 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-per-invocation-tmp-namespace-for-make-recipes | T | 55 | feature | The Makefile's ~3700 fixed /tmp/test_* output paths make two concurrent `make test*` runs on one box clobber each other; route them through a per-invocation temp dir | — |
@@ -346,7 +346,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1193)
+## done (1194)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1411,6 +1411,7 @@ _none_
 | feature-t-quick-canary-for-nilpy-and-c | T | 70 | feature | The 2-14s quick canary covers Pascal only; a NilPy change and a C change can both go out with no fast check at all. Add one dense .npy and one dense .c canary. | — |
 | feature-t-quick-gate-must-be-quick-and-gate-lines-must-not-name-long-suites | T | 60 | feature | `gate.sh quick` runs the 625s make test-nilpy, and ticket Gate: lines name long local suites — both push agents into running locally what Track T exists to offload | — |
 | feature-t-snapshot-compiler-binary-per-run | T | 70 | feature | A test run should snapshot the compiler binary into its own scratch dir at start and run against that copy, so a concurrent rebuild cannot swap the binary out mid-run | — |
+| feature-t-trackt-setup-autodetect-box-role | T | 70 | feature | trackt's profile wizard asks instead of detecting, and its NON-INTERACTIVE default is 'dedicated' — so a Pi provisioned headless over ssh enrols itself as a full-matrix fuzzing box, the exact opposite of its role | — |
 | feature-t-watcher-health-verdict-and-host-local-alerting | T | 70 | feature | Nothing detects a watcher that is running but wedged, and nothing pushes a problem at anyone. Split it: a portable health verdict in the repo, platform-specific delivery on the host. | — |
 | feature-target-aarch64 | A | 50 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | A | 50 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
@@ -1636,6 +1637,7 @@ _none_
 - [p 55] [T] feature-pasmith-multi-unit-programs
 - [p 55] [A] feature-signal-siginfo-ucontext
 - [p 55] [T] feature-t-bench-idle-must-be-preemptible
+- [p 55] [T] feature-t-est-mem-from-measurement
 - [p 55] [T] feature-t-per-invocation-tmp-namespace-for-make-recipes
 - [p 55] [T] task-t-xeon-agent-needs-its-own-dev-checkout
 - [p 53] [A] feature-threadsafe-heap-optimize
