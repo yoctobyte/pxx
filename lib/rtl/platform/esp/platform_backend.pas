@@ -41,6 +41,10 @@ function PalBackendFtruncate(handle: Integer; length: Int64): Integer;
 function PalBackendAccess(path: PChar; mode: Integer): Integer;
 function PalBackendFchown(handle, owner, group: Integer): Integer;
 function PalBackendGeteuid: Integer;
+function PalBackendGetuid: Integer;
+function PalBackendGetgid: Integer;
+function PalBackendGetegid: Integer;
+function PalBackendGetppid: Integer;
 function PalBackendReadlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;
 function PalBackendGetpid: Integer;
 function PalBackendGetcwd(buf: PChar; size: Integer): Integer;
@@ -505,6 +509,28 @@ begin
 end;
 
 function PalBackendGeteuid: Integer;
+begin
+  Result := 0;
+end;
+
+{ ESP has no users or process hierarchy; 0 is the honest answer for a system
+  with exactly one privilege level, matching what PalBackendGeteuid reports. }
+function PalBackendGetuid: Integer;
+begin
+  Result := 0;
+end;
+
+function PalBackendGetgid: Integer;
+begin
+  Result := 0;
+end;
+
+function PalBackendGetegid: Integer;
+begin
+  Result := 0;
+end;
+
+function PalBackendGetppid: Integer;
 begin
   Result := 0;
 end;

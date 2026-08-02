@@ -45,6 +45,10 @@ function PalBackendFtruncate(handle: Integer; length: Int64): Integer;
 function PalBackendAccess(path: PChar; mode: Integer): Integer;
 function PalBackendFchown(handle, owner, group: Integer): Integer;
 function PalBackendGeteuid: Integer;
+function PalBackendGetuid: Integer;
+function PalBackendGetgid: Integer;
+function PalBackendGetegid: Integer;
+function PalBackendGetppid: Integer;
 function PalBackendReadlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;
 function PalBackendGetpid: Integer;
 function PalBackendGetcwd(buf: PChar; size: Integer): Integer;
@@ -121,6 +125,7 @@ const
   SYS_mmap = 9; SYS_munmap = 11; SYS_fchmod = 91; SYS_getpid = 39; SYS_nanosleep = 35; SYS_utimensat = 280;
   SYS_getcwd = 79; SYS_rt_sigaction = 13;
   SYS_ftruncate = 77; SYS_faccessat = 269; SYS_geteuid = 107; SYS_fchown = 93; SYS_readlinkat = 267;
+  SYS_getuid = 102; SYS_getgid = 104; SYS_getegid = 108; SYS_getppid = 110;
 {$endif}
 {$ifdef CPU_I386}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
@@ -138,6 +143,7 @@ const
   SYS_mmap = 192; SYS_munmap = 91; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 320;
   SYS_getcwd = 183; SYS_rt_sigaction = 174;
   SYS_ftruncate = 93; SYS_faccessat = 307; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 305;
+  SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
 {$endif}
 {$ifdef CPU_AARCH64}
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
@@ -153,6 +159,7 @@ const
   SYS_mmap = 222; SYS_munmap = 215; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
+  SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
 {$endif}
 {$ifdef CPU_ARM32}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
@@ -168,6 +175,7 @@ const
   SYS_mmap = 192; SYS_munmap = 91; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 348;
   SYS_getcwd = 183; SYS_rt_sigaction = 174;
   SYS_ftruncate = 93; SYS_faccessat = 334; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 332;
+  SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
 {$endif}
 {$ifdef CPU_RISCV32}
   { rv32 linux = asm-generic table (same slots as aarch64). 32-bit quirks:
@@ -187,6 +195,7 @@ const
   SYS_mmap = 222; SYS_munmap = 215; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
+  SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
 {$endif}
   PAL_AT_FDCWD = -100;
   PAL_AT_EMPTY_PATH = $1000;
@@ -443,6 +452,28 @@ end;
 function PalBackendGeteuid: Integer;
 begin
   Result := Integer(__pxxrawsyscall(SYS_geteuid, 0, 0, 0, 0, 0, 0));
+end;
+
+{ The remaining id calls. 32-bit targets use the *32 variants, as geteuid above
+  already does — the legacy 16-bit ones truncate a modern uid. }
+function PalBackendGetuid: Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_getuid, 0, 0, 0, 0, 0, 0));
+end;
+
+function PalBackendGetgid: Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_getgid, 0, 0, 0, 0, 0, 0));
+end;
+
+function PalBackendGetegid: Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_getegid, 0, 0, 0, 0, 0, 0));
+end;
+
+function PalBackendGetppid: Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_getppid, 0, 0, 0, 0, 0, 0));
 end;
 
 function PalBackendReadlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;

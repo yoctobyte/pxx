@@ -7218,6 +7218,18 @@ lib-test: pxx-stable-check
 	    { echo 'FAIL: cstat_fields differs from gcc'; exit 1; }; \
 	  echo 'cstat_fields: identical to gcc'; \
 	else echo 'cstat_fields: SKIP (no gcc)'; /tmp/cstat_fields >/dev/null; fi
+	# Process/user ids, pipe, kill, sleep, getpagesize. Behavioural: the pipe
+	# must move bytes and kill(pid,0) must tell a live process from an absent
+	# one, so a stub returning success would fail here.
+	$(PXX_STABLE) test/cproc_ids.c /tmp/cproc_ids
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -w -o /tmp/cproc_ids_gcc test/cproc_ids.c 2>/dev/null; \
+	  /tmp/cproc_ids_gcc > /tmp/cpi_gcc.txt 2>&1; \
+	  /tmp/cproc_ids > /tmp/cpi_pxx.txt 2>&1; \
+	  diff /tmp/cpi_gcc.txt /tmp/cpi_pxx.txt || \
+	    { echo 'FAIL: cproc_ids differs from gcc'; exit 1; }; \
+	  echo 'cproc_ids: identical to gcc'; \
+	else echo 'cproc_ids: SKIP (no gcc)'; /tmp/cproc_ids >/dev/null; fi
 	# crtl against gcc's libc, which is the oracle for this surface: the whole
 	# output is diffed against the SAME file built by gcc, so there are no
 	# recorded expectations to drift.

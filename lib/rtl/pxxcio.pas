@@ -99,6 +99,12 @@ function __pxx_fchmod(fd, mode: Integer): Integer;
 function __pxx_ftruncate(fd: Integer; length: Int64): Integer;
 function __pxx_access(path: PChar; mode: Integer): Integer;
 function __pxx_fchown(fd, owner, group: Integer): Integer;
+function __pxx_getuid: Integer;
+function __pxx_getgid: Integer;
+function __pxx_getegid: Integer;
+function __pxx_getppid: Integer;
+function __pxx_pipe2(fds: Pointer; flags: Integer): Integer;
+function __pxx_kill(pid, sig: Integer): Integer;
 function __pxx_geteuid: Integer;
 function __pxx_readlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;
 function __pxx_mkdir(path: PChar; mode: Integer): Integer;
@@ -402,6 +408,48 @@ end;
 function __pxx_geteuid: Integer;
 begin
   Result := PalGeteuid;
+end;
+
+function __pxx_getuid: Integer;
+begin
+  Result := PalGetuid;
+end;
+
+function __pxx_getgid: Integer;
+begin
+  Result := PalGetgid;
+end;
+
+function __pxx_getegid: Integer;
+begin
+  Result := PalGetegid;
+end;
+
+function __pxx_getppid: Integer;
+begin
+  Result := PalGetppid;
+end;
+
+function __pxx_pipe2(fds: Pointer; flags: Integer): Integer;
+{ PalPipe2 takes an open array; C hands us a bare int[2], so copy across rather
+  than alias — the two layouts agree today but a var-open-array is not an ABI. }
+var local: array[0..1] of Integer; rc: Integer; p: ^Integer;
+begin
+  local[0] := -1; local[1] := -1;
+  rc := PalPipe2(local, flags);
+  if rc >= 0 then
+  begin
+    p := fds;
+    p^ := local[0];
+    p := Pointer(Int64(fds) + SizeOf(Integer));
+    p^ := local[1];
+  end;
+  Result := rc;
+end;
+
+function __pxx_kill(pid, sig: Integer): Integer;
+begin
+  Result := PalKill(pid, sig);
 end;
 
 function __pxx_readlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;

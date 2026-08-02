@@ -260,3 +260,42 @@ cases and each diffed against gcc. A test written around the original symptom
 would have shipped either wrong version.
 
 Identical to gcc on x86-64, i386, aarch64 and arm32.
+
+## Round 7 — the process/user surface, which `getuid` exposed
+
+Sweeping `unistd.h`/`stdlib.h`/`signal.h` after `getuid` turned up missing while
+testing `st_uid`. Nine landed: `getuid`, `getgid`, `getegid`, `getppid`,
+`pipe`, `kill`, `sleep`, `usleep`, `getpagesize`.
+
+`getuid` is the one worth naming. `geteuid` was present and its siblings were
+not, so `if (getuid() == 0)` — the standard "am I root" check — did not compile
+at all. Once it does, it must not answer 0 for everyone, which is why the test
+asserts the ids are NON-ZERO and that uid matches euid rather than merely that
+the call returns.
+
+The costs split three ways, which is why they could land together:
+
+- **No PAL work**: `sleep`/`usleep` over the `nanosleep` crtl already had, and
+  `getpagesize`.
+- **Bridge only**: `pipe` and `kill` — `PalPipe2` and `PalKill` already existed
+  with no `__pxx_` bridge.
+- **New PAL surface**: the four id calls, following the pattern used for
+  `chdir` earlier the same day. On 32-bit they use the `*32` syscall variants,
+  as `PalBackendGeteuid` already did — the legacy 16-bit ones truncate a modern
+  uid. ESP reports 0 for all four, honest for a system with one privilege level
+  and no process hierarchy.
+
+Verified behaviourally: the pipe must move bytes, and `kill(pid, 0)` must
+distinguish a live process from an absent one — a stub returning success passes
+a "did it return 0" test and fails this one. Identical to gcc on x86-64, i386,
+aarch64 and arm32.
+
+**Documented rather than faked:** `sleep()` returns the seconds REMAINING if
+interrupted. The PAL does not surface interruption, so it returns 0 — correct
+for every completed sleep, and the comment names the case that is not covered
+instead of implying the contract is fully met.
+
+Still missing from that sweep, and deliberately not attempted: `fork`, `execv`
+and `alarm`. The first two are process creation, which crtl has no story for at
+all (see the note in [[feature-crtl-libc-gap-batch-2026-08]] about the spawn
+surface and the environment buffer), and `alarm` needs signal timers.

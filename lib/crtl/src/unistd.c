@@ -11,6 +11,12 @@
 extern int __pxx_fsync(int fd);
 extern int __pxx_dup(int oldFd);
 extern int __pxx_chdir(const char *path);
+extern int __pxx_getuid(void);
+extern int __pxx_getgid(void);
+extern int __pxx_getegid(void);
+extern int __pxx_getppid(void);
+extern int __pxx_pipe2(int *fds, int flags);
+extern int __pxx_nanosleep(long long sec, long long nsec);
 extern int __pxx_symlink(const char *target, const char *linkpath);
 extern int __pxx_link(const char *oldpath, const char *newpath);
 extern int __pxx_dup2(int oldFd, int newFd);
@@ -127,3 +133,31 @@ int symlink(const char *target, const char *linkpath) {
 int link(const char *oldpath, const char *newpath) {
   return __pxx_link(oldpath, newpath);
 }
+
+/* Real ids, not zero: geteuid was already here, the rest were simply missing —
+   and code that branches on getuid() == 0 to decide "am I root" would have
+   taken the privileged path for everyone. */
+int getuid(void)  { return __pxx_getuid(); }
+int getgid(void)  { return __pxx_getgid(); }
+int getegid(void) { return __pxx_getegid(); }
+int getppid(void) { return __pxx_getppid(); }
+
+int pipe(int fds[2]) { return __pxx_pipe2(fds, 0); }
+
+/* sleep/usleep over nanosleep, which crtl already had. sleep() returns the
+   number of seconds LEFT if interrupted, which is 0 on a completed sleep — not
+   a status code, so returning 0 unconditionally would be wrong only for the
+   interrupted case the PAL does not surface. Documented rather than faked. */
+unsigned int sleep(unsigned int seconds) {
+  __pxx_nanosleep((long long)seconds, 0);
+  return 0;
+}
+
+int usleep(unsigned int usec) {
+  __pxx_nanosleep((long long)(usec / 1000000u), (long long)(usec % 1000000u) * 1000LL);
+  return 0;
+}
+
+/* Linux is 4096 everywhere pxx targets. sysconf(_SC_PAGESIZE) is the portable
+   spelling and returns the same thing. */
+int getpagesize(void) { return 4096; }

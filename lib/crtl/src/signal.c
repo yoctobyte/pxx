@@ -7,6 +7,9 @@
  */
 
 #include <signal.h>
+#include <errno.h>
+
+extern int __pxx_kill(int pid, int sig);
 
 #define __SIGSET_NWORDS 16
 #define __SIGSET_WORDBITS (8 * (int)sizeof(unsigned long))
@@ -63,5 +66,12 @@ int sigaction(int sig, const struct sigaction *act, struct sigaction *oact) {
 
 int sigaltstack(const stack_t *ss, stack_t *oss) {
   (void)ss; (void)oss;
+  return 0;
+}
+
+/* kill: send a signal. Returns 0 or -1 with errno, like the C contract. */
+int kill(int pid, int sig) {
+  int r = __pxx_kill(pid, sig);
+  if (r < 0) { errno = -r; return -1; }
   return 0;
 }

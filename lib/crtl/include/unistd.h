@@ -33,6 +33,17 @@ int dup(int oldfd);
 
 /* Working directory and links. chdir is process-global. */
 int chdir(const char *path);
+
+/* Process and user ids. geteuid was already present; these are its siblings. */
+int getuid(void);
+int getgid(void);
+int getegid(void);
+int getppid(void);
+
+int pipe(int fds[2]);
+unsigned int sleep(unsigned int seconds);
+int usleep(unsigned int usec);
+int getpagesize(void);
 int symlink(const char *target, const char *linkpath);
 int link(const char *oldpath, const char *newpath);
 int dup2(int oldfd, int newfd);

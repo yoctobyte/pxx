@@ -128,6 +128,10 @@ function PalFtruncate(handle: Integer; length: Int64): Integer;
 function PalAccess(path: PChar; mode: Integer): Integer;
 function PalFchown(handle, owner, group: Integer): Integer;
 function PalGeteuid: Integer;
+function PalGetuid: Integer;
+function PalGetgid: Integer;
+function PalGetegid: Integer;
+function PalGetppid: Integer;
 function PalReadlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;
 function PalGetpid: Integer;
 function PalGetcwd(buf: PChar; size: Integer): Integer;
@@ -206,6 +210,26 @@ implementation
 function PalPlatform: Integer;
 begin
   Result := PalBackendPlatform;
+end;
+
+function PalGetuid: Integer;
+begin
+  Result := PalBackendGetuid;
+end;
+
+function PalGetgid: Integer;
+begin
+  Result := PalBackendGetgid;
+end;
+
+function PalGetegid: Integer;
+begin
+  Result := PalBackendGetegid;
+end;
+
+function PalGetppid: Integer;
+begin
+  Result := PalBackendGetppid;
 end;
 
 function PalChdir(path: PChar): Integer;

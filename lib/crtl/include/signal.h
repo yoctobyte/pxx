@@ -35,6 +35,7 @@ typedef int sig_atomic_t;
 typedef void (*__sighandler_t)(int);
 __sighandler_t signal(int sig, __sighandler_t func);
 int raise(int sig);
+int kill(int pid, int sig);
 
 /* POSIX signal surface — TYPES are Linux/glibc-shaped; sigaction/sigprocmask/
    sigaltstack are LINK-ONLY STUBS for now (no rt_sigaction PAL bridge yet), so
