@@ -3,6 +3,7 @@ track: N
 prio: 75
 type: bug
 summary: "`self.n += x` produces garbage when the field was initialised from an UNANNOTATED ctor parameter — True, an empty line, or 4.94e-323. Annotating the parameter fixes it. This is the most idiomatic shape in Python OO"
+status: done
 ---
 
 # Augmented assignment to a variant-typed field corrupts it
@@ -83,3 +84,6 @@ string field with `+=`; a list field with `+=`; the same operators on a plain
 LOCAL variable (which should be unaffected); and a field mutated across several
 method calls to confirm the value accumulates rather than only the first one
 landing.
+
+## Log
+- 2026-08-02 — resolved, commit 90eb6a85e.
