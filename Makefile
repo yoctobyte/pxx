@@ -1125,6 +1125,10 @@ test-nilpy: $(COMPILER)
 	# garbage (1592266472), '()', or a spurious IndexError, silently.
 	./$(COMPILER) test/test_nilpy_mutators_return_none.npy /tmp/test_nilpy_mutnone26
 	test "$$(/tmp/test_nilpy_mutnone26)" = "$$(printf '%b' 'None\n[9, 3, 1, 2]\nNone\n[3, 1, 2]\nNone\n[(\047a\047, 1), (\047z\047, 2)]\nNone\n[(\047q\047, 5)]\nTrue\nTrue\nTrue\ninsert result is falsy\n[9, 3, 2, 4]\n[(\047a\047, 9), (\047z\047, 2)]\n[(\047z\047, 2)]\n[(\047a\047, 2), (\047b\047, 1)]')"
+	# dict.copy() (shallow) and dict.popitem() (LIFO, KeyError when empty, yields a
+	# TUPLE) — both were "TPyDict has no method ..."
+	./$(COMPILER) test/test_nilpy_dict_copy_popitem.npy /tmp/test_nilpy_dictcp26
+	test "$$(/tmp/test_nilpy_dictcp26)" = "$$(printf '%b' '[(\047a\047, 1), (\047b\047, 2)]\n[(\047a\047, 1), (\047b\047, 2)]\n[(\047a\047, 1), (\047b\047, 2), (\047z\047, 9)]\n[1, 2]\n[]\n[(\047a\047, 1), (\047b\047, 2)]\n(\047c\047, 3)\n[(\047a\047, 1), (\047b\047, 2)]\n(\047b\047, 2)\n[(\047a\047, 1)]\n(\047a\047, 1)\n[]\nKeyError on empty\nstill running\ntuple\n[(\047k\047, 5)]')"
 	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
 	# key function had no overload to bind to (dict alone and list+key both worked)
 	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26

@@ -225,6 +225,14 @@ type
       merges them. The mode picks which, which is why they share a name. }
     function update(l: TPyList): Variant;   { None, see TPyList.remove }
     function update(d: TPyDict): Variant; overload;
+    { dict.copy() — a SHALLOW copy, like TPyList.copy: a new dict holding the
+      same key/value pairs, so storing into the copy leaves the original alone
+      while a mutable VALUE stays shared. }
+    function copy: TPyDict;
+    { dict.popitem() — remove and return the LAST (key, value) pair, which is
+      what CPython 3.7+ does now that dicts are insertion-ordered. Raises
+      KeyError on an empty dict, as CPython does. The pair is a tuple. }
+    function popitem: TPyList;
     { Counter.most_common([n]): (element, count) pairs, highest count first. The
       pair is a 2-element list — NilPy has no tuple type; indexing is identical. }
     function most_common: TPyList;
@@ -3212,6 +3220,32 @@ begin
     dict.clear() does too }
   Self.FLen := 0;
   PyDictRehash(Self, Self.FHashCap);
+end;
+
+function TPyDict.copy: TPyDict;
+var ks, vs: TPyList; i: Integer;
+begin
+  Result := TPyDict.Create;
+  Result.FCounterMode := FCounterMode;
+  ks := keylist;
+  vs := vallist;
+  for i := 0 to ks.count - 1 do Result.store(ks.at(i), vs.at(i));
+end;
+
+function TPyDict.popitem: TPyList;
+var ks, vs: TPyList; n: Integer; k: Variant;
+begin
+  ks := keylist;
+  if ks.count = 0 then
+    raise KeyError.Create('popitem(): dictionary is empty');
+  vs := vallist;
+  n := ks.count - 1;                  { LIFO, matching CPython 3.7+ }
+  k := ks.at(n);
+  Result := TPyList.Create;
+  Result.FIsTuple := True;            { popitem() yields a (key, value) TUPLE }
+  Result.append(k);
+  Result.append(vs.at(n));
+  remove(k);
 end;
 
 function TPyDict.pop(const k: Variant): Variant;

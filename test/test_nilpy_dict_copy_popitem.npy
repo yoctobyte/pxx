@@ -1,0 +1,49 @@
+# dict.copy() and dict.popitem(), which were "TPyDict has no method ..."
+# bug-nilpy-dict-missing-copy-and-popitem
+
+d = {"a": 1, "b": 2}
+c = d.copy()
+print(sorted(c.items()))
+
+# the copy is INDEPENDENT: storing into it leaves the original alone
+c["z"] = 9
+print(sorted(d.items()))
+print(sorted(c.items()))
+
+# ...but it is SHALLOW, so a mutable VALUE is still shared
+m = {"a": [1]}
+m2 = m.copy()
+m2["a"].append(2)
+print(m["a"])
+
+# copying an empty dict, and copying a copy. Bound to a name first: `.items()`
+# on a dict LITERAL receiver is a separate open gap
+# (bug-nilpy-dict-method-on-a-literal-receiver-not-found), not exercised here.
+empty = {}
+print(sorted(empty.copy().items()))
+print(sorted(d.copy().copy().items()))
+
+# popitem() removes and returns the LAST pair (CPython 3.7+ is LIFO)
+e = {"a": 1, "b": 2, "c": 3}
+print(e.popitem())
+print(sorted(e.items()))
+print(e.popitem())
+print(sorted(e.items()))
+print(e.popitem())
+print(sorted(e.items()))
+
+# ...and raises KeyError once empty, catchably
+try:
+    e.popitem()
+except KeyError:
+    print("KeyError on empty")
+print("still running")
+
+# the pair is a TUPLE, not a list
+print(type({"a": 1}.popitem()).__name__)
+
+# popitem then reinsert round-trips
+f = {"k": 5}
+p = f.popitem()
+f[p[0]] = p[1]
+print(sorted(f.items()))
