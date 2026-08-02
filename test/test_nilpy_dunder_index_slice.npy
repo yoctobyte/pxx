@@ -1,0 +1,34 @@
+# bug-nilpy-unary-numeric-dunders-return-raw-handle — the SLICE-BOUND half
+#
+# A slice bound is an integer position, so an object standing in one must be
+# asked for its __index__ exactly as a subscript is. It was not, so the instance
+# HANDLE became the bound — and because a handle is far past the end, the clamp
+# turned that into an EMPTY slice rather than an error: `xs[C(1):C(3)]` returned
+# [] and `"abcdef"[C(1):C(4)]` returned "". Silent, unlike the subscript form,
+# which at least raised IndexError.
+#
+# One coercion site covers str, bytes, list and variant receivers, and the step.
+# The plain numeric slices are the controls.
+#
+# Diffed against CPython (tools/pydiff.py).
+class C:
+    def __init__(self, v): self.v = v
+    def __index__(self): return self.v
+
+xs = [10, 20, 30, 40, 50]
+b = bytes([1, 2, 3, 4])
+s = "abcdef"
+
+print(xs[C(1):C(3)])
+print(xs[C(0):C(4):C(2)])
+print(xs[C(2):])
+print(xs[:C(2)])
+print(s[C(1):C(4)])
+print(s[C(0):C(5):C(2)])
+print(b[C(1):C(3)])
+
+# a literal-receiver subscript already asked __index__ and must keep doing so
+print([10, 20, 30][C(2)])
+
+# plain numeric slices are unaffected
+print(xs[1:3], s[2:4], xs[::2])

@@ -5810,6 +5810,18 @@ var procIdx, callNode, a0, a1, a2, a3, rec, listCi, bytesCi: Integer;
     pname, suffix: AnsiString;
     retTk: TTypeKind;
 begin
+  { A slice BOUND is an integer position, so an object standing in one is asked
+    for its `__index__` exactly as a subscript is. Without this the instance
+    HANDLE became the bound: `xs[C(1):C(3)]` returned `[]` and
+    `"abcdef"[C(1):C(4)]` returned the empty string — silently, because a
+    handle is far past the end and the clamp turns that into an empty slice
+    rather than an error. The subscript form at least raised
+    (bug-nilpy-unary-numeric-dunders-return-raw-handle).
+
+    One site covers str, bytes, list and variant receivers, and the step too. }
+  loNode := PyIndexCoerce(loNode);
+  hiNode := PyIndexCoerce(hiNode);
+  if stepNode >= 0 then stepNode := PyIndexCoerce(stepNode);
   pname := '';
   retTk := tyInteger;
   if stepNode >= 0 then suffix := '_step' else suffix := '';

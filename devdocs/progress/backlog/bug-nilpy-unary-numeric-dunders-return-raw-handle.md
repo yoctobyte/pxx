@@ -103,3 +103,54 @@ wrong element).
 counts. `PyIndexCoerce` is the piece to reuse at each — it is a one-line call
 per site — but each needs its own CPython-diffed case, so they are left for a
 follow-up rather than wired blind. Ticket stays open for them.
+
+
+## 2026-08-03 — slice bounds DONE; the rest measured shape by shape
+
+`__index__` at slice bounds is fixed, in one place: `PyMakeSlice` coerces `lo`,
+`hi` and `step` before choosing the pylib helper, so str, bytes, list and
+variant receivers are all covered, extended slices included.
+
+That was the SILENT half and the reason to do it first. A handle used as a
+subscript is far past the end and raises IndexError; used as a slice bound the
+same handle is CLAMPED, so `xs[C(1):C(3)]` quietly returned `[]` and
+`"abcdef"[C(1):C(4)]` quietly returned `""`.
+
+### The remaining sites, measured rather than listed
+
+Each row is a one-line program against the same `C` declaring `__index__`:
+
+| shape | pxx | CPython | kind |
+| --- | --- | --- | --- |
+| `[10, 20, 30][C(2)]` — LITERAL receiver | 30 | 30 | ok |
+| `"abcdef"[C(2)]` — str receiver | c | c | ok |
+| every slice form, all receivers | correct | correct | ok (this change) |
+| **`xs[C(2)]` — NAMED list variable** | IndexError | 30 | loud, wrong |
+| **`b[C(2)]` — named bytes variable** | IndexError | 3 | loud, wrong |
+| **`[0] * C(3)`** | TypeError | [0, 0, 0] | loud, wrong |
+| **`"ab" * C(2)`** | TypeError | abab | loud, wrong |
+
+So "done for SUBSCRIPTS" was true only for a LITERAL or str receiver.
+`PyMakeSuffixIndex` — which does call `PyIndexCoerce` — is reached from
+`parser.inc:13433`, the suffix on a fresh construction. A subscript on a NAMED
+container goes through the shared parser's class default-property dispatch
+instead, which knows nothing about `__index__`.
+
+**That is why the remaining half is not a one-liner:** the fix belongs in
+`ParseClassRecordSelectors` / the ident suffix loop, which is shared Pascal
+ground, so it needs a NilPy guard and Track A's gate rather than a NilPy-only
+edit. The repeat counts (`*`) are a third, separate site.
+
+`range(C(3))` could not be measured at all: `range` outside a `for` header is
+not a callable in this frontend ("undefined variable (range)"), which is its
+own gap.
+
+### Verified
+
+`test/test_nilpy_dunder_index_slice.npy` (+ `.expected`, wired into
+`make test-nilpy`), byte-identical to CPython: list, str and bytes slices with
+object bounds, an extended slice with an object step, open-ended slices on
+either side, the literal-receiver subscript as the already-working control, and
+plain numeric slices as the regression control.
+
+`gate.sh quick` GREEN, self-host fixedpoint byte-identical, FPC seed clean.
