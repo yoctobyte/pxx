@@ -27517,6 +27517,7 @@ var
   basePath, ext, emsg: AnsiString;
   lastSlash, lastDot: Integer;
   isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
+  guardIdx: Integer;   { CompiledUnits key — see the note at its assignment }
   isPyUnit, savedPyExprMode: Boolean;
   savedNestedComments: Boolean;
   unitNeedsText: Boolean;
@@ -27546,6 +27547,35 @@ begin
 
   { Check if already compiled }
   strIdx := InternStr(lo);
+  { ...but a path-form C/H reference gets its OWN key space for that check.
+
+    `lo` for `uses './hello_ext.c'` is the file's BASE NAME with the extension
+    stripped — the very same key a bare `uses hello_ext` resolves to. So a unit
+    named hello_ext that pulls in its own C companion `./hello_ext.c` hit the
+    already-compiled guard against ITSELF (a unit registers its name before its
+    uses clause is parsed), the C file was never loaded, and every function it
+    defined survived only as an unresolved extern: a clean COMPILE and a
+    `symbol lookup error` at run time, with no diagnostic anywhere
+    (bug-c-uses-path-basename-collides-with-enclosing-unit-name).
+
+    Nothing about the path syntax suggests it shares a namespace with unit
+    names, and a C source is never importable by bare name the way a `.pas`
+    unit is — so the two spaces have no reason to share keys. Keyed on the path
+    TEXT, which also makes a genuine repeat of the same `uses './x.c'` still
+    dedupe. `strIdx` itself is untouched: it still tags the symbols this load
+    registers (CurrentUnitIdx below), so qualified access by base name is
+    unchanged. }
+  guardIdx := strIdx;
+  if isPath then
+  begin
+    lastDot := 0;
+    for i := 1 to Length(name) do
+      if name[i] = '.' then lastDot := i;
+    ext := '';
+    if lastDot > 0 then ext := LowerCase(Copy(name, lastDot, Length(name) - lastDot + 1));
+    if (ext = '.c') or (ext = '.h') then
+      guardIdx := InternStr('@cpath:' + LowerCase(name));
+  end;
   { Record the edge for EVERY `uses X` clause, even one that hits the
     already-compiled guard below — a warn/count pass over
     bug-pascal-uses-is-transitive wants every clause, not just first-loads,
@@ -27554,7 +27584,7 @@ begin
   isCompiled := False;
   for i := 0 to CompiledUnitCount - 1 do
   begin
-    if CompiledUnits[i] = strIdx then
+    if CompiledUnits[i] = guardIdx then
       isCompiled := True;
   end;
   if isCompiled then Exit;
@@ -27565,7 +27595,7 @@ begin
   savedCUC := CompiledUnitCount;
   if CompiledUnitCount < 256 then
   begin
-    CompiledUnits[CompiledUnitCount] := strIdx;
+    CompiledUnits[CompiledUnitCount] := guardIdx;
     Inc(CompiledUnitCount);
   end;
 

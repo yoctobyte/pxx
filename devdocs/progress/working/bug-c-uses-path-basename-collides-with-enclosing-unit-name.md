@@ -3,6 +3,8 @@ track: A
 prio: 35
 type: bug
 blocked-by: []
+status: working
+owner: claude-AN
 ---
 
 # path-form `uses './x.c'` collides with the enclosing unit's OWN name
