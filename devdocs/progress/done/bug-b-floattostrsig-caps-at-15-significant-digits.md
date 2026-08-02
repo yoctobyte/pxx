@@ -132,4 +132,4 @@ Tests: `test/lib_floattostr.pas` gained 18 assertions, every expectation taken
 from CPython.
 
 ## Log
-- 2026-08-02 — resolved, commit PENDING.
+- 2026-08-02 — resolved, commit df0bf0182.
