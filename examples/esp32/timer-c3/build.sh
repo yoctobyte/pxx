@@ -11,7 +11,9 @@ cd "$(dirname "$0")"
 REPO_ROOT="$(cd ../../.. && pwd)"
 PXX="${PXX:-$REPO_ROOT/stable_linux_amd64/default/pinned}"
 
-"$PXX" --target=riscv32 --platform=esp -Fu"$REPO_ROOT/lib/rtl" -Fu"$REPO_ROOT/lib/rtl/platform/esp" main/main.pas main/main.o
+# --no-signals as well as --platform=esp: the signal runtime's rt_sigaction
+# install is an ecall in app_main's prologue, fatal under FreeRTOS.
+"$PXX" --target=riscv32 --platform=esp --no-signals -Fu"$REPO_ROOT/lib/rtl" -Fu"$REPO_ROOT/lib/rtl/platform/esp" main/main.pas main/main.o
 ar rcs main/libpxx_app.a main/main.o
 
 idf.py set-target esp32c3

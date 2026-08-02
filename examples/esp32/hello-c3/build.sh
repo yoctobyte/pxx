@@ -11,7 +11,10 @@ cd "$(dirname "$0")"
 REPO_ROOT="$(cd ../../.. && pwd)"
 PXX="$REPO_ROOT/compiler/pascal26"
 
-"$PXX" --target=riscv32 main/main.pas main/main.o
+# See net-c3/build.sh: --platform=esp (IDF heap) and --no-signals (no
+# rt_sigaction in the prologue) are both required, and each is silent when
+# missing — the app panics at "Calling app_main()" and boot-loops.
+"$PXX" --target=riscv32 --platform=esp --no-signals main/main.pas main/main.o
 ar rcs main/libpxx_app.a main/main.o
 
 idf.py set-target esp32c3

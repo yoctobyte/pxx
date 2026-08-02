@@ -91,7 +91,20 @@ What is actually here:
 So this ticket can be started and verified, and the "Gate" below is achievable
 rather than aspirational.
 
-## The REAL blocker, found by trying it (2026-08-02)
+## Blocker RESOLVED same day — the ESP path works again
+
+The blocker below turned out to be two missing flags in the examples' build
+scripts, not a compiler defect:
+`--platform=esp` (IDF heap) **and** `--no-signals` (no `rt_sigaction` in the
+prologue), which are each silent on their own. Fixed in
+[[bug-esp-examples-missing-platform-and-nosignals-flags]].
+
+`net-c3` now boots once and prints `PXX-net-smoke status=0`, so **the ESP lwIP
+socket path is proven working under QEMU on this box**, and this ticket's Gate
+is reachable. What remains is the work itself, plus the user's standing
+priority call that ESP is parked behind Pascal.
+
+## The blocker as originally found (2026-08-02)
 
 Establishing a baseline before starting this ticket turned up a hard blocker:
 **every pxx ESP-IDF app currently panics the instant control reaches Pascal**,

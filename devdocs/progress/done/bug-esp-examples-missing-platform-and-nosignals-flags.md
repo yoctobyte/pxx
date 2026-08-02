@@ -1,10 +1,12 @@
 ---
-track: A
-prio: 75
+track: B
+prio: 60
 type: bug
 ---
 
-# Every pxx ESP-IDF app panics at `app_main`: Linux syscalls emitted into the image
+# ESP examples panic at `app_main`: their build scripts omit two required flags
+
+**RESOLVED 2026-08-02 — and re-laned A -> B: this is not a compiler bug.**
 
 - **Type:** bug (runtime/codegen for the ESP profile) — **Track A**
   (`compiler/builtin`, syscall emission). Filed by the Track B agent, who has
@@ -56,17 +58,10 @@ The one in `app_main` is the fatal one — it is in the prologue, before any use
 statement runs, which is why even a program that only calls
 `esp_rom_printf`/`vTaskDelay` dies.
 
-## Flags tried, none sufficient
+## Flags tried individually — the misleading step
 
-Each rebuilt and re-booted individually; the `app_main` `ecall` survives all
-three:
-
-- `--platform=esp`
-- `-dPXX_ESP_IDF`
-- `--no-unhandled-handler` (the obvious candidate, since 134 is `rt_sigaction`)
-
-So the handler install is not the only emitter, or the flag does not reach the
-prologue emission.
+Each rebuilt and re-booted on its own; the panic survived all three, which is
+what sent this to the wrong lane. See the Resolution above for why.
 
 ## Relation to the resolved heap ticket
 
@@ -78,11 +73,56 @@ runs"; it does not, so either the fix regressed or it was narrower than the
 acceptance implied. Worth reading before re-fixing, since its analysis of the
 bare-vs-IDF profile split is still the right frame.
 
-## Why it is Track A
+## Resolution: two missing flags, and each is silent on its own
 
-`compiler/builtin` decides what the runtime emits, and the fatal call is in the
-compiler-generated prologue of `app_main`. Nothing in `lib/rtl` or the examples
-can suppress it — proven by `hello-c3`, which links neither.
+The compiler already has both switches. The example `build.sh` scripts simply
+did not pass them:
+
+| flag | what it suppresses |
+| --- | --- |
+| `--platform=esp` | auto-defines `PXX_ESP_IDF`, backing `PXXAlloc` with the IDF heap (`calloc`/`free` externals). Without it the heap takes the hosted-linux branch and `mmap` is an `ecall`. |
+| `--no-signals` | omits the SIGINT/SIGTERM runtime, whose install is the `rt_sigaction` `ecall` in `app_main`'s prologue. |
+
+**Neither alone is enough**, which is what made this look like a compiler defect:
+each leaves a different fatal `ecall` behind, so testing them one at a time
+"disproves" both. Together:
+
+```
+--target=riscv32 --platform=esp --no-signals
+```
+
+- `hello-c3`: boots ONCE, no panic, prints `PXX hello from Pascal: i=1..5` and
+  `PXX sum 1..5 = 15`.
+- `net-c3`: boots once and prints `PXX-net-smoke status=0` — the lwIP loopback
+  socket smoke passes.
+
+### How I got the lane wrong
+
+I filed this Track A after testing `--platform=esp`, `-dPXX_ESP_IDF` and
+`--no-unhandled-handler` **individually** and seeing the panic survive each.
+Two errors:
+
+1. `--no-unhandled-handler` is not the signals flag. It gates the
+   *unhandled-exception message printer*; `--no-signals` gates the signal
+   runtime. Measured afterwards: `--no-unhandled-handler` produces a
+   **byte-identical** object on `--target=riscv32` — it does nothing there.
+2. Testing flags one at a time cannot find a fix that needs two. Each single
+   flag leaves a different `ecall`, so every individual test looks like a failure.
+
+`-dPXX_ESP_IDF` by hand was also wrong: that define is *derived* from
+`--platform=esp` in `lexer.inc`, and setting it directly does not select the
+rest of the platform.
+
+## Fixed in
+
+`examples/esp32/{hello-c3,net-c3,timer-c3}/build.sh` now pass both flags, with a
+comment naming the failure mode — `timer-c3` had `--platform=esp` but not
+`--no-signals`, i.e. exactly half the recipe.
+
+Still to check: `examples/esp32/hello-s3` (xtensa) passes neither. The signal
+runtime is gated on `TARGET_RISCV32`, so xtensa may not need `--no-signals`, but
+it does want `--platform=esp` for the heap. Left unchanged pending a real
+`qemu-system-xtensa -M esp32s3` boot rather than guessed at.
 
 ## Gate
 

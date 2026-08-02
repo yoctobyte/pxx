@@ -16,7 +16,17 @@ REPO_ROOT="$(cd ../../.. && pwd)"
 PXX="${PXX:-$REPO_ROOT/stable_linux_amd64/default/pinned}"
 [ -x "$PXX" ] || PXX="$REPO_ROOT/compiler/pascal26"
 
-"$PXX" --target=riscv32 -Fu"$REPO_ROOT/lib/rtl" -Fu"$REPO_ROOT/lib/rtl/platform/esp" main/main.pas main/main.o
+# --platform=esp and --no-signals are BOTH required, and each is silent when
+# missing:
+#   --platform=esp   auto-defines PXX_ESP_IDF, which backs PXXAlloc with the
+#                    IDF heap (calloc/free externals). Without it the heap
+#                    takes the hosted-linux branch and mmap is an ecall.
+#   --no-signals     omits the SIGINT/SIGTERM runtime, whose install is an
+#                    rt_sigaction ecall in app_main's prologue.
+# An ecall under FreeRTOS is an unhandled M-mode trap: the app panics at
+# "Calling app_main()" and boot-loops. Neither flag alone is enough.
+"$PXX" --target=riscv32 --platform=esp --no-signals \
+  -Fu"$REPO_ROOT/lib/rtl" -Fu"$REPO_ROOT/lib/rtl/platform/esp" main/main.pas main/main.o
 ar rcs main/libpxx_app.a main/main.o
 
 idf.py set-target esp32c3
