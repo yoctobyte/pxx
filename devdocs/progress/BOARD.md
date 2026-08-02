@@ -40,7 +40,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (207)
+## backlog (206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -135,7 +135,6 @@ lives in git, not in a timestamp._
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 50 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade |
 | feature-dns-esp-backend | B | 20 | feature | `dns_esp` — the lwIP resolver on ESP targets | — |
-| feature-dns-libc-backend | B | 35 | feature | `dns_libc` — a getaddrinfo backend, for the policy `dns_resolved` cannot see | — |
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-dynamic-include-paths-config | A | 45 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | 45 | feature | Dynamic soname discovery (no execve) | — |
@@ -356,7 +355,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1203)
+## done (1204)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1173,6 +1172,7 @@ lives in git, not in a timestamp._
 | feature-demo-vm | E | 50 | feature | Demo — bytecode VM + assembler (small ISA) | — |
 | feature-directive-if-numeric | A | 50 | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dns-backends-selection | B | 40 | feature | DNS backends beyond dns_wire: dns_libc / dns_resolved / dns_esp + selection | — |
+| feature-dns-libc-backend | B | 35 | feature | `dns_libc` — a getaddrinfo backend, for the policy `dns_resolved` cannot see | — |
 | feature-dns-resolver-library | B | 60 | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
 | feature-dotted-unit-names | A | 50 | feature | Dotted / namespace unit names in `uses` | — |
 | feature-double-to-single-narrowing | A | 50 | feature | Double literal / value → Single narrowing on assign and argument | — |
@@ -1746,7 +1746,6 @@ lives in git, not in a timestamp._
 - [p 35] [N] bug-nilpy-pypow-integer-overflow-does-not-promote
 - [p 35] [N] bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash
 - [p 35] [C] feature-c-esp-conformance-coverage
-- [p 35] [B] feature-dns-libc-backend
 - [p 35] [A] feature-nested-routine-fixed-array-capture
 - [p 35] [A] feature-nilpy-arc-cross-parity
 - [p 35] [N] feature-nilpy-multi-arg-callback-bridges

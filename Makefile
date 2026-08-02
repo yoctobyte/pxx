@@ -7081,6 +7081,16 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_dns_wire_default | tail -1)" = "DNSRESOLVED OK"
 	$(PXX_STABLE) -dPXX_DNS_RESOLVED -Fulib/rtl test/lib_dns_resolved.pas /tmp/lib_dns_resolved
 	test "$$(/tmp/lib_dns_resolved | tail -1)" = "DNSRESOLVED OK"
+	# The getaddrinfo backend, same two ways. Its ABI assertions (struct
+	# addrinfo's field offsets, pinned against gcc offsetof) run in the second
+	# build and are the load-bearing part: a wrong offset yields a plausible
+	# wrong address rather than a failure. -dPXX_DYNLIB_LIBC is required with
+	# -dPXX_DNS_LIBC and the build refuses without it; running the libc variant
+	# unconditionally follows the existing test_dynlib precedent in `make test`.
+	$(PXX_STABLE) -Fulib/rtl test/lib_dns_libc.pas /tmp/lib_dns_libc_default
+	test "$$(/tmp/lib_dns_libc_default | tail -1)" = "DNSLIBC OK"
+	$(PXX_STABLE) -dPXX_DNS_LIBC -dPXX_DYNLIB_LIBC -Fulib/rtl -Fulib/rtl/platform/posix test/lib_dns_libc.pas /tmp/lib_dns_libc
+	test "$$(/tmp/lib_dns_libc | tail -1)" = "DNSLIBC OK"
 	# A spawned child inherits the parent's environment (every spawn site used
 	# to hard-code an empty envp, i.e. handed each child `env -i`).
 	$(PXX_STABLE) -Fulib/rtl test/lib_child_env.pas /tmp/lib_child_env

@@ -2,9 +2,10 @@
 unit dns;
 { Resolver facade (feature-dns-resolver-library): host -> A records using the
   "files dns" order — consult /etc/hosts first, then query a configured
-  nameserver over UDP via the dns_wire path. This is the stable entrypoint; the
-  selectable dns_libc / dns_resolved / dns_esp backends and an async sibling come
-  later. Public DNS is never assumed: with no configured nameserver and no hosts
+  nameserver over UDP via the dns_wire path. This is the stable entrypoint, and
+  it stays the same API whichever backend is selected below — dns_resolved and
+  dns_libc are built (see the selection block); dns_esp is still to come.
+  Public DNS is never assumed: with no configured nameserver and no hosts
   match, resolution fails (DNS_ERR_NOCONFIG) rather than reaching out to a public
   resolver. }
 
@@ -15,7 +16,7 @@ interface
 
     (none)               dns_wire     — pure Pascal over PAL, zero dependencies
     -dPXX_DNS_RESOLVED   dns_resolved — systemd-resolved over Varlink (split DNS)
-    -dPXX_DNS_LIBC       dns_libc     — getaddrinfo via dlopen (not built yet)
+    -dPXX_DNS_LIBC       dns_libc     — getaddrinfo via dlopen (nsswitch, mDNS)
 
   Two backends at once is a COMPILE-TIME ERROR rather than silent precedence:
   which resolver a program uses is a policy decision, and quietly picking one
@@ -25,13 +26,22 @@ interface
     {$error PXX_DNS_RESOLVED and PXX_DNS_LIBC are mutually exclusive: pick one DNS backend}
   {$endif}
 {$endif}
+{ dns_libc reaches getaddrinfo through the runtime loader, which is itself
+  opt-in so the syscall-only core stays libc-free. Asking for the backend
+  without the loader would build a program that can never use it and silently
+  falls back on every lookup — so it is refused here instead. }
 {$ifdef PXX_DNS_LIBC}
-  {$error PXX_DNS_LIBC: the dns_libc backend is not implemented yet (feature-dns-backends-selection item 1); build without it for dns_wire, or use -dPXX_DNS_RESOLVED}
+  {$ifndef PXX_DYNLIB_LIBC}
+    {$error PXX_DNS_LIBC needs the runtime loader too: add -dPXX_DYNLIB_LIBC (it is opt-in because it makes the binary depend on glibc)}
+  {$endif}
 {$endif}
 
 uses platform, dns_wire_core, dns_config, dns_wire_blocking, dns_cache
 {$ifdef PXX_DNS_RESOLVED}
      , dns_resolved
+{$endif}
+{$ifdef PXX_DNS_LIBC}
+     , dns_libc
 {$endif}
      ;
 
@@ -593,6 +603,14 @@ begin
     if Result <> DNS_ERR_RESOLVED_PROTO then Exit;
   count := 0;
 {$endif}
+{$ifdef PXX_DNS_LIBC}
+  { Same contract as the resolved backend: a real DNS verdict (including
+    NXDOMAIN) is returned as-is, and only "the backend itself is not usable
+    here" falls through to wire. }
+  Result := DnsLibcResolveHost(name, ips, count);
+  if Result <> DNS_ERR_LIBC_UNAVAIL then Exit;
+  count := 0;
+{$endif}
   Result := DnsWireResolveHost(name, ips, count);
 end;
 
@@ -602,6 +620,11 @@ begin
   Result := DnsResolvedResolveHost6(name, ips, count);
   if Result <> DNS_ERR_RESOLVED_UNAVAIL then
     if Result <> DNS_ERR_RESOLVED_PROTO then Exit;
+  count := 0;
+{$endif}
+{$ifdef PXX_DNS_LIBC}
+  Result := DnsLibcResolveHost6(name, ips, count);
+  if Result <> DNS_ERR_LIBC_UNAVAIL then Exit;
   count := 0;
 {$endif}
   Result := DnsWireResolveHost6(name, ips, count);
