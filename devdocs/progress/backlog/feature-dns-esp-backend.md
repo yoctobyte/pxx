@@ -4,7 +4,11 @@ prio: 35
 type: feature
 ---
 
-# `dns_esp` — the lwIP resolver on ESP targets
+# DNS on ESP — bind lwIP's getaddrinfo, do NOT build a separate backend
+
+**RE-SCOPED 2026-08-02 (user).** The original framing — a `dns_esp` resolver
+backend alongside `dns_wire`/`dns_resolved`/`dns_libc` — is the wrong shape.
+See "Design, settled" below.
 
 - **Type:** feature (Track B networking / resolver backends), ESP-only
 - **Split out of** [[feature-dns-backends-selection]] on 2026-08-02 (item 3),
@@ -132,3 +136,79 @@ lwIP resolver can answer; the host-side build must be unaffected, which the
 existing `lib-test` DNS entries already assert by building the default and the
 resolved variants. Cannot be gated on the normal x86-64 lib gate — state that
 plainly in the ticket rather than pretending the usual gate covers it.
+
+## Design, settled 2026-08-02 — measured, not assumed
+
+**The user's point, and it is right:** an ESP program needs the IDF/lwIP stack
+for networking anyway, and that stack already ships a DNS interface. So unless
+the programmer explicitly opts into pxx's own resolver, DNS on ESP is already
+solved — through the same POSIX-shaped API glibc offers, which puts it at the
+`dns_libc` layer, **above the PAL**, not in a new backend.
+
+### Verified in the installed IDF
+
+`liblwip.a` contains all of it (checked with `nm` on the net-c3 build):
+
+| symbol | in liblwip.a |
+| --- | --- |
+| `lwip_getaddrinfo` | yes |
+| `lwip_freeaddrinfo` | yes |
+| `lwip_gethostbyname` | yes |
+| `dns_getserver` | yes |
+| `dns_gethostbyname` | yes |
+
+They do not appear in the *linked image* only because nothing references them
+and the linker drops them — not because they are unavailable.
+
+Note the real symbol is **`lwip_getaddrinfo`**; the plain `getaddrinfo` is a
+`#define` in `lwip/netdb.h`, so a Pascal `external` must name the `lwip_` form.
+
+### So the change is a BINDING difference, not a new backend
+
+`dns_libc` already is "resolve through the platform's getaddrinfo". Only how the
+symbol is acquired differs:
+
+- **glibc**: `dlopen("libc.so.6")` + `dlsym`, because the syscall-only core is
+  deliberately libc-free (hence `-dPXX_DYNLIB_LIBC`).
+- **lwIP/ESP**: a direct `external 'lwip_getaddrinfo'` — statically linked by
+  `idf.py`, no loader involved and no `-dPXX_DYNLIB_LIBC`.
+
+That is an `{$ifdef}` around how `FnGetAddrInfo` is obtained. The list walking,
+family filtering, error mapping and `TCAddrInfo` decoding are all shared.
+
+### The ABI matches — but partly by coincidence, so pin it
+
+`dns_libc` reads `struct addrinfo` and `sockaddr_in` **by offset**. Both are
+compatible with lwIP, and one of them only by luck:
+
+- **`struct addrinfo`**: identical field ORDER to glibc, including `ai_addr`
+  before `ai_canonname`. On 32-bit that is 0/4/8/12/16/20/24/28 — exactly what
+  `test/lib_dns_libc.pas` already pins for i386 and arm32.
+- **`sockaddr_in`**: lwIP is BSD-style with a leading `u8_t sin_len` that glibc
+  does not have. But lwIP's `sa_family_t` is `u8_t`, so
+  `sin_len(1) + sin_family(1) + sin_port(2)` lands `sin_addr` at offset **4** —
+  the same place glibc's `family(2) + port(2)` puts it. `sin6_addr` likewise
+  coincides at 8.
+
+**That coincidence must be asserted, not relied on.** If lwIP ever widened
+`sa_family_t`, or someone "simplified" the two paths on the assumption the
+structs are the same, every resolved address would silently shift by a byte.
+The ESP test should assert the offsets the way `lib_dns_libc` does on host.
+
+### What this leaves for `dns_wire` on ESP
+
+It becomes the **explicit opt-in** case: someone who wants pxx's own resolver
+rather than lwIP's (to bypass lwIP's cache, or to query a chosen server). Only
+then does "where do nameservers come from on ESP" matter — and `dns_getserver`
+is in `liblwip.a` for exactly that. Its `ip_addr_t` return is a union whose tag
+offset moves with `LWIP_IPV6_SCOPES`, so that one *does* want a small C shim
+using `ip_addr_get_ip4_u32()` rather than hand-computed offsets.
+
+So the earlier PAL-nameserver plan is not wrong, just **not first**: it belongs
+with the opt-in wire path, not on the default route.
+
+### Target scope
+
+**riscv32 (ESP32-C3) only.** xtensa is postponed by the user — it had too many
+issues and riscv is the direction — so `examples/esp32/hello-s3` stays as it is
+and nothing here targets xtensa.
