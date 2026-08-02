@@ -440,6 +440,19 @@ function GetEnvironmentVariableCount: Integer;
 { The parent's environment as execve's `envp`, for handing to a spawned child.
   Call it in the parent, before vfork — see the body. }
 function EnvironmentBlock: Pointer;
+
+{ Write side (decide-env-write-side, user 2026-08-01: option 3). The write goes
+  to OUR buffer — the same one GetEnvironmentVariable reads and the same one
+  EnvironmentBlock hands to execve — so a value set here is visible both to this
+  process and to any child spawned afterwards. That pairing is the decision's
+  whole point: a process-local write ALONE would silently get the set-then-spawn
+  case wrong, which this project treats as worse than not supporting writes.
+
+  It does not reach an already-running child, and it does not touch
+  /proc/self/environ — that is a read-only view of what the kernel handed us at
+  exec time. Setting an existing name replaces it; an empty name is ignored. }
+procedure SetEnvironmentVariable(const name, value: string);
+procedure UnsetEnvironmentVariable(const name: string);
 function GetEnvironmentString(Index: Integer): string;
 
 { File predicates over the PAL (FPC SysUtils). FileExists is True only for
@@ -2500,6 +2513,70 @@ begin
   end;
 end;
 
+{ Point the execve table at the CURRENT records. Rebuilt at use rather than
+  maintained incrementally: the entries are pointers into Pascal strings, and a
+  string reassigned by a write can move, so a table cached across a mutation
+  could dangle. At most 1024 pointer stores. }
+procedure EnvRebuildTable;
+var i: Integer;
+begin
+  for i := 0 to EnvCount - 1 do EnvpTable[i] := PChar(EnvVars[i]);
+  EnvpTable[EnvCount] := nil;
+end;
+
+{ Index of the record whose NAME is `name`, or -1. Compares up to the '=' so
+  'PATH' does not match 'PATHEXT'. }
+function EnvIndexOf(const name: string): Integer;
+var i, j, n: Integer; rec: string; hit: Boolean;
+begin
+  EnvIndexOf := -1;
+  n := Length(name);
+  if n = 0 then Exit;
+  for i := 0 to EnvCount - 1 do
+  begin
+    rec := EnvVars[i];
+    if Length(rec) >= n + 1 then
+      if rec[n + 1] = '=' then
+      begin
+        hit := True;
+        for j := 1 to n do
+          if rec[j] <> name[j] then begin hit := False; break; end;
+        if hit then
+        begin
+          EnvIndexOf := i;
+          Exit;
+        end;
+      end;
+  end;
+end;
+
+procedure SetEnvironmentVariable(const name, value: string);
+var idx: Integer;
+begin
+  if name = '' then Exit;
+  EnvLoad;
+  idx := EnvIndexOf(name);
+  if idx >= 0 then
+    EnvVars[idx] := name + '=' + value
+  else if EnvCount < 1024 then
+  begin
+    EnvVars[EnvCount] := name + '=' + value;
+    EnvCount := EnvCount + 1;
+  end;
+end;
+
+procedure UnsetEnvironmentVariable(const name: string);
+var idx, i: Integer;
+begin
+  if name = '' then Exit;
+  EnvLoad;
+  idx := EnvIndexOf(name);
+  if idx < 0 then Exit;
+  { compact: order carries no meaning in an environment }
+  for i := idx to EnvCount - 2 do EnvVars[i] := EnvVars[i + 1];
+  EnvCount := EnvCount - 1;
+end;
+
 function EnvironmentBlock: Pointer;
 { The parent's own environment shaped as execve's `envp`.
 
@@ -2509,11 +2586,13 @@ function EnvironmentBlock: Pointer;
   started with nothing.
 
   Call this in the PARENT, before vfork: it may do I/O on first use, and after
-  vfork the child must not. The pointers are into EnvRaw, a global that is never
-  freed, so they stay valid through the child's exec (which shares this address
-  space until it execs). }
+  vfork the child must not. The pointers are into the global record strings,
+  which are never freed, so they stay valid through the child's exec (which
+  shares this address space until it execs). Rebuilt on every call so a write
+  made since the last spawn is included. }
 begin
   EnvLoad;
+  EnvRebuildTable;
   EnvironmentBlock := @EnvpTable[0];
 end;
 

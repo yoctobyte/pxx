@@ -40,7 +40,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (205)
+## backlog (206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -130,6 +130,7 @@ lives in git, not in a timestamp._
 | feature-cli-widgetset-flag | A | 20 | feature | CLI: --widgetset=<name> as sugar for -dWIDGETSET_<NAME>, so the flag reads like Lazarus' -ws | — |
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
 | feature-crtl-implement-libc-assumptions | B | 10 | feature | crtl: implement the libc assumptions real-world C leans on | — |
+| feature-crtl-libc-gap-batch-2026-08 | B | 30 | feature | crtl gap batch, 2026-08: 10 assumed-libc symbols real C reaches for | — |
 | feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | feature-nilpy-break-continue, feature-nilpy-tk-binding |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 50 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade |
@@ -354,7 +355,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1209)
+## done (1210)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1394,6 +1395,7 @@ lives in git, not in a timestamp._
 | feature-riscv32-var-param-forwarding | A | 50 | feature | riscv32: a var parameter forwarded to a nested var parameter loses its address | — |
 | feature-rtl-conversion-and-bitset-library | B | 50 | feature | RTL gaps — string/number conversion + a bit-set type (surfaced by the demos) | — |
 | feature-rtl-environment-variables | B | 45 | feature | No access to environment variables anywhere in the RTL | — |
+| feature-rtl-environment-write-side | B | 40 | feature | The environment's write side — SetEnvironmentVariable, and the child sees it | — |
 | feature-rtl-image-bitmap-library | B | 50 | feature | RTL image bitmap library | — |
 | feature-rtl-month-day-name-arrays | B | 55 | feature | RTL: ShortMonthNames / LongMonthNames / day-name arrays — lib-test's synapse step is red on them | — |
 | feature-rtl-terminal-raw-mode | B | 50 | feature | Terminal raw mode and unbuffered input support (libc-free) | — |
@@ -1766,6 +1768,7 @@ lives in git, not in a timestamp._
 - [p 30] [N] bug-nilpy-dataclass-no-generated-eq
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
 - [p 30] [N] bug-nilpy-for-else-and-while-else-not-supported
+- [p 30] [B] feature-crtl-libc-gap-batch-2026-08
 - [p 30] [N] feature-nilpy-list-sort-inplace-key-reverse
 - [p 30] [N] feature-nilpy-min-max-variadic-more-than-two-args
 - [p 30] [N] feature-nilpy-stdlib-coverage-gaps-measured

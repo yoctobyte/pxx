@@ -270,3 +270,35 @@ Two items came back out of it as a Track U question rather than plumbing —
 [[decide-ipv6-dualstack-and-aaaa-ordering]]. Both are choices this umbrella's
 design section never made, and both change observable behaviour, so they wait
 for a human.
+
+## 2026-08-02 (Track B) — the decided items landed; this umbrella has no open children
+
+[[decide-ipv6-dualstack-and-aaaa-ordering]] was resolved 2026-08-01, but the
+ticket that owned its implementation ([[feature-ipv6-complete-surface]]) was
+already in `done/`, so the decided work sat in nobody's queue for a day. Both
+halves are now in:
+
+- **`IPV6_V6ONLY` escape hatch** — `NetTcpListen(..., v6Only)` with
+  INHERIT (the decided default, unchanged) / OFF / ON. Asserted behaviourally:
+  strict refuses a v4 client, dual-stack accepts one. Commit 272a4d90b.
+- **A-first, AAAA-fallback connect-by-name** — new `lib/rtl/netconnect.pas`,
+  kept out of both `net.pas` and `dns.pas` so neither gains a dependency on the
+  other. Commit ec221f7a0, re-filed as
+  [[feature-net-a-first-connect-by-name]].
+
+Two defects fell out of that work, both fixed with regressions:
+[[bug-b-dns-wire-ipv4-literal-returns-nxdomain]] (the default resolver answered
+NXDOMAIN for `127.0.0.1`, so the facade's answer changed with the backend), and
+`NetTcpConnectTimeout` silently ignoring `addr.Family` (a v6 address connected
+to `0.0.0.0`).
+
+**State of this umbrella: no open children.** Its named milestones are done, its
+IPv6 child is closed, and its decision is implemented. The only networking
+tickets left in the tree are [[feature-dns-esp-backend]] (ESP-only, and not
+startable without an ESP runner) and [[feature-dns-libc-backend]] (done).
+
+It is still ranked 20 and still appears in the ready queue despite its own
+instruction to "rank the children, not the umbrella". Whether a years-spanning
+strategy umbrella with zero open children should be closed, or kept open to
+collect future ones, is a judgment call about how this project wants its board
+read — flagged here rather than decided by an agent.

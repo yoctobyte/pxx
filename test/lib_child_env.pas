@@ -72,6 +72,38 @@ begin
   Chk('child_unset',
       ChildSucceeds('test -z "$PXX_DEFINITELY_NOT_SET_ANYWHERE"'), True);
 
+  { ---- the WRITE side (decide-env-write-side, user 2026-08-01: option 3) ----
+    The decision insists the process-local write and the execve hand-off are one
+    change, because a write visible only to us silently gets set-then-spawn
+    wrong. So every assertion here comes in pairs: what WE see, and what a CHILD
+    spawned afterwards sees. Asserting only the first would pass under option 2,
+    which is the outcome the decision rejected. }
+  SetEnvironmentVariable('PXX_WRITE_TEST', 'hello');
+  Chk('write_self',      GetEnvironmentVariable('PXX_WRITE_TEST') = 'hello', True);
+  Chk('write_child',     ChildSucceeds('test "$PXX_WRITE_TEST" = hello'), True);
+
+  SetEnvironmentVariable('PXX_WRITE_TEST', 'second');
+  Chk('replace_self',    GetEnvironmentVariable('PXX_WRITE_TEST') = 'second', True);
+  Chk('replace_child',   ChildSucceeds('test "$PXX_WRITE_TEST" = second'), True);
+
+  UnsetEnvironmentVariable('PXX_WRITE_TEST');
+  Chk('unset_self',      GetEnvironmentVariable('PXX_WRITE_TEST') = '', True);
+  Chk('unset_child',     ChildSucceeds('test -z "$PXX_WRITE_TEST"'), True);
+
+  { a write must not disturb what we inherited }
+  Chk('inherit_survives_write', GetEnvironmentVariable('HOME') <> '', True);
+  Chk('inherit_child_survives', ChildSucceeds('test -n "$HOME"'), True);
+
+  { name matching stops at the '=' — PXX_P must not match PXX_PEXT }
+  SetEnvironmentVariable('PXX_P', 'a');
+  SetEnvironmentVariable('PXX_PEXT', 'b');
+  Chk('no_prefix_match', (GetEnvironmentVariable('PXX_P') = 'a')
+                     and (GetEnvironmentVariable('PXX_PEXT') = 'b'), True);
+  { and unsetting one leaves the other }
+  UnsetEnvironmentVariable('PXX_P');
+  Chk('unset_keeps_sibling', (GetEnvironmentVariable('PXX_P') = '')
+                         and (GetEnvironmentVariable('PXX_PEXT') = 'b'), True);
+
   if fails = 0 then WriteLn('CHILDENV OK')
   else WriteLn('CHILDENV FAILED ', fails);
 end.
