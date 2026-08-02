@@ -1,0 +1,62 @@
+# del l[i] -- removing a single list element by index.
+# Only `del d[k]` (dict) and `del l[a:b]` (slice) were supported; a plain index
+# was a compile error naming the two forms that worked.
+# bug-nilpy-del-of-a-list-index-is-unsupported
+
+l = [0, 1, 2, 3, 4]
+del l[1]
+print(l)
+
+# a negative index counts from the end
+del l[-1]
+print(l)
+
+del l[0]
+print(l)
+
+# out of range RAISES, unlike a slice, which clamps -- that asymmetry is
+# Python's own: del l[99] raises, del l[99:] does not
+try:
+    del l[99]
+except IndexError:
+    print("IndexError")
+print(l)
+
+try:
+    del l[-99]
+except IndexError:
+    print("IndexError neg")
+print(l)
+
+# a slice with the same out-of-range bound does NOT raise
+big = [1, 2, 3]
+del big[99:]
+print(big)
+
+# the index expression must be evaluated exactly ONCE
+calls = [0]
+
+def bump():
+    calls[0] = calls[0] + 1
+    return 0
+
+m = [7, 8, 9]
+del m[bump()]
+print(m)
+print(calls[0])
+
+# the other del forms still work
+d = {"a": 1, "b": 2}
+del d["a"]
+print(d)
+
+s = [1, 2, 3, 4, 5]
+del s[1:3]
+print(s)
+
+# deleting down to empty
+e = [1, 2]
+del e[0]
+del e[0]
+print(e)
+print(len(e))

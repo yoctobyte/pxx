@@ -496,6 +496,7 @@ function pystr_slice_step(const s: AnsiString; lo, hi, step: Integer): AnsiStrin
 function pybytes_slice_step(b: TPyBytes; lo, hi, step: Integer): TPyBytes;
 function pylist_slice_step(l: TPyList; lo, hi, step: Integer): TPyList;
 function pylist_del_slice(l: TPyList; lo, hi: Integer): TPyList;   { del l[lo:hi] in place }
+function pylist_del_at(l: TPyList; i: Integer): TPyList;           { del l[i] in place }
 procedure pylist_setslice(l: TPyList; lo, hi: Integer; src: TPyList);   { l[lo:hi] = src in place }
 { `b[lo:hi] = src`. uforth assigns a slice of the SAME length everywhere (it is
   emulating fixed-width cells in Forth data space), so a length CHANGE is
@@ -7551,6 +7552,27 @@ begin
   for i := hi to l.count - 1 do
     l.put(i - gap, l.at(i));
   l.FLen := l.count - gap;
+end;
+
+{ `del l[i]` — remove ONE element in place. Delegates to the slice delete so
+  the shifting logic exists once, but takes the index as a single argument: the
+  frontend cannot build `[i:i+1]` from the parsed subscript without duplicating
+  the index EXPRESSION, which would evaluate `del l[f()]` twice.
+
+  A negative index counts from the end, and an out-of-range one raises
+  IndexError — unlike a SLICE, which clamps. That asymmetry is Python's:
+  `del l[99]` raises, `del l[99:]` does not
+  (bug-nilpy-del-of-a-list-index-is-unsupported). }
+function pylist_del_at(l: TPyList; i: Integer): TPyList;
+var k: Integer;
+begin
+  Result := l;
+  if l = nil then Exit;
+  k := i;
+  if k < 0 then k := k + l.count;
+  if (k < 0) or (k >= l.count) then
+    raise IndexError.Create('list assignment index out of range');
+  pylist_del_slice(l, k, k + 1);
 end;
 
 { `l[lo:hi] = src` — replace that slice IN PLACE with src's elements (Python's

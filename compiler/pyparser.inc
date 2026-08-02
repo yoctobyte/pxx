@@ -12149,12 +12149,31 @@ begin
       Result := delBase;
       Exit;
     end;
+    { `del l[i]` — the read lowered to TPyList.at(l, i); swap it for the
+      in-place single-element delete, which takes the index as ONE argument so
+      the index expression is not duplicated (`del l[f()]` must call f once).
+      bug-nilpy-del-of-a-list-index-is-unsupported }
+    ci := FindUClass('TPyList');
+    symIdx := -1;
+    if ci >= 0 then symIdx := FindUMeth(ci, 'at');
+    if (symIdx >= 0) and (ASTKind[delBase] = AN_CALL) and
+       (ASTIVal[delBase] = UMthProc_[symIdx]) then
+    begin
+      symIdx := FindProc('pylist_del_at');
+      if symIdx < 0 then Error('Nil Python: pylib (pylist_del_at) not loaded');
+      ASTIVal[delBase] := symIdx;
+      ASTTk[delBase] := Ord(Procs[symIdx].RetType);
+      ASTRight[delBase] := ProcRetRecId[symIdx];
+      Result := delBase;
+      Exit;
+    end;
     ci := FindUClass('TPyDict');
     symIdx := -1;
     if ci >= 0 then symIdx := FindUMeth(ci, 'fetch');
     if (symIdx < 0) or (ASTKind[delBase] <> AN_CALL) or
        (ASTIVal[delBase] <> UMthProc_[symIdx]) then
-      Error('Nil Python: del is supported on a dict subscript or a list slice (del d[k], del l[a:b])');
+      Error('Nil Python: del is supported on a dict subscript, a list index or '
+            + 'a list slice (del d[k], del l[i], del l[a:b])');
     symIdx := FindUMeth(ci, 'remove');
     if symIdx < 0 then Error('Nil Python: TPyDict.remove not found');
     ASTIVal[delBase] := UMthProc_[symIdx];

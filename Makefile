@@ -1109,6 +1109,11 @@ test-nilpy: $(COMPILER)
 	# was silently missed and shrinking ran off the end into an IndexError.
 	./$(COMPILER) test/test_nilpy_iterate_live_list.npy /tmp/test_nilpy_livelist26
 	test "$$(/tmp/test_nilpy_livelist26)" = "$$(printf '%b' '[1, 2, 3, 9]\n[1, 2, 3, 9]\n[1, 2, 3]\n[1, 2, 3]\n[1, 3]\n[2, 4]\n[1]\n[]\n[2, 4, 6]\n[2, 3]\n0 1\n1 2\n2 3\na 1\nb 2\na 1\nb 2\na\nb\nc\n90\nempty ok\n[1, 3]')"
+	# del l[i] — a plain list index was a compile error; only del d[k] and
+	# del l[a:b] worked. Out of range RAISES (a slice clamps), and the index
+	# expression must be evaluated exactly once.
+	./$(COMPILER) test/test_nilpy_del_list_index.npy /tmp/test_nilpy_delidx26
+	test "$$(/tmp/test_nilpy_delidx26)" = "$$(printf '%b' '[0, 2, 3, 4]\n[0, 2, 3]\n[2, 3]\nIndexError\n[2, 3]\nIndexError neg\n[2, 3]\n[1, 2, 3]\n[8, 9]\n1\n{\047b\047: 2}\n[1, 4, 5]\n[]\n0')"
 	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
 	# key function had no overload to bind to (dict alone and list+key both worked)
 	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26
