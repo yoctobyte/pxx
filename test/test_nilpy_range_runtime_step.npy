@@ -1,0 +1,50 @@
+# bug-nilpy-range-negative-runtime-step-yields-empty
+#
+# The loop DIRECTION was decided at compile time and only from a literal, so a
+# step known only at run time always got `<`: a descending range terminated
+# immediately and yielded an empty list, silently. A literal step was always
+# fine, which is why this survived.
+#
+# The literal cases below are the gate on the fast path being kept: a literal
+# step still gets a single comparison, not the runtime direction test.
+#
+# The zero step is Python's ValueError — without it the loop never advances and
+# hangs, which is the failure mode a runtime step made reachable.
+#
+# Diffed against CPython (tools/pydiff.py).
+
+def stepped(a, b, s):
+    out = []
+    for i in range(a, b, s):
+        out.append(i)
+    return out
+
+print(stepped(10, 0, -3))
+print(stepped(0, 10, 3))
+print(stepped(10, 1, -3))
+print(stepped(9, 0, -3))
+print(stepped(0, 0, 1))
+print(stepped(5, 5, -1))
+print(stepped(1, 10, 1))
+print(stepped(-1, -10, -2))
+
+out = []
+for i in range(10, 0, -3):
+    out.append(i)
+print(out)
+
+out = []
+for i in range(0, 6, 2):
+    out.append(i)
+print(out)
+
+n = 4
+out = []
+for i in range(n - 1, -1, -1):
+    out.append(i)
+print(out)
+
+try:
+    print(stepped(0, 5, 0))
+except ValueError as e:
+    print("caught")

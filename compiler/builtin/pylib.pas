@@ -504,6 +504,11 @@ function pylist_slice(l: TPyList; lo, hi: Integer): TPyList;
   negative step an omitted low bound means n-1 (not 0) and an omitted high
   bound means "before index 0" (not n), and the clamps differ likewise.
   step = 0 raises ValueError, as in Python. }
+{ `range(a, b, s)` rejects a zero step, as Python does — otherwise the loop
+  never advances and hangs. Called from the frontend's while-loop desugar only
+  when the step is not a literal whose sign is already known, so the common
+  `range(n-1, -1, -1)` shape pays nothing. }
+procedure pyrange_check_step(step: Int64);
 function pystr_slice_step(const s: AnsiString; lo, hi, step: Integer): AnsiString;
 function pybytes_slice_step(b: TPyBytes; lo, hi, step: Integer): TPyBytes;
 function pylist_slice_step(l: TPyList; lo, hi, step: Integer): TPyList;
@@ -5304,6 +5309,11 @@ begin
   begin
     if lo > hi then Result := ((lo - hi) + (-step) - 1) div (-step) else Result := 0;
   end;
+end;
+
+procedure pyrange_check_step(step: Int64);
+begin
+  if step = 0 then raise ValueError.Create('range() arg 3 must not be zero');
 end;
 
 function pystr_slice_step(const s: AnsiString; lo, hi, step: Integer): AnsiString;

@@ -46,7 +46,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (211)
+## backlog (210)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -97,7 +97,6 @@ lives in git, not in a timestamp._
 | bug-nilpy-print-stringifies-container-args-eagerly | N | 45 | bug | print() converts a container argument to text as it evaluates it, not after all arguments are evaluated — so `print(xs, xs.pop(), xs)` shows the list before AND after the pop. A user function with the identical shape is correct | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pypow-integer-overflow-does-not-promote | N | 35 | bug | `pypow_v`'s integer path silently wraps past 64 bits instead of promoting | — |
-| bug-nilpy-range-negative-runtime-step-yields-empty | N | 55 | bug | `range(a, b, s)` with a NEGATIVE step passed at runtime yields an empty range | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
 | bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | decide-nilpy-set-as-a-distinct-type-or-a-list |
@@ -366,7 +365,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1245)
+## done (1246)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -845,6 +844,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-qualified-proc-omitted-default | N | 35 | bug | A qualified UNIT-LEVEL proc call cannot omit a defaulted parameter | — |
 | bug-nilpy-raise-of-empty-exception-subclass-with-no-args | N | 65 | bug | `raise E()` where E is a user Exception subclass with an EMPTY body segfaults or prints nothing. Passing any argument, or giving E an __init__, makes it work — so the idiomatic empty exception class is the broken one | — |
 | bug-nilpy-range-for-variant-loop-var | N | 30 | bug | NilPy: range for-loop with a pre-existing VARIANT loop variable corrupts it | — |
+| bug-nilpy-range-negative-runtime-step-yields-empty | N | 55 | bug | `range(a, b, s)` with a NEGATIVE step passed at runtime yields an empty range | — |
 | bug-nilpy-range-over-a-variant-bound-loops-forever | N | 75 | bug | `for i in range(n)` LOOPS FOREVER when n is a variant | — |
 | bug-nilpy-redefining-a-def-is-ignored-the-first-body-still-runs | N | 60 | bug | Redefining a `def` silently does nothing — the FIRST body still runs | — |
 | bug-nilpy-return-type-inference-mistypes-several-expression-shapes | N | 75 | bug | An unannotated def's inferred return type is wrong for several common expression shapes | — |
@@ -1695,7 +1695,6 @@ lives in git, not in a timestamp._
 - [p 55] [C] bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [N] bug-nilpy-one-line-def-suite-does-not-parse
-- [p 55] [N] bug-nilpy-range-negative-runtime-step-yields-empty
 - [p 55] [N] bug-nilpy-unary-numeric-dunders-return-raw-handle
 - [p 55] [T] bug-t-corpus-regex-invents-phantom-tree
 - [p 55] [P] compat-pascal-assert-halts-instead-of-raising-eassertionfailed

@@ -11797,6 +11797,9 @@ var name, name2: AnsiString;
     enumMode: Boolean; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
     pair1, pair2, pair3, bodyNode, oneNode, limitNode, compSaved: Integer;
     rngStep, cmpNode, incNode, whileNode, keyN, hoistPre: Integer;
+    rngStepSym, rngStopSym, rngChkPi, rngChkArg: Integer;
+    rngDown, rngZero, rngGt, rngLt, rngPair: Integer;
+    stepKnown: Boolean;
     parenTarget: Boolean; pDepth, pScan: Integer;
     forTokIdx: Integer;   { token index of the `for` keyword itself }
     hName: AnsiString; ifCondStart, closerPos2, filtDummy: Integer;
@@ -12035,17 +12038,91 @@ begin
     ASTRight[node] := startNode;
     Result := PySeqAppend(-1, node);
 
-    cmpNode := AllocNode(AN_BINOP);              { i < stop  or  i > stop }
-    { a negative step (`-1` is AN_NEG over a literal; a bare negative literal is
-      AN_INT_LIT<0) counts DOWN, so the guard flips to `>` }
-    if (ASTKind[rngStep] = AN_NEG) or
-       ((ASTKind[rngStep] = AN_INT_LIT) and (ASTIVal[rngStep] < 0)) then
-      ASTIVal[cmpNode] := Ord(tkGt)
+    { The guard's direction follows the step's SIGN. For a literal step that is
+      known here, and the single-comparison lowering below is kept for it —
+      `range(n-1, -1, -1)` is the overwhelmingly common shape and pays nothing.
+
+      For a step only known at RUN time it was not known, and the code assumed
+      ascending: `range(a, b, s)` with a negative `s` terminated immediately and
+      yielded an empty range, silently
+      (bug-nilpy-range-negative-runtime-step-yields-empty). }
+    stepKnown := (ASTKind[rngStep] = AN_NEG) or
+                 ((ASTKind[rngStep] = AN_INT_LIT) and (ASTIVal[rngStep] <> 0));
+    if stepKnown then
+    begin
+      cmpNode := AllocNode(AN_BINOP);              { i < stop  or  i > stop }
+      { a negative step (`-1` is AN_NEG over a literal; a bare negative literal is
+        AN_INT_LIT<0) counts DOWN, so the guard flips to `>` }
+      if (ASTKind[rngStep] = AN_NEG) or
+         ((ASTKind[rngStep] = AN_INT_LIT) and (ASTIVal[rngStep] < 0)) then
+        ASTIVal[cmpNode] := Ord(tkGt)
+      else
+        ASTIVal[cmpNode] := Ord(tkLt);
+      ASTLeft[cmpNode] := PyMakeIdent(symIdx);
+      ASTRight[cmpNode] := stopNode;
+      ASTTk[cmpNode] := Ord(tyBoolean);
+    end
     else
-      ASTIVal[cmpNode] := Ord(tkLt);
-    ASTLeft[cmpNode] := PyMakeIdent(symIdx);
-    ASTRight[cmpNode] := stopNode;
-    ASTTk[cmpNode] := Ord(tyBoolean);
+    begin
+      { Runtime step: bind the step AND the stop to hidden temps, then test the
+        direction at run time — `(step < 0) ? (i > stop) : (i < stop)`.
+
+        Both need a temp because each is now read twice (the step by the
+        direction test and the increment, the stop by the two ternary arms), and
+        re-reading an expression with side effects would run it again. Binding
+        them ALSO evaluates each exactly once for the whole loop, which is what
+        CPython does with range()'s arguments — the previous lowering re-ran the
+        stop expression on every iteration. }
+      rngStepSym := AllocVar(PyHiddenName('step'), tyInt64);
+      rngStopSym := AllocVar(PyHiddenName('stop'), tyInt64);
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := PyMakeIdent(rngStepSym);
+      ASTRight[node] := rngStep;
+      Result := PySeqAppend(Result, node);
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := PyMakeIdent(rngStopSym);
+      ASTRight[node] := stopNode;
+      Result := PySeqAppend(Result, node);
+      { a zero step never advances, so the loop would hang; Python raises }
+      rngChkPi := FindProc('pyrange_check_step');
+      if rngChkPi >= 0 then
+      begin
+        rngChkArg := AllocNode(AN_ARG);
+        ASTLeft[rngChkArg] := PyMakeIdent(rngStepSym);
+        ASTRight[rngChkArg] := -1;
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := rngChkPi;
+        ASTTk[node] := Ord(tyUnknown);
+        ASTLeft[node] := rngChkArg;
+        Result := PySeqAppend(Result, node);
+      end;
+      rngDown := AllocNode(AN_BINOP);              { step < 0 }
+      ASTIVal[rngDown] := Ord(tkLt);
+      ASTLeft[rngDown] := PyMakeIdent(rngStepSym);
+      rngZero := AllocNode(AN_INT_LIT);
+      ASTIVal[rngZero] := 0;
+      ASTTk[rngZero] := Ord(tyInteger);
+      ASTRight[rngDown] := rngZero;
+      ASTTk[rngDown] := Ord(tyBoolean);
+      rngGt := AllocNode(AN_BINOP);                { i > stop }
+      ASTIVal[rngGt] := Ord(tkGt);
+      ASTLeft[rngGt] := PyMakeIdent(symIdx);
+      ASTRight[rngGt] := PyMakeIdent(rngStopSym);
+      ASTTk[rngGt] := Ord(tyBoolean);
+      rngLt := AllocNode(AN_BINOP);                { i < stop }
+      ASTIVal[rngLt] := Ord(tkLt);
+      ASTLeft[rngLt] := PyMakeIdent(symIdx);
+      ASTRight[rngLt] := PyMakeIdent(rngStopSym);
+      ASTTk[rngLt] := Ord(tyBoolean);
+      rngPair := AllocNode(AN_PAIR);
+      ASTLeft[rngPair] := rngGt;
+      ASTRight[rngPair] := rngLt;
+      cmpNode := AllocNode(AN_TERNARY);
+      ASTLeft[cmpNode] := rngDown;
+      ASTRight[cmpNode] := rngPair;
+      ASTTk[cmpNode] := Ord(tyBoolean);
+      rngStep := PyMakeIdent(rngStepSym);          { the increment reads the temp }
+    end;
 
     incNode := AllocNode(AN_BINOP);              { i + step }
     ASTIVal[incNode] := Ord(tkPlus);
