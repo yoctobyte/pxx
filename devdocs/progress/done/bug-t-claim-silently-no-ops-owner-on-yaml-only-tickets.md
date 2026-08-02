@@ -2,6 +2,8 @@
 track: T
 prio: 45
 type: bug
+owner: claude@xeon
+status: done
 ---
 
 # `progress.sh claim`/`resolve` silently no-op Owner/Status on YAML-only tickets
@@ -44,3 +46,6 @@ frontmatter block, or create one). Same bug likely affects `cmd_resolve`'s
 ## Workaround used
 
 Manually added `owner: <id>` to both affected tickets' frontmatter.
+
+## Log
+- 2026-08-02 — resolved, commit 03b90a755.
