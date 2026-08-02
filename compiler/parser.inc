@@ -5156,7 +5156,16 @@ begin
            (FindUMeth(recName - REC_UCLASS_BASE, fieldName + '_') >= 0) then
           fieldName := fieldName + '_';
       end;
-      if isNilPy and (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
+      { NilPyUserCode, not isNilPy: `isNilPy` is true for the WHOLE compilation,
+        including every PASCAL unit loaded into it (pylib and friends), so this
+        Python-only fallback was hijacking ordinary Pascal member resolution
+        inside those units. `o.ClassName` on a plain `TObject` local became a
+        dynamic attribute fetch and died at run time with "'Dog' object has no
+        attribute 'ClassName'", while the identical `TObject(p).ClassName` — a
+        different SHAPE, same type — resolved to the RTTI call and worked
+        (bug-classname-on-a-tobject-local-compiles-to-a-dynamic-attr-fetch).
+        Same predicate that gates every other NilPy-only rule. }
+      if NilPyUserCode and (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
          (FindUField(recName - REC_UCLASS_BASE, fieldName) < 0) and
          (FindUMeth(recName - REC_UCLASS_BASE, fieldName) < 0) and
          (FindUProp(recName - REC_UCLASS_BASE, fieldName) < 0) then

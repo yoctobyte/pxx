@@ -3,6 +3,8 @@ track: N
 prio: 65
 type: bug
 summary: "`o.ClassName` on a TObject local compiles to a NilPy DYNAMIC ATTRIBUTE fetch instead of the RTTI call, while `TObject(obj).ClassName` compiles correctly — same expression, different shape, different meaning"
+status: working
+owner: claude-AN
 ---
 
 # `o.ClassName` on a `TObject` local silently becomes a dynamic-attr fetch

@@ -1,0 +1,26 @@
+# bug-classname-on-a-tobject-local-compiles-to-a-dynamic-attr-fetch
+#
+# The Pascal side is test/nilpy_units/tobjprobe.pas — see its header. What is
+# pinned here: a Pascal unit compiled INTO a NilPy program still resolves Pascal
+# members the Pascal way. The NilPy dynamic-attribute fallback belongs to the
+# user's Python code, and it must not reach into the units loaded alongside it.
+import tobjprobe
+
+class Dog:
+    pass
+
+d = Dog()
+print(tobjprobe.NameViaCast(d))
+print(tobjprobe.NameViaLocal(d))
+print(tobjprobe.ClassTypeNameViaLocal(d))
+
+# ...and the feature that fallback exists FOR still works in NilPy's own code:
+# an attribute the class never declared, read, written and augmented.
+class Bag:
+    pass
+
+b = Bag()
+b.extra = 42
+print(b.extra)
+b.extra += 1
+print(b.extra)

@@ -509,6 +509,8 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_param_defaults_nonconstant26 | diff -u test/test_nilpy_param_defaults_nonconstant.expected -
 	./$(COMPILER) test/test_nilpy_method_param_defaults.npy /tmp/test_nilpy_method_param_defaults26
 	/tmp/test_nilpy_method_param_defaults26 | diff -u test/test_nilpy_method_param_defaults.expected -
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_tobject_member_via_local.npy /tmp/test_nilpy_tobject_member26
+	test "$$(/tmp/test_nilpy_tobject_member26)" = "$$(printf 'Dog\nDog\nDog\n42\n43')"
 	./$(COMPILER) test/test_nilpy_object_arc.npy /tmp/test_nilpy_object_arc26
 	test "$$(/tmp/test_nilpy_object_arc26)" = "$$(printf '3\n9\n2\n2')"
 	./$(COMPILER) test/test_nilpy_class_return.npy /tmp/test_nilpy_class_return26
