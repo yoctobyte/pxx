@@ -7140,6 +7140,18 @@ lib-test: pxx-stable-check
 	    { echo 'FAIL: cerrno_strings differs from gcc'; exit 1; }; \
 	  echo 'cerrno_strings: identical to gcc'; \
 	else echo 'cerrno_strings: SKIP (no gcc)'; /tmp/cerrno_strings >/dev/null 2>&1; fi
+	# strtol overflow clamping + ERANGE + base-0 octal, and limits.h's LONG_MAX
+	# matching the actual width of long. Assertions are target-independent
+	# booleans, so the same expected output holds on 32- and 64-bit targets.
+	$(PXX_STABLE) test/cstrtol_range.c /tmp/cstrtol_range
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -w -o /tmp/cstrtol_range_gcc test/cstrtol_range.c 2>/dev/null; \
+	  /tmp/cstrtol_range_gcc > /tmp/cstrtol_gcc.txt; \
+	  /tmp/cstrtol_range > /tmp/cstrtol_pxx.txt; \
+	  diff /tmp/cstrtol_gcc.txt /tmp/cstrtol_pxx.txt || \
+	    { echo 'FAIL: cstrtol_range differs from gcc'; exit 1; }; \
+	  echo 'cstrtol_range: identical to gcc'; \
+	else echo 'cstrtol_range: SKIP (no gcc)'; /tmp/cstrtol_range >/dev/null; fi
 	# crtl against gcc's libc, which is the oracle for this surface: the whole
 	# output is diffed against the SAME file built by gcc, so there are no
 	# recorded expectations to drift.

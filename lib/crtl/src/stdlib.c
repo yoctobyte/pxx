@@ -13,6 +13,8 @@
 #include <inttypes.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
+#include <limits.h>
 #include <inttypes.h>
 
 extern void *__pxx_malloc(long n);
@@ -129,30 +131,35 @@ long atol(const char *s) {
   return v * sign;
 }
 
+/* strtol/strtoul now DELEGATE to the 64-bit pair and clamp to long's range.
+   They used to accumulate on their own, which had two defects the file's own
+   note below already described but left standing for these two:
+
+     strtol("99999999999999999999", 0, 10)  ->  7766279631452241919
+       (silently WRAPPED, where C requires LONG_MAX and errno = ERANGE)
+     strtol("010", 0, 0)                    ->  10, not 8
+       (base 0 means a leading '0' is octal)
+
+   The note reasoned the overflow was masked because `long` is 64-bit on this
+   LP64 target and strtol's callers had not reached it — but the input above
+   reaches it on any target, and a silently wrapped value is exactly the
+   plausible-wrong-number this codebase treats as worse than an error. strtoul
+   was worse again: it cast the SIGNED result, so it inherited the wrap and
+   could not represent the upper half of its own range.
+
+   On LP64 the clamp below is a no-op and ERANGE comes from the 64-bit callee;
+   on i386/arm32, where long is 32 bits, the clamp is what does the work. */
 long strtol(const char *s, char **end, int base) {
-  long sign = 1, v = 0;
-  const char *p = s;
-  if (!p) { if (end) *end = (char *)s; return 0; }
-  while (*p == ' ' || *p == '\t' || *p == '\n') p++;
-  if (*p == '-') { sign = -1; p++; } else if (*p == '+') p++;
-  if ((base == 0 || base == 16) && p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) { p += 2; base = 16; }
-  if (base == 0) base = 10;
-  for (;;) {
-    int d;
-    char c = *p;
-    if (c >= '0' && c <= '9') d = c - '0';
-    else if (c >= 'a' && c <= 'z') d = c - 'a' + 10;
-    else if (c >= 'A' && c <= 'Z') d = c - 'A' + 10;
-    else break;
-    if (d >= base) break;
-    v = v * base + d; p++;
-  }
-  if (end) *end = (char *)p;
-  return v * sign;
+  long long v = strtoll(s, end, base);
+  if (v > (long long)LONG_MAX) { errno = ERANGE; return LONG_MAX; }
+  if (v < (long long)LONG_MIN) { errno = ERANGE; return LONG_MIN; }
+  return (long)v;
 }
 
 unsigned long strtoul(const char *s, char **end, int base) {
-  return (unsigned long)strtol(s, end, base);
+  unsigned long long v = strtoull(s, end, base);
+  if (v > (unsigned long long)ULONG_MAX) { errno = ERANGE; return ULONG_MAX; }
+  return (unsigned long)v;
 }
 
 /* strtoll/strtoull/atoll were declared in stdlib.h (C99) but, until now, never
@@ -196,7 +203,10 @@ long long strtoll(const char *s, char **end, int base) {
     p++;
   }
   if (end) *end = (char *)p;
-  if (overflow) return sign < 0 ? (-9223372036854775807LL - 1) : 9223372036854775807LL;
+  if (overflow) {
+    errno = ERANGE;            /* C requires it; callers distinguish clamp from a real value */
+    return sign < 0 ? (-9223372036854775807LL - 1) : 9223372036854775807LL;
+  }
   return v * sign;
 }
 
@@ -225,7 +235,7 @@ unsigned long long strtoull(const char *s, char **end, int base) {
     p++;
   }
   if (end) *end = (char *)p;
-  if (overflow) return 18446744073709551615ULL;
+  if (overflow) { errno = ERANGE; return 18446744073709551615ULL; }
   /* C99 7.20.1.4p4: a leading '-' negates in unsigned arithmetic, not an
      error — strtoull("-1", ...) is ULLONG_MAX, same as glibc. */
   return neg ? (0ULL - v) : v;

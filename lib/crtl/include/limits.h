@@ -14,9 +14,20 @@
 #define INT_MIN (-2147483647 - 1)
 #define INT_MAX 2147483647
 #define UINT_MAX 4294967295U
+/* long is target-width: 64-bit on x86-64/aarch64, 32-bit on i386/arm32. These
+   were hardcoded to the 64-bit values on EVERY target, so on i386 and arm32
+   LONG_MAX was larger than a long can hold — a bound check against it never
+   fired, and `x == LONG_MAX` was false for a value that really was the maximum.
+   __SIZEOF_LONG__ is predefined per target by the C frontend. */
+#if defined(__SIZEOF_LONG__) && __SIZEOF_LONG__ == 4
+#define LONG_MIN (-2147483647L - 1L)
+#define LONG_MAX 2147483647L
+#define ULONG_MAX 4294967295UL
+#else
 #define LONG_MIN (-9223372036854775807L - 1L)
 #define LONG_MAX 9223372036854775807L
 #define ULONG_MAX 18446744073709551615UL
+#endif
 #define LLONG_MIN (-9223372036854775807LL - 1LL)
 #define LLONG_MAX 9223372036854775807LL
 #define ULLONG_MAX 18446744073709551615ULL

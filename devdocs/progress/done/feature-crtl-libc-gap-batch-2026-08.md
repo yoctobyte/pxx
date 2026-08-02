@@ -175,3 +175,57 @@ the compile-time probe covers it.
 Verified: both streams (stdout and stderr separately, since `perror` writes to
 stderr and a merged stream compares buffering rather than content) identical to
 gcc on **x86-64, i386, aarch64 and arm32**.
+
+## Round 3 — asking whether it BEHAVES, not whether it exists
+
+Rounds 1 and 2 asked "does the symbol compile". `strerror` compiled fine and was
+a stub, which is the argument for a third round asking whether the answers are
+right. Probed printf/snprintf conversion coverage, strtol/strtod edge cases,
+qsort/bsearch, ctype over the full byte range, and string comparison signs —
+whole output diffed against gcc.
+
+printf/snprintf, qsort/bsearch, ctype and the comparison signs are **clean**.
+Three real bugs in the conversion family, all silent-wrong-value:
+
+**1. `strtol`/`strtoul` wrapped instead of clamping.**
+`strtol("99999999999999999999", 0, 10)` returned `7766279631452241919` where C
+requires `LONG_MAX` and `errno = ERANGE`. `strtoul` was worse: it cast the
+SIGNED `strtol` result, so it inherited the wrap and could not represent the top
+half of its own range. Base 0 also ignored a leading `0` (octal).
+
+This file's own comment already described the gap — a previous session wrote
+`strtoll`/`strtoull` correctly and noted that `strtol` "doesn't clamp on
+overflow or auto-detect an octal `0` prefix", reasoning it was masked because
+`long` is 64-bit on LP64 and strtol's callers had not reached it. An ordinary
+literal reaches it. Both now delegate to the 64-bit pair and clamp; the 64-bit
+pair now sets `ERANGE`, which it never did.
+
+**2. `limits.h` defined `LONG_MAX`/`LONG_MIN`/`ULONG_MAX` as the 64-bit values
+on EVERY target.** On i386 and arm32, where `long` is 32 bits, the bound was
+larger than a `long` can hold: a range check against it could never fire, and
+`x == LONG_MAX` was false for a value that really was the maximum. This is why
+the clamp from (1) still failed on 32-bit after it was written — the clamp was
+right, the constant it compared against was not. Now keyed on
+`__SIZEOF_LONG__`, which the frontend predefines correctly per target.
+
+**3. Filed, not fixed:**
+[[bug-cfront-arch-predefines-always-x86-64]] — `__x86_64__` is predefined on all
+five targets including riscv32, and `__i386__`/`__aarch64__`/`__arm__`/`__riscv`
+never are. Track C, urgent: real C selects machine-specific code (including
+inline assembly) with these, so a cross-compile takes the x86 branch everywhere,
+and the `#else` generic fallback a new target needs is unreachable.
+
+### Two things about the method
+
+The assertions in `test/cstrtol_range.c` are **target-independent booleans**
+(`is_LONG_MAX`, not a literal) so one expected output serves 32- and 64-bit
+targets. That choice is what exposed bug 2: printing the numbers would have
+needed a different expectation per target and hidden the disagreement.
+
+The first version of the probe made **gcc segfault**. It passed `end` to the
+same `printf` argument list as the `strtol` call that sets it, and evaluation
+order is unspecified, so gcc read an uninitialised pointer. The test was
+invalid, not the library — every call is sequenced before its printf now, and
+the test says why.
+
+Identical to gcc on x86-64, i386, aarch64 and arm32.
