@@ -1,0 +1,66 @@
+# bug-nilpy-augmented-assign-to-a-variant-typed-field-corrupts-it
+#
+# `self.n += 3` on a field initialised from an UNANNOTATED ctor parameter gave
+# True; `-=` gave an empty line; `*=` gave 4.940656458412466e-323 — the integer's
+# bit pattern read as an IEEE double, which is what named the cause.
+#
+# An unannotated parameter is variant-typed, so the field is too. The shared
+# expression parser's compound-assignment node computes the lvalue address once
+# and does a scalar read-modify-write, which on a 16-byte variant slot reads the
+# payload as a raw machine word. That tail is documented as "inert for non-C
+# code" — true for Pascal, but NilPy's `+=` lexes to the same token, and a DOTTED
+# target reaches the expression parser before NilPy's own augmented path sees it.
+#
+# `def __init__(self, n): self.n = n` is the most common constructor in Python,
+# so this was the common case rather than a corner.
+#
+# The last block is the regression guard for the fix's one risk: a variant
+# holding a LIST must still extend IN PLACE, so an alias taken before the `+=`
+# sees the new element too.
+
+class A:
+    def __init__(self, n, s, xs):
+        self.n = n
+        self.s = s
+        self.xs = xs
+    def add(self, v):
+        self.n += v
+        return self.n
+    def sub(self, v):
+        self.n -= v
+        return self.n
+    def mul(self, v):
+        self.n *= v
+        return self.n
+    def cat(self, v):
+        self.s += v
+        return self.s
+    def grow(self, v):
+        self.xs += v
+        return self.xs
+
+a = A(10, "x", [1])
+print(a.add(3), a.sub(1), a.mul(2))
+print(a.cat("y"))
+print(a.grow([2]), a.xs)
+
+b = A(0, "", [])
+for i in [1, 2, 3]:
+    b.add(i)
+print(b.n)
+
+t = 10
+t += 3
+t -= 1
+t *= 2
+print(t)
+
+class L:
+    def __init__(self, xs):
+        self.xs = xs
+    def grow(self, v):
+        self.xs += v
+o = L([1])
+alias = o.xs
+o.grow([9])
+print(o.xs, alias)

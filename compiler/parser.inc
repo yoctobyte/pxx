@@ -13921,6 +13921,7 @@ var op: TTokenKind; left, right, node, isci, isNode, isArg, isArg2: Integer; isI
     chMid, chSym, chAssign, chSeq, chRight, chCmp, chAnd: Integer;   { Python comparison chaining }
     spDepth, spI: Integer;
     ordDirect, ordRefl: AnsiString; ordLCi, ordRCi, ordErr: Integer;   { Python ordering dunders }
+    caOp, caRhs: Integer;   { compound assignment: the binop token, and the NilPy variant rewrite }
 begin
   { NilPy argument UNPACKING of a list literal: `f(*[a, b, c])` means
     `f(a, b, c)`, and with a literal that is purely syntactic — songformatter
@@ -14315,16 +14316,51 @@ begin
     left := CurASTNode;
     ParseExpr;                 { right-assoc: RHS may itself be a compound assign }
     right := CurASTNode;
-    node := AllocNode(AN_COMPOUND_ASSIGN);
-    ASTLeft[node] := left; ASTRight[node] := right;
     case op of
-      tkPlusEq:  ASTIVal[node] := Ord(tkPlus);
-      tkMinusEq: ASTIVal[node] := Ord(tkMinus);
-      tkStarEq:  ASTIVal[node] := Ord(tkStar);
-      else       ASTIVal[node] := Ord(tkSlash);
+      tkPlusEq:  caOp := Ord(tkPlus);
+      tkMinusEq: caOp := Ord(tkMinus);
+      tkStarEq:  caOp := Ord(tkStar);
+      else       caOp := Ord(tkSlash);
     end;
-    ASTTk[node] := ASTTk[left];
-    CurASTNode := node;
+    { A NilPy VARIANT lvalue must NOT take the compound-assign node. That node
+      computes the lvalue address once and does a scalar read-modify-write, which
+      on a 16-byte variant slot reads the payload as a raw machine word: `self.n
+      += 3` yielded True, `-=` an empty line and `*=` 4.94e-323 — the integer's
+      bit pattern read as a double
+      (bug-nilpy-augmented-assign-to-a-variant-typed-field-corrupts-it).
+
+      This tail is documented as "inert for non-C code", and it is for Pascal —
+      but NilPy's `+=` lexes to tkPlusEq too, and a DOTTED target (`self.n += 3`)
+      reaches the expression parser before NilPy's own augmented-assignment path
+      can see it. A field initialised from an UNANNOTATED ctor parameter is
+      variant-typed, which is the most idiomatic constructor in Python, so this
+      was the common case rather than a corner.
+
+      Rewritten to the explicit `lv = lv <op> rhs`, which is exactly what NilPy's
+      own augmented path builds for a bare name and is measured correct — the
+      binop goes through the variant-aware dispatch instead of a raw word
+      update. `+` keeps the AUGADD mark so a variant holding a LIST still extends
+      IN PLACE (bug-nilpy-augmented-add-on-variant-list-is-not-in-place). }
+    if NilPyUserCode and (IntToTypeKind(ASTTk[left]) = tyVariant) then
+    begin
+      node := AllocNode(AN_BINOP);
+      ASTIVal[node] := caOp;
+      ASTLeft[node] := left; ASTRight[node] := right;
+      ASTTk[node] := Ord(tyVariant);
+      if caOp = Ord(tkPlus) then ASTSLen[node] := PY_BINOP_AUGADD;
+      caRhs := node;
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := left; ASTRight[node] := caRhs;
+      CurASTNode := node;
+    end
+    else
+    begin
+      node := AllocNode(AN_COMPOUND_ASSIGN);
+      ASTLeft[node] := left; ASTRight[node] := right;
+      ASTIVal[node] := caOp;
+      ASTTk[node] := ASTTk[left];
+      CurASTNode := node;
+    end;
   end;
   { The closing ']' of a `*[...]` argument splice: the elements were handed to
     the caller's argument loop one comma at a time, and this is the token the
