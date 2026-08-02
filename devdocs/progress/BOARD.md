@@ -38,7 +38,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (199)
+## backlog (201)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -60,6 +60,7 @@ _none_
 | bug-nilpy-constructor-call-in-unpack-rhs-fails-to-parse | N | 55 | bug | A constructor call in an unpacking right-hand side won't parse | — |
 | bug-nilpy-dataclass-no-generated-eq | N | 30 | bug | `@dataclass` gets no generated `__eq__` — compares by identity instead of fields | — |
 | bug-nilpy-defaulted-param-before-star-args-rejects-short-call | N | 60 | bug | `def f(a, b=2, *rest)` cannot be called as `f(1)` | — |
+| bug-nilpy-dict-mutation-during-iteration-is-unobserved-not-raised | N | 35 | bug | Mutating a dict while iterating it is silently unobserved; CPython raises RuntimeError 'dictionary changed size during iteration' | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-float-print-loses-precision-vs-cpython | N | 40 | bug | Float printing loses the last 1-2 significant digits vs CPython's shortest round-trip repr | — |
 | bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip | N | 20 | bug | `print(1e-20)` prints `0.0` — NilPy's float repr has no small-magnitude exponential form | — |
@@ -75,6 +76,7 @@ _none_
 | bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error | N | 50 | bug | `xs.sort(key=..., reverse=...)` fails with a bare "unexpected token" | — |
 | bug-nilpy-missing-builtins-step-slicing-range-into-list | N | 45 | bug | NilPy survey: step slicing (x[::2]), list(range(...)), pow(), str.index/expandtabs, sorted(d.keys()) all fail to COMPILE — 13 of 133 method-surface cases | — |
 | bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch | N | 70 | bug | NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a user class — dispatch is compile-time only. Scalar-then-class rebinding is just one way to get a variant. | — |
+| bug-nilpy-multiple-inheritance-does-not-parse | N | 40 | bug | class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable | — |
 | bug-nilpy-ne-dunder-ignored-always-negates-eq | N | 50 | bug | NilPy: a user-defined __ne__ is never consulted — `!=` always negates __eq__, silently returning the wrong value when they differ | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
@@ -3103,6 +3105,7 @@ _none_
 - [p 40] [N] bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter
 - [p 40] [N] bug-nilpy-float-print-loses-precision-vs-cpython
 - [p 40] [N] bug-nilpy-list-of-custom-objects-loses-repr-str
+- [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
 - [p 40] [A] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
@@ -3114,6 +3117,7 @@ _none_
 - [p 40] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 40] [T] feature-twatch-full-tier-coverage-age
 - [p 40] [A] feature-unicodestring-model
+- [p 35] [N] bug-nilpy-dict-mutation-during-iteration-is-unobserved-not-raised
 - [p 35] [N] bug-nilpy-list-sort-ignores-lt-dunder-on-objects
 - [p 35] [N] bug-nilpy-list-sort-method-missing
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
