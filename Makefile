@@ -1128,7 +1128,7 @@ test-nilpy: $(COMPILER)
 	# dict.copy() (shallow) and dict.popitem() (LIFO, KeyError when empty, yields a
 	# TUPLE) — both were "TPyDict has no method ..."
 	./$(COMPILER) test/test_nilpy_dict_copy_popitem.npy /tmp/test_nilpy_dictcp26
-	test "$$(/tmp/test_nilpy_dictcp26)" = "$$(printf '%b' '[(\047a\047, 1), (\047b\047, 2)]\n[(\047a\047, 1), (\047b\047, 2)]\n[(\047a\047, 1), (\047b\047, 2), (\047z\047, 9)]\n[1, 2]\n[]\n[(\047a\047, 1), (\047b\047, 2)]\n(\047c\047, 3)\n[(\047a\047, 1), (\047b\047, 2)]\n(\047b\047, 2)\n[(\047a\047, 1)]\n(\047a\047, 1)\n[]\nKeyError on empty\nstill running\ntuple\n[(\047k\047, 5)]')"
+	test "$$(/tmp/test_nilpy_dictcp26)" = "$$(printf '%b' '[(\047a\047, 1), (\047b\047, 2)]\n[(\047a\047, 1), (\047b\047, 2)]\n[(\047a\047, 1), (\047b\047, 2), (\047z\047, 9)]\n[1, 2]\n[]\n[(\047a\047, 1), (\047b\047, 2)]\n(\047c\047, 3)\n[(\047a\047, 1), (\047b\047, 2)]\n(\047b\047, 2)\n[(\047a\047, 1)]\n(\047a\047, 1)\n[]\nKeyError on empty\nstill running\ntuple\n[(\047k\047, 5)]\n[(\047a\047, 1), (\047b\047, 2)]\n[\047a\047, \047b\047]\n[1, 2]\n[]\n[]\n[(\047x\047, 1), (\047y\047, 2)]\n[\047x\047, \047y\047]\n[1, 2]\n[(\047x\047, 1), (\047y\047, 2)]\nq 9')"
 	# format-spec gaps that were all "unsupported format spec": the SIGN flag
 	# ('+', '-', ' '), the '#' ALTERNATE form, '_' grouping and the 'c' type, plus
 	# .precision on a STRING (truncates). Ordering is the point: zero padding goes

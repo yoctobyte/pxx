@@ -47,6 +47,27 @@ Filed because it is cheap to fix once the special case is found, and because
 "works through a variable, fails as a literal" is exactly the kind of
 inconsistency that costs someone an hour when they do hit it.
 
+## 2026-08-02 — FIXED
+
+The guess above was right in shape but wrong in mechanism: it is not the for-in
+pair-loop rewrite. `TPyDict` spells the three view methods `keylist` /
+`vallist` / `itemlist`, and `PyParseVariantMethod` maps the Python names onto
+them for a VARIANT receiver — but `PyParseClassMethodCall`, the path a receiver
+of KNOWN static type takes, had no such mapping and went straight to
+`FindUMeth(ci, 'items')`, which misses.
+
+That is why it looked like a literal-vs-variable distinction: a literal has a
+known static type, a plain variable is a variant. `popitem` worked on the same
+literal because it is spelled the same in both worlds.
+
+Fixed by mapping items/keys/values -> itemlist/keylist/vallist in
+`PyParseClassMethodCall` when the class IS TPyDict, so the two receiver paths
+agree. `.keys()` and `.values()` were broken identically and are covered.
+
+Verified in `test/test_nilpy_dict_copy_popitem.npy` (26 lines, byte-identical to
+CPython): all three on empty and non-empty literals, through a variable, on a
+method result, and in a for-in pair loop over a literal.
+
 ## Gate
 
 A `.npy` diffed against CPython: `.items()`, `.keys()` and `.values()` on a dict

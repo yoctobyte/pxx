@@ -7055,11 +7055,25 @@ end;
 function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer;
 var mmi, mpi, selfArg, lastArg, argNode, callNode, n, k, kwIdx, minArgs: Integer;
     anyKw: Boolean;
+    mn: AnsiString;
 begin
-  mmi := FindUMeth(ci, mname);
+  mn := mname;
+  { TPyDict spells the three view methods keylist/vallist/itemlist. The VARIANT
+    receiver path (PyParseVariantMethod, below) already maps the Python names
+    onto them; this CLASS-TYPED path did not, so a dict whose static type is
+    known — most visibly a LITERAL — failed with "TPyDict has no method
+    .items()" while the identical call through a variable worked
+    (bug-nilpy-dict-method-on-a-literal-receiver-not-found). }
+  if (FindUClass('TPyDict') >= 0) and (ci = FindUClass('TPyDict')) then
+  begin
+    if mn = 'items' then mn := 'itemlist'
+    else if mn = 'keys' then mn := 'keylist'
+    else if mn = 'values' then mn := 'vallist';
+  end;
+  mmi := FindUMeth(ci, mn);
   if mmi < 0 then
     Error('Nil Python: ' + PyRawName(UClsNOff[ci], UClsNLen[ci]) + ' has no method .' + mname + '()');
-  mmi := PyPromoteOverloadByKw(ci, mmi, mname);
+  mmi := PyPromoteOverloadByKw(ci, mmi, mn);
   selfArg := AllocNode(AN_ARG);
   ASTLeft[selfArg] := baseNode;
   ASTRight[selfArg] := -1;

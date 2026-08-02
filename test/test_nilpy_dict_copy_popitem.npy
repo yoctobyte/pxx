@@ -47,3 +47,25 @@ f = {"k": 5}
 p = f.popitem()
 f[p[0]] = p[1]
 print(sorted(f.items()))
+
+# .items()/.keys()/.values() on a dict whose static type is KNOWN -- most
+# visibly a LITERAL receiver. TPyDict spells these keylist/vallist/itemlist; the
+# VARIANT receiver path mapped the Python names across, the class-typed path did
+# not, so `{"a":1}.items()` failed while `d.items()` worked.
+# bug-nilpy-dict-method-on-a-literal-receiver-not-found
+print(sorted({"b": 2, "a": 1}.items()))
+print(sorted({"b": 2, "a": 1}.keys()))
+print(sorted({"b": 2, "a": 1}.values()))
+print(sorted({}.items()))
+print(sorted({}.keys()))
+
+# through a variable and a method result, which already worked
+dd = {"x": 1, "y": 2}
+print(sorted(dd.items()))
+print(sorted(dd.keys()))
+print(sorted(dd.values()))
+print(sorted(dd.copy().items()))
+
+# and in a for-in pair loop over a literal
+for k, v in {"q": 9}.items():
+    print(k, v)
