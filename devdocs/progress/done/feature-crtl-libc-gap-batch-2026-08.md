@@ -300,7 +300,7 @@ and `alarm`. The first two are process creation, which crtl has no story for at
 all (see the note in [[feature-crtl-libc-gap-batch-2026-08]] about the spawn
 surface and the environment buffer), and `alarm` needs signal timers.
 
-## isatty, and a correction to round 1
+## isatty (commit d31a18713), and a correction to round 1
 
 `isatty` landed. Round 1 declined it for two reasons and **both were false**:
 
