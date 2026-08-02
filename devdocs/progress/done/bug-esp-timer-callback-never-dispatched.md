@@ -3,6 +3,7 @@ track: A
 prio: 70
 type: bug
 summary: "An esp_timer periodic callback never fires — on BOTH chips — although create/start return ESP_OK, the timer reports active, and the callback pointer handed to the SDK is provably correct. Adding ONE unrelated statement to app_main makes it fire 30/30. Layout-sensitive, so a codegen/emit-obj fault, not the timer wrapper."
+status: done
 ---
 
 # esp_timer callbacks are not dispatched — and one extra statement fixes it
@@ -212,3 +213,6 @@ disagree on xtensa. Nothing does that today (`app_main` and the esp_timer
 callback take no 64-bit arguments), and the honest fix is to drive the callee
 spill from an explicit `cdecl` marker rather than guess. Filed as
 [[bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c]].
+
+## Log
+- 2026-08-02 — resolved, commit 02e6de315.
