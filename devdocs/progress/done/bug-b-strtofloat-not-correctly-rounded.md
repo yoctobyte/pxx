@@ -164,4 +164,4 @@ Tests: `test/lib_floattostr.pas` is up to 68 assertions (22 pre-existing, all
 still passing unmodified).
 
 ## Log
-- 2026-08-02 — resolved, commit PENDING.
+- 2026-08-02 — resolved, commit 05d5e7dcd.
