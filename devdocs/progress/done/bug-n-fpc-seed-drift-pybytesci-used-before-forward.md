@@ -3,7 +3,7 @@ summary: "FPC cold-start broken again: PyBytesCi is called at pyparser.inc:1508 
 type: regression
 track: N
 prio: 60
-status: working
+status: done
 owner: claude-AN
 ---
 
@@ -77,3 +77,26 @@ one-line fix.
 `fpc -Mobjfpc -O2 -Tlinux -Px86_64 ... compiler/compiler.pas` compiles clean,
 and `tools/testmgr.py --tier native --job 'fpc-bootstrap#src:compiler/compiler.pas'`
 goes green on the next watcher run.
+
+
+## Resolved 2026-08-02 — commit 831e2db63
+
+The one-line forward, placed beside the other `pyparser.inc` forwards, with a
+comment saying WHY it exists so the next person does not tidy it away as
+redundant (pxx does not need it; only FPC does).
+
+Verified end to end rather than at the seed step alone: `make bootstrap` runs
+fpc -> `pascal26-build` -> `pascal26-verify` and the two are byte-identical.
+135915 lines compiled in 3.8s — which is the ticket's own argument for
+[[feature-t-fpc-seed-canary-closer-to-the-dev-loop]] restated with a number:
+the check that would have caught this costs four seconds and nothing in the
+dev loop runs it.
+
+`gate.sh quick` GREEN. The `fpc-bootstrap` job goes green on T's next run.
+
+Line numbers had drifted since filing (the call is at 1560 now, the body at
+5506) — the diagnosis was otherwise exact, including the note not to trust the
+blamed sha.
+
+## Log
+- 2026-08-02 — resolved, commit 831e2db63.

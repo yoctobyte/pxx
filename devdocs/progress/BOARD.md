@@ -43,7 +43,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (208)
+## backlog (207)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -59,7 +59,6 @@ lives in git, not in a timestamp._
 | bug-cfront-spurious-dt-needed-libc-with-no-imports | C | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
 | bug-classname-on-a-tobject-local-compiles-to-a-dynamic-attr-fetch | N | 65 | bug | `o.ClassName` on a TObject local compiles to a NilPy DYNAMIC ATTRIBUTE fetch instead of the RTTI call, while `TObject(obj).ClassName` compiles correctly — same expression, different shape, different meaning | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
-| bug-n-fpc-seed-drift-pybytesci-used-before-forward | N | 60 | bug | FPC cold-start broken again: PyBytesCi is called at pyparser.inc:1508 but not defined until 5236, with no forward. One-line fix, verified — FPC then compiles the whole compiler in 10.7s | — |
 | bug-nilpy-bare-dot-float-literals-do-not-lex | N | 35 | bug | `.5` and `5.` do not lex — the shared number scanner requires a digit on BOTH sides of the dot, which is right for Pascal and wrong for Python | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
@@ -360,7 +359,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1215)
+## done (1216)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -698,6 +697,7 @@ lives in git, not in a timestamp._
 | bug-mixed-signature-vmt-misdispatch | A | 50 | bug | Virtual dispatch hits the wrong VMT slot with many mixed-signature methods | — |
 | bug-movslq-on-64bit-pointer-load | A | 50 | bug | Bug — movslq instruction generated for 64-bit pointer/array field load | — |
 | bug-multi-interface-method-corruption | A | 50 | bug | Memory/String corruption when calling methods on secondary interfaces | — |
+| bug-n-fpc-seed-drift-pybytesci-used-before-forward | N | 60 | bug | FPC cold-start broken again: PyBytesCi is called at pyparser.inc:1508 but not defined until 5236, with no forward. One-line fix, verified — FPC then compiles the whole compiler in 10.7s | — |
 | bug-n-nilpy-char-to-string-arg-leaks | N | 40 | bug | NilPy tyChar arg to a string parameter leaks one handle per call | — |
 | bug-n-nilpy-import-sqlite-asserts-host-sqlite-version | N | 60 | bug | test-nilpy hard-codes sqlite 3.45.1's version number, so the suite is red on any box with a different system sqlite | — |
 | bug-n-nilpy-missing-dunder-expect-fail-assertion-is-stale | N | 55 | bug | test_nilpy_operator_dunder_missing_fail still expects a COMPILE error; the missing-dunder case now raises a runtime TypeError like CPython, so the assertion is stale | — |
@@ -1630,7 +1630,6 @@ lives in git, not in a timestamp._
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 65] [T] task-t-worktree-is-not-current-state
-- [p 60] [N] bug-n-fpc-seed-drift-pybytesci-used-before-forward
 - [p 60] [N] bug-nilpy-defaulted-param-before-star-args-rejects-short-call
 - [p 60] [N] bug-nilpy-from-import-as-alias-is-discarded
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
