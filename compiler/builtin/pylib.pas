@@ -111,6 +111,10 @@ type
       (bug-a-nilpy-list-augmented-add-segfaults). }
     function extend(other: TPyList): TPyList;
     procedure clear;
+    { list.reverse() -- IN PLACE, unlike reversed()/[::-1] which both return a
+      NEW sequence. Returns Self so the statement lowering can use it as a
+      value node, the same shape sort() and extend() use. }
+    function reverse: TPyList;
     { list.sort() -- in place, no key=/reverse= yet (see the implementation). }
     function sort: TPyList;
     { `with open(p, "r") as f: f.read()`. The read-slurp model makes open()
@@ -2466,6 +2470,27 @@ end;
 procedure TPyList.clear;
 begin
   FLen := 0;
+end;
+
+{ Python's list.reverse() — IN PLACE. `reversed(xs)` and `xs[::-1]` both build a
+  NEW sequence and already existed; the in-place method did not, so `xs.reverse()`
+  failed to compile: "TPyList has no method reverse"
+  (bug-nilpy-list-reverse-method-missing). Swaps ends inward rather than building
+  a copy, which is what "in place" is for. }
+function TPyList.reverse: TPyList;
+var i, j: Integer; tmp: Variant;
+begin
+  i := 0;
+  j := FLen - 1;
+  while i < j do
+  begin
+    tmp := at(i);
+    put(i, at(j));
+    put(j, tmp);
+    Inc(i);
+    Dec(j);
+  end;
+  Result := Self;
 end;
 
 { Python's list.sort() — IN PLACE, unlike sorted() (pyeval.pas), which

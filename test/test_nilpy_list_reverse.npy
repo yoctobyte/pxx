@@ -1,0 +1,36 @@
+# list.reverse() — IN PLACE.
+#
+# `reversed(xs)` and `xs[::-1]` both build a NEW sequence and already worked;
+# the in-place method was simply absent, so `xs.reverse()` failed to compile
+# with "TPyList has no method reverse" (bug-nilpy-list-reverse-method-missing).
+#
+# Found by a differential sweep against the CPython oracle; it was the only gap
+# in a sweep that otherwise covered dict mutation, del, clear, list
+# sort/insert/pop/remove/extend/copy/clear, sets, nested containers and a
+# nested-comprehension matrix — all of which agreed.
+#
+# Covers the double-reverse identity, the empty and single-element edge cases,
+# and that the NEW-sequence forms still leave the original alone.
+#
+# Expectation is CPython's own output.
+
+xs = [5, 3, 1]
+xs.reverse()
+print(xs)
+xs.reverse()
+print(xs)
+ys = [1]
+ys.reverse()
+print(ys)
+zs = []
+zs.reverse()
+print(zs)
+ws = [1, 2, 3, 4]
+ws.reverse()
+print(ws)
+print(list(reversed(ws)))
+print(ws[::-1])
+print(ws)
+mixed = [1, "a", 2.5]
+mixed.reverse()
+print(mixed)

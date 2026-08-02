@@ -1088,6 +1088,10 @@ test-nilpy: $(COMPILER)
 	# resolve against and the AN_CALL reached IR lowering unlowered
 	./$(COMPILER) test/test_nilpy_str_method_subscript.npy /tmp/test_nilpy_strmsub26
 	test "$$(/tmp/test_nilpy_strmsub26)" = "$$(printf '%b' 'World\nHello\nc\n[\047a\047, \047b\047, \047c\047]\nb\ny\nH\nhello,world\nPAD\nb\n72\ntwo')"
+	# list.reverse() — IN PLACE. reversed()/[::-1] build a NEW sequence and worked;
+	# the in-place method was absent, so xs.reverse() did not compile.
+	./$(COMPILER) test/test_nilpy_list_reverse.npy /tmp/test_nilpy_lrev26
+	test "$$(/tmp/test_nilpy_lrev26)" = "$$(printf '%b' '[1, 3, 5]\n[5, 3, 1]\n[1]\n[]\n[4, 3, 2, 1]\n[1, 2, 3, 4]\n[1, 2, 3, 4]\n[4, 3, 2, 1]\n[2.5, \047a\047, 1]')"
 	# str.index()/rindex(): find/rfind that RAISE ValueError when absent. index was
 	# missing from the str-method table entirely, so the raising form did not compile.
 	./$(COMPILER) test/test_nilpy_str_index.npy /tmp/test_nilpy_stridx26

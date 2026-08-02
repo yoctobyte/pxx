@@ -333,7 +333,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1183)
+## done (1185)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -741,6 +741,7 @@ _none_
 | bug-nilpy-lifted-lambda-discards-its-return-value | N | 60 | bug | NilPy: a lifted lambda always discarded its own return value | — |
 | bug-nilpy-list-ordering-compares-heap-addresses | N | 70 | bug | NilPy: ordering two statically-typed lists compares their HEAP ADDRESSES, not their contents — `[9,9] < [1,1]` is True; no comparison helper is called at all | — |
 | bug-nilpy-list-plus-nonlist-silently-corrupts-instead-of-typeerror | N | 55 | bug | `[list] + non-list` silently corrupted instead of raising TypeError | — |
+| bug-nilpy-list-reverse-method-missing | N | 50 | bug | `list.reverse()` was missing | — |
 | bug-nilpy-locals-list-pointer-truncated-32bit | N | 55 | bug | NilPy: a list passed to a method truncates its pointer to 32-bit (SIGSEGV) | — |
 | bug-nilpy-method-call-on-fresh-construction | N | 45 | bug | nilpy: Cls().method() — a method call directly on a construction expression | — |
 | bug-nilpy-method-chaining-on-a-call-result | N | 65 | bug | Chaining a method call on the RESULT of a method call does not parse | — |
@@ -797,6 +798,7 @@ _none_
 | bug-nilpy-static-typed-operands-skip-mixed-type-guard | N | 70 | bug | NilPy: the mixed-type TypeError guard lives ONLY in the runtime variant path — when BOTH operands are statically typed, `7 - [1,2]` and `\"ab\" - \"ab\"` silently do pointer math (108 sweep cases) | — |
 | bug-nilpy-stdlib-name-binds-pascal-unit | N | 60 | bug | nilpy: a Python stdlib import silently binds to a same-named Pascal RTL unit (import json -> lib/rtl/json.pas) | — |
 | bug-nilpy-str-format-ignores-positional-indices | N | 60 | bug | NilPy: `\"{1}{0}\".format(a, b)` ignores the explicit indices and substitutes left-to-right — silently prints the arguments in the WRONG ORDER | — |
+| bug-nilpy-str-index-method-missing | N | 50 | bug | `str.index()` / `str.rindex()` were missing | — |
 | bug-nilpy-str-index-off-by-one | N | 75 | bug | NilPy string subscripts are 1-BASED — silently off by one vs CPython | — |
 | bug-nilpy-str-of-literal-none-prints-zero | N | 65 | bug | `str(None)` prints `0`, but `str(x)` with `x = None` prints `None` | — |
 | bug-nilpy-str-of-mixed-mod-prints-double-bits | N | 65 | bug | `str(3 % 2.5)` prints the double's BIT PATTERN | — |
