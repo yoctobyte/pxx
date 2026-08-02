@@ -7170,6 +7170,18 @@ lib-test: pxx-stable-check
 	  done; \
 	  echo 'ctime_localtime: identical to gcc (5 zones)'; \
 	else echo 'ctime_localtime: SKIP (no gcc or no zoneinfo)'; /tmp/ctime_localtime >/dev/null; fi
+	# sscanf's EOF-vs-0 return contract, and the math surface. The boundary
+	# cases are the point: EOF means input ran out before any conversion, 0
+	# means input was there and did not match, and callers loop on != EOF.
+	$(PXX_STABLE) test/cscanf_math.c /tmp/cscanf_math
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -w -o /tmp/cscanf_math_gcc test/cscanf_math.c -lm 2>/dev/null; \
+	  /tmp/cscanf_math_gcc > /tmp/csm_gcc.txt 2>&1; \
+	  /tmp/cscanf_math > /tmp/csm_pxx.txt 2>&1; \
+	  diff /tmp/csm_gcc.txt /tmp/csm_pxx.txt || \
+	    { echo 'FAIL: cscanf_math differs from gcc'; exit 1; }; \
+	  echo 'cscanf_math: identical to gcc'; \
+	else echo 'cscanf_math: SKIP (no gcc)'; /tmp/cscanf_math >/dev/null; fi
 	# crtl against gcc's libc, which is the oracle for this surface: the whole
 	# output is diffed against the SAME file built by gcc, so there are no
 	# recorded expectations to drift.

@@ -903,6 +903,7 @@ void setbuf(FILE *stream, char *buf) { (void)stream; (void)buf; }
 int vsscanf(const char *s, const char *fmt, va_list ap) {
   int count = 0;
   const char *p = fmt;
+  const char *s0 = s;
   while (*p) {
     if (isspace((unsigned char)*p)) {
       while (isspace((unsigned char)*s)) s++;
@@ -1016,6 +1017,23 @@ int vsscanf(const char *s, const char *fmt, va_list ap) {
         break; /* unsupported conversion: stop, matching glibc's early return */
       }
     }
+  }
+  /* C99 7.19.6.7p9: EOF when an INPUT failure occurs before any conversion —
+     distinct from 0, which means input WAS available and simply did not match.
+     Callers rely on the difference: `while (sscanf(...) != EOF)` terminates on
+     the former and spins forever on the latter, and error paths use it to tell
+     "no more input" from "malformed input". This returned 0 for both.
+
+     The test is "input exhausted after leading whitespace", not "input was
+     empty", because scanf skips leading whitespace before every conversion —
+     glibc gives EOF for a whitespace-only string too. And it is measured from
+     the START rather than from wherever the scan stopped, because
+     sscanf("abc", "abc") consumed its input successfully and must return 0,
+     not EOF, even though it ends at the terminator with nothing assigned. */
+  if (count == 0 && *fmt != 0) {
+    const char *q = s0;
+    while (isspace((unsigned char)*q)) q++;
+    if (*q == 0) return EOF;
   }
   return count;
 }

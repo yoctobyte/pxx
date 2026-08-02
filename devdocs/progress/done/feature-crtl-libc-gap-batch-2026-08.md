@@ -229,3 +229,34 @@ invalid, not the library — every call is sequenced before its printf now, and
 the test says why.
 
 Identical to gcc on x86-64, i386, aarch64 and arm32.
+
+## Round 5 — sscanf's return contract, and two wrong fixes before the right one
+
+Probed sscanf (12 conversion cases) and the math surface (fmod on a negative,
+hypot, log2, copysign, floor/ceil/trunc/round on negatives, pow, sqrt, exp, log,
+NaN/Inf detection). Math is **entirely clean**. One bug in sscanf:
+
+**`sscanf` returned 0 where C requires EOF.** An input failure *before any
+conversion* is -1; 0 means input was available and did not match. Callers depend
+on the difference — `while (sscanf(...) != EOF)` terminates on the first and
+**spins forever** on the second.
+
+Getting the condition right took three tries, and each wrong one passed the case
+that motivated it:
+
+1. *"was the input string empty"* — passes `sscanf("", "%d")`, but misses
+   `sscanf("   ", "%d")`. scanf skips leading whitespace before every
+   conversion, so a whitespace-only string is an input failure too, and glibc
+   returns EOF.
+2. *"is the input exhausted where the scan stopped"* — fixes that, and breaks
+   `sscanf("abc", "abc")`, which glibc returns **0** for: it consumed its input
+   successfully and merely assigned nothing.
+3. Correct: *input exhausted after leading whitespace, measured from the
+   START*, and only when the format asked for something (`sscanf("", "")` is 0,
+   not EOF).
+
+The only reason this converged is that the probe was widened to ten boundary
+cases and each diffed against gcc. A test written around the original symptom
+would have shipped either wrong version.
+
+Identical to gcc on x86-64, i386, aarch64 and arm32.
