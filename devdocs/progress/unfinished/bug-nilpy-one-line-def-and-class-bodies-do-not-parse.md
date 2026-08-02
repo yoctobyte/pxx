@@ -157,8 +157,24 @@ the class-side pieces:
 5. `PyCollectModuleLocalsAST` — `blockIsDef` by indent depth
 6. `PyAllocModuleGlobals` — `inDefStack` by indent depth
 
-(4, `PyRegisterClassMembers`, is unaffected by the class change — a one-line
-METHOD inside an ordinary class body still needs it.)
+**Correction, same day:** I wrote here that site 4 was unaffected by the class
+change. It was not, and the claim cost a shipped bug. `PyRegisterClassFieldsPrepass`
+locates a class body by scanning to the first `tkIndent`; a one-line body has
+none, so the scan ran on to the NEXT class's indent and registered that class's
+members against the one-line class — `class G(Exception): pass` followed by a
+class with an `__init__` failed with "unresolved forward: G.create". Fixed in
+a0cf42cb6 (stop at the header COLON, read the shape from what follows, and
+register an EMPTY member span rather than skipping the pass, which also sizes the
+class and emits its VMT).
+
+The reasoning error is worth keeping: "an empty body has no members, so the
+member scanners cannot be affected" ignored that a scanner can be wrong about
+where the body *ENDS*, not only about what is inside it. The same trap is
+waiting for the def half — sites 3, 5 and 6 all locate a def body by INDENT, and
+a one-line def body has none.
+
+Site 4 still needs its own work for a one-line METHOD inside an ordinary class
+body, which nothing above addresses.
 
 ### Found while testing this, filed separately
 
