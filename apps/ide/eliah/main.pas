@@ -1428,7 +1428,10 @@ begin
 
     { status title reflects the open design + node count }
     EliahForm.UpdateTitle;
-    if Length(EliahForm.Win.Caption) = 0 then begin writeln('SMOKE FAIL: title empty'); Halt(1); end;
+    { UpdateTitle writes Self.Caption (TControl.Caption); there is no `Win`
+      member on TEliahForm or anywhere in its chain — the stray `.Win` was
+      never valid and only survived because the file stopped compiling earlier }
+    if Length(EliahForm.Caption) = 0 then begin writeln('SMOKE FAIL: title empty'); Halt(1); end;
 
     writeln('SMOKE OK');
   end

@@ -3,6 +3,8 @@ track: B
 prio: 40
 type: bug
 blocked-by: []
+status: done
+owner: claude-B
 ---
 
 # `apps/ide/eliah/main.pas:1431` — `EliahForm.Win.Caption`: no `Win` member exists
@@ -45,8 +47,31 @@ an app-level bug in `apps/ide/eliah/main.pas` itself (or a missing PCL
 feature it was written against) — file-owned by Track B (apps built with pxx
 are Track E, file-owned by B) per `CLAUDE.md`'s Track E note.
 
+## Resolved 2026-08-02 — option (a), and the code says so rather than the odds
+
+The ticket offered (a) drop `.Win` or (b) add a real `Win` property, and
+reasoned that (a) was "more likely given no other reference exists". The
+deciding evidence is one line up rather than an absence: `UpdateTitle`, the
+procedure the smoke check is verifying, ends with
+
+```pascal
+  Self.Caption := s;        { apps/ide/eliah/main.pas:631 }
+```
+
+So the value the check wants is on `Caption` itself. `EliahForm.Win.Caption`
+would have been reading a different thing even if `Win` existed — (b) would have
+made it compile and still assert nothing useful. Changed to
+`EliahForm.Caption`.
+
+Confirmed: `main.pas` compiles (it needs `-Fuapps/ide/garin` for the shared
+`buffer`/`runner` units, as `tools/gui_suite.sh` does), and `eliah --smoke`
+prints `SMOKE OK`, which is the step this ticket said it was blocking.
+
 ## Suggested fix direction
 Read `apps/ide/eliah/main.pas` around line 1431 and its git history / any
 sibling `.Win` usage (there is none) to decide: (a) drop `.Win` and just call
 `EliahForm.Caption`, or (b) if `Win` is meant to be a distinct wrapped-window
 object, add the property. (a) is more likely given no other reference exists.
+
+## Log
+- 2026-08-02 — resolved, commit PENDING.
