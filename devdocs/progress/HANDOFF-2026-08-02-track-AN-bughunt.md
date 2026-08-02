@@ -15,20 +15,34 @@ Verified byte-identical to CPython, but **not gated and not pushed**:
 - `test/test_nilpy_format_thousands.npy` (new) and its Makefile assertion —
   both written, assertion passes.
 
-To finish: run **`make test-nilpy`** (this touched SHARED formatting, so the
-full suite is warranted here rather than just quick), then commit and push, and
-mark item 2 done on
+**LANDED** 2026-08-02 as `f7bc8e1bc`, and item 2 is marked done on
 `bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice`.
+
+The instruction that first stood here — *"run `make test-nilpy`, this touched
+SHARED formatting so the full suite is warranted"* — was **wrong**, and the user
+corrected it. That judgement call is the trap: it sounds conscientious, but it
+trades ~30s for ~10 minutes to buy coverage Track T runs against your exact SHA
+anyway, and it delays the push. See the loop below; it is now spelled out in
+CLAUDE.md and `devdocs/dev/gating-and-waiting.md`.
 
 ## The loop
 
 `make compiler/pascal26` (~12s — it IS the byte-identical self-host fixedpoint)
-→ run your repro → `tools/testmgr.py --tier quick` → `make bootstrap` → push.
+→ run your repro → `tools/gate.sh quick` (~30s) → push. That is the WHOLE per-fix
+gate; do not widen it because a change feels broad. Full suites are yours only
+when `tools/twatch.py --status` exits 1.
+
+(`gate.sh quick` is the dev loop — it is fixedpoint + `testmgr --tier quick` and
+no longer runs `test-nilpy`. An earlier draft of this file said "never run
+gate.sh in the dev loop, it is the pin gate"; that has not been true since
+`test-nilpy` was dropped from the quick mode.)
+
+`make bootstrap` when you add a call crossing an `.inc` boundary — see below.
 
 `make bootstrap` is the FPC seed build and is **mandatory whenever you add a
 call that crosses an `.inc` boundary** — PXX is lax about declaration order and
 FPC is strict, and neither `make` nor `gate.sh` runs FPC. That bit me once
-tonight. Never run `gate.sh` in the dev loop; it is the pin gate.
+tonight.
 
 ## Test expectations
 

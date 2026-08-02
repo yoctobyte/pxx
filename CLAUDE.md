@@ -417,6 +417,19 @@ diffed against an oracle.
   bad push could poison for everyone — a compiler that cannot reproduce itself —
   cannot leave your tree, because `make compiler/pascal26` IS the fixedpoint.
   `pin` stays the deliberate brake.
+- **Per fix, the loop is FAST — and "this change feels broad" is NOT a reason to
+  widen it.** `make compiler/pascal26` (~12s, and it IS the byte-identical
+  self-host fixedpoint) → run your repro / the one assertion you added →
+  `tools/gate.sh quick` (~30s) → commit → push. That is the whole per-fix gate.
+  Do **not** hand-run `make test-nilpy`, `make test` or any other full suite
+  because the change touched something shared: `gate.sh quick` deliberately
+  dropped `test-nilpy` for exactly this reason (it was 625 of the gate's 649
+  seconds), the quick tier carries dense NilPy/C canaries, and the full suites
+  are enrolled in Track T's tiers and will run against your exact SHA. Widening
+  the local gate costs ~10 minutes, buys coverage you were already getting free,
+  and — worst — *delays the push*, and unpushed work is work T cannot see at
+  all. Full suites are yours only when T is proven down (`tools/twatch.py
+  --status` exit 1).
 - **Run the gate with `tools/gate.sh` (quick | lib | full | check), and background
   THAT — never poll a `make` you started.** `gate.sh quick` is the native
   confirm above (~30s idle); `gate.sh full` adds the local suites and is for
