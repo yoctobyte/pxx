@@ -1114,6 +1114,12 @@ test-nilpy: $(COMPILER)
 	# expression must be evaluated exactly once.
 	./$(COMPILER) test/test_nilpy_del_list_index.npy /tmp/test_nilpy_delidx26
 	test "$$(/tmp/test_nilpy_delidx26)" = "$$(printf '%b' '[0, 2, 3, 4]\n[0, 2, 3]\n[2, 3]\nIndexError\n[2, 3]\nIndexError neg\n[2, 3]\n[1, 2, 3]\n[8, 9]\n1\n{\047b\047: 2}\n[1, 4, 5]\n[]\n0')"
+	# a str is an iterable: sorted/zip/enumerate over one passed the string HANDLE
+	# where an object pointer was expected and SEGFAULTED with no diagnostic
+	# (sorted printed [] first). The calls are built by a fixed FindProc index, so
+	# Pascal overloads are never consulted — the str is exploded at the call site.
+	./$(COMPILER) test/test_nilpy_str_iterable_builtins.npy /tmp/test_nilpy_striter26
+	test "$$(/tmp/test_nilpy_striter26)" = "$$(printf '%b' '[\047a\047, \047b\047, \047c\047]\n[\047a\047, \047b\047, \047c\047]\n3\nabc\n[\047c\047, \047b\047, \047a\047]\n[(\047c\047, \047x\047), (\047a\047, \047y\047), (\047b\047, \047z\047)]\n[(\047c\047, 1), (\047a\047, 2), (\047b\047, 3)]\n[(1, \047c\047), (2, \047a\047), (3, \047b\047)]\n[(0, \047c\047), (1, \047a\047), (2, \047b\047)]\n[(1, \047c\047), (2, \047a\047), (3, \047b\047)]\n[(-2, \047c\047), (-1, \047a\047), (0, \047b\047)]\n1 c\n2 a\n3 b\n(\047c\047, \047x\047)\n(0, \047c\047)\n[]\n[]\n[]\n[1, 2, 3]\n[(1, 1), (2, 2), (3, 3)]\n[(0, 1), (1, 2), (2, 3)]\n[\047a\047, \047b\047, \047c\047]\n[\047b\047, \047a\047, \047c\047]\nbac')"
 	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
 	# key function had no overload to bind to (dict alone and list+key both worked)
 	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26

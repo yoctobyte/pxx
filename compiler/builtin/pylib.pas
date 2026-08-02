@@ -946,6 +946,11 @@ function pyenumerate(a: TPyList): TPyList;
 { `enumerate(xs, start)` / `enumerate(xs, start=N)` — same as pyenumerate with
   the index offset by `start`. }
 function pyenumerate2(a: TPyList; start: Integer): TPyList;
+{ A str exploded into a list of 1-character strs. The frontend wraps a str
+  argument to zip()/enumerate() in this, because those build their calls by a
+  fixed FindProc index and so never consult overloads
+  (bug-nilpy-str-iterable-builtins-segfault-on-a-string-handle). }
+function pystr_charlist(const s: AnsiString): TPyList;
 { Python's TWO-argument round(x, ndigits) — a float rounded to that many
   decimals, unlike the one-argument form which yields an int. Half-away-from-
   zero rather than CPython's banker's rounding: the difference shows only on an
@@ -3423,6 +3428,20 @@ begin
     PXXObjRetain(Pointer(pair));
     r.append(pv);
   end;
+end;
+
+{ A str is an ITERABLE in Python, so `enumerate("ab")` and `zip(s, t)` are
+  ordinary code — but pyenumerate/pyzip take TPyList only, and the frontend
+  builds those calls by a FIXED FindProc index, so adding Pascal overloads here
+  would never be consulted. The str argument is converted at the CALL SITE
+  instead (PyIterArgAsList); this is the conversion it uses. Passing the raw
+  AnsiString handle got it dereferenced as an object: SIGSEGV, no diagnostic
+  (bug-nilpy-str-iterable-builtins-segfault-on-a-string-handle). }
+function pystr_charlist(const s: AnsiString): TPyList;
+var i: Integer;
+begin
+  Result := TPyList.Create;
+  for i := 1 to Length(s) do Result.append(pystr_ofchar(s[i]));
 end;
 
 function pyzip(a: TPyList; b: TPyList): TPyList;

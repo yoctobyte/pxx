@@ -1,0 +1,51 @@
+# A str is an ITERABLE, so sorted/zip/enumerate accept one.
+# pyzip / pyenumerate take a TPyList, and the frontend builds those calls by a
+# FIXED FindProc index, so overload resolution never ran: the AnsiString HANDLE
+# was passed where an object pointer was expected and got dereferenced.
+# sorted("...") printed an empty list and SEGFAULTED in a larger program;
+# zip(s, t) and enumerate(s) segfaulted outright. No diagnostic in any case.
+# bug-nilpy-str-iterable-builtins-segfault-on-a-string-handle
+
+s = "cab"
+t = "xyz"
+l = [1, 2, 3]
+
+# sorted() over a str -- used to print [] then segfault
+print(sorted(s))
+print(sorted("cba"))
+print(len(sorted(s)))
+print("".join(sorted(s)))
+print(sorted(s, reverse=True))
+
+# zip() with a str on either side, or both
+print(list(zip(s, t)))
+print(list(zip(s, l)))
+print(list(zip(l, s)))
+
+# enumerate() over a str, with and without a start
+print(list(enumerate(s)))
+print(list(enumerate(s, 1)))
+print(list(enumerate(s, -2)))
+
+# zip/enumerate in a for header over a str
+for i, ch in zip(l, s):
+    print(i, ch)
+
+# the pairs are TUPLES, as Python's are
+print(list(zip(s, t))[0])
+print(list(enumerate(s))[0])
+
+# an empty str yields nothing rather than crashing
+print(sorted(""))
+print(list(zip("", t)))
+print(list(enumerate("")))
+
+# the list forms must be unchanged
+print(sorted(l))
+print(list(zip(l, l)))
+print(list(enumerate(l)))
+print(sorted(["c", "a", "b"]))
+
+# reversed() already had a str overload -- guard it against regressing
+print(list(reversed(s)))
+print("".join(reversed(s)))

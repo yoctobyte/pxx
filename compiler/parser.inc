@@ -863,6 +863,7 @@ function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil 
 function PyIsSliceBase(n: Integer): Boolean; forward; { Nil Python: may this value be sliced? (pyparser.inc) }
 function PySliceBracketAt(i: Integer): Boolean; forward; { Nil Python: is the bracket group at i a SLICE? (pyparser.inc) }
 function PyParseSliceTail(baseNode, loNode: Integer): Integer; forward; { Nil Python x[a:b], from the ':' (pyparser.inc) }
+function PyIterArgAsList(n: Integer): Integer; forward; { Nil Python: explode a str arg to an iterable builtin (pyparser.inc) }
 function PyIsIntBaseTk(tk: TTypeKind): Boolean; forward; { Nil Python: is this an int base for .to_bytes? (pyparser.inc) }
 function PyParseToBytes(baseNode: Integer): Integer; forward; { Nil Python <int>.to_bytes(...) intrinsic (pyparser.inc) }
 function PyParseFromBytes: Integer; forward; { Nil Python int.from_bytes(...) intrinsic (pyparser.inc) }
@@ -13154,6 +13155,11 @@ begin
       enStart := CurASTNode;
     end;
     Expect(tkRParen, ')');
+    { a str IS an iterable — explode it, since pyenumerate takes a TPyList and
+      this call is built by a fixed FindProc index, so an AnsiString handle
+      would be dereferenced as an object (SIGSEGV, no diagnostic).
+      bug-nilpy-str-iterable-builtins-segfault-on-a-string-handle }
+    smBase := PyIterArgAsList(smBase);
     if enStart >= 0 then
     begin
       smNameTok := FindProc('pyenumerate2');

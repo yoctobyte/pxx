@@ -84,6 +84,8 @@ function sorted(l: TPyList; key: Pointer = nil; reverse: Boolean = False): TPyLi
   arguments' (bug-nilpy-sorted-over-a-dict-with-a-key-function). Delegates to
   the list form over keylist, so the key/reverse handling stays in one place. }
 function sorted(d: TPyDict; key: Pointer = nil; reverse: Boolean = False): TPyList; overload;
+{ a str is an iterable too: sorted("cba") -> ['a','b','c'] }
+function sorted(const s: AnsiString; key: Pointer = nil; reverse: Boolean = False): TPyList; overload;
 
 { `map(f, xs)` / `filter(f, xs)` over an arbitrary callable VALUE -- the
   general form beside the existing map(int|str|float, xs) conversion shims.
@@ -3875,6 +3877,20 @@ function sorted(d: TPyDict; key: Pointer; reverse: Boolean): TPyList; overload;
 begin
   if d = nil then Result := TPyList.Create
   else Result := sorted(d.keylist, key, reverse);
+end;
+
+{ `sorted("cba")` -> ['a','b','c']. Python sorts any ITERABLE, and a str is one.
+  Without this overload the AnsiString handle bound to the TPyList overload and
+  was dereferenced as an object: `sorted(s)` printed an empty list for a short
+  string and SEGFAULTED in a larger program
+  (bug-nilpy-sorted-over-a-string-segfaults). Same shape as list(const s), which
+  already had its own overload — this is the sibling that was missing. }
+function sorted(const s: AnsiString; key: Pointer; reverse: Boolean): TPyList; overload;
+var chars: TPyList; i: Integer;
+begin
+  chars := TPyList.Create;
+  for i := 1 to Length(s) do chars.append(pystr_ofchar(s[i]));
+  Result := sorted(chars, key, reverse);
 end;
 
 function sorted(l: TPyList; key: Pointer; reverse: Boolean): TPyList;

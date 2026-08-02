@@ -5021,9 +5021,36 @@ begin
 end;
 
 { `zip(a, b)` as a value -> pylib pyzip, which builds the pair list. }
+{ A str argument to an iterable builtin, exploded into a list of 1-character
+  strs. pyzip / pyenumerate take a TPyList and these calls are built by a FIXED
+  FindProc index, so overload resolution never runs: handing them an AnsiString
+  passed the string HANDLE where an object pointer was expected, and it was
+  dereferenced — SIGSEGV, no diagnostic, from `zip(s, t)` or `enumerate(s)`
+  (bug-nilpy-str-iterable-builtins-segfault-on-a-string-handle).
+  A non-str node is returned untouched, so nothing else changes. }
+function PyIterArgAsList(n: Integer): Integer;
+var procIdx, argNode: Integer;
+begin
+  Result := n;
+  if n < 0 then Exit;
+  if not PyIsStrBaseTk(IntToTypeKind(ASTTk[n])) then Exit;
+  procIdx := FindProc('pystr_charlist');
+  if procIdx < 0 then Error('Nil Python: pylib (pystr_charlist) not loaded');
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := n;
+  ASTRight[argNode] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTLeft[Result] := argNode;
+  ASTTk[Result] := Ord(tyClass);
+  ASTRight[Result] := REC_UCLASS_BASE + FindUClass('TPyList');
+end;
+
 function PyMakeZip(aNode, bNode: Integer): Integer;
 var a0, a1: Integer;
 begin
+  aNode := PyIterArgAsList(aNode);
+  bNode := PyIterArgAsList(bNode);
   a0 := AllocNode(AN_ARG); ASTLeft[a0] := aNode;
   a1 := AllocNode(AN_ARG); ASTLeft[a1] := bNode; ASTRight[a1] := -1;
   ASTRight[a0] := a1;
