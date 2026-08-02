@@ -85,5 +85,32 @@ begin
   if src.Port <> 28855 then begin writeln('FAIL v4 udp sender port ', src.Port); Halt(1); end;
   NetClose(uc); NetClose(us);
 
+  { NetTcpConnectTimeout must honour the address family too. It used to
+    hard-code AF_INET/PalConnectIpv4 — missed when IPv6 landed in net.pas — so a
+    v6 address silently built a v4 socket and connected to addr.Host, which is 0
+    for a v6 address: a connect to 0.0.0.0 rather than an error. The plain
+    NetTcpConnect always branched correctly, which is exactly why this hid: the
+    v6 tests above all use NetTcpConnect. }
+  srv := NetTcpListen(NetLoopback6(28856), 4);
+  if srv < 0 then begin writeln('FAIL v6 listen for connect-timeout ', srv); Halt(1); end;
+  cli := NetTcpConnectTimeout(NetLoopback6(28856), 2000);
+  if cli < 0 then
+  begin
+    writeln('FAIL v6 NetTcpConnectTimeout -> ', cli);
+    Halt(1);
+  end;
+  conn := NetTcpAccept6(srv, p);
+  if conn < 0 then begin writeln('FAIL v6 accept after connect-timeout ', conn); Halt(1); end;
+  if not IsV6Loopback(p) then begin writeln('FAIL v6 connect-timeout peer is not ::1'); Halt(1); end;
+  NetClose(conn); NetClose(cli); NetClose(srv);
+
+  { and the v4 path through the SAME call is unchanged }
+  srv := NetTcpListen(NetLoopback(28857), 4);
+  cli := NetTcpConnectTimeout(NetLoopback(28857), 2000);
+  if (srv < 0) or (cli < 0) then begin writeln('FAIL v4 connect-timeout regressed'); Halt(1); end;
+  conn := NetTcpAccept(srv, p);
+  if conn < 0 then begin writeln('FAIL v4 accept after connect-timeout ', conn); Halt(1); end;
+  NetClose(conn); NetClose(cli); NetClose(srv);
+
   writeln('NET6 OK');
 end.

@@ -233,14 +233,21 @@ end;
 function NetTcpConnectTimeout(const addr: TNetAddress; timeoutMs: Integer): TNetSocket;
 var fd, rc, pr, soErr: Integer;
 begin
-  fd := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_STREAM, 0);
+  { Branch on the address's family, like NetTcpConnect. This used to hard-code
+    AF_INET and PalConnectIpv4 — missed when IPv6 landed in this unit — so a v6
+    address silently produced a v4 socket connecting to addr.Host, which is 0
+    for a v6 address: a connect to 0.0.0.0 rather than an error. }
+  fd := PalSocket(addr.Family, PAL_NET_SOCK_STREAM, 0);
   if fd < 0 then
   begin
     Result := fd;
     Exit;
   end;
   rc := PalSetSocketNonBlocking(fd, 1);
-  rc := PalConnectIpv4(fd, addr.Host, addr.Port);
+  if NetIsV6(addr) then
+    rc := PalConnectIpv6(fd, addr.V6, addr.Port, addr.ScopeId)
+  else
+    rc := PalConnectIpv4(fd, addr.Host, addr.Port);
   if rc = 0 then
   begin
     { Immediate completion (common on loopback). }

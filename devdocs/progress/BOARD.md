@@ -40,7 +40,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (207)
+## backlog (206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -151,7 +151,6 @@ lives in git, not in a timestamp._
 | feature-move-fillchar-intrinsics | A | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-n-nilpy-ast-typing-module-scope | N | 55 | feature | NilPy: type MODULE locals from the AST too | — |
 | feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
-| feature-net-a-first-connect-by-name | B | 35 | feature | Connect-by-name with A-first, AAAA-fallback ordering | — |
 | feature-networking | B | 20 | feature | Networking runtime | — |
 | feature-nilpy-arc-cross-parity | A | 35 | feature | NilPy object-ARC cross-target parity (aarch64 inline arms + scope-exit) | — |
 | feature-nilpy-arithmetic-dunders-full-protocol | N | 40 | feature | Arithmetic dunders (`__add__`, `__sub__`, …) — full protocol | — |
@@ -356,7 +355,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1207)
+## done (1208)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1274,6 +1273,7 @@ lives in git, not in a timestamp._
 | feature-native-arch-binaries | A | 50 | feature | Distribute native per-arch stable binaries (no FPC/make on install) | — |
 | feature-nested-anonymous-fixed-array | A | 50 | feature | Anonymous nested fixed array `array[..] of array[..] of T` | — |
 | feature-nested-routines | A | 50 | feature | feature: nested (local) functions and procedures | — |
+| feature-net-a-first-connect-by-name | B | 35 | feature | Connect-by-name with A-first, AAAA-fallback ordering | — |
 | feature-net-lib-cross-target | A | 50 | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
 | feature-nil-python-frontend | A | 50 | feature | Nil Python frontend (`.npy`) | — |
 | feature-nilpy-aggregate-builtins | N | 50 | feature | nilpy: map/filter over an arbitrary callable value | — |
@@ -1753,7 +1753,6 @@ lives in git, not in a timestamp._
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [B] feature-dns-esp-backend
 - [p 35] [A] feature-nested-routine-fixed-array-capture
-- [p 35] [B] feature-net-a-first-connect-by-name
 - [p 35] [A] feature-nilpy-arc-cross-parity
 - [p 35] [N] feature-nilpy-multi-arg-callback-bridges
 - [p 35] [N] feature-nilpy-staticmethod-and-classmethod

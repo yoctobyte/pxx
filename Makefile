@@ -6774,6 +6774,11 @@ lib-test: pxx-stable-check
 	# option takes effect rather than being accepted and ignored.
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_net_v6only.pas /tmp/lib_net_v6only
 	test "$$(/tmp/lib_net_v6only | tail -1)" = "NETV6ONLY OK"
+	# Connect-by-name and the decided A-first / AAAA-fallback ordering. Every
+	# ordering assertion checks which FAMILY won, since "it connected" is true
+	# under either order. localhost only, so no network.
+	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_netconnect.pas /tmp/lib_netconnect
+	test "$$(/tmp/lib_netconnect | tail -1)" = "NETCONNECT OK"
 	# asyncnet over ::1 — the coroutine reactor is family-agnostic, so this runs
 	# the v6 socket calls against the SAME accept/recv/send the v4 tests use
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_asyncnet6.pas /tmp/lib_asyncnet6
