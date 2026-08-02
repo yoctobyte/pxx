@@ -26,3 +26,6 @@ sh: 6: /tmp/testmgr-scratch-653976/pascal26-self: Text file busy
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-02 — auto-closed by the xeon watcher: `test-smoke#src:compiler/compiler.pas` passes at f3e839eb7675 (tier native); it was red at b11e604f8043. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
