@@ -26,7 +26,16 @@ const
     own code costs one — so this grows with the compiler and had been sitting just
     under the cap: two more parallel arrays' worth of references tipped it into
     "global fixup overflow", which reads as a mysterious failure in the LAST unit
-    rather than as a capacity limit. Costs 8 bytes per slot. }
+    rather than as a capacity limit.
+
+    Measured (bug-a-threadsafe-self-host-exceeds-max-globfix-by-121): the normal
+    self-compile needs 45326 fixups, the --threadsafe one 65657 — the latter had
+    crossed the old 65536 cap by 121, i.e. by 0.18%, so whichever commit added
+    the last few globals took the blame for a capacity limit. Costs 16 bytes per
+    slot of BSS RESERVATION, which is not resident: only touched pages reach RSS.
+
+    The +45% that --threadsafe costs is itself unexplained and may be a fixup per
+    TLS access that could be deduped — feature-a-why-threadsafe-needs-45pct-more-global-fixups. }
   MAX_GLOBFIX = 262144;
   MAX_ASM_GLOBFIX = 4096;
   MAX_INLINE_ASM_LINES = 4096;

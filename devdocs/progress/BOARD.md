@@ -50,7 +50,6 @@ lives in git, not in a timestamp._
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-a-selfhost-recipe-should-rename-not-write-in-place | A | 55 | bug | The self-host chain compiles straight onto the path it is about to exec, so a concurrent fd holder makes the exec fail with ETXTBSY. Write to a temp name and rename — atomic in RUN_TMP, and a new inode | — |
-| bug-a-threadsafe-self-host-exceeds-max-globfix-by-121 | A | 75 | bug | The --threadsafe self-compile needs 65657 global fixups against a fixed cap of 65536 — over by 121. A GATED test-core job is red on master, and `make compiler/pascal26` is green, so the normal build masks it completely | — |
 | bug-b-writeln-float-with-17-decimals-prints-garbage | A | 55 | bug | `WriteLn(x:0:17)` prints garbage | — |
 | bug-c-uses-path-basename-collides-with-enclosing-unit-name | A | 35→65 | bug | path-form `uses './x.c'` collides with the enclosing unit's OWN name | — |
 | bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity | C | 55 | bug | In a mixed Pascal+C build, a C call binds to a same-named Pascal routine at the wrong arity | — |
@@ -124,6 +123,7 @@ lives in git, not in a timestamp._
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
 | feature-a-promoint-variant-esp-targets | A | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
+| feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-esp-conformance-coverage | C | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
 | feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
@@ -359,7 +359,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1216)
+## done (1217)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -410,6 +410,7 @@ lives in git, not in a timestamp._
 | bug-a-qplus-misses-32bit-overflow | A | 60 | bug | `{$Q+}` does not trap 32-bit overflow — only 64-bit ops are checked | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 55 | bug | issue: runtime heap grows unbounded in a dynamic/variant-heavy loop (long-running programs OOM) | — |
 | bug-a-str-boxed-into-variant-does-not-own-bytes | A | 80 | bug | A `str` boxed into a Variant does not OWN its bytes — silent wrong values | — |
+| bug-a-threadsafe-self-host-exceeds-max-globfix-by-121 | A | 75 | bug | The --threadsafe self-compile needs 65657 global fixups against a fixed cap of 65536 — over by 121. A GATED test-core job is red on master, and `make compiler/pascal26` is green, so the normal build masks it completely | — |
 | bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
 | bug-a-variant-class-boxing-missing-on-i386-aarch64 | A | 70 | bug | Storing a class into a Variant did not build on i386 or aarch64 | — |
 | bug-a-variant-fn-return-forward-nrvo-corruption | A | 55 | bug | Variant FUNCTION forwarding another Variant call's result corrupts the value | — |
@@ -1620,7 +1621,6 @@ lives in git, not in a timestamp._
 - [urgent p 80] [C] bug-cfront-plain-char-is-unsigned-and-folds-inconsistently
 - [urgent p 75] [C] bug-cfront-arch-predefines-always-x86-64
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
-- [p 75] [A] bug-a-threadsafe-self-host-exceeds-max-globfix-by-121
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] regression-test-core-compiler
@@ -1763,6 +1763,7 @@ lives in git, not in a timestamp._
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
 - [p 35] [N] bug-nilpy-pypow-integer-overflow-does-not-promote
 - [p 35] [N] bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash
+- [p 35] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [B] feature-dns-esp-backend
 - [p 35] [A] feature-nested-routine-fixed-array-capture

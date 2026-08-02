@@ -3,6 +3,7 @@ summary: "The --threadsafe self-compile needs 65657 global fixups against a fixe
 type: regression
 track: A
 prio: 75
+status: done
 ---
 
 # `--threadsafe` self-host is 121 fixups over `MAX_GLOBFIX`
@@ -87,3 +88,37 @@ one-per-TLS-access there may be a cheap win in the emitter.
 `./compiler/pascal26 --threadsafe compiler/compiler.pas /tmp/x` compiles clean,
 the `test-core` threadsafe chain reaches its `cmp` and matches byte for byte,
 and the normal fixedpoint stays byte-identical.
+
+
+## Resolved 2026-08-02 — commit 91f063250 (fix direction 1, as recommended)
+
+Found independently from the same tstate NEW-RED about an hour before this
+ticket was read, and fixed the same way — which is a small vote of confidence in
+the measurement: two paths reached "capacity limit, not bad commit".
+
+`MAX_GLOBFIX` 65536 -> **262144** (~4x headroom against the threadsafe build's
+65657), with the *reason* recorded at the constant, including this ticket's
+numbers and the "16 bytes per slot, reserved not resident" note. The next person
+to add a global to the compiler should not have to rediscover why the last unit
+suddenly fails to emit.
+
+Verified against this ticket's own gate:
+
+- `./compiler/pascal26 --threadsafe compiler/compiler.pas` compiles clean
+- the `test-core` threadsafe chain reaches its `cmp` and matches byte for byte
+  (re-run as `testmgr --tier native --job 'test-core#*'` -> GREEN)
+- the normal fixedpoint stays byte-identical (`gate.sh quick` GREEN)
+
+**Fix direction 3 is NOT done and is the interesting part** — *why* does
+threadsafe need 45% more fixups for the same source? Split out as
+[[feature-a-why-threadsafe-needs-45pct-more-global-fixups]] at prio 35 so it
+survives the closing of this ticket. Direction 2 (dynamic growth) is deliberately
+not taken: it puts an allocation on the emitter's hot path for a table that is
+now 4x oversized.
+
+One correction to the record: the commit message for 91f063250 says 8 bytes per
+slot, reasoning from `TGlobFix`'s two Integers. This ticket MEASURED 16. The
+constant's comment carries the measured figure.
+
+## Log
+- 2026-08-02 — resolved, commit 91f063250.
