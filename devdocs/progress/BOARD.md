@@ -13,11 +13,12 @@ lives in git, not in a timestamp._
 | bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size | C | 85 | bug | `sizeof(p->arr)` returns the POINTER size, not the array size — silent buffer overflow | — |
 | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling | P | 80 | bug | A procedural variable in a value context takes its ADDRESS instead of calling it | — |
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-non-constant-parameter-defaults-silently-become-none | N | 70 | bug | Every non-constant parameter default silently becomes None on the ordinary call path — `def f(b=[])` gives b=None, and so does `def f(b=w)` for any name w. Only the closure-VALUE path evaluates defaults at def time. | — |
+| bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 
 ## unfinished (5)
@@ -42,7 +43,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (204)
+## backlog (203)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -92,7 +93,6 @@ lives in git, not in a timestamp._
 | bug-nilpy-pypow-integer-overflow-does-not-promote | N | 35 | bug | `pypow_v`'s integer path silently wraps past 64 bits instead of promoting | — |
 | bug-nilpy-range-negative-runtime-step-yields-empty | N | 55 | bug | `range(a, b, s)` with a NEGATIVE step passed at runtime yields an empty range | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
-| bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | — |
 | bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | — |
 | bug-nilpy-stdlib-shim-table-cannot-reach-an-overload | N | 50 | bug | The stdlib shim table and every hand-built pylib call resolve a NAME with FindProc, which returns ONE proc index and never consults overloads — so os.path.join('a','b','c') fails and adding a Pascal overload has no effect | — |
 | bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice | N | 50 | bug | Three loud gaps found by the CPython differential sweep | — |
@@ -1637,7 +1637,6 @@ lives in git, not in a timestamp._
 - [p 60] [N] bug-nilpy-from-import-as-alias-is-discarded
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [N] bug-nilpy-one-line-def-and-class-bodies-do-not-parse
-- [p 60] [N] bug-nilpy-same-kind-undefined-operators-still-compute
 - [p 60] [T] bug-t-resolve-cites-a-sha-the-rebase-then-rewrites
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [U] decide-nilpy-runtime-dunder-dispatch-mechanism

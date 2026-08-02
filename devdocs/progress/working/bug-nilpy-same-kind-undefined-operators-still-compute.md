@@ -89,3 +89,46 @@ or a runtime kind check, and the choice between them is the actual work — see
 the two directions costed above.
 
 Reduced in scope, not resolved.
+
+## 2026-08-02 — table RE-MEASURED at HEAD; the str slice is done, one row left
+
+Most of the table above no longer reproduces. Measured, not assumed:
+
+| expression | CPython | pxx at HEAD |
+| --- | --- | --- |
+| `"ab" - "ab"` | TypeError | TypeError ✓ |
+| `"ab" / "ab"` | TypeError | TypeError ✓ |
+| `"ab" // "ab"` | TypeError | TypeError ✓ |
+| `[1] // [2]` | TypeError | TypeError ✓ |
+| `[1] % [2]` | TypeError | TypeError ✓ |
+| `[1] * [2]` | TypeError | TypeError ✓ |
+| `[1] / [2]` | TypeError | TypeError ✓ |
+| **`"ab" * "ab"`** | TypeError | **a garbage integer** — fixed below |
+| **`[1] - [2]`** | TypeError | **`[1]`** — still open, see below |
+
+So the ticket's own recommended cheap slice ("`str`-vs-`str` has no set-like
+ambiguity") had already been taken for `-`, `/` and `//`. What it missed is
+that **`*` was never in the operator set at all**, so `"ab" * "ab"` multiplied
+the two string HANDLES and printed a different garbage integer per run.
+
+### Fixed here — commit dd022a110
+
+`tkStar` added to `IRPyStaticPairUndefined`, judged by the same-kind str rule.
+Multiply needed one guard the others do not: across DIFFERING kinds it is
+DEFINED — `"ab" * 3` and `[1] * 3` are repetition, in either operand order — so
+it is admitted only for the same-kind test and never reaches the differing-kind
+rejection. `test/test_nilpy_str_mul_str_undefined.npy` leads with those
+repetition controls, since preserving them is the actual risk.
+
+### STILL OPEN — exactly one row, and it is the set question
+
+`[1] - [2]` returns `[1]`, because that IS set difference: pxx backs a Python
+`set` with `TPyList`, so `list - list` is not statically distinguishable from
+`set - set`. Nothing here changes that, and the two fix directions in the
+section above (a distinct `TPySet` row, or a runtime kind check) are still the
+choice to make. The ticket is therefore narrower than when it was filed, and
+that one row is all of it.
+
+Related and worth deciding together: pxx already diverges from CPython in `repr`
+for the same reason — a set prints `[1, 3]` where CPython prints `{1, 3}`. A
+`TPySet` row would fix both, which strengthens direction 1.
