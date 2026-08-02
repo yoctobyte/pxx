@@ -356,7 +356,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1206)
+## done (1207)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -425,6 +425,7 @@ lives in git, not in a timestamp._
 | bug-asmcore-fpc-bootstrap | A | 50 | bug | FPC bootstrap can't compile the asmcore units the compiler now `uses` | — |
 | bug-b-crtl-host-header-and-arity-mismatches-building-pdfgen | B | 45 | bug | Building pdfgen: `strings.h` comes from the host, and `time`/`bcmp` bind at the wrong arity | — |
 | bug-b-crtl-math-constants-missing-silently-zero | B | 60 | bug | `math.h`'s `M_*` constants were absent, so `M_PI` silently evaluated to 0 | — |
+| bug-b-dns-wire-ipv4-literal-returns-nxdomain | B | 55 | bug | `dns_wire` answers NXDOMAIN for an IPv4 literal, so the facade's answer depends on the backend | — |
 | bug-b-floattostrsig-caps-at-15-significant-digits | B | 65 | bug | `FloatToStrSig` caps at 15 significant digits, so no double round-trips | — |
 | bug-b-strtofloat-not-correctly-rounded | B | 60 | bug | `StrToFloat` is not correctly rounded, so exact decimals still do not read back | — |
 | bug-b-sysutils-and-pylib-exception-declarations-diverged | B | 70 | bug | sysutils and pylib both declare `Exception`, and their shapes had diverged | — |

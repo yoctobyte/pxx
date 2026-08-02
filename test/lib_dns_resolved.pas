@@ -38,6 +38,20 @@ var
 begin
   fails := 0;
 
+  { An IP literal must resolve to itself WITHOUT network, and must do so
+    identically on every backend. dns_wire used to answer NXDOMAIN here while
+    dns_resolved, dns_libc and getent all returned the address, so the facade's
+    answer changed with the selected backend — the one thing the selection
+    design promises it will not do. Asserted in this file (rather than a
+    backend-specific one) precisely because it is a CROSS-backend contract:
+    lib-test builds this program with and without the define. }
+  rc := DnsResolveHost('127.0.0.1', ips, n);
+  Chk('literal_v4_rc', rc = 0, True);
+  Chk('literal_v4_value', (n = 1) and (ips[0] = $7F000001), True);
+  rc := DnsResolveHost6('::1', ip6, n);
+  Chk('literal_v6_rc', rc = 0, True);
+  Chk('literal_v6_value', (n = 1) and (ip6[0][0] = 0) and (ip6[0][15] = 1), True);
+
   { the facade still answers, whichever backend is compiled in }
   rc := DnsResolveHost('localhost', ips, n);
   Chk('facade_v4_rc', rc = 0, True);

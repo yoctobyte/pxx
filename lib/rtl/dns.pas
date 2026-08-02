@@ -57,8 +57,9 @@ function DnsResolveHostEx(const hostsText: string; nsHost: LongWord; nsPort: Int
 
 { Convenience entrypoint: read /etc/hosts and /etc/resolv.conf via PAL, then
   resolve using the first configured nameserver on the standard DNS port.
-  Returns DNS_ERR_NOCONFIG if nothing in hosts matches and no nameserver is
-  configured. }
+  An IPv4 literal short-circuits without network (as an IPv6 literal does in
+  DnsResolveHost6). Returns DNS_ERR_NOCONFIG if nothing in hosts matches and no
+  nameserver is configured. }
 function DnsResolveHost(const name: string; var ips: TDnsIpv4Array; var count: Integer): Integer;
 
 { Resolve A records for one exact query name through the nameserver list,
@@ -464,10 +465,25 @@ var
   ns, localIps: TDnsIpv4Array;
   search: TDnsSearchArray;
   nsCount, searchCount, ndots, localCount, rc, i, idx: Integer;
-  hostIp: LongWord;
+  hostIp, litIp: LongWord;
   cand: string;
 begin
   count := 0;
+
+  { An IPv4 literal needs no network — the same short-circuit DnsWireResolveHost6
+    has always had for an IPv6 literal. Its absence here made the wire backend
+    answer NXDOMAIN for '127.0.0.1' while dns_resolved, dns_libc and getent all
+    return the address, so the facade's answer changed with the selected
+    backend — exactly what "the API is identical whichever backend" is meant to
+    rule out. }
+  if DnsParseIpv4(name, 1, Length(name), litIp) then
+  begin
+    ips[0] := litIp;
+    count := 1;
+    DnsWireResolveHost := 0;
+    Exit;
+  end;
+
   rc := ReadFileText(PChar('/etc/hosts'), hostsText, 65536);
   rc := ReadFileText(PChar('/etc/resolv.conf'), resolvText, 8192);
 
