@@ -10,7 +10,30 @@ unit dns;
 
 interface
 
-uses platform, dns_wire_core, dns_config, dns_wire_blocking, dns_cache;
+{ Backend selection is a -d define on the pxx command line, matching the
+  existing convention (-dPXX_MANAGED_STRING, -dPXX_HEAP_DEBUG):
+
+    (none)               dns_wire     — pure Pascal over PAL, zero dependencies
+    -dPXX_DNS_RESOLVED   dns_resolved — systemd-resolved over Varlink (split DNS)
+    -dPXX_DNS_LIBC       dns_libc     — getaddrinfo via dlopen (not built yet)
+
+  Two backends at once is a COMPILE-TIME ERROR rather than silent precedence:
+  which resolver a program uses is a policy decision, and quietly picking one
+  would be the kind of plausible-looking wrong answer that never gets noticed. }
+{$ifdef PXX_DNS_RESOLVED}
+  {$ifdef PXX_DNS_LIBC}
+    {$error PXX_DNS_RESOLVED and PXX_DNS_LIBC are mutually exclusive: pick one DNS backend}
+  {$endif}
+{$endif}
+{$ifdef PXX_DNS_LIBC}
+  {$error PXX_DNS_LIBC: the dns_libc backend is not implemented yet (feature-dns-backends-selection item 1); build without it for dns_wire, or use -dPXX_DNS_RESOLVED}
+{$endif}
+
+uses platform, dns_wire_core, dns_config, dns_wire_blocking, dns_cache
+{$ifdef PXX_DNS_RESOLVED}
+     , dns_resolved
+{$endif}
+     ;
 
 const
   DNS_ERR_NOCONFIG = -4;   { no /etc/resolv.conf nameserver and no hosts match }
@@ -416,7 +439,16 @@ begin
   DnsResolveChase6 := rc;
 end;
 
-function DnsResolveHost(const name: string; var ips: TDnsIpv4Array; var count: Integer): Integer;
+{ ---- backend selection ------------------------------------------------------
+
+  The wire path below is the default and always compiled: it is the
+  zero-dependency backend and the fallback for everything the selected backend
+  cannot answer. A -dPXX_DNS_* define only changes which one the two POLICY
+  entrypoints (DnsResolveHost / DnsResolveHost6) consult first — every other
+  function this unit exports is a wire building block and is unaffected, so the
+  facade's API is identical whichever backend is chosen. }
+
+function DnsWireResolveHost(const name: string; var ips: TDnsIpv4Array; var count: Integer): Integer;
 var
   hostsText, resolvText: string;
   ns, localIps: TDnsIpv4Array;
@@ -435,7 +467,7 @@ begin
   begin
     ips[0] := hostIp;
     count := 1;
-    DnsResolveHost := 0;
+    DnsWireResolveHost := 0;
     Exit;
   end;
 
@@ -447,7 +479,7 @@ begin
   rc := DnsParseResolvConfEx(resolvText, ns, nsCount, search, searchCount, ndots);
   if nsCount = 0 then
   begin
-    DnsResolveHost := DNS_ERR_NOCONFIG;
+    DnsWireResolveHost := DNS_ERR_NOCONFIG;
     Exit;
   end;
   rc := DNS_ERR_NOCONFIG;
@@ -461,7 +493,7 @@ begin
     begin
       { transport failure — the nameservers are unreachable; stop, do not walk
         the whole search list against a dead resolver }
-      DnsResolveHost := rc;
+      DnsWireResolveHost := rc;
       Exit;
     end;
     if (rc = 0) and (localCount > 0) then
@@ -469,16 +501,16 @@ begin
       for i := 0 to localCount - 1 do
         ips[i] := localIps[i];
       count := localCount;
-      DnsResolveHost := 0;
+      DnsWireResolveHost := 0;
       Exit;
     end;
     { NXDOMAIN / no records — try the next candidate }
     idx := idx + 1;
   end;
-  DnsResolveHost := rc;   { last rcode (e.g. NXDOMAIN), or NOCONFIG if no candidates }
+  DnsWireResolveHost := rc;   { last rcode (e.g. NXDOMAIN), or NOCONFIG if no candidates }
 end;
 
-function DnsResolveHost6(const name: string; var ips: TDnsIpv6Array; var count: Integer): Integer;
+function DnsWireResolveHost6(const name: string; var ips: TDnsIpv6Array; var count: Integer): Integer;
 var
   resolvText, hostsText: string;
   ns: TDnsIpv4Array;
@@ -495,7 +527,7 @@ begin
   begin
     for j := 0 to 15 do ips[0][j] := lit6[j];
     count := 1;
-    DnsResolveHost6 := 0;
+    DnsWireResolveHost6 := 0;
     Exit;
   end;
 
@@ -505,7 +537,7 @@ begin
   begin
     for j := 0 to 15 do ips[0][j] := lit6[j];
     count := 1;
-    DnsResolveHost6 := 0;
+    DnsWireResolveHost6 := 0;
     Exit;
   end;
 
@@ -517,7 +549,7 @@ begin
   rc := DnsParseResolvConfEx(resolvText, ns, nsCount, search, searchCount, ndots);
   if nsCount = 0 then
   begin
-    DnsResolveHost6 := DNS_ERR_NOCONFIG;
+    DnsWireResolveHost6 := DNS_ERR_NOCONFIG;
     Exit;
   end;
   rc := DNS_ERR_NOCONFIG;
@@ -529,7 +561,7 @@ begin
     rc := DnsResolveChase6(ns, nsCount, DNS_PORT, cand, localIps, localCount, 2000);
     if rc < 0 then
     begin
-      DnsResolveHost6 := rc;
+      DnsWireResolveHost6 := rc;
       Exit;
     end;
     if (rc = 0) and (localCount > 0) then
@@ -538,12 +570,42 @@ begin
         for j := 0 to 15 do
           ips[i][j] := localIps[i][j];
       count := localCount;
-      DnsResolveHost6 := 0;
+      DnsWireResolveHost6 := 0;
       Exit;
     end;
     idx := idx + 1;
   end;
-  DnsResolveHost6 := rc;
+  DnsWireResolveHost6 := rc;
 end;
+
+function DnsResolveHost(const name: string; var ips: TDnsIpv4Array; var count: Integer): Integer;
+begin
+{$ifdef PXX_DNS_RESOLVED}
+  { systemd-resolved knows the split-DNS / VPN routing-domain policy that the
+    resolv.conf stub flattens away, so it is asked first. It is NOT asked to be
+    infallible: a host without the Varlink socket, or a reply that is not the
+    documented shape, falls through to the wire path rather than failing the
+    lookup — the backend is a policy improvement, not a new dependency. A real
+    DNS answer, including NXDOMAIN, is returned as-is; only backend-unavailable
+    conditions fall through. }
+  Result := DnsResolvedResolveHost(name, ips, count);
+  if Result <> DNS_ERR_RESOLVED_UNAVAIL then
+    if Result <> DNS_ERR_RESOLVED_PROTO then Exit;
+  count := 0;
+{$endif}
+  Result := DnsWireResolveHost(name, ips, count);
+end;
+
+function DnsResolveHost6(const name: string; var ips: TDnsIpv6Array; var count: Integer): Integer;
+begin
+{$ifdef PXX_DNS_RESOLVED}
+  Result := DnsResolvedResolveHost6(name, ips, count);
+  if Result <> DNS_ERR_RESOLVED_UNAVAIL then
+    if Result <> DNS_ERR_RESOLVED_PROTO then Exit;
+  count := 0;
+{$endif}
+  Result := DnsWireResolveHost6(name, ips, count);
+end;
+
 
 end.

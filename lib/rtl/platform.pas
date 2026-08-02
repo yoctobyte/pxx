@@ -18,6 +18,7 @@ const
   PAL_PLATFORM_POSIX = 1;
   PAL_PLATFORM_ESP_IDF = 2;
 
+  PAL_NET_AF_UNIX = 1;        { Linux AF_UNIX/AF_LOCAL — filesystem sockets }
   PAL_NET_AF_INET = 2;
   PAL_NET_AF_INET6 = 10;      { Linux AF_INET6 }
   PAL_NET_SOCK_STREAM = 1;
@@ -32,6 +33,8 @@ const
   PAL_NET_ECONNREFUSED = -111;
   PAL_NET_ECONNRESET = -104;
   PAL_NET_ETIMEDOUT = -110;
+  PAL_NET_ENOTSUP = -95;      { EOPNOTSUPP — the backend has no such facility }
+  PAL_NET_ENAMETOOLONG = -36; { a socket path that does not fit sun_path }
 
   { Readiness poll event/result bits (Linux poll(2) values, shared across PAL
     arches). PalPoll returns the OR of the revents bits that fired. }
@@ -127,6 +130,15 @@ function PalSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; valLen:
 function PalSetSocketNonBlocking(handle, enabled: Integer): Integer;
 function PalBindIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 function PalConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
+
+{ Connect an AF_UNIX stream socket to a filesystem path (a `sockaddr_un`).
+  `path` is a pathname socket — the abstract namespace (a leading NUL) is not
+  offered, because nothing here needs it and it would make the length rules
+  subtler. Paths longer than 107 bytes do not fit sun_path and are refused
+  rather than silently truncated to a DIFFERENT existing socket.
+
+  POSIX only: the ESP backend has no AF_UNIX and returns PAL_NET_ENOTSUP. }
+function PalConnectUnix(handle: Integer; const path: string): Integer;
 
 { IPv6 bind/connect. `addr` is the 16 address bytes in WIRE order — an IPv6
   address is already a byte string, so unlike the IPv4 LongWord there is nothing
@@ -411,6 +423,11 @@ end;
 function PalConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 begin
   Result := PalBackendConnectIpv4(handle, hostAddr, port);
+end;
+
+function PalConnectUnix(handle: Integer; const path: string): Integer;
+begin
+  Result := PalBackendConnectUnix(handle, path);
 end;
 
 function PalBindIpv6(handle: Integer; const addr: TPalIn6Addr;

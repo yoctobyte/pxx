@@ -53,6 +53,7 @@ function PalBackendSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; 
 function PalBackendSetSocketNonBlocking(handle, enabled: Integer): Integer;
 function PalBackendBindIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 function PalBackendConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
+function PalBackendConnectUnix(handle: Integer; const path: string): Integer;
 function PalBackendBindIpv6(handle: Integer; const addr: TPalIn6Addr;
                             port, scopeId: Integer): Integer;
 function PalBackendConnectIpv6(handle: Integer; const addr: TPalIn6Addr;
@@ -107,6 +108,7 @@ const
   PAL_OPEN_DIRECTORY = $10000;
 
   PAL_NET_AF_INET = 2;
+  PAL_NET_ENOTSUP = -95;   { lwIP has no AF_UNIX }
   SOL_SOCKET = 1;
   SO_REUSEADDR = 2;
   SO_ERROR = 4;
@@ -570,6 +572,14 @@ begin
 {$else}
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
+end;
+
+function PalBackendConnectUnix(handle: Integer; const path: string): Integer;
+{ lwIP has no AF_UNIX: there is no filesystem to hold a socket node. Reported
+  as unsupported rather than failing obscurely at connect() time, so a caller
+  can pick another backend. }
+begin
+  Result := PAL_NET_ENOTSUP;
 end;
 
 function PalBackendConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;

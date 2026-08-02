@@ -58,6 +58,7 @@ function PalBackendSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; 
 function PalBackendSetSocketNonBlocking(handle, enabled: Integer): Integer;
 function PalBackendBindIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 function PalBackendConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
+function PalBackendConnectUnix(handle: Integer; const path: string): Integer;
 function PalBackendBindIpv6(handle: Integer; const addr: TPalIn6Addr;
                             port, scopeId: Integer): Integer;
 function PalBackendConnectIpv6(handle: Integer; const addr: TPalIn6Addr;
@@ -187,8 +188,10 @@ const
   PAL_S_IFMT = $F000;
   PAL_S_IFDIR = $4000;
   PAL_S_IFREG = $8000;
+  PAL_NET_AF_UNIX = 1;
   PAL_NET_AF_INET = 2;
   PAL_NET_AF_INET6 = 10;
+  PAL_NET_ENAMETOOLONG = -36;   { a socket path too long for sun_path }
   SOL_SOCKET = 1;
   SO_REUSEADDR = 2;
   SO_ERROR = 4;
@@ -632,6 +635,36 @@ begin
   Result := Integer(SockCall(SC_CONNECT, handle, Int64(@sa[0]), 16, 0, 0));
 {$else}
   Result := Integer(__pxxrawsyscall(SYS_connect, handle, Int64(@sa[0]), 16, 0, 0, 0));
+{$endif}
+end;
+
+function PalBackendConnectUnix(handle: Integer; const path: string): Integer;
+{ sockaddr_un is 110 bytes:
+    0..1     sun_family (AF_UNIX, host order — read as a short)
+    2..109   sun_path, 108 bytes, NUL-terminated for a pathname socket
+
+  The whole 110 is passed as the address length, which is what a pathname
+  socket wants; the kernel stops at the NUL. A path that does not fit is
+  REFUSED rather than truncated — a truncated path is still a valid path, so
+  silently shortening it would connect to a different socket than the caller
+  named, which is the sort of plausible-wrong-target this codebase does not
+  want. The abstract namespace (leading NUL) is deliberately not offered. }
+var sa: array[0..109] of Byte; i, n: Integer;
+begin
+  n := Length(path);
+  if n > 107 then
+  begin
+    Result := PAL_NET_ENAMETOOLONG;
+    Exit;
+  end;
+  for i := 0 to 109 do sa[i] := 0;
+  sa[0] := PAL_NET_AF_UNIX and $FF;
+  sa[1] := (PAL_NET_AF_UNIX shr 8) and $FF;
+  for i := 1 to n do sa[1 + i] := Byte(Ord(path[i]));
+{$ifdef CPU_I386}
+  Result := Integer(SockCall(SC_CONNECT, handle, Int64(@sa[0]), 110, 0, 0));
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_connect, handle, Int64(@sa[0]), 110, 0, 0, 0));
 {$endif}
 end;
 

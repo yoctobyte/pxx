@@ -7068,6 +7068,14 @@ lib-test: pxx-stable-check
 	# FPC-built copy of the same program, so this compiles under FPC too.
 	$(PXX_STABLE) -Fulib/rtl test/lib_floattostr.pas /tmp/lib_floattostr
 	test "$$(/tmp/lib_floattostr | tail -1)" = "FLOATTOSTR OK"
+	# DNS backend selection: the default (dns_wire) must be undisturbed by the
+	# new backend, and -dPXX_DNS_RESOLVED must agree with it. Both use only
+	# localhost, so neither needs the network; the resolved half skips itself
+	# where systemd-resolved is absent, which is a supported configuration.
+	$(PXX_STABLE) -Fulib/rtl test/lib_dns_resolved.pas /tmp/lib_dns_wire_default
+	test "$$(/tmp/lib_dns_wire_default | tail -1)" = "DNSRESOLVED OK"
+	$(PXX_STABLE) -dPXX_DNS_RESOLVED -Fulib/rtl test/lib_dns_resolved.pas /tmp/lib_dns_resolved
+	test "$$(/tmp/lib_dns_resolved | tail -1)" = "DNSRESOLVED OK"
 	# A spawned child inherits the parent's environment (every spawn site used
 	# to hard-code an empty envp, i.e. handed each child `env -i`).
 	$(PXX_STABLE) -Fulib/rtl test/lib_child_env.pas /tmp/lib_child_env
