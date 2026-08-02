@@ -2814,6 +2814,34 @@ begin
     Result := p^.Payload = q^.Payload;
     Exit;
   end;
+  { A FLOAT and an int are ONE Python number too: `1 == 1.0` is True, and so
+    `d[1]` and `d[1.0]` are the SAME dict key. The `==` OPERATOR already agreed
+    with CPython here; only this path did not, so `1.0 in {1: 'a'}` was False and
+    `{2.0: 'x'}.get(2)` missed — a silently wrong answer from an equality the
+    language reports as true elsewhere
+    (bug-nilpy-int-and-float-dict-keys-are-not-the-same-key).
+    Float-vs-float is compared as a VALUE rather than by payload bits, so
+    -0.0 == 0.0 (bit-different) and nan <> nan (bit-identical) both come out
+    Python's way. }
+  if ((p^.VType = 3) or (q^.VType = 3)) and
+     ((p^.VType = 3) or (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4)) and
+     ((q^.VType = 3) or (q^.VType = 1) or (q^.VType = 2) or (q^.VType = 4)) then
+  begin
+    { IDENTICAL BITS settle it first, before the numeric compare. CPython's dict
+      tests `key is entry_key or key == entry_key`, and that identity half is
+      what lets a NaN key find ITSELF (`q[n]` where q = {n: ...}) even though
+      `n == n` is False. Comparing numerically alone turned that lookup into a
+      KeyError — caught before this shipped, but only because the edge was
+      probed; it is the exact case the value-compare below is meant to fix for
+      -0.0 and would have broken for NaN. }
+    if (p^.VType = 3) and (q^.VType = 3) and (p^.Payload = q^.Payload) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Result := PyVarAsFloat(p) = PyVarAsFloat(q);
+    Exit;
+  end;
   if p^.VType <> q^.VType then Exit;
   if p^.VType = 7 then
   begin
@@ -3090,10 +3118,23 @@ function PyVarHashKey(p: PPyVarRec): NativeUInt;
     identity hash, which is what PyVarEq's identity compare needs;
   - else: same VType required by PyVarEq, so hash (VType, payload).
   A wrong hash here silently loses keys, so this mirrors PyVarEq arm-for-arm. }
-var h: NativeUInt; sp: PPyAnsiString; ol: TObject; k: Integer;
+var h: NativeUInt; sp: PPyAnsiString; ol: TObject; k: Integer; dv: Double;
 begin
   if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
     h := NativeUInt(p^.Payload)
+  else if p^.VType = 3 then
+  begin
+    { A float that is numerically an INTEGER must hash as that integer, because
+      PyVarEq now says they are equal and equal keys MUST hash equal — the
+      invariant this whole routine is written to hold. A non-integral float
+      cannot equal any int, so its bits are a fine hash.
+      (bug-nilpy-int-and-float-dict-keys-are-not-the-same-key) }
+    dv := PPyDouble(@p^.Payload)^;
+    if (dv = Trunc(dv)) and (dv >= -9.2e18) and (dv <= 9.2e18) then
+      h := NativeUInt(Int64(Trunc(dv)))
+    else
+      h := NativeUInt(p^.Payload);
+  end
   else if p^.VType = 8193 then
   begin
     sp := PPyAnsiString(@p^.Payload);

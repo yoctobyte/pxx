@@ -1,0 +1,69 @@
+# An int and a float that compare equal are the SAME dict key, as in Python.
+# `1 == 1.0` already reported True, but the dict's key path disagreed: 1.0 was a
+# DIFFERENT key from 1, so `1.0 in {1: "a"}` was False and `{2.0: "x"}.get(2)`
+# missed -- a silently wrong answer from an equality the language reports as
+# true everywhere else.
+# Equal keys must also HASH equal, so an integral float hashes as its integer.
+# bug-nilpy-int-and-float-dict-keys-are-not-the-same-key
+
+d = {}
+d[1] = "int"
+d[1.0] = "float"
+print(len(d))
+print(d[1])
+print(d[1.0])
+
+# membership and .get() through both spellings
+e = {1: "a"}
+print(1.0 in e)
+print(e.get(1.0, "MISSING"))
+f = {2.0: "x"}
+print(2 in f)
+print(f.get(2, "MISSING"))
+
+# bool is an int too, so True is the same key as 1 and 1.0
+mix = {}
+mix[True] = "t"
+mix[1.0] = "f"
+print(len(mix))
+print(mix[1])
+
+# negative and large integral floats
+neg = {-1: "m"}
+print(neg[-1.0])
+big = {}
+big[2 ** 40] = "big"
+print(big[2.0 ** 40])
+print(float(2 ** 40) in big)
+
+# a NON-integral float is its own key and must not collide with any int
+frac = {}
+frac[0.5] = "half"
+print(frac[0.5])
+print(0.5 in frac)
+print(1 in frac)
+print(0 in frac)
+
+# 0.0 and -0.0 are equal in Python, so they are ONE key
+z = {}
+z[0.0] = "pz"
+z[-0.0] = "nz"
+print(len(z))
+print(z[0])
+
+# mixed with non-numeric keys, which must be unaffected
+m = {1: "one", "1": "str-one", 2.5: "two-five"}
+print(len(m))
+print(m[1.0])
+print(m["1"])
+print(m[2.5])
+
+# a NaN key finds ITSELF -- CPython's dict tests identity before equality, so
+# this works even though nan == nan is False. (Two SEPARATELY created NaNs are
+# distinct keys in CPython because floats are objects there; NilPy variants are
+# values, so that distinction is not representable and is not asserted here.)
+n = float("nan")
+q = {n: "nan"}
+print(q[n])
+print(n in q)
+print(n == n)

@@ -1161,6 +1161,11 @@ test-nilpy: $(COMPILER)
 	# shared ones), and a BARE assert carries an EMPTY message, as CPython does.
 	./$(COMPILER) test/test_nilpy_assert.npy /tmp/test_nilpy_assert26
 	test "$$(/tmp/test_nilpy_assert26)" = "$$(printf '%b' 'pass ok\ncaught: boom\nbare len: 0\nempty list is falsy\nempty dict is falsy\nempty str is falsy\nNone is falsy\nzero is falsy\ntruthy ok\n5\nin def: must be positive\nvia Exception: generic\nn was 3\nstill running')"
+	# an int and a float that compare equal are the SAME dict key. `1 == 1.0` was
+	# already True but the dict key path disagreed, so 1.0 missed a 1 key —
+	# silently. Equal keys must hash equal, so an integral float hashes as its int.
+	./$(COMPILER) test/test_nilpy_numeric_dict_keys.npy /tmp/test_nilpy_numkey26
+	test "$$(/tmp/test_nilpy_numkey26)" = "$$(printf '%b' '1\nfloat\nfloat\nTrue\na\nTrue\nx\n1\nf\nm\nbig\nTrue\nhalf\nTrue\nFalse\nFalse\n1\nnz\n3\none\nstr-one\ntwo-five\nnan\nTrue\nFalse')"
 	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
 	# key function had no overload to bind to (dict alone and list+key both worked)
 	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26
