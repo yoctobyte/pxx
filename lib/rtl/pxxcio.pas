@@ -99,6 +99,7 @@ function __pxx_fchmod(fd, mode: Integer): Integer;
 function __pxx_ftruncate(fd: Integer; length: Int64): Integer;
 function __pxx_access(path: PChar; mode: Integer): Integer;
 function __pxx_fchown(fd, owner, group: Integer): Integer;
+function __pxx_isatty(fd: Integer): Integer;
 function __pxx_getuid: Integer;
 function __pxx_getgid: Integer;
 function __pxx_getegid: Integer;
@@ -408,6 +409,18 @@ end;
 function __pxx_geteuid: Integer;
 begin
   Result := PalGeteuid;
+end;
+
+function __pxx_isatty(fd: Integer): Integer;
+{ isatty is the TCGETS ioctl succeeding — that is what libc does, and it is the
+  only test that distinguishes a terminal from another character device.
+  fstat + S_ISCHR does NOT: /dev/null is a character device and is not a tty,
+  so the fstat version answers 1 for redirected output and every "am I
+  interactive" branch takes the wrong path. TCGETS is 0x5401 on every target pxx
+  builds for (asm-generic/ioctls.h; only mips/alpha/sparc/powerpc differ). }
+var termios: array[0..63] of Byte;   { struct termios is 60 bytes on Linux }
+begin
+  if PalIoctl(fd, $5401, @termios[0]) = 0 then Result := 1 else Result := 0;
 end;
 
 function __pxx_getuid: Integer;

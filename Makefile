@@ -7232,6 +7232,17 @@ lib-test: pxx-stable-check
 	    { echo 'FAIL: cproc_ids differs from gcc'; exit 1; }; \
 	  echo 'cproc_ids: identical to gcc'; \
 	else echo 'cproc_ids: SKIP (no gcc)'; /tmp/cproc_ids >/dev/null; fi
+	# isatty via the TCGETS ioctl. Checks /dev/null and a directory as well as
+	# a real tty (/dev/ptmx): the tempting fstat+S_ISCHR implementation answers
+	# 1 for /dev/null, so a one-sided test would pass against it.
+	$(PXX_STABLE) test/cisatty.c /tmp/cisatty
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -w -o /tmp/cisatty_gcc test/cisatty.c 2>/dev/null; \
+	  /tmp/cisatty_gcc > /tmp/cia_gcc.txt 2>&1; /tmp/cisatty > /tmp/cia_pxx.txt 2>&1; \
+	  diff /tmp/cia_gcc.txt /tmp/cia_pxx.txt || \
+	    { echo 'FAIL: cisatty differs from gcc'; exit 1; }; \
+	  echo 'cisatty: identical to gcc'; \
+	else echo 'cisatty: SKIP (no gcc)'; /tmp/cisatty >/dev/null; fi
 	# crtl against gcc's libc, which is the oracle for this surface: the whole
 	# output is diffed against the SAME file built by gcc, so there are no
 	# recorded expectations to drift.

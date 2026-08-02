@@ -12,6 +12,7 @@ extern int __pxx_fsync(int fd);
 extern int __pxx_dup(int oldFd);
 extern int __pxx_chdir(const char *path);
 extern int __pxx_getuid(void);
+extern int __pxx_isatty(int fd);
 extern int __pxx_getgid(void);
 extern int __pxx_getegid(void);
 extern int __pxx_getppid(void);
@@ -98,20 +99,15 @@ long sysconf(int name) {
   return -1;
 }
 
-/* isatty is DELIBERATELY ABSENT — see feature-crtl-libc-gap-batch-2026-08.
+/* isatty: 1 when fd is a terminal, 0 otherwise.
  *
- * The tempting implementation is fstat + S_ISCHR, and it is WRONG: /dev/null is
- * a character device and is not a tty. Verified against gcc, which answers
- * isatty("/dev/null") = 0. Shipping the fstat version would make every
- * "am I on a terminal" branch take the colour/progress-bar path when output is
- * redirected to /dev/null.
- *
- * The correct implementation is the TCGETS ioctl (what libc does: it succeeds
- * only on a tty), and crtl has no ioctl bridge yet — __pxx_fstat exists,
- * __pxx_ioctl does not. Adding one is small but its true-positive case cannot
- * be verified without a controlling terminal, which this build environment does
- * not have. Left out rather than guessed at.
- */
+ * The TCGETS ioctl, which is what libc does and the only test that separates a
+ * terminal from another character device. fstat + S_ISCHR does NOT work:
+ * /dev/null is a character device and is not a tty, so that version answers 1
+ * for redirected output and every "am I interactive" branch — colour, progress
+ * bars, prompting — takes the wrong path. Verified in both directions against
+ * gcc: /dev/ptmx is a tty, /dev/null and a directory are not. */
+int isatty(int fd) { return __pxx_isatty(fd); }
 
 /* dup/dup2: duplicate a descriptor. dup2 makes newfd refer to oldfd, closing
    whatever newfd was; dup picks the lowest free descriptor, which is what

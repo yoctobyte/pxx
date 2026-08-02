@@ -44,6 +44,9 @@ int pipe(int fds[2]);
 unsigned int sleep(unsigned int seconds);
 int usleep(unsigned int usec);
 int getpagesize(void);
+
+/* 1 when fd refers to a terminal (the TCGETS ioctl), 0 otherwise. */
+int isatty(int fd);
 int symlink(const char *target, const char *linkpath);
 int link(const char *oldpath, const char *newpath);
 int dup2(int oldfd, int newfd);

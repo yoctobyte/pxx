@@ -86,7 +86,7 @@ The probe now reports **47 of 48**. Implemented: `stpcpy`, `memccpy`,
 `strndup`, `setenv`, `unsetenv` (in `stdlib.c`, where `malloc` and the
 environment buffer already live).
 
-### `isatty` deliberately NOT implemented
+### `isatty` deliberately NOT implemented — and that call was WRONG, see below
 
 The obvious implementation is `fstat` + `S_ISCHR`, and it is **wrong**:
 `/dev/null` is a character device and is not a tty. Confirmed against gcc,
@@ -299,3 +299,43 @@ Still missing from that sweep, and deliberately not attempted: `fork`, `execv`
 and `alarm`. The first two are process creation, which crtl has no story for at
 all (see the note in [[feature-crtl-libc-gap-batch-2026-08]] about the spawn
 surface and the environment buffer), and `alarm` needs signal timers.
+
+## isatty, and a correction to round 1
+
+`isatty` landed. Round 1 declined it for two reasons and **both were false**:
+
+- *"crtl has no ioctl bridge (`__pxx_fstat` exists, `__pxx_ioctl` does not)"* —
+  `PalIoctl` exists in the PAL (`platform.pas:192`). I had checked for the
+  `__pxx_` wrapper and concluded the capability was missing, when only the
+  one-line wrapper was.
+- *"its true-positive case cannot be verified without a controlling terminal,
+  and this build environment has none"* — `/dev/ptmx` **is** a tty and opens
+  fine from a non-interactive build, so both directions were testable all along.
+
+The shape of the reasoning was right — do not ship an implementation verified in
+only one direction — but it rested on two premises I did not check, and checking
+them took about a minute. Recorded here rather than quietly fixed, because the
+deferral is written into `unistd.c`'s history and into round 1's notes above.
+
+The implementation is the one round 1 said it should be: the **TCGETS ioctl**,
+not `fstat` + `S_ISCHR`. `/dev/null` is a character device and is not a tty, so
+the fstat version answers 1 for redirected output and every "am I interactive"
+branch takes the wrong path. `test/cisatty.c` checks `/dev/null` and a directory
+alongside a real terminal for exactly that reason — a one-sided test would pass
+against the wrong implementation.
+
+TCGETS is `0x5401` on every target pxx builds for (asm-generic; only
+mips/alpha/sparc/powerpc differ). Identical to gcc on x86-64, i386, aarch64 and
+arm32.
+
+## Both probes are now at zero gaps
+
+`48/48` and `60/60`, from `38/48` and `55/60` when the sweeps started. Across
+the rounds: 21 functions implemented, and eight bugs found — five in the library
+(`strerror` stub, `strtol` overflow wrap, `limits.h` widths, `sscanf` EOF,
+`struct stat`'s hardcoded fields) and three in the compiler, filed to Track C
+([[bug-cfront-plain-char-is-unsigned-and-folds-inconsistently]],
+[[bug-cfront-sizeof-unparenthesised-subscript]],
+[[bug-cfront-spurious-dt-needed-libc-with-no-imports]]).
+
+Still absent by decision, not oversight: `fork`, `execv`, `alarm`.
