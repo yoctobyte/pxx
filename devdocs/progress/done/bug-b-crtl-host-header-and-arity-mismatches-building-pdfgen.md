@@ -79,7 +79,7 @@ call against gcc. `lib/crtl` builds for every target while `gate.sh lib` is
 x86-64 only, so cross-check i386/aarch64/arm32 as well —
 see [[frank2-crtl-changes-need-cross-check]].
 
-## Resolved 2026-08-02 — the crtl half; the rest was two other bugs
+## Resolved 2026-08-02 (commit 1d32180b6) — the crtl half; the rest was two other bugs
 
 Measuring first, as this ticket's own "not yet measured" section asked for,
 split the three warnings into three different owners. Only one of them was
