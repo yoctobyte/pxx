@@ -849,6 +849,7 @@ function PyMakePercentFormat(fmtNode, argsNode: Integer): Integer; forward;  { `
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
 function PyMakeDynCall(baseNode: Integer): Integer; forward; { Nil Python: call a callable stored in a variant (pyparser.inc) }
+function PyBoxCallableValue(node: Integer): Integer; forward; { Nil Python: box a closure/bound-fn pointer into a callable variant (pyparser.inc) }
 function PyMakeCallDunder(baseNode: Integer): Integer; forward; { Nil Python: call a class instance's __call__ (pyparser.inc) }
 function PyWrapClosureFieldCall(fieldNode, argExpr, defCall: Integer): Integer; forward; { Nil Python: a Callable field may hold a pyeval closure (pyparser.inc) }
 function PyMakeBoundMethod(mpi, selfNode: Integer): Integer; forward; { Nil Python: `obj.method` (no call) -> a bound-method value (pyparser.inc) }
@@ -8707,6 +8708,22 @@ begin
         LastExprTk := IntToTypeKind(ASTTk[node]);
       end;
       Expect(tkRParen, ')');
+      { A parenthesised CALLABLE VALUE used directly as a callee —
+        `(lambda a, b: a - b)(9, 4)`. The lambda lowering yields the raw
+        closure/bound-fn pointer; it is `PyBoxCallableValue` that turns one into
+        the variant the dynamic-call path recognises, and until now that ran
+        only on an assignment's right-hand side. So the identical lambda bound to
+        a NAME first was callable and the inline form raised "object is not
+        callable" (bug-nilpy-immediately-invoked-lambda-is-not-callable).
+
+        Boxing here rather than teaching the call site a second callability
+        rule: the tyVariant dynamic-call loop further down already handles
+        everything after this point, including a call whose result is itself
+        callable. PyBoxCallableValue is a no-op on any node that is not one of
+        the callable-producing calls, so a grouped expression of any other kind
+        is untouched. }
+      if PyExprMode and (CurTok.Kind = tkLParen) then
+        CurASTNode := PyBoxCallableValue(CurASTNode);
       { Postfix suffix on a parenthesised expression: `(p)^`, `(p+k)^`, `(r).f`,
         `(a)[i]`. Without this the `^`/`.`/`[` were left dangling and the grouped
         value was used as-is (e.g. `(p)^` returned the pointer, not the pointee). }

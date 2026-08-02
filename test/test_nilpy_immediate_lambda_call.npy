@@ -1,0 +1,45 @@
+# bug-nilpy-immediately-invoked-lambda-is-not-callable
+#
+# TWO independent faults, and the second was hiding behind the first:
+#
+# 1. A parenthesised lambda used directly as a callee was never BOXED. The
+#    lambda lowering yields a raw closure pointer; PyBoxCallableValue is what
+#    turns one into the variant the dynamic-call path recognises, and it ran
+#    only on an assignment right-hand side. So `f = lambda ...` then `f(...)`
+#    worked and the inline form raised "object is not callable".
+#
+# 2. `(lambda a, b: ...)` was parsed as a TUPLE. PyTupleParenAhead saw the comma
+#    in the lambda's PARAMETER LIST and read it as a tuple separator, so a
+#    multi-parameter lambda became a TPyList. A zero- or one-parameter lambda
+#    has no such comma, which is why the bug presented as callability rather
+#    than as parsing.
+#
+# The tuple rows below are the gate on fault 2 not being over-corrected:
+# `(lambda v: v + 1, 5)` IS a 2-tuple in CPython — a lambda body stops at a
+# comma inside a display, so only the commas BEFORE the colon are parameters.
+#
+# Pinned does not even parse line 1. Diffed against CPython (tools/pydiff.py).
+
+print((lambda a, b: a - b)(9, 4))
+print((lambda: 7)())
+print((lambda x: x * 3)(5))
+
+f = lambda a, b: a - b
+print(f(9, 4))
+g = lambda: 7
+print(g())
+print(list(map(lambda v: v + 1, [1, 2])))
+handlers = {"a": lambda v: v + 100}
+print(handlers["a"](2))
+lst = [lambda v: v * 10]
+print(lst[0](3))
+
+# a real TUPLE must still be a tuple, and a lambda INSIDE one must still work
+t = (1, 2, 3)
+print(t)
+pair = (lambda v: v + 1, 5)
+print(pair[0](pair[1]))
+print(())
+print((7,))
+print(sorted([3, 1, 2], key=lambda v: -v))
+print((lambda a, b, c: a + b + c)(1, 2, 3))

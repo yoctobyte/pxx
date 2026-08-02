@@ -3,6 +3,8 @@ track: N
 prio: 55
 type: bug
 summary: "`(lambda a, b: a - b)(9, 4)` raises TypeError: object is not callable, and a zero-arg `(lambda: 7)()` does not even parse. The identical lambda bound to a NAME first is fine"
+status: done
+owner: claude-AN-night
 ---
 
 # An immediately-invoked lambda is not callable
@@ -129,3 +131,63 @@ positions call `PyMakeFuncValue` today rather than by patching the boxer.
 Item 1 (the call site accepting a callable-valued EXPRESSION as callee) is
 untouched by this and remains the smaller, separable half — it is what
 `(lambda ...)(...)` needs.
+
+
+## Resolved 2026-08-03 — item 1, and a SECOND fault the first one was hiding
+
+The ticket's item 1 ("the call site must recognise a callable-valued
+EXPRESSION") turned out to need no new call-site rule at all. The boxing is the
+missing step, not the recognition: `PyBoxCallableValue` at the end of the
+parenthesised-expression branch, when the next token is `(`, hands the existing
+tyVariant dynamic-call loop something it already knows how to call. One
+statement, and it also fixed the zero-arg `(lambda: 7)()` form the ticket
+reported as a PARSE error — that was the same missing box, showing up as a
+different symptom because nothing claimed the trailing `()`.
+
+`PyBoxCallableValue` is a no-op on any node that is not one of the
+callable-producing calls, so a grouped expression of any other kind is
+untouched.
+
+### The second fault: a multi-parameter lambda was parsed as a TUPLE
+
+With the boxing in, `(lambda x: x * 3)(5)` and `(lambda: 7)()` both worked and
+`(lambda a, b: a - b)(9, 4)` still did not. Dumping the AST
+(`PXXDBG=a.ast`) showed `AN_CALL(-tkGetMem)` — a CONSTRUCTION, not a closure:
+`PyTupleParenAhead` had seen the comma in the lambda's **parameter list** and
+read it as a tuple separator, so the whole thing was built as a TPyList.
+
+That is why the ticket's own measurements looked like a callability problem: a
+zero- or one-parameter lambda has no comma there and never hit it.
+
+`PyTupleParenAhead` now fast-forwards past a leading lambda's `:` before
+scanning for a depth-1 comma.
+
+**Not skipped — STARTED past the colon**, which is the whole subtlety.
+`(lambda v: v + 1, 5)` IS a 2-tuple in CPython: a lambda body stops at a comma
+inside a display, so only the commas BEFORE the colon are parameters. The first
+attempt refused the tuple reading outright for any group starting with
+`lambda`, and that broke exactly this case — caught by the test, which is why
+the tuple rows are in it.
+
+### Item 2 of the ticket is untouched
+
+`z = f if c else g` then `z(1)` still does not parse, and the earlier analysis
+of why stands: a bare def NAME only becomes a function value in a few specific
+positions, so there is nothing inside a conditional expression for the boxer to
+see through. That remains its own (larger) piece of work — "a bare def name in
+ANY value position should become a function value" — and this ticket does not
+touch it.
+
+### Verified
+
+`test/test_nilpy_immediate_lambda_call.npy` (+ `.expected`, wired into
+`make test-nilpy`), 14 lines byte-identical to CPython: the two repros, a
+one-parameter and a three-parameter IIFE, the named-lambda controls, a lambda
+through `map` and through `sorted(key=)`, dict- and list-subscript callees, and
+the tuple set — a plain 3-tuple, the empty tuple, a 1-tuple, and a tuple whose
+FIRST element is a lambda. Pinned does not parse line 1 of it.
+
+`gate.sh quick` GREEN, self-host fixedpoint byte-identical, FPC seed clean.
+
+## Log
+- 2026-08-03 — resolved.

@@ -489,7 +489,7 @@ begin
 end;
 
 function PyTupleParenAhead: Boolean;
-var i, depth: Integer;
+var i, depth: Integer; lamSkip: Boolean;
 begin
   Result := False;
   if CurTok.Kind <> tkLParen then Exit;
@@ -503,8 +503,44 @@ begin
     Result := True;
     Exit;
   end;
+  { `(lambda a, b: ...)` — the commas BEFORE the lambda's `:` are its PARAMETER
+    LIST, not tuple separators, and the depth-1 scan below cannot tell them
+    apart: a parenthesised multi-parameter lambda was built as a TPyList and
+    then, of course, was not callable
+    (bug-nilpy-immediately-invoked-lambda-is-not-callable). A zero- or
+    one-parameter lambda has no comma there, which is why the bug presented as a
+    callability problem rather than a parsing one.
+
+    Commas AFTER the colon are tuple separators again — `(lambda v: v + 1, 5)`
+    IS a 2-tuple in CPython, since a lambda body stops at a comma inside a
+    display. So the scan is not skipped, it is STARTED past the colon; a group
+    that closes before any colon is not a tuple either way. }
   i := TokPos - 1;
-  depth := 0;
+  lamSkip := False;
+  if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+     CaseEqual(GetTokenStr(TokPos), 'lambda') then
+  begin
+    depth := 0;
+    while i < TokCount do
+    begin
+      if Tokens[i].Kind in [tkBegin, tkLBrack, tkLParen] then Inc(depth)
+      else if Tokens[i].Kind in [tkEnd, tkRBrack, tkRParen] then
+      begin
+        Dec(depth);
+        if depth = 0 then Exit;
+      end
+      else if (depth = 1) and (Tokens[i].Kind = tkColon) then
+      begin
+        lamSkip := True;
+        Break;
+      end;
+      Inc(i);
+    end;
+    if not lamSkip then Exit;
+  end;
+  { depth starts at 1 when the scan was fast-forwarded past a lambda's colon:
+    the group's own '(' is behind us and must not be counted twice. }
+  if lamSkip then depth := 1 else depth := 0;
   while i < TokCount do
   begin
     if Tokens[i].Kind in [tkBegin, tkLBrack, tkLParen] then Inc(depth)
