@@ -74,3 +74,42 @@ against CPython's own output, and specifically a mixed `or` used AS A CONDITION
 
 ## Log
 - 2026-07-31 — resolved, commit 83ef062fcea265fd31239a08bd739546abfa0234.
+
+## 2026-08-02 — the BOOLEAN half, deliberately excluded here, is now done (a28a9f838)
+
+This ticket's fix admitted str-vs-NUMBER and explicitly held Boolean back:
+
+> Boolean is deliberately NOT included here — a str-vs-Boolean pair is exactly
+> the segfault repro the original rule was written to avoid, and stays on the
+> boolean lowering.
+
+A differential sweep found what that left behind, and it is not confined to
+str-vs-Boolean:
+
+| expression | CPython | pxx before |
+| --- | --- | --- |
+| `True and 0` | `0` | `False` |
+| `True and "s"` | `'s'` | `True` |
+| `False or "s"` | `'s'` | `True` |
+| `flag and value` | the value | a Boolean |
+
+The last row is the one that matters — `flag and value` is ordinary Python and
+the wrong answer is silent.
+
+**The caution was self-cancelling.** The segfault it guarded against is the
+"type the ternary as one arm and read the other through it" hazard, and the
+`tyVariant` fallback this very ticket introduced is what removed it: the ternary
+is typed VARIANT, so neither arm is read through the other's representation. The
+argument that admitted str-vs-number admits str-vs-Boolean unchanged. The comment
+in the code even states the argument immediately before declining to apply it.
+
+Boolean is now admitted against str, int and float.
+
+Verified against the ORIGINAL repro rather than only the new cases: a
+str/Boolean pair used AS A CONDITION (the `has()` shape the old comment names)
+is unchanged, as are if/while/not conditions — a condition only truthiness-tests
+the result, so it cannot observe the difference. That is the regression guard in
+`test/test_nilpy_bool_operand_and_or.npy`, which is byte-identical to CPython
+across 20+ and/or forms.
+
+`gate.sh quick` GREEN, self-host fixedpoint byte-identical.
