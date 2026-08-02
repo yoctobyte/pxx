@@ -40,7 +40,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (205)
+## backlog (206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -95,6 +95,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
 | bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | — |
 | bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | — |
+| bug-nilpy-single-line-def-body-fails-to-parse | N | 40 | bug | NilPy: a single-line `def f(): return x` body fails to parse | — |
 | bug-nilpy-stdlib-shim-table-cannot-reach-an-overload | N | 50 | bug | The stdlib shim table and every hand-built pylib call resolve a NAME with FindProc, which returns ONE proc index and never consults overloads — so os.path.join('a','b','c') fails and adding a Pascal overload has no effect | — |
 | bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice | N | 50 | bug | Three loud gaps found by the CPython differential sweep | — |
 | bug-nilpy-unary-numeric-dunders-return-raw-handle | N | 55 | bug | NilPy: abs(obj), ~obj and obj-as-index ignore __abs__/__invert__/__index__ — they return the raw instance HANDLE as a number, silently | — |
@@ -1732,6 +1733,7 @@ lives in git, not in a timestamp._
 - [p 40] [N] bug-nilpy-list-mutators-return-self-instead-of-none
 - [p 40] [N] bug-nilpy-list-of-custom-objects-loses-repr-str
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
+- [p 40] [N] bug-nilpy-single-line-def-body-fails-to-parse
 - [p 40] [A] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
