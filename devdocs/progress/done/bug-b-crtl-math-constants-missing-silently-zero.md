@@ -8,7 +8,7 @@ type: bug
 
 - **Type:** bug (crtl, silent wrong value) — **Track B** (`lib/crtl/include/math.h`)
 - **Found:** 2026-08-02, while assessing [[feature-lib-pxxpdf-reportlab-compat]].
-- **Resolved:** same day, commit recorded below.
+- **Resolved:** same day, commit 6ade7cabd.
 
 ## Measured
 
