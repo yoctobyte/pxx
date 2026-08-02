@@ -4706,27 +4706,58 @@ end;
   caller reads (`key=lambda p: p[1]`) must keep the pyeval closure, which
   returns one. Refusing loudly here beats lifting a body whose value silently
   disappears. }
-function PyLambdaBodyIsDiscardableCall(bStart, bEnd: Integer): Boolean;
+{ Is this lambda body one the LIFTED path can compile?
+
+  It must CONTAIN a call — a body with none already works through the pyeval
+  closure and lifting it would be a behaviour change for no gain — and every
+  token it is built from must be one PyLambdaTokText can render, because the
+  lifted body is reconstructed as SOURCE from the token span and an unrenderable
+  token is a hard Error, not a fallback. Anything rejected here keeps the pyeval
+  closure, which is what makes this predicate safe to widen incrementally.
+
+  WIDENED 2026-08-03 from "the body IS exactly one call" to "the body is a flat
+  expression CONTAINING a call". The old rule demanded the first token be an
+  identifier, the last a `)`, and nothing but ident/dot at depth 0 — so
+  `lambda: f()` lifted but `lambda: f() + 1` and `lambda: f() or 4` did not, and
+  they fell to the pyeval interpreter, which cannot call a compiled def: they
+  died at RUN time with `pyeval: unknown call: f()`
+  (bug-nilpy-lambda-body-expression-around-a-call-cannot-call-a-def). Nothing in
+  the lifted path was specific to a bare call; the predicate was the only thing
+  holding it back.
+
+  Still rejected, deliberately, each for its own reason rather than in one
+  sweep: a depth-0 token outside the operator set below (a float literal has no
+  PyLambdaTokText case; a nested `lambda`, a comprehension and an unparenthesised
+  tuple are shapes the capture scan has not been measured against), and a body
+  with no call at all. }
+function PyLambdaBodyIsLiftable(bStart, bEnd: Integer): Boolean;
 var i, depth: Integer; sawCall: Boolean;
 begin
   Result := False;
   if bEnd - bStart < 3 then Exit;
-  if Tokens[bStart].Kind <> tkIdent then Exit;
-  if Tokens[bEnd - 1].Kind <> tkRParen then Exit;
   depth := 0;
   sawCall := False;
   for i := bStart to bEnd - 1 do
   begin
     if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then
     begin
-      if (depth = 0) and (Tokens[i].Kind = tkLParen) and (i > bStart) then sawCall := True;
+      { `name(` at any depth is a call — the old rule only counted one at
+        depth 0, which is the same thing once the body must be a single call }
+      if (Tokens[i].Kind = tkLParen) and (i > bStart) and
+         (Tokens[i - 1].Kind = tkIdent) then sawCall := True;
       Inc(depth);
     end
     else if Tokens[i].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(depth)
     else if depth = 0 then
     begin
-      { at depth 0 only the callee chain may appear: `a.b.c(` }
-      if not (Tokens[i].Kind in [tkIdent, tkDot]) then Exit;
+      { a flat expression: the callee chain, literals, and the operators
+        PyLambdaTokText knows how to write back out }
+      if not (Tokens[i].Kind in [tkIdent, tkDot, tkInteger, tkString,
+                                 tkPlus, tkMinus, tkStar, tkSlash, tkDiv, tkMod,
+                                 tkAmp, tkPipe, tkXor, tkShl, tkShr, tkLogNot,
+                                 tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe,
+                                 tkAnd, tkOr, tkNot, tkIn,
+                                 tkIf, tkElse, tkNil, tkTrue, tkFalse]) then Exit;
     end;
   end;
   Result := sawCall and (depth = 0);
@@ -4819,7 +4850,7 @@ begin
   bindPi := FindProc('pyboundfn_bind');
   varBindPi := FindProc('pyboundfn_bind_var');
   if (not PyTypingPass) and (nParams <= 1) and (newPi >= 0) and (bindPi >= 0) and
-     (varBindPi >= 0) and PyLambdaBodyIsDiscardableCall(bStart, bEnd) then
+     (varBindPi >= 0) and PyLambdaBodyIsLiftable(bStart, bEnd) then
   begin
     lamN := 0;
     { A ZERO-parameter lambda is lifted too, under a DUMMY own parameter nothing

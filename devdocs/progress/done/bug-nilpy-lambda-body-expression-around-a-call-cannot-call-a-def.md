@@ -3,6 +3,8 @@ track: N
 prio: 55
 type: bug
 summary: "A lambda whose body is an EXPRESSION AROUND a call (`lambda: f() or 4`, `lambda: f() + 1`) is not lifted — it falls to the pyeval interpreter, which cannot call a compiled def, so it dies at RUN time with `pyeval: unknown call: f()`. A bare `lambda: f()` works."
+status: done
+owner: claude-AN-night
 ---
 
 # lambda body that is an expression *around* a call cannot call a def
@@ -90,3 +92,54 @@ message — is the worst of the three.
 `lambda x: f(x) * 2`, a lambda calling a *method*, and a lambda calling a nested
 def that has captures (the transitive-capture case `PyParseLambdaStub` already
 documents). Plus the existing lambda tests staying green.
+
+
+## Resolved 2026-08-03 — the predicate was the whole of it
+
+Widening `PyLambdaBodyIsDiscardableCall` was the fix, exactly as the ticket
+suspected, and the lifted path needed no change at all. Renamed
+`PyLambdaBodyIsLiftable`, since "is a discardable call" stopped describing what
+it tests.
+
+It now accepts any FLAT expression that CONTAINS a call, instead of a body that
+IS one call. The old rule demanded the first token be an identifier, the last a
+`)`, and nothing but ident/dot at depth 0.
+
+Two conditions survive, and they are what keeps this safe:
+
+- the body must contain a call. A body without one already works through the
+  pyeval closure, and lifting it would be a behaviour change for no gain.
+- every depth-0 token must be one `PyLambdaTokText` can render. The lifted body
+  is reconstructed as SOURCE from the token span, and an unrenderable token is a
+  hard `Error`, not a fallback — so the allowlist is written against that
+  function's own case list rather than against what "looks like an expression".
+  A float literal has no case there, and is therefore still rejected (and still
+  gets the interpreter), which is the pre-existing behaviour.
+
+The ticket's step 2 (subscripts, nested lambdas, comprehensions one at a time)
+is deliberately not taken: those are shapes the capture scan below the predicate
+has not been measured against.
+
+### One behaviour change worth stating
+
+A lambda over a **capturing sibling nested def** used to fall to the interpreter
+in its `add(10) + 1` spelling and fail at run time; it now fails at COMPILE with
+`undefined variable (add)` — which is the same error the bare `add(10)` spelling
+already gave on pinned. Consistency rather than a new fault, but a program that
+merely BUILT before, without ever invoking such a lambda, now does not. Filed as
+[[bug-nilpy-lambda-over-a-capturing-nested-def-does-not-compile]] (pre-existing,
+reproduced on pinned, independent of the body shape).
+
+### Verified
+
+`test/test_nilpy_lambda_expression_body.npy` (+ `.expected`, wired into
+`make test-nilpy`), byte-identical to CPython across 9 lines: `f() + 1`,
+`f() or 4` with the side effect counted, `f(x) * 2`, `f(x) + f(x)`, a comparison
+result, a ternary over two calls, a METHOD call on a captured object, the bare
+`f()` form as a control, and a body with no call at all as the other control.
+Pinned prints the first line and then dies with `pyeval: unknown call: top()`.
+
+`gate.sh quick` GREEN, self-host fixedpoint byte-identical, FPC seed clean.
+
+## Log
+- 2026-08-03 — resolved.

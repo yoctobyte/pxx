@@ -1,0 +1,57 @@
+# bug-nilpy-lambda-body-expression-around-a-call-cannot-call-a-def
+#
+# A lambda whose body is an EXPRESSION AROUND a call was not lifted — only a
+# body that WAS exactly one call. Everything else fell to the pyeval closure,
+# which has no access to the program's compiled procs, so it died at RUN time
+# with `pyeval: unknown call: f()`. Pinned prints `5` for the first line here
+# and then dies on the second.
+#
+# Nothing in the lifted path was specific to a bare call; the predicate was the
+# only thing holding it back. It now accepts any FLAT expression that contains
+# a call, built from tokens the source reconstruction can write back out.
+#
+# f9 is the control: a body with no call at all still takes the old path.
+# Diffed against CPython (tools/pydiff.py).
+
+def top():
+    return 5
+
+def dbl(x):
+    return x * 2
+
+class C:
+    def __init__(self):
+        self.n = 3
+    def m(self):
+        return self.n
+
+h = 0
+def hh():
+    global h
+    h += 1
+    return 0
+
+f1 = lambda: top()
+f2 = lambda: top() + 1
+f3 = lambda: hh() or 4
+f4 = lambda x: dbl(x) * 2
+f5 = lambda x: dbl(x) + dbl(x)
+f6 = lambda: top() > 4
+f7 = lambda x: dbl(x) if x > 0 else top()
+
+print(f1())
+print(f2())
+print(f3(), h)
+print(f4(5))
+print(f5(3))
+print(f6())
+print(f7(2), f7(-1))
+
+c = C()
+f8 = lambda: c.m() + 1
+print(f8())
+
+# a body with NO call still goes through the old path
+f9 = lambda x: x + 1
+print(f9(41))
+
