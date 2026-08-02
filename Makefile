@@ -1327,6 +1327,13 @@ test-nilpy: $(COMPILER)
 	# SAME extension's own output under real CPython, not a hand-typed guess
 	./$(COMPILER) -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_markupsafe.npy /tmp/test_cpyext_markupsafe26
 	test "$$(/tmp/test_cpyext_markupsafe26)" = "$$(printf '&lt;b&gt;hi &amp; &#34;bye&#34; &#39;all&#39;&lt;/b&gt;\nplain text, no specials')"
+	# cpyext M5a "a Cython-generated module": Cython 3.2.9's unmodified output
+	# for test/nilpy_units/vendor/cyadd.pyx (6057 lines from 6), compiled by
+	# cfront. Proves real PEP 489 init (Py_mod_create/Py_mod_exec are EXECUTED),
+	# module-dict function objects rather than a static PyMethodDef table, and
+	# METH_FASTCALL. Both -D flags are load-bearing — see that vendor README.
+	./$(COMPILER) -DPy_LIMITED_API=0x030c0000 -DCYTHON_COMPRESS_STRINGS=0 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_cython.npy /tmp/test_cpyext_cython26
+	test "$$(/tmp/test_cpyext_cython26)" = "$$(printf '42\n0\n3000000\n1\n720\n3628800\n479001600')"
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING

@@ -470,3 +470,92 @@ Use **gcc** for the header-surface inventory, not cfront: it reports `#error`
 and gives one diagnostic per missing name. Switch to cfront once the surface is
 declared — from there the walls are C-frontend gaps and link failures, which is
 what cfront is the right tool to find.
+
+
+## 2026-08-03 — M5a LANDED. A Cython-generated module compiles, inits and RUNS.
+
+Cython 3.2.9's unmodified output for a 6-line `.pyx` — 6057 lines — is compiled
+by cfront against pxx's own `Python.h`, initialised through real PEP 489
+multi-phase init, and its functions called. Verified against the oracle the
+milestone asks for: the SAME generated C, built as a normal CPython 3.12
+extension in a venv, gives identical results.
+
+```
+cyadd(20,22)=42  cyadd(-5,5)=0  cyadd(1000000,2000000)=3000000
+cyfact(0)=1  cyfact(6)=720  cyfact(10)=3628800  cyfact(12)=479001600
+```
+
+`test/test_cpyext_cython.npy` + `test/nilpy_units/{cyadd_ext.pas,
+cyadd_ext_host.c,vendor/{cyadd.pyx,cyadd_cython.c}}`, wired into
+`make test-nilpy`.
+
+### What the scoping pass got wrong, and it is worth recording
+
+The scoping section above predicted M5a would be the ~20 identifiers plus the
+75 functions, with the module-DICT and function-object work deferred to M5b.
+That was wrong in an instructive way: **Cython 3 emits an EMPTY `m_methods`
+table.** Its module-level `def`s are registered from the `Py_mod_exec` slot into
+the module dict. So the M1-M4 route — walk the static PyMethodDef table — finds
+nothing, and a module that init'd "successfully" had zero functions. Silently.
+
+The type-object work stayed deferred (there are still no heap types), but three
+M5b-shaped pieces moved into M5a because nothing works without them:
+
+1. **Real PEP 489 init.** `PyModuleDef_Init` no longer collapses to
+   `PyModule_Create2`: it runs `Py_mod_create` (synthesizing the module SPEC
+   that importlib normally supplies — generated code reads only `spec.name`),
+   then every `Py_mod_exec` in order, failing if one does.
+2. **Attributes and the module dict.** `PyObject` gains `ob_attrs`; modules,
+   specs and function objects carry a real dict. Everything else still raises
+   AttributeError, which is the correct Python answer, not a placeholder.
+3. **Builtin-function objects** (`PYOBJ_CFUNC`) via `PyCFunction_New(Ex)`, and
+   `PyObject_Call` over them — including **METH_FASTCALL**, which is the common
+   path (not an optimisation) once the claimed version is 3.12+.
+
+### Four walls, each with its own lesson
+
+- **`zlib.decompress` at module init.** Cython 3.2 compresses its string tables
+  by default and decompresses them with a LIVE zlib module during init. Needs
+  `-DCYTHON_COMPRESS_STRINGS=0`. A generated-code default can require an
+  importable stdlib module at import time — worth checking for on every future
+  package.
+- **The CO_* flags.** Under `Py_LIMITED_API`, CPython does not expose them, so
+  Cython falls back to `PyImport_ImportModule("inspect")` and reads them as
+  attributes at run time. No runtime without an importer can satisfy that, so
+  our `Python.h` DELIBERATELY diverges and defines them unconditionally. They
+  are fixed published constants, not machinery.
+- **`PyImport_AddModule` does not import.** It returns the module of that name
+  or CREATES an empty one. Honouring that exactly (rather than raising
+  ImportError) is what makes `builtins` and Cython's own `cython_runtime`
+  scratch module work with no importer at all.
+- **`PyErr_Fetch`/`Restore` must preserve the MESSAGE.** They did not, and the
+  first failing init reported an empty error — the message was destroyed by the
+  traceback builder's own fetch/restore round trip. Fetch now hands the message
+  back as a real `str`. Directly cost an hour of chasing the wrong thing.
+
+Also: `Py_CompileString` and `PyTraceBack_Here` were moved OUT of the
+stop-the-program set. Their only real caller is Cython's traceback DECORATOR,
+which runs after an exception has already happened; stopping there replaces a
+reportable error with a message about tracebacks. They now fail and let the
+caller restore the original exception. The distinction — "unsupported and
+load-bearing" vs "unsupported and decorative" — is the useful one.
+
+### Filed while doing this
+
+- [[bug-cfront-error-directive-silently-ignored]] (prio 75) — `#error` compiles
+  clean; this is what made the very first measurement lie.
+- [[bug-cfront-undeclared-type-in-cast-treated-as-zero]] (prio 65) — an
+  undeclared TYPE in a cast is a warning and evaluates to 0, so a
+  function-pointer cast became null and the program segfaulted far away. gcc
+  errors, with a did-you-mean that was the whole diagnosis.
+
+### Remaining, for M5b
+
+- `-X binding=False` is still required at generation time. Dropping it needs
+  CyFunction: a heap type via `PyType_FromSpec`, `tp_descr_get`, GC
+  traverse/clear, vectorcall. That is the honest boundary of "Cython support".
+- `PyObject_CallFunctionObjArgs` is still a stop (needs an argument tuple built
+  from a `va_list`); nothing generated has reached it.
+- Keyword arguments through the fastcall path are refused rather than
+  mis-passed — needs the `kwnames` tuple.
+- A `cdef class`, and a real Cython-built package from PyPI, are M5c.

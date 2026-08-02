@@ -123,6 +123,29 @@ typedef unsigned long Py_uhash_t;
 #define Py_file_input   257
 #define Py_eval_input   258
 
+/* Code-object flags. CPython puts these in <compile.h> and does NOT expose
+ * them under Py_LIMITED_API, which is why generated code has a fallback that
+ * imports the `inspect` module and reads them as attributes at run time. No
+ * runtime without an importer can satisfy that fallback, so this header
+ * DELIBERATELY diverges and defines them unconditionally: they are fixed,
+ * published constants, not machinery, and defining them is what keeps a
+ * Cython module's init from needing a live `inspect`.
+ *
+ * <compile.h> re-states them for source that includes it directly; the two
+ * must agree, hence the header guard there. */
+#ifndef CO_OPTIMIZED
+#define CO_OPTIMIZED            0x0001
+#define CO_NEWLOCALS            0x0002
+#define CO_VARARGS              0x0004
+#define CO_VARKEYWORDS          0x0008
+#define CO_NESTED               0x0010
+#define CO_GENERATOR            0x0020
+#define CO_NOFREE               0x0040
+#define CO_COROUTINE            0x0080
+#define CO_ITERABLE_COROUTINE   0x0100
+#define CO_ASYNC_GENERATOR      0x0200
+#endif
+
 /* --- object model -------------------------------------------------------
  * One tagged struct standing in for every PyObject subtype M1 needs. Real
  * CPython objects vary in size per type with a common PyObject header; pxx's
@@ -138,6 +161,11 @@ typedef unsigned long Py_uhash_t;
 #define PYOBJ_BYTES  6
 #define PYOBJ_LIST   7
 #define PYOBJ_DICT   8
+/* M5b: a builtin-function object (ob_ptr = its PyMethodDef*) and a plain
+ * attribute namespace (a module, or the module SPEC the import machinery
+ * normally supplies). Both keep their attributes in ob_attrs. */
+#define PYOBJ_CFUNC  9
+#define PYOBJ_NS    10
 
 typedef struct _object {
     long   ob_refcnt;
@@ -146,12 +174,17 @@ typedef struct _object {
     double ob_fval;   /* PYOBJ_FLOAT payload */
     void  *ob_ptr;    /* PYOBJ_TUPLE/PYOBJ_LIST: PyObject** items;
                           PYOBJ_MODULE: PyMethodDef*;
+                          PYOBJ_CFUNC: PyMethodDef* (the one entry);
                           PYOBJ_STR/PYOBJ_BYTES: char* bytes (NUL-terminated);
                           PYOBJ_DICT: PyDictEntry* pairs */
     long   ob_size;   /* PYOBJ_TUPLE/PYOBJ_LIST: item count;
                           PYOBJ_MODULE: method count;
                           PYOBJ_STR/PYOBJ_BYTES: byte length (excl. the NUL);
                           PYOBJ_DICT: pair count */
+    struct _object *ob_attrs; /* PYOBJ_MODULE/PYOBJ_NS/PYOBJ_CFUNC: the
+                          attribute dict, allocated on first use. NULL on every
+                          other kind — this model has no per-instance
+                          attributes, and PyObject_GetAttr says so (M5b). */
 } PyObject;
 
 typedef struct PyDictEntry {
@@ -340,10 +373,25 @@ typedef PyObject *(*PyCFunction)(PyObject *self, PyObject *args);
 #define METH_KEYWORDS 0x0002 /* ml_meth is really PyCFunctionWithKeywords */
 #define METH_O       0x0008  /* ml_meth called as fn(self, theSingleArg) directly */
 
-/* METH_KEYWORDS entries carry a three-argument function through the same
- * one-field ml_meth slot, exactly as CPython does — the cast is the API. */
+#define METH_NOARGS  0x0004
+#define METH_FASTCALL 0x0080  /* args as a C array, not a tuple */
+
+/* METH_KEYWORDS and METH_FASTCALL entries carry a wider function through the
+ * same one-field ml_meth slot, exactly as CPython does — the cast IS the API,
+ * and ml_flags is what says which signature is really there. */
 typedef PyObject *(*PyCFunctionWithKeywords)(PyObject *self, PyObject *args,
                                              PyObject *kwargs);
+typedef PyObject *(*PyCFunctionFast)(PyObject *self, PyObject *const *args,
+                                     Py_ssize_t nargs);
+typedef PyObject *(*PyCFunctionFastWithKeywords)(PyObject *self,
+                                                 PyObject *const *args,
+                                                 Py_ssize_t nargs,
+                                                 PyObject *kwnames);
+/* The pre-3.13 private spellings. CPython renamed these without removing the
+ * old names, and generated code picks whichever the CLAIMED version had — so
+ * both must exist here or a cast lands on an undeclared name. */
+typedef PyCFunctionFast _PyCFunctionFast;
+typedef PyCFunctionFastWithKeywords _PyCFunctionFastWithKeywords;
 
 typedef struct PyMethodDef {
     const char  *ml_name;

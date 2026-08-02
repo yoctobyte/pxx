@@ -83,6 +83,7 @@ static PyObject *py_alloc(int kind) {
     o->ob_fval = 0.0;
     o->ob_ptr = 0;
     o->ob_size = 0;
+    o->ob_attrs = 0;
     return o;
 }
 
@@ -101,6 +102,10 @@ void Py_DecRef(PyObject *o) {
              o->ob_kind == PYOBJ_BYTES || o->ob_kind == PYOBJ_LIST ||
              o->ob_kind == PYOBJ_DICT) && o->ob_ptr != 0)
             free(o->ob_ptr);
+        /* PYOBJ_CFUNC's ob_ptr is a PyMethodDef the extension OWNS (a static
+           table); PYOBJ_MODULE's likewise. Neither is freed here — only the
+           attribute dict this object allocated for itself. */
+        if (o->ob_attrs != 0) Py_DecRef(o->ob_attrs);
         free(o);
     }
 }
@@ -530,15 +535,10 @@ PyObject *PyModule_Create2(PyModuleDef *def, int module_api_version) {
     o = py_alloc(PYOBJ_MODULE);
     o->ob_ptr = (void *)def->m_methods;
     count = 0;
-    while (def->m_methods[count].ml_name != 0) count = count + 1;
+    if (def->m_methods != 0)
+        while (def->m_methods[count].ml_name != 0) count = count + 1;
     o->ob_size = count;
     return o;
-}
-
-PyObject *PyModuleDef_Init(PyModuleDef *def) {
-    /* Multi-phase (PEP 489) collapsed to single-phase — see the comment on
-       this declaration in Python.h. */
-    return PyModule_Create2(def, 0);
 }
 
 /* ==========================================================================
@@ -606,7 +606,7 @@ int PyUnicode_CheckExact(PyObject *o) { return PyUnicode_Check(o); }
 int PyBytes_CheckExact(PyObject *o) { return o != 0 && o->ob_kind == PYOBJ_BYTES; }
 int PyTuple_Check(PyObject *o)      { return o != 0 && o->ob_kind == PYOBJ_TUPLE; }
 int PyByteArray_Check(PyObject *o)  { return o != 0 && o->ob_kind == PYOBJ_BYTES; }
-int PyCFunction_Check(PyObject *o)  { (void)o; return 0; }  /* no function objects yet */
+int PyCFunction_Check(PyObject *o)  { return o != 0 && o->ob_kind == PYOBJ_CFUNC; }
 
 /* --- long: the widths beyond plain `long` -------------------------------- */
 PyObject *PyLong_FromLongLong(long long v)               { return PyLong_FromLong((long)v); }
@@ -729,11 +729,31 @@ int PyObject_RichCompareBool(PyObject *a, PyObject *b, int op) {
     return c >= 0;   /* Py_GE */
 }
 
-/* Attributes: this object model has none. AttributeError is not a placeholder
-   here — it is the CORRECT Python answer for an object that does not carry
-   the name, and it is what an extension's own hasattr-style probe expects. */
+/* --- attributes ----------------------------------------------------------
+   Modules, module SPECS and function objects carry a real attribute dict
+   (ob_attrs, allocated on first write). Every other kind has none, and
+   AttributeError is then not a placeholder — it is the correct Python answer
+   for an object that does not carry the name, and it is what an extension's
+   own optional-feature probe expects to see. */
+static int py_has_attrs(PyObject *o) {
+    return o != 0 && (o->ob_kind == PYOBJ_MODULE || o->ob_kind == PYOBJ_NS ||
+                      o->ob_kind == PYOBJ_CFUNC);
+}
+
+static PyObject *py_attrs(PyObject *o) {
+    if (!py_has_attrs(o)) return 0;
+    if (o->ob_attrs == 0) o->ob_attrs = PyDict_New();
+    return o->ob_attrs;
+}
+
 PyObject *PyObject_GetAttrString(PyObject *o, const char *name) {
-    (void)o;
+    PyObject *d;
+    PyObject *v;
+    d = py_attrs(o);
+    if (d != 0) {
+        v = PyDict_GetItemString(d, name);   /* borrowed */
+        if (v != 0) { Py_IncRef(v); return v; }
+    }
     PyErr_SetString(PyExc_AttributeError, name);
     return 0;
 }
@@ -743,29 +763,80 @@ PyObject *PyObject_GetAttr(PyObject *o, PyObject *name) {
 }
 
 int PyObject_SetAttrString(PyObject *o, const char *name, PyObject *v) {
-    (void)o; (void)v;
-    PyErr_SetString(PyExc_AttributeError, name);
-    return -1;
+    PyObject *d;
+    d = py_attrs(o);
+    if (d == 0) {
+        PyErr_SetString(PyExc_AttributeError, name);
+        return -1;
+    }
+    return PyDict_SetItemString(d, name, v);
 }
 
 int PyObject_SetAttr(PyObject *o, PyObject *name, PyObject *v) {
     return PyObject_SetAttrString(o, PyUnicode_Check(name) ? (const char *)name->ob_ptr : "?", v);
 }
 
-/* Calling back INTO Python from C needs callable objects, which this runtime
-   does not have yet (an extension's own methods are reached through its
-   PyMethodDef table by the embedding driver, not through PyObject_Call).
-   TypeError is the honest answer and matches what CPython says for a
-   non-callable. */
+/* --- calling -------------------------------------------------------------
+   Only a builtin-function object is callable. That covers what an extension
+   actually needs (its own module-level functions, reached after Py_mod_exec
+   registered them); calling back into arbitrary NilPy objects from C is a
+   later milestone, and TypeError is what CPython says for a non-callable. */
 PyObject *PyObject_Call(PyObject *callable, PyObject *args, PyObject *kwargs) {
-    (void)callable; (void)args; (void)kwargs;
-    PyErr_SetString(PyExc_TypeError, "object is not callable in this runtime");
-    return 0;
+    PyMethodDef *md;
+    PyObject **fastargs;
+    Py_ssize_t n;
+    Py_ssize_t i;
+    PyObject *r;
+    int flags;
+
+    if (callable == 0 || callable->ob_kind != PYOBJ_CFUNC) {
+        PyErr_SetString(PyExc_TypeError, "object is not callable in this runtime");
+        return 0;
+    }
+    md = (PyMethodDef *)callable->ob_ptr;
+    flags = md->ml_flags;
+    n = (args != 0) ? PyTuple_Size(args) : 0;
+    if (n < 0) n = 0;
+
+    /* METH_FASTCALL: the callee wants a C ARRAY of borrowed argument pointers
+       plus a count, not a tuple. Generated code uses this for every function
+       when the claimed version is 3.12+, so it is the common path, not an
+       optimisation. kwnames NULL = no keyword arguments; passing keywords
+       through the fast path needs the names tuple and is not wired up. */
+    if ((flags & METH_FASTCALL) != 0) {
+        if (kwargs != 0 && PyDict_Size(kwargs) > 0) {
+            PyErr_SetString(PyExc_TypeError,
+                            "keyword arguments through the fastcall path are not supported");
+            return 0;
+        }
+        fastargs = (PyObject **)malloc((size_t)((n > 0 ? n : 1)) * sizeof(PyObject *));
+        for (i = 0; i < n; i++) fastargs[i] = PyTuple_GetItem(args, i);  /* borrowed */
+        if ((flags & METH_KEYWORDS) != 0)
+            r = ((PyCFunctionFastWithKeywords)md->ml_meth)(0, fastargs, n, 0);
+        else
+            r = ((PyCFunctionFast)md->ml_meth)(0, fastargs, n);
+        free(fastargs);
+        return r;
+    }
+    if ((flags & METH_KEYWORDS) != 0)
+        return ((PyCFunctionWithKeywords)md->ml_meth)(0, args, kwargs);
+    if (kwargs != 0 && PyDict_Size(kwargs) > 0) {
+        PyErr_SetString(PyExc_TypeError, "function takes no keyword arguments");
+        return 0;
+    }
+    if ((flags & METH_O) != 0)
+        return md->ml_meth(0, PyTuple_GetItem(args, 0));
+    if ((flags & METH_NOARGS) != 0)
+        return md->ml_meth(0, 0);
+    return md->ml_meth(0, args);
 }
 
 PyObject *PyObject_CallFunctionObjArgs(PyObject *callable, ...) {
     (void)callable;
-    PyErr_SetString(PyExc_TypeError, "object is not callable in this runtime");
+    /* The variadic NULL-terminated form needs an argument tuple built from a
+       va_list of PyObject*; not wired up because nothing generated has
+       reached it yet. Deliberately loud rather than a wrong empty call. */
+    __pxx_cpyext_unsupported("PyObject_CallFunctionObjArgs");
     return 0;
 }
 
@@ -906,19 +977,25 @@ int PyErr_ExceptionMatches(PyObject *exc) {
     return PyErr_GivenExceptionMatches(PyErr_Occurred(), exc);
 }
 
+/* The pending-error slot is a single (type, message) pair — see PyErr_SetString.
+   Fetch hands the message back as a real str object so that the pair survives
+   a Fetch/Restore round trip: generated code fetches the current exception,
+   does something (build a traceback), then restores it, and losing the message
+   there turns a reportable error into an empty one. That is exactly what
+   happened while bringing this up — the first Cython import failure reported
+   nothing at all. There is still no traceback object, and *ptraceback is NULL. */
 void PyErr_Fetch(PyObject **ptype, PyObject **pvalue, PyObject **ptraceback) {
     if (ptype != 0) *ptype = PyErr_Occurred();
-    /* No exception INSTANCE and no traceback object exist in this runtime; the
-       message lives in the slot and is read via __pxx_PyErr_Message. */
-    if (pvalue != 0) *pvalue = 0;
+    if (pvalue != 0) *pvalue = PyUnicode_FromString(__pxx_PyErr_Message());
     if (ptraceback != 0) *ptraceback = 0;
     PyErr_Clear();
 }
 
 void PyErr_Restore(PyObject *type, PyObject *value, PyObject *traceback) {
-    (void)value; (void)traceback;
+    (void)traceback;
     if (type == 0) { PyErr_Clear(); return; }
-    PyErr_SetString(type, "");
+    PyErr_SetString(type, (value != 0 && PyUnicode_Check(value))
+                            ? (const char *)value->ob_ptr : "");
 }
 
 PyObject *PyErr_Format(PyObject *exc, const char *format, ...) {
@@ -969,35 +1046,117 @@ int PyArg_ValidateKeywordArguments(PyObject *kwargs) {
 
 /* --- module / import / sys ------------------------------------------------
    A pxx program links its modules in; there is no import machinery to consult
-   at run time. ImportError is the truthful answer and the one an extension's
-   optional-dependency probe already knows how to handle. */
+   at run time. The ONE exception is `builtins`, which generated code fetches
+   unconditionally at module-exec time and would otherwise fail on — it is a
+   real (empty) module here, so a name looked up in it raises AttributeError,
+   which is the same answer Python gives for a name builtins does not have. */
 PyObject *PyModule_GetDict(PyObject *m) {
-    (void)m;
-    return 0;
+    return py_attrs(m);     /* borrowed */
 }
 
 PyObject *PyModule_NewObject(PyObject *name) {
-    (void)name;
-    PyErr_SetString(PyExc_ImportError, "creating modules at run time is not supported");
-    return 0;
+    PyObject *m;
+    m = py_alloc(PYOBJ_MODULE);
+    m->ob_ptr = 0;
+    m->ob_size = 0;
+    if (name != 0) PyObject_SetAttrString(m, "__name__", name);
+    return m;
 }
 
+/* The module registry — CPython's sys.modules, minus the importer. */
+static PyObject *g_modules = 0;
+
+static PyObject *py_modules(void) {
+    if (g_modules == 0) g_modules = PyDict_New();
+    return g_modules;
+}
+
+/* CPython's PyImport_AddModule does NOT import: it returns the module of that
+   name if one exists and otherwise CREATES an empty one and registers it.
+   That is the whole contract, and it is one this runtime can honour exactly —
+   which matters, because generated code uses it for `builtins` and for
+   Cython's own `cython_runtime` scratch module, neither of which is importable
+   from anywhere. */
 PyObject *PyImport_AddModule(const char *name) {
-    PyErr_SetString(PyExc_ImportError, name);
-    return 0;
+    PyObject *m;
+    PyObject *nm;
+    m = PyDict_GetItemString(py_modules(), name);   /* borrowed */
+    if (m != 0) return m;
+    nm = PyUnicode_FromString(name);
+    m = PyModule_NewObject(nm);
+    PyDict_SetItemString(py_modules(), name, m);
+    Py_DecRef(nm);
+    Py_DecRef(m);          /* the registry holds the reference */
+    return PyDict_GetItemString(py_modules(), name);
 }
 
 PyObject *PyImport_GetModuleDict(void) {
-    return 0;
+    return py_modules();   /* borrowed */
 }
 
+/* ...whereas PyImport_ImportModule really does import, and there is no
+   importer here: a pxx program links its modules in. A name already in the
+   registry is returned; anything else is an honest ImportError, which is what
+   an extension's optional-dependency probe expects. */
 PyObject *PyImport_ImportModule(const char *name) {
-    PyErr_SetString(PyExc_ImportError, name);
-    return 0;
+    PyObject *m;
+    m = PyDict_GetItemString(py_modules(), name);
+    if (m == 0) {
+        PyErr_SetString(PyExc_ImportError, name);
+        return 0;
+    }
+    Py_IncRef(m);
+    return m;
 }
 
 PyObject *PySys_GetObject(const char *name) {
     (void)name;
+    return 0;
+}
+
+/* --- builtin-function objects --------------------------------------------
+   A PyMethodDef entry wrapped as a callable. This is what Cython's module
+   exec builds for every module-level `def` — with an EMPTY m_methods table,
+   it is the only route by which those functions become reachable. */
+PyObject *PyCFunction_New(PyMethodDef *ml, PyObject *self) {
+    return PyCFunction_NewEx(ml, self, 0);
+}
+
+PyObject *PyCFunction_NewEx(PyMethodDef *ml, PyObject *self, PyObject *module) {
+    PyObject *f;
+    (void)self;   /* no bound builtins in this model */
+    f = py_alloc(PYOBJ_CFUNC);
+    f->ob_ptr = (void *)ml;
+    if (ml != 0 && ml->ml_name != 0) {
+        PyObject *nm;
+        nm = PyUnicode_FromString(ml->ml_name);
+        PyObject_SetAttrString(f, "__name__", nm);
+        Py_DecRef(nm);
+    }
+    if (module != 0) PyObject_SetAttrString(f, "__module__", module);
+    return f;
+}
+
+PyCFunction PyCFunction_GetFunction(PyObject *op) {
+    if (op == 0 || op->ob_kind != PYOBJ_CFUNC) {
+        PyErr_SetString(PyExc_TypeError, "expected a builtin function");
+        return 0;
+    }
+    return ((PyMethodDef *)op->ob_ptr)->ml_meth;
+}
+
+/* --- interpreter identity -------------------------------------------------
+   There is exactly one interpreter and it is implicit, so a fixed non-NULL
+   handle and id 0 are not stubs — they are the true answer. Generated code
+   uses them only to refuse a SECOND interpreter, which cannot occur. */
+static int g_the_interpreter = 0;
+
+void *PyInterpreterState_Get(void) {
+    return (void *)&g_the_interpreter;
+}
+
+long long PyInterpreterState_GetID(void *interp) {
+    (void)interp;
     return 0;
 }
 
@@ -1015,22 +1174,29 @@ int PyOS_snprintf(char *str, size_t size, const char *format, ...) {
    compiled-ahead-of-time extension does not execute, so they must LINK; but
    there is no honest value to return, so reaching one stops the program with
    its name. See RULE 2 at the top of this section. */
+/* No Python compiler here. This one does NOT stop the program, deliberately:
+   its only caller in practice is Cython's traceback DECORATOR
+   (__Pyx_AddTraceback), which compiles "_getframe()" to synthesize a code
+   object. Failing that must not kill the process — it is optional decoration
+   over an exception that has already happened, and the caller restores the
+   original exception when this returns NULL. Stopping here would replace a
+   real, reportable error with a message about tracebacks, which is how the
+   first Cython import failure got misread. */
 struct _object *Py_CompileString(const char *str, const char *filename, int start) {
     (void)str; (void)filename; (void)start;
-    __pxx_cpyext_unsupported("Py_CompileString"); return 0;
+    PyErr_SetString(PyExc_RuntimeError, "no Python compiler in this runtime");
+    return 0;
 }
 PyObject *PyEval_EvalCode(PyObject *co, PyObject *globals, PyObject *locals) {
     (void)co; (void)globals; (void)locals;
     __pxx_cpyext_unsupported("PyEval_EvalCode"); return 0;
 }
+/* Same reasoning as Py_CompileString: traceback recording is decoration over
+   an exception that already exists. There is no traceback object to append a
+   frame to, so it reports failure and the caller carries on. */
 int PyTraceBack_Here(void *frame) {
-    (void)frame; __pxx_cpyext_unsupported("PyTraceBack_Here"); return -1;
-}
-void *PyInterpreterState_Get(void) {
-    __pxx_cpyext_unsupported("PyInterpreterState_Get"); return 0;
-}
-long long PyInterpreterState_GetID(void *interp) {
-    (void)interp; __pxx_cpyext_unsupported("PyInterpreterState_GetID"); return -1;
+    (void)frame;
+    return -1;
 }
 PyObject *PyType_GetQualName(PyTypeObject *t) {
     (void)t; __pxx_cpyext_unsupported("PyType_GetQualName"); return 0;
@@ -1048,18 +1214,65 @@ PyObject *PyObject_VectorcallMethod(PyObject *name, PyObject *const *args,
 Py_ssize_t PyVectorcall_NARGS(size_t nargsf) {
     return (Py_ssize_t)(nargsf & ~PY_VECTORCALL_ARGUMENTS_OFFSET);
 }
-PyObject *PyCFunction_New(PyMethodDef *ml, PyObject *self) {
-    (void)ml; (void)self;
-    __pxx_cpyext_unsupported("PyCFunction_New"); return 0;
-}
-PyObject *PyCFunction_NewEx(PyMethodDef *ml, PyObject *self, PyObject *module) {
-    (void)ml; (void)self; (void)module;
-    __pxx_cpyext_unsupported("PyCFunction_NewEx"); return 0;
-}
-PyCFunction PyCFunction_GetFunction(PyObject *op) {
-    (void)op; __pxx_cpyext_unsupported("PyCFunction_GetFunction"); return 0;
-}
 PyObject *PyMemoryView_FromMemory(char *mem, Py_ssize_t size, int flags) {
     (void)mem; (void)size; (void)flags;
     __pxx_cpyext_unsupported("PyMemoryView_FromMemory"); return 0;
+}
+
+/* --- PEP 489 multi-phase module init -------------------------------------
+   Previously collapsed to PyModule_Create2, which was fine while every
+   extension put its functions in a static m_methods table. Cython 3 does not:
+   `__pyx_methods` is EMPTY and the module-level defs are registered from the
+   Py_mod_exec slot, so a collapsed init produced a module with no functions
+   at all — a silently empty module, which is the failure mode this runtime
+   refuses everywhere else. So the slots are now actually run.
+
+   This is a small piece of the import machinery, deliberately: create the
+   module (Py_mod_create if given, else the default), then execute every
+   Py_mod_exec in order and fail if one does. The SPEC object the create slot
+   receives is synthesized here — real CPython's importlib builds it, and the
+   only field generated code reads is `name`. Unknown slot ids are capability
+   announcements (Py_mod_gil, Py_mod_multiple_interpreters) and are ignored;
+   an unknown slot that mattered would announce itself by the module not
+   working, not by being silently wrong. */
+PyObject *PyModuleDef_Init(PyModuleDef *def) {
+    PyObject *spec;
+    PyObject *nm;
+    PyObject *module;
+    PyModuleDef_Slot *slot;
+    PyObject *(*createfn)(PyObject *, PyModuleDef *);
+    int (*execfn)(PyObject *);
+
+    module = 0;
+    spec = py_alloc(PYOBJ_NS);
+    nm = PyUnicode_FromString(def->m_name != 0 ? def->m_name : "");
+    PyObject_SetAttrString(spec, "name", nm);
+    Py_DecRef(nm);
+
+    if (def->m_slots != 0) {
+        for (slot = def->m_slots; slot->slot != 0; slot++) {
+            if (slot->slot == Py_mod_create) {
+                createfn = (PyObject *(*)(PyObject *, PyModuleDef *))slot->value;
+                module = createfn(spec, def);
+                if (module == 0) { Py_DecRef(spec); return 0; }
+            }
+        }
+    }
+    if (module == 0) module = PyModule_Create2(def, 0);
+    if (module == 0) { Py_DecRef(spec); return 0; }
+
+    if (def->m_slots != 0) {
+        for (slot = def->m_slots; slot->slot != 0; slot++) {
+            if (slot->slot == Py_mod_exec) {
+                execfn = (int (*)(PyObject *))slot->value;
+                if (execfn(module) < 0) {
+                    Py_DecRef(module);
+                    Py_DecRef(spec);
+                    return 0;
+                }
+            }
+        }
+    }
+    Py_DecRef(spec);
+    return module;
 }

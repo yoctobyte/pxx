@@ -1,0 +1,20 @@
+# cpyext M5 "a Cython-generated module" (feature-nilpy-cpyext-c-api-from-source):
+# Cython 3.2.9's unmodified 6057-line output for a 6-line .pyx, compiled by
+# cfront against pxx's own Python.h, imported from NilPy and called.
+#
+# What this proves beyond M1-M4: real PEP 489 multi-phase module init (the
+# Py_mod_create and Py_mod_exec slots are actually EXECUTED, not collapsed),
+# builtin-function objects registered into a module dict rather than a static
+# PyMethodDef table, and the METH_FASTCALL calling convention.
+#
+# Every number below is the output of the SAME generated C running under real
+# CPython 3.12 (test/nilpy_units/vendor/README.md has the recipe).
+import cyadd_ext
+
+print(cyadd_ext.cyadd(20, 22))
+print(cyadd_ext.cyadd(-5, 5))
+print(cyadd_ext.cyadd(1000000, 2000000))
+print(cyadd_ext.cyfact(0))
+print(cyadd_ext.cyfact(6))
+print(cyadd_ext.cyfact(10))
+print(cyadd_ext.cyfact(12))
