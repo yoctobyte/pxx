@@ -3,6 +3,8 @@ summary: "A one-off `Text file busy` on exec red the self-host chain job; selfho
 type: bug
 track: T
 prio: 60
+status: working
+owner: claude@xeon
 ---
 
 # ETXTBSY on exec permanently reds a single-shot self-host job

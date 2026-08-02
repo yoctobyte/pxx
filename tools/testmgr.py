@@ -154,6 +154,22 @@ CLASSES = {
 # bug-t-flaky-async-multithreaded-tests-false-newred.
 RUN_RETRY_CLASSES = frozenset({"qemu", "corpus", "conformance", "opt"})
 RUN_RETRY_TRIES = 3      # total attempts before a fail/timeout is final
+# Failure signatures that are retriable in ANY class, including the single-shot
+# ones above.  Scoped to signatures that provably say nothing about the binary's
+# CONTENTS, so this cannot mask what single-shot exists to catch.
+#
+# ETXTBSY: the kernel refuses to exec a file some process still holds open for
+# writing (classic mechanism: A opens the binary for writing, B forks and
+# inherits the fd, A closes but B still holds it).  Observed 2026-08-02 on
+# test-core@1 and again on test-smoke, both times AFTER the compile reported
+# `ok:` — nothing was miscompiled, and the same job passes on re-run.  A real
+# fixedpoint mismatch or genuine nondeterminism fails EVERY attempt, so a
+# signature-scoped retry cannot hide one; a blanket selfhost retry would, which
+# is why that stays forbidden.  Root cause belongs in the recipe (write under a
+# temp name and rename into place, atomic on one filesystem) —
+# bug-t-etxtbsy-race-reds-single-shot-selfhost-jobs.
+RUN_RETRY_SIGNATURES = ("Text file busy", "ETXTBSY")
+RUN_RETRY_SIG_TAIL = 8192   # bytes of the log tail to scan for a signature
 # tiers that carry the FPC cold-start canary (advisory; see fpc_canary_job).
 # Not "quick": that is the inner loop and an FPC compile of compiler.pas is a
 # whole build, not an inner-loop cost.
@@ -1241,6 +1257,28 @@ class Manager:
                 and job.cls in RUN_RETRY_CLASSES
                 and job.attempts < RUN_RETRY_TRIES)
 
+    def _retriable_signature(self, job):
+        """A HARNESS-level failure that any class may retry — see
+        RUN_RETRY_SIGNATURES. Returns the matched signature, or None.
+
+        Deliberately independent of job.cls: the point is that `Text file busy`
+        is an exec race in the harness, not a statement about the artifact, so
+        the single-shot rule it bypasses is not the rule it would undermine.
+        Advisory jobs are still skipped — they gate nothing, so a retry only
+        costs time."""
+        if job.advisory or job.attempts >= RUN_RETRY_TRIES or not job.logpath:
+            return None
+        try:
+            with open(job.logpath, "rb") as f:
+                try:
+                    f.seek(-RUN_RETRY_SIG_TAIL, os.SEEK_END)
+                except OSError:            # log shorter than the tail window
+                    f.seek(0)
+                tail = f.read().decode(errors="replace")
+        except OSError:
+            return None
+        return next((s for s in RUN_RETRY_SIGNATURES if s in tail), None)
+
     def _requeue_retry(self, job, why):
         # A transient failure: put the job back on the queue for another launch
         # instead of finalizing it RED.  Do NOT add to `done` — it re-enters the
@@ -1269,6 +1307,12 @@ class Manager:
                     self.learn(job)
                 elif self._retriable(job):
                     self._requeue_retry(job, "failed (rc=%d)" % rc)
+                elif self._retriable_signature(job):
+                    # single-shot classes included: the signature, not the
+                    # class, is what makes this safe to re-run
+                    self._requeue_retry(
+                        job, "failed (rc=%d) with a harness signature (%s)"
+                             % (rc, self._retriable_signature(job)))
                 else:
                     job.t1 = now
                     job.status = "fail"

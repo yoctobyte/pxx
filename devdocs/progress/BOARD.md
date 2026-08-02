@@ -13,11 +13,12 @@ lives in git, not in a timestamp._
 | bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size | C | 85 | bug | `sizeof(p->arr)` returns the POINTER size, not the array size — silent buffer overflow | — |
 | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling | P | 80 | bug | A procedural variable in a value context takes its ADDRESS instead of calling it | — |
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-non-constant-parameter-defaults-silently-become-none | N | 70 | bug | Every non-constant parameter default silently becomes None on the ordinary call path — `def f(b=[])` gives b=None, and so does `def f(b=w)` for any name w. Only the closure-VALUE path evaluates defaults at def time. | — |
+| bug-t-etxtbsy-race-reds-single-shot-selfhost-jobs | T | 60 | bug | A one-off `Text file busy` on exec red the self-host chain job; selfhost is single-shot by policy, so a harness-level OS race is indistinguishable from real compiler nondeterminism | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 
 ## unfinished (5)
@@ -43,7 +44,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (208)
+## backlog (206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -104,7 +105,6 @@ lives in git, not in a timestamp._
 | bug-nilpy-unary-numeric-dunders-return-raw-handle | N | 55 | bug | NilPy: abs(obj), ~obj and obj-as-index ignore __abs__/__invert__/__index__ — they return the raw instance HANDLE as a number, silently | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-t-corpus-regex-invents-phantom-tree | T | 55 | bug | CORPUS_RE matches prose in a SKIP message and invents corpus 'stb)', permanently skipping a job that also carries a non-corpus regression test | — |
-| bug-t-etxtbsy-race-reds-single-shot-selfhost-jobs | T | 60 | bug | A one-off `Text file busy` on exec red the self-host chain job; selfhost is single-shot by policy, so a harness-level OS race is indistinguishable from real compiler nondeterminism | — |
 | bug-t-host-dependent-test-assertions-cross-distro | T | 70 | bug | Watcher and dev boxes run different distros, so tests that bake in host state (library versions, allocator behaviour, the host CPython) go permanently RED on the watcher while passing locally — and read as watcher bugs | — |
 | bug-t-resolve-cites-a-sha-the-rebase-then-rewrites | T | 60 | bug | The documented loop is commit -> resolve <slug> <sha> -> sync.sh, but sync.sh REBASES, so the sha written into the ticket no longer exists on origin. Four tickets in one session cited commits nobody else can look up. | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
@@ -246,7 +246,6 @@ lives in git, not in a timestamp._
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | regression-test-core-compiler | T | 70 | regression | regression: test-core#src:compiler/compiler.pas@2 red at 96cffaf08de5 (auto-filed by twatch) | — |
-| regression-test-smoke-compiler | T | 70 | regression | regression: test-smoke#src:compiler/compiler.pas red at b11e604f8043 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-borg-open-regression-is-permanently-stale | T | 40 | task | borg's watcher was stopped 2026-07-31 with one open regression recorded; nothing will ever clear it, so every --status and gate.sh check reads a dead host's red as live | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
@@ -360,7 +359,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1213)
+## done (1214)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1553,6 +1552,7 @@ lives in git, not in a timestamp._
 | regression-test-nilpy-test-nilpy-import-sqlite | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_sqlite.npy red at 6840247771d5 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-operator-dunders | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_operator_dunders.npy red at 6840247771d5 (auto-filed by twatch) | — |
 | regression-test-smoke-11 | T | 70 | regression | regression: test-smoke#11 red at 163ffea562fa (auto-filed by twatch) | — |
+| regression-test-smoke-compiler | T | 70 | regression | regression: test-smoke#src:compiler/compiler.pas red at b11e604f8043 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-00 | T | 70 | regression | regression: test-sqlite-threads-aarch64#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-run-sqlite-thread-test | T | 70 | regression | regression: test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh red at 8766dccbd2dd (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-arm32-00 | T | 70 | regression | regression: test-sqlite-threads-arm32#00 red at 83006e927e35 (auto-filed by twatch) | — |
@@ -1622,7 +1622,6 @@ lives in git, not in a timestamp._
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] regression-test-core-compiler
-- [p 70] [T] regression-test-smoke-compiler
 - [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
 - [p 65] [N] bug-classname-on-a-tobject-local-compiles-to-a-dynamic-attr-fetch
 - [p 65] [N] bug-nilpy-class-attribute-unreachable-through-the-class-name
@@ -1636,7 +1635,6 @@ lives in git, not in a timestamp._
 - [p 60] [N] bug-nilpy-one-line-def-and-class-bodies-do-not-parse
 - [p 60] [N] bug-nilpy-parent-method-call-breaks-if-parent-instantiated-first
 - [p 60] [N] bug-nilpy-same-kind-undefined-operators-still-compute
-- [p 60] [T] bug-t-etxtbsy-race-reds-single-shot-selfhost-jobs
 - [p 60] [T] bug-t-resolve-cites-a-sha-the-rebase-then-rewrites
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [U] decide-nilpy-runtime-dunder-dispatch-mechanism
