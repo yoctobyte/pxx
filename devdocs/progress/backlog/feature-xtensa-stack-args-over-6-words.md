@@ -217,3 +217,34 @@ over the cap. The overflow area is plain outgoing stack, never heap.)
 **`esp32s3`** only — there is no `esp32s2`. So this work is verifiable headless
 for S3, and S2 needs real silicon
 ([[feature-esp-hardware-flash-validation]]).
+
+## Do WINDOWED first — it is the profile that matters (user, 2026-08-02)
+
+The acceptance above asks for "both Call0 and windowed" without ranking them.
+They are not equally valuable:
+
+| | ABI | what it gets you |
+| --- | --- | --- |
+| **ESP-IDF profile** | **windowed** (`--xtensa-abi=windowed`, as `examples/esp32/hello-s3` uses) | lwIP, Wi-Fi/BT, esp_netif, FreeRTOS, the whole driver set |
+| bare (`--esp-profile=bare`) | Call0 — *required*, windowed needs window-overflow handlers and a vecbase bare-metal never installs (`compiler.pas:634`) | MMIO only |
+
+**Bare-metal is not a smaller version of the IDF profile; it is a different,
+much weaker device.** `lib/rtl/platform/esp/platform_backend.pas` carries **39**
+`PXX_PAL_ESP_IDF_TARGET` guards, and every one of them returns
+`PAL_ERR_UNSUPPORTED` without IDF — no files, no sockets, no networking. As the
+user put it, bare would downgrade an ESP32 to microcontroller level, which
+throws away the reason to choose a Wi-Fi SoC in the first place.
+
+So the ordering is:
+
+1. **Windowed caller + callee** — unblocks the xtensa ESP PAL build, and with it
+   everything real: networking, peripherals, [[feature-dns-esp-backend]].
+   Remember the callee offset is biased by the `entry` frame size (the measured
+   gcc reference above reads args 7/8/9 at `sp+32/36/40` after `entry sp,32`).
+2. **Call0 callee** — same caller-side spill, offsets read directly at
+   `sp+0/4/8`. Needed for the bare profile, which is the niche one.
+
+Both are small once the caller-side spill exists — the caller side is identical
+between the two ABIs — so this is a sequencing note, not a scope cut. But if
+only one lands first, windowed is the one that turns the S2/S3 hardware the user
+actually owns into a usable target.
