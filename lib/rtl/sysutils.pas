@@ -437,6 +437,9 @@ function DateTimeToTimeStamp(DateTime: TDateTime): TTimeStamp;
   without changing this surface). An unset variable reads as '', as in FPC. }
 function GetEnvironmentVariable(const Name: string): string;
 function GetEnvironmentVariableCount: Integer;
+{ The parent's environment as execve's `envp`, for handing to a spawned child.
+  Call it in the parent, before vfork — see the body. }
+function EnvironmentBlock: Pointer;
 function GetEnvironmentString(Index: Integer): string;
 
 { File predicates over the PAL (FPC SysUtils). FileExists is True only for
@@ -2262,7 +2265,7 @@ var
   argv: array of PChar;
   i: Integer;
   res: Integer;
-  env: array[0..0] of PChar;
+  envp: Pointer;
 begin
   stdinPipe[0] := -1; stdinPipe[1] := -1;
   stdoutPipe[0] := -1; stdoutPipe[1] := -1;
@@ -2274,7 +2277,10 @@ begin
     argv[i + 1] := PChar(args[i]);
   argv[Length(args) + 1] := nil;
 
-  env[0] := nil;
+  { The child inherits OUR environment. Built here, in the parent, because it
+    may read /proc/self/environ on first use and after vfork the child must not
+    do I/O. }
+  envp := EnvironmentBlock;
 
   if childStdinFd = -1 then
   begin
@@ -2300,7 +2306,7 @@ begin
   end;
 
   { Fork and exec via PAL helper to avoid stack corruption }
-  pid := PalVforkAndExec(PChar(cmd), @argv[0], @env[0], stdinPipe[0], stdinPipe[1], stdoutPipe[0], stdoutPipe[1]);
+  pid := PalVforkAndExec(PChar(cmd), @argv[0], envp, stdinPipe[0], stdinPipe[1], stdoutPipe[0], stdoutPipe[1]);
 
   if pid < 0 then
   begin
@@ -2441,6 +2447,11 @@ var
   EnvLoaded: Boolean;
   EnvVars: array[0..1023] of string;   { each entry a whole NAME=VALUE record }
   EnvCount: Integer;
+  { The block exactly as /proc/self/environ gave it. Kept because its records
+    are ALREADY the NUL-terminated `NAME=VALUE` strings execve's envp wants, so
+    a child's environment is pointers into this rather than a second copy. }
+  EnvRaw: array[0..16383] of Char;
+  EnvpTable: array[0..1024] of PChar;  { execve envp: one per record, then nil }
 
 procedure EnvLoad;
 { Read /proc/self/environ once, through the PAL: its records are NUL-separated,
@@ -2448,40 +2459,62 @@ procedure EnvLoad;
   leaves the table empty, which reads back as "every variable is unset" rather
   than as an error — a program that cannot see its environment should behave
   like one started without one. }
-var h, i, start: Integer; got: Int64; buf: array[0..16383] of Char; cur: string;
+var h, i, start, recStart: Integer; got: Int64; cur: string;
 begin
   if EnvLoaded then Exit;
   EnvLoaded := True;
   EnvCount := 0;
+  EnvpTable[0] := nil;                { an empty envp is still a valid envp }
   h := PalOpen(PChar('/proc/self/environ'), 0, 0);   { O_RDONLY }
   if h < 0 then Exit;
-  got := PalRead(h, @buf[0], SizeOf(buf));
+  got := PalRead(h, @EnvRaw[0], SizeOf(EnvRaw));
   PalClose(h);
   if got <= 0 then Exit;
   start := 0;
   i := 0;
   while i < got do
   begin
-    if buf[i] = #0 then
+    if EnvRaw[i] = #0 then
     begin
       if i > start then
       begin
+        recStart := start;
         cur := '';
         while start < i do
         begin
-          cur := cur + buf[start];
+          cur := cur + EnvRaw[start];
           Inc(start);
         end;
         if EnvCount < 1024 then
         begin
           EnvVars[EnvCount] := cur;
+          { the #0 just found terminates this record in place }
+          EnvpTable[EnvCount] := @EnvRaw[recStart];
           Inc(EnvCount);
+          EnvpTable[EnvCount] := nil;
         end;
       end;
       start := i + 1;
     end;
     Inc(i);
   end;
+end;
+
+function EnvironmentBlock: Pointer;
+{ The parent's own environment shaped as execve's `envp`.
+
+  Every spawn site used to hard-code an empty envp, so a pxx-compiled program
+  handed each child `env -i` — no PATH, no HOME, no TZ — even when it never
+  touched the environment itself. Nothing errored; the child just behaved as if
+  started with nothing.
+
+  Call this in the PARENT, before vfork: it may do I/O on first use, and after
+  vfork the child must not. The pointers are into EnvRaw, a global that is never
+  freed, so they stay valid through the child's exec (which shares this address
+  space until it execs). }
+begin
+  EnvLoad;
+  EnvironmentBlock := @EnvpTable[0];
 end;
 
 function GetEnvironmentVariableCount: Integer;

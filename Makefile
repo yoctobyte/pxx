@@ -7062,6 +7062,16 @@ lib-test: pxx-stable-check
 	# FPC-built copy of the same program, so this compiles under FPC too.
 	$(PXX_STABLE) -Fulib/rtl test/lib_floattostr.pas /tmp/lib_floattostr
 	test "$$(/tmp/lib_floattostr | tail -1)" = "FLOATTOSTR OK"
+	# A spawned child inherits the parent's environment (every spawn site used
+	# to hard-code an empty envp, i.e. handed each child `env -i`).
+	$(PXX_STABLE) -Fulib/rtl test/lib_child_env.pas /tmp/lib_child_env
+	test "$$(/tmp/lib_child_env | tail -1)" = "CHILDENV OK"
+	# The M_* math constants, and <strings.h>: both were absent, and an
+	# undeclared identifier is a silent 0 rather than an error.
+	$(PXX_STABLE) test/cmath_constants.c /tmp/cmath_constants
+	/tmp/cmath_constants
+	$(PXX_STABLE) test/cstrings_bsd.c /tmp/cstrings_bsd
+	/tmp/cstrings_bsd
 	# crtl against gcc's libc, which is the oracle for this surface: the whole
 	# output is diffed against the SAME file built by gcc, so there are no
 	# recorded expectations to drift.

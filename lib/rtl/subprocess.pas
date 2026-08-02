@@ -103,7 +103,7 @@ var l: TPyList; i, devNull, res: Integer;
     prog: AnsiString;
     argvp: array of PChar;
     holds: array of AnsiString;      { keeps each argument alive across the exec }
-    env: array[0..0] of PChar;
+    envp: Pointer;
 begin
   CheckRedirect(stdout, 'stdout');
   CheckRedirect(stderr, 'stderr');
@@ -120,7 +120,11 @@ begin
     argvp[i] := PChar(holds[i]);
   end;
   argvp[l.count] := nil;
-  env[0] := nil;
+  { The child inherits OUR environment — built in the parent, before vfork, so
+    the first-use read of /proc/self/environ does not happen in the child. It
+    used to be a hard-coded empty envp, which handed every subprocess `env -i`:
+    no PATH, so `subprocess.run(["some_tool"])` could not even find its tool. }
+  envp := EnvironmentBlock;
   { PalVforkAndExec dup2's the fds it is given and skips the ones that are -1,
     so /dev/null on the child's stdout is one open() away and everything else
     is inherited. ExecutePipeline is not used here: -1 asks IT to build pipes,
@@ -128,7 +132,7 @@ begin
   devNull := -1;
   if WantsDevNull(stdout) then devNull := PalOpen(PChar('/dev/null'), 1, 0);   { O_WRONLY }
   returncode := -1;
-  pid := PalVforkAndExec(PChar(prog), @argvp[0], @env[0], -1, -1, -1, devNull);
+  pid := PalVforkAndExec(PChar(prog), @argvp[0], envp, -1, -1, -1, devNull);
   if devNull >= 0 then res := PalClose(devNull);
 end;
 
