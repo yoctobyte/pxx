@@ -6,7 +6,7 @@ type: bug
 
 # ESP examples panic at `app_main`: their build scripts omit two required flags
 
-**RESOLVED 2026-08-02 — and re-laned A -> B: this is not a compiler bug.**
+**RESOLVED 2026-08-02 (commit 780a3079a) — and re-laned A -> B: this is not a compiler bug.**
 
 - **Type:** bug (runtime/codegen for the ESP profile) — **Track A**
   (`compiler/builtin`, syscall emission). Filed by the Track B agent, who has
