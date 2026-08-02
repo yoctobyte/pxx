@@ -133,7 +133,7 @@ path's is recorded in a comment at the definition, not only in this ticket.
 ## Log
 - 2026-08-02 — resolved, commit PENDING.
 
-## Round 2 — a second probe, and a stub that made round 1 useless
+## Round 2 (commit c224672a1) — a second probe, and a stub that made round 1 useless
 
 Ran the same differential over 60 symbols in headers round 1 did not cover
 (dirent, sys/mman, sys/wait, sys/socket, netinet, poll, pthread, locale, wchar,
