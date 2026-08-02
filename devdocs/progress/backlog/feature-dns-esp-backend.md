@@ -91,7 +91,20 @@ What is actually here:
 So this ticket can be started and verified, and the "Gate" below is achievable
 rather than aspirational.
 
-## The real reason it sits low
+## The REAL blocker, found by trying it (2026-08-02)
+
+Establishing a baseline before starting this ticket turned up a hard blocker:
+**every pxx ESP-IDF app currently panics the instant control reaches Pascal**,
+on an unhandled Linux syscall (`ecall`) in the compiler-generated `app_main`
+prologue. Both committed examples boot-loop; `net-c3`'s own smoke reports FAIL.
+Filed as [[bug-esp-idf-linux-syscalls-emitted-panic-at-app-main]] (Track A).
+
+That is the thing standing in front of this ticket — not the absence of a
+runner, which is what an earlier revision wrongly claimed. It also means the
+Gate below cannot pass today no matter how good the backend is, since the smoke
+would die before reaching any DNS code.
+
+## The other reason it sits low
 
 **ESP is parked by the user** — "ESP parked (user 2026-07-12): Pascal has prio",
 recorded in [[feature-pal-esp-posix-fd-semantics]]. That is a priority decision,
