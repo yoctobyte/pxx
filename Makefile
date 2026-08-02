@@ -1088,6 +1088,11 @@ test-nilpy: $(COMPILER)
 	# resolve against and the AN_CALL reached IR lowering unlowered
 	./$(COMPILER) test/test_nilpy_str_method_subscript.npy /tmp/test_nilpy_strmsub26
 	test "$$(/tmp/test_nilpy_strmsub26)" = "$$(printf '%b' 'World\nHello\nc\n[\047a\047, \047b\047, \047c\047]\nb\ny\nH\nhello,world\nPAD\nb\n72\ntwo')"
+	# the `,` thousands separator, and unsupported specs raising instead of
+	# HALTING the process. Also: a float spec naming no type and no precision is
+	# Python's general form, not fixed-6.
+	./$(COMPILER) test/test_nilpy_format_thousands.npy /tmp/test_nilpy_fth26
+	test "$$(/tmp/test_nilpy_fth26)" = "$$(printf '%b' '1,234,567\n-1,234,567\n0\n999\n1,000\n9,876,543,210\n100\n1234567\n42 ff 00007\nbad spec caught\nstill running\n1,234.50\n1,234.5\n1,234,567.25\n1234.50\n      3.14\n75%\n1.234500e+03\n1234.5\n-9,876.5')"
 	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
 	# key function had no overload to bind to (dict alone and list+key both worked)
 	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26

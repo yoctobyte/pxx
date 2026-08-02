@@ -1,0 +1,41 @@
+# The `,` thousands-separator format spec, and CATCHABLE unsupported specs.
+#
+# `"{:,}".format(1234567)` was not handled at all, and the unsupported-spec path
+# then called Halt(1) — so it ABORTED the process rather than raising. A
+# try/except around a format could not run its handler and everything after the
+# call was lost (bug-nilpy-thousands-separator-format-spec-unsupported).
+#
+# Both overloads were fixed: `,` is parsed between the width and the precision
+# (Python's grammar), grouping is applied to the integer part only, and the two
+# refusal sites raise ValueError instead of halting.
+#
+# One further correction fell out: a float spec that names NO type and NO
+# precision — `{:,}`, `{:10}` — is Python's GENERAL form, not fixed-point with 6
+# decimals. `"{:,}".format(1234.5)` is `1,234.5`, not `1,234.500000`. That was
+# unreachable before, since a float spec previously always named a type.
+#
+# Expectation is CPython's own output.
+
+print("{:,}".format(1234567))
+print("{:,}".format(-1234567))
+print("{:,}".format(0))
+print("{:,}".format(999))
+print("{:,}".format(1000))
+print("{:,d}".format(9876543210))
+print("{:,}".format(100))
+print("{}".format(1234567))
+print("{:d}".format(42), "{:x}".format(255), "{:05d}".format(7))
+try:
+    print("{:q}".format(1))
+except ValueError:
+    print("bad spec caught")
+print("still running")
+print("{:,.2f}".format(1234.5))
+print("{:,}".format(1234.5))
+print("{:,}".format(1234567.25))
+print("{:.2f}".format(1234.5))
+print("{:10.2f}".format(3.14159))
+print("{:.0%}".format(0.75))
+print("{:e}".format(1234.5))
+print("{}".format(1234.5))
+print("{:,}".format(-9876.5))

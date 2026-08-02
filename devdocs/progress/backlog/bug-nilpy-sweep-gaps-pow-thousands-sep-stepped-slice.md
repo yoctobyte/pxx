@@ -92,9 +92,21 @@ would be silently wrong — exactly the failure mode this repo treats as worst. 
 stays a loud "no overload of pow matches these arguments" until someone
 implements it properly.
 
+## 2026-08-02 — item 2 FIXED (both halves)
+
+`"{:,}"` is implemented in **both** the int and the float overload in pylib, and
+the two unsupported-spec sites now `raise ValueError` instead of `Halt(1)` — so
+the abort-vs-raise half is done too, and a `try/except` around a format now
+actually runs. Verified byte-identical to CPython in
+`test/test_nilpy_format_thousands.npy` (wired into `make test-nilpy`).
+
+A third divergence surfaced while writing the test and is fixed with it: a float
+spec naming **no type and no precision** is Python's *general* form, not
+fixed-6 — `"{:,}".format(1234.5)` is `1,234.5`, was `1,234.500000`.
+
+`_` as a separator is NOT implemented; it stays a loud raise.
+
 ## Still open
 
-2. `"{:,}"` thousands separator — unsupported, and it ABORTS rather than raising
-   catchably. The abort-vs-raise half matters more than the feature.
 3. Stepped slices other than `[::-1]`.
 5. `range` as a first-class VALUE (`list(range(3))`).
