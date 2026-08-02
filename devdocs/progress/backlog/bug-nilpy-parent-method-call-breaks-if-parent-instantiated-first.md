@@ -60,9 +60,12 @@ than as a class name at the later `A.call(self)` site, so the parser is at
 
 `PyAllocModuleGlobals` and the depth-0 bare-assignment TRIAL PARSE in
 `PyCollectModuleLocalsAST` are the two passes that run over that line before the
-class body is parsed, and both were touched on 2026-08-01/02 — worth checking
-whether this predates that work by testing `stable_linux_amd64/default/pinned`
-before assuming either way.
+class body is parsed.
+
+**Checked: PRE-EXISTING, not a regression.** `stable_linux_amd64/default/pinned`
+gives the identical `unexpected token` on the repro, so this predates the
+2026-08-01/02 work on both of those passes. They are still the right
+neighbourhood to look in — just not the cause of its appearing.
 
 **Dump tokens before theorising** (`project_dump_tokens_before_theorising`) —
 the near-text shows the parser stopping at `self`, which is a symptom, not the
