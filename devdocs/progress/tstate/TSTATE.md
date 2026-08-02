@@ -3,8 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| xeon | `f9d0679ce2ad` | 2026-08-02T13:02:41Z | RED (native) | 107.6s | `73221c107e96` GREEN |
+| xeon | `9c43415f8c7b` | 2026-08-02T13:05:22Z | GREEN (native) | 107.3s | `73221c107e96` GREEN |
 
 ## Open regressions
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `b1976742df2c`, last good `6f73c5a88bef`, 1 commit(s) in range
-- **test-core#src:test/test_nilpy_dataclass_dict_factory.npy** — test/test_nilpy_dataclass_dict_factory.npy (xeon): bad `2fbb5a270acc`, last good `01d3efe7739d`, 4 commit(s) in range

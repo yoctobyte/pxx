@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-02T07:28:54Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "2c0dc1dadad2af06350d1c04530ac416db310a3c",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-02T07:32:01Z",
    "fixed": [],
    "new_red": [],
@@ -413,6 +405,16 @@
    "sha": "f9d0679ce2ad2a56e14ac4398970ab0d1d5467d4",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-02T13:05:22Z",
+   "fixed": [
+    "test-core#src:test/test_nilpy_dataclass_dict_factory.npy"
+   ],
+   "new_red": [],
+   "sha": "9c43415f8c7b7b28c7912c7e8d20582df189547c",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "xeon",
@@ -3466,7 +3468,7 @@
   "test-core#src:test/test_nilpy_convert.npy": "pass",
   "test-core#src:test/test_nilpy_counter.npy": "pass",
   "test-core#src:test/test_nilpy_ctor_suffix_defaults.npy": "pass",
-  "test-core#src:test/test_nilpy_dataclass_dict_factory.npy": "fail",
+  "test-core#src:test/test_nilpy_dataclass_dict_factory.npy": "pass",
   "test-core#src:test/test_nilpy_default_arguments.npy": "pass",
   "test-core#src:test/test_nilpy_dict_fromkeys.npy": "pass",
   "test-core#src:test/test_nilpy_dispatch_result_class.npy": "pass",
@@ -4402,11 +4404,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-02T13:02:41Z",
-  "sha": "f9d0679ce2ad2a56e14ac4398970ab0d1d5467d4",
+  "date": "2026-08-02T13:05:22Z",
+  "sha": "9c43415f8c7b7b28c7912c7e8d20582df189547c",
   "tier": "native",
-  "verdict": "RED",
-  "wall": 107.6
+  "verdict": "GREEN",
+  "wall": 107.3
  },
  "last_bench": {
   "conf_rows": 550,
@@ -4426,20 +4428,5 @@
   "date": "2026-08-02T09:11:40Z",
   "sha": "2e626bcd9b4f0b95a2cfc45f6b98600167c88d0f"
  },
- "open_regressions": [
-  {
-   "bad": "2fbb5a270accfcafd3583cb605a91d0a8742149b",
-   "good": "01d3efe7739d1a4deb539f07ef6ed56894ea453f",
-   "job": "test-core#src:test/test_nilpy_dataclass_dict_factory.npy",
-   "name": "test-core#980",
-   "opened": "2026-08-02T12:56:07Z",
-   "range": [
-    "ee339d010ce6aef7238ea31b941837fea27ea125",
-    "ef73cf54555252c0447294d5d2a761f4fbdc686c",
-    "42ac7bedc9f441138d7207a4b65dc7544aa5003f",
-    "2fbb5a270accfcafd3583cb605a91d0a8742149b"
-   ],
-   "src": "test/test_nilpy_dataclass_dict_factory.npy"
-  }
- ]
+ "open_regressions": []
 }
