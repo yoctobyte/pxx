@@ -333,7 +333,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1185)
+## done (1186)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -762,6 +762,7 @@ _none_
 | bug-nilpy-nonlocal-write-never-reaches-the-enclosing-scope | N | 80 | bug | `nonlocal x` — the write never reaches the enclosing function | — |
 | bug-nilpy-not-on-object-always-true | N | 80 | bug | `not <object>` was TRUE for every live object — silently wrong answers | — |
 | bug-nilpy-not-on-string-always-true | N | 60 | bug | NilPy: `not s` on a string was ALWAYS True (silent wrong branch) | — |
+| bug-nilpy-numeric-builtin-gaps-min-max-sum-float-inf | N | 50 | bug | Numeric builtin gaps: `float("inf")`, variadic `min`/`max`, `sum(x, start)` | — |
 | bug-nilpy-object-reclamation-disabled-inside-py-modules | N | 65 | bug | NilPy object reclamation is switched off inside an imported `.py` module | — |
 | bug-nilpy-omitted-variant-default-segfaults | N | 65 | bug | nilpy: reading a DEFAULTED variant parameter segfaults (by-ref seen as by-value) | — |
 | bug-nilpy-param-spill-width | N | 60 | bug | NilPy: bool/char param spill wrote 4 bytes into a 1-byte slot (SILENT, then SIGSEGV) | — |

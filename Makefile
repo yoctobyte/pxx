@@ -1088,6 +1088,10 @@ test-nilpy: $(COMPILER)
 	# resolve against and the AN_CALL reached IR lowering unlowered
 	./$(COMPILER) test/test_nilpy_str_method_subscript.npy /tmp/test_nilpy_strmsub26
 	test "$$(/tmp/test_nilpy_strmsub26)" = "$$(printf '%b' 'World\nHello\nc\n[\047a\047, \047b\047, \047c\047]\nb\ny\nH\nhello,world\nPAD\nb\n72\ntwo')"
+	# numeric builtin gaps: float("inf"/"nan") raised ValueError, min/max were not
+	# variadic, sum() took no start value
+	./$(COMPILER) test/test_nilpy_numeric_builtins.npy /tmp/test_nilpy_numbi26
+	test "$$(/tmp/test_nilpy_numbi26)" = "$$(printf '%b' 'True\nTrue\nTrue\nTrue\nTrue\n1.5 -2.0 3.5\nabc ValueError\n1 3\n0 9\n1 3\n2 9\n6 16\n0 5\n1.5 b')"
 	# list.reverse() — IN PLACE. reversed()/[::-1] build a NEW sequence and worked;
 	# the in-place method was absent, so xs.reverse() did not compile.
 	./$(COMPILER) test/test_nilpy_list_reverse.npy /tmp/test_nilpy_lrev26

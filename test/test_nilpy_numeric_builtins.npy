@@ -1,0 +1,37 @@
+# Numeric builtin gaps found by a differential sweep against the CPython oracle
+# (bug-nilpy-numeric-builtin-gaps-min-max-sum-float-inf).
+#
+#   float("inf") / "-inf" / "infinity" / "nan"  raised ValueError. These are how
+#     you spell an unbounded sentinel, and `best = float("inf")` is everywhere.
+#     No literal spells them, so they are built by overflow: 1e308*10 is +Inf and
+#     Inf-Inf is NaN (verified to produce, not trap, on this target).
+#   min(a, b, c) / max(a, b, c)   Python's are variadic; only the two-argument
+#     and single-iterable forms existed.
+#   sum(iterable, start)          the optional initial accumulator value.
+#
+# The rest of the numeric surface agreed with CPython on that sweep: negative
+# floor division, modulo signs on both operands, divmod with negatives, **,
+# int() truncation toward zero, true division, bool arithmetic, 2**40 and the
+# 2**31 boundaries, and all six bitwise/shift operators including negative
+# shifts.
+#
+# Expectation is CPython's own output.
+
+print(float("inf") > 1e308)
+print(float("-inf") < -1e308)
+print(float("Infinity") > 1e308)
+print(float("INF") > 1e308)
+x = float("nan")
+print(x != x)
+print(float("1.5"), float("-2"), float("  3.5  "))
+try:
+    float("abc")
+except ValueError:
+    print("abc ValueError")
+print(min(3, 1, 2), max(3, 1, 2))
+print(min(3, 1, 2, 0), max(3, 1, 2, 9))
+print(min(3, 1), max(3, 1))
+print(min([4, 9, 2]), max([4, 9, 2]))
+print(sum([1, 2, 3]), sum([1, 2, 3], 10))
+print(sum([]), sum([], 5))
+print(min(1.5, 2), max("a", "b"))

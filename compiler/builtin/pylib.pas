@@ -941,6 +941,17 @@ function pymath_fabs(x: Double): Double;
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
+{ sum(iterable, start) — Python's optional second argument, the accumulator's
+  initial value. `sum(xs, 10)` is an ordinary spelling and was rejected with
+  "no overload of sum matches these arguments". }
+function sum(l: TPyList; const start: Variant): Variant; overload;
+{ Three- and four-argument min/max. Python's are variadic; only the
+  two-argument and single-iterable forms existed, so `min(3, 1, 2)` did not
+  compile (bug-nilpy-numeric-builtin-gaps-min-max-sum-float-inf). }
+function min(const a, b, c: Variant): Variant; overload;
+function min(const a, b, c, d: Variant): Variant; overload;
+function max(const a, b, c: Variant): Variant; overload;
+function max(const a, b, c, d: Variant): Variant; overload;
 function max(l: TPyList): Variant; overload;
 function min(l: TPyList): Variant; overload;
 function max(const s: AnsiString): AnsiString; overload;
@@ -3376,6 +3387,34 @@ begin
   for i := 0 to l.count - 1 do Result := pyadd_v(Result, l.at(i));
 end;
 
+function sum(l: TPyList; const start: Variant): Variant; overload;
+var i: Integer;
+begin
+  Result := start;
+  if l = nil then Exit;
+  for i := 0 to l.count - 1 do Result := pyadd_v(Result, l.at(i));
+end;
+
+function min(const a, b, c: Variant): Variant; overload;
+begin
+  Result := min(min(a, b), c);
+end;
+
+function min(const a, b, c, d: Variant): Variant; overload;
+begin
+  Result := min(min(min(a, b), c), d);
+end;
+
+function max(const a, b, c: Variant): Variant; overload;
+begin
+  Result := max(max(a, b), c);
+end;
+
+function max(const a, b, c, d: Variant): Variant; overload;
+begin
+  Result := max(max(max(a, b), c), d);
+end;
+
 function max(l: TPyList): Variant;
 var i: Integer;
 begin
@@ -5057,8 +5096,8 @@ begin
 end;
 
 function pyfloat_parse(const s: AnsiString): Double;
-var i, n, digits: Integer; neg, seenDot, seenExp: Boolean; body: AnsiString;
-    intPart, frac, scale, expSign, expVal: Double;
+var i, n, digits: Integer; neg, seenDot, seenExp: Boolean; body, lowbody: AnsiString;
+    intPart, frac, scale, expSign, expVal, infv: Double;
 begin
   body := s;
   i := 1; n := Length(body);
@@ -5067,6 +5106,31 @@ begin
   body := Copy(body, i, n - i + 1);
   if Length(body) = 0 then
     raise ValueError.Create('could not convert string to float');
+
+  { Python accepts the SPECIAL float spellings, case-insensitively and with an
+    optional sign: inf, infinity, nan. float("inf") raised
+    'could not convert string to float' here, which is wrong — it is how you
+    write an unbounded sentinel, and the idiom `best = float("inf")` is
+    everywhere (bug-nilpy-float-of-inf-nan-string-raises). Checked before the
+    digit scan, since the scan has no notion of them. }
+  lowbody := pystr_lower(body);
+  if (lowbody = 'inf') or (lowbody = '+inf') or (lowbody = 'infinity') or
+     (lowbody = '+infinity') or (lowbody = '-inf') or (lowbody = '-infinity') or
+     (lowbody = 'nan') or (lowbody = '+nan') or (lowbody = '-nan') then
+  begin
+    { No literal spells these, so build them by overflow: 1e308*10 is +Inf and
+      Inf-Inf is NaN. Verified to produce them rather than trap on this target
+      (float exceptions are masked; see feature-float-exception-mask-control). }
+    infv := 1.0e308;
+    infv := infv * 10.0;
+    if (lowbody = 'nan') or (lowbody = '+nan') or (lowbody = '-nan') then
+      Result := infv - infv
+    else if (lowbody = '-inf') or (lowbody = '-infinity') then
+      Result := -infv
+    else
+      Result := infv;
+    Exit;
+  end;
 
   neg := False;
   i := 1;

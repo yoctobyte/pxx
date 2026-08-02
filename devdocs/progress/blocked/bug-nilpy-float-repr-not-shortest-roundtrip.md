@@ -129,3 +129,17 @@ So both consumers need genuinely EXACT digit generation, not more digits.
 
 Raising the value of [[bug-b-floattostrsig-caps-at-15-significant-digits]]
 accordingly: it now unblocks two user-visible parity gaps, not one.
+
+
+## 2026-08-02 — a THIRD symptom: no exponent form for small magnitudes
+
+```python
+print(1e-10)     # CPython 1e-10     pxx 0.0000000001
+print(1e10)      # CPython 10000000000.0   pxx 10000000000.0   (agrees)
+```
+
+CPython's `repr` switches to exponent notation below `1e-4` and at/above
+`1e16`; pxx renders fixed-point throughout. Same routine family as the
+shortest-round-trip gap, so it should be settled in the same pass rather than
+patched separately — the exponent threshold is part of the same "how does a
+double print" contract.
