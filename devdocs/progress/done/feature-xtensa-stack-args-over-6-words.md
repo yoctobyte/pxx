@@ -5,7 +5,7 @@ prio: 65  # user 2026-08-02: xtensa is the PRIMARY ESP target (S2/S3 hardware)
 # xtensa: support calls/definitions with more than 6 parameter words
 
 - **Type:** feature (Track A — xtensa codegen / ABI)
-- **Status:** working
+- **Status:** done
 - **Owner:** track-A-S
 - **Opened:** 2026-06-22 (found during PAL esp object-smoke, Track B)
 
@@ -248,3 +248,66 @@ Both are small once the caller-side spill exists — the caller side is identica
 between the two ABIs — so this is a sequencing note, not a scope cut. But if
 only one lands first, windowed is the one that turns the S2/S3 hardware the user
 actually owns into a usable target.
+
+## DONE 2026-08-02 — both ABIs, verified on hardware-accurate qemu
+
+Implemented exactly as the measured gcc reference above prescribes; no
+workaround, no second convention.
+
+**Windowed.** `XT_OUTARG_REGION` (64 bytes = 16 overflow words, so 22 argument
+words in total) is now reserved at the BOTTOM of the constant-sp frame and the
+expression stack starts just above it (`XtSpillDepth` is seeded to
+`XT_OUTARG_REGION` instead of 0; the frame reservation and the entry-stub
+`entry` grew by the same amount). The caller copies word k>=6 down to sp+(k-6)*4
+before the call; the callee reads it at `a15 + 32 + (k-6)*4`, the 32 being its
+own `entry` frame size — the bias the gcc listing shows as `sp+32/36/40`.
+
+**Call0.** No reservation needed (moving sp). The pushes run arg0-deepest, so
+the overflow words already occupy the LOWEST slots but in DESCENDING order; the
+low `nArgs-6` slots are reversed in place, and the block is freed AFTER the call
+instead of before, because those words are the callee's incoming arguments. The
+six register words stay allocated across the call (24 bytes). Callee bias is 16,
+the a0/a15 save area.
+
+Both sides live in three helpers (`XtensaLoadArgRegsWindowed`,
+`XtensaOrderOverflowArgsCall0`, `XtensaLoadArgRegsCall0`) used by all four call
+sites — direct, indirect, virtual, constructor — so the four separate "more than
+6" errors are gone together. An Int64 pair may straddle the boundary (lo in the
+last register, hi in the first stack slot) and is handled. `interrupt;` handlers
+still refuse stack arguments: their prologue saves 48 extra bytes first, so the
+bias would silently be wrong, and they take no parameters anyway.
+
+**Verification** — `test/test_esp_stack_args.pas` (7, 9 and 12 words; a var
+parameter landing in an overflow slot; a straddling Int64; a nested call that
+itself spills, so the outgoing area is reused):
+
+- esp32c3 (riscv32) and esp32s3 (xtensa Call0) bare under qemu-system: output
+  identical to the x86-64 oracle. Wired into `make test-esp-bare`, whole suite
+  green (class/virtual/procvar/record/exception all still match).
+- esp32s3 **windowed** through the real ESP-IDF build and boot
+  (`tools/esp_run.sh --chip esp32s3`): identical to the oracle. This is the
+  profile the ticket asked for first.
+- `tools/gate.sh quick` GREEN (self-host fixedpoint + tier quick), FPC seed
+  build clean.
+
+Commit: 21c963bc6.
+
+### Acceptance bullet 3 moves to a follow-up (the PAL has a SECOND blocker)
+
+The claim above that the 6-word cap was "the first and only error" was an
+artifact of the compiler stopping at the first one. With the cap lifted, the
+xtensa windowed PAL object build now reaches:
+
+```
+--target=xtensa --xtensa-abi=windowed --platform=esp -Fulib/rtl \
+  -Fulib/rtl/platform/esp test/lib_platform_esp.pas
+  -> pascal26:504: error: target xtensa: record function results require Call0
+                          (windowed not yet supported)   [near PalIn6Any]
+```
+
+That is an orthogonal, already-known gap (Call0 record results landed
+2026-06-23; windowed was deferred because the call-window rotation has no
+obvious caller->callee hidden-dest register). Filed as
+[[feature-xtensa-windowed-record-results]], which now carries the PAL
+object-smoke acceptance.
+- 2026-08-02 — resolved, commit 21c963bc6.
