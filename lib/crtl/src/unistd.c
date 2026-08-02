@@ -86,3 +86,18 @@ long sysconf(int name) {
   if (name == _SC_PAGESIZE) return 4096;
   return -1;
 }
+
+/* isatty is DELIBERATELY ABSENT — see feature-crtl-libc-gap-batch-2026-08.
+ *
+ * The tempting implementation is fstat + S_ISCHR, and it is WRONG: /dev/null is
+ * a character device and is not a tty. Verified against gcc, which answers
+ * isatty("/dev/null") = 0. Shipping the fstat version would make every
+ * "am I on a terminal" branch take the colour/progress-bar path when output is
+ * redirected to /dev/null.
+ *
+ * The correct implementation is the TCGETS ioctl (what libc does: it succeeds
+ * only on a tty), and crtl has no ioctl bridge yet — __pxx_fstat exists,
+ * __pxx_ioctl does not. Adding one is small but its true-positive case cannot
+ * be verified without a controlling terminal, which this build environment does
+ * not have. Left out rather than guessed at.
+ */

@@ -46,6 +46,18 @@ int rand(void);
 void srand(unsigned int seed);
 
 char *getenv(const char *name);
+
+/* Environment write side. These mutate the SAME buffer getenv() reads, so a C
+   program sees its own writes. NOTE they do not reach the Pascal RTL's spawn
+   path (a separate buffer) — safe today only because crtl exposes no spawn
+   surface at all; see the standing constraint at the definition in stdlib.c. */
+int setenv(const char *name, const char *value, int overwrite);
+int unsetenv(const char *name);
+
+/* Allocating string duplicates. strndup always NUL-terminates, even when the
+   source is longer than n — that is the point of it. */
+char *strdup(const char *s);
+char *strndup(const char *s, size_t n);
 char *realpath(const char *path, char *resolved);
 int system(const char *command);
 

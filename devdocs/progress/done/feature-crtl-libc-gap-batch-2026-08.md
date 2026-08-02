@@ -2,6 +2,8 @@
 track: B
 prio: 30
 type: feature
+status: done
+owner: claude-B
 ---
 
 # crtl gap batch, 2026-08: 10 assumed-libc symbols real C reaches for
@@ -76,3 +78,57 @@ outputs diffed, as `test/crtl_libc_oracle.c` already does for the existing
 surface. Re-run the probe afterwards and confirm 48/48. Cross-check
 i386/aarch64/arm32: `lib/crtl` builds for every target while `gate.sh lib` is
 x86-64 only ([[frank2-crtl-changes-need-cross-check]]).
+
+## Landed 2026-08-02 — 9 of 10
+
+The probe now reports **47 of 48**. Implemented: `stpcpy`, `memccpy`,
+`memrchr`, `strsep`, `strcasestr` (in `lib/crtl/src/string.c`), `strdup`,
+`strndup`, `setenv`, `unsetenv` (in `stdlib.c`, where `malloc` and the
+environment buffer already live).
+
+### `isatty` deliberately NOT implemented
+
+The obvious implementation is `fstat` + `S_ISCHR`, and it is **wrong**:
+`/dev/null` is a character device and is not a tty. Confirmed against gcc,
+which answers `isatty` on an open `/dev/null` as **0**. Shipping the `fstat`
+version would make every "am I on a terminal" branch — colour, progress bars,
+prompting — take the interactive path whenever output is redirected to
+`/dev/null`.
+
+The correct implementation is the `TCGETS` ioctl, which succeeds only on a tty.
+crtl has no ioctl bridge (`__pxx_fstat` exists, `__pxx_ioctl` does not). Adding
+one is small, but its **true-positive** case cannot be verified without a
+controlling terminal, and this build environment has none — so it would land
+tested only in the negative direction. Left out, with the reasoning recorded at
+the site in `unistd.c` so the next person meets it before the bug does.
+
+### Verified behaviourally, against gcc, not by compiling
+
+`test/cstring_batch.c` diffs its **whole output** against the same file built by
+gcc, so there are no recorded expectations to drift. The cases are chosen where
+each function differs from its obvious cousin, since that is where a plausible
+wrong implementation hides: `stpcpy` returning the NUL rather than the start
+(and chaining on it), `memccpy` stopping *after* the byte and yielding NULL when
+absent, `memrchr` with `n = 0` not reading at all, `strsep` producing an EMPTY
+token between adjacent delimiters where `strtok` skips it, `strndup`
+NUL-terminating a truncated copy, and `setenv(..., overwrite = 0)` NOT replacing
+an existing value.
+
+**Identical to gcc on x86-64, i386, aarch64 and arm32.** The cross-target run is
+not optional here — `lib/crtl` builds for every target while `gate.sh lib` is
+x86-64 only ([[frank2-crtl-changes-need-cross-check]]).
+
+### The setenv hazard, as filed
+
+Records are appended rather than edited in place (a longer replacement value
+would have to shift the rest of a fixed 16K buffer), and a superseded record is
+hidden by making its name unmatchable with a `\1` first byte — a byte no
+environment name can contain — which preserves the NUL-separated record
+structure `getenv`'s scan walks. Blanking the record instead would have made the
+scan treat it as an empty record and mis-step.
+
+The standing constraint about crtl's buffer being separate from the Pascal spawn
+path's is recorded in a comment at the definition, not only in this ticket.
+
+## Log
+- 2026-08-02 — resolved, commit PENDING.

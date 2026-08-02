@@ -435,3 +435,98 @@ lldiv_t lldiv(long long num, long long den)
     r.rem  = num % den;
     return r;
 }
+
+/* ---- strdup / strndup -----------------------------------------------------
+ * Here rather than in string.c because they allocate, and malloc lives in this
+ * file. Both return NULL on allocation failure, which callers do check.
+ */
+char *strdup(const char *s) {
+  size_t n;
+  char *p;
+  if (!s) return 0;
+  n = strlen(s);
+  p = (char *)malloc(n + 1);
+  if (!p) return 0;
+  memcpy(p, s, n + 1);
+  return p;
+}
+
+/* strndup: at most n bytes, and ALWAYS NUL-terminated even when the source is
+ * longer — that termination is the difference from a bare malloc+memcpy and is
+ * why callers reach for it on fixed-width fields. */
+char *strndup(const char *s, size_t n) {
+  size_t len = 0;
+  char *p;
+  if (!s) return 0;
+  while (len < n && s[len]) len++;
+  p = (char *)malloc(len + 1);
+  if (!p) return 0;
+  memcpy(p, s, len);
+  p[len] = 0;
+  return p;
+}
+
+/* ---- setenv / unsetenv ----------------------------------------------------
+ * These mutate the same pxx_env_buf that getenv() reads, so a C program sees
+ * its own writes.
+ *
+ * A STANDING CONSTRAINT, not an oversight: this buffer is NOT the one the
+ * Pascal RTL's spawn path hands to execve (that is sysutils' EnvVars, see
+ * decide-env-write-side option 3). Today that cannot diverge, because crtl
+ * exposes no spawn surface at all — no execve, fork, system or posix_spawn in
+ * any crtl header — so "setenv then exec" is unreachable from C. WHOEVER ADDS
+ * A SPAWN SURFACE TO CRTL must make it pass this buffer, or unify the two
+ * first; otherwise a C setenv silently fails to reach the child, which is
+ * exactly the divergence that decision exists to prevent.
+ *
+ * Records are appended to the buffer rather than edited in place: an overwrite
+ * of a longer value would need to shift everything after it, and the buffer is
+ * a fixed 16K. An overwritten record is blanked by setting its first byte to
+ * NUL... which getenv's scan would then treat as an empty record and skip, so
+ * instead the name is mangled to a byte no environment name can contain. That
+ * keeps the scan's structure (NUL-separated records) intact.
+ */
+static int pxx_env_put(const char *name, const char *value) {
+  size_t nl = strlen(name), vl = strlen(value);
+  long need = (long)nl + 1 + (long)vl + 1;
+  if (pxx_env_len + need > PXX_ENV_BUFSZ) return -1;
+  memcpy(&pxx_env_buf[pxx_env_len], name, nl);
+  pxx_env_buf[pxx_env_len + (long)nl] = '=';
+  memcpy(&pxx_env_buf[pxx_env_len + (long)nl + 1], value, vl);
+  pxx_env_buf[pxx_env_len + need - 1] = 0;
+  pxx_env_len += need;
+  return 0;
+}
+
+/* Hide every existing record for `name` by making its NAME unmatchable. '\1'
+ * cannot appear in a real environment name, and keeping the record's length
+ * and terminator preserves the scan. */
+static void pxx_env_hide(const char *name) {
+  long i = 0;
+  size_t j;
+  while (i < pxx_env_len) {
+    for (j = 0; name[j] && pxx_env_buf[i + (long)j] == name[j]; j++) ;
+    if (!name[j] && pxx_env_buf[i + (long)j] == '=')
+      pxx_env_buf[i] = 1;                 /* unmatchable first byte */
+    while (i < pxx_env_len && pxx_env_buf[i]) i++;
+    i++;
+  }
+}
+
+int setenv(const char *name, const char *value, int overwrite) {
+  if (!name || !*name || strchr(name, '=')) return -1;
+  if (!value) value = "";
+  pxx_env_load();
+  if (getenv(name)) {
+    if (!overwrite) return 0;             /* present and told not to replace */
+    pxx_env_hide(name);
+  }
+  return pxx_env_put(name, value);
+}
+
+int unsetenv(const char *name) {
+  if (!name || !*name || strchr(name, '=')) return -1;
+  pxx_env_load();
+  pxx_env_hide(name);
+  return 0;
+}

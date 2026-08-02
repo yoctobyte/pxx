@@ -281,3 +281,74 @@ static char *__pxx_strtok_save;
 char *strtok(char *s, const char *delim) {
   return strtok_r(s, delim, &__pxx_strtok_save);
 }
+
+/* ---- the assumed-libc batch (feature-crtl-libc-gap-batch-2026-08) ----------
+ * Found by a differential probe against gcc rather than by waiting for a
+ * corpus to trip them: real C reaches for all of these routinely.
+ */
+
+/* stpcpy: like strcpy but returns a pointer to the destination's NUL rather
+ * than to its start — the whole reason to use it, since it lets a caller chain
+ * appends without re-walking what it just wrote. */
+char *stpcpy(char *dest, const char *src) {
+  while ((*dest = *src) != 0) { dest++; src++; }
+  return dest;                    /* the NUL, not the start */
+}
+
+/* memccpy: copy at most n bytes, stopping AFTER the first occurrence of c.
+ * Returns the byte past that copy of c, or NULL if c never appeared. */
+void *memccpy(void *dest, const void *src, int c, size_t n) {
+  unsigned char *d = (unsigned char *)dest;
+  const unsigned char *s = (const unsigned char *)src;
+  unsigned char t = (unsigned char)c;
+  size_t i;
+  for (i = 0; i < n; i++) {
+    d[i] = s[i];
+    if (s[i] == t) return &d[i + 1];
+  }
+  return 0;
+}
+
+/* memrchr: last occurrence of c in the first n bytes. Walks backwards, so an
+ * n of 0 must not index at all. */
+void *memrchr(const void *s, int c, size_t n) {
+  const unsigned char *p = (const unsigned char *)s;
+  unsigned char t = (unsigned char)c;
+  while (n > 0) {
+    n--;
+    if (p[n] == t) return (void *)&p[n];
+  }
+  return 0;
+}
+
+/* strsep: the reentrant strtok replacement, and NOT equivalent to it — strsep
+ * returns an EMPTY token for two adjacent delimiters where strtok skips them,
+ * which is the behaviour parsers of ':'-separated fields depend on. Advances
+ * *stringp past the delimiter, or sets it to NULL at the end. */
+char *strsep(char **stringp, const char *delim) {
+  char *s = *stringp;
+  char *p;
+  if (!s) return 0;
+  p = s + strcspn(s, delim);
+  if (*p) { *p = 0; *stringp = p + 1; }
+  else *stringp = 0;
+  return s;
+}
+
+/* strcasestr: strstr ignoring ASCII case. Not locale-aware, matching what the
+ * GNU version does for the ASCII range that callers actually use. */
+static int __pxx_lc(int ch) {
+  if (ch >= 'A' && ch <= 'Z') return ch + 32;
+  return ch;
+}
+char *strcasestr(const char *haystack, const char *needle) {
+  size_t i, j;
+  if (!*needle) return (char *)haystack;
+  for (i = 0; haystack[i]; i++) {
+    for (j = 0; needle[j]; j++)
+      if (__pxx_lc((unsigned char)haystack[i + j]) != __pxx_lc((unsigned char)needle[j]))
+        break;
+    if (!needle[j]) return (char *)&haystack[i];
+  }
+  return 0;
+}

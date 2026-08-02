@@ -7113,6 +7113,18 @@ lib-test: pxx-stable-check
 	/tmp/cmath_constants
 	$(PXX_STABLE) test/cstrings_bsd.c /tmp/cstrings_bsd
 	/tmp/cstrings_bsd
+	# The assumed-libc batch: behavioural, and the whole output is diffed
+	# against the SAME file built by gcc, so there are no recorded expectations
+	# to drift. Cases chosen where these differ from their obvious cousins.
+	$(PXX_STABLE) test/cstring_batch.c /tmp/cstring_batch
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -w -o /tmp/cstring_batch_gcc test/cstring_batch.c 2>/dev/null; \
+	  /tmp/cstring_batch_gcc > /tmp/cstring_batch_gcc.txt; \
+	  /tmp/cstring_batch > /tmp/cstring_batch_pxx.txt; \
+	  diff /tmp/cstring_batch_gcc.txt /tmp/cstring_batch_pxx.txt || \
+	    { echo 'FAIL: cstring_batch differs from gcc'; exit 1; }; \
+	  echo 'cstring_batch: identical to gcc'; \
+	else echo 'cstring_batch: SKIP (no gcc)'; /tmp/cstring_batch >/dev/null; fi
 	# crtl against gcc's libc, which is the oracle for this surface: the whole
 	# output is diffed against the SAME file built by gcc, so there are no
 	# recorded expectations to drift.

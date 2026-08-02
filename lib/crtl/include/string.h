@@ -19,6 +19,16 @@ char *strncpy(char *dest, const char *src, size_t n);
 char *strcat(char *dest, const char *src);
 char *strncat(char *dest, const char *src, size_t n);
 char *strchr(const char *s, int c);
+
+/* The assumed-libc batch (feature-crtl-libc-gap-batch-2026-08). stpcpy returns
+   the destination's NUL, not its start; memccpy stops AFTER the first c;
+   strsep yields an EMPTY token between adjacent delimiters where strtok skips
+   them, which is what ':'-field parsers depend on. */
+char *stpcpy(char *dest, const char *src);
+void *memccpy(void *dest, const void *src, int c, size_t n);
+void *memrchr(const void *s, int c, size_t n);
+char *strsep(char **stringp, const char *delim);
+char *strcasestr(const char *haystack, const char *needle);
 char *strrchr(const char *s, int c);
 char *strstr(const char *haystack, const char *needle);
 char *strpbrk(const char *s, const char *accept);

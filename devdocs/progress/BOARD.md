@@ -40,7 +40,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (206)
+## backlog (205)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -130,7 +130,6 @@ lives in git, not in a timestamp._
 | feature-cli-widgetset-flag | A | 20 | feature | CLI: --widgetset=<name> as sugar for -dWIDGETSET_<NAME>, so the flag reads like Lazarus' -ws | — |
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
 | feature-crtl-implement-libc-assumptions | B | 10 | feature | crtl: implement the libc assumptions real-world C leans on | — |
-| feature-crtl-libc-gap-batch-2026-08 | B | 30 | feature | crtl gap batch, 2026-08: 10 assumed-libc symbols real C reaches for | — |
 | feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | feature-nilpy-break-continue, feature-nilpy-tk-binding |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 50 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade |
@@ -355,7 +354,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1210)
+## done (1211)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1146,6 +1145,7 @@ lives in git, not in a timestamp._
 | feature-cross-streaming-lfm | A | 50 | feature | Component streaming + LFM loading on the cross targets | — |
 | feature-cross-target-feature-parity | A | 50 | feature | Cross-target language-feature parity (Intel + ARM) | — |
 | feature-cross-virtual-indirect-hidden-dest | A | 65 | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
+| feature-crtl-libc-gap-batch-2026-08 | B | 30 | feature | crtl gap batch, 2026-08: 10 assumed-libc symbols real C reaches for | — |
 | feature-crtl-libm-correctly-rounded-transcendentals | B | 40 | feature | crtl libm: correctly-rounded (or <1ulp) transcendentals — cbrt/log/pow/exp | — |
 | feature-crtl-strtok-missing | B | 60 | feature | crtl: `strtok` not implemented (undeclared function) | — |
 | feature-crtl-trig-payne-hanek | B | 15 | feature | crtl libm: Payne-Hanek reduction for \|x\| >= 1e8 trig (sin/cos/tan) | — |
@@ -1768,7 +1768,6 @@ lives in git, not in a timestamp._
 - [p 30] [N] bug-nilpy-dataclass-no-generated-eq
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
 - [p 30] [N] bug-nilpy-for-else-and-while-else-not-supported
-- [p 30] [B] feature-crtl-libc-gap-batch-2026-08
 - [p 30] [N] feature-nilpy-list-sort-inplace-key-reverse
 - [p 30] [N] feature-nilpy-min-max-variadic-more-than-two-args
 - [p 30] [N] feature-nilpy-stdlib-coverage-gaps-measured
