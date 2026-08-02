@@ -1,88 +1,118 @@
-# Prompt to self — next fresh session (Track C+B+A, master)
+# Handoff — 2026-08-01, NilPy bughunt (tracks A+N+P+C)
 
-You are **Track C+B+A** (C frontend + libraries + compiler) on frankonpiler,
-working directly on `master`. Combined-track rule: a change to shared compiler
-internals is filed as a Track A ticket but you may self-resolve it. Read
-`devdocs/dev/parallel-tracks.md` if unsure.
+Supersedes the 2026-07-05 Track C+B+A handoff, archived alongside as
+`HANDOFF-2026-07-05-track-CBA.md` (its cross-target debug tactics are still
+good; its "no Nil-Python until C is stable" directive is superseded).
 
-## Prime directive (user, 2026-07-05)
+Paste everything below the line as the opening prompt for a fresh session.
 
-**Prove Pascal AND C stable before anything new. NO Nil-Python / new frontends
-until then.** Real-world C programs are the proven bug-finders — keep grinding
-them until the cross targets are solid.
+---
 
-### The WHY (the capstone this is all for)
+Continue on tracks **A+N+P+C**. You are sole-A. Work on `master`, commit small,
+push often.
 
-The golden demo: **a ~25-line Nil-Python program that statically links BOTH
-sqlite AND lua** — opens a SQLite DB, runs a Lua script, libc-free, one binary,
-cross-compilable to every target. That one file exercises the ENTIRE stack at
-once: C frontend (compiles sqlite+lua), crtl (the libc-free runtime they call
-into), Nil-Python frontend (calls both), one IR → many backends, static linking
-(zero deps). That is why C + the cross targets must be rock-solid FIRST — the
-Python layer sits on top of the C-compiled libraries. Every 32-bit lua/sqlite
-codegen bug fixed below is a brick under that demo.
+## Cadence — the user asked for this explicitly
 
-## Where things stand (all pushed, master green)
+**Go fast; let Track T find regressions. Quick checks only.** Per fix:
 
-Variadic C ABI is DONE on all 5 targets; `va_list` is an array typedef
-(pass-by-pointer); **C `long` is now native** (8 on LP64, 4 on ILP32) — that was
-the keystone that made **arm32 printf incl `%f` byte-identical to x86-64**.
-x86-64/aarch64/i386/arm32 printf all byte-identical. Gate held: `make test` +
-self-host byte-identical + `test-{i386,arm32,riscv32}` green. Key commits:
-`2647f41f` `c5f80ac6` `74d6d4b7` `1b12f4a6`.
+1. `make` — the self-host loop must converge.
+2. **FPC seed build, but only if you ADDED or MOVED a routine** (~30s):
+   `rm -rf /tmp/fpcu && mkdir -p /tmp/fpcu && fpc -O2 -Tlinux -Px86_64 -FU/tmp/fpcu -o/tmp/pxx-fpc compiler/compiler.pas`
+   Neither `make` nor `gate.sh` ever invokes FPC, so a declaration-order break
+   (PXX is lax, FPC is strict) is structurally invisible locally. I shipped one
+   this session; T caught it.
+3. Self-host fixedpoint from the pinned seed (A==B==C) + `tools/testmgr.py --tier quick`.
+4. Push.
 
-Read first: ticket `devdocs/progress/unfinished/feature-c-cross-lua-sqlite.md`
-(full bug log, items 1-17), and memory
-`project_cross_variadic_arm32_riscv32_v178.md`,
-`project_aarch64_signed_subword_load_sqlite_v177.md`,
-`project_cross_lua_aarch64_green_v176.md`.
+Do **not** run `make test-nilpy` (~9 min) per fix.
+`git fetch` **before** `tools/twatch.py --status` — it reads the LOCAL `tstate/`
+dir, so without a fetch it reports your own checkout's staleness. That gave a
+false "T is DOWN" this session.
+Never pipe a backgrounded `make`/gate to `tail` — it masks the exit status.
 
-## Open loose ends — hunt these to "stable" (rough priority)
+## State
 
-1. **arm32 + i386 lua/sqlite emit GARBAGE output.** They BUILD now (variadic +
-   long fixed the ABI) but run wrong — separate 32-bit codegen bugs, unrelated to
-   variadic. Highest signal: `make test-lua-cross LUA_CROSS_TARGETS=arm32` /
-   i386, then bisect a single script (e.g. `strings.lua`) with `__pxx_write`
-   markers in `builtin/*.pas` or the lua .c. Expect a handful of real 32-bit
-   codegen bugs (string/number/table/hash paths). This is the big one.
-2. **riscv32 printf = softfloat.** `pascal26:...: __pxx_dcmp not found (uses
-   softfloat?)` — riscv32 `%f`/double formatting needs the softfloat compare/
-   convert kernels wired (see `ir_codegen_riscv32.inc` softfloat helper lookups).
-   Blocks riscv32 printf/lua/sqlite entirely.
-3. **typedef-array-param → pointer decay (cfront correctness, ticket item 17).**
-   `va_list ap` param types as by-value `tyRecord` instead of decaying to a
-   pointer (cfront drops the array dim of an array-typedef param). No longer on
-   printf's critical path (long=native keeps va_list in regs) but still wrong for
-   >4-word va_list args. Fix: (a) `ParseCTypedef` record the `[N]` of
-   `typedef T Y[N]`, (b) param loop `cparser.inc ~4777-4806` apply the pointer
-   decay when the resolved param type is an array typedef. Minimal repro:
-   `inner(int,int,int,int, Box b)` with `typedef struct{int a;} Box[1]` SIGSEGVs
-   on arm32; plain-pointer 5th arg works.
-4. **Wire green cross runs into make targets** — `test-lua-cross` exists
-   (aarch64), extend to arm32/i386 once green; add `test-sqlite-cross`. NOT in
-   `make test` (3rd-party + qemu).
-5. **Fresh real-world C target** once cross is greener — see
-   `backlog/idea-c-realworld-test-targets.md` (busybox `cat` = top pick, then
-   tcc). North star: compile gcc.
+HEAD `eeae1e4a3`, tree clean, all pushed, T is UP.
 
-## Gates (every compiler change)
+**One unverified thing:** a `make test-nilpy` was still running at session end.
+Re-run it once. It had already passed everything through
+`test_nilpy_comprehension_scope`. If something is red, the likeliest cause is
+another assertion encoding OLD compile-error behaviour that is now a runtime
+raise — exactly what `test_nilpy_list_plus_nonlist_fail` was.
 
-`make test` + self-host byte-identical (`make all`) on x86-64 host; keep
-`test-{i386,arm32,riscv32}` green; aarch64 lua stays 6/6
-(`make test-lua-cross`); x86-64 sqlite/lua unchanged. Commit small, push when
-your lane is green. LANDMINE: compiler self-host has no IntToStr — never use it
-in `Error()` strings.
+## Landed this session — 11 NilPy fixes, each CPython-diffed with a test
 
-## Debug tactics that worked this arc (reuse)
+ordering dunders · `__bool__`/`__len__` truthiness · list ordering (was comparing
+heap ADDRESSES, ignoring contents) · `__ne__` · bitwise/shift (was SIGSEGV) ·
+`__floordiv__`/`__mod__`/`__pow__` · all seven reflected dunders · undefined
+operand pairs now raise a catchable TypeError instead of aborting the build ·
+`__abs__`/`__invert__`/`__index__` · `with` context-manager protocol ·
+`b.decode()` (was SIGSEGV). Plus the uses-leak instrument fix (Track A) and
+`PXXDBG=n.locals` now dumping the MODULE constraint table.
 
-- x86-64 native is fastest to debug (no qemu) — favor generalizations validated
-  on x64 first.
-- qemu + gdb-multiarch: `set sysroot ~/.cache/pxx-cross/<arch>`; frame-walk by
-  fp when symbols absent; addr2line filename/line is unreliable (cfront skips
-  `#if 0`).
-- Instrument 3rd-party C with file-scope `extern long __pxx_write(int,const
-  void*,unsigned long);` + block decls before statements (cfront rejects
-  mid-block extern). Exit codes are 8-bit — probe one small value per run.
-- A/B a suspected regression against the pre-change compiler via `git stash`.
-- pxx struct layout == gcc for plain structs — a standalone offsetof-probe TU
-  gives field names; BFS an object graph for ASCII strings to ID a struct.
+Also closed by measurement: the uses-transitivity "campaign" is not one —
+35 leak pairs across all 934 test files (was reported as 81 from 80 files), and
+the "hundreds of files need `uses builtin`" work was pure instrumentation
+artifact.
+
+## Pick up next, in order
+
+1. **`bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults`** (75).
+   `xs.index()` and `d.get()` compile then SIGSEGV; `.count()` returns a wrong
+   value. Too MANY args IS rejected and str methods ARE rejected — so a check
+   exists and fails in one direction on one path. Cause deliberately NOT
+   guessed: diff `xs.index()` against `xs.index(2)` with `PXXDBG=a.ir:<proc>`
+   and check whether `FindUMethArity` is consulted there at all.
+2. **`bug-nilpy-dict-from-pairs-and-bytes-decode-segfault`** (70) — only the
+   `dict()` half is left. Diagnosed: `dict(x)` lowers as a **typecast** to
+   TPyDict rather than a conversion, so it reinterprets a TPyList's header
+   words. Evidence and fix shape are on the ticket.
+3. **`bug-nilpy-global-shadowed-by-method-param-name-loses-class-type`** (75).
+   Pre-existing (reproduces on pinned v239). Heavily narrowed on the ticket,
+   which also records a REJECTED fix and two of my own wrong claims, corrected —
+   read those first so you don't repeat them.
+4. **`bug-nilpy-static-typed-operands-skip-mixed-type-guard`** (70) — 117 sweep
+   cases, the largest remaining family. Needs a per-operator legality table
+   derived from CPython's rules, NOT another guard. The ticket explains why
+   there is no single entry point to patch (`+ - * /` and comparisons are typed
+   in `parser.inc`; bitwise goes through `PyWiden` in `pyparser.inc`).
+5. `bug-nilpy-str-format-ignores-positional-indices` (60), then the survey
+   tickets (step slicing, `list(range(...))`, `pow`, `str.index`, `expandtabs`).
+
+Also filed for other lanes, not yours: `bug-t-xeon-job-set-covers-only-a-third-of-nilpy-tests`
+(T, 55 — the user is investigating on that box) and
+`bug-t-gate-sh-pgrep-fc-double-zero-integer-error` (T, 25).
+
+## Tooling left behind — reuse it
+
+Two differential sweeps under the session scratchpad (may be gone; each has a
+`gen.py` that regenerates its cases, and `run.sh <pxx-binary>` diffs against
+precomputed CPython oracles):
+
+- **sweep** — 1094 cases, operator × operand-type matrix + every dunder protocol.
+- **sweep2** — 133 cases, string/list/dict/builtin METHOD surface.
+
+Three traps, each of which cost me a run:
+
+- The pxx binary **must live inside the repo tree** or `uses builtin` fails and
+  every case silently "passes" — one bogus zero-divergence run.
+- **Never rebuild the compiler mid-sweep** — two discarded runs.
+- After a batch of fixes, re-run a sweep and **diff the group counts against the
+  previous run**. That is the only thing that caught a regression where I traded
+  a loud compile error for silent pointer math; nine passing per-fix tests did
+  not see it.
+
+## Discipline that actually mattered
+
+- **Write tests that can distinguish the broken implementation from the correct
+  one.** The list allocated first must sort last; `__ne__` must disagree with
+  `not __eq__`; `__enter__` must return something other than `self`. Several
+  existing tests passed only by coincidence.
+- **Check how a test's operands are BOUND before trusting it.**
+  `test_nilpy_mixed_type_operands` asserts all the mixed-type cases and passes —
+  its operands come from a heterogeneous list literal, so they are all variants,
+  the one path that works. It reads as coverage while being unable to fail.
+- **Measure with `PXXDBG` before writing a cause into a ticket.** Three
+  plausible diagnoses died on contact this session; each would have sent a fix
+  to the wrong file.
+- **Park forks as Track U `decide-*` tickets and move on.** Do not guess.
