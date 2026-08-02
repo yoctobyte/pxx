@@ -1166,6 +1166,12 @@ test-nilpy: $(COMPILER)
 	# silently. Equal keys must hash equal, so an integral float hashes as its int.
 	./$(COMPILER) test/test_nilpy_numeric_dict_keys.npy /tmp/test_nilpy_numkey26
 	test "$$(/tmp/test_nilpy_numkey26)" = "$$(printf '%b' '1\nfloat\nfloat\nTrue\na\nTrue\nx\n1\nf\nm\nbig\nTrue\nhalf\nTrue\nFalse\nFalse\n1\nnz\n3\none\nstr-one\ntwo-five\nnan\nTrue\nFalse')"
+	# `n /= 2` at MODULE level. Python's / is always true division, so the target
+	# becomes a float — but the module type collector only matched `name = expr`,
+	# so the name kept an int slot and printed the Double's raw BITS: i=8; i/=4
+	# printed 0. Correct inside a def all along.
+	./$(COMPILER) test/test_nilpy_module_true_divide_assign.npy /tmp/test_nilpy_tdiv26
+	test "$$(/tmp/test_nilpy_tdiv26)" = "$$(printf '%b' '2.0\n2.5\n1.25\n0.333333\n2.0\n2.0\n4.5\n2.0\n4\n1\n9\n3\n6\n2\n16\n3.5\n2.0')"
 	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
 	# key function had no overload to bind to (dict alone and list+key both worked)
 	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26

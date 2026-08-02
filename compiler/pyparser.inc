@@ -13189,6 +13189,32 @@ begin
           continue;
         end;
       end
+      { `n /= 2` at MODULE level. Python's `/` is ALWAYS true division, so the
+        target becomes a float — but this collector only ever matched
+        tkIdent-then-tkAssign, so an augmented assignment was invisible to it
+        and the name kept whatever type its plain binding gave it. The frame
+        slot stayed Int64 and the Double's raw BITS were then read through an
+        integer formatter: `i = 8; i /= 4` printed 0, because the low half of
+        2.0's bit pattern is zero. Silent, and the same class of bug as
+        bug-nilpy-str-of-mixed-mod-prints-double-bits.
+
+        The def-level collector already handles this (via the fast path in
+        PyParseStatement noting the constraint); only the MODULE scope was
+        missing it, which is why the identical program was correct inside a
+        function and wrong at the top level
+        (bug-nilpy-module-level-true-divide-assign-keeps-an-int-slot).
+
+        Only `/=` needs this: every other augmented operator preserves the
+        target's type, and `//=` is deliberately integer division. }
+      else if (depth <= 255) and
+              ((depth = 0) or (not blockIsDef[depth])) and
+              (Tokens[i].Kind = tkIdent) and
+              (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkTrueDivEq) and
+              ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon])) then
+      begin
+        PyNoteLocalType(GetTokenStr(i), tyDouble, REC_NONE);
+        Inc(i);
+      end
       else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
               (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkAssign) and
               { …and at a STATEMENT BOUNDARY. Parentheses do not change `depth`

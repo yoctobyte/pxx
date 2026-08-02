@@ -1,0 +1,88 @@
+# `n /= 2` at MODULE level. Python's `/` is ALWAYS true division, so the target
+# becomes a float. The module-level type collector only ever matched
+# `name = expr`, so an AUGMENTED assignment was invisible to it and the name
+# kept its integer slot -- the Double's raw BITS were then read through an
+# integer formatter and `i = 8; i /= 4` printed 0, because the low half of
+# 2.0's bit pattern is zero. Silent, and correct inside a function all along.
+# bug-nilpy-module-level-true-divide-assign-keeps-an-int-slot
+
+i = 8
+i /= 4
+print(i)
+
+j = 10
+j /= 4
+print(j)
+
+# repeated, and down to a fraction
+e = 10
+e /= 4
+e /= 2
+print(e)
+
+g = 1
+g /= 3
+print(round(g, 6))
+
+# already a float: unchanged behaviour
+f = 8.0
+f /= 4
+print(f)
+
+# inside control-flow blocks, which are still module scope in Python
+if True:
+    b = 8
+    b /= 4
+print(b)
+
+for _ in [1]:
+    c = 9
+    c /= 2
+print(c)
+
+# inside a def -- this always worked, and must keep working
+def divide():
+    d = 8
+    d /= 4
+    return d
+
+print(divide())
+
+# every OTHER augmented operator preserves the target's type and must be
+# untouched by this -- `//=` in particular is deliberately integer division.
+# (`**=` is a separate unimplemented gap and is not exercised here.)
+q = 9
+q //= 2
+print(q)
+
+r = 7
+r %= 3
+print(r)
+
+m = 3
+m *= 3
+print(m)
+
+n = 5
+n -= 2
+print(n)
+
+acc = 0
+for v in [1, 2, 3]:
+    acc += v
+print(acc)
+
+t = 6
+t &= 3
+print(t)
+
+u = 1
+u <<= 4
+print(u)
+
+# plain division and rebinding were already correct
+k = 7
+print(k / 2)
+w = 8
+w = w / 4
+print(w)
