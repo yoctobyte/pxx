@@ -230,7 +230,7 @@ the test says why.
 
 Identical to gcc on x86-64, i386, aarch64 and arm32.
 
-## Round 5 — sscanf's return contract, and two wrong fixes before the right one
+## Round 5 (commit d28b44187) — sscanf's return contract, and two wrong fixes before the right one
 
 Probed sscanf (12 conversion cases) and the math surface (fmod on a negative,
 hypot, log2, copysign, floor/ceil/trunc/round on negatives, pow, sqrt, exp, log,
