@@ -71,7 +71,7 @@ neither returns a clean error rather than hanging. Assert the ORDER
 observably — e.g. the connected socket's family — not just that a connection
 happened, since "it connected" passes under either ordering.
 
-## Landed 2026-08-02
+## Landed 2026-08-02 (commit ec221f7a0)
 
 `lib/rtl/netconnect.pas` — `NetConnectHost` / `NetConnectHostTimeout` /
 `NetConnectHostEx`, implementing the decided A-first, AAAA-fallback ordering.
