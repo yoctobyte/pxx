@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-02T13:05:22Z",
-   "fixed": [
-    "test-core#src:test/test_nilpy_dataclass_dict_factory.npy"
-   ],
-   "new_red": [],
-   "sha": "9c43415f8c7b7b28c7912c7e8d20582df189547c",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-02T13:08:32Z",
    "fixed": [],
    "new_red": [],
@@ -405,6 +395,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "2dbce8a2ec1fd52b774fa43122a7e02a17147a76",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-02T22:04:45Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "280a3083e24e25bb0e9e0d190a50169f2b14f98c",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -4437,11 +4435,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-02T21:55:42Z",
-  "sha": "2dbce8a2ec1fd52b774fa43122a7e02a17147a76",
+  "date": "2026-08-02T22:04:45Z",
+  "sha": "280a3083e24e25bb0e9e0d190a50169f2b14f98c",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 108.7
+  "wall": 108.1
  },
  "last_bench": {
   "conf_rows": 550,
