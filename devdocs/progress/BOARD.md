@@ -42,12 +42,13 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (206)
+## backlog (208)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
+| bug-a-threadsafe-self-host-exceeds-max-globfix-by-121 | A | 75 | bug | The --threadsafe self-compile needs 65657 global fixups against a fixed cap of 65536 — over by 121. A GATED test-core job is red on master, and `make compiler/pascal26` is green, so the normal build masks it completely | — |
 | bug-b-writeln-float-with-17-decimals-prints-garbage | A | 55 | bug | `WriteLn(x:0:17)` prints garbage | — |
 | bug-c-uses-path-basename-collides-with-enclosing-unit-name | A | 35→65 | bug | path-form `uses './x.c'` collides with the enclosing unit's OWN name | — |
 | bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity | C | 55 | bug | In a mixed Pascal+C build, a C call binds to a same-named Pascal routine at the wrong arity | — |
@@ -244,6 +245,7 @@ lives in git, not in a timestamp._
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | regression-test-core-compiler | T | 70 | regression | regression: test-core#src:compiler/compiler.pas@2 red at 96cffaf08de5 (auto-filed by twatch) | — |
+| regression-test-smoke-compiler | T | 70 | regression | regression: test-smoke#src:compiler/compiler.pas red at b11e604f8043 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-borg-open-regression-is-permanently-stale | T | 40 | task | borg's watcher was stopped 2026-07-31 with one open regression recorded; nothing will ever clear it, so every --status and gate.sh check reads a dead host's red as live | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
@@ -1614,9 +1616,11 @@ lives in git, not in a timestamp._
 - [urgent p 80] [P] bug-pascal-procvar-in-value-context-takes-address-instead-of-calling (unblocks 1)
 - [urgent p 75] [C] bug-cfront-arch-predefines-always-x86-64
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
+- [p 75] [A] bug-a-threadsafe-self-host-exceeds-max-globfix-by-121
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] regression-test-core-compiler
+- [p 70] [T] regression-test-smoke-compiler
 - [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
 - [p 65] [N] bug-classname-on-a-tobject-local-compiles-to-a-dynamic-attr-fetch
 - [p 65] [N] bug-nilpy-class-attribute-unreachable-through-the-class-name
