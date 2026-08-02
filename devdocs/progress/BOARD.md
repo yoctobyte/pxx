@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
-| feature-t-autoticket-must-close-its-own-stubs-when-fixed | T | 65 | feature | twatch auto-files a prio-70 stub on NEW-RED and never closes it when the job goes green again — the watcher's own ledger closes the regression, the ticket sits at the top of the ready queue forever | — |
 
 ## unfinished (5)
 
@@ -348,7 +347,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1191)
+## done (1192)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1405,6 +1404,7 @@ _none_
 | feature-system-stack-frame-intrinsics | A | 45 | feature | System stack-frame intrinsics: get_frame / get_pc_addr / get_caller_stackinfo | — |
 | feature-sysutils-decodedate-missing | A | 50 | feature | SysUtils `DecodeDate` missing — next Synapse `synautil` wall | — |
 | feature-t-agent-side-tstate-watch | T | 65 | feature | An agent session has no way to hear Track T's verdict on a sha it just pushed; a small poll tool would deliver reds while the context that caused them is still warm | — |
+| feature-t-autoticket-must-close-its-own-stubs-when-fixed | T | 65 | feature | twatch auto-files a prio-70 stub on NEW-RED and never closes it when the job goes green again — the watcher's own ledger closes the regression, the ticket sits at the top of the ready queue forever | — |
 | feature-t-bench-portable-variants | T | 40 | feature | mandelbrot and raytracer have no FPC comparison — they depend on pxx-only units, not on dialect extensions | — |
 | feature-t-fuzz-findings-ledger | T | 70 | feature | Fuzz findings ledger: dedupe by signature, throttle fuzzing until the finding is fixed | — |
 | feature-t-publish-selfhost-red-immediately | T | 75 | feature | twatch publishes only when a whole tier finishes, so a self-host fixedpoint break — the one red that blocks every track — waits behind the entire native tier before anyone hears about it | — |
