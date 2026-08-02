@@ -5827,8 +5827,11 @@ begin
         frame pointer moves to a7, outside call8's outgoing window. The
         patchable addi lowers sp once to reserve locals + the constant-sp
         expression-stack region; sp then stays fixed for the whole body so the
-        window spill area at [sp-16] never desyncs. }
-      XtSpillDepth := 0;
+        window spill area at [sp-16] never desyncs. The reserved region starts
+        with XT_OUTARG_REGION bytes of OUTGOING argument space at sp+0 (the
+        ABI's home for argument words 6..), so the expression stack begins
+        above it. }
+      XtSpillDepth := XT_OUTARG_REGION;
       xtensa_mov(reg_xtensa_a15, reg_xtensa_sp);
       Result := CodeLen;
       xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 0);
@@ -5910,7 +5913,7 @@ begin
     cannot reach it, and a too-large ADDI silently truncates. }
   if (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
   begin
-    aligned := ((size + XT_EXPR_REGION + 255) div 256) * 256;
+    aligned := ((size + XT_EXPR_REGION + XT_OUTARG_REGION + 255) div 256) * 256;
     Patch24(patchPos, EncodeXtensaAddmi(reg_xtensa_sp, reg_xtensa_sp, -aligned));
     Exit;
   end;

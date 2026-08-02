@@ -25530,6 +25530,8 @@ var
   methOwnerCi, methOwnerRec, methSNOff, methSNLen, mmi, slot, otherCi: Integer;
   inlineBodyNode: Integer;   { retained body root for inline expansion }
   pw, pnWords, wlo, whi: Integer;   { ARM32 word-based param spill (int64 = 2 words) }
+  xtVReg, xtVReg2, xtInBias: Integer;  { xtensa: incoming param word -> register,
+                                         and the frame bias of the stack args }
   methName: AnsiString;
   extLib: AnsiString;
   extSym: AnsiString;
@@ -26968,14 +26970,21 @@ begin
     { Call0 ABI word-based convention: args arrive in a2..a7 (word k in a[2+k]);
       each scalar param is one word, a by-value Int64/UInt64 is two (lo then hi).
       The call side (ir_codegen_xtensa.inc IR_CALL) pushes the matching word
-      layout. Up to 6 words total (no stack args yet). }
+      layout. Words 6 and up did not fit the register set: the caller left them
+      in its own frame at its sp+0, sp+4, ... which — a15 being the frame base
+      recorded before locals were reserved — this callee reads back at
+      a15 + xtInBias + (pw-6)*4. The bias is the distance a15 sits BELOW the
+      caller's sp: the `entry` frame on windowed, the a0/a15 save area on Call0.
+      Same layout xtensa gcc uses, so IDF can call in and be called out of. }
     pw := 0;
+    if XtensaABI = XTENSA_ABI_WINDOWED then
+      xtInBias := 32                       { entry sp, 32 in the prologue }
+    else
+      xtInBias := 16;                      { addi sp, sp, -16 (a0/a15 saved) }
     for i := 0 to nparams-1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
       sz := ParamSize(idx);
-      if pw >= 6 then
-        Error('target xtensa: more than 6 parameter words not yet supported');
       if XtensaABI = XTENSA_ABI_WINDOWED then
       begin
         if (Syms[idx].Offset >= -128) and (Syms[idx].Offset <= 127) then
@@ -26985,21 +26994,42 @@ begin
       end
       else
         EmitFrameAddrXtensa(reg_xtensa_a8, Syms[idx].Offset);
+      { Where word pw arrived. a10 is scratch here (it is the callee's own
+        first OUTGOING argument register, dead until this proc makes a call). }
+      if pw < 6 then
+        xtVReg := reg_xtensa_a2 + pw
+      else
+      begin
+        { An `interrupt;` handler's prologue saves 48 extra bytes first, so its
+          a15 sits at a different bias — it takes no parameters, and a stack
+          argument there would silently read the wrong slot. }
+        if ProcIsInterrupt[procIdx] then
+          Error('target xtensa: an interrupt handler cannot take stack arguments');
+        xtensa_l32i(reg_xtensa_a10, reg_xtensa_a15, xtInBias + (pw - 6) * 4);
+        xtVReg := reg_xtensa_a10;
+      end;
       if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
           (Syms[idx].TypeKind = tyDouble)) and
          (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
       begin
-        xtensa_s32i(reg_xtensa_a2 + pw, reg_xtensa_a8, 0);     { lo (word pw) }
-        if pw + 1 >= 6 then
-          Error('target xtensa: more than 6 parameter words not yet supported');
-        xtensa_s32i(reg_xtensa_a2 + pw + 1, reg_xtensa_a8, 4); { hi (word pw+1) }
+        xtensa_s32i(xtVReg, reg_xtensa_a8, 0);                 { lo (word pw) }
+        if pw + 1 < 6 then
+          xtVReg2 := reg_xtensa_a2 + pw + 1
+        else
+        begin
+          { The pair may straddle the boundary: lo in the last register, hi in
+            the first stack slot. }
+          xtensa_l32i(reg_xtensa_a10, reg_xtensa_a15, xtInBias + (pw + 1 - 6) * 4);
+          xtVReg2 := reg_xtensa_a10;
+        end;
+        xtensa_s32i(xtVReg2, reg_xtensa_a8, 4);                { hi (word pw+1) }
         Inc(pw, 2);
       end
       else
       begin
-        if sz = 1 then xtensa_s8i(reg_xtensa_a2 + pw, reg_xtensa_a8, 0)
-        else if sz = 2 then xtensa_s16i(reg_xtensa_a2 + pw, reg_xtensa_a8, 0)
-        else xtensa_s32i(reg_xtensa_a2 + pw, reg_xtensa_a8, 0);
+        if sz = 1 then xtensa_s8i(xtVReg, reg_xtensa_a8, 0)
+        else if sz = 2 then xtensa_s16i(xtVReg, reg_xtensa_a8, 0)
+        else xtensa_s32i(xtVReg, reg_xtensa_a8, 0);
         Inc(pw, 1);
       end;
     end;
@@ -29498,9 +29528,9 @@ begin
       { app_main: program-level vars are globals (BSS), so no stack locals --
         but the body still uses the constant-sp expression stack, so reserve
         the spill region up front (no patchable addi on this path). }
-      xtensa_entry(reg_xtensa_sp, 32 + XT_EXPR_REGION);
+      xtensa_entry(reg_xtensa_sp, 32 + XT_EXPR_REGION + XT_OUTARG_REGION);
       xtensa_mov(reg_xtensa_a7, reg_xtensa_sp);
-      XtSpillDepth := 0;
+      XtSpillDepth := XT_OUTARG_REGION;
     end;
     { Enable the FP coprocessor before any add.s/mul.s (bare metal leaves CPENABLE
       clear -> FP would trap). Enable all CPs (harmless: no context switching). }

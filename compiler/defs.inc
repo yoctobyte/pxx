@@ -694,6 +694,17 @@ const
     expression/argument spill stack. Stage-1 nesting is shallow; 256 = 64
     slots is ample and keeps every offset inside the s32i/l32i imm range. }
   XT_EXPR_REGION = 256;
+  { Bytes reserved at the BOTTOM of a windowed frame (sp+0 upward) for the
+    OUTGOING arguments that do not fit the register set: the Xtensa ABI puts
+    argument words 6.. in the caller's frame at sp+0, sp+4, ... and the callee
+    reads them back through its own frame pointer (biased by its `entry` size).
+    That is exactly what xtensa gcc emits, so the boundary stays crossable in
+    both directions with ESP-IDF. Call0 allocates its outgoing area by moving
+    sp and needs no reservation. 64 bytes = 16 overflow words (22 argument
+    words in total), well past any real signature; the expression stack starts
+    just above it. }
+  XT_OUTARG_REGION = 64;
+  XT_MAX_ARG_WORDS = 6 + XT_OUTARG_REGION div 4;
   LOAD_ADDR32        = $08048000;  { classic i386 ET_EXEC base }
   { ESP32 bare-metal SRAM map (--esp-profile=bare). On ESP32-C3 the internal
     SRAM is mapped twice: instruction bus (IRAM) at 0x4037C000 and data bus

@@ -5,8 +5,8 @@ prio: 65  # user 2026-08-02: xtensa is the PRIMARY ESP target (S2/S3 hardware)
 # xtensa: support calls/definitions with more than 6 parameter words
 
 - **Type:** feature (Track A — xtensa codegen / ABI)
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** track-A-S
 - **Opened:** 2026-06-22 (found during PAL esp object-smoke, Track B)
 
 ## Problem

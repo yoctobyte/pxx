@@ -146,7 +146,7 @@ procedure XtensaPushA2;
 begin
   if XtensaABI = XTENSA_ABI_WINDOWED then
   begin
-    if XtSpillDepth + 4 > XT_EXPR_REGION then
+    if XtSpillDepth + 4 > XT_OUTARG_REGION + XT_EXPR_REGION then
       Error('target xtensa: expression/argument stack exceeds reserved frame');
     xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, XtSpillDepth);
     Inc(XtSpillDepth, 4);
@@ -195,7 +195,7 @@ procedure XtensaPush64;
 begin
   if XtensaABI = XTENSA_ABI_WINDOWED then
   begin
-    if XtSpillDepth + 8 > XT_EXPR_REGION then
+    if XtSpillDepth + 8 > XT_OUTARG_REGION + XT_EXPR_REGION then
       Error('target xtensa: expression/argument stack exceeds reserved frame');
     xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, XtSpillDepth);
     xtensa_s32i(reg_xtensa_a3, reg_xtensa_sp, XtSpillDepth + 4);
@@ -224,6 +224,62 @@ begin
     xtensa_l32i(reg_xtensa_a5, reg_xtensa_sp, 4);
     xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 8);
   end;
+end;
+
+procedure XtensaLoadArgRegsWindowed(argBase, nArgs: Integer);
+{ Windowed: hand nArgs argument words, spilled at sp+argBase.., to the callee.
+  Words 0..5 travel in a10..a15; word k >= 6 is copied down to the outgoing
+  area at sp+(k-6)*4, which the callee reads back through its own frame pointer
+  (biased by its `entry` size). That is the layout xtensa gcc emits, so calls
+  in and out of ESP-IDF agree. a8 is scratch: an indirect/virtual site only
+  loads the callee address into it afterwards. }
+var k: Integer;
+begin
+  if nArgs > XT_MAX_ARG_WORDS then
+    Error('target xtensa windowed: more than 22 argument words not supported ' +
+          '(XT_OUTARG_REGION is 16 overflow words)');
+  for k := 6 to nArgs - 1 do
+  begin
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, argBase + k * 4);
+    xtensa_s32i(reg_xtensa_a8, reg_xtensa_sp, (k - 6) * 4);
+  end;
+  for k := 0 to nArgs - 1 do
+    if k < 6 then
+      xtensa_l32i(reg_xtensa_a10 + k, reg_xtensa_sp, argBase + k * 4);
+end;
+
+procedure XtensaOrderOverflowArgsCall0(nArgs: Integer);
+{ Call0: the words were pushed arg0-deepest, so word k sits at (nArgs-1-k)*4
+  and the overflow words 6.. occupy the LOWEST nArgs-6 slots in DESCENDING
+  order. The callee reads word 6 at sp+0 ascending (gcc layout), so reverse
+  that low block in place. The six register words above it stay allocated
+  across the call — 24 bytes — which is why an overflowing Call0 site frees its
+  block AFTER the call instead of before. Scratch is a8/a10; a9 is left alone
+  because the `interrupt;` prologue does not save it. }
+var lo, hi: Integer;
+begin
+  lo := 0;
+  hi := nArgs - 7;
+  while lo < hi do
+  begin
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, lo * 4);
+    xtensa_l32i(reg_xtensa_a10, reg_xtensa_sp, hi * 4);
+    xtensa_s32i(reg_xtensa_a10, reg_xtensa_sp, lo * 4);
+    xtensa_s32i(reg_xtensa_a8, reg_xtensa_sp, hi * 4);
+    Inc(lo);
+    Dec(hi);
+  end;
+end;
+
+procedure XtensaLoadArgRegsCall0(nArgs: Integer);
+{ Call0: words 0..5 into a2..a7; the rest are already sitting in the outgoing
+  area at sp+0.. thanks to XtensaOrderOverflowArgsCall0. }
+var k: Integer;
+begin
+  XtensaOrderOverflowArgsCall0(nArgs);
+  for k := 0 to nArgs - 1 do
+    if k < 6 then
+      xtensa_l32i(reg_xtensa_a2 + k, reg_xtensa_sp, (nArgs - 1 - k) * 4);
 end;
 
 procedure EmitSlotAddrXtensa(rd, si: Integer);
@@ -901,6 +957,8 @@ end;
 procedure IREmitNodeXtensa(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
+  argFree: Integer;   { Call0: bytes of argument block to pop AFTER the call
+                        (0 = the block was already freed before it) }
   tk: TTypeKind;
   sgn, savedLVW: Boolean;
   sVal: AnsiString;
@@ -1508,12 +1566,9 @@ begin
             Inc(nArgs);
             argNode := IRB[argNode];
           end;
-          if nArgs > 6 then
-            Error('target xtensa: constructor with more than 6 parameter words not supported');
           if XtensaABI = XTENSA_ABI_WINDOWED then
           begin
-            for i := 0 to nArgs - 1 do
-              xtensa_l32i(reg_xtensa_a10 + i, reg_xtensa_sp, argBase + i * 4);
+            XtensaLoadArgRegsWindowed(argBase, nArgs);
             EmitCallProc(j);
             { Self survives in its sp-relative slot (sp is constant). }
             xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase);
@@ -1522,9 +1577,10 @@ begin
           else
           begin
             { Call0: word i sits at (nArgs-1-i)*4, Self deepest. Keep the block
-              across the call so Self can be reloaded, then drop it. }
-            for i := 0 to nArgs - 1 do
-              xtensa_l32i(reg_xtensa_a2 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4);
+              across the call so Self can be reloaded, then drop it — which is
+              also what the >6-word overflow area needs. (The reversal only
+              touches the low nArgs-6 slots, so Self's slot is untouched.) }
+            XtensaLoadArgRegsCall0(nArgs);
             EmitCallProc(j);
             xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, (nArgs - 1) * 4);  { Self }
             xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
@@ -1770,34 +1826,44 @@ begin
           argNode := IRB[argNode];
         end;
 
-        if nArgs > 6 then
-          Error('target xtensa: more than 6 call argument words not supported yet');
-
         { Load the outgoing argument registers. Windowed keeps sp constant, so
           the args sit at sp-relative offsets wid..wid+(n-1)*4 (arg0 lowest);
           pop them off the expression stack by resetting XtSpillDepth. Call0
-          uses the moving-sp slots (arg0 deepest) and frees them with addi. }
+          uses the moving-sp slots (arg0 deepest) and frees them with addi.
+          Beyond 6 words both ABIs place the overflow in the outgoing stack
+          area the callee reads (see the two helpers). }
+        argFree := 0;
         if XtensaABI = XTENSA_ABI_WINDOWED then
         begin
-          for i := 0 to nArgs - 1 do
-            xtensa_l32i(reg_xtensa_a10 + i, reg_xtensa_sp, argBase + i * 4);
+          XtensaLoadArgRegsWindowed(argBase, nArgs);
           XtSpillDepth := argBase;
         end
         else
         begin
-          for i := 0 to nArgs - 1 do
-            xtensa_l32i(reg_xtensa_a2 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4);
+          XtensaLoadArgRegsCall0(nArgs);
           if (procIdx >= 0) and (not ProcExternal[procIdx]) and
              RetViaHiddenDest(Procs[procIdx].RetType) then
           begin
             xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, nArgs * 4);   { hidden dest (deepest) }
-            xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4);
+            argFree := (nArgs + 1) * 4;
           end
           else if nArgs > 0 then
-            xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
+            argFree := nArgs * 4;
+          { With no overflow the block is dead the moment the registers are
+            loaded, so free it before the call (unchanged codegen). With
+            overflow the low words ARE the callee's incoming arguments and the
+            block must survive until it returns. }
+          if nArgs <= 6 then
+          begin
+            if argFree > 0 then
+              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, argFree);
+            argFree := 0;
+          end;
         end;
 
         EmitCallProc(procIdx);
+        if argFree > 0 then
+          xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, argFree);
         if XtensaABI = XTENSA_ABI_WINDOWED then
         begin
           xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
@@ -1987,12 +2053,9 @@ begin
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
-        if nArgs > 6 then
-          Error('target xtensa: indirect call with more than 6 argument words not supported');
         if XtensaABI = XTENSA_ABI_WINDOWED then
         begin
-          for i := 0 to nArgs - 1 do
-            xtensa_l32i(reg_xtensa_a10 + i, reg_xtensa_sp, argBase + 4 + i * 4);
+          XtensaLoadArgRegsWindowed(argBase + 4, nArgs);
           xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, argBase);      { callee }
           XtSpillDepth := argBase;
           xtensa_callx8(reg_xtensa_a8);
@@ -2003,12 +2066,20 @@ begin
         else
         begin
           { Call0: moving-sp pushes — arg i sits at (nArgs-1-i)*4, the callee
-            deepest at nArgs*4. }
-          for i := 0 to nArgs - 1 do
-            xtensa_l32i(reg_xtensa_a2 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4);
+            deepest at nArgs*4. Overflow words stay allocated across the call
+            (they are the callee's incoming stack args) and are freed after. }
+          XtensaLoadArgRegsCall0(nArgs);
           xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, nArgs * 4);    { callee }
-          xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4);
-          xtensa_callx0(reg_xtensa_a8);
+          if nArgs > 6 then
+          begin
+            xtensa_callx0(reg_xtensa_a8);
+            xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4);
+          end
+          else
+          begin
+            xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4);
+            xtensa_callx0(reg_xtensa_a8);
+          end;
         end;
       end;
 
@@ -2031,12 +2102,9 @@ begin
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
-        if nArgs > 6 then
-          Error('target xtensa: virtual call with more than 6 parameter words not supported');
         if XtensaABI = XTENSA_ABI_WINDOWED then
         begin
-          for i := 0 to nArgs - 1 do
-            xtensa_l32i(reg_xtensa_a10 + i, reg_xtensa_sp, argBase + i * 4);
+          XtensaLoadArgRegsWindowed(argBase, nArgs);
           XtSpillDepth := argBase;
           xtensa_l32i(reg_xtensa_a8, reg_xtensa_a10, 0);              { VMT ptr from [Self] }
           xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, Integer(IRIVal[node]) * 8);
@@ -2047,12 +2115,15 @@ begin
         end
         else
         begin
-          for i := 0 to nArgs - 1 do
-            xtensa_l32i(reg_xtensa_a2 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4);
-          xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
+          XtensaLoadArgRegsCall0(nArgs);
+          if nArgs <= 6 then
+            xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
           xtensa_l32i(reg_xtensa_a8, reg_xtensa_a2, 0);               { VMT ptr from [Self] }
           xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, Integer(IRIVal[node]) * 8);
           xtensa_callx0(reg_xtensa_a8);
+          { Overflow words are the callee's incoming stack args: free after. }
+          if nArgs > 6 then
+            xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
         end;
       end;
 
