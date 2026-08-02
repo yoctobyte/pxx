@@ -1,0 +1,65 @@
+# `range()` over a VARIANT bound.
+#
+# The loop lowers to `i < stop` with the counter typed tyInteger, so a variant
+# stop compared the counter against the variant's BOX rather than its value —
+# always true, so the loop NEVER TERMINATED
+# (bug-nilpy-range-over-a-variant-bound-loops-forever).
+#
+# An unannotated parameter is a variant, which makes this the most ordinary
+# shape in Python. What hid it: `range(4)`, a module-level variable, and an
+# ANNOTATED parameter all worked — only the bare parameter hung, and a hanging
+# test looks like a slow one.
+#
+# Bounds are unboxed with pyvar_to_int, which also applies Python's numeric
+# rules and raises TypeError for a non-number.
+#
+# NOTE: a NEGATIVE step passed as a runtime value is a separate, still-open
+# defect (bug-nilpy-range-negative-runtime-step-yields-empty) — the loop
+# direction is chosen at compile time from a literal step. Not covered here.
+
+def gen(n):
+    out = []
+    for i in range(n):
+        out.append(i * i)
+    return out
+
+
+def two(a, b):
+    out = []
+    for i in range(a, b):
+        out.append(i)
+    return out
+
+
+def stepped(a, b, s):
+    out = []
+    for i in range(a, b, s):
+        out.append(i)
+    return out
+
+
+def ann(n: int):
+    return [i for i in range(n)]
+
+
+def zero(n):
+    out = []
+    for i in range(n):
+        out.append(i)
+    return out
+
+
+def comp(n):
+    return [i * 2 for i in range(n)]
+
+
+print(gen(4))
+print(two(2, 5))
+print(stepped(0, 10, 3))
+print(ann(3))
+print(zero(0))
+print(comp(3))
+# the forms that always worked, as controls
+print([i for i in range(4)])
+m = 3
+print([i for i in range(m)])

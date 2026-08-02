@@ -11056,6 +11056,28 @@ begin
   Result := seq;
 end;
 
+{ A range() bound that is a VARIANT must be unboxed to an integer: the loop
+  compares a tyInteger counter against it, and comparing against the BOX is
+  always true. Returns the node unchanged for any non-variant, so the literal
+  and int-typed paths are untouched. }
+function PyUnboxRangeBound(n: Integer): Integer;
+var idx, argSeq, node: Integer;
+begin
+  PyUnboxRangeBound := n;
+  if n < 0 then Exit;
+  if IntToTypeKind(ASTTk[n]) <> tyVariant then Exit;
+  idx := FindProc('pyvar_to_int');
+  if idx < 0 then Exit;            { pylib not loaded — leave the old behaviour }
+  argSeq := AllocNode(AN_ARG);
+  ASTLeft[argSeq] := n;
+  ASTRight[argSeq] := -1;
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := idx;
+  ASTTk[node] := Ord(tyInt64);
+  ASTLeft[node] := argSeq;
+  PyUnboxRangeBound := node;
+end;
+
 function PyParseFor: Integer;
 var name, name2: AnsiString;
     enumMode: Boolean; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
@@ -11185,6 +11207,20 @@ begin
     PyParseBoolExpr;
     rngStep := CurASTNode;
   end;
+  { UNBOX a variant bound. The loop lowers to `i < stop` with `i` typed
+    tyInteger, so a VARIANT stop compared the counter against the variant's
+    BOX rather than its value — always true, so `def f(n): for i in range(n)`
+    LOOPED FOREVER. An unannotated parameter is a variant, which makes this the
+    most ordinary shape in Python: `f(n: int)` worked, `f(n)` hung, and a bare
+    `range(4)` or a module-level variable worked, so nothing in the test corpus
+    caught it (bug-nilpy-range-over-a-variant-bound-loops-forever).
+    pyvar_to_int already applies Python's numeric rules and raises TypeError for
+    a non-number, which is also what `range("x")` should do. Same shape the
+    chr() unbox in parser.inc uses. All three of start/stop/step, since any of
+    them can be a parameter. }
+  startNode := PyUnboxRangeBound(startNode);
+  stopNode := PyUnboxRangeBound(stopNode);
+  if rngStep >= 0 then rngStep := PyUnboxRangeBound(rngStep);
   { drain a hoisted comp build inside the range() arguments before the body
     parse flushes it INTO the loop body — see PyParseForIn }
   hoistPre := PyFlushHoist(-1);

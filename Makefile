@@ -1088,6 +1088,12 @@ test-nilpy: $(COMPILER)
 	# resolve against and the AN_CALL reached IR lowering unlowered
 	./$(COMPILER) test/test_nilpy_str_method_subscript.npy /tmp/test_nilpy_strmsub26
 	test "$$(/tmp/test_nilpy_strmsub26)" = "$$(printf '%b' 'World\nHello\nc\n[\047a\047, \047b\047, \047c\047]\nb\ny\nH\nhello,world\nPAD\nb\n72\ntwo')"
+	# range() over a VARIANT bound (an unannotated parameter) compared the
+	# tyInteger counter against the variant's BOX — always true, so the loop
+	# never terminated. An annotated param, a literal and a module-level var all
+	# worked, so nothing in the corpus caught it; a hanging test looks slow.
+	./$(COMPILER) test/test_nilpy_range_variant_bound.npy /tmp/test_nilpy_rangevar26
+	test "$$(/tmp/test_nilpy_rangevar26)" = "$$(printf '%b' '[0, 1, 4, 9]\n[2, 3, 4]\n[0, 3, 6, 9]\n[0, 1, 2]\n[]\n[0, 2, 4]\n[0, 1, 2, 3]\n[0, 1, 2]')"
 	# round(x, n): negative n was IGNORED (round(1234.5678,-2) gave 1235.0) and
 	# ties went half-UP instead of half-to-EVEN. NOTE the last line asserts pxx's
 	# CURRENT output for round(2.675,2)/round(2.665,2), which still diverge from
