@@ -4445,10 +4445,10 @@
  },
  "last_bench": {
   "conf_rows": 550,
-  "date": "2026-08-02T20:28:07Z",
+  "date": "2026-08-02T21:33:36Z",
   "rc": 0,
   "rows": 30,
-  "sha": "5321ce207ef862025c60a5b1f7c77ccd89c026f0"
+  "sha": "f474ecce7bf854737002ac47ac2926f8480b149c"
  },
  "last_full": {
   "date": "2026-08-02T21:18:33Z",
