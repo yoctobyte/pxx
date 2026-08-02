@@ -71,3 +71,29 @@ print(f"{n:#<10x}|")
 print(f"{n:+#x}")
 print(f"{big:#x}")
 print("{:#x}".format(n))
+
+# '_' is a grouping separator too, exactly like ','
+# bug-nilpy-format-spec-underscore-separator
+print(f"{big:_}")
+print(f"{-big:_}")
+print(f"{n:_}")
+print(f"{big:_d}")
+print(f"{big:+_}")
+
+# 'c' renders an int as the character with that codepoint
+print(f"{65:c}")
+print(f"{n:c}")
+
+# .precision on a STRING TRUNCATES it (a maximum, where width is a minimum),
+# and an unsupported string spec now RAISES instead of aborting the process
+s = "abcdef"
+print(f"{s:.2}")
+print(f"{s:.99}")
+print(f"{s:.0}|")
+print(f"{s:8.3}|")
+print(f"{s:>8.3}|")
+try:
+    print(f"{s:Q}")
+except ValueError:
+    print("string spec ValueError caught")
+print("still running")

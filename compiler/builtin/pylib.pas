@@ -6772,7 +6772,7 @@ end;
 { Insert Python's thousands separators into a already-rendered DECIMAL string:
   groups of three from the RIGHT, with any leading sign left alone.
   (bug-nilpy-thousands-separator-format-spec-unsupported) }
-function PyGroupThousands(const s: AnsiString): AnsiString;
+function PyGroupThousands(const s: AnsiString; sep: Char): AnsiString;
 var i, n, cnt: Integer; sign, digits, outS: AnsiString;
 begin
   sign := '';
@@ -6789,14 +6789,14 @@ begin
   begin
     outS := digits[i] + outS;
     Inc(cnt);
-    if (cnt mod 3 = 0) and (i > 1) then outS := ',' + outS;
+    if (cnt mod 3 = 0) and (i > 1) then outS := sep + outS;
   end;
   Result := sign + outS;
 end;
 
 function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
 var p, width, need, zi: Integer; zero, leftAlign, grouped, alt: Boolean;
-    kind, fillCh, align, signCh: Char;
+    kind, fillCh, align, signCh, groupCh: Char;
     body, altPre, lead, zeros: AnsiString;
 begin
   p := 1;
@@ -6849,9 +6849,12 @@ begin
     before any `.precision`/type, so `{:,}`, `{:,d}` and `{:10,d}` are all legal.
     It was not handled at all, and the unsupported-spec path then ABORTED the
     process (bug-nilpy-thousands-separator-format-spec-unsupported). }
-  if (p <= Length(spec)) and (spec[p] = ',') then
+  { ',' or '_' — Python allows either as the grouping separator }
+  groupCh := ',';
+  if (p <= Length(spec)) and (spec[p] in [',', '_']) then
   begin
     grouped := True;
+    groupCh := spec[p];
     Inc(p);
   end;
   { a FLOAT spec on an integer value — Python prints `{2:.1f}` as `2.0`, and an
@@ -6884,10 +6887,11 @@ begin
     'o': body := PyFmtBase(i, 8, False);
     'b': body := PyFmtBase(i, 2, False);
     's': body := PyFmtBase(i, 10, False);
+    'c': body := Chr(i);        { `{65:c}` is 'A' — the codepoint as a character }
   else
     raise ValueError.Create('unsupported format spec "' + spec + '"');
   end;
-  if grouped then body := PyGroupThousands(body);
+  if grouped then body := PyGroupThousands(body, groupCh);
   { Assemble as sign + prefix + zeros + digits, which is the order Python uses:
     `{42:#010x}` is 0x0000002a — the zero padding sits INSIDE the 0x, not before
     it. Doing this here rather than in PyFmtPad keeps every existing caller of
@@ -6928,12 +6932,14 @@ begin
 end;
 
 function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; overload;
-var p, width: Integer; leftAlign, explicitAlign: Boolean; fillCh, align: Char;
+var p, width, prec: Integer; leftAlign, explicitAlign, hasPrec: Boolean;
+    fillCh, align: Char; body: AnsiString;
 begin
   p := 1;
   leftAlign := False;
   explicitAlign := False;
   width := 0;
+  prec := 0; hasPrec := False;
   fillCh := ' '; align := #0;
   if (p + 1 <= Length(spec)) and (spec[p + 1] in ['<', '>', '^']) then
   begin
@@ -6952,18 +6958,35 @@ begin
     width := width * 10 + (Ord(spec[p]) - Ord('0'));
     Inc(p);
   end;
+  { `.precision` on a STRING TRUNCATES it — `f"{'abcdef':.2}"` is `ab`. Python's
+    own rule, and the reason it is a maximum rather than a minimum: for a string
+    the precision caps the length while the width sets a floor
+    (bug-nilpy-format-spec-string-precision-and-halt). }
+  if (p <= Length(spec)) and (spec[p] = '.') then
+  begin
+    Inc(p);
+    hasPrec := True;
+    while (p <= Length(spec)) and (spec[p] >= '0') and (spec[p] <= '9') do
+    begin
+      prec := prec * 10 + (Ord(spec[p]) - Ord('0'));
+      Inc(p);
+    end;
+  end;
   if (p <= Length(spec)) and (spec[p] = 's') then Inc(p);
   if p <= Length(spec) then
-  begin
-    WriteLn('Nil Python: unsupported f-string format spec "', spec, '" for a string');
-    Halt(1);
-  end;
+    { CATCHABLE, not Halt. This site was missed when the int and float overloads
+      were converted: a bad spec on a STRING still aborted the process, so a
+      try/except around the format could not run and everything after it was
+      lost (bug-nilpy-format-spec-string-precision-and-halt). }
+    raise ValueError.Create('unsupported format spec "' + spec + '" for a string');
+  body := s;
+  if hasPrec and (prec < Length(body)) then body := Copy(body, 1, prec);
   { a string left-aligns by default, unlike a number, UNLESS an align/fill was
     given explicitly (a bare `{s:>5}` must still right-align) }
-  if (not explicitAlign) and (width > Length(s)) then leftAlign := True;
-  if align = '^' then Result := PyFmtPadEx(s, width, fillCh, '^')
-  else if fillCh <> ' ' then Result := PyFmtPadEx(s, width, fillCh, align)
-  else Result := PyFmtPad(s, width, False, leftAlign);
+  if (not explicitAlign) and (width > Length(body)) then leftAlign := True;
+  if align = '^' then Result := PyFmtPadEx(body, width, fillCh, '^')
+  else if fillCh <> ' ' then Result := PyFmtPadEx(body, width, fillCh, align)
+  else Result := PyFmtPad(body, width, False, leftAlign);
 end;
 
 function PyFmtFixed(d: Double; prec: Integer): AnsiString;
@@ -7081,7 +7104,7 @@ function pyformat_of(d: Double; const spec: AnsiString): AnsiString; overload;
 { `{x:.2f}` and friends. Same grammar as the integer spec plus a `.precision`
   group; `f` is fixed point, `g` is FloatToStr's compact form. }
 var p, width, prec, dotAt: Integer; zero, leftAlign, hasPrec, grouped, hasKind: Boolean;
-    kind, fillCh, align, signCh: Char; body, intPartS, fracPartS: AnsiString;
+    kind, fillCh, align, signCh, groupCh: Char; body, intPartS, fracPartS: AnsiString;
 begin
   p := 1; zero := False; leftAlign := False; width := 0; grouped := False;
   prec := 6; hasPrec := False; hasKind := False; kind := 'f';
@@ -7111,9 +7134,11 @@ begin
   end;
   { `,` — thousands grouping, between the width and the precision, same as the
     integer spec (bug-nilpy-thousands-separator-format-spec-unsupported). }
-  if (p <= Length(spec)) and (spec[p] = ',') then
+  groupCh := ',';
+  if (p <= Length(spec)) and (spec[p] in [',', '_']) then
   begin
     grouped := True;
+    groupCh := spec[p];
     Inc(p);
   end;
   if (p <= Length(spec)) and (spec[p] = '.') then
@@ -7154,10 +7179,10 @@ begin
     begin
       intPartS := Copy(body, 1, dotAt - 1);
       fracPartS := Copy(body, dotAt, Length(body) - dotAt + 1);
-      body := PyGroupThousands(intPartS) + fracPartS;
+      body := PyGroupThousands(intPartS, groupCh) + fracPartS;
     end
     else
-      body := PyGroupThousands(body);
+      body := PyGroupThousands(body, groupCh);
   end;
   { sign after grouping, before padding — see the integer overload }
   if (signCh <> #0) and (signCh <> '-') and (Length(body) > 0) and (body[1] <> '-') then
