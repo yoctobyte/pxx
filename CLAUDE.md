@@ -29,7 +29,8 @@ gate each must stay green** — it is NOT an ontology of the codebase. So:
   core, **B** libs/demos, **C/N/P/R/Z** frontends — these answer "who owns this
   file when two agents run at once." **Work-tags** (human grouping, compose
   freely, each *inherits* a file-lane): **O** optimization (owned by A), **E**
-  examples/apps (owned by B), **T** testing, **D** docs, **X** experimental. A
+  examples/apps (owned by B), **S** eSpressif/SoC (owned by A+B), **T**
+  testing, **D** docs, **X** experimental. A
   tag is not a new file-lane — "Track O" work still lands under A's gate, "Track
   E" under B's. So pick a new letter on the right axis: a new *place code lives* →
   new lane (rare, resisted); a new *kind of work* over existing files → tag.
