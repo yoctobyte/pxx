@@ -1,0 +1,75 @@
+# An END-TO-END NilPy program, kept as a regression test.
+#
+# Not a feature test: nothing here exercises one construct. It is a deliberately
+# ordinary program — a dict of objects, augmented field updates, a list of tuples
+# as history, a comprehension over .values(), exception flow, sorted() over a
+# dict — written to make features INTERACT, which is where the bugs were.
+#
+# It earned its place. On 2026-08-02 its entire output was one line:
+#
+#     Unhandled exception: ValueError: insufficient
+#
+# Every print before it vanished too. The visible symptom (a withdrawal rejected)
+# was twenty lines from the cause: `self.balance += amt` silently did not apply,
+# because an unannotated ctor parameter makes the field variant-typed and the
+# compound-assignment lowering did a raw read-modify-write on the 16-byte slot.
+# Balances stayed 0, so withdraw(999) legitimately raised. Reducing that to three
+# lines found four bugs in total:
+#
+#   bug-nilpy-augmented-assign-to-a-variant-typed-field-corrupts-it
+#   bug-nilpy-augmented-assign-of-a-variant-param-to-an-int-field-adds-one
+#   bug-nilpy-floor-div-assign-is-true-division
+#   bug-nilpy-constructor-call-in-unpack-rhs-fails-to-parse  (via a sibling probe)
+#
+# Keep it whole. Its value is the combination, so splitting it into per-feature
+# assertions would remove exactly the property that made it useful.
+
+class Account:
+    def __init__(self, owner, balance=0):
+        self.owner = owner
+        self.balance = balance
+        self.history = []
+
+    def deposit(self, amt):
+        if amt <= 0:
+            raise ValueError("bad amount")
+        self.balance += amt
+        self.history.append(("dep", amt))
+        return self.balance
+
+    def withdraw(self, amt):
+        if amt > self.balance:
+            raise ValueError("insufficient")
+        self.balance -= amt
+        self.history.append(("wd", amt))
+        return self.balance
+
+    def summary(self):
+        return self.owner + ": " + str(self.balance) + " (" + str(len(self.history)) + " ops)"
+
+
+accounts = {}
+for name in ["ann", "bob"]:
+    accounts[name] = Account(name)
+
+accounts["ann"].deposit(100)
+accounts["ann"].withdraw(30)
+accounts["bob"].deposit(50)
+
+for name in sorted(accounts):
+    print(accounts[name].summary())
+
+try:
+    accounts["bob"].withdraw(999)
+except ValueError as e:
+    print("error:", str(e))
+
+totals = [a.balance for a in accounts.values()]
+print(sorted(totals), sum(totals))
+
+best = None
+for name in sorted(accounts):
+    a = accounts[name]
+    if best is None or a.balance > best.balance:
+        best = a
+print("best:", best.summary())

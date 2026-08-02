@@ -1,0 +1,5 @@
+ann: 70 (2 ops)
+bob: 50 (1 ops)
+error: insufficient
+[50, 70] 120
+best: ann: 70 (2 ops)
