@@ -743,6 +743,11 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # while its jobs remain red in the persisted state. See reg_open.
     authoritative = dict(st["jobs"], **now)
     regs = [r for r in st["open_regressions"] if reg_open(r, fixed, authoritative)]
+    # The entries this filter DROPS are exactly the regressions the ledger
+    # considers closed, so they are also exactly the stubs face 1 may retire —
+    # one rule, not a second invented one that could disagree with it.
+    closed_regs = [r for r in st["open_regressions"]
+                   if not reg_open(r, fixed, authoritative)]
     srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
     namemap = {job_key(j): j["name"] for j in report["jobs"]}
     rng = clone.commits_between(parent, sha) if parent else [sha]
@@ -827,6 +832,8 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     clone.publish(msg)
     if new_red and CONF.get("autoticket"):
         file_stub_tickets(clone, host, st, sha, new_red, report, parent)
+    if closed_regs and CONF.get("autoticket"):
+        close_stub_tickets(clone, host, closed_regs, sha, report)
     print("twatch: %s %s%s" % (sha[:12], report["verdict"],
                                " report=" + rel if rel else ""), flush=True)
     return True
@@ -1061,6 +1068,84 @@ takes it from the repro line.*
                       (host, ", ".join(os.path.basename(p) for p in filed)),
                       paths=filed)
         print("twatch: auto-filed %d stub ticket(s)" % len(filed), flush=True)
+
+
+# Present in every stub file_stub_tickets/file_cascade_ticket writes. Its
+# presence is the test for "still an untriaged stub, safe for the daemon to
+# retire"; a triager who rewrites the body removes it and takes ownership.
+STUB_MARKER = "auto-filed by twatch"
+
+
+def close_stub_tickets(clone, host, closed, sha, report):
+    """Face-1 auto-close: retire a stub whose job is green again.
+
+    The mirror of file_stub_tickets, gated by the same `autoticket` flag: what
+    the watcher opened, the watcher may close.  It ran a day too late for
+    `regression-test-nilpy-test-nilpy-bytes-decode`, which sat in backlog at
+    prio 70 for a full day after the watcher had already published
+    `FIXED:...bytes_decode.npy` — top of `ready --track T`, work that no longer
+    existed (feature-t-autoticket-must-close-its-own-stubs-when-fixed).
+
+    Deliberately narrow.  The daemon closes a ticket only when BOTH hold:
+
+      * it is still in `backlog/` — any other bucket means a human or an agent
+        has taken it (working/blocked/unfinished) or already settled it
+        (done/rejected), and their judgement outranks the ledger's;
+      * it still carries STUB_MARKER — an enriched body is somebody's analysis,
+        not a stub, even if it never moved bucket.
+
+    Neither case is a silent skip: both print, because "the watcher quietly
+    declined to do the thing you expect it to do" is how a tool loses trust.
+    The board is NOT regenerated here — BOARD.md is generated and is the file
+    two agents always conflict on (sync.sh exists for it), and the filing path
+    does not regenerate it either.  An agent regenerates.
+    """
+    pdir = os.path.join(clone.path, "devdocs/progress")
+    paths, slugs = [], []
+    for r in closed:
+        slug = ("regression-cascade-" + (r.get("bad") or "")[:12]
+                if r.get("cascade") else reg_slug(r["job"]))
+        src = os.path.join(pdir, "backlog", slug + ".md")
+        if not os.path.exists(src):
+            held = next((b for b in PROGRESS_BUCKETS
+                         if b != "backlog"
+                         and os.path.exists(os.path.join(pdir, b, slug + ".md"))),
+                        None)
+            if held:
+                print("twatch: %s is in %s/ — its owner closes it, not me"
+                      % (slug, held), flush=True)
+            continue
+        with open(src, errors="replace") as f:
+            body = f.read()
+        if STUB_MARKER not in body:
+            print("twatch: %s has been triaged (no stub marker) — leaving it"
+                  % slug, flush=True)
+            continue
+        if "\n## Log\n" not in body:
+            body = body.rstrip("\n") + "\n\n## Log\n"
+        # Name the sha the job PASSED at and the tier that judged it: a close
+        # with no evidence is indistinguishable from a lost ticket, and
+        # progress.sh check requires done/ tickets to log something citable.
+        body = (body.rstrip("\n") + "\n- %s — auto-closed by the %s watcher: "
+                "`%s` passes at %s (tier %s); it was red at %s. Reopening is "
+                "by a fresh NEW-RED stub, since a second red is a second "
+                "finding with its own range.\n"
+                % (utcnow()[:10], host,
+                   r.get("job") or slug, sha[:12], report["tier"],
+                   (r.get("bad") or "?")[:12]))
+        dst = os.path.join(pdir, "done", slug + ".md")
+        with open(dst, "w") as f:
+            f.write(body)
+        os.unlink(src)
+        paths += [os.path.relpath(p, clone.path) for p in (src, dst)]
+        slugs.append(slug)
+    if slugs:
+        # Both paths go to publish(): `git add -- <gone> <new>` is what records
+        # the move; staging only the destination leaves the stub in backlog on
+        # origin and the ticket exists twice.
+        clone.publish("tstate-ticket(%s): closed %s (job green again)"
+                      % (host, ", ".join(slugs)), paths=paths)
+        print("twatch: auto-closed %d stub ticket(s)" % len(slugs), flush=True)
 
 
 def clone_head_back(clone):
