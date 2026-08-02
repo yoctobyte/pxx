@@ -3,7 +3,7 @@ track: A
 prio: 60
 type: bug
 summary: "Hi()/Lo() are declared only for Cardinal and QWord, so every narrower type widens to the 32-bit overload: hi(word($1234)) gives 0 where FPC gives $12, and an Int64 argument is TRUNCATED to 32 bits first. Silent wrong value"
-status: working
+status: done
 owner: track-A-S
 ---
 
@@ -184,3 +184,6 @@ a cast gives FPC's answer today.
   procs — the resolution change did NOT alter the compiler's own build).
   `make stabilize` + `make pin` -> **v240**, gate GREEN after.
 - `tools/gate.sh quick` GREEN, FPC seed build clean.
+
+## Log
+- 2026-08-02 — resolved, commit 6468ecc41.
