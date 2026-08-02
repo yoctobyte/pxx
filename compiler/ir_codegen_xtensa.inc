@@ -226,6 +226,21 @@ begin
   end;
 end;
 
+procedure XtensaPadTo64Xtensa(procIdx: Integer; var nArgs: Integer);
+{ The xtensa C ABI starts a 64-bit argument at an EVEN word index — measured
+  from the IDF's own xtensa-esp32s3-elf-gcc, which compiles
+  `f(void *p, long long v)` to p in a10 and v in a12:a13, SKIPPING a11. Our
+  internal convention packs words with no padding and the callee spill in
+  parser.inc matches it, so the skip is for EXTERNAL callees only. The padding
+  word's value is irrelevant; only its slot matters. }
+begin
+  if (procIdx >= 0) and ProcExternal[procIdx] and ((nArgs and 1) = 1) then
+  begin
+    XtensaPushA2;
+    Inc(nArgs);
+  end;
+end;
+
 procedure XtensaLoadArgRegsWindowed(argBase, nArgs: Integer);
 { Windowed: hand nArgs argument words, spilled at sp+argBase.., to the callee.
   Words 0..5 travel in a10..a15; word k >= 6 is copied down to the outgoing
@@ -1776,14 +1791,17 @@ begin
         end;
         while argNode <> -1 do
         begin
-          if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+          if (procIdx >= 0) and
              (i < Procs[procIdx].ParamCount) and
              IsFloatXtensa(Procs[procIdx].Params[i].TypeKind) and
              (not Procs[procIdx].Params[i].IsRef) and
              (not Procs[procIdx].Params[i].IsArray) then
           begin
             { Float param: coerce to the param's float width, push one word
-              (single) or two words lo:hi (double). }
+              (single) or two words lo:hi (double). EXTERNAL callees included —
+              excluding them handed a C function's `double` a single word. }
+            if (Procs[procIdx].Params[i].TypeKind = tyDouble) then
+              XtensaPadTo64Xtensa(procIdx, nArgs);
             EmitFloatOperandXtensa(IRA[argNode], Procs[procIdx].Params[i].TypeKind);
             XtensaPushA2;                           { lo / single }
             if Procs[procIdx].Params[i].TypeKind = tyDouble then
@@ -1795,13 +1813,18 @@ begin
             else
               Inc(nArgs, 1);
           end
-          else if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+          else if (procIdx >= 0) and
              (i < Procs[procIdx].ParamCount) and
              ((Procs[procIdx].Params[i].TypeKind = tyInt64) or
               (Procs[procIdx].Params[i].TypeKind = tyUInt64)) and
              (not Procs[procIdx].Params[i].IsRef) and
              (not Procs[procIdx].Params[i].IsArray) then
           begin
+            { EXTERNAL callees included — excluding them gave a C function's
+              64-bit parameter only its LOW word, the high one being whatever
+              the previous call left in that register
+              (bug-esp-timer-callback-never-dispatched). }
+            XtensaPadTo64Xtensa(procIdx, nArgs);
             EmitNode64Xtensa(IRA[argNode]);        { a2=lo, a3=hi }
             XtensaPushA2;                           { lo, word nArgs }
             xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);

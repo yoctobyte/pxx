@@ -2124,14 +2124,20 @@ begin
         i := 0;         { argument index }
         while argNode <> -1 do
         begin
-          if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+          if (procIdx >= 0) and
              (i < Procs[procIdx].ParamCount) and
              IsFloatRISCV32(Procs[procIdx].Params[i].TypeKind) and
              (not Procs[procIdx].Params[i].IsRef) and
              (not Procs[procIdx].Params[i].IsArray) then
           begin
             { Float param: coerce the arg to the param's float width, then push
-              one word (single) or two words lo:hi (double). }
+              one word (single) or two words lo:hi (double).
+              EXTERNAL callees take this path too. They used to be excluded, so
+              a `double` parameter of a C function got ONE word and the callee
+              read whatever was left in the next register — see the Int64 case
+              below for the incident that found it. ILP32 passes a 2x XLEN
+              scalar in consecutive argument registers (the even-pair rule is a
+              STACK rule, not a register one), which is exactly this layout. }
             EmitFloatOperandRISCV32(IRA[argNode], Procs[procIdx].Params[i].TypeKind);
             if Procs[procIdx].Params[i].TypeKind = tyDouble then
             begin
@@ -2163,13 +2169,20 @@ begin
             end;
             Inc(nArgs, 8);
           end
-          else if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+          else if (procIdx >= 0) and
              (i < Procs[procIdx].ParamCount) and
              ((Procs[procIdx].Params[i].TypeKind = tyInt64) or
               (Procs[procIdx].Params[i].TypeKind = tyUInt64)) and
              (not Procs[procIdx].Params[i].IsRef) and
              (not Procs[procIdx].Params[i].IsArray) then
           begin
+            { EXTERNAL callees included — excluding them meant a 64-bit
+              parameter of a C function received only its LOW word while the
+              high word register kept whatever the last call left there. Found
+              via esp_timer_start_periodic(handle, 100000): the SDK computed an
+              alarm 145000 years out and the callback never fired, and the
+              outcome flipped with unrelated code because that decided the stale
+              register's value (bug-esp-timer-callback-never-dispatched). }
             EmitNode64RISCV32(IRA[argNode]);        { a0=lo, a1=hi }
             rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { lo, word nArgs }
             rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);  { hi, word nArgs+1 }

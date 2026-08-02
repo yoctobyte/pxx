@@ -57,6 +57,7 @@ PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
 .PHONY: pxx-debug
+.PHONY: test-esp-idf
 .PHONY: fuzz-csmith
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
 .PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
@@ -6449,6 +6450,30 @@ test-esp-bare: $(COMPILER)
 # the riscv32 (esp32c3) + xtensa (esp32s3) QEMU targets; any output mismatch
 # means a 64-bit op miscompiles. Each chip is skipped when its Espressif qemu is
 # absent. (feature-esp-int64-arith)
+# ESP-IDF (not bare-metal) runtime check: builds a program into the real IDF,
+# boots it under the Espressif qemu fork and diffs the serial output. Needs a
+# full ESP-IDF checkout, so it is NOT part of `make test` — run it when touching
+# argument marshalling, the esp PAL, or anything that crosses into the SDK.
+#
+# The timer demo is the case worth guarding: it calls
+# esp_timer_start_periodic(handle, period: Int64), and passing a 64-bit
+# argument to a C function was broken on BOTH backends for a month with no
+# symptom other than a callback that never fired
+# (bug-esp-timer-callback-never-dispatched). Nothing in the bare-metal suite
+# calls into C, so nothing there could have caught it.
+test-esp-idf: $(COMPILER)
+	@[ -f $$HOME/esp/esp-idf/export.sh ] || { echo "ESP-IDF not installed; test-esp-idf skipped"; exit 0; }
+	@for chip in esp32c3 esp32s3; do \
+	  echo "--- $$chip esp_timer callback"; \
+	  ESP_RUN_TIMEOUT=25 ESP_PXXFLAGS="--no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$chip examples/esp32/timer-c3/main/main.pas 2>/dev/null \
+	    | grep "PXX timer" > /tmp/test_esp_idf_timer.$$chip || true; \
+	  printf 'PXX timer: started\nPXX timer: tick=1\nPXX timer: tick=2\nPXX timer: tick=3\nPXX timer: tick=4\nPXX timer: tick=5\nPXX timer: done ticks=5 status=0\n' > /tmp/test_esp_idf_timer.expected; \
+	  if diff -u /tmp/test_esp_idf_timer.expected /tmp/test_esp_idf_timer.$$chip; then \
+	    echo "$$chip esp_timer callback ok"; \
+	  else echo "$$chip esp_timer callback MISMATCH"; exit 1; fi; \
+	done
+
 test-esp-softfloat: $(COMPILER)
 	@./$(COMPILER) test/test_esp_softfloat_probe.pas /tmp/test_esp_softfloat_oracle >/dev/null && /tmp/test_esp_softfloat_oracle > /tmp/test_esp_softfloat.oracle
 	@RV=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \

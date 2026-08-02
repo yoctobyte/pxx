@@ -141,3 +141,74 @@ code, an old commit that "works" may only be lucky.
   `tick=1..5 / done ticks=5 status=0` under qemu.
 - A regression test that would have caught it: the timer demo's output, checked
   in a make target rather than a README.
+
+
+## FIXED 2026-08-02 — a 64-bit argument to a C function was passed HALF
+
+The perturbation experiments had gone as far as they could and every one of
+them pointed away from the truth. gdb on the qemu gdbstub found it in three
+breakpoints.
+
+```
+Breakpoint 1, esp_timer_start_periodic (timer=0x3fc94d14,
+                                        period_us=4596191047733839520)
+```
+
+`period_us` arrives as **garbage whose high 32 bits are 0x3FC8A2AA — a DRAM
+address**. The low half is the 100000 that was asked for. pxx pushed ONE word
+for the 64-bit argument and never wrote the high one, so the callee read
+whatever the previous call had left in that register. IDF then computed
+`alarm = now + period` some 145,000 years out and the ISR, correctly, never
+fired.
+
+That explains every observation at once, including the ones that looked
+supernatural: the outcome flipped on unrelated code **before** the call because
+that code decided what was left in the stale register; code after the call
+could not help; an uncalled procedure could not help.
+
+### Root cause in one line
+
+Both `ir_codegen_riscv32.inc` and `ir_codegen_xtensa.inc` gated their
+Int64/UInt64 and float argument marshalling on `not ProcExternal[procIdx]` — so
+for an EXTERNAL callee, the two-word push was skipped and the argument fell
+through to the generic one-word case. Every `external` C function taking an
+`Int64`, `QWord` or `Double` was affected on both ESP backends.
+
+### The two ABIs differ, and both were measured, not assumed
+
+- **riscv32** packs the pair into consecutive argument registers — no
+  alignment. `riscv32-esp-elf-gcc -O2` on `f(void *p, long long v)`:
+  `a0=p, a1=lo, a2=hi`. (The even-pair rule in the RISC-V psABI is a *stack*
+  rule, not a register one.) So dropping the guard was the whole fix.
+- **xtensa** starts a 64-bit argument at an EVEN word index.
+  `xtensa-esp32s3-elf-gcc -O2` on the same function: `a10=p`, `a12:a13=v` —
+  a11 is SKIPPED. So xtensa also needed a padding word, added by
+  `XtensaPadTo64Xtensa` for external callees only (the internal convention
+  packs, and the callee spill in `parser.inc` matches it).
+
+An earlier A/B experiment had "disproved" the alignment theory by inserting a
+dummy word by hand; the gdb register dump shows why that was misleading — on
+riscv32 the aligned layout is the WRONG one, so the padded variant failed for a
+second, different reason.
+
+### Verified
+
+- The two-file repro: variant A now fires 29/29 on esp32c3 and 29/29 on
+  esp32s3, with no source change.
+- `examples/esp32/timer-c3` and `timer-s3` both print `tick=1..5` and
+  `done ticks=5 status=0` — the documented expected output, and the first time
+  the xtensa half has ever produced it.
+- New `make test-esp-idf` target guards both chips. Nothing in the bare-metal
+  suite calls into C, which is why nothing there could catch this; it is not
+  wired into `make test` (it needs a full ESP-IDF) but it is one command.
+- `tools/gate.sh quick` GREEN, `make test-esp-bare` green (19 checks), FPC seed
+  clean.
+
+### Left open, deliberately
+
+A pxx routine **called from C** with a 64-bit parameter still uses the internal
+packed convention on its callee side, so a C caller and a pxx callee would
+disagree on xtensa. Nothing does that today (`app_main` and the esp_timer
+callback take no 64-bit arguments), and the honest fix is to drive the callee
+spill from an explicit `cdecl` marker rather than guess. Filed as
+[[bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c]].

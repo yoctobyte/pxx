@@ -22,15 +22,11 @@ PXX timer: tick=5
 PXX timer: done ticks=5 status=0
 ```
 
-## It does not do that today — and neither does the C3 original
+It does — verified under qemu on 2026-08-02, and this is the first time the
+xtensa half ever has. It did not until that afternoon: a 64-bit argument to a C
+function was passed with only its low word, so `esp_timer_start_periodic`'s
+period arrived with a stale pointer in its high half and the alarm was set some
+145,000 years out. Both backends were affected; the write-up is
+`devdocs/progress/urgent/bug-esp-timer-callback-never-dispatched.md`.
 
-Both chips currently report `done ticks=0 status=2`: the callback is never
-dispatched, although `esp_timer_create` and `esp_timer_start_periodic` both
-return `ESP_OK` and `esp_timer_is_active` says the timer is armed. It is
-**layout-sensitive** — adding one unrelated statement to `app_main` makes it
-fire 30 times out of 30 — so it is not this project and not the wrapper.
-
-Tracked, with the full measurement chain and the hypotheses already killed, in
-`devdocs/progress/urgent/bug-esp-timer-callback-never-dispatched.md`. This
-project builds and links correctly; keep it as the xtensa half of the retest
-once that bug is fixed.
+`make test-esp-idf` now guards both chips against a repeat.
