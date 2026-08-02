@@ -64,7 +64,7 @@ is invisible until something depends on it. `st_ino`, `st_dev`, `st_blocks`,
 diffed against gcc; a directory's `st_nlink` matching gcc's for a directory with
 known subdirectories. Cross-target, since `lib/crtl` builds for every target.
 
-## Resolved 2026-08-02 — and it was four fields, not one
+## Resolved 2026-08-02 (commit c19f4d9b1) — and it was four fields, not one
 
 The audit this ticket asked for ("worth checking the other `struct stat` fields
 in the same pass") found three more, all hardcoded in `fill()`:
