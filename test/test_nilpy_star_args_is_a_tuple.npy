@@ -1,0 +1,25 @@
+# bug-nilpy-star-args-is-a-list-not-a-tuple
+#
+# `*args` is a TUPLE in Python. pxx backs a tuple with the same TPyList a list
+# uses and tells them apart with a mark (pylist_mark_tuple) set where the syntax
+# is still visible — the mechanism two earlier tickets built and repaired. The
+# `*args` PACKING path simply never called it, so `print(args)` showed `[2, 3]`
+# where CPython shows `(2, 3)` and `type(args).__name__` answered 'list'.
+#
+# The genuine-list control at the end is the point of the fix's risk: the mark
+# must not be applied more widely than the packing path.
+
+def m(a, *args):
+    return args
+print(m(1), m(1, 2), m(1, 2, 3))
+print(type(m(1, 2)).__name__, len(m(1, 2, 3)))
+
+def both(a, *args, **kw):
+    return (args, sorted(kw.items()))
+print(both(1, 2, 3, z=4))
+
+def plain(xs):
+    return xs
+print(plain([1, 2]))          # a genuine list must stay a list
+print(type(plain([1, 2])).__name__)
+print((1, 2), [1, 2])

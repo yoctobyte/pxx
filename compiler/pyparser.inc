@@ -8650,6 +8650,7 @@ end;
 procedure PyPackStarArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer);
 var si, ki, n, nxt, pos, listSym, dictSym, keyNode, argNode: Integer;
     posHead, posLast, kwHead, kwLast: Integer;
+    mtPi, mtSelf, mtCall: Integer;   { pylist_mark_tuple — *args is a tuple }
 begin
   si := ProcPyStarIdx[mpi];
   ki := ProcPyKwIdx[mpi];
@@ -8694,6 +8695,24 @@ begin
   if si >= 0 then
   begin
     if listSym < 0 then listSym := PyNewContainerTemp('TPyList', 'starargs');
+    { `*args` is a TUPLE in Python, and a tuple is the same TPyList as a list
+      here — so it has to be MARKED, exactly as a parenthesised display is
+      (see PyParseListLiteralT). Unmarked, `print(args)` showed `[2, 3]` where
+      CPython shows `(2, 3)`, and `type(args).__name__` answered 'list'
+      (bug-nilpy-star-args-is-a-list-not-a-tuple). The rendering mechanism
+      already existed; this packing path simply never called it. }
+    mtPi := FindProc('pylist_mark_tuple');
+    if mtPi >= 0 then
+    begin
+      mtSelf := AllocNode(AN_ARG);
+      ASTLeft[mtSelf] := PyMakeIdent(listSym);
+      ASTRight[mtSelf] := -1;
+      mtCall := AllocNode(AN_CALL);
+      ASTIVal[mtCall] := mtPi;
+      ASTTk[mtCall] := Ord(tyClass);
+      ASTLeft[mtCall] := mtSelf;
+      PyHoistStmt(mtCall);
+    end;
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := PyMakeIdent(listSym);
     if posHead < 0 then posHead := argNode else ASTRight[posLast] := argNode;
