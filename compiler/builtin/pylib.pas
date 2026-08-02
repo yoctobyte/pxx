@@ -485,6 +485,16 @@ function pystr_encode(const s: AnsiString): TPyBytes;
 function pystr_slice(const s: AnsiString; lo, hi: Integer): AnsiString;
 function pybytes_slice(b: TPyBytes; lo, hi: Integer): TPyBytes;
 function pylist_slice(l: TPyList; lo, hi: Integer): TPyList;
+{ EXTENDED slices — `b[lo:hi:step]`, any non-zero step. Separate entry points
+  rather than a default parameter so the frontend picks one by arity and the
+  plain 3-argument path stays exactly as it was. Bounds follow CPython's
+  slice.indices(), which is NOT PySliceBounds with an extra loop: with a
+  negative step an omitted low bound means n-1 (not 0) and an omitted high
+  bound means "before index 0" (not n), and the clamps differ likewise.
+  step = 0 raises ValueError, as in Python. }
+function pystr_slice_step(const s: AnsiString; lo, hi, step: Integer): AnsiString;
+function pybytes_slice_step(b: TPyBytes; lo, hi, step: Integer): TPyBytes;
+function pylist_slice_step(l: TPyList; lo, hi, step: Integer): TPyList;
 function pylist_del_slice(l: TPyList; lo, hi: Integer): TPyList;   { del l[lo:hi] in place }
 procedure pylist_setslice(l: TPyList; lo, hi: Integer; src: TPyList);   { l[lo:hi] = src in place }
 { `b[lo:hi] = src`. uforth assigns a slice of the SAME length everywhere (it is
@@ -1060,6 +1070,8 @@ function pydynattr_has(obj: Pointer; const name: AnsiString): Boolean;
 { `v[lo:hi]` where v is a VARIANT — slice the str/list/bytes it holds, at run
   time. Returns a variant of the same kind. }
 function pyvar_slice(const v: Variant; lo, hi: Integer): Variant;
+{ `v[lo:hi:step]` on a variant — same run-time tag dispatch, extended step. }
+function pyvar_slice_step(const v: Variant; lo, hi, step: Integer): Variant;
 
 { str methods. The frontend desugars `s.upper()` into pystr_upper(s) — see
   PyParseStrMethod. ASCII-only for now: CPython's str.upper() is full-Unicode
@@ -2127,6 +2139,23 @@ begin
     o := TObject(pyvarobj(v));
     if o is TPyList then Result := pylist_slice(TPyList(o), lo, hi)
     else if o is TPyBytes then Result := pybytes_slice(TPyBytes(o), lo, hi)
+    else
+      raise TypeError.Create('object is not subscriptable');
+  end
+  else
+    raise TypeError.Create('object is not subscriptable');
+end;
+
+function pyvar_slice_step(const v: Variant; lo, hi, step: Integer): Variant;
+var o: TObject;
+begin
+  if pyvartag(v) = 6 then
+    Result := pystr_slice_step(pystr_of(v), lo, hi, step)   { str -> VT_STRING }
+  else if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then Result := pylist_slice_step(TPyList(o), lo, hi, step)
+    else if o is TPyBytes then Result := pybytes_slice_step(TPyBytes(o), lo, hi, step)
     else
       raise TypeError.Create('object is not subscriptable');
   end
@@ -4928,6 +4957,92 @@ begin
   if hi < lo then hi := lo;
 end;
 
+{ CPython's slice.indices(n) for an explicit STEP. Deliberately a separate
+  routine from PySliceBounds rather than an extension of it: with a negative
+  step every default and every clamp changes, so folding the two together
+  would make the step=1 path harder to read for no gain.
+
+  The high bound is EXCLUSIVE in both directions, so for a negative step it can
+  legitimately land on -1 ("stop before index 0") — callers must therefore
+  iterate with `while i > hi`, never `for i := lo downto hi`.
+
+  Returns the element COUNT, which callers need to preallocate; recomputing it
+  from (lo, hi, step) at each call site is where an off-by-one would hide. }
+function PySliceBoundsStep(n: Integer; var lo, hi: Integer; step: Integer): Integer;
+begin
+  if step = 0 then raise ValueError.Create('slice step cannot be zero');
+  if lo = PY_SLICE_OMIT then
+  begin
+    if step < 0 then lo := n - 1 else lo := 0;
+  end
+  else
+  begin
+    if lo < 0 then lo := lo + n;
+    if lo < 0 then
+    begin
+      if step < 0 then lo := -1 else lo := 0;
+    end;
+    if lo >= n then
+    begin
+      if step < 0 then lo := n - 1 else lo := n;
+    end;
+  end;
+  if hi = PY_SLICE_OMIT then
+  begin
+    if step < 0 then hi := -1 else hi := n;
+  end
+  else
+  begin
+    if hi < 0 then hi := hi + n;
+    if hi < 0 then
+    begin
+      if step < 0 then hi := -1 else hi := 0;
+    end;
+    if hi >= n then
+    begin
+      if step < 0 then hi := n - 1 else hi := n;
+    end;
+  end;
+  if step > 0 then
+  begin
+    if hi > lo then Result := ((hi - lo) + step - 1) div step else Result := 0;
+  end
+  else
+  begin
+    if lo > hi then Result := ((lo - hi) + (-step) - 1) div (-step) else Result := 0;
+  end;
+end;
+
+function pystr_slice_step(const s: AnsiString; lo, hi, step: Integer): AnsiString;
+var i, k, cnt: Integer;
+begin
+  cnt := PySliceBoundsStep(Length(s), lo, hi, step);
+  { SetLength once and index, never `Result := Result + ch` — that idiom is
+    QUADRATIC here (project_pxx_string_concat_in_loop_is_quadratic). }
+  SetLength(Result, cnt);
+  i := lo;
+  for k := 1 to cnt do
+  begin
+    Result[k] := s[i + 1];        { Python is 0-based, Pascal strings 1-based }
+    i := i + step;
+  end;
+end;
+
+function pybytes_slice_step(b: TPyBytes; lo, hi, step: Integer): TPyBytes;
+var i, k, cnt: Integer; src, dst: PByte;
+begin
+  cnt := PySliceBoundsStep(b.FLen, lo, hi, step);
+  Result := TPyBytes.Create(cnt);
+  i := lo;
+  for k := 0 to cnt - 1 do
+  begin
+    src := PByte(NativeInt(b.FData) + i);
+    dst := PByte(NativeInt(Result.FData) + k);
+    dst^ := src^;
+    i := i + step;
+  end;
+end;
+
 function pystr_encode(const s: AnsiString): TPyBytes;
 var k: Integer; p: PByte;
 begin
@@ -7358,6 +7473,26 @@ begin
     PySliceBounds(l.count, lo, hi);
     for i := lo to hi - 1 do
       r.append(l.at(i));
+  end;
+  Result := r;
+end;
+
+function pylist_slice_step(l: TPyList; lo, hi, step: Integer): TPyList;
+var r: TPyList; i, k, cnt: Integer;
+begin
+  r := TPyList.Create;
+  if l <> nil then
+  begin
+    { a slice of a TUPLE is a TUPLE, extended slices included — so `(1,2,3)[::-1]`
+      is `(3, 2, 1)`, not `[3, 2, 1]` (bug-nilpy-derived-tuple-loses-tupleness) }
+    r.FIsTuple := l.FIsTuple;
+    cnt := PySliceBoundsStep(l.count, lo, hi, step);
+    i := lo;
+    for k := 1 to cnt do
+    begin
+      r.append(l.at(i));
+      i := i + step;
+    end;
   end;
   Result := r;
 end;

@@ -1,0 +1,72 @@
+# Extended slices: xs[lo:hi:step] for any non-zero step.
+# Only the whole-range reverse [::-1] used to work; every other step was a
+# compile error. Bounds follow CPython's slice.indices(), which is NOT the
+# plain-slice clamp with a loop bolted on -- with a negative step the omitted
+# defaults and the clamps both change.
+# bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice item 3.
+
+s = "abcdefgh"
+
+# forward steps
+print(s[1:5:2])
+print(s[::2])
+print(s[::3])
+print(s[2::2])
+print(s[:5:2])
+
+# negative steps -- the omitted low bound is len-1 and the omitted high bound
+# is "before index 0", so [::-1] is the whole string reversed
+print(s[::-1])
+print(s[::-2])
+print(s[4:1:-1])
+print(s[-1:-4:-1])
+print(s[:2:-1])
+
+# out-of-range and inverted ranges clamp to empty, they do not raise
+print("[" + s[20:30:2] + "]")
+print("[" + s[5:1:2] + "]")
+print("[" + s[1:5:-1] + "]")
+print("[" + s[-30:-20:1] + "]")
+
+# a step larger than the sequence yields exactly one element
+print(s[::100])
+print(s[::-100])
+
+# lists: same bounds logic, and the result is a list
+l = [0, 1, 2, 3, 4, 5, 6, 7]
+print(l[1:6:2])
+print(l[::2])
+print(l[::-1])
+print(l[::-3])
+print(l[-2:1:-2])
+print(l[5:1:1])
+
+# a slice of a TUPLE stays a tuple, extended slices included -- reversal used
+# to route through reversed(), which hands back a list
+t = (1, 2, 3, 4)
+print(t[::-1])
+print(t[::2])
+print(t[1:4:2])
+
+# the step is an EXPRESSION, not a literal
+n = 2
+print(s[::n])
+print(s[::-n])
+print(l[::n + 1])
+
+# a slice held in a variant round-trips through the run-time tag dispatch
+v = s
+print(v[::-2])
+vl = l
+print(vl[::3])
+
+# step 0 raises ValueError, catchably -- and the program keeps running
+try:
+    print(s[::0])
+except ValueError:
+    print("step-zero ValueError caught")
+try:
+    print(l[::0])
+except ValueError:
+    print("step-zero ValueError caught on list")
+print("still running")

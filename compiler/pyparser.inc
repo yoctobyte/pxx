@@ -5208,16 +5208,21 @@ begin
   ASTTk[Result] := Ord(tyInteger);
 end;
 
-{ base[lo:hi] as a VALUE. Picks the pylib function by element type so each
-  container keeps its own result type: str -> str, bytes -> bytes, list ->
-  list. }
-function PyMakeSlice(baseNode, loNode, hiNode: Integer): Integer;
-var procIdx, callNode, a0, a1, a2, rec, listCi, bytesCi: Integer;
-    pname: AnsiString;
+{ base[lo:hi] or base[lo:hi:step] as a VALUE. Picks the pylib function by
+  element type so each container keeps its own result type: str -> str, bytes
+  -> bytes, list -> list.
+
+  `stepNode` < 0 means no step was written, and selects the plain 3-argument
+  helper — so the ordinary `b[lo:hi]` path is byte-for-byte what it was and an
+  extended slice is the only thing routed to the `_step` overloads. }
+function PyMakeSlice(baseNode, loNode, hiNode, stepNode: Integer): Integer;
+var procIdx, callNode, a0, a1, a2, a3, rec, listCi, bytesCi: Integer;
+    pname, suffix: AnsiString;
     retTk: TTypeKind;
 begin
   pname := '';
   retTk := tyInteger;
+  if stepNode >= 0 then suffix := '_step' else suffix := '';
   if IntToTypeKind(ASTTk[baseNode]) = tyVariant then
   begin
     pname := 'pyvar_slice';       { unbox and slice at run time; yields a variant }
@@ -5245,6 +5250,7 @@ begin
     end;
   end;
   if pname = '' then Error('Nil Python: this value cannot be sliced');
+  pname := pname + suffix;
   procIdx := FindProc(pname);
   if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
 
@@ -5255,6 +5261,12 @@ begin
   ASTRight[a0] := a1;
   ASTRight[a1] := a2;
   ASTRight[a2] := -1;
+  if stepNode >= 0 then
+  begin
+    a3 := AllocNode(AN_ARG); ASTLeft[a3] := stepNode;
+    ASTRight[a2] := a3;
+    ASTRight[a3] := -1;
+  end;
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := procIdx;
   ASTTk[callNode] := Ord(retTk);
@@ -5273,58 +5285,42 @@ end;
 { Parse the tail of a slice: CurTok is the ':' , `loNode` is the low bound
   already parsed (-1 when omitted, as in `b[:n]`). Consumes through ']'. }
 function PyParseSliceTail(baseNode, loNode: Integer): Integer;
-var hiNode, revIdx, revArg: Integer; stepNeg, loOmitted, hiOmitted: Boolean;
+var hiNode, stepNode: Integer;
 begin
   Next;                              { consume ':' }
-  loOmitted := loNode < 0;
   if loNode < 0 then loNode := PySliceOmitNode;
-  hiOmitted := (CurTok.Kind = tkRBrack) or (CurTok.Kind = tkColon);
-  if hiOmitted then
+  if (CurTok.Kind = tkRBrack) or (CurTok.Kind = tkColon) then
     hiNode := PySliceOmitNode        { `b[lo:]`, and `b[lo::step]` }
   else
   begin
     PyParseBoolExpr;
     hiNode := CurASTNode;
   end;
-  { An optional STEP: `xs[lo:hi:step]`. Only the whole-range reverse `[::-1]`
-    is implemented, because that is the idiom real code uses and pylib already
-    has `reversed` (a reversed COPY, which is what a slice yields anyway). Any
-    other step is refused by name rather than approximated — a slice that
-    silently ignored its step would produce a plausible wrong answer. }
+  { An optional STEP: `xs[lo:hi:step]`, any non-zero step, negative included.
+    The step is a full EXPRESSION, not a literal — `xs[::n]` and `xs[::-k]`
+    are ordinary Python — so it is parsed and passed through to pylib, which
+    normalises the bounds per CPython's slice.indices() at run time. A step of
+    0 raises there rather than here, because it need not be a literal.
+
+    This used to accept ONLY the whole-range reverse `[::-1]`, rewritten into a
+    `reversed` / `pystr_reverse` call. That rewrite is gone: the generic path
+    covers it, and routing `[::-1]` through the slice helpers also fixes tuple
+    reversal, since `reversed` yields a list while pylist_slice_step carries
+    FIsTuple across (bug-nilpy-derived-tuple-loses-tupleness). }
+  stepNode := -1;
   if CurTok.Kind = tkColon then
   begin
     Next;                            { consume the second ':' }
-    if CurTok.Kind = tkRBrack then
-      Error('Nil Python: a slice step is required after the second '':''');
-    stepNeg := (CurTok.Kind = tkMinus) and (TokPos < TokCount) and
-               (Tokens[TokPos].Kind = tkInteger) and (Tokens[TokPos].IVal = 1);
-    if not (stepNeg and loOmitted and hiOmitted) then
-      Error('Nil Python: only the whole-range reverse slice [::-1] is supported; '
-            + 'other steps are not implemented');
-    Next; Next;                      { '-' and the 1 }
-    Expect(tkRBrack, ']');
-    { A slice of a STRING is a string; `reversed` would hand back a list of
-      characters, which prints as a list and crashes wherever a string was
-      expected. Pick the helper from the base's type. }
-    if IntToTypeKind(ASTTk[baseNode]) in [tyString, tyAnsiString] then
-      revIdx := FindProc('pystr_reverse')
-    else
-      revIdx := FindProc('reversed');
-    if revIdx < 0 then Error('Nil Python: pylib (reversed) not loaded');
-    Result := AllocNode(AN_CALL);
-    ASTIVal[Result] := revIdx;
-    revArg := AllocNode(AN_ARG);
-    ASTLeft[revArg] := baseNode;
-    ASTRight[revArg] := -1;
-    ASTLeft[Result] := revArg;
-    ASTTk[Result] := Ord(Procs[revIdx].RetType);
-    ASTRight[Result] := ProcRetRecId[revIdx];
-    LastExprTk := Procs[revIdx].RetType;
-    CurASTNode := Result;
-    Exit;
+    { `xs[::]` is legal Python and means a plain copy — an omitted step is 1,
+      so leave stepNode = -1 and take the 3-argument path. }
+    if CurTok.Kind <> tkRBrack then
+    begin
+      PyParseBoolExpr;
+      stepNode := CurASTNode;
+    end;
   end;
   Expect(tkRBrack, ']');
-  Result := PyMakeSlice(baseNode, loNode, hiNode);
+  Result := PyMakeSlice(baseNode, loNode, hiNode, stepNode);
   CurASTNode := Result;
 end;
 
@@ -5340,6 +5336,15 @@ begin
   if (procIdx >= 0) and (ASTIVal[n] = procIdx) then begin Result := True; Exit; end;
   { a LIST slice read (`l[lo:hi]`) is also a valid slice-assign target }
   procIdx := FindProc('pylist_slice');
+  if (procIdx >= 0) and (ASTIVal[n] = procIdx) then begin Result := True; Exit; end;
+  { An EXTENDED slice (`l[::2] = ...`) is a valid target in Python but is not
+    implemented here. Recognise it anyway, so PyRewriteSliceAssign can refuse it
+    BY NAME — otherwise the statement falls through to a bare "expected
+    expression" pointing at the '=', which reads like a parser bug rather than a
+    missing feature (bug-nilpy-stepped-slices-other-than-reverse). }
+  procIdx := FindProc('pylist_slice_step');
+  if (procIdx >= 0) and (ASTIVal[n] = procIdx) then begin Result := True; Exit; end;
+  procIdx := FindProc('pybytes_slice_step');
   Result := (procIdx >= 0) and (ASTIVal[n] = procIdx);
 end;
 
@@ -5349,6 +5354,12 @@ end;
 function PyRewriteSliceAssign(sliceNode, rhsNode: Integer): Integer;
 var procIdx, a3, a: Integer;
 begin
+  { extended-slice assignment — parsed, recognised, and refused by name rather
+    than approximated: dropping the step would write the WRONG elements }
+  if (ASTIVal[sliceNode] = FindProc('pylist_slice_step')) or
+     (ASTIVal[sliceNode] = FindProc('pybytes_slice_step')) then
+    Error('Nil Python: assigning to an extended slice (with a step) is not '
+          + 'implemented; only x[lo:hi] = src is');
   if ASTIVal[sliceNode] = FindProc('pylist_slice') then
     procIdx := FindProc('pylist_setslice')
   else if IntToTypeKind(ASTTk[rhsNode]) = tyVariant then
