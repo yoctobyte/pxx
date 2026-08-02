@@ -97,3 +97,77 @@ the compiler.
   windowed frame-layout work (and the qemu-system harness, which now exists, to
   verify). The sibling ESP items (var->var forwarding, record results) are DONE
   and verified this session; this is the remaining one.
+
+## Reference implementation, measured from xtensa gcc (2026-08-02)
+
+Asked how other toolchains handle this (Arduino, MicroPython, ESP-IDF — all gcc).
+**They do not work around it.** No pointer-struct packing: they implement the
+ABI, first N words in registers and the rest in the caller's outgoing stack
+frame. Taken from the `xtensa-esp32s3-elf-gcc` that ships with the installed IDF,
+`-O2`, 9 int args:
+
+**Caller (windowed)** — args 1..6 in `a10..a15`, args 7,8,9 written to the
+outgoing area at `sp+0/4/8` *before* the call:
+
+```asm
+caller:
+    entry   sp, 48
+    movi.n  a8, 9
+    s32i.n  a8, sp, 8        ; arg 9
+    movi.n  a8, 8
+    s32i.n  a8, sp, 4        ; arg 8
+    movi.n  a8, 7
+    s32i.n  a8, sp, 0        ; arg 7
+    movi.n  a15, 6 ... movi.n a10, 1
+    call8   callee
+```
+
+**Callee (windowed)** — `entry sp,32` lowers sp by the frame size, so the
+caller's `sp+0/4/8` is read back at `sp+32/36/40`:
+
+```asm
+callee:
+    entry   sp, 32
+    l32i.n  a8, sp, 32       ; arg 7
+    l32i.n  a9, sp, 36       ; arg 8
+    l32i.n  a2, sp, 40       ; arg 9
+```
+
+**Callee (Call0, `-mabi=call0`)** — no window rotation and no `entry`, so the
+same slots are read directly at `sp+0/4/8`:
+
+```asm
+callee:
+    l32i.n  a9, sp, 0
+    l32i.n  a10, sp, 4
+    l32i.n  a2, sp, 8
+```
+
+So the two ABIs differ only in whether the incoming offset is biased by the
+`entry` frame size — the caller side is identical. That is the whole fix.
+
+## riscv32 is NOT working by luck — checked
+
+The Problem section above says "riscv32 already allows 8", which reads as a
+higher cap of the same kind. It is not: riscv32 **spills to the stack properly**.
+Measured with a 12-integer-argument function compiled `--target=riscv32` and run
+under `qemu-riscv32`:
+
+```
+expect:  1 2 3 4 5 6 7 8 9 10 11 12   sum=78
+riscv32: 1 2 3 4 5 6 7 8 9 10 11 12   sum=78     (identical to x86-64)
+```
+
+9, 10 and 12 parameter words all compile and pass correctly. So this is an
+**xtensa-only implementation gap**, not a shared limit that riscv32 happens to
+sit under — and there is a working in-tree implementation of the same idea to
+copy from.
+
+## Line numbers refreshed
+
+The Problem section's citations have drifted. Current sites:
+
+- `compiler/parser.inc:26978` and `:26994` — definition cap
+- `compiler/ir_codegen_xtensa.inc:1774` — call-site cap
+- `compiler/ir_codegen_xtensa.inc:1512` — a third one the ticket does not
+  mention: `constructor with more than 6 parameter words not supported`
