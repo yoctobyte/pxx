@@ -1,0 +1,81 @@
+# bug-nilpy-annotated-class-attribute-fails-to-parse
+#
+# An ANNOTATED class attribute had no branch on EITHER side. The class body only
+# matched a name followed directly by `=`, so `n: int = 0` fell through to the
+# method branch and died with "Expected: def, but got: n"; the member pre-pass
+# matched the same shape, so even once it parsed there was no FIELD to read.
+# Only a @dataclass accepted annotated members, through its own field branch —
+# which is why the gap survived: the idiom most likely to be reached for is also
+# the one form that worked.
+#
+# `ClassVar[int]` was the reported symptom (it is what the class-attribute
+# registry documents), but it was never about ClassVar: EVERY annotated form was
+# affected, including a bare `n: int`.
+#
+# Each group below is its OWN class deliberately, and the expression-initialised
+# attribute is read on its own line rather than through the tuple. A class that
+# declares a NON-LITERAL class attribute and also builds a tuple out of its other
+# class attributes loses the tuple — pre-existing, unrelated to annotations (the
+# unannotated spelling does it too), filed as
+# bug-nilpy-non-literal-class-attribute-corrupts-the-class-layout. Keeping them
+# apart means this test measures the annotation fix and not that bug.
+
+from typing import ClassVar, List, Dict
+
+
+class Inner:
+    z = 3
+
+
+class Scalars:
+    a: int = 0
+    b = 1                       # the unannotated control, which always worked
+    c: ClassVar[int] = 7
+    d: str = "hi"
+    e: bool = True
+    f: float = 1.5
+
+    def read(self):
+        return self.a, self.b, self.c, self.d, self.e, self.f
+
+
+class Expr:
+    # an expression initialiser, not a literal token — the OTHER registration
+    # branch, and annotated
+    g: int = 2 + 3
+
+
+class Containers:
+    lst: List[int] = []
+    # a subscripted annotation must not end the scan early: Dict[str, int]
+    # contains a comma and brackets, and the `=` after it still has to be found
+    dct: Dict[str, int] = {}
+
+
+class Typed:
+    inner: Inner = Inner()      # class-typed, so the traversal below resolves
+
+    def traverse(self):
+        return self.inner.z
+
+
+class Bare:
+    # A bare annotation binds NOTHING in Python — it is not a class attribute —
+    # so reading it is an AttributeError. Pinned because the fix must not
+    # over-reach and invent storage for it.
+    v: int
+
+    def get(self):
+        return self.v
+
+
+print(Scalars().read())
+print(Expr().g)
+print(Containers().lst)
+print(Containers().dct)
+print(Typed().traverse())
+
+try:
+    print(Bare().get())
+except AttributeError:
+    print("bare annotation binds nothing")

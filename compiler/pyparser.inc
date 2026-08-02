@@ -3081,15 +3081,58 @@ begin
   Result := '$clsattr.' + PyRawName(UClsNOff[ci], UClsNLen[ci]) + '.' + nm;
 end;
 
+function PyClsAttrEqIdx(nameIdx, stopIdx: Integer): Integer;
+{ Token index of the `=` binding the class attribute whose NAME sits at nameIdx,
+  stepping over an optional `: <annotation>`. -1 when the line has no
+  initialiser (`n: int`, which in Python is an annotation and binds nothing).
+
+  Annotated class attributes were invisible on BOTH sides: the class body only
+  matched a name followed directly by `=`, so `n: int = 0` fell through to the
+  method branch and died with "Expected: def, but got: n"; and the member
+  pre-pass matched the same shape, so even once it parsed there was no FIELD to
+  read. Only a @dataclass accepted them, through its own field branch
+  (bug-nilpy-annotated-class-attribute-fails-to-parse). One helper for both
+  readers, deliberately: they must agree on where the initialiser starts, and a
+  disagreement here is a field registered at one type and read at another.
+
+  Brackets are balanced so a subscripted annotation (`List[int]`,
+  `ClassVar[int]`, `Dict[str, int]`) cannot end the scan early. }
+var k, depth: Integer;
+begin
+  Result := -1;
+  k := nameIdx + 1;
+  if k >= stopIdx then Exit;
+  if Tokens[k].Kind = tkAssign then begin Result := k; Exit; end;
+  if Tokens[k].Kind <> tkColon then Exit;
+  Inc(k);
+  depth := 0;
+  while k < stopIdx do
+  begin
+    if Tokens[k].Kind in [tkLBrack, tkLParen] then Inc(depth)
+    else if Tokens[k].Kind in [tkRBrack, tkRParen] then Dec(depth)
+    else if (depth = 0) and (Tokens[k].Kind = tkAssign) then begin Result := k; Exit; end
+    else if Tokens[k].Kind in [tkNewline, tkDedent, tkEOF] then Exit;
+    Inc(k);
+  end;
+end;
+
+function PyClsAttrAssignAt: Integer;
+{ The cursor-side spelling: CurTok is the attribute name, so its token index is
+  TokPos - 1. }
+begin
+  Result := PyClsAttrEqIdx(TokPos - 1, TokCount);
+end;
+
 { Is the class-body line at CurTok an attribute whose initialiser needs REAL
-  evaluation? CurTok is the name, Tokens[TokPos] the '='. A single literal
+  evaluation? CurTok is the name, eqAt the index of its '='. A single literal
   followed by the end of the line is the folded-constant case the pre-pass
   already took. }
-function PyClsAttrExprAhead: Boolean;
+function PyClsAttrExprAhead(eqAt: Integer): Boolean;
 var k: Integer;
 begin
   Result := False;
-  k := TokPos + 1;                { the token after '=' }
+  if eqAt < 0 then Exit;
+  k := eqAt + 1;                  { the token after '=' }
   if k >= TokCount then Exit;
   if (Tokens[k].Kind in [tkInteger, tkFloat, tkString, tkTrue, tkFalse, tkNil]) and
      (k + 1 < TokCount) and (Tokens[k + 1].Kind in [tkNewline, tkDedent, tkEOF]) then
@@ -3099,11 +3142,14 @@ end;
 
 { Evaluate one such attribute into its hidden global, at the point the class
   statement runs. CurTok is the attribute name. }
-procedure PyEmitClassAttrExpr(ci: Integer);
+procedure PyEmitClassAttrExpr(ci: Integer; eqAt: Integer);
 var nm, gname: AnsiString; gsym, valNode, asgn, fi: Integer;
 begin
   nm := CurTok.SVal;
-  Next;                            { onto '=' }
+  { jump to the '=' rather than assuming it is the very next token — an
+    ANNOTATED attribute (`mode: Mode = Inner()`) has the annotation in between }
+  TokPos := eqAt;
+  Next;                            { CurTok = '=' }
   Next;                            { onto the expression }
   PyParseBoolExpr;
   valNode := CurASTNode;
@@ -15121,6 +15167,7 @@ var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, al
     fldAnn, rhsAt, k2, fldSig: Integer;
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
     fldRec, mRetRec, pri: Integer; mRet: TTypeKind;
+    caVal: Integer;   { class-attribute initialiser token, past any annotation }
     mStarIdx, mKwIdx, starCi: Integer;   { `*args` / `**kwargs` parameter slots }
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
     pdefHas: array[0..15] of Boolean; pdefIsStr: array[0..15] of Boolean;
@@ -15156,11 +15203,16 @@ begin
     if Tokens[i].Kind = tkIndent then Inc(depth)
     else if Tokens[i].Kind = tkDedent then Dec(depth)
     else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
-            (i + 2 < bodyEnd) and (Tokens[i + 1].Kind = tkAssign) and
             ((i = bodyStart) or
              (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) and
-            (Tokens[i + 2].Kind in [tkInteger, tkFloat, tkString, tkTrue, tkFalse, tkNil]) then
+            (PyClsAttrEqIdx(i, bodyEnd) >= 0) and
+            (PyClsAttrEqIdx(i, bodyEnd) + 1 < bodyEnd) and
+            (Tokens[PyClsAttrEqIdx(i, bodyEnd) + 1].Kind in
+               [tkInteger, tkFloat, tkString, tkTrue, tkFalse, tkNil]) then
     begin
+      { the initialiser token, past an optional `: <annotation>` — the class
+        body's own branch finds it with the same helper, and the two MUST agree }
+      caVal := PyClsAttrEqIdx(i, bodyEnd) + 1;
       { A CLASS ATTRIBUTE — `name = "note_counting"`, unannotated, at class
         level. Held as a per-class compile-time constant (see the PyClsAttr*
         note in defs.inc): the read `self.name` becomes the literal, and an
@@ -15172,7 +15224,7 @@ begin
         path. Registered here in the pre-pass, before any method body is parsed. }
       if FindUField(ci, GetTokenStr(i)) < 0 then
       begin
-        case Tokens[i + 2].Kind of
+        case Tokens[caVal].Kind of
           tkInteger:      tk := tyInt64;
           tkFloat:        tk := tyDouble;
           tkString:       tk := tyAnsiString;
@@ -15193,14 +15245,14 @@ begin
         PyClsAttrSOff[PyClsAttrCount] := 0;
         PyClsAttrSLen[PyClsAttrCount] := 0;
         PyClsAttrIVal[PyClsAttrCount] := 0;
-        case Tokens[i + 2].Kind of
+        case Tokens[caVal].Kind of
           tkInteger: begin PyClsAttrKind[PyClsAttrCount] := PYDC_INT;
-                           PyClsAttrIVal[PyClsAttrCount] := Tokens[i + 2].IVal; end;
+                           PyClsAttrIVal[PyClsAttrCount] := Tokens[caVal].IVal; end;
           tkFloat:   begin PyClsAttrKind[PyClsAttrCount] := PYDC_FLOAT;
-                           PyClsAttrIVal[PyClsAttrCount] := Tokens[i + 2].IVal; end;
+                           PyClsAttrIVal[PyClsAttrCount] := Tokens[caVal].IVal; end;
           tkString:  begin PyClsAttrKind[PyClsAttrCount] := PYDC_STR;
-                           PyClsAttrSOff[PyClsAttrCount] := Tokens[i + 2].SOffset;
-                           PyClsAttrSLen[PyClsAttrCount] := Tokens[i + 2].SLen; end;
+                           PyClsAttrSOff[PyClsAttrCount] := Tokens[caVal].SOffset;
+                           PyClsAttrSLen[PyClsAttrCount] := Tokens[caVal].SLen; end;
           tkTrue:    begin PyClsAttrKind[PyClsAttrCount] := PYDC_BOOL;
                            PyClsAttrIVal[PyClsAttrCount] := 1; end;
           tkFalse:   begin PyClsAttrKind[PyClsAttrCount] := PYDC_BOOL; end;
@@ -15214,10 +15266,14 @@ begin
       continue;
     end
     else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
-            (i + 2 < bodyEnd) and (Tokens[i + 1].Kind = tkAssign) and
             ((i = bodyStart) or
-             (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) then
+             (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) and
+            (PyClsAttrEqIdx(i, bodyEnd) >= 0) and
+            (PyClsAttrEqIdx(i, bodyEnd) + 1 < bodyEnd) then
     begin
+      { the initialiser token, past an optional `: <annotation>` — same helper
+        as the literal branch above, so the two agree on where the value is }
+      caVal := PyClsAttrEqIdx(i, bodyEnd) + 1;
       { A class attribute whose initialiser is NOT a literal — `mode = Inner()`,
         the attribute-namespace idiom (songformatter's render backend declares
         reportlab's blend modes exactly this way). The literal branch above
@@ -15235,10 +15291,10 @@ begin
         k := REC_NONE;
         { `name = Cls(...)` — the field carries Cls's identity, which is what
           makes the traversal `self.name.attr` resolve to a real field. }
-        if (Tokens[i + 2].Kind = tkIdent) and (i + 3 < bodyEnd) and
-           (Tokens[i + 3].Kind = tkLParen) then
+        if (Tokens[caVal].Kind = tkIdent) and (caVal + 1 < bodyEnd) and
+           (Tokens[caVal + 1].Kind = tkLParen) then
         begin
-          j := FindUClass(GetTokenStr(i + 2));
+          j := FindUClass(GetTokenStr(caVal));
           if j >= 0 then begin tk := tyClass; k := REC_UCLASS_BASE + j; end;
         end;
         sz := TypeSize(tk);
@@ -16403,7 +16459,7 @@ begin
 end;
 
 procedure PyParseClass(isDC: Boolean);
-var ci, bodyStart, bodyEnd, baseCi, k: Integer;
+var ci, bodyStart, bodyEnd, baseCi, k, clsEqAt: Integer;
     propName: AnsiString;
 begin
   Expect(tkClass, 'class');
@@ -16475,16 +16531,26 @@ begin
       PySkipNewlines;
     end
     else if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
-            (Tokens[TokPos].Kind = tkAssign) then
+            (Tokens[TokPos].Kind in [tkAssign, tkColon]) then
     begin
-      { class-attribute line. A LITERAL one is already a folded constant from
-        the pre-pass and only has to be stepped over; anything else — `mode =
-        Inner()` — is evaluated HERE, at the point the class statement runs,
-        which is where Python evaluates a class body too. The value goes into a
-        hidden global named after the class and the attribute, and construction
-        copies it into the instance field the pre-pass registered, so every
-        instance shares the one object. }
-      if PyClsAttrExprAhead then PyEmitClassAttrExpr(ci)
+      { Class-attribute line, ANNOTATED or not — `n = 0`, `n: int = 0`,
+        `n: ClassVar[int] = 0`, `items: List[int] = []`. The annotated forms had
+        no branch at all and fell through to the method branch below, which
+        reported "Expected: def"; only a @dataclass accepted them, via its own
+        field branch (bug-nilpy-annotated-class-attribute-fails-to-parse).
+
+        A LITERAL initialiser is already a folded constant from the pre-pass and
+        only has to be stepped over; anything else — `mode = Inner()` — is
+        evaluated HERE, at the point the class statement runs, which is where
+        Python evaluates a class body too. The value goes into a hidden global
+        named after the class and the attribute, and construction copies it into
+        the instance field the pre-pass registered, so every instance shares the
+        one object.
+
+        A bare `n: int` with no initialiser binds nothing in Python either — it
+        is an annotation — so it simply steps over. }
+      clsEqAt := PyClsAttrAssignAt;
+      if PyClsAttrExprAhead(clsEqAt) then PyEmitClassAttrExpr(ci, clsEqAt)
       else
       begin
         while not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) do Next;
