@@ -120,3 +120,52 @@ Two things worth keeping when this is fixed:
   module-level syntax error hard to locate, not just this one.
 - Splitting the body onto its own indented line compiles and runs correctly, so
   the module path is otherwise fine.
+
+## 2026-08-02 — the CLASS half is DONE (commit 9e5d2a80a); the def half stays open
+
+`class C: pass` and `class E(Exception): pass` now parse. Only `pass` is accepted
+as a one-line class body; anything else is refused with "put the body on its own
+indented line".
+
+**Why that restraint is the whole point of splitting here.** This ticket's own
+sizing calls out sites 5 and 6 — `PyCollectModuleLocalsAST`'s `blockIsDef` and
+`PyAllocModuleGlobals`'s `inDefStack` — as the dangerous pair, because both infer
+"is this name bound inside a def?" from INDENT depth, and a one-line def body has
+no indent. Land one-line defs without teaching them, and every name such a def
+binds is harvested as a MODULE GLOBAL: a silent re-opening of
+[[bug-nilpy-def-local-assignment-widens-module-global-to-variant]].
+
+An EMPTY class body reaches neither scanner. It registers no members at all, so
+the INDENT-keyed pre-passes have nothing to find, and the change touches sites 1
+and 2 only — in the class header, not the def header. That is why `pass` and only
+`pass`: a one-line class body with real content would put content back in front
+of those scanners for no benefit.
+
+`test/test_nilpy_one_line_class_body.npy` (+ `.expected`, wired into `make
+test-nilpy`) checks the result is a REAL class rather than a parse that merely
+succeeds — constructible, subclassable, carrying dynamic attributes, and reached
+from an ordinary class.
+
+### What is left
+
+The `def` half, in full, and it is still the six-site job described above minus
+the class-side pieces:
+
+1. `PyParseDefHeader` — still ends `Expect(tkColon); Expect(tkNewline);
+   Expect(tkIndent);`
+2. `PyParseDef` — should use `PyParseSuite`, which already handles BOTH shapes
+   and is what `if`/`for`/`while`/`with` use
+3. `PyRegisterDefShells` — walks to a body `tkIndent`
+5. `PyCollectModuleLocalsAST` — `blockIsDef` by indent depth
+6. `PyAllocModuleGlobals` — `inDefStack` by indent depth
+
+(4, `PyRegisterClassMembers`, is unaffected by the class change — a one-line
+METHOD inside an ordinary class body still needs it.)
+
+### Found while testing this, filed separately
+
+[[bug-nilpy-raise-of-empty-exception-subclass-with-no-args]] — `raise E()` where
+`class E(Exception): pass` segfaults or silently skips the `except`. Pre-existing
+and reproduces on the indented spelling too, so it is not fallout; but it does
+mean the obvious next test to write for one-line classes (an exception hierarchy)
+hits a different bug first, which is worth knowing before writing it.

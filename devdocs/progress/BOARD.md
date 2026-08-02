@@ -13,11 +13,12 @@ lives in git, not in a timestamp._
 | bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size | C | 85 | bug | `sizeof(p->arr)` returns the POINTER size, not the array size — silent buffer overflow | — |
 | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling | P | 80 | bug | A procedural variable in a value context takes its ADDRESS instead of calling it | — |
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-non-constant-parameter-defaults-silently-become-none | N | 70 | bug | Every non-constant parameter default silently becomes None on the ordinary call path — `def f(b=[])` gives b=None, and so does `def f(b=w)` for any name w. Only the closure-VALUE path evaluates defaults at def time. | — |
+| bug-nilpy-one-line-def-and-class-bodies-do-not-parse | N | 60 | bug | One-line `def` and `class` bodies do not parse | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 
 ## unfinished (5)
@@ -87,9 +88,9 @@ lives in git, not in a timestamp._
 | bug-nilpy-nested-for-comprehension-not-supported | N | 45 | bug | A comprehension with TWO for-clauses — [c for r in rows for c in r] — fails with 'undefined variable (c)'; the flatten idiom is unavailable | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
-| bug-nilpy-one-line-def-and-class-bodies-do-not-parse | N | 60 | bug | One-line `def` and `class` bodies do not parse | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pypow-integer-overflow-does-not-promote | N | 35 | bug | `pypow_v`'s integer path silently wraps past 64 bits instead of promoting | — |
+| bug-nilpy-raise-of-empty-exception-subclass-with-no-args | N | 65 | bug | `raise E()` where E is a user Exception subclass with an EMPTY body segfaults or prints nothing. Passing any argument, or giving E an __init__, makes it work — so the idiomatic empty exception class is the broken one | — |
 | bug-nilpy-range-negative-runtime-step-yields-empty | N | 55 | bug | `range(a, b, s)` with a NEGATIVE step passed at runtime yields an empty range | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
 | bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | decide-nilpy-set-as-a-distinct-type-or-a-list |
@@ -1630,6 +1631,7 @@ lives in git, not in a timestamp._
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 65] [N] bug-nilpy-class-attribute-unreachable-through-the-class-name
+- [p 65] [N] bug-nilpy-raise-of-empty-exception-subclass-with-no-args
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
@@ -1638,7 +1640,6 @@ lives in git, not in a timestamp._
 - [p 60] [N] bug-nilpy-defaulted-param-before-star-args-rejects-short-call
 - [p 60] [N] bug-nilpy-from-import-as-alias-is-discarded
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
-- [p 60] [N] bug-nilpy-one-line-def-and-class-bodies-do-not-parse
 - [p 60] [T] bug-t-resolve-cites-a-sha-the-rebase-then-rewrites
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [U] decide-nilpy-runtime-dunder-dispatch-mechanism
