@@ -3,7 +3,7 @@ track: N
 prio: 65
 type: bug
 summary: "`o.ClassName` on a TObject local compiles to a NilPy DYNAMIC ATTRIBUTE fetch instead of the RTTI call, while `TObject(obj).ClassName` compiles correctly — same expression, different shape, different meaning"
-status: working
+status: done
 owner: claude-AN
 ---
 
@@ -81,3 +81,54 @@ NilPy-only or also reachable from Pascal (`isNilPy` gates a lot of this).
 A `.npy` that calls `type(<user class instance>).__name__` already covers the
 regression (`test/test_nilpy_type_name.npy`). A direct test wants a Pascal unit
 in the NilPy builtin set calling `o.ClassName` on a plain `TObject` local.
+
+
+## Resolved 2026-08-02 — commit e455ff322
+
+The ticket's "What to investigate" was right about where to look and the answer
+was one predicate.
+
+The dynamic-attribute fallback (`parser.inc`, the `FindUField`/`FindUMeth`/
+`FindUProp` all-miss branch) was gated on **`isNilPy`**, which is true for the
+WHOLE compilation — every Pascal unit loaded into a NilPy program included. So a
+Python-only rule was deciding member resolution inside `pylib.pas` and friends: a
+`TObject` method reached through a plain local is not a declared member of the
+receiver's UClass, all three lookups miss, and the branch concluded "undeclared
+-> dynamic attribute". The cast form takes a different route that consults RTTI,
+which is why one spelling worked and the difference looked arbitrary.
+
+Changed to **`NilPyUserCode`**, the predicate that already gates every other
+NilPy-only rule ("the main `.npy`/`.py` the user wrote, not the Pascal units
+compiled alongside it").
+
+### Answers to the ticket's open questions
+
+- **Other `TObject` members through a plain local:** measured, same bug, same
+  fix. `ClassName`, `ClassType.ClassName` and `InheritsFrom` all resolve now;
+  all three were on the dynamic-attr path before.
+- **NilPy-only or also Pascal-reachable?** NilPy-only. The branch was
+  `isNilPy`-gated, so a pure-Pascal compilation never entered it. What was
+  exposed is precisely "a Pascal unit inside a NilPy build".
+- **Did the fallback itself survive?** Yes, and it is tested in the same file:
+  an attribute no class declares, read, written and augmented from NilPy code.
+
+### Test
+
+`test/test_nilpy_tobject_member_via_local.npy` + `test/nilpy_units/tobjprobe.pas`
+(wired into `make test-nilpy`). Both spellings are kept side by side on purpose:
+a regression that re-breaks only the local form should read as the one-line
+divergence it is rather than as a whole-file failure.
+
+### Noted in passing, NOT chased
+
+`InheritsFrom(TObject)` on a NilPy user-class instance returns **False**. That is
+consistent with pxx's model — a NilPy class is registered as a UClass with no
+parent, so it is not a TObject descendant even though `TObject(p)` casts to one —
+but it is worth knowing before anyone writes `InheritsFrom` into pylib expecting
+Delphi semantics. Not filed: it is a modelling question, not a wrong value, and
+nothing depends on it today.
+
+Gate: `gate.sh quick` GREEN, self-host fixedpoint byte-identical.
+
+## Log
+- 2026-08-02 — resolved, commit e455ff322.

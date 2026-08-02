@@ -43,7 +43,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (207)
+## backlog (205)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -56,7 +56,6 @@ lives in git, not in a timestamp._
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-cfront-sizeof-unparenthesised-subscript | C | 50 | bug | `sizeof a[0]` is a parse error — the array-length idiom does not compile | — |
 | bug-cfront-spurious-dt-needed-libc-with-no-imports | C | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
-| bug-classname-on-a-tobject-local-compiles-to-a-dynamic-attr-fetch | N | 65 | bug | `o.ClassName` on a TObject local compiles to a NilPy DYNAMIC ATTRIBUTE fetch instead of the RTTI call, while `TObject(obj).ClassName` compiles correctly — same expression, different shape, different meaning | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
 | bug-nilpy-bare-dot-float-literals-do-not-lex | N | 35 | bug | `.5` and `5.` do not lex — the shared number scanner requires a digit on BOTH sides of the dot, which is right for Pascal and wrong for Python | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
@@ -245,7 +244,6 @@ lives in git, not in a timestamp._
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
-| regression-test-core-compiler | T | 70 | regression | regression: test-core#src:compiler/compiler.pas@2 red at 96cffaf08de5 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-borg-open-regression-is-permanently-stale | T | 40 | task | borg's watcher was stopped 2026-07-31 with one open regression recorded; nothing will ever clear it, so every --status and gate.sh check reads a dead host's red as live | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
@@ -359,7 +357,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1217)
+## done (1219)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -599,6 +597,7 @@ lives in git, not in a timestamp._
 | bug-char-literal-concat-in-const-expr | A | 50 | bug | Char-literal concatenation in a const expression fails (`const T = #65 + #66`) | — |
 | bug-char-literal-in-const-expr | A | 50 | bug | Char literal in a constant expression: `ConstEval` rejected `'a'` | — |
 | bug-chr-builtin-shadows-param-name | A | 50 | bug | Bug: `Chr` as parameter name treated as built-in function | — |
+| bug-classname-on-a-tobject-local-compiles-to-a-dynamic-attr-fetch | N | 65 | bug | `o.ClassName` on a TObject local compiles to a NilPy DYNAMIC ATTRIBUTE fetch instead of the RTTI call, while `TObject(obj).ClassName` compiles correctly — same expression, different shape, different meaning | — |
 | bug-codegen-nested-index-load-width-pressure | A | 50 | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
 | bug-compiler-hang-on-nested-if-in-begin | A | 50 | bug | bug: compiler hangs (infinite loop) on a method with a nested if/else inside a begin block | — |
 | bug-compiler-tmyclass-hardcoded-clash | A | 50 | bug | Hardcoded 'TMyClass' name clash in compiler type resolution | — |
@@ -1531,6 +1530,7 @@ lives in git, not in a timestamp._
 | regression-test-core-665 | T | 70 | regression | regression: test-core#665 red at 8d1e694a9d8d (auto-filed by twatch) | — |
 | regression-test-core-666 | T | 70 | regression | regression: test-core#666 red at 2758e0d9814c (auto-filed by twatch) | — |
 | regression-test-core-676 | T | 70 | regression | regression: test-core#676 red at 51f2a8a3258f (auto-filed by twatch) | — |
+| regression-test-core-compiler | T | 70 | regression | regression: test-core#src:compiler/compiler.pas@2 red at 96cffaf08de5 (auto-filed by twatch) | — |
 | regression-test-core-facade-and-paths | T | 70 | regression | regression: test-core#src:examples/tk/facade_and_paths.npy red at d64a5d6a97b4 (auto-filed by twatch) | — |
 | regression-test-core-test-basic-comprehensive | T | 70 | regression | regression: test-core#src:test/test_basic_comprehensive.bas red at 3f2828476c6c (auto-filed by twatch) | — |
 | regression-test-core-test-fpc-compat-batch2 | T | 70 | regression | regression: test-core#src:test/test_fpc_compat_batch2.pas red at f6bcbe6c1237 (auto-filed by twatch) | — |
@@ -1623,9 +1623,7 @@ lives in git, not in a timestamp._
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
-- [p 70] [T] regression-test-core-compiler
 - [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
-- [p 65] [N] bug-classname-on-a-tobject-local-compiles-to-a-dynamic-attr-fetch
 - [p 65] [N] bug-nilpy-class-attribute-unreachable-through-the-class-name
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
