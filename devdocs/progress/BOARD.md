@@ -38,7 +38,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (187)
+## backlog (188)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -151,6 +151,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 70 | feature | Runtime dunder dispatch for a user class held in a Variant | — |
 | feature-nilpy-runtime-method-dispatch-on-variant | N | 50 | feature | NilPy: dispatch a method call on a VARIANT receiver at RUNTIME | — |
 | feature-nilpy-set-needs-runtime-tag-for-display-and-equality | N | 40 | feature | A `set` needs its own runtime tag — two divergences from `list` share this root cause | — |
+| feature-nilpy-starred-and-nested-unpacking | N | 50 | feature | Starred and NESTED unpacking targets | — |
 | feature-nilpy-staticmethod-and-classmethod | N | 35 | feature | `@staticmethod` and `@classmethod` are rejected | — |
 | feature-nilpy-stdlib-coverage-gaps-measured | N | 30 | feature | Measured stdlib coverage: json and re are solid; os, time and math.fabs are absent | — |
 | feature-nilpy-str-format-named-keyword-fields | N | 25 | feature | `"{name} is {age}".format(name=..., age=...)` — named fields not supported | — |
@@ -3035,6 +3036,7 @@ _none_
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [N] feature-nilpy-runtime-method-dispatch-on-variant
+- [p 50] [N] feature-nilpy-starred-and-nested-unpacking
 - [p 50] [A] feature-pascal-asmmode-directive-tolerance
 - [p 50] [A] feature-pascal-initialize-finalize-intrinsics
 - [p 50] [N] feature-pyeval-closure-as-native-word
