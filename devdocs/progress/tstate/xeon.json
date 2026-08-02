@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-02T13:40:19Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "13fae32d176734aa4499b49a2da241ff19fa61fb",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-02T13:47:03Z",
    "fixed": [],
    "new_red": [],
@@ -404,6 +396,16 @@
    "new_red": [],
    "sha": "877631dbe175e97a62ce982d850994cc51391523",
    "tier": "full",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-02T22:38:30Z",
+   "fixed": [
+    "optdiff#shard8/12"
+   ],
+   "new_red": [],
+   "sha": "877631dbe175e97a62ce982d850994cc51391523",
+   "tier": "opt",
    "verdict": "GREEN"
   }
  ],
@@ -2268,6 +2270,7 @@
   "test-opt#src:compiler/compiler.pas@1": "opt",
   "test-opt#src:compiler/compiler.pas@2": "opt",
   "test-opt#src:compiler/compiler.pas@3": "opt",
+  "test-opt#src:test/c_inline_strlit_arg.c": "opt",
   "test-opt#src:test/test_atomic64.pas": "opt",
   "test-riscv32#00": "full",
   "test-riscv32#src:test/ccross_args.c@1": "full",
@@ -2443,7 +2446,7 @@
   "optdiff#shard5/6": "pass",
   "optdiff#shard6/12": "pass",
   "optdiff#shard7/12": "pass",
-  "optdiff#shard8/12": "fail",
+  "optdiff#shard8/12": "pass",
   "optdiff#shard9/12": "pass",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "pass",
   "test-aarch64#src:test/ccross_args.c": "pass",
@@ -4282,6 +4285,7 @@
   "test-opt#src:compiler/compiler.pas@1": "pass",
   "test-opt#src:compiler/compiler.pas@2": "pass",
   "test-opt#src:compiler/compiler.pas@3": "pass",
+  "test-opt#src:test/c_inline_strlit_arg.c": "pass",
   "test-opt#src:test/test_atomic64.pas": "pass",
   "test-riscv32#00": "pass",
   "test-riscv32#src:test/ccross_args.c@1": "pass",
@@ -4439,11 +4443,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-02T22:35:25Z",
+  "date": "2026-08-02T22:38:30Z",
   "sha": "877631dbe175e97a62ce982d850994cc51391523",
-  "tier": "full",
+  "tier": "opt",
   "verdict": "GREEN",
-  "wall": 394.7
+  "wall": 177.8
  },
  "last_bench": {
   "conf_rows": 550,
