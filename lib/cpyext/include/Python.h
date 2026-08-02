@@ -87,6 +87,41 @@
 #define PY_VERSION "3.12.0"
 
 typedef long Py_ssize_t;
+#define PY_SSIZE_T_MAX ((Py_ssize_t)(((unsigned long)-1) >> 1))
+#define PY_SSIZE_T_MIN (-PY_SSIZE_T_MAX - 1)
+
+/* Spellings CPython's headers provide and generated code uses in casts and
+ * conversion helpers. `LONG_LONG` is CPython's own legacy alias, not limits.h's
+ * LLONG_MAX family — the two are unrelated despite the name. */
+/* MACROS, not typedefs, exactly as CPython spells them — generated code writes
+ * `unsigned PY_LONG_LONG`, which only parses if the name expands to a type
+ * KEYWORD sequence. A typedef compiles here and then fails at every such use. */
+#define LONG_LONG long long
+#define PY_LONG_LONG long long
+#define PY_INT64_T long long
+typedef Py_ssize_t Py_hash_t;
+typedef unsigned long Py_uhash_t;
+
+/* Runtime version, as `PyLong`-free plain integer. Real CPython exposes it as
+ * a `const unsigned long`; generated code compares it against PY_VERSION_HEX
+ * to detect a build/runtime mismatch, which for us can never differ. */
+#define Py_Version ((unsigned long)PY_VERSION_HEX)
+
+/* Vectorcall: NOT implemented by this runtime. The flag bit is declared
+ * because generated call helpers mask it off an argument count before doing
+ * anything else; with no vectorcall protocol here it is never set, so the
+ * mask is a no-op and the ordinary tp_call/PyObject_Call path is taken. */
+#define PY_VECTORCALL_ARGUMENTS_OFFSET \
+    ((size_t)1 << (8 * sizeof(size_t) - 1))
+
+/* Py_CompileString / PyEval_EvalCode start symbols. Declared for the same
+ * reason: they appear in generated utility code that a compiled-ahead-of-time
+ * extension never reaches. There is no compiler in this runtime, and anything
+ * that actually calls them will fail at LINK with its own name — which is the
+ * intended failure mode (see the header note on honest promises). */
+#define Py_single_input 256
+#define Py_file_input   257
+#define Py_eval_input   258
 
 /* --- object model -------------------------------------------------------
  * One tagged struct standing in for every PyObject subtype M1 needs. Real
@@ -131,13 +166,56 @@ void Py_IncRef(PyObject *o);
 void Py_DecRef(PyObject *o);
 #define Py_INCREF(o)  Py_IncRef((PyObject *)(o))
 #define Py_DECREF(o)  Py_DecRef((PyObject *)(o))
+#define Py_XINCREF(o) do { if ((o) != 0) Py_IncRef((PyObject *)(o)); } while (0)
 #define Py_XDECREF(o) do { if ((o) != 0) Py_DecRef((PyObject *)(o)); } while (0)
+#define Py_CLEAR(o)   do { PyObject *_pxx_tmp = (PyObject *)(o); \
+                           if (_pxx_tmp != 0) { (o) = 0; Py_DecRef(_pxx_tmp); } } while (0)
+
+/* The canonical True/False objects. Real CPython exposes struct instances and
+ * `Py_True`/`Py_False` as their addresses; this runtime has no bool object
+ * kind yet, so they are the two long objects 1 and 0 — enough for the
+ * `return o == Py_True` / `Py_INCREF(Py_False); return Py_False;` shapes
+ * generated code emits, and honest about being nothing more. */
+extern PyObject _Py_TrueStruct;
+extern PyObject _Py_FalseStruct;
+#define Py_True  (&_Py_TrueStruct)
+#define Py_False (&_Py_FalseStruct)
+
+/* PEP 380 send() protocol result. No generators cross this boundary — the
+ * enum exists because generated code typedefs a function pointer returning it
+ * before any feature test can exclude the declaration. */
+typedef enum {
+    PYGEN_RETURN = 0,
+    PYGEN_ERROR = -1,
+    PYGEN_NEXT = 1
+} PySendResult;
+
+/* Rich-comparison opcodes (PyObject_RichCompare / _RichCompareBool). */
+#define Py_LT 0
+#define Py_LE 1
+#define Py_EQ 2
+#define Py_NE 3
+#define Py_GT 4
+#define Py_GE 5
 
 /* A stub type object: part of the real API's shape, unused by M1's own
  * extension but declared so a `PyTypeObject *` field/parameter compiles. */
 typedef struct _typeobject {
     const char *tp_name;
 } PyTypeObject;
+
+/* M5a: the built-in type objects generated code compares against
+ * (`Py_TYPE(o) == &PyDict_Type`). One PyTypeObject per PYOBJ_* kind lives in
+ * the runtime; these are those entries by name. Identity is all they carry —
+ * there are no slots behind them, and `tp_name` is for diagnostics only. */
+extern PyTypeObject PyLong_Type;
+extern PyTypeObject PyFloat_Type;
+extern PyTypeObject PyUnicode_Type;
+extern PyTypeObject PyBytes_Type;
+extern PyTypeObject PyTuple_Type;
+extern PyTypeObject PyList_Type;
+extern PyTypeObject PyDict_Type;
+PyTypeObject *Py_TYPE(PyObject *o);
 
 /* --- int / float / string conversion -------------------------------------- */
 PyObject *PyLong_FromLong(long v);
@@ -234,6 +312,15 @@ extern PyObject *PyExc_Exception;
 extern PyObject *PyExc_ValueError;
 extern PyObject *PyExc_TypeError;
 extern PyObject *PyExc_RuntimeError;
+/* M5a: the rest of the set generated (Cython) code names unconditionally in
+ * its error and deprecation paths. Same treatment as the four above — an
+ * identity, not a class hierarchy: nothing here inspects them beyond `==`. */
+extern PyObject *PyExc_AttributeError;
+extern PyObject *PyExc_ImportError;
+extern PyObject *PyExc_OverflowError;
+extern PyObject *PyExc_DeprecationWarning;
+extern PyObject *PyExc_RuntimeWarning;
+extern PyObject *PyExc_SystemError;
 
 void PyErr_SetString(PyObject *type, const char *message);
 PyObject *PyErr_Occurred(void);
@@ -246,7 +333,13 @@ const char *__pxx_PyErr_Message(void);
 typedef PyObject *(*PyCFunction)(PyObject *self, PyObject *args);
 
 #define METH_VARARGS 0x0001
+#define METH_KEYWORDS 0x0002 /* ml_meth is really PyCFunctionWithKeywords */
 #define METH_O       0x0008  /* ml_meth called as fn(self, theSingleArg) directly */
+
+/* METH_KEYWORDS entries carry a three-argument function through the same
+ * one-field ml_meth slot, exactly as CPython does — the cast is the API. */
+typedef PyObject *(*PyCFunctionWithKeywords)(PyObject *self, PyObject *args,
+                                             PyObject *kwargs);
 
 typedef struct PyMethodDef {
     const char  *ml_name;
@@ -269,6 +362,15 @@ typedef struct PyModuleDef_Slot {
     int   slot;
     void *value;
 } PyModuleDef_Slot;
+
+/* The PEP 489 slot IDs. Named because generated code builds the table with
+ * them; the values are never interpreted here (PyModuleDef_Init collapses
+ * multi-phase init to single-phase — see below), and a real Py_mod_exec slot
+ * is NOT executed. An extension that needs one is out of scope today, and
+ * silently not running it would be exactly the failure mode this header
+ * refuses; that gap is recorded on the cpyext ticket, not papered over. */
+#define Py_mod_create 1
+#define Py_mod_exec   2
 
 typedef struct PyModuleDef {
     PyModuleDef_Base  m_base;
@@ -294,5 +396,146 @@ PyObject *PyModule_Create2(PyModuleDef *def, int module_api_version);
 PyObject *PyModuleDef_Init(PyModuleDef *def);
 
 #define PyMODINIT_FUNC PyObject *
+
+/* --- M5a: the surface a Cython-generated module names ----------------------
+ *
+ * Measured, not guessed: this is exactly the set of functions the smallest
+ * possible Cython 3.2 module references when generated with `-X binding=False`
+ * and compiled with `-DPy_LIMITED_API` (see the M5 scoping section on
+ * feature-nilpy-cpyext-c-api-from-source for how the list was taken and why
+ * those two knobs are the right target).
+ *
+ * DECLARED here, implemented in pyruntime.c only where this runtime can mean
+ * it. The rest are declared so the translation unit COMPILES — generated code
+ * emits utility functions it never calls — and left to fail at LINK with their
+ * own name if something does reach them. That is the header's standing rule
+ * and it is why nothing below is stubbed to return a plausible value.
+ */
+
+/* type / identity predicates */
+int PyLong_Check(PyObject *o);
+int PyLong_CheckExact(PyObject *o);
+int PyUnicode_CheckExact(PyObject *o);
+int PyBytes_CheckExact(PyObject *o);
+int PyTuple_Check(PyObject *o);
+int PyByteArray_Check(PyObject *o);
+int PyCFunction_Check(PyObject *o);
+
+/* long: the widths beyond M1's plain `long` */
+PyObject *PyLong_FromLongLong(long long v);
+PyObject *PyLong_FromUnsignedLong(unsigned long v);
+PyObject *PyLong_FromUnsignedLongLong(unsigned long long v);
+PyObject *PyLong_FromSize_t(size_t v);
+long long PyLong_AsLongLong(PyObject *o);
+unsigned long PyLong_AsUnsignedLong(PyObject *o);
+unsigned long long PyLong_AsUnsignedLongLong(PyObject *o);
+Py_ssize_t PyLong_AsSsize_t(PyObject *o);
+
+/* number protocol — the operators Cython's int conversion helpers use */
+PyObject *PyNumber_Long(PyObject *o);
+PyObject *PyNumber_Index(PyObject *o);
+PyObject *PyNumber_And(PyObject *a, PyObject *b);
+PyObject *PyNumber_Rshift(PyObject *a, PyObject *b);
+PyObject *PyNumber_Invert(PyObject *o);
+
+/* object protocol */
+int PyObject_IsTrue(PyObject *o);
+Py_hash_t PyObject_Hash(PyObject *o);
+int PyObject_RichCompareBool(PyObject *a, PyObject *b, int op);
+PyObject *PyObject_GetAttr(PyObject *o, PyObject *name);
+PyObject *PyObject_GetAttrString(PyObject *o, const char *name);
+int PyObject_SetAttr(PyObject *o, PyObject *name, PyObject *v);
+int PyObject_SetAttrString(PyObject *o, const char *name, PyObject *v);
+PyObject *PyObject_Call(PyObject *callable, PyObject *args, PyObject *kwargs);
+PyObject *PyObject_CallFunctionObjArgs(PyObject *callable, ...);
+
+/* unicode / bytes / bytearray */
+Py_ssize_t PyTuple_Size(PyObject *t);
+int PyBytes_AsStringAndSize(PyObject *o, char **buf, Py_ssize_t *len);
+PyObject *PyByteArray_FromStringAndSize(const char *s, Py_ssize_t n);
+char *PyByteArray_AsString(PyObject *o);
+Py_ssize_t PyByteArray_Size(PyObject *o);
+int PyUnicode_Compare(PyObject *a, PyObject *b);
+int PyUnicode_CompareWithASCIIString(PyObject *a, const char *s);
+PyObject *PyUnicode_Decode(const char *s, Py_ssize_t size,
+                           const char *encoding, const char *errors);
+PyObject *PyUnicode_DecodeUTF8(const char *s, Py_ssize_t size,
+                               const char *errors);
+PyObject *PyUnicode_FromFormat(const char *format, ...);
+void PyUnicode_InternInPlace(PyObject **p);
+
+/* dict */
+int PyDict_Contains(PyObject *d, PyObject *key);
+PyObject *PyDict_GetItemString(PyObject *d, const char *key);   /* borrowed */
+PyObject *PyDict_GetItemWithError(PyObject *d, PyObject *key);  /* borrowed */
+int PyDict_SetItemString(PyObject *d, const char *key, PyObject *v);
+int PyDict_Update(PyObject *a, PyObject *b);
+
+/* errors */
+int PyErr_ExceptionMatches(PyObject *exc);
+int PyErr_GivenExceptionMatches(PyObject *given, PyObject *exc);
+void PyErr_Fetch(PyObject **ptype, PyObject **pvalue, PyObject **ptraceback);
+void PyErr_Restore(PyObject *type, PyObject *value, PyObject *traceback);
+PyObject *PyErr_Format(PyObject *exc, const char *format, ...);
+int PyErr_WarnEx(PyObject *category, const char *message, Py_ssize_t stacklevel);
+int PyErr_WarnFormat(PyObject *category, Py_ssize_t stacklevel,
+                     const char *format, ...);
+
+/* raw memory (extension-owned buffers, never a NilPy object) */
+void *PyMem_Malloc(size_t n);
+void *PyMem_Realloc(void *p, size_t n);
+void PyMem_Free(void *p);
+
+/* argument-parsing helper generated keyword code calls before parsing */
+int PyArg_ValidateKeywordArguments(PyObject *kwargs);
+
+/* module / import / sys. There is no import machinery in this runtime (a pxx
+ * program's modules are linked in), so these exist for the shapes generated
+ * code emits around module setup; anything that genuinely needs a live import
+ * system is out of scope and is meant to fail loudly. */
+PyObject *PyModule_GetDict(PyObject *m);                        /* borrowed */
+PyObject *PyModule_NewObject(PyObject *name);
+PyObject *PyImport_AddModule(const char *name);                 /* borrowed */
+PyObject *PyImport_GetModuleDict(void);                         /* borrowed */
+PyObject *PyImport_ImportModule(const char *name);
+PyObject *PySys_GetObject(const char *name);                    /* borrowed */
+
+/* formatting */
+int PyOS_snprintf(char *str, size_t size, const char *format, ...);
+
+/* --- declared but deliberately NOT implemented ----------------------------
+ * Each is referenced from Cython utility code that a compiled-ahead-of-time
+ * extension does not execute. They are declared so the module compiles, and
+ * NOT defined so that anything actually calling one fails at link naming it.
+ * Do not stub these: a stub that returns NULL or 0 turns "unsupported" into a
+ * wrong answer, which is the failure mode this whole header refuses.
+ *
+ *   Py_CompileString / PyEval_EvalCode  — no Python compiler here
+ *   PyTraceBack_Here                    — no PyFrameObject to record
+ *   PyInterpreterState_Get / _GetID     — single, implicit interpreter
+ *   PyType_GetQualName                  — no heap types until M5b
+ *   PyObject_Vectorcall / _VectorcallMethod / PyVectorcall_NARGS
+ *                                       — no vectorcall protocol
+ *   PyCFunction_New / _NewEx / _GetFunction
+ *                                       — builtin-function objects are M5b
+ *   PyMemoryView_FromMemory             — buffer protocol is M6
+ */
+struct _object *Py_CompileString(const char *str, const char *filename, int start);
+PyObject *PyEval_EvalCode(PyObject *co, PyObject *globals, PyObject *locals);
+int PyTraceBack_Here(void *frame);
+void *PyInterpreterState_Get(void);
+long long PyInterpreterState_GetID(void *interp);
+PyObject *PyType_GetQualName(PyTypeObject *t);
+PyObject *PyObject_Vectorcall(PyObject *callable, PyObject *const *args,
+                              size_t nargsf, PyObject *kwnames);
+PyObject *PyObject_VectorcallMethod(PyObject *name, PyObject *const *args,
+                                    size_t nargsf, PyObject *kwnames);
+Py_ssize_t PyVectorcall_NARGS(size_t nargsf);
+PyObject *PyCFunction_New(PyMethodDef *ml, PyObject *self);
+PyObject *PyCFunction_NewEx(PyMethodDef *ml, PyObject *self, PyObject *module);
+PyCFunction PyCFunction_GetFunction(PyObject *op);
+PyObject *PyMemoryView_FromMemory(char *mem, Py_ssize_t size, int flags);
+#define PyBUF_READ  0x100
+#define PyBUF_WRITE 0x200
 
 #endif /* PXX_CPYEXT_PYTHON_H */
