@@ -38,7 +38,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (190)
+## backlog (191)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -85,6 +85,7 @@ _none_
 | bug-t-bench-sub-second-timings-quantized-to-50ms | T | 65 | bug | Benchmark timings under 1s are quantized to a 50 ms grid | — |
 | bug-t-claim-silently-no-ops-owner-on-yaml-only-tickets | T | 45 | bug | `progress.sh claim`/`resolve` silently no-op Owner/Status on YAML-only tickets | — |
 | bug-t-corpus-regex-invents-phantom-tree | T | 55 | bug | CORPUS_RE matches prose in a SKIP message and invents corpus 'stb)', permanently skipping a job that also carries a non-corpus regression test | — |
+| bug-t-etxtbsy-race-reds-single-shot-selfhost-jobs | T | 60 | bug | A one-off `Text file busy` on exec red the self-host chain job; selfhost is single-shot by policy, so a harness-level OS race is indistinguishable from real compiler nondeterminism | — |
 | bug-t-gate-sh-contention-check-double-counts-zero | T | 25 | bug | tools/gate.sh: the watcher-contention check prints a shell error on every run because `pgrep -c` emits 0 AND exits 1, so the `\|\| echo 0` fallback appends a second 0 | — |
 | bug-t-gate-sh-pgrep-fc-double-zero-integer-error | T | 25 | bug | tools/gate.sh: pgrep -fc prints 0 AND exits 1, so `\|\| echo 0` makes others=\"0\\n0\" and every gate run emits a bogus 'integer expression expected' error | — |
 | bug-t-host-dependent-test-assertions-cross-distro | T | 70 | bug | Watcher and dev boxes run different distros, so tests that bake in host state (library versions, allocator behaviour, the host CPython) go permanently RED on the watcher while passing locally — and read as watcher bugs | — |
@@ -2991,6 +2992,7 @@ _none_
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [N] bug-nilpy-one-line-def-and-class-bodies-do-not-parse
 - [p 60] [N] bug-nilpy-same-kind-undefined-operators-still-compute
+- [p 60] [T] bug-t-etxtbsy-race-reds-single-shot-selfhost-jobs
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [U] decide-nilpy-runtime-dunder-dispatch-mechanism
 - [p 60] [A] feature-a-abi-oracle
