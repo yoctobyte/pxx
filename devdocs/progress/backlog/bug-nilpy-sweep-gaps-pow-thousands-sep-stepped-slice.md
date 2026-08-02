@@ -152,3 +152,35 @@ static one.
 
 ## Still open
 5. `range` as a first-class VALUE (`list(range(3))`).
+
+## 2026-08-02 — a fourth loud gap, same family: NESTED format specs
+
+```python
+w = 7
+print(f"{n:{w}d}")     # CPython: "     42"
+                       # pxx    : ValueError: unsupported format spec "{w"  (at RUN time)
+```
+
+A format spec may itself contain a replacement field — that is how a width or
+precision is computed rather than written literally, and it is the standard way
+to build a table whose column width is decided at run time.
+
+Same shape as the `,` thousands-separator gap above: **loud, and raised at RUN
+time for something knowable while compiling.** The spec text is a literal in the
+source; a spec pxx cannot handle could be refused when the f-string is parsed,
+naming the file and line, instead of surfacing as a ValueError from somewhere
+inside the program.
+
+That is worth doing for the whole family at once rather than per spec — it turns
+"my program died halfway through" into "line 14 uses a format spec pxx does not
+support yet", which is the difference between a bug report and a five-second fix.
+
+### What the same sweep confirmed WORKS, for scope
+
+Measured byte-identical to CPython in the same run, so the f-string machinery is
+in good shape and this really is a spec-parser gap:
+`{n:5d}`, `{n:<5}`, `{n:>5}`, `{n:^5}`, `{f:.2f}`, `{f:8.3f}`, `{f:e}`,
+`{n:x}`, `{n:o}`, `{n:b}`, `{n:+d}`, `{-n:+d}`, `{0.5:.0%}`, `{s!r}`, `{n!r}`,
+`{{literal}}`, expressions inside holes (`{n + 1}`, `{s.upper()}`, `{len(s)}`),
+subscripts (`{xs[0]}`, `{d['k']}`), a nested string literal (`{'nested'}`),
+`"%s-%d" % (s, n)` and `"{0} {1} {0}".format(...)`.
