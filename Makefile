@@ -384,6 +384,8 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_oneline26 | diff -u test/test_nilpy_one_line_def_suite.expected -
 	./$(COMPILER) test/test_nilpy_dunder_index_slice.npy /tmp/test_nilpy_idxslice26
 	/tmp/test_nilpy_idxslice26 | diff -u test/test_nilpy_dunder_index_slice.expected -
+	./$(COMPILER) test/test_nilpy_widen_binding_variant.npy /tmp/test_nilpy_widenbind26
+	/tmp/test_nilpy_widenbind26 | diff -u test/test_nilpy_widen_binding_variant.expected -
 	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy /tmp/test_nilpy_ast_literal26
 	test "$$(/tmp/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
 	# atexit handlers run at exit (LIFO), io's in-memory buffers behave
@@ -4205,7 +4207,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_class.npy /tmp/test_nilpy_class26
 	test "$$(/tmp/test_nilpy_class26)" = "25"
 	./$(COMPILER) test/test_nilpy_widen_fix.npy /tmp/test_nilpy_widen_fix26
-	test "$$(/tmp/test_nilpy_widen_fix26)" = "$$(printf '5.0\n3.14\n7.0\n2.5')"
+	# CPython's answer, not pxx's. This expectation used to record 5.0/7.0 —
+	# the bug itself, kept green by the test
+	# (bug-nilpy-int-prints-as-float-when-the-name-is-widened-later).
+	test "$$(/tmp/test_nilpy_widen_fix26)" = "$$(printf '5\n3.14\n7\n2.5')"
 	./$(COMPILER) test/test_nilpy_call_return_infer.npy /tmp/test_nilpy_call_return_infer26
 	test "$$(/tmp/test_nilpy_call_return_infer26)" = "42"
 	./$(COMPILER) test/test_nilpy_c_define_const.npy /tmp/test_nilpy_c_define_const26

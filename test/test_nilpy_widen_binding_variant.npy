@@ -1,0 +1,54 @@
+# bug-nilpy-int-prints-as-float-when-the-name-is-widened-later
+#
+# `x = 5; print(x); x = 3.14` printed 5.0 for the FIRST print: rebinding a name
+# across int and float widened its slot to float, and the widened type was used
+# for every reference including those lexically BEFORE the widening assignment.
+# An assignment that had not run yet changed how an earlier value was rendered.
+#
+# The slot is now a VARIANT for that pair, so each binding carries its own tag
+# and renders as itself. Only int-meets-float is redirected — the integer loop
+# below is the gate on ordinary integer code not being boxed, and the
+# float-only and int-only names are the gate on a same-kind rebinding staying
+# scalar.
+#
+# Diffed against CPython (tools/pydiff.py).
+
+x = 5
+print(x)
+x = 3.14
+print(x)
+
+def local() -> int:
+    y = 7
+    print(y)
+    y = 2.5
+    print(y)
+local()
+
+# ordinary integer code must NOT be boxed by this
+def add(a, b):
+    t = 0
+    i = 0
+    while i < 5:
+        t = t + i
+        i = i + 1
+    return t
+print(add(1, 2))
+
+# a float-only name stays a float
+f = 1.5
+print(f)
+f = 2.5
+print(f)
+
+# an int-only name stays an int
+n = 3
+print(n)
+n = 4
+print(n)
+
+# widened, then arithmetic on each binding
+z = 2
+print(z * 3)
+z = 0.5
+print(z * 3)

@@ -1032,6 +1032,32 @@ begin
   Result := tyUnknown;
 end;
 
+{ The join for a NAME REBOUND across types — which is NOT the join for an
+  EXPRESSION, and that distinction is the whole fix. `1 + 2.5` really is a
+  float. `x = 5` then `x = 3.14` is two BINDINGS of one name, and Python renders
+  each by the value it holds; widening the slot to float made the earlier
+  binding print `5.0`, a wrong value in output produced by an assignment that
+  had not run yet
+  (bug-nilpy-int-prints-as-float-when-the-name-is-widened-later).
+
+  A variant carries its own tag, so each binding renders as itself — the variant
+  tier already does exactly this for a value out of a heterogeneous container.
+
+  ONLY the int-meets-float pair is redirected. Everything else keeps PyWiden's
+  answer: int-meets-int stays scalar so ordinary integer code boxes nothing, the
+  two string kinds keep their own rule (a variant scalar-loaded on `return`
+  yields its tag word), and a promotable int keeps its own join, whose
+  float case is a deliberate honest error rather than a silent boxing. }
+function PyWidenBinding(a, b: TTypeKind): TTypeKind;
+begin
+  if PyNumeric(a) and PyNumeric(b) and (a <> b) and
+     (not TypeIsPromoInt(a)) and (not TypeIsPromoInt(b)) and
+     (TypeIsFloat(a) <> TypeIsFloat(b)) then
+    Result := tyVariant
+  else
+    Result := PyWiden(a, b);
+end;
+
 procedure PyInitVariantLocals(scopeBase: Integer);
 var i: Integer;
 begin
@@ -13670,7 +13696,7 @@ begin
       end
       else
       begin
-        w := PyWiden(PyLocals[si].TypeKind, tk);
+        w := PyWidenBinding(PyLocals[si].TypeKind, tk);
         if w <> PyLocals[si].TypeKind then
         begin
           PyLocals[si].TypeKind := w;
@@ -14077,7 +14103,7 @@ begin
       end
       else
       begin
-        w := PyWiden(PyLocals[si].TypeKind, tk);
+        w := PyWidenBinding(PyLocals[si].TypeKind, tk);
         if w <> PyLocals[si].TypeKind then
         begin
           PyLocals[si].TypeKind := w;
