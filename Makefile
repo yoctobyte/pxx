@@ -1104,6 +1104,11 @@ test-nilpy: $(COMPILER)
 	# class, so the answer needs FIsTuple at run time, not a class name.
 	./$(COMPILER) test/test_nilpy_type_name.npy /tmp/test_nilpy_typename26
 	test "$$(/tmp/test_nilpy_typename26)" = "$$(printf '%b' 'Dog\nAnimal\nint\nfloat\nbool\nstr\nNoneType\nlist\ndict\ndict\nbytes\ntuple\nlist\ntuple\ntuple\nint\nstr\nfloat\nNoneType\nbool\nlist\ntuple\ndict\nint str list tuple')"
+	# for-in over a list iterates it LIVE. The bound used to be snapshotted while
+	# the element fetch read the live list, so mutation mid-loop diverged: growth
+	# was silently missed and shrinking ran off the end into an IndexError.
+	./$(COMPILER) test/test_nilpy_iterate_live_list.npy /tmp/test_nilpy_livelist26
+	test "$$(/tmp/test_nilpy_livelist26)" = "$$(printf '%b' '[1, 2, 3, 9]\n[1, 2, 3, 9]\n[1, 2, 3]\n[1, 2, 3]\n[1, 3]\n[2, 4]\n[1]\n[]\n[2, 4, 6]\n[2, 3]\n0 1\n1 2\n2 3\na 1\nb 2\na 1\nb 2\na\nb\nc\n90\nempty ok\n[1, 3]')"
 	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
 	# key function had no overload to bind to (dict alone and list+key both worked)
 	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26

@@ -1,0 +1,82 @@
+# A for-in over a list iterates it LIVE, as Python does.
+# The loop bound used to be snapshotted into a hidden __py_n before the loop
+# while the element fetch read the live list, so the two disagreed the moment
+# the body mutated the list: growth was silently MISSED, and shrinking ran off
+# the end into an IndexError.
+# bug-nilpy-for-in-snapshots-the-length-so-mutation-during-iteration-diverges
+
+# growth during iteration IS seen
+m = [1, 2, 3]
+out = []
+for v in m:
+    out.append(v)
+    if v == 1:
+        m.append(9)
+print(out)
+print(m)
+
+# shrinking just ends the loop early -- this used to raise IndexError
+n = [1, 2, 3, 4]
+o2 = []
+for v in n:
+    o2.append(v)
+    if v == 1:
+        n.pop()
+print(o2)
+print(n)
+
+# removing the current element makes CPython SKIP the next one; match that
+m2 = [1, 2, 3, 4]
+seen = []
+for v in m2:
+    seen.append(v)
+    m2.remove(v)
+print(seen)
+print(m2)
+
+# clearing mid-loop stops immediately
+m3 = [1, 2, 3]
+s3 = []
+for v in m3:
+    s3.append(v)
+    del m3[0:3]
+print(s3)
+print(m3)
+
+# --- everything below must be UNCHANGED by the live bound ---
+
+l = [1, 2, 3]
+print([x * 2 for x in l])
+print([x for x in l if x > 1])
+
+for i, v in enumerate(l):
+    print(i, v)
+
+d = {"a": 1, "b": 2}
+for k in d:
+    print(k, d[k])
+for k, v in d.items():
+    print(k, v)
+
+# a str is immutable, so it keeps the snapshot bound
+for ch in "abc":
+    print(ch)
+
+tot = 0
+for a in [1, 2]:
+    for b in [10, 20]:
+        tot += a * b
+print(tot)
+
+for x in []:
+    print("never")
+print("empty ok")
+
+r = []
+for x in [1, 2, 3, 4, 5]:
+    if x == 2:
+        continue
+    if x == 4:
+        break
+    r.append(x)
+print(r)

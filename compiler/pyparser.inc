@@ -10708,7 +10708,7 @@ begin
 
   bodyNode := PySeqAppend(bodyNode, node);
 
-  { while __py_i + 1 < __py_n }
+  { while __py_i + 1 < len(__py_c) }
   incNode := AllocNode(AN_BINOP);
   ASTIVal[incNode] := Ord(tkPlus);
   ASTLeft[incNode] := PyMakeIdent(iSym);
@@ -10720,7 +10720,30 @@ begin
   cmpNode := AllocNode(AN_BINOP);
   ASTIVal[cmpNode] := Ord(tkLt);
   ASTLeft[cmpNode] := incNode;
-  ASTRight[cmpNode] := PyMakeIdent(nSym);
+  { The bound is re-read EVERY iteration for a container, not taken from the
+    __py_n snapshot. Python iterates a list LIVE: appending during the loop is
+    seen by it, and shrinking it just ends the loop early. With the snapshot,
+    growth was silently missed (`out` came back [1,2,3] where CPython gives
+    [1,2,3,9]) and shrinking ran off the end into an IndexError, because the
+    element fetch `__py_c.at(i)` always read the live list while only the bound
+    was frozen — the two disagreed
+    (bug-nilpy-for-in-snapshots-the-length-so-mutation-during-iteration-diverges).
+
+    A STRING keeps the snapshot: str is immutable, so a fresh pystr_len every
+    iteration could not observe anything different.
+
+    A DICT is unaffected either way — the dict path iterates a keylist COPY
+    built before the loop (see `ci := listCi` after the keylist call), so the
+    live count reads that copy, not the dict. Mutating a dict mid-loop remains
+    unobserved rather than raising as CPython does; that is a separate gap. }
+  if isStr then
+    ASTRight[cmpNode] := PyMakeIdent(nSym)
+  else
+  begin
+    lenNode := PyCallMeth1(ci, 'count', PyMakeIdent(cSym), -1);
+    if lenNode < 0 then Error('Nil Python: pylib (count) not loaded');
+    ASTRight[cmpNode] := lenNode;
+  end;
   ASTTk[cmpNode] := Ord(tyBoolean);
   whileNode := AllocNode(AN_WHILE);
   ASTLeft[whileNode] := cmpNode;

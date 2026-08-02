@@ -123,5 +123,32 @@ Not implemented, and refused BY NAME rather than approximated: assigning to an
 extended slice (`l[::2] = ...`) and `del l[::2]`. Dropping the step there would
 touch the wrong elements.
 
+## 2026-08-02 — item 5 scoped (NOT started), so the next session need not re-scope
+
+`range` as a value is a new TYPE, not a missing wrapper like `pow`/`tuple` were,
+and it is the only item here that is not a quick fix. Measured state: `range`
+works ONLY as a for-loop header (a counted-loop lowering, `PyParseForIn`); in
+any expression position it is `undefined variable (range)` — including
+`list(range(3))` and `sum(range(5))`.
+
+**Do not implement it by materialising a TPyList eagerly.** That is the obvious
+20-minute version and it lies in three observable ways: `print(range(3))` would
+give `[0, 1, 2]` instead of `range(0, 3)`, `type(range(3)).__name__` would give
+`list`, and `range(10**9)` would exhaust memory instead of being O(1). Silent
+wrong values are exactly what this repo refuses; the current loud compile error
+is strictly better than that, which is why this is NOT urgent despite `range`
+being common.
+
+The honest shape is a `TPyRange` class in pylib (FStart/FStop/FStep + count/at)
+plus, at minimum: `list()` / `len()` / `sum()` overloads, indexing, `==`,
+printing through the variant object path, and a for-in arm. Iteration may
+legitimately materialise at the loop (`pyrange_to_list`) — that costs only the
+huge-range case and keeps every observable answer right, whereas materialising
+at CONSTRUCTION corrupts print and type().
+
+Note the interaction: for-in over a VARIABLE holding a range goes through the
+generic variant path, so `pyvar_*` needs a TPyRange arm too, not just the
+static one.
+
 ## Still open
 5. `range` as a first-class VALUE (`list(range(3))`).
