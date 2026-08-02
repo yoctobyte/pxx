@@ -306,3 +306,27 @@ numbers on this ticket as unverified until reproduced independently, ideally
 by someone OTHER than the agent that wrote the fix, with a byte-for-byte-fresh
 build (not the agent's own build artifacts) — this round's numbers could not
 be reproduced even from the exact same commit.
+
+
+## 2026-08-03 — picked up, read in full, NOT attempted. Parked back.
+
+Read end to end and put down deliberately rather than started. Three rounds have
+now looked at this and two independently-committed "fixed, verified" attempts
+failed to reproduce when re-measured from their own exact commits. The recorded
+next step is specific and is the only one nobody has done: a gdb breakpoint on
+`PXXObjRetain` / `PXXObjRelease` for the ONE leaking address, walking the actual
+call sites — not aggregate counts, and not reasoning about which branch "should"
+be reached.
+
+That is a long single-thread hunt, and this ticket's own history is the argument
+against starting it at the end of a session: what it keeps producing is
+confident wrong root causes, and each one costs the next reader a full
+re-measurement. Left claim-free for whoever has a clean run at it.
+
+Two things worth carrying forward, both already in the notes above but easy to
+lose in their length:
+
+- the gate's repro does NOT need `f()` to be called, so the leak is in
+  CREATION, not invocation;
+- treat any self-reported RSS/objtrace numbers here as unverified until
+  reproduced from a byte-for-byte-fresh build by someone other than the author.
