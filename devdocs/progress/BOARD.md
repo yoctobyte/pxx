@@ -13,12 +13,11 @@ lives in git, not in a timestamp._
 | bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size | C | 85 | bug | `sizeof(p->arr)` returns the POINTER size, not the array size — silent buffer overflow | — |
 | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling | P | 80 | bug | A procedural variable in a value context takes its ADDRESS instead of calling it | — |
 
-## working (3)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-non-constant-parameter-defaults-silently-become-none | N | 70 | bug | Every non-constant parameter default silently becomes None on the ordinary call path — `def f(b=[])` gives b=None, and so does `def f(b=w)` for any name w. Only the closure-VALUE path evaluates defaults at def time. | — |
-| bug-t-etxtbsy-race-reds-single-shot-selfhost-jobs | T | 60 | bug | A one-off `Text file busy` on exec red the self-host chain job; selfhost is single-shot by policy, so a harness-level OS race is indistinguishable from real compiler nondeterminism | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 
 ## unfinished (5)
@@ -44,12 +43,13 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (206)
+## backlog (207)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
+| bug-a-selfhost-recipe-should-rename-not-write-in-place | A | 55 | bug | The self-host chain compiles straight onto the path it is about to exec, so a concurrent fd holder makes the exec fail with ETXTBSY. Write to a temp name and rename — atomic in RUN_TMP, and a new inode | — |
 | bug-a-threadsafe-self-host-exceeds-max-globfix-by-121 | A | 75 | bug | The --threadsafe self-compile needs 65657 global fixups against a fixed cap of 65536 — over by 121. A GATED test-core job is red on master, and `make compiler/pascal26` is green, so the normal build masks it completely | — |
 | bug-b-writeln-float-with-17-decimals-prints-garbage | A | 55 | bug | `WriteLn(x:0:17)` prints garbage | — |
 | bug-c-uses-path-basename-collides-with-enclosing-unit-name | A | 35→65 | bug | path-form `uses './x.c'` collides with the enclosing unit's OWN name | — |
@@ -359,7 +359,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1214)
+## done (1215)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -986,6 +986,7 @@ lives in git, not in a timestamp._
 | bug-t-autoticket-files-emergencies-for-already-fixed-shas | T | 75 | bug | a cascade is auto-filed as a live emergency for a sha whose breakage was already reverted minutes earlier; ancestry alone cannot detect it | — |
 | bug-t-bench-sub-second-timings-quantized-to-50ms | T | 65 | bug | Benchmark timings under 1s are quantized to a 50 ms grid | — |
 | bug-t-claim-silently-no-ops-owner-on-yaml-only-tickets | T | 45 | bug | `progress.sh claim`/`resolve` silently no-op Owner/Status on YAML-only tickets | — |
+| bug-t-etxtbsy-race-reds-single-shot-selfhost-jobs | T | 60 | bug | A one-off `Text file busy` on exec red the self-host chain job; selfhost is single-shot by policy, so a harness-level OS race is indistinguishable from real compiler nondeterminism | — |
 | bug-t-flaky-async-multithreaded-tests-false-newred | T | 45 | bug | Flaky async/multithreaded run-tests emit false NEW-REDs — reap() fails on first nonzero exit, no confirm-retry | — |
 | bug-t-full-run-evicts-opt-verdicts-perpetual-new-red | T | 75 | bug | DUPLICATE of bug-t-full-tier-wipes-other-tiers-job-status — "a full run replaces the whole job map and evicts opt-tier verdicts, so every opt-only red re-reports as NEW-RED forever" | — |
 | bug-t-full-tier-wipes-other-tiers-job-status | T | 70 | bug | a full run replaces the whole jobs map, so opt-tier reds re-announce as NEW-RED forever | — |
@@ -1656,6 +1657,7 @@ lives in git, not in a timestamp._
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
+- [p 55] [A] bug-a-selfhost-recipe-should-rename-not-write-in-place
 - [p 55] [A] bug-b-writeln-float-with-17-decimals-prints-garbage
 - [p 55] [C] bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed

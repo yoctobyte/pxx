@@ -3,7 +3,7 @@ summary: "A one-off `Text file busy` on exec red the self-host chain job; selfho
 type: bug
 track: T
 prio: 60
-status: working
+status: done
 owner: claude@xeon
 ---
 
@@ -82,3 +82,22 @@ about binary contents is not.
 Hard to force deliberately — that is the nature of it. Acceptance is that the
 signature-scoped retry path is unit-tested against a synthetic `ETXTBSY`, and
 that a real fixedpoint mismatch still fails on the first attempt with no retry.
+
+## Log
+- 2026-08-02 — **fix 2 (Track T's half) landed in `faa64cd4a`**: a
+  signature-scoped retry that applies in ANY class, including the single-shot
+  ones, gated on the failure text rather than on `job.cls`. Devtest
+  `tools/testmgr_retry_signature_devtest.py` asserts both directions — a
+  selfhost ETXTBSY retries, a selfhost fixedpoint MISMATCH does not.
+- **It recurred before the fix landed**, which strengthens the case: a second
+  hit at `b11e604f8043` red `test-smoke#src:compiler/compiler.pas`, so this is
+  not the one-off the ticket originally described. Two gated reds in one day,
+  both after `ok:` compile lines.
+- **Fix 1 (root cause) is still OPEN and is not T's to make.** The recipe must
+  write the binary under a temp name and `rename()` it into place — atomic
+  within `RUN_TMP` (one filesystem) and a new inode, so an exec can never
+  observe a file another process still holds open. Re-filed as
+  [[bug-a-selfhost-recipe-should-rename-not-write-in-place]] so closing T's
+  fence does not close the underlying race.
+
+- 2026-08-02 — resolved, commit faa64cd4a.
