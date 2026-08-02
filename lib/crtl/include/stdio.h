@@ -40,6 +40,7 @@ int sscanf(const char *s, const char *fmt, ...);
 int vsscanf(const char *s, const char *fmt, va_list ap);
 int puts(const char *s);
 int fputs(const char *s, FILE *stream);
+void perror(const char *msg);
 int putchar(int c);
 int fputc(int c, FILE *stream);
 int putc(int c, FILE *stream);

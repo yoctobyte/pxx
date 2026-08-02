@@ -40,5 +40,8 @@ int strcoll(const char *a, const char *b);
 size_t strxfrm(char *dest, const char *src, size_t n);
 void *memchr(const void *s, int c, size_t n);
 char *strerror(int errnum);
+/* XSI strerror_r: fills buf, returns 0 or ERANGE. Deliberately the XSI form,
+   not GNU's char*-returning one — they disagree on the return type. */
+int strerror_r(int errnum, char *buf, size_t buflen);
 
 #endif

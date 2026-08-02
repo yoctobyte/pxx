@@ -7127,6 +7127,19 @@ lib-test: pxx-stable-check
 	    { echo 'FAIL: cstring_batch differs from gcc'; exit 1; }; \
 	  echo 'cstring_batch: identical to gcc'; \
 	else echo 'cstring_batch: SKIP (no gcc)'; /tmp/cstring_batch >/dev/null; fi
+	# strerror was a stub returning "error" for every errnum, which made perror
+	# and strerror_r useless. Table generated FROM gcc, so both streams are
+	# diffed against it — stderr separately, since perror writes there.
+	$(PXX_STABLE) test/cerrno_strings.c /tmp/cerrno_strings
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -w -o /tmp/cerrno_strings_gcc test/cerrno_strings.c 2>/dev/null; \
+	  /tmp/cerrno_strings_gcc > /tmp/cerrno_gcc.out 2> /tmp/cerrno_gcc.err; \
+	  /tmp/cerrno_strings > /tmp/cerrno_pxx.out 2> /tmp/cerrno_pxx.err; \
+	  diff /tmp/cerrno_gcc.out /tmp/cerrno_pxx.out && \
+	  diff /tmp/cerrno_gcc.err /tmp/cerrno_pxx.err || \
+	    { echo 'FAIL: cerrno_strings differs from gcc'; exit 1; }; \
+	  echo 'cerrno_strings: identical to gcc'; \
+	else echo 'cerrno_strings: SKIP (no gcc)'; /tmp/cerrno_strings >/dev/null 2>&1; fi
 	# crtl against gcc's libc, which is the oracle for this surface: the whole
 	# output is diffed against the SAME file built by gcc, so there are no
 	# recorded expectations to drift.

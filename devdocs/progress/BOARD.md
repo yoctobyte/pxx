@@ -40,12 +40,13 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (204)
+## backlog (205)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
+| bug-b-crtl-htons-pulls-libc-into-a-static-binary | B | 40 | bug | Calling `htons()` makes a C binary libc-dependent, losing the libc-free property | — |
 | bug-b-writeln-float-with-17-decimals-prints-garbage | A | 55 | bug | `WriteLn(x:0:17)` prints garbage | — |
 | bug-c-uses-path-basename-collides-with-enclosing-unit-name | A | 35→65 | bug | path-form `uses './x.c'` collides with the enclosing unit's OWN name | — |
 | bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity | C | 55 | bug | In a mixed Pascal+C build, a C call binds to a same-named Pascal routine at the wrong arity | — |
@@ -1725,6 +1726,7 @@ lives in git, not in a timestamp._
 - [p 45] [T] task-t-enroll-pascal-conformance-tier
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
+- [p 40] [B] bug-b-crtl-htons-pulls-libc-into-a-static-binary
 - [p 40] [N] bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter
 - [p 40] [N] bug-nilpy-chained-assign-power-assign-and-semicolon-statements
 - [p 40] [N] bug-nilpy-float-print-loses-precision-vs-cpython

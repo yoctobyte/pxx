@@ -1028,3 +1028,17 @@ int sscanf(const char *s, const char *fmt, ...) {
   va_end(ap);
   return r;
 }
+
+/* perror: "<msg>: <strerror(errno)>\n" on STDERR, and just the error text when
+ * msg is NULL or empty — the exact shape callers' output is diffed against.
+ * Goes to fd 2 directly rather than through stdout's buffering, so it is not
+ * reordered relative to the failure it reports. */
+void perror(const char *msg) {
+  const char *e = strerror(errno);
+  if (msg && *msg) {
+    fputs(msg, stderr);
+    fputs(": ", stderr);
+  }
+  fputs(e, stderr);
+  fputs("\n", stderr);
+}

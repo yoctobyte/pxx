@@ -132,3 +132,46 @@ path's is recorded in a comment at the definition, not only in this ticket.
 
 ## Log
 - 2026-08-02 — resolved, commit PENDING.
+
+## Round 2 — a second probe, and a stub that made round 1 useless
+
+Ran the same differential over 60 symbols in headers round 1 did not cover
+(dirent, sys/mman, sys/wait, sys/socket, netinet, poll, pthread, locale, wchar,
+math, more stdio/stdlib/string). 55 already worked. Fixed:
+
+- **`strerror` was a STUB** — it ignored `errnum` and returned the literal
+  `"error"` for every value. That made `perror` and `strerror_r`, which round 1
+  had just added, report nothing useful: *"cannot open config: error"*. Now the
+  real table, **generated from gcc rather than transcribed**, including the two
+  indices where glibc has no name and falls through to `"Unknown error N"`.
+  Identical to gcc across 0..140 and negatives.
+- **`perror`** and **`strerror_r`** (the XSI form — returns int, not GNU's
+  `char*`; the two disagree on the return type and code testing the result as an
+  int is the common case).
+- **`htons`/`ntohs`/`htonl`/`ntohl` reachable from `<netinet/in.h>`.** They were
+  implemented and declared only in `<arpa/inet.h>`; glibc declares them in both,
+  and network code routinely includes only `<netinet/in.h>`.
+
+The probe now reports **59 of 60** and **47 of 48**. The two left are `chdir`
+(needs a PAL bridge that does not exist — `__pxx_chdir` is absent) and `isatty`
+(above).
+
+### A pre-existing defect this surfaced, filed not fixed
+
+Calling `htons` — a pure byte-swap — makes the binary `NEEDED libc.so.6` on
+every target, losing the libc-free property the opt-in `-dPXX_DYNLIB_LIBC`
+design rests on. Verified to happen through the OLD `<arpa/inet.h>` path too, so
+it is not from this change. Filed as
+[[bug-b-crtl-htons-pulls-libc-into-a-static-binary]] with the diagnosis
+explicitly left open, because `socket.c` declares only `__pxx_*` Pascal-side
+externs and it is not obvious why they force a libc dependency.
+
+It is also why `test/cerrno_strings.c` does not exercise the byte-order helpers:
+including them made the binary dynamic, which made it unrunnable under qemu
+without a target sysroot — so the `strerror` table, the substantial fix, would
+have been verifiable on x86-64 only. Header visibility is what changed here and
+the compile-time probe covers it.
+
+Verified: both streams (stdout and stderr separately, since `perror` writes to
+stderr and a merged stream compares buffering rather than content) identical to
+gcc on **x86-64, i386, aarch64 and arm32**.
