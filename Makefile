@@ -1088,6 +1088,10 @@ test-nilpy: $(COMPILER)
 	# resolve against and the AN_CALL reached IR lowering unlowered
 	./$(COMPILER) test/test_nilpy_str_method_subscript.npy /tmp/test_nilpy_strmsub26
 	test "$$(/tmp/test_nilpy_strmsub26)" = "$$(printf '%b' 'World\nHello\nc\n[\047a\047, \047b\047, \047c\047]\nb\ny\nH\nhello,world\nPAD\nb\n72\ntwo')"
+	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
+	# key function had no overload to bind to (dict alone and list+key both worked)
+	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26
+	test "$$(/tmp/test_nilpy_sdk26)" = "$$(printf '%b' '[\047a\047, \047b\047, \047c\047]\n[\047a\047, \047b\047, \047c\047]\n[\047c\047, \047b\047, \047a\047]\n[\047c\047, \047b\047, \047a\047]\n[(\047a\047, 1), (\047b\047, 2), (\047c\047, 3)]\n[\047a\047, \047b\047, \047c\047] [1, 2, 3]\n[1, 2, 3] [3, 2, 1] [3, 2, 1]')"
 	# tuple() and pow(): the tuple TYPE existed but not its constructor, and pow
 	# was undefined though ** worked
 	./$(COMPILER) test/test_nilpy_tuple_pow_builtins.npy /tmp/test_nilpy_tpb26

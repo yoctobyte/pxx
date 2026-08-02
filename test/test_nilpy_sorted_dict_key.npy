@@ -1,0 +1,21 @@
+# sorted(<dict>, key=...) — Python sorts a dict's KEYS.
+#
+# `sorted(d)` and `sorted(list, key=...)` both worked, but the combination had
+# no overload to bind to: sorted() only accepted a TPyList, so
+# `sorted(d, key=lambda k: d[k])` failed with "no overload of sorted matches
+# these arguments" (bug-nilpy-sorted-over-a-dict-with-a-key-function).
+#
+# The dict form delegates to the list form over keylist, so key/reverse handling
+# stays in one place rather than being duplicated.
+#
+# Expectation is CPython's own output.
+
+d = {"b": 2, "a": 1, "c": 3}
+print(sorted(d))
+print(sorted(d, key=lambda k: d[k]))
+print(sorted(d, key=lambda k: d[k], reverse=True))
+print(sorted(d, reverse=True))
+print(sorted(d.items()))
+print(sorted(d.keys()), sorted(d.values()))
+xs = [3, 1, 2]
+print(sorted(xs), sorted(xs, key=lambda v: -v), sorted(xs, reverse=True))

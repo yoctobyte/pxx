@@ -38,7 +38,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (196)
+## backlog (197)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -70,6 +70,7 @@ _none_
 | bug-nilpy-list-of-custom-objects-loses-repr-str | N | 40 | bug | A user class instance boxed in a list/dict prints as empty, losing `__repr__`/`__str__` | — |
 | bug-nilpy-list-sort-ignores-lt-dunder-on-objects | N | 35 | bug | `list.sort()` on user objects with `__lt__` raises a runtime TypeError instead of using it | — |
 | bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
+| bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error | N | 50 | bug | `xs.sort(key=..., reverse=...)` fails with a bare "unexpected token" | — |
 | bug-nilpy-missing-builtins-step-slicing-range-into-list | N | 45 | bug | NilPy survey: step slicing (x[::2]), list(range(...)), pow(), str.index/expandtabs, sorted(d.keys()) all fail to COMPILE — 13 of 133 method-surface cases | — |
 | bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch | N | 70 | bug | NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a user class — dispatch is compile-time only. Scalar-then-class rebinding is just one way to get a variant. | — |
 | bug-nilpy-ne-dunder-ignored-always-negates-eq | N | 50 | bug | NilPy: a user-defined __ne__ is never consulted — `!=` always negates __eq__, silently returning the wrong value when they differ | — |
@@ -3043,6 +3044,7 @@ _none_
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [N] bug-nilpy-in-over-objects-ignores-eq
 - [p 50] [N] bug-nilpy-int-prints-as-float-when-the-name-is-widened-later
+- [p 50] [N] bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error
 - [p 50] [N] bug-nilpy-ne-dunder-ignored-always-negates-eq
 - [p 50] [N] bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice
 - [p 50] [T] bug-tstate-xeon-cross-jobs-red-missing-corpora
