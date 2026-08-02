@@ -53,3 +53,21 @@ print(f"{n:+b}")
 print("{:+d}".format(n))
 print("{:+.1f}".format(fl))
 print("{: d}".format(n))
+
+# '#' — ALTERNATE form, prefixing the base. Grammar position is after the sign
+# and before the zero-pad, and the zero padding sits INSIDE the prefix:
+# f"{42:#010x}" is 0x0000002a, not 00000x2a.
+# bug-nilpy-format-spec-alt-form-hash
+print(f"{n:#x}")
+print(f"{n:#X}")
+print(f"{n:#o}")
+print(f"{n:#b}")
+print(f"{z:#x}")
+print(f"{-n:#x}")
+print(f"{n:#010x}")
+print(f"{-n:#010x}")
+print(f"{n:#10x}|")
+print(f"{n:#<10x}|")
+print(f"{n:+#x}")
+print(f"{big:#x}")
+print("{:#x}".format(n))

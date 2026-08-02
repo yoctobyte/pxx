@@ -6795,9 +6795,9 @@ begin
 end;
 
 function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
-var p, width: Integer; zero, leftAlign, grouped: Boolean;
+var p, width, need, zi: Integer; zero, leftAlign, grouped, alt: Boolean;
     kind, fillCh, align, signCh: Char;
-    body: AnsiString;
+    body, altPre, lead, zeros: AnsiString;
 begin
   p := 1;
   zero := False;
@@ -6825,6 +6825,14 @@ begin
   if (p <= Length(spec)) and (spec[p] in ['+', '-', ' ']) then
   begin
     signCh := spec[p];
+    Inc(p);
+  end;
+  { '#' — ALTERNATE form: prefix the base, 0x / 0X / 0o / 0b. Grammar position is
+    after the sign and before the zero-pad (bug-nilpy-format-spec-alt-form-hash). }
+  alt := False;
+  if (p <= Length(spec)) and (spec[p] = '#') then
+  begin
+    alt := True;
     Inc(p);
   end;
   if (p <= Length(spec)) and (spec[p] = '0') then
@@ -6880,13 +6888,40 @@ begin
     raise ValueError.Create('unsupported format spec "' + spec + '"');
   end;
   if grouped then body := PyGroupThousands(body);
-  { the sign goes on AFTER grouping (it must not be grouped with the digits) and
-    BEFORE padding (so `{:+06d}` zero-pads between the sign and the digits, which
-    is what PyFmtPad's zero mode already does for a '-') }
-  if (signCh <> #0) and (signCh <> '-') and (Length(body) > 0) and (body[1] <> '-') then
+  { Assemble as sign + prefix + zeros + digits, which is the order Python uses:
+    `{42:#010x}` is 0x0000002a — the zero padding sits INSIDE the 0x, not before
+    it. Doing this here rather than in PyFmtPad keeps every existing caller of
+    PyFmtPad on its byte-identical path; PyFmtPad only knows about a ONE-character
+    sign, which cannot express a two-character base prefix. }
+  altPre := '';
+  if alt then
+    case kind of
+      'x': altPre := '0x';
+      'X': altPre := '0X';
+      'o': altPre := '0o';
+      'b': altPre := '0b';
+    end;
+  lead := '';
+  { the sign comes off the digits AFTER grouping, so it is never grouped with them }
+  if (Length(body) > 0) and (body[1] = '-') then
   begin
-    if signCh = '+' then body := '+' + body else body := ' ' + body;
+    lead := '-';
+    body := Copy(body, 2, Length(body) - 1);
+  end
+  else if (signCh <> #0) and (signCh <> '-') then
+  begin
+    if signCh = '+' then lead := '+' else lead := ' ';
   end;
+  lead := lead + altPre;
+  if zero and (align = #0) and (fillCh = ' ') and (not leftAlign) then
+  begin
+    need := width - Length(lead) - Length(body);
+    zeros := '';
+    for zi := 1 to need do zeros := zeros + '0';
+    Result := lead + zeros + body;
+    Exit;
+  end;
+  body := lead + body;
   if align = '^' then Result := PyFmtPadEx(body, width, fillCh, '^')
   else if fillCh <> ' ' then Result := PyFmtPadEx(body, width, fillCh, align)
   else Result := PyFmtPad(body, width, zero, leftAlign);
