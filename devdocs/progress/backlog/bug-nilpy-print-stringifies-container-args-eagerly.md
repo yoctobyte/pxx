@@ -65,3 +65,34 @@ A `.npy` diffed against CPython: the list and dict repros; `print` with a
 mutating call in FIRST, middle and last position; the user-function and explicit
 `str()` controls; plain aliasing as a control; and a mutation of a container that
 appears twice with no call between the two mentions.
+
+## 2026-08-02 — cause LOCATED
+
+`PyParsePrint`'s argument loop applies `PyReprContainer(CurASTNode)` to each
+container argument **as that argument is parsed**, so the repr call sits in
+argument position N of the `AN_WRITELN` chain and therefore RUNS before argument
+N+1 is evaluated. That is exactly the observed behaviour: the first `xs` is
+converted to text before `xs.pop()` has run.
+
+The user-function control works for the mirror-image reason — `show(xs, xs.pop(),
+xs)` binds all three arguments first and the `str()` calls happen in the callee,
+after every argument is evaluated. Python's rule, arrived at by construction.
+
+## Why the fix is a restructure, not a line move
+
+The conversion has to happen after ALL argument evaluation, and `AN_WRITELN`
+lowers its argument chain in order — so a repr call anywhere in the chain runs
+too early. Making it correct means two passes: bind every argument into a temp
+first (hoisted assignments, preserving left-to-right evaluation), then build the
+writeln over `repr(temp)` nodes.
+
+The loop that would have to change also interleaves separator literals and
+handles `end=`, `file=`, `*unpacking`, bare `None`, floats and containers, each
+with its own recorded bug behind it. That is a lot of tested behaviour around the
+single most-used statement in NilPy, for a divergence that needs a mutating call
+among print's own arguments to observe — hence prio 45, and hence not attempted
+in the session that found it.
+
+Whoever takes it: the `pargTmp` / `pargAsgn` / `pargTk` locals already declared
+in `PyParsePrint` look like the beginning of exactly this temp machinery, and are
+worth understanding before adding a second mechanism beside them.
