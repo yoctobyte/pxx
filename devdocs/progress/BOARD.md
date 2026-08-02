@@ -43,7 +43,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (207)
+## backlog (210)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -57,6 +57,7 @@ lives in git, not in a timestamp._
 | bug-cfront-sizeof-unparenthesised-subscript | C | 50 | bug | `sizeof a[0]` is a parse error — the array-length idiom does not compile | — |
 | bug-cfront-spurious-dt-needed-libc-with-no-imports | C | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
+| bug-nilpy-and-or-evaluates-the-left-operand-twice | N | 70 | bug | `f() and x` / `f() or x` call f() TWICE — the left operand's side effects are duplicated. Silent, no error. Root cause read out of PyMakeBoolOpValue: the same AST node is used as both the condition and an arm, and the AST is a TREE | — |
 | bug-nilpy-bare-dot-float-literals-do-not-lex | N | 35 | bug | `.5` and `5.` do not lex — the shared number scanner requires a digit on BOTH sides of the dot, which is right for Pascal and wrong for Python | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
@@ -70,6 +71,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-dict-mutation-during-iteration-is-unobserved-not-raised | N | 35 | bug | Mutating a dict while iterating it is silently unobserved; CPython raises RuntimeError 'dictionary changed size during iteration' | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-float-print-loses-precision-vs-cpython | N | 40 | bug | Float printing loses the last 1-2 significant digits vs CPython's shortest round-trip repr | — |
+| bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip | N | 60 | bug | print(float) does not use Python's shortest-round-trip repr: 1/3 loses a digit, 0.1+0.2 prints 0.3 (hiding the error), 1e-20 prints WRONG DIGITS (1.000000000000001e-20), and the scientific-notation threshold differs (3e-05 vs 0.00003) | — |
 | bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip | N | 20 | bug | `print(1e-20)` prints `0.0` — NilPy's float repr has no small-magnitude exponential form | — |
 | bug-nilpy-for-else-and-while-else-not-supported | N | 30 | bug | The `else` clause on a for/while loop does not parse — `for ... else:` fails with 'expected expression' at the else | — |
 | bug-nilpy-from-import-as-alias-is-discarded | N | 60 | bug | `from mod import NAME as ALIAS` — the alias is parsed and thrown away | — |
@@ -89,6 +91,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-nested-for-comprehension-not-supported | N | 45 | bug | A comprehension with TWO for-clauses — [c for r in rows for c in r] — fails with 'undefined variable (c)'; the flatten idiom is unavailable | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
+| bug-nilpy-one-line-def-suite-does-not-parse | N | 55 | bug | `def f(x): return x + 1` on ONE line fails with 'unexpected token'. The compound-statement header requires a newline + INDENT suite; the inline form Python allows on the same line is not accepted for def (or class) | — |
 | bug-nilpy-print-stringifies-container-args-eagerly | N | 45 | bug | print() converts a container argument to text as it evaluates it, not after all arguments are evaluated — so `print(xs, xs.pop(), xs)` shows the list before AND after the pop. A user function with the identical shape is correct | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pypow-integer-overflow-does-not-promote | N | 35 | bug | `pypow_v`'s integer path silently wraps past 64 bits instead of promoting | — |
@@ -1640,6 +1643,7 @@ lives in git, not in a timestamp._
 - [p 80] [O] bug-a-o3-inline-retention-substitutes-a-global-read-across-a-call
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
+- [p 70] [N] bug-nilpy-and-or-evaluates-the-left-operand-twice
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] regression-optdiff-shard8-12
 - [p 65] [N] bug-nilpy-class-attribute-unreachable-through-the-class-name
@@ -1649,6 +1653,7 @@ lives in git, not in a timestamp._
 - [p 65] [T] task-t-worktree-is-not-current-state
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - [p 60] [N] bug-nilpy-defaulted-param-before-star-args-rejects-short-call
+- [p 60] [N] bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip
 - [p 60] [N] bug-nilpy-from-import-as-alias-is-discarded
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [T] bug-t-resolve-cites-a-sha-the-rebase-then-rewrites
@@ -1677,6 +1682,7 @@ lives in git, not in a timestamp._
 - [p 55] [C] bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [N] bug-nilpy-immediately-invoked-lambda-is-not-callable
+- [p 55] [N] bug-nilpy-one-line-def-suite-does-not-parse
 - [p 55] [N] bug-nilpy-range-negative-runtime-step-yields-empty
 - [p 55] [N] bug-nilpy-unary-numeric-dunders-return-raw-handle
 - [p 55] [T] bug-t-corpus-regex-invents-phantom-tree

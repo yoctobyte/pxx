@@ -58,3 +58,23 @@ A `.npy` diffed against CPython covering `sort()` with `reverse`, with `key`,
 with both, on an empty list and a single-element list, and confirming the sort
 is IN PLACE (the original name observes the new order) with the return value
 being `None` as Python's is.
+
+## 2026-08-02 — `min()` / `max()` reject `key=` too
+
+Same sweep, same family, different route — this one is a named diagnostic rather
+than a parse error:
+
+```python
+words = ["bb", "a", "ccc"]
+print(min(words, key=len))    # pascal26: error: Nil Python: min has no parameter named 'key'
+print(max(words, key=len))    # same
+```
+
+`sorted(words, key=len)` and `sorted(..., reverse=True)` fail here as well, so
+the `key=` callable is missing across the whole comparison family — `sort`,
+`sorted`, `min`, `max` — not just the list method this ticket was filed for.
+They should be gated together: whatever mechanism passes a callable into the
+comparison is one piece of machinery serving all four.
+
+`sorted(xs)`, `sorted(xs, reverse=...)` as the ONLY kwarg, `min(xs)` and
+`max(xs)` without a key all work today.
