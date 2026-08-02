@@ -77,12 +77,53 @@ Making the common case work therefore needs literal class attributes promoted to
 real storage, which is the risky half: it changes how every class attribute is
 laid out and interacts with dataclass defaults (`PyDc*`) and instance init.
 
-## Suggested order
+## Suggested order — CORRECTED 2026-08-02, I tried part 1 and REVERTED it
 
-Land **1** alone first — it is small, it is measurable (`n = 2 + 3` starts
-working), and it cannot regress the literal path because that path errors today
-either way. Then do **2** behind the full gate, with dataclass defaults
-explicitly in the test set.
+My first read was that part 1 is small and safe because "the literal path errors
+today either way". **That is wrong, and the counter-example is recorded here so
+nobody repeats it.**
+
+The lookup fallback was implemented — `FindSym(PyClsAttrGlobalName(ci,
+fieldName))` before the error at `parser.inc:4399`, returning an `AN_IDENT` on
+the hidden global. It builds, self-hosts, and works in the obvious cases:
+
+```python
+class A:
+    n = 2 + 3
+print(A.n)        # 5   read      ok
+A.n = 9           #     write     ok
+class A:
+    n = 0 + 0
+    def bump(self): A.n += 1      # ok, in a plain method
+A(); print(A.n)   # 1   in __init__, bare construction   ok
+```
+
+Then this, which differs only in binding the instance to a name:
+
+```python
+class A:
+    n = 0 + 0
+    def __init__(self):
+        A.n += 1
+class B:
+    m = 2 + 3
+a = A()           # <-- assigned, rather than a bare A()
+print(A.n)        # CPython 1     with the fix: 0     SILENTLY WRONG
+```
+
+`A()` bare gives 1; `a = A()` gives 0 — the constructor's side effect on the
+class attribute is lost. Other arrangements of the same program instead failed
+to compile with "assignment target is not an lvalue". So the fallback interacts
+with the constructor/hoisting path in a way that is not understood, and it turns
+a loud, correct refusal into a SILENT WRONG VALUE, which is the worst outcome
+this repo recognises. Reverted.
+
+**Whoever picks this up: the lookup fallback alone is not sufficient and not
+safe.** The interaction to understand first is why the class-attribute global
+misses the constructor's write when the result is bound to a name — most likely
+the hoisted `$clsattr` initialiser assignment running relative to the
+constructor call, not the lookup itself. Get that right, then parts 1 and 2
+can be judged.
 
 ## Also found here
 
