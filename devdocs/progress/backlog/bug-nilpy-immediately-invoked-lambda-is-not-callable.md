@@ -57,3 +57,49 @@ narrow, and if they do not, this ticket is a symptom of a much larger one.
 A `.npy` diffed against CPython: the two repros; the named-lambda controls; a
 lambda passed to `map`/`filter`/`sorted(key=)`; and the three expression-call
 shapes above, whichever of them turn out to be affected.
+
+## 2026-08-02 — the three shapes MEASURED, and the cause named
+
+The ticket asked for `(f if cond else g)(x)`, `handlers[k](x)` and
+`obj.get_cb()(x)` to be measured before choosing a fix, on the grounds that if
+they shared the path this was a symptom of something much larger. They do not all
+share it, and the answer narrows the fix considerably:
+
+| shape | result |
+| --- | --- |
+| `handlers["a"](2)` — dict subscript | **works** |
+| `lst[0](3)` — list subscript | **works** |
+| `f = lambda a, b: a - b` then `f(9, 4)` | **works** |
+| `map(lambda v: v + 1, xs)` | **works** |
+| **`(lambda a, b: a - b)(9, 4)`** | TypeError: object is not callable |
+| **`(lambda: 7)()`** | does not parse |
+| **`z = f if c else g` then `z(1)`** | does not parse |
+
+Note the last row: `z = f if c else g` COMPILES on its own. Only the CALL fails.
+
+### Cause
+
+`PyBoxCallableValue` is what makes a callable value callable through a name: it
+boxes the closure/bound-fn pointer into a variant so `z(...)` reaches the
+dynamic-call path. It recognises exactly one shape — an `AN_CALL` straight to one
+of `pyclosure_src_new` / `pyboundfn_new` / `pyboundfn_bind*`.
+
+So it fires for `f = lambda ...` (the RHS *is* that call) and not for anything
+that WRAPS such a call: a conditional expression whose arms are function values,
+or a parenthesised lambda used directly as a callee. Subscripts work because they
+go through a different path entirely — the container already holds boxed values.
+
+### Consequence for the fix
+
+Two independent pieces, and only the first is this ticket:
+
+1. **The call site** must recognise a callable-valued EXPRESSION as a callee, not
+   only a name. That covers `(lambda ...)(...)` and `(f if c else g)(x)` written
+   inline.
+2. **`PyBoxCallableValue` must see through wrappers** — at minimum a conditional
+   whose two arms are both callable values, boxing the arms or the result. That
+   is what makes `z = f if c else g` produce a `z` that can be called at all, and
+   it is arguably its own ticket.
+
+Neither needs the runtime-dispatch decision; both are compile-time shape
+recognition, the same family as the unpack type-erasure fix (3ccb6576d).
