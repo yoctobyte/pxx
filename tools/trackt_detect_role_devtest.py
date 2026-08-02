@@ -58,10 +58,16 @@ def main():
         check("a BIG arm box is still an oracle (arch beats size)",
               trackt.detect_role(16, 65536)[0] == "native-oracle", role)
 
+        # A desktop session must NOT decide the role (user, 2026-08-02: "this
+        # box is considered dedicated. headless has little to do with that").
+        # It got xeon and borg wrong in opposite directions, so it is reported
+        # and ignored.
         with_box("x86_64", True)
-        role, why = trackt.detect_role(8, 16384)
-        check("x86_64 with a desktop session -> limited", role == "limited", role)
-        check("  ...and says why", any("graphical" in r for r in why), why)
+        role, why = trackt.detect_role(12, 61938)
+        check("a desktop session does NOT demote a capable box",
+              role == "dedicated", role)
+        check("  ...but it is still reported to the operator",
+              any("graphical session" in r for r in why), why)
 
         with_box("x86_64", False)
         role, _ = trackt.detect_role(12, 61440)
@@ -75,7 +81,7 @@ def main():
         trackt.ISATTY = False
         for machine, desktop, want in (("aarch64", False, "native-oracle"),
                                        ("x86_64", False, "dedicated"),
-                                       ("x86_64", True, "limited")):
+                                       ("x86_64", True, "dedicated")):
             with_box(machine, desktop)
             d = pathlib.Path(tempfile.mkdtemp(prefix="trackt-role-"))
             trackt.configure_profile(str(d))

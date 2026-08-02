@@ -701,13 +701,29 @@ def detect_role(nproc, total_mb):
     still be an oracle in role, and a weak x86 box makes a poor oracle no
     matter how slow it is; it is just a slow runner.
 
-    Then, among x86_64 boxes, the question is whether anyone else is using it:
-    a desktop session or a small core count means "be polite", not "be idle".
+    Then, among x86_64 boxes, only CAPABILITY is detectable — a box too small
+    to run the matrix without thrashing. Whether a big box is dedicated or
+    shared is INTENT, and nothing on the machine reports it.
+
+    A graphical session was tried as that proxy and dropped (user, 2026-08-02:
+    "this box is considered dedicated. headless has little to do with that").
+    It got both fleet boxes wrong in opposite ways for the same reason: xeon
+    runs the matrix and has a desktop login, borg is the box a human works at
+    and also has one. The signal is real but it answers a different question,
+    so it is now REPORTED and never decides.
+
+    Ties break toward `dedicated` deliberately. The two errors are not
+    symmetric: dedicated on a shared box is loud and self-correcting — the
+    machine gets busy, someone notices within minutes and runs `trackt config`
+    — while limited on a watcher box is silent, and costs the fleet cores and
+    spare-cycle fuzzing indefinitely, which is exactly what
+    meta-t-dev-throughput-and-track-a-t-integration exists to stop.
 
     Used as the NON-INTERACTIVE default as well as the interactive proposal.
-    The old code defaulted to 'dedicated' with no TTY, which is how a Pi
-    provisioned headless over ssh — the most likely way one is ever set up —
-    enrolled itself as a full-matrix fuzzing box.
+    The old code defaulted to 'dedicated' with no TTY regardless of the box,
+    which is how a Pi provisioned headless over ssh — the most likely way one
+    is ever set up — enrolled itself as a full-matrix fuzzing box. That case is
+    caught by the architecture branch, not by the headless one.
     """
     mach = platform.machine().lower()
     reasons = ["%s, %d cores, %d MB" % (mach or "unknown-arch", nproc, total_mb)]
@@ -722,13 +738,15 @@ def detect_role(nproc, total_mb):
     if mach and mach not in X86:
         reasons.append("non-x86_64: its native run is what QEMU cannot verify")
         return "native-oracle", reasons
-    if _has_desktop_session():
-        reasons.append("a graphical session is present — someone uses this box")
-        return "limited", reasons
     if nproc < 4 or (total_mb and total_mb < 4096):
         reasons.append("small box: leave headroom rather than saturate it")
         return "limited", reasons
-    reasons.append("headless x86_64 with room to work")
+    reasons.append("x86_64 with room to work")
+    if _has_desktop_session():
+        # informational: it does NOT change the role, but the operator should
+        # know the box will be worked hard while they are sitting at it
+        reasons.append("NOTE a graphical session is present — if someone works "
+                       "here, choose 'limited' or `trackt config max_cores N`")
     return "dedicated", reasons
 
 
