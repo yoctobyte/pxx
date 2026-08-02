@@ -212,6 +212,12 @@ function PyMethodName(const name: AnsiString): AnsiString; forward; { ditto }
 function PyParseFor: Integer; forward;
 { PyBareGenExprAhead is likewise forward-declared in parser.inc now (same
   duplicate-forward issue as PyCallMeth1 above). }
+{ Called from the bytes membership/slice paths ~3900 lines before its body.
+  pxx's own frontend resolves it either way; FPC is single-pass and stops the
+  SEED build dead without this (bug-n-fpc-seed-drift-pybytesci-used-before-forward).
+  Nothing in the day-to-day loop compiles with FPC, which is exactly why this
+  rots silently — see the ticket. }
+function PyBytesCi: Integer; forward;
 
 { Queue a setup statement to run before the current one — see PyHoistHead. }
 procedure PyHoistStmt(node: Integer);

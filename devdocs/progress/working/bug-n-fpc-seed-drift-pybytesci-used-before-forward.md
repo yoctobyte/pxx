@@ -3,6 +3,8 @@ summary: "FPC cold-start broken again: PyBytesCi is called at pyparser.inc:1508 
 type: regression
 track: N
 prio: 60
+status: working
+owner: claude-AN
 ---
 
 # FPC seed drift: `PyBytesCi` is used 3700 lines before it is defined
