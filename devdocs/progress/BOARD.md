@@ -51,7 +51,6 @@ lives in git, not in a timestamp._
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-a-selfhost-recipe-should-rename-not-write-in-place | A | 55 | bug | The self-host chain compiles straight onto the path it is about to exec, so a concurrent fd holder makes the exec fail with ETXTBSY. Write to a temp name and rename — atomic in RUN_TMP, and a new inode | — |
 | bug-b-writeln-float-with-17-decimals-prints-garbage | A | 55 | bug | `WriteLn(x:0:17)` prints garbage | — |
-| bug-c-uses-path-basename-collides-with-enclosing-unit-name | A | 35→65 | bug | path-form `uses './x.c'` collides with the enclosing unit's OWN name | — |
 | bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity | C | 55 | bug | In a mixed Pascal+C build, a C call binds to a same-named Pascal routine at the wrong arity | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-cfront-sizeof-unparenthesised-subscript | C | 50 | bug | `sizeof a[0]` is a parse error — the array-length idiom does not compile | — |
@@ -159,6 +158,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
+| feature-nilpy-dataclass-expression-field-default | N | 40 | feature | A @dataclass field default may only be a scalar literal, field(default_factory=list/dict) or a zero-arg lambda. An expression (`x: int = 2 + 3`) is refused; a plain class attribute with the same initialiser is evaluated | — |
 | feature-nilpy-for-loop-getitem-protocol-fallback | N | 25 | feature | `for x in obj:` doesn't fall back to `__getitem__`/`__len__` for a custom container | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nilpy-lambda-compiled-closure | N | 45 | feature | nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics) | — |
@@ -356,7 +356,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1224)
+## done (1225)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -579,6 +579,7 @@ lives in git, not in a timestamp._
 | bug-c-unixfile-mmap-field-offset-zero | A | 56 | bug | C: struct field resolves to offset 0 in the full sqlite unixFile (context-dependent) | — |
 | bug-c-unsigned-div-mod-32bit-backends | A | 50 | bug | C `unsigned int` / Pascal Cardinal division+mod use signed div on 32-bit backends | — |
 | bug-c-unsigned-int-32bit-arithmetic-semantics | A | 50 | bug | C `unsigned int` (32-bit) arithmetic computed in 64-bit — no wraparound, signed compares | — |
+| bug-c-uses-path-basename-collides-with-enclosing-unit-name | A | 35→65 | bug | path-form `uses './x.c'` collides with the enclosing unit's OWN name | — |
 | bug-c-va-arg-local-fnptr-typedef-sqlite | C | 50 | bug | C: va_arg with local function-pointer typedef in sqlite | — |
 | bug-c-vararg-overflow-area | A | 50 | bug | C: 6+ variadic args (overflow area) segfault | — |
 | bug-c-vararg-vastart-named-fp-stack | A | 50 | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
@@ -1627,7 +1628,6 @@ lives in git, not in a timestamp._
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
-- [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
 - [p 65] [N] bug-nilpy-class-attribute-unreachable-through-the-class-name
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
@@ -1751,6 +1751,7 @@ lives in git, not in a timestamp._
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
 - [p 40] [N] feature-nilpy-arithmetic-dunders-full-protocol
+- [p 40] [N] feature-nilpy-dataclass-expression-field-default
 - [p 40] [N] feature-nilpy-map-and-filter-over-a-lambda
 - [p 40] [N] feature-nilpy-set-needs-runtime-tag-for-display-and-equality
 - [p 40] [O] feature-opt-rtti-emit-on-use
@@ -1817,7 +1818,6 @@ lives in git, not in a timestamp._
 - **3** — feature-port-windows-pe
 - **2** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **2** — feature-web-track-w-bootstrap
-- **1** — bug-c-uses-path-basename-collides-with-enclosing-unit-name
 - **1** — bug-pascal-procvar-in-value-context-takes-address-instead-of-calling
 - **1** — decide-nilpy-parallel-capture-semantics
 - **1** — decide-pxxpdf-ticket-obsolete

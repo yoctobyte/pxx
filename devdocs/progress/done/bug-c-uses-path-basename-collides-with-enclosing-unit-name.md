@@ -3,7 +3,7 @@ track: A
 prio: 35
 type: bug
 blocked-by: []
-status: working
+status: done
 owner: claude-AN
 ---
 
@@ -64,3 +64,6 @@ reason for the two spaces to share keys). Whichever direction is chosen, the
 miss should probably also raise a diagnostic instead of silently no-op'ing
 when a `.c`/`.h` load is skipped as "already compiled" but no such file was
 ever actually loaded under that path.
+
+## Log
+- 2026-08-02 — resolved, commit 5303d2741.
