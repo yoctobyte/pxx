@@ -7,4 +7,4 @@
 
 ## Open regressions
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `b1976742df2c`, last good `6f73c5a88bef`, 1 commit(s) in range
-- **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (xeon): bad `12769fe00866`, last good `c13356cc6b19`, 3 commit(s) in range
+- **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (xeon): bad `12769fe00866`, last good `4eb0a29a206a`, 2 commit(s) in range
