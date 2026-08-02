@@ -1156,6 +1156,11 @@ test-nilpy: $(COMPILER)
 	# rebased onto the original string — dropping that offset is the silent half.
 	./$(COMPILER) test/test_nilpy_str_search_window.npy /tmp/test_nilpy_strwin26
 	test "$$(/tmp/test_nilpy_strwin26)" = "$$(printf '%b' '4\n7\n7\n-1\n-1\n7\n7\n7\n4\n7\n-1\n3\n2\n2\n0\n1\n7\n7\nindex raises ValueError\nTrue\nTrue\nTrue\nFalse\nTrue\nTrue\nTrue\nFalse\n-1\n0\nFalse\nstill running')"
+	# the `assert` statement, which was "undefined variable (assert)". The
+	# condition goes through PyMakeTruthy (so Python's truthiness rules are the
+	# shared ones), and a BARE assert carries an EMPTY message, as CPython does.
+	./$(COMPILER) test/test_nilpy_assert.npy /tmp/test_nilpy_assert26
+	test "$$(/tmp/test_nilpy_assert26)" = "$$(printf '%b' 'pass ok\ncaught: boom\nbare len: 0\nempty list is falsy\nempty dict is falsy\nempty str is falsy\nNone is falsy\nzero is falsy\ntruthy ok\n5\nin def: must be positive\nvia Exception: generic\nn was 3\nstill running')"
 	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
 	# key function had no overload to bind to (dict alone and list+key both worked)
 	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26

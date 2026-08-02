@@ -12084,6 +12084,7 @@ var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integ
     mmi, mpi, selfArg, lastArg, argNode, kwIdx, j, k: Integer;   { inherited (super()) call }
     cmpTmp, cmpSeq, cmpAsgn: Integer;   { comprehension into a non-list target }
     cmpExisted: Boolean;
+    asrtCond, asrtMsg, asrtProc, asrtA0, asrtA1: Integer;   { assert statement }
 begin
   Result := -1;
   PyStmtAteBlock := False;
@@ -12142,6 +12143,41 @@ begin
       end;
     end;
     Result := node;
+    Exit;
+  end;
+  { `assert cond` / `assert cond, msg`. Lowered to a pylib call rather than an
+    if/raise tree: the CONDITION goes through PyMakeTruthy, so Python's
+    truthiness rules for str/containers/None are the same ones every other
+    condition uses instead of a second copy, and pyassert raises a catchable
+    AssertionError. The message is optional and defaults to EMPTY — CPython's
+    bare `assert x` gives str(e) == '', not a synthesised description.
+    bug-nilpy-assert-statement-not-supported }
+  if PyIsIdent('assert') then
+  begin
+    Next;
+    PyParseBoolExpr;
+    asrtCond := PyMakeTruthy(CurASTNode);
+    if CurTok.Kind = tkComma then
+    begin
+      Next;
+      PyParseBoolExpr;
+      asrtMsg := CurASTNode;
+    end
+    else
+    begin
+      asrtMsg := AllocNode(AN_STR_LIT);
+      ASTSOffset[asrtMsg] := 0;
+      ASTSLen[asrtMsg] := 0;
+      ASTTk[asrtMsg] := Ord(tyAnsiString);
+    end;
+    asrtProc := FindProc('pyassert');
+    if asrtProc < 0 then Error('Nil Python: pylib (pyassert) not loaded');
+    asrtA1 := AllocNode(AN_ARG); ASTLeft[asrtA1] := asrtMsg; ASTRight[asrtA1] := -1;
+    asrtA0 := AllocNode(AN_ARG); ASTLeft[asrtA0] := asrtCond; ASTRight[asrtA0] := asrtA1;
+    Result := AllocNode(AN_CALL);
+    ASTIVal[Result] := asrtProc;
+    ASTLeft[Result] := asrtA0;
+    ASTTk[Result] := Ord(tyUnknown);
     Exit;
   end;
   if (CurTok.Kind = tkFor) or PyIsIdent('for') then begin Result := PyParseFor; Exit; end;

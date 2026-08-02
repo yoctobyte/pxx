@@ -1,0 +1,74 @@
+# Python's `assert` statement, which was "undefined variable (assert)" — it was
+# not a statement at all.
+# bug-nilpy-assert-statement-not-supported
+
+assert 1 == 1
+print("pass ok")
+
+# with a message
+try:
+    assert 1 == 2, "boom"
+except AssertionError as e:
+    print("caught:", str(e))
+
+# BARE assert gives an EMPTY message, not a synthesised description
+try:
+    assert 1 == 2
+except AssertionError as e:
+    print("bare len:", len(str(e)))
+
+# the condition uses Python's TRUTHINESS, not just booleans
+try:
+    assert []
+except AssertionError:
+    print("empty list is falsy")
+try:
+    assert {}
+except AssertionError:
+    print("empty dict is falsy")
+try:
+    assert ""
+except AssertionError:
+    print("empty str is falsy")
+try:
+    assert None
+except AssertionError:
+    print("None is falsy")
+try:
+    assert 0
+except AssertionError:
+    print("zero is falsy")
+
+# ...and the truthy side passes without raising
+assert [1]
+assert {"k": 1}
+assert "x"
+assert 1
+assert -1
+print("truthy ok")
+
+# inside a def, and catchable there
+def check(v):
+    assert v > 0, "must be positive"
+    return v
+
+print(check(5))
+try:
+    check(-1)
+except AssertionError as e:
+    print("in def:", str(e))
+
+# an AssertionError is an Exception, so a bare handler catches it
+try:
+    assert False, "generic"
+except Exception as e:
+    print("via Exception:", str(e))
+
+# a message that is an EXPRESSION, not a literal
+n = 3
+try:
+    assert n > 10, "n was " + str(n)
+except AssertionError as e:
+    print(str(e))
+
+print("still running")

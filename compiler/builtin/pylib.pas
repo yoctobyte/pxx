@@ -976,6 +976,12 @@ function pyenumerate2(a: TPyList; start: Integer): TPyList;
   fixed FindProc index and so never consult overloads
   (bug-nilpy-str-iterable-builtins-segfault-on-a-string-handle). }
 function pystr_charlist(const s: AnsiString): TPyList;
+{ Python's `assert cond` / `assert cond, msg`. The frontend evaluates the
+  condition's TRUTHINESS and hands the boolean here, so the container/str/None
+  rules stay in PyMakeTruthy rather than being re-implemented. A raise (not a
+  Halt) so `try/except AssertionError` runs, like every other NilPy error
+  (bug-nilpy-assert-statement-not-supported). }
+procedure pyassert(ok: Boolean; const msg: AnsiString);
 { Python's TWO-argument round(x, ndigits) — a float rounded to that many
   decimals, unlike the one-argument form which yields an int. Half-away-from-
   zero rather than CPython's banker's rounding: the difference shows only on an
@@ -3582,6 +3588,15 @@ var i: Integer;
 begin
   Result := TPyList.Create;
   for i := 1 to Length(s) do Result.append(pystr_ofchar(s[i]));
+end;
+
+procedure pyassert(ok: Boolean; const msg: AnsiString);
+begin
+  if ok then Exit;
+  { CPython's bare `assert x` raises AssertionError with NO message, and
+    `assert x, m` raises it with m — str(e) is '' in the first case, so an empty
+    message must not become a placeholder string. }
+  raise AssertionError.Create(msg);
 end;
 
 function pyzip(a: TPyList; b: TPyList): TPyList;
