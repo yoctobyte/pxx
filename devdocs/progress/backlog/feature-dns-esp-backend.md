@@ -209,22 +209,45 @@ with the opt-in wire path, not on the default route.
 
 ### Target scope
 
-**riscv32 (ESP32-C3) first.** xtensa is *deferred, not dropped* — the user still
-wants it (correcting an earlier revision of this note, which overstated a
-remark about riscv being the way forward into "no xtensa").
+**riscv32 (ESP32-C3) first; xtensa deferred, not dropped.** Searched the board
+rather than relying on recollection — the blockers below are what is actually
+recorded, and they are more specific than "calling convention and FreeRTOS
+bindings" (my earlier paraphrase of a from-memory remark).
 
-Known xtensa issues, per the user: the **calling convention** (windowed vs
-Call0) and the **FreeRTOS bindings**. Not investigated in depth and thought
-likely fixable in a focused session. The compiler already encodes one facet —
-`--esp-profile=bare` on xtensa requires Call0, because the windowed ABI needs
-window-overflow handlers and a vecbase that bare-metal does not install
-(`compiler.pas:634`) — and there is prior art in
-[[feature-xtensa-windowed-abi]], [[feature-esp32-idf-xtensa]] and
-[[bug-xtensa-call0-large-frame-truncates]].
+**1. The real blocker for the ESP PAL on xtensa:**
+[[feature-xtensa-stack-args-over-6-words]] (Track A, prio 45). The xtensa
+backend caps both definitions and call sites at **6 parameter words**
+(`parser.inc:10557`/`:10573`, `ir_codegen_xtensa.inc:1528`). `PalBackendVforkAndExec`
+takes 7 (`path, argv, envp` + four fds), so
 
-**The broader gate is not this ticket:** ESP32 *hardware* testing is postponed
-until the compiler is stable on x86-64. So DNS-on-ESP work should be judged as
-QEMU-verifiable groundwork, not as something waiting on a device.
+```
+--target=xtensa --xtensa-abi=windowed -Fulib/rtl/platform/esp \
+  test/lib_platform_esp.pas          -> fails at pascal26:647
+```
+
+**riscv32 is unaffected — its cap is 8**, which is exactly why the C3 path
+works and the S3 one does not. So this *is* the calling convention, but
+specifically argument passing beyond the in-register set, not windowed-vs-Call0.
+That ticket also notes no workaround was applied: the 7-word signature is the
+honest one and the fix belongs in the compiler.
+
+**2. A second, narrower one:** [[feature-a-promoint-variant-esp-targets]] —
+`--target=xtensa` gives `compiler error: __pxx_d2i not found (uses softfloat?)`
+for Variant interop. riscv32 fails there too, differently.
+
+**Not corroborated: "FreeRTOS bindings".** No open ticket attributes an xtensa
+block to them, and `examples/esp32/hello-s3` links ESP-IDF through the same
+`external` mechanism the working C3 examples use. Recorded so nobody chases it.
+
+**Xtensa is not unexercised:** `make test-emit-obj` builds xtensa objects in
+both Call0 and windowed ABIs (`Makefile:6315`/`:6322`), and `test_asmcore_xtensa`
+runs in the gate.
+
+**Separate gate, often conflated:** ESP32 *hardware* flash/boot validation is
+[[feature-esp-hardware-flash-validation]] (Track A, blocked on physical
+hardware), and the user is holding it until the compiler is stable on x86-64.
+That is about silicon, not about whether this work can proceed — everything here
+is QEMU-verifiable today.
 
 `examples/esp32/hello-s3` therefore stays unchanged for now — deferred pending a
 real `qemu-system-xtensa -M esp32s3` boot, not written off.
