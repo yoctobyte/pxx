@@ -3,6 +3,8 @@ summary: "Third FPC seed drift in two days: parser.inc calls PyWiden, defined in
 type: regression
 track: N
 prio: 60
+status: done
+owner: claude-AN
 ---
 
 # FPC seed drift #3: `PyWiden` called from `parser.inc`, defined in `pyparser.inc`
@@ -58,3 +60,6 @@ three occurrences in two days, that mitigation is looking less optional.
 
 `fpc -Mobjfpc -O2 -Tlinux -Px86_64 ... compiler/compiler.pas` compiles clean and
 the `fpc-bootstrap` canary goes green on the next watcher run.
+
+## Log
+- 2026-08-02 — resolved, commit HEAD.
