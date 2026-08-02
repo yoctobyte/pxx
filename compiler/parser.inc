@@ -26977,6 +26977,11 @@ begin
       caller's sp: the `entry` frame on windowed, the a0/a15 save area on Call0.
       Same layout xtensa gcc uses, so IDF can call in and be called out of. }
     pw := 0;
+    { Windowed carries the hidden aggregate-result pointer as the implicit
+      FIRST argument word (EmitAggregateDestStash already spilled it), so the
+      declared parameters start at word 1. Call0 uses a8 and does not shift. }
+    if (XtensaABI = XTENSA_ABI_WINDOWED) and (ProcAggregateDestSym[procIdx] >= 0) then
+      pw := 1;
     if XtensaABI = XTENSA_ABI_WINDOWED then
       xtInBias := 32                       { entry sp, 32 in the prologue }
     else

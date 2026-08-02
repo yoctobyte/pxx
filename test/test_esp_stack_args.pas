@@ -94,9 +94,25 @@ begin
   Nested := Sum9(a, b, c, d, e, f, g, h, 9) + Sum7(a, b, c, d, e, f, g);
 end;
 
+{ A by-value record result rides on the same machinery: on windowed the hidden
+  destination pointer is argument word 0, so eight declared arguments become
+  nine words and the last three spill. }
+type
+  TBig = record a, b, c, d, e: Integer; end;
+
+function MakeBig(p1, p2, p3, p4, p5, p6, p7, p8: Integer): TBig;
+begin
+  MakeBig.a := p1 + p8;
+  MakeBig.b := p2 * p7;
+  MakeBig.c := p3 - p6;
+  MakeBig.d := p4 + p5;
+  MakeBig.e := p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8;
+end;
+
 var
   n: Integer;
   m: Int64;
+  big: TBig;
 begin
   PutS('sum7 ');  PutInt(Sum7(1, 2, 3, 4, 5, 6, 7)); PutC(10);
   PutS('sum9 ');  PutInt(Sum9(1, 2, 3, 4, 5, 6, 7, 8, 9)); PutC(10);
@@ -108,5 +124,9 @@ begin
   m := Mix(1, 2, 3, 4, 5, 6, 7);
   PutS('mix '); PutInt(Integer(m)); PutC(10);
   PutS('nested '); PutInt(Nested(1, 2, 3, 4, 5, 6, 7, 8)); PutC(10);
+  big := MakeBig(1, 2, 3, 4, 5, 6, 7, 8);
+  PutS('big ');
+  PutInt(big.a); PutC(32); PutInt(big.b); PutC(32); PutInt(big.c); PutC(32);
+  PutInt(big.d); PutC(32); PutInt(big.e); PutC(10);
 {$ifdef PXX_ESP} while True do ; {$endif}
 end.

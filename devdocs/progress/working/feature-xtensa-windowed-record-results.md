@@ -6,8 +6,8 @@ prio: 65  # inherits feature-xtensa-stack-args-over-6-words: last blocker on the
 
 - **Type:** feature (Track S — ESP campaign; Track A file ownership: xtensa
   codegen / ABI)
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** track-A-S
 - **Opened:** 2026-08-02 (surfaced the moment the >6-word arg cap was lifted)
 
 ## Problem

@@ -6257,12 +6257,25 @@ begin
   else if TargetArch = TARGET_XTENSA then
   begin
     { xtensa Call0 carries the hidden destination in a8 (a caller-saved temp
-      outside the a2-a7 arg set); stash it before the param-copy clobbers a8.
-      Windowed record results are unsupported (rejected at the epilogue). }
+      outside the a2-a7 arg set); stash it before the param-copy clobbers a8. }
     if XtensaABI = XTENSA_ABI_CALL0 then
     begin
       EmitFrameAddrXtensa(reg_xtensa_a9, Syms[idx].Offset);
       xtensa_s32i(reg_xtensa_a8, reg_xtensa_a9, 0);
+    end
+    else
+    begin
+      { Windowed has no register that survives the call8 rotation, so the
+        destination travels as the ABI's implicit FIRST argument word — callee
+        a2 (the caller's a10), exactly where xtensa gcc puts the pointer for a
+        >16-byte struct return; every declared parameter shifts up one word
+        (the param-copy loop starts at pw=1). a15 is the frame base here: a7 is
+        not the frame pointer yet (it still holds incoming argument word 5). }
+      if (Syms[idx].Offset >= -128) and (Syms[idx].Offset <= 127) then
+        xtensa_addi(reg_xtensa_a9, reg_xtensa_a15, Syms[idx].Offset)
+      else
+        Error('target xtensa windowed: aggregate-result frame offset out of range');
+      xtensa_s32i(reg_xtensa_a2, reg_xtensa_a9, 0);
     end;
   end
   else
@@ -6664,20 +6677,31 @@ begin
       if RetViaHiddenDest(Syms[retSymIdx].TypeKind) and
          (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
       begin
-        { Aggregate (record) result, Call0 only: copy the Result local into the
-          caller's hidden destination (the pointer the prologue stashed from a8),
-          return it in a2. PXXMemMove(dest, &Result, size). Windowed is rejected —
-          its call-window rotation has no clean caller->callee hidden-dest reg. }
-        if XtensaABI <> XTENSA_ABI_CALL0 then
-          Error('target xtensa: record function results require Call0 (windowed not yet supported)');
+        { Aggregate (record) result: copy the Result local into the caller's
+          hidden destination and return that pointer in a2.
+          PXXMemMove(dest, &Result, size). Call0 took the pointer from a8;
+          windowed took it from incoming argument word 0 — either way the
+          prologue stashed it in a frame slot by now. }
         EmitFrameAddrXtensa(reg_xtensa_a3, Syms[retSymIdx].Offset);   { a3 = &Result (src) }
         EmitLoadVarXtensa(ProcAggregateDestSym[CurProc]);             { a2 = dest ptr }
         sz := AggRetCopySize(retSymIdx);
         EmitLoadConstXtensa(reg_xtensa_a4, sz);                       { a4 = byte count }
         procIdx := FindProc('PXXMemMove');
         if procIdx < 0 then Error('compiler error: PXXMemMove not found');
-        EmitCallProc(procIdx);
-        EmitLoadVarXtensa(ProcAggregateDestSym[CurProc]);             { a2 = dest (return value) }
+        if XtensaABI = XTENSA_ABI_WINDOWED then
+        begin
+          { Outgoing args go in a10..a12; a2 (the dest) survives the rotation,
+            so it is already the return value when the copy comes back. }
+          xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+          xtensa_mov(reg_xtensa_a11, reg_xtensa_a3);
+          xtensa_mov(reg_xtensa_a12, reg_xtensa_a4);
+          EmitCallProc(procIdx);
+        end
+        else
+        begin
+          EmitCallProc(procIdx);
+          EmitLoadVarXtensa(ProcAggregateDestSym[CurProc]);           { a2 = dest (return value) }
+        end;
       end
       else
       begin

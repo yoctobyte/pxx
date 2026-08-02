@@ -1749,12 +1749,14 @@ begin
         { Word-based argument passing (matches the callee spill in parser.inc):
           each scalar arg is one word, a by-value Int64/UInt64 is two (lo then
           hi). nArgs counts WORDS; word k loads into the k-th arg register
-          (Call0 a2+k / windowed a10+k). Up to 6 words total. }
-        { Aggregate (record) result, Call0 only: push the caller's hidden
-          destination first (deepest), load into a8 just before the call. Windowed
-          record results are unsupported (the call-window rotation has no clean
-          caller->callee hidden-dest register) and are rejected at the callee
-          epilogue, so no windowed call reaches here with an aggregate result. }
+          (Call0 a2+k / windowed a10+k). }
+        { Aggregate (record) result: the caller's hidden destination pointer.
+          Call0 pushes it first (deepest) and loads it into a8 just before the
+          call — it is NOT an argument word there. Windowed has no register that
+          survives the call8 rotation, so it travels as the implicit FIRST
+          argument word instead (callee a2), which is also what xtensa gcc does
+          for a >16-byte struct return; every real argument shifts up one word
+          and the callee's param-copy loop starts at word 1. }
         if (procIdx >= 0) and (not ProcExternal[procIdx]) and
            RetViaHiddenDest(Procs[procIdx].RetType) and (XtensaABI = XTENSA_ABI_CALL0) then
         begin
@@ -1765,6 +1767,13 @@ begin
         nArgs := 0;     { word count }
         i := 0;         { argument index }
         argBase := XtSpillDepth;   { windowed: base offset of this call's arg block }
+        if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+           RetViaHiddenDest(Procs[procIdx].RetType) and (XtensaABI = XTENSA_ABI_WINDOWED) then
+        begin
+          IREmitNodeXtensa(IRC[node]);     { a2 = hidden dest addr }
+          XtensaPushA2;                    { word 0 }
+          nArgs := 1;
+        end;
         while argNode <> -1 do
         begin
           if (procIdx >= 0) and (not ProcExternal[procIdx]) and
