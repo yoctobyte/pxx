@@ -1059,6 +1059,12 @@ function len(const v: Variant): Integer; overload;
 function next(c: TPyCounter): Int64;
 function pyvar_holds(const v: Variant; k: Int64): Boolean;
 function pycontains(l: TPyList; const v: Variant): Boolean;
+{ `x in <bytes>`. Python allows BOTH a bytes subsequence (`b"ell" in b"hello"`)
+  and an integer byte value (`104 in b"hello"`). Without this the bytes receiver
+  fell through to pycontains, which scans a TPyList — reading a TPyBytes'
+  header words as variant slots and answering False
+  (bug-nilpy-bytes-membership-always-false-for-a-bytes-needle). }
+function pybytes_contains(b: TPyBytes; const v: Variant): Boolean;
 function pyvar_contains(const c: Variant; const v: Variant): Boolean;
 function pyset_and(a: TPyList; b: TPyList): TPyList;
 function pyset_or(a: TPyList; b: TPyList): TPyList;
@@ -2928,6 +2934,36 @@ begin
       Result := True;
       Exit;
     end;
+end;
+
+function pybytes_contains(b: TPyBytes; const v: Variant): Boolean;
+var o: TObject; k: Integer; p: PByte; want: Int64;
+begin
+  Result := False;
+  if b = nil then Exit;
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyBytes then
+    begin
+      { an EMPTY needle is in every sequence, which pybytes_find must agree on }
+      Result := pybytes_find(b, TPyBytes(o), 0) >= 0;
+      Exit;
+    end;
+    Exit;
+  end;
+  { an INTEGER needle tests a single BYTE VALUE, not a subsequence — and one
+    OUTSIDE 0..255 is a ValueError in CPython, not simply absent. Answering
+    False there would be a plausible wrong answer for what is really a type
+    error, so it raises. }
+  want := pyvar_to_int(v);
+  if (want < 0) or (want > 255) then
+    raise ValueError.Create('byte must be in range(0, 256)');
+  for k := 0 to b.FLen - 1 do
+  begin
+    p := PByte(NativeInt(b.FData) + k);
+    if p^ = Byte(want) then begin Result := True; Exit; end;
+  end;
 end;
 
 { Python's set operators (`&`/`|`/`-`/`^`) -- NilPy has one sequence

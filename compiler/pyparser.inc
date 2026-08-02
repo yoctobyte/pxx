@@ -1505,6 +1505,13 @@ begin
         node := FindProc('pyvar_contains')
       else if ResolveNodeRec(right) = REC_UCLASS_BASE + FindUClass('TPyDict') then
         node := FindProc('pydictcontains')
+      else if (PyBytesCi >= 0) and
+              (ResolveNodeRec(right) = REC_UCLASS_BASE + PyBytesCi) then
+        { BYTES: a bytes subsequence or an integer byte value. Without its own
+          arm this fell to pycontains below, which scans a TPyList — so it read
+          a TPyBytes' header words as variant slots and answered False for every
+          bytes needle (bug-nilpy-bytes-membership-always-false-for-a-bytes-needle) }
+        node := FindProc('pybytes_contains')
       else if (ResolveNodeRec(right) >= REC_UCLASS_BASE) and
               (ResolveNodeRec(right) <> REC_UCLASS_BASE + FindUClass('TPyList')) and
               (ResolveNodeRec(right) <> REC_UCLASS_BASE + FindUClass('TPyBytes')) then

@@ -1172,6 +1172,11 @@ test-nilpy: $(COMPILER)
 	# printed 0. Correct inside a def all along.
 	./$(COMPILER) test/test_nilpy_module_true_divide_assign.npy /tmp/test_nilpy_tdiv26
 	test "$$(/tmp/test_nilpy_tdiv26)" = "$$(printf '%b' '2.0\n2.5\n1.25\n0.333333\n2.0\n2.0\n4.5\n2.0\n4\n1\n9\n3\n6\n2\n16\n3.5\n2.0')"
+	# `x in <bytes>` — a bytes SUBSEQUENCE or an integer BYTE VALUE. The bytes
+	# receiver had no arm in the `in` dispatch and fell through to pycontains (a
+	# TPyList scan), answering False for every bytes needle. Out-of-range int raises.
+	./$(COMPILER) test/test_nilpy_bytes_membership.npy /tmp/test_nilpy_bymem26
+	test "$$(/tmp/test_nilpy_bymem26)" = "$$(printf '%b' 'True\nTrue\nTrue\nFalse\nTrue\nTrue\nTrue\nFalse\nTrue\nFalse\nTrue\nValueError for 300\nValueError for -1\nTrue\nFalse\nbranch taken\n[b\047a\047]\nTrue\nFalse\nstill running')"
 	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
 	# key function had no overload to bind to (dict alone and list+key both worked)
 	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26

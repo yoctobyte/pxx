@@ -1,0 +1,51 @@
+# `x in <bytes>`. Python allows BOTH a bytes SUBSEQUENCE and an integer BYTE
+# VALUE. The bytes receiver had no arm in the `in` dispatch, so it fell through
+# to pycontains — a TPyList scan — which read a TPyBytes' header words as
+# variant slots and answered False for every bytes needle. Silent.
+# bug-nilpy-bytes-membership-always-false-for-a-bytes-needle
+
+bb = b"hello world"
+
+# a bytes SUBSEQUENCE
+print(b"world" in bb)
+print(b"hello" in bb)
+print(b"lo w" in bb)
+print(b"xyz" in bb)
+print(bb in bb)
+
+# the empty needle is in everything, including the empty sequence
+print(b"" in bb)
+print(b"" in b"")
+print(b"a" in b"")
+
+# an INTEGER needle is a single byte VALUE, not a subsequence
+print(108 in bb)
+print(122 in bb)
+print(104 in bb)
+
+# ...and one outside 0..255 is a ValueError, not simply absent
+try:
+    print(300 in bb)
+except ValueError:
+    print("ValueError for 300")
+try:
+    print(-1 in bb)
+except ValueError:
+    print("ValueError for -1")
+
+# a bytearray receiver, including a NUL byte
+e = bytearray(3)
+print(b"\x00" in e)
+print(b"\x01" in e)
+
+# in a condition and in a comprehension filter
+n = b"abc"
+if b"b" in n:
+    print("branch taken")
+print([x for x in [b"a", b"z"] if x in n])
+
+# `not in`
+print(b"z" not in n)
+print(b"a" not in n)
+
+print("still running")
