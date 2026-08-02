@@ -47,7 +47,7 @@ an app-level bug in `apps/ide/eliah/main.pas` itself (or a missing PCL
 feature it was written against) — file-owned by Track B (apps built with pxx
 are Track E, file-owned by B) per `CLAUDE.md`'s Track E note.
 
-## Resolved 2026-08-02 — option (a), and the code says so rather than the odds
+## Resolved 2026-08-02 (commit 0542f35a4) — option (a), and the code says so rather than the odds
 
 The ticket offered (a) drop `.Win` or (b) add a real `Win` property, and
 reasoned that (a) was "more likely given no other reference exists". The
