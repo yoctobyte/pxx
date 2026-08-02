@@ -17,9 +17,10 @@ prio: 55
 |---|---|---|
 | 2026-08-01 | [[bug-a-fpc-seed-drift-pymaketruthy-forward-wrong-file]] | forward in the wrong file |
 | 2026-08-02 | [[bug-n-fpc-seed-drift-pybytesci-used-before-forward]] | no forward at all |
+| 2026-08-02 | [[bug-n-fpc-seed-drift-pywiden-needs-a-forward-in-parser-inc]] | forward missing in the FIRST-included file |
 
-Both were introduced by a Track N feature commit, both are one-line fixes, and
-both were found by the watcher hours later — after the author's context was
+All three were introduced by a Track N feature commit, all are one-line fixes,
+and all were found by the watcher hours later — after the author's context was
 gone and after other work had stacked on top.
 
 ## Why it keeps happening, structurally
@@ -43,6 +44,10 @@ person who can act on it never looks.
 The whole seed build. For comparison the quick tier is 2-14 s, so this is
 not a rounding error — but it is not a suite either, and it is O(1) in the
 size of the change.
+
+**Instance #3 landed within hours of #2 being fixed**, which settles the
+question of whether this is a run of bad luck: it is a standing property of the
+layout that nothing in the dev loop can see.
 
 ## Options
 
