@@ -43,7 +43,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (208)
+## backlog (210)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -57,6 +57,7 @@ lives in git, not in a timestamp._
 | bug-cfront-sizeof-unparenthesised-subscript | C | 50 | bug | `sizeof a[0]` is a parse error — the array-length idiom does not compile | — |
 | bug-cfront-spurious-dt-needed-libc-with-no-imports | C | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
+| bug-nilpy-augmented-assign-of-a-variant-param-to-an-int-field-adds-one | N | 70 | bug | `self.n += v` where n is an INT field and v an unannotated parameter adds 1, not v. `C(10).add(5)` returns 11. The variant argument is being read as a truthy 1 | — |
 | bug-nilpy-augmented-assign-to-a-variant-typed-field-corrupts-it | N | 75 | bug | `self.n += x` produces garbage when the field was initialised from an UNANNOTATED ctor parameter — True, an empty line, or 4.94e-323. Annotating the parameter fixes it. This is the most idiomatic shape in Python OO | — |
 | bug-nilpy-bare-dot-float-literals-do-not-lex | N | 35 | bug | `.5` and `5.` do not lex — the shared number scanner requires a digit on BOTH sides of the dot, which is right for Pascal and wrong for Python | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
@@ -72,6 +73,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-float-print-loses-precision-vs-cpython | N | 40 | bug | Float printing loses the last 1-2 significant digits vs CPython's shortest round-trip repr | — |
 | bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip | N | 20 | bug | `print(1e-20)` prints `0.0` — NilPy's float repr has no small-magnitude exponential form | — |
+| bug-nilpy-floor-div-assign-is-true-division | N | 55 | bug | `self.n //= v` performs TRUE division — 25 //= 3 gives 8.333… instead of 8. The `//=` token is folded onto the same binop as `/=` | — |
 | bug-nilpy-for-else-and-while-else-not-supported | N | 30 | bug | The `else` clause on a for/while loop does not parse — `for ... else:` fails with 'expected expression' at the else | — |
 | bug-nilpy-from-import-as-alias-is-discarded | N | 60 | bug | `from mod import NAME as ALIAS` — the alias is parsed and thrown away | — |
 | bug-nilpy-immediately-invoked-lambda-is-not-callable | N | 55 | bug | `(lambda a, b: a - b)(9, 4)` raises TypeError: object is not callable, and a zero-arg `(lambda: 7)()` does not even parse. The identical lambda bound to a NAME first is fine | — |
@@ -1638,6 +1640,7 @@ lives in git, not in a timestamp._
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 75] [N] bug-nilpy-augmented-assign-to-a-variant-typed-field-corrupts-it
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
+- [p 70] [N] bug-nilpy-augmented-assign-of-a-variant-param-to-an-int-field-adds-one
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] regression-optdiff-shard8-12
 - [p 65] [N] bug-nilpy-class-attribute-unreachable-through-the-class-name
@@ -1674,6 +1677,7 @@ lives in git, not in a timestamp._
 - [p 55] [A] bug-b-writeln-float-with-17-decimals-prints-garbage
 - [p 55] [C] bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
+- [p 55] [N] bug-nilpy-floor-div-assign-is-true-division
 - [p 55] [N] bug-nilpy-immediately-invoked-lambda-is-not-callable
 - [p 55] [N] bug-nilpy-range-negative-runtime-step-yields-empty
 - [p 55] [N] bug-nilpy-unary-numeric-dunders-return-raw-handle
