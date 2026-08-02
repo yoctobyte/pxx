@@ -1,5 +1,5 @@
 ---
-prio: 45  # auto
+prio: 65  # user 2026-08-02: xtensa is the PRIMARY ESP target (S2/S3 hardware)
 ---
 
 # xtensa: support calls/definitions with more than 6 parameter words
@@ -171,3 +171,49 @@ The Problem section's citations have drifted. Current sites:
 - `compiler/ir_codegen_xtensa.inc:1774` — call-site cap
 - `compiler/ir_codegen_xtensa.inc:1512` — a third one the ticket does not
   mention: `constructor with more than 6 parameter words not supported`
+
+## Priority: xtensa is the PRIMARY ESP target (user, 2026-08-02)
+
+Raised 45 -> 65. The user's ESP32 devices are mostly **S2 and S3, both xtensa**;
+older models are out of scope. So this ticket is not a nice-to-have behind
+riscv32 — it is the gate on the ESP target that actually matters to the person
+using it.
+
+Confirmed the same day that this cap is the **only** thing stopping the xtensa
+ESP PAL build:
+
+```
+--target=xtensa --xtensa-abi=windowed --platform=esp \
+  -Fulib/rtl -Fulib/rtl/platform/esp test/lib_platform_esp.pas
+  -> pascal26:961: error: target xtensa: more than 6 parameter words not yet supported
+```
+
+That is the first and only error; nothing else in the ESP PAL is refused.
+
+### Matching gcc is required, not merely convenient
+
+An ABI is a contract with the *other* compiler, and on ESP both directions are
+crossed constantly:
+
+- pxx-built code **calls into** IDF / FreeRTOS / lwIP, all gcc-built. A call
+  with >6 argument words must leave them where gcc's callee looks.
+- IDF **calls into** pxx — `app_main` today, plus any callback or ISR
+  registered later. Those must read arguments where gcc's caller left them.
+
+So the alternative sometimes suggested — packing the overflow into a
+caller-allocated struct and passing a pointer — is not an option here: it is
+ABI-incompatible the moment either boundary is crossed with >6 words, and it
+would leave two conventions to keep straight. Doing exactly what gcc does is
+both simpler and the only interoperable answer. The measured reference codegen
+is in the section above.
+
+(Aside, since it came up: a Pascal `var` parameter costs **one** word — it
+passes an address — so it needs no heap and does not itself push a signature
+over the cap. The overflow area is plain outgoing stack, never heap.)
+
+### QEMU covers S3 but not S2
+
+`qemu-system-xtensa` in the installed IDF offers machines **`esp32`** and
+**`esp32s3`** only — there is no `esp32s2`. So this work is verifiable headless
+for S3, and S2 needs real silicon
+([[feature-esp-hardware-flash-validation]]).

@@ -209,7 +209,14 @@ with the opt-in wire path, not on the default route.
 
 ### Target scope
 
-**riscv32 (ESP32-C3) first; xtensa deferred, not dropped.** Searched the board
+**CORRECTION 2026-08-02 (user): xtensa is the PRIMARY ESP target** — most of the
+user's devices are S2/S3, both xtensa. riscv32 (C3) is what works *today*, so it
+stays the first thing to build against, but xtensa is the destination, not a
+follow-up. The single blocker is
+[[feature-xtensa-stack-args-over-6-words]] (re-ranked 45 -> 65), confirmed to be
+the *only* error the xtensa ESP PAL build hits.
+
+The original scope note said: Searched the board
 rather than relying on recollection — the blockers below are what is actually
 recorded, and they are more specific than "calling convention and FreeRTOS
 bindings" (my earlier paraphrase of a from-memory remark).

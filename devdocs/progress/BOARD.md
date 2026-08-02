@@ -240,7 +240,7 @@ lives in git, not in a timestamp._
 | feature-web-track-w-bootstrap | A | 40→45 | feature | Track W (website) — bootstrap the lane: two repos, one board | — |
 | feature-web-tracker-and-host-portability | A | 45 | feature | Public tracker on GitHub + host-portability rule (nothing lives only in a service) | feature-web-track-w-bootstrap |
 | feature-writeln-as-library | A | 45 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
-| feature-xtensa-stack-args-over-6-words | A | 45 | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
+| feature-xtensa-stack-args-over-6-words | A | 65 | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | idea-adaptive-heap-growth | A | 10 | idea | Adaptive heap growth policy (research / north-star — not scheduled) | — |
 | idea-c-realworld-test-targets | C | 25 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
 | idea-cross-namespace-ambiguity-warning | A | 10 | idea | Warn when a call name matches in BOTH the Pascal and C namespaces | — |
@@ -1651,6 +1651,7 @@ lives in git, not in a timestamp._
 - [p 65] [N] bug-nilpy-class-attribute-unreachable-through-the-class-name
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
+- [p 65] [A] feature-xtensa-stack-args-over-6-words
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 65] [T] task-t-worktree-is-not-current-state
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
@@ -1758,7 +1759,6 @@ lives in git, not in a timestamp._
 - [p 45] [T] feature-t-uforth-benchmark-harness
 - [p 45] [A] feature-toolchain-cli-ux
 - [p 45] [A] feature-writeln-as-library
-- [p 45] [A] feature-xtensa-stack-args-over-6-words
 - [p 45] [A] refactor-centralize-managed-string-pchar-conversion
 - [p 45] [T] task-t-enroll-libtest-demos-watcher
 - [p 45] [T] task-t-enroll-pascal-conformance-tier
