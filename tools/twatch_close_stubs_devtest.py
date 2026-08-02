@@ -143,6 +143,31 @@ def main():
     check("1. pushed: backlog copy GONE on origin",
           "backlog/regression-test-core-alpha.md" not in ls, ls)
 
+    print("case 5: a 0-byte ticket must not suppress filing")
+    pdir = os.path.join(CLONE, "devdocs/progress")
+    open(os.path.join(pdir, "backlog", "regression-test-core-empty.md"), "w").close()
+    check("5. zero-byte ticket does NOT count as filed",
+          twatch.already_filed(pdir, "regression-test-core-empty") is False)
+    check("5. a real ticket still counts as filed",
+          twatch.already_filed(pdir, "regression-test-core-gamma") is True)
+
+    print("case 6: ticket writes are atomic")
+    target = os.path.join(pdir, "backlog", "regression-atomic-probe.md")
+    twatch.write_ticket(target, "---\nprio: 70\n---\n\nbody\n")
+    check("6. content lands whole", open(target).read().endswith("body\n"))
+    leftovers = [f for f in os.listdir(os.path.join(pdir, "backlog"))
+                 if f.startswith(".tkt-")]
+    check("6. no temp file left behind", not leftovers, leftovers)
+    try:
+        twatch.write_ticket(target, None)          # provoke a mid-write failure
+    except TypeError:
+        pass
+    check("6. a failed write leaves the previous content intact",
+          open(target).read().endswith("body\n"))
+    leftovers = [f for f in os.listdir(os.path.join(pdir, "backlog"))
+                 if f.startswith(".tkt-")]
+    check("6. a failed write cleans up its temp file", not leftovers, leftovers)
+
     print("case 4: cascade closes only when every swept job is green")
     casc = {"job": "cascade@abc", "cascade": ["j1", "j2"], "bad": "abc"}
     one_green = {"j1": "pass", "j2": "fail"}

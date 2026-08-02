@@ -937,14 +937,58 @@ def staleness_note(clone, sha, parent):
     return ""
 
 
+def already_filed(pdir, slug):
+    """Does a ticket for `slug` exist in any bucket — and is it real?
+
+    A ZERO-BYTE file does not count. That is not hypothetical: on 2026-08-01 a
+    format-injection crash (fixed in `7911dc603`) died between `open(..., "w")`
+    and the write, leaving
+    `backlog/regression-test-nilpy-test-nilpy-static-mixed-type-guard.md` at 0
+    bytes. Because this check only asked "does the path exist", that empty file
+    became a permanent SUPPRESSOR: the job could go red again and the watcher
+    would decline to file, silently, forever. Debris must never be able to
+    switch off a signal.
+    """
+    for b in PROGRESS_BUCKETS:
+        p = os.path.join(pdir, b, slug + ".md")
+        try:
+            if os.path.getsize(p) > 0:
+                return True
+        except OSError:                    # absent, or unreadable
+            continue
+    return False
+
+
+def write_ticket(path, text):
+    """Write a ticket atomically: full content to a temp file in the same
+    directory, then rename over the target.
+
+    Belt to `already_filed`'s braces. Formatting the body BEFORE any file
+    exists is what actually prevents the 0-byte case, but a crash, a full
+    disk, or a kill between write and close can still truncate an ordinary
+    write — and the failure is invisible until the day a red goes unfiled.
+    """
+    d = os.path.dirname(path)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".tkt-")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def file_cascade_ticket(clone, host, st, sha, new_red, report, parent=None):
     """One ticket for a mass NEW-RED sweep.  Slug keyed on the bad sha, so a
     re-test of the same sha never files twice; a DIFFERENT sha cascading
     files its own (that is a new event worth a new signal)."""
     slug = "regression-cascade-" + sha[:12]
     pdir = os.path.join(clone.path, "devdocs/progress")
-    if any(os.path.exists(os.path.join(pdir, b, slug + ".md"))
-           for b in PROGRESS_BUCKETS):
+    if already_filed(pdir, slug):
         return
     roots = [j for j in new_red
              if any(j.startswith(r) for r in CASCADE_ROOT_JOBS)]
@@ -956,8 +1000,7 @@ def file_cascade_ticket(clone, host, st, sha, new_red, report, parent=None):
     # but at a priority that matches "probably already handled".
     stale = staleness_note(clone, sha, parent)
     prio = 25 if stale.startswith("> **LIKELY ALREADY FIXED") else 70
-    with open(os.path.join(clone.path, rel), "w") as f:
-        f.write("""---
+    body = ("""---
 prio: %d
 ---
 
@@ -981,9 +1024,10 @@ prio: %d
 dev track triages the root; individual tickets only for whatever remains red
 after the root is fixed.*
 """ % (len(new_red), sha[:12], host, len(new_red), utcnow(),
-                ", ".join("`%s`" % r for r in roots) if roots
-                else "none of the known root jobs — likely a broken build or harness event",
-                report["tier"], sha, joblist))
+            ", ".join("`%s`" % r for r in roots) if roots
+            else "none of the known root jobs — likely a broken build or harness event",
+            report["tier"], sha, joblist))
+    write_ticket(os.path.join(clone.path, rel), body)
     clone.publish("tstate-ticket(%s): %s (cascade, %d jobs)" %
                   (host, slug + ".md", len(new_red)), paths=[rel])
     print("twatch: auto-filed CASCADE ticket for %d red jobs" % len(new_red),
@@ -1005,8 +1049,7 @@ def file_stub_tickets(clone, host, st, sha, new_red, report, parent=None):
     for job in new_red:
         slug = reg_slug(job)
         pdir = os.path.join(clone.path, "devdocs/progress")
-        if any(os.path.exists(os.path.join(pdir, b, slug + ".md"))
-               for b in PROGRESS_BUCKETS):
+        if already_filed(pdir, slug):
             continue
         j = next((x for x in report["jobs"] if job_key(x) == job), {})
         tail = ""
@@ -1021,15 +1064,16 @@ def file_stub_tickets(clone, host, st, sha, new_red, report, parent=None):
         kind = ("advisory (NOT a gate — nothing day-to-day depends on this "
                 "path; a notice for the owning track)" if job in advisory
                 else "regression")
-        with open(os.path.join(clone.path, rel), "w") as f:
-            # The note is an ARGUMENT, never concatenated into the format
-            # string: it carries commit subjects and free text, and a literal
-            # `%` in there becomes a format spec once `%` is applied to the
-            # joined string. That crashed the daemon on 2026-08-01 with
-            # "TypeError: %d format: a real number is required, not str".
-            # file_cascade_ticket already passed it as an argument; this one
-            # did not, and only the stub path ever files a small-enough red.
-            f.write("""---
+        # The note is an ARGUMENT, never concatenated into the format
+        # string: it carries commit subjects and free text, and a literal
+        # `%` in there becomes a format spec once `%` is applied to the
+        # joined string. That crashed the daemon on 2026-08-01 with
+        # "TypeError: %d format: a real number is required, not str".
+        # file_cascade_ticket already passed it as an argument; this one
+        # did not, and only the stub path ever files a small-enough red.
+        # Formatted BEFORE the file is created, so the same crash can no
+        # longer leave a 0-byte suppressor behind (see already_filed).
+        body = ("""---
 prio: %d
 ---
 
@@ -1062,6 +1106,7 @@ takes it from the repro line.*
                 report["tier"], job, sha,
                 (reg.get("bad") or sha)[:12], (reg.get("good") or "unknown")[:12],
                 len(reg.get("range", [])), tail))
+        write_ticket(os.path.join(clone.path, rel), body)
         filed.append(rel)
     if filed:
         clone.publish("tstate-ticket(%s): %s" %
