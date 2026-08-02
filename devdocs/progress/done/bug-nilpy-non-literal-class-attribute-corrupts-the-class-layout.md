@@ -3,7 +3,7 @@ track: N
 prio: 70
 type: bug
 summary: "A class attribute with a NON-LITERAL initialiser (`g = 2 + 3`) corrupts the class: a method returning a tuple of two OTHER class attributes then prints nothing or segfaults. Deleting the unused attribute fixes it"
-status: working
+status: done
 owner: claude-AN
 ---
 
@@ -89,3 +89,68 @@ non-literal and container class attributes read every way (individually, as a
 tuple, through a method and directly on the instance); the module-global and
 instance-field arrangements as controls; and the existing class-attribute tests
 still green.
+
+
+## Resolved 2026-08-02 — commit 7202d10e5. The title is WRONG: it was never the layout.
+
+Kept the slug (it is what the symptom looked like), but leaving the wrong cause
+in a title is how the next reader gets misled, so: **the class layout was fine
+all along.** Dumping `UFldOff_`/`UFldTk` for the repro class showed
+`a off=8 tk=int`, `d off=16 tk=string`, `g off=24` — correct, contiguous, and the
+class size covering all three. The "two AddUField branches disagree about
+`curOff`" theory in the section above is plausible and false; it is left standing
+as the record of what was guessed before anything was measured.
+
+**The actual cause was the HOIST QUEUE.** `PyParseDef` and `PyParseMethod` both
+ended with `PyHoistHead := savedHoist`, meaning "drop whatever this body left
+queued". That cannot unlink anything — `PySeqAppend` mutates the saved chain's
+TAIL in place, so re-pointing at the head leaves the appended nodes reachable
+through it. With an empty queue (`savedHoist = -1`) the restore worked by
+accident, which is every case *until* something is already pending. A class
+attribute with a non-literal initialiser is exactly that: `PyEmitClassAttrExpr`
+queues its `$clsattr` assignment at the class statement. From then on the
+method's own hoisted setup — the statements that BUILD the tuple — stayed on the
+chain and were flushed into the MODULE body, where they reference the method's
+locals. Hence nothing printed, or a segfault, depending on the build.
+
+Both routines now PARK the queue on a fresh chain and restore the saved head.
+
+### What actually cracked it
+
+The clue was in this ticket's own control table and nearly missed: moving the
+attribute BELOW the method makes the program correct. A layout bug does not care
+about source order; a QUEUE does. That single re-ordering turned an unbounded
+hunt into one predicted, confirmed test — and it came from varying the repro
+rather than from reading the registration code, which is where the wrong theory
+came from.
+
+### Second bug, found by the same measurement and fixed with it
+
+The member pre-pass called `g = 2 + 3` a LITERAL: it inspected only the first
+token after `=`, folded the `2` and dropped the rest, while the class body's own
+test (`PyClsAttrExprAhead`, which DOES check that the line ends) called it an
+expression. Two readers, one construct, opposite answers — `g` was registered as
+an int constant of 2 and evaluated as a global of 5. Not the cause of this bug,
+but real, and fixed here: the pre-pass now requires the literal to END the
+initialiser.
+
+That is the same shape as the parameter-default constant path which claimed the
+`1` of `b=1+2` (fixed earlier the same day in e53fa4a3f). **A constant fast-path
+that does not check it consumed the WHOLE construct is a recurring bug in this
+frontend** — worth grepping for the third instance rather than waiting for it.
+
+### Verified
+
+`test/test_nilpy_class_attr_hoist_leak.npy` (+ `.expected`, wired into `make
+test-nilpy`), byte-identical to CPython: the repro; a list-literal attribute
+(which hoists its construction); a nine-attribute class mixing literal,
+expression and container initialisers with a six-element tuple return; a
+literal-only control; and the non-literal attribute's own value read back as 5,
+which is what catches the truncated constant-fold. Every class keeps its
+non-literal attribute ABOVE the hoisting method deliberately — the ordering IS
+the test.
+
+`gate.sh quick` GREEN, self-host fixedpoint byte-identical.
+
+## Log
+- 2026-08-02 — resolved, commit 7202d10e5.
