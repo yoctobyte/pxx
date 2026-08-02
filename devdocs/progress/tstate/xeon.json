@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-02T06:35:16Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "ae959ba533515893b7485105b21649ca5df4e9f0",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-02T06:41:17Z",
    "fixed": [],
    "new_red": [],
@@ -407,6 +399,16 @@
    ],
    "new_red": [],
    "sha": "91f0632507796ed7c897bdb5f39126451e1f50ad",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-02T12:35:30Z",
+   "fixed": [
+    "fpc-bootstrap#src:compiler/compiler.pas"
+   ],
+   "new_red": [],
+   "sha": "dd34fdc16328d679bbade58d6c03ff553d885453",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -2406,7 +2408,7 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "full"
  },
  "jobs": {
-  "fpc-bootstrap#src:compiler/compiler.pas": "fail",
+  "fpc-bootstrap#src:compiler/compiler.pas": "pass",
   "lib-fpc-clean#00": "pass",
   "optdiff#shard0/12": "pass",
   "optdiff#shard0/6": "pass",
@@ -4398,11 +4400,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-02T12:32:42Z",
-  "sha": "91f0632507796ed7c897bdb5f39126451e1f50ad",
+  "date": "2026-08-02T12:35:30Z",
+  "sha": "dd34fdc16328d679bbade58d6c03ff553d885453",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 107.4
+  "wall": 107.8
  },
  "last_bench": {
   "conf_rows": 550,
@@ -4422,26 +4424,5 @@
   "date": "2026-08-02T09:11:40Z",
   "sha": "2e626bcd9b4f0b95a2cfc45f6b98600167c88d0f"
  },
- "open_regressions": [
-  {
-   "bad": "d21c2da3ad81fb01a3006b7037629f7f7724dfdb",
-   "good": "2e626bcd9b4f0b95a2cfc45f6b98600167c88d0f",
-   "job": "fpc-bootstrap#src:compiler/compiler.pas",
-   "name": "fpc-bootstrap#00",
-   "opened": "2026-08-02T11:16:37Z",
-   "range": [
-    "83d599564b02956bb30021c73aa94661842e7287",
-    "db9ba88f259aba4571bca06db443ed5255061f1e",
-    "f94d5754a1d28f33a5878c162275dbc0c66ed853",
-    "6f1a6d0018b24910f1109a3ac60810285cf6da91",
-    "d7521f563063447071b497e1f500b51b0e35f6fe",
-    "005becad76d3148c79aa1c1554dea74f0155feff",
-    "7d66c5276c0ac598d4bcc454da458e3c3e8b19bb",
-    "4724ca4a4413bd5cab5bd0f000ce3d5c939e9d32",
-    "c3b843308feceb0312420fde27ff1758a4331467",
-    "d21c2da3ad81fb01a3006b7037629f7f7724dfdb"
-   ],
-   "src": "compiler/compiler.pas"
-  }
- ]
+ "open_regressions": []
 }
