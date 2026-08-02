@@ -431,6 +431,32 @@ fine and needs no coordination — but **never run jobs inside the peer's
 `~/trackt-watch` while its daemon is live**: it checks out shas underneath you
 and your run races its working tree. Copy what you need to `/tmp` and work there.
 
+### …and that applies to your OWN box's watcher clone
+
+The rule above is written as a courtesy to the peer. It is not — it is a
+property of **any live watcher clone, including the local one**:
+
+> a checkout with a live watcher daemon is infra and cannot also be a
+> workspace, because it detaches HEAD underneath you.
+
+So **every box running a watcher needs a second, ordinary checkout for agent
+work.** On 2026-07-31 xeon had only `~/trackt-watch`, the agent used it as a
+workspace, and three separate failures followed from that one cause: `git pull
+--rebase` refusing while the daemon was mid-publish, a commit stranded on a
+detached HEAD (rescued by cherry-pick onto a re-attached `master`), and a push
+rejected by the daemon's own tstate push. None of it was the daemon
+misbehaving — `twatch` refuses a dirty checkout precisely because it detaches,
+which is it protecting you.
+
+Current layout, the same shape on both boxes: agent works in a dev checkout
+(`~/pxx` on xeon), the watcher owns `~/trackt-watch` alone, origin is the only
+shared state.
+
+**This is not an argument for one checkout per box** (user, 2026-07-31):
+borg's several checkouts are deliberate — that split is per TRACK, and the
+resulting untidiness is normal development, not drift to be cleaned up. The
+rule here is narrower: a clone with a *live daemon in it* is not a workspace.
+
 ## The short version
 
 - two peers, no master; the user may be at either box
