@@ -20,6 +20,7 @@
 # bug-nilpy-non-literal-class-attribute-corrupts-the-class-layout. Keeping them
 # apart means this test measures the annotation fix and not that bug.
 
+from dataclasses import dataclass, field
 from typing import ClassVar, List, Dict
 
 
@@ -69,11 +70,28 @@ class Bare:
         return self.v
 
 
+# REGRESSION CONTROL. In a @dataclass an annotated member is a FIELD, owned by
+# the dataclass branches that also record its default and build the generated
+# ctor. The first cut of this fix matched the annotated shape ahead of them and
+# hijacked it — test_nilpy_dataclass_dict_factory segfaulted. A dataclass keeps
+# the pre-existing unannotated-only rule; this pins that it still does.
+@dataclass
+class DC:
+    label: str = ""
+    score: float = 0.0
+    items: List[int] = field(default_factory=list)
+
+
 print(Scalars().read())
 print(Expr().g)
 print(Containers().lst)
 print(Containers().dct)
 print(Typed().traverse())
+
+d1 = DC("F", 1.5)
+d1.items.append(3)
+d2 = DC()
+print(d1.label, d1.score, d1.items, "| fresh:", d2.items)
 
 try:
     print(Bare().get())

@@ -15217,6 +15217,14 @@ begin
     else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
             ((i = bodyStart) or
              (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) and
+            { the ANNOTATED shape is a PLAIN class's attribute only. In a
+              @dataclass `label: str = ""` is a FIELD, owned by the isDC branches
+              below which also record its default in the PyDc* tables and build
+              the generated ctor from them. Matching it here hijacked that —
+              test_nilpy_dataclass_dict_factory segfaulted
+              (regression-nilpy-dataclass-dict-factory-test-core-red). A
+              dataclass keeps the pre-existing unannotated-only rule. }
+            ((not isDC) or (Tokens[i + 1].Kind = tkAssign)) and
             (PyClsAttrEqIdx(i, bodyEnd) >= 0) and
             (PyClsAttrEqIdx(i, bodyEnd) + 1 < bodyEnd) and
             (Tokens[PyClsAttrEqIdx(i, bodyEnd) + 1].Kind in
@@ -15294,6 +15302,14 @@ begin
     else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
             ((i = bodyStart) or
              (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) and
+            { the ANNOTATED shape is a PLAIN class's attribute only. In a
+              @dataclass `label: str = ""` is a FIELD, owned by the isDC branches
+              below which also record its default in the PyDc* tables and build
+              the generated ctor from them. Matching it here hijacked that —
+              test_nilpy_dataclass_dict_factory segfaulted
+              (regression-nilpy-dataclass-dict-factory-test-core-red). A
+              dataclass keeps the pre-existing unannotated-only rule. }
+            ((not isDC) or (Tokens[i + 1].Kind = tkAssign)) and
             (PyClsAttrEqIdx(i, bodyEnd) >= 0) and
             (PyClsAttrEqIdx(i, bodyEnd) + 1 < bodyEnd) then
     begin
