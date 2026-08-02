@@ -2,6 +2,8 @@
 track: N
 prio: 80
 type: bug
+status: working
+owner: claude-AN
 ---
 
 # A function-local assignment WRITES the module global of the same name

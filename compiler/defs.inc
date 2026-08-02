@@ -13,6 +13,7 @@ const
   MAX_PROCS   = 16384;
   PY_MAX_NESTED = 512;  { queued nested defs per enclosing body (feature-nilpy-nested-defs); uforth registers ~100 native-word bodies in one setup function }
   PY_MAX_CAPS = 20;     { enclosing locals one nested def may capture }
+  PY_MAX_DEF_GLOBALS = 32;  { `global`/`nonlocal` names one def body may declare }
   PROC_HASH_SIZE = 16384;  { FindProc hash buckets; power of two (mask below) }
   SYM_HASH_SIZE  = 65536;  { FindSym hash buckets; power of two }
   MAX_PROC_PARAMS = 32;
@@ -1626,6 +1627,19 @@ var
     here, so passing the value at each call site is exactly Python's answer for
     reads. Writes need `nonlocal` and are not this. }
   PyCapCount : array[0..MAX_PROCS-1] of Integer;
+  { The `global` / `nonlocal` names declared by the def body CURRENTLY being
+    parsed. Python's scoping rule is that assigning a name anywhere in a
+    function makes it local for the whole function UNLESS one of these
+    declarations says otherwise, so an assignment target has to consult this
+    set before it is allowed to bind a module global
+    (bug-nilpy-function-local-assignment-clobbers-module-global). Filled by
+    PyScanDefGlobals from the body's tokens (the body is not parsed yet when
+    the answer is first needed) and saved/restored around each def, so a nested
+    def's declarations do not leak into its enclosing one. `nonlocal` is kept
+    in the same list because a nonlocal name must not become a fresh local
+    either — its write propagation is feature-nilpy-nonlocal-write-propagation. }
+  PyDefGlobalCount : Integer;
+  PyDefGlobalName : array[0..PY_MAX_DEF_GLOBALS-1] of AnsiString;
   { 1 + token index of a NESTED def's `def` token, 0 = none. Recorded so the
     def taken AS A VALUE (`target.native = does_runtime`) can be re-lowered as
     a pyeval closure binding its default-arg/captured values at that point

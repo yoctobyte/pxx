@@ -1,0 +1,81 @@
+# bug-nilpy-function-local-assignment-clobbers-module-global
+#
+# Python's binding rule: assigning a name anywhere in a function makes it LOCAL
+# for the whole function, unless `global`/`nonlocal` says otherwise. NilPy used
+# to resolve the assignment target by ordinary lookup, find the module global
+# and write through to it — so a function silently mutated module state.
+#
+# The two halves are entangled and must both hold: `global` used to "work" ONLY
+# because of that leak (the declaration was parsed and discarded), so a fix that
+# stops the leak without recording `global` breaks every correct `global` user.
+# Every expectation below is CPython's own output.
+
+# local shadowing a module global; another function reads the true global
+g = 1
+def shadow():
+    g = 99
+    return g
+def reader():
+    return g
+print(shadow(), reader(), g)
+
+# global, single and multiple names
+a = 1
+b = 2
+def setboth():
+    global a, b
+    a = 10
+    b = 20
+setboth()
+print(a, b)
+
+# global in a NESTED def
+n = 0
+def outer():
+    def inner():
+        global n
+        n = 7
+    inner()
+outer()
+print(n)
+
+# a nested def that shadows without declaring global
+m = 5
+def outer2():
+    def inner2():
+        m = 42
+        return m
+    return inner2()
+print(outer2(), m)
+
+# strings and containers, not just ints
+s = "keep"
+def stomp():
+    s = "gone"
+    return s
+print(stomp(), s)
+
+# a method shadowing a module global
+c = 3
+class K:
+    def go(self):
+        c = 30
+        return c
+print(K().go(), c)
+
+# a method that declares global
+d = 4
+class L:
+    def go(self):
+        global d
+        d = 40
+        return d
+print(L().go(), d)
+
+# shadowing a name assigned in a loop
+t = 100
+def loopy():
+    for t in [1, 2, 3]:
+        pass
+    return t
+print(loopy(), t)

@@ -2152,6 +2152,94 @@ begin
   PyProgSym := si;
 end;
 
+procedure PyScanDefGlobals(bodyStart: Integer);
+{ Collect the `global` / `nonlocal` names declared anywhere in the def body that
+  starts at bodyStart, into PyDefGlobalName. Token-scanned rather than collected
+  while parsing, because the answer is needed by the FIRST assignment in the
+  body and Python's rule is whole-function: `g = 1` on line 2 is still a module
+  write when `global g` appears on line 9. Statement-start only, so a variable
+  legitimately named `global` in an expression cannot be mistaken for the
+  declaration.
+
+  The scan stops at the body's own DEDENT, so a NESTED def's `global` is not
+  harvested into the enclosing one — the nested def scans its own body when it
+  is parsed, and PyParseDef saves/restores the list around it. }
+var i, depth: Integer;
+begin
+  PyDefGlobalCount := 0;
+  { bodyStart is already INSIDE the block — PyParseDefHeader / PyParseMethod
+    consume the tkIndent before recording it — so the scan starts at depth 1
+    rather than hunting for an INDENT that has already gone by. Getting this
+    wrong is silent: the scan then finds the first NESTED block instead and the
+    body's own `global` is never seen. }
+  i := bodyStart;
+  depth := 1;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then
+    begin
+      Dec(depth);
+      if depth <= 0 then Exit;
+    end
+    else if (Tokens[i].Kind = tkIdent) and (i > 0) and
+            (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]) and
+            ((GetTokenStr(i) = 'global') or (GetTokenStr(i) = 'nonlocal')) then
+    begin
+      Inc(i);
+      while (i < TokCount) and (Tokens[i].Kind = tkIdent) do
+      begin
+        if PyDefGlobalCount < PY_MAX_DEF_GLOBALS then
+        begin
+          PyDefGlobalName[PyDefGlobalCount] := GetTokenStr(i);
+          Inc(PyDefGlobalCount);
+        end;
+        Inc(i);
+        if (i < TokCount) and (Tokens[i].Kind = tkComma) then Inc(i) else Break;
+      end;
+      Continue;
+    end;
+    Inc(i);
+  end;
+end;
+
+function PyDefDeclaresGlobal(const nm: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to PyDefGlobalCount - 1 do
+    if PyDefGlobalName[i] = nm then begin Result := True; Exit; end;
+end;
+
+function PyAssignTargetSym(const nm: AnsiString): Integer;
+{ PyProgSym for a name being ASSIGNED. Differs in exactly one case: inside a def,
+  a name that resolves to a MODULE GLOBAL and is not declared `global`/`nonlocal`
+  is reported as absent, so the caller allocates a proc-local instead of writing
+  through to module state.
+
+  That is Python's binding rule, and without it
+
+      g = 1
+      def shadow():
+          g = 99        # a LOCAL in Python
+      shadow()
+      print(g)          # CPython 1, pxx used to print 99
+
+  silently mutated the module (bug-nilpy-function-local-assignment-clobbers-
+  module-global). Note the entanglement this had to preserve: `global g` USED to
+  work only BECAUSE of the leak — the declaration was parsed and discarded — so
+  the registry (PyScanDefGlobals) and this rule had to land together, or fixing
+  the leak would have broken every correct `global` user.
+
+  Only skGlobal is diverted: params, existing locals and `self` keep resolving as
+  before. Comparison is exact-case, matching NilPy's case-sensitive names. }
+begin
+  Result := PyProgSym(nm);
+  if (Result >= 0) and (CurProc >= 0) and (Syms[Result].Kind = skGlobal) and
+     (not PyDefDeclaresGlobal(nm)) then
+    Result := -1;
+end;
+
 function PyFindConstraint(const name: AnsiString): Integer;
 var i: Integer;
 begin
@@ -12636,7 +12724,7 @@ begin
       Next;                      { CurTok = '=' }
       Expect(tkAssign, '=');
       PyParseBoolExpr;
-      symIdx := PyProgSym(name);
+      symIdx := PyAssignTargetSym(name);
       if symIdx < 0 then
       begin
         { `s: str` means an UNBOUNDED Python string, so the local is managed —
@@ -12664,7 +12752,7 @@ begin
      (Tokens[TokPos].Kind = tkAssign) then
   begin
     name := CurTok.SVal;
-    symIdx := PyProgSym(name);
+    symIdx := PyAssignTargetSym(name);
     Next;
     Expect(tkAssign, '=');
     { `target = [EXPR for VAR in ITER]` — a list comprehension. Desugared to an
@@ -12920,7 +13008,7 @@ begin
     savedFS := FrameSize;
     { seed the scratch scope with what the previous round learned }
     for i := 0 to PyLocalCount - 1 do
-      if PyProgSym(PyLocals[i].Name) < 0 then
+      if PyAssignTargetSym(PyLocals[i].Name) < 0 then
       begin
         si := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
         if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
@@ -13050,7 +13138,7 @@ begin
     savedFS := FrameSize;
     savedBSS := BSSSize;
     for i := 0 to PyLocalCount - 1 do
-      if PyProgSym(PyLocals[i].Name) < 0 then
+      if PyAssignTargetSym(PyLocals[i].Name) < 0 then
       begin
         si := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
         if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
@@ -13933,15 +14021,23 @@ procedure PyParseDef;
 var name, savedPfx, savedPfx2: AnsiString;
     nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyNode: Integer;
     savedNest, savedTok, savedLam, savedHoist: Integer;
+    savedDefGlobals: array[0..PY_MAX_DEF_GLOBALS-1] of AnsiString;
+    savedDefGlobalCount, dgI: Integer;
     retType: TTypeKind; isProc, capByRef: Boolean;
 begin
   savedHoist := PyHoistHead;
+  { Python's binding rule is per-FUNCTION, so the `global`/`nonlocal` set is a
+    property of THIS body — saved and restored so a nested def (drained at the
+    end of this routine) cannot leak its declarations into the enclosing one. }
+  savedDefGlobalCount := PyDefGlobalCount;
+  for dgI := 0 to PyDefGlobalCount - 1 do savedDefGlobals[dgI] := PyDefGlobalName[dgI];
   PyParseDefHeader;
   name := PyHdrName;
   nparams := PyHdrNParams;
   isProc := PyHdrIsProc;
   retType := PyHdrRetType;
   bodyStart := TokPos - 1;
+  PyScanDefGlobals(bodyStart);
 
   { Reuse the shell PyRegisterDefShells registered for this def. A shell has
     BodyAddr = -1; anything else means the name is being DEFINED AGAIN, which
@@ -14082,7 +14178,7 @@ begin
   PyCollectLocalsAST(bodyStart);
   PyDbgDumpLocals(Procs[procIdx].Name);
   for i := 0 to PyLocalCount - 1 do
-    if PyProgSym(PyLocals[i].Name) < 0 then
+    if PyAssignTargetSym(PyLocals[i].Name) < 0 then
     begin
       idx := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
       if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
@@ -14149,6 +14245,8 @@ begin
     Next;
   end;
   PyDrainPendingLambdas(savedLam);
+  PyDefGlobalCount := savedDefGlobalCount;
+  for dgI := 0 to savedDefGlobalCount - 1 do PyDefGlobalName[dgI] := savedDefGlobals[dgI];
 end;
 
 { Is the `def` at token index defIdx decorated with @property or @x.setter?
@@ -15598,8 +15696,16 @@ var savedHoist: Integer; clsAttrSeq: Integer;
     psigs: array[0..15] of Integer;   { Callable signature per parameter, or -1 }
     isCtor: Boolean; isKwP: Boolean; starCi: Integer;
     savedNest, savedTok, savedLam: Integer; savedPfx, savedPfx2: AnsiString;
+    savedDefGlobals: array[0..PY_MAX_DEF_GLOBALS-1] of AnsiString;
+    savedDefGlobalCount, dgI: Integer;
 begin
   savedHoist := PyHoistHead;
+  { Python's binding rule is per-FUNCTION, so the `global`/`nonlocal` set is a
+    property of THIS body — saved and restored so a nested def (drained at the
+    end of this routine) cannot leak its declarations into the enclosing one. }
+  savedDefGlobalCount := PyDefGlobalCount;
+  for dgI := 0 to PyDefGlobalCount - 1 do savedDefGlobals[dgI] := PyDefGlobalName[dgI];
+
   Expect(tkFunction, 'def');
   origName := CurTok.SVal; name := PyMethodName(origName);
   { same mangling the pre-pass applied. TokPos-2 is the `def`, since CurTok is
@@ -15713,6 +15819,7 @@ begin
     signature. The requirement was a syntax rule with nothing behind it. }
   Expect(tkColon, ':'); Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
   bodyStart := TokPos - 1;
+  PyScanDefGlobals(bodyStart);
   fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]); AppendChar(fullName, '.');
   for i := 1 to Length(name) do AppendChar(fullName, name[i]);
   procIdx := FindProc(fullName);
@@ -15766,7 +15873,7 @@ begin
   PyCollectLocalsAST(bodyStart);
   PyDbgDumpLocals(Procs[procIdx].Name);
   for i := 0 to PyLocalCount - 1 do
-    if PyProgSym(PyLocals[i].Name) < 0 then
+    if PyAssignTargetSym(PyLocals[i].Name) < 0 then
     begin
       idx := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
       if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
@@ -15830,6 +15937,8 @@ begin
     Next;
   end;
   PyDrainPendingLambdas(savedLam);
+  PyDefGlobalCount := savedDefGlobalCount;
+  for dgI := 0 to savedDefGlobalCount - 1 do PyDefGlobalName[dgI] := savedDefGlobals[dgI];
 end;
 
 { Emit the synthesized @dataclass ctor body: spill params, then
