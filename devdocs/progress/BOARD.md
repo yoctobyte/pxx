@@ -36,13 +36,12 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (202)
+## backlog (201)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
-| bug-b-strtofloat-not-correctly-rounded | B | 60 | bug | `StrToFloat` is not correctly rounded, so exact decimals still do not read back | — |
 | bug-b-writeln-float-with-17-decimals-prints-garbage | A | 55 | bug | `WriteLn(x:0:17)` prints garbage | — |
 | bug-c-uses-path-basename-collides-with-enclosing-unit-name | A | 35→65 | bug | path-form `uses './x.c'` collides with the enclosing unit's OWN name | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
@@ -347,7 +346,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1196)
+## done (1198)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -415,6 +414,7 @@ _none_
 | bug-as-cast-inline-method-call | A | 50 | bug | bug: method call on an inline `(expr as T)` is silently dropped | — |
 | bug-asmcore-fpc-bootstrap | A | 50 | bug | FPC bootstrap can't compile the asmcore units the compiler now `uses` | — |
 | bug-b-floattostrsig-caps-at-15-significant-digits | B | 65 | bug | `FloatToStrSig` caps at 15 significant digits, so no double round-trips | — |
+| bug-b-strtofloat-not-correctly-rounded | B | 60 | bug | `StrToFloat` is not correctly rounded, so exact decimals still do not read back | — |
 | bug-b-sysutils-and-pylib-exception-declarations-diverged | B | 70 | bug | sysutils and pylib both declare `Exception`, and their shapes had diverged | — |
 | bug-bare-function-name-call-vs-resultvar | A | 50 | bug | Bare function name in an expression: PXX calls it, FPC/ISO reads the result var | — |
 | bug-bare-read-write-in-method-hits-intrinsic | A | 50 | bug | Bare `Read`/`Write` inside a method resolves to the console intrinsic, not the method | — |
@@ -1598,7 +1598,6 @@ _none_
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 65] [T] task-t-worktree-is-not-current-state
-- [p 60] [B] bug-b-strtofloat-not-correctly-rounded
 - [p 60] [N] bug-nilpy-defaulted-param-before-star-args-rejects-short-call
 - [p 60] [N] bug-nilpy-from-import-as-alias-is-discarded
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
