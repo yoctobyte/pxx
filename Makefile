@@ -1146,6 +1146,11 @@ test-nilpy: $(COMPILER)
 	# keyed on the float tag — a string reading "Inf" stays untouched.
 	./$(COMPILER) test/test_nilpy_inf_nan_spelling.npy /tmp/test_nilpy_infnan26
 	test "$$(/tmp/test_nilpy_infnan26)" = "$$(printf '%b' 'inf\n-inf\nnan\ninf\n-inf\nnan\ninf\n[inf, -inf]\n(inf, -inf)\n{\047k\047: inf}\ninf\n-inf\nInf\nInf\n[\047Inf\047]\nTrue\n3\n2.5\n2.5\n-0.125\n[1.5, 2.5]\n2.5\nTrue\nTrue\nFalse')"
+	# os.path.isdir / isfile / splitext, which were "undefined variable (os)".
+	# A missing path is False for isdir/isfile (CPython's rule), and splitext
+	# splits at the last dot of the BASENAME — a leading dot is not an extension.
+	./$(COMPILER) test/test_nilpy_os_path_gaps.npy /tmp/test_nilpy_ospath26
+	test "$$(/tmp/test_nilpy_ospath26)" = "$$(printf '%b' 'True\nFalse\nFalse\nTrue\nFalse\nFalse\nFalse\nFalse\n(\047f.tar\047, \047.gz\047)\n(\047noext\047, \047\047)\n(\047/a/b/c\047, \047.txt\047)\n(\047x\047, \047.\047)\n(\047\047, \047\047)\n(\047.bashrc\047, \047\047)\n(\047/a/b/.hidden\047, \047\047)\n(\047/a.b/c\047, \047\047)\n(\047a.b/c\047, \047\047)\ntuple\nf.tar\n.gz\nc.txt\n/a/b\na/b\nTrue')"
 	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
 	# key function had no overload to bind to (dict alone and list+key both worked)
 	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26

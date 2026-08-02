@@ -555,6 +555,19 @@ function pyos_path_isabs(const p: AnsiString): Boolean;
 function pyos_path_join(const a: AnsiString; const b: AnsiString): AnsiString;
 function pyos_path_dirname(const p: AnsiString): AnsiString;
 function pyos_path_basename(const p: AnsiString): AnsiString;
+{ os.path.isdir / os.path.isfile — a MISSING path is False, not an error, which
+  is CPython's rule and the reason these cannot just be `stat` plus a field read.
+  Real stat on x86-64 only, like pyos_stat; elsewhere they RAISE rather than
+  answer False, because a silent False for a directory that exists is exactly
+  the plausible-wrong-value this repo refuses
+  (bug-nilpy-os-path-isdir-isfile-splitext-missing). }
+function pyos_path_isdir(const p: AnsiString): Boolean;
+function pyos_path_isfile(const p: AnsiString): Boolean;
+{ os.path.splitext — (root, ext), split at the LAST dot of the basename. A
+  leading dot is not an extension (".bashrc" -> (".bashrc", "")), and a dot in a
+  directory component does not count. Pure string work, so it is exact on every
+  target. Returns a TUPLE, as CPython does. }
+function pyos_path_splitext(const p: AnsiString): TPyList;
 function pyos_path_exists(const p: AnsiString): Boolean;
 function pyos_path_abspath(const p: AnsiString): AnsiString;
 function pyos_getcwd: AnsiString;
@@ -5614,6 +5627,67 @@ begin
   if Length(p) = 0 then Exit;
   cs := p + #0;
   Result := PyPalAccessOk(@cs[1]);
+end;
+
+function pyos_path_isdir(const p: AnsiString): Boolean;
+{$ifdef CPUX86_64}
+var cs: AnsiString; r: Int64; buf: array[0..143] of Byte;
+{$endif}
+begin
+  Result := False;
+{$ifdef CPUX86_64}
+  if Length(p) = 0 then Exit;
+  cs := p + #0;
+  FillChar(buf[0], SizeOf(buf), 0);
+  r := PyPalStat(@cs[1], @buf[0]);
+  if r < 0 then Exit;                  { missing path is False, not an error }
+  Result := ((PInt64(@buf[24])^ and $FFFFFFFF) and $F000) = $4000;   { S_IFDIR }
+{$else}
+  raise NotImplementedError.Create('os.path.isdir needs stat, which is x86-64 only here');
+{$endif}
+end;
+
+function pyos_path_isfile(const p: AnsiString): Boolean;
+{$ifdef CPUX86_64}
+var cs: AnsiString; r: Int64; buf: array[0..143] of Byte;
+{$endif}
+begin
+  Result := False;
+{$ifdef CPUX86_64}
+  if Length(p) = 0 then Exit;
+  cs := p + #0;
+  FillChar(buf[0], SizeOf(buf), 0);
+  r := PyPalStat(@cs[1], @buf[0]);
+  if r < 0 then Exit;
+  Result := ((PInt64(@buf[24])^ and $FFFFFFFF) and $F000) = $8000;   { S_IFREG }
+{$else}
+  raise NotImplementedError.Create('os.path.isfile needs stat, which is x86-64 only here');
+{$endif}
+end;
+
+function pyos_path_splitext(const p: AnsiString): TPyList;
+var i, lastSlash, dot: Integer;
+begin
+  lastSlash := 0;
+  for i := 1 to Length(p) do
+    if p[i] = '/' then lastSlash := i;
+  dot := 0;
+  { scan only the BASENAME, and never accept its first character: CPython gives
+    ('.bashrc', '') and ('a.b/c', '') }
+  for i := lastSlash + 2 to Length(p) do
+    if p[i] = '.' then dot := i;
+  Result := TPyList.Create;
+  Result.FIsTuple := True;
+  if dot = 0 then
+  begin
+    Result.append(p);
+    Result.append('');
+  end
+  else
+  begin
+    Result.append(Copy(p, 1, dot - 1));
+    Result.append(Copy(p, dot, Length(p) - dot + 1));
+  end;
 end;
 
 { ---- environment ---------------------------------------------------------- }

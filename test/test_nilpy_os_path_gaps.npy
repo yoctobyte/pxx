@@ -1,0 +1,44 @@
+# os.path.isdir / isfile / splitext, which were "undefined variable (os)".
+# bug-nilpy-os-path-isdir-isfile-splitext-missing
+
+import os
+
+# isdir / isfile on things that exist
+print(os.path.isdir("/tmp"))
+print(os.path.isfile("/tmp"))
+print(os.path.isdir("/etc/hostname"))
+print(os.path.isfile("/etc/hostname"))
+
+# a MISSING path is False, not an error -- CPython's rule, and the reason these
+# are not just stat() plus a field read
+print(os.path.isdir("/definitely/not/here"))
+print(os.path.isfile("/definitely/not/here"))
+print(os.path.isdir(""))
+print(os.path.isfile(""))
+
+# splitext: split at the LAST dot of the BASENAME
+print(os.path.splitext("f.tar.gz"))
+print(os.path.splitext("noext"))
+print(os.path.splitext("/a/b/c.txt"))
+print(os.path.splitext("x."))
+print(os.path.splitext(""))
+
+# a LEADING dot is not an extension
+print(os.path.splitext(".bashrc"))
+print(os.path.splitext("/a/b/.hidden"))
+
+# ...and a dot in a DIRECTORY component does not count
+print(os.path.splitext("/a.b/c"))
+print(os.path.splitext("a.b/c"))
+
+# the result is a TUPLE and unpacks
+print(type(os.path.splitext("f.txt")).__name__)
+r, e = os.path.splitext("f.tar.gz")
+print(r)
+print(e)
+
+# the existing os.path calls still work
+print(os.path.basename("/a/b/c.txt"))
+print(os.path.dirname("/a/b/c.txt"))
+print(os.path.join("a", "b"))   # 3+ components is a separate gap
+print(os.path.exists("/tmp"))
