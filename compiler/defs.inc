@@ -21,7 +21,13 @@ const
   MAX_CALL_ARGS = 128;
   MAX_PARAM_DEPTHS = MAX_PROCS * MAX_PROC_PARAMS;
   MAX_CALLFIX = 16384;
-  MAX_GLOBFIX = 65536;
+  { Absolute BSS-address fixups in one emitted image. The SELF-HOST build under
+    --threadsafe is the high-water mark — every global reference in the compiler's
+    own code costs one — so this grows with the compiler and had been sitting just
+    under the cap: two more parallel arrays' worth of references tipped it into
+    "global fixup overflow", which reads as a mysterious failure in the LAST unit
+    rather than as a capacity limit. Costs 8 bytes per slot. }
+  MAX_GLOBFIX = 262144;
   MAX_ASM_GLOBFIX = 4096;
   MAX_INLINE_ASM_LINES = 4096;
   MAX_INLINE_ASM_HOLES = 1024;
