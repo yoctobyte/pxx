@@ -76,3 +76,24 @@ This ticket's own two items are done; the corpus's ACTUAL remaining walls
 
 ## Log
 - 2026-07-31 — resolved, commit f8dd8453b.
+
+## 2026-08-02 — scope correction on the "closure-captured defaults: FIXED" claim
+
+Re-measured while sweeping function semantics. That claim is correct but reads
+wider than it is: the def-time re-parse implementing it lives in
+`PyNestedDefClosureValue`, so it runs only when a nested def is materialised as
+a closure VALUE. A def that is merely CALLED never reaches it:
+
+```python
+def outer():
+    w = 7
+    def inner(b=w):
+        return b
+    return inner()      # -> None, not 7
+```
+
+On the ordinary call path every non-constant default still silently becomes
+None — including `b=[]`, `b={}`, `b=()` and any name. Filed as
+[[bug-nilpy-non-constant-parameter-defaults-silently-become-none]] (prio 70).
+This ticket stays resolved; only the scope of its claim is narrowed here, so the
+next reader does not take "defaults are fixed" at face value.
