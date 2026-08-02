@@ -56,7 +56,7 @@ mutated) is what gets passed here — this fix is the prerequisite either way.
 parent inherited from ITS OWN environment (not one the test program set),
 confirming it's visible to the child.
 
-## Resolved 2026-08-02
+## Resolved 2026-08-02 (commit 11e6b3e19)
 
 Reproduced first, exactly as filed — a child spawned by a pxx program saw
 nothing:
