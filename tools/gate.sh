@@ -29,7 +29,10 @@ PINNED="stable_linux_amd64/default/pinned"
 # front rather than letting the wait be a mystery.
 note_contention() {
   local others load
-  others=$(pgrep -fc 'testmgr\.py|twatch\.py' 2>/dev/null || echo 0)
+  # pgrep -c PRINTS 0 and EXITS 1 when nothing matches, so `|| echo 0` appends a
+  # second zero and every later `[ "$others" -gt 0 ]` dies with "integer
+  # expression expected". Recover on the assignment's status instead.
+  others=$(pgrep -fc 'testmgr\.py|twatch\.py' 2>/dev/null) || others=0
   load=$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || echo '?')
   if [ "${others:-0}" -gt 0 ]; then
     echo "gate: NOTE Track T tooling is running here ($others process(es)), load $load"
