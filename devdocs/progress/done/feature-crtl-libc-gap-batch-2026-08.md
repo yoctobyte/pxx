@@ -261,7 +261,7 @@ would have shipped either wrong version.
 
 Identical to gcc on x86-64, i386, aarch64 and arm32.
 
-## Round 7 — the process/user surface, which `getuid` exposed
+## Round 7 (commit 2f23800c7) — the process/user surface, which `getuid` exposed
 
 Sweeping `unistd.h`/`stdlib.h`/`signal.h` after `getuid` turned up missing while
 testing `st_uid`. Nine landed: `getuid`, `getgid`, `getegid`, `getppid`,
