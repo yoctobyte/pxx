@@ -43,7 +43,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (207)
+## backlog (208)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -134,6 +134,7 @@ lives in git, not in a timestamp._
 | feature-cli-widgetset-flag | A | 20 | feature | CLI: --widgetset=<name> as sugar for -dWIDGETSET_<NAME>, so the flag reads like Lazarus' -ws | — |
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
 | feature-crtl-implement-libc-assumptions | B | 10 | feature | crtl: implement the libc assumptions real-world C leans on | — |
+| feature-crtl-process-file-ops-batch | B | 25 | feature | crtl gap batch: `chdir`, `dup`, `dup2`, `symlink`, `link` | — |
 | feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | feature-nilpy-break-continue, feature-nilpy-tk-binding |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 50 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade |
@@ -1788,6 +1789,7 @@ lives in git, not in a timestamp._
 - [p 30] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 25] [N] bug-nilpy-repr-of-a-function-value-prints-none
 - [p 25] [P] compat-pascal-unit-deprecated-hint-directive
+- [p 25] [B] feature-crtl-process-file-ops-batch
 - [p 25] [N] feature-nilpy-for-loop-getitem-protocol-fallback
 - [p 25] [N] feature-nilpy-str-format-named-keyword-fields
 - [p 25] [O] feature-opt-alloc-intent-hint
