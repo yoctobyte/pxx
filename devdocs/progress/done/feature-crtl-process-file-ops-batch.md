@@ -55,7 +55,7 @@ creating one in `/tmp` and `stat`-ing both ends. Cross-check
 i386/aarch64/arm32, since `lib/crtl` builds for every target while `gate.sh lib`
 is x86-64 only ([[frank2-crtl-changes-need-cross-check]]).
 
-## dup / dup2 landed 2026-08-02
+## dup / dup2 landed 2026-08-02 (commit fcc86ac39)
 
 The cheap half, as this ticket predicted. `__pxx_dup2` bridges `PalDup2`;
 `__pxx_dup` is `PalFcntl(fd, F_DUPFD, 0)`, which *is* dup()'s definition rather
@@ -69,7 +69,7 @@ to gcc on x86-64, i386, aarch64 and arm32.
 **Still open: `chdir`, `symlink`, `link`** — the three that need new PAL surface
 in both backends. The caution about `chdir` above still applies.
 
-## chdir / symlink / link landed 2026-08-02 — batch complete
+## chdir / symlink / link landed 2026-08-02 (commit 0b1122ed8) — batch complete
 
 New PAL surface in both backends: `PalChdir`, `PalSymlink`, `PalLink`, with the
 ESP backend refusing them (`PAL_ERR_UNSUPPORTED`) rather than faking — a chdir
