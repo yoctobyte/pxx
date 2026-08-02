@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-02T06:25:05Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e6768db402bc7a847334cbda059fa0229e9c7031",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-02T06:32:19Z",
    "fixed": [],
    "new_red": [],
@@ -403,6 +395,16 @@
     "test-smoke#src:compiler/compiler.pas"
    ],
    "sha": "b11e604f80437ae06888c3a38988b18247cf7320",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-02T12:28:54Z",
+   "fixed": [
+    "test-smoke#src:compiler/compiler.pas"
+   ],
+   "new_red": [],
+   "sha": "f3e839eb7675cfe558e0be95cc7e3eb7843d6c7b",
    "tier": "native",
    "verdict": "RED"
   }
@@ -4341,7 +4343,7 @@
   "test-riscv32#src:test/test_uint32_write.pas": "pass",
   "test-riscv32#src:test/test_uint64_ops.pas": "pass",
   "test-smoke#00": "pass",
-  "test-smoke#src:compiler/compiler.pas": "fail",
+  "test-smoke#src:compiler/compiler.pas": "pass",
   "test-smoke#src:test/quick_canary_c.c": "pass",
   "test-smoke#src:test/quick_canary_nilpy.npy": "pass",
   "test-smoke#src:test/test_ansistring.pas": "pass",
@@ -4394,11 +4396,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-02T12:24:51Z",
-  "sha": "b11e604f80437ae06888c3a38988b18247cf7320",
+  "date": "2026-08-02T12:28:54Z",
+  "sha": "f3e839eb7675cfe558e0be95cc7e3eb7843d6c7b",
   "tier": "native",
   "verdict": "RED",
-  "wall": 107.4
+  "wall": 107.5
  },
  "last_bench": {
   "conf_rows": 550,
@@ -4452,19 +4454,6 @@
     "96cffaf08de5ac209b2721b29ade3a1fe1130d81"
    ],
    "src": "compiler/compiler.pas tools/progress.sh"
-  },
-  {
-   "bad": "b11e604f80437ae06888c3a38988b18247cf7320",
-   "good": "07e4f8424e6f577b0a750471db70d82c20f24581",
-   "job": "test-smoke#src:compiler/compiler.pas",
-   "name": "test-smoke#15",
-   "opened": "2026-08-02T12:24:51Z",
-   "range": [
-    "c7f71e13b55a974558b886e133727488318b12c3",
-    "7582cd5433db3eaded492952b57a1db8cc2ce7c6",
-    "b11e604f80437ae06888c3a38988b18247cf7320"
-   ],
-   "src": "compiler/compiler.pas test/bootstrap_features.pas"
   }
  ]
 }
