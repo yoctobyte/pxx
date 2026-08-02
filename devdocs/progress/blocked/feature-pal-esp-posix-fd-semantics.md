@@ -73,3 +73,48 @@ looks right. The current newlib-stdio backend already refuses what it cannot do
 **Tagged for later testing** with [[feature-esp-peripheral-callback-api]]: when a
 C3/S3 board or a working qemu-IDF harness appears, both wake up together. Nothing
 from this ticket enters the regression suite until something can run it.
+
+## Inventory 2026-08-02 — what "not a Unix" actually costs, measured
+
+The user's framing: ESP32 is *"not a unix at all, just a thin layer of
+FreeRTOS"*, so it will carry its own incompatibility set. Counted from
+`lib/rtl/platform/esp/platform_backend.pas`, separating the two cases that a
+naive grep conflates:
+
+**Refused even under ESP-IDF — 33 PAL entry points.** This is the real gap list:
+
+| area | refused |
+| --- | --- |
+| **process model** | `Vfork` `VforkAndExec` `Execve` `Wait4` `Kill` `Pipe2` |
+| **filesystem metadata** | `Stat` `StatAt` `Fstat` `Lstat` `Access` `GetDents64` `Readlink` `Utimes` `Fchmod` `Fchown` `Ftruncate` `Fsync` `Fcntl` `Dup2` |
+| **namespace** | `Chdir` `Getcwd` `Symlink` `Link` |
+| **memory** | `MmapAnon` `Munmap` |
+| **IPv6** | `BindIpv6` `ConnectIpv6` `AcceptIpv6` `SendToIpv6` `RecvFromIpv6` |
+| **time** | `Nanosleep` `Realtime` |
+
+**Works under IDF, refused only on bare — 25.** The IPv4 socket surface
+(`Socket` `BindIpv4` `ConnectIpv4` `Listen` `Accept` `Send` `Recv`
+`SendToIpv4` `SetSockOpt` `GetSockOpt` `Ioctl` `Shutdown` `SocketClose`
+`SetSocketNonBlocking` `SetSocketReuseAddr`) plus basic file I/O over the IDF
+VFS (`Open` `Read` `Write` `Seek` `Close` `Flush` `Delete` `Rename` `Mkdir`
+`Rmdir`).
+
+### The shape of it
+
+**Sockets work; basic file I/O works; almost everything else Unix-shaped is
+absent.** FreeRTOS has tasks, not processes — so there is no fork/exec/wait/kill
+and no pipes. There is no working directory, no links, no ownership, no
+directory enumeration and no `stat`. There is no virtual memory (the IDF heap
+replaces `mmap`). That is not a set of missing features to fill in one by one:
+it is a different OS model, and code that assumes POSIX will meet it as
+`PAL_ERR_UNSUPPORTED` rather than as a wrong answer — which is the right
+failure mode and worth preserving.
+
+### Consequence for lib/crtl
+
+The crtl additions of 2026-08-02 (`pipe`, `kill`, `dup`/`dup2`, `chdir`,
+`symlink`, `link`, `getuid`/`getgid`/`getegid`/`getppid`) are POSIX-shaped and
+several land on the always-refused list above. They are honest on ESP — the PAL
+returns unsupported rather than faking — but a C program ported to ESP will hit
+them. Worth knowing before anyone reads the crtl gap-batch tickets as "crtl is
+now complete for every target": it is complete for the **hosted** targets.
