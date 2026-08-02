@@ -1,6 +1,6 @@
 ---
 prio: 45  # auto
-blocked-by: [bug-cdecl-indirect-over-6-integer-args]
+blocked-by: [bug-pascal-procvar-in-value-context-takes-address-instead-of-calling]
 ---
 
 # Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy
@@ -201,3 +201,43 @@ workaround and hide the very bug that blocks it. It goes in when (1) is fixed.
 
 Item (b), other-target run verification, is unchanged and still needs the cross
 runners.
+
+## 2026-08-02 (Track B) — the stale blocker, and item (d)'s real root cause
+
+**The frontmatter blocker was stale.** This ticket sat in `blocked/` behind
+`bug-cdecl-indirect-over-6-integer-args`, which is in `done/` — re-measured, a
+7-argument indirect cdecl call returns the right answer. Nothing has been
+holding this ticket back on that account. The other bug named in the 2026-07-31
+note, `bug-pascal-transitive-unit-crashes-at-startup-unless-named-first`, is
+also resolved: `uses blcksock;` alone now starts cleanly, so wall (1) is gone
+and `test/lib_synapse_transitive_unit.pas` guards it.
+
+Also stale in the body above: the Context section still says "**no
+`PalDlOpen`/`PalDlSym`/`PalDlClose` primitives exist**" and that
+`PalHasDynlib` is lying. Both were fixed by the 2026-07-12 update further down;
+the opening text was never revised. Measured today: without the define
+`PalHasDynlib` is False and `PalDlOpen` returns nil; with `-dPXX_DYNLIB_LIBC`,
+`dlopen("libc.so.6")` and `dlsym("getaddrinfo")` both succeed.
+
+**Item (d)'s second wall now has a real root cause**, which the 2026-07-31 note
+explicitly deferred rather than guess at. It is NOT this ticket's loader and not
+the indirect-call path:
+
+> Driving OpenSSL 3 directly through our own `dlopen` works completely —
+> `OPENSSL_init_ssl` returns 1, `TLS_method`/`TLS_client_method` resolve, and
+> `TLS_client_method()` / `SSL_CTX_new()` / `SSL_new()` all return non-null.
+
+The fault is a Pascal frontend semantics bug: a procedural variable used in a
+value context has its ADDRESS taken instead of being CALLED (FPC `{$MODE
+DELPHI}` calls it; verified against the FPC binary, in that mode, because that
+is the mode the Synapse unit declares). So `SslMethodTLS` returns
+`@TLS_method` rather than `TLS_method()`, and libssl dies dereferencing it.
+Confirmed by simulation: `SSL_CTX_new(TLS_client_method())` is fine,
+`SSL_CTX_new(@TLS_client_method)` segfaults exactly as observed.
+
+Filed as [[bug-pascal-procvar-in-value-context-takes-address-instead-of-calling]]
+(Track P, urgent — it silently yields a valid-looking pointer, and the idiom is
+how every Delphi-family dynamic-binding layer is written). This ticket's
+blocked-by now points at that, which is its ONLY remaining external blocker.
+
+Item (b), other-target run verification, is unchanged.
