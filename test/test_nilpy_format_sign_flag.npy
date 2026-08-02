@@ -1,0 +1,55 @@
+# The format-spec SIGN flag: '+' shows a sign on positives too, '-' is the
+# default (negatives only), ' ' puts a space where '+' would go.
+# It was unhandled, so f"{n:+d}" raised "unsupported format spec".
+# bug-nilpy-format-spec-sign-flag-unsupported
+
+n = 42
+z = 0
+fl = 3.14159
+big = 1234567
+
+# ints
+print(f"{n:+d}")
+print(f"{-n:+d}")
+print(f"{n:-d}")
+print(f"{-n:-d}")
+print(f"{n: d}")
+print(f"{-n: d}")
+print(f"{z:+d}")
+print(f"{z: d}")
+
+# no type letter after the sign
+print(f"{n:+}")
+print(f"{-n:+}")
+
+# with a width, alignment and fill
+print(f"{n:+5d}|")
+print(f"{n:+<8d}|")
+print(f"{n:+>8d}|")
+print(f"{n:+^8d}|")
+
+# zero padding goes BETWEEN the sign and the digits
+print(f"{n:+06d}")
+print(f"{-n:+06d}")
+print(f"{n: 06d}")
+
+# floats
+print(f"{fl:+.2f}")
+print(f"{-fl:+.2f}")
+print(f"{fl: .2f}")
+print(f"{fl:+10.2f}|")
+print(f"{fl:+010.2f}")
+
+# combined with the thousands separator
+print(f"{big:+,}")
+print(f"{-big:+,}")
+print(f"{fl:+,.2f}")
+
+# other bases
+print(f"{n:+x}")
+print(f"{n:+b}")
+
+# and through .format() rather than an f-string
+print("{:+d}".format(n))
+print("{:+.1f}".format(fl))
+print("{: d}".format(n))

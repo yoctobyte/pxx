@@ -6472,9 +6472,11 @@ begin
   for i := 1 to need do
     if zero then pad := pad + '0' else pad := pad + ' ';
   if leftAlign then Result := s + pad
-  else if zero and (Length(s) > 0) and (s[1] = '-') then
-    { zero padding goes AFTER the sign: {-5:04d} is -005, not 0-05 }
-    Result := '-' + pad + Copy(s, 2, Length(s) - 1)
+  else if zero and (Length(s) > 0) and (s[1] in ['-', '+', ' ']) then
+    { zero padding goes AFTER the sign: {-5:04d} is -005, not 0-05. '+' and the
+      space flag are signs too — `{42:+06d}` is +00042, not 000+42
+      (bug-nilpy-format-spec-sign-flag-unsupported). }
+    Result := s[1] + pad + Copy(s, 2, Length(s) - 1)
   else
     Result := pad + s;
 end;
@@ -6793,7 +6795,8 @@ begin
 end;
 
 function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
-var p, width: Integer; zero, leftAlign, grouped: Boolean; kind, fillCh, align: Char;
+var p, width: Integer; zero, leftAlign, grouped: Boolean;
+    kind, fillCh, align, signCh: Char;
     body: AnsiString;
 begin
   p := 1;
@@ -6811,6 +6814,17 @@ begin
   else if (p <= Length(spec)) and (spec[p] in ['<', '>', '^']) then
   begin
     align := spec[p]; leftAlign := align = '<';
+    Inc(p);
+  end;
+  { SIGN flag — Python's grammar puts it after [[fill]align] and before the
+    zero-pad/width: '+' shows a sign on positive numbers too, '-' is the default
+    (negative only), ' ' puts a SPACE where '+' would go. It was unhandled, so
+    `f"{n:+d}"` raised "unsupported format spec"
+    (bug-nilpy-format-spec-sign-flag-unsupported). }
+  signCh := #0;
+  if (p <= Length(spec)) and (spec[p] in ['+', '-', ' ']) then
+  begin
+    signCh := spec[p];
     Inc(p);
   end;
   if (p <= Length(spec)) and (spec[p] = '0') then
@@ -6866,6 +6880,13 @@ begin
     raise ValueError.Create('unsupported format spec "' + spec + '"');
   end;
   if grouped then body := PyGroupThousands(body);
+  { the sign goes on AFTER grouping (it must not be grouped with the digits) and
+    BEFORE padding (so `{:+06d}` zero-pads between the sign and the digits, which
+    is what PyFmtPad's zero mode already does for a '-') }
+  if (signCh <> #0) and (signCh <> '-') and (Length(body) > 0) and (body[1] <> '-') then
+  begin
+    if signCh = '+' then body := '+' + body else body := ' ' + body;
+  end;
   if align = '^' then Result := PyFmtPadEx(body, width, fillCh, '^')
   else if fillCh <> ' ' then Result := PyFmtPadEx(body, width, fillCh, align)
   else Result := PyFmtPad(body, width, zero, leftAlign);
@@ -7025,7 +7046,7 @@ function pyformat_of(d: Double; const spec: AnsiString): AnsiString; overload;
 { `{x:.2f}` and friends. Same grammar as the integer spec plus a `.precision`
   group; `f` is fixed point, `g` is FloatToStr's compact form. }
 var p, width, prec, dotAt: Integer; zero, leftAlign, hasPrec, grouped, hasKind: Boolean;
-    kind, fillCh, align: Char; body, intPartS, fracPartS: AnsiString;
+    kind, fillCh, align, signCh: Char; body, intPartS, fracPartS: AnsiString;
 begin
   p := 1; zero := False; leftAlign := False; width := 0; grouped := False;
   prec := 6; hasPrec := False; hasKind := False; kind := 'f';
@@ -7038,6 +7059,13 @@ begin
   else if (p <= Length(spec)) and (spec[p] in ['<', '>', '^']) then
   begin
     align := spec[p]; leftAlign := align = '<';
+    Inc(p);
+  end;
+  { SIGN flag, same grammar position as the integer spec — see there }
+  signCh := #0;
+  if (p <= Length(spec)) and (spec[p] in ['+', '-', ' ']) then
+  begin
+    signCh := spec[p];
     Inc(p);
   end;
   if (p <= Length(spec)) and (spec[p] = '0') then begin zero := True; Inc(p); end;
@@ -7095,6 +7123,11 @@ begin
     end
     else
       body := PyGroupThousands(body);
+  end;
+  { sign after grouping, before padding — see the integer overload }
+  if (signCh <> #0) and (signCh <> '-') and (Length(body) > 0) and (body[1] <> '-') then
+  begin
+    if signCh = '+' then body := '+' + body else body := ' ' + body;
   end;
   if align = '^' then Result := PyFmtPadEx(body, width, fillCh, '^')
   else if fillCh <> ' ' then Result := PyFmtPadEx(body, width, fillCh, align)

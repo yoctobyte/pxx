@@ -1129,6 +1129,10 @@ test-nilpy: $(COMPILER)
 	# TUPLE) — both were "TPyDict has no method ..."
 	./$(COMPILER) test/test_nilpy_dict_copy_popitem.npy /tmp/test_nilpy_dictcp26
 	test "$$(/tmp/test_nilpy_dictcp26)" = "$$(printf '%b' '[(\047a\047, 1), (\047b\047, 2)]\n[(\047a\047, 1), (\047b\047, 2)]\n[(\047a\047, 1), (\047b\047, 2), (\047z\047, 9)]\n[1, 2]\n[]\n[(\047a\047, 1), (\047b\047, 2)]\n(\047c\047, 3)\n[(\047a\047, 1), (\047b\047, 2)]\n(\047b\047, 2)\n[(\047a\047, 1)]\n(\047a\047, 1)\n[]\nKeyError on empty\nstill running\ntuple\n[(\047k\047, 5)]')"
+	# the format-spec SIGN flag ('+', '-', ' '), which was "unsupported format
+	# spec". Zero padding must go BETWEEN the sign and the digits: +00042.
+	./$(COMPILER) test/test_nilpy_format_sign_flag.npy /tmp/test_nilpy_fsign26
+	test "$$(/tmp/test_nilpy_fsign26)" = "$$(printf '%b' '+42\n-42\n42\n-42\n 42\n-42\n+0\n 0\n+42\n-42\n  +42|\n42++++++|\n++++++42|\n+++42+++|\n+00042\n-00042\n 00042\n+3.14\n-3.14\n 3.14\n     +3.14|\n+000003.14\n+1,234,567\n-1,234,567\n+3.14\n+2a\n+101010\n+42\n+3.1\n 42')"
 	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
 	# key function had no overload to bind to (dict alone and list+key both worked)
 	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26
