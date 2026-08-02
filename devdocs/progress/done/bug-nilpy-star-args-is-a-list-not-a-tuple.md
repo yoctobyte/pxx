@@ -3,6 +3,7 @@ track: N
 prio: 40
 type: bug
 summary: "`*args` inside a function is a LIST, so it prints as [2, 3] where CPython prints (2, 3) and type(args).__name__ is 'list' rather than 'tuple'"
+status: done
 ---
 
 # `*args` is a list, not a tuple
@@ -46,3 +47,27 @@ A `.npy` diffed against CPython: `print(args)` for zero, one and several extra
 arguments; `type(args).__name__`; `args` forwarded to another `*args` function
 and printed there; and a genuine list parameter alongside, to confirm the marking
 is not applied too widely.
+
+## Resolved 2026-08-02 — commit 4ef8f4343
+
+The guess in "Cause" was right: one call, at the point `PyPackStarArgs` hands the
+packed list to the callee. The representation already existed and this path never
+used it.
+
+`test/test_nilpy_star_args_is_a_tuple.npy` (+ `.expected`, wired into
+`make test-nilpy`) is byte-identical to CPython across zero, one and several
+extra arguments, `type(args).__name__`, `len(args)`, `*args` alongside
+`**kwargs`, and — the control that matters, since over-applying the mark is the
+only real risk — a genuine list parameter staying a list, with
+`print((1, 2), [1, 2])` showing both bracket styles.
+
+`gate.sh quick` GREEN, self-host fixedpoint byte-identical.
+
+### Found alongside, NOT fixed
+
+`inner(*args)` — star-UNPACKING at a CALL site, as opposed to star-packing in a
+signature — does not parse ("expected expression"). Different direction of the
+same syntax and a separate gap; see [[feature-nilpy-starred-and-nested-unpacking]].
+
+## Log
+- 2026-08-02 — resolved, commit 4ef8f4343.
