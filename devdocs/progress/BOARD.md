@@ -37,10 +37,10 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-dunders-not-dispatched-through-containers | N | 60 | bug | NilPy: __repr__/__str__ of a class instance held in a container silently print EMPTY; ordering/sorted raise — no runtime dunder dispatch on a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | bug-nilpy-float-repr-not-shortest-roundtrip | N | 70 | bug | NilPy float repr is fixed-precision, not CPython's shortest round-trip | — |
-| feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
+| feature-esp-peripheral-callback-api | S | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-lib-pxxpdf-reportlab-compat | B | 50 | feature | pxxpdf — pxx pdfgen-backed, reportlab-compatible PDF library (nilpy) | decide-pxxpdf-ticket-obsolete |
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | — |
-| feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
+| feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
 ## backlog (213)
@@ -127,10 +127,10 @@ lives in git, not in a timestamp._
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
-| feature-a-promoint-variant-esp-targets | A | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
+| feature-a-promoint-variant-esp-targets | S | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
-| feature-c-esp-conformance-coverage | C | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
+| feature-c-esp-conformance-coverage | S | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
 | feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
 | feature-c-package-namespace-decision | A | 40 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
 | feature-c-vla-via-alloca | C | 50 | feature | C variable-length arrays, lowered through alloca | — |
@@ -141,7 +141,7 @@ lives in git, not in a timestamp._
 | feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | feature-nilpy-break-continue, feature-nilpy-tk-binding |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 50 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade |
-| feature-dns-esp-backend | B | 35 | feature | DNS on ESP — bind lwIP's getaddrinfo, do NOT build a separate backend | — |
+| feature-dns-esp-backend | S | 35 | feature | DNS on ESP — bind lwIP's getaddrinfo, do NOT build a separate backend | — |
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-dynamic-include-paths-config | A | 45 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | 45 | feature | Dynamic soname discovery (no execve) | — |
@@ -149,7 +149,7 @@ lives in git, not in a timestamp._
 | feature-embed-dwscript-rtti | P | 45 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
 | feature-embed-pascal-script | P | 45 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-emission-size-dce | A | 45 | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
-| feature-esp-hardware-flash-validation | A | 45 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
+| feature-esp-hardware-flash-validation | S | 45 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 | feature-float-exception-mask-control | A | 60 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
 | feature-inline-asm-xmm-operands | A | 55 | feature | Inline asm cannot express float or vector code (no xmm operands, no packed SSE, no VEX, no cpuid) | — |
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
@@ -241,7 +241,7 @@ lives in git, not in a timestamp._
 | feature-web-track-w-bootstrap | A | 40→45 | feature | Track W (website) — bootstrap the lane: two repos, one board | — |
 | feature-web-tracker-and-host-portability | A | 45 | feature | Public tracker on GitHub + host-portability rule (nothing lives only in a service) | feature-web-track-w-bootstrap |
 | feature-writeln-as-library | A | 45 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
-| feature-xtensa-stack-args-over-6-words | A | 65 | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
+| feature-xtensa-stack-args-over-6-words | S | 65 | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | idea-adaptive-heap-growth | A | 10 | idea | Adaptive heap growth policy (research / north-star — not scheduled) | — |
 | idea-c-realworld-test-targets | C | 25 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
 | idea-cross-namespace-ambiguity-warning | A | 10 | idea | Warn when a call name matches in BOTH the Pascal and C namespaces | — |
@@ -642,11 +642,11 @@ lives in git, not in a timestamp._
 | bug-eliah-ide-win-caption-no-such-member | B | 40 | bug | `apps/ide/eliah/main.pas:1431` — `EliahForm.Win.Caption`: no `Win` member exists | — |
 | bug-emitasmx64-heap-helpers-oom-selfhost | A | 50 | bug | EmitAsmX64 conversion of heap-alloc/free/ansistr-retain/release codegen causes unbounded memory growth (OOM) + non-determinism during self-host | — |
 | bug-emitasmx64-no-sib-index-silent-misparse | A | 50 | bug | `EmitAsmX64` has no `[base+index-register]` (SIB) form — fails safely, but with an unhelpful error | — |
-| bug-esp-bare-riscv32-xtensa-cannot-compile-trivial-program | A | 50 | bug | riscv32 / xtensa (`--esp-profile=bare`) reject even a trivial program — unsupported `call_ind` node | — |
-| bug-esp-emit-obj-proc-fixup-non-iram | A | 30 | bug | --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered | — |
-| bug-esp-examples-missing-platform-and-nosignals-flags | B | 60 | bug | ESP examples panic at `app_main`: their build scripts omit two required flags | — |
-| bug-esp-idf-heap-linux-mmap-ecall | A | 35 | bug | ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes | — |
-| bug-esp-not-always-boolean | A | 50 | bug | bug: `not` on an integer is boolean-only on ESP (riscv32 / xtensa) | — |
+| bug-esp-bare-riscv32-xtensa-cannot-compile-trivial-program | S | 50 | bug | riscv32 / xtensa (`--esp-profile=bare`) reject even a trivial program — unsupported `call_ind` node | — |
+| bug-esp-emit-obj-proc-fixup-non-iram | S | 30 | bug | --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered | — |
+| bug-esp-examples-missing-platform-and-nosignals-flags | S | 60 | bug | ESP examples panic at `app_main`: their build scripts omit two required flags | — |
+| bug-esp-idf-heap-linux-mmap-ecall | S | 35 | bug | ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes | — |
+| bug-esp-not-always-boolean | S | 50 | bug | bug: `not` on an integer is boolean-only on ESP (riscv32 / xtensa) | — |
 | bug-esp32s3-bare-boot-no-uart-output | A | 40 | bug | `make test-esp-bare` — the esp32s3 (xtensa) leg emits NO UART output | — |
 | bug-except-base-handler-misses-derived | A | 50 | bug | `except on E: BaseClass` does not catch a derived exception | — |
 | bug-explicit-tobject-base | A | 50 | bug | bug: explicit `class(TObject)` base "type not found" | — |
@@ -1059,7 +1059,7 @@ lives in git, not in a timestamp._
 | bug-writeln-boolean-format | A | 50 | bug | `WriteLn(Boolean)` prints `0`/`1` instead of `FALSE`/`TRUE` | — |
 | bug-writeln-real-format | A | 50 | bug | bug: `WriteLn(real)` default format differs from FPC | — |
 | bug-writeln-real-width | A | 50 | bug | bug: `WriteLn(real:w:d)` ignores the field width | — |
-| bug-xtensa-call0-large-frame-truncates | A | 50 | bug | Xtensa Call0 / non-windowed frame >128 bytes silently truncates | — |
+| bug-xtensa-call0-large-frame-truncates | S | 50 | bug | Xtensa Call0 / non-windowed frame >128 bytes silently truncates | — |
 | bugfix-cfront-sqlite3-crash-vdbecursor-layout | A+C | 50 | bugfix | bugfix: cfront — sqlite3 aggregate crash from inline struct pointer field | — |
 | chess-pal-getdents-link | B | 50 | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
 | chore-asmtext-per-platform-split | A | 50 | chore | Split `asmtext.inc` monolith into per-platform files + fix emitter tests | — |
@@ -1233,16 +1233,16 @@ lives in git, not in a timestamp._
 | feature-esoteric-fortran | A | 45 | feature | Esoteric probe: Fortran | — |
 | feature-esoteric-lolcode | A | 45 | feature | Esoteric probe: LOLCODE | — |
 | feature-esoteric-whitespace | A | 45 | feature | Esoteric probe: Whitespace | — |
-| feature-esp-bare-exceptions | A | 50 | feature | ESP bare: try/except (raise currently terminates) | — |
-| feature-esp-float | B | 50 | feature | ESP float wiring (xtensa + riscv32 float value model) | — |
-| feature-esp-int64-arith | A | 50 | feature | 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa) | — |
-| feature-esp-isa-baseline-softfallback | A | 50 | feature | ESP ISA baseline + software fallbacks for older parts | — |
-| feature-esp32-bare-boot | A | 50 | feature | ESP32 bare-metal boot profile (no IDF) | — |
-| feature-esp32-idf-riscv32 | A | 50 | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
-| feature-esp32-idf-xtensa | A | 50 | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
-| feature-esp32-isr-iram | B | 50 | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
-| feature-esp32-managed-features | A | 50 | feature | ESP32 managed-feature port (xtensa + riscv32, qemu-validated) | — |
-| feature-esp32-managed-strings | A | 50 | feature | ESP32 managed strings (tyAnsiString runtime on xtensa + riscv32) | — |
+| feature-esp-bare-exceptions | S | 50 | feature | ESP bare: try/except (raise currently terminates) | — |
+| feature-esp-float | S | 50 | feature | ESP float wiring (xtensa + riscv32 float value model) | — |
+| feature-esp-int64-arith | S | 50 | feature | 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa) | — |
+| feature-esp-isa-baseline-softfallback | S | 50 | feature | ESP ISA baseline + software fallbacks for older parts | — |
+| feature-esp32-bare-boot | S | 50 | feature | ESP32 bare-metal boot profile (no IDF) | — |
+| feature-esp32-idf-riscv32 | S | 50 | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
+| feature-esp32-idf-xtensa | S | 50 | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
+| feature-esp32-isr-iram | S | 50 | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
+| feature-esp32-managed-features | S | 50 | feature | ESP32 managed-feature port (xtensa + riscv32, qemu-validated) | — |
+| feature-esp32-managed-strings | S | 50 | feature | ESP32 managed strings (tyAnsiString runtime on xtensa + riscv32) | — |
 | feature-exception-base-class | B | 50 | feature | Built-in / RTL `Exception` base class | — |
 | feature-explicit-typecasts | A | 50 | feature | Explicit type-casts (`Char`/`Boolean`/`String` and a general `TypeName(expr)`) | — |
 | feature-extended-alias-or-reject | A | 50 | feature | Extended: formalize as Double alias (or reject) | — |
@@ -1375,7 +1375,7 @@ lives in git, not in a timestamp._
 | feature-optimization-levels | O | 65 | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-overflow-checks-cross-and-intrinsics | A | 35 | feature | {$Q+} follow-up: cross-backend checks (pair carry chains), Succ/Pred/Abs/Sqr, subword widths | — |
 | feature-own-net-http-lib | B | 50 | feature | Own networking library — native HTTP client (+ sockets, async) | — |
-| feature-pal-esp-lwip-sockaddr-readback | B | 50 | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
+| feature-pal-esp-lwip-sockaddr-readback | S | 50 | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
 | feature-pal-file-stat-metadata | B | 50 | feature | PAL file stat metadata | — |
 | feature-pal-network-datagram-poll-errno | B | 50 | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
 | feature-pal-thread-primitives | A | 50 | feature | PAL thread primitives — libc-free clone(2)/futex(2) (M1 keystone) | — |
@@ -1498,9 +1498,9 @@ lives in git, not in a timestamp._
 | feature-uses-alias-as | P | 50 | feature | Support namespace aliasing in uses clauses (`uses 'name' as alias`) | — |
 | feature-value-bearing-expressions-for-c | A | 50 | feature | feature: value-bearing expression nodes for the C frontend (ternary + side-effecting exprs) | — |
 | feature-warn-oversized-stack-frame | A | 50 | feature | Warn on oversized stack locals / stack frames | — |
-| feature-xtensa-asm-emitter | A | 50 | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
-| feature-xtensa-class-instantiation | A | 50 | feature | xtensa: class instantiation (VMT + ctor) not supported | — |
-| feature-xtensa-windowed-abi | A | 50 | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
+| feature-xtensa-asm-emitter | S | 50 | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
+| feature-xtensa-class-instantiation | S | 50 | feature | xtensa: class instantiation (VMT + ctor) not supported | — |
+| feature-xtensa-windowed-abi | S | 50 | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
 | feature-zero-init-contract | A | 65 | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | fix-sat-dpll-needs-parens-after-paramless-flip | B | 50 | fix | sat DPLL: bare paramless recursion needs `DPLL()` after the paramless flip | — |
 | flaky-corpus-runner-shared-tmp-path | C | 55 | flaky | flaky: cJSON / lua corpus runners race on a shared /tmp input path under parallel testing | — |
@@ -1652,7 +1652,7 @@ lives in git, not in a timestamp._
 - [p 65] [N] bug-nilpy-class-attribute-unreachable-through-the-class-name
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
-- [p 65] [A] feature-xtensa-stack-args-over-6-words
+- [p 65] [S] feature-xtensa-stack-args-over-6-words
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 65] [T] task-t-worktree-is-not-current-state
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
@@ -1749,7 +1749,7 @@ lives in git, not in a timestamp._
 - [p 45] [P] feature-embed-dwscript-rtti
 - [p 45] [P] feature-embed-pascal-script
 - [p 45] [A] feature-emission-size-dce
-- [p 45] [A] feature-esp-hardware-flash-validation
+- [p 45] [S] feature-esp-hardware-flash-validation
 - [p 45] [O] feature-inline-nonleaf-and-branch-locals
 - [p 45] [A] feature-move-fillchar-intrinsics
 - [p 45] [A] feature-nilpy-idf-import
@@ -1772,7 +1772,7 @@ lives in git, not in a timestamp._
 - [p 40] [N] bug-nilpy-list-mutators-return-self-instead-of-none
 - [p 40] [N] bug-nilpy-list-of-custom-objects-loses-repr-str
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
-- [p 40] [A] feature-a-promoint-variant-esp-targets
+- [p 40] [S] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
 - [p 40] [N] feature-nilpy-arithmetic-dunders-full-protocol
@@ -1792,8 +1792,8 @@ lives in git, not in a timestamp._
 - [p 35] [N] bug-nilpy-pypow-integer-overflow-does-not-promote
 - [p 35] [N] bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash
 - [p 35] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
-- [p 35] [C] feature-c-esp-conformance-coverage
-- [p 35] [B] feature-dns-esp-backend
+- [p 35] [S] feature-c-esp-conformance-coverage
+- [p 35] [S] feature-dns-esp-backend
 - [p 35] [A] feature-nested-routine-fixed-array-capture
 - [p 35] [A] feature-nilpy-arc-cross-parity
 - [p 35] [N] feature-nilpy-multi-arg-callback-bridges

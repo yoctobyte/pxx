@@ -156,6 +156,22 @@ frontend)"). **At session start, infer your track from the request:**
   (peepholes, register allocator) = x86-64 + aarch64 only** — 32-bit is
   perf-irrelevant and ESP/xtensa's hot paths are hardware peripherals; shared-IR
   passes still help all targets free. Works on `master`.
+- **Track S — eSpressif / SoC (formal category, file-owned by A and B).** The
+  ESP32 family — ESP32, S2, S3, C3 — as one visible campaign: the xtensa and
+  riscv32 backends, `lib/rtl/platform/esp/**`, the ESP-IDF profile
+  (`--platform=esp`, `--esp-profile=bare`), and `examples/esp32/**`. Like **O**,
+  this is a work-tag surfaced as its own lane, NOT a file-lane: every S ticket
+  also carries its Track A (compiler internals — `ir_codegen_xtensa.inc`) or
+  Track B (`lib/rtl/platform/esp`, `lib/crtl`, examples) ownership for collision
+  rules, and obeys that lane's gate. It exists because ESP work is otherwise
+  spread across A/B/E and reads as unrelated items, which is how it drifted.
+  **ESP is not a Unix** — FreeRTOS gives tasks, not processes — so 33 PAL entry
+  points are refused even under IDF (no fork/exec/wait/kill, no pipes, no cwd,
+  no links, no stat, no mmap); sockets and basic VFS file I/O are what work. The
+  letter reads as "SoC" as much as "eSpressif", so a future non-Espressif MCU
+  target fits without renaming. `*-esp-*` / `*-xtensa-*` slugs auto-tag S.
+  Works on `master`.
+
 - **Track Z — Zig frontend (zfront).** The Zig-language frontend, greenfield:
   future `compiler/zlexer.inc`, `zparser.inc`, Zig-exclusive Zig→IR lowering,
   `lib/zrtl`, Zig tests. **Works on `master`**, under the same pin boundary as C.
@@ -313,6 +329,14 @@ push-your-own-lane rule: T touches `tools/testmgr.py` / `tools/twatch*` /
 tool, never the bug**: a compiler or test-target gap it hits (including a fuzz
 divergence) → ticket for the owning track (IR/codegen → A, dialect → P,
 RTL → B), never a fix under T.
+
+### Track S in one line
+The ESP32 campaign (xtensa/riscv32 backends, ESP PAL, IDF profile,
+`examples/esp32/**`) surfaced as one lane — a work-tag like O, file-owned by A
+or B per ticket and gated by that lane. ESP is not a Unix: 33 PAL entries are
+unsupported even under IDF, so POSIX-shaped code meets `PAL_ERR_UNSUPPORTED`
+rather than a wrong answer, and that failure mode is deliberate. Primary target
+is **xtensa** (the user's S2/S3 hardware); riscv32 (C3) is what works today.
 
 ### Track Z in one line
 Own the Zig-frontend files (`zlexer` / `zparser`, Zig→IR lowering, `lib/zrtl`,

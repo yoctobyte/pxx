@@ -207,6 +207,23 @@ class Ticket:
         if re.search(r"\bTrack[ -]?T\b", decl, re.I) and \
                 normalize_track(self.fm.get("track", "")) in ("", "T"):
             return "T"
+        # Track S (eSpressif / SoC: the ESP32 family — ESP32, S2, S3, C3, and
+        # the xtensa/riscv32 backends, ESP PAL, ESP-IDF integration and
+        # examples/esp32/**). A cross-cutting work-tag, same decl-line rule as
+        # O/E/R/T: each ticket ALSO carries its Track A (compiler internals,
+        # e.g. ir_codegen_xtensa.inc) or Track B (lib/rtl/platform/esp, lib/crtl,
+        # examples) file-ownership tag for collision rules. This only groups the
+        # embedded campaign into one visible lane — ESP work is otherwise spread
+        # across A/B/E and reads as unrelated items, which is how it gets
+        # neglected. The letter is read as "SoC" as much as "eSpressif", so a
+        # future non-Espressif MCU target fits without renaming.
+        # NOTE the separator is MANDATORY here, unlike the O/E/R/T rules: with
+        # `[ -]?` the pattern also matches the plural "Tracks", which appears in
+        # ordinary prose ("Tracks A and B") and mis-tagged two unrelated tickets.
+        if re.search(r"\bTrack[ -]S\b", decl, re.I) or \
+                re.match(r"^(feature|bug|regression|idea|compat)-esp-", self.slug) or \
+                re.search(r"-(esp|esp32|xtensa)-", self.slug):
+            return "S"
         # Track O (Optimization: register allocation, opt passes, codegen/heap
         # perf) — a cross-cutting lane surfaced on its own, same decl-line rule as
         # R/T. Each ticket ALSO carries a Track A (compiler internals) or Track B
@@ -1033,13 +1050,13 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="progress.sh",
-        usage="%(prog)s [next|ready|leverage|autorate|board|board-md|check|all] [--track A|B|C|D|E|N|O|P|R|T|U|Z]\n"
+        usage="%(prog)s [next|ready|leverage|autorate|board|board-md|check|all] [--track A|B|C|D|E|N|O|P|R|S|T|U|Z]\n"
         "       %(prog)s autorate [--write] | claim <slug> <owner> | resolve <slug> <commit>",
     )
     sub = p.add_subparsers(dest="cmd")
     for name in ["next", "ready", "leverage", "autorate", "board", "board-md", "check", "all"]:
         sp = sub.add_parser(name)
-        sp.add_argument("--track", choices=["A", "B", "C", "D", "E", "N", "O", "P", "R", "T", "U", "Z"], default="")
+        sp.add_argument("--track", choices=["A", "B", "C", "D", "E", "N", "O", "P", "R", "S", "T", "U", "Z"], default="")
         sp.add_argument("--strict", action="store_true")
         sp.add_argument("--write", action="store_true")
     sp = sub.add_parser("claim")
