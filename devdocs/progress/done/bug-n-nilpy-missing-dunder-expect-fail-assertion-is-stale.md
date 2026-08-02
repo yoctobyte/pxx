@@ -72,3 +72,47 @@ grep -q "TypeError" /tmp/nod.log
 
 That keeps the guard the test exists for — the operator must not silently
 compute garbage — while matching where the diagnostic now lives.
+
+## 2026-08-02 — already FIXED by `784613a31`; verified and resolving
+
+Filed by Track T from the newly-enrolled `test-nilpy` tier at almost the same
+time I hit the same red from the other direction (triaging T's two NEW-REDs).
+`784613a31` — *"fix(N): update the missing-dunder assertion to the
+runtime-TypeError behaviour"* — is this ticket's fix; the two crossed.
+
+Verified rather than assumed, through make's own expanded recipe
+(`make -n test-nilpy | grep nodunder_fail26 | bash -e`): PASSES. The assertion
+now reads
+
+```make
+./$(COMPILER) test/test_nilpy_operator_dunder_missing_fail.npy /tmp/test_nilpy_nodunder_fail26
+test "$$(/tmp/test_nilpy_nodunder_fail26)" = "$$(printf '%b' 'caught missing __add__\nstill running')"
+```
+
+and the program prints exactly that — it compiles, raises a catchable runtime
+`TypeError`, the handler runs, execution continues. Which is CPython's own
+behaviour and what this ticket asked for.
+
+No further code change. Recording the duplication so the pattern is visible:
+this is the SECOND stale expect-FAIL assertion from the same cause (the first
+was `test_nilpy_list_plus_nonlist_fail`, `eeae1e4a3`). Both were left behind by
+the deliberate move of missing-operator cases from compile errors to catchable
+runtime TypeErrors. If a third turns up, the fix is to grep the recipe for
+remaining `! ./$(COMPILER)` expect-FAIL lines and check each against current
+behaviour, rather than waiting for them to surface one at a time.
+
+## Log
+- 2026-08-02 — resolved, commit 784613a31.
+
+### The sweep, actually run
+
+Rather than leave that as advice: the three remaining `! ./$(COMPILER)`
+expect-FAIL assertions in `test-nilpy` were extracted and executed via make's
+own expansion. **All three still valid.** They are a different family — genuine
+compile-time failures that are not moving to runtime:
+
+- `--no-shims` with a dotted import (a missing shim IS a build-time error)
+- inconsistent dedent (syntax)
+- mixed indent (syntax)
+
+So the stale-assertion family is now closed at two instances, not open-ended.
