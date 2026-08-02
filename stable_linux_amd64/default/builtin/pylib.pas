@@ -97,7 +97,10 @@ type
       RAISES ValueError when absent and remove REMOVES it; a find-style -1
       return would be a different function (feature-nilpy-container-method-gaps). }
     function index(const v: Variant): Integer;
-    procedure remove(const v: Variant);
+    { returns None, like Python's — a PROCEDURE here meant `r = l.remove(x)`
+      read a result that was never written and yielded garbage
+      (bug-nilpy-inplace-mutators-do-not-return-none) }
+    function remove(const v: Variant): Variant;
     { A SHALLOW copy, like Python's: a new list holding the same element
       values, so appending to the copy leaves the original alone while a
       mutable ELEMENT stays shared. }
@@ -105,12 +108,16 @@ type
     function pop: Variant; overload;
     function pop(i: Integer): Variant; overload;   { list.pop(index) — Python removes at i }
     function pop_at(i: Integer): Variant;
-    procedure insert(i: Integer; const v: Variant);
+    function insert(i: Integer; const v: Variant): Variant;   { None, see remove }
     { Python's `xs += ys` / xs.extend(ys): IN-PLACE, appending ys's elements.
       `+` on two lists would add the two class HANDLES
       (bug-a-nilpy-list-augmented-add-segfaults). }
     function extend(other: TPyList): TPyList;
     procedure clear;
+    { list.reverse() -- IN PLACE, unlike reversed()/[::-1] which both return a
+      NEW sequence. Returns Self so the statement lowering can use it as a
+      value node, the same shape sort() and extend() use. }
+    function reverse: TPyList;
     { list.sort() -- in place, no key=/reverse= yet (see the implementation). }
     function sort: TPyList;
     { `with open(p, "r") as f: f.read()`. The read-slurp model makes open()
@@ -178,7 +185,7 @@ type
       hook needed. }
     function get(const k: Variant): Variant; overload;
     function get(const k: Variant; const d: Variant): Variant; overload;
-    procedure remove(const k: Variant);
+    function remove(const k: Variant): Variant;   { None, see TPyList.remove }
     { dict.pop(key, default): remove the key and return its value, or return
       `default` if absent (never raises in the two-argument form uforth uses). }
     { Both Python arities. The one-argument form RAISES KeyError when the key
@@ -216,8 +223,16 @@ type
     FCounterMode: Boolean;
     { Counter.update(iterable) COUNTS elements; a plain dict's update(pairs)
       merges them. The mode picks which, which is why they share a name. }
-    procedure update(l: TPyList);
-    procedure update(d: TPyDict); overload;
+    function update(l: TPyList): Variant;   { None, see TPyList.remove }
+    function update(d: TPyDict): Variant; overload;
+    { dict.copy() — a SHALLOW copy, like TPyList.copy: a new dict holding the
+      same key/value pairs, so storing into the copy leaves the original alone
+      while a mutable VALUE stays shared. }
+    function copy: TPyDict;
+    { dict.popitem() — remove and return the LAST (key, value) pair, which is
+      what CPython 3.7+ does now that dicts are insertion-ordered. Raises
+      KeyError on an empty dict, as CPython does. The pair is a tuple. }
+    function popitem: TPyList;
     { Counter.most_common([n]): (element, count) pairs, highest count first. The
       pair is a 2-element list — NilPy has no tuple type; indexing is identical. }
     function most_common: TPyList;
@@ -353,6 +368,7 @@ type
       latin-1 is an exact identity mapping; the `errors` argument is accepted
       and ignored because latin-1 cannot fail. Named `errors` so the keyword
       form binds through the ordinary method keyword-argument path. }
+    function decode: AnsiString; overload;
     function decode(const encoding: AnsiString): AnsiString; overload;
     function decode(const encoding: AnsiString; const errors: AnsiString): AnsiString; overload;
     { bytes.endswith(suffix) — the READ-LINE CR/LF trim }
@@ -393,6 +409,7 @@ type
 function pystr_of(const s: AnsiString): AnsiString;
 function pystr_of(b: Boolean): AnsiString; overload;
 function pystr_of(i: Int64): AnsiString; overload;
+function PyFloatStr(d: Double): AnsiString;   { FloatToStr + Python's inf/nan spelling }
 function pystr_of(d: Double): AnsiString; overload;
 function pystr_of(c: Char): AnsiString; overload;
 function pystr_of(const v: Variant): AnsiString; overload;
@@ -454,6 +471,12 @@ function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; over
 function bytearray: TPyBytes; overload;   { bytearray() — an EMPTY buffer }
 function bytearray(n: Integer): TPyBytes; overload;
 function bytes(b: TPyBytes): TPyBytes;
+{ bytes([104, 105]) — from a LIST of codepoints. A REAL overload since
+  bug-a-overload-resolution-ignores-class-identity: before that, a list
+  argument silently bound to the TPyBytes parameter above and was rescued by
+  a runtime `is` check inside it. Correct resolution now rejects that bind,
+  so the overload has to exist. }
+function bytes(l: TPyList): TPyBytes; overload;
 function pybytes_from_list(l: TPyList): TPyBytes;
 function bytes(const s: AnsiString): TPyBytes; overload;
 function pybytes_find(b: TPyBytes; sub: TPyBytes; start: Integer): Integer;
@@ -474,7 +497,18 @@ function pystr_encode(const s: AnsiString): TPyBytes;
 function pystr_slice(const s: AnsiString; lo, hi: Integer): AnsiString;
 function pybytes_slice(b: TPyBytes; lo, hi: Integer): TPyBytes;
 function pylist_slice(l: TPyList; lo, hi: Integer): TPyList;
+{ EXTENDED slices — `b[lo:hi:step]`, any non-zero step. Separate entry points
+  rather than a default parameter so the frontend picks one by arity and the
+  plain 3-argument path stays exactly as it was. Bounds follow CPython's
+  slice.indices(), which is NOT PySliceBounds with an extra loop: with a
+  negative step an omitted low bound means n-1 (not 0) and an omitted high
+  bound means "before index 0" (not n), and the clamps differ likewise.
+  step = 0 raises ValueError, as in Python. }
+function pystr_slice_step(const s: AnsiString; lo, hi, step: Integer): AnsiString;
+function pybytes_slice_step(b: TPyBytes; lo, hi, step: Integer): TPyBytes;
+function pylist_slice_step(l: TPyList; lo, hi, step: Integer): TPyList;
 function pylist_del_slice(l: TPyList; lo, hi: Integer): TPyList;   { del l[lo:hi] in place }
+function pylist_del_at(l: TPyList; i: Integer): TPyList;           { del l[i] in place }
 procedure pylist_setslice(l: TPyList; lo, hi: Integer; src: TPyList);   { l[lo:hi] = src in place }
 { `b[lo:hi] = src`. uforth assigns a slice of the SAME length everywhere (it is
   emulating fixed-width cells in Forth data space), so a length CHANGE is
@@ -521,6 +555,19 @@ function pyos_path_isabs(const p: AnsiString): Boolean;
 function pyos_path_join(const a: AnsiString; const b: AnsiString): AnsiString;
 function pyos_path_dirname(const p: AnsiString): AnsiString;
 function pyos_path_basename(const p: AnsiString): AnsiString;
+{ os.path.isdir / os.path.isfile — a MISSING path is False, not an error, which
+  is CPython's rule and the reason these cannot just be `stat` plus a field read.
+  Real stat on x86-64 only, like pyos_stat; elsewhere they RAISE rather than
+  answer False, because a silent False for a directory that exists is exactly
+  the plausible-wrong-value this repo refuses
+  (bug-nilpy-os-path-isdir-isfile-splitext-missing). }
+function pyos_path_isdir(const p: AnsiString): Boolean;
+function pyos_path_isfile(const p: AnsiString): Boolean;
+{ os.path.splitext — (root, ext), split at the LAST dot of the basename. A
+  leading dot is not an extension (".bashrc" -> (".bashrc", "")), and a dot in a
+  directory component does not count. Pure string work, so it is exact on every
+  target. Returns a TUPLE, as CPython does. }
+function pyos_path_splitext(const p: AnsiString): TPyList;
 function pyos_path_exists(const p: AnsiString): Boolean;
 function pyos_path_abspath(const p: AnsiString): AnsiString;
 function pyos_getcwd: AnsiString;
@@ -810,6 +857,12 @@ function pylist_repeat(l: TPyList; n: Int64): TPyList;
 function pybytes_repeat(b: TPyBytes; n: Int64): TPyBytes;
 function pybytes_concat(a, b: TPyBytes): TPyBytes;
 function pybytes_eq(a, b: TPyBytes): Boolean;
+{ Lexicographic ORDER for bytes, -1/0/1, the same contract pylist_cmp has:
+  element by element, then the shorter sequence first. Ordering operators on two
+  statically-typed TPyBytes used to lower to a raw handle compare and answer
+  from the two objects' HEAP ADDRESSES
+  (bug-nilpy-list-ordering-compares-heap-addresses, the bytes half). }
+function pybytes_cmp(a, b: TPyBytes): Int64;
 function pyfile_open(const path, mode: AnsiString): TPyFile;
 { `s.rjust(w)` / `s.rjust(w, fill)` — right-align in a field of w characters.
   Python returns the string UNCHANGED when it is already at least that long
@@ -839,11 +892,35 @@ function max(a: Double; b: Double): Double; overload;
 function list(l: TPyList): TPyList;
 function list(const s: AnsiString): TPyList; overload;
 function list(const v: Variant): TPyList; overload;
+{ tuple(iterable) — the same sequence with the TUPLE flag set. The tuple TYPE
+  existed (literals work, and FIsTuple distinguishes it) but the CONSTRUCTOR did
+  not, so `tuple([1, 2])` failed with 'undefined variable (tuple)'.
+  (bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice) }
+function tuple(l: TPyList): TPyList;
+function tuple(const s: AnsiString): TPyList; overload;
+{ pow(base, exp) — the function spelling of `**`, which already works. pow with
+  a THIRD argument is modular exponentiation and is a different algorithm; it is
+  deliberately NOT provided here rather than silently ignoring the modulus. }
+function pow(const a: Variant; const b: Variant): Variant;
 { `dict(x)` — a shallow COPY of a mapping, as Python's dict() constructor makes.
   Same overload-by-argument-type shape as list() (feature-nilpy-missing-builtins).
   uforth uses `dict(vm.dict)` to snapshot word-list state for MARKER. }
-function dict(d: TPyDict): TPyDict;
+function dict(d: TPyDict): TPyDict; overload;
 function dict(const v: Variant): TPyDict; overload;
+{ dict(pairs) — the standard way to build a dict from zip(), .items() or parsed
+  input, and platonically the overload that makes `dict([("a", 1)])` work.
+  It is NOT selected yet: overload resolution takes the first candidate whose
+  ARITY fits and never checks class identity for a class-typed parameter, so a
+  TPyList argument binds to `dict(d: TPyDict)` above and its body reads a
+  TPyList's fields as a TPyDict's — SIGSEGV
+  (bug-nilpy-dict-from-pairs-and-bytes-decode-segfault, blocked on
+  bug-a-overload-resolution-ignores-class-identity).
+  Left in place rather than reordered on purpose: putting it FIRST does fix
+  `dict(pairs)` but then breaks `dict(a_real_dict)` the same way, so ordering
+  only moves the crash. Per the no-compiler-appeasement rule this stays
+  platonic and waits for the resolution fix, at which point it starts being
+  selected with no further change here. }
+function dict(l: TPyList): TPyDict; overload;
 
 { dict.fromkeys(iterable): a dict with those keys, values None, insertion order
   preserved. `list(dict.fromkeys(xs))` is the standard order-preserving dedupe. }
@@ -894,6 +971,17 @@ function pyenumerate(a: TPyList): TPyList;
 { `enumerate(xs, start)` / `enumerate(xs, start=N)` — same as pyenumerate with
   the index offset by `start`. }
 function pyenumerate2(a: TPyList; start: Integer): TPyList;
+{ A str exploded into a list of 1-character strs. The frontend wraps a str
+  argument to zip()/enumerate() in this, because those build their calls by a
+  fixed FindProc index and so never consult overloads
+  (bug-nilpy-str-iterable-builtins-segfault-on-a-string-handle). }
+function pystr_charlist(const s: AnsiString): TPyList;
+{ Python's `assert cond` / `assert cond, msg`. The frontend evaluates the
+  condition's TRUTHINESS and hands the boolean here, so the container/str/None
+  rules stay in PyMakeTruthy rather than being re-implemented. A raise (not a
+  Halt) so `try/except AssertionError` runs, like every other NilPy error
+  (bug-nilpy-assert-statement-not-supported). }
+procedure pyassert(ok: Boolean; const msg: AnsiString);
 { Python's TWO-argument round(x, ndigits) — a float rounded to that many
   decimals, unlike the one-argument form which yields an int. Half-away-from-
   zero rather than CPython's banker's rounding: the difference shows only on an
@@ -910,6 +998,17 @@ function pymath_fabs(x: Double): Double;
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
+{ sum(iterable, start) — Python's optional second argument, the accumulator's
+  initial value. `sum(xs, 10)` is an ordinary spelling and was rejected with
+  "no overload of sum matches these arguments". }
+function sum(l: TPyList; const start: Variant): Variant; overload;
+{ Three- and four-argument min/max. Python's are variadic; only the
+  two-argument and single-iterable forms existed, so `min(3, 1, 2)` did not
+  compile (bug-nilpy-numeric-builtin-gaps-min-max-sum-float-inf). }
+function min(const a, b, c: Variant): Variant; overload;
+function min(const a, b, c, d: Variant): Variant; overload;
+function max(const a, b, c: Variant): Variant; overload;
+function max(const a, b, c, d: Variant): Variant; overload;
 function max(l: TPyList): Variant; overload;
 function min(l: TPyList): Variant; overload;
 function max(const s: AnsiString): AnsiString; overload;
@@ -960,6 +1059,12 @@ function len(const v: Variant): Integer; overload;
 function next(c: TPyCounter): Int64;
 function pyvar_holds(const v: Variant; k: Int64): Boolean;
 function pycontains(l: TPyList; const v: Variant): Boolean;
+{ `x in <bytes>`. Python allows BOTH a bytes subsequence (`b"ell" in b"hello"`)
+  and an integer byte value (`104 in b"hello"`). Without this the bytes receiver
+  fell through to pycontains, which scans a TPyList — reading a TPyBytes'
+  header words as variant slots and answering False
+  (bug-nilpy-bytes-membership-always-false-for-a-bytes-needle). }
+function pybytes_contains(b: TPyBytes; const v: Variant): Boolean;
 function pyvar_contains(const c: Variant; const v: Variant): Boolean;
 function pyset_and(a: TPyList; b: TPyList): TPyList;
 function pyset_or(a: TPyList; b: TPyList): TPyList;
@@ -1008,6 +1113,11 @@ function pydynattr_has(obj: Pointer; const name: AnsiString): Boolean;
 { `v[lo:hi]` where v is a VARIANT — slice the str/list/bytes it holds, at run
   time. Returns a variant of the same kind. }
 function pyvar_slice(const v: Variant; lo, hi: Integer): Variant;
+{ `v[lo:hi:step]` on a variant — same run-time tag dispatch, extended step. }
+function pyvar_slice_step(const v: Variant; lo, hi, step: Integer): Variant;
+{ `type(x).__name__` for any value — see the body for why the frontend cannot
+  answer this from RTTI alone (tuple and list share one class). }
+function pytype_name_v(const v: Variant): AnsiString;
 
 { str methods. The frontend desugars `s.upper()` into pystr_upper(s) — see
   PyParseStrMethod. ASCII-only for now: CPython's str.upper() is full-Unicode
@@ -1026,6 +1136,11 @@ function pystr_rstrip_chars(const s: AnsiString; const chars: AnsiString): AnsiS
 function pystr_startswith(const s: AnsiString; const pre: AnsiString): Boolean;
 function pystr_endswith(const s: AnsiString; const suf: AnsiString): Boolean;
 function pystr_find(const s: AnsiString; const sub: AnsiString): Integer;
+{ str.index/rindex — like find/rfind but RAISE ValueError when absent, which is
+  the whole difference and the reason both exist in Python. }
+function pystr_index(const s: AnsiString; const sub: AnsiString): Integer;
+function pystr_index_from(const s: AnsiString; const sub: AnsiString; start: Integer): Integer;
+function pystr_rindex(const s: AnsiString; const sub: AnsiString): Integer;
 { str.find(sub, start): searches from `start` but reports the index in the
   ORIGINAL string, as Python does. }
 function pystr_find_from(const s: AnsiString; const sub: AnsiString; start: Integer): Integer;
@@ -1061,6 +1176,26 @@ function pystr_replace_n(const s: AnsiString; const pat: AnsiString; const rep: 
 { str.count(sub) — non-overlapping occurrences; an empty sub counts the gaps,
   Length(s)+1, as CPython does. }
 function pystr_count(const s: AnsiString; const sub: AnsiString): Integer;
+{ The optional start/end window Python gives find/rfind/index/count/startswith/
+  endswith. One name per ARITY rather than an overload, because the frontend
+  resolves these by name through FindProc, which never consults overloads
+  ([[bug-nilpy-stdlib-shim-table-cannot-reach-an-overload]]) — the `_from` /
+  `_range` suffix convention the str-method table already uses.
+
+  The window is a SLICE, so it clamps and accepts negative indices exactly like
+  s[a:b]; a returned INDEX is then rebased onto the original string, which is
+  the part that would be silently wrong if the offset were forgotten
+  (bug-nilpy-str-search-methods-lack-the-start-end-window). }
+function pystr_count_from(const s, sub: AnsiString; a: Integer): Integer;
+function pystr_count_range(const s, sub: AnsiString; a, b: Integer): Integer;
+function pystr_find_range(const s, sub: AnsiString; a, b: Integer): Integer;
+function pystr_index_range(const s, sub: AnsiString; a, b: Integer): Integer;
+function pystr_rfind_from(const s, sub: AnsiString; a: Integer): Integer;
+function pystr_rfind_range(const s, sub: AnsiString; a, b: Integer): Integer;
+function pystr_startswith_from(const s, pre: AnsiString; a: Integer): Boolean;
+function pystr_startswith_range(const s, pre: AnsiString; a, b: Integer): Boolean;
+function pystr_endswith_from(const s, suf: AnsiString; a: Integer): Boolean;
+function pystr_endswith_range(const s, suf: AnsiString; a, b: Integer): Boolean;
 { str.rfind(sub) — last occurrence, -1 when absent. }
 function pystr_rfind(const s: AnsiString; const sub: AnsiString): Integer;
 function pystr_title(const s: AnsiString): AnsiString;
@@ -1285,6 +1420,27 @@ begin
   tail := Copy(s, start + 1, Length(s) - start);
   r := pystr_find(tail, sub);
   if r < 0 then Result := -1 else Result := r + start;
+end;
+
+function pystr_index(const s: AnsiString; const sub: AnsiString): Integer;
+begin
+  Result := pystr_find(s, sub);
+  if Result < 0 then
+    raise ValueError.Create('substring not found');
+end;
+
+function pystr_index_from(const s: AnsiString; const sub: AnsiString; start: Integer): Integer;
+begin
+  Result := pystr_find_from(s, sub, start);
+  if Result < 0 then
+    raise ValueError.Create('substring not found');
+end;
+
+function pystr_rindex(const s: AnsiString; const sub: AnsiString): Integer;
+begin
+  Result := pystr_rfind(s, sub);
+  if Result < 0 then
+    raise ValueError.Create('substring not found');
 end;
 
 function pystr_isdigit(const s: AnsiString): Boolean;
@@ -1651,6 +1807,72 @@ begin
   Result := -1;
 end;
 
+{ ---- the start/end window (see the interface block) ---------------------- }
+
+function pystr_count_from(const s, sub: AnsiString; a: Integer): Integer;
+begin
+  Result := pystr_count(pystr_slice(s, a, PY_SLICE_OMIT), sub);
+end;
+
+function pystr_count_range(const s, sub: AnsiString; a, b: Integer): Integer;
+begin
+  Result := pystr_count(pystr_slice(s, a, b), sub);
+end;
+
+{ a found index is relative to the WINDOW, so rebase it onto the original
+  string; -1 (not found) must stay -1 rather than becoming the offset }
+function PyWindowStart(n, a: Integer): Integer;
+var lo, hi: Integer;
+begin
+  lo := a; hi := PY_SLICE_OMIT;
+  PySliceBounds(n, lo, hi);
+  Result := lo;
+end;
+
+function pystr_find_range(const s, sub: AnsiString; a, b: Integer): Integer;
+begin
+  Result := pystr_find(pystr_slice(s, a, b), sub);
+  if Result >= 0 then Result := Result + PyWindowStart(Length(s), a);
+end;
+
+function pystr_index_range(const s, sub: AnsiString; a, b: Integer): Integer;
+begin
+  Result := pystr_find_range(s, sub, a, b);
+  if Result < 0 then raise ValueError.Create('substring not found');
+end;
+
+function pystr_rfind_from(const s, sub: AnsiString; a: Integer): Integer;
+begin
+  Result := pystr_rfind(pystr_slice(s, a, PY_SLICE_OMIT), sub);
+  if Result >= 0 then Result := Result + PyWindowStart(Length(s), a);
+end;
+
+function pystr_rfind_range(const s, sub: AnsiString; a, b: Integer): Integer;
+begin
+  Result := pystr_rfind(pystr_slice(s, a, b), sub);
+  if Result >= 0 then Result := Result + PyWindowStart(Length(s), a);
+end;
+
+function pystr_startswith_from(const s, pre: AnsiString; a: Integer): Boolean;
+begin
+  Result := pystr_startswith(pystr_slice(s, a, PY_SLICE_OMIT), pre);
+end;
+
+function pystr_startswith_range(const s, pre: AnsiString; a, b: Integer): Boolean;
+begin
+  Result := pystr_startswith(pystr_slice(s, a, b), pre);
+end;
+
+function pystr_endswith_from(const s, suf: AnsiString; a: Integer): Boolean;
+begin
+  Result := pystr_endswith(pystr_slice(s, a, PY_SLICE_OMIT), suf);
+end;
+
+function pystr_endswith_range(const s, suf: AnsiString; a, b: Integer): Boolean;
+begin
+  Result := pystr_endswith(pystr_slice(s, a, b), suf);
+end;
+
 function PyIsWordCh(c: Char): Boolean;
 begin
   Result := ((c >= 'a') and (c <= 'z')) or ((c >= 'A') and (c <= 'Z')) or
@@ -1954,6 +2176,42 @@ begin
   raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + name + '''');
 end;
 
+{ `type(x).__name__` for ANY value. Two things the frontend cannot do itself:
+
+  - the pylib CONTAINERS must report their PYTHON names, not the Pascal class
+    backing them. Reading the RTTI ClassName gave `TPyList` / `TPyDict` /
+    `TPyBytes` — a silently wrong string, the worst failure class here.
+  - `tuple` and `list` share ONE representation, so the answer depends on
+    FIsTuple at run time and cannot come from a class name at all.
+
+  A user NilPy class still falls through to ClassName, which is already its
+  Python name (bug-nilpy-type-name-reports-the-internal-pascal-class). }
+function pytype_name_v(const v: Variant): AnsiString;
+var obj: Pointer; tg: Int64; o: TObject;
+begin
+  tg := pyvartag(v);
+  if tg <> 7 then
+  begin
+    Result := PyVarTypeName(tg);
+    Exit;
+  end;
+  obj := pyvarobj(v);
+  if obj = nil then begin Result := 'NoneType'; Exit; end;
+  o := TObject(obj);
+  if o is TPyList then
+  begin
+    if TPyList(o).FIsTuple then Result := 'tuple' else Result := 'list';
+  end
+  else if o is TPyDict then Result := 'dict'
+  else if o is TPyBytes then Result := 'bytes'
+  else
+    { spelled `TObject(obj).ClassName`, exactly as the two AttributeError sites
+      above do. Written as `o.ClassName` on an already-TObject local it compiled
+      into a DYNAMIC ATTRIBUTE fetch instead of the RTTI call, and a user class
+      then died with "'Dog' object has no attribute 'ClassName'". }
+    Result := TObject(obj).ClassName;
+end;
+
 function pyvar_is_strtag(const v: Variant): Boolean;
 begin
   Result := pyvartag(v) in [5, 6];
@@ -2056,6 +2314,23 @@ begin
     raise TypeError.Create('object is not subscriptable');
 end;
 
+function pyvar_slice_step(const v: Variant; lo, hi, step: Integer): Variant;
+var o: TObject;
+begin
+  if pyvartag(v) = 6 then
+    Result := pystr_slice_step(pystr_of(v), lo, hi, step)   { str -> VT_STRING }
+  else if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then Result := pylist_slice_step(TPyList(o), lo, hi, step)
+    else if o is TPyBytes then Result := pybytes_slice_step(TPyBytes(o), lo, hi, step)
+    else
+      raise TypeError.Create('object is not subscriptable');
+  end
+  else
+    raise TypeError.Create('object is not subscriptable');
+end;
+
 procedure pyvar_setitem(const v: Variant; const key: Variant; const val: Variant);
 var o: TObject; ki: Int64;
 begin
@@ -2133,9 +2408,10 @@ begin
   raise ValueError.Create(pyrepr_of(v) + ' is not in list');
 end;
 
-procedure TPyList.remove(const v: Variant);
+function TPyList.remove(const v: Variant): Variant;
 var i: Integer;
 begin
+  Result := pynone;   { Python's in-place mutators return None }
   for i := 0 to FLen - 1 do
     if PyVarEq(PPyVarRec(NativeInt(FItems) + i * 16), PPyVarRec(@v)) then
     begin
@@ -2384,11 +2660,12 @@ begin
   FLen := FLen - 1;
 end;
 
-procedure TPyList.insert(i: Integer; const v: Variant);
+function TPyList.insert(i: Integer; const v: Variant): Variant;
 var
   k: Integer;
   src, dst: PPyVarRec;
 begin
+  Result := pynone;   { Python's in-place mutators return None }
   { Python allows insert at len (append position) and clamps beyond. }
   if i < 0 then i := i + FLen;
   if i < 0 then i := 0;
@@ -2413,6 +2690,27 @@ end;
 procedure TPyList.clear;
 begin
   FLen := 0;
+end;
+
+{ Python's list.reverse() — IN PLACE. `reversed(xs)` and `xs[::-1]` both build a
+  NEW sequence and already existed; the in-place method did not, so `xs.reverse()`
+  failed to compile: "TPyList has no method reverse"
+  (bug-nilpy-list-reverse-method-missing). Swaps ends inward rather than building
+  a copy, which is what "in place" is for. }
+function TPyList.reverse: TPyList;
+var i, j: Integer; tmp: Variant;
+begin
+  i := 0;
+  j := FLen - 1;
+  while i < j do
+  begin
+    tmp := at(i);
+    put(i, at(j));
+    put(j, tmp);
+    Inc(i);
+    Dec(j);
+  end;
+  Result := Self;
 end;
 
 { Python's list.sort() — IN PLACE, unlike sorted() (pyeval.pas), which
@@ -2522,6 +2820,34 @@ begin
     Result := p^.Payload = q^.Payload;
     Exit;
   end;
+  { A FLOAT and an int are ONE Python number too: `1 == 1.0` is True, and so
+    `d[1]` and `d[1.0]` are the SAME dict key. The `==` OPERATOR already agreed
+    with CPython here; only this path did not, so `1.0 in {1: 'a'}` was False and
+    `{2.0: 'x'}.get(2)` missed — a silently wrong answer from an equality the
+    language reports as true elsewhere
+    (bug-nilpy-int-and-float-dict-keys-are-not-the-same-key).
+    Float-vs-float is compared as a VALUE rather than by payload bits, so
+    -0.0 == 0.0 (bit-different) and nan <> nan (bit-identical) both come out
+    Python's way. }
+  if ((p^.VType = 3) or (q^.VType = 3)) and
+     ((p^.VType = 3) or (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4)) and
+     ((q^.VType = 3) or (q^.VType = 1) or (q^.VType = 2) or (q^.VType = 4)) then
+  begin
+    { IDENTICAL BITS settle it first, before the numeric compare. CPython's dict
+      tests `key is entry_key or key == entry_key`, and that identity half is
+      what lets a NaN key find ITSELF (`q[n]` where q = {n: ...}) even though
+      `n == n` is False. Comparing numerically alone turned that lookup into a
+      KeyError — caught before this shipped, but only because the edge was
+      probed; it is the exact case the value-compare below is meant to fix for
+      -0.0 and would have broken for NaN. }
+    if (p^.VType = 3) and (q^.VType = 3) and (p^.Payload = q^.Payload) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Result := PyVarAsFloat(p) = PyVarAsFloat(q);
+    Exit;
+  end;
   if p^.VType <> q^.VType then Exit;
   if p^.VType = 7 then
   begin
@@ -2608,6 +2934,36 @@ begin
       Result := True;
       Exit;
     end;
+end;
+
+function pybytes_contains(b: TPyBytes; const v: Variant): Boolean;
+var o: TObject; k: Integer; p: PByte; want: Int64;
+begin
+  Result := False;
+  if b = nil then Exit;
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyBytes then
+    begin
+      { an EMPTY needle is in every sequence, which pybytes_find must agree on }
+      Result := pybytes_find(b, TPyBytes(o), 0) >= 0;
+      Exit;
+    end;
+    Exit;
+  end;
+  { an INTEGER needle tests a single BYTE VALUE, not a subsequence — and one
+    OUTSIDE 0..255 is a ValueError in CPython, not simply absent. Answering
+    False there would be a plausible wrong answer for what is really a type
+    error, so it raises. }
+  want := pyvar_to_int(v);
+  if (want < 0) or (want > 255) then
+    raise ValueError.Create('byte must be in range(0, 256)');
+  for k := 0 to b.FLen - 1 do
+  begin
+    p := PByte(NativeInt(b.FData) + k);
+    if p^ = Byte(want) then begin Result := True; Exit; end;
+  end;
 end;
 
 { Python's set operators (`&`/`|`/`-`/`^`) -- NilPy has one sequence
@@ -2798,10 +3154,23 @@ function PyVarHashKey(p: PPyVarRec): NativeUInt;
     identity hash, which is what PyVarEq's identity compare needs;
   - else: same VType required by PyVarEq, so hash (VType, payload).
   A wrong hash here silently loses keys, so this mirrors PyVarEq arm-for-arm. }
-var h: NativeUInt; sp: PPyAnsiString; ol: TObject; k: Integer;
+var h: NativeUInt; sp: PPyAnsiString; ol: TObject; k: Integer; dv: Double;
 begin
   if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
     h := NativeUInt(p^.Payload)
+  else if p^.VType = 3 then
+  begin
+    { A float that is numerically an INTEGER must hash as that integer, because
+      PyVarEq now says they are equal and equal keys MUST hash equal — the
+      invariant this whole routine is written to hold. A non-integral float
+      cannot equal any int, so its bits are a fine hash.
+      (bug-nilpy-int-and-float-dict-keys-are-not-the-same-key) }
+    dv := PPyDouble(@p^.Payload)^;
+    if (dv = Trunc(dv)) and (dv >= -9.2e18) and (dv <= 9.2e18) then
+      h := NativeUInt(Int64(Trunc(dv)))
+    else
+      h := NativeUInt(p^.Payload);
+  end
   else if p^.VType = 8193 then
   begin
     sp := PPyAnsiString(@p^.Payload);
@@ -3003,11 +3372,12 @@ begin
   PyVarSlotInit(dst, src);
 end;
 
-procedure TPyDict.remove(const k: Variant);
+function TPyDict.remove(const k: Variant): Variant;
 var
   i, j: Integer;
   src, dst: PPyVarRec;
 begin
+  Result := pynone;   { Python's in-place mutators return None }
   i := indexof(k);
   if i < 0 then PyKeyError;
   for j := i to FLen - 2 do
@@ -3033,6 +3403,32 @@ begin
     dict.clear() does too }
   Self.FLen := 0;
   PyDictRehash(Self, Self.FHashCap);
+end;
+
+function TPyDict.copy: TPyDict;
+var ks, vs: TPyList; i: Integer;
+begin
+  Result := TPyDict.Create;
+  Result.FCounterMode := FCounterMode;
+  ks := keylist;
+  vs := vallist;
+  for i := 0 to ks.count - 1 do Result.store(ks.at(i), vs.at(i));
+end;
+
+function TPyDict.popitem: TPyList;
+var ks, vs: TPyList; n: Integer; k: Variant;
+begin
+  ks := keylist;
+  if ks.count = 0 then
+    raise KeyError.Create('popitem(): dictionary is empty');
+  vs := vallist;
+  n := ks.count - 1;                  { LIFO, matching CPython 3.7+ }
+  k := ks.at(n);
+  Result := TPyList.Create;
+  Result.FIsTuple := True;            { popitem() yields a (key, value) TUPLE }
+  Result.append(k);
+  Result.append(vs.at(n));
+  remove(k);
 end;
 
 function TPyDict.pop(const k: Variant): Variant;
@@ -3154,12 +3550,45 @@ begin
 end;
 
 function pyround_n(x: Double; n: Integer): Double;
-var scale: Double; i: Integer;
+var p, y, r, f: Double; i, k: Integer;
 begin
-  scale := 1.0;
-  for i := 1 to n do scale := scale * 10.0;
-  if x >= 0.0 then pyround_n := Trunc(x * scale + 0.5) / scale
-  else pyround_n := -(Trunc(-x * scale + 0.5) / scale);
+  { Python's round(x, n) differs from naive half-up in TWO ways, and this got
+    both wrong (bug-nilpy-round-ndigits-half-up-and-ignores-negative-ndigits):
+
+    1. NEGATIVE n rounds to tens/hundreds. `for i := 1 to n` simply does not
+       run when n < 0, so scale stayed 1.0 and round(1234.5678, -2) returned
+       1235.0 instead of 1200.0 — silently, and wrong by two orders of
+       magnitude.
+    2. Ties go to EVEN, not up. round(0.125, 2) is 0.12 and round(2.5, 0) is
+       2.0 in Python; half-up gave 0.13 and 3.0.
+
+    Note round(2.675, 2) = 2.67 falls out of doing the arithmetic on the actual
+    double rather than on the decimal text: 2.675 * 100 is 267.49999999999997,
+    so the tie never arises. That is CPython's answer too, and it is why this
+    must NOT be "fixed" by rounding a decimal string.
+
+    Scaling multiplies for n >= 0 and DIVIDES for n < 0, rather than building a
+    fractional scale and dividing by it — 1/100 is not exact, and r/0.01 comes
+    back 1199.9999... }
+  k := n;
+  if k < 0 then k := -k;
+  p := 1.0;
+  for i := 1 to k do p := p * 10.0;
+  if n >= 0 then y := x * p else y := x / p;
+  { round half to even on y }
+  r := Int(y);              { toward zero; keeps the sign of y }
+  f := y - r;
+  if f > 0.5 then r := r + 1.0
+  else if f < -0.5 then r := r - 1.0
+  else if (f = 0.5) or (f = -0.5) then
+  begin
+    { a tie: step away from zero only when that lands on an EVEN integer }
+    if Odd(Trunc(r)) then
+    begin
+      if f > 0.0 then r := r + 1.0 else r := r - 1.0;
+    end;
+  end;
+  if n >= 0 then pyround_n := r / p else pyround_n := r * p;
 end;
 
 function pymath_floor(x: Double): Int64;
@@ -3224,6 +3653,29 @@ begin
   end;
 end;
 
+{ A str is an ITERABLE in Python, so `enumerate("ab")` and `zip(s, t)` are
+  ordinary code — but pyenumerate/pyzip take TPyList only, and the frontend
+  builds those calls by a FIXED FindProc index, so adding Pascal overloads here
+  would never be consulted. The str argument is converted at the CALL SITE
+  instead (PyIterArgAsList); this is the conversion it uses. Passing the raw
+  AnsiString handle got it dereferenced as an object: SIGSEGV, no diagnostic
+  (bug-nilpy-str-iterable-builtins-segfault-on-a-string-handle). }
+function pystr_charlist(const s: AnsiString): TPyList;
+var i: Integer;
+begin
+  Result := TPyList.Create;
+  for i := 1 to Length(s) do Result.append(pystr_ofchar(s[i]));
+end;
+
+procedure pyassert(ok: Boolean; const msg: AnsiString);
+begin
+  if ok then Exit;
+  { CPython's bare `assert x` raises AssertionError with NO message, and
+    `assert x, m` raises it with m — str(e) is '' in the first case, so an empty
+    message must not become a placeholder string. }
+  raise AssertionError.Create(msg);
+end;
+
 function pyzip(a: TPyList; b: TPyList): TPyList;
 var r, pair: TPyList; i, n: Integer; pv: Variant;
 begin
@@ -3263,6 +3715,34 @@ begin
   Result := pyvar_of_int(0);
   if l = nil then Exit;
   for i := 0 to l.count - 1 do Result := pyadd_v(Result, l.at(i));
+end;
+
+function sum(l: TPyList; const start: Variant): Variant; overload;
+var i: Integer;
+begin
+  Result := start;
+  if l = nil then Exit;
+  for i := 0 to l.count - 1 do Result := pyadd_v(Result, l.at(i));
+end;
+
+function min(const a, b, c: Variant): Variant; overload;
+begin
+  Result := min(min(a, b), c);
+end;
+
+function min(const a, b, c, d: Variant): Variant; overload;
+begin
+  Result := min(min(min(a, b), c), d);
+end;
+
+function max(const a, b, c: Variant): Variant; overload;
+begin
+  Result := max(max(a, b), c);
+end;
+
+function max(const a, b, c, d: Variant): Variant; overload;
+begin
+  Result := max(max(max(a, b), c), d);
 end;
 
 function max(l: TPyList): Variant;
@@ -3382,9 +3862,10 @@ end;
 
 { ---- collections.Counter ------------------------------------------------- }
 
-procedure TPyDict.update(l: TPyList);
+function TPyDict.update(l: TPyList): Variant;
 var i: Integer; k, pair: Variant; pl: TPyList; o: TObject;
 begin
+  Result := pynone;   { Python's in-place mutators return None }
   if l = nil then exit;
   for i := 0 to l.count - 1 do
   begin
@@ -3409,9 +3890,10 @@ end;
 
 { CPython's Counter.update(mapping) ADDS the mapping's values; a plain dict's
   update(mapping) replaces them. }
-procedure TPyDict.update(d: TPyDict);
+function TPyDict.update(d: TPyDict): Variant;
 var ks, vs: TPyList; i: Integer; k: Variant;
 begin
+  Result := pynone;   { Python's in-place mutators return None }
   if d = nil then exit;
   ks := d.keylist;
   vs := d.vallist;
@@ -3691,6 +4173,38 @@ end;
 procedure PyNotCallableError;
 begin
   raise TypeError.Create('object is not callable (no __call__)');
+end;
+
+{ `a < b` on two class instances where NEITHER the direct ordering dunder nor
+  its reflected partner exists -- CPython raises rather than falling back to
+  identity the way `==` does, so ordering has no silent answer. Matches
+  CPython's "'<' not supported between instances of 'X' and 'Y'" shape (minus
+  the class names, not available here).
+  bug-nilpy-comparison-dunders-not-dispatched. }
+procedure PyNotOrderableError;
+begin
+  raise TypeError.Create('comparison not supported between these instances (no __lt__/__le__/__gt__/__ge__)');
+end;
+
+{ `obj & 1` / `obj << 2` on a class declaring none of the bitwise/shift dunders.
+  Before this existed the operands fell through to the generic bitwise typing,
+  which widened tyClass to a variant and dereferenced the handle -- a SEGFAULT,
+  not a wrong value. bug-nilpy-bitwise-shift-on-class-operand-segfaults. }
+procedure PyNotBitOperandError;
+begin
+  raise TypeError.Create('unsupported operand type for a bitwise or shift operator (no __and__/__or__/__xor__/__lshift__/__rshift__)');
+end;
+
+{ An operand pair Python does not define for the operator -- a missing
+  __add__/__sub__/__mul__/__truediv__/__floordiv__/__mod__/__neg__, or a list
+  concatenated with a non-list. CPython raises TypeError at RUN time; these
+  sites used the compiler's Error() instead, so a `try/except TypeError` around
+  the expression could not even BUILD -- which is the normal Python way to probe
+  for operator support.
+  bug-nilpy-missing-arith-dunder-aborts-compile-instead-of-raising. }
+procedure PyUnsupportedOperandError;
+begin
+  raise TypeError.Create('unsupported operand type(s) for this operator');
 end;
 
 { `obj[i] = v` where obj's class defines `__getitem__` but not `__setitem__`
@@ -4680,6 +5194,16 @@ begin
   p^ := v;
 end;
 
+function TPyBytes.decode: AnsiString; overload;
+{ Python's `b.decode()` defaults to utf-8. Without this zero-argument overload a
+  bare `b.decode()` bound to the one-argument form with an UNINITIALISED
+  AnsiString for `encoding` and SEGFAULTED (exit 139) — `b.decode("utf-8")`
+  worked all along, which is what hid it.
+  bug-nilpy-dict-from-pairs-and-bytes-decode-segfault. }
+begin
+  Result := decode('utf-8');
+end;
+
 function TPyBytes.decode(const encoding: AnsiString): AnsiString; overload;
 var k: Integer; p: PByte;
 begin
@@ -4724,6 +5248,92 @@ begin
   if hi > n then hi := n;
   { an inverted range is empty, not negative-length }
   if hi < lo then hi := lo;
+end;
+
+{ CPython's slice.indices(n) for an explicit STEP. Deliberately a separate
+  routine from PySliceBounds rather than an extension of it: with a negative
+  step every default and every clamp changes, so folding the two together
+  would make the step=1 path harder to read for no gain.
+
+  The high bound is EXCLUSIVE in both directions, so for a negative step it can
+  legitimately land on -1 ("stop before index 0") — callers must therefore
+  iterate with `while i > hi`, never `for i := lo downto hi`.
+
+  Returns the element COUNT, which callers need to preallocate; recomputing it
+  from (lo, hi, step) at each call site is where an off-by-one would hide. }
+function PySliceBoundsStep(n: Integer; var lo, hi: Integer; step: Integer): Integer;
+begin
+  if step = 0 then raise ValueError.Create('slice step cannot be zero');
+  if lo = PY_SLICE_OMIT then
+  begin
+    if step < 0 then lo := n - 1 else lo := 0;
+  end
+  else
+  begin
+    if lo < 0 then lo := lo + n;
+    if lo < 0 then
+    begin
+      if step < 0 then lo := -1 else lo := 0;
+    end;
+    if lo >= n then
+    begin
+      if step < 0 then lo := n - 1 else lo := n;
+    end;
+  end;
+  if hi = PY_SLICE_OMIT then
+  begin
+    if step < 0 then hi := -1 else hi := n;
+  end
+  else
+  begin
+    if hi < 0 then hi := hi + n;
+    if hi < 0 then
+    begin
+      if step < 0 then hi := -1 else hi := 0;
+    end;
+    if hi >= n then
+    begin
+      if step < 0 then hi := n - 1 else hi := n;
+    end;
+  end;
+  if step > 0 then
+  begin
+    if hi > lo then Result := ((hi - lo) + step - 1) div step else Result := 0;
+  end
+  else
+  begin
+    if lo > hi then Result := ((lo - hi) + (-step) - 1) div (-step) else Result := 0;
+  end;
+end;
+
+function pystr_slice_step(const s: AnsiString; lo, hi, step: Integer): AnsiString;
+var i, k, cnt: Integer;
+begin
+  cnt := PySliceBoundsStep(Length(s), lo, hi, step);
+  { SetLength once and index, never `Result := Result + ch` — that idiom is
+    QUADRATIC here (project_pxx_string_concat_in_loop_is_quadratic). }
+  SetLength(Result, cnt);
+  i := lo;
+  for k := 1 to cnt do
+  begin
+    Result[k] := s[i + 1];        { Python is 0-based, Pascal strings 1-based }
+    i := i + step;
+  end;
+end;
+
+function pybytes_slice_step(b: TPyBytes; lo, hi, step: Integer): TPyBytes;
+var i, k, cnt: Integer; src, dst: PByte;
+begin
+  cnt := PySliceBoundsStep(b.FLen, lo, hi, step);
+  Result := TPyBytes.Create(cnt);
+  i := lo;
+  for k := 0 to cnt - 1 do
+  begin
+    src := PByte(NativeInt(b.FData) + i);
+    dst := PByte(NativeInt(Result.FData) + k);
+    dst^ := src^;
+    i := i + step;
+  end;
 end;
 
 function pystr_encode(const s: AnsiString): TPyBytes;
@@ -4904,8 +5514,8 @@ begin
 end;
 
 function pyfloat_parse(const s: AnsiString): Double;
-var i, n, digits: Integer; neg, seenDot, seenExp: Boolean; body: AnsiString;
-    intPart, frac, scale, expSign, expVal: Double;
+var i, n, digits: Integer; neg, seenDot, seenExp: Boolean; body, lowbody: AnsiString;
+    intPart, frac, scale, expSign, expVal, infv: Double;
 begin
   body := s;
   i := 1; n := Length(body);
@@ -4914,6 +5524,31 @@ begin
   body := Copy(body, i, n - i + 1);
   if Length(body) = 0 then
     raise ValueError.Create('could not convert string to float');
+
+  { Python accepts the SPECIAL float spellings, case-insensitively and with an
+    optional sign: inf, infinity, nan. float("inf") raised
+    'could not convert string to float' here, which is wrong — it is how you
+    write an unbounded sentinel, and the idiom `best = float("inf")` is
+    everywhere (bug-nilpy-float-of-inf-nan-string-raises). Checked before the
+    digit scan, since the scan has no notion of them. }
+  lowbody := pystr_lower(body);
+  if (lowbody = 'inf') or (lowbody = '+inf') or (lowbody = 'infinity') or
+     (lowbody = '+infinity') or (lowbody = '-inf') or (lowbody = '-infinity') or
+     (lowbody = 'nan') or (lowbody = '+nan') or (lowbody = '-nan') then
+  begin
+    { No literal spells these, so build them by overflow: 1e308*10 is +Inf and
+      Inf-Inf is NaN. Verified to produce them rather than trap on this target
+      (float exceptions are masked; see feature-float-exception-mask-control). }
+    infv := 1.0e308;
+    infv := infv * 10.0;
+    if (lowbody = 'nan') or (lowbody = '+nan') or (lowbody = '-nan') then
+      Result := infv - infv
+    else if (lowbody = '-inf') or (lowbody = '-infinity') then
+      Result := -infv
+    else
+      Result := infv;
+    Exit;
+  end;
 
   neg := False;
   i := 1;
@@ -5170,6 +5805,67 @@ begin
   if Length(p) = 0 then Exit;
   cs := p + #0;
   Result := PyPalAccessOk(@cs[1]);
+end;
+
+function pyos_path_isdir(const p: AnsiString): Boolean;
+{$ifdef CPUX86_64}
+var cs: AnsiString; r: Int64; buf: array[0..143] of Byte;
+{$endif}
+begin
+  Result := False;
+{$ifdef CPUX86_64}
+  if Length(p) = 0 then Exit;
+  cs := p + #0;
+  FillChar(buf[0], SizeOf(buf), 0);
+  r := PyPalStat(@cs[1], @buf[0]);
+  if r < 0 then Exit;                  { missing path is False, not an error }
+  Result := ((PInt64(@buf[24])^ and $FFFFFFFF) and $F000) = $4000;   { S_IFDIR }
+{$else}
+  raise NotImplementedError.Create('os.path.isdir needs stat, which is x86-64 only here');
+{$endif}
+end;
+
+function pyos_path_isfile(const p: AnsiString): Boolean;
+{$ifdef CPUX86_64}
+var cs: AnsiString; r: Int64; buf: array[0..143] of Byte;
+{$endif}
+begin
+  Result := False;
+{$ifdef CPUX86_64}
+  if Length(p) = 0 then Exit;
+  cs := p + #0;
+  FillChar(buf[0], SizeOf(buf), 0);
+  r := PyPalStat(@cs[1], @buf[0]);
+  if r < 0 then Exit;
+  Result := ((PInt64(@buf[24])^ and $FFFFFFFF) and $F000) = $8000;   { S_IFREG }
+{$else}
+  raise NotImplementedError.Create('os.path.isfile needs stat, which is x86-64 only here');
+{$endif}
+end;
+
+function pyos_path_splitext(const p: AnsiString): TPyList;
+var i, lastSlash, dot: Integer;
+begin
+  lastSlash := 0;
+  for i := 1 to Length(p) do
+    if p[i] = '/' then lastSlash := i;
+  dot := 0;
+  { scan only the BASENAME, and never accept its first character: CPython gives
+    ('.bashrc', '') and ('a.b/c', '') }
+  for i := lastSlash + 2 to Length(p) do
+    if p[i] = '.' then dot := i;
+  Result := TPyList.Create;
+  Result.FIsTuple := True;
+  if dot = 0 then
+  begin
+    Result.append(p);
+    Result.append('');
+  end
+  else
+  begin
+    Result.append(Copy(p, 1, dot - 1));
+    Result.append(Copy(p, dot, Length(p) - dot + 1));
+  end;
 end;
 
 { ---- environment ---------------------------------------------------------- }
@@ -5882,11 +6578,21 @@ begin
   end;
 end;
 
+function bytes(l: TPyList): TPyBytes; overload;
+begin
+  Result := pybytes_from_list(l);
+end;
+
 function bytes(b: TPyBytes): TPyBytes;
 var k: Integer; src, dst: PByte;
 begin
-  { A LIST argument binds to this overload too (class-arg overload resolution
-    is not identity-precise): hand it to the from-list builder. }
+  { Belt and braces. A list argument used to bind HERE, because class-arg
+    overload resolution was not identity-precise, and this runtime `is` check
+    was the rescue. Since bug-a-overload-resolution-ignores-class-identity a
+    list binds to the real `bytes(l: TPyList)` overload above and never reaches
+    this, so the check is now unreachable in normal code — kept because it is
+    free and because a variant-typed argument can still arrive by another
+    route. Remove once that is confirmed impossible. }
   if TObject(b) is TPyList then
   begin
     Result := pybytes_from_list(TPyList(TObject(b)));
@@ -6019,9 +6725,11 @@ begin
   for i := 1 to need do
     if zero then pad := pad + '0' else pad := pad + ' ';
   if leftAlign then Result := s + pad
-  else if zero and (Length(s) > 0) and (s[1] = '-') then
-    { zero padding goes AFTER the sign: {-5:04d} is -005, not 0-05 }
-    Result := '-' + pad + Copy(s, 2, Length(s) - 1)
+  else if zero and (Length(s) > 0) and (s[1] in ['-', '+', ' ']) then
+    { zero padding goes AFTER the sign: {-5:04d} is -005, not 0-05. '+' and the
+      space flag are signs too — `{42:+06d}` is +00042, not 000+42
+      (bug-nilpy-format-spec-sign-flag-unsupported). }
+    Result := s[1] + pad + Copy(s, 2, Length(s) - 1)
   else
     Result := pad + s;
 end;
@@ -6061,7 +6769,7 @@ end;
   argument. }
 function PyFormatApply(const fmt: AnsiString; const a: Variant; const b: Variant;
                        nArgs: Integer): AnsiString;
-var i, j, argi: Integer; spec, outS: AnsiString;
+var i, j, argi, useIdx, k: Integer; spec, fld, outS: AnsiString;
 begin
   outS := '';
   argi := 0;
@@ -6074,23 +6782,46 @@ begin
     begin outS := outS + '}'; Inc(i, 2); Continue; end;
     if fmt[i] = '{' then
     begin
+      { A replacement field is `{[field][:spec]}`. The FIELD was previously
+        scanned past and thrown away, so `"{1}{0}".format(a, b)` substituted
+        left-to-right and printed the arguments in the WRONG ORDER, silently —
+        `{}` and `{0}{1}` agree with sequential substitution, which is why it
+        stayed invisible until an index actually reordered
+        (bug-nilpy-str-format-ignores-positional-indices). }
       j := i + 1;
       spec := '';
-      while (j <= Length(fmt)) and (fmt[j] <> '}') do
+      fld := '';
+      while (j <= Length(fmt)) and (fmt[j] <> '}') and (fmt[j] <> ':') do
+      begin fld := fld + fmt[j]; Inc(j); end;
+      if (j <= Length(fmt)) and (fmt[j] = ':') then
       begin
-        if fmt[j] = ':' then
-        begin
-          Inc(j);
-          spec := '';
-          while (j <= Length(fmt)) and (fmt[j] <> '}') do
-          begin spec := spec + fmt[j]; Inc(j); end;
-          Break;
-        end;
         Inc(j);
+        while (j <= Length(fmt)) and (fmt[j] <> '}') do
+        begin spec := spec + fmt[j]; Inc(j); end;
       end;
-      if argi >= nArgs then
+      { An all-digits field is an explicit index and does NOT advance the
+        automatic counter — Python numbers `{}` and `{N}` independently, which
+        is what makes `"{0}-{0}"` repeat one argument. A non-numeric field (a
+        NAMED one, `{name}`) needs kwargs, which this path does not carry, so
+        it keeps the previous sequential behaviour rather than erroring. }
+      useIdx := -1;
+      if fld <> '' then
+      begin
+        useIdx := 0;
+        for k := 1 to Length(fld) do
+          if (fld[k] >= '0') and (fld[k] <= '9') then
+            useIdx := useIdx * 10 + (Ord(fld[k]) - Ord('0'))
+          else
+          begin useIdx := -1; Break; end;
+      end;
+      if useIdx < 0 then
+      begin
+        useIdx := argi;
+        Inc(argi);
+      end;
+      if useIdx >= nArgs then
         raise Exception.Create('str.format: more placeholders than arguments');
-      if argi = 0 then
+      if useIdx = 0 then
       begin
         if spec = '' then outS := outS + pystr_of(a)
         else outS := outS + pyformat_of(a, spec);
@@ -6100,7 +6831,6 @@ begin
         if spec = '' then outS := outS + pystr_of(b)
         else outS := outS + pyformat_of(b, spec);
       end;
-      Inc(argi);
       i := j + 1;
       Continue;
     end;
@@ -6133,9 +6863,9 @@ end;
 
 function pypercent_format(const fmt: AnsiString; const args: Variant): AnsiString;
 var i, width, prec, argi, nargs: Integer;
-    zero, leftAlign, hasPrec: Boolean;
+    zero, leftAlign, hasPrec, alt: Boolean;
     outS, spec: AnsiString;
-    conv: Char;
+    conv, signCh: Char;
     lst: TPyList;
     cur: Variant;
 begin
@@ -6172,10 +6902,21 @@ begin
     width := 0;
     prec := 0;
     hasPrec := False;
-    while (i <= Length(fmt)) and ((fmt[i] = '-') or (fmt[i] = '0') or (fmt[i] = '+') or (fmt[i] = ' ')) do
+    signCh := #0;
+    alt := False;
+    { The flag loop CONSUMED '+' and ' ' without recording them, so `"%+d" % n`
+      printed 42 rather than +42 — silently dropping a flag that decides what is
+      printed. '#' was not in the set at all, so it fell through to the
+      conversion char and raised. Both are now carried into the {}-spec below,
+      which learned them alongside
+      (bug-nilpy-percent-format-drops-the-sign-and-alt-flags). }
+    while (i <= Length(fmt)) and
+          ((fmt[i] = '-') or (fmt[i] = '0') or (fmt[i] = '+') or (fmt[i] = ' ') or (fmt[i] = '#')) do
     begin
       if fmt[i] = '-' then leftAlign := True
-      else if fmt[i] = '0' then zero := True;
+      else if fmt[i] = '0' then zero := True
+      else if fmt[i] = '#' then alt := True
+      else signCh := fmt[i];
       Inc(i);
     end;
     while (i <= Length(fmt)) and (fmt[i] >= '0') and (fmt[i] <= '9') do
@@ -6216,10 +6957,14 @@ begin
     { translate into the {}-spec grammar and reuse its formatter }
     spec := '';
     if leftAlign then spec := '<';
+    { grammar order is [align][sign][#][0][width] — see pyformat_of }
+    if signCh <> #0 then spec := spec + signCh;
+    if alt then spec := spec + '#';
     if zero and (not leftAlign) then spec := spec + '0';
     if width > 0 then spec := spec + pystr_of(Int64(width));
     case conv of
       'd', 'i', 'u': spec := spec + 'd';
+      'c': spec := spec + 'c';
       'x': spec := spec + 'x';
       'X': spec := spec + 'X';
       'o': spec := spec + 'o';
@@ -6245,13 +6990,26 @@ begin
                                     width, zero, leftAlign);
           Continue;
         end;
-      's', 'r':
+      's':
         begin
           { a str conversion of ANY value, then the same padding.
             pyvar_print_of, not pystr_of: %s of a LIST prints it the way Python
             does (`"[%s]" % [1,2]` -> `[[1, 2]]`), and pystr_of renders a
             container as empty. It falls back to str for every scalar. }
           outS := outS + PyFmtPad(pyvar_print_of(cur), width, False, leftAlign);
+          Continue;
+        end;
+      'r':
+        begin
+          { %r is repr(), NOT str(). It shared the 's' arm, so `"%r" % "v"`
+            printed `v` where Python prints `'v'` — silently, and ONLY for
+            string operands, since repr and str agree for numbers and pxx's
+            containers already render repr-style. That is what hid it:
+            `"%r" % 5` and `"%r" % [1,2]` both looked right
+            (bug-nilpy-percent-r-renders-as-str-not-repr).
+            pyvar_repr already quotes a string and delegates list/dict/bytes to
+            their own repr, so this is one call, not new logic. }
+          outS := outS + PyFmtPad(pyvar_repr(cur), width, False, leftAlign);
           Continue;
         end;
     else
@@ -6279,13 +7037,40 @@ begin
   Result := outS;
 end;
 
+{ Insert Python's thousands separators into a already-rendered DECIMAL string:
+  groups of three from the RIGHT, with any leading sign left alone.
+  (bug-nilpy-thousands-separator-format-spec-unsupported) }
+function PyGroupThousands(const s: AnsiString; sep: Char): AnsiString;
+var i, n, cnt: Integer; sign, digits, outS: AnsiString;
+begin
+  sign := '';
+  digits := s;
+  if (Length(digits) > 0) and ((digits[1] = '-') or (digits[1] = '+')) then
+  begin
+    sign := Copy(digits, 1, 1);
+    digits := Copy(digits, 2, Length(digits) - 1);
+  end;
+  n := Length(digits);
+  outS := '';
+  cnt := 0;
+  for i := n downto 1 do
+  begin
+    outS := digits[i] + outS;
+    Inc(cnt);
+    if (cnt mod 3 = 0) and (i > 1) then outS := sep + outS;
+  end;
+  Result := sign + outS;
+end;
+
 function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
-var p, width: Integer; zero, leftAlign: Boolean; kind, fillCh, align: Char;
-    body: AnsiString;
+var p, width, need, zi: Integer; zero, leftAlign, grouped, alt: Boolean;
+    kind, fillCh, align, signCh, groupCh: Char;
+    body, altPre, lead, zeros: AnsiString;
 begin
   p := 1;
   zero := False;
   leftAlign := False;
+  grouped := False;
   width := 0;
   kind := 'd';
   fillCh := ' '; align := #0;
@@ -6299,6 +7084,25 @@ begin
     align := spec[p]; leftAlign := align = '<';
     Inc(p);
   end;
+  { SIGN flag — Python's grammar puts it after [[fill]align] and before the
+    zero-pad/width: '+' shows a sign on positive numbers too, '-' is the default
+    (negative only), ' ' puts a SPACE where '+' would go. It was unhandled, so
+    `f"{n:+d}"` raised "unsupported format spec"
+    (bug-nilpy-format-spec-sign-flag-unsupported). }
+  signCh := #0;
+  if (p <= Length(spec)) and (spec[p] in ['+', '-', ' ']) then
+  begin
+    signCh := spec[p];
+    Inc(p);
+  end;
+  { '#' — ALTERNATE form: prefix the base, 0x / 0X / 0o / 0b. Grammar position is
+    after the sign and before the zero-pad (bug-nilpy-format-spec-alt-form-hash). }
+  alt := False;
+  if (p <= Length(spec)) and (spec[p] = '#') then
+  begin
+    alt := True;
+    Inc(p);
+  end;
   if (p <= Length(spec)) and (spec[p] = '0') then
   begin
     zero := True;
@@ -6307,6 +7111,18 @@ begin
   while (p <= Length(spec)) and (spec[p] >= '0') and (spec[p] <= '9') do
   begin
     width := width * 10 + (Ord(spec[p]) - Ord('0'));
+    Inc(p);
+  end;
+  { `,` — thousands grouping. Python's spec grammar puts it after the width and
+    before any `.precision`/type, so `{:,}`, `{:,d}` and `{:10,d}` are all legal.
+    It was not handled at all, and the unsupported-spec path then ABORTED the
+    process (bug-nilpy-thousands-separator-format-spec-unsupported). }
+  { ',' or '_' — Python allows either as the grouping separator }
+  groupCh := ',';
+  if (p <= Length(spec)) and (spec[p] in [',', '_']) then
+  begin
+    grouped := True;
+    groupCh := spec[p];
     Inc(p);
   end;
   { a FLOAT spec on an integer value — Python prints `{2:.1f}` as `2.0`, and an
@@ -6327,10 +7143,11 @@ begin
     Exit;
   end;
   if p <= Length(spec) then
-  begin
-    WriteLn('Nil Python: unsupported f-string format spec "', spec, '"');
-    Halt(1);
-  end;
+    { CATCHABLE, not Halt. An unsupported spec used to abort the process, so a
+      try/except around a format could not run its handler and everything after
+      the call was lost — the same "must be catchable" rule already applied to
+      missing operators (bug-nilpy-thousands-separator-format-spec-unsupported). }
+    raise ValueError.Create('unsupported format spec "' + spec + '"');
   case kind of
     'd': body := PyFmtBase(i, 10, False);
     'x': body := PyFmtBase(i, 16, False);
@@ -6338,24 +7155,59 @@ begin
     'o': body := PyFmtBase(i, 8, False);
     'b': body := PyFmtBase(i, 2, False);
     's': body := PyFmtBase(i, 10, False);
+    'c': body := Chr(i);        { `{65:c}` is 'A' — the codepoint as a character }
   else
-    begin
-      WriteLn('Nil Python: unsupported f-string format spec "', spec, '"');
-      Halt(1);
-    end;
+    raise ValueError.Create('unsupported format spec "' + spec + '"');
   end;
+  if grouped then body := PyGroupThousands(body, groupCh);
+  { Assemble as sign + prefix + zeros + digits, which is the order Python uses:
+    `{42:#010x}` is 0x0000002a — the zero padding sits INSIDE the 0x, not before
+    it. Doing this here rather than in PyFmtPad keeps every existing caller of
+    PyFmtPad on its byte-identical path; PyFmtPad only knows about a ONE-character
+    sign, which cannot express a two-character base prefix. }
+  altPre := '';
+  if alt then
+    case kind of
+      'x': altPre := '0x';
+      'X': altPre := '0X';
+      'o': altPre := '0o';
+      'b': altPre := '0b';
+    end;
+  lead := '';
+  { the sign comes off the digits AFTER grouping, so it is never grouped with them }
+  if (Length(body) > 0) and (body[1] = '-') then
+  begin
+    lead := '-';
+    body := Copy(body, 2, Length(body) - 1);
+  end
+  else if (signCh <> #0) and (signCh <> '-') then
+  begin
+    if signCh = '+' then lead := '+' else lead := ' ';
+  end;
+  lead := lead + altPre;
+  if zero and (align = #0) and (fillCh = ' ') and (not leftAlign) then
+  begin
+    need := width - Length(lead) - Length(body);
+    zeros := '';
+    for zi := 1 to need do zeros := zeros + '0';
+    Result := lead + zeros + body;
+    Exit;
+  end;
+  body := lead + body;
   if align = '^' then Result := PyFmtPadEx(body, width, fillCh, '^')
   else if fillCh <> ' ' then Result := PyFmtPadEx(body, width, fillCh, align)
   else Result := PyFmtPad(body, width, zero, leftAlign);
 end;
 
 function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; overload;
-var p, width: Integer; leftAlign, explicitAlign: Boolean; fillCh, align: Char;
+var p, width, prec: Integer; leftAlign, explicitAlign, hasPrec: Boolean;
+    fillCh, align: Char; body: AnsiString;
 begin
   p := 1;
   leftAlign := False;
   explicitAlign := False;
   width := 0;
+  prec := 0; hasPrec := False;
   fillCh := ' '; align := #0;
   if (p + 1 <= Length(spec)) and (spec[p + 1] in ['<', '>', '^']) then
   begin
@@ -6374,18 +7226,35 @@ begin
     width := width * 10 + (Ord(spec[p]) - Ord('0'));
     Inc(p);
   end;
+  { `.precision` on a STRING TRUNCATES it — `f"{'abcdef':.2}"` is `ab`. Python's
+    own rule, and the reason it is a maximum rather than a minimum: for a string
+    the precision caps the length while the width sets a floor
+    (bug-nilpy-format-spec-string-precision-and-halt). }
+  if (p <= Length(spec)) and (spec[p] = '.') then
+  begin
+    Inc(p);
+    hasPrec := True;
+    while (p <= Length(spec)) and (spec[p] >= '0') and (spec[p] <= '9') do
+    begin
+      prec := prec * 10 + (Ord(spec[p]) - Ord('0'));
+      Inc(p);
+    end;
+  end;
   if (p <= Length(spec)) and (spec[p] = 's') then Inc(p);
   if p <= Length(spec) then
-  begin
-    WriteLn('Nil Python: unsupported f-string format spec "', spec, '" for a string');
-    Halt(1);
-  end;
+    { CATCHABLE, not Halt. This site was missed when the int and float overloads
+      were converted: a bad spec on a STRING still aborted the process, so a
+      try/except around the format could not run and everything after it was
+      lost (bug-nilpy-format-spec-string-precision-and-halt). }
+    raise ValueError.Create('unsupported format spec "' + spec + '" for a string');
+  body := s;
+  if hasPrec and (prec < Length(body)) then body := Copy(body, 1, prec);
   { a string left-aligns by default, unlike a number, UNLESS an align/fill was
     given explicitly (a bare `{s:>5}` must still right-align) }
-  if (not explicitAlign) and (width > Length(s)) then leftAlign := True;
-  if align = '^' then Result := PyFmtPadEx(s, width, fillCh, '^')
-  else if fillCh <> ' ' then Result := PyFmtPadEx(s, width, fillCh, align)
-  else Result := PyFmtPad(s, width, False, leftAlign);
+  if (not explicitAlign) and (width > Length(body)) then leftAlign := True;
+  if align = '^' then Result := PyFmtPadEx(body, width, fillCh, '^')
+  else if fillCh <> ' ' then Result := PyFmtPadEx(body, width, fillCh, align)
+  else Result := PyFmtPad(body, width, False, leftAlign);
 end;
 
 function PyFmtFixed(d: Double; prec: Integer): AnsiString;
@@ -6502,11 +7371,11 @@ end;
 function pyformat_of(d: Double; const spec: AnsiString): AnsiString; overload;
 { `{x:.2f}` and friends. Same grammar as the integer spec plus a `.precision`
   group; `f` is fixed point, `g` is FloatToStr's compact form. }
-var p, width, prec: Integer; zero, leftAlign, hasPrec: Boolean;
-    kind, fillCh, align: Char; body: AnsiString;
+var p, width, prec, dotAt: Integer; zero, leftAlign, hasPrec, grouped, hasKind: Boolean;
+    kind, fillCh, align, signCh, groupCh: Char; body, intPartS, fracPartS: AnsiString;
 begin
-  p := 1; zero := False; leftAlign := False; width := 0;
-  prec := 6; hasPrec := False; kind := 'f';
+  p := 1; zero := False; leftAlign := False; width := 0; grouped := False;
+  prec := 6; hasPrec := False; hasKind := False; kind := 'f';
   fillCh := ' '; align := #0;
   if (p + 1 <= Length(spec)) and (spec[p + 1] in ['<', '>', '^']) then
   begin
@@ -6518,10 +7387,26 @@ begin
     align := spec[p]; leftAlign := align = '<';
     Inc(p);
   end;
+  { SIGN flag, same grammar position as the integer spec — see there }
+  signCh := #0;
+  if (p <= Length(spec)) and (spec[p] in ['+', '-', ' ']) then
+  begin
+    signCh := spec[p];
+    Inc(p);
+  end;
   if (p <= Length(spec)) and (spec[p] = '0') then begin zero := True; Inc(p); end;
   while (p <= Length(spec)) and (spec[p] >= '0') and (spec[p] <= '9') do
   begin
     width := width * 10 + (Ord(spec[p]) - Ord('0'));
+    Inc(p);
+  end;
+  { `,` — thousands grouping, between the width and the precision, same as the
+    integer spec (bug-nilpy-thousands-separator-format-spec-unsupported). }
+  groupCh := ',';
+  if (p <= Length(spec)) and (spec[p] in [',', '_']) then
+  begin
+    grouped := True;
+    groupCh := spec[p];
     Inc(p);
   end;
   if (p <= Length(spec)) and (spec[p] = '.') then
@@ -6534,12 +7419,15 @@ begin
       Inc(p);
     end;
   end;
-  if p <= Length(spec) then begin kind := spec[p]; Inc(p); end;
+  if p <= Length(spec) then begin kind := spec[p]; Inc(p); hasKind := True; end;
   if p <= Length(spec) then
-  begin
-    WriteLn('Nil Python: unsupported f-string format spec "', spec, '"');
-    Halt(1);
-  end;
+    { catchable, not Halt — see the integer overload }
+    raise ValueError.Create('unsupported format spec "' + spec + '"');
+  { No explicit TYPE and no precision — `{:,}`, `{:10}` — is Python's GENERAL
+    form, not fixed-point with 6 decimals: `"{:,}".format(1234.5)` is `1,234.5`,
+    not `1,234.500000`. Only reachable once a spec exists but names no type,
+    which before the `,` flag could not happen for a float. }
+  if (not hasKind) and (not hasPrec) then kind := 'g';
   if (kind = 'f') or (kind = 'F') then body := PyFmtFixed(d, prec)
   else if (kind = 'e') or (kind = 'E') then body := PyFmtExp(d, prec, kind = 'E')
   else if kind = '%' then
@@ -6550,9 +7438,24 @@ begin
   else if (kind = 'g') or (kind = 'G') then body := FloatToStr(d)
   else if kind = 's' then body := FloatToStr(d)
   else
+    raise ValueError.Create('unsupported format spec "' + spec + '"');
+  { group only the INTEGER part: 1234.5 -> 1,234.5 }
+  if grouped then
   begin
-    WriteLn('Nil Python: unsupported f-string format spec "', spec, '"');
-    Halt(1);
+    dotAt := Pos('.', body);
+    if dotAt > 0 then
+    begin
+      intPartS := Copy(body, 1, dotAt - 1);
+      fracPartS := Copy(body, dotAt, Length(body) - dotAt + 1);
+      body := PyGroupThousands(intPartS, groupCh) + fracPartS;
+    end
+    else
+      body := PyGroupThousands(body, groupCh);
+  end;
+  { sign after grouping, before padding — see the integer overload }
+  if (signCh <> #0) and (signCh <> '-') and (Length(body) > 0) and (body[1] <> '-') then
+  begin
+    if signCh = '+' then body := '+' + body else body := ' ' + body;
   end;
   if align = '^' then Result := PyFmtPadEx(body, width, fillCh, '^')
   else if fillCh <> ' ' then Result := PyFmtPadEx(body, width, fillCh, align)
@@ -6609,9 +7512,39 @@ begin
   Result := StrInt(i, 0);
 end;
 
-function pystr_of(d: Double): AnsiString; overload;
+{ Python spells the non-finite floats in LOWER case — inf / -inf / nan — while
+  Pascal's FloatToStr gives Inf / -Inf / Nan, which is correct for PASCAL and
+  must not change. Respelled on the NilPy conversion path only.
+
+  Applied by float SPELLING, never to arbitrary text: a NilPy string whose value
+  happens to be "Inf" must survive untouched, so every caller gates on the
+  variant tag being a float before routing here
+  (bug-nilpy-inf-and-nan-print-pascal-spelled). }
+function PyFloatStr(d: Double): AnsiString;
+var bits: Int64;
 begin
   Result := FloatToStr(d);
+  { NEGATIVE ZERO keeps its sign in Python: `print(-0.0)` is `-0.0`, and so is
+    `float("-0.0")`. FloatToStr drops it, so the sign bit is read back from the
+    IEEE 754 bits directly — a comparison cannot do this, since -0.0 = 0.0 is
+    True. Not a rounding difference: the value is exact either way, only the
+    printed text was wrong
+    (bug-nilpy-float-print-loses-precision-vs-cpython, item 1 of the
+    2026-08-02 sweep). }
+  if d = 0 then
+  begin
+    Move(d, bits, 8);
+    if bits <> 0 then Result := '-' + Result;
+  end;
+  if Result = 'Inf' then Result := 'inf'
+  else if Result = '-Inf' then Result := '-inf'
+  else if (Result = 'Nan') or (Result = 'NaN') then Result := 'nan'
+  else if (Result = '-Nan') or (Result = '-NaN') then Result := 'nan';
+end;
+
+function pystr_of(d: Double): AnsiString; overload;
+begin
+  Result := PyFloatStr(d);
 end;
 
 function pystr_of(c: Char): AnsiString; overload;
@@ -6626,20 +7559,44 @@ const
   QuoteCh = #39;   { a single quote, by code point — Python's repr uses it }
 
 function PyReprQuote(const s: AnsiString): AnsiString;
-var i: Integer; ch: Char;
+var i: Integer; ch: Char; useDq, hasSq, hasDq: Boolean;
 begin
-  Result := QuoteCh;
+  { Python's repr prefers ' but switches to " when the string CONTAINS a single
+    quote and NO double quote, so repr("it's") is "it's" and not 'it\'s'.
+    When it contains BOTH, ' stays the delimiter and the embedded ' is escaped.
+    (bug-nilpy-percent-r-renders-as-str-not-repr, found in the same sweep.)
+
+    Deliberately a Boolean and two explicit branches rather than a `delim: Char`
+    variable: a Char VARIABLE does not convert to a string the way a Char CONST
+    does — the conversion is keyed on the expression SHAPE, not its type
+    (project_string_conversion_shape_blindspot_pattern) — and the first attempt
+    at this silently emitted EMPTY delimiters. }
+  hasSq := False;
+  hasDq := False;
+  for i := 1 to Length(s) do
+  begin
+    if s[i] = QuoteCh then hasSq := True
+    else if s[i] = '"' then hasDq := True;
+  end;
+  useDq := hasSq and (not hasDq);
+  if useDq then Result := '"' else Result := QuoteCh;
   for i := 1 to Length(s) do
   begin
     ch := s[i];
-    if ch = QuoteCh then Result := Result + '\' + QuoteCh
-    else if ch = '\' then Result := Result + '\\'
+    if ch = '\' then Result := Result + '\\'
     else if ch = #10 then Result := Result + '\n'
     else if ch = #9 then Result := Result + '\t'
     else if ch = #13 then Result := Result + '\r'
-    else Result := Result + ch;
+    else if useDq then
+    begin
+      if ch = '"' then Result := Result + '\"' else Result := Result + ch;
+    end
+    else
+    begin
+      if ch = QuoteCh then Result := Result + '\' + QuoteCh else Result := Result + ch;
+    end;
   end;
-  Result := Result + QuoteCh;
+  if useDq then Result := Result + '"' else Result := Result + QuoteCh;
 end;
 
 function pyrepr_of(const s: AnsiString): AnsiString;
@@ -6836,6 +7793,30 @@ begin
   Result := r;
 end;
 
+function tuple(l: TPyList): TPyList;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  r.FIsTuple := True;
+  if l <> nil then
+    for i := 0 to l.count - 1 do r.append(l.at(i));
+  Result := r;
+end;
+
+function tuple(const s: AnsiString): TPyList; overload;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  r.FIsTuple := True;
+  for i := 1 to Length(s) do r.append(pystr_ofchar(s[i]));
+  Result := r;
+end;
+
+function pow(const a: Variant; const b: Variant): Variant;
+begin
+  Result := pypow_v(a, b);
+end;
+
 { list(v) where v is a VARIANT — copy the list/str it holds. `list(fb or [])`
   reaches this once `or` returns its operand as a variant. }
 function list(const v: Variant): TPyList; overload;
@@ -6859,7 +7840,7 @@ begin
   Result := r;
 end;
 
-function dict(d: TPyDict): TPyDict;
+function dict(d: TPyDict): TPyDict; overload;
 var r: TPyDict; ks, vs: TPyList; i: Integer;
 begin
   r := TPyDict.Create;
@@ -6885,10 +7866,29 @@ begin
   Result := TPyDict.Create;   { None / non-mapping }
 end;
 
+{ dict(pairs): each element is a (key, value) sequence. TPyDict.update(TPyList)
+  already walks exactly that shape, so this is the constructor around it rather
+  than a second copy of the loop — a fresh dict has FCounterMode false, so it
+  takes update's pair branch, not the Counter branch. }
+function dict(l: TPyList): TPyDict; overload;
+var r: TPyDict;
+begin
+  r := TPyDict.Create;
+  r.update(l);
+  Result := r;
+end;
+
 function reversed(l: TPyList): TPyList;
 var r: TPyList; i: Integer;
 begin
   r := TPyList.Create;
+  { Carries the tuple flag so `(1,2,3)[::-1]` is `(3, 2, 1)`: the reverse-slice
+    form lowers to this very function (see the `[::-1]` arm in pyparser), and a
+    slice of a tuple is a tuple. CPython's `reversed()` returns an ITERATOR
+    whose repr pxx already does not reproduce, so nothing that currently matches
+    the oracle moves — and `list(reversed(t))` still builds a fresh plain list.
+    (bug-nilpy-derived-tuple-loses-tupleness) }
+  if l <> nil then r.FIsTuple := l.FIsTuple;
   if l <> nil then
     for i := l.count - 1 downto 0 do r.append(l.at(i));
   Result := r;
@@ -6956,9 +7956,35 @@ begin
   r := TPyList.Create;
   if l <> nil then
   begin
+    { A slice of a TUPLE is a TUPLE: `(1,2,3)[1:]` is `(2, 3)`, not `[2, 3]`.
+      One sequence representation backs both, so the flag has to be carried
+      explicitly by every DERIVED sequence — pylist_repeat already did this,
+      slice and concat did not
+      (bug-nilpy-derived-tuple-loses-tupleness). }
+    r.FIsTuple := l.FIsTuple;
     PySliceBounds(l.count, lo, hi);
     for i := lo to hi - 1 do
       r.append(l.at(i));
+  end;
+  Result := r;
+end;
+
+function pylist_slice_step(l: TPyList; lo, hi, step: Integer): TPyList;
+var r: TPyList; i, k, cnt: Integer;
+begin
+  r := TPyList.Create;
+  if l <> nil then
+  begin
+    { a slice of a TUPLE is a TUPLE, extended slices included — so `(1,2,3)[::-1]`
+      is `(3, 2, 1)`, not `[3, 2, 1]` (bug-nilpy-derived-tuple-loses-tupleness) }
+    r.FIsTuple := l.FIsTuple;
+    cnt := PySliceBoundsStep(l.count, lo, hi, step);
+    i := lo;
+    for k := 1 to cnt do
+    begin
+      r.append(l.at(i));
+      i := i + step;
+    end;
   end;
   Result := r;
 end;
@@ -6978,6 +8004,27 @@ begin
   for i := hi to l.count - 1 do
     l.put(i - gap, l.at(i));
   l.FLen := l.count - gap;
+end;
+
+{ `del l[i]` — remove ONE element in place. Delegates to the slice delete so
+  the shifting logic exists once, but takes the index as a single argument: the
+  frontend cannot build `[i:i+1]` from the parsed subscript without duplicating
+  the index EXPRESSION, which would evaluate `del l[f()]` twice.
+
+  A negative index counts from the end, and an out-of-range one raises
+  IndexError — unlike a SLICE, which clamps. That asymmetry is Python's:
+  `del l[99]` raises, `del l[99:]` does not
+  (bug-nilpy-del-of-a-list-index-is-unsupported). }
+function pylist_del_at(l: TPyList; i: Integer): TPyList;
+var k: Integer;
+begin
+  Result := l;
+  if l = nil then Exit;
+  k := i;
+  if k < 0 then k := k + l.count;
+  if (k < 0) or (k >= l.count) then
+    raise IndexError.Create('list assignment index out of range');
+  pylist_del_slice(l, k, k + 1);
 end;
 
 { `l[lo:hi] = src` — replace that slice IN PLACE with src's elements (Python's
@@ -7001,6 +8048,10 @@ function pylist_repeat(l: TPyList; n: Int64): TPyList;
 var r: TPyList; i, k: Integer;
 begin
   r := TPyList.Create;
+  { `(1, 2) * 2` is a TUPLE. The variant-dispatch repeat path already carried
+    this flag; the statically-typed one did not, so it depended on which path
+    the operands took (bug-nilpy-derived-tuple-loses-tupleness). }
+  if l <> nil then r.FIsTuple := l.FIsTuple;
   if (l <> nil) and (n > 0) then
     for k := 1 to n do
       for i := 0 to l.count - 1 do
@@ -7013,6 +8064,11 @@ function pylist_concat(a, b: TPyList): TPyList;
 var r: TPyList; i: Integer;
 begin
   r := TPyList.Create;
+  { tuple + tuple is a TUPLE; list + list is a list. Python refuses to
+    concatenate the two kinds at all, so taking the LEFT operand's flag matches
+    wherever the expression is legal (bug-nilpy-derived-tuple-loses-tupleness). }
+  if a <> nil then r.FIsTuple := a.FIsTuple
+  else if b <> nil then r.FIsTuple := b.FIsTuple;
   if a <> nil then for i := 0 to a.count - 1 do r.append(a.at(i));
   if b <> nil then for i := 0 to b.count - 1 do r.append(b.at(i));
   Result := r;
@@ -7056,6 +8112,25 @@ begin
   for i := 0 to na - 1 do
     if a.at(i) <> b.at(i) then Exit;
   Result := True;
+end;
+
+function pybytes_cmp(a, b: TPyBytes): Int64;
+var i, na, nb, n, x, y: Integer;
+begin
+  if a = nil then na := 0 else na := a.count;
+  if b = nil then nb := 0 else nb := b.count;
+  if na < nb then n := na else n := nb;
+  for i := 0 to n - 1 do
+  begin
+    x := a.at(i);
+    y := b.at(i);
+    if x < y then begin Result := -1; Exit; end;
+    if x > y then begin Result := 1; Exit; end;
+  end;
+  { common prefix equal — the shorter sequence sorts first }
+  if na < nb then Result := -1
+  else if na > nb then Result := 1
+  else Result := 0;
 end;
 
 function TPyBytes.endswith(sfx: TPyBytes): Boolean;
@@ -7303,6 +8378,13 @@ begin
   if pyvartag(v) = 4 then
   begin
     if PPyVarRec(@v)^.Payload <> 0 then Result := 'True' else Result := 'False';
+    Exit;
+  end;
+  { a FLOAT payload goes through PyFloatStr for the inf/nan spelling; gated on
+    the tag so a string reading "Inf" is not rewritten }
+  if pyvartag(v) = 3 then
+  begin
+    Result := PyFloatStr(PPyDouble(@PPyVarRec(@v)^.Payload)^);
     Exit;
   end;
   Result := VariantToStr(v);

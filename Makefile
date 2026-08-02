@@ -2414,6 +2414,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_dynarray_copy26)" = "$$(printf '3\n30\n40\n50\n2\n50\n60\n2\n30 60\n3\n1 10 100\n2 20 200\n3 30 300\n6 60')"
 	./$(COMPILER) test/test_val_builtin.pas /tmp/test_val_builtin26
 	test "$$(/tmp/test_val_builtin26)" = "$$(printf '5 0\n55 0\n0 2\n-42 0\n88 0\n0 1\n1000000000000 0\n0')"
+	./$(COMPILER) test/test_hilo_swap.pas /tmp/test_hilo_swap26
+	test "$$(/tmp/test_hilo_swap26)" = "$$(printf '10 11 43776\n0 5 1280\n255 170 -21761\n0 86 22016\n18 52 13330\n237 204 -13075\n4660 22136 1450709556\n60875 43400 -1450644021\n39612 57072 3740310204\n287454020 1432778632 6153737367135073092\n4294967295 4294967295 -1\n2291772091 3437096703 14762217934866197179\n12 8 51200\n18 52 13330')"
+	./$(COMPILER) test/test_overload_no_narrowing.pas /tmp/test_overload_no_narrowing26
+	test "$$(/tmp/test_overload_no_narrowing26)" = "$$(printf 'longint 5\nlongint 200\nlongint 40000\nlongint 100000\nint64 5000000000\nbyte 200\nword 40000\nbyte 7\n')"
 	./$(COMPILER) test/test_managed_record_temp_init.pas /tmp/test_managed_record_temp_init26
 	test "$$(/tmp/test_managed_record_temp_init26)" = "$$(printf '5! = 120\n5! = 120\n6! = 720')"
 	./$(COMPILER) test/hello.pas /tmp/hello26

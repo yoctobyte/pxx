@@ -3,6 +3,8 @@ track: A
 prio: 60
 type: bug
 summary: "Hi()/Lo() are declared only for Cardinal and QWord, so every narrower type widens to the 32-bit overload: hi(word($1234)) gives 0 where FPC gives $12, and an Int64 argument is TRUNCATED to 32 bits first. Silent wrong value"
+status: working
+owner: track-A-S
 ---
 
 # `Hi` / `Lo` always split a 32-bit value, whatever the argument type
@@ -109,3 +111,76 @@ A Pascal test diffed against FPC over the full table above — `byte`, `word`,
 `shortint`, `smallint`, `longint`, `cardinal`, `int64`, `qword`, an untyped
 literal, and a negative value of each signed type — plus `make test` and the
 self-host fixedpoint, then `stabilize` + `pin`.
+
+## DONE 2026-08-02 — every TYPED argument now matches FPC; Swap fixed too
+
+### What the fix turned out to be — two bugs, and the second is the bigger one
+
+Adding the missing narrow overloads (the ticket's plan) made the *typed* rows
+right immediately, and made the literal rows **worse**: `hi($1234)` went from
+`0|4660` to `3|4`. The literal was binding to the new `Lo(Byte)` overload and
+being TRUNCATED to `$34` first.
+
+That is not a Hi/Lo problem. Measured on a plain program with no builtin
+involved:
+
+```pascal
+procedure p(v: byte); overload;  procedure p(v: word); overload;
+procedure p(v: longint); overload;  procedure p(v: int64); overload;
+p(40000);        { FPC: word 40000     pxx: byte 64 }
+```
+
+`MatchProcCall` took the first COMPATIBLE candidate in hash-chain order, so
+whichever narrow overload happened to come first won and silently dropped the
+high bits — a wrong value in ordinary user code, no diagnostic, nothing to do
+with Hi/Lo. Same shape as the fpjson `CreateJSON(Data: Boolean)` incident that
+`TypesCompatible` already carries a guard for.
+
+Fixed with **Phase 1d** in `MatchProcCall`: a compatible match that does not
+narrow an integer argument, tried before the general compatible phase, so a
+lossless candidate beats a truncating one whatever the declaration order.
+`ArgNarrowsInt` ranks, it does not reject — a narrowing candidate still wins
+when it is the only one that matches (`q(v: Byte)` called with an Integer).
+
+### Then the ticket's own fix
+
+One overload per integer type for `Lo`, `Hi` **and `Swap`** — Swap has the
+identical bug (`swap(word($1234))` gave 305397760 for FPC's 13330, and an Int64
+argument was truncated), lives in the same file, and needs the same repin, so
+fixing it separately would have cost a second repin for two lines.
+
+Semantics measured from FPC, not assumed — including the two rows that read as
+warts and would have been guessed wrong:
+
+- **ShortInt is not split into nibbles the way Byte is.** FPC sign-extends it to
+  16 bits first: `hi(shortint(-86))` = 255, not 10.
+- **Swap has no nibble form at all**: a 1-byte argument widens to 16 bits and
+  swaps ITS bytes, so `swap(byte($AB))` = `$AB00` = 43776, a Word — and the
+  result keeps the argument's signedness (`swap(shortint(-86))` = -21761).
+
+### Result — the ticket's table, re-measured
+
+Every typed row matches FPC exactly: byte, shortint (both signs), word,
+smallint, longint (both signs), cardinal, int64 (including -1), qword, and a
+`Byte(200)` / `Word($1234)` cast. Same for Swap.
+
+**Not matching, and split out:** an *untyped literal* still types as LongInt, so
+`hi($1234)` = `0|4660` where FPC says `18|52`. That is pxx's literal typing, not
+Hi/Lo — FPC gives a constant the smallest type that holds it. Filed as
+[[bug-a-integer-literal-not-typed-by-its-value-for-overload-resolution]] with
+the measured table. It is no longer a wrong *value*, only a wrong candidate, and
+a cast gives FPC's answer today.
+
+### Tests + gate
+
+- `test/test_hilo_swap.pas` — the full FPC-measured table, expectations diffed
+  against a real FPC run, wired into `make test`.
+- `test/test_overload_no_narrowing.pas` — the truncation repro plus the
+  only-narrow-candidate case, also in `make test`.
+- Self-host fixedpoint went RED as the ticket predicted, and for exactly the
+  predicted reason: the pinned stable ships its own frozen
+  `stable_linux_amd64/default/builtin/builtin.pas`, so the seed-built compiler
+  lacked the new overloads (the map diff shows only the 18 new Lo/Hi/Swap
+  procs — the resolution change did NOT alter the compiler's own build).
+  `make stabilize` + `make pin` -> **v240**, gate GREEN after.
+- `tools/gate.sh quick` GREEN, FPC seed build clean.

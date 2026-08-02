@@ -4915,6 +4915,23 @@ begin
   end;
 end;
 
+function ArgNarrowsInt(pType, aType: TTypeKind): Boolean;
+{ True when binding an integer argument to this parameter would silently DROP
+  high bits — a 16-bit argument onto a Byte parameter, an Int64 onto a LongInt.
+  Overload resolution otherwise takes the first COMPATIBLE candidate in chain
+  order, so with `p(v: Byte)` declared before `p(v: Word)`, `p(40000)` printed
+  64: the argument was truncated, silently, in ordinary user code. Same shape as
+  the fpjson `CreateJSON(Data: Boolean)` incident TypesCompatible already guards
+  against — wrong VALUES, no diagnostic. Used to rank candidates, not to reject
+  them: a narrowing candidate still wins when it is the only one that matches. }
+begin
+  Result := (pType in [tyInteger, tyInt8, tyUInt8, tyInt16, tyUInt16, tyInt32,
+                       tyUInt32, tyInt64, tyUInt64, tyNativeInt, tyNativeUInt]) and
+            (aType in [tyInteger, tyInt8, tyUInt8, tyInt16, tyUInt16, tyInt32,
+                       tyUInt32, tyInt64, tyUInt64, tyNativeInt, tyNativeUInt]) and
+            (TypeSize(pType) < TypeSize(aType));
+end;
+
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind; suppressBuiltin: Boolean): Integer;
 var i, j: Integer; match: Boolean; cn, nl: AnsiString; demote: Boolean; bIdx: Integer;
 begin
@@ -5022,6 +5039,36 @@ begin
       begin
         Result := i;
         Exit;
+      end;
+    end;
+    i := ProcHashNext[i];
+  end;
+
+  { Phase 1d: compatible match that does NOT narrow an integer argument. Runs
+    before the general compatible phase so a lossless candidate beats a
+    truncating one whatever the declaration order — see ArgNarrowsInt. }
+  i := ProcChainHead(name);
+  while i >= 0 do
+  begin
+    if MatchElig(i, name, demote, bIdx) then
+    begin
+      if ProcArityMatches(i, nArgs) then
+      begin
+        match := True;
+        for j := 0 to nArgs-1 do
+        begin
+          if (not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
+                  ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or
+             MatchArgRecMismatch(i, j, argTypes[j]) or
+             (ArgNarrowsInt(Procs[i].Params[j].TypeKind, argTypes[j]) and
+              not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then
+            match := False;
+        end;
+        if match then
+        begin
+          Result := i;
+          Exit;
+        end;
       end;
     end;
     i := ProcHashNext[i];

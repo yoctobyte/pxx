@@ -161,19 +161,47 @@ function HexStr(Val: Int64; cnt: Integer): AnsiString;
   meaningful one here, so just the number. }
 procedure RunError(errnum: Integer);
 
-{ FPC System.Lo/Hi: low/high half of the value. FPC dispatches on the argument
-  type (Word->Byte, DWord->Word, QWord->DWord); the Word->Byte form is omitted
-  until something needs it (an untyped 16-bit argument would widen into the
-  Cardinal overload and take its DWord semantics, matching FPC's default for
-  integer expressions). }
+{ FPC System.Lo/Hi: the two halves of the value, SIZED BY THE ARGUMENT'S OWN
+  TYPE — nibbles for a byte, bytes for a 16-bit type, words for a 32-bit one,
+  longwords for a 64-bit one. One overload per integer type, because leaving a
+  width out does not fall back to something sensible: it silently widens into
+  the next overload and returns a plausible wrong number (hi(word($1234)) gave
+  0 where FPC gives $12, and an Int64 argument was truncated into the Cardinal
+  overload). Measured against FPC, including the two rows that read as warts:
+
+    - ShortInt is NOT split into nibbles the way Byte is. FPC sign-extends it
+      to 16 bits first, so hi(shortint(-86)) = $FF, not $A.
+    - the halves are bit patterns, so a negative argument splits its two's
+      complement and the results are unsigned. }
+function Lo(v: Byte): Byte;
+function Lo(v: ShortInt): Byte;
+function Lo(v: Word): Byte;
+function Lo(v: SmallInt): Byte;
+function Lo(v: LongInt): Word;
 function Lo(v: Cardinal): Word;
+function Lo(v: Int64): Cardinal;
 function Lo(v: QWord): Cardinal;
+function Hi(v: Byte): Byte;
+function Hi(v: ShortInt): Byte;
+function Hi(v: Word): Byte;
+function Hi(v: SmallInt): Byte;
+function Hi(v: LongInt): Word;
 function Hi(v: Cardinal): Word;
+function Hi(v: Int64): Cardinal;
 function Hi(v: QWord): Cardinal;
 
-{ FPC System.Swap: exchange the two halves (DWord: word halves, QWord: dword
-  halves). The Word->byte-swap form is omitted like Lo/Hi's. }
+{ FPC System.Swap: exchange the two halves. Same per-type dispatch as Lo/Hi and
+  the same reason for spelling every width out — but the sizes differ: Swap has
+  no nibble form, a 1-byte argument widens to 16 bits and swaps ITS bytes
+  (swap(byte($AB)) = $AB00, a Word), and the result keeps the argument's
+  signedness (swap(shortint(-86)) = -21761). }
+function Swap(v: Byte): Word;
+function Swap(v: ShortInt): SmallInt;
+function Swap(v: Word): Word;
+function Swap(v: SmallInt): SmallInt;
+function Swap(v: LongInt): LongInt;
 function Swap(v: Cardinal): Cardinal;
+function Swap(v: Int64): Int64;
 function Swap(v: QWord): QWord;
 
 { FPC System.UniqueString(s): make the string's payload uniquely referenced so
@@ -262,9 +290,42 @@ begin
   Halt(errnum);
 end;
 
+{ Lo/Hi: halves sized by the argument's own type (see the interface note). A
+  signed argument is split as the bit pattern it sign-extends to, which is what
+  makes `and`/`shr` on the widened value the whole implementation. }
+function Lo(v: Byte): Byte;
+begin
+  Result := Byte(v and $0F);
+end;
+
+function Lo(v: ShortInt): Byte;
+begin
+  Result := Byte(v and $FF);
+end;
+
+function Lo(v: Word): Byte;
+begin
+  Result := Byte(v and $FF);
+end;
+
+function Lo(v: SmallInt): Byte;
+begin
+  Result := Byte(v and $FF);
+end;
+
+function Lo(v: LongInt): Word;
+begin
+  Result := Word(v and $FFFF);
+end;
+
 function Lo(v: Cardinal): Word;
 begin
   Result := Word(v and $FFFF);
+end;
+
+function Lo(v: Int64): Cardinal;
+begin
+  Result := Cardinal(v and $FFFFFFFF);
 end;
 
 function Lo(v: QWord): Cardinal;
@@ -272,9 +333,39 @@ begin
   Result := Cardinal(v and $FFFFFFFF);
 end;
 
+function Hi(v: Byte): Byte;
+begin
+  Result := Byte((v shr 4) and $0F);
+end;
+
+function Hi(v: ShortInt): Byte;
+begin
+  Result := Byte((v shr 8) and $FF);
+end;
+
+function Hi(v: Word): Byte;
+begin
+  Result := Byte((v shr 8) and $FF);
+end;
+
+function Hi(v: SmallInt): Byte;
+begin
+  Result := Byte((v shr 8) and $FF);
+end;
+
+function Hi(v: LongInt): Word;
+begin
+  Result := Word((v shr 16) and $FFFF);
+end;
+
 function Hi(v: Cardinal): Word;
 begin
   Result := Word((v shr 16) and $FFFF);
+end;
+
+function Hi(v: Int64): Cardinal;
+begin
+  Result := Cardinal((v shr 32) and $FFFFFFFF);
 end;
 
 function Hi(v: QWord): Cardinal;
@@ -282,9 +373,41 @@ begin
   Result := Cardinal((v shr 32) and $FFFFFFFF);
 end;
 
+{ Swap: no nibble form — a 1-byte argument is swapped as the 16-bit value it
+  widens to, and the result keeps the argument's signedness. }
+function Swap(v: Byte): Word;
+begin
+  Result := Word(((v and $FF) shl 8) or ((v shr 8) and $FF));
+end;
+
+function Swap(v: ShortInt): SmallInt;
+begin
+  Result := SmallInt(((v and $FF) shl 8) or ((v shr 8) and $FF));
+end;
+
+function Swap(v: Word): Word;
+begin
+  Result := Word(((v and $FF) shl 8) or ((v shr 8) and $FF));
+end;
+
+function Swap(v: SmallInt): SmallInt;
+begin
+  Result := SmallInt(((v and $FF) shl 8) or ((v shr 8) and $FF));
+end;
+
+function Swap(v: LongInt): LongInt;
+begin
+  Result := LongInt(((v and $FFFF) shl 16) or ((v shr 16) and $FFFF));
+end;
+
 function Swap(v: Cardinal): Cardinal;
 begin
   Result := ((v and $FFFF) shl 16) or ((v shr 16) and $FFFF);
+end;
+
+function Swap(v: Int64): Int64;
+begin
+  Result := Int64(((v and $FFFFFFFF) shl 32) or ((v shr 32) and $FFFFFFFF));
 end;
 
 function Swap(v: QWord): QWord;

@@ -237,3 +237,4 @@
 2026-08-01T00:43:24Z  v237  be92c0913c57730f9f2caeb12c42a2a2378d25c90556d07367dd5b71d5f4489c  c27700ee2b9eeb7388e765485b057bf5086c00fd  chore(progress): resolve bug-nilpy-keyword-arg-vs-overload-set
 2026-08-01T02:08:44Z  v238  3a19c02a100f507b512085ba40ce139353de550593ce245a629e1d092522f85a  134578edecfa12596cf168b7a6900b8934297137  chore(progress): resolve compat-pascal-const-expr-ord-chr-succ
 2026-08-01T03:08:29Z  v239  3a19c02a100f507b512085ba40ce139353de550593ce245a629e1d092522f85a  a516a230e5d2180b6b696201d5ea396cc5af28f1  chore(progress): claim feature-a-typeref-migrate-consumers
+2026-08-02T18:47:25Z  v240  a108a05216353befb7f1a9ba749eab37beb121ed9f81ed2f3c17e2776fd8e8dd  29382493d516e51c43e00e4fad10b9731ebe986b  docs(S): resolve xtensa windowed record results (ESP PAL object builds, lwip parity)
