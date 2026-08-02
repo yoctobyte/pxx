@@ -3,6 +3,7 @@ track: A
 prio: 55
 type: bug
 summary: "Every windowed-ABI stack frame costs at least 256 bytes — a fixed expression region plus the 256-byte granularity of the single ADDMI the prologue patches — so ~11 nested calls exhaust ESP-IDF's default 3584-byte task stack. Printing one Int64 digit by digit does it."
+status: done
 ---
 
 # xtensa windowed: every frame costs ≥256 bytes, so recursion dies early on IDF
@@ -110,3 +111,6 @@ what an ordinary project needs, which is nothing.
 Verified: `tools/gate.sh quick` GREEN, `make test-esp-bare` 19/19,
 `make test-esp-idf` green on both chips, oracle match for the validation program
 on esp32s3 and esp32c3.
+
+## Log
+- 2026-08-02 — resolved, commit 6e93f5c70.
