@@ -691,9 +691,15 @@ const
   PLATFORM_POSIX = 0;
   PLATFORM_ESP   = 1;
   { Bytes reserved below the windowed locals frame for the constant-sp
-    expression/argument spill stack. Stage-1 nesting is shallow; 256 = 64
-    slots is ample and keeps every offset inside the s32i/l32i imm range. }
-  XT_EXPR_REGION = 256;
+    expression/argument spill stack. Stage-1 nesting is shallow; 192 = 48
+    slots is ample and keeps every offset inside the s32i/l32i imm range.
+    It is 192 rather than 256 so that adding XT_OUTARG_REGION below keeps the
+    per-frame reservation at 256 bytes: the frame rounds UP to a multiple of
+    256, so one extra byte over the boundary would DOUBLE every windowed frame
+    — and with ESP-IDF's 3584-byte task stacks that halves the recursion depth
+    a program can survive (measured: a 19-deep Int64 print died with
+    LoadProhibited when the reservation crossed to 512). }
+  XT_EXPR_REGION = 192;
   { Bytes reserved at the BOTTOM of a windowed frame (sp+0 upward) for the
     OUTGOING arguments that do not fit the register set: the Xtensa ABI puts
     argument words 6.. in the caller's frame at sp+0, sp+4, ... and the callee
@@ -702,7 +708,7 @@ const
     both directions with ESP-IDF. Call0 allocates its outgoing area by moving
     sp and needs no reservation. 64 bytes = 16 overflow words (22 argument
     words in total), well past any real signature; the expression stack starts
-    just above it. }
+    just above it and was shrunk by the same amount so the total stays 256. }
   XT_OUTARG_REGION = 64;
   XT_MAX_ARG_WORDS = 6 + XT_OUTARG_REGION div 4;
   LOAD_ADDR32        = $08048000;  { classic i386 ET_EXEC base }

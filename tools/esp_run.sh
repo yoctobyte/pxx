@@ -56,8 +56,15 @@ esac
 . "$ESP_IDF_DIR/export.sh" >/dev/null 2>&1
 
 cd "$PROJ"
+# The compile runs from INSIDE the project, so any -Fu in ESP_PXXFLAGS must be
+# absolute. Its diagnostics used to go to /dev/null along with the "ok:" line,
+# so a failed compile aborted with no output at all and looked like a program
+# that printed nothing — keep stderr, and say which step died.
 # shellcheck disable=SC2086
-"$PXX" $PXXFLAGS ${ESP_PXXFLAGS:-} "$PAS" main/main.o >/dev/null
+if ! "$PXX" $PXXFLAGS ${ESP_PXXFLAGS:-} "$PAS" main/main.o >/dev/null; then
+  echo "esp_run: compiling $PAS failed (note: -Fu paths must be absolute)" >&2
+  exit 1
+fi
 ar rcs main/libpxx_app.a main/main.o
 # The Pascal code arrives via add_prebuilt_library (libpxx_app.a), which ninja
 # does NOT track for content changes -- so force a relink by removing the app

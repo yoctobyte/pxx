@@ -1,15 +1,12 @@
 # The component itself has no C sources; app_main comes from the PXX-built
 # Pascal object, wrapped into a static archive by build.sh (CMake's prebuilt
 # library support wants an archive, not a bare .o).
-# esp_timer / lwip / esp_netif are REQUIREd not because this hello uses them,
-# but because this project doubles as tools/esp_run.sh's harness: it links an
-# arbitrary .pas, and a program calling the timer or socket APIs must resolve
-# them. Without the dependency the component links before those archives and
-# the references come out undefined.
-idf_component_register(REQUIRES esp_timer lwip esp_netif)
+idf_component_register(REQUIRES esp_timer)
 
+# The Pascal object calls esp_timer_* directly; REQUIRES makes the prebuilt
+# archive depend on the esp_timer component so link order resolves it.
 add_prebuilt_library(pxx_app "${CMAKE_CURRENT_LIST_DIR}/libpxx_app.a"
-                     REQUIRES esp_timer lwip esp_netif)
+                     REQUIRES esp_timer)
 target_link_libraries(${COMPONENT_LIB} INTERFACE pxx_app)
 # Nothing in this component references app_main, so force the linker to keep
 # pulling it from the archive (ESP-IDF's startup task calls it).

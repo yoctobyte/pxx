@@ -1,0 +1,6 @@
+build/
+sdkconfig
+sdkconfig.old
+main/main.o
+main/libpxx_app.a
+dependencies.lock
