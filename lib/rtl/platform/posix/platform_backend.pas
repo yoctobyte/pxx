@@ -498,6 +498,12 @@ begin
   info.Dev := 0;
   info.Blocks := 0;
   info.BlkSize := 4096;
+  info.Nlink := 1;      { a plain file has one link; overwritten by a real stat }
+  info.Uid := 0;
+  info.Gid := 0;
+  info.Rdev := 0;
+  info.ATimeSec := 0;
+  info.CTimeSec := 0;
 end;
 
 { statx(2) — arch-neutral stat with a uniform struct layout on every target, so
@@ -519,6 +525,15 @@ begin
   info.Size := StatxInt64LE(@sx[0], $28);
   info.Blocks := StatxInt64LE(@sx[0], $30);
   info.MTimeSec := StatxInt64LE(@sx[0], $70);
+  { the fields crtl used to hardcode. Offsets are the statx(2) layout, which is
+    identical on every target — the same reason the ones above work unchanged. }
+  info.Nlink := Int64(StatxDwordLE(@sx[0], $10));
+  info.Uid := Integer(StatxDwordLE(@sx[0], $14));
+  info.Gid := Integer(StatxDwordLE(@sx[0], $18));
+  info.ATimeSec := StatxInt64LE(@sx[0], $40);
+  info.CTimeSec := StatxInt64LE(@sx[0], $60);
+  info.Rdev := (Int64(StatxDwordLE(@sx[0], $80)) shl 20)
+            or Int64(StatxDwordLE(@sx[0], $84) and $FFFFF);
   major := Integer(StatxDwordLE(@sx[0], $88));
   minor := Integer(StatxDwordLE(@sx[0], $8C));
   info.Dev := (Int64(major) shl 20) or Int64(minor and $FFFFF);  { stable (dev,ino) key for sqlite locks }

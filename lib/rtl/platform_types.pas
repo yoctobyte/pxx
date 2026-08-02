@@ -16,6 +16,17 @@ type
     Dev: Int64;
     Blocks: Int64;
     BlkSize: Integer;
+    { st_nlink / st_uid / st_gid / st_rdev and the OTHER two timestamps. crtl's
+      stat() hardcoded nlink to 1, uid/gid/rdev to 0, and reported MTime for
+      atime and ctime as well — all silently, so a caller comparing atime, or
+      spotting a hard link by nlink > 1, got a plausible wrong answer. statx
+      returns every one of these already; they were simply never carried. }
+    Nlink: Int64;
+    Uid: Integer;
+    Gid: Integer;
+    Rdev: Int64;
+    ATimeSec: Int64;
+    CTimeSec: Int64;
   end;
 
   { An IPv6 address as its 16 wire-order bytes. Deliberately a byte array rather

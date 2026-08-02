@@ -7206,6 +7206,18 @@ lib-test: pxx-stable-check
 	    { echo 'FAIL: cfileops differs from gcc'; exit 1; }; \
 	  echo 'cfileops: identical to gcc'; \
 	else echo 'cfileops: SKIP (no gcc)'; (cd /tmp && /tmp/cfileops) >/dev/null; fi
+	# struct stat's fields: nlink/uid/gid/rdev and atime/ctime were hardcoded.
+	# Asserted through consequences — nlink rises with a hard link and falls
+	# when it is removed, a directory's nlink counts its subdirectories.
+	$(PXX_STABLE) test/cstat_fields.c /tmp/cstat_fields
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -w -o /tmp/cstat_fields_gcc test/cstat_fields.c 2>/dev/null; \
+	  /tmp/cstat_fields_gcc > /tmp/csf_gcc.txt 2>&1; \
+	  /tmp/cstat_fields > /tmp/csf_pxx.txt 2>&1; \
+	  diff /tmp/csf_gcc.txt /tmp/csf_pxx.txt || \
+	    { echo 'FAIL: cstat_fields differs from gcc'; exit 1; }; \
+	  echo 'cstat_fields: identical to gcc'; \
+	else echo 'cstat_fields: SKIP (no gcc)'; /tmp/cstat_fields >/dev/null; fi
 	# crtl against gcc's libc, which is the oracle for this surface: the whole
 	# output is diffed against the SAME file built by gcc, so there are no
 	# recorded expectations to drift.

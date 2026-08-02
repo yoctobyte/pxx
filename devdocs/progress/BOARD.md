@@ -43,14 +43,13 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (205)
+## backlog (204)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-a-selfhost-recipe-should-rename-not-write-in-place | A | 55 | bug | The self-host chain compiles straight onto the path it is about to exec, so a concurrent fd holder makes the exec fail with ETXTBSY. Write to a temp name and rename — atomic in RUN_TMP, and a new inode | — |
-| bug-b-crtl-stat-nlink-hardcoded | B | 30 | bug | `struct stat.st_nlink` is hardcoded to 1 | — |
 | bug-b-writeln-float-with-17-decimals-prints-garbage | A | 55 | bug | `WriteLn(x:0:17)` prints garbage | — |
 | bug-c-uses-path-basename-collides-with-enclosing-unit-name | A | 35→65 | bug | path-form `uses './x.c'` collides with the enclosing unit's OWN name | — |
 | bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity | C | 55 | bug | In a mixed Pascal+C build, a C call binds to a same-named Pascal routine at the wrong arity | — |
@@ -357,7 +356,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1220)
+## done (1221)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -427,6 +426,7 @@ lives in git, not in a timestamp._
 | bug-asmcore-fpc-bootstrap | A | 50 | bug | FPC bootstrap can't compile the asmcore units the compiler now `uses` | — |
 | bug-b-crtl-host-header-and-arity-mismatches-building-pdfgen | B | 45 | bug | Building pdfgen: `strings.h` comes from the host, and `time`/`bcmp` bind at the wrong arity | — |
 | bug-b-crtl-math-constants-missing-silently-zero | B | 60 | bug | `math.h`'s `M_*` constants were absent, so `M_PI` silently evaluated to 0 | — |
+| bug-b-crtl-stat-nlink-hardcoded | B | 30 | bug | `struct stat.st_nlink` is hardcoded to 1 | — |
 | bug-b-dns-wire-ipv4-literal-returns-nxdomain | B | 55 | bug | `dns_wire` answers NXDOMAIN for an IPv4 literal, so the facade's answer depends on the backend | — |
 | bug-b-floattostrsig-caps-at-15-significant-digits | B | 65 | bug | `FloatToStrSig` caps at 15 significant digits, so no double round-trips | — |
 | bug-b-strtofloat-not-correctly-rounded | B | 60 | bug | `StrToFloat` is not correctly rounded, so exact decimals still do not read back | — |
@@ -1773,7 +1773,6 @@ lives in git, not in a timestamp._
 - [p 35] [O] feature-opt-complex-packed-double
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
 - [p 30] [A] bug-a-const-variant-arg-expression-fails-outside-pyexprmode
-- [p 30] [B] bug-b-crtl-stat-nlink-hardcoded
 - [p 30] [A] bug-cfront-silent-bind-to-pascal-proc-of-different-arity
 - [p 30] [N] bug-nilpy-bitwise-op-rejects-boolean-variable-operand
 - [p 30] [N] bug-nilpy-construction-on-the-right-of-is-does-not-parse

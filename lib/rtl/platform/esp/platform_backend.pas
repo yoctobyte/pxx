@@ -442,6 +442,12 @@ begin
   info.Mode := 0;
   info.IsDir := False;
   info.IsFile := False;
+  info.Nlink := 1;      { a plain file has one link }
+  info.Uid := 0;
+  info.Gid := 0;
+  info.Rdev := 0;
+  info.ATimeSec := 0;
+  info.CTimeSec := 0;
 end;
 
 function PalBackendStat(path: PChar; var info: TPalFileStat): Integer;

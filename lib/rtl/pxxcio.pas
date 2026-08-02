@@ -71,6 +71,15 @@ type
     Blocks:  Int64;
     Mode:    Integer;
     BlkSize: Integer;
+    { Appended so the fields above keep their offsets — this record's layout is
+      an ABI shared with lib/crtl/src/sys/stat.c's struct __pxx_statbuf, and the
+      two must stay in step. }
+    Nlink:   Int64;
+    Rdev:    Int64;
+    ATime:   Int64;
+    CTime:   Int64;
+    Uid:     Integer;
+    Gid:     Integer;
   end;
 
 function __pxx_fstat(fd: Integer; sb: PPxxStatBuf): Integer;
@@ -303,6 +312,12 @@ begin
   sb^.Blocks  := info.Blocks;
   sb^.Mode    := info.Mode;
   sb^.BlkSize := info.BlkSize;
+  sb^.Nlink   := info.Nlink;
+  sb^.Rdev    := info.Rdev;
+  sb^.ATime   := info.ATimeSec;
+  sb^.CTime   := info.CTimeSec;
+  sb^.Uid     := info.Uid;
+  sb^.Gid     := info.Gid;
 end;
 
 function __pxx_fstat(fd: Integer; sb: PPxxStatBuf): Integer;

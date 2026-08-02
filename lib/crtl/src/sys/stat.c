@@ -20,6 +20,16 @@ struct __pxx_statbuf {
   long long blocks;
   int       mode;
   int       blksize;
+  /* Appended, so the existing field offsets are unchanged. These were
+     hardcoded in fill() below — nlink to 1, uid/gid/rdev to 0, and atime and
+     ctime to mtime — which is silently wrong for anything that compares them.
+     statx returns all of them; they were simply never carried across. */
+  long long nlink;
+  long long rdev;
+  long long atime;
+  long long ctime;
+  int       uid;
+  int       gid;
 };
 
 extern int __pxx_fstat(int fd, struct __pxx_statbuf *sb);
@@ -32,16 +42,16 @@ static void fill(struct stat *buf, const struct __pxx_statbuf *sb) {
   buf->st_dev     = (dev_t)sb->dev;
   buf->st_ino     = (ino_t)sb->ino;
   buf->st_mode    = (mode_t)sb->mode;
-  buf->st_nlink   = 1;
-  buf->st_uid     = 0;
-  buf->st_gid     = 0;
-  buf->st_rdev    = 0;
+  buf->st_nlink   = (nlink_t)sb->nlink;
+  buf->st_uid     = (uid_t)sb->uid;
+  buf->st_gid     = (gid_t)sb->gid;
+  buf->st_rdev    = (dev_t)sb->rdev;
   buf->st_size    = (off_t)sb->size;
   buf->st_blksize = (blksize_t)sb->blksize;
   buf->st_blocks  = (blkcnt_t)sb->blocks;
-  buf->st_atime   = (long)sb->mtime;
+  buf->st_atime   = (long)sb->atime;
   buf->st_mtime   = (long)sb->mtime;
-  buf->st_ctime   = (long)sb->mtime;
+  buf->st_ctime   = (long)sb->ctime;
 }
 
 /* The PAL stat calls return the raw syscall result: 0 on success, -errno on
