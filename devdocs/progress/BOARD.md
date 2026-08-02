@@ -38,7 +38,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (186)
+## backlog (187)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -192,6 +192,7 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-t-bench-hardware-provenance | T | 60 | feature | bench.tsv records a hostname but no hardware — the series silently changed machines today | — |
+| feature-t-bench-record-host-hardware-specs | T | 55 | feature | Benchmarks record the host *name*, but nothing about the hardware | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
 | feature-t-host-roles-native-vs-qemu-topology | T | 65 | feature | Track T is becoming multi-host with DIFFERENT PURPOSES per box — xeon runs the matrix, arm32/arm64 rPis exist only as native oracles against xeon's QEMU — but profiles express resource ceilings, not purpose, and nothing compares two hosts' results | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 40 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
@@ -3015,6 +3016,7 @@ _none_
 - [p 55] [A] feature-pascal-type-helpers
 - [p 55] [T] feature-pasmith-multi-unit-programs
 - [p 55] [A] feature-signal-siginfo-ucontext
+- [p 55] [T] feature-t-bench-record-host-hardware-specs
 - [p 55] [T] feature-t-per-invocation-tmp-namespace-for-make-recipes
 - [p 55] [T] task-t-xeon-agent-needs-its-own-dev-checkout
 - [p 53] [A] feature-threadsafe-heap-optimize
