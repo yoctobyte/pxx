@@ -4,8 +4,9 @@ unit net;
 
   This is the normal (blocking) networking face; `asyncnet.pas` is the
   coroutine-backed face. Both sit on the same scheduler-free PAL primitives
-  (`platform.pas`) — net.pas adds no platform conditionals of its own. IPv4
-  only for now; IPv6 waits on a PAL sockaddr_in6 layout.
+  (`platform.pas`) — net.pas adds no platform conditionals of its own. TCP and
+  UDP speak both IPv4 and IPv6; an address carries its family and the calls
+  branch on it.
 
   TNetAddress carries a host-order IPv4 address + port; the PAL converts to
   network byte order internally. A TNetSocket is just the PAL handle (<0 is
@@ -37,6 +38,13 @@ type
 const
   NET_INVALID_SOCKET = -1;
 
+const
+  { NetTcpListen's v6Only argument. INHERIT is the decided default (leave the
+    host's bindv6only alone); the other two pin it for a caller who cares. }
+  NET_V6ONLY_INHERIT = -1;
+  NET_V6ONLY_OFF     = 0;   { dual-stack: v4 peers arrive as ::ffff:a.b.c.d }
+  NET_V6ONLY_ON      = 1;   { strict v6; serve v4 on a second listener }
+
 function NetAddress(host: LongWord; port: Integer): TNetAddress;
 function NetLoopback(port: Integer): TNetAddress;
 
@@ -53,10 +61,24 @@ function NetIsV6(const addr: TNetAddress): Boolean;
 { TCP (blocking). On loopback a blocking connect to a listening socket
   completes via the kernel backlog before Accept is called, so a single
   thread can drive both sides. }
-function NetTcpListen(const addr: TNetAddress; backlog: Integer): TNetSocket;
+{ `v6Only` controls IPV6_V6ONLY on a `::` listener, and is ignored for IPv4.
+
+  The DEFAULT is INHERIT — whatever the host's /proc/sys/net/ipv6/bindv6only
+  says. That is the decided policy (decide-ipv6-dualstack-and-aaaa-ordering,
+  user, 2026-08-01): plain `bind()` on `::` with no setsockopt is exactly what
+  raw BSD sockets do, so it matches the platform rather than second-guessing a
+  sysadmin's system-wide setting.
+
+  The explicit values are the other half of that decision — "do nothing" as the
+  default must not also mean "no escape hatch" for a caller who does care,
+  because the inherited setting is a sysctl an administrator can change under a
+  running program. Asking explicitly and being refused is an ERROR here, not a
+  silent fallback to the inherited value: a caller who pinned it meant it. }
+function NetTcpListen(const addr: TNetAddress; backlog: Integer;
+                      v6Only: Integer = NET_V6ONLY_INHERIT): TNetSocket;
 function NetTcpAccept(listener: TNetSocket; var peer: TNetAddress): TNetSocket;
-{ Accept on an IPv6 listener. Same caveat as NetTcpAccept: the peer address is
-  not filled in (no PalAcceptIpv6 yet), only its Family. }
+{ Accept on an IPv6 listener. The peer address IS filled in — address, port and
+  scope id — since PalAcceptIpv6 landed. }
 function NetTcpAccept6(listener: TNetSocket; var peer: TNetAddress): TNetSocket;
 function NetTcpConnect(const addr: TNetAddress): TNetSocket;
 { Connect with a deadline. Returns a connected (blocking) socket >= 0, or a
@@ -122,8 +144,9 @@ begin
   NetIsV6 := addr.Family = PAL_NET_AF_INET6;
 end;
 
-function NetTcpListen(const addr: TNetAddress; backlog: Integer): TNetSocket;
-var fd, rc: Integer;
+function NetTcpListen(const addr: TNetAddress; backlog: Integer;
+                      v6Only: Integer): TNetSocket;
+var fd, rc, optVal: Integer;
 begin
   fd := PalSocket(addr.Family, PAL_NET_SOCK_STREAM, 0);
   if fd < 0 then
@@ -132,6 +155,22 @@ begin
     Exit;
   end;
   rc := PalSetSocketReuseAddr(fd, 1);
+  { Before bind: IPV6_V6ONLY cannot be changed afterwards. Only when the caller
+    asked — the default leaves the host setting untouched, which is the policy. }
+  if NetIsV6(addr) and (v6Only <> NET_V6ONLY_INHERIT) then
+  begin
+    if v6Only <> NET_V6ONLY_OFF then optVal := 1 else optVal := 0;
+    rc := PalSetSockOpt(fd, PAL_NET_IPPROTO_IPV6, PAL_NET_IPV6_V6ONLY,
+                        @optVal, SizeOf(optVal));
+    if rc < 0 then
+    begin
+      { an explicit request that could not be honoured is an error, not a
+        silent fall back to whatever the host happened to be set to }
+      PalSocketClose(fd);
+      Result := rc;
+      Exit;
+    end;
+  end;
   if NetIsV6(addr) then
     rc := PalBindIpv6(fd, addr.V6, addr.Port, addr.ScopeId)
   else

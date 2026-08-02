@@ -27,6 +27,12 @@ const
   PAL_NET_IP_ANY = 0;
   PAL_NET_IP_LOOPBACK = $7F000001;
 
+  { setsockopt level/name for IPV6_V6ONLY, for a caller that wants to pin
+    whether a `::` listener also accepts v4. Linux values, taken from a gcc
+    probe rather than from memory. }
+  PAL_NET_IPPROTO_IPV6 = 41;
+  PAL_NET_IPV6_V6ONLY = 26;
+
   PAL_NET_EAGAIN = -11;
   PAL_NET_EWOULDBLOCK = -11;
   PAL_NET_EINPROGRESS = -115;

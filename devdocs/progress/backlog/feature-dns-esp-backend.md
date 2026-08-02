@@ -66,6 +66,22 @@ is really two** and should be split when picked up:
 Doing (2) without (1) leaves `dns_wire` broken on ESP as the *fallback* path,
 which is what every build without `-dPXX_DNS_ESP` gets.
 
+## Not startable on the current fleet — checked 2026-08-02
+
+Picked up as queue-top after the re-rank above and put back down, so the next
+agent does not repeat the check:
+
+- `xtensa` and `riscv32` **compile** here, and `tools/run_target.sh riscv32`
+  runs a binary under `qemu-riscv32`.
+- But that is Linux userspace, not ESP-IDF. lwIP's `dns_gethostbyname` does not
+  exist in it, so the backend's entire behaviour — the thing worth verifying —
+  cannot be exercised. Writing extern declarations against an API that nothing
+  available can link or answer is how a plausible-wrong binding gets committed.
+
+So this wants an ESP device or a QEMU-ESP image in the loop before it starts.
+That is the same gap as item (b) of [[feature-real-dynlib-loader]] (other-target
+run verification), and it is worth solving once for both rather than per-ticket.
+
 ## Gate
 
 Runs on real ESP hardware (or QEMU-ESP where that exists) against a name the
