@@ -1,11 +1,15 @@
 ---
-prio: 60  # auto
+track: A
+prio: 60
+type: feature
+blocked-by: [feature-opt-accumulator-value-tracker]
 ---
 
 # Store-reload (redundant load) elimination — -O1 pass
 
 - **Type:** feature (codegen — optimization pass) — Track A
-- **Status:** backlog — **BLOCKED on a register-liveness scaffold**
+- **Status:** blocked — on [[feature-opt-accumulator-value-tracker]], which is
+  now a ticket rather than a paragraph (see the 2026-08-03 note at the end)
 - **Opened:** 2026-07-03 (pin-time optimization campaign)
 - **Umbrella:** a candidate -O1 pass under [[feature-optimization-levels]]
   (listed there as low-hanging item 2, "redundant load elimination"); split
@@ -100,3 +104,20 @@ together, or land the scaffold first as its own ticket.
   (leaf-const operand load, leaf-sym operand load, const-load size peephole).
 - [[feature-callconv-register-args]] — shares the register-liveness scaffold
   that unblocks this.
+
+
+## 2026-08-03 — the blocker is now a TICKET, and it is still real
+
+This sat in `backlog/` with the blocker described in prose but no `blocked-by:`
+field, so `progress.sh ready` offered it as pullable work for a month. It is
+not: the naive version ships a silent miscompile.
+
+Re-checked rather than inherited, because [[feature-callconv-register-args]] has
+landed since and its write-up mentions liveness. What that ticket actually built
+is MEASUREMENT — `InlineMeasureBody` / `RegcallMeasureBody` counting
+makes-a-call, early-exit and addr-taken-param over the IR. No value tracking,
+no choke point for accumulator writes. **The blocker is unchanged.**
+
+Split out as [[feature-opt-accumulator-value-tracker]] so it can be ranked, and
+because it unblocks more than this pass (the "dead store to hidden temps" item
+on the umbrella needs the same fact). `blocked-by:` added above.

@@ -31,7 +31,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-star-args-kwargs | N | 50 | feature | nilpy: *args / **kwargs in a def signature | — |
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 
-## blocked (8)
+## blocked (9)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -41,6 +41,7 @@ lives in git, not in a timestamp._
 | feature-esp-peripheral-callback-api | S | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-lib-pxxpdf-reportlab-compat | B | 50 | feature | pxxpdf — pxx pdfgen-backed, reportlab-compatible PDF library (nilpy) | decide-pxxpdf-ticket-obsolete |
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | — |
+| feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
@@ -189,13 +190,13 @@ lives in git, not in a timestamp._
 | feature-nilpy-thirdparty-libraries-as-targets | N | 60 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
 | feature-nilpy-tkinter-facade | N | 50 | feature | nilpy: tkinter-shaped façade over lib/pcl/tk.pas — widget objects, kwargs, command callbacks | feature-nilpy-star-args-kwargs |
 | feature-nilpy-yield-outside-a-for-loop | N | 35 | feature | `yield` only works inside a `for` — a while-loop generator does not compile | — |
+| feature-opt-accumulator-value-tracker | O | 58→60 | feature | The register-value scaffold two -O passes are blocked on: a single choke point for every write to the accumulator, so a 'rax currently holds symbol S' fact can be maintained without a silent-miscompile risk. Today rax is written from hundreds of scattered raw EmitB sites. | — |
 | feature-opt-alloc-intent-hint | O | 25 | feature | Allocation-intent hint: tell the RTL growth policy how a buffer will be used | — |
 | feature-opt-complex-packed-double | O | 35 | feature | Complex as a packed-double XMM value (SSE2/SSE3) | — |
 | feature-opt-float-register-temporaries | O | 20 | feature | float kernels: -O3 now 1.97x vs FPC (was 4.2x); residual = the rax value model — multi-session xmm-resident rewrite | — |
 | feature-opt-heap-per-thread-cache | O | 55 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-opt-rtti-emit-on-use | O | 40 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
-| feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | — |
 | feature-parallel-load-sampler-refine | B | 20 | feature | Parallel load sampler — refinements (ramp/EMA, BSD/cgroup) | feature-os-targets-bsd-mac |
 | feature-pascal-asmmode-directive-tolerance | A | 50 | feature | Accept `{$asmMode default}` (and other non-intel asmmode values) | — |
 | feature-pascal-builtin-tobject-class | A | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | — |
@@ -1664,6 +1665,7 @@ lives in git, not in a timestamp._
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 65] [T] task-t-worktree-is-not-current-state
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
+- [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [N] bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip
 - [p 60] [N] bug-nilpy-from-import-as-alias-is-discarded
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
@@ -1676,7 +1678,6 @@ lives in git, not in a timestamp._
 - [p 60] [A] feature-inline-asm-xtensa
 - [p 60] [N] feature-nilpy-arithmetic-ordering-dunders
 - [p 60] [N] feature-nilpy-thirdparty-libraries-as-targets
-- [p 60] [O] feature-opt-store-reload-elimination
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
 - [p 60] [P] feature-pascal-corpus-oop
 - [p 60] [T] feature-t-bench-hardware-provenance
@@ -1863,6 +1864,7 @@ lives in git, not in a timestamp._
 - **1** — feature-nilpy-runtime-dunder-dispatch-on-variants
 - **1** — feature-nilpy-star-args-kwargs
 - **1** — feature-nilpy-tkinter-facade
+- **1** — feature-opt-accumulator-value-tracker
 - **1** — feature-os-targets-bsd-mac
 - **1** — feature-pcl-win32-widgetset
 - **1** — feature-port-freebsd-native
