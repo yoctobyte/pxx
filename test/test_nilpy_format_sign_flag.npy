@@ -97,3 +97,17 @@ try:
 except ValueError:
     print("string spec ValueError caught")
 print("still running")
+
+# The %-style operator translates into the {} spec grammar, so it must carry the
+# flags across. It CONSUMED '+' and ' ' without recording them ("%+d" % 42 gave
+# 42, not +42 -- silently dropping a flag that decides what is printed), and '#'
+# was not a flag there at all so it raised.
+# bug-nilpy-percent-format-drops-the-sign-and-alt-flags
+print("%+d|%+d|% d|" % (n, -n, n))
+print("%-+8d|" % n)
+print("%#x|%#o|%#X|" % (n, n, n))
+print("%#010x|" % n)
+print("%c%c%c" % (72, 105, 33))
+print("%05.2f|%+.3f|%-10.2f|" % (fl, fl, fl))
+print("%s=%d (%x)" % (s, n, n))
+print("%d%%" % n)

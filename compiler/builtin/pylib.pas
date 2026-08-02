@@ -6610,9 +6610,9 @@ end;
 
 function pypercent_format(const fmt: AnsiString; const args: Variant): AnsiString;
 var i, width, prec, argi, nargs: Integer;
-    zero, leftAlign, hasPrec: Boolean;
+    zero, leftAlign, hasPrec, alt: Boolean;
     outS, spec: AnsiString;
-    conv: Char;
+    conv, signCh: Char;
     lst: TPyList;
     cur: Variant;
 begin
@@ -6649,10 +6649,21 @@ begin
     width := 0;
     prec := 0;
     hasPrec := False;
-    while (i <= Length(fmt)) and ((fmt[i] = '-') or (fmt[i] = '0') or (fmt[i] = '+') or (fmt[i] = ' ')) do
+    signCh := #0;
+    alt := False;
+    { The flag loop CONSUMED '+' and ' ' without recording them, so `"%+d" % n`
+      printed 42 rather than +42 — silently dropping a flag that decides what is
+      printed. '#' was not in the set at all, so it fell through to the
+      conversion char and raised. Both are now carried into the {}-spec below,
+      which learned them alongside
+      (bug-nilpy-percent-format-drops-the-sign-and-alt-flags). }
+    while (i <= Length(fmt)) and
+          ((fmt[i] = '-') or (fmt[i] = '0') or (fmt[i] = '+') or (fmt[i] = ' ') or (fmt[i] = '#')) do
     begin
       if fmt[i] = '-' then leftAlign := True
-      else if fmt[i] = '0' then zero := True;
+      else if fmt[i] = '0' then zero := True
+      else if fmt[i] = '#' then alt := True
+      else signCh := fmt[i];
       Inc(i);
     end;
     while (i <= Length(fmt)) and (fmt[i] >= '0') and (fmt[i] <= '9') do
@@ -6693,10 +6704,14 @@ begin
     { translate into the {}-spec grammar and reuse its formatter }
     spec := '';
     if leftAlign then spec := '<';
+    { grammar order is [align][sign][#][0][width] — see pyformat_of }
+    if signCh <> #0 then spec := spec + signCh;
+    if alt then spec := spec + '#';
     if zero and (not leftAlign) then spec := spec + '0';
     if width > 0 then spec := spec + pystr_of(Int64(width));
     case conv of
       'd', 'i', 'u': spec := spec + 'd';
+      'c': spec := spec + 'c';
       'x': spec := spec + 'x';
       'X': spec := spec + 'X';
       'o': spec := spec + 'o';

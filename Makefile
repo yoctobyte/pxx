@@ -1135,7 +1135,7 @@ test-nilpy: $(COMPILER)
 	# between the sign and the digits (+00042) and INSIDE the base prefix
 	# (0x0000002a). The string overload also still HALTED on a bad spec.
 	./$(COMPILER) test/test_nilpy_format_sign_flag.npy /tmp/test_nilpy_fsign26
-	test "$$(/tmp/test_nilpy_fsign26)" = "$$(printf '%b' '+42\n-42\n42\n-42\n 42\n-42\n+0\n 0\n+42\n-42\n  +42|\n42++++++|\n++++++42|\n+++42+++|\n+00042\n-00042\n 00042\n+3.14\n-3.14\n 3.14\n     +3.14|\n+000003.14\n+1,234,567\n-1,234,567\n+3.14\n+2a\n+101010\n+42\n+3.1\n 42\n0x2a\n0X2A\n0o52\n0b101010\n0x0\n-0x2a\n0x0000002a\n-0x000002a\n      0x2a|\n2a########|\n+0x2a\n0x12d687\n0x2a\n1_234_567\n-1_234_567\n42\n1_234_567\n+1_234_567\nA\n*\nab\nabcdef\n|\nabc     |\n     abc|\nstring spec ValueError caught\nstill running')"
+	test "$$(/tmp/test_nilpy_fsign26)" = "$$(printf '%b' '+42\n-42\n42\n-42\n 42\n-42\n+0\n 0\n+42\n-42\n  +42|\n42++++++|\n++++++42|\n+++42+++|\n+00042\n-00042\n 00042\n+3.14\n-3.14\n 3.14\n     +3.14|\n+000003.14\n+1,234,567\n-1,234,567\n+3.14\n+2a\n+101010\n+42\n+3.1\n 42\n0x2a\n0X2A\n0o52\n0b101010\n0x0\n-0x2a\n0x0000002a\n-0x000002a\n      0x2a|\n2a########|\n+0x2a\n0x12d687\n0x2a\n1_234_567\n-1_234_567\n42\n1_234_567\n+1_234_567\nA\n*\nab\nabcdef\n|\nabc     |\n     abc|\nstring spec ValueError caught\nstill running\n+42|-42| 42|\n+42     |\n0x2a|0o52|0X2A|\n0x0000002a|\nHi!\n03.14|+3.142|3.14      |\nabcdef=42 (2a)\n42%')"
 	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
 	# key function had no overload to bind to (dict alone and list+key both worked)
 	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26
