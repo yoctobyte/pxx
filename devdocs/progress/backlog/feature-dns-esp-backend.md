@@ -1,6 +1,6 @@
 ---
 track: B
-prio: 20
+prio: 35
 type: feature
 ---
 
@@ -17,11 +17,28 @@ ESP-IDF/lwIP exposes its own resolver (`dns_gethostbyname` / lwIP's
 holds the DHCP-supplied nameservers and the lwIP DNS cache, so going through it
 is both cheaper and more correct than re-deriving configuration.
 
-## Why it is low priority
+## Correction 2026-08-02 — this is an ENABLER, not an optimisation
 
-`dns_wire` already works on ESP in principle — it is pure Pascal over PAL — so
-this is an optimisation and an integration nicety, not an enabler. Nothing is
-blocked on it. Ranked below [[feature-dns-libc-backend]] accordingly.
+Filed claiming "`dns_wire` already works on ESP in principle — it is pure Pascal
+over PAL — so this is an optimisation and an integration nicety, not an enabler.
+Nothing is blocked on it." **That looks wrong**, and the open question below is
+how it surfaced — it was checked rather than left hanging:
+
+- `lib/rtl/dns_config.pas` has **zero** ESP handling (measured: no
+  `PXX_PAL_ESP_IDF_TARGET` / `ESP_IDF` reference in it or in
+  `dns_wire_blocking.pas`).
+- `dns_wire` gets its nameservers from `/etc/resolv.conf` through the PAL.
+  ESP-IDF does provide a VFS, so `PalOpen` itself would work — but nothing in
+  this tree ever creates such a file on ESP, and an ESP device's DHCP-supplied
+  nameservers live inside lwIP, not on a filesystem.
+
+So on ESP `dns_wire` should reach `DNS_ERR_NOCONFIG` for every name, meaning DNS
+does not work there at all and this ticket is the enabler. Re-ranked 20 → 35.
+
+**Not run-verified.** This is read off the code and the ESP backend, not measured
+on hardware — there is no ESP runner here. Confirm it on a device before trusting
+it, because the point of this note is that the original claim was equally
+plausible and equally unchecked.
 
 The one thing that IS ESP-specific and already handled: `PalConnectUnix` reports
 `PAL_NET_ENOTSUP` on the ESP backend, because lwIP has no filesystem sockets, so
@@ -36,11 +53,18 @@ fallback, only `DnsResolveHost` / `DnsResolveHost6` dispatch, and selecting two
 backends at once is a compile-time error (the guard already exists — extend it
 to the new define).
 
-Sequencing note: unlike the other backends this one cannot fall back to
-`dns_wire` for *configuration* reasons — on ESP there is no `/etc/resolv.conf`
-at all, so `dns_wire`'s config layer needs a story on that target regardless of
-this ticket. Worth checking before starting whether `dns_config` already has
-one, since if it does not, this ticket is really two.
+Sequencing note, now answered: `dns_config` has no ESP story, so **this ticket
+is really two** and should be split when picked up:
+
+1. **Where do nameservers come from on ESP?** Either a `dns_config` source that
+   reads lwIP's DHCP-supplied servers, or an app-supplied resolv.conf-shaped
+   text. This half also fixes `dns_wire` on ESP and is worth doing even if the
+   lwIP resolver backend never lands.
+2. **The `dns_esp` backend proper** — hand the name to lwIP's own resolver so it
+   uses its cache and its DHCP servers.
+
+Doing (2) without (1) leaves `dns_wire` broken on ESP as the *fallback* path,
+which is what every build without `-dPXX_DNS_ESP` gets.
 
 ## Gate
 

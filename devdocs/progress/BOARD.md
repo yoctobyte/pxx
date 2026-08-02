@@ -134,7 +134,7 @@ lives in git, not in a timestamp._
 | feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | feature-nilpy-break-continue, feature-nilpy-tk-binding |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 50 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade |
-| feature-dns-esp-backend | B | 20 | feature | `dns_esp` — the lwIP resolver on ESP targets | — |
+| feature-dns-esp-backend | B | 35 | feature | `dns_esp` — the lwIP resolver on ESP targets | — |
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-dynamic-include-paths-config | A | 45 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | 45 | feature | Dynamic soname discovery (no execve) | — |
@@ -1746,6 +1746,7 @@ lives in git, not in a timestamp._
 - [p 35] [N] bug-nilpy-pypow-integer-overflow-does-not-promote
 - [p 35] [N] bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash
 - [p 35] [C] feature-c-esp-conformance-coverage
+- [p 35] [B] feature-dns-esp-backend
 - [p 35] [A] feature-nested-routine-fixed-array-capture
 - [p 35] [A] feature-nilpy-arc-cross-parity
 - [p 35] [N] feature-nilpy-multi-arg-callback-bridges
@@ -1779,7 +1780,6 @@ lives in git, not in a timestamp._
 - [p 20] [N] bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip
 - [p 20] [P] compat-pascal-method-impl-without-declaration
 - [p 20] [A] feature-cli-widgetset-flag
-- [p 20] [B] feature-dns-esp-backend
 - [p 20] [B] feature-networking
 - [p 20] [O] feature-opt-float-register-temporaries
 - [p 15] [A] compat-pascal-binop-operand-eval-order
