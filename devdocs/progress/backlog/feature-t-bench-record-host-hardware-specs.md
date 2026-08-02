@@ -23,6 +23,18 @@ xeon     956 rows   2026-07-31 .. 2026-08-01
 first. Nothing in the data explains the 40% jump, so anyone reading the series
 — human or chart — sees what looks like a large regression on 2026-07-31.
 
+## The specs, for now (read off the machines 2026-08-02)
+
+| host | CPU | cores | RAM |
+| --- | --- | --- | --- |
+| `borg` | Intel Core i7-6700 @ 3.4 GHz (turbo 4.0) | 4C/8T, Skylake | 16 GB DDR4-2133 |
+| `xeon` | Intel Xeon E5-2620 v2 @ 2.1 GHz (turbo 2.6) | 6C/12T, Ivy Bridge-EP | 64 GB DDR3-1333 ECC |
+
+That makes the observed ~1.45 ratio legible: roughly 1.5× on clock before IPC
+differences, against half the memory bandwidth. Recorded here so the knowledge
+is not lost, but it is hand-gathered — the ask below is for the watcher to
+collect it, not for someone to keep this table current.
+
 ## Ask
 
 Record the host's hardware alongside its identity, once per host rather than
