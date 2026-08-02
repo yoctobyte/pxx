@@ -31,10 +31,11 @@ lives in git, not in a timestamp._
 | feature-nilpy-star-args-kwargs | N | 50 | feature | nilpy: *args / **kwargs in a def signature | — |
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 
-## blocked (7)
+## blocked (8)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-nilpy-class-attribute-unreachable-through-the-class-name | N | 65 | bug | `C.attr` on a class attribute: "class method not found" | decide-nilpy-class-attribute-instance-read-model |
 | bug-nilpy-dunders-not-dispatched-through-containers | N | 60 | bug | NilPy: __repr__/__str__ of a class instance held in a container silently print EMPTY; ordering/sorted raise — no runtime dunder dispatch on a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | bug-nilpy-float-repr-not-shortest-roundtrip | N | 70 | bug | NilPy float repr is fixed-precision, not CPython's shortest round-trip | — |
 | feature-esp-peripheral-callback-api | S | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
@@ -66,7 +67,6 @@ lives in git, not in a timestamp._
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-bytearray-constructor-only-accepts-a-length | N | 45 | bug | bytearray() only has () and (Integer) overloads — bytearray(b\"abc\") and bytearray([1,2,3]) are compile errors, so a bytearray cannot be built from data | — |
 | bug-nilpy-chained-assign-power-assign-and-semicolon-statements | N | 40 | bug | Three statement-level forms don't parse: chained assignment `a = b = 5`, `**=`, and semicolon-separated statements on one line — all loud | — |
-| bug-nilpy-class-attribute-unreachable-through-the-class-name | N | 65 | bug | `C.attr` on a class attribute: "class method not found" | — |
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
 | bug-nilpy-dataclass-no-generated-eq | N | 30 | bug | `@dataclass` gets no generated `__eq__` — compares by identity instead of fields | — |
 | bug-nilpy-defaulted-param-before-star-args-rejects-short-call | N | 60 | bug | `def f(a, b=2, *rest)` cannot be called as `f(1)` | — |
@@ -119,6 +119,7 @@ lives in git, not in a timestamp._
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | decide-abi-portable-vs-target-split | U | 60 | decide |  | — |
+| decide-nilpy-class-attribute-instance-read-model | U | 65 | decide | How should `inst.attr` read a CLASS attribute? Full Python fall-through with per-instance overrides (correct, invasive), or a whole-program static specialisation using the PyDynAttrEverAssigned-style scan already in the frontend (cheaper, correct for programs that never override per instance)? Blocks bug-nilpy-class-attribute-unreachable-through-the-class-name. | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-nilpy-runtime-dunder-dispatch-mechanism | U | 60 | decide | Decide: how should NilPy dispatch dunders on an instance whose class is known only at RUN time (container elements)? | — |
 | decide-nilpy-runtime-dunder-dispatch-strategy | U | 70 | decide | Decide: how should NilPy dispatch dunders on a Variant-held instance? | — |
@@ -1654,7 +1655,7 @@ lives in git, not in a timestamp._
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] regression-optdiff-shard8-12
-- [p 65] [N] bug-nilpy-class-attribute-unreachable-through-the-class-name
+- [p 65] [U] decide-nilpy-class-attribute-instance-read-model (unblocks 1)
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
@@ -1851,6 +1852,7 @@ lives in git, not in a timestamp._
 - **2** — decide-nilpy-set-as-a-distinct-type-or-a-list
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-pascal-procvar-in-value-context-takes-address-instead-of-calling
+- **1** — decide-nilpy-class-attribute-instance-read-model
 - **1** — decide-nilpy-parallel-capture-semantics
 - **1** — decide-pxxpdf-ticket-obsolete
 - **1** — feature-inline-asm-xmm-operands

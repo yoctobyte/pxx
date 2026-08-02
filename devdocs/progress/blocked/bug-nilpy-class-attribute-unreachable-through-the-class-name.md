@@ -2,6 +2,8 @@
 track: N
 prio: 65
 type: bug
+status: blocked
+blocked-by: decide-nilpy-class-attribute-instance-read-model
 ---
 
 # `C.attr` on a class attribute: "class method not found"
@@ -260,3 +262,16 @@ literal and non-literal branches each call `AddUField` and advance `curOff`
 independently. Plausibly the same layout disagreement seen from another side;
 fixing the copy-at-construction model without understanding it risks baking the
 bug in.
+
+## 2026-08-02 — moved to blocked/, the fork is now a Track U ticket
+
+Picked up, re-read end to end, and NOT re-attempted: the write-up's own
+conclusion is that the copy-at-construction read model has to change first, and
+*how* it should change is a design fork with materially different cost, not
+something to settle by guessing. Filed
+[[decide-nilpy-class-attribute-instance-read-model]] — full Python fall-through
+with per-instance overrides (what this ticket recommends) versus a whole-program
+static specialisation reusing the `PyDynAttrEverAssigned`-style module scan the
+frontend already leans on. Recommendation is on that ticket.
+
+Nothing was changed in the compiler for this ticket.
