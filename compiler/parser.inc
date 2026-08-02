@@ -14353,14 +14353,32 @@ begin
       own augmented path builds for a bare name and is measured correct — the
       binop goes through the variant-aware dispatch instead of a raw word
       update. `+` keeps the AUGADD mark so a variant holding a LIST still extends
-      IN PLACE (bug-nilpy-augmented-add-on-variant-list-is-not-in-place). }
-    if NilPyUserCode and (IntToTypeKind(ASTTk[left]) = tyVariant) then
+      IN PLACE (bug-nilpy-augmented-add-on-variant-list-is-not-in-place).
+
+      EITHER side, not just the lvalue: the mirror case is an INT field with a
+      variant OPERAND (`def add(self, v): self.n += v`, v an unannotated
+      parameter), where the raw update added the variant's low word read as a
+      truthy 1 — `C(10).add(5)` returned 11
+      (bug-nilpy-augmented-assign-of-a-variant-param-to-an-int-field-adds-one).
+      Same missing conversion seen from the other end, and the same explicit
+      rewrite fixes it; the binop's own typing then widens as it does for a
+      written-out `self.n = self.n + v`. }
+    if NilPyUserCode and ((IntToTypeKind(ASTTk[left]) = tyVariant) or
+                          (IntToTypeKind(ASTTk[right]) = tyVariant)) then
     begin
       node := AllocNode(AN_BINOP);
       ASTIVal[node] := caOp;
       ASTLeft[node] := left; ASTRight[node] := right;
-      ASTTk[node] := Ord(tyVariant);
-      if caOp = Ord(tkPlus) then ASTSLen[node] := PY_BINOP_AUGADD;
+      { WIDEN the two operand types, exactly as NilPy's own augmented path does
+        for a bare name. Taking the lvalue's type instead makes an int-typed
+        binop over a VARIANT operand, which reads the variant's 16-byte slot as
+        a machine word and yields a pointer; taking tyVariant unconditionally
+        would box the result into a scalar field. The widen is what the written
+        out `self.n = self.n + v` gets, and that spelling is measured correct. }
+      ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[left]),
+                                 IntToTypeKind(ASTTk[right])));
+      if (caOp = Ord(tkPlus)) and (IntToTypeKind(ASTTk[left]) = tyVariant) then
+        ASTSLen[node] := PY_BINOP_AUGADD;
       caRhs := node;
       node := AllocNode(AN_ASSIGN);
       ASTLeft[node] := left; ASTRight[node] := caRhs;

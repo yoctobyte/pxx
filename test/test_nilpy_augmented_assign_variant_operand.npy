@@ -1,0 +1,67 @@
+# bug-nilpy-augmented-assign-of-a-variant-param-to-an-int-field-adds-one
+#
+# The mirror image of the variant-FIELD bug: here the field is a real int (the
+# ctor parameter is annotated) and the OPERAND is the variant — an unannotated
+# method parameter. `C(10).add(5)` returned 11, because the raw read-modify-write
+# added the variant's low word read as a truthy 1.
+#
+# Same missing conversion, seen from the other end, and the same explicit
+# `lv = lv <op> rhs` rewrite fixes it — so the condition is "EITHER side is a
+# variant", not "the lvalue is".
+#
+# The binop must be typed by WIDENING the two operands, which is what the
+# written-out spelling gets. Typing it from the lvalue instead makes an int-typed
+# binop over a 16-byte variant slot and yields a pointer (measured: every value
+# on the first line came back as 140733931812968-ish). That is the trap in this
+# fix and the reason the annotated control and the both-variant case are both
+# here.
+
+class C:
+    def __init__(self, n: int, s: str):
+        self.n = n
+        self.s = s
+    def add(self, v):        # unannotated -> variant operand
+        self.n += v
+        return self.n
+    def sub(self, v):
+        self.n -= v
+        return self.n
+    def mul(self, v):
+        self.n *= v
+        return self.n
+    def addA(self, v: int):  # annotated control
+        self.n += v
+        return self.n
+    def cat(self, v):
+        self.s += v
+        return self.s
+    def explicit(self, v):
+        self.n = self.n + v
+        return self.n
+
+c = C(10, "x")
+print(c.add(5), c.sub(2), c.mul(3), c.addA(1), c.explicit(4))
+print(c.cat("y"))
+
+# plain locals with a variant operand (were always correct)
+def loc(a, v):
+    a += v
+    a -= 1
+    a *= 2
+    return a
+print(loc(10, 5))
+
+# accumulation across calls
+d = C(0, "")
+for i in [1, 2, 3]:
+    d.add(i)
+print(d.n)
+
+# a variant FIELD with a variant operand — both sides variant
+class V:
+    def __init__(self, n):
+        self.n = n
+    def add(self, v):
+        self.n += v
+        return self.n
+print(V(10).add(5))
