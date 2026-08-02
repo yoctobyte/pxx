@@ -2,6 +2,7 @@
 track: N
 prio: 70
 type: regression
+status: done
 ---
 
 # test-core RED: `test_nilpy_dataclass_dict_factory.npy`
@@ -67,3 +68,33 @@ Build a fixedpoint at `ef73cf545` and at its parent and run
 class-attribute registration change is it; the ticket that commit belongs to
 ([[bug-nilpy-class-attribute-unreachable-through-the-class-name]]) is the place
 to record the finding.
+
+
+## Resolved 2026-08-02 — commit e1e9ea07a
+
+The triage was right on every point: `2fbb5a270` is innocent, and `ef73cf545`
+was the only code change in the range and was the cause. Mine.
+
+That commit generalised the class-attribute branches in `PyRegisterClassMembers`
+to match `name : ann = value` — which is precisely how a `@dataclass` field is
+written. Those branches run BEFORE the `isDC` ones, so a dataclass's fields were
+registered as ordinary class attributes and never reached the branches that
+record their defaults into the `PyDc*` tables and build the generated ctor. Hence
+the segfault, and hence a `field(default_factory=dict)` test being the one to
+catch it.
+
+Fix: the annotated shape is a PLAIN class's attribute only. A dataclass keeps the
+pre-existing unannotated-only rule, so its behaviour is exactly what it was.
+
+`test/test_nilpy_annotated_class_attribute.npy` now carries a `@dataclass` with
+`str` / `float` / `default_factory=list` fields as a permanent control — the
+interaction is pinned rather than remembered.
+
+Gate: `gate.sh quick` GREEN, self-host fixedpoint byte-identical, both dataclass
+tests green.
+
+Filed by the Track B agent rather than by me; the range table saved the next
+reader a bisect against a tickets-only commit.
+
+## Log
+- 2026-08-02 — resolved, commit e1e9ea07a.
