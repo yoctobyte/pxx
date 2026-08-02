@@ -3,8 +3,6 @@ track: N
 prio: 70
 type: bug
 summary: "Every non-constant parameter default silently becomes None on the ordinary call path — `def f(b=[])` gives b=None, and so does `def f(b=w)` for any name w. Only the closure-VALUE path evaluates defaults at def time."
-status: working
-owner: claude-AN
 ---
 
 # Non-constant parameter defaults silently become `None`

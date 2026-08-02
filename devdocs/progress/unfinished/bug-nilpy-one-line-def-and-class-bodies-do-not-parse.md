@@ -2,8 +2,6 @@
 track: N
 prio: 60
 type: bug
-status: working
-owner: claude-AN
 ---
 
 # One-line `def` and `class` bodies do not parse
