@@ -3,6 +3,8 @@ track: N
 prio: 70
 type: bug
 summary: "`f() and x` / `f() or x` call f() TWICE — the left operand's side effects are duplicated. Silent, no error. Root cause read out of PyMakeBoolOpValue: the same AST node is used as both the condition and an arm, and the AST is a TREE"
+status: done
+owner: claude-AN-night
 ---
 
 # `and` / `or` evaluate the LEFT operand twice
@@ -140,3 +142,6 @@ the NESTED case `a and (b() or c())` with `a` falsy — asserting `b()` does not
 run at all — the same nested shape inside a comprehension filter and inside a
 lambda, and a right-operand call to confirm it is still evaluated exactly once
 when reached and zero times when short-circuited.
+
+## Log
+- 2026-08-02 — resolved, commit HEAD.

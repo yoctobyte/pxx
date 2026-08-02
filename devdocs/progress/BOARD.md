@@ -60,7 +60,6 @@ lives in git, not in a timestamp._
 | bug-cfront-sizeof-unparenthesised-subscript | C | 50 | bug | `sizeof a[0]` is a parse error — the array-length idiom does not compile | — |
 | bug-cfront-spurious-dt-needed-libc-with-no-imports | C | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
-| bug-nilpy-and-or-evaluates-the-left-operand-twice | N | 70 | bug | `f() and x` / `f() or x` call f() TWICE — the left operand's side effects are duplicated. Silent, no error. Root cause read out of PyMakeBoolOpValue: the same AST node is used as both the condition and an arm, and the AST is a TREE | — |
 | bug-nilpy-bare-dot-float-literals-do-not-lex | N | 35 | bug | `.5` and `5.` do not lex — the shared number scanner requires a digit on BOTH sides of the dot, which is right for Pascal and wrong for Python | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
@@ -82,6 +81,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
 | bug-nilpy-int-prints-as-float-when-the-name-is-widened-later | N | 50 | bug | An int prints as `5.0` because the SAME NAME is assigned a float later in the file | — |
 | bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
+| bug-nilpy-lambda-body-expression-around-a-call-cannot-call-a-def | N | 55 | bug | A lambda whose body is an EXPRESSION AROUND a call (`lambda: f() or 4`, `lambda: f() + 1`) is not lifted — it falls to the pyeval interpreter, which cannot call a compiled def, so it dies at RUN time with `pyeval: unknown call: f()`. A bare `lambda: f()` works. | — |
 | bug-nilpy-list-mutators-return-self-instead-of-none | N | 40 | bug | list.append/extend/sort/reverse return Self, so `x = l.sort()` yields the LIST where Python yields None — silent, and the return is load-bearing for the comprehension desugar | — |
 | bug-nilpy-list-of-custom-objects-loses-repr-str | N | 40 | bug | A user class instance boxed in a list/dict prints as empty, losing `__repr__`/`__str__` | — |
 | bug-nilpy-list-sort-ignores-lt-dunder-on-objects | N | 35 | bug | `list.sort()` on user objects with `__lt__` raises a runtime TypeError instead of using it | — |
@@ -365,7 +365,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1239)
+## done (1240)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -727,6 +727,7 @@ lives in git, not in a timestamp._
 | bug-nested-dynarray-cross-segfault | A | 50 | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
 | bug-nested-proc-sibling-call-unresolved | A | 50 | bug | Nested procedure can't call its sibling (and capturing self-recursion breaks) | — |
 | bug-nilpy-ambiguous-dynamic-field-needs-runtime-dispatch | N | 70 | bug | `.field` on a dynamically-typed value is refused when two classes disagree | — |
+| bug-nilpy-and-or-evaluates-the-left-operand-twice | N | 70 | bug | `f() and x` / `f() or x` call f() TWICE — the left operand's side effects are duplicated. Silent, no error. Root cause read out of PyMakeBoolOpValue: the same AST node is used as both the condition and an arm, and the AST is a TREE | — |
 | bug-nilpy-annotated-assignment-single-token-only | N | 60 | bug | NilPy: an annotated assignment only accepted a SINGLE-TOKEN annotation | — |
 | bug-nilpy-annotated-module-global-invisible-in-kwarg | N | 55 | bug | A module-level ANNOTATED global is not visible in a keyword argument | — |
 | bug-nilpy-arithmetic-operator-dunders-not-dispatched | N | 55 | bug | `Vector(1,2) + Vector(3,4)` silently computed garbage — arithmetic dunders never dispatched | — |
@@ -1651,7 +1652,6 @@ lives in git, not in a timestamp._
 - [p 80] [O] bug-a-o3-inline-retention-substitutes-a-global-read-across-a-call
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
-- [p 70] [N] bug-nilpy-and-or-evaluates-the-left-operand-twice
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] regression-optdiff-shard8-12
 - [p 65] [N] bug-nilpy-class-attribute-unreachable-through-the-class-name
@@ -1690,6 +1690,7 @@ lives in git, not in a timestamp._
 - [p 55] [C] bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [N] bug-nilpy-immediately-invoked-lambda-is-not-callable
+- [p 55] [N] bug-nilpy-lambda-body-expression-around-a-call-cannot-call-a-def
 - [p 55] [N] bug-nilpy-one-line-def-suite-does-not-parse
 - [p 55] [N] bug-nilpy-range-negative-runtime-step-yields-empty
 - [p 55] [N] bug-nilpy-unary-numeric-dunders-return-raw-handle

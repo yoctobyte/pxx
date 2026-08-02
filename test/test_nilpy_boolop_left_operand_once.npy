@@ -1,0 +1,74 @@
+# bug-nilpy-and-or-evaluates-the-left-operand-twice
+#
+# `a and b` / `a or b` lower to a ternary in which `a` appears BOTH inside the
+# condition and as an arm. The AST is a tree, so `a` was emitted twice and its
+# side effects ran twice — silently: nothing printed wrong, only the counter
+# moved. Diffed against CPython (tools/pydiff.py).
+#
+# The nested case (C/D below) is the required gate line: the binding must NOT be
+# hoisted to statement level, or the outer `and` would stop short-circuiting and
+# run bb() even when the left side is falsy.
+
+n = 0
+def bump():
+    global n
+    n += 1
+    return 0
+x = bump() and 5
+print("A n =", n, "x =", x)
+
+m = 0
+def bump2():
+    global m
+    m += 1
+    return 7
+y = bump2() or 5
+print("B m =", m, "y =", y)
+
+def side(v, tag):
+    print("eval", tag)
+    return v
+
+side(False, "a") and side(True, "b")
+side(True, "c") or side(False, "d")
+
+# nested: outer short-circuit must still skip b()
+c1 = 0
+c2 = 0
+def bb():
+    global c1
+    c1 += 1
+    return 0
+def cc():
+    global c2
+    c2 += 1
+    return 3
+z = 0 and (bb() or cc())
+print("C c1 =", c1, "c2 =", c2, "z =", z)
+z2 = 1 and (bb() or cc())
+print("D c1 =", c1, "c2 =", c2, "z2 =", z2)
+
+# right operand evaluated exactly once when reached, zero when skipped
+r = 0
+def rr():
+    global r
+    r += 1
+    return 9
+q = 0 or rr()
+print("E r =", r, "q =", q)
+q2 = 0 and rr()
+print("F r =", r, "q2 =", q2)
+
+# comprehension filter
+k = 0
+def kk(v):
+    global k
+    k += 1
+    return v
+lst = [i for i in [1, 2, 3] if kk(i) and i > 1]
+print("G k =", k, "lst =", lst)
+
+# strings and containers keep operand semantics
+print("I", "" or "default", "x" and "y", [] or [1], [2] and [3])
+s = ""
+print("J", s or "fallback")

@@ -1827,7 +1827,6 @@ end;
 
 function PyBoolOpReturnsOperand(a, b: Integer): Boolean; forward;
 function PyMakeBoolOpValue(a, b: Integer; isOr: Boolean): Integer; forward;
-
 procedure PyParseBoolAnd;
 var left, right, node: Integer;
 begin
@@ -2045,11 +2044,44 @@ begin
             or (ta = tb);
 end;
 
+{ Can a local temp of this kind hold the left operand? Excludes the frozen
+  `tyString` (inline [N] storage, no handle slot — the ternary lowering has the
+  same carve-out) and anything the frontend has not typed yet. }
+function PyBoolOpBindableTk(tk: TTypeKind): Boolean;
+begin
+  Result := (tk = tyVariant) or (tk = tyClass) or (tk = tyAnsiString) or
+            (tk = tyBoolean) or PyIsIntLikeTk(tk) or TypeIsFloat(tk);
+end;
+
+{ Is re-evaluating this node free? Only for leaves. Anything else — a call, an
+  attribute read (a dict lookup or a property), a subscript (`__getitem__`) — is
+  bound to a temp first. }
+function PyBoolOpNeedsBind(n: Integer): Boolean;
+begin
+  Result := True;
+  if n < 0 then begin Result := False; Exit; end;
+  if (ASTKind[n] = AN_IDENT) or (ASTKind[n] = AN_INT_LIT) or
+     (ASTKind[n] = AN_STR_LIT) or (ASTKind[n] = AN_BOOL_LIT) or
+     (ASTKind[n] = AN_FLOAT_LIT) then
+    Result := False;
+end;
+
 { `a or b` as a value -> `a if truthy(a) else b`; `a and b` -> `b if truthy(a)
   else a`. Lowered to AN_TERNARY so ONLY the selected arm evaluates — Python
-  short-circuit. `a` appears in both the condition and an arm — fine for the
-  side-effect-free operands the corpus uses; a call with side effects would
-  double-evaluate (noted).
+  short-circuit.
+
+  `a` is referenced TWICE by that shape (once inside the condition, once as an
+  arm) and the AST is a TREE, so a node referenced twice is EMITTED twice:
+  `bump() and 5` called bump() twice — silent duplicated side effects, nothing
+  wrong printed (bug-nilpy-and-or-evaluates-the-left-operand-twice). So a
+  non-leaf `a` is bound to a hidden temp first and both references read the temp.
+
+  The binding is carried in the LEFT arm of an AN_COMMA that IS the condition,
+  NOT hoisted to statement level the way PyEvalOnce binds: the ternary lowers its
+  condition where the ternary sits, so the store lands inside whatever
+  conditional region encloses it. A statement-level hoist would leak the side
+  effect OUT of that region — in `x = a and (b() or c())` it would run `b()` even
+  when `a` is falsy, trading this bug for a worse one.
 
   A prior version used an eager pylib call (pyand_v/pyor_v) to get clean variant
   boxing, but that evaluated BOTH operands and so lost short-circuit — the common
@@ -2060,10 +2092,29 @@ end;
 function PyMakeBoolOpValue(a, b: Integer; isOr: Boolean): Integer;
 var condNode, thenNode, elseNode, pairNode, node: Integer;
     ta, tb: TTypeKind;
+    aSym, aUse, asgn, comma: Integer;
 begin
-  condNode := PyMakeTruthy(a);
-  if isOr then begin thenNode := a; elseNode := b; end
-  else begin thenNode := b; elseNode := a; end;
+  ta := IntToTypeKind(ASTTk[a]);
+  aUse := a;
+  if PyBoolOpNeedsBind(a) and PyBoolOpBindableTk(ta) then
+  begin
+    aSym := AllocVar(PyHiddenName('boolop'), ta);
+    Syms[aSym].RecName := ResolveNodeRec(a);
+    SymSyncTypeRef(aSym);
+    asgn := AllocNode(AN_ASSIGN);
+    ASTLeft[asgn] := PyMakeIdent(aSym);
+    ASTRight[asgn] := a;
+    aUse := PyMakeIdent(aSym);
+    comma := AllocNode(AN_COMMA);
+    ASTLeft[comma] := asgn;
+    ASTRight[comma] := PyMakeTruthy(PyMakeIdent(aSym));
+    ASTTk[comma] := ASTTk[ASTRight[comma]];
+    condNode := comma;
+  end
+  else
+    condNode := PyMakeTruthy(a);
+  if isOr then begin thenNode := aUse; elseNode := b; end
+  else begin thenNode := b; elseNode := aUse; end;
   pairNode := AllocNode(AN_PAIR);
   ASTLeft[pairNode] := thenNode;
   ASTRight[pairNode] := elseNode;

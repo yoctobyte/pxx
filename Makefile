@@ -522,6 +522,8 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_augvarfield26 | diff -u test/test_nilpy_augmented_assign_variant_field.expected -
 	./$(COMPILER) test/test_nilpy_bool_operand_and_or.npy /tmp/test_nilpy_boolop26
 	/tmp/test_nilpy_boolop26 | diff -u test/test_nilpy_bool_operand_and_or.expected -
+	./$(COMPILER) test/test_nilpy_boolop_left_operand_once.npy /tmp/test_nilpy_boolonce26
+	/tmp/test_nilpy_boolonce26 | diff -u test/test_nilpy_boolop_left_operand_once.expected -
 	./$(COMPILER) test/test_nilpy_star_args_is_a_tuple.npy /tmp/test_nilpy_stargstuple26
 	/tmp/test_nilpy_stargstuple26 | diff -u test/test_nilpy_star_args_is_a_tuple.expected -
 	./$(COMPILER) test/test_nilpy_unpack_keeps_class_identity.npy /tmp/test_nilpy_unpackid26
