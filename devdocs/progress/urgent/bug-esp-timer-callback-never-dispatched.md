@@ -84,6 +84,32 @@ windowed): the stock `examples/esp32/timer-c3` demo reports
   `.data 0x3fc8a318 0x5d0`, `.bss 0x3fc8ca58 0x251c`) — nothing at a fixed
   address, nothing obviously overlapping.
 
+## Sharper: the SDK is armed CORRECTLY, and only code BEFORE the start helps
+
+Two more measurements narrow this a lot.
+
+- **The stored period is right in the failing build.** `esp_timer_get_period`
+  on the failing timer returns `rc=0, period=100000` — exactly what was asked
+  for. Combined with `esp_timer_is_active` = true, the SDK's view of the timer
+  is completely correct while no callback arrives. Argument passing and arming
+  are both exonerated; the fault is purely in DISPATCH.
+- **Position matters, and "extra executed code" was too loose a summary.**
+  Refining the earlier finding:
+
+  | variant | where the extra code goes | ticks |
+  | --- | --- | --- |
+  | C | printf BEFORE `esp_timer_start_periodic` | 30 |
+  | G | different filler printf, same place | 29 |
+  | I | `esp_timer_get_period` + 2 printfs AFTER the start | **0** |
+  | H | a whole procedure that is never called | **0** |
+
+  So it is neither code size (H grows the image and changes nothing) nor
+  "anything that executes" (I executes more than G and still fails). What helps
+  is specifically code that runs **between creating the timer and starting it**.
+
+That combination — correct period, timer active, dispatch dead unless something
+happens before the start — is what the debugger should be pointed at.
+
 ## What that leaves
 
 The behaviour flips on an unrelated statement, so it is **layout-sensitive**:
