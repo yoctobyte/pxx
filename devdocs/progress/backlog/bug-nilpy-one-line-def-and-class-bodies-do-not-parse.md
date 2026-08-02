@@ -93,3 +93,28 @@ A `.npy` diffed against CPython covering: one-line `def` with a return, one-line
 `def` with a bare call, `class C: pass`, a one-line method inside a normal class
 body, an empty exception subclass (`class E(Exception): pass`), and the indented
 forms of each still working.
+
+## 2026-08-02 — also in an IMPORTED `.py` module, and the line number lies
+
+Re-sighted from a different direction (verifying imported-module scope for
+[[bug-nilpy-identifiers-are-case-insensitive]]), so it is not confined to the
+main `.npy`:
+
+```python
+# helper.py, imported by a .npy
+def get(): return "lower-get"
+```
+
+```
+Expected: newline, but got:  (Kind: 49, Line: 4)
+pascal26:4: error: unexpected token
+```
+
+Two things worth keeping when this is fixed:
+
+- The reported line is the **importing** file's numbering, not the module's, so
+  the error points at an unrelated line in a file that does not contain the
+  construct. That mis-attribution is worth a look on its own — it will make any
+  module-level syntax error hard to locate, not just this one.
+- Splitting the body onto its own indented line compiles and runs correctly, so
+  the module path is otherwise fine.
