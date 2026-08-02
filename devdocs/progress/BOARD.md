@@ -13,12 +13,11 @@ lives in git, not in a timestamp._
 | bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size | C | 85 | bug | `sizeof(p->arr)` returns the POINTER size, not the array size — silent buffer overflow | — |
 | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling | P | 80 | bug | A procedural variable in a value context takes its ADDRESS instead of calling it | — |
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
-| feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 
 ## unfinished (7)
 
@@ -71,7 +70,6 @@ lives in git, not in a timestamp._
 | bug-nilpy-chained-assign-power-assign-and-semicolon-statements | N | 40 | bug | Three statement-level forms don't parse: chained assignment `a = b = 5`, `**=`, and semicolon-separated statements on one line — all loud | — |
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
 | bug-nilpy-dataclass-no-generated-eq | N | 30 | bug | `@dataclass` gets no generated `__eq__` — compares by identity instead of fields | — |
-| bug-nilpy-defaulted-param-before-star-args-rejects-short-call | N | 60 | bug | `def f(a, b=2, *rest)` cannot be called as `f(1)` | — |
 | bug-nilpy-dict-mutation-during-iteration-is-unobserved-not-raised | N | 35 | bug | Mutating a dict while iterating it is silently unobserved; CPython raises RuntimeError 'dictionary changed size during iteration' | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-float-print-loses-precision-vs-cpython | N | 40 | bug | Float printing loses the last 1-2 significant digits vs CPython's shortest round-trip repr | — |
@@ -169,6 +167,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
+| feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-dataclass-expression-field-default | N | 40 | feature | A @dataclass field default may only be a scalar literal, field(default_factory=list/dict) or a zero-arg lambda. An expression (`x: int = 2 + 3`) is refused; a plain class attribute with the same initialiser is evaluated | — |
 | feature-nilpy-for-loop-getitem-protocol-fallback | N | 25 | feature | `for x in obj:` doesn't fall back to `__getitem__`/`__len__` for a custom container | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
@@ -367,7 +366,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1241)
+## done (1242)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -766,6 +765,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-container-literal-default-arg-segfaults | N | 65 | bug | `def f(a, b=[])` SEGFAULTS the moment the default is used as a container | — |
 | bug-nilpy-def-local-assignment-widens-module-global-to-variant | N | 70 | bug | NilPy: a name assigned as a LOCAL inside a def widens the same-named module global to tyVariant, killing its class identity and every compile-time dunder dispatch | — |
 | bug-nilpy-def-value-in-a-variable-is-not-callable | N | 75 | bug | A def stored in a NAME and then called SEGFAULTS | — |
+| bug-nilpy-defaulted-param-before-star-args-rejects-short-call | N | 60 | bug | `def f(a, b=2, *rest)` cannot be called as `f(1)` | — |
 | bug-nilpy-derived-tuple-loses-tupleness | N | 60 | bug | A derived tuple decayed into a list | — |
 | bug-nilpy-dict-equality-compares-identity | N | 70 | bug | `{"k": 1} == {"k": 1}` is False — dict equality compares identity, not value | — |
 | bug-nilpy-dict-from-pairs-and-bytes-decode-segfault | N | 70 | bug | NilPy: `dict([(\"a\",1)])[\"a\"]` and `\"abc\".encode().decode()` both SEGFAULT (exit 139, core dumped) on ordinary one-liners | bug-a-overload-resolution-ignores-class-identity |
@@ -1659,11 +1659,11 @@ lives in git, not in a timestamp._
 - [p 70] [T] regression-optdiff-shard8-12
 - [p 65] [U] decide-nilpy-class-attribute-instance-read-model (unblocks 1)
 - [p 65] [C] bug-cfront-undeclared-type-in-cast-treated-as-zero
+- [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 65] [T] task-t-worktree-is-not-current-state
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
-- [p 60] [N] bug-nilpy-defaulted-param-before-star-args-rejects-short-call
 - [p 60] [N] bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip
 - [p 60] [N] bug-nilpy-from-import-as-alias-is-discarded
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps

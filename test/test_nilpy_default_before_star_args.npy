@@ -1,0 +1,48 @@
+# bug-nilpy-defaulted-param-before-star-args-rejects-short-call
+#
+# `def f(a, b=2, *rest)` called as `f(1)` was rejected outright ("no overload of
+# f matches these arguments"), and the obvious fix — relaxing the arity check —
+# produced a SEGFAULT instead: the star list was appended after the supplied
+# positionals, so it landed in b's slot and `rest` was never bound.
+#
+# The gap between the last supplied positional and the star slot is filled with
+# the missing parameters' DEFAULTS before the container is placed, which makes
+# the call exactly arity-matched and needs no arity relaxation at all.
+#
+# Every line diffed against CPython (tools/pydiff.py). The `g`/`h` shapes are
+# the controls: each half worked on its own, only the combination failed.
+
+def f(a, b=2, *rest):
+    return (a, b, len(rest))
+print(f(1))
+print(f(1, 5))
+print(f(1, 5, 9))
+print(f(1, 5, 9, 11))
+
+def g(a, *rest):
+    return (a, len(rest))
+print(g(1))
+print(g(1, 2, 3))
+
+def h(a, b=2):
+    return (a, b)
+print(h(1))
+print(h(1, 7))
+
+def k(a, b=3, **kw):
+    return (a, b, len(kw))
+print(k(1))
+print(k(1, 4))
+print(k(1, 4, x=5))
+
+def m(a, b=2, *rest, **kw):
+    return (a, b, len(rest), len(kw))
+print(m(1))
+print(m(1, 5))
+print(m(1, 5, 6, 7))
+print(m(1, 5, 6, 7, z=1))
+
+def s(a, b="d", *rest):
+    return (a, b, len(rest))
+print(s(1))
+print(s(1, "x", "y"))

@@ -3,8 +3,6 @@ track: N
 prio: 65
 type: feature
 blocked-by: []
-status: working
-owner: claude-AN-night
 ---
 
 # cpyext: compile a CPython C extension's SOURCE against our own `Python.h`

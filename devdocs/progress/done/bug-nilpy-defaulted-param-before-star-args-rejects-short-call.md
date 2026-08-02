@@ -2,6 +2,8 @@
 track: N
 prio: 60
 type: bug
+status: done
+owner: claude-AN-night
 ---
 
 # `def f(a, b=2, *rest)` cannot be called as `f(1)`
@@ -75,3 +77,45 @@ A `.npy` diffed against CPython covering `def f(a, b=2, *rest)` called with 1,
 2 and 3+ arguments; the same with `**kwargs`; both together
 (`def f(a, b=2, *rest, **kw)`); and the existing `f(a, *rest)` /
 `f(a, b=2)` shapes as controls.
+
+
+## Resolved 2026-08-03 — and the arity check needed NO change
+
+The ticket's fix shape said the two defects had to land together: relax
+`ProcArityMatches`, and reorder the default-fill ahead of the star packing. Only
+the second was needed, and doing it alone makes the first unnecessary — which is
+the better outcome, because the relaxation is precisely what reopened the
+segfault when it was tried in isolation.
+
+`PyPackStarArgs` now fills the DEFAULTS of any parameters between the last kept
+positional and the slot the `*args` list (or `**kwargs` dict) is about to
+occupy, before placing that container. For `def f(a, b=2, *rest)` called as
+`f(1)` that means slot 1 gets `b`'s default and the list goes to slot 2 — so the
+call arrives at overload resolution **exactly arity-matched**. There is no short
+call left for `ProcArityMatches` to accept or reject, so it keeps its current
+rule and nothing else that depends on it moves.
+
+The default nodes come from `DefaultArgValueNode`, the same AST-level builder
+`PyBindKwArgs` already uses for keyword calls — no new default-materialising
+code, and every default flavour (sym / None / str / bool / float / int) is
+covered by construction.
+
+The `**kwargs` slot gets the same treatment, so `def k(a, b=3, **kw)` called as
+`k(1)` works for the same reason rather than by accident.
+
+### Verified
+
+`test/test_nilpy_default_before_star_args.npy` (+ `.expected`, wired into
+`make test-nilpy`), byte-identical to CPython across 17 lines: the repro at 1,
+2, 3 and 4 arguments; `def f(a, *rest)` and `def f(a, b=2)` as controls;
+`**kwargs` alone; both together (`def m(a, b=2, *rest, **kw)`); and a STRING
+default, which exercises a different `DefaultArgValueNode` flavour than the
+integer one the repro uses.
+
+Before/after on the same program: pinned rejects it at compile time, HEAD prints
+CPython's answers.
+
+`gate.sh quick` GREEN, self-host fixedpoint byte-identical, FPC seed build clean.
+
+## Log
+- 2026-08-03 — resolved.

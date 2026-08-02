@@ -8719,9 +8719,40 @@ begin
   mai := Procs[mpi].ParamCount;
 end;
 
+{ Fill the DEFAULTS of any parameters between the last kept positional and the
+  slot a packed `*args` / `**kwargs` container is about to occupy.
+
+  `def f(a, b=2, *rest)` called as `f(1)` leaves slot 1 (`b`) empty. Appending
+  the star list next put it in b's slot, so `b` received the list and `rest` was
+  never bound: `return b` gave 1, `return a` SEGFAULTED, `len(rest)` returned
+  garbage. The trailing-default filler that would normally cover slot 1 runs
+  much later and sees a FULL argument list by then, so it fills nothing — the
+  gap has to be closed here, before the container is placed
+  (bug-nilpy-defaulted-param-before-star-args-rejects-short-call).
+
+  Closing it also makes the call EXACTLY arity-matched, which is why
+  ProcArityMatches needs no special case for the star parameter: by the time it
+  runs, there is no short call left to accept. }
+procedure PyFillDefaultsUpTo(mpi, upTo: Integer; var nextSlot, posHead, posLast: Integer);
+var argNode: Integer;
+begin
+  while (nextSlot < upTo) and (nextSlot < MAX_PROC_PARAMS) and
+        ProcParamHasDefault[mpi * MAX_PROC_PARAMS + nextSlot] do
+  begin
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := DefaultArgValueNode(mpi, nextSlot);
+    ASTRight[argNode] := -1;
+    ASTIVal[argNode] := 0;              { positional }
+    if posHead < 0 then posHead := argNode else ASTRight[posLast] := argNode;
+    posLast := argNode;
+    Inc(nextSlot);
+  end;
+end;
+
 procedure PyPackStarArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer);
 var si, ki, n, nxt, pos, listSym, dictSym, keyNode, argNode: Integer;
     posHead, posLast, kwHead, kwLast: Integer;
+    nKept: Integer;   { positional slots actually filled so far }
     mtPi, mtSelf, mtCall: Integer;   { pylist_mark_tuple — *args is a tuple }
 begin
   si := ProcPyStarIdx[mpi];
@@ -8729,7 +8760,7 @@ begin
   if (si < 0) and (ki < 0) then Exit;
   listSym := -1; dictSym := -1;
   posHead := -1; posLast := -1; kwHead := -1; kwLast := -1;
-  pos := 0;
+  pos := 0; nKept := 0;
   n := argsHead;
   while n >= 0 do
   begin
@@ -8759,6 +8790,7 @@ begin
       begin
         if posHead < 0 then posHead := n else ASTRight[posLast] := n;
         posLast := n;
+        Inc(nKept);
       end;
       Inc(pos);
     end;
@@ -8785,18 +8817,22 @@ begin
       ASTLeft[mtCall] := mtSelf;
       PyHoistStmt(mtCall);
     end;
+    PyFillDefaultsUpTo(mpi, si, nKept, posHead, posLast);
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := PyMakeIdent(listSym);
     if posHead < 0 then posHead := argNode else ASTRight[posLast] := argNode;
     posLast := argNode;
+    nKept := si + 1;
   end;
   if ki >= 0 then
   begin
     if dictSym < 0 then dictSym := PyNewContainerTemp('TPyDict', 'kwargs');
+    PyFillDefaultsUpTo(mpi, ki, nKept, posHead, posLast);
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := PyMakeIdent(dictSym);
     if posHead < 0 then posHead := argNode else ASTRight[posLast] := argNode;
     posLast := argNode;
+    nKept := ki + 1;
   end;
   if kwHead >= 0 then
   begin
