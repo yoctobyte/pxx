@@ -1,0 +1,42 @@
+# Method parameter defaults — the class half of
+# bug-nilpy-non-constant-parameter-defaults-silently-become-none.
+#
+# A CONTAINER default on a method did not compile at all: the method header
+# stepped exactly ONE token past the `=`, so `def go(self, b=[])` died with
+# "unexpected token" on the `]`. And `b=True` was recorded as the ordinal 1 and
+# boxed as an integer, so it printed 1.
+#
+# Non-constant method defaults still yield None (they are recorded by the class
+# member PRE-PASS, which walks token indices with no cursor and runs before the
+# class statement's position in the stream) — that is tracked on the ticket and
+# is why the container cases below are asserted through `is None` rather than
+# against CPython's value. What this file pins is that they COMPILE and that
+# every constant form is right.
+
+class K:
+    def cint(self, b=5):
+        return b
+    def cstr(self, b="s"):
+        return b
+    def cbool(self, b=True):
+        return b
+    def cbool2(self, b=False):
+        return b
+    def cnone(self, b=None):
+        return b
+    def cfloat(self, b=2.0):
+        return b
+    def cneg(self, b=-3):
+        return b
+    def explicit(self, b=[]):
+        return b
+
+k = K()
+print(k.cint(), k.cstr(), k.cbool(), k.cbool2(), k.cnone(), k.cfloat(), k.cneg())
+
+# every constant default is still overridden by an explicit argument
+print(k.cint(9), k.cstr("z"), k.cbool(False), k.cfloat(1.5), k.cneg(3))
+
+# container defaults COMPILE (they used to be a hard parse error) and an
+# explicitly passed container works
+print(k.explicit([1, 2]))

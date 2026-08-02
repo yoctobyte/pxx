@@ -3391,6 +3391,35 @@ begin
   end;
 end;
 
+procedure PySkipParamDefaultAtCursor;
+{ Step the CURSOR over a parameter default of any shape, CurTok on the `=`.
+
+  The method header used to step exactly one token (plus an optional leading
+  `-`), which is every literal and nothing else: a list or dict default on a
+  method died with "unexpected token" on its closing bracket — a method could
+  not carry a container default at all, so the None behaviour the ticket
+  describes was not even reachable for those forms. Brackets are balanced and the scan stops at
+  the top-level `,` or `)`, the same rule PyParamDefaultAt uses on token
+  indices; the VALUE itself was already recorded by the class member pre-pass,
+  which is what the call path reads. }
+var depth: Integer;
+begin
+  Next;                              { past '=' }
+  depth := 0;
+  while CurTok.Kind <> tkEOF do
+  begin
+    if CurTok.Kind in [tkLParen, tkLBrack] then Inc(depth)
+    else if CurTok.Kind in [tkRBrack] then Dec(depth)
+    else if CurTok.Kind = tkRParen then
+    begin
+      if depth = 0 then Exit;        { the closing ) of the parameter list }
+      Dec(depth);
+    end
+    else if (CurTok.Kind = tkComma) and (depth = 0) then Exit;
+    Next;
+  end;
+end;
+
 { Does a user definition of this name shadow the builtin spelling HERE — in the
   module being parsed right now? Python's rule is per-module: a name counts if
   this module defines it (a def or a module-level variable, both tagged with the
@@ -15090,6 +15119,7 @@ var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, al
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
     pdefHas: array[0..15] of Boolean; pdefIsStr: array[0..15] of Boolean;
     pdefIsNone: array[0..15] of Boolean; pdefIsFloat: array[0..15] of Boolean;
+    pdefIsBool: array[0..15] of Boolean;
     pdefVal: array[0..15] of Int64;
     pdefSOff: array[0..15] of Integer; pdefSLen: array[0..15] of Integer;
     tk: TTypeKind; defKind: Integer; defIVal: Int64; defSOff, defSLen: Integer;
@@ -15372,7 +15402,7 @@ begin
         name := PyPropAccessorPrefixAt(i) + origName;
       isCtor := name = 'create';
       nparams := 0;
-      for k := 0 to 15 do pdefHas[k] := False;
+      for k := 0 to 15 do begin pdefHas[k] := False; pdefIsBool[k] := False; end;
       j := i + 3;
       mStarIdx := -1; mKwIdx := -1;
       while Tokens[j].Kind <> tkRParen do
@@ -15453,6 +15483,7 @@ begin
                                                  pdefSLen[nparams]);
             pdefIsNone[nparams] := PyDefaultWasNone;
             pdefIsFloat[nparams] := PyDefaultWasFloat;
+            pdefIsBool[nparams] := PyDefaultWasBool;
           end;
         end;
         Inc(nparams);
@@ -15572,6 +15603,7 @@ begin
             ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + k] := pdefIsStr[k];
             ProcParamDefaultIsNone[procIdx * MAX_PROC_PARAMS + k] := pdefIsNone[k];
             ProcParamDefaultIsFloat[procIdx * MAX_PROC_PARAMS + k] := pdefIsFloat[k];
+            ProcParamDefaultIsBool[procIdx * MAX_PROC_PARAMS + k] := pdefIsBool[k];
             ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + k] := pdefSOff[k];
             ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + k] := pdefSLen[k];
           end;
@@ -15958,12 +15990,7 @@ begin
     begin
       { UNANNOTATED parameter -> Any (variant); must match the pre-pass. }
       ptypes[nparams] := tyVariant; pcis[nparams] := -1;
-      if CurTok.Kind = tkAssign then
-      begin
-        Next;
-        if CurTok.Kind = tkMinus then Next;
-        Next;
-      end;
+      if CurTok.Kind = tkAssign then PySkipParamDefaultAtCursor;
     end
     else
     begin
@@ -15984,14 +16011,9 @@ begin
       psigs[nparams] := PyAnnLastProcSig;
       TokPos := annIdx;
       Next;
-      if CurTok.Kind = tkAssign then
-      begin
-        { the default VALUE was recorded by the pre-pass, which is what the
-          call path reads; here it only has to be stepped over }
-        Next;
-        if CurTok.Kind = tkMinus then Next;
-        Next;
-      end;
+      { the default VALUE was recorded by the pre-pass, which is what the
+        call path reads; here it only has to be stepped over }
+      if CurTok.Kind = tkAssign then PySkipParamDefaultAtCursor;
     end;
     Inc(nparams);
     if not Eat(tkComma) then break;
