@@ -81,6 +81,9 @@ function __pxx_fsync(fd: Integer): Integer;
 { dup/dup2 for crtl. PalDup2 already existed; dup(oldFd) is expressed as
   "lowest free descriptor", which the PAL has no primitive for, so it is
   fcntl(F_DUPFD, 0) — the same thing dup() is defined to be. }
+function __pxx_chdir(path: PChar): Integer;
+function __pxx_symlink(target, linkpath: PChar): Integer;
+function __pxx_link(oldPath, newPath: PChar): Integer;
 function __pxx_dup(oldFd: Integer): Integer;
 function __pxx_dup2(oldFd, newFd: Integer): Integer;
 function __pxx_fchmod(fd, mode: Integer): Integer;
@@ -331,6 +334,21 @@ end;
 function __pxx_fsync(fd: Integer): Integer;
 begin
   Result := PalFsync(fd);
+end;
+
+function __pxx_chdir(path: PChar): Integer;
+begin
+  Result := PalChdir(path);
+end;
+
+function __pxx_symlink(target, linkpath: PChar): Integer;
+begin
+  Result := PalSymlink(target, linkpath);
+end;
+
+function __pxx_link(oldPath, newPath: PChar): Integer;
+begin
+  Result := PalLink(oldPath, newPath);
 end;
 
 function __pxx_dup2(oldFd, newFd: Integer): Integer;

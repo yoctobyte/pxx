@@ -7194,6 +7194,18 @@ lib-test: pxx-stable-check
 	    { echo 'FAIL: cdup differs from gcc'; exit 1; }; \
 	  echo 'cdup: identical to gcc'; \
 	else echo 'cdup: SKIP (no gcc)'; /tmp/cdup >/dev/null; fi
+	# chdir/symlink/link. Behavioural: chdir must make a RELATIVE path resolve
+	# against the new directory, lstat must see a link where stat follows it.
+	# Run from /tmp because the test chdir's around.
+	$(PXX_STABLE) test/cfileops.c /tmp/cfileops
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -w -o /tmp/cfileops_gcc test/cfileops.c 2>/dev/null; \
+	  (cd /tmp && /tmp/cfileops_gcc) > /tmp/cfo_gcc.txt 2>&1; \
+	  (cd /tmp && /tmp/cfileops) > /tmp/cfo_pxx.txt 2>&1; \
+	  diff /tmp/cfo_gcc.txt /tmp/cfo_pxx.txt || \
+	    { echo 'FAIL: cfileops differs from gcc'; exit 1; }; \
+	  echo 'cfileops: identical to gcc'; \
+	else echo 'cfileops: SKIP (no gcc)'; (cd /tmp && /tmp/cfileops) >/dev/null; fi
 	# crtl against gcc's libc, which is the oracle for this surface: the whole
 	# output is diffed against the SAME file built by gcc, so there are no
 	# recorded expectations to drift.

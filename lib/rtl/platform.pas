@@ -109,6 +109,13 @@ const
 function PalIgnoreSignal(sig: Integer): Integer;
 function PalMkdir(path: PChar; mode: Integer): Integer;
 function PalRmdir(path: PChar): Integer;
+{ Change the process working directory. Process-GLOBAL: it affects every
+  subsequent relative path in the program, including other threads. }
+function PalChdir(path: PChar): Integer;
+{ Create a symbolic link at linkpath pointing at target, and a hard link
+  respectively. ESP has neither and reports PAL_ERR_UNSUPPORTED. }
+function PalSymlink(target, linkpath: PChar): Integer;
+function PalLink(oldPath, newPath: PChar): Integer;
 function PalGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalStat(path: PChar; var info: TPalFileStat): Integer;
 function PalStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Integer;
@@ -199,6 +206,21 @@ implementation
 function PalPlatform: Integer;
 begin
   Result := PalBackendPlatform;
+end;
+
+function PalChdir(path: PChar): Integer;
+begin
+  Result := PalBackendChdir(path);
+end;
+
+function PalSymlink(target, linkpath: PChar): Integer;
+begin
+  Result := PalBackendSymlink(target, linkpath);
+end;
+
+function PalLink(oldPath, newPath: PChar): Integer;
+begin
+  Result := PalBackendLink(oldPath, newPath);
 end;
 
 function PalHasFiles: Boolean;

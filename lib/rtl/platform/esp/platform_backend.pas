@@ -26,6 +26,9 @@ function PalBackendDelete(path: PChar): Integer;
 function PalBackendRename(oldPath, newPath: PChar): Integer;
 function PalBackendMkdir(path: PChar; mode: Integer): Integer;
 function PalBackendRmdir(path: PChar): Integer;
+function PalBackendChdir(path: PChar): Integer;
+function PalBackendSymlink(target, linkpath: PChar): Integer;
+function PalBackendLink(oldPath, newPath: PChar): Integer;
 function PalBackendGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalBackendStat(path: PChar; var info: TPalFileStat): Integer;
 function PalBackendStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Integer;
@@ -407,6 +410,24 @@ begin
 {$else}
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
+end;
+
+{ ESP-IDF's VFS has no working directory and no hard/symbolic links, so these
+  are refused rather than faked — a chdir that silently did nothing would make
+  every later relative path wrong. }
+function PalBackendChdir(path: PChar): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendSymlink(target, linkpath: PChar): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendLink(oldPath, newPath: PChar): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
 end;
 
 function PalBackendGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;

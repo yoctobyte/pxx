@@ -30,6 +30,11 @@ int fsync(int fd);
 /* Descriptor duplication. dup picks the lowest free fd; dup2 forces newfd,
    closing it first if it was open. */
 int dup(int oldfd);
+
+/* Working directory and links. chdir is process-global. */
+int chdir(const char *path);
+int symlink(const char *target, const char *linkpath);
+int link(const char *oldpath, const char *newpath);
 int dup2(int oldfd, int newfd);
 int getpid(void);
 char *getcwd(char *buf, size_t size);

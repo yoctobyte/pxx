@@ -10,6 +10,9 @@
 
 extern int __pxx_fsync(int fd);
 extern int __pxx_dup(int oldFd);
+extern int __pxx_chdir(const char *path);
+extern int __pxx_symlink(const char *target, const char *linkpath);
+extern int __pxx_link(const char *oldpath, const char *newpath);
 extern int __pxx_dup2(int oldFd, int newFd);
 extern int __pxx_getpid(void);
 extern int __pxx_getcwd(char *buf, unsigned long size);
@@ -110,3 +113,17 @@ long sysconf(int name) {
    a missing one. Both return the new descriptor, or -errno. */
 int dup(int oldfd) { return __pxx_dup(oldfd); }
 int dup2(int oldfd, int newfd) { return __pxx_dup2(oldfd, newfd); }
+
+/* chdir changes PROCESS-GLOBAL state: every later relative path in the program
+   resolves against it. Nothing in lib/rtl memoises the working directory
+   (checked before adding this), so there is no stale cache to invalidate.
+
+   symlink/link reach the kernel through symlinkat/linkat with AT_FDCWD, since
+   aarch64 and riscv have no legacy symlink/link syscalls at all. */
+int chdir(const char *path) { return __pxx_chdir(path); }
+int symlink(const char *target, const char *linkpath) {
+  return __pxx_symlink(target, linkpath);
+}
+int link(const char *oldpath, const char *newpath) {
+  return __pxx_link(oldpath, newpath);
+}

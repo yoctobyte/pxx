@@ -50,6 +50,7 @@ lives in git, not in a timestamp._
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-a-selfhost-recipe-should-rename-not-write-in-place | A | 55 | bug | The self-host chain compiles straight onto the path it is about to exec, so a concurrent fd holder makes the exec fail with ETXTBSY. Write to a temp name and rename — atomic in RUN_TMP, and a new inode | — |
+| bug-b-crtl-stat-nlink-hardcoded | B | 30 | bug | `struct stat.st_nlink` is hardcoded to 1 | — |
 | bug-b-writeln-float-with-17-decimals-prints-garbage | A | 55 | bug | `WriteLn(x:0:17)` prints garbage | — |
 | bug-c-uses-path-basename-collides-with-enclosing-unit-name | A | 35→65 | bug | path-form `uses './x.c'` collides with the enclosing unit's OWN name | — |
 | bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity | C | 55 | bug | In a mixed Pascal+C build, a C call binds to a same-named Pascal routine at the wrong arity | — |
@@ -132,7 +133,6 @@ lives in git, not in a timestamp._
 | feature-cli-widgetset-flag | A | 20 | feature | CLI: --widgetset=<name> as sugar for -dWIDGETSET_<NAME>, so the flag reads like Lazarus' -ws | — |
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
 | feature-crtl-implement-libc-assumptions | B | 10 | feature | crtl: implement the libc assumptions real-world C leans on | — |
-| feature-crtl-process-file-ops-batch | B | 25 | feature | crtl gap batch: `chdir`, `dup`, `dup2`, `symlink`, `link` | — |
 | feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | feature-nilpy-break-continue, feature-nilpy-tk-binding |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 50 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade |
@@ -357,7 +357,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1219)
+## done (1220)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1156,6 +1156,7 @@ lives in git, not in a timestamp._
 | feature-crtl-libc-gap-batch-2026-08 | B | 30 | feature | crtl gap batch, 2026-08: 10 assumed-libc symbols real C reaches for | — |
 | feature-crtl-libm-correctly-rounded-transcendentals | B | 40 | feature | crtl libm: correctly-rounded (or <1ulp) transcendentals — cbrt/log/pow/exp | — |
 | feature-crtl-localtime-honours-the-timezone | B | 35 | feature | `localtime()` returns UTC, so every local timestamp a C program prints is wrong | — |
+| feature-crtl-process-file-ops-batch | B | 25 | feature | crtl gap batch: `chdir`, `dup`, `dup2`, `symlink`, `link` | — |
 | feature-crtl-strtok-missing | B | 60 | feature | crtl: `strtok` not implemented (undeclared function) | — |
 | feature-crtl-trig-payne-hanek | B | 15 | feature | crtl libm: Payne-Hanek reduction for \|x\| >= 1e8 trig (sin/cos/tan) | — |
 | feature-debuggability-umbrella | A | 78 | feature | Umbrella: make pxx programs (and the compiler) DEBUGGABLE | — |
@@ -1772,6 +1773,7 @@ lives in git, not in a timestamp._
 - [p 35] [O] feature-opt-complex-packed-double
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
 - [p 30] [A] bug-a-const-variant-arg-expression-fails-outside-pyexprmode
+- [p 30] [B] bug-b-crtl-stat-nlink-hardcoded
 - [p 30] [A] bug-cfront-silent-bind-to-pascal-proc-of-different-arity
 - [p 30] [N] bug-nilpy-bitwise-op-rejects-boolean-variable-operand
 - [p 30] [N] bug-nilpy-construction-on-the-right-of-is-does-not-parse
@@ -1787,7 +1789,6 @@ lives in git, not in a timestamp._
 - [p 30] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 25] [N] bug-nilpy-repr-of-a-function-value-prints-none
 - [p 25] [P] compat-pascal-unit-deprecated-hint-directive
-- [p 25] [B] feature-crtl-process-file-ops-batch
 - [p 25] [N] feature-nilpy-for-loop-getitem-protocol-fallback
 - [p 25] [N] feature-nilpy-str-format-named-keyword-fields
 - [p 25] [O] feature-opt-alloc-intent-hint

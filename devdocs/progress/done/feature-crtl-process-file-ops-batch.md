@@ -2,6 +2,7 @@
 track: B
 prio: 25
 type: feature
+status: done
 ---
 
 # crtl gap batch: `chdir`, `dup`, `dup2`, `symlink`, `link`
@@ -17,11 +18,11 @@ Present and callable already: `rmdir`, `unlink`, `ftruncate`, `fsync`, `mkdir`,
 
 | symbol | header | note |
 | --- | --- | --- |
-| `chdir` | unistd.h | also the last gap from the round-1 probe (47/48) |
+| `chdir` | unistd.h | **DONE 2026-08-02** (was the last round-1 gap) |
 | `dup` | unistd.h | **DONE 2026-08-02** |
 | `dup2` | unistd.h | **DONE 2026-08-02** (`PalDup2` existed; bridge only) |
-| `symlink` | unistd.h | |
-| `link` | unistd.h | |
+| `symlink` | unistd.h | **DONE 2026-08-02** |
+| `link` | unistd.h | **DONE 2026-08-02** |
 
 ## Cost is uneven, which is the useful part of this note
 
@@ -67,3 +68,46 @@ to gcc on x86-64, i386, aarch64 and arm32.
 
 **Still open: `chdir`, `symlink`, `link`** — the three that need new PAL surface
 in both backends. The caution about `chdir` above still applies.
+
+## chdir / symlink / link landed 2026-08-02 — batch complete
+
+New PAL surface in both backends: `PalChdir`, `PalSymlink`, `PalLink`, with the
+ESP backend refusing them (`PAL_ERR_UNSUPPORTED`) rather than faking — a chdir
+that silently did nothing would make every later relative path wrong.
+
+`symlink`/`link` reach the kernel through **`symlinkat`/`linkat` with
+`AT_FDCWD`**, not the legacy syscalls: aarch64 and riscv do not have
+`symlink`/`link` at all, so the `*at` form is the only spelling that exists on
+every target — the same reason `openat`/`unlinkat`/`renameat` are used
+elsewhere in the backend. Note the argument shapes differ: `symlinkat` puts the
+dirfd in the MIDDLE (`target, dirfd, linkpath`) while `linkat` brackets it
+(`olddirfd, old, newdirfd, new, flags`).
+
+The `chdir` caution above was checked, not assumed: nothing in `lib/rtl` or
+`compiler/builtin` memoises the working directory — every caller goes straight
+to `PalGetcwd` — so there is no stale cache to invalidate.
+
+**Syscall numbers came from kernel headers on the build box** for x86-64, i386
+and the asm-generic pair (aarch64/riscv). arm32 has no header here, so its
+numbers were derived from the ordering the backend's existing entries pin
+(openat=322 … renameat=329 … readlinkat=332), which puts linkat=330 and
+symlinkat=331. **The qemu-arm run is what confirms that**, not the reasoning —
+recorded in the test so a future reader knows which numbers were verified and
+which were inferred-then-tested.
+
+Verified behaviourally in `test/cfileops.c`: `chdir` must make a RELATIVE path
+resolve against the new directory (not merely return 0), `lstat` must see a
+link where `stat` follows it, the hard link must expose the same content, and
+the failure cases must fail. Identical to gcc on x86-64, i386, aarch64, arm32.
+
+### One assertion deliberately absent
+
+The natural proof of a hard link is the target's `st_nlink` reaching 2. pxx
+reports 1 — `lib/crtl/src/sys/stat.c` assigns it unconditionally and the PAL
+never carried the field. That is not this change; filed as
+[[bug-b-crtl-stat-nlink-hardcoded]], and the test proves the link by content
+instead rather than asserting something known-wrong or quietly dropping the
+case.
+
+## Log
+- 2026-08-02 — resolved, commit PENDING.

@@ -30,6 +30,9 @@ function PalBackendDelete(path: PChar): Integer;
 function PalBackendRename(oldPath, newPath: PChar): Integer;
 function PalBackendMkdir(path: PChar; mode: Integer): Integer;
 function PalBackendRmdir(path: PChar): Integer;
+function PalBackendChdir(path: PChar): Integer;
+function PalBackendSymlink(target, linkpath: PChar): Integer;
+function PalBackendLink(oldPath, newPath: PChar): Integer;
 function PalBackendGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalBackendStat(path: PChar; var info: TPalFileStat): Integer;
 function PalBackendStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Integer;
@@ -107,6 +110,7 @@ const
 {$ifdef CPUX86_64}
   SYS_read = 0; SYS_write = 1; SYS_close = 3; SYS_lseek = 8;
   SYS_fsync = 74; SYS_openat = 257; SYS_mkdirat = 258; SYS_getdents64 = 217; SYS_statx = 332;
+  SYS_chdir = 80; SYS_linkat = 265; SYS_symlinkat = 266;
   SYS_unlinkat = 263; SYS_renameat = 264;
   SYS_socket=41; SYS_connect=42; SYS_accept4=288; SYS_bind=49; SYS_listen=50;
   SYS_setsockopt=54; SYS_shutdown=48; SYS_fcntl=72;
@@ -121,6 +125,7 @@ const
 {$ifdef CPU_I386}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
   SYS_fsync = 118; SYS_openat = 295; SYS_mkdirat = 296; SYS_getdents64 = 220; SYS_statx = 383;
+  SYS_chdir = 12; SYS_linkat = 303; SYS_symlinkat = 304;
   SYS_unlinkat = 301; SYS_renameat = 302;
   SYS_socketcall=102; SYS_fcntl=55;
   SC_SOCKET=1; SC_BIND=2; SC_CONNECT=3; SC_LISTEN=4; SC_ACCEPT4=18;
@@ -137,6 +142,7 @@ const
 {$ifdef CPU_AARCH64}
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
   SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
+  SYS_chdir = 49; SYS_linkat = 37; SYS_symlinkat = 36;
   SYS_unlinkat = 35; SYS_renameat = 38;
   SYS_socket=198; SYS_connect=203; SYS_accept4=242; SYS_bind=200; SYS_listen=201;
   SYS_setsockopt=208; SYS_shutdown=210; SYS_fcntl=25;
@@ -151,6 +157,7 @@ const
 {$ifdef CPU_ARM32}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
   SYS_fsync = 118; SYS_openat = 322; SYS_mkdirat = 323; SYS_getdents64 = 217; SYS_statx = 397;
+  SYS_chdir = 12; SYS_linkat = 330; SYS_symlinkat = 331;
   SYS_unlinkat = 328; SYS_renameat = 329;
   SYS_socket=281; SYS_connect=283; SYS_accept4=366; SYS_bind=282; SYS_listen=284;
   SYS_setsockopt=294; SYS_shutdown=293; SYS_fcntl=55;
@@ -169,6 +176,7 @@ const
     time-related calls keep the legacy generic numbers qemu implements. }
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
   SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
+  SYS_chdir = 49; SYS_linkat = 37; SYS_symlinkat = 36;
   SYS_unlinkat = 35; SYS_renameat = 38;
   SYS_socket=198; SYS_connect=203; SYS_accept4=242; SYS_bind=200; SYS_listen=201;
   SYS_setsockopt=208; SYS_shutdown=210; SYS_fcntl=25;
@@ -391,6 +399,28 @@ function PalBackendRmdir(path: PChar): Integer;
 begin
   Result := Integer(__pxxrawsyscall(SYS_unlinkat, PAL_AT_FDCWD, Int64(path),
     PAL_AT_REMOVEDIR, 0, 0, 0));
+end;
+
+function PalBackendChdir(path: PChar): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_chdir, Int64(path), 0, 0, 0, 0, 0));
+end;
+
+{ symlink/link go through the *at forms with AT_FDCWD (-100): aarch64 and riscv
+  have no legacy symlink/link syscalls at all, so the *at variant is the only
+  spelling that exists on every target — the same reason openat/unlinkat/
+  renameat are used above. Note symlinkat takes (target, dirfd, linkpath), with
+  the dirfd in the MIDDLE, unlike linkat's (olddirfd, old, newdirfd, new, flags). }
+function PalBackendSymlink(target, linkpath: PChar): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_symlinkat, Int64(target), -100,
+                                    Int64(linkpath), 0, 0, 0));
+end;
+
+function PalBackendLink(oldPath, newPath: PChar): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_linkat, -100, Int64(oldPath), -100,
+                                    Int64(newPath), 0, 0));
 end;
 
 function PalBackendFtruncate(handle: Integer; length: Int64): Integer;
