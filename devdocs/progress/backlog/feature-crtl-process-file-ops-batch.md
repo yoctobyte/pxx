@@ -18,8 +18,8 @@ Present and callable already: `rmdir`, `unlink`, `ftruncate`, `fsync`, `mkdir`,
 | symbol | header | note |
 | --- | --- | --- |
 | `chdir` | unistd.h | also the last gap from the round-1 probe (47/48) |
-| `dup` | unistd.h | |
-| `dup2` | unistd.h | **`PalDup2` already exists** — bridge only |
+| `dup` | unistd.h | **DONE 2026-08-02** |
+| `dup2` | unistd.h | **DONE 2026-08-02** (`PalDup2` existed; bridge only) |
 | `symlink` | unistd.h | |
 | `link` | unistd.h | |
 
@@ -53,3 +53,17 @@ proven by redirecting a real fd and reading it back; `symlink`/`link` by
 creating one in `/tmp` and `stat`-ing both ends. Cross-check
 i386/aarch64/arm32, since `lib/crtl` builds for every target while `gate.sh lib`
 is x86-64 only ([[frank2-crtl-changes-need-cross-check]]).
+
+## dup / dup2 landed 2026-08-02
+
+The cheap half, as this ticket predicted. `__pxx_dup2` bridges `PalDup2`;
+`__pxx_dup` is `PalFcntl(fd, F_DUPFD, 0)`, which *is* dup()'s definition rather
+than a stand-in for a missing primitive, so nothing new was needed in the PAL.
+
+Verified behaviourally in `test/cdup.c`, not by return code: the duplicate must
+actually read the same file, and `dup2` must land on the descriptor it was
+given (17, chosen so a "returns some fd" implementation would fail). Identical
+to gcc on x86-64, i386, aarch64 and arm32.
+
+**Still open: `chdir`, `symlink`, `link`** — the three that need new PAL surface
+in both backends. The caution about `chdir` above still applies.

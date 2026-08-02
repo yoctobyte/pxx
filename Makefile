@@ -7182,6 +7182,16 @@ lib-test: pxx-stable-check
 	    { echo 'FAIL: cscanf_math differs from gcc'; exit 1; }; \
 	  echo 'cscanf_math: identical to gcc'; \
 	else echo 'cscanf_math: SKIP (no gcc)'; /tmp/cscanf_math >/dev/null; fi
+	# dup/dup2 — asserted behaviourally (the duplicate reads the same file, and
+	# dup2 lands on the descriptor it was given), not just that it returned >= 0.
+	$(PXX_STABLE) test/cdup.c /tmp/cdup
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -w -o /tmp/cdup_gcc test/cdup.c 2>/dev/null; \
+	  /tmp/cdup_gcc > /tmp/cdup_gcc.txt 2>&1; /tmp/cdup > /tmp/cdup_pxx.txt 2>&1; \
+	  diff /tmp/cdup_gcc.txt /tmp/cdup_pxx.txt || \
+	    { echo 'FAIL: cdup differs from gcc'; exit 1; }; \
+	  echo 'cdup: identical to gcc'; \
+	else echo 'cdup: SKIP (no gcc)'; /tmp/cdup >/dev/null; fi
 	# crtl against gcc's libc, which is the oracle for this surface: the whole
 	# output is diffed against the SAME file built by gcc, so there are no
 	# recorded expectations to drift.

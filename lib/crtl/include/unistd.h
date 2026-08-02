@@ -26,6 +26,11 @@ off_t lseek(int fd, off_t offset, int whence);
 ssize_t pread(int fd, void *buf, size_t count, off_t offset);
 ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset);
 int fsync(int fd);
+
+/* Descriptor duplication. dup picks the lowest free fd; dup2 forces newfd,
+   closing it first if it was open. */
+int dup(int oldfd);
+int dup2(int oldfd, int newfd);
 int getpid(void);
 char *getcwd(char *buf, size_t size);
 int unlink(const char *path);

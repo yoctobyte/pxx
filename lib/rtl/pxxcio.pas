@@ -78,6 +78,11 @@ function __pxx_stat(path: PChar; sb: PPxxStatBuf): Integer;
 function __pxx_lstat(path: PChar; sb: PPxxStatBuf): Integer;
 function __pxx_fcntl(fd, cmd: Integer; arg: Int64): Integer;
 function __pxx_fsync(fd: Integer): Integer;
+{ dup/dup2 for crtl. PalDup2 already existed; dup(oldFd) is expressed as
+  "lowest free descriptor", which the PAL has no primitive for, so it is
+  fcntl(F_DUPFD, 0) — the same thing dup() is defined to be. }
+function __pxx_dup(oldFd: Integer): Integer;
+function __pxx_dup2(oldFd, newFd: Integer): Integer;
 function __pxx_fchmod(fd, mode: Integer): Integer;
 function __pxx_ftruncate(fd: Integer; length: Int64): Integer;
 function __pxx_access(path: PChar; mode: Integer): Integer;
@@ -326,6 +331,19 @@ end;
 function __pxx_fsync(fd: Integer): Integer;
 begin
   Result := PalFsync(fd);
+end;
+
+function __pxx_dup2(oldFd, newFd: Integer): Integer;
+begin
+  Result := PalDup2(oldFd, newFd);
+end;
+
+function __pxx_dup(oldFd: Integer): Integer;
+{ F_DUPFD = 0: duplicate onto the lowest free descriptor >= the third arg.
+  That IS dup()'s definition, so this is the primitive rather than a
+  workaround for a missing one. }
+begin
+  Result := PalFcntl(oldFd, 0, 0);
 end;
 
 function __pxx_fchmod(fd, mode: Integer): Integer;

@@ -9,6 +9,8 @@
 #include <errno.h>
 
 extern int __pxx_fsync(int fd);
+extern int __pxx_dup(int oldFd);
+extern int __pxx_dup2(int oldFd, int newFd);
 extern int __pxx_getpid(void);
 extern int __pxx_getcwd(char *buf, unsigned long size);
 extern int __pxx_remove(const char *path);
@@ -101,3 +103,10 @@ long sysconf(int name) {
  * be verified without a controlling terminal, which this build environment does
  * not have. Left out rather than guessed at.
  */
+
+/* dup/dup2: duplicate a descriptor. dup2 makes newfd refer to oldfd, closing
+   whatever newfd was; dup picks the lowest free descriptor, which is what
+   fcntl(F_DUPFD, 0) means and therefore is the primitive, not a substitute for
+   a missing one. Both return the new descriptor, or -errno. */
+int dup(int oldfd) { return __pxx_dup(oldfd); }
+int dup2(int oldfd, int newfd) { return __pxx_dup2(oldfd, newfd); }
