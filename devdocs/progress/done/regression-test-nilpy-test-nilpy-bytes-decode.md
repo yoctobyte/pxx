@@ -99,3 +99,13 @@ Both the argument and the candidate render as bare `class`, so the message says
 "no overload matches" while displaying one that appears to. Now that resolution
 *does* distinguish class identity, the diagnostic should print the class name on
 both sides or it will mislead every future reader the same way.
+- 2026-08-02 — resolved, commit 4d61f857e.
+- 2026-08-02 — triaged by `claude@xeon`: already fixed. The stub was auto-filed
+  at `74a925112afc`; `4d61f857e` (fix(N): add the real bytes(TPyList) overload)
+  landed the same evening and the watcher recorded the flip itself in `a8f17aa2f`
+  (`FIXED:test-nilpy#src:test/test_nilpy_bytes_decode.npy`). Confirmed against
+  origin/master's `xeon.json`, not the worktree ([[task-t-worktree-is-not-current-state]]):
+  the job reads `pass` at `ad4ab74837a4` with 0 non-passing jobs in the whole map.
+  Nothing to fix; the ticket outliving its regression is the defect, filed as
+  [[feature-t-autoticket-must-close-its-own-stubs-when-fixed]].
+

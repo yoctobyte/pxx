@@ -8,11 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
+| feature-t-autoticket-must-close-its-own-stubs-when-fixed | T | 65 | feature | twatch auto-files a prio-70 stub on NEW-RED and never closes it when the job goes green again — the watcher's own ledger closes the regression, the ticket sits at the top of the ready queue forever | — |
 
 ## unfinished (5)
 
@@ -36,7 +37,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (203)
+## backlog (202)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -233,7 +234,6 @@ _none_
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
-| regression-test-nilpy-test-nilpy-bytes-decode | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_bytes_decode.npy red at 74a925112afc (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-borg-open-regression-is-permanently-stale | T | 40 | task | borg's watcher was stopped 2026-07-31 with one open regression recorded; nothing will ever clear it, so every --status and gate.sh check reads a dead host's red as live | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
@@ -348,7 +348,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1190)
+## done (1191)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1516,6 +1516,7 @@ _none_
 | regression-test-i386-test-timer | T | 70 | regression | regression: test-i386#src:test/test_timer.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | regression-test-lua-00 | T | 70 | regression | regression: test-lua#00 red at 074e902b62ef (auto-filed by twatch) | — |
 | regression-test-lua-cross-runner | T | 70 | regression | regression: test-lua-cross#src:test/lua/runner.c red at 940b261f8678 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-bytes-decode | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_bytes_decode.npy red at 74a925112afc (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-import-sqlite | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_sqlite.npy red at 6840247771d5 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-operator-dunders | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_operator_dunders.npy red at 6840247771d5 (auto-filed by twatch) | — |
 | regression-test-smoke-11 | T | 70 | regression | regression: test-smoke#11 red at 163ffea562fa (auto-filed by twatch) | — |
@@ -1586,7 +1587,6 @@ _none_
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [N] feature-nilpy-runtime-dunder-dispatch-on-variants
 - [p 70] [T] feature-t-trackt-setup-autodetect-box-role
-- [p 70] [T] regression-test-nilpy-test-nilpy-bytes-decode
 - [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
 - [p 65] [B] bug-b-floattostrsig-caps-at-15-significant-digits
 - [p 65] [N] bug-classname-on-a-tobject-local-compiles-to-a-dynamic-attr-fetch
