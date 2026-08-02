@@ -1,0 +1,41 @@
+# A DERIVED tuple must stay a tuple.
+#
+# One sequence representation (TPyList) backs both list and tuple, distinguished
+# only by an FIsTuple flag — so every operation that builds a NEW sequence has to
+# carry it explicitly. Slice, concat, repeat and the reverse-slice form did not,
+# so `(1,2,3)[1:]` printed `[2, 3]` where Python prints `(2, 3)`
+# (bug-nilpy-derived-tuple-loses-tupleness).
+#
+# `print(t)` on the original was always right, which is what hid it: the tuple
+# only decayed once you DERIVED something from it.
+#
+# Expectation is CPython's own output.
+
+t = (1, 2, 3)
+xs = [1, 2, 3]
+
+# the original — always worked
+print(t)
+
+# derived tuples: all four used to come back as lists
+print(t[1:])
+print(t[:2])
+print(t[::-1])
+print(t + (4,))
+print(t * 2)
+
+# lists must NOT become tuples
+print(xs[1:])
+print(xs[::-1])
+print(xs + [4])
+print(xs * 2)
+
+# conversions still produce a plain list
+print(list(t))
+print(sorted(t))
+print(list(reversed(xs)))
+
+# a one-element tuple keeps its trailing comma
+u = (5,)
+print(u)
+print(u * 2)

@@ -1088,6 +1088,12 @@ test-nilpy: $(COMPILER)
 	# resolve against and the AN_CALL reached IR lowering unlowered
 	./$(COMPILER) test/test_nilpy_str_method_subscript.npy /tmp/test_nilpy_strmsub26
 	test "$$(/tmp/test_nilpy_strmsub26)" = "$$(printf '%b' 'World\nHello\nc\n[\047a\047, \047b\047, \047c\047]\nb\ny\nH\nhello,world\nPAD\nb\n72\ntwo')"
+	# a DERIVED tuple must stay a tuple: one representation backs list and tuple,
+	# so slice/concat/repeat/reverse each have to carry the FIsTuple flag. They
+	# did not, so (1,2,3)[1:] printed [2, 3]. print(t) alone was always right,
+	# which is what hid it.
+	./$(COMPILER) test/test_nilpy_tuple_identity.npy /tmp/test_nilpy_tupleid26
+	test "$$(/tmp/test_nilpy_tupleid26)" = "$$(printf '%b' '(1, 2, 3)\n(2, 3)\n(1, 2)\n(3, 2, 1)\n(1, 2, 3, 4)\n(1, 2, 3, 1, 2, 3)\n[2, 3]\n[3, 2, 1]\n[1, 2, 3, 4]\n[1, 2, 3, 1, 2, 3]\n[1, 2, 3]\n[1, 2, 3]\n[3, 2, 1]\n(5,)\n(5, 5)')"
 	# range() over a VARIANT bound (an unannotated parameter) compared the
 	# tyInteger counter against the variant's BOX — always true, so the loop
 	# never terminated. An annotated param, a literal and a module-level var all

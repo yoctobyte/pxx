@@ -7072,6 +7072,13 @@ function reversed(l: TPyList): TPyList;
 var r: TPyList; i: Integer;
 begin
   r := TPyList.Create;
+  { Carries the tuple flag so `(1,2,3)[::-1]` is `(3, 2, 1)`: the reverse-slice
+    form lowers to this very function (see the `[::-1]` arm in pyparser), and a
+    slice of a tuple is a tuple. CPython's `reversed()` returns an ITERATOR
+    whose repr pxx already does not reproduce, so nothing that currently matches
+    the oracle moves — and `list(reversed(t))` still builds a fresh plain list.
+    (bug-nilpy-derived-tuple-loses-tupleness) }
+  if l <> nil then r.FIsTuple := l.FIsTuple;
   if l <> nil then
     for i := l.count - 1 downto 0 do r.append(l.at(i));
   Result := r;
@@ -7139,6 +7146,12 @@ begin
   r := TPyList.Create;
   if l <> nil then
   begin
+    { A slice of a TUPLE is a TUPLE: `(1,2,3)[1:]` is `(2, 3)`, not `[2, 3]`.
+      One sequence representation backs both, so the flag has to be carried
+      explicitly by every DERIVED sequence — pylist_repeat already did this,
+      slice and concat did not
+      (bug-nilpy-derived-tuple-loses-tupleness). }
+    r.FIsTuple := l.FIsTuple;
     PySliceBounds(l.count, lo, hi);
     for i := lo to hi - 1 do
       r.append(l.at(i));
@@ -7184,6 +7197,10 @@ function pylist_repeat(l: TPyList; n: Int64): TPyList;
 var r: TPyList; i, k: Integer;
 begin
   r := TPyList.Create;
+  { `(1, 2) * 2` is a TUPLE. The variant-dispatch repeat path already carried
+    this flag; the statically-typed one did not, so it depended on which path
+    the operands took (bug-nilpy-derived-tuple-loses-tupleness). }
+  if l <> nil then r.FIsTuple := l.FIsTuple;
   if (l <> nil) and (n > 0) then
     for k := 1 to n do
       for i := 0 to l.count - 1 do
@@ -7196,6 +7213,11 @@ function pylist_concat(a, b: TPyList): TPyList;
 var r: TPyList; i: Integer;
 begin
   r := TPyList.Create;
+  { tuple + tuple is a TUPLE; list + list is a list. Python refuses to
+    concatenate the two kinds at all, so taking the LEFT operand's flag matches
+    wherever the expression is legal (bug-nilpy-derived-tuple-loses-tupleness). }
+  if a <> nil then r.FIsTuple := a.FIsTuple
+  else if b <> nil then r.FIsTuple := b.FIsTuple;
   if a <> nil then for i := 0 to a.count - 1 do r.append(a.at(i));
   if b <> nil then for i := 0 to b.count - 1 do r.append(b.at(i));
   Result := r;

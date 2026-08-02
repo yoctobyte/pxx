@@ -59,3 +59,17 @@ Per item, a `.npy` diffed against CPython. For 1: `pow(2,10)`, `pow(2,10,7)`,
 and float/negative exponents. For 2: `{:,}` on int and float, plus the
 abort-vs-raise decision. For 3: forward and negative steps, and slices with a
 step on both str and list.
+
+
+## 2026-08-02 — two more from later sweeps
+
+4. **`tuple(iterable)` is undefined** — `tuple([1, 2])` gives
+   `undefined variable (tuple)`. The tuple TYPE exists (literals work, and
+   `FIsTuple` distinguishes it), so this is the missing constructor wrapper,
+   the same shape as `pow()` above. Found alongside
+   [[bug-nilpy-derived-tuple-loses-tupleness]].
+
+5. **`range` as a VALUE** — `list(range(3))` gives
+   `undefined variable (range)`. `range` works as a for-loop header only; it is
+   not a first-class object. `list(range(n))` is an extremely common spelling.
+   Found alongside [[bug-nilpy-range-over-a-variant-bound-loops-forever]].

@@ -332,7 +332,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1182)
+## done (1183)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -711,6 +711,7 @@ _none_
 | bug-nilpy-container-literal-default-arg-segfaults | N | 65 | bug | `def f(a, b=[])` SEGFAULTS the moment the default is used as a container | — |
 | bug-nilpy-def-local-assignment-widens-module-global-to-variant | N | 70 | bug | NilPy: a name assigned as a LOCAL inside a def widens the same-named module global to tyVariant, killing its class identity and every compile-time dunder dispatch | — |
 | bug-nilpy-def-value-in-a-variable-is-not-callable | N | 75 | bug | A def stored in a NAME and then called SEGFAULTS | — |
+| bug-nilpy-derived-tuple-loses-tupleness | N | 60 | bug | A derived tuple decayed into a list | — |
 | bug-nilpy-dict-equality-compares-identity | N | 70 | bug | `{"k": 1} == {"k": 1}` is False — dict equality compares identity, not value | — |
 | bug-nilpy-dict-from-pairs-and-bytes-decode-segfault | N | 70 | bug | NilPy: `dict([(\"a\",1)])[\"a\"]` and `\"abc\".encode().decode()` both SEGFAULT (exit 139, core dumped) on ordinary one-liners | bug-a-overload-resolution-ignores-class-identity |
 | bug-nilpy-dict-insert-lookup-linear-not-hashed | N | 45 | bug | NilPy: dict insert/lookup is O(N), not O(1) — quadratic build, drives uforth O(N²) | — |
