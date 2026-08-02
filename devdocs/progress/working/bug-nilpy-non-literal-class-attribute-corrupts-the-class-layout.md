@@ -3,6 +3,8 @@ track: N
 prio: 70
 type: bug
 summary: "A class attribute with a NON-LITERAL initialiser (`g = 2 + 3`) corrupts the class: a method returning a tuple of two OTHER class attributes then prints nothing or segfaults. Deleting the unused attribute fixes it"
+status: working
+owner: claude-AN
 ---
 
 # A non-literal class attribute corrupts the class layout

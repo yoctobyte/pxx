@@ -1,0 +1,76 @@
+# bug-nilpy-non-literal-class-attribute-corrupts-the-class-layout
+#
+# Declaring a class attribute with a NON-LITERAL initialiser made an unrelated
+# method lose its result — silently, or with a segfault:
+#
+#     class A:
+#         a = 0
+#         d = "hi"
+#         g = 2 + 3            # never read by anything
+#         def read(self):
+#             return self.a, self.d
+#     print(A().read())        # CPython (0, 'hi'), pxx printed nothing
+#
+# Deleting the unused `g` line fixed it, and so did MOVING IT BELOW the method —
+# which is what identified the cause. A non-literal class attribute queues its
+# initialiser on the hoist chain at the class statement; PyParseMethod then
+# "restored" that chain by re-pointing at the saved head, which cannot unlink
+# anything, because appending mutates the saved chain's tail in place. The
+# method's own hoisted setup — the statements that BUILD the tuple — stayed
+# reachable and were flushed into the module body, where they refer to the
+# method's locals.
+#
+# Everything below therefore keeps at least one non-literal class attribute
+# ABOVE the method that has to hoist. Order matters here; do not tidy it.
+
+class Order:
+    a = 0
+    d = "hi"
+    g = 2 + 3                  # expression: the hoisting kind
+
+    def read(self):
+        return self.a, self.d  # a tuple: the hoisting kind
+
+
+class Container:
+    a = 1
+    lst = []                   # a list literal hoists its construction too
+
+    def read(self):
+        return self.a, self.lst
+
+
+class Several:
+    a = 0
+    b = 1
+    c = 7
+    d = "hi"
+    e = True
+    f = 1.5
+    g = 2 + 3
+    lst = []
+    dct = {}
+
+    def read(self):
+        return self.a, self.b, self.c, self.d, self.e, self.f
+
+
+# the literal-only controls, which always worked
+class Literals:
+    a = 0
+    d = "hi"
+
+    def read(self):
+        return self.a, self.d
+
+
+print(Order().read())
+print(Container().read())
+print(Several().read())
+print(Several().lst)
+print(Several().dct)
+print(Literals().read())
+
+# and the non-literal attribute itself still holds its evaluated value —
+# `g = 2 + 3` is 5, not the 2 a truncated constant-fold would leave
+print(Order().g, Several().g)

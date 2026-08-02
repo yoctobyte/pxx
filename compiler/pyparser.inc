@@ -14281,6 +14281,18 @@ var name, savedPfx, savedPfx2: AnsiString;
     retType: TTypeKind; isProc, capByRef: Boolean;
 begin
   savedHoist := PyHoistHead;
+  { PARK the queue on a fresh chain rather than merely remembering its head.
+    `PyHoistHead := savedHoist` at the end cannot UNLINK anything: PySeqAppend
+    mutates the saved chain's tail in place, so with a hoist already pending
+    (a class attribute with a non-literal initialiser queues one at the class
+    statement) this body's own hoisted statements stayed reachable through it
+    and were flushed into the MODULE body — where they reference this routine's
+    locals. The visible symptom was a class losing a whole tuple return to
+    silence or a segfault, three lines away from an attribute nothing read
+    (bug-nilpy-non-literal-class-attribute-corrupts-the-class-layout). A body's
+    own hoists are flushed by its statement loop; the rest is stale by
+    construction, which is what the restore always meant to express. }
+  PyHoistHead := -1;
   { Python's binding rule is per-FUNCTION, so the `global`/`nonlocal` set is a
     property of THIS body — saved and restored so a nested def (drained at the
     end of this routine) cannot leak its declarations into the enclosing one. }
@@ -15208,7 +15220,21 @@ begin
             (PyClsAttrEqIdx(i, bodyEnd) >= 0) and
             (PyClsAttrEqIdx(i, bodyEnd) + 1 < bodyEnd) and
             (Tokens[PyClsAttrEqIdx(i, bodyEnd) + 1].Kind in
-               [tkInteger, tkFloat, tkString, tkTrue, tkFalse, tkNil]) then
+               [tkInteger, tkFloat, tkString, tkTrue, tkFalse, tkNil]) and
+            { ...and that literal must BE the whole initialiser. `g = 2 + 3`
+              starts with a literal token but is an expression, and claiming it
+              here folded the `2` and dropped the rest — while the class body's
+              own test (PyClsAttrExprAhead, which DOES check the line ends)
+              evaluated it as an expression into a hidden global. The two
+              readers then disagreed about what kind of attribute `g` is, and a
+              class holding one lost an unrelated tuple of its OTHER attributes
+              to a segfault or to silence
+              (bug-nilpy-non-literal-class-attribute-corrupts-the-class-layout).
+              Same shape as the parameter-default constant path, which claimed
+              the `1` of `b=1+2` for the same reason. }
+            (PyClsAttrEqIdx(i, bodyEnd) + 2 < bodyEnd) and
+            (Tokens[PyClsAttrEqIdx(i, bodyEnd) + 2].Kind in
+               [tkNewline, tkDedent, tkEOF]) then
     begin
       { the initialiser token, past an optional `: <annotation>` — the class
         body's own branch finds it with the same helper, and the two MUST agree }
@@ -15994,6 +16020,18 @@ var savedHoist: Integer; clsAttrSeq: Integer;
     savedDefGlobalCount, dgI: Integer;
 begin
   savedHoist := PyHoistHead;
+  { PARK the queue on a fresh chain rather than merely remembering its head.
+    `PyHoistHead := savedHoist` at the end cannot UNLINK anything: PySeqAppend
+    mutates the saved chain's tail in place, so with a hoist already pending
+    (a class attribute with a non-literal initialiser queues one at the class
+    statement) this body's own hoisted statements stayed reachable through it
+    and were flushed into the MODULE body — where they reference this routine's
+    locals. The visible symptom was a class losing a whole tuple return to
+    silence or a segfault, three lines away from an attribute nothing read
+    (bug-nilpy-non-literal-class-attribute-corrupts-the-class-layout). A body's
+    own hoists are flushed by its statement loop; the rest is stale by
+    construction, which is what the restore always meant to express. }
+  PyHoistHead := -1;
   { Python's binding rule is per-FUNCTION, so the `global`/`nonlocal` set is a
     property of THIS body — saved and restored so a nested def (drained at the
     end of this routine) cannot leak its declarations into the enclosing one. }
