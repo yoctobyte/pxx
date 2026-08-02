@@ -75,6 +75,17 @@ var
     the temp. Each statement-sequence builder flushes this before the statement
     it just parsed, so the setup runs first. }
   PyHoistHead: Integer;
+  { `from mod import NAME as ALIAS` — the alias's binding, queued rather than
+    built where the import is parsed. The LEADING import run happens before the
+    program's statement list exists and before ASTArenaFloor is set, so an AST
+    node made there is both homeless and liable to be recycled by a later unit
+    compile. Only the two symbol indices are recorded here; the assignment is
+    materialised by PyFlushImportAliases at the head of the module body.
+    PyImpAliasSrc >= 0 is the exporting unit's SYMBOL; < 0 encodes a PROC as
+    -(pi + 1). }
+  PyImpAliasSym: array[0..63] of Integer;
+  PyImpAliasSrc: array[0..63] of Integer;
+  PyImpAliasCount: Integer;
   PyTypingChanged: Boolean;
   PyHiddenSeq: Integer;   { serial for hidden for-in loop temps }
   { One parsed `def` header, filled by PyParseDefHeader and read by both its
@@ -298,6 +309,37 @@ begin
     if node >= 0 then Result := PySeqAppend(Result, node);
     h := ASTRight[h];
   end;
+end;
+
+function PyMakeFuncValueFor(pi: Integer; const nm: AnsiString): Integer; forward;
+
+{ Materialise the `from mod import NAME as ALIAS` bindings queued by
+  PyParseImportRun (see PyImpAliasSym). Drains the queue, so whichever flush
+  point runs first wins and a second call is a no-op.
+
+  Deliberately NOT done where the import is parsed: the leading import run
+  happens before the program's statement list exists and before ASTArenaFloor
+  is set, so an AST node built there has nowhere to be appended and can be
+  handed out again by the next unit compile. }
+function PyFlushImportAliases(seq: Integer): Integer;
+var i, rhs, asgn: Integer;
+begin
+  Result := seq;
+  for i := 0 to PyImpAliasCount - 1 do
+  begin
+    if PyImpAliasSrc[i] >= 0 then
+      rhs := PyMakeIdent(PyImpAliasSrc[i])
+    else
+      { a def: the same function object `g = f` builds, via the shared helper }
+      rhs := PyMakeFuncValueFor(-(PyImpAliasSrc[i]) - 1,
+                                Syms[PyImpAliasSym[i]].Name);
+    if rhs < 0 then Continue;
+    asgn := AllocNode(AN_ASSIGN);
+    ASTLeft[asgn] := PyMakeIdent(PyImpAliasSym[i]);
+    ASTRight[asgn] := rhs;
+    Result := PySeqAppend(Result, asgn);
+  end;
+  PyImpAliasCount := 0;
 end;
 
 function PySeqAppend(head, stmt: Integer): Integer;
@@ -7013,31 +7055,17 @@ begin
   Result := wrapPi;
 end;
 
-function PyMakeFuncValue: Integer;
-{ A bare def NAME in a value position — `w.bind(seq, on_plain)`, `sorted(l,
-  key=cmp)`. Python's function object; NilPy already builds one for a bound
-  METHOD (pybound_new with the receiver), so a plain def is the same pair with
-  a nil receiver and every consumer (pycallback_call*, the tkinter dispatcher)
-  handles both. Returns -1 when the token is not a def name, so callers fall
-  through to their existing handling. CurTok is the identifier. }
-var pi, procAddr, argA, argB, argC, callNode, nilNode, isFuncNode, boundPi,
+{ The function-object VALUE for an ALREADY-RESOLVED proc. Split out of
+  PyMakeFuncValue so a caller holding a proc index but no token to consume —
+  the `from mod import f as g` alias desugar — builds the identical value
+  instead of growing a second copy that can drift from this one. }
+function PyMakeFuncValueFor(pi: Integer; const nm: AnsiString): Integer;
+var procAddr, argA, argB, argC, callNode, nilNode, isFuncNode, boundPi,
     altPi, wpj: Integer;
     paramsAllVariant: Boolean;
 begin
   Result := -1;
-  if not isNilPy then Exit;
-  if CurTok.Kind <> tkIdent then Exit;
-  if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then Exit;  { a CALL }
-  if FindSym(CurTok.SVal) >= 0 then Exit;                                 { a variable }
-  { A NESTED def is registered under its enclosing qualifier (`A.build.on_resize`),
-    so an unqualified FindProc lands on the bodyless shell the pre-pass made —
-    and its address is a plausible-looking pointer one byte below the entry
-    point, which crashes the first time the callback fires. Look up the
-    qualified name first. }
-  pi := -1;
-  if PyNestPrefix <> '' then pi := FindProc(PyNestPrefix + '.' + CurTok.SVal);
-  if pi < 0 then pi := FindProc(CurTok.SVal);
-  if pi < 0 then Exit;
+  if (pi < 0) or (pi >= ProcCount) then Exit;
   { The first FindProc match may not be the SAFE overload: `len`'s first
     declared one takes a TPyBytes, not a Variant, and a wrapper built around
     the wrong overload would silently misread a string argument as a bytes
@@ -7051,7 +7079,7 @@ begin
     parameter overload at all (or the wrong arity) is left exactly as
     before: still the pre-existing, unwrapped, possibly-unsafe value.
     feature-nilpy-callable-value-unified-dispatch }
-  altPi := PyFindVariantParamOverload(CurTok.SVal, Procs[pi].ParamCount);
+  altPi := PyFindVariantParamOverload(nm, Procs[pi].ParamCount);
   if altPi >= 0 then pi := altPi;
   if Procs[pi].RetType <> tyVariant then
   begin
@@ -7090,8 +7118,34 @@ begin
   ASTIVal[callNode] := boundPi;
   ASTTk[callNode] := Ord(tyVariant);
   ASTLeft[callNode] := argA;
-  Next;                      { consume the name }
   Result := callNode;
+end;
+
+function PyMakeFuncValue: Integer;
+{ A bare def NAME in a value position — `w.bind(seq, on_plain)`, `sorted(l,
+  key=cmp)`. Python's function object; NilPy already builds one for a bound
+  METHOD (pybound_new with the receiver), so a plain def is the same pair with
+  a nil receiver and every consumer (pycallback_call*, the tkinter dispatcher)
+  handles both. Returns -1 when the token is not a def name, so callers fall
+  through to their existing handling. CurTok is the identifier. }
+var pi: Integer;
+begin
+  Result := -1;
+  if not isNilPy then Exit;
+  if CurTok.Kind <> tkIdent then Exit;
+  if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then Exit;  { a CALL }
+  if FindSym(CurTok.SVal) >= 0 then Exit;                                 { a variable }
+  { A NESTED def is registered under its enclosing qualifier (`A.build.on_resize`),
+    so an unqualified FindProc lands on the bodyless shell the pre-pass made —
+    and its address is a plausible-looking pointer one byte below the entry
+    point, which crashes the first time the callback fires. Look up the
+    qualified name first. }
+  pi := -1;
+  if PyNestPrefix <> '' then pi := FindProc(PyNestPrefix + '.' + CurTok.SVal);
+  if pi < 0 then pi := FindProc(CurTok.SVal);
+  if pi < 0 then Exit;
+  Result := PyMakeFuncValueFor(pi, CurTok.SVal);
+  if Result >= 0 then Next;  { consume the name }
 end;
 
 function PyEvalOnce(node: Integer): Integer;
@@ -17007,7 +17061,9 @@ begin
 end;
 
 procedure PyParseImportRun;
-var impName, impAlias, impRoot: AnsiString; isCount: Boolean; aStrIdx, realStrIdx, optSym: Integer;
+var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
+    aStrIdx, realStrIdx, optSym: Integer;
+    aliasSym, aliasCi, aliasRealSym, aliasRealProc: Integer;
 begin
   while (CurTok.Kind = tkUses) or PyIsIdent('from') do
   begin
@@ -17061,7 +17117,8 @@ begin
             restored CurrentUnitIdx by now), so a builtin spelling it shadows
             is shadowed here and nowhere else. `as` rebinds it, so the ALIAS is
             the name in scope. }
-          impAlias := CurTok.SVal;
+          impReal := CurTok.SVal;
+          impAlias := impReal;
           Next;
           if PyIsIdent('as') then
           begin
@@ -17070,6 +17127,67 @@ begin
             begin
               impAlias := CurTok.SVal;
               Next;
+            end;
+          end;
+          { `from mod import NAME as ALIAS`. Unit scope is flat, so NAME itself
+            is already in scope after ParseUsesUnit — but ALIAS is a second
+            spelling that has to resolve to the same thing, and there is no
+            general name-alias registry to point it at. Before this the alias
+            was parsed and discarded, so every `as` form died with "undefined
+            variable" (bug-nilpy-from-import-as-alias-is-discarded).
+
+            Rather than inventing a registry, the alias is desugared to what
+            Python actually does: `ALIAS = NAME`, a real binding in the
+            importing module. That gets REBINDING right for free — a later
+            `ALIAS = x` rebinds the alias and leaves the exporting module's
+            name alone, exactly as CPython does, which a storage-sharing alias
+            would have got wrong.
+
+            A CLASS cannot go through an assignment (a class held in a variable
+            is not constructible here — measured), so it takes the class-alias
+            registry, which resolves the alias onto the same class row for var
+            decls, ALIAS(), casts and is/as alike. That is the same registry a
+            Pascal `TOptionList = TList;` uses. }
+          if impAlias <> impReal then
+          begin
+            aliasCi := FindUClass(impReal);
+            if aliasCi >= 0 then
+              RegisterUClassAlias(PyStoredName(impAlias), Length(impAlias), aliasCi)
+            else if PyImpAliasCount < 64 then
+            begin
+              { FindSym, not PyProgSym: the name belongs to the EXPORTING unit
+                and PyProgSym deliberately hides other units' symbols. Flat unit
+                scope is what makes the un-aliased spelling resolve, and this is
+                the same lookup. }
+              aliasRealSym := FindSym(impReal);
+              aliasRealProc := -1;
+              if aliasRealSym < 0 then aliasRealProc := FindProc(impReal);
+              if (aliasRealSym >= 0) or (aliasRealProc >= 0) then
+              begin
+                aliasSym := PyProgSym(impAlias);
+                if aliasSym < 0 then
+                begin
+                  if aliasRealSym >= 0 then
+                    aliasSym := AllocVar(impAlias, Syms[aliasRealSym].TypeKind)
+                  else
+                    aliasSym := AllocVar(impAlias, tyVariant);
+                end;
+                if aliasRealSym >= 0 then
+                begin
+                  Syms[aliasSym].RecName := Syms[aliasRealSym].RecName;
+                  SymSyncTypeRef(aliasSym);
+                end;
+                PyImpAliasSym[PyImpAliasCount] := aliasSym;
+                if aliasRealSym >= 0 then
+                  PyImpAliasSrc[PyImpAliasCount] := aliasRealSym
+                else
+                  PyImpAliasSrc[PyImpAliasCount] := -(aliasRealProc + 1);
+                Inc(PyImpAliasCount);
+              end;
+              { Neither a symbol nor a proc: the real name is something this
+                frontend does not know. Left alone — the alias stays undefined
+                and walls at its use site, which is the pre-existing behaviour
+                and still the honest one. }
             end;
           end;
           { A from-imported name may be a SUBMODULE rather than a value —
@@ -17846,6 +17964,9 @@ begin
   DbgGlobalScopeBase := SymCount;
   mainNode := -1;
   PySkipNewlines;
+  { `from mod import NAME as ALIAS` bindings, at the head of the module body —
+    before any of its statements, which is where Python runs an import too. }
+  mainNode := PyFlushImportAliases(mainNode);
   { The program's own statement list is live until the body is compiled at the
     end of this routine, and parsing it compiles units whose per-body resets
     would hand these nodes out again — the same hazard ParsePyUnit guards, and

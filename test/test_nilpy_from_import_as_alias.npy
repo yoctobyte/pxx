@@ -1,0 +1,45 @@
+# bug-nilpy-from-import-as-alias-is-discarded
+#
+# `from mod import NAME as ALIAS` parsed the alias and threw it away, so every
+# `as` form died with "undefined variable" — for values, functions and classes
+# alike, while the module alias (`import m as h`) and the un-aliased member
+# import both worked.
+#
+# The alias is desugared to what Python actually does: `ALIAS = NAME`, a real
+# binding in the importing module. That is why the REBINDING case below is part
+# of the test and not an afterthought — a storage-sharing alias would pass every
+# other line here and get that one wrong.
+#
+# A class takes the class-alias registry instead: a class held in a variable is
+# not constructible in this frontend, so `BoxAlias()` has to resolve onto the
+# same class row rather than through an assignment.
+#
+# Diffed against CPython (tools/pydiff.py).
+import nilpy_modhelper as mh
+from nilpy_modhelper import COUNT as C
+from nilpy_modhelper import twice as tw
+from nilpy_modhelper import Box as BoxAlias
+from nilpy_modhelper import COUNT as C2, twice as tw2
+from nilpy_modhelper import COUNT, twice, Box
+
+print(C, C2)
+print(tw(4), tw2(5))
+b = BoxAlias(9)
+print(b.get())
+# INLINE construction through the alias, then a member access. This is the case
+# that segfaulted: the NilPy construction intercept asked an alias-BLIND
+# predicate and stood down, so the Pascal typecast branch below it — which asks
+# an alias-AWARE one — claimed `BoxAlias(9)` as a hard reinterpret cast of the
+# integer 9 to a class pointer.
+print(BoxAlias(9).get())
+print(BoxAlias(4).v)
+
+# the un-aliased forms are the controls — they worked before and must still
+print(COUNT, twice(6), Box(3).get())
+print(mh.COUNT, mh.twice(7))
+
+# rebinding the alias binds the ALIAS, not the exporting module's name
+C = 99
+print(C)
+print(mh.COUNT)
+print(COUNT)

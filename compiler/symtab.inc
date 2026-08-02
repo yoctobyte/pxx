@@ -1165,6 +1165,23 @@ begin
       Result := i;
       Exit;
     end;
+  { Class-name ALIASES too, exactly as FindUClass resolves them. Without this
+    the two predicates disagree about the same name, and the NilPy construction
+    intercept (parser.inc, `FindUClassNonRecord(...) and next is '('`) stood
+    down for an alias while the Pascal typecast branch below it — which asks
+    IsClassType, i.e. FindUClass, i.e. alias-AWARE — claimed it. So
+    `AliasName(9)` compiled as a hard reinterpret cast of the integer 9 to a
+    class pointer and segfaulted on the first member access, while
+    `RealName(9)` constructed normally
+    (bug-nilpy-from-import-as-alias-is-discarded found it; it is not specific
+    to imports — any class alias reached from NilPy had it). }
+  for i := 0 to UClsAliasCount - 1 do
+    if UNameMatch(UClsAliasNOff[i], UClsAliasNLen[i], lo) and
+       (UClsAliasCi[i] >= 0) and (not UClsIsRecord[UClsAliasCi[i]]) then
+    begin
+      Result := UClsAliasCi[i];
+      Exit;
+    end;
 end;
 
 function IsClassType(const lo: AnsiString): Boolean;

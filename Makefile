@@ -371,6 +371,9 @@ test-nilpy: $(COMPILER)
 	# a sibling .py MODULE: unit scoping, its own initialisation, both import forms
 	./$(COMPILER) test/test_nilpy_py_module_import.npy /tmp/test_nilpy_py_module_import26
 	test "$$(/tmp/test_nilpy_py_module_import26)" = "$$(printf 'module init ran\nprogram body\n8\n8\n3 3 b\n9\n7')"
+	# `from mod import NAME as ALIAS` for a value, a def and a class
+	./$(COMPILER) -Futest test/test_nilpy_from_import_as_alias.npy /tmp/test_nilpy_fromas26
+	/tmp/test_nilpy_fromas26 | diff -u test/test_nilpy_from_import_as_alias.expected -
 	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy /tmp/test_nilpy_ast_literal26
 	test "$$(/tmp/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
 	# atexit handlers run at exit (LIFO), io's in-memory buffers behave
