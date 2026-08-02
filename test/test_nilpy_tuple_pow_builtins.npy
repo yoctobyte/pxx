@@ -1,0 +1,24 @@
+# tuple() and pow() — two missing builtins found by a differential sweep against
+# the CPython oracle (bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice).
+#
+#   tuple(iterable)  the tuple TYPE existed (literals work, and FIsTuple
+#                    distinguishes it) but the CONSTRUCTOR did not, so
+#                    tuple([1, 2]) failed with "undefined variable (tuple)".
+#   pow(base, exp)   the function spelling of **, which already worked.
+#
+# pow()'s THREE-argument form (modular exponentiation) is deliberately NOT
+# provided: it is a different algorithm, and accepting the modulus and ignoring
+# it would be silently wrong. It stays a loud "no overload matches".
+#
+# Expectation is CPython's own output.
+
+print(tuple([1, 2, 3]))
+print(tuple("abc"))
+print(tuple([]))
+t = tuple([1, 2])
+print(t, t[0], len(t))
+print(t + (3,))
+print(list(tuple([4, 5])))
+print(pow(2, 10), pow(2, 0), pow(3, 3))
+print(pow(2.0, 3), pow(2, -1))
+print(2 ** 10)

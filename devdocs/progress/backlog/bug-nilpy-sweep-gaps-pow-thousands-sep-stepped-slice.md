@@ -73,3 +73,28 @@ step on both str and list.
    `undefined variable (range)`. `range` works as a for-loop header only; it is
    not a first-class object. `list(range(n))` is an extremely common spelling.
    Found alongside [[bug-nilpy-range-over-a-variant-bound-loops-forever]].
+
+
+## 2026-08-02 — items 1 and 4 FIXED
+
+**`pow()`** and **`tuple()`** are done, both as small additive builtins in
+pylib, verified byte-identical to CPython in
+`test/test_nilpy_tuple_pow_builtins.npy` (wired into `make test-nilpy`).
+
+- `tuple(l: TPyList)` and `tuple(const s: AnsiString)` — the same sequence with
+  `FIsTuple` set, so `tuple([1,2])` prints `(1, 2)` and composes correctly with
+  the derived-tuple work (`tuple([1,2]) + (3,)` is a tuple).
+- `pow(a, b)` delegating to the existing `pypow_v`, which already backs `**`.
+
+**`pow(base, exp, mod)` deliberately NOT added.** Modular exponentiation is a
+different algorithm, and accepting a third argument while ignoring the modulus
+would be silently wrong — exactly the failure mode this repo treats as worst. It
+stays a loud "no overload of pow matches these arguments" until someone
+implements it properly.
+
+## Still open
+
+2. `"{:,}"` thousands separator — unsupported, and it ABORTS rather than raising
+   catchably. The abort-vs-raise half matters more than the feature.
+3. Stepped slices other than `[::-1]`.
+5. `range` as a first-class VALUE (`list(range(3))`).

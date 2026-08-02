@@ -1088,6 +1088,10 @@ test-nilpy: $(COMPILER)
 	# resolve against and the AN_CALL reached IR lowering unlowered
 	./$(COMPILER) test/test_nilpy_str_method_subscript.npy /tmp/test_nilpy_strmsub26
 	test "$$(/tmp/test_nilpy_strmsub26)" = "$$(printf '%b' 'World\nHello\nc\n[\047a\047, \047b\047, \047c\047]\nb\ny\nH\nhello,world\nPAD\nb\n72\ntwo')"
+	# tuple() and pow(): the tuple TYPE existed but not its constructor, and pow
+	# was undefined though ** worked
+	./$(COMPILER) test/test_nilpy_tuple_pow_builtins.npy /tmp/test_nilpy_tpb26
+	test "$$(/tmp/test_nilpy_tpb26)" = "$$(printf '%b' '(1, 2, 3)\n(\047a\047, \047b\047, \047c\047)\n()\n(1, 2) 1 2\n(1, 2, 3)\n[4, 5]\n1024 1 27\n8.0 0.5\n1024')"
 	# numeric builtin gaps: float("inf"/"nan") raised ValueError, min/max were not
 	# variadic, sum() took no start value
 	./$(COMPILER) test/test_nilpy_numeric_builtins.npy /tmp/test_nilpy_numbi26

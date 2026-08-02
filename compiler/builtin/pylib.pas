@@ -856,6 +856,16 @@ function max(a: Double; b: Double): Double; overload;
 function list(l: TPyList): TPyList;
 function list(const s: AnsiString): TPyList; overload;
 function list(const v: Variant): TPyList; overload;
+{ tuple(iterable) — the same sequence with the TUPLE flag set. The tuple TYPE
+  existed (literals work, and FIsTuple distinguishes it) but the CONSTRUCTOR did
+  not, so `tuple([1, 2])` failed with 'undefined variable (tuple)'.
+  (bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice) }
+function tuple(l: TPyList): TPyList;
+function tuple(const s: AnsiString): TPyList; overload;
+{ pow(base, exp) — the function spelling of `**`, which already works. pow with
+  a THIRD argument is modular exponentiation and is a different algorithm; it is
+  deliberately NOT provided here rather than silently ignoring the modulus. }
+function pow(const a: Variant; const b: Variant): Variant;
 { `dict(x)` — a shallow COPY of a mapping, as Python's dict() constructor makes.
   Same overload-by-argument-type shape as list() (feature-nilpy-missing-builtins).
   uforth uses `dict(vm.dict)` to snapshot word-list state for MARKER. }
@@ -7120,6 +7130,30 @@ begin
   if l <> nil then
     for i := 0 to l.count - 1 do r.append(l.at(i));
   Result := r;
+end;
+
+function tuple(l: TPyList): TPyList;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  r.FIsTuple := True;
+  if l <> nil then
+    for i := 0 to l.count - 1 do r.append(l.at(i));
+  Result := r;
+end;
+
+function tuple(const s: AnsiString): TPyList; overload;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  r.FIsTuple := True;
+  for i := 1 to Length(s) do r.append(pystr_ofchar(s[i]));
+  Result := r;
+end;
+
+function pow(const a: Variant; const b: Variant): Variant;
+begin
+  Result := pypow_v(a, b);
 end;
 
 { list(v) where v is a VARIANT — copy the list/str it holds. `list(fb or [])`
