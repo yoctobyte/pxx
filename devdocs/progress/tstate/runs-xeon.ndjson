@@ -268,3 +268,4 @@
 {"date": "2026-08-02T12:52:37Z", "fixed": [], "full": false, "new_red": [], "sha": "01d3efe7739d1a4deb539f07ef6ed56894ea453f", "tier": "native", "verdict": "GREEN", "wall": 107.8}
 {"date": "2026-08-02T12:56:07Z", "fixed": [], "full": false, "new_red": ["test-core#src:test/test_nilpy_dataclass_dict_factory.npy"], "sha": "2fbb5a270accfcafd3583cb605a91d0a8742149b", "tier": "native", "verdict": "RED", "wall": 107.6}
 {"date": "2026-08-02T12:58:51Z", "fixed": [], "full": false, "new_red": [], "sha": "5d759e2a603ce71954c4a282c1ccca63dd486741", "tier": "native", "verdict": "RED", "wall": 107.7}
+{"date": "2026-08-02T13:02:41Z", "fixed": [], "full": false, "new_red": [], "sha": "f9d0679ce2ad2a56e14ac4398970ab0d1d5467d4", "tier": "native", "verdict": "RED", "wall": 107.6}
