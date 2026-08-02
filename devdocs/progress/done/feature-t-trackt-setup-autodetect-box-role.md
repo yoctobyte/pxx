@@ -136,3 +136,21 @@ get a selfhost job it cannot run.
   about intent that detection cannot make; raised with the user.
 
 - 2026-08-02 — resolved, commit 1f015d684.
+- 2026-08-02 — **the ticket's role table is SUPERSEDED on one row**, by the
+  user at the xeon box: *"this box is considered dedicated. headless has
+  little to do with that."* The `x86_64 + desktop session -> limited` row is
+  gone (`c3b843308`).
+  Why it was wrong is worth keeping: the signal got both fleet boxes wrong in
+  OPPOSITE directions for the same reason — xeon runs the matrix and has a
+  desktop login; borg is the box a human works at and also has one. A session
+  says someone logged in graphically, not whose box it is. That is intent, and
+  no probe on the machine reports intent.
+  Detection now decides only what it can see: architecture (native-oracle),
+  then capability (<4 cores or <4 GB -> limited), else dedicated. The session
+  is still probed and printed as a NOTE, it just does not vote. Ties break
+  toward dedicated because the errors are asymmetric — dedicated on a shared
+  box is loud and self-correcting, limited on a watcher box is silent and
+  costs the fleet indefinitely.
+  This also closes the open question raised in the entry above: no big-box
+  escape hatch is needed, because the rule it would have patched is gone.
+
