@@ -14316,11 +14316,24 @@ begin
     left := CurASTNode;
     ParseExpr;                 { right-assoc: RHS may itself be a compound assign }
     right := CurASTNode;
+    { tkSlashEq means DIFFERENT operators in different frontends, which is the
+      trap here: NilPy's lexer emits it for `//=` (floor division — `/=` gets
+      tkTrueDivEq), while Pascal and C emit it for `/=` (real division). Mapping
+      it unconditionally to tkSlash made `self.n //= 3` perform TRUE division —
+      25 //= 3 gave 8.333… instead of 8, silently
+      (bug-nilpy-floor-div-assign-is-true-division).
+
+      The ELSE is no longer a silent fallthrough to division either: that shape
+      is exactly how this bug arrived, and it would have done the same for the
+      next compound token added. }
     case op of
       tkPlusEq:  caOp := Ord(tkPlus);
       tkMinusEq: caOp := Ord(tkMinus);
       tkStarEq:  caOp := Ord(tkStar);
-      else       caOp := Ord(tkSlash);
+      tkSlashEq: if NilPyUserCode then caOp := Ord(tkDiv)
+                 else caOp := Ord(tkSlash);
+      else       begin caOp := Ord(tkSlash);
+                       Error('internal: unhandled compound-assignment operator'); end;
     end;
     { A NilPy VARIANT lvalue must NOT take the compound-assign node. That node
       computes the lvalue address once and does a scalar read-modify-write, which

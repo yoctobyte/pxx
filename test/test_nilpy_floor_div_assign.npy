@@ -1,0 +1,37 @@
+# bug-nilpy-floor-div-assign-is-true-division
+#
+# `self.n //= 3` performed TRUE division: 25 //= 3 gave 8.333… instead of 8.
+#
+# The trap is that ONE token means TWO operators depending on the frontend.
+# NilPy's lexer emits tkSlashEq for `//=` (and tkTrueDivEq for `/=`), while
+# Pascal and C emit tkSlashEq for `/=`. The shared compound-assignment tail
+# mapped it unconditionally to tkSlash — correct for Pascal, silently wrong for
+# NilPy.
+#
+# `%=` in the same position was always correct, which is what made this look
+# like an operator-specific bug rather than a token-meaning one.
+#
+# Negatives and floats are here because floor division is where they differ most
+# visibly: -7 // 2 is -4 in Python (floor), not -3 (truncation).
+
+class A:
+    def __init__(self, n):
+        self.n = n
+    def idiv(self, v):
+        self.n //= v
+        return self.n
+    def tdiv(self, v):
+        self.n /= v
+        return self.n
+    def mod(self, v):
+        self.n %= v
+        return self.n
+print(A(25).idiv(3), A(25).tdiv(4), A(25).mod(4))
+print(A(25.0).idiv(3), A(-7).idiv(2))
+t = 25
+t //= 3
+print(t)
+u = 25
+u /= 4
+print(u)
+print(25 // 3, 25 / 4, -7 // 2)
