@@ -1,0 +1,48 @@
+# bug-nilpy-and-or-of-two-different-classes-reinterprets-one-as-the-other
+#
+# `PyMakeBoolOpValue` typed the ternary it builds as `ASTTk[thenNode]` whenever
+# `ASTTk[a] = ASTTk[b]`. That test is TYPE-KIND equality, and class identity is
+# not carried in ASTTk (it lives in ResolveNodeRec), so it held between ANY two
+# classes: `[] or {}` typed the result as the LIST class while the DICT arm
+# flowed through it, and the dict printed as `[]`.
+#
+# Silent, and direction-dependent in a way that looks like a truthiness bug but
+# is not: `e or f` with both arms lists was always correct, so only a pair of
+# DIFFERENT classes shows it. Two different classes now fall through to the
+# tyVariant arm, which boxes each arm instead of reinterpreting one.
+#
+# Diffed against CPython with tools/pydiff.py.
+
+e = []
+d = {}
+f = [1]
+t = ()
+
+# both arms falsy, different classes — the reported shape
+print(e or d)
+print(d or e)
+print(e and d)
+print(d and e)
+
+# one arm truthy, different classes
+print(e or f)
+print(f or d)
+print(t or f)
+print(f and d)
+
+# same class on both arms still keeps the class (the branch being narrowed)
+print(e or f)
+print(f or e)
+print(e and f)
+
+# mixed class/scalar arms were already correct — regression control
+print(e or "S")
+print(e or 5)
+print(d or "S")
+print(0 or "x")
+print("" or 0)
+print(1 and 2)
+
+# the result is still usable as its own type when the class is preserved
+g = f or e
+print(len(g), g[0])

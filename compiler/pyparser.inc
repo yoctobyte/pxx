@@ -2090,9 +2090,20 @@ begin
   else if PyIsIntLikeTk(ta) and PyIsIntLikeTk(tb) then
     { two integer widths — the wider one carries both arms }
     ASTTk[node] := Ord(tyInt64)
-  else if ASTTk[a] = ASTTk[b] then
+  else if (ASTTk[a] = ASTTk[b])
+          and ((ta <> tyClass) or (ResolveNodeRec(a) = ResolveNodeRec(b))) then
     { same type on both arms -> keep it, preserving a container/class identity so
-      `.method()` on the result still resolves }
+      `.method()` on the result still resolves.
+
+      ASTTk equality is TYPE-KIND equality, so for tyClass it holds between ANY
+      two classes: `[] or {}` typed the ternary as the LIST class while the dict
+      arm flowed through it, and the dict printed as `[]` — the same
+      reinterpretation the str-vs-scalar comment above describes, reached
+      through class identity instead. Class identity lives in ResolveNodeRec,
+      not in ASTTk, so it has to be compared separately; two DIFFERENT classes
+      fall through to the tyVariant arm, which boxes each arm rather than
+      reading one through the other's representation
+      (bug-nilpy-and-or-of-two-different-classes-reinterprets-one-as-the-other). }
     ASTTk[node] := ASTTk[thenNode]
   else
     ASTTk[node] := Ord(tyVariant);
