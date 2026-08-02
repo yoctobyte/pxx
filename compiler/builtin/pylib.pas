@@ -1072,6 +1072,9 @@ function pydynattr_has(obj: Pointer; const name: AnsiString): Boolean;
 function pyvar_slice(const v: Variant; lo, hi: Integer): Variant;
 { `v[lo:hi:step]` on a variant — same run-time tag dispatch, extended step. }
 function pyvar_slice_step(const v: Variant; lo, hi, step: Integer): Variant;
+{ `type(x).__name__` for any value — see the body for why the frontend cannot
+  answer this from RTTI alone (tuple and list share one class). }
+function pytype_name_v(const v: Variant): AnsiString;
 
 { str methods. The frontend desugars `s.upper()` into pystr_upper(s) — see
   PyParseStrMethod. ASCII-only for now: CPython's str.upper() is full-Unicode
@@ -2042,6 +2045,42 @@ begin
   else
     cn := PyVarTypeName(tg);
   raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + name + '''');
+end;
+
+{ `type(x).__name__` for ANY value. Two things the frontend cannot do itself:
+
+  - the pylib CONTAINERS must report their PYTHON names, not the Pascal class
+    backing them. Reading the RTTI ClassName gave `TPyList` / `TPyDict` /
+    `TPyBytes` — a silently wrong string, the worst failure class here.
+  - `tuple` and `list` share ONE representation, so the answer depends on
+    FIsTuple at run time and cannot come from a class name at all.
+
+  A user NilPy class still falls through to ClassName, which is already its
+  Python name (bug-nilpy-type-name-reports-the-internal-pascal-class). }
+function pytype_name_v(const v: Variant): AnsiString;
+var obj: Pointer; tg: Int64; o: TObject;
+begin
+  tg := pyvartag(v);
+  if tg <> 7 then
+  begin
+    Result := PyVarTypeName(tg);
+    Exit;
+  end;
+  obj := pyvarobj(v);
+  if obj = nil then begin Result := 'NoneType'; Exit; end;
+  o := TObject(obj);
+  if o is TPyList then
+  begin
+    if TPyList(o).FIsTuple then Result := 'tuple' else Result := 'list';
+  end
+  else if o is TPyDict then Result := 'dict'
+  else if o is TPyBytes then Result := 'bytes'
+  else
+    { spelled `TObject(obj).ClassName`, exactly as the two AttributeError sites
+      above do. Written as `o.ClassName` on an already-TObject local it compiled
+      into a DYNAMIC ATTRIBUTE fetch instead of the RTTI call, and a user class
+      then died with "'Dog' object has no attribute 'ClassName'". }
+    Result := TObject(obj).ClassName;
 end;
 
 function pyvar_is_strtag(const v: Variant): Boolean;

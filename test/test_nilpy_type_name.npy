@@ -1,0 +1,45 @@
+# type(x).__name__ must report the PYTHON type name.
+# It used to read the RTTI ClassName, which is the Pascal class backing the
+# value: a list said "TPyList", a dict "TPyDict" -- silently wrong. tuple and
+# list also share ONE class, so the answer needs FIsTuple at run time and
+# cannot come from a class name at all. Scalars were refused outright.
+# bug-nilpy-type-name-reports-the-internal-pascal-class
+
+class Animal:
+    pass
+
+class Dog(Animal):
+    pass
+
+# a user class keeps its own name, and reports its OWN class, not the base
+print(type(Dog()).__name__)
+print(type(Animal()).__name__)
+
+# scalars -- these used to be a compile error ("a scalar has no RTTI blob")
+print(type(1).__name__)
+print(type(2.5).__name__)
+print(type(True).__name__)
+print(type("s").__name__)
+print(type(None).__name__)
+
+# containers -- these used to print TPyList / TPyDict / TPyBytes
+print(type([1, 2]).__name__)
+print(type({}).__name__)
+print(type({"a": 1}).__name__)
+print(type(b"ab").__name__)
+
+# tuple vs list share a representation, so this is the case a class name
+# cannot answer
+print(type((1, 2)).__name__)
+print(type([1, 2][::-1]).__name__)
+print(type((1, 2)[::-1]).__name__)
+print(type((1, 2, 3)[1:]).__name__)
+
+# through a variant (loop element) and through a parameter
+for x in [1, "a", 2.5, None, True, [1], (1,), {}]:
+    print(type(x).__name__)
+
+def nameof(v):
+    return type(v).__name__
+
+print(nameof(3), nameof("q"), nameof([1, 2]), nameof((1,)))

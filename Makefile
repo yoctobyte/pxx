@@ -1099,6 +1099,11 @@ test-nilpy: $(COMPILER)
 	# Also covers tupleness across a reversal, and step 0 raising catchably.
 	./$(COMPILER) test/test_nilpy_slice_step.npy /tmp/test_nilpy_slicestep26
 	test "$$(/tmp/test_nilpy_slicestep26)" = "$$(printf '%b' 'bd\naceg\nadg\nceg\nace\nhgfedcba\nhfdb\nedc\nhgf\nhgfed\n[]\n[]\n[]\n[]\na\nh\n[1, 3, 5]\n[0, 2, 4, 6]\n[7, 6, 5, 4, 3, 2, 1, 0]\n[7, 4, 1]\n[6, 4, 2]\n[]\n(4, 3, 2, 1)\n(1, 3)\n(2, 4)\naceg\nhfdb\n[0, 3, 6]\nhfdb\n[0, 3, 6]\nstep-zero ValueError caught\nstep-zero ValueError caught on list\nstill running')"
+	# type(x).__name__ reported the PASCAL class backing the value (TPyList for a
+	# list) — silently wrong — and refused scalars outright. tuple/list share one
+	# class, so the answer needs FIsTuple at run time, not a class name.
+	./$(COMPILER) test/test_nilpy_type_name.npy /tmp/test_nilpy_typename26
+	test "$$(/tmp/test_nilpy_typename26)" = "$$(printf '%b' 'Dog\nAnimal\nint\nfloat\nbool\nstr\nNoneType\nlist\ndict\ndict\nbytes\ntuple\nlist\ntuple\ntuple\nint\nstr\nfloat\nNoneType\nbool\nlist\ntuple\ndict\nint str list tuple')"
 	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
 	# key function had no overload to bind to (dict alone and list+key both worked)
 	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26

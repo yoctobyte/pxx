@@ -13068,16 +13068,25 @@ begin
        (not CaseEqual(GetTokenStr(TokPos), '__name__')) then
       Error('Nil Python: type(x) is only supported as type(x).__name__');
     Next; Next;                { '.', '__name__' }
-    if IntToTypeKind(ASTTk[tpObjNode]) <> tyClass then
-      Error('Nil Python: type(x).__name__ needs x to be a class instance ' +
-            '(a scalar has no RTTI blob to read)');
-    tpBlobNode := GenMakeRttiOfCall(tpObjNode);
-    if tpBlobNode < 0 then
-      Error('Nil Python: type(x).__name__ needs RTTI linked (__pxxRttiOf)');
-    tpCallNode := GenMakeClassRefOp(tpBlobNode, 'ClassName', tpTk);
+    { Answered by pylib at RUN time, not from the RTTI ClassName here. Reading
+      ClassName reported the Pascal class backing a pylib container — `TPyList`
+      for a list, `TPyDict` for a dict — a silently wrong string; and `tuple`
+      and `list` share ONE class, so the honest answer needs FIsTuple and cannot
+      come from a class name at all. Going through a variant also means scalars
+      work (`type(1).__name__` is `int`), which the RTTI route had to refuse.
+      bug-nilpy-type-name-reports-the-internal-pascal-class }
+    tpCallNode := FindProc('pytype_name_v');
     if tpCallNode < 0 then
-      Error('Nil Python: type(x).__name__ needs RTTI linked (__pxxClassName)');
-    CurASTNode := tpCallNode;
+      Error('Nil Python: pylib (pytype_name_v) not loaded');
+    tpBlobNode := AllocNode(AN_ARG);
+    ASTLeft[tpBlobNode] := tpObjNode;
+    ASTRight[tpBlobNode] := -1;
+    tpTk := tyAnsiString;
+    CurASTNode := AllocNode(AN_CALL);
+    ASTIVal[CurASTNode] := tpCallNode;
+    ASTLeft[CurASTNode] := tpBlobNode;
+    ASTTk[CurASTNode] := Ord(tpTk);
+    ASTRight[CurASTNode] := -1;
     LastExprTk := tpTk;
     Exit;
   end;
