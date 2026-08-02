@@ -19,19 +19,10 @@ name, in the very mode agents are told to run per fix. `testmgr --tier quick`
 carries dense NilPy and C canaries, and the whole nilpy suite is enrolled in
 Track T's limited/full tiers, so the coverage is not lost — it is offloaded.
 
-## Do not "upgrade" the gate because a change feels broad
-
-The judgement call *"this touched shared formatting, so the full suite is
-warranted here"* is the trap, and it is seductive precisely because it sounds
-conscientious. It is not: it trades ~30s of your own turn for ~10 minutes,
-buys coverage Track T was already going to run against your exact SHA, and
-delays the push — which means it delays T seeing the commit at all. Unpushed
-work is untested work.
-
-**Per fix, the loop is: `make compiler/pascal26` (~12s, and it IS the
-byte-identical fixedpoint) → run your repro → `tools/gate.sh quick` → push.**
-Breadth is T's job. Run a full suite yourself only when `tools/twatch.py
---status` exits 1 (T proven down) — not when a change merely feels risky.
+**Which mode to run, and why you must not widen it, is CLAUDE.md's call** — see
+"THE PER-FIX LOOP" there; it is the authority and this file does not restate it.
+The one-liner: `gate.sh quick` per fix, then push; breadth is Track T's, run
+against your exact SHA. `full` is for when T is *proven* down.
 
 It prints one line per step with its duration, `GREEN`/`RED` at the end, and exits
 with the gate's status. Logs land in one directory, named per step, and a failing

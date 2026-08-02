@@ -100,17 +100,10 @@ filed as bugs and can be fixed without it.
 
 ## Gate discipline — where time is actually lost
 
-- **`tools/gate.sh quick` per fix, then push — for every change, including
-  frontend and shared-IR ones.** This bullet used to add "or `full` for frontend
-  / shared-IR changes"; that is superseded. `quick` is ~30s (self-host
-  fixedpoint + `testmgr --tier quick`; `test-nilpy` was removed from it, having
-  been 625 of the gate's 649 seconds). Breadth is Track T's, run against your
-  exact SHA — so widening the local gate buys nothing and delays the push, and
-  unpushed work is work T cannot see. Full gates are yours only when T is
-  **proven** down (`tools/twatch.py --status` exit 1).
+- `tools/gate.sh quick` (or `full` for frontend / shared-IR changes).
   **Background the script and wait for the notification.** With Track T's
-  watcher on this box a *full* gate took **~20 minutes** — one more reason not
-  to reach for one; do useful read-only work meanwhile if you must run it.
+  watcher on this box a full gate took **~20 minutes**; budget for it and do
+  useful read-only work meanwhile.
 - **Background it with an absolute path** (`/home/rene/frankonpiler/tools/gate.sh
   full`). A backgrounded relative path silently failed with exit 127 and no gate
   ran at all — the notification said "failed", which is easy to skim past.

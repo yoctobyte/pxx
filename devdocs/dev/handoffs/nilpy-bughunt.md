@@ -98,19 +98,10 @@ the cheap one and call the family closed.
 
 ## Gate discipline
 
-- **`tools/gate.sh quick` per fix, then push** — including for frontend and
-  shared-IR changes. This bullet used to say "`full` when the change touches a
-  frontend or shared IR"; that is superseded. Breadth is Track T's job, and it
-  runs against your exact SHA, so widening the local gate costs ~10 minutes to
-  buy coverage you were getting free — and delays the push, which delays T
-  seeing the commit at all.
-  Two facts behind the old advice are still true and still worth knowing:
-  `--tier quick` covers **zero C/Rust/Zig jobs**, and `test-nilpy` is **no
-  longer inside `quick`** (it was 625 of the gate's 649 seconds and was removed).
-  The conclusion changed, not the facts: that uncovered surface is what T's
-  limited/full tiers exist to sweep. Run a full gate yourself only when T is
-  **proven** down — `tools/twatch.py --status` exit 1 (`git fetch` first; it
-  reads the local `tstate/`).
+- `tools/gate.sh full` when the change touches a frontend or shared IR.
+  **`--tier quick` covers ZERO C/Rust/Zig jobs** — it would pass frontend work
+  without testing a line of it. `quick` is fine for a NilPy-only change
+  (`test-nilpy` is in it), but check what your diff actually touched.
 - Background the gate and wait for the notification. **Do not edit compiler
   sources while a gate runs** — it invalidates the run. That happened twice in
   the session that built this toolkit; both had to be re-gated.

@@ -402,38 +402,64 @@ diffed against an oracle.
   units. (Historic: C used a `feat/cfront` worktree until it merged at v80; that
   worktree is retired. Exception: Track T's watcher daemon runs in its own
   dedicated clone — it's infra, not a dev agent.)
-- **Proceed optimistic (user, 2026-08-01, `decide-gate-line-convention`).** The
-  default gate for a push is the **native confirm**: `tools/testmgr.py --tier
-  quick` + self-host byte-identical. *The fix worked and the native test shows
-  it did* is sufficient — push, and let Track T's report come back tied to your
-  sha. **Do NOT run a suite by hand.** A ticket `Gate:` line naming
-  `make test-nilpy` (or any long local suite) is superseded by this rule.
-  The one exception is Track T being **proven** down — `tools/twatch.py
-  --status` exit 1, or `tools/trackt.py health` reporting DOWN — and then the
-  old rule applies: run your lane's full gate first. Slow, quiet or "feels
-  stale" is not proven; those two commands are what answer it.
-  Hear back with `tools/twatch.py --follow` (it reports your sha as covered as
-  soon as any descendant is judged). Safe by construction: the one property a
-  bad push could poison for everyone — a compiler that cannot reproduce itself —
-  cannot leave your tree, because `make compiler/pascal26` IS the fixedpoint.
-  `pin` stays the deliberate brake.
-- **Per fix, the loop is FAST — and "this change feels broad" is NOT a reason to
-  widen it.** `make compiler/pascal26` (~12s, and it IS the byte-identical
-  self-host fixedpoint) → run your repro / the one assertion you added →
-  `tools/gate.sh quick` (~30s) → commit → push. That is the whole per-fix gate.
-  Do **not** hand-run `make test-nilpy`, `make test` or any other full suite
-  because the change touched something shared: `gate.sh quick` deliberately
-  dropped `test-nilpy` for exactly this reason (it was 625 of the gate's 649
-  seconds), the quick tier carries dense NilPy/C canaries, and the full suites
-  are enrolled in Track T's tiers and will run against your exact SHA. Widening
-  the local gate costs ~10 minutes, buys coverage you were already getting free,
-  and — worst — *delays the push*, and unpushed work is work T cannot see at
-  all. Full suites are yours only when T is proven down (`tools/twatch.py
-  --status` exit 1).
+### THE PER-FIX LOOP — this file is the authority on it
+
+**Per fix, in full:**
+
+```
+make compiler/pascal26     # ~12s — and it IS the byte-identical self-host fixedpoint
+<run your repro / the one assertion you added>
+tools/gate.sh quick        # ~30s — self-host fixedpoint + testmgr --tier quick
+git commit && git push
+```
+
+**That is the entire gate. Nothing is missing from it.** Breadth — the full
+suites, cross targets, the corpus, regressions elsewhere — is **Track T's job**,
+run against your exact SHA, and it comes back asynchronously as tstate reports
+and tickets. Hear back with `tools/twatch.py --follow`.
+
+**Do not widen this loop.** Specifically, do **not** hand-run `make test-nilpy`,
+`make test`, `gate.sh full`, or any other long suite because:
+
+- the change "touched something shared" / a frontend / the IR — **this is the
+  trap**; it sounds conscientious and is wrong;
+- a ticket's `Gate:` line names a long local suite — those lines are
+  **superseded** by this rule (user, 2026-08-01, `decide-gate-line-convention`);
+- an older doc says to. **See the precedence rule below.**
+
+Widening costs ~10 minutes, buys coverage you were already getting free, and —
+worst — *delays the push*, and **unpushed work is work T cannot see at all.**
+`gate.sh quick` deliberately dropped `test-nilpy` for exactly this reason (it was
+625 of the gate's 649 seconds); the quick tier carries dense NilPy/C canaries.
+
+Yes, `--tier quick` covers **zero C/Rust/Zig jobs** and no longer runs the nilpy
+suite. That uncovered surface is precisely what T's limited/full tiers sweep. It
+is not an argument for gating it yourself.
+
+**The one exception: Track T is PROVEN down** — `tools/twatch.py --status`
+exit 1, or `tools/trackt.py health` reporting DOWN. Then run your lane's full
+gate first (`tools/testmgr.py --tier full`, or `--tier limited` + the targets you
+touched). Slow, quiet, or "feels stale" is **not** proven; those two commands are
+what answer it. (`git fetch` before `--status` — it reads the local `tstate/`,
+so without a fetch it reports your own checkout's staleness.)
+
+Safe by construction: the one property a bad push could poison for everyone — a
+compiler that cannot reproduce itself — cannot leave your tree, because
+`make compiler/pascal26` IS the fixedpoint. `make pin` stays the deliberate brake.
+
+#### Precedence — CLAUDE.md wins
+
+The loop above is the **single source of truth for gating**. Handoff notes
+(`devdocs/dev/handoffs/**`, `devdocs/progress/HANDOFF-*`), resolved tickets, and
+`done/` write-ups are **historical records of what a past session actually ran** —
+they are not instructions, they are not maintained, and several of them predate
+this rule and say `gate.sh full`. **Never widen your gate on their authority, and
+do not "fix" them** — rewriting a session record falsifies history. If a live
+reference doc (`devdocs/dev/*.md`) contradicts this section, that doc is the bug:
+fix the doc, not the loop.
+
 - **Run the gate with `tools/gate.sh` (quick | lib | full | check), and background
-  THAT — never poll a `make` you started.** `gate.sh quick` is the native
-  confirm above (~30s idle); `gate.sh full` adds the local suites and is for
-  when T is down. It runs the whole gate to completion,
+  THAT — never poll a `make` you started.** It runs the whole gate to completion,
   prints one line per step, and exits with the result, so the completion
   notification is the answer. Polling a long run with repeated `sleep N; tail log`
   burns a turn per poll and learns nothing; and `until ! pgrep -f "make test"`
@@ -442,17 +468,6 @@ diffed against an oracle.
   takes 2-3x longer — slow, not stuck). Full note, including why an expected
   output must never contain an absolute `/tmp` path (testmgr rewrites it):
   **`devdocs/dev/gating-and-waiting.md`**.
-- **Confirm native, offload the matrix.** After a change, ALWAYS confirm it
-  works natively yourself: `tools/testmgr.py --tier quick` plus self-host
-  fixedpoint for compiler changes (≈40s). The breadth — cross targets, corpus,
-  regressions elsewhere — is Track T's job *when a watcher is up*. Check with
-  `tools/twatch.py --status` (no network, no ping: reads `tstate/` vs git
-  history; a commit older than the grace window that nobody tested = T down).
-  Exit 0 → push after the native confirm; regressions come back asynchronously
-  as tstate reports/tickets tied to your exact SHA. Exit 1 → T is down/absent:
-  the old rules apply — run your lane's full gate (`tools/testmgr.py --tier
-  full`, or `--tier limited` + the targets your change touches) before pushing
-  anything risky.
 - **Don't idle on a gate — snapshot and proceed, but verify against a KNOWN
   sha.** The gate/pin/matrix runs in the background; you keep bughunting the
   next thing. Fire the background job (`tools/gate.sh` — background *that*, never
