@@ -328,6 +328,10 @@ void PyErr_Clear(void);
 /* pxx-internal: lets the embedding driver read the pending message without
    exposing PyObject internals; not part of the real CPython API. */
 const char *__pxx_PyErr_Message(void);
+/* pxx-internal: stops the program naming a C-API function this runtime does
+   not implement. Used only by the entries listed at the end of this header —
+   see the note there for why they exist at all. */
+void __pxx_cpyext_unsupported(const char *name);
 
 /* --- module definition ---------------------------------------------------- */
 typedef PyObject *(*PyCFunction)(PyObject *self, PyObject *args);
