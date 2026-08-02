@@ -106,3 +106,26 @@ revisit that call.
 
 `FloatToStrSig` spells several things Pascal's way: `5.0`→`5`, `1.0e20`→`1E20`,
 `-0.0`→`0`, `NaN`/`Inf`. Python needs `5.0`, `1e+20`, `-0.0`, `nan`/`inf`.
+
+
+## 2026-08-02 — a SECOND consumer wants the same primitive
+
+`round(x, n)` needs it too. CPython's `round` operates on the double's exact
+decimal value, not on `x * 10**n`:
+
+```
+Decimal(2.675) = 2.674999999999999822...  -> round(2.675, 2) = 2.67
+Decimal(2.665) = 2.665000000000000035...  -> round(2.665, 2) = 2.67
+```
+
+Both scale to exactly `267.5` / `266.5`, so the deciding information is gone
+before any tie-break rule runs — see
+[[bug-nilpy-round-ndigits-half-up-and-ignores-negative-ndigits]], where the
+other two defects were fixed and these two cases documented as blocked.
+
+Note a 17-significant-digit approximation does NOT suffice for round either:
+`2.665` renders as exactly `2.6650000000000000`, which is ambiguous at the tie.
+So both consumers need genuinely EXACT digit generation, not more digits.
+
+Raising the value of [[bug-b-floattostrsig-caps-at-15-significant-digits]]
+accordingly: it now unblocks two user-visible parity gaps, not one.

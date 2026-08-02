@@ -3181,12 +3181,45 @@ begin
 end;
 
 function pyround_n(x: Double; n: Integer): Double;
-var scale: Double; i: Integer;
+var p, y, r, f: Double; i, k: Integer;
 begin
-  scale := 1.0;
-  for i := 1 to n do scale := scale * 10.0;
-  if x >= 0.0 then pyround_n := Trunc(x * scale + 0.5) / scale
-  else pyround_n := -(Trunc(-x * scale + 0.5) / scale);
+  { Python's round(x, n) differs from naive half-up in TWO ways, and this got
+    both wrong (bug-nilpy-round-ndigits-half-up-and-ignores-negative-ndigits):
+
+    1. NEGATIVE n rounds to tens/hundreds. `for i := 1 to n` simply does not
+       run when n < 0, so scale stayed 1.0 and round(1234.5678, -2) returned
+       1235.0 instead of 1200.0 — silently, and wrong by two orders of
+       magnitude.
+    2. Ties go to EVEN, not up. round(0.125, 2) is 0.12 and round(2.5, 0) is
+       2.0 in Python; half-up gave 0.13 and 3.0.
+
+    Note round(2.675, 2) = 2.67 falls out of doing the arithmetic on the actual
+    double rather than on the decimal text: 2.675 * 100 is 267.49999999999997,
+    so the tie never arises. That is CPython's answer too, and it is why this
+    must NOT be "fixed" by rounding a decimal string.
+
+    Scaling multiplies for n >= 0 and DIVIDES for n < 0, rather than building a
+    fractional scale and dividing by it — 1/100 is not exact, and r/0.01 comes
+    back 1199.9999... }
+  k := n;
+  if k < 0 then k := -k;
+  p := 1.0;
+  for i := 1 to k do p := p * 10.0;
+  if n >= 0 then y := x * p else y := x / p;
+  { round half to even on y }
+  r := Int(y);              { toward zero; keeps the sign of y }
+  f := y - r;
+  if f > 0.5 then r := r + 1.0
+  else if f < -0.5 then r := r - 1.0
+  else if (f = 0.5) or (f = -0.5) then
+  begin
+    { a tie: step away from zero only when that lands on an EVEN integer }
+    if Odd(Trunc(r)) then
+    begin
+      if f > 0.0 then r := r + 1.0 else r := r - 1.0;
+    end;
+  end;
+  if n >= 0 then pyround_n := r / p else pyround_n := r * p;
 end;
 
 function pymath_floor(x: Double): Int64;

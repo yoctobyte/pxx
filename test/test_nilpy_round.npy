@@ -1,0 +1,38 @@
+# round(x, n).
+#
+# Two real defects were fixed here (bug-nilpy-round-ndigits-half-up-and-ignores-
+# negative-ndigits):
+#   1. NEGATIVE n was ignored entirely — `for i := 1 to n` does not run when
+#      n < 0, so the scale stayed 1.0 and round(1234.5678, -2) returned 1235.0.
+#   2. Ties went half-UP; Python's rule is half-to-EVEN.
+#
+# TWO CASES BELOW STILL DIVERGE FROM CPython, DELIBERATELY. Do NOT "fix" them by
+# editing this expectation:
+#
+#     round(2.675, 2)   CPython 2.67   pxx 2.68
+#     round(2.665, 2)   CPython 2.67   pxx 2.66
+#
+# CPython rounds the EXACT decimal value of the double, not x*10**n:
+#     Decimal(2.675) = 2.674999999999999822...   -> below the tie -> 2.67
+#     Decimal(2.665) = 2.665000000000000035...   -> above the tie -> 2.67
+# Both scale to exactly 267.5 / 266.5, which destroys the deciding information,
+# so no tie-break rule on the scaled value can be right. Matching CPython needs
+# correctly-rounded decimal conversion — blocked on
+# bug-b-floattostrsig-caps-at-15-significant-digits. These two lines assert
+# pxx's CURRENT behaviour so the divergence is visible and tracked.
+
+# --- no ndigits: half-to-even, and already correct before the fix ---
+print(round(0.5), round(1.5), round(2.5), round(3.5), round(-0.5), round(-1.5))
+print(round(1.0), round(-2.5))
+
+# --- ndigits: half-to-even (fixed) ---
+print(round(0.125, 2), round(2.5, 0))
+print(round(2.345, 2), round(0.135, 2), round(1.005, 2))
+print(round(3.14159, 3), round(3.14159, 1))
+
+# --- negative ndigits (fixed: was ignored) ---
+print(round(1234.5678, -2), round(1234.5678, -1), round(15678.0, -3))
+print(round(-1234.5678, -2))
+
+# --- the two known divergences, asserted as pxx behaves today ---
+print(round(2.675, 2), round(2.665, 2))
