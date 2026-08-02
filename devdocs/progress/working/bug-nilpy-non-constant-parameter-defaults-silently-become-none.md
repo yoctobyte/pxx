@@ -178,9 +178,16 @@ the change neither helps nor hurts it.
    the initialiser belongs at the class statement, which means routing it
    through `PyParseClass` rather than the member pre-pass. Separate plumbing,
    not a flag flip.
-   *Note:* `def go(self, b=[])` does not compile AT ALL today ("unexpected
-   token"), on baseline as well — so the method path needs that parse fixed
-   first, and the None behaviour is only reachable for defaults that do parse.
+   *Update, commit ce45555ec:* the PARSE half is fixed. Both skip sites in the
+   method header stepped exactly ONE token past the `=`, so a container default
+   on a method was a hard error rather than a None — the None behaviour was not
+   even reachable for those forms. `PySkipParamDefaultAtCursor` now balances
+   brackets like `PyParamDefaultAt` does on indices. A method's `b=True` also
+   printed 1 (the member pre-pass did not carry `ProcParamDefaultIsBool`) and is
+   fixed with it. So what remains for methods is only the EVALUATION, and the
+   route is known: the initialiser must be queued from `PyParseClass`, at the
+   class statement, since Python evaluates a method default when the class body
+   executes.
 2. **NESTED defs** (`def inner(b=q)` over an enclosing local). Queued at their
    `def` statement and compiled AFTER the enclosing routine's epilogue, so by
    the time the header is parsed the enclosing scope is gone and evaluating
