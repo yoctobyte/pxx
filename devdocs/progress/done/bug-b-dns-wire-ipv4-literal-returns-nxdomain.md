@@ -8,7 +8,7 @@ type: bug
 
 - **Type:** bug (RTL resolver, wrong answer + backend divergence) — **Track B**
   (`lib/rtl/dns.pas`)
-- **Found and fixed:** 2026-08-02, while starting
+- **Found and fixed:** 2026-08-02 (commit 11f3c2d60), while starting
   [[feature-net-a-first-connect-by-name]] — a connect-by-name entry point has to
   accept a literal, so the first thing checked was whether the resolver does.
 
