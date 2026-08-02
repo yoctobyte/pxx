@@ -80,3 +80,33 @@ check the rounding, not just the sum.
   task stack, i.e. after removing the `sdkconfig.defaults` override.
 - Self-host fixedpoint + `make test-esp-bare` green; the qemu s3 windowed runs
   still match their oracles.
+
+
+## DONE 2026-08-02 — both fixes, and the stock stack now passes
+
+Both changes from the plan above, together:
+
+- **`PatchProcPrologue` reserves what the routine actually used.** `XtSpillMax`
+  tracks the high-water mark of `XtSpillDepth` (updated in `XtensaPushA2` /
+  `XtensaPush64`, reset by `EmitProcPrologue`), and the patch reserves
+  `size + XtSpillMax` instead of `size + XT_EXPR_REGION + XT_OUTARG_REGION`.
+  Safe because the offsets are all relative to the BOTTOM of the frame and the
+  patch runs after the body — and nested routines are emitted BEFORE their
+  parent's prologue, so the two never interleave.
+- **Small frames patch `ADDI`, not `ADDMI`.** Same 3 bytes, but a byte-granular
+  ±128 immediate instead of multiples of 256. Frames up to 128 bytes are now
+  exact (rounded to 16 for stack alignment); larger ones round to ADDMI's step
+  as before.
+
+**Acceptance met:** `test/test_esp_hw_validation.pas` — whose Int64 print
+recurses 19 deep, the case that died — passes on esp32s3 with the **stock
+3584-byte** task stack, with `sdkconfig.defaults` removed entirely.
+
+The 8 KB setting stays in `hello-s2/s3/c3` only, reworded as what it now is:
+headroom for the harness, which links whatever program `esp_run.sh` /
+`esp_flash.sh` is handed. `timer-s3` lost it — an ordinary example should show
+what an ordinary project needs, which is nothing.
+
+Verified: `tools/gate.sh quick` GREEN, `make test-esp-bare` 19/19,
+`make test-esp-idf` green on both chips, oracle match for the validation program
+on esp32s3 and esp32c3.

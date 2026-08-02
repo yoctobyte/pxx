@@ -1853,6 +1853,12 @@ var
     positive offsets inside a reserved frame region; XtSpillDepth is the
     current byte offset, reset per proc. Call0 keeps the moving-sp stack. }
   XtSpillDepth : Integer;
+  { High-water mark of XtSpillDepth for the routine being emitted, so the
+    prologue can reserve what this routine actually uses instead of the worst
+    case. Reset by EmitProcPrologue, read by PatchProcPrologue — which runs
+    after the body, and nested routines are emitted BEFORE their parent's
+    prologue, so the two never interleave. }
+  XtSpillMax : Integer;
   { Emit a relocatable ET_REL .o instead of a linked ET_EXEC image
     (--emit-obj, or inferred from a .o output name). esp32 targets only. }
   EmitObjMode : Boolean;

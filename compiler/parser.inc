@@ -29536,6 +29536,7 @@ begin
       xtensa_entry(reg_xtensa_sp, 32 + XT_EXPR_REGION + XT_OUTARG_REGION);
       xtensa_mov(reg_xtensa_a7, reg_xtensa_sp);
       XtSpillDepth := XT_OUTARG_REGION;
+      XtSpillMax := XtSpillDepth;
     end;
     { Enable the FP coprocessor before any add.s/mul.s (bare metal leaves CPENABLE
       clear -> FP would trap). Enable all CPs (harmless: no context switching). }

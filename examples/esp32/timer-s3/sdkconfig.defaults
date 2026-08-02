@@ -1,9 +1,0 @@
-# A pxx windowed-ABI frame reserves a fixed expression region and rounds up to
-# 256 bytes (the granularity of the single ADDMI the prologue patches), so a
-# recursive Pascal routine eats stack much faster than the C the SDK sizes its
-# defaults for: printing one Int64 digit-by-digit recurses ~19 deep and blew
-# the 3584-byte default clean off the end (LoadProhibited, no diagnostic).
-# 8 KB is still small by IDF standards and covers ordinary recursion.
-# See bug-a-xtensa-windowed-frame-minimum-256-bytes for the compiler-side fix.
-CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
-CONFIG_ESP_TIMER_TASK_STACK_SIZE=8192

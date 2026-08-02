@@ -150,6 +150,7 @@ begin
       Error('target xtensa: expression/argument stack exceeds reserved frame');
     xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, XtSpillDepth);
     Inc(XtSpillDepth, 4);
+    if XtSpillDepth > XtSpillMax then XtSpillMax := XtSpillDepth;
   end
   else
   begin
@@ -200,6 +201,7 @@ begin
     xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, XtSpillDepth);
     xtensa_s32i(reg_xtensa_a3, reg_xtensa_sp, XtSpillDepth + 4);
     Inc(XtSpillDepth, 8);
+    if XtSpillDepth > XtSpillMax then XtSpillMax := XtSpillDepth;
   end
   else
   begin

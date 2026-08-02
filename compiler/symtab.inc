@@ -5879,6 +5879,7 @@ begin
         ABI's home for argument words 6..), so the expression stack begins
         above it. }
       XtSpillDepth := XT_OUTARG_REGION;
+      XtSpillMax := XtSpillDepth;
       xtensa_mov(reg_xtensa_a15, reg_xtensa_sp);
       Result := CodeLen;
       xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 0);
@@ -5960,8 +5961,29 @@ begin
     cannot reach it, and a too-large ADDI silently truncates. }
   if (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
   begin
-    aligned := ((size + XT_EXPR_REGION + XT_OUTARG_REGION + 255) div 256) * 256;
-    Patch24(patchPos, EncodeXtensaAddmi(reg_xtensa_sp, reg_xtensa_sp, -aligned));
+    { Reserve the locals plus what this routine's expression/argument stack
+      actually reached (XtSpillMax already includes XT_OUTARG_REGION, its
+      starting value) — not the worst case. ESP-IDF hands tasks 3584-byte
+      stacks, so a fixed 256-byte floor per frame cost ~11 levels of recursion:
+      printing one Int64 digit by digit is 19 deep and died with LoadProhibited
+      (bug-a-xtensa-windowed-frame-minimum-256-bytes).
+
+      ADDI reaches -128 with byte granularity and is the same 3 bytes as ADDMI,
+      whose immediate is a multiple of 256 — so small frames use ADDI and pay
+      only what they need, and everything else rounds up to ADDMI's step. The
+      stack stays 16-byte aligned either way. }
+    aligned := size + XtSpillMax;
+    if aligned <= 128 then
+    begin
+      aligned := ((aligned + 15) div 16) * 16;
+      if aligned = 0 then aligned := 16;
+      Patch24(patchPos, EncodeXtensaAddi(reg_xtensa_sp, reg_xtensa_sp, -aligned));
+    end
+    else
+    begin
+      aligned := ((aligned + 255) div 256) * 256;
+      Patch24(patchPos, EncodeXtensaAddmi(reg_xtensa_sp, reg_xtensa_sp, -aligned));
+    end;
     Exit;
   end;
   if TargetArch = TARGET_ARM32 then
