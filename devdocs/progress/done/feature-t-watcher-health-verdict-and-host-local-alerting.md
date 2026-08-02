@@ -85,3 +85,20 @@ is what made `--status` untrustworthy in the first place.
 Kill `-STOP` the daemon mid-run (alive, frozen, `live.json` stops moving) and
 confirm `trackt health` reports DOWN/wedged within one poll — not after the
 45-minute grace window, and distinguishably from "no daemon" and from "idle".
+
+## Log
+- 2026-08-02 — resolved, commit e6ee21fcc.
+- 2026-08-02 — resolved for the REPO half only. `trackt health` / `--json`
+  landed in `e6ee21fcc` (verdict, exit code, wedged-detection off a frozen
+  `live.json`) and `gate.sh check` points at it (`a483dcf95`). The HOST half —
+  the megaphone, a systemd user timer on xeon piping a non-zero verdict into a
+  notifier — was never wired: `systemctl --user list-timers` shows the three
+  `xeon-*` units and nothing for the watcher. Split out as
+  [[task-t-xeon-host-local-health-alerting]] rather than left implicit here,
+  because the ticket's own architecture says that half is deliberately NOT
+  committed and so cannot be judged from the repo.
+  The gate stated here (`-STOP` the daemon mid-run, confirm DOWN/wedged within
+  one poll, distinguishable from idle) was NOT re-run today — the daemon was
+  mid `--tier full` and stopping it to test the detector would have cost the
+  matrix run. It carries over to the split ticket.
+

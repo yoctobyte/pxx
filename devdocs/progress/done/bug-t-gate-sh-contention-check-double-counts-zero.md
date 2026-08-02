@@ -61,3 +61,12 @@ is fine today only because `cut` succeeds when `/proc/loadavg` exists.
 `tools/gate.sh quick` on an idle box prints no shell error, and the
 contention branch still fires when a watcher IS running (test by starting a
 `twatch.py` or by pointing the pattern at a running process).
+
+## Log
+- 2026-08-02 — resolved, commit 07467a16f.
+- 2026-08-02 — same defect as [[bug-t-gate-sh-pgrep-fc-double-zero-integer-error]],
+  filed independently the same day; one fix (`07467a16f`) closes both. Kept as
+  a resolved duplicate rather than rejected, since each ticket describes the
+  failure from a different end (the doubled zero vs. the shell error it
+  produces) and both are accurate.
+

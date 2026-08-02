@@ -4,6 +4,7 @@ owner: claude-A
 prio: 65
 type: feature
 blocked-by: [bug-c-uses-path-basename-collides-with-enclosing-unit-name]
+status: blocked
 ---
 
 # cpyext: compile a CPython C extension's SOURCE against our own `Python.h`
@@ -300,3 +301,11 @@ green under its real upstream filename.
 - Keep the header's promises minimal and explicit: a function we do not
   implement should fail at LINK time with a clear name, never silently do
   nothing at run time.
+
+## Log
+- 2026-08-02 — moved working/ -> blocked/ by `claude@xeon` during T-queue
+  triage. Not a judgement on the work: the ticket carries
+  `blocked-by: [bug-c-uses-path-basename-collides-with-enclosing-unit-name]`,
+  that blocker is still open in backlog/ (prio 65, unblocks this), and
+  `working/` is a LIVE LOCK — a ticket parked on someone else's fix does not
+  belong in it. Owner field left intact; re-claim when the blocker lands.

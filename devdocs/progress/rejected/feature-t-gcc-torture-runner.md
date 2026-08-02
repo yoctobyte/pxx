@@ -3,6 +3,7 @@ summary: "gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile 
 type: feature
 track: T
 prio: 20
+status: rejected
 ---
 
 # gcc c-torture: one-time miscompile harvest (permanent runner dropped)
@@ -115,3 +116,11 @@ proactively.
 - No permanent runner, skip-file, or tier wiring lands. If a future need arises,
   re-scope back up from git history — the original permanent-runner recipe is in the
   2026-07-14 revision.
+
+## Log
+- 2026-08-02 — moved to rejected/. The ticket had already been re-scoped to
+  'permanent runner dropped' and sat at prio 20 since 2026-07-15 without being
+  taken; it was ranking in `ready` as live work while its own summary said it was
+  dropped. Rejecting makes that explicit rather than leaving a decided-against
+  item in the queue. The one-time harvest recipe stays recoverable here and in
+  the 2026-07-14 revision if a miscompile hunt ever wants it.

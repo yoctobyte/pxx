@@ -3,6 +3,7 @@ track: A
 prio: 55
 type: feature
 owner: fable-a-n
+status: unfinished
 ---
 
 # NilPy object reclamation — dict/list/instance/bound-method lifetime
@@ -105,3 +106,11 @@ NEXT (ranked):
 4. aarch64 EmitVariantClearA64/RetainA64 object arms + non-x86 scope-exit
    tyClass release arm (leak-only asymmetry today).
 5. `d = None` (RHS non-class) rebind leaks the old binding's ref.
+
+## Log
+- 2026-08-02 — moved working/ -> unfinished/ by `claude@xeon` during T-queue
+  triage. Last substantive commit 2026-07-23 (`485c25c21`, doloop RSS 369 MB
+  after the concat + hidden-dest fixes), so the lock had been held 10 days with
+  no agent on it. The remaining numbered items at the end of this ticket are
+  real and unstarted. Owner `fable-a-n` left in place: this frees the lock, it
+  does not reassign the work — re-claim to resume.

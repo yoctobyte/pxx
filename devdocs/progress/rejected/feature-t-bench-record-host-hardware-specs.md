@@ -3,6 +3,7 @@ track: T
 prio: 55
 type: feature
 blocked-by: []
+status: rejected
 ---
 
 # Benchmarks record the host *name*, but nothing about the hardware
@@ -64,3 +65,11 @@ instead of merely annotating one.
 
 Found while looking at the benchmark charts (Track D/W), filed to T as the
 owner of the bench log and the watcher that writes it.
+
+## Log
+- 2026-08-02 — rejected as a DUPLICATE of [[feature-t-bench-hardware-provenance]]
+  (filed 2026-07-31, prio 60), which describes the same defect with the
+  measured borg-vs-xeon table. Both were open at once because the same gap was
+  rediscovered a day apart from opposite ends — one from the chart, one from the
+  row counts. The work is still WANTED: `bench.tsv` remains
+  `# date host sha workload level ms` with no hardware column. Track it there.

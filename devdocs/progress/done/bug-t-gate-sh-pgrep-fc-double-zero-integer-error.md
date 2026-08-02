@@ -61,3 +61,6 @@ others=${others:-0}
 `tools/gate.sh quick` on an idle box prints no `[:` error, and still prints the
 Track T contention warning when a `testmgr.py`/`twatch.py` process is running
 (check both branches — the idle one is the regression here).
+
+## Log
+- 2026-08-02 — resolved, commit 07467a16f.

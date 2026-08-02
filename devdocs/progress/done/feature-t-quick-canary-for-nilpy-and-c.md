@@ -63,3 +63,6 @@ that do not collide with the existing `smoke_*` names.
 
 `testmgr --tier quick` stays under ~20s, and each new canary is confirmed to FAIL
 against a deliberately reverted fix in its own language (not just to pass today).
+
+## Log
+- 2026-08-02 — resolved, commit 832a0ad03.
