@@ -1,6 +1,5 @@
 ---
 track: N
-owner: claude-A
 prio: 65
 type: feature
 blocked-by: []
