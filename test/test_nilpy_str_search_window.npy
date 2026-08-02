@@ -1,0 +1,58 @@
+# The optional start/end WINDOW on the string search methods.
+# find(sub, start) and index(sub, start) worked; find(sub, start, end),
+# rfind/count/startswith/endswith with any window did not -- all loud errors.
+# The window is a SLICE (it clamps, and takes negative indices), and a returned
+# INDEX is rebased onto the original string, which is the half that would be
+# silently wrong if the offset were dropped.
+# bug-nilpy-str-search-methods-lack-the-start-end-window
+
+s = "hello world"
+
+# find
+print(s.find("o"))
+print(s.find("o", 5))
+print(s.find("o", 5, 9))
+print(s.find("o", 0, 4))
+print(s.find("z", 0, 4))
+
+# negative window bounds count from the end, like a slice
+print(s.find("o", -5))
+print(s.find("o", -5, -1))
+
+# rfind
+print(s.rfind("o"))
+print(s.rfind("o", 0, 5))
+print(s.rfind("o", 6))
+print(s.rfind("o", 0, 3))
+
+# count
+print(s.count("l"))
+print(s.count("l", 3))
+print(s.count("l", 0, 4))
+print(s.count("l", 99))
+print(s.count("l", 3, 4))
+
+# index -- like find but raises when absent
+print(s.index("o", 5))
+print(s.index("o", 5, 9))
+try:
+    print(s.index("zz", 0, 4))
+except ValueError:
+    print("index raises ValueError")
+
+# startswith / endswith with a window
+print(s.startswith("he"))
+print(s.startswith("llo", 2))
+print(s.startswith("wo", 6, 11))
+print(s.startswith("wo", 6, 7))
+print(s.endswith("ld"))
+print(s.endswith("lo", 0, 5))
+print(s.endswith("ld", 0, 11))
+print(s.endswith("ld", 0, 5))
+
+# an out-of-range window clamps to empty rather than raising
+print(s.find("h", 99))
+print(s.count("h", 99))
+print(s.startswith("h", 99))
+
+print("still running")

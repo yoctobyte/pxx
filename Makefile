@@ -1151,6 +1151,11 @@ test-nilpy: $(COMPILER)
 	# splits at the last dot of the BASENAME — a leading dot is not an extension.
 	./$(COMPILER) test/test_nilpy_os_path_gaps.npy /tmp/test_nilpy_ospath26
 	test "$$(/tmp/test_nilpy_ospath26)" = "$$(printf '%b' 'True\nFalse\nFalse\nTrue\nFalse\nFalse\nFalse\nFalse\n(\047f.tar\047, \047.gz\047)\n(\047noext\047, \047\047)\n(\047/a/b/c\047, \047.txt\047)\n(\047x\047, \047.\047)\n(\047\047, \047\047)\n(\047.bashrc\047, \047\047)\n(\047/a/b/.hidden\047, \047\047)\n(\047/a.b/c\047, \047\047)\n(\047a.b/c\047, \047\047)\ntuple\nf.tar\n.gz\nc.txt\n/a/b\na/b\nTrue')"
+	# the optional start/end WINDOW on find/rfind/index/count/startswith/endswith.
+	# The window is a SLICE (clamps, takes negative bounds) and a returned INDEX is
+	# rebased onto the original string — dropping that offset is the silent half.
+	./$(COMPILER) test/test_nilpy_str_search_window.npy /tmp/test_nilpy_strwin26
+	test "$$(/tmp/test_nilpy_strwin26)" = "$$(printf '%b' '4\n7\n7\n-1\n-1\n7\n7\n7\n4\n7\n-1\n3\n2\n2\n0\n1\n7\n7\nindex raises ValueError\nTrue\nTrue\nTrue\nFalse\nTrue\nTrue\nTrue\nFalse\n-1\n0\nFalse\nstill running')"
 	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
 	# key function had no overload to bind to (dict alone and list+key both worked)
 	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26

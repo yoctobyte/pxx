@@ -1164,6 +1164,26 @@ function pystr_replace_n(const s: AnsiString; const pat: AnsiString; const rep: 
 { str.count(sub) — non-overlapping occurrences; an empty sub counts the gaps,
   Length(s)+1, as CPython does. }
 function pystr_count(const s: AnsiString; const sub: AnsiString): Integer;
+{ The optional start/end window Python gives find/rfind/index/count/startswith/
+  endswith. One name per ARITY rather than an overload, because the frontend
+  resolves these by name through FindProc, which never consults overloads
+  ([[bug-nilpy-stdlib-shim-table-cannot-reach-an-overload]]) — the `_from` /
+  `_range` suffix convention the str-method table already uses.
+
+  The window is a SLICE, so it clamps and accepts negative indices exactly like
+  s[a:b]; a returned INDEX is then rebased onto the original string, which is
+  the part that would be silently wrong if the offset were forgotten
+  (bug-nilpy-str-search-methods-lack-the-start-end-window). }
+function pystr_count_from(const s, sub: AnsiString; a: Integer): Integer;
+function pystr_count_range(const s, sub: AnsiString; a, b: Integer): Integer;
+function pystr_find_range(const s, sub: AnsiString; a, b: Integer): Integer;
+function pystr_index_range(const s, sub: AnsiString; a, b: Integer): Integer;
+function pystr_rfind_from(const s, sub: AnsiString; a: Integer): Integer;
+function pystr_rfind_range(const s, sub: AnsiString; a, b: Integer): Integer;
+function pystr_startswith_from(const s, pre: AnsiString; a: Integer): Boolean;
+function pystr_startswith_range(const s, pre: AnsiString; a, b: Integer): Boolean;
+function pystr_endswith_from(const s, suf: AnsiString; a: Integer): Boolean;
+function pystr_endswith_range(const s, suf: AnsiString; a, b: Integer): Boolean;
 { str.rfind(sub) — last occurrence, -1 when absent. }
 function pystr_rfind(const s: AnsiString; const sub: AnsiString): Integer;
 function pystr_title(const s: AnsiString): AnsiString;
@@ -1773,6 +1793,72 @@ begin
     Dec(i);
   end;
   Result := -1;
+end;
+
+{ ---- the start/end window (see the interface block) ---------------------- }
+
+function pystr_count_from(const s, sub: AnsiString; a: Integer): Integer;
+begin
+  Result := pystr_count(pystr_slice(s, a, PY_SLICE_OMIT), sub);
+end;
+
+function pystr_count_range(const s, sub: AnsiString; a, b: Integer): Integer;
+begin
+  Result := pystr_count(pystr_slice(s, a, b), sub);
+end;
+
+{ a found index is relative to the WINDOW, so rebase it onto the original
+  string; -1 (not found) must stay -1 rather than becoming the offset }
+function PyWindowStart(n, a: Integer): Integer;
+var lo, hi: Integer;
+begin
+  lo := a; hi := PY_SLICE_OMIT;
+  PySliceBounds(n, lo, hi);
+  Result := lo;
+end;
+
+function pystr_find_range(const s, sub: AnsiString; a, b: Integer): Integer;
+begin
+  Result := pystr_find(pystr_slice(s, a, b), sub);
+  if Result >= 0 then Result := Result + PyWindowStart(Length(s), a);
+end;
+
+function pystr_index_range(const s, sub: AnsiString; a, b: Integer): Integer;
+begin
+  Result := pystr_find_range(s, sub, a, b);
+  if Result < 0 then raise ValueError.Create('substring not found');
+end;
+
+function pystr_rfind_from(const s, sub: AnsiString; a: Integer): Integer;
+begin
+  Result := pystr_rfind(pystr_slice(s, a, PY_SLICE_OMIT), sub);
+  if Result >= 0 then Result := Result + PyWindowStart(Length(s), a);
+end;
+
+function pystr_rfind_range(const s, sub: AnsiString; a, b: Integer): Integer;
+begin
+  Result := pystr_rfind(pystr_slice(s, a, b), sub);
+  if Result >= 0 then Result := Result + PyWindowStart(Length(s), a);
+end;
+
+function pystr_startswith_from(const s, pre: AnsiString; a: Integer): Boolean;
+begin
+  Result := pystr_startswith(pystr_slice(s, a, PY_SLICE_OMIT), pre);
+end;
+
+function pystr_startswith_range(const s, pre: AnsiString; a, b: Integer): Boolean;
+begin
+  Result := pystr_startswith(pystr_slice(s, a, b), pre);
+end;
+
+function pystr_endswith_from(const s, suf: AnsiString; a: Integer): Boolean;
+begin
+  Result := pystr_endswith(pystr_slice(s, a, PY_SLICE_OMIT), suf);
+end;
+
+function pystr_endswith_range(const s, suf: AnsiString; a, b: Integer): Boolean;
+begin
+  Result := pystr_endswith(pystr_slice(s, a, b), suf);
 end;
 
 function PyIsWordCh(c: Char): Boolean;

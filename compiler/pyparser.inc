@@ -2215,16 +2215,17 @@ begin
   else if CaseEqual(mname, 'lstrip') then begin pname := 'pystr_lstrip'; wantArgs := -5; end
   else if CaseEqual(mname, 'rstrip') then begin pname := 'pystr_rstrip'; wantArgs := -5; end
   else if CaseEqual(mname, 'startswith') then
-    begin pname := 'pystr_startswith'; retTk := tyBoolean; wantArgs := 1; end
+    { prefix, plus Python's optional start/end WINDOW — the -9 case }
+    begin pname := 'pystr_startswith'; retTk := tyBoolean; wantArgs := -9; end
   else if CaseEqual(mname, 'endswith') then
-    begin pname := 'pystr_endswith'; retTk := tyBoolean; wantArgs := 1; end
+    begin pname := 'pystr_endswith'; retTk := tyBoolean; wantArgs := -9; end
   else if CaseEqual(mname, 'find') then
-    { .find(sub) and .find(sub, start) — see the -3 case in PyParseStrMethod }
-    begin pname := 'pystr_find'; retTk := tyInteger; wantArgs := -3; end
+    { .find(sub), .find(sub, start) and .find(sub, start, end) — the -9 case }
+    begin pname := 'pystr_find'; retTk := tyInteger; wantArgs := -9; end
   else if CaseEqual(mname, 'index') then
     { like find, but RAISES ValueError when the substring is absent — same
-      one-or-two-argument shape, so the same -3 case handles it. }
-    begin pname := 'pystr_index'; retTk := tyInteger; wantArgs := -3; end
+      one-to-three-argument shape, so the same -9 case handles it. }
+    begin pname := 'pystr_index'; retTk := tyInteger; wantArgs := -9; end
   else if CaseEqual(mname, 'rindex') then
     begin pname := 'pystr_rindex'; retTk := tyInteger; wantArgs := 1; end
   else if CaseEqual(mname, 'encode') then
@@ -2274,9 +2275,9 @@ begin
       raise (bug-nilpy-songformatter-first-render-walls). }
     begin pname := 'pystr_replace'; wantArgs := -7; end
   else if CaseEqual(mname, 'count') then
-    begin pname := 'pystr_count'; retTk := tyInteger; wantArgs := 1; end
+    begin pname := 'pystr_count'; retTk := tyInteger; wantArgs := -9; end
   else if CaseEqual(mname, 'rfind') then
-    begin pname := 'pystr_rfind'; retTk := tyInteger; wantArgs := 1; end
+    begin pname := 'pystr_rfind'; retTk := tyInteger; wantArgs := -9; end
   else if CaseEqual(mname, 'title') then pname := 'pystr_title'
   else if CaseEqual(mname, 'capitalize') then pname := 'pystr_capitalize'
   else if CaseEqual(mname, 'swapcase') then pname := 'pystr_swapcase'
@@ -4047,6 +4048,19 @@ begin
     if i = 2 then pname := pname + '_from'
     else if i <> 1 then
       Error('Nil Python: str method .' + mname + '() takes one or two arguments');
+    procIdx := FindProc(pname);
+    if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  end
+  else if wantArgs = -9 then
+  begin
+    { substring/prefix, plus Python's OPTIONAL start and end window. One pylib
+      name per arity — '' / '_from' / '_range' — rather than an overload,
+      because FindProc resolves by name and never consults overloads
+      (bug-nilpy-stdlib-shim-table-cannot-reach-an-overload). }
+    if i = 2 then pname := pname + '_from'
+    else if i = 3 then pname := pname + '_range'
+    else if i <> 1 then
+      Error('Nil Python: str method .' + mname + '() takes one to three arguments');
     procIdx := FindProc(pname);
     if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   end
