@@ -46,7 +46,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (210)
+## backlog (209)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -93,7 +93,6 @@ lives in git, not in a timestamp._
 | bug-nilpy-nested-for-comprehension-not-supported | N | 45 | bug | A comprehension with TWO for-clauses — [c for r in rows for c in r] — fails with 'undefined variable (c)'; the flatten idiom is unavailable | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
-| bug-nilpy-one-line-def-suite-does-not-parse | N | 55 | bug | `def f(x): return x + 1` on ONE line fails with 'unexpected token'. The compound-statement header requires a newline + INDENT suite; the inline form Python allows on the same line is not accepted for def (or class) | — |
 | bug-nilpy-print-stringifies-container-args-eagerly | N | 45 | bug | print() converts a container argument to text as it evaluates it, not after all arguments are evaluated — so `print(xs, xs.pop(), xs)` shows the list before AND after the pop. A user function with the identical shape is correct | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pypow-integer-overflow-does-not-promote | N | 35 | bug | `pypow_v`'s integer path silently wraps past 64 bits instead of promoting | — |
@@ -365,7 +364,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1246)
+## done (1247)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -826,6 +825,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-numeric-builtin-gaps-min-max-sum-float-inf | N | 50 | bug | Numeric builtin gaps: `float("inf")`, variadic `min`/`max`, `sum(x, start)` | — |
 | bug-nilpy-object-reclamation-disabled-inside-py-modules | N | 65 | bug | NilPy object reclamation is switched off inside an imported `.py` module | — |
 | bug-nilpy-omitted-variant-default-segfaults | N | 65 | bug | nilpy: reading a DEFAULTED variant parameter segfaults (by-ref seen as by-value) | — |
+| bug-nilpy-one-line-def-suite-does-not-parse | N | 55 | bug | `def f(x): return x + 1` on ONE line fails with 'unexpected token'. The compound-statement header requires a newline + INDENT suite; the inline form Python allows on the same line is not accepted for def (or class) | — |
 | bug-nilpy-param-spill-width | N | 60 | bug | NilPy: bool/char param spill wrote 4 bytes into a 1-byte slot (SILENT, then SIGSEGV) | — |
 | bug-nilpy-param-with-string-default-reads-garbage | N | 75 | bug | A parameter with a STRING default is read as garbage | — |
 | bug-nilpy-parent-method-call-breaks-if-parent-instantiated-first | N | 60 | bug | `A.call(self)` won't parse if `A` was instantiated at module level first | bug-nilpy-identifiers-are-case-insensitive |
@@ -1694,7 +1694,6 @@ lives in git, not in a timestamp._
 - [p 55] [A] bug-b-writeln-float-with-17-decimals-prints-garbage
 - [p 55] [C] bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
-- [p 55] [N] bug-nilpy-one-line-def-suite-does-not-parse
 - [p 55] [N] bug-nilpy-unary-numeric-dunders-return-raw-handle
 - [p 55] [T] bug-t-corpus-regex-invents-phantom-tree
 - [p 55] [P] compat-pascal-assert-halts-instead-of-raising-eassertionfailed

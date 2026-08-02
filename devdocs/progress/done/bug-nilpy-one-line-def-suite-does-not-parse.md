@@ -3,6 +3,8 @@ track: N
 prio: 55
 type: bug
 summary: "`def f(x): return x + 1` on ONE line fails with 'unexpected token'. The compound-statement header requires a newline + INDENT suite; the inline form Python allows on the same line is not accepted for def (or class)"
+status: done
+owner: claude-AN-night
 ---
 
 # A one-line `def` suite does not parse
@@ -99,3 +101,59 @@ method in a class; `class A: pass`; a one-line `def` immediately followed by
 another top-level statement at column 0 (the DEDENT bookkeeping); a one-line
 `def` nested inside a multi-line `def`; and the multi-line spellings of each as
 regression controls.
+
+
+## Resolved 2026-08-03 — normalised in the LEXER, not in the parser
+
+The ticket's fix shape was "reuse `PyParseSuite`'s inline branch in
+`PyParseDef`". That would work for the parser and be wrong for everything else:
+a def body is read by several TOKEN-LEVEL scanners as well —
+`PyRegisterDefShells`, `PyCollectModuleLocalsAST`, `PyScanDefGlobals` — and each
+of them finds the body by hunting for its `tkIndent`. Every one would need the
+second shape, and missing one is SILENT: the scan finds a different region and
+the def is typed from it. (That hazard is already recorded: "def bodyStart is
+INSIDE the block — scans hunting tkIndent silently find the NESTED one".)
+
+So the lexer synthesises the canonical shape instead. When a logical line opens
+with `def` or `class` and its depth-0 `:` is followed by anything other than a
+comment or the line end, it emits `NEWLINE INDENT` after the colon and
+`DEDENT` after the line's own newline — exactly the token sequence the
+multi-line form produces. Nothing downstream, parser or scanner, can tell the
+two apart.
+
+The IndentStack is deliberately untouched: the pair opens and closes inside one
+physical line, so the next line's real indentation is measured against exactly
+the stack it would have seen.
+
+Restricted to `def` and `class`. `if c: break` and `while n < 3: n += 1` already
+work through `PyParseSuite`'s inline branch, and routing them through a
+synthetic block would change paths that are not broken.
+
+The header is recognised only when the keyword is the FIRST token of the logical
+line (the previous token is a NEWLINE/INDENT/DEDENT, or it is the first token in
+the file), and only the FIRST depth-0 colon on that line is a candidate — so an
+annotated signature's colons, a default's, a dict literal's and a slice's are
+all untouched. Each of those is a row in the test.
+
+Semicolons come along for free: `def two(x): a = x + 1; return a` works because
+the synthesised block is an ordinary block, and `PyParseBlock` already handles
+`;`-separated statements. That closes the half of
+[[bug-nilpy-chained-assign-power-assign-and-semicolon-statements]] the ticket
+suggested gating together, at least for this position.
+
+### Verified
+
+`test/test_nilpy_one_line_def_suite.npy` (+ `.expected`, wired into
+`make test-nilpy`), 14 lines byte-identical to CPython: a one-line def returning
+an expression and one whose body has a side effect; two one-line methods in a
+class; `class B: pass`; a one-line def nested inside a multi-line def; a
+one-line def followed immediately by a top-level statement (the DEDENT
+bookkeeping); a semicolon body; the multi-line spellings of each as controls;
+and the over-firing gate — a dict literal, an annotated signature with a default
+and a return annotation, a comment after the header colon, a slice, and the two
+inline suites that already worked.
+
+`gate.sh quick` GREEN, self-host fixedpoint byte-identical, FPC seed clean.
+
+## Log
+- 2026-08-03 — resolved.

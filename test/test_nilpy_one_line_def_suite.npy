@@ -1,0 +1,82 @@
+# bug-nilpy-one-line-def-suite-does-not-parse
+#
+# `def f(x): return x + 1` and `class B: pass` failed with "unexpected token".
+# PyParseDefHeader ended with Expect(NEWLINE) + Expect(INDENT), so only the
+# block form existed for def and class — while `if c: break` and
+# `while n < 3: n += 1` already worked, because those go through PyParseSuite,
+# which has an inline branch.
+#
+# Normalised in the LEXER rather than by teaching the parser a second body
+# shape: a def body is read by several TOKEN-LEVEL scanners too
+# (PyRegisterDefShells, PyCollectModuleLocalsAST, PyScanDefGlobals, all hunting
+# for the body's tkIndent), and each would otherwise need the second shape,
+# with a silent failure if one were missed.
+#
+# The rows after the multi-line controls are the gate on the lexer rule not
+# over-firing: a dict literal's colon, an annotated signature's colons, a
+# comment after the header colon (NOT an inline suite), a slice, and the two
+# inline suites that already worked and must keep their existing path.
+#
+# Diffed against CPython (tools/pydiff.py).
+
+def f(x): return x + 1
+print(f(1))
+
+n = 0
+def bump(): 
+    global n
+    n += 1
+def bump2(): print("bumped")
+bump2()
+
+class A:
+    def who(self): return "A"
+    def n(self): return 7
+print(A().who(), A().n())
+
+class B: pass
+b = B()
+print(type(b).__name__)
+
+def outer(v):
+    def inner(w): return w * 2
+    return inner(v) + 1
+print(outer(5))
+
+# multi-line spellings stay correct
+def g(x):
+    return x * 3
+print(g(4))
+
+class C:
+    def m(self):
+        return 11
+print(C().m())
+
+def two(x): a = x + 1; return a
+print(two(9))
+
+# a dict literal must not be mistaken for a header colon
+d = {1: 2, "k": 3}
+print(d[1], d["k"])
+
+# a return annotation, and a default, before the colon
+def ann(x: int = 4) -> int: return x * 5
+print(ann(), ann(2))
+
+# the inline suites that already worked
+m = 0
+while m < 3: m += 1
+print(m)
+for i in range(4):
+    if i == 2: break
+print(i)
+
+# a comment after the header colon is NOT an inline suite
+def cm(x):  # trailing comment
+    return x - 1
+print(cm(10))
+
+# slices and annotations elsewhere keep their colons
+xs = [1, 2, 3, 4]
+print(xs[1:3])

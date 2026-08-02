@@ -380,6 +380,8 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_iife26 | diff -u test/test_nilpy_immediate_lambda_call.expected -
 	./$(COMPILER) test/test_nilpy_range_runtime_step.npy /tmp/test_nilpy_rngstep26
 	/tmp/test_nilpy_rngstep26 | diff -u test/test_nilpy_range_runtime_step.expected -
+	./$(COMPILER) test/test_nilpy_one_line_def_suite.npy /tmp/test_nilpy_oneline26
+	/tmp/test_nilpy_oneline26 | diff -u test/test_nilpy_one_line_def_suite.expected -
 	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy /tmp/test_nilpy_ast_literal26
 	test "$$(/tmp/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
 	# atexit handlers run at exit (LIFO), io's in-memory buffers behave

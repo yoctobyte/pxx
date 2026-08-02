@@ -507,6 +507,26 @@ var
   IndentStack: array[0..1024] of Integer;
   IndentStackTop: Integer;
   parenDepth: Integer;
+  { `def f(x): return x + 1` — Python's one-line suite. Rather than teach the
+    PARSER a second body shape, the lexer normalises it here into the canonical
+    NEWLINE INDENT ... NEWLINE DEDENT the multi-line form already produces. That
+    matters because a def body is read by several TOKEN-LEVEL scanners as well
+    as by the parser (PyRegisterDefShells, PyCollectModuleLocalsAST,
+    PyScanDefGlobals — all of which hunt for the body's tkIndent), and every one
+    of them would otherwise need the second shape too. Getting one of them wrong
+    is silent: the scan finds a different region and the def is typed from it.
+
+    Restricted to `def` and `class`. `if c: break` and `while n < 3: n += 1`
+    already work through PyParseSuite's own inline branch, and routing them
+    through a synthetic block instead would change paths that are not broken.
+
+    The IndentStack is deliberately untouched: the INDENT/DEDENT pair is emitted
+    and closed within one physical line, so the next line's real indentation is
+    measured against exactly the stack it would have seen. }
+  lineIsDefClass: Boolean;   { this logical line opened with `def` or `class` }
+  lineSawColon: Boolean;     { ...and its depth-0 `:` has been passed }
+  inlineSuite: Boolean;      { ...and an INDENT was synthesised, so a DEDENT is owed }
+  peekP: Integer;
   HasSpaceIndent: Boolean;
   HasTabIndent: Boolean;
   IndentWidth: Integer;
@@ -539,6 +559,9 @@ begin
   IndentStack[0] := 0;
   IndentStackTop := 0;
   parenDepth := 0;
+  lineIsDefClass := False;
+  lineSawColon := False;
+  inlineSuite := False;
   HasSpaceIndent := False;
   HasTabIndent := False;
 
@@ -602,6 +625,11 @@ begin
 
     { 3. Tokenize the physical line until we hit a newline or EOF }
     IsLogicalLine := False;
+    if parenDepth = 0 then
+    begin
+      lineIsDefClass := False;
+      lineSawColon := False;
+    end;
     while (P <= Length(Source)) and (Source[P] <> #10) and (Source[P] <> #13) do
     begin
       c := Source[P];
@@ -647,6 +675,12 @@ begin
           Inc(P);
         end;
         k := PyKeyword(s);
+        { the FIRST token of the logical line decides whether an inline suite is
+          possible at all — `x = {1: 2}` must not be mistaken for a header }
+        if (parenDepth = 0) and (not lineSawColon) and
+           ((k = tkFunction) or (k = tkClass)) and
+           ((TokCount = 0) or (Tokens[TokCount - 1].Kind in [tkNewline, tkIndent, tkDedent])) then
+          lineIsDefClass := True;
         PyEmitToken(k, 0, SrcLine, s);
         continue;
       end;
@@ -941,7 +975,26 @@ begin
           end;
         end;
         '@': PyEmitToken(tkAt, 0, SrcLine, '');
-        ':': PyEmitToken(tkColon, 0, SrcLine, '');
+        ':':
+        begin
+          PyEmitToken(tkColon, 0, SrcLine, '');
+          { a header colon with anything but a comment or the line end after it
+            opens an inline suite }
+          if lineIsDefClass and (parenDepth = 0) and (not lineSawColon) then
+          begin
+            lineSawColon := True;
+            peekP := P;
+            while (peekP <= Length(Source)) and
+                  ((Source[peekP] = ' ') or (Source[peekP] = #9)) do Inc(peekP);
+            if (peekP <= Length(Source)) and (Source[peekP] <> #10) and
+               (Source[peekP] <> #13) and (Source[peekP] <> '#') then
+            begin
+              PyEmitToken(tkNewline, 0, SrcLine, '');
+              PyEmitToken(tkIndent, 0, SrcLine, '');
+              inlineSuite := True;
+            end;
+          end;
+        end;
         ',': PyEmitToken(tkComma, 0, SrcLine, '');
         '.': PyEmitToken(tkDot, 0, SrcLine, '');
         ';': PyEmitToken(tkSemicolon, 0, SrcLine, '');
@@ -1010,6 +1063,13 @@ begin
     if IsLogicalLine and (parenDepth = 0) then
     begin
       PyEmitToken(tkNewline, 0, SrcLine, '');
+    end;
+    { close a synthesised inline suite: the multi-line form's DEDENT comes from
+      the NEXT line's indent measurement, so it sits after that newline too }
+    if inlineSuite and (parenDepth = 0) then
+    begin
+      PyEmitToken(tkDedent, 0, SrcLine, '');
+      inlineSuite := False;
     end;
 
     { Consume physical newline }
