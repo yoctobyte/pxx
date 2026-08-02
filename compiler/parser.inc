@@ -10170,6 +10170,32 @@ begin
             Exit;
           end;
         end;
+        { A FLOAT argument: route to pylib's pystr_of, which spells the
+          non-finite values Python's way (inf / -inf / nan). The shared -201
+          builtin below goes to FloatToStr, whose Inf / -Inf / Nan is correct for
+          PASCAL and must not change — so this is a NilPy-only reroute, the same
+          shape as the container one just above
+          (bug-nilpy-inf-and-nan-print-pascal-spelled). }
+        if isNilPy and (IntToTypeKind(ASTTk[CurASTNode]) in [tyDouble, tySingle]) then
+        begin
+          { PyFloatStr, not pystr_of: FindProc resolves a NAME to one proc index
+            and never consults overloads, so 'pystr_of' would have picked the
+            AnsiString overload and handed it a Double — the same trap that made
+            zip/enumerate segfault on a str handle. PyFloatStr has one signature. }
+          atDflt := FindProc('PyFloatStr');
+          if atDflt >= 0 then
+          begin
+            Expect(tkRParen, ')');
+            argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+            ASTRight[argSeq] := -1;
+            node := AllocNode(AN_CALL);
+            ASTIVal[node] := atDflt;
+            ASTLeft[node] := argSeq;
+            ASTTk[node] := Ord(tyAnsiString);
+            CurASTNode := node; LastExprTk := tyAnsiString;
+            Exit;
+          end;
+        end;
         Expect(tkRParen, ')');
         node := AllocNode(AN_CALL); ASTIVal[node] := -201;
         { str() lowers to StrInt/FloatToStr/VariantToStr, which return AnsiString

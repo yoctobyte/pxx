@@ -1141,6 +1141,11 @@ test-nilpy: $(COMPILER)
 	# Zero-argument CALLS share the shape and must stay unaffected.
 	./$(COMPILER) test/test_nilpy_empty_tuple.npy /tmp/test_nilpy_emptytup26
 	test "$$(/tmp/test_nilpy_emptytup26)" = "$$(printf '%b' '()\n0\ntuple\nTrue\nFalse\n(1, 2)\n(1, 2)\n()\n[]\n[]\nempty loop ok\n1 2\nFalse\n()\n0\n%\n100%\n1\n0\nX')"
+	# inf/-inf/nan print Python-spelled (lower case). Pascal's FloatToStr says
+	# Inf/-Inf/Nan and MUST keep saying it, so the respelling is NilPy-only and
+	# keyed on the float tag — a string reading "Inf" stays untouched.
+	./$(COMPILER) test/test_nilpy_inf_nan_spelling.npy /tmp/test_nilpy_infnan26
+	test "$$(/tmp/test_nilpy_infnan26)" = "$$(printf '%b' 'inf\n-inf\nnan\ninf\n-inf\nnan\ninf\n[inf, -inf]\n(inf, -inf)\n{\047k\047: inf}\ninf\n-inf\nInf\nInf\n[\047Inf\047]\nTrue\n3\n2.5\n2.5\n-0.125\n[1.5, 2.5]\n2.5\nTrue\nTrue\nFalse')"
 	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
 	# key function had no overload to bind to (dict alone and list+key both worked)
 	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26

@@ -1,0 +1,50 @@
+# Python spells the non-finite floats in LOWER case: inf / -inf / nan.
+# Pascal's FloatToStr gives Inf / -Inf / Nan -- correct for PASCAL, and it must
+# stay that way -- so the respelling is applied on the NilPy conversion path
+# only, gated on the value actually being a FLOAT.
+# bug-nilpy-inf-and-nan-print-pascal-spelled
+
+a = 1e308 * 10
+b = -1e308 * 10
+c = a - a
+
+print(a)
+print(b)
+print(c)
+
+# str() takes a different route from print() -- the shared -201 builtin, which
+# goes to FloatToStr -- so it needs its own NilPy reroute
+print(str(a))
+print(str(b))
+print(str(c))
+
+# f-strings and containers
+print(f"{a}")
+print([a, b])
+print((a, b))
+print({"k": a})
+
+# float("inf") parses and prints the same way
+print(float("inf"))
+print(float("-inf"))
+
+# a STRING whose value is literally "Inf" must survive untouched -- the
+# respelling is keyed on the float tag, not on the text
+s = "Inf"
+print(s)
+print(str(s))
+print([s])
+print(s == "Inf")
+print(len(s))
+
+# ordinary floats are unaffected
+print(2.5)
+print(str(2.5))
+print(-0.125)
+print([1.5, 2.5])
+print(f"{2.5}")
+
+# and inf still behaves as a number
+print(a > 1e300)
+print(b < 0)
+print(c == c)

@@ -409,6 +409,7 @@ type
 function pystr_of(const s: AnsiString): AnsiString;
 function pystr_of(b: Boolean): AnsiString; overload;
 function pystr_of(i: Int64): AnsiString; overload;
+function PyFloatStr(d: Double): AnsiString;   { FloatToStr + Python's inf/nan spelling }
 function pystr_of(d: Double): AnsiString; overload;
 function pystr_of(c: Char): AnsiString; overload;
 function pystr_of(const v: Variant): AnsiString; overload;
@@ -7259,9 +7260,26 @@ begin
   Result := StrInt(i, 0);
 end;
 
-function pystr_of(d: Double): AnsiString; overload;
+{ Python spells the non-finite floats in LOWER case — inf / -inf / nan — while
+  Pascal's FloatToStr gives Inf / -Inf / Nan, which is correct for PASCAL and
+  must not change. Respelled on the NilPy conversion path only.
+
+  Applied by float SPELLING, never to arbitrary text: a NilPy string whose value
+  happens to be "Inf" must survive untouched, so every caller gates on the
+  variant tag being a float before routing here
+  (bug-nilpy-inf-and-nan-print-pascal-spelled). }
+function PyFloatStr(d: Double): AnsiString;
 begin
   Result := FloatToStr(d);
+  if Result = 'Inf' then Result := 'inf'
+  else if Result = '-Inf' then Result := '-inf'
+  else if (Result = 'Nan') or (Result = 'NaN') then Result := 'nan'
+  else if (Result = '-Nan') or (Result = '-NaN') then Result := 'nan';
+end;
+
+function pystr_of(d: Double): AnsiString; overload;
+begin
+  Result := PyFloatStr(d);
 end;
 
 function pystr_of(c: Char): AnsiString; overload;
@@ -8095,6 +8113,13 @@ begin
   if pyvartag(v) = 4 then
   begin
     if PPyVarRec(@v)^.Payload <> 0 then Result := 'True' else Result := 'False';
+    Exit;
+  end;
+  { a FLOAT payload goes through PyFloatStr for the inf/nan spelling; gated on
+    the tag so a string reading "Inf" is not rewritten }
+  if pyvartag(v) = 3 then
+  begin
+    Result := PyFloatStr(PPyDouble(@PPyVarRec(@v)^.Payload)^);
     Exit;
   end;
   Result := VariantToStr(v);
