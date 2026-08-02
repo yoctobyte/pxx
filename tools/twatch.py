@@ -634,11 +634,52 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red)
         if log and os.path.exists(log):
             lines.append("```")
             with open(log, errors="replace") as f:
-                lines.append(f.read()[-4000:])
+                body = f.read()
+            diag = diagnostic_lines(body)
+            if diag:
+                lines.append("(diagnostics)")
+                lines.append(diag)
+                lines.append("(tail)")
+            lines.append(body[-4000:])
             lines.append("```")
     with open(path, "w") as f:
         f.write("\n".join(lines) + "\n")
     return rel
+
+
+# Lines worth hoisting out of a job log ahead of the raw tail. Deliberately
+# narrow — an anchored `error:`/`Error:` shape and the compilers' own fatal
+# forms — because the value is that a hoisted line is ALWAYS the failure, never
+# a warning that merely says "error" somewhere in its prose.
+DIAG_RE = re.compile(
+    r"\berror\s*:|\bfatal\s*:|\bfatal error\b|\bassertion\b.*failed"
+    r"|\bsegmentation fault\b|\btext file busy\b|\bdiffer:"
+    r"|\bundefined reference\b", re.I)
+DIAG_MAX = 12          # keep the hoist short; the tail is right underneath
+
+
+def diagnostic_lines(body):
+    """Pull the actual error lines out of a job log.
+
+    A raw tail is the wrong thing to read when a compiler fails: FPC emits
+    thousands of warnings AFTER the error that stopped it, so the last 4000
+    characters of a seed-build failure are `Comment level 2 found` and the one
+    line that matters is nowhere in the report. That happened three times on
+    2026-08-02 (three separate FPC seed drifts), and each cost a full local
+    reproduction to learn a fact the log already contained.
+
+    Hoisting is additive: the tail is still printed underneath, so nothing that
+    used to be visible is lost and a failure whose signature is not matched
+    reads exactly as before.
+    """
+    hits = []
+    for line in (body or "").splitlines():
+        line = line.strip()
+        if line and DIAG_RE.search(line) and line not in hits:
+            hits.append(line)
+            if len(hits) >= DIAG_MAX:
+                break
+    return "\n".join(hits)
 
 
 def regen_index(clone):
@@ -1055,7 +1096,13 @@ def file_stub_tickets(clone, host, st, sha, new_red, report, parent=None):
         tail = ""
         if j.get("log") and os.path.exists(j["log"]):
             with open(j["log"], errors="replace") as f:
-                tail = f.read()[-2000:]
+                body = f.read()
+            # Same blind spot as the report, and it matters more here: the stub
+            # is what a dev reads FIRST. A 2000-char tail of an FPC failure is
+            # all warnings, with the one Error line thousands of characters
+            # above it.
+            diag = diagnostic_lines(body)
+            tail = (diag + "\n(tail)\n" if diag else "") + body[-2000:]
         reg = next((r for r in st["open_regressions"] if r["job"] == job), {})
         rel = os.path.join("devdocs/progress/backlog", slug + ".md")
         # an advisory job is not part of anyone's gate: its red is a NOTICE for
