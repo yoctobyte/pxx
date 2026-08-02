@@ -66,21 +66,38 @@ is really two** and should be split when picked up:
 Doing (2) without (1) leaves `dns_wire` broken on ESP as the *fallback* path,
 which is what every build without `-dPXX_DNS_ESP` gets.
 
-## Not startable on the current fleet — checked 2026-08-02
+## CORRECTION 2026-08-02 — it IS runnable here; my earlier note was wrong
 
-Picked up as queue-top after the re-rank above and put back down, so the next
-agent does not repeat the check:
+An earlier revision of this ticket said "Not startable on the current fleet",
+reasoning that `riscv32` under `qemu-riscv32` is Linux userspace with no lwIP,
+so the backend could not be exercised. **That was wrong**, and wrong in the same
+way as the `isatty` deferral in
+[[feature-crtl-libc-gap-batch-2026-08]]: a real-sounding conclusion drawn from a
+premise I never checked. I looked for USER-mode qemu and concluded no ESP runner
+existed, without looking for system-mode.
 
-- `xtensa` and `riscv32` **compile** here, and `tools/run_target.sh riscv32`
-  runs a binary under `qemu-riscv32`.
-- But that is Linux userspace, not ESP-IDF. lwIP's `dns_gethostbyname` does not
-  exist in it, so the backend's entire behaviour — the thing worth verifying —
-  cannot be exercised. Writing extern declarations against an API that nothing
-  available can link or answer is how a plausible-wrong binding gets committed.
+What is actually here:
 
-So this wants an ESP device or a QEMU-ESP image in the loop before it starts.
-That is the same gap as item (b) of [[feature-real-dynlib-loader]] (other-target
-run verification), and it is worth solving once for both rather than per-ticket.
+- **Espressif QEMU 9.2.2** — `qemu-system-xtensa` and `qemu-system-riscv32`
+  under `~/.espressif/tools/`, machines `esp32`, `esp32s3`, `esp32c3`. Not on
+  the default PATH; they come from ESP-IDF's export, which is why a bare
+  `command -v` missed them.
+- **ESP-IDF itself** at `~/esp/esp-idf`, with `tools/install_esp32_target.sh`
+  in this repo installing exactly those two QEMU packages.
+- **A working, exercised path.** [[feature-esp32-idf-xtensa]] records booting
+  under `qemu-system-xtensa -M esp32s3` with the full IDF banner and serial
+  output; [[bug-esp32s3-bare-boot-no-uart-output]] was found and fixed that way.
+
+So this ticket can be started and verified, and the "Gate" below is achievable
+rather than aspirational.
+
+## The real reason it sits low
+
+**ESP is parked by the user** — "ESP parked (user 2026-07-12): Pascal has prio",
+recorded in [[feature-pal-esp-posix-fd-semantics]]. That is a priority decision,
+not a capability limit, and it is a perfectly good reason not to pick this up
+unprompted. It is also a completely different statement from "cannot be run
+here", and the difference matters to whoever reads this next.
 
 ## Gate
 
