@@ -40,7 +40,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (204)
+## backlog (206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -52,6 +52,7 @@ lives in git, not in a timestamp._
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-classname-on-a-tobject-local-compiles-to-a-dynamic-attr-fetch | N | 65 | bug | `o.ClassName` on a TObject local compiles to a NilPy DYNAMIC ATTRIBUTE fetch instead of the RTTI call, while `TObject(obj).ClassName` compiles correctly — same expression, different shape, different meaning | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
+| bug-n-fpc-seed-drift-pybytesci-used-before-forward | N | 60 | bug | FPC cold-start broken again: PyBytesCi is called at pyparser.inc:1508 but not defined until 5236, with no forward. One-line fix, verified — FPC then compiles the whole compiler in 10.7s | — |
 | bug-nilpy-bare-dot-float-literals-do-not-lex | N | 35 | bug | `.5` and `5.` do not lex — the shared number scanner requires a digit on BOTH sides of the dot, which is right for Pascal and wrong for Python | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
@@ -214,6 +215,7 @@ lives in git, not in a timestamp._
 | feature-t-bench-hardware-provenance | T | 60 | feature | bench.tsv records a hostname but no hardware — the series silently changed machines today | — |
 | feature-t-bench-idle-must-be-preemptible | T | 55 | feature | Every idle phase yields to a new push except bench — so worst-case time-to-verdict is ~2-3 min of benchmarking, an order of magnitude above the poll interval anyone would tune | — |
 | feature-t-est-mem-from-measurement | T | 55 | feature | testmgr estimates the selfhost job at 1200 MB; measured peak RSS is 156 MB. An 8x error in one class means none of them were measured — it both under-packs big boxes and will exclude small ones | — |
+| feature-t-fpc-seed-canary-closer-to-the-dev-loop | T | 55 | feature | The FPC seed build breaks every couple of days, always the same way, and only the watcher ever notices — yet it costs 10.7s. Put it where the person who broke it will see it. | — |
 | feature-t-host-roles-native-vs-qemu-topology | T | 65 | feature | Track T is becoming multi-host with DIFFERENT PURPOSES per box — xeon runs the matrix, arm32/arm64 rPis exist only as native oracles against xeon's QEMU — but profiles express resource ceilings, not purpose, and nothing compares two hosts' results | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 40 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-per-invocation-tmp-namespace-for-make-recipes | T | 55 | feature | The Makefile's ~3700 fixed /tmp/test_* output paths make two concurrent `make test*` runs on one box clobber each other; route them through a per-invocation temp dir | — |
@@ -1615,6 +1617,7 @@ lives in git, not in a timestamp._
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 65] [T] task-t-worktree-is-not-current-state
+- [p 60] [N] bug-n-fpc-seed-drift-pybytesci-used-before-forward
 - [p 60] [N] bug-nilpy-defaulted-param-before-star-args-rejects-short-call
 - [p 60] [N] bug-nilpy-from-import-as-alias-is-discarded
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
@@ -1661,6 +1664,7 @@ lives in git, not in a timestamp._
 - [p 55] [A] feature-signal-siginfo-ucontext
 - [p 55] [T] feature-t-bench-idle-must-be-preemptible
 - [p 55] [T] feature-t-est-mem-from-measurement
+- [p 55] [T] feature-t-fpc-seed-canary-closer-to-the-dev-loop
 - [p 55] [T] feature-t-per-invocation-tmp-namespace-for-make-recipes
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [U] decide-pxxpdf-ticket-obsolete (unblocks 1)
