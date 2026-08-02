@@ -2,6 +2,7 @@
 track: N
 prio: 55
 type: bug
+status: done
 ---
 
 # A constructor call in an unpacking right-hand side won't parse
@@ -132,3 +133,30 @@ The existing table, plus: a method call on each unpacked target; `__len__`,
 CPython; the two-separate-assignments control; and an unpacking whose RHS is a
 genuine iterable (a list, a function return) left behaving as it does today,
 since that one really does belong to the runtime-dispatch cluster.
+
+## Resolved 2026-08-02 — commit 3ccb6576d
+
+One omission, in `PyUnpackTargetStore`: the target got the temp's type KIND but
+not its `RecName`. Both halves above follow from that, and both are fixed by
+carrying the identity through.
+
+Conservative on rebinding — a name that already carries a class identity is left
+alone, because a name holding two different classes over its life is the widening
+case the module/local tables own, not something the unpack path should decide.
+
+`test/test_nilpy_unpack_keeps_class_identity.npy` (+ `.expected`, wired into
+`make test-nilpy`) is byte-identical to CPython and carries both halves, the
+separate-assignment control that named the cause, mixed target lists
+(`r, s = Thing(), 5` and its mirror), and the shapes that already worked.
+
+`gate.sh quick` GREEN, self-host fixedpoint byte-identical.
+
+### Found alongside, NOT fixed
+
+`m, n = "xy"` — unpacking a STRING into several names — is refused with "cannot
+unpack this value into several names — it is not a list, tuple or variant".
+CPython unpacks any iterable, strings included. Loud rather than silent, and
+unrelated to the identity bug; worth its own ticket if a corpus wants it.
+
+## Log
+- 2026-08-02 — resolved, commit 3ccb6576d.
