@@ -16,9 +16,12 @@ devdocs/progress/tstate/**) — the daemon (tools/twatch.py) stays the engine.
                          each finished suite run leaves a timestamped result
                          line incl. commit hash (--no-sha to omit it)
   trackt run [tier]      manual testmgr run in THIS checkout (default quick)
-  trackt setup           box prerequisites + git access + role profile wizard
-                         (dedicated / limited / restricted — first run asks;
-                          also asked on the first `trackt up` if unconfigured)
+  trackt setup           box prerequisites + git access + role profile wizard.
+                         The role is DETECTED (dedicated / limited /
+                         restricted / native-oracle) and proposed with
+                         Enter-to-accept; with no TTY the detected role is
+                         applied unprompted, never a blanket 'dedicated'.
+                         Also run on the first `trackt up` if unconfigured.
   trackt config [k [v]]  show / set daemon config (applies live where safe)
   trackt log             follow the daemon log
   trackt web on|off      enable/disable the Flask UI (spawned by start)
@@ -41,6 +44,7 @@ checkout you call it from.
 import argparse
 import json
 import os
+import platform
 import signal
 import subprocess
 import sys
@@ -617,44 +621,178 @@ PROFILES = {
         "_half_cores": True,        # cap = max(1, nproc//2)
         "_mem_frac": 0.5,           # cap mem to half the box
     },
+    "native-oracle": {
+        "_blurb": "a non-x86_64 box. Its unique value is running its OWN "
+                  "architecture natively — the one thing QEMU cannot verify — "
+                  "so: own-arch verdicts, no cross matrix, no idle work. "
+                  "(an arm32/arm64 Pi, a riscv board)",
+        # Not "restricted with a different name": restricted is a box we are
+        # BORROWING (half its cores, it has other work). An oracle is dedicated
+        # to this job, so it keeps its cores — what it must not do is spend
+        # them on a cross matrix that x86 boxes already cover faster.
+        "tier": "native", "idle_opt": False, "idle_bench": False,
+        "idle_fuzz": False, "interval": 120, "web": False,
+        "_mem_frac": 0.75,
+    },
 }
 
 
-def configure_profile(clone):
-    """First-run wizard: write <clone>/twatch.conf from a chosen role profile.
+# Machines whose native run IS the thing being verified. Everything else is
+# "some x86_64 box", where the interesting question is who else is using it.
+X86 = ("x86_64", "amd64", "i686", "i386")
 
-    Runs only when no conf exists yet. Non-interactive (no TTY) defaults to
-    'dedicated' and says so — a cron/headless setup must not block on a prompt.
+
+def total_ram_mb():
+    """This box's RAM in MB, or 0 if /proc/meminfo cannot be read.
+
+    Read here rather than borrowed: the wizard used to call
+    `twatch.meminfo()`, which does not exist — that function lives in
+    testmgr. The AttributeError was swallowed by a bare `except Exception`,
+    so the wizard printed "0 MB" to the user AND `_write_profile`'s
+    `if prof.get("_mem_frac") and total_mb` never fired, meaning the
+    restricted profile's memory cap silently never existed.
+    """
+    try:
+        with open("/proc/meminfo") as f:
+            for ln in f:
+                if ln.startswith("MemTotal:"):
+                    return int(ln.split()[1]) >> 10        # kB -> MB
+    except (OSError, ValueError, IndexError):
+        pass
+    return 0
+
+
+def _has_desktop_session():
+    """Is somebody logged in graphically on this box?
+
+    Two sources because neither is sufficient: the env vars are absent when
+    setup runs from cron or a bare ssh command even on a machine with an active
+    desktop, and `loginctl` is absent on non-systemd boxes and inside
+    containers. Either one saying yes is enough; both failing is treated as
+    headless, which is the conservative answer for a ROLE decision (headless
+    implies dedicated, and over-claiming a box the user is sitting at is the
+    error that actually annoys anyone).
+    """
+    if any(os.environ.get(v) for v in
+           ("DISPLAY", "WAYLAND_DISPLAY", "XDG_CURRENT_DESKTOP")):
+        return True
+    try:
+        out = subprocess.run(["loginctl", "list-sessions", "--no-legend"],
+                             capture_output=True, text=True, timeout=5).stdout
+        for line in out.splitlines():
+            sid = line.split()[0] if line.split() else ""
+            if not sid:
+                continue
+            t = subprocess.run(["loginctl", "show-session", sid, "-p", "Type",
+                                "--value"], capture_output=True, text=True,
+                               timeout=5).stdout.strip()
+            if t in ("x11", "wayland", "mir"):
+                return True
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return False
+
+
+def detect_role(nproc, total_mb):
+    """Pick a profile from what this box IS. Returns (role, [reasons]).
+
+    The discriminator is ARCHITECTURE first, not size. A non-x86_64 box is
+    valuable because it runs its own arch natively — a fast ARM server should
+    still be an oracle in role, and a weak x86 box makes a poor oracle no
+    matter how slow it is; it is just a slow runner.
+
+    Then, among x86_64 boxes, the question is whether anyone else is using it:
+    a desktop session or a small core count means "be polite", not "be idle".
+
+    Used as the NON-INTERACTIVE default as well as the interactive proposal.
+    The old code defaulted to 'dedicated' with no TTY, which is how a Pi
+    provisioned headless over ssh — the most likely way one is ever set up —
+    enrolled itself as a full-matrix fuzzing box.
+    """
+    mach = platform.machine().lower()
+    reasons = ["%s, %d cores, %d MB" % (mach or "unknown-arch", nproc, total_mb)]
+    model = ""
+    try:                                  # Pi/board name, when the DT exposes it
+        with open("/proc/device-tree/model", errors="replace") as f:
+            model = f.read().strip("\x00 \t\n")
+    except OSError:
+        pass
+    if model:
+        reasons.append(model)
+    if mach and mach not in X86:
+        reasons.append("non-x86_64: its native run is what QEMU cannot verify")
+        return "native-oracle", reasons
+    if _has_desktop_session():
+        reasons.append("a graphical session is present — someone uses this box")
+        return "limited", reasons
+    if nproc < 4 or (total_mb and total_mb < 4096):
+        reasons.append("small box: leave headroom rather than saturate it")
+        return "limited", reasons
+    reasons.append("headless x86_64 with room to work")
+    return "dedicated", reasons
+
+
+def configure_profile(clone):
+    """First-run wizard: write <clone>/twatch.conf from a role profile.
+
+    Runs only when no conf exists yet. DETECTS the role and proposes it; the
+    prompt is Enter-to-accept. Without a TTY it writes the detected role — not
+    a blanket 'dedicated', which is what enrolled a headless Pi as a
+    full-matrix fuzzing box.
+
+    Always prints what was detected, why, and the caps that follow: a silently
+    auto-configured box is worse than a wrongly prompted one, because nobody
+    notices it. Every key stays overridable with `trackt config <key> <val>`.
     """
     conf_path = os.path.join(clone, twatch.CONF_NAME)
     if os.path.exists(conf_path):
         return
     nproc = os.cpu_count() or 1
-    total_mb = 0
-    try:
-        total_mb = twatch.meminfo().get("MemTotal", 0) >> 20
-    except Exception:
-        pass
+    ram_mb = total_ram_mb()
+    role, reasons = detect_role(nproc, ram_mb)
+    detail = "; ".join(reasons)
+    order = ["dedicated", "limited", "restricted", "native-oracle"]
     if not ISATTY:
-        _write_profile(conf_path, "dedicated", nproc, total_mb)
-        print("trackt: no twatch.conf — defaulted to 'dedicated' "
-              "(non-interactive). Edit %s or run `trackt config` to change."
-              % conf_path)
+        _write_profile(conf_path, role, nproc, ram_mb)
+        print("trackt: no twatch.conf — detected %s (%s)" % (role, detail))
+        _print_caps(conf_path, role)
+        print("trackt: non-interactive, so this was applied unprompted. "
+              "`trackt config <key> <val>` changes any of it.")
         return
-    print("\ntrackt: first run on this box (%d cores, %d MB). How should it be "
-          "used as a Track T runner?\n" % (nproc, total_mb))
-    order = ["dedicated", "limited", "restricted"]
+    print("\ntrackt: first run on this box.\n  detected: %s\n  role:     "
+          "%s%s%s\n" % (detail, GRN, role, OFF))
     for i, name in enumerate(order, 1):
-        print("  %d) %-11s %s" % (i, name, PROFILES[name]["_blurb"]))
+        mark = " <- detected" if name == role else ""
+        print("  %d) %-13s %s%s" % (i, name, PROFILES[name]["_blurb"], mark))
     try:
-        ans = input("\nChoose [1/2/3] (default 1): ").strip()
+        ans = input("\nEnter to accept %s, or choose [1-%d]: "
+                    % (role, len(order))).strip()
     except (EOFError, KeyboardInterrupt):
         ans = ""
-    pick = order[int(ans) - 1] if ans in ("1", "2", "3") else "dedicated"
-    _write_profile(conf_path, pick, nproc, total_mb)
-    print("trackt: wrote %s profile -> %s "
-          "(tune any key later with `trackt config <key> <val>`)"
-          % (pick, conf_path))
+    pick = order[int(ans) - 1] if ans in [str(i) for i in
+                                          range(1, len(order) + 1)] else role
+    _write_profile(conf_path, pick, nproc, ram_mb)
+    print("trackt: wrote %s profile -> %s" % (pick, conf_path))
+    _print_caps(conf_path, pick)
+    print("trackt: tune any key later with `trackt config <key> <val>`")
+
+
+def _print_caps(conf_path, pick):
+    """Say what the profile actually DOES. A role name is not self-explaining,
+    and the caps are the part someone re-provisioning a box needs to see."""
+    try:
+        with open(conf_path) as f:
+            conf = json.load(f)
+    except (OSError, ValueError):
+        return
+    eff = dict(twatch.CONF_DEFAULTS, **conf)
+    idle = [n for n in ("opt", "bench", "fuzz") if eff.get("idle_" + n)]
+    print("  tier %s · %s cores · %s · idle: %s · poll %ss · web %s"
+          % (eff.get("tier"),
+             conf.get("max_cores", "all"),
+             ("%d MB" % conf["max_mem_mb"]) if conf.get("max_mem_mb") else "all RAM",
+             ", ".join(idle) or "none",
+             eff.get("interval"), "on" if eff.get("web") else "off"))
 
 
 def _write_profile(conf_path, pick, nproc, total_mb):
