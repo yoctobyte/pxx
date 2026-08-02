@@ -2,6 +2,7 @@
 track: T
 prio: 30
 type: bug
+status: done
 ---
 
 # `progress.sh claim`/`resolve` silently no-op when a ticket lacks the expected body line
@@ -49,3 +50,15 @@ ticket body conventions already in the tree).
 `tools/testmgr.py --tier full` per T's own tooling gate; a quick regression:
 `claim` on a ticket with no existing Owner/Status line, assert the file
 actually gained one and `check` reports no NO-OWNER for it.
+
+## Log
+- 2026-08-02 — resolved, commit 1091a57d9.
+- 2026-08-02 — same defect as [[bug-t-claim-silently-no-ops-owner-on-yaml-only-tickets]]
+  (filed a day later, from the other end: this one found it via a ticket with
+  no `- **Owner:**` line, that one via YAML-only frontmatter — one regex, two
+  symptoms). Fixed by `1091a57d9`: set_field now falls back to the YAML key,
+  matched only inside the frontmatter block so prose cannot be mistaken for the
+  field. Gated by tools/progress_setfield_devtest.py, which covers exactly the
+  shape this ticket described (a body with `- **Type:**` and no Owner line)
+  alongside the four others.
+

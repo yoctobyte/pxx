@@ -40,7 +40,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (206)
+## backlog (204)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -99,7 +99,6 @@ lives in git, not in a timestamp._
 | bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice | N | 50 | bug | Three loud gaps found by the CPython differential sweep | — |
 | bug-nilpy-unary-numeric-dunders-return-raw-handle | N | 55 | bug | NilPy: abs(obj), ~obj and obj-as-index ignore __abs__/__invert__/__index__ — they return the raw instance HANDLE as a number, silently | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
-| bug-progress-claim-silently-drops-owner-without-template-line | T | 30 | bug | `progress.sh claim`/`resolve` silently no-op when a ticket lacks the expected body line | — |
 | bug-t-corpus-regex-invents-phantom-tree | T | 55 | bug | CORPUS_RE matches prose in a SKIP message and invents corpus 'stb)', permanently skipping a job that also carries a non-corpus regression test | — |
 | bug-t-etxtbsy-race-reds-single-shot-selfhost-jobs | T | 60 | bug | A one-off `Text file busy` on exec red the self-host chain job; selfhost is single-shot by policy, so a harness-level OS race is indistinguishable from real compiler nondeterminism | — |
 | bug-t-host-dependent-test-assertions-cross-distro | T | 70 | bug | Watcher and dev boxes run different distros, so tests that bake in host state (library versions, allocator behaviour, the host CPython) go permanently RED on the watcher while passing locally — and read as watcher bugs | — |
@@ -248,7 +247,6 @@ lives in git, not in a timestamp._
 | task-t-seed-from-stable-defeats-rebuild | T | 65 | task | seed-from-stable makes the whole matrix test the pinned binary; only selfhost-fixedpoint can see it | — |
 | task-t-suppress-autoticket-until-host-baselined | T | 60 | task | a new watcher host's first run auto-files a bogus 17-job cascade ticket; NEW-RED is meaningless without a per-host baseline | — |
 | task-t-worktree-is-not-current-state | T | 65 | task | In a watcher clone the working tree is a snapshot of the sha under test, not current state. Four separate bugs in one day came from reading it. | — |
-| task-t-xeon-agent-needs-its-own-dev-checkout | T | 55 | task | the xeon agent had no dev checkout, so its commits landed on the watcher clone's detached HEAD; protocol doc should say so | — |
 | task-t-xeon-host-local-health-alerting | T | 50 | task | The health VERDICT landed (trackt health, e6ee21fcc) but nothing on xeon delivers it — no timer, no toast. The watcher can go wedged with nobody told. | — |
 
 ## experimental (20)
@@ -355,7 +353,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1204)
+## done (1206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -938,6 +936,7 @@ lives in git, not in a timestamp._
 | bug-proc-typed-call-const-record-arg | A | 50 | bug | bug: indirect call through a proc-typed value with a `const record` arg miscompiles | — |
 | bug-procedure-typed-procvalue | A | 50 | bug | `@Proc` / proc-value of a `procedure`-typed routine rejected ("unexpected token") | — |
 | bug-procptr-record-field-call | A | 50 | bug | Calling a procedural-pointer record/class field (`v.Run(args)`) | — |
+| bug-progress-claim-silently-drops-owner-without-template-line | T | 30 | bug | `progress.sh claim`/`resolve` silently no-op when a ticket lacks the expected body line | — |
 | bug-property-setter-resolution-uses-order | A | 52 | bug | Class-typed property WRITE mis-parses ("Expected: [") depending on uses order | — |
 | bug-pyeval-exec-requires-a-globals-key-named-vm | N | 45 | bug | pyeval: exec()'s env must contain a key literally named \"vm\" or every host call fails — CPython has no such rule | — |
 | bug-qplus-narrow-32bit-backends | A | 35 | bug | {$Q+} narrow-width overflow still unchecked on the 32-bit backends | — |
@@ -1554,6 +1553,7 @@ lives in git, not in a timestamp._
 | task-license-mpl2-rollout | A | 50 | task | Adopt MPL 2.0 (compiler) + zlib (runtime/libs) — licensing rollout | — |
 | task-remove-sysutils-move-fillchar-copies | B | 50 | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
 | task-sqlite-libc-free-runtime-bringup | B | 64 | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
+| task-t-xeon-agent-needs-its-own-dev-checkout | T | 55 | task | the xeon agent had no dev checkout, so its commits landed on the watcher clone's detached HEAD; protocol doc should say so | — |
 | test-c-crypt | C | 50 | test | Implement a C interop regression test for passphrase hashing (`crypt.h`) | — |
 | test-c-dlopen | C | 50 | test | Implement C interop regression test for dynamic loading and runtime symbol invocation (`dlopen`/`dlsym`) | — |
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | — |
@@ -1662,7 +1662,6 @@ lives in git, not in a timestamp._
 - [p 55] [T] feature-t-bench-idle-must-be-preemptible
 - [p 55] [T] feature-t-est-mem-from-measurement
 - [p 55] [T] feature-t-per-invocation-tmp-namespace-for-make-recipes
-- [p 55] [T] task-t-xeon-agent-needs-its-own-dev-checkout
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [U] decide-pxxpdf-ticket-obsolete (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
@@ -1761,7 +1760,6 @@ lives in git, not in a timestamp._
 - [p 30] [N] bug-nilpy-dataclass-no-generated-eq
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
 - [p 30] [N] bug-nilpy-for-else-and-while-else-not-supported
-- [p 30] [T] bug-progress-claim-silently-drops-owner-without-template-line
 - [p 30] [N] feature-nilpy-list-sort-inplace-key-reverse
 - [p 30] [N] feature-nilpy-min-max-variadic-more-than-two-args
 - [p 30] [N] feature-nilpy-stdlib-coverage-gaps-measured

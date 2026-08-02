@@ -3,6 +3,7 @@ summary: "the xeon agent had no dev checkout, so its commits landed on the watch
 type: task
 track: T
 prio: 55
+status: done
 ---
 
 # The watcher clone is not a dev checkout — xeon's agent needs its own
@@ -97,3 +98,13 @@ ticket rather than an edit from here):
 
 Worth a line in `trackt setup` too — if it is pointed at a clone that turns out
 to be the *only* checkout on the box, say so.
+
+## Log
+- 2026-08-02 — resolved, commit 5535fd197.
+- 2026-08-02 — closed by `5535fd197`. The machine half was already done on
+  2026-07-31 (`~/pxx` exists; every commit of this session came from it); what
+  remained was the doc half this ticket asked for, and
+  `two-box-protocol.md` now states the rule for a box's OWN watcher clone
+  rather than only the peer's — including the user's correction that this is
+  not a call to consolidate borg's per-track checkouts.
+
