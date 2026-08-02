@@ -76,4 +76,4 @@ by a triager is untouched**; and a **cascade** entry closes only when every job
 it swept up is green, never on one lucky run.
 
 ## Log
-- 2026-08-02 — resolved, commit 12f1cd965.
+- 2026-08-02 — resolved, commit 1dd53a8ec.

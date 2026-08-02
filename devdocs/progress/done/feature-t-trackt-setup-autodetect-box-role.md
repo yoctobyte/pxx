@@ -112,7 +112,7 @@ profile unprompted, prints what it detected and why, and a small-RAM Pi does not
 get a selfhost job it cannot run.
 
 ## Log
-- 2026-08-02 — implemented in `ef2005e8e` (detection + native-oracle profile +
+- 2026-08-02 — implemented in `1f015d684` (detection + native-oracle profile +
   non-interactive uses it + caps printed), gated by
   `tools/trackt_detect_role_devtest.py`.
 - Found while implementing: the wizard called `twatch.meminfo()`, which does
@@ -135,4 +135,4 @@ get a selfhost job it cannot run.
   cores and >= M RAM -> dedicated) belongs in the rule is a judgement call
   about intent that detection cannot make; raised with the user.
 
-- 2026-08-02 — resolved, commit ef2005e8e.
+- 2026-08-02 — resolved, commit 1f015d684.

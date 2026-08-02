@@ -67,7 +67,7 @@ mean anything; this one bounds what any calibration figure can achieve, since a
 calibration workload timed on this grid inherits the same error.
 
 ## Log
-- 2026-08-02 — fixed in `688a174aa`, gated by `tools/bench_timing_devtest.py`.
+- 2026-08-02 — fixed in `7225fb647`, gated by `tools/bench_timing_devtest.py`.
 - **The ticket's own suspicion was right and its arithmetic was the clue.** The
   "~14 ms offset on a 50 ms grid" is not an offset: it is CPython's
   `Popen._wait()` poll schedule (0.5 ms, doubling, capped at 50 ms), whose
@@ -94,4 +94,4 @@ calibration workload timed on this grid inherits the same error.
   what [[feature-t-est-mem-from-measurement]] needs to replace testmgr's
   guessed `est_mem` table.
 
-- 2026-08-02 — resolved, commit 688a174aa.
+- 2026-08-02 — resolved, commit 7225fb647.

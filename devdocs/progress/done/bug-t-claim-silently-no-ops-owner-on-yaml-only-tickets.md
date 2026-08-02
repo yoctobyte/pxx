@@ -48,4 +48,4 @@ frontmatter block, or create one). Same bug likely affects `cmd_resolve`'s
 Manually added `owner: <id>` to both affected tickets' frontmatter.
 
 ## Log
-- 2026-08-02 — resolved, commit 03b90a755.
+- 2026-08-02 — resolved, commit 1091a57d9.
