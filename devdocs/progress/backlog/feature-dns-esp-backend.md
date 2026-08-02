@@ -209,6 +209,22 @@ with the opt-in wire path, not on the default route.
 
 ### Target scope
 
-**riscv32 (ESP32-C3) only.** xtensa is postponed by the user — it had too many
-issues and riscv is the direction — so `examples/esp32/hello-s3` stays as it is
-and nothing here targets xtensa.
+**riscv32 (ESP32-C3) first.** xtensa is *deferred, not dropped* — the user still
+wants it (correcting an earlier revision of this note, which overstated a
+remark about riscv being the way forward into "no xtensa").
+
+Known xtensa issues, per the user: the **calling convention** (windowed vs
+Call0) and the **FreeRTOS bindings**. Not investigated in depth and thought
+likely fixable in a focused session. The compiler already encodes one facet —
+`--esp-profile=bare` on xtensa requires Call0, because the windowed ABI needs
+window-overflow handlers and a vecbase that bare-metal does not install
+(`compiler.pas:634`) — and there is prior art in
+[[feature-xtensa-windowed-abi]], [[feature-esp32-idf-xtensa]] and
+[[bug-xtensa-call0-large-frame-truncates]].
+
+**The broader gate is not this ticket:** ESP32 *hardware* testing is postponed
+until the compiler is stable on x86-64. So DNS-on-ESP work should be judged as
+QEMU-verifiable groundwork, not as something waiting on a device.
+
+`examples/esp32/hello-s3` therefore stays unchanged for now — deferred pending a
+real `qemu-system-xtensa -M esp32s3` boot, not written off.
