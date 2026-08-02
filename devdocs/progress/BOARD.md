@@ -39,7 +39,7 @@ lives in git, not in a timestamp._
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-lib-pxxpdf-reportlab-compat | B | 50 | feature | pxxpdf — pxx pdfgen-backed, reportlab-compatible PDF library (nilpy) | decide-pxxpdf-ticket-obsolete |
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | — |
-| feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | bug-c-uses-path-basename-collides-with-enclosing-unit-name |
+| feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
@@ -579,7 +579,7 @@ lives in git, not in a timestamp._
 | bug-c-unixfile-mmap-field-offset-zero | A | 56 | bug | C: struct field resolves to offset 0 in the full sqlite unixFile (context-dependent) | — |
 | bug-c-unsigned-div-mod-32bit-backends | A | 50 | bug | C `unsigned int` / Pascal Cardinal division+mod use signed div on 32-bit backends | — |
 | bug-c-unsigned-int-32bit-arithmetic-semantics | A | 50 | bug | C `unsigned int` (32-bit) arithmetic computed in 64-bit — no wraparound, signed compares | — |
-| bug-c-uses-path-basename-collides-with-enclosing-unit-name | A | 35→65 | bug | path-form `uses './x.c'` collides with the enclosing unit's OWN name | — |
+| bug-c-uses-path-basename-collides-with-enclosing-unit-name | A | 35 | bug | path-form `uses './x.c'` collides with the enclosing unit's OWN name | — |
 | bug-c-va-arg-local-fnptr-typedef-sqlite | C | 50 | bug | C: va_arg with local function-pointer typedef in sqlite | — |
 | bug-c-vararg-overflow-area | A | 50 | bug | C: 6+ variadic args (overflow area) segfault | — |
 | bug-c-vararg-vastart-named-fp-stack | A | 50 | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |

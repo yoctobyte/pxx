@@ -3,8 +3,7 @@ track: N
 owner: claude-A
 prio: 65
 type: feature
-blocked-by: [bug-c-uses-path-basename-collides-with-enclosing-unit-name]
-status: blocked
+blocked-by: []
 ---
 
 # cpyext: compile a CPython C extension's SOURCE against our own `Python.h`
@@ -309,3 +308,19 @@ green under its real upstream filename.
   that blocker is still open in backlog/ (prio 65, unblocks this), and
   `working/` is a LIVE LOCK — a ticket parked on someone else's fix does not
   belong in it. Owner field left intact; re-claim when the blocker lands.
+
+
+## 2026-08-02 — UNBLOCKED: the path-form `uses` collision is fixed
+
+[[bug-c-uses-path-basename-collides-with-enclosing-unit-name]] is resolved
+(commit 5303d2741), so `test_cpyext_hello` no longer prints a SKIP line — it
+runs and asserts, and it needed **no change to hello_ext.pas at all**.
+
+Worth recording as a vindication of the call made when M1 landed: the module
+source was left platonically named `./hello_ext.c` (same basename as the unit,
+exactly as a real CPython extension is laid out) and the TEST was skipped, rather
+than renaming the file to dodge the compiler bug. The workaround would have been
+invisible forever; the skip made the bug someone's job, and the fix cost one key
+in the uses guard.
+
+`make test-nilpy` now carries M1 as a real assertion alongside M2/M3/MarkupSafe.
