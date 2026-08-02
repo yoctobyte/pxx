@@ -51,7 +51,7 @@ search/ndots candidates, CNAME chasing, and a process-wide TTL cache
 3. **`dns_esp`** — ESP-IDF/lwIP resolver API after netif bring-up; ESP-only.
 4. **Selection mechanism** — see above, now designed.
 
-## Landed 2026-08-02 — `dns_resolved` + the selection mechanism
+## Landed 2026-08-02 (commit a2501ee40) — `dns_resolved` + the selection mechanism
 
 Items 2 and 4. Items 1 (`dns_libc`) and 3 (`dns_esp`) remain; see below.
 
