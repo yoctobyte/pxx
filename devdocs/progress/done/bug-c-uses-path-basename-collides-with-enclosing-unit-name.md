@@ -67,3 +67,51 @@ ever actually loaded under that path.
 
 ## Log
 - 2026-08-02 — resolved, commit 5303d2741.
+
+## Resolved 2026-08-02 — commit 5303d2741
+
+Took the suggested direction: the already-compiled guard for a path-form
+`.c`/`.h` keys on the PATH TEXT (`@cpath:<lowercased path>`) rather than the
+stripped base name. `strIdx` is deliberately left alone — it still tags the
+symbols the load registers (`CurrentUnitIdx`), so qualified access by base name
+behaves exactly as before, and a genuine repeat of the same `uses './x.c'` still
+dedupes.
+
+**cpyext M1 is unblocked.** `test/nilpy_units/hello_ext.pas` was left in its
+platonic shape on purpose — module source named after the module, as any real
+CPython extension's is — with `make test-nilpy` printing a SKIP line rather than
+renaming around the bug. That was the right call: the skip is now a real
+assertion (`test_cpyext_hello` prints 42) and it needed no source change at all.
+
+Verified alongside: the M2 / M3 / MarkupSafe cpyext tests and
+`test_relpath_uses.pas` (the other path-form user) stay green. `gate.sh quick`
+GREEN, self-host fixedpoint byte-identical.
+
+## A NARROWER residual, measured — same family, not the same bug
+
+One arrangement still fails, and it is worth writing down because it looks like
+the original if you meet it: a unit whose `uses './collide.c'` shares its base
+name AND which also carries an **explicit** `function collide_answer: Integer;
+cdecl; external;` declaration. Then the runtime `undefined symbol` returns.
+Without that declaration — which is what `hello_ext` does, and what an ordinary
+`interface function` gives you — it works.
+
+The cause is the other half of the shared key space: `CurrentUnitIdx` for the C
+load is still `strIdx`, i.e. the ENCLOSING unit's index when the names collide,
+so the C definition binds to the extern already declared in that same unit
+instead of supplying its body. Naming the C file differently avoids it, as does
+dropping the redundant `external` declaration.
+
+**Deliberately not fixed here.** The clean answer is to give the C load its own
+`CurrentUnitIdx` too, but that changes how every path-form C unit's symbols are
+tagged — including the four cpyext units that work today — for a case with no
+current user. Left as a known edge with a repro rather than a speculative change
+under the self-host gate. If it acquires a user, that is the fix.
+
+## Not done: the diagnostic
+
+The ticket also asks that a skipped `.c`/`.h` load raise a diagnostic instead of
+silently no-op'ing. Not implemented — with the key spaces separated the skip can
+now only mean "this exact path was already loaded", which is correct rather than
+suspicious, so the warning would fire on the legitimate case and not on any known
+wrong one.
