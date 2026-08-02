@@ -1821,19 +1821,6 @@ BENCH_SUITE = (
 )
 
 
-def _child_cpu():
-    """Cumulative cpu-time (user+sys, secs) of reaped child processes. Diffing
-    this around one subprocess.run (which waits) isolates that child's cpu --
-    the bench driver is serial, so nothing else is reaped in between. Returns
-    None where rusage is unavailable (non-POSIX)."""
-    try:
-        import resource
-        ru = resource.getrusage(resource.RUSAGE_CHILDREN)
-        return ru.ru_utime + ru.ru_stime
-    except (ImportError, ValueError, OSError):
-        return None
-
-
 def _wait_quiet():
     """Best-effort: if 1-min load per core is high, wait (up to
     BENCH_QUIET_WAIT_S) so timing does not start mid-spike. loadavg is coarse and
@@ -1850,6 +1837,64 @@ def _wait_quiet():
         pass
 
 
+def _timed_run(argv, timeout):
+    """Run argv once and return (wall_secs, cpu_secs, rc, peak_rss_kb).
+
+    Uses os.wait4() — a BLOCKING reap — deliberately, and never
+    `subprocess.run(..., timeout=)`.
+
+    That kwarg was the entire "benchmark timings are quantized to a 50 ms grid"
+    bug (bug-t-bench-sub-second-timings-quantized-to-50ms). Passing a timeout
+    sends CPython down Popen._wait()'s POLLING path: it sleeps 0.5 ms, then
+    doubles, capped at 50 ms, and checks waitpid(WNOHANG) after each nap. The
+    wall time you measure is therefore not when the child exited, it is the
+    next POLL WAKEUP after it exited. Cumulative wakeups land at
+
+        0.5, 1.5, 3.5, 7.5, 15.5, 31.5, 63.5, 113.5, 163.5, 213.5, 263.5 ...
+
+    which is exactly the grid bench.tsv shows (observed clusters 31.6-32.1,
+    63.7-64.5, 113.7-114.4, 163.9-164.6, 213.x, 263.x ...). Measured proof: the
+    same FPC-built sieve times 77.8-84.7 ms in a plain loop and a suspiciously
+    stable 64.1-64.5 ms through the old bench_time — the harness was reporting
+    the 63.5 ms wakeup, i.e. a number BELOW the true runtime, not merely a
+    coarse one. 61% of all rows are sub-second, so most of the log was affected;
+    on a 64 ms measurement a 50 ms grid is ±39%.
+
+    wait4 also hands back per-child rusage for free, which replaces the old
+    RUSAGE_CHILDREN differencing (that needed the driver to stay strictly
+    serial to be meaningful) and yields peak RSS — the measurement
+    feature-t-est-mem-from-measurement wants.
+
+    The timeout is enforced by a watchdog thread instead, so a hung workload is
+    still bounded; it just no longer taxes the measurement of every healthy run.
+    """
+    p = subprocess.Popen(argv, cwd=REPO, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+    timed_out = []
+
+    def _watchdog():
+        timed_out.append(True)
+        try:
+            p.kill()
+        except OSError:
+            pass
+
+    wd = threading.Timer(timeout, _watchdog)
+    wd.start()
+    t0 = time.monotonic()
+    try:
+        _, status, ru = os.wait4(p.pid, 0)
+    finally:
+        wd.cancel()
+    wall = time.monotonic() - t0
+    # We reaped the child behind Popen's back: tell it, or __del__ warns and
+    # a later poll()/wait() would block on a pid that no longer exists.
+    p.returncode = os.waitstatus_to_exitcode(status)
+    if timed_out:
+        return None, None, None, None
+    return (wall, ru.ru_utime + ru.ru_stime, p.returncode, ru.ru_maxrss)
+
+
 def bench_time(argv, runs, timeout, label=""):
     """Min wall time over `runs` CLEAN runs. A run is discarded (and replaced,
     up to runs+BENCH_EXTRA_TRIES attempts) when the child was descheduled --
@@ -1862,18 +1907,10 @@ def bench_time(argv, runs, timeout, label=""):
     clean = tries = 0
     while clean < runs and tries < max_tries:
         tries += 1
-        c0 = _child_cpu()
-        t0 = time.monotonic()
-        try:
-            r = subprocess.run(argv, cwd=REPO, stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL, timeout=timeout)
-        except subprocess.TimeoutExpired:
-            return None
-        wall = time.monotonic() - t0
-        if r.returncode != 0:
+        wall, cpu, rc, _rss = _timed_run(argv, timeout)
+        if wall is None or rc != 0:        # timeout, or the workload failed
             return None
         best_any = wall if best_any is None else min(best_any, wall)
-        cpu = None if c0 is None else _child_cpu() - c0
         # descheduled? only judge once cpu is big enough that the ratio is signal
         if cpu is not None and cpu >= BENCH_CPU_MIN_S and \
            wall > cpu * BENCH_CPU_WALL_MAX:

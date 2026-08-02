@@ -3,6 +3,8 @@ track: T
 prio: 65
 type: bug
 blocked-by: []
+status: working
+owner: claude@xeon
 ---
 
 # Benchmark timings under 1s are quantized to a 50 ms grid
