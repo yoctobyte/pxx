@@ -3,7 +3,7 @@ summary: "pxxpdf — pxx pdfgen-backed, reportlab-compatible PDF library (nilpy)
 type: feature
 track: B
 prio: 50
-blocked-by: [bug-cfront-fegetround-unresolved-float-printf, feature-nilpy-fallback-import]
+blocked-by: [decide-pxxpdf-ticket-obsolete]
 ---
 
 # pxxpdf — pxx pdfgen-backed, reportlab-compatible PDF library

@@ -2,6 +2,8 @@
 track: B
 prio: 45
 type: bug
+status: done
+owner: claude-B
 ---
 
 # Building pdfgen: `strings.h` comes from the host, and `time`/`bcmp` bind at the wrong arity
@@ -76,3 +78,52 @@ The pdfgen build emits **zero** warnings, plus a differential probe per fixed
 call against gcc. `lib/crtl` builds for every target while `gate.sh lib` is
 x86-64 only, so cross-check i386/aarch64/arm32 as well —
 see [[frank2-crtl-changes-need-cross-check]].
+
+## Resolved 2026-08-02 — the crtl half; the rest was two other bugs
+
+Measuring first, as this ticket's own "not yet measured" section asked for,
+split the three warnings into three different owners. Only one of them was
+Track B's.
+
+### Fixed here: `strings.h`
+
+Added `lib/crtl/include/strings.h` with the BSD string surface — `bcmp`,
+`bcopy`, `bzero`, `index`, `rindex`, `ffs`, `strcasecmp`, `strncasecmp`. The
+host-header warning is gone, so the build no longer depends on the box's libc
+headers.
+
+Written as **static definitions** rather than `extern` declarations,
+deliberately: an extern `bcmp` is exactly what binds by name to Pascal's
+`BCmp`, and a local definition has no external name to collide with. (That did
+not turn out to defeat the binding — see below — but it is still the right
+shape for a header that must not reach outside pxx.)
+
+Verified against gcc on every function, and **cross-checked on i386, aarch64
+and arm32** as well as x86-64, per [[frank2-crtl-changes-need-cross-check]].
+Identical output everywhere.
+
+### Not Track B, and not what the ticket assumed
+
+**The truncated `/CreationDate` that motivated this was neither warning.** It is
+`sizeof(p->arr)` returning the pointer size — filed as
+[[bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size]] and moved
+to `urgent/`, because the same bug **overflows** when the array is smaller than
+a pointer (`memset(h.s->buf, 'X', sizeof(h.s->buf))` writes 8 bytes into 4 and
+clobbers the neighbouring field). Proven by compiling pdfgen as pure C — no
+Pascal, zero warnings, date still truncated — and then substituting the single
+`sizeof` expression for the literal `64`, which fixes it.
+
+**The `time`/`bcmp` arity warnings are a frontend name-resolution issue**, not a
+library gap, so they cannot be fixed under Track B. The static `bcmp` above was
+the attempted fix and the warning persisted unchanged — which is itself the
+evidence: a C translation unit that defines a function should call that
+function, whatever Pascal names are in scope. Re-filed as
+[[bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity]], honestly marked as
+*no wrong behaviour demonstrated yet* — in a pure C build `time(&now)` matches
+gcc exactly, and pdfgen never calls `bcmp` at all.
+
+So the pdfgen build is down from three warnings to two, both now owned by
+Track C with their real causes identified rather than guessed at.
+
+## Log
+- 2026-08-02 — resolved, commit PENDING.
