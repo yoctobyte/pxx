@@ -40,7 +40,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (206)
+## backlog (205)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -71,7 +71,6 @@ lives in git, not in a timestamp._
 | bug-nilpy-for-else-and-while-else-not-supported | N | 30 | bug | The `else` clause on a for/while loop does not parse — `for ... else:` fails with 'expected expression' at the else | — |
 | bug-nilpy-from-import-as-alias-is-discarded | N | 60 | bug | `from mod import NAME as ALIAS` — the alias is parsed and thrown away | — |
 | bug-nilpy-function-local-assignment-clobbers-module-global | N | 80 | bug | A function-local assignment WRITES the module global of the same name | — |
-| bug-nilpy-identifiers-are-case-insensitive | N | 80 | bug | NilPy identifiers are case-INSENSITIVE; Python's are case-sensitive | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
 | bug-nilpy-int-prints-as-float-when-the-name-is-widened-later | N | 50 | bug | An int prints as `5.0` because the SAME NAME is assigned a float later in the file | — |
 | bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
@@ -355,7 +354,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1208)
+## done (1209)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -756,6 +755,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-function-level-import-drops-body | N | 70 | bug | An import inside a function body — and the fix that silently emptied the body | — |
 | bug-nilpy-function-value-call-gaps | N | 55 | bug | Two function-value shapes that do not COMPILE | — |
 | bug-nilpy-global-shadowed-by-method-param-name-loses-class-type | N | 75 | bug | NilPy: a module-level variable whose NAME matches any method parameter loses its class type at operator-dispatch sites — every dunder silently stops dispatching, while attribute access on the same variable still works | — |
+| bug-nilpy-identifiers-are-case-insensitive | N | 80 | bug | NilPy identifiers are case-INSENSITIVE; Python's are case-sensitive | — |
 | bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float | N | 55 | bug | A function with no `return` yields UNINITIALIZED garbage, not None | — |
 | bug-nilpy-import-lost-after-a-fallback-import-block | N | 70 | bug | A C library's function name shadows a Python module name as a qualifier | — |
 | bug-nilpy-import-name-forces-function-object-abi | N | 70 | bug | `from m import f` makes every def in an imported module use the function-object ABI | — |
@@ -1605,7 +1605,6 @@ lives in git, not in a timestamp._
 
 - [urgent p 85] [C] bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size
 - [urgent p 80] [P] bug-pascal-procvar-in-value-context-takes-address-instead-of-calling (unblocks 1)
-- [p 80] [N] bug-nilpy-identifiers-are-case-insensitive (unblocks 1)
 - [p 80] [N] bug-nilpy-function-local-assignment-clobbers-module-global
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 1)
@@ -1624,6 +1623,7 @@ lives in git, not in a timestamp._
 - [p 60] [N] bug-nilpy-from-import-as-alias-is-discarded
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [N] bug-nilpy-one-line-def-and-class-bodies-do-not-parse
+- [p 60] [N] bug-nilpy-parent-method-call-breaks-if-parent-instantiated-first
 - [p 60] [N] bug-nilpy-same-kind-undefined-operators-still-compute
 - [p 60] [T] bug-t-etxtbsy-race-reds-single-shot-selfhost-jobs
 - [p 60] [T] bug-t-resolve-cites-a-sha-the-rebase-then-rewrites
@@ -1801,7 +1801,6 @@ lives in git, not in a timestamp._
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-c-uses-path-basename-collides-with-enclosing-unit-name
-- **1** — bug-nilpy-identifiers-are-case-insensitive
 - **1** — bug-pascal-procvar-in-value-context-takes-address-instead-of-calling
 - **1** — decide-nilpy-parallel-capture-semantics
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy

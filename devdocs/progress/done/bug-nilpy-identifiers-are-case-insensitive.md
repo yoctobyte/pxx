@@ -2,6 +2,7 @@
 track: N
 prio: 80
 type: bug
+status: done
 ---
 
 # NilPy identifiers are case-INSENSITIVE; Python's are case-sensitive
@@ -139,3 +140,75 @@ case-insensitively with something already in scope, presumably pylib's
 programs it breaks, it is the debugging time it silently misdirects and the
 false conclusions it plants in other tickets. That is an argument for the
 existing prio 80, not against it.
+
+## Log
+- 2026-08-02 — resolved, commit 59ba7bed5.
+
+
+## Resolved 2026-08-02 — commit 3ae48b3e8 (rebased from 59ba7bed5)
+
+Option 1 from "Fix shape", as recommended, and it turned out to need **five**
+sites rather than one, because "identifier" spans more layers than the symbol
+table:
+
+1. **Symbols and procs** — `DeclCaseSensitive` (= `CaseSensitiveMode or
+   NilPyUserCode`) replaces the bare `CaseSensitiveMode` at the five
+   `SymCaseSensitive[]` writes and the `ProcCaseSensitive[]` write. Nothing in
+   `FindSym` changed: it already matched exact case first and only fell back to
+   a case-insensitive scan for symbols flagged not-sensitive, so flipping the
+   FLAG was the whole fix on this layer. Pascal RTL/pylib routines keep FPC's
+   rule and stay reachable from NilPy spelled any way the lowering spells them.
+2. **Class members** — `UClsCaseSensFields[]`, already carried per class for C
+   structs, is set for NilPy classes, and a new `UMemberNameMatch` routes
+   field/method/property lookup (`FindUField`, `FindUMeth`, `FindUProp`,
+   `FindUMethArity`, `FindUMethOverloadAhead`, `FindUCtorOverloadArgs`, and
+   pyparser's kwarg-aware method probe) through the **declaring** class's rule.
+   Per-declaring-class is what makes a mixed hierarchy work: a NilPy class
+   deriving from a Pascal one tells its own `run` from `Run` while still
+   reaching the base's `Free`/`Destroy`/`GetEnumerator`.
+3. **Keyword arguments** — `ParamNameEq(pi, ...)` binds kwarg names under the
+   CALLEE's rule, so `def kw(Alpha=1, alpha=2)` has two parameters.
+4. **The LEXER** — the layer the ticket did not anticipate. `PyKeyword`
+   case-folded before matching, so `For`, `Not`, `If`, `Print` lexed as
+   KEYWORDS; `For = 2` did not merely bind the wrong name, it failed to parse.
+   Now an exact compare, with `True`/`False`/`None` matched capitalised.
+   `PyIsIdent` (the soft-keyword probe: `for`, `elif`, `pass`, `lambda`,
+   `dataclass`) likewise went `CaseEqual` -> `StrEqual`.
+5. **`ParsePyUnit` ordering** — `PyExprMode := True` moved BEFORE the pre-passes.
+   They REGISTER symbols, and for an imported `.py` module (CurrentUnitIdx >= 0)
+   `NilPyUserCode` is carried by `PyExprMode` alone, so a module's own names were
+   being registered case-INsensitively while the program's were sensitive.
+
+## Verified against CPython
+
+`test/test_nilpy_case_sensitive.npy` (+ `.expected`, wired into `make
+test-nilpy`) covers every row of the ticket's "Scope measured so far" table plus
+the gate list: two variables differing only in case; the `class A` / `a = A()` /
+`A.call(self)` repro; two fields and two methods differing only in case on one
+object; a function vs a variable; two functions; keyword arguments matching
+parameters that differ only in case; and capitalised Python keywords as ordinary
+identifiers. Output is byte-identical to CPython's.
+
+Imported-module scope verified separately (a `.py` module exporting `val`/`VAL`,
+`get`/`Get` and a class with `n`/`N`, read through the module qualifier) —
+matches CPython.
+
+## Gate
+
+`tools/gate.sh quick` GREEN, self-host fixedpoint byte-identical. Additionally,
+because the lexer rule has the widest reach, every `test/*.npy` was
+compile-checked: the only failures are the pre-existing ones (tests needing aux
+units the Makefile supplies from another cwd, and the two intentional
+`*_fail.npy` diagnostics). Cross targets and the full matrix are Track T's.
+
+## Fallout for other tickets
+
+[[bug-nilpy-class-attribute-unreachable-through-the-class-name]] should be
+**re-attempted**: the reverted class-attribute fallback was reverted on a
+misdiagnosis caused by this bug (`a = A()` rebinding `A`). Re-measured after this
+fix, `class A: n = 0 + 0` / `print(A.n)` still fails with "class method not
+found: n", so that ticket's real work is genuinely still open — but its recorded
+root cause is wrong and its repro should be re-derived from scratch.
+
+Noted in passing, unrelated to case: a single-line `def get(): return "x"` body
+in an imported `.py` module fails to parse ("Expected: newline"). Not filed here.
