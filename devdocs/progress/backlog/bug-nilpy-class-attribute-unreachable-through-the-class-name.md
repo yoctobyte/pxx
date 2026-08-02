@@ -227,3 +227,36 @@ constructions; literal and non-literal initialisers; that instance reads still
 see the class value and that assigning through an INSTANCE (`c.attr = ...`)
 creates an instance attribute without disturbing the class one (Python's rule);
 and a dataclass with defaults as a regression control.
+
+
+## 2026-08-02 — the "Also found here" note is FIXED; the main ticket stays blocked
+
+`from typing import ClassVar` parses fine; what failed was the **class member**
+`n: ClassVar[int] = 0`. Measuring it showed the report was narrower than the bug:
+EVERY annotated class attribute failed to parse — `n: int = 0`, `List[int]`,
+`Dict[str, int]`, and a bare `n: int` — because the class body only matched a
+name followed directly by `=`. The member pre-pass matched the same shape, so
+there was no field either. Only a @dataclass accepted annotated members, through
+its own branch.
+
+Fixed in **04408c2f1**, with `test/test_nilpy_annotated_class_attribute.npy`
+byte-identical to CPython.
+
+That does NOT unblock this ticket. The ClassVar registry (`FindClassVar`, the
+route through which "ClassName.name resolves") is still gated on `isDC` in
+`PyRegisterClassMembers`, so a plain class's `ClassVar` now lands as an ordinary
+FIELD — correct for instance reads, and it does not change the `ClassName.attr`
+story at all. **The copy-at-construction blocker is untouched. Do not re-attempt
+parts 1/2.**
+
+## Related bug found in the same session — read it before the rework
+
+[[bug-nilpy-non-literal-class-attribute-corrupts-the-class-layout]]: declaring
+`g = 2 + 3` in a class makes a method returning a tuple of two OTHER class
+attributes print nothing or segfault, with `g` never read. Pre-existing
+(reproduced on a stashed baseline), and it lives in exactly the
+`PyRegisterClassMembers` code this ticket's part 2 would have to change — the
+literal and non-literal branches each call `AddUField` and advance `curOff`
+independently. Plausibly the same layout disagreement seen from another side;
+fixing the copy-at-construction model without understanding it risks baking the
+bug in.
