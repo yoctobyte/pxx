@@ -2,18 +2,15 @@
 { ===== Nil Python Lexer ===== }
 
 function PyKeyword(const s: AnsiString): TTokenKind;
+{ Python keywords are case-SENSITIVE and all-lowercase (except the three
+  capitalised literals True/False/None), so the comparison below is EXACT.
+  It used to case-fold first, which made `For`, `Not`, `If`, `Print` lex as
+  keywords — they are ordinary identifiers in Python, and a program that binds
+  one failed to parse at all (bug-nilpy-identifiers-are-case-insensitive). }
 var
   lower: AnsiString;
-  i: Integer;
 begin
-  SetLength(lower, Length(s));
-  for i := 1 to Length(s) do
-  begin
-    if s[i] in ['A'..'Z'] then
-      lower[i] := Chr(Ord(s[i]) + 32)
-    else
-      lower[i] := s[i];
-  end;
+  lower := s;
 
   Result := tkIdent;
   case Length(lower) of
@@ -32,12 +29,12 @@ begin
       if lower = 'else' then Result := tkElse;
       if lower = 'elif' then Result := tkIdent;
       if lower = 'pass' then Result := tkIdent;
-      if lower = 'true' then Result := tkTrue;
-      if lower = 'none' then Result := tkNil;
+      if lower = 'True' then Result := tkTrue;
+      if lower = 'None' then Result := tkNil;
     end;
     5: begin
       if lower = 'while' then Result := tkWhile;
-      if lower = 'false' then Result := tkFalse;
+      if lower = 'False' then Result := tkFalse;
       if lower = 'print' then Result := tkwriteln;
       if lower = 'break' then Result := tkBreak;
       if lower = 'class' then Result := tkClass;

@@ -25,6 +25,30 @@ begin
   NilPyUserCode := isNilPy and ((CurrentUnitIdx < 0) or PyExprMode);
 end;
 
+function DeclCaseSensitive: Boolean;
+{ Should a symbol/proc registered RIGHT NOW be matched case-sensitively?
+
+  Pascal is case-INsensitive (FPC parity) and that is deliberate; Python is
+  case-SENSITIVE. NilPy inherited Pascal's rule, so `x` and `X` were one
+  variable and `a = A()` rebound the class name to the instance — a silent
+  wrong value in the single most idiomatic spelling in Python
+  (bug-nilpy-identifiers-are-case-insensitive).
+
+  The split is per-DECLARATION, not per-lookup: FindSym already matches exact
+  case first and only falls back to a case-insensitive scan for symbols whose
+  SymCaseSensitive is False. So marking only the NilPy user's own symbols
+  sensitive keeps every Pascal RTL routine reachable from NilPy code under
+  whatever case it is spelled with, while NilPy's own names stop merging.
+  Same shape as the C frontend, which forces CaseSensitiveMode around
+  ParseCUnit for exactly this reason.
+
+  NilPyUserCode (not `isNilPy`) is the predicate: a Pascal unit compiled into
+  the same NilPy compilation parses with PyExprMode off and CurrentUnitIdx >= 0,
+  so its symbols keep Pascal's rule. }
+begin
+  DeclCaseSensitive := CaseSensitiveMode or NilPyUserCode;
+end;
+
 procedure IREmitCodeCall(addr: Integer); forward;
 procedure EmitDynArrayReleaseForSym(symIdx: Integer); forward;
 procedure EmitVariantClear; forward;
@@ -653,8 +677,24 @@ begin
   Result := UClsIsInterface[ci] and UClsIsComInterface[ci];
 end;
 
+function UMemberNameMatch(off, len, cls: Integer; const name, lo: AnsiString): Boolean;
+{ Match a class MEMBER name (field / method / property) under the owning class's
+  own case rule. `name` is the caller's spelling as written, `lo` its ULower —
+  both are passed so neither path has to re-fold per candidate.
+
+  The rule is per-DECLARING-class, which is what makes a mixed hierarchy work:
+  a NilPy class deriving from a Pascal/pylib one distinguishes `run` from `Run`
+  among its own methods while still reaching the base's `Free`/`Destroy`/
+  `GetEnumerator` spelled any way the lowering happens to spell them. }
+begin
+  if UClsCaseSensFields[cls] then
+    UMemberNameMatch := UNameMatchCS(off, len, name)
+  else
+    UMemberNameMatch := UNameMatch(off, len, lo);
+end;
+
 function FindUField(ci: Integer; const name: AnsiString): Integer;
-var i, base, cnt: Integer; lo, name2: AnsiString; curr: Integer; cs, hit: Boolean;
+var i, base, cnt: Integer; lo, name2: AnsiString; curr: Integer; hit: Boolean;
 begin
   Result := -1;
   name2 := name;
@@ -664,14 +704,10 @@ begin
   begin
     base := UClsFBase[curr];
     cnt  := UClsFCount[curr];
-    { C structs/unions distinguish `b` from `B` — match case-sensitively when the
-      owning class flags it; Pascal records stay case-insensitive (default). }
-    cs := UClsCaseSensFields[curr];
     i := 0;
     while i < cnt do
     begin
-      if cs then hit := UNameMatchCS(UFldNOff[base + i], UFldNLen[base + i], name)
-      else       hit := UNameMatch(UFldNOff[base + i], UFldNLen[base + i], lo);
+      hit := UMemberNameMatch(UFldNOff[base + i], UFldNLen[base + i], curr, name, lo);
       if hit then begin Result := base + i; Exit; end;
       Inc(i);
     end;
@@ -680,7 +716,7 @@ begin
 end;
 
 function FindUMeth(ci: Integer; const name: AnsiString): Integer;
-var i, base, cnt: Integer; lo, name2: AnsiString; curr: Integer;
+var i, base, cnt: Integer; lo, name2: AnsiString; curr: Integer; hit: Boolean;
 begin
   Result := -1;
   name2 := name;
@@ -693,7 +729,8 @@ begin
     i := 0;
     while i < cnt do
     begin
-      if UNameMatch(UMthNOff[base + i], UMthNLen[base + i], lo) then begin Result := base + i; Exit; end;
+      hit := UMemberNameMatch(UMthNOff[base + i], UMthNLen[base + i], curr, name, lo);
+      if hit then begin Result := base + i; Exit; end;
       Inc(i);
     end;
     curr := UClsParent[curr];
@@ -763,7 +800,7 @@ begin
     i := 0;
     while i < cnt do
     begin
-      if UNameMatch(UPropNOff[base + i], UPropNLen[base + i], lo) then begin Result := base + i; Exit; end;
+      if UMemberNameMatch(UPropNOff[base + i], UPropNLen[base + i], curr, name, lo) then begin Result := base + i; Exit; end;
       Inc(i);
     end;
     curr := UClsParent[curr];
@@ -841,7 +878,10 @@ begin
   UClsHelperTk[UClsCount] := -1;
   UClsHelperRec[UClsCount] := REC_NONE;
   UClsForward[UClsCount] := False;
-  UClsCaseSensFields[UClsCount] := False;
+  { NilPy classes are Python classes: `self.c` and `self.C` are two attributes
+    and `def Run` is not `def run` (bug-nilpy-identifiers-are-case-insensitive).
+    Same reason C sets this for structs; Pascal classes stay case-insensitive. }
+  UClsCaseSensFields[UClsCount] := NilPyUserCode;
   UClsCount := UClsCount + 1;
 end;
 
@@ -2289,6 +2329,19 @@ begin
   end;
 end;
 
+function ParamNameEq(pi: Integer; const declared, given: AnsiString): Boolean;
+{ Match a keyword-argument name against a declared parameter name under the
+  CALLEE's case rule — the same per-declaration split DeclCaseSensitive applies
+  to symbols. A NilPy `def f(Alpha=1, alpha=2)` has two distinct parameters and
+  `f(Alpha=10, alpha=20)` must bind them separately; a Pascal RTL routine called
+  from NilPy keeps FPC's case-insensitive names. }
+begin
+  if (pi >= 0) and (pi < ProcCount) and ProcCaseSensitive[pi] then
+    ParamNameEq := StrEqual(declared, given)
+  else
+    ParamNameEq := CaseEqual(declared, given);
+end;
+
 function IsBlockVisible(symBlockId, curBlockId: Integer): Boolean;
 var b: Integer;
 begin
@@ -2639,7 +2692,7 @@ begin
     Syms[SymCount].ElemType := tyChar;
   Syms[SymCount].RecName  := LastTypeRecId;
   Syms[SymCount].IsRef    := False;
-  SymCaseSensitive[SymCount] := CaseSensitiveMode;
+  SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
@@ -2774,7 +2827,7 @@ begin
   Syms[SymCount].RecName  := LastTypeRecId;
   Syms[SymCount].IsRef    := isRef;
   Syms[SymCount].Kind     := skParam;
-  SymCaseSensitive[SymCount] := CaseSensitiveMode;
+  SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
@@ -2898,7 +2951,7 @@ begin
   Syms[SymCount].IsRef    := False;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
-  SymCaseSensitive[SymCount] := CaseSensitiveMode;
+  SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx;
   if elemType = tyPointer then
   begin
@@ -2989,7 +3042,7 @@ begin
   Syms[SymCount].IsRef       := False;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
-  SymCaseSensitive[SymCount] := CaseSensitiveMode;
+  SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx;
   if elemType = tyPointer then
   begin
@@ -3033,7 +3086,7 @@ begin
   SymArrNDims[SymCount] := 0;   { slot recycling — see AllocParam }
   SymBlockId[SymCount] := CurBlockId;   { slot recycling — see AllocParam }
   SymEnumId[SymCount] := -1;    { slot recycling — every Alloc* must reset EVERY parallel array }
-  SymCaseSensitive[SymCount] := CaseSensitiveMode;
+  SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx;
   SymSyncTypeRef(SymCount);
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
@@ -4722,7 +4775,7 @@ begin
     i := 0;
     while i < cnt do
     begin
-      if UNameMatch(UMthNOff[base + i], UMthNLen[base + i], lo) then
+      if UMemberNameMatch(UMthNOff[base + i], UMthNLen[base + i], curr, name, lo) then
       begin
         want := nExplicitArgs;
         want := want + 1;   { every method has Self at 0, class methods included }
@@ -5182,7 +5235,7 @@ begin
   Procs[ProcCount].RetSymIdx  := -1;
   Procs[ProcCount].ScopeBase  := 0;
   ProcExternal[ProcCount]     := False;
-  ProcCaseSensitive[ProcCount] := CaseSensitiveMode;
+  ProcCaseSensitive[ProcCount] := DeclCaseSensitive;
   ProcOverloadDirective[ProcCount] := False;
   ProcFlexColumn[ProcCount]   := False;
   ProcLibrary[ProcCount]      := -1;

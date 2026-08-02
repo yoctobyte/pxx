@@ -501,6 +501,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_str_param26)" = "$$(printf '2\nb\ncd\nok!')"
 	./$(COMPILER) test/test_nilpy_forin.npy /tmp/test_nilpy_forin26
 	/tmp/test_nilpy_forin26 | diff -u test/test_nilpy_forin.expected -
+	./$(COMPILER) test/test_nilpy_case_sensitive.npy /tmp/test_nilpy_case_sensitive26
+	/tmp/test_nilpy_case_sensitive26 | diff -u test/test_nilpy_case_sensitive.expected -
 	./$(COMPILER) test/test_nilpy_object_arc.npy /tmp/test_nilpy_object_arc26
 	test "$$(/tmp/test_nilpy_object_arc26)" = "$$(printf '3\n9\n2\n2')"
 	./$(COMPILER) test/test_nilpy_class_return.npy /tmp/test_nilpy_class_return26

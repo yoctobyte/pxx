@@ -128,8 +128,12 @@ var
   PyMembersHoisted: array[0..MAX_UCLASS-1] of Boolean;
 
 function PyIsIdent(const s: AnsiString): Boolean;
+{ Exact, not CaseEqual: every literal passed here is a lowercase Python soft
+  keyword (`for`, `elif`, `pass`, `lambda`, `dataclass`, ...), and Python
+  identifiers are case-sensitive — `For = 2` binds a variable, it does not open
+  a loop (bug-nilpy-identifiers-are-case-insensitive). }
 begin
-  Result := (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, s);
+  Result := (CurTok.Kind = tkIdent) and StrEqual(CurTok.SVal, s);
 end;
 
 { `/` is Python true division and maps to the shared tkSlash float-division
@@ -3424,7 +3428,7 @@ begin
       begin
         kwCtorPi := UMthProc_[kwCtorMi];
         for kwPk := 1 to Procs[kwCtorPi].ParamCount - 1 do
-          if CaseEqual(Procs[kwCtorPi].Params[kwPk].Name, kwName) then
+          if ParamNameEq(kwCtorPi, Procs[kwCtorPi].Params[kwPk].Name, kwName) then
             kwFld := kwPk - 1;
       end;
       if kwFld < 0 then
@@ -3808,7 +3812,7 @@ begin
   Next;              { the name }
   Next;              { the '=' }
   for i := firstParam to Procs[mpi].ParamCount - 1 do
-    if CaseEqual(Procs[mpi].Params[i].Name, nm) then
+    if ParamNameEq(mpi, Procs[mpi].Params[i].Name, nm) then
     begin
       PyKwArgIndex := i + 1;
       Exit;
@@ -6473,7 +6477,7 @@ begin
   Result := False;
   if mpi < 0 then Exit;
   for i := firstParam to Procs[mpi].ParamCount - 1 do
-    if CaseEqual(Procs[mpi].Params[i].Name, nm) then
+    if ParamNameEq(mpi, Procs[mpi].Params[i].Name, nm) then
     begin
       Result := True;
       Exit;
@@ -6818,7 +6822,7 @@ begin
         for di := 0 to UClsMCount[curr] - 1 do
         begin
           cand := UClsMBase[curr] + di;
-          if UNameMatch(UMthNOff[cand], UMthNLen[cand], ULower(mname)) and
+          if UMemberNameMatch(UMthNOff[cand], UMthNLen[cand], curr, mname, ULower(mname)) and
              PyProcParamNamed(UMthProc_[cand], pname) then
           begin
             Result := cand;
@@ -16850,6 +16854,14 @@ begin
     them, so the IR verifier rejected the compile at the module's LAST line
     with nothing there to explain it. Drop the queue instead. }
   savedHoist := PyHoistHead;
+  { On BEFORE the pre-passes, not after: the pre-passes REGISTER symbols (class
+    shells, def shells, module globals), and DeclCaseSensitive keys on
+    NilPyUserCode, which for a `.py` MODULE (CurrentUnitIdx >= 0) is carried by
+    PyExprMode alone. Set after the pre-passes, a module's own names were
+    registered case-INsensitively while the program's were sensitive
+    (bug-nilpy-identifiers-are-case-insensitive). Pascal units pulled in by
+    PyPreScanImports still parse with it off — ParseUnit saves/clears/restores. }
+  PyExprMode := True;
   PyRegisterClassShells;          { the class ROWS the field pre-pass fills in }
   PyPreScanImports;
   PyRegisterClassFieldsPrepass;
@@ -16857,7 +16869,6 @@ begin
   PyCollectModuleLocalsAST;
   PyAllocModuleGlobals;           { a def may read a global assigned further down }
   PyHoistHead := savedHoist;
-  PyExprMode := True;
 
   seqNode := AllocNode(AN_SEQ);
   lastSeq := seqNode;

@@ -1,0 +1,64 @@
+# bug-nilpy-identifiers-are-case-insensitive
+#
+# Python identifiers are case-SENSITIVE; Pascal's (the shared resolution layer
+# NilPy inherited) are not. Two differently-cased names used to be ONE name, so
+# `a = A()` rebound the class to the instance and `x`/`X` silently merged.
+# Every shape below must tell the two spellings apart.
+
+# --- module-level variables ---
+x = 1
+X = 2
+print(x, X)
+
+# --- a class and a same-named-but-lowercase variable (the idiomatic spelling) ---
+class A:
+    def call(self):
+        return "A"
+a = A()
+class E(A):
+    def call(self):
+        return "E:" + A.call(self)
+e = E()
+print(a.call(), e.call())
+
+# --- fields differing only in case, on one object ---
+class Counter:
+    def __init__(self):
+        self.c = 0
+        self.C = 9
+    def bump(self):
+        self.c += 1
+        return self.c
+    def run(self):
+        return "lower"
+    def Run(self):
+        return "upper"
+k = Counter()
+print(k.bump(), k.c, k.C)
+print(k.run(), k.Run())
+
+# --- a function and a variable differing only in case ---
+def go(v):
+    return v * 2
+GO = 7
+print(go(3), GO)
+
+# --- two functions differing only in case ---
+def Fn(v):
+    return v + 1
+def fn(v):
+    return v - 1
+print(Fn(5), fn(5))
+
+# --- keyword arguments matching parameters that differ only in case ---
+def kw(Alpha=1, alpha=2):
+    return str(Alpha) + "/" + str(alpha)
+print(kw(Alpha=10, alpha=20))
+print(kw())
+
+# --- Python keywords capitalised are ordinary identifiers ---
+If = 1
+For = 2
+Not = 3
+And = 4
+print(If, For, Not, And)

@@ -3288,7 +3288,7 @@ begin
     i := 0;
     while i < cnt do
     begin
-      if UNameMatch(UMthNOff[mbase + i], UMthNLen[mbase + i], lo) then
+      if UMemberNameMatch(UMthNOff[mbase + i], UMthNLen[mbase + i], curr, name, lo) then
       begin
         { EVERY method carries a Self at index 0 now -- a class method's Self is the
           metaclass. So the implicit arg is always there, static or not. }
@@ -3489,7 +3489,7 @@ begin
     i := 0;
     while i < cnt do
     begin
-      if UNameMatch(UMthNOff[mbase + i], UMthNLen[mbase + i], lo) then
+      if UMemberNameMatch(UMthNOff[mbase + i], UMthNLen[mbase + i], curr, nm, lo) then
       begin
         want := nArgs + 1;   { Self at 0 for every method, class methods included }
         if ProcArityMatches(UMthProc_[mbase + i], want) and (nCand < MAX_OVL_CAND) then
