@@ -7,7 +7,7 @@ type: feature
 # The environment's write side — SetEnvironmentVariable, and the child sees it
 
 - **Type:** feature (RTL) — **Track B** (`lib/rtl/sysutils.pas`)
-- **Filed and landed:** 2026-08-02, re-filing decided policy into the owning
+- **Filed and landed:** 2026-08-02 (commit 272e7ee29), re-filing decided policy into the owning
   lane. [[decide-env-write-side]] was resolved **2026-08-01** (option 3), but no
   implementation ticket was ever created, so — exactly like
   [[decide-ipv6-dualstack-and-aaaa-ordering]] the same week — the decided work
