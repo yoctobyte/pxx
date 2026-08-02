@@ -43,7 +43,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (208)
+## backlog (207)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -57,7 +57,6 @@ lives in git, not in a timestamp._
 | bug-cfront-sizeof-unparenthesised-subscript | C | 50 | bug | `sizeof a[0]` is a parse error — the array-length idiom does not compile | — |
 | bug-cfront-spurious-dt-needed-libc-with-no-imports | C | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
 | bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
-| bug-nilpy-augmented-assign-of-a-variant-param-to-an-int-field-adds-one | N | 70 | bug | `self.n += v` where n is an INT field and v an unannotated parameter adds 1, not v. `C(10).add(5)` returns 11. The variant argument is being read as a truthy 1 | — |
 | bug-nilpy-bare-dot-float-literals-do-not-lex | N | 35 | bug | `.5` and `5.` do not lex — the shared number scanner requires a digit on BOTH sides of the dot, which is right for Pascal and wrong for Python | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
@@ -360,7 +359,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1232)
+## done (1233)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -723,6 +722,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-annotated-module-global-invisible-in-kwarg | N | 55 | bug | A module-level ANNOTATED global is not visible in a keyword argument | — |
 | bug-nilpy-arithmetic-operator-dunders-not-dispatched | N | 55 | bug | `Vector(1,2) + Vector(3,4)` silently computed garbage — arithmetic dunders never dispatched | — |
 | bug-nilpy-augmented-add-on-variant-list-is-not-in-place | N | 55 | bug | `xs += ys` on a VARIANT-typed list rebinds instead of extending, so the caller never sees it | — |
+| bug-nilpy-augmented-assign-of-a-variant-param-to-an-int-field-adds-one | N | 70 | bug | `self.n += v` where n is an INT field and v an unannotated parameter adds 1, not v. `C(10).add(5)` returns 11. The variant argument is being read as a truthy 1 | — |
 | bug-nilpy-augmented-assign-to-a-variant-typed-field-corrupts-it | N | 75 | bug | `self.n += x` produces garbage when the field was initialised from an UNANNOTATED ctor parameter — True, an empty line, or 4.94e-323. Annotating the parameter fixes it. This is the most idiomatic shape in Python OO | — |
 | bug-nilpy-bitwise-on-float-variant-truncates | A | 30 | bug | NilPy: a bitwise op on a FLOAT variant truncates instead of raising TypeError | — |
 | bug-nilpy-bitwise-shift-on-class-operand-segfaults | N | 60 | bug | NilPy: `obj & 1` / `obj << 1` on a class instance SEGFAULTS (core dump); __and__/__or__/__xor__/__lshift__/__rshift__ are never dispatched | — |
@@ -1639,7 +1639,6 @@ lives in git, not in a timestamp._
 - [p 80] [O] bug-a-o3-inline-retention-substitutes-a-global-read-across-a-call
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
-- [p 70] [N] bug-nilpy-augmented-assign-of-a-variant-param-to-an-int-field-adds-one
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] regression-optdiff-shard8-12
 - [p 65] [N] bug-nilpy-class-attribute-unreachable-through-the-class-name
