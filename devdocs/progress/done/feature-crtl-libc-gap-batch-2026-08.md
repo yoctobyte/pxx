@@ -79,7 +79,7 @@ surface. Re-run the probe afterwards and confirm 48/48. Cross-check
 i386/aarch64/arm32: `lib/crtl` builds for every target while `gate.sh lib` is
 x86-64 only ([[frank2-crtl-changes-need-cross-check]]).
 
-## Landed 2026-08-02 — 9 of 10
+## Landed 2026-08-02 (commit 37928b45b) — 9 of 10
 
 The probe now reports **47 of 48**. Implemented: `stpcpy`, `memccpy`,
 `memrchr`, `strsep`, `strcasestr` (in `lib/crtl/src/string.c`), `strdup`,
