@@ -3977,7 +3977,7 @@ begin
   if (ASTLeft[node] < 0) or (ASTRight[node] < 0) then Exit;
   op := Integer(ASTIVal[node]);
   if (op <> Ord(tkMinus)) and (op <> Ord(tkSlash)) and (op <> Ord(tkDiv)) and
-     (op <> Ord(tkMod)) and
+     (op <> Ord(tkMod)) and (op <> Ord(tkStar)) and
      (op <> Ord(tkLt)) and (op <> Ord(tkLe)) and
      (op <> Ord(tkGt)) and (op <> Ord(tkGe)) then Exit;
   lk := IRPyOperandKind(ASTLeft[node]);
@@ -3997,10 +3997,20 @@ begin
       Ordering is NOT included: `"aa" < "bb"` is perfectly defined, and `%` is
       already exempted above as formatting. }
     if (lk = 2) and
-       ((op = Ord(tkMinus)) or (op = Ord(tkSlash)) or (op = Ord(tkDiv))) then
+       ((op = Ord(tkMinus)) or (op = Ord(tkSlash)) or (op = Ord(tkDiv)) or
+        (op = Ord(tkStar))) then
+      { `"ab" * "ab"` belongs with the three above: str carries no set-like
+        alter ego, Python raises "can't multiply sequence by non-int", and pxx
+        multiplied the two string HANDLES and printed whatever address product
+        fell out — a different garbage integer per run. }
       IRPyStaticPairUndefined := True;
     Exit;
   end;
+  { MULTIPLY across DIFFERING kinds is defined in Python — `"ab" * 3` and
+    `[1] * 3` are repetition, in either operand order — so it must never reach
+    the differing-kind rejection below. It is admitted above only to be judged
+    by the same-kind str rule. }
+  if op = Ord(tkStar) then Exit;
   IRPyStaticPairUndefined := True;
 end;
 
