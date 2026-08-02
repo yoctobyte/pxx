@@ -99,12 +99,31 @@ Things that are expected to bite, so they do not read as failures:
   `ESP_PXXFLAGS="--no-signals"`; without it app_main panics on an `ecall` in its
   prologue. The validation program does not need it.
 
-## What this ticket can NOT close yet
+## The peripheral half is unblocked too (2026-08-02, later)
 
-The acceptance asks for "a basic peripheral/ISR fires on hardware". The timer
-callback surface is broken in QEMU on both chips right now
-([[bug-esp-timer-callback-never-dispatched]] — filed with a two-file repro), so
-that half is blocked. GPIO output IS exercised by the validation program, and
-`examples/esp32/timer-s3` is ready as the xtensa retest the moment the callback
-bug is fixed. **Worth trying on the board anyway**: if the timer demo works on
-real silicon while failing under qemu, that is a large clue for that bug.
+[[bug-esp-timer-callback-never-dispatched]] is FIXED — it was a 64-bit argument
+to a C function being passed with only its low word, so `esp_timer`'s period
+arrived with a stale pointer in its high half. Both chips now run the periodic
+callback correctly, xtensa included. So the board session gets a second step:
+
+```sh
+ESP_PXXFLAGS="--no-signals -Fu$PWD/lib/rtl -Fu$PWD/lib/rtl/platform/esp" \
+  tools/esp_flash.sh --chip esp32s3 --no-verify --seconds 15 \
+  examples/esp32/timer-c3/main/main.pas
+```
+
+Expected:
+
+```text
+PXX timer: started
+PXX timer: tick=1 ... tick=5
+PXX timer: done ticks=5 status=0
+```
+
+(`--no-verify` because the demo has no meaningful x86-64 run: it is all SDK
+calls.) That satisfies the acceptance's "a basic peripheral/ISR fires" — the
+callback is dispatched by the SDK's timer interrupt, which is the real thing on
+silicon and only emulated in qemu. `make test-esp-idf` guards the qemu side.
+
+Still worth watching on hardware: qemu's systimer is not the S2/S3 silicon's, so
+a timer that works in emulation and not on the board would be new information.
