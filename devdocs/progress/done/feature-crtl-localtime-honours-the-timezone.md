@@ -74,7 +74,7 @@ directions. `TZ=UTC` output must be byte-unchanged — that is what the existing
 `test/` time coverage pins today. Cross-target, since `lib/crtl` builds for
 every target.
 
-## Landed 2026-08-02
+## Landed 2026-08-02 (commit c7f71e13b)
 
 `localtime`/`localtime_r` read the TZif file that `$TZ` or `/etc/localtime`
 names — the RFC 8536 format, parsed to "UTC offset in effect at instant T" by
