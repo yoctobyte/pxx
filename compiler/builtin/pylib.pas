@@ -1053,6 +1053,11 @@ function pystr_rstrip_chars(const s: AnsiString; const chars: AnsiString): AnsiS
 function pystr_startswith(const s: AnsiString; const pre: AnsiString): Boolean;
 function pystr_endswith(const s: AnsiString; const suf: AnsiString): Boolean;
 function pystr_find(const s: AnsiString; const sub: AnsiString): Integer;
+{ str.index/rindex — like find/rfind but RAISE ValueError when absent, which is
+  the whole difference and the reason both exist in Python. }
+function pystr_index(const s: AnsiString; const sub: AnsiString): Integer;
+function pystr_index_from(const s: AnsiString; const sub: AnsiString; start: Integer): Integer;
+function pystr_rindex(const s: AnsiString; const sub: AnsiString): Integer;
 { str.find(sub, start): searches from `start` but reports the index in the
   ORIGINAL string, as Python does. }
 function pystr_find_from(const s: AnsiString; const sub: AnsiString; start: Integer): Integer;
@@ -1312,6 +1317,27 @@ begin
   tail := Copy(s, start + 1, Length(s) - start);
   r := pystr_find(tail, sub);
   if r < 0 then Result := -1 else Result := r + start;
+end;
+
+function pystr_index(const s: AnsiString; const sub: AnsiString): Integer;
+begin
+  Result := pystr_find(s, sub);
+  if Result < 0 then
+    raise ValueError.Create('substring not found');
+end;
+
+function pystr_index_from(const s: AnsiString; const sub: AnsiString; start: Integer): Integer;
+begin
+  Result := pystr_find_from(s, sub, start);
+  if Result < 0 then
+    raise ValueError.Create('substring not found');
+end;
+
+function pystr_rindex(const s: AnsiString; const sub: AnsiString): Integer;
+begin
+  Result := pystr_rfind(s, sub);
+  if Result < 0 then
+    raise ValueError.Create('substring not found');
 end;
 
 function pystr_isdigit(const s: AnsiString): Boolean;

@@ -1,0 +1,26 @@
+# str.index() / str.rindex() — like find/rfind but RAISING ValueError when the
+# substring is absent, which is the whole reason both pairs exist in Python.
+#
+# .index() was simply missing from the str-method table (the diagnostic listed
+# 32 supported methods and index was not among them), so any code using the
+# raising form failed to compile. Found by a differential sweep against the
+# CPython oracle — the rest of the string surface agreed on all 19 lines.
+#
+# Expectation is CPython's own output.
+
+s = "Hello World"
+print(s.index("W"), s.index("o"), s.index("o", 5))
+print(s.rindex("o"), s.rindex("l"))
+print(s.find("zz"), s.rfind("zz"))
+try:
+    s.index("zz")
+except ValueError:
+    print("index ValueError")
+try:
+    s.rindex("zz")
+except ValueError:
+    print("rindex ValueError")
+try:
+    s.index("o", 99)
+except ValueError:
+    print("index-from ValueError")

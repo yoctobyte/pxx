@@ -2211,6 +2211,12 @@ begin
   else if CaseEqual(mname, 'find') then
     { .find(sub) and .find(sub, start) — see the -3 case in PyParseStrMethod }
     begin pname := 'pystr_find'; retTk := tyInteger; wantArgs := -3; end
+  else if CaseEqual(mname, 'index') then
+    { like find, but RAISES ValueError when the substring is absent — same
+      one-or-two-argument shape, so the same -3 case handles it. }
+    begin pname := 'pystr_index'; retTk := tyInteger; wantArgs := -3; end
+  else if CaseEqual(mname, 'rindex') then
+    begin pname := 'pystr_rindex'; retTk := tyInteger; wantArgs := 1; end
   else if CaseEqual(mname, 'encode') then
     { .encode(enc [, errors=...]) — the arguments are accepted and DROPPED; see
       the -4 case in PyParseStrMethod and pystr_encode for what that means. }
