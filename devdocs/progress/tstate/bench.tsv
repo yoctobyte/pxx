@@ -1,4 +1,5 @@
 # date	host	sha	workload	level	ms
+# 2026-08-02 688a174aa MEASUREMENT BASIS CHANGED — do not compare rows across this line. Everything recorded BEFORE it is a subprocess poll wakeup (0.5/1.5/3.5/7.5/15.5/31.5/63.5/113.5/163.5... ms), not a process exit; sub-second rows are clock artefact to within ~50 ms. See bug-t-bench-sub-second-timings-quantized-to-50ms.
 2026-07-11T07:31:45Z	borg	b51a92f0879f	mandelbrot	-O0	114.1
 2026-07-11T07:31:45Z	borg	b51a92f0879f	mandelbrot	-O2	114.1
 2026-07-11T07:31:45Z	borg	b51a92f0879f	mandelbrot	-O3	114.0

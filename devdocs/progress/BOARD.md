@@ -36,7 +36,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (201)
+## backlog (200)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -93,7 +93,6 @@ _none_
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-progress-claim-silently-drops-owner-without-template-line | T | 30 | bug | `progress.sh claim`/`resolve` silently no-op when a ticket lacks the expected body line | — |
 | bug-subprocess-spawns-child-with-empty-environment | B | 45 | bug | Every spawned child process gets a completely empty environment | — |
-| bug-t-bench-sub-second-timings-quantized-to-50ms | T | 65 | bug | Benchmark timings under 1s are quantized to a 50 ms grid | — |
 | bug-t-corpus-regex-invents-phantom-tree | T | 55 | bug | CORPUS_RE matches prose in a SKIP message and invents corpus 'stb)', permanently skipping a job that also carries a non-corpus regression test | — |
 | bug-t-etxtbsy-race-reds-single-shot-selfhost-jobs | T | 60 | bug | A one-off `Text file busy` on exec red the self-host chain job; selfhost is single-shot by policy, so a harness-level OS race is indistinguishable from real compiler nondeterminism | — |
 | bug-t-host-dependent-test-assertions-cross-distro | T | 70 | bug | Watcher and dev boxes run different distros, so tests that bake in host state (library versions, allocator behaviour, the host CPython) go permanently RED on the watcher while passing locally — and read as watcher bugs | — |
@@ -346,7 +345,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1194)
+## done (1195)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -960,6 +959,7 @@ _none_
 | bug-subclass-field-offset-calculation | A | 50 | bug | bug-subclass-field-offset-calculation (Track A) | — |
 | bug-sysutils-unit-hard-skipped | A | 50 | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
 | bug-t-autoticket-files-emergencies-for-already-fixed-shas | T | 75 | bug | a cascade is auto-filed as a live emergency for a sha whose breakage was already reverted minutes earlier; ancestry alone cannot detect it | — |
+| bug-t-bench-sub-second-timings-quantized-to-50ms | T | 65 | bug | Benchmark timings under 1s are quantized to a 50 ms grid | — |
 | bug-t-claim-silently-no-ops-owner-on-yaml-only-tickets | T | 45 | bug | `progress.sh claim`/`resolve` silently no-op Owner/Status on YAML-only tickets | — |
 | bug-t-flaky-async-multithreaded-tests-false-newred | T | 45 | bug | Flaky async/multithreaded run-tests emit false NEW-REDs — reap() fails on first nonzero exit, no confirm-retry | — |
 | bug-t-full-run-evicts-opt-verdicts-perpetual-new-red | T | 75 | bug | DUPLICATE of bug-t-full-tier-wipes-other-tiers-job-status — "a full run replaces the whole job map and evicts opt-tier verdicts, so every opt-only red re-reports as NEW-RED forever" | — |
@@ -1591,7 +1591,6 @@ _none_
 - [p 65] [B] bug-b-floattostrsig-caps-at-15-significant-digits
 - [p 65] [N] bug-classname-on-a-tobject-local-compiles-to-a-dynamic-attr-fetch
 - [p 65] [N] bug-nilpy-class-attribute-unreachable-through-the-class-name
-- [p 65] [T] bug-t-bench-sub-second-timings-quantized-to-50ms
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 65] [T] task-t-worktree-is-not-current-state
