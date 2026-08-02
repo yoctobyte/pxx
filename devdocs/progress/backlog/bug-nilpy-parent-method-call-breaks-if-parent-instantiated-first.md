@@ -102,3 +102,32 @@ A `.npy` diffed against CPython covering the repro and its mirror (instantiation
 after), instantiation of the SUBCLASS before the parent call, instantiation
 inside a function rather than at module level, and a parent call reached through
 two inheritance levels.
+
+## Resolved 2026-08-02 — fixed by [[bug-nilpy-identifiers-are-case-insensitive]] (3ae48b3e8), no code of its own
+
+The re-diagnosis was right and the prediction held: making NilPy identifiers
+case-sensitive fixed this outright. Re-measured at HEAD, the repro compiles and
+prints `E:A`.
+
+Verified against the whole gate list in one file, byte-identical to CPython:
+the repro; its mirror (instantiation after the subclass); the SUBCLASS also
+instantiated under a same-cased name; instantiation inside a function rather
+than at module level; and a parent call reached through two inheritance levels.
+
+Kept as a regression test — `test/test_nilpy_parent_call_after_instantiation.npy`
+(+ `.expected`, wired into `make test-nilpy`) — rather than closed silently,
+because the symptom is so far from the cause: a parse error at `self`, decided
+by a line that mentions neither the subclass nor the method. Every case in it
+keeps the `a = A()` spelling on purpose; that is the shape that hid the bug.
+
+## Worth keeping from this ticket
+
+Two process notes that earned their place:
+
+- **The delta-debugging predicate needs a validity clause.** Reducing under
+  "still fails" alone collapsed the file to `class A:` — which fails for an
+  unrelated reason. Adding "and is still valid Python" is what made the
+  reduction compare like with like.
+- **The first six guesses were wrong and the seventh measurement was right.**
+  The ordering theory in the superseded section is a good record of a plausible
+  story that no oracle had been diffed against.

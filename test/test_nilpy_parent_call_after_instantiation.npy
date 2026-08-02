@@ -1,0 +1,61 @@
+# bug-nilpy-parent-method-call-breaks-if-parent-instantiated-first
+#
+# `A.call(self)` in a subclass failed to PARSE ("unexpected token ... >>> self")
+# when the parent had been instantiated at module level first — and moving that
+# one line, which mentions neither the subclass nor the method, made it compile.
+#
+# It was never about ORDER. `a` and `A` were the same identifier, so the instance
+# shadowed the class and `A.call` was a member fetch on an instance. The ticket
+# says so itself, having been re-diagnosed after the ordering theory; fixing
+# bug-nilpy-identifiers-are-case-insensitive fixed this with no code of its own.
+#
+# The single-letter-lowercase-instance-of-a-capitalised-class spelling (`a = A()`)
+# is the most idiomatic line in Python, which is why this hid so well. Every case
+# below keeps that spelling deliberately.
+
+class A:
+    def call(self):
+        return "A"
+
+a = A()                       # the repro: parent instantiated first, name = class name
+
+class E(A):
+    def call(self):
+        return "E:" + A.call(self)
+
+e = E()                       # subclass instantiated, same-cased name too
+print(e.call(), a.call())
+
+# mirror: instantiation AFTER the subclass
+class B:
+    def call(self):
+        return "B"
+
+class F(B):
+    def call(self):
+        return "F:" + B.call(self)
+
+b = B()
+print(F().call(), b.call())
+
+# instantiation inside a FUNCTION rather than at module level
+class C:
+    def call(self):
+        return "C"
+
+def make():
+    c = C()
+    return c.call()
+
+class G(C):
+    def call(self):
+        return "G:" + C.call(self)
+
+print(make(), G().call())
+
+# a parent call reached through TWO inheritance levels
+class H(G):
+    def call(self):
+        return "H:" + G.call(self)
+
+print(H().call())
