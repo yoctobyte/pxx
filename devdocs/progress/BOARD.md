@@ -43,11 +43,12 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (207)
+## backlog (208)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
+| bug-a-o3-inline-retention-substitutes-a-global-read-across-a-call | O | 80 | bug | -O3 silently returns the wrong value: the non-leaf inline slice treats a GLOBAL read as re-readable and can evaluate it on the wrong side of the retained body's inner call, which writes it. localtime loses its timezone offset | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-a-selfhost-recipe-should-rename-not-write-in-place | A | 55 | bug | The self-host chain compiles straight onto the path it is about to exec, so a concurrent fd holder makes the exec fail with ETXTBSY. Write to a temp name and rename — atomic in RUN_TMP, and a new inode | — |
 | bug-b-writeln-float-with-17-decimals-prints-garbage | A | 55 | bug | `WriteLn(x:0:17)` prints garbage | — |
@@ -1633,6 +1634,7 @@ lives in git, not in a timestamp._
 - [urgent p 80] [P] bug-pascal-procvar-in-value-context-takes-address-instead-of-calling (unblocks 1)
 - [urgent p 80] [C] bug-cfront-plain-char-is-unsigned-and-folds-inconsistently
 - [urgent p 75] [C] bug-cfront-arch-predefines-always-x86-64
+- [p 80] [O] bug-a-o3-inline-retention-substitutes-a-global-read-across-a-call
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 75] [N] bug-nilpy-augmented-assign-to-a-variant-typed-field-corrupts-it
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
