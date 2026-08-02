@@ -63,3 +63,72 @@ A `.npy` diffed against CPython covering a constructor in every RHS position
 (first, last, middle, alone), mixed with literals and function calls, a
 subclass constructor, and a constructor with arguments — plus the single
 assignment and list-then-unpack forms as controls.
+
+## 2026-08-02 — this is TYPE ERASURE, and it has a SILENT half the title hides
+
+Re-measured at HEAD by a differential sweep. The parse error is real and still
+reproduces with non-colliding names (`p, q = Thing(), Thing()` then `p.w()`), so
+it is not the case-insensitivity bug that was fixed the same day. But framing
+this as "won't parse" points the fix at the parser, and the parser is not where
+the problem is.
+
+**Unpacking erases the class identity of its targets.** The target becomes a
+variant, and everything downstream follows from that:
+
+- a **method call** on the target does not resolve — the loud half, which is
+  what this ticket recorded
+- a **dunder** on the target does not dispatch — the SILENT half, which nobody
+  had measured
+
+```python
+class Counter:
+    def __init__(self, n):     self.n = n
+    def __len__(self):         return self.n
+    def __eq__(self, o):       return self.n == o.n
+    def __str__(self):         return "C(" + str(self.n) + ")"
+    def __contains__(self, v): return v == self.n
+
+a, b = Counter(3), Counter(3)
+print(len(a), a == b, str(a), 3 in a)
+# CPython: 3 True C(3) True
+# pxx    : 1 False 123581388292120 <segfault on `3 in a`>
+```
+
+`str(a)` printing a POINTER and `a == b` answering False are exactly the failure
+shapes this repo treats as worst-case: confident, well-formed, wrong.
+
+### The control that names the cause
+
+```python
+a = Counter(3)
+b = Counter(3)
+print(len(a), a == b, str(a), 3 in a, 4 in a)   # byte-identical to CPython
+```
+
+Two separate assignments — same classes, same calls, same dunders — are entirely
+correct. Only the unpacking form loses it.
+
+### Why this is NOT simply the runtime-dunder cluster
+
+It looks like [[feature-nilpy-runtime-dunder-dispatch-on-variants]], which lists
+"unpacking from a container" among its entry points, and if the RHS were an
+arbitrary iterable it would be — the class genuinely is unknown then, and that
+needs the Track U decision.
+
+But here the RHS is a **tuple DISPLAY of constructions whose classes are known at
+compile time**. `a, b = Counter(3), Counter(3)` has nothing erased about it
+except by pxx's own lowering. Typing each unpack target from the corresponding
+RHS element, when the RHS is a literal tuple, needs no runtime dispatch and no
+decision — and it fixes both halves at once, the parse error included.
+
+That makes this ticket **separable from the blocked cluster**, which is the main
+reason for writing this down: it currently reads like a small parser gap, and it
+is actually a self-contained type-propagation fix with a silent wrong-value half.
+
+### Gate (revised)
+
+The existing table, plus: a method call on each unpacked target; `__len__`,
+`__eq__`, `__str__`, `__contains__` on an unpacked target, diffed against
+CPython; the two-separate-assignments control; and an unpacking whose RHS is a
+genuine iterable (a list, a function return) left behaving as it does today,
+since that one really does belong to the runtime-dispatch cluster.
