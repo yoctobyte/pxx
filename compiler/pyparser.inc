@@ -12279,13 +12279,32 @@ end;
   it goes through the same dynamic store `obj.name = v` already uses. `newTk`
   is the type a freshly created plain name takes. }
 function PyUnpackTargetStore(const nm, fld: AnsiString; valNode: Integer;
-                            newTk: TTypeKind): Integer;
+                            newTk: TTypeKind; newRec: Integer): Integer;
 var symIdx, ci, fi, lhs: Integer;
 begin
   symIdx := PyProgSym(nm);
   if fld = '' then
   begin
     if symIdx < 0 then symIdx := AllocVar(nm, newTk);
+    { Carry the CLASS IDENTITY, not just the type kind. `a, b = C(3), C(3)`
+      typed each target tyClass but left RecName unset, so the target was a
+      class-shaped value with no class — and everything that resolves against
+      the class silently stopped working: a method call on it did not parse,
+      and `len(a)` / `a == b` / `str(a)` / `x in a` skipped dunder dispatch and
+      answered 1 / False / a POINTER. Two separate assignments of the same
+      constructions were always correct, which is what pinned it here
+      (bug-nilpy-constructor-call-in-unpack-rhs-fails-to-parse).
+
+      Set when the symbol has no identity yet, including a fresh one; an
+      existing name REBOUND to a different class is left alone here, since a
+      name that genuinely holds two classes over its life is the widening case
+      the module/local tables own. }
+    if (newTk = tyClass) and (newRec >= REC_UCLASS_BASE) and
+       (Syms[symIdx].RecName < REC_UCLASS_BASE) then
+    begin
+      Syms[symIdx].RecName := newRec;
+      SymSyncTypeRef(symIdx);
+    end;
     lhs := PyMakeIdent(symIdx);
   end
   else
@@ -12389,7 +12408,7 @@ begin
       end
       else
         unpElem := PyMakeVariantGetItem(PyMakeIdent(tmps[0]), unpIdx);
-      node := PyUnpackTargetStore(names[i], flds[i], unpElem, tyVariant);
+      node := PyUnpackTargetStore(names[i], flds[i], unpElem, tyVariant, REC_NONE);
       seq := PySeqAppend(seq, node);
     end;
     Result := seq;
@@ -12402,7 +12421,7 @@ begin
   for i := 0 to nTargets - 1 do
   begin
     node := PyUnpackTargetStore(names[i], flds[i], PyMakeIdent(tmps[i]),
-                                Syms[tmps[i]].TypeKind);
+                                Syms[tmps[i]].TypeKind, Syms[tmps[i]].RecName);
     seq := PySeqAppend(seq, node);
   end;
   Result := seq;

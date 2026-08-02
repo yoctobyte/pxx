@@ -1,0 +1,71 @@
+# bug-nilpy-constructor-call-in-unpack-rhs-fails-to-parse
+#
+# Unpacking ERASED the class identity of its targets: each target was typed
+# tyClass but left with no RecName, so it was a class-shaped value with no class.
+# Both halves followed from that one omission, and only one of them was loud:
+#
+#   a, b = Thing(), Thing()
+#   a.w()            # "unexpected token" — the LOUD half, which was filed
+#   len(a), a == b, str(a), 3 in a
+#                    # 1, False, a POINTER — the SILENT half, which was not
+#
+# Two separate assignments of the same constructions were always correct, which
+# is what pinned the cause on the unpack path rather than on dunder dispatch.
+#
+# NOT the runtime-dunder-on-variants cluster: the right-hand side here is a tuple
+# display of constructions whose classes are known at compile time, so carrying
+# the identity through needs no runtime dispatch.
+
+class Thing:
+    def w(self):
+        return "T"
+
+
+class Counter:
+    def __init__(self, n):
+        self.n = n
+
+    def __len__(self):
+        return self.n
+
+    def __eq__(self, o):
+        return self.n == o.n
+
+    def __str__(self):
+        return "C(" + str(self.n) + ")"
+
+    def __contains__(self, v):
+        return v == self.n
+
+
+def f():
+    return 1
+
+
+# the loud half: a method call on each unpacked target
+p, q = Thing(), Thing()
+print(p.w(), q.w())
+
+# the silent half: dunders on an unpacked target
+a, b = Counter(3), Counter(3)
+print(len(a), a == b, str(a), 3 in a, 4 in a)
+print(a != b)
+
+# the control that names the cause — same classes, same dunders, no unpacking
+c = Counter(3)
+d = Counter(3)
+print(len(c), c == d, str(c), 3 in c)
+
+# mixed target lists must keep each element's own type
+r, s = Thing(), 5
+print(r.w(), s)
+t, u = 5, Thing()
+print(t, u.w())
+
+# the shapes that already worked, as regression controls
+v, w = f(), f()
+print(v, w)
+x, y, z = 1, 2, 3
+print(x, y, z)
+i, j, k = [1, 2, 3]
+print(i, j, k)
