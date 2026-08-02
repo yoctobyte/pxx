@@ -92,3 +92,50 @@ a class and an instance differing only in case (the repro above), a function and
 a variable, attribute names differing only in case on one object, and a keyword
 argument matching a parameter with different case. Plus `make test` and the
 Pascal corpus byte-identical, since the shared layer is being touched.
+
+## 2026-08-02 — this bug caused a WRONG ROOT CAUSE to be recorded elsewhere
+
+Add to the blast radius: it produced a misdiagnosis that got a separate fix
+reverted and a wrong conclusion written into a ticket, where it sat until
+someone re-measured.
+
+On [[bug-nilpy-class-attribute-unreachable-through-the-class-name]], the
+class-attribute lookup fallback was reverted because this program "silently"
+gave 0 instead of 1:
+
+```python
+class A:
+    n = 0 + 0
+    def __init__(self):
+        A.n += 1
+a = A()
+print(A.n)
+```
+
+That was read as an unexplained interaction between the hoisted `$clsattr`
+initialiser and the constructor. It is not. **`a` and `A` are the same
+identifier**, so `a = A()` rebinds the class name to the instance and `A.n`
+then reads the instance's stale copy. Renaming the variable to `zzz` gives the
+correct answer with no code change. Reduced to a one-liner with no constructor:
+
+```python
+class A:
+    n = 0 + 0
+a = 5
+print(A.n)        # prints 5
+```
+
+The instructive part is the SHAPE of the confusion: single-letter locals paired
+with a capitalised class (`a = A()`, `p = P()`, `c = Counter()`) are the single
+most common spelling in Python, so this bug hides *inside the most idiomatic
+code in the language* and reads as "the feature I just wrote is broken".
+
+A second sighting the same day: `class Counter` fails to compile entirely
+("no such member on this record/class") — `Counter` collides
+case-insensitively with something already in scope, presumably pylib's
+`TPyCounter` family. `class Reg` with identical code compiles fine.
+
+**Implication for prioritisation:** the cost of this bug is not only the
+programs it breaks, it is the debugging time it silently misdirects and the
+false conclusions it plants in other tickets. That is an argument for the
+existing prio 80, not against it.

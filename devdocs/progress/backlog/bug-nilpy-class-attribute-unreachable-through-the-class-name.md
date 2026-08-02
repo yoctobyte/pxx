@@ -125,6 +125,92 @@ the hoisted `$clsattr` initialiser assignment running relative to the
 constructor call, not the lookup itself. Get that right, then parts 1 and 2
 can be judged.
 
+## 2026-08-02 — THE ABOVE DIAGNOSIS IS WRONG. Measured, not reasoned.
+
+The counter-example that caused the revert is **not** a hoisting or constructor
+interaction at all. It is [[bug-nilpy-identifiers-are-case-insensitive]].
+
+`a` and `A` are the SAME identifier, so `a = A()` **rebinds the class name to
+the instance**. `A.n` afterwards reads the *instance's* copy of the field — which
+the constructor set from the global BEFORE incrementing it — hence 0. Bare `A()`
+rebinds nothing, hence 1. The variable name was the whole variable:
+
+```python
+class A:
+    n = 0 + 0
+    def __init__(self):
+        A.n += 1
+a   = A(); print(A.n)   # 0   <- `a` IS `A`
+zzz = A(); print(A.n)   # 1   <- same program, different variable name
+```
+
+Decisive one-liner, no constructor involved at all:
+
+```python
+class A:
+    n = 0 + 0
+a = 5
+print(A.n)        # prints 5 — `A` now names the integer
+```
+
+With non-colliding names the part-1 fallback is **correct in every case I
+measured**: module-level read (0) and write (7), explicit write in a method (2),
+augmented `Reg.k += 1` in a method (1), the counter idiom across three
+constructions (3), and instance reads unaffected. The literal-initialiser case
+stays a LOUD "class method not found", exactly as before — no silent wrongness
+introduced there.
+
+I also tried part 2 (make `PyClsAttrExprAhead` always true, so a literal
+initialiser gets real storage too). It works: a 6-line probe covering int/str/list
+class attributes, module write, the counter idiom, augmented assignment, and
+`s1.v = 99` creating an instance attribute without disturbing the class one, is
+byte-identical to CPython.
+
+## So why is this still open? A DIFFERENT blocker, also measured
+
+Both parts were reverted again, for a reason that is real:
+
+```python
+class S:
+    v = 5
+a1 = S(); a2 = S()
+print(a1.v, a2.v, S.v)    # CPython 5 5 5     pxx 5 5 5    ok
+S.v = 10
+print(a1.v, a2.v, S.v)    # CPython 10 10 10  pxx 5 5 10   SILENTLY WRONG
+```
+
+Construction **copies** each class attribute into the instance field, so once a
+write through the class name is possible, existing instances silently disagree
+with the class. Today that is unreachable because the write is a compile error;
+enabling the lookup makes it reachable. Same category as the first revert — a
+loud refusal becoming a silent wrong value — via a completely different route.
+
+Mutable class attributes are NOT affected (the instances copy the same list
+HANDLE, so mutation is shared, matching CPython). It is specifically *assigning*
+to the class attribute after instances exist.
+
+## What actually has to change first
+
+The copy-at-construction model. Python resolves `inst.attr` by looking at the
+instance dict and *falling through to the class* when absent; assigning
+`inst.attr` creates a per-instance override. So:
+
+- construction should NOT copy class attributes into instance fields
+- `inst.attr` should read the class global unless an instance override exists
+- `inst.attr = x` should create that override — and the `pydynattr` machinery
+  for per-instance dynamic attributes already exists, so this is wiring, not
+  new runtime
+
+Only once reads fall through is the `ClassName.attr` lookup safe to enable, and
+at that point parts 1 and 2 are both small.
+
+**Read-only access cannot be split out as a cheap interim**: the fallback site
+(`parser.inc:4400`) returns a node the caller may use as either an rvalue or an
+assignment target, so refusing only writes needs the same context plumbing.
+
+Do NOT re-attempt parts 1/2 before the lookup model is fixed — and do not
+re-diagnose the `a = A()` example, it is case-insensitivity and is settled.
+
 ## Also found here
 
 `from typing import ClassVar` fails to parse (`unexpected token`), so the
