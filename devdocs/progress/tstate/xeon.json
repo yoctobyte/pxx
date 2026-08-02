@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-02T06:09:20Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "83d810b221d3c6e7eeeaed704c6ecd80177f69ce",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-02T06:15:19Z",
    "fixed": [],
    "new_red": [],
@@ -401,6 +393,16 @@
    "sha": "65c53ad280bc4a67770a04cf11c2132d37371803",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-02T12:17:34Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:compiler/compiler.pas@2"
+   ],
+   "sha": "96cffaf08de5ac209b2721b29ade3a1fe1130d81",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "xeon",
@@ -2721,7 +2723,7 @@
   "test-core#128": "pass",
   "test-core#129": "pass",
   "test-core#src:compiler/compiler.pas@1": "pass",
-  "test-core#src:compiler/compiler.pas@2": "pass",
+  "test-core#src:compiler/compiler.pas@2": "fail",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
   "test-core#src:examples/tk/facade_and_paths.npy": "pass",
@@ -4390,11 +4392,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-02T12:13:11Z",
-  "sha": "65c53ad280bc4a67770a04cf11c2132d37371803",
+  "date": "2026-08-02T12:17:34Z",
+  "sha": "96cffaf08de5ac209b2721b29ade3a1fe1130d81",
   "tier": "native",
-  "verdict": "GREEN",
-  "wall": 107.2
+  "verdict": "RED",
+  "wall": 105.4
  },
  "last_bench": {
   "conf_rows": 550,
@@ -4434,6 +4436,20 @@
     "d21c2da3ad81fb01a3006b7037629f7f7724dfdb"
    ],
    "src": "compiler/compiler.pas"
+  },
+  {
+   "bad": "96cffaf08de5ac209b2721b29ade3a1fe1130d81",
+   "good": "65c53ad280bc4a67770a04cf11c2132d37371803",
+   "job": "test-core#src:compiler/compiler.pas@2",
+   "name": "test-core#1044",
+   "opened": "2026-08-02T12:17:34Z",
+   "range": [
+    "cdf874dcc8d071c4c402af76ebc0e6ab1352e9f6",
+    "444bb38b015f3aabd88d3da84a471756ba72b681",
+    "e53fa4a3feb4adb5b4df3a123044d3fcd680dc5c",
+    "96cffaf08de5ac209b2721b29ade3a1fe1130d81"
+   ],
+   "src": "compiler/compiler.pas tools/progress.sh"
   }
  ]
 }
