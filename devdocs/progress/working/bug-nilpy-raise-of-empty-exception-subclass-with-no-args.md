@@ -3,6 +3,8 @@ track: N
 prio: 65
 type: bug
 summary: "`raise E()` where E is a user Exception subclass with an EMPTY body segfaults or prints nothing. Passing any argument, or giving E an __init__, makes it work — so the idiomatic empty exception class is the broken one"
+status: working
+owner: claude-AN
 ---
 
 # `raise E()` on an empty Exception subclass: segfault / silent no-op

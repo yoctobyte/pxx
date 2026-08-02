@@ -1,0 +1,7 @@
+caught E
+caught E as Exception
+caught E with message
+caught F, not E
+caught G
+caught WithInit
+done

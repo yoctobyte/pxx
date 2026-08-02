@@ -1,0 +1,68 @@
+# bug-nilpy-raise-of-empty-exception-subclass-with-no-args
+#
+# `raise E()` where `class E(Exception): pass` segfaulted, or silently skipped
+# the `except` — a wrong control-flow PATH, on the standard way to declare and
+# raise a domain error. `raise E("m")`, or giving E an `__init__`, worked.
+#
+# Cause: NilPy's `Exception` resolves to the RTL's, whose `Create(msg)` takes a
+# REQUIRED message. The constructor's default-fill loop stops at a parameter
+# with no declared default, so the call went out one argument short and the
+# callee read whatever was in the register as its message. `Exception()` with no
+# arguments is valid Python and `str(Exception())` is the empty string, so an
+# empty message is the right value rather than a diagnostic.
+#
+# The one-line `class G(Exception): pass` case is here on purpose: it is the
+# spelling that also exercises the class-body span scanners, which locate a
+# class body by INDENT and had to learn that a one-line body declares nothing.
+
+class E(Exception):
+    pass
+
+class F(Exception):
+    pass
+
+class G(Exception): pass
+
+class WithInit(Exception):
+    def __init__(self):
+        self.code = 7
+
+# bare raise, caught by its own name
+try:
+    raise E()
+except E:
+    print("caught E")
+
+# bare raise, caught by the base class
+try:
+    raise E()
+except Exception:
+    print("caught E as Exception")
+
+# with an argument, the path that always worked
+try:
+    raise E("boom")
+except E:
+    print("caught E with message")
+
+# two sibling empty subclasses must be told apart by their except clauses
+try:
+    raise F()
+except E:
+    print("WRONG: F caught as E")
+except F:
+    print("caught F, not E")
+
+# the one-line spelling of the same class
+try:
+    raise G()
+except G:
+    print("caught G")
+
+# a subclass with its own __init__ still works
+try:
+    raise WithInit()
+except WithInit:
+    print("caught WithInit")
+
+print("done")

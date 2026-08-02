@@ -3937,6 +3937,35 @@ begin
     end;
   end;
   { @dataclass: fill omitted trailing args from field defaults. }
+  { An INHERITED constructor whose remaining parameters are still unfilled.
+    `class E(Exception): pass` then `E()` is the case that matters: NilPy's
+    `Exception` resolves to the RTL's, whose `Create(msg)` takes a REQUIRED
+    message, and the default-fill loop above stops at a parameter with no
+    declared default. The call was emitted one argument short, so the callee
+    read whatever was in the register as its message — a segfault, or a silent
+    skip of the `except` clause, depending on the build
+    (bug-nilpy-raise-of-empty-exception-subclass-with-no-args).
+
+    `Exception()` with no arguments is valid Python and `str(Exception())` is
+    the empty string, so an empty message is the right value rather than a
+    diagnostic. Restricted to STRING parameters: those are the ones with a
+    meaningful empty value, and it keeps this from quietly papering over an
+    under-called ctor of any other shape, which should stay visible. }
+  if ctorMi >= 0 then
+    while (nArgs < Procs[ctorPi].ParamCount - 1) and
+          (nArgs + 1 < MAX_PROC_PARAMS) and
+          (Procs[ctorPi].Params[nArgs + 1].TypeKind in [tyString, tyAnsiString]) do
+    begin
+      valNode := AllocNode(AN_STR_LIT);
+      ASTSOffset[valNode] := 0;
+      ASTSLen[valNode] := 0;
+      ASTTk[valNode] := Ord(tyString);
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := valNode;
+      ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+      Inc(nArgs);
+    end;
   if (ci < PY_MAX_DC_FIELDS) and PyDcClassIsDc[ci] then
   begin
     { locate the class's first default-table entry }
@@ -15991,6 +16020,7 @@ begin
     AddUMeth(ci, k, 6, procIdx);
   end;
   UClsSize_[ci] := AlignTo(curOff, align);
+
   { RTTI backlink word (VMT-8) + LAYOUT backlink word (VMT-16) before the VMT —
     same layout the Pascal path reserves, so an instance can reach its class RTTI
     at [[instance+0] - 8] and its managed-field layout at [[instance+0] - 16].
@@ -16500,21 +16530,49 @@ begin
           else
             hoist := False;
         end;
-        { skip the header to its tkIndent, honouring a parenthesised base list }
+        { Skip the header to the COLON that ends it, honouring a parenthesised
+          base list — then decide from what FOLLOWS the colon whether there is
+          an indented body at all.
+
+          Scanning straight to the first tkIndent (what this did) is wrong for a
+          ONE-LINE class body: `class G(Exception): pass` has no INDENT of its
+          own, so the scan ran on to the NEXT class's indent and registered THAT
+          class's members against G — `class G(Exception): pass` followed by a
+          class with an `__init__` failed with "unresolved forward: G.create",
+          the ctor having been attributed to the wrong class. A one-line body can
+          only be `pass` (PyParseClass refuses anything else), so it declares no
+          members and the right answer is to register none. }
         j := i + 2;
         depth := 0;
         while j < MainProgramTokCount do
         begin
           if Tokens[j].Kind = tkLParen then Inc(depth)
           else if Tokens[j].Kind = tkRParen then Dec(depth)
-          else if (Tokens[j].Kind = tkIndent) and (depth = 0) then Break;
+          else if (Tokens[j].Kind = tkColon) and (depth = 0) then Break
+          else if Tokens[j].Kind in [tkNewline, tkEOF] then Break;
           Inc(j);
         end;
-        if j < MainProgramTokCount then
+        { the indented shape is COLON NEWLINE INDENT; anything else is one-line }
+        if (j + 2 < MainProgramTokCount) and (Tokens[j].Kind = tkColon) and
+           (Tokens[j + 1].Kind = tkNewline) and (Tokens[j + 2].Kind = tkIndent) then
         begin
+          j := j + 2;
           bs := j + 1;   { first BODY token, matching PyParseClass's bodyStart
                            (it takes TokPos-1 after Expect(tkIndent)) }
           be := PyFindBodyEnd(bs);
+        end
+        else
+        begin
+          { One-line body: an EMPTY member span, not a skipped call. The pass
+            does more than register members — it computes the class SIZE and
+            emits the VMT — so skipping it left the class unsized and every
+            construction crashed. An empty span registers nothing and still
+            lays the class out. }
+          bs := j + 1;
+          be := bs;
+        end;
+        if bs < MainProgramTokCount then
+        begin
           { Full members when the parent is settled: methods registered here
             let the module-collect trial parse resolve `x = obj.method()`.
             PyParseClass skips its own (second) full run via the flag — the
@@ -16586,6 +16644,12 @@ begin
       Error('Nil Python: only `pass` is supported as a one-line class body — '
             + 'put the body on its own indented line');
     Next;
+    { An EMPTY member span rather than no call at all: PyRegisterClassMembers
+      also computes the class SIZE and emits its VMT, so skipping it leaves the
+      class unsized and every construction crashes. }
+    bodyStart := TokPos - 1;
+    if not PyMembersHoisted[ci] then
+      PyRegisterClassMembers(ci, bodyStart, bodyStart, isDC, False);
     if CurTok.Kind = tkNewline then Next;
     PySkipNewlines;
     if isDC then PyEmitDataclassCtor(ci);
