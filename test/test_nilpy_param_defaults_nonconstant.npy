@@ -1,0 +1,62 @@
+# bug-nilpy-non-constant-parameter-defaults-silently-become-none
+#
+# Anything that was not a literal scalar token became None, SILENTLY: `def
+# acc(v, bucket=[])` ran with bucket=None and failed downstream with
+# AttributeError on NoneType, far from the cause.
+#
+# Python evaluates a default ONCE, at DEF time, in the scope where the def
+# stands — which is exactly what makes the shared-mutable-default idiom
+# observable, so the first two lines below pin the ACCUMULATION. A fresh value
+# per call would get the common case right and diverge here instead, trading one
+# silent wrong answer for a subtler one. Expectations are CPython's own output.
+#
+# The constant forms at the end are regression controls; `b=True` is among them
+# because it was separately boxed as the ordinal 1 and printed as 1.
+
+def acc(v, bucket=[]):
+    bucket.append(v)
+    return bucket
+print(acc(1))
+print(acc(2))
+
+def f1(b=[]):
+    return b
+def f2(b={}):
+    return b
+w = 7
+def f3(b=w):
+    return b
+ww = [1, 2]
+def f4(b=ww):
+    return b
+print(f1(), f2(), f3(), f4())
+
+
+# constant-default controls
+def c1(b=10):
+    return b
+def c2(b="z"):
+    return b
+def c3(b=True):
+    return b
+def c4(b=None):
+    return b
+def c5(b=2.0):
+    return b
+def c6(b=-1):
+    return b
+print(c1(), c2(), c3(), c4(), c5(), c6())
+
+# a default that is a whole EXPRESSION, not one token: `def f(b=1+2)` used to
+# fail to PARSE — the constant path claimed the `1` and left the cursor on `+`
+def expr1(b=1+2):
+    return b
+def expr2(b="x"+"y"):
+    return b
+zz = 7
+def expr3(b=zz+1):
+    return b
+print(expr1(), expr2(), expr3())
+
+# an explicitly passed argument still wins over every default
+print(acc(3, [0]), expr1(99), f3(5))

@@ -102,8 +102,26 @@ var
   PyHdrDefIsStr: array[0..31] of Boolean;
   PyHdrDefIsNone: array[0..31] of Boolean;
   PyHdrDefIsFloat: array[0..31] of Boolean;
+  PyHdrDefIsBool: array[0..31] of Boolean;
   PyDefaultWasNone: Boolean;   { set by PyParamDefaultAt — see there }
   PyDefaultWasFloat: Boolean;
+  PyDefaultWasBool: Boolean;
+  { Symbol of the hidden global holding a NON-CONSTANT default's def-time value,
+    or -1. Set by PyParamDefaultAt alongside the flags above, for the same
+    reason: every caller wants it immediately after the call. }
+  PyDefaultSym: Integer;
+  { PyParamDefaultAt may EVALUATE a non-constant default only while this is on.
+    Off in the pre-passes (PyRegisterDefShells, the nested-def queue scan) which
+    re-parse headers purely to learn signatures — evaluating there would build
+    the value before the names it reads exist, and queue it at the wrong point
+    in the statement stream. }
+  PyDefaultEvalMode: Boolean;
+  { Def-time parameter-default initialisers awaiting the enclosing statement
+    stream. A queue of its OWN, not PyHoistHead: PyParseDef deliberately
+    discards the hoist queue on the way out (a body's residue must not escape),
+    and these are produced by the HEADER and must survive that. }
+  PyDefInitHead: Integer;
+  PyHdrDefSym: array[0..31] of Integer;
   PyHdrDefVal: array[0..31] of Int64;
   PyHdrDefSOff: array[0..31] of Integer;
   PyHdrDefSLen: array[0..31] of Integer;
@@ -232,6 +250,36 @@ end;
 { Prepend any hoisted setup statements to `seq`, then clear. Called by each
   statement-sequence builder right after it parses one statement, so the
   expression-comprehension setup lands before the statement that uses it. }
+procedure PyQueueDefInit(node: Integer);
+{ Queue one `$pdef.<proc>.<param> := <expr>` for the enclosing statement stream.
+  Same duplicate guard as PyHoistStmt and for the same reason: the typing
+  pre-passes re-parse the same tokens with ASTNodeCount rolled back, so a later
+  round hands out the identical node id. }
+var scan: Integer;
+begin
+  scan := PyDefInitHead;
+  while scan >= 0 do
+  begin
+    if (scan = node) or (ASTLeft[scan] = node) then Exit;
+    scan := ASTRight[scan];
+  end;
+  PyDefInitHead := PySeqAppend(PyDefInitHead, node);
+end;
+
+function PyFlushDefInit(seq: Integer): Integer;
+var h, node: Integer;
+begin
+  Result := seq;
+  h := PyDefInitHead;
+  PyDefInitHead := -1;
+  while h >= 0 do
+  begin
+    node := ASTLeft[h];
+    if node >= 0 then Result := PySeqAppend(Result, node);
+    h := ASTRight[h];
+  end;
+end;
+
 function PyFlushHoist(seq: Integer): Integer;
 var h, node: Integer;
 begin
@@ -3159,9 +3207,79 @@ end;
   list) is a clean error rather than a guess: Python evaluates it ONCE at
   definition time, and quietly picking either "once" or "per call" would be a
   silent semantic difference. }
+function PyEvalParamDefault(var j: Integer; const pname: AnsiString): Integer;
+{ Evaluate a NON-CONSTANT parameter default into a hidden global and return that
+  global's symbol (-1 if the expression could not be parsed as a value).
+
+  Python evaluates a default ONCE, at DEF time, in the scope where the def
+  stands. `j` is a token INDEX (the header is walked by index, not by the
+  cursor), so the cursor is parked here, moved to the expression, and put back —
+  and put back by RE-READING Tokens[], never by restoring a saved copy of
+  CurTok: `Next` does SetLength(CurTok.SVal, ...) in place, so a record copy
+  taken beforehand comes back holding whatever token the detour stopped on.
+  That is a compiler segfault, not a subtle wrong type. Same rule as the trial
+  parse in PyCollectLocalsAST.
+
+  The global is named, not serial-numbered, so the typing pre-pass and the real
+  parse converge on the SAME symbol: a serial would hand the real parse a fresh
+  symbol while ProcParamDefaultSym still pointed at one the pre-pass rolled
+  back — a recycled index, i.e. a plausible wrong value. }
+var gname: AnsiString; gsym, valNode, asgn, savedTok, savedHoist, h: Integer;
+begin
+  Result := -1;
+  savedTok := TokPos;
+  { A value is not always ONE expression node: a list/dict literal, an f-string
+    and a comprehension all HOIST setup statements (the pylist_new plus an
+    append per element) and hand back a node that merely names the result. Those
+    statements must travel with the assignment into the def-init queue — left on
+    the hoist chain they are discarded by PyParseDef on the way out, and the
+    default global then held a list that was never built: `len(b)` reported
+    "expected an object with a length, got object". Swapped out and spliced
+    below, the same way the nested-comprehension parse does it. }
+  savedHoist := PyHoistHead;
+  PyHoistHead := -1;
+  TokPos := j;
+  Next;
+  PyParseBoolExpr;
+  valNode := CurASTNode;
+  j := TokPos - 1;
+  if valNode < 0 then
+  begin
+    PyHoistHead := savedHoist;
+    TokPos := savedTok - 1;
+    Next;
+    Exit;
+  end;
+  gname := '$pdef.';
+  if PyNestPrefix <> '' then gname := gname + PyNestPrefix + '.';
+  gname := gname + PyHdrName + '.' + pname;
+  gsym := FindSym(gname);
+  if gsym < 0 then
+  begin
+    gsym := AllocVar(gname, IntToTypeKind(ASTTk[valNode]));
+    Syms[gsym].RecName := ResolveNodeRec(valNode);
+    SymSyncTypeRef(gsym);
+  end;
+  { the value's own setup first, then the store — order matters }
+  h := PyHoistHead;
+  PyHoistHead := savedHoist;
+  while h >= 0 do
+  begin
+    if ASTLeft[h] >= 0 then PyQueueDefInit(ASTLeft[h]);
+    h := ASTRight[h];
+  end;
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(gsym);
+  ASTRight[asgn] := valNode;
+  PyQueueDefInit(asgn);
+  TokPos := savedTok - 1;
+  Next;
+  Result := gsym;
+end;
+
 function PyParamDefaultAt(var j: Integer; const pname: AnsiString;
                           var isStr: Boolean; var sOff, sLen: Integer): Int64;
-var depth: Integer;
+var depth: Integer; lone, loneNeg: Boolean;
 begin
   Result := 0;
   isStr := False;
@@ -3174,6 +3292,17 @@ begin
     this function wants the same answer right after the call. }
   PyDefaultWasNone := True;
   PyDefaultWasFloat := False;
+  PyDefaultWasBool := False;
+  PyDefaultSym := -1;
+  { A literal is the CONSTANT default only when it is the WHOLE default — the
+    next token must close it. Unchecked, `def f(b=1+2)` claimed the `1`, left the
+    cursor on `+` and the header then died on "Expected: )", so a perfectly
+    ordinary Python default failed to parse at all. Everything else falls through
+    to the expression path below, which now evaluates it. }
+  lone := (j + 1 < TokCount) and (Tokens[j + 1].Kind in [tkComma, tkRParen]);
+  loneNeg := (j + 2 < TokCount) and (Tokens[j].Kind = tkMinus) and
+             (Tokens[j + 2].Kind in [tkComma, tkRParen]);
+  if lone or loneNeg then
   case Tokens[j].Kind of
     tkNil:     begin Inc(j); Exit; end;
     { A FLOAT default (`max_zoom=2.0`). The token already carries the IEEE 754
@@ -3184,8 +3313,8 @@ begin
       into a 128x76 corner at the minimum zoom. }
     tkFloat:   begin Result := Tokens[j].IVal; PyDefaultWasNone := False;
                      PyDefaultWasFloat := True; Inc(j); Exit; end;
-    tkTrue:    begin Result := 1; PyDefaultWasNone := False; Inc(j); Exit; end;
-    tkFalse:   begin PyDefaultWasNone := False; Inc(j); Exit; end;
+    tkTrue:    begin Result := 1; PyDefaultWasNone := False; PyDefaultWasBool := True; Inc(j); Exit; end;
+    tkFalse:   begin PyDefaultWasNone := False; PyDefaultWasBool := True; Inc(j); Exit; end;
     tkInteger: begin Result := Tokens[j].IVal; PyDefaultWasNone := False; Inc(j); Exit; end;
     tkString:
       begin
@@ -3197,14 +3326,14 @@ begin
         Exit;
       end;
     tkMinus:
-      if Tokens[j + 1].Kind = tkInteger then
+      if loneNeg and (Tokens[j + 1].Kind = tkInteger) then
       begin
         Result := -Tokens[j + 1].IVal;
         PyDefaultWasNone := False;
         j := j + 2;
         Exit;
       end
-      else if Tokens[j + 1].Kind = tkFloat then
+      else if loneNeg and (Tokens[j + 1].Kind = tkFloat) then
       begin
         { negate by flipping the IEEE sign bit — the bits are the value here }
         Result := Tokens[j + 1].IVal xor Int64($8000000000000000);
@@ -3214,16 +3343,36 @@ begin
         Exit;
       end;
   end;
-  { NON-CONSTANT default, e.g. `target: Word = w` where w is an enclosing
-    local. Python evaluates such a default ONCE at def time (closure-by-value
-    capture — the loop-variable idiom). uforth uses it only for native word
-    bodies, which reach the interpreter through the exec/native path (a stub),
-    so they never actually run in a COMPILED uforth. To move compilation past
-    the wall we accept the expression, skip its token span (balancing brackets,
-    stopping at the top-level comma or ')'), and treat the parameter as an
-    optional None-valued default. True def-time capture is filed as a feature
-    (feature-nilpy-closure-default-and-remaining). }
+  { NON-CONSTANT default: `b=[]`, `b={}`, `b=w`, any expression that is not a
+    literal scalar token.
+
+    Python evaluates it ONCE, at DEF time, in the scope where the def stands —
+    which is exactly what makes the shared-mutable-default idiom observable
+    (`def acc(v, bucket=[])` accumulates across calls). So the value goes into a
+    hidden global evaluated at the def statement, and the call site reads that
+    global; a fresh value per call would get the common case right and diverge
+    on the accumulator idiom, trading one silent wrong answer for a subtler one.
+
+    This used to SKIP the expression and leave the parameter None — silently, so
+    `bucket.append(v)` failed with AttributeError on NoneType far from the cause
+    (bug-nilpy-non-constant-parameter-defaults-silently-become-none). The old
+    behaviour was justified for uforth's native-word bodies, which only ever run
+    through the exec/native stub; that justification never covered ordinary
+    Python.
+
+    In a pre-pass (PyDefaultEvalMode off) the span is still merely skipped: the
+    signature is all those passes want, and the names the expression reads may
+    not exist yet. }
   begin
+    if PyDefaultEvalMode then
+    begin
+      PyDefaultSym := PyEvalParamDefault(j, pname);
+      if PyDefaultSym >= 0 then
+      begin
+        PyDefaultWasNone := False;
+        Exit;
+      end;
+    end;
     depth := 0;
     while j < TokCount do
     begin
@@ -12991,11 +13140,20 @@ end;
 
 procedure PyCollectLocalsAST(bodyStart: Integer);
 var rnd, i, si, savedTok, savedAST, savedSC, savedCur, savedFS: Integer;
+    savedDefInit: Integer;
     changed: Boolean;
     tk, w: TTypeKind;
     nm: AnsiString;
 begin
   PyLocalCount := 0;
+  { The def-time default initialisers queued by the HEADER we were called from
+    are already pending, and each trial round below clears the queue. Park them
+    on a fresh chain — not merely saved, since appending to a live chain mutates
+    the old tail in place — and put them back afterwards. Missing this silently
+    dropped every non-constant default's initialiser and the hidden global read
+    as zero. }
+  savedDefInit := PyDefInitHead;
+  PyDefInitHead := -1;
   rnd := 0;
   repeat
     changed := False;
@@ -13083,6 +13241,12 @@ begin
       be legitimately pending here: trials start at statement boundaries,
       where the suite builders have already flushed. }
     PyHoistHead := -1;
+    { and the def-time default initialisers, for exactly the same reason: a
+      trial round that parses a `def` queues one, the rollback then re-issues
+      the same node id to something else, and the duplicate guard would refuse
+      to queue the REAL one — so the module ran the recycled statement and the
+      default global stayed zero. }
+    PyDefInitHead := -1;
     { Re-READ the saved token rather than restoring a saved copy of CurTok:
       Next does SetLength(CurTok.SVal, ...) in place, so a record copy taken
       before the trial parse shares that buffer and comes back holding whatever
@@ -13092,6 +13256,7 @@ begin
     Next;
     Inc(rnd);
   until (not changed) or (rnd >= PY_INFER_ROUNDS);
+  PyDefInitHead := savedDefInit;
 end;
 
 { Type MODULE-level names by PARSING the module body, the same way
@@ -13476,6 +13641,7 @@ begin
     BSSSize := savedBSS;
     CurASTNode := savedCur;
     PyHoistHead := -1;   { discard trial-queued hoists — see PyCollectLocalsAST }
+    PyDefInitHead := -1; { and trial-queued def-time defaults — same reason }
     TokPos := savedTok - 1;
     Next;
     Inc(rnd);
@@ -13658,6 +13824,7 @@ begin
       Next;
     end;
     PyHdrDefHas[PyHdrNParams] := False;
+    PyHdrDefSym[PyHdrNParams] := -1;
     if CurTok.Kind = tkAssign then
     begin
       annIdx := TokPos;
@@ -13669,6 +13836,8 @@ begin
                          PyHdrDefSLen[PyHdrNParams]);
       PyHdrDefIsNone[PyHdrNParams] := PyDefaultWasNone;
       PyHdrDefIsFloat[PyHdrNParams] := PyDefaultWasFloat;
+      PyHdrDefIsBool[PyHdrNParams] := PyDefaultWasBool;
+      PyHdrDefSym[PyHdrNParams] := PyDefaultSym;
       TokPos := annIdx;
       Next;
     end;
@@ -13775,8 +13944,13 @@ begin
       ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefIsStr[i];
       ProcParamDefaultIsNone[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefIsNone[i];
       ProcParamDefaultIsFloat[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefIsFloat[i];
+      ProcParamDefaultIsBool[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefIsBool[i];
       ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefSOff[i];
       ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefSLen[i];
+      { -1 unless the default was non-constant and actually evaluated — a
+        pre-pass leaves it -1, and the REAL parse must not be left holding the
+        pre-pass's answer, so this is written unconditionally with the rest. }
+      ProcParamDefaultSym[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefSym[i];
     end;
 end;
 
@@ -14031,7 +14205,18 @@ begin
     end of this routine) cannot leak its declarations into the enclosing one. }
   savedDefGlobalCount := PyDefGlobalCount;
   for dgI := 0 to PyDefGlobalCount - 1 do savedDefGlobals[dgI] := PyDefGlobalName[dgI];
+  { The REAL header parse — non-constant defaults are evaluated here, at the
+    point the def statement stands, which is where Python evaluates them.
+
+    NOT for a NESTED def (PyNestPrefix <> ''): those are queued at their `def`
+    statement and compiled AFTER the enclosing routine's epilogue, so by the
+    time this runs the enclosing scope is gone and `def inner(b=q)` would report
+    `q` undefined. A nested def with a non-constant default therefore keeps the
+    old None behaviour on the direct-call path; the closure-VALUE path already
+    evaluates it (PyNestedDefClosureValue). Tracked on the ticket. }
+  PyDefaultEvalMode := PyNestPrefix = '';
   PyParseDefHeader;
+  PyDefaultEvalMode := False;
   name := PyHdrName;
   nparams := PyHdrNParams;
   isProc := PyHdrIsProc;
@@ -14074,6 +14259,21 @@ begin
                             PyHdrPNames, PyHdrPTypes);
     PyApplyDefSignature(procIdx);
   end;
+  { Record the def-time default globals unconditionally, because the common case
+    reaches NEITHER branch above: a def whose shell PyRegisterDefShells already
+    registered (BodyAddr = -1) keeps that Proc untouched, so PyApplyDefSignature
+    does not run here. The shell pass parses the header with evaluation OFF — it
+    only wants the signature — so the symbols exist only after THIS parse, and
+    without this loop they were never carried onto the Proc and every
+    non-constant default stayed None. }
+  if procIdx >= 0 then
+    for i := 0 to nparams - 1 do
+      if (i < MAX_PROC_PARAMS) and PyHdrDefHas[i] and (PyHdrDefSym[i] >= 0) then
+      begin
+        ProcParamDefaultSym[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefSym[i];
+        ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := True;
+        ProcParamDefaultIsNone[procIdx * MAX_PROC_PARAMS + i] := False;
+      end;
   { The BODY must build the frame the registered SIGNATURE describes, not what
     a second inference pass makes of the same header. The two can disagree: the
     shell pass runs before any def is compiled, so a return expression it cannot
@@ -16971,6 +17171,7 @@ begin
     (bug-nilpy-identifiers-are-case-insensitive). Pascal units pulled in by
     PyPreScanImports still parse with it off — ParseUnit saves/clears/restores. }
   PyExprMode := True;
+  PyDefInitHead := -1;
   PyRegisterClassShells;          { the class ROWS the field pre-pass fills in }
   PyPreScanImports;
   PyRegisterClassFieldsPrepass;
@@ -17003,7 +17204,25 @@ begin
         Error('Nil Python: @dataclass must precede a class');
       PyParseClass(True);
     end
-    else if CurTok.Kind = tkFunction then PyParseDef
+    else if CurTok.Kind = tkFunction then
+    begin
+      PyParseDef;
+      { same as the program loop: a def's non-constant defaults are evaluated
+        where the def statement stands, and that is the def's only run-time
+        effect. Routed through the module's own statement list below. }
+      stmt := PyFlushDefInit(-1);
+      if stmt >= 0 then
+      begin
+        if ASTLeft[lastSeq] = -1 then ASTLeft[lastSeq] := stmt
+        else
+        begin
+          ASTRight[lastSeq] := AllocNode(AN_SEQ);
+          lastSeq := ASTRight[lastSeq];
+          ASTLeft[lastSeq] := stmt;
+        end;
+      end;
+      ASTArenaFloor := ASTNodeCount;
+    end
     else
     begin
       stmt := PyParseStatement;
@@ -17193,6 +17412,8 @@ begin
   PyProgramMode := True;
   PyCompTarget := -1;   { no comprehension in progress by default }
   PyHoistHead := -1;    { no pending hoisted statements }
+  PyDefInitHead := -1;
+  PyDefaultEvalMode := False;
   PySkipNewlines;
   { A leading module docstring may precede the imports; consume it. }
   if (CurTok.Kind = tkString) and (TokPos < TokCount) and
@@ -17248,7 +17469,15 @@ begin
         Error('Nil Python: @dataclass must precede a class');
       PyParseClass(True);
     end
-    else if CurTok.Kind = tkFunction then PyParseDef
+    else if CurTok.Kind = tkFunction then
+    begin
+      PyParseDef;
+      { `def f(b=[])` evaluates its default HERE, where the def statement
+        stands — the def itself emits no code, so this is the whole of its
+        run-time effect. }
+      mainNode := PyFlushDefInit(mainNode);
+      ASTArenaFloor := ASTNodeCount;
+    end
     else
     begin
       stmt := PyParseStatement;

@@ -2580,7 +2580,15 @@ begin
   if (k >= MAX_PROC_PARAMS) or (not ProcParamHasDefault[mpi * MAX_PROC_PARAMS + k]) then
     Error('not enough arguments to ' + Procs[mpi].Name +
           ' (parameter ' + Procs[mpi].Params[k].Name + ' has no default)');
-  if ProcParamDefaultIsStr[mpi * MAX_PROC_PARAMS + k] then
+  { A NON-CONSTANT NilPy default (`b=[]`, `b={}`, `b=w`) was evaluated ONCE into
+    a hidden global at the def statement, because that is when Python evaluates
+    it — and it is what makes the shared-mutable-default idiom accumulate. The
+    omitted argument therefore READS that global; it does not rebuild a value,
+    which would give a fresh container per call and diverge on the accumulator
+    idiom (bug-nilpy-non-constant-parameter-defaults-silently-become-none). }
+  if ProcParamDefaultSym[mpi * MAX_PROC_PARAMS + k] >= 0 then
+    exprNode := PyMakeIdent(ProcParamDefaultSym[mpi * MAX_PROC_PARAMS + k])
+  else if ProcParamDefaultIsStr[mpi * MAX_PROC_PARAMS + k] then
   begin
     exprNode := AllocNode(AN_STR_LIT);
     ASTSOffset[exprNode] := ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + k];
@@ -2622,6 +2630,15 @@ begin
       passed a filled xscrollcommand too, and tkinter refused it — the first
       thing songformatter did at run time. }
     exprNode := PyMakeNone
+  else if isNilPy and ProcParamDefaultIsBool[mpi * MAX_PROC_PARAMS + k] and
+          (Procs[mpi].Params[k].TypeKind = tyVariant) then
+  begin
+    { `b=True` into a VARIANT parameter: recorded as the ordinal 1, and boxed as
+      an integer the variant prints 1 rather than True. }
+    exprNode := AllocNode(AN_BOOL_LIT);
+    ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k];
+    ASTTk[exprNode] := Ord(tyBoolean);
+  end
   else
   begin
     exprNode := AllocNode(AN_INT_LIT);

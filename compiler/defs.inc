@@ -1449,6 +1449,8 @@ var
   ProcParamDefaultIsStr : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { default is a STRING literal (`msg: string = ''`), not an ordinal; the text is (SOff,SLen) below. }
   ProcParamDefaultIsNone: array[0..MAX_PARAM_DEPTHS-1] of Boolean;
   ProcParamDefaultIsFloat: array[0..MAX_PARAM_DEPTHS-1] of Boolean; { the default is a FLOAT; DefaultVal holds its IEEE 754 bits, as a float TOKEN does. } { NilPy `= None` (or a non-constant default, which is treated as one) — distinct from the ordinal 0 a False/absent default records. }
+  ProcParamDefaultIsBool : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { NilPy: default is a BOOLEAN (`b=True`), not the ordinal 1 it is recorded as — a variant parameter must be boxed tyBoolean or `print(b)` says 1. }
+  ProcParamDefaultSym : array[0..MAX_PARAM_DEPTHS-1] of Integer;  { NilPy: symbol of the hidden global holding a NON-CONSTANT default's def-time value (-1 = none). Python evaluates such a default ONCE, where the def stands, which is what makes the shared-mutable-default idiom observable; the call site therefore reads this global rather than rebuilding a value. A PARALLEL ARRAY, not a TSymbol/Proc field — see project_tsymbol_field_landmine. }
   ProcParamDefaultIsSet : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { default is a SET (`opts: TOpts = []` / `= DefaultFormat`), not an ordinal: ProcParamDefaultVal holds the Data[] OFFSET of the baked 32-byte mask, and the call rebuilds an AN_SET_CONST_REF from it. }
   ProcParamDefaultSOff  : array[0..MAX_PARAM_DEPTHS-1] of Integer; { char-pool offset of the string default's text. }
   ProcParamDefaultSLen  : array[0..MAX_PARAM_DEPTHS-1] of Integer; { its length. }

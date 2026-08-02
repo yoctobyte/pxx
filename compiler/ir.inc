@@ -8019,7 +8019,24 @@ begin
             by hand here the value reached the callee as a raw ordinal or a
             frozen string handle, and the callee dereferenced it — a def's
             declared default was never what it actually ran with. }
-          if (Procs[cpi].Params[pathIdx].TypeKind = tyVariant) and
+          { A NON-CONSTANT NilPy default (`b=[]`, `b={}`, `b=w`) lives in a hidden
+            global evaluated ONCE where the def statement stands, because that is
+            when Python evaluates it — and it is what makes the shared-mutable-
+            default idiom accumulate across calls. So the omitted argument READS
+            that global; rebuilding a value here would hand out a fresh container
+            per call and diverge on the accumulator idiom
+            (bug-nilpy-non-constant-parameter-defaults-silently-become-none).
+            Checked before every other flavour: the recorded ordinal/None flags
+            are meaningless once a symbol is present. }
+          if ProcParamDefaultSym[cpi * MAX_PROC_PARAMS + pathIdx] >= 0 then
+          begin
+            dfltAST := AllocNode(AN_IDENT);
+            ASTIVal[dfltAST] := ProcParamDefaultSym[cpi * MAX_PROC_PARAMS + pathIdx];
+            ASTTk[dfltAST] := Ord(Syms[ProcParamDefaultSym[cpi * MAX_PROC_PARAMS + pathIdx]].TypeKind);
+            value := IRLowerCallArg(cpi, pathIdx, dfltAST, False);
+            argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[dfltAST]);
+          end
+          else if (Procs[cpi].Params[pathIdx].TypeKind = tyVariant) and
              (not Procs[cpi].Params[pathIdx].IsArray) then
           begin
             if ProcParamDefaultIsFloat[cpi * MAX_PROC_PARAMS + pathIdx] then
@@ -8059,6 +8076,14 @@ begin
                 ASTSOffset[dfltAST] := ProcParamDefaultSOff[cpi * MAX_PROC_PARAMS + pathIdx];
                 ASTSLen[dfltAST] := ProcParamDefaultSLen[cpi * MAX_PROC_PARAMS + pathIdx];
                 ASTTk[dfltAST] := Ord(tyString);
+              end
+              else if ProcParamDefaultIsBool[cpi * MAX_PROC_PARAMS + pathIdx] then
+              begin
+                { `b=True` is recorded as the ordinal 1; boxed as an INTEGER the
+                  variant prints 1 instead of True. }
+                dfltAST := AllocNode(AN_BOOL_LIT);
+                ASTIVal[dfltAST] := ProcParamDefaultVal[cpi * MAX_PROC_PARAMS + pathIdx];
+                ASTTk[dfltAST] := Ord(tyBoolean);
               end
               else
               begin

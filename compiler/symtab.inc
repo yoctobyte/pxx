@@ -5275,6 +5275,8 @@ begin
     ProcParamDefaultIsFloat[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamDefaultSOff[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamDefaultSLen[ProcCount * MAX_PROC_PARAMS + i] := 0;
+    ProcParamDefaultSym[ProcCount * MAX_PROC_PARAMS + i] := -1;
+    ProcParamDefaultIsBool[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamRecId[ProcCount * MAX_PROC_PARAMS + i] := REC_NONE;
     ProcParamDynDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamElemRowLen[ProcCount * MAX_PROC_PARAMS + i] := 0;
