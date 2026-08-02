@@ -51,7 +51,23 @@ inspection:
 Only the ORDER matters: parent instantiated at module level, THEN the subclass
 declaring the parent call.
 
-## Likely cause
+## ROOT CAUSE FOUND 2026-08-02 — it is CASE-INSENSITIVITY, not ordering
+
+`a = A()` does not break this because of WHEN it runs. It breaks it because
+`a` and `A` are the SAME NAME to pxx's resolver: NilPy inherits Pascal's
+case-insensitive identifier resolution, so the instance shadows the class.
+
+Renaming the variable to `zz` — same position, same everything else — compiles
+and prints `E:A`.
+
+So this ticket is a SYMPTOM. The real bug is
+[[bug-nilpy-identifiers-are-case-insensitive]], where `x = 1; X = 2` makes
+`print(x, X)` give `2 2`. Fix that and this goes with it; do NOT chase the
+ordering theory below, which was my first (wrong) reading.
+
+**blocked-by:** [[bug-nilpy-identifiers-are-case-insensitive]]
+
+## Original (superseded) cause note
 
 Instantiating `A` at module scope makes the module pre-pass bind the name `a`
 and trial-parse `A()`. Something in that leaves `A` resolving as a VALUE rather
