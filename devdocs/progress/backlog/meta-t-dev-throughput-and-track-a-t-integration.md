@@ -86,10 +86,25 @@ Two facts that fall out and correct earlier assumptions:
   and ticket `Gate:` lines).
 - [[decide-gate-line-convention]] (U, 60) — the Track U half: what a ticket's
   `Gate:` line should require. Blocks nothing else here.
+- [[feature-t-bench-idle-must-be-preemptible]] (55) — filed 2026-08-02: the one
+  idle phase a new push cannot interrupt, and at ~2-3 min it is the largest
+  number in the time-to-verdict path.
+- [[decide-t-notification-transport-poll-not-webhooks]] (U, decided 2026-08-02)
+  — the return path is a poll, permanently; and the daemon's loop is work-gated,
+  so it must NOT grow a time-based backoff.
 - Multi-box / core utilisation: `hard_cap = --jobs or nproc*2`, adaptive, and
   `xeon.json` sets no `max_cores` — so the xeon *should* already be using the
   box. **Verify from the `jobs=N cap=N scale=N` header testmgr prints in its own
   reports before tuning anything**; do not "fix" a config that is not broken.
+
+## Status 2026-08-02
+
+Five of the six original work items are closed: `publish-selfhost-red-immediately`,
+`agent-side-tstate-watch` (shipped as `twatch --follow`), `quick-canary-for-nilpy-and-c`,
+`quick-gate-must-be-quick…` and `decide-gate-line-convention`. **Open: pinning
+(60), bench preemption (55), and the unticketed core-utilisation check in the
+bullet above** — which is a *verification*, not a change: read testmgr's own
+`jobs=N cap=N scale=N` header from a report before touching any config.
 
 ## Done when
 

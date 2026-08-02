@@ -55,12 +55,22 @@ existing `xeon-*` units, NOT in the repo:
 Per `two-box-protocol.md` an alert is a **hint**, never state: it says "look at
 git", it does not carry a verdict anyone acts on directly.
 
+**Poll, not push** — settled by
+[[decide-t-notification-transport-poll-not-webhooks]] (2026-08-02): the timer
+polls `trackt health` locally and delivers on non-zero. No webhook, no callback
+URL, nothing requiring inbound reachability. A backoff when the verdict has been
+OK for a long stretch is allowed here (this loop is a plain timer, unlike the
+daemon's work-gated one) but is not required — a 5-10 min timer running a
+sub-second command costs nothing worth optimising.
+
 ## Why it stays out of the repo
 
 A toast needs a graphical session, a D-Bus address and a desktop that shows
 toasts. The repo is shared with boxes that have none (a Pi oracle, a container,
 borg). Enrolling a new watcher gets the truth-teller for free and wires
-whatever megaphone that platform has — mail, ntfy, a webhook, an ssh poke.
+whatever megaphone that platform has — a desktop toast, mail, a log the
+selfcheck surfaces, an ssh poke at a peer. All *outbound* from the box that
+already knows the answer; nothing that has to be called back into.
 
 ## Gate
 
