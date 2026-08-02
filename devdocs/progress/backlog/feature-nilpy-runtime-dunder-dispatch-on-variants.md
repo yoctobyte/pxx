@@ -2,6 +2,7 @@
 track: N
 prio: 70
 type: feature
+blocked-by: [decide-nilpy-runtime-dunder-dispatch-strategy]
 ---
 
 # Runtime dunder dispatch for a user class held in a Variant

@@ -123,3 +123,17 @@ mostly do not** — a constraint that did not exist when the options were drafte
 Still `blocked-by` this: [[bug-nilpy-dunders-not-dispatched-through-containers]],
 and [[feature-nilpy-arithmetic-ordering-dunders]] will hit the identical wall for
 `__add__`.
+
+## 2026-08-02 — superseded in scope by `decide-nilpy-runtime-dunder-dispatch-strategy`
+
+Both tickets ask the same question — how does NilPy dispatch a dunder when the
+instance's class is known only at run time — from two entry points (this one from
+container elements, the other from Variant-held globals and parameters). They
+list the same three options and reach the same recommendation.
+
+Leaving both filed rather than merging one away, because they record different
+symptom sets and neither is resolved. But **one answer settles both**, and
+[[decide-nilpy-runtime-dunder-dispatch-strategy]] is the broader statement (a
+container element is one way to end up Variant-held), so answer that one and
+apply it here. Do not decide them separately — two different mechanisms for one
+problem is the outcome nobody wants.

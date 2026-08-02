@@ -3,6 +3,7 @@ summary: "NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a 
 type: bug
 track: N
 prio: 70
+blocked-by: [feature-nilpy-runtime-dunder-dispatch-on-variants]
 ---
 
 # Rebinding a module global from a scalar to a class kills dunder dispatch

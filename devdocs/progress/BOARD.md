@@ -79,7 +79,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
 | bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error | N | 50 | bug | `xs.sort(key=..., reverse=...)` fails with a bare "unexpected token" | — |
 | bug-nilpy-missing-builtins-step-slicing-range-into-list | N | 45 | bug | NilPy survey: step slicing (x[::2]), list(range(...)), pow(), str.index/expandtabs, sorted(d.keys()) all fail to COMPILE — 13 of 133 method-surface cases | — |
-| bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch | N | 70 | bug | NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a user class — dispatch is compile-time only. Scalar-then-class rebinding is just one way to get a variant. | — |
+| bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch | N | 70 | bug | NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a user class — dispatch is compile-time only. Scalar-then-class rebinding is just one way to get a variant. | feature-nilpy-runtime-dunder-dispatch-on-variants |
 | bug-nilpy-multiple-inheritance-does-not-parse | N | 40 | bug | class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable | — |
 | bug-nilpy-ne-dunder-ignored-always-negates-eq | N | 50 | bug | NilPy: a user-defined __ne__ is never consulted — `!=` always negates __eq__, silently returning the wrong value when they differ | — |
 | bug-nilpy-nested-for-comprehension-not-supported | N | 45 | bug | A comprehension with TWO for-clauses — [c for r in rows for c in r] — fails with 'undefined variable (c)'; the flatten idiom is unavailable | — |
@@ -166,7 +166,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-nested-def-as-value | N | 15 | feature | SUPERSEDED: nested def as a VALUE (stored, passed, returned) | — |
 | feature-nilpy-parallel-for-in | A | 5 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
 | feature-nilpy-process-exec-binding | N | 45 | feature | nilpy: os.system / subprocess-shaped process spawning over the RTL's libc-free execve | — |
-| feature-nilpy-runtime-dunder-dispatch-on-variants | N | 70 | feature | Runtime dunder dispatch for a user class held in a Variant | — |
+| feature-nilpy-runtime-dunder-dispatch-on-variants | N | 70 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-nilpy-runtime-method-dispatch-on-variant | N | 50 | feature | NilPy: dispatch a method call on a VARIANT receiver at RUNTIME | — |
 | feature-nilpy-set-needs-runtime-tag-for-display-and-equality | N | 40 | feature | A `set` needs its own runtime tag — two divergences from `list` share this root cause | — |
 | feature-nilpy-starred-and-nested-unpacking | N | 50 | feature | Starred and NESTED unpacking targets | — |
@@ -1608,11 +1608,9 @@ lives in git, not in a timestamp._
 - [urgent p 85] [C] bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size
 - [urgent p 80] [P] bug-pascal-procvar-in-value-context-takes-address-instead-of-calling (unblocks 1)
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
-- [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 1)
-- [p 70] [N] bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch
+- [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
 - [p 70] [N] bug-nilpy-non-constant-parameter-defaults-silently-become-none
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
-- [p 70] [N] feature-nilpy-runtime-dunder-dispatch-on-variants
 - [p 65] [A] bug-c-uses-path-basename-collides-with-enclosing-unit-name (unblocks 1)
 - [p 65] [N] bug-classname-on-a-tobject-local-compiles-to-a-dynamic-attr-fetch
 - [p 65] [N] bug-nilpy-class-attribute-unreachable-through-the-class-name
@@ -1800,15 +1798,16 @@ lives in git, not in a timestamp._
 
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
+- **2** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-c-uses-path-basename-collides-with-enclosing-unit-name
 - **1** — bug-pascal-procvar-in-value-context-takes-address-instead-of-calling
 - **1** — decide-nilpy-parallel-capture-semantics
-- **1** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **1** — decide-pxxpdf-ticket-obsolete
 - **1** — feature-inline-asm-xmm-operands
 - **1** — feature-lib-pxxpdf-reportlab-compat
 - **1** — feature-nilpy-break-continue
+- **1** — feature-nilpy-runtime-dunder-dispatch-on-variants
 - **1** — feature-nilpy-star-args-kwargs
 - **1** — feature-nilpy-tkinter-facade
 - **1** — feature-os-targets-bsd-mac
