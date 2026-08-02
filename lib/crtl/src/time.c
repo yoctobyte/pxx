@@ -13,6 +13,7 @@
 
 #include <time.h>
 #include <sys/time.h>
+#include <stdlib.h>   /* getenv, for $TZ */
 
 extern long long __pxx_time(void);
 extern long long __pxx_clock(void);
@@ -93,8 +94,140 @@ struct tm *gmtime(const time_t *timer) {
   return &tm_buf;
 }
 
-/* No timezone database — local time == UTC. */
-struct tm *localtime(const time_t *timer) { return gmtime(timer); }
+/* ---- timezone: the UTC offset in effect at an instant --------------------
+ *
+ * localtime() used to be gmtime(), so every local timestamp a program printed
+ * was UTC — silently, since 22:13 is as plausible as 23:13. Measured against
+ * gcc: Europe/Amsterdam was off by an hour, America/New_York by five.
+ *
+ * The source is the TZif file (RFC 8536) that $TZ or /etc/localtime names, NOT
+ * the POSIX TZ rule string. That is deliberate: parsing a TZ string's leading
+ * offset while skipping its DST rule gives an answer right for half the year
+ * and wrong for the other half with nothing to say which, which is worse than
+ * an honest uniform UTC. A TZif file carries PRECOMPUTED transitions, so DST
+ * falls out of a binary search rather than rule evaluation.
+ *
+ * If anything fails — no file, unreadable, bad magic, truncated — the offset is
+ * 0 and behaviour is exactly what it was before. A missing timezone database
+ * must not break the clock. */
+
+#define PXX_TZ_BUFSZ 8192
+
+static char pxx_tz_buf[PXX_TZ_BUFSZ];
+static long pxx_tz_len = 0;
+static int pxx_tz_loaded = 0;
+
+extern int __pxx_open(const char *path, int flags, int mode);
+extern long __pxx_read(int fd, void *buf, unsigned long n);
+extern int __pxx_close(int fd);
+
+/* TZif counts are UNSIGNED 32-bit; utoff is SIGNED. Two readers, because one
+   that ignored the difference made America/New_York's -18000 (0xFFFFB9B0) read
+   back as 4294948784 on a 64-bit long — and Europe/Amsterdam's +3600 still
+   worked, so a one-zone test would have passed. */
+static long pxx_be32u(const unsigned char *p) {
+  return ((long)p[0] << 24) | ((long)p[1] << 16) | ((long)p[2] << 8) | (long)p[3];
+}
+
+static long pxx_be32s(const unsigned char *p) {
+  long v = pxx_be32u(p);
+  if (v & 0x80000000L) v -= 0x100000000L;      /* sign-extend the int32 */
+  return v;
+}
+
+static long long pxx_be64(const unsigned char *p) {
+  long long v = 0; int i;
+  for (i = 0; i < 8; i++) v = (v << 8) | (long long)p[i];
+  return v;
+}
+
+/* Read $TZ's zoneinfo file, else /etc/localtime. A TZ of "UTC" needs no file
+   and is the common case in test harnesses, so it short-circuits. */
+static void pxx_tz_load(void) {
+  int fd; long got; const char *tz;
+  char path[256]; int i, j;
+  if (pxx_tz_loaded) return;
+  pxx_tz_loaded = 1;
+  tz = getenv("TZ");
+  if (tz && tz[0] == 'U' && tz[1] == 'T' && tz[2] == 'C' && tz[3] == 0) return;
+  if (tz && tz[0] && tz[0] != ':') {
+    const char *pre = "/usr/share/zoneinfo/";
+    for (i = 0; pre[i]; i++) path[i] = pre[i];
+    for (j = 0; tz[j] && i + j + 1 < (int)sizeof(path); j++) path[i + j] = tz[j];
+    path[i + j] = 0;
+    fd = __pxx_open(path, 0, 0);
+  } else {
+    fd = __pxx_open("/etc/localtime", 0, 0);
+  }
+  if (fd < 0) return;
+  got = __pxx_read(fd, pxx_tz_buf, PXX_TZ_BUFSZ);
+  __pxx_close(fd);
+  if (got > 0) pxx_tz_len = got;
+}
+
+/* The UTC offset in seconds at `t`, from the loaded TZif. 0 on any problem. */
+static long pxx_tz_offset(long long t) {
+  const unsigned char *b = (const unsigned char *)pxx_tz_buf;
+  long len, isutcnt, isstdcnt, leapcnt, timecnt, typecnt, charcnt;
+  long off, v1size, i, lo, hi, idx;
+  int ver;
+  pxx_tz_load();
+  len = pxx_tz_len;
+  if (len < 44) return 0;
+  if (b[0] != 'T' || b[1] != 'Z' || b[2] != 'i' || b[3] != 'f') return 0;
+  ver = b[4];
+
+  isutcnt = pxx_be32u(b + 20); isstdcnt = pxx_be32u(b + 24);
+  leapcnt = pxx_be32u(b + 28); timecnt  = pxx_be32u(b + 32);
+  typecnt = pxx_be32u(b + 36); charcnt  = pxx_be32u(b + 40);
+
+  if (ver == '2' || ver == '3' || ver == '4') {
+    /* skip the 32-bit block and its header, then re-read the 64-bit counts */
+    v1size = 44 + timecnt * 4 + timecnt + typecnt * 6 + charcnt
+           + leapcnt * 8 + isstdcnt + isutcnt;
+    if (v1size + 44 > len) return 0;
+    b += v1size;
+    len -= v1size;
+    if (b[0] != 'T' || b[1] != 'Z' || b[2] != 'i' || b[3] != 'f') return 0;
+    isutcnt = pxx_be32u(b + 20); isstdcnt = pxx_be32u(b + 24);
+    leapcnt = pxx_be32u(b + 28); timecnt  = pxx_be32u(b + 32);
+    typecnt = pxx_be32u(b + 36); charcnt  = pxx_be32u(b + 40);
+    off = 44;
+    if (off + timecnt * 8 + timecnt + typecnt * 6 > len) return 0;
+    /* largest transition <= t; before the first, use type 0 */
+    idx = -1;
+    lo = 0; hi = timecnt - 1;
+    while (lo <= hi) {
+      long mid = lo + (hi - lo) / 2;
+      if (pxx_be64(b + off + mid * 8) <= t) { idx = mid; lo = mid + 1; }
+      else hi = mid - 1;
+    }
+    if (idx < 0) i = 0;
+    else i = b[off + timecnt * 8 + idx];
+    if (i < 0 || i >= typecnt) return 0;
+    return pxx_be32s(b + off + timecnt * 8 + timecnt + i * 6);
+  }
+
+  /* version 1: 32-bit transitions */
+  off = 44;
+  if (off + timecnt * 4 + timecnt + typecnt * 6 > len) return 0;
+  idx = -1;
+  for (i = 0; i < timecnt; i++) {
+    long tt = pxx_be32s(b + off + i * 4);
+    if ((long long)tt <= t) idx = i; else break;
+  }
+  if (idx < 0) i = 0;
+  else i = b[off + timecnt * 4 + idx];
+  if (i < 0 || i >= typecnt) return 0;
+  return pxx_be32s(b + off + timecnt * 4 + timecnt + i * 6);
+}
+
+struct tm *localtime(const time_t *timer) {
+  time_t shifted;
+  if (!timer) return gmtime(timer);
+  shifted = (time_t)(*timer + (time_t)pxx_tz_offset((long long)*timer));
+  return gmtime(&shifted);
+}
 
 /* Reentrant variants (POSIX): fill the caller's buffer, no shared static. */
 struct tm *gmtime_r(const time_t *timer, struct tm *result) {
@@ -102,7 +235,8 @@ struct tm *gmtime_r(const time_t *timer, struct tm *result) {
   return result;
 }
 struct tm *localtime_r(const time_t *timer, struct tm *result) {
-  return gmtime_r(timer, result);
+  *result = *localtime(timer);
+  return result;
 }
 
 time_t mktime(struct tm *tm) {

@@ -7156,6 +7156,20 @@ lib-test: pxx-stable-check
 	    { echo 'FAIL: cstrtol_range differs from gcc'; exit 1; }; \
 	  echo 'cstrtol_range: identical to gcc'; \
 	else echo 'cstrtol_range: SKIP (no gcc)'; /tmp/cstrtol_range >/dev/null; fi
+	# localtime honouring the timezone. Run ONCE PER ZONE with TZ in the
+	# environment — glibc caches the zone until tzset(), so a self-contained
+	# setenv loop silently compares UTC against UTC and passes for every zone.
+	$(PXX_STABLE) test/ctime_localtime.c /tmp/ctime_localtime
+	@if command -v gcc >/dev/null 2>&1 && [ -d /usr/share/zoneinfo ]; then \
+	  gcc -w -o /tmp/ctime_localtime_gcc test/ctime_localtime.c 2>/dev/null; \
+	  for z in UTC Europe/Amsterdam America/New_York Asia/Kolkata Australia/Sydney; do \
+	    TZ=$$z /tmp/ctime_localtime_gcc > /tmp/ctl_gcc.txt; \
+	    TZ=$$z /tmp/ctime_localtime > /tmp/ctl_pxx.txt; \
+	    diff /tmp/ctl_gcc.txt /tmp/ctl_pxx.txt || \
+	      { echo "FAIL: ctime_localtime differs from gcc for $$z"; exit 1; }; \
+	  done; \
+	  echo 'ctime_localtime: identical to gcc (5 zones)'; \
+	else echo 'ctime_localtime: SKIP (no gcc or no zoneinfo)'; /tmp/ctime_localtime >/dev/null; fi
 	# crtl against gcc's libc, which is the oracle for this surface: the whole
 	# output is diffed against the SAME file built by gcc, so there are no
 	# recorded expectations to drift.
