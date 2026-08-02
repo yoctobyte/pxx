@@ -106,7 +106,22 @@ fixed-6 — `"{:,}".format(1234.5)` is `1,234.5`, was `1,234.500000`.
 
 `_` as a separator is NOT implemented; it stays a loud raise.
 
-## Still open
+## 2026-08-02 — item 3 FIXED
 
-3. Stepped slices other than `[::-1]`.
+Extended slices `xs[lo:hi:step]` work for any non-zero step on str, bytes, list,
+tuple and a variant holding any of them (`81153f008`). Bounds are CPython's
+`slice.indices()`, added as `PySliceBoundsStep` beside `PySliceBounds` rather
+than folded in — with a negative step the omitted defaults AND both clamps
+differ. Verified with a 150-case lo/hi/step sweep vs CPython;
+`test/test_nilpy_slice_step.npy` (33 lines) is in `make test-nilpy`.
+
+The `[::-1]` special case (a rewrite to `reversed()` / `pystr_reverse`) is gone,
+which fixed tuple reversal for free: `reversed()` yields a list, while
+`pylist_slice_step` carries `FIsTuple` across.
+
+Not implemented, and refused BY NAME rather than approximated: assigning to an
+extended slice (`l[::2] = ...`) and `del l[::2]`. Dropping the step there would
+touch the wrong elements.
+
+## Still open
 5. `range` as a first-class VALUE (`list(range(3))`).
