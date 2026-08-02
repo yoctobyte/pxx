@@ -103,3 +103,29 @@ Two independent pieces, and only the first is this ticket:
 
 Neither needs the runtime-dispatch decision; both are compile-time shape
 recognition, the same family as the unpack type-erasure fix (3ccb6576d).
+
+## 2026-08-02 — the see-through-wrappers half is DEEPER than boxing. Attempted, reverted.
+
+Tried the obvious version of item 2: teach `PyBoxCallableValue` to recognise an
+`AN_TERNARY` whose both arms are callable and box the ARMS (boxing the arms
+rather than the result, so only the selected arm still evaluates). It compiled
+and changed nothing — `z = f if c else g` then `z(1)` still failed to parse.
+Reverted rather than left in as dead code.
+
+**Why it cannot work there.** The arms are not boxable calls in the first place.
+A bare `def` NAME only becomes a function VALUE in a few specific positions —
+`PyMakeFuncValue` is reached from the assignment RHS when the name is the whole
+right-hand side, and from argument positions — so inside a conditional
+expression, `f` never becomes a `pyboundfn_new` pair at all. There is nothing for
+the boxer to see through.
+
+So item 2 is really: **a bare def name in ANY value position should become a
+function value**, and the ternary is just where that first shows. That is a
+larger and more interesting change than "box a wrapper", and it probably
+subsumes several sibling gaps (a def name in a container literal, in a return
+expression, as a default). Whoever takes it should start by listing which
+positions call `PyMakeFuncValue` today rather than by patching the boxer.
+
+Item 1 (the call site accepting a callable-valued EXPRESSION as callee) is
+untouched by this and remains the smaller, separable half — it is what
+`(lambda ...)(...)` needs.
