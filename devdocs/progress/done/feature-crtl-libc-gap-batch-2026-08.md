@@ -162,7 +162,7 @@ Calling `htons` — a pure byte-swap — makes the binary `NEEDED libc.so.6` on
 every target, losing the libc-free property the opt-in `-dPXX_DYNLIB_LIBC`
 design rests on. Verified to happen through the OLD `<arpa/inet.h>` path too, so
 it is not from this change. Filed as
-[[bug-b-crtl-htons-pulls-libc-into-a-static-binary]] with the diagnosis
+[[bug-cfront-spurious-dt-needed-libc-with-no-imports]] with the diagnosis
 explicitly left open, because `socket.c` declares only `__pxx_*` Pascal-side
 externs and it is not obvious why they force a libc dependency.
 

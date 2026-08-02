@@ -1,0 +1,96 @@
+---
+track: C
+prio: 45
+type: bug
+---
+
+# A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing
+
+- **Type:** bug (C frontend / ELF emission) — **Track C**, re-laned from B on
+  2026-08-02 once diagnosed: the defect is not in `lib/crtl` at all.
+- **Found:** 2026-08-02 while adding the byte-order declarations to
+  `<netinet/in.h>` ([[feature-crtl-libc-gap-batch-2026-08]]). **Pre-existing** —
+  not introduced by that change.
+
+## Measured
+
+```c
+#include <arpa/inet.h>            /* the OLD path, unchanged by anything today */
+int main(void){ return (int)htons(1); }
+```
+
+| program | linkage |
+| --- | --- |
+| `htons` (or any other socket.c symbol) | **dynamically linked, NEEDED libc.so.6** |
+| the same file without it | statically linked |
+| a C program using only string/stdio/errno | statically linked |
+
+True on every target (x86-64, i386, aarch64, arm32) and through both
+`<arpa/inet.h>` and the newly-added `<netinet/in.h>` declarations, so it is a
+property of pulling `socket.c` in, not of either header.
+
+## Why it matters
+
+The syscall-only core being libc-free is a design invariant — it is why
+`-dPXX_DYNLIB_LIBC` exists as an *opt-in* for the loader, and why the ESP and
+static-target stories work at all. A program acquires a glibc runtime dependency
+here by calling a **pure byte-swap function**, which is about as far from
+needing libc as a function gets.
+
+The practical bite is portability, and it is not hypothetical: such a binary
+cannot run under `qemu-aarch64`/`qemu-arm` on a box without a target sysroot,
+which is exactly how it was noticed — a test calling `htons` could not be
+cross-verified while the identical test without it could.
+
+## Diagnosed 2026-08-02 — the binary imports NOTHING
+
+The decisive measurement: the produced binary has
+
+```
+Dynamic section:
+  (NEEDED)  Shared library: [libc.so.6]
+```
+
+and **zero dynamic symbols** (`readelf --dyn-syms` lists no FUNC or OBJECT).
+It also runs standalone here. So this is not a real dependency being discovered
+— it is a `DT_NEEDED` emitted for a library nothing is imported from.
+
+Narrowed:
+
+| program | linkage |
+| --- | --- |
+| references `htons` (in `socket.c`) | dynamic |
+| references `socket()` (also `socket.c`) | dynamic |
+| references `strlen` (in `string.c`) | **static** |
+| includes any of socket.c's headers, references nothing | static |
+| declares AND calls a bare `extern int __pxx_foo(int)` | static |
+
+So it is triggered by pulling the `socket.c` translation unit in — any symbol
+of it will do — and not by a header, and not by an `extern` declaration alone.
+
+`socket.c` declares only `__pxx_*` externs, which are Pascal-side PAL helpers
+resolved internally, never libc symbols. The relevant compiler code is
+`compiler/cparser.inc:8059` / `:8128`, which defaults an external's soname to
+`libc.so.6` and then decides `forceSystemExternal`; something on that path
+registers the soname for symbols that are subsequently satisfied internally, and
+the ELF writer emits the `NEEDED` without checking that anything was actually
+imported.
+
+**Why it is Track C, not B.** Nothing in `lib/crtl` is wrong: the externs are
+correctly declared and correctly resolved. The fix is either to stop registering
+the soname for an external that resolves internally, or to prune a `DT_NEEDED`
+with no importing symbols at emission — both in `compiler/**`, which Track B
+does not edit. It may well hand off again to Track A if the right fix is in the
+ELF writer rather than the C frontend.
+
+Do not "fix" it by duplicating the byte-swaps somewhere else — that hides the
+dependency for four functions and leaves it for every other socket symbol, and
+the actual defect (a NEEDED with no imports) would survive untouched.
+
+## Gate
+
+A C program calling `htons` (or any other `socket.c` symbol, or nothing at all)
+is statically linked and has no `DT_NEEDED` it does not import from. Then the
+byte-order assertions can be restored to `test/cerrno_strings.c` — they were
+removed precisely because this made that test unrunnable under qemu on targets
+with no sysroot, and their return would be the end-to-end proof.
