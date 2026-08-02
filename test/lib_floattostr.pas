@@ -46,6 +46,37 @@ begin
   { explicit-precision paths are a contract and must not have moved }
   Chk('fixed15',  Format('%.15f', [1/3]),         '0.333333333333333');
   Chk('fixed2',   Format('%f', [1/3]),            '0.33');
+
+  { ---- exact expansion (bug-b-floattostrsig-caps-at-15-significant-digits).
+    Every expectation here is CPython's `'%.17g' % v` / `'%.16g' % v` on the
+    same double — an oracle, not pxx's own output read back. These are the
+    digits FloatToStrSig structurally could not produce: it normalises by
+    scaling in doubles, so past 15 the scaling itself is the error. }
+  Chk('x17_third', FloatToStrExact(1/3, 17),      '0.33333333333333331');
+  Chk('x16_third', FloatToStrExact(1/3, 16),      '0.3333333333333333');
+  Chk('x17_tenth', FloatToStrExact(0.1, 17),      '0.10000000000000001');
+  Chk('x17_sum',   FloatToStrExact(0.1 + 0.2, 17),'0.30000000000000004');
+  Chk('x17_254',   FloatToStrExact(25.4, 17),     '25.399999999999999');
+  Chk('x16_awk',   FloatToStrExact(2.834645669291339, 16), '2.834645669291339');
+  { the magnitudes where scaling in doubles hurt most: DBL_MAX and a denormal }
+  Chk('x17_max',   FloatToStrExact(1.7976931348623157e308, 17),
+                                                  '1.7976931348623157E308');
+  Chk('x17_den',   FloatToStrExact(5.0e-324, 17), '4.9406564584124654E-324');
+  Chk('x17_e300',  FloatToStrExact(1e-300, 17),   '1E-300');
+  { asking for fewer digits still rounds off the EXACT expansion }
+  Chk('x3_254',    FloatToStrExact(25.4, 3),      '25.4');
+  Chk('x1_third',  FloatToStrExact(1/3, 1),       '0.3');
+  { specials keep FloatToStr's spellings }
+  Chk('x_zero',    FloatToStrExact(0.0, 17),      '0');
+  Chk('x_negsum',  FloatToStrExact(-(0.1 + 0.2), 17), '-0.30000000000000004');
+  { FloatToStrSig's own cap is gone: past 15 it defers to the exact path,
+    while 15 and below keep the output every other test in the tree pins. }
+  Chk('sig17',     FloatToStrSig(1/3, 17),        '0.33333333333333331');
+  Chk('sig15',     FloatToStrSig(1/3, 15),        '0.333333333333333');
+  { shortest round-trip: the shortest spelling that reads back identical }
+  Chk('short254',  FloatToStrShortest(25.4),      '25.4');
+  Chk('shortsum',  FloatToStrShortest(0.1 + 0.2), '0.30000000000000004');
+  Chk('shorttenth',FloatToStrShortest(0.1),       '0.1');
   if fails = 0 then WriteLn('FLOATTOSTR OK')
   else WriteLn('FLOATTOSTR FAILED ', fails);
 end.

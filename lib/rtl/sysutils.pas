@@ -276,6 +276,19 @@ function FloatToStrSig(value: Double; sigDigits: Integer): AnsiString;
 function FloatToExpStr(value: Double): AnsiString;
 function FloatToStrF(value: Double; precision: Integer): AnsiString;
 
+{ EXACT float -> string. Unlike FloatToStrSig, which normalises the mantissa by
+  scaling in doubles and therefore cannot honestly offer more than 15
+  significant digits, these two generate the double's exact decimal expansion
+  with integer arithmetic. Every digit they print is a real digit of the value.
+
+  FloatToStrExact asks for a specific number of significant digits (correctly
+  rounded, half-to-even on the exact remainder, as %.*g does).
+  FloatToStrShortest gives the shortest string that reads back as the SAME
+  double — 17 digits always suffice, most values need far fewer, and this is
+  what a faithful decimal form of a Double means. }
+function FloatToStrExact(value: Double; sigDigits: Integer): AnsiString;
+function FloatToStrShortest(value: Double): AnsiString;
+
 { String -> float. StrToFloatDef returns def on malformed; StrToFloat returns 0. }
 function StrToFloatDef(const s: AnsiString; def: Double): Double;
 function StrToFloat(const s: AnsiString): Double;
@@ -903,6 +916,215 @@ begin
   if neg then Result := '-' + Result;
 end;
 
+{ ---- exact decimal expansion of a Double ---------------------------------
+
+  Every finite double IS a finite decimal, exactly. value = mant * 2^exp2 with
+  mant a 53-bit integer, and 2^-k = 5^k * 10^-k, so the exact decimal form is
+  the integer mant*5^k with the point pushed k places left (k = -exp2). For
+  exp2 >= 0 it is the plain integer mant*2^exp2. No approximation enters, so
+  every digit produced is a real digit of the value — which is exactly what the
+  normalise-in-doubles path in FloatToStrSig cannot do past 15, and why that
+  routine caps there.
+
+  Worst case is a denormal at exp2 = -1074: 5^1074 is 751 digits, times a
+  16-digit mantissa, so 767 digits. Digits live little-endian, one per byte,
+  grown by repeated multiply-by-small. Multiplying in chunks of 5^13 / 2^30 —
+  the largest powers whose per-digit product stays well inside Int64 — turns
+  that worst case into ~83 passes instead of 1074. }
+const
+  PXX_EXDEC_MAX   = 800;          { 767 is the true worst case; slack on top }
+  PXX_EXDEC_P5_13 = 1220703125;   { 5^13 }
+  PXX_EXDEC_P2_30 = 1073741824;   { 2^30 }
+type
+  TExDecBuf   = array[0..PXX_EXDEC_MAX - 1] of Byte;
+  PExDecInt64 = ^Int64;
+
+{ buf := buf * f. f is small enough that d*f + carry cannot leave Int64. }
+procedure ExDecMul(var buf: TExDecBuf; var n: Integer; f: Int64);
+var i: Integer; t, carry: Int64;
+begin
+  carry := 0;
+  for i := 0 to n - 1 do
+  begin
+    t := Int64(buf[i]) * f + carry;
+    buf[i] := Byte(t mod 10);
+    carry := t div 10;
+  end;
+  while (carry > 0) and (n < PXX_EXDEC_MAX) do
+  begin
+    buf[n] := Byte(carry mod 10);
+    carry := carry div 10;
+    n := n + 1;
+  end;
+end;
+
+{ Split a finite value into mant * 2^exp2 with mant an integer. Reads the
+  IEEE-754 fields directly; a denormal carries no implicit leading bit. }
+procedure ExDecSplit(value: Double; var mant: Int64; var exp2: Integer);
+var bits, frac: Int64; be: Integer;
+begin
+  bits := PExDecInt64(@value)^;
+  be   := Integer((bits shr 52) and $7FF);
+  frac := bits and ((Int64(1) shl 52) - 1);
+  if be = 0 then
+  begin
+    mant := frac;
+    exp2 := -1074;
+  end
+  else
+  begin
+    mant := frac or (Int64(1) shl 52);
+    exp2 := be - 1075;
+  end;
+end;
+
+{ Exact digits of a finite, nonzero, POSITIVE value: ds holds them most
+  significant first with no leading zero, and decExp is the power of ten the
+  first digit stands for (so 267.5 gives '2675' and decExp = 2). }
+procedure ExDecDigits(value: Double; var ds: AnsiString; var decExp: Integer);
+var
+  buf: TExDecBuf;
+  n, i, k, fracDigits, exp2: Integer;
+  mant: Int64;
+begin
+  ExDecSplit(value, mant, exp2);
+  n := 0;
+  while mant > 0 do
+  begin
+    buf[n] := Byte(mant mod 10);
+    mant := mant div 10;
+    n := n + 1;
+  end;
+  if n = 0 then begin buf[0] := 0; n := 1; end;
+  fracDigits := 0;
+  if exp2 >= 0 then
+  begin
+    k := exp2;
+    while k >= 30 do begin ExDecMul(buf, n, PXX_EXDEC_P2_30); k := k - 30; end;
+    while k > 0 do begin ExDecMul(buf, n, 2); k := k - 1; end;
+  end
+  else
+  begin
+    k := -exp2;
+    fracDigits := k;
+    while k >= 13 do begin ExDecMul(buf, n, PXX_EXDEC_P5_13); k := k - 13; end;
+    while k > 0 do begin ExDecMul(buf, n, 5); k := k - 1; end;
+  end;
+  while (n > 1) and (buf[n - 1] = 0) do n := n - 1;
+  decExp := n - 1 - fracDigits;
+  SetLength(ds, n);
+  for i := 1 to n do ds[i] := Chr(Ord('0') + buf[n - i]);
+end;
+
+{ Round an exact digit string to sig digits, half-to-EVEN on the exact
+  remainder (glibc's %.*g rule — and the remainder here really is exact, so
+  the tie case is a genuine tie rather than an artifact of scaling). A carry
+  out of the leading digit (999 -> 100) moves the decimal exponent. }
+procedure ExDecRound(var ds: AnsiString; var decExp: Integer; sig: Integer);
+var i, c: Integer; up, rest: Boolean;
+begin
+  if Length(ds) <= sig then Exit;
+  up := False;
+  if ds[sig + 1] > '5' then up := True
+  else if ds[sig + 1] = '5' then
+  begin
+    rest := False;
+    for i := sig + 2 to Length(ds) do
+      if ds[i] <> '0' then begin rest := True; break; end;
+    if rest then up := True
+    else up := ((Ord(ds[sig]) - Ord('0')) mod 2) = 1;
+  end;
+  ds := Copy(ds, 1, sig);
+  if up then
+  begin
+    i := sig;
+    while i >= 1 do
+    begin
+      c := Ord(ds[i]) - Ord('0') + 1;
+      if c < 10 then begin ds[i] := Chr(Ord('0') + c); break; end;
+      ds[i] := '0';
+      i := i - 1;
+    end;
+    if i = 0 then
+    begin
+      ds := '1' + Copy(ds, 1, sig - 1);
+      decExp := decExp + 1;
+    end;
+  end;
+end;
+
+{ FPC's ffGeneral layout: fixed while the point sits in [-3, sig], exponential
+  otherwise. Shared with FloatToStrSig so both entry points format alike. }
+function ExDecLayout(const ds: AnsiString; decExp, sig: Integer): AnsiString;
+var p, i: Integer; s: AnsiString;
+begin
+  p := decExp + 1;
+  if (p > sig) or (p < -3) then
+  begin
+    if Length(ds) > 1 then s := Copy(ds, 1, 1) + '.' + Copy(ds, 2, Length(ds) - 1)
+    else s := ds;
+    if p - 1 >= 0 then s := s + 'E' + IntToStr(p - 1)
+    else s := s + 'E-' + IntToStr(1 - p);
+  end
+  else if p <= 0 then
+  begin
+    s := '0.';
+    for i := 1 to -p do s := s + '0';
+    s := s + ds;
+  end
+  else if p >= Length(ds) then
+  begin
+    s := ds;
+    for i := Length(ds) + 1 to p do s := s + '0';
+  end
+  else
+    s := Copy(ds, 1, p) + '.' + Copy(ds, p + 1, Length(ds) - p);
+  Result := s;
+end;
+
+function FloatToStrExact(value: Double; sigDigits: Integer): AnsiString;
+var ds: AnsiString; decExp, sig, i: Integer; neg: Boolean;
+begin
+  sig := sigDigits;
+  if sig < 1 then sig := 1;
+  { past the exact expansion there is nothing left to ask for }
+  if sig > 767 then sig := 767;
+  if value <> value then begin Result := 'NaN'; Exit; end;
+  if value > 1.7976931348623157e308 then begin Result := 'Inf'; Exit; end;
+  if value < -1.7976931348623157e308 then begin Result := '-Inf'; Exit; end;
+  if value = 0.0 then begin Result := '0'; Exit; end;
+  neg := value < 0.0;
+  if neg then value := -value;
+  ExDecDigits(value, ds, decExp);
+  ExDecRound(ds, decExp, sig);
+  { trailing zeros carry no information in either form }
+  i := Length(ds);
+  while (i > 1) and (ds[i] = '0') do i := i - 1;
+  ds := Copy(ds, 1, i);
+  Result := ExDecLayout(ds, decExp, sig);
+  if neg then Result := '-' + Result;
+end;
+
+function FloatToStrShortest(value: Double): AnsiString;
+var i: Integer; s: AnsiString;
+begin
+  { NaN / Inf / zero have one spelling each; FloatToStrExact already gives it }
+  if (value <> value) or (value = 0.0)
+     or (value > 1.7976931348623157e308) or (value < -1.7976931348623157e308) then
+  begin
+    Result := FloatToStrExact(value, 17);
+    Exit;
+  end;
+  { 17 significant digits always round-trip a double, so this loop terminates
+    with the shortest spelling that does. }
+  for i := 1 to 16 do
+  begin
+    s := FloatToStrExact(value, i);
+    if StrToFloat(s) = value then begin Result := s; Exit; end;
+  end;
+  Result := FloatToStrExact(value, 17);
+end;
+
 { FPC's `FloatToStr` IS `FloatToStrF(value, ffGeneral, 15, 0)`: fifteen
   SIGNIFICANT digits, not a fixed number of decimal places, switching to
   exponential form when the decimal point falls outside the window
@@ -929,7 +1151,12 @@ var
 begin
   sig := sigDigits;
   if sig < 1 then sig := 1;
-  if sig > 15 then sig := 15;      { past 15 a double scaled in doubles lies }
+  { Past 15 a double scaled in doubles lies, so hand those over to the exact
+    expansion, which does not scale in doubles at all. Up to 15 this keeps its
+    own long-standing output: FloatToStr is the shared Pascal path and its
+    formatting is observable by every program and test expectation in the tree,
+    so it is not changed here as a side effect of gaining 16 and 17. }
+  if sig > 15 then begin Result := FloatToStrExact(value, sig); Exit; end;
   if value <> value then begin Result := 'NaN'; Exit; end;
   { Infinity first: the normalise loop below would not terminate on it. }
   if value > 1.7976931348623157e308 then begin Result := 'Inf'; Exit; end;
