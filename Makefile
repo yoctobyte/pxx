@@ -1120,6 +1120,11 @@ test-nilpy: $(COMPILER)
 	# Pascal overloads are never consulted — the str is exploded at the call site.
 	./$(COMPILER) test/test_nilpy_str_iterable_builtins.npy /tmp/test_nilpy_striter26
 	test "$$(/tmp/test_nilpy_striter26)" = "$$(printf '%b' '[\047a\047, \047b\047, \047c\047]\n[\047a\047, \047b\047, \047c\047]\n3\nabc\n[\047c\047, \047b\047, \047a\047]\n[(\047c\047, \047x\047), (\047a\047, \047y\047), (\047b\047, \047z\047)]\n[(\047c\047, 1), (\047a\047, 2), (\047b\047, 3)]\n[(1, \047c\047), (2, \047a\047), (3, \047b\047)]\n[(0, \047c\047), (1, \047a\047), (2, \047b\047)]\n[(1, \047c\047), (2, \047a\047), (3, \047b\047)]\n[(-2, \047c\047), (-1, \047a\047), (0, \047b\047)]\n1 c\n2 a\n3 b\n(\047c\047, \047x\047)\n(0, \047c\047)\n[]\n[]\n[]\n[1, 2, 3]\n[(1, 1), (2, 2), (3, 3)]\n[(0, 1), (1, 2), (2, 3)]\n[\047a\047, \047b\047, \047c\047]\n[\047b\047, \047a\047, \047c\047]\nbac')"
+	# in-place mutators return None. list.remove/insert and dict.remove/update
+	# were PROCEDURES, so reading their result read a value never written —
+	# garbage (1592266472), '()', or a spurious IndexError, silently.
+	./$(COMPILER) test/test_nilpy_mutators_return_none.npy /tmp/test_nilpy_mutnone26
+	test "$$(/tmp/test_nilpy_mutnone26)" = "$$(printf '%b' 'None\n[9, 3, 1, 2]\nNone\n[3, 1, 2]\nNone\n[(\047a\047, 1), (\047z\047, 2)]\nNone\n[(\047q\047, 5)]\nTrue\nTrue\nTrue\ninsert result is falsy\n[9, 3, 2, 4]\n[(\047a\047, 9), (\047z\047, 2)]\n[(\047z\047, 2)]\n[(\047a\047, 2), (\047b\047, 1)]')"
 	# sorted(<dict>, key=...) — sorted() only accepted a TPyList, so a dict WITH a
 	# key function had no overload to bind to (dict alone and list+key both worked)
 	./$(COMPILER) test/test_nilpy_sorted_dict_key.npy /tmp/test_nilpy_sdk26

@@ -97,7 +97,10 @@ type
       RAISES ValueError when absent and remove REMOVES it; a find-style -1
       return would be a different function (feature-nilpy-container-method-gaps). }
     function index(const v: Variant): Integer;
-    procedure remove(const v: Variant);
+    { returns None, like Python's — a PROCEDURE here meant `r = l.remove(x)`
+      read a result that was never written and yielded garbage
+      (bug-nilpy-inplace-mutators-do-not-return-none) }
+    function remove(const v: Variant): Variant;
     { A SHALLOW copy, like Python's: a new list holding the same element
       values, so appending to the copy leaves the original alone while a
       mutable ELEMENT stays shared. }
@@ -105,7 +108,7 @@ type
     function pop: Variant; overload;
     function pop(i: Integer): Variant; overload;   { list.pop(index) — Python removes at i }
     function pop_at(i: Integer): Variant;
-    procedure insert(i: Integer; const v: Variant);
+    function insert(i: Integer; const v: Variant): Variant;   { None, see remove }
     { Python's `xs += ys` / xs.extend(ys): IN-PLACE, appending ys's elements.
       `+` on two lists would add the two class HANDLES
       (bug-a-nilpy-list-augmented-add-segfaults). }
@@ -182,7 +185,7 @@ type
       hook needed. }
     function get(const k: Variant): Variant; overload;
     function get(const k: Variant; const d: Variant): Variant; overload;
-    procedure remove(const k: Variant);
+    function remove(const k: Variant): Variant;   { None, see TPyList.remove }
     { dict.pop(key, default): remove the key and return its value, or return
       `default` if absent (never raises in the two-argument form uforth uses). }
     { Both Python arities. The one-argument form RAISES KeyError when the key
@@ -220,8 +223,8 @@ type
     FCounterMode: Boolean;
     { Counter.update(iterable) COUNTS elements; a plain dict's update(pairs)
       merges them. The mode picks which, which is why they share a name. }
-    procedure update(l: TPyList);
-    procedure update(d: TPyDict); overload;
+    function update(l: TPyList): Variant;   { None, see TPyList.remove }
+    function update(d: TPyDict): Variant; overload;
     { Counter.most_common([n]): (element, count) pairs, highest count first. The
       pair is a 2-element list — NilPy has no tuple type; indexing is identical. }
     function most_common: TPyList;
@@ -2285,9 +2288,10 @@ begin
   raise ValueError.Create(pyrepr_of(v) + ' is not in list');
 end;
 
-procedure TPyList.remove(const v: Variant);
+function TPyList.remove(const v: Variant): Variant;
 var i: Integer;
 begin
+  Result := pynone;   { Python's in-place mutators return None }
   for i := 0 to FLen - 1 do
     if PyVarEq(PPyVarRec(NativeInt(FItems) + i * 16), PPyVarRec(@v)) then
     begin
@@ -2536,11 +2540,12 @@ begin
   FLen := FLen - 1;
 end;
 
-procedure TPyList.insert(i: Integer; const v: Variant);
+function TPyList.insert(i: Integer; const v: Variant): Variant;
 var
   k: Integer;
   src, dst: PPyVarRec;
 begin
+  Result := pynone;   { Python's in-place mutators return None }
   { Python allows insert at len (append position) and clamps beyond. }
   if i < 0 then i := i + FLen;
   if i < 0 then i := 0;
@@ -3176,11 +3181,12 @@ begin
   PyVarSlotInit(dst, src);
 end;
 
-procedure TPyDict.remove(const k: Variant);
+function TPyDict.remove(const k: Variant): Variant;
 var
   i, j: Integer;
   src, dst: PPyVarRec;
 begin
+  Result := pynone;   { Python's in-place mutators return None }
   i := indexof(k);
   if i < 0 then PyKeyError;
   for j := i to FLen - 2 do
@@ -3630,9 +3636,10 @@ end;
 
 { ---- collections.Counter ------------------------------------------------- }
 
-procedure TPyDict.update(l: TPyList);
+function TPyDict.update(l: TPyList): Variant;
 var i: Integer; k, pair: Variant; pl: TPyList; o: TObject;
 begin
+  Result := pynone;   { Python's in-place mutators return None }
   if l = nil then exit;
   for i := 0 to l.count - 1 do
   begin
@@ -3657,9 +3664,10 @@ end;
 
 { CPython's Counter.update(mapping) ADDS the mapping's values; a plain dict's
   update(mapping) replaces them. }
-procedure TPyDict.update(d: TPyDict);
+function TPyDict.update(d: TPyDict): Variant;
 var ks, vs: TPyList; i: Integer; k: Variant;
 begin
+  Result := pynone;   { Python's in-place mutators return None }
   if d = nil then exit;
   ks := d.keylist;
   vs := d.vallist;

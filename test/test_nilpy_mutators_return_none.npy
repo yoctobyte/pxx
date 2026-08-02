@@ -1,0 +1,53 @@
+# Python's in-place mutators return None.
+# list.remove/insert and dict.remove/update were Pascal PROCEDURES, so using
+# their result read a value that was never written and yielded GARBAGE:
+#   r = d.update({"z":1})   ->  1592266472
+#   r = l.insert(0, 1)      ->  ()
+#   r = d.update(...)       ->  a spurious IndexError
+# Undefined behaviour, silently, from ordinary Python.
+# bug-nilpy-inplace-mutators-do-not-return-none
+
+l = [3, 1, 2]
+print(l.insert(0, 9))
+print(l)
+print(l.remove(9))
+print(l)
+
+d = {"a": 1}
+print(d.update({"z": 2}))
+print(sorted(d.items()))
+
+d2 = {"q": 1}
+print(d2.update({"q": 5}))
+print(sorted(d2.items()))
+
+# the result really is None, not merely something that prints as None
+r = l.insert(0, 7)
+print(r is None)
+print(l.remove(7) is None)
+print(d.update({}) is None)
+
+# a None result is FALSY, which is the difference that bites real code
+if not l.insert(0, 5):
+    print("insert result is falsy")
+l.remove(5)
+
+# statement position is unchanged -- the mutation still happens
+l2 = [3, 1, 2]
+l2.insert(0, 9)
+l2.remove(1)
+l2.append(4)
+print(l2)
+
+d3 = {"a": 1}
+d3.update({"z": 2})
+d3.update({"a": 9})
+print(sorted(d3.items()))
+del d3["a"]
+print(sorted(d3.items()))
+
+# the counting idiom, which leans on dict.get + assignment rather than update
+c = {}
+for w in ["a", "b", "a"]:
+    c[w] = c.get(w, 0) + 1
+print(sorted(c.items()))
