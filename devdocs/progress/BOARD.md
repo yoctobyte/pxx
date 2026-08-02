@@ -44,7 +44,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (204)
+## backlog (206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -73,6 +73,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip | N | 20 | bug | `print(1e-20)` prints `0.0` — NilPy's float repr has no small-magnitude exponential form | — |
 | bug-nilpy-for-else-and-while-else-not-supported | N | 30 | bug | The `else` clause on a for/while loop does not parse — `for ... else:` fails with 'expected expression' at the else | — |
 | bug-nilpy-from-import-as-alias-is-discarded | N | 60 | bug | `from mod import NAME as ALIAS` — the alias is parsed and thrown away | — |
+| bug-nilpy-immediately-invoked-lambda-is-not-callable | N | 55 | bug | `(lambda a, b: a - b)(9, 4)` raises TypeError: object is not callable, and a zero-arg `(lambda: 7)()` does not even parse. The identical lambda bound to a NAME first is fine | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
 | bug-nilpy-int-prints-as-float-when-the-name-is-widened-later | N | 50 | bug | An int prints as `5.0` because the SAME NAME is assigned a float later in the file | — |
 | bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
@@ -95,6 +96,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
 | bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | decide-nilpy-set-as-a-distinct-type-or-a-list |
+| bug-nilpy-star-args-is-a-list-not-a-tuple | N | 40 | bug | `*args` inside a function is a LIST, so it prints as [2, 3] where CPython prints (2, 3) and type(args).__name__ is 'list' rather than 'tuple' | — |
 | bug-nilpy-stdlib-shim-table-cannot-reach-an-overload | N | 50 | bug | The stdlib shim table and every hand-built pylib call resolve a NAME with FindProc, which returns ONE proc index and never consults overloads — so os.path.join('a','b','c') fails and adding a Pascal overload has no effect | — |
 | bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice | N | 50 | bug | Three loud gaps found by the CPython differential sweep | — |
 | bug-nilpy-unary-numeric-dunders-return-raw-handle | N | 55 | bug | NilPy: abs(obj), ~obj and obj-as-index ignore __abs__/__invert__/__index__ — they return the raw instance HANDLE as a number, silently | — |
@@ -1667,6 +1669,7 @@ lives in git, not in a timestamp._
 - [p 55] [A] bug-b-writeln-float-with-17-decimals-prints-garbage
 - [p 55] [C] bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
+- [p 55] [N] bug-nilpy-immediately-invoked-lambda-is-not-callable
 - [p 55] [N] bug-nilpy-range-negative-runtime-step-yields-empty
 - [p 55] [N] bug-nilpy-unary-numeric-dunders-return-raw-handle
 - [p 55] [T] bug-t-corpus-regex-invents-phantom-tree
@@ -1750,6 +1753,7 @@ lives in git, not in a timestamp._
 - [p 40] [N] bug-nilpy-list-mutators-return-self-instead-of-none
 - [p 40] [N] bug-nilpy-list-of-custom-objects-loses-repr-str
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
+- [p 40] [N] bug-nilpy-star-args-is-a-list-not-a-tuple
 - [p 40] [A] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
