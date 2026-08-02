@@ -1,0 +1,38 @@
+# `%r` is repr(), NOT str().
+#
+# The %-format conversion switch lumped 's' and 'r' into one arm, both rendering
+# through pyvar_print_of — so `"%r" % "v"` printed `v` where Python prints `'v'`.
+# Silent, and ONLY for string operands: repr and str agree for numbers, and
+# pxx's containers already render repr-style, so `"%r" % 5` and `"%r" % [1,2]`
+# both looked correct. That is what hid it
+# (bug-nilpy-percent-r-renders-as-str-not-repr).
+#
+# Found by a differential sweep against the CPython oracle (tools/pydiff.py),
+# not by a failing test.
+#
+# Also covers repr's QUOTE SELECTION, fixed in the same pass: Python prefers '
+# but switches to " when the string contains a single quote and no double quote,
+# and keeps ' (escaping it) when the string contains both.
+#
+# Expectation is CPython's own output.
+
+print("%r" % "v")
+print("%s" % "v")
+print("%r" % 5)
+print("%r" % 2.5)
+print("%r" % [1, 2])
+print("%r" % {"k": 1})
+print("%s=%r" % ("k", "v"))
+print("%r and %r" % ("a", "b"))
+print("[%8r]" % "ab")
+print("[%-8r]" % "ab")
+print("%r" % True)
+print("%s %s" % ("x", "y"))
+print("%d %05.2f %x" % (42, 3.14159, 255))
+print("%r" % "it's")
+print("%r" % "it's")
+print("%r" % 'say "hi"')
+print("%r" % "both ' and \"")
+print("%r" % "plain")
+print(["it's", 'say "hi"'])
+print("%r" % "tab\there")

@@ -6346,13 +6346,26 @@ begin
                                     width, zero, leftAlign);
           Continue;
         end;
-      's', 'r':
+      's':
         begin
           { a str conversion of ANY value, then the same padding.
             pyvar_print_of, not pystr_of: %s of a LIST prints it the way Python
             does (`"[%s]" % [1,2]` -> `[[1, 2]]`), and pystr_of renders a
             container as empty. It falls back to str for every scalar. }
           outS := outS + PyFmtPad(pyvar_print_of(cur), width, False, leftAlign);
+          Continue;
+        end;
+      'r':
+        begin
+          { %r is repr(), NOT str(). It shared the 's' arm, so `"%r" % "v"`
+            printed `v` where Python prints `'v'` — silently, and ONLY for
+            string operands, since repr and str agree for numbers and pxx's
+            containers already render repr-style. That is what hid it:
+            `"%r" % 5` and `"%r" % [1,2]` both looked right
+            (bug-nilpy-percent-r-renders-as-str-not-repr).
+            pyvar_repr already quotes a string and delegates list/dict/bytes to
+            their own repr, so this is one call, not new logic. }
+          outS := outS + PyFmtPad(pyvar_repr(cur), width, False, leftAlign);
           Continue;
         end;
     else
@@ -6727,20 +6740,44 @@ const
   QuoteCh = #39;   { a single quote, by code point — Python's repr uses it }
 
 function PyReprQuote(const s: AnsiString): AnsiString;
-var i: Integer; ch: Char;
+var i: Integer; ch: Char; useDq, hasSq, hasDq: Boolean;
 begin
-  Result := QuoteCh;
+  { Python's repr prefers ' but switches to " when the string CONTAINS a single
+    quote and NO double quote, so repr("it's") is "it's" and not 'it\'s'.
+    When it contains BOTH, ' stays the delimiter and the embedded ' is escaped.
+    (bug-nilpy-percent-r-renders-as-str-not-repr, found in the same sweep.)
+
+    Deliberately a Boolean and two explicit branches rather than a `delim: Char`
+    variable: a Char VARIABLE does not convert to a string the way a Char CONST
+    does — the conversion is keyed on the expression SHAPE, not its type
+    (project_string_conversion_shape_blindspot_pattern) — and the first attempt
+    at this silently emitted EMPTY delimiters. }
+  hasSq := False;
+  hasDq := False;
+  for i := 1 to Length(s) do
+  begin
+    if s[i] = QuoteCh then hasSq := True
+    else if s[i] = '"' then hasDq := True;
+  end;
+  useDq := hasSq and (not hasDq);
+  if useDq then Result := '"' else Result := QuoteCh;
   for i := 1 to Length(s) do
   begin
     ch := s[i];
-    if ch = QuoteCh then Result := Result + '\' + QuoteCh
-    else if ch = '\' then Result := Result + '\\'
+    if ch = '\' then Result := Result + '\\'
     else if ch = #10 then Result := Result + '\n'
     else if ch = #9 then Result := Result + '\t'
     else if ch = #13 then Result := Result + '\r'
-    else Result := Result + ch;
+    else if useDq then
+    begin
+      if ch = '"' then Result := Result + '\"' else Result := Result + ch;
+    end
+    else
+    begin
+      if ch = QuoteCh then Result := Result + '\' + QuoteCh else Result := Result + ch;
+    end;
   end;
-  Result := Result + QuoteCh;
+  if useDq then Result := Result + '"' else Result := Result + QuoteCh;
 end;
 
 function pyrepr_of(const s: AnsiString): AnsiString;

@@ -1088,6 +1088,10 @@ test-nilpy: $(COMPILER)
 	# resolve against and the AN_CALL reached IR lowering unlowered
 	./$(COMPILER) test/test_nilpy_str_method_subscript.npy /tmp/test_nilpy_strmsub26
 	test "$$(/tmp/test_nilpy_strmsub26)" = "$$(printf '%b' 'World\nHello\nc\n[\047a\047, \047b\047, \047c\047]\nb\ny\nH\nhello,world\nPAD\nb\n72\ntwo')"
+	# %r is repr(), not str(): the conversion switch lumped 's' and 'r' together,
+	# so "%r" % "v" printed v instead of 'v'. Only string operands diverged.
+	./$(COMPILER) test/test_nilpy_percent_repr.npy /tmp/test_nilpy_pctrepr26
+	test "$$(/tmp/test_nilpy_pctrepr26)" = "$$(printf '%b' '\047v\047\nv\n5\n2.5\n[1, 2]\n{\047k\047: 1}\nk=\047v\047\n\047a\047 and \047b\047\n[    \047ab\047]\n[\047ab\047    ]\nTrue\nx y\n42 03.14 ff\n"it\047s"\n"it\047s"\n\047say "hi"\047\n\047both \\\047 and "\047\n\047plain\047\n["it\047s", \047say "hi"\047]\n\047tab\\there\047')"
 	# str.format must honour EXPLICIT positional indices: the field was thrown
 	# away and arguments substituted sequentially, so "{1}{0}" printed in the
 	# wrong order. Only reordering/repeating indices expose it.
