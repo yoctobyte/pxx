@@ -16566,7 +16566,32 @@ begin
     Next;
     Expect(tkRParen, ')');
   end;
-  Expect(tkColon, ':'); Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
+  Expect(tkColon, ':');
+  { ONE-LINE class body — `class C: pass`, `class E(Exception): pass`. The
+    idiomatic empty placeholder, and it is everywhere in stubs, exception
+    hierarchies and protocol classes; it used to be a hard compile error
+    ("unexpected token") because the header required `: NEWLINE INDENT`
+    (bug-nilpy-one-line-def-and-class-bodies-do-not-parse).
+
+    Only `pass` is accepted, deliberately. An empty body registers no members,
+    so the INDENT-keyed pre-passes have nothing to find and nothing to get
+    wrong — which is what makes this slice separable from the one-line DEF
+    half of that ticket, where two scanners infer "is this name bound inside a
+    def?" from indent depth alone and would harvest a one-line def's locals as
+    module globals. A one-line class body with real CONTENT is refused rather
+    than half-parsed, for the same reason. }
+  if CurTok.Kind <> tkNewline then
+  begin
+    if not PyIsIdent('pass') then
+      Error('Nil Python: only `pass` is supported as a one-line class body — '
+            + 'put the body on its own indented line');
+    Next;
+    if CurTok.Kind = tkNewline then Next;
+    PySkipNewlines;
+    if isDC then PyEmitDataclassCtor(ci);
+    Exit;
+  end;
+  Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
   bodyStart := TokPos - 1; bodyEnd := PyFindBodyEnd(bodyStart);
   { The member pre-pass may have already done the FULL registration (methods
     + fields + PyDc* defaults) so the module-collect trial parse could resolve

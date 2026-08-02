@@ -1,0 +1,47 @@
+# bug-nilpy-one-line-def-and-class-bodies-do-not-parse — the CLASS half
+#
+# `class C: pass` was a hard compile error ("unexpected token"): the class header
+# required `: NEWLINE INDENT`. It is the idiomatic empty placeholder and appears
+# constantly in stubs, exception hierarchies and protocol classes.
+#
+# Only `pass` is accepted as a one-line class body, deliberately. An empty body
+# registers no members, so the INDENT-keyed member pre-passes have nothing to
+# find and nothing to get wrong — which is what makes this slice separable from
+# the one-line DEF half of the ticket, where two scanners infer "is this name
+# bound inside a def?" from indent depth alone and would harvest a one-line def's
+# locals as module globals (re-opening
+# bug-nilpy-def-local-assignment-widens-module-global-to-variant in a new shape).
+# A one-line class body with real content is REFUSED rather than half-parsed.
+
+class Empty: pass
+
+
+class Sub(Empty): pass
+
+
+class Indented:
+    pass
+
+
+# the one-line class is a real class: constructible, subclassable, and its
+# instances carry dynamic attributes like any other
+e = Empty()
+s = Sub()
+print(type(e).__name__, type(s).__name__)
+print(isinstance(s, Empty))
+
+e.tag = 7
+print(e.tag)
+
+
+# it also mixes with ordinary classes declared either way
+class Holder:
+    def __init__(self):
+        self.inner = Empty()
+
+    def name(self):
+        return type(self.inner).__name__
+
+
+print(Holder().name())
+print(type(Indented()).__name__)
