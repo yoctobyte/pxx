@@ -2,8 +2,7 @@
 track: N
 prio: 60
 type: bug
-status: working
-owner: claude-AN
+blocked-by: [decide-nilpy-set-as-a-distinct-type-or-a-list]
 ---
 
 # Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0)

@@ -3,6 +3,7 @@ track: N
 prio: 55
 type: bug
 summary: "set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong"
+blocked-by: [decide-nilpy-set-as-a-distinct-type-or-a-list]
 ---
 
 # `set()` is a list wearing the name
