@@ -127,10 +127,24 @@ timeout "$SECONDS_TO_READ" cat "$PORT" > "$SER" 2>/dev/null || true
 
 # Everything after "Calling app_main()" is the program's own output; the serial
 # console turns each '\n' into '\r\n', so strip the CR to match a Linux oracle.
+#
+# esptool's hard-reset happens while this script is still getting to the read,
+# so on a fast board the banner — and the marker with it — can be gone before
+# the tty is open. A missing marker is therefore not an error: fall back to the
+# oracle's first line, then to the whole capture, so the user sees what the
+# board actually said instead of a bare "nothing arrived".
 OUT="$(awk 'f {print} /Calling app_main\(\)/{f=1}' "$SER" | tr -d '\r')"
+if [ -z "$OUT" ] && [ -n "$ORACLE" ] && [ -s "$ORACLE" ]; then
+  FIRST="$(head -1 "$ORACLE")"
+  OUT="$(tr -d '\r' < "$SER" | awk -v k="$FIRST" 'index($0,k){f=1} f {print}')"
+  [ -n "$OUT" ] && echo "esp_flash: no boot banner in the capture (the reset raced the reader); synced on the program's first line instead" >&2
+fi
 if [ -z "$OUT" ]; then
-  echo "esp_flash: nothing after 'Calling app_main()' in ${SECONDS_TO_READ}s. Raw log:" >&2
-  cat "$SER" >&2
+  OUT="$(tr -d '\r' < "$SER")"
+  [ -n "$OUT" ] && echo "esp_flash: no 'Calling app_main()' and no oracle match — showing the whole capture" >&2
+fi
+if [ -z "$OUT" ]; then
+  echo "esp_flash: the board said nothing in ${SECONDS_TO_READ}s. Try --seconds 20, or press RESET while it is reading." >&2
   rm -f "$SER" "$ORACLE"
   exit 1
 fi
