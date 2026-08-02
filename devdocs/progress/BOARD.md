@@ -38,7 +38,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-cdecl-indirect-over-6-integer-args |
 
-## backlog (191)
+## backlog (192)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -60,6 +60,7 @@ _none_
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-float-print-loses-precision-vs-cpython | N | 40 | bug | Float printing loses the last 1-2 significant digits vs CPython's shortest round-trip repr | — |
 | bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip | N | 20 | bug | `print(1e-20)` prints `0.0` — NilPy's float repr has no small-magnitude exponential form | — |
+| bug-nilpy-from-import-as-alias-is-discarded | N | 60 | bug | `from mod import NAME as ALIAS` — the alias is parsed and thrown away | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
 | bug-nilpy-int-prints-as-float-when-the-name-is-widened-later | N | 50 | bug | An int prints as `5.0` because the SAME NAME is assigned a float later in the file | — |
 | bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
@@ -2989,6 +2990,7 @@ _none_
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 65] [T] task-t-worktree-is-not-current-state
 - [p 60] [N] bug-nilpy-defaulted-param-before-star-args-rejects-short-call
+- [p 60] [N] bug-nilpy-from-import-as-alias-is-discarded
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [N] bug-nilpy-one-line-def-and-class-bodies-do-not-parse
 - [p 60] [N] bug-nilpy-same-kind-undefined-operators-still-compute
