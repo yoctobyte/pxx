@@ -3554,6 +3554,29 @@ begin
       ptk := Procs[cpi].Params[n].TypeKind;
       tsym := AllocVar('', ptk);
       aval := IRLowerAST(rawArg[n]);
+      { A FROZEN string value bound to a Pointer parameter needs the +8
+        length-prefix skip — the same decay the ordinary call-argument path
+        applies in the AN_CALL arm below (and the assign, binop and return paths
+        each apply for their own position). Capturing the argument into a temp
+        HERE bypasses all of them: the raw IR_CONST_STR landed in the pointer
+        slot, so the callee received a pointer at the 8-byte length prefix
+        instead of at char 0.
+
+        Only reachable at -O3, because only a call-bearing retained body forces
+        every argument to be temp-captured. `__pxx_open("/etc/localtime", 0, 0)`
+        then opened garbage and returned -2, /etc/localtime never loaded, and
+        localtime() silently reported UTC
+        (bug-a-o3-inline-retention-substitutes-a-global-read-across-a-call —
+        the slug describes the theory it was filed under, not this cause).
+
+        Keyed on the LOWERED value's tk, exactly like the call path, so a
+        managed tyAnsiString (already a char pointer) is correctly passed
+        as-is. }
+      if (ptk = tyPointer) and (aval >= 0) and (aval < IRCount) and
+         (IntToTypeKind(IRTk[aval]) = tyString) then
+        aval := IRAppend(IR_BINOP, aval,
+                         IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+                         Ord(tkPlus), 0, Ord(tyPointer));
       IRAppend(IR_STORE_SYM, tsym, aval, -1, 0, Ord(ptk));
       identNode := AllocNode(AN_IDENT);
       ASTIVal[identNode] := tsym;

@@ -6602,6 +6602,17 @@ test-opt: $(COMPILER)
 	  cmp -s /tmp/opt0_$$t.out /tmp/opt2_$$t.out || { echo "OPT DIFF O2: $$t"; exit 1; }; \
 	  cmp -s /tmp/opt0_$$t.out /tmp/opt3_$$t.out || { echo "OPT DIFF O3: $$t"; exit 1; }; \
 	done
+	# C: a string LITERAL argument to a Pointer param, through a shim whose
+	# retained body contains a call — the shape the -O3 inline splice
+	# temp-captures. Only -O3 lost the +8 frozen-string length-prefix skip, so
+	# the callee got a pointer at the length byte: __pxx_open("/etc/localtime")
+	# failed and localtime() silently reported UTC for every zone.
+	@for o in -O0 -O2 -O3; do \
+	  ./$(COMPILER) $$o -Ilib/crtl/include -Ilib/crtl/src test/c_inline_strlit_arg.c /tmp/c_inl_strlit >/dev/null && \
+	  out=$$(/tmp/c_inl_strlit); \
+	  [ "$$out" = "literal_ok=1 variable_ok=1" ] || \
+	    { echo "FAIL: c_inline_strlit_arg at $$o -> $$out"; exit 1; }; \
+	done; echo 'c_inline_strlit_arg: -O0/-O2/-O3 agree'
 	./$(COMPILER) --threadsafe test/test_atomic64.pas /tmp/opt0_atomic64 >/dev/null
 	./$(COMPILER) -O1 --threadsafe test/test_atomic64.pas /tmp/opt1_atomic64 >/dev/null
 	/tmp/opt0_atomic64 > /tmp/opt0_a64.out; /tmp/opt1_atomic64 > /tmp/opt1_a64.out

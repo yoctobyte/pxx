@@ -44,13 +44,12 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (213)
+## backlog (212)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
 | bug-a-integer-literal-not-typed-by-its-value-for-overload-resolution | A | 45 | bug | An untyped integer literal always types as LongInt (or Int64 if it does not fit), so overload resolution picks a different candidate than FPC: hi($1234) gives 0\|4660 where FPC gives 18\|52. Values are no longer truncated (that half is fixed) — this is the remaining FPC-parity gap. | — |
-| bug-a-o3-inline-retention-substitutes-a-global-read-across-a-call | O | 80 | bug | -O3 silently returns the wrong value: the non-leaf inline slice treats a GLOBAL read as re-readable and can evaluate it on the wrong side of the retained body's inner call, which writes it. localtime loses its timezone offset | — |
 | bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c | A | 40 | bug | The caller side now follows the C ABI for 64-bit arguments to external functions, but a pxx routine CALLED FROM C still spills them with the internal packed convention — so on xtensa, where the C ABI skips to an even register, a C caller and a pxx callee would disagree. Latent: nothing crosses that way today. | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-a-selfhost-recipe-should-rename-not-write-in-place | A | 55 | bug | The self-host chain compiles straight onto the path it is about to exec, so a concurrent fd holder makes the exec fail with ETXTBSY. Write to a temp name and rename — atomic in RUN_TMP, and a new inode | — |
@@ -366,7 +365,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1240)
+## done (1241)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -410,6 +409,7 @@ lives in git, not in a timestamp._
 | bug-a-nilpy-variant-element-not-usable-as-scalar | A | 85 | bug | NilPy: a list/dict ELEMENT cannot be used as a scalar — silent garbage or IR_UNSUPPORTED | — |
 | bug-a-o2-miscompiles-disassembler | A | 70 | bug | -O2 miscompiles the x86-64 disassembler (`WriteDisassemblyX64`) | — |
 | bug-a-o2-resident-param-stale-after-longjmp | A | 90 | bug | bug: -O2 (DEFAULT) resident param reads STALE after exception longjmp | — |
+| bug-a-o3-inline-retention-substitutes-a-global-read-across-a-call | O | 80 | bug | -O3 silently returns the wrong value: the non-leaf inline slice treats a GLOBAL read as re-readable and can evaluate it on the wrong side of the retained body's inner call, which writes it. localtime loses its timezone offset | — |
 | bug-a-open-array-of-variant-silent-miscompile | A | 45 | bug | Open `array of Variant` parameter silently miscompiles (reads only first elem) | — |
 | bug-a-overload-resolution-ignores-class-identity | A | 80 | bug | Overload resolution never checks CLASS IDENTITY for a class-typed parameter — it takes the first candidate whose arity fits, so an unrelated class binds silently and the callee reads one class's fields as another's | — |
 | bug-a-parallel-for-aarch64-multi-capture | A | 40 | bug | aarch64: `parallel for` with 2+ captures → Bus error (alignment) | — |
@@ -1650,7 +1650,6 @@ lives in git, not in a timestamp._
 - [urgent p 80] [P] bug-pascal-procvar-in-value-context-takes-address-instead-of-calling (unblocks 1)
 - [urgent p 80] [C] bug-cfront-plain-char-is-unsigned-and-folds-inconsistently
 - [urgent p 75] [C] bug-cfront-arch-predefines-always-x86-64
-- [p 80] [O] bug-a-o3-inline-retention-substitutes-a-global-read-across-a-call
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro

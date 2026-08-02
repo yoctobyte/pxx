@@ -3,6 +3,8 @@ summary: "-O3 silently returns the wrong value: the non-leaf inline slice treats
 type: bug
 track: A
 prio: 80
+status: done
+owner: claude-AN-night
 ---
 
 # -O3 reads a global across the call that writes it (silent wrong value)
@@ -104,3 +106,96 @@ The optdiff report also carried a `Segmentation fault (core dumped)` line
 adjacent to this diff. Direct runs at -O0/-O2/-O3 all exit 0, so that crash is
 unexplained and may belong to another program in the same shard — worth a
 glance, but do not assume it is this bug.
+
+
+## Resolved 2026-08-02 — the ROOT CAUSE ABOVE IS WRONG. It was never the global.
+
+Kept the slug (it is what the bisect pointed at), but the mechanism section is a
+plausible story that was never diffed against anything, so: **no global read is
+involved, and `time.c` was never the miscompiled code.** `pxx_tz_offset` is C,
+and the C frontend does no inline retention at all — `TryRetainInlineBody` is
+called from one place, the Pascal routine-body parser. The theory could not have
+been true for a C program.
+
+### What it actually was
+
+A **string LITERAL argument to a Pointer parameter loses its +8 skip** over the
+frozen string's length prefix when the -O3 inline splice TEMP-CAPTURES it.
+
+Every ordinary position applies that decay — the call-argument path
+(`ir.inc`, the AN_CALL arm's `IRTk[value] = tyString` + pointer-param test), the
+assignment path, the binop path, the return path — four ad-hoc copies. The
+splice's own argument capture in `IRInlineExpand` was a fifth site that did not,
+so the raw `IR_CONST_STR` landed in the pointer slot and the callee got a
+pointer at the length byte instead of at char 0.
+
+Reachable only at -O3 because only a **call-bearing** retained body forces every
+argument to be temp-captured (`InlineBodyHasCall` -> `anyImpure`); with direct
+substitution the literal reaches the body's own argument position and decays
+correctly. `__pxx_open` is exactly that shape (`Result := PalOpen(...)`), which
+is why `lib/crtl`'s `pxx_tz_load` could not open `/etc/localtime`, `pxx_tz_len`
+stayed 0, and the offset came out 0 — the observed symptom, reached by a
+completely different route than the one this ticket described.
+
+Same family as the recorded landmine "hand-built IR_ARG skips IRLowerCallArg".
+
+### The 11-line repro
+
+```c
+extern int __pxx_open(const char *p, int flags, int mode);
+const char *p = "/etc/localtime";
+int a = __pxx_open("/etc/localtime", 0, 0);   /* -O2: 3   -O3: -2 */
+int b = __pxx_open(p, 0, 0);                  /* -O2: 3   -O3:  3 */
+```
+
+The literal-vs-variable pair is the whole diagnosis: through a variable the
+ASSIGNMENT already applied the decay, which is why this survived so long.
+
+### What cracked it — a new probe, now permanent
+
+`PXXDBG=a.inline` (added here, documented in `devdocs/dev/debug-switches.md`)
+lists every routine whose body is retained for inlining, with its shape, param
+count, and whether it contains a call or reads a global. Flipping `OptLevel < 3`
+gates tells you which SLICE; it never tells you which ROUTINE, and that is where
+an -O3 hunt stalls. The retained list showed 120 bodies, the `hasCall` ones were
+all `__pxx_*` PAL shims, and the C program under test calls one with a string
+literal — repro in minutes.
+
+### The global-read hazard: MEASURED, and it does not exist
+
+The suggested fix direction was implemented first (refuse a `skGlobal` read in a
+call-bearing retained body) and it changed nothing — the probe showed no
+retained body in this program reads a global at all. Then it was tested
+directly, with the guard disabled:
+
+```pascal
+function Load: Integer; begin g := 7; Result := 1; end;
+function F: Integer; begin Result := Load + g; end;   { F=8 at -O0/-O2/-O3 }
+function H: Integer; begin Result := g + Load; end;   { H=1 at -O0/-O2/-O3 }
+```
+
+Both retained with `hasCall readsGlobal`, both identical at every -O level. The
+reason is structural: **arguments are placeholders SUBSTITUTED at each use;
+a body's own global read is cloned in place and lowered in the body's order**,
+so nothing can move it across the body's inner call. The guard was removed
+rather than kept as insurance — speculative refusal of inlining, justified by a
+hazard that measurement says is not there. The `readsGlobal` flag survives as
+probe output only, because it is the first thing anyone will suspect next time.
+
+### Verified
+
+- `test/c_inline_strlit_arg.c` (new, wired into `make test-opt`) — the literal
+  and variable forms agree at -O0/-O2/-O3.
+- `test/ctime_localtime.c` byte-identical output at -O0/-O2/-O3.
+- self-host fixedpoint byte-identical; `gate.sh quick` GREEN; FPC seed build
+  clean.
+
+### Note on the adjacent segfault
+
+Not investigated — direct runs at every -O level exit 0 here too, so the
+ticket's own guess that it belongs to another program in the shard still stands.
+`optdiff` shard 8/12 re-running against this SHA is the check.
+
+## Log
+- 2026-08-02 — resolved.
+- 2026-08-02 — resolved, commit HEAD.

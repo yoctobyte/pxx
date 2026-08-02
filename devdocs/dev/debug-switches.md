@@ -144,12 +144,24 @@ enables a whole lane.
 | `n.ctorargs` | N (NilPy) | every NilPy construction's argument AST kind + type kind |
 | `a.ir:<proc>` | A (core) | the IR of ONE routine (`a.ir:*` = `--dump-ir`) |
 | `a.ast:<proc>` | A (core) | that routine's AST tree before lowering |
+| `a.inline` | A (core) | one line per routine whose body is RETAINED for inline expansion: name, body shape (1 = `Result := E`, 2 = if/else ternary, 3 = straight-line), param count, and whether the body contains a call / reads a global |
 | `n.*` / `a.*` | — | everything in a lane |
 | `all` | — | everything |
 
 A topic ending in `:<name>` takes an argument — the routine to dump. That is the
 difference between 19 lines and 83,046: `--dump-ir` dumps every body in the
 program, `a.ir:combine` dumps the one you asked about.
+
+`a.inline` answers the question an -O3 miscompile actually poses. Bisecting by
+flipping `OptLevel < 3` gates tells you which SLICE is responsible and never
+which ROUTINE, and the wrong routine is where an -O3 hunt goes to die: the only
+evidence is a plausible wrong value somewhere else entirely. Listing what was
+retained, with `hasCall` marking the bodies whose arguments must be
+temp-captured, turned
+`bug-a-o3-inline-retention-substitutes-a-global-read-across-a-call` from a
+theory about globals into an 11-line repro — the retained list showed the
+`__pxx_*` PAL shims, and the C program under test called one with a string
+literal.
 
 `a.ast` is STRUCTURAL, not pretty-printed — kind and type-kind are numbers.
 There are 127 `AN_` constants and no name table; adding one would be a second

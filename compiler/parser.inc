@@ -253,7 +253,20 @@ begin
         if not InlineScalarTk(Syms[idx].TypeKind) then Exit;
         if InlineParamIndexOf(procIdx, idx) >= 0 then
           InlineExprSimple := True
-        else if (Syms[idx].Kind = skGlobal) or (Syms[idx].Kind = skConst) then
+        else if Syms[idx].Kind = skGlobal then
+        begin
+          { Recorded for the PXXDBG=a.inline probe only. A global is MUTABLE, so
+            it LOOKS like the same hazard the arguments have — but it is not:
+            arguments are placeholders SUBSTITUTED at each use, while the body's
+            own global read is cloned in place and lowered in the body's own
+            order, so nothing can move it across the body's inner call. Measured
+            both ways (`Result := Load + g` and `Result := g + Load`, where Load
+            writes g) at -O0/-O2/-O3: identical. Left visible in the probe
+            because it is the first thing anyone will suspect. }
+          InlineRetentionSawGlobal := True;
+          InlineExprSimple := True;
+        end
+        else if Syms[idx].Kind = skConst then
           InlineExprSimple := True
         else if allowLocals and (Syms[idx].Kind = skLocal) then
           InlineExprSimple := True;
@@ -291,6 +304,22 @@ begin
         InlineExprSimple := True;
       end;
   end;
+end;
+
+{ PXXDBG=a.inline — one line per routine whose body is RETAINED for inline
+  expansion, with the two properties that make the non-leaf slice dangerous.
+  Exists because an -O3 inline miscompile is otherwise invisible: the only
+  evidence is a wrong value in an unrelated routine, and bisecting by flipping
+  `OptLevel < 3` gates tells you which SLICE but never which ROUTINE.
+  `shape` is 1 (Result := E), 2 (if/else ternary) or 3 (straight-line body). }
+procedure DbgInlineRetained(procIdx, shape: Integer);
+begin
+  if not PxxDbgEnabled('a.inline') then Exit;
+  Write('PXXDBG a.inline RETAIN ', Procs[procIdx].Name, ' shape=', shape,
+        ' params=', Procs[procIdx].ParamCount);
+  if InlineRetentionSawCall then Write(' hasCall');
+  if InlineRetentionSawGlobal then Write(' readsGlobal');
+  WriteLn;
 end;
 
 { Alloc a node in the reserved low inline AST region [0..INLINE_AST_RESERVE);
@@ -562,6 +591,7 @@ begin
   cloned := CloneToInlineRegion(bodyNode, procIdx);
   if cloned < 0 then begin InlineASTNext := startNext; Exit; end;
   if InlineASTNext - startNext > 256 then begin InlineASTNext := startNext; Exit; end;
+  DbgInlineRetained(procIdx, 3);
   InlineBodyRoot[procIdx]   := cloned;
   InlineBodyIsStmt[procIdx] := True;
   InlineBodyHasCall[procIdx] := InlineRetentionSawCall;
@@ -582,6 +612,7 @@ begin
   if OptLevel < 2 then Exit;
   if procIdx < 0 then Exit;
   InlineRetentionSawCall := False;   { non-leaf slice: set by InlineExprSimple on any accepted AN_CALL }
+  InlineRetentionSawGlobal := False; { ...and on any accepted GLOBAL read — diagnostic only, see InlineExprSimple }
   if not Procs[procIdx].IsFunc then Exit;
   if ProcExternal[procIdx] or ProcCdecl[procIdx] or ProcVariadic[procIdx] then Exit;
   if ProcIsGenerator[procIdx] or ProcIsStackless[procIdx] then Exit;
@@ -620,6 +651,7 @@ begin
     i := CloneToInlineRegion(rhs, procIdx);
     if i < 0 then begin InlineASTNext := startNext; Exit; end;
     if InlineASTNext - startNext > 48 then begin InlineASTNext := startNext; Exit; end;
+    DbgInlineRetained(procIdx, 1);
     InlineBodyRoot[procIdx] := i;
     InlineParamCnt[procIdx] := Procs[procIdx].ParamCount;
     InlineBodyHasCall[procIdx] := InlineRetentionSawCall;
@@ -646,6 +678,7 @@ begin
     i := BuildInlineTernary(condN, aE, bE, procIdx, Ord(Syms[retSym].TypeKind));
     if i < 0 then begin InlineASTNext := startNext; Exit; end;
     if InlineASTNext - startNext > 96 then begin InlineASTNext := startNext; Exit; end;
+    DbgInlineRetained(procIdx, 2);
     InlineBodyRoot[procIdx] := i;
     InlineParamCnt[procIdx] := Procs[procIdx].ParamCount;
     InlineBodyHasCall[procIdx] := InlineRetentionSawCall;
