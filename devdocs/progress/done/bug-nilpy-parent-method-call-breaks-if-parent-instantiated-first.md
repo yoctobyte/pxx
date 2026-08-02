@@ -2,6 +2,7 @@
 track: N
 prio: 60
 type: bug
+status: done
 ---
 
 # `A.call(self)` won't parse if `A` was instantiated at module level first
@@ -131,3 +132,6 @@ Two process notes that earned their place:
 - **The first six guesses were wrong and the seventh measurement was right.**
   The ordering theory in the superseded section is a good record of a plausible
   story that no oracle had been diffed against.
+
+## Log
+- 2026-08-02 — resolved, commit 3ae48b3e8.
