@@ -26,3 +26,6 @@ pascal26:135844: error: global fixup overflow
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-02 — auto-closed by the xeon watcher: `test-core#src:compiler/compiler.pas@2` passes at 91f063250779 (tier native); it was red at 96cffaf08de5. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
