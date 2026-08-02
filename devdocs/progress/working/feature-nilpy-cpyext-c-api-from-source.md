@@ -3,6 +3,8 @@ track: N
 prio: 65
 type: feature
 blocked-by: []
+status: working
+owner: claude-AN-night
 ---
 
 # cpyext: compile a CPython C extension's SOURCE against our own `Python.h`
@@ -323,3 +325,148 @@ invisible forever; the skip made the bug someone's job, and the fix cost one key
 in the uses guard.
 
 `make test-nilpy` now carries M1 as a real assertion alongside M2/M3/MarkupSafe.
+
+
+## 2026-08-02 — M5 SCOPING PASS (measured, not estimated)
+
+M5 was left with "deserves its own scoping pass before starting". Here it is,
+with numbers. Cython 3.2.9 in a throwaway venv; the module is the smallest
+useful one (two `def`s, one with a `cdef int` loop). Nothing was implemented.
+
+### First finding: the measurement was lying, and so was the compiler
+
+`cython -3 cyadd.pyx` emits 8061 lines. Compiling that against our `Python.h`
+reported ONE error — `PyInit_cyadd` undeclared — which reads like "almost
+there". It was the opposite. Cython's output opens with
+
+```c
+#include "Python.h"
+#ifndef Py_PYTHON_H
+    #error Python headers needed to compile C extensions...
+#elif PY_VERSION_HEX < 0x03080000
+    #error Cython requires Python 3.8+.
+#else
+    ...the entire 8000-line module...
+#endif
+```
+
+Our header defined neither `Py_PYTHON_H` nor `PY_VERSION_HEX`, so the `#elif`
+was true and **the whole module body was excluded** — and cfront drops `#error`
+silently, so nothing said so. Filed
+[[bug-cfront-error-directive-silently-ignored]] (Track C, prio 75): `#error` in
+a live branch compiles clean, which turns any "this build is unsupported" guard
+into a silently truncated program. `gcc -E -I lib/cpyext/include` is the
+reliable oracle for this stage until that lands, and is what every number below
+was taken with.
+
+`Py_PYTHON_H` + the `PY_*_VERSION` family are now defined in `Python.h`
+(committed with this note; all four existing cpyext tests stay green). The
+version claimed is a SOURCE-level claim and a deliberate knob: it selects which
+of Cython's many `#if PY_VERSION_HEX` paths the generated code takes.
+
+### The decisive measurement: two knobs cut the surface by 3.5x
+
+Missing identifiers (types, macros, constants — not counting functions), for the
+same tiny module:
+
+| Cython flags | plain | `-DPy_LIMITED_API=0x030c0000` |
+| --- | --- | --- |
+| default (`binding=True`) | **78** | **53** |
+| `-X binding=False` | **46** | **22** |
+
+`Py_LIMITED_API` is the important one, and not merely for the count: it removes
+every direct-struct-layout entry — `PyASCIIObject`, `PyListObject`,
+`PyTupleObject`, `PyLongObject`, `PyCFunctionObject`, `PyCodeObject`,
+`PyFrameObject`, `PyLong_SHIFT`, `digit`. Those are exactly the inlined-layout
+dependencies whose absence is the whole reason this ticket rejected loading a
+prebuilt `.so`. Under the limited API an extension can only reach objects
+through functions, which is precisely the contract this runtime can honour.
+
+`binding=False` drops Cython's CyFunction machinery — its own heap type with
+`tp_descr_get`, GC traverse/clear, vectorcall. Costly to support, and it buys
+only that `module.f` behaves like a Python function object rather than a
+builtin. A perfectly good first rung.
+
+So: **M5 should target `Py_LIMITED_API` Cython output, and M5a should add
+`-X binding=False`.** This also matches the ticket's own stated aim ("aim at the
+limited API / abi3 surface as the definition of done enough") — it turns out to
+be the cheap path as well as the principled one.
+
+### M5a shopping list — the whole thing, measured
+
+With `binding=False` + `Py_LIMITED_API`, the missing IDENTIFIERS are 20 (the 22
+above include `value`/`zero`, which are cascade noise from `LONG_LONG`):
+
+- typedefs: `LONG_LONG`, `PY_INT64_T`, `Py_hash_t`
+- constants: `PY_SSIZE_T_MAX`, `Py_Version`, `PY_VECTORCALL_ARGUMENTS_OFFSET`
+- comparison ops: `Py_EQ`, `Py_LT`
+- method flags: `METH_KEYWORDS`
+- singletons: `Py_True`, `Py_False`
+- type objects: `PyDict_Type`, `PyLong_Type`
+- exceptions: `PyExc_AttributeError`, `PyExc_DeprecationWarning`,
+  `PyExc_ImportError`, `PyExc_OverflowError`
+- multi-phase init: `Py_mod_create`, `Py_mod_exec`
+- `Py_eval_input`
+
+Nearly all are `#define`s or extern object pointers next to the four
+`PyExc_*` we already have. **This is a small header change, not a design.**
+
+Plus four headers Cython `#include`s by name and CPython really does ship
+separately: `pythread.h`, `compile.h`, `frameobject.h`, `traceback.h`. Under the
+limited API their CONTENTS are unreachable (the code using them is compiled
+out), so minimal honest files suffice — but they must exist, and each should say
+in a comment what it deliberately does not provide.
+
+### The real cost is the FUNCTION surface: ~93 entries
+
+Identifiers are the cheap half. Every `Py*` name referenced by the limited-API
+preprocessed output, minus what our header declares, is **93** — the shape of
+the work, in rough groups:
+
+- object protocol: `PyObject_Call`, `_CallFunctionObjArgs`, `_GetAttr(String)`,
+  `_SetAttr(String)`, `_Hash`, `_IsTrue`, `_RichCompareBool`, `_Vectorcall`,
+  `_VectorcallMethod`, `Py_TYPE`
+- long/number: `PyLong_As{LongLong,Ssize_t,UnsignedLong,UnsignedLongLong}`,
+  `PyLong_From{LongLong,Size_t,UnsignedLong,UnsignedLongLong}`, `PyLong_Check(Exact)`,
+  `PyNumber_{And,Index,Invert,Long,Rshift}`
+- unicode: `PyUnicode_{Compare,CompareWithASCIIString,Decode,DecodeUTF8,FromFormat,InternInPlace,CheckExact}`
+- dict/tuple/bytes/bytearray: `PyDict_{Contains,GetItemString,GetItemWithError,SetItemString,Update}`,
+  `PyTuple_{Check,Size}`, `PyBytes_{AsStringAndSize,CheckExact}`, the `PyByteArray_*` four
+- errors: `PyErr_{ExceptionMatches,Fetch,Restore,Format,GivenExceptionMatches,WarnEx,WarnFormat}`
+- import/module/sys: `PyImport_{AddModule,GetModuleDict,ImportModule}`,
+  `PyModule_{GetDict,NewObject}`, `PySys_GetObject`
+- memory: `PyMem_Malloc`, `PyMem_Realloc`, `PyMemoryView_FromMemory`
+- the tail nobody should implement yet: `PyEval_EvalCode`, `Py_CompileString`,
+  `PyTraceBack_Here`, `PyInterpreterState_*`, `PyType_GetQualName`
+
+Many are referenced from Cython utility code that a given module never
+executes, so the honest sequencing is: declare all of them, implement on
+first LINK failure, and let anything unimplemented fail at link with its own
+name (the ticket's existing rule — "never silently do nothing at run time").
+
+### Recommended milestone split
+
+- **M5a** — `-X binding=False` + `Py_LIMITED_API`, one arithmetic `def`.
+  The 20 identifiers, the 4 headers, and however many of the 93 functions the
+  link actually demands. This is the rung that proves the Cython shape works.
+- **M5b** — drop `binding=False` (CyFunction: a heap type via `PyType_FromSpec`,
+  `tp_descr_get`, GC slots). This is where the type-object layer stops being
+  avoidable.
+- **M5c** — a `cdef class`, and a real Cython-built package from PyPI.
+
+M5b is the honest boundary of "Cython support"; M5a is a weekend and unlocks the
+measurement loop for the rest.
+
+### Reproducing
+
+```sh
+python3 -m venv v && v/bin/pip install cython
+v/bin/cython -3 -X binding=False -o cyadd_nb.c cyadd.pyx
+gcc -fsyntax-only -w -DPy_LIMITED_API=0x030c0000 \
+    -I <stub-headers> -I lib/cpyext/include -I lib/crtl/include cyadd_nb.c
+```
+
+Use **gcc** for the header-surface inventory, not cfront: it reports `#error`
+and gives one diagnostic per missing name. Switch to cfront once the surface is
+declared — from there the walls are C-frontend gaps and link failures, which is
+what cfront is the right tool to find.

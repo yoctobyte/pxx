@@ -13,11 +13,12 @@ lives in git, not in a timestamp._
 | bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size | C | 85 | bug | `sizeof(p->arr)` returns the POINTER size, not the array size — silent buffer overflow | — |
 | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling | P | 80 | bug | A procedural variable in a value context takes its ADDRESS instead of calling it | — |
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
+| feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 
 ## unfinished (7)
 
@@ -55,6 +56,7 @@ lives in git, not in a timestamp._
 | bug-a-selfhost-recipe-should-rename-not-write-in-place | A | 55 | bug | The self-host chain compiles straight onto the path it is about to exec, so a concurrent fd holder makes the exec fail with ETXTBSY. Write to a temp name and rename — atomic in RUN_TMP, and a new inode | — |
 | bug-b-writeln-float-with-17-decimals-prints-garbage | A | 55 | bug | `WriteLn(x:0:17)` prints garbage | — |
 | bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity | C | 55 | bug | In a mixed Pascal+C build, a C call binds to a same-named Pascal routine at the wrong arity | — |
+| bug-cfront-error-directive-silently-ignored | C | 75 | bug | `#error` in a LIVE branch is silently ignored — the program compiles and runs. Any C source whose configuration guard says \"this build is unsupported\" is built anyway, usually with most of the file #if'd away. Found while scoping cpyext M5: it made a Cython module look like it compiled clean when 5000 of its 8000 lines had been discarded. | — |
 | bug-cfront-no-entry-stub-for-xtensa | C | 40 | bug | No C program entry stub for xtensa — no C compiles for that target at all | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-cfront-sizeof-unparenthesised-subscript | C | 50 | bug | `sizeof a[0]` is a parse error — the array-length idiom does not compile | — |
@@ -166,7 +168,6 @@ lives in git, not in a timestamp._
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
-| feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-dataclass-expression-field-default | N | 40 | feature | A @dataclass field default may only be a scalar literal, field(default_factory=list/dict) or a zero-arg lambda. An expression (`x: int = 2 + 3`) is refused; a plain class attribute with the same initialiser is evaluated | — |
 | feature-nilpy-for-loop-getitem-protocol-fallback | N | 25 | feature | `for x in obj:` doesn't fall back to `__getitem__`/`__len__` for a custom container | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
@@ -1651,11 +1652,11 @@ lives in git, not in a timestamp._
 - [urgent p 80] [C] bug-cfront-plain-char-is-unsigned-and-folds-inconsistently
 - [urgent p 75] [C] bug-cfront-arch-predefines-always-x86-64
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
+- [p 75] [C] bug-cfront-error-directive-silently-ignored
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] regression-optdiff-shard8-12
 - [p 65] [U] decide-nilpy-class-attribute-instance-read-model (unblocks 1)
-- [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 65] [T] task-t-worktree-is-not-current-state

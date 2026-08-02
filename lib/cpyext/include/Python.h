@@ -49,6 +49,43 @@
                         MarkupSafe's _speedups.c calls assert() without its own
                         #include, relying on exactly that */
 
+/* --- version identity ---------------------------------------------------
+ * Real CPython's Python.h defines `Py_PYTHON_H` and the PY_*_VERSION family,
+ * and generated / vendored extension source gates on them BEFORE it emits a
+ * single line. Cython's output is the extreme case:
+ *
+ *     #include "Python.h"
+ *     #ifndef Py_PYTHON_H
+ *         #error Python headers needed ...
+ *     #elif PY_VERSION_HEX < 0x03080000
+ *         #error Cython requires Python 3.8+.
+ *     #else
+ *         ...the entire module...
+ *     #endif
+ *
+ * Without these, that `#elif` is true and the whole module body is excluded —
+ * and because cfront currently drops `#error` silently
+ * (bug-cfront-error-directive-silently-ignored) the file appears to compile.
+ *
+ * The version claimed here is a SOURCE-LEVEL claim only ("the API surface this
+ * header offers is shaped like 3.12's"), never an ABI one — see the header
+ * note above. It is deliberately a single place to turn: which minor version
+ * we claim decides which of Cython's many `#if PY_VERSION_HEX` paths the
+ * generated code takes, so it is a knob for the cpyext milestones to tune with
+ * measurements, not a fact about this runtime. */
+#define Py_PYTHON_H 1
+#define PY_MAJOR_VERSION  3
+#define PY_MINOR_VERSION  12
+#define PY_MICRO_VERSION  0
+#define PY_RELEASE_LEVEL  0xF   /* final */
+#define PY_RELEASE_SERIAL 0
+#define PY_VERSION_HEX ((PY_MAJOR_VERSION << 24) | \
+                        (PY_MINOR_VERSION << 16) | \
+                        (PY_MICRO_VERSION <<  8) | \
+                        (PY_RELEASE_LEVEL <<  4) | \
+                        (PY_RELEASE_SERIAL))
+#define PY_VERSION "3.12.0"
+
 typedef long Py_ssize_t;
 
 /* --- object model -------------------------------------------------------
