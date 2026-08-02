@@ -1,0 +1,60 @@
+# bug-nilpy-mixed-type-and-or-returns-a-bool-not-the-operand — the BOOLEAN half
+#
+# decide-nilpy-and-or-return-operand-or-bool settled that `and`/`or` return an
+# OPERAND, as Python's do. The mixed str-vs-number half landed; pairs involving a
+# BOOLEAN were deliberately held back, on the grounds that a str-vs-Boolean pair
+# was the original segfault repro.
+#
+# But that repro is precisely the "type the ternary as one arm and read the other
+# through it" hazard, and the tyVariant fallback is what removed it — the same
+# argument that admitted str-vs-number admits str-vs-Boolean. Without them:
+#
+#   True and 0     -> False   (CPython: 0)
+#   True and "s"   -> True    (CPython: 's')
+#   False or "s"   -> True    (CPython: 's')
+#   flag and value -> a Boolean instead of the value
+#
+# The last is a very ordinary Python line, and the failure is silent.
+#
+# The CONDITION forms below are the regression guard, not decoration: a condition
+# only truthiness-tests the result, so it must be unaffected — and the has()
+# function is the original segfault repro's own shape.
+
+print(True and 0)
+print(True and 5)
+print(False or 0)
+print(False or "s")
+print(True and "s")
+print(1 and 0)
+print(0 and 1)
+print(True or 0)
+print(False and 0)
+t = True
+print(t and 0)
+z = 0
+print(True and z)
+# the ORIGINAL segfault repro: a string and a Boolean pair, used AS A CONDITION
+def has(w, f):
+    if f and w.upper() != f:
+        return "differs"
+    return "same"
+print(has("ab", "AB"), has("ab", "ZZ"), has("ab", ""))
+
+s = "x"
+flag = True
+if s and flag:
+    print("cond1")
+if flag and s:
+    print("cond2")
+if "" or flag:
+    print("cond3")
+while flag and s:
+    flag = False
+print("loop done")
+print(not (s and flag), not ("" or False))
+
+# and the VALUE forms that were wrong
+print(True and 0, True and "s", False or "s", flag and s)
+print(0 or True, "" and True, True or "s", False and "s")
+v = flag and s
+print(v)

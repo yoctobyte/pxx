@@ -2023,15 +2023,25 @@ begin
     it), which is what makes this safe now in a way the original comment's
     "typing the ternary as either arm's type" concern does not apply to —
     the ternary is typed VARIANT, not str or int, so neither arm is read
-    through the other's representation. Boolean is deliberately NOT included
-    here (PyIsIntLikeTk already excludes it) — a str-vs-Boolean pair is
-    exactly the segfault repro the original rule was written to avoid, and
-    stays on the boolean lowering. }
+    through the other's representation.
+
+    BOOLEAN pairs are admitted too, as of 2026-08-02. They were held back on
+    the grounds that a str-vs-Boolean pair is the original segfault repro —
+    but that repro is precisely the "type the ternary as one arm and read the
+    other through it" hazard, and the tyVariant fallback is what removed it;
+    the same argument that admits str-vs-number admits str-vs-Boolean. Without
+    them `True and 0` gave False, `True and "s"` and `False or "s"` gave True,
+    and a plain `flag and value` — a very ordinary Python line — returned a
+    Boolean instead of the value. Measured against CPython, including the
+    original repro shape (a str/Boolean pair used AS A CONDITION), which is
+    unchanged because a condition only truthiness-tests the result. }
   Result := (ta = tyVariant) or (tb = tyVariant) or (ta = tyClass) or (tb = tyClass)
             or (PyIsStrBaseTk(ta) and PyIsStrBaseTk(tb))
             or (PyIsIntLikeTk(ta) and PyIsIntLikeTk(tb))
-            or (PyIsStrBaseTk(ta) and (PyIsIntLikeTk(tb) or TypeIsFloat(tb)))
-            or (PyIsStrBaseTk(tb) and (PyIsIntLikeTk(ta) or TypeIsFloat(ta)))
+            or (PyIsStrBaseTk(ta) and (PyIsIntLikeTk(tb) or TypeIsFloat(tb) or (tb = tyBoolean)))
+            or (PyIsStrBaseTk(tb) and (PyIsIntLikeTk(ta) or TypeIsFloat(ta) or (ta = tyBoolean)))
+            or ((ta = tyBoolean) and (PyIsIntLikeTk(tb) or TypeIsFloat(tb)))
+            or ((tb = tyBoolean) and (PyIsIntLikeTk(ta) or TypeIsFloat(ta)))
             or (ta = tb);
 end;
 
