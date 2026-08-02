@@ -53,7 +53,7 @@ they asked for libc. Implementing this means replacing that `{$error}` with the
 `uses` entry and the two dispatch calls — the mutual-exclusion guard against
 `-dPXX_DNS_RESOLVED` is already there and already tested.
 
-## Landed 2026-08-02
+## Landed 2026-08-02 (commit 55b0a5b1e)
 
 `lib/rtl/dns_libc.pas` — `dlopen("libc.so.6")` + `getaddrinfo`/`freeaddrinfo`
 through the existing dynlib machinery, wired into `dns.pas` behind
