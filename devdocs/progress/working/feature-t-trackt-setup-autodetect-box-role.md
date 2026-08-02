@@ -3,6 +3,8 @@ summary: "trackt's profile wizard asks instead of detecting, and its NON-INTERAC
 type: feature
 track: T
 prio: 70
+status: working
+owner: claude@xeon
 ---
 
 # `trackt setup` should detect the box and default to the right role

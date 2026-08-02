@@ -955,9 +955,37 @@ def set_prio_auto(path: Path, value: int) -> None:
 
 
 def set_field(path: Path, marker: str, value: str) -> None:
+    """Write `<marker>: <value>` in whichever form the ticket already uses.
+
+    Prefers an existing `- **Marker:** ...` bullet; otherwise writes the YAML
+    frontmatter key, replacing it, inserting it into the block, or creating a
+    block — the same ladder `set_prio_auto` uses.
+
+    The fallback is the bug fix: this used to be a bare `pat.sub()`, so a ticket
+    with only YAML frontmatter (no bullet to replace) was written back BYTE FOR
+    BYTE UNCHANGED while `claim`/`resolve` still printed success. Owner was
+    silently dropped on every modern ticket — `check` then reported NO-OWNER for
+    tickets that had been claimed correctly, and on a two-box fleet the claim IS
+    the distributed mutex, so a claim that does not stick is two agents doing
+    the same work (which happened on 2026-07-31).
+
+    The key is matched only INSIDE the frontmatter block: a `status:` line in
+    prose must not be mistaken for the field.
+    """
     text = path.read_text(encoding="utf-8")
     pat = re.compile(rf"^(\s*-?\s*\*\*{re.escape(marker)}:\*\*\s*).*$", re.I | re.M)
-    text = pat.sub(rf"\g<1>{value}", text, count=1)
+    text, hits = pat.subn(rf"\g<1>{value}", text, count=1)
+    if not hits:
+        key = marker.lower()
+        line = f"{key}: {value}"
+        fm = re.match(r"---\n(.*?)\n---\n", text, re.S)
+        if fm and re.search(rf"(?mi)^{re.escape(key)}:.*$", fm.group(1)):
+            block = re.sub(rf"(?mi)^{re.escape(key)}:.*$", line, fm.group(1), count=1)
+            text = text.replace(fm.group(0), f"---\n{block}\n---\n", 1)
+        elif fm:
+            text = text.replace(fm.group(0), f"---\n{fm.group(1)}\n{line}\n---\n", 1)
+        else:
+            text = f"---\n{line}\n---\n\n" + text
     path.write_text(text, encoding="utf-8")
 
 
