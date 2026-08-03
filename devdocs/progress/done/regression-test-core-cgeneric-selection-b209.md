@@ -31,3 +31,6 @@ pascal26:35: error: _Generic: no matching association and no default
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-03 — auto-closed by the xeon watcher: `test-core#src:test/cgeneric_selection_b209.c` passes at 6995a1a0d618 (tier native); it was red at 07414aa8944b. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
