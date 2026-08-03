@@ -188,4 +188,4 @@ outer handler; `return` out of a try body; and a plain try/except unchanged.
 canary).
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit 586c90f0a.
