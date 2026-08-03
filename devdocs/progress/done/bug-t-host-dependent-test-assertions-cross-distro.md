@@ -129,4 +129,4 @@ dependency being present, and the triage rule lands in the Track T notes.
   the ticket names — each new distro multiplies the surface — is real but
   belongs to [[feature-t-host-roles-native-vs-qemu-topology]] when the rPis
   land; the rule above is what makes that cheap.
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit c080b092a.
