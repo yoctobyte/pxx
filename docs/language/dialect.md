@@ -108,6 +108,62 @@ the register the C function reads — while `TCdecl` yields the correct `42.0`.
 The rule of thumb: **if you are writing a type for a pointer to a C function,
 write `cdecl` on it.** Everywhere else the marker is documentation.
 
+## Routine directives
+
+Calling conventions are not the only decorators, and the rest are not uniformly
+inert either. A directive here falls into one of three groups, and it is worth
+knowing which — an inert one is free to write, a load-bearing one changes what
+is compiled, and a rejected one stops the build.
+
+### Load-bearing
+
+These change the routine. Several refuse to compile when they cannot be honored,
+which is deliberate: silently ignoring them would produce a working build that
+does the wrong thing.
+
+| directive | effect |
+| --- | --- |
+| `assembler` | the body is inline assembly; an ordinary `begin` body is an error |
+| `generator` | the routine becomes a generator, and must be a function (its result type is the yielded element type) |
+| `async` | asynchronous routine |
+| `stackless` | selects the stackless strategy for an async routine |
+| `interrupt` | raw hardware-vector ISR. Implemented for riscv32 (ESP32-C3) and xtensa Call0 (ESP32-S3) only; on any other target it is an **error**, naming `iram` as the alternative for an IDF-registered ISR |
+| `flexcolumn` | call arguments accept `write`-style `:width[:decimals]` modifiers |
+| `external` | the routine is a dynamically-linked import |
+| `virtual`, `override`, `dynamic`, `abstract` | method dispatch (on a class member declaration) |
+| `static` | on a **class method** declaration: no `Self` |
+
+### Accepted and ignored
+
+Written for the reader, or for FPC source compatibility. They parse and do
+nothing.
+
+| directive | why it is inert |
+| --- | --- |
+| `cdecl`, `register` | the calling convention is the target's — see above. `cdecl` on a *procedural type* is the exception |
+| `inline` | the optimizer decides. At `-O2` it inlines any routine that qualifies (a function, scalar result, at most six scalar by-value parameters, not external or a generator) whether or not you wrote `inline`, and never inlines one that does not qualify because you did |
+| `stackful` | the default async strategy; accepted so it can be stated explicitly |
+| `static`, `reintroduce` | on a plain routine (`static` *is* meaningful on a class method) |
+| `iram` | on targets other than xtensa and riscv32, where there is no IRAM to place anything in |
+| `deprecated`, `platform`, `experimental`, `unimplemented`, `library` | hint directives — see [FPC compatibility](./fpc-compatibility.md#hint-directives). No usage warning is emitted yet |
+
+`overload` is a case of its own: **inert by default**, required under
+`--strict-overload`. PXX resolves overloads without it; the flag makes the
+missing directive an error, the way FPC has it.
+
+### Not accepted
+
+`stdcall`, `safecall`, `pascal` and `mwpascal` parse only on a *method*
+declaration — on a plain routine, an `external`, or a procedural type they are a
+parse error. `varargs` is not accepted at all. These are gaps rather than
+decisions; FPC sources using them need the directive removed.
+
+### On unfulfillable directives
+
+PXX does not currently warn when a directive is accepted but cannot be honored —
+`iram` on x86-64 compiles silently. Only `interrupt` errors. A uniform
+"this directive is ignored here" diagnostic is a known gap.
+
 ## Source compatibility posture
 
 Prefer ordinary Object Pascal where possible. Use `{$ifdef PXX}` only for code

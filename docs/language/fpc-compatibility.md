@@ -90,6 +90,11 @@ procedure Probe; experimental;
 those declarations. They are accepted for source compatibility; PXX does not yet
 emit a usage warning for them, and they are not accepted on `var` declarations.
 
+These are one group among several. Which routine directives are inert, which
+change what is compiled, and which are rejected outright is tabulated under
+[routine directives](./dialect.md#routine-directives) — `stdcall` and `varargs`
+in particular do not parse on a plain routine and need removing when porting.
+
 ## Common fixes
 
 Prefer these changes when moving small FPC examples to PXX:
