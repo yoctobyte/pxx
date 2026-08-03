@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 30
+prio: 60
 type: feature
 summary: "A routine directive that is accepted but cannot be honored is silently ignored — `iram` on x86-64, `inline` anywhere (the flag is written and never read), `register`, `cdecl` on a routine. Warn: 'directive ignored here', so the source stops claiming something the build does not do."
 ---
@@ -78,6 +78,14 @@ home — see [[project_strict_fpc_umbrella_and_lax_default]]), covering:
 Deliberately NOT proposed: warning on the hint directives
 (`deprecated`/`platform`/…). Those are meant to be inert until usage warnings
 exist, and warning about them would fire on ordinary FPC source.
+
+## Priority
+
+Raised 30 -> 60 by the user, 2026-08-03: *"raise the prio on that ticket though..
+feedback is informative"*. The point is general, not about this ticket alone —
+a diagnostic that tells the user what the compiler actually did is worth more
+than its size suggests, and should not be ranked as cosmetic just because it
+changes no generated code.
 
 ## Gate
 

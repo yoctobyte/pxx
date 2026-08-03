@@ -39,7 +39,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (200)
+## backlog (201)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -188,6 +188,7 @@ _none_
 | feature-pascal-exitcode-finalization-halt | A | 45 | feature | ExitCode global + unit finalization execution + FPC Halt semantics (Halt sets ExitCode, runs finalizations, exits with ExitCode) | — |
 | feature-pascal-initialize-finalize-intrinsics | A | 50 | feature | `Initialize()` / `Finalize()` standard procedures (managed-type intrinsics) | — |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
+| feature-pascal-warn-on-unfulfillable-directive | P | 60 | feature | A routine directive that is accepted but cannot be honored is silently ignored — `iram` on x86-64, `inline` anywhere (the flag is written and never read), `register`, `cdecl` on a routine. Warn: 'directive ignored here', so the source stops claiming something the build does not do. | — |
 | feature-pasmith-divergence-signature-granularity | T | 35 | feature | pasmith divergence signatures are too coarse: end-of-program divergences all collapse to pxx-vs-fpc_trace-length, so distinct bugs can over-dedup and hide each other | — |
 | feature-pasmith-multi-unit-programs | T | 55 | feature | pasmith: generate multi-UNIT programs — the last structurally unreachable bug class | — |
 | feature-pasmith-qplus-rplus-rungs | T | 30 | feature | pasmith rungs for {$Q+}/{$R+}: generate checked regions + try/except EIntOverflow/ERangeError harnesses, differential vs FPC | — |
@@ -1699,6 +1700,7 @@ _none_
 - [p 60] [N] feature-nilpy-thirdparty-libraries-as-targets
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
 - [p 60] [P] feature-pascal-corpus-oop
+- [p 60] [P] feature-pascal-warn-on-unfulfillable-directive
 - [p 60] [T] feature-t-bench-hardware-provenance
 - [p 60] [T] feature-t-testmgr-owns-pinning-interruptible
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
