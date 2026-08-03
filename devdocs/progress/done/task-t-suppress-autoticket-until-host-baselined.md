@@ -91,4 +91,4 @@ broke" — which is the question the cutover comparison exists to answer.
   run exactly at the fraction still files), the empty-matrix case, and — as the
   documented premise — that `diff_jobs()` against an empty map really does mark
   every red as new.
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit e79433307.
