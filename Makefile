@@ -1368,12 +1368,13 @@ test-nilpy: $(COMPILER)
 	# worked, so nothing in the corpus caught it; a hanging test looks slow.
 	./$(COMPILER) test/test_nilpy_range_variant_bound.npy /tmp/test_nilpy_rangevar26
 	test "$$(/tmp/test_nilpy_rangevar26)" = "$$(printf '%b' '[0, 1, 4, 9]\n[2, 3, 4]\n[0, 3, 6, 9]\n[0, 1, 2]\n[]\n[0, 2, 4]\n[0, 1, 2, 3]\n[0, 1, 2]')"
-	# round(x, n): negative n was IGNORED (round(1234.5678,-2) gave 1235.0) and
-	# ties went half-UP instead of half-to-EVEN. NOTE the last line asserts pxx's
-	# CURRENT output for round(2.675,2)/round(2.665,2), which still diverge from
-	# CPython — see the test's own header. Do not 'fix' the expectation.
+	# round(x, n): negative n was IGNORED (round(1234.5678,-2) gave 1235.0), ties
+	# went half-UP instead of half-to-EVEN, and the rounding was done on x*10**n
+	# in doubles — which collapses 2.675 and 2.665 to the same apparent tie and
+	# is why the last line was divergent until pyround_n moved onto the exact
+	# decimal expansion. Every value here is now CPython's.
 	./$(COMPILER) test/test_nilpy_round.npy /tmp/test_nilpy_round26
-	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.68 2.66')"
+	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.67 2.67\n9.99 0.04 0.3 100.0\n1.0 0.0 -0.0 0.0')"
 	# %r is repr(), not str(): the conversion switch lumped 's' and 'r' together,
 	# so "%r" % "v" printed v instead of 'v'. Only string operands diverged.
 	./$(COMPILER) test/test_nilpy_percent_repr.npy /tmp/test_nilpy_pctrepr26

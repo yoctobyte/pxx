@@ -1,25 +1,26 @@
 # round(x, n).
 #
-# Two real defects were fixed here (bug-nilpy-round-ndigits-half-up-and-ignores-
-# negative-ndigits):
+# Three defects were fixed here, the last of them long after the first two
+# (bug-nilpy-round-ndigits-half-up-and-ignores-negative-ndigits, then
+# bug-nilpy-float-repr-not-shortest-roundtrip):
 #   1. NEGATIVE n was ignored entirely — `for i := 1 to n` does not run when
 #      n < 0, so the scale stayed 1.0 and round(1234.5678, -2) returned 1235.0.
 #   2. Ties went half-UP; Python's rule is half-to-EVEN.
+#   3. The rounding was done on x*10**n, computed in DOUBLES. That was the
+#      structural one, and it is why the last two lines below were divergent
+#      for two days:
 #
-# TWO CASES BELOW STILL DIVERGE FROM CPython, DELIBERATELY. Do NOT "fix" them by
-# editing this expectation:
-#
-#     round(2.675, 2)   CPython 2.67   pxx 2.68
-#     round(2.665, 2)   CPython 2.67   pxx 2.66
+#     round(2.675, 2)   CPython 2.67   pxx was 2.68
+#     round(2.665, 2)   CPython 2.67   pxx was 2.66
 #
 # CPython rounds the EXACT decimal value of the double, not x*10**n:
 #     Decimal(2.675) = 2.674999999999999822...   -> below the tie -> 2.67
 #     Decimal(2.665) = 2.665000000000000035...   -> above the tie -> 2.67
 # Both scale to exactly 267.5 / 266.5, which destroys the deciding information,
-# so no tie-break rule on the scaled value can be right. Matching CPython needs
-# correctly-rounded decimal conversion — blocked on
-# bug-b-floattostrsig-caps-at-15-significant-digits. These two lines assert
-# pxx's CURRENT behaviour so the divergence is visible and tracked.
+# so no tie-break rule on the scaled value could ever be right. pyround_n now
+# expands the double exactly (the exact-decimal core in pylib.pas), rounds the
+# digit string half-to-even on the exact remainder, and reads it back with the
+# correctly-rounded parser. Every expectation in this file is CPython's.
 
 # --- no ndigits: half-to-even, and already correct before the fix ---
 print(round(0.5), round(1.5), round(2.5), round(3.5), round(-0.5), round(-1.5))
@@ -34,5 +35,10 @@ print(round(3.14159, 3), round(3.14159, 1))
 print(round(1234.5678, -2), round(1234.5678, -1), round(15678.0, -3))
 print(round(-1234.5678, -2))
 
-# --- the two known divergences, asserted as pxx behaves today ---
+# --- the exact-value ties: only an exact expansion gets both of these ---
 print(round(2.675, 2), round(2.665, 2))
+
+# --- more exact-value cases: each of these is decided by digits BEYOND the
+# 17 a %.17g approximation would give, or by a place the scale would erase ---
+print(round(9.995, 2), round(0.045, 2), round(0.35, 1), round(99.5, -1))
+print(round(0.6, 0), round(0.5, 0), round(-0.4, 0), round(1234.5678, -10))

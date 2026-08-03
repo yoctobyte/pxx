@@ -988,9 +988,9 @@ function pystr_charlist(const s: AnsiString): TPyList;
   (bug-nilpy-assert-statement-not-supported). }
 procedure pyassert(ok: Boolean; const msg: AnsiString);
 { Python's TWO-argument round(x, ndigits) — a float rounded to that many
-  decimals, unlike the one-argument form which yields an int. Half-away-from-
-  zero rather than CPython's banker's rounding: the difference shows only on an
-  exact .5 at the last digit, and matching it needs decimal arithmetic. }
+  decimals, unlike the one-argument form which yields an int. Half-to-EVEN on
+  the double's EXACT decimal value, which is CPython's rule; the body sits far
+  below, next to the exact-decimal core it is built on. }
 function pyround_n(x: Double; n: Integer): Double;
 { Python's math.floor/math.ceil return an int, unlike the RTL Math unit's
   Floor/Ceil (Double->Double, shared with the Pascal frontend and left alone
@@ -3554,47 +3554,6 @@ begin
     pyvar_gt := pyvar_to_int(a) > pyvar_to_int(b);
 end;
 
-function pyround_n(x: Double; n: Integer): Double;
-var p, y, r, f: Double; i, k: Integer;
-begin
-  { Python's round(x, n) differs from naive half-up in TWO ways, and this got
-    both wrong (bug-nilpy-round-ndigits-half-up-and-ignores-negative-ndigits):
-
-    1. NEGATIVE n rounds to tens/hundreds. `for i := 1 to n` simply does not
-       run when n < 0, so scale stayed 1.0 and round(1234.5678, -2) returned
-       1235.0 instead of 1200.0 — silently, and wrong by two orders of
-       magnitude.
-    2. Ties go to EVEN, not up. round(0.125, 2) is 0.12 and round(2.5, 0) is
-       2.0 in Python; half-up gave 0.13 and 3.0.
-
-    Note round(2.675, 2) = 2.67 falls out of doing the arithmetic on the actual
-    double rather than on the decimal text: 2.675 * 100 is 267.49999999999997,
-    so the tie never arises. That is CPython's answer too, and it is why this
-    must NOT be "fixed" by rounding a decimal string.
-
-    Scaling multiplies for n >= 0 and DIVIDES for n < 0, rather than building a
-    fractional scale and dividing by it — 1/100 is not exact, and r/0.01 comes
-    back 1199.9999... }
-  k := n;
-  if k < 0 then k := -k;
-  p := 1.0;
-  for i := 1 to k do p := p * 10.0;
-  if n >= 0 then y := x * p else y := x / p;
-  { round half to even on y }
-  r := Int(y);              { toward zero; keeps the sign of y }
-  f := y - r;
-  if f > 0.5 then r := r + 1.0
-  else if f < -0.5 then r := r - 1.0
-  else if (f = 0.5) or (f = -0.5) then
-  begin
-    { a tie: step away from zero only when that lands on an EVEN integer }
-    if Odd(Trunc(r)) then
-    begin
-      if f > 0.0 then r := r + 1.0 else r := r - 1.0;
-    end;
-  end;
-  if n >= 0 then pyround_n := r / p else pyround_n := r * p;
-end;
 
 function pymath_floor(x: Double): Int64;
 begin
@@ -6017,6 +5976,107 @@ begin
   w := PyExDecNearest(ds, lead, nd, expo);
   if neg then w := -w;
   Result := w;
+end;
+
+{ Python's two-argument round(x, n), on the EXACT decimal value of the double.
+
+  It lives down here, past the exact-decimal core, because that is what it is
+  built on — the previous version sat up with the other numeric builtins and
+  scaled in doubles, which is precisely the thing that cannot work:
+
+    round(2.675, 2)  CPython 2.67   pxx 2.68
+    round(2.665, 2)  CPython 2.67   pxx 2.66
+
+  `2.675 * 100` is exactly 267.5 and `2.665 * 100` is exactly 266.5, in pxx
+  and in CPython alike, so after scaling BOTH look like a tie and no
+  tie-breaking rule can separate them. The information that decides them is in
+  the double's exact value, which the scale destroyed:
+
+    2.675 = 2.674999999999999822...  -> below the half, rounds DOWN to 2.67
+    2.665 = 2.665000000000000035...  -> above the half, rounds UP   to 2.67
+
+  Nor does a 17-significant-digit approximation suffice: 2.665 renders as
+  exactly `2.6650000000000000` at 17 digits, still ambiguous at the tie
+  (bug-nilpy-round-ndigits-half-up-and-ignores-negative-ndigits recorded both
+  facts and left the case open pending this core).
+
+  So: expand the double exactly, round the digit string half-to-EVEN on the
+  exact remainder, and read the result back with the correctly-rounded parser
+  to land on the nearest double. Every step is exact except the final read,
+  which is correctly rounded — the same shape CPython uses.
+
+  n is a decimal PLACE count, so the digit to keep down to stands for 10^-n;
+  the first digit stands for 10^decExp, which makes the significant-digit
+  count decExp + n + 1. Non-positive means the whole value sits below the
+  rounding position: it rounds to zero, except that sig = 0 can still carry up
+  to one unit in the last place (round(0.6, 0) is 1.0). At sig = 0 the digit
+  before the rounding position is an implicit 0, which is even, so an exact
+  tie goes to zero — round(0.5, 0) is 0.0 in Python, and this gets that for
+  the same reason CPython does rather than by a special case. }
+function pyround_n(x: Double; n: Integer): Double;
+var
+  av, r: Double;
+  ds, s: AnsiString;
+  decExp, sig, i: Integer;
+  neg, up, rest: Boolean;
+begin
+  { NaN, the infinities and both zeros round to themselves. Zero is returned
+    unchanged rather than rebuilt so -0.0 keeps its sign, which a comparison
+    cannot preserve (-0.0 = 0.0 is True). }
+  av := x;
+  if av < 0 then av := -av;
+  if (x <> x) or (x = 0) or (av > 1.7976931348623157e308) then
+  begin
+    Result := x;
+    Exit;
+  end;
+  neg := PyExDecDoubleToBits(x) < 0;
+  PyExDecDigits(av, ds, decExp);
+  sig := decExp + n + 1;
+  if sig <= 0 then
+  begin
+    up := False;
+    if sig = 0 then
+    begin
+      { compare the value against half a unit in the last kept place }
+      if ds[1] > '5' then up := True
+      else if ds[1] = '5' then
+      begin
+        rest := False;
+        for i := 2 to Length(ds) do
+          if ds[i] <> '0' then begin rest := True; break; end;
+        up := rest;      { an exact tie goes to the even 0 }
+      end;
+    end;
+    if up then begin ds := '1'; decExp := -n; end
+    else begin Result := 0.0; if neg then Result := -Result; Exit; end;
+  end
+  else
+    PyExDecRound(ds, decExp, sig);
+  { lay the rounded digits out as plain decimal text: ds stands for
+    0.ds * 10^(decExp+1), so the point falls decExp+1 digits in }
+  if decExp >= 0 then
+  begin
+    if Length(ds) <= decExp then
+    begin
+      s := ds;
+      for i := Length(ds) to decExp do s := s + '0';
+    end
+    else if Length(ds) = decExp + 1 then
+      s := ds
+    else
+      s := Copy(ds, 1, decExp + 1) + '.' +
+           Copy(ds, decExp + 2, Length(ds) - decExp - 1);
+  end
+  else
+  begin
+    s := '0.';
+    for i := 1 to -decExp - 1 do s := s + '0';
+    s := s + ds;
+  end;
+  r := PyStrToFloatDef(s, 0.0);
+  if neg then r := -r;
+  Result := r;
 end;
 
 function pyfloat_any(const v: Variant): Double;

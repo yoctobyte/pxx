@@ -2,6 +2,8 @@
 track: N
 prio: 70
 type: bug
+status: done
+owner: claude-AN
 ---
 
 # NilPy float repr is fixed-precision, not CPython's shortest round-trip
@@ -143,3 +145,71 @@ CPython's `repr` switches to exponent notation below `1e-4` and at/above
 shortest-round-trip gap, so it should be settled in the same pass rather than
 patched separately — the exponent threshold is part of the same "how does a
 double print" contract.
+
+
+## Resolved 2026-08-04 — the repr half had landed; this closes the round half
+
+Re-measured first rather than assuming the ticket still described reality. The
+**repr** half was already fixed by the exact-decimal work that unblocked this
+(`PyFloatRepr` / `PyFloatLayout` in `compiler/builtin/pylib.pas`): every row of
+this ticket's table, plus the exponent-threshold and extremes rows the
+2026-08-02 notes added, now matches CPython byte for byte. The 23-line probe
+that reproduced all three symptoms diffed clean against `python3` except for
+two lines — both of them `round`.
+
+So the only thing left was the **second consumer** this ticket recorded on
+2026-08-02: `round(x, n)`.
+
+### `pyround_n` now rounds the exact value, not `x * 10**n`
+
+The old body scaled in doubles and then applied half-to-even. That rule was
+right and the input was not: `2.675 * 100` is exactly `267.5` and
+`2.665 * 100` is exactly `266.5`, so both look like ties and the digits that
+decide them (`2.674999...` below, `2.665000...035` above) are already gone. As
+this ticket and
+[[bug-nilpy-round-ndigits-half-up-and-ignores-negative-ndigits]] both noted, no
+tie-break rule on the scaled value can be correct, and 17 significant digits do
+not suffice either.
+
+Rewritten on the exact-decimal core that is now sitting in the same file:
+expand the double exactly (`PyExDecDigits`), round the digit string
+half-to-even on the exact remainder (`PyExDecRound`, at
+`decExp + n + 1` significant digits), lay it out as plain decimal text, and
+read it back with the correctly-rounded parser (`PyStrToFloatDef`) to land on
+the nearest double. Only the final read rounds, and it rounds correctly — the
+same shape CPython uses.
+
+The body **moved** in the file, from among the numeric builtins down to just
+past `PyStrToFloatDef`, because that is what it now depends on; the interface
+declaration was already there, so nothing else had to change.
+
+Cases the exact path handles that the old one could not express: `sig <= 0`
+(the whole value below the rounding position, where `sig = 0` can still carry
+one unit up — `round(0.6, 0)` is `1.0`, `round(0.5, 0)` is `0.0` because the
+implicit preceding digit is an even zero), and `-0.0` preservation, which is
+read off the sign bit rather than from a comparison.
+
+### Verified against the oracle, twice
+
+- The 24 hand-picked cases from this ticket and the round ticket:
+  **identical to CPython**, including `round(2.675, 2)` = `2.67` and
+  `round(2.665, 2)` = `2.67`, the two that were open.
+- A randomized differential sweep of **2999** `round(d, n)` calls — half from
+  random 64-bit patterns, half from exact-binary decimals chosen to land on
+  ties, `n` in -6..10 — against CPython: **0 mismatches**.
+
+`test/test_nilpy_round.npy` gained two lines of exact-value cases and its
+header now records why the divergence existed; every expectation in it is
+CPython's, and the Makefile comment that told the next reader NOT to fix those
+two values is replaced with the reason they are now fixable.
+
+### Not changed, deliberately
+
+`lib/rtl/sysutils.pas` is untouched, so Pascal's own `writeln` of a Double is
+unchanged — the half of this ticket's gate that asked for that is met by
+construction, not by measurement. NilPy's float output has its own entry point,
+which is exactly the shape this ticket asked for in 2026-08-01.
+
+## Log
+- 2026-08-04 — resolved.
+- 2026-08-04 — resolved, commit PENDING-COMMIT.
