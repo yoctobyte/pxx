@@ -143,4 +143,4 @@ correct top to bottom, which it has never been.
 changes without `-g` — testmgr quick, FPC seed canary).
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING.
+- 2026-08-03 — resolved, commit 3efc30537.
