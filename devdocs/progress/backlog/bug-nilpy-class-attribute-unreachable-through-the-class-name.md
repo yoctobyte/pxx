@@ -2,8 +2,6 @@
 track: N
 prio: 65
 type: bug
-status: blocked
-blocked-by: decide-nilpy-class-attribute-instance-read-model
 ---
 
 # `C.attr` on a class attribute: "class method not found"
@@ -275,3 +273,33 @@ static specialisation reusing the `PyDynAttrEverAssigned`-style module scan the
 frontend already leans on. Recommendation is on that ticket.
 
 Nothing was changed in the compiler for this ticket.
+
+
+## 2026-08-03 — UNBLOCKED. The decision was "there is no decision".
+
+[[decide-nilpy-class-attribute-instance-read-model]] is resolved: NilPy follows
+CPython wherever possible, quirks included, and a known divergence is never
+traded for implementation cost. So this is **one ticket, fixed once** — the real
+model, not a phased approximation and not a "correct for the programs we
+compile" subset.
+
+**Implement:** reads fall through instance → class; a write through an instance
+creates a per-instance override; construction copies nothing that can be reached
+by fall-through. Then parts 1 and 2 above (the `ClassName.attr` lookup, and real
+storage for a literal initialiser) are both small, and both were already
+measured byte-identical to CPython in isolation.
+
+The whole-program scan discussed while deciding is kept ONLY as a lowering
+optimisation and must not be described as semantics: divergence from a
+copy-at-construction lowering requires a class-level write AFTER construction,
+so without one the cheap lowering is provably indistinguishable. Attributes
+never class-written at run time keep today's copy; class-written but never
+instance-written become one shared slot read directly; only the both-written
+case pays for the fall-through check. The counter idiom `C.count += 1` is the
+middle row — correct and free.
+
+The framing that makes the model obvious, from the same discussion:
+`self.x = ...` in `__init__` is an INSTANCE WRITE, not a field declaration —
+identical machinery to `a.x = ...` from outside. One rule (reads fall through,
+writes land on what you named), and ordinary per-instance fields exist only
+because `__init__` performs those writes.

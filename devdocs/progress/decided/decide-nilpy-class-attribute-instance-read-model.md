@@ -2,8 +2,48 @@
 track: U
 prio: 65
 type: decide
+status: resolved
+resolved: 2026-08-03
 summary: "How should `inst.attr` read a CLASS attribute? Full Python fall-through with per-instance overrides (correct, invasive), or a whole-program static specialisation using the PyDynAttrEverAssigned-style scan already in the frontend (cheaper, correct for programs that never override per instance)? Blocks bug-nilpy-class-attribute-unreachable-through-the-class-name."
 ---
+
+## DECIDED 2026-08-03 — there is no fork. Follow CPython.
+
+**User's call, and it is a standing rule rather than a ruling on this ticket:**
+NilPy follows CPython wherever possible — language semantics above all,
+**including the ugly quirks, which do have reasons**. A known divergence is not
+traded for implementation cost, and where something is not implemented yet the
+compilation HALTS rather than being silently wrong.
+
+So: **option A**, the real model — reads fall through to the class, a write
+through an instance creates a per-instance override. Not phased, not
+approximated. One bug ticket
+([[bug-nilpy-class-attribute-unreachable-through-the-class-name]], unblocked by
+this), fixed once.
+
+### The scan survives, as an OPTIMIZATION only — never as semantics
+
+The whole-program scan proposed as "option B" is not a second semantics and must
+never be written up as one. It is a lowering choice under semantics that are
+always CPython's, and it is what keeps the correct model cheap. Divergence from
+a copy-at-construction lowering requires a class-level write AFTER construction;
+without one, the cheap lowering is provably indistinguishable. That splits
+attributes three ways:
+
+| attribute | lowering | cost |
+| --- | --- | --- |
+| never class-written at run time | copy at construction (what happens today) | zero |
+| class-written, never instance-written | one shared slot, read directly (a Pascal `class var`) | zero — a global read |
+| class-written **and** instance-written | genuine fall-through + per-instance override | the only place the check lands |
+
+The counter/registry idiom — `C.count += 1` in `__init__`, the reason the
+blocked ticket exists at all — is the middle row: exactly correct AND free.
+
+Worth stating for the next reader, because it is the thing that makes the whole
+model click: `self.x = ...` in `__init__` is not a field declaration, it is an
+INSTANCE WRITE, the same mechanism as `a.x = ...` from outside. There is one
+rule (read falls through, write lands on what you named), not two, and ordinary
+per-instance fields exist only because `__init__` performs those writes.
 
 # `inst.attr` on a class attribute — which read model?
 
