@@ -1826,6 +1826,53 @@ def calibrate():
     return max(1.0, dt / PROBE_REF)
 
 
+PINNED_REL = "stable_linux_amd64/default/pinned"
+
+
+def unseed_pinned():
+    """Never let the matrix run against a binary that IS the pinned seed.
+
+    The documented fresh-box step is `make seed-from-stable`, which COPIES
+    `pinned` onto `compiler/pascal26`. The copy gets a fresh mtime, newer than
+    `compiler/compiler.pas`, so the `make compiler/pascal26` below is told
+    "up to date" and no self-host build ever happens: the whole sweep tests the
+    PINNED binary rather than a compiler built from the checked-out sources.
+    Measured on xeon at 110774a14648 — byte-identical to `pinned`, mtime 13
+    minutes newer than the sources, 17 jobs red.
+
+    The window is not just the first run. It persists for every sha whose diff
+    does not touch a compiler source — a tstate commit, a docs commit, a
+    `lib/**` commit — because nothing bumps a source mtime past the binary. That
+    is a concrete mechanism for the phantom-NEW-RED family: jobs go red against
+    a stale compiler, then "fix themselves" at the next sha that happens to
+    touch `compiler/**`, with no commit in the range able to explain either
+    transition. Only selfhost-fixedpoint can see it, and when it does it reads
+    as a scary self-host regression rather than "your seed is stale".
+
+    twatch backdates the seed after a fresh clone, but only under
+    `if not os.path.exists(comp)` — so every clone after its first cycle, and
+    every manual run, is exposed. The invariant belongs where the matrix runs.
+    Deliberately NOT fixed by editing the `seed-from-stable` rule: the Makefile
+    is Track A's ground. task-t-seed-from-stable-defeats-rebuild.
+    """
+    comp = os.path.join(REPO, COMPILER)
+    pinned = os.path.join(REPO, PINNED_REL)
+    if not (os.path.exists(comp) and os.path.exists(pinned)):
+        return False
+    if file_sha256(comp) != file_sha256(pinned):
+        return False
+    # Backdate the binary rather than touching a source: touching
+    # compiler.pas would make it newer than everything else and can cascade
+    # into other mtime-driven rules; an epoch-old binary simply loses to every
+    # source, which is exactly the ordering make should have seen.
+    os.utime(comp, (0, 0))
+    print("testmgr: %s is byte-identical to %s — that is the seed, not a "
+          "build. Backdated it so `make` rebuilds from source; otherwise this "
+          "run would have tested the PINNED binary." % (COMPILER, PINNED_REL),
+          flush=True)
+    return True
+
+
 def build_compiler():
     """Build the compiler into paths PRIVATE to this clone.
 
@@ -1845,6 +1892,7 @@ def build_compiler():
     These are plain `:=` make variables, so overriding them on the command line
     needs no Makefile change (that sweep stays Track A's ticket).
     """
+    unseed_pinned()
     priv = "/tmp/pascal26-build-%s" % REPO_TAG
     r = subprocess.run(["make", "--no-print-directory", COMPILER,
                         "BUILD_COMPILER=%s-build" % priv,

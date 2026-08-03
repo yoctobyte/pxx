@@ -612,6 +612,11 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red)
              "wall: %s" % report["wall"],
              "scale: %s" % report["scale"],
              "verdict: %s" % report["verdict"],
+             # WHICH binary produced this verdict. The json has carried it since
+             # the mid-run-change check; the markdown is what a human reads days
+             # later, and "verify against a KNOWN sha" is unusable if the report
+             # does not name the binary (task-t-seed-from-stable-defeats-rebuild).
+             "compiler_sha256: %s" % (report.get("compiler_sha256") or "unknown"),
              "---", ""]
     # stable key -> source file(s), so a reader sees WHICH test without
     # mapping job numbers back to Makefile lines (numbers shift with edits)

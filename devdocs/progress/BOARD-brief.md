@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:8 blocked:5 backlog:196 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1296 rejected:28`
+`unfinished:8 blocked:5 backlog:195 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1297 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -30,7 +30,7 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 176, ranked
+## Ready — top 30 of 175, ranked
 
 - `[p 80] [T]` meta-t-dev-throughput-and-track-a-t-integration
 - `[p 70] [U]` decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 3)
@@ -38,7 +38,6 @@ _none — no lane is locked._
 - `[p 70] [T]` regression-optdiff-shard8-12
 - `[p 70] [T]` regression-test-c-conformance-shard2-6
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
-- `[p 65] [T]` task-t-seed-from-stable-defeats-rebuild
 - `[p 65] [T]` task-t-worktree-is-not-current-state
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
@@ -62,5 +61,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
 - `[p 55] [N]` bug-nilpy-def-return-coerces-a-float-to-the-inferred-int-result
+- `[p 55] [N]` bug-nilpy-user-def-does-not-shadow-a-pylib-builtin
 
-_146 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_145 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

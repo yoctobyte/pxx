@@ -3,6 +3,8 @@ summary: "seed-from-stable makes the whole matrix test the pinned binary; only s
 type: task
 track: T
 prio: 65
+status: done
+owner: claude@xeon
 ---
 
 # `seed-from-stable` silently defeats the self-host rebuild
@@ -84,3 +86,34 @@ tools/testmgr.py --tier native --job 'src:tools/selfhost_fixedpoint.sh'
 touch compiler/compiler.pas && make compiler/pascal26
 tools/testmgr.py --tier native --job 'src:tools/selfhost_fixedpoint.sh'   # green
 ```
+
+## Log
+- 2026-08-03 (`claude@xeon`) — fixed in testmgr, as the ticket specifies: the
+  invariant belongs where the matrix runs, and the `seed-from-stable` rule is
+  Track A's ground and stays untouched.
+
+  `unseed_pinned()` runs at the top of `build_compiler()`: if
+  `compiler/pascal26` is byte-identical to `stable_linux_amd64/default/pinned`,
+  that is the SEED, not a build, so the binary is backdated to the epoch and
+  make rebuilds from source. Backdating the binary rather than touching
+  `compiler/compiler.pas` on purpose — a touched source becomes newer than
+  everything else and can cascade into other mtime-driven rules, whereas an
+  epoch-old binary simply loses to every source, which is the ordering make
+  should have seen in the first place.
+
+  Reproduced the trap first, exactly as written: after `cp pinned
+  compiler/pascal26`, `make -q compiler/pascal26` exits 0 — "up to date" — so
+  the sweep would have tested the pinned binary. With the guard, testmgr says
+  so and the self-host build runs (converged after 1 round); the rebuilt binary
+  is byte-identical to the real one and differs from `pinned`.
+
+  Second half of the ask done too: the tstate report's frontmatter now carries
+  `compiler_sha256`. The json has had it since the mid-run-change check, but
+  the markdown is what a human reads days later, and "verify against a KNOWN
+  sha" is unusable if the report does not name the binary.
+
+  `tools/testmgr_unseed_devtest.py` pins it: identical -> backdated, a real
+  build -> untouched (the guard fires on identity, never on suspicion), same
+  size but different bytes -> untouched, and a checkout missing either file ->
+  quiet no-op rather than a crash.
+- 2026-08-03 — resolved, commit PENDING-COMMIT.

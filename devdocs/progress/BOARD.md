@@ -35,7 +35,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (196)
+## backlog (195)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -232,7 +232,6 @@ _none_
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
 | task-t-enroll-pascal-conformance-tier | T | 45 | task | Enroll test-pascal-conformance in testmgr tiers (sharded, like the C battery) | — |
-| task-t-seed-from-stable-defeats-rebuild | T | 65 | task | seed-from-stable makes the whole matrix test the pinned binary; only selfhost-fixedpoint can see it | — |
 | task-t-worktree-is-not-current-state | T | 65 | task | In a watcher clone the working tree is a snapshot of the sha under test, not current state. Four separate bugs in one day came from reading it. | — |
 | task-t-xeon-host-local-health-alerting | T | 50 | task | The health VERDICT landed (trackt health, e6ee21fcc) but nothing on xeon delivers it — no timer, no toast. The watcher can go wedged with nobody told. | — |
 
@@ -345,9 +344,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1296)
+## done (1297)
 
-1296 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1297 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -390,7 +389,6 @@ _none_
 - [p 70] [T] regression-optdiff-shard8-12
 - [p 70] [T] regression-test-c-conformance-shard2-6
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
-- [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 65] [T] task-t-worktree-is-not-current-state
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
