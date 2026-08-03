@@ -1,4 +1,5 @@
 ---
+reopened: 2026-08-04
 summary: "nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter"
 type: bug
 track: N
@@ -89,3 +90,38 @@ fall out of one change.
 
 ## Log
 - 2026-08-01 — resolved, commit 7be01f05f.
+
+
+## 2026-08-04 — NOT finished: the promoter is scoped to ONE unit, and pylib/pyeval are two
+
+Found while implementing `min(xs, key=len)` for
+[[bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error]]. The
+2026-08-01 resolution (`7be01f05f`) generalized the promotion correctly, but
+kept the sibling search **scoped to the same unit** as the initially-chosen
+overload — deliberately, and its own comment says why. That leaves a case it
+cannot reach:
+
+```python
+words = ["bb", "a"]
+print(min(words, len))        # 'a'  — correct, positionally
+print(min(words, key=len))    # error: min has no parameter named 'key' in the
+                              # overload taking 2 argument(s) — a sibling
+                              # overload taking 2 does.
+```
+
+`min` resolves first to the two-Variant scalar form in **pylib**, while the
+list form that takes `key` has to live in **pyeval** (only pyeval has
+`PyCallKey1`, and `pyeval uses pylib`, not the reverse). Different units, so
+`PyPromoteProcOverloadByKwAt` refuses to promote.
+
+The scoping is right in general — same-named routines really do collide across
+unrelated RTL units — and wrong here: pylib and pyeval are not two unrelated
+units, they are one language's builtins split for a layering reason. So the fix
+is a way to say "these units are one overload set" (a builtin-unit group, or
+`NilPyUserCode`-gated widening to any builtin unit), not removing the scope.
+
+Note this is now a BLOCKER, not a nuisance: `key=` is the only valid Python
+spelling, so the positional form is not a workaround for user code, and the
+`min`/`max` implementation was reverted rather than landed inert.
+
+Reopened — moved back to `backlog/`.

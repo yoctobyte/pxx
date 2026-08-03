@@ -1,0 +1,168 @@
+---
+track: N
+prio: 50
+type: bug
+status: working
+owner: claude-AN
+---
+
+# `xs.sort(key=..., reverse=...)` fails with a bare "unexpected token"
+
+- **Type:** bug (missing feature + poor diagnostic) — **Track N**
+- **Found:** 2026-08-02, by a differential sweep against the CPython oracle.
+
+## Measured
+
+```python
+xs = [3, 1, 2]
+xs.sort(reverse=True)
+```
+```
+error: unexpected token
+  near:   xs  sort  >>> reverse
+```
+
+Same for `xs.sort(key=len)`. Meanwhile `sorted()` supports both:
+
+| form | result |
+| --- | --- |
+| `sorted(xs, reverse=True)` | ok |
+| `sorted(xs, key=len)` | ok |
+| `sorted(xs, key=len, reverse=True)` | ok |
+| `xs.sort()` | ok |
+| **`xs.sort(reverse=True)`** | **parse error** |
+| **`xs.sort(key=len)`** | **parse error** |
+
+## Two things wrong
+
+**1. The feature is missing.** `TPyList.sort`'s own comment says `key=`/
+`reverse=` are not implemented because they need `PyCallKey1`'s callable
+dispatch, which lives in `pyeval.pas` — and `pyeval uses pylib`, not the
+reverse, so pylib cannot call it. That is a real constraint and honestly
+documented.
+
+But `sorted()` — which DOES live in `pyeval.pas` — already implements both,
+including the insertion sort that moves a computed-key list in lockstep. So the
+in-place method could delegate: sort into a new list with the existing code,
+then copy back. `TPyList.reverse` (added 2026-08-02) is the same in-place
+shape.
+
+**2. The refusal is not loud, it is confusing.** The comment says these are
+"refused loudly rather than guessed at", but what the user sees is a generic
+`unexpected token` pointing at the keyword name — indistinguishable from a typo
+in their own code. Compare the str-method table, which says exactly what is
+wrong (`str method .find() takes one or two arguments`). Even without the
+feature, this should name it.
+
+## Gate
+
+A `.npy` diffed against CPython covering `sort()` with `reverse`, with `key`,
+with both, on an empty list and a single-element list, and confirming the sort
+is IN PLACE (the original name observes the new order) with the return value
+being `None` as Python's is.
+
+## 2026-08-02 — `min()` / `max()` reject `key=` too
+
+Same sweep, same family, different route — this one is a named diagnostic rather
+than a parse error:
+
+```python
+words = ["bb", "a", "ccc"]
+print(min(words, key=len))    # pascal26: error: Nil Python: min has no parameter named 'key'
+print(max(words, key=len))    # same
+```
+
+`sorted(words, key=len)` and `sorted(..., reverse=True)` fail here as well, so
+the `key=` callable is missing across the whole comparison family — `sort`,
+`sorted`, `min`, `max` — not just the list method this ticket was filed for.
+They should be gated together: whatever mechanism passes a callable into the
+comparison is one piece of machinery serving all four.
+
+`sorted(xs)`, `sorted(xs, reverse=...)` as the ONLY kwarg, `min(xs)` and
+`max(xs)` without a key all work today.
+
+
+## 2026-08-04 — re-measured (the ticket is now half stale), and BOTH halves are blocked, on different things
+
+### What already works, which the table above no longer reflects
+
+`sorted()` has gained the whole `key=`/`reverse=` surface since this was filed:
+
+| form | today |
+| --- | --- |
+| `sorted(xs, reverse=True)` | ok |
+| `sorted(xs, key=len)` | **ok** |
+| `sorted(xs, key=len, reverse=True)` | **ok** |
+| `xs.sort()` | ok |
+| `xs.sort(reverse=True)` | still `Expected: ), but got: reverse` |
+| `xs.sort(key=len)` | still a parse error |
+| `min(xs, key=len)` / `max(xs, key=len)` | still refused |
+
+So the "`key=` callable is missing across the whole comparison family" note is
+out of date: `sorted` has it, and the machinery (`PyCallKey1`) is proven.
+
+### `xs.sort(...)` — blocked on layering PLUS a frontend rewrite
+
+`TPyList.sort` is a method of a class declared in `pylib.pas`, and `key=` needs
+`PyCallKey1`, which is in `pyeval.pas` — `pyeval uses pylib`, not the reverse.
+Neither unit has an `initialization` section, so the obvious dependency-inversion
+hook (a `var PyKeyCall: function...` in pylib that pyeval fills in) has no
+natural place to be assigned.
+
+The workable shape is therefore a free function in `pyeval` that sorts in place
+(sort into a new list with the existing code, copy the contents back — identity
+is preserved, which is what `sort` being in-place means), plus a FRONTEND rewrite
+of `X.sort(...)` to it. That rewrite is the cost: there is no list-method table
+to add a row to (the str methods have one, lists do not), so it means a new
+interception in the member-call path — and
+[[project_nilpy_parsefactor_suffix_extension_point]] records that NilPy's postfix
+handling has FOUR routes, so a hook added at one is a hook missing at three.
+
+### `min`/`max` with `key=` — blocked on the keyword promoter's SAME-UNIT scoping
+
+Implemented this one to the point of measurement, then reverted it. Moving the
+list forms `min(l: TPyList)` / `max(l: TPyList)` out of `pylib` and into
+`pyeval` with a `key: Pointer = nil` parameter (whole, not as a sibling, or
+`min(xs)` becomes ambiguous across the two units) **works** — but only
+positionally:
+
+```python
+print(min(words, len))        # 'a'   correct
+print(max(words, len))        # 'bb'  correct
+print(min(words, key=len))    # STILL refused
+```
+
+`key=` is not valid Python positionally, so that is inert for real code, and it
+was reverted rather than left in the tree — the same call the shadowing ticket
+made on 2026-08-03, for the same reason.
+
+The blocker is precise. `PyPromoteProcOverloadByKwAt` (`pyparser.inc`) is what
+lets a keyword name steer overload SELECTION, and its sibling search is
+deliberately **scoped to the same unit** as the initially-chosen overload:
+
+> Sibling search is scoped to the SAME UNIT as procIdx — that is what makes two
+> Procs[] entries one Pascal overload SET in the first place, and it keeps this
+> from promoting into an unrelated same-named routine from a different unit.
+
+`min` is picked from `pylib` (the two-Variant scalar form) and the key-taking
+list form is in `pyeval`, so the promotion refuses by design. The scoping is
+right in general and wrong for this case: pylib and pyeval are not two unrelated
+units, they are one language's builtins split for a layering reason.
+
+**That also means [[bug-nilpy-keyword-arg-vs-overload-set]] is not finished**,
+though it sits in `done/`. Its own body says the fix was not attempted; what
+landed (`7be01f05f`) generalizes the promoter but keeps the same-unit scope.
+Re-measured repro recorded there.
+
+### Where this leaves the ticket
+
+Both halves need something that is not in this ticket:
+
+- `sort` → a `pyeval` in-place sort plus one frontend rewrite, done across all
+  four postfix routes;
+- `min`/`max` → the keyword promoter allowing pylib↔pyeval as one overload set
+  (or those two builtins living in one unit).
+
+Moved to `unfinished/`. The diagnostic complaint in the original report —
+`unexpected token` pointing at the keyword name, indistinguishable from a typo —
+is still true and is the cheapest independent improvement available here.

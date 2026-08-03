@@ -473,7 +473,6 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-int-prints-as-float-when-the-name-is-widened-later | N | 50 | bug | An int prints as `5.0` because the SAME NAME is assigned a float later in the file | — |
 | bug-nilpy-is-on-two-lists-compares-contents | N | 55 | bug | `is` on two lists compares CONTENTS, so distinct lists are "identical" | — |
 | bug-nilpy-key-analysis-compiles-but-segfaults | N | 70 | bug | nilpy: songformatter's key_analysis.py COMPILES but segfaults at run time | — |
-| bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
 | bug-nilpy-lambda-body-expression-around-a-call-cannot-call-a-def | N | 55 | bug | A lambda whose body is an EXPRESSION AROUND a call (`lambda: f() or 4`, `lambda: f() + 1`) is not lifted — it falls to the pyeval interpreter, which cannot call a compiled def, so it dies at RUN time with `pyeval: unknown call: f()`. A bare `lambda: f()` works. | — |
 | bug-nilpy-large-float-str-overruns-into-garbage | N | 70 | bug | `str()` of a float whose integer part exceeds Int64 writes garbage bytes | — |
 | bug-nilpy-lifted-lambda-discards-its-return-value | N | 60 | bug | NilPy: a lifted lambda always discarded its own return value | — |

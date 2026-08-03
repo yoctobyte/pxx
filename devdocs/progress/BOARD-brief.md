@@ -5,15 +5,16 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:9 blocked:7 backlog:189 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1306 rejected:28`
+`unfinished:10 blocked:7 backlog:189 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1305 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (9) — parked mid-flight; re-claim, do not duplicate
+## unfinished (10) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps` [N]
+- `bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error` [N]
 - `bug-nilpy-non-constant-parameter-defaults-silently-become-none` [N]
 - `bug-nilpy-one-line-def-and-class-bodies-do-not-parse` [N]
 - `bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults` [N]

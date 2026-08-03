@@ -12,11 +12,12 @@ _none_
 
 _none_
 
-## unfinished (9)
+## unfinished (10)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
+| bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error | N | 50 | bug | `xs.sort(key=..., reverse=...)` fails with a bare "unexpected token" | — |
 | bug-nilpy-non-constant-parameter-defaults-silently-become-none | N | 70 | bug | Every non-constant parameter default silently becomes None on the ordinary call path — `def f(b=[])` gives b=None, and so does `def f(b=w)` for any name w. Only the closure-VALUE path evaluates defaults at def time. | — |
 | bug-nilpy-one-line-def-and-class-bodies-do-not-parse | N | 60 | bug | One-line `def` and `class` bodies do not parse | — |
 | bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults | N | 75 | bug | NilPy: calling a pylib CONTAINER method with too FEW arguments compiles and SEGFAULTS — xs.index(), d.get() both core-dump; too MANY args is correctly rejected | — |
@@ -51,12 +52,12 @@ _none_
 | bug-nilpy-dict-mutation-during-iteration-is-unobserved-not-raised | N | 35 | bug | Mutating a dict while iterating it is silently unobserved; CPython raises RuntimeError 'dictionary changed size during iteration' | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant | N | 55 | bug | `a == b` skips __eq__ and compares identity as soon as ONE operand is a variant (a container element, a for-in variable). Both-static works, so the dunder LOOKS wired up; `a == xs[0]` is silently False. | — |
+| bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
 | bug-nilpy-lambda-over-a-capturing-nested-def-does-not-compile | N | 50 | bug | `def outer(base): def add(v): return v+base; g = lambda: add(10)` fails to COMPILE with `undefined variable (add)` — the transitive-capture path PyParseLambdaStub documents does not fire for this shape. Pre-existing, and independent of the body's shape. | — |
 | bug-nilpy-list-mutators-return-self-instead-of-none | N | 40 | bug | list.append/extend/sort/reverse return Self, so `x = l.sort()` yields the LIST where Python yields None — silent, and the return is load-bearing for the comprehension desugar | — |
 | bug-nilpy-list-of-custom-objects-loses-repr-str | N | 40 | bug | A user class instance boxed in a list/dict prints as empty, losing `__repr__`/`__str__` | — |
 | bug-nilpy-list-sort-ignores-lt-dunder-on-objects | N | 35 | bug | `list.sort()` on user objects with `__lt__` raises a runtime TypeError instead of using it | — |
 | bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
-| bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error | N | 50 | bug | `xs.sort(key=..., reverse=...)` fails with a bare "unexpected token" | — |
 | bug-nilpy-missing-builtins-step-slicing-range-into-list | N | 45 | bug | NilPy survey: step slicing (x[::2]), list(range(...)), pow(), str.index/expandtabs, sorted(d.keys()) all fail to COMPILE — 13 of 133 method-surface cases | — |
 | bug-nilpy-missing-index-dunder-raises-indexerror-not-typeerror | N | 35 | bug | Indexing a sequence with an object that has no __index__ raises IndexError (the handle used as a position) where CPython raises TypeError — loud but misleading, and a small handle would index the wrong element instead | — |
 | bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch | N | 45 | bug | NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a user class — dispatch is compile-time only. Scalar-then-class rebinding is just one way to get a variant. | feature-nilpy-runtime-dunder-dispatch-on-variants |
@@ -341,9 +342,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1306)
+## done (1305)
 
-1306 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1305 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -423,8 +424,8 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [U] decide-pxxpdf-ticket-obsolete (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
+- [p 50] [N] bug-nilpy-keyword-arg-vs-overload-set
 - [p 50] [N] bug-nilpy-lambda-over-a-capturing-nested-def-does-not-compile
-- [p 50] [N] bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error
 - [p 50] [N] bug-nilpy-stdlib-shim-table-cannot-reach-an-overload
 - [p 50] [N] bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
