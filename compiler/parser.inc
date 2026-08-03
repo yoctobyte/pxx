@@ -7895,7 +7895,8 @@ function MatchCallDelphiProcAddr(const name: AnsiString; qUnit, nArgs, argsHead:
   const argTypes: array of TTypeKind): Integer;
 var i, currArg, exprNode, pi, sidx, node, match0: Integer;
     procCand: array[0..MAX_PROC_PARAMS-1] of Boolean; retryTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
-    hasCand, needAddr, pcharRetry, hasPChar: Boolean;
+    litTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+    hasCand, needAddr, pcharRetry, hasPChar, litRetry: Boolean;
 begin
   hasCand := False;
   if DelphiMode then
@@ -7949,9 +7950,50 @@ begin
   end;
   MatchArgRecValid := True;
 
+  { FPC parity: an untyped integer LITERAL is typed by its VALUE — the smallest
+    type that holds it — and overload resolution ranks against THAT. pxx types
+    every literal LongInt (Int64 when it does not fit), so `hi($1234)` bound
+    Hi(LongInt) and split 32 bits (0|4660) where FPC binds Hi(SmallInt) and
+    splits 16 (18|52). Probed as a separate EXACT-only match ahead of the real
+    one: an exact hit is unambiguously the candidate FPC would pick, and a miss
+    costs one chain walk and changes nothing — which is what keeps `5` binding
+    LongInt rather than Byte, since ShortInt does not widen into Byte and FPC
+    ranks it the same way. The literal's own type is untouched, so arithmetic
+    promotion is unaffected. }
+  litRetry := False;
+  currArg := argsHead;
+  for i := 0 to nArgs-1 do
+  begin
+    if i < MAX_PROC_PARAMS then
+    begin
+      litTypes[i] := argTypes[i];
+      exprNode := ASTLeft[currArg];
+      { ASTEnumId >= 0: an enum MEMBER folds to an AN_INT_LIT carrying its
+        ordinal — re-typing that by value would rank it as a plain number. }
+      if (ASTKind[exprNode] = AN_INT_LIT) and (ASTEnumId[exprNode] < 0) and
+         IsIntTypeKind(argTypes[i]) then
+      begin
+        litTypes[i] := LiteralIntKind(ASTIVal[exprNode]);
+        if litTypes[i] <> argTypes[i] then litRetry := True;
+      end;
+    end;
+    currArg := ASTRight[currArg];
+  end;
+
   MatchQuiet := hasCand or hasPChar;   { the call-first / pchar probe must not print mismatch diag }
-  if qUnit >= 0 then match0 := MatchProcCallInUnit(name, qUnit, nArgs, argTypes)
-  else match0 := MatchProcCall(name, nArgs, argTypes, qUnit = -1);   { qUnit=-1 plain unqualified -> builtin is fallback-only; -2 System keeps builtin }
+  match0 := -1;
+  if litRetry and (nArgs <= MAX_PROC_PARAMS) then
+  begin
+    MatchExactOnly := True;
+    if qUnit >= 0 then match0 := MatchProcCallInUnit(name, qUnit, nArgs, litTypes)
+    else match0 := MatchProcCall(name, nArgs, litTypes, qUnit = -1);
+    MatchExactOnly := False;
+  end;
+  if match0 < 0 then
+  begin
+    if qUnit >= 0 then match0 := MatchProcCallInUnit(name, qUnit, nArgs, argTypes)
+    else match0 := MatchProcCall(name, nArgs, argTypes, qUnit = -1);   { qUnit=-1 plain unqualified -> builtin is fallback-only; -2 System keeps builtin }
+  end;
   MatchQuiet := False;
   Result := match0;
 

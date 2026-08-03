@@ -1253,6 +1253,7 @@ var
   DelphiMode : Boolean;  { {$mode delphi}: relaxes a bare function name bound to a procedural-value target to take its address (@F-optional). PXX's dialect is otherwise one objfpc-ish superset; this is the one behavioural delta. Default off. }
   ThreadSafeMode : Boolean;
   MatchQuiet : Boolean;  { suppress MatchProcCall's mismatch diagnostics for a speculative overload probe (delphi @-relax call-first attempt). }
+  MatchExactOnly : Boolean;  { restrict MatchProcCall* to its EXACT phase and return -1 otherwise — the literal-typed probe in MatchCallDelphiProcAddr, which must not fall through to the compatible phases with a re-typed argument. }
   { Record identity of each call argument, for overload matching. Filled by
     MatchCallDelphiProcAddr (the single entry into MatchProcCall*) from the
     arg AST nodes; REC_NONE when unknown. Valid=False -> matcher ignores them

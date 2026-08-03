@@ -21,9 +21,10 @@ var
   w: Word;
   n: Integer;
 begin
-  { Untyped literals type as LongInt here (FPC sizes them to the value, so it
-    would say byte/word for the middle two — same VALUES, different overload;
-    see bug-a-integer-literal-not-typed-by-its-value-for-overload-resolution). }
+  { An untyped literal is typed by its VALUE — the smallest type that holds it —
+    and resolution ranks against that, so these match FPC candidate for
+    candidate. `5` is ShortInt, which does not widen into Byte, so it lands on
+    longint rather than byte; 200 and 40000 hit Byte and Word exactly. }
   p(5);
   p(200);
   p(40000);

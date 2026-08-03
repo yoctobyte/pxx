@@ -4949,6 +4949,32 @@ begin
             (TypeSize(pType) < TypeSize(aType));
 end;
 
+function LiteralIntKind(v: Int64): TTypeKind;
+{ FPC's type for an untyped integer CONSTANT: the smallest type that holds it,
+  signed candidate before unsigned at each width. pxx types every literal as
+  LongInt (Int64 when it does not fit), which is a fine type for the VALUE but
+  the wrong input to overload ranking — `hi($1234)` bound Hi(LongInt) and
+  answered 0 where FPC binds Hi(SmallInt) and answers 18.
+
+  Used ONLY to rank overload candidates (see MatchCallDelphiProcAddr). The
+  literal's own expression type is untouched, so arithmetic promotion is
+  unaffected — `b + 0` stays LongInt, as it is in FPC. }
+begin
+  if (v >= -128) and (v <= 127) then Result := tyInt8
+  else if (v >= 0) and (v <= 255) then Result := tyUInt8
+  else if (v >= -32768) and (v <= 32767) then Result := tyInt16
+  else if (v >= 0) and (v <= 65535) then Result := tyUInt16
+  else if (v >= -2147483648) and (v <= 2147483647) then Result := tyInt32
+  else if (v >= 0) and (v <= 4294967295) then Result := tyUInt32
+  else Result := tyInt64;
+end;
+
+function IsIntTypeKind(t: TTypeKind): Boolean;
+begin
+  Result := t in [tyInteger, tyInt8, tyUInt8, tyInt16, tyUInt16, tyInt32,
+                  tyUInt32, tyInt64, tyUInt64, tyNativeInt, tyNativeUInt];
+end;
+
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind; suppressBuiltin: Boolean): Integer;
 var i, j: Integer; match: Boolean; cn, nl: AnsiString; demote: Boolean; bIdx: Integer;
 begin
@@ -5003,6 +5029,13 @@ begin
     end;
     i := ProcHashNext[i];
   end;
+
+  { The literal-typed probe wants Phase 1 and nothing else: its argTypes carry a
+    RE-TYPED integer literal (LiteralIntKind), which is a legitimate input to an
+    exact match and a misleading one to every compatible phase below. Bail out
+    with no match and no diagnostic; the caller then matches again on the real
+    argument types. }
+  if MatchExactOnly then begin Result := -1; Exit; end;
 
   { Phase 1b: Try exact match with return-lifting }
   i := ProcChainHead(name);
@@ -5225,6 +5258,8 @@ begin
         Exit;
       end;
     end;
+
+  if MatchExactOnly then begin Result := -1; Exit; end;   { see MatchProcCall }
 
   { Phase 1b: Try exact match with return-lifting }
   for i := 0 to ProcCount - 1 do

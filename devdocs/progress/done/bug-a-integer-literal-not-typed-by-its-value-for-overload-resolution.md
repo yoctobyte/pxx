@@ -3,6 +3,8 @@ track: A
 prio: 45
 type: bug
 summary: "An untyped integer literal always types as LongInt (or Int64 if it does not fit), so overload resolution picks a different candidate than FPC: hi($1234) gives 0|4660 where FPC gives 18|52. Values are no longer truncated (that half is fixed) — this is the remaining FPC-parity gap."
+status: done
+owner: claude-A@opus5
 ---
 
 # An integer literal is not typed by its VALUE for overload resolution
@@ -79,3 +81,59 @@ cheapest widening".
   `test/test_hilo_swap.pas` gains literal rows.
 - Self-host fixedpoint + `make test`; a repin only if `compiler/builtin/**`
   changes again.
+
+## Resolution 2026-08-03 (claude-A@opus5)
+
+Neither option as written — a third one, which is option 1's ranking model
+applied *only* where ranking happens, so it carries none of option 1's risk to
+arithmetic promotion and none of option 2's parallel array through callers.
+
+- `LiteralIntKind(v: Int64): TTypeKind` (`symtab.inc`) — FPC's smallest fitting
+  type, signed candidate before unsigned at each width.
+- `MatchCallDelphiProcAddr` (`parser.inc`) is the SINGLE entry into
+  `MatchProcCall*` and already refills a side channel there (`MatchArgRec`), so
+  the literal re-typing rides the same loop: an argument that is a bare
+  `AN_INT_LIT` (and not a folded enum member) contributes its `LiteralIntKind`
+  to a parallel `litTypes`.
+- That probe runs as an **EXACT-only** match ahead of the real one, via a new
+  `MatchExactOnly` global that makes `MatchProcCall` / `MatchProcCallInUnit`
+  return -1 after their exact phase. A hit is unambiguously FPC's candidate; a
+  miss costs one chain walk and changes nothing.
+
+Exact-only is what makes the `5` row come out right without a scoring pass:
+`5` is ShortInt, ShortInt does not widen into Byte, and FPC ranks it onto
+LongInt for exactly that reason — which is what the fallback already does. The
+rows that need the fix are the ones where the literal's own type *is* a
+candidate (200/Byte, 40000/Word, `$1234`/SmallInt).
+
+The literal's expression type is untouched, so promotion is unaffected
+(`b + 0` stays LongInt).
+
+### Verified against FPC, not against expectation
+
+Both regression tests now produce output **identical to FPC's**, diffed against
+a real `fpc` build of the same source:
+
+```
+p(5) p(200) p(40000) p(100000) p(5000000000)
+  ->  longint / byte / word / longint / int64          (was longint x4 + int64)
+hi($1234)|lo($1234) -> 18|52                           (was 0|4660)
+swap($1234)         -> 13330                           (was 305397760)
+```
+
+`test/test_hilo_swap.pas` gains six literal rows (5, 200, `$1234`, 40000,
+`$12345678`, `$1122334455667788`) covering every width; all 20 rows match FPC.
+`test/test_overload_no_narrowing.pas` keeps its shape, with the middle two rows
+now byte/word; its comment no longer describes the gap as open. Makefile
+expectations updated for both.
+
+Blast radius is small by construction: the probe only wins on an EXACT hit for
+the literal's smallest type, i.e. only where someone declared an overload taking
+precisely Byte/ShortInt/SmallInt/Word/Cardinal. A non-overloaded `Foo(b: Byte)`
+called `Foo(200)` resolves to the same routine, just one phase earlier.
+
+`tools/gate.sh quick` GREEN (self-host fixedpoint byte-identical, testmgr quick,
+FPC seed canary). No `compiler/builtin/**` change, so no repin needed.
+
+## Log
+- 2026-08-03 — resolved, commit PENDING.

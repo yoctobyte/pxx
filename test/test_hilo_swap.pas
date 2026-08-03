@@ -29,4 +29,14 @@ begin
   { A cast gives the expression a real type, so it dispatches like a variable. }
   writeln(hi(Byte(200)), ' ', lo(Byte(200)), ' ', swap(Byte(200)));
   writeln(hi(Word($1234)), ' ', lo(Word($1234)), ' ', swap(Word($1234)));
+  { An untyped LITERAL is typed by its VALUE, so it dispatches like the cast
+    above with no cast written — the residual half of
+    bug-a-integer-literal-not-typed-by-its-value-for-overload-resolution.
+    hi($1234) answered 0 while every typed row here was already right. }
+  writeln(hi(5), ' ', lo(5), ' ', swap(5));
+  writeln(hi(200), ' ', lo(200), ' ', swap(200));
+  writeln(hi($1234), ' ', lo($1234), ' ', swap($1234));
+  writeln(hi(40000), ' ', lo(40000), ' ', swap(40000));
+  writeln(hi($12345678), ' ', lo($12345678), ' ', swap($12345678));
+  writeln(hi($1122334455667788), ' ', lo($1122334455667788), ' ', swap($1122334455667788));
 end.
