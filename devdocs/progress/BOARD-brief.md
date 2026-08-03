@@ -32,7 +32,6 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 174, ranked
 
-- `[p 80] [T]` meta-t-dev-throughput-and-track-a-t-integration
 - `[p 70] [U]` decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 3)
 - `[p 70] [N]` bug-nilpy-float-repr-not-shortest-roundtrip
 - `[p 70] [T]` regression-optdiff-shard8-12
@@ -62,5 +61,6 @@ _none — no lane is locked._
 - `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
 - `[p 55] [N]` bug-nilpy-def-return-coerces-a-float-to-the-inferred-int-result
 - `[p 55] [N]` bug-nilpy-user-def-does-not-shadow-a-pylib-builtin
+- `[p 55] [P]` compat-pascal-assert-halts-instead-of-raising-eassertionfailed
 
 _144 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -2,7 +2,7 @@
 summary: "META: development is wait-limited, not token-limited. Dev tracks stop running suites; T owns breadth and its report LATENCY becomes the product. Coordinates the tooling tickets that get us there."
 type: meta
 track: T
-prio: 80
+prio: 40
 ---
 
 # META: dev throughput — Track A+* / Track T integration
@@ -110,3 +110,60 @@ bullet above** — which is a *verification*, not a change: read testmgr's own
 
 An agent can land a compiler fix in ~15s of local work, and hears about any
 regression it caused within minutes, without ever running a suite by hand.
+
+## Measured 2026-08-03 — the claim, tested
+
+User observation that prompted this: *"as far as I observe track T works as
+intended, no new issues. Track A and T align well... maybe numbers can prove
+it."* They do. Rerun any time with `tools/tstate_stats.py` — the point of
+writing it down is that the claim stays falsifiable.
+
+418 runs on xeon, 2026-07-31 .. 2026-08-03:
+
+| | median | p90 | max |
+|---|---|---|---|
+| **commit -> first verdict** | **2.8 min** | 3.4 min | 7.5 min |
+| commit -> full-tier verdict | 8.8 min | 10.2 min | 12.5 min |
+| commit -> opt verdict | 12.7 min | 15.9 min | 17.2 min |
+| full-tier run wall | 5.8 min | 6.6 min | 9.6 min |
+| native run wall | 1.8 min | 1.9 min | 5.2 min |
+
+**"Done when: ... hears about any regression it caused within minutes" — met.**
+The first verdict on a sha lands in under 4 minutes nine times out of ten, and
+never took more than 7.5 in this window.
+
+**A/T alignment, quantified.** The watcher's auto-filed regression tickets:
+**80 fixed, 7 rejected, 2 still open — 92% of resolved ones were real bugs.**
+That is the number behind "they align well": T is not spending other agents'
+triage cycles on noise. (Two of those 7 rejections were the enrollment cascade
+and its stale seed, both of which now have guards —
+[[task-t-suppress-autoticket-until-host-baselined]],
+[[task-t-seed-from-stable-defeats-rebuild]] — so the ratio should improve, not
+merely hold.) Only 6% of runs report NEW-RED at all, so the steady state is
+quiet, which is what "no new issues" looks like from the other side.
+
+**Core utilisation — the unticketed work item above, now VERIFIED, not tuned.**
+testmgr's own header on this box reads `tier=full jobs=2040 cap=24 scale=1.00`.
+`cap=24` is `nproc*2` on the 12-core xeon, and `scale=1.00` says calibration
+finds the box at reference speed. Nothing is misconfigured; per the item's own
+instruction, nothing was touched.
+
+**One assumption corrected.** The full tier is **5.8 min median**, not the
+"~45 min" that [[feature-twatch-full-tier-coverage-age]] was written against
+(that figure came from the older box). It covers 42% of tested shas with a
+median 25.8 min gap — but the max gap was 7.8h, so preemption starvation is
+rarer than assumed and still real.
+
+## Status 2026-08-03
+
+Open: [[feature-t-testmgr-owns-pinning-interruptible]] (60) and
+[[feature-t-bench-idle-must-be-preemptible]] (55). Both carry their own
+priority and neither is blocked on this ticket.
+
+**Prio 80 -> 40.** The urgency this was rated for was the *wait-limited*
+premise — agents burning 20 minutes on 554s gate runs that found nothing. That
+premise is measurably gone: the dev loop is the ~12s build, breadth is
+offloaded, and the report comes back in under 3 minutes. The umbrella stays
+open until its two remaining children land (its own rule), but it should not
+head the ready queue while doing so — an 80 here also propagates down its
+dependency edges and inflates everything it links.

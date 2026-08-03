@@ -82,3 +82,18 @@ whose verdict is known (that is what testing a HEAD actually establishes), and
 reserve DOWN for genuine lag — the last verdict being stale, or HEAD having run
 far ahead of the last tested sha. A per-commit-gating shortfall is still worth
 reporting, but as a distinct, quieter line than "T is down, gate it yourself".
+
+## Log
+- 2026-08-03 — measured on xeon (`tools/tstate_stats.py`, 418 runs over 3 days),
+  which corrects the number this ticket reasons from. A full run is **5.8 min
+  median** (p90 6.6), not the ~45 min quoted above — that figure was borg's.
+  Full-tier coverage reaches **42% of tested shas** with a **median 25.8 min**
+  gap between successive full runs.
+
+  So the starvation scenario is rarer than the ticket assumes: at ~6 min a run
+  usually finds an idle window. It is NOT void, though — the max observed gap
+  was **471 min (7.8h)**, which is exactly the invisible state described here,
+  and nothing yet distinguishes it from healthy lag. Prio unchanged; what
+  changed is that the numbers now exist, so suggestion 1 (report coverage age
+  and preemption count in `trackt status`) can be built against real thresholds
+  rather than a guess.
