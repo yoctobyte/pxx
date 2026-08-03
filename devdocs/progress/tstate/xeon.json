@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-02T22:15:08Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "d6f4f74ae8c14cea1da4d4c7bf962688c4ed09f9",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-02T22:21:33Z",
    "fixed": [],
    "new_red": [],
@@ -412,6 +404,14 @@
    "sha": "c3920992b93ddba5d83f4f549227e1c064fc7b85",
    "tier": "full",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-03T14:52:02Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "c3920992b93ddba5d83f4f549227e1c064fc7b85",
+   "tier": "opt",
+   "verdict": "GREEN"
   }
  ],
  "host": "xeon",
@@ -4487,11 +4487,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-03T14:47:17Z",
+  "date": "2026-08-03T14:52:02Z",
   "sha": "c3920992b93ddba5d83f4f549227e1c064fc7b85",
-  "tier": "full",
-  "verdict": "RED",
-  "wall": 408.2
+  "tier": "opt",
+  "verdict": "GREEN",
+  "wall": 278.1
  },
  "last_bench": {
   "conf_rows": 550,
