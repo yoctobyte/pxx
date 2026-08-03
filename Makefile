@@ -1375,6 +1375,11 @@ test-nilpy: $(COMPILER)
 	# decimal expansion. Every value here is now CPython's.
 	./$(COMPILER) test/test_nilpy_round.npy /tmp/test_nilpy_round26
 	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.67 2.67\n9.99 0.04 0.3 100.0\n1.0 0.0 -0.0 0.0')"
+	# pow(base, exp, mod): modular exponentiation, incl. the sign-of-the-modulus
+	# rule, the negative-exponent modular inverse, and doubling-based products so a
+	# 2^62 modulus does not overflow Int64. See the test's header.
+	./$(COMPILER) test/test_nilpy_pow_mod.npy /tmp/test_nilpy_powmod26
+	test "$$(/tmp/test_nilpy_powmod26)" = "$$(printf '%b' '24 1024 1 0\n8 -2 2 -3\n560583526\n1 0\n3 5 11\n281250002\nValueError-zero-mod\nValueError-not-invertible\n1,234,567\nbd [2, 4] ace fedcba')"
 	# Python has no overloading: a module-level `def sorted(x)` REPLACES the
 	# builtin. A user def merely joined the overload set and lost on ARGUMENT FIT,
 	# so the program silently printed the builtin's answer. See the test's header;

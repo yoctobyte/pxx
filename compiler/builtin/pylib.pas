@@ -903,10 +903,19 @@ function list(const v: Variant): TPyList; overload;
   (bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice) }
 function tuple(l: TPyList): TPyList;
 function tuple(const s: AnsiString): TPyList; overload;
-{ pow(base, exp) — the function spelling of `**`, which already works. pow with
-  a THIRD argument is modular exponentiation and is a different algorithm; it is
-  deliberately NOT provided here rather than silently ignoring the modulus. }
+{ pow(base, exp) — the function spelling of `**`, which already works. }
 function pow(const a: Variant; const b: Variant): Variant;
+{ pow(base, exp, mod) — MODULAR exponentiation, and genuinely a different
+  algorithm rather than `(a ** b) mod m`: the intermediate power overflows long
+  before the modulus does, which is the whole reason the three-argument form
+  exists (bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice, item 1).
+
+  Integers only, as in CPython. The result takes the SIGN OF THE MODULUS —
+  pow(2, 3, -5) is -2, not 3 — which is Python's floored-modulo rule and not
+  what a plain `mod` gives. A NEGATIVE exponent is the modular INVERSE raised to
+  |exp|, as in CPython 3.8+, and raises ValueError when the base is not coprime
+  with the modulus — which is what CPython does too. }
+function pow(a, b, m: Int64): Int64; overload;
 { `dict(x)` — a shallow COPY of a mapping, as Python's dict() constructor makes.
   Same overload-by-argument-type shape as list() (feature-nilpy-missing-builtins).
   uforth uses `dict(vm.dict)` to snapshot word-list state for MARKER. }
@@ -8476,6 +8485,80 @@ end;
 function pow(const a: Variant; const b: Variant): Variant;
 begin
   Result := pypow_v(a, b);
+end;
+
+{ (a * b) mod m without overflowing Int64. A plain `a * b` overflows as soon as
+  the operands pass 2^31 even though the RESULT is bounded by m, so the product
+  is accumulated by doubling instead — every intermediate stays below 2m, which
+  is why m is capped just under 2^62 rather than at Int64's range. }
+function PyMulMod(a, b, m: Int64): Int64;
+var r: Int64;
+begin
+  r := 0;
+  a := a mod m;
+  while b > 0 do
+  begin
+    if (b and 1) = 1 then r := (r + a) mod m;
+    a := (a + a) mod m;
+    b := b shr 1;
+  end;
+  PyMulMod := r;
+end;
+
+{ The modular inverse of a mod m, by the extended Euclidean algorithm: the x in
+  a*x = 1 (mod m), which exists exactly when gcd(a, m) = 1. Needed by pow()'s
+  NEGATIVE exponent form. Kept in plain Int64 rather than PyMulMod because every
+  intermediate here is a remainder or a coefficient bounded by m, not a product
+  of two of them. }
+function PyModInverse(a, m: Int64): Int64;
+var oldR, r, oldS, s2, q, t: Int64;
+begin
+  oldR := a; r := m;
+  oldS := 1; s2 := 0;
+  while r <> 0 do
+  begin
+    q := oldR div r;
+    t := oldR - q * r; oldR := r; r := t;
+    t := oldS - q * s2; oldS := s2; s2 := t;
+  end;
+  if oldR <> 1 then
+    raise ValueError.Create('base is not invertible for the given modulus');
+  oldS := oldS mod m;
+  if oldS < 0 then oldS := oldS + m;
+  PyModInverse := oldS;
+end;
+
+function pow(a, b, m: Int64): Int64; overload;
+var r, base: Int64; neg: Boolean;
+begin
+  if m = 0 then
+    raise ValueError.Create('pow() 3rd argument cannot be 0');
+  neg := m < 0;
+  if neg then m := -m;
+  if m > (Int64(1) shl 62) then
+    raise ValueError.Create('pow() 3rd argument is too large (modulus must be '
+      + 'below 2^62)');
+  r := 1 mod m;              { m = 1 makes every result 0, including pow(x,0,1) }
+  base := a mod m;
+  if base < 0 then base := base + m;
+  { A NEGATIVE exponent is the modular INVERSE raised to |b| (CPython 3.8+), and
+    it exists only when the base is coprime with the modulus — CPython raises
+    ValueError when it is not, rather than returning something. }
+  if b < 0 then
+  begin
+    base := PyModInverse(base, m);
+    b := -b;
+  end;
+  while b > 0 do
+  begin
+    if (b and 1) = 1 then r := PyMulMod(r, base, m);
+    base := PyMulMod(base, base, m);
+    b := b shr 1;
+  end;
+  { Python's result carries the sign of the modulus: the mathematical residue
+    is in [0, |m|), and a negative modulus shifts it down by |m|. }
+  if neg and (r <> 0) then r := r - m;
+  pow := r;
 end;
 
 { list(v) where v is a VARIANT — copy the list/str it holds. `list(fb or [])`

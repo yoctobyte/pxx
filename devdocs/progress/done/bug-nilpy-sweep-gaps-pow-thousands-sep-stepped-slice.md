@@ -2,6 +2,8 @@
 track: N
 prio: 50
 type: bug
+status: done
+owner: claude-AN
 ---
 
 # Three loud gaps found by the CPython differential sweep
@@ -184,3 +186,56 @@ in good shape and this really is a spec-parser gap:
 `{{literal}}`, expressions inside holes (`{n + 1}`, `{s.upper()}`, `{len(s)}`),
 subscripts (`{xs[0]}`, `{d['k']}`), a nested string literal (`{'nested'}`),
 `"%s-%d" % (s, n)` and `"{0} {1} {0}".format(...)`.
+
+
+## Resolved 2026-08-04 — two of the three had already been fixed; `pow` finished
+
+Re-measured all three before touching anything, and the ticket was two-thirds
+stale:
+
+| item | today |
+| --- | --- |
+| 2. `"{:,}".format(1234567)` | **already works** — `1,234,567` |
+| 3. `"abcdef"[1:5:2]`, `[1,2,3,4,5,6][1:5:2]`, `"abcdef"[::2]` | **already work** |
+| 1. `pow(2, 10)` | already works |
+| 1. `pow(2, 10, 1000)` | **still `no overload of pow matches these arguments`** |
+
+Items 2 and 3 were fixed by other work since 2026-08-02 (`pystr_slice_step` and
+the format-spec handling). They are pinned in the new test rather than left
+untested, since nothing else covered them.
+
+### `pow(base, exp, mod)` implemented
+
+Modular exponentiation, and genuinely a different algorithm rather than
+`(a ** b) mod m` — the intermediate power overflows long before the modulus
+does, which is the whole reason Python has the three-argument form. Three
+things it gets right that are easy to get subtly wrong, each pinned by a row:
+
+- **The result carries the sign of the MODULUS.** `pow(2, 3, -5)` is `-2`, not
+  `3`. That is Python's floored-modulo rule, and it is not what a plain `mod`
+  produces.
+- **A negative exponent is the modular INVERSE** raised to `|exp|` (CPython
+  3.8+), by extended Euclid, raising `ValueError` when the base is not coprime
+  with the modulus — which is what CPython raises too. The first version refused
+  negative exponents outright; measuring against the oracle showed CPython
+  answers `pow(2, -1, 5)` = `3`, so the refusal would have been a real gap and
+  was replaced.
+- **Products are accumulated by doubling** (`PyMulMod`), because a plain `a * b`
+  overflows Int64 once the operands pass 2^31 even though the *result* is
+  bounded by `m`. Every intermediate then stays below `2m`, which is why the
+  modulus is capped just under 2^62 and refused loudly above it rather than
+  silently wrapping.
+
+`m = 0` raises `ValueError`, as in CPython, and both raises are catchable — the
+"must be catchable, not an abort" principle this ticket's item 2 raised.
+
+### Verified
+
+`test/test_nilpy_pow_mod.npy`, wired into `make test-nilpy`: 20 `pow` values
+including both negative-modulus and negative-exponent cases and a 2^62 modulus,
+both error paths, plus the items 2 and 3 regressions. Diffed against CPython,
+identical. `tools/gate.sh quick` GREEN, self-host byte-identical.
+
+## Log
+- 2026-08-04 — resolved.
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

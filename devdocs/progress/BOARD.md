@@ -73,7 +73,6 @@ _none_
 | bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-stdlib-shim-table-cannot-reach-an-overload | N | 50 | bug | The stdlib shim table and every hand-built pylib call resolve a NAME with FindProc, which returns ONE proc index and never consults overloads — so os.path.join('a','b','c') fails and adding a Pascal overload has no effect | — |
-| bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice | N | 50 | bug | Three loud gaps found by the CPython differential sweep | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-nilpy-user-def-len-of-a-container-still-binds-the-builtin | N | 45 | bug | `def len(x)` shadows the builtin for a STRING argument but not for a list/dict — the container call still reaches pylib's len and prints its answer silently. Residue of bug-nilpy-user-def-does-not-shadow-a-pylib-builtin, which fixed 14 of 15 builtins. | — |
 | bug-nilpy-user-def-loses-to-pylibs-variant-overload-at-the-same-arity | N | 30 | bug | A NilPy `def min(x, y, z)` compiles but is silently NOT called — pylib's all-Variant 3-arg min outranks it, so the program gets the builtin's answer | — |
@@ -227,6 +226,7 @@ _none_
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | regression-optdiff-shard8-12 | T | 70 | regression | regression: optdiff#shard8/12 red at 28eb1a105ddb (auto-filed by twatch) | — |
 | regression-test-c-conformance-shard2-6 | T | 70 | regression | regression: test-c-conformance#shard2/6 red at ff1a30aae401 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-class-return | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_class_return.npy red at cd891b44a616 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
 | task-t-enroll-pascal-conformance-tier | T | 45 | task | Enroll test-pascal-conformance in testmgr tiers (sharded, like the C battery) | — |
@@ -342,9 +342,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1305)
+## done (1306)
 
-1305 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1306 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -383,6 +383,7 @@ _none_
 
 - [p 70] [T] regression-optdiff-shard8-12
 - [p 70] [T] regression-test-c-conformance-shard2-6
+- [p 70] [T] regression-test-nilpy-test-nilpy-class-return
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 65] [T] task-t-worktree-is-not-current-state
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
@@ -427,7 +428,6 @@ _none_
 - [p 50] [N] bug-nilpy-keyword-arg-vs-overload-set
 - [p 50] [N] bug-nilpy-lambda-over-a-capturing-nested-def-does-not-compile
 - [p 50] [N] bug-nilpy-stdlib-shim-table-cannot-reach-an-overload
-- [p 50] [N] bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
 - [p 50] [T] bug-tstate-xeon-cross-jobs-red-missing-corpora
 - [p 50] [D] docs-devnotes-ai-assisted-build

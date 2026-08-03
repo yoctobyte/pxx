@@ -557,6 +557,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-subscript-argument-boxes-wrong-into-variant-param | N | 75 | bug | A SUBSCRIPT argument passed to a variant parameter arrives as garbage | — |
 | bug-nilpy-subscript-on-literal | N | 35 | bug | NilPy: cannot subscript a string LITERAL — `"abc"[1]` | — |
 | bug-nilpy-super-and-unbound-parent-method-calls | N | 70 | bug | Neither `super().m()` nor `Parent.m(self)` reaches an overridden method | — |
+| bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice | N | 50 | bug | Three loud gaps found by the CPython differential sweep | — |
 | bug-nilpy-ternary-comprehension-element-stringified | N | 70 | bug | A mixed-type conditional in a comprehension element turns numbers into strings | — |
 | bug-nilpy-tk-pxxcb-invalid-command-name | N | 65 | bug | Tk: `invalid command name "pxxcb"` in a long-running app | — |
 | bug-nilpy-tokenize-managed-temp-release-garbage | A | 60 | bug | NilPy/uforth: managed-string hidden temp released with garbage at method return | — |
