@@ -2,7 +2,7 @@
 track: N
 prio: 65
 type: bug
-status: working
+status: done
 owner: claude-AN
 ---
 
@@ -312,3 +312,81 @@ The framing that makes the model obvious, from the same discussion:
 identical machinery to `a.x = ...` from outside. One rule (reads fall through,
 writes land on what you named), and ordinary per-instance fields exist only
 because `__init__` performs those writes.
+
+## 2026-08-03 — RESOLVED. Commits 8263dda78 (rows 1-2) and the follow-up (row 3).
+
+Implemented as the model, with the whole-program scan used ONLY as the lowering
+optimisation the decision permits. `PyClsAttrWriteScan` answers two questions per
+attribute — is it written through the CLASS NAME, is it written through an
+INSTANCE — and the three answers are the three rows:
+
+| class-written | instance-written | lowering |
+| --- | --- | --- |
+| no | either | copy at construction, as before |
+| yes | no | ONE shared slot, no instance field |
+| yes | yes | shared slot + per-instance override |
+
+Row 1 is provably indistinguishable from fall-through: divergence needs a
+class-level write after construction and there is none. Row 2 is the counter
+idiom — correct and free, no run-time check. Row 3 pays for
+`pydynattr_has(inst,"x") ? pydynattr_get(inst,"x") : <slot>` on reads and
+`pydynattr_set` on writes, which is the same store an undeclared dynamic
+attribute already used: in Python `self.x = ...` and `obj.x = ...` ARE the same
+operation whether or not the class declares `x`, and now so is the lowering.
+
+**Parts 1 and 2 came out as one thing, not two.** Every class attribute — literal
+initialiser included — now gets its `$clsattr.<Class>.<name>` slot allocated in
+the member pre-pass and registered as a CLASS VAR. That registration IS the
+lookup fix: the shared parser already resolves a class var from `C.attr`, from a
+bare `attr` inside a method, and from `inst.attr` when the class has no field of
+that name. No new lookup code was written. The "risky half" (real storage for a
+literal) turned out to be three lines plus routing the literal through
+`PyEmitClassAttrExpr`, once the retype-the-field step was made conditional —
+tkString maps to tyAnsiString for a field, while the literal NODE is tyString, and
+a tyString field is an inline string[N], a different layout.
+
+### Four earlier branches had to be told to stand back
+
+Each of them claimed the name before the class-var branch could, and each failed
+differently:
+
+- NilPy's closed-world dynamic-attribute fallback — every instance read of a
+  shared slot became a runtime `AttributeError`.
+- the variant-receiver path — no class to key on, so it resolves a shared slot
+  only when EXACTLY ONE class offers the name; an ambiguous guess there would be
+  a silently wrong value, and falling through leaves the loud error.
+- the `self.x = ...` field scan — this one was the subtle one. With a row-3
+  attribute it registered an instance field, and the instance then read that
+  field instead of falling through, so `C.x = ...` was invisible to every
+  instance. Found by measurement, not by reading: adding an uncalled
+  `def set_mode(self, m): self.mode = m` to a passing 8-line program made it
+  fail, which is what pointed at the scan.
+- `PyEmitClassAttrExpr`'s retype, above.
+
+### Verified
+
+`test/test_nilpy_class_attribute_through_class_name.npy` (+ `.expected`, wired
+into `make test-nilpy`), byte-identical to CPython: all three rows read and
+written every way; the counter idiom across three constructions; literal,
+expression and container initialisers; an instance write leaving the class value
+alone; mutable attributes staying shared; per-instance overrides surviving a
+later class rebind; augmented assignment both creating and updating an override;
+inheritance through the subclass NAME; and a dataclass with defaults as a
+regression control. `gate.sh quick` GREEN, self-host fixedpoint byte-identical.
+
+### Filed on the way, both pre-existing and both reproduced on a baseline build
+
+- [[bug-nilpy-user-class-named-like-a-pylib-builtin-is-shadowed]] — a user
+  `class Counter` loses to pylib's `Counter`, and the diagnostic blames a missing
+  member. Cost about twenty minutes of hunting a class-attribute bug that wasn't
+  one.
+- [[bug-nilpy-inherited-class-attribute-empty-on-a-subclass-instance]] —
+  `Sub().kind` reads empty when `kind` is declared on `Base`: construction copies
+  only the class's OWN class attributes. Silent wrong value. Unrelated to the
+  three rows here (the shared-slot rows resolve through `FindClassVar`, which
+  already walks the parent chain — which is why `Sub.kind` is correct today and
+  only the instance route is wrong).
+
+## Log
+- 2026-08-03 — resolved.
+- 2026-08-03 — resolved, commit HEAD.

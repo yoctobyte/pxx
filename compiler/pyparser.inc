@@ -3258,7 +3258,7 @@ begin
 end;
 
 function PyClsAttrEnsureGlobal(ci, nOff, nLen: Integer; tk: TTypeKind;
-                              rec: Integer): Integer;
+                              rec: Integer; needsOvr: Boolean): Integer;
 { The single shared slot behind a class attribute, registered as a CLASS VAR of
   `ci` so that all three access routes reach it with no new lookup code:
 
@@ -3288,16 +3288,41 @@ begin
     the ancestor's slot }
   for i := 0 to ClassVarCount - 1 do
     if (ClassVarCi[i] = ci) and
-       (GetTokenStrFromRaw(ClassVarNOff[i], ClassVarNLen[i]) = nm) then Exit;
+       (GetTokenStrFromRaw(ClassVarNOff[i], ClassVarNLen[i]) = nm) then
+    begin
+      if needsOvr then ClassVarPyOvr[i] := True;
+      Exit;
+    end;
   if ClassVarCount >= MAX_TYPEALIAS then Error('too many class variables');
   ClassVarCi[ClassVarCount]   := ci;
   ClassVarNOff[ClassVarCount] := nOff;
   ClassVarNLen[ClassVarCount] := nLen;
   ClassVarSym[ClassVarCount]  := Result;
+  ClassVarPyOvr[ClassVarCount] := needsOvr;
   Inc(ClassVarCount);
 end;
 
-function PyClsAttrSharedSym(const fname: AnsiString): Integer;
+function PyClsAttrOvrSlot(ci: Integer; const fname: AnsiString): Integer;
+{ The shared slot of a class attribute that ALSO needs per-instance overrides —
+  written through the class name AND through an instance. -1 for every other
+  attribute, including the shared-slot ones that no instance ever writes, which
+  read straight from the slot with no run-time check. Walks the parent chain, as
+  FindClassVar does, so a subclass instance sees the ancestor's attribute. }
+var i, cur: Integer;
+begin
+  Result := -1;
+  cur := ci;
+  while cur >= 0 do
+  begin
+    for i := 0 to ClassVarCount - 1 do
+      if (ClassVarCi[i] = cur) and ClassVarPyOvr[i] and
+         (GetTokenStrFromRaw(ClassVarNOff[i], ClassVarNLen[i]) = fname) then
+      begin Result := ClassVarSym[i]; Exit; end;
+    cur := UClsParent[cur];
+  end;
+end;
+
+function PyClsAttrSharedSym(const fname: AnsiString; var needsOvr: Boolean): Integer;
 { The shared class-attribute slot named `fname`, for a receiver whose class is
   NOT known statically — a plain NilPy local, which the frontend types as a
   variant. The statically-typed routes reach the same slot through FindClassVar;
@@ -3313,13 +3338,72 @@ function PyClsAttrSharedSym(const fname: AnsiString): Integer;
 var i: Integer;
 begin
   Result := -1;
+  needsOvr := False;
   for i := 0 to ClassVarCount - 1 do
     if (GetTokenStrFromRaw(ClassVarNOff[i], ClassVarNLen[i]) = fname) and
        (FindUField(ClassVarCi[i], fname) < 0) then
     begin
-      if Result < 0 then Result := ClassVarSym[i]
-      else if Result <> ClassVarSym[i] then begin Result := -1; Exit; end;
+      if Result < 0 then
+      begin Result := ClassVarSym[i]; needsOvr := ClassVarPyOvr[i]; end
+      else if Result <> ClassVarSym[i] then
+      begin Result := -1; needsOvr := False; Exit; end;
     end;
+end;
+
+function PyClsAttrOvrGet(baseNode: Integer; const fname: AnsiString;
+                         gsym: Integer): Integer;
+{ `inst.attr` for a class attribute with per-instance overrides — Python's
+  fall-through, spelled out:
+
+      pydynattr_has(inst, "attr") ? pydynattr_get(inst, "attr") : <shared slot>
+
+  The override store is the SAME `pydynattr` machinery an undeclared dynamic
+  attribute uses, which is why this is wiring rather than new runtime: an
+  instance write of a declared class attribute and one of an ad-hoc attribute
+  are the same operation in Python, and now in the lowering too.
+
+  Both arms are boxed to a variant so the ternary has one representation — the
+  slot's own type is whatever the initialiser produced, and letting a raw scalar
+  arm meet a variant arm reads the wrong bits. }
+var hasIdx, boxIdx, a0, a1, nameN, hasCall, slotN, boxCall, pairN: Integer;
+begin
+  { the receiver appears in BOTH the test and the get arm, and an AST node used
+    twice is EMITTED twice — `make_one().attr` would construct two objects and
+    ask the second one about the first one's override }
+  baseNode := PyEvalOnce(baseNode);
+  hasIdx := FindProc('pydynattr_has');
+  if hasIdx < 0 then Error('Nil Python: pylib (pydynattr_has) not loaded');
+  boxIdx := FindProc('pyvar_box');
+  if boxIdx < 0 then Error('Nil Python: pylib (pyvar_box) not loaded');
+
+  nameN := AllocNode(AN_STR_LIT);
+  ASTSOffset[nameN] := PyStoredName(fname);
+  ASTSLen[nameN] := Length(fname);
+  ASTTk[nameN] := Ord(tyString);
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := PyMakeObjPtr(baseNode);
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := nameN; ASTRight[a1] := -1;
+  ASTRight[a0] := a1;
+  hasCall := AllocNode(AN_CALL);
+  ASTIVal[hasCall] := hasIdx;
+  ASTTk[hasCall] := Ord(tyBoolean);
+  ASTLeft[hasCall] := a0;
+
+  slotN := AllocNode(AN_IDENT);
+  ASTIVal[slotN] := gsym;
+  ASTTk[slotN] := Ord(Syms[gsym].TypeKind);
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := slotN; ASTRight[a0] := -1;
+  boxCall := AllocNode(AN_CALL);
+  ASTIVal[boxCall] := boxIdx;
+  ASTTk[boxCall] := Ord(tyVariant);
+  ASTLeft[boxCall] := a0;
+
+  pairN := AllocNode(AN_PAIR);
+  ASTLeft[pairN] := PyForceVariant(PyMakeDynAttrGet(baseNode, fname));
+  ASTRight[pairN] := boxCall;
+  Result := AllocNode(AN_TERNARY);
+  ASTLeft[Result] := hasCall;
+  ASTRight[Result] := pairN;
+  ASTTk[Result] := Ord(tyVariant);
 end;
 
 procedure PyClsAttrWriteScan(const clsName, attrName: AnsiString;
@@ -15816,11 +15900,8 @@ begin
         shared slot the global already is. }
       PyClsAttrWriteScan(PyRawName(UClsNOff[ci], UClsNLen[ci]), GetTokenStr(i),
                          caClassW, caInstW);
-      if caClassW and caInstW then
-        Error('Nil Python: class attribute "' + GetTokenStr(i) + '" is written ' +
-              'both through the class and through an instance; the per-instance ' +
-              'override that needs is not implemented yet');
-      PyClsAttrEnsureGlobal(ci, Tokens[i].SOffset, Tokens[i].SLen, tk, REC_NONE);
+      PyClsAttrEnsureGlobal(ci, Tokens[i].SOffset, Tokens[i].SLen, tk, REC_NONE,
+                            caClassW and caInstW);
       { The attribute is a real FIELD on the instance (typed from its literal),
         so reads and the construction-time store go through the ordinary field
         path. Registered here in the pre-pass, before any method body is parsed. }
@@ -15900,11 +15981,8 @@ begin
       { same lowering choice as the literal branch above }
       PyClsAttrWriteScan(PyRawName(UClsNOff[ci], UClsNLen[ci]), GetTokenStr(i),
                          caClassW, caInstW);
-      if caClassW and caInstW then
-        Error('Nil Python: class attribute "' + GetTokenStr(i) + '" is written ' +
-              'both through the class and through an instance; the per-instance ' +
-              'override that needs is not implemented yet');
-      PyClsAttrEnsureGlobal(ci, Tokens[i].SOffset, Tokens[i].SLen, tk, k);
+      PyClsAttrEnsureGlobal(ci, Tokens[i].SOffset, Tokens[i].SLen, tk, k,
+                            caClassW and caInstW);
       if (not caClassW) and (FindUField(ci, GetTokenStr(i)) < 0) then
       begin
         sz := TypeSize(tk);
@@ -15936,6 +16014,7 @@ begin
         ClassVarNOff[ClassVarCount] := Tokens[i].SOffset;
         ClassVarNLen[ClassVarCount] := Tokens[i].SLen;
         ClassVarSym[ClassVarCount]  := k;
+        ClassVarPyOvr[ClassVarCount] := False;   { a Pascal/ClassVar-annotated slot never needs the NilPy per-instance override }
         Inc(ClassVarCount);
         while (i < bodyEnd) and (Tokens[i].Kind <> tkNewline) do Inc(i);
         Inc(i);
@@ -16518,7 +16597,16 @@ begin
             { see the dataclass branch: str fields are managed, not string[N] }
             if tk = tyString then tk := tyAnsiString;
             if tk <> tyClass then fldRec := REC_NONE;
-            if FindUField(ci, GetTokenStr(j + 2)) < 0 then
+            { ...unless the name is a CLASS ATTRIBUTE lowered as a shared slot
+              with per-instance overrides. There `self.x = ...` is precisely the
+              write that creates the override, and giving it a field as well
+              would make the instance read that field instead of falling through
+              to the slot — so a later `C.x = ...` would be invisible to every
+              instance, which is the divergence the whole lowering exists to
+              avoid. Same rule as the class-attribute branches: a shared slot
+              has no instance field, deliberately. }
+            if (FindUField(ci, GetTokenStr(j + 2)) < 0) and
+               (PyClsAttrOvrSlot(ci, GetTokenStr(j + 2)) < 0) then
             begin
               sz := TypeSize(tk);
               curOff := AlignTo(curOff, TypeAlign(tk));

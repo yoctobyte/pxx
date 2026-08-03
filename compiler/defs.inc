@@ -2593,6 +2593,12 @@ var
   ClassVarNOff    : array[0..MAX_TYPEALIAS-1] of Integer;   { name in TokChars }
   ClassVarNLen    : array[0..MAX_TYPEALIAS-1] of Integer;
   ClassVarSym     : array[0..MAX_TYPEALIAS-1] of Integer;   { global var sym idx }
+  { NilPy only: this slot backs a class ATTRIBUTE that is written through the
+    class name AND through an instance, so an instance read has to fall through
+    to the slot only when that instance has no override of its own. A parallel
+    array rather than a field, so nothing outside the NilPy paths sees it and a
+    Pascal `class var` (always False) keeps its single-slot lowering. }
+  ClassVarPyOvr   : array[0..MAX_TYPEALIAS-1] of Boolean;
   ClassVarCount   : Integer;
   LastTypeEnumId  : Integer;  { set by ParseTypeKind: enum type index or -1 }
   LastTypeSetEnumId : Integer;  { set by ParseTypeKind for set types: element enum index or -1 }

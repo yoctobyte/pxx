@@ -844,7 +844,10 @@ function PyWrapHeapCallableCall(calleeNode, argsHead, n, defCall: Integer): Inte
 function PyBareNoneHere: Boolean; forward;  { a `None` with nothing after it that could continue an expression — pyparser.inc }
 function PyMakeSuperCall(const name: AnsiString): Integer; forward;  { `super().m(args)` as a value (pyparser.inc) }
 function PyDynAttrEverAssigned(const nm: AnsiString): Boolean; forward;  { is `.nm =` written anywhere? (pyparser.inc) }
-function PyClsAttrSharedSym(const fname: AnsiString): Integer; forward;  { the one shared class-attribute slot of that name, for a VARIANT receiver (pyparser.inc) }
+function PyClsAttrSharedSym(const fname: AnsiString; var needsOvr: Boolean): Integer; forward;  { the one shared class-attribute slot of that name, for a VARIANT receiver (pyparser.inc) }
+function PyClsAttrOvrSlot(ci: Integer; const fname: AnsiString): Integer; forward;  { that slot, when the attribute also needs per-instance overrides (pyparser.inc) }
+function PyClsAttrOvrGet(baseNode: Integer; const fname: AnsiString; gsym: Integer): Integer; forward;  { instance read of an overridable class attribute: has? get : slot (pyparser.inc) }
+function PyForceVariant(node: Integer): Integer; forward;  { box a value into a variant (pyparser.inc) }
 function PyEvalOnce(node: Integer): Integer; forward;  { bind a value to a hidden temp so it is evaluated once (pyparser.inc) }
 function PyMakePercentFormat(fmtNode, argsNode: Integer): Integer; forward;  { `str % args` (pyparser.inc) }
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
@@ -3727,6 +3730,7 @@ var
   ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { qualified TClass.Const }
   keyNode: Integer;   { __getitem__/__setitem__ subscript key }
   setTmpSym, setTmpAssign, setInnerComma: Integer;   { chained subscript-assign value }
+  sharedNeedsOvr: Boolean;   { the shared class-attribute slot also has per-instance overrides }
 begin
   prevTok := identTokIdx;
   if DebugTrace then writeln('ParseLValueAST: idx = ', idx, ' prevTok = ', prevTok, ' TokenStr = "', GetTokenStr(prevTok), '" CurTok.Line = ', CurTok.Line, ' TokPos = ', TokPos);
@@ -5192,6 +5196,46 @@ begin
            (FindUMeth(recName - REC_UCLASS_BASE, fieldName + '_') >= 0) then
           fieldName := fieldName + '_';
       end;
+      { A class attribute written BOTH through its class name and through an
+        instance: the one row where Python's model is visibly different from
+        copy-at-construction, so it is spelled out. The instance's own override
+        wins; absent one the read falls through to the shared slot; and a write
+        CREATES the override rather than touching the slot every other instance
+        reads. The `pydynattr` store is the same machinery an undeclared dynamic
+        attribute uses — in Python `self.x = ...` and `obj.x = ...` really are
+        the same operation, whether or not the class declares `x`. }
+      if NilPyUserCode and (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
+         (FindUField(recName - REC_UCLASS_BASE, fieldName) < 0) and
+         (FindUMeth(recName - REC_UCLASS_BASE, fieldName) < 0) and
+         (PyClsAttrOvrSlot(recName - REC_UCLASS_BASE, fieldName) >= 0) then
+      begin
+        cvIdx := PyClsAttrOvrSlot(recName - REC_UCLASS_BASE, fieldName);
+        Next;   { consume the field name }
+        if CurTok.Kind = tkAssign then
+        begin
+          Next;
+          ParseArgExpr;
+          node := PyMakeDynAttrSet(node, fieldName, CurASTNode);
+          tk := tyUnknown; Result := node; Exit;
+        end;
+        if PyAugBinTok(CurTok.Kind) <> tkEOF then
+        begin
+          fldSigPi := Ord(PyAugBinTok(CurTok.Kind));
+          Next;
+          ParseArgExpr;
+          callIndNode := AllocNode(AN_BINOP);
+          ASTIVal[callIndNode] := fldSigPi;
+          ASTLeft[callIndNode] := PyClsAttrOvrGet(node, fieldName, cvIdx);
+          ASTRight[callIndNode] := CurASTNode;
+          ASTTk[callIndNode] := Ord(tyVariant);
+          node := PyMakeDynAttrSet(node, fieldName, callIndNode);
+          tk := tyUnknown; Result := node; Exit;
+        end;
+        node := PyClsAttrOvrGet(node, fieldName, cvIdx);
+        tk := tyVariant; recName := REC_NONE;
+        Continue;
+      end;
+
       { NilPyUserCode, not isNilPy: `isNilPy` is true for the WHOLE compilation,
         including every PASCAL unit loaded into it (pylib and friends), so this
         Python-only fallback was hijacking ordinary Pascal member resolution
@@ -5351,7 +5395,35 @@ begin
           an instance read of it falls through to that slot (Python's model).
           The statically-typed receivers reach it via FindClassVar a few hundred
           lines down; a variant receiver has only the name to go on. }
-        fldIdx := PyClsAttrSharedSym(fieldName);
+        fldIdx := PyClsAttrSharedSym(fieldName, sharedNeedsOvr);
+        if (fldIdx >= 0) and sharedNeedsOvr then
+        begin
+          { ...and if instances also write it, the same fall-through the
+            statically-typed receiver gets a few hundred lines up }
+          if CurTok.Kind = tkAssign then
+          begin
+            Next;
+            PyParseBoolExpr;
+            node := PyMakeDynAttrSet(node, fieldName, CurASTNode);
+            tk := tyUnknown; Result := node; Exit;
+          end;
+          if PyAugBinTok(CurTok.Kind) <> tkEOF then
+          begin
+            fldSigPi := Ord(PyAugBinTok(CurTok.Kind));
+            Next;
+            PyParseBoolExpr;
+            callIndNode := AllocNode(AN_BINOP);
+            ASTIVal[callIndNode] := fldSigPi;
+            ASTLeft[callIndNode] := PyClsAttrOvrGet(node, fieldName, fldIdx);
+            ASTRight[callIndNode] := CurASTNode;
+            ASTTk[callIndNode] := Ord(tyVariant);
+            node := PyMakeDynAttrSet(node, fieldName, callIndNode);
+            tk := tyUnknown; Result := node; Exit;
+          end;
+          node := PyClsAttrOvrGet(node, fieldName, fldIdx);
+          tk := tyVariant; recName := REC_NONE;
+          Continue;
+        end;
         if fldIdx >= 0 then
         begin
           node := AllocNode(AN_IDENT);
@@ -23611,6 +23683,7 @@ begin
                 ClassVarNOff[ClassVarCount] := fldNOffs[fni];
                 ClassVarNLen[ClassVarCount] := fldNLens[fni];
                 ClassVarSym[ClassVarCount]  := i;
+                ClassVarPyOvr[ClassVarCount] := False;   { a Pascal/ClassVar-annotated slot never needs the NilPy per-instance override }
                 Inc(ClassVarCount);
               end;
               Eat(tkSemicolon);

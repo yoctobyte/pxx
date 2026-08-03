@@ -44,7 +44,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (211)
+## backlog (212)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -68,7 +68,6 @@ lives in git, not in a timestamp._
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-bytearray-constructor-only-accepts-a-length | N | 45 | bug | bytearray() only has () and (Integer) overloads — bytearray(b\"abc\") and bytearray([1,2,3]) are compile errors, so a bytearray cannot be built from data | — |
 | bug-nilpy-chained-assign-power-assign-and-semicolon-statements | N | 40 | bug | Three statement-level forms don't parse: chained assignment `a = b = 5`, `**=`, and semicolon-separated statements on one line — all loud | — |
-| bug-nilpy-class-attribute-unreachable-through-the-class-name | N | 65 | bug | `C.attr` on a class attribute: "class method not found" | — |
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
 | bug-nilpy-dataclass-no-generated-eq | N | 30 | bug | `@dataclass` gets no generated `__eq__` — compares by identity instead of fields | — |
 | bug-nilpy-def-return-coerces-a-float-to-the-inferred-int-result | N | 55 | bug | A def whose result type was inferred (or annotated) as int TRUNCATES a float it returns: `def g() -> int: v = 1; v = 2.5; return v` gives 2 where CPython gives 2.5. Python annotations are not enforcement. Pinned returned the raw IEEE BITS (4612811918334230528) for the same program — improved to truncation by the widen-binding fix, not resolved by it. | — |
@@ -80,6 +79,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip | N | 20 | bug | `print(1e-20)` prints `0.0` — NilPy's float repr has no small-magnitude exponential form | — |
 | bug-nilpy-for-else-and-while-else-not-supported | N | 30 | bug | The `else` clause on a for/while loop does not parse — `for ... else:` fails with 'expected expression' at the else | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
+| bug-nilpy-inherited-class-attribute-empty-on-a-subclass-instance | N | 60 | bug | `Sub().kind` reads empty/zero when `kind` is a class attribute declared on the BASE — construction copies only the class's OWN class attributes, never the inherited ones. Silent wrong value | — |
 | bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
 | bug-nilpy-lambda-over-a-capturing-nested-def-does-not-compile | N | 50 | bug | `def outer(base): def add(v): return v+base; g = lambda: add(10)` fails to COMPILE with `undefined variable (add)` — the transitive-capture path PyParseLambdaStub documents does not fire for this shape. Pre-existing, and independent of the body's shape. | — |
 | bug-nilpy-list-mutators-return-self-instead-of-none | N | 40 | bug | list.append/extend/sort/reverse return Self, so `x = l.sort()` yields the LIST where Python yields None — silent, and the return is load-bearing for the comprehension desugar | — |
@@ -104,6 +104,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice | N | 50 | bug | Three loud gaps found by the CPython differential sweep | — |
 | bug-nilpy-unary-numeric-dunders-return-raw-handle | N | 55 | bug | NilPy: abs(obj), ~obj and obj-as-index ignore __abs__/__invert__/__index__ — they return the raw instance HANDLE as a number, silently | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
+| bug-nilpy-user-class-named-like-a-pylib-builtin-is-shadowed | N | 60 | bug | A user `class Counter:` is shadowed by pylib's `Counter` function, so `Counter.attr` fails with \"no such member on this record/class\" — the user's own class is unreachable by its own name | — |
 | bug-t-corpus-regex-invents-phantom-tree | T | 55 | bug | CORPUS_RE matches prose in a SKIP message and invents corpus 'stb)', permanently skipping a job that also carries a non-corpus regression test | — |
 | bug-t-host-dependent-test-assertions-cross-distro | T | 70 | bug | Watcher and dev boxes run different distros, so tests that bake in host state (library versions, allocator behaviour, the host CPython) go permanently RED on the watcher while passing locally — and read as watcher bugs | — |
 | bug-t-resolve-cites-a-sha-the-rebase-then-rewrites | T | 60 | bug | The documented loop is commit -> resolve <slug> <sha> -> sync.sh, but sync.sh REBASES, so the sha written into the ticket no longer exists on origin. Four tickets in one session cited commits nobody else can look up. | — |
@@ -366,7 +367,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1248)
+## done (1249)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -753,6 +754,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-char-vs-string-literal-ordering-compares-an-address | N | 80 | bug | `s[0] >= "0"` is ALWAYS False and `s[0] < "0"` ALWAYS True — a char is ordered against the literal's ADDRESS | — |
 | bug-nilpy-chr-of-a-variant-reads-the-slot-not-the-value | N | 65 | bug | `chr()` of a variant returns the wrong character — the slot is read as an ordinal | — |
 | bug-nilpy-class-attr-instance-traversal-crashes | N | 70 | bug | A class attribute holding an INSTANCE crashes when traversed | — |
+| bug-nilpy-class-attribute-unreachable-through-the-class-name | N | 65 | bug | `C.attr` on a class attribute: "class method not found" | — |
 | bug-nilpy-class-typed-field-loses-identity | N | 70 | bug | NilPy: a class-typed field loses its class identity | — |
 | bug-nilpy-class-value-into-variant-local-mistagged | N | 65 | bug | NilPy: storing a class value into a variant-typed local mis-tags it VT_INT64 | — |
 | bug-nilpy-class-with-pass-body-fails-to-parse | N | 50 | bug | NilPy: a class body of only `pass` fails to parse | — |
@@ -1664,7 +1666,6 @@ lives in git, not in a timestamp._
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] regression-optdiff-shard8-12
 - [p 65] [C] bug-cfront-undeclared-type-in-cast-treated-as-zero
-- [p 65] [N] bug-nilpy-class-attribute-unreachable-through-the-class-name
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
@@ -1672,7 +1673,9 @@ lives in git, not in a timestamp._
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [N] bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip
+- [p 60] [N] bug-nilpy-inherited-class-attribute-empty-on-a-subclass-instance
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
+- [p 60] [N] bug-nilpy-user-class-named-like-a-pylib-builtin-is-shadowed
 - [p 60] [T] bug-t-resolve-cites-a-sha-the-rebase-then-rewrites
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [U] decide-nilpy-runtime-dunder-dispatch-mechanism

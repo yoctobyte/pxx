@@ -12,6 +12,15 @@ registered: 3 3
 bare: 2 4 4
 cfg: [10, 20] [10, 20] 10
 cfg rebound: [7] [7] 7
+opt start: auto auto auto
+class rebind reaches all: fast fast fast
+override: fast slow fast slow fast
+class rebind after override: third slow third
+int slot: 20 20 20
+int override: 20 20 5
+augmented on override: 20 20 105
+augmented creating one: 20 21 105
+container: [9] [4, 5] [9] 2 4
 inherit: base base 2 2 base
 dataclass: 1 2 pt 9
 annotated: 4 ann 4 ann

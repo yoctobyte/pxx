@@ -71,6 +71,38 @@ print("cfg:", Cfg.limits, cf.limits, cf.show())
 Cfg.limits = [7]
 print("cfg rebound:", Cfg.limits, cf.limits, cf.show())
 
+# --- per-instance override row: written through the class name AND through an
+#     instance, so reads fall through and an instance write creates an override ---
+class Opt:
+    mode = "auto"
+    limit = 10
+    tags = [1, 2]
+    def show(self):
+        return self.mode
+    def set_mode(self, m):
+        self.mode = m
+
+o1 = Opt()
+o2 = Opt()
+print("opt start:", Opt.mode, o1.mode, o1.show())
+Opt.mode = "fast"
+print("class rebind reaches all:", Opt.mode, o1.mode, o2.show())
+o1.set_mode("slow")
+print("override:", Opt.mode, o1.mode, o2.mode, o1.show(), o2.show())
+Opt.mode = "third"
+print("class rebind after override:", Opt.mode, o1.mode, o2.mode)
+Opt.limit = 20
+print("int slot:", Opt.limit, o1.limit, o2.limit)
+o2.limit = 5
+print("int override:", Opt.limit, o1.limit, o2.limit)
+o2.limit += 100
+print("augmented on override:", Opt.limit, o1.limit, o2.limit)
+o1.limit += 1
+print("augmented creating one:", Opt.limit, o1.limit, o2.limit)
+Opt.tags = [9]
+o1.tags = [4, 5]
+print("container:", Opt.tags, o1.tags, o2.tags, len(o1.tags), o1.tags[0])
+
 # --- an inherited class attribute is reachable through the SUBCLASS name ---
 class Base:
     kind = "base"
