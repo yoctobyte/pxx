@@ -3,10 +3,8 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| xeon | `c3920992b93d` | 2026-08-03T14:52:02Z | GREEN (opt) | 278.1s | `c3920992b93d` RED |
+| xeon | `6995a1a0d618` | 2026-08-03T15:03:36Z | RED (native) | 108.9s | `c3920992b93d` RED |
 
 ## Open regressions
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `b1976742df2c`, last good `6f73c5a88bef`, 1 commit(s) in range
-- **test-core#src:test/cgeneric_selection_b209.c** — test/cgeneric_selection_b209.c (xeon): bad `07414aa8944b`, last good `420de52428cd`, 1 commit(s) in range
-- **test-core#src:test/test_c_packed_aligned.pas** — test/test_c_packed_aligned.pas (xeon): bad `07414aa8944b`, last good `420de52428cd`, 1 commit(s) in range
-- **test-core#src:test/test_c_struct_fields.pas** — test/test_c_struct_fields.pas (xeon): bad `07414aa8944b`, last good `420de52428cd`, 1 commit(s) in range
+- **test-core#src:test/cstatic_init_cast.c** — test/cstatic_init_cast.c (xeon): bad `6995a1a0d618`, last good `c3920992b93d`, 7 commit(s) in range
