@@ -104,4 +104,4 @@ CPython. `tools/gate.sh quick` GREEN (self-host fixedpoint + `--tier quick` +
 FPC seed canary).
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit aaf5c89a3.
