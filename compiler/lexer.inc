@@ -101,16 +101,16 @@ begin
   Inc(WarnCount);
   if WarnAsError then
   begin
-    writeln('pascal26:', line, ': error: C call to ''', cname,
-            ''' binds to the Pascal routine ''', pname, ''' which takes ',
+    writeln('pascal26:', line, ': error: C declaration of ''', cname,
+            ''' does not match the Pascal routine ''', pname, ''' which takes ',
             pcount, ' parameter(s), not ', nargs,
             ' (warning promoted by -Werror)');
     Halt(1);
   end;
-  writeln('pascal26:', line, ': warning: C call to ''', cname,
-          ''' binds to the Pascal routine ''', pname, ''' which takes ',
+  writeln('pascal26:', line, ': warning: C declaration of ''', cname,
+          ''' does not match the Pascal routine ''', pname, ''' which takes ',
           pcount, ' parameter(s), not ', nargs,
-          ' — the argument list will not arrive as written');
+          ' — binding to the C declaration, not the Pascal routine');
 end;
 
 { --auto-locals / {$IMPLICITVARS ON}: an assignment to an undeclared name just

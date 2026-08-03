@@ -2,6 +2,8 @@
 track: C
 prio: 55
 type: bug
+status: done
+owner: claude-AC
 ---
 
 # In a mixed Pascal+C build, a C call binds to a same-named Pascal routine at the wrong arity
@@ -76,3 +78,47 @@ Either a demonstrated fix (C definitions and C declarations win over an
 unrelated same-named Pascal routine, with the probe matching gcc), or a
 demonstration that the binding is harmless plus a narrowed warning that stops
 firing on it.
+
+## ANSWERED + FIXED (2026-08-03)
+
+The probe the "First step" asked for was built and run against gcc. **The
+warning was right, not crying wolf** — the bind really does lose the argument:
+
+| build | `time(&now)` probe (`now != 0 && now == r`) |
+| --- | --- |
+| gcc oracle | **1** |
+| pxx, mixed Pascal+C, no `<time.h>` | **0** — `now` never written |
+
+So a caller reads uninitialised memory while the return value looks fine. That
+settles the severity question the ticket was opened on.
+
+Both halves of the ticket's gate now hold, via rung 2 of
+[[bug-a-silent-bind-to-pascal-proc-of-different-arity]] (`WarnCrossNamespaceArity`
+became the predicate `CCrossNamespaceArityMismatch`; callers act on it):
+
+- **C DECLARATION path** (`cparser.inc`, the `procIdx := FindProc(name)` in the
+  declaration registrar): a mismatched Pascal twin is dropped, so a fresh cdecl
+  proc registers and the C declaration is what gets called. Warns — the name
+  collision is worth seeing even though the outcome is now correct. The probe
+  matches gcc (`time=1`).
+- **Undeclared-CALL path** (`ParseCPostfix`'s call bind): there is no C
+  declaration to prefer, so the call is refused with a message naming both
+  routines and the fix (declare it / include its header).
+
+Same arity still binds — that is how lua's `<math.h>` `sqrt`/`sin`/`cos` reach
+the RTL's Pascal routines, and it is untouched.
+
+Note the `bcmp` half needs no separate fix: `lib/crtl/include/strings.h` defines
+it in-TU, and a C definition already wins. It was only ever reachable through
+the same undeclared-call path, which now errors.
+
+Pinned by `test/test_c_cross_ns_arity.pas` + `.c` (positive, gcc-differential)
+and `test/test_c_cross_ns_arity_fail.pas` + `.c` (the refusal), both wired into
+the C suite.
+
+The `__crtl_time` / `__crtl_`-prefix workarounds in the crtl headers are now
+belt-and-braces rather than the only defence; they are deliberately left in
+place (they also fix the *same-arity* collisions this check cannot see).
+
+## Log
+- 2026-08-03 — resolved, commit PENDING.

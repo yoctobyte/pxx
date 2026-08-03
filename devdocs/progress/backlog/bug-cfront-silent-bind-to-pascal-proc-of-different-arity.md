@@ -78,3 +78,31 @@ Some are intentional (the math family, already routed through `__crtl_` macros
 where the convention differs), some are harmless (Pascal METHODS do not
 collide — only globals do), and some are latent copies of the `time` bug.
 The diagnostic above is what tells them apart without auditing the list by hand.
+
+## RUNG 2 LANDED (2026-08-03) — the bind is now REFUSED, not just warned
+
+Escalated to option (2) on the evidence this ticket already recorded (zero
+warnings across the whole C suite, so no corpus needs a mismatched bind), plus a
+fresh measurement from the sibling
+[[bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity]]: a mixed Pascal+C
+build calling `time(&now)` without `<time.h>` returned 0 where gcc returns 1 —
+the out-parameter was never written, so the caller read uninitialised memory
+behind a plausible return value. The warning was right; the binding was not
+harmless.
+
+`WarnCrossNamespaceArity` became the predicate `CCrossNamespaceArityMismatch`,
+and the two bind sites act on it:
+
+- **C declaration path** — drop the Pascal twin, register the C name as its own
+  cdecl proc, so the C declaration is what gets called (warns; the message now
+  says what happened rather than predicting breakage).
+- **Undeclared-call path** — refuse with an error naming both routines and the
+  fix, since there is no C declaration there to prefer.
+
+Same arity still binds, so the intentional cross-namespace routing (lua's
+`<math.h>` `sqrt`/`sin`/`cos` → the RTL's Pascal `Sqrt`/`Sin`/`Cos`) is
+untouched. Pinned by `test/test_c_cross_ns_arity{,_fail}.pas` + their `.c` units.
+
+The parameter TYPE-compatibility check named as "the obvious next rung" is still
+open, and so is the collision surface list above — arity alone catches every
+case seen so far.

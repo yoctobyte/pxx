@@ -11,7 +11,7 @@ begin
   CProcArgCount := n;
 end;
 
-procedure WarnCrossNamespaceArity(procIdx, nargs: Integer; const name: AnsiString);
+function CCrossNamespaceArityMismatch(procIdx, nargs: Integer): Boolean;
 { A C name resolves through FindProc, which spans the C and PASCAL namespaces
   case-insensitively. That is deliberate -- lua's <math.h> sqrt/sin/cos bind to
   the RTL's Pascal routines, which is how a C corpus gets a math library. What
@@ -26,17 +26,24 @@ procedure WarnCrossNamespaceArity(procIdx, nargs: Integer; const name: AnsiStrin
       argument never arrived (b377).
 
   Both took days to find; a one-line arity comparison names either at once.
-  WARNING only, deliberately: it cannot break a corpus that binds correctly
-  today. The rung above -- refuse to bind, so an unresolved extern surfaces at
-  link time -- waits on evidence that no corpus needs a mismatched bind.
-  bug-cfront-silent-bind-to-pascal-proc-of-different-arity. }
+
+  Rung 1 (e63a59747) warned. Rung 2 REFUSES the bind, on the evidence rung 1
+  gathered: the whole C suite -- 220/220 c-conformance plus lua, sqlite,
+  quickjs, tcc and zlib -- produced ZERO warnings, so no corpus needs a
+  mismatched bind. Measured cost of keeping it (2026-08-03): a mixed Pascal+C
+  build calling `time(&now)` without <time.h> left `now` UNWRITTEN and returned
+  0 where gcc returns the epoch second -- the caller then reads uninitialised
+  memory with a plausible-looking return value. Callers act on the predicate:
+  the C DECLARATION path registers its own C proc instead (warning), the
+  undeclared-CALL path errors, since C has no declaration there to bind to.
+  bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity. }
 begin
+  Result := False;
   if procIdx < 0 then Exit;
   if ProcCdecl[procIdx] then Exit;         { a C proc -- same namespace, fine }
   if ProcVariadic[procIdx] then Exit;
   if Procs[procIdx].ParamCount = nargs then Exit;
-  WarnCrossBindArity(CurTok.Line, name, Procs[procIdx].Name,
-                     Procs[procIdx].ParamCount, nargs);
+  Result := True;
 end;
 
 function ParseCBlockAST: Integer; forward;
@@ -60,8 +67,10 @@ procedure ParseCStructDecl; forward;
 function IsBareStructDecl: Boolean; forward;
 function IsBareEnumDecl: Boolean; forward;
 function IsCTypeTok: Boolean; forward;
-function FindCTypedef(const name: AnsiString): Integer; forward;
+{ FindCTypedef's forward lives in forwards.inc (it is called from an include
+  earlier in compiler.pas than this one). }
 function CTypedefNameAt(idx: Integer): AnsiString; forward;
+function CSuggestTypeName(const name: AnsiString): AnsiString; forward;
 function ParseCDeclType: TTypeKind; forward;
 function ParseCCommaStmt: Integer; forward;
 function ParseCSwitchAST: Integer; forward;
@@ -1401,9 +1410,21 @@ begin
         else if name = '__builtin_popcount' then name := '__pxx_builtin_popcount32'
         else if name = '__builtin_popcountll' then name := '__pxx_builtin_popcount64';
         procIdx := FindProc(name);
+        { An UNDECLARED C call landing on a Pascal routine of another arity —
+          `time(&now)` with no <time.h> against sysutils' parameterless `Time`.
+          There is no C declaration here to prefer, and binding anyway compiles
+          a call whose arguments cannot arrive (measured: `now` stays unwritten,
+          the caller then reads uninitialised memory). Refuse it and name the
+          collision — the fix is always to declare the function.
+          bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity. }
+        if CCrossNamespaceArityMismatch(procIdx, CProcArgCount(argHead)) then
+          Error('call to undeclared function ''' + name +
+                ''' would bind to the Pascal routine ''' + Procs[procIdx].Name +
+                ''', which takes ' + AIntToStr(Procs[procIdx].ParamCount) +
+                ' parameter(s), not ' + AIntToStr(CProcArgCount(argHead)) +
+                ' — declare it (include its header) so the C function is used');
         if procIdx >= 0 then
         begin
-          WarnCrossNamespaceArity(procIdx, CProcArgCount(argHead), name);
           { An undeclared identifier passed where a POINTER parameter is
             declared degrades to a warning-plus-0 above — reasonable for an
             unused value, wrong here: the callee (bsearch, qsort, signal, any
@@ -8569,8 +8590,18 @@ begin
   begin
     procIdx := FindProc(name);
     { a C DECLARATION landing on a Pascal routine of another arity -- the
-      shape `time_t time(time_t *)` against `function Time: TDateTime` }
-    WarnCrossNamespaceArity(procIdx, nparams, name);
+      shape `time_t time(time_t *)` against `function Time: TDateTime`. The
+      declaration is explicit and right there in the translation unit, so it
+      wins: drop the bind and let a fresh cdecl proc register below. Warn,
+      because the name collision is worth seeing even when the outcome is now
+      correct. Same arity still binds -- that is how lua's <math.h> sqrt/sin/cos
+      reach the RTL's Pascal routines. }
+    if CCrossNamespaceArityMismatch(procIdx, nparams) then
+    begin
+      WarnCrossBindArity(CurTok.Line, name, Procs[procIdx].Name,
+                         Procs[procIdx].ParamCount, nparams);
+      procIdx := -1;
+    end;
   end;
   wasNewProc := procIdx < 0;
   if wasNewProc then

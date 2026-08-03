@@ -73,3 +73,18 @@ are unaffected); zlib, sqlite, tcc, lua and quickjs still build.
 
 ## Log
 - 2026-08-03 — resolved, commit c43500f47.
+
+## Follow-up: FPC seed drift (same day)
+
+The first landing (c43500f47) broke the **FPC seed build** — not `make`, not
+`gate.sh`'s pxx half, only the seed canary:
+
+- a duplicate `FindCTypedef` forward (its real one is in `forwards.inc`, because
+  it is called from an include earlier in `compiler.pas`) — FPC: "already
+  declared Public/Forward", pxx: silently fine;
+- `CSuggestTypeName` used at its call site above its definition with no forward
+  — pxx is lax about declaration order, FPC is not.
+
+Both fixed by dropping the duplicate and adding the missing forward. The
+standing lesson (already recorded): adding or moving a routine in `compiler/**`
+needs the FPC seed checked, and `gate.sh quick`'s seed canary is what catches it.

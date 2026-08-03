@@ -3764,6 +3764,15 @@ test-core: $(COMPILER)
 	# static resolved, crtl's own <stdarg.h> found (gcc-differential)
 	./$(COMPILER) -Futest test/test_c_unit_globals.pas /tmp/c_unit_globals26
 	test "$$(/tmp/c_unit_globals26)" = "$$(printf '31\n8')"
+	# bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity: in a mixed
+	# Pascal+C build a C DECLARATION wins over a same-named Pascal routine of
+	# another arity (was: bound to the Pascal one, out-param never written), and
+	# an UNDECLARED call to such a name is refused rather than mis-bound.
+	./$(COMPILER) -Futest test/test_c_cross_ns_arity.pas /tmp/c_cross_ns_arity26
+	test "$$(/tmp/c_cross_ns_arity26)" = "time=1"
+	@./$(COMPILER) -Futest test/test_c_cross_ns_arity_fail.pas /tmp/c_cross_ns_arity_fail26 2>&1 \
+	  | grep -q "call to undeclared function 'time' would bind to the Pascal routine 'Time'" \
+	  || { echo 'c_cross_ns_arity_fail: FAIL - an undeclared C call must not bind to a Pascal routine of another arity'; exit 1; }
 	./$(COMPILER) test/test_c_widths.pas /tmp/c_widths26
 	test "$$(/tmp/c_widths26)" = "5000000000"
 	./$(COMPILER) test/test_c_typedef.pas /tmp/c_typedef26
