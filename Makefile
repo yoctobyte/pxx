@@ -972,6 +972,23 @@ test-nilpy: $(COMPILER)
 	   | grep -c 'bare own name'); \
 	 test "$$n" = "0" \
 	  || { echo "test_pascal_self_result_delphi: FAIL - warning must not fire in delphi mode (it recurses there; the message would be false)"; exit 1; }
+	@# FPC's -M<mode> command-line switch. The source carries NO mode directive —
+	@# which is how real Delphi projects ship — so the two runs must DIFFER, and
+	@# the test cannot pass by accident if the flag is ignored. Both expectations
+	@# match FPC 3.2.2 under the same flag. compat-pascal-no-command-line-mode-switch
+	./$(COMPILER) test/test_pascal_mode_switch_cli.pas /tmp/test_pascal_mode_cli26
+	test "$$(/tmp/test_pascal_mode_cli26)" = "$$(printf '7\n1')"
+	./$(COMPILER) -Mdelphi test/test_pascal_mode_switch_cli.pas /tmp/test_pascal_mode_cli_d26
+	test "$$(/tmp/test_pascal_mode_cli_d26)" = "$$(printf '42\n4')"
+	@# -Mobjfpc is the default dialect; other mode names are accepted but inert, so
+	@# a build script's -Mtp does not die on an unknown option
+	./$(COMPILER) -Mobjfpc test/test_pascal_mode_switch_cli.pas /tmp/test_pascal_mode_cli_o26
+	test "$$(/tmp/test_pascal_mode_cli_o26)" = "$$(printf '7\n1')"
+	./$(COMPILER) -Mtp test/test_pascal_mode_switch_cli.pas /tmp/test_pascal_mode_cli_tp26
+	test "$$(/tmp/test_pascal_mode_cli_tp26)" = "$$(printf '7\n1')"
+	@# a source-level mode directive OVERRIDES the command line, as in FPC
+	./$(COMPILER) -Mobjfpc test/test_pascal_self_result_delphi.pas /tmp/test_pascal_mode_override26
+	test "$$(/tmp/test_pascal_mode_override26)" = "$$(printf '42\n4\n7\n3\n10')"
 	./$(COMPILER) test/test_nilpy_method_on_fresh_construction.npy /tmp/test_nilpy_method_fresh_ctor26
 	test "$$(/tmp/test_nilpy_method_fresh_ctor26)" = "$$(printf '5\n7\na9\n6\n3 a3\n[1, 2]')"
 	./$(COMPILER) test/test_nilpy_discarded_string_result.npy /tmp/test_nilpy_discarded_string_result26

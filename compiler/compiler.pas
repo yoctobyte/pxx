@@ -383,6 +383,29 @@ begin
       EmitSharedMode := True;
       Inc(i);
     end
+    else if (Length(option) > 2) and (option[1] = '-') and (option[2] = 'M') then
+    begin
+      { FPC's `-M<mode>` (-Mdelphi, -Mobjfpc, -Mtp, ...). Real Delphi-targeting
+        projects set the dialect in the BUILD rather than in each source, so
+        their files carry no {$MODE} line at all — without this pxx compiled them
+        in the default objfpc-ish dialect silently, and the deltas are the quiet
+        kind (a bare paramless own-name read is a recursive call in delphi and a
+        Result read in objfpc). compat-pascal-no-command-line-mode-switch.
+
+        Same policy as the {$MODE} directive: only `delphi` changes behaviour,
+        every other mode name maps to the default dialect and is accepted but
+        inert, so a build script's -Mtp/-Miso does not fail on an unknown option.
+        `delphiunicode` is delphi for our purposes.
+
+        Safe to assign directly here: PasInitDefines (which resets DelphiMode)
+        runs ONCE just above this loop, not per source, so nothing clobbers it
+        afterwards — and a source-level {$MODE} still wins, because directives are
+        honoured later during lexing. Both are gated. }
+      DelphiMode := CaseEqual(Copy(option, 3, Length(option) - 2), 'delphi') or
+                    CaseEqual(Copy(option, 3, Length(option) - 2), 'delphiunicode');
+      NestedComments := not DelphiMode;
+      Inc(i);
+    end
     else if option = '-S' then
     begin
       { head 2 (feature-asm-textual-emit-mode): also write <out>.s, a best-

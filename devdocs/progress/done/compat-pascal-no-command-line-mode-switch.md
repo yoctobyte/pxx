@@ -3,6 +3,7 @@ summary: "FPC's -Mdelphi / -Mobjfpc command-line mode switch has no pxx equivale
 type: compat
 track: P
 prio: 45
+status: done
 ---
 
 # No command-line `-Mdelphi` / `-Mobjfpc`
@@ -51,3 +52,51 @@ an unrecognised option.
 `{$MODE DELPHI}` does — checked with the existing pair of self-result tests, whose
 outputs differ between the modes (`42 4 7 3 10` vs `5 1 8 42 6 42 100`), so the
 flag either takes effect or the test fails. A source `{$MODE}` overrides the flag.
+
+## Resolution 2026-08-03 (claude-AC@opus5)
+
+`-M<mode>` implemented in `compiler.pas`'s option loop. Same policy as the
+`{$MODE}` directive: only `delphi` (and `delphiunicode`) changes behaviour, every
+other mode name maps to the default dialect and is **accepted but inert**, so a
+build script's `-Mtp` / `-Miso` does not die on an unknown option. It also flips
+`NestedComments`, which is part of what delphi mode means.
+
+### The implementation note above was WRONG — worth recording
+
+It claimed `DelphiMode` is reset per source, so a command-line default would have
+to seed the reset rather than assign once. Checked instead of trusted:
+`PasInitDefines` has exactly **one** call site, `compiler.pas:206`, and the option
+loop starts at 207 — it runs once per invocation, *before* options. So a direct
+assignment in the option handler is correct and nothing clobbers it. A source
+`{$MODE}` still wins for free, because directives are honoured later during
+lexing. No new global either, which also avoids the `MAX_GLOBFIX` landmine.
+
+The caution cost nothing here, but the note would have sent the next reader down
+a longer path than the problem needed.
+
+### Verified against FPC 3.2.2, same flag
+
+| invocation | pxx | fpc |
+| --- | --- | --- |
+| (no flag) | `7 1` | `7 1` (`-Mobjfpc`) |
+| `-Mdelphi` | **`42 4`** | **`42 4`** |
+| `-Mobjfpc` | `7 1` | `7 1` |
+| `-Mtp` (inert) | `7 1` | — |
+| source `{$MODE DELPHI}` + `-Mobjfpc` | `42 4 7 3 10` (directive wins) | — |
+
+`test/test_pascal_mode_switch_cli.pas` (**new**, gated) carries **no** mode
+directive — which is how real Delphi projects ship — so the flagged and unflagged
+runs must produce *different* output. If the switch were ignored both would print
+`7 1` and the test fails; it cannot pass by accident.
+
+### Found while writing the test, filed separately
+
+[[compat-pascal-directive-in-comment-ignores-nested-comments-off]] — with nesting
+off, pxx still special-cases a `{$...}` sequence inside a brace comment where FPC
+lets the closing brace end the comment. Lax direction (pxx accepts what FPC
+rejects), so it is a compat item, not a bug. The first two drafts of the new test
+tripped over it — the second one in the very sentence describing the hazard.
+
+## Log
+- 2026-08-03 — filed and resolved the same day.
+- 2026-08-03 — resolved, commit HEAD.

@@ -102,9 +102,9 @@ _none_
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
 | compat-pascal-assert-halts-instead-of-raising-eassertionfailed | P | 55 | compat | Pascal's Assert() halts with 227 even when sysutils is used, so `try Assert(...) except` cannot run — FPC raises a catchable EAssertionFailed, and our RTL already declares the class but nothing raises it | — |
 | compat-pascal-binop-operand-eval-order | A | 15 | compat | pxx evaluates binary-operator operands left-to-right; FPC evaluates right-to-left | — |
+| compat-pascal-directive-in-comment-ignores-nested-comments-off | P | 25 | compat | With nested comments OFF (delphi mode), a {$...} sequence inside a brace comment does not end the comment in pxx, but does in FPC. Lax direction — pxx accepts sources FPC rejects | — |
 | compat-pascal-math-intrinsics-not-in-the-system-unit | A | 45 | compat | sqrt/sin/cos/exp/ln/arctan require `uses math`; in FPC they are System-unit intrinsics available with no uses clause. Loud (undefined variable), but it breaks unmodified FPC/Delphi source on its first line | — |
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
-| compat-pascal-no-command-line-mode-switch | P | 45 | compat | FPC's -Mdelphi / -Mobjfpc command-line mode switch has no pxx equivalent — the dialect can only be set with a {$MODE} directive in the source. Real projects set it in the build, not the file, so their sources carry no directive and pxx silently compiles them in the wrong dialect | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | decide-abi-portable-vs-target-split | U | 60 | decide |  | — |
@@ -358,7 +358,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1277)
+## done (1278)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1105,6 +1105,7 @@ _none_
 | compat-pascal-const-expr-ord-chr-succ | P | 45 | compat | `Ord()` / `Chr()` / `Length()` / `Succ()` are not folded in constant expressions | — |
 | compat-pascal-copy-of-char-literal | P | 55 | compat | Copy('a', i, n) — FPC promotes a char to a string, pxx rejects the program | — |
 | compat-pascal-format-g-and-e-specifiers | B | 25 | compat | compat: Format's %g ignores its precision and uses 15 digits where FPC uses 17; %e is not implemented at all | — |
+| compat-pascal-no-command-line-mode-switch | P | 45 | compat | FPC's -Mdelphi / -Mobjfpc command-line mode switch has no pxx equivalent — the dialect can only be set with a {$MODE} directive in the source. Real projects set it in the build, not the file, so their sources carry no directive and pxx silently compiles them in the wrong dialect | — |
 | doc-licensing-split-mpl-zlib | D | 45 | doc | Document the licensing split (MPL 2.0 compiler / Zlib RTL) | — |
 | docs-fpc-compatibility-overstates-subset | D | 30 | docs | Track D: fpc-compatibility.md understates the language aim ("useful subset") | — |
 | docs-reference-cli-modes-directives | D | 40 | docs | Reference docs incomplete: cli.md lists ~26 of the compiler's 37 --flags, there is no compiler-modes/strictness page (lax -> --strict -> granular -> --mimic-fpc), and no {$...} directive reference — three linked reference gaps | — |
@@ -1761,7 +1762,6 @@ _none_
 - [p 45] [T] bug-t-watcher-dev-contention-false-newred
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [A] compat-pascal-math-intrinsics-not-in-the-system-unit
-- [p 45] [P] compat-pascal-no-command-line-mode-switch
 - [p 45] [D] docs-canonical-domain
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [A] feature-cross-frontend-interop-contract
@@ -1843,6 +1843,7 @@ _none_
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 30] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 25] [N] bug-nilpy-repr-of-a-function-value-prints-none
+- [p 25] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off
 - [p 25] [P] compat-pascal-unit-deprecated-hint-directive
 - [p 25] [N] feature-nilpy-for-loop-getitem-protocol-fallback
 - [p 25] [N] feature-nilpy-str-format-named-keyword-fields
