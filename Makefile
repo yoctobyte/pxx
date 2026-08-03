@@ -567,6 +567,8 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_floatrepr26 | diff -u test/test_nilpy_float_repr.expected -
 	./$(COMPILER) test/test_nilpy_user_class_shadows_builtin.npy /tmp/test_nilpy_shadow26
 	/tmp/test_nilpy_shadow26 | diff -u test/test_nilpy_user_class_shadows_builtin.expected -
+	./$(COMPILER) test/test_nilpy_dunder_index_sites.npy /tmp/test_nilpy_ixsites26
+	/tmp/test_nilpy_ixsites26 | diff -u test/test_nilpy_dunder_index_sites.expected -
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_tobject_member_via_local.npy /tmp/test_nilpy_tobject_member26
 	test "$$(/tmp/test_nilpy_tobject_member26)" = "$$(printf 'Dog\nDog\nDog\n42\n43')"
 	./$(COMPILER) test/test_nilpy_object_arc.npy /tmp/test_nilpy_object_arc26

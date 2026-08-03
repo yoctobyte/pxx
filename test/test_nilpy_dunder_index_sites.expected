@@ -1,0 +1,7 @@
+literal: 30 c
+named: 30 c 3
+negative: 30 f
+repeat: [0, 0, 0] abab xyxy [7, 7, 7]
+store: [99, 20, 30]
+dict keys stay distinct: 2 int
+plain: 20 b 2 [0, 0, 0] abab

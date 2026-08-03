@@ -844,6 +844,8 @@ function PyWrapHeapCallableCall(calleeNode, argsHead, n, defCall: Integer): Inte
 function PyBareNoneHere: Boolean; forward;  { a `None` with nothing after it that could continue an expression — pyparser.inc }
 function PyMakeSuperCall(const name: AnsiString): Integer; forward;  { `super().m(args)` as a value (pyparser.inc) }
 function PyDynAttrEverAssigned(const nm: AnsiString): Boolean; forward;  { is `.nm =` written anywhere? (pyparser.inc) }
+function PyIndexCoerce(n: Integer): Integer; forward;  { Python __index__: an object used where an integer is required (pyparser.inc) }
+function PyClassWantsIntIndex(ci: Integer): Boolean; forward;  { does a subscript of this class take an INTEGER (a sequence) rather than an object key? (pyparser.inc) }
 function PyClsAttrSharedSym(const fname: AnsiString; var needsOvr: Boolean): Integer; forward;  { the one shared class-attribute slot of that name, for a VARIANT receiver (pyparser.inc) }
 function PyClsAttrOvrSlot(ci: Integer; const fname: AnsiString): Integer; forward;  { that slot, when the attribute also needs per-instance overrides (pyparser.inc) }
 function PyClsAttrOvrGet(baseNode: Integer; const fname: AnsiString; gsym: Integer): Integer; forward;  { instance read of an overridable class attribute: has? get : slot (pyparser.inc) }
@@ -4774,6 +4776,19 @@ begin
           end;
 
           ParsePropIndexArgs(margIdx, mlastArg);   { [a {, b}] (bracket consumed here) }
+          { NilPy: a SEQUENCE subscript asks the index for its `__index__`, so
+            `xs[C(2)]` / `b[C(2)]` on a NAMED container reach the getter with an
+            integer instead of the instance HANDLE (which raised IndexError, and
+            only by luck — a smaller handle would have indexed the wrong
+            element). A LITERAL receiver already went through PyMakeSuffixIndex.
+
+            Gated on the receiver being a sequence, NOT applied in
+            ParsePropIndexArgs: a dict subscript comes through here too, and a
+            dict KEY is the object itself. Coercing it collapsed an object key
+            onto its __index__ value — measured, `d[K(1)]` and `d[1]` became one
+            entry (bug-nilpy-unary-numeric-dunders-return-raw-handle). }
+          if PyExprMode and PyClassWantsIntIndex(mci) then
+            ASTLeft[margIdx] := PyIndexCoerce(ASTLeft[margIdx]);
 
           if isAssign then
           begin
@@ -13673,6 +13688,7 @@ end;
 
 procedure ParseTerm;
 var op: TTokenKind; left, right, node, opSOffset, opSLen, opci: Integer;
+    ixTry: Integer;   { a repeat count coerced through __index__ }
 begin
   ParseFactor;
   while ((CurTok.Kind in [tkStar, tkSlash, tkDiv, tkMod, tkAnd, tkShl]) or
@@ -13689,6 +13705,28 @@ begin
     ASTSOffset[node] := opSOffset; ASTSLen[node] := opSLen;
     { {$Q+} region: * is overflow-checked (feature-pascal-overflow-checks-q-plus) }
     if (op = tkStar) and TokQChecks[TokPos - 1] then ASTQChk[node] := True;
+    { A sequence REPEAT COUNT may be an object with `__index__` — `[0] * C(3)`,
+      `"ab" * C(2)`. The repeat tests below only recognise an ordinal, so the
+      object fell past them into the arithmetic/dunder path and raised
+      TypeError. Coerce ONLY when doing so actually turns the pair into a
+      repeat: `C(3) * 5` with no `__mul__` must stay a TypeError, not silently
+      become 15 (bug-nilpy-unary-numeric-dunders-return-raw-handle). }
+    if PyExprMode and (op = tkStar) then
+    begin
+      ixTry := PyIndexCoerce(right);
+      if (ixTry <> right) and
+         (PyListRepeatPair(left, ixTry) or PyBytesRepeatPair(left, ixTry) or
+          PyIsStrBaseTk(IntToTypeKind(ASTTk[left]))) then
+      begin right := ixTry; ASTRight[node] := right; end
+      else
+      begin
+        ixTry := PyIndexCoerce(left);
+        if (ixTry <> left) and
+           (PyListRepeatPair(ixTry, right) or PyBytesRepeatPair(ixTry, right) or
+            PyIsStrBaseTk(IntToTypeKind(ASTTk[right]))) then
+        begin left := ixTry; ASTLeft[node] := left; end;
+      end;
+    end;
     opci := -1;
     if (IntToTypeKind(ASTTk[left]) = tyRecord) or (IntToTypeKind(ASTTk[left]) = tyClass) then
       opci := FindOpOverload(Ord(op), ASTTk[left], ResolveNodeRec(left));

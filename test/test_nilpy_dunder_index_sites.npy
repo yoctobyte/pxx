@@ -1,0 +1,41 @@
+# `__index__` at the sites a subscript on a NAMED container and a sequence
+# REPEAT COUNT reach. A literal receiver already worked (PyMakeSuffixIndex);
+# a named one goes through the shared parser's default-property dispatch, which
+# knew nothing about the dunder and handed the getter the instance HANDLE. It
+# raised IndexError only by luck — a smaller handle indexes the wrong element.
+
+class C:
+    def __init__(self, v):
+        self.v = v
+    def __index__(self):
+        return self.v
+
+xs = [10, 20, 30]
+s = "abcdef"
+b = bytes([1, 2, 3])
+
+print("literal:", [10, 20, 30][C(2)], "abcdef"[C(2)])
+print("named:", xs[C(2)], s[C(2)], b[C(2)])
+print("negative:", xs[C(-1)], s[C(-1)])
+print("repeat:", [0] * C(3), "ab" * C(2), C(2) * "xy", C(3) * [7])
+print("store:", end=" ")
+xs[C(0)] = 99
+print(xs)
+
+# a dict KEY is the object itself, never coerced — coercing it collapsed
+# d[K(1)] and d[1] onto one entry
+class K:
+    def __init__(self, v):
+        self.v = v
+    def __hash__(self):
+        return self.v
+    def __index__(self):
+        return self.v
+
+d = {}
+d[K(1)] = "obj"
+d[1] = "int"
+print("dict keys stay distinct:", len(d), d[1])
+
+# plain integers must be untouched
+print("plain:", xs[1], s[1], b[1], [0] * 3, "ab" * 2)

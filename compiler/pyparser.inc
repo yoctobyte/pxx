@@ -4723,6 +4723,9 @@ end;
 function PyMakeStrIndex(baseNode, idxNode: Integer): Integer;
 var procIdx, callNode, a0, a1: Integer;
 begin
+  { the other subscript choke point: a NAMED str variable reaches here from the
+    shared parser's generic index path, which has no notion of __index__ }
+  idxNode := PyIndexCoerce(idxNode);
   procIdx := FindProc('pystr_at');
   if procIdx < 0 then Error('Nil Python: pylib (pystr_at) not loaded');
   a0 := AllocNode(AN_ARG);
@@ -5983,6 +5986,21 @@ begin
   ASTTk[Result] := Ord(tyVariant);
 end;
 
+function PyClassWantsIntIndex(ci: Integer): Boolean;
+{ True when a subscript of `ci` is an INDEX (a sequence position) rather than a
+  KEY. Only pylib's list and bytes qualify: a dict subscript is an object key,
+  and so is a user class's `__getitem__` argument — Python hands both the object
+  itself, and coercing either through `__index__` would silently change which
+  entry a program means. str is handled on its own path (PyMakeStrIndex). }
+var listCi, bytesCi: Integer;
+begin
+  Result := False;
+  if ci < 0 then Exit;
+  listCi := FindUClass('TPyList');
+  bytesCi := FindUClass('TPyBytes');
+  Result := ((listCi >= 0) and (ci = listCi)) or ((bytesCi >= 0) and (ci = bytesCi));
+end;
+
 function PyIndexCoerce(n: Integer): Integer;
 { Python's `__index__`: an object used where an INTEGER is required is asked for
   one. Returns the dunder call when `n` is a user class declaring it, otherwise
@@ -5997,7 +6015,7 @@ function PyIndexCoerce(n: Integer): Integer;
   Applied at the SUBSCRIPT site only so far. The other integer-coercion sites —
   slice bounds, range(), sequence repeat counts — still pass the handle; see
   that ticket. }
-var ci: Integer;
+var ci, idx, a0, cv: Integer;
 begin
   PyIndexCoerce := n;
   if n < 0 then Exit;
@@ -6007,7 +6025,27 @@ begin
   ci := ResolveNodeRec(n) - REC_UCLASS_BASE;
   if FindUMeth(ci, '__index__') < 0 then Exit;
   ci := PyCallMeth1(ci, '__index__', n, -1);
-  if ci >= 0 then PyIndexCoerce := ci;
+  if ci < 0 then Exit;
+  { Python REQUIRES __index__ to return an int, so make the node say so. The
+    method's own inferred result is usually a variant (`return self.v` over an
+    unannotated field), and a variant is not an ORDINAL — which the sequence
+    repeat pair tests ask for, so `[0] * C(3)` fell past them into the
+    arithmetic path and raised TypeError. Every consumer of an index wants an
+    integer anyway. }
+  if IntToTypeKind(ASTTk[ci]) = tyVariant then
+  begin
+    idx := FindProc('pyvar_to_int');
+    if idx < 0 then Error('Nil Python: pylib (pyvar_to_int) not loaded');
+    a0 := AllocNode(AN_ARG);
+    ASTLeft[a0] := ci;
+    ASTRight[a0] := -1;
+    cv := AllocNode(AN_CALL);
+    ASTIVal[cv] := idx;
+    ASTTk[cv] := Ord(tyInt64);
+    ASTLeft[cv] := a0;
+    ci := cv;
+  end;
+  PyIndexCoerce := ci;
 end;
 
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer;

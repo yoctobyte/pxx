@@ -3,6 +3,8 @@ summary: "NilPy: abs(obj), ~obj and obj-as-index ignore __abs__/__invert__/__ind
 type: bug
 track: N
 prio: 55
+status: done
+owner: claude-AN
 ---
 
 # `__abs__`/`__invert__`/`__index__` never dispatched — raw handle used as the value
@@ -154,3 +156,68 @@ either side, the literal-receiver subscript as the already-working control, and
 plain numeric slices as the regression control.
 
 `gate.sh quick` GREEN, self-host fixedpoint byte-identical, FPC seed clean.
+
+## 2026-08-03 — the remaining `__index__` sites are DONE. Ticket closed.
+
+Named-container subscripts and sequence repeat counts, the two rows the previous
+session measured and left. Also `s[C(2)]` on a NAMED str, which the table above
+recorded as "ok" — that was true only for a str LITERAL.
+
+### Where each one went
+
+- **named list / bytes subscript** — at the default-property dispatch in
+  `parser.inc`, where the receiver class is in scope, NOT inside
+  `ParsePropIndexArgs`. That distinction is the whole lesson of this change: see
+  below.
+- **named str subscript** — inside `PyMakeStrIndex`, which every str-subscript
+  route funnels through.
+- **repeat counts** — before the binop if-chain in `ParseBinOpAST`, and only
+  when the coercion actually TURNS the pair into a repeat. `C(3) * 5` with no
+  `__mul__` must stay a TypeError, not silently become 15.
+- **`PyIndexCoerce` now forces its result to an integer.** `__index__`'s own
+  inferred result is usually a variant (`return self.v` over an unannotated
+  field), and a variant is not an ORDINAL — which is exactly what the repeat
+  pair tests ask for, so `[0] * C(3)` fell past them into the arithmetic path.
+  Python requires `__index__` to return an int, so the node now says so.
+
+### The mistake worth recording: `ParsePropIndexArgs` was the wrong choke point
+
+It looked like the ideal single site — five call sites, all subscripts, one
+edit. It is also where a DICT subscript is parsed, and a dict key is the object
+itself. Coercing there collapsed an object key onto its `__index__` value:
+
+```python
+d[K(1)] = "obj"
+d[1]    = "int"
+len(d)          # 2 on the pinned binary, 1 with the coercion in place
+```
+
+Caught by diffing against the PINNED binary rather than against CPython — the
+CPython run failed for an unrelated reason in my probe, and the
+pinned-vs-HEAD comparison is what actually answered "did I change this?".
+`PyClassWantsIntIndex` now gates it: pylib's list and bytes only. A user class's
+`__getitem__` argument is a key too, and stays untouched.
+
+### Verified
+
+`test/test_nilpy_dunder_index_sites.npy` (+ `.expected`, wired into
+`make test-nilpy`), byte-identical to CPython: literal and named receivers for
+list/str/bytes, negative indices through the dunder, all four repeat orders
+(`seq * obj` and `obj * seq`, list and str), a subscript STORE, plain integer
+indices as the regression control, and the dict-key case as the guard against
+the mistake above.
+
+`gate.sh quick` GREEN, self-host fixedpoint byte-identical.
+
+### Still open, deliberately, and filed as its own ticket
+
+A missing `__index__` at a sequence subscript raises `IndexError`, where CPython
+raises `TypeError`. Loud either way, so not silent — but the honest fix needs
+the receiver's identity at a site that does not have it, exactly like the dict
+hazard above. [[bug-nilpy-missing-index-dunder-raises-indexerror-not-typeerror]].
+`range(C(3))` still cannot be measured at all: `range` outside a `for` header is
+not a callable in this frontend, which is its own gap.
+
+## Log
+- 2026-08-03 — resolved.
+- 2026-08-03 — resolved, commit HEAD.
