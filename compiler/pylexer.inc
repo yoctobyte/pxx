@@ -501,6 +501,27 @@ begin
   Source := PyFsDone;
 end;
 
+function PyTrailingDotFloat(P: Integer): Boolean;
+{ At a '.' that ends a digit run: does the dot belong to the number? True when
+  it terminates the literal (`5.`, `5.)`, `5. + 1`) or introduces an exponent
+  (`5.e3`); false for `5.real`, which stays an integer and a selector the way
+  it does today. bug-nilpy-bare-dot-float-literals-do-not-lex }
+begin
+  PyTrailingDotFloat := False;
+  if (P > Length(Source)) or (Source[P] <> '.') then Exit;
+  if P >= Length(Source) then begin PyTrailingDotFloat := True; Exit; end;
+  if (Source[P + 1] = 'e') or (Source[P + 1] = 'E') then
+  begin
+    PyTrailingDotFloat := ((P + 2 <= Length(Source)) and
+                           (Source[P + 2] in ['0'..'9'])) or
+                          ((P + 3 <= Length(Source)) and
+                           ((Source[P + 2] = '+') or (Source[P + 2] = '-')) and
+                           (Source[P + 3] in ['0'..'9']));
+    Exit;
+  end;
+  PyTrailingDotFloat := not (Source[P + 1] in ['.', 'a'..'z', 'A'..'Z', '_', '0'..'9']);
+end;
+
 procedure PyLexAll(SupportLineNumbers: Boolean);
 var
   P: Integer;
@@ -685,8 +706,16 @@ begin
         continue;
       end;
 
-      { Numbers (Integers or Floats) }
-      if c in ['0'..'9'] then
+      { Numbers (Integers or Floats). `.5` also enters here: NilPy accepts
+        Python's two dot-edge float spellings, `.5` and `5.`, which the SHARED
+        Pascal scanner cannot (it starts only on a digit and only makes a float
+        when the dot is followed by one — both load-bearing there, since `5.`
+        must not swallow the first dot of `5..10` nor the selector in
+        `5.Field`). NilPy has neither subranges nor a numeric-literal selector,
+        and it lexes here rather than in lexer.inc, so this costs Pascal
+        nothing. bug-nilpy-bare-dot-float-literals-do-not-lex }
+      if (c in ['0'..'9']) or
+         ((c = '.') and (P < Length(Source)) and (Source[P+1] in ['0'..'9'])) then
       begin
         n := 0;
         floatStart := P;
@@ -741,15 +770,19 @@ begin
           end;
           Inc(P);
         end;
-        { detect float: '.' followed by digit, or e/E exponent }
+        { detect float: '.' followed by digit, a TRAILING '.' (`5.`, `5.e3` —
+          see PyTrailingDotFloat), or an e/E exponent }
         if ((P < Length(Source)) and (Source[P] = '.') and (Source[P+1] in ['0'..'9'])) or
+           PyTrailingDotFloat(P) or
            ((P <= Length(Source)) and ((Source[P] = 'e') or (Source[P] = 'E'))) then
         begin
           if (P < Length(Source)) and (Source[P] = '.') and (Source[P+1] in ['0'..'9']) then
           begin
             Inc(P);
             while (P <= Length(Source)) and (Source[P] in ['0'..'9']) do Inc(P);
-          end;
+          end
+          else if PyTrailingDotFloat(P) then
+            Inc(P);   { `5.` / `5.e3`: take the dot; the exponent follows below }
           if (P <= Length(Source)) and ((Source[P] = 'e') or (Source[P] = 'E')) then
           begin
             Inc(P);

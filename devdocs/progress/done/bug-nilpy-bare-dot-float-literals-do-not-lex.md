@@ -3,6 +3,8 @@ track: N
 prio: 35
 type: bug
 summary: "`.5` and `5.` do not lex — the shared number scanner requires a digit on BOTH sides of the dot, which is right for Pascal and wrong for Python"
+status: done
+owner: claude-AN
 ---
 
 # `.5` and `5.` are not accepted as float literals
@@ -68,3 +70,47 @@ matters is "not another dot".
 A `.npy` diffed against CPython covering `.5`, `5.`, `.5e3`, `5.e3`, `x[.5]`-ish
 contexts and arithmetic on both; plus a `.pas` regression asserting `5..10` and
 `5.Field` still lex, and the self-host fixedpoint staying byte-identical.
+
+## Fixed 2026-08-03 — and it was NOT a Track A change
+
+The ticket's core premise was wrong, in the direction that makes this cheap:
+**NilPy does not lex through `compiler/lexer.inc` at all.** It has its own
+scanner, `compiler/pylexer.inc` (`PyLexAll`, its own number branch around the
+`0x`/`0o`/`0b` prefix handling), which is Track N's own file. So there is no
+lexer mode to plumb, no Pascal blast radius, and nothing in the shared lexer
+was touched — `git diff` on `lexer.inc` is empty.
+
+The premise was checked the expensive way first: the change was written into
+`lexer.inc` exactly as this ticket specified, gated on `isNilPy`, and `print(.5)`
+STILL failed — which is what pointed at the second scanner. Recorded so the next
+person reading "the lexer has no NilPy awareness whatsoever" knows the sentence
+is true and irrelevant.
+
+### What landed (pylexer.inc only)
+
+- the number branch now also starts on a `.` followed by a digit, so `.5`
+  reaches the existing dot-then-digit float path unchanged;
+- `PyTrailingDotFloat(P)` decides whether a dot ending a digit run belongs to
+  the number: yes when it terminates the literal (`5.`, `5.)`, `5. * 2`) or
+  introduces an exponent (`5.e3`, `5.e-3`), no before an identifier character
+  (`5.real` stays an integer and a selector) or another dot.
+
+Pascal's `5..10` and `5.Field` never enter this code, so the subtle lookahead
+the ticket worried about costs Pascal nothing.
+
+### Verified
+
+`test/test_nilpy_dot_edge_float_literals.npy` (new, registered in both
+`test-nilpy` Makefile sites): `.5`, `5.`, `.25 + 1`, `5. * 2`, `.5e3`, `5.e3`,
+`5.e-3`, `-.5`, a list literal, a dict KEY, a default-free float parameter, and
+the ordinary `0.5`/`5.0`/`1e3` spellings — all 15 lines byte-identical to
+CPython. Separately checked unaffected: f-string format specs (`f"{v:.2f}"`,
+`f"{v:8.3f}"`), `%`-formatting, slices, `1_000.`, `0x10`, `//`. The corpus's
+`d1.items`-shaped hits (identifier ending in a digit, then a dot) enter the
+IDENTIFIER branch and never reach this code.
+
+`tools/gate.sh quick` GREEN (self-host fixedpoint + `--tier quick` + FPC seed
+canary).
+
+## Log
+- 2026-08-03 — resolved, commit PENDING-COMMIT.

@@ -35,12 +35,11 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (201)
+## backlog (200)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-cfront-spurious-dt-needed-libc-with-no-imports | B | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
-| bug-nilpy-bare-dot-float-literals-do-not-lex | N | 35 | bug | `.5` and `5.` do not lex — the shared number scanner requires a digit on BOTH sides of the dot, which is right for Pascal and wrong for Python | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-bytearray-constructor-only-accepts-a-length | N | 45 | bug | bytearray() only has () and (Integer) overloads — bytearray(b\"abc\") and bytearray([1,2,3]) are compile errors, so a bytearray cannot be built from data | — |
@@ -348,9 +347,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1289)
+## done (1290)
 
-1289 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1290 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -515,7 +514,6 @@ _none_
 - [p 40] [T] feature-twatch-full-tier-coverage-age
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [T] task-t-borg-open-regression-is-permanently-stale
-- [p 35] [N] bug-nilpy-bare-dot-float-literals-do-not-lex
 - [p 35] [N] bug-nilpy-dict-mutation-during-iteration-is-unobserved-not-raised
 - [p 35] [N] bug-nilpy-list-sort-ignores-lt-dunder-on-objects
 - [p 35] [N] bug-nilpy-list-sort-method-missing

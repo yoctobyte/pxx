@@ -1,0 +1,27 @@
+# Python's two dot-edge float spellings. The shared number scanner required a
+# digit on BOTH sides of the dot -- right for Pascal (`5..10`, `5.Field`),
+# wrong for Python. bug-nilpy-bare-dot-float-literals-do-not-lex
+print(.5)
+print(5.)
+print(.25 + 1)
+print(5. * 2)
+print(.5e3)
+print(5.e3)
+print(5.e-3)
+print(-.5)
+xs = [.5, 1.5, 2.]
+print(xs)
+print(sum(xs))
+d = {.5: "half"}
+print(d[.5])
+
+
+def half(x: float) -> float:
+    return x * .5
+
+
+print(half(3.))
+# the ordinary spellings must be untouched
+print(0.5)
+print(5.0)
+print(1e3)

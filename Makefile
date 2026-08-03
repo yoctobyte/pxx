@@ -372,6 +372,10 @@ test-nilpy: $(COMPILER)
 	# still be refused -- that is the precedence typo the guard exists for.
 	./$(COMPILER) test/test_nilpy_bitwise_on_booleans.npy /tmp/test_nilpy_bitwise_on_booleans26
 	test "$$(/tmp/test_nilpy_bitwise_on_booleans26)" = "$$(printf 'False\nTrue\nTrue\nTrue\nFalse\nTrue\nFalse\n1\n1\n5\n8\n2\n2')"
+	# Python's dot-edge float spellings `.5` and `5.` (and `.5e3` / `5.e-3`),
+	# which the shared Pascal scanner cannot lex -- NilPy has its own lexer.
+	./$(COMPILER) test/test_nilpy_dot_edge_float_literals.npy /tmp/test_nilpy_dot_edge_float26
+	test "$$(/tmp/test_nilpy_dot_edge_float26)" = "$$(printf '0.5\n5.0\n1.25\n10.0\n500.0\n5000.0\n0.005\n-0.5\n[0.5, 1.5, 2.0]\n4.0\nhalf\n1.5\n0.5\n5.0\n1000.0')"
 	./$(COMPILER) test/test_nilpy_membership_bool_return.npy /tmp/test_nilpy_membership_bool_return26
 	test "$$(/tmp/test_nilpy_membership_bool_return26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n3\n3\n3')"
 	# a sibling .py MODULE: unit scoping, its own initialisation, both import forms
@@ -4343,6 +4347,10 @@ test-core: $(COMPILER)
 	# still be refused -- that is the precedence typo the guard exists for.
 	./$(COMPILER) test/test_nilpy_bitwise_on_booleans.npy /tmp/test_nilpy_bitwise_on_booleans26
 	test "$$(/tmp/test_nilpy_bitwise_on_booleans26)" = "$$(printf 'False\nTrue\nTrue\nTrue\nFalse\nTrue\nFalse\n1\n1\n5\n8\n2\n2')"
+	# Python's dot-edge float spellings `.5` and `5.` (and `.5e3` / `5.e-3`),
+	# which the shared Pascal scanner cannot lex -- NilPy has its own lexer.
+	./$(COMPILER) test/test_nilpy_dot_edge_float_literals.npy /tmp/test_nilpy_dot_edge_float26
+	test "$$(/tmp/test_nilpy_dot_edge_float26)" = "$$(printf '0.5\n5.0\n1.25\n10.0\n500.0\n5000.0\n0.005\n-0.5\n[0.5, 1.5, 2.0]\n4.0\nhalf\n1.5\n0.5\n5.0\n1000.0')"
 	./$(COMPILER) test/test_nilpy_membership_bool_return.npy /tmp/test_nilpy_membership_bool_return26
 	test "$$(/tmp/test_nilpy_membership_bool_return26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n3\n3\n3')"
 	# a sibling .py MODULE: unit scoping, its own initialisation, both import forms
