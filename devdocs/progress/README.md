@@ -189,6 +189,14 @@ detail and fails. Render the grid: `tools/progress.sh board-md` → `BOARD.md`
 `BOARD.html`. Regenerate after any board change — `check` fails on a stale
 `BOARD.md`.
 
+`done/` is **not** enumerated in `BOARD.md`; it gets a count and a pointer to
+`BOARD-done.md`, generated alongside and guarded by the same staleness check.
+The reason is orientation cost: the done table was 190KB of a 260KB board, so
+every agent reading the board to find out what to do paid ~47k tokens for a list
+of things nobody can act on. The record is unchanged and still in git — grep
+`BOARD-done.md` or `done/` directly. Add a status to `ARCHIVED_STATUSES` in
+`tools/progress.py` if another one grows the same way.
+
 ## Multi-agent use
 
 - **Claim before working:** `git mv` the ticket to `working/` and set `Owner` in
