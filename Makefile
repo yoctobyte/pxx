@@ -2814,6 +2814,8 @@ test-core: $(COMPILER)
 	/tmp/csizeof_arrow_array_field_b19426; test "$$?" = "42"
 	./$(COMPILER) test/csizeof_member_chain_through_pointer.c /tmp/csizeof_member_chain26
 	/tmp/csizeof_member_chain26; test "$$?" = "42"
+	./$(COMPILER) test/cstatic_init_cast.c /tmp/cstatic_init_cast26
+	/tmp/cstatic_init_cast26; test "$$?" = "42"
 	./$(COMPILER) test/cchar_plain_signedness.c /tmp/cchar_plain_signedness26
 	/tmp/cchar_plain_signedness26; test "$$?" = "42"
 	./$(COMPILER) test/carch_predefines.c /tmp/carch_predefines26

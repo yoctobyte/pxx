@@ -3,6 +3,8 @@ track: C
 prio: 85
 type: bug
 summary: "Any CAST inside a static array/struct initializer folds to 0, for every type — `int b[2] = {(int)0xFF, 0}` gives 0 where gcc gives 255. Arithmetic in the same position folds correctly, so only the cast form is affected. Silent wrong data in every static table that casts."
+status: done
+owner: claude-C@opus5
 ---
 
 # A cast in a static aggregate initializer folds to 0
@@ -85,3 +87,61 @@ Every row of the table above matches gcc, for file-scope arrays and structs,
 with casts to `char` / `unsigned char` / `signed char` / `short` / `int` /
 `long`, including values that truncate and values that do not. A local
 aggregate with the same initializer keeps its current (correct) answer.
+
+## Resolution 2026-08-03 (claude-C@opus5)
+
+Not the constant evaluator — that was innocent. `CEvalConstPrimary` has always
+skipped a cast's type tokens and folded the operand. The bug was one step
+earlier, in `CBraceFlatIntInitCountAt`, the token pre-scan that decides whether
+a brace initializer can take the flat constant-array path: its allowed-token set
+listed `tkLParen`/`tkRParen`/`tkIdent` but **none of the C type KEYWORDS**, so
+`{ (int)0xFF, 0 }` was rejected as "not a flat int init" and routed to the path
+that materialised zeros.
+
+The tell was measured, not guessed: a cast through a **typedef** name already
+worked, because a typedef name lexes as `tkIdent` and was allowed —
+
+```c
+int b1[2] = { (int)0xFF,   0 };   /* pxx 0    gcc 255 */
+int b2[2] = { (myint)0xFF, 0 };   /* pxx 255  gcc 255 */
+```
+
+One spelling of one expression apart, which is what identified the pre-scan
+rather than the folder. Fix: add `tkInteger_T tkChar_T tkCVoid tkCShort tkCLong
+tkCSigned tkCUnsigned tkCFloat tkCDouble tkCBool tkConst tkRecord` — the set
+`IsCTypeTok` accepts — to that case list. Nothing new has to fold; the elements
+just stop being routed away from the folder that already handled them. A
+compound literal `(struct S){...}` still bails on its `tkBegin` and a string
+init still takes the pointer-array path.
+
+### Verified against gcc
+
+Every row of the ticket's table, diffed against a gcc build:
+
+| | `b1` | `c1` | `c2` | `c3` | `s1` | `c4` |
+| --- | --- | --- | --- | --- | --- | --- |
+| gcc | 255 | 1 | 127 | -1 | 255 | 2 |
+| pxx, before | 0 | 0 | 0 | 0 | 0 | 2 |
+| pxx, after | **255** | **1** | **127** | **-1** | **255** | 2 |
+
+This also clears the residual left open on
+[[bug-cfront-plain-char-is-unsigned-and-folds-inconsistently]]: its `a1`/`a4`
+rows (`char a[2] = { (char)0xFF, 0 }`) now read -1, matching gcc, so that
+ticket's tables are complete with no exception.
+
+Regression test `test/cstatic_init_cast.c` (gated, exit 42) covers every cast
+spelling — keyword and typedef, `char`/`signed char`/`unsigned char`/`short`/
+`int`/`unsigned`/`long` — casts inside larger constant expressions, a struct
+initializer, a static local, and a non-static local (which was always correct
+and must stay so). It returns 42 under **gcc and pxx**, and **1 under
+`pinned`**, so it genuinely pins the bug rather than merely passing.
+
+Nested aggregates (`int m[2][2] = { { (int)0xFF, 1 }, ... }`) bail off the flat
+path on their opening brace and were **never** affected — `pinned` gets them
+right. Checked and added to the test anyway, so a future change to this pre-scan
+cannot quietly break them instead.
+
+`tools/gate.sh quick` GREEN (self-host fixedpoint, testmgr quick, FPC canary).
+
+## Log
+- 2026-08-03 — resolved, commit PENDING.

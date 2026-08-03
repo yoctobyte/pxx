@@ -5342,7 +5342,21 @@ begin
           end;
         end;
       tkInteger, tkMinus, tkPlus, tkStar, tkSlash, tkMod, tkShl, tkShr, tkAmp,
-      tkXor, tkPipe, tkLParen, tkRParen, tkNot, tkIdent:
+      tkXor, tkPipe, tkLParen, tkRParen, tkNot, tkIdent,
+      { The type keywords a CAST can be spelled with. Without them `{ (int)0xFF }`
+        left this flat path and every element materialised as 0 — for EVERY type,
+        `(char)1` included, so a static table built from casts became all zeros
+        with no diagnostic. A cast through a TYPEDEF name already worked, because
+        that is a tkIdent and was allowed: `{ (myint)0xFF }` gave 255 while
+        `{ (int)0xFF }` gave 0, one spelling of one expression apart.
+
+        Nothing new has to fold: CEvalConstPrimary has always skipped a cast's
+        type tokens and folded the operand — this scan just has to stop routing
+        those elements away from it. A compound literal `(struct S){...}` still
+        bails on its tkBegin, and tkString still takes the pointer-array path.
+        bug-cfront-cast-in-static-aggregate-initializer-folds-to-zero }
+      tkInteger_T, tkChar_T, tkCVoid, tkCShort, tkCLong, tkCSigned, tkCUnsigned,
+      tkCFloat, tkCDouble, tkCBool, tkConst, tkRecord:
         { Allowed flat constant-expression tokens. An element may be a full
           integer constant expression — parens, shifts, bitwise ops, and
           identifiers that name enum/macro constants (e.g. lua's
