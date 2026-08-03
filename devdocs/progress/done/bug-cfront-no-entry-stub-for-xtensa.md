@@ -94,4 +94,4 @@ setjmp/longjmp and fenv on xtensa; running the crtl differential tests on
 xtensa, which needs an emulator or hardware, not a compiler change.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING.
+- 2026-08-03 — resolved, commit 4db44b42c.
