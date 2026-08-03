@@ -2,6 +2,8 @@
 track: P
 prio: 80
 type: bug
+status: done
+owner: claude-P@opus5
 ---
 
 # A procedural variable in a value context takes its ADDRESS instead of calling it
@@ -102,3 +104,66 @@ this frontend semantics bug alone.
 The repro above returns FPC's value; `fp` and `fp()` agree; `@fp` still yields
 the address. Then Synapse's `SSLDoConnect` reaching a real TLS handshake, which
 is [[feature-real-dynlib-loader]] item (d) and is the end-to-end check.
+
+## Resolution 2026-08-03 (claude-P@opus5)
+
+Fixed at the `AN_ASSIGN` lowering choke point (`ir.inc`), chosen for the same
+reason the enum-identity check already sits there: **every syntactic form of
+assignment funnels through that node**, so one rule replaces edits at ~20
+assignment sites — which is exactly the shape this repo has been bitten by
+before (the hand-built-call-args landmine).
+
+A bare procvar RHS becomes an `AN_CALL_IND` with the symbol's `SymProcSig`
+signature, no arguments, and the signature's result type — the identical node
+`fp()` already produced, so the two spellings now agree by construction rather
+than by coincidence.
+
+Deliberately conservative, because a wrong call here would be as silent as the
+bug. It fires only when:
+
+- the RHS is a **bare** procvar identifier (`@fp` is AN_ADDR, `fp()` is already
+  AN_CALL_IND — neither matches);
+- the signature takes **no parameters**, since a bare name supplies none;
+- the LHS is an identifier we can **positively** see is not itself proc-typed,
+  so `fp := f2` keeps copying the pointer and a field/indexed target is left
+  alone rather than guessed at.
+
+### Verified against FPC, not against expectation
+
+The ticket's repro, run under both:
+
+| | `Result := fp` yields |
+| --- | --- |
+| FPC 3.2.2, Delphi mode | 3735928559 |
+| pxx `--mimic-fpc`, before | 4198544 (`@Impl`) |
+| pxx `--mimic-fpc`, after | **3735928559** |
+
+`test/test_procvar_value_context.pas` (gated) pins the rule and all four
+exceptions — `fp()` agreeing with the bare name, `fp2 := fp` copying the
+pointer, `@fp`, `Assigned(fp)`, and a parameterised signature staying a pointer
+copy. It compiles and prints the same line under **FPC and pxx**.
+
+FPC's own diagnostics were used as the oracle for the exceptions too: it rejects
+`Pointer(gp)` for a parameterised `gp` with "Wrong number of parameters
+specified for call to `<Procedure Variable>`", confirming it reads a cast
+operand as a call.
+
+`tools/gate.sh quick` GREEN.
+
+### Deliberate remainder, filed
+
+Value contexts **other than an assignment** still yield the address —
+`Int64(fp)` in a `writeln` argument, a procvar passed to a non-procvar
+parameter, a comparison against a non-procvar. At the assignment node both
+sides' types are known and the exceptions are decidable; in a general expression
+the parser has no expected-type channel yet, so this took the decidable half
+rather than guess at the rest. Filed as
+[[bug-pascal-procvar-value-context-outside-assignment]] (prio 60) with the full
+Delphi rule and the fix shape.
+
+The Synapse chain this was found through — `Result := _SslMethodTLS` — is the
+assignment form, so [[feature-real-dynlib-loader]] item (d) is unblocked by this
+alone; the end-to-end TLS handshake check belongs there.
+
+## Log
+- 2026-08-03 — resolved, commit PENDING.

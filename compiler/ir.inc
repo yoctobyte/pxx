@@ -4149,6 +4149,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     vuArgProc, vuArgAddr, vuArgNode: Integer;   { `return <variant>` -> class via pyvarobj }
     fdName: string;                 { NilPy floor-div/mod helper being called }
     pvName: string;                 { NilPy variant-dispatch builtin }
+    pvarRhsSym, pvarLhsSym, pvarSig, pvarCall: Integer;   { bare procvar in a value context -> indirect call }
     pvTk: TTypeKind;
     fdTk: TTypeKind;
     intfCallCi, intfSelfSym, intfImtSym: Integer;   { single-pointer interface call }
@@ -6492,6 +6493,55 @@ begin
 
     AN_ASSIGN:
     begin
+      { FPC/Delphi parity: a procedural VARIABLE named in a VALUE context is
+        CALLED. Taking its address is what `@fp` is for, and `fp()` with explicit
+        parens was already right — so the two spellings disagreed, and the wrong
+        one is the one real Delphi code writes:
+
+          function SslMethodTLS: PSSL_METHOD;
+          begin ... Result := _SslMethodTLS;      { <- called by FPC }
+
+        pxx yielded `@TLS_method` instead. The wrong value is a VALID POINTER, so
+        nothing errors: Synapse handed it to SSL_CTX_new and libssl died far away
+        dereferencing it as a method table.
+
+        Rewritten HERE for the same reason the enum-identity check below lives
+        here — every syntactic form of assignment funnels through this node, so
+        one rule covers them all instead of ~20 assignment sites.
+
+        Deliberately conservative, because "value context" has real exceptions
+        (`fp := f2`, `@fp`, `Assigned(fp)`, a procvar argument) and a wrong call
+        here would be as silent as the bug:
+          - the RHS must be a BARE procvar identifier (`@fp` is AN_ADDR, `fp()`
+            is already AN_CALL_IND — neither matches);
+          - its signature must take NO parameters, since a bare name supplies
+            none;
+          - the LHS must be an identifier we can POSITIVELY see is not itself
+            proc-typed, so `fp := f2` keeps assigning the pointer and a field or
+            indexed target is left alone rather than guessed at.
+        bug-pascal-procvar-in-value-context-takes-address-instead-of-calling }
+      if (ASTKind[ASTRight[node]] = AN_IDENT) and (ASTKind[ASTLeft[node]] = AN_IDENT) then
+      begin
+        pvarRhsSym := Integer(ASTIVal[ASTRight[node]]);
+        pvarLhsSym := Integer(ASTIVal[ASTLeft[node]]);
+        if (pvarRhsSym >= 0) and (pvarRhsSym < SymCount) and
+           (pvarLhsSym >= 0) and (pvarLhsSym < SymCount) and
+           (SymProcSig[pvarRhsSym] >= 0) and (SymProcSig[pvarLhsSym] < 0) then
+        begin
+          pvarSig := SymProcSig[pvarRhsSym];
+          if (pvarSig >= 0) and (pvarSig < ProcCount) and
+             (Procs[pvarSig].ParamCount = 0) and Procs[pvarSig].IsFunc then
+          begin
+            pvarCall := AllocNode(AN_CALL_IND);
+            ASTIVal[pvarCall] := pvarSig;
+            ASTLeft[pvarCall] := -1;                 { no arguments }
+            ASTRight[pvarCall] := ASTRight[node];    { callee = the procvar value }
+            ASTTk[pvarCall] := Ord(Procs[pvarSig].RetType);
+            ASTRight[node] := pvarCall;
+          end;
+        end;
+      end;
+
       { FPC-parity: two enum TYPES are distinct types with no implicit conversion, so
         `aColor := banana` is an error, not a reinterpretation of the ordinal. It used to
         compile and store TFruit's 1 into a TColor, which reads back as green — a wrong
