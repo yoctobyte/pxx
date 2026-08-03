@@ -12913,6 +12913,52 @@ begin
   PyAugClassDunder := asgn;
 end;
 
+function PyAugClassDunderNode(lhsNode: Integer; binTk: TTokenKind; rhsNode: Integer): Integer;
+{ `obj.field += x` / `self.field += x` where the FIELD holds a user class
+  instance: the node-target twin of PyAugClassDunder, which is keyed on a
+  symbol and so only reaches a bare NAME target. Same rule, same fallbacks.
+
+  Without it the field target fell through to the numeric AN_BINOP below, which
+  added the two instance HANDLES and stored the result into a class slot — the
+  field read back as 0, silently, with the dunder never called.
+  bug-nilpy-augmented-assign-to-a-class-typed-FIELD-silently-yields-zero
+
+  The target subtree is CLONEd for the store, not shared: one node index sitting
+  in two places is emitted twice, and an AST DAG is not what the rest of the
+  pipeline expects. }
+var ci, rec, callNode, asgn: Integer; nm: AnsiString;
+begin
+  PyAugClassDunderNode := -1;
+  if lhsNode < 0 then Exit;
+  if IntToTypeKind(ASTTk[lhsNode]) <> tyClass then Exit;
+  rec := ResolveNodeRec(lhsNode);
+  if rec < REC_UCLASS_BASE then Exit;
+  if PyRecIsPylibOwnClass(rec) then Exit;   { pylib containers keep their own path }
+  ci := rec - REC_UCLASS_BASE;
+  nm := PyAugDunderName(binTk, True);
+  if (nm = '') or (FindUMeth(ci, nm) < 0) then
+    nm := PyAugDunderName(binTk, False);
+  if (nm = '') or (FindUMeth(ci, nm) < 0) then
+  begin
+    { NEITHER dunder — CPython raises. Refuse at RUN time so a try/except
+      TypeError around the statement still compiles, exactly as the name twin. }
+    callNode := FindProc('PyUnsupportedOperandError');
+    if callNode < 0 then Exit;    { pylib absent: leave the old path alone }
+    asgn := AllocNode(AN_CALL);
+    ASTIVal[asgn] := callNode;
+    ASTTk[asgn] := Ord(tyUnknown);
+    ASTLeft[asgn] := -1;
+    PyAugClassDunderNode := asgn;
+    Exit;
+  end;
+  callNode := PyCallMeth1(ci, nm, lhsNode, rhsNode);
+  if callNode < 0 then Exit;
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := CloneAST(lhsNode);
+  ASTRight[asgn] := callNode;
+  PyAugClassDunderNode := asgn;
+end;
+
 { Register a nested def's SHELL and queue its body for later compilation.
   Returns an empty statement: the def itself produces no code where it stands.
   The typing pre-pass trial-parses the enclosing body too, so this must stay
@@ -13833,6 +13879,14 @@ begin
         { list += list is in-place extend, and the whole statement IS the call }
         Result := PyCallMeth1(PyNodeListCi(lhsNode), 'extend', lhsNode, CurASTNode);
         if Result < 0 then Error('Nil Python: pylib TPyList.extend not loaded');
+        Exit;
+      end;
+      { `h.acc += 5` where the field holds a user class: dispatch __iadd__ /
+        __add__, or raise. The whole statement IS that assignment. }
+      node := PyAugClassDunderNode(lhsNode, augTk, CurASTNode);
+      if node >= 0 then
+      begin
+        Result := node;
         Exit;
       end;
       node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(augTk);

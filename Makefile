@@ -391,6 +391,11 @@ test-nilpy: $(COMPILER)
 	# real TypeError -- all three used to silently leave the name holding 0.
 	./$(COMPILER) test/test_nilpy_augmented_assign_class_dunder.npy /tmp/test_nilpy_aug_class26
 	test "$$(/tmp/test_nilpy_aug_class26)" = "$$(printf '15\n12\n48\n9\n2\n7\n21\n10\ncaught TypeError\n6\n[1, 2, 3] [1, 2, 3]')"
+	# ...and the same on a class-typed FIELD (`h.acc += 5`, `self.acc += k`),
+	# which takes a DIFFERENT path: a dotted target is claimed by the shared
+	# expression tail before NilPy's own augmented site can see it.
+	./$(COMPILER) test/test_nilpy_augmented_assign_class_field.npy /tmp/test_nilpy_aug_field26
+	test "$$(/tmp/test_nilpy_aug_field26)" = "$$(printf '105\n103\n309\n44\n4\n12\n15\n14\n56\n28\n38\n11\n[1, 2, 3]\n42\nTypeError')"
 	./$(COMPILER) test/test_nilpy_dataclass_eq.npy /tmp/test_nilpy_dataclass_eq26
 	test "$$(/tmp/test_nilpy_dataclass_eq26)" = "$$(printf 'True\nFalse\nFalse\nTrue\nTrue\nFalse\nFalse\nFalse\nFalse\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue')"
 	./$(COMPILER) test/test_nilpy_is_identity_vs_class_test.npy /tmp/test_nilpy_is_identity26
@@ -4395,6 +4400,11 @@ test-core: $(COMPILER)
 	# real TypeError -- all three used to silently leave the name holding 0.
 	./$(COMPILER) test/test_nilpy_augmented_assign_class_dunder.npy /tmp/test_nilpy_aug_class26
 	test "$$(/tmp/test_nilpy_aug_class26)" = "$$(printf '15\n12\n48\n9\n2\n7\n21\n10\ncaught TypeError\n6\n[1, 2, 3] [1, 2, 3]')"
+	# ...and the same on a class-typed FIELD (`h.acc += 5`, `self.acc += k`),
+	# which takes a DIFFERENT path: a dotted target is claimed by the shared
+	# expression tail before NilPy's own augmented site can see it.
+	./$(COMPILER) test/test_nilpy_augmented_assign_class_field.npy /tmp/test_nilpy_aug_field26
+	test "$$(/tmp/test_nilpy_aug_field26)" = "$$(printf '105\n103\n309\n44\n4\n12\n15\n14\n56\n28\n38\n11\n[1, 2, 3]\n42\nTypeError')"
 	./$(COMPILER) test/test_nilpy_dataclass_eq.npy /tmp/test_nilpy_dataclass_eq26
 	test "$$(/tmp/test_nilpy_dataclass_eq26)" = "$$(printf 'True\nFalse\nFalse\nTrue\nTrue\nFalse\nFalse\nFalse\nFalse\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue')"
 	./$(COMPILER) test/test_nilpy_is_identity_vs_class_test.npy /tmp/test_nilpy_is_identity26

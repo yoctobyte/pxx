@@ -1,0 +1,91 @@
+# `h.acc += 5` on a class-typed FIELD: every augmented operator dispatches
+# the in-place dunder, falls back to the binary one + rebind, and raises a
+# catchable TypeError with neither -- all of which silently yielded 0.
+# Also pins the LIST field (`h.xs += [3]` = in-place extend; it segfaulted)
+# and the int field, which must be untouched.
+# bug-nilpy-augmented-assign-to-a-class-typed-FIELD-silently-yields-zero
+class Box:
+    def __init__(self, v: int):
+        self.v = v
+    def __iadd__(self, o):
+        return Box(self.v + o)
+    def __isub__(self, o):
+        return Box(self.v - o)
+    def __imul__(self, o):
+        return Box(self.v * o)
+    def __ifloordiv__(self, o):
+        return Box(self.v // o)
+    def __imod__(self, o):
+        return Box(self.v % o)
+    def __ior__(self, o):
+        return Box(self.v | o)
+    def __ixor__(self, o):
+        return Box(self.v ^ o)
+    def __iand__(self, o):
+        return Box(self.v & o)
+    def __ilshift__(self, o):
+        return Box(self.v << o)
+    def __irshift__(self, o):
+        return Box(self.v >> o)
+
+class BinOnly:
+    def __init__(self, v: int):
+        self.v = v
+    def __add__(self, o):
+        return BinOnly(self.v + o)
+
+class Plain:
+    def __init__(self, v: int):
+        self.v = v
+
+class H:
+    def __init__(self):
+        self.b = Box(100)
+        self.n = 7
+        self.xs = [1, 2]
+    def bump(self, k: int):
+        self.b += k
+
+h = H()
+h.b += 5
+print(h.b.v)
+h.b -= 2
+print(h.b.v)
+h.b *= 3
+print(h.b.v)
+h.b //= 7
+print(h.b.v)
+h.b %= 20
+print(h.b.v)
+h.b |= 8
+print(h.b.v)
+h.b ^= 3
+print(h.b.v)
+h.b &= 14
+print(h.b.v)
+h.b <<= 2
+print(h.b.v)
+h.b >>= 1
+print(h.b.v)
+h.bump(10)
+print(h.b.v)
+
+h.n += 4
+print(h.n)
+h.xs += [3]
+print(h.xs)
+
+class W:
+    def __init__(self):
+        self.b = BinOnly(1)
+        self.p = Plain(1)
+
+w = W()
+w.b += 41
+print(w.b.v)
+
+try:
+    w.p += 1
+    print("no raise")
+except TypeError:
+    print("TypeError")

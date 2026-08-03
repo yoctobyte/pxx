@@ -866,6 +866,8 @@ function PyIsIdent(const s: AnsiString): Boolean; forward; { (pyparser.inc) }
 function PyMakeVariantGetItem(baseNode, idxNode: Integer): Integer; forward; { Nil Python v[key] on a variant (pyparser.inc) }
 function PyMakeObjPtr(baseNode: Integer): Integer; forward; { Nil Python: object as a pointer for the dynattr store (pyparser.inc) }
 function PyAugBinTok(k: TTokenKind): TTokenKind; forward; { Nil Python augmented-assign op (pyparser.inc) }
+function PyAugClassDunderNode(lhsNode: Integer; binTk: TTokenKind; rhsNode: Integer): Integer; forward; { Nil Python obj.field += x dunder dispatch (pyparser.inc) }
+function PyNodeListCi(n: Integer): Integer; forward; { Nil Python: TPyList class index of a node, else -1 (pyparser.inc) }
 function PyMakeDynAttrGet(baseNode: Integer; const fname: AnsiString): Integer; forward; { Nil Python obj.name dynamic read (pyparser.inc) }
 function PyMakeDynAttrSet(baseNode: Integer; const fname: AnsiString; valNode: Integer): Integer; forward; { Nil Python obj.name = v dynamic write (pyparser.inc) }
 function PyMakeVariantSetItem(baseNode, idxNode, valNode: Integer): Integer; forward; { Nil Python v[key]=val on a variant (pyparser.inc) }
@@ -14208,6 +14210,7 @@ var op: TTokenKind; left, right, node, isci, isNode, isArg, isArg2: Integer; isI
     spDepth, spI: Integer;
     ordDirect, ordRefl: AnsiString; ordLCi, ordRCi, ordErr: Integer;   { Python ordering dunders }
     caOp, caRhs: Integer;   { compound assignment: the binop token, and the NilPy variant rewrite }
+    caBinTk: TTokenKind;    { same token as caOp, kept typed for the NilPy dunder dispatch }
 begin
   { NilPy argument UNPACKING of a list literal: `f(*[a, b, c])` means
     `f(a, b, c)`, and with a literal that is purely syntactic — songformatter
@@ -14627,14 +14630,15 @@ begin
       is exactly how this bug arrived, and it would have done the same for the
       next compound token added. }
     case op of
-      tkPlusEq:  caOp := Ord(tkPlus);
-      tkMinusEq: caOp := Ord(tkMinus);
-      tkStarEq:  caOp := Ord(tkStar);
-      tkSlashEq: if NilPyUserCode then caOp := Ord(tkDiv)
-                 else caOp := Ord(tkSlash);
-      else       begin caOp := Ord(tkSlash);
+      tkPlusEq:  caBinTk := tkPlus;
+      tkMinusEq: caBinTk := tkMinus;
+      tkStarEq:  caBinTk := tkStar;
+      tkSlashEq: if NilPyUserCode then caBinTk := tkDiv
+                 else caBinTk := tkSlash;
+      else       begin caBinTk := tkSlash;
                        Error('internal: unhandled compound-assignment operator'); end;
     end;
+    caOp := Ord(caBinTk);
     { A NilPy VARIANT lvalue must NOT take the compound-assign node. That node
       computes the lvalue address once and does a scalar read-modify-write, which
       on a 16-byte variant slot reads the payload as a raw machine word: `self.n
@@ -14663,8 +14667,36 @@ begin
       Same missing conversion seen from the other end, and the same explicit
       rewrite fixes it; the binop's own typing then widens as it does for a
       written-out `self.n = self.n + v`. }
-    if NilPyUserCode and ((IntToTypeKind(ASTTk[left]) = tyVariant) or
-                          (IntToTypeKind(ASTTk[right]) = tyVariant)) then
+    { A NilPy target holding a USER CLASS instance takes neither the compound
+      node nor the variant rewrite: `h.acc += 5` must call __iadd__ (or __add__
+      and rebind), and with neither declared must RAISE. The raw read-modify-
+      write added the two instance HANDLES and stored the sum into a class slot,
+      so the field read back as 0 — silently, dunder never called
+      (bug-nilpy-augmented-assign-to-a-class-typed-FIELD-silently-yields-zero).
+
+      It lands HERE rather than in NilPy's own augmented path for the same
+      reason the variant fix above does: a DOTTED target reaches this shared
+      expression tail first, so pyparser's site never sees it. The helper is
+      NilPy's (pyparser.inc) and returns -1 for anything that is not a user
+      class, which keeps Pascal and C on their existing path. }
+    caRhs := -1;
+    { `h.xs += [3]` on a LIST-typed field is Python's in-place extend, the same
+      rule bug-a-nilpy-list-augmented-add-segfaults established for a bare name.
+      pyparser's augmented path carries that special case, but — again — only a
+      bare name reaches it, so the dotted spelling fell through to the compound
+      node, added the two list HANDLES and SEGFAULTED (measured against the
+      pinned binary too: pre-existing, not a regression of the dunder work). }
+    if NilPyUserCode and (caBinTk = tkPlus) and (PyNodeListCi(left) >= 0) then
+    begin
+      caRhs := PyCallMeth1(PyNodeListCi(left), 'extend', left, right);
+      if caRhs < 0 then Error('Nil Python: pylib TPyList.extend not loaded');
+    end;
+    if (caRhs < 0) and NilPyUserCode then
+      caRhs := PyAugClassDunderNode(left, caBinTk, right);
+    if caRhs >= 0 then
+      CurASTNode := caRhs
+    else if NilPyUserCode and ((IntToTypeKind(ASTTk[left]) = tyVariant) or
+                               (IntToTypeKind(ASTTk[right]) = tyVariant)) then
     begin
       node := AllocNode(AN_BINOP);
       ASTIVal[node] := caOp;
