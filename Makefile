@@ -6529,6 +6529,23 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_largeframe.pas > /tmp/test_esp_bare_lf.s3 2>/dev/null; \
 	  if diff -u /tmp/test_esp_bare_lf.oracle /tmp/test_esp_bare_lf.s3; then echo "esp32s3 call0 large-frame ok (>128B frame via ADDMI == x86-64 oracle)"; \
 	  else echo "esp32s3 call0 large-frame MISMATCH"; exit 1; fi; fi
+	# bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c: the
+	# xtensa C ABI starts a 64-bit argument at an EVEN word index; pxx now applies
+	# that rule unconditionally on BOTH sides (caller pad + callee spill), so a
+	# routine called from C reads the same registers gcc wrote. These calls put
+	# the 64-bit value at odd word indices 1, 3 and 5 (the last straddling a7 into
+	# the stack area) plus an even control case.
+	@./$(COMPILER) test/test_esp_bare_arg64.pas /tmp/test_esp_arg64_oracle >/dev/null && /tmp/test_esp_arg64_oracle > /tmp/test_esp_arg64.oracle
+	@RV=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \
+	if [ -z "$$RV" ]; then echo "Espressif qemu-system-riscv32 not installed; esp32c3 arg64 run skipped"; else \
+	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32c3 test/test_esp_bare_arg64.pas > /tmp/test_esp_arg64.c3 2>/dev/null; \
+	  if diff -u /tmp/test_esp_arg64.oracle /tmp/test_esp_arg64.c3; then echo "esp32c3 odd-index 64-bit args ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32c3 odd-index 64-bit args MISMATCH"; exit 1; fi; fi
+	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
+	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 arg64 run skipped"; else \
+	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_arg64.pas > /tmp/test_esp_arg64.s3 2>/dev/null; \
+	  if diff -u /tmp/test_esp_arg64.oracle /tmp/test_esp_arg64.s3; then echo "esp32s3 odd-index 64-bit args ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32s3 odd-index 64-bit args MISMATCH"; exit 1; fi; fi
 	@./$(COMPILER) test/test_esp_frozen_string.pas /tmp/test_esp_frz_oracle >/dev/null && /tmp/test_esp_frz_oracle > /tmp/test_esp_frz.oracle
 	@RV=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \
 	if [ -z "$$RV" ]; then echo "Espressif qemu-system-riscv32 not installed; esp32c3 frozen-string run skipped"; else \

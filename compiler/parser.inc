@@ -27271,6 +27271,26 @@ begin
           (Syms[idx].TypeKind = tyDouble)) and
          (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
       begin
+        { The xtensa C ABI starts a 64-bit argument at an EVEN word index, so an
+          odd index skips one word — the caller's XtensaPadTo64Xtensa emits that
+          same skip, and both sides must apply the rule or neither. Without it
+          here, a routine CALLED FROM C read the parameter one register early:
+          gcc puts f(int, long long)'s second argument in a4:a5, this spill read
+          a3:a4 (measured against xtensa-esp32s3-elf-gcc, both ABIs).
+          bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c }
+        if (pw and 1) = 1 then
+        begin
+          Inc(pw);
+          if pw < 6 then
+            xtVReg := reg_xtensa_a2 + pw
+          else
+          begin
+            if ProcIsInterrupt[procIdx] then
+              Error('target xtensa: an interrupt handler cannot take stack arguments');
+            xtensa_l32i(reg_xtensa_a10, reg_xtensa_a15, xtInBias + (pw - 6) * 4);
+            xtVReg := reg_xtensa_a10;
+          end;
+        end;
         xtensa_s32i(xtVReg, reg_xtensa_a8, 0);                 { lo (word pw) }
         if pw + 1 < 6 then
           xtVReg2 := reg_xtensa_a2 + pw + 1

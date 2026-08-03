@@ -231,12 +231,21 @@ end;
 procedure XtensaPadTo64Xtensa(procIdx: Integer; var nArgs: Integer);
 { The xtensa C ABI starts a 64-bit argument at an EVEN word index — measured
   from the IDF's own xtensa-esp32s3-elf-gcc, which compiles
-  `f(void *p, long long v)` to p in a10 and v in a12:a13, SKIPPING a11. Our
-  internal convention packs words with no padding and the callee spill in
-  parser.inc matches it, so the skip is for EXTERNAL callees only. The padding
-  word's value is irrelevant; only its slot matters. }
+  `f(void *p, long long v)` to p in a10 and v in a12:a13, SKIPPING a11 (call0:
+  a2 and a4:a5, skipping a3). The padding word's value is irrelevant; only its
+  slot matters.
+
+  This rule is now UNCONDITIONAL — it used to apply to EXTERNAL callees only,
+  with pxx's own routines keeping a packed no-padding layout. That asymmetry is
+  what made a pxx routine called FROM C read its 64-bit parameter one register
+  early: gcc placed it at a4:a5, the pxx callee spill read a3:a4
+  (bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c). A calling
+  convention is the TARGET's by definition — a `cdecl`/`stdcall` marker in this
+  dialect is decoration — so xtensa uses the xtensa C ABI for everyone, and pxx
+  and gcc cannot disagree. Internal calls stay correct because the callee spill
+  in parser.inc applies the identical rule; the two must be changed together. }
 begin
-  if (procIdx >= 0) and ProcExternal[procIdx] and ((nArgs and 1) = 1) then
+  if (nArgs and 1) = 1 then
   begin
     XtensaPushA2;
     Inc(nArgs);
