@@ -71,6 +71,24 @@ rebase_onto_origin() {
     fi
 }
 
+# Push, re-rebasing on a race. The daemon publishes tstate every few minutes,
+# so origin can move between our fetch and our push — a plain `push` then fails
+# with "fetch first" and the caller has to run sync.sh again by hand (observed
+# 2026-08-03 landing the ticket below). Rebase and retry is exactly what that
+# rerun does, minus the human.
+push_with_retry() {
+    tries=0
+    while [ "$tries" -lt 3 ]; do
+        if git push -q origin master 2>/dev/null; then
+            return 0
+        fi
+        tries=$((tries + 1))
+        echo "sync: push raced another writer — rebasing and retrying ($tries/3)" >&2
+        rebase_onto_origin
+    done
+    git push origin master          # let the real error out
+}
+
 # Fill in the commit citation of every ticket resolved without one.
 #
 # `progress.sh resolve <slug>` writes PENDING-COMMIT rather than a sha, because
@@ -108,14 +126,14 @@ fill_pending_commits() {
 
 $(printf '%s\n' $filled)"
     rebase_onto_origin
-    git push -q origin master
+    push_with_retry
     echo "sync: filled PENDING-COMMIT —$filled"
 }
 
 rebase_onto_origin
 
 if [ "$PUSH" = "1" ]; then
-    git push -q origin master
+    push_with_retry
     echo "sync: pushed — $(git log --oneline -1)"
     fill_pending_commits
 else
