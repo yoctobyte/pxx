@@ -31,12 +31,11 @@ lives in git, not in a timestamp._
 | feature-nilpy-star-args-kwargs | N | 50 | feature | nilpy: *args / **kwargs in a def signature | — |
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 
-## blocked (9)
+## blocked (8)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-dunders-not-dispatched-through-containers | N | 60 | bug | NilPy: __repr__/__str__ of a class instance held in a container silently print EMPTY; ordering/sorted raise — no runtime dunder dispatch on a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
-| bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip | N | 60 | bug | print(float) does not use Python's shortest-round-trip repr: 1/3 loses a digit, 0.1+0.2 prints 0.3 (hiding the error), 1e-20 prints WRONG DIGITS (1.000000000000001e-20), and the scientific-notation threshold differs (3e-05 vs 0.00003) | decide-nilpy-where-the-exact-decimal-float-core-lives |
 | bug-nilpy-float-repr-not-shortest-roundtrip | N | 70 | bug | NilPy float repr is fixed-precision, not CPython's shortest round-trip | — |
 | feature-esp-peripheral-callback-api | S | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-lib-pxxpdf-reportlab-compat | B | 50 | feature | pxxpdf — pxx pdfgen-backed, reportlab-compatible PDF library (nilpy) | decide-pxxpdf-ticket-obsolete |
@@ -45,7 +44,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (209)
+## backlog (210)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -76,6 +75,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-dict-mutation-during-iteration-is-unobserved-not-raised | N | 35 | bug | Mutating a dict while iterating it is silently unobserved; CPython raises RuntimeError 'dictionary changed size during iteration' | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-float-print-loses-precision-vs-cpython | N | 40 | bug | Float printing loses the last 1-2 significant digits vs CPython's shortest round-trip repr | — |
+| bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip | N | 60 | bug | print(float) does not use Python's shortest-round-trip repr: 1/3 loses a digit, 0.1+0.2 prints 0.3 (hiding the error), 1e-20 prints WRONG DIGITS (1.000000000000001e-20), and the scientific-notation threshold differs (3e-05 vs 0.00003) | — |
 | bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip | N | 20 | bug | `print(1e-20)` prints `0.0` — NilPy's float repr has no small-magnitude exponential form | — |
 | bug-nilpy-for-else-and-while-else-not-supported | N | 30 | bug | The `else` clause on a for/while loop does not parse — `for ... else:` fails with 'expected expression' at the else | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
@@ -116,11 +116,11 @@ lives in git, not in a timestamp._
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | decide-abi-portable-vs-target-split | U | 60 | decide |  | — |
+| decide-builtin-and-library-code-sharing | U | 30 | decide | A builtin unit and lib/rtl cannot share code today: moving the shared part down breaks library READABILITY (you must be able to step into sysutils and read it straight through), and letting a builtin use the library collides in NilPy's flat unit scope. The float core is being copied because of it. Review when the next clash lands — not a blocker for anything now. | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-nilpy-runtime-dunder-dispatch-mechanism | U | 60 | decide | Decide: how should NilPy dispatch dunders on an instance whose class is known only at RUN time (container elements)? | — |
 | decide-nilpy-runtime-dunder-dispatch-strategy | U | 70 | decide | Decide: how should NilPy dispatch dunders on a Variant-held instance? | — |
 | decide-nilpy-set-as-a-distinct-type-or-a-list | U | 55→60 | decide | pxx backs a Python set with TPyList. That makes set difference work, makes `list - list` unrejectable, and makes a set repr as [1, 3] instead of {1, 3}. Give sets their own row, or keep the alias and pay at run time? | — |
-| decide-nilpy-where-the-exact-decimal-float-core-lives | U | 60 | decide | NilPy's float repr needs exact decimal digits + a correctly-rounded strtod. Both exist, in lib/rtl/sysutils.pas — which a BUILTIN unit may not use (builtins sit below the Track B libraries, and pylib dragging sysutils in would link it into every NilPy program). Move the core down into a builtin unit, duplicate it, or relax the layering? Blocks bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip. | — |
 | decide-pxxpdf-ticket-obsolete | U | 50 | decide | Close `feature-lib-pxxpdf-reportlab-compat` as obsolete, or keep it? | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
@@ -325,7 +325,7 @@ lives in git, not in a timestamp._
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (34)
+## decided (35)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -351,6 +351,7 @@ lives in git, not in a timestamp._
 | decide-nilpy-mixed-type-operand-policy | U | 60 | decide | Decide: what should NilPy do when an operator gets operand types Python rejects? | — |
 | decide-nilpy-optional-int-none-vs-zero | U | 60 | decide | decide: NilPy Optional[int] — None must be distinct from 0 | — |
 | decide-nilpy-transitive-nested-def-capture | U | 40 | decide | decide: NilPy transitive capture for sibling nested-def calls | — |
+| decide-nilpy-where-the-exact-decimal-float-core-lives | U | 60 | decide | NilPy's float repr needs exact decimal digits + a correctly-rounded strtod. Both exist, in lib/rtl/sysutils.pas — which a BUILTIN unit may not use (builtins sit below the Track B libraries, and pylib dragging sysutils in would link it into every NilPy program). Move the core down into a builtin unit, duplicate it, or relax the layering? Blocks bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip. | — |
 | decide-pascal-uses-campaign-scope | U | 55 | decide | Decide: how should the `uses`-is-transitive fix be scoped and sequenced? | — |
 | decide-pcl-may-use-pylib | U | 55 | decide | decide: may a PCL library unit use pylib (Python runtime types) to accept Python-shaped arguments? | — |
 | decide-promoint-rvalue-representation | U | 85 | decide | Promotable int: what IS an rvalue once heap bignums exist? | — |
@@ -1668,8 +1669,8 @@ lives in git, not in a timestamp._
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild
 - [p 65] [T] task-t-worktree-is-not-current-state
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
-- [p 60] [U] decide-nilpy-where-the-exact-decimal-float-core-lives (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
+- [p 60] [N] bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [T] bug-t-resolve-cites-a-sha-the-rebase-then-rewrites
 - [p 60] [U] decide-abi-portable-vs-target-split
@@ -1817,6 +1818,7 @@ lives in git, not in a timestamp._
 - [p 30] [N] bug-nilpy-dataclass-no-generated-eq
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
 - [p 30] [N] bug-nilpy-for-else-and-while-else-not-supported
+- [p 30] [U] decide-builtin-and-library-code-sharing
 - [p 30] [N] feature-nilpy-list-sort-inplace-key-reverse
 - [p 30] [N] feature-nilpy-min-max-variadic-more-than-two-args
 - [p 30] [N] feature-nilpy-stdlib-coverage-gaps-measured
@@ -1855,7 +1857,6 @@ lives in git, not in a timestamp._
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-pascal-procvar-in-value-context-takes-address-instead-of-calling
 - **1** — decide-nilpy-parallel-capture-semantics
-- **1** — decide-nilpy-where-the-exact-decimal-float-core-lives
 - **1** — decide-pxxpdf-ticket-obsolete
 - **1** — feature-inline-asm-xmm-operands
 - **1** — feature-lib-pxxpdf-reportlab-compat

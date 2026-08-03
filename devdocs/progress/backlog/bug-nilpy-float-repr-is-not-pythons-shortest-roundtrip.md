@@ -2,8 +2,6 @@
 track: N
 prio: 60
 type: bug
-status: blocked
-blocked-by: [decide-nilpy-where-the-exact-decimal-float-core-lives]
 summary: "print(float) does not use Python's shortest-round-trip repr: 1/3 loses a digit, 0.1+0.2 prints 0.3 (hiding the error), 1e-20 prints WRONG DIGITS (1.000000000000001e-20), and the scientific-notation threshold differs (3e-05 vs 0.00003)"
 status: working
 owner: claude-AN-night
@@ -298,3 +296,43 @@ yet ([[bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash]]), so the
 round-trip property cannot be spelled from NilPy source. The gate's
 `float(str(x)) == x` assertion needs that ticket first, or has to be written as
 a comparison against a literal table.
+
+
+## 2026-08-03 — UNBLOCKED. Decision: copy the core into the builtin layer.
+
+[[decide-nilpy-where-the-exact-decimal-float-core-lives]] is resolved — option
+B, copy rather than reimplement, `sysutils.pas` untouched. Full rationale is on
+that ticket; the parts that change what gets built here:
+
+1. **Copy ~420 lines verbatim** into the builtin layer: the digits closure
+   (`ExDecMul`, `ExDecSplit`, `ExDecOfMant`, `ExDecDigits`, `ExDecRound` +
+   `TExDecBuf` / `PXX_EXDEC_LIMBS`, ~113) and the correctly-rounded parser
+   closure (`ExDecCmp`, `ExDecBitsToDouble`, `ExDecDoubleToBits`,
+   `ExDecEstimate`, `ExDecNearest`, `StrToFloatDef`, ~304). Do NOT reimplement,
+   and do NOT substitute Steele-White midpoints to avoid the parser.
+2. **Point `pyfloat_parse` at the copied parser.** It reconstructs with float
+   arithmetic today and is measurably wrong — `float("1e308")`,
+   `float("0.3333333333333333")` and `float("2.2250738585072011e-308")` all
+   disagree with pxx's own (correct) literals. This ticket fixes `float(str)`
+   as well as `repr`, and that is not a bonus to be skipped: it is half the
+   reason the parser is worth copying.
+3. **Land `PyFloatRepr`** — written, measured, and pasted in the section above.
+4. **The round-trip check compares the 64 BITS, not the doubles.** Not
+   cosmetic: `StrToFloat('0') = -0.0` is True, so the existing
+   `FloatToStrShortest` in sysutils would accept `'0'` as the shortest form of
+   `-0.0`. Reading bits also handles NaN and is immune to extended-precision
+   registers.
+5. **A permanent DIFFERENTIAL TEST** over a large sample, asserting the copy and
+   `sysutils` agree — the anti-drift device, and the thing that makes the
+   duplication defensible. A note in each file naming the other and why.
+
+`str()` and `repr()` share the one formatter, matching CPython 3.1+. Worth
+carrying the reasoning into the code comment, because it is what stops someone
+"improving" the output later: before 3.1, `repr` was `%.17g` (round-trips,
+ugly) and `str` was `%.12g` (friendly, lossy — `0.3` for `0.1 + 0.2`); 3.1 made
+them identical because for every value whose friendly answer is TRUE,
+shortest-round-trip already IS it. **pxx today is the pre-3.1 `str`**, which is
+the behaviour Python dropped in 2009 for silently lying.
+
+The duplication itself is filed as a separate, non-blocking concern:
+[[decide-builtin-and-library-code-sharing]].
