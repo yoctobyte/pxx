@@ -53,6 +53,33 @@ For Pascal-side interop the same distinction is what makes a C `char` field
 come out as a `Char` rather than an `Int8`, which is what the two `.pas` tests
 assert.
 
+## Blast radius — five gated jobs, one cause
+
+Confirmed by running the shard against the corpus copied out of the watcher
+clone (never inside it — it detaches HEAD underneath you):
+
+```
+test-c-conformance: 35 pass, 1 fail, 1 skip (of 37)
+test-c-conformance: FAILURES: 00219.c(compile)
+    pascal26:2805: error: _Generic: no matching association and no default
+```
+
+`00219.c:52` is `i = _Generic(i2, char: 1, int: 0);` — the same char
+association, in the upstream c-testsuite battery rather than one of ours. It
+fails identically on **i386**, so this is not an x86-64 psABI detail; it is the
+type identity, on every target.
+
+| job | how it fails |
+|---|---|
+| `test-core#src:test/test_c_struct_fields.pas` | prints ordinals |
+| `test-core#src:test/test_c_packed_aligned.pas` | prints ordinals |
+| `test-core#src:test/cgeneric_selection_b209.c` | `_Generic` no match |
+| `test-c-conformance#shard2/6` | `00219.c` `_Generic` no match |
+| `test-c-conformance-i386#shard2/6` | same, i386 |
+
+The watcher auto-filed a stub per job; each now points here rather than being
+triaged separately, and they will auto-close when this goes green.
+
 ## Suggested direction
 
 Keep plain `char` its own type (`tyChar`) and carry the psABI signedness as an

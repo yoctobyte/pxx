@@ -2,6 +2,11 @@
 prio: 70
 ---
 
+
+> **Root cause already diagnosed — see [[bug-c-plain-char-lost-its-type-identity-not-just-its-signedness]].**
+> One commit (`07414aa89`) turned plain `char` into an 8-bit integer
+> rather than a signed character type. Do not triage this stub
+> separately; it goes green when that ticket does.
 > **origin/master has advanced 1 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
 
 # regression: test-core#src:test/cgeneric_selection_b209.c red at 42786f141ea7 (auto-filed by twatch)
