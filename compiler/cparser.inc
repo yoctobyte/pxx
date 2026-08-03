@@ -273,6 +273,63 @@ begin
   end;
 end;
 
+{ C6.3.1.1 integer promotion of a plain-`char` RVALUE, value-level.
+
+  Plain `char` stays tyChar (it is its own type — writeln and _Generic dispatch
+  on that; see ParseCDeclType). Its SIGNEDNESS is therefore a property, not a
+  type kind, and this is where the property is applied to a value: on a
+  signed-char target a char widening to int must SIGN-extend, and codegen
+  zero-extends tyChar because Pascal's Char is unsigned. Same branchless
+  construction as CMakeNarrowIntCast: ((v & $FF) ^ $80) - $80.
+
+  Result is tagged tyInteger because that is what the promotion yields — which
+  also makes this idempotent, since a promoted node is no longer tyChar.
+
+  Deliberately NOT applied where C does not promote: the _Generic controlling
+  expression (lvalue conversion only, 6.5.1.1p2), sizeof, and the & operand.
+  On unsigned-char targets it is identity, so every call site is unconditional.
+  bug-cfront-plain-char-is-unsigned-and-folds-inconsistently }
+function CPromoteChar(e: Integer): Integer;
+var lit, n1: Integer;
+begin
+  Result := e;
+  if e < 0 then Exit;
+  if IntToTypeKind(ASTTk[e]) <> tyChar then Exit;
+  if not CPlainCharSigned then Exit;
+  { A `char[]` ARRAY designator is also tagged tyChar, but it is not a char
+    rvalue — it decays to a pointer. Promoting it turned `printf(buf)` and every
+    crtl string call into arithmetic on the address, so the C runtime segfaulted
+    before main's first line. Never promote anything that decays. }
+  if CNodeDecaysToPointer(e) then Exit;
+  lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := $FF; ASTTk[lit] := Ord(tyInt64);
+  n1 := AllocNode(AN_BINOP); ASTIVal[n1] := Ord(tkAnd);
+  ASTLeft[n1] := e; ASTRight[n1] := lit; ASTTk[n1] := Ord(tyInt64);
+  lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := $80; ASTTk[lit] := Ord(tyInt64);
+  Result := AllocNode(AN_BINOP); ASTIVal[Result] := Ord(tkXor);
+  ASTLeft[Result] := n1; ASTRight[Result] := lit; ASTTk[Result] := Ord(tyInt64);
+  lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := $80; ASTTk[lit] := Ord(tyInt64);
+  n1 := AllocNode(AN_BINOP); ASTIVal[n1] := Ord(tkMinus);
+  ASTLeft[n1] := Result; ASTRight[n1] := lit; ASTTk[n1] := Ord(tyInteger);
+  Result := n1;
+end;
+
+{ Assignment converts the RHS to the destination type (6.5.16.1p2), and a plain
+  char promotes on the way: `int t = c;` must store -1, not 255. Guarded on the
+  destination being a WIDER arithmetic type — assigning back into a char
+  re-truncates to the same byte, and a pointer/record destination must not be
+  rewritten into an arithmetic expression. }
+function CPromoteCharTo(dstTk: TTypeKind; e: Integer): Integer;
+begin
+  Result := e;
+  if e < 0 then Exit;
+  if IntToTypeKind(ASTTk[e]) <> tyChar then Exit;
+  if dstTk = tyPointer then Exit;
+  if TypeIsFloat(dstTk) then begin Result := CPromoteChar(e); Exit; end;
+  if not TypeIsOrdinal(dstTk) then Exit;
+  if TypeSize(dstTk) <= 1 then Exit;
+  Result := CPromoteChar(e);
+end;
+
 { C99 6.7.8p21: an aggregate initializer with fewer initializers than members
   zero-initializes the remainder (and 6.7.8p10 semantics for what "zero" means).
   Lower as an `x := Default(T)` assignment BEFORE the listed element stores:
@@ -357,6 +414,14 @@ end;
 function CMakeBinop(cTok, l, r: Integer): Integer;
 var node, ivalOp, bfPrec: Integer; bfSigned: Boolean;
 begin
+  { Both operands undergo the integer promotions before the usual arithmetic
+    conversions (6.3.1.8), so a plain char sign-extends HERE on a signed-char
+    target — this is the chokepoint every C binary operator goes through, which
+    is what makes `c < 0`, `c + 0` and `*p < 0` agree with the constant folder.
+    Must run BEFORE the type-driven decisions below (tkShr's arithmetic-vs-
+    logical pick, CCmpUnsigned32), or they would read the pre-promotion tyChar. }
+  l := CPromoteChar(l);
+  r := CPromoteChar(r);
   ivalOp := cTok;
   if cTok = Ord(tkSlash) then
   begin
@@ -1286,8 +1351,13 @@ begin
               bug-c-undeclared-identifier-as-function-pointer-becomes-null. }
             if argN <= 31 then argUndecl[argN] := CLastExprUndeclared;
             Inc(argN);
+            { A plain-char ARGUMENT is promoted: prototyped params take the
+              converted value and varargs take the default argument promotions
+              (6.5.2.2p6/p7), so `f(c)` and `printf("%d", c)` both pass -1, not
+              255. Passing into a `char` parameter re-truncates to the same byte.
+              String literals are tagged tyString, so they are untouched. }
             argNode := AllocNode(AN_ARG);
-            ASTLeft[argNode] := valNode;
+            ASTLeft[argNode] := CPromoteChar(valNode);
             ASTRight[argNode] := -1;
             if argHead = -1 then argHead := argNode
             else ASTRight[argTail] := argNode;
@@ -2413,6 +2483,15 @@ begin
       float intrinsics: -203 Trunc (float->int, toward zero = C cast semantics)
       and -206 Int (int->float, cvtsi2sd). Pointer casts, same-class and
       float<->float casts keep the reinterpret/retag path below. }
+    { The cast operand is promoted before it is converted, so a plain char on a
+      signed-char target reaches every branch below as its NEGATIVE int value:
+      `(int)(char)0xFF` is -1 and `(double)c` is -1.0, not 255. `(unsigned char)c`
+      re-truncates that -1 back to 255, exactly as gcc does. Must be BEFORE opTk
+      is read — the int->float branch exits early and would otherwise still see
+      an unsigned byte. Casts to a pointer keep the byte, not an arithmetic value. }
+    if (castDepth = 0) and (castTk <> tyPointer) and
+       (TypeIsOrdinal(castTk) or TypeIsFloat(castTk)) then
+      operand := CPromoteChar(operand);
     opTk := IntToTypeKind(ASTTk[operand]);
     if (castDepth = 0) and (not TypeIsFloat(castTk)) and TypeIsOrdinal(castTk)
        and TypeIsFloat(opTk) then
@@ -2453,6 +2532,11 @@ begin
       Result := node;
       Exit;
     end;
+    { The cast operand is promoted before it is converted, so a plain char on a
+      signed-char target reaches the conversion as its NEGATIVE int value:
+      `(int)(char)0xFF` is -1, not 255, and `(unsigned char)c` re-truncates that
+      -1 back to 255 exactly as gcc does. Only for a cast to an arithmetic type
+      — casting to a pointer wants the byte, not an arithmetic value. }
     { narrow integer cast: truncate + re-extend by target signedness
       (C 6.3.1.3) — see CMakeNarrowIntCast. Pointer-width and 64-bit casts
       keep the plain retag (no value change at full width). }
@@ -2530,6 +2614,7 @@ begin
     begin
       Next;
       operand := ParseCUnary();
+      operand := CPromoteChar(operand);   { promoted before negation, like `~` below }
       node := AllocNode(AN_NEG);
       ASTLeft[node] := operand;
       { The integer promotions apply to the operand, so the RESULT of unary minus on
@@ -2544,12 +2629,13 @@ begin
     tkPlus:
     begin
       Next;
-      Result := ParseCUnary();
+      Result := CPromoteChar(ParseCUnary());   { unary + promotes its operand too }
     end;
     tkNot:   { `~` bitwise NOT }
     begin
       Next;
       operand := ParseCUnary();
+      operand := CPromoteChar(operand);
       node := AllocNode(AN_NOT);
       ASTLeft[node] := operand;
       { Preserve the (promoted) operand type, mirroring unary `-`. Hardcoding
@@ -2960,7 +3046,7 @@ begin
           begin
             valNode := ParseCExpr;
             argNode := AllocNode(AN_ARG);
-            ASTLeft[argNode] := valNode; ASTRight[argNode] := -1;
+            ASTLeft[argNode] := CPromoteChar(valNode); ASTRight[argNode] := -1;
             if argHead = -1 then argHead := argNode
             else ASTRight[argTail] := argNode;
             argTail := argNode;
@@ -2991,7 +3077,7 @@ begin
         begin
           valNode := ParseCExpr;
           argNode := AllocNode(AN_ARG);
-          ASTLeft[argNode] := valNode; ASTRight[argNode] := -1;
+          ASTLeft[argNode] := CPromoteChar(valNode); ASTRight[argNode] := -1;
           if argHead = -1 then argHead := argNode
           else ASTRight[argTail] := argNode;
           argTail := argNode;
@@ -3034,6 +3120,10 @@ begin
     thenE := ParseCCommaExpr();   { middle: C `expression`, so comma is allowed }
     Expect(tkColon, ':');
     elseE := ParseCExpr();        { else: right-associative }
+    { 6.5.15p4: when both arms are arithmetic the usual arithmetic conversions
+      apply, so a plain-char arm promotes — `c < 0 ? c : i` yielded 255. }
+    thenE := CPromoteChar(thenE);
+    elseE := CPromoteChar(elseE);
     pair := AllocNode(AN_PAIR);
     ASTLeft[pair] := thenE;
     ASTRight[pair] := elseE;
@@ -3076,7 +3166,7 @@ begin
       end;
       node := AllocNode(AN_ASSIGN);
       ASTLeft[node] := left;
-      ASTRight[node] := rhs;
+      ASTRight[node] := CPromoteCharTo(IntToTypeKind(ASTTk[left]), rhs);
       ASTTk[node] := ASTTk[left];
       Result := node;
     end;
@@ -4583,7 +4673,8 @@ begin
       if initExpr >= 0 then
       begin
         idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(declTk);
-        asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := idn; ASTRight[asn] := initExpr;
+        asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := idn;
+        ASTRight[asn] := CPromoteCharTo(declTk, initExpr);
         ASTTk[asn] := Ord(declTk);
         seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
         if head = -1 then head := seq else ASTRight[tail] := seq;
@@ -5254,7 +5345,10 @@ begin
           or (CurTok.Kind = tkEOF);
   end;
   node := AllocNode(AN_SWITCH);
-  ASTLeft[node] := selNode;
+  { 6.8.4.2p5: the integer promotions are performed on the controlling
+    expression, so `switch (c)` on a negative plain char matches `case -1:`
+    rather than falling to default. }
+  ASTLeft[node] := CPromoteChar(selNode);
   ASTRight[node] := bodyNode;
   Result := node;
 end;

@@ -2,8 +2,8 @@
 track: C
 prio: 80
 type: bug
-status: open
-owner: claude-C@opus5
+status: working
+owner: claude-AC@opus5
 ---
 
 # Plain `char` is unsigned at runtime but signed when constant-folded
@@ -208,3 +208,82 @@ Do **not** re-attempt the `tyInt8` remap.
 - 2026-08-03 — resolved, commit a31f53dfc (landed as 07414aa8944b).
 - 2026-08-03 — REOPENED: that fix regressed five gated jobs and was reverted.
   Identity restored; signedness gap on x86-64/i386 still open.
+
+## Resolution 2026-08-03 (claude-AC@opus5) — signedness as a PROPERTY
+
+Plain `char` keeps its type (`tyChar`, its own C type — see the REOPENED section
+above for why remapping it to `tyInt8` is not available). The psABI signedness is
+applied to the **value**, at the places C actually performs the integer
+promotions, by one helper:
+
+`CPromoteChar(e)` (cparser.inc) — on a signed-char target, rewrites a plain-char
+rvalue to `((v & $FF) ^ $80) - $80` tagged `tyInteger`, the same branchless
+construction `CMakeNarrowIntCast` already used. Identity on unsigned-char
+targets, so every call site is unconditional, and idempotent, since a promoted
+node is no longer `tyChar`.
+
+### The promotion sites
+
+`CMakeBinop` is the chokepoint every C binary operator goes through, so both
+operands promote there — before the type-driven decisions in that function
+(`tkShr`'s arithmetic-vs-logical pick, `CCmpUnsigned32`), which would otherwise
+read the pre-promotion `tyChar`. That one site covers all arithmetic, bitwise,
+shift and relational operators. The rest are the contexts C promotes in that do
+not route through a binop: cast to an arithmetic type (placed **before** `opTk`
+is computed — the int->float branch exits early), unary `-` `~` `+`, assignment
+and declaration initializer (via `CPromoteCharTo`, which is destination-aware so
+assigning back into a `char` is left alone), ternary arms, the `switch`
+controlling expression, and call arguments (prototyped and varargs).
+
+### The guard that matters
+
+`CPromoteChar` refuses anything satisfying `CNodeDecaysToPointer`. A `char[]`
+ARRAY designator is also tagged `tyChar`, and promoting it turned `printf(buf)`
+and every crtl string call into arithmetic on the address — **the C runtime
+segfaulted before main's first statement**, `printf("A\n")` included. Caught
+immediately because it was loud; a narrower version of the same mistake would
+have been a silent wrong pointer. `test/cchar_promotion_contexts.c` pins it.
+
+### Oracle sweep, as the ticket required — not a spot fix
+
+An 89-line probe over the operator x lvalue-flavour grid (local / global / array
+element / struct field / deref, for -1, 65, 127, -128): `+ - * / %`, all six
+comparisons, `& | ^ << >>`, unary `- ~ + !`, casts to
+`int/short/signed char/unsigned char/long/double/float`, assignment, ternary,
+switch, prototyped call, varargs, and a UTF-8 continuation scan. Compiled with
+gcc and with pxx, **outputs diffed: identical**. A second sweep covering
+`++`/`--` (prefix and postfix), every compound assignment, char-to-char
+comparison, `sizeof`, and `%c`: also identical.
+
+The sweep is what found the real work. After the binop chokepoint alone, the
+grid still disagreed with gcc on cast-to-float, assignment, ternary, switch and
+call arguments — five contexts, each a silent wrong value, none of which the
+existing tests touched. Re-running the one regression test would have declared
+victory.
+
+### Verified
+
+| check | result |
+| --- | --- |
+| `test/cchar_plain_signedness.c` | exit 42 (re-enabled in the Makefile, expectations untouched) |
+| `test/cchar_promotion_contexts.c` | **new**, gated, exit 42 under gcc and pxx |
+| charsweep grid vs gcc | identical (89 lines) |
+| charsweep2 (inc/dec, compound assign) vs gcc | identical |
+| `make test-c-conformance` | **219 pass, 0 fail**, 1 known skip (VLA) — `00219.c` included |
+| identity kept: `test_c_struct_fields` | `7 9 11 h i 3 4` |
+| identity kept: `test_c_packed_aligned` | `X 42 8 4 P 7 5 1 A 8 16 8 T 16 16 4` |
+| identity kept: `cgeneric_selection_b209` | exit 42 |
+| identity kept: `_Generic` char / signed char / unsigned char | `1 2 3`, same as gcc |
+| `-fsigned-char` / `-funsigned-char` / default | all three match gcc exactly |
+| aarch64 / arm32 / riscv32 / i386 | compile clean (promotion is identity on the unsigned-char three) |
+| `tools/gate.sh quick` | GREEN |
+
+Both halves now hold at once, which is the thing that was not true before:
+signedness matches the psABI **and** plain `char` is still a character type.
+
+## Log
+- 2026-08-03 — resolved, commit a31f53dfc (landed as 07414aa8944b).
+- 2026-08-03 — REOPENED: that fix regressed five gated jobs and was reverted.
+  Identity restored; signedness gap on x86-64/i386 still open.
+- 2026-08-03 — resolved properly: signedness applied at the C promotion sites as
+  a property of the value, identity untouched. Oracle-swept against gcc.

@@ -2818,13 +2818,10 @@ test-core: $(COMPILER)
 	/tmp/csizeof_member_chain26; test "$$?" = "42"
 	./$(COMPILER) test/cstatic_init_cast.c /tmp/cstatic_init_cast26
 	/tmp/cstatic_init_cast26; test "$$?" = "42"
-	# PARKED, not deleted: cchar_plain_signedness.c states gcc's answer and is
-	# correct C — plain `char` is signed on x86-64/i386. pxx still zero-extends it
-	# at runtime, so the test returns 1 here and 42 under gcc. It was briefly green
-	# via 07414aa8944b (plain char -> tyInt8), which regressed three shipped
-	# behaviours and was reverted; see the ticket for why the remap is the wrong
-	# shape. Re-enable with the fix, do NOT weaken the expectations.
-	# blocked-by: bug-cfront-plain-char-is-unsigned-and-folds-inconsistently
+	./$(COMPILER) test/cchar_plain_signedness.c /tmp/cchar_plain_signedness26
+	/tmp/cchar_plain_signedness26; test "$$?" = "42"
+	./$(COMPILER) test/cchar_promotion_contexts.c /tmp/cchar_promotion_contexts26
+	/tmp/cchar_promotion_contexts26; test "$$?" = "42"
 	./$(COMPILER) test/carch_predefines.c /tmp/carch_predefines26
 	/tmp/carch_predefines26; test "$$?" = "42"
 	# b195 (bug-c-printf-without-stdio-include-varargs): implicit printf binds crtl
