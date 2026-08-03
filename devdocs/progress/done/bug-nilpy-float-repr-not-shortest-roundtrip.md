@@ -212,4 +212,4 @@ which is exactly the shape this ticket asked for in 2026-08-01.
 
 ## Log
 - 2026-08-04 — resolved.
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit a529cec84.
