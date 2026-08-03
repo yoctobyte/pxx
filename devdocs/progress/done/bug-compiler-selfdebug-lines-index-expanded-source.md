@@ -114,4 +114,4 @@ exist. Present identically in a `-g` build from `pinned` against HEAD sources.
 Filed as [[bug-a-dwarf-line-program-emits-backward-address-steps]] (prio 50).
 
 ## Log
-- 2026-08-03 — resolved, commit ed2275a4a.
+- 2026-08-03 — resolved, commit a273ed6d4.
