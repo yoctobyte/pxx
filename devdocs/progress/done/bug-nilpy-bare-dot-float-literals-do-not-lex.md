@@ -113,4 +113,4 @@ IDENTIFIER branch and never reach this code.
 canary).
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit 774e746f7.
