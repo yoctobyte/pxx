@@ -9,4 +9,4 @@
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `b1976742df2c`, last good `6f73c5a88bef`, 1 commit(s) in range
 - **test-core#src:test/cgeneric_selection_b209.c** — test/cgeneric_selection_b209.c (xeon): bad `07414aa8944b`, last good `420de52428cd`, 1 commit(s) in range
 - **test-core#src:test/test_c_packed_aligned.pas** — test/test_c_packed_aligned.pas (xeon): bad `07414aa8944b`, last good `420de52428cd`, 1 commit(s) in range
-- **test-core#src:test/test_c_struct_fields.pas** — test/test_c_struct_fields.pas (xeon): bad `42786f141ea7`, last good `420de52428cd`, 2 commit(s) in range
+- **test-core#src:test/test_c_struct_fields.pas** — test/test_c_struct_fields.pas (xeon): bad `07414aa8944b`, last good `420de52428cd`, 1 commit(s) in range
