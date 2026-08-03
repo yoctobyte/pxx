@@ -35,7 +35,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (203)
+## backlog (202)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -82,7 +82,6 @@ _none_
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-nilpy-user-def-does-not-shadow-a-pylib-builtin | N | 55 | bug | A user `def sorted(x)` at module scope loses to pylib's builtin — calls go to the builtin and the user's function never runs. Silent: the program produces the BUILTIN's answer | — |
 | bug-pascal-member-check-missing-on-the-lvalue-field-path | P | 45 | bug | RequireRecMember has 3 call sites, all expression paths, and ~20 AN_FIELD construction sites exist. A breakpoint proved the statement-LVALUE path never calls it. No longer a silent wrong store (RecFieldType now rejects), but the guard is inconsistent and its coverage is unaudited. | — |
-| bug-t-host-dependent-test-assertions-cross-distro | T | 70 | bug | Watcher and dev boxes run different distros, so tests that bake in host state (library versions, allocator behaviour, the host CPython) go permanently RED on the watcher while passing locally — and read as watcher bugs | — |
 | bug-t-tstate-launders-skip-into-pass | T | 50 | bug | tstate records a SKIPPED job as \"pass\", so a green published state cannot be distinguished from one that actually ran — cross-host coverage differences are invisible exactly when they matter | — |
 | bug-tstate-xeon-cross-jobs-red-missing-corpora | T | 50 | bug | tstate: xeon's red set is PART missing-corpora and PART a real i386 regression of mine (now reverted) — the corpora half still stands | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -350,7 +349,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1287)
+## done (1288)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1042,6 +1041,7 @@ _none_
 | bug-t-full-tier-wipes-other-tiers-job-status | T | 70 | bug | a full run replaces the whole jobs map, so opt-tier reds re-announce as NEW-RED forever | — |
 | bug-t-gate-sh-contention-check-double-counts-zero | T | 25 | bug | tools/gate.sh: the watcher-contention check prints a shell error on every run because `pgrep -c` emits 0 AND exits 1, so the `\|\| echo 0` fallback appends a second 0 | — |
 | bug-t-gate-sh-pgrep-fc-double-zero-integer-error | T | 25 | bug | tools/gate.sh: pgrep -fc prints 0 AND exits 1, so `\|\| echo 0` makes others=\"0\\n0\" and every gate run emits a bogus 'integer expression expected' error | — |
+| bug-t-host-dependent-test-assertions-cross-distro | T | 70 | bug | Watcher and dev boxes run different distros, so tests that bake in host state (library versions, allocator behaviour, the host CPython) go permanently RED on the watcher while passing locally — and read as watcher bugs | — |
 | bug-t-idle-work-leaks-tmp-on-tmpfs-boxes | T | 70 | bug | idle fuzz/bench leave ~130MB/hour in /tmp; on xeon /tmp is tmpfs, so it eats RAM the scheduler is counting on | — |
 | bug-t-optdiff-positional-sharding-migrates-job-identity | T | 70 | bug | DUPLICATE of bug-t-optdiff-shard-identity-is-positional — "optdiff shards by position in the test glob, so adding any test migrates failures between shard identities — a phantom NEW-RED plus a phantom FIXED, for an unchanged failure" | — |
 | bug-t-optdiff-shard-identity-is-positional | T | 75 | bug | optdiff jobs are identified by shard index, so adding one test file moves a failure to a new shard and manufactures a fresh NEW-RED + ticket | — |
@@ -1680,7 +1680,6 @@ _none_
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 3)
 - [p 70] [N] bug-nilpy-float-repr-not-shortest-roundtrip
-- [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] regression-optdiff-shard8-12
 - [p 70] [T] regression-test-c-conformance-shard2-6
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source

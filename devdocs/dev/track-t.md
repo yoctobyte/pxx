@@ -103,6 +103,55 @@ one — and it doesn't matter, because there's nothing it should have tested.
 - Idle watcher time narrows open regression ranges: midpoint commit, failing
   job only (`testmgr --job`) — lazy bisect toward a single SHA.
 
+## Triage rule: green on dev, red on the watcher ⇒ suspect HOST COUPLING first
+
+The boxes run different distros on purpose (dev Ubuntu 24.04, `xeon` 26.04,
+the planned rPis Raspberry Pi OS). Different distro ⇒ different system
+libraries, different glibc, different system CPython. A test whose expectation
+is coupled to any of those is green where it was written and red forever
+everywhere else — and it looks *exactly* like a watcher fault, which is why it
+survives triage. One instance cost three wrong diagnoses (twice written off as
+a phantom) before the distro difference was guessed:
+`test_nilpy_import_sqlite` asserted `= "3045001"`, i.e. sqlite **3.45.1**, the
+authoring box's version. Fixed by asserting the SHAPE (any well-formed
+`3.x.y`), which is what the test exists to prove.
+
+**Read the log tail first, and read the compile line.** If it says `ok:`, the
+build succeeded and the failure is the OUTPUT COMPARISON — so the question is
+what the expected value depends on, never what the compiler did. In the sqlite
+case that `ok:` was in every report and was walked past each time.
+
+**The oracle is `ldd`, not the shape of the number.** A test is host-coupled
+when it reaches OUTSIDE the repo at runtime — a system shared library, a host
+binary, host data. That is checkable in one command, and it beats guessing from
+what an assertion *looks* like. The 2026-08-03 audit of the two families
+flagged as residual risks found both to be false alarms, for exactly this
+reason:
+
+- **Suspected allocator/RSS assertions** (`= "640000"`, `= "396000"`,
+  `= "770000"`). Not allocator numbers at all: 396000 and 770000 are the
+  compiled program's own arithmetic (180 and 350 statements x 2200), and
+  640000 is a raise count the program prints. Measured on xeon/26.04: 396000,
+  770000, 640000 — exact. The one real memory assertion beside them is already
+  a tolerance band (`RSS > 90000` KB, measured 75308 here) and is already gated
+  on `[ -x /usr/bin/time ]`.
+- **cpyext vs the host CPython** (`test_cpyext_markupsafe.npy` and siblings).
+  No host CPython is involved: the tests compile vendored, unmodified
+  extension sources against **pxx's own** `lib/cpyext/include/Python.h` and
+  runtime, with `Py_LIMITED_API` pinned in the recipe. `ldd` on the built test
+  reports *not a dynamic executable* — it links nothing at all, let alone
+  libpython. Contrast the sqlite test, which genuinely links
+  `libsqlite3.so.0`: that is what host coupling looks like.
+
+So the rule is: **shape-based or tolerant when the value comes from outside the
+repo; exact when the program computes it itself.** A dependency that may be
+absent gets an explicit guard instead — the Tk test's `command -v xvfb-run`
+plus `[ -e ... ]` is the pattern to copy, and an unfetched corpus tree is the
+same idea done by testmgr.
+
+Each individual test fix belongs to the lane that owns the test (the sqlite one
+was Track N); T owns this rule and the audit, not other lanes' tests.
+
 ## Face 2 — the Track T agent (backlog)
 
 A Claude agent, supervised session or cron, that consumes tstate and adds

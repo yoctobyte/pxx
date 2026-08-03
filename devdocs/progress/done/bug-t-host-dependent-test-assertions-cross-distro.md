@@ -3,6 +3,8 @@ summary: "Watcher and dev boxes run different distros, so tests that bake in hos
 type: bug
 track: T
 prio: 70
+status: done
+owner: claude@xeon
 ---
 
 # Host-coupled test assertions produce permanent, misleading REDs
@@ -83,3 +85,48 @@ regressions and burns triage time on every cycle.
 The two flagged families are checked on xeon (not reasoned about). Anything
 host-coupled is either made shape-based/tolerant or explicitly gated on the
 dependency being present, and the triage rule lands in the Track T notes.
+
+## Log
+- 2026-08-03 (`claude@xeon`) — audit done ON xeon (26.04), not reasoned about;
+  the triage rule landed in `devdocs/dev/track-t.md`. Both flagged families are
+  **false alarms**, and the ticket's own framing of them was wrong in an
+  instructive way.
+
+  **Family 1 — "allocator-behaviour assertions".** `= "396000"` and
+  `= "770000"` are not malloc numbers: the recipes generate a Pascal program of
+  180 and 350 statements summing 2200 per statement, so the assertions are the
+  program's own arithmetic. `= "640000"` is a raise count the NilPy program
+  prints. Compiled and run here at HEAD: 396000, 770000, 640000 — exact, and
+  host-independent by construction. The one genuine memory assertion sits
+  beside 640000 and was already both tolerant (`RSS > 90000` KB) and guarded
+  (`[ -x /usr/bin/time ]`); measured 75308 KB on 26.04, comfortably inside the
+  band the ticket quotes as ~75 MB fixed / ~105 MB pre-fix.
+
+  **Family 2 — "cpyext vs the host CPython".** No host CPython is involved at
+  all. The tests compile vendored, unmodified extension sources (MarkupSafe
+  3.0.3, Cython 3.2.9 output) against pxx's OWN `lib/cpyext/include/Python.h`
+  and `lib/cpyext/src/pyruntime.c`, with `Py_LIMITED_API` pinned in the recipe.
+  `ldd` on the built `test_cpyext_markupsafe` binary says *not a dynamic
+  executable* — it links nothing, let alone libpython. Output matches byte for
+  byte here. The coupling the ticket feared exists only at AUTHORING time, in
+  the vendored sources, which are in-tree and versioned.
+
+  **What the audit changes about the rule.** "Looks like a host version
+  literal" is a weak oracle — it is what produced both false alarms. The strong
+  one is `ldd` (or, equivalently: does the test reach outside the repo at
+  runtime?). The proven instance passes that test — `test_nilpy_import_sqlite`
+  really does link `libsqlite3.so.0` — and both suspects fail it. The rule as
+  written now leads with the log tail and the compile line, then `ldd`, then
+  shape-vs-exact.
+
+  **Corroborating evidence, not just inspection:** xeon's last full tier
+  (1c8df90, 2026-08-03) is GREEN with all five cpyext jobs and
+  `test_nilpy_exception_no_leak` passing, and a fresh scan for host version
+  literals and `/usr`/`/lib` paths in assertions found nothing beyond the
+  already-fixed sqlite one (only its explanatory comment remains).
+
+  Nothing to change in the tests, so no lane fixes are filed. The residual risk
+  the ticket names — each new distro multiplies the surface — is real but
+  belongs to [[feature-t-host-roles-native-vs-qemu-topology]] when the rPis
+  land; the rule above is what makes that cheap.
+- 2026-08-03 — resolved, commit PENDING-COMMIT.
