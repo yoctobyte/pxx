@@ -102,11 +102,16 @@ push_with_retry() {
 # final. The fill commit itself may still be rebased by a later push — that is
 # harmless, since it cites shas that already landed, never its own.
 fill_pending_commits() {
-    # The whole board, not just done/ + decided/: a resolved ticket can be
-    # filed onward the same commit (done-followup/ when it spawned a follow-up,
-    # which is exactly what the first ticket resolved through this path did),
-    # and a placeholder left anywhere is a citation nobody can look up.
-    files=$(git grep -l -- PENDING-COMMIT devdocs/progress 2>/dev/null || true)
+    # Every BUCKET, not just done/ + decided/: a resolved ticket can be filed
+    # onward the same commit (done-followup/ when it spawned a follow-up, which
+    # is what the first ticket resolved through this path did), and a
+    # placeholder left in any bucket is a citation nobody can look up.
+    #
+    # The `*/*.md` glob is load-bearing: it keeps the board's own docs
+    # (devdocs/progress/README.md, which DOCUMENTS the placeholder by name, and
+    # BOARD.md) out of reach. Widening this to the whole directory rewrote the
+    # README's prose into a sha on 2026-08-03.
+    files=$(git grep -l -- "commit PENDING-COMMIT" -- 'devdocs/progress/*/*.md' 2>/dev/null || true)
     [ -n "$files" ] || return 0
 
     filled=""
@@ -119,7 +124,10 @@ fill_pending_commits() {
             echo "sync: $f holds PENDING-COMMIT but no commit introduced it — left alone" >&2
             continue
         fi
-        sed -i "s/PENDING-COMMIT/$sha/g" "$f"
+        # Anchored to the citation `resolve` writes. A ticket may legitimately
+        # DISCUSS the placeholder in prose; only "commit PENDING-COMMIT" is a
+        # citation waiting to be filled.
+        sed -i "s/commit PENDING-COMMIT/commit $sha/g" "$f"
         git add "$f"
         filled="$filled $f"
     done

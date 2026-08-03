@@ -83,6 +83,7 @@ def build_scratch(tmp):
 def daemon_publishes(daemon, n):
     """What actually forces the rebase in production: tstate landing on master
     between a dev box's commit and its push."""
+    git(daemon, "pull", "--rebase", "-q", "origin", "master")
     (daemon / f"tstate-{n}.json").write_text(f'{{"run": {n}}}\n', encoding="utf-8")
     git(daemon, "add", "-A")
     git(daemon, "commit", "-qm", f"tstate: run {n}")
@@ -162,6 +163,31 @@ def case_placeholder_filled_in_any_bucket(tmp):
     return f"done-followup/ ticket cites {sha}"
 
 
+def case_prose_mention_is_not_rewritten(tmp):
+    """The fill must rewrite CITATIONS, not every occurrence of the word. The
+    board's own README documents the placeholder by name, and a whole-directory
+    fill turned that prose into a sha on 2026-08-03."""
+    origin, dev, daemon = build_scratch(tmp)
+    doc = dev / "devdocs/progress/README.md"
+    doc.write_text("resolve writes PENDING-COMMIT; sync.sh fills it in.\n",
+                   encoding="utf-8")
+    prose_ticket = dev / f"devdocs/progress/backlog/{SLUG}-notes.md"
+    prose_ticket.write_text("# notes\n\nWe should audit PENDING-COMMIT leftovers.\n",
+                            encoding="utf-8")
+    git(dev, "add", "-A")
+    git(dev, "commit", "-qm", "docs: describe the placeholder")
+    git(dev, "push", "-q", "origin", "master")
+
+    resolve_and_sync(dev, daemon, commit_arg=None)
+
+    landed_doc = git(dev, "show", "origin/master:devdocs/progress/README.md").stdout
+    assert PLACEHOLDER in landed_doc, f"prose in README was rewritten:\n{landed_doc}"
+    landed_note = git(dev, "show",
+                      f"origin/master:devdocs/progress/backlog/{SLUG}-notes.md").stdout
+    assert PLACEHOLDER in landed_note, f"prose in a ticket was rewritten:\n{landed_note}"
+    return "prose mentions left alone"
+
+
 def case_check_flags_a_dead_citation(tmp):
     """The audit that caught this by hand, made cheap."""
     origin, dev, daemon = build_scratch(tmp)
@@ -177,6 +203,7 @@ CASES = [
     case_placeholder_is_filled_with_the_landed_sha,
     case_explicit_sha_still_honoured,
     case_placeholder_filled_in_any_bucket,
+    case_prose_mention_is_not_rewritten,
     case_check_flags_a_dead_citation,
 ]
 

@@ -137,13 +137,13 @@ tools/sync.sh                       # push, then record the sha it LANDED as
 ```
 
 `resolve` takes an optional sha, and you normally omit it: it writes
-`68be6bd59` and `sync.sh` replaces that with the sha the resolve commit
+`PENDING-COMMIT` and `sync.sh` replaces that with the sha the resolve commit
 landed as. The sha you could name at resolve time is the pre-rebase one, and
 `sync.sh` rebases — on this fleet the watcher publishes tstate every few
 minutes, so the cited commit is rewritten away before anyone else can look it
 up (`bug-t-resolve-cites-a-sha-the-rebase-then-rewrites`). Pass an explicit sha
 only for a commit that already landed. `check --strict` reports both leftovers
-(`WARN-68be6bd59`) and citations absent from origin/master
+(`WARN-PENDING-COMMIT`) and citations absent from origin/master
 (`WARN-DEAD-COMMIT`).
 
 Commit the ticket move **together with the fix**: the sha `sync.sh` fills in is
