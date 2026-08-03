@@ -8881,6 +8881,14 @@ begin
         LastExprTk := IntToTypeKind(ASTTk[node]);
       end;
       Expect(tkRParen, ')');
+      { Record that a Python comparison came out of an explicit paren group, so
+        PyBitGuard can tell `(a == b) & c` (deliberate, and the very form its
+        message asks for) from `a & b == c` (the precedence typo it exists to
+        catch). Only stamped on an unmarked node — PY_BINOP_IDENTITY and
+        friends share this field and outrank it. }
+      if PyExprMode and (ASTKind[CurASTNode] = AN_BINOP) and
+         (ASTSLen[CurASTNode] = 0) then
+        ASTSLen[CurASTNode] := PY_BINOP_PARENED;
       { A parenthesised CALLABLE VALUE used directly as a callee —
         `(lambda a, b: a - b)(9, 4)`. The lambda lowering yields the raw
         closure/bound-fn pointer; it is `PyBoxCallableValue` that turns one into

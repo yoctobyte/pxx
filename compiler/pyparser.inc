@@ -1079,9 +1079,40 @@ end;
   tighter, so the unparenthesized mixed case would silently change meaning.
   Explicit parens express either reading. }
 procedure PyBitGuard(n: Integer);
+{ Fires ONLY on a bare (unparenthesized) COMPARISON node. Keying it on the
+  operand's TYPE instead — any tyBoolean at all — also rejected `a & b` on two
+  real booleans, which CPython computes fine because bool is an int subclass,
+  and rejected `(x > y) & (y > x)`, i.e. the exact rewrite this message asks
+  for. bug-nilpy-bitwise-op-rejects-boolean-variable-operand. }
 begin
-  if IntToTypeKind(ASTTk[n]) = tyBoolean then
-    Error('Nil Python: parenthesize the comparison next to a bitwise operator');
+  if ASTKind[n] <> AN_BINOP then Exit;
+  if ASTSLen[n] = PY_BINOP_PARENED then Exit;
+  case ASTIVal[n] of
+    Ord(tkEq), Ord(tkNeq), Ord(tkLt), Ord(tkLe), Ord(tkGt), Ord(tkGe):
+      Error('Nil Python: parenthesize the comparison next to a bitwise operator');
+  end;
+end;
+
+function PyBitTk(n: Integer): TTypeKind;
+{ The type a bitwise operand contributes to PyWiden. A Python bool IS an int
+  (bool subclasses int), so it must widen with the integers rather than falling
+  through to the box-them-both rule that yields tyVariant — a raw Boolean and a
+  raw Integer typed as a variant is the pointer-arithmetic shape that
+  SEGFAULTED (`True & 1`, measured). bool ⊕ bool stays Boolean, which is a real
+  Pascal bitwise op and already correct.
+  bug-nilpy-bitwise-op-rejects-boolean-variable-operand }
+begin
+  PyBitTk := IntToTypeKind(ASTTk[n]);
+  if PyBitTk = tyBoolean then PyBitTk := tyInteger;
+end;
+
+function PyBitWiden(left, right: Integer): TTypeKind;
+begin
+  if (IntToTypeKind(ASTTk[left]) = tyBoolean) and
+     (IntToTypeKind(ASTTk[right]) = tyBoolean) then
+    PyBitWiden := tyBoolean
+  else
+    PyBitWiden := PyWiden(PyBitTk(left), PyBitTk(right));
 end;
 
 function PyBitDunder(const mname: AnsiString; left, right: Integer): Integer;
@@ -1441,7 +1472,7 @@ begin
       native shr is logical — both need the promo runtime, unconditionally.
       Variant operands keep the variant typing; the variant binop routes
       shifts through the same runtime (NilPy-only op map). }
-    w := PyWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right]));
+    w := PyBitWiden(left, right);
     if (w = tyInteger) or (w = tyInt64) or (w = tyBoolean) then
       w := tyPromoInt64;
     ASTTk[node] := Ord(w);
@@ -1474,7 +1505,7 @@ begin
     PyBitGuard(left); PyBitGuard(right);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkAnd);
     ASTLeft[node] := left; ASTRight[node] := right;
-    ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
+    ASTTk[node] := Ord(PyBitWiden(left, right));
     left := node;
   end;
   CurASTNode := left;
@@ -1500,7 +1531,7 @@ begin
     PyBitGuard(left); PyBitGuard(right);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkXor);
     ASTLeft[node] := left; ASTRight[node] := right;
-    ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
+    ASTTk[node] := Ord(PyBitWiden(left, right));
     left := node;
   end;
   CurASTNode := left;
@@ -1534,7 +1565,7 @@ begin
     PyBitGuard(left); PyBitGuard(right);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkOr);
     ASTLeft[node] := left; ASTRight[node] := right;
-    ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
+    ASTTk[node] := Ord(PyBitWiden(left, right));
     left := node;
   end;
   CurASTNode := left;

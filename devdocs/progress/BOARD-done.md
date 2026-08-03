@@ -397,6 +397,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-augmented-assign-of-a-variant-param-to-an-int-field-adds-one | N | 70 | bug | `self.n += v` where n is an INT field and v an unannotated parameter adds 1, not v. `C(10).add(5)` returns 11. The variant argument is being read as a truthy 1 | — |
 | bug-nilpy-augmented-assign-to-a-variant-typed-field-corrupts-it | N | 75 | bug | `self.n += x` produces garbage when the field was initialised from an UNANNOTATED ctor parameter — True, an empty line, or 4.94e-323. Annotating the parameter fixes it. This is the most idiomatic shape in Python OO | — |
 | bug-nilpy-bitwise-on-float-variant-truncates | A | 30 | bug | NilPy: a bitwise op on a FLOAT variant truncates instead of raising TypeError | — |
+| bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bitwise-shift-on-class-operand-segfaults | N | 60 | bug | NilPy: `obj & 1` / `obj << 1` on a class instance SEGFAULTS (core dump); __and__/__or__/__xor__/__lshift__/__rshift__ are never dispatched | — |
 | bug-nilpy-bool-protocol-ignored-object-always-truthy | N | 65 | bug | NilPy: __bool__ and __len__ are ignored in a truth test — every non-nil object is truthy, so `if obj:` takes the WRONG BRANCH silently | bug-a-overload-resolution-ignores-class-identity |
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |

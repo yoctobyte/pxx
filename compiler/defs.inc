@@ -579,6 +579,12 @@ const
     marker field, as PY_BINOP_AUGADD already uses).
     bug-pascal-procvar-value-context-outside-assignment }
   PAS_BINOP_ASSIGNED = 3;
+  { AN_BINOP marker in ASTSLen: this comparison was written PARENTHESIZED, so
+    its precedence is explicit and PyBitGuard must not object to it sitting
+    next to a bitwise operator — `(x > y) & (y > x)` is exactly what that
+    diagnostic asks the user to write.
+    bug-nilpy-bitwise-op-rejects-boolean-variable-operand }
+  PY_BINOP_PARENED = 4;
 
   VT_EMPTY   = 0;   { unassigned slot; payload ignored }
   VT_INT     = 1;   { payload = sign-extended Int64 }

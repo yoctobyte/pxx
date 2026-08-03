@@ -366,6 +366,12 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_convert26)" = "$$(printf '3\n42')"
 	./$(COMPILER) test/test_nilpy_bool.npy /tmp/test_nilpy_bool26
 	test "$$(/tmp/test_nilpy_bool26)" = "$$(printf 'True\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nFalse\nFalse\nzero is falsy\nfive is truthy')"
+	# bool is an int subclass: &/|/^/<</>> on booleans compute, and a
+	# PARENTHESIZED comparison next to a bitwise op is accepted (it is what
+	# PyBitGuard's own message asks for). Unparenthesized `x & 1 == 1` must
+	# still be refused -- that is the precedence typo the guard exists for.
+	./$(COMPILER) test/test_nilpy_bitwise_on_booleans.npy /tmp/test_nilpy_bitwise_on_booleans26
+	test "$$(/tmp/test_nilpy_bitwise_on_booleans26)" = "$$(printf 'False\nTrue\nTrue\nTrue\nFalse\nTrue\nFalse\n1\n1\n5\n8\n2\n2')"
 	./$(COMPILER) test/test_nilpy_membership_bool_return.npy /tmp/test_nilpy_membership_bool_return26
 	test "$$(/tmp/test_nilpy_membership_bool_return26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n3\n3\n3')"
 	# a sibling .py MODULE: unit scoping, its own initialisation, both import forms
@@ -4331,6 +4337,12 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_convert26)" = "$$(printf '3\n42')"
 	./$(COMPILER) test/test_nilpy_bool.npy /tmp/test_nilpy_bool26
 	test "$$(/tmp/test_nilpy_bool26)" = "$$(printf 'True\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nFalse\nFalse\nzero is falsy\nfive is truthy')"
+	# bool is an int subclass: &/|/^/<</>> on booleans compute, and a
+	# PARENTHESIZED comparison next to a bitwise op is accepted (it is what
+	# PyBitGuard's own message asks for). Unparenthesized `x & 1 == 1` must
+	# still be refused -- that is the precedence typo the guard exists for.
+	./$(COMPILER) test/test_nilpy_bitwise_on_booleans.npy /tmp/test_nilpy_bitwise_on_booleans26
+	test "$$(/tmp/test_nilpy_bitwise_on_booleans26)" = "$$(printf 'False\nTrue\nTrue\nTrue\nFalse\nTrue\nFalse\n1\n1\n5\n8\n2\n2')"
 	./$(COMPILER) test/test_nilpy_membership_bool_return.npy /tmp/test_nilpy_membership_bool_return26
 	test "$$(/tmp/test_nilpy_membership_bool_return26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n3\n3\n3')"
 	# a sibling .py MODULE: unit scoping, its own initialisation, both import forms

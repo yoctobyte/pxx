@@ -1,0 +1,26 @@
+# bool is an int subclass in CPython, so &/|/^ on booleans are legal and
+# compute the logical operation. PyBitGuard used to reject ANY tyBoolean
+# operand of a bitwise operator, which also rejected the parenthesized
+# comparison its own diagnostic asks the user to write.
+# bug-nilpy-bitwise-op-rejects-boolean-variable-operand
+a = True
+b = False
+print(a & b)
+print(a | b)
+print(a ^ b)
+print(a & a)
+
+x = 5
+y = 3
+# explicit parens: the precedence is stated, so no complaint
+print((x > y) & (y > x))
+print((x > y) | (y > x))
+print((x == 5) ^ (y == 3))
+
+# plain integer bitwise still works, and mixing a bool in follows CPython
+print(x & y)
+print(a & 1)
+print(b | x)
+print(a << 3)
+print(x >> a)
+print(a ^ 3)
