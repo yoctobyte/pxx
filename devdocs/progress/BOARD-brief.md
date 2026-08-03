@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:8 blocked:5 backlog:197 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1294 rejected:28`
+`unfinished:8 blocked:5 backlog:196 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1295 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -30,7 +30,7 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 177, ranked
+## Ready — top 30 of 176, ranked
 
 - `[p 80] [T]` meta-t-dev-throughput-and-track-a-t-integration
 - `[p 70] [U]` decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 3)
@@ -56,11 +56,11 @@ _none — no lane is locked._
 - `[p 60] [T]` feature-t-bench-hardware-provenance
 - `[p 60] [T]` feature-t-testmgr-owns-pinning-interruptible
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
-- `[p 60] [T]` task-t-suppress-autoticket-until-host-baselined
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
+- `[p 55] [N]` bug-nilpy-def-return-coerces-a-float-to-the-inferred-int-result
 
-_147 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_146 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

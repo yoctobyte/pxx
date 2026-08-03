@@ -683,6 +683,24 @@ def diagnostic_lines(body):
     return "\n".join(hits)
 
 
+def ticket_suppression(had_baseline, n_new_red, n_jobs):
+    """Why this run's regression tickets are suppressed, or None to file them.
+
+    Gates TICKET FILING only — the verdict, the job map and the report are
+    published either way. A false ticket is worse than a false tstate row: it
+    lands on the board at prio 70, names an innocent sha, and costs another
+    agent a triage cycle before anyone even looks at the box.
+    """
+    if not had_baseline:
+        return ("first run on this host: with no baseline every red is 'new', "
+                "so NEW-RED carries no information yet")
+    if n_new_red and n_new_red > INFRA_FAULT_FRAC * max(1, n_jobs):
+        return ("%d of %d jobs newly red (>%.0f%%): an environment or infra "
+                "fault, not a code change"
+                % (n_new_red, n_jobs, INFRA_FAULT_FRAC * 100))
+    return None
+
+
 def host_quiet_secs(st, now=None):
     """How long since this host last published a verdict, or None if fresh.
 
@@ -806,7 +824,16 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
         return False
 
     parent = (st["last"] or {}).get("sha")
+    # Captured BEFORE the diff, because the diff is what consumes it. NEW-RED
+    # means "red now, green in this host's recorded map", and on a host's first
+    # run that map is empty — `prev_jobs.get(n, "pass")` then defaults every
+    # unknown job to pass, so EVERY red is new. The verdict and the job map are
+    # honest and get published; what must not happen is filing tickets or
+    # opening ledger entries from a diff against nothing.
+    had_baseline = bool(st["jobs"])
     now, new_red, fixed, still_red = diff_jobs(st["jobs"], report)
+    no_ticket = ticket_suppression(had_baseline, len(new_red),
+                                   len(report["jobs"]))
 
     # open-regression bookkeeping.  Two invariants keep this ledger a list of
     # REAL, actionable regressions instead of a dump of every red job:
@@ -839,7 +866,15 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
     namemap = {job_key(j): j["name"] for j in report["jobs"]}
     rng = clone.commits_between(parent, sha) if parent else [sha]
-    if new_red and not rng:
+    if new_red and not had_baseline:
+        # Same treatment as the empty-range case, and for the same reason: the
+        # entries would name a sha that cannot have caused them. This run's
+        # statuses still land in st["jobs"], which IS the baseline the next run
+        # produces real NEW-RED against.
+        print("twatch: %d red at %s recorded as this host's BASELINE — no "
+              "ledger entries, no tickets (%s)"
+              % (len(new_red), sha[:12], no_ticket), flush=True)
+    elif new_red and not rng:
         print("twatch: %d new red at %s but 0 commits since the last tested "
               "sha — not localizable; recording job status only"
               % (len(new_red), sha[:12]), flush=True)
@@ -914,11 +949,15 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     msg = "tstate(%s): %s %s (%s)" % (host, sha[:12], report["verdict"],
                                       report["tier"])
     if new_red:
-        msg += " NEW-RED:" + ",".join(new_red[:5])
+        msg += (" BASELINE:%d red" % len(new_red) if not had_baseline
+                else " NEW-RED:" + ",".join(new_red[:5]))
     if fixed:
         msg += " FIXED:" + ",".join(fixed[:5])
     clone.publish(msg)
-    if new_red and CONF.get("autoticket"):
+    if new_red and CONF.get("autoticket") and no_ticket:
+        print("twatch: NOT filing a regression ticket — %s" % no_ticket,
+              flush=True)
+    elif new_red and CONF.get("autoticket"):
         file_stub_tickets(clone, host, st, sha, new_red, report, parent)
     if closed_regs and CONF.get("autoticket"):
         close_stub_tickets(clone, host, closed_regs, sha, report)
@@ -938,6 +977,17 @@ PROGRESS_BUCKETS = ("urgent", "working", "unfinished", "backlog",
 # forward produced 939 tickets.  Above the threshold, file ONE cascade
 # ticket naming the whole set instead.
 CASCADE_THRESHOLD = 10
+
+# A sweep that turns more than this FRACTION of the matrix newly red is an
+# environment or infra fault, not a code regression — a commit that breaks a
+# quarter of N unrelated subsystems at once essentially does not exist. xeon's
+# first run blamed 17 jobs on 110774a14648, a tstate-ONLY commit that touches
+# no code; all 17 were missing host packages (libgtk2.0-dev, libsqlite3-dev,
+# tk-dev, libc6:i386) plus a stale seed. The cascade rule above already
+# collapses that to one ledger entry; this decides whether it is worth a
+# TICKET, which lands at prio 70, names an innocent sha, and costs another
+# agent a triage cycle.
+INFRA_FAULT_FRAC = 0.25
 
 # How many open-regression lines `--status` prints before summarizing. It is a
 # pre-push liveness check: the UP/DOWN verdict must stay visible.
@@ -1873,7 +1923,12 @@ def status(repo, grace_min, tdir=None, ref="HEAD"):
                last.get("date", ""),
                "; full through %s %s" % (lf["sha"][:12], lf["verdict"])
                if lf.get("sha") else "",
-               "  [QUIET %s — not publishing]" % fmt_age(quiet) if quiet else ""))
+               "  [QUIET %s — not publishing]" % fmt_age(quiet) if quiet
+               # Before a host has one recorded job map, its NEW-RED is a diff
+               # against nothing. Say so where the host is read, so a fresh
+               # enrollment's green is not mistaken for coverage.
+               else "  [NOT BASELINED — NEW-RED not meaningful yet]"
+               if not st.get("jobs") else ""))
         # --status is a liveness check read before a push, not a report: cap
         # the ledger dump so one bad sweep can never bury the verdict line
         # (2026-07-20 it printed 467 entries / 49KB above the UP/DOWN answer).
