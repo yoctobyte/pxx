@@ -3,6 +3,8 @@ summary: "NilPy: a user-defined __ne__ is never consulted — `!=` always negate
 type: bug
 track: N
 prio: 50
+status: done
+owner: agent-AN
 ---
 
 # `__ne__` ignored — `!=` always negates `__eq__`
@@ -97,3 +99,22 @@ reflected forms are measured broken.
 Static receivers only, like every other compile-time dunder dispatch: `a != b`
 where either side arrives as an untyped parameter is a variant and needs
 [[decide-nilpy-runtime-dunder-dispatch-mechanism]].
+
+## Re-verified 2026-08-03 at HEAD — was fixed but never moved out of backlog/
+
+The fix and its gate test both landed on 2026-08-01; only the ticket's file
+move was missed, so it kept surfacing in the ready queue as open work.
+
+Re-measured against a self-hosted binary at HEAD rather than re-read: this
+ticket's own reproducer prints `NE-CALLED`, matching CPython, and
+`test/test_nilpy_dunder_ne.npy` is present and registered in the Makefile —
+`__ne__` wins where it disagrees with `not __eq__`, the derived negation still
+holds with only `__eq__`, identity holds with neither, and list `!=` still
+compares by content. Closed on the measurement, not on the write-up.
+
+Out-of-scope items above are unchanged and stay with their own tickets:
+reflected `__ne__`, and a variant (non-static) receiver, which needs
+[[decide-nilpy-runtime-dunder-dispatch-mechanism]].
+
+## Log
+- 2026-08-03 — resolved, commit PENDING-COMMIT.

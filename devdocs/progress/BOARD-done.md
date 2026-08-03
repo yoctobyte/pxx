@@ -491,6 +491,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-module-ast-recycled-by-nested-unit-compile | N | 85 | bug | A .py module's statement list is RECYCLED while it is still being built | — |
 | bug-nilpy-module-class-vmtaddr | N | 60 | bug | A class in an imported `.py` module: "invalid class index in vmtaddr" | — |
 | bug-nilpy-module-level-name-bound-in-a-block-is-invisible-to-a-later-assignment | N | 55 | bug | nilpy: at module level, a name first bound inside if/for/with is 'undefined variable' on the RHS of a later top-level assignment | — |
+| bug-nilpy-ne-dunder-ignored-always-negates-eq | N | 50 | bug | NilPy: a user-defined __ne__ is never consulted — `!=` always negates __eq__, silently returning the wrong value when they differ | — |
 | bug-nilpy-nested-def-capture-sets-are-not-final | N | 85 | bug | A nested def's capture set is read before it is final | — |
 | bug-nilpy-nested-def-nonint-result-garbage | N | 75 | bug | A nested def's non-integer result is read as a number — silent garbage | — |
 | bug-nilpy-non-literal-class-attribute-corrupts-the-class-layout | N | 70 | bug | A class attribute with a NON-LITERAL initialiser (`g = 2 + 3`) corrupts the class: a method returning a tuple of two OTHER class attributes then prints nothing or segfaults. Deleting the unused attribute fixes it | — |

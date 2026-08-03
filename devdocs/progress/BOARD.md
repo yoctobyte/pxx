@@ -62,10 +62,10 @@ _none_
 | bug-nilpy-missing-index-dunder-raises-indexerror-not-typeerror | N | 35 | bug | Indexing a sequence with an object that has no __index__ raises IndexError (the handle used as a position) where CPython raises TypeError — loud but misleading, and a small handle would index the wrong element instead | — |
 | bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch | N | 70 | bug | NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a user class — dispatch is compile-time only. Scalar-then-class rebinding is just one way to get a variant. | feature-nilpy-runtime-dunder-dispatch-on-variants |
 | bug-nilpy-multiple-inheritance-does-not-parse | N | 40 | bug | class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable | — |
-| bug-nilpy-ne-dunder-ignored-always-negates-eq | N | 50 | bug | NilPy: a user-defined __ne__ is never consulted — `!=` always negates __eq__, silently returning the wrong value when they differ | — |
 | bug-nilpy-nested-for-comprehension-not-supported | N | 45 | bug | A comprehension with TWO for-clauses — [c for r in rows for c in r] — fails with 'undefined variable (c)'; the flatten idiom is unavailable | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
+| bug-nilpy-power-augmented-assign-does-not-parse | N | 30 | bug | NilPy `x **= n` is a hard parse error — power is the one operator with no token, so the token-keyed augmented-assignment machinery cannot express it | — |
 | bug-nilpy-print-stringifies-container-args-eagerly | N | 45 | bug | print() converts a container argument to text as it evaluates it, not after all arguments are evaluated — so `print(xs, xs.pop(), xs)` shows the list before AND after the pop. A user function with the identical shape is correct | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pypow-integer-overflow-does-not-promote | N | 35 | bug | `pypow_v`'s integer path silently wraps past 64 bits instead of promoting | — |
@@ -342,9 +342,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1301)
+## done (1302)
 
-1301 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1302 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -430,7 +430,6 @@ _none_
 - [p 50] [N] bug-nilpy-in-over-objects-ignores-eq
 - [p 50] [N] bug-nilpy-lambda-over-a-capturing-nested-def-does-not-compile
 - [p 50] [N] bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error
-- [p 50] [N] bug-nilpy-ne-dunder-ignored-always-negates-eq
 - [p 50] [N] bug-nilpy-stdlib-shim-table-cannot-reach-an-overload
 - [p 50] [N] bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
@@ -522,6 +521,7 @@ _none_
 - [p 35] [O] feature-opt-complex-packed-double
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
+- [p 30] [N] bug-nilpy-power-augmented-assign-does-not-parse
 - [p 30] [N] bug-nilpy-user-def-loses-to-pylibs-variant-overload-at-the-same-arity
 - [p 30] [U] decide-builtin-and-library-code-sharing
 - [p 30] [N] feature-nilpy-list-sort-inplace-key-reverse

@@ -2,6 +2,7 @@
 track: N
 prio: 40
 type: feature
+status: working
 ---
 
 # Arithmetic dunders (`__add__`, `__sub__`, …) — full protocol
@@ -224,3 +225,27 @@ measured is the operator dispatch, not this ticket's full phase-2 scope
 (in-place operators beyond `+=`, `__divmod__`/`__matmul__`-shaped members, and
 the composition-with-existing-special-cases concerns below were not swept).
 Re-scope it against what remains rather than re-deriving the parts that work.
+
+## 2026-08-03 (later) — in-place operators re-scoped by measurement
+
+The 2026-08-03 note above left "in-place operators beyond `+=`" as unswept
+remaining scope. Swept now, against CPython, on three target shapes — a bare
+name, a class-typed field, and an in-method `self.` target:
+
+`-= *= /= //= %= &= |= ^= <<= >>=` all dispatch the in-place dunder, fall back
+to the binary one with a rebind, and raise a catchable TypeError with neither.
+So this line of the remaining scope is **closed**, pinned by
+`test/test_nilpy_augmented_assign_class_dunder.npy` (name target) and
+`test/test_nilpy_augmented_assign_class_field.npy` (field target, added with
+[[bug-nilpy-augmented-assign-to-a-class-typed-FIELD-silently-yields-zero]]).
+
+**One exception, split out:** `**=` is a hard parse error —
+[[bug-nilpy-power-augmented-assign-does-not-parse]]. It is not a gap in this
+protocol so much as a consequence of power being the one operator with no
+token: `**` is two `tkStar` plus an ad-hoc lookahead, so there is no binary
+token for `PyAugDunderName` to key `__ipow__` off. Filed separately because the
+fix is a new `TTokenKind` in `defs.inc` — Track A ground — rather than more
+dunder plumbing.
+
+Still genuinely open here, and still not swept: `__divmod__` / `__matmul__`-
+shaped members, and the composition-with-existing-special-cases concerns above.

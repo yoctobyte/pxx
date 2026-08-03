@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:8 blocked:5 backlog:193 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1301 rejected:28`
+`unfinished:8 blocked:5 backlog:193 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1302 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
