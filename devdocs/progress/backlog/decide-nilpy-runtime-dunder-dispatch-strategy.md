@@ -53,3 +53,67 @@ the container one at all.
 Whether the compile-time static paths stay: they should. They are correct, fast,
 and already landed. This is only about what happens when the static class is
 genuinely unknown.
+
+## POSTPONED — 2026-08-03 (user)
+
+> "postpone, i need to study this"
+
+Second deliberate postponement (the first was 2026-08-01 on the sibling
+[[decide-nilpy-runtime-dunder-dispatch-mechanism]], "#1 needs a careful
+thought"). Still blocked on judgement, not on information. **Do not answer this
+from the analysis below** — it costs less than the options imply, which is an
+argument about cost, not the judgement being reserved.
+
+### Carry forward: measured against HEAD, so the fork is narrower than drafted
+
+Read out of the emitters rather than reasoned about:
+
+1. **Option C's stated cost is not real.** It is written as "a table plus
+   registration, and a decision about where it hangs". There is already a
+   reserved **16-byte metadata area immediately before every VMT** — `[VMT-8]`
+   the RTTI backlink, `[VMT-16]` the managed-field layout backlink — and NilPy's
+   class emitter (`pyparser.inc:17193`) mirrors the Pascal one (`parser.inc`
+   ~24619) with a comment to keep the two in step. A dunder-table backlink at
+   `[VMT-24]` is that pattern extended by one word, **patched at emit time**.
+   There is no registration at construction.
+
+2. **Option A's dependency is absent, not merely unproven.** RTTI emission is
+   published-only ("every class with >=1 published member",
+   `compiler/rtti_emit.inc`). NilPy classes declare no published members, so
+   **no RTTI blob is emitted for them at all**. A is therefore: first build RTTI
+   emission for every NilPy class, then put a name search on the arithmetic hot
+   path, then live with
+   [[project_rtti_method_table_multi_consumer_stride_landmine]].
+
+3. **The obvious way to do C is a trap, and it should be named on the ticket.**
+   A synthetic common base (`TPyObject`) with virtual dunders reuses the
+   existing `AN_VIRTUAL_CALL` machinery and reads clean. But virtual dispatch is
+   deliberately gated on `PyClassInHierarchy` (`pyparser.inc` ~8223): a class
+   with neither parent nor children gets a **direct** call, because "the method
+   is resolved on that very type is what Python means anyway". A universal base
+   makes that predicate true everywhere and turns **every** NilPy method call
+   into a VMT indirection. The backlink shape leaves `UClsParent = -1`.
+
+4. **The constraint that narrowed the space is free under C.** The
+   carry-forward on the sibling ticket requires answering "does this class
+   declare `__bool__`?" cheaply at run time for objects that mostly do not. Under
+   a slot table that is a single nil test, and nil is where the correct default
+   ("any instance is true") already lives — so no raise, no reflection, and
+   option 4's inapplicability to truthiness stops being a constraint.
+
+5. **Scale.** ~50 Python dunders appear in the frontend
+   (`grep -oh '__[a-z_]*__' compiler/*.inc`, minus the C/compiler ones like
+   `__attribute__`). The three stalled symptoms need about ten — `__repr__
+   __str__ __bool__ __eq__ __hash__ __lt__ __le__ __gt__ __ge__ __len__`. At 8
+   bytes a slot that is a few hundred bytes per class that declares any dunder,
+   and zero for classes that declare none.
+
+### Left open deliberately, and worth deciding WITH the mechanism
+
+- **Per-dunder fallback semantics.** A nil slot means "default", but the correct
+  default differs per dunder: `__bool__` → true, `__eq__` → identity, the four
+  ordering ones → raise. That is a semantics decision living inside the
+  mechanism decision, and collapsing them is how a silent-wrong path survives.
+- **Whether `[VMT-24]` is genuinely free.** It widens a layout two emitters
+  currently keep in step at 16 bytes. Not measured — the blast radius should be
+  checked before the shape is committed to, not after.
