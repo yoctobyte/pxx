@@ -83,4 +83,4 @@ The structural answer is a NilPy expression parser that never enters the Pascal
 one, which is its own piece of work.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit a686e8e36.
