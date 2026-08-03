@@ -38,7 +38,7 @@ _none — no lane is locked._
 
 - `[p 70] [T]` regression-optdiff-shard8-12
 - `[p 70] [T]` regression-test-c-conformance-shard2-6
-- `[p 70] [T]` regression-test-nilpy-test-nilpy-class-return
+- `[p 70] [N]` regression-test-nilpy-test-nilpy-class-return
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [T]` task-t-worktree-is-not-current-state
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
