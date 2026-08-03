@@ -41,7 +41,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (207)
+## backlog (210)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -244,6 +244,9 @@ lives in git, not in a timestamp._
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | regression-optdiff-shard8-12 | T | 70 | regression | regression: optdiff#shard8/12 red at 28eb1a105ddb (auto-filed by twatch) | — |
+| regression-test-core-cgeneric-selection-b209 | T | 70 | regression | regression: test-core#src:test/cgeneric_selection_b209.c red at 42786f141ea7 (auto-filed by twatch) | — |
+| regression-test-core-test-c-packed-aligned | T | 70 | regression | regression: test-core#src:test/test_c_packed_aligned.pas red at 42786f141ea7 (auto-filed by twatch) | — |
+| regression-test-core-test-c-struct-fields | T | 70 | regression | regression: test-core#src:test/test_c_struct_fields.pas red at 42786f141ea7 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-borg-open-regression-is-permanently-stale | T | 40 | task | borg's watcher was stopped 2026-07-31 with one open regression recorded; nothing will ever clear it, so every --status and gate.sh check reads a dead host's red as live | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
@@ -1670,6 +1673,9 @@ lives in git, not in a timestamp._
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] regression-optdiff-shard8-12
+- [p 70] [T] regression-test-core-cgeneric-selection-b209
+- [p 70] [T] regression-test-core-test-c-packed-aligned
+- [p 70] [T] regression-test-core-test-c-struct-fields
 - [p 65] [C] bug-cfront-undeclared-type-in-cast-treated-as-zero
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
