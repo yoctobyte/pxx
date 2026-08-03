@@ -10,13 +10,14 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-cfront-arch-predefines-always-x86-64 | C | 75 | bug | `__x86_64__` is predefined on every target, and no other arch macro ever is | — |
 | bug-cfront-plain-char-is-unsigned-and-folds-inconsistently | C | 80 | bug | Plain `char` is unsigned at runtime but signed when constant-folded | — |
-| bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size | C | 85 | bug | `sizeof(p->arr)` returns the POINTER size, not the array size — silent buffer overflow | — |
+| bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size | A | 50→85 | bug |  | — |
 | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling | P | 80 | bug | A procedural variable in a value context takes its ADDRESS instead of calling it | — |
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size | C | 85 | bug | `sizeof(p->arr)` returns the POINTER size, not the array size — silent buffer overflow | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 
 ## unfinished (7)
@@ -1662,7 +1663,7 @@ lives in git, not in a timestamp._
 
 ## Ready (no unmet blocker)
 
-- [urgent p 85] [C] bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size
+- [urgent p 85] [A] bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size
 - [urgent p 80] [P] bug-pascal-procvar-in-value-context-takes-address-instead-of-calling (unblocks 1)
 - [urgent p 80] [C] bug-cfront-plain-char-is-unsigned-and-folds-inconsistently
 - [urgent p 75] [C] bug-cfront-arch-predefines-always-x86-64

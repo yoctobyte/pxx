@@ -2810,6 +2810,8 @@ test-core: $(COMPILER)
 	/tmp/cinit_elision_nested_b19326; test "$$?" = "42"
 	./$(COMPILER) test/csizeof_arrow_array_field_b194.c /tmp/csizeof_arrow_array_field_b19426
 	/tmp/csizeof_arrow_array_field_b19426; test "$$?" = "42"
+	./$(COMPILER) test/csizeof_member_chain_through_pointer.c /tmp/csizeof_member_chain26
+	/tmp/csizeof_member_chain26; test "$$?" = "42"
 	# b195 (bug-c-printf-without-stdio-include-varargs): implicit printf binds crtl
 	./$(COMPILER) test/cimplicit_printf_varargs_b195.c /tmp/cimplicit_printf_varargs_b19526
 	test "$$(/tmp/cimplicit_printf_varargs_b19526; test $$? = 42 && echo RC42)" = "$$(printf 'x=42 y=ok\nRC42')"

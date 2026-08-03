@@ -1954,20 +1954,47 @@ begin
         Next;
         if CurTok.Kind = tkDot then
         begin
-          Next;
-          if CurTok.Kind = tkIdent then
+          recId := REC_NONE;
+          if Syms[si].TypeKind = tyPointer then
+            recId := Syms[si].PtrElemRec
+          else if Syms[si].TypeKind = tyRecord then
           begin
+            { an ARRAY of records keeps the element record in ElemRecName
+              (RecName is unset) — `arr->field` sizing, c-testsuite 00205's
+              `sizeof(cases->c)/sizeof(cases->c[0])` }
+            if Syms[si].IsArray then recId := Syms[si].ElemRecName
+            else recId := Syms[si].RecName;
+          end;
+          { Walk the WHOLE member chain, not just its first link. `->` and `.`
+            both lex as tkDot, so `sizeof(d.info->date)` used to size `info`
+            (a POINTER, 8) and let the balanced-paren scan swallow `->date`,
+            where the answer is 64. Direct `.` access was right, which is why
+            this survived: the obvious test passes.
+
+            Where the real array is SMALLER than a pointer the bogus 8 is a
+            BOUND that overflows — `memset(h.s->buf, 'X', sizeof(h.s->buf))`
+            wrote 8 bytes into 4 and clobbered the next field, silently. See
+            bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size. }
+          while (CurTok.Kind = tkDot) and (recId <> REC_NONE) do
+          begin
+            Next;
+            if CurTok.Kind <> tkIdent then Break;
             fieldName := CurTok.SVal;
-            recId := REC_NONE;
-            if Syms[si].TypeKind = tyPointer then
-              recId := Syms[si].PtrElemRec
-            else if Syms[si].TypeKind = tyRecord then
+            { Another `.`/`->` after this field? Then this link is intermediate:
+              step into the field's own record and keep walking. Anything that
+              is neither a record nor a pointer-to-record ends the walk with
+              recId = REC_NONE, leaving the default pointer-size answer rather
+              than a confidently wrong one. }
+            if Tokens[TokPos].Kind = tkDot then
             begin
-              { an ARRAY of records keeps the element record in ElemRecName
-                (RecName is unset) — `arr->field` sizing, c-testsuite 00205's
-                `sizeof(cases->c)/sizeof(cases->c[0])` }
-              if Syms[si].IsArray then recId := Syms[si].ElemRecName
-              else recId := Syms[si].RecName;
+              if RecFieldType(recId, fieldName) = tyPointer then
+                recId := RecFieldPtrElemRec(recId, fieldName)
+              else if RecFieldType(recId, fieldName) = tyRecord then
+                recId := RecFieldRecId(recId, fieldName)
+              else
+                recId := REC_NONE;
+              Next;   { onto the next tkDot }
+              Continue;
             end;
             if recId <> REC_NONE then
             begin
@@ -2008,6 +2035,7 @@ begin
               else
                 sz := TypeSize(RecFieldType(recId, fieldName));
             end;
+            Break;   { terminal link: the chain is measured }
           end;
         end
         else

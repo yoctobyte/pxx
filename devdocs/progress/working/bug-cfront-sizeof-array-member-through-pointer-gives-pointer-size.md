@@ -2,6 +2,8 @@
 track: C
 prio: 85
 type: bug
+status: working
+owner: claude-C@opus5
 ---
 
 # `sizeof(p->arr)` returns the POINTER size, not the array size — silent buffer overflow
