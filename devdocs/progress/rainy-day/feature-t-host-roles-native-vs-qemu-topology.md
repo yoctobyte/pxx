@@ -71,3 +71,11 @@ enrolled, not after.
 An arm64 rPi enrolled with a native-oracle role runs only its native job set,
 never a full tier, and its results are comparable against xeon's QEMU verdicts
 for the same sha without hand work.
+
+## Log
+- 2026-08-03 — moved to rainy-day: the arm oracles are aspirational with no
+  date and no hardware on hand (user, [[decide-t-queue-scope-2026-08-03]]).
+  Kept as the design record for the topology — it is the thing to read when the
+  boxes do arrive, and [[bug-t-host-dependent-test-assertions-cross-distro]]
+  already installed the triage rule that makes a third distro cheap. Anything
+  in here that pays off on xeon ALONE was split out rather than parked with it.

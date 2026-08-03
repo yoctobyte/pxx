@@ -1,7 +1,7 @@
 ---
 summary: "NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle"
 type: feature
-prio: 40
+prio: 20
 ---
 
 # NilPy differential fuzzer (vs CPython)
@@ -53,3 +53,13 @@ subset — which is exactly what keeps the oracle valid.)
 
 - Not full CPython parity — the generator targets the intersection subset only.
 - Not a CI gate (out-of-band, opportunistic — same contract as pasmith/fuzz.sh).
+
+## Log
+- 2026-08-03 — still wanted; deliberately NOT scheduled yet, prio 40 -> 20
+  (user, [[decide-t-queue-scope-2026-08-03]]). A differential fuzzer against a
+  surface with NilPy's current known-bug backlog reports mostly already-known
+  defects, and that noise buries the new ones it exists to find. Precondition:
+  NilPy stable enough that a fuzz finding is probably a NEW bug. Note the
+  user's reading of the existing fuzzers — they have stopped reporting new
+  issues, which is a good sign; what pays off now is real-world library corpus
+  breadth rather than more synthetic generation.
