@@ -2871,6 +2871,11 @@ test-core: $(COMPILER)
 	@./$(COMPILER) test/cerror_directive_fail.c /tmp/cerror_directive_fail26 2>&1 \
 	  | grep -q 'configuration is unsupported' \
 	  || { echo 'cerror_directive_fail: FAIL - #error in a live branch must stop the compile and name its text'; exit 1; }
+	# bug-cfront-sizeof-unparenthesised-subscript: the unary sizeof operand is a
+	# unary-expression, so the whole postfix chain applies — `sizeof a[0]` (and
+	# the ARRAY_SIZE idiom built on it) used to be a parse error. gcc-differential.
+	./$(COMPILER) test/csizeof_postfix_unparen.c /tmp/csizeof_postfix_unparen26
+	/tmp/csizeof_postfix_unparen26; test "$$?" = "42"
 	# bug-cfront-undeclared-type-in-cast-treated-as-zero: a cast to an undeclared
 	# type name is an ERROR with a did-you-mean (it used to degrade to the value
 	# 0 — a NULL fn pointer crashing far from the cast); value position keeps its

@@ -1966,7 +1966,9 @@ begin
 end;
 
 function ParseCSizeof: Integer;
-var node, sz, si, depth, recId, arrLen, savedPos: Integer; tk, elemTk: TTypeKind; fieldName: AnsiString;
+var node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen: Integer;
+    cNDims, cDim, cSpanSym: Integer;
+    tk, elemTk, cTk, cPtrTk: TTypeKind; fieldName: AnsiString; cOK: Boolean;
 begin
   Next; { sizeof }
   sz := TARGET_PTR_SIZE;
@@ -2245,45 +2247,147 @@ begin
   else if CurTok.Kind = tkIdent then
   begin
     si := FindSym(CurTok.SVal);
+    procIdx := FindProc(CurTok.SVal);
     Next;   { consume the base identifier }
-    { Unparenthesized `sizeof s.field` / `sizeof p->field` (C 6.5.3): resolve the
-      field's size, including array members (`sizeof file->filename` where
-      filename is `char[1024]` — tcc's tccpp.c). tkDot covers both `.` and `->`.
-      Without this only the base ident was consumed and `->field` dangled. }
-    if (si >= 0) and (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) then
+    { Unparenthesized `sizeof ident <postfix...>` (C 6.5.3: the operand of the
+      unary form is a unary-expression, which includes a whole postfix chain).
+      `.`/`->` alone used to be handled and `[` was not, so `sizeof a[0]` — and
+      with it `sizeof a / sizeof a[0]`, THE way C spells "how many elements" and
+      the unparenthesised spelling the Linux kernel and BSD sources use — was a
+      hard parse error. bug-cfront-sizeof-unparenthesised-subscript.
+
+      Walked as a type descriptor rather than per-shape special cases, so the
+      chain composes to any depth: `cArrLen >= 0` means "array of cTk", cRec is
+      the record id when cTk is tyRecord, and cPtrTk/cPtrRec the pointee when
+      cTk is tyPointer. cOK goes False the moment a link cannot be resolved,
+      which leaves the pointer-size default rather than a confidently wrong
+      answer — the same conservative choice the parenthesized walk makes. }
+    if si >= 0 then
     begin
-      Next;   { consume '.' / '->' }
-      fieldName := CurTok.SVal;
-      recId := REC_NONE;
-      if Syms[si].TypeKind = tyPointer then recId := Syms[si].PtrElemRec
-      else if Syms[si].TypeKind = tyRecord then recId := Syms[si].RecName;
-      if recId <> REC_NONE then
-      begin
-        if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
-        begin
-          arrLen := RecFieldArrLen(recId, fieldName);
-          elemTk := RecFieldType(recId, fieldName);
-          if elemTk = tyRecord then sz := arrLen * RecSize(RecFieldRecId(recId, fieldName))
-          else sz := arrLen * TypeSize(elemTk);
-        end
-        else if RecFieldType(recId, fieldName) = tyPointer then sz := TARGET_PTR_SIZE
-        else if RecFieldType(recId, fieldName) = tyRecord then
-          sz := RecSize(RecFieldRecId(recId, fieldName))
-        else sz := TypeSize(RecFieldType(recId, fieldName));
-      end;
-      Next;   { consume the field name }
-    end
-    else if si >= 0 then
-    begin
+      cOK := True;
+      cPtrTk := tyUnknown; cPtrRec := REC_NONE;
+      cNDims := 0; cDim := 0; cSpanSym := si;
       if Syms[si].IsArray then
       begin
-        if Syms[si].ElemType = tyRecord then
-          sz := Syms[si].ArrLen * RecSize(Syms[si].ElemRecName)
-        else
-          sz := Syms[si].ArrLen * TypeSize(Syms[si].ElemType);
+        { ArrLen is the FLATTENED element count; a multidimensional array keeps
+          its per-dim spans in SymArrDimSpan, and one subscript peels ONE dim
+          (int[3][5] -> int[5], not int). Without the spans `sizeof m[0]` would
+          answer the element size and ARRAY_SIZE(m) would count 15 rather than 3. }
+        cArrLen := Syms[si].ArrLen;
+        cTk := Syms[si].ElemType;
+        cRec := Syms[si].ElemRecName;
+        cNDims := SymArrNDims[si];
       end
-      else if Syms[si].TypeKind = tyRecord then sz := RecSize(Syms[si].RecName)
-      else sz := TypeSize(Syms[si].TypeKind);
+      else
+      begin
+        cArrLen := -1;
+        cTk := Syms[si].TypeKind;
+        cRec := Syms[si].RecName;
+        cPtrTk := Syms[si].PtrElemTk;
+        cPtrRec := Syms[si].PtrElemRec;
+      end;
+      while cOK do
+      begin
+        if CurTok.Kind = tkLBrack then
+        begin
+          { one subscript peels one level: an element of the array, or the
+            pointee of a pointer. The index expression is skipped balanced so
+            `a[f(i)][j]` and `a[b[0]]` do not stop at an inner `]`. }
+          if cArrLen >= 0 then
+          begin
+            if (cNDims > 1) and (cDim < cNDims - 1) then
+            begin
+              { the spans of a multidim RECORD FIELD are not reachable by symbol
+                index, so a subscript into one cannot be sized -- bail to the
+                default rather than answer the element size. }
+              if cSpanSym < 0 then cOK := False
+              else
+              begin
+                cArrLen := cArrLen div SymArrDimSpan[cSpanSym * MAX_ARR_DIMS + cDim];
+                Inc(cDim);
+              end;
+            end
+            else cArrLen := -1;
+          end
+          else if cTk = tyPointer then
+          begin
+            cTk := cPtrTk; cRec := cPtrRec;
+            cPtrTk := tyUnknown; cPtrRec := REC_NONE;
+          end
+          else cOK := False;
+          depth := 0;
+          while CurTok.Kind <> tkEOF do
+          begin
+            if CurTok.Kind = tkLBrack then Inc(depth)
+            else if CurTok.Kind = tkRBrack then
+            begin
+              Dec(depth);
+              if depth = 0 then begin Next; Break; end;
+            end;
+            Next;
+          end;
+        end
+        else if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) then
+        begin
+          { `.` and `->` both lex as tkDot. An ARRAY base reaches its element's
+            record through cRec, which is how `arr->field` sizes. }
+          recId := REC_NONE;
+          if cTk = tyRecord then recId := cRec
+          else if cTk = tyPointer then recId := cPtrRec;
+          if recId = REC_NONE then begin cOK := False; Break; end;
+          Next;   { consume '.' / '->' }
+          fieldName := CurTok.SVal;
+          Next;   { consume the field name }
+          cTk := RecFieldType(recId, fieldName);
+          cRec := REC_NONE; cPtrTk := tyUnknown; cPtrRec := REC_NONE;
+          cNDims := 0; cDim := 0; cSpanSym := -1;
+          if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
+          begin
+            cArrLen := RecFieldArrLen(recId, fieldName);
+            cNDims := RecFieldArrNDims(recId, fieldName);
+            if cTk = tyRecord then cRec := RecFieldRecId(recId, fieldName);
+          end
+          else
+          begin
+            cArrLen := -1;
+            if cTk = tyRecord then cRec := RecFieldRecId(recId, fieldName)
+            else if cTk = tyPointer then
+            begin
+              cPtrTk := RecFieldPtrElemTk(recId, fieldName);
+              cPtrRec := RecFieldPtrElemRec(recId, fieldName);
+            end;
+          end;
+        end
+        else Break;
+      end;
+      if cOK then
+      begin
+        if cArrLen >= 0 then
+        begin
+          if cTk = tyRecord then sz := cArrLen * RecSize(cRec)
+          else sz := cArrLen * TypeSize(cTk);
+        end
+        else if cTk = tyRecord then sz := RecSize(cRec)
+        else sz := TypeSize(cTk);
+      end;
+    end
+    else if (procIdx >= 0) and (CurTok.Kind = tkLParen) then
+    begin
+      { `sizeof f()` — the size of the RETURN type; the call is not evaluated,
+        so the argument list is only skipped (balanced). }
+      depth := 0;
+      while CurTok.Kind <> tkEOF do
+      begin
+        if CurTok.Kind = tkLParen then Inc(depth)
+        else if CurTok.Kind = tkRParen then
+        begin
+          Dec(depth);
+          if depth = 0 then begin Next; Break; end;
+        end;
+        Next;
+      end;
+      if Procs[procIdx].RetType = tyRecord then sz := RecSize(ProcRetRecId[procIdx])
+      else sz := TypeSize(Procs[procIdx].RetType);
     end;
   end
   else if CurTok.Kind = tkString then
