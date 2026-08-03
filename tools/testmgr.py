@@ -170,6 +170,31 @@ RUN_RETRY_TRIES = 3      # total attempts before a fail/timeout is final
 # bug-t-etxtbsy-race-reds-single-shot-selfhost-jobs.
 RUN_RETRY_SIGNATURES = ("Text file busy", "ETXTBSY")
 RUN_RETRY_SIG_TAIL = 8192   # bytes of the log tail to scan for a signature
+# ---- co-tenancy: another testmgr, from another CLONE, on the same box -------
+# The run lock is per-repo (.testmgr/run.lock), so it cannot see a run in a
+# different checkout — and the watcher daemon lives in its own dedicated clone
+# by design. Two testmgrs then each size their parallelism to the WHOLE box and
+# together oversubscribe it ~2x. The jobs that lose are the long ones, and they
+# lose by being KILLED, not by answering wrongly: the tell is `Terminated` in
+# the log with the compile line reading `ok:`.
+#
+# That killed a 111.5s test-core job at e584d7b4 and published it as NEW-RED.
+# The job passes standalone and the dev session's own run at the same tree
+# called it "flaky (recovered on retry)" — the same job, two verdicts, decided
+# by who else was on the box. Worse, the job was
+# test_interface_mainbody_ascast_temp: the as-cast temp lifetime landmine is a
+# REAL known bug, so a false red there reads exactly like it resurfacing and
+# pulls a dev session into a full investigation.
+# bug-t-watcher-dev-contention-false-newred.
+#
+# A kill under co-tenancy says nothing about the binary's CONTENTS — the same
+# reasoning that makes the ETXTBSY signature safe to retry in single-shot
+# classes — so it is retried in ANY class, but ONLY while a peer is actually
+# present. On an idle box every one of these paths is a no-op and single-shot
+# stays single-shot.
+PEER_POLL_PERIOD = 15.0     # seconds between /proc scans for co-tenant runs
+PEER_TIME_FACTOR = 2.0      # two runs sizing to the whole box ~halve our share
+CONTENTION_SIGNALS = (signal.SIGTERM, signal.SIGKILL, signal.SIGHUP)
 # tiers that carry the FPC cold-start canary (advisory; see fpc_canary_job).
 # Not "quick": that is the inner loop and an FPC compile of compiler.pas is a
 # whole build, not an inner-loop cost.
@@ -338,17 +363,47 @@ def find_runs():
         path = next((a for a in argv if a.endswith("testmgr.py")), None)
         if not path:
             continue
+        # A process that merely CARRIES the command line is not a run: `timeout
+        # 600 python3 tools/testmgr.py`, `bash -c "...testmgr.py..."`, gate.sh,
+        # and systemd-run itself all match the argv scan. Counting them
+        # inflated --status and, once co-tenancy started steering retries,
+        # would have made a solo run believe it was contended — the run's own
+        # `timeout` wrapper posing as its rival.
+        try:
+            exe = os.path.basename(os.path.realpath("/proc/%s/exe" % pid))
+        except OSError:         # another user's process, or already gone
+            continue
+        if not exe.startswith("python"):
+            continue
         tier = "?"
         for i, a in enumerate(argv):
             if a == "--tier" and i + 1 < len(argv):
                 tier = argv[i + 1]
-        repo = os.path.dirname(os.path.dirname(path))
+        # argv may hold a RELATIVE path (`tools/testmgr.py`), which resolves
+        # against THAT process's cwd, not ours. Getting this wrong yields an
+        # empty repo, which compares equal to no clone and unequal to ours.
+        if not os.path.isabs(path):
+            try:
+                path = os.path.join(os.readlink("/proc/%s/cwd" % pid), path)
+            except OSError:
+                continue
+        repo = os.path.dirname(os.path.dirname(os.path.realpath(path)))
         try:
             age = time.time() - os.path.getmtime("/proc/%s" % pid)
         except OSError:
             age = 0.0
         out.append((int(pid), repo, tier, age))
     return sorted(out)
+
+
+def foreign_runs():
+    """Runs belonging to a DIFFERENT clone on this box — our co-tenants.
+
+    A run in our own repo is already excluded by the per-repo lock, so anything
+    left is exactly what that lock cannot see: the watcher daemon's dedicated
+    clone versus a dev checkout, or vice versa (see CONTENTION_SIGNALS).
+    """
+    return [r for r in find_runs() if r[1] != REPO]
 
 
 def read_lock():
@@ -1192,6 +1247,12 @@ class Manager:
         self.running = []
         self.nproc = os.cpu_count() or 1
         self.last_stall_msg = 0.0
+        # co-tenancy state: when we last SAW another clone's run, and which
+        # repos they came from (reported at the end, so a red read months later
+        # still says the box was shared)
+        self._peer_polled = -PEER_POLL_PERIOD
+        self.peer_last_seen = -1.0
+        self.peer_repos = set()
         self.metrics = load_metrics()
         for j in jobs:
             cls_to = CLASSES[j.cls]["timeout"]
@@ -1264,6 +1325,55 @@ class Manager:
         except (ProcessLookupError, PermissionError):
             pass
 
+    def poll_peers(self, now):
+        """Notice another clone's testmgr, cheaply and repeatedly.
+
+        Repeatedly because the contention that produced the false red started
+        MID-RUN: the watcher was already going when a dev session launched its
+        own gate. A startup-only check would have seen an idle box and drawn
+        exactly the wrong conclusion.
+        """
+        if now - self._peer_polled < PEER_POLL_PERIOD:
+            return
+        self._peer_polled = now
+        peers = foreign_runs()
+        if not peers:
+            return
+        self.peer_last_seen = now
+        for pid, repo, tier, _age in peers:
+            if repo not in self.peer_repos:
+                self.peer_repos.add(repo)
+                print("testmgr: NOTE another testmgr shares this box — pid %d, "
+                      "%s, tier %s. Both size their parallelism to the whole "
+                      "box, so long jobs get %.0fx timeouts here and a kill is "
+                      "retried, not called RED."
+                      % (pid, repo, tier, PEER_TIME_FACTOR), flush=True)
+
+    def contended(self, job):
+        """Was another clone's run live at any point while THIS job ran?
+
+        Deliberately "since the job started" rather than "right now": the peer
+        may have finished in the second between killing us and our reap.
+        """
+        return job.t0 is not None and self.peer_last_seen >= job.t0
+
+    def effective_timeout(self, job):
+        # Stretch rather than retry where we can: a 111s job re-run three times
+        # under contention costs more than giving it the room it needs once.
+        return job.timeout * (PEER_TIME_FACTOR if self.contended(job) else 1.0)
+
+    def _retriable_contention(self, job, why):
+        """A kill/timeout while a co-tenant run was live is a statement about
+        the BOX, not the artifact. Any class may retry it — the single-shot
+        rule protects against nondeterminism in the code under test, and being
+        killed by another tenant's load is not that."""
+        if job.advisory or job.attempts >= RUN_RETRY_TRIES:
+            return False
+        if not self.contended(job):
+            return False
+        self._requeue_retry(job, "%s while another testmgr shared the box" % why)
+        return True
+
     def _retriable(self, job):
         # Re-run a FAILED job before calling it RED, only in the
         # runtime-nondeterministic classes and only while attempts remain.
@@ -1328,16 +1438,26 @@ class Manager:
                     self._requeue_retry(
                         job, "failed (rc=%d) with a harness signature (%s)"
                              % (rc, self._retriable_signature(job)))
+                elif (rc < 0 and -rc in CONTENTION_SIGNALS
+                      and self._retriable_contention(
+                          job, "killed by SIG%s"
+                               % signal.Signals(-rc).name.removeprefix("SIG"))):
+                    # A job the OS killed never produced a verdict. This is the
+                    # exact shape of the false NEW-RED: `Terminated` in the log
+                    # with the compile line reading `ok:`.
+                    pass
                 else:
                     job.t1 = now
                     job.status = "fail"
                     self.running.remove(job)
                     done.append(job)
-            elif now - job.t0 > job.timeout:
+            elif now - job.t0 > self.effective_timeout(job):
                 self.kill_group(job)
                 job.proc.wait()
                 if self._retriable(job):
                     self._requeue_retry(job, "timed out")
+                elif self._retriable_contention(job, "timed out"):
+                    pass
                 else:
                     job.t1 = now
                     job.status = "timeout"
@@ -1651,6 +1771,7 @@ class Manager:
             self.sample()
             self.watchdog()
             now = time.monotonic()
+            self.poll_peers(now)
             if now - self._last_live >= 1.0:
                 self._last_live = now
                 self.write_live(self._wall_t0)
@@ -2480,6 +2601,15 @@ def main():
                                 ", %d flaky (passed on retry)" % len(flaky) if flaky else ""))
     if flaky:
         print("  flaky (recovered on retry, NOT red): %s" % " ".join(flaky))
+    # Co-tenancy belongs in the REPORT, not just the scrollback: twatch turns
+    # this text into a tstate report someone reads days later while deciding
+    # whether a red is real. "The box was shared" is the first thing that
+    # triage needs and the last thing it used to be told.
+    if mgr.peer_repos:
+        print("  NOTE this run shared the box with another clone's testmgr "
+              "(%s) — long jobs got %.0fx timeouts and kills were retried; "
+              "expect longer durations than a solo run"
+              % (", ".join(sorted(mgr.peer_repos)), PEER_TIME_FACTOR))
     # repeat the banner at the END too: on a 1000-job run the startup one has
     # long scrolled away, and this is the line someone reads before believing
     # a GREEN
