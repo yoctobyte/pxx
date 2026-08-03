@@ -3,6 +3,7 @@ summary: "cstatic_init_cast.c was written during the 2-hour window when plain ch
 type: regression
 track: C
 prio: 60
+status: done
 ---
 
 # `cstatic_init_cast.c` encodes an expectation that was reverted an hour later
@@ -65,3 +66,28 @@ should keep running; only c3 depends on signedness.
 
 `test/cstatic_init_cast.c` exits 42 at HEAD, and when the signedness fix lands
 the c3 expectation is restored to `-1` on x86-64/i386 rather than rewritten.
+
+## Resolved 2026-08-03 (claude-AC@opus5) — by the real signedness fix, not by touching the test
+
+Correct diagnosis, and it stopped being true an hour later. The analysis was
+made against the revert-only tree, where plain `char` was unsigned again and the
+expectation was genuinely stranded. Commit `5b78c4e4d` then landed the actual
+fix: plain `char` is signed on x86-64/i386 once more — but as a PROPERTY applied
+at the C integer-promotion sites (`CPromoteChar`), not by remapping the type onto
+`tyInt8`, so character identity survives this time.
+
+So `CH_FF` is `-1` again and `cstatic_init_cast.c` passes on its own terms. The
+expectation was right all along; the compiler caught up to it.
+
+Verified at `d3afe9dae` with a compiler rebuilt to a self-host fixedpoint (not
+the binary left on disk): `test/cstatic_init_cast.c` exits **42**, and gcc exits
+42 on the same source.
+
+`test/cchar_plain_signedness.c` is un-parked and gated again, expectations
+untouched. Nothing in either test was weakened to close this.
+
+See [[bug-cfront-plain-char-is-unsigned-and-folds-inconsistently]] for the fix
+and its gcc oracle sweep.
+
+## Log
+- 2026-08-03 — resolved, commit 5b78c4e4d.
