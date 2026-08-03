@@ -1,5 +1,6 @@
 compiler/pascal26
 compiler/pascal26-managed
+compiler/pascal26-debug
 compiler/compiler
 compiler/*.o
 compiler/*.ppu
