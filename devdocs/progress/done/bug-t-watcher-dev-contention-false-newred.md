@@ -110,4 +110,4 @@ session into a full investigation.
   exactly one peer (`/home/neo/trackt-watch`, tier full) and no phantom, and
   prints the note in both places. `tools/testmgr_contention_devtest.py` pins
   all eight behaviours by driving `reap()` with stub processes.
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit 6cc0753da.
