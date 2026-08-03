@@ -8496,6 +8496,7 @@ var
   savedSC, savedFS, node, savedCurProc, pmi: Integer;
   vaSaveSym, vaSaveRec, vaOverflowSym: Integer;
   parenName, isVariadic, wasNewProc, fnRetIsFunc, forceSystemExternal, sigMatch, paramsOverflow: Boolean;
+  xnI: Integer; xnBad: Boolean;   { cross-namespace float-class check }
 begin
   { Default DT_NEEDED soname for an external with no explicit library: math
     functions are in libm.so.6 on glibc, everything else in libc.so.6. }
@@ -8732,6 +8733,35 @@ begin
       WarnCrossBindArity(CurTok.Line, name, Procs[procIdx].Name,
                          Procs[procIdx].ParamCount, nparams);
       procIdx := -1;
+    end
+    else if (procIdx >= 0) and (not ProcCdecl[procIdx]) and
+            (not ProcVariadic[procIdx]) then
+    begin
+      { Rung 3: the counts agree, but a parameter or the result disagrees on
+        being a FLOAT — the class that picks the register file (XMM vs GP on
+        x86-64) and the whole marshalling path, so the call cannot arrive right.
+        int-vs-pointer is deliberately NOT checked: both travel the GP path and
+        the corpora interchange them constantly.
+
+        Measured before escalating, the same way the arity rung was: zlib, lua,
+        quickjs, the 220-case c-conformance suite and the C suite produce ZERO
+        float-class warnings, so no corpus needs such a bind — the C declaration
+        wins, exactly as on the arity path. }
+      xnBad := False;
+      for xnI := 0 to nparams - 1 do
+        if TypeIsFloat(ptypes[xnI]) <> TypeIsFloat(Procs[procIdx].Params[xnI].TypeKind) then
+        begin
+          if not xnBad then
+            WarnCrossBindType(CurTok.Line, name, Procs[procIdx].Name,
+                              'parameter ' + AIntToStr(xnI + 1));
+          xnBad := True;
+        end;
+      if (not xnBad) and (TypeIsFloat(retType) <> TypeIsFloat(Procs[procIdx].RetType)) then
+      begin
+        WarnCrossBindType(CurTok.Line, name, Procs[procIdx].Name, 'the result type');
+        xnBad := True;
+      end;
+      if xnBad then procIdx := -1;
     end;
   end;
   wasNewProc := procIdx < 0;

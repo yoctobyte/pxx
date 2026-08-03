@@ -113,6 +113,28 @@ begin
           ' — binding to the C declaration, not the Pascal routine');
 end;
 
+{ The arity check's sibling: same parameter COUNT, but a parameter (or the
+  result) disagrees on whether it is a FLOAT. That class decides the register
+  file — XMM vs general-purpose on x86-64, and the whole marshalling path — so a
+  disagreement there cannot produce a right answer, unlike int-vs-pointer, which
+  share the GP path and are interchanged harmlessly all over the corpora. This
+  is the shape that made `exp(x)` return e^(previous result) in b377.
+  bug-cfront-silent-bind-to-pascal-proc-of-different-arity, rung 3. }
+procedure WarnCrossBindType(line: Integer; const cname, pname, what: AnsiString);
+begin
+  Inc(WarnCount);
+  if WarnAsError then
+  begin
+    writeln('pascal26:', line, ': error: C declaration of ''', cname,
+            ''' disagrees with the Pascal routine ''', pname, ''' on ', what,
+            ' (float vs non-float; warning promoted by -Werror)');
+    Halt(1);
+  end;
+  writeln('pascal26:', line, ': warning: C declaration of ''', cname,
+          ''' disagrees with the Pascal routine ''', pname, ''' on ', what,
+          ' (float vs non-float) — binding to the C declaration');
+end;
+
 { --auto-locals / {$IMPLICITVARS ON}: an assignment to an undeclared name just
   created an implicit routine-local. Warn so the sloppy-mode inference is
   visible (a typo'd name silently becomes a new variable otherwise). }

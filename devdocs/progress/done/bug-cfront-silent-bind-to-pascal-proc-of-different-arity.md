@@ -2,6 +2,8 @@
 track: A
 prio: 30
 type: bug
+status: done
+owner: claude-AC
 ---
 
 # A C call binds to a Pascal routine of a DIFFERENT arity, silently
@@ -106,3 +108,43 @@ untouched. Pinned by `test/test_c_cross_ns_arity{,_fail}.pas` + their `.c` units
 The parameter TYPE-compatibility check named as "the obvious next rung" is still
 open, and so is the collision surface list above — arity alone catches every
 case seen so far.
+
+## RUNG 3 LANDED (2026-08-03) — the parameter TYPE check, scoped to float-class
+
+The "obvious next rung" named at the top of this ticket, done the same way
+rungs 1 and 2 were: implement as a warning, MEASURE the corpora, then escalate.
+
+**Scope: float vs non-float only**, on each parameter and on the result. That is
+the class which picks the register file — XMM vs general-purpose on x86-64 — and
+with it the whole marshalling path, so a disagreement there cannot produce a
+right answer. It is exactly the b377 shape (`exp(x)` returning e^(previous
+result)). **int-vs-pointer is deliberately NOT checked**: both travel the GP
+path and the corpora interchange them constantly, so checking it would be the
+"crying wolf on every mixed build" failure this ticket warned about.
+
+Measured with the check as a warning:
+
+| corpus | float-class warnings |
+| --- | --- |
+| zlib | 0 |
+| lua | 0 |
+| quickjs | 0 |
+| c-conformance (220 cases) | 0 |
+| the C suite | 0 |
+
+Zero everywhere — the same evidence bar that unblocked rung 2 — so it escalated
+to refusing the bind: the C declaration wins and registers its own cdecl proc,
+identical to the arity path. Verified firing on the b377 shape (`int exp(int)`
+against the RTL's `function Exp(x: Double): Double`).
+
+Note the intentional cross-namespace routing is untouched, because it AGREES on
+float-ness: lua's `<math.h>` `sqrt`/`sin`/`cos` are `double(double)` and the RTL's
+`Sqrt`/`Sin`/`Cos` are `Double`→`Double`.
+
+**Still open:** width mismatches (`long` vs `Integer`) and int-vs-pointer, both
+deliberately out of scope above; and the collision-surface list earlier in this
+ticket has not been audited by hand — the diagnostics are what make that
+unnecessary.
+
+## Log
+- 2026-08-03 — resolved, commit PENDING.

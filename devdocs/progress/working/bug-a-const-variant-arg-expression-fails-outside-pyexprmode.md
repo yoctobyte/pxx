@@ -3,6 +3,8 @@ track: A
 prio: 30
 type: bug
 blocked-by: []
+status: working
+owner: claude-AC
 ---
 
 # `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy
@@ -126,3 +128,62 @@ regression here was invisible to self-host fixedpoint, a handful of
 targeted spot-checks, and even a broad-ish sweep of const/overload
 tests; it only surfaced in the full test-core suite, on a test file with
 no obvious connection to `const` parameter handling at the source level.
+
+## 2026-08-03 — RE-ATTEMPTED, and the 2026-08-01 regression does NOT reproduce
+
+Re-attempted under the discipline the note above demands: apply the two halves
+**separately**, diff each against a known-good binary, and gate on a full tier
+before claiming anything.
+
+### Half 1 — the `pconst` shift — is clean on its own
+
+Applied alone (both shift blocks in `ParseSubroutine`, plus the `pconst[0] :=
+False` that the other per-param arrays already set explicitly for the injected
+`Self`/`__genself` slot). Then:
+
+```
+stable_linux_amd64/default/pinned  test/test_promoint.pas  -> /tmp/promoint.pin
+HEAD + pconst shift only           test/test_promoint.pas  -> /tmp/promoint.new
+diff  =>  IDENTICAL
+```
+
+So the pconst shift by itself does not touch promotable-int/bignum output. The
+2026-08-01 session landed both halves together and could not have seen this
+split.
+
+### Half 2 — the `ByRefArgStartsExpression` threading — is also clean
+
+`ByRefArgStartsExpression` now takes `constVariantParam`, computed at each of
+the 8 call sites (plus `False` at the `Inc`/`Dec` intrinsic site) through a
+small `ParamIsConstVariant(pi, slot)` helper; the lvalue-chain-skip logic runs
+when `PyExprMode OR constVariantParam`. With both halves in:
+
+```
+diff /tmp/promoint.pin /tmp/promoint.new2  =>  IDENTICAL
+```
+
+**The regression the last attempt hit does not reproduce at HEAD.** The honest
+reading: that attempt's diagnosis — the pconst fix UNMASKS a second, pre-existing
+downstream bug — was probably right, and that second bug has since been fixed by
+other work (a great deal has landed since 2026-08-01, including the const-Variant
+revert itself, the TypeRef migration and the promo-int follow-ups). It is not
+that the earlier session was wrong; it is that the ground moved.
+
+### Repros, both directions
+
+```pascal
+b.Take(start + i);        { const v: Variant — the ticket's own shape }
+b.Take(start * 2 + 1);
+b.Take(start);            { a bare variable must still bind — it does }
+```
+prints `15 / 21 / 10`, and the original NilPy shape `xs.append(a + b)` still
+prints `[7, 3]`. Genuine `var`/`out`/array by-ref parameters keep the
+`PyExprMode` gate, so Pascal's real var-binding is untouched.
+
+### Gate
+
+Per this ticket's own standing instruction — *"do not re-attempt without gating
+on a full `make stabilize`/`testmgr --tier full`-equivalent run"*, whose reason
+is recorded above (the 2026-08-01 regression was invisible to the self-host
+fixedpoint, targeted spot-checks and a broad const/overload sweep) — this landed
+on `tools/testmgr.py --tier full`, not the usual quick gate.
