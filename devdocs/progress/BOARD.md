@@ -49,6 +49,7 @@ lives in git, not in a timestamp._
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
+| bug-a-dwarf-line-program-emits-backward-address-steps | A | 50 | bug | The .debug_line program emits DW_LNS_advance_pc with a NEGATIVE delta, encoded as unsigned ULEB128. Each one adds 2^32 to the address register, so every row after the first backward step is unreachable — 25911 of 76894 rows (34%) in the compiler's own -g build, i.e. the whole upper fifth of the binary has no usable line info. | — |
 | bug-a-integer-literal-not-typed-by-its-value-for-overload-resolution | A | 45 | bug | An untyped integer literal always types as LongInt (or Int64 if it does not fit), so overload resolution picks a different candidate than FPC: hi($1234) gives 0\|4660 where FPC gives 18\|52. Values are no longer truncated (that half is fixed) — this is the remaining FPC-parity gap. | — |
 | bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c | A | 40 | bug | The caller side now follows the C ABI for 64-bit arguments to external functions, but a pxx routine CALLED FROM C still spills them with the internal packed convention — so on xtensa, where the C ABI skips to an even register, a C caller and a pxx callee would disagree. Latent: nothing crosses that way today. | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
@@ -59,7 +60,6 @@ lives in git, not in a timestamp._
 | bug-cfront-sizeof-unparenthesised-subscript | C | 50 | bug | `sizeof a[0]` is a parse error — the array-length idiom does not compile | — |
 | bug-cfront-spurious-dt-needed-libc-with-no-imports | C | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
 | bug-cfront-undeclared-type-in-cast-treated-as-zero | C | 65 | bug | An undeclared TYPE NAME used in a cast is only a warning — cfront treats the name as the value 0, so `(SomeMissingType)fnptr` becomes an integer 0 and the call goes through a null pointer. gcc rejects it. Found in cpyext M5: a function-pointer cast silently became 0 and the program segfaulted far from the cast. | — |
-| bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
 | bug-nilpy-bare-dot-float-literals-do-not-lex | N | 35 | bug | `.5` and `5.` do not lex — the shared number scanner requires a digit on BOTH sides of the dot, which is right for Pascal and wrong for Python | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
@@ -363,7 +363,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1258)
+## done (1259)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -614,6 +614,7 @@ lives in git, not in a timestamp._
 | bug-classname-on-a-tobject-local-compiles-to-a-dynamic-attr-fetch | N | 65 | bug | `o.ClassName` on a TObject local compiles to a NilPy DYNAMIC ATTRIBUTE fetch instead of the RTTI call, while `TObject(obj).ClassName` compiles correctly — same expression, different shape, different meaning | — |
 | bug-codegen-nested-index-load-width-pressure | A | 50 | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
 | bug-compiler-hang-on-nested-if-in-begin | A | 50 | bug | bug: compiler hangs (infinite loop) on a method with a nested if/else inside a begin block | — |
+| bug-compiler-selfdebug-lines-index-expanded-source | A | 45 | bug | `make pxx-debug`: line numbers index the INCLUDE-EXPANDED source | — |
 | bug-compiler-tmyclass-hardcoded-clash | A | 50 | bug | Hardcoded 'TMyClass' name clash in compiler type resolution | — |
 | bug-conditional-directive-miscount-synautil | A | 50 | bug | Spurious "unterminated conditional directive" on synautil + jedi.inc | — |
 | bug-const-array-of-ansistring-literal-too-many-elements | A | 50 | bug | Bug: `const array[0..N-1] of AnsiString = (...)` literal fails "too many array constant elements" despite correct count | — |
@@ -1719,6 +1720,7 @@ lives in git, not in a timestamp._
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [U] decide-pxxpdf-ticket-obsolete (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
+- [p 50] [A] bug-a-dwarf-line-program-emits-backward-address-steps
 - [p 50] [C] bug-cfront-sizeof-unparenthesised-subscript
 - [p 50] [N] bug-nilpy-in-over-objects-ignores-eq
 - [p 50] [N] bug-nilpy-lambda-over-a-capturing-nested-def-does-not-compile
@@ -1742,7 +1744,6 @@ lives in git, not in a timestamp._
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] bug-a-integer-literal-not-typed-by-its-value-for-overload-resolution
 - [p 45] [C] bug-cfront-spurious-dt-needed-libc-with-no-imports
-- [p 45] [A] bug-compiler-selfdebug-lines-index-expanded-source
 - [p 45] [N] bug-nilpy-bytearray-constructor-only-accepts-a-length
 - [p 45] [N] bug-nilpy-missing-builtins-step-slicing-range-into-list
 - [p 45] [N] bug-nilpy-nested-for-comprehension-not-supported

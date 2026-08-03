@@ -1881,6 +1881,77 @@ begin
   end;
 end;
 
+{ ===== -g line markers ========================================================
+  ExpandIncludes splices every `{$I}` into one buffer, so without these the
+  lexer's line numbers index the EXPANDED text and every routine reads as a
+  (huge, real, useless) line of the main .pas file — see IncEmitLineMarker in
+  elfwriter.inc for the emitter and the full note.
+
+  A marker is `# <line> "<path>"` at the start of a line, gcc's shape and the
+  same one clexer.inc consumes. It cannot collide with Pascal's `#nn` char-code
+  literal: that has no space after the '#', and `"` is not a Pascal quote at
+  all. Only recognised under -g, which is the only mode that emits them. }
+function PasAtLineMarker: Boolean;
+var p: Integer;
+begin
+  PasAtLineMarker := False;
+  if not DebugInfo then Exit;
+  if SrcPos > Length(Source) then Exit;
+  if Source[SrcPos] <> '#' then Exit;
+  if (SrcPos > 1) and (Source[SrcPos - 1] <> #10) then Exit;
+  p := SrcPos + 1;
+  if (p > Length(Source)) or (not (Source[p] in [' ', #9])) then Exit;
+  while (p <= Length(Source)) and (Source[p] in [' ', #9]) do Inc(p);
+  PasAtLineMarker := (p <= Length(Source)) and
+                     (Source[p] >= '0') and (Source[p] <= '9');
+end;
+
+procedure PasLexLineMarker;
+{ Consume one marker. The marker names the line of the text AFTER it, and its
+  own newline is NOT counted — so the marker line is invisible to numbering.
+  Anything that does not parse as a marker is swallowed to end of line rather
+  than guessed at; PasAtLineMarker has already ruled out real Pascal. }
+var n: Integer; path: AnsiString; ok: Boolean;
+begin
+  ok := False;
+  n := 0;
+  path := '';
+  Inc(SrcPos);                                   { the '#' }
+  while (SrcPos <= Length(Source)) and (Source[SrcPos] in [' ', #9]) do Inc(SrcPos);
+  while (SrcPos <= Length(Source)) and
+        (Source[SrcPos] >= '0') and (Source[SrcPos] <= '9') do
+  begin
+    n := n * 10 + (Ord(Source[SrcPos]) - Ord('0'));
+    Inc(SrcPos);
+  end;
+  while (SrcPos <= Length(Source)) and (Source[SrcPos] in [' ', #9]) do Inc(SrcPos);
+  if (SrcPos <= Length(Source)) and (Source[SrcPos] = '"') then
+  begin
+    Inc(SrcPos);
+    while (SrcPos <= Length(Source)) and (Source[SrcPos] <> '"') and
+          (Source[SrcPos] <> #10) do
+    begin
+      AppendChar(path, Source[SrcPos]);
+      Inc(SrcPos);
+    end;
+    if (SrcPos <= Length(Source)) and (Source[SrcPos] = '"') then
+    begin
+      Inc(SrcPos);
+      ok := True;
+    end;
+  end;
+  { swallow the rest of the marker line, its newline included and UNCOUNTED }
+  while (SrcPos <= Length(Source)) and (Source[SrcPos] <> #10) do Inc(SrcPos);
+  if SrcPos <= Length(Source) then Inc(SrcPos);
+  if not ok then Exit;
+  SrcLine := n;
+  { Tokens from here belong to `path`. The main file keeps id 1; an .inc interns
+    its own, so its routines land in the line table as themselves instead of as
+    a wrong line of the .pas. }
+  if path = DbgSrcName then DbgMarkTokFile(TokCount, 1)
+  else DbgMarkTokFile(TokCount, DbgFileId(path));
+end;
+
 procedure LexOne;
 var
 {$ifdef FPC}
@@ -1895,6 +1966,13 @@ var
 begin
   if DebugTrace then writeln('Entering Next. SrcPos = ', SrcPos);
   SkipSpace;
+  { Markers can arrive back to back — an include whose last line is another
+    include leaves a "resume" marker immediately followed by an "enter" one. }
+  while PasAtLineMarker do
+  begin
+    PasLexLineMarker;
+    SkipSpace;
+  end;
   CurTok.Line := SrcLine; CurTok.SVal := '';
   if SrcPos > Length(Source) then
   begin

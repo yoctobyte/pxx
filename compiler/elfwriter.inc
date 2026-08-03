@@ -3178,13 +3178,67 @@ begin
   src := res;
 end;
 
-procedure ExpandIncludes(var src: AnsiString; const baseDir: AnsiString);
+{ ===== -g line markers (Pascal include splice) ================================
+  ExpandIncludes splices every `{$I}` into ONE buffer and the lexer numbers
+  lines in that buffer, so `info line IRDump` answered "line 61871 of
+  compiler.pas" — a real line of the 1001-line file's include-EXPANDED text,
+  and the wrong file name for every routine that actually lives in an .inc.
+
+  Same shape, and the same fix, as the C side's
+  bug-c-dwarf-lines-index-the-preprocessed-text: emit gcc-style
+  `# <line> "<path>"` markers at each splice boundary and let the lexer recover
+  the origin (PasLexLineMarker in lexer.inc). Two markers per include — one
+  entering the file at its line 1, one resuming the includer at the line after
+  the directive — so a marker is an ABSOLUTE anchor and no drift accumulates
+  between them.
+
+  Only under -g, and only for a source that asked for markers by passing a
+  non-empty selfPath. Without -g the expanded text is byte for byte what it
+  always was, which is what keeps the self-host fixedpoint honest. }
+function IncSmallIntStr(n: Integer): AnsiString;
+{ Decimal text of a small non-negative int. elfwriter.inc is included before
+  cpreproc.inc, so its CPSmallIntStr twin is not in scope here, and this
+  dialect surface has no IntToStr. }
+var r: AnsiString;
+begin
+  if n <= 0 then begin IncSmallIntStr := '0'; Exit; end;
+  r := '';
+  while n > 0 do
+  begin
+    r := Chr(Ord('0') + (n mod 10)) + r;
+    n := n div 10;
+  end;
+  IncSmallIntStr := r;
+end;
+
+procedure IncEmitLineMarker(const path: AnsiString; line: Integer);
+{ Append `# <line> "<path>"` on a line of its own. The lexer does not count the
+  marker's own newline, so a marker never shifts the numbering it just set. }
+begin
+  if (Length(IncExpanded) > 0) and (IncExpanded[Length(IncExpanded)] <> #10) then
+    AppendChar(IncExpanded, #10);
+  AppendString(IncExpanded, '# ');
+  AppendString(IncExpanded, IncSmallIntStr(line));
+  AppendString(IncExpanded, ' "');
+  AppendString(IncExpanded, path);
+  AppendString(IncExpanded, '"');
+  AppendChar(IncExpanded, #10);
+end;
+
+procedure ExpandIncludes(var src: AnsiString; const baseDir, selfPath: AnsiString);
 { Replace active dollar-include directives with file contents, one level deep.
   Conditional directives remain in the text for the real lexer pass; this
   pre-pass only simulates enough state to avoid loading includes from inactive
-  branches. }
+  branches.
+
+  selfPath is the path of `src` itself, used to name it in the -g line markers
+  above. Pass '' to suppress markers entirely: a Pascal UNIT is deliberately
+  left out of the line table (see the DbgMarkTokFile note in parser.inc — the
+  RTL would swamp it), and a marker is exactly what would opt it back in. }
 var
   i, j, k, incDi, closePos, condCount, savedDefineCount, savedDefineCharLen: Integer;
+  markLine, markPos: Integer;   { -g: line of src at markPos, both advance forward only }
+  wantMarkers: Boolean;
   fname, command, name, exprSource: AnsiString;
   cond, active: Boolean;
   condParent, condActive, condTaken: array[0..MAX_PAS_CONDS-1] of Boolean;
@@ -3209,6 +3263,9 @@ begin
   condCount := 0;
   active := True;
   SetLength(IncExpanded, 0);
+  wantMarkers := DebugInfo and (Length(selfPath) > 0);
+  markLine := 1;
+  markPos := 1;
   i := 1;
   while i <= Length(src) do
   begin
@@ -3361,7 +3418,21 @@ begin
             ErrorIdent := fname;
             Error('cannot open include file');
           end;
-          AppendString(IncExpanded, IncIncluded);
+          if wantMarkers then
+          begin
+            { The included text starts at ITS line 1; afterwards the includer
+              resumes at the line the directive's closing brace sits on. }
+            IncEmitLineMarker(fullPath, 1);
+            AppendString(IncExpanded, IncIncluded);
+            while markPos <= j do
+            begin
+              if src[markPos] = #10 then Inc(markLine);
+              Inc(markPos);
+            end;
+            IncEmitLineMarker(selfPath, markLine);
+          end
+          else
+            AppendString(IncExpanded, IncIncluded);
           i := j + 1;
         end
         else

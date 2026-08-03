@@ -49,9 +49,9 @@ uses asmcore_base, asmcore_x64;
   what a literal MEANS — a divergence that cost nothing only because the
   compiler's own float constants are few. }
 {$include exdec.inc}
-{$include lexer.inc}
-function DbgFileId(const path: AnsiString): Integer; forward;   { real body in parser.inc, included after clexer.inc uses it (regression-fpc-seed-drift-b1976-stale) }
+function DbgFileId(const path: AnsiString): Integer; forward;   { real body in parser.inc, included after lexer.inc and clexer.inc use it (regression-fpc-seed-drift-b1976-stale) }
 procedure DbgMarkTokFile(startTok, fileId: Integer); forward;   { real body in parser.inc, ditto }
+{$include lexer.inc}
 {$include clexer.inc}
 {$include blexer.inc}
 {$include pylexer.inc}
@@ -753,7 +753,7 @@ begin
   PreScanPass := False;
   DeclItemCount := 0;
   if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) and (not isAda) and (not isZig) and (not isLol) and (not isWs) and (not isF90) and (not isAlgol) and (not isErl) then
-    ExpandIncludes(Source, SourceFileDir);
+    ExpandIncludes(Source, SourceFileDir, DbgSrcName);
     ExpandPasMacros(Source);
   if DebugTrace then writeln('After include expansion: ', Length(Source));
 
@@ -920,6 +920,13 @@ begin
   begin
     LexAll;
     DbgMainTokEnd := TokCount;   { -g: main-file token boundary (units appended after) }
+    { -g: CLOSE the include-marker ranges. The last `{$I}` in the main file
+      leaves its .inc as the open range, and DbgFileOfTok answers with the last
+      range at or before a token — so without this, every token of every unit
+      appended afterwards (the whole RTL) would report as that .inc, with its
+      own line numbers, and land in the line table. Marking file 1 here restores
+      the deliberate line-0 treatment for unmarked appended sources. }
+    DbgMarkTokFile(TokCount, 1);
     TokPos := 0;
     Next;
     ParseProgram;

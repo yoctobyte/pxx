@@ -6,7 +6,7 @@ procedure LoadFileCI(const path: AnsiString; var dst: AnsiString); forward;
 function GetFilePath(const path: AnsiString): AnsiString; forward;
 function GetFileBaseName(const path: AnsiString): AnsiString; forward;
 procedure NormalizePath(var p: AnsiString); forward;
-procedure ExpandIncludes(var src: AnsiString; const baseDir: AnsiString); forward;
+procedure ExpandIncludes(var src: AnsiString; const baseDir, selfPath: AnsiString); forward;
 procedure ExpandPasMacros(var src: AnsiString); forward;
 procedure ParseCUnit; forward;
 procedure RegisterCMacroConsts; forward;
@@ -28486,7 +28486,9 @@ begin
       savedPasDefineValue[pdi] := PasDefineValue[pdi];
     end;
 
-    ExpandIncludes(UnitContent, GetFilePath(path));
+    { '' = no -g line markers: a Pascal unit is deliberately absent from the
+      line table (see DbgMarkTokFile above), and a marker would opt it in. }
+    ExpandIncludes(UnitContent, GetFilePath(path), '');
     ExpandPasMacros(UnitContent);
 
     { This unit's name resolves the `*` in its own $R *.lfm (processed during
