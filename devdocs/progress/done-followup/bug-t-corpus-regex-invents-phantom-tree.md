@@ -88,6 +88,6 @@ Item 3 changes the tstate schema, so it wants a deliberate migration rather than
 a drive-by — but items 1 and 2 are self-contained.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit c7400944e.
   Items 1 and 2 only; item 3 (skip published as pass) is split out as
   [[bug-t-tstate-launders-skip-into-pass]] — it changes the tstate schema.
