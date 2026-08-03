@@ -2,7 +2,7 @@
 track: C
 prio: 80
 type: bug
-status: working
+status: done
 owner: claude-AC@opus5
 ---
 
@@ -287,3 +287,4 @@ signedness matches the psABI **and** plain `char` is still a character type.
   Identity restored; signedness gap on x86-64/i386 still open.
 - 2026-08-03 — resolved properly: signedness applied at the C promotion sites as
   a property of the value, identity untouched. Oracle-swept against gcc.
+- 2026-08-03 — resolved, commit 5b78c4e4d.
