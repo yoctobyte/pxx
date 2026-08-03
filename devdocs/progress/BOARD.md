@@ -39,7 +39,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (212)
+## backlog (210)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -244,9 +244,7 @@ _none_
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | regression-optdiff-shard8-12 | T | 70 | regression | regression: optdiff#shard8/12 red at 28eb1a105ddb (auto-filed by twatch) | — |
 | regression-test-c-conformance-shard2-6 | T | 70 | regression | regression: test-c-conformance#shard2/6 red at ff1a30aae401 (auto-filed by twatch) | — |
-| regression-test-core-cgeneric-selection-b209 | T | 70 | regression | regression: test-core#src:test/cgeneric_selection_b209.c red at 42786f141ea7 (auto-filed by twatch) | — |
-| regression-test-core-test-c-packed-aligned | T | 70 | regression | regression: test-core#src:test/test_c_packed_aligned.pas red at 42786f141ea7 (auto-filed by twatch) | — |
-| regression-test-core-test-c-struct-fields | T | 70 | regression | regression: test-core#src:test/test_c_struct_fields.pas red at 42786f141ea7 (auto-filed by twatch) | — |
+| regression-test-core-cstatic-init-cast | T | 70 | regression | regression: test-core#src:test/cstatic_init_cast.c red at 6995a1a0d618 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-borg-open-regression-is-permanently-stale | T | 40 | task | borg's watcher was stopped 2026-07-31 with one open regression recorded; nothing will ever clear it, so every --status and gate.sh check reads a dead host's red as live | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
@@ -362,7 +360,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1268)
+## done (1271)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1583,9 +1581,12 @@ _none_
 | regression-test-core-665 | T | 70 | regression | regression: test-core#665 red at 8d1e694a9d8d (auto-filed by twatch) | — |
 | regression-test-core-666 | T | 70 | regression | regression: test-core#666 red at 2758e0d9814c (auto-filed by twatch) | — |
 | regression-test-core-676 | T | 70 | regression | regression: test-core#676 red at 51f2a8a3258f (auto-filed by twatch) | — |
+| regression-test-core-cgeneric-selection-b209 | T | 70 | regression | regression: test-core#src:test/cgeneric_selection_b209.c red at 42786f141ea7 (auto-filed by twatch) | — |
 | regression-test-core-compiler | T | 70 | regression | regression: test-core#src:compiler/compiler.pas@2 red at 96cffaf08de5 (auto-filed by twatch) | — |
 | regression-test-core-facade-and-paths | T | 70 | regression | regression: test-core#src:examples/tk/facade_and_paths.npy red at d64a5d6a97b4 (auto-filed by twatch) | — |
 | regression-test-core-test-basic-comprehensive | T | 70 | regression | regression: test-core#src:test/test_basic_comprehensive.bas red at 3f2828476c6c (auto-filed by twatch) | — |
+| regression-test-core-test-c-packed-aligned | T | 70 | regression | regression: test-core#src:test/test_c_packed_aligned.pas red at 42786f141ea7 (auto-filed by twatch) | — |
+| regression-test-core-test-c-struct-fields | T | 70 | regression | regression: test-core#src:test/test_c_struct_fields.pas red at 42786f141ea7 (auto-filed by twatch) | — |
 | regression-test-core-test-fpc-compat-batch2 | T | 70 | regression | regression: test-core#src:test/test_fpc_compat_batch2.pas red at f6bcbe6c1237 (auto-filed by twatch) | — |
 | regression-test-core-test-interface-mainbody-ascast-temp | T | 70 | regression | regression: test-core#src:test/test_interface_mainbody_ascast_temp.pas red at daf8d692af04 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-dataclass-dict-factory | T | 70 | regression | regression: test-core#src:test/test_nilpy_dataclass_dict_factory.npy red at 2fbb5a270acc (auto-filed by twatch) | — |
@@ -1677,9 +1678,7 @@ _none_
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] regression-optdiff-shard8-12
 - [p 70] [T] regression-test-c-conformance-shard2-6
-- [p 70] [T] regression-test-core-cgeneric-selection-b209
-- [p 70] [T] regression-test-core-test-c-packed-aligned
-- [p 70] [T] regression-test-core-test-c-struct-fields
+- [p 70] [T] regression-test-core-cstatic-init-cast
 - [p 65] [C] bug-cfront-undeclared-type-in-cast-treated-as-zero
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
