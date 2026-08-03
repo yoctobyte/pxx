@@ -2,6 +2,8 @@
 track: C
 prio: 75
 type: bug
+status: done
+owner: claude-C@opus5
 ---
 
 # `__x86_64__` is predefined on every target, and no other arch macro ever is
@@ -73,3 +75,55 @@ Each target defines its own arch macro and no other, checked against
 like the table above run under qemu for the rest. Plus a real-world case: a
 source with an `#if defined(__x86_64__) / #elif defined(__aarch64__) / #else`
 ladder selects the right arm on each target.
+
+## Resolution 2026-08-03 (claude-C@opus5)
+
+`CPreprocess`'s predefine block emitted `__x86_64__` unconditionally. It now
+selects on `TargetArch`:
+
+| target | macros |
+| --- | --- |
+| x86-64 | `__x86_64__` `__x86_64` `__amd64__` `__amd64` |
+| i386 | `__i386__` `__i386` `i386` |
+| aarch64 | `__aarch64__` `__AARCH64EL__` |
+| arm32 | `__arm__` `__ARMEL__` `__ARM_ARCH=7` |
+| riscv32 | `__riscv` `__riscv_xlen=32` |
+| xtensa | `__xtensa__` `__XTENSA__` |
+
+**Oracle provenance, stated honestly:** the x86-64 and i386 sets are measured
+from this box's `gcc -dM -E` and `gcc -m32 -dM -E`. No cross-gcc was installed
+here, so aarch64/arm32/riscv32/xtensa follow each triple's canonical gcc set —
+documented, not oracle-diffed. Diffing those belongs with the cross runners.
+
+`__ARM_ARCH=7` because the arm32 backend is ARMv7-A (`ir_codegen_arm32.inc:4`),
+and `__riscv_xlen` is carried because real riscv headers require it, not just
+the identity macro. Both are emitted as DECIMAL text: `'032'` would have been
+**octal 26** through this preprocessor's `#if` evaluator
+(see project_cpreproc_hex_octal_if_b237) — caught before it shipped.
+
+The data-model predefines were already target-aware and are unchanged.
+
+### Verified
+
+An `#if defined(__x86_64__) / #elif __i386__ / #elif __aarch64__ / #elif
+__arm__ / #elif __riscv / #else` ladder selects the right arm on all five
+buildable targets, where every one of them used to select x86-64. A companion
+preprocessor assertion — "exactly one arch macro is defined, and its value
+macros are right" — passes on all five, and the `#else` generic fallback is
+reachable again.
+
+`test/carch_predefines.c` (gated, exit 42) encodes both as PREPROCESSOR
+assertions, so it is meaningful when merely *compiled* for a cross target rather
+than only when run; it also pins the arch-vs-data-model agreement (`__LP64__` +
+`__SIZEOF_LONG__` 8 for the 64-bit arches, `__ILP32__` + 4 otherwise). It
+compiles clean for i386/aarch64/arm32/riscv32 and returns 42 natively under both
+gcc and pxx.
+
+xtensa cannot be checked end to end: a C program for it fails earlier with
+"C program entry stub not implemented for this target yet" — pre-existing,
+identical on `pinned`, already tracked by [[bug-cfront-no-entry-stub-for-xtensa]].
+
+`tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-03 — resolved, commit PENDING.

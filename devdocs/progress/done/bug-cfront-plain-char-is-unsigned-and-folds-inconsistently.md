@@ -2,6 +2,8 @@
 track: C
 prio: 80
 type: bug
+status: done
+owner: claude-C@opus5
 ---
 
 # Plain `char` is unsigned at runtime but signed when constant-folded
@@ -89,3 +91,55 @@ Every row of both tables above matches gcc for the target, and the folded and
 runtime forms of the same expression agree with each other on every target. Plus
 a UTF-8 continuation-byte probe (`*p < 0` over a multi-byte string) giving the
 same answer as gcc.
+
+## Resolution 2026-08-03 (claude-C@opus5)
+
+The ticket's diagnosis was exact: two places decided independently. There is now
+**one** — `CPlainCharSigned` (`cparser.inc`), which answers from the target psABI
+(signed on x86-64/i386, unsigned elsewhere) with a `-fsigned-char` /
+`-funsigned-char` override.
+
+The fix single-sources it at the *type* level rather than by teaching two
+consumers to agree: plain `char` now RESOLVES to `tyInt8` on a signed-char
+target, in the one place `ParseCDeclType` already mapped `signed char` -> tyInt8
+and `unsigned char` -> tyUInt8. Every downstream consumer — codegen extension,
+comparison signedness, promotion — already handles tyInt8, so fold and runtime
+cannot drift again. `CMakeNarrowIntCast`'s `isSgn` now asks the same property
+instead of assuming tyChar is signed, which also fixes the arm32 row (folded
+signed, ABI unsigned).
+
+### Verified against gcc
+
+Every row of both ticket tables, diffed against a gcc build of the same source:
+
+| `char c = (char)0xFF;` | before | after | gcc |
+| --- | --- | --- | --- |
+| `(int)c` | 255 | **-1** | -1 |
+| `c < 0` | 0 | **1** | 1 |
+| `c + 0` | 255 | **-1** | -1 |
+| global / `*p` | 255 | **-1** | -1 |
+| `(char)-1 < 0` vs `rt < 0` | 1 vs 0 | **1 vs 1** | 1 vs 1 |
+| `(int)(char)-1` vs `(int)rt` | -1 vs 255 | **-1 vs -1** | -1 vs -1 |
+| UTF-8 continuation bytes via `*p < 0` | 0 | **2** | 2 |
+
+`-funsigned-char` and `-fsigned-char` both match gcc under the same flag.
+
+Regression test `test/cchar_plain_signedness.c` (gated, exit 42), with its
+expectations guarded on the target so it states the right answer on every
+backend rather than only where it was written — which is why
+[[bug-cfront-arch-predefines-always-x86-64]] had to be fixed alongside it, or
+the guard would have taken the x86 branch on aarch64.
+
+### Found while verifying, filed separately
+
+`(int)arr[0]` for a file-scope `char arr[2] = { (char)0xFF, 0 }` still answers 0
+— because **any cast in a static aggregate initializer folds to 0**, for every
+type, `(int)0xFF` included. Reproduced identically on `pinned`, so it predates
+this work and is not a regression from it. Filed as
+[[bug-cfront-cast-in-static-aggregate-initializer-folds-to-zero]] (urgent,
+prio 85).
+
+`tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-03 — resolved, commit PENDING.

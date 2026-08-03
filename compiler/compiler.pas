@@ -144,6 +144,7 @@ begin
   DebugTrace := False;
   DebugInfo := False;
   DbgMainTokEnd := MAX_TOKENS;
+  CCharSignedOpt := -1;   { -1 = follow the target psABI; see CPlainCharSigned }
   DumpIR := False;
   DumpProcMap := False;
   EmitMapFile := True;   { default on; --no-map suppresses }
@@ -561,6 +562,18 @@ begin
     else if option = '--permissive-overload' then
     begin
       StrictOverload := False;
+      Inc(i);
+    end
+    else if option = '-fsigned-char' then
+    begin
+      { Override the target psABI's plain-`char` signedness; real projects pass
+        these. See CPlainCharSigned (cparser.inc), the single source. }
+      CCharSignedOpt := 1;
+      Inc(i);
+    end
+    else if option = '-funsigned-char' then
+    begin
+      CCharSignedOpt := 0;
       Inc(i);
     end
     else if (option = '--no-unhandled-handler') or

@@ -2513,7 +2513,55 @@ begin
                                       hosted-Linux or bare-metal POSIX-shaped build,
                                       never Windows/macOS, so this is as unconditional
                                       as __linux__ right above it. }
-  CPAddLiteral('__x86_64__', '01');
+  { Arch identity, from the SELECTED target. This was an unconditional
+    `__x86_64__` on every target, and no other arch macro was ever defined — so a
+    cross-compile to aarch64 took every `#ifdef __x86_64__` branch (x86 inline
+    asm, word-size assumptions, atomics/SIMD selection) and the portable
+    `#else` fallback that a new target actually wants was unreachable. Nothing
+    warned; the program compiled and did the wrong machine's thing.
+
+    x86-64 and i386 sets are measured from this box's `gcc -dM -E` (and
+    `gcc -m32 -dM -E`). The others follow each triple's canonical gcc set; no
+    cross-gcc was available here to diff them against, so treat them as the
+    documented set rather than an oracle-verified one — that check belongs with
+    the cross runners. `__riscv_xlen` and `__ARM_ARCH` are carried because real
+    headers require them, not just the identity macro; the arm32 backend is
+    ARMv7-A (see ir_codegen_arm32.inc).
+    bug-cfront-arch-predefines-always-x86-64 }
+  if TargetArch = TARGET_I386 then
+  begin
+    CPAddLiteral('__i386__', '01');
+    CPAddLiteral('__i386', '01');
+    CPAddLiteral('i386', '01');
+  end
+  else if TargetArch = TARGET_AARCH64 then
+  begin
+    CPAddLiteral('__aarch64__', '01');
+    CPAddLiteral('__AARCH64EL__', '01');
+  end
+  else if TargetArch = TARGET_ARM32 then
+  begin
+    CPAddLiteral('__arm__', '01');
+    CPAddLiteral('__ARMEL__', '01');
+    CPAddLiteral('__ARM_ARCH', '7');
+  end
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    CPAddLiteral('__riscv', '01');
+    CPAddLiteral('__riscv_xlen', '32');   { decimal — '032' would be OCTAL 26 }
+  end
+  else if TargetArch = TARGET_XTENSA then
+  begin
+    CPAddLiteral('__xtensa__', '01');
+    CPAddLiteral('__XTENSA__', '01');
+  end
+  else
+  begin
+    CPAddLiteral('__x86_64__', '01');
+    CPAddLiteral('__x86_64', '01');
+    CPAddLiteral('__amd64__', '01');
+    CPAddLiteral('__amd64', '01');
+  end;
   { Data-model predefines (C 5.2.4.2): real code branches on these to size long
     (c-testsuite 00212). 64-bit targets are LP64 (long/pointer = 8), 32-bit are
     ILP32 (long/pointer = 4) — matches the native-`long` model (see the C

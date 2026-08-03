@@ -1822,6 +1822,9 @@ var
     unit references (uses './sub/unit') resolve relative to it. Saved/restored
     around each nested unit parse, like CurSrcBaseName. }
   CurUnitDir : AnsiString;
+  { -fsigned-char / -funsigned-char: 1 = signed, 0 = unsigned, -1 = follow the
+    target's psABI (see CPlainCharSigned in cparser.inc). }
+  CCharSignedOpt : Integer;
   { Selected compile target (TARGET_*). Default TARGET_X86_64. }
   TargetArch : Integer;
   { Selected platform/OS (PLATFORM_*). Default PLATFORM_POSIX; derived from the

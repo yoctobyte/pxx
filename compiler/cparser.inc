@@ -222,6 +222,23 @@ begin
   Result := node;
 end;
 
+{ Is plain `char` signed on the selected target? Each psABI decides: signed on
+  x86-64 and i386, unsigned on aarch64, arm32 and riscv — and gcc follows.
+  `-fsigned-char` / `-funsigned-char` override it, as real projects expect.
+
+  This is the SINGLE source for the property. Before it, the constant folder
+  (CMakeNarrowIntCast below) treated tyChar as signed while codegen treated it
+  as unsigned, so `(char)-1 < 0` folded to 1 while the same comparison on a
+  variable gave 0 — an expression whose meaning depended on whether the value
+  happened to be known at compile time.
+  bug-cfront-plain-char-is-unsigned-and-folds-inconsistently }
+function CPlainCharSigned: Boolean;
+begin
+  if CCharSignedOpt > 0 then Result := True
+  else if CCharSignedOpt = 0 then Result := False
+  else Result := (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386);
+end;
+
 { C 6.3.1.3: a cast to a narrower integer type TRUNCATES the value and
   re-extends it by the TARGET's signedness. AN_PTR_CAST alone only retags, so
   `(char)0x80` kept the full-width 0x80 and `c == (char)c` compared equal —
@@ -234,7 +251,11 @@ var bits: Integer; isSgn: Boolean; m, sb: Int64;
     lit, n1: Integer;
 begin
   bits := TypeSize(castTk) * 8;
-  isSgn := castTk in [tyChar, tyInt8, tyInt16, tyInt32];
+  { tyChar reaching here is a plain `char` on a target where it stays tyChar
+    (the unsigned ones) — or an explicit Pascal Char. Ask the one property
+    rather than assuming, so the fold cannot disagree with codegen. }
+  isSgn := (castTk in [tyInt8, tyInt16, tyInt32]) or
+           ((castTk = tyChar) and CPlainCharSigned);
   m := (Int64(1) shl bits) - 1;
   lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := m; ASTTk[lit] := Ord(tyInt64);
   n1 := AllocNode(AN_BINOP); ASTIVal[n1] := Ord(tkAnd);
@@ -3436,8 +3457,18 @@ begin
   else if base = tyChar then
   begin
     if isSigned then base := tyInt8
-    else if isUnsigned then base := tyUInt8;
-    Result := base;              { plain char stays tyChar }
+    else if isUnsigned then base := tyUInt8
+    else if CPlainCharSigned then base := tyInt8;
+    { Plain `char` resolves to the TARGET's signedness — signed on x86-64/i386,
+      unsigned (tyChar) on aarch64/arm32/riscv — because that is what each psABI
+      says and what gcc does. Single-sourcing it HERE is the point: the constant
+      folder decided tyChar was signed (CMakeNarrowIntCast) while codegen
+      treated it as unsigned, so `(char)-1 < 0` folded to 1 and the same
+      comparison on a variable gave 0. Two places deciding independently is the
+      actual bug; resolving to tyInt8 leaves exactly one decision, and every
+      downstream consumer already handles tyInt8 correctly.
+      bug-cfront-plain-char-is-unsigned-and-folds-inconsistently }
+    Result := base;
   end
   else
   begin
