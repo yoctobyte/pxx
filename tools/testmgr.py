@@ -652,7 +652,22 @@ def sample_sessions(sids):
 COMPILE_RE = re.compile(r"^\.?/?" + re.escape(COMPILER) + r"\b")
 # corpus trees under library_candidates/ are gitignored scratch; a box that
 # hasn't fetched them must SKIP the jobs that reference them, not fail them
-CORPUS_RE = re.compile(r"library_candidates/([^/\s\"']+)")
+#
+# The character class is a WHITELIST, not "anything but a separator". The old
+# `[^/\s"']+` also accepted punctuation, so it matched the PROSE inside a shell
+# SKIP message — `echo "stb_sprintf_probe: SKIP (no library_candidates/stb)"` —
+# and extracted the corpus `stb)`. No such directory can ever exist, so the job
+# self-skipped permanently on every host, fetched or not, and the remedy the
+# warning printed (`install_lib_candidates.sh stb)`) was itself invalid.
+# bug-t-corpus-regex-invents-phantom-tree.
+CORPUS_RE = re.compile(r"library_candidates/([A-Za-z0-9_.+-]+)")
+# A recipe line that tests for its own corpus path before using it handles the
+# absence itself (prints SKIP, exits 0), so it must NOT drag the whole job into
+# a skip: jobs bundle several sources, and the stb probe shared one with the
+# b207 non-compound-switch/Duff's-device regression — a test with no corpus
+# dependency at all, which consequently had not run on any watcher host since
+# the probe was appended next to it.
+CORPUS_GUARD_RE = re.compile(r"\[\s+-[a-z]\s+library_candidates/")
 
 # private per-run substitute for the recipes' literal /tmp/ paths (see
 # Job.script); created in main(), world-unreadable is not needed — /tmp
@@ -2359,7 +2374,9 @@ def main():
     # "corpus jobs self-skip"); recipes with their own guard never get here
     absent, nabsent = {}, 0
     for j in jobs:
-        missing = sorted({m for m in CORPUS_RE.findall("\n".join(j.lines))
+        unguarded = "\n".join(ln for ln in j.lines
+                              if not CORPUS_GUARD_RE.search(ln))
+        missing = sorted({m for m in CORPUS_RE.findall(unguarded)
                           if not os.path.isdir(
                               os.path.join(REPO, "library_candidates", m))})
         if missing:

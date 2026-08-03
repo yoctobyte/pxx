@@ -3,6 +3,8 @@ summary: "CORPUS_RE matches prose in a SKIP message and invents corpus 'stb)', p
 type: bug
 track: T
 prio: 55
+status: done-followup
+owner: claude@xeon
 ---
 
 # `CORPUS_RE` invents a corpus tree that can never exist
@@ -84,3 +86,8 @@ silently green. Any cross-host comparison reads it as covered.
 
 Item 3 changes the tstate schema, so it wants a deliberate migration rather than
 a drive-by — but items 1 and 2 are self-contained.
+
+## Log
+- 2026-08-03 — resolved, commit PENDING-COMMIT.
+  Items 1 and 2 only; item 3 (skip published as pass) is split out as
+  [[bug-t-tstate-launders-skip-into-pass]] — it changes the tstate schema.
