@@ -2,7 +2,7 @@
 summary: "Decide: how should NilPy dispatch dunders on an instance whose class is known only at RUN time (container elements)?"
 type: decide
 track: U
-prio: 60
+prio: 45
 blocked-by: [decide-nilpy-runtime-dunder-dispatch-strategy]
 ---
 

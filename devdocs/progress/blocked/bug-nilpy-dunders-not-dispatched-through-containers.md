@@ -2,7 +2,7 @@
 summary: "NilPy: __repr__/__str__ of a class instance held in a container silently print EMPTY; ordering/sorted raise — no runtime dunder dispatch on a Variant"
 type: bug
 track: N
-prio: 60
+prio: 45
 blocked-by: [decide-nilpy-runtime-dunder-dispatch-strategy]
 ---
 

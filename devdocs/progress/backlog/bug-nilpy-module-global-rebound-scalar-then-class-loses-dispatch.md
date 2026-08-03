@@ -2,7 +2,7 @@
 summary: "NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a user class — dispatch is compile-time only. Scalar-then-class rebinding is just one way to get a variant."
 type: bug
 track: N
-prio: 70
+prio: 45
 blocked-by: [feature-nilpy-runtime-dunder-dispatch-on-variants]
 ---
 
@@ -137,3 +137,16 @@ split it.
 
 Left claimed but NOT implemented tonight, deliberately: improvising a reflective
 dispatch path at this size is how a plausible-but-wrong design gets baked in.
+
+## 2026-08-03 — prio 70 -> 45 with the rest of the runtime-dispatch cluster
+
+Not a re-judgement of this bug: it is the same root cause as
+[[decide-nilpy-runtime-dunder-dispatch-strategy]], which the user postponed on
+2026-08-03 to study ("we'll get back to this tomorrow"). This ticket's own
+summary says so — a rebound global is just one way to end up Variant-held.
+
+Left at 70 it propagated 70 back up the whole chain (blocked-by
+[[feature-nilpy-runtime-dunder-dispatch-on-variants]] -> the strategy decision),
+so `progress.sh next` kept offering the postponed decision as the global top
+pick — which is how it reached an agent today and two days ago. Restore to 70
+together with the cluster when the decision is made.

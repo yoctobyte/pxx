@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:8 blocked:5 backlog:192 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1303 rejected:28`
+`unfinished:8 blocked:6 backlog:191 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1303 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -22,17 +22,17 @@ _none — no lane is locked._
 - `feature-nilpy-star-args-kwargs` [N]
 - `feature-pascal-corpus-generics` [P]
 
-## blocked (5) — has an unmet blocker; do not claim
+## blocked (6) — has an unmet blocker; do not claim
 
 - `bug-nilpy-dunders-not-dispatched-through-containers` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `decide-nilpy-runtime-dunder-dispatch-mechanism` [U] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-lib-pxxpdf-reportlab-compat` [B] — blocked-by: decide-pxxpdf-ticket-obsolete
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
+- `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
 ## Ready — top 30 of 172, ranked
 
-- `[p 70] [U]` decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 3)
 - `[p 70] [N]` bug-nilpy-float-repr-not-shortest-roundtrip
 - `[p 70] [T]` regression-optdiff-shard8-12
 - `[p 70] [T]` regression-test-c-conformance-shard2-6
@@ -62,5 +62,6 @@ _none — no lane is locked._
 - `[p 55] [N]` bug-nilpy-def-return-coerces-a-float-to-the-inferred-int-result
 - `[p 55] [N]` bug-nilpy-user-def-does-not-shadow-a-pylib-builtin
 - `[p 55] [P]` compat-pascal-assert-halts-instead-of-raising-eassertionfailed
+- `[p 55] [A]` feature-a-declaration-phase
 
 _142 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

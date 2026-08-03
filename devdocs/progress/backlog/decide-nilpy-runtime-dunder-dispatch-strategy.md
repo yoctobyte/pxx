@@ -1,6 +1,6 @@
 ---
 track: U
-prio: 70
+prio: 45
 type: decision
 ---
 
