@@ -3,6 +3,8 @@ track: N
 prio: 55
 type: bug
 summary: "A user `def sorted(x)` at module scope loses to pylib's builtin — calls go to the builtin and the user's function never runs. Silent: the program produces the BUILTIN's answer"
+status: done
+owner: claude-AN
 ---
 
 # A user `def` does not shadow a pylib builtin of the same name
@@ -95,3 +97,68 @@ intrinsic-dispatch sites**, not by reading `FindProc`.
 
 The measured symptom stands unchanged — `def sorted(x)` compiles, never runs,
 and the program prints the builtin's answer, silently.
+
+
+## Resolved 2026-08-04 — 14 of 15 builtins; the cause was a THIRD thing
+
+The 2026-08-03 correction was right that the first diagnosis was false, and its
+instruction ("start by listing the intrinsic-dispatch sites, not by reading
+FindProc") is what made this tractable. But the cause is neither of the two
+theories on this ticket.
+
+### It is not registration order, and it is not only the intrinsics
+
+Measured: `def Counter(x)` — an ordinary pylib routine with no intrinsic —
+appeared to work, which is what led the 2026-08-03 note to conclude "a user def
+shadowing an ordinary pylib routine already works". It does not. It only
+appeared to, because the probe called it as `Counter(3)` and **no pylib
+`Counter` overload takes an int**. Called as `Counter([1, 2])`, which matches
+`Counter(TPyList)` exactly, the user's def loses.
+
+So the real rule: **a user def merely JOINS the overload candidate set and then
+loses on argument fit.** Python has no overloading — a module-level `def`
+REPLACES the builtin — so the winner has to be decided at NAME level.
+
+That rule already exists in the tree, for the Pascal version of the same bug:
+`MatchElig`'s `demote`, which drops every builtin-unit candidate as soon as a
+non-builtin routine of the same name is in scope
+(bug-pascal-unqualified-call-binds-builtin-over-used-unit). `PyUserShadowsProc`
+is the same rule with "declared by the main program" (`ProcUnitIdx = -1`) in
+place of "not the builtin unit", threaded through `MatchElig` as `userOnly`, so
+ALL of the unit's overloads are demoted together — the trap
+[[project_findproc_by_name_ignores_overloads]] warns about. NilPyUserCode-gated,
+so Pascal keeps FPC's rules.
+
+### Plus the name-keyed intrinsics, which the note correctly predicted
+
+Those never consult the symbol table, so the overload fix cannot reach them.
+Guarded with the same predicate, one site each: `len`, `str`, `int`, the
+`trunc/round/frac/int` float-intrinsic group, and `enumerate` in both its
+value form (`parser.inc`) and its for-header form (`pyparser.inc`).
+
+### Measured, 15 builtins shadowed and 15 controls
+
+| shadowed | before | after / CPython |
+| --- | --- | --- |
+| `sorted`, `Counter` (exact-match container arg) | builtin's answer | user's |
+| `str`, `int`, `round`, `enumerate` (intrinsics) | builtin's answer | user's |
+| `abs`, `min`, `max`, `sum`, `list`, `divmod`, `hex`, `reversed` | already ok | user's |
+| **`len` with a CONTAINER argument** | `2` | **still `2`** |
+
+`len` of a **string** is fixed; `len` of a list/dict is not, and it is not the
+overload matcher (`Counter([1,2])` proves the mechanism works on that exact
+shape) nor the guarded intrinsic. There is a third route. Split out with both
+exclusions recorded, plus a pre-existing segfault that lives in the same corner
+and reproduces on `pinned`:
+[[bug-nilpy-user-def-len-of-a-container-still-binds-the-builtin]].
+
+### Verified
+
+`test/test_nilpy_user_def_shadows_builtin.npy` (14 shadowed builtins, including
+the exact-match container arguments that used to lose) and a control program
+exercising all of them UNSHADOWED — both diffed against CPython, identical.
+`tools/gate.sh quick` GREEN, self-host byte-identical.
+
+## Log
+- 2026-08-04 — resolved.
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

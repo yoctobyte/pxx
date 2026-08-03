@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:9 blocked:6 backlog:189 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1305 rejected:28`
+`unfinished:9 blocked:6 backlog:189 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1306 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -59,10 +59,10 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
-- `[p 55] [N]` bug-nilpy-user-def-does-not-shadow-a-pylib-builtin
 - `[p 55] [P]` compat-pascal-assert-halts-instead-of-raising-eassertionfailed
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
+- `[p 55] [N]` feature-nilpy-corpus-uforth
 
 _140 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

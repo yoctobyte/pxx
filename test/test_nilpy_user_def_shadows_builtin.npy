@@ -1,0 +1,55 @@
+# Python has no overloading: a module-level `def sorted(x)` REPLACES the
+# builtin, and every call in that module goes to it
+# (bug-nilpy-user-def-does-not-shadow-a-pylib-builtin).
+#
+# pxx registers pylib's and pyeval's routines as ordinary overloaded procs, so
+# a user def merely JOINED the candidate set and then lost on ARGUMENT FIT:
+# `def sorted(x)` called with a list lost to `sorted(TPyList)` and the program
+# silently printed [1, 2, 3]. The same def called with an int LOOKED correct
+# only because no pylib overload matched — which is why the ticket's first
+# diagnosis (proc registration order) measured as false.
+#
+# The winner is decided at NAME level now, via PyUserShadowsProc: one
+# declaration in the main program demotes ALL of the unit's overloads together.
+# Some builtins are additionally lowered by NAME in the parser, never
+# consulting the symbol table, and each of those dispatches is guarded too.
+#
+# `len` of a CONTAINER is deliberately NOT here — it has a further lowering and
+# still binds the builtin; see bug-nilpy-user-def-len-of-a-container-still-
+# binds-the-builtin. Every expectation below is CPython's.
+
+def sorted(x):
+    return "mine-sorted"
+def abs(x):
+    return "mine-abs"
+def Counter(x):
+    return "mine-counter"
+def str(x):
+    return "mine-str"
+def min(x):
+    return "mine-min"
+def max(x):
+    return "mine-max"
+def sum(x):
+    return "mine-sum"
+def int(x):
+    return "mine-int"
+def list(x):
+    return "mine-list"
+def round(x):
+    return "mine-round"
+def divmod(a, b):
+    return "mine-divmod"
+def hex(x):
+    return "mine-hex"
+def reversed(x):
+    return "mine-reversed"
+def enumerate(x):
+    return "mine-enumerate"
+
+# an EXACT-match argument, the case that used to lose: pyeval declares
+# sorted(TPyList) and pylib declares Counter(TPyList)
+print(sorted([3, 1, 2]), Counter([1, 2]))
+print(abs(-3), str(1), min([1, 2]), max([1, 2]))
+print(sum([1, 2]), int("3"), list([1]), round(1.5))
+print(divmod(7, 3), hex(255), reversed([1, 2]), enumerate([1, 2]))

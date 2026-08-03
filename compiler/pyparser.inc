@@ -12535,7 +12535,8 @@ begin
       recognised here and its argument becomes the container. }
       enumMode := False;
       if PyIsIdent('enumerate') and (TokPos < TokCount) and
-         (Tokens[TokPos].Kind = tkLParen) then
+         (Tokens[TokPos].Kind = tkLParen) and
+         (not PyUserShadowsProc('enumerate')) then
       begin
         if name2 = '' then Error('Nil Python: enumerate() needs two loop variables');
         enumMode := True;

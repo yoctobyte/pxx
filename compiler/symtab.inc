@@ -4902,9 +4902,53 @@ end;
   winner name-level, not arg-width-level, so a used unit's routine can never be
   silently split with the intrinsic by argument width
   (bug-pascal-unqualified-call-binds-builtin-over-used-unit). }
-function MatchElig(idx: Integer; const name: AnsiString; demote: Boolean; bIdx: Integer): Boolean;
+function MatchElig(idx: Integer; const name: AnsiString; demote: Boolean;
+                  bIdx: Integer; userOnly: Boolean): Boolean;
 begin
   Result := ProcNameMatches(idx, name) and not (demote and (ProcUnitIdx[idx] = bIdx));
+  { ...and, in a NilPy program that declares this name itself, ONLY that
+    declaration is a candidate — see PyUserShadowsProc. }
+  if Result and userOnly and (ProcUnitIdx[idx] <> -1) then Result := False;
+end;
+
+{ Does the NilPy program itself declare a routine called `name`?
+
+  Python has no overloading: a module-level `def sorted(x)` REPLACES the
+  builtin, and every call in that module goes to it. pxx registers pylib's and
+  pyeval's routines as ordinary overloaded procs, so a user def merely JOINED
+  the candidate set and then lost on argument fit — `def sorted(x)` called with
+  a list lost to `sorted(TPyList)` and the program silently printed the
+  builtin's answer, while the same def called with an int appeared to work
+  because no pylib overload matched (bug-nilpy-user-def-does-not-shadow-a-
+  pylib-builtin; that accident is why the ticket's first diagnosis, registration
+  order, measured as false).
+
+  So the winner has to be decided at NAME level, not argument-width level —
+  exactly the rule MatchElig's `demote` already implements for Pascal's
+  builtin-vs-used-unit case (bug-pascal-unqualified-call-binds-builtin-over-
+  used-unit). This is the same rule with "declared by the main program"
+  (ProcUnitIdx = -1) in place of "not the builtin unit", and it demotes ALL of
+  the unit's overloads together, which is the trap
+  project_findproc_by_name_ignores_overloads warns about.
+
+  NilPyUserCode-gated: a Pascal unit compiled into the same binary keeps FPC's
+  rules, where a program routine and a unit routine of the same name do not
+  work this way. }
+function PyUserShadowsProc(const name: AnsiString): Boolean;
+var i: Integer;
+begin
+  PyUserShadowsProc := False;
+  if not NilPyUserCode then Exit;
+  i := ProcChainHead(name);
+  while i >= 0 do
+  begin
+    if ProcNameMatches(i, name) and (ProcUnitIdx[i] = -1) then
+    begin
+      PyUserShadowsProc := True;
+      Exit;
+    end;
+    i := ProcHashNext[i];
+  end;
 end;
 
 { Human-readable spelling of a type kind, for diagnostics. A raw TTypeKind
@@ -4989,6 +5033,7 @@ end;
 
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind; suppressBuiltin: Boolean): Integer;
 var i, j: Integer; match: Boolean; cn, nl: AnsiString; demote: Boolean; bIdx: Integer;
+    userOnly: Boolean;
 begin
   { LAZYCASING: rebind a wrong-case C-import call to its exact declared spelling
     once, then match normally (the exact-name phases below then find it). }
@@ -5003,6 +5048,10 @@ begin
     A `System.X` call (qUnit = -2) passes suppressBuiltin=False so the intrinsic
     still wins, matching the explicit-System semantics. Demote fires only when a
     real (non-builtin) same-name routine is actually in scope. }
+  { A NilPy `def` REPLACES a builtin of the same name, at name level rather
+    than by argument fit — see PyUserShadowsProc. Independent of the builtin
+    demote below: pylib and pyeval are ordinary units, not the builtin unit. }
+  userOnly := PyUserShadowsProc(name);
   demote := False;
   bIdx := -1;
   if suppressBuiltin then
@@ -5020,7 +5069,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if MatchElig(i, name, demote, bIdx) then
+    if MatchElig(i, name, demote, bIdx, userOnly) then
     begin
       if ProcArityMatches(i, nArgs) then
       begin
@@ -5053,7 +5102,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if MatchElig(i, name, demote, bIdx) then
+    if MatchElig(i, name, demote, bIdx, userOnly) then
     begin
       if (Procs[i].ParamCount > nArgs) and (ProcParamPtrDepth[i * MAX_PROC_PARAMS + nArgs] = 2) then
       begin
@@ -5084,7 +5133,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if MatchElig(i, name, demote, bIdx) and ProcArityMatches(i, nArgs) then
+    if MatchElig(i, name, demote, bIdx, userOnly) and ProcArityMatches(i, nArgs) then
     begin
       match := True;
       for j := 0 to nArgs-1 do
@@ -5112,7 +5161,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if MatchElig(i, name, demote, bIdx) then
+    if MatchElig(i, name, demote, bIdx, userOnly) then
     begin
       if ProcArityMatches(i, nArgs) then
       begin
@@ -5140,7 +5189,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if MatchElig(i, name, demote, bIdx) then
+    if MatchElig(i, name, demote, bIdx, userOnly) then
     begin
       if ProcArityMatches(i, nArgs) then
       begin
@@ -5166,7 +5215,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if MatchElig(i, name, demote, bIdx) then
+    if MatchElig(i, name, demote, bIdx, userOnly) then
     begin
       if (Procs[i].ParamCount > nArgs) and (ProcParamPtrDepth[i * MAX_PROC_PARAMS + nArgs] = 2) then
       begin
@@ -5194,7 +5243,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if MatchElig(i, name, demote, bIdx) and ProcArityMatches(i, nArgs) then
+    if MatchElig(i, name, demote, bIdx, userOnly) and ProcArityMatches(i, nArgs) then
     begin
       match := True;
       for j := 0 to nArgs-1 do
@@ -5234,7 +5283,7 @@ begin
     i := ProcChainHead(name);
     while i >= 0 do
     begin
-      if MatchElig(i, name, demote, bIdx) then
+      if MatchElig(i, name, demote, bIdx, userOnly) then
       begin
         OverloadReport := OverloadReport + nl + '    ' + name + '(';
         for j := 0 to Procs[i].ParamCount-1 do

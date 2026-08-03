@@ -9782,7 +9782,14 @@ begin
         { no class rewrite: rewind and take the ordinary overload path }
         TokPos := intBaseArg - 1; Next;
       end;
-      if isNilPy and CaseEqual(name, 'len') and (TokPos < TokCount) and
+      { ...unless the program declares its own `len`, which REPLACES the
+        builtin in Python. A name-keyed intrinsic never consults the symbol
+        table, so it could not notice the user's def and the call went to the
+        builtin silently (bug-nilpy-user-def-does-not-shadow-a-pylib-builtin).
+        Checked here rather than inside, so the dunder rewrite below does not
+        run either. }
+      if isNilPy and CaseEqual(name, 'len') and (not PyUserShadowsProc(name)) and
+         (TokPos < TokCount) and
          (Tokens[TokPos].Kind = tkLParen) then
       begin
         { A class that defines `__len__` must be measured BY IT:
@@ -9845,7 +9852,7 @@ begin
           the ordinary overload path, unchanged byte for byte }
         TokPos := intBaseArg - 1; Next;
       end;
-      if isNilPy and (name = 'int') then
+      if isNilPy and (name = 'int') and (not PyUserShadowsProc(name)) then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr;
         { `int(s, base)` — the two-argument radix form. A separate pylib
@@ -10360,7 +10367,7 @@ begin
         LastExprTk := tyBoolean;
         Exit;
       end
-      else if isNilPy and (name = 'str') then
+      else if isNilPy and (name = 'str') and (not PyUserShadowsProc(name)) then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr;
         { str(e) of a built-in Exception (or subclass) is its message: rewrite
@@ -10479,6 +10486,7 @@ begin
       end
       else if (CaseEqual(name, 'trunc') or CaseEqual(name, 'round') or
                CaseEqual(name, 'frac') or CaseEqual(name, 'int')) and
+              (not PyUserShadowsProc(name)) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { only a call `name(...)` is the float intrinsic; a bare identifier of the
@@ -13464,7 +13472,8 @@ begin
       any `def min(x, y, z)` the program declares over the builtin. }
     CurASTNode := PyParseVariadicMinMax(CurTok.SVal)
   else if PyExprMode and PyIsIdent('enumerate') and (TokPos < TokCount) and
-          (Tokens[TokPos].Kind = tkLParen) and (FindSym('enumerate') < 0) then
+          (Tokens[TokPos].Kind = tkLParen) and (FindSym('enumerate') < 0) and
+          (not PyUserShadowsProc('enumerate')) then
   begin
     { `enumerate(xs)` / `enumerate(xs, N)` / `enumerate(xs, start=N)` as a
       VALUE — `for i, s in reversed(list(enumerate(t)))`. The for-HEADER form
