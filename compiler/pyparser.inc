@@ -210,6 +210,64 @@ begin
   Result := callNode;
 end;
 
+function PyAnyProcWithArity(const nm: AnsiString; n: Integer): Boolean;
+{ Is there ANY routine of this name that takes exactly n parameters? Used to
+  keep the min/max fold from stealing a call an ordinary overload can already
+  serve — pylib declares all-Variant 3- and 4-argument min/max, and a NilPy
+  program is free to `def min(x, y, z)` over the builtin. Folding those would
+  silently ignore a routine the programmer wrote, which is worse than the
+  missing arity this whole branch exists to supply. }
+var i: Integer;
+begin
+  PyAnyProcWithArity := False;
+  for i := 0 to ProcCount - 1 do
+    if (Procs[i].ParamCount = n) and CaseEqual(Procs[i].Name, nm) then
+    begin
+      PyAnyProcWithArity := True;
+      Exit;
+    end;
+end;
+
+function PyParseVariadicMinMax(const nm: AnsiString): Integer;
+{ `min(a, b, c, ...)` / `max(...)` — Python takes ANY number of positional
+  arguments. min/max are ordinary overloaded Pascal functions here, so an
+  arity nobody wrote an overload for simply has no candidate: 3 and 4 have
+  hand-written all-Variant overloads in pylib.pas, 5 did not, and adding
+  fixed arities one at a time never terminates.
+
+  Folded left-to-right through the EXISTING 2-argument overload instead —
+  `min(a,b,c)` is `min(min(a,b),c)`, which is what Python computes. Each pair
+  is resolved through MatchProcCall on the two operands' actual types, so the
+  Int64/Double/Variant dispatch stays the already-correct 2-arg one rather
+  than being re-derived here (and an int fold stays an int instead of boxing
+  through the Variant arity overloads).
+  feature-nilpy-min-max-variadic-more-than-two-args }
+var acc, rhs, a0, a1, node, pi: Integer;
+    at: array[0..1] of TTypeKind;
+begin
+  Next; Expect(tkLParen, '(');
+  ParseArgExpr; acc := CurASTNode;
+  while Eat(tkComma) do
+  begin
+    ParseArgExpr; rhs := CurASTNode;
+    at[0] := IntToTypeKind(ASTTk[acc]); at[1] := IntToTypeKind(ASTTk[rhs]);
+    pi := MatchProcCall(nm, 2, at, False);
+    if pi < 0 then
+      Error('Nil Python: no 2-argument ' + nm + ' for these operand types');
+    a0 := AllocNode(AN_ARG); ASTLeft[a0] := acc;
+    a1 := AllocNode(AN_ARG); ASTLeft[a1] := rhs; ASTRight[a1] := -1;
+    ASTRight[a0] := a1;
+    node := AllocNode(AN_CALL);
+    ASTIVal[node] := pi;
+    ASTLeft[node] := a0;
+    ASTTk[node] := Ord(Procs[pi].RetType);
+    acc := node;
+  end;
+  Expect(tkRParen, ')');
+  LastExprTk := IntToTypeKind(ASTTk[acc]);
+  PyParseVariadicMinMax := acc;
+end;
+
 function PyBuildComp(targetSym, exprStart: Integer): Integer; forward; { comprehension core (pyparser.inc) }
 { PyMakeTruthy is forward-declared in parser.inc (included FIRST): the bool()
   arm there calls it too, and FPC rejects a second forward. }

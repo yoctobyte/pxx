@@ -376,6 +376,10 @@ test-nilpy: $(COMPILER)
 	# which the shared Pascal scanner cannot lex -- NilPy has its own lexer.
 	./$(COMPILER) test/test_nilpy_dot_edge_float_literals.npy /tmp/test_nilpy_dot_edge_float26
 	test "$$(/tmp/test_nilpy_dot_edge_float26)" = "$$(printf '0.5\n5.0\n1.25\n10.0\n500.0\n5000.0\n0.005\n-0.5\n[0.5, 1.5, 2.0]\n4.0\nhalf\n1.5\n0.5\n5.0\n1000.0')"
+	# min/max at 3+ positional args fold through the 2-argument overload; the
+	# 1-/2-arg forms and a user shadow at the folded arity are untouched.
+	./$(COMPILER) test/test_nilpy_min_max_variadic.npy /tmp/test_nilpy_min_max_variadic26
+	test "$$(/tmp/test_nilpy_min_max_variadic26)" = "$$(printf '1\n3\n0\n5\n3\n3.5\n0.5\nc\na\n4 11\n14\n1\n3\n2\n9\no\n100')"
 	./$(COMPILER) test/test_nilpy_membership_bool_return.npy /tmp/test_nilpy_membership_bool_return26
 	test "$$(/tmp/test_nilpy_membership_bool_return26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n3\n3\n3')"
 	# a sibling .py MODULE: unit scoping, its own initialisation, both import forms
@@ -4351,6 +4355,10 @@ test-core: $(COMPILER)
 	# which the shared Pascal scanner cannot lex -- NilPy has its own lexer.
 	./$(COMPILER) test/test_nilpy_dot_edge_float_literals.npy /tmp/test_nilpy_dot_edge_float26
 	test "$$(/tmp/test_nilpy_dot_edge_float26)" = "$$(printf '0.5\n5.0\n1.25\n10.0\n500.0\n5000.0\n0.005\n-0.5\n[0.5, 1.5, 2.0]\n4.0\nhalf\n1.5\n0.5\n5.0\n1000.0')"
+	# min/max at 3+ positional args fold through the 2-argument overload; the
+	# 1-/2-arg forms and a user shadow at the folded arity are untouched.
+	./$(COMPILER) test/test_nilpy_min_max_variadic.npy /tmp/test_nilpy_min_max_variadic26
+	test "$$(/tmp/test_nilpy_min_max_variadic26)" = "$$(printf '1\n3\n0\n5\n3\n3.5\n0.5\nc\na\n4 11\n14\n1\n3\n2\n9\no\n100')"
 	./$(COMPILER) test/test_nilpy_membership_bool_return.npy /tmp/test_nilpy_membership_bool_return26
 	test "$$(/tmp/test_nilpy_membership_bool_return26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n3\n3\n3')"
 	# a sibling .py MODULE: unit scoping, its own initialisation, both import forms

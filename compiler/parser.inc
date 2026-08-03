@@ -927,6 +927,8 @@ function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString):
 function PyIsSysStreamAhead: Boolean; forward; { Nil Python: at `sys.stdout`/`sys.stderr`? (pyparser.inc) }
 function PyStdlibCallAhead(var pname: AnsiString; var nTok: Integer): Boolean; forward; { Nil Python: at a mapped os./sys. call? (pyparser.inc) }
 function PyParseStdlibCall(const pname: AnsiString; nTok: Integer): Integer; forward; { Nil Python os./sys. call -> pylib shim (pyparser.inc) }
+function PyParseVariadicMinMax(const nm: AnsiString): Integer; forward; { Nil Python min/max at 3+ args (pyparser.inc) }
+function PyAnyProcWithArity(const nm: AnsiString; n: Integer): Boolean; forward; { any routine of this name with exactly n params (pyparser.inc) }
 function PyParseSysStream: Integer; forward; { Nil Python sys.stdout/sys.stderr -> its fd (pyparser.inc) }
 function PyIsToBytesSuffixAhead: Boolean; forward; { Nil Python: at a `.to_bytes(` suffix? (pyparser.inc) }
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python obj.meth() on a VARIANT receiver (pyparser.inc) }
@@ -13436,6 +13438,16 @@ begin
   else if PyExprMode and PyStdlibCallAhead(sdName, sdTok) then
     { `os.path.join(...)`, `sys.exit(...)` — mapped by name onto a pylib shim. }
     CurASTNode := PyParseStdlibCall(sdName, sdTok)
+  else if PyExprMode and (PyIsIdent('min') or PyIsIdent('max')) and
+          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+          (FindSym(CurTok.SVal) < 0) and (CountCallArgsAhead >= 3) and
+          (not PyAnyProcWithArity(CurTok.SVal, CountCallArgsAhead)) then
+    { 3+ positional arguments that NO routine of that arity can serve: fold
+      through the 2-arg overload. 1 and 2 args keep the ordinary call path,
+      whose overload set (iterable, AnsiString, the scalar pairs) is what the
+      fold itself relies on — as do pylib's hand-written 3/4-arg overloads and
+      any `def min(x, y, z)` the program declares over the builtin. }
+    CurASTNode := PyParseVariadicMinMax(CurTok.SVal)
   else if PyExprMode and PyIsIdent('enumerate') and (TokPos < TokCount) and
           (Tokens[TokPos].Kind = tkLParen) and (FindSym('enumerate') < 0) then
   begin

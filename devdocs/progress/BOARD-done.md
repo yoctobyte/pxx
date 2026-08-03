@@ -1031,6 +1031,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-list-repeat | N | 40 | feature | NilPy: `[0] * 4` (list repeat) is not lowered | — |
 | feature-nilpy-list | N | 60 | feature | NilPy: list type v1 (pylib TPyList, literals, subscripts, methods, len) | — |
 | feature-nilpy-min-max-over-a-string | N | 30 | feature | `min("cab")` / `max("cab")` do not compile | — |
+| feature-nilpy-min-max-variadic-more-than-two-args | N | 30 | feature | `min(a, b, c)` / `max(a, b, c)` — only the 2-argument and iterable forms exist | — |
 | feature-nilpy-missing-builtins | N | 45 | feature | NilPy: the remaining missing builtins — min/max, list(), reversed(), enumerate(), hex() | — |
 | feature-nilpy-nested-comprehension | N | 60 | feature | nilpy: a comprehension INSIDE another comprehension's expression | — |
 | feature-nilpy-nested-defs | N | 70 | feature | NilPy: nested `def` | — |
