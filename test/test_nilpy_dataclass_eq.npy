@@ -1,0 +1,99 @@
+# CPython's @dataclass generates __eq__ comparing the declared fields, so
+# P(1) == P(1) is True. pxx synthesized only __init__, so `==` fell back to
+# identity and answered False. bug-nilpy-dataclass-no-generated-eq
+from dataclasses import dataclass, field
+from typing import List, Optional
+
+
+@dataclass
+class P:
+    x: int
+
+
+print(P(1) == P(1))
+print(P(1) == P(2))
+print(P(1) != P(1))
+print(P(1) != P(2))
+
+
+# every scalar field kind, and each one differing in turn
+@dataclass
+class Multi:
+    n: int
+    s: str
+    f: float
+    b: bool
+
+
+print(Multi(1, "a", 1.5, True) == Multi(1, "a", 1.5, True))
+print(Multi(1, "a", 1.5, True) == Multi(1, "a", 1.5, False))
+print(Multi(1, "a", 1.5, True) == Multi(1, "b", 1.5, True))
+print(Multi(1, "a", 1.5, True) == Multi(1, "a", 2.5, True))
+print(Multi(1, "a", 1.5, True) == Multi(9, "a", 1.5, True))
+
+
+# a nested dataclass field compares BY VALUE, not by handle
+@dataclass
+class Inner:
+    v: int
+
+
+@dataclass
+class Outer:
+    inner: Inner
+    tag: str
+
+
+print(Outer(Inner(1), "t") == Outer(Inner(1), "t"))
+print(Outer(Inner(1), "t") == Outer(Inner(2), "t"))
+print(Outer(Inner(1), "t") == Outer(Inner(1), "u"))
+
+
+# a field-less dataclass: CPython compares the empty field tuples, so equal
+@dataclass
+class Empty:
+    pass
+
+
+print(Empty() == Empty())
+
+
+# a list field via default_factory, and a defaulted str
+@dataclass
+class Bag:
+    items: List[int] = field(default_factory=list)
+    name: str = ""
+
+
+b1 = Bag()
+b1.items.append(1)
+b2 = Bag()
+b2.items.append(1)
+b3 = Bag()
+b3.items.append(2)
+print(b1 == b2)
+print(b1 == b3)
+
+
+# Optional / None-defaulted fields
+@dataclass
+class Opt:
+    v: Optional[int] = None
+    w: int = 0
+
+
+print(Opt() == Opt())
+print(Opt(1) == Opt(1))
+print(Opt(1) == Opt(2))
+
+
+# a HAND-WRITTEN __eq__ wins over the generated one
+@dataclass
+class Hand:
+    v: int
+
+    def __eq__(self, other) -> bool:
+        return True
+
+
+print(Hand(1) == Hand(2))

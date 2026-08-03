@@ -148,6 +148,11 @@ var
   PyDcSLen: array[0..PY_MAX_DC_FIELDS-1] of Integer;
   PyDcCount: Integer;
   PyDcClassIsDc: array[0..PY_MAX_DC_FIELDS-1] of Boolean;  { indexed by ci }
+  { Proc index of the SYNTHESIZED @dataclass __eq__, or -1 when the class has a
+    hand-written one (which wins) or is not a dataclass. Indexed by ci; the
+    body is emitted by PyEmitDataclassEq once the fields are known.
+    bug-nilpy-dataclass-no-generated-eq }
+  PyDcEqProc: array[0..MAX_UCLASS-1] of Integer;
   { True when the member pre-pass already ran the FULL PyRegisterClassMembers
     for this ci (methods + fields + defaults), so PyParseClass must not run it
     again — a second full run would duplicate the append-only PyDc* defaults
@@ -17033,6 +17038,25 @@ begin
     procIdx := RegisterProc(fullName, False, tyInteger, nparams, pnames, ptypes);
     k := PyStoredName('create');
     AddUMeth(ci, k, 6, procIdx);
+    { CPython's @dataclass also generates __eq__, comparing the declared fields
+      — `P(1) == P(1)` is True there and was False here, an identity compare
+      with no method to dispatch to (bug-nilpy-dataclass-no-generated-eq).
+      Registered as an ordinary method so the `==` dispatch in ParseExpr picks
+      it up like a hand-written one; a hand-written __eq__ WINS (it is already
+      in the method table by now, and eq=False is not modelled). }
+    if FindUMeth(ci, '__eq__') < 0 then
+    begin
+      pnames[0] := 'self'; ptypes[0] := tyClass;
+      pnames[1] := 'other'; ptypes[1] := tyClass;
+      fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
+      AppendChar(fullName, '.');
+      name := '__eq__';
+      for k := 1 to Length(name) do AppendChar(fullName, name[k]);
+      procIdx := RegisterProc(fullName, True, tyBoolean, 2, pnames, ptypes);
+      k := PyStoredName('__eq__');
+      AddUMeth(ci, k, 6, procIdx);
+      PyDcEqProc[ci] := procIdx;
+    end;
   end;
   UClsSize_[ci] := AlignTo(curOff, align);
 
@@ -17487,6 +17511,99 @@ begin
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
 end;
 
+procedure PyEmitDataclassEq(ci: Integer);
+{ Emit the synthesized @dataclass `__eq__`: `Result := (self.f1 = other.f1) and
+  ... ` over every declared field, in declaration order — what CPython's
+  decorator generates. Registered next to the ctor in PyRegisterClassMembers;
+  this emits the body once the field window is final.
+
+  A CLASS-typed field whose own class declares `__eq__` dispatches to it, so a
+  nested dataclass compares by value the way CPython does rather than by
+  handle. Every other field kind compares with the ordinary `=`, which is what
+  the parser builds for the same operand types.
+  bug-nilpy-dataclass-no-generated-eq }
+var procIdx, i, k, idx, savedSC, savedFS, savedSelf, patchPos: Integer;
+    selfNode, otherNode, lhs, rhs, cmp, acc, retNode, fci: Integer;
+    fieldTk: TTypeKind;
+    name: AnsiString;
+begin
+  procIdx := PyDcEqProc[ci];
+  if procIdx < 0 then Exit;
+  savedSC := SymCount; savedFS := FrameSize; savedSelf := CurSelfClass;
+  FrameSize := 0; CurProc := procIdx; CurSelfClass := REC_UCLASS_BASE + ci;
+  Procs[procIdx].ScopeBase := SymCount;
+  for i := 0 to 1 do
+  begin
+    if i = 0 then name := 'self' else name := 'other';
+    idx := AllocParam(name, tyClass, False, False);
+    Procs[procIdx].Params[i].SymIdx := idx;
+    Syms[idx].RecName := REC_UCLASS_BASE + ci;
+    SymSyncTypeRef(idx);
+  end;
+  idx := AllocVar('$pyresult', tyBoolean);
+  Procs[procIdx].RetSymIdx := idx;
+  Syms[idx].Kind := skLocal;
+  Procs[procIdx].BodyAddr := CodeLen;
+  patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
+  PyEmitParamSpills(procIdx, 2);
+  acc := -1;
+  for i := 0 to UClsFCount[ci] - 1 do
+  begin
+    k := UClsFBase[ci] + i;
+    fieldTk := IntToTypeKind(UFldTk[k]);
+    selfNode := PyMakeIdent(Procs[procIdx].Params[0].SymIdx);
+    otherNode := PyMakeIdent(Procs[procIdx].Params[1].SymIdx);
+    lhs := AllocNode(AN_FIELD);
+    ASTLeft[lhs] := selfNode;
+    ASTSOffset[lhs] := UFldNOff[k]; ASTSLen[lhs] := UFldNLen[k];
+    ASTTk[lhs] := UFldTk[k]; ASTRight[lhs] := UFldRec_[k];
+    rhs := AllocNode(AN_FIELD);
+    ASTLeft[rhs] := otherNode;
+    ASTSOffset[rhs] := UFldNOff[k]; ASTSLen[rhs] := UFldNLen[k];
+    ASTTk[rhs] := UFldTk[k]; ASTRight[rhs] := UFldRec_[k];
+    cmp := -1;
+    if (fieldTk = tyClass) and (UFldRec_[k] >= REC_UCLASS_BASE) then
+    begin
+      fci := UFldRec_[k] - REC_UCLASS_BASE;
+      if (not PyRecIsPylibOwnClass(UFldRec_[k])) and
+         (FindUMeth(fci, '__eq__') >= 0) then
+        cmp := PyCallMeth1(fci, '__eq__', lhs, rhs);
+    end;
+    if cmp < 0 then
+    begin
+      cmp := AllocNode(AN_BINOP);
+      ASTIVal[cmp] := Ord(tkEq);
+      ASTLeft[cmp] := lhs; ASTRight[cmp] := rhs;
+      ASTTk[cmp] := Ord(tyBoolean);
+    end;
+    if acc < 0 then acc := cmp
+    else
+    begin
+      retNode := AllocNode(AN_BINOP);
+      ASTIVal[retNode] := Ord(tkAnd);
+      ASTLeft[retNode] := acc; ASTRight[retNode] := cmp;
+      ASTTk[retNode] := Ord(tyBoolean);
+      acc := retNode;
+    end;
+  end;
+  { a field-less @dataclass compares equal to any other instance, as CPython's
+    empty tuple comparison does }
+  if acc < 0 then
+  begin
+    acc := AllocNode(AN_BOOL_LIT);
+    ASTIVal[acc] := 1; ASTTk[acc] := Ord(tyBoolean);
+  end;
+  retNode := AllocNode(AN_ASSIGN);
+  ASTLeft[retNode] := PyMakeIdent(Procs[procIdx].RetSymIdx);
+  ASTRight[retNode] := acc;
+  CompileAST(retNode);
+  EmitProcEpilog(Procs[procIdx].RetSymIdx);
+  PatchProcPrologue(patchPos, FrameSize);
+  ProcBodyEnd[procIdx] := CodeLen;
+  ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
+  SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
+end;
+
 { FIELD pre-pass. PyRegisterClassShells registers class NAMES only, and
   PyCollectModuleLocals runs before the main loop that parses class bodies — so
   without this every class has zero fields during module-local inference and a
@@ -17667,7 +17784,7 @@ begin
       PyRegisterClassMembers(ci, bodyStart, bodyStart, isDC, False);
     if CurTok.Kind = tkNewline then Next;
     PySkipNewlines;
-    if isDC then PyEmitDataclassCtor(ci);
+    if isDC then begin PyEmitDataclassCtor(ci); PyEmitDataclassEq(ci); end;
     Exit;
   end;
   Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
@@ -17781,7 +17898,7 @@ begin
     end;
   end;
   Expect(tkDedent, 'dedent');
-  if isDC then PyEmitDataclassCtor(ci);
+  if isDC then begin PyEmitDataclassCtor(ci); PyEmitDataclassEq(ci); end;
 end;
 
 { One run of `import` / `from ... import` statements, wherever they appear.

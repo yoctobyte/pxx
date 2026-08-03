@@ -44,7 +44,7 @@ _none_
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-bytearray-constructor-only-accepts-a-length | N | 45 | bug | bytearray() only has () and (Integer) overloads — bytearray(b\"abc\") and bytearray([1,2,3]) are compile errors, so a bytearray cannot be built from data | — |
 | bug-nilpy-chained-assign-power-assign-and-semicolon-statements | N | 40 | bug | Three statement-level forms don't parse: chained assignment `a = b = 5`, `**=`, and semicolon-separated statements on one line — all loud | — |
-| bug-nilpy-dataclass-no-generated-eq | N | 30 | bug | `@dataclass` gets no generated `__eq__` — compares by identity instead of fields | — |
+| bug-nilpy-container-membership-ignores-the-eq-dunder | N | 35 | bug | `x in [a, b]` compares boxed handles, so a class's __eq__ is ignored and membership is False for an equal-but-distinct object — the same runtime-dispatch gap as list.sort() ignoring __lt__ | — |
 | bug-nilpy-def-named-sizeof-is-hijacked-by-the-pascal-intrinsic | N | 20 | bug | A NilPy `def sizeof(...)` is claimed by Pascal's SizeOf intrinsic — 'SizeOf: expected type name'. Loud and exotic, but the guard its sibling intrinsics already have is missing | — |
 | bug-nilpy-def-return-coerces-a-float-to-the-inferred-int-result | N | 55 | bug | A def whose result type was inferred (or annotated) as int TRUNCATES a float it returns: `def g() -> int: v = 1; v = 2.5; return v` gives 2 where CPython gives 2.5. Python annotations are not enforcement. Pinned returned the raw IEEE BITS (4612811918334230528) for the same program — improved to truncation by the widen-binding fix, not resolved by it. | — |
 | bug-nilpy-dict-mutation-during-iteration-is-unobserved-not-raised | N | 35 | bug | Mutating a dict while iterating it is silently unobserved; CPython raises RuntimeError 'dictionary changed size during iteration' | — |
@@ -345,9 +345,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1295)
+## done (1296)
 
-1295 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1296 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -508,6 +508,7 @@ _none_
 - [p 40] [O] feature-opt-rtti-emit-on-use
 - [p 40] [T] feature-twatch-full-tier-coverage-age
 - [p 40] [A] feature-unicodestring-model
+- [p 35] [N] bug-nilpy-container-membership-ignores-the-eq-dunder
 - [p 35] [N] bug-nilpy-dict-mutation-during-iteration-is-unobserved-not-raised
 - [p 35] [N] bug-nilpy-list-sort-ignores-lt-dunder-on-objects
 - [p 35] [N] bug-nilpy-list-sort-method-missing
@@ -525,7 +526,6 @@ _none_
 - [p 35] [N] feature-nilpy-yield-outside-a-for-loop
 - [p 35] [O] feature-opt-complex-packed-double
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
-- [p 30] [N] bug-nilpy-dataclass-no-generated-eq
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
 - [p 30] [N] bug-nilpy-user-def-loses-to-pylibs-variant-overload-at-the-same-arity
 - [p 30] [U] decide-builtin-and-library-code-sharing
