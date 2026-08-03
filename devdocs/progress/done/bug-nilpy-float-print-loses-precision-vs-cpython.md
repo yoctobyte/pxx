@@ -131,4 +131,4 @@ round-trip property rather than only the printed text.
 `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit 716f286c4.
