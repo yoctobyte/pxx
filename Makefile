@@ -1397,7 +1397,7 @@ test-nilpy: $(COMPILER)
 	# typed by the smallest operand in it. See the test's header; expectations are
 	# CPython's.
 	./$(COMPILER) test/test_nilpy_def_return_type.npy /tmp/test_nilpy_defret26
-	test "$$(/tmp/test_nilpy_defret26)" = "$$(printf '%b' '2.5 1 2.5 0.5\n1.5 2.5 1.5 1.5\n0.25 1.5 7 6')"
+	test "$$(/tmp/test_nilpy_defret26)" = "$$(printf '%b' '2.5 1 2.5 0.5\n1.5 2.5 1.5 1.5\n0.25 1.5 7 6\nlate')"
 	# A field initialised from a small int LITERAL was 4 bytes wide and wrapped at
 	# 2^31, while the `int` ANNOTATION gave 8 — PyTypeFromTokenIndex disagreeing
 	# with itself. See the test's own header; expectations are CPython's.

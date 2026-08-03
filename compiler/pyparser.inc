@@ -16502,7 +16502,25 @@ begin
   infRec := REC_NONE;
   infTk := PyInferDefRetType(methodStart, infRec);
   if not PyInferRetSeenAny then Exit;
-  if PyWidenBinding(annTk, infTk) = tyVariant then
+  { The int-meets-float pair, and ONLY that pair — PyWidenBinding's own redirect
+    condition, tested directly rather than by asking whether it answered
+    tyVariant.
+
+    Asking for the ANSWER was the first version and it regressed forward calls
+    (regression-test-nilpy-test-nilpy-class-return, bisected by Track T to the
+    commit that added this). PyWidenBinding falls through to PyWiden for
+    everything outside that pair, and PyWiden(tyClass, tyInteger) is ALSO
+    tyVariant — so `def build_later() -> P: return named_p()` where `named_p` is
+    defined LATER joined its annotation against the inference's tyInteger
+    default (the body's type is not resolved yet on a forward edge) and lost P's
+    class identity, after which `build_later().name` did not parse. Reordering
+    the two defs made the identical program compile, which is the tell.
+
+    On a forward edge the annotation is the ONLY type information that exists at
+    that moment, so it has to survive. }
+  if PyNumeric(annTk) and PyNumeric(infTk) and (annTk <> infTk) and
+     (not TypeIsPromoInt(annTk)) and (not TypeIsPromoInt(infTk)) and
+     (TypeIsFloat(annTk) <> TypeIsFloat(infTk)) then
   begin
     PyJoinRetAnnotation := tyVariant;
     annRec := REC_NONE;

@@ -74,3 +74,24 @@ def m():
 print(a(), b(), c(), d())
 print(e(), f(), g(), h())
 print(i(), j(), k(), m())
+
+# A FORWARD call must keep its annotated class result. On a forward edge the
+# body's type is not resolved yet, so the inference answers its integer default
+# — and the first version of the join above asked PyWidenBinding for its ANSWER
+# rather than testing the int-meets-float pair directly. PyWiden(tyClass,
+# tyInteger) is also tyVariant, so `-> P` lost P's identity and
+# `build_later().name` stopped parsing, while REORDERING the two defs made the
+# identical program compile (regression-test-nilpy-test-nilpy-class-return,
+# bisected by Track T). The annotation is the only type information that exists
+# at that moment and has to survive.
+class P:
+    def __init__(self, n: str) -> None:
+        self.name = n
+
+def build_later() -> P:
+    return named_p()
+
+def named_p() -> P:
+    return P("late")
+
+print(build_later().name)
