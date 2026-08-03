@@ -3,8 +3,6 @@ track: N
 prio: 60
 type: bug
 summary: "print(float) does not use Python's shortest-round-trip repr: 1/3 loses a digit, 0.1+0.2 prints 0.3 (hiding the error), 1e-20 prints WRONG DIGITS (1.000000000000001e-20), and the scientific-notation threshold differs (3e-05 vs 0.00003)"
-status: working
-owner: claude-AN-night
 ---
 
 # Float printing is not Python's `repr` — six distinct divergences
@@ -310,8 +308,11 @@ that ticket; the parts that change what gets built here:
    closure (`ExDecCmp`, `ExDecBitsToDouble`, `ExDecDoubleToBits`,
    `ExDecEstimate`, `ExDecNearest`, `StrToFloatDef`, ~304). Do NOT reimplement,
    and do NOT substitute Steele-White midpoints to avoid the parser.
-2. **Point `pyfloat_parse` at the copied parser.** It reconstructs with float
-   arithmetic today and is measurably wrong — `float("1e308")`,
+2. **Point `pyfloat_parse` at the copied parser** — filed on its own as
+   [[bug-nilpy-float-of-a-string-is-not-correctly-rounded]], because it is a
+   user-visible defect independent of `repr` and must not be dropped as "just
+   for the round-trip check". It reconstructs with float arithmetic today and is
+   measurably wrong — `float("1e308")`,
    `float("0.3333333333333333")` and `float("2.2250738585072011e-308")` all
    disagree with pxx's own (correct) literals. This ticket fixes `float(str)`
    as well as `repr`, and that is not a bonus to be skipped: it is half the

@@ -211,6 +211,13 @@ assignment target, so refusing only writes needs the same context plumbing.
 Do NOT re-attempt parts 1/2 before the lookup model is fixed — and do not
 re-diagnose the `a = A()` example, it is case-insensitivity and is settled.
 
+> **SUPERSEDED 2026-08-03 — the first half of that sentence no longer applies.**
+> The read model IS now decided (see the section at the end of this file), so
+> parts 1 and 2 are exactly the work, not something to hold off on. The second
+> half stands: `a = A()` is case-insensitivity, settled, do not re-diagnose it.
+> Left in place rather than edited out — it was true when written, and rewriting
+> the record is how the next reader loses the reasoning.
+
 ## Also found here
 
 `from typing import ClassVar` fails to parse (`unexpected token`), so the
