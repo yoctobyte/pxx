@@ -3,6 +3,8 @@ summary: "borg's watcher was stopped 2026-07-31 with one open regression recorde
 type: task
 track: T
 prio: 40
+status: done
+owner: claude@xeon
 ---
 
 # A retired host's open regression never clears
@@ -64,3 +66,31 @@ whole reason `--status` exists is to notice a watcher that stopped.
 Whether borg should watch again. That is the user's call about the fleet, not
 a tooling decision — if borg re-enrols, it publishes under its own `borg.json`
 and this entry resumes meaning something.
+
+## Log
+- 2026-08-03 (`claude@xeon`) — option **1** (stale-host suppression in the
+  reader), per the user's call that borg's watcher is undecided/occasional
+  ([[decide-t-queue-scope-2026-08-03]]). That answer is what rules option 2
+  out: an explicit `trackt retire` would have to be undone by hand the next
+  time borg runs, and nothing prompts anyone to do either.
+
+  So quietness is read from the clock — `last.date` older than
+  `QUIET_HOST_SECS` (2 days) — and it reverses itself the moment the host
+  publishes again. `host_quiet_secs()` is one helper used by both readers, so
+  `--status`, `trackt status` and `gate.sh check` (which shells out to
+  `--status`) all agree rather than each re-deriving it, as
+  [[task-t-worktree-is-not-current-state]] asks. It reads `last.date`, never a
+  file mtime, for the same reason.
+
+  Held, never hidden — the ticket's caveat is the load-bearing part. The host
+  line gains `[QUIET 3d2h — not publishing]`, the entries are replaced by a
+  named count rather than dropped, and TSTATE.md grows a "Held — quiet hosts"
+  section that says why nothing can clear them. A host going quiet is now MORE
+  visible than it was, which is what `--status` exists for.
+
+  Verified against live tstate: borg shows QUIET 3d2h with its one entry held,
+  xeon's live state is untouched, and `tstate: UP` still answers the question
+  the command is read for. `tools/twatch_quiet_host_devtest.py` pins the
+  threshold, the never-ran case (being enrolled is not being abandoned), the
+  live-host-beside-a-quiet-one case, and the reversal.
+- 2026-08-03 — resolved, commit PENDING-COMMIT.

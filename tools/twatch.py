@@ -33,6 +33,7 @@ harmless — next fetch resumes.  State marker for idempotence = <host>.json.
 """
 
 import argparse
+import calendar
 import datetime
 import fnmatch
 import json
@@ -682,9 +683,33 @@ def diagnostic_lines(body):
     return "\n".join(hits)
 
 
+def host_quiet_secs(st, now=None):
+    """How long since this host last published a verdict, or None if fresh.
+
+    Reads `last.date` (ISO-8601 Z, written by publish) rather than any file
+    mtime: in a watcher clone the working tree is a snapshot of the sha under
+    test and mtimes are rewritten by every checkout
+    (task-t-worktree-is-not-current-state).
+    """
+    date = ((st.get("last") or {}).get("date") or "").strip()
+    if not date:
+        return None                  # never ran: not the same thing as quiet
+    try:
+        seen = calendar.timegm(time.strptime(date, "%Y-%m-%dT%H:%M:%SZ"))
+    except ValueError:
+        return None
+    age = (now if now is not None else time.time()) - seen
+    return age if age > QUIET_HOST_SECS else None
+
+
+def fmt_age(secs):
+    days, rem = divmod(int(secs), 86400)
+    return "%dd%dh" % (days, rem // 3600) if days else "%dh" % (rem // 3600)
+
+
 def regen_index(clone):
     tdir = os.path.join(clone.path, TSTATE_REL)
-    rows, regs = [], []
+    rows, regs, held = [], [], []
     for fn in sorted(os.listdir(tdir)):
         if not fn.endswith(".json"):
             continue
@@ -692,11 +717,23 @@ def regen_index(clone):
             st = json.load(f)
         last = st.get("last") or {}
         lf = st.get("last_full") or {}
-        rows.append("| %s | `%s` | %s | %s (%s) | %ss | `%s` %s |" %
-                    (st["host"], (last.get("sha") or "")[:12],
+        quiet = host_quiet_secs(st)
+        rows.append("| %s%s | `%s` | %s | %s (%s) | %ss | `%s` %s |" %
+                    (st["host"], " **QUIET %s**" % fmt_age(quiet) if quiet else "",
+                     (last.get("sha") or "")[:12],
                      last.get("date", ""), last.get("verdict", "never-ran"),
                      last.get("tier", "?"), last.get("wall", ""),
                      (lf.get("sha") or "")[:12], lf.get("verdict", "")))
+        if quiet:
+            # A quiet host's entries move to their own section: they are real
+            # history, but only a run on THAT host can ever clear them.
+            held.extend(
+                "- **%s** (%s, quiet %s): bad `%s`, %d commit(s) in range"
+                % (("CASCADE %d jobs" % len(r["cascade"])) if r.get("cascade")
+                   else r["job"], st["host"], fmt_age(quiet), r["bad"][:12],
+                   len(r.get("range", [])))
+                for r in st.get("open_regressions", []))
+            continue
         for r in st.get("open_regressions", []):
             if r.get("cascade"):
                 # one event, one line — the job list goes in a fold so the
@@ -722,6 +759,16 @@ def regen_index(clone):
     out.append("## Open regressions")
     out += regs if regs else ["- none"]
     out.append("")
+    if held:
+        out.append("## Held — quiet hosts (not actionable)")
+        out.append("")
+        out.append("A regression clears when a later run on THAT host passes "
+                   "the job. These hosts have stopped publishing, so nothing "
+                   "can clear them; they return to the list above by "
+                   "themselves if the host runs again.")
+        out.append("")
+        out += held
+        out.append("")
     with open(os.path.join(tdir, "TSTATE.md"), "w") as f:
         f.write("\n".join(out))
 
@@ -895,6 +942,26 @@ CASCADE_THRESHOLD = 10
 # How many open-regression lines `--status` prints before summarizing. It is a
 # pre-push liveness check: the UP/DOWN verdict must stay visible.
 STATUS_REG_CAP = 12
+
+# A host that has not published a verdict in this long is QUIET, and its open
+# regressions are held rather than mixed into the live list.
+#
+# A regression clears when a later run ON THAT HOST passes the job — verdicts
+# are per host by design, since the toolchain gap between boxes is the point.
+# So a host that stops running leaves entries nothing can ever clear: borg's
+# watcher stopped on 2026-07-31 with one open, and every --status and
+# `gate.sh check` since has printed `fpc-bootstrap#src:compiler/compiler.pas`
+# as if it were live. It reads exactly like a bootstrap break, so each new
+# agent re-investigates it, and the habit it really trains is skimming the
+# open-regression lines — which is how a REAL one gets missed.
+#
+# Time, not a flag, because borg is still the dev box and may run the watcher
+# again now and then (user, decide-t-queue-scope-2026-08-03): quietness is a
+# property of the clock, so this reverses itself the moment the host publishes
+# and there is no `retire` anyone can forget to undo. Held, never hidden — a
+# host going quiet unnoticed is its own failure mode, and noticing a stopped
+# watcher is what --status is FOR.
+QUIET_HOST_SECS = 2 * 86400
 
 # Jobs whose red predictably drags a whole dependent class down — listed in
 # the cascade ticket as root-cause suspects when present in the red set.
@@ -1799,16 +1866,27 @@ def status(repo, grace_min, tdir=None, ref="HEAD"):
     for st in hosts:
         last = st.get("last") or {}
         lf = st.get("last_full") or {}
-        print("tstate: host %-12s last %s %s (%s, %s)%s" %
+        quiet = host_quiet_secs(st, now)
+        print("tstate: host %-12s last %s %s (%s, %s)%s%s" %
               (st["host"], (last.get("sha") or "")[:12],
                last.get("verdict", "never"), last.get("tier", "?"),
                last.get("date", ""),
                "; full through %s %s" % (lf["sha"][:12], lf["verdict"])
-               if lf.get("sha") else ""))
+               if lf.get("sha") else "",
+               "  [QUIET %s — not publishing]" % fmt_age(quiet) if quiet else ""))
         # --status is a liveness check read before a push, not a report: cap
         # the ledger dump so one bad sweep can never bury the verdict line
         # (2026-07-20 it printed 467 entries / 49KB above the UP/DOWN answer).
         regs = st.get("open_regressions", [])
+        if quiet and regs:
+            # HELD, not hidden: nothing on a quiet host can clear these, so
+            # printing them among the live ones asks agents to act on entries
+            # no run will ever resolve. Named and counted, so the host going
+            # quiet is MORE visible than before, not less.
+            print("tstate:   %d open regression(s) held with %s — nothing can "
+                  "clear them until it publishes again (see %s)"
+                  % (len(regs), st["host"], INDEX_REL))
+            continue
         for r in regs[:STATUS_REG_CAP]:
             if r.get("cascade"):
                 print("tstate:   open CASCADE: %d jobs bad=%s (%d in range)"
