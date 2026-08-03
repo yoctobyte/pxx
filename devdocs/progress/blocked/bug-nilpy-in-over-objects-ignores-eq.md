@@ -1,0 +1,98 @@
+---
+track: N
+prio: 50
+type: bug
+status: working
+owner: claude-AN
+---
+
+# `obj in [list of objects]` ignores `__eq__` and compares identity
+
+```python
+class V:
+    def __init__(self, v: int):
+        self.v = v
+    def __eq__(self, o) -> bool:
+        return self.v == o.v
+
+print(V(1) in [V(1), V(2)])     # CPython: True    pxx: False
+```
+
+`==` itself now dispatches `__eq__` (parser.inc, the comparison arm). `in` does
+not, because membership is decided at RUN time by pylib's `PyVarEq`, which
+compares two object slots by pointer and has a by-content case only for TPyList
+and TPyDict. It has no way to reach back into a user method.
+
+The machinery to do it exists in a neighbouring form: `pyvar_callv0..3`
+(pyeval.pas) already tells the callable shapes apart at run time and invokes
+them, which is how a def, a lambda and a bound method are all callable from a
+variant. Membership needs the same trick for a per-class `__eq__` — most
+directly, a slot in the object's class record pointing at its `__eq__` proc,
+which PyVarEq calls when both operands are user objects.
+
+Same fix covers `list.count(obj)`, `list.remove(obj)` and `dict` keyed by an
+object, all of which route through PyVarEq.
+
+Split out of [[bug-nilpy-eq-dunder-ignored]] when that landed.
+
+## Gate
+
+`make test-nilpy` + self-host byte-identical, plus `in`, `count` and `index`
+over a list of objects with and without `__eq__`, and an object as a dict key.
+
+## Recon 2026-07-30 — sized, not started
+
+Confirmed the shape above is still the blocker: pylib's `PyVarEq` decides
+membership and cannot reach a user method, so this needs a per-class `__eq__`
+entry that pylib can call — i.e. a CLASS-RECORD / RTTI change, which is Track A
+shared ground, not a pylib-local fix. That makes it a two-track item (A for the
+slot, N for the dispatch), which is why it was left rather than started at the
+tail of a long session. Note the stride landmine on that table:
+[[project_rtti_method_table_multi_consumer_stride_landmine]].
+
+
+## 2026-08-04 — the premise is WRONG, and the cheap fix is ruled out by measurement
+
+Picked this up to build the frontend-only version: lower `x in xs` into a loop
+over `x == xs[i]`, which needs no runtime hook, because this ticket states that
+"`==` itself now dispatches `__eq__`".
+
+**It does not.** `==` dispatches `__eq__` only when BOTH operands are statically
+class-typed. As soon as one is a VARIANT — which is what a container element and
+a for-in variable are — it falls back to `PyVarEq` and compares pointers:
+
+```python
+a = V(1); b = V(1); xs = [V(1)]
+print(a == b)         # True   correct
+print(a == xs[0])     # False  CPython: True
+print(a in xs)        # False  CPython: True
+print(xs.count(a))    # 0      CPython: 1
+```
+
+So the loop rewrite would have expanded `in` into exactly the expression that is
+already broken, and would have "fixed" nothing while looking plausible. Not
+implemented; nothing changed in the tree.
+
+That is a bigger and more user-visible defect than membership on its own — the
+dunder works in the shape a minimal test uses (two named locals) and fails in
+the shape real code uses — so it is filed with its own repro as
+[[bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant]] and carries the
+higher priority.
+
+**The 2026-07-30 recon's conclusion stands and is reinforced:** both tickets need
+one thing, a way for `PyVarEq` to reach a user `__eq__` at run time, and fixing
+it fixes `==`, `in`, `count`/`index`/`remove` and object dict keys together.
+
+### One lead the recon did not have
+
+`__pxxMethodAddress(Instance, Name)` (`compiler/builtin/builtin.pas`) already
+walks a class's RTTI method table BY NAME at run time. Two things to settle
+before building on it, both recorded on the sibling ticket: whether a NilPy
+method carries `PXX_RTTI_METH_PUBLISHED` (that routine skips anything that does
+not), and the ABI — `__eq__(self, o)`'s second parameter is a variant when
+unannotated and a class pointer when annotated, so one fixed call signature
+would miscompile half the cases. The safe shape is a compiler-emitted
+fixed-signature wrapper per class, published under a known name.
+
+Returned to `backlog/` with the premise corrected, blocked in practice on the
+sibling above.
