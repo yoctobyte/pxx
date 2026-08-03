@@ -117,4 +117,4 @@ reflected `__ne__`, and a variant (non-static) receiver, which needs
 [[decide-nilpy-runtime-dunder-dispatch-mechanism]].
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit dc0d9820d.
