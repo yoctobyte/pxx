@@ -509,6 +509,18 @@ function pylist_slice(l: TPyList; lo, hi: Integer): TPyList;
   when the step is not a literal whose sign is already known, so the common
   `range(n-1, -1, -1)` shape pays nothing. }
 procedure pyrange_check_step(step: Int64);
+{ `list(range(...))` — range MATERIALISED as a list.
+
+  NilPy's `range` is not a value: it exists only as the counted-loop lowering in
+  a `for` header, so `list(range(3))` failed with "undefined variable (range)"
+  (bug-nilpy-missing-builtins-step-slicing-range-into-list, group 2). This is
+  what the frontend calls once it has recognised that exact shape.
+
+  Deliberately NOT reachable as a general `range(...)` value: CPython's range is
+  lazy and prints as `range(0, 3)`, so making every range a list would turn a
+  loud compile error into a quietly different `print(range(3))`. Materialising
+  only where the program has ALREADY asked for a list keeps the two agreeing. }
+function pyrange_list(lo, hi, step: Int64): TPyList;
 function pystr_slice_step(const s: AnsiString; lo, hi, step: Integer): AnsiString;
 function pybytes_slice_step(b: TPyBytes; lo, hi, step: Integer): TPyBytes;
 function pylist_slice_step(l: TPyList; lo, hi, step: Integer): TPyList;
@@ -1222,6 +1234,17 @@ function pystr_center(const s: AnsiString; w: Int64): AnsiString;
 function pystr_center_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
 { str.zfill(width) — left-pad with '0', keeping a leading sign in front. }
 function pystr_zfill(const s: AnsiString; w: Int64): AnsiString;
+{ str.expandtabs() / .expandtabs(n) — a TAB advances to the next multiple of
+  tabsize measured from the start of the LINE, so the replacement width depends
+  on the column and is not a fixed number of spaces. The column resets at \n and
+  \r, which is what makes it per-line. tabsize <= 0 drops tabs outright, as
+  CPython does (bug-nilpy-missing-builtins-step-slicing-range-into-list).
+  Two arities, two NAMES: FindProc looks a proc up by bare name and is not
+  arity-aware, so a same-named overload pair would resolve to whichever was
+  registered first — the arity-suffix convention every other multi-arity str
+  method here already uses. }
+function pystr_expandtabs(const s: AnsiString): AnsiString;
+function pystr_expandtabs_n(const s: AnsiString; tabsize: Int64): AnsiString;
 function pystr_removeprefix(const s: AnsiString; const pre: AnsiString): AnsiString;
 function pystr_removesuffix(const s: AnsiString; const suf: AnsiString): AnsiString;
 
@@ -1988,6 +2011,46 @@ end;
 function pystr_center(const s: AnsiString; w: Int64): AnsiString;
 begin
   Result := pystr_center_c(s, w, ' ');
+end;
+
+function pystr_expandtabs_n(const s: AnsiString; tabsize: Int64): AnsiString;
+var i, k, col, n, outLen: Integer; ch: Char;
+begin
+  { size first, then fill — `Result := Result + ch` in a loop is QUADRATIC here
+    (project_pxx_string_concat_in_loop_is_quadratic). }
+  outLen := 0; col := 0;
+  for i := 1 to Length(s) do
+  begin
+    ch := s[i];
+    if ch = #9 then
+    begin
+      if tabsize <= 0 then n := 0
+      else n := Integer(tabsize) - (col mod Integer(tabsize));
+      outLen := outLen + n; col := col + n;
+    end
+    else if (ch = #10) or (ch = #13) then begin outLen := outLen + 1; col := 0; end
+    else begin outLen := outLen + 1; col := col + 1; end;
+  end;
+  SetLength(Result, outLen);
+  k := 1; col := 0;
+  for i := 1 to Length(s) do
+  begin
+    ch := s[i];
+    if ch = #9 then
+    begin
+      if tabsize <= 0 then n := 0
+      else n := Integer(tabsize) - (col mod Integer(tabsize));
+      while n > 0 do begin Result[k] := ' '; Inc(k); Dec(n); Inc(col); end;
+    end
+    else if (ch = #10) or (ch = #13) then
+    begin Result[k] := ch; Inc(k); col := 0; end
+    else begin Result[k] := ch; Inc(k); Inc(col); end;
+  end;
+end;
+
+function pystr_expandtabs(const s: AnsiString): AnsiString;
+begin
+  pystr_expandtabs := pystr_expandtabs_n(s, 8);   { Python's default tabsize }
 end;
 
 function pystr_zfill(const s: AnsiString; w: Int64): AnsiString;
@@ -5282,6 +5345,18 @@ end;
 procedure pyrange_check_step(step: Int64);
 begin
   if step = 0 then raise ValueError.Create('range() arg 3 must not be zero');
+end;
+
+function pyrange_list(lo, hi, step: Int64): TPyList;
+var i: Int64;
+begin
+  pyrange_check_step(step);
+  Result := TPyList.Create;
+  i := lo;
+  if step > 0 then
+    while i < hi do begin Result.append(i); i := i + step; end
+  else
+    while i > hi do begin Result.append(i); i := i + step; end;
 end;
 
 function pystr_slice_step(const s: AnsiString; lo, hi, step: Integer): AnsiString;

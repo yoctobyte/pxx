@@ -930,6 +930,8 @@ function PyIsSysStreamAhead: Boolean; forward; { Nil Python: at `sys.stdout`/`sy
 function PyStdlibCallAhead(var pname: AnsiString; var nTok: Integer): Boolean; forward; { Nil Python: at a mapped os./sys. call? (pyparser.inc) }
 function PyParseStdlibCall(const pname: AnsiString; nTok: Integer): Integer; forward; { Nil Python os./sys. call -> pylib shim (pyparser.inc) }
 function PyParseVariadicMinMax(const nm: AnsiString): Integer; forward; { Nil Python min/max at 3+ args (pyparser.inc) }
+function PyRangeAsListWanted: Boolean; forward;   { Nil Python: is this range( inside a list( ? (pyparser.inc) }
+function PyParseRangeList: Integer; forward;      { Nil Python: list(range(...)) materialised (pyparser.inc) }
 function PyAnyProcWithArity(const nm: AnsiString; n: Integer): Boolean; forward; { any routine of this name with exactly n params (pyparser.inc) }
 function PyParseSysStream: Integer; forward; { Nil Python sys.stdout/sys.stderr -> its fd (pyparser.inc) }
 function PyIsToBytesSuffixAhead: Boolean; forward; { Nil Python: at a `.to_bytes(` suffix? (pyparser.inc) }
@@ -13471,6 +13473,21 @@ begin
       fold itself relies on — as do pylib's hand-written 3/4-arg overloads and
       any `def min(x, y, z)` the program declares over the builtin. }
     CurASTNode := PyParseVariadicMinMax(CurTok.SVal)
+  else if PyExprMode and PyIsIdent('range') and (TokPos < TokCount) and
+          (Tokens[TokPos].Kind = tkLParen) and (FindSym('range') < 0) and
+          (not PyUserShadowsProc('range')) and PyRangeAsListWanted then
+    { `list(range(...))` — range MATERIALISED, because the program has already
+      asked for a list. NilPy's range is otherwise not a value at all (it exists
+      only as the counted-loop lowering in a `for` header), so this failed with
+      "undefined variable (range)"
+      (bug-nilpy-missing-builtins-step-slicing-range-into-list, group 2).
+
+      Gated on PyRangeAsListWanted — the enclosing call being `list(` —
+      deliberately, rather than making every range a list: CPython's range is
+      LAZY and prints as `range(0, 3)`, so a general materialisation would turn
+      this loud compile error into a quietly different `print(range(3))`, which
+      is the worse failure. }
+    CurASTNode := PyParseRangeList
   else if PyExprMode and PyIsIdent('enumerate') and (TokPos < TokCount) and
           (Tokens[TokPos].Kind = tkLParen) and (FindSym('enumerate') < 0) and
           (not PyUserShadowsProc('enumerate')) then

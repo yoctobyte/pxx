@@ -1,0 +1,51 @@
+# `list(range(...))` — group 2 of
+# bug-nilpy-missing-builtins-step-slicing-range-into-list (5 of its 13 cases).
+#
+# NilPy's `range` is not a VALUE: it exists only as the counted-loop lowering in
+# a `for` header, so `list(range(3))` failed with "undefined variable (range)"
+# while `for i in range(3)` worked.
+#
+# It is materialised ONLY when the enclosing call is `list(`, and that gate is
+# the point: CPython's range is LAZY and prints as `range(0, 3)`, so
+# materialising every range would have replaced a loud compile error with a
+# quietly different `print(range(3))`. `print(range(3))` therefore still refuses
+# to compile, deliberately, and that is NOT a gap this test should be "fixed" to
+# paper over.
+#
+# Bounds are unboxed through pyvar_to_int like the for header's, so a variant
+# bound (an unannotated parameter) compares by VALUE and not against its box —
+# the `f(k)` row is what pins that. A zero step raises ValueError, as CPython
+# does. Every expectation is CPython's.
+
+print(list(range(3)))
+print(list(range(1, 4)))
+print(list(range(0, 10, 3)))
+print(list(range(3, 0, -1)))
+print(list(range(0)))
+print(list(range(5, 5)))
+print(list(range(-3, 3, 2)))
+
+n = 4
+print(list(range(n)))
+
+def f(k):
+    return list(range(k))
+print(f(3))
+
+print(len(list(range(10))))
+print(list(range(2)) + [9])
+
+try:
+    print(list(range(0, 5, 0)))
+except ValueError:
+    print("ValueError")
+
+# str.expandtabs() / .expandtabs(n) — item 4 of the same survey ticket. A TAB
+# advances to the next multiple of tabsize measured from the start of the LINE,
+# so the replacement width depends on the COLUMN and is not a fixed number of
+# spaces; the column resets at \n. tabsize 0 drops tabs, as CPython does.
+print("a\tb".expandtabs(4), "a\tb".expandtabs(), "\t".expandtabs(4))
+print("ab\tc".expandtabs(4), "abcd\te".expandtabs(4), "a\tb\tc".expandtabs(2))
+print("a\nb\tc".expandtabs(4))
+print("a\tb".expandtabs(1), "a\tb".expandtabs(0), "no tabs".expandtabs(4))
+print(len("a\tb".expandtabs()))

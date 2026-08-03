@@ -2728,6 +2728,9 @@ begin
     begin pname := 'pystr_center'; wantArgs := -2; end
   else if CaseEqual(mname, 'zfill') then
     begin pname := 'pystr_zfill'; wantArgs := 1; end
+  else if CaseEqual(mname, 'expandtabs') then
+    { no arg (tabsize 8) or one INT tabsize — the -10 case }
+    begin pname := 'pystr_expandtabs'; wantArgs := -10; end
   else if CaseEqual(mname, 'removeprefix') then
     begin pname := 'pystr_removeprefix'; wantArgs := 1; end
   else if CaseEqual(mname, 'removesuffix') then
@@ -5029,6 +5032,16 @@ begin
     if i = 3 then pname := pname + '_n'
     else if i <> 2 then
       Error('Nil Python: str method .' + mname + '() takes two or three arguments');
+    procIdx := FindProc(pname);
+    if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  end
+  else if wantArgs = -10 then
+  begin
+    { no argument, or one INT argument — expandtabs. Distinct proc NAMES per
+      arity, like every other multi-arity row: FindProc is not arity-aware. }
+    if i = 1 then pname := pname + '_n'
+    else if i <> 0 then
+      Error('Nil Python: str method .' + mname + '() takes at most one argument');
     procIdx := FindProc(pname);
     if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   end
@@ -12450,6 +12463,91 @@ begin
   ASTTk[node] := Ord(tyInt64);
   ASTLeft[node] := argSeq;
   PyUnboxRangeBound := node;
+end;
+
+{ Is this `range(` sitting directly inside a `list(`?
+
+  CurTok is the `range` identifier, so `Tokens[TokPos]` is its own '(' — which
+  makes `Tokens[TokPos - 2]` the enclosing call's '(' and `Tokens[TokPos - 3]`
+  the callee name. Purely a token peek; nothing is consumed either way.
+
+  This gate is the whole reason `list(range(3))` can be materialised without
+  changing what `print(range(3))` does — see PyParseRangeList. }
+function PyRangeAsListWanted: Boolean;
+begin
+  PyRangeAsListWanted :=
+    (TokPos >= 3) and (Tokens[TokPos - 2].Kind = tkLParen) and
+    (Tokens[TokPos - 3].Kind = tkIdent) and
+    CaseEqual(GetTokenStr(TokPos - 3), 'list');
+end;
+
+{ `range(stop)` / `range(start, stop)` / `range(start, stop, step)` as a LIST.
+
+  NilPy's range is not a value: it exists only as the counted-loop lowering in a
+  `for` header, so `list(range(3))` failed with "undefined variable (range)"
+  (bug-nilpy-missing-builtins-step-slicing-range-into-list, group 2 — five of
+  its thirteen cases).
+
+  Reached ONLY through PyRangeAsListWanted, i.e. only when the enclosing call is
+  `list(`. CPython's range is lazy and prints as `range(0, 3)`, so materialising
+  every range would have replaced a loud compile error with a quietly different
+  `print(range(3))` — the trade this frontend deliberately does not make. The
+  enclosing `list()` then receives a TPyList and its ordinary copy overload
+  applies, so nothing else had to learn about range at all.
+
+  Bounds go through pyvar_to_int (PyUnboxRangeBound) for the same reason the for
+  header does: an unannotated parameter is a VARIANT, and comparing the counter
+  against the box rather than the value is what made
+  `def f(n): for i in range(n)` loop forever. A zero step raises ValueError
+  inside pyrange_list, as CPython does. }
+function PyParseRangeList: Integer;
+var lo, hi, step, a0, a1, a2, node, pi: Integer;
+begin
+  Next; Expect(tkLParen, '(');
+  PyParseBoolExpr;
+  hi := CurASTNode;
+  lo := -1;
+  step := -1;
+  if Eat(tkComma) then
+  begin
+    lo := hi;
+    PyParseBoolExpr;
+    hi := CurASTNode;
+    if Eat(tkComma) then
+    begin
+      PyParseBoolExpr;
+      step := CurASTNode;
+    end;
+  end;
+  Expect(tkRParen, ')');
+  if lo < 0 then
+  begin
+    lo := AllocNode(AN_INT_LIT);
+    ASTIVal[lo] := 0;
+    ASTTk[lo] := Ord(tyInt64);
+  end;
+  if step < 0 then
+  begin
+    step := AllocNode(AN_INT_LIT);
+    ASTIVal[step] := 1;
+    ASTTk[step] := Ord(tyInt64);
+  end;
+  lo   := PyUnboxRangeBound(lo);
+  hi   := PyUnboxRangeBound(hi);
+  step := PyUnboxRangeBound(step);
+  pi := FindProc('pyrange_list');
+  if pi < 0 then Error('Nil Python: pyrange_list (pylib) not loaded');
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := lo;
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := hi;
+  a2 := AllocNode(AN_ARG); ASTLeft[a2] := step; ASTRight[a2] := -1;
+  ASTRight[a1] := a2;
+  ASTRight[a0] := a1;
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := pi;
+  ASTLeft[node] := a0;
+  ASTTk[node] := Ord(Procs[pi].RetType);
+  LastExprTk := IntToTypeKind(ASTTk[node]);
+  PyParseRangeList := node;
 end;
 
 function PyParseFor: Integer;

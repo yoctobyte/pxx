@@ -1375,6 +1375,12 @@ test-nilpy: $(COMPILER)
 	# decimal expansion. Every value here is now CPython's.
 	./$(COMPILER) test/test_nilpy_round.npy /tmp/test_nilpy_round26
 	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.67 2.67\n9.99 0.04 0.3 100.0\n1.0 0.0 -0.0 0.0')"
+	# list(range(...)) and str.expandtabs(). NilPy's range is not a value, it is the counted-loop
+	# lowering in a for header, so list(range(3)) did not compile. Materialised
+	# ONLY inside list( — a general range value would make print(range(3)) print a
+	# list where CPython prints range(0, 3). See the test's header.
+	./$(COMPILER) test/test_nilpy_range_into_list.npy /tmp/test_nilpy_rangelist26
+	test "$$(/tmp/test_nilpy_rangelist26)" = "$$(printf '%b' '[0, 1, 2]\n[1, 2, 3]\n[0, 3, 6, 9]\n[3, 2, 1]\n[]\n[]\n[-3, -1, 1]\n[0, 1, 2, 3]\n[0, 1, 2]\n10\n[0, 1, 9]\nValueError\na   b a       b     \nab  c abcd    e a b c\na\nb   c\na b ab no tabs\n9')"
 	# pow(base, exp, mod): modular exponentiation, incl. the sign-of-the-modulus
 	# rule, the negative-exponent modular inverse, and doubling-based products so a
 	# 2^62 modulus does not overflow Int64. See the test's header.
