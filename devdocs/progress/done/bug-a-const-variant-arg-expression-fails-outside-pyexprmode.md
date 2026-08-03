@@ -189,4 +189,4 @@ fixedpoint, targeted spot-checks and a broad const/overload sweep) — this land
 on `tools/testmgr.py --tier full`, not the usual quick gate.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING.
+- 2026-08-03 — resolved, commit ccbf2556c.

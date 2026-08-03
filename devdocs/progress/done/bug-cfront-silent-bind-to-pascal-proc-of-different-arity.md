@@ -147,4 +147,4 @@ ticket has not been audited by hand — the diagnostics are what make that
 unnecessary.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING.
+- 2026-08-03 — resolved, commit 0fa768c5d.
