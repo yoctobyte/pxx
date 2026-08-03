@@ -3457,17 +3457,26 @@ begin
   else if base = tyChar then
   begin
     if isSigned then base := tyInt8
-    else if isUnsigned then base := tyUInt8
-    else if CPlainCharSigned then base := tyInt8;
-    { Plain `char` resolves to the TARGET's signedness — signed on x86-64/i386,
-      unsigned (tyChar) on aarch64/arm32/riscv — because that is what each psABI
-      says and what gcc does. Single-sourcing it HERE is the point: the constant
-      folder decided tyChar was signed (CMakeNarrowIntCast) while codegen
-      treated it as unsigned, so `(char)-1 < 0` folded to 1 and the same
-      comparison on a variable gave 0. Two places deciding independently is the
-      actual bug; resolving to tyInt8 leaves exactly one decision, and every
-      downstream consumer already handles tyInt8 correctly.
-      bug-cfront-plain-char-is-unsigned-and-folds-inconsistently }
+    else if isUnsigned then base := tyUInt8;
+    { Plain `char` stays tyChar — its own type, distinct from both `signed char`
+      and `unsigned char` (C11 6.2.5p15), and the one that carries CHARACTER-ness.
+
+      Resolving it to tyInt8 on signed-char targets was tried (07414aa8944b) to
+      single-source the signedness at the type level, and reverted: tyInt8 is
+      ShortInt, so the mapping silently dropped three things a plain char must
+      keep. `writeln` of a C `char` struct field printed 88 instead of 'X'
+      (test_c_struct_fields, test_c_packed_aligned); a string literal's element
+      stayed tyChar while `char *` became ^tyInt8, so `_Generic("hi", char *: ...)`
+      matched no association at all (cgeneric_selection_b209); and plain char
+      became indistinguishable from `signed char`, which _Generic must tell apart.
+      It also made the SAME program print 'X' on aarch64 and 88 on x86-64.
+
+      So signedness is a PROPERTY of plain char (CPlainCharSigned), not a change
+      of its type kind. The fold asks that property; codegen still zero-extends
+      tyChar, so the two disagree on signed-char targets — the open gap, tracked
+      in bug-cfront-plain-char-is-unsigned-and-folds-inconsistently, which needs
+      the extension applied at the C integer-promotion sites (or a distinct
+      character-and-signed type kind), not a remap onto ShortInt. }
     Result := base;
   end
   else

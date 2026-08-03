@@ -2,7 +2,7 @@
 track: C
 prio: 80
 type: bug
-status: done
+status: open
 owner: claude-C@opus5
 ---
 
@@ -141,5 +141,70 @@ prio 85).
 
 `tools/gate.sh quick` GREEN.
 
+
+## REOPENED 2026-08-03 — the resolution above was reverted
+
+The type-level shape claimed "every downstream consumer already handles tyInt8".
+That was **false**, and it is the load-bearing sentence in the resolution above.
+`tyInt8` is `ShortInt`: an 8-bit INTEGER, not a character type. Resolving plain
+`char` to it kept the arithmetic and threw away the identity, taking out five
+gated jobs — see [[bug-c-plain-char-lost-its-type-identity-not-just-its-signedness]],
+filed by Track T off the `test-core` matrix:
+
+- `writeln` of a C `char` struct field printed `104` / `88` instead of `'h'` / `'X'`
+  (`test_c_struct_fields`, `test_c_packed_aligned`) — it dispatches on the type,
+  and the type had stopped being a character;
+- a string literal's element stayed `tyChar` while `char *` became `^tyInt8`, so
+  `_Generic("hi", char *: …)` matched **no association** (`cgeneric_selection_b209`,
+  and `00219.c` in the c-testsuite, on x86-64 **and** i386);
+- plain `char` became indistinguishable from `signed char`, which C requires
+  `_Generic` to tell apart (C11 6.2.5p15: three distinct types).
+
+It also made the *same* program print `'X'` on aarch64 and `88` on x86-64, since
+only the signed-char targets were remapped — on its own enough to show the axis
+was wrong.
+
+**The one-line remap was reverted; plain `char` is `tyChar` again.** Everything
+else from that commit stands and is still correct: `CPlainCharSigned` as the
+single source, `-fsigned-char` / `-funsigned-char`, and `CMakeNarrowIntCast`
+asking the property instead of assuming `tyChar` is signed — which keeps the
+**arm32 fold row fixed** (folded signed, ABI unsigned) rather than regressing it.
+
+### What is still open — exactly the original defect 2, x86-64/i386 only
+
+| target | ABI | pxx folded | pxx runtime |
+| --- | --- | --- | --- |
+| x86-64 | signed | signed | **unsigned** ← gap |
+| i386 | signed | signed | **unsigned** ← gap |
+| aarch64 | unsigned | unsigned | unsigned ✓ |
+| arm32 | unsigned | unsigned ✓ (kept) | unsigned ✓ |
+
+`test/cchar_plain_signedness.c` is **parked, not deleted or weakened** — it
+states gcc's answer and is correct C. It is commented out of the `Makefile` C
+battery with a `blocked-by:` pointing here; pxx returns 1, gcc returns 42.
+Re-enable it with the fix.
+
+### Fix shape — signedness is a PROPERTY, not a type kind
+
+The property must be applied to the *value* where C applies it: at the **integer
+promotions**. A plain-`char` rvalue on a signed-char target has to sign-extend
+when it widens to `int` — that is the one thing codegen does not do, and the
+only thing left. `CIntegerPromoteTk` today computes the promoted *type* only; it
+has no value-level counterpart, and promotion is otherwise implicit in codegen,
+so the sites have to be found rather than being one hook. **A missed site is a
+silently wrong value, so this needs an oracle sweep against gcc, not a spot fix**
+— sweep the operator × operand-type grid, do not just re-run the one test.
+
+The alternative, if the promotion sites prove too diffuse to cover safely, is a
+distinct type kind (a character type that is *also* signed) rather than reusing
+`tyInt8`. That is a shared-`defs.inc` change and therefore **Track A**, and it
+carries the usual new-type-kind fallout across every `case` on `TTypeKind`.
+Worth a Track U call before starting down it — the two options differ a lot in
+cost and risk.
+
+Do **not** re-attempt the `tyInt8` remap.
+
 ## Log
-- 2026-08-03 — resolved, commit a31f53dfc.
+- 2026-08-03 — resolved, commit a31f53dfc (landed as 07414aa8944b).
+- 2026-08-03 — REOPENED: that fix regressed five gated jobs and was reverted.
+  Identity restored; signedness gap on x86-64/i386 still open.
