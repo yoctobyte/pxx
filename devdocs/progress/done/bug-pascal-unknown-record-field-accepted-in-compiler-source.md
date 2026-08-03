@@ -96,4 +96,4 @@ purely through the lvalue path relies on other checks. Worth auditing the ~20
 `AllocNode(AN_FIELD)` sites against the three guarded ones.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING.
+- 2026-08-03 — resolved, commit e5fd92573.
