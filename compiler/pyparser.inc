@@ -3257,6 +3257,26 @@ begin
   Result := '$clsattr.' + PyRawName(UClsNOff[ci], UClsNLen[ci]) + '.' + nm;
 end;
 
+function PyClassDepth(ci: Integer): Integer;
+{ How many classes are in ci's chain, ci itself included. }
+begin
+  Result := 0;
+  while ci >= 0 do begin Inc(Result); ci := UClsParent[ci]; end;
+end;
+
+function PyClassAncestorAt(ci, up: Integer): Integer;
+{ ci's ancestor `up` steps above it — 0 is ci, PyClassDepth(ci)-1 is the root.
+
+  The pair exists so that both class-attribute emitters can walk the chain
+  ROOT-FIRST without a local array and without agreeing on one by accident:
+  a subclass that redeclares an attribute must store LAST, so its value wins.
+  Class hierarchies are shallow, so the quadratic walk is free and the absence
+  of a shared buffer is worth more than the saved steps. }
+begin
+  Result := ci;
+  while (up > 0) and (Result >= 0) do begin Result := UClsParent[Result]; Dec(up); end;
+end;
+
 function PyClsAttrEnsureGlobal(ci, nOff, nLen: Integer; tk: TTypeKind;
                               rec: Integer; needsOvr: Boolean): Integer;
 { The single shared slot behind a class attribute, registered as a CLASS VAR of
@@ -4089,6 +4109,7 @@ var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     kwCtorMi, kwCtorPi, kwPk, kwVal: Integer;
     kwAny: Boolean; kwSlot: array[0..PY_MAX_DC_KW - 1] of Integer;
     attrAny: Boolean; attrSym, attrAsgn, attrFld, attrFi, attrGSym: Integer;
+    attrD, attrCur: Integer;   { the ancestor-chain walk, root first }
 begin
   name := CurTok.SVal;
   ci := -1;
@@ -4410,16 +4431,27 @@ begin
     class with a constructor is therefore REFUSED rather than silently having
     its ctor's own writes overwritten — that is the one case where "after" is
     the wrong order and guessing would be silent corruption. }
+  { The whole ANCESTOR CHAIN, not just this class: a subclass declares none of
+    the parent's class attributes, so filtering on `ci` alone ran no stores at
+    all for `class Sub(Base): pass` and `Sub().kind` read a zeroed field —
+    silently, because the field IS inherited and only its value was missing
+    (bug-nilpy-inherited-class-attribute-empty-on-a-subclass-instance). }
   attrAny := False;
-  for i := 0 to PyClsAttrCount - 1 do
-    if PyClsAttrCi[i] = ci then attrAny := True;
-  { ...and the NON-literal ones, which live in a hidden global apiece rather
-    than in the constant table (PyEmitClassAttrExpr). They are found by name,
-    from the class's own field list. }
-  for i := 0 to UClsFCount[ci] - 1 do
-    if FindSym(PyClsAttrGlobalName(ci,
-         PyRawName(UFldNOff[UClsFBase[ci] + i], UFldNLen[UClsFBase[ci] + i]))) >= 0 then
-      attrAny := True;
+  for attrD := PyClassDepth(ci) - 1 downto 0 do
+  begin
+    attrCur := PyClassAncestorAt(ci, attrD);
+    for i := 0 to PyClsAttrCount - 1 do
+      if PyClsAttrCi[i] = attrCur then attrAny := True;
+    { ...and the NON-literal ones, which live in a hidden global apiece rather
+      than in the constant table (PyEmitClassAttrExpr). They are found by name,
+      from the DECLARING class's own field list — the global is named after the
+      class that declared the attribute, not after the one being constructed. }
+    for i := 0 to UClsFCount[attrCur] - 1 do
+      if FindSym(PyClsAttrGlobalName(attrCur,
+           PyRawName(UFldNOff[UClsFBase[attrCur] + i],
+                     UFldNLen[UClsFBase[attrCur] + i]))) >= 0 then
+        attrAny := True;
+  end;
   { A class WITH a constructor applies its class attributes at the head of that
     constructor (PyClassAttrInitSeq), which is Python's order — before
     `__init__` runs, so `__init__` can overwrite them. Only a class without one
@@ -4435,37 +4467,43 @@ begin
     ASTLeft[attrAsgn] := PyMakeIdent(attrSym);
     ASTRight[attrAsgn] := node;
     PyHoistStmt(attrAsgn);
-    for i := 0 to PyClsAttrCount - 1 do
-      if PyClsAttrCi[i] = ci then
+    { ROOT FIRST, so a subclass that redeclares an attribute stores last and its
+      value is the one the instance keeps. }
+    for attrD := PyClassDepth(ci) - 1 downto 0 do
+    begin
+      attrCur := PyClassAncestorAt(ci, attrD);
+      for i := 0 to PyClsAttrCount - 1 do
+        if PyClsAttrCi[i] = attrCur then
+        begin
+          attrFld := AllocNode(AN_FIELD);
+          ASTLeft[attrFld] := PyMakeIdent(attrSym);
+          ASTSOffset[attrFld] := PyClsAttrNOff[i];
+          ASTSLen[attrFld] := PyClsAttrNLen[i];
+          attrFi := FindUField(ci, PyRawName(PyClsAttrNOff[i], PyClsAttrNLen[i]));
+          if attrFi >= 0 then ASTTk[attrFld] := UFldTk[attrFi]
+          else ASTTk[attrFld] := Ord(tyVariant);
+          attrAsgn := AllocNode(AN_ASSIGN);
+          ASTLeft[attrAsgn] := attrFld;
+          ASTRight[attrAsgn] := PyClsAttrNode(i);
+          PyHoistStmt(attrAsgn);
+        end;
+      { the non-literal ones: copy the shared value out of its hidden global }
+      for i := 0 to UClsFCount[attrCur] - 1 do
       begin
+        attrFi := UClsFBase[attrCur] + i;
+        attrGSym := FindSym(PyClsAttrGlobalName(attrCur,
+                      PyRawName(UFldNOff[attrFi], UFldNLen[attrFi])));
+        if attrGSym < 0 then Continue;
         attrFld := AllocNode(AN_FIELD);
         ASTLeft[attrFld] := PyMakeIdent(attrSym);
-        ASTSOffset[attrFld] := PyClsAttrNOff[i];
-        ASTSLen[attrFld] := PyClsAttrNLen[i];
-        attrFi := FindUField(ci, PyRawName(PyClsAttrNOff[i], PyClsAttrNLen[i]));
-        if attrFi >= 0 then ASTTk[attrFld] := UFldTk[attrFi]
-        else ASTTk[attrFld] := Ord(tyVariant);
+        ASTSOffset[attrFld] := UFldNOff[attrFi];
+        ASTSLen[attrFld] := UFldNLen[attrFi];
+        ASTTk[attrFld] := UFldTk[attrFi];
         attrAsgn := AllocNode(AN_ASSIGN);
         ASTLeft[attrAsgn] := attrFld;
-        ASTRight[attrAsgn] := PyClsAttrNode(i);
+        ASTRight[attrAsgn] := PyMakeIdent(attrGSym);
         PyHoistStmt(attrAsgn);
       end;
-    { the non-literal ones: copy the shared value out of its hidden global }
-    for i := 0 to UClsFCount[ci] - 1 do
-    begin
-      attrFi := UClsFBase[ci] + i;
-      attrGSym := FindSym(PyClsAttrGlobalName(ci,
-                    PyRawName(UFldNOff[attrFi], UFldNLen[attrFi])));
-      if attrGSym < 0 then Continue;
-      attrFld := AllocNode(AN_FIELD);
-      ASTLeft[attrFld] := PyMakeIdent(attrSym);
-      ASTSOffset[attrFld] := UFldNOff[attrFi];
-      ASTSLen[attrFld] := UFldNLen[attrFi];
-      ASTTk[attrFld] := UFldTk[attrFi];
-      attrAsgn := AllocNode(AN_ASSIGN);
-      ASTLeft[attrAsgn] := attrFld;
-      ASTRight[attrAsgn] := PyMakeIdent(attrGSym);
-      PyHoistStmt(attrAsgn);
     end;
     Result := PyMakeIdent(attrSym);
   end;
@@ -4479,39 +4517,47 @@ end;
   _BlendModes()` beside an `__init__`), where the construction path had to
   refuse. Returns -1 when the class has none. }
 function PyClassAttrInitSeq(ci, selfSym: Integer): Integer;
-var i, fi, gsym, fldNode, asgn, seq: Integer;
+var i, fi, gsym, fldNode, asgn, seq, d, cur: Integer;
 begin
   seq := -1;
-  for i := 0 to PyClsAttrCount - 1 do
-    if PyClsAttrCi[i] = ci then
+  { the ANCESTOR CHAIN, ROOT FIRST — see the identical walk in the construction
+    path above, which this must stay in step with: a class with a constructor
+    takes this route and one without takes that one, and if only one of them
+    inherited, two arrangements of the same class would disagree. }
+  for d := PyClassDepth(ci) - 1 downto 0 do
+  begin
+    cur := PyClassAncestorAt(ci, d);
+    for i := 0 to PyClsAttrCount - 1 do
+      if PyClsAttrCi[i] = cur then
+      begin
+        fldNode := AllocNode(AN_FIELD);
+        ASTLeft[fldNode] := PyMakeIdent(selfSym);
+        ASTSOffset[fldNode] := PyClsAttrNOff[i];
+        ASTSLen[fldNode] := PyClsAttrNLen[i];
+        fi := FindUField(ci, PyRawName(PyClsAttrNOff[i], PyClsAttrNLen[i]));
+        if fi >= 0 then ASTTk[fldNode] := UFldTk[fi]
+        else ASTTk[fldNode] := Ord(tyVariant);
+        asgn := AllocNode(AN_ASSIGN);
+        ASTLeft[asgn] := fldNode;
+        ASTRight[asgn] := PyClsAttrNode(i);
+        seq := PySeqAppend(seq, asgn);
+      end;
+    { the non-literal ones live in a hidden global apiece }
+    for i := 0 to UClsFCount[cur] - 1 do
     begin
+      fi := UClsFBase[cur] + i;
+      gsym := FindSym(PyClsAttrGlobalName(cur, PyRawName(UFldNOff[fi], UFldNLen[fi])));
+      if gsym < 0 then Continue;
       fldNode := AllocNode(AN_FIELD);
       ASTLeft[fldNode] := PyMakeIdent(selfSym);
-      ASTSOffset[fldNode] := PyClsAttrNOff[i];
-      ASTSLen[fldNode] := PyClsAttrNLen[i];
-      fi := FindUField(ci, PyRawName(PyClsAttrNOff[i], PyClsAttrNLen[i]));
-      if fi >= 0 then ASTTk[fldNode] := UFldTk[fi]
-      else ASTTk[fldNode] := Ord(tyVariant);
+      ASTSOffset[fldNode] := UFldNOff[fi];
+      ASTSLen[fldNode] := UFldNLen[fi];
+      ASTTk[fldNode] := UFldTk[fi];
       asgn := AllocNode(AN_ASSIGN);
       ASTLeft[asgn] := fldNode;
-      ASTRight[asgn] := PyClsAttrNode(i);
+      ASTRight[asgn] := PyMakeIdent(gsym);
       seq := PySeqAppend(seq, asgn);
     end;
-  { the non-literal ones live in a hidden global apiece }
-  for i := 0 to UClsFCount[ci] - 1 do
-  begin
-    fi := UClsFBase[ci] + i;
-    gsym := FindSym(PyClsAttrGlobalName(ci, PyRawName(UFldNOff[fi], UFldNLen[fi])));
-    if gsym < 0 then Continue;
-    fldNode := AllocNode(AN_FIELD);
-    ASTLeft[fldNode] := PyMakeIdent(selfSym);
-    ASTSOffset[fldNode] := UFldNOff[fi];
-    ASTSLen[fldNode] := UFldNLen[fi];
-    ASTTk[fldNode] := UFldTk[fi];
-    asgn := AllocNode(AN_ASSIGN);
-    ASTLeft[asgn] := fldNode;
-    ASTRight[asgn] := PyMakeIdent(gsym);
-    seq := PySeqAppend(seq, asgn);
   end;
   PyClassAttrInitSeq := seq;
 end;

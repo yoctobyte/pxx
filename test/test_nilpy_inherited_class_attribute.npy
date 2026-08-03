@@ -1,0 +1,47 @@
+# An inherited class attribute must be readable through a SUBCLASS INSTANCE.
+# Construction used to run stores only for the class's OWN class attributes, so
+# `Sub().kind` read a zeroed inherited field — silently, since the field itself
+# IS inherited and only its value was missing.
+
+class Base:
+    kind = "base"
+    n = 1
+    calc = 2 + 3
+    bag = [7]
+
+class Sub(Base):
+    pass
+
+class Deep(Sub):
+    n = 42                  # redeclared: the SUBCLASS value must win
+
+class WithCtor(Base):
+    def __init__(self):
+        self.own = 5        # takes the constructor-head route, not the hoisted one
+
+class CtorOverwrites(Base):
+    def __init__(self):
+        self.n = 99         # __init__ runs AFTER the class attributes, so it wins
+
+print("one level:", Base().kind, Sub().kind, Deep().kind)
+print("redeclared:", Base().n, Sub().n, Deep().n, Base.n, Deep.n)
+print("expression:", Sub().calc, Deep().calc)
+print("container:", Sub().bag, Deep().bag, len(Deep().bag))
+
+c = WithCtor()
+print("with ctor:", c.kind, c.n, c.calc, c.bag, c.own)
+
+o = CtorOverwrites()
+print("ctor overwrites:", o.n, o.kind, Base.n)
+
+# the shared-slot lowering already walked the chain (FindClassVar does) — a
+# control that inheritance and the class-written row still agree
+class Counted:
+    made = 0
+class SubCounted(Counted):
+    def __init__(self):
+        Counted.made += 1
+
+SubCounted()
+SubCounted()
+print("class-written inherited:", Counted.made, SubCounted.made)

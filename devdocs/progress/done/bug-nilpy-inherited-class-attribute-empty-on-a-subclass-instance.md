@@ -3,6 +3,8 @@ track: N
 prio: 60
 type: bug
 summary: "`Sub().kind` reads empty/zero when `kind` is a class attribute declared on the BASE — construction copies only the class's OWN class attributes, never the inherited ones. Silent wrong value"
+status: done
+owner: claude-AN
 ---
 
 # An inherited class attribute is empty when read through a subclass instance
@@ -60,3 +62,36 @@ class attributes read through a subclass instance; two levels of subclassing; a
 subclass that redeclares one of them; a subclass with its own `__init__` (the
 `PyClassAttrInitSeq` path) and one without (the hoisted-temp path); and the
 existing class-attribute tests still green.
+
+## Resolved 2026-08-03
+
+Both emitters now walk the ancestor chain ROOT FIRST, via a `PyClassDepth` /
+`PyClassAncestorAt` pair rather than a shared array — the walk is quadratic in
+the chain depth, which is free, and not sharing a buffer is what keeps the two
+routines independent. Root-first is the whole ordering rule: a subclass that
+redeclares an attribute stores last and its value is the one the instance keeps.
+
+Two details the fix turns on:
+
+- the hidden global is named after the DECLARING class, so the field loop is
+  driven by each ancestor's OWN field span (`UClsFBase[cur]`) while the field's
+  type and the receiver stay the subclass's. `FindUField` already walked the
+  chain, which is exactly why the field existed and only its value did not.
+- the two emitters had to change together. A class with a constructor takes
+  `PyClassAttrInitSeq` and one without takes the hoisted-temp form; fixing one
+  would have made two arrangements of the same class disagree.
+
+`test/test_nilpy_inherited_class_attribute.npy` (+ `.expected`, wired into
+`make test-nilpy`), byte-identical to CPython: one and two levels of
+subclassing; a subclass redeclaring an inherited attribute; literal, expression
+and container initialisers; a subclass with its own `__init__` (the
+constructor-head route) and one without (the hoisted route); an `__init__` that
+overwrites an inherited class attribute, which must still win because it runs
+after; and a class-written attribute incremented from a subclass constructor as
+a control that the shared-slot row and inheritance agree.
+
+`gate.sh quick` GREEN, self-host fixedpoint byte-identical.
+
+## Log
+- 2026-08-03 — resolved.
+- 2026-08-03 — resolved, commit HEAD.

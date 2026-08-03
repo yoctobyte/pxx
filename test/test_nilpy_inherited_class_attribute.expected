@@ -1,0 +1,7 @@
+one level: base base base
+redeclared: 1 1 42 1 42
+expression: 5 5
+container: [7] [7] 1
+with ctor: base 1 5 [7] 5
+ctor overwrites: 99 base 1
+class-written inherited: 2 2
