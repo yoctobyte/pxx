@@ -3745,6 +3745,45 @@ begin
   end;
 end;
 
+function PyCtorEndsRhs: Boolean;
+{ Does the construction at CurTok END the right-hand side, or is it merely the
+  FIRST operand of a larger expression? `x = C(1)` is a construction
+  assignment; `x = C(1) == y`, `x = C(1) is y`, `x = C(1) if c else C(2)` are
+  expressions that happen to start with one.
+
+  The construction fast-path used to be claimed on the OPENING shape alone
+  (class name + `(`, minus the `.method(` suffix case), i.e. it claimed the
+  first token without checking the construct ended — so every binary operator
+  after a bare construction died at statement level: `K(1) == k2` and
+  `K(1) in [k1]` reported "expected expression", `K(1) is k2` reported
+  "undefined variable (is)". The identical expressions with the construction
+  bound to a NAME first, or merely parenthesised (`(K(1)) is k2`), were always
+  fine, which is what disguised this as an `is`-specific parse bug.
+  bug-nilpy-construction-on-the-right-of-is-does-not-parse }
+var i, depth: Integer;
+begin
+  PyCtorEndsRhs := False;
+  i := TokPos;                     { the '(' after the class name }
+  depth := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRParen, tkRBrack, tkEnd] then
+    begin
+      Dec(depth);
+      if depth = 0 then
+      begin
+        PyCtorEndsRhs := (i + 1 >= TokCount) or
+                         (Tokens[i + 1].Kind in [tkNewline, tkDedent, tkEOF,
+                                                 tkSemicolon]);
+        Exit;
+      end;
+    end
+    else if Tokens[i].Kind in [tkNewline, tkEOF] then Exit;
+    Inc(i);
+  end;
+end;
+
 { `_count(1)` (the itertools.count alias) -> a fresh TPyCounter. }
 (* `set()` — Python's empty-set constructor. There is no empty-set LITERAL in
    Python (empty braces are a dict), so this call is the only way to write one,
@@ -14019,7 +14058,7 @@ begin
     end
     else if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
        (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
-       (not PyCtorSuffixAhead) then
+       (not PyCtorSuffixAhead) and PyCtorEndsRhs then
       { ...but `x = Cls().method(...)` is not a construction ASSIGNMENT: the
         construction is the RECEIVER. Leave it to the expression parser, whose
         factor path builds the construction and then applies the method suffix

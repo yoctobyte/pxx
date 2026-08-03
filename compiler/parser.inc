@@ -14252,6 +14252,7 @@ begin
     the right-hand ident is a class-reference-typed symbol or field -- a known class
     NAME still takes the compile-time path above, and anything else leaves `is` alone. }
   if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'is') and
+     (not PyExprMode) and
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
      (FindUClass(GetTokenStr(TokPos)) < 0) and
      IdentIsClassRefValue(GetTokenStr(TokPos)) and
@@ -14277,8 +14278,21 @@ begin
     Exit;
   end;
 
+  { NOT under PyExprMode for `is`: Pascal's `E is TClass` is a TYPE test, but
+    Python's `is` is IDENTITY and never a type test (`isinstance` is the type
+    test, and has its own branch). This intercept sits in the SHARED ParseExpr
+    and fired first, so NilPy's `x is K(2)` was read as the Pascal type test
+    `x is K` — the constructor never ran, the trailing `(2)` was left behind,
+    and the answer was True because x really is a K. Silent at module scope,
+    a bare parse error inside a def, and INVISIBLE to a boolean-only test
+    because `X() is Y()` is False either way — which is how it was filed as
+    "a construction on the right of is does not parse".
+    `is not` was unaffected (this pattern does not match it), which is what
+    made the two shapes look unrelated.
+    bug-nilpy-construction-on-the-right-of-is-does-not-parse }
   if (CurTok.Kind = tkIdent) and
-     (CaseEqual(CurTok.SVal, 'is') or CaseEqual(CurTok.SVal, 'as')) and
+     ((CaseEqual(CurTok.SVal, 'is') and (not PyExprMode)) or
+      CaseEqual(CurTok.SVal, 'as')) and
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
      (FindUClass(GetTokenStr(TokPos)) >= 0) then
   begin

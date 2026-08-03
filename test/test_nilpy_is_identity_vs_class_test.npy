@@ -1,0 +1,39 @@
+# Python's `is` is IDENTITY, never a type test -- Pascal's `E is TClass` type
+# test lives in the same shared ParseExpr and used to claim `is <ClassName>`
+# first, so the construction on the right never ran and the answer was True
+# because the left operand really was a K.
+# bug-nilpy-construction-on-the-right-of-is-does-not-parse
+
+
+class K:
+    def __init__(self, v: int):
+        print("ctor", v)
+        self.v = v
+
+
+class J:
+    def __init__(self):
+        pass
+
+
+k1 = K(1)
+print("--- is with a construction on the right")
+print(k1 is K(2))
+print("--- is not")
+print(k1 is not K(3))
+print("--- both sides constructed")
+print(K(4) is K(5))
+print("--- nested in a call, a paren, a list")
+print((k1 is K(6)))
+print([k1 is K(7)])
+r = k1 is K(8)
+print(r)
+print("--- identity that is actually True")
+k2 = k1
+print(k1 is k2)
+print(k1 is not k2)
+print("--- a different class on the right is still identity, not a type test")
+j = J()
+print(k1 is j)
+print("--- == still constructs and compares")
+print(k1 == K(9))

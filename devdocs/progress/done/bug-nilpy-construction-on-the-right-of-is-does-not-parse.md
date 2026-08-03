@@ -2,6 +2,8 @@
 track: N
 prio: 30
 type: bug
+status: done
+owner: claude-AN
 ---
 
 # A construction on the right of `is` does not parse
@@ -77,3 +79,73 @@ shapes rather than another round of read-the-source guessing.
 
 `make test-nilpy` plus `is` / `is not` with a construction, a call and a
 subscript on the right, diffed against CPython.
+
+## Fixed 2026-08-03 — it was not a parse bug, and prio 30 was based on a wrong premise
+
+**Root cause: Pascal's `E is TClass` TYPE test, in the shared `ParseExpr`,
+claimed `is <ClassName>` before NilPy's identity `is` ever saw it.** The
+intercept (parser.inc, the `is`/`as` branch and its class-reference-value
+sibling) had no `PyExprMode` gate, so under NilPy:
+
+```python
+k1 = K(1)
+print(k1 is K(2))      # CPython: ctor 2 / False     pxx: (no ctor) / True
+```
+
+The construction on the right **never ran**, the trailing `(2)` was left
+behind, and the answer was `True` — because `k1` really is a `K`, which is
+what the Pascal type test asks. Not a parse failure: a **silent wrong
+answer**, at module scope. Inside a `def` the leftover tokens surfaced as
+"expected newline after statement", which is the recon's "two distinct failure
+shapes" — one bug, two symptoms, depending on whether the enclosing scope
+tolerated the orphaned `(2)`.
+
+`is not` was unaffected (the Pascal pattern does not match it), and that
+asymmetry is what made the two shapes look unrelated.
+
+### Why the ticket's own reproducer could not see it
+
+`X() is Y()` is always `False` in Python **and** was False under the bug, so a
+boolean-only test is blind here. It was found by giving `__init__` a `print`
+and counting constructor calls — the missing `ctor 2` line is the whole
+finding. The gate test asserts those lines for that reason.
+
+That also disposes of the prio-30 rationale ("`X() is Y()` is always False and
+so is a rare thing to write"). The reachable form is the ordinary
+`x is SomeClass(...)`, and it answered wrongly rather than failing.
+
+### The fix
+
+Gate both Pascal is-test intercepts on `not PyExprMode`. Python's type test is
+`isinstance`, which has its own branch, so NilPy loses nothing. `as` is left
+exactly as it was (Python has no `as` expression operator, so gating it would
+have been an unmeasured change).
+
+Pascal is untouched, and the self-host fixedpoint proves it: the compiler is
+Pascal source and leans on `is` heavily, and it still reproduces itself
+byte-identically.
+
+### A second, unrelated bug found on the way and fixed here
+
+`r = K(1) == k2` and `r = K(1) in [k1]` also failed ("expected expression"),
+and `r = K(1) is k2` gave "undefined variable (is)" — a **left**-operand
+failure, mirroring the ticket's right-operand one. Cause: the statement-level
+construction fast-path claimed the RHS on its OPENING shape alone (class name
++ `(`, minus the `.method(` case) without checking the construction ENDED the
+right-hand side — the "a fast-path beside a real expression path is a second
+parser that disagrees silently" pattern this repo has hit repeatedly. New
+`PyCtorEndsRhs` requires a statement terminator after the ctor's `)`, so
+`x = C(1)` keeps the fast path and `x = C(1) <anything>` goes to the
+expression parser.
+
+### Verified
+
+`test/test_nilpy_is_identity_vs_class_test.npy` (new, registered in both
+`test-nilpy` Makefile sites), byte-identical to CPython including every
+constructor-call line: `is` with a construction on the right, `is not`, both
+sides constructed, nested in a call / parens / a list literal, at statement
+level, a genuinely-True identity, a different class on the right (identity,
+not a type test), and `==` still constructing. `tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-03 — resolved, commit PENDING-COMMIT.

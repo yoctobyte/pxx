@@ -378,6 +378,10 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_dot_edge_float26)" = "$$(printf '0.5\n5.0\n1.25\n10.0\n500.0\n5000.0\n0.005\n-0.5\n[0.5, 1.5, 2.0]\n4.0\nhalf\n1.5\n0.5\n5.0\n1000.0')"
 	# min/max at 3+ positional args fold through the 2-argument overload; the
 	# 1-/2-arg forms and a user shadow at the folded arity are untouched.
+	# `is` is IDENTITY in Python, never Pascal's `E is TClass` type test -- the
+	# ctor on the right must actually RUN (the "ctor N" lines are the proof).
+	./$(COMPILER) test/test_nilpy_is_identity_vs_class_test.npy /tmp/test_nilpy_is_identity26
+	test "$$(/tmp/test_nilpy_is_identity26)" = "$$(printf 'ctor 1\n--- is with a construction on the right\nctor 2\nFalse\n--- is not\nctor 3\nTrue\n--- both sides constructed\nctor 4\nctor 5\nFalse\n--- nested in a call, a paren, a list\nctor 6\nFalse\nctor 7\n[False]\nctor 8\nFalse\n--- identity that is actually True\nTrue\nFalse\n--- a different class on the right is still identity, not a type test\nFalse\n--- == still constructs and compares\nctor 9\nFalse')"
 	./$(COMPILER) test/test_nilpy_min_max_variadic.npy /tmp/test_nilpy_min_max_variadic26
 	test "$$(/tmp/test_nilpy_min_max_variadic26)" = "$$(printf '1\n3\n0\n5\n3\n3.5\n0.5\nc\na\n4 11\n14\n1\n3\n2\n9\no\n100')"
 	# for/while `else` (runs when the loop finished WITHOUT a break -- an empty
@@ -4365,6 +4369,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_dot_edge_float26)" = "$$(printf '0.5\n5.0\n1.25\n10.0\n500.0\n5000.0\n0.005\n-0.5\n[0.5, 1.5, 2.0]\n4.0\nhalf\n1.5\n0.5\n5.0\n1000.0')"
 	# min/max at 3+ positional args fold through the 2-argument overload; the
 	# 1-/2-arg forms and a user shadow at the folded arity are untouched.
+	# `is` is IDENTITY in Python, never Pascal's `E is TClass` type test -- the
+	# ctor on the right must actually RUN (the "ctor N" lines are the proof).
+	./$(COMPILER) test/test_nilpy_is_identity_vs_class_test.npy /tmp/test_nilpy_is_identity26
+	test "$$(/tmp/test_nilpy_is_identity26)" = "$$(printf 'ctor 1\n--- is with a construction on the right\nctor 2\nFalse\n--- is not\nctor 3\nTrue\n--- both sides constructed\nctor 4\nctor 5\nFalse\n--- nested in a call, a paren, a list\nctor 6\nFalse\nctor 7\n[False]\nctor 8\nFalse\n--- identity that is actually True\nTrue\nFalse\n--- a different class on the right is still identity, not a type test\nFalse\n--- == still constructs and compares\nctor 9\nFalse')"
 	./$(COMPILER) test/test_nilpy_min_max_variadic.npy /tmp/test_nilpy_min_max_variadic26
 	test "$$(/tmp/test_nilpy_min_max_variadic26)" = "$$(printf '1\n3\n0\n5\n3\n3.5\n0.5\nc\na\n4 11\n14\n1\n3\n2\n9\no\n100')"
 	# for/while `else` (runs when the loop finished WITHOUT a break -- an empty
