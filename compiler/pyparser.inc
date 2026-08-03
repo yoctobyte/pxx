@@ -10249,6 +10249,77 @@ end;
   suite is legal, and uforth uses the one-line form heavily for guard clauses.
   Semicolon-separated statements are accepted in the one-line form, as Python
   does. }
+{ ---- for/while `else` ----------------------------------------------------
+  Python's loop `else` runs when the loop finished WITHOUT executing a break —
+  not "if the body never ran", which is the reading that would silently invert
+  an empty loop (`for i in []: ... else:` still runs the else).
+
+  Desugared with a hidden flag bound to the loop the break belongs to:
+
+      __loopelseN := False
+      <loop>                  { every `break` in THIS loop's body first
+                                assigns __loopelseN := True }
+      if not __loopelseN then <else suite>
+
+  PyLoopElseFlag is the innermost enclosing loop's flag, or -1. Every loop
+  saves and restores it around its own body, so a `break` in a NESTED loop
+  cannot touch the outer loop's flag — the outer else still runs, which is
+  what CPython does. A loop with no `else` sets it to -1, so no dead
+  assignment is emitted for the overwhelmingly common case.
+
+  A `return` out of the loop skips the else for free: it never reaches the
+  test. bug-nilpy-for-else-and-while-else-not-supported }
+function PySkipToMatchingDedent(var k: Integer): Boolean; forward;
+function PyLoopHasElseAhead: Boolean;
+{ CurTok is on `for`/`while`. True when the loop's suite is followed by an
+  `else` at the loop's own level. Decided by lookahead rather than after the
+  fact because the flag must exist BEFORE the body is parsed — that is where
+  the break assignments are built. }
+var k, d: Integer;
+begin
+  PyLoopHasElseAhead := False;
+  k := TokPos;                        { first token after the for/while }
+  d := 0;
+  while k < TokCount do               { find the header's own ':' }
+  begin
+    if Tokens[k].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(d)
+    else if Tokens[k].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(d)
+    else if (Tokens[k].Kind = tkColon) and (d = 0) then Break
+    else if Tokens[k].Kind in [tkNewline, tkEOF] then Exit;
+    Inc(k);
+  end;
+  if (k >= TokCount) or (Tokens[k].Kind <> tkColon) then Exit;
+  Inc(k);
+  if (k < TokCount) and (Tokens[k].Kind = tkNewline) then
+  begin
+    { block form: skip the indented suite whole }
+    Inc(k);
+    while (k < TokCount) and (Tokens[k].Kind = tkNewline) do Inc(k);
+    if not PySkipToMatchingDedent(k) then Exit;
+  end
+  else
+  begin
+    { one-liner body: `while c: x = 1` then `else:` on the next line }
+    while (k < TokCount) and not (Tokens[k].Kind in [tkNewline, tkEOF]) do Inc(k);
+    while (k < TokCount) and (Tokens[k].Kind = tkNewline) do Inc(k);
+  end;
+  PyLoopHasElseAhead := (k < TokCount) and (Tokens[k].Kind = tkElse);
+end;
+
+function PyMakeBoolLit(v: Boolean): Integer;
+begin
+  PyMakeBoolLit := AllocNode(AN_BOOL_LIT);
+  ASTIVal[PyMakeBoolLit] := Ord(v);
+  ASTTk[PyMakeBoolLit] := Ord(tyBoolean);
+end;
+
+function PyMakeFlagSet(sym: Integer; v: Boolean): Integer;
+begin
+  PyMakeFlagSet := AllocNode(AN_ASSIGN);
+  ASTLeft[PyMakeFlagSet] := PyMakeIdent(sym);
+  ASTRight[PyMakeFlagSet] := PyMakeBoolLit(v);
+end;
+
 function PyParseSuite: Integer;
 var stmt, seq: Integer;
 begin
@@ -10531,6 +10602,7 @@ end;
 function PyParseTry: Integer;
 var node, innerNode, trySeq, finSeq, handlerHead, lastHandler, handlerNode: Integer;
     actionSeq, handlerVar, ci, recId: Integer;
+    elseSeq, elseFlag, elsePair, elseIf: Integer;
     handlerName, className: AnsiString;
     excRecs: array[0..15] of Integer; nExc, ei: Integer;   { except (A, B, ...) tuple }
 begin
@@ -10640,6 +10712,42 @@ begin
     until ei >= nExc;
   end;
 
+  { `try ... else:` — the third of Python's statement-level else clauses (see
+    the loop-else note above PyLoopHasElseAhead). Its rule is "run when the try
+    body completed without raising", and an exception raised INSIDE the else
+    must not be caught by this statement's own handlers.
+
+    Same hidden-flag shape as the loops, set as the last statement of the
+    protected body so it runs only on completion — a `return`, `break` or a
+    raise out of the try body all skip the else for free:
+
+        __tryelseN := False
+        try: <body>; __tryelseN := True
+        except ...: <handlers>
+        if __tryelseN: <else suite>          { OUTSIDE the try/except }
+
+    Python orders the else BEFORE finally, so the test is placed inside the
+    try-FINALLY's protected region and outside the try-EXCEPT's — which also
+    gives the else body the finally's protection without the except's, exactly
+    as CPython does. bug-nilpy-for-else-and-while-else-not-supported }
+  elseSeq := -1;
+  elseFlag := -1;
+  if CurTok.Kind = tkElse then
+  begin
+    if handlerHead = -1 then
+      Error('Nil Python: try ... else: needs an except: clause');
+    Next;
+    Expect(tkColon, ':');
+    Expect(tkNewline, 'newline');
+    Expect(tkIndent, 'indent');
+    elseFlag := AllocVar(PyHiddenName('tryelse'), tyBoolean);
+    elseSeq := PyParseBlock;
+    Expect(tkDedent, 'dedent');
+    PySkipNewlines;
+    if ASTKind[trySeq] <> AN_SEQ then trySeq := PySeqAppend(-1, trySeq);
+    trySeq := PySeqAppend(trySeq, PyMakeFlagSet(elseFlag, True));
+  end;
+
   finSeq := -1;
   if CurTok.Kind = tkFinally then
   begin
@@ -10662,6 +10770,16 @@ begin
     ASTRight[node] := handlerHead;
     innerNode := node;
   end;
+  if elseSeq >= 0 then
+  begin
+    elsePair := AllocNode(AN_PAIR);
+    ASTLeft[elsePair] := elseSeq;
+    ASTRight[elsePair] := -1;
+    elseIf := AllocNode(AN_IF);
+    ASTLeft[elseIf] := PyMakeIdent(elseFlag);
+    ASTRight[elseIf] := elsePair;
+    innerNode := PySeqAppend(PySeqAppend(-1, innerNode), elseIf);
+  end;
   if finSeq >= 0 then
   begin
     node := AllocNode(AN_TRY_FINALLY);
@@ -10670,6 +10788,14 @@ begin
     innerNode := node;
   end;
   Dec(GenTryDepth);
+  if elseSeq >= 0 then
+  begin
+    { the flag has to be cleared before the statement runs, and the result is
+      now an AN_SEQ rather than a try node — PyParseBlock keys its
+      block-consumed check on the node kind, so say so explicitly }
+    innerNode := PySeqAppend(PySeqAppend(-1, PyMakeFlagSet(elseFlag, False)), innerNode);
+    PyStmtAteBlock := True;
+  end;
   PyParseTry := innerNode;
 end;
 
@@ -10689,6 +10815,47 @@ begin
   ASTRight[node] := PyParseSuite;
   PyHoistPrepend(condHoist);
   Result := node;
+end;
+
+function PyParseLoopMaybeElse(isFor: Boolean): Integer;
+{ Parses a `for`/`while` and, when one follows, its `else` clause. See the
+  note above PyLoopHasElseAhead for the desugar and why the flag is allocated
+  BEFORE the body. }
+var save, flagSym, loopNode, elseBody, ifNode, pairNode, notNode, seq: Integer;
+begin
+  save := PyLoopElseFlag;
+  flagSym := -1;
+  if PyLoopHasElseAhead then
+    flagSym := AllocVar(PyHiddenName('loopelse'), tyBoolean);
+  PyLoopElseFlag := flagSym;
+  if isFor then loopNode := PyParseFor else loopNode := PyParseWhile;
+  PyLoopElseFlag := save;
+  if flagSym < 0 then
+  begin
+    PyParseLoopMaybeElse := loopNode;
+    Exit;
+  end;
+  { the lookahead promised an else; a mismatch here is a parser bug, not a
+    user error, so Expect's own diagnostic is the right one }
+  Expect(tkElse, 'else');
+  Expect(tkColon, ':');
+  elseBody := PyParseSuite;
+  notNode := AllocNode(AN_NOT);
+  ASTLeft[notNode] := PyMakeIdent(flagSym);
+  ASTTk[notNode] := Ord(tyBoolean);
+  pairNode := AllocNode(AN_PAIR);
+  ASTLeft[pairNode] := elseBody;
+  ASTRight[pairNode] := -1;
+  ifNode := AllocNode(AN_IF);
+  ASTLeft[ifNode] := notNode;
+  ASTRight[ifNode] := pairNode;
+  seq := PySeqAppend(-1, PyMakeFlagSet(flagSym, False));
+  seq := PySeqAppend(seq, loopNode);
+  seq := PySeqAppend(seq, ifNode);
+  { an AN_SEQ is not one of the block-consuming node kinds PyParseBlock knows,
+    so tell it explicitly that both suites are already eaten }
+  PyStmtAteBlock := True;
+  PyParseLoopMaybeElse := seq;
 end;
 
 { `with EXPR as VAR:` — desugared to `VAR = EXPR` followed by the body. The
@@ -13250,7 +13417,7 @@ begin
     (feature-nilpy-nested-defs). }
   if CurTok.Kind = tkFunction then begin Result := PyQueueNestedDef; Exit; end;
   if CurTok.Kind = tkIf then begin Result := PyParseIf; Exit; end;
-  if CurTok.Kind = tkWhile then begin Result := PyParseWhile; Exit; end;
+  if CurTok.Kind = tkWhile then begin Result := PyParseLoopMaybeElse(False); Exit; end;
   if CurTok.Kind = tkTry then
   begin
     { the fallback-import idiom is decided at compile time, not caught at
@@ -13318,7 +13485,7 @@ begin
     ASTTk[Result] := Ord(tyUnknown);
     Exit;
   end;
-  if (CurTok.Kind = tkFor) or PyIsIdent('for') then begin Result := PyParseFor; Exit; end;
+  if (CurTok.Kind = tkFor) or PyIsIdent('for') then begin Result := PyParseLoopMaybeElse(True); Exit; end;
   if PyIsIdent('pass') then begin Next; Exit; end;
   { `break` / `continue`. The lexer already maps break to tkBreak, but no
     statement rule ever consumed either, so both died as "expected expression"
@@ -13327,6 +13494,11 @@ begin
   begin
     Next;
     Result := AllocNode(AN_BREAK);
+    { record that THIS loop was left by a break, so its `else` is skipped.
+      PyLoopElseFlag is the innermost loop's flag and is -1 unless that loop
+      actually has an else clause, so nothing is emitted for a normal break. }
+    if PyLoopElseFlag >= 0 then
+      Result := PySeqAppend(PySeqAppend(-1, PyMakeFlagSet(PyLoopElseFlag, True)), Result);
     Exit;
   end;
   if (CurTok.Kind = tkContinue) or PyIsIdent('continue') then

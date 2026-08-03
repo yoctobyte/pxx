@@ -1672,6 +1672,12 @@ var
   PyPendLamWrapReal: array[0..PY_MAX_NESTED-1] of Integer;
   PyWrapSeq: Integer;                       { serial for the synthetic wrapper name }
   PyStmtAteBlock: Boolean;   { last statement consumed its own indented block AND the DEDENT (nested def) }
+  { Syms[] index of the innermost enclosing loop's `else` flag, or -1 when that
+    loop has no else clause (or we are not in a loop). A `break` assigns True
+    to it before jumping. Saved/restored around every loop body, so a nested
+    loop's break cannot touch the outer loop's flag.
+    bug-nilpy-for-else-and-while-else-not-supported }
+  PyLoopElseFlag: Integer;
   { Enclosing locals a nested def READS, lifted to trailing by-value parameters
     the call site fills in (feature-nilpy-nested-defs). Python reads a closed-over
     name at CALL time, and a nested def is only callable from inside its parent

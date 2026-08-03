@@ -380,6 +380,14 @@ test-nilpy: $(COMPILER)
 	# 1-/2-arg forms and a user shadow at the folded arity are untouched.
 	./$(COMPILER) test/test_nilpy_min_max_variadic.npy /tmp/test_nilpy_min_max_variadic26
 	test "$$(/tmp/test_nilpy_min_max_variadic26)" = "$$(printf '1\n3\n0\n5\n3\n3.5\n0.5\nc\na\n4 11\n14\n1\n3\n2\n9\no\n100')"
+	# for/while `else` (runs when the loop finished WITHOUT a break -- an empty
+	# iterable still runs it; a break in a NESTED loop must not skip the outer
+	# one's else) and `try ... else` (runs when the body did not raise, before
+	# finally, and its own raise escapes this statement's except).
+	./$(COMPILER) test/test_nilpy_loop_else.npy /tmp/test_nilpy_loop_else26
+	test "$$(/tmp/test_nilpy_loop_else26)" = "$$(printf 'for-else ran\nwhile-else ran\nafter break loop\nm = 2\nempty loop else ran\nouter 1\nouter 2\nouter else ran\nouter else ran, inner skipped\nplain break i = 2\nrange else ran\nrange break i = 1\nfound\nexhausted')"
+	./$(COMPILER) test/test_nilpy_try_else.npy /tmp/test_nilpy_try_else26
+	test "$$(/tmp/test_nilpy_try_else26)" = "$$(printf 'else ran, x = 1\nhandler ran\nbody\nelse\nfinally\nhandler2\nfinally2\ninner body\nouter handler caught the else'"'"'s raise\nearly\nelse\nplain except still works')"
 	./$(COMPILER) test/test_nilpy_membership_bool_return.npy /tmp/test_nilpy_membership_bool_return26
 	test "$$(/tmp/test_nilpy_membership_bool_return26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n3\n3\n3')"
 	# a sibling .py MODULE: unit scoping, its own initialisation, both import forms
@@ -4359,6 +4367,14 @@ test-core: $(COMPILER)
 	# 1-/2-arg forms and a user shadow at the folded arity are untouched.
 	./$(COMPILER) test/test_nilpy_min_max_variadic.npy /tmp/test_nilpy_min_max_variadic26
 	test "$$(/tmp/test_nilpy_min_max_variadic26)" = "$$(printf '1\n3\n0\n5\n3\n3.5\n0.5\nc\na\n4 11\n14\n1\n3\n2\n9\no\n100')"
+	# for/while `else` (runs when the loop finished WITHOUT a break -- an empty
+	# iterable still runs it; a break in a NESTED loop must not skip the outer
+	# one's else) and `try ... else` (runs when the body did not raise, before
+	# finally, and its own raise escapes this statement's except).
+	./$(COMPILER) test/test_nilpy_loop_else.npy /tmp/test_nilpy_loop_else26
+	test "$$(/tmp/test_nilpy_loop_else26)" = "$$(printf 'for-else ran\nwhile-else ran\nafter break loop\nm = 2\nempty loop else ran\nouter 1\nouter 2\nouter else ran\nouter else ran, inner skipped\nplain break i = 2\nrange else ran\nrange break i = 1\nfound\nexhausted')"
+	./$(COMPILER) test/test_nilpy_try_else.npy /tmp/test_nilpy_try_else26
+	test "$$(/tmp/test_nilpy_try_else26)" = "$$(printf 'else ran, x = 1\nhandler ran\nbody\nelse\nfinally\nhandler2\nfinally2\ninner body\nouter handler caught the else'"'"'s raise\nearly\nelse\nplain except still works')"
 	./$(COMPILER) test/test_nilpy_membership_bool_return.npy /tmp/test_nilpy_membership_bool_return26
 	test "$$(/tmp/test_nilpy_membership_bool_return26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n3\n3\n3')"
 	# a sibling .py MODULE: unit scoping, its own initialisation, both import forms

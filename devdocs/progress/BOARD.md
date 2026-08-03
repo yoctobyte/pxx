@@ -35,7 +35,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (200)
+## backlog (199)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -52,7 +52,6 @@ _none_
 | bug-nilpy-float-print-loses-precision-vs-cpython | N | 40 | bug | Float printing loses the last 1-2 significant digits vs CPython's shortest round-trip repr | — |
 | bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip | N | 20 | bug | `print(1e-20)` prints `0.0` — NilPy's float repr has no small-magnitude exponential form | — |
 | bug-nilpy-float-repr-not-shortest-roundtrip | N | 70 | bug | NilPy float repr is fixed-precision, not CPython's shortest round-trip | — |
-| bug-nilpy-for-else-and-while-else-not-supported | N | 30 | bug | The `else` clause on a for/while loop does not parse — `for ... else:` fails with 'expected expression' at the else | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
 | bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
 | bug-nilpy-lambda-over-a-capturing-nested-def-does-not-compile | N | 50 | bug | `def outer(base): def add(v): return v+base; g = lambda: add(10)` fails to COMPILE with `undefined variable (add)` — the transitive-capture path PyParseLambdaStub documents does not fire for this shape. Pre-existing, and independent of the body's shape. | — |
@@ -347,9 +346,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1291)
+## done (1292)
 
-1291 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1292 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -534,7 +533,6 @@ _none_
 - [p 30] [N] bug-nilpy-construction-on-the-right-of-is-does-not-parse
 - [p 30] [N] bug-nilpy-dataclass-no-generated-eq
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
-- [p 30] [N] bug-nilpy-for-else-and-while-else-not-supported
 - [p 30] [N] bug-nilpy-user-def-loses-to-pylibs-variant-overload-at-the-same-arity
 - [p 30] [U] decide-builtin-and-library-code-sharing
 - [p 30] [N] feature-nilpy-list-sort-inplace-key-reverse

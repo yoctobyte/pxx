@@ -444,6 +444,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip | N | 60 | bug | print(float) does not use Python's shortest-round-trip repr: 1/3 loses a digit, 0.1+0.2 prints 0.3 (hiding the error), 1e-20 prints WRONG DIGITS (1.000000000000001e-20), and the scientific-notation threshold differs (3e-05 vs 0.00003) | — |
 | bug-nilpy-float-times-string-hangs | N | 65 | bug | `2.5 * "ab"` hangs forever | — |
 | bug-nilpy-floor-div-assign-is-true-division | N | 55 | bug | `self.n //= v` performs TRUE division — 25 //= 3 gives 8.333… instead of 8. The `//=` token is folded onto the same binop as `/=` | — |
+| bug-nilpy-for-else-and-while-else-not-supported | N | 30 | bug | The `else` clause on a for/while loop does not parse — `for ... else:` fails with 'expected expression' at the else | — |
 | bug-nilpy-for-variable-reused-after-a-non-string-binding-iterates-garbage | N | 70 | bug | A `for` variable that was previously bound to a non-string value iterates GARBAGE | — |
 | bug-nilpy-from-import-as-alias-is-discarded | N | 60 | bug | `from mod import NAME as ALIAS` — the alias is parsed and thrown away | — |
 | bug-nilpy-function-level-import-drops-body | N | 70 | bug | An import inside a function body — and the fix that silently emptied the body | — |

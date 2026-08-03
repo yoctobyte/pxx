@@ -1,0 +1,87 @@
+# The `else` clause on a for/while loop: runs when the loop finished WITHOUT
+# executing a break -- NOT "if the body never ran". An empty iterable still
+# runs the else. bug-nilpy-for-else-and-while-else-not-supported
+for i in [1, 2]:
+    pass
+else:
+    print("for-else ran")
+
+n = 0
+while n < 2:
+    n += 1
+else:
+    print("while-else ran")
+
+# a break skips the else
+for i in [1, 2, 3]:
+    if i == 2:
+        break
+else:
+    print("NOT REACHED")
+print("after break loop")
+
+m = 0
+while m < 5:
+    m += 1
+    if m == 2:
+        break
+else:
+    print("NOT REACHED either")
+print("m =", m)
+
+# an empty iterable still runs the else
+for i in []:
+    print("body")
+else:
+    print("empty loop else ran")
+
+# a break in a NESTED loop must not skip the OUTER loop's else
+for i in [1, 2]:
+    for j in [1, 2, 3]:
+        if j == 2:
+            break
+    print("outer", i)
+else:
+    print("outer else ran")
+
+# ... and the inner loop's own else is the one that gets skipped
+for i in [1]:
+    for j in [1, 2]:
+        if j == 1:
+            break
+    else:
+        print("NOT REACHED inner else")
+else:
+    print("outer else ran, inner skipped")
+
+# a loop with no else at all still breaks normally
+for i in [1, 2, 3]:
+    if i == 2:
+        break
+print("plain break i =", i)
+
+# a range loop
+for i in range(3):
+    pass
+else:
+    print("range else ran")
+
+for i in range(3):
+    if i == 1:
+        break
+else:
+    print("NOT REACHED range")
+print("range break i =", i)
+
+
+# a return out of the loop skips the else
+def find(xs: list, want: int) -> str:
+    for x in xs:
+        if x == want:
+            return "found"
+    else:
+        return "exhausted"
+
+
+print(find([1, 2, 3], 2))
+print(find([1, 2, 3], 9))

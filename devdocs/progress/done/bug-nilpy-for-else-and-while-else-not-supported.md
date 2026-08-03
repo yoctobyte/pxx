@@ -3,6 +3,8 @@ track: N
 prio: 30
 type: bug
 summary: "The `else` clause on a for/while loop does not parse — `for ... else:` fails with 'expected expression' at the else"
+status: done
+owner: claude-AN
 ---
 
 # `for ... else:` / `while ... else:` do not parse
@@ -115,3 +117,75 @@ Add to the gate: `try/else` with the body succeeding (else runs), with the body
 raising (else skipped, handler runs), with `finally` also present (ordering:
 else before finally), and an exception raised from inside the `else` body
 escaping this statement's own `except`.
+
+## Fixed 2026-08-03 — all three `else` families
+
+`for ... else`, `while ... else` and `try ... else` all work and all diff
+byte-identical against CPython. Three desugars as the ticket said, sharing one
+hidden-flag idiom.
+
+### The loops
+
+`PyParseLoopMaybeElse` (pyparser.inc) wraps both loop parsers:
+
+```
+__loopelseN := False
+<loop>                 { each `break` in THIS loop assigns __loopelseN := True }
+if not __loopelseN then <else suite>
+```
+
+The flag has to exist BEFORE the body is parsed — that is where the break
+assignments are built — so `PyLoopHasElseAhead` decides by token lookahead:
+find the header's own `:` (depth-tracked, so the `:` of a dict literal or a
+slice in the header is not mistaken for it), skip the suite via the existing
+`PySkipToMatchingDedent`, and test for `else`. The one-line body form
+(`while c: x = 1` then `else:`) is handled too.
+
+`PyLoopElseFlag` is the innermost loop's flag, saved and restored around every
+loop body and set to **-1 for a loop with no else**. That is what makes the
+ticket's care point fall out: a break in a nested loop cannot reach the outer
+loop's flag, so the outer else still runs and the inner one is skipped — both
+verified. It also means no dead assignment is emitted for an ordinary break,
+which is every break in the corpus.
+
+`return` skipping the else came free, as predicted.
+
+### `try ... else`
+
+Not the same desugar, as the 2026-08-02 note said. The flag is set as the LAST
+statement of the protected body, so it runs only on completion:
+
+```
+__tryelseN := False
+try: <body>; __tryelseN := True
+except ...: <handlers>
+if __tryelseN: <else suite>          { OUTSIDE the try/except }
+```
+
+The test node is placed inside the try-FINALLY's protected region and outside
+the try-EXCEPT's, which gives Python's ordering (else before finally) and
+Python's scoping (a raise from the else escapes this statement's own handlers
+but is still covered by its finally) from the same placement. `return` /
+`break` / a raise out of the try body all skip the else for free, same
+mechanism as the loops. `try ... else` with no `except:` is now a named error
+rather than a parse failure.
+
+The "expected expression" misdiagnosis the ticket flagged is gone by
+construction — all three clauses parse.
+
+### Verified
+
+`test/test_nilpy_loop_else.npy` (14 lines) and `test/test_nilpy_try_else.npy`
+(12 lines), both new and registered in both `test-nilpy` Makefile sites,
+byte-identical to CPython. Between them: for-else and while-else with and
+without a break; an empty iterable (else still runs); a break in a nested inner
+loop (outer else runs, inner else skipped); a `range()` loop; `return` out of a
+loop; try-else with the body succeeding and raising; with `finally` present in
+both cases (ordering checked); a raise from inside the else escaping to an
+outer handler; `return` out of a try body; and a plain try/except unchanged.
+
+`tools/gate.sh quick` GREEN (self-host fixedpoint + `--tier quick` + FPC seed
+canary).
+
+## Log
+- 2026-08-03 — resolved, commit PENDING-COMMIT.

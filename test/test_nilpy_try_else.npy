@@ -1,0 +1,69 @@
+# `try ... else:` -- runs when the try body completed WITHOUT raising, before
+# any finally, and an exception raised inside the else is NOT caught by this
+# statement's own handlers. bug-nilpy-for-else-and-while-else-not-supported
+try:
+    x = 1
+except Exception:
+    print("handler ran")
+else:
+    print("else ran, x =", x)
+
+# body raises: handler runs, else skipped
+try:
+    raise ValueError("boom")
+except Exception:
+    print("handler ran")
+else:
+    print("NOT REACHED")
+
+# ordering with finally: else before finally
+try:
+    print("body")
+except Exception:
+    print("NOT REACHED handler")
+else:
+    print("else")
+finally:
+    print("finally")
+
+# and when the body raises, with a finally present
+try:
+    raise ValueError("boom2")
+except Exception:
+    print("handler2")
+else:
+    print("NOT REACHED else2")
+finally:
+    print("finally2")
+
+# an exception raised from inside the else escapes THIS statement's except
+try:
+    try:
+        print("inner body")
+    except ValueError:
+        print("NOT REACHED inner handler")
+    else:
+        raise ValueError("from else")
+except ValueError:
+    print("outer handler caught the else's raise")
+
+# a return out of the try body skips the else
+def f(n: int) -> str:
+    try:
+        if n == 0:
+            return "early"
+    except Exception:
+        return "handled"
+    else:
+        return "else"
+    return "fell through"
+
+
+print(f(0))
+print(f(1))
+
+# a plain try/except with no else is unchanged
+try:
+    raise ValueError("v")
+except ValueError:
+    print("plain except still works")

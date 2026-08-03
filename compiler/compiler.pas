@@ -860,6 +860,7 @@ begin
 
   if isNilPy then
   begin
+    PyLoopElseFlag := -1;   { no enclosing loop yet; 0 is a real Syms index }
     PyExpandFStrings;
     PyLexAll(False);
     { -g: main-file token boundary, exactly as the Pascal branch below sets it.
