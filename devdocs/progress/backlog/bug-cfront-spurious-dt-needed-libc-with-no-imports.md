@@ -1,7 +1,8 @@
 ---
-track: C
+track: B
 prio: 45
 type: bug
+owner: claude-AC
 ---
 
 # A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing
@@ -94,3 +95,59 @@ is statically linked and has no `DT_NEEDED` it does not import from. Then the
 byte-order assertions can be restored to `test/cerrno_strings.c` — they were
 removed precisely because this made that test unrunnable under qemu on targets
 with no sysroot, and their return would be the end-to-end proof.
+
+## ROOT CAUSE CORRECTED (2026-08-03) — the binary DOES import, and it is not a Track C bug
+
+**The "imports NOTHING" diagnosis above is wrong, and it is wrong for a tooling
+reason worth recording.** `readelf --dyn-syms` needs section headers; pxx emits
+these binaries with program headers only ("no section header" in `file` output),
+so readelf lists nothing whatever the dynamic segment says. Reading the same
+binary through the segment tells the truth:
+
+```
+$ objdump -T htonbin
+DYNAMIC SYMBOL TABLE:
+0000000000000000      DF *UND*  0000000000000000 htons
+```
+
+One dynamic symbol, one RELA entry (`DT_RELASZ` = 24 = exactly one), and the
+`DT_NEEDED` is honest: `htons` really is being imported from glibc. The ELF
+writer is fine — it emits one NEEDED per distinct library over `ExternalProc[]`,
+and `RegisterExternal` only fires for a proc still marked external at codegen.
+
+So there is nothing to prune and nothing to fix in `compiler/**`. **Use
+`objdump -T` (or `readelf -d` + `DT_RELASZ`), never `readelf --dyn-syms`, on a
+pxx binary.**
+
+### The actual defect (Track B, `lib/crtl`)
+
+crtl's sibling auto-pull is by convention: `crtl/include/<name>.h` pulls
+`crtl/src/<name>.c` (`CPCrtlSrcOf`, `compiler/cpreproc.inc`). The byte-order and
+socket functions are DECLARED in `arpa/inet.h`, `netinet/in.h` and
+`sys/socket.h`, but IMPLEMENTED in `crtl/src/socket.c` — a path no one of those
+headers maps to (`src/arpa/inet.c`, `src/netinet/in.c`, `src/sys/socket.c` all
+do not exist). The impl is therefore never pulled, the prototype stays external,
+and the call falls back to a glibc dynamic import. It *works* on glibc, which is
+why it read as a phantom NEEDED rather than an unresolved symbol.
+
+`strlen` is static precisely because `string.h` ↔ `src/string.c` obeys the
+convention.
+
+### Proven fix (measured here, then reverted — `lib/**` is Track B's)
+
+1. move `lib/crtl/src/socket.c` → `lib/crtl/src/sys/socket.c` (so `sys/socket.h`
+   pulls it by the existing convention — `src/sys/` already holds `mman.c`,
+   `stat.c`, `time.c`);
+2. `#include <sys/socket.h>` from `arpa/inet.h` and `netinet/in.h`, so a program
+   that includes only those still reaches the impl.
+
+Measured with exactly that change in place:
+
+| | before | after |
+| --- | --- | --- |
+| `#include <arpa/inet.h>` + `htons(1)` | dynamically linked, NEEDED libc.so.6, imports `htons` | **statically linked, no imports** |
+| `htons(1)` / `htonl(1)` values | 256 / 16777216 | 256 / 16777216 (unchanged, = gcc) |
+
+Re-laned to **Track B**. The gate stands as written, including restoring the
+byte-order assertions to `test/cerrno_strings.c` — with this fix that test is
+statically linked again and runs under qemu with no sysroot.

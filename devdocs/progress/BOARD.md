@@ -47,7 +47,7 @@ _none_
 | bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c | A | 40 | bug | The caller side now follows the C ABI for 64-bit arguments to external functions, but a pxx routine CALLED FROM C still spills them with the internal packed convention — so on xtensa, where the C ABI skips to an even register, a C caller and a pxx callee would disagree. Latent: nothing crosses that way today. | — |
 | bug-cfront-no-entry-stub-for-xtensa | C | 40 | bug | No C program entry stub for xtensa — no C compiles for that target at all | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
-| bug-cfront-spurious-dt-needed-libc-with-no-imports | C | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
+| bug-cfront-spurious-dt-needed-libc-with-no-imports | B | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
 | bug-nilpy-bare-dot-float-literals-do-not-lex | N | 35 | bug | `.5` and `5.` do not lex — the shared number scanner requires a digit on BOTH sides of the dot, which is right for Pascal and wrong for Python | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
@@ -1746,7 +1746,7 @@ _none_
 - [p 50] [T] task-t-xeon-host-local-health-alerting
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [C] bug-cfront-spurious-dt-needed-libc-with-no-imports
+- [p 45] [B] bug-cfront-spurious-dt-needed-libc-with-no-imports
 - [p 45] [N] bug-nilpy-bytearray-constructor-only-accepts-a-length
 - [p 45] [N] bug-nilpy-missing-builtins-step-slicing-range-into-list
 - [p 45] [N] bug-nilpy-nested-for-comprehension-not-supported
