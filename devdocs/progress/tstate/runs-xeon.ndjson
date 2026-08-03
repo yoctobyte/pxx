@@ -376,3 +376,4 @@
 {"date": "2026-08-03T15:10:30Z", "fixed": ["test-c-conformance#shard2/6", "test-c-conformance-i386#shard2/6"], "full": true, "new_red": [], "sha": "6995a1a0d61817b767126d0d9ed818770e7ae9c3", "tier": "full", "verdict": "RED", "wall": 393.8}
 {"date": "2026-08-03T15:16:22Z", "fixed": ["test-core#src:test/cstatic_init_cast.c"], "full": false, "new_red": [], "sha": "d3afe9dae0e684f60069670da5d3d3d626493a15", "tier": "native", "verdict": "GREEN", "wall": 110.0}
 {"date": "2026-08-03T15:23:19Z", "fixed": [], "full": true, "new_red": [], "sha": "d3afe9dae0e684f60069670da5d3d3d626493a15", "tier": "full", "verdict": "GREEN", "wall": 386.1}
+{"date": "2026-08-03T15:26:31Z", "fixed": [], "full": false, "new_red": [], "sha": "d3afe9dae0e684f60069670da5d3d3d626493a15", "tier": "opt", "verdict": "GREEN", "wall": 182.9}
