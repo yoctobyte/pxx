@@ -144,4 +144,4 @@ cannot quietly break them instead.
 `tools/gate.sh quick` GREEN (self-host fixedpoint, testmgr quick, FPC canary).
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING.
+- 2026-08-03 — resolved, commit eee8c4998.
