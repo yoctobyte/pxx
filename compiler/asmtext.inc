@@ -648,6 +648,16 @@ begin
     else Error('EmitAsmX64: unsupported cvttsd2si form');
     Exit;
   end;
+  { cvtsd2si is cvttsd2si's ROUNDING sibling ($2D vs $2C) — it honours the
+    rounding mode where cvttsd2si always truncates. Both are needed together
+    wherever a value is split into an integer part and a rounded fraction. }
+  if CaseEqual(mnem, 'cvtsd2si') then
+  begin
+    if (k0 = 0) and (k1 = 0) then x64_sse_rr($F2, $2D, r0, r1, s0 = 8)
+    else if (k0 = 0) and (k1 = 2) then x64_sse_rm($F2, $2D, r0, mb1, md1, s0 = 8, False)
+    else Error('EmitAsmX64: unsupported cvtsd2si form');
+    Exit;
+  end;
 
   { movabs reg, imm64 — the explicit 10-byte REX.W B8+r imm64 form. }
   if CaseEqual(mnem, 'movabs') then

@@ -53,7 +53,6 @@ lives in git, not in a timestamp._
 | bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c | A | 40 | bug | The caller side now follows the C ABI for 64-bit arguments to external functions, but a pxx routine CALLED FROM C still spills them with the internal packed convention — so on xtensa, where the C ABI skips to an even register, a C caller and a pxx callee would disagree. Latent: nothing crosses that way today. | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-a-selfhost-recipe-should-rename-not-write-in-place | A | 55 | bug | The self-host chain compiles straight onto the path it is about to exec, so a concurrent fd holder makes the exec fail with ETXTBSY. Write to a temp name and rename — atomic in RUN_TMP, and a new inode | — |
-| bug-b-writeln-float-with-17-decimals-prints-garbage | A | 55 | bug | `WriteLn(x:0:17)` prints garbage | — |
 | bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity | C | 55 | bug | In a mixed Pascal+C build, a C call binds to a same-named Pascal routine at the wrong arity | — |
 | bug-cfront-error-directive-silently-ignored | C | 75 | bug | `#error` in a LIVE branch is silently ignored — the program compiles and runs. Any C source whose configuration guard says \"this build is unsupported\" is built anyway, usually with most of the file #if'd away. Found while scoping cpyext M5: it made a Cython module look like it compiled clean when 5000 of its 8000 lines had been discarded. | — |
 | bug-cfront-no-entry-stub-for-xtensa | C | 40 | bug | No C program entry stub for xtensa — no C compiles for that target at all | — |
@@ -114,6 +113,7 @@ lives in git, not in a timestamp._
 | compat-pascal-math-intrinsics-not-in-the-system-unit | A | 45 | compat | sqrt/sin/cos/exp/ln/arctan require `uses math`; in FPC they are System-unit intrinsics available with no uses clause. Loud (undefined variable), but it breaks unmodified FPC/Delphi source on its first line | — |
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
+| compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | decide-abi-portable-vs-target-split | U | 60 | decide |  | — |
 | decide-builtin-and-library-code-sharing | U | 30 | decide | A builtin unit and lib/rtl cannot share code today: moving the shared part down breaks library READABILITY (you must be able to step into sysutils and read it straight through), and letting a builtin use the library collides in NilPy's flat unit scope. The float core is being copied because of it. Review when the next clash lands — not a blocker for anything now. | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
@@ -364,7 +364,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1253)
+## done (1254)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -442,6 +442,7 @@ lives in git, not in a timestamp._
 | bug-b-floattostrsig-caps-at-15-significant-digits | B | 65 | bug | `FloatToStrSig` caps at 15 significant digits, so no double round-trips | — |
 | bug-b-strtofloat-not-correctly-rounded | B | 60 | bug | `StrToFloat` is not correctly rounded, so exact decimals still do not read back | — |
 | bug-b-sysutils-and-pylib-exception-declarations-diverged | B | 70 | bug | sysutils and pylib both declare `Exception`, and their shapes had diverged | — |
+| bug-b-writeln-float-with-17-decimals-prints-garbage | A | 55 | bug | `WriteLn(x:0:17)` prints garbage | — |
 | bug-bare-function-name-call-vs-resultvar | A | 50 | bug | Bare function name in an expression: PXX calls it, FPC/ISO reads the result var | — |
 | bug-bare-read-write-in-method-hits-intrinsic | A | 50 | bug | Bare `Read`/`Write` inside a method resolves to the console intrinsic, not the method | — |
 | bug-basic-goto-gosub-halts-program | A | 70 | bug | bug: BASIC frontend's GOTO/GOSUB silently halt the program instead of jumping | — |
@@ -1696,7 +1697,6 @@ lives in git, not in a timestamp._
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
 - [p 55] [A] bug-a-selfhost-recipe-should-rename-not-write-in-place
-- [p 55] [A] bug-b-writeln-float-with-17-decimals-prints-garbage
 - [p 55] [C] bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [N] bug-nilpy-def-return-coerces-a-float-to-the-inferred-int-result
@@ -1785,6 +1785,7 @@ lives in git, not in a timestamp._
 - [p 40] [N] bug-nilpy-list-mutators-return-self-instead-of-none
 - [p 40] [N] bug-nilpy-list-of-custom-objects-loses-repr-str
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
+- [p 40] [A] compat-pascal-write-fixed-huge-magnitude-differs-from-fpc
 - [p 40] [S] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue

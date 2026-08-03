@@ -5601,13 +5601,35 @@ procedure EmitWriteFloatFixed(width, decimals: Integer);
 { Double value in xmm0. Prints [-]intpart.frac with exactly 'decimals'
   fractional digits (decimals=0 -> rounded integer, no point), right-justified in
   a field of `width` columns (width<=0 = no padding). Reuses the integer
-  printers; the value is scaled by 10^decimals and rounded to an Int64 so all
-  digits come from integer division. }
-var pow10, divisor: Int64; i, k, jncOff: Integer;
+  printers, so all digits come from integer division.
+
+  The INTEGER AND FRACTIONAL parts are scaled SEPARATELY. Scaling the whole
+  value by 10^decimals in one multiply overflows Int64 the moment
+  |v| * 10^decimals reaches 2^63 — `WriteLn(1e16:0:5)` and `WriteLn(267.5:0:17)`
+  both did, and printed 2^63's own digits with a point pushed in
+  (92233720368547.75808), with nothing to suggest the number was debris
+  (bug-b-writeln-float-with-17-decimals-prints-garbage).
+
+  trunc(|v|) is exact in Int64 for |v| < 2^63, and |v| - trunc(|v|) is exact
+  too, both operands being representable. The fraction is below 1, so scaling
+  IT by up to 10^18 cannot overflow — one multiply and one rounding, the same
+  quality as before for every value that already printed correctly.
+
+  Digits past the 18th are printed as zeros rather than guessed: a double
+  carries no information there, and FPC pads the same way (measured — both
+  print `0.1:0:20` as 0.10000000000000000000).
+
+  |v| >= 2^63 has no fixed form to build and is still wrong; FPC prints those
+  in full, so the residual is
+  compat-pascal-write-fixed-huge-magnitude-differs-from-fpc. }
+var pow10, divisor: Int64; i, k, fdigits, jncOff: Integer;
     pNotNeg, pCntTop, pCntDone, pNoPad: Integer;
 begin
+  { the fractional scale, capped where Int64 stops carrying information }
+  fdigits := decimals;
+  if fdigits > 18 then fdigits := 18;
   pow10 := 1;
-  for i := 1 to decimals do pow10 := pow10 * 10;
+  for i := 1 to fdigits do pow10 := pow10 * 10;
 
   { Field-width padding: a pre-pass computes the formatted length and emits the
     leading spaces, right-justifying the value (FPC `:w:d`). It must not disturb
@@ -5623,13 +5645,31 @@ begin
     Code[pNotNeg] := Byte(CodeLen - (pNotNeg + 1));
     EmitB($48); EmitB($0F); EmitB($BA); EmitB($F0); EmitB($3F);   { btr rax, 63 (abs bits) }
     EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C8);   { movq xmm1, rax }
-    MovRaxImm(pow10);
-    EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($D0);   { cvtsi2sd xmm2, rax }
-    EmitB($F2); EmitB($0F); EmitB($59); EmitB($CA);               { mulsd xmm1, xmm2 }
-    EmitB($F2); EmitB($48); EmitB($0F); EmitB($2D); EmitB($C1);   { cvtsd2si rax, xmm1 }
-    EmitB($48); EmitB($31); EmitB($D2);                           { xor rdx, rdx }
-    EmitB($48); EmitB($B9); EmitI64(pow10);                       { mov rcx, pow10 }
-    EmitB($48); EmitB($F7); EmitB($F1);                           { div rcx -> rax=intpart }
+    { The intpart AS PRINTED, which means AFTER the fraction's rounding: `9.999:7:2`
+      prints `10.00`, two integer digits from a value whose trunc is 9, and
+      counting the untruncated one padded the field one column too wide. Same
+      split as the emission below, in the scratch registers this pre-pass is
+      allowed to touch (rax/rcx/rdx/rsi + xmm1/xmm2; xmm0 must survive). }
+    EmitAsmX64([
+      'cvttsd2si rax, xmm1',
+      'cvtsi2sd xmm2, rax',
+      'subsd xmm1, xmm2'
+    ]);
+    EmitB($48); EmitB($B9); EmitI64(pow10);                        { mov rcx, pow10 }
+    EmitAsmX64([
+      'cvtsi2sd xmm2, rcx',
+      'mulsd xmm1, xmm2'
+    ]);
+    EmitB($48); EmitB($BA); EmitI64($3FE0000000000000);            { mov rdx, 0.5 }
+    EmitAsmX64([
+      'movq xmm2, rdx',
+      'addsd xmm1, xmm2',
+      'cvttsd2si rdx, xmm1',
+      'cmp rdx, rcx',
+      'jb .nocarrywidth',
+      'inc rax',
+    '.nocarrywidth:'
+    ]);
     EmitB($48); EmitB($FF); EmitB($C6);                           { inc rsi (first int digit) }
     EmitB($48); EmitB($B9); EmitI64(10);                          { mov rcx, 10 }
     pCntTop := CodeLen;                                           { .cnt: }
@@ -5663,26 +5703,54 @@ begin
   MovRaxImm(Ord('-')); EmitwriteChar;
   Code[jncOff] := Byte(CodeLen - (jncOff + 1));
 
-  { xmm0 *= (double)pow10 ; rax = round(xmm0) }
-  MovRaxImm(pow10);
-  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C8);   { cvtsi2sd xmm1, rax }
-  EmitB($F2); EmitB($0F); EmitB($59); EmitB($C1);               { mulsd xmm0, xmm1 }
-  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2D); EmitB($C0);   { cvtsd2si rax, xmm0 }
+  { rax = trunc(|v|) exactly; rbx = round((|v| - rax) * 10^fdigits), which
+    cannot overflow because the fraction is below 1. A fraction that rounds up
+    to 1.0 carries into the integer part — with fdigits = 0 that IS the
+    round-to-nearest the `decimals <= 0` form needs. }
+  EmitAsmX64([
+    'cvttsd2si rax, xmm0',
+    'cvtsi2sd xmm1, rax',
+    'subsd xmm0, xmm1'
+  ]);
+  { 10^fdigits reaches 10^18, so it must be the full imm64 form — an imm32
+    silently truncated it and every value with 15+ decimals rounded up }
+  EmitB($48); EmitB($BB); EmitI64(pow10);                       { mov rbx, pow10 }
+  EmitAsmX64([
+    'cvtsi2sd xmm1, rbx',
+    'mulsd xmm0, xmm1',
+    'push rax'
+  ]);
+  { round HALF AWAY FROM ZERO, by adding a half and truncating — FPC's rule for
+    write(v:w:d), measured: 0.5/1.5/2.5 at :0:0 print 1/2/3, where round-to-even
+    would give 0/2/2. The value is already non-negative here (the sign was
+    printed and cleared above), so "away from zero" is "up". }
+  EmitB($48); EmitB($B8); EmitI64($3FE0000000000000);           { mov rax, 0.5 }
+  EmitAsmX64([
+    'movq xmm1, rax',
+    'addsd xmm0, xmm1',
+    'cvttsd2si rax, xmm0',
+    'cmp rax, rbx',
+    'jb .nocarry',
+    'xor rax, rax',
+    'pop rbx',
+    'inc rbx',
+    'push rbx',
+  '.nocarry:',
+    'mov rbx, rax',
+    'pop rax'
+  ]);
 
   if decimals <= 0 then begin EmitwriteUInt; Exit; end;
 
-  { split: rax = intpart, rdx = frac }
-  EmitB($48); EmitB($31); EmitB($D2);                           { xor rdx, rdx }
-  EmitB($48); EmitB($BB); EmitI64(pow10);                       { mov rbx, pow10 }
-  EmitB($48); EmitB($F7); EmitB($F3);                           { div rbx }
-  EmitB($52);                                                   { push rdx (frac) }
+  EmitB($53);                                                   { push rbx (frac) }
   EmitwriteUInt;                                                { print intpart }
   MovRaxImm(Ord('.')); EmitwriteChar;
   EmitB($5B);                                                   { pop rbx (frac) }
 
-  { print frac as 'decimals' zero-padded digits, most significant first.
-    frac stays in rbx (preserved across the write syscall). }
-  for i := decimals - 1 downto 0 do
+  { print frac as 'fdigits' zero-padded digits, most significant first, then
+    literal zeros out to `decimals`. frac stays in rbx (preserved across the
+    write syscall). }
+  for i := fdigits - 1 downto 0 do
   begin
     divisor := 1;
     for k := 1 to i do divisor := divisor * 10;
@@ -5693,6 +5761,10 @@ begin
     EmitB($48); EmitB($89); EmitB($D3);                         { mov rbx, rdx }
     EmitB($48); EmitB($83); EmitB($C0); EmitB($30);             { add rax, '0' }
     EmitwriteChar;
+  end;
+  for i := fdigits + 1 to decimals do
+  begin
+    MovRaxImm(Ord('0')); EmitwriteChar;
   end;
 end;
 

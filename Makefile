@@ -2098,6 +2098,11 @@ test-core: $(COMPILER)
 	# bug-a-float-literal-lexer-is-not-correctly-rounded
 	./$(COMPILER) -Fulib/rtl test/lex_float_literal.pas /tmp/lex_float_literal26
 	test "$$(/tmp/lex_float_literal26 | tail -1)" = "LEXFLOAT OK"
+	# write(v:w:d) must not overflow Int64 into 2^63's own digits, and must round
+	# the way FPC does (half away from zero).
+	# bug-b-writeln-float-with-17-decimals-prints-garbage
+	./$(COMPILER) test/lib_writefloat_fixed.pas /tmp/lib_writefloat_fixed26
+	test "$$(/tmp/lib_writefloat_fixed26 | tail -1)" = "WRITEFLOAT OK"
 	./$(COMPILER) --strict-fpc -Fulib/rtl test/lib_strict_fpc.pas /tmp/lib_strict_fpc26
 	test "$$(/tmp/lib_strict_fpc26)" = "42 OK"
 	# ...and it activates its member flags (StrictCase rejects a duplicate label

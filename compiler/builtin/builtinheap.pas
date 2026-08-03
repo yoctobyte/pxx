@@ -2941,8 +2941,21 @@ end;
 
 procedure PXXWriteFloatFixed(p: Pointer; decimals: NativeInt);
 { [-]intpart.frac with exactly 'decimals' fractional digits (0 -> rounded
-  integer, no point). Mirrors EmitWriteFloatFixed (x86-64). }
-var x, pw, v, ip, rem, dv, r, two52: Double; d: Integer; i: Int64; ch: Char;
+  integer, no point). Mirrors EmitWriteFloatFixed (x86-64), and must keep
+  mirroring it: this is the i386 / arm32 / riscv32 route to the same output, so
+  a program's text must not depend on which backend built it.
+
+  The INTEGER AND FRACTIONAL parts are scaled SEPARATELY, for the same reason
+  the x86-64 emitter does it: scaling the whole value by 10^decimals pushes it
+  past the 53-bit mantissa long before it runs out of exponent, so the low
+  digits become the scale's granularity rather than the number's — `267.5:0:20`
+  printed 267.50000000000000524288, where 524288 is 2^19 and no part of the
+  value (bug-b-writeln-float-with-17-decimals-prints-garbage).
+
+  Splitting first keeps the product below 1e18, and digits past the 18th are
+  printed as zeros rather than guessed: a double carries no information there,
+  and FPC pads the same way. }
+var x, pw, v, ip, rem, dv, r, two52: Double; d, fdigits: Integer; i: Int64; ch: Char;
 begin
   two52 := 1;
   i := 1;
@@ -2957,56 +2970,66 @@ begin
     write('-');
     x := -x;
   end;
+  fdigits := decimals;
+  if fdigits > 18 then fdigits := 18;
   pw := 1;
   i := 1;
-  while i <= decimals do
+  while i <= fdigits do
   begin
     pw := pw * 10;
     i := i + 1;
   end;
-  { v := round-even(x * pw) }
-  v := x * pw;
+  { ip := trunc(x), by the round-even-then-correct-down trick used above }
+  if x >= two52 then
+    ip := x
+  else
+  begin
+    r := x + two52;
+    r := r - two52;
+    if r > x then r := r - 1;
+    ip := r;
+  end;
+  { rem := round-half-AWAY((x - ip) * pw). The fraction is below 1, so the
+    product stays under 1e18 and every digit of it is a digit of the value; the
+    +0.5-then-truncate is FPC's rounding rule for write(v:w:d), measured
+    (0.5/1.5/2.5 at :0:0 print 1/2/3, not round-to-even's 0/2/2). x is
+    non-negative here, the sign having been printed and removed. }
+  v := (x - ip) * pw + 0.5;
   if v < two52 then
   begin
     r := v + two52;
-    v := r - two52;
-  end;
-  if decimals <= 0 then
-  begin
-    PXXWriteUIntD(@v);
-    Exit;
-  end;
-  { exact integer split v = ip*pw + rem (correct the rounded quotient) }
-  r := v / pw;
-  if r < two52 then
-  begin
-    ip := r + two52;
-    ip := ip - two52;
+    rem := r - two52;
+    if rem > v then rem := rem - 1;      { round-even then correct down = trunc }
   end
   else
-    ip := r;
-  rem := v - ip * pw;
-  if rem < 0 then
+    rem := v;
+  if rem >= pw then          { the fraction rounded up to 1.0 }
   begin
-    ip := ip - 1;
-    rem := rem + pw;
-  end;
-  if rem >= pw then
-  begin
+    rem := 0;
     ip := ip + 1;
-    rem := rem - pw;
+  end;
+  if decimals <= 0 then      { fdigits = 0, so `rem >= pw` above IS the rounding }
+  begin
+    PXXWriteUIntD(@ip);
+    Exit;
   end;
   PXXWriteUIntD(@ip);
   write('.');
   dv := pw / 10;
   i := 1;
-  while i <= decimals do
+  while i <= fdigits do
   begin
     d := Trunc(rem / dv);
     rem := rem - d * dv;
     ch := Chr(48 + d);
     write(ch);
     dv := dv / 10;
+    i := i + 1;
+  end;
+  i := fdigits + 1;
+  while i <= decimals do     { past what a double knows: zeros, not guesses }
+  begin
+    write('0');
     i := i + 1;
   end;
 end;

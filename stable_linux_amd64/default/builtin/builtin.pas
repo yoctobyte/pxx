@@ -848,7 +848,9 @@ function StrFloat(v: Double; width: Integer; decimals: Integer): AnsiString;
 var
   neg: Boolean;
   pw, scaled, ip, fp: Int64;
-  i: Integer;
+  i, k: Integer;
+  capped: Boolean;
+  fv: Double;
   frac: string;
   e: Integer;
   m: Double;
@@ -892,17 +894,65 @@ begin
   begin
     neg := v < 0;
     if neg then v := -v;
-    pw := 1;
-    for i := 1 to decimals do pw := pw * 10;
-    scaled := Round(v * pw);              { round-to-nearest, Int64 }
-    ip := scaled div pw;
-    fp := scaled mod pw;
-    Result := StrInt(ip, 0);
-    if decimals > 0 then
+    { 10^decimals, and whether it even fits Int64 (it does not past 18) }
+    pw := 1; capped := False;
+    for i := 1 to decimals do
+      if pw <= 922337203685477580 then pw := pw * 10 else capped := True;
+    if (not capped) and (v * pw < 9.2e18) then
     begin
-      frac := StrInt(fp, 0);
-      while Length(frac) < decimals do frac := '0' + frac;
-      Result := Result + '.' + frac;
+      { The single-scaled-multiply path, kept EXACTLY as it was for every case
+        it can represent — one multiply, one rounding, and every value that
+        printed correctly before still prints the identical text. }
+      scaled := Trunc(v * pw + 0.5);      { half AWAY FROM ZERO, as FPC rounds }
+      ip := scaled div pw;
+      fp := scaled mod pw;
+      Result := StrInt(ip, 0);
+      if decimals > 0 then
+      begin
+        frac := StrInt(fp, 0);
+        while Length(frac) < decimals do frac := '0' + frac;
+        Result := Result + '.' + frac;
+      end;
+    end
+    else if v >= 9.2e18 then
+      { The integer part alone does not fit Int64, so there is no fixed form to
+        build. FPC keeps going here for a while (it prints 1e60 in full) and
+        then falls back to an exponent form whose exponent width depends on
+        whether the value was typed Extended — chasing that exactly is not
+        worth it, so pxx uses its own exponent spelling and the residual is
+        recorded as compat-pascal-write-fixed-huge-magnitude-differs-from-fpc.
+        Whatever it prints, it is a number rather than the overflow debris the
+        single-multiply path produced. }
+      Result := FloatToExpStr(v)
+    else
+    begin
+      { SPLIT, because `v * 10^decimals` overflowed Int64 — `WriteLn(1e16:0:5)`
+        did, and printed 92233720368547.75808, which is 2^63's digits with a
+        point pushed in. Nothing warned.
+
+        The integer part is exact in Int64 here (v < 2^63 was just checked) and
+        `v - ip` is exact too, both operands being representable. The fraction
+        is below 1, so scaling it by up to 10^18 cannot overflow — one multiply
+        and one rounding, the same quality as the fast path above. Digits past
+        the 18th are printed as zeros rather than guessed: a double carries no
+        information there, and FPC pads the same way (measured: `0.1:0:20` is
+        `0.10000000000000000000` on both). }
+      ip := Trunc(v);
+      fv := v - ip;
+      k := decimals;
+      if k > 18 then k := 18;
+      pw := 1;
+      for i := 1 to k do pw := pw * 10;
+      fp := Trunc(fv * pw + 0.5);                          { as above }
+      if fp >= pw then begin fp := 0; ip := ip + 1; end;   { .999.. rounded up }
+      Result := StrInt(ip, 0);
+      if decimals > 0 then
+      begin
+        frac := StrInt(fp, 0);
+        while Length(frac) < k do frac := '0' + frac;
+        while Length(frac) < decimals do frac := frac + '0';
+        Result := Result + '.' + frac;
+      end;
     end;
     if neg then Result := '-' + Result;
   end;

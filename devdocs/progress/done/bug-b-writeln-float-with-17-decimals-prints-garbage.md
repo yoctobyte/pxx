@@ -2,6 +2,8 @@
 track: A
 prio: 55
 type: bug
+status: done
+owner: claude-AN
 ---
 
 # `WriteLn(x:0:17)` prints garbage
@@ -85,3 +87,68 @@ behind it rather than a fresh design.
 
 `WriteLn(x:0:N)` for N = 0..17 over a spread of magnitudes, each checked against
 the exact decimal value (`Decimal(x)` in CPython is a convenient oracle).
+
+## Resolved 2026-08-03 — and it was THREE implementations, not one
+
+The diagnosis on this ticket was exactly right (`Round(v * 10^decimals)` into an
+Int64) but it named only `StrFloat`. `write(v:w:d)` does not go through
+`StrFloat` at all: x86-64 and aarch64 emit the formatter INLINE
+(`EmitWriteFloatFixed`), and i386 / arm32 / riscv32 call a runtime helper
+(`PXXWriteFloatFixed`). Three implementations of one set of rules, and all three
+had the same overflow — which is also why `WriteLn(1e16:0:5)`, an entirely
+ordinary line, printed `92233720368547.75808`.
+
+### The fix, applied identically in all three
+
+Scale the INTEGER and FRACTIONAL parts separately. `trunc(|v|)` is exact in
+Int64 below 2^63 and `|v| - trunc(|v|)` is exact too, both operands being
+representable; the fraction is below 1, so scaling it by up to 10^18 cannot
+overflow. One multiply and one rounding, the same quality as before for every
+value that already printed correctly, and no overflow for the ones that did not.
+
+Digits past the 18th are printed as zeros rather than guessed — a double carries
+no information there, and FPC pads the same way (measured: `0.1:0:20` is
+`0.10000000000000000000` on both). That also removed the runtime helper's own
+`267.5:0:20` -> `267.50000000000000524288`, where 524288 is 2^19 and no part of
+the value.
+
+### A second divergence found while measuring: the ROUNDING RULE
+
+FPC rounds `write(v:w:d)` HALF AWAY FROM ZERO; pxx used `Round`, which is
+half-to-even. `0.5 / 1.5 / 2.5` at `:0:0` printed `0 / 2 / 2` where FPC prints
+`1 / 2 / 3`. Fixed in all three by adding a half and truncating. This was
+pre-existing and unrelated to the overflow — it only surfaced because the new
+regression test compared against FPC row by row instead of against pxx's own
+output.
+
+`cvtsd2si` (the rounding sibling of `cvttsd2si`, opcode $2D vs $2C) was added to
+the x86-64 text assembler along the way.
+
+### Verified
+
+`test/lib_writefloat_fixed.pas`, wired into `test-core`, every expectation taken
+from FPC running the same program: the ticket's repro at 2, 15, 16, 17, 20 and
+30 decimals, negatives, `1e15`..`1e18` at 5 and 3 decimals (the ordinary values
+that overflowed), `1e-300`, the half-way rounding cases, a carry out of the
+fraction into the integer part, and a `:30:5` field width. **Both** paths are
+exercised: `Str` reaches `StrFloat`, `WriteLn` reaches the codegen writer, and
+the point is that they agree. i386 was checked against FPC separately, so the
+runtime-helper path is covered too.
+
+`gate.sh quick` GREEN after `make stabilize` + `make pin` (the builtin units are
+frozen into the pinned binary, so the fixedpoint reports A != B until the pin —
+B == C exactly and the sh-A/sh-B map diff showed no proc appearing or vanishing,
+which is the signature of that and not of a regression).
+
+### Residual, filed rather than left implicit
+
+[[compat-pascal-write-fixed-huge-magnitude-differs-from-fpc]] — `|v| >= 2^63`
+and NaN/Inf still print debris on x86-64 and a full 301-digit expansion on the
+helper backends, where FPC uses an exponent form. Three backends, three answers.
+The real fix is to route x86-64 and aarch64 through `PXXWriteFloatFixed` too,
+collapsing the three implementations into one; that needs a `width` parameter on
+the helper and every call site changed together, which is its own piece of work.
+
+## Log
+- 2026-08-03 — resolved.
+- 2026-08-03 — resolved, commit HEAD.
