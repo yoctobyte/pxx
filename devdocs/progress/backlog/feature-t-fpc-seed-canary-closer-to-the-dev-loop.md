@@ -77,3 +77,24 @@ that dev does not wait).
 Making the canary a GATE. It is advisory on purpose — nothing day-to-day
 depends on the FPC seed, and a hard gate on a path nobody uses would be the
 worst of both worlds. The ask here is latency and visibility, not enforcement.
+
+## Log
+- 2026-08-03 — **instance #4 landed** ([[bug-a-fpc-seed-drift-emitasmx64-forward]]),
+  this time in Track A's own files, which kills the reading that it was a
+  Track N habit. Four in three days.
+- **Partly done in `bed641cf8`**: option 2 (a local check), implemented in the
+  shape option 1 wanted but could not afford — the canary runs CONCURRENTLY
+  inside `gate.sh quick`, so wall time is max() not sum(). Measured beside a
+  running full matrix (load 15.4): the 11s seed build cost ~3s of gate wall.
+  Armed only when `compiler/` has uncommitted changes; a missing FPC is a SKIP,
+  never a failure.
+- **Still open: option 3**, the watcher-side half — run the seed canary FIRST
+  in the fast tier and publish its red immediately. `gate.sh` only helps an
+  agent that RUNS the gate; the model in
+  [[meta-t-dev-throughput-and-track-a-t-integration]] is explicitly that dev
+  pushes on a quick confirm and lets T report back, so the watcher path still
+  needs to be the fast one. Keeping this ticket open for that.
+- Option 4 (a static lint) stays rejected: FPC is the real oracle and now
+  costs ~3s of wall time, so a bespoke scope-rule reimplementation would be
+  strictly worse.
+
