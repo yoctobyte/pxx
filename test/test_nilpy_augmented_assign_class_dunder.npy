@@ -1,0 +1,90 @@
+# `obj += n` on a class instance: Python tries the IN-PLACE dunder (__iadd__),
+# falls back to the binary one (__add__) and REBINDS, and raises TypeError when
+# neither exists. All three used to fall through to the numeric path, which
+# operated on the instance handle and left the name holding 0 -- silently.
+# bug-nilpy-augmented-assign-on-a-class-instance-silently-yields-zero
+
+
+class Acc:
+    def __init__(self, v: int):
+        self.v = v
+
+    def __iadd__(self, o):
+        return Acc(self.v + o)
+
+    def __isub__(self, o):
+        return Acc(self.v - o)
+
+    def __imul__(self, o):
+        return Acc(self.v * o)
+
+    def __ifloordiv__(self, o):
+        return Acc(self.v // o)
+
+    def __imod__(self, o):
+        return Acc(self.v % o)
+
+
+a = Acc(10)
+a += 5
+print(a.v)
+a -= 3
+print(a.v)
+a *= 4
+print(a.v)
+a //= 5
+print(a.v)
+a %= 7
+print(a.v)
+
+
+# only the BINARY dunder declared -- CPython falls back to it and rebinds
+class OnlyBin:
+    def __init__(self, v: int):
+        self.v = v
+
+    def __add__(self, o):
+        return OnlyBin(self.v + o)
+
+    def __mul__(self, o):
+        return OnlyBin(self.v * o)
+
+
+b = OnlyBin(2)
+b += 5
+print(b.v)
+b *= 3
+print(b.v)
+
+
+# the accumulator idiom the silent 0 was hiding in
+total = Acc(0)
+for i in [1, 2, 3, 4]:
+    total += i
+print(total.v)
+
+
+# NEITHER dunder: a real runtime TypeError, so a try/except still compiles
+class Bare:
+    def __init__(self, v: int):
+        self.v = v
+
+
+x = Bare(1)
+try:
+    x += 5
+    print("NOT REACHED")
+except TypeError:
+    print("caught TypeError")
+
+# a plain int accumulator must be untouched by any of this
+n = 0
+for i in [1, 2, 3]:
+    n += i
+print(n)
+
+# and so must a list `+=`, which is in-place extend, not a rebind
+xs = [1]
+ys = xs
+xs += [2, 3]
+print(xs, ys)

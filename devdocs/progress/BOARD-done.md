@@ -395,6 +395,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-arithmetic-operator-dunders-not-dispatched | N | 55 | bug | `Vector(1,2) + Vector(3,4)` silently computed garbage — arithmetic dunders never dispatched | — |
 | bug-nilpy-augmented-add-on-variant-list-is-not-in-place | N | 55 | bug | `xs += ys` on a VARIANT-typed list rebinds instead of extending, so the caller never sees it | — |
 | bug-nilpy-augmented-assign-of-a-variant-param-to-an-int-field-adds-one | N | 70 | bug | `self.n += v` where n is an INT field and v an unannotated parameter adds 1, not v. `C(10).add(5)` returns 11. The variant argument is being read as a truthy 1 | — |
+| bug-nilpy-augmented-assign-on-a-class-instance-silently-yields-zero | N | 45 | bug | `obj += n` on a class instance silently produces 0 — neither __iadd__ nor the __add__ fallback is dispatched, and nothing raises | — |
 | bug-nilpy-augmented-assign-to-a-variant-typed-field-corrupts-it | N | 75 | bug | `self.n += x` produces garbage when the field was initialised from an UNANNOTATED ctor parameter — True, an empty line, or 4.94e-323. Annotating the parameter fixes it. This is the most idiomatic shape in Python OO | — |
 | bug-nilpy-bare-dot-float-literals-do-not-lex | N | 35 | bug | `.5` and `5.` do not lex — the shared number scanner requires a digit on BOTH sides of the dot, which is right for Pascal and wrong for Python | — |
 | bug-nilpy-bitwise-on-float-variant-truncates | A | 30 | bug | NilPy: a bitwise op on a FLOAT variant truncates instead of raising TypeError | — |

@@ -12845,6 +12845,74 @@ begin
   end;
 end;
 
+function PyAugDunderName(binTk: TTokenKind; inPlace: Boolean): AnsiString;
+{ The dunder an augmented assignment asks for. Python tries the IN-PLACE form
+  first (`__iadd__`) and falls back to the binary one (`__add__`), rebinding the
+  name with its result. Keyed on the BINARY token PyAugBinTok already produced,
+  so NilPy's `//=`-is-tkDiv / `/=`-is-tkSlash split (which is the reverse of
+  Pascal's reading — see project_shared_token_means_different_operators_per_
+  frontend) is honoured in one place rather than re-derived here. }
+begin
+  case binTk of
+    tkPlus:  if inPlace then Result := '__iadd__'      else Result := '__add__';
+    tkMinus: if inPlace then Result := '__isub__'      else Result := '__sub__';
+    tkStar:  if inPlace then Result := '__imul__'      else Result := '__mul__';
+    tkSlash: if inPlace then Result := '__itruediv__'  else Result := '__truediv__';
+    tkDiv:   if inPlace then Result := '__ifloordiv__' else Result := '__floordiv__';
+    tkMod:   if inPlace then Result := '__imod__'      else Result := '__mod__';
+    tkAnd:   if inPlace then Result := '__iand__'      else Result := '__and__';
+    tkOr:    if inPlace then Result := '__ior__'       else Result := '__or__';
+    tkXor:   if inPlace then Result := '__ixor__'      else Result := '__xor__';
+    tkShl:   if inPlace then Result := '__ilshift__'   else Result := '__lshift__';
+    tkShr:   if inPlace then Result := '__irshift__'   else Result := '__rshift__';
+    else Result := '';
+  end;
+end;
+
+function PyAugClassDunder(symIdx: Integer; binTk: TTokenKind; rhsNode: Integer): Integer;
+{ `obj += x` where obj is a USER class instance: dispatch __iadd__, else fall
+  back to __add__ and REBIND — Python's own rule. Returns the whole assignment
+  statement, or -1 when the target is not a user class (caller keeps its path).
+
+  Without this the target fell through to the numeric AN_BINOP below, which
+  operated on the instance HANDLE and left the name holding 0 — silently, on an
+  ordinary accumulator idiom, and equally with only `__add__` declared.
+  bug-nilpy-augmented-assign-on-a-class-instance-silently-yields-zero }
+var ci, rec, callNode, asgn: Integer; nm: AnsiString;
+begin
+  PyAugClassDunder := -1;
+  if Syms[symIdx].TypeKind <> tyClass then Exit;
+  rec := Syms[symIdx].RecName;
+  if rec < REC_UCLASS_BASE then Exit;
+  if PyRecIsPylibOwnClass(rec) then Exit;   { TPyList `+=` is extend, handled above }
+  ci := rec - REC_UCLASS_BASE;
+  nm := PyAugDunderName(binTk, True);
+  if (nm = '') or (FindUMeth(ci, nm) < 0) then
+    nm := PyAugDunderName(binTk, False);
+  if (nm = '') or (FindUMeth(ci, nm) < 0) then
+  begin
+    { NEITHER dunder: CPython raises "unsupported operand type(s) for +=".
+      Falling through to the numeric path here is what produced the silent 0
+      this ticket is about, so refuse it — and refuse it at RUN time, so a
+      `try/except TypeError` around the statement still compiles, the same
+      shape every other missing-dunder site in this frontend uses. }
+    callNode := FindProc('PyUnsupportedOperandError');
+    if callNode < 0 then Exit;    { pylib absent: leave the old path alone }
+    asgn := AllocNode(AN_CALL);
+    ASTIVal[asgn] := callNode;
+    ASTTk[asgn] := Ord(tyUnknown);
+    ASTLeft[asgn] := -1;
+    PyAugClassDunder := asgn;
+    Exit;
+  end;
+  callNode := PyCallMeth1(ci, nm, PyMakeIdent(symIdx), rhsNode);
+  if callNode < 0 then Exit;
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(symIdx);
+  ASTRight[asgn] := callNode;
+  PyAugClassDunder := asgn;
+end;
+
 { Register a nested def's SHELL and queue its body for later compilation.
   Returns an empty statement: the def itself produces no code where it stands.
   The typing pre-pass trial-parses the enclosing body too, so this must stay
@@ -13915,6 +13983,14 @@ begin
       Result := PyCallMeth1(PyNodeListCi(PyMakeIdent(symIdx)), 'extend',
                             PyMakeIdent(symIdx), CurASTNode);
       if Result < 0 then Error('Nil Python: pylib TPyList.extend not loaded');
+      Exit;
+    end;
+    { a USER class instance: __iadd__, else __add__ and rebind (Python's rule).
+      Checked after the TPyList case, which has its own in-place meaning. }
+    node := PyAugClassDunder(symIdx, augTk, CurASTNode);
+    if node >= 0 then
+    begin
+      Result := node;
       Exit;
     end;
     { `n = 7; n /= 2` -- unlike a plain rebind (`n = n / 2`), an augmented

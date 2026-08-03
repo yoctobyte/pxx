@@ -40,7 +40,7 @@ _none_
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-cfront-spurious-dt-needed-libc-with-no-imports | B | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
-| bug-nilpy-augmented-assign-on-a-class-instance-silently-yields-zero | N | 45 | bug | `obj += n` on a class instance silently produces 0 — neither __iadd__ nor the __add__ fallback is dispatched, and nothing raises | — |
+| bug-nilpy-augmented-assign-to-a-class-typed-FIELD-silently-yields-zero | N | 45 | bug | `h.acc += 5` on a class-typed FIELD silently yields 0 — the name-target twin is fixed; a dispatch written for the obvious site never fired, so the real code path is unknown | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-bytearray-constructor-only-accepts-a-length | N | 45 | bug | bytearray() only has () and (Integer) overloads — bytearray(b\"abc\") and bytearray([1,2,3]) are compile errors, so a bytearray cannot be built from data | — |
@@ -343,9 +343,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1299)
+## done (1300)
 
-1299 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1300 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -451,7 +451,7 @@ _none_
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [B] bug-cfront-spurious-dt-needed-libc-with-no-imports
-- [p 45] [N] bug-nilpy-augmented-assign-on-a-class-instance-silently-yields-zero
+- [p 45] [N] bug-nilpy-augmented-assign-to-a-class-typed-FIELD-silently-yields-zero
 - [p 45] [N] bug-nilpy-bytearray-constructor-only-accepts-a-length
 - [p 45] [N] bug-nilpy-missing-builtins-step-slicing-range-into-list
 - [p 45] [N] bug-nilpy-nested-for-comprehension-not-supported
