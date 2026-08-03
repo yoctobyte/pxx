@@ -1,0 +1,75 @@
+diff --git a/compiler/parser.inc b/compiler/parser.inc
+index 88e2d7d14..79fe783fb 100644
+--- a/compiler/parser.inc
++++ b/compiler/parser.inc
+@@ -13960,6 +13960,13 @@ begin
+         TypeIsOrdinal. }
+       ASTTk[node] := Ord(TypeArithmeticResult(IntToTypeKind(ASTTk[left]),
+                                               IntToTypeKind(ASTTk[right])))
++    else if PyExprMode and PyIntGrowsOp(op) and
++            PyIsMachineIntTk(IntToTypeKind(ASTTk[left])) and
++            PyIsMachineIntTk(IntToTypeKind(ASTTk[right])) then
++      { NilPy: `*` over two NATIVE ints is still arbitrary precision — see
++        PyIntGrowsOp. Below the promo arm (which already covers the mixed
++        case) and above the ordinal one, which would type it tyInteger. }
++      ASTTk[node] := Ord(tyPromoInt64)
+     else if TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then
+       ASTTk[node] := Ord(TypeArithmeticResult(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
+     else
+@@ -14181,6 +14188,13 @@ begin
+         still resolves as float. }
+       ASTTk[node] := Ord(TypeArithmeticResultOp(IntToTypeKind(ASTTk[left]),
+                                                 IntToTypeKind(ASTTk[right]), op))
++    else if PyExprMode and PyIntGrowsOp(op) and
++            PyIsMachineIntTk(IntToTypeKind(ASTTk[left])) and
++            PyIsMachineIntTk(IntToTypeKind(ASTTk[right])) then
++      { NilPy: `+`/`-` over two NATIVE ints is still arbitrary precision — see
++        PyIntGrowsOp. Below the promo arm (which already covers the mixed case)
++        and above the ordinal one, which would type it tyInteger and wrap. }
++      ASTTk[node] := Ord(tyPromoInt64)
+     else if TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then
+     begin
+       { FPC range-based constants: a NON-NEGATIVE integer literal paired with a
+diff --git a/compiler/symtab.inc b/compiler/symtab.inc
+index d5540c66b..eb62e1c98 100644
+--- a/compiler/symtab.inc
++++ b/compiler/symtab.inc
+@@ -1956,6 +1956,38 @@ begin
+   TypeIsPromoInt := (tk = tyPromoInt32) or (tk = tyPromoInt64);
+ end;
+ 
++{ NilPy's `int` is arbitrary precision, so an ARITHMETIC result over machine
++  ints has to be promotable even when both operands are native — otherwise a
++  value that starts small and grows wraps at 2^63 with no diagnostic, which is
++  the wrong way round: the literal that overflows is the case a programmer
++  notices, and the accumulator is the case they do not
++  (bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps,
++  decided as decide-nilpy-int-promotion-default option 1).
++
++  Only the operators that can GROW a value are listed. `//`, `%`, `&`, `|`,
++  `^` and the comparisons cannot leave the range of their operands, so they
++  keep native codegen and cost nothing; `<<` already forces promo at its own
++  site in pyparser.inc for the same reason this exists. Division is absent
++  because Python's `/` is float.
++
++  This is asked for by NAME at the two binop typing sites rather than folded
++  into TypeArithmeticResult, because that routine is shared with Pascal and C,
++  where `Integer + Integer` must stay an Integer. }
++function PyIntGrowsOp(op: TTokenKind): Boolean;
++begin
++  PyIntGrowsOp := (op = tkPlus) or (op = tkMinus) or (op = tkStar);
++end;
++
++{ A native machine integer, i.e. the operand shape PyIntGrowsOp promotes.
++  Boolean is included because a Python bool IS an int and `True + 1` is 2. }
++function PyIsMachineIntTk(tk: TTypeKind): Boolean;
++begin
++  PyIsMachineIntTk := (tk = tyInteger) or (tk = tyInt64) or (tk = tyBoolean) or
++                      (tk = tyInt8) or (tk = tyUInt8) or (tk = tyInt16) or
++                      (tk = tyUInt16) or (tk = tyInt32) or (tk = tyUInt32) or
++                      (tk = tyUInt64) or (tk = tyNativeInt) or (tk = tyNativeUInt);
++end;
++
+ { Usable inline width in bits, before the value spills to a heap bignum. The
+   boundary is semantically unobservable — the type is arbitrary precision either
+   way — so this only ever changes performance, never a result. }

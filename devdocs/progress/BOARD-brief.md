@@ -5,14 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:8 blocked:6 backlog:190 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1304 rejected:28`
+`unfinished:9 blocked:6 backlog:190 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1304 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (8) — parked mid-flight; re-claim, do not duplicate
+## unfinished (9) — parked mid-flight; re-claim, do not duplicate
 
+- `bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps` [N]
 - `bug-nilpy-non-constant-parameter-defaults-silently-become-none` [N]
 - `bug-nilpy-one-line-def-and-class-bodies-do-not-parse` [N]
 - `bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults` [N]
@@ -39,8 +40,8 @@ _none — no lane is locked._
 - `[p 65] [T]` task-t-worktree-is-not-current-state
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
-- `[p 60] [N]` bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - `[p 60] [U]` decide-abi-portable-vs-target-split
+- `[p 60] [U]` decide-nilpy-int-promotion-costs-10x-on-ordinary-loops
 - `[p 60] [A]` feature-a-abi-oracle
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-float-exception-mask-control

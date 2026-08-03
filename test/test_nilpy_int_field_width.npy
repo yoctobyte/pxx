@@ -1,0 +1,36 @@
+# A field whose initialiser is a small INT LITERAL used to be 4 bytes wide, so
+# it wrapped at 2^31 — two orders of magnitude sooner than the 2^63 the rest of
+# NilPy wraps at, and exactly where an accumulator lives
+# (bug-nilpy-int-promotion-decided-statically, the 2026-07-31 addendum):
+#
+#     2^30 correct | 2^31 -> -2147483648 | 2^32 and up -> 0
+#
+# The cause was PyTypeFromTokenIndex disagreeing with itself: the `int`
+# ANNOTATION mapped to tyInt64 while an integer LITERAL mapped to tyInteger, so
+# `self.v: int = 0` was fine and `self.v = 0` was not. Every host-bridge route
+# (bound method, qualified call, field store, env value) merely reported the
+# narrow field, which is why this looked like four bugs.
+#
+# Beyond 2^63 a field still wraps — that is the ticket's headline case and is
+# tracked there, not here. Expectations are CPython's.
+
+class B:
+    def __init__(self):
+        self.v = 0
+
+b = B()
+for p in [30, 31, 32, 40, 62]:
+    b.v = 2 ** p
+    print(b.v)
+b.v = -4294967296
+print(b.v)
+
+# the annotated spelling, which always worked — pinned so the two cannot drift
+# apart again
+class C:
+    def __init__(self):
+        self.w: int = 0
+
+c = C()
+c.w = 4294967296
+print(c.w)

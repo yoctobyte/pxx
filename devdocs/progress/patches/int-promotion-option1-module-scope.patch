@@ -1,0 +1,124 @@
+diff --git a/compiler/pyparser.inc b/compiler/pyparser.inc
+index c0796aaf9..a4e6d83ff 100644
+--- a/compiler/pyparser.inc
++++ b/compiler/pyparser.inc
+@@ -431,7 +431,13 @@ begin
+   Result := tyUnknown;
+   if (i < 0) or (i >= TokCount) then Exit;
+   case Tokens[i].Kind of
+-    tkInteger: Result := tyInteger;
++    { A 64-bit cell, the same width the `int` ANNOTATION gets below. It used to
++      be tyInteger, and the two disagreeing is what put a 2^31 cliff on a field
++      whose initialiser was a small literal: `self.v = 0` made a 4-byte field,
++      so `b.v = 2147483648` came back -2147483648 and everything from 2^32 up
++      came back 0, while `self.v: int = 0` was fine
++      (bug-nilpy-int-promotion-decided-statically, 2026-07-31 addendum). }
++    tkInteger: Result := tyInt64;
+     tkFloat: Result := tyDouble;
+     tkString: Result := tyString;
+     tkTrue, tkFalse: Result := tyBoolean;
+@@ -14517,6 +14523,74 @@ end;
+   Rolls back the AST, the symbols, the frame and BSSSize: a module-level
+   AllocVar allocates a BSS global, so without the BSSSize restore every
+   iteration would leak the whole module's globals again. }
++{ Does this name already stand for an INTEGER at module scope? Asked by the
++  token-shape probe below, which may not parse and so cannot ask the AST. }
++function PyBlkIntName(const nm: AnsiString): Boolean;
++var ci, si: Integer;
++begin
++  PyBlkIntName := False;
++  ci := PyFindConstraint(nm);
++  if ci >= 0 then
++  begin
++    PyBlkIntName := PyIsMachineIntTk(PyLocals[ci].TypeKind) or
++                    TypeIsPromoInt(PyLocals[ci].TypeKind);
++    Exit;
++  end;
++  si := PyProgSym(nm);
++  if si >= 0 then
++    PyBlkIntName := PyIsMachineIntTk(Syms[si].TypeKind) or
++                    TypeIsPromoInt(Syms[si].TypeKind);
++end;
++
++{ `name = <integer arithmetic>` as the shape of a statement, read from TOKENS.
++
++  The module pre-pass may not trial-parse a right-hand side that sits inside a
++  control-flow block — the block has not run for real yet, so a reference to
++  anything the pre-pass cannot also see calls Error() and Halts the compile
++  (the landmine documented at both callers). So the shapes it trusts there are
++  recognised token by token, and this adds one more: an accumulator.
++
++  It exists because that is precisely where an accumulator LIVES. The headline
++  case of bug-nilpy-int-promotion-decided-statically is
++
++      n = 1
++      for i in range(70):
++          n = n * 2
++
++  and without this the loop body never widens `n`, so it stays the tyInteger
++  its initialiser made it and wraps at 2^63 in silence. Inside a def the AST
++  pre-pass sees the same statement and widens it correctly; only module scope
++  had the hole.
++
++  Recognises ONLY int literals, `+ - *`, and names already known to be
++  integers — no parens (so an ident can never be a call), no dots, no
++  subscripts. Anything else returns False and the caller behaves exactly as
++  before. At least one operator must appear, or this is a plain copy and the
++  existing bare-name arm types it better. }
++function PyBlkIntArith(j: Integer): Boolean;
++var k: Integer; sawOp: Boolean;
++begin
++  PyBlkIntArith := False;
++  sawOp := False;
++  k := j;
++  while (k < MainProgramTokCount) and
++        (not (Tokens[k].Kind in [tkNewline, tkDedent, tkSemicolon])) do
++  begin
++    if Tokens[k].Kind in [tkPlus, tkMinus, tkStar] then
++      sawOp := True
++    else if Tokens[k].Kind = tkInteger then
++      { an int literal — fine }
++    else if Tokens[k].Kind = tkIdent then
++    begin
++      if not PyBlkIntName(GetTokenStr(k)) then Exit;
++    end
++    else
++      Exit;
++    k := k + 1;
++  end;
++  PyBlkIntArith := sawOp;
++end;
++
+ procedure PyCollectModuleLocalsAST;
+ var rnd, i, si, depth, bodyIx, forJ, forCi: Integer;
+     savedTok, savedAST, savedSC, savedCur, savedFS, savedBSS: Integer;
+@@ -14625,6 +14699,11 @@ begin
+         else if (blkJ < MainProgramTokCount) and
+                 (Tokens[blkJ].Kind in [tkLBrack, tkBegin]) then
+           blkTk := tyVariant
++        else if (blkJ < MainProgramTokCount) and PyBlkIntArith(blkJ) then
++          { an accumulator: `n = n * 2`, `total = total + i`. Arbitrary
++            precision, like every other NilPy int arithmetic — see
++            PyBlkIntArith. }
++          blkTk := tyPromoInt64
+         else if (blkJ < MainProgramTokCount) and (Tokens[blkJ].Kind = tkIdent) and
+                 (blkJ + 1 < MainProgramTokCount) and
+                 (Tokens[blkJ + 1].Kind in [tkNewline, tkDedent]) then
+@@ -14798,6 +14877,17 @@ begin
+         else if (forJ < MainProgramTokCount) and
+                 (Tokens[forJ].Kind in [tkLBrack, tkBegin]) then
+           forElemTk := tyVariant
++        else if (forJ + 1 < MainProgramTokCount) and (Tokens[forJ].Kind = tkIdent) and
++                (GetTokenStr(forJ) = 'range') and
++                (Tokens[forJ + 1].Kind = tkLParen) and
++                (PyFindModuleConstraint('range') < 0) and (PyProgSym('range') < 0) then
++          { `for i in range(...)` — the induction variable is an int, and the
++            single most common loop in Python. Left unnoted before, so an
++            accumulator in the body could not be recognised as arithmetic over
++            known ints (PyBlkIntArith) and module-scope factorial kept wrapping.
++            Still a pure token peek: `range` is only trusted when nothing has
++            shadowed it. }
++          forElemTk := tyInt64
+         else if (forJ < MainProgramTokCount) and (Tokens[forJ].Kind = tkIdent) and
+                 (forJ + 1 < MainProgramTokCount) and
+                 (Tokens[forJ + 1].Kind in [tkColon, tkNewline]) then

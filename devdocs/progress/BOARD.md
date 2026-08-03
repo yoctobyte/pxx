@@ -12,10 +12,11 @@ _none_
 
 _none_
 
-## unfinished (8)
+## unfinished (9)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
 | bug-nilpy-non-constant-parameter-defaults-silently-become-none | N | 70 | bug | Every non-constant parameter default silently becomes None on the ordinary call path — `def f(b=[])` gives b=None, and so does `def f(b=w)` for any name w. Only the closure-VALUE path evaluates defaults at def time. | — |
 | bug-nilpy-one-line-def-and-class-bodies-do-not-parse | N | 60 | bug | One-line `def` and `class` bodies do not parse | — |
 | bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults | N | 75 | bug | NilPy: calling a pylib CONTAINER method with too FEW arguments compiles and SEGFAULTS — xs.index(), d.get() both core-dump; too MANY args is correctly rejected | — |
@@ -50,7 +51,6 @@ _none_
 | bug-nilpy-dict-mutation-during-iteration-is-unobserved-not-raised | N | 35 | bug | Mutating a dict while iterating it is silently unobserved; CPython raises RuntimeError 'dictionary changed size during iteration' | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
-| bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
 | bug-nilpy-lambda-over-a-capturing-nested-def-does-not-compile | N | 50 | bug | `def outer(base): def add(v): return v+base; g = lambda: add(10)` fails to COMPILE with `undefined variable (add)` — the transitive-capture path PyParseLambdaStub documents does not fire for this shape. Pre-existing, and independent of the body's shape. | — |
 | bug-nilpy-list-mutators-return-self-instead-of-none | N | 40 | bug | list.append/extend/sort/reverse return Self, so `x = l.sort()` yields the LIST where Python yields None — silent, and the return is load-bearing for the comprehension desugar | — |
 | bug-nilpy-list-of-custom-objects-loses-repr-str | N | 40 | bug | A user class instance boxed in a list/dict prints as empty, losing `__repr__`/`__str__` | — |
@@ -91,6 +91,7 @@ _none_
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | decide-abi-portable-vs-target-split | U | 60 | decide |  | — |
 | decide-builtin-and-library-code-sharing | U | 30 | decide | A builtin unit and lib/rtl cannot share code today: moving the shared part down breaks library READABILITY (you must be able to step into sysutils and read it straight through), and letting a builtin use the library collides in NilPy's flat unit scope. The float core is being copied because of it. Review when the next clash lands — not a blocker for anything now. | — |
+| decide-nilpy-int-promotion-costs-10x-on-ordinary-loops | U | 60 | decide | Option 1 was decided without a number; the number is 10x | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-nilpy-runtime-dunder-dispatch-strategy | U | 45 | decide | Decide: how should NilPy dispatch dunders on a Variant-held instance? | — |
 | decide-nilpy-set-as-a-distinct-type-or-a-list | U | 55→60 | decide | pxx backs a Python set with TPyList. That makes set difference work, makes `list - list` unrejectable, and makes a set repr as [1, 3] instead of {1, 3}. Give sets their own row, or keep the alias and pay at run time? | — |
@@ -385,8 +386,8 @@ _none_
 - [p 65] [T] task-t-worktree-is-not-current-state
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
-- [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [U] decide-abi-portable-vs-target-split
+- [p 60] [U] decide-nilpy-int-promotion-costs-10x-on-ordinary-loops
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control

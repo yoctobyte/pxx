@@ -431,7 +431,13 @@ begin
   Result := tyUnknown;
   if (i < 0) or (i >= TokCount) then Exit;
   case Tokens[i].Kind of
-    tkInteger: Result := tyInteger;
+    { A 64-bit cell, the same width the `int` ANNOTATION gets below. It used to
+      be tyInteger, and the two disagreeing is what put a 2^31 cliff on a field
+      whose initialiser was a small literal: `self.v = 0` made a 4-byte field,
+      so `b.v = 2147483648` came back -2147483648 and everything from 2^32 up
+      came back 0, while `self.v: int = 0` was fine
+      (bug-nilpy-int-promotion-decided-statically, 2026-07-31 addendum). }
+    tkInteger: Result := tyInt64;
     tkFloat: Result := tyDouble;
     tkString: Result := tyString;
     tkTrue, tkFalse: Result := tyBoolean;
