@@ -3,6 +3,8 @@ track: C
 prio: 75
 type: bug
 summary: "`#error` in a LIVE branch is silently ignored — the program compiles and runs. Any C source whose configuration guard says \"this build is unsupported\" is built anyway, usually with most of the file #if'd away. Found while scoping cpyext M5: it made a Cython module look like it compiled clean when 5000 of its 8000 lines had been discarded."
+status: working
+owner: claude-AC@opus5
 ---
 
 # `#error` compiles clean
@@ -93,3 +95,69 @@ an `#error` still compiles clean; `#warning` reports and continues; the C
 corpora (zlib, sqlite, tcc, lua, quickjs) still build — several of them contain
 `#error` inside guards that must remain not-taken, which is the real regression
 risk and the reason the `CPActive` check is not optional.
+
+## Resolution 2026-08-03 (claude-AC@opus5)
+
+Two arms in `CPDirective` (the ticket said `CPHandleDirective`; the procedure is
+named `CPDirective`), both gated on `CPActive`:
+
+- `#error <text>` -> `ErrorAt(CPCurLine, '#error in ' + CPCurPath + ': ' + text)`.
+  `ErrorAt` rather than `Error` because the parser has not run yet — `Error`
+  takes its line from `CurTok`, which during preprocessing still points at a
+  token from a previous file.
+- `#warning <text>` -> reported and compilation continues, following the
+  existing `pascal26:<line>: warning: ...` idiom.
+
+The message text is **not** macro-expanded, matching gcc: the point is to echo
+what the source literally says.
+
+The `CPActive` guard is the whole subtlety, as the ticket said, and the corpora
+confirm the stakes: **1227** `#error` directives across `library_candidates/`,
+`lib/crtl/` and `lib/cpyext/`, essentially all behind guards that must stay
+not-taken.
+
+### It immediately found three real preprocessor bugs
+
+This is the part worth recording. Turning `#error` on dropped
+`make test-c-conformance` from "219 pass" to **216 pass, 3 fail** — not a
+regression, but three pre-existing defects that had been invisible *because*
+`#error` was a no-op. The suite had been reporting green on tests whose only
+assertions were `#error`s.
+
+| test | defect |
+| --- | --- |
+| 00075, 00145 | `?:` had no precedence level in the `#if` evaluator at all — [[bug-cfront-if-ternary-unimplemented]] |
+| 00152 | `#line` unimplemented, and `__LINE__` read as 0 inside `#if` — [[bug-cfront-line-directive-unimplemented]] |
+
+Both were fixed in the same commit rather than skipped, so the suite is back to
+**219 pass, 0 fail**, 1 known skip (VLA) — and now genuinely, since the `#error`
+assertions actually fire.
+
+That was the ticket's own argument, demonstrated: a no-op `#error` does not make
+a build succeed, it makes the guard's failure land somewhere else and much later.
+
+### Unknown-directive diagnostic — deliberately NOT added
+
+The ticket floated failing on unrecognised directives. Not done: `#line` turned
+out to be a real gap rather than a candidate for a fallback error, and with it
+implemented the remaining unknowns are the `#ident` / `#sccs` GNU extensions,
+which are legitimately ignorable. Making unknown directives fatal against 1227
+`#error`s' worth of corpus guards is risk without a demonstrated defect behind
+it. Reconsider if one shows up.
+
+### Verified
+
+| check | result |
+| --- | --- |
+| the ticket's repro | `pascal26:3: error: #error in e1.c: this must stop the compile`, exit 1 |
+| `#if 0` / `#ifdef` undefined / not-taken `#elif` around an `#error` | compiles clean |
+| `#warning` | reports and continues, exit 0 |
+| `test/cerror_directive.c` | **new**, gated, exit 42 — pins the SILENT half (the regression risk) |
+| `test/cerror_directive_fail.c` | **new**, gated must-fail — greps the diagnostic for the message text, so "it failed" is not enough |
+| `test/cpreproc_cond_line.c` | **new**, gated, exit 42 under gcc and pxx |
+| `make test-c-conformance` | 219 pass, 0 fail, 1 known skip |
+| corpora: lua, cJSON, zlib, duktape, quickjs, sqlite parity | all PASS |
+| `tools/gate.sh quick` | GREEN |
+
+## Log
+- 2026-08-03 — resolved; found and fixed three exposed preprocessor bugs with it.

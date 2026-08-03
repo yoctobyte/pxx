@@ -2822,6 +2822,18 @@ test-core: $(COMPILER)
 	/tmp/cchar_plain_signedness26; test "$$?" = "42"
 	./$(COMPILER) test/cchar_promotion_contexts.c /tmp/cchar_promotion_contexts26
 	/tmp/cchar_promotion_contexts26; test "$$?" = "42"
+	# bug-cfront-error-directive-silently-ignored: #error stops a LIVE branch,
+	# stays silent in a not-taken one (the half with the regression risk — the
+	# corpora hold 1200+ #errors, essentially all behind untaken guards).
+	./$(COMPILER) test/cerror_directive.c /tmp/cerror_directive26
+	/tmp/cerror_directive26; test "$$?" = "42"
+	@./$(COMPILER) test/cerror_directive_fail.c /tmp/cerror_directive_fail26 2>&1 \
+	  | grep -q 'configuration is unsupported' \
+	  || { echo 'cerror_directive_fail: FAIL - #error in a live branch must stop the compile and name its text'; exit 1; }
+	# #if `?:`, #line renumbering, and __LINE__ inside #if — three evaluator gaps
+	# that only became visible once #error above stopped being a no-op.
+	./$(COMPILER) test/cpreproc_cond_line.c /tmp/cpreproc_cond_line26
+	/tmp/cpreproc_cond_line26; test "$$?" = "42"
 	./$(COMPILER) test/carch_predefines.c /tmp/carch_predefines26
 	/tmp/carch_predefines26; test "$$?" = "42"
 	# b195 (bug-c-printf-without-stdio-include-varargs): implicit printf binds crtl

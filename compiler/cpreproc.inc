@@ -540,6 +540,7 @@ begin
 end;
 
 function CPExprOr: Int64; forward;
+function CPExprCond: Int64; forward;   { `?:` level, above Or — see its body }
 
 { Forward decls for the recursive macro expander, hoisted above CPExprAtom
   which calls them at #if-eval time. pascal26 sees these via whole-section
@@ -563,7 +564,7 @@ begin
   if CPExprText[CPExprPos] = '(' then
   begin
     Inc(CPExprPos);
-    Result := CPExprOr;
+    Result := CPExprCond;   { a parenthesised sub-expression may be a ternary }
     CPSkipExprSpace;
     if (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = ')') then Inc(CPExprPos);
     Exit;
@@ -630,6 +631,13 @@ begin
       CPSkipExprSpace;
       if (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = ')') then Inc(CPExprPos);
     end
+    { __LINE__ is synthesised during macro EXPANSION (CPExpandRange), a path the
+      #if evaluator never takes — so here it read as an undefined identifier,
+      i.e. 0, and `#if __LINE__ == N` was false for every N including the right
+      one. Silent, like every wrong #if: it just takes the other branch.
+      c-testsuite 00152. bug-cfront-line-directive-unimplemented }
+    else if CPRangeIsLiteral(CPExprText, a, b, '__LINE__') then
+      Result := CPCurLine
     else
     begin
       mi := CPFindMacro(CPExprText, a, b);
@@ -927,13 +935,52 @@ begin
   end;
 end;
 
+{ `?:` — the one precedence level the #if evaluator never had. Without it the
+  parse simply ABANDONED at the `?`, so the condition's own value became the
+  whole expression's: `#if (1 ? 3 : 1) == 3` was true for every right-hand side
+  and `#if (0 ? 1 : 3) == 3` was true for none. Silent, because a wrong #if just
+  takes the other branch — it surfaced only once `#error` started firing
+  (c-testsuite 00075, 00145).
+
+  Both arms are evaluated, matching what `&&` and `||` already do here. C says
+  the untaken arm is not evaluated, but an #if expression cannot have side
+  effects, and the one trap that matters — division by zero, which is exactly
+  what these tests guard the untaken arm with — is already benign above
+  (`0/0` yields 0 rather than faulting). Right-associative, so
+  `a ? b : c ? d : e` groups as `a ? b : (c ? d : e)`.
+
+  The recursive calls need explicit `()`: inside a function's own body a bare
+  parameterless function name is the RESULT VARIABLE (standard Pascal, and what
+  FPC does), so `t := CPExprCond` silently read the result-so-far instead of
+  recursing — it consumed no input and returned 0, and the only symptom was a
+  bogus "expected ':'" pointing at a colon that was right there.
+  bug-cfront-if-ternary-unimplemented }
+function CPExprCond: Int64;
+var t, f: Int64;
+begin
+  Result := CPExprOr;
+  CPSkipExprSpace;
+  if (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = '?') then
+  begin
+    Inc(CPExprPos);
+    t := CPExprCond();
+    CPSkipExprSpace;
+    if (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = ':') then
+      Inc(CPExprPos)
+    else
+      Error('C #if: expected '':'' in conditional expression');
+    f := CPExprCond();
+    if Result <> 0 then Result := t else Result := f;
+  end;
+end;
+
 function CPEvalExpr(const line: AnsiString; p, last: Integer): Boolean;
 begin
   CPExprText := line;
   CPExprPos := p;
   CPExprEnd := last;
   CPExprDepth := 0;
-  Result := CPExprOr <> 0;
+  Result := CPExprCond <> 0;
 end;
 
 procedure CPExpandRange(const src: AnsiString; first, last, level: Integer;
@@ -2291,6 +2338,48 @@ begin
   end;
 end;
 
+{ The text after `#error` / `#warning`, trimmed. Deliberately NOT macro-expanded:
+  gcc does not expand the message either, and the point is to echo what the
+  source literally says. }
+function CPDirectiveText(const line: AnsiString; p, last: Integer): AnsiString;
+var e: Integer;
+begin
+  while (p <= last) and (line[p] in [' ', #9]) do Inc(p);
+  e := last;
+  while (e >= p) and (line[e] in [' ', #9]) do Dec(e);
+  if e < p then Result := '' else Result := Copy(line, p, e - p + 1);
+end;
+
+{ `#line N` / `#line N "file"` — renumber the NEXT physical line, which is what
+  __LINE__ and every diagnostic then report. The operand is macro-expanded
+  first: `#define line 1000` / `#line line` is legal and is exactly what
+  c-testsuite 00152 checks. CPCurLine is "the last line CONSUMED" and the read
+  loop Incs it before handling a line, so storing N-1 makes the next line N.
+  bug-cfront-line-directive-unimplemented }
+procedure CPLineDirective(const line: AnsiString; p, last: Integer);
+var expanded: AnsiString; i, n, q: Integer;
+begin
+  expanded := '';
+  CPExpandRange(line, p, last, 0, expanded);
+  i := 1;
+  while (i <= Length(expanded)) and not (expanded[i] in ['0'..'9']) do Inc(i);
+  n := 0;
+  while (i <= Length(expanded)) and (expanded[i] in ['0'..'9']) do
+  begin
+    n := n * 10 + (Ord(expanded[i]) - Ord('0'));
+    Inc(i);
+  end;
+  if n > 0 then CPCurLine := n - 1;
+  { optional "file" operand renames the current file for later diagnostics }
+  while (i <= Length(expanded)) and (expanded[i] in [' ', #9]) do Inc(i);
+  if (i <= Length(expanded)) and (expanded[i] = '"') then
+  begin
+    Inc(i); q := i;
+    while (i <= Length(expanded)) and (expanded[i] <> '"') do Inc(i);
+    if i > q then CPCurPath := Copy(expanded, q, i - q);
+  end;
+end;
+
 procedure CPDirective(const line: AnsiString; p, last, depth: Integer;
   const baseDir: AnsiString);
 var a, b: Integer; cond, parent: Boolean;
@@ -2357,7 +2446,26 @@ begin
   else if CPActive and CPRangeIsLiteral(line, a, b, 'include') then
     CPInclude(line, p, last, depth, baseDir)
   else if CPActive and CPRangeIsLiteral(line, a, b, 'pragma') then
-    CPPragma(line, p, last);
+    CPPragma(line, p, last)
+  { `#error` is how a C library states a precondition. Dropping it did not make
+    the build succeed — it made the guard's OTHER half unreachable, since the
+    same `#if` that reached the `#error` excludes the `#else` holding the code.
+    Cython's generated module compiled "clean" with 5000 of its 8000 lines
+    discarded, and the only symptom was an undeclared PyInit_ 3000 lines later.
+
+    The CPActive guard is the whole subtlety and is not optional: `#error` inside
+    a NOT-taken branch is ordinary and extremely common (`#if 0 / #error /
+    #endif`, and every corpus header that guards an unsupported platform).
+    ErrorAt rather than Error because the parser has not run — CurTok.Line would
+    name a token from a previous file. bug-cfront-error-directive-silently-ignored }
+  else if CPActive and CPRangeIsLiteral(line, a, b, 'error') then
+    ErrorAt(CPCurLine, '#error in ' + CPCurPath + ': ' +
+                       CPDirectiveText(line, p, last))
+  else if CPActive and CPRangeIsLiteral(line, a, b, 'line') then
+    CPLineDirective(line, p, last)
+  else if CPActive and CPRangeIsLiteral(line, a, b, 'warning') then
+    writeln('pascal26:', CPCurLine, ': warning: #warning ',
+            CPDirectiveText(line, p, last), ' (', CPCurPath, ')');
 end;
 
 { Net parenthesis depth of a line, ignoring `"..."` / `'...'` literals. Used to
