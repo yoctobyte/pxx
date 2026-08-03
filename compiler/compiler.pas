@@ -43,6 +43,12 @@ uses asmcore_base, asmcore_x64;
 
 {$include defs.inc}
 {$include zdefs.inc}
+{ The exact decimal <-> double core, ahead of every lexer that converts a float
+  literal. ONE conversion for both build paths: the FPC-seeded bootstrap used
+  Val and the self-host used its own rational scaler, so the two disagreed about
+  what a literal MEANS — a divergence that cost nothing only because the
+  compiler's own float constants are few. }
+{$include exdec.inc}
 {$include lexer.inc}
 function DbgFileId(const path: AnsiString): Integer; forward;   { real body in parser.inc, included after clexer.inc uses it (regression-fpc-seed-drift-b1976-stale) }
 procedure DbgMarkTokFile(startTok, fileId: Integer); forward;   { real body in parser.inc, ditto }

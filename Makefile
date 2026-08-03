@@ -2093,6 +2093,11 @@ test-core: $(COMPILER)
 	grep -q "cannot access strict private" /tmp/test_ccvsf.log
 	# --strict-fpc umbrella: bundles case/operator/visibility/require-forward (NOT
 	# StrictOverload), so an ordinary RTL-using program still compiles under it...
+	# A float LITERAL must be the nearest double to the text written. The old
+	# rational scaler was 1 ULP low on 23 of 490 sampled literals, silently.
+	# bug-a-float-literal-lexer-is-not-correctly-rounded
+	./$(COMPILER) -Fulib/rtl test/lex_float_literal.pas /tmp/lex_float_literal26
+	test "$$(/tmp/lex_float_literal26 | tail -1)" = "LEXFLOAT OK"
 	./$(COMPILER) --strict-fpc -Fulib/rtl test/lib_strict_fpc.pas /tmp/lib_strict_fpc26
 	test "$$(/tmp/lib_strict_fpc26)" = "42 OK"
 	# ...and it activates its member flags (StrictCase rejects a duplicate label

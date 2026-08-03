@@ -3,6 +3,8 @@ track: A
 prio: 65
 type: bug
 summary: "A float LITERAL is up to 1 ULP away from the nearest double — `1e-292` in source is not the same number as `float(\"1e-292\")` in the same program. 23 of 490 sampled literals are wrong. Affects every frontend"
+status: done
+owner: claude-AN
 ---
 
 # The float-literal lexer is not correctly rounded
@@ -84,3 +86,53 @@ satisfy `<literal> == <parser>("<the same text>")`, plus the round decades
 Cross targets too — the conversion happens at compile time, so a wrong literal
 is baked into every backend's output identically, but the test should prove that
 rather than assume it.
+
+## Resolved 2026-08-03
+
+`compiler/exdec.inc` — the exact-decimal core of `lib/rtl/sysutils.pas`, copied,
+included from `compiler.pas` ahead of every lexer. `StrToDoubleBits` is now four
+lines over `ExDecStrToDouble`. The old rational scaler is deleted; git holds it.
+
+Two edits inside the copy, both forced and both noted in the file: the
+`StrToFloatDef` name is `ExDecStrToDouble` (the FPC-seeded bootstrap has real
+SysUtils in scope), and `IntToStr` becomes a local helper (the compiler's own
+RTL has none — pylib's copy substitutes `StrInt` for the same reason). Copying
+rather than reimplementing follows the ruling already made for the pylib copy in
+[[decide-nilpy-where-the-exact-decimal-float-core-lives]]; the same constraint
+applies verbatim here, since the compiler must not drag `lib/rtl` into its own
+build either.
+
+### It also removed a build-path divergence nobody had named
+
+The FPC path used `Val` (correctly rounded) and the self-host path used the
+rational scaler, so **the bootstrap and the self-hosted compiler disagreed about
+what a float literal means**. One conversion now serves both. `make fpc-check`
+passes — the FPC-built compiler produces a byte-identical `pascal26` — which is
+the strongest available confirmation that the two paths agree.
+
+### Verified
+
+- the 490-value sweep that found the bug: **byte-identical to CPython**, 0
+  mismatches (was 23).
+- `float("<text>") != <the same text as a literal>` over the same 490 values,
+  inside one pxx program: **0** (was 23).
+- `test/lex_float_literal.pas` (wired into `test-core`): every value the sweep
+  caught, by name, plus the extremes, subnormals, `DBL_MAX`, the 19-digit
+  `9223372036854775808.0` overflow guard, and the ordinary values that were
+  already right — a correctness fix that MOVES a correct value is a regression,
+  so those rows are the point of the test as much as the failures are.
+- `gate.sh quick` GREEN, self-host fixedpoint byte-identical.
+
+### For the next reader
+
+There are now three copies of this core: `lib/rtl/sysutils.pas`,
+`compiler/exdec.inc`, `compiler/builtin/pylib.pas`. Each names the others and
+says CHANGE ONE, CHANGE ALL THREE, and each is pinned by a test
+(`test/lib_floattostr.pas`, `test/lex_float_literal.pas`,
+`test/test_nilpy_float_repr.npy`) with CPython as the oracle. The general
+problem — builtin/compiler code and `lib/rtl` cannot share source — is
+[[decide-builtin-and-library-code-sharing]], still open.
+
+## Log
+- 2026-08-03 — resolved.
+- 2026-08-03 — resolved, commit HEAD.

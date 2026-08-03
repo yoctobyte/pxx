@@ -393,194 +393,28 @@ begin
 end;
 
 
-{$ifdef FPC}
 function StrToDoubleBits(const s: AnsiString): Int64;
-var d: Double; code: Integer;
+{ A float literal's bits, correctly rounded — the nearest double to the decimal
+  text, every time.
+
+  What it replaced was a rational N/D scaler that stayed inside Int64 by halving
+  with round-to-odd — which composes safely for ONE final rounding of an
+  exactly-known value, but not for a chain that introduces error at every step,
+  and the chain is the whole algorithm here. At 1e-292 scale that
+  chain is ~300 steps against ~7 guard bits, and 23 of 490 sampled literals came
+  out 1 ULP off — silently, since the error survives every comparison against a
+  nearby value and shows up only in a round trip
+  (bug-a-float-literal-lexer-is-not-correctly-rounded).
+
+  ExDecStrToDouble accepts leading/trailing spaces, a sign, a point and an
+  exponent — a superset of what the lexers hand it, since they have already
+  matched the number's shape. `def` is unreachable for that reason. }
+var d: Double;
 begin
-  Val(s, d, code);
-  Move(d, Result, 8);
+  d := ExDecStrToDouble(s, 0.0);
+  Result := ExDecDoubleToBits(d);
 end;
-{$else}
-function StrToDoubleBits(const s: AnsiString): Int64;
-{ Pure-integer IEEE 754 double. ~18 significant digits.
-  Subnormals flushed to zero; overflow = +/-Inf. No shl (not self-hostable). }
-var
-  i, len, fracDigits, expSign, expVal, decExp, bexp, intDropped: Integer;
-  hasDot: Boolean;
-  coeff, N, D, mant, biasedExp, signBit, bitval, be, N2, D2, lowBits: Int64;
-  c: Char;
-begin
-  Result := 0;
-  len := Length(s);
-  if len = 0 then Exit;
-  i := 1;
-  signBit := 0;
-  if s[i] = '-' then begin signBit := $8000000000000000; Inc(i); end
-  else if s[i] = '+' then Inc(i);
 
-  coeff := 0; fracDigits := 0; hasDot := False; intDropped := 0;
-  while i <= len do
-  begin
-    c := s[i];
-    if (c = '.') and not hasDot then begin hasDot := True; Inc(i); continue; end;
-    if (c < '0') or (c > '9') then break;
-    { Absorb only while `coeff*10 + digit` cannot overflow Int64:
-      (High(Int64) - 9) div 10 = 922337203685477579. The old bound of 18 nines
-      let one extra digit in, so a 19-sig-figure literal whose 19th digit pushed
-      coeff to 2^63 (e.g. `9223372036854775808.0`, sqlite3IntFloatCompare's
-      overflow guard) wrapped to a negative coeff and decoded as 0 — making every
-      REAL-vs-INT SQL comparison wrong. }
-    if coeff <= 922337203685477579 then
-    begin
-      { Absorb the digit. Only count a fractional digit toward fracDigits when it
-        is actually absorbed — otherwise a high-precision literal (e.g. 21 sig
-        figs) over-counts fracDigits while coeff saturates, scaling the value off
-        by powers of ten. }
-      coeff := coeff * 10 + (Ord(c) - 48);
-      if hasDot then Inc(fracDigits);
-    end
-    else
-    begin
-      { coeff saturated (~18 digits is already past double precision): drop extra
-        digits. A dropped INTEGER-part digit still multiplies magnitude by ten; a
-        dropped FRACTIONAL digit is simply ignored. }
-      if not hasDot then Inc(intDropped);
-    end;
-    Inc(i);
-  end;
-
-  expSign := 1; expVal := 0;
-  if (i <= len) and ((s[i] = 'e') or (s[i] = 'E')) then
-  begin
-    Inc(i);
-    if (i <= len) and (s[i] = '-') then begin expSign := -1; Inc(i); end
-    else if (i <= len) and (s[i] = '+') then Inc(i);
-    while (i <= len) and (s[i] >= '0') and (s[i] <= '9') do
-    begin
-      expVal := expVal * 10 + (Ord(s[i]) - 48);
-      Inc(i);
-    end;
-  end;
-
-  decExp := expSign * expVal - fracDigits + intDropped;
-  if coeff = 0 then begin Result := signBit; Exit; end;
-
-  N := coeff; D := 1; bexp := 0;
-  if decExp >= 0 then
-  begin
-    while decExp > 0 do
-    begin
-      { Lossy halvings use round-to-odd (sticky low bit): with 60+ working bits
-        vs the 53 target, round-to-odd intermediates compose safely and the
-        final round-to-nearest-even stays correct — plain truncation biased
-        long scaling chains (1e300, DBL_MAX) 1 ulp low. }
-      while N > 1844674407370955161 do
-      begin
-        if (N and 1) <> 0 then N := (N shr 1) or 1 else N := N shr 1;
-        Inc(bexp);
-      end;
-      N := N * 5;
-      Inc(bexp);
-      Dec(decExp);
-    end;
-  end
-  else
-  begin
-    while decExp < 0 do
-    begin
-      if D > 922337203685477580 then
-      begin
-        { D at its cap: the /10 must come out of N. Scale N up by 2s first
-          (exact, tracked in bexp) so the truncating div costs < 2^-60 relative
-          per step instead of a whole decimal digit (1.0e-100 formerly decayed
-          to 0, and every large negative exponent lost most of its mantissa). }
-        while N <= 1844674407370955161 do begin N := N * 2; Dec(bexp); end;
-        { round-to-odd div (see the positive-exponent loop's comment) }
-        if (N mod 10) <> 0 then N := (N div 10) or 1
-        else N := N div 10;
-      end
-      else
-        D := D * 10;
-      Inc(decExp);
-    end;
-  end;
-
-  { normalize N/D into [1,2): multiply by 2 instead of shl for self-hosting.
-    Scale the denominator up rather than shifting N down — N shr 1 truncates
-    N's low bit and corrupts odd coefficients (e.g. 3.5 -> 3.4). N >= D holds
-    after the first loop, so N - D >= D is the overflow-safe form of N >= 2D.
-    If D is too large to double safely, fall back to the lossy N shift (only
-    reachable for extreme magnitudes where the low bit is below precision). }
-  while N < D do begin N := N * 2; Dec(bexp); end;
-  while (N - D) >= D do
-  begin
-    if D <= $3FFFFFFFFFFFFFFF then begin D := D * 2; Inc(bexp); end
-    else
-    begin
-      { round-to-odd (see the exponent-scaling loops) }
-      if (N and 1) <> 0 then N := (N shr 1) or 1 else N := N shr 1;
-      Inc(bexp);
-    end;
-  end;
-
-  if bexp > 1023 then begin Result := signBit or $7FF0000000000000; Exit; end;
-  { bexp < -1022: SUBNORMAL range — fall through to the mantissa extraction
-    and denormalize after it (the old early exit flushed every subnormal
-    literal to zero: bug-c-float-literal-subnormal-parses-zero). Anything
-    below half of 2^-1074 is a true zero. }
-  if bexp < -1076 then begin Result := signBit; Exit; end;
-
-  N := N - D;
-  mant := 0;
-  bitval := $8000000000000;  { 2^51 = top mantissa bit }
-  while bitval > 0 do
-  begin
-    { overflow-safe 2N vs D: N >= D-N <=> 2N >= D. D can exceed 2^62 after the
-      normalize doubling above, where a bare N*2 would wrap Int64 and silently
-      drop the bit. In the else arm 2N < D <= High(Int64) so N*2 is safe. }
-    if N >= D - N then begin mant := mant or bitval; N := N - (D - N); end
-    else N := N * 2;
-    bitval := bitval shr 1;
-  end;
-  { SUBNORMAL (bexp < -1022): the 53-bit significand 2^52|mant shifts right by
-    (-1022 - bexp) with round-to-nearest-even; the extraction remainder N is
-    the sticky bit. The exponent field is 0; a round-up carry into 2^52 lands
-    exactly on the minimum NORMAL (biased exponent 1, mantissa 0). }
-  if bexp < -1022 then
-  begin
-    N2 := $10000000000000 or mant;          { 2^52 | mant = full significand }
-    D2 := 1;
-    i := -1022 - bexp;                      { shift >= 1, <= 54 }
-    if i > 53 then begin Result := signBit; Exit; end;
-    while i > 0 do begin D2 := D2 * 2; Dec(i); end;
-    lowBits := N2 mod D2;
-    N2 := N2 div D2;
-    if (lowBits > D2 div 2) or
-       ((lowBits = D2 div 2) and ((N <> 0) or ((N2 and 1) = 1))) then
-      N2 := N2 + 1;                         { carry into 2^52 = min normal }
-    Result := signBit or N2;
-    Exit;
-  end;
-
-  { Round to nearest, ties to even (remainder N/D vs one half). Truncating here
-    left every inexact literal 1 ulp low (0.1 -> ...999 instead of ...99A),
-    which broke e.g. sqlite's Dekker double-double kernels built on exact
-    decimal constants. }
-  if (N > D - N) or ((N = D - N) and ((mant and 1) = 1)) then
-  begin
-    mant := mant + 1;
-    if mant = $10000000000000 then   { carry out of the 52 mantissa bits }
-    begin
-      mant := 0;
-      Inc(bexp);
-      if bexp > 1023 then begin Result := signBit or $7FF0000000000000; Exit; end;
-    end;
-  end;
-
-  be := bexp + 1023; biasedExp := be * $10000000000000;  { be shl 52 }
-  Result := signBit or biasedExp or mant;
-end;
-{$endif}
 
 function PasDirectiveActive: Boolean;
 begin
