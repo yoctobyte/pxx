@@ -8179,6 +8179,22 @@ begin
     (recording callPatch at the call instruction for later body-address fixup),
     then exit_group(main's return). The call encoding differs per target (E8
     rel32 on x86 family, BL on arm32), so it lives inside each branch. }
+  { A RELOCATABLE OBJECT has no ELF entry point and no `main` requirement — the
+    linker (ESP-IDF, or whatever consumes the .o) supplies both, and the unit
+    may legitimately export only `app_main`. Emitting the stub here is what made
+    `--target=xtensa` reject every C program outright: the C driver ran the
+    entry-stub emitter unconditionally, and xtensa has no stub because a
+    standalone xtensa executable is not a meaningful artifact (no OS, no syscall
+    ABI — the ESP world links objects into an IDF image). Skipping it in object
+    mode is what makes C-on-xtensa compile at all, and it also drops the bogus
+    "main function not found" from an app_main-only riscv32 object.
+    bug-cfront-no-entry-stub-for-xtensa. }
+  callPatch := -1;
+  if EmitObjMode then
+  begin
+    { no entry stub, no main lookup — see the patch guard below }
+  end
+  else
   case TargetArch of
     TARGET_X86_64:
     begin
@@ -8310,7 +8326,14 @@ begin
 
   { setjmp/longjmp primitives (lua's error model). After the entry stub, before
     any C body, so __pxx_setjmp/__pxx_longjmp resolve as bodied procs. }
-  if not CRuntimeStubsEmitted then
+  { xtensa has no setjmp/longjmp/fenv stub implementation yet (the windowed ABI
+    makes the register-save stub its own piece of work), and emitting them
+    unconditionally made EVERY C compile fail there — including the
+    overwhelming majority that never touch setjmp. Skip them instead: a TU that
+    really does call setjmp leaves `__pxx_setjmp` undefined and says so, a
+    failure that names its cause, where the old one named nothing a C author
+    could act on. bug-cfront-no-entry-stub-for-xtensa. }
+  if (not CRuntimeStubsEmitted) and (TargetArch <> TARGET_XTENSA) then
   begin
     CRuntimeStubsEmitted := True;
     EmitCSetjmpStubs;
@@ -8422,6 +8445,10 @@ begin
   CProgramMode := False;
   EmitFinalizerRunnerBody;   { resolve any Halt-site __pxx_run_finalizers forward calls }
   ApplyCallFixups;
+
+  { Object mode emitted no entry stub, so there is nothing to patch and no
+    `main` to demand — see the stub guard above. }
+  if callPatch < 0 then Exit;
 
   mainIdx := FindProc('main');
   if mainIdx < 0 then Error('main function not found');
@@ -11119,7 +11146,14 @@ begin
     C-PROGRAM path emitted them, so any Pascal or NilPy program pulling a .c
     unit that formats a float hit exactly that.
     bug-cfront-fegetround-unresolved-float-printf, second half. }
-  if not CRuntimeStubsEmitted then
+  { xtensa has no setjmp/longjmp/fenv stub implementation yet (the windowed ABI
+    makes the register-save stub its own piece of work), and emitting them
+    unconditionally made EVERY C compile fail there — including the
+    overwhelming majority that never touch setjmp. Skip them instead: a TU that
+    really does call setjmp leaves `__pxx_setjmp` undefined and says so, a
+    failure that names its cause, where the old one named nothing a C author
+    could act on. bug-cfront-no-entry-stub-for-xtensa. }
+  if (not CRuntimeStubsEmitted) and (TargetArch <> TARGET_XTENSA) then
   begin
     CRuntimeStubsEmitted := True;
     EmitCSetjmpStubs;

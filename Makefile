@@ -6475,6 +6475,20 @@ test-emit-obj: $(COMPILER)
 	readelf -s /tmp/test_emit_obj_xt.o | grep -q 'UND ext_notify'
 	readelf -r /tmp/test_emit_obj_xt.o | grep -q 'R_XTENSA_32'
 	readelf -r /tmp/test_emit_obj_xt.o | grep -q 'ext_notify + 0'
+	# bug-cfront-no-entry-stub-for-xtensa: C compiles for the ESP ISAs in the only
+	# shape that means anything there — a relocatable object exporting app_main,
+	# no entry stub (no OS, no syscall ABI). The file's #if guards also pin
+	# <limits.h>'s target-width LONG_MAX/INT_MAX on xtensa, which was the
+	# coverage blind spot the ticket was opened for.
+	./$(COMPILER) --target=xtensa test/cxtensa_obj.c /tmp/cxtensa_obj_xt.o
+	readelf -h /tmp/cxtensa_obj_xt.o | grep -q 'REL (Relocatable file)'
+	readelf -h /tmp/cxtensa_obj_xt.o | grep -q 'Xtensa'
+	readelf -s /tmp/cxtensa_obj_xt.o | grep -q 'FUNC    GLOBAL DEFAULT    1 app_main'
+	readelf -s /tmp/cxtensa_obj_xt.o | grep -q 'UND ext_notify'
+	readelf -r /tmp/cxtensa_obj_xt.o | grep -q 'R_XTENSA_32'
+	./$(COMPILER) --target=riscv32 test/cxtensa_obj.c /tmp/cxtensa_obj_rv.o
+	readelf -h /tmp/cxtensa_obj_rv.o | grep -q 'REL (Relocatable file)'
+	readelf -s /tmp/cxtensa_obj_rv.o | grep -q 'FUNC    GLOBAL DEFAULT    1 app_main'
 	./$(COMPILER) --target=xtensa --xtensa-abi=windowed test/test_emit_obj.pas /tmp/test_emit_obj_xt_windowed.o
 	readelf -h /tmp/test_emit_obj_xt_windowed.o | grep -q 'REL (Relocatable file)'
 	readelf -h /tmp/test_emit_obj_xt_windowed.o | grep -q 'Xtensa'
