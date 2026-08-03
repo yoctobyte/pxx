@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-03T12:18:50Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "b1edede90158a309370bd8cc52330d2c1e75f198",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-03T14:26:04Z",
    "fixed": [],
    "new_red": [],
@@ -412,6 +404,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "723362ae2c812f92fa00437d5abd51d0c8a7b84a",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-03T20:27:48Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "05465c183ecc218f7a63e5b8cac009e2b9b0f389",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1493,6 +1493,7 @@
   "test-core#src:test/test_nilpy_counter.npy": "native",
   "test-core#src:test/test_nilpy_ctor_suffix_defaults.npy": "native",
   "test-core#src:test/test_nilpy_dataclass_dict_factory.npy": "native",
+  "test-core#src:test/test_nilpy_dataclass_eq.npy": "native",
   "test-core#src:test/test_nilpy_default_arguments.npy": "native",
   "test-core#src:test/test_nilpy_dict_fromkeys.npy": "native",
   "test-core#src:test/test_nilpy_dispatch_result_class.npy": "native",
@@ -3557,6 +3558,7 @@
   "test-core#src:test/test_nilpy_counter.npy": "pass",
   "test-core#src:test/test_nilpy_ctor_suffix_defaults.npy": "pass",
   "test-core#src:test/test_nilpy_dataclass_dict_factory.npy": "pass",
+  "test-core#src:test/test_nilpy_dataclass_eq.npy": "pass",
   "test-core#src:test/test_nilpy_default_arguments.npy": "pass",
   "test-core#src:test/test_nilpy_dict_fromkeys.npy": "pass",
   "test-core#src:test/test_nilpy_dispatch_result_class.npy": "pass",
@@ -4547,11 +4549,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-03T20:21:56Z",
-  "sha": "723362ae2c812f92fa00437d5abd51d0c8a7b84a",
+  "date": "2026-08-03T20:27:48Z",
+  "sha": "05465c183ecc218f7a63e5b8cac009e2b9b0f389",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 119.3
+  "wall": 115.5
  },
  "last_bench": {
   "conf_rows": 550,
