@@ -133,4 +133,4 @@ Known limit, not fixed here: a target whose base has a side effect
 a different change; a bare `f().acc += 1` never reaches this branch at all.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit 9690ad68a.
