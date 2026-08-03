@@ -36,7 +36,7 @@ program Pascal26;
   directory (compiler/), not CWD -- portable to any checkout location. }
 {$UNITPATH ../lib/asmcore}
 {$ifdef FPC}
-uses SysUtils, BaseUnix, asmcore_base, asmcore_x64;
+uses SysUtils, Math, BaseUnix, asmcore_base, asmcore_x64;
 {$else}
 uses asmcore_base, asmcore_x64;
 {$endif}
@@ -76,6 +76,13 @@ procedure AsmI64(v: Int64); forward;
 {$ifdef FPC}{$define PXX_NEED_FORWARDS}{$endif}
 {$ifdef PXX_REQUIRE_FORWARD}{$define PXX_NEED_FORWARDS}{$endif}
 {$ifdef PXX_NEED_FORWARDS}{$include forwards.inc}{$endif}
+{ symtab.inc's float writers emit through the x86-64 text assembler, which is
+  defined in asmtext.inc five includes later. Only the array-of-const overload
+  is called from there. Beside DbgFileId / AddDefaultCIncludeDirs, which exist
+  for exactly this reason: PXX's own prescan is order-agnostic, so a missing
+  forward is invisible until the FPC-seeded cold-start bootstrap
+  (bug-a-fpc-seed-drift-emitasmx64-forward). }
+procedure EmitAsmX64(const items: array of const); overload; forward;
 {$include symtab.inc}
 {$include exception_emit.inc}
 {$include coroutine_emit.inc}
@@ -122,6 +129,18 @@ function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 
 var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j: Integer;
 begin
+{$ifdef FPC}
+  { The exact-decimal core in exdec.inc is lib/rtl code, written for a runtime
+    where float exceptions are MASKED — which is pxx's (see
+    feature-float-exception-mask-control). Its decimal->double seed estimate
+    deliberately overflows to Inf and is never trusted; the exact search that
+    follows proves the answer. FPC unmasks by default, so the FPC-seeded
+    bootstrap died with EOverflow while compiling a float literal. Masking here
+    makes both build paths behave identically, which is the property the whole
+    conversion exists to have. }
+  SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+                    exOverflow, exUnderflow, exPrecision]);
+{$endif}
   DebugTrace := False;
   DebugInfo := False;
   DbgMainTokEnd := MAX_TOKENS;
