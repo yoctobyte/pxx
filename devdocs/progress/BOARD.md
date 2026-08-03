@@ -100,7 +100,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice | N | 50 | bug | Three loud gaps found by the CPython differential sweep | — |
 | bug-nilpy-unary-numeric-dunders-return-raw-handle | N | 55 | bug | NilPy: abs(obj), ~obj and obj-as-index ignore __abs__/__invert__/__index__ — they return the raw instance HANDLE as a number, silently | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
-| bug-nilpy-user-class-named-like-a-pylib-builtin-is-shadowed | N | 60 | bug | A user `class Counter:` is shadowed by pylib's `Counter` function, so `Counter.attr` fails with \"no such member on this record/class\" — the user's own class is unreachable by its own name | — |
+| bug-nilpy-user-def-does-not-shadow-a-pylib-builtin | N | 55 | bug | A user `def sorted(x)` at module scope loses to pylib's builtin — calls go to the builtin and the user's function never runs. Silent: the program produces the BUILTIN's answer | — |
 | bug-t-corpus-regex-invents-phantom-tree | T | 55 | bug | CORPUS_RE matches prose in a SKIP message and invents corpus 'stb)', permanently skipping a job that also carries a non-corpus regression test | — |
 | bug-t-host-dependent-test-assertions-cross-distro | T | 70 | bug | Watcher and dev boxes run different distros, so tests that bake in host state (library versions, allocator behaviour, the host CPython) go permanently RED on the watcher while passing locally — and read as watcher bugs | — |
 | bug-t-resolve-cites-a-sha-the-rebase-then-rewrites | T | 60 | bug | The documented loop is commit -> resolve <slug> <sha> -> sync.sh, but sync.sh REBASES, so the sha written into the ticket no longer exists on origin. Four tickets in one session cited commits nobody else can look up. | — |
@@ -364,7 +364,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1254)
+## done (1255)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -895,6 +895,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-unary-neg-dunder-not-dispatched | N | 40 | bug | `-n` on a user class silently computed garbage — `__neg__` never dispatched | — |
 | bug-nilpy-unknown-method-segfaults | N | 70 | bug | nilpy: calling a method that does not exist compiles and SEGFAULTS instead of erroring | — |
 | bug-nilpy-user-class-bytes-method-loses-identity | N | 45 | bug | NilPy: a USER class method `-> bytes` result loses its TPyBytes identity | — |
+| bug-nilpy-user-class-named-like-a-pylib-builtin-is-shadowed | N | 60 | bug | A user `class Counter:` is shadowed by pylib's `Counter` function, so `Counter.attr` fails with \"no such member on this record/class\" — the user's own class is unreachable by its own name | — |
 | bug-nilpy-void-def-assigned-and-called-crashes | N | 55 | bug | NilPy: a `-> None` def assigned to a name, then called directly, segfaults | — |
 | bug-nilpy-wide-int-literal-and-unsigned-mask-not-promoted | A | 55 | bug | NilPy: wide int literals + the `& 0xFFFF...` unsigned-mask idiom don't promote to bignum | — |
 | bug-nilpy-with-statement-skips-enter-and-exit | N | 70 | bug | NilPy: `with` is desugared to a plain assignment — the context-manager protocol is deliberately not modelled, so a user __enter__/__exit__ silently never runs | — |
@@ -1675,7 +1676,6 @@ lives in git, not in a timestamp._
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
-- [p 60] [N] bug-nilpy-user-class-named-like-a-pylib-builtin-is-shadowed
 - [p 60] [T] bug-t-resolve-cites-a-sha-the-rebase-then-rewrites
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [U] decide-nilpy-runtime-dunder-dispatch-mechanism
@@ -1701,6 +1701,7 @@ lives in git, not in a timestamp._
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [N] bug-nilpy-def-return-coerces-a-float-to-the-inferred-int-result
 - [p 55] [N] bug-nilpy-unary-numeric-dunders-return-raw-handle
+- [p 55] [N] bug-nilpy-user-def-does-not-shadow-a-pylib-builtin
 - [p 55] [T] bug-t-corpus-regex-invents-phantom-tree
 - [p 55] [P] compat-pascal-assert-halts-instead-of-raising-eassertionfailed
 - [p 55] [A] feature-a-declaration-phase

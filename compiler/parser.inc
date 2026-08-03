@@ -11190,6 +11190,22 @@ begin
         symbol by construction. }
       if qUnit < 0 then idx := OwnFieldBeatsSym(idx, name);
 
+      { A NilPy program's OWN class beats a pylib routine of the same name.
+        Shadowing a builtin is ordinary Python — `class Counter:`, `def list(...)`
+        — and from that point on the name means the user's. pylib spells
+        collections.Counter as overloaded FUNCTIONS, so `Counter` bound to those
+        instead, and `Counter.k` on the user's class died with
+        '"k": no such member on this record/class': an error about a MEMBER,
+        which sends the reader to the class body rather than to the name
+        (bug-nilpy-user-class-named-like-a-pylib-builtin-is-shadowed).
+
+        UClsUnitIdx = -1 is "declared in the main program", so this only fires
+        for a class the user wrote; a pylib class keeps losing to a pylib
+        routine exactly as before, and Pascal is untouched. }
+      if NilPyUserCode and (qUnit < 0) and (procIdx >= 0) and (idx < 0) and
+         (FindUClassInUnit(name, -1) >= 0) then
+        procIdx := -1;
+
       { Bare class const inside a method body — `Result := Max` where TFoo declares
         `const Max`. FPC scope order: a genuine local/param shadows it, but a class
         const BEATS a unit global of the same name (repro 2: a method's `Size` is

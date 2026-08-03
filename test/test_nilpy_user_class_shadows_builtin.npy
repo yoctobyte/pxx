@@ -1,0 +1,31 @@
+# Shadowing a builtin is ordinary Python: from the definition on, the name means
+# the user's. pylib spells collections.Counter as overloaded FUNCTIONS, so a user
+# `class Counter` lost to them and `Counter.k` died with
+# '"k": no such member on this record/class' — an error about a MEMBER, which
+# sends the reader to the class body rather than to the name.
+
+class Counter:
+    k = 0
+    def __init__(self):
+        Counter.k += 1
+    def show(self):
+        return Counter.k
+
+a = Counter()
+b = Counter()
+print("counter:", Counter.k, a.k, b.show())
+
+class list:
+    v = 7
+    def get(self):
+        return self.v
+
+print("list:", list.v, list().get())
+
+class dict:
+    tag = "mine"
+print("dict:", dict.tag, dict().tag)
+
+class type:
+    n = 1 + 1
+print("type:", type.n)
