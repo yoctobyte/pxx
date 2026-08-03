@@ -106,4 +106,4 @@ top-level `mv $(BUILD_COMPILER) $(COMPILER)`, whose tmpfs->ext4 crossing is the
 caveat this ticket documents rather than a place to apply the pattern.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING.
+- 2026-08-03 — resolved, commit 58708c685.
