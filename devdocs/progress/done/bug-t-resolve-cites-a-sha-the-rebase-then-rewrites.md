@@ -57,7 +57,7 @@ not git pull --rebase") compose into the bug.
    nothing enforces it.
 2. **Let `resolve` take no sha and fill it in at push time.** `sync.sh` already
    owns the push; after a successful push it can rewrite any
-   `PENDING-COMMIT` placeholder in the tickets it is pushing to the sha they
+   `68be6bd59` placeholder in the tickets it is pushing to the sha they
    actually landed as. Deterministic, no ordering discipline required.
 3. **`sync.sh` post-rebase fixup:** map pre-rebase to post-rebase shas (the
    rebase knows both) and rewrite citations in the commits being pushed.
@@ -78,4 +78,4 @@ The four citations above and the `bench.tsv` marker were rewritten to their
 landed shas by hand. This ticket is about the loop that produced them.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit 68be6bd59.
