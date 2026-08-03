@@ -4532,12 +4532,11 @@
   },
   {
    "bad": "42786f141ea7b8b86f84b8f074d887f0e98c1401",
-   "good": "2028afba02ca2233a51317ca45f7f0772d71d03a",
+   "good": "420de52428cdd944b9d60a85676cf65682632430",
    "job": "test-core#src:test/test_c_struct_fields.pas",
    "name": "test-core#801",
    "opened": "2026-08-03T10:55:19Z",
    "range": [
-    "420de52428cdd944b9d60a85676cf65682632430",
     "07414aa8944bd3dee42ae1a06f56eee2dc912fe5",
     "42786f141ea7b8b86f84b8f074d887f0e98c1401"
    ],
