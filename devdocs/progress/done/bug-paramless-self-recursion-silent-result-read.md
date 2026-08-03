@@ -141,3 +141,37 @@ silences it once a codebase has been audited.
 - 2026-08-03 — warning flipped ON by default; the compiler's single bare-name
   site rewritten to `Result`; gated test added. The opt-in default had let the
   same bug cost the same hour a second time.
+
+### `{$MODE DELPHI}` — already obeyed, now pinned
+
+Checked rather than assumed, since the delphi delta lives in the *same*
+`ParseFactor` branch as the warning (the branch is guarded by `not DelphiMode`)
+and was therefore exactly what a change to that warning could silently break.
+
+pxx already follows the mode, and matches FPC 3.2.2 in both:
+
+| mode | pxx | FPC | meaning |
+| --- | --- | --- | --- |
+| default / `{$MODE OBJFPC}` | `depth=1` | `depth=1` (`-Mobjfpc`) | reads `Result` |
+| `{$MODE DELPHI}` | `depth=3` | `depth=3` (`-Mdelphi`) | recursive call |
+
+The warning also correctly stays **silent** in delphi mode — there the construct
+is unambiguous, and "reads the result" would be a false statement.
+
+Nothing pinned any of this before. Two gated tests now do, and each is
+oracle-verified against FPC in the matching mode:
+
+- `test/test_pascal_self_result_warn.pas` — objfpc half, `5 1 8 42 6 42 100`,
+  exactly 1 warning, silenced by `--no-warn-self-result`.
+- `test/test_pascal_self_result_delphi.pas` — **new**, delphi half,
+  `42 4 7 3 10` (`depth=4` proves it recursed), 0 warnings.
+
+The outputs differ between the two modes, so the tests cannot both pass unless
+the mode is actually being honoured.
+
+Found while doing this and filed separately:
+[[compat-pascal-no-command-line-mode-switch]] — the `{$MODE}` *directive* works,
+but FPC's `-Mdelphi` / `-Mobjfpc` **command-line** switch has no pxx equivalent.
+That matters because real Delphi projects set the mode in the build rather than
+in each file, so their sources carry no directive at all and pxx compiles them in
+the wrong dialect silently — the same failure through a different door.

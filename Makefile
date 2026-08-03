@@ -963,6 +963,15 @@ test-nilpy: $(COMPILER)
 	   | grep -c 'bare own name'); \
 	 test "$$n" = "0" \
 	  || { echo "test_pascal_self_result_warn: FAIL - --no-warn-self-result did not silence the warning"; exit 1; }
+	@# the {$$MODE DELPHI} half: there the SAME spelling is a recursive call, not a
+	@# Result read, and the warning must stay silent because its text would be
+	@# false. Both halves match FPC 3.2.2 under -Mobjfpc / -Mdelphi respectively.
+	./$(COMPILER) test/test_pascal_self_result_delphi.pas /tmp/test_pascal_self_result_delphi26
+	test "$$(/tmp/test_pascal_self_result_delphi26)" = "$$(printf '42\n4\n7\n3\n10')"
+	@n=$$(./$(COMPILER) test/test_pascal_self_result_delphi.pas /tmp/test_pascal_self_result_delphi26 2>&1 \
+	   | grep -c 'bare own name'); \
+	 test "$$n" = "0" \
+	  || { echo "test_pascal_self_result_delphi: FAIL - warning must not fire in delphi mode (it recurses there; the message would be false)"; exit 1; }
 	./$(COMPILER) test/test_nilpy_method_on_fresh_construction.npy /tmp/test_nilpy_method_fresh_ctor26
 	test "$$(/tmp/test_nilpy_method_fresh_ctor26)" = "$$(printf '5\n7\na9\n6\n3 a3\n[1, 2]')"
 	./$(COMPILER) test/test_nilpy_discarded_string_result.npy /tmp/test_nilpy_discarded_string_result26
