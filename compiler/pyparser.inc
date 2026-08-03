@@ -996,6 +996,13 @@ var
   PyInferName: AnsiString;  { name under type inference, for diagnostics }
   PyWidenA, PyWidenB: TTypeKind;
   PyInferLastCi: Integer;   { class index of the last tyClass inference result }
+  { Did the last PyInferDefRetType actually SEE a value-bearing return? It
+    returns tyInteger when it found none, which is indistinguishable from a def
+    that genuinely returns an int — and the annotation join below must not
+    treat "nothing to infer" as a disagreement. Reported through a global
+    rather than another var parameter because the routine has several callers
+    that do not care, the same shape PyInferLastCi already uses. }
+  PyInferRetSeenAny: Boolean;
 
 function PyWidenErr: AnsiString;
 begin
@@ -14905,6 +14912,10 @@ end;
   of the header grammar — see the PyHdr* declaration for why that matters. }
 function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind; forward; { defined with the pre-pass helpers below }
 function PyDefHasValueReturn(defIdx: Integer): Boolean; forward; { lying `-> None` detector (with the pre-pass helpers) }
+{ the annotation-vs-body join; PyParseDefHeader below calls it and its body sits
+  with the pre-pass helpers, so FPC needs the forward even though pxx does not }
+function PyJoinRetAnnotation(annTk: TTypeKind; methodStart: Integer;
+                             var annRec: Integer): TTypeKind; forward;
 
 function PyDefUsedAsValue(const nm: AnsiString): Boolean;
 { True iff the module mentions `nm` as a VALUE (a bare name that is not being
@@ -15125,6 +15136,16 @@ begin
       PyHdrRetType := PyParseType;
       PyAnnRetScope := False;
       PyHdrRetCi := PyLastTypeCi;
+      { the annotation is metadata, not enforcement — see PyJoinRetAnnotation.
+        Its twin in PyMethodRetType must stay in step or the signature (decided
+        there) and the frame (decided here) disagree, which is a silent ABI
+        mismatch. }
+      hdrRetRec := REC_NONE;
+      if PyJoinRetAnnotation(PyHdrRetType, hdrDefIdx, hdrRetRec) = tyVariant then
+      begin
+        PyHdrRetType := tyVariant;
+        PyHdrRetCi := -1;
+      end;
     end;
   end;
   { `-> str` is an unbounded Python string, so the Result var is MANAGED — the
@@ -15869,6 +15890,43 @@ begin
     end;
 end;
 
+{ "the scanner learned nothing better than an integer". Expressible as EITHER
+  kind and both must be tested: this routine's own no-value-return default is
+  tyInteger, while an integer LITERAL token now reports tyInt64 (the two
+  disagreeing at 4 vs 8 bytes is what put a 2^31 cliff on a field, fixed
+  separately). Testing only tyInteger silently switched every chase below OFF
+  for a return expression containing an int literal — `return v + 1` over a
+  float local kept the literal's own type and handed back the double's BITS. }
+function PyRetIsIntDefault(tk: TTypeKind): Boolean;
+begin
+  PyRetIsIntDefault := (tk = tyInteger) or (tk = tyInt64);
+end;
+
+{ The type a NAME assigned in this body ends up holding, read from tokens
+  alone: scan every `name = <rhs>` before the return and take the last one the
+  expression scanner can type. Used by the returned-EXPRESSION chase, which
+  cannot consult PyLocals — the shell pre-pass has none, and answering
+  differently in the two passes is a silent ABI mismatch.
+
+  A name rebound across kinds (`v = 3` then `v = 0.5`) reports the LAST kind,
+  which is what the value at the return actually is in the straight-line case
+  this can see. Returns tyUnknown when nothing typed. }
+function PyRetNameType(scanFrom, scanTo: Integer; const nm: AnsiString): TTypeKind;
+var k, e2: Integer; t2: TTypeKind;
+begin
+  PyRetNameType := tyUnknown;
+  for k := scanFrom to scanTo - 1 do
+    if (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount) and
+       (Tokens[k + 1].Kind = tkAssign) and CaseEqual(GetTokenStr(k), nm) then
+    begin
+      e2 := k + 2;
+      while (e2 < TokCount) and
+            not (Tokens[e2].Kind in [tkNewline, tkDedent, tkEOF]) do Inc(e2);
+      t2 := PyInferExprType(k + 2, e2);
+      if t2 <> tyUnknown then PyRetNameType := t2;
+    end;
+end;
+
 function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
 var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
     tupDepth: Integer;
@@ -15879,6 +15937,7 @@ begin
   retRec := REC_NONE;
   rec2 := -1;
   seenAny := False;
+  PyInferRetSeenAny := False;
   j := methodStart + 2;
   pdepth := 0;
   while j < TokCount do
@@ -16013,7 +16072,7 @@ begin
         the same def — the silent ABI mismatch this comment warns about — and a
         def returning `s` where `s = str(x)` crashed on return. The token-only
         chase gives both passes the same answer, so it must run in both. }
-      if ((cur = tyUnknown) or (cur = tyInteger) or (cur = tyVariant) or
+      if ((cur = tyUnknown) or PyRetIsIntDefault(cur) or (cur = tyVariant) or
           TypeIsPromoInt(cur)) and
          (e = j + 2) and (Tokens[j + 1].Kind = tkIdent) then
       begin
@@ -16040,7 +16099,7 @@ begin
                (Tokens[k + 2].Kind = tkIdent) and
                CaseEqual(GetTokenStr(k + 2), GetTokenStr(j + 1)) then
               t2 := PyWiden(chainCur, t2);
-            if (t2 <> tyUnknown) and (t2 <> tyInteger) and (t2 <> tyVariant) then
+            if (t2 <> tyUnknown) and (not PyRetIsIntDefault(t2)) and (t2 <> tyVariant) then
             begin
               cur := t2;
               chainCur := t2;
@@ -16050,6 +16109,38 @@ begin
         if (cur = tyClass) and (rec2 >= 0) then
           PyInferLastCi := rec2;
       end;
+      { The same chase, for an EXPRESSION rather than a bare ident.
+
+        `def e(): v = 0.5; return v + 1` returned 4609434218613702656 — the
+        double's IEEE bits scalar-loaded as an integer. The bare-ident chase
+        above only fires for a single-token return, so `v + 1` went to
+        PyInferExprType, which in this pass has no PyLocals, could not type
+        `v`, and took tyInteger from the literal `1` alone. The float local was
+        invisible and the result type was decided by the smallest operand in
+        the expression (bug-nilpy-def-return-coerces-a-float-to-the-inferred-
+        int-result, row e — measured worse than the ticket recorded, which had
+        it as a truncation).
+
+        Chases each NAME in the returned expression to its last well-typed
+        assignment in this body and widens. Token-only, exactly like the bare
+        chase, so the shell pre-pass and the body pass still answer the same
+        thing — they must, or the signature and the frame disagree.
+
+        Only when the expression scan produced the tyInteger DEFAULT, and only
+        for names that chase to something better than tyInteger, so an ordinary
+        integer expression keeps its scalar result and boxes nothing. A name
+        followed by `(` is a call and a name after `.` is an attribute; neither
+        is a local, and both keep their existing routes. }
+      if ((cur = tyUnknown) or PyRetIsIntDefault(cur)) and (e > j + 2) then
+        for k := j + 1 to e - 1 do
+          if (Tokens[k].Kind = tkIdent) and
+             not ((k + 1 < TokCount) and (Tokens[k + 1].Kind = tkLParen)) and
+             not ((k > 0) and (Tokens[k - 1].Kind = tkDot)) then
+          begin
+            t2 := PyRetNameType(bodyScanStart, j, GetTokenStr(k));
+            if (t2 <> tyUnknown) and (not PyRetIsIntDefault(t2)) then
+              cur := PyWiden(cur, t2);
+          end;
       { A return EXPRESSION the scanner cannot type is DYNAMIC, not an integer.
         `def g(a): return a` with an untyped parameter is the plain case, and
         typing it tyInteger made the result a number: `g("a b").split(" ")`
@@ -16062,7 +16153,7 @@ begin
         above answer Integer by default and the enclosing function then hands a
         string result back as a number. Find the nested def and take ITS type.
         bug-nilpy-nested-def-nonint-result-garbage. }
-      if ((cur = tyUnknown) or (cur = tyInteger)) and (j + 2 < TokCount) and
+      if ((cur = tyUnknown) or PyRetIsIntDefault(cur)) and (j + 2 < TokCount) and
          (Tokens[j + 1].Kind = tkIdent) and (Tokens[j + 2].Kind = tkLParen) and
          (FindProc(GetTokenStr(j + 1)) < 0) then
       begin
@@ -16075,7 +16166,7 @@ begin
         end;
       end;
       { the same through a local: `s = inner()` then `return s` }
-      if ((cur = tyUnknown) or (cur = tyInteger)) and
+      if ((cur = tyUnknown) or PyRetIsIntDefault(cur)) and
          (e = j + 2) and (Tokens[j + 1].Kind = tkIdent) then
         for k := bodyScanStart to j - 1 do
           if (Tokens[k].Kind = tkIdent) and (k + 3 < TokCount) and
@@ -16123,6 +16214,7 @@ begin
       if not seenAny then
       begin
         seenAny := True;
+        PyInferRetSeenAny := True;
         Result := cur;
         retRec := curRec;
       end
@@ -16275,6 +16367,49 @@ begin
   end;
 end;
 
+{ An annotated result type joined with what the BODY actually returns.
+
+  A Python annotation is metadata, not enforcement: `def g() -> int` that
+  returns 2.5 returns 2.5. Trusting `-> int` coerced on the way out, and the
+  worst case was not even a truncation — `def a() -> int: return 2.5` printed
+  4612811918334230528, the double's IEEE bits scalar-loaded as an integer. The
+  mirror was wrong too: `def b() -> float: return 1` printed 1.0 where CPython
+  prints the int 1 (bug-nilpy-def-return-coerces-a-float-to-the-inferred-int-result).
+
+  The rule is the one already written down a few lines below for `-> None`
+  ("CPython ignores annotations… then the annotation loses"), extended from
+  None to every annotation. A disagreement yields a VARIANT, which carries
+  either and renders each as itself.
+
+  DELIBERATELY only when the join is a variant, i.e. only for the int-meets-
+  float pair PyWidenBinding redirects. Every other annotation keeps exactly its
+  old answer — in particular `-> str` stays the MANAGED tyAnsiString the method
+  path has always mapped it to, rather than being re-joined with the tyString
+  an inference might report and quietly becoming a frozen string[N].
+
+  Gated on PyInferRetSeenAny: with no value-bearing return the inference
+  answers tyInteger by default, which is not a disagreement with anything.
+
+  BOTH callers must apply this identically. The result type IS the calling
+  convention — a variant returns through the hidden-destination path, a scalar
+  in a register — and PyMethodRetType decides the signature while
+  PyParseDefHeader decides the frame, so a difference between them is a silent
+  ABI mismatch, not a typing nit. }
+function PyJoinRetAnnotation(annTk: TTypeKind; methodStart: Integer;
+                             var annRec: Integer): TTypeKind;
+var infTk: TTypeKind; infRec: Integer;
+begin
+  PyJoinRetAnnotation := annTk;
+  infRec := REC_NONE;
+  infTk := PyInferDefRetType(methodStart, infRec);
+  if not PyInferRetSeenAny then Exit;
+  if PyWidenBinding(annTk, infTk) = tyVariant then
+  begin
+    PyJoinRetAnnotation := tyVariant;
+    annRec := REC_NONE;
+  end;
+end;
+
 function PyMethodRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
 var j, pdepth, k: Integer;
 begin
@@ -16318,6 +16453,10 @@ begin
       retRec := REC_UCLASS_BASE + PyAnnLastCi
     else
       retRec := REC_NONE;
+    { the annotation is metadata, not enforcement — see PyJoinRetAnnotation.
+      Its twin in PyParseDefHeader must stay in step or the signature and the
+      frame disagree. }
+    Result := PyJoinRetAnnotation(Result, methodStart, retRec);
   end
   else
     { no annotation: infer from the body rather than defaulting to Integer }

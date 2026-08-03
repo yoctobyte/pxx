@@ -3,6 +3,8 @@ track: N
 prio: 55
 type: bug
 summary: "A def whose result type was inferred (or annotated) as int TRUNCATES a float it returns: `def g() -> int: v = 1; v = 2.5; return v` gives 2 where CPython gives 2.5. Python annotations are not enforcement. Pinned returned the raw IEEE BITS (4612811918334230528) for the same program — improved to truncation by the widen-binding fix, not resolved by it."
+status: done
+owner: claude-AN
 ---
 
 # a def's return coerces a float to its inferred int result type
@@ -148,3 +150,88 @@ Row `e` (the unannotated, inferred case) may or may not fall out of the same
 change — `v + 1` should type variant already, so if it still comes out int
 after the join, that is a second, narrower inference bug and deserves its own
 measurement.
+
+
+## Resolved 2026-08-04 — all seven rows, and row `e` was worse than recorded
+
+The 2026-08-03 hand-off was accurate and its recommendation is what landed. All
+seven rows of the table now match CPython, plus three shapes the measurement
+here added.
+
+### The annotation half (rows a, b, f)
+
+`PyJoinRetAnnotation` extends the precedent already written for `-> None`
+("CPython ignores annotations… then the annotation loses") to every annotation:
+join the annotation with `PyInferDefRetType`'s answer, and a disagreement
+yields a variant, which carries either and renders each value as itself.
+
+Two things the hand-off flagged, both handled as it described:
+
+1. **Gated on the inference having SEEN a value-bearing return.**
+   `PyInferDefRetType` answers `tyInteger` when it finds none, which is
+   indistinguishable from a def that genuinely returns an int; a def with no
+   value return would otherwise join to a variant against any annotation. It
+   now reports `seenAny` through `PyInferRetSeenAny`, the same global shape
+   `PyInferLastCi` already uses.
+2. **Applied at BOTH sites in step** — `PyMethodRetType` (signature) and
+   `PyParseDefHeader` (frame). The result type is the calling convention, so a
+   difference between those two is a silent ABI mismatch.
+
+The join deliberately fires **only when it produces a variant**, i.e. only for
+the int-meets-float pair `PyWidenBinding` redirects. Every other annotation
+keeps exactly its old answer — in particular `-> str` stays the managed
+`tyAnsiString` rather than being re-joined with a `tyString` and quietly
+becoming a frozen `string[N]`.
+
+### Row `e` did NOT fall out of that, and it is a bigger hole than the ticket had
+
+The ticket predicted this and asked for its own measurement. Measured:
+
+| program | before | CPython |
+| --- | --- | --- |
+| `def h(): v = 0.5; return v + 1` | **4609434218613702656** | 1.5 |
+| `def i(): v = 0.5; return v * v` | 0.25 (ok) | 0.25 |
+| `def j(): v = 0.5; w = v + 1; return w` | **4609434218613702656** | 1.5 |
+
+So it is not about the REBINDING at all — a plain float local is enough, and the
+answer is the double's IEEE bits, not the truncation the ticket recorded. The
+cause: the returned-expression scanner is token-only (it has to be — the shell
+pre-pass has no `PyLocals`, and answering differently in the two passes is the
+ABI mismatch above), so in `v + 1` it cannot type `v` and took `tyInt64` from
+the literal `1` alone. The existing chase that would have found `v` only fires
+for a BARE ident return.
+
+Fixed by extending that chase to expressions: `PyRetNameType` reads a name's
+last well-typed assignment from tokens, and each name in a returned expression
+is chased and widened in. Token-only, so both passes still agree. Only when the
+expression scan produced its integer default, and only for names that chase to
+something better than an integer, so ordinary integer defs keep a scalar result
+and box nothing (`def m(): n = 2; return n * 3` is still 6, scalar).
+
+### A latent break this uncovered, worth reading
+
+Those chases were all guarded on `cur = tyInteger`. The field-width fix earlier
+today (`ae4057989`) made an integer LITERAL report `tyInt64` instead of
+`tyInteger` — so every one of those guards silently stopped firing for any
+return expression containing an int literal. `PyRetIsIntDefault` now tests both
+kinds in one place. This is why row `e` measured worse than when it was filed:
+part of the damage was a day old.
+
+### FPC seed canary caught it, `make` did not
+
+`PyJoinRetAnnotation` is called from `PyParseDefHeader`, which sits earlier in
+the file than the body. pxx is lax about declaration order and FPC is not, so
+`make compiler/pascal26` and the self-host fixedpoint both passed and the seed
+build failed. Forward added. (`feedback_fpc_seed_build_not_covered_by_make_or_gate`
+— `gate.sh quick` runs the canary concurrently, which is what surfaced it.)
+
+### Verified
+
+`test/test_nilpy_def_return_type.npy`, wired into `make test-nilpy`: all seven
+original rows plus the three shapes above and two integer controls, every
+expectation taken from CPython. `tools/gate.sh quick` GREEN, self-host
+byte-identical.
+
+## Log
+- 2026-08-04 — resolved.
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

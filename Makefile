@@ -1375,6 +1375,12 @@ test-nilpy: $(COMPILER)
 	# decimal expansion. Every value here is now CPython's.
 	./$(COMPILER) test/test_nilpy_round.npy /tmp/test_nilpy_round26
 	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.67 2.67\n9.99 0.04 0.3 100.0\n1.0 0.0 -0.0 0.0')"
+	# A Python annotation is metadata, not enforcement: `-> int` returning 2.5 gave
+	# 4612811918334230528 (the double's IEEE bits). And a returned EXPRESSION was
+	# typed by the smallest operand in it. See the test's header; expectations are
+	# CPython's.
+	./$(COMPILER) test/test_nilpy_def_return_type.npy /tmp/test_nilpy_defret26
+	test "$$(/tmp/test_nilpy_defret26)" = "$$(printf '%b' '2.5 1 2.5 0.5\n1.5 2.5 1.5 1.5\n0.25 1.5 7 6')"
 	# A field initialised from a small int LITERAL was 4 bytes wide and wrapped at
 	# 2^31, while the `int` ANNOTATION gave 8 — PyTypeFromTokenIndex disagreeing
 	# with itself. See the test's own header; expectations are CPython's.

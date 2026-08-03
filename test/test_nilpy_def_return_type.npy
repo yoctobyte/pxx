@@ -1,0 +1,76 @@
+# A Python annotation is METADATA, not enforcement — `def g() -> int` that
+# returns 2.5 returns 2.5 — and an unannotated def's result type must follow
+# what the body actually returns
+# (bug-nilpy-def-return-coerces-a-float-to-the-inferred-int-result).
+#
+# Two causes, one table. The annotation was trusted as enforcement, and the
+# worst case was not even a truncation: `-> int` returning 2.5 printed
+# 4612811918334230528, the double's IEEE bits scalar-loaded as an integer.
+# Separately, a returned EXPRESSION was typed by the smallest operand in it,
+# because the token-only return scanner cannot consult the local table: with
+# `v = 0.5`, `return v + 1` took tyInt64 from the literal `1` alone and handed
+# back 4609434218613702656.
+#
+# The rule now is the one the `-> None` case already used: CPython ignores
+# annotations, so on a disagreement the annotation LOSES and the result is a
+# variant, which carries either and renders each value as itself. Applied
+# identically in PyMethodRetType (which decides the signature) and
+# PyParseDefHeader (which decides the frame) — a difference between those two
+# is a silent ABI mismatch, not a typing nit.
+#
+# Every expectation is CPython's.
+
+def a() -> int:
+    return 2.5
+
+def b() -> float:
+    return 1
+
+def c():
+    return 2.5
+
+def d():
+    v = 3
+    v = 0.5
+    return v
+
+def e():
+    v = 3
+    v = 0.5
+    return v + 1
+
+def f() -> int:
+    v = 1
+    v = 2.5
+    return v
+
+def g():
+    return 0.5 + 1
+
+# the expression chase, with no rebinding at all
+def h():
+    v = 0.5
+    return v + 1
+
+# ...and with no literal to take a type from
+def i():
+    v = 0.5
+    return v * v
+
+# ...and through an intermediate local
+def j():
+    v = 0.5
+    w = v + 1
+    return w
+
+# ordinary integer defs must keep their SCALAR result and box nothing
+def k() -> int:
+    return 7
+
+def m():
+    n = 2
+    return n * 3
+
+print(a(), b(), c(), d())
+print(e(), f(), g(), h())
+print(i(), j(), k(), m())
