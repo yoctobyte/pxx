@@ -3,6 +3,8 @@ summary: "The self-host chain compiles straight onto the path it is about to exe
 type: bug
 track: A
 prio: 55
+status: done
+owner: claude-A@opus5
 ---
 
 # The self-host recipe writes the binary in place, then execs it
@@ -74,3 +76,34 @@ The self-host chains compile to a temp path and rename; source and destination
 are demonstrably on one filesystem; `test-core`, `test-smoke` and the
 `--threadsafe` chain stay byte-identical. The race cannot be forced on demand,
 so the acceptance is structural, not a reproduction.
+
+## Resolution 2026-08-03 (claude-A@opus5)
+
+Every stage of the gated self-host chains now compiles/copies to a PID-unique
+`<path>.$$.tmp` in the SAME directory and `mv -f`s it into place on the same
+recipe line. Covered: `test-core` (self / next / fixedpoint / threadsafe-self /
+threadsafe-next), `test-smoke` (self / next / fixedpoint / s5), `test-opt`
+(o1a-c, o2a-c, o3a-c), `stabilize` and `stabilize-managed` (s4 / s5).
+
+The one-filesystem caveat holds by construction — temp and destination differ
+only in suffix, so they are always in the same directory. Under testmgr the
+whole line is rewritten into the run's private scratch together
+(`TMP_RE` stops at the `$`, so `/tmp/x.$$.tmp` becomes `<RUN_TMP>/x.$$.tmp`);
+verified against `tools/testmgr.py`'s own rewrite.
+
+`$$$$` in the Makefile reaches the recipe shell as `$$` = that shell's pid, both
+under plain `make` and under testmgr's `make -n` capture, so no two writers can
+pick the same temp name even when two runs share `/tmp`.
+
+Verified: `make -n` expands cleanly for test-core / test-opt / stabilize /
+stabilize-managed; the test-smoke chain was run end to end from its own `make
+-n` output and stayed a fixedpoint (`cmp next fixedpoint` clean, code=6108489B
+across all three stages); `tools/gate.sh quick` GREEN.
+
+Not touched, deliberately: the `bench-*` targets' fixed `/tmp/pascal26-runtime-*`
+names (same shape, but ungated and not part of the self-host chain), and the
+top-level `mv $(BUILD_COMPILER) $(COMPILER)`, whose tmpfs->ext4 crossing is the
+caveat this ticket documents rather than a place to apply the pattern.
+
+## Log
+- 2026-08-03 — resolved, commit PENDING.

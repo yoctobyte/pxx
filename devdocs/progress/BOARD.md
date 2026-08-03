@@ -44,7 +44,7 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (209)
+## backlog (208)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -52,7 +52,6 @@ lives in git, not in a timestamp._
 | bug-a-integer-literal-not-typed-by-its-value-for-overload-resolution | A | 45 | bug | An untyped integer literal always types as LongInt (or Int64 if it does not fit), so overload resolution picks a different candidate than FPC: hi($1234) gives 0\|4660 where FPC gives 18\|52. Values are no longer truncated (that half is fixed) — this is the remaining FPC-parity gap. | — |
 | bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c | A | 40 | bug | The caller side now follows the C ABI for 64-bit arguments to external functions, but a pxx routine CALLED FROM C still spills them with the internal packed convention — so on xtensa, where the C ABI skips to an even register, a C caller and a pxx callee would disagree. Latent: nothing crosses that way today. | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
-| bug-a-selfhost-recipe-should-rename-not-write-in-place | A | 55 | bug | The self-host chain compiles straight onto the path it is about to exec, so a concurrent fd holder makes the exec fail with ETXTBSY. Write to a temp name and rename — atomic in RUN_TMP, and a new inode | — |
 | bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity | C | 55 | bug | In a mixed Pascal+C build, a C call binds to a same-named Pascal routine at the wrong arity | — |
 | bug-cfront-error-directive-silently-ignored | C | 75 | bug | `#error` in a LIVE branch is silently ignored — the program compiles and runs. Any C source whose configuration guard says \"this build is unsupported\" is built anyway, usually with most of the file #if'd away. Found while scoping cpyext M5: it made a Cython module look like it compiled clean when 5000 of its 8000 lines had been discarded. | — |
 | bug-cfront-no-entry-stub-for-xtensa | C | 40 | bug | No C program entry stub for xtensa — no C compiles for that target at all | — |
@@ -364,7 +363,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1257)
+## done (1258)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -417,6 +416,7 @@ lives in git, not in a timestamp._
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
 | bug-a-qplus-misses-32bit-overflow | A | 60 | bug | `{$Q+}` does not trap 32-bit overflow — only 64-bit ops are checked | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 55 | bug | issue: runtime heap grows unbounded in a dynamic/variant-heavy loop (long-running programs OOM) | — |
+| bug-a-selfhost-recipe-should-rename-not-write-in-place | A | 55 | bug | The self-host chain compiles straight onto the path it is about to exec, so a concurrent fd holder makes the exec fail with ETXTBSY. Write to a temp name and rename — atomic in RUN_TMP, and a new inode | — |
 | bug-a-str-boxed-into-variant-does-not-own-bytes | A | 80 | bug | A `str` boxed into a Variant does not OWN its bytes — silent wrong values | — |
 | bug-a-threadsafe-self-host-exceeds-max-globfix-by-121 | A | 75 | bug | The --threadsafe self-compile needs 65657 global fixups against a fixed cap of 65536 — over by 121. A GATED test-core job is red on master, and `make compiler/pascal26` is green, so the normal build masks it completely | — |
 | bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
@@ -1698,7 +1698,6 @@ lives in git, not in a timestamp._
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-runtime-variant-heap-grows-unbounded
-- [p 55] [A] bug-a-selfhost-recipe-should-rename-not-write-in-place
 - [p 55] [C] bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [N] bug-nilpy-def-return-coerces-a-float-to-the-inferred-int-result

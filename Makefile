@@ -4402,7 +4402,19 @@ test-core: $(COMPILER)
 	./$(COMPILER) -fno-unhandled-handler test/test_exception_unhandled.pas /tmp/test_exception_silent_alias26
 	! /tmp/test_exception_silent_alias26 > /tmp/test_exception_silent_alias.out 2> /tmp/test_exception_silent_alias.log
 	test ! -s /tmp/test_exception_silent_alias.log
-	./$(COMPILER) $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-self
+	# Self-host chain. Every stage compiles to a PID-unique temp name and
+	# rename(2)s it into place, never onto the path the next line execs.
+	# The names here are fixed (/tmp/pascal26-self, -next, -fixedpoint), so two
+	# jobs of one testmgr run — or a dev `make` and the watcher in plain /tmp —
+	# share them: one process writing the path another is about to exec is
+	# ETXTBSY, "Text file busy", a red that has nothing to do with the code
+	# (observed twice on 2026-08-02, test-core and test-smoke). rename() is
+	# atomic within a filesystem and gives the path a fresh inode, so an exec
+	# sees a complete binary or the previous one, never a half-written file
+	# somebody holds a write fd to. Source and destination MUST stay on one
+	# filesystem — across one, mv degrades to copy-in-place and reintroduces
+	# exactly the window this closes.
+	./$(COMPILER) $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-self.$$$$.tmp && mv -f /tmp/pascal26-self.$$$$.tmp /tmp/pascal26-self
 	/tmp/pascal26-self test/hello.pas /tmp/self-hello26
 	test "$$(/tmp/self-hello26)" = "Hello, World!"
 	/tmp/pascal26-self test/bootstrap_features.pas /tmp/self-bootstrap_features26
@@ -4423,7 +4435,7 @@ test-core: $(COMPILER)
 	test "$$(/tmp/self-test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	/tmp/pascal26-self test/fileio.pas /tmp/self-fileio26
 	test "$$(/tmp/self-fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
-	/tmp/pascal26-self $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-next
+	/tmp/pascal26-self $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-next.$$$$.tmp && mv -f /tmp/pascal26-next.$$$$.tmp /tmp/pascal26-next
 	/tmp/pascal26-next test/hello.pas /tmp/next-hello26
 	test "$$(/tmp/next-hello26)" = "Hello, World!"
 	/tmp/pascal26-next test/bootstrap_features.pas /tmp/next-bootstrap_features26
@@ -4444,10 +4456,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/next-test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	/tmp/pascal26-next test/fileio.pas /tmp/next-fileio26
 	test "$$(/tmp/next-fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
-	/tmp/pascal26-next $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-fixedpoint
+	/tmp/pascal26-next $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-fixedpoint.$$$$.tmp && mv -f /tmp/pascal26-fixedpoint.$$$$.tmp /tmp/pascal26-fixedpoint
 	cmp /tmp/pascal26-next /tmp/pascal26-fixedpoint
-	./$(COMPILER) $(PXXFLAGS) --threadsafe $(COMPILER_SRC) /tmp/pascal26-threadsafe-self
-	/tmp/pascal26-threadsafe-self $(PXXFLAGS) --threadsafe $(COMPILER_SRC) /tmp/pascal26-threadsafe-next
+	./$(COMPILER) $(PXXFLAGS) --threadsafe $(COMPILER_SRC) /tmp/pascal26-threadsafe-self.$$$$.tmp && mv -f /tmp/pascal26-threadsafe-self.$$$$.tmp /tmp/pascal26-threadsafe-self
+	/tmp/pascal26-threadsafe-self $(PXXFLAGS) --threadsafe $(COMPILER_SRC) /tmp/pascal26-threadsafe-next.$$$$.tmp && mv -f /tmp/pascal26-threadsafe-next.$$$$.tmp /tmp/pascal26-threadsafe-next
 	cmp /tmp/pascal26-threadsafe-self /tmp/pascal26-threadsafe-next
 	@echo "=== progress board check (non-fatal) ==="
 	@./tools/progress.sh check || echo "WARNING: progress board stale or invalid — run 'tools/progress.sh board-md' (non-fatal)"
@@ -6617,13 +6629,13 @@ test-quick: $(COMPILER)
 # bug-selfhost-multifn-ifelse-miscompile).
 test-smoke: test-quick
 	# self-host byte-identity chain (the artifacts stabilize-core pins)
-	./$(COMPILER) $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-self
-	/tmp/pascal26-self $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-next
+	./$(COMPILER) $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-self.$$$$.tmp && mv -f /tmp/pascal26-self.$$$$.tmp /tmp/pascal26-self
+	/tmp/pascal26-self $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-next.$$$$.tmp && mv -f /tmp/pascal26-next.$$$$.tmp /tmp/pascal26-next
 	/tmp/pascal26-next test/bootstrap_features.pas /tmp/smoke_boot26
 	test "$$(/tmp/smoke_boot26)" = "$$(printf '120\n98\ncase-ok\n0')"
-	/tmp/pascal26-next $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-fixedpoint
+	/tmp/pascal26-next $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-fixedpoint.$$$$.tmp && mv -f /tmp/pascal26-fixedpoint.$$$$.tmp /tmp/pascal26-fixedpoint
 	cmp /tmp/pascal26-next /tmp/pascal26-fixedpoint
-	cp /tmp/pascal26-fixedpoint /tmp/pascal26-s5
+	cp /tmp/pascal26-fixedpoint /tmp/pascal26-s5.$$$$.tmp && mv -f /tmp/pascal26-s5.$$$$.tmp /tmp/pascal26-s5
 
 # test-opt: the -O gate (feature-optimization-levels). Differential corpus —
 # every program compiled at -O0 and -O1 must produce IDENTICAL runtime
@@ -6666,24 +6678,24 @@ test-opt: $(COMPILER)
 	cmp /tmp/opt0_a64.out /tmp/opt1_a64.out
 	# -O1 self-compile fixedpoint: an -O1-built compiler rebuilding itself at
 	# -O1 must reach byte-identity too
-	./$(COMPILER) -O1 $(COMPILER_SRC) /tmp/pascal26-o1a
-	/tmp/pascal26-o1a -O1 $(COMPILER_SRC) /tmp/pascal26-o1b
-	/tmp/pascal26-o1b -O1 $(COMPILER_SRC) /tmp/pascal26-o1c
+	./$(COMPILER) -O1 $(COMPILER_SRC) /tmp/pascal26-o1a.$$$$.tmp && mv -f /tmp/pascal26-o1a.$$$$.tmp /tmp/pascal26-o1a
+	/tmp/pascal26-o1a -O1 $(COMPILER_SRC) /tmp/pascal26-o1b.$$$$.tmp && mv -f /tmp/pascal26-o1b.$$$$.tmp /tmp/pascal26-o1b
+	/tmp/pascal26-o1b -O1 $(COMPILER_SRC) /tmp/pascal26-o1c.$$$$.tmp && mv -f /tmp/pascal26-o1c.$$$$.tmp /tmp/pascal26-o1c
 	cmp /tmp/pascal26-o1b /tmp/pascal26-o1c
 	# -O2 self-compile fixedpoint (register calling convention, feature-callconv-
 	# register-args): an -O2-built compiler rebuilding itself at -O2 reaches
 	# byte-identity too. Gates the r14/r15 param-residency codegen.
-	./$(COMPILER) -O2 $(COMPILER_SRC) /tmp/pascal26-o2a
-	/tmp/pascal26-o2a -O2 $(COMPILER_SRC) /tmp/pascal26-o2b
-	/tmp/pascal26-o2b -O2 $(COMPILER_SRC) /tmp/pascal26-o2c
+	./$(COMPILER) -O2 $(COMPILER_SRC) /tmp/pascal26-o2a.$$$$.tmp && mv -f /tmp/pascal26-o2a.$$$$.tmp /tmp/pascal26-o2a
+	/tmp/pascal26-o2a -O2 $(COMPILER_SRC) /tmp/pascal26-o2b.$$$$.tmp && mv -f /tmp/pascal26-o2b.$$$$.tmp /tmp/pascal26-o2b
+	/tmp/pascal26-o2b -O2 $(COMPILER_SRC) /tmp/pascal26-o2c.$$$$.tmp && mv -f /tmp/pascal26-o2c.$$$$.tmp /tmp/pascal26-o2c
 	cmp /tmp/pascal26-o2b /tmp/pascal26-o2c
 	# -O2 now carries the W1 mirror / leaf-index fold / last-arg collapse
 	# (promoted 2026-07-11 after a 564-program -O0-vs differential). -O3 keeps
 	# the register-lifetime passes (r8-r13 scratch, loop/float residency); an
 	# -O3-built compiler rebuilding itself at -O3 must reach byte-identity too.
-	./$(COMPILER) -O3 $(COMPILER_SRC) /tmp/pascal26-o3a
-	/tmp/pascal26-o3a -O3 $(COMPILER_SRC) /tmp/pascal26-o3b
-	/tmp/pascal26-o3b -O3 $(COMPILER_SRC) /tmp/pascal26-o3c
+	./$(COMPILER) -O3 $(COMPILER_SRC) /tmp/pascal26-o3a.$$$$.tmp && mv -f /tmp/pascal26-o3a.$$$$.tmp /tmp/pascal26-o3a
+	/tmp/pascal26-o3a -O3 $(COMPILER_SRC) /tmp/pascal26-o3b.$$$$.tmp && mv -f /tmp/pascal26-o3b.$$$$.tmp /tmp/pascal26-o3b
+	/tmp/pascal26-o3b -O3 $(COMPILER_SRC) /tmp/pascal26-o3c.$$$$.tmp && mv -f /tmp/pascal26-o3c.$$$$.tmp /tmp/pascal26-o3c
 	cmp /tmp/pascal26-o3b /tmp/pascal26-o3c
 	@echo "test-opt OK (differential corpus + -O1/-O2 fixedpoint)"
 
@@ -6697,9 +6709,9 @@ stabilize-fast: test-smoke
 
 stabilize: test
 	@echo "=== stabilize: 4-iteration fixedpoint check ==="
-	/tmp/pascal26-fixedpoint $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-s4
+	/tmp/pascal26-fixedpoint $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-s4.$$$$.tmp && mv -f /tmp/pascal26-s4.$$$$.tmp /tmp/pascal26-s4
 	cmp /tmp/pascal26-next /tmp/pascal26-s4
-	/tmp/pascal26-s4 $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-s5
+	/tmp/pascal26-s4 $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-s5.$$$$.tmp && mv -f /tmp/pascal26-s5.$$$$.tmp /tmp/pascal26-s5
 	cmp /tmp/pascal26-next /tmp/pascal26-s5
 	$(MAKE) stabilize-record
 
@@ -6728,9 +6740,9 @@ stabilize-managed: COMPILER := $(COMPILER_MANAGED)
 stabilize-managed: PXXFLAGS := -dPXX_MANAGED_STRING
 stabilize-managed: test-managed
 	@echo "=== stabilize-managed: 4-iteration fixedpoint check ==="
-	/tmp/pascal26-fixedpoint $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-s4
+	/tmp/pascal26-fixedpoint $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-s4.$$$$.tmp && mv -f /tmp/pascal26-s4.$$$$.tmp /tmp/pascal26-s4
 	cmp /tmp/pascal26-next /tmp/pascal26-s4
-	/tmp/pascal26-s4 $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-s5
+	/tmp/pascal26-s4 $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-s5.$$$$.tmp && mv -f /tmp/pascal26-s5.$$$$.tmp /tmp/pascal26-s5
 	cmp /tmp/pascal26-next /tmp/pascal26-s5
 	@echo "=== recording stable managed binary ==="
 	@mkdir -p $(STABLE_MANAGED_DIR)
