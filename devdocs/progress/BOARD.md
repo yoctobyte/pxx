@@ -44,12 +44,11 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (207)
+## backlog (206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
-| bug-a-dwarf-line-program-emits-backward-address-steps | A | 50 | bug | The .debug_line program emits DW_LNS_advance_pc with a NEGATIVE delta, encoded as unsigned ULEB128. Each one adds 2^32 to the address register, so every row after the first backward step is unreachable — 25911 of 76894 rows (34%) in the compiler's own -g build, i.e. the whole upper fifth of the binary has no usable line info. | — |
 | bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c | A | 40 | bug | The caller side now follows the C ABI for 64-bit arguments to external functions, but a pxx routine CALLED FROM C still spills them with the internal packed convention — so on xtensa, where the C ABI skips to an even register, a C caller and a pxx callee would disagree. Latent: nothing crosses that way today. | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity | C | 55 | bug | In a mixed Pascal+C build, a C call binds to a same-named Pascal routine at the wrong arity | — |
@@ -362,7 +361,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1260)
+## done (1261)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -378,6 +377,7 @@ lives in git, not in a timestamp._
 | bug-a-csmith-o0-miscompile-seed31039 | A | 50 | bug | csmith seed 31039: pxx prints a wrong global (g_22) checksum vs gcc at -O0, consistent across -O levels. Pre-existing. Needs creduce (line-reducer floors ~90 lines). | — |
 | bug-a-csmith-o0-miscompile-seed5038 | A | 55 | bug | csmith seed 5038: pxx produces a WRONG global checksum vs gcc at -O0 (silent miscompile). Pre-existing (pinned reproduces). Needs creduce to reduce. | — |
 | bug-a-double-global-initializer-arithmetic-folds-to-zero | A | 65 | bug | any compile-time ARITHMETIC in a double global/static initializer folds to 0.0 (1.0/4.0, 2.0*3.0, 1024.0-0.5 all become 0.0); a bare literal is fine — silent, hits real C code | — |
+| bug-a-dwarf-line-program-emits-backward-address-steps | A | 50 | bug | The .debug_line program emits DW_LNS_advance_pc with a NEGATIVE delta, encoded as unsigned ULEB128. Each one adds 2^32 to the address register, so every row after the first backward step is unreachable — 25911 of 76894 rows (34%) in the compiler's own -g build, i.e. the whole upper fifth of the binary has no usable line info. | — |
 | bug-a-float-literal-lexer-is-not-correctly-rounded | A | 65 | bug | A float LITERAL is up to 1 ULP away from the nearest double — `1e-292` in source is not the same number as `float(\"1e-292\")` in the same program. 23 of 490 sampled literals are wrong. Affects every frontend | — |
 | bug-a-fpc-seed-drift-emitasmx64-forward | A | 60 | bug | FPC seed drift #4 in three days, now in Track A's own files: symtab.inc calls EmitAsmX64, defined in asmtext.inc five includes later. Verified one-line fix | — |
 | bug-a-fpc-seed-drift-pymaketruthy-forward-wrong-file | A | 60 | bug | FPC cold-start broken again: PyMakeTruthy is used in parser.inc but forward-declared in pyparser.inc, which is included 14 lines later. Verified one-line-move fix. | — |
@@ -1720,7 +1720,6 @@ lives in git, not in a timestamp._
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [U] decide-pxxpdf-ticket-obsolete (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
-- [p 50] [A] bug-a-dwarf-line-program-emits-backward-address-steps
 - [p 50] [C] bug-cfront-sizeof-unparenthesised-subscript
 - [p 50] [N] bug-nilpy-in-over-objects-ignores-eq
 - [p 50] [N] bug-nilpy-lambda-over-a-capturing-nested-def-does-not-compile

@@ -3,6 +3,8 @@ track: A
 prio: 50
 type: bug
 summary: "The .debug_line program emits DW_LNS_advance_pc with a NEGATIVE delta, encoded as unsigned ULEB128. Each one adds 2^32 to the address register, so every row after the first backward step is unreachable — 25911 of 76894 rows (34%) in the compiler's own -g build, i.e. the whole upper fifth of the binary has no usable line info."
+status: done
+owner: claude-A@opus5
 ---
 
 # `.debug_line` advances the PC backwards, and the address register wraps
@@ -98,3 +100,47 @@ check in the emitter and worth keeping as an assertion under `-g`.
   gives a real address; a backtrace from a breakpoint deep in the parser names
   `compiler/compiler.pas` for the main-body frame.
 - Self-host fixedpoint byte-identical (nothing changes without `-g`).
+
+## Resolution 2026-08-03 (claude-A@opus5)
+
+Option 1 (sort), not option 2 (split the sequence) — measurement made the choice
+cheap. The 104 backward steps displace at most 5389 bytes of code (median 1615),
+so the rows are already sorted apart from small local inversions and a **stable
+insertion sort** over the four parallel `DwarfRow*` arrays is linear in practice.
+Splitting into 104 sequences would have cost each sequence's last row its
+coverage; sorting costs nothing and produces the table DWARF actually wants
+(a line program maps address -> line, so address order IS the correct order).
+
+Stability is load-bearing: several rows legitimately share an address and the
+first of them carries `prologue_end`. Shifting rather than swapping keeps it
+first.
+
+`BuildDwarfSections` (`elfwriter.inc`), immediately before the line program.
+
+### Verified
+
+| | before | after |
+| --- | --- | --- |
+| rows with an address >= 2^32 | 25911 of 76894 | **0** |
+| `Advance PC` operands above 2^31 | 104 | **0** |
+
+```
+(gdb) info line PyClassCreateExpr
+Line 4003 of "compiler/pyparser.inc" ...     { was: no line number information }
+```
+— and `pyparser.inc:4001` is `function PyClassCreateExpr;`, 4003 its first
+statement, so the row is right and not merely present.
+
+```
+(gdb) bt
+#6  ... ParseProgram () at compiler/parser.inc:29882
+#7  ... Pascal26 () at compiler/compiler.pas:932      { was: asmdisasm_x64.inc:99 }
+```
+— `compiler.pas:932` is the `ParseProgram;` call. The whole backtrace is now
+correct top to bottom, which it has never been.
+
+`tools/gate.sh quick` GREEN (self-host fixedpoint byte-identical — nothing
+changes without `-g` — testmgr quick, FPC seed canary).
+
+## Log
+- 2026-08-03 — resolved, commit PENDING.

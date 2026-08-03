@@ -1277,6 +1277,8 @@ end;
   (LOAD_ADDR+codeOffset); codeBytes = CodeLen. DWARF version 3, DWARF32. }
 procedure BuildDwarfSections(entry: Int64; codeBytes: Integer);
 var i, lenPos, hdrPos, progStart, curLine, curAddr, dLine, dAddr, curFile: Integer;
+    j, sortAddr, sortLine, sortFile: Integer;
+    sortProl: Boolean;
     nm: AnsiString;
 begin
   DbgSetArchParams;
@@ -1311,6 +1313,44 @@ begin
   { header_length = distance from the byte after header_length to here }
   progStart := DbgLen;
   DbgPatchU32(hdrPos, progStart - (hdrPos + 4));
+
+  { The rows arrive in EMISSION order, which is not address order: codegen places
+    out-of-line chunks (and a proc's first-row backfill) away from the main flow,
+    so ~104 rows in the compiler's own -g build sit below their predecessor.
+    DW_LNS_advance_pc's operand is an UNSIGNED LEB128, so a negative delta was
+    emitted as its 32-bit two's complement and the consumer's address register
+    carried into bit 32 — permanently. 34% of the rows described addresses that
+    do not exist, which is why `info line` on anything in the top fifth of the
+    binary answered "no line number information" or named a wrong file.
+
+    Sorting by address is what DWARF wants (a line program maps address -> line,
+    so address order IS the correct order) and costs nothing here: the rows are
+    already sorted apart from those inversions, and the deepest one displaces
+    ~5 KB of code, so this insertion sort is linear in practice. It must be
+    STABLE — several rows legitimately share an address, and the first of them
+    is the one carrying prologue_end. Shifting rather than swapping gives that.
+    See bug-a-dwarf-line-program-emits-backward-address-steps. }
+  for i := 1 to DwarfRowCount - 1 do
+    if DwarfRowAddr[i] < DwarfRowAddr[i - 1] then
+    begin
+      sortAddr := DwarfRowAddr[i];
+      sortLine := DwarfRowLine[i];
+      sortFile := DwarfRowFile[i];
+      sortProl := DwarfRowPrologueEnd[i];
+      j := i - 1;
+      while (j >= 0) and (DwarfRowAddr[j] > sortAddr) do
+      begin
+        DwarfRowAddr[j + 1] := DwarfRowAddr[j];
+        DwarfRowLine[j + 1] := DwarfRowLine[j];
+        DwarfRowFile[j + 1] := DwarfRowFile[j];
+        DwarfRowPrologueEnd[j + 1] := DwarfRowPrologueEnd[j];
+        Dec(j);
+      end;
+      DwarfRowAddr[j + 1] := sortAddr;
+      DwarfRowLine[j + 1] := sortLine;
+      DwarfRowFile[j + 1] := sortFile;
+      DwarfRowPrologueEnd[j + 1] := sortProl;
+    end;
 
   { line number program }
   { DW_LNE_set_address(entry + first row addr) }
