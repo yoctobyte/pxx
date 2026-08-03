@@ -528,8 +528,13 @@ fix the doc, not the loop.
   Ranking = one human `prio:` (0-100, frontmatter, unset=50) propagated down
   dependency edges — a blocker inherits the priority of what it unblocks, so you
   rate goals and the chain follows. Loop `next → claim <slug> <agent> → do →
-  resolve <slug> <commit> → board-md`. origin/master is truth (pull --rebase,
-  push green). Full model: `devdocs/progress/README.md`.
+  resolve <slug> → board-md`. origin/master is truth (pull --rebase,
+  push green). **Pass no sha to `resolve`** — it writes `PENDING-COMMIT` and
+  `tools/sync.sh` fills in the sha the commit LANDED as. A sha you name before
+  the push is the pre-rebase one, and this repo rebases nearly every sync (the
+  watcher publishes tstate continuously), so it cites a commit that exists only
+  in your reflog — `bug-t-resolve-cites-a-sha-the-rebase-then-rewrites`. Full
+  model: `devdocs/progress/README.md`.
 - **Cold start — "continue on tickets" (no track named):** self-dispatch,
   auto-pick the global top.
   1. `git pull --rebase` (origin is truth).
@@ -541,7 +546,8 @@ fix the doc, not the loop.
      can't tell. If you're not sole-A, skip it and take the top of a non-A track
      (`next --track C|B|R|D`). Any non-shared ticket: just claim it.
   4. `claim <slug> <agent-id>` → do it → land green (your lane's gate) →
-     `resolve <slug> <commit>` → `board-md` → commit the move + push.
+     `resolve <slug>` (no sha — see above) → `board-md` → commit the move, then
+     `tools/sync.sh` to push and record the landed sha.
   5. Loop: `pull --rebase`, `next`, repeat. Stop when the queue is dry for your
      lane or the user says so.
 - Tickets live in

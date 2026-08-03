@@ -131,9 +131,24 @@ tools/progress.sh next --track C   # the single top ticket to grab (+ why)
 tools/progress.sh ready --track C  # the whole ranked queue for your track
 tools/progress.sh claim <slug> <your-agent-id>   # -> working/, sets Owner
 # ... do the work; land only green (your lane's gate) ...
-tools/progress.sh resolve <slug> <commit>        # -> done/, logs the commit
+tools/progress.sh resolve <slug>                 # -> done/, logs the commit
 tools/progress.sh board-md          # regen BOARD.md/.html; commit with the move
+tools/sync.sh                       # push, then record the sha it LANDED as
 ```
+
+`resolve` takes an optional sha, and you normally omit it: it writes
+`PENDING-COMMIT` and `sync.sh` replaces that with the sha the resolve commit
+landed as. The sha you could name at resolve time is the pre-rebase one, and
+`sync.sh` rebases — on this fleet the watcher publishes tstate every few
+minutes, so the cited commit is rewritten away before anyone else can look it
+up (`bug-t-resolve-cites-a-sha-the-rebase-then-rewrites`). Pass an explicit sha
+only for a commit that already landed. `check --strict` reports both leftovers
+(`WARN-PENDING-COMMIT`) and citations absent from origin/master
+(`WARN-DEAD-COMMIT`).
+
+Commit the ticket move **together with the fix**: the sha `sync.sh` fills in is
+the commit that introduced the placeholder, so a move committed on its own
+cites the move rather than the work.
 
 `next` picks the top of the ranked ready queue for the track and prints why it
 won (effective priority, what it inherits, what it unblocks). An agent — or

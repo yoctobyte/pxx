@@ -52,8 +52,8 @@ claim <slug> <agent-id>
   ... do the work ...
 land green                # the lane's gate: A = make test + self-host byte-identical;
                           # B = lib-test/demos; C/Z = tests + self-host + cross; etc.
-resolve <slug> <commit>
-board-md ; commit the move ; push
+resolve <slug>            # no sha: sync.sh records the one it LANDED as
+board-md ; commit the move ; tools/sync.sh
 loop
 ```
 

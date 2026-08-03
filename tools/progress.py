@@ -38,6 +38,20 @@ STATUSES = [
     "rejected",
 ]
 
+# The placeholder `resolve` writes when no sha is given, rewritten by
+# tools/sync.sh to the sha the resolve commit LANDED as.
+#
+# Why a placeholder at all: the documented loop was commit -> resolve <sha> ->
+# sync.sh, and sync.sh REBASES. On this fleet the watcher daemon publishes
+# tstate every few minutes, so a rebase is the norm — every sha cited before
+# the push was rewritten by it and exists only in the author's local reflog
+# (bug-t-resolve-cites-a-sha-the-rebase-then-rewrites: four dead citations in
+# one session). Deferring the citation to after the push is the only ordering
+# that cannot be got wrong by forgetting it.
+PENDING_COMMIT = "PENDING-COMMIT"
+# `resolve` writes "commit <sha>"; hand-written log lines use the same shape.
+CITATION_RE = re.compile(r"\bcommits?\s+`?([0-9a-f]{7,40})`?", re.I)
+
 
 def ensure_dirs() -> None:
     if not PROG.is_dir():
@@ -779,6 +793,38 @@ pre code{background:none;padding:0}
             if os.path.exists(tmp_name):
                 os.unlink(tmp_name)
 
+    def _audit_citations(self) -> tuple[list[str], list[tuple[str, str]]]:
+        """Resolved tickets whose commit citation nobody else can look up.
+
+        Returns (slugs still holding the placeholder, [(slug, dead sha)]).
+
+        `origin/master` is the oracle on purpose, not the local object DB: a
+        rebased-away commit is still reachable from the author's reflog, which
+        is precisely the place the OTHER box cannot look. One rev-list over
+        ~9k commits costs ~0.2s, so the whole audit is a single subprocess.
+        """
+        try:
+            out = subprocess.run(
+                ["git", "rev-list", "origin/master"], cwd=ROOT, text=True,
+                capture_output=True, check=True, timeout=60).stdout
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+            return [], []          # no origin (fresh clone, scratch repo) — skip
+        by_prefix: dict[str, list[str]] = defaultdict(list)
+        for sha in out.split():
+            by_prefix[sha[:7]].append(sha)
+
+        pending: list[str] = []
+        dead: list[tuple[str, str]] = []
+        for st in ("done", "decided"):
+            for t in self.by_status[st]:
+                if PENDING_COMMIT in t.text:
+                    pending.append(t.slug)
+                for sha in CITATION_RE.findall(t.text):
+                    if not any(full.startswith(sha)
+                               for full in by_prefix.get(sha[:7], ())):
+                        dead.append((t.slug, sha))
+        return pending, dead
+
     def check(self, strict: bool = False) -> tuple[int, str]:
         problems = 0
         warning_count = 0
@@ -907,6 +953,45 @@ pre code{background:none;padding:0}
                 if strict:
                     lines.append(f"WARN-NO-COMMIT: {t.slug} is in done/ but logs no commit")
                     problems = 1
+
+        # A citation is only worth having if the other box can look it up, so
+        # audit the ones we make. Two failure modes, one rule:
+        #
+        #   PENDING-COMMIT survives -> sync.sh never ran (or ran before the
+        #       resolve was committed). Actionable NOW, and cheap to fix.
+        #   the sha is on no branch  -> it was rewritten by a rebase, reverted,
+        #       or dropped. Mostly historical mass; a NEW one means the
+        #       placeholder flow was bypassed.
+        #
+        # Both are warnings, not failures: 324 of the 933 citations already on
+        # the board predate the placeholder flow and cannot be repaired.
+        # Non-strict still prints a count line, because the hand audit that
+        # first caught this (bug-t-resolve-cites-a-sha-the-rebase-then-rewrites)
+        # is exactly what should not need doing by hand again.
+        pending, dead = self._audit_citations()
+        for slug in pending:
+            warning_count += 1
+            if strict:
+                lines.append(
+                    f"WARN-PENDING-COMMIT: {slug} still says {PENDING_COMMIT} — "
+                    f"run tools/sync.sh to record the sha it landed as"
+                )
+        for slug, sha in dead:
+            warning_count += 1
+            if strict:
+                lines.append(
+                    f"WARN-DEAD-COMMIT: {slug} cites {sha}, which is on no branch of origin/master"
+                )
+        if not strict and (pending or dead):
+            if pending:
+                lines.append(
+                    f"PENDING-COMMIT: {len(pending)} resolved ticket(s) await their landed sha — run: tools/sync.sh"
+                )
+            if dead:
+                lines.append(
+                    f"DEAD-COMMIT: {len(dead)} citation(s) name a sha absent from origin/master "
+                    f"(historical; --strict lists them)"
+                )
 
         board = PROG / "BOARD.md"
         if not board.exists():
@@ -1039,11 +1124,14 @@ def cmd_resolve(args: argparse.Namespace) -> int:
     if not re.search(r"^## Log", text, re.M):
         text += "\n## Log\n"
     verb = "decided" if bucket == "decided" else "resolved"
-    text += f"- {_dt.date.today().isoformat()} — {verb}, commit {args.commit}.\n"
+    commit = args.commit or PENDING_COMMIT
+    text += f"- {_dt.date.today().isoformat()} — {verb}, commit {commit}.\n"
     dst.write_text(text, encoding="utf-8")
     subprocess.run(["git", "add", str(dst)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print(f"{verb} {args.slug} -> {bucket}/ (commit {args.commit}).", file=sys.stderr)
+    print(f"{verb} {args.slug} -> {bucket}/ (commit {commit}).", file=sys.stderr)
     print(f"staged, not committed. regenerate the board ({Path(sys.argv[0]).name} board-md) and commit.", file=sys.stderr)
+    if commit == PENDING_COMMIT:
+        print(f"{PENDING_COMMIT} will be filled in by tools/sync.sh once the commit lands on origin.", file=sys.stderr)
     return 0
 
 
@@ -1051,7 +1139,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="progress.sh",
         usage="%(prog)s [next|ready|leverage|autorate|board|board-md|check|all] [--track A|B|C|D|E|N|O|P|R|S|T|U|Z]\n"
-        "       %(prog)s autorate [--write] | claim <slug> <owner> | resolve <slug> <commit>",
+        "       %(prog)s autorate [--write] | claim <slug> <owner> | resolve <slug> [<commit>]",
     )
     sub = p.add_subparsers(dest="cmd")
     for name in ["next", "ready", "leverage", "autorate", "board", "board-md", "check", "all"]:
@@ -1064,7 +1152,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     sp.add_argument("owner")
     sp = sub.add_parser("resolve")
     sp.add_argument("slug")
-    sp.add_argument("commit")
+    # Optional on purpose: the sha you can name here is the PRE-push one, and a
+    # rebase rewrites it. Omit it and sync.sh cites the landed one.
+    sp.add_argument("commit", nargs="?", default="")
     if not argv:
         argv = ["all"]
     return p.parse_args(argv)

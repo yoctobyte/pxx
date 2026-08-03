@@ -3,6 +3,8 @@ summary: "The documented loop is commit -> resolve <slug> <sha> -> sync.sh, but 
 type: bug
 track: T
 prio: 60
+status: done
+owner: claude@xeon
 ---
 
 # `resolve <slug> <commit>` cites a sha that `sync.sh` then rewrites
@@ -74,3 +76,6 @@ also catches a citation to a commit that was later reverted or dropped.
 
 The four citations above and the `bench.tsv` marker were rewritten to their
 landed shas by hand. This ticket is about the loop that produced them.
+
+## Log
+- 2026-08-03 — resolved, commit PENDING-COMMIT.
