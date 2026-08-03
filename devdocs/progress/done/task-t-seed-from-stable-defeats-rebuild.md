@@ -116,4 +116,4 @@ tools/testmgr.py --tier native --job 'src:tools/selfhost_fixedpoint.sh'   # gree
   build -> untouched (the guard fires on identity, never on suspicion), same
   size but different bytes -> untouched, and a checkout missing either file ->
   quiet no-op rather than a crash.
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit 548a69518.
