@@ -140,4 +140,4 @@ Note for the record: `gate.sh quick` did NOT catch this when `86b0fc2b7` landed
 — test-nilpy is in the `full`/`limited` tiers. The offload worked exactly as
 designed; the watcher found it, bisected it, and handed it back inside a few
 hours.
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 9f5744593.
