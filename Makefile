@@ -396,6 +396,10 @@ test-nilpy: $(COMPILER)
 	# expression tail before NilPy's own augmented site can see it.
 	./$(COMPILER) test/test_nilpy_augmented_assign_class_field.npy /tmp/test_nilpy_aug_field26
 	test "$$(/tmp/test_nilpy_aug_field26)" = "$$(printf '105\n103\n309\n44\n4\n12\n15\n14\n56\n28\n38\n11\n[1, 2, 3]\n42\nTypeError')"
+	# a NilPy def named like a Pascal intrinsic wins over the intrinsic:
+	# sizeof was claimed by ParseFactorCore while high/low/length declined.
+	./$(COMPILER) test/test_nilpy_def_shadows_pascal_intrinsic.npy /tmp/test_nilpy_intrinsic26
+	test "$$(/tmp/test_nilpy_intrinsic26)" = "$$(printf '10\n4\n2\n6\n105')"
 	./$(COMPILER) test/test_nilpy_dataclass_eq.npy /tmp/test_nilpy_dataclass_eq26
 	test "$$(/tmp/test_nilpy_dataclass_eq26)" = "$$(printf 'True\nFalse\nFalse\nTrue\nTrue\nFalse\nFalse\nFalse\nFalse\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue')"
 	./$(COMPILER) test/test_nilpy_is_identity_vs_class_test.npy /tmp/test_nilpy_is_identity26
@@ -4405,6 +4409,10 @@ test-core: $(COMPILER)
 	# expression tail before NilPy's own augmented site can see it.
 	./$(COMPILER) test/test_nilpy_augmented_assign_class_field.npy /tmp/test_nilpy_aug_field26
 	test "$$(/tmp/test_nilpy_aug_field26)" = "$$(printf '105\n103\n309\n44\n4\n12\n15\n14\n56\n28\n38\n11\n[1, 2, 3]\n42\nTypeError')"
+	# a NilPy def named like a Pascal intrinsic wins over the intrinsic:
+	# sizeof was claimed by ParseFactorCore while high/low/length declined.
+	./$(COMPILER) test/test_nilpy_def_shadows_pascal_intrinsic.npy /tmp/test_nilpy_intrinsic26
+	test "$$(/tmp/test_nilpy_intrinsic26)" = "$$(printf '10\n4\n2\n6\n105')"
 	./$(COMPILER) test/test_nilpy_dataclass_eq.npy /tmp/test_nilpy_dataclass_eq26
 	test "$$(/tmp/test_nilpy_dataclass_eq26)" = "$$(printf 'True\nFalse\nFalse\nTrue\nTrue\nFalse\nFalse\nFalse\nFalse\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue')"
 	./$(COMPILER) test/test_nilpy_is_identity_vs_class_test.npy /tmp/test_nilpy_is_identity26

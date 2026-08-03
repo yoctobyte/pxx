@@ -10581,8 +10581,21 @@ begin
           Exit;
         end;
       end;
-      { ---- SizeOf(TypeName) intrinsic: resolved at parse time to AN_INT_LIT ---- }
-      if CaseEqual(name, 'sizeof') then
+      { ---- SizeOf(TypeName) intrinsic: resolved at parse time to AN_INT_LIT ----
+        Declined under NilPy when the program actually declares a routine of
+        that name and arity: a Python `def sizeof(x)` was claimed by the
+        intrinsic, whose hand-rolled type dispatch then rejected the integer
+        argument with "SizeOf: expected type name". `high`, `low` and `length`
+        already honour a NilPy def of their name — sizeof was the odd one out,
+        not a deliberate exception
+        (bug-nilpy-def-named-sizeof-is-hijacked-by-the-pascal-intrinsic).
+
+        Gated on PyExprMode so Pascal's own SizeOf stays an intrinsic, where it
+        must: the self-host fixedpoint is the check for that. }
+      if CaseEqual(name, 'sizeof') and
+         not (PyExprMode and (TokPos < TokCount) and
+              (Tokens[TokPos].Kind = tkLParen) and
+              PyAnyProcWithArity(name, CountCallArgsAhead)) then
       begin
         Next; { consume 'SizeOf' }
         Expect(tkLParen, '(');

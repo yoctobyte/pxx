@@ -1,0 +1,32 @@
+# A NilPy `def` named like a Pascal intrinsic must win: `sizeof` was claimed by
+# ParseFactorCore's SizeOf intrinsic, whose hand-rolled type dispatch then
+# rejected the integer argument ("SizeOf: expected type name"). Its neighbours
+# high/low/length already declined correctly; this pins all four together.
+# Pascal's own SizeOf staying an intrinsic is pinned by the self-host fixedpoint.
+# bug-nilpy-def-named-sizeof-is-hijacked-by-the-pascal-intrinsic
+
+def sizeof(x: int) -> int:
+    return x + 7
+
+def high(x: int) -> int:
+    return x + 1
+
+def low(x: int) -> int:
+    return x - 1
+
+def length(x: int) -> int:
+    return x * 2
+
+print(sizeof(3))
+print(high(3))
+print(low(3))
+print(length(3))
+
+class Box:
+    def __init__(self, v: int):
+        self.v = v
+    def sizeof(self) -> int:
+        return self.v + 100
+
+b = Box(5)
+print(b.sizeof())

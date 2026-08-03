@@ -431,6 +431,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-container-literal-default-arg-segfaults | N | 65 | bug | `def f(a, b=[])` SEGFAULTS the moment the default is used as a container | — |
 | bug-nilpy-dataclass-no-generated-eq | N | 30 | bug | `@dataclass` gets no generated `__eq__` — compares by identity instead of fields | — |
 | bug-nilpy-def-local-assignment-widens-module-global-to-variant | N | 70 | bug | NilPy: a name assigned as a LOCAL inside a def widens the same-named module global to tyVariant, killing its class identity and every compile-time dunder dispatch | — |
+| bug-nilpy-def-named-sizeof-is-hijacked-by-the-pascal-intrinsic | N | 20 | bug | A NilPy `def sizeof(...)` is claimed by Pascal's SizeOf intrinsic — 'SizeOf: expected type name'. Loud and exotic, but the guard its sibling intrinsics already have is missing | — |
 | bug-nilpy-def-value-in-a-variable-is-not-callable | N | 75 | bug | A def stored in a NAME and then called SEGFAULTS | — |
 | bug-nilpy-defaulted-param-before-star-args-rejects-short-call | N | 60 | bug | `def f(a, b=2, *rest)` cannot be called as `f(1)` | — |
 | bug-nilpy-derived-tuple-loses-tupleness | N | 60 | bug | A derived tuple decayed into a list | — |
