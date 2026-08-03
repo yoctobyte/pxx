@@ -121,4 +121,4 @@ belt-and-braces rather than the only defence; they are deliberately left in
 place (they also fix the *same-arity* collisions this check cannot see).
 
 ## Log
-- 2026-08-03 — resolved, commit 1849af96d.
+- 2026-08-03 — resolved, commit e53297297.
