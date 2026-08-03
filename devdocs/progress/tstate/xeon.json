@@ -4509,14 +4509,13 @@
  },
  "open_regressions": [
   {
-   "bad": "42786f141ea7b8b86f84b8f074d887f0e98c1401",
+   "bad": "07414aa8944bd3dee42ae1a06f56eee2dc912fe5",
    "good": "420de52428cdd944b9d60a85676cf65682632430",
    "job": "test-core#src:test/cgeneric_selection_b209.c",
    "name": "test-core#448",
    "opened": "2026-08-03T10:55:19Z",
    "range": [
-    "07414aa8944bd3dee42ae1a06f56eee2dc912fe5",
-    "42786f141ea7b8b86f84b8f074d887f0e98c1401"
+    "07414aa8944bd3dee42ae1a06f56eee2dc912fe5"
    ],
    "src": "test/cgeneric_selection_b209.c"
   },
