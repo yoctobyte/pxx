@@ -159,4 +159,4 @@ quick canary. Only the FPC seed canary caught it. Filed as
 reproduce it.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING.
+- 2026-08-03 — resolved, commit 37cb5f556.
