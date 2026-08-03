@@ -173,7 +173,7 @@ begin
   CUseSystemLibs := False;
   CSystemLibCount := 0;
   CrtlSrcPulledCount := 0;
-  WarnSelfResult := False;
+  WarnSelfResult := True;   { on by default; --no-warn-self-result silences }
   WarnUsesLeak := False;
   UsesEdgeCount := 0;
   DumpRTTI := False;
@@ -469,10 +469,20 @@ begin
     end
     else if option = '--warn-self-result' then
     begin
-      { Warn when a parameterless function's bare own name is read as a value
-        (FPC reads its Result; a recursive-descent author usually meant Name()).
-        Opt-in: the compiler's own source uses the bare-name=Result idiom. }
+      { Kept for compatibility with scripts that passed it while it was opt-in;
+        it is the default now. }
       WarnSelfResult := True;
+      Inc(i);
+    end
+    else if option = '--no-warn-self-result' then
+    begin
+      { Silence the paramless bare-own-name warning. It is ON by default because
+        that construct is the one place the reference dialects DISAGREE — objfpc
+        reads the function's Result, delphi emits a recursive call — so the same
+        line means two different things and pxx used to pick one silently. The
+        idiom is legal and this is only a warning, so old sources still build;
+        pass this when you have audited them and want the noise gone. }
+      WarnSelfResult := False;
       Inc(i);
     end
     else if option = '--warn-uses-leak' then

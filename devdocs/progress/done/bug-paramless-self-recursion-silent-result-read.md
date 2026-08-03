@@ -76,3 +76,68 @@ Verified:
 ## Log
 
 - 2026-06-29 — resolved; commit in this changeset.
+
+## Follow-up 2026-08-03 (claude-AC@opus5) — the warning is now ON by default
+
+The earlier resolution added exactly the diagnostic this ticket asked for, but
+made it **opt-in** (`--warn-self-result`, default off). That defeats the ticket's
+own argument — "even a note would have saved the hour" — because nobody passes a
+flag for a footgun they do not yet know about.
+
+Demonstrated the hard way on 2026-08-03: writing `t := CPExprCond` inside
+`CPExprCond` while implementing the C preprocessor's `?:`. It read the
+result-so-far instead of recursing, consumed no input, returned 0, and the only
+symptom was a bogus `expected ':'` pointing at a colon that was plainly there.
+The warning existed and said precisely the right thing; it was off, so it said
+nothing. Same hour lost, same bug, second time.
+
+### Why default-on is the right call, measured
+
+The construct is not merely a wart — it is the one place the reference dialects
+**disagree**, so the same source means two different things:
+
+| dialect | bare paramless own name, read as a value |
+| --- | --- |
+| FPC `{$MODE OBJFPC}` | reads the function's **Result** |
+| FPC `{$MODE DELPHI}` | emits a **recursive call** |
+| pxx | reads the Result (matches objfpc) |
+
+Measured, both FPC modes, with a depth counter: objfpc `depth=1`, delphi
+`depth=3`. pxx is not wrong — it follows objfpc — but picking one side of a real
+dialect split in silence is what makes it a trap.
+
+### The stated reason for opt-in no longer held
+
+The flag's comment justified the default as "the compiler's own source uses the
+bare-name=Result idiom". Compiling `compiler/compiler.pas` with the warning on
+found **exactly one** such site: `PyEnsureExceptionClass` (`pyparser.inc`),
+correct but written in the ambiguous form. Rewritten to explicit `Result`, which
+it should have been anyway.
+
+### Noise, measured before flipping
+
+- `compiler/compiler.pas` self-compile: **0** warnings (after the one fix).
+- **400** `test/*.pas` programs compiled: **0** warnings.
+- `make lib-test`: clean.
+
+So default-on costs nothing on this codebase. It is a warning, not an error, so
+the idiom stays legal and old sources still build; `--no-warn-self-result`
+silences it once a codebase has been audited.
+
+### Verified
+
+| check | result |
+| --- | --- |
+| the landmine repro | warns, naming both fixes (`Name()` or `Result`) |
+| `test/test_pascal_self_result_warn.pas` | **new**, gated: exactly **1** warning |
+| explicit `Result` / `F()` / with-param forms | silent — the warning must not become noise, or it gets tuned out |
+| runtime behaviour unchanged | `5 1 8 42 6 42 100` — `depth=1` proves the bare form does not recurse, `depth=6` proves `F()` does |
+| `--no-warn-self-result` | silences it (gated) |
+| self-host fixedpoint | byte-identical, converged in 1 round |
+| `tools/gate.sh quick` | GREEN |
+
+## Log
+- 2026-06-25 — opened.
+- 2026-08-03 — warning flipped ON by default; the compiler's single bare-name
+  site rewritten to `Result`; gated test added. The opt-in default had let the
+  same bug cost the same hour a second time.

@@ -1746,10 +1746,12 @@ var
   MaxStackFrameSize : Integer; { effective oversized-stack-frame warn threshold in
                                  bytes (0 = disabled). Init to MAX_STACK_FRAME_SIZE;
                                  overridable via --max-stack-frame=N / {$MAXSTACKFRAME n}. }
-  WarnSelfResult : Boolean; { --warn-self-result: warn when a paramless function's
-                             bare own name is read as a value (FPC = its Result,
-                             but often a mistaken `Name()` self-recursion). Off by
-                             default — the compiler's own source uses the idiom. }
+  WarnSelfResult : Boolean; { warn when a paramless function's bare own name is
+                             read as a value. ON by default (--no-warn-self-result
+                             silences it): it is the one construct whose meaning
+                             DIFFERS between reference dialects — objfpc reads the
+                             Result, delphi makes a recursive call — so the same
+                             source means two things and neither is announced. }
   LastExprTk : TTypeKind;
   InInterface : Boolean;
   WarnUsesLeak : Boolean; { --warn-uses-leak: warn whenever a name resolves through

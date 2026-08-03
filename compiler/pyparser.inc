@@ -10217,12 +10217,16 @@ end;
 function PyEnsureExceptionClass: Integer;
 var k: Integer;
 begin
-  PyEnsureExceptionClass := FindUClass('Exception');
-  if PyEnsureExceptionClass < 0 then
+  { `Result`, not the bare own name: for a PARAMETERLESS function the bare form
+    is the one construct whose meaning differs between dialects — objfpc reads
+    the result, delphi makes a recursive call — so --warn-self-result (on by
+    default) flags it. This was the compiler's only occurrence. }
+  Result := FindUClass('Exception');
+  if Result < 0 then
   begin
     k := PyStoredName('Exception');
     AddUClass(k, 9);
-    PyEnsureExceptionClass := FindUClass('Exception');
+    Result := FindUClass('Exception');
   end;
 end;
 

@@ -948,6 +948,21 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas /tmp/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \
 	  || { echo 'test_pascal_duplicate_class_fail: FAIL - expected a duplicate-class-name error'; exit 1; }
+	@# a PARAMETERLESS function's bare own name read as a value means different
+	@# things in objfpc (its Result) and delphi (a recursive call), so it warns by
+	@# default. Exactly one site here is ambiguous; the explicit Result / F() /
+	@# with-param forms must stay quiet, or the warning becomes noise and gets
+	@# tuned out. bug-paramless-self-recursion-silent-result-read
+	@n=$$(./$(COMPILER) test/test_pascal_self_result_warn.pas /tmp/test_pascal_self_result_warn26 2>&1 \
+	   | grep -c 'bare own name'); \
+	 test "$$n" = "1" \
+	  || { echo "test_pascal_self_result_warn: FAIL - expected exactly 1 bare-own-name warning, got $$n"; exit 1; }
+	test "$$(/tmp/test_pascal_self_result_warn26)" = "$$(printf '5\n1\n8\n42\n6\n42\n100')"
+	@# ... and --no-warn-self-result silences it
+	@n=$$(./$(COMPILER) --no-warn-self-result test/test_pascal_self_result_warn.pas /tmp/test_pascal_self_result_warn26 2>&1 \
+	   | grep -c 'bare own name'); \
+	 test "$$n" = "0" \
+	  || { echo "test_pascal_self_result_warn: FAIL - --no-warn-self-result did not silence the warning"; exit 1; }
 	./$(COMPILER) test/test_nilpy_method_on_fresh_construction.npy /tmp/test_nilpy_method_fresh_ctor26
 	test "$$(/tmp/test_nilpy_method_fresh_ctor26)" = "$$(printf '5\n7\na9\n6\n3 a3\n[1, 2]')"
 	./$(COMPILER) test/test_nilpy_discarded_string_result.npy /tmp/test_nilpy_discarded_string_result26
