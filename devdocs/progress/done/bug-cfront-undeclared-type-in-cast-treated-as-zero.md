@@ -72,4 +72,4 @@ value-position undeclared identifier still warns and compiles (so the corpora
 are unaffected); zlib, sqlite, tcc, lua and quickjs still build.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING.
+- 2026-08-03 — resolved, commit c43500f47.
