@@ -125,3 +125,52 @@ returned via hidden dest currently requires edits at 9 independent sites**
 (2 param-sizing + 1 return + 6 backend param-detection). After the work it must
 require ONE. If it still takes six backend edits, the abstraction failed however
 clean it looks.
+
+## The compiler's OWN structs are a second identity space (2026-08-03)
+
+A late-found instance of the same invariant break, worth its own section because
+it is the one place where getting it wrong corrupts the compiler building
+itself.
+
+`TSymbol`, `TParam` and `TProc` exist **twice**: once as ordinary Pascal record
+declarations in `defs.inc`, and once as hand-written *builtin-mirrored* layouts
+so the compiler can self-host (`symtab.inc:1114`):
+
+```pascal
+REC_TSYMBOL = 6;   REC_TPARAM = 7;   REC_TPROC = 8;   { all < REC_UCLASS_BASE = 16 }
+```
+
+Member resolution then splits on that id, and the builtin half was deliberately
+lax — `RequireRecMember`'s own comment: *"Builtin records keep the lax path —
+their field names are compiler-authored."* Which is true, and is exactly why the
+lax path was wrong: a name that is compiler-authored and does not match is
+always a **typo**, never a probe.
+
+What it cost, measured: `Procs[i].Params[j].ProcSig := -1` — `TParam` has no
+`ProcSig` — compiled with no diagnostic, took `RecFieldType`'s not-found default
+(`tyInteger`, **offset 0**), clobbered a neighbouring field, and segfaulted an
+unrelated NilPy test in the `quick` tier. FPC rejected the same source outright.
+Fixed by rejecting in `RecFieldType`'s builtin branch
+(`bug-pascal-unknown-record-field-accepted-in-compiler-source`).
+
+Three things to carry forward:
+
+1. **A duplicated type declaration is a duplicated identity, and the copies get
+   different rules.** Same failure shape as the ~90 sites above, but between the
+   *language's* view of a record and the *compiler's* view of the same record.
+   `ValidateBuiltinRecordLayout` checks the two agree on LAYOUT; nothing checked
+   they agree on which members exist.
+
+2. **"Compiler-authored, therefore trusted" is backwards.** Hand-written and
+   unvalidated is where a typo has no other net. Every user record was already
+   checked; only the compiler's own structs were not.
+
+3. **Minimal repros cannot find this class.** Four were tried, and every one is
+   correctly rejected, because a user record gets `recId >= 16`. The bug is
+   reachable ONLY when a record is builtin-mirrored — i.e. by the compiler
+   compiling itself. When a minimal case refuses to reproduce something the real
+   tree does, suspect a second identity space rather than a subtle shape.
+
+The tooling lesson is in `debugging-playbook.md` terms: this was settled in one
+step by building a `-g` compiler, breaking on the miss path and reading the
+backtrace — after several minimal-repro guesses had settled nothing.

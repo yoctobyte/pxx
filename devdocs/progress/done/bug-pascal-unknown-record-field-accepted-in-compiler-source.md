@@ -86,14 +86,25 @@ unguarded statement-lvalue path that `RequireRecMember` never sees.
   build.
 - `tools/gate.sh quick` GREEN (self-host fixedpoint, testmgr quick, FPC canary).
 
-## Residual — worth a follow-up, not urgent
+## Residual — filed separately
 
 `RequireRecMember` still only covers `recId >= REC_UCLASS_BASE`, and the
-statement-lvalue path still does not call it. That no longer produces a silent
-wrong store (the `RecFieldType` check catches those), but the three-call-site
-asymmetry is a latent inconsistency: an unknown member on a USER record reached
-purely through the lvalue path relies on other checks. Worth auditing the ~20
-`AllocNode(AN_FIELD)` sites against the three guarded ones.
+statement-lvalue path still does not call it (proven by breakpoint). That no
+longer produces a silent wrong store — the `RecFieldType` check is
+path-independent — but the three-call-sites-against-~20-`AN_FIELD`-builders
+asymmetry is a latent inconsistency. Filed as
+[[bug-pascal-member-check-missing-on-the-lvalue-field-path]] (prio 45), with the
+NilPy caveat that a member miss on a dynamic-attribute path can be legitimate.
+
+## Written up
+
+The general lesson — the compiler's own core structs are a SECOND type-identity
+space, with different rules from the language's view of the same records — is in
+**`devdocs/dev/type-identity-as-substrate.md`**, as a new closing section. It
+belongs there because it is the same invariant break the rest of that note
+catalogues, one layer down: `ValidateBuiltinRecordLayout` checks the two
+declarations agree on LAYOUT, and nothing checked they agree on which members
+EXIST.
 
 ## Log
 - 2026-08-03 — resolved, commit e5fd92573.
