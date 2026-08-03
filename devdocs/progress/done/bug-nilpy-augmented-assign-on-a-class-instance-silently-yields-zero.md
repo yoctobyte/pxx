@@ -129,4 +129,4 @@ augmented assignment to a field**, not to write the dispatch again. Filed on as
 [[bug-nilpy-augmented-assign-to-a-class-typed-FIELD-silently-yields-zero]].
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit 8b694981c.
