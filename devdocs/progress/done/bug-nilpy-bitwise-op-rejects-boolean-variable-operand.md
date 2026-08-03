@@ -89,4 +89,4 @@ precedence typo the guard exists for is still caught. Set `&`/`|`/`^` and dict
 fixedpoint + `--tier quick` + FPC seed canary).
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit abd709361.
