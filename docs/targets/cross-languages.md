@@ -60,6 +60,12 @@ PXX can import selected C headers and call shared-library symbols on supported
 paths. This is useful for concrete bindings, but it is not a full C compiler or
 full C ABI compatibility layer.
 
+An `external` routine is called with the platform's C ABI automatically — a
+`cdecl` marker on it is documentation, not instruction. The one place the marker
+carries meaning is a **procedural type** used as a C function pointer, where
+omitting it compiles a call that runs and returns the wrong value. See
+[calling conventions](../language/dialect.md#calling-conventions).
+
 ## Nil Python
 
 Nil Python calls imported C APIs directly through the same compiler backend. It
