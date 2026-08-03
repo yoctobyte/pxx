@@ -24,7 +24,13 @@ set -eu
 ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT"
 
-BOARD=devdocs/progress/BOARD.md
+# EVERY generated board file, not just BOARD.md. `board-md` also writes
+# BOARD-brief.md and BOARD-done.md (done/ alone was 190KB of BOARD.md, so the
+# archived tables were split out) — and the moment a second generated file
+# existed, sync.sh stopped being able to finish a rebase: it auto-resolved
+# BOARD.md, then refused at BOARD-brief.md and handed a mechanical conflict to
+# a human. The pattern must match whatever board-md emits, so it is a glob.
+BOARD_GLOB='devdocs/progress/BOARD*.md'
 PUSH=1
 [ "${1:-}" = "--no-push" ] && PUSH=0
 
@@ -38,22 +44,24 @@ rebase_onto_origin() {
     git fetch --no-write-fetch-head -q origin master
 
     if ! git rebase -q origin/master 2>/dev/null; then
-        # Only BOARD.md may be auto-resolved. Anything else is real content and
-        # belongs to a human.
+        # Only the GENERATED board files may be auto-resolved. Anything else is
+        # real content and belongs to a human.
         while true; do
             conflicted=$(git diff --name-only --diff-filter=U)
             [ -z "$conflicted" ] && break
-            others=$(printf '%s\n' "$conflicted" | grep -v "^$BOARD$" || true)
+            others=$(printf '%s\n' "$conflicted" \
+                     | grep -v '^devdocs/progress/BOARD.*\.md$' || true)
             if [ -n "$others" ]; then
                 echo "sync: conflicts I will not guess at:" >&2
                 printf '  %s\n' $others >&2
                 echo "sync: resolve them, then: git rebase --continue" >&2
                 exit 1
             fi
-            # BOARD.md only — discard both sides and regenerate from the tickets.
-            git checkout --ours -- "$BOARD" 2>/dev/null || true
+            # Generated boards only — discard both sides, regenerate from the
+            # tickets. The resolution is always identical and always mechanical.
+            git checkout --ours -- $BOARD_GLOB 2>/dev/null || true
             tools/progress.sh board-md >/dev/null 2>&1 || true
-            git add "$BOARD"
+            git add $BOARD_GLOB
             if ! GIT_EDITOR=true git rebase --continue >/dev/null 2>&1; then
                 if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
                     break      # rebase finished (or nothing left to apply)
@@ -62,11 +70,11 @@ rebase_onto_origin() {
         done
     fi
 
-    # The board can also be merely stale after a clean rebase — regenerate and
-    # fold it into the top commit rather than leaving a dangling diff.
+    # The boards can also be merely stale after a clean rebase — regenerate and
+    # fold them into the top commit rather than leaving a dangling diff.
     tools/progress.sh board-md >/dev/null 2>&1 || true
-    if [ -n "$(git status --porcelain -- "$BOARD")" ]; then
-        git add "$BOARD"
+    if [ -n "$(git status --porcelain -- $BOARD_GLOB)" ]; then
+        git add $BOARD_GLOB
         git commit -q --amend --no-edit
     fi
 }

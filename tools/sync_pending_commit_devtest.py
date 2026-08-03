@@ -70,6 +70,17 @@ def build_scratch(tmp):
     (prog / "backlog").mkdir(parents=True)
     (prog / "done").mkdir(parents=True)
     (prog / f"backlog/{SLUG}.md").write_text(TICKET, encoding="utf-8")
+    # BOARD.html is generated AND gitignored in the real repo; mirror that, or
+    # the fixture invents a tracked generated file the tooling never has to
+    # resolve.
+    (dev / ".gitignore").write_text("devdocs/progress/BOARD.html\n", encoding="utf-8")
+    # Filler tickets so backlog/ does not consist of the single file we later
+    # move: git would read that as a DIRECTORY rename and conflict on where a
+    # sister's new ticket belongs — an artefact of a 1-file fixture, not of the
+    # tooling. The real backlog carries ~200.
+    for i in range(3):
+        (prog / f"backlog/bug-filler-{i}.md").write_text(
+            TICKET.replace("the widget explodes", f"filler {i}"), encoding="utf-8")
     git(dev, "add", "-A")
     git(dev, "commit", "-qm", "seed")
     git(dev, "push", "-q", "origin", "master")
@@ -188,6 +199,46 @@ def case_prose_mention_is_not_rewritten(tmp):
     return "prose mentions left alone"
 
 
+def case_generated_boards_autoresolve(tmp):
+    """Two agents both touching tickets conflict on the GENERATED boards every
+    time, and the resolution is always the same: discard both sides, regenerate.
+    sync.sh knew only BOARD.md, so the day board-md started emitting
+    BOARD-brief.md and BOARD-done.md it began handing that mechanical conflict
+    back to a human mid-rebase."""
+    origin, dev, daemon = build_scratch(tmp)
+
+    # the sister agent files a ticket and regenerates the boards
+    (daemon / "devdocs/progress/backlog/bug-sister-ticket.md").write_text(
+        TICKET.replace("the widget explodes", "the sister ticket"), encoding="utf-8")
+    subprocess.run(["tools/progress.sh", "board-md"], cwd=daemon, check=True,
+                   capture_output=True)
+    git(daemon, "add", "-A")
+    git(daemon, "commit", "-qm", "docs(tickets): sister ticket")
+    git(daemon, "push", "-q", "origin", "master")
+
+    # ...while we resolve ours and regenerate them too -> both sides differ
+    subprocess.run(["tools/progress.sh", "resolve", SLUG], cwd=dev, check=True,
+                   capture_output=True)
+    subprocess.run(["tools/progress.sh", "board-md"], cwd=dev, check=True,
+                   capture_output=True)
+    git(dev, "add", "-A")
+    git(dev, "commit", "-qm", f"fix(T): {SLUG}")
+
+    r = subprocess.run(["tools/sync.sh"], cwd=dev, text=True, capture_output=True)
+    assert r.returncode == 0, f"sync.sh could not resolve the boards: {r.stdout}{r.stderr}"
+    boards = git(dev, "ls-tree", "--name-only", "origin/master",
+                 "devdocs/progress/").stdout.split()
+    generated = [b for b in boards if "BOARD" in b]
+    assert generated, "test setup: no generated board files at all"
+    for b in generated:
+        text = git(dev, "show", f"origin/master:{b}").stdout
+        assert "<<<<<<<" not in text, f"{b} landed with conflict markers"
+    # both agents' work survived the regeneration
+    brief = "".join(git(dev, "show", f"origin/master:{b}").stdout for b in generated)
+    assert "sister ticket" in brief, "the sister's ticket was lost in the resolve"
+    return f"{len(generated)} generated board(s) auto-resolved"
+
+
 def case_check_flags_a_dead_citation(tmp):
     """The audit that caught this by hand, made cheap."""
     origin, dev, daemon = build_scratch(tmp)
@@ -204,6 +255,7 @@ CASES = [
     case_explicit_sha_still_honoured,
     case_placeholder_filled_in_any_bucket,
     case_prose_mention_is_not_rewritten,
+    case_generated_boards_autoresolve,
     case_check_flags_a_dead_citation,
 ]
 
