@@ -3,7 +3,7 @@ track: C
 prio: 75
 type: bug
 summary: "`#error` in a LIVE branch is silently ignored — the program compiles and runs. Any C source whose configuration guard says \"this build is unsupported\" is built anyway, usually with most of the file #if'd away. Found while scoping cpyext M5: it made a Cython module look like it compiled clean when 5000 of its 8000 lines had been discarded."
-status: working
+status: done
 owner: claude-AC@opus5
 ---
 
@@ -161,3 +161,4 @@ it. Reconsider if one shows up.
 
 ## Log
 - 2026-08-03 — resolved; found and fixed three exposed preprocessor bugs with it.
+- 2026-08-03 — resolved, commit 312778a4b.

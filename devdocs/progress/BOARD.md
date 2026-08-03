@@ -39,7 +39,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (208)
+## backlog (207)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -47,7 +47,6 @@ _none_
 | bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c | A | 40 | bug | The caller side now follows the C ABI for 64-bit arguments to external functions, but a pxx routine CALLED FROM C still spills them with the internal packed convention — so on xtensa, where the C ABI skips to an even register, a C caller and a pxx callee would disagree. Latent: nothing crosses that way today. | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
 | bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity | C | 55 | bug | In a mixed Pascal+C build, a C call binds to a same-named Pascal routine at the wrong arity | — |
-| bug-cfront-error-directive-silently-ignored | C | 75 | bug | `#error` in a LIVE branch is silently ignored — the program compiles and runs. Any C source whose configuration guard says \"this build is unsupported\" is built anyway, usually with most of the file #if'd away. Found while scoping cpyext M5: it made a Cython module look like it compiled clean when 5000 of its 8000 lines had been discarded. | — |
 | bug-cfront-no-entry-stub-for-xtensa | C | 40 | bug | No C program entry stub for xtensa — no C compiles for that target at all | — |
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-cfront-sizeof-unparenthesised-subscript | C | 50 | bug | `sizeof a[0]` is a parse error — the array-length idiom does not compile | — |
@@ -358,7 +357,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1274)
+## done (1277)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -606,7 +605,10 @@ _none_
 | bug-cdecl-indirect-over-6-integer-args | A | 50 | bug | `cdecl` indirect call with more than 6 integer args is rejected | — |
 | bug-cfront-arch-predefines-always-x86-64 | C | 75 | bug | `__x86_64__` is predefined on every target, and no other arch macro ever is | — |
 | bug-cfront-cast-in-static-aggregate-initializer-folds-to-zero | C | 85 | bug | Any CAST inside a static array/struct initializer folds to 0, for every type — `int b[2] = {(int)0xFF, 0}` gives 0 where gcc gives 255. Arithmetic in the same position folds correctly, so only the cast form is affected. Silent wrong data in every static table that casts. | — |
+| bug-cfront-error-directive-silently-ignored | C | 75 | bug | `#error` in a LIVE branch is silently ignored — the program compiles and runs. Any C source whose configuration guard says \"this build is unsupported\" is built anyway, usually with most of the file #if'd away. Found while scoping cpyext M5: it made a Cython module look like it compiled clean when 5000 of its 8000 lines had been discarded. | — |
 | bug-cfront-fegetround-unresolved-float-printf | C | 55 | bug | cfront: __pxx_fegetround unresolved at runtime for any float-printf C program | — |
+| bug-cfront-if-ternary-unimplemented | C | 70 | bug | `?:` had no precedence level in the #if evaluator: the parse abandoned at the `?`, so the CONDITION's value became the whole expression's — `#if (1 ? 3 : 1) == N` was true for every N and `#if (0 ? 1 : 3) == N` for none. Silent, because a wrong #if just takes the other branch | — |
+| bug-cfront-line-directive-unimplemented | C | 65 | bug | `#line` was not implemented and `__LINE__` evaluated as an undefined identifier (0) inside `#if`, so `#if __LINE__ == N` was false for every N. Both silent; found once #error started firing | — |
 | bug-cfront-plain-char-is-unsigned-and-folds-inconsistently | C | 80 | bug | Plain `char` is unsigned at runtime but signed when constant-folded | — |
 | bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size | C | 85 | bug | `sizeof(p->arr)` returns the POINTER size, not the array size — silent buffer overflow | — |
 | bug-cfront-unit-globals-unregistered | C | 70 | bug | cfront: a file-scope global in a .c compiled as a UNIT is never reserved — arrays fail to lower, scalars silently read 0 | — |
@@ -1673,7 +1675,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 80] [T] meta-t-dev-throughput-and-track-a-t-integration
-- [p 75] [C] bug-cfront-error-directive-silently-ignored
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] regression-optdiff-shard8-12
