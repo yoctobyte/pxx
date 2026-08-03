@@ -3,6 +3,8 @@ track: C
 prio: 65
 type: bug
 summary: "An undeclared TYPE NAME used in a cast is only a warning — cfront treats the name as the value 0, so `(SomeMissingType)fnptr` becomes an integer 0 and the call goes through a null pointer. gcc rejects it. Found in cpyext M5: a function-pointer cast silently became 0 and the program segfaulted far from the cast."
+status: done
+owner: claude-AC
 ---
 
 # an undeclared type name in a cast is treated as `0`
@@ -68,3 +70,6 @@ actionable.
 The cast above fails to compile with a message naming the type; a
 value-position undeclared identifier still warns and compiles (so the corpora
 are unaffected); zlib, sqlite, tcc, lua and quickjs still build.
+
+## Log
+- 2026-08-03 — resolved, commit PENDING.

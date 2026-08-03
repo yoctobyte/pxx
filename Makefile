@@ -2871,6 +2871,15 @@ test-core: $(COMPILER)
 	@./$(COMPILER) test/cerror_directive_fail.c /tmp/cerror_directive_fail26 2>&1 \
 	  | grep -q 'configuration is unsupported' \
 	  || { echo 'cerror_directive_fail: FAIL - #error in a live branch must stop the compile and name its text'; exit 1; }
+	# bug-cfront-undeclared-type-in-cast-treated-as-zero: a cast to an undeclared
+	# type name is an ERROR with a did-you-mean (it used to degrade to the value
+	# 0 — a NULL fn pointer crashing far from the cast); value position keeps its
+	# degrade-to-0 leniency, which is what the corpora rely on.
+	./$(COMPILER) test/cundeclared_type_value_pos.c /tmp/cundeclared_type_value_pos26
+	/tmp/cundeclared_type_value_pos26; test "$$?" = "42"
+	@./$(COMPILER) test/cundeclared_type_cast_fail.c /tmp/cundeclared_type_cast_fail26 2>&1 \
+	  | grep -q "unknown type name '_PyCFunctionFastWithKeywords' in cast; did you mean 'PyCFunctionFastWithKeywords'" \
+	  || { echo 'cundeclared_type_cast_fail: FAIL - a cast to an undeclared type must error and suggest the near miss'; exit 1; }
 	# #if `?:`, #line renumbering, and __LINE__ inside #if — three evaluator gaps
 	# that only became visible once #error above stopped being a no-op.
 	./$(COMPILER) test/cpreproc_cond_line.c /tmp/cpreproc_cond_line26

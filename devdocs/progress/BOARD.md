@@ -39,7 +39,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (208)
+## backlog (207)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -51,7 +51,6 @@ _none_
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-cfront-sizeof-unparenthesised-subscript | C | 50 | bug | `sizeof a[0]` is a parse error — the array-length idiom does not compile | — |
 | bug-cfront-spurious-dt-needed-libc-with-no-imports | C | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
-| bug-cfront-undeclared-type-in-cast-treated-as-zero | C | 65 | bug | An undeclared TYPE NAME used in a cast is only a warning — cfront treats the name as the value 0, so `(SomeMissingType)fnptr` becomes an integer 0 and the call goes through a null pointer. gcc rejects it. Found in cpyext M5: a function-pointer cast silently became 0 and the program segfaulted far from the cast. | — |
 | bug-nilpy-bare-dot-float-literals-do-not-lex | N | 35 | bug | `.5` and `5.` do not lex — the shared number scanner requires a digit on BOTH sides of the dot, which is right for Pascal and wrong for Python | — |
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
@@ -358,7 +357,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1278)
+## done (1279)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -612,6 +611,7 @@ _none_
 | bug-cfront-line-directive-unimplemented | C | 65 | bug | `#line` was not implemented and `__LINE__` evaluated as an undefined identifier (0) inside `#if`, so `#if __LINE__ == N` was false for every N. Both silent; found once #error started firing | — |
 | bug-cfront-plain-char-is-unsigned-and-folds-inconsistently | C | 80 | bug | Plain `char` is unsigned at runtime but signed when constant-folded | — |
 | bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size | C | 85 | bug | `sizeof(p->arr)` returns the POINTER size, not the array size — silent buffer overflow | — |
+| bug-cfront-undeclared-type-in-cast-treated-as-zero | C | 65 | bug | An undeclared TYPE NAME used in a cast is only a warning — cfront treats the name as the value 0, so `(SomeMissingType)fnptr` becomes an integer 0 and the call goes through a null pointer. gcc rejects it. Found in cpyext M5: a function-pointer cast silently became 0 and the program segfaulted far from the cast. | — |
 | bug-cfront-unit-globals-unregistered | C | 70 | bug | cfront: a file-scope global in a .c compiled as a UNIT is never reserved — arrays fail to lower, scalars silently read 0 | — |
 | bug-cfront-vla-stack-corruption | C | 65 | bug | C VLA (`int arr[n]` with runtime `n`) silently corrupts adjacent stack slots | — |
 | bug-char-literal-concat-in-const-expr | A | 50 | bug | Char-literal concatenation in a const expression fails (`const T = #65 + #66`) | — |
@@ -1681,7 +1681,6 @@ _none_
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] regression-optdiff-shard8-12
 - [p 70] [T] regression-test-c-conformance-shard2-6
-- [p 65] [C] bug-cfront-undeclared-type-in-cast-treated-as-zero
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
 - [p 65] [T] task-t-seed-from-stable-defeats-rebuild

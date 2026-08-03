@@ -60,6 +60,8 @@ procedure ParseCStructDecl; forward;
 function IsBareStructDecl: Boolean; forward;
 function IsBareEnumDecl: Boolean; forward;
 function IsCTypeTok: Boolean; forward;
+function FindCTypedef(const name: AnsiString): Integer; forward;
+function CTypedefNameAt(idx: Integer): AnsiString; forward;
 function ParseCDeclType: TTypeKind; forward;
 function ParseCCommaStmt: Integer; forward;
 function ParseCSwitchAST: Integer; forward;
@@ -2300,6 +2302,45 @@ begin
   TokPos := savedPos; Next;        { rewind to '(' }
 end;
 
+{ Peek: `( ident )` where ident is declared as NOTHING — not a typedef, not a
+  variable, not a function — and the token after the `)` can only begin an
+  operand. That shape is a cast to a type name we never saw. Without this check
+  it falls through to the parenthesised-expression path, where the undeclared
+  identifier degrades to the value 0 (the deliberate leniency for macro
+  leftovers), so `(SomeMissingType)fn` becomes a NULL pointer that crashes far
+  from the cast — the exact failure in cpyext M5
+  (bug-cfront-undeclared-type-in-cast-treated-as-zero). gcc errors here.
+
+  The follow-token set is deliberately narrow: an identifier or a literal
+  cannot continue a parenthesised VALUE, so there is no ambiguity. `(X)*p`,
+  `(X)&y`, `(X)-1` and `(X)(y)` are left alone precisely because `*`/`&`/`-`/`(`
+  are also binary/call continuations, and the value-position leniency the
+  corpora rely on must keep working there. Rewinds. }
+function CUndeclaredTypeCastAhead(var tname: AnsiString): Boolean;
+var savedPos: Integer; nm: AnsiString;
+begin
+  Result := False; tname := '';
+  savedPos := TokPos - 1;          { index of the '(' }
+  Next;                            { CurTok = first token inside the parens }
+  if (CurTok.Kind = tkIdent) and (FindCTypedef(CurTok.SVal) < 0)
+     and (FindSym(CurTok.SVal) < 0) and (FindProc(CurTok.SVal) < 0) then
+  begin
+    nm := CurTok.SVal;
+    Next;
+    if CurTok.Kind = tkRParen then
+    begin
+      Next;
+      if CurTok.Kind in [tkIdent, tkInteger, tkFloat, tkString,
+                         tkLogNot, tkNot] then
+      begin
+        Result := True;
+        tname := nm;
+      end;
+    end;
+  end;
+  TokPos := savedPos; Next;        { rewind to '(' }
+end;
+
 { C99 6.5.2.5 compound literal (T) followed by a braced initializer, where T is
   a record. Materialise a hidden temp of T, then build an AN_COMPOUND_LITERAL:
   IVal = the temp, Left = the init statement chain (zero-fill + the braced
@@ -2399,8 +2440,20 @@ var node, operand, castElemTk, castElemRec, castDepth, castBaseTk, castBaseRec,
     frTmp, frIdn, frAsn, frSeq: Integer;
     clScalar: Boolean;
     castTk, opTk: TTypeKind; isVoidCast: Boolean;
+    undeclTy, suggestTy: AnsiString;
 begin
   clScalar := False;
+  { A cast to a type name that was never declared: error, never the
+    value-position 0 fallback (see CUndeclaredTypeCastAhead). }
+  if (CurTok.Kind = tkLParen) and CUndeclaredTypeCastAhead(undeclTy) then
+  begin
+    suggestTy := CSuggestTypeName(undeclTy);
+    if suggestTy <> '' then
+      Error('unknown type name ''' + undeclTy + ''' in cast; did you mean ''' +
+            suggestTy + '''?')
+    else
+      Error('unknown type name ''' + undeclTy + ''' in cast');
+  end;
   { sizeof }
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
   begin
@@ -3192,6 +3245,68 @@ begin
   for j := 0 to CTypedefNameLen[idx] - 1 do
     if CTypedefChars[CTypedefNameOff[idx] + j] <> name[j + 1] then Exit;
   Result := True;
+end;
+
+{ Reconstruct a typedef's name from the shared char pool. Error/diagnostic path
+  only (the hot lookups compare in place via CTypedefNameMatches). }
+function CTypedefNameAt(idx: Integer): AnsiString;
+var j: Integer; s: AnsiString;
+begin
+  s := '';
+  for j := 0 to CTypedefNameLen[idx] - 1 do
+    s := s + CTypedefChars[CTypedefNameOff[idx] + j];
+  Result := s;
+end;
+
+{ Levenshtein distance, abandoned as soon as the whole row is >= cap (returns
+  cap then). Bounded so the did-you-mean scan below stays cheap over a few
+  thousand typedefs. }
+function CEditDistance(const a, b: AnsiString; cap: Integer): Integer;
+var prev, cur: array[0..127] of Integer;
+    i, j, la, lb, cost, m, rowMin: Integer;
+begin
+  la := Length(a); lb := Length(b);
+  if (la > 127) or (lb > 127) then begin Result := cap; Exit; end;
+  for j := 0 to lb do prev[j] := j;
+  for i := 1 to la do
+  begin
+    cur[0] := i;
+    rowMin := cur[0];
+    for j := 1 to lb do
+    begin
+      if a[i] = b[j] then cost := 0 else cost := 1;
+      m := prev[j] + 1;
+      if cur[j - 1] + 1 < m then m := cur[j - 1] + 1;
+      if prev[j - 1] + cost < m then m := prev[j - 1] + cost;
+      cur[j] := m;
+      if m < rowMin then rowMin := m;
+    end;
+    if rowMin >= cap then begin Result := cap; Exit; end;
+    for j := 0 to lb do prev[j] := cur[j];
+  end;
+  Result := prev[lb];
+end;
+
+{ gcc's did-you-mean over declared type names: the closest typedef within two
+  edits, or '' when nothing is near. `_PyCFunctionFastWithKeywords` vs
+  `PyCFunctionFastWithKeywords` is one edit, and the suggestion IS the
+  diagnosis (bug-cfront-undeclared-type-in-cast-treated-as-zero). }
+function CSuggestTypeName(const name: AnsiString): AnsiString;
+var i, d, best, bestIdx, dl: Integer;
+begin
+  Result := '';
+  best := 3; bestIdx := -1;
+  for i := 0 to CTypedefCount - 1 do
+  begin
+    dl := CTypedefNameLen[i] - Length(name);
+    if dl < 0 then dl := -dl;
+    if dl < best then
+    begin
+      d := CEditDistance(name, CTypedefNameAt(i), best);
+      if d < best then begin best := d; bestIdx := i; end;
+    end;
+  end;
+  if bestIdx >= 0 then Result := CTypedefNameAt(bestIdx);
 end;
 
 { O(1) average lookup via the open-addressed hash. Slots hold idx+1; 0 = empty. }
