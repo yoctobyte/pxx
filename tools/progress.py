@@ -815,10 +815,15 @@ pre code{background:none;padding:0}
 
         pending: list[str] = []
         dead: list[tuple[str, str]] = []
-        for st in ("done", "decided"):
+        # A placeholder is wrong in ANY bucket — a ticket can be resolved and
+        # filed onward (done-followup/) in one commit. Dead-sha auditing stays
+        # on the resolved buckets: an open ticket citing an old commit in prose
+        # is discussion, not a claim about where the fix landed.
+        for t in self.tickets:
+            if PENDING_COMMIT in t.text:
+                pending.append(t.slug)
+        for st in ("done", "decided", "done-followup"):
             for t in self.by_status[st]:
-                if PENDING_COMMIT in t.text:
-                    pending.append(t.slug)
                 for sha in CITATION_RE.findall(t.text):
                     if not any(full.startswith(sha)
                                for full in by_prefix.get(sha[:7], ())):

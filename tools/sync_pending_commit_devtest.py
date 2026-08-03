@@ -138,6 +138,30 @@ def case_explicit_sha_still_honoured(tmp):
     return "explicit sha written verbatim"
 
 
+def case_placeholder_filled_in_any_bucket(tmp):
+    """A ticket resolved and filed onward in the same commit (done-followup/,
+    for a fix that spawned a follow-up) must still get its sha. The first
+    ticket ever resolved through this path did exactly that and the fill,
+    scoped to done/ + decided/, walked straight past it."""
+    origin, dev, daemon = build_scratch(tmp)
+    subprocess.run(["tools/progress.sh", "resolve", SLUG], cwd=dev, check=True,
+                   capture_output=True)
+    followup = dev / "devdocs/progress/done-followup"
+    followup.mkdir(parents=True, exist_ok=True)
+    git(dev, "mv", f"devdocs/progress/done/{SLUG}.md",
+        f"devdocs/progress/done-followup/{SLUG}.md")
+    git(dev, "commit", "-qm", f"fix(T): {SLUG}")
+    daemon_publishes(daemon, 1)
+    r = subprocess.run(["tools/sync.sh"], cwd=dev, text=True, capture_output=True)
+    assert r.returncode == 0, f"sync.sh failed: {r.stdout}{r.stderr}"
+    landed = git(dev, "show",
+                 f"origin/master:devdocs/progress/done-followup/{SLUG}.md").stdout
+    assert PLACEHOLDER not in landed, "placeholder survived in done-followup/"
+    sha = cited_sha(landed)
+    assert sha and on_origin(dev, sha), f"cited {sha}, not on origin/master"
+    return f"done-followup/ ticket cites {sha}"
+
+
 def case_check_flags_a_dead_citation(tmp):
     """The audit that caught this by hand, made cheap."""
     origin, dev, daemon = build_scratch(tmp)
@@ -152,6 +176,7 @@ def case_check_flags_a_dead_citation(tmp):
 CASES = [
     case_placeholder_is_filled_with_the_landed_sha,
     case_explicit_sha_still_honoured,
+    case_placeholder_filled_in_any_bucket,
     case_check_flags_a_dead_citation,
 ]
 

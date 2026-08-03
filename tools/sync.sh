@@ -102,8 +102,11 @@ push_with_retry() {
 # final. The fill commit itself may still be rebased by a later push — that is
 # harmless, since it cites shas that already landed, never its own.
 fill_pending_commits() {
-    files=$(git grep -l -- PENDING-COMMIT \
-            "devdocs/progress/done" "devdocs/progress/decided" 2>/dev/null || true)
+    # The whole board, not just done/ + decided/: a resolved ticket can be
+    # filed onward the same commit (done-followup/ when it spawned a follow-up,
+    # which is exactly what the first ticket resolved through this path did),
+    # and a placeholder left anywhere is a citation nobody can look up.
+    files=$(git grep -l -- PENDING-COMMIT devdocs/progress 2>/dev/null || true)
     [ -n "$files" ] || return 0
 
     filled=""
