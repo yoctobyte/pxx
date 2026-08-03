@@ -3,7 +3,7 @@ track: A
 prio: 30
 type: bug
 blocked-by: []
-status: working
+status: done
 owner: claude-AC
 ---
 
@@ -187,3 +187,6 @@ on a full `make stabilize`/`testmgr --tier full`-equivalent run"*, whose reason
 is recorded above (the 2026-08-01 regression was invisible to the self-host
 fixedpoint, targeted spot-checks and a broad const/overload sweep) — this landed
 on `tools/testmgr.py --tier full`, not the usual quick gate.
+
+## Log
+- 2026-08-03 — resolved, commit PENDING.

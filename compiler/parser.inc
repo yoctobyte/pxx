@@ -29,7 +29,8 @@ procedure EmitIoLockStubsArm32; forward;
   pxx-built stage stays perfectly green -- a gap only the fpc-bootstrap job sees. }
 function ParamIsVarRecArray(procIdx, argNo: Integer): Boolean; forward;
 function ParamIsOpenArrayScalar(procIdx, argNo: Integer): Boolean; forward;
-function ByRefArgStartsExpression: Boolean; forward;
+function ByRefArgStartsExpression(constVariantParam: Boolean): Boolean; forward;
+function ParamIsConstVariant(pi, slot: Integer): Boolean; forward;
 function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer; forward;
 
 
@@ -3092,7 +3093,7 @@ begin
           ProcParamElemRowLen[mpi * MAX_PROC_PARAMS + ai], ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + ai])
       else if Procs[mpi].Params[ai].IsRef or Procs[mpi].Params[ai].IsArray then
       begin
-        if ByRefArgStartsExpression then
+        if ByRefArgStartsExpression(ParamIsConstVariant(mpi, ai)) then
         begin
           ParseExpr; exprNode := CurASTNode;
         end
@@ -3622,7 +3623,21 @@ begin
     Error('"' + fieldName + '": no such member on this record/class');
 end;
 
-function ByRefArgStartsExpression: Boolean;
+function ParamIsConstVariant(pi, slot: Integer): Boolean;
+{ True for a `const v: Variant` parameter — by-ref internally (boxed at
+  IRLowerCallArg), but NEVER a genuine var-binding target, so an expression may
+  bind to it. The by-ref argument VALIDATOR two call sites up already treats it
+  that way; ByRefArgStartsExpression below needs the same fact to stop reading
+  `obj.method(a + b)` as a bare lvalue.
+  bug-a-const-variant-arg-expression-fails-outside-pyexprmode }
+begin
+  Result := (pi >= 0) and (slot >= 0) and (slot < MAX_PROC_PARAMS) and
+            (slot < Procs[pi].ParamCount) and
+            (Procs[pi].Params[slot].TypeKind = tyVariant) and
+            ProcParamIsConst[pi * MAX_PROC_PARAMS + slot];
+end;
+
+function ByRefArgStartsExpression(constVariantParam: Boolean): Boolean;
 var bx, bd: Integer;
 { True when the next by-ref/array argument cannot be a bare variable lvalue:
   not an ident at all, or an ident that names no symbol and is followed by
@@ -3641,8 +3656,16 @@ begin
     Gated on PyExprMode: Pascal's var-parameter binding must keep passing a
     bare variable by reference, and that path is under the self-host gate.
     Literal operands already worked, which is what hid this — only two NAMED
-    operands hit it (bug-nilpy-expression-arg-to-a-const-param). }
-  if PyExprMode then
+    operands hit it (bug-nilpy-expression-arg-to-a-const-param).
+
+    ...and on constVariantParam, which lifts the same logic into PASCAL source
+    for a `const Variant` parameter only. That parameter is by-ref internally
+    but is never a genuine var-binding target, so there is no bare-lvalue
+    requirement to protect — `pair.append(start + i)` failed in a plain Pascal
+    unit (pylib.pas's own body) for exactly this reason. Genuine var/out/array
+    by-ref params still require the gate.
+    bug-a-const-variant-arg-expression-fails-outside-pyexprmode }
+  if PyExprMode or constVariantParam then
   begin
     { Skip the whole lvalue CHAIN — `self._tok_quote_char`, `a.b[i].c` — and
       judge by what FOLLOWS it. One-token lookahead is not enough: uforth's
@@ -5936,7 +5959,7 @@ begin
             begin
               if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
               begin
-                if ByRefArgStartsExpression then
+                if ByRefArgStartsExpression(ParamIsConstVariant(mpi, mai)) then
                 begin
                   { non-ident by-ref/array arg (@obj.Method to a method-pointer
                     param, [..] literals, casts): parse as an expression }
@@ -6047,7 +6070,7 @@ begin
                   ProcParamElemRowLen[mpi * MAX_PROC_PARAMS + mslot], ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + mslot])
               else if Procs[mpi].Params[mslot].IsRef or Procs[mpi].Params[mslot].IsArray then
               begin
-                if ByRefArgStartsExpression then
+                if ByRefArgStartsExpression(ParamIsConstVariant(mpi, mslot)) then
                 begin
                   { non-ident by-ref/array arg (@obj.Method to a method-pointer
                     param, [..] literals, casts): parse as an expression }
@@ -6284,7 +6307,7 @@ begin
           { `[e0, e1, ...]` open-array/array-of-const literal argument
             (Exception.CreateFmt(Msg, [Data]) shape) }
           mexprNode := ParseVarRecLiteralAST
-        else if ByRefArgStartsExpression then
+        else if ByRefArgStartsExpression(ParamIsConstVariant(mpi, mai)) then
         begin
           { non-ident / cast-lvalue by-ref arg (PChar(s)^): full expression }
           ParseArgExpr; mexprNode := CurASTNode;
@@ -7366,7 +7389,7 @@ begin
             end
             else if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
             begin
-              if ByRefArgStartsExpression then
+              if ByRefArgStartsExpression(ParamIsConstVariant(mpi, mai)) then
               begin
                 { non-ident by-ref/array arg (@obj.Method to a method-pointer
                   param, [..] literals, casts): parse as an expression }
@@ -8999,7 +9022,7 @@ begin
               begin
                 if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
                 begin
-                  if ByRefArgStartsExpression then
+                  if ByRefArgStartsExpression(ParamIsConstVariant(mpi, mai)) then
                   begin
                     { non-ident by-ref/array arg (@obj.Method to a method-pointer
                       param, [..] literals, casts): parse as an expression }
@@ -9076,7 +9099,7 @@ begin
                 if kwIdx > 0 then slotIdx := kwIdx - 1 else slotIdx := mai;
                 if Procs[mpi].Params[slotIdx].IsRef or Procs[mpi].Params[slotIdx].IsArray then
                 begin
-                  if ByRefArgStartsExpression then
+                  if ByRefArgStartsExpression(ParamIsConstVariant(mpi, slotIdx)) then
                   begin
                     { non-ident by-ref/array arg (@obj.Method to a method-pointer
                       param, [..] literals, casts): parse as an expression }
@@ -19179,7 +19202,7 @@ begin
           not-yet-a-symbol ident followed by '(' starts a cast expression
           whose value is an lvalue; ParseExpr yields the addressable node. }
         if (CurTok.Kind in [tkInteger_T, tkLongWord_T, tkBoolean_T, tkChar_T]) or
-           ByRefArgStartsExpression then
+           ByRefArgStartsExpression(False) then
         begin
           ParseExpr; valNode := CurASTNode;
         end
@@ -26308,6 +26331,13 @@ begin
       ptypesProcSig[i] := ptypesProcSig[i-1];
       parr[i]   := parr[i-1];
       pbyref[i] := pbyref[i-1];
+      { pconst shifts with the params like every other per-param array. It was
+        the ONE omission here, so a method implementation's real `const`
+        parameter was written into Self's (meaningless) slot and the parameter's
+        own slot read stale data — ProcParamIsConst was misregistered for EVERY
+        method impl with a const parameter, not just Variant ones.
+        bug-a-const-variant-arg-expression-fails-outside-pyexprmode }
+      pconst[i] := pconst[i-1];
       pNDims[i] := pNDims[i-1];
       pDynDepth[i] := pDynDepth[i-1];
       pElemRowLen[i] := pElemRowLen[i-1];
@@ -26329,6 +26359,7 @@ begin
       end;
     end;
     pnames[0] := 'Self';
+    pconst[0] := False;   { Self is never a `const` parameter }
     if isStaticMethod and (methOwnerCi >= 0) and (UClsHelperTk[methOwnerCi] >= 0) then
     begin
       { a HELPER's `class function ...; static;`: Self = the target BY VALUE
@@ -26423,6 +26454,13 @@ begin
       ptypesProcSig[i] := ptypesProcSig[i-1];
       parr[i]   := parr[i-1];
       pbyref[i] := pbyref[i-1];
+      { pconst shifts with the params like every other per-param array. It was
+        the ONE omission here, so a method implementation's real `const`
+        parameter was written into Self's (meaningless) slot and the parameter's
+        own slot read stale data — ProcParamIsConst was misregistered for EVERY
+        method impl with a const parameter, not just Variant ones.
+        bug-a-const-variant-arg-expression-fails-outside-pyexprmode }
+      pconst[i] := pconst[i-1];
       pNDims[i] := pNDims[i-1];
       pDynDepth[i] := pDynDepth[i-1];
       pElemRowLen[i] := pElemRowLen[i-1];
@@ -26434,6 +26472,7 @@ begin
       end;
     end;
     pnames[0] := '__genself';
+    pconst[0] := False;
     ptypes[0] := tyPointer;
     ptypesRec[0] := REC_NONE;
     ptypesPtrElemTk[0] := tyUnknown;
