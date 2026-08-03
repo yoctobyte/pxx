@@ -50,3 +50,48 @@ A `.npy` diffed against CPython: a user `def` named after a pylib builtin
 (`sorted`, `len`, `str`, `min`) called before and after its definition; one that
 shadows an OVERLOADED pylib routine; a control module that does NOT shadow, so
 the builtins still work; and the class-shadowing test still green.
+
+## 2026-08-03 — THE CAUSE ABOVE IS WRONG. Measured, and returned to the backlog.
+
+I filed this ticket the same day and guessed the cause from the class half.
+The guess — "both are procs, and `FindProc` returns whichever was registered
+first" — is **false**, and the counter-measurement is two lines:
+
+```python
+def Counter(x):                 # a plain pylib FUNCTION of the same name
+    return "mine:" + str(x)
+print(Counter(3))               # mine:3 — correct, and correct on PINNED too
+```
+
+A user `def` shadowing an ordinary pylib routine **already works**, on the
+pinned binary as well as HEAD. So proc-registration order was never the problem.
+
+I implemented the guessed fix anyway (prefer `FindProcInUnit(name, -1)` under
+`NilPyUserCode`), built it, and it changed nothing on either program — inert.
+**Reverted rather than left in**: unmeasured code that fixes nothing is how a
+wrong theory gets a foothold in the tree.
+
+### What is actually happening
+
+`sorted`, `len`, `str`, `int`, `list`, `abs` and friends are **not procs at
+all**. They are dispatched by NAME in the parser — an intrinsic lowering keyed
+on the spelling, which never consults the symbol table and so cannot notice that
+the user declared anything. `Counter` works precisely because it is an ordinary
+pylib routine with no intrinsic.
+
+That relocates the ticket entirely:
+
+- the fix is not one comparison at one resolution site;
+- it is a guard at every name-keyed intrinsic dispatch — "does the user's module
+  declare this name?" — or one predicate consulted before the whole table;
+- and it needs the same care as the `__index__` work: a guard applied too
+  broadly is how object dict keys got collapsed
+  ([[bug-nilpy-unary-numeric-dunders-return-raw-handle]]).
+
+The right shape is probably a single `PyUserShadowsBuiltin(name)` predicate,
+checked once at the head of the intrinsic dispatch, mirroring the class rule's
+`FindUClassInUnit(name, -1)`. Whoever picks this up: **start by listing the
+intrinsic-dispatch sites**, not by reading `FindProc`.
+
+The measured symptom stands unchanged — `def sorted(x)` compiles, never runs,
+and the program prints the builtin's answer, silently.
