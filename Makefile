@@ -382,6 +382,11 @@ test-nilpy: $(COMPILER)
 	# ctor on the right must actually RUN (the "ctor N" lines are the proof).
 	# @dataclass generates __eq__ over the declared fields (CPython does); a
 	# nested dataclass field compares BY VALUE, a hand-written __eq__ wins.
+	# float str()/repr() = shortest round-tripping decimal, CPython's rule.
+	# Pins two tickets that were fixed by unrelated exact-decimal work with
+	# nothing guarding the behaviour; second half asserts float(str(v)) == v.
+	./$(COMPILER) test/test_nilpy_float_repr_roundtrip.npy /tmp/test_nilpy_float_repr26
+	test "$$(/tmp/test_nilpy_float_repr26)" = "$$(printf '3.3333333333333335\n0.3333333333333333\n0.30000000000000004\n1e-20\n1e-300\n1.23e+18\n-0.0\n0.0\n1e+16\n1e+17\n5e-324\n1.7976931348623157e+308\n2.2250738585072014e-308\n0.1\n0.2\n0.14285714285714285\n0.2857142857142857\n1e+100\n-1e-100\n123456789.12345679\n1.5\n100.0\n0.5\n3.14159265358979\n1e-05\n0.0001\n1000000000000000.0\n1e+21\n1e+22\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue')"
 	./$(COMPILER) test/test_nilpy_dataclass_eq.npy /tmp/test_nilpy_dataclass_eq26
 	test "$$(/tmp/test_nilpy_dataclass_eq26)" = "$$(printf 'True\nFalse\nFalse\nTrue\nTrue\nFalse\nFalse\nFalse\nFalse\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue')"
 	./$(COMPILER) test/test_nilpy_is_identity_vs_class_test.npy /tmp/test_nilpy_is_identity26
@@ -4377,6 +4382,11 @@ test-core: $(COMPILER)
 	# ctor on the right must actually RUN (the "ctor N" lines are the proof).
 	# @dataclass generates __eq__ over the declared fields (CPython does); a
 	# nested dataclass field compares BY VALUE, a hand-written __eq__ wins.
+	# float str()/repr() = shortest round-tripping decimal, CPython's rule.
+	# Pins two tickets that were fixed by unrelated exact-decimal work with
+	# nothing guarding the behaviour; second half asserts float(str(v)) == v.
+	./$(COMPILER) test/test_nilpy_float_repr_roundtrip.npy /tmp/test_nilpy_float_repr26
+	test "$$(/tmp/test_nilpy_float_repr26)" = "$$(printf '3.3333333333333335\n0.3333333333333333\n0.30000000000000004\n1e-20\n1e-300\n1.23e+18\n-0.0\n0.0\n1e+16\n1e+17\n5e-324\n1.7976931348623157e+308\n2.2250738585072014e-308\n0.1\n0.2\n0.14285714285714285\n0.2857142857142857\n1e+100\n-1e-100\n123456789.12345679\n1.5\n100.0\n0.5\n3.14159265358979\n1e-05\n0.0001\n1000000000000000.0\n1e+21\n1e+22\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue')"
 	./$(COMPILER) test/test_nilpy_dataclass_eq.npy /tmp/test_nilpy_dataclass_eq26
 	test "$$(/tmp/test_nilpy_dataclass_eq26)" = "$$(printf 'True\nFalse\nFalse\nTrue\nTrue\nFalse\nFalse\nFalse\nFalse\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue')"
 	./$(COMPILER) test/test_nilpy_is_identity_vs_class_test.npy /tmp/test_nilpy_is_identity26

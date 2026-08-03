@@ -193,3 +193,34 @@ and is tracked elsewhere:
   [[decide-nilpy-runtime-dunder-dispatch-mechanism]]
 - mismatched static operand pairs computing instead of raising →
   [[bug-nilpy-static-typed-operands-skip-mixed-type-guard]]
+
+## 2026-08-03 — re-measured; the subject of this ticket ALREADY WORKS
+
+Run against HEAD rather than re-read. The ticket's own reproducer
+(`print(C(1) + C(2))` with `__add__` declared) now prints `3`, not a sum of
+handles. Full operator matrix, all diffed against CPython and all correct:
+
+| form | result |
+| --- | --- |
+| `a + b`, `a - b`, `a * b`, `a / b`, `a // b`, `a % b`, `a ** b` on two instances | all correct |
+| mixed type — `c + 3` via `__add__` | correct |
+| reflected — `3 + c` via `__radd__` | correct |
+| **augmented — `d += 5`** | **0, silently** |
+
+So this feature landed at some point without the ticket being updated — the
+"adds the HANDLES" symptom in the header is stale, and the phase-2 framing
+(threading a blanket rule through every operator, composing with `Path("a") /
+"b"`) describes work that has evidently been done.
+
+**The one remaining hole is split out as
+[[bug-nilpy-augmented-assign-on-a-class-instance-silently-yields-zero]]** — a
+silent wrong answer (`0`, no diagnostic), which also reproduces with only
+`__add__` declared, i.e. it is the augmented-assignment path rather than
+`__iadd__` specifically. Filed separately because a silent wrong answer buried
+as one line in a 195-line feature ticket stays invisible.
+
+**Do not close this ticket on the strength of the table above** — what was
+measured is the operator dispatch, not this ticket's full phase-2 scope
+(in-place operators beyond `+=`, `__divmod__`/`__matmul__`-shaped members, and
+the composition-with-existing-special-cases concerns below were not swept).
+Re-scope it against what remains rather than re-deriving the parts that work.

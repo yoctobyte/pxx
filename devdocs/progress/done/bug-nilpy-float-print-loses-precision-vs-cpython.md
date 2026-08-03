@@ -3,6 +3,8 @@ track: N
 prio: 40
 type: bug
 blocked-by: []
+status: done
+owner: claude-AN
 ---
 
 # Float printing loses the last 1-2 significant digits vs CPython's shortest round-trip repr
@@ -103,3 +105,30 @@ cheaper: a sign check and a threshold. Item 3 is the original ticket. Worth
 splitting the work that way if this is picked up — shipping the sign and the
 threshold does not require committing to a Grisu/Ryu-class shortest-round-trip
 algorithm, which is what item 3 actually needs.
+
+## 2026-08-03 — already fixed; closed on measurement, with a regression test added
+
+Found by running every reproducer this ticket carries against HEAD instead of
+re-reading it. **All of them now match CPython exactly**, so the ticket
+describes behaviour the codebase has since outgrown — fixed by the later
+exact-decimal float work, with nothing in this ticket updated at the time.
+
+Not closed on those lines alone: the claim is the *property* (Python's
+`str`/`repr` of a float is the SHORTEST decimal that round-trips to the same
+IEEE 754 double), so 29 values were checked for both the exact spelling AND
+`float(str(v)) == v` — 58/58 identical to CPython. That set deliberately
+includes the cases this ticket family named plus the ones most likely to break
+a shortest-repr algorithm: the denormal floor `5e-324`, both extremes
+(`1.7976931348623157e308`, `2.2250738585072014e-308`), and the boundaries
+where CPython switches to exponent notation (`1e15`/`1e16`, `1e21`/`1e22`),
+plus `-0.0`.
+
+**Nothing pinned this behaviour**, which is how it could have regressed as
+silently as it was fixed. `test/test_nilpy_float_repr_roundtrip.npy` is new
+and registered in both `test-nilpy` Makefile sites; its second half asserts the
+round-trip property rather than only the printed text.
+
+`tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-03 — resolved, commit PENDING-COMMIT.

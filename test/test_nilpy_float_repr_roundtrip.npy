@@ -1,0 +1,16 @@
+# Python's str()/repr() of a float is the SHORTEST decimal string that
+# round-trips back to the identical IEEE 754 double. Two tickets recorded this
+# as broken (bug-nilpy-float-print-loses-precision-vs-cpython,
+# bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip); both were
+# fixed by later exact-decimal work with nothing pinning the behaviour, so this
+# is that pin. Covers the cases those tickets named plus the boundaries where
+# CPython switches to exponent notation (1e16, 1e21) and the denormal extremes.
+vals = [10 / 3, 1 / 3, 0.1 + 0.2, 1e-20, 1e-300, 1.23e18, -0.0, 0.0,
+        1e16, 1e17, 5e-324, 1.7976931348623157e308, 2.2250738585072014e-308,
+        0.1, 0.2, 1 / 7, 2 / 7, 1e100, -1e-100, 123456789.123456789,
+        1.5, 100.0, 0.5, 3.14159265358979, 1e-5, 1e-4, 1e15, 1e21, 1e22]
+for v in vals:
+    print(v)
+# and the property itself, not just the spelling
+for v in vals:
+    print(float(str(v)) == v)
