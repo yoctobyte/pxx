@@ -100,9 +100,53 @@ case "$MODE" in
     #   - ten minutes is also long enough to overlap another build, which is
     #     the window bug-t-selfhost-build-uses-fixed-tmp-paths-colliding and
     #     feature-t-snapshot-compiler-binary-per-run are about.
+    # FPC seed canary, started FIRST and in the BACKGROUND so it overlaps the
+    # steps below instead of adding to them. Four separate "Identifier not
+    # found" breaks landed on master in three days (PyMakeTruthy, PyBytesCi,
+    # PyWiden, EmitAsmX64) — every one a routine called from an include that
+    # sits EARLIER in compiler.pas than the file defining it. pxx's own
+    # frontend resolves all of them; FPC is single-pass and does not, so the
+    # property is invisible to every other check a dev runs, and the watcher
+    # only reports it hours later.
+    #
+    # It is affordable precisely because it is concurrent: the seed build takes
+    # ~11s against this gate's ~14-30s, so wall time is max() rather than sum()
+    # and the gate stays the thing you run between edits. Skipped when compiler
+    # sources are untouched (nothing else can break the seed) and when FPC is
+    # absent, which must be a SKIP and never a failure — the watcher boxes are
+    # not required to have it.
+    seed_pid=
+    if command -v fpc >/dev/null 2>&1 && \
+       ! git diff --quiet HEAD -- compiler/ 2>/dev/null; then
+      ( rm -rf "$LOGDIR/seed_u" && mkdir -p "$LOGDIR/seed_u" && \
+        fpc -Mobjfpc -O2 -Tlinux -Px86_64 -FU"$LOGDIR/seed_u" \
+            -FE"$LOGDIR/seed_u" -o"$LOGDIR/seed26" compiler/compiler.pas \
+        ) >"$LOGDIR/fpc-seed.log" 2>&1 &
+      seed_pid=$!
+    fi
+
     step "self-host fixedpoint" "$LOGDIR/fixedpoint.log" fixedpoint      || RC=1
     step "testmgr --tier quick" "$LOGDIR/quick.log" \
          tools/testmgr.py --tier quick                                   || RC=1
+
+    if [ -n "$seed_pid" ]; then
+      if wait "$seed_pid"; then
+        echo "  PASS  FPC seed canary (concurrent)"
+      else
+        echo "  FAIL  FPC seed canary (concurrent)  $LOGDIR/fpc-seed.log"
+        # The error is thousands of lines above the tail — FPC keeps warning
+        # after the error that stopped it — so surface it rather than the tail.
+        grep -E "Error:|Fatal:" "$LOGDIR/fpc-seed.log" | head -5 | sed 's/^/        /'
+        echo "        a routine is called from an include EARLIER in compiler.pas"
+        echo "        than the file defining it — add a forward, see"
+        echo "        bug-a-fpc-seed-drift-emitasmx64-forward"
+        RC=1
+      fi
+    elif command -v fpc >/dev/null 2>&1; then
+      echo "  SKIP  FPC seed canary (no uncommitted compiler/ changes)"
+    else
+      echo "  SKIP  FPC seed canary (fpc not installed)"
+    fi
     if [ "$MODE" = full ]; then
       step "make test-nilpy"    "$LOGDIR/test-nilpy.log" make test-nilpy || RC=1
       step "make test"          "$LOGDIR/test.log" make test             || RC=1
