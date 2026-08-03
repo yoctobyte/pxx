@@ -136,4 +136,4 @@ called `Foo(200)` resolves to the same routine, just one phase earlier.
 FPC seed canary). No `compiler/builtin/**` change, so no repin needed.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING.
+- 2026-08-03 — resolved, commit 75d8aaf28.
