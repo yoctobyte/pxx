@@ -3,6 +3,7 @@ summary: "Decide: how should NilPy dispatch dunders on an instance whose class i
 type: decide
 track: U
 prio: 60
+blocked-by: [decide-nilpy-runtime-dunder-dispatch-strategy]
 ---
 
 # Decide: mechanism for runtime dunder dispatch on container elements
@@ -137,3 +138,16 @@ symptom sets and neither is resolved. But **one answer settles both**, and
 container element is one way to end up Variant-held), so answer that one and
 apply it here. Do not decide them separately — two different mechanisms for one
 problem is the outcome nobody wants.
+
+## 2026-08-03 — edge recorded, so the two cannot be decided separately
+
+The supersession note above says *"do not decide them separately — two different
+mechanisms for one problem is the outcome nobody wants"*, and deliberately kept
+both filed because they record different symptom sets. But nothing enforced it:
+both sat in `backlog/` as independently rankable Track U items (p60 and p70), so
+`progress.sh next` could hand this narrower one to an agent to answer on its own.
+
+Recorded `blocked-by: [decide-nilpy-runtime-dunder-dispatch-strategy]` and moved
+to `blocked/`. Neither ticket's content is merged away — this one keeps its three
+symptom sets and the POSTPONED carry-forward. Only the ordering is now explicit:
+answer the broad one, then apply it here.

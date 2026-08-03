@@ -2,6 +2,7 @@
 track: B
 prio: 40
 type: feature
+blocked-by: [feature-nilpy-multi-arg-callback-bridges]
 ---
 
 # tkinter façade: a callable option that receives Tk's OWN arguments
@@ -68,3 +69,13 @@ call back into Python for `yscrollcommand` either, it wires Tcl straight to the
 other widget's subcommand, and `TkiOptScrollCmd` now does the same and refuses
 loudly for anything that is not a widget method. Nothing enters the regression
 suite from here until the bridges exist.
+
+## 2026-08-03 — dependency recorded in frontmatter
+
+The 2026-07-31 note above identified the blocker in prose (the shared-runtime
+`pycallback_call2/3` / multi-arg `pyboundfn_call_ptr` bridges) but no
+`blocked-by:` edge existed, so the board could not see it: this ticket ranked as
+ready and would have been handed to a Track B agent who cannot edit
+`compiler/builtin/pylib.pas`. The bridges have their own ticket —
+[[feature-nilpy-multi-arg-callback-bridges]] — and it is now the recorded edge,
+so priority propagates to it and this surfaces only once it lands.

@@ -3,6 +3,7 @@ summary: "NilPy: __repr__/__str__ of a class instance held in a container silent
 type: bug
 track: N
 prio: 60
+blocked-by: [decide-nilpy-runtime-dunder-dispatch-strategy]
 ---
 
 # NilPy: dunders don't dispatch when the instance is reached through a container
@@ -85,3 +86,11 @@ each grow a private runtime path, which is precisely how the `not <x>` family
 came to need three separate fixes.
 
 **blocked-by:** [[decide-nilpy-runtime-dunder-dispatch-strategy]]
+
+## 2026-08-03 — dependency recorded in frontmatter
+
+The body named the blocker (twice, under two different slugs) but no
+`blocked-by:` edge existed. The edge is the broader of the two decide tickets,
+[[decide-nilpy-runtime-dunder-dispatch-strategy]], per the supersession note on
+[[decide-nilpy-runtime-dunder-dispatch-mechanism]]: one answer settles both, and
+deciding them separately is the outcome that note warns against.

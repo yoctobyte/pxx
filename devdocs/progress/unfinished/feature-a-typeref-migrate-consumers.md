@@ -94,3 +94,16 @@ Alloc*/AddConst) is roughly: `RecName`/`ElemRecName` ~58 sites (`ir.inc` 3,
 is real, distinct work — do it before trusting any more `SymTR` reads, and
 re-land the two reverted backend migrations only after it's done and
 re-verified.
+
+## 2026-08-03 — moved working/ -> unfinished/ (board maintenance)
+
+`working/` is a live lock: a ticket sits there only while an agent is actively
+on it. This one had not been touched in three days, so the lock was stale and
+`next` was reserving a Track A file-lane nobody held.
+
+**Not a revert, and nothing is half-applied**: lane 1 (the `SymTR` parallel
+array plus the full write-side sync) is landed and green — the self-host
+fixedpoint has been rebuilt many times since against it. What remains is the
+~68 read sites and the old-field deletion, which is why this is `unfinished/`
+rather than `done/`. Re-claim it to continue.
+
