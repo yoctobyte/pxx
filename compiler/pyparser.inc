@@ -3257,6 +3257,123 @@ begin
   Result := '$clsattr.' + PyRawName(UClsNOff[ci], UClsNLen[ci]) + '.' + nm;
 end;
 
+function PyClsAttrEnsureGlobal(ci, nOff, nLen: Integer; tk: TTypeKind;
+                              rec: Integer): Integer;
+{ The single shared slot behind a class attribute, registered as a CLASS VAR of
+  `ci` so that all three access routes reach it with no new lookup code:
+
+    C.attr        parser.inc's ClassName.member branch (FindClassVar)
+    attr          the bare-name branch inside a method body
+    inst.attr     the "class variable through an instance" branch — which fires
+                  only when the class has no instance FIELD of that name, i.e.
+                  exactly when this attribute was lowered as a shared slot
+
+  Registering it for EVERY class attribute (not only the shared-slot ones) is
+  what makes `C.attr` readable in the copy-at-construction rows too: there the
+  field carries the instance reads and this global carries the class-name ones,
+  and nothing can make them disagree because nothing writes through the class
+  name (PyClsAttrWriteScan). }
+var nm: AnsiString; i: Integer;
+begin
+  nm := PyRawName(nOff, nLen);
+  Result := FindSym(PyClsAttrGlobalName(ci, nm));
+  if Result < 0 then
+  begin
+    Result := AllocVar(PyClsAttrGlobalName(ci, nm), tk);
+    Syms[Result].RecName := rec;
+    SymSyncTypeRef(Result);
+  end;
+  { own-class registration only — FindClassVar walks the PARENT chain, so using
+    it here would let a subclass that redeclares the attribute silently share
+    the ancestor's slot }
+  for i := 0 to ClassVarCount - 1 do
+    if (ClassVarCi[i] = ci) and
+       (GetTokenStrFromRaw(ClassVarNOff[i], ClassVarNLen[i]) = nm) then Exit;
+  if ClassVarCount >= MAX_TYPEALIAS then Error('too many class variables');
+  ClassVarCi[ClassVarCount]   := ci;
+  ClassVarNOff[ClassVarCount] := nOff;
+  ClassVarNLen[ClassVarCount] := nLen;
+  ClassVarSym[ClassVarCount]  := Result;
+  Inc(ClassVarCount);
+end;
+
+function PyClsAttrSharedSym(const fname: AnsiString): Integer;
+{ The shared class-attribute slot named `fname`, for a receiver whose class is
+  NOT known statically — a plain NilPy local, which the frontend types as a
+  variant. The statically-typed routes reach the same slot through FindClassVar;
+  this is the variant receiver's equivalent, and it sits beside
+  PyMakeVariantField (resolve-by-name across the declared classes) for the same
+  reason: there is no class to key on, only a name.
+
+  Only slots with no instance FIELD of that name qualify — those are exactly the
+  class-written attributes, the ones where the field was deliberately not
+  emitted. Returns -1 when no class offers the name, and ALSO when more than one
+  distinct slot does: an ambiguous guess here would be a silently wrong value,
+  where falling through leaves today's loud AttributeError. }
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to ClassVarCount - 1 do
+    if (GetTokenStrFromRaw(ClassVarNOff[i], ClassVarNLen[i]) = fname) and
+       (FindUField(ClassVarCi[i], fname) < 0) then
+    begin
+      if Result < 0 then Result := ClassVarSym[i]
+      else if Result <> ClassVarSym[i] then begin Result := -1; Exit; end;
+    end;
+end;
+
+procedure PyClsAttrWriteScan(const clsName, attrName: AnsiString;
+                             var classW, instW: Boolean);
+{ The whole-module scan that picks the lowering for one class attribute.
+  Answers two separate questions about `.attrName` STORES:
+
+    classW - written through the CLASS NAME (`C.attr = 5`, `C.attr += 1`)
+    instW  - written through anything else (`self.attr = 5`, `obj.attr = 5`,
+             `f().attr = 5`)
+
+  Python's model is that a class attribute lives on the CLASS and an instance
+  read falls through to it, while an instance write creates a per-instance
+  override. Copy-at-construction — what this frontend does — is provably
+  indistinguishable from that model as long as nothing writes through the class
+  name after construction, which is why `classW` is the whole question: without
+  it the cheap lowering stays correct, with it the attribute must become one
+  shared slot. `instW` then separates the two remaining rows: class-written but
+  never instance-written is still a single slot (no override can exist);
+  BOTH written is the only row that needs a real per-instance override.
+
+  A receiver that is not a bare identifier counts as an instance write: it
+  cannot be the class name spelled literally, and over-counting here only ever
+  costs generality, never correctness.
+
+  `setattr` anywhere forces the instance side on for the same reason
+  PyDynAttrEverAssigned does — the target is not visible in the tokens. }
+var j: Integer;
+begin
+  classW := False;
+  instW := False;
+  if attrName = '' then Exit;
+  j := 1;
+  while j < MainProgramTokCount do
+  begin
+    if (Tokens[j].Kind = tkIdent) and CaseEqual(GetTokenStr(j), 'setattr') then
+      instW := True
+    else if (Tokens[j].Kind = tkIdent) and (Tokens[j - 1].Kind = tkDot) and
+            (j + 1 < MainProgramTokCount) and
+            (Tokens[j + 1].Kind in [tkAssign, tkPlusEq, tkMinusEq, tkStarEq,
+                                    tkSlashEq, tkModEq, tkTrueDivEq, tkAmpEq,
+                                    tkPipeEq, tkXorEq, tkShlEq, tkShrEq]) and
+            (GetTokenStr(j) = attrName) then
+    begin
+      if (j >= 2) and (Tokens[j - 2].Kind = tkIdent) and
+         (GetTokenStr(j - 2) = clsName) then
+        classW := True
+      else
+        instW := True;
+    end;
+    Inc(j);
+  end;
+end;
+
 function PyClsAttrEqIdx(nameIdx, stopIdx: Integer): Integer;
 { Token index of the `=` binding the class attribute whose NAME sits at nameIdx,
   stepping over an optional `: <annotation>`. -1 when the line has no
@@ -3330,16 +3447,36 @@ begin
   PyParseBoolExpr;
   valNode := CurASTNode;
   gname := PyClsAttrGlobalName(ci, nm);
-  gsym := AllocVar(gname, IntToTypeKind(ASTTk[valNode]));
-  Syms[gsym].RecName := ResolveNodeRec(valNode);
-  SymSyncTypeRef(gsym);
+  { the member pre-pass already allocated this slot and registered it as a class
+    var (PyClsAttrEnsureGlobal) — RETYPE it here rather than allocating a second
+    one, because the pre-pass had only the tokens to go on }
+  gsym := FindSym(gname);
+  if gsym < 0 then
+  begin
+    gsym := AllocVar(gname, IntToTypeKind(ASTTk[valNode]));
+    Syms[gsym].RecName := ResolveNodeRec(valNode);
+    SymSyncTypeRef(gsym);
+  end
+  else if PyClsAttrExprAhead(eqAt) then
+  begin
+    { retype only for an EXPRESSION initialiser — see the field note below }
+    Syms[gsym].TypeKind := IntToTypeKind(ASTTk[valNode]);
+    Syms[gsym].RecName := ResolveNodeRec(valNode);
+    SymSyncTypeRef(gsym);
+  end;
   { RETYPE the field to what the initialiser actually produced. The pre-pass had
     only the tokens to go on and defaulted to a variant; a list or dict literal
     yields a CLASS handle, and storing one into a variant slot left the tag
     garbage — `Cfg().LIMITS[1]` read None. The slot was laid out variant-sized
     (16 bytes), so a narrower kind always fits. }
   fi := FindUField(ci, nm);
-  if fi >= 0 then
+  { ...but only for a genuine EXPRESSION initialiser. A single-literal one is now
+    routed through here too (so its shared slot gets a value like every other
+    attribute's), and there the pre-pass's typing is the authority: it maps
+    tkString to tyAnsiString, while the literal NODE is tyString — and a tyString
+    FIELD means an inline string[N] to the store path, which is a different
+    layout entirely. }
+  if (fi >= 0) and PyClsAttrExprAhead(eqAt) then
   begin
     UFldTk[fi] := ASTTk[valNode];
     UFldRec_[fi] := Syms[gsym].RecName;
@@ -15591,6 +15728,7 @@ var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, al
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
     fldRec, mRetRec, pri: Integer; mRet: TTypeKind;
     caVal: Integer;   { class-attribute initialiser token, past any annotation }
+    caClassW, caInstW: Boolean;   { how this attribute is written module-wide }
     mStarIdx, mKwIdx, starCi: Integer;   { `*args` / `**kwargs` parameter slots }
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
     pdefHas: array[0..15] of Boolean; pdefIsStr: array[0..15] of Boolean;
@@ -15664,25 +15802,36 @@ begin
         assignment to it is refused rather than pretending Python's shared
         class attribute exists. Registered in the pre-pass with everything
         else, so a method body parsed later can already see it. }
+      case Tokens[caVal].Kind of
+        tkInteger:      tk := tyInt64;
+        tkFloat:        tk := tyDouble;
+        tkString:       tk := tyAnsiString;
+        tkTrue, tkFalse: tk := tyBoolean;
+      else
+        tk := tyVariant;
+      end;
+      { WHICH lowering — see PyClsAttrWriteScan. Without a write through the
+        class name the copy-at-construction form below is indistinguishable from
+        Python's fall-through; with one the attribute has to become the single
+        shared slot the global already is. }
+      PyClsAttrWriteScan(PyRawName(UClsNOff[ci], UClsNLen[ci]), GetTokenStr(i),
+                         caClassW, caInstW);
+      if caClassW and caInstW then
+        Error('Nil Python: class attribute "' + GetTokenStr(i) + '" is written ' +
+              'both through the class and through an instance; the per-instance ' +
+              'override that needs is not implemented yet');
+      PyClsAttrEnsureGlobal(ci, Tokens[i].SOffset, Tokens[i].SLen, tk, REC_NONE);
       { The attribute is a real FIELD on the instance (typed from its literal),
         so reads and the construction-time store go through the ordinary field
         path. Registered here in the pre-pass, before any method body is parsed. }
-      if FindUField(ci, GetTokenStr(i)) < 0 then
+      if (not caClassW) and (FindUField(ci, GetTokenStr(i)) < 0) then
       begin
-        case Tokens[caVal].Kind of
-          tkInteger:      tk := tyInt64;
-          tkFloat:        tk := tyDouble;
-          tkString:       tk := tyAnsiString;
-          tkTrue, tkFalse: tk := tyBoolean;
-        else
-          tk := tyVariant;
-        end;
         sz := TypeSize(tk);
         curOff := AlignTo(curOff, TypeAlign(tk));
         AddUField(ci, Tokens[i].SOffset, Tokens[i].SLen, curOff, Ord(tk), REC_NONE);
         Inc(curOff, sz);
       end;
-      if PyClsAttrCount < 256 then
+      if (not caClassW) and (PyClsAttrCount < 256) then
       begin
         PyClsAttrCi[PyClsAttrCount]   := ci;
         PyClsAttrNOff[PyClsAttrCount] := Tokens[i].SOffset;
@@ -15738,18 +15887,26 @@ begin
         Before this, the line matched no branch at all: no field, no constant,
         and `self.mode.NORMAL` then compiled against nothing and SEGFAULTED at
         run time (bug-nilpy-class-attr-instance-traversal-crashes). }
-      if FindUField(ci, GetTokenStr(i)) < 0 then
+      tk := tyVariant;
+      k := REC_NONE;
+      { `name = Cls(...)` — the field carries Cls's identity, which is what
+        makes the traversal `self.name.attr` resolve to a real field. }
+      if (Tokens[caVal].Kind = tkIdent) and (caVal + 1 < bodyEnd) and
+         (Tokens[caVal + 1].Kind = tkLParen) then
       begin
-        tk := tyVariant;
-        k := REC_NONE;
-        { `name = Cls(...)` — the field carries Cls's identity, which is what
-          makes the traversal `self.name.attr` resolve to a real field. }
-        if (Tokens[caVal].Kind = tkIdent) and (caVal + 1 < bodyEnd) and
-           (Tokens[caVal + 1].Kind = tkLParen) then
-        begin
-          j := FindUClass(GetTokenStr(caVal));
-          if j >= 0 then begin tk := tyClass; k := REC_UCLASS_BASE + j; end;
-        end;
+        j := FindUClass(GetTokenStr(caVal));
+        if j >= 0 then begin tk := tyClass; k := REC_UCLASS_BASE + j; end;
+      end;
+      { same lowering choice as the literal branch above }
+      PyClsAttrWriteScan(PyRawName(UClsNOff[ci], UClsNLen[ci]), GetTokenStr(i),
+                         caClassW, caInstW);
+      if caClassW and caInstW then
+        Error('Nil Python: class attribute "' + GetTokenStr(i) + '" is written ' +
+              'both through the class and through an instance; the per-instance ' +
+              'override that needs is not implemented yet');
+      PyClsAttrEnsureGlobal(ci, Tokens[i].SOffset, Tokens[i].SLen, tk, k);
+      if (not caClassW) and (FindUField(ci, GetTokenStr(i)) < 0) then
+      begin
         sz := TypeSize(tk);
         curOff := AlignTo(curOff, TypeAlign(tk));
         AddUField(ci, Tokens[i].SOffset, Tokens[i].SLen, curOff, Ord(tk), k);
@@ -17091,7 +17248,12 @@ begin
         A bare `n: int` with no initialiser binds nothing in Python either — it
         is an annotation — so it simply steps over. }
       clsEqAt := PyClsAttrAssignAt;
-      if PyClsAttrExprAhead(clsEqAt) then PyEmitClassAttrExpr(ci, clsEqAt)
+      { A LITERAL initialiser goes through the same routine now: its folded
+        constant still drives construction, but the attribute's SHARED SLOT — the
+        one `C.attr` names and the one an instance falls through to when the
+        attribute is class-written — has to be given a value too, and there is
+        exactly one place a class body's value is evaluated. }
+      if clsEqAt >= 0 then PyEmitClassAttrExpr(ci, clsEqAt)
       else
       begin
         while not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) do Next;

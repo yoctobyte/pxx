@@ -559,6 +559,8 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_class_attr_hoist_leak26 | diff -u test/test_nilpy_class_attr_hoist_leak.expected -
 	./$(COMPILER) test/test_nilpy_annotated_class_attribute.npy /tmp/test_nilpy_annotated_class_attribute26
 	/tmp/test_nilpy_annotated_class_attribute26 | diff -u test/test_nilpy_annotated_class_attribute.expected -
+	./$(COMPILER) test/test_nilpy_class_attribute_through_class_name.npy /tmp/test_nilpy_clsattr_byname26
+	/tmp/test_nilpy_clsattr_byname26 | diff -u test/test_nilpy_class_attribute_through_class_name.expected -
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_tobject_member_via_local.npy /tmp/test_nilpy_tobject_member26
 	test "$$(/tmp/test_nilpy_tobject_member26)" = "$$(printf 'Dog\nDog\nDog\n42\n43')"
 	./$(COMPILER) test/test_nilpy_object_arc.npy /tmp/test_nilpy_object_arc26

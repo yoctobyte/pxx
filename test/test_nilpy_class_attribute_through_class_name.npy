@@ -1,0 +1,95 @@
+from dataclasses import dataclass
+
+# --- copy-at-construction row: nothing writes through the class name, so the
+#     instance copy is indistinguishable from Python's fall-through ---
+class Plain:
+    n = 5
+    label = "plain"
+    calc = 2 + 3
+    bag = []
+
+p1 = Plain()
+p2 = Plain()
+print("plain read:", Plain.n, Plain.label, Plain.calc, Plain.bag)
+print("plain inst:", p1.n, p1.label, p1.calc, p2.n)
+p1.n = 99
+print("inst write:", p1.n, p2.n, Plain.n)
+p1.bag.append(1)
+print("shared mutable:", p1.bag, p2.bag, Plain.bag)
+
+# --- shared-slot row: written through the class name, so there is no instance
+#     copy and every read reaches the one slot ---
+class Tally:
+    total = 0
+    tag = "c"
+    seed = 3 * 4
+    def bump(self):
+        Tally.total += 1
+        return Tally.total
+
+print("tally start:", Tally.total, Tally.tag, Tally.seed)
+c1 = Tally()
+c2 = Tally()
+c3 = Tally()
+print("ctor made:", Tally.total)
+print("bump:", c1.bump(), c2.bump())
+print("through inst:", c1.total, c2.total, c3.total, Tally.total)
+Tally.total = 100
+print("class write:", c1.total, c2.total, Tally.total)
+Tally.tag = "z"
+print("class write str:", c1.tag, Tally.tag)
+
+# --- the counter idiom, which is the main reason to write a class attribute ---
+class Reg:
+    made = 0
+    def __init__(self):
+        Reg.made += 1
+
+r1 = Reg()
+r2 = Reg()
+r3 = Reg()
+print("registered:", Reg.made, r1.made)
+
+# --- augmented write inside a plain method ---
+class Bare:
+    hits = 0
+    def hit(self):
+        Bare.hits += 2
+        return Bare.hits
+
+b = Bare()
+print("bare:", b.hit(), b.hit(), Bare.hits)
+
+# --- non-literal initialiser, class-written and rebound ---
+class Cfg:
+    limits = [10, 20]
+    def show(self):
+        return Cfg.limits[0]
+
+cf = Cfg()
+print("cfg:", Cfg.limits, cf.limits, cf.show())
+Cfg.limits = [7]
+print("cfg rebound:", Cfg.limits, cf.limits, cf.show())
+
+# --- an inherited class attribute is reachable through the SUBCLASS name ---
+class Base:
+    kind = "base"
+    ver = 1 + 1
+class Sub(Base):
+    pass
+print("inherit:", Base.kind, Sub.kind, Base.ver, Sub.ver, Base().kind)
+
+# --- dataclass defaults are a different branch entirely: regression control ---
+@dataclass
+class Point:
+    x: int = 1
+    y: int = 2
+    name: str = "pt"
+
+print("dataclass:", Point().x, Point().y, Point().name, Point(9, 8, "q").x)
+
+# --- annotated class attributes keep working ---
+class Ann:
+    n: int = 4
+    s: str = "ann"
+print("annotated:", Ann.n, Ann.s, Ann().n, Ann().s)

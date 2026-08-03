@@ -844,6 +844,7 @@ function PyWrapHeapCallableCall(calleeNode, argsHead, n, defCall: Integer): Inte
 function PyBareNoneHere: Boolean; forward;  { a `None` with nothing after it that could continue an expression — pyparser.inc }
 function PyMakeSuperCall(const name: AnsiString): Integer; forward;  { `super().m(args)` as a value (pyparser.inc) }
 function PyDynAttrEverAssigned(const nm: AnsiString): Boolean; forward;  { is `.nm =` written anywhere? (pyparser.inc) }
+function PyClsAttrSharedSym(const fname: AnsiString): Integer; forward;  { the one shared class-attribute slot of that name, for a VARIANT receiver (pyparser.inc) }
 function PyEvalOnce(node: Integer): Integer; forward;  { bind a value to a hidden temp so it is evaluated once (pyparser.inc) }
 function PyMakePercentFormat(fmtNode, argsNode: Integer): Integer; forward;  { `str % args` (pyparser.inc) }
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
@@ -5203,7 +5204,12 @@ begin
       if NilPyUserCode and (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
          (FindUField(recName - REC_UCLASS_BASE, fieldName) < 0) and
          (FindUMeth(recName - REC_UCLASS_BASE, fieldName) < 0) and
-         (FindUProp(recName - REC_UCLASS_BASE, fieldName) < 0) then
+         (FindUProp(recName - REC_UCLASS_BASE, fieldName) < 0) and
+         { a CLASS ATTRIBUTE lowered as a shared slot has no instance field on
+           purpose — it is declared, not dynamic, and the class-variable branch
+           further down resolves it. Without this the closed-world fallback
+           claimed it first and every instance read raised AttributeError. }
+         (FindClassVar(recName - REC_UCLASS_BASE, fieldName) < 0) then
       begin
         Next;   { consume the field name }
         if CurTok.Kind = tkAssign then
@@ -5340,6 +5346,21 @@ begin
         Next;   { consume the field name, as the call branch above does }
         indexNode := PyMakeVariantField(node, fieldName, tk, recName);
         if indexNode >= 0 then begin node := indexNode; Continue; end;
+        { No FIELD of that name — but a CLASS ATTRIBUTE that is written through
+          its class name has no field by construction: it is one shared slot, and
+          an instance read of it falls through to that slot (Python's model).
+          The statically-typed receivers reach it via FindClassVar a few hundred
+          lines down; a variant receiver has only the name to go on. }
+        fldIdx := PyClsAttrSharedSym(fieldName);
+        if fldIdx >= 0 then
+        begin
+          node := AllocNode(AN_IDENT);
+          ASTIVal[node] := fldIdx;
+          ASTTk[node] := Ord(Syms[fldIdx].TypeKind);
+          tk := Syms[fldIdx].TypeKind;
+          recName := Syms[fldIdx].RecName;
+          Continue;
+        end;
         { No class declares it -> a DYNAMIC attribute. `vm._trans_ptr = X`
           (assignment) becomes pydynattr_set; a read becomes pydynattr_get. }
         if CurTok.Kind = tkAssign then

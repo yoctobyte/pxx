@@ -1,0 +1,17 @@
+plain read: 5 plain 5 []
+plain inst: 5 plain 5 5
+inst write: 99 5 5
+shared mutable: [1] [1] [1]
+tally start: 0 c 12
+ctor made: 0
+bump: 1 2
+through inst: 2 2 2 2
+class write: 100 100 100
+class write str: z z
+registered: 3 3
+bare: 2 4 4
+cfg: [10, 20] [10, 20] 10
+cfg rebound: [7] [7] 7
+inherit: base base 2 2 base
+dataclass: 1 2 pt 9
+annotated: 4 ann 4 ann

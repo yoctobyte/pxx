@@ -2,6 +2,8 @@
 track: N
 prio: 65
 type: bug
+status: working
+owner: claude-AN
 ---
 
 # `C.attr` on a class attribute: "class method not found"
