@@ -98,4 +98,4 @@ instances unhashable. Neither is reachable through anything this frontend
 currently supports.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit 51563a1ec.
