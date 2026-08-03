@@ -161,4 +161,4 @@ exercising all of them UNSHADOWED — both diffed against CPython, identical.
 
 ## Log
 - 2026-08-04 — resolved.
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 37ce259f9.
