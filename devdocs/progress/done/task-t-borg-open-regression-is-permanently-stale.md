@@ -93,4 +93,4 @@ and this entry resumes meaning something.
   the command is read for. `tools/twatch_quiet_host_devtest.py` pins the
   threshold, the never-ran case (being enrolled is not being abandoned), the
   live-host-beside-a-quiet-one case, and the reversal.
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit 3baa61f7e.
