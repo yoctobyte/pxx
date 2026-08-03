@@ -436,3 +436,4 @@
 {"date": "2026-08-03T23:12:45Z", "fixed": [], "full": false, "new_red": [], "sha": "083e60f1b09c5a0142b10ba37dd09f74f261b6fd", "tier": "native", "verdict": "GREEN", "wall": 115.1}
 {"date": "2026-08-03T23:15:30Z", "fixed": [], "full": false, "new_red": [], "sha": "2501060cf95b8c7220a72af7f857268f4be63c37", "tier": "native", "verdict": "GREEN", "wall": 115.6}
 {"date": "2026-08-03T23:22:20Z", "fixed": ["test-nilpy#src:test/test_nilpy_class_return.npy"], "full": true, "new_red": [], "sha": "2501060cf95b8c7220a72af7f857268f4be63c37", "tier": "full", "verdict": "GREEN", "wall": 400.9}
+{"date": "2026-08-03T23:27:10Z", "fixed": [], "full": false, "new_red": [], "sha": "2501060cf95b8c7220a72af7f857268f4be63c37", "tier": "opt", "verdict": "GREEN", "wall": 283.2}
