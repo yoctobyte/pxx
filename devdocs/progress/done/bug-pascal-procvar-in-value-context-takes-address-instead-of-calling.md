@@ -166,4 +166,4 @@ assignment form, so [[feature-real-dynlib-loader]] item (d) is unblocked by this
 alone; the end-to-end TLS handshake check belongs there.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING.
+- 2026-08-03 — resolved, commit f14a4679c.
