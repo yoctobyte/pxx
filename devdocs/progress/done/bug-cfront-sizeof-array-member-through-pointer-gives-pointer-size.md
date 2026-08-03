@@ -2,7 +2,7 @@
 track: C
 prio: 85
 type: bug
-status: working
+status: done
 owner: claude-C@opus5
 ---
 
@@ -122,3 +122,45 @@ The cause is `sizeof`, and only through `->`.
 smaller than a pointer, through one and several levels of `->`, matching gcc;
 plus the overflow probe above showing the adjacent field intact. A gcc-built
 pdfgen oracle comparison on `/CreationDate` is the end-to-end check.
+
+## Resolution 2026-08-03 (claude-C@opus5)
+
+`ParseCSizeof`'s member path handled exactly ONE link. `->` and `.` both lex as
+`tkDot` (clexer maps `->` to it), so `sizeof(d.info->date)` matched `d` `.`
+`info`, sized `info` — a pointer, 8 — and the balanced-`)` scan swallowed
+`->date` without anyone noticing. Direct `.` was right, which is why the obvious
+test passed.
+
+Rewritten as a **walk over the whole chain**: at each link, if another `tkDot`
+follows the field, step into that field's record (`RecFieldPtrElemRec` for a
+pointer field, `RecFieldRecId` for a record one) and continue; otherwise run the
+existing terminal computation, which already handled the array / pointer /
+record / `[i]`-element cases correctly. A link that is neither a record nor a
+pointer-to-record ends the walk with `recId = REC_NONE`, leaving the default
+pointer-size answer rather than a confidently wrong one.
+
+### Verified against gcc
+
+Every row of the ticket's tables, diffed against a gcc build of the same source:
+
+| | before | after | gcc |
+| --- | --- | --- | --- |
+| `sizeof(d.info->date)` | 8 | **64** | 64 |
+| `sizeof(pd->info->date)` | 8 | **64** | 64 |
+| `sizeof(h.s->buf)` (char[4]) | 8 | **4** | 4 |
+| `guard` after the memset | 0x58585858 | **0x41414141** | 0x41414141 |
+
+End-to-end, the ticket's oracle: vendored pdfgen built with pxx now writes
+`/CreationDate (D:20260803124231Z)` — 15 chars, same shape as the gcc-built
+oracle's `(D:20260803124220Z)` — where it used to write `(D:2026080)`.
+
+Regression test `test/csizeof_member_chain_through_pointer.c` (gated, exit 42):
+two/three/four-link chains, the smaller-than-a-pointer overflow probe with an
+adjacent-field guard, and an element-through-the-chain case
+(`sizeof(d.info->date)/sizeof(d.info->date[0])` = 64). It returns 42 under
+**both gcc and pxx**.
+
+`tools/gate.sh quick` GREEN (self-host fixedpoint, testmgr quick, FPC canary).
+
+## Log
+- 2026-08-03 — resolved, commit a51cbe7d3.
