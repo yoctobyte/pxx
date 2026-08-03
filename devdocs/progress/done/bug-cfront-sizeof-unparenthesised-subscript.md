@@ -87,4 +87,4 @@ Pinned by `test/csizeof_postfix_unparen.c` (rc 42 under both gcc and pxx), wired
 into the C suite.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING.
+- 2026-08-03 — resolved, commit ef633ac10.
