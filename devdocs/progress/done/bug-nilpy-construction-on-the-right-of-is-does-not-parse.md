@@ -148,4 +148,4 @@ level, a genuinely-True identity, a different class on the right (identity,
 not a type test), and `==` still constructing. `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING-COMMIT.
+- 2026-08-03 — resolved, commit 94971ff0b.
