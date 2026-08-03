@@ -74,6 +74,20 @@ without it a `dlsym`'d `double dtwice(double)` called through the type returns
 also mark a procedural type C-ABI is a smaller question — on the supported
 targets they would all mean the same thing as `cdecl`.
 
+## Sequencing — deliberately left at prio 35
+
+User, 2026-08-03, on whether to raise it: *"nah don't bother we will get there
+once we start working on windows target."*
+
+That is the right pairing: `stdcall` and `safecall` are Windows/COM spellings,
+so the sources that trip over this are the ones a Windows port brings in.
+Picking it up alongside [[feature-port-windows-pe]] also answers the open
+sub-question here — whether the non-`cdecl` spellings should *mark* a procedural
+type C-ABI — with a real target where the answer might not be "same as cdecl".
+
+So the 35 is a decision, not neglect. Do not re-rank it on the grounds that it
+is a parse error; take it when Windows work starts.
+
 ## Gate
 
 Each of `cdecl`, `stdcall`, `safecall`, `register`, `pascal` and `mwpascal`
