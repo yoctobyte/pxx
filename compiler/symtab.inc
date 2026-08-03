@@ -1452,6 +1452,18 @@ begin
         Result := BuiltinRecFieldType(rec, i);
         Exit;
       end;
+    { A BUILTIN record's field names are compiler-authored, so a miss is always
+      a typo — never a legitimate probe. Falling through used to return the
+      tyInteger-at-offset-0 default, which STORES to the wrong offset: writing
+      `Procs[i].Params[j].ProcSig` (TParam has no such field) clobbered a
+      neighbouring field and segfaulted an unrelated NilPy test, with no
+      diagnostic. Only the FPC seed canary caught it.
+
+      RequireRecMember cannot cover this: it is gated on recId >= REC_UCLASS_BASE
+      and the compiler's own TSymbol/TParam/TProc are builtin records (6/7/8),
+      and the statement-lvalue path does not call it at all.
+      bug-pascal-unknown-record-field-accepted-in-compiler-source }
+    Error('"' + field + '": no such member on this record/class');
   end
   else if rec >= REC_UCLASS_BASE then
   begin
