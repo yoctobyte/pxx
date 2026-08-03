@@ -1955,6 +1955,53 @@ begin
       Ord(tkPlus), 0, Ord(tyPointer));
 end;
 
+{ ===== {$MODE DELPHI}: a bare procvar in a VALUE context is CALLED ===========
+  A procedural variable named where a VALUE is wanted must be called; taking its
+  address is what `@fp` is for. `fp()` was already right, so the two spellings
+  disagreed, and the wrong one is what Delphi-family code writes — every dynamic
+  binding layer is "load a function pointer, wrap it in a function that calls
+  it". The wrong value is a VALID POINTER, so nothing errors: Synapse handed
+  `@TLS_method` to SSL_CTX_new and libssl died far away.
+
+  DELPHI MODE ONLY, and that is the whole point of the flag. Measured against
+  FPC 3.2.2, same program in each mode:
+
+    context                          $MODE FPC / OBJFPC   $MODE DELPHI
+    p := fp        (p: Pointer)      address              CALL
+    Int64(fp)      (cast)            address              CALL
+    Takes(fp)      (Pointer param)   address              CALL
+    fp = nil / fp = fp2              address compare      CALL both
+    Takes(fp)      (procvar param)   address              address
+    Assigned(fp), @fp                address              address
+
+  So FPC/OBJFPC never auto-call, and pxx must not either — this project targets
+  FPC, with Delphi behaviour only under {$MODE DELPHI}.
+
+  `sinkIsProcVar` is the caller's answer to "does this context want the procvar
+  ITSELF?". Callers that cannot tell must pass True: suppressing is always safe,
+  auto-calling when the sink wanted the pointer is a silent wrong value.
+  bug-pascal-procvar-value-context-outside-assignment }
+function IRProcVarAutoCall(n: Integer; sinkIsProcVar: Boolean): Integer;
+var sym, sig, callNode: Integer;
+begin
+  Result := n;
+  if sinkIsProcVar or (not DelphiMode) then Exit;
+  if (n < 0) or (ASTKind[n] <> AN_IDENT) then Exit;   { `@fp` is AN_ADDR, `fp()` already AN_CALL_IND }
+  sym := Integer(ASTIVal[n]);
+  if (sym < 0) or (sym >= SymCount) then Exit;
+  sig := SymProcSig[sym];
+  if (sig < 0) or (sig >= ProcCount) then Exit;
+  { A bare name supplies no arguments, so a signature WITH parameters can never
+    be an auto-call; and a procedure has no value to yield. }
+  if (Procs[sig].ParamCount <> 0) or (not Procs[sig].IsFunc) then Exit;
+  callNode := AllocNode(AN_CALL_IND);
+  ASTIVal[callNode] := sig;
+  ASTLeft[callNode] := -1;                { no arguments }
+  ASTRight[callNode] := n;                { callee = the procvar value }
+  ASTTk[callNode] := Ord(Procs[sig].RetType);
+  Result := callNode;
+end;
+
 function IRLowerCallArg(cpi: Integer; pathIdx: Integer; argAST: Integer; isRefArg: Boolean): Integer;
 var argTk: TTypeKind;
     needTemp: Boolean;
@@ -1971,7 +2018,26 @@ var argTk: TTypeKind;
     caRecName: Integer; caField: AnsiString; oaEligible: Boolean;
   coerceParamSym, coerceIntfCi, coerceCast: Integer;
   arcArg1, arcArg2, arcCall: Integer;
+  pvSinkIsProcVar: Boolean;
 begin
+  { {$MODE DELPHI}: a bare procvar ARGUMENT is called when the parameter wants a
+    value, and passed as-is when the parameter is itself proc-typed — measured
+    both ways against FPC. Computed with explicit ifs rather than a chained
+    `or`, so Procs[cpi].Params[pathIdx] is never touched with an out-of-range
+    index whatever the dialect's boolean-evaluation order. A var/out parameter
+    binds the variable itself, never a call result, so it always suppresses. }
+  pvSinkIsProcVar := True;
+  if (not isRefArg) and (cpi >= 0) and (cpi < ProcCount) and
+     (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) then
+  begin
+    { ProcParamProcSig, not the parameter's SYMBOL: a param symbol is a local
+      that does not outlive the callee's scope, and RegisterProc leaves
+      Params[].SymIdx = -1, so a caller has no way back to it. The per-proc
+      parallel array persists — see the write site in parser.inc's param loop. }
+    pvSinkIsProcVar := (ProcParamProcSig[cpi * MAX_PROC_PARAMS + pathIdx] >= 0);
+  end;
+  argAST := IRProcVarAutoCall(argAST, pvSinkIsProcVar);
+
   { A WideChar VALUE passed to a string parameter converts to its UTF-8
     encoding (fpjson's `UTF8Encode(WideChar(U1))`). Without this the 16-bit
     ordinal was retained AS A STRING POINTER by the managed-arg path — silent
@@ -4149,7 +4215,6 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     vuArgProc, vuArgAddr, vuArgNode: Integer;   { `return <variant>` -> class via pyvarobj }
     fdName: string;                 { NilPy floor-div/mod helper being called }
     pvName: string;                 { NilPy variant-dispatch builtin }
-    pvarRhsSym, pvarLhsSym, pvarSig, pvarCall: Integer;   { bare procvar in a value context -> indirect call }
     pvTk: TTypeKind;
     fdTk: TTypeKind;
     intfCallCi, intfSelfSym, intfImtSym: Integer;   { single-pointer interface call }
@@ -5058,6 +5123,10 @@ begin
 
     AN_PTR_CAST:
     begin
+      { {$MODE DELPHI}: `Int64(fp)` / `PtrUInt(fp)` cast the procvar's CALL
+        RESULT. A cast never wants the procvar itself — `@fp` is how you take
+        the address — so the operand is not a procvar sink. }
+      ASTLeft[node] := IRProcVarAutoCall(ASTLeft[node], False);
       castTk := IntToTypeKind(ASTTk[node]);
       if (castTk = tyString) or (castTk = tyAnsiString) then
       begin
@@ -5686,6 +5755,18 @@ begin
 
     AN_BINOP:
     begin
+      { {$MODE DELPHI}: `fp = nil` and `fp = fp2` compare the CALL RESULTS, not
+        the addresses — measured against FPC, which does the opposite in
+        FPC/OBJFPC mode. To compare addresses in Delphi mode you write `@fp`.
+        A comparison never wants the procvar itself, so neither operand is a
+        procvar sink. }
+      if ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
+         (ASTSLen[node] <> PAS_BINOP_ASSIGNED) then
+      begin
+        ASTLeft[node]  := IRProcVarAutoCall(ASTLeft[node], False);
+        ASTRight[node] := IRProcVarAutoCall(ASTRight[node], False);
+      end;
+
       { Both operand types provable and the pair meaningless: say so now rather
         than letting the runtime helper raise when (and if) the line executes.
         A warning, not an error — see IRPyNumStrClash. }
@@ -6509,38 +6590,18 @@ begin
         here — every syntactic form of assignment funnels through this node, so
         one rule covers them all instead of ~20 assignment sites.
 
-        Deliberately conservative, because "value context" has real exceptions
-        (`fp := f2`, `@fp`, `Assigned(fp)`, a procvar argument) and a wrong call
-        here would be as silent as the bug:
-          - the RHS must be a BARE procvar identifier (`@fp` is AN_ADDR, `fp()`
-            is already AN_CALL_IND — neither matches);
-          - its signature must take NO parameters, since a bare name supplies
-            none;
-          - the LHS must be an identifier we can POSITIVELY see is not itself
-            proc-typed, so `fp := f2` keeps assigning the pointer and a field or
-            indexed target is left alone rather than guessed at.
+        The rule and its exceptions live in IRProcVarAutoCall — including that
+        this is DELPHI-mode only: FPC and OBJFPC mode pass the address here, and
+        that difference is measured, not assumed.
         bug-pascal-procvar-in-value-context-takes-address-instead-of-calling }
-      if (ASTKind[ASTRight[node]] = AN_IDENT) and (ASTKind[ASTLeft[node]] = AN_IDENT) then
-      begin
-        pvarRhsSym := Integer(ASTIVal[ASTRight[node]]);
-        pvarLhsSym := Integer(ASTIVal[ASTLeft[node]]);
-        if (pvarRhsSym >= 0) and (pvarRhsSym < SymCount) and
-           (pvarLhsSym >= 0) and (pvarLhsSym < SymCount) and
-           (SymProcSig[pvarRhsSym] >= 0) and (SymProcSig[pvarLhsSym] < 0) then
-        begin
-          pvarSig := SymProcSig[pvarRhsSym];
-          if (pvarSig >= 0) and (pvarSig < ProcCount) and
-             (Procs[pvarSig].ParamCount = 0) and Procs[pvarSig].IsFunc then
-          begin
-            pvarCall := AllocNode(AN_CALL_IND);
-            ASTIVal[pvarCall] := pvarSig;
-            ASTLeft[pvarCall] := -1;                 { no arguments }
-            ASTRight[pvarCall] := ASTRight[node];    { callee = the procvar value }
-            ASTTk[pvarCall] := Ord(Procs[pvarSig].RetType);
-            ASTRight[node] := pvarCall;
-          end;
-        end;
-      end;
+      { The LHS is the SINK. Only an identifier we can positively read tells us
+        whether it is proc-typed; anything else (field, index, deref) is treated
+        as a procvar sink, i.e. left alone, rather than guessed at. }
+      ASTRight[node] := IRProcVarAutoCall(ASTRight[node],
+                          (ASTKind[ASTLeft[node]] <> AN_IDENT) or
+                          (Integer(ASTIVal[ASTLeft[node]]) < 0) or
+                          (Integer(ASTIVal[ASTLeft[node]]) >= SymCount) or
+                          (SymProcSig[Integer(ASTIVal[ASTLeft[node]])] >= 0));
 
       { FPC-parity: two enum TYPES are distinct types with no implicit conversion, so
         `aColor := banana` is an error, not a reinterpretation of the ordinal. It used to

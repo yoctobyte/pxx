@@ -571,6 +571,14 @@ const
     than rebound to a new list the caller never sees
     (bug-nilpy-augmented-add-on-variant-list-is-not-in-place). }
   PY_BINOP_AUGADD = 2;
+  { `Assigned(x)` desugars at PARSE time into the SAME `x <> 0` AN_BINOP that
+    `x <> nil` produces — but FPC treats the two OPPOSITELY for a procedural
+    variable: `Assigned(fp)` tests the pointer in every mode, while `fp <> nil`
+    under {$MODE DELPHI} CALLS fp and tests the result. Indistinguishable at
+    lowering, so the Assigned form is tagged here (ASTSLen, the binop's spare
+    marker field, as PY_BINOP_AUGADD already uses).
+    bug-pascal-procvar-value-context-outside-assignment }
+  PAS_BINOP_ASSIGNED = 3;
 
   VT_EMPTY   = 0;   { unassigned slot; payload ignored }
   VT_INT     = 1;   { payload = sign-extended Int64 }
@@ -1475,6 +1483,7 @@ var
   ProcParamIsConst : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param declared `const` (read-only by-ref). Persists because param syms are reused across procs. At a call site, a `const` record param may bind a non-lvalue temporary (FPC behaviour) — the temp is materialized into a hidden local and its address passed; a `var`/`out` param still requires a true lvalue for write-back. }
   ProcParamExplicitByRef : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param was EXPLICITLY declared by-ref (`var`/`out`/`const`) at the source level, before the >8-byte record ABI forces IsRef. Lets a call site tell a genuine `var`/`out` record param (needs a real lvalue for write-back) from a plain by-value record passed by-ref only for ABI (a temporary is fine — the callee copies). const records carry their own ProcParamIsConst flag. }
   ProcParamCapRef : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { NilPy: this trailing CAPTURE parameter stands for an enclosing local the nested body declares `nonlocal`, so it is passed by REFERENCE and a write lands in the enclosing frame. Persists because the def's body is parsed later, and that parse rebuilds Params[].IsRef from the header types alone. }
+  ProcParamProcSig : array[0..MAX_PARAM_DEPTHS-1] of Integer; { param is PROCEDURAL: signature Procs[] index, -1 = not proc-typed. A PARALLEL ARRAY rather than a TParam field, following ProcParamUntyped below — and because a param SYMBOL cannot answer this from a caller: RegisterProc leaves Params[].SymIdx = -1 and the symbol does not outlive the callee's scope. Read by IRProcVarAutoCall's call-argument sink. }
   ProcParamUntyped : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param declared untyped (`var x`/`const x`/`out x`, no type) — an untyped by-ref param. Overload matching accepts ANY argument type for this slot; the caller passes the argument's address. Underpins Move/FillChar-style routines. }
   ProcParamHasDefault : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param has a default value (`b: Integer = 10`). Trailing params only. A call omitting trailing args supplies these; overload matching accepts nArgs in [required..ParamCount]. }
   ProcParamElemRowLen : array[0..MAX_PARAM_DEPTHS-1] of Integer; { open-array param whose element is a named FIXED array (`a: array of T`): the row's flattened element count; 0 = scalar element. Drives the call-site `[..]` ctor stride and static-array copy-in count. }

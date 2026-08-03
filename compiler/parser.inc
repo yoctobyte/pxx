@@ -11793,6 +11793,9 @@ begin
         left := AllocNode(AN_INT_LIT); ASTIVal[left] := 0; ASTTk[left] := Ord(tyPointer);
         CurASTNode := AllocNode(AN_BINOP); ASTIVal[CurASTNode] := Ord(tkNeq);
         ASTLeft[CurASTNode] := node; ASTRight[CurASTNode] := left; ASTTk[CurASTNode] := Ord(tyBoolean);
+        { Tag it: `Assigned(fp)` must keep testing the POINTER even in Delphi
+          mode, where the identical `fp <> nil` node calls fp instead. }
+        ASTSLen[CurASTNode] := PAS_BINOP_ASSIGNED;
         LastExprTk := tyBoolean;
         Exit;
       end;
@@ -26798,6 +26801,17 @@ begin
       { method-pointer param ({Code,Data} record, `of object` type): callable —
         Compare(a, b) inside the body must see the signature (fgl QuickSort) }
       SymProcSig[idx] := ptypesProcSig[i];
+    { Record the parameter's procedural signature on the PROC entry too, not only
+      on the parameter's symbol. A param symbol is a local: RegisterProc leaves
+      Params[].SymIdx = -1 and the symbol itself does not outlive the callee's
+      scope, so a CALLER lowering `Takes(fp)` has no way back to it.
+      A PARALLEL ARRAY, like ProcParamUntyped: TParam has no ProcSig field.
+      Consumer: IRProcVarAutoCall's call-argument sink (Delphi-mode
+      bare-procvar auto-call), which must pass `fp` untouched to a proc-typed
+      parameter and CALL it for any other.
+      bug-pascal-procvar-value-context-outside-assignment }
+    ProcParamProcSig[procIdx * MAX_PROC_PARAMS + i] := ptypesProcSig[i];
+
     { feature-a-typeref-migrate-consumers: this per-param body has several
       independent mutation points above (ArrLen/SymDynDepth, ElemType/
       ElemRecName, RecName, PtrElemTk/PtrElemRec, SymProcSig) — resync once

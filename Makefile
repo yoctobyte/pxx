@@ -2467,6 +2467,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_overload_no_narrowing26)" = "$$(printf 'longint 5\nbyte 200\nword 40000\nlongint 100000\nint64 5000000000\nbyte 200\nword 40000\nbyte 7\n')"
 	./$(COMPILER) --mimic-fpc test/test_procvar_value_context.pas /tmp/test_procvar_value_context26
 	test "$$(/tmp/test_procvar_value_context26)" = "procvar-value-context OK"
+	./$(COMPILER) --mimic-fpc test/test_procvar_fpc_mode.pas /tmp/test_procvar_fpc_mode26
+	test "$$(/tmp/test_procvar_fpc_mode26)" = "procvar-fpc-mode OK"
 	./$(COMPILER) test/test_managed_record_temp_init.pas /tmp/test_managed_record_temp_init26
 	test "$$(/tmp/test_managed_record_temp_init26)" = "$$(printf '5! = 120\n5! = 120\n6! = 720')"
 	./$(COMPILER) test/hello.pas /tmp/hello26

@@ -5386,6 +5386,7 @@ begin
     Procs[ProcCount].Params[i].Name     := pnames[i];
     Procs[ProcCount].Params[i].TypeKind := ptypes[i];
     Procs[ProcCount].Params[i].SymIdx   := -1;
+    ProcParamProcSig[ProcCount * MAX_PROC_PARAMS + i] := -1;   { not proc-typed unless the frontend says so }
     Procs[ProcCount].Params[i].IsArray  := False;
     { C struct-by-value params use the by-ref ABI (an 8-byte pointer slot the
       callee derefs; the caller copies to a temp and passes &temp — see cparser
