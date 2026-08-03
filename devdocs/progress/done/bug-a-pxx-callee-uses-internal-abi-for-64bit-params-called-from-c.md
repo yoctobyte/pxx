@@ -123,4 +123,4 @@ separate gap — worth its own ticket if the callback story is picked up. What
 this ticket was about, the register disagreement, is gone.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING.
+- 2026-08-03 — resolved, commit 0674a655e.
