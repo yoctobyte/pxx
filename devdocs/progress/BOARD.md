@@ -44,11 +44,12 @@ lives in git, not in a timestamp._
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 
-## backlog (211)
+## backlog (210)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-const-variant-arg-expression-fails-outside-pyexprmode | A | 30 | bug | `obj.method(a + b)` to a `const Variant` param fails to parse OUTSIDE NilPy | — |
+| bug-a-float-literal-lexer-is-not-correctly-rounded | A | 65 | bug | A float LITERAL is up to 1 ULP away from the nearest double — `1e-292` in source is not the same number as `float(\"1e-292\")` in the same program. 23 of 490 sampled literals are wrong. Affects every frontend | — |
 | bug-a-integer-literal-not-typed-by-its-value-for-overload-resolution | A | 45 | bug | An untyped integer literal always types as LongInt (or Int64 if it does not fit), so overload resolution picks a different candidate than FPC: hi($1234) gives 0\|4660 where FPC gives 18\|52. Values are no longer truncated (that half is fixed) — this is the remaining FPC-parity gap. | — |
 | bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c | A | 40 | bug | The caller side now follows the C ABI for 64-bit arguments to external functions, but a pxx routine CALLED FROM C still spills them with the internal packed convention — so on xtensa, where the C ABI skips to an even register, a C caller and a pxx callee would disagree. Latent: nothing crosses that way today. | — |
 | bug-a-runtime-variant-heap-grows-unbounded | A | 50→55 | bug |  | — |
@@ -73,9 +74,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-def-return-coerces-a-float-to-the-inferred-int-result | N | 55 | bug | A def whose result type was inferred (or annotated) as int TRUNCATES a float it returns: `def g() -> int: v = 1; v = 2.5; return v` gives 2 where CPython gives 2.5. Python annotations are not enforcement. Pinned returned the raw IEEE BITS (4612811918334230528) for the same program — improved to truncation by the widen-binding fix, not resolved by it. | — |
 | bug-nilpy-dict-mutation-during-iteration-is-unobserved-not-raised | N | 35 | bug | Mutating a dict while iterating it is silently unobserved; CPython raises RuntimeError 'dictionary changed size during iteration' | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
-| bug-nilpy-float-of-a-string-is-not-correctly-rounded | N | 55 | bug | `float(\"1e308\")` is not the same double as the literal `1e308`. pyfloat_parse reconstructs with FLOAT arithmetic (intPart/frac/scale as Doubles), so it is not correctly rounded — 3 of 6 hard inputs disagree with pxx's own literals. Silent: the value is close, just not the right double. | — |
 | bug-nilpy-float-print-loses-precision-vs-cpython | N | 40 | bug | Float printing loses the last 1-2 significant digits vs CPython's shortest round-trip repr | — |
-| bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip | N | 60 | bug | print(float) does not use Python's shortest-round-trip repr: 1/3 loses a digit, 0.1+0.2 prints 0.3 (hiding the error), 1e-20 prints WRONG DIGITS (1.000000000000001e-20), and the scientific-notation threshold differs (3e-05 vs 0.00003) | — |
 | bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip | N | 20 | bug | `print(1e-20)` prints `0.0` — NilPy's float repr has no small-magnitude exponential form | — |
 | bug-nilpy-for-else-and-while-else-not-supported | N | 30 | bug | The `else` clause on a for/while loop does not parse — `for ... else:` fails with 'expected expression' at the else | — |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
@@ -366,7 +365,7 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1250)
+## done (1252)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -778,6 +777,8 @@ lives in git, not in a timestamp._
 | bug-nilpy-eq-dunder-ignored | N | 70 | bug | `__eq__` is ignored — `==` on user objects compares identity | — |
 | bug-nilpy-escaping-closure-captures-unbound-unless-arity-is-one | N | 65 | bug | A returned closure reads GARBAGE for its captures unless it takes exactly one argument | — |
 | bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory | N | 75 | bug | `f.write()` silently writes nothing, and once a "w" open exists, `print(f.read())` dumps RTTI MEMORY to stdout | — |
+| bug-nilpy-float-of-a-string-is-not-correctly-rounded | N | 55 | bug | `float(\"1e308\")` is not the same double as the literal `1e308`. pyfloat_parse reconstructs with FLOAT arithmetic (intPart/frac/scale as Doubles), so it is not correctly rounded — 3 of 6 hard inputs disagree with pxx's own literals. Silent: the value is close, just not the right double. | — |
+| bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip | N | 60 | bug | print(float) does not use Python's shortest-round-trip repr: 1/3 loses a digit, 0.1+0.2 prints 0.3 (hiding the error), 1e-20 prints WRONG DIGITS (1.000000000000001e-20), and the scientific-notation threshold differs (3e-05 vs 0.00003) | — |
 | bug-nilpy-float-times-string-hangs | N | 65 | bug | `2.5 * "ab"` hangs forever | — |
 | bug-nilpy-floor-div-assign-is-true-division | N | 55 | bug | `self.n //= v` performs TRUE division — 25 //= 3 gives 8.333… instead of 8. The `//=` token is folded onto the same binop as `/=` | — |
 | bug-nilpy-for-variable-reused-after-a-non-string-binding-iterates-garbage | N | 70 | bug | A `for` variable that was previously bound to a non-string value iterates GARBAGE | — |
@@ -1665,6 +1666,7 @@ lives in git, not in a timestamp._
 - [p 70] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 2)
 - [p 70] [T] bug-t-host-dependent-test-assertions-cross-distro
 - [p 70] [T] regression-optdiff-shard8-12
+- [p 65] [A] bug-a-float-literal-lexer-is-not-correctly-rounded
 - [p 65] [C] bug-cfront-undeclared-type-in-cast-treated-as-zero
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 65] [T] feature-t-host-roles-native-vs-qemu-topology
@@ -1672,7 +1674,6 @@ lives in git, not in a timestamp._
 - [p 65] [T] task-t-worktree-is-not-current-state
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
-- [p 60] [N] bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip
 - [p 60] [N] bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps
 - [p 60] [N] bug-nilpy-user-class-named-like-a-pylib-builtin-is-shadowed
 - [p 60] [T] bug-t-resolve-cites-a-sha-the-rebase-then-rewrites
@@ -1700,7 +1701,6 @@ lives in git, not in a timestamp._
 - [p 55] [C] bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [N] bug-nilpy-def-return-coerces-a-float-to-the-inferred-int-result
-- [p 55] [N] bug-nilpy-float-of-a-string-is-not-correctly-rounded
 - [p 55] [N] bug-nilpy-unary-numeric-dunders-return-raw-handle
 - [p 55] [T] bug-t-corpus-regex-invents-phantom-tree
 - [p 55] [P] compat-pascal-assert-halts-instead-of-raising-eassertionfailed

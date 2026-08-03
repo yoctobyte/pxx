@@ -3,6 +3,8 @@ track: N
 prio: 60
 type: bug
 summary: "print(float) does not use Python's shortest-round-trip repr: 1/3 loses a digit, 0.1+0.2 prints 0.3 (hiding the error), 1e-20 prints WRONG DIGITS (1.000000000000001e-20), and the scientific-notation threshold differs (3e-05 vs 0.00003)"
+status: done
+owner: claude-AN
 ---
 
 # Float printing is not Python's `repr` — six distinct divergences
@@ -337,3 +339,55 @@ the behaviour Python dropped in 2009 for silently lying.
 
 The duplication itself is filed as a separate, non-blocking concern:
 [[decide-builtin-and-library-code-sharing]].
+
+## Resolved 2026-08-03 — all six divergences gone, and `float(str)` with them
+
+Built as the decision specified: ~420 lines of `lib/rtl/sysutils.pas`'s exact
+decimal core copied into `compiler/builtin/pylib.pas` under a `Py` prefix (the
+only edit inside the copy is `IntToStr` becoming this layer's `StrInt(x, 0)`),
+`pyfloat_parse` reduced to Python's VALIDATION plus a call into the copied
+correctly-rounded parser, and `PyFloatRepr` / `PyFloatLayout` on top.
+
+One simplification against the code drafted on this ticket: `PyFloatSplit` is
+not needed. It existed to re-parse `FloatToStrExact`'s output back into
+(digits, decExp) — but `PyExDecDigits` + `PyExDecRound` produce exactly that
+pair directly, so the round-trip through a formatted string, and the copy of
+`FloatToStrExact` it would have required, both disappear. The round-trip check
+compares BITS via `PyExDecDoubleToBits`, as decided.
+
+### Measured
+
+Every row of this ticket's table, both notation thresholds from either side,
+subnormals, `DBL_MAX`, `-0.0`, inf/nan, the `float(str)` cases, Python's
+spelling rules (`1_000.5`, `3.`, `.5`, `+2.5`, `1E+2`, `-0.0`) and a round-trip
+assertion over the whole table: byte-identical to CPython
+(`test/test_nilpy_float_repr.npy`, wired into `make test-nilpy`).
+`gate.sh quick` GREEN, self-host fixedpoint byte-identical.
+
+### Anti-drift, as decided
+
+`lib/rtl/sysutils.pas` and `compiler/builtin/pylib.pas` each carry a header
+naming the other and saying CHANGE ONE, CHANGE BOTH.
+`test/lib_floattostr.pas` gained the shared value table (digits and round trip
+— the layouts differ by design), so the two cores are pinned from both sides
+with CPython as the oracle.
+
+### A 500-value random sweep found 23 divergences — and NONE of them are here
+
+A sweep of 400 random bit patterns plus a 1e-320..1e308 ladder disagreed with
+CPython on 23 values (`1e-292` printed `9.999999999999999e-293`). Measured
+rather than assumed: for exactly those 23, and only those,
+`float("<literal text>") != <the same literal>` **inside one pxx program** —
+so the correctly-rounded parser and the FLOAT LITERAL LEXER disagree, and it is
+the lexer that is 1 ULP off. That is `compiler/lexer.inc`'s `StrToDoubleBits`,
+the third float parser this ticket's decision explicitly declined to sweep
+along "until it has its own measurement". It now has one, filed as
+[[bug-a-float-literal-lexer-is-not-correctly-rounded]].
+
+The 23 are proof the new formatter is right, not wrong: a literal that is one
+ULP away from the intended value HAS a different shortest repr, and printing 17
+digits for it is the correct answer for the double actually in the program.
+
+## Log
+- 2026-08-03 — resolved.
+- 2026-08-03 — resolved, commit HEAD.

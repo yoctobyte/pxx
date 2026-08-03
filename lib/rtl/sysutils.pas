@@ -934,6 +934,19 @@ end;
 
 { ---- exact decimal expansion of a Double ---------------------------------
 
+  THIS CORE IS COPIED. `compiler/builtin/pylib.pas` carries a renamed copy of
+  everything from here down to ExDecRound, and of the correctly-rounded parser
+  closure below (ExDecCmp .. StrToFloatDef), because a builtin unit may not
+  `uses sysutils` — NilPy's unit scope is flat, so every name here would
+  collide in every NilPy program. Moving the core down into a shared builtin
+  unit was considered and rejected: library source has to stay STEPPABLE, and
+  stepping into FloatToStr should not walk you out of this file
+  (decide-nilpy-where-the-exact-decimal-float-core-lives).
+
+  CHANGE ONE, CHANGE BOTH. `test/lib_floattostr.pas` pins this copy and
+  `test/test_nilpy_float_repr.npy` pins the other, over a shared value table
+  with CPython as the oracle, so a drift between them fails a test.
+
   Every finite double IS a finite decimal, exactly. value = mant * 2^exp2 with
   mant a 53-bit integer, and 2^-k = 5^k * 10^-k, so the exact decimal form is
   the integer mant*5^k with the point pushed k places left (k = -exp2). For

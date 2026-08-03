@@ -5510,6 +5510,515 @@ begin
   Result := acc;
 end;
 
+{ ---- exact decimal core: A COPY of lib/rtl/sysutils.pas ------------------
+
+  The next ~420 lines are `ExDecMul` / `ExDecSplit` / `ExDecOfMant` /
+  `ExDecDigits` / `ExDecRound` and the correctly-rounded parser closure
+  (`ExDecCmp` .. `StrToFloatDef`) from `lib/rtl/sysutils.pas`, renamed with a
+  `Py` prefix and otherwise UNCHANGED — the only edit is `IntToStr` becoming
+  `StrInt(x, 0)`, which is this layer's spelling.
+
+  It is a copy on purpose, and the reason is not layering purity. A builtin
+  unit may not `uses sysutils` (NilPy's unit scope is flat, so every sysutils
+  name would collide in every NilPy program), and moving the core DOWN into a
+  shared builtin unit was rejected because library source has to stay
+  STEPPABLE: stepping into `FloatToStr` should not walk you out of
+  `sysutils.pas` into a unit you never asked about
+  (decide-nilpy-where-the-exact-decimal-float-core-lives, option B).
+
+  Reimplementing it was explicitly rejected too. Copy proven code; a second
+  exact-decimal implementation is this repo's recurring failure mode — two
+  readers of one construct that disagree — in its most numeric form.
+
+  It also does not ADD a disagreeing implementation, it removes one:
+  `pyfloat_parse` used to reconstruct with float arithmetic and was measurably
+  wrong (`float("1e308")`, `float("0.3333333333333333")` and
+  `float("2.2250738585072011e-308")` all differed from pxx's own literals). It
+  is now a thin wrapper over the copy below.
+
+  ANTI-DRIFT: `test/test_nilpy_float_repr.npy` and its Pascal sibling run both
+  implementations over the same table with CPython as the oracle, so a
+  divergence between this copy and sysutils' original is a test failure rather
+  than a discovery. Change one, change both. }
+
+
+{ ---- exact decimal expansion of a Double ---------------------------------
+
+  Every finite double IS a finite decimal, exactly. value = mant * 2^exp2 with
+  mant a 53-bit integer, and 2^-k = 5^k * 10^-k, so the exact decimal form is
+  the integer mant*5^k with the point pushed k places left (k = -exp2). For
+  exp2 >= 0 it is the plain integer mant*2^exp2. No approximation enters, so
+  every digit produced is a real digit of the value — which is exactly what the
+  normalise-in-doubles path in FloatToStrSig cannot do past 15, and why that
+  routine caps there.
+
+  Worst case is a denormal at exp2 = -1074: 5^1074 is 751 digits, times a
+  16-digit mantissa, so 767 digits. Those live little-endian in limbs of nine
+  decimal digits (base 10^9), grown by repeated multiply-by-small. Two chunk
+  sizes do the scaling: 5^13 and 2^30, the largest powers whose per-limb
+  product stays inside Int64 (10^9 * 5^13 is 1.2e18, well under 9.2e18). That
+  turns the worst case into ~83 passes over ~86 limbs instead of 1074 passes
+  over 767 single digits.
+
+  Base 10^9 rather than one digit per byte is a ~9x cut in the inner loop, and
+  it is the reason the exact path is affordable on BOTH sides: the decimal ->
+  double search below expands a candidate per comparison, so expansion cost is
+  multiplied by the search, not paid once. }
+const
+  PXX_PYEXDEC_LIMBS = 96;           { 9 digits each; 767 digits needs 86 }
+  PXX_PYEXDEC_BASE  = 1000000000;   { 10^9 }
+  PXX_PYEXDEC_P5_13 = 1220703125;   { 5^13 }
+  PXX_PYEXDEC_P2_30 = 1073741824;   { 2^30 }
+type
+  PyTExDecBuf   = array[0..PXX_PYEXDEC_LIMBS - 1] of Int64;
+  PyPExDecInt64 = ^Int64;
+
+{ buf := buf * f. f is small enough that limb*f + carry cannot leave Int64. }
+procedure PyExDecMul(var buf: PyTExDecBuf; var n: Integer; f: Int64);
+var i: Integer; t, carry: Int64;
+begin
+  carry := 0;
+  for i := 0 to n - 1 do
+  begin
+    t := buf[i] * f + carry;
+    buf[i] := t mod PXX_PYEXDEC_BASE;
+    carry := t div PXX_PYEXDEC_BASE;
+  end;
+  while (carry > 0) and (n < PXX_PYEXDEC_LIMBS) do
+  begin
+    buf[n] := carry mod PXX_PYEXDEC_BASE;
+    carry := carry div PXX_PYEXDEC_BASE;
+    n := n + 1;
+  end;
+end;
+
+{ Split a finite value into mant * 2^exp2 with mant an integer. Reads the
+  IEEE-754 fields directly; a denormal carries no implicit leading bit. }
+procedure PyExDecSplit(value: Double; var mant: Int64; var exp2: Integer);
+var bits, frac: Int64; be: Integer;
+begin
+  bits := PyPExDecInt64(@value)^;
+  be   := Integer((bits shr 52) and $7FF);
+  frac := bits and ((Int64(1) shl 52) - 1);
+  if be = 0 then
+  begin
+    mant := frac;
+    exp2 := -1074;
+  end
+  else
+  begin
+    mant := frac or (Int64(1) shl 52);
+    exp2 := be - 1075;
+  end;
+end;
+
+{ Exact digits of mant * 2^exp2: ds holds them most significant first with no
+  leading zero, and decExp is the power of ten the first digit stands for (so
+  267.5 gives '2675' and decExp = 2). Taking mant/exp2 rather than a Double is
+  deliberate — the decimal->double side needs the exact expansion of MIDPOINTS
+  between adjacent doubles, and a midpoint needs 54 bits, so it is not a
+  Double. mant = 0 yields '0'. }
+procedure PyExDecOfMant(mant: Int64; exp2: Integer;
+                      var ds: AnsiString; var decExp: Integer);
+var
+  buf: PyTExDecBuf;
+  n, i, k, fracDigits: Integer;
+  lp: AnsiString;
+begin
+  n := 0;
+  while mant > 0 do
+  begin
+    buf[n] := mant mod PXX_PYEXDEC_BASE;
+    mant := mant div PXX_PYEXDEC_BASE;
+    n := n + 1;
+  end;
+  if n = 0 then begin buf[0] := 0; n := 1; end;
+  fracDigits := 0;
+  if exp2 >= 0 then
+  begin
+    k := exp2;
+    while k >= 30 do begin PyExDecMul(buf, n, PXX_PYEXDEC_P2_30); k := k - 30; end;
+    while k > 0 do begin PyExDecMul(buf, n, 2); k := k - 1; end;
+  end
+  else
+  begin
+    k := -exp2;
+    fracDigits := k;
+    while k >= 13 do begin PyExDecMul(buf, n, PXX_PYEXDEC_P5_13); k := k - 13; end;
+    while k > 0 do begin PyExDecMul(buf, n, 5); k := k - 1; end;
+  end;
+  while (n > 1) and (buf[n - 1] = 0) do n := n - 1;
+  { top limb unpadded (that is what drops the leading zeros), the rest padded
+    to the full nine so limb boundaries do not swallow interior zeros }
+  ds := StrInt(buf[n - 1], 0);
+  for i := n - 2 downto 0 do
+  begin
+    lp := StrInt(buf[i], 0);
+    while Length(lp) < 9 do lp := '0' + lp;
+    ds := ds + lp;
+  end;
+  decExp := Length(ds) - 1 - fracDigits;
+end;
+
+{ Exact digits of a finite Double, sign ignored. }
+procedure PyExDecDigits(value: Double; var ds: AnsiString; var decExp: Integer);
+var mant: Int64; exp2: Integer;
+begin
+  PyExDecSplit(value, mant, exp2);
+  PyExDecOfMant(mant, exp2, ds, decExp);
+end;
+
+{ Round an exact digit string to sig digits, half-to-EVEN on the exact
+  remainder (glibc's %.*g rule — and the remainder here really is exact, so
+  the tie case is a genuine tie rather than an artifact of scaling). A carry
+  out of the leading digit (999 -> 100) moves the decimal exponent. }
+procedure PyExDecRound(var ds: AnsiString; var decExp: Integer; sig: Integer);
+var i, c: Integer; up, rest: Boolean;
+begin
+  if Length(ds) <= sig then Exit;
+  up := False;
+  if ds[sig + 1] > '5' then up := True
+  else if ds[sig + 1] = '5' then
+  begin
+    rest := False;
+    for i := sig + 2 to Length(ds) do
+      if ds[i] <> '0' then begin rest := True; break; end;
+    if rest then up := True
+    else up := ((Ord(ds[sig]) - Ord('0')) mod 2) = 1;
+  end;
+  ds := Copy(ds, 1, sig);
+  if up then
+  begin
+    i := sig;
+    while i >= 1 do
+    begin
+      c := Ord(ds[i]) - Ord('0') + 1;
+      if c < 10 then begin ds[i] := Chr(Ord('0') + c); break; end;
+      ds[i] := '0';
+      i := i - 1;
+    end;
+    if i = 0 then
+    begin
+      ds := '1' + Copy(ds, 1, sig - 1);
+      decExp := decExp + 1;
+    end;
+  end;
+end;
+
+{ ---- decimal -> double, correctly rounded --------------------------------
+
+  The old parser accumulated in doubles: one rounding per fractional digit, and
+  10^e built by e successive multiplies (e up to 308, so the power itself was
+  tens of ULP off). That is at most an approximation of the nearest double, and
+  it is why exact 17-digit forms of 1/3, 1e-300, DBL_MAX and the denormals did
+  not read back. Correct rounding means landing on the nearest double every
+  time, so the value is reconstructed with the exact expansion above rather
+  than with float arithmetic. }
+
+{ Compare two exact decimals held as (digits, decExp) — digits most significant
+  first with no leading zero, decExp the power of ten the first digit stands
+  for. Both must be positive and nonzero. Shorter operands read as zero-padded,
+  so '25'/1 and '250'/1 compare equal (both are 25). }
+function PyExDecCmp(const a: AnsiString; ae: Integer;
+                  const b: AnsiString; be: Integer): Integer;
+var i, n: Integer; ca, cb: Char;
+begin
+  if ae <> be then
+  begin
+    if ae < be then Result := -1 else Result := 1;
+    Exit;
+  end;
+  n := Length(a);
+  if Length(b) > n then n := Length(b);
+  for i := 1 to n do
+  begin
+    if i <= Length(a) then ca := a[i] else ca := '0';
+    if i <= Length(b) then cb := b[i] else cb := '0';
+    if ca <> cb then
+    begin
+      if ca < cb then Result := -1 else Result := 1;
+      Exit;
+    end;
+  end;
+  Result := 0;
+end;
+
+function PyExDecBitsToDouble(b: Int64): Double;
+type PyPExDecDouble = ^Double;
+begin
+  Result := PyPExDecDouble(@b)^;
+end;
+
+function PyExDecDoubleToBits(d: Double): Int64;
+begin
+  Result := PyPExDecInt64(@d)^;
+end;
+
+{ A cheap approximation of int(ds) * 10^expo. This is float arithmetic and is
+  therefore wrong by some ULP — it is NEVER trusted, only used to seed the
+  bracket for the exact search, which then proves the answer. Getting it close
+  is purely a speed matter: the search costs one exact expansion per step, and
+  seeding turns a 63-step search over the whole bit range into a handful of
+  steps around the right answer. Powers of ten are applied by binary splitting
+  (at most nine multiplies) rather than one per decade. }
+function PyExDecEstimate(const ds: AnsiString; nd, expo: Integer): Double;
+var
+  sig: Int64;
+  i, k, e: Integer;
+  w: Double;
+  p10: array[0..8] of Double;
+begin
+  k := nd;
+  if k > 17 then k := 17;
+  sig := 0;
+  for i := 1 to k do sig := sig * 10 + Int64(Ord(ds[i]) - Ord('0'));
+  { digits we did not take are absorbed into the exponent }
+  e := expo + (nd - k);
+  w := sig * 1.0;
+  p10[0] := 1.0e1;   p10[1] := 1.0e2;   p10[2] := 1.0e4;   p10[3] := 1.0e8;
+  p10[4] := 1.0e16;  p10[5] := 1.0e32;  p10[6] := 1.0e64;  p10[7] := 1.0e128;
+  p10[8] := 1.0e256;
+  { the table spans 2^9-1 = 511 decades; anything past that is far outside the
+    double range and only has to land on the correct side of it }
+  if e > 511 then e := 511;
+  if e < -511 then e := -511;
+  if e > 0 then
+  begin
+    for i := 0 to 8 do
+      if (e and (1 shl i)) <> 0 then w := w * p10[i];
+  end
+  else if e < 0 then
+  begin
+    k := -e;
+    { divide rather than multiply by a negative power: keeps the intermediate
+      from overflowing on the way down }
+    for i := 0 to 8 do
+      if (k and (1 shl i)) <> 0 then w := w / p10[i];
+  end;
+  Result := w;
+end;
+
+{ The double nearest to the positive decimal (ds, decExp), correctly rounded,
+  ties to even.
+
+  For positive doubles the IEEE bit pattern increases monotonically with the
+  value, so "largest double <= D" is a plain ordered search over the bit
+  pattern — 63 steps, each comparing D against the candidate's EXACT decimal
+  expansion. There is no estimate here that could be wrong by an unknown number
+  of ULP; the search cannot land anywhere but the right pair of neighbours.
+
+  Then one decision between that double c and the next one up. Their midpoint is
+  exactly (2*mant + 1) * 2^(exp2 - 1) — one formula that holds everywhere,
+  including across a power-of-two boundary (where c = (2^53-1)*2^e and the next
+  is 2^52*2^(e+1)) and across the denormal/normal boundary, because incrementing
+  the bit pattern is exactly what both of those transitions are. The midpoint
+  needs 54 bits, which is why the expansion above takes a mantissa rather than a
+  Double.
+
+  Out-of-range inputs fall out correctly rather than needing a guard: below the
+  smallest denormal the search settles on bits 0 and the midpoint test rounds to
+  zero, and above DBL_MAX it settles on DBL_MAX whose "next up" bit pattern is
+  +Inf. }
+function PyExDecNearest(const ds: AnsiString; decExp, nd, expo: Integer): Double;
+var
+  lo, hi, mid, mant, maxbits, step, eb: Int64;
+  exp2, cmp: Integer;
+  cds, mds: AnsiString;
+  cexp, mexp: Integer;
+  c, est: Double;
+
+  { sign of exact(bits) - D }
+  function CmpBits(b: Int64): Integer;
+  var d: Double; xs: AnsiString; xe: Integer;
+  begin
+    d := PyExDecBitsToDouble(b);
+    if b = 0 then begin CmpBits := -1; Exit; end;   { 0 < D, D is positive }
+    PyExDecDigits(d, xs, xe);
+    CmpBits := PyExDecCmp(xs, xe, ds, decExp);
+  end;
+
+begin
+  { DBL_MAX = biased exponent 2046, mantissa all ones }
+  maxbits := (Int64(2046) shl 52) or ((Int64(1) shl 52) - 1);
+
+  { Seed from the float estimate, then widen by doubling steps until the
+    bracket provably straddles D. The estimate's error is never assumed —
+    if it is wildly wrong the doubling simply runs until it reaches the ends,
+    which is the unseeded search and still correct. }
+  est := PyExDecEstimate(ds, nd, expo);
+  if (est <> est) or (est >= 1.7976931348623157e308) then eb := maxbits
+  else if est <= 0.0 then eb := 0
+  else
+  begin
+    eb := PyExDecDoubleToBits(est);
+    if eb < 0 then eb := 0;
+    if eb > maxbits then eb := maxbits;
+  end;
+
+  lo := eb;
+  step := 1;
+  while (lo > 0) and (CmpBits(lo) > 0) do
+  begin
+    lo := lo - step;
+    if lo < 0 then lo := 0;
+    step := step * 2;
+  end;
+
+  hi := eb;
+  step := 1;
+  while (hi < maxbits) and (CmpBits(hi) < 0) do
+  begin
+    hi := hi + step;
+    if hi > maxbits then hi := maxbits;
+    step := step * 2;
+  end;
+
+  { largest bit pattern whose exact value is <= D }
+  while lo < hi do
+  begin
+    mid := lo + (hi - lo + 1) div 2;
+    if CmpBits(mid) <= 0 then lo := mid else hi := mid - 1;
+  end;
+
+  c := PyExDecBitsToDouble(lo);
+  if lo <> 0 then
+  begin
+    PyExDecDigits(c, cds, cexp);
+    if PyExDecCmp(cds, cexp, ds, decExp) = 0 then begin Result := c; Exit; end;
+  end;
+
+  PyExDecSplit(c, mant, exp2);
+  PyExDecOfMant(2 * mant + 1, exp2 - 1, mds, mexp);
+  cmp := PyExDecCmp(ds, decExp, mds, mexp);
+  if cmp > 0 then Result := PyExDecBitsToDouble(lo + 1)
+  else if cmp < 0 then Result := c
+  else if (mant mod 2) = 0 then Result := c          { exact tie -> even }
+  else Result := PyExDecBitsToDouble(lo + 1);
+end;
+
+function PyStrToFloatDef(const s: AnsiString; def: Double): Double;
+const
+  { every digit past this is beyond any midpoint's ~1080, so it can only break
+    a tie — which the sticky digit below does, without unbounded strings }
+  PyEXDEC_INMAX = 1200;
+var i, digit, e, k: Integer; c: Char; neg, eneg: Boolean;
+    w, p: Double; in_frac, started, estarted, sticky: Boolean;
+    ds: AnsiString; fracCount, nd, expo, lead: Integer; sig: Int64;
+begin
+  Result := def;
+  i := 1; neg := False; w := 0.0; in_frac := False; started := False;
+  ds := ''; fracCount := 0; sticky := False;
+  while (i <= Length(s)) and (s[i] = ' ') do i := i + 1;
+  if (i <= Length(s)) and ((s[i] = '-') or (s[i] = '+')) then
+  begin
+    if s[i] = '-' then neg := True;
+    i := i + 1;
+  end;
+  e := 0; eneg := False; estarted := True;
+  while i <= Length(s) do
+  begin
+    c := s[i];
+    if (c >= '0') and (c <= '9') then
+    begin
+      digit := Ord(c) - Ord('0');
+      if in_frac then fracCount := fracCount + 1;
+      { keep the digits themselves; the value is reconstructed exactly below }
+      if Length(ds) < PyEXDEC_INMAX then
+      begin
+        if (ds <> '') or (digit <> 0) then ds := ds + c;   { drop leading zeros }
+      end
+      else if digit <> 0 then
+        sticky := True;
+      started := True;
+      i := i + 1;
+    end
+    else if (c = '.') and (not in_frac) then
+    begin
+      in_frac := True;
+      i := i + 1;
+    end
+    else if ((c = 'e') or (c = 'E')) and started then
+    begin
+      { exponent: [+|-]digits to the END of the string ('1e0', '1.2E+003') }
+      i := i + 1;
+      if (i <= Length(s)) and ((s[i] = '-') or (s[i] = '+')) then
+      begin
+        if s[i] = '-' then eneg := True;
+        i := i + 1;
+      end;
+      estarted := False;
+      while i <= Length(s) do
+      begin
+        c := s[i];
+        if (c < '0') or (c > '9') then Exit;
+        e := e * 10 + (Ord(c) - Ord('0'));
+        estarted := True;
+        i := i + 1;
+      end;
+      if not estarted then Exit;
+    end
+    else
+      Exit;
+  end;
+  if not (started and estarted) then Exit;
+
+  { a dropped nonzero digit past the cap makes the value strictly greater than
+    the kept prefix — exactly what a sticky bit is for, and enough to settle any
+    tie, since a midpoint has far fewer significant digits than the cap }
+  if sticky then ds := ds + '1';
+
+  if ds = '' then                       { all digits were zero }
+  begin
+    w := 0.0;
+    if neg then w := -w;                { preserves -0.0 }
+    Result := w;
+    Exit;
+  end;
+
+  if eneg then e := -e;
+  { value = int(ds) * 10^expo }
+  expo := e - fracCount;
+  { trailing zeros move to the exponent — cheaper, and widens the fast path }
+  nd := Length(ds);
+  while (nd > 1) and (ds[nd] = '0') do begin nd := nd - 1; expo := expo + 1; end;
+  ds := Copy(ds, 1, nd);
+
+  { Fast path (Clinger): with the significand under 2^53 and |expo| <= 22, both
+    the significand and 10^|expo| are exactly representable, so a single
+    multiply or divide is a single rounding and is therefore already the
+    correctly rounded result. 10^k is built by repeated multiplication, which
+    is exact up to 10^22 — deliberately not a table of literals, since parsing
+    those literals is the very thing being fixed here. Covers the overwhelming
+    majority of real input (JSON numbers and the like). }
+  if (nd <= 15) and (expo >= -22) and (expo <= 22) then
+  begin
+    sig := 0;
+    for k := 1 to nd do sig := sig * 10 + Int64(Ord(ds[k]) - Ord('0'));
+    w := sig * 1.0;
+    p := 1.0;
+    if expo >= 0 then
+    begin
+      for k := 1 to expo do p := p * 10.0;
+      w := w * p;
+    end
+    else
+    begin
+      for k := 1 to -expo do p := p * 10.0;
+      w := w / p;
+    end;
+    if neg then w := -w;
+    Result := w;
+    Exit;
+  end;
+
+  { Slow path: exact reconstruction. decExp is the power of ten the first digit
+    stands for. }
+  lead := nd - 1 + expo;
+  w := PyExDecNearest(ds, lead, nd, expo);
+  if neg then w := -w;
+  Result := w;
+end;
+
 function pyfloat_any(const v: Variant): Double;
 var t: Int64;
 begin
@@ -5524,8 +6033,9 @@ begin
 end;
 
 function pyfloat_parse(const s: AnsiString): Double;
-var i, n, digits: Integer; neg, seenDot, seenExp: Boolean; body, lowbody: AnsiString;
-    intPart, frac, scale, expSign, expVal, infv: Double;
+var i, n, digits: Integer; seenDot, seenExp: Boolean;
+    body, lowbody, clean: AnsiString;
+    infv: Double;
 begin
   body := s;
   i := 1; n := Length(body);
@@ -5560,17 +6070,20 @@ begin
     Exit;
   end;
 
-  neg := False;
-  i := 1;
-  if (body[i] = '-') or (body[i] = '+') then
-  begin
-    neg := body[i] = '-';
-    Inc(i);
-  end;
-
-  intPart := 0; frac := 0; scale := 1;
+  { The loop below VALIDATES — Python's own rules about where a sign, a point,
+    an exponent and an underscore may appear, and which spellings raise
+    ValueError. It no longer computes the value: accumulating digit by digit in
+    doubles is one rounding per digit plus a 10^e built by e multiplies, which
+    is why float("1e308"), float("0.3333333333333333") and
+    float("2.2250738585072011e-308") all disagreed with pxx's own literals for
+    the same numbers. The accepted text is handed to the correctly-rounded
+    parser instead (bug-nilpy-float-of-a-string-is-not-correctly-rounded). }
+  clean := '';
+  for i := 1 to Length(body) do
+    if body[i] <> '_' then clean := clean + body[i];
   seenDot := False; seenExp := False; digits := 0;
-  expSign := 1; expVal := 0;
+  i := 1;
+  if (body[i] = '-') or (body[i] = '+') then Inc(i);
   while i <= Length(body) do
   begin
     if body[i] = '_' then begin Inc(i); Continue; end;
@@ -5585,42 +6098,21 @@ begin
       seenExp := True;
       Inc(i);
       if (i <= Length(body)) and ((body[i] = '-') or (body[i] = '+')) then
-      begin
-        if body[i] = '-' then expSign := -1;
         Inc(i);
-      end;
       if (i > Length(body)) or (body[i] < '0') or (body[i] > '9') then
         raise ValueError.Create('could not convert string to float');
       while (i <= Length(body)) and (body[i] >= '0') and (body[i] <= '9') do
-      begin
-        expVal := expVal * 10 + (Ord(body[i]) - Ord('0'));
         Inc(i);
-      end;
       Continue;
     end;
     if (body[i] < '0') or (body[i] > '9') then
       raise ValueError.Create('could not convert string to float');
     Inc(digits);
-    if seenDot then
-    begin
-      scale := scale * 10;
-      frac := frac + (Ord(body[i]) - Ord('0')) / scale;
-    end
-    else
-      intPart := intPart * 10 + (Ord(body[i]) - Ord('0'));
     Inc(i);
   end;
   if digits = 0 then
     raise ValueError.Create('could not convert string to float');
-
-  Result := intPart + frac;
-  if seenExp then
-    while expVal > 0 do
-    begin
-      if expSign > 0 then Result := Result * 10 else Result := Result / 10;
-      expVal := expVal - 1;
-    end;
-  if neg then Result := -Result;
+  Result := PyStrToFloatDef(clean, 0.0);
 end;
 
 function PyDigitVal(c: Char): Integer;
@@ -7530,9 +8022,108 @@ end;
   happens to be "Inf" must survive untouched, so every caller gates on the
   variant tag being a float before routing here
   (bug-nilpy-inf-and-nan-print-pascal-spelled). }
-function PyFloatStr(d: Double): AnsiString;
-var bits: Int64;
+{ Lay `digits` / `decExp` out the way CPython's repr does. The rule is one
+  comparison on `decpt`, the position of the decimal point: exponential when
+  `decpt <= -4` or `decpt > 16`, fixed otherwise — which is NOT Pascal's window
+  ([-3, sig], and dependent on the requested precision), so PyExDecLayout's
+  sibling in sysutils cannot be borrowed for it.
+
+  Two details that are part of the format and easy to miss: a fixed-form float
+  ALWAYS shows a point (`2.0`, `100.0` — CPython's Py_DTSF_ADD_DOT_0), and the
+  exponent is signed with at LEAST two digits (`3e-05`, `1e+16`, but
+  `1.5e+300` — no padding past two). }
+function PyFloatLayout(const digits: AnsiString; decExp: Integer): AnsiString;
+var decpt, i, ae: Integer; s, es: AnsiString;
 begin
+  decpt := decExp + 1;
+  if (decpt <= -4) or (decpt > 16) then
+  begin
+    s := Copy(digits, 1, 1);
+    if Length(digits) > 1 then s := s + '.' + Copy(digits, 2, Length(digits) - 1);
+    if decExp < 0 then begin s := s + 'e-'; ae := -decExp; end
+    else begin s := s + 'e+'; ae := decExp; end;
+    es := StrInt(ae, 0);
+    if Length(es) < 2 then es := '0' + es;
+    Result := s + es;
+  end
+  else if decpt <= 0 then
+  begin
+    s := '0.';
+    for i := 1 to -decpt do s := s + '0';
+    Result := s + digits;
+  end
+  else if decpt >= Length(digits) then
+  begin
+    s := digits;
+    for i := Length(digits) + 1 to decpt do s := s + '0';
+    Result := s + '.0';
+  end
+  else
+    Result := Copy(digits, 1, decpt) + '.' +
+              Copy(digits, decpt + 1, Length(digits) - decpt);
+end;
+
+{ Python's `repr` of a float: the SHORTEST decimal string that reads back as the
+  same double, laid out by Python's rules. `str` and `repr` are the same function
+  in Python 3, so this serves both.
+
+  Shortest is found by trying precisions and CHECKING the round trip, so the
+  answer is correct by construction rather than by trusting a digit-count
+  heuristic — the same method sysutils' FloatToStrShortest uses, with Python's
+  layout instead of Pascal's. 17 significant digits always round-trip a double,
+  so the loop terminates.
+
+  The round trip compares BITS, not doubles. It is asking IDENTITY, not
+  proximity, so `=` would answer it exactly — but reading the bits says what it
+  means, makes -0.0 and NaN fall out correctly instead of needing special cases,
+  and is immune to an extended-precision register ever appearing in this path.
+
+  `av` must be finite, positive and nonzero; the caller handles the rest.
+  Returns '' if nothing round-tripped, which cannot happen at sig = 17. }
+function PyFloatRepr(av: Double): AnsiString;
+var sig, tail, decExp: Integer; ds, cand: AnsiString;
+begin
+  Result := '';
+  for sig := 1 to 17 do
+  begin
+    PyExDecDigits(av, ds, decExp);
+    PyExDecRound(ds, decExp, sig);
+    tail := Length(ds);
+    while (tail > 1) and (ds[tail] = '0') do tail := tail - 1;
+    cand := PyFloatLayout(Copy(ds, 1, tail), decExp);
+    if PyExDecDoubleToBits(PyStrToFloatDef(cand, 0.0)) =
+       PyExDecDoubleToBits(av) then
+    begin
+      Result := cand;
+      Exit;
+    end;
+  end;
+end;
+
+function PyFloatStr(d: Double): AnsiString;
+var bits: Int64; av: Double; rep: AnsiString;
+begin
+  { Python's repr, NOT Pascal's FloatToStr. builtin.pas's FloatToStr is
+    Trunc/Frac scaled to fifteen decimal places, with its own fixed/exponential
+    window — correct for Pascal and observable by every Pascal program in the
+    tree, so it is not changed; NilPy gets its own formatter instead. Six
+    measured divergences it removes, all silent: 1/3 lost a digit and stopped
+    round-tripping, 0.1+0.2 printed 0.3 (the representation error HIDDEN by
+    rounding — the one most likely to be read as correct), 1e-20 printed
+    1.000000000000001e-20 (different digits, not fewer), 3.0e-5 printed 0.00003
+    instead of 3e-05, and 123456789.123 expanded to 123456789.122999995946884
+    (bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip). }
+  av := d;
+  if av < 0 then av := -av;
+  if (d = d) and (av <= 1.7976931348623157e308) and (d <> 0) then
+  begin
+    rep := PyFloatRepr(av);
+    if rep <> '' then
+    begin
+      if d < 0 then Result := '-' + rep else Result := rep;
+      Exit;
+    end;
+  end;
   Result := FloatToStr(d);
   { NEGATIVE ZERO keeps its sign in Python: `print(-0.0)` is `-0.0`, and so is
     `float("-0.0")`. FloatToStr drops it, so the sign bit is read back from the

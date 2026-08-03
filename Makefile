@@ -563,6 +563,8 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_clsattr_byname26 | diff -u test/test_nilpy_class_attribute_through_class_name.expected -
 	./$(COMPILER) test/test_nilpy_inherited_class_attribute.npy /tmp/test_nilpy_inhclsattr26
 	/tmp/test_nilpy_inhclsattr26 | diff -u test/test_nilpy_inherited_class_attribute.expected -
+	./$(COMPILER) test/test_nilpy_float_repr.npy /tmp/test_nilpy_floatrepr26
+	/tmp/test_nilpy_floatrepr26 | diff -u test/test_nilpy_float_repr.expected -
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_tobject_member_via_local.npy /tmp/test_nilpy_tobject_member26
 	test "$$(/tmp/test_nilpy_tobject_member26)" = "$$(printf 'Dog\nDog\nDog\n42\n43')"
 	./$(COMPILER) test/test_nilpy_object_arc.npy /tmp/test_nilpy_object_arc26

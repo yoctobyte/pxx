@@ -6,6 +6,14 @@
 
   The value-LOSS cases are the ones that matter: 1.23E-7, 1E-20 and 1E-300 all
   used to print as the string `0`. }
+{ ANTI-DRIFT PAIR. `compiler/builtin/pylib.pas` holds a renamed COPY of this
+  file's exact-decimal core (ExDecDigits / ExDecRound and the correctly-rounded
+  parser), because a builtin unit may not `uses sysutils` and moving the core
+  down would stop `sysutils.pas` reading — and stepping — as a whole
+  (decide-nilpy-where-the-exact-decimal-float-core-lives). The copy is exercised
+  by `test/test_nilpy_float_repr.npy` against CPython over the same values, so a
+  divergence between the two is a test failure here or there rather than a
+  discovery years later. CHANGE ONE, CHANGE BOTH. }
 program lib_floattostr;
 uses sysutils;
 
@@ -134,6 +142,19 @@ begin
   ChkD('bad_sp',   StrToFloatDef('1 2', -999.0),   -999.0);
   ChkD('ok_lead',  StrToFloatDef('000123.4500', -999.0), 123.45);
   ChkD('ok_exp',   StrToFloatDef('1.2E+003', -999.0),    1200.0);
+  { The SHARED TABLE — the same values test_nilpy_float_repr.npy runs through
+    the pylib copy. Layout differs by design (Pascal's window vs Python's), so
+    what is pinned here is the DIGITS and the round trip, which is what the two
+    cores actually share. }
+  Chk('sh_third',  FloatToStrShortest(1/3),           '0.3333333333333333');
+  Chk('sh_e20',    FloatToStrShortest(1e-20),         '1E-20');
+  Chk('sh_3e5',    FloatToStrShortest(3.0e-5),        '3E-5');
+  Chk('sh_123',    FloatToStrShortest(123456789.123), '123456789.123');
+  Chk('sh_sum',    FloatToStrShortest(0.1 + 0.2),     '0.30000000000000004');
+  Chk('sh_2third', FloatToStrShortest(1/3 + 1/3),     '0.6666666666666666');
+  ChkD('sh_p308',  StrToFloat('1e308'),                             1e308);
+  ChkD('sh_pthird',StrToFloat('0.3333333333333333'),   0.3333333333333333);
+  ChkD('sh_pden',  StrToFloat('5e-324'),                           5e-324);
   if fails = 0 then WriteLn('FLOATTOSTR OK')
   else WriteLn('FLOATTOSTR FAILED ', fails);
 end.
