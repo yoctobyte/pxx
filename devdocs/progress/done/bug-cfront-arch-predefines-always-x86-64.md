@@ -126,4 +126,4 @@ identical on `pinned`, already tracked by [[bug-cfront-no-entry-stub-for-xtensa]
 `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-03 — resolved, commit PENDING.
+- 2026-08-03 — resolved, commit a31f53dfc.
