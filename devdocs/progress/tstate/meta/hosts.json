@@ -1,0 +1,1 @@
+{"xeon": [{"cpu": "Intel(R) Xeon(R) CPU E5-2620 v2 @ 2.10GHz", "sockets": 1, "cores": 6, "threads": 12, "mhz_max": 2600, "mem_total_kb": 63424932, "kernel": "7.0.0-28-generic", "gcc": "15.2.0", "governor": "schedutil", "turbo": true, "fp": "4426967897b7", "from": "2026-08-04T11:40:48Z"}]}
