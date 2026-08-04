@@ -3,6 +3,7 @@ prio: 70
 type: bug
 track: N
 summary: "SILENT MISCOMPILE: a parameter or local whose name matches a CLASS name is typed tyClass by return-type inference, so `def h(b): return b` beside `class B: pass` returns a raw pointer instead of the value. IsClassType is consulted BEFORE the locals table and the local can then never win. Ordinary Python; no diagnostic."
+status: done
 ---
 
 # A parameter or local named like a class is typed as that class
@@ -119,3 +120,31 @@ local named like a class, the value returned vs merely used, and — as the
 regression control that must NOT break — an actual `return SomeClass(...)`
 construction and a genuine class-typed return, which are what the
 `IsClassType` branch is there for.
+
+## 2026-08-04 — FIXED for the RETURN path (e8b439e24); the FIELD path is split out
+
+The repro in this ticket, and every row of its narrowing table, is fixed and
+pinned by `test/test_nilpy_local_named_like_a_class.npy`.
+
+Fixed in `PyInferDefRetType`, where the def's token range is known, NOT by
+reordering the lookups in `PyInferExprType`. That routine runs in the shell
+pre-pass (no `PyLocals`) and again in the body pass (`PyLocals` populated), and
+the two answering differently is a silent ABI mismatch — the signature and the
+frame then describe different types, which that file's comments record as having
+already cost a crash. The new `PyNameBoundInDef` is token-only for the same
+reason. Only the NAME-based conclusion is dropped, so the existing chase still
+types `w = Word(); return w` as Word and a `return SomeClass(...)` construction
+is untouched.
+
+**Still open, as its own ticket:**
+[[bug-nilpy-tuple-of-a-field-from-an-omitted-default-segfaults]] — the same
+collision reaches a FIELD through `self.a = a`, and that route still crashes
+(at run time, and in the compiler under `-g`). It is a different consumer: the
+returned expression there is a tuple, not a bare ident, so this fix's guard
+never applies. The obvious completion of the field half was attempted and
+reverted — it trades the crash for a silent wrong value — and the measurements
+are recorded there.
+
+
+## Log
+- 2026-08-04 — resolved, commit PENDING-COMMIT.
