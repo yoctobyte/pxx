@@ -215,4 +215,4 @@ deliberately: this changes the shared parameter-registration path, so the risk
 is every aggregate parameter in the codebase, not just promo ones. Nothing moved.
 
 ## Log
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 7e5ea47c5.
