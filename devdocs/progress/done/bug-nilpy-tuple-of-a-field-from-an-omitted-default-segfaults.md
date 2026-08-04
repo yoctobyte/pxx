@@ -3,6 +3,7 @@ prio: 70
 type: bug
 track: N
 summary: "SEGFAULT, and a COMPILER crash under -g: a class whose method parameter name matches the CLASS name still mis-resolves on the FIELD path. `class A` + `def __init__(self, a): self.a = a` + a tuple return crashes. Same family as the fixed return-inference bug; that fix did not cover this route."
+status: done
 ---
 
 # The class/parameter name collision still crashes on the FIELD path
@@ -233,3 +234,6 @@ is a genuine shadowing question rather than a spelling accident. The return path
 handles it (`PyNameBoundInDef`, `e8b439e24`); the field path would need the same
 treatment, and no repro of it crashing is known. Left alone rather than guessed
 at.
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.
