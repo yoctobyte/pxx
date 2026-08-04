@@ -98,4 +98,4 @@ and float exponents at both module and def scope.
 
 ## Log
 - 2026-08-04 — resolved (duplicate; fixed by cd948253b).
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 5ffd33a0b.
