@@ -1,5 +1,8 @@
 ---
 prio: 70
+track: B
+type: bug
+summary: "csocket_loopback_b88.c includes \"socket.c\", which 8d7c47f8f moved to sys/socket.c — the test has not compiled since"
 ---
 
 > **origin/master has advanced 1 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -27,3 +30,37 @@ pascal26:1: error: C include file not found: "socket.c" (searched: test/, lib/cr
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Triage (Track T, 2026-08-05) — attributed, and NOT the blamed sha
+
+**Cause: `8d7c47f8f` — "fix(crtl): the socket veneer was never pulled, so calls
+fell back to glibc"**, which MOVED the file:
+
+```
+D  lib/crtl/src/socket.c
+A  lib/crtl/src/sys/socket.c
+```
+
+`test/csocket_loopback_b88.c` line 1 still says `#include "socket.c"`, so it no
+longer resolves:
+
+```
+pascal26:1: error: C include file not found: "socket.c"
+  (searched: test/, lib/crtl/include/, <host system dirs>)
+```
+
+Reproduced at HEAD on this box. It is a compile failure, not a socket or
+networking problem — the loopback behaviour the test exists to check has not
+been exercised since the move.
+
+**The blamed sha is innocent.** The stub names `330f62af7`, which is
+`tickets(B): record 0758d456e on the printf/strtod ticket` — a docs-only commit
+that cannot break code. It was simply the sha the watcher happened to be
+testing; the real cause is earlier in the range. Same shape as
+[[bug-t-empty-range-regression-cannot-be-bisected]], which is why that ticket
+matters.
+
+**Lane: B** (`lib/crtl/**` is Track B's ground, and the fix is in the test's
+include path — one line, either `#include "sys/socket.c"` or an include-path
+adjustment). T files, never fixes.
+

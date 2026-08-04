@@ -224,7 +224,7 @@ _none_
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
-| regression-test-core-csocket-loopback-b88 | T | 70 | regression | regression: test-core#src:test/csocket_loopback_b88.c red at 330f62af78d0 (auto-filed by twatch) | — |
+| regression-test-core-csocket-loopback-b88 | B | 70 | regression | csocket_loopback_b88.c includes \"socket.c\", which 8d7c47f8f moved to sys/socket.c — the test has not compiled since | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
 | task-t-enroll-pascal-conformance-tier | T | 45 | task | Enroll test-pascal-conformance in testmgr tiers (sharded, like the C battery) | — |
@@ -387,7 +387,7 @@ _none_
 - [urgent p 80] [C] bug-c-int64-to-double-cast-truncates-on-32bit
 - [urgent p 75] [A] bug-a-arm32-write-after-free-kills-four-lib-tests
 - [urgent p 75] [A] bug-a-i386-int64-arg-high-half-uninitialized
-- [p 70] [T] regression-test-core-csocket-loopback-b88
+- [p 70] [B] regression-test-core-csocket-loopback-b88
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)

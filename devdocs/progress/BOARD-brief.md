@@ -48,7 +48,7 @@ _none — no lane is locked._
 - `[p 80] [C]` bug-c-int64-to-double-cast-truncates-on-32bit
 - `[p 75] [A]` bug-a-arm32-write-after-free-kills-four-lib-tests
 - `[p 75] [A]` bug-a-i386-int64-arg-high-half-uninitialized
-- `[p 70] [T]` regression-test-core-csocket-loopback-b88
+- `[p 70] [B]` regression-test-core-csocket-loopback-b88
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
