@@ -68,3 +68,52 @@ anyone writing ordinary Pascal against `PromoInt` will hit them.)
 several widths against the `div`-by-power-of-two answer, and `Int64(n)`/
 `Integer(n)` round-tripping a small promotable int — including one that has
 spilled to the heap tier and back.
+
+
+## 2026-08-04 (same session) — a THIRD gap: a PromoInt PARAMETER cannot reach the runtime
+
+Found while checking whether `pylib` could simply gain `hex/bin/oct(n: PromoInt)`
+overloads. It cannot, and the reason is a third instance of the same
+slot-address confusion — this one on the PARAMETER passing convention.
+
+At PROGRAM scope, with a LOCAL, both spellings are correct:
+
+```pascal
+var n: PromoInt;
+n := 1; n := n * 70000000000;
+writeln(PXXPromoToStr(@n));         { 70000000000 — correct }
+writeln(PXXPromoToStr(Pointer(n))); { 70000000000 — correct }
+```
+
+Inside a routine, with the same value arriving as a PARAMETER, **both are
+garbage**:
+
+```pascal
+function viaAt(n: PromoInt): AnsiString;  begin Result := PXXPromoToStr(@n); end;
+function viaPtr(n: PromoInt): AnsiString; begin Result := PXXPromoToStr(Pointer(n)); end;
+{ both print 4343016 — a pointer }
+```
+
+So a parameter of type `PromoInt` is neither "a slot you can take the address of"
+nor "already the address". Whichever it is, ordinary Pascal source has no
+spelling that reaches the runtime, which means **a promotable int cannot be
+passed to a hand-written helper at all** — only operated on by the operators the
+frontend lowers.
+
+### Consequence for the hex/bin/oct work
+
+The natural design (pylib gains `PromoInt` overloads that call into the promo
+runtime) is blocked by this, not by the unit-name overlap that was suspected —
+`uses promoint` alongside a `PromoInt` variable compiles and runs fine, and a
+unit declaring a `PromoInt` parameter needs no explicit `uses` at all because
+the compiler auto-pulls the unit when it sees the type. Both measured.
+
+So `hex`/`bin`/`oct` over a big int want a **frontend lowering** to a
+`PXXPromoToBase(a, base)` in `promoint.pas` — the same shape as `**` → `pypow_v`
+and the other name-keyed lowerings — rather than a pylib overload. The frontend
+already knows how to hand a promo value to a runtime helper; that is how every
+promo operator works, and it is why `writeln(n)` prints correctly.
+
+Fixing the parameter convention is still worth doing on its own: as it stands,
+`PromoInt` is a type you can compute with but cannot write a library function
+against, which is a surprising hole in a first-class type.
