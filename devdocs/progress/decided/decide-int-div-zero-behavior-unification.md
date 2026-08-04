@@ -87,3 +87,42 @@ exists.
 
 ## Log
 - 2026-07-20 — DECIDED by the user; see the DECISION section above. Implementation follows in its own tickets.
+
+## 2026-08-04 — measured data for the PROMO layer, and the position restated
+
+Still **postponed** by the user; recorded only so the eventual decision starts
+from measurements rather than recollection. Nothing was changed.
+
+### `PromoInt` div/mod by zero, measured today
+
+| target | tier | `x div 0` |
+|---|---|---|
+| x86-64 | inline | `Runtime error 200`, exit 200 |
+| x86-64 | inline, `0 div 0` | `Runtime error 200` |
+| x86-64 | heap (2^70) | `Runtime error 200` |
+| **i386** | inline | **4294967295, exit 0 — SILENT** |
+
+So the promotable-int layer inherits the same cross-target split the integer
+table above documents, and i386 adds a fourth flavour to the list: not a trap,
+not 0, not -1, but 2^32-1. Worth noting when option 1 ("RE 200 everywhere") is
+costed — the promo runtime is ordinary Pascal compiled by pxx, so it follows
+whatever the backends do rather than having a policy of its own.
+
+**NilPy is already decided and correct**: `7 // 0` raises `ZeroDivisionError`,
+byte-identical to CPython, because the frontend checks before promocore is
+reached. Whatever this ticket settles for Pascal, the Python frontend keeps
+Python's answer.
+
+### The user's position, restated 2026-08-04
+
+- **`0/0 == 1` by definition.** The confusion the position is aimed at is people
+  reading a LIMIT where there is only a zero: `lim x→0` of something is not the
+  value at zero, and the two get conflated.
+- The float cases are **already settled and correct**: `1/0 = +Inf`,
+  `1/-0 = -Inf`, `0/0 = NaN` — verified today at both targets, IEEE throughout.
+- The blocker remains that **CPU behaviour differs** and there is no pragmatic
+  forcing case yet. Postponed until one appears, deliberately.
+
+(The float VALUES are right; printing one is not — `writeln` of a non-finite
+Double hangs. That is a plain bug, not a policy question, and is filed as
+[[bug-a-writeln-of-a-non-finite-double-hangs]].)
