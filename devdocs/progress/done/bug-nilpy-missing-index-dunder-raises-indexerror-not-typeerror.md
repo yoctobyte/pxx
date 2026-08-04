@@ -93,4 +93,4 @@ canary caught duplicate forwards (declared in both `parser.inc` and
 
 ## Log
 - 2026-08-04 — resolved.
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit b568b4389.
