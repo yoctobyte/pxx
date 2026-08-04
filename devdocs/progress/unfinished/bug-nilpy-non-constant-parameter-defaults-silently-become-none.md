@@ -3,6 +3,8 @@ track: N
 prio: 70
 type: bug
 summary: "Every non-constant parameter default silently becomes None on the ordinary call path — `def f(b=[])` gives b=None, and so does `def f(b=w)` for any name w. Only the closure-VALUE path evaluates defaults at def time."
+status: working
+owner: claude-AN
 ---
 
 # Non-constant parameter defaults silently become `None`
@@ -193,3 +195,86 @@ the change neither helps nor hurts it.
    (`PyNestPrefix <> ''`). The closure-VALUE path already evaluates these
    (`PyNestedDefClosureValue`); the direct-call path would need the default
    evaluated at `PyQueueNestedDef`, where the enclosing scope IS live.
+
+## 2026-08-04 — METHOD half ATTEMPTED and REVERTED; the route works, but it corrupts on the SECOND class
+
+Recording a negative result, because it rules out the obvious plan and leaves a
+much narrower question than "how would you do this".
+
+### The plan works — for one class
+
+`PyEvalMethodDefaults(ci, bodyStart, bodyEnd)`: walk the class body's `def`
+headers by token index, and at each top-level `=` call the existing
+`PyParamDefaultAt` with `PyDefaultEvalMode` ON, so the constant-vs-expression
+rule and the span skipping stay in one place. It hands back the hidden global in
+`PyDefaultSym`; store that into `ProcParamDefaultSym[mpi * MAX_PROC_PARAMS +
+pIdx]` (parameter 0 is `self`), and flush `PyDefInitHead` at the class statement
+the way the `def` branch already flushes at the def statement. The hidden
+global's name must carry the CLASS (`$pdef.<Class>.<meth>.<param>`) or two
+classes with the same method and parameter names share one slot.
+
+Measured working with that in place:
+
+```python
+class C:
+    def go(self, b=[]):
+        b.append(1)
+        return b
+    def sc(self, b=7):
+        return b
+print(C().go(), C().sc())    # [1] 7 — correct, was AttributeError on NoneType
+```
+
+### The wall: a SECOND class statement corrupts unrelated values
+
+```python
+class A:
+    def f(self, b=[1]):
+        return b
+class B:
+    def f(self, b=[2]):
+        return b
+print(A().f(), B().f())      # want [1] [2]; got two raw POINTERS
+```
+
+Everything in the file then prints as a pointer — including a module-level
+`def f1(b=[])` declared BEFORE either class, and including files where only
+`f1()` is printed. So it is not "the second class is wrong", it is that the
+second class's evaluation corrupts state the whole compile depends on; printing
+as a pointer means `print` bound its Int64 overload, i.e. the values lost their
+container type.
+
+Narrowed by measurement:
+
+| shape | result |
+| --- | --- |
+| one class, one container default | OK |
+| one class, TWO container defaults | **OK** |
+| two classes, CONSTANT defaults | OK |
+| two classes, one container default each | **corrupt** |
+
+So it is two class STATEMENTS that each allocate a hidden global — not two
+allocations (one class with two is fine), and not two classes as such.
+
+### What is NOT the cause
+
+Evaluating from inside `PyParseClass` was suspected — its trial parses and
+symbol rollbacks are exactly the hazard — so the evaluation was moved OUT to the
+statement loop (recording the body span in globals set by `PyParseClass`, then
+calling the evaluator after it returns, beside the existing `PyFlushDefInit`).
+**The corruption is identical either way.** Do not spend the same hour on that
+hypothesis.
+
+### Where to look next
+
+Something about the per-class-statement flush/arena interaction, not the
+evaluation itself. Concretely: whether the AST nodes of the FIRST class's queued
+initialiser survive the SECOND class's parse (`ASTArenaFloor` is raised at the
+class branch, which should protect them — verify that it actually does), and
+whether `AllocVar` of the second hidden global disturbs a symbol the first one's
+type resolution still points at. Measure with `PXXDBG=n.locals` on a two-class
+file and compare the globals' TypeKind against the one-class file, rather than
+reasoning about the arena.
+
+The change is reverted; the tree carries none of it. The METHOD half and the
+NESTED-def half (unchanged, see above) both remain open.
