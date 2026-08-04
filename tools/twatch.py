@@ -777,6 +777,8 @@ def regen_index(clone):
             continue
         with open(os.path.join(tdir, fn)) as f:
             st = json.load(f)
+        if "host" not in st:
+            continue            # a side file, not a per-host state document
         last = st.get("last") or {}
         lf = st.get("last_full") or {}
         quiet = host_quiet_secs(st)
@@ -2012,7 +2014,11 @@ def debounce(clone, secs, cap=300):
 
 
 # ---------------------------------------------------------------- status ---
-HOSTS_REL = TSTATE_REL + "/hosts.json"
+# A SUBDIR, not the tstate root. Every reader treats `<tstate>/*.json` as a
+# per-host state document — an implicit schema that was never written down, and
+# putting a side file beside them took the daemon down with KeyError: 'host'
+# on 2026-08-04. Side files go under meta/.
+HOSTS_REL = TSTATE_REL + "/meta/hosts.json"
 # Facts that DEFINE a measurement epoch. A change in any of them means earlier
 # numbers are not comparable with later ones, so it opens a new epoch rather
 # than silently continuing the old series.
@@ -2099,6 +2105,7 @@ def record_host_epoch(clone, host):
     hw = host_hardware()
     fp = host_hardware_fp()
     path = os.path.join(clone.path, HOSTS_REL)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     try:
         with open(path) as f:
             doc = json.load(f)
@@ -2193,8 +2200,9 @@ def states_at(repo, ref):
         try:
             blob = sh(["git", "show", "%s:%s/%s" % (ref, TSTATE_REL, n)],
                       cwd=repo, check=False)
-            if blob:
-                out.append(json.loads(blob))
+            doc = json.loads(blob) if blob else None
+            if doc and "host" in doc:   # side files are not host states
+                out.append(doc)
         except (RuntimeError, OSError, ValueError):
             continue                   # a half-written or absent blob is not fatal
     return out
@@ -2259,7 +2267,9 @@ def status(repo, grace_min, tdir=None, ref="HEAD"):
                     continue
                 try:
                     with open(os.path.join(tdir, fn)) as f:
-                        hosts.append(json.load(f))
+                        doc = json.load(f)
+                    if "host" in doc:   # side files are not host states
+                        hosts.append(doc)
                 except (OSError, ValueError):
                     pass
     tested = set()

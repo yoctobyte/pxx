@@ -340,7 +340,7 @@ def read_hosts(tdir):
     """Hardware epochs per host, or {} if the side file is absent (it is written
     by the watcher, so a dev checkout that has never run one has none)."""
     try:
-        with open(os.path.join(tdir, "hosts.json")) as f:
+        with open(os.path.join(tdir, "meta", "hosts.json")) as f:
             return json.load(f)
     except (OSError, ValueError):
         return {}

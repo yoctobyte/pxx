@@ -44,6 +44,36 @@ def hosts_doc(clone):
         return json.load(f)
 
 
+def case_side_file_is_not_in_the_host_state_directory():
+    """Every reader treats <tstate>/*.json as a per-host state document — an
+    implicit schema nobody had written down. Putting hosts.json beside them
+    took the daemon down with KeyError: 'host' minutes after it shipped."""
+    assert twatch.HOSTS_REL.startswith(twatch.TSTATE_REL + "/meta/"), \
+        f"side file is back in the host-state directory: {twatch.HOSTS_REL}"
+    clone = scratch()
+    twatch.record_host_epoch(clone, "xeon")
+    root = pathlib.Path(clone.path) / twatch.TSTATE_REL
+    strays = [p.name for p in root.iterdir() if p.suffix == ".json"]
+    assert not strays, f"non-host json in the tstate root: {strays}"
+    return "meta/hosts.json, root stays host-states only"
+
+
+def case_readers_skip_a_json_without_a_host_key():
+    """Belt to the subdir's braces: the next side file should not be able to
+    do this again, wherever someone puts it."""
+    import io, json as _j, os as _os
+    clone = scratch()
+    root = pathlib.Path(clone.path) / twatch.TSTATE_REL
+    (root / "xeon.json").write_text(_j.dumps(
+        {"host": "xeon", "last": {}, "jobs": {}, "open_regressions": [],
+         "history": []}))
+    (root / "notahost.json").write_text('{"whatever": 1}')
+    twatch.regen_index(clone)           # must not raise
+    idx = (root / "TSTATE.md").read_text()
+    assert "xeon" in idx and "notahost" not in idx
+    return "regen_index survives a stray json"
+
+
 def case_fingerprint_covers_what_decides_comparability():
     hw = twatch.host_hardware()
     for field in ("cpu", "cores", "threads", "mhz_max", "mem_total_kb",
@@ -130,6 +160,8 @@ CASES = [
     case_changed_hardware_opens_a_new_epoch_and_closes_the_old,
     case_governor_change_is_a_new_epoch,
     case_hosts_are_independent,
+    case_side_file_is_not_in_the_host_state_directory,
+    case_readers_skip_a_json_without_a_host_key,
 ]
 
 
