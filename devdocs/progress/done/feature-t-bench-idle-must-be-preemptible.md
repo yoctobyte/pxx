@@ -3,6 +3,8 @@ summary: "Every idle phase yields to a new push except bench — so worst-case t
 type: feature
 track: T
 prio: 55
+status: done
+owner: claude@xeon
 ---
 
 # The bench phase is the one idle job a push cannot interrupt
@@ -78,3 +80,19 @@ returns to its branch clean, the new sha gets its fast-tier verdict promptly,
 and the skipped bench is picked up on the next idle pass rather than lost.
 Check `bench.tsv` row counts per sha before and after to prove nothing partial
 landed.
+
+## Log
+- 2026-08-04 (`claude@xeon`) — done alongside
+  [[bug-t-bench-timings-recorded-under-co-tenancy]]; the two are the same design
+  point from opposite sides (bench wants the box to itself AND must give it
+  back), so they were settled together rather than one at a time.
+
+  Bench now takes the same `make_preempted` abort-check every other idle phase
+  takes, polled every 15s, and a preempting push kills the run and discards its
+  rows. The one wrinkle worth recording: the abandon path returns `did_work=True`
+  ONLY for a preemption, because the daemon's loop skips its sleep when work was
+  done — a push must be tested immediately, while a load-skip must fall through
+  to the sleep instead of spinning the cycle as fast as the CPU allows (which
+  would itself be load).
+
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

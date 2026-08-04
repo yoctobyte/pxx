@@ -3,6 +3,8 @@ summary: "bench records timings with no check that the box is quiet, so an agent
 type: bug
 track: T
 prio: 60
+status: done
+owner: claude@xeon
 ---
 
 # Bench measures whatever the box was doing, and calls the result SLOW
@@ -101,3 +103,40 @@ A devtest over the void/keep decision (quiet -> keep; co-tenant at start, at
 end, or in the middle -> void), plus `--tier quick` green. The contaminated
 batch of 2026-08-04 is already marked in `bench.tsv`; it is the fixture this was
 written from.
+
+## Log
+- 2026-08-04 (`claude@xeon`) — implemented as the user's call: **defer, and void
+  the partial** (rather than flag rows or pin cores).
+
+  - **Never starts** unless `/proc/loadavg` 1-min is under `BENCH_QUIET_LOAD`
+    (2.0). Load rather than `foreign_runs()` because the load that spoiled the
+    2026-08-04 batch included a bare `make compiler/pascal26`, which is no
+    testmgr process at all.
+  - **Sampled every 15s while running**, not just at the start — that batch was
+    begun on a quiet box and the load ARRIVED mid-run, so a start-only check
+    would have passed it. The during-limit leaves `BENCH_OWN_LOAD` (2.0) of
+    headroom, or the batch would abandon itself on its own load.
+  - **Abandon discards every row**, including the ones already collected: the
+    contamination is per-row, so a partial batch is exactly as unreadable as a
+    contended one. Void, never partial.
+  - **Skips are counted** (`bench_skips`, consecutive, reset by a clean batch)
+    and printed with the load that caused them, so "we have not benched in two
+    days" cannot hide — the starvation this trades for trustworthiness has to
+    be visible.
+
+  Verified against real load on the box: at 0.64 it proceeds, at 5.04 (twenty
+  spinners) it refuses to start and would abandon mid-batch.
+
+  Not done, per the same call: no `contended` column and no core pinning.
+  Flagging needs every reader to honour the flag — including twatch's own
+  comparator, the thing that printed `SLOW (was ...)` in the first place — and
+  a flag one reader ignores is worse than no row. Pinning was ruled out by the
+  data: `mandelbrot` was untouched (+0.5%) while `selfcompile` took +23%, so
+  the contended resource is memory bandwidth and cache, not core count.
+
+  `tools/twatch_bench_quiet_devtest.py` pins the decision: idle starts, 9.1/15.4
+  refused, mid-batch arrival abandons, our own load tolerated, push preempts,
+  counter is consecutive, unreadable load degrades to running rather than never
+  running.
+
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

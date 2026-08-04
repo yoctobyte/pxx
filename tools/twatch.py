@@ -1683,14 +1683,70 @@ def publish_ledger(clone, host, ledger_loc, ledger_pub, findings, sha,
     return kept
 
 
-def run_bench_idle(clone, host, st, sha):
+# Bench needs the box to itself, and must give it back.
+#
+# A timing measured while something else runs is not slow, it is VOID — and it
+# does not announce itself as void, it announces itself as `SLOW (was ...)`,
+# i.e. in a regression's own words. Measured 2026-08-04: an agent's compiler
+# builds and gate runs in a dev checkout inflated a batch by up to +24%, with
+# the FPC rows — which pxx is not involved in at all — up 14.8%, the control
+# that settles it. The inflation was PER-ROW (mandelbrot within 0.2%,
+# selfcompile +23%) because the load was intermittent, so a contended window
+# cannot be salvaged row by row: the numbers cannot say which ones were hit.
+#
+# Worse than the bad batch: it silently becomes the next baseline, so the
+# following clean batch reads as a 20% IMPROVEMENT — the harder direction to
+# notice. bug-t-bench-timings-recorded-under-co-tenancy.
+#
+# Load, not process detection, is the signal: the contaminating load included a
+# bare `make compiler/pascal26`, which is no testmgr process and foreign_runs()
+# would not see it. Thresholds are absolute and generously spaced from what was
+# actually observed — an idle box with only the daemon sits under 1.0, while a
+# gate run put it at 9-15.
+BENCH_QUIET_LOAD = 2.0       # must be under this to START a batch
+BENCH_OWN_LOAD = 2.0         # ...plus what the batch itself contributes, while running
+BENCH_POLL_SECS = 15.0
+
+
+def load1():
+    try:
+        with open("/proc/loadavg") as f:
+            return float(f.read().split()[0])
+    except (OSError, ValueError, IndexError):
+        return 0.0           # unknown load must not block work forever
+
+
+def run_bench_idle(clone, host, st, sha, abort_check=None):
     """Idle work: tracked benchmark timings for the fully-tested sha — the
     clone's testmgr --bench, rows published to tstate/bench.tsv. Runs
     detached at `sha`, so the TSV is written to a temp file and appended
     after checking the branch back out (bench.tsv is tracked: mutating it
-    under a detached HEAD would block the checkout back). Not preemptible —
-    ~2-3 min, shorter than a full backfill."""
-    print("twatch: bench %s" % sha[:12], flush=True)
+    under a detached HEAD would block the checkout back).
+
+    Skips outright unless the box is quiet, and abandons the batch — DISCARDING
+    its rows — if the quiet ends or a push preempts it. Both halves are the same
+    rule: a measurement taken while the box was shared is void, and a void
+    number is worse than no number, because it is indistinguishable from a
+    regression. Bench is the one idle phase that used to be non-preemptible;
+    at ~2-3 min it was also the largest term in time-to-verdict
+    (feature-t-bench-idle-must-be-preemptible).
+
+    Returns whether the caller should keep the loop HOT (`did_work`). True when
+    a batch completed, and also when a push preempted it — the loop must go
+    straight on to test that push, not sleep out the poll interval first. False
+    when the box was too loaded, because `did_work` skips the sleep: returning
+    True there would spin the cycle, re-fetching and re-deciding as fast as the
+    CPU allows, which is itself load."""
+    load = load1()
+    if load > BENCH_QUIET_LOAD:
+        st["bench_skips"] = st.get("bench_skips", 0) + 1
+        print("twatch: bench SKIPPED at %s — box not quiet (load %.1f > %.1f); "
+              "%d consecutive skip(s). A contended timing is VOID, not slow."
+              % (sha[:12], load, BENCH_QUIET_LOAD, st["bench_skips"]),
+              flush=True)
+        save_state(clone, host, st)
+        return False
+    print("twatch: bench %s (load %.1f)" % (sha[:12], load), flush=True)
     set_phase(clone, host, "bench", sha=sha)
     clone.checkout(sha)
     tmp_tsv = os.path.join(tempfile.gettempdir(),
@@ -1698,9 +1754,38 @@ def run_bench_idle(clone, host, st, sha):
     if os.path.exists(tmp_tsv):
         os.unlink(tmp_tsv)
     env = dict(os.environ, TESTMGR_BENCH_TSV=tmp_tsv)
-    r = subprocess.run([sys.executable,
-                        os.path.join(clone.path, "tools/testmgr.py"),
-                        "--bench"], cwd=clone.path, env=env)
+    proc = subprocess.Popen([sys.executable,
+                             os.path.join(clone.path, "tools/testmgr.py"),
+                             "--bench"], cwd=clone.path, env=env,
+                            start_new_session=True)
+    abandoned, preempted = None, False
+    while proc.poll() is None:
+        time.sleep(BENCH_POLL_SECS)
+        # Sampled throughout, not just at the start: the load that spoiled the
+        # 2026-08-04 batch ARRIVED mid-batch, which a start-only check would
+        # have called a quiet box.
+        during = load1()
+        if during > BENCH_QUIET_LOAD + BENCH_OWN_LOAD:
+            abandoned = "box stopped being quiet (load %.1f)" % during
+        elif abort_check and abort_check():
+            abandoned, preempted = "new work preempts it", True
+        if abandoned:
+            kill_child(proc)
+            break
+    r = proc.returncode
+    if abandoned:
+        # VOID, not partial: the rows already collected are indistinguishable
+        # from the contaminated ones, so none of them are written.
+        st["bench_skips"] = st.get("bench_skips", 0) + 1
+        print("twatch: bench ABANDONED at %s — %s; rows discarded (%d "
+              "consecutive skip(s))" % (sha[:12], abandoned, st["bench_skips"]),
+              flush=True)
+        if os.path.exists(tmp_tsv):
+            os.unlink(tmp_tsv)
+        clone_head_back(clone)
+        save_state(clone, host, st)
+        return preempted        # a push must be tested NOW, not after a sleep
+    st["bench_skips"] = 0
     # FPC conformance breakdown at this sha (feature-testmgr-fpc-compare-and-
     # web-dashboard): per-test TSV the dashboard reads. Uses the compiler --bench
     # just built at `sha`; the suite may be absent (runner SKIPs, empty report).
@@ -1742,12 +1827,13 @@ def run_bench_idle(clone, host, st, sha):
                     os.path.join(clone.path, "tools/twatch_web.py"),
                     "--clone", clone.path, "--static"],
                    cwd=clone.path, stdout=subprocess.DEVNULL)
-    st["last_bench"] = {"sha": sha, "date": utcnow(), "rc": r.returncode,
+    st["last_bench"] = {"sha": sha, "date": utcnow(), "rc": r,
                         "rows": rows, "conf_rows": conf_rows}
     save_state(clone, host, st)
     clone.publish("tstate(%s): bench %s %s (%d bench rows, %d conf)"
                   % (host, sha[:12],
-                     "ok" if r.returncode == 0 else "RED", rows, conf_rows))
+                     "ok" if r == 0 else "RED", rows, conf_rows))
+    return True
 
 
 # A commit that only touches tickets/docs/tstate cannot change a test verdict,
@@ -2291,9 +2377,12 @@ def main():
             elif tested and CONF.get("idle_bench") and \
                     (st.get("last_full") or {}).get("sha") == tested and \
                     (st.get("last_bench") or {}).get("sha") != tested:
-                # idle, opt done too: tracked benchmark timings per sha
-                run_bench_idle(clone, host, st, tested)
-                did_work = True
+                # idle, opt done too: tracked benchmark timings per sha.
+                # Preemptible like every other idle phase — it was the one that
+                # was not, and at ~2-3 min the largest term in time-to-verdict.
+                did_work = run_bench_idle(
+                    clone, host, st, tested,
+                    abort_check=make_preempted(clone, tested))
             elif not args.no_bisect:
                 st = load_state(clone, host)
                 set_phase(clone, host, "bisect-check", head=head[:12])
