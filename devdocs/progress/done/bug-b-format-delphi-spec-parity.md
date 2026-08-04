@@ -2,6 +2,7 @@
 
 - **Type:** bug — Track B (library), tag `compat` (FPC parity)
 - **Status:** done
+- **Resolved:** 2026-08-04 in `0ae0a4aa7` (verified on origin/master after the rebase)
 - **Opened:** 2026-08-04
 - **Found by:** widening `tools/fpc_diff_probe.sh` past its 40 core-language
   cases into sysutils. Three of the first 21 new cases diverged.
