@@ -45,3 +45,35 @@ shared-internals change, so file/hand off accordingly.
 `make test-nilpy` plus a `.npy` printing and truth-testing a def, a lambda, a
 returned nested def and a bound method, diffed against CPython for the truth
 tests (the address in a repr obviously cannot match).
+
+
+## 2026-08-04 — one probe recorded, so the next session does not repeat it
+
+The fix shape above says "the tag block after VT_PYCLOSURE_TAG (9) is free …
+this claims the next free code". Before doing that, check the tag that already
+exists — and then check why it does not fit:
+
+**`VT_BOUNDMETHOD = 8` is already defined** (`defs.inc`), documented as
+"payload = {code, recv} pair pointer (pylib pybound_new)". A lifted bound-fn IS
+such a pair, so reusing it looks right and is the first thing anyone will try.
+
+**It does not fit as-is, for two reasons:**
+
+1. `pyvar_of_callable` (pyeval.pas) sets VType **0** for *both* a lifted
+   bound-fn and a **bare compiled code address** — the two are not
+   distinguished at that point, and only one of them is a pair. Tagging both 8
+   would put a code address behind a tag whose consumers dereference it as a
+   pair.
+2. `pyvar_callv*` **probes for tag 0** to find these values, by the comment on
+   `pyvar_of_callable` itself. Retagging without updating those probes moves the
+   bug rather than fixing it.
+
+So the work is: distinguish the two shapes at the boxing site (`PXXObjIsBoundPair`
+already answers it for the pair case), give the bare-address shape its own tag,
+update the `pyvar_callv*` probes, and only then add rendering and truthiness.
+That is a Track A shared-internals change touching variant tags — and variant
+tags can never be renumbered, so the choice has to be right the first time.
+
+Not attempted here: adding a variant tag late in a long session is exactly the
+change whose failure mode (a leak or a wrong clear/retain) the quick gate does
+not catch.
