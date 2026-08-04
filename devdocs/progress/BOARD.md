@@ -39,7 +39,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (180)
+## backlog (182)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -218,6 +218,8 @@ _none_
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | regression-optdiff-shard8-12 | T | 70 | regression | regression: optdiff#shard8/12 red at 28eb1a105ddb (auto-filed by twatch) | — |
 | regression-test-c-conformance-shard2-6 | T | 70 | regression | regression: test-c-conformance#shard2/6 red at ff1a30aae401 (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-module-first-import | T | 70 | regression | regression: test-core#src:test/test_nilpy_module_first_import.npy red at b9e334fbd649 (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-re | T | 70 | regression | regression: test-core#src:test/test_nilpy_re.npy red at b9e334fbd649 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
 | task-t-enroll-pascal-conformance-tier | T | 45 | task | Enroll test-pascal-conformance in testmgr tiers (sharded, like the C battery) | — |
@@ -374,6 +376,8 @@ _none_
 
 - [p 70] [T] regression-optdiff-shard8-12
 - [p 70] [T] regression-test-c-conformance-shard2-6
+- [p 70] [T] regression-test-core-test-nilpy-module-first-import
+- [p 70] [T] regression-test-core-test-nilpy-re
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 65] [T] task-t-worktree-is-not-current-state
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)

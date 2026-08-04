@@ -18512,6 +18512,27 @@ begin
       Error('Nil Python: unknown base class ' + CurTok.SVal);
     UClsParent[ci] := baseCi;
     Next;
+    { MULTIPLE INHERITANCE — `class D(B, C):`. Refused BY NAME rather than
+      accepted-and-ignored: Python resolves attributes by C3 linearisation, so
+      `D().who()` must give B's, and with a diamond the order is D, B, C, A.
+      The Pascal object model underneath is single-inheritance, so a second base
+      cannot be a real parent; taking it and dropping it would turn a compile
+      error into the WRONG METHOD being called at run time, which is the one
+      outcome worse than not supporting it
+      (bug-nilpy-multiple-inheritance-does-not-parse — option 3 there, explicitly
+      worth doing regardless of which of the real implementations is chosen
+      later).
+
+      The message replaces a bare "unexpected token" pointing at the comma,
+      which read like a parser bug rather than a missing feature. }
+    if CurTok.Kind = tkComma then
+      Error('Nil Python: multiple inheritance is not supported — `class ' +
+            PyRawName(UClsNOff[ci], UClsNLen[ci]) +
+            '` names more than one base. Python resolves these by C3 ' +
+            'linearisation and the object model here is single-inheritance, ' +
+            'so a second base cannot be honoured; it is refused rather than ' +
+            'silently ignored. Use single inheritance, or compose: hold the ' +
+            'would-be second base as a field and forward to it');
     Expect(tkRParen, ')');
   end;
   Expect(tkColon, ':');
