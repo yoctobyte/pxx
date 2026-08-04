@@ -3,10 +3,11 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg **QUIET 3d10h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| xeon | `48d007d6febb` | 2026-08-04T04:22:29Z | GREEN (native) | 116.0s | `2501060cf95b` GREEN |
+| xeon | `b9e334fbd649` | 2026-08-04T04:26:22Z | RED (native) | 118.0s | `2501060cf95b` GREEN |
 
 ## Open regressions
-- none
+- **test-core#src:test/test_nilpy_module_first_import.npy** — test/test_nilpy_module_first_import.npy (xeon): bad `b9e334fbd649`, last good `48d007d6febb`, 2 commit(s) in range
+- **test-core#src:test/test_nilpy_re.npy** — test/test_nilpy_re.npy (xeon): bad `b9e334fbd649`, last good `48d007d6febb`, 2 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
