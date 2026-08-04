@@ -86,6 +86,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-b-crtl-host-header-and-arity-mismatches-building-pdfgen | B | 45 | bug | Building pdfgen: `strings.h` comes from the host, and `time`/`bcmp` bind at the wrong arity | — |
 | bug-b-crtl-math-constants-missing-silently-zero | B | 60 | bug | `math.h`'s `M_*` constants were absent, so `M_PI` silently evaluated to 0 | — |
 | bug-b-crtl-stat-nlink-hardcoded | B | 30 | bug | `struct stat.st_nlink` is hardcoded to 1 | — |
+| bug-b-crtl-wchar-wctype-declared-not-implemented | B | 50 | bug | wcslen, the twelve isw* predicates and towlower/towupper were declared by <wchar.h>/<wctype.h> and implemented nowhere, so calling one imported it from glibc | — |
 | bug-b-dns-wire-ipv4-literal-returns-nxdomain | B | 55 | bug | `dns_wire` answers NXDOMAIN for an IPv4 literal, so the facade's answer depends on the backend | — |
 | bug-b-dotfile-treated-as-extension | B | 50 | bug | A dotfile's name was treated as its extension — ChangeFileExt ate the filename | — |
 | bug-b-floattostrsig-caps-at-15-significant-digits | B | 65 | bug | `FloatToStrSig` caps at 15 significant digits, so no double round-trips | — |

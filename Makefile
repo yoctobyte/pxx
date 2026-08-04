@@ -7691,6 +7691,26 @@ lib-test: pxx-stable-check
 	    readelf -d /tmp/cerrno_strings | grep NEEDED; exit 1; }; \
 	  echo 'cerrno_strings: statically linked, no DT_NEEDED'; \
 	else echo 'cerrno_strings: linkage check SKIP (no readelf)'; fi
+	# <wchar.h>/<wctype.h>: wcslen, the twelve isw* predicates, towlower/towupper.
+	# Whole output diffed against gcc -- no recorded expectations -- over the
+	# full range -1..255 plus four wide values, because the claim being tested
+	# is "everything above 127 is FALSE in the C locale", which a few-letter
+	# test would not catch an over-clever implementation failing.
+	$(PXX_STABLE) test/cwctype.c /tmp/cwctype
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -w -o /tmp/cwctype_gcc test/cwctype.c 2>/dev/null; \
+	  /tmp/cwctype_gcc > /tmp/cwctype_gcc.out; /tmp/cwctype > /tmp/cwctype_pxx.out; \
+	  diff /tmp/cwctype_gcc.out /tmp/cwctype_pxx.out || \
+	    { echo 'FAIL: cwctype differs from gcc'; exit 1; }; \
+	  echo 'cwctype: identical to gcc'; \
+	else echo 'cwctype: SKIP (no gcc)'; /tmp/cwctype >/dev/null; fi
+	# and it must be STATICALLY linked -- these functions existing as glibc
+	# imports is the bug this file was written for, and the output diff above
+	# passes either way on a glibc host
+	@if command -v readelf >/dev/null 2>&1; then \
+	  n=$$(readelf -d /tmp/cwctype 2>/dev/null | grep -c NEEDED); \
+	  test "$$n" = "0" || { echo "FAIL: cwctype has $$n DT_NEEDED, want 0"; exit 1; }; \
+	  echo 'cwctype: statically linked, no DT_NEEDED'; fi
 	# strtol overflow clamping + ERANGE + base-0 octal, and limits.h's LONG_MAX
 	# matching the actual width of long. Assertions are target-independent
 	# booleans, so the same expected output holds on 32- and 64-bit targets.
