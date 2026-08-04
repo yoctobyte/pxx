@@ -2,6 +2,7 @@
 track: N
 prio: 35
 type: bug
+blocked-by: decide-nilpy-dict-mutation-during-iteration
 summary: "Mutating a dict while iterating it is silently unobserved; CPython raises RuntimeError 'dictionary changed size during iteration'"
 ---
 
@@ -51,3 +52,19 @@ are already broken.
 Whichever way it is decided, a `.npy` pinning the chosen behaviour, plus a note
 in the NilPy semantics doc alongside the other deliberate
 [[project_nilpy_semantics_vs_pascal_shared_layers]] splits.
+
+
+## 2026-08-04 — escalated, not decided here
+
+This ticket says "this is a Track U question as much as a bug" and then sits in
+a bug queue where nobody can answer it. Filed as
+[[decide-nilpy-dict-mutation-during-iteration]] with the three options (keep the
+snapshot and document it; match CPython with a modification counter; match it
+only under a strict flag) and this ticket's own recommendation carried across.
+
+Also carried across, because it is the part most likely to read as a bug later:
+the LIST half is already settled the OTHER way — a list loop's bound is LIVE
+since `4eadf7f54`, so `for x in xs` DOES observe mutation. Whichever way the
+dict goes, the asymmetry needs to be written down as chosen.
+
+`blocked-by` set; no code touched.
