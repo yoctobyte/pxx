@@ -50,4 +50,4 @@ to prevent.
   origin with an old and a fixed commit, detaches the clone on the old one (the
   post-crash state) and asserts the launcher returns it to the branch, leaves a
   current clone alone, and refuses a dirty one.
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 1559ba406.
