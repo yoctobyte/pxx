@@ -1148,9 +1148,19 @@ begin
     end;
     r := x * y;
     { division is the portable overflow oracle: no {$Q+} dependency, and it is
-      correct on every target including the 32-bit cores }
-    if (r div y = x) and not ((x = -1) and (y = Low(Int64)))
-                    and not ((y = -1) and (x = Low(Int64))) then
+      correct on every target including the 32-bit cores.
+
+      The Low(Int64)/-1 pair is excluded FIRST, not alongside: `r div y` is the
+      very division the hardware traps on (SIGFPE — the quotient 2^63 does not
+      fit), so testing it in the same expression evaluated the trap before the
+      guard could veto it. The guard was already here and already correct in
+      intent; it just sat on the wrong side of the operator. Falling through
+      leaves the bignum path to produce 2^63 exactly. }
+    if ((x = -1) and (y = Low(Int64))) or ((y = -1) and (x = Low(Int64))) then
+      { the true product is 2^63, which does not fit — and probing it with the
+        oracle below would be the very division that traps }
+      StoreBig(dst, BMul(BFromInt(x), BFromInt(y)))
+    else if r div y = x then
       PXXPromoFromInt(dst, r)
     else
       StoreBig(dst, BMul(BFromInt(x), BFromInt(y)));
@@ -1241,7 +1251,13 @@ end;
 procedure PXXPromoDiv(dst, a, b: Pointer);
 var q, r: TBig;
 begin
-  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+  { Low(Int64) div -1 is the one inline pair the HARDWARE refuses: the true
+    quotient is 2^63, which does not fit the register, and x86 raises SIGFPE
+    rather than wrapping. Sent to the bignum path, which represents it exactly.
+    Found by a full operand sweep against a Python oracle — it is the single
+    input pair in 4770 that a hand-written test would never think to try. }
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) and
+     not ((SlotInt(a) = Low(Int64)) and (SlotInt(b) = -1)) then
   begin
     PXXPromoFromInt(dst, SlotInt(a) div SlotInt(b));
     Exit;
@@ -1253,7 +1269,10 @@ end;
 procedure PXXPromoMod(dst, a, b: Pointer);
 var q, r: TBig;
 begin
-  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+  { same trap as PXXPromoDiv — `mod` is the same hardware instruction, so
+    Low(Int64) mod -1 raises SIGFPE even though the answer (0) fits fine }
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) and
+     not ((SlotInt(a) = Low(Int64)) and (SlotInt(b) = -1)) then
   begin
     PXXPromoFromInt(dst, SlotInt(a) mod SlotInt(b));
     Exit;
@@ -1836,7 +1855,10 @@ var q, r, zs: array[0..1] of NativeInt;
     ai, bi, qi: Int64;
     negA, negB: Boolean;
 begin
-  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+  { Low(Int64) div -1 traps in hardware — see PXXPromoDiv. The general path
+    below routes through PXXPromoDiv/PXXPromoMod, which handle it. }
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) and
+     not ((SlotInt(a) = Low(Int64)) and (SlotInt(b) = -1)) then
   begin
     ai := SlotInt(a); bi := SlotInt(b);
     qi := ai div bi;
@@ -1863,7 +1885,9 @@ var r, zs: array[0..1] of NativeInt;
     ai, bi, ri: Int64;
     negR, negB: Boolean;
 begin
-  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+  { same hardware trap as PXXPromoFloorDiv }
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) and
+     not ((SlotInt(a) = Low(Int64)) and (SlotInt(b) = -1)) then
   begin
     ai := SlotInt(a); bi := SlotInt(b);
     ri := ai mod bi;

@@ -1829,6 +1829,11 @@ test-core: $(COMPILER)
 	# which RETAINS the heap tier's managed payload — a raw 16-byte copy would not).
 	# Covers both tiers, mutation not aliasing the caller, and a base conversion
 	# written in ordinary Pascal against the type.
+	# Low(Int64) with -1: the one pair the inline tier cannot compute — x86 raises
+	# SIGFPE because the quotient 2^63 does not fit, and `*` trapped inside its own
+	# division-based overflow oracle. Found by a 4770-pair sweep vs a Python oracle.
+	./$(COMPILER) test/test_promoint_minint64_div.pas /tmp/test_promoint_minint26
+	test "$$(/tmp/test_promoint_minint26)" = "$$(printf '9223372036854775808\n9223372036854775808\n0\n-9223372036854775808\n0\n-9223372036854775808\n9223372036854775807\n9223372036854775807\n-1180591620717411303424')"
 	./$(COMPILER) test/test_promoint_parameter.pas /tmp/test_promoint_param26
 	test "$$(/tmp/test_promoint_param26)" = "$$(printf '12 12 24 13\n12\n70000000000 70000000000\n140000000000 140000000000 70000000001\n70000000000\nff\n400000000000000000 0x400000000000000000\n0')"
 	./$(COMPILER) test/test_promoint_shr_and_casts.pas /tmp/test_promoint_shrcast26
