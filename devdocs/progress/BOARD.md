@@ -42,7 +42,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-promoint-shr-yields-nothing-and-a-machine-int-cast-yields-the-slot-address | A | 50 | bug | PromoInt in PASCAL: `n shr k` produces nothing (shl is fine), and Integer(n)/Int64(n) yields the SLOT ADDRESS instead of the value — both silent, both block writing base-conversion (hex/bin/oct) over a promotable int in Pascal | — |
+| bug-a-promoint-parameter-cannot-be-used-at-all | A | 45 | bug | A PromoInt PARAMETER is unusable: @n and Pointer(n) both yield a pointer to the parameter CELL rather than the slot, and even `n + 0` on the parameter SEGFAULTS — so PromoInt is a type you can compute with but cannot write a function against | — |
 | bug-cfront-spurious-dt-needed-libc-with-no-imports | B | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
@@ -325,9 +325,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1341)
+## done (1342)
 
-1341 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1342 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -402,7 +402,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [U] decide-pxxpdf-ticket-obsolete (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
-- [p 50] [A] bug-a-promoint-shr-yields-nothing-and-a-machine-int-cast-yields-the-slot-address
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
 - [p 50] [T] bug-tstate-xeon-cross-jobs-red-missing-corpora
 - [p 50] [D] docs-devnotes-ai-assisted-build
@@ -419,6 +418,7 @@ _none_
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 3)
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [A] bug-a-promoint-parameter-cannot-be-used-at-all
 - [p 45] [B] bug-cfront-spurious-dt-needed-libc-with-no-imports
 - [p 45] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position

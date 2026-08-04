@@ -1075,7 +1075,19 @@ begin
   else if op = tkOr then PromoOpHelper := 'PXXPromoOr'
   else if op = tkXor then PromoOpHelper := 'PXXPromoXor'
   else if op = tkShl then PromoOpHelper := 'PXXPromoShl'
-  else if op = tkShr then PromoOpHelper := 'PXXPromoShr';
+  else if op = tkShr then PromoOpHelper := 'PXXPromoShr'
+  { Pascal's `shr` is lexed as an IDENTIFIER — there is no tkShr token for it —
+    and the term parser stores Ord(tkIdent) as the operator. That is the
+    repo-wide convention (see IRLowerSetBitMutate and the shift arm of every
+    backend), so it must not be "fixed" in the lexer; the promo path simply has
+    to know it. Without this arm PromoOpHelper answered '' for `n shr k`, the
+    promo branch declined the node, and the generic integer path shifted two
+    SLOT ADDRESSES — then the promo store read the result as a slot and died in
+    SlotTag. `shl` was fine because it has a real token, which is exactly why
+    the pair looked like a one-operator bug.
+    In a BINOP, tkIdent is only ever `shr`: the parser admits it solely when the
+    identifier text is 'shr'. }
+  else if op = tkIdent then PromoOpHelper := 'PXXPromoShr';
 end;
 
 { Box a promotable-int-typed expression (or a wide literal) into a fresh

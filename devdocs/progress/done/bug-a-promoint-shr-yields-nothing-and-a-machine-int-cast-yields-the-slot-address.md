@@ -3,6 +3,8 @@ track: A
 prio: 50
 type: bug
 summary: "PromoInt in PASCAL: `n shr k` produces nothing (shl is fine), and Integer(n)/Int64(n) yields the SLOT ADDRESS instead of the value — both silent, both block writing base-conversion (hex/bin/oct) over a promotable int in Pascal"
+status: done
+owner: claude-AN
 ---
 
 # `PromoInt`: `shr` yields nothing, and a machine-int cast yields the slot address
@@ -117,3 +119,57 @@ promo operator works, and it is why `writeln(n)` prints correctly.
 Fixing the parameter convention is still worth doing on its own: as it stands,
 `PromoInt` is a type you can compute with but cannot write a library function
 against, which is a surprising hole in a first-class type.
+
+## Resolved 2026-08-04 — defects 1 and 2 fixed; defect 3 split out
+
+**1. `shr` produced nothing** — actually it SEGFAULTED; the output was lost
+because stdout is buffered and the crash killed the process before a flush,
+which is why it read as "prints nothing". Cause: Pascal's `shr` is lexed as an
+**identifier** (there is no `tkShr` token for it) and the term parser stores
+`Ord(tkIdent)` as the operator — the repo-wide convention every backend's shift
+arm and `IRLowerSetBitMutate` depend on. `PromoOpHelper` did not know it, so the
+promo branch declined the node and the generic integer path shifted two SLOT
+ADDRESSES; the promo store then read that as a slot and died in `SlotTag`. `shl`
+has a real token and was always correct, which is exactly why this looked like a
+one-operator bug. Fixed by mapping `tkIdent` to `PXXPromoShr` — in a BINOP,
+`tkIdent` is only ever `shr` (the parser admits it solely on the text).
+
+The runtime was never at fault: calling `PXXPromoShr(@d, @n, @k)` by hand
+already answered 127. Measuring that first is what stopped an hour going into
+`BShr`.
+
+**2. A machine-int cast yielded the slot address** — fixed by demoting the
+operand through `PXXPromoToInt64` before the pun, so every existing cast rule
+(width truncation, sign) keeps doing what it did. **Three separate parser sites**
+reach these casts and all three needed it, which is the trap: the keyword tokens
+(`Integer`/`Byte`/`LongWord`), the ident-spelled ordinal names (`Int64`,
+`LongInt`, `Cardinal`, `NativeInt`, `Word`, `SmallInt`, `QWord`) and
+`Char`/`Boolean`. Patching one made `Integer(n)` right while `Int64(n)` stayed
+wrong — a partial fix that looks complete unless every spelling is swept.
+
+CHECKED (`PXXPromoToInt64`, RunError 215) rather than wrapping: a Pascal cast of
+a value that does not fit is the case a programmer wants told about. NilPy's own
+int-annotated narrowing stays wrapping and is a different path.
+
+`Pointer(n)` is deliberately NOT demoted — on a promotable int that spelling IS
+the slot address and is how `PXXPromoToStr` is reached from Pascal. It broke
+once during this work because `TypeIsOrdinal` **includes `tyPointer`**, the same
+trap `IRLowerCallArg`'s promo arms already document; excluded explicitly.
+
+Also caught by the gate: `PromoDemoteToInt64` is defined below its call sites,
+which pxx accepts and **FPC does not** — the seed canary in `tools/gate.sh`
+turned it red, and it needed a forward.
+
+**3. A `PromoInt` PARAMETER** is re-filed as
+[[bug-a-promoint-parameter-cannot-be-used-at-all]] with a sharper repro: it is
+worse than recorded here — even `n + 0` on a promo parameter SEGFAULTS, not just
+the hand-written `@n`/`Pointer(n)` spellings. It is left open because it needs an
+ABI decision (const-by-ref vs copy-on-entry vs slot-by-value), not just a
+lowering change.
+
+Test: `test/test_promoint_shr_and_casts.pas`, covering `shr` at several widths
+against the `div` answer, a heap-tier value shifted back down, every cast
+spelling, and `Pointer(n)` still reaching the runtime.
+
+## Log
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

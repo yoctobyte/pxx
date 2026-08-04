@@ -1812,6 +1812,11 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_promoint.pas /tmp/test_promoint26
 	test "$$(/tmp/test_promoint26)" = "$$(printf '0\n12\n60\n7\n2\n2\n-5\n25\n7\nlt\ngt\neq\nsame\n265252859812191058636308480000000\n0\n265252859812191058636308480\n109361473\n-15511210043330985984000000\n15511210043330985984000000\n9223372036854775808\n18446744073709551614\n18446744073709551616\n-18446744073709551616\n18446744073709551616\n1\n42\n265252859812191058636308480000000\n265252859812191058636308480000000\n265252859812191058636308480000002\n530505719624382117272616960000000\nvgt\n10\n2\nogt\n1')"
 	# ...and it is ARBITRARY PRECISION: 25! is exact, not 25! mod 2^64
+	# PromoInt in PASCAL: `shr` (lexed as an IDENT, so PromoOpHelper missed it and
+	# the generic path shifted two slot ADDRESSES) and every T(n) value cast
+	# (which punned the address). Pointer(n) must stay the slot address.
+	./$(COMPILER) test/test_promoint_shr_and_casts.pas /tmp/test_promoint_shrcast26
+	test "$$(/tmp/test_promoint_shrcast26)" = "$$(printf '127 127\n15 15\n510\n1180591620717411303424\n1\n32\n12 12 12 12\n12 12 12 12\n12 12\nA\nFALSE\nTRUE\n70000000000\n70000000000')"
 	./$(COMPILER) test/test_promoint_overflow.pas /tmp/test_promoint_overflow26
 	test "$$(/tmp/test_promoint_overflow26)" = "15511210043330985984000000"
 	# nested variant part + tagged discriminant + const case labels (TVarSin, bug-pascal-nested-variant-record-tagged)

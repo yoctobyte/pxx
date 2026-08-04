@@ -901,6 +901,7 @@ function PyBareGenExprAhead: Boolean; forward;   { bare genexpr as a call arg (p
 function PyStarForwardCall(procIdx, listNode, dictNode: Integer): Integer; forward;   { *args/**kwargs forwarding call (pyparser.inc) }
 function PyReprContainer(n: Integer): Integer; forward;   { repr() of a container node (pyparser.inc) }
 function PyMakeTruthy(n: Integer): Integer; forward;   { Nil Python truthiness, shared by bool()/if/not (pyparser.inc) }
+function PromoDemoteToInt64(n: Integer): Integer; forward;   { promo -> machine int for a value CAST; defined beside PromoWidenToDouble, below its three call sites (FPC is strict about declaration order, pxx is not — bug-a-fpc-seed-drift-emitasmx64-forward) }
 function PyWiden(a, b: TTypeKind): TTypeKind; forward;   { Nil Python numeric-kind widening (pyparser.inc) }
 function AIntToStr(n: Integer): AnsiString; forward;   { real body in aparser.inc, included after pyparser.inc uses it (regression-fpc-seed-drift-b1976-stale) }
 function PyRawName(off, len: Integer): AnsiString; forward;           { name text from the token pool (pyparser.inc) }                                   { Nil Python None literal node (pyparser.inc) }
@@ -9391,6 +9392,8 @@ begin
       if CaseEqual(CurTok.SVal, 'byte') then
       begin
         Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        { demote a promotable operand first — see PromoDemoteToInt64 }
+        CurASTNode := PromoDemoteToInt64(CurASTNode);
         node := AllocNode(AN_PTR_CAST);
         ASTLeft[node] := CurASTNode;
         ASTIVal[node] := -1;
@@ -9401,6 +9404,8 @@ begin
       else if CaseEqual(CurTok.SVal, 'longword') then
       begin
         Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        { demote a promotable operand first — see PromoDemoteToInt64 }
+        CurASTNode := PromoDemoteToInt64(CurASTNode);
         node := AllocNode(AN_PTR_CAST);
         ASTLeft[node] := CurASTNode;
         ASTIVal[node] := -1;
@@ -9412,6 +9417,8 @@ begin
       begin
         op := Ord(CurTok.Kind);
         Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        { a promotable operand demotes before the pun — see PromoDemoteToInt64 }
+        CurASTNode := PromoDemoteToInt64(CurASTNode);
         { `operator Explicit(a: TFoo): Integer` — an Integer(recordValue)
           cast with a matching Explicit overload is the conversion CALL
           (toperator11), not the value-pun. }
@@ -9444,6 +9451,10 @@ begin
       op := Ord(CurTok.Kind);
       if CurTok.Kind = tkChar_T then LastExprTk := tyChar else LastExprTk := tyBoolean;
       Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+      { demote a promotable operand first, or the pun takes the low byte of the
+        SLOT ADDRESS — `Char(n)` for n = 65 gave a character from the pointer,
+        not 'A'. See PromoDemoteToInt64. }
+      CurASTNode := PromoDemoteToInt64(CurASTNode);
       node := AllocNode(AN_CALL); ASTIVal[node] := -op;
       if op = Ord(tkChar_T) then ASTTk[node] := Ord(tyChar) else ASTTk[node] := Ord(tyBoolean);
       argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
@@ -11142,6 +11153,14 @@ begin
       begin
         tk := OrdinalNameToTk(name);
         Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        { a promotable operand demotes to a real machine integer BEFORE the
+          width-truncating cast — otherwise the cast truncates the SLOT ADDRESS.
+          This is the site every IDENT-spelled ordinal name reaches (Int64,
+          LongInt, Cardinal, NativeInt, Word, Byte...); only `Integer`/`Byte`/
+          `LongWord` have their own keyword TOKEN and their own branch, which is
+          why fixing that one made Integer(n) right while Int64(n) stayed
+          wrong. See PromoDemoteToInt64. }
+        CurASTNode := PromoDemoteToInt64(CurASTNode);
         node := AllocNode(AN_PTR_CAST);
         ASTLeft[node] := CurASTNode;
         { -3 = a WIDECHAR value cast: same width-truncating value cast as -1
@@ -12614,6 +12633,17 @@ begin
             Expect(tkLParen, '(');
             ParseExpr;
             Expect(tkRParen, ')');
+            { a promotable operand demotes before the pun — see
+              PromoDemoteToInt64.
+
+              NOT for `Pointer(n)`: TypeIsOrdinal INCLUDES tyPointer (the same
+              trap IRLowerCallArg's promo arms document), and `Pointer(n)` on a
+              promotable int is the deliberate spelling for its SLOT ADDRESS —
+              it is how `PXXPromoToStr(Pointer(n))` reaches the runtime. Demoting
+              it handed the runtime a value where it expects an address, which
+              segfaulted. }
+            if TypeIsOrdinal(castTk) and (castTk <> tyPointer) then
+              CurASTNode := PromoDemoteToInt64(CurASTNode);
             { `operator Explicit(a: TFoo): Integer` — a value cast of a
               record/class operand with a matching Explicit overload is the
               conversion CALL, not a reinterpret (toperator11's Integer(a)). }
@@ -13944,6 +13974,39 @@ begin
   ASTTk[pwCall] := Ord(tyDouble);
   ASTLeft[pwCall] := pwArg;
   PromoWidenToDouble := pwCall;
+end;
+
+{ Rewrite a PROMO operand of a machine-integer TYPECAST into an explicit
+  PXXPromoToInt64 call; anything else is handed back untouched.
+
+  `Integer(n)` / `Int64(n)` are value-PUNS: the result's bit pattern is the
+  operand's. For a promotable int the operand's bit pattern is its SLOT ADDRESS
+  (decide-promoint-rvalue-representation), so `n := 12; writeln(Int64(n))`
+  printed a pointer. Demoting first makes the pun operate on a real machine
+  integer, which leaves every existing cast rule (width truncation, sign) doing
+  exactly what it did before.
+
+  CHECKED (PXXPromoToInt64, RunError 215) rather than the wrapping demote: a
+  Pascal cast of a value that does not fit is the case a programmer wants told
+  about, and silently delivering `value mod 2^64` is the defect the whole type
+  exists to remove. NilPy's own int-annotated narrowing is separate and stays
+  wrapping — it goes through IRLowerCallArg and the assignment path, not here. }
+function PromoDemoteToInt64(n: Integer): Integer;
+var pdProc, pdArg, pdCall: Integer;
+begin
+  PromoDemoteToInt64 := n;
+  if n < 0 then Exit;
+  if not TypeIsPromoInt(IntToTypeKind(ASTTk[n])) then Exit;
+  pdProc := FindProc('PXXPromoToInt64');
+  if pdProc < 0 then Exit;        { promocore not loaded — leave as-is }
+  pdArg := AllocNode(AN_ARG);
+  ASTLeft[pdArg] := n;
+  ASTRight[pdArg] := -1;
+  pdCall := AllocNode(AN_CALL);
+  ASTIVal[pdCall] := pdProc;
+  ASTTk[pdCall] := Ord(tyInt64);
+  ASTLeft[pdCall] := pdArg;
+  PromoDemoteToInt64 := pdCall;
 end;
 
 { Apply PromoWidenToDouble to both operands of a float-typed binop, in place. }
