@@ -108,4 +108,4 @@ NOT cover its tier stays open.
   Closing is announced (`N ledger key(s) no longer exist in any tier — closing
   as GONE`), not silent: an entry vanishing quietly is indistinguishable from
   one being FIXED, which would be a worse bug than the one being fixed.
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 2e89399c5.
