@@ -1,5 +1,17 @@
 { SPDX-License-Identifier: Zlib }
-unit promoint;
+{ NAMED promocore, NOT promoint — deliberately.
+
+  `PromoInt` is a compiler-INTRINSIC TYPE NAME (parser.inc maps `promoint` /
+  `promoint32` / `promoint64` to tyPromoInt*), and Pascal identifiers are
+  case-insensitive, so a unit called `promoint` is the SAME identifier as the
+  type it implements. That resolves correctly today — measured: `uses promoint`
+  beside a `PromoInt` variable compiles and runs — but it is one resolver change
+  away from biting, it makes `grep promoint` return the type, the unit and the
+  routines all at once, and it obscures which of the three any given line means.
+
+  `promocore` greps uniquely: the TYPE is `PromoInt`, the runtime entry points
+  are `PXXPromo*`, and this name is neither. }
+unit promocore;
 
 { Promotable-int runtime (feature-a-promotable-int stage 3).
 

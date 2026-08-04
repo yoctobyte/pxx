@@ -43,7 +43,7 @@ unit pyeval;
 
 interface
 
-uses pylib, typinfo, promoint;
+uses pylib, typinfo, promocore;
 
 { Run a statement sequence `src` with globals g / locals l (Python's explicit
   exec form; uforth always passes both). Assignments write locals; name reads
@@ -86,6 +86,23 @@ function sorted(l: TPyList; key: Pointer = nil; reverse: Boolean = False): TPyLi
 function sorted(d: TPyDict; key: Pointer = nil; reverse: Boolean = False): TPyList; overload;
 { a str is an iterable too: sorted("cba") -> ['a','b','c'] }
 function sorted(const s: AnsiString; key: Pointer = nil; reverse: Boolean = False): TPyList; overload;
+
+{ min(l)/max(l) over a LIST, WITH Python's `key=`. They live here rather than in
+  pylib beside the scalar min/max because `key=` needs PyCallKey1's callable
+  dispatch, and `pyeval uses pylib`, not the reverse — the same constraint
+  sorted() is here for. The keyless list form moved here whole rather than
+  staying in pylib as a sibling, which would have made `min(xs)` ambiguous
+  across the two units.
+
+  `min(xs, key=f)` only RESOLVES because the keyword promoter now falls back
+  across units (bug-nilpy-keyword-arg-vs-overload-set): `min` is picked from
+  pylib's two-Variant scalar form, and the keyword `key` is what re-targets it
+  here.
+
+  Python compares the KEYS and returns the ELEMENT, and on a tie returns the
+  FIRST — so the scan keeps a strict > / < and never replaces on equality. }
+function min(l: TPyList; key: Pointer = nil): Variant; overload;
+function max(l: TPyList; key: Pointer = nil): Variant; overload;
 
 { `map(f, xs)` / `filter(f, xs)` over an arbitrary callable VALUE -- the
   general form beside the existing map(int|str|float, xs) conversion shims.
@@ -279,7 +296,7 @@ end;
 { ---- promotable-int (bignum) integer layer --------------------------------
 
   Python ints are arbitrary precision. pyeval keeps them as Int64 while they fit
-  and PROMOTES to promoint.pas's bignum on overflow — the value's variant simply
+  and PROMOTES to promocore.pas's bignum on overflow — the value's variant simply
   changes shape (VT_INT64 <-> VT_PROMO_INT64). Bignum is a TRANSIENT intermediate
   (the double-cell MATH words compute a 128-bit product then mask/shift it back
   into two 64-bit cells before push); the Forth stack itself stays 64-bit. Only
@@ -3871,6 +3888,42 @@ begin
   { shape D: a bare compiled def's code address, no tag to check }
   f1 := TPyKeyCbF1(key);
   Result := f1(a0);
+end;
+
+function min(l: TPyList; key: Pointer): Variant; overload;
+var i: Integer; bestK, k: Variant;
+begin
+  if (l = nil) or (l.count = 0) then
+    raise ValueError.Create('min() arg is an empty sequence');
+  Result := l.at(0);
+  if key = nil then bestK := Result else bestK := PyCallKey1(key, Result);
+  for i := 1 to l.count - 1 do
+  begin
+    if key = nil then k := l.at(i) else k := PyCallKey1(key, l.at(i));
+    if pyvar_gt(bestK, k) then
+    begin
+      bestK := k;
+      Result := l.at(i);
+    end;
+  end;
+end;
+
+function max(l: TPyList; key: Pointer): Variant; overload;
+var i: Integer; bestK, k: Variant;
+begin
+  if (l = nil) or (l.count = 0) then
+    raise ValueError.Create('max() arg is an empty sequence');
+  Result := l.at(0);
+  if key = nil then bestK := Result else bestK := PyCallKey1(key, Result);
+  for i := 1 to l.count - 1 do
+  begin
+    if key = nil then k := l.at(i) else k := PyCallKey1(key, l.at(i));
+    if pyvar_gt(k, bestK) then
+    begin
+      bestK := k;
+      Result := l.at(i);
+    end;
+  end;
 end;
 
 function sorted(d: TPyDict; key: Pointer; reverse: Boolean): TPyList; overload;

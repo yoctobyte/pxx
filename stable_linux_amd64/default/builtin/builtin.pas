@@ -532,7 +532,7 @@ begin
   else if p^.VType = 8193 then
     { VT_PROMO_INT64: a promotable int too large for the inline tier. Its
       payload IS the exact decimal, held as a managed AnsiString — see
-      compiler/builtin/promoint.pas. An inline-tier promo never reaches here;
+      compiler/builtin/promocore.pas. An inline-tier promo never reaches here;
       it is stored as an ordinary VT_INT64. }
     Result := PAnsiString(@p^.Payload)^
   else if p^.VType = 0 then

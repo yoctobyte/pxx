@@ -75,7 +75,13 @@ type
       tuple printed with brackets (bug-nilpy-str-of-tuple-is-empty). }
     FIsTuple: Boolean;
     constructor Create;
-    function append(const v: Variant): TPyList;
+    { Python's list.append returns NONE. The Self-returning form the frontend
+      chains list literals through is append_self, a SEPARATE name — flipping
+      append itself would have broken `[a, b, c]`, which desugars to
+      TPyList.Create.append_self(a).append_self(b)...
+      (bug-nilpy-list-mutators-return-self-instead-of-none). }
+    function append(const v: Variant): Variant;
+    function append_self(const v: Variant): TPyList;
     { set-style insert: append only when the value is not already present.
       NilPy backs `set` with TPyList (see PyAnnTypeAt), and this is the whole
       set contract the corpus uses — `s.add(x)` then `x in s`. }
@@ -112,14 +118,14 @@ type
     { Python's `xs += ys` / xs.extend(ys): IN-PLACE, appending ys's elements.
       `+` on two lists would add the two class HANDLES
       (bug-a-nilpy-list-augmented-add-segfaults). }
-    function extend(other: TPyList): TPyList;
+    function extend(other: TPyList): Variant;
     procedure clear;
     { list.reverse() -- IN PLACE, unlike reversed()/[::-1] which both return a
       NEW sequence. Returns Self so the statement lowering can use it as a
       value node, the same shape sort() and extend() use. }
-    function reverse: TPyList;
-    { list.sort() -- in place, no key=/reverse= yet (see the implementation). }
-    function sort: TPyList;
+    function reverse: Variant;
+    { list.sort() -- in place, returns None. No key=/reverse= yet. }
+    function sort: Variant;
     { `with open(p, "r") as f: f.read()`. The read-slurp model makes open()
       yield the file's LINES, and each keeps its newline, so joining them
       reproduces the file byte for byte — which is what CPython's read()
@@ -470,6 +476,16 @@ function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; over
   hook only because `set` IS a keyword.) }
 function bytearray: TPyBytes; overload;   { bytearray() — an EMPTY buffer }
 function bytearray(n: Integer): TPyBytes; overload;
+{ bytearray(b"abc") — a COPY of a bytes/bytearray, never an alias. The point of
+  the call is almost always to get a MUTABLE copy of an immutable bytes, so
+  returning the same object would be a silent aliasing bug rather than a missing
+  feature (bug-nilpy-bytearray-constructor-only-accepts-a-length). }
+function bytearray(b: TPyBytes): TPyBytes; overload;
+{ bytearray([1, 2, 3]) — an iterable of ints. An element outside 0..255 raises
+  ValueError as CPython does, rather than truncating to a byte: a truncation
+  here would be a wrong VALUE in a buffer, which is exactly the failure mode
+  this type is used to avoid. }
+function bytearray(l: TPyList): TPyBytes; overload;
 function bytes(b: TPyBytes): TPyBytes;
 { bytes([104, 105]) — from a LIST of codepoints. A REAL overload since
   bug-a-overload-resolution-ignores-class-identity: before that, a list
@@ -509,6 +525,18 @@ function pylist_slice(l: TPyList; lo, hi: Integer): TPyList;
   when the step is not a literal whose sign is already known, so the common
   `range(n-1, -1, -1)` shape pays nothing. }
 procedure pyrange_check_step(step: Int64);
+{ `list(range(...))` — range MATERIALISED as a list.
+
+  NilPy's `range` is not a value: it exists only as the counted-loop lowering in
+  a `for` header, so `list(range(3))` failed with "undefined variable (range)"
+  (bug-nilpy-missing-builtins-step-slicing-range-into-list, group 2). This is
+  what the frontend calls once it has recognised that exact shape.
+
+  Deliberately NOT reachable as a general `range(...)` value: CPython's range is
+  lazy and prints as `range(0, 3)`, so making every range a list would turn a
+  loud compile error into a quietly different `print(range(3))`. Materialising
+  only where the program has ALREADY asked for a list keeps the two agreeing. }
+function pyrange_list(lo, hi, step: Int64): TPyList;
 function pystr_slice_step(const s: AnsiString; lo, hi, step: Integer): AnsiString;
 function pybytes_slice_step(b: TPyBytes; lo, hi, step: Integer): TPyBytes;
 function pylist_slice_step(l: TPyList; lo, hi, step: Integer): TPyList;
@@ -558,6 +586,13 @@ function pyfloat_ofint(v: Int64): Double;
   the kernel; that keeps the arch-specific syscall surface down to two calls. }
 function pyos_path_isabs(const p: AnsiString): Boolean;
 function pyos_path_join(const a: AnsiString; const b: AnsiString): AnsiString;
+{ Python's os.path.join is VARIADIC and the corpus writes three components
+  routinely. These are ordinary Pascal overloads, reachable from the stdlib
+  shim table only because that call site now re-targets by ARITY — before
+  FindProcArity they were added, measured to do nothing, and removed again
+  (bug-nilpy-stdlib-shim-table-cannot-reach-an-overload, sighting 3). }
+function pyos_path_join(const a, b, c: AnsiString): AnsiString; overload;
+function pyos_path_join(const a, b, c, d: AnsiString): AnsiString; overload;
 function pyos_path_dirname(const p: AnsiString): AnsiString;
 function pyos_path_basename(const p: AnsiString): AnsiString;
 { os.path.isdir / os.path.isfile — a MISSING path is False, not an error, which
@@ -903,10 +938,19 @@ function list(const v: Variant): TPyList; overload;
   (bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice) }
 function tuple(l: TPyList): TPyList;
 function tuple(const s: AnsiString): TPyList; overload;
-{ pow(base, exp) — the function spelling of `**`, which already works. pow with
-  a THIRD argument is modular exponentiation and is a different algorithm; it is
-  deliberately NOT provided here rather than silently ignoring the modulus. }
+{ pow(base, exp) — the function spelling of `**`, which already works. }
 function pow(const a: Variant; const b: Variant): Variant;
+{ pow(base, exp, mod) — MODULAR exponentiation, and genuinely a different
+  algorithm rather than `(a ** b) mod m`: the intermediate power overflows long
+  before the modulus does, which is the whole reason the three-argument form
+  exists (bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice, item 1).
+
+  Integers only, as in CPython. The result takes the SIGN OF THE MODULUS —
+  pow(2, 3, -5) is -2, not 3 — which is Python's floored-modulo rule and not
+  what a plain `mod` gives. A NEGATIVE exponent is the modular INVERSE raised to
+  |exp|, as in CPython 3.8+, and raises ValueError when the base is not coprime
+  with the modulus — which is what CPython does too. }
+function pow(a, b, m: Int64): Int64; overload;
 { `dict(x)` — a shallow COPY of a mapping, as Python's dict() constructor makes.
   Same overload-by-argument-type shape as list() (feature-nilpy-missing-builtins).
   uforth uses `dict(vm.dict)` to snapshot word-list state for MARKER. }
@@ -988,9 +1032,9 @@ function pystr_charlist(const s: AnsiString): TPyList;
   (bug-nilpy-assert-statement-not-supported). }
 procedure pyassert(ok: Boolean; const msg: AnsiString);
 { Python's TWO-argument round(x, ndigits) — a float rounded to that many
-  decimals, unlike the one-argument form which yields an int. Half-away-from-
-  zero rather than CPython's banker's rounding: the difference shows only on an
-  exact .5 at the last digit, and matching it needs decimal arithmetic. }
+  decimals, unlike the one-argument form which yields an int. Half-to-EVEN on
+  the double's EXACT decimal value, which is CPython's rule; the body sits far
+  below, next to the exact-decimal core it is built on. }
 function pyround_n(x: Double; n: Integer): Double;
 { Python's math.floor/math.ceil return an int, unlike the RTL Math unit's
   Floor/Ceil (Double->Double, shared with the Pascal frontend and left alone
@@ -1014,8 +1058,10 @@ function min(const a, b, c: Variant): Variant; overload;
 function min(const a, b, c, d: Variant): Variant; overload;
 function max(const a, b, c: Variant): Variant; overload;
 function max(const a, b, c, d: Variant): Variant; overload;
-function max(l: TPyList): Variant; overload;
-function min(l: TPyList): Variant; overload;
+{ min(l)/max(l) over a LIST live in pyeval.pas, not here: Python's `key=` needs
+  PyCallKey1's callable dispatch, and `pyeval uses pylib`, not the reverse.
+  Keeping the keyless form here as well would make `min(xs)` ambiguous across
+  the two units, so the whole list form moved rather than gaining a sibling. }
 function max(const s: AnsiString): AnsiString; overload;
 function min(const s: AnsiString): AnsiString; overload;
 function any(l: TPyList): Boolean;
@@ -1213,6 +1259,17 @@ function pystr_center(const s: AnsiString; w: Int64): AnsiString;
 function pystr_center_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
 { str.zfill(width) — left-pad with '0', keeping a leading sign in front. }
 function pystr_zfill(const s: AnsiString; w: Int64): AnsiString;
+{ str.expandtabs() / .expandtabs(n) — a TAB advances to the next multiple of
+  tabsize measured from the start of the LINE, so the replacement width depends
+  on the column and is not a fixed number of spaces. The column resets at \n and
+  \r, which is what makes it per-line. tabsize <= 0 drops tabs outright, as
+  CPython does (bug-nilpy-missing-builtins-step-slicing-range-into-list).
+  Two arities, two NAMES: FindProc looks a proc up by bare name and is not
+  arity-aware, so a same-named overload pair would resolve to whichever was
+  registered first — the arity-suffix convention every other multi-arity str
+  method here already uses. }
+function pystr_expandtabs(const s: AnsiString): AnsiString;
+function pystr_expandtabs_n(const s: AnsiString; tabsize: Int64): AnsiString;
 function pystr_removeprefix(const s: AnsiString; const pre: AnsiString): AnsiString;
 function pystr_removesuffix(const s: AnsiString; const suf: AnsiString): AnsiString;
 
@@ -1981,6 +2038,46 @@ begin
   Result := pystr_center_c(s, w, ' ');
 end;
 
+function pystr_expandtabs_n(const s: AnsiString; tabsize: Int64): AnsiString;
+var i, k, col, n, outLen: Integer; ch: Char;
+begin
+  { size first, then fill — `Result := Result + ch` in a loop is QUADRATIC here
+    (project_pxx_string_concat_in_loop_is_quadratic). }
+  outLen := 0; col := 0;
+  for i := 1 to Length(s) do
+  begin
+    ch := s[i];
+    if ch = #9 then
+    begin
+      if tabsize <= 0 then n := 0
+      else n := Integer(tabsize) - (col mod Integer(tabsize));
+      outLen := outLen + n; col := col + n;
+    end
+    else if (ch = #10) or (ch = #13) then begin outLen := outLen + 1; col := 0; end
+    else begin outLen := outLen + 1; col := col + 1; end;
+  end;
+  SetLength(Result, outLen);
+  k := 1; col := 0;
+  for i := 1 to Length(s) do
+  begin
+    ch := s[i];
+    if ch = #9 then
+    begin
+      if tabsize <= 0 then n := 0
+      else n := Integer(tabsize) - (col mod Integer(tabsize));
+      while n > 0 do begin Result[k] := ' '; Inc(k); Dec(n); Inc(col); end;
+    end
+    else if (ch = #10) or (ch = #13) then
+    begin Result[k] := ch; Inc(k); col := 0; end
+    else begin Result[k] := ch; Inc(k); Inc(col); end;
+  end;
+end;
+
+function pystr_expandtabs(const s: AnsiString): AnsiString;
+begin
+  pystr_expandtabs := pystr_expandtabs_n(s, 8);   { Python's default tabsize }
+end;
+
 function pystr_zfill(const s: AnsiString; w: Int64): AnsiString;
 var n, i, pad, signLen: Integer;
 begin
@@ -2579,7 +2676,7 @@ begin
   l.FCap := newCap;
 end;
 
-function TPyList.append(const v: Variant): TPyList;
+function TPyList.append_self(const v: Variant): TPyList;
 var
   src, dst: PPyVarRec;
 begin
@@ -2591,12 +2688,18 @@ begin
   Result := Self;
 end;
 
-function TPyList.extend(other: TPyList): TPyList;
+function TPyList.append(const v: Variant): Variant;
+begin
+  Self.append_self(v);
+  Result := pynone;
+end;
+
+function TPyList.extend(other: TPyList): Variant;
 var
   i, n: Integer;
   src, dst: PPyVarRec;
 begin
-  Result := Self;
+  Result := pynone;   { Python returns None }
   if other = nil then Exit;
   { snapshot the source length FIRST: xs.extend(xs) must copy the ORIGINAL
     elements and terminate, not chase its own growth }
@@ -2702,7 +2805,7 @@ end;
   failed to compile: "TPyList has no method reverse"
   (bug-nilpy-list-reverse-method-missing). Swaps ends inward rather than building
   a copy, which is what "in place" is for. }
-function TPyList.reverse: TPyList;
+function TPyList.reverse: Variant;
 var i, j: Integer; tmp: Variant;
 begin
   i := 0;
@@ -2715,7 +2818,7 @@ begin
     Inc(i);
     Dec(j);
   end;
-  Result := Self;
+  Result := pynone;   { Python returns None }
 end;
 
 { Python's list.sort() — IN PLACE, unlike sorted() (pyeval.pas), which
@@ -2725,7 +2828,7 @@ end;
   than guessed at; a plain `.sort()` needs no callable at all, just the
   `pyvar_gt` content-order comparison this unit already has (see max()/min()
   above). bug-nilpy-list-sort-method-missing. }
-function TPyList.sort: TPyList;
+function TPyList.sort: Variant;
 var i, j: Integer; v: Variant; swapped: Boolean;
 begin
   for i := 1 to Self.count - 1 do
@@ -2744,7 +2847,7 @@ begin
       end;
     end;
   end;
-  Result := Self;
+  Result := pynone;   { Python returns None }
 end;
 
 function TPyList.read: AnsiString;
@@ -3554,47 +3657,6 @@ begin
     pyvar_gt := pyvar_to_int(a) > pyvar_to_int(b);
 end;
 
-function pyround_n(x: Double; n: Integer): Double;
-var p, y, r, f: Double; i, k: Integer;
-begin
-  { Python's round(x, n) differs from naive half-up in TWO ways, and this got
-    both wrong (bug-nilpy-round-ndigits-half-up-and-ignores-negative-ndigits):
-
-    1. NEGATIVE n rounds to tens/hundreds. `for i := 1 to n` simply does not
-       run when n < 0, so scale stayed 1.0 and round(1234.5678, -2) returned
-       1235.0 instead of 1200.0 — silently, and wrong by two orders of
-       magnitude.
-    2. Ties go to EVEN, not up. round(0.125, 2) is 0.12 and round(2.5, 0) is
-       2.0 in Python; half-up gave 0.13 and 3.0.
-
-    Note round(2.675, 2) = 2.67 falls out of doing the arithmetic on the actual
-    double rather than on the decimal text: 2.675 * 100 is 267.49999999999997,
-    so the tie never arises. That is CPython's answer too, and it is why this
-    must NOT be "fixed" by rounding a decimal string.
-
-    Scaling multiplies for n >= 0 and DIVIDES for n < 0, rather than building a
-    fractional scale and dividing by it — 1/100 is not exact, and r/0.01 comes
-    back 1199.9999... }
-  k := n;
-  if k < 0 then k := -k;
-  p := 1.0;
-  for i := 1 to k do p := p * 10.0;
-  if n >= 0 then y := x * p else y := x / p;
-  { round half to even on y }
-  r := Int(y);              { toward zero; keeps the sign of y }
-  f := y - r;
-  if f > 0.5 then r := r + 1.0
-  else if f < -0.5 then r := r - 1.0
-  else if (f = 0.5) or (f = -0.5) then
-  begin
-    { a tie: step away from zero only when that lands on an EVEN integer }
-    if Odd(Trunc(r)) then
-    begin
-      if f > 0.0 then r := r + 1.0 else r := r - 1.0;
-    end;
-  end;
-  if n >= 0 then pyround_n := r / p else pyround_n := r * p;
-end;
 
 function pymath_floor(x: Double): Int64;
 begin
@@ -3748,30 +3810,6 @@ end;
 function max(const a, b, c, d: Variant): Variant; overload;
 begin
   Result := max(max(max(a, b), c), d);
-end;
-
-function max(l: TPyList): Variant;
-var i: Integer;
-begin
-  if (l = nil) or (l.count = 0) then
-  begin
-    raise ValueError.Create('max() arg is an empty sequence');
-  end;
-  Result := l.at(0);
-  for i := 1 to l.count - 1 do
-    if pyvar_gt(l.at(i), Result) then Result := l.at(i);
-end;
-
-function min(l: TPyList): Variant;
-var i: Integer;
-begin
-  if (l = nil) or (l.count = 0) then
-  begin
-    raise ValueError.Create('min() arg is an empty sequence');
-  end;
-  Result := l.at(0);
-  for i := 1 to l.count - 1 do
-    if pyvar_gt(Result, l.at(i)) then Result := l.at(i);
 end;
 
 { Python's min()/max() take ANY iterable, not just a list -- a str iterates
@@ -4167,6 +4205,25 @@ end;
   aborts the WHOLE COMPILATION, which made `try: ... in obj ... except:` fail
   to even build instead of running its handler, unlike CPython.
   bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic }
+{ `xs[obj]` where obj's class declares no `__index__`. CPython's message names
+  both the sequence KIND and the class — "list indices must be integers or
+  slices, not N" — and the kind is what makes it useful. A runtime raise
+  (catchable), like every other dunder-absent case here.
+
+  Before this the instance HANDLE was used as the position, so it raised
+  IndexError "list index out of range" — and only because the handle happened to
+  be far past the end. A smaller handle would have silently indexed the WRONG
+  element, which is the shape this dunder family keeps producing
+  (bug-nilpy-missing-index-dunder-raises-indexerror-not-typeerror). }
+function PyIndexTypeError(const seqKind: AnsiString;
+                          const clsName: AnsiString): Int64;
+begin
+  raise TypeError.Create(seqKind + ' indices must be integers or slices, not '
+                         + clsName);
+  PyIndexTypeError := 0;   { unreachable; a FUNCTION so it can stand in for the
+                             index expression itself at every subscript site }
+end;
+
 procedure PyNotContainerError;
 begin
   raise TypeError.Create('argument is not a container (no __contains__)');
@@ -5235,6 +5292,28 @@ begin
   Result := TPyBytes.Create(n);
 end;
 
+function bytearray(b: TPyBytes): TPyBytes; overload;
+var i: Integer;
+begin
+  if b = nil then begin Result := TPyBytes.Create(0); Exit; end;
+  Result := TPyBytes.Create(b.FLen);
+  for i := 0 to b.FLen - 1 do Result.put(i, b.at(i));
+end;
+
+function bytearray(l: TPyList): TPyBytes; overload;
+var i: Integer; v: Int64;
+begin
+  if l = nil then begin Result := TPyBytes.Create(0); Exit; end;
+  Result := TPyBytes.Create(l.count);
+  for i := 0 to l.count - 1 do
+  begin
+    v := pyvar_to_int(l.at(i));
+    if (v < 0) or (v > 255) then
+      raise ValueError.Create('byte must be in range(0, 256)');
+    Result.put(i, Integer(v));
+  end;
+end;
+
 { Python's slice bound normalisation, shared by str, bytes and list so the
   three cannot drift apart. Order matters: PY_SLICE_OMIT is resolved FIRST
   (an omitted low bound is 0 and an omitted high bound is n), then a negative
@@ -5314,6 +5393,18 @@ end;
 procedure pyrange_check_step(step: Int64);
 begin
   if step = 0 then raise ValueError.Create('range() arg 3 must not be zero');
+end;
+
+function pyrange_list(lo, hi, step: Int64): TPyList;
+var i: Int64;
+begin
+  pyrange_check_step(step);
+  Result := TPyList.Create;
+  i := lo;
+  if step > 0 then
+    while i < hi do begin Result.append(i); i := i + step; end
+  else
+    while i > hi do begin Result.append(i); i := i + step; end;
 end;
 
 function pystr_slice_step(const s: AnsiString; lo, hi, step: Integer): AnsiString;
@@ -6019,6 +6110,107 @@ begin
   Result := w;
 end;
 
+{ Python's two-argument round(x, n), on the EXACT decimal value of the double.
+
+  It lives down here, past the exact-decimal core, because that is what it is
+  built on — the previous version sat up with the other numeric builtins and
+  scaled in doubles, which is precisely the thing that cannot work:
+
+    round(2.675, 2)  CPython 2.67   pxx 2.68
+    round(2.665, 2)  CPython 2.67   pxx 2.66
+
+  `2.675 * 100` is exactly 267.5 and `2.665 * 100` is exactly 266.5, in pxx
+  and in CPython alike, so after scaling BOTH look like a tie and no
+  tie-breaking rule can separate them. The information that decides them is in
+  the double's exact value, which the scale destroyed:
+
+    2.675 = 2.674999999999999822...  -> below the half, rounds DOWN to 2.67
+    2.665 = 2.665000000000000035...  -> above the half, rounds UP   to 2.67
+
+  Nor does a 17-significant-digit approximation suffice: 2.665 renders as
+  exactly `2.6650000000000000` at 17 digits, still ambiguous at the tie
+  (bug-nilpy-round-ndigits-half-up-and-ignores-negative-ndigits recorded both
+  facts and left the case open pending this core).
+
+  So: expand the double exactly, round the digit string half-to-EVEN on the
+  exact remainder, and read the result back with the correctly-rounded parser
+  to land on the nearest double. Every step is exact except the final read,
+  which is correctly rounded — the same shape CPython uses.
+
+  n is a decimal PLACE count, so the digit to keep down to stands for 10^-n;
+  the first digit stands for 10^decExp, which makes the significant-digit
+  count decExp + n + 1. Non-positive means the whole value sits below the
+  rounding position: it rounds to zero, except that sig = 0 can still carry up
+  to one unit in the last place (round(0.6, 0) is 1.0). At sig = 0 the digit
+  before the rounding position is an implicit 0, which is even, so an exact
+  tie goes to zero — round(0.5, 0) is 0.0 in Python, and this gets that for
+  the same reason CPython does rather than by a special case. }
+function pyround_n(x: Double; n: Integer): Double;
+var
+  av, r: Double;
+  ds, s: AnsiString;
+  decExp, sig, i: Integer;
+  neg, up, rest: Boolean;
+begin
+  { NaN, the infinities and both zeros round to themselves. Zero is returned
+    unchanged rather than rebuilt so -0.0 keeps its sign, which a comparison
+    cannot preserve (-0.0 = 0.0 is True). }
+  av := x;
+  if av < 0 then av := -av;
+  if (x <> x) or (x = 0) or (av > 1.7976931348623157e308) then
+  begin
+    Result := x;
+    Exit;
+  end;
+  neg := PyExDecDoubleToBits(x) < 0;
+  PyExDecDigits(av, ds, decExp);
+  sig := decExp + n + 1;
+  if sig <= 0 then
+  begin
+    up := False;
+    if sig = 0 then
+    begin
+      { compare the value against half a unit in the last kept place }
+      if ds[1] > '5' then up := True
+      else if ds[1] = '5' then
+      begin
+        rest := False;
+        for i := 2 to Length(ds) do
+          if ds[i] <> '0' then begin rest := True; break; end;
+        up := rest;      { an exact tie goes to the even 0 }
+      end;
+    end;
+    if up then begin ds := '1'; decExp := -n; end
+    else begin Result := 0.0; if neg then Result := -Result; Exit; end;
+  end
+  else
+    PyExDecRound(ds, decExp, sig);
+  { lay the rounded digits out as plain decimal text: ds stands for
+    0.ds * 10^(decExp+1), so the point falls decExp+1 digits in }
+  if decExp >= 0 then
+  begin
+    if Length(ds) <= decExp then
+    begin
+      s := ds;
+      for i := Length(ds) to decExp do s := s + '0';
+    end
+    else if Length(ds) = decExp + 1 then
+      s := ds
+    else
+      s := Copy(ds, 1, decExp + 1) + '.' +
+           Copy(ds, decExp + 2, Length(ds) - decExp - 1);
+  end
+  else
+  begin
+    s := '0.';
+    for i := 1 to -decExp - 1 do s := s + '0';
+    s := s + ds;
+  end;
+  r := PyStrToFloatDef(s, 0.0);
+  if neg then r := -r;
+  Result := r;
+end;
+
 function pyfloat_any(const v: Variant): Double;
 var t: Int64;
 begin
@@ -6271,6 +6463,16 @@ begin
   if Length(a) = 0 then begin Result := b; Exit; end;
   if a[Length(a)] = '/' then Result := a + b
   else Result := a + '/' + b;
+end;
+
+function pyos_path_join(const a, b, c: AnsiString): AnsiString; overload;
+begin
+  Result := pyos_path_join(pyos_path_join(a, b), c);
+end;
+
+function pyos_path_join(const a, b, c, d: AnsiString): AnsiString; overload;
+begin
+  Result := pyos_path_join(pyos_path_join(pyos_path_join(a, b), c), d);
 end;
 
 function pyos_path_dirname(const p: AnsiString): AnsiString;
@@ -8416,6 +8618,80 @@ end;
 function pow(const a: Variant; const b: Variant): Variant;
 begin
   Result := pypow_v(a, b);
+end;
+
+{ (a * b) mod m without overflowing Int64. A plain `a * b` overflows as soon as
+  the operands pass 2^31 even though the RESULT is bounded by m, so the product
+  is accumulated by doubling instead — every intermediate stays below 2m, which
+  is why m is capped just under 2^62 rather than at Int64's range. }
+function PyMulMod(a, b, m: Int64): Int64;
+var r: Int64;
+begin
+  r := 0;
+  a := a mod m;
+  while b > 0 do
+  begin
+    if (b and 1) = 1 then r := (r + a) mod m;
+    a := (a + a) mod m;
+    b := b shr 1;
+  end;
+  PyMulMod := r;
+end;
+
+{ The modular inverse of a mod m, by the extended Euclidean algorithm: the x in
+  a*x = 1 (mod m), which exists exactly when gcd(a, m) = 1. Needed by pow()'s
+  NEGATIVE exponent form. Kept in plain Int64 rather than PyMulMod because every
+  intermediate here is a remainder or a coefficient bounded by m, not a product
+  of two of them. }
+function PyModInverse(a, m: Int64): Int64;
+var oldR, r, oldS, s2, q, t: Int64;
+begin
+  oldR := a; r := m;
+  oldS := 1; s2 := 0;
+  while r <> 0 do
+  begin
+    q := oldR div r;
+    t := oldR - q * r; oldR := r; r := t;
+    t := oldS - q * s2; oldS := s2; s2 := t;
+  end;
+  if oldR <> 1 then
+    raise ValueError.Create('base is not invertible for the given modulus');
+  oldS := oldS mod m;
+  if oldS < 0 then oldS := oldS + m;
+  PyModInverse := oldS;
+end;
+
+function pow(a, b, m: Int64): Int64; overload;
+var r, base: Int64; neg: Boolean;
+begin
+  if m = 0 then
+    raise ValueError.Create('pow() 3rd argument cannot be 0');
+  neg := m < 0;
+  if neg then m := -m;
+  if m > (Int64(1) shl 62) then
+    raise ValueError.Create('pow() 3rd argument is too large (modulus must be '
+      + 'below 2^62)');
+  r := 1 mod m;              { m = 1 makes every result 0, including pow(x,0,1) }
+  base := a mod m;
+  if base < 0 then base := base + m;
+  { A NEGATIVE exponent is the modular INVERSE raised to |b| (CPython 3.8+), and
+    it exists only when the base is coprime with the modulus — CPython raises
+    ValueError when it is not, rather than returning something. }
+  if b < 0 then
+  begin
+    base := PyModInverse(base, m);
+    b := -b;
+  end;
+  while b > 0 do
+  begin
+    if (b and 1) = 1 then r := PyMulMod(r, base, m);
+    base := PyMulMod(base, base, m);
+    b := b shr 1;
+  end;
+  { Python's result carries the sign of the modulus: the mathematical residue
+    is in [0, |m|), and a negative modulus shifts it down by |m|. }
+  if neg and (r <> 0) then r := r - m;
+  pow := r;
 end;
 
 { list(v) where v is a VARIANT — copy the list/str it holds. `list(fb or [])`
