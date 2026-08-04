@@ -43,7 +43,7 @@ unit pyeval;
 
 interface
 
-uses pylib, typinfo, promoint;
+uses pylib, typinfo, promocore;
 
 { Run a statement sequence `src` with globals g / locals l (Python's explicit
   exec form; uforth always passes both). Assignments write locals; name reads
@@ -296,7 +296,7 @@ end;
 { ---- promotable-int (bignum) integer layer --------------------------------
 
   Python ints are arbitrary precision. pyeval keeps them as Int64 while they fit
-  and PROMOTES to promoint.pas's bignum on overflow — the value's variant simply
+  and PROMOTES to promocore.pas's bignum on overflow — the value's variant simply
   changes shape (VT_INT64 <-> VT_PROMO_INT64). Bignum is a TRANSIENT intermediate
   (the double-cell MATH words compute a 128-bit product then mask/shift it back
   into two 64-bit cells before push); the Forth stack itself stays 64-bit. Only

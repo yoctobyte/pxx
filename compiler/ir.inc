@@ -857,7 +857,7 @@ end;
 
   A promotable-int slot is two native machine words: the storage tag, then the
   inline payload (a machine int) or a managed AnsiString ref holding the
-  serialized bignum. compiler/builtin/promoint.pas owns that layout and every
+  serialized bignum. compiler/builtin/promocore.pas owns that layout and every
   operation on it.
 
   An rvalue is the slot ADDRESS, not the payload. Stage 2 used the payload —
@@ -897,7 +897,7 @@ begin
   PromoPayloadOffset := TypeSize(tk) div 2;
 end;
 
-{ Call a promoint runtime routine, given already-lowered argument nodes.
+{ Call a promocore runtime routine, given already-lowered argument nodes.
 
   IR_ARG nodes form a LINKED chain: IRB points at the next argument. Building
   them without that link produced a call that read its second argument from
@@ -908,7 +908,7 @@ var cpi, arg0, arg1, arg2: Integer;
 begin
   cpi := FindProc(fname);
   if cpi < 0 then
-    Error('promotable int: runtime helper ' + fname + ' not found (promoint unit not loaded)');
+    Error('promotable int: runtime helper ' + fname + ' not found (promocore unit not loaded)');
   arg0 := IRAppend(IR_ARG, a0, -1, -1, 0, Ord(tyPointer));
   arg1 := -1;
   arg2 := -1;
@@ -1056,7 +1056,7 @@ begin
   else if op = tkStar then PromoMixedHelper := 'PXXPromoMulInt';
 end;
 
-{ Which promoint helper implements this operator token. }
+{ Which promocore helper implements this operator token. }
 function PromoOpHelper(op: TTokenKind): AnsiString;
 begin
   PromoOpHelper := '';
@@ -6657,7 +6657,7 @@ begin
       { PROMOTABLE INT store. Handled before every other assignment shape so no
         integer path ever sees the {tag, payload} slot. A promo source is COPIED
         (which retains its managed heap payload); an ordinary integer source is
-        boxed. Both go through promoint.pas, the only place that knows the
+        boxed. Both go through promocore.pas, the only place that knows the
         layout. }
       if (ASTKind[ASTLeft[node]] = AN_IDENT) and (ASTIVal[ASTLeft[node]] >= 0) and
          TypeIsPromoInt(Syms[ASTIVal[ASTLeft[node]]].TypeKind) and

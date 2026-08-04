@@ -30037,7 +30037,9 @@ begin
   end;
   if needHeapUnit then ParseUsesUnit('builtinheap');
   if needsBuiltin then ParseUsesUnit('builtin');
-  if needsPromoInt then ParseUsesUnit('promoint');
+  { the TYPE is spelled PromoInt; the UNIT implementing it is promocore — see
+    the note at the top of compiler/builtin/promocore.pas for why they differ }
+  if needsPromoInt then ParseUsesUnit('promocore');
   { Implicit text-file unit (classic `Text`/Assign/Reset/... surface), loaded
     like an explicit `uses textfile` would be — before user declarations, so the
     Text record + its procedures resolve and proc-local `var f: Text` gets normal
