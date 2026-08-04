@@ -9,6 +9,7 @@ prio: 70
 
 - **Type:** bug — Track B (library / PAL)
 - **Status:** done
+- **Resolved:** 2026-08-04 in `0f84feea3` (verified on origin/master after the rebase)
 - **Opened:** 2026-08-04
 - **Found by:** `tools/lib_cross_sweep.sh` — `lib_directory` differed from its
   x86-64 output on both arm32 and aarch64.
