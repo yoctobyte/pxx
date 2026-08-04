@@ -3,6 +3,7 @@ summary: "NilPy: calling a pylib CONTAINER method with too FEW arguments compile
 type: bug
 track: N
 prio: 75
+status: done
 ---
 
 # Too few arguments to a container method compiles, then segfaults
@@ -174,3 +175,78 @@ eeae1e4a3). The str-method table, by contrast, still compile-errors. This fix
 follows the str-method precedent because a compile error is strictly better than
 a segfault and far simpler — but the end state is arguably a runtime TypeError,
 and that is a Track U call rather than something to settle in passing.
+
+## 2026-08-04 — the NAME-receiver case is fixed; ticket closes
+
+The previous entry's next step was right about WHERE (`parser.inc`, the shared
+method-call route) and the cause turned out to be smaller than "NilPy mode
+relaxes the arity loop".
+
+### Root cause
+
+The `obj.F()` **empty-parens** shortcut:
+
+```pascal
+if CurTok.Kind = tkRParen then
+begin
+  if (Procs[mpi].ParamCount > 1) and CanFillDefaultsFrom(mpi, 1) then
+    FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
+  mai := Procs[mpi].ParamCount;   { <-- unconditional }
+end;
+```
+
+It exists for a method whose parameters ALL have defaults (`J.FormatJSON()`),
+but it sets `mai` past the arity loop **whether or not the defaults could
+actually be filled**. So with required parameters the loop never ran, the slots
+were never filled, and the callee read an uninitialised frame. Nothing about
+`PyExprMode` was involved — which is why the earlier hunt for a NilPy-specific
+relaxation found nothing.
+
+### Correction 3: it is not NilPy-specific at all
+
+The previous entry concluded "the relaxation is specific to NilPy mode
+(`PyExprMode`), and that is where to look next", reasoning from `f.Bar(1)`
+against `Bar(a, b)` being rejected in Pascal. That comparison used a NON-empty
+argument list, which takes the arity loop and fails at `Expect(tkComma)`.
+**Empty** parens skip the loop in Pascal too:
+
+```pascal
+type TC = class function M(a: Integer): Integer; end;
+c.M()   { accepted; FPC rejects it }
+```
+
+So this was a Pascal bug as well, and the fix is in the shared route for both.
+Same lesson as the `abs()` mis-filing earlier today: the control has to differ
+in exactly one thing.
+
+### Fixed
+
+Both identical copies of the shortcut now error when the parameters cannot be
+filled from defaults, exempting `*args`/`**kwargs`:
+
+```
+pascal26:5: error: m() requires 1 argument(s), none given
+pascal26:2: error: index() requires 1 argument(s), none given
+pascal26:11: error: M() requires 1 argument(s), none given   { the Pascal case }
+```
+
+Compile error rather than a runtime `TypeError`, following the str-method table
+precedent and the earlier half of this fix. The "arguably the end state is a
+runtime TypeError" note below stands as a separate Track U question; a
+diagnostic is strictly better than a segfault either way and does not foreclose
+it.
+
+### Gate
+
+`tools/gate.sh quick` + **`make test`** green — the full Pascal suite was run
+deliberately, because this tightening turns previously-COMPILING code into a
+compile error on shared ground, so the risk is library or corpus code that
+relied on the laxness. Nothing did.
+
+Tests: `test_nilpy_method_arity_missing_args_fails.npy` (expects the
+diagnostic) and `test_nilpy_method_arity_ok.npy` (no-arg method, correct-arity
+call, omitted defaulted parameter, and the `xs.index()` / `d.get()` container
+methods that were the original crash reports).
+
+## Log
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

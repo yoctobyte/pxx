@@ -1393,6 +1393,15 @@ test-nilpy: $(COMPILER)
 	# and range materialised only inside a literal `list(`. .expected is CPython's.
 	./$(COMPILER) test/test_nilpy_repr_and_range_consumers.npy /tmp/test_nilpy_reprrange26
 	/tmp/test_nilpy_reprrange26 | diff -u test/test_nilpy_repr_and_range_consumers.expected -
+	# A method with REQUIRED parameters called with EMPTY parens must diagnose, not
+	# crash: the empty-parens shortcut used to skip the arity loop outright, so the
+	# callee read an uninitialised frame. Negative case first, then every shape the
+	# guard could have broken.
+	@./$(COMPILER) test/test_nilpy_method_arity_missing_args_fails.npy /tmp/test_nilpy_arity_fail26 2>&1 \
+	  | grep -q 'm() requires 1 argument' \
+	  || { echo 'test_nilpy_method_arity_missing_args_fails: FAIL - expected a compile error naming the method'; exit 1; }
+	./$(COMPILER) test/test_nilpy_method_arity_ok.npy /tmp/test_nilpy_arity_ok26
+	/tmp/test_nilpy_arity_ok26 | diff -u test/test_nilpy_method_arity_ok.expected -
 	# Mutating a dict while iterating it is NOT DETECTED — a DELIBERATE divergence
 	# (devdocs/dev/nilpy-semantics-divergences.md). These expectations are
 	# deliberately NOT CPython's: every program in that file is one CPython rejects,

@@ -12,14 +12,13 @@ _none_
 
 _none_
 
-## unfinished (9)
+## unfinished (8)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error | N | 50 | bug | `xs.sort(key=..., reverse=...)` fails with a bare "unexpected token" | — |
 | bug-nilpy-non-constant-parameter-defaults-silently-become-none | N | 70 | bug | Every non-constant parameter default silently becomes None on the ordinary call path — `def f(b=[])` gives b=None, and so does `def f(b=w)` for any name w. Only the closure-VALUE path evaluates defaults at def time. | — |
 | bug-nilpy-one-line-def-and-class-bodies-do-not-parse | N | 60 | bug | One-line `def` and `class` bodies do not parse | — |
-| bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults | N | 75 | bug | NilPy: calling a pylib CONTAINER method with too FEW arguments compiles and SEGFAULTS — xs.index(), d.get() both core-dump; too MANY args is correctly rejected | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-optional-string-param-accepts-none | N | 50 | feature | nilpy: passing None to an Optional[str] / str\|None PARAMETER does not match the overload | — |
@@ -325,9 +324,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1342)
+## done (1343)
 
-1342 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1343 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 

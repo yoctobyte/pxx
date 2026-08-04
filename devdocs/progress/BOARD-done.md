@@ -580,6 +580,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-ternary-comprehension-element-stringified | N | 70 | bug | A mixed-type conditional in a comprehension element turns numbers into strings | — |
 | bug-nilpy-tk-pxxcb-invalid-command-name | N | 65 | bug | Tk: `invalid command name "pxxcb"` in a long-running app | — |
 | bug-nilpy-tokenize-managed-temp-release-garbage | A | 60 | bug | NilPy/uforth: managed-string hidden temp released with garbage at method return | — |
+| bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults | N | 75 | bug | NilPy: calling a pylib CONTAINER method with too FEW arguments compiles and SEGFAULTS — xs.index(), d.get() both core-dump; too MANY args is correctly rejected | — |
 | bug-nilpy-tuple-dict-key-never-matches | N | 65 | bug | A tuple used as a dict KEY never matches on lookup | — |
 | bug-nilpy-typed-const-import-reads-zero | N | 75 | bug | Typed-constant initializers are not applied in a Nil Python build | — |
 | bug-nilpy-uforth-exceptiontest-source-unlink | N | 40 | bug | NilPy: uforth exceptiontest source-unlink test fails under the full driver | — |

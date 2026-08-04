@@ -5964,7 +5964,28 @@ begin
             if CurTok.Kind = tkRParen then
             begin
               if (Procs[mpi].ParamCount > 1) and CanFillDefaultsFrom(mpi, 1) then
-                FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
+                FillDefaultArgs(mpi, 1, mcallNode, mlastArg)
+              { ...but EMPTY parens on a method with REQUIRED parameters is a
+                missing-argument error, not a free pass. This shortcut set mai
+                PAST the arity loop unconditionally, so the loop never ran, the
+                required slots were never filled, and the callee read an
+                UNINITIALISED frame: `c.m()` against `def m(self, a)` SEGFAULTED
+                and `[1,2,3].count()` quietly returned a wrong value — the worse
+                of the two. A plain NAME receiver is what reaches this route; a
+                literal or constructor receiver goes through
+                PyParseClassMethodCall, which already checks
+                (bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults).
+
+                NOT NilPy-only: `c.M()` against `function M(a: Integer)` was
+                accepted in Pascal too, where FPC rejects it.
+
+                `*args`/`**kwargs` methods are variadic by construction and are
+                exempt; the call-site star-unpack form is handled below. }
+              else if (Procs[mpi].ParamCount > 1) and
+                      (ProcPyStarIdx[mpi] < 0) and (ProcPyKwIdx[mpi] < 0) then
+                Error(fieldName + '() requires ' +
+                      AIntToStr(Procs[mpi].ParamCount - 1) +
+                      ' argument(s), none given');
               mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
             end;
             { `obj.m(*xs)` — a call-site UNPACK (the callee declares ordinary
@@ -6057,7 +6078,28 @@ begin
             if CurTok.Kind = tkRParen then
             begin
               if (Procs[mpi].ParamCount > 1) and CanFillDefaultsFrom(mpi, 1) then
-                FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
+                FillDefaultArgs(mpi, 1, mcallNode, mlastArg)
+              { ...but EMPTY parens on a method with REQUIRED parameters is a
+                missing-argument error, not a free pass. This shortcut set mai
+                PAST the arity loop unconditionally, so the loop never ran, the
+                required slots were never filled, and the callee read an
+                UNINITIALISED frame: `c.m()` against `def m(self, a)` SEGFAULTED
+                and `[1,2,3].count()` quietly returned a wrong value — the worse
+                of the two. A plain NAME receiver is what reaches this route; a
+                literal or constructor receiver goes through
+                PyParseClassMethodCall, which already checks
+                (bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults).
+
+                NOT NilPy-only: `c.M()` against `function M(a: Integer)` was
+                accepted in Pascal too, where FPC rejects it.
+
+                `*args`/`**kwargs` methods are variadic by construction and are
+                exempt; the call-site star-unpack form is handled below. }
+              else if (Procs[mpi].ParamCount > 1) and
+                      (ProcPyStarIdx[mpi] < 0) and (ProcPyKwIdx[mpi] < 0) then
+                Error(fieldName + '() requires ' +
+                      AIntToStr(Procs[mpi].ParamCount - 1) +
+                      ' argument(s), none given');
               mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
             end;
             { A method with `*args` / `**kwargs` has no fixed arity, so the

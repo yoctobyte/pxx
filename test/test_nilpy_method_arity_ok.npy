@@ -1,0 +1,25 @@
+# The positive half of test_nilpy_method_arity_missing_args_fails: every shape
+# the arity guard could have broken still compiles and still answers correctly —
+# a method with no parameters, one called with its argument, a defaulted
+# parameter left out, and the pylib container methods that were the original
+# crash reports (xs.index(), d.get()).
+class C:
+    def m(self, a):
+        return a * 2
+    def z(self):
+        return 7
+    def d(self, a, b=5):
+        return a + b
+
+c = C()
+print(c.m(21), c.z())
+print(c.d(1), c.d(1, 2))
+
+xs = [1, 2, 3]
+print(xs.index(2), xs.count(1))
+
+dd = {"a": 1}
+print(dd.get("a"), dd.get("b", 9))
+
+s = "a,b"
+print(s.split(","))

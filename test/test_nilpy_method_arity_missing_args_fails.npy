@@ -1,0 +1,17 @@
+# A method called with EMPTY parens when it has required parameters must be a
+# DIAGNOSTIC, not a crash
+# (bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults).
+#
+# The empty-parens shortcut in the method-call route used to set the argument
+# index PAST the arity loop unconditionally, so the loop never ran, the required
+# slots were never filled, and the callee read an uninitialised frame. A plain
+# NAME receiver is what reaches that route — a literal or constructor receiver
+# goes through PyParseClassMethodCall, which was already checked.
+#
+# Expected: a compile error naming the method. This file must NOT compile.
+class C:
+    def m(self, a):
+        return 99
+
+c = C()
+print(c.m())
