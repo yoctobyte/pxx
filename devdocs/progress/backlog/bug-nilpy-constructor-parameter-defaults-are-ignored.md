@@ -82,3 +82,41 @@ pointed at the CALL path rather than the registration).
 with: a constant ctor default, a container ctor default, an explicit argument
 overriding each, and a ctor default alongside an ordinary method default in the
 same class — all diffed against CPython.
+
+## 2026-08-04 (same night) — FIXED
+
+Cause found, and it was a THIRD default-fill implementation nobody had counted.
+
+The parent ticket's 2026-08-02 note records two fill sites — `DefaultArgValueNode`
+(`parser.inc:2629`, the funnel behind the four `parser.inc` call sites) and the
+IR-level loop (`ir.inc:8305`). A CONSTRUCTION uses neither: `pyparser.inc:4573`
+had its own copy of the value-building logic, and it had drifted from the funnel
+in two ways, both silent:
+
+- it never consulted `ProcParamDefaultSym`, so a non-constant ctor default
+  ignored the hidden global evaluated at class-body time;
+- it mapped **every** `tyVariant` parameter to `PyMakeNone`, where the funnel
+  does that only when the default really IS None (or the routine is a library
+  façade whose `= 0` spells "not supplied"). An unannotated parameter is
+  `tyVariant` — so `def __init__(self, v=7)`, a plain CONSTANT, filled `v` with
+  None.
+
+That second point is the whole reason this looked unrelated to non-constant
+defaults: it broke for `v=7` too.
+
+Fixed by deleting the copy and calling `DefaultArgValueNode(ctorPi, k)`. The
+existing `ProcParamHasDefault` guard is what keeps that funnel's "no default"
+Error unreachable from here.
+
+Verified against CPython (rows added to
+`test/test_nilpy_param_defaults_nonconstant.npy`): a constant ctor default, a
+container one, every kind (`2.0`, `"n"`, `True`, `None`, `{}`, `1+2`), an
+explicit argument overriding each, and a partially-supplied ctor whose trailing
+defaults still fill. The regression cases the deleted copy carried comments about
+also still pass: `on_change=None` read directly, `class E(Exception): pass` with
+`raise E()` and `raise E("boom")`, and float/string/bool ctor defaults.
+
+Found while regression-testing this: [[bug-nilpy-tuple-of-a-field-from-an-omitted-default-segfaults]]
+— a field assigned from an omitted defaulted variant parameter and returned
+inside a TUPLE segfaults. PRE-EXISTING (reproduces on the pinned binary and on
+`a87e8a224`), narrowed to four required conditions, filed separately.

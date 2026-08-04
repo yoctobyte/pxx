@@ -4575,36 +4575,27 @@ begin
       k := nArgs + 1;
       if (k >= MAX_PROC_PARAMS) or
          (not ProcParamHasDefault[ctorPi * MAX_PROC_PARAMS + k]) then Break;
-      if ProcParamDefaultIsStr[ctorPi * MAX_PROC_PARAMS + k] then
-      begin
-        valNode := AllocNode(AN_STR_LIT);
-        ASTSOffset[valNode] := ProcParamDefaultSOff[ctorPi * MAX_PROC_PARAMS + k];
-        ASTSLen[valNode] := ProcParamDefaultSLen[ctorPi * MAX_PROC_PARAMS + k];
-        ASTTk[valNode] := Ord(tyString);
-      end
-      else if ProcParamDefaultIsFloat[ctorPi * MAX_PROC_PARAMS + k] then
-      begin
-        { a FLOAT default (max_zoom=2.0): IVal holds the IEEE bits, and only
-          AN_FLOAT_LIT tags them tyDouble — an AN_INT_LIT here handed the body
-          the bit pattern as an integer. }
-        valNode := AllocNode(AN_FLOAT_LIT);
-        ASTIVal[valNode] := ProcParamDefaultVal[ctorPi * MAX_PROC_PARAMS + k];
-        ASTTk[valNode] := Ord(tyDouble);
-      end
-      else if Procs[ctorPi].Params[k].TypeKind = tyVariant then
-        { A VARIANT parameter's omitted default has to be a real variant, not a
-          bare integer: `def __init__(self, a, on_change=None)` types on_change
-          Any, and filling it with AN_INT_LIT 0 handed the callee a machine word
-          where it reads a 16-byte slot — the call SEGFAULTED, or printed empty
-          fields, while passing the argument explicitly worked. pynone() is the
-          same None the `return None` path already uses for a variant result. }
-        valNode := PyMakeNone
-      else
-      begin
-        valNode := AllocNode(AN_INT_LIT);
-        ASTIVal[valNode] := ProcParamDefaultVal[ctorPi * MAX_PROC_PARAMS + k];
-        ASTTk[valNode] := Ord(Procs[ctorPi].Params[k].TypeKind);
-      end;
+      { DefaultArgValueNode, not a private copy of it. This loop used to build
+        the value itself and had drifted from that funnel in two ways, both
+        silent:
+
+          - it never consulted ProcParamDefaultSym, so a NON-CONSTANT ctor
+            default (`def __init__(self, items=[])`) ignored the hidden global
+            evaluated at class-body time;
+          - it mapped EVERY tyVariant parameter to None, where the funnel does
+            that only when the default really IS None (or the routine is a
+            library façade whose `= 0` means "not supplied"). An unannotated
+            parameter is tyVariant, so `def __init__(self, v=7)` — a plain
+            CONSTANT — filled v with None.
+
+        That second one is why the constructor half of
+        bug-nilpy-non-constant-parameter-defaults-silently-become-none looked
+        unrelated to non-constant defaults at all: it broke for `v=7` too.
+        bug-nilpy-constructor-parameter-defaults-are-ignored.
+
+        The ProcParamHasDefault guard above is what keeps the funnel's
+        "no default" Error unreachable from here. }
+      valNode := DefaultArgValueNode(ctorPi, k);
       argNode := AllocNode(AN_ARG);
       ASTLeft[argNode] := valNode;
       ASTRight[lastArg] := argNode;

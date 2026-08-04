@@ -136,3 +136,53 @@ class MSub(MBase):
     pass
 
 print(MA().f([9]), MBase().f(), MSub().f())
+
+# --- CONSTRUCTOR defaults (2026-08-04) ---
+#
+# `__init__` defaults were ignored entirely, CONSTANT ones included:
+# `def __init__(self, v=7)` then `C()` left v as None. A construction does not
+# go through the ordinary method call path, and the ctor's own default-fill loop
+# had drifted from DefaultArgValueNode in two ways — it never consulted
+# ProcParamDefaultSym, and it mapped EVERY tyVariant parameter to None, where
+# the funnel does that only when the default really is None. An unannotated
+# parameter is tyVariant, which is why a plain `v=7` was lost too.
+# It now delegates to that funnel instead of reimplementing it.
+# bug-nilpy-constructor-parameter-defaults-are-ignored
+
+class KC:
+    def __init__(self, v=7):
+        self.v = v
+
+print(KC().v, KC(9).v)
+
+class KL:
+    def __init__(self, items=[]):
+        self.items = items
+    def get(self):
+        return self.items
+
+print(KL().get(), KL([5]).get())
+
+# every ctor default KIND, and an explicit argument overriding each
+class KK:
+    def __init__(self, mz=2.0, nm="n", fl=True, no=None, dd={}, ee=1+2):
+        self.mz = mz
+        self.nm = nm
+        self.fl = fl
+        self.no = no
+        self.dd = dd
+        self.ee = ee
+
+k = KK()
+print(k.mz, k.nm, k.fl, k.no, k.dd, k.ee)
+k2 = KK(3.5, "q", False, 4, {"z": 1}, 9)
+print(k2.mz, k2.nm, k2.fl, k2.no, k2.dd, k2.ee)
+
+# a partially-supplied ctor: the trailing defaults still fill
+class KP:
+    def __init__(self, a, b=2, c=[3]):
+        self.t = (a, b, c)
+    def get(self):
+        return self.t
+
+print(KP(1).get(), KP(1, 9).get(), KP(1, 9, [0]).get())
