@@ -16703,6 +16703,44 @@ begin
     end;
 end;
 
+{ Is `nm` bound INSIDE this def — as a parameter, or by an assignment in the
+  body? Used to tell a name that merely SPELLS a class from one that denotes it.
+
+  Token-only, and that is not a style choice: PyInferExprType runs in the shell
+  pre-pass (no PyLocals) and again in the body pass (PyLocals populated), and
+  the two answering differently is a silent ABI mismatch — the signature and the
+  frame then describe different types. See the notes above the bare-ident chase.
+  Reading PyLocals here would reintroduce exactly that. }
+function PyNameBoundInDef(hdrFrom, hdrTo, bodyFrom, bodyTo: Integer;
+                          const nm: AnsiString): Boolean;
+var k, depth: Integer;
+begin
+  Result := False;
+  { a PARAMETER name is an ident at paren depth 1 that follows '(' or ',' —
+    which skips annotations and default values, both of which can name types }
+  depth := 0;
+  for k := hdrFrom to hdrTo - 1 do
+  begin
+    if Tokens[k].Kind = tkLParen then Inc(depth)
+    else if Tokens[k].Kind = tkRParen then Dec(depth)
+    else if (depth = 1) and (Tokens[k].Kind = tkIdent) and (k > hdrFrom) and
+            (Tokens[k - 1].Kind in [tkLParen, tkComma]) and
+            CaseEqual(GetTokenStr(k), nm) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+  { a LOCAL: `nm = ...` earlier in the body, the same shape PyRetNameType scans }
+  for k := bodyFrom to bodyTo - 1 do
+    if (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount) and
+       (Tokens[k + 1].Kind = tkAssign) and CaseEqual(GetTokenStr(k), nm) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
 var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
     tupDepth: Integer;
@@ -16830,6 +16868,33 @@ begin
         cur := tyVariant
       else
         cur := PyInferExprType(j + 1, e);
+      { `def h(b): return b` beside `class B: pass` came back as a raw pointer.
+        PyInferExprType tests IsClassType(name) BEFORE consulting the locals
+        table, and every later refinement there is guarded on `tk = tyUnknown`,
+        so once a class name matches, the parameter that SHADOWS it can never
+        win. The def then registered a class result and the caller read the
+        handle as an object pointer — silently.
+
+        Python scoping is the rule being restored: a parameter or local shadows
+        a class of the same name. Exact-case collisions (`class Item` + a
+        parameter `Item`) fail too, so this is not merely IsClassType matching
+        case-insensitively (bug-nilpy-identifiers-are-case-insensitive) — that
+        only widens the blast radius from `Item` to `item`/`ITEM`.
+
+        Only the NAME-based conclusion is dropped, not the type: `cur` goes back
+        to tyUnknown so the bare-ident chase just below re-derives the type from
+        what the name was ASSIGNED. So `w = Word(); return w` still types as
+        Word even when a class happens to be called `w`, and a genuine
+        `return SomeClass(...)` construction is untouched (it is not a bare
+        ident). bug-nilpy-a-local-named-like-a-class-is-typed-as-that-class. }
+      if (cur = tyClass) and (e = j + 2) and (Tokens[j + 1].Kind = tkIdent) and
+         IsClassType(GetTokenStr(j + 1)) and
+         PyNameBoundInDef(methodStart, bodyScanStart, bodyScanStart, j,
+                          GetTokenStr(j + 1)) then
+      begin
+        cur := tyUnknown;
+        PyInferLastCi := -1;
+      end;
       { `return w` — a bare ident the scanner cannot type: chase the ident's
         ASSIGNMENT earlier in the body and infer from its right-hand side
         (uforth's finalize_definition: `w = self.define_word(...)`, whose

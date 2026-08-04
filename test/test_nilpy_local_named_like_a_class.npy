@@ -1,0 +1,107 @@
+# bug-nilpy-a-local-named-like-a-class-is-typed-as-that-class
+#
+# SILENT MISCOMPILE. `def h(b): return b` beside `class B: pass` returned a raw
+# pointer, printed as an integer -- no error at compile time or run time.
+#
+# PyInferExprType tested IsClassType(name) BEFORE consulting the locals table,
+# and every later refinement there is guarded on `tk = tyUnknown`, so once a
+# class name matched, the parameter that SHADOWS it could never win.
+# PyInferDefRetType then registered the def as returning a class instance
+# instead of taking its tyUnknown -> tyVariant path, and the caller read the
+# handle as an object pointer.
+#
+# Two defects met here. The PRECEDENCE one is what this pins: Python scoping
+# says a parameter or local shadows a class of the same name, and the
+# exact-case rows below fail even with case-sensitive matching. IsClassType's
+# case-INSENSITIVE match (bug-nilpy-identifiers-are-case-insensitive) is what
+# widens it from `Item` to `item`/`b`-finds-`B`, which is why the first repro
+# looks like it should be impossible.
+#
+# WARNING for anyone re-measuring: the natural probe uses classes A and B with
+# a parameter named b, which reads as "two classes corrupt, one does not". That
+# is a confound -- the second class is named B and the parameter is b. Vary the
+# NAMES, not the count.
+#
+# The rows after the repros are the regression control, and they are the point:
+# only the NAME-based conclusion was dropped, not the type. A local assigned a
+# real instance, a construction return, and a parameter carrying an instance
+# must all still resolve their class.
+#
+# Every expectation is CPython's own output.
+
+# --- the bug: a name that merely SPELLS a class ---
+
+class B: pass
+
+def h(b):
+    return b
+
+print(h([9]))
+print(h({"k": 1}))
+print(h("hi"))
+print(h(5))
+
+# exact-case collision: not a spelling problem
+class Item: pass
+
+def take(Item):
+    return Item
+
+print(take([1, 2]))
+
+# an all-lowercase class, matched exactly
+class item: pass
+
+def take2(item):
+    return item
+
+print(take2([3]))
+
+# a LOCAL, not a parameter
+class Box: pass
+
+def wrap(v):
+    Box = v
+    return Box
+
+print(wrap(["boxed"]))
+
+# --- regression control: real class identity must survive ---
+
+class Word:
+    def __init__(self, n):
+        self.n = n
+    def get(self):
+        return self.n
+
+# a construction returned directly
+def make():
+    return Word(11)
+
+print(make().get())
+
+# a local assigned a real instance, then returned
+def make2():
+    w = Word(22)
+    return w
+
+print(make2().get())
+
+# a PARAMETER carrying an instance, returned, then a method called on it
+def ident(b):
+    return b
+
+print(ident(Word(33)).get())
+
+# the value merely USED rather than returned still works
+def show(b):
+    print(b)
+
+show([7])
+
+# and a name that shadows a class but holds an instance of it
+def rewrap(v):
+    Box = Word(44)
+    return Box.get() + v
+
+print(rewrap(1))

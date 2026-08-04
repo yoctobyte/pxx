@@ -279,7 +279,62 @@ reasoning about the arena.
 The change is reverted; the tree carries none of it. The METHOD half and the
 NESTED-def half (unchanged, see above) both remain open.
 
-## 2026-08-04 (later) — a named suspect for the two-class corruption: the `tkClass` branch never raises `ASTArenaFloor`
+## 2026-08-04 (later still) — CORRECTION: the two-class corruption was a DIFFERENT bug, and it is now fixed
+
+**Read this before the `ASTArenaFloor` section below, which I wrote earlier the
+same night and which is wrong about the cause.** I had a story that matched the
+measured table and did not diff it against an oracle first — the exact failure
+mode CLAUDE.md warns about. Keeping both, in order, because the sequence is the
+lesson.
+
+The wall was [[bug-nilpy-a-local-named-like-a-class-is-typed-as-that-class]]:
+a parameter or local whose name matches a CLASS name was typed as that class by
+return-type inference, silently. Look at this ticket's own repro:
+
+```python
+class A:
+    def f(self, b=[1]): return b
+class B:
+    def f(self, b=[2]): return b
+```
+
+The parameter is `b` and the second class is `B`, and `IsClassType` matches
+case-insensitively. That is why the table read "one class OK, two classes
+corrupt" — with only `class A` there is nothing for `b` to collide with. The
+class COUNT was a confound; the class NAME was the variable.
+
+It also explains the blast radius that made the corruption look like arena
+reuse: a module-level `def f1(b=[])` declared BEFORE either class printed as a
+pointer, in files where only `f1()` was printed. Same collision, same silent
+retype to `tyClass` — nothing to do with the class statements executing at all.
+
+### Re-measured after that fix (HEAD 7750c2653 + the shadowing fix)
+
+| repro | before | now |
+| --- | --- | --- |
+| module-level `f1(b=[])` with two classes present | raw pointer | **`[]` — correct** |
+| `A().f(), B().f()` (method container defaults) | two raw pointers / `0 0` | **`None None`** |
+
+So the METHOD half now fails the way the ticket says it should — cleanly, as
+`None`, the missing feature — instead of producing garbage. **The reason the
+2026-08-04 attempt was reverted is gone.** Re-applying it is the next step, and
+it should now be measurable on its own terms.
+
+Two things from that attempt still need doing, and both are independent of the
+wall that is now removed:
+
+- `PyEvalParamDefault` (`pyparser.inc:3964-3966`) builds the hidden global's
+  name with no CLASS component, so `A.f.b` and `B.f.b` collide on one symbol.
+  Real, and a sufficient cause of two-class breakage on its own.
+- The initialiser must be queued at the CLASS statement, since Python evaluates
+  a method default when the class body executes.
+
+## 2026-08-04 (later) — SUPERSEDED as a cause: the `tkClass` branch never raises `ASTArenaFloor`
+
+**The asymmetry below is real and worth keeping as an observation. Its claim to
+be THE cause of the two-class corruption is withdrawn — see the correction
+above.** It was never verified by experiment; it was inferred from the table,
+and the table had a confound.
 
 The section above says "where to look next: whether the AST nodes of the FIRST
 class's queued initialiser survive the SECOND class's parse (`ASTArenaFloor` is
