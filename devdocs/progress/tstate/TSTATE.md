@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg **QUIET 3d10h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| xeon | `b9e334fbd649` | 2026-08-04T04:26:22Z | RED (native) | 118.0s | `2501060cf95b` GREEN |
+| xeon | `abb3a7a30ad8` | 2026-08-04T04:30:28Z | RED (native) | 123.7s | `2501060cf95b` GREEN |
 
 ## Open regressions
 - **test-core#src:test/test_nilpy_module_first_import.npy** — test/test_nilpy_module_first_import.npy (xeon): bad `b9e334fbd649`, last good `48d007d6febb`, 2 commit(s) in range
