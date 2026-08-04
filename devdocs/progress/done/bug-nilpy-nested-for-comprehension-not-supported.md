@@ -124,4 +124,4 @@ says so rather than quietly omitting the row.
 
 ## Log
 - 2026-08-04 — resolved.
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit a7fd1968c.
