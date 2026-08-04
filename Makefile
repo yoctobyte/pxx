@@ -614,6 +614,9 @@ test-nilpy: $(COMPILER)
 	@# a parameter/local named like a CLASS must not be typed as that class
 	./$(COMPILER) test/test_nilpy_local_named_like_a_class.npy /tmp/test_nilpy_localclsname26
 	/tmp/test_nilpy_localclsname26 | diff -u test/test_nilpy_local_named_like_a_class.expected -
+	@# the field-path half also killed the COMPILER under -g, so that is its own row
+	./$(COMPILER) -g test/test_nilpy_local_named_like_a_class.npy /tmp/test_nilpy_localclsname_g26
+	/tmp/test_nilpy_localclsname_g26 | diff -u test/test_nilpy_local_named_like_a_class.expected -
 	./$(COMPILER) test/test_nilpy_str_mul_str_undefined.npy /tmp/test_nilpy_strmul26
 	/tmp/test_nilpy_strmul26 | diff -u test/test_nilpy_str_mul_str_undefined.expected -
 	./$(COMPILER) test/test_nilpy_parent_call_after_instantiation.npy /tmp/test_nilpy_parentcall26

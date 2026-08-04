@@ -105,3 +105,55 @@ def rewrap(v):
     return Box.get() + v
 
 print(rewrap(1))
+
+# --- the FIELD path (2026-08-04, second half) ---
+#
+# The same collision reaches a FIELD through `self.a = a` in a constructor.
+# Reading such a field back is harmless — the value is right — so it hid until
+# something ACTED on the wrong type: a tuple element copied it as an object and
+# dereferenced a non-pointer. SIGSEGV at run time, and the COMPILER itself died
+# under -g on the same input.
+#
+# Fixed at the root rather than per-site: FindUClass matches case-INSENSITIVELY
+# (correct for Pascal, wrong for Python), so a lowercase VALUE name found a
+# CapWords class — `node` found `Node`, `b` found `class B`. PyIsClassTypeExact
+# requires the stored name to match exactly, and is used only where an
+# identifier stands in VALUE position, so a genuine type reference is untouched.
+#
+# An earlier attempt guarded the field site alone by forcing tyVariant. It fixed
+# the -g crash, left the runtime crash, and turned `str(Node(5).node)` from 5
+# into 1 — reverted. The rows below pin BOTH: the crash must not come back and
+# the value must stay right.
+
+class Nd:
+    def __init__(self, nd):
+        self.nd = nd
+    def pair(self):
+        return (self.nd, 2)
+    def shown(self):
+        return str(self.nd)
+
+n = Nd(5)
+print(n.pair())
+print(n.shown())
+print(n.nd)
+
+# the ctor-parameter spelling that segfaulted, with an optional trailing param
+class Ay:
+    def __init__(self, ay, on_change=None):
+        self.ay = ay
+        self.oc = on_change
+    def both(self):
+        return (self.ay, self.oc)
+
+print(Ay(1).both())
+print(Ay(1, 9).both())
+
+# a field whose name matches its OWN class, differing only in case
+class Box:
+    def __init__(self, box):
+        self.box = box
+    def get(self):
+        return (self.box, "b")
+
+print(Box([4]).get())

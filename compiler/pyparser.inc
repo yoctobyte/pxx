@@ -440,6 +440,34 @@ begin
   ASTRight[tail] := -1;
 end;
 
+{ IsClassType with PYTHON's case sensitivity.
+
+  FindUClass lowercases and matches case-INSENSITIVELY, which is right for
+  Pascal and wrong for NilPy: a lowercase VALUE name then finds a CapWords class,
+  which is the single most common naming convention in Python. `node` found
+  `Node`, `item` found `Item`, and a parameter `b` found `class B` — and the
+  identifier was then typed as that class, silently
+  (bug-nilpy-a-local-named-like-a-class-is-typed-as-that-class, and the FIELD
+  half that is still open).
+
+  Used only where an identifier stands in VALUE position, so a genuine type
+  reference keeps the existing lookup. An EXACT-case collision (a local really
+  called `Item` beside `class Item`) is not addressed here — that one is a real
+  shadowing question rather than a spelling accident, and it is handled at the
+  return path by PyNameBoundInDef.
+
+  bug-nilpy-identifiers-are-case-insensitive is the umbrella; this is the class
+  half of it. }
+function PyIsClassTypeExact(const nm: AnsiString): Boolean;
+var ci: Integer;
+begin
+  Result := False;
+  if not IsClassType(nm) then Exit;
+  ci := FindUClass(nm);
+  if ci < 0 then Exit;
+  Result := PyRawName(UClsNOff[ci], UClsNLen[ci]) = nm;
+end;
+
 function PyTypeFromTokenIndex(i: Integer): TTypeKind;
 var lo: AnsiString;
 begin
@@ -467,7 +495,7 @@ begin
       else if lo = 'float' then Result := tyDouble
       else if lo = 'bool' then Result := tyBoolean
       else if lo = 'str' then Result := tyString
-      else if IsClassType(GetTokenStr(i)) then Result := tyClass;
+      else if PyIsClassTypeExact(GetTokenStr(i)) then Result := tyClass;
     end;
   end;
 end;
@@ -3071,7 +3099,7 @@ begin
           Inc(i);
           Continue;
         end;
-        if IsClassType(name) then tk := tyClass;
+        if PyIsClassTypeExact(name) then tk := tyClass;
         ci := PyFindConstraint(name);
         if (tk = tyUnknown) and (ci >= 0) then tk := PyLocals[ci].TypeKind
         else

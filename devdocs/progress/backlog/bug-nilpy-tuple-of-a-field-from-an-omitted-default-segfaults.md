@@ -184,3 +184,52 @@ says the field half needs a real type rather than a variant.
 with the field-path rows, including the `-g` compile as a row of its own so the
 compiler crash cannot regress silently — **and** `str()` of an unannotated
 field named like its class, which is the row the reverted attempt broke.
+
+## 2026-08-04 (later) — FIXED at the root, not at the site
+
+The reverted attempt failed because it guarded ONE consumer. The right lever was
+one level down: **`FindUClass` matches case-INSENSITIVELY.**
+
+That is correct for Pascal and wrong for Python, and it is what makes the whole
+bug family reachable at all — a lowercase VALUE name finds a CapWords class,
+which is the single most common naming convention in Python. `node` found
+`Node`, `item` found `Item`, a parameter `b` found `class B`.
+
+`PyIsClassTypeExact` (`pyparser.inc`) requires the class's stored name to match
+the identifier exactly, and replaces `IsClassType` at the two sites where an
+identifier stands in **value** position:
+
+- `PyTypeFromTokenIndex`'s `tkIdent` case — which is what typed the FIELD from
+  `self.a = a`;
+- `PyInferExprType`'s ident scan (`:3059`) — the site the return-path fix
+  deliberately did not reorder.
+
+Genuine TYPE references keep the existing lookup, so nothing about declaring or
+constructing a class changes.
+
+### Measured after the fix
+
+| row | before | after |
+| --- | --- | --- |
+| `class A` + `def __init__(self, a)` + tuple return | SIGSEGV | `(1, 2)` ok |
+| the same under `-g` | compiler SIGSEGV | compiles, runs, correct |
+| `class A(a, on_change=None)` + tuple of both fields | SIGSEGV | `(1, None)` ok |
+| `str(Node(5).node)` — the row the reverted attempt broke | `5` | `5` ok |
+| `str(self.node)` in a method | `5` | `5` ok |
+
+Regression sweep, all matching CPython: a class used normally, a local holding an
+instance, inheritance with an overridden method, `str`/`int`/`float`/`len`
+builtins, `list(d.keys())`/`sorted`, an `Exception` subclass with `raise`/`except`,
+a `@dataclass`, and a forward-referenced annotation `other: "Node"`.
+
+Pinned by rows added to `test/test_nilpy_local_named_like_a_class.npy`, including
+the `-g` compile as a row of its own so the compiler crash cannot regress
+silently.
+
+### What is deliberately NOT fixed
+
+An **exact-case** collision — a local really called `Item` beside `class Item` —
+is a genuine shadowing question rather than a spelling accident. The return path
+handles it (`PyNameBoundInDef`, `e8b439e24`); the field path would need the same
+treatment, and no repro of it crashing is known. Left alone rather than guessed
+at.
