@@ -265,4 +265,4 @@ already-working not-first-line forms as controls.
   set (`tkSemicolon`).
 
 ## Log
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit bd16f4b1c.
