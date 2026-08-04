@@ -1035,8 +1035,10 @@ function min(const a, b, c: Variant): Variant; overload;
 function min(const a, b, c, d: Variant): Variant; overload;
 function max(const a, b, c: Variant): Variant; overload;
 function max(const a, b, c, d: Variant): Variant; overload;
-function max(l: TPyList): Variant; overload;
-function min(l: TPyList): Variant; overload;
+{ min(l)/max(l) over a LIST live in pyeval.pas, not here: Python's `key=` needs
+  PyCallKey1's callable dispatch, and `pyeval uses pylib`, not the reverse.
+  Keeping the keyless form here as well would make `min(xs)` ambiguous across
+  the two units, so the whole list form moved rather than gaining a sibling. }
 function max(const s: AnsiString): AnsiString; overload;
 function min(const s: AnsiString): AnsiString; overload;
 function any(l: TPyList): Boolean;
@@ -3779,30 +3781,6 @@ end;
 function max(const a, b, c, d: Variant): Variant; overload;
 begin
   Result := max(max(max(a, b), c), d);
-end;
-
-function max(l: TPyList): Variant;
-var i: Integer;
-begin
-  if (l = nil) or (l.count = 0) then
-  begin
-    raise ValueError.Create('max() arg is an empty sequence');
-  end;
-  Result := l.at(0);
-  for i := 1 to l.count - 1 do
-    if pyvar_gt(l.at(i), Result) then Result := l.at(i);
-end;
-
-function min(l: TPyList): Variant;
-var i: Integer;
-begin
-  if (l = nil) or (l.count = 0) then
-  begin
-    raise ValueError.Create('min() arg is an empty sequence');
-  end;
-  Result := l.at(0);
-  for i := 1 to l.count - 1 do
-    if pyvar_gt(Result, l.at(i)) then Result := l.at(i);
 end;
 
 { Python's min()/max() take ANY iterable, not just a list -- a str iterates

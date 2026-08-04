@@ -1,0 +1,45 @@
+# A keyword argument must steer overload SELECTION, not just be looked up in
+# whichever overload the call site happened to lock in first
+# (bug-nilpy-keyword-arg-vs-overload-set).
+#
+# The same-unit half landed 2026-08-01. What was still missing is the CROSS-UNIT
+# case, and it is not exotic — it is how one Python builtin is normally split
+# here: anything needing PyCallKey1's callable dispatch has to live in pyeval,
+# because `pyeval uses pylib` and not the reverse. So `min` resolves first to
+# pylib's two-Variant scalar form while the list form that takes `key` is in
+# pyeval, and a same-unit-only sibling search refused to cross:
+#
+#     min(xs, len)        worked
+#     min(xs, key=len)    "min has no parameter named 'key'"
+#
+# `key=` is the only valid Python spelling, so the positional form was no
+# workaround. The promoter now tries the same unit FIRST (a real Pascal overload
+# set must keep winning) and any unit second.
+#
+# min/max compare the KEYS and return the ELEMENT, and on a tie return the
+# FIRST — the `ties` row pins that. Every expectation is CPython's.
+
+words = ["bb", "a", "ccc"]
+print(min(words, key=len), max(words, key=len))
+print(min(words), max(words))
+print(sorted(words, key=len), sorted(words, reverse=True))
+print(sorted(words, key=len, reverse=True))
+
+nums = [3, 1, 2]
+def neg(x):
+    return -x
+print(min(nums), max(nums), min(nums, key=neg), max(nums, key=neg))
+
+# the scalar and variadic forms must still resolve exactly as before
+print(min(3, 1), max(3, 1), min(3, 1, 2), max(3, 1, 2))
+print(min("cba"), max("cba"), min([5]), max([5]))
+
+# a tie on the key returns the FIRST element, as in Python
+ties = ["ab", "cd", "e"]
+print(min(ties, key=len), max(ties, key=len))
+
+# the ticket's original repro: two arities of one routine in ONE unit, the
+# same-unit case that must not regress
+import html
+print(html.escape("it's", quote=False))
+print(html.escape("it's"))

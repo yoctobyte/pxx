@@ -4,6 +4,8 @@ summary: "nilpy: a keyword argument is resolved against ONE overload, so it fail
 type: bug
 track: N
 prio: 50
+status: done
+owner: claude-AN
 ---
 
 # nilpy: keyword arguments and overload sets do not mix
@@ -125,3 +127,73 @@ spelling, so the positional form is not a workaround for user code, and the
 `min`/`max` implementation was reverted rather than landed inert.
 
 Reopened — moved back to `backlog/`.
+
+
+## Resolved 2026-08-04 — the cross-unit half, which is the one that mattered
+
+The ticket's own repro (`html.escape("it's", quote=False)`) has worked since
+`7be01f05f`; re-measured before touching anything. What was left is the case
+found yesterday while implementing `min(xs, key=len)`: the promoter's sibling
+search was scoped to the **same unit** as the initially-chosen overload.
+
+That scoping reads as a safety rule and is one, but it excluded the shape that
+matters most here, because it is how one Python builtin is normally split in
+this tree: anything needing `PyCallKey1`'s callable dispatch has to live in
+`pyeval`, since `pyeval uses pylib` and not the reverse. So `min` resolves first
+to **pylib**'s two-Variant scalar form while the list form carrying `key` is in
+**pyeval**, and the promotion refused to cross:
+
+```python
+print(min(words, len))       # 'a'  — worked
+print(min(words, key=len))   # "min has no parameter named 'key'"
+```
+
+`key=` is the only valid Python spelling, so the positional form was never a
+workaround — which is why this was a blocker rather than a nuisance and why the
+`min`/`max` implementation was reverted yesterday instead of landed inert.
+
+### Fix: same unit first, any unit second
+
+Two loops rather than one. The same-unit pass still wins whenever it finds
+something, so no genuine Pascal overload set changes its answer; the cross-unit
+pass runs only when the same unit has nothing.
+
+Widening is safe **here specifically**, and the reasoning is narrower than "the
+scope was wrong":
+
+- the promotion already demands an exact **parameter-name** match that the
+  chosen overload lacks — a far more selective key than the routine name alone,
+  which is what the original comment was worried about;
+- NilPy's unit scope is **flat by design**, so a visible same-named routine is a
+  candidate for that call anyway;
+- and the whole routine is `isNilPy`-gated, so Pascal's resolution is untouched.
+
+### `min`/`max` with `key=` landed on top of it
+
+The list forms moved from `pylib` into `pyeval` **whole** (not as siblings —
+keeping the keyless form in pylib would make `min(xs)` ambiguous across the two
+units) and gained `key: Pointer = nil`. They compare the KEYS and return the
+ELEMENT, and on a tie return the FIRST, as CPython does. That closes the
+`min`/`max` half of
+[[bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error]]; only
+`xs.sort(key=, reverse=)` remains there, blocked on a separate frontend rewrite.
+
+### Also fixed in passing: a temp-file collision between two tests
+
+`test_nilpy_user_def_shadows_builtin` (added earlier today) was writing
+`/tmp/test_nilpy_shadow26`, already used by `test_nilpy_user_class_shadows_builtin`.
+Harmless in a sequential `make`, a race under parallelism. Renamed.
+
+### Verified
+
+`test/test_nilpy_kwarg_overload.npy` + `.expected` (an expected FILE, not an
+inline `printf` — the output contains quotes), wired into `make test-nilpy`:
+`min`/`max` with and without `key=`, `sorted` with `key=`/`reverse=`/both, the
+scalar and variadic `min`/`max` forms unchanged, the tie-returns-first rule, and
+the ticket's original same-unit `html.escape` repro in both arities. Diffed
+against CPython, identical. `tools/gate.sh quick` GREEN, self-host
+byte-identical.
+
+## Log
+- 2026-08-04 — resolved.
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

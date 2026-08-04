@@ -7897,14 +7897,15 @@ function PyPromoteProcOverloadByKwAt(procIdx, firstParam, parenTok: Integer): In
   and the 1-argument form has no `quote`, even though the 2-argument sibling
   does (bug-nilpy-keyword-arg-vs-overload-set).
 
-  Sibling search is scoped to the SAME UNIT as procIdx — that is what makes
-  two Procs[] entries one Pascal overload SET in the first place, and it keeps
-  this from promoting into an unrelated same-named routine from a different
-  unit (a real hazard: builtin/RTL overloads collide by name across units).
+  Sibling search prefers the SAME UNIT as procIdx — that is what makes two
+  Procs[] entries one Pascal overload SET in the first place. It used to be
+  restricted to it, which was too strict: one Python builtin is routinely split
+  across pylib and pyeval, so a cross-unit fallback runs when the same unit has
+  no match. See the two loops below for why widening is safe here.
   parenTok is the call's '(' token index (PyKwNamesTokPos); -1 is a no-op.
   Returns the same procIdx unless a sibling declares a keyword the call
   actually uses and procIdx does not. }
-var k, depth, cand, unitIdx: Integer; pname: AnsiString;
+var k, depth, cand, unitIdx, found: Integer; pname: AnsiString;
 begin
   Result := procIdx;
   if (procIdx < 0) or (parenTok < 0) or (parenTok >= TokCount) or
@@ -7920,14 +7921,41 @@ begin
             (not PyProcParamNamedFrom(Result, GetTokenStr(k), firstParam)) then
     begin
       pname := GetTokenStr(k);
+      { SAME UNIT first — see the note above: two Procs[] entries in one unit
+        really are one Pascal overload set, so a sibling there is the intended
+        answer and must not be beaten by a coincidence elsewhere. }
+      found := -1;
       for cand := 0 to ProcCount - 1 do
         if (cand <> Result) and (ProcUnitIdx[cand] = unitIdx) and
            CaseEqual(Procs[cand].Name, Procs[Result].Name) and
            PyProcParamNamedFrom(cand, pname, firstParam) then
         begin
-          Result := cand;
+          found := cand;
           Break;
         end;
+      { ...then ANY unit. One Python builtin is routinely split across pylib and
+        pyeval — anything needing PyCallKey1's callable dispatch has to live in
+        pyeval, because `pyeval uses pylib` and not the reverse — so `min` is
+        picked from pylib (the two-Variant scalar form) while the list form
+        that takes `key` is in pyeval, and same-unit-only refused to cross:
+        `min(xs, key=len)` failed while `min(xs, len)` worked, and `key=` is the
+        only valid Python spelling (bug-nilpy-keyword-arg-vs-overload-set,
+        2026-08-04). Safe to widen HERE specifically because the promotion
+        already demands an exact PARAMETER-NAME match that the chosen overload
+        lacks — a far narrower key than the name alone — and because NilPy's
+        unit scope is flat by design, so a visible same-named routine is a
+        candidate for that call anyway. Same-unit still wins when it exists, so
+        no Pascal overload set changes its answer. }
+      if found < 0 then
+        for cand := 0 to ProcCount - 1 do
+          if (cand <> Result) and
+             CaseEqual(Procs[cand].Name, Procs[Result].Name) and
+             PyProcParamNamedFrom(cand, pname, firstParam) then
+          begin
+            found := cand;
+            Break;
+          end;
+      if found >= 0 then Result := found;
     end;
     Inc(k);
   end;

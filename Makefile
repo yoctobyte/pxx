@@ -1375,6 +1375,12 @@ test-nilpy: $(COMPILER)
 	# decimal expansion. Every value here is now CPython's.
 	./$(COMPILER) test/test_nilpy_round.npy /tmp/test_nilpy_round26
 	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.67 2.67\n9.99 0.04 0.3 100.0\n1.0 0.0 -0.0 0.0')"
+	# A keyword argument must steer overload SELECTION. The same-unit half landed
+	# 2026-08-01; the CROSS-UNIT case is how one Python builtin is normally split —
+	# key= needs PyCallKey1, which lives in pyeval, while min resolves from pylib.
+	# .expected file rather than an inline printf: the output contains quotes.
+	./$(COMPILER) test/test_nilpy_kwarg_overload.npy /tmp/test_nilpy_kwovl26
+	/tmp/test_nilpy_kwovl26 | diff -u test/test_nilpy_kwarg_overload.expected -
 	# list(range(...)) and str.expandtabs(). NilPy's range is not a value, it is the counted-loop
 	# lowering in a for header, so list(range(3)) did not compile. Materialised
 	# ONLY inside list( — a general range value would make print(range(3)) print a
@@ -1390,8 +1396,8 @@ test-nilpy: $(COMPILER)
 	# builtin. A user def merely joined the overload set and lost on ARGUMENT FIT,
 	# so the program silently printed the builtin's answer. See the test's header;
 	# expectations are CPython's.
-	./$(COMPILER) test/test_nilpy_user_def_shadows_builtin.npy /tmp/test_nilpy_shadow26
-	test "$$(/tmp/test_nilpy_shadow26)" = "$$(printf '%b' 'mine-sorted mine-counter\nmine-abs mine-str mine-min mine-max\nmine-sum mine-int mine-list mine-round\nmine-divmod mine-hex mine-reversed mine-enumerate')"
+	./$(COMPILER) test/test_nilpy_user_def_shadows_builtin.npy /tmp/test_nilpy_defshadow26
+	test "$$(/tmp/test_nilpy_defshadow26)" = "$$(printf '%b' 'mine-sorted mine-counter\nmine-abs mine-str mine-min mine-max\nmine-sum mine-int mine-list mine-round\nmine-divmod mine-hex mine-reversed mine-enumerate')"
 	# A Python annotation is metadata, not enforcement: `-> int` returning 2.5 gave
 	# 4612811918334230528 (the double's IEEE bits). And a returned EXPRESSION was
 	# typed by the smallest operand in it. See the test's header; expectations are
