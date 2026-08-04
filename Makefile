@@ -1375,6 +1375,12 @@ test-nilpy: $(COMPILER)
 	# decimal expansion. Every value here is now CPython's.
 	./$(COMPILER) test/test_nilpy_round.npy /tmp/test_nilpy_round26
 	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.67 2.67\n9.99 0.04 0.3 100.0\n1.0 0.0 -0.0 0.0')"
+	# Subscripting a SEQUENCE with an object that declares no __index__ raised
+	# IndexError (the instance HANDLE used as a position) instead of TypeError; a
+	# DICT must still accept an object KEY. Three subscript paths needed it. See
+	# the test's header.
+	./$(COMPILER) test/test_nilpy_index_dunder_typeerror.npy /tmp/test_nilpy_idxdun26
+	test "$$(/tmp/test_nilpy_idxdun26)" = "$$(printf '%b' 'obj-key-ok\n20 c 120\nlist TypeError\nstr TypeError\nbytes TypeError\n20 b 121')"
 	# list.append/extend/sort/reverse returned SELF, so `x = l.sort()` yielded the
 	# list where Python yields None — silent, and in the direction where NilPy
 	# looks correct and CPython breaks. The list-LITERAL desugar keeps a Self

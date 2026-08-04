@@ -1,0 +1,52 @@
+# Subscripting a SEQUENCE with an object whose class declares no `__index__`
+# raised IndexError — "list index out of range" — because the instance HANDLE
+# was used as the position
+# (bug-nilpy-missing-index-dunder-raises-indexerror-not-typeerror).
+#
+# It raised only by luck: the handle happened to be far past the end. A smaller
+# handle would have silently indexed the WRONG element, which is the shape this
+# dunder family keeps producing.
+#
+# Two things this test has to hold apart, and they are why the raise could not
+# go in PyIndexCoerce (which sees only the index):
+#   * a SEQUENCE — list, str, bytearray — must raise TypeError;
+#   * a DICT must still WORK, because an object is a perfectly legal key.
+#     Coercing there collapsed object keys onto their __index__ value, measured
+#     on the parent ticket (bug-nilpy-unary-numeric-dunders-return-raw-handle).
+#
+# THREE subscript paths reach a sequence and all three needed it: a literal
+# receiver (PyMakeSuffixIndex), a NAMED container through the shared parser's
+# default-property path, and a named str (PyMakeStrIndex). Fixing one and
+# leaving the others is how this stays half-broken, so every row below is a
+# named receiver.
+#
+# Every expectation is CPython's.
+
+class N:
+    pass
+class I:
+    def __init__(self, v):
+        self.v = v
+    def __index__(self):
+        return self.v
+xs = [10, 20, 30]
+s = "abc"
+b = bytearray(b"xyz")
+d = {}
+n = N()
+d[n] = "obj-key-ok"
+print(d[n])
+print(xs[I(1)], s[I(2)], b[I(0)])
+try:
+    print(xs[N()])
+except TypeError:
+    print("list TypeError")
+try:
+    print(s[N()])
+except TypeError:
+    print("str TypeError")
+try:
+    print(b[N()])
+except TypeError:
+    print("bytes TypeError")
+print(xs[1], s[1], b[1])

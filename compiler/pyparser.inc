@@ -4942,8 +4942,13 @@ function PyMakeStrIndex(baseNode, idxNode: Integer): Integer;
 var procIdx, callNode, a0, a1: Integer;
 begin
   { the other subscript choke point: a NAMED str variable reaches here from the
-    shared parser's generic index path, which has no notion of __index__ }
-  idxNode := PyIndexCoerce(idxNode);
+    shared parser's generic index path, which has no notion of __index__.
+    A str is always a sequence, so an object index with no `__index__` raises
+    TypeError here unconditionally — no receiver test needed, unlike the
+    container paths where a dict KEY may legitimately be an object. }
+  procIdx := PyIndexNotIntKind('string', idxNode);
+  if procIdx >= 0 then idxNode := procIdx
+  else idxNode := PyIndexCoerce(idxNode);
   procIdx := FindProc('pystr_at');
   if procIdx < 0 then Error('Nil Python: pylib (pystr_at) not loaded');
   a0 := AllocNode(AN_ARG);
@@ -6278,10 +6283,93 @@ begin
   PyIndexCoerce := ci;
 end;
 
-function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer;
-var rec, listCi, dictCi, procIdx, a0, a1: Integer;
+{ `xs[obj]` where obj's class declares no `__index__` and the receiver is a
+  SEQUENCE — a TypeError, as in CPython, not an accidental IndexError from using
+  the instance handle as a position.
+
+  Both halves of the condition matter. It has to know the receiver is a
+  sequence, which is why this lives here and not in PyIndexCoerce: that routine
+  sees only the index expression and is called from a DICT subscript too, where
+  an object is a perfectly legal key. Getting that wrong collapses object dict
+  keys onto their `__index__` value — measured, and recorded on the parent
+  ticket (bug-nilpy-unary-numeric-dunders-return-raw-handle).
+
+  Returns the raising call, or -1 when this is not the case. }
+function PyIndexNotIntKind(kind: AnsiString; idxNode: Integer): Integer;
+var ci, procIdx, a0, a1, lit: Integer;
 begin
-  idxNode := PyIndexCoerce(idxNode);   { obj-as-subscript asks its __index__ }
+  PyIndexNotIntKind := -1;
+  if (idxNode < 0) or (kind = '') then Exit;
+  if IntToTypeKind(ASTTk[idxNode]) <> tyClass then Exit;
+  if ResolveNodeRec(idxNode) < REC_UCLASS_BASE then Exit;
+  if PyRecIsPylibOwnClass(ResolveNodeRec(idxNode)) then Exit;
+  ci := ResolveNodeRec(idxNode) - REC_UCLASS_BASE;
+  if FindUMeth(ci, '__index__') >= 0 then Exit;    { it has one — coerce, do not raise }
+  procIdx := FindProc('PyIndexTypeError');
+  if procIdx < 0 then Exit;
+  a0 := AllocNode(AN_ARG);
+  lit := AllocNode(AN_STR_LIT);
+  ASTSOffset[lit] := PyStoredName(kind); ASTSLen[lit] := Length(kind);
+  ASTTk[lit] := Ord(tyString);
+  ASTLeft[a0] := lit;
+  a1 := AllocNode(AN_ARG);
+  lit := AllocNode(AN_STR_LIT);
+  ASTSOffset[lit] := PyStoredName(PyRawName(UClsNOff[ci], UClsNLen[ci]));
+  ASTSLen[lit] := UClsNLen[ci];
+  ASTTk[lit] := Ord(tyString);
+  ASTLeft[a1] := lit; ASTRight[a1] := -1;
+  ASTRight[a0] := a1;
+  PyIndexNotIntKind := AllocNode(AN_CALL);
+  ASTIVal[PyIndexNotIntKind] := procIdx;
+  ASTTk[PyIndexNotIntKind] := Ord(tyInt64);
+  ASTLeft[PyIndexNotIntKind] := a0;
+end;
+
+{ The sequence KIND a receiver NODE is, or '' when it is not a sequence (a dict,
+  or a variant that may hold one at run time). }
+function PyIndexSeqKind(baseNode: Integer): AnsiString;
+var rec, listCi: Integer;
+begin
+  PyIndexSeqKind := '';
+  if baseNode < 0 then Exit;
+  if PyIsStrBaseTk(IntToTypeKind(ASTTk[baseNode])) then
+  begin PyIndexSeqKind := 'string'; Exit; end;
+  if IntToTypeKind(ASTTk[baseNode]) <> tyClass then Exit;
+  rec := ResolveNodeRec(baseNode);
+  listCi := FindUClass('TPyList');
+  if (listCi >= 0) and (rec = REC_UCLASS_BASE + listCi) then PyIndexSeqKind := 'list'
+  else if (PyBytesCi >= 0) and (rec = REC_UCLASS_BASE + PyBytesCi) then
+    PyIndexSeqKind := 'bytearray';
+end;
+
+{ ...and the same for a receiver named only by its CLASS index, which is what
+  the NAMED-receiver subscript path in parser.inc has. }
+function PyIndexSeqKindCi(mci: Integer): AnsiString;
+var listCi: Integer;
+begin
+  PyIndexSeqKindCi := '';
+  if mci < 0 then Exit;
+  listCi := FindUClass('TPyList');
+  if mci = listCi then PyIndexSeqKindCi := 'list'
+  else if mci = PyBytesCi then PyIndexSeqKindCi := 'bytearray';
+end;
+
+{ The raise for a receiver NODE — the literal-receiver path. }
+function PyIndexNotIntRaise(baseNode, idxNode: Integer): Integer;
+begin
+  PyIndexNotIntRaise := PyIndexNotIntKind(PyIndexSeqKind(baseNode), idxNode);
+end;
+
+function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer;
+var rec, listCi, dictCi, procIdx, a0, a1, notIntN: Integer;
+begin
+  { An object index with no `__index__` on a SEQUENCE raises TypeError. The
+    raiser stands in for the index EXPRESSION rather than replacing the whole
+    subscript, so both this path and the named-receiver one in parser.inc use
+    the identical shape and the getter is never reached. }
+  notIntN := PyIndexNotIntRaise(baseNode, idxNode);
+  if notIntN >= 0 then idxNode := notIntN
+  else idxNode := PyIndexCoerce(idxNode);   { obj-as-subscript asks its __index__ }
   if PyIsStrBaseTk(IntToTypeKind(ASTTk[baseNode])) then
   begin
     Result := PyMakeStrIndex(baseNode, idxNode);

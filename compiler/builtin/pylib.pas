@@ -4205,6 +4205,25 @@ end;
   aborts the WHOLE COMPILATION, which made `try: ... in obj ... except:` fail
   to even build instead of running its handler, unlike CPython.
   bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic }
+{ `xs[obj]` where obj's class declares no `__index__`. CPython's message names
+  both the sequence KIND and the class — "list indices must be integers or
+  slices, not N" — and the kind is what makes it useful. A runtime raise
+  (catchable), like every other dunder-absent case here.
+
+  Before this the instance HANDLE was used as the position, so it raised
+  IndexError "list index out of range" — and only because the handle happened to
+  be far past the end. A smaller handle would have silently indexed the WRONG
+  element, which is the shape this dunder family keeps producing
+  (bug-nilpy-missing-index-dunder-raises-indexerror-not-typeerror). }
+function PyIndexTypeError(const seqKind: AnsiString;
+                          const clsName: AnsiString): Int64;
+begin
+  raise TypeError.Create(seqKind + ' indices must be integers or slices, not '
+                         + clsName);
+  PyIndexTypeError := 0;   { unreachable; a FUNCTION so it can stand in for the
+                             index expression itself at every subscript site }
+end;
+
 procedure PyNotContainerError;
 begin
   raise TypeError.Create('argument is not a container (no __contains__)');

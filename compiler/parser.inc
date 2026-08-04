@@ -846,6 +846,8 @@ function PyBareNoneHere: Boolean; forward;  { a `None` with nothing after it tha
 function PyMakeSuperCall(const name: AnsiString): Integer; forward;  { `super().m(args)` as a value (pyparser.inc) }
 function PyDynAttrEverAssigned(const nm: AnsiString): Boolean; forward;  { is `.nm =` written anywhere? (pyparser.inc) }
 function PyIndexCoerce(n: Integer): Integer; forward;  { Python __index__: an object used where an integer is required (pyparser.inc) }
+function PyIndexNotIntKind(kind: AnsiString; idxNode: Integer): Integer; forward;  { …and the TypeError when it declares none (pyparser.inc) }
+function PyIndexSeqKindCi(mci: Integer): AnsiString; forward;
 function PyClassWantsIntIndex(ci: Integer): Boolean; forward;  { does a subscript of this class take an INTEGER (a sequence) rather than an object key? (pyparser.inc) }
 function PyClsAttrSharedSym(const fname: AnsiString; var needsOvr: Boolean): Integer; forward;  { the one shared class-attribute slot of that name, for a VARIANT receiver (pyparser.inc) }
 function PyClsAttrOvrSlot(ci: Integer; const fname: AnsiString): Integer; forward;  { that slot, when the attribute also needs per-instance overrides (pyparser.inc) }
@@ -4818,7 +4820,15 @@ begin
             onto its __index__ value — measured, `d[K(1)]` and `d[1]` became one
             entry (bug-nilpy-unary-numeric-dunders-return-raw-handle). }
           if PyExprMode and PyClassWantsIntIndex(mci) then
-            ASTLeft[margIdx] := PyIndexCoerce(ASTLeft[margIdx]);
+          begin
+            { ...and an object with NO `__index__` raises TypeError rather than
+              reaching the getter with its handle — the same substitution the
+              literal-receiver path makes (PyIndexNotIntKind). Only for a
+              sequence; PyClassWantsIntIndex is already that gate. }
+            i := PyIndexNotIntKind(PyIndexSeqKindCi(mci), ASTLeft[margIdx]);
+            if i >= 0 then ASTLeft[margIdx] := i
+            else ASTLeft[margIdx] := PyIndexCoerce(ASTLeft[margIdx]);
+          end;
 
           if isAssign then
           begin
