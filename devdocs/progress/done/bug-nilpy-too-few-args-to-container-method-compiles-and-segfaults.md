@@ -249,4 +249,4 @@ call, omitted defaulted parameter, and the `xs.index()` / `d.get()` container
 methods that were the original crash reports).
 
 ## Log
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 7db9c4b90.
