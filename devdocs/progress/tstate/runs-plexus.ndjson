@@ -1,1 +1,2 @@
 {"date": "2026-08-04T23:37:06Z", "fixed": [], "full": false, "new_red": ["test-core#src:test/csocket_loopback_b88.c"], "sha": "abcf66b0b308fdef5d6cbe3906756e91a70315dc", "tier": "native", "verdict": "RED", "wall": 121.8}
+{"date": "2026-08-04T23:44:27Z", "fixed": [], "full": true, "new_red": [], "sha": "abcf66b0b308fdef5d6cbe3906756e91a70315dc", "tier": "full", "verdict": "RED", "wall": 429.1}
