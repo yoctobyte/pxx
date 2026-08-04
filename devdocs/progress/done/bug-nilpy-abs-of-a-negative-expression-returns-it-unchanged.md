@@ -74,4 +74,4 @@ a machine int first would narrow mod 2^64, which is the whole reason the tag
 exists.
 
 ## Log
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 404b249e6.
