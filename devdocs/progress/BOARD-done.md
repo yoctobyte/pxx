@@ -1303,6 +1303,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-nilpy-test-nilpy-class-return | N | 70 | regression | a def whose body is a FORWARD call loses its annotated class result, so attribute access on the call no longer parses | — |
 | regression-test-nilpy-test-nilpy-import-sqlite | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_sqlite.npy red at 6840247771d5 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-operator-dunders | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_operator_dunders.npy red at 6840247771d5 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-print-arg-eval-order | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_print_arg_eval_order.npy@1 red at 9df2717684a3 (auto-filed by twatch) | — |
 | regression-test-smoke-11 | T | 70 | regression | regression: test-smoke#11 red at 163ffea562fa (auto-filed by twatch) | — |
 | regression-test-smoke-compiler | T | 70 | regression | regression: test-smoke#src:compiler/compiler.pas red at b11e604f8043 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-00 | T | 70 | regression | regression: test-sqlite-threads-aarch64#00 red at 83006e927e35 (auto-filed by twatch) | — |

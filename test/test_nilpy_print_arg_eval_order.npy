@@ -1,52 +1,23 @@
-# print() converted a container argument to TEXT as it evaluated it, not after
-# every argument was evaluated — so `print(zs, zs.pop(), zs)` showed the list
-# BEFORE and after the pop (bug-nilpy-print-stringifies-container-args-eagerly).
-#
-# Python evaluates all arguments left to right and only then converts each to
-# text, so both references show the container in its FINAL state.
-#
-# The arguments were already hoisted into temps (that fix predates this one, for
-# a different reason: an argument that RAISES must not leave earlier ones
-# already on stdout). What was wrong is that the container/float conversions ran
-# BEFORE the hoist, so what got hoisted was the TEXT. Converting the TEMP
-# instead is the whole fix — and it is why the user-function control below was
-# always correct: a callee doing its own str() converts after every argument is
-# bound.
-#
-# The last group is the reason this cannot be "fixed" by dropping the hoist:
-# print of a float, a string LITERAL, a bool and None all route through
-# conversions that must still happen, and a string literal in particular must
-# widen to a managed string or every print reserves 8 MB of BSS.
-#
-# Every expectation is CPython's.
+# print() wrote each argument to stdout as it was evaluated, so an exception
+# raised by a LATER argument left EARLIER ones already on stdout -- the
+# classic `try: print(...) except: print(fallback)` idiom then printed both.
+# bug-nilpy-print-emits-arguments-before-evaluating-later-ones
+# Every expectation is CPython's own output.
 
-zs = [1, 2, 3]
-print(zs, zs.pop(), zs)
+try:
+    print("label =", str(3 % 0))
+except:
+    print("label = ERR")
 
-ds = {"a": 1, "b": 2}
-print(ds, ds.pop("a"), ds)
+print(1, 2, 3)
+print("a", "b", "c")
+print([1, 2], {"k": 1})
+print("x", 5, 3.14, True, None)
 
-# the mutating call FIRST, and alone
-ys = [1, 2, 3]
-print(ys.pop(), ys)
-qs = [1, 2, 3]
-print(qs, qs.pop())
+def f():
+    return "side"
+print("before", f())
 
-# controls the ticket lists as already correct
-def show(a, b, c):
-    return str(a) + " " + str(b) + " " + str(c)
-ws = [1, 2, 3]
-print(show(ws, ws.pop(), ws))
-vs = [1, 2, 3]
-print(str(vs), vs.pop(), str(vs))
-us = [1, 2, 3]
-print([us, us.pop(), us])
-
-# plain aliasing, unchanged
-al = [1, 2]
-al2 = al
-al2.append(3)
-print(al)
-
-# the conversions that must still happen
-print(1e19, 2.5, "lit", 7, True, None)
+xs = [1, 2, 3]
+print(*xs)
+print("lead", *xs)
