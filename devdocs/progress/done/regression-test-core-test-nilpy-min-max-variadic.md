@@ -82,4 +82,4 @@ GREEN, self-host byte-identical.
 Note the loop that caught it: the shadowing commit gated green on quick, and
 `test-core` is a full-tier job, so the watcher found it and pinned the bad sha
 within the hour. Working as designed.
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit a6754ddf7.
