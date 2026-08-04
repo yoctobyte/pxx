@@ -117,4 +117,4 @@ is only in *readers* that assume the tree reflects now.
   makes it concrete (worktree `210523Z-74a9251`, 1 failing; `origin/master`
   `212028Z-4d61f85`, 0 failing, minutes apart in the same clone).
 
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 0cf7b17cd.
