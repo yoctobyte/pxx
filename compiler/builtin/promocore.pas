@@ -85,6 +85,9 @@ procedure PXXPromoShl(dst, a, b: Pointer);
 procedure PXXPromoShr(dst, a, b: Pointer);
 function  PXXPromoCmp(a, b: Pointer): Integer;
 function  PXXPromoToStr(a: Pointer): AnsiString;
+{ base 2, 8 or 16, spelled as Python spells it (prefix + leading minus). The
+  frontend lowers hex/bin/oct of an arbitrary-precision int here. }
+function  PXXPromoToBase(a: Pointer; base: Integer): AnsiString;
 procedure PXXPromoToVariant(dstVar, src: Pointer);
 procedure PXXPromoFromVariant(dst, srcVar: Pointer);
 function  PXXPromoVarArithTry(dst, a, b: Pointer; op: Integer): Integer;
@@ -532,6 +535,47 @@ begin
 end;
 
 { signed two's-complement of `a` into `w` bytes of `buf` (w >= mag length + 1) }
+{ The MAGNITUDE of `a` in base 2, 8 or 16, digits only — no sign, no prefix.
+
+  Those are the three bases Python's bin/oct/hex use, and all three are POWERS
+  OF TWO, so this reads bit groups straight out of the byte buffer BMagToBuf
+  already produces (base 256, little-endian) instead of dividing the bignum once
+  per digit. Exact by construction: 8 is a multiple of neither 3 nor... it is a
+  multiple of 1 and 4 but not 3, so an octal digit can straddle a byte boundary —
+  which is why this walks a BIT index rather than assuming digits nest inside
+  bytes.
+
+  `bpd` is bits per digit: 1, 3 or 4. Zero renders as '0'.
+
+  Built into a SetLength'd buffer and filled from the end, never by prepending
+  in a loop — `s := c + s` is quadratic here, the same trap
+  project_pxx_string_concat_in_loop_is_quadratic records. }
+function BMagToBase(const a: TBig; bpd: Integer): AnsiString;
+const BDIG = '0123456789abcdef';
+var buf: TBitBuf; n, totalBits, nd, i, k, bit, v, lead: Integer; s: AnsiString;
+begin
+  n := BMagToBuf(a, buf);
+  if n = 0 then begin BMagToBase := '0'; Exit; end;
+  totalBits := n * 8;
+  nd := (totalBits + bpd - 1) div bpd;
+  SetLength(s, nd);
+  for i := 0 to nd - 1 do
+  begin
+    v := 0;
+    for k := 0 to bpd - 1 do
+    begin
+      bit := i * bpd + k;
+      if bit < totalBits then
+        if ((buf[bit div 8] shr (bit mod 8)) and 1) = 1 then v := v or (1 shl k);
+    end;
+    { digit i counts from the LEAST significant end, so it lands at the END }
+    s[nd - i] := BDIG[v + 1];
+  end;
+  lead := 1;
+  while (lead < nd) and (s[lead] = '0') do Inc(lead);
+  BMagToBase := Copy(s, lead, nd - lead + 1);
+end;
+
 procedure BTwosToBuf(const a: TBig; w: Integer; var buf: TBitBuf);
 var mag: TBitBuf; mn, i, carry, v: Integer;
 begin
@@ -1299,6 +1343,39 @@ end;
 procedure PXXPromoShr(dst, a, b: Pointer);
 begin
   StoreBig(dst, BShr(SlotBig(a), PromoShiftCount(b)));
+end;
+
+{ A promotable int in base 2, 8 or 16, spelled as Python spells it — including
+  the `0b`/`0o`/`0x` prefix and a LEADING MINUS for a negative value.
+
+  Python's hex(-255) is '-0xff', NOT a two's-complement form, so the sign is
+  carried separately and only the magnitude is converted. Zero is '0x0', which
+  is what pylib's Int64 hex already produces — the two spellings must agree,
+  since which one a program reaches depends only on whether its value happens to
+  have grown past a machine word.
+
+  The frontend is the only caller and passes a literal base
+  (feature-nilpy-hex-bin-oct-over-a-big-int). promocore is exception-free by
+  design, so an out-of-range base cannot raise; it returns a marker that cannot
+  be mistaken for a number rather than a plausible-looking wrong rendering. }
+function PXXPromoToBase(a: Pointer; base: Integer): AnsiString;
+var big: TBig; bpd: Integer; pfx, digits: AnsiString;
+begin
+  bpd := 0;
+  pfx := '';
+  if base = 2 then begin bpd := 1; pfx := '0b'; end
+  else if base = 8 then begin bpd := 3; pfx := '0o'; end
+  else if base = 16 then begin bpd := 4; pfx := '0x'; end;
+  if bpd = 0 then
+  begin
+    PXXPromoToBase := '<promocore: unsupported base>';
+    Exit;
+  end;
+  if SlotTag(a) = PROMO_TAG_INLINE then big := BFromInt(SlotInt(a))
+  else big := SlotBig(a);
+  digits := BMagToBase(big, bpd);
+  if big.neg then PXXPromoToBase := '-' + pfx + digits
+  else PXXPromoToBase := pfx + digits;
 end;
 
 function PXXPromoToStr(a: Pointer): AnsiString;

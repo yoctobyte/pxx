@@ -9865,6 +9865,62 @@ begin
           the ordinary overload path, unchanged byte for byte }
         TokPos := intBaseArg - 1; Next;
       end;
+      { hex/bin/oct of an ARBITRARY-PRECISION int. Python's take any width, while
+        pylib's are `function hex(n: Int64)`, so once a value has grown past a
+        machine word (or came from a wide literal) the call simply has no
+        matching overload — measured today, before the promotion default even
+        lands: `x = 1180591620717411303424; hex(x)` fails to compile.
+
+        A `PromoInt` OVERLOAD in pylib cannot be written: a PromoInt PARAMETER
+        cannot be handed to the promo runtime at all, and `shr` / `Integer(n)`
+        on one are both broken, so the digit loop is unwritable in Pascal
+        source (bug-a-promoint-shr-yields-nothing-and-a-machine-int-cast-yields-
+        the-slot-address). So this lowers to promocore's own base conversion,
+        which works off the bignum limbs directly — the same shape `**` uses for
+        pypow_v and `writeln` uses for PXXPromoToStr.
+
+        Guarded by PyUserShadowsProc like every other name-keyed lowering: an
+        IR-level rewrite doing exactly this without the guard is what made a
+        user `def len(x)` unreachable
+        (bug-nilpy-user-def-len-of-a-container-still-binds-the-builtin).
+
+        A NON-promo argument REWINDS to the ordinary Int64 overload, so native
+        values keep today's code path untouched. }
+      if isNilPy and (not PyUserShadowsProc(name)) and
+         (CaseEqual(name, 'hex') or CaseEqual(name, 'bin') or CaseEqual(name, 'oct')) and
+         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        intBaseArg := TokPos;
+        Next; Expect(tkLParen, '('); ParseArgExpr;
+        if TypeIsPromoInt(IntToTypeKind(ASTTk[CurASTNode])) then
+        begin
+          if CaseEqual(name, 'hex') then i := 16
+          else if CaseEqual(name, 'oct') then i := 8
+          else i := 2;
+          procIdx := FindProc('PXXPromoToBase');
+          if procIdx < 0 then
+            Error('Nil Python: promocore (PXXPromoToBase) not loaded');
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := CurASTNode;
+          valNode := AllocNode(AN_INT_LIT);
+          ASTIVal[valNode] := i;
+          ASTTk[valNode] := Ord(tyInteger);
+          argSeq2 := AllocNode(AN_ARG);
+          ASTLeft[argSeq2] := valNode;
+          ASTRight[argSeq2] := -1;
+          ASTRight[argSeq] := argSeq2;
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := procIdx;
+          ASTLeft[node] := argSeq;
+          ASTTk[node] := Ord(tyAnsiString);
+          Expect(tkRParen, ')');
+          CurASTNode := node;
+          LastExprTk := tyAnsiString;
+          Exit;
+        end;
+        { a machine-width argument: rewind, take the ordinary overload }
+        TokPos := intBaseArg - 1; Next;
+      end;
       if isNilPy and (name = 'int') and (not PyUserShadowsProc(name)) then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr;

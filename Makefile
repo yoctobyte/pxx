@@ -1375,6 +1375,12 @@ test-nilpy: $(COMPILER)
 	# decimal expansion. Every value here is now CPython's.
 	./$(COMPILER) test/test_nilpy_round.npy /tmp/test_nilpy_round26
 	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.67 2.67\n9.99 0.04 0.3 100.0\n1.0 0.0 -0.0 0.0')"
+	# hex/bin/oct of an ARBITRARY-PRECISION int. pylib's take Int64, so a value past
+	# a machine word had no matching overload; a PromoInt overload is unwritable (a
+	# PromoInt parameter cannot reach the runtime), so the frontend lowers a
+	# promo-typed argument to promocore's PXXPromoToBase. See the test's header.
+	./$(COMPILER) test/test_nilpy_hex_bin_oct_bigint.npy /tmp/test_nilpy_hexbig26
+	/tmp/test_nilpy_hexbig26 | diff -u test/test_nilpy_hex_bin_oct_bigint.expected -
 	# Mutating a dict while iterating it is NOT DETECTED — a DELIBERATE divergence
 	# (devdocs/dev/nilpy-semantics-divergences.md). These expectations are
 	# deliberately NOT CPython's: every program in that file is one CPython rejects,

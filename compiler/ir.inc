@@ -2321,8 +2321,33 @@ begin
     Result := IRAppendCall(caSlCall, caArg1, -1, Ord(tyPointer));
     Exit;
   end;
+  { PROMO argument to a POINTER parameter: pass the slot ADDRESS, which is what
+    every promocore entry point takes.
+
+    MUST come before the narrowing arm below. TypeIsOrdinal includes tyPointer
+    (it is in the 15/16/17 group with tyNativeInt/tyNativeUInt), so the narrowing
+    arm matches a Pointer parameter too and would hand the callee a value where
+    it expects an address — measured: PXXPromoToInt64Wrap ran and the callee
+    dereferenced the result into a segfault, with an IR dump that looked
+    perfectly reasonable until the arg's source node was read.
+
+    This is the path a frontend lowering uses to reach the promo runtime with an
+    ordinary AN_CALL rather than hand-built IR: it is how `hex`/`bin`/`oct` of an
+    arbitrary-precision int reach PXXPromoToBase
+    (feature-nilpy-hex-bin-oct-over-a-big-int). }
+  if (cpi >= 0) and (pathIdx >= 0) and
+     (pathIdx < Procs[cpi].ParamCount) and
+     TypeIsPromoInt(IntToTypeKind(ASTTk[argAST])) and
+     (not Procs[cpi].Params[pathIdx].IsRef) and
+     (Procs[cpi].Params[pathIdx].TypeKind = tyPointer) then
+  begin
+    Result := IRPromoAddrOf(argAST);
+    Exit;
+  end;
   { PROMO argument to a concrete int parameter: same mod-2^64 narrowing as the
-    assignment path — the raw lowering would pass the slot ADDRESS. }
+    assignment path — the raw lowering would pass the slot ADDRESS. A POINTER
+    parameter is handled above; it is ordinal by TypeIsOrdinal's reckoning but
+    wants the address, not a narrowed value. }
   if (cpi >= 0) and (pathIdx >= 0) and
      (pathIdx < Procs[cpi].ParamCount) and
      TypeIsPromoInt(IntToTypeKind(ASTTk[argAST])) and

@@ -1,0 +1,53 @@
+# Python's hex/bin/oct take ARBITRARY PRECISION; pylib's are
+# `function hex(n: Int64)`, so a value past a machine word had no matching
+# overload and `hex(x)` simply failed to compile
+# (feature-nilpy-hex-bin-oct-over-a-big-int).
+#
+# A PromoInt OVERLOAD in pylib cannot be written: a PromoInt PARAMETER cannot be
+# handed to the promo runtime at all, and `shr`/`Integer(n)` on one are both
+# broken, so the digit loop is unwritable in Pascal source
+# (bug-a-promoint-shr-yields-nothing-and-a-machine-int-cast-yields-the-slot-address).
+# So the frontend lowers a promo-typed argument to promocore's own
+# PXXPromoToBase, which works off the bignum limbs directly — the same shape
+# `**` uses for pypow_v.
+#
+# Bases 2/8/16 are all powers of two, so the conversion reads BIT GROUPS out of
+# the byte buffer rather than dividing per digit. Octal is the one that does not
+# nest inside a byte (3 does not divide 8), which is why the 2**70 oct row is
+# here.
+#
+# A NATIVE-width argument still takes pylib's Int64 path untouched — the first
+# group below — so both spellings must agree, since which one a program reaches
+# depends only on whether its value happened to grow.
+#
+# Every expectation is CPython's.
+
+# native path, unchanged
+print(hex(255), oct(255), bin(255))
+print(hex(0), oct(0), bin(0))
+print(hex(-255), oct(-255), bin(-255))
+print(hex(1), bin(1))
+
+# arbitrary precision
+big = 1180591620717411303424
+print(hex(big))
+print(oct(big))
+print(bin(big))
+
+huge = 1267650600228229401496703205376
+print(hex(huge))
+
+neg = -1180591620717411303424
+print(hex(neg))
+print(oct(neg))
+
+# right at the machine-word boundary
+w = 18446744073709551616
+print(hex(w), oct(w))
+
+d = 12345678901234567890
+print(hex(d))
+
+# the result is an ordinary string
+s = hex(big)
+print(len(s), s[0:2], s[2:6])

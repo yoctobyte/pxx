@@ -1052,6 +1052,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-function-values-spellings | N | 45 | feature | NilPy: a function is a VALUE — bind it to a name, store it, call it back | — |
 | feature-nilpy-function-values | N | 70 | feature | NilPy: a def as a VALUE (procedure pointer) | — |
 | feature-nilpy-generator-expression-arg | N | 45 | feature | NilPy: a generator expression as a call argument | — |
+| feature-nilpy-hex-bin-oct-over-a-big-int | N | 55 | feature | hex/bin/oct take Int64, so they stop matching the moment every NilPy int is promotable — they need a PXXPromoToBase in promocore plus a frontend lowering, NOT a pylib overload (a PromoInt parameter cannot reach the runtime) | decide-nilpy-int-promotion-costs-10x-on-ordinary-loops |
 | feature-nilpy-keyword-args | N | 65 | feature | NilPy: keyword arguments at call sites | — |
 | feature-nilpy-lambda | N | 40 | feature | NilPy: real lambda expressions (function values) | — |
 | feature-nilpy-len-of-str | N | 50 | feature | NilPy: len() on a str (only TPyList is accepted today) | — |
