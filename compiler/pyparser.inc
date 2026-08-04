@@ -10422,34 +10422,6 @@ begin
       end
       else
         PyParseBoolExpr;
-      { A container argument prints its ELEMENTS (`['a', 'b']`), like Python.
-        Without this it fell through to the integer path and printed the
-        TPyList/TPyDict instance pointer — silently, in the single most natural
-        debugging line there is (bug-a-nilpy-print-of-a-list-prints-a-pointer). }
-      CurASTNode := PyReprContainer(CurASTNode);
-      { A FLOAT argument goes through pystr_of too, for the same reason the
-        container line above exists: otherwise print reaches the BACKEND float
-        writer (EmitWriteFloatNat, hand-written per target) while `str()` uses
-        FloatToStr, and the two disagree. They did — `print(1e19)` wrote
-        `9223372036854775809.o72036854775808`, a byte that is not a digit,
-        while `print(str(1e19))` was already correct
-        (bug-nilpy-print-of-a-float-bypasses-str-formatting). Routing here fixes
-        every target at once and makes print(x) and print(str(x)) agree by
-        construction, which is Python's actual rule. }
-      if (IntToTypeKind(ASTTk[CurASTNode]) = tyDouble) or
-         (IntToTypeKind(ASTTk[CurASTNode]) = tySingle) then
-      begin
-        starProc := IRFindProc1ByArgTk('pystr_of', tyDouble);
-        if starProc >= 0 then
-        begin
-          starArg := AllocNode(AN_ARG);
-          ASTLeft[starArg] := CurASTNode;
-          CurASTNode := AllocNode(AN_CALL);
-          ASTIVal[CurASTNode] := starProc;
-          ASTTk[CurASTNode] := Ord(tyAnsiString);
-          ASTLeft[CurASTNode] := starArg;
-        end;
-      end;
       { Evaluate this argument into a hidden temp NOW, rather than letting
         AN_WRITELN's own lowering evaluate-and-emit each argument in turn.
         Python evaluates every argument before print writes anything; pxx
@@ -10484,6 +10456,52 @@ begin
       ASTRight[pargAsgn] := CurASTNode;
       PyHoistStmt(pargAsgn);
       CurASTNode := PyMakeIdent(pargTmp);
+
+      { CONVERT THE TEMP, not the raw argument. The conversions below turn a
+        container into its repr text and a float into str()'s spelling, and they
+        used to run BEFORE the hoist above — so what got hoisted was the TEXT,
+        computed while later arguments had not been evaluated yet. Python
+        evaluates every argument first and only then converts, so both
+        references in `print(zs, zs.pop(), zs)` show the list in its FINAL
+        state; pxx froze the first one's text before the pop and printed
+        `[1, 2, 3] 3 [1, 2]` where CPython prints `[1, 2] 3 [1, 2]`
+        (bug-nilpy-print-stringifies-container-args-eagerly).
+
+        Moving the conversion after the hoist is the whole fix: the temp holds
+        the container POINTER, every argument's evaluation has already happened
+        by the time AN_WRITELN's lowering runs, and the repr then reads the list
+        as it finally is. The user-function control the ticket noted —
+        `show(xs, xs.pop(), xs)` doing its own str() — was always correct for
+        exactly this reason: the conversion happened in the callee, after every
+        argument was bound. }
+      { A container argument prints its ELEMENTS (`['a', 'b']`), like Python.
+        Without this it fell through to the integer path and printed the
+        TPyList/TPyDict instance pointer — silently, in the single most natural
+        debugging line there is (bug-a-nilpy-print-of-a-list-prints-a-pointer). }
+      CurASTNode := PyReprContainer(CurASTNode);
+      { A FLOAT argument goes through pystr_of too, for the same reason the
+        container line above exists: otherwise print reaches the BACKEND float
+        writer (EmitWriteFloatNat, hand-written per target) while `str()` uses
+        FloatToStr, and the two disagree. They did — `print(1e19)` wrote
+        `9223372036854775809.o72036854775808`, a byte that is not a digit,
+        while `print(str(1e19))` was already correct
+        (bug-nilpy-print-of-a-float-bypasses-str-formatting). Routing here fixes
+        every target at once and makes print(x) and print(str(x)) agree by
+        construction, which is Python's actual rule. }
+      if (IntToTypeKind(ASTTk[CurASTNode]) = tyDouble) or
+         (IntToTypeKind(ASTTk[CurASTNode]) = tySingle) then
+      begin
+        starProc := IRFindProc1ByArgTk('pystr_of', tyDouble);
+        if starProc >= 0 then
+        begin
+          starArg := AllocNode(AN_ARG);
+          ASTLeft[starArg] := CurASTNode;
+          CurASTNode := AllocNode(AN_CALL);
+          ASTIVal[CurASTNode] := starProc;
+          ASTTk[CurASTNode] := Ord(tyAnsiString);
+          ASTLeft[CurASTNode] := starArg;
+        end;
+      end;
 
       argNode := AllocNode(AN_ARG);
       ASTLeft[argNode] := CurASTNode;

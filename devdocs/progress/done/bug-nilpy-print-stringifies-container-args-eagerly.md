@@ -3,6 +3,8 @@ track: N
 prio: 45
 type: bug
 summary: "print() converts a container argument to text as it evaluates it, not after all arguments are evaluated — so `print(xs, xs.pop(), xs)` shows the list before AND after the pop. A user function with the identical shape is correct"
+status: done
+owner: claude-AN
 ---
 
 # `print` stringifies container arguments eagerly
@@ -96,3 +98,53 @@ in the session that found it.
 Whoever takes it: the `pargTmp` / `pargAsgn` / `pargTk` locals already declared
 in `PyParsePrint` look like the beginning of exactly this temp machinery, and are
 worth understanding before adding a second mechanism beside them.
+
+
+## Resolved 2026-08-04 — the restructure was already there; the ORDER was wrong
+
+The 2026-08-02 note called this "a restructure, not a line move": bind every
+argument into a temp first, then build the writeln over the temps. That
+restructure **already exists** — and has since before this ticket, added for a
+different reason (an argument that RAISES must not leave earlier ones already on
+stdout, `bug-nilpy-print-emits-arguments-before-evaluating-later-ones`). Every
+print argument is hoisted into a hidden temp.
+
+What was wrong is one line's POSITION. `PyReprContainer` and the float
+`pystr_of` routing ran **before** that hoist, so what got hoisted was the
+**text**, computed while later arguments had not been evaluated yet:
+
+```
+t1 := repr(zs)      <- pre-pop text, frozen here
+t2 := zs.pop()
+t3 := repr(zs)      <- post-pop
+writeln(t1, ' ', t2, ' ', t3)
+```
+
+Moving both conversions to **after** the hoist is the entire fix: the temp then
+holds the container POINTER, every argument's evaluation has happened by the
+time `AN_WRITELN`'s lowering runs, and the repr reads the list as it finally is.
+
+That also explains the control the ticket found most puzzling —
+`show(xs, xs.pop(), xs)` doing its own `str()` was always right, because a
+callee converts after every argument is bound. The fix makes `print` do the same
+thing by construction, which is what the ticket asked for.
+
+### What the temps must still do
+
+Not dropped, and the test pins them: a float still routes through `pystr_of`
+(the backend writer and `str()` disagree otherwise), and a string LITERAL must
+still widen to a managed string — a `tyString` temp allocates a frozen
+STRING_CAP slot, and without the widening `print("a","b","c","d")` reserved
+8 MB *per literal*. Measured after the move: that program's BSS is 8324 bytes.
+
+### Verified
+
+`test/test_nilpy_print_arg_eval_order.npy`, wired into `make test-nilpy`: the
+list and dict repros, the mutating call in first / middle / last position, the
+user-function and explicit-`str()` controls, the list-literal control, plain
+aliasing, and the float/literal/bool/None conversions. Diffed against CPython,
+identical. `tools/gate.sh quick` GREEN, self-host byte-identical.
+
+## Log
+- 2026-08-04 — resolved.
+- 2026-08-04 — resolved, commit PENDING-COMMIT.
