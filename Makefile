@@ -1375,6 +1375,12 @@ test-nilpy: $(COMPILER)
 	# decimal expansion. Every value here is now CPython's.
 	./$(COMPILER) test/test_nilpy_round.npy /tmp/test_nilpy_round26
 	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.67 2.67\n9.99 0.04 0.3 100.0\n1.0 0.0 -0.0 0.0')"
+	# Mutating a dict while iterating it is NOT DETECTED — a DELIBERATE divergence
+	# (devdocs/dev/nilpy-semantics-divergences.md). These expectations are
+	# deliberately NOT CPython's: every program in that file is one CPython rejects,
+	# which is why the divergence is acceptable. Do NOT make this match python3.
+	./$(COMPILER) test/test_nilpy_dict_mutation_during_iteration.npy /tmp/test_nilpy_dictmut26
+	/tmp/test_nilpy_dictmut26 | diff -u test/test_nilpy_dict_mutation_during_iteration.expected -
 	# print() converted a container argument to TEXT as it evaluated it, so
 	# `print(zs, zs.pop(), zs)` showed the list before AND after the pop. The
 	# arguments were already hoisted into temps; the conversions just ran BEFORE

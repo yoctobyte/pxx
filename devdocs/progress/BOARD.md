@@ -39,7 +39,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (180)
+## backlog (178)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -48,7 +48,6 @@ _none_
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-container-membership-ignores-the-eq-dunder | N | 35 | bug | `x in [a, b]` compares boxed handles, so a class's __eq__ is ignored and membership is False for an equal-but-distinct object — the same runtime-dispatch gap as list.sort() ignoring __lt__ | — |
-| bug-nilpy-dict-mutation-during-iteration-is-unobserved-not-raised | N | 35 | bug | Mutating a dict while iterating it is silently unobserved; CPython raises RuntimeError 'dictionary changed size during iteration' | decide-nilpy-dict-mutation-during-iteration |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant | N | 55 | bug | `a == b` skips __eq__ and compares identity as soon as ONE operand is a variant (a container element, a for-in variable). Both-static works, so the dunder LOOKS wired up; `a == xs[0]` is silently False. | — |
 | bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module | N | 40 | bug | A def shadowing a builtin that has NO pylib proc (ord, chr, …) takes effect from the top of the module — `print(ord('A'))` ABOVE the def prints the user's answer where CPython prints 65. Silent. | — |
@@ -81,7 +80,6 @@ _none_
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | decide-abi-portable-vs-target-split | U | 60 | decide |  | — |
 | decide-builtin-and-library-code-sharing | U | 30 | decide | A builtin unit and lib/rtl cannot share code today: moving the shared part down breaks library READABILITY (you must be able to step into sysutils and read it straight through), and letting a builtin use the library collides in NilPy's flat unit scope. The float core is being copied because of it. Review when the next clash lands — not a blocker for anything now. | — |
-| decide-nilpy-dict-mutation-during-iteration | U | 35 | decide | Raise on dict mutation during iteration, or keep the snapshot? | — |
 | decide-nilpy-int-promotion-costs-10x-on-ordinary-loops | U | 60 | decide | Option 1 was decided without a number; the number is 10x | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-nilpy-runtime-dunder-dispatch-strategy | U | 45 | decide | Decide: how should NilPy dispatch dunders on a Variant-held instance? | — |
@@ -249,10 +247,11 @@ _none_
 | feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
 | feature-zig-frontend | Z | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
-## rainy-day (30)
+## rainy-day (31)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-nilpy-dict-mutation-during-iteration-is-unobserved-not-raised | N | 35 | bug | Mutating a dict while iterating it is silently unobserved; CPython raises RuntimeError 'dictionary changed size during iteration' | decide-nilpy-dict-mutation-during-iteration |
 | decide-ilja-tui-render-model | U | 45 | decide | Track U: four render/input questions Ilja (TUI IDE face) must answer before any code | — |
 | design-overloadable-intrinsics | A | 50 | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
 | design-record-copy-dynarray-field-semantics | A | 50 | design | Record copy with a dynamic-array field: PXX deep-copies, FPC shares (reference) | — |
@@ -292,7 +291,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (36)
+## decided (37)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -312,6 +311,7 @@ _none_
 | decide-nilpy-bigint-vs-64bit-cells | U | 40 | decide | decide: NilPy integer semantics — arbitrary precision vs 64-bit (uforth needs one) | — |
 | decide-nilpy-class-attribute-instance-read-model | U | 65 | decide | How should `inst.attr` read a CLASS attribute? Full Python fall-through with per-instance overrides (correct, invasive), or a whole-program static specialisation using the PyDynAttrEverAssigned-style scan already in the frontend (cheaper, correct for programs that never override per instance)? Blocks bug-nilpy-class-attribute-unreachable-through-the-class-name. | — |
 | decide-nilpy-closure-model | A | 50 | decide |  | — |
+| decide-nilpy-dict-mutation-during-iteration | U | 35 | decide | Raise on dict mutation during iteration, or keep the snapshot? | — |
 | decide-nilpy-gui-tk-vs-pcl | A | 25 | decide | RESOLVED 2026-07-21: keep the real Tcl/Tk embed on Linux (works); Windows = opt-in tk emulate/wrap via a platform include, later. Follow-up: feature-pcl-tk-windows-compat | — |
 | decide-nilpy-hasattr-per-instance-semantics | U | 35 | decide | decide: should NilPy's hasattr answer per-INSTANCE or per-CLASS? | — |
 | decide-nilpy-int-promotion-default | U | 60 | decide | Decide: should NilPy `int` bindings default to promotable, not native int64? | — |
@@ -483,7 +483,6 @@ _none_
 - [p 40] [T] feature-twatch-full-tier-coverage-age
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [T] meta-t-dev-throughput-and-track-a-t-integration
-- [p 35] [U] decide-nilpy-dict-mutation-during-iteration (unblocks 1)
 - [p 35] [N] bug-nilpy-container-membership-ignores-the-eq-dunder
 - [p 35] [N] bug-nilpy-list-sort-ignores-lt-dunder-on-objects
 - [p 35] [N] bug-nilpy-list-sort-method-missing

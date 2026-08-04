@@ -68,3 +68,21 @@ since `4eadf7f54`, so `for x in xs` DOES observe mutation. Whichever way the
 dict goes, the asymmetry needs to be written down as chosen.
 
 `blocked-by` set; no code touched.
+
+## 2026-08-04 — DECIDED as intended behaviour; postponed
+
+[[decide-nilpy-dict-mutation-during-iteration]] resolved: keep the snapshot,
+document it. So this is no longer a bug — it is
+`devdocs/dev/nilpy-semantics-divergences.md`, pinned by
+`test/test_nilpy_dict_mutation_during_iteration.npy`.
+
+What remains is the OPTIONAL half the decision explicitly kept open: a
+`--strict-python` mode that raises `RuntimeError` on the modification, paying a
+per-iteration check to buy CPython parity for the differential sweeps. That is a
+feature nobody needs yet, so it moves to `rainy-day/` rather than staying in a
+bug queue.
+
+The measured correction that went with the decision, worth keeping here too: it
+is NOT "the same failure with a different message". Only a delete-then-read
+raises; an insert, and a delete whose key is never re-read, both complete
+silently — and the latter still visits the deleted key.

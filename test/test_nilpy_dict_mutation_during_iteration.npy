@@ -1,0 +1,55 @@
+# Mutating a dict while iterating it is NOT DETECTED — a deliberate divergence,
+# decided 2026-08-04. See devdocs/dev/nilpy-semantics-divergences.md and
+# decide-nilpy-dict-mutation-during-iteration.
+#
+# `for k in d` iterates a SNAPSHOT of the keys taken at loop entry (the lowering
+# rewrites it to iterate d.keylist()), so the loop cannot observe a concurrent
+# mutation. CPython raises RuntimeError: dictionary changed size during
+# iteration, for all three shapes below.
+#
+# THESE EXPECTATIONS ARE DELIBERATELY NOT CPython's. Every program here is one
+# CPython REJECTS outright, which is exactly why the divergence is acceptable:
+# no working Python program can tell the difference. Do not "fix" this file by
+# making it match python3 — that would mean the compiler had started raising,
+# which is a behaviour change to decide, not a test to correct.
+#
+# The three rows are kept apart because only ONE of them errors, and describing
+# this as "same failure, different message" is wrong:
+#   * insert            -> completes silently
+#   * delete, not read  -> completes, and the deleted key is still VISITED
+#   * delete, then read -> KeyError (catchable, at the point of use)
+
+d = {"a": 1, "b": 2}
+n = 0
+for k in d:
+    n = n + 1
+    d["z" + str(n)] = n
+print("insert:", n, "iterations, len", len(d))
+
+e = {"a": 1, "b": 2, "c": 3}
+seen = []
+for k in e:
+    seen.append(k)
+    if k == "a":
+        del e["b"]
+print("delete, not read:", seen, "len", len(e))
+
+f = {"a": 1, "b": 2, "c": 3}
+out = []
+try:
+    for k in f:
+        if k == "a":
+            del f["b"]
+        out.append(k + "=" + str(f[k]))
+except KeyError:
+    out.append("KeyError")
+print("delete, then read:", out)
+
+# a dict loop that does NOT mutate is ordinary and matches CPython
+g = {"a": 1, "b": 2}
+acc = []
+for k in g:
+    acc.append(k + str(g[k]))
+for k, v in g.items():
+    acc.append(k + str(v))
+print("no mutation:", acc)

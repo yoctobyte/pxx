@@ -1,0 +1,4 @@
+insert: 2 iterations, len 4
+delete, not read: ['a', 'b', 'c'] len 2
+delete, then read: ['a=1', 'KeyError']
+no mutation: ['a1', 'b2', 'a1', 'b2']
