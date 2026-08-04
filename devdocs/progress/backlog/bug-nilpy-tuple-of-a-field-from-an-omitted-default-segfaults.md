@@ -141,10 +141,27 @@ covers. Reverted rather than patched around, per CLAUDE.md. Verified against
 pre-existing behaviour and the `1` was introduced by the attempt — the tree
 carries none of it.
 
-Why it goes wrong is the useful part: forcing the field to `tyVariant` is not
-free. The value stored is a machine int and something on the `str()` path then
-reads the variant's tag rather than its payload. Whatever the right answer is,
-"call it a variant and move on" is not it.
+Why it goes wrong is the useful part, and the first explanation written here was
+itself wrong — corrected after measuring rather than left standing.
+
+**It is NOT that variant fields are broken.** Probed separately, `str()` of a
+genuinely variant field is fine:
+
+| shape | result |
+| --- | --- |
+| `def __init__(self, v)` + `self.v = v`, then `str(K(5).v)` | `5` ok |
+| `self.v = None` in the ctor, `self.v = x` later, `str(k.v)` | `5` ok |
+| the same, `print(k.v)` | `5` ok |
+
+So forcing `tyVariant` is not wrong in itself. What the attempt produced was a
+**mismatch**: the field was registered variant while another consumer still
+resolved that name to the class, so two views disagreed about what the slot
+holds. That is the same two-consumers problem as the crash, surfacing on the
+value path instead of the crash path.
+
+The lesson for whoever fixes this: changing the field's type in ONE place is what
+breaks it. Every consumer of that name has to move together — which is also why
+the crash survived the attempt unchanged.
 
 ### The runtime crash is a SECOND consumer, in a different place
 
