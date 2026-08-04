@@ -809,7 +809,13 @@ type
     { Rust-only keywords/punctuation (feature-rust-frontend-skeleton). `struct`
       reuses tkRecord, `return` reuses tkExit, `break`/`continue` are shared —
       only genuinely new shapes get their own token. }
-    tkFn, tkLet, tkMut, tkLoop, tkPathSep, tkDotDotEq, tkLifetime
+    tkFn, tkLet, tkMut, tkLoop, tkPathSep, tkDotDotEq, tkLifetime,
+    { Python `**=`. APPENDED at the tail, never inserted — token ordinals are
+      frozen by the self-host discipline. `**` itself is two tkStar tokens the
+      parser recognises, but the augmented spelling has to lex as ONE token or
+      `p **= 3` reads as `p * (*= 3)` and dies on "expected expression"
+      (bug-nilpy-chained-assign-power-assign-and-semicolon-statements). }
+    tkPowEq
   );
 
   TToken = record

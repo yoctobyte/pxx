@@ -866,6 +866,7 @@ function PyIsIdent(const s: AnsiString): Boolean; forward; { (pyparser.inc) }
 function PyMakeVariantGetItem(baseNode, idxNode: Integer): Integer; forward; { Nil Python v[key] on a variant (pyparser.inc) }
 function PyMakeObjPtr(baseNode: Integer): Integer; forward; { Nil Python: object as a pointer for the dynattr store (pyparser.inc) }
 function PyAugBinTok(k: TTokenKind): TTokenKind; forward; { Nil Python augmented-assign op (pyparser.inc) }
+function PyMakePow(ppBase, ppExp: Integer): Integer; forward;  { Nil Python `**` lowering, shared with `**=` (pyparser.inc) }
 function PyAugClassDunderNode(lhsNode: Integer; binTk: TTokenKind; rhsNode: Integer): Integer; forward; { Nil Python obj.field += x dunder dispatch (pyparser.inc) }
 function PyNodeListCi(n: Integer): Integer; forward; { Nil Python: TPyList class index of a node, else -1 (pyparser.inc) }
 function PyMakeDynAttrGet(baseNode: Integer; const fname: AnsiString): Integer; forward; { Nil Python obj.name dynamic read (pyparser.inc) }
@@ -13755,42 +13756,9 @@ begin
     ppBase := CurASTNode;
     ParseFactor;
     ppExp := CurASTNode;
-    { `obj ** n` on a user class dispatches its __pow__. Without this the base
-      went to pypow_v as a boxed handle and raised "expected a number, got
-      object" where CPython returned the method's result
-      (feature-nilpy-arithmetic-dunders-full-protocol). pylib's own rows are
-      excluded so container/scalar powers keep today's behaviour. }
-    { reflected `__rpow__`: `3 ** C(4)`. Tried first only when the BASE is not
-      itself a user class, so a class base keeps left-operand priority. }
-    if PyExprMode and (IntToTypeKind(ASTTk[ppBase]) <> tyClass) and
-       (PyReflectedDunder('__rpow__', ppBase, ppExp) >= 0) then
-    begin
-      CurASTNode := PyReflectedDunder('__rpow__', ppBase, ppExp);
-      LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
-      Exit;
-    end;
-    if PyExprMode and (IntToTypeKind(ASTTk[ppBase]) = tyClass) and
-       (ResolveNodeRec(ppBase) >= REC_UCLASS_BASE) and
-       not PyRecIsPylibOwnClass(ResolveNodeRec(ppBase)) and
-       (FindUMeth(ResolveNodeRec(ppBase) - REC_UCLASS_BASE, '__pow__') >= 0) then
-    begin
-      CurASTNode := PyCallMeth1(ResolveNodeRec(ppBase) - REC_UCLASS_BASE,
-                                '__pow__', ppBase, ppExp);
-      if CurASTNode >= 0 then
-      begin
-        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
-        Exit;
-      end;
-    end;
-    ppPi := FindProc('pypow_v');
-    if ppPi < 0 then Error('Nil Python: pylib (pypow_v) not loaded');
-    ppArgSeq := AllocNode(AN_ARG); ASTLeft[ppArgSeq] := ppBase;
-    ppArgSeq2 := AllocNode(AN_ARG); ASTLeft[ppArgSeq2] := ppExp; ASTRight[ppArgSeq2] := -1;
-    ASTRight[ppArgSeq] := ppArgSeq2;
-    CurASTNode := AllocNode(AN_CALL);
-    ASTIVal[CurASTNode] := ppPi;
-    ASTLeft[CurASTNode] := ppArgSeq;
-    ASTTk[CurASTNode] := Ord(Procs[ppPi].RetType);
+    { the lowering itself (dunders, then pypow_v) is PyMakePow — shared with
+      `**=`, which must produce the identical node }
+    CurASTNode := PyMakePow(ppBase, ppExp);
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
   end;
 end;

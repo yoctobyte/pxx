@@ -13087,6 +13087,46 @@ begin
 end;
 
 { Map an augmented-assignment token to its binary operator, tkEOF if none. }
+{ `base ** exp` lowered. Factored out of ParseFactor's `**` case so the
+  AUGMENTED spelling `p **= e` produces the IDENTICAL node — including the
+  dunder dispatch, which a second hand-built pypow_v call would have silently
+  dropped (bug-nilpy-chained-assign-power-assign-and-semicolon-statements).
+
+  `obj ** n` on a user class dispatches its __pow__; without it the base went to
+  pypow_v as a boxed handle and raised "expected a number, got object" where
+  CPython returned the method's result. Reflected `__rpow__` (`3 ** C(4)`) is
+  tried FIRST, and only when the BASE is not itself a user class, so a class
+  base keeps left-operand priority. pylib's own rows are excluded so
+  container/scalar powers keep today's behaviour. }
+function PyMakePow(ppBase, ppExp: Integer): Integer;
+var ppPi, ppArgSeq, ppArgSeq2, node: Integer;
+begin
+  if PyExprMode and (IntToTypeKind(ASTTk[ppBase]) <> tyClass) then
+  begin
+    node := PyReflectedDunder('__rpow__', ppBase, ppExp);
+    if node >= 0 then begin PyMakePow := node; Exit; end;
+  end;
+  if PyExprMode and (IntToTypeKind(ASTTk[ppBase]) = tyClass) and
+     (ResolveNodeRec(ppBase) >= REC_UCLASS_BASE) and
+     not PyRecIsPylibOwnClass(ResolveNodeRec(ppBase)) and
+     (FindUMeth(ResolveNodeRec(ppBase) - REC_UCLASS_BASE, '__pow__') >= 0) then
+  begin
+    node := PyCallMeth1(ResolveNodeRec(ppBase) - REC_UCLASS_BASE,
+                        '__pow__', ppBase, ppExp);
+    if node >= 0 then begin PyMakePow := node; Exit; end;
+  end;
+  ppPi := FindProc('pypow_v');
+  if ppPi < 0 then Error('Nil Python: pylib (pypow_v) not loaded');
+  ppArgSeq := AllocNode(AN_ARG); ASTLeft[ppArgSeq] := ppBase;
+  ppArgSeq2 := AllocNode(AN_ARG); ASTLeft[ppArgSeq2] := ppExp; ASTRight[ppArgSeq2] := -1;
+  ASTRight[ppArgSeq] := ppArgSeq2;
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := ppPi;
+  ASTLeft[node] := ppArgSeq;
+  ASTTk[node] := Ord(Procs[ppPi].RetType);
+  PyMakePow := node;
+end;
+
 function PyAugBinTok(k: TTokenKind): TTokenKind;
 begin
   case k of
@@ -13809,6 +13849,8 @@ var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integ
     cmpTmp, cmpSeq, cmpAsgn: Integer;   { comprehension into a non-list target }
     cmpExisted: Boolean;
     asrtCond, asrtMsg, asrtProc, asrtA0, asrtA1: Integer;   { assert statement }
+    chainN, chainI, chainTmp, chainSeq: Integer;   { chained assignment a = b = v }
+    chainNames: array[0..7] of AnsiString;
 begin
   Result := -1;
   PyStmtAteBlock := False;
@@ -14283,13 +14325,38 @@ begin
     Exit;
   end;
   if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
-     (PyAugBinTok(Tokens[TokPos].Kind) <> tkEOF) then
+     ((PyAugBinTok(Tokens[TokPos].Kind) <> tkEOF) or
+      (Tokens[TokPos].Kind = tkPowEq)) then
   begin
     name := CurTok.SVal;
     symIdx := PyProgSym(name);
     if symIdx < 0 then
       Error('Nil Python: augmented assignment to undefined name ' + name);
     Next;
+    { `p **= e`. `**` is not a binop TOKEN — it lowers through pypow_v (and the
+      __pow__/__rpow__ dunders), so this cannot go through the AN_BINOP path
+      below and desugars to `p = p ** e` via the shared PyMakePow instead.
+
+      The RESULT TYPE has to widen, and copying the target's type would be
+      wrong in the direction that matters: `2 ** -1` is a FLOAT in Python, so
+      `p **= -1` on an int target must not stay an int. pypow_v already returns
+      a variant that carries either, and noting the constraint (rather than only
+      typing the node) is what makes the target's own SLOT widen across
+      trial-parse rounds — the same rule `/=` needed one scope over. }
+    if CurTok.Kind = tkPowEq then
+    begin
+      Next;
+      PyParseBoolExpr;
+      node := PyMakePow(PyMakeIdent(symIdx), CurASTNode);
+      if PyTypingPass then
+        PyNoteLocalType(name, IntToTypeKind(ASTTk[node]), REC_NONE);
+      rhsNode := node;
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := PyMakeIdent(symIdx);
+      ASTRight[node] := rhsNode;
+      Result := node;
+      Exit;
+    end;
     augTk := PyAugBinTok(CurTok.Kind);
     Next;
     PyParseBoolExpr;
@@ -14393,6 +14460,65 @@ begin
       Result := node;
       Exit;
     end;
+  end;
+  { CHAINED assignment `a = b = RHS`. Python binds every target to ONE
+    evaluation of the right-hand side, so `a = b = f()` calls f once — which is
+    why this cannot desugar to `b = f(); a = f()`. It goes through a hidden temp
+    instead, assigned once and then stored to each target LEFT TO RIGHT, which
+    is also CPython's order.
+
+    Before this the statement was read as `a = (b = RHS)` and reported
+    "undefined variable (b)" — a diagnostic that names the wrong thing entirely
+    (bug-nilpy-chained-assign-power-assign-and-semicolon-statements).
+
+    PLAIN NAME targets only. `d[k] = d2[k2] = f()` has targets with side effects
+    of their own and is refused by name below rather than guessed at — the temp
+    would be right for it too, but the STORE path for a subscript target is a
+    different lowering and quietly getting it half-right is the failure mode
+    this frontend is trying to avoid. }
+  if (CurTok.Kind = tkIdent) and (TokPos + 2 < TokCount) and
+     (Tokens[TokPos].Kind = tkAssign) and
+     (Tokens[TokPos + 1].Kind = tkIdent) and
+     (Tokens[TokPos + 2].Kind = tkAssign) then
+  begin
+    chainN := 0;
+    while (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+          (Tokens[TokPos].Kind = tkAssign) do
+    begin
+      if chainN >= 8 then
+        Error('Nil Python: at most 8 targets in a chained assignment');
+      chainNames[chainN] := CurTok.SVal;
+      Inc(chainN);
+      Next;
+      Expect(tkAssign, '=');
+    end;
+    PyParseBoolExpr;
+    chainTmp := AllocVar(PyHiddenName('chain'), IntToTypeKind(ASTTk[CurASTNode]));
+    Syms[chainTmp].RecName := ResolveNodeRec(CurASTNode);
+    SymSyncTypeRef(chainTmp);
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(chainTmp);
+    ASTRight[node] := CurASTNode;
+    chainSeq := PySeqAppend(-1, node);
+    for chainI := 0 to chainN - 1 do
+    begin
+      symIdx := PyAssignTargetSym(chainNames[chainI]);
+      if symIdx < 0 then
+      begin
+        symIdx := AllocVar(chainNames[chainI], Syms[chainTmp].TypeKind);
+        Syms[symIdx].RecName := Syms[chainTmp].RecName;
+        SymSyncTypeRef(symIdx);
+      end;
+      if PyTypingPass then
+        PyNoteLocalType(chainNames[chainI], Syms[chainTmp].TypeKind,
+                        ResolveNodeRec(PyMakeIdent(chainTmp)));
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := PyMakeIdent(symIdx);
+      ASTRight[node] := PyMakeIdent(chainTmp);
+      chainSeq := PySeqAppend(chainSeq, node);
+    end;
+    Result := chainSeq;
+    Exit;
   end;
   if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkAssign) then
@@ -14965,7 +15091,7 @@ begin
         function and wrong at the top level
         (bug-nilpy-module-level-true-divide-assign-keeps-an-int-slot).
 
-        Only `/=` needs this: every other augmented operator preserves the
+        `/=` and `**=` need this; every other augmented operator preserves the
         target's type, and `//=` is deliberately integer division. }
       else if (depth <= 255) and
               ((depth = 0) or (not blockIsDef[depth])) and
@@ -14974,6 +15100,21 @@ begin
               ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon])) then
       begin
         PyNoteLocalType(GetTokenStr(i), tyDouble, REC_NONE);
+        Inc(i);
+      end
+      { `**=` is the same shape as `/=` and for the same reason, but it widens
+        to a VARIANT rather than a float: `2 ** 3` is an int and `2 ** -1` is a
+        float, and pypow_v returns the one tag that carries either. Inside a def
+        the ordinary trial parse notes this from the lowered node; at module
+        scope it needs the token-shape arm, exactly as `/=` did
+        (bug-nilpy-chained-assign-power-assign-and-semicolon-statements). }
+      else if (depth <= 255) and
+              ((depth = 0) or (not blockIsDef[depth])) and
+              (Tokens[i].Kind = tkIdent) and
+              (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkPowEq) and
+              ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon])) then
+      begin
+        PyNoteLocalType(GetTokenStr(i), tyVariant, REC_NONE);
         Inc(i);
       end
       else if (depth = 0) and (Tokens[i].Kind = tkIdent) and

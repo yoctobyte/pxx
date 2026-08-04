@@ -1375,6 +1375,11 @@ test-nilpy: $(COMPILER)
 	# decimal expansion. Every value here is now CPython's.
 	./$(COMPILER) test/test_nilpy_round.npy /tmp/test_nilpy_round26
 	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.67 2.67\n9.99 0.04 0.3 100.0\n1.0 0.0 -0.0 0.0')"
+	# Chained assignment (`a = b = 5`, ONE evaluation of the RHS) and `**=` (its
+	# own token, desugared through the same PyMakePow so the __pow__ dunders still
+	# dispatch, and widening because 2 ** -1 is a float). See the test's header.
+	./$(COMPILER) test/test_nilpy_chained_assign_powassign.npy /tmp/test_nilpy_chpow26
+	test "$$(/tmp/test_nilpy_chpow26)" = "$$(printf '%b' '5 5\nhi hi hi\n7 7 1\n6\n[1, 2, 3] [1, 2, 3]\n2 2\n8\n0.5\n2.0\n0.5 2.0\n4')"
 	# A SECOND for-clause in one comprehension — the flatten idiom — failed with
 	# "undefined variable (c)". The clauses nest left to right (a recursion), AND
 	# the loop variable's rename had to cover the whole remainder, because the next

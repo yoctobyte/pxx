@@ -934,7 +934,13 @@ begin
           else PyEmitToken(tkMinus, 0, SrcLine, '');
         end;
         '*': begin
-          if (P <= Length(Source)) and (Source[P] = '=') then
+          { `**=` must be ONE token — `**` itself is two tkStar the parser pairs
+            up, but the augmented form would otherwise read as `*` then `*=`.
+            Checked before the plain `*=` so the longer spelling wins. }
+          if (P + 1 <= Length(Source)) and (Source[P] = '*') and
+             (Source[P + 1] = '=') then
+          begin Inc(P); Inc(P); PyEmitToken(tkPowEq, 0, SrcLine, ''); end
+          else if (P <= Length(Source)) and (Source[P] = '=') then
           begin Inc(P); PyEmitToken(tkStarEq, 0, SrcLine, ''); end
           else PyEmitToken(tkStar, 0, SrcLine, '');
         end;

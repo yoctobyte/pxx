@@ -1,0 +1,79 @@
+# Three statement forms from one sweep
+# (bug-nilpy-chained-assign-power-assign-and-semicolon-statements). The
+# semicolon form already worked by the time this was picked up and is pinned
+# here so it stays working.
+#
+# 1. CHAINED ASSIGNMENT `a = b = 5`. Python binds every target to ONE evaluation
+#    of the right-hand side, so `p = q = f()` calls f ONCE — the `calls` row is
+#    what pins that, and it is why this cannot desugar to `q = f(); p = f()`.
+#    Assignment is left to right through a hidden temp. PLAIN NAME targets only;
+#    `d[k] = d2[k2] = f()` is refused by name rather than half-lowered.
+#    It used to report "undefined variable (b)", naming the wrong thing entirely.
+#
+# 2. `**=`. `**` is not a binop TOKEN — it lowers through pypow_v and the
+#    __pow__/__rpow__ dunders — so `**=` lexes as its own token (tkPowEq,
+#    APPENDED to the enum, never inserted) and desugars through the same
+#    PyMakePow the expression form uses. A second hand-built pypow_v call would
+#    have silently dropped the dunder dispatch.
+#    The RESULT WIDENS: `2 ** 3` is an int but `2 ** -1` is a FLOAT, so the
+#    target must not stay an int. Inside a def the trial parse notes that from
+#    the lowered node; at MODULE scope it needs a token-shape arm, exactly as
+#    `/=` did before it.
+#
+# Every expectation is CPython's.
+
+a = b = 5
+print(a, b)
+
+x = y = z = "hi"
+print(x, y, z)
+
+calls = []
+def f():
+    calls.append(1)
+    return 7
+
+p = q = f()
+print(p, q, len(calls))          # ONE call
+
+def g():
+    m = n = 3
+    return m + n
+print(g())
+
+# both names bind the SAME object
+lst = lst2 = [1, 2]
+lst.append(3)
+print(lst, lst2)
+
+# the right-hand side is evaluated before any target is stored
+i = 1
+i = j = i + 1
+print(i, j)
+
+# **= at module scope: int result, float result, float exponent
+pw = 2
+pw **= 3
+print(pw)
+neg = 2
+neg **= -1
+print(neg)
+rt = 4
+rt **= 0.5
+print(rt)
+
+# ...and inside a def
+def h():
+    v = 2
+    v **= -1
+    return v
+def k2():
+    w = 4
+    w **= 0.5
+    return w
+print(h(), k2())
+
+# semicolon-separated statements
+s = 5
+s += 1; s -= 2
+print(s)

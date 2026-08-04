@@ -414,6 +414,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-callable-return-abi-mismatch | N | 75 | bug | nilpy: a def passed to a Callable[...] parameter marshalled by the ANNOTATION, not by the def | — |
 | bug-nilpy-callable-value-abi-sorted-key-and-builtins | N | 65 | bug | `sorted(key=...)` ignores most keys, and a callable passed as a VALUE has no common ABI | — |
 | bug-nilpy-caught-exception-objects-are-never-freed | N | 60 | bug | Every caught exception leaks its object — 640k raises cost 105 MB | — |
+| bug-nilpy-chained-assign-power-assign-and-semicolon-statements | N | 40 | bug | Three statement-level forms don't parse: chained assignment `a = b = 5`, `**=`, and semicolon-separated statements on one line — all loud | — |
 | bug-nilpy-chained-subscript-assignment-writes-only-the-last-target | N | 50 | bug | `xs[0] = xs[1] = 3` writes only `xs[1]` — the other target is silently skipped | — |
 | bug-nilpy-char-vs-string-literal-ordering-compares-an-address | N | 80 | bug | `s[0] >= "0"` is ALWAYS False and `s[0] < "0"` ALWAYS True — a char is ordered against the literal's ADDRESS | — |
 | bug-nilpy-chr-of-a-variant-reads-the-slot-not-the-value | N | 65 | bug | `chr()` of a variant returns the wrong character — the slot is read as an ordinal | — |
