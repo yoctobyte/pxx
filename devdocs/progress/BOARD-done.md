@@ -420,6 +420,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-chr-of-a-variant-reads-the-slot-not-the-value | N | 65 | bug | `chr()` of a variant returns the wrong character — the slot is read as an ordinal | — |
 | bug-nilpy-class-attr-instance-traversal-crashes | N | 70 | bug | A class attribute holding an INSTANCE crashes when traversed | — |
 | bug-nilpy-class-attribute-unreachable-through-the-class-name | N | 65 | bug | `C.attr` on a class attribute: "class method not found" | — |
+| bug-nilpy-class-field-and-recursive-return-narrow-an-arbitrary-precision-int | N | 55 | bug | A class FIELD and a RECURSIVE def's result are typed from their first int-shaped initialiser, so an arbitrary-precision value assigned later wraps at 2^64 | — |
 | bug-nilpy-class-typed-field-loses-identity | N | 70 | bug | NilPy: a class-typed field loses its class identity | — |
 | bug-nilpy-class-value-into-variant-local-mistagged | N | 65 | bug | NilPy: storing a class value into a variant-typed local mis-tags it VT_INT64 | — |
 | bug-nilpy-class-with-pass-body-fails-to-parse | N | 50 | bug | NilPy: a class body of only `pass` fails to parse | — |
@@ -531,6 +532,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-pydict-v-borrowed-reference | N | 70 | bug | `pydict_v` handed back a BORROWED dict — use-after-free, heap corruption | — |
 | bug-nilpy-pyeval-host-kwargs-positional | N | 60 | bug | pyeval passes a host method's KEYWORD arguments POSITIONALLY (silent wrong option) | — |
 | bug-nilpy-pyeval-prints-bool-as-number | N | 30 | bug | pyeval prints a Boolean as 1/0 where CPython prints True/False | — |
+| bug-nilpy-pypow-integer-overflow-does-not-promote | N | 35 | bug | `pypow_v`'s integer path silently wraps past 64 bits instead of promoting | — |
 | bug-nilpy-pytypeerror-halts-instead-of-raising | N | 40 | bug | `PyTypeError` halts the process, so `except TypeError:` cannot catch it | — |
 | bug-nilpy-qualified-proc-omitted-default | N | 35 | bug | A qualified UNIT-LEVEL proc call cannot omit a defaulted parameter | — |
 | bug-nilpy-raise-of-empty-exception-subclass-with-no-args | N | 65 | bug | `raise E()` where E is a user Exception subclass with an EMPTY body segfaults or prints nothing. Passing any argument, or giving E an __init__, makes it work — so the idiomatic empty exception class is the broken one | — |
@@ -1248,6 +1250,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-optdiff-shard2-6 | T | 70 | regression | regression: optdiff#shard2/6 red at d87301219197 (auto-filed by twatch) | — |
 | regression-optdiff-shard4-6 | T | 70 | regression | regression: optdiff#shard4/6 red at 6e0395e5495f (auto-filed by twatch) | — |
 | regression-optdiff-shard5-6 | T | 70 | regression | regression: optdiff#shard5/6 red at 2add2ebb487b (auto-filed by twatch) | — |
+| regression-optdiff-shard8-12 | T | 70 | regression | regression: optdiff#shard8/12 red at 28eb1a105ddb (auto-filed by twatch) | — |
 | regression-test-aarch64-test-asyncecho | T | 70 | regression | regression: test-aarch64#src:test/test_asyncecho.pas red at 88986014e07d (auto-filed by twatch) | — |
 | regression-test-aarch64-test-lfm | T | 70 | regression | regression: test-aarch64#src:test/test_lfm.pas red at adaecd1206f3 (auto-filed by twatch) | — |
 | regression-test-aarch64-test-streaming-enumset | T | 70 | regression | regression: test-aarch64#src:test/test_streaming_enumset.pas red at adaecd1206f3 (auto-filed by twatch) | — |

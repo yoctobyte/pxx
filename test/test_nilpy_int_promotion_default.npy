@@ -93,3 +93,31 @@ for k in range(200):
     a = b
     b = c
 print(a)
+
+# a class FIELD grown by arithmetic on itself: the field was declared from its
+# first initialiser (`self.v = 1` -> a machine int) and never widened
+class Acc:
+    def __init__(self):
+        self.v = 1
+        self.n = 0
+    def grow(self):
+        for k in range(70):
+            self.v = self.v * 2
+        self.n += 1
+g = Acc()
+g.grow()
+print(g.v, g.n)
+
+# a SELF-RECURSIVE result: the return-type chase cannot type the recursive call
+def fa(m):
+    if m <= 1:
+        return 1
+    return m * fa(m - 1)
+print(fa(25))
+
+# `**` did exponentiation by squaring in machine words and wrapped: 2**70 came
+# back as 0, which is the exact value mod 2^64 and reads as a plausible number
+print(2 ** 70)
+print(10 ** 30)
+print(3 ** 40)
+print(2 ** 10, 2 ** 0, 2 ** -1)

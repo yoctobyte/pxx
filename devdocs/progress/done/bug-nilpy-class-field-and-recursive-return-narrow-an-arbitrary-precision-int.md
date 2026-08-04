@@ -3,6 +3,8 @@ track: N
 prio: 55
 type: bug
 summary: "A class FIELD and a RECURSIVE def's result are typed from their first int-shaped initialiser, so an arbitrary-precision value assigned later wraps at 2^64"
+status: done
+owner: claude-AN
 ---
 
 # A class field and a recursive return narrow an arbitrary-precision int
@@ -71,3 +73,6 @@ survey missed four sites. `tools/pydiff.py` or the sweep harness in
 
 Per-fix loop. A field/recursion `.npy` test diffed against CPython; check
 `ls test/ | grep -E 'promo|bigint'` for an existing file to extend.
+
+## Log
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

@@ -17244,6 +17244,69 @@ end;
   The later real call resets UClsFBase/UClsFCount on entry, so it rebuilds the
   window from scratch and the pre-pass entries are simply orphaned — which also
   means the dataclass duplicate-field check cannot see them and mis-fire. }
+{ Does this class GROW the named field by arithmetic on ITSELF?
+
+  `self.v = self.v * 2`, `self.total = self.total + n`, `self.n += 1`. The field
+  is declared from its first initialiser (`self.v = 1` -> tyInt64), and nothing
+  widened it afterwards, so a value that grew past 2^63 wrapped in silence —
+  2**70 stored back as 0, while the identical accumulator written as a plain
+  local was exact (bug-nilpy-class-field-and-recursive-return-narrow-an-
+  arbitrary-precision-int).
+
+  The answer types the field tyVariant, NOT tyPromoInt64: a promo rvalue is a
+  slot ADDRESS and IRPromoAddrOf only knows how to take one for a plain
+  identifier, so a promo FIELD has no lowering today. A variant does, it is
+  already the boxing the promo RETURN and CAPTURE paths use, and it is lossless
+  — VT_PROMO_INT64 carries the exact decimal.
+
+  Deliberately narrow: it requires the field to appear on BOTH sides of its own
+  assignment, so a field merely assigned from somewhere else keeps its machine
+  type and its cheap storage. That is the accumulator shape the bug is about. }
+function PyFieldIsIntAccumulator(bodyStart, bodyEnd: Integer; const fld: AnsiString): Boolean;
+var k, e: Integer; sawSelf, sawOp: Boolean;
+begin
+  PyFieldIsIntAccumulator := False;
+  k := bodyStart;
+  while k + 3 < bodyEnd do
+  begin
+    if (Tokens[k].Kind = tkIdent) and (GetTokenStr(k) = 'self') and
+       (Tokens[k + 1].Kind = tkDot) and (Tokens[k + 2].Kind = tkIdent) and
+       CaseEqual(GetTokenStr(k + 2), fld) then
+    begin
+      { `self.f += 1` — the self-reference is implicit in the operator }
+      if Tokens[k + 3].Kind in [tkPlusEq, tkMinusEq, tkStarEq] then
+      begin
+        PyFieldIsIntAccumulator := True;
+        Exit;
+      end;
+      if Tokens[k + 3].Kind = tkAssign then
+      begin
+        e := k + 4;
+        sawSelf := False;
+        sawOp := False;
+        while (e < bodyEnd) and
+              not (Tokens[e].Kind in [tkNewline, tkDedent, tkSemicolon]) do
+        begin
+          if Tokens[e].Kind in [tkPlus, tkMinus, tkStar] then
+            sawOp := True
+          else if (Tokens[e].Kind = tkIdent) and (GetTokenStr(e) = 'self') and
+                  (e + 2 < bodyEnd) and (Tokens[e + 1].Kind = tkDot) and
+                  (Tokens[e + 2].Kind = tkIdent) and
+                  CaseEqual(GetTokenStr(e + 2), fld) then
+            sawSelf := True;
+          Inc(e);
+        end;
+        if sawSelf and sawOp then
+        begin
+          PyFieldIsIntAccumulator := True;
+          Exit;
+        end;
+      end;
+    end;
+    Inc(k);
+  end;
+end;
+
 procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
                                  fieldsOnly: Boolean);
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, align, sz: Integer;
@@ -18033,6 +18096,16 @@ begin
                         'Nil Python: cannot infer the type of field self.'
                         + GetTokenStr(j + 2) + ' - annotate it (self.'
                         + GetTokenStr(j + 2) + ': int = ...)');
+            end;
+            { An int field this class GROWS by arithmetic on itself becomes a
+              VARIANT, so an accumulator stays exact past 2^63 instead of
+              wrapping in silence — see PyFieldIsIntAccumulator for why variant
+              and not promo, and for why the test is deliberately narrow. }
+            if PyIsMachineIntTk(tk) and
+               PyFieldIsIntAccumulator(bodyStart, bodyEnd, GetTokenStr(j + 2)) then
+            begin
+              tk := tyVariant;
+              fldSig := -1;
             end;
             { see the dataclass branch: str fields are managed, not string[N] }
             if tk = tyString then tk := tyAnsiString;

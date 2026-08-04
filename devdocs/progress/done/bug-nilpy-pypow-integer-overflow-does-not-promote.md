@@ -2,7 +2,7 @@
 track: N
 prio: 35
 type: bug
-status: working
+status: done
 owner: claude-AN
 ---
 
@@ -110,3 +110,6 @@ the one that costs every program 57KB.
 **Not implemented.** Recorded here rather than guessed at; the ticket keeps its
 priority and its gate. Note `pow(base, exp, mod)` (the three-argument modular
 form, added today) is unaffected either way — it never builds the full power.
+
+## Log
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

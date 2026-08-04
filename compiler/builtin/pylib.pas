@@ -4458,6 +4458,7 @@ var
   pa, pb, sp, np, r: PPyVarRec;
   txt: AnsiString;
   lo: TObject;
+  ia, ib, ir: Int64;   { machine-word result, checked for overflow }
   src, rep: TPyList;
   k, cnt, li: Integer;
 begin
@@ -4517,8 +4518,17 @@ begin
     { arbitrary precision stays exact — see pyadd_v. PXXPromoVarArithTry
       answers 0 when neither side is promo-tagged. }
     if PXXPromoVarArithTry(@Result, @a, @b, 3) <> 0 then Exit;
+    { neither side promo-tagged: do it in machine words, and only if THAT
+      overflows redo it exactly — see PyPromoteIntArith }
+    ia := pyvar_to_int(a); ib := pyvar_to_int(b);
+    ir := ia * ib;
+    if PyIntOpOverflows(ia, ib, ir, 3) then
+    begin
+      PyPromoteIntArith(@Result, ia, ib, 3);
+      Exit;
+    end;
     r^.VType := 2;
-    r^.Payload := pyvar_to_int(a) * pyvar_to_int(b);
+    r^.Payload := ir;
   end;
 end;
 
@@ -4567,9 +4577,45 @@ begin
   if neg then Result := 1.0 / sum else Result := sum;
 end;
 
+{ `base ** exp` for a non-negative integer exponent, in ARBITRARY PRECISION.
+  Exponentiation by squaring, the same shape as the machine-word loop in
+  pypow_v, so the two cannot drift on the exponent bits. Reached only after the
+  machine loop reports overflow — `2 ** 70` answered 0, which is the exact value
+  mod 2^64 and reads as a plausible number
+  (bug-nilpy-pypow-integer-overflow-does-not-promote).
+
+  Every product goes via a third slot and is copied back, because PXXPromoMul
+  must not have its destination alias an operand. }
+procedure PyPromoIntPow(dst: Pointer; base, exp: Int64);
+var pb, pr, pt: array[0..1] of NativeInt;
+    n: Int64;
+begin
+  PXXPromoInit(@pb); PXXPromoInit(@pr); PXXPromoInit(@pt);
+  PXXPromoFromInt(@pb, base);
+  PXXPromoFromInt(@pr, 1);
+  n := exp;
+  while n > 0 do
+  begin
+    if (n and 1) = 1 then
+    begin
+      PXXPromoMul(@pt, @pr, @pb);
+      PXXPromoCopy(@pr, @pt);
+    end;
+    n := n shr 1;
+    if n > 0 then
+    begin
+      PXXPromoMul(@pt, @pb, @pb);
+      PXXPromoCopy(@pb, @pt);
+    end;
+  end;
+  PXXPromoToVariant(dst, @pr);
+  PXXPromoClear(@pb); PXXPromoClear(@pr); PXXPromoClear(@pt);
+end;
+
 function pypow_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec;
     n: Int64; ir, ibase: Int64;
+    it: Int64; ovf: Boolean;   { overflow watch on the machine-word loop }
     fr, fbase, fexp: Double; negExp: Boolean;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
@@ -4579,11 +4625,30 @@ begin
     n := pyvar_to_int(b);
     ibase := pyvar_to_int(a);
     ir := 1;
+    ovf := False;
     while n > 0 do
     begin
-      if (n and 1) = 1 then ir := ir * ibase;
-      ibase := ibase * ibase;
+      if (n and 1) = 1 then
+      begin
+        it := ir * ibase;
+        if PyIntOpOverflows(ir, ibase, it, 3) then begin ovf := True; Break; end;
+        ir := it;
+      end;
       n := n shr 1;
+      { the final squaring is SKIPPED once no bits remain: the old loop always
+        squared once more, which is harmless when the result is discarded but
+        would report a false overflow here }
+      if n > 0 then
+      begin
+        it := ibase * ibase;
+        if PyIntOpOverflows(ibase, ibase, it, 3) then begin ovf := True; Break; end;
+        ibase := it;
+      end;
+    end;
+    if ovf then
+    begin
+      PyPromoIntPow(@Result, pyvar_to_int(a), pyvar_to_int(b));
+      Exit;
     end;
     r^.VType := 2;
     r^.Payload := ir;
@@ -4727,9 +4792,51 @@ begin
   Result := pyvar_of_int(pyvar_to_int(v));
 end;
 
+{ Redo an int operation in ARBITRARY PRECISION after the machine one overflowed.
+
+  Python has no fixed-width int, so a variant holding two ordinary VT_INT64s
+  must still give the exact answer when they do not fit: `self.v = self.v * 2`
+  on a variant field doubled correctly 63 times and then went to 0, because the
+  promo runtime's own gate (PXXPromoVarArithTry) deliberately declines a pair
+  where NEITHER side is promo-tagged — that gate is right for a Pascal Variant,
+  whose arithmetic wraps, and wrong for NilPy, which is what this unit is.
+
+  Only reached on the overflow path, so ordinary variant arithmetic keeps its
+  machine speed and this costs nothing until it is the difference between a
+  right answer and a silent wrong one. dst must already be a valid (cleared)
+  variant slot: PXXPromoToVariant reads the old tag before overwriting it. }
+procedure PyPromoteIntArith(dst: Pointer; x, y: Int64; op: Integer);
+var pa, pb, pr: array[0..1] of NativeInt;
+begin
+  PXXPromoInit(@pa); PXXPromoInit(@pb); PXXPromoInit(@pr);
+  PXXPromoFromInt(@pa, x);
+  PXXPromoFromInt(@pb, y);
+  if op = 1 then PXXPromoAdd(@pr, @pa, @pb)
+  else if op = 2 then PXXPromoSub(@pr, @pa, @pb)
+  else PXXPromoMul(@pr, @pa, @pb);
+  PXXPromoToVariant(dst, @pr);
+  PXXPromoClear(@pa); PXXPromoClear(@pb); PXXPromoClear(@pr);
+end;
+
+{ Did `x + y` / `x - y` / `x * y` leave the signed 64-bit range? Sign rules for
+  the additive pair; a divide-back check for the multiply, which is exact and
+  needs no 128-bit type. }
+function PyIntOpOverflows(x, y, r: Int64; op: Integer): Boolean;
+begin
+  if op = 1 then
+    PyIntOpOverflows := ((x > 0) and (y > 0) and (r < 0)) or
+                        ((x < 0) and (y < 0) and (r >= 0))
+  else if op = 2 then
+    PyIntOpOverflows := ((x >= 0) and (y < 0) and (r < 0)) or
+                        ((x < 0) and (y > 0) and (r >= 0))
+  else
+    PyIntOpOverflows := (x <> 0) and ((r div x) <> y);
+end;
+
 function pyadd_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec; concat: AnsiString;
     oa, ob: TObject; joined: TPyList; ji: Integer;
+    ia, ib, ir: Int64;   { machine-word result, checked for overflow }
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
@@ -4768,8 +4875,17 @@ begin
       when neither side is promo-tagged, so the machine-int path below is
       untouched for ordinary variants. }
     if PXXPromoVarArithTry(@Result, @a, @b, 1) <> 0 then Exit;
+    { neither side promo-tagged: do it in machine words, and only if THAT
+      overflows redo it exactly — see PyPromoteIntArith }
+    ia := pyvar_to_int(a); ib := pyvar_to_int(b);
+    ir := ia + ib;
+    if PyIntOpOverflows(ia, ib, ir, 1) then
+    begin
+      PyPromoteIntArith(@Result, ia, ib, 1);
+      Exit;
+    end;
     r^.VType := 2;
-    r^.Payload := pyvar_to_int(a) + pyvar_to_int(b);
+    r^.Payload := ir;
   end;
 end;
 
@@ -4812,6 +4928,7 @@ end;
 
 function pysub_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec;
+    ia, ib, ir: Int64;   { machine-word result, checked for overflow }
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
@@ -4825,8 +4942,17 @@ begin
     { arbitrary precision stays exact — see pyadd_v. PXXPromoVarArithTry
       answers 0 when neither side is promo-tagged. }
     if PXXPromoVarArithTry(@Result, @a, @b, 2) <> 0 then Exit;
+    { neither side promo-tagged: do it in machine words, and only if THAT
+      overflows redo it exactly — see PyPromoteIntArith }
+    ia := pyvar_to_int(a); ib := pyvar_to_int(b);
+    ir := ia - ib;
+    if PyIntOpOverflows(ia, ib, ir, 2) then
+    begin
+      PyPromoteIntArith(@Result, ia, ib, 2);
+      Exit;
+    end;
     r^.VType := 2;
-    r^.Payload := pyvar_to_int(a) - pyvar_to_int(b);
+    r^.Payload := ir;
   end;
 end;
 
