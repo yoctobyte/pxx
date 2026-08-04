@@ -507,6 +507,147 @@ function F: Boolean; begin calls:=calls+1; F:=True; end;
 begin calls:=0; if False and F then ; writeln(calls); if True or F then ; writeln(calls); end.
 P
 
+# ---- text file I/O ----
+probe file-write-read <<'P'
+var f: Text; s: string;
+begin
+  Assign(f,'/tmp/fdp_io.txt'); Rewrite(f); writeln(f,'line1'); writeln(f,'line2'); Close(f);
+  Assign(f,'/tmp/fdp_io.txt'); Reset(f);
+  while not Eof(f) do begin readln(f,s); writeln('[',s,']'); end;
+  Close(f);
+end.
+P
+# filed: bug-p-writeln-text-rejects-char (writeln(f,'a') -- 'a' is a Char)
+probe file-append    known <<'P'
+var f: Text; s: string;
+begin
+  Assign(f,'/tmp/fdp_ap.txt'); Rewrite(f); writeln(f,'a'); Close(f);
+  Assign(f,'/tmp/fdp_ap.txt'); Append(f); writeln(f,'b'); Close(f);
+  Assign(f,'/tmp/fdp_ap.txt'); Reset(f);
+  while not Eof(f) do begin readln(f,s); write(s); end;
+  Close(f); writeln;
+end.
+P
+# filed: feature-b-rtl-missing-fpc-surface-2026-08 (Eoln)
+probe file-eoln      known <<'P'
+var f: Text; c: Char; n: Integer;
+begin
+  Assign(f,'/tmp/fdp_el.txt'); Rewrite(f); writeln(f,'ab'); Close(f);
+  Assign(f,'/tmp/fdp_el.txt'); Reset(f); n:=0;
+  while not Eoln(f) do begin read(f,c); n:=n+1; end;
+  Close(f); writeln(n);
+end.
+P
+probe file-missing   <<'P'
+uses sysutils; var f: Text;
+begin
+  Assign(f,'/tmp/fdp_does_not_exist_zz');
+  try Reset(f); writeln('opened'); Close(f); except writeln('raised'); end;
+end.
+P
+# filed: bug-p-writeln-text-rejects-char
+probe fileexists     known <<'P'
+uses sysutils; var f: Text;
+begin
+  Assign(f,'/tmp/fdp_fe.txt'); Rewrite(f); writeln(f,'x'); Close(f);
+  writeln(FileExists('/tmp/fdp_fe.txt'),'|',FileExists('/tmp/fdp_nope_zz'));
+  DeleteFile('/tmp/fdp_fe.txt');
+  writeln(FileExists('/tmp/fdp_fe.txt'));
+end.
+P
+# ---- streams ----
+probe stream-mem     <<'P'
+uses classes; var m: TMemoryStream; b: array[0..3] of Byte; n: Integer;
+begin
+  m:=TMemoryStream.Create;
+  b[0]:=1;b[1]:=2;b[2]:=3;b[3]:=4;
+  m.Write(b,4); writeln(m.Size,'|',m.Position);
+  m.Position:=0; b[0]:=0;b[1]:=0;
+  n:=m.Read(b,2); writeln(n,'|',b[0],b[1],'|',m.Position);
+  m.Free;
+end.
+P
+# filed: feature-b-rtl-missing-fpc-surface-2026-08 (TSeekOrigin)
+probe stream-seek    known <<'P'
+uses classes; var m: TMemoryStream; b: array[0..7] of Byte; i: Integer;
+begin
+  m:=TMemoryStream.Create;
+  for i:=0 to 7 do b[i]:=i;
+  m.Write(b,8);
+  writeln(m.Seek(2,soFromBeginning),'|',m.Seek(0,soFromEnd),'|',m.Size);
+  m.Free;
+end.
+P
+probe stream-strings <<'P'
+uses classes; var m: TMemoryStream; l: TStringList;
+begin
+  l:=TStringList.Create; l.Add('one'); l.Add('two');
+  m:=TMemoryStream.Create; l.SaveToStream(m);
+  writeln(m.Size);
+  m.Position:=0; l.Clear; l.LoadFromStream(m);
+  writeln(l.Count,'|',l[0],'/',l[1]);
+  l.Free; m.Free;
+end.
+P
+# ---- TList ----
+probe tlist-basic    <<'P'
+uses classes; var l: TList; a, b: Integer;
+begin
+  a:=1; b:=2; l:=TList.Create;
+  l.Add(@a); l.Add(@b);
+  writeln(l.Count,'|',PInteger(l[0])^,PInteger(l[1])^,'|',l.IndexOf(@b));
+  l.Delete(0); writeln(l.Count,'|',PInteger(l[0])^);
+  l.Free;
+end.
+P
+# ---- sorting a TStringList with duplicates ----
+probe sl-sort-dups   <<'P'
+uses classes; var l: TStringList; i: Integer;
+begin
+  l:=TStringList.Create;
+  l.Add('b'); l.Add('a'); l.Add('b'); l.Add('A');
+  l.Sort;
+  for i:=0 to l.Count-1 do write(l[i],' ');
+  writeln('|',l.Count);
+  l.Free;
+end.
+P
+# filed: feature-b-rtl-missing-fpc-surface-2026-08 (TStringList.Sorted)
+probe sl-sorted-prop known <<'P'
+uses classes; var l: TStringList; i: Integer;
+begin
+  l:=TStringList.Create; l.Sorted:=True;
+  l.Add('c'); l.Add('a'); l.Add('b');
+  for i:=0 to l.Count-1 do write(l[i]);
+  writeln;
+  l.Free;
+end.
+P
+# ---- date/time round trips ----
+probe dt-roundtrip   <<'P'
+uses sysutils; var d: TDateTime; y,mo,dd: Word; h,mi,se,ms: Word;
+begin
+  d := EncodeDate(2026,2,28) + EncodeTime(23,59,58,0);
+  DecodeDate(d,y,mo,dd); DecodeTime(d,h,mi,se,ms);
+  writeln(y,'-',mo,'-',dd,' ',h,':',mi,':',se);
+end.
+P
+probe dt-leapyear    <<'P'
+uses sysutils; var y,mo,d: Word;
+begin
+  DecodeDate(EncodeDate(2024,2,29),y,mo,d); writeln(y,'-',mo,'-',d);
+  writeln(IsLeapYear(2024),'|',IsLeapYear(2023),'|',IsLeapYear(2000),'|',IsLeapYear(1900));
+end.
+P
+probe dt-dayofweek   <<'P'
+uses sysutils; begin writeln(DayOfWeek(EncodeDate(2026,8,4))); end.
+P
+# filed: feature-b-rtl-missing-fpc-surface-2026-08 (IncMonth)
+probe dt-incmonth    known <<'P'
+uses sysutils; var y,mo,d: Word;
+begin DecodeDate(IncMonth(EncodeDate(2026,1,31),1),y,mo,d); writeln(y,'-',mo,'-',d); end.
+P
+
 echo "---"
 echo "new divergences: $new   known/filed: $known   no-oracle skips: $skipped"
 # A skip is not a pass. It is a case that silently compared nothing, so it is
