@@ -65,7 +65,7 @@ _none_
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
 | bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | decide-nilpy-set-as-a-distinct-type-or-a-list |
-| bug-nilpy-tuple-of-a-field-from-an-omitted-default-segfaults | N | 65 | bug | SEGFAULT: a field assigned from an OMITTED defaulted variant ctor parameter, returned inside a TUPLE, crashes. Needs all four — a constructor, the default actually taken, the field, and the tuple; drop any one and it works. | — |
+| bug-nilpy-tuple-of-a-field-from-an-omitted-default-segfaults | N | 70 | bug | SEGFAULT, and a COMPILER crash under -g: a class whose method parameter name matches the CLASS name still mis-resolves on the FIELD path. `class A` + `def __init__(self, a): self.a = a` + a tuple return crashes. Same family as the fixed return-inference bug; that fix did not cover this route. | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-pascal-member-check-missing-on-the-lvalue-field-path | P | 45 | bug | RequireRecMember has 3 call sites, all expression paths, and ~20 AN_FIELD construction sites exist. A breakpoint proved the statement-LVALUE path never calls it. No longer a silent wrong store (RecFieldType now rejects), but the guard is inconsistent and its coverage is unaudited. | — |
 | bug-t-empty-range-regression-cannot-be-bisected | T | 55 | bug | When a run's parent_tested IS the tested sha, the regression's range is empty and idle bisect can never narrow it — so those tickets sit until a human bisects by hand | — |
@@ -370,7 +370,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [N] bug-nilpy-a-local-named-like-a-class-is-typed-as-that-class
-- [p 65] [N] bug-nilpy-tuple-of-a-field-from-an-omitted-default-segfaults
+- [p 70] [N] bug-nilpy-tuple-of-a-field-from-an-omitted-default-segfaults
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)

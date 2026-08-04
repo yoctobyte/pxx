@@ -34,7 +34,7 @@ _none — no lane is locked._
 ## Ready — top 30 of 158, ranked
 
 - `[p 70] [N]` bug-nilpy-a-local-named-like-a-class-is-typed-as-that-class
-- `[p 65] [N]` bug-nilpy-tuple-of-a-field-from-an-omitted-default-segfaults
+- `[p 70] [N]` bug-nilpy-tuple-of-a-field-from-an-omitted-default-segfaults
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
