@@ -9,6 +9,7 @@ prio: 65
 
 - **Type:** bug — Track B (`lib/crtl`), tag `compat`
 - **Status:** done
+- **Resolved:** 2026-08-05 in `0758d456e` (verified on origin/master after the rebase)
 - **Opened:** 2026-08-05
 
 ## The crash, which is the part that matters
