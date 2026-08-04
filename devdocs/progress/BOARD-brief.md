@@ -69,6 +69,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
+- `[p 55] [A]` bug-a-duplicate-definition-silently-accepted
 - `[p 55] [C]` bug-c-pthread-without-threadsafe-builds-then-dies-at-load
 - `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
 - `[p 55] [N]` bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant

@@ -47,6 +47,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-duplicate-definition-silently-accepted | A | 55 | bug | two definitions of the same function (or global) are silently accepted in BOTH frontends — last one wins, except calls placed between them bind to the earlier, so identical source text calls different functions depending on position | — |
 | bug-a-promoint-function-result-crashes | A | 45 | bug | A Pascal function RETURNING PromoInt crashes — `function mk: PromoInt; begin Result := 12 end` segfaults on writeln(mk). Confirmed on `pinned` too, so pre-existing; split out of the parameter ticket, which conflated the two | — |
 | bug-a-promoint-parameter-32bit-by-ref-indirection-hangs | A | 40 | bug | On 32-bit targets a PromoInt parameter still does not work: it does not compile today, and simply extending the 64-bit by-ref fix makes it HANG — the by-ref indirection is not resolved, so PromoShiftCount reads a garbage tag and `n shr 4` spins in BShr's doubling loop | — |
 | bug-a-writeln-float-exponent-form-not-correctly-rounded | A | 60 | bug | writeln(Double) and Str(F,S) scale by repeated /10.0 and are wrong from the 16th digit; 1e200 even gets the wrong EXPONENT | — |
@@ -408,6 +409,7 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
+- [p 55] [A] bug-a-duplicate-definition-silently-accepted
 - [p 55] [C] bug-c-pthread-without-threadsafe-builds-then-dies-at-load
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [N] bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
