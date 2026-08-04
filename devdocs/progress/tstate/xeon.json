@@ -4611,10 +4611,10 @@
  },
  "last_bench": {
   "conf_rows": 550,
-  "date": "2026-08-04T05:16:50Z",
+  "date": "2026-08-04T05:43:13Z",
   "rc": 0,
   "rows": 30,
-  "sha": "9df2717684a330d02747d73cffe34ffb575ca9ac"
+  "sha": "309296d6fb5ee5068452d3f00ba010fd5eee7534"
  },
  "last_full": {
   "date": "2026-08-04T05:28:54Z",
