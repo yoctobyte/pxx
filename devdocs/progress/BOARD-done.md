@@ -1278,6 +1278,8 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-nilpy-dataclass-dict-factory | T | 70 | regression | regression: test-core#src:test/test_nilpy_dataclass_dict_factory.npy red at 2fbb5a270acc (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-html-tempfile | T | 70 | regression | regression: test-core#src:test/test_nilpy_html_tempfile.npy red at 106a63cabbca (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-min-max-variadic | T | 70 | regression | regression: test-core#src:test/test_nilpy_min_max_variadic.npy red at 9305672dbcd5 (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-module-first-import | T | 70 | regression | regression: test-core#src:test/test_nilpy_module_first_import.npy red at b9e334fbd649 (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-re | T | 70 | regression | regression: test-core#src:test/test_nilpy_re.npy red at b9e334fbd649 (auto-filed by twatch) | — |
 | regression-test-core-test-platform-defines | T | 70 | regression | regression: test-core#src:test/test_platform_defines.pas@2 red at 96147f570d29 (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud-lazy | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud_lazy.pas red at f913bd22ae30 (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud.pas red at ff90643ef2a3 (auto-filed by twatch) | — |

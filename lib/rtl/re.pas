@@ -201,15 +201,18 @@ begin
   for i := 0 to n - 1 do
   begin
     if compiled.groupCount <= 1 then
-      out_ := out_.append(ReGroup(ms[i], s, 0))
+      { append_self, not append: Python's list.append returns NONE, so the
+        Self-returning form the chaining idiom needs has its own name
+        (bug-nilpy-list-mutators-return-self-instead-of-none). }
+      out_ := out_.append_self(ReGroup(ms[i], s, 0))
     else if compiled.groupCount = 2 then
-      out_ := out_.append(ReGroup(ms[i], s, 1))
+      out_ := out_.append_self(ReGroup(ms[i], s, 1))
     else
     begin
       row := TPyList.Create;
       for g := 1 to compiled.groupCount - 1 do
-        row := row.append(ReGroup(ms[i], s, g));
-      out_ := out_.append(row);
+        row := row.append_self(ReGroup(ms[i], s, g));
+      out_ := out_.append_self(row);
     end;
   end;
   findall := out_;
