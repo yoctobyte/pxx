@@ -12686,6 +12686,23 @@ begin
               segfaulted. }
             if TypeIsOrdinal(castTk) and (castTk <> tyPointer) then
               CurASTNode := PromoDemoteToInt64(CurASTNode);
+            { ...and on a promotable int that spelling IS `@n`, so make it one.
+              Punning the operand worked for a LOCAL, whose rvalue already is
+              its slot address, and CRASHED for a by-ref PARAMETER, whose cell
+              holds the address instead — one spelling, two meanings, with a
+              segfault on the side that a line earlier had worked. AN_ADDR is
+              right for both: it resolves through the parameter cell exactly as
+              `@n` does. }
+            if (castTk = tyPointer) and
+               TypeIsPromoInt(IntToTypeKind(ASTTk[CurASTNode])) then
+            begin
+              node := AllocNode(AN_ADDR);
+              ASTLeft[node] := CurASTNode;
+              ASTTk[node] := Ord(tyPointer);
+              CurASTNode := node;
+              LastExprTk := tyPointer;
+              Exit;
+            end;
             { `operator Explicit(a: TFoo): Integer` — a value cast of a
               record/class operand with a matching Explicit overload is the
               conversion CALL, not a reinterpret (toperator11's Integer(a)). }
@@ -27187,6 +27204,23 @@ begin
         by-value RecName, and it must NOT be promoted to by-ref. }
       Syms[idx].ElemType := tyRecord;
       Syms[idx].ElemRecName := ptypesRec[i];
+    end
+    else if TypeIsPromoInt(ptypes[i]) then
+    begin
+      { A PROMOTABLE INT parameter is an AGGREGATE — {tag, payload}, 16 bytes on
+        a 64-bit target — so it travels the same way a large record does: by
+        reference, with the CALLER copying into a hidden temp first, which is
+        what gives Pascal's value semantics over an address-passing ABI.
+
+        Without this it was in no class at all: the caller passed the slot
+        ADDRESS (an rvalue promo IS its slot address) while the callee's `lea n`
+        addressed an unfilled 16-byte frame cell, so `@n` was a pointer to a
+        pointer and `n + 0` read the caller's address as a TAG word and crashed
+        in the runtime's heap branch
+        (bug-a-promoint-parameter-cannot-be-used-at-all). }
+      Syms[idx].IsRef := True;
+      if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then
+        Procs[procIdx].Params[i].IsRef := True;
     end
     else if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
     begin

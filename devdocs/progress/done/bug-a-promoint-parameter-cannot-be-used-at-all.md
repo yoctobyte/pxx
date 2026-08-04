@@ -3,6 +3,8 @@ track: A
 prio: 45
 type: bug
 summary: "A PromoInt PARAMETER is unusable — @n, Pointer(n) and even `n + 0` are wrong or SEGFAULT — because promo was never joined to the aggregate-by-value parameter path every record already uses. Root cause and fix both confirmed by IR; no semantics decision needed."
+status: done
+owner: claude-AN
 ---
 
 # A `PromoInt` parameter cannot be used at all
@@ -146,3 +148,71 @@ against `PromoInt`, which today is impossible.
 `make test` + self-host byte-identical, plus a Pascal test covering: a promo
 parameter read, operated on, passed on to another routine, and (per whichever
 option is chosen) assigned to — with a heap-tier value, not only an inline one.
+
+## FIXED 2026-08-04
+
+Exactly the shape the corrected analysis predicted, in three small pieces plus a
+consistency fix. No new ABI, no semantics decision.
+
+1. **`PromoInt` joins the by-ref aggregate class** (`parser.inc`, the same arm
+   that promotes a record larger than a qword). The callee's `lea n` then
+   resolves to the passed pointer, as it already did for records.
+2. **`IRPromoAddrOf` resolves through a by-ref promo symbol** — `IR_LEA` instead
+   of `IR_SLOTADDR` when `Syms[i].IsRef`. `IR_SLOTADDR` hands back the address OF
+   THE CELL, i.e. a pointer to a pointer.
+3. **The caller copies into a hidden temp** (`IRLowerCallArg`), with
+   **`PXXPromoCopy`, not `copy_rec`**: the heap tier's payload is a managed
+   AnsiString and the copy must RETAIN it (`dp^ := sp^`), or the callee's
+   epilogue releases a string the caller still owns. This is what makes it VALUE
+   semantics; without it the callee wrote straight through and `n := n + 1`
+   changed the caller's variable.
+4. **`Pointer(n)` now means `@n` for a promo operand.** It worked for a LOCAL,
+   whose rvalue already is its slot address, and crashed for a by-ref PARAMETER,
+   whose cell holds the address instead — one spelling, two meanings, with a
+   segfault on the side that had worked a line earlier.
+
+Two things surfaced while fixing it that the ticket had wrong:
+
+- **The promo STORE path excluded `IsRef` outright.** Harmless while promo
+  parameters did not work at all; once they did, `n := n + 1` fell through to a
+  path that silently DROPPED the write. Fixed with the same LEA-vs-SLOTADDR rule.
+- **The `viaOp` repro conflated two bugs.** `function viaOp(n: PromoInt):
+  PromoInt` mixes a promo parameter with a promo RESULT. The addition was never
+  the problem; a function RETURNING PromoInt crashes with no parameter involved,
+  on `pinned` too. Filed as [[bug-a-promoint-function-result-crashes]] — which is
+  why this ticket's headline "even `n + 0` SEGFAULTS" overstated the parameter
+  half.
+
+### Verified
+
+The motivating case works — base conversion written in ORDINARY Pascal against
+`PromoInt`, which needs a promo parameter, `shr`, a machine-int cast and
+mutation of the parameter at once:
+
+```pascal
+function toHex(n: PromoInt): AnsiString;
+begin
+  while n <> 0 do
+  begin
+    d := Integer(n and 15);
+    Result := digits[d + 1] + Result;
+    n := n shr 4;
+  end;
+end;
+```
+
+`toHex(2**70)` = `400000000000000000`, agreeing with the runtime's own
+`PXXPromoToBase(@v, 16)`.
+
+`test/test_promoint_parameter.pas` covers both tiers, read/operate/chain/mutate,
+the caller staying unchanged after a callee mutation, both `@n` and `Pointer(n)`,
+and the library function.
+
+### Gate
+
+`tools/gate.sh quick` + **`make test`** green. The full Pascal suite was run
+deliberately: this changes the shared parameter-registration path, so the risk
+is every aggregate parameter in the codebase, not just promo ones. Nothing moved.
+
+## Log
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

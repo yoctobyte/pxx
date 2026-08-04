@@ -1824,6 +1824,13 @@ test-core: $(COMPILER)
 	# PromoInt in PASCAL: `shr` (lexed as an IDENT, so PromoOpHelper missed it and
 	# the generic path shifted two slot ADDRESSES) and every T(n) value cast
 	# (which punned the address). Pointer(n) must stay the slot address.
+	# A PromoInt PARAMETER: promo joins the by-ref aggregate class every large
+	# record already uses, with the CALLER copying into a hidden temp (PXXPromoCopy,
+	# which RETAINS the heap tier's managed payload — a raw 16-byte copy would not).
+	# Covers both tiers, mutation not aliasing the caller, and a base conversion
+	# written in ordinary Pascal against the type.
+	./$(COMPILER) test/test_promoint_parameter.pas /tmp/test_promoint_param26
+	test "$$(/tmp/test_promoint_param26)" = "$$(printf '12 12 24 13\n12\n70000000000 70000000000\n140000000000 140000000000 70000000001\n70000000000\nff\n400000000000000000 0x400000000000000000\n0')"
 	./$(COMPILER) test/test_promoint_shr_and_casts.pas /tmp/test_promoint_shrcast26
 	test "$$(/tmp/test_promoint_shrcast26)" = "$$(printf '127 127\n15 15\n510\n1180591620717411303424\n1\n32\n12 12 12 12\n12 12 12 12\n12 12\nA\nFALSE\nTRUE\n70000000000\n70000000000')"
 	./$(COMPILER) test/test_promoint_overflow.pas /tmp/test_promoint_overflow26

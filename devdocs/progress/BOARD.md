@@ -41,7 +41,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-promoint-parameter-cannot-be-used-at-all | A | 45 | bug | A PromoInt PARAMETER is unusable — @n, Pointer(n) and even `n + 0` are wrong or SEGFAULT — because promo was never joined to the aggregate-by-value parameter path every record already uses. Root cause and fix both confirmed by IR; no semantics decision needed. | — |
+| bug-a-promoint-function-result-crashes | A | 45 | bug | A Pascal function RETURNING PromoInt crashes — `function mk: PromoInt; begin Result := 12 end` segfaults on writeln(mk). Confirmed on `pinned` too, so pre-existing; split out of the parameter ticket, which conflated the two | — |
 | bug-cfront-spurious-dt-needed-libc-with-no-imports | B | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
@@ -323,9 +323,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1344)
+## done (1345)
 
-1344 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1345 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -415,7 +415,7 @@ _none_
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 3)
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [A] bug-a-promoint-parameter-cannot-be-used-at-all
+- [p 45] [A] bug-a-promoint-function-result-crashes
 - [p 45] [B] bug-cfront-spurious-dt-needed-libc-with-no-imports
 - [p 45] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position

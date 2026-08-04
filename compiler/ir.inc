@@ -1029,6 +1029,16 @@ begin
      TypeIsPromoInt(IntToTypeKind(ASTTk[node])) then
   begin
     if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+       TypeIsPromoInt(Syms[ASTIVal[node]].TypeKind) and
+       Syms[ASTIVal[node]].IsRef then
+      { A promo PARAMETER is by-ref, like every other aggregate parameter: the
+        slot lives in the caller's hidden temp and the cell here holds its
+        ADDRESS. IR_LEA resolves through that (it is what `@n` already lowers
+        to); IR_SLOTADDR would hand back the address OF THE CELL, i.e. a pointer
+        to a pointer, and the runtime would read the address as a TAG word
+        (bug-a-promoint-parameter-cannot-be-used-at-all). }
+      IRPromoAddrOf := IRAppend(IR_LEA, ASTIVal[node], -1, -1, 0, Ord(tyPointer))
+    else if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
        TypeIsPromoInt(Syms[ASTIVal[node]].TypeKind) then
       IRPromoAddrOf := IRAppend(IR_SLOTADDR, ASTIVal[node], -1, -1, 0, Ord(tyPointer))
     else
@@ -2337,6 +2347,34 @@ begin
     if caSlCall < 0 then Error('variant unbox: pyvarobj builtin not loaded');
     caArg1 := IRAppend(IR_ARG, IRVariantAddr(argAST), -1, -1, 0, Ord(tyVariant));
     Result := IRAppendCall(caSlCall, caArg1, -1, Ord(tyPointer));
+    Exit;
+  end;
+  { PROMO argument to a PROMO parameter: give the callee its OWN slot.
+
+    A promo parameter is by-ref like every other aggregate parameter (see the
+    IsRef promotion in parser.inc), so what crosses the call is an address —
+    and Pascal value semantics then depend on that address naming a COPY, which
+    is exactly what the record path does with a hidden temp and copy_rec. Promo
+    needs PXXPromoCopy rather than a raw 16-byte copy: the heap tier's payload
+    is a managed AnsiString and the copy has to RETAIN it (`dp^ := sp^`), or the
+    callee's epilogue would release a string the caller still owns.
+
+    Without the copy the callee wrote straight through to the caller's variable
+    — `n := n + 1` inside the routine changed the caller's `v`.
+
+    Copied unconditionally, including for a promo rvalue that already sits in a
+    fresh temp: one redundant copy is worth the rule staying "the callee always
+    gets its own slot", and the alternative is an aliasing question at every
+    call site. }
+  if (cpi >= 0) and (pathIdx >= 0) and
+     (pathIdx < Procs[cpi].ParamCount) and
+     TypeIsPromoInt(Procs[cpi].Params[pathIdx].TypeKind) and
+     TypeIsPromoInt(IntToTypeKind(ASTTk[argAST])) then
+  begin
+    caArg1 := IRPromoTempSlot(caSym);
+    IRMarkStatementNode(IRPromoCall('PXXPromoCopy', caArg1,
+                                    IRPromoAddrOf(argAST), -1, tyUnknown));
+    Result := IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer));
     Exit;
   end;
   { PROMO argument to a POINTER parameter: pass the slot ADDRESS, which is what
@@ -6739,10 +6777,18 @@ begin
         layout. }
       if (ASTKind[ASTLeft[node]] = AN_IDENT) and (ASTIVal[ASTLeft[node]] >= 0) and
          TypeIsPromoInt(Syms[ASTIVal[ASTLeft[node]]].TypeKind) and
-         not Syms[ASTIVal[ASTLeft[node]]].IsRef then
+         True then
       begin
         varIdx := ASTIVal[ASTLeft[node]];
-        leftAddr := IRAppend(IR_SLOTADDR, varIdx, -1, -1, 0, Ord(tyPointer));
+        { a by-ref promo PARAMETER names its slot through the cell, so the
+          destination address is IR_LEA, not IR_SLOTADDR. This arm used to
+          exclude IsRef outright, which was harmless while promo parameters did
+          not work at all — once they did, `n := n + 1` fell through to a path
+          that silently DROPPED the store. }
+        if Syms[varIdx].IsRef then
+          leftAddr := IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(tyPointer))
+        else
+          leftAddr := IRAppend(IR_SLOTADDR, varIdx, -1, -1, 0, Ord(tyPointer));
         if IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant then
           { variant -> promotable int: the runtime reads whichever tier the
             variant holds (VT_INT64 inline, VT_PROMO_INT64 heap) }
