@@ -18,6 +18,7 @@ command -v fpc >/dev/null || { echo "fpc not found"; exit 2; }
 
 new=0
 known=0
+skipped=0
 
 # probe NAME [known] -- full program on stdin
 probe() {
@@ -31,9 +32,15 @@ probe() {
   if "$S" /tmp/fdp.pas /tmp/fdp_p >/tmp/fdp_c.log 2>&1; then
     pr="$(/tmp/fdp_p 2>&1)"
   else pr="<pxx-compile-fail: $(grep -oE 'error[^(]*' /tmp/fdp_c.log | head -1)>"; fi
+  # The oracle check comes FIRST. A case FPC cannot build compared nothing, and
+  # returning quietly is how such a case sits in this file for months looking
+  # like coverage — one missing `uses` is enough to disarm it, which is exactly
+  # what had happened to exc-finally and exc-nested. Say so out loud instead.
+  if [ "$fr" = "<fpc-compile-fail>" ]; then
+    printf 'SKIP        %-22s no oracle: fpc cannot compile it, so this case proves nothing\n' "$name"
+    skipped=$((skipped+1)); return
+  fi
   if [ "$fr" = "$pr" ]; then return; fi
-  # skip cases where FPC itself can't compile (probe is then meaningless)
-  [ "$fr" = "<fpc-compile-fail>" ] && return
   if [ "$tag" = "known" ]; then
     printf 'DIFF [known] %-22s fpc=[%s] pxx=[%s]\n' "$name" "$fr" "$pr"; known=$((known+1))
   else
@@ -184,6 +191,82 @@ probe enum-explicit known <<'P'
 type te = (a = 1, b = 5, c = 10); begin writeln(ord(a), '|', ord(b), '|', ord(c)); end.
 P
 
+# ---- sysutils: conversions ----
+probe su-inttostr    <<'P'
+uses sysutils; begin writeln(IntToStr(0),'|',IntToStr(-42),'|',IntToStr(2147483647)); end.
+P
+probe su-strtoint    <<'P'
+uses sysutils; begin writeln(StrToInt('42'),'|',StrToInt('-7'),'|',StrToIntDef('zz',9)); end.
+P
+probe su-inttohex    <<'P'
+uses sysutils; begin writeln(IntToHex(255,2),'|',IntToHex(255,4),'|',IntToHex(0,1)); end.
+P
+probe su-upperlower  <<'P'
+uses sysutils; begin writeln(UpperCase('aBc1!'),'|',LowerCase('AbC1!')); end.
+P
+probe su-trim        <<'P'
+uses sysutils; begin writeln('[',Trim('  ab  '),']|[',TrimLeft('  ab'),']|[',TrimRight('ab  '),']'); end.
+P
+probe su-pos         <<'P'
+uses sysutils; begin writeln(Pos('b','abc'),'|',Pos('z','abc'),'|',Pos('','abc')); end.
+P
+probe su-stringreplace <<'P'
+uses sysutils; begin writeln(StringReplace('a.b.c','.','-',[rfReplaceAll]),'|',StringReplace('a.b.c','.','-',[])); end.
+P
+probe su-format-d    <<'P'
+uses sysutils; begin writeln(Format('%d|%5d|%-5d|%05d',[42,42,42,42])); end.
+P
+probe su-format-s    <<'P'
+uses sysutils; begin writeln(Format('%s|%8s|%-8s|%.2s',['ab','ab','ab','abcd'])); end.
+P
+probe su-format-x    <<'P'
+uses sysutils; begin writeln(Format('%x|%X|%8.4x',[255,255,255])); end.
+P
+# ---- strings ----
+probe str-index      <<'P'
+var s: string; begin s := 'abc'; writeln(s[1],s[3],'|',Length(s)); end.
+P
+probe str-setlength  <<'P'
+var s: string; begin s := 'abcdef'; SetLength(s,3); writeln('[',s,']',Length(s)); end.
+P
+probe str-insert-del <<'P'
+var s: string; begin s := 'abcd'; Insert('XY',s,2); writeln(s); Delete(s,2,2); writeln(s); end.
+P
+probe str-compare    <<'P'
+begin writeln('a'<'b','|','abc'='abc','|','ab'<'abc'); end.
+P
+# ---- dynamic arrays ----
+probe dyn-setlength  <<'P'
+var a: array of Integer; i: Integer;
+begin SetLength(a,3); for i:=0 to 2 do a[i]:=i*i; writeln(Length(a),'|',a[0],a[1],a[2],'|',High(a)); end.
+P
+probe dyn-grow       <<'P'
+var a: array of Integer; begin SetLength(a,2); a[0]:=1; a[1]:=2; SetLength(a,4); writeln(Length(a),'|',a[0],a[1],'|',a[2],a[3]); end.
+P
+probe dyn-copy       <<'P'
+var a,b: array of Integer; begin SetLength(a,3); a[0]:=1;a[1]:=2;a[2]:=3; b:=Copy(a,1,2); writeln(Length(b),'|',b[0],b[1]); end.
+P
+# ---- exceptions ----
+probe exc-basic      <<'P'
+uses sysutils;
+begin try raise Exception.Create('boom'); except on E: Exception do writeln('caught:',E.Message); end; end.
+P
+probe exc-finally    <<'P'
+uses sysutils;
+begin try try writeln('t'); raise Exception.Create('x'); finally writeln('f'); end; except writeln('e'); end; end.
+P
+probe exc-divzero    <<'P'
+uses sysutils; var a,b: Integer;
+begin a:=1; b:=0; try writeln(a div b); except on E: Exception do writeln('div caught'); end; end.
+P
+probe exc-nested     <<'P'
+uses sysutils;
+begin try try raise Exception.Create('inner') except writeln('in'); raise; end except writeln('out'); end; end.
+P
+
 echo "---"
-echo "new divergences: $new   known/filed: $known"
+echo "new divergences: $new   known/filed: $known   no-oracle skips: $skipped"
+# A skip is not a pass. It is a case that silently compared nothing, so it is
+# worth the same attention as a divergence until it is either fixed or removed.
+[ "$skipped" -gt 0 ] && echo "(a SKIP is not a pass -- fix the case or drop it)"
 [ "$new" -eq 0 ] && exit 0 || exit 1

@@ -897,7 +897,10 @@ var i, j, m, n: Integer; match: Boolean;
 begin
   m := Length(substr);
   n := Length(s);
-  if m = 0 then begin Result := 1; Exit; end;
+  { An empty needle is NOT found at position 1. That is C's strstr convention;
+    Delphi and FPC both return 0, and PosEx here already did. Returning 1 makes
+    the common `if Pos(sep, s) > 0` guard fire on an empty separator. }
+  if m = 0 then begin Result := 0; Exit; end;
   for i := 1 to n - m + 1 do
   begin
     match := True;
@@ -2060,26 +2063,47 @@ begin
   FmtExponent := mant + 'E' + es;
 end;
 
-function FmtPad(const s: AnsiString; width: Integer; leftAlign, zeroPad: Boolean): AnsiString;
+{ Width padding is ALWAYS spaces. Zero-padding is what the precision does, and
+  only for the integer types — see FmtIntPrec. }
+function FmtPad(const s: AnsiString; width: Integer; leftAlign: Boolean): AnsiString;
 var pad: AnsiString; need, k: Integer;
 begin
   need := width - Length(s);
   if need <= 0 then begin Result := s; Exit; end;
   pad := '';
-  if leftAlign then
-    for k := 1 to need do pad := pad + ' '
-  else if zeroPad then
-    for k := 1 to need do pad := pad + '0'
-  else
-    for k := 1 to need do pad := pad + ' ';
+  for k := 1 to need do pad := pad + ' ';
   if leftAlign then Result := s + pad else Result := pad + s;
+end;
+
+{ Apply an integer precision: a MINIMUM number of digits, zero-filled on the
+  left, with the sign staying outside the zeros ('%.5d' of -42 is '-00042', not
+  '000-42'). A value already that long is never truncated — precision is a
+  floor for integers, unlike '%s' where it is a ceiling. }
+function FmtIntPrec(const s: AnsiString; hasPrec: Boolean; prec: Integer): AnsiString;
+var body, sign: AnsiString; k: Integer;
+begin
+  if not hasPrec then begin Result := s; Exit; end;
+  sign := ''; body := s;
+  if (Length(body) > 0) and ((body[1] = '-') or (body[1] = '+')) then
+  begin sign := body[1]; body := Copy(body, 2, Length(body) - 1); end;
+  for k := Length(body) + 1 to prec do body := '0' + body;
+  Result := sign + body;
+end;
+
+{ Was the argument a 32-bit integer rather than an Int64? It decides how wide a
+  negative value prints in hex: '%x' of Integer(-1) is FFFFFFFF, of Int64(-1)
+  sixteen nibbles. FmtArgInt widens everything to Int64, so the original width
+  is only recoverable from the variant tag. }
+function FmtArgIs32(const v: TVarRec): Boolean;
+begin
+  Result := (v.VType = vtInteger) or (v.VType = vtBoolean) or (v.VType = vtChar);
 end;
 
 function Format(const fmt: AnsiString; const args: array of const): AnsiString;
 var
-  i, n, argIdx, width, prec: Integer;
+  i, j, n, argIdx, idxVal, width, prec: Integer;
   c: Char;
-  leftAlign, zeroPad, hasPrec: Boolean;
+  leftAlign, hasPrec: Boolean;
   piece, r: AnsiString;
   iv: Int64;
 begin
@@ -2091,12 +2115,27 @@ begin
     Inc(i);                                        { past '%' }
     if (i <= n) and (fmt[i] = '%') then begin r := r + '%'; Inc(i); Continue; end;
 
-    leftAlign := False; zeroPad := False;
-    while (i <= n) and ((fmt[i] = '-') or (fmt[i] = '0')) do
+    { Delphi's spec is  %[index:][-][width][.prec]type  and is NOT printf's.
+      There is no '0' flag: the leading zero of '%05d' is simply part of the
+      WIDTH, so it pads with spaces to 5 — zero-filling is the precision's job
+      ('%.5d'). Parsing it as a flag is the classic way to get '00042' where FPC
+      and Delphi both give '   42'. }
+
+    { optional argument index — digits followed by ':'. Only committed to once
+      the ':' is seen, because those same digits are otherwise the width. }
+    j := i; idxVal := 0;
+    while (j <= n) and (fmt[j] >= '0') and (fmt[j] <= '9') do
+    begin idxVal := idxVal * 10 + (Ord(fmt[j]) - Ord('0')); Inc(j); end;
+    if (j > i) and (j <= n) and (fmt[j] = ':') then
     begin
-      if fmt[i] = '-' then leftAlign := True else zeroPad := True;
-      Inc(i);
+      { it moves the cursor: the specifiers AFTER an indexed one continue from
+        there rather than resuming where they left off }
+      argIdx := idxVal;
+      i := j + 1;
     end;
+
+    leftAlign := False;
+    while (i <= n) and (fmt[i] = '-') do begin leftAlign := True; Inc(i); end;
     width := 0;
     while (i <= n) and (fmt[i] >= '0') and (fmt[i] <= '9') do
     begin width := width * 10 + (Ord(fmt[i]) - Ord('0')); Inc(i); end;
@@ -2114,13 +2153,21 @@ begin
     case c of
       'd', 'u':
         begin
-          if argIdx < Length(args) then piece := IntToStr(FmtArgInt(args[argIdx]));
+          if argIdx < Length(args) then
+            piece := FmtIntPrec(IntToStr(FmtArgInt(args[argIdx])), hasPrec, prec);
           Inc(argIdx);
         end;
       'x', 'X':
         begin
           if argIdx < Length(args) then
-          begin iv := FmtArgInt(args[argIdx]); piece := IntToHex(iv, 0); end;
+          begin
+            iv := FmtArgInt(args[argIdx]);
+            { a 32-bit argument prints 32-bit: FmtArgInt sign-extended it on the
+              way in, and without narrowing it back every negative Integer would
+              come out as sixteen nibbles }
+            if FmtArgIs32(args[argIdx]) then iv := Int64(LongWord(iv));
+            piece := FmtIntPrec(IntToHex(iv, 0), hasPrec, prec);
+          end;
           Inc(argIdx);
         end;
       's':
@@ -2164,7 +2211,7 @@ begin
     else
       piece := '%' + c;                            { unknown spec — emit literally }
     end;
-    r := r + FmtPad(piece, width, leftAlign, zeroPad);
+    r := r + FmtPad(piece, width, leftAlign);
   end;
   Result := r;
 end;

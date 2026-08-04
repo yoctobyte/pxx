@@ -7595,10 +7595,10 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_types.pas /tmp/lib_types
 	test "$$(/tmp/lib_types)" = "3 4 10 20 0 1"
 	$(PXX_STABLE) -Fulib/rtl test/lib_strutil.pas /tmp/lib_strutil
-	test "$$(/tmp/lib_strutil | grep -c '=ok')" = "32"
+	test "$$(/tmp/lib_strutil | grep -c '=ok')" = "37"
 	test "$$(/tmp/lib_strutil | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_format.pas /tmp/lib_format
-	test "$$(/tmp/lib_format | grep -c '=ok')" = "14"
+	test "$$(/tmp/lib_format | grep -c '=ok')" = "27"
 	test "$$(/tmp/lib_format | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_paths.pas /tmp/lib_paths
 	test "$$(/tmp/lib_paths | grep -c '=ok')" = "14"

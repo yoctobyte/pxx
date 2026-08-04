@@ -8,8 +8,9 @@ begin
   if b then writeln(tag, '=ok') else writeln(tag, '=FAIL');
 end;
 
-var v: Integer;
+var v: Integer; emptyStr: string;
 begin
+  emptyStr := '';
   SayBool('cmp-lt', CompareStr('apple', 'banana') < 0);
   SayBool('cmp-gt', CompareStr('b', 'a') > 0);
   SayBool('cmp-eq', CompareStr('abc', 'abc') = 0);
@@ -49,4 +50,14 @@ begin
   SayBool('padright', PadRight('42', 5, '.') = '42...');
   SayBool('padleft-empty', PadLeft('', 3, 'x') = 'xxx');
   SayBool('pad-nogrow', PadLeft('toolong', 3, ' ') = 'toolong');
+
+  { Pos with an EMPTY needle is 0, not 1. Returning 1 is C's strstr convention
+    and it silently breaks the common `if Pos(sep, s) > 0` guard when the
+    separator turns out to be empty. PosEx in strutils always agreed with FPC
+    here; SysUtils.Pos did not (bug-b-pos-empty-substr-returns-1). }
+  SayBool('pos-empty',      Pos('', 'abc') = 0);
+  SayBool('pos-empty-var',  Pos(emptyStr, 'abc') = 0);
+  SayBool('pos-both-empty', Pos('', '') = 0);
+  SayBool('pos-found',      Pos('b', 'abc') = 2);
+  SayBool('pos-absent',     Pos('z', 'abc') = 0);
 end.
