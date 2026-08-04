@@ -147,4 +147,4 @@ are recorded there.
 
 
 ## Log
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 8f26e4883.
