@@ -123,4 +123,4 @@ inside a TUPLE segfaults. PRE-EXISTING (reproduces on the pinned binary and on
 `a87e8a224`), narrowed to four required conditions, filed separately.
 
 ## Log
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit b1d17ffe4.
