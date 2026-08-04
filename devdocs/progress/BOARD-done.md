@@ -87,10 +87,13 @@ should not read it to find out what to do. Grep it freely._
 | bug-b-crtl-math-constants-missing-silently-zero | B | 60 | bug | `math.h`'s `M_*` constants were absent, so `M_PI` silently evaluated to 0 | — |
 | bug-b-crtl-stat-nlink-hardcoded | B | 30 | bug | `struct stat.st_nlink` is hardcoded to 1 | — |
 | bug-b-dns-wire-ipv4-literal-returns-nxdomain | B | 55 | bug | `dns_wire` answers NXDOMAIN for an IPv4 literal, so the facade's answer depends on the backend | — |
+| bug-b-dotfile-treated-as-extension | B | 50 | bug | A dotfile's name was treated as its extension — ChangeFileExt ate the filename | — |
 | bug-b-floattostrsig-caps-at-15-significant-digits | B | 65 | bug | `FloatToStrSig` caps at 15 significant digits, so no double round-trips | — |
 | bug-b-format-delphi-spec-parity | B | 50 | bug | SysUtils.Format parsed printf's spec, not Delphi's | — |
 | bug-b-pos-empty-substr-returns-1 | B | 50 | bug | SysUtils.Pos returned 1 for an empty substring | — |
+| bug-b-stringlist-text-hardcoded-crlf | B | 50 | bug | TStrings.Text hardcoded CRLF, so SaveToFile wrote DOS line endings on Linux | — |
 | bug-b-strtofloat-not-correctly-rounded | B | 60 | bug | `StrToFloat` is not correctly rounded, so exact decimals still do not read back | — |
+| bug-b-strtoint-parsers-disagree | B | 50 | bug | Four integer parsers, four different answers — no radix prefixes, silent overflow | — |
 | bug-b-sysutils-and-pylib-exception-declarations-diverged | B | 70 | bug | sysutils and pylib both declare `Exception`, and their shapes had diverged | — |
 | bug-b-writeln-float-with-17-decimals-prints-garbage | A | 55 | bug | `WriteLn(x:0:17)` prints garbage | — |
 | bug-bare-function-name-call-vs-resultvar | A | 50 | bug | Bare function name in an expression: PXX calls it, FPC/ISO reads the result var | — |

@@ -7594,6 +7594,12 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_tcomponent)" = "total ok 9 / 9"
 	$(PXX_STABLE) -Fulib/rtl test/lib_types.pas /tmp/lib_types
 	test "$$(/tmp/lib_types)" = "3 4 10 20 0 1"
+	# the integer parsers: radix prefixes, the Int64 boundaries, and that all
+	# four entry points give the SAME answer (they used to disagree). Compiles
+	# under FPC; expectations read off it.
+	$(PXX_STABLE) -Fulib/rtl test/lib_strtoint.pas /tmp/lib_strtoint
+	test "$$(/tmp/lib_strtoint | grep -c '=ok')" = "36"
+	test "$$(/tmp/lib_strtoint | tail -1)" = "STRTOINT OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_strutil.pas /tmp/lib_strutil
 	test "$$(/tmp/lib_strutil | grep -c '=ok')" = "37"
 	test "$$(/tmp/lib_strutil | grep -c 'FAIL')" = "0"
@@ -7601,7 +7607,7 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_format | grep -c '=ok')" = "27"
 	test "$$(/tmp/lib_format | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_paths.pas /tmp/lib_paths
-	test "$$(/tmp/lib_paths | grep -c '=ok')" = "14"
+	test "$$(/tmp/lib_paths | grep -c '=ok')" = "20"
 	test "$$(/tmp/lib_paths | grep -c 'FAIL')" = "0"
 	# FloatToStr against FPC: every expectation in the table came from an
 	# FPC-built copy of the same program, so this compiles under FPC too.
@@ -7808,6 +7814,12 @@ lib-test: pxx-stable-check
 	# same file (it compiles under both)
 	$(PXX_STABLE) -Fulib/rtl test/lib_strings_namevalue.pas /tmp/lib_namevalue
 	test "$$(/tmp/lib_namevalue | tail -1)" = "NAMEVALUE OK"
+	# TStrings.Text at the BYTE level -- CRLF and LF print identically and
+	# SetText accepts either, so only the length and the character codes can
+	# see the difference. Compiles under FPC too; expectations read off it.
+	$(PXX_STABLE) -Fulib/rtl test/lib_strings_text.pas /tmp/lib_strings_text
+	test "$$(/tmp/lib_strings_text | grep -c '=ok')" = "11"
+	test "$$(/tmp/lib_strings_text | tail -1)" = "STRINGSTEXT OK"
 	# markdown against the CommonMark reference (expectations came from
 	# markdown-it-py; python-markdown agrees on all but its ul/ol merge quirk)
 	$(PXX_STABLE) -Fulib/rtl test/lib_markdown.pas /tmp/lib_markdown

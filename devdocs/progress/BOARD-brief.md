@@ -5,11 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:7 blocked:7 backlog:175 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1351 rejected:28`
+`urgent:1 unfinished:7 blocked:7 backlog:178 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1354 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
+
+## urgent (1) — jump the queue
+
+- `bug-p-string-char-relational-compares-lengths` [A]
 
 ## unfinished (7) — parked mid-flight; re-claim, do not duplicate
 
@@ -31,8 +35,9 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 156, ranked
+## Ready — top 30 of 160, ranked
 
+- `[p 85] [A]` bug-p-string-char-relational-compares-lengths
 - `[p 70] [N]` bug-nilpy-tuple-of-a-field-from-an-omitted-default-segfaults
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
@@ -62,6 +67,5 @@ _none — no lane is locked._
 - `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
 - `[p 55] [N]` feature-nilpy-corpus-uforth
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
-- `[p 55] [A]` feature-pascal-type-helpers
 
-_126 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_130 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

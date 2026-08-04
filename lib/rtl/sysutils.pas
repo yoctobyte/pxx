@@ -562,12 +562,8 @@ end;
   to the same value both times. That is cheaper and more honest than duplicating each
   parser's validation, and it cannot be fooled -- no single input can equal both sentinels. }
 function TryStrToInt64(const s: AnsiString; var value: Int64): Boolean;
-var a, b: Int64;
 begin
-  a := StrToInt64Def(s, 0);
-  b := StrToInt64Def(s, 1);
-  Result := (a = b);
-  if Result then value := a;
+  Result := ParseIntPrefixed(s, value);
 end;
 
 function TryStrToQWord(const s: AnsiString; var value: QWord): Boolean;
@@ -651,15 +647,30 @@ begin
     Exit;
   end;
   neg := value < 0;
-  if neg then value := -value;
   s := '';
-  while value > 0 do
+  if neg then
   begin
-    d := value mod 10;
-    s := Chr(Ord('0') + Integer(d)) + s;
-    value := value div 10;
-  end;
-  if neg then s := '-' + s;
+    { Digits are accumulated on the NEGATIVE side, because Low(Int64) has no
+      positive counterpart: `value := -value` leaves it unchanged (still
+      negative), the `while value > 0` loop then never runs, and IntToStr
+      returned a bare '-'. Every value in range is representable as a negative,
+      so this direction has no special case. `mod` of a negative is <= 0 here
+      (truncated division, same as FPC), hence the unary minus on d. }
+    while value <> 0 do
+    begin
+      d := -(value mod 10);
+      s := Chr(Ord('0') + Integer(d)) + s;
+      value := value div 10;
+    end;
+    s := '-' + s;
+  end
+  else
+    while value > 0 do
+    begin
+      d := value mod 10;
+      s := Chr(Ord('0') + Integer(d)) + s;
+      value := value div 10;
+    end;
   Result := s;
 end;
 
@@ -718,30 +729,74 @@ begin
   Result := Copy(s, a, b - a + 1);
 end;
 
-function StrToIntDef(const s: AnsiString; def: Integer): Integer;
-var v, i, sign: Integer; c: Char; started: Boolean;
+{ THE integer parser. Everything that turns text into an integer goes through
+  here -- StrToIntDef, StrToInt64Def, TryStrToInt, TryStrToInt64 -- because when
+  they were four separate implementations they disagreed with EACH OTHER, never
+  mind with FPC: TryStrToInt('42 ') accepted a trailing space that
+  StrToIntDef('42 ') rejected, and none of the four saw a radix prefix. FPC
+  funnels all four through one Val and its four answers agree for every input;
+  that structure is the fix, not just the individual behaviours.
+
+  Accepts, per FPC: leading spaces but NOT trailing, an optional sign BEFORE the
+  radix prefix ('-$FF'), and the prefixes '$' / '0x' / '0X' hex, '&' octal, '%'
+  binary; otherwise decimal. A digit outside the base ('&19', '%12') is
+  rejected, as is a prefix with no digits after it ('$', '0x').
+
+  Digits accumulate NEGATIVE so Low(Int64) -- which has no positive counterpart
+  -- is reachable without the accumulator ever holding an unrepresentable value,
+  which is what makes the overflow test exact at both ends. }
+function ParseIntPrefixed(const s: AnsiString; var v: Int64): Boolean;
+var i, base, digit: Integer; c: Char; neg, started: Boolean;
 begin
-  Result := def;
-  v := 0; sign := 1; i := 1; started := False;
+  ParseIntPrefixed := False;
+  v := 0; neg := False; started := False; i := 1;
   while (i <= Length(s)) and (s[i] = ' ') do i := i + 1;
   if (i <= Length(s)) and ((s[i] = '-') or (s[i] = '+')) then
   begin
-    if s[i] = '-' then sign := -1;
+    neg := s[i] = '-';
     i := i + 1;
+  end;
+  base := 10;
+  if i <= Length(s) then
+  begin
+    if s[i] = '$' then begin base := 16; i := i + 1; end
+    else if s[i] = '&' then begin base := 8; i := i + 1; end
+    else if s[i] = '%' then begin base := 2; i := i + 1; end
+    else if (s[i] = '0') and (i < Length(s)) and ((s[i + 1] = 'x') or (s[i + 1] = 'X')) then
+    begin base := 16; i := i + 2; end;
   end;
   while i <= Length(s) do
   begin
     c := s[i];
-    if (c >= '0') and (c <= '9') then
-    begin
-      v := v * 10 + (Ord(c) - Ord('0'));
-      started := True;
-      i := i + 1;
-    end
-    else
-      Exit;            { malformed -> def }
+    if (c >= '0') and (c <= '9') then digit := Ord(c) - Ord('0')
+    else if (c >= 'a') and (c <= 'f') then digit := Ord(c) - Ord('a') + 10
+    else if (c >= 'A') and (c <= 'F') then digit := Ord(c) - Ord('A') + 10
+    else Exit;
+    if digit >= base then Exit;
+    { split in two so neither test can itself overflow }
+    if v < Low(Int64) div base then Exit;
+    v := v * base;
+    if v < Low(Int64) + digit then Exit;
+    v := v - digit;
+    started := True;
+    i := i + 1;
   end;
-  if started then Result := sign * v;
+  if not started then Exit;
+  if not neg then
+  begin
+    { |Low(Int64)| is one past High(Int64), so it has no positive form }
+    if v = Low(Int64) then Exit;
+    v := -v;
+  end;
+  ParseIntPrefixed := True;
+end;
+
+{ 32-bit overflow TRUNCATES rather than failing: FPC's StrToIntDef('99999999999')
+  is 1215752191, not the default. Only a value too large for Int64 is rejected. }
+function StrToIntDef(const s: AnsiString; def: Integer): Integer;
+var v: Int64;
+begin
+  if ParseIntPrefixed(s, v) then Result := Integer(v) else Result := def;
 end;
 
 function StrToInt(const s: AnsiString): Integer;
@@ -752,33 +807,9 @@ begin
 end;
 
 function StrToInt64Def(const s: AnsiString; def: Int64): Int64;
-var
-  v: Int64;
-  i, sign: Integer;
-  c: Char;
-  started: Boolean;
+var v: Int64;
 begin
-  Result := def;
-  v := 0; sign := 1; i := 1; started := False;
-  while (i <= Length(s)) and (s[i] = ' ') do i := i + 1;
-  if (i <= Length(s)) and ((s[i] = '-') or (s[i] = '+')) then
-  begin
-    if s[i] = '-' then sign := -1;
-    i := i + 1;
-  end;
-  while i <= Length(s) do
-  begin
-    c := s[i];
-    if (c >= '0') and (c <= '9') then
-    begin
-      v := v * 10 + (Ord(c) - Ord('0'));
-      started := True;
-    end
-    else
-      Exit;
-    i := i + 1;
-  end;
-  if started then Result := sign * v;
+  if ParseIntPrefixed(s, v) then Result := v else Result := def;
 end;
 
 function LastDelimiter(const Delimiters, S: AnsiString): Integer;
@@ -1771,26 +1802,14 @@ begin
   Result := Copy(s, 1, i);
 end;
 
+{ Same parser as StrToIntDef, so the two cannot answer differently -- this one
+  used to Trim() and so accepted a trailing space that StrToIntDef rejected.
+  FPC accepts leading whitespace only. }
 function TryStrToInt(const s: AnsiString; var value: Integer): Boolean;
-var i, n, sign, d: Integer; t: AnsiString; v: Int64;
+var v: Int64;
 begin
-  t := Trim(s);
-  n := Length(t);
-  if n = 0 then begin Result := False; Exit; end;
-  i := 1; sign := 1;
-  if t[1] = '-' then begin sign := -1; i := 2; end
-  else if t[1] = '+' then i := 2;
-  if i > n then begin Result := False; Exit; end;
-  v := 0;
-  while i <= n do
-  begin
-    if (t[i] < '0') or (t[i] > '9') then begin Result := False; Exit; end;
-    d := Ord(t[i]) - Ord('0');
-    v := v * 10 + d;
-    Inc(i);
-  end;
-  value := Integer(sign * v);
-  Result := True;
+  Result := ParseIntPrefixed(s, v);
+  if Result then value := Integer(v);
 end;
 
 { pat matches src at 1-based pos (no allocation, unlike Copy(src,pos,plen)=pat). }
@@ -1894,20 +1913,29 @@ begin
   else Result := Copy(path, 1, p - 1);
 end;
 
+{ NOTE `sep + 2`, not `sep + 1`: a dot that is the FIRST character of the
+  basename starts a dotfile, it does not introduce an extension. '.hidden' has
+  no extension; '.hidden.txt' has '.txt'. Scanning down to sep+1 made the whole
+  dotfile name look like one, which is FPC's rule too and matters far more in
+  ChangeFileExt below, where it silently ate the name. }
 function ExtractFileExt(const path: AnsiString): AnsiString;
 var i, sep: Integer;
 begin
   Result := '';
   sep := LastPathSep(path);
-  for i := Length(path) downto sep + 1 do
+  for i := Length(path) downto sep + 2 do
     if path[i] = '.' then begin Result := Copy(path, i, Length(path) - i + 1); Exit; end;
 end;
 
+{ Same dotfile rule as ExtractFileExt, and here getting it wrong was
+  destructive rather than merely wrong: with `sep + 1`, ChangeFileExt('.hidden',
+  '.bak') truncated at the leading dot and returned '.bak' — the filename was
+  gone. FPC appends, giving '.hidden.bak'. }
 function ChangeFileExt(const path, ext: AnsiString): AnsiString;
 var i, sep: Integer;
 begin
   sep := LastPathSep(path);
-  for i := Length(path) downto sep + 1 do
+  for i := Length(path) downto sep + 2 do
     if path[i] = '.' then begin Result := Copy(path, 1, i - 1) + ext; Exit; end;
   Result := path + ext;
 end;

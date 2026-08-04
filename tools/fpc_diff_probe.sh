@@ -20,6 +20,13 @@ new=0
 known=0
 skipped=0
 
+# Make invisible bytes visible. Applied to both sides of every reported
+# divergence so a whitespace-only difference cannot masquerade as agreement.
+# NOTE the separator, not terminator: $( ) has already stripped trailing
+# newlines from both sides, so emitting <LF> after the last line would show a
+# byte that is not being compared.
+vis() { sed -e 's/\r/<CR>/g' -e 's/\t/<TAB>/g' | awk 'NR>1{printf "<LF>"}{printf "%s", $0}'; }
+
 # probe NAME [known] -- full program on stdin
 probe() {
   local name="$1"; local tag=""
@@ -41,10 +48,15 @@ probe() {
     skipped=$((skipped+1)); return
   fi
   if [ "$fr" = "$pr" ]; then return; fi
+  # Render control characters, or a divergence that is PURELY whitespace prints
+  # as two identical-looking strings and reads as harness noise. That is exactly
+  # how sl-text reported the CRLF-vs-LF bug: fpc=[p\nq] pxx=[p\nq].
+  local frv prv
+  frv="$(printf '%s' "$fr" | vis)"; prv="$(printf '%s' "$pr" | vis)"
   if [ "$tag" = "known" ]; then
-    printf 'DIFF [known] %-22s fpc=[%s] pxx=[%s]\n' "$name" "$fr" "$pr"; known=$((known+1))
+    printf 'DIFF [known] %-22s fpc=[%s] pxx=[%s]\n' "$name" "$frv" "$prv"; known=$((known+1))
   else
-    printf 'DIFF        %-22s fpc=[%s] pxx=[%s]\n' "$name" "$fr" "$pr"; new=$((new+1))
+    printf 'DIFF        %-22s fpc=[%s] pxx=[%s]\n' "$name" "$frv" "$prv"; new=$((new+1))
   fi
 }
 
@@ -262,6 +274,237 @@ P
 probe exc-nested     <<'P'
 uses sysutils;
 begin try try raise Exception.Create('inner') except writeln('in'); raise; end except writeln('out'); end; end.
+P
+
+# ---- sysutils: numbers & dates ----
+probe su-strtofloat  <<'P'
+uses sysutils; begin writeln(StrToFloatDef('1.5',0):0:4,'|',StrToFloatDef('bad',9):0:4); end.
+P
+probe su-floattostr  <<'P'
+uses sysutils; begin writeln(FloatToStr(1.5),'|',FloatToStr(0.1),'|',FloatToStr(100.0)); end.
+P
+probe su-encodedate  <<'P'
+uses sysutils; var y,m,d: Word;
+begin DecodeDate(EncodeDate(2026,8,4),y,m,d); writeln(y,'-',m,'-',d); end.
+P
+probe su-formatdt    <<'P'
+uses sysutils; begin writeln(FormatDateTime('yyyy-mm-dd hh:nn:ss', EncodeDate(2026,8,4)+EncodeTime(13,5,9,0))); end.
+P
+probe su-comparestr  <<'P'
+uses sysutils; begin writeln(CompareStr('a','b'),'|',CompareText('A','a'),'|',SameText('Ab','aB')); end.
+P
+# ---- sets & enums ----
+probe set-ops        <<'P'
+type TS = set of 1..8; var a,b: TS;
+begin a:=[1,2,3]; b:=[3,4]; writeln(3 in (a*b),'|',4 in (a+b),'|',3 in (a-b)); end.
+P
+probe set-empty      <<'P'
+type TS = set of 1..8; var a: TS; begin a:=[]; writeln(1 in a,'|',a=[]); end.
+P
+probe enum-ord       <<'P'
+type TE=(eA,eB,eC); var e: TE; begin e:=eB; writeln(Ord(e),'|',Ord(High(TE)),'|',Ord(Low(TE))); end.
+P
+# ---- records & pointers ----
+probe rec-nested     <<'P'
+type TI=record x,y: Integer; end; TO_=record a: TI; n: Integer; end;
+var o,p: TO_; begin o.a.x:=1; o.a.y:=2; o.n:=3; p:=o; p.a.x:=9; writeln(o.a.x,p.a.x,o.n); end.
+P
+probe rec-array      <<'P'
+type TR=record v: Integer; end; var a: array[0..2] of TR; i: Integer;
+begin for i:=0 to 2 do a[i].v:=i*10; writeln(a[0].v,'|',a[1].v,'|',a[2].v); end.
+P
+probe ptr-deref      <<'P'
+var i: Integer; p: ^Integer; begin i:=5; p:=@i; p^:=7; writeln(i,'|',p^); end.
+P
+# ---- classes ----
+probe cls-basic      <<'P'
+type TC=class public v: Integer; constructor Create(a: Integer); function Twice: Integer; end;
+constructor TC.Create(a: Integer); begin v:=a; end;
+function TC.Twice: Integer; begin Twice:=v*2; end;
+var c: TC; begin c:=TC.Create(21); writeln(c.v,'|',c.Twice); c.Free; end.
+P
+probe cls-virtual    <<'P'
+type TB=class public function Name: string; virtual; end;
+     TD=class(TB) public function Name: string; override; end;
+function TB.Name: string; begin Name:='base'; end;
+function TD.Name: string; begin Name:='derived'; end;
+var b: TB; begin b:=TD.Create; writeln(b.Name); b.Free; end.
+P
+probe cls-inherited  <<'P'
+type TB=class public function N: string; virtual; end;
+     TD=class(TB) public function N: string; override; end;
+function TB.N: string; begin N:='B'; end;
+function TD.N: string; begin N:='D+'+inherited N; end;
+var b: TB; begin b:=TD.Create; writeln(b.N); b.Free; end.
+P
+probe cls-is-as      <<'P'
+type TB=class end; TD=class(TB) end;
+var b: TB; begin b:=TD.Create; writeln(b is TD,'|',b is TB,'|',(b as TD)<>nil); b.Free; end.
+P
+# ---- TStringList ----
+probe sl-addcount    <<'P'
+uses classes; var l: TStringList;
+begin l:=TStringList.Create; l.Add('a'); l.Add('b'); writeln(l.Count,'|',l[0],l[1]); l.Free; end.
+P
+probe sl-indexof     <<'P'
+uses classes; var l: TStringList;
+begin l:=TStringList.Create; l.Add('x'); l.Add('y'); writeln(l.IndexOf('y'),'|',l.IndexOf('z')); l.Free; end.
+P
+probe sl-text        <<'P'
+uses classes; var l: TStringList;
+begin l:=TStringList.Create; l.Add('p'); l.Add('q'); write(l.Text); l.Free; end.
+P
+probe sl-delete-clear <<'P'
+uses classes; var l: TStringList;
+begin l:=TStringList.Create; l.Add('a'); l.Add('b'); l.Add('c'); l.Delete(1);
+writeln(l.Count,'|',l[0],l[1]); l.Clear; writeln(l.Count); l.Free; end.
+P
+
+# ---- sysutils: paths ----
+probe su-extractname <<'P'
+uses sysutils; begin writeln(ExtractFileName('/a/b/c.txt'),'|',ExtractFileName('c.txt'),'|',ExtractFileName('/a/')); end.
+P
+probe su-extractpath <<'P'
+uses sysutils; begin writeln('[',ExtractFilePath('/a/b/c.txt'),']|[',ExtractFilePath('c.txt'),']'); end.
+P
+probe su-extractext  <<'P'
+uses sysutils; begin writeln('[',ExtractFileExt('/a/b.c.txt'),']|[',ExtractFileExt('noext'),']|[',ExtractFileExt('.hidden'),']'); end.
+P
+probe su-changeext   <<'P'
+uses sysutils; begin writeln(ChangeFileExt('a.txt','.bak'),'|',ChangeFileExt('noext','.x')); end.
+P
+# ---- numeric edges ----
+probe int64-bounds   <<'P'
+begin writeln(High(Int64),'|',Low(Int64)); end.
+P
+probe int-bounds     <<'P'
+begin writeln(High(Integer),'|',Low(Integer),'|',High(Word),'|',High(Byte)); end.
+P
+probe abs-neg        <<'P'
+var i: Integer; begin i:=-5; writeln(Abs(i),'|',Abs(-2.5):0:2); end.
+P
+probe sqr            <<'P'
+begin writeln(Sqr(7),'|',Sqr(2.5):0:4); end.
+P
+# filed: compat-pascal-sqrt-requires-uses-math (Sqrt needs `uses math` here)
+probe sqrt-no-uses   known <<'P'
+begin writeln(Sqrt(16.0):0:4); end.
+P
+probe frac-int       <<'P'
+begin writeln(Frac(2.75):0:4,'|',Int(2.75):0:4,'|',Int(-2.75):0:4); end.
+P
+probe round-banker   <<'P'
+begin writeln(Round(0.5),'|',Round(1.5),'|',Round(2.5),'|',Round(-0.5),'|',Round(-1.5)); end.
+P
+probe trunc-neg      <<'P'
+begin writeln(Trunc(-2.7),'|',Trunc(2.7),'|',Round(-2.7),'|',Round(2.7)); end.
+P
+probe str-proc       <<'P'
+var s: string; begin Str(42, s); writeln('[',s,']'); Str(3.5:0:2, s); writeln('[',s,']'); end.
+P
+probe val-proc       <<'P'
+var i, code: Integer; begin Val('123', i, code); writeln(i,'|',code); Val('12x', i, code); writeln(code); end.
+P
+probe odd-succ-pred  <<'P'
+begin writeln(Odd(3),'|',Succ(5),'|',Pred(5),'|',Succ('a')); end.
+P
+# ---- TStringList: order & duplicates ----
+probe sl-sorted      <<'P'
+uses classes; var l: TStringList;
+begin l:=TStringList.Create; l.Add('c'); l.Add('a'); l.Add('b'); l.Sort;
+writeln(l[0],l[1],l[2]); l.Free; end.
+P
+probe sl-insert      <<'P'
+uses classes; var l: TStringList;
+begin l:=TStringList.Create; l.Add('a'); l.Add('c'); l.Insert(1,'b');
+writeln(l.Count,'|',l[0],l[1],l[2]); l.Free; end.
+P
+# filed: feature-b-tstrings-commatext
+probe sl-commatext   known <<'P'
+uses classes; var l: TStringList;
+begin l:=TStringList.Create; l.Add('a'); l.Add('b'); writeln(l.CommaText); l.Free; end.
+P
+probe sl-assign      <<'P'
+uses classes; var a,b: TStringList;
+begin a:=TStringList.Create; b:=TStringList.Create; a.Add('x'); a.Add('y');
+b.Assign(a); a.Clear; writeln(b.Count,'|',b[0],b[1]); a.Free; b.Free; end.
+P
+
+# ---- string <-> number round trips ----
+probe su-inttostr64  <<'P'
+uses sysutils; begin writeln(IntToStr(High(Int64)),'|',IntToStr(Low(Int64))); end.
+P
+probe su-strtoint64  <<'P'
+uses sysutils; begin writeln(StrToInt64('9223372036854775807'),'|',StrToInt64('-9223372036854775808')); end.
+P
+probe su-strtoint-ws <<'P'
+uses sysutils; begin writeln(StrToIntDef(' 42',0),'|',StrToIntDef('42 ',0),'|',StrToIntDef('+42',0)); end.
+P
+probe su-strtoint-hex <<'P'
+uses sysutils; begin writeln(StrToIntDef('$FF',0),'|',StrToIntDef('0x10',0)); end.
+P
+probe su-trystrtoint <<'P'
+uses sysutils; var v: Integer;
+begin writeln(TryStrToInt('7',v),'|',v,'|',TryStrToInt('no',v)); end.
+P
+# ---- case & comparison with non-letters ----
+probe su-case-digits <<'P'
+uses sysutils; begin writeln(UpperCase('a1[]~'),'|',LowerCase('A1[]~')); end.
+P
+probe su-comparetext-ord <<'P'
+uses sysutils; begin writeln(CompareText('a','B')<0,'|',CompareStr('a','B')<0); end.
+P
+# ---- Copy / Delete / Insert edges ----
+probe copy-zero      <<'P'
+begin writeln('[',Copy('abcdef',3,0),']|[',Copy('abcdef',0,2),']|[',Copy('abcdef',7,2),']'); end.
+P
+probe copy-negative  <<'P'
+begin writeln('[',Copy('abcdef',3,-1),']|[',Copy('abcdef',-2,3),']'); end.
+P
+probe delete-oob     <<'P'
+var s: string; begin s:='abc'; Delete(s,5,2); writeln('[',s,']'); Delete(s,2,99); writeln('[',s,']'); end.
+P
+probe insert-oob     <<'P'
+var s: string; begin s:='abc'; Insert('X',s,99); writeln('[',s,']'); s:='abc'; Insert('Y',s,0); writeln('[',s,']'); end.
+P
+probe concat-empty   <<'P'
+begin writeln('[', Concat('a','','b'), ']|[', ''+'', ']'); end.
+P
+# ---- string comparison ordering ----
+# filed URGENT: bug-p-string-char-relational-compares-lengths. A one-character
+# literal is a Char, so '' < 'a' and 'ab' < 'b' are string-vs-Char comparisons,
+# and those compare LENGTHS instead of content.
+probe str-order      known <<'P'
+begin writeln('A'<'a','|','Z'<'a','|',''<'a','|','ab'<'b'); end.
+P
+probe char-vs-str    <<'P'
+var c: Char; s: string; begin c:='a'; s:='a'; writeln(s=c,'|',c<'b'); end.
+P
+# ---- for-loop and control flow edges ----
+probe for-downto-zero <<'P'
+var i, n: Integer; begin n:=0; for i:=3 downto 1 do n:=n*10+i; writeln(n); end.
+P
+# NOTE: does not read `i` after the loop. The value of a for-loop variable
+# after the loop is UNDEFINED in Pascal, so a probe that printed it would be
+# comparing two implementations' liberties, not finding a bug -- and it did
+# report a divergence (fpc=0 pxx=5) that is nobody's defect.
+probe for-empty      <<'P'
+var i, n: Integer; begin n:=0; for i:=5 to 1 do n:=n+1; writeln(n); end.
+P
+probe case-else      <<'P'
+var i, n: Integer; begin n:=0; for i:=1 to 4 do case i of 1,2: n:=n+1; 3: n:=n+10; else n:=n+100; end; writeln(n); end.
+P
+probe case-range     <<'P'
+var i: Integer; begin i:=5; case i of 1..3: writeln('lo'); 4..6: writeln('mid'); else writeln('hi'); end; end.
+P
+probe while-break-cont <<'P'
+var i, n: Integer;
+begin i:=0; n:=0; while i<10 do begin i:=i+1; if i=3 then Continue; if i=6 then Break; n:=n+i; end; writeln(n,'|',i); end.
+P
+probe shortcircuit   <<'P'
+var calls: Integer;
+function F: Boolean; begin calls:=calls+1; F:=True; end;
+begin calls:=0; if False and F then ; writeln(calls); if True or F then ; writeln(calls); end.
 P
 
 echo "---"

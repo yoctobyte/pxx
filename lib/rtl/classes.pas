@@ -720,11 +720,17 @@ begin
   Result := -1;
 end;
 
+{ The separator is the PLATFORM one (LineEnding: LF here, and a
+  compiler-known constant so it follows the target), not a hardcoded CRLF.
+  FPC's TStrings.GetTextStr does the same, so a two-line list is 4 bytes on
+  Linux, not 6 — and SaveToFile through here was writing DOS line endings into
+  files on a Unix host. SetText below already accepts either form, which is why
+  the round-trip hid this. }
 function TStrings.GetText: string;
 var i: Integer; r: string;
 begin
   r := '';
-  for i := 0 to GetCount - 1 do r := r + Get(i) + #13#10;
+  for i := 0 to GetCount - 1 do r := r + Get(i) + LineEnding;
   Result := r;
 end;
 

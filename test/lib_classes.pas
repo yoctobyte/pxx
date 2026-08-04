@@ -53,7 +53,12 @@ begin
 
   sl.Sort;                       { uses CompareStr (correct comparator) }
   SayBool('sl-sorted', (sl[0] = 'apple') and (sl[1] = 'banana') and (sl[2] = 'cherry'));
-  SayBool('sl-text', sl.Text = 'apple'#13#10'banana'#13#10'cherry'#13#10);
+  { LF, not CRLF: Text uses the PLATFORM terminator, and lib-test runs on
+    Linux. This line asserted #13#10 and so pinned bug-b-stringlist-text-
+    hardcoded-crlf in place -- the expectation was written from the
+    implementation rather than from FPC, which gives LF here.
+    test/lib_strings_text.pas carries the full byte-level coverage. }
+  SayBool('sl-text', sl.Text = 'apple'#10'banana'#10'cherry'#10);
   sl.Free;
 
   { ---- TStrings base reference to a TStringList (the standard idiom) ---- }
