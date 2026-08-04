@@ -3,6 +3,8 @@ track: N
 prio: 55
 type: bug
 summary: "`a == b` skips __eq__ and compares identity as soon as ONE operand is a variant (a container element, a for-in variable). Both-static works, so the dunder LOOKS wired up; `a == xs[0]` is silently False."
+status: working
+owner: claude-AN
 ---
 
 # `__eq__` is skipped as soon as one operand is a variant
@@ -84,3 +86,39 @@ variant (subscript, for-in variable, `.get()` result, function argument); a clas
 WITHOUT `__eq__` still comparing by identity; `__eq__` annotated `o: V` and
 unannotated, both dispatching; and the `in`/`count`/`index`/dict-key consumers
 from [[bug-nilpy-in-over-objects-ignores-eq]].
+
+
+## 2026-08-04 (later) — feasibility probed; it is a FEATURE, not a bugfix
+
+Went at the runtime hook and stopped at the point where it stops being a fix and
+becomes compiler work. Three things measured, so the next session does not
+re-probe them:
+
+1. **A NilPy method is NOT published in RTTI.** `AddUMethod` sets
+   `UMthPub := 0` (`parser.inc`), and the RTTI emitter only sets
+   `RTTI_METH_FLAG_PUBLISHED` when `UMthPub = 1`. `__pxxMethodAddress` skips
+   every unpublished entry, so it cannot see `__eq__` today even though the
+   method table itself holds every method. Publishing dunders specifically would
+   be the narrow way in — not publishing everything.
+2. **`__pxxMethodAddress` is not reachable from ordinary source** — "undefined
+   variable" from a plain program. It lives in `builtin.pas`; whether `pylib`
+   may call it is the next thing to check, and it decides whether the lookup can
+   live in `PyVarEq` at all.
+3. **A method's code ADDRESS is not expressible**: `@TC.eq` gives "cannot call
+   non-static method on class type directly". So the cheaper design that avoids
+   RTTI — a registry filled at module init with
+   `pyeq_register(<class>, @<method>, <param-kind>)`, letting `PyVarEq` pick
+   between a variant-taking and an object-taking call shape by a registered flag
+   instead of needing a synthesized wrapper — **cannot be written in source
+   either**. The frontend would have to emit the address node itself.
+
+So both routes need compiler-side work (publish dunders in RTTI, or emit a
+method-address + registration at module init), plus the `PyVarEq` call. That is
+a feature-sized Track A+N change with an ABI in the middle, not something to
+half-build unattended — the same call the closure-leak ticket's two prior
+sessions made about adjacent work.
+
+The design recorded above still looks right; what this adds is that the
+`param-kind flag instead of a wrapper` simplification is available and removes
+the synthesized-wrapper half, IF the frontend can emit the address. Returned to
+`backlog/` with that.
