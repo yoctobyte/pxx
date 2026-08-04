@@ -78,6 +78,12 @@ procedure PXXPromoSubInt(dst, a: Pointer; b: Int64);
 procedure PXXPromoMulInt(dst, a: Pointer; b: Int64);
 procedure PXXPromoDiv(dst, a, b: Pointer);
 procedure PXXPromoMod(dst, a, b: Pointer);
+{ Python's `//` and `%`: quotient floored toward -infinity, remainder taking the
+  sign of the DIVISOR. Separate entry points rather than a mode flag, because
+  Pascal's own `div`/`mod` on a PromoInt must stay TRUNCATING — the two
+  languages genuinely disagree and one shared routine would have to guess. }
+procedure PXXPromoFloorDiv(dst, a, b: Pointer);
+procedure PXXPromoFloorMod(dst, a, b: Pointer);
 procedure PXXPromoAnd(dst, a, b: Pointer);
 procedure PXXPromoOr(dst, a, b: Pointer);
 procedure PXXPromoXor(dst, a, b: Pointer);
@@ -85,6 +91,9 @@ procedure PXXPromoShl(dst, a, b: Pointer);
 procedure PXXPromoShr(dst, a, b: Pointer);
 function  PXXPromoCmp(a, b: Pointer): Integer;
 function  PXXPromoToStr(a: Pointer): AnsiString;
+{ base 2, 8 or 16, spelled as Python spells it (prefix + leading minus). The
+  frontend lowers hex/bin/oct of an arbitrary-precision int here. }
+function  PXXPromoToBase(a: Pointer; base: Integer): AnsiString;
 procedure PXXPromoToVariant(dstVar, src: Pointer);
 procedure PXXPromoFromVariant(dst, srcVar: Pointer);
 function  PXXPromoVarArithTry(dst, a, b: Pointer; op: Integer): Integer;
@@ -92,6 +101,7 @@ function  PXXPromoVarCmpTry(a, b: Pointer; op: Integer): Integer;
 function  PXXPromoFitsInt64(a: Pointer): Boolean;
 function  PXXPromoToInt64(a: Pointer): Int64;
 function  PXXPromoToInt64Wrap(a: Pointer): Int64;
+function  PXXPromoToDouble(a: Pointer): Double;
 
 implementation
 
@@ -532,6 +542,47 @@ begin
 end;
 
 { signed two's-complement of `a` into `w` bytes of `buf` (w >= mag length + 1) }
+{ The MAGNITUDE of `a` in base 2, 8 or 16, digits only — no sign, no prefix.
+
+  Those are the three bases Python's bin/oct/hex use, and all three are POWERS
+  OF TWO, so this reads bit groups straight out of the byte buffer BMagToBuf
+  already produces (base 256, little-endian) instead of dividing the bignum once
+  per digit. Exact by construction: 8 is a multiple of neither 3 nor... it is a
+  multiple of 1 and 4 but not 3, so an octal digit can straddle a byte boundary —
+  which is why this walks a BIT index rather than assuming digits nest inside
+  bytes.
+
+  `bpd` is bits per digit: 1, 3 or 4. Zero renders as '0'.
+
+  Built into a SetLength'd buffer and filled from the end, never by prepending
+  in a loop — `s := c + s` is quadratic here, the same trap
+  project_pxx_string_concat_in_loop_is_quadratic records. }
+function BMagToBase(const a: TBig; bpd: Integer): AnsiString;
+const BDIG = '0123456789abcdef';
+var buf: TBitBuf; n, totalBits, nd, i, k, bit, v, lead: Integer; s: AnsiString;
+begin
+  n := BMagToBuf(a, buf);
+  if n = 0 then begin BMagToBase := '0'; Exit; end;
+  totalBits := n * 8;
+  nd := (totalBits + bpd - 1) div bpd;
+  SetLength(s, nd);
+  for i := 0 to nd - 1 do
+  begin
+    v := 0;
+    for k := 0 to bpd - 1 do
+    begin
+      bit := i * bpd + k;
+      if bit < totalBits then
+        if ((buf[bit div 8] shr (bit mod 8)) and 1) = 1 then v := v or (1 shl k);
+    end;
+    { digit i counts from the LEAST significant end, so it lands at the END }
+    s[nd - i] := BDIG[v + 1];
+  end;
+  lead := 1;
+  while (lead < nd) and (s[lead] = '0') do Inc(lead);
+  BMagToBase := Copy(s, lead, nd - lead + 1);
+end;
+
 procedure BTwosToBuf(const a: TBig; w: Integer; var buf: TBitBuf);
 var mag: TBitBuf; mn, i, carry, v: Integer;
 begin
@@ -1097,9 +1148,19 @@ begin
     end;
     r := x * y;
     { division is the portable overflow oracle: no {$Q+} dependency, and it is
-      correct on every target including the 32-bit cores }
-    if (r div y = x) and not ((x = -1) and (y = Low(Int64)))
-                    and not ((y = -1) and (x = Low(Int64))) then
+      correct on every target including the 32-bit cores.
+
+      The Low(Int64)/-1 pair is excluded FIRST, not alongside: `r div y` is the
+      very division the hardware traps on (SIGFPE — the quotient 2^63 does not
+      fit), so testing it in the same expression evaluated the trap before the
+      guard could veto it. The guard was already here and already correct in
+      intent; it just sat on the wrong side of the operator. Falling through
+      leaves the bignum path to produce 2^63 exactly. }
+    if ((x = -1) and (y = Low(Int64))) or ((y = -1) and (x = Low(Int64))) then
+      { the true product is 2^63, which does not fit — and probing it with the
+        oracle below would be the very division that traps }
+      StoreBig(dst, BMul(BFromInt(x), BFromInt(y)))
+    else if r div y = x then
       PXXPromoFromInt(dst, r)
     else
       StoreBig(dst, BMul(BFromInt(x), BFromInt(y)));
@@ -1190,7 +1251,13 @@ end;
 procedure PXXPromoDiv(dst, a, b: Pointer);
 var q, r: TBig;
 begin
-  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+  { Low(Int64) div -1 is the one inline pair the HARDWARE refuses: the true
+    quotient is 2^63, which does not fit the register, and x86 raises SIGFPE
+    rather than wrapping. Sent to the bignum path, which represents it exactly.
+    Found by a full operand sweep against a Python oracle — it is the single
+    input pair in 4770 that a hand-written test would never think to try. }
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) and
+     not ((SlotInt(a) = Low(Int64)) and (SlotInt(b) = -1)) then
   begin
     PXXPromoFromInt(dst, SlotInt(a) div SlotInt(b));
     Exit;
@@ -1202,7 +1269,10 @@ end;
 procedure PXXPromoMod(dst, a, b: Pointer);
 var q, r: TBig;
 begin
-  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+  { same trap as PXXPromoDiv — `mod` is the same hardware instruction, so
+    Low(Int64) mod -1 raises SIGFPE even though the answer (0) fits fine }
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) and
+     not ((SlotInt(a) = Low(Int64)) and (SlotInt(b) = -1)) then
   begin
     PXXPromoFromInt(dst, SlotInt(a) mod SlotInt(b));
     Exit;
@@ -1299,6 +1369,39 @@ end;
 procedure PXXPromoShr(dst, a, b: Pointer);
 begin
   StoreBig(dst, BShr(SlotBig(a), PromoShiftCount(b)));
+end;
+
+{ A promotable int in base 2, 8 or 16, spelled as Python spells it — including
+  the `0b`/`0o`/`0x` prefix and a LEADING MINUS for a negative value.
+
+  Python's hex(-255) is '-0xff', NOT a two's-complement form, so the sign is
+  carried separately and only the magnitude is converted. Zero is '0x0', which
+  is what pylib's Int64 hex already produces — the two spellings must agree,
+  since which one a program reaches depends only on whether its value happens to
+  have grown past a machine word.
+
+  The frontend is the only caller and passes a literal base
+  (feature-nilpy-hex-bin-oct-over-a-big-int). promocore is exception-free by
+  design, so an out-of-range base cannot raise; it returns a marker that cannot
+  be mistaken for a number rather than a plausible-looking wrong rendering. }
+function PXXPromoToBase(a: Pointer; base: Integer): AnsiString;
+var big: TBig; bpd: Integer; pfx, digits: AnsiString;
+begin
+  bpd := 0;
+  pfx := '';
+  if base = 2 then begin bpd := 1; pfx := '0b'; end
+  else if base = 8 then begin bpd := 3; pfx := '0o'; end
+  else if base = 16 then begin bpd := 4; pfx := '0x'; end;
+  if bpd = 0 then
+  begin
+    PXXPromoToBase := '<promocore: unsupported base>';
+    Exit;
+  end;
+  if SlotTag(a) = PROMO_TAG_INLINE then big := BFromInt(SlotInt(a))
+  else big := SlotBig(a);
+  digits := BMagToBase(big, bpd);
+  if big.neg then PXXPromoToBase := '-' + pfx + digits
+  else PXXPromoToBase := pfx + digits;
 end;
 
 function PXXPromoToStr(a: Pointer): AnsiString;
@@ -1720,6 +1823,99 @@ begin
     PXXPromoToInt64Wrap := SlotInt(a)
   else
     PXXPromoToInt64Wrap := PromoWrapHeap(a);
+end;
+
+{ Slow path, split out for the same reason PromoWrapHeap is: naming TBig costs
+  a managed prologue on every call. Horner over the limbs in DOUBLE, which is
+  what makes the result an approximation of the true value rather than of its
+  low 64 bits — the wrapping narrowing above would turn 2**70 into a small
+  number and then into a small float, silently. Overflows to +/-Inf beyond
+  ~1.8e308, where CPython raises OverflowError; that difference is noted in
+  bug-nilpy-promo-to-float-overflows-to-inf-instead-of-raising rather than
+  guessed at here. }
+function PromoHeapToDouble(a: Pointer): Double;
+var bg: TBig; r: Double; i: Integer;
+begin
+  bg := SlotBig(a);
+  r := 0.0;
+  for i := Length(bg.limbs) - 1 downto 0 do
+    r := r * BIG_BASE + bg.limbs[i];
+  if bg.neg then r := -r;
+  PromoHeapToDouble := r;
+end;
+
+{ `a // b` with Python's flooring. Built on the truncating pair plus a
+  correction rather than a second BDivMod: the correction is exact (when the
+  remainder is non-zero and the operand signs differ, the truncated quotient is
+  one too high) and it keeps ONE division algorithm in the unit.
+
+  dst may alias a or b, so both are fully read before anything is written. }
+procedure PXXPromoFloorDiv(dst, a, b: Pointer);
+var q, r, zs: array[0..1] of NativeInt;
+    ai, bi, qi: Int64;
+    negA, negB: Boolean;
+begin
+  { Low(Int64) div -1 traps in hardware — see PXXPromoDiv. The general path
+    below routes through PXXPromoDiv/PXXPromoMod, which handle it. }
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) and
+     not ((SlotInt(a) = Low(Int64)) and (SlotInt(b) = -1)) then
+  begin
+    ai := SlotInt(a); bi := SlotInt(b);
+    qi := ai div bi;
+    if ((ai mod bi) <> 0) and ((ai < 0) <> (bi < 0)) then qi := qi - 1;
+    PXXPromoFromInt(dst, qi);
+    Exit;
+  end;
+  PXXPromoInit(@q); PXXPromoInit(@r); PXXPromoInit(@zs);
+  PXXPromoFromInt(@zs, 0);
+  PXXPromoDiv(@q, a, b);
+  PXXPromoMod(@r, a, b);
+  negA := PXXPromoCmp(a, @zs) < 0;
+  negB := PXXPromoCmp(b, @zs) < 0;
+  if (PXXPromoCmp(@r, @zs) <> 0) and (negA <> negB) then
+    PXXPromoSubInt(@q, @q, 1);
+  PXXPromoCopy(dst, @q);
+  PXXPromoClear(@q); PXXPromoClear(@r); PXXPromoClear(@zs);
+end;
+
+{ `a % b` with Python's sign rule: the remainder takes the sign of the DIVISOR,
+  so `-7 % 3` is 2, not -1. Same correction shape as PXXPromoFloorDiv. }
+procedure PXXPromoFloorMod(dst, a, b: Pointer);
+var r, zs: array[0..1] of NativeInt;
+    ai, bi, ri: Int64;
+    negR, negB: Boolean;
+begin
+  { same hardware trap as PXXPromoFloorDiv }
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) and
+     not ((SlotInt(a) = Low(Int64)) and (SlotInt(b) = -1)) then
+  begin
+    ai := SlotInt(a); bi := SlotInt(b);
+    ri := ai mod bi;
+    if (ri <> 0) and ((ri < 0) <> (bi < 0)) then ri := ri + bi;
+    PXXPromoFromInt(dst, ri);
+    Exit;
+  end;
+  PXXPromoInit(@r); PXXPromoInit(@zs);
+  PXXPromoFromInt(@zs, 0);
+  PXXPromoMod(@r, a, b);
+  negR := PXXPromoCmp(@r, @zs) < 0;
+  negB := PXXPromoCmp(b, @zs) < 0;
+  if (PXXPromoCmp(@r, @zs) <> 0) and (negR <> negB) then
+    PXXPromoAdd(@r, @r, b);
+  PXXPromoCopy(dst, @r);
+  PXXPromoClear(@r); PXXPromoClear(@zs);
+end;
+
+{ Widening to a float, for `promo + 2.5` and `promo / 2`. Python converts an
+  int operand to float for these, so this is the conversion that mixed
+  arithmetic needs; without it the promo's SLOT ADDRESS was converted instead
+  and `(i + 1) + 2.5` printed 5553978.5. }
+function PXXPromoToDouble(a: Pointer): Double;
+begin
+  if SlotTag(a) = PROMO_TAG_INLINE then
+    PXXPromoToDouble := SlotInt(a)
+  else
+    PXXPromoToDouble := PromoHeapToDouble(a);
 end;
 
 end.

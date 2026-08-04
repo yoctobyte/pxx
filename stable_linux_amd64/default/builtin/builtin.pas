@@ -739,6 +739,17 @@ function FloatToExpStr(v: Double): AnsiString;
   the same reason. }
 var neg: Boolean; e, i: Integer; m, es: AnsiString;
 begin
+  { NaN and infinities first. FloatToStr's own header already warns that "the
+    normalise loop in FloatToExpStr would not terminate on an infinity" — that
+    guard was added THERE and never here, so every caller that reaches this
+    routine first (Str with no width, and any magnitude the Int64 digit split
+    cannot hold) hung instead: `Inf / 10.0` is still Inf, and a NaN fails both
+    `>= 10.0` and `< 1.0` so it falls out with e = 0 and then formats garbage.
+    Same spelling as FloatToStr, which is the one this delegates to anyway
+    (bug-a-writeln-of-a-non-finite-double-hangs). }
+  if v <> v then begin Result := 'NaN'; Exit; end;
+  if v > 1.7976931348623157e308 then begin Result := 'Inf'; Exit; end;
+  if v < -1.7976931348623157e308 then begin Result := '-Inf'; Exit; end;
   neg := v < 0;
   if neg then v := -v;
   e := 0;
@@ -856,6 +867,20 @@ var
   m: Double;
   digs: AnsiString;
 begin
+  { NaN and infinities before any of the three formatting shapes. The
+    width<0 branch below has its OWN normalise loops (a third copy, beside
+    FloatToStr's and FloatToExpStr's), and `Inf / 10.0` is still Inf, so
+    `Str(F, S)` on a non-finite value spun forever. The fixed-decimals branch
+    does not hang but scales through Int64 and printed
+    9223372036854775809.000000 for +Inf — a silent wrong number, which is the
+    worse half of the same defect.
+
+    Spelled as FPC does for Str: a LEADING SPACE where the sign would go for
+    the non-negative forms, matching the rest of this routine's contract
+    (bug-a-writeln-of-a-non-finite-double-hangs). }
+  if v <> v then begin Result := ' Nan'; Exit; end;
+  if v > 1.7976931348623157e308 then begin Result := ' Inf'; Exit; end;
+  if v < -1.7976931348623157e308 then begin Result := '-Inf'; Exit; end;
   if (width < 0) and (decimals < 0) then
   begin
     neg := v < 0;

@@ -1832,6 +1832,12 @@ test-core: $(COMPILER)
 	# Low(Int64) with -1: the one pair the inline tier cannot compute — x86 raises
 	# SIGFPE because the quotient 2^63 does not fit, and `*` trapped inside its own
 	# division-based overflow oracle. Found by a 4770-pair sweep vs a Python oracle.
+	# writeln/write/Str of Inf/-Inf/NaN. FIVE formatters normalised into [1,10) with
+	# a loop that never terminates on a non-finite value; the x86-64 fixed-form twin
+	# did not hang but printed 9223372036854775809.000000. Run under a TIMEOUT — a
+	# regression here is a HANG, not a wrong line.
+	./$(COMPILER) test/test_writeln_nonfinite_float.pas /tmp/test_writeln_nonfinite26
+	test "$$(timeout 20 /tmp/test_writeln_nonfinite26)" = "$$(printf ' Inf\n Inf\n[ Inf]\n Inf\n Inf\n-Inf\n[-Inf]\n-Inf\n Nan\n[ Nan]\n Nan\n 1.0000000000000000E+000\n-2.5000000000000000E+000\n 0.0000000000000000E+000\n 1.0000000000000007E+300\n3.50\n  -0.125')"
 	./$(COMPILER) test/test_promoint_minint64_div.pas /tmp/test_promoint_minint26
 	test "$$(/tmp/test_promoint_minint26)" = "$$(printf '9223372036854775808\n9223372036854775808\n0\n-9223372036854775808\n0\n-9223372036854775808\n9223372036854775807\n9223372036854775807\n-1180591620717411303424')"
 	./$(COMPILER) test/test_promoint_parameter.pas /tmp/test_promoint_param26

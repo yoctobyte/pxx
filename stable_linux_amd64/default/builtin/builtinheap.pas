@@ -2957,6 +2957,28 @@ procedure PXXWriteFloatFixed(p: Pointer; decimals: NativeInt);
   and FPC pads the same way. }
 var x, pw, v, ip, rem, dv, r, two52: Double; d, fdigits: Integer; i: Int64; ch: Char;
 begin
+  { NON-FINITE first — see PXXWriteFloatSci. The digit loops here do not
+    terminate on an infinity either, and on x86-64 the native twin does not hang
+    but scales through Int64 and prints 9223372036854775809.000000, which is the
+    silent half of the same defect. A fixed-decimals request cannot be honoured
+    for a value with no digits, so the spelling wins over the field
+    (bug-a-writeln-of-a-non-finite-double-hangs). }
+  x := PDouble(p)^;
+  if x <> x then
+  begin
+    write(' Nan');
+    Exit;
+  end;
+  if x > 1.7976931348623157e308 then
+  begin
+    write(' Inf');
+    Exit;
+  end;
+  if x < -1.7976931348623157e308 then
+  begin
+    write('-Inf');
+    Exit;
+  end;
   two52 := 1;
   i := 1;
   while i <= 52 do
@@ -3044,6 +3066,32 @@ procedure PXXWriteFloatSci(p: Pointer);
 var x: Double; e, d, k: Integer; m, divisor: Int64; ch: Char;
 begin
   x := PDouble(p)^;
+  { NON-FINITE first — the normalise loops below never terminate on one:
+    `Inf / 10` is still Inf, and a NaN compares false against both bounds so it
+    escapes the loops only to format garbage. This is the portable twin of
+    EmitWriteFloatSci (x86-64), which had the same hang and the same fix; every
+    target that does NOT have a native emitter reaches this one, so i386 kept
+    hanging after x86-64 was fixed.
+
+    Checked before the sign write so NaN prints unsigned, as FPC does — a
+    0.0/0.0 NaN carries a set sign bit and would otherwise render '-Nan'.
+    Spelling matches sysutils' FloatToStr and the native emitter
+    (bug-a-writeln-of-a-non-finite-double-hangs). }
+  if x <> x then
+  begin
+    write(' Nan');
+    Exit;
+  end;
+  if x > 1.7976931348623157e308 then
+  begin
+    write(' Inf');
+    Exit;
+  end;
+  if x < -1.7976931348623157e308 then
+  begin
+    write('-Inf');
+    Exit;
+  end;
   if PByte(Int64(p) + 7)^ >= 128 then
   begin
     write('-');

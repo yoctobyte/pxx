@@ -5874,7 +5874,55 @@ procedure EmitWriteFloatFixed(width, decimals: Integer);
   compat-pascal-write-fixed-huge-magnitude-differs-from-fpc. }
 var pow10, divisor: Int64; i, k, fdigits, jncOff: Integer;
     pNotNeg, pCntTop, pCntDone, pNoPad: Integer;
+    nfJne, nfJnz, nfJnc, nfJmpSign, nfEndInf, nfEndNan: Integer;
 begin
+  { ---- NON-FINITE first ----
+
+    A fixed-decimals request cannot be honoured for a value that has no digits.
+    Unguarded, this path did not hang the way the scientific one did — it scaled
+    through Int64 and printed 9223372036854775809.000000 for +Inf, a plausible
+    number that is entirely debris. Its portable twin (PXXWriteFloatFixed, used
+    by every target without a native emitter) DID hang, so the pair produced two
+    different wrong answers for the same program depending on the backend
+    (bug-a-writeln-of-a-non-finite-double-hangs).
+
+    The spelling wins over the field width: `Inf:12:3` prints ` Inf`, not a
+    padded one. Field padding of a non-numeric spelling is a separate question
+    and FPC is not a clean oracle for it either.
+
+    rel32 branches, not rel8 — each EmitwriteChar expands to a write syscall
+    sequence, so a byte displacement silently truncates. Before the padding
+    pre-pass, so no register state is live yet. }
+  EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);   { movq rax, xmm0 }
+  EmitB($48); EmitB($BA); EmitI64($7FF0000000000000);           { mov rdx, expmask }
+  EmitB($48); EmitB($89); EmitB($C1);                           { mov rcx, rax }
+  EmitB($48); EmitB($21); EmitB($D1);                           { and rcx, rdx }
+  EmitB($48); EmitB($39); EmitB($D1);                           { cmp rcx, rdx }
+  EmitB($0F); EmitB($85); nfJne := CodeLen; EmitI32(0);         { jne .finite }
+  EmitB($48); EmitB($89); EmitB($C1);                           { mov rcx, rax (sign) }
+  EmitB($48); EmitB($BA); EmitI64($000FFFFFFFFFFFFF);           { mov rdx, mantmask }
+  EmitB($48); EmitB($21); EmitB($D0);                           { and rax, rdx }
+  EmitB($48); EmitB($85); EmitB($C0);                           { test rax, rax }
+  EmitB($0F); EmitB($85); nfJnz := CodeLen; EmitI32(0);         { jnz .nan }
+  EmitB($48); EmitB($0F); EmitB($BA); EmitB($E1); EmitB($3F);   { bt rcx, 63 }
+  EmitB($0F); EmitB($83); nfJnc := CodeLen; EmitI32(0);         { jnc .posinf }
+  MovRaxImm(Ord('-')); EmitwriteChar;
+  EmitB($E9); nfJmpSign := CodeLen; EmitI32(0);                 { jmp .infbody }
+  Patch32(nfJnc, CodeLen - (nfJnc + 4));                        { .posinf: }
+  MovRaxImm(Ord(' ')); EmitwriteChar;
+  Patch32(nfJmpSign, CodeLen - (nfJmpSign + 4));                { .infbody: }
+  MovRaxImm(Ord('I')); EmitwriteChar;
+  MovRaxImm(Ord('n')); EmitwriteChar;
+  MovRaxImm(Ord('f')); EmitwriteChar;
+  EmitB($E9); nfEndInf := CodeLen; EmitI32(0);                  { jmp .fixdone }
+  Patch32(nfJnz, CodeLen - (nfJnz + 4));                        { .nan: }
+  MovRaxImm(Ord(' ')); EmitwriteChar;
+  MovRaxImm(Ord('N')); EmitwriteChar;
+  MovRaxImm(Ord('a')); EmitwriteChar;
+  MovRaxImm(Ord('n')); EmitwriteChar;
+  EmitB($E9); nfEndNan := CodeLen; EmitI32(0);                  { jmp .fixdone }
+  Patch32(nfJne, CodeLen - (nfJne + 4));                        { .finite: }
+
   { the fractional scale, capped where Int64 stops carrying information }
   fdigits := decimals;
   if fdigits > 18 then fdigits := 18;
@@ -6016,6 +6064,8 @@ begin
   begin
     MovRaxImm(Ord('0')); EmitwriteChar;
   end;
+  Patch32(nfEndInf, CodeLen - (nfEndInf + 4));                  { .fixdone: }
+  Patch32(nfEndNan, CodeLen - (nfEndNan + 4));
 end;
 
 procedure EmitWriteFloatSci;
@@ -6028,9 +6078,63 @@ const FRAC = 16;
 var jncPos, jmpSignDone, jnzNz, jmpDone: Integer;
     laTop, laJb, lbTop, lbJae, jnsPos2, jmpEd: Integer;
     clampJle, bdLoop, roundJl, ovJb: Integer;
+    nfJne, nfJnz, nfJnc, nfJmpSign, nfDoneInf, nfDoneNan: Integer;
     k, j: Integer; divisor: Int64;
 begin
   EmitB($41); EmitB($54);                                       { push r12 }
+
+  { ---- NON-FINITE first: Inf and NaN have no decimal normalisation ----
+
+    The two loops below normalise into [1,10) by repeated divide/multiply. For
+    +Inf, `Inf/10` is still Inf, so `.la` NEVER EXITS; a NaN compares UNORDERED,
+    which leaves `.lb`'s `jae` untaken and loops there instead. So `writeln` of a
+    non-finite Double emitted its sign and then SPUN FOREVER — a hang, the one
+    failure shape worse than a crash, and reachable from ordinary code because a
+    float divide by zero yields Inf BY DESIGN here rather than erroring
+    (bug-a-writeln-of-a-non-finite-double-hangs).
+
+    Checked BEFORE the sign block on purpose: everything here runs with no
+    syscall in between, so rax/rcx/rdx are free (EmitwriteChar issues a syscall,
+    which clobbers rcx and r11 — that is why the existing code parks live values
+    in r12/r13). It also lets NaN print WITHOUT a sign, which is what FPC does;
+    detecting after the sign block would have emitted the '-' that 0.0/0.0's
+    negative NaN carries.
+
+    Spelling matches sysutils' FloatToStr — `Inf` / `-Inf` — plus `Nan`. }
+  EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);   { movq rax, xmm0 }
+  EmitB($48); EmitB($BA); EmitI64($7FF0000000000000);           { mov rdx, expmask }
+  EmitB($48); EmitB($89); EmitB($C1);                           { mov rcx, rax }
+  EmitB($48); EmitB($21); EmitB($D1);                           { and rcx, rdx }
+  EmitB($48); EmitB($39); EmitB($D1);                           { cmp rcx, rdx }
+  { rel32 throughout this block, NOT rel8: each EmitwriteChar expands to a full
+    write syscall sequence, so these branches span far more than 127 bytes and a
+    byte displacement silently TRUNCATES — which is what made NaN still hang
+    after the Inf case was already right. }
+  EmitB($0F); EmitB($85); nfJne := CodeLen; EmitI32(0);         { jne .finite }
+  EmitB($48); EmitB($89); EmitB($C1);                           { mov rcx, rax (keep sign) }
+  EmitB($48); EmitB($BA); EmitI64($000FFFFFFFFFFFFF);           { mov rdx, mantmask }
+  EmitB($48); EmitB($21); EmitB($D0);                           { and rax, rdx }
+  EmitB($48); EmitB($85); EmitB($C0);                           { test rax, rax }
+  EmitB($0F); EmitB($85); nfJnz := CodeLen; EmitI32(0);          { jnz .nan }
+  { Inf: sign from the saved bits, then the magnitude spelling }
+  EmitB($48); EmitB($0F); EmitB($BA); EmitB($E1); EmitB($3F);   { bt rcx, 63 }
+  EmitB($0F); EmitB($83); nfJnc := CodeLen; EmitI32(0);          { jnc .posinf }
+  MovRaxImm(Ord('-')); EmitwriteChar;
+  EmitB($E9); nfJmpSign := CodeLen; EmitI32(0);                  { jmp .infbody }
+  Patch32(nfJnc, CodeLen - (nfJnc + 4));                        { .posinf: }
+  MovRaxImm(Ord(' ')); EmitwriteChar;
+  Patch32(nfJmpSign, CodeLen - (nfJmpSign + 4));                { .infbody: }
+  MovRaxImm(Ord('I')); EmitwriteChar;
+  MovRaxImm(Ord('n')); EmitwriteChar;
+  MovRaxImm(Ord('f')); EmitwriteChar;
+  EmitB($E9); nfDoneInf := CodeLen; EmitI32(0);                 { jmp .done }
+  Patch32(nfJnz, CodeLen - (nfJnz + 4));                        { .nan: }
+  MovRaxImm(Ord(' ')); EmitwriteChar;
+  MovRaxImm(Ord('N')); EmitwriteChar;
+  MovRaxImm(Ord('a')); EmitwriteChar;
+  MovRaxImm(Ord('n')); EmitwriteChar;
+  EmitB($E9); nfDoneNan := CodeLen; EmitI32(0);                 { jmp .done }
+  Patch32(nfJne, CodeLen - (nfJne + 4));                        { .finite: }
 
   { ---- sign ---- }
   EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);   { movq rax, xmm0 }
@@ -6158,6 +6262,8 @@ begin
   end;
 
   Patch32(jmpDone, CodeLen - (jmpDone + 4));                   { .done: }
+  Patch32(nfDoneInf, CodeLen - (nfDoneInf + 4));               { ...Inf joins here }
+  Patch32(nfDoneNan, CodeLen - (nfDoneNan + 4));               { ...and NaN }
   EmitB($41); EmitB($5C);                                       { pop r12 }
 end;
 

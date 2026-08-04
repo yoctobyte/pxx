@@ -24,7 +24,12 @@ interface
 
 { NilPy's PAL — the one place a NilPy primitive reaches the kernel.
   See decide-runtime-primitive-layering. }
-uses pypal;
+{ promocore: the arbitrary-precision runtime. A Variant can HOLD a promotable
+  int (tag VT_PROMO_INT64, payload = the exact decimal), and the variant
+  arithmetic below must not narrow it — pyvar_to_int's mod-2^64 reading turns
+  2**70 into 0, so `v + 1` answered 1 for a 22-digit number. promocore has no
+  uses clause of its own, so this adds no cycle. }
+uses pypal, promocore;
 
 const
   { An omitted slice bound, as emitted by the frontend for `b[:hi]` / `b[lo:]`.
@@ -428,6 +433,20 @@ function pyrepr_of(i: Int64): AnsiString; overload;
 function pyrepr_of(d: Double): AnsiString; overload;
 function pyrepr_of(c: Char): AnsiString; overload;
 function pyrepr_of(const v: Variant): AnsiString; overload;
+{ Python's `repr()` under its OWN name. pyrepr_of already had the whole per-type
+  overload set — it is what an f-string's `!r` hole lowers to — but the builtin
+  NAME was never bound to anything, so `repr(x)` failed with "undefined
+  variable (repr)". Thin forwarders rather than a frontend intrinsic, so the
+  ordinary overload machinery does the type dispatch (and a promotable int picks
+  the lossless Variant one, per ArgNarrowsInt). }
+function repr(const s: AnsiString): AnsiString;
+function repr(b: Boolean): AnsiString; overload;
+function repr(i: Int64): AnsiString; overload;
+function repr(d: Double): AnsiString; overload;
+function repr(c: Char): AnsiString; overload;
+function repr(const v: Variant): AnsiString; overload;
+function repr(l: TPyList): AnsiString; overload;
+function repr(dc: TPyDict): AnsiString; overload;
 { Python's repr() of a CONTAINER. print(xs) is the most natural debugging line
   in Python, and it used to print the TPyList instance POINTER — the container
   fell through to the integer path (bug-a-nilpy-print-of-a-list-prints-a-pointer).
@@ -4453,6 +4472,7 @@ var
   pa, pb, sp, np, r: PPyVarRec;
   txt: AnsiString;
   lo: TObject;
+  ia, ib, ir: Int64;   { machine-word result, checked for overflow }
   src, rep: TPyList;
   k, cnt, li: Integer;
 begin
@@ -4509,8 +4529,20 @@ begin
   end
   else
   begin
+    { arbitrary precision stays exact — see pyadd_v. PXXPromoVarArithTry
+      answers 0 when neither side is promo-tagged. }
+    if PXXPromoVarArithTry(@Result, @a, @b, 3) <> 0 then Exit;
+    { neither side promo-tagged: do it in machine words, and only if THAT
+      overflows redo it exactly — see PyPromoteIntArith }
+    ia := pyvar_to_int(a); ib := pyvar_to_int(b);
+    ir := ia * ib;
+    if PyIntOpOverflows(ia, ib, ir, 3) then
+    begin
+      PyPromoteIntArith(@Result, ia, ib, 3);
+      Exit;
+    end;
     r^.VType := 2;
-    r^.Payload := pyvar_to_int(a) * pyvar_to_int(b);
+    r^.Payload := ir;
   end;
 end;
 
@@ -4559,9 +4591,45 @@ begin
   if neg then Result := 1.0 / sum else Result := sum;
 end;
 
+{ `base ** exp` for a non-negative integer exponent, in ARBITRARY PRECISION.
+  Exponentiation by squaring, the same shape as the machine-word loop in
+  pypow_v, so the two cannot drift on the exponent bits. Reached only after the
+  machine loop reports overflow — `2 ** 70` answered 0, which is the exact value
+  mod 2^64 and reads as a plausible number
+  (bug-nilpy-pypow-integer-overflow-does-not-promote).
+
+  Every product goes via a third slot and is copied back, because PXXPromoMul
+  must not have its destination alias an operand. }
+procedure PyPromoIntPow(dst: Pointer; base, exp: Int64);
+var pb, pr, pt: array[0..1] of NativeInt;
+    n: Int64;
+begin
+  PXXPromoInit(@pb); PXXPromoInit(@pr); PXXPromoInit(@pt);
+  PXXPromoFromInt(@pb, base);
+  PXXPromoFromInt(@pr, 1);
+  n := exp;
+  while n > 0 do
+  begin
+    if (n and 1) = 1 then
+    begin
+      PXXPromoMul(@pt, @pr, @pb);
+      PXXPromoCopy(@pr, @pt);
+    end;
+    n := n shr 1;
+    if n > 0 then
+    begin
+      PXXPromoMul(@pt, @pb, @pb);
+      PXXPromoCopy(@pb, @pt);
+    end;
+  end;
+  PXXPromoToVariant(dst, @pr);
+  PXXPromoClear(@pb); PXXPromoClear(@pr); PXXPromoClear(@pt);
+end;
+
 function pypow_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec;
     n: Int64; ir, ibase: Int64;
+    it: Int64; ovf: Boolean;   { overflow watch on the machine-word loop }
     fr, fbase, fexp: Double; negExp: Boolean;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
@@ -4571,11 +4639,30 @@ begin
     n := pyvar_to_int(b);
     ibase := pyvar_to_int(a);
     ir := 1;
+    ovf := False;
     while n > 0 do
     begin
-      if (n and 1) = 1 then ir := ir * ibase;
-      ibase := ibase * ibase;
+      if (n and 1) = 1 then
+      begin
+        it := ir * ibase;
+        if PyIntOpOverflows(ir, ibase, it, 3) then begin ovf := True; Break; end;
+        ir := it;
+      end;
       n := n shr 1;
+      { the final squaring is SKIPPED once no bits remain: the old loop always
+        squared once more, which is harmless when the result is discarded but
+        would report a false overflow here }
+      if n > 0 then
+      begin
+        it := ibase * ibase;
+        if PyIntOpOverflows(ibase, ibase, it, 3) then begin ovf := True; Break; end;
+        ibase := it;
+      end;
+    end;
+    if ovf then
+    begin
+      PyPromoIntPow(@Result, pyvar_to_int(a), pyvar_to_int(b));
+      Exit;
     end;
     r^.VType := 2;
     r^.Payload := ir;
@@ -4719,9 +4806,51 @@ begin
   Result := pyvar_of_int(pyvar_to_int(v));
 end;
 
+{ Redo an int operation in ARBITRARY PRECISION after the machine one overflowed.
+
+  Python has no fixed-width int, so a variant holding two ordinary VT_INT64s
+  must still give the exact answer when they do not fit: `self.v = self.v * 2`
+  on a variant field doubled correctly 63 times and then went to 0, because the
+  promo runtime's own gate (PXXPromoVarArithTry) deliberately declines a pair
+  where NEITHER side is promo-tagged — that gate is right for a Pascal Variant,
+  whose arithmetic wraps, and wrong for NilPy, which is what this unit is.
+
+  Only reached on the overflow path, so ordinary variant arithmetic keeps its
+  machine speed and this costs nothing until it is the difference between a
+  right answer and a silent wrong one. dst must already be a valid (cleared)
+  variant slot: PXXPromoToVariant reads the old tag before overwriting it. }
+procedure PyPromoteIntArith(dst: Pointer; x, y: Int64; op: Integer);
+var pa, pb, pr: array[0..1] of NativeInt;
+begin
+  PXXPromoInit(@pa); PXXPromoInit(@pb); PXXPromoInit(@pr);
+  PXXPromoFromInt(@pa, x);
+  PXXPromoFromInt(@pb, y);
+  if op = 1 then PXXPromoAdd(@pr, @pa, @pb)
+  else if op = 2 then PXXPromoSub(@pr, @pa, @pb)
+  else PXXPromoMul(@pr, @pa, @pb);
+  PXXPromoToVariant(dst, @pr);
+  PXXPromoClear(@pa); PXXPromoClear(@pb); PXXPromoClear(@pr);
+end;
+
+{ Did `x + y` / `x - y` / `x * y` leave the signed 64-bit range? Sign rules for
+  the additive pair; a divide-back check for the multiply, which is exact and
+  needs no 128-bit type. }
+function PyIntOpOverflows(x, y, r: Int64; op: Integer): Boolean;
+begin
+  if op = 1 then
+    PyIntOpOverflows := ((x > 0) and (y > 0) and (r < 0)) or
+                        ((x < 0) and (y < 0) and (r >= 0))
+  else if op = 2 then
+    PyIntOpOverflows := ((x >= 0) and (y < 0) and (r < 0)) or
+                        ((x < 0) and (y > 0) and (r >= 0))
+  else
+    PyIntOpOverflows := (x <> 0) and ((r div x) <> y);
+end;
+
 function pyadd_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec; concat: AnsiString;
     oa, ob: TObject; joined: TPyList; ji: Integer;
+    ia, ib, ir: Int64;   { machine-word result, checked for overflow }
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
@@ -4756,8 +4885,21 @@ begin
   end
   else
   begin
+    { An ARBITRARY-PRECISION operand stays exact: PXXPromoVarArithTry answers 0
+      when neither side is promo-tagged, so the machine-int path below is
+      untouched for ordinary variants. }
+    if PXXPromoVarArithTry(@Result, @a, @b, 1) <> 0 then Exit;
+    { neither side promo-tagged: do it in machine words, and only if THAT
+      overflows redo it exactly — see PyPromoteIntArith }
+    ia := pyvar_to_int(a); ib := pyvar_to_int(b);
+    ir := ia + ib;
+    if PyIntOpOverflows(ia, ib, ir, 1) then
+    begin
+      PyPromoteIntArith(@Result, ia, ib, 1);
+      Exit;
+    end;
     r^.VType := 2;
-    r^.Payload := pyvar_to_int(a) + pyvar_to_int(b);
+    r^.Payload := ir;
   end;
 end;
 
@@ -4800,6 +4942,7 @@ end;
 
 function pysub_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec;
+    ia, ib, ir: Int64;   { machine-word result, checked for overflow }
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
@@ -4810,8 +4953,20 @@ begin
   end
   else
   begin
+    { arbitrary precision stays exact — see pyadd_v. PXXPromoVarArithTry
+      answers 0 when neither side is promo-tagged. }
+    if PXXPromoVarArithTry(@Result, @a, @b, 2) <> 0 then Exit;
+    { neither side promo-tagged: do it in machine words, and only if THAT
+      overflows redo it exactly — see PyPromoteIntArith }
+    ia := pyvar_to_int(a); ib := pyvar_to_int(b);
+    ir := ia - ib;
+    if PyIntOpOverflows(ia, ib, ir, 2) then
+    begin
+      PyPromoteIntArith(@Result, ia, ib, 2);
+      Exit;
+    end;
     r^.VType := 2;
-    r^.Payload := pyvar_to_int(a) - pyvar_to_int(b);
+    r^.Payload := ir;
   end;
 end;
 
@@ -7766,7 +7921,16 @@ begin
   Result := sign + outS;
 end;
 
-function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
+{ The integer format spec, over EITHER a machine int or an arbitrary-precision
+  decimal. bigDec = '' means "use i"; otherwise bigDec is the exact decimal of a
+  VT_PROMO_INT64 payload and i is unused.
+
+  One body rather than two because the spec grammar (fill/align/sign/#/0/width/
+  grouping/type) is the same either way and a second copy would drift. Only the
+  DIGIT-PRODUCING step differs, and for a bignum only base 10 can be produced
+  here — pylib does not see promocore, so a base conversion is not available and
+  is REFUSED rather than answered with a wrapped machine int. }
+function PyFormatIntEx(i: Int64; const bigDec: AnsiString; const spec: AnsiString): AnsiString;
 var p, width, need, zi: Integer; zero, leftAlign, grouped, alt: Boolean;
     kind, fillCh, align, signCh, groupCh: Char;
     body, altPre, lead, zeros: AnsiString;
@@ -7833,6 +7997,9 @@ begin
     int is exactly representable, so hand it to the float formatter }
   if (p <= Length(spec)) and (spec[p] = '.') then
   begin
+    if bigDec <> '' then
+      raise ValueError.Create('float format spec "' + spec +
+                              '" on an arbitrary-precision int is not supported');
     Result := pyformat_of(pyfloat_ofint(i), spec);
     Exit;
   end;
@@ -7843,6 +8010,9 @@ begin
   end;
   if (kind = 'f') or (kind = 'F') or (kind = 'e') or (kind = 'E') then
   begin
+    if bigDec <> '' then
+      raise ValueError.Create('float format spec "' + spec +
+                              '" on an arbitrary-precision int is not supported');
     Result := pyformat_of(pyfloat_ofint(i), spec);
     Exit;
   end;
@@ -7852,6 +8022,17 @@ begin
       the call was lost — the same "must be catchable" rule already applied to
       missing operators (bug-nilpy-thousands-separator-format-spec-unsupported). }
     raise ValueError.Create('unsupported format spec "' + spec + '"');
+  if bigDec <> '' then
+  begin
+    { base 10 is the only base reachable without promocore; anything else would
+      have to narrow first, i.e. print a wrapped value for a number that does
+      not fit — exactly the silent-wrong-output case a spec exists to avoid }
+    if (kind <> 'd') and (kind <> 's') then
+      raise ValueError.Create('format spec "' + spec +
+                              '" on an arbitrary-precision int is not supported');
+    body := bigDec;
+  end
+  else
   case kind of
     'd': body := PyFmtBase(i, 10, False);
     'x': body := PyFmtBase(i, 16, False);
@@ -7901,6 +8082,11 @@ begin
   if align = '^' then Result := PyFmtPadEx(body, width, fillCh, '^')
   else if fillCh <> ' ' then Result := PyFmtPadEx(body, width, fillCh, align)
   else Result := PyFmtPad(body, width, zero, leftAlign);
+end;
+
+function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
+begin
+  Result := PyFormatIntEx(i, '', spec);
 end;
 
 function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; overload;
@@ -8194,6 +8380,15 @@ begin
     Result := pyformat_of(pyvar_to_float(v), spec);
     Exit;
   end;
+  { VT_PROMO_INT64: an arbitrary-precision int whose payload IS its exact
+    decimal. Formatting it as an integer is what `f"{n:d}"` and `"%d" % n` both
+    reach; without this arm the latter aborted the process on a value that
+    print() rendered perfectly well. }
+  if tag = 8193 then
+  begin
+    Result := PyFormatIntEx(0, PPyAnsiString(@PPyVarRec(@v)^.Payload)^, spec);
+    Exit;
+  end;
   WriteLn('Nil Python: f-string format spec "', spec,
           '" on a value of variant tag ', tag, ' is not supported');
   Halt(1);
@@ -8442,10 +8637,68 @@ begin
   Result := pystr_of(v);
 end;
 
+{ repr() — see the interface. Each forwards to the pyrepr_of overload that
+  already spells this type Python's way; the container pair go to the recursive
+  container reprs, which is what makes repr([1, 2]) print `[1, 2]` rather than a
+  class handle. }
+function repr(const s: AnsiString): AnsiString;
+begin
+  Result := pyrepr_of(s);
+end;
+
+function repr(b: Boolean): AnsiString; overload;
+begin
+  Result := pyrepr_of(b);
+end;
+
+function repr(i: Int64): AnsiString; overload;
+begin
+  Result := pyrepr_of(i);
+end;
+
+function repr(d: Double): AnsiString; overload;
+begin
+  Result := pyrepr_of(d);
+end;
+
+function repr(c: Char): AnsiString; overload;
+begin
+  Result := pyrepr_of(c);
+end;
+
+function repr(const v: Variant): AnsiString; overload;
+begin
+  Result := pyrepr_of(v);
+end;
+
+function repr(l: TPyList): AnsiString; overload;
+begin
+  Result := pylist_repr(l);
+end;
+
+function repr(dc: TPyDict): AnsiString; overload;
+begin
+  Result := pydict_repr(dc);
+end;
+
 function pyabs_v(const v: Variant): Variant;
 var t: Int64; d: Double; i: Int64;
+    ds: AnsiString; pa: array[0..1] of NativeInt;
 begin
   t := pyvartag(v);
+  { VT_PROMO_INT64: the payload IS the exact decimal, so the absolute value is
+    that text without its leading '-'. Reading it as a machine int first would
+    narrow mod 2^64 — the whole reason this tag exists. }
+  if t = 8193 then
+  begin
+    ds := PPyAnsiString(@PPyVarRec(@v)^.Payload)^;
+    if (Length(ds) > 0) and (ds[1] = '-') then ds := Copy(ds, 2, Length(ds) - 1);
+    PXXPromoInit(@pa);
+    PXXPromoFromStr(@pa, ds);
+    PXXPromoToVariant(@Result, @pa);
+    PXXPromoClear(@pa);
+    Exit;
+  end;
   if t = 3 then           { VT_DOUBLE }
   begin
     d := pyvar_to_float(v);

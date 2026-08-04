@@ -69,6 +69,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-variant-class-boxing-missing-on-i386-aarch64 | A | 70 | bug | Storing a class into a Variant did not build on i386 or aarch64 | — |
 | bug-a-variant-fn-return-forward-nrvo-corruption | A | 55 | bug | Variant FUNCTION forwarding another Variant call's result corrupts the value | — |
 | bug-a-variant-unbox-wrong-on-32bit-and-unavailable-cross | A | 70 | bug | Variant -> scalar unbox is unavailable on cross targets | — |
+| bug-a-writeln-of-a-non-finite-double-hangs | A | 55 | bug | writeln() of an Inf or NaN Double HANGS (emits one space, then spins forever). FloatToStr renders the same value as 'Inf' correctly, so the correct behaviour already exists one layer away — this is writeln's own formatter | — |
 | bug-a-xtensa-windowed-frame-minimum-256-bytes | S | 55 | bug | Every windowed-ABI stack frame costs at least 256 bytes — a fixed expression region plus the 256-byte granularity of the single ADDMI the prologue patches — so ~11 nested calls exhaust ESP-IDF's default 3584-byte task stack. Printing one Int64 digit by digit does it. | — |
 | bug-aarch64-arm32-record-temp-byvalue-arg | A | 50 | bug | aarch64/arm32: record temporary as a by-value arg fails codegen | — |
 | bug-aggregate-member-array-as-var-param | A | 50 | bug | bug: passing an array that is a member of an aggregate (record field / 2D-array row) as a var/const param segfaults | — |
