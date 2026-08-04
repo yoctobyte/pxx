@@ -109,4 +109,4 @@ pins the positional half.
 
 ## Log
 - 2026-08-04 — resolved (fixed by 37ce259f9 + 8a660bce7 + a6754ddf7).
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit f3b8fd38a.
