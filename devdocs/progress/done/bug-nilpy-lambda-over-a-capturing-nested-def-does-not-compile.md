@@ -132,4 +132,4 @@ whose sibling does NOT capture `self`. Diffed against CPython, identical.
 
 ## Log
 - 2026-08-04 — resolved.
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit e4477b8f6.
