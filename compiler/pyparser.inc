@@ -12793,12 +12793,34 @@ end;
 
   This gate is the whole reason `list(range(3))` can be materialised without
   changing what `print(range(3))` does — see PyParseRangeList. }
+{ The enclosing callee names that CONSUME an iterable, i.e. the ones for which
+  materialising `range(...)` into a list is indistinguishable from Python's lazy
+  object. `list` was the only one, so `list(range(3))` worked while
+  `sum(range(3))` failed with "undefined variable (range)" — range is not a
+  value in NilPy, it exists only as the counted-loop lowering in a `for` header.
+
+  A WHITELIST, not "any call argument". CPython's range is LAZY and reprs as
+  `range(0, 3)`, so materialising it is only invisible where the callee does
+  nothing but iterate. `print(range(3))` is the case that is NOT invisible, and
+  it is currently a compile error (on `pinned` too) rather than a wrong answer —
+  widening this to every call position would silently turn it into `[0, 1, 2]`.
+  Each name here is a promise that the callee only ever iterates its argument. }
+function PyRangeIterConsumer(const nm: AnsiString): Boolean;
+begin
+  PyRangeIterConsumer := CaseEqual(nm, 'list') or CaseEqual(nm, 'sum') or
+                         CaseEqual(nm, 'max') or CaseEqual(nm, 'min') or
+                         CaseEqual(nm, 'sorted') or CaseEqual(nm, 'tuple') or
+                         CaseEqual(nm, 'set') or CaseEqual(nm, 'len') or
+                         CaseEqual(nm, 'any') or CaseEqual(nm, 'all') or
+                         CaseEqual(nm, 'reversed');
+end;
+
 function PyRangeAsListWanted: Boolean;
 begin
   PyRangeAsListWanted :=
     (TokPos >= 3) and (Tokens[TokPos - 2].Kind = tkLParen) and
     (Tokens[TokPos - 3].Kind = tkIdent) and
-    CaseEqual(GetTokenStr(TokPos - 3), 'list');
+    PyRangeIterConsumer(GetTokenStr(TokPos - 3));
 end;
 
 { `range(stop)` / `range(start, stop)` / `range(start, stop, step)` as a LIST.

@@ -3,6 +3,8 @@ track: N
 prio: 30
 type: bug
 summary: "repr() is not a builtin at all, and sum(range(n)) fails 'undefined variable (range)' because range is only a for-header form"
+status: done
+owner: claude-AN
 ---
 
 # `repr()` and `sum(range(...))` are undefined variables
@@ -43,3 +45,6 @@ only observable for `print(range(3))`.
 
 Per-fix loop, plus a `.npy` test with each wrapper over `range` diffed against
 CPython. `ls test/ | grep -E 'range|repr'` before creating a file.
+
+## Log
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

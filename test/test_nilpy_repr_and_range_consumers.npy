@@ -1,0 +1,42 @@
+# Two builtins that existed in the runtime but were not reachable from the
+# place a program uses them
+# (bug-nilpy-repr-and-sum-over-range-are-undefined-variables).
+#
+# repr(): pyrepr_of already had the whole per-type overload set — it is what an
+# f-string's `!r` hole lowers to — but the NAME was bound to nothing, so
+# `repr(x)` failed to compile.
+#
+# range(): NilPy's range is not a value, it is the counted-loop lowering in a
+# `for` header plus a materialising path that was gated on the enclosing call
+# being literally `list(`. So `list(range(3))` worked and `sum(range(3))` did
+# not. The gate is now a whitelist of callees that only ITERATE their argument.
+#
+# Output must match CPython running this same file.
+
+i = 5
+
+print(repr(i))
+print(repr("ab"))
+print(repr(2.5))
+print(repr(True))
+print(repr([1, 2]))
+print(repr({"a": 1}))
+# repr of an ARBITRARY-PRECISION int goes through the lossless Variant overload
+print(repr(i + 1))
+n = 1
+for k in range(70):
+    n = n * 2
+print(repr(n))
+
+# every whitelisted range consumer
+print(sum(range(i)))
+print(max(range(i)))
+print(min(range(1, i)))
+print(sorted(range(3)))
+print(len(range(4)))
+print(list(range(3)))
+print(tuple(range(3)))
+print(any(range(3)), all(range(3)))
+print(sum(range(0, 10, 2)))
+# ...and with a promotable bound
+print(sum(range(i + 1)))

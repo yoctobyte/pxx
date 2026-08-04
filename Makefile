@@ -1388,6 +1388,11 @@ test-nilpy: $(COMPILER)
 	# .expected is CPython's own output for the same file.
 	./$(COMPILER) test/test_nilpy_int_promotion_default.npy /tmp/test_nilpy_intpromo26
 	/tmp/test_nilpy_intpromo26 | diff -u test/test_nilpy_int_promotion_default.expected -
+	# repr() and range() as an ITERABLE: both existed in the runtime but were not
+	# reachable from where a program uses them — repr's name was bound to nothing,
+	# and range materialised only inside a literal `list(`. .expected is CPython's.
+	./$(COMPILER) test/test_nilpy_repr_and_range_consumers.npy /tmp/test_nilpy_reprrange26
+	/tmp/test_nilpy_reprrange26 | diff -u test/test_nilpy_repr_and_range_consumers.expected -
 	# Mutating a dict while iterating it is NOT DETECTED — a DELIBERATE divergence
 	# (devdocs/dev/nilpy-semantics-divergences.md). These expectations are
 	# deliberately NOT CPython's: every program in that file is one CPython rejects,

@@ -433,6 +433,20 @@ function pyrepr_of(i: Int64): AnsiString; overload;
 function pyrepr_of(d: Double): AnsiString; overload;
 function pyrepr_of(c: Char): AnsiString; overload;
 function pyrepr_of(const v: Variant): AnsiString; overload;
+{ Python's `repr()` under its OWN name. pyrepr_of already had the whole per-type
+  overload set — it is what an f-string's `!r` hole lowers to — but the builtin
+  NAME was never bound to anything, so `repr(x)` failed with "undefined
+  variable (repr)". Thin forwarders rather than a frontend intrinsic, so the
+  ordinary overload machinery does the type dispatch (and a promotable int picks
+  the lossless Variant one, per ArgNarrowsInt). }
+function repr(const s: AnsiString): AnsiString;
+function repr(b: Boolean): AnsiString; overload;
+function repr(i: Int64): AnsiString; overload;
+function repr(d: Double): AnsiString; overload;
+function repr(c: Char): AnsiString; overload;
+function repr(const v: Variant): AnsiString; overload;
+function repr(l: TPyList): AnsiString; overload;
+function repr(dc: TPyDict): AnsiString; overload;
 { Python's repr() of a CONTAINER. print(xs) is the most natural debugging line
   in Python, and it used to print the TPyList instance POINTER — the container
   fell through to the integer path (bug-a-nilpy-print-of-a-list-prints-a-pointer).
@@ -8621,6 +8635,50 @@ begin
     Exit;
   end;
   Result := pystr_of(v);
+end;
+
+{ repr() — see the interface. Each forwards to the pyrepr_of overload that
+  already spells this type Python's way; the container pair go to the recursive
+  container reprs, which is what makes repr([1, 2]) print `[1, 2]` rather than a
+  class handle. }
+function repr(const s: AnsiString): AnsiString;
+begin
+  Result := pyrepr_of(s);
+end;
+
+function repr(b: Boolean): AnsiString; overload;
+begin
+  Result := pyrepr_of(b);
+end;
+
+function repr(i: Int64): AnsiString; overload;
+begin
+  Result := pyrepr_of(i);
+end;
+
+function repr(d: Double): AnsiString; overload;
+begin
+  Result := pyrepr_of(d);
+end;
+
+function repr(c: Char): AnsiString; overload;
+begin
+  Result := pyrepr_of(c);
+end;
+
+function repr(const v: Variant): AnsiString; overload;
+begin
+  Result := pyrepr_of(v);
+end;
+
+function repr(l: TPyList): AnsiString; overload;
+begin
+  Result := pylist_repr(l);
+end;
+
+function repr(dc: TPyDict): AnsiString; overload;
+begin
+  Result := pydict_repr(dc);
 end;
 
 function pyabs_v(const v: Variant): Variant;
