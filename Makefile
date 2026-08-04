@@ -1375,6 +1375,11 @@ test-nilpy: $(COMPILER)
 	# decimal expansion. Every value here is now CPython's.
 	./$(COMPILER) test/test_nilpy_round.npy /tmp/test_nilpy_round26
 	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.67 2.67\n9.99 0.04 0.3 100.0\n1.0 0.0 -0.0 0.0')"
+	# The stdlib shim table builds a call by NAME (FindProc), which never consults
+	# overloads — so adding an overload for a case it got wrong did NOTHING,
+	# silently. The call site now re-targets by ARITY. See the test's header.
+	./$(COMPILER) test/test_nilpy_stdlib_shim_arity.npy /tmp/test_nilpy_shimarity26
+	test "$$(/tmp/test_nilpy_shimarity26)" = "$$(printf '%b' 'a/b\na/b/c\na/b/c/d\n/x/y/z\na/c\ndflt')"
 	# A keyword argument must steer overload SELECTION. The same-unit half landed
 	# 2026-08-01; the CROSS-UNIT case is how one Python builtin is normally split —
 	# key= needs PyCallKey1, which lives in pyeval, while min resolves from pylib.

@@ -544,6 +544,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-statement-after-for-in-a-def | N | 60 | bug | NilPy: any statement after a `for` inside a def failed to parse | — |
 | bug-nilpy-static-typed-operands-skip-mixed-type-guard | N | 70 | bug | NilPy: the mixed-type TypeError guard lives ONLY in the runtime variant path — when BOTH operands are statically typed, `7 - [1,2]` and `\"ab\" - \"ab\"` silently do pointer math (108 sweep cases) | — |
 | bug-nilpy-stdlib-name-binds-pascal-unit | N | 60 | bug | nilpy: a Python stdlib import silently binds to a same-named Pascal RTL unit (import json -> lib/rtl/json.pas) | — |
+| bug-nilpy-stdlib-shim-table-cannot-reach-an-overload | N | 50 | bug | The stdlib shim table and every hand-built pylib call resolve a NAME with FindProc, which returns ONE proc index and never consults overloads — so os.path.join('a','b','c') fails and adding a Pascal overload has no effect | — |
 | bug-nilpy-str-format-ignores-positional-indices | N | 60 | bug | NilPy: `\"{1}{0}\".format(a, b)` ignores the explicit indices and substitutes left-to-right — silently prints the arguments in the WRONG ORDER | — |
 | bug-nilpy-str-index-method-missing | N | 50 | bug | `str.index()` / `str.rindex()` were missing | — |
 | bug-nilpy-str-index-off-by-one | N | 75 | bug | NilPy string subscripts are 1-BASED — silently off by one vs CPython | — |

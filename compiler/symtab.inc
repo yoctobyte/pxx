@@ -4363,6 +4363,22 @@ begin
   Result := ProcHashHead[NameFoldHash(name)];
 end;
 
+{ NAME ONLY — this returns ONE proc index and never consults overloads.
+
+  That is not a gap to be fixed here, it is the contract: FindProc is what
+  hand-built call sites use when they know exactly which routine they want.
+  But it has a sharp edge worth stating at the declaration, because it cost
+  three separate rediscoveries in one night
+  (bug-nilpy-stdlib-shim-table-cannot-reach-an-overload): **adding a Pascal
+  `overload` for a case a hand-built call gets wrong has NO EFFECT** — the new
+  overload is never selected, the build is clean, the self-host is green, and
+  nothing changes. The natural next conclusion is that the runtime is wrong
+  rather than that the call was never routed there.
+
+  When a hand-built call site needs to pick among arities, use FindProcArity
+  below. When it needs to pick by TYPE, give the routine a unique name or
+  convert at the call site — full overload resolution lives in MatchProcCall
+  and is not reachable from a name lookup. }
 function FindProc(const name: AnsiString): Integer;
 var i: Integer; lo: AnsiString;
 begin
@@ -4455,6 +4471,35 @@ begin
       found := i;
     end;
   if found >= 0 then Result := Procs[found].Name;
+end;
+
+{ The same-named proc that takes exactly `nArgs` parameters, or -1.
+
+  The arity half of what FindProc cannot do. A hand-built call site knows its
+  argument count, so this is enough to make an ordinary Pascal `overload` that
+  differs only in arity actually reachable from one — which is the trap
+  bug-nilpy-stdlib-shim-table-cannot-reach-an-overload is about. Type-based
+  selection is still not available this way and still needs MatchProcCall.
+
+  Scans rather than walking the hash chain in one pass because it must consider
+  EVERY same-named entry, not stop at the first. }
+function FindProcArity(const name: AnsiString; nArgs: Integer): Integer;
+var i: Integer;
+begin
+  FindProcArity := -1;
+  for i := 0 to ProcCount - 1 do
+    if (Procs[i].Name = name) and (Procs[i].ParamCount = nArgs) then
+    begin
+      FindProcArity := i;
+      Exit;
+    end;
+  for i := 0 to ProcCount - 1 do
+    if (not ProcCaseSensitive[i]) and CaseEqual(Procs[i].Name, name) and
+       (Procs[i].ParamCount = nArgs) then
+    begin
+      FindProcArity := i;
+      Exit;
+    end;
 end;
 
 function FindProcInUnit(const name: AnsiString; unitIdx: Integer): Integer;

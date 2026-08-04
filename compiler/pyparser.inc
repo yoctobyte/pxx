@@ -6772,23 +6772,39 @@ begin
       Inc(nArgs);
     until not Eat(tkComma);
   Expect(tkRParen, ')');
-  { The optional-DEFAULT form of a shim, e.g. `os.environ.get(name, default)`
-    beside `os.environ.get(name)`. FindProc takes the first overload, and a call
-    node carries one fixed proc index, so the two arities cannot be one
-    overloaded name here — the second is registered as `<name>_d` and selected
-    by the count. Without this the two-argument call bound to the one-argument
-    proc and the default was silently dropped. }
-  if nArgs > Procs[procIdx].ParamCount then
+  { RE-TARGET BY ARITY. FindProc above answers by NAME and never consults
+    overloads, so the shim it returned may simply be the wrong arity — and an
+    ordinary Pascal `overload` added to fix that used to have no effect at all,
+    silently (bug-nilpy-stdlib-shim-table-cannot-reach-an-overload; it cost
+    three rediscoveries in one night). FindProcArity closes that for the arity
+    case: a same-named overload taking exactly this many arguments is now
+    reachable from a hand-built call site, so `os.path.join(a, b, c)` works by
+    declaring a 3-argument overload like any Pascal routine.
+
+    The `<name>_d` fallback stays for the shims that already use it — the
+    optional-DEFAULT form, e.g. `os.environ.get(name, default)` beside
+    `os.environ.get(name)`, where the two arities were given DIFFERENT names
+    precisely because this lookup did not exist. Tried second, so nothing that
+    works today changes its answer.
+
+    Type-based selection is still not reachable this way; see FindProc's own
+    note for what to do then. }
+  if nArgs <> Procs[procIdx].ParamCount then
   begin
-    i := FindProc(pname + '_d');
-    if (i >= 0) and (Procs[i].ParamCount = nArgs) then
+    i := FindProcArity(pname, nArgs);
+    if i < 0 then
+    begin
+      i := FindProc(pname + '_d');
+      if (i >= 0) and (Procs[i].ParamCount <> nArgs) then i := -1;
+    end;
+    if i >= 0 then
     begin
       procIdx := i;
       ASTIVal[callNode] := procIdx;
       ASTTk[callNode] := Ord(Procs[procIdx].RetType);
       ASTRight[callNode] := ProcRetRecId[procIdx];
     end
-    else
+    else if nArgs > Procs[procIdx].ParamCount then
       Error('Nil Python: ' + pname + ' takes ' +
             'fewer arguments than were given');
   end;

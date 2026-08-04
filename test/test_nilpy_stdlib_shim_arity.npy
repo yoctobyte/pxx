@@ -1,0 +1,32 @@
+# The stdlib shim table builds a pylib call by NAME, via FindProc, which returns
+# ONE proc index and never consults overloads
+# (bug-nilpy-stdlib-shim-table-cannot-reach-an-overload).
+#
+# The dangerous half of that was not the missing arity — it was that the
+# OBVIOUS FIX DID NOTHING. Adding a Pascal `overload` for the case the shim got
+# wrong produced a clean build, a green self-host, and no behaviour change at
+# all, so the next conclusion was that the runtime was wrong rather than that
+# the call was never routed there. It cost three rediscoveries in one night, and
+# os.path.join's 3- and 4-argument overloads were added, measured to be inert,
+# and removed again.
+#
+# The shim call site now re-targets by ARITY (FindProcArity), so an ordinary
+# same-named overload taking exactly this many arguments is reachable from a
+# hand-built call. The `<name>_d` fallback is tried second, so the shims that
+# already gave their two arities different names — os.environ.get(name) beside
+# os.environ.get(name, default) — keep answering exactly as before.
+#
+# Type-based selection is still NOT reachable this way; that is stated at
+# FindProc's declaration rather than left to be rediscovered a fourth time.
+#
+# Every expectation is CPython's.
+
+import os
+print(os.path.join("a", "b"))
+print(os.path.join("a", "b", "c"))
+print(os.path.join("a", "b", "c", "d"))
+print(os.path.join("/x", "y", "z"))
+print(os.path.join("a", "", "c"))
+
+# the _d fallback, unchanged
+print(os.environ.get("PXX_NOT_SET_XYZ", "dflt"))

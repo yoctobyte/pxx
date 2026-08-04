@@ -570,6 +570,13 @@ function pyfloat_ofint(v: Int64): Double;
   the kernel; that keeps the arch-specific syscall surface down to two calls. }
 function pyos_path_isabs(const p: AnsiString): Boolean;
 function pyos_path_join(const a: AnsiString; const b: AnsiString): AnsiString;
+{ Python's os.path.join is VARIADIC and the corpus writes three components
+  routinely. These are ordinary Pascal overloads, reachable from the stdlib
+  shim table only because that call site now re-targets by ARITY — before
+  FindProcArity they were added, measured to do nothing, and removed again
+  (bug-nilpy-stdlib-shim-table-cannot-reach-an-overload, sighting 3). }
+function pyos_path_join(const a, b, c: AnsiString): AnsiString; overload;
+function pyos_path_join(const a, b, c, d: AnsiString): AnsiString; overload;
 function pyos_path_dirname(const p: AnsiString): AnsiString;
 function pyos_path_basename(const p: AnsiString): AnsiString;
 { os.path.isdir / os.path.isfile — a MISSING path is False, not an error, which
@@ -6393,6 +6400,16 @@ begin
   if Length(a) = 0 then begin Result := b; Exit; end;
   if a[Length(a)] = '/' then Result := a + b
   else Result := a + '/' + b;
+end;
+
+function pyos_path_join(const a, b, c: AnsiString): AnsiString; overload;
+begin
+  Result := pyos_path_join(pyos_path_join(a, b), c);
+end;
+
+function pyos_path_join(const a, b, c, d: AnsiString): AnsiString; overload;
+begin
+  Result := pyos_path_join(pyos_path_join(pyos_path_join(a, b), c), d);
 end;
 
 function pyos_path_dirname(const p: AnsiString): AnsiString;
