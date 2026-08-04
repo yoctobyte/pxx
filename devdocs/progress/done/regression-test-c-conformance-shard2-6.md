@@ -61,4 +61,4 @@ across all five, exactly as the stub predicted.
 No separate fix was needed and none is filed: this stub existed only to carry
 the signal until the owning lane landed the real one.
 
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 4c0ea6707.
