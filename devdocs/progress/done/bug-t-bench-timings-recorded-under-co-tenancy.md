@@ -139,4 +139,4 @@ written from.
   counter is consecutive, unreadable load degrades to running rather than never
   running.
 
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 713269e96.
