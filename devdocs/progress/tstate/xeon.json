@@ -3,16 +3,6 @@
  "bench_skips": 0,
  "history": [
   {
-   "date": "2026-08-03T23:22:20Z",
-   "fixed": [
-    "test-nilpy#src:test/test_nilpy_class_return.npy"
-   ],
-   "new_red": [],
-   "sha": "2501060cf95b8c7220a72af7f857268f4be63c37",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-03T23:27:10Z",
    "fixed": [],
    "new_red": [],
@@ -415,6 +405,14 @@
     "test-core#src:test/csocket_loopback_b88.c"
    ],
    "sha": "330f62af78d0971ee8c39d5aa9bf6dc294aeaab7",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-04T23:13:51Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "0db7276f06a0ef4b03470acbf5971ba1d1811fc7",
    "tier": "native",
    "verdict": "RED"
   }
@@ -4628,11 +4626,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-04T23:06:22Z",
-  "sha": "330f62af78d0971ee8c39d5aa9bf6dc294aeaab7",
+  "date": "2026-08-04T23:13:51Z",
+  "sha": "0db7276f06a0ef4b03470acbf5971ba1d1811fc7",
   "tier": "native",
   "verdict": "RED",
-  "wall": 127.4
+  "wall": 124.5
  },
  "last_bench": {
   "conf_rows": 550,

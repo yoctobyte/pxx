@@ -485,3 +485,4 @@
 {"date": "2026-08-04T12:04:21Z", "fixed": [], "full": true, "new_red": [], "sha": "7d8929633721af6b943f2ebb33af49313351f7fb", "tier": "full", "verdict": "GREEN", "wall": 420.7}
 {"date": "2026-08-04T12:07:37Z", "fixed": [], "full": false, "new_red": [], "sha": "7d8929633721af6b943f2ebb33af49313351f7fb", "tier": "opt", "verdict": "GREEN", "wall": 188.7}
 {"date": "2026-08-04T23:06:22Z", "fixed": [], "full": false, "new_red": ["test-core#src:test/csocket_loopback_b88.c"], "sha": "330f62af78d0971ee8c39d5aa9bf6dc294aeaab7", "tier": "native", "verdict": "RED", "wall": 127.4}
+{"date": "2026-08-04T23:13:51Z", "fixed": [], "full": false, "new_red": [], "sha": "0db7276f06a0ef4b03470acbf5971ba1d1811fc7", "tier": "native", "verdict": "RED", "wall": 124.5}
