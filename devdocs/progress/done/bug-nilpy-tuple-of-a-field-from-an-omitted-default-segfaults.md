@@ -236,4 +236,4 @@ treatment, and no repro of it crashing is known. Left alone rather than guessed
 at.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit a49eda765.
