@@ -1698,22 +1698,81 @@ def publish_ledger(clone, host, ledger_loc, ledger_pub, findings, sha,
 # following clean batch reads as a 20% IMPROVEMENT — the harder direction to
 # notice. bug-t-bench-timings-recorded-under-co-tenancy.
 #
-# Load, not process detection, is the signal: the contaminating load included a
-# bare `make compiler/pascal26`, which is no testmgr process and foreign_runs()
-# would not see it. Thresholds are absolute and generously spaced from what was
-# actually observed — an idle box with only the daemon sits under 1.0, while a
-# gate run put it at 9-15.
-BENCH_QUIET_LOAD = 2.0       # must be under this to START a batch
-BENCH_OWN_LOAD = 2.0         # ...plus what the batch itself contributes, while running
-BENCH_POLL_SECS = 15.0
+# WHY A PROBE AND NOT loadavg. The first cut gated on /proc/loadavg and was
+# wrong in both directions, measured on this 12-core box:
+#
+#     busy cores | probe ratio | loadavg
+#     -----------|-------------|--------
+#          0     |    1.00     |  17.22   <- quiet, but loadavg says otherwise
+#          4     |    1.09     |  16.88
+#         12     |    2.17     |  17.62
+#         24     |    4.75     |  21.53   <- a full gate (testmgr cap=24)
+#
+# loadavg is a 1-minute EXPONENTIAL AVERAGE: it still reads 17 on a box that
+# went quiet a minute ago, and it cannot separate quiet from 12 busy cores. So
+# it blocks benching long after a burst ends and would wave one through at the
+# start of a fresh burst. The probe measures the CPU actually available to a
+# single thread RIGHT NOW, which is what the bench itself experiences.
+#
+# The tolerance is deliberately generous: this box has 12 cores and is meant to
+# be worked on, so a third of it busy (ratio 1.09) must NOT block a batch —
+# ordinary agent work costs 1-2 cores. What it rejects is oversubscription, and
+# the contaminating gate run sat at 4.75x, nowhere near the line.
+BENCH_PROBE_ITERS = 1_000_000
+BENCH_PROBE_SAMPLES = 3      # min of N: a single probe's noise spans ~10%
+# Generous ON PURPOSE. Measured here: 4 of 12 cores busy reads 1.09-1.19 —
+# an agent doing ordinary work — while 12 busy is 2.17 and an oversubscribed
+# gate run (testmgr cap=24) is 4.75. The line sits well above the first and
+# well below the second, because a box with 12 cores is meant to be worked on
+# and a bench that never runs is worth less than one measured beside a build.
+BENCH_PROBE_TOL = 1.35
+BENCH_POLL_SECS = 30.0
+# The reference is the fastest probe ever seen on this host, so there is no
+# per-box constant to tune and a faster box calibrates itself. The risk of a
+# min-forever reference is that it becomes unreachable (thermal throttling, a
+# CPU governor change, a Python upgrade) and bench then NEVER runs again — so
+# it relaxes 5% after this many consecutive skips. Starvation self-heals; a
+# genuinely quieter moment still pulls the reference back down.
+BENCH_SKIP_RELAX_AFTER = 12
+BENCH_RELAX_FACTOR = 1.05
 
 
-def load1():
+def speed_probe(iters=BENCH_PROBE_ITERS):
+    """Seconds for a fixed integer workload — a pure hardware/contention signal.
+
+    Deliberately does NOT use the compiler under test. A probe that compiled
+    something would slow down when the COMPILER regressed, and bench would then
+    switch itself off exactly when there was a regression worth measuring.
+    """
+    t0 = time.perf_counter()
+    x = 0
+    for i in range(iters):
+        x = (x * 31 + i) & 0xFFFFFFFF
+    return time.perf_counter() - t0
+
+
+def hours_since(iso):
+    """Hours since an ISO-8601 Z timestamp, or None if there isn't one."""
+    if not iso:
+        return None
     try:
-        with open("/proc/loadavg") as f:
-            return float(f.read().split()[0])
-    except (OSError, ValueError, IndexError):
-        return 0.0           # unknown load must not block work forever
+        return (time.time() - calendar.timegm(
+            time.strptime(iso, "%Y-%m-%dT%H:%M:%SZ"))) / 3600.0
+    except ValueError:
+        return None
+
+
+def box_speed(st):
+    """(ratio, seconds) — how much slower than this host's best-ever probe.
+
+    Min of several samples: one probe's noise spans ~10%, which is the same
+    order as the contention worth detecting, and min is the right statistic —
+    it is the least-interrupted sample rather than an average of interruptions.
+    """
+    t = min(speed_probe() for _ in range(BENCH_PROBE_SAMPLES))
+    ref = min(st.get("bench_probe_ref") or t, t)
+    st["bench_probe_ref"] = ref
+    return t / ref, t
 
 
 def run_bench_idle(clone, host, st, sha, abort_check=None):
@@ -1737,16 +1796,25 @@ def run_bench_idle(clone, host, st, sha, abort_check=None):
     when the box was too loaded, because `did_work` skips the sleep: returning
     True there would spin the cycle, re-fetching and re-deciding as fast as the
     CPU allows, which is itself load."""
-    load = load1()
-    if load > BENCH_QUIET_LOAD:
+    ratio, secs = box_speed(st)
+    if ratio > BENCH_PROBE_TOL:
         st["bench_skips"] = st.get("bench_skips", 0) + 1
-        print("twatch: bench SKIPPED at %s — box not quiet (load %.1f > %.1f); "
-              "%d consecutive skip(s). A contended timing is VOID, not slow."
-              % (sha[:12], load, BENCH_QUIET_LOAD, st["bench_skips"]),
+        if st["bench_skips"] >= BENCH_SKIP_RELAX_AFTER:
+            # Do not starve forever on an unreachable reference; a real quiet
+            # moment still pulls it back down.
+            st["bench_probe_ref"] *= BENCH_RELAX_FACTOR
+        since = hours_since((st.get("last_bench") or {}).get("date"))
+        print("twatch: bench SKIPPED at %s — box %.2fx slower than its best "
+              "(%.0fms probe, limit %.2fx); %d consecutive skip(s)%s. A "
+              "contended timing is VOID, not slow."
+              % (sha[:12], ratio, secs * 1000, BENCH_PROBE_TOL,
+                 st["bench_skips"],
+                 ", none for %.0fh" % since if since and since >= 24 else ""),
               flush=True)
         save_state(clone, host, st)
         return False
-    print("twatch: bench %s (load %.1f)" % (sha[:12], load), flush=True)
+    print("twatch: bench %s (box at %.2fx of best)" % (sha[:12], ratio),
+          flush=True)
     set_phase(clone, host, "bench", sha=sha)
     clone.checkout(sha)
     tmp_tsv = os.path.join(tempfile.gettempdir(),
@@ -1764,9 +1832,9 @@ def run_bench_idle(clone, host, st, sha, abort_check=None):
         # Sampled throughout, not just at the start: the load that spoiled the
         # 2026-08-04 batch ARRIVED mid-batch, which a start-only check would
         # have called a quiet box.
-        during = load1()
-        if during > BENCH_QUIET_LOAD + BENCH_OWN_LOAD:
-            abandoned = "box stopped being quiet (load %.1f)" % during
+        during, _secs = box_speed(st)
+        if during > BENCH_PROBE_TOL:
+            abandoned = "box slowed to %.2fx of its best" % during
         elif abort_check and abort_check():
             abandoned, preempted = "new work preempts it", True
         if abandoned:

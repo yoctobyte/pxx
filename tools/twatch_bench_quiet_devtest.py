@@ -31,49 +31,49 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import twatch  # noqa: E402
 
-START = twatch.BENCH_QUIET_LOAD
-DURING = twatch.BENCH_QUIET_LOAD + twatch.BENCH_OWN_LOAD
+TOL = twatch.BENCH_PROBE_TOL
 
 
-def may_start(load):
+def may_start(ratio):
     """The predicate run_bench_idle applies before checking anything out."""
-    return not load > START
+    return not ratio > TOL
 
 
-def must_abandon(load, preempted=False):
+def must_abandon(ratio, preempted=False):
     """The predicate it applies on every poll while the batch runs."""
-    return load > DURING or preempted
+    return ratio > TOL or preempted
 
 
-def case_idle_box_benches():
-    assert may_start(0.4), "an idle box was refused"
-    assert not must_abandon(1.8), "our own batch's load abandoned it"
-    return f"load 0.4 starts; 1.8 (our own) keeps running"
+def case_quiet_box_benches():
+    assert may_start(1.00), "a quiet box was refused"
+    assert not must_abandon(1.00)
+    return "ratio 1.00 starts"
 
 
-def case_loaded_box_never_starts():
-    """Tonight's contamination came from a gate run, which put this box at
-    9-15. Anything in that region must not even begin."""
-    for load in (2.5, 9.1, 15.4):
-        assert not may_start(load), f"started a batch at load {load}"
-    return "2.5 / 9.1 / 15.4 all refused"
+def case_a_third_of_the_box_busy_is_fine():
+    """The point of the tolerance. Measured on the 12-core xeon: 4 busy cores
+    cost 9%. The box exists to be worked on, and ordinary agent work is 1-2
+    cores — refusing to bench through that would mean never benching."""
+    for ratio in (1.09, 1.19, 1.30):      # observed range for 4/12 busy + noise
+        assert may_start(ratio), f"4 busy cores of 12 blocked a batch at {ratio}"
+        assert not must_abandon(ratio)
+    return "1.09-1.30 (4 of 12 cores busy) still benches"
 
 
-def case_load_arriving_mid_batch_abandons():
-    """The case a start-only check gets wrong, and the one that actually
-    happened: the box was quiet when the batch began."""
-    assert may_start(0.5)
-    assert must_abandon(9.1), "a gate run mid-batch did not abandon it"
-    return "quiet at start, loaded later -> abandoned"
+def case_oversubscription_never_starts():
+    """Measured: 12 busy cores = 2.17x, and a full gate run (testmgr cap=24 on
+    12 cores) = 4.75x. That gate run is what inflated the 2026-08-04 batch."""
+    for ratio in (2.17, 4.75):
+        assert not may_start(ratio), f"started a batch at {ratio}x"
+    return "2.17x / 4.75x refused"
 
 
-def case_own_load_is_not_contention():
-    """The batch itself raises the load. If that counted, no batch could ever
-    finish — the threshold has to leave room for our own work."""
-    assert not must_abandon(START + 1.0), \
-        "the batch abandoned itself on its own load"
-    assert DURING > START, "no headroom for the batch's own load"
-    return f"{START + 1.0} tolerated while running (limit {DURING})"
+def case_slowdown_arriving_mid_batch_abandons():
+    """The case a start-only check gets wrong, and the one that happened: the
+    box was quiet when the batch began."""
+    assert may_start(1.02)
+    assert must_abandon(4.75), "a gate run mid-batch did not abandon it"
+    return "quiet at start, contended later -> abandoned"
 
 
 def case_push_preempts():
@@ -95,21 +95,59 @@ def case_skip_counter_is_consecutive():
     return "counts up, resets on a clean batch"
 
 
-def case_unknown_load_does_not_wedge():
-    """If /proc/loadavg cannot be read, benching must degrade to running, not
-    to never running again."""
-    assert may_start(twatch.load1() * 0), "a 0.0 (unknown) load blocked the batch"
-    return "unreadable load -> 0.0 -> allowed"
+def case_reference_is_self_calibrating():
+    """No per-box constant: the reference is this host's fastest probe, and a
+    faster one replaces it."""
+    st = {}
+    r1, t1 = twatch.box_speed(st)
+    assert r1 == 1.0, "the first probe on a fresh host must define the reference"
+    # a much FASTER best-ever reference => this same box now reads as slow
+    st["bench_probe_ref"] = t1 / 4
+    r2, _ = twatch.box_speed(st)
+    assert r2 > 2.0, f"a 4x-faster reference did not register as slow: {r2}"
+    # ...and a probe faster than the stored reference pulls the reference down
+    st["bench_probe_ref"] = t1 * 4
+    r3, _ = twatch.box_speed(st)
+    assert r3 == 1.0, f"a probe faster than the reference still read slow: {r3}"
+    assert st["bench_probe_ref"] < t1 * 4, "reference did not track downward"
+    return "min-so-far, updates downward"
+
+
+def case_reference_relaxes_rather_than_starving():
+    """A reference that becomes unreachable — thermal throttling, a governor
+    change, a Python upgrade — must not switch benching off permanently."""
+    st = {"bench_probe_ref": 0.001, "bench_skips": twatch.BENCH_SKIP_RELAX_AFTER}
+    before = st["bench_probe_ref"]
+    if st["bench_skips"] >= twatch.BENCH_SKIP_RELAX_AFTER:
+        st["bench_probe_ref"] *= twatch.BENCH_RELAX_FACTOR
+    assert st["bench_probe_ref"] > before, "reference never relaxes"
+    assert twatch.BENCH_RELAX_FACTOR < 1.2, "relaxation is too aggressive to trust"
+    return f"+{(twatch.BENCH_RELAX_FACTOR - 1) * 100:.0f}% after "\
+           f"{twatch.BENCH_SKIP_RELAX_AFTER} skips"
+
+
+def case_probe_is_compiler_independent():
+    """A probe that compiled something would slow down when the COMPILER
+    regressed, switching bench off exactly when there was something to measure."""
+    import inspect
+    src = inspect.getsource(twatch.speed_probe)
+    # everything after the docstring: the CODE, not the prose about it
+    src = src.split('"""')[2] if src.count('"""') >= 2 else src
+    for word in ("subprocess", "pascal26", "COMPILER", "make"):
+        assert word not in src, f"the probe reaches for {word!r}"
+    return "pure in-process integer work"
 
 
 CASES = [
-    case_idle_box_benches,
-    case_loaded_box_never_starts,
-    case_load_arriving_mid_batch_abandons,
-    case_own_load_is_not_contention,
+    case_quiet_box_benches,
+    case_a_third_of_the_box_busy_is_fine,
+    case_oversubscription_never_starts,
+    case_slowdown_arriving_mid_batch_abandons,
     case_push_preempts,
     case_skip_counter_is_consecutive,
-    case_unknown_load_does_not_wedge,
+    case_reference_is_self_calibrating,
+    case_reference_relaxes_rather_than_starving,
+    case_probe_is_compiler_independent,
 ]
 
 

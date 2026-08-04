@@ -140,3 +140,45 @@ written from.
   running.
 
 - 2026-08-04 — resolved, commit 713269e96.
+- 2026-08-04 (`claude@xeon`) — **gate replaced: speed probe, not loadavg**, after
+  the user pointed out that one bench a day is the goal, the box has 12 cores
+  and more work is planned for it, so the first cut was too strict.
+
+  Measuring instead of guessing showed loadavg was wrong in BOTH directions:
+
+  | busy cores | probe ratio | loadavg |
+  |---|---|---|
+  | 0 (quiet) | 1.00 | **17.22** |
+  | 4 | 1.09-1.19 | 16.88 |
+  | 12 | 1.65-2.17 | 17.62 |
+  | 24 (a full gate) | 2.64-4.75 | 21.53 |
+
+  loadavg is a 1-minute EXPONENTIAL AVERAGE, so it still read 17 on a box that
+  had gone quiet a minute earlier, and it could not separate quiet from 12 busy
+  cores. The shipped 2.0 threshold would have blocked benching for minutes
+  after every burst — the starvation this ticket was supposed to make visible,
+  caused by the fix itself — and could have waved a batch through at the start
+  of a fresh burst.
+
+  `speed_probe()` times a fixed in-process integer loop instead: the CPU
+  actually available to a single thread right now, which is what the bench
+  experiences. It deliberately does not compile anything — a compiler-based
+  probe would slow down when the COMPILER regressed and switch benching off
+  exactly when there was something worth measuring.
+
+  The reference is this host's fastest-ever probe (`bench_probe_ref`), so there
+  is no per-box constant and a new box calibrates itself; it relaxes 5% after 12
+  consecutive skips so an unreachable reference — thermal throttling, a governor
+  change, a Python upgrade — cannot switch benching off permanently.
+
+  Tolerance **1.35**, deliberately generous per the user's call: 4 of 12 cores
+  busy reads 1.05-1.19 and still benches, while 12 busy (1.65) and an
+  oversubscribed gate (2.64-4.75) refuse. Verified end to end against real
+  spinners, including that a recovered box benches IMMEDIATELY where loadavg
+  would still have been reading ~20.
+
+  Also: `box_speed` takes the min of 3 probes. A single probe's noise spans
+  ~10%, the same order as the contention worth detecting — the first end-to-end
+  run refused a 4-core-busy box at 1.19 purely on noise. Min, not mean: it is
+  the least-interrupted sample rather than an average of interruptions.
+
