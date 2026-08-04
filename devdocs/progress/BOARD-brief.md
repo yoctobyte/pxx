@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:9 blocked:7 backlog:175 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1335 rejected:28`
+`unfinished:9 blocked:7 backlog:174 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1336 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -33,9 +33,8 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 156, ranked
+## Ready — top 30 of 155, ranked
 
-- `[p 70] [T]` regression-test-c-conformance-shard2-6
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [T]` task-t-worktree-is-not-current-state
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
@@ -65,5 +64,6 @@ _none — no lane is locked._
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
 - `[p 55] [N]` feature-nilpy-corpus-uforth
+- `[p 55] [O]` feature-opt-heap-per-thread-cache
 
-_126 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_125 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

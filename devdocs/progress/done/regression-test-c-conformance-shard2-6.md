@@ -1,5 +1,7 @@
 ---
 prio: 70
+status: done
+owner: claude@xeon
 ---
 
 
@@ -35,3 +37,28 @@ test-c-conformance: FAILURES: 00219.c(compile)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Triage (Track T, 2026-08-04) — closed by its root cause
+
+The stub said it goes green when
+[[bug-c-plain-char-lost-its-type-identity-not-just-its-signedness]] does, and
+that ticket resolved in `0816af23f`. Verified from the watcher's published
+state rather than by re-running here (this checkout has no `c-testsuite`
+corpus, so the job would SKIP and a skip is not evidence):
+
+```
+pass   test-c-conformance#shard2/6
+pass   test-c-conformance-aarch64#shard2/6
+pass   test-c-conformance-arm32#shard2/6
+pass   test-c-conformance-i386#shard2/6
+pass   test-c-conformance-riscv32#shard2/6
+```
+
+xeon's job map currently holds **zero** non-passing entries, so the four cross
+variants are green too — the `_Generic` failure on `00219.c` was one root cause
+across all five, exactly as the stub predicted.
+
+No separate fix was needed and none is filed: this stub existed only to carry
+the signal until the owning lane landed the real one.
+
+- 2026-08-04 — resolved, commit PENDING-COMMIT.
