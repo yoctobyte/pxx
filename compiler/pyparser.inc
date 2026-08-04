@@ -5457,6 +5457,7 @@ begin
       PyPendLamTok[PyPendLamCount] := bStart;
       PyPendLamProc[PyPendLamCount] := lamProc;
       PyPendLamWrapReal[PyPendLamCount] := -1;   { not a callable-value wrapper }
+      PyPendLamPfx[PyPendLamCount] := PyNestPrefix;
       Inc(PyPendLamCount);
 
       { pyboundfn_new(addr, nBound, a0var=1) — the own param is a variant and
@@ -7636,6 +7637,7 @@ begin
   PyPendLamTok[PyPendLamCount] := -1;    { sentinel: hand-built body, not parsed }
   PyPendLamProc[PyPendLamCount] := wrapPi;
   PyPendLamWrapReal[PyPendLamCount] := realPi;
+  PyPendLamPfx[PyPendLamCount] := PyNestPrefix;
   Inc(PyPendLamCount);
   Result := wrapPi;
 end;
@@ -15584,14 +15586,27 @@ end;
   follows, and for the same reason: a lambda inside a lifted lambda would queue
   onto this list too. }
 procedure PyDrainPendingLambdas(mark: Integer);
-var savedTok: Integer;
+var savedTok: Integer; savedPfx: AnsiString;
 begin
   while PyPendLamCount > mark do
   begin
     Dec(PyPendLamCount);
     savedTok := TokPos;
+    { RESTORE the nest prefix the lambda was WRITTEN under, the same way the
+      nested-def drain in PyParseDef restores PyPendNestPfx. A lifted lambda's
+      body is compiled after the enclosing def's epilogue, by which point
+      PyNestPrefix has been popped back to the enclosing scope's — so a call to
+      a SIBLING NESTED def could not be qualified and failed with "undefined
+      variable (add)". It had nothing to do with captures or with the lambda's
+      position, which is how the ticket originally read it: a NON-capturing
+      sibling and an argument-position lambda failed identically, while a
+      top-level callee worked (bug-nilpy-lambda-over-a-capturing-nested-def-
+      does-not-compile). }
+    savedPfx := PyNestPrefix;
+    PyNestPrefix := PyPendLamPfx[PyPendLamCount];
     PyCompileLambdaBody(PyPendLamProc[PyPendLamCount], PyPendLamTok[PyPendLamCount],
                         PyPendLamWrapReal[PyPendLamCount]);
+    PyNestPrefix := savedPfx;
     TokPos := savedTok - 1;
     Next;
   end;

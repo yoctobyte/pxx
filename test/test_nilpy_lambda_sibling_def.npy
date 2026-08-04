@@ -1,0 +1,79 @@
+# A lambda could not call a SIBLING NESTED def
+# (bug-nilpy-lambda-over-a-capturing-nested-def-does-not-compile):
+#
+#     def outer():
+#         def add(v): return v + 1
+#         g = lambda: add(10)      # error: undefined variable (add)
+#
+# The ticket read this as a CAPTURE problem — "capturing an enclosing parameter
+# rather than self" — and it is not. Measured: a NON-capturing sibling fails
+# identically, an argument-position lambda fails identically, and a TOP-LEVEL
+# callee works. The axis is only "is the callee a sibling nested def".
+#
+# Cause: a lifted lambda's body is compiled after the enclosing def's epilogue,
+# by which point PyNestPrefix has been popped back to the enclosing scope's — so
+# PyQualifyNested could not turn `add` into `outer.add`. The nested-def queue
+# beside it already carried its prefix (PyPendNestPfx) for exactly this reason;
+# the lambda queue now carries one too.
+#
+# Every expectation is CPython's.
+
+def outer_nocap():
+    def add(v):
+        return v + 1
+    g = lambda: add(10)
+    return g()
+
+def outer_cap(base):
+    def add(v):
+        return v + base
+    g = lambda: add(10)
+    return g()
+
+def outer_expr(base):
+    def add(v):
+        return v + base
+    g = lambda: add(10) + 1
+    return g()
+
+def call(f):
+    return f()
+
+def outer_arg():
+    def add(v):
+        return v + 1
+    return call(lambda: add(10))
+
+# controls that worked before and must keep working
+def top_add(v):
+    return v + 1
+
+def outer_toplevel():
+    g = lambda: top_add(10)
+    return g()
+
+def outer_direct(base):
+    g = lambda: base + 1
+    return g()
+
+def outer_sibling_def():
+    def add(v):
+        return v + 1
+    def use():
+        return add(10)
+    return use()
+
+print(outer_nocap(), outer_cap(5), outer_expr(5), outer_arg())
+print(outer_toplevel(), outer_direct(5), outer_sibling_def())
+
+# a lambda over a sibling nested def inside a METHOD, where the sibling does NOT
+# capture self — the self-capturing variant is a separate, pre-existing defect
+# (bug-nilpy-nested-def-capturing-self-called-from-a-sibling-returns-nothing)
+class C:
+    def run(self):
+        def draw(v):
+            return v + 1
+        g = lambda: draw(10)
+        return g()
+
+print(C().run())

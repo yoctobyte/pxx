@@ -1375,6 +1375,12 @@ test-nilpy: $(COMPILER)
 	# decimal expansion. Every value here is now CPython's.
 	./$(COMPILER) test/test_nilpy_round.npy /tmp/test_nilpy_round26
 	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.67 2.67\n9.99 0.04 0.3 100.0\n1.0 0.0 -0.0 0.0')"
+	# A lambda could not call a SIBLING NESTED def — the lifted body is compiled
+	# after the enclosing def's epilogue, when PyNestPrefix has been popped, so the
+	# name could not be qualified. Not a capture problem: a non-capturing sibling
+	# failed identically. See the test's header.
+	./$(COMPILER) test/test_nilpy_lambda_sibling_def.npy /tmp/test_nilpy_lamsib26
+	test "$$(/tmp/test_nilpy_lamsib26)" = "$$(printf '%b' '11 15 16 11\n11 6 11\n11')"
 	# The stdlib shim table builds a call by NAME (FindProc), which never consults
 	# overloads — so adding an overload for a case it got wrong did NOTHING,
 	# silently. The call site now re-targets by ARITY. See the test's header.

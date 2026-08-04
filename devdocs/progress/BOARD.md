@@ -52,7 +52,6 @@ _none_
 | bug-nilpy-dict-mutation-during-iteration-is-unobserved-not-raised | N | 35 | bug | Mutating a dict while iterating it is silently unobserved; CPython raises RuntimeError 'dictionary changed size during iteration' | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant | N | 55 | bug | `a == b` skips __eq__ and compares identity as soon as ONE operand is a variant (a container element, a for-in variable). Both-static works, so the dunder LOOKS wired up; `a == xs[0]` is silently False. | — |
-| bug-nilpy-lambda-over-a-capturing-nested-def-does-not-compile | N | 50 | bug | `def outer(base): def add(v): return v+base; g = lambda: add(10)` fails to COMPILE with `undefined variable (add)` — the transitive-capture path PyParseLambdaStub documents does not fire for this shape. Pre-existing, and independent of the body's shape. | — |
 | bug-nilpy-list-mutators-return-self-instead-of-none | N | 40 | bug | list.append/extend/sort/reverse return Self, so `x = l.sort()` yields the LIST where Python yields None — silent, and the return is load-bearing for the comprehension desugar | — |
 | bug-nilpy-list-of-custom-objects-loses-repr-str | N | 40 | bug | A user class instance boxed in a list/dict prints as empty, losing `__repr__`/`__str__` | — |
 | bug-nilpy-list-sort-ignores-lt-dunder-on-objects | N | 35 | bug | `list.sort()` on user objects with `__lt__` raises a runtime TypeError instead of using it | — |
@@ -60,6 +59,7 @@ _none_
 | bug-nilpy-missing-index-dunder-raises-indexerror-not-typeerror | N | 35 | bug | Indexing a sequence with an object that has no __index__ raises IndexError (the handle used as a position) where CPython raises TypeError — loud but misleading, and a small handle would index the wrong element instead | — |
 | bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch | N | 45 | bug | NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a user class — dispatch is compile-time only. Scalar-then-class rebinding is just one way to get a variant. | feature-nilpy-runtime-dunder-dispatch-on-variants |
 | bug-nilpy-multiple-inheritance-does-not-parse | N | 40 | bug | class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable | — |
+| bug-nilpy-nested-def-capturing-self-called-from-a-sibling-returns-nothing | N | 50 | bug | Inside a METHOD, a nested def that captures self returns nothing when called from a SIBLING nested def — `C().run()` prints an empty line where CPython prints 17. Pre-existing (identical on pinned), and needs no lambda to reproduce. | — |
 | bug-nilpy-nested-for-comprehension-not-supported | N | 45 | bug | A comprehension with TWO for-clauses — [c for r in rows for c in r] — fails with 'undefined variable (c)'; the flatten idiom is unavailable | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
@@ -338,9 +338,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1310)
+## done (1311)
 
-1310 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1311 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -420,7 +420,7 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [U] decide-pxxpdf-ticket-obsolete (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
-- [p 50] [N] bug-nilpy-lambda-over-a-capturing-nested-def-does-not-compile
+- [p 50] [N] bug-nilpy-nested-def-capturing-self-called-from-a-sibling-returns-nothing
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
 - [p 50] [T] bug-tstate-xeon-cross-jobs-red-missing-corpora
 - [p 50] [D] docs-devnotes-ai-assisted-build

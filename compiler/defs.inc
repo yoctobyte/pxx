@@ -1660,6 +1660,13 @@ var
     `def` token, plus the proc the header already registered. }
   PyPendLamTok: array[0..PY_MAX_NESTED-1] of Integer;    { token index of the body expression }
   PyPendLamProc: array[0..PY_MAX_NESTED-1] of Integer;   { the proc registered for it }
+  { The NEST PREFIX in force where the lambda was written. A lifted lambda's
+    body is compiled long after its enclosing def's prefix has been popped, so
+    without carrying it a call to a SIBLING NESTED def could not be qualified
+    and reported "undefined variable" — the nested-def queue beside this one
+    carries PyPendNestPfx for exactly the same reason
+    (bug-nilpy-lambda-over-a-capturing-nested-def-does-not-compile). }
+  PyPendLamPfx: array[0..PY_MAX_NESTED-1] of AnsiString;
   PyPendLamCount: Integer;
   PyLamSeq: Integer;                        { serial for the synthetic lambda name }
   { A CALLABLE-VALUE WRAPPER's body, queued on the SAME lambda queue (same
