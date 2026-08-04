@@ -1375,6 +1375,12 @@ test-nilpy: $(COMPILER)
 	# decimal expansion. Every value here is now CPython's.
 	./$(COMPILER) test/test_nilpy_round.npy /tmp/test_nilpy_round26
 	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.67 2.67\n9.99 0.04 0.3 100.0\n1.0 0.0 -0.0 0.0')"
+	# A nested def in a METHOD reading self.<field> inferred its RETURN TYPE from
+	# the RECEIVER, not the field, so the caller read the field slot as an object
+	# pointer and printed an empty line. PyInferExprType's receiver branch required
+	# a '(' and so only ever handled obj.method(...). See the test's header.
+	./$(COMPILER) test/test_nilpy_nested_def_self_field.npy /tmp/test_nilpy_nselffld26
+	test "$$(/tmp/test_nilpy_nselffld26)" = "$$(printf '%b' '17 7 17 17\n17 hi 17\n3 6')"
 	# A lambda could not call a SIBLING NESTED def — the lifted body is compiled
 	# after the enclosing def's epilogue, when PyNestPrefix has been popped, so the
 	# name could not be qualified. Not a capture problem: a non-capturing sibling

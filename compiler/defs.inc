@@ -1652,6 +1652,15 @@ var
   PyNestPrefix: AnsiString;                 { qualifier for defs nested in the body being parsed }
   PyPendNestTok: array[0..PY_MAX_NESTED-1] of Integer;   { token index of each queued nested def }
   PyPendNestPfx: array[0..PY_MAX_NESTED-1] of AnsiString;{ the qualifier it must register under }
+  { CurSelfClass in force where the nested def was WRITTEN. Its body is compiled
+    after the enclosing METHOD's epilogue, which restores CurSelfClass first — so
+    `self.<field>` in a nested def had no class to resolve against and its
+    RETURN TYPE was inferred wrong, silently: `def draw(v): return v + self.n`
+    inside a method printed an empty line where CPython printed 17, while an
+    explicit `-> int` made it correct
+    (bug-nilpy-nested-def-capturing-self-called-from-a-sibling-returns-nothing).
+    Carried per entry for the same reason PyPendNestPfx is. }
+  PyPendNestSelf: array[0..PY_MAX_NESTED-1] of Integer;
   PyPendNestCount: Integer;
   { A LIFTED LAMBDA's body, queued exactly like a nested def's: a lambda whose
     shape the lifter accepts becomes a real proc whose body is compiled once the
@@ -1667,6 +1676,7 @@ var
     carries PyPendNestPfx for exactly the same reason
     (bug-nilpy-lambda-over-a-capturing-nested-def-does-not-compile). }
   PyPendLamPfx: array[0..PY_MAX_NESTED-1] of AnsiString;
+  PyPendLamSelf: array[0..PY_MAX_NESTED-1] of Integer;  { ...and the same for a lifted lambda }
   PyPendLamCount: Integer;
   PyLamSeq: Integer;                        { serial for the synthetic lambda name }
   { A CALLABLE-VALUE WRAPPER's body, queued on the SAME lambda queue (same

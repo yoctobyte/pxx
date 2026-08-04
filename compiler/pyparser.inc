@@ -2806,6 +2806,7 @@ end;
 
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
+    fldCi, fldAt: Integer; fldTk: TTypeKind;
     name, lo, smPName: AnsiString;
 begin
   Result := tyUnknown;
@@ -3051,6 +3052,74 @@ begin
         if (ci >= 0) and (PyLocals[ci].RecCi >= 0) then rcvCi := PyLocals[ci].RecCi
         else if (name = 'self') and (CurSelfClass >= REC_UCLASS_BASE) then
           rcvCi := CurSelfClass - REC_UCLASS_BASE;
+        { A plain FIELD READ on a class-typed receiver — `self.n`, with NO '('.
+          The method branch below requires one, so a field read fell straight
+          through and the expression took its type from the RECEIVER instead:
+          `def draw(v): return v + self.n` inside a method inferred a CLASS
+          result, the caller read the field slot as an object pointer, and
+          `print(C().run())` produced an empty line where CPython printed 17 —
+          silent, and only for a nested def, because a method body itself never
+          asks this scanner. An explicit `-> int` made it correct, which is what
+          identifies it as return-type INFERENCE rather than the capture (the
+          capture is fine: `print(self.n)` inside the same nested def prints 7).
+          bug-nilpy-nested-def-capturing-self-called-from-a-sibling-returns-nothing }
+        if rcvCi >= 0 then
+        begin
+          { Walk the whole `.field.field…` CHAIN, so `self.inner.k` resolves
+            through the intermediate class rather than stopping at the first
+            segment. A trailing `.method(...)` is resolved too, which is what
+            keeps a chain ending in a call from being typed by the last FIELD. }
+          fldCi := rcvCi;
+          fldAt := i;
+          fldTk := tyUnknown;
+          while (fldCi >= 0) and (fldAt + 2 < endIdx) and
+                (Tokens[fldAt + 1].Kind = tkDot) and
+                (Tokens[fldAt + 2].Kind = tkIdent) and
+                ((fldAt + 3 >= endIdx) or (Tokens[fldAt + 3].Kind <> tkLParen)) do
+          begin
+            si := FindUField(fldCi, GetTokenStr(fldAt + 2));
+            if si < 0 then Break;
+            fldTk := IntToTypeKind(UFldTk[si]);
+            if (fldTk = tyClass) and (UFldRec_[si] >= REC_UCLASS_BASE) then
+            begin
+              fldCi := UFldRec_[si] - REC_UCLASS_BASE;
+              PyInferLastCi := fldCi;
+            end
+            else fldCi := -1;
+            fldAt := fldAt + 2;
+          end;
+          { …and a method call closing the chain: `self.inner.get()`. }
+          if (fldCi >= 0) and (fldAt > i) and (fldAt + 3 < endIdx) and
+             (Tokens[fldAt + 1].Kind = tkDot) and
+             (Tokens[fldAt + 2].Kind = tkIdent) and
+             (Tokens[fldAt + 3].Kind = tkLParen) then
+          begin
+            si := FindUMeth(fldCi, GetTokenStr(fldAt + 2));
+            if si >= 0 then
+            begin
+              fldTk := Procs[UMthProc_[si]].RetType;
+              if (fldTk = tyClass) and (ProcRetRecId[UMthProc_[si]] >= REC_UCLASS_BASE) then
+                PyInferLastCi := ProcRetRecId[UMthProc_[si]] - REC_UCLASS_BASE;
+              fldAt := fldAt + 3; depth := 0;
+              while fldAt < endIdx do
+              begin
+                if Tokens[fldAt].Kind = tkLParen then Inc(depth)
+                else if Tokens[fldAt].Kind = tkRParen then
+                begin
+                  Dec(depth);
+                  if depth = 0 then Break;
+                end;
+                Inc(fldAt);
+              end;
+            end;
+          end;
+          if (fldAt > i) and (fldTk <> tyUnknown) then
+          begin
+            Result := PyWiden(Result, fldTk);
+            i := fldAt + 1;
+            Continue;
+          end;
+        end;
         if (rcvCi >= 0) and
            (i + 3 < endIdx) and (Tokens[i + 1].Kind = tkDot) and
            (Tokens[i + 2].Kind = tkIdent) and (Tokens[i + 3].Kind = tkLParen) then
@@ -5458,6 +5527,7 @@ begin
       PyPendLamProc[PyPendLamCount] := lamProc;
       PyPendLamWrapReal[PyPendLamCount] := -1;   { not a callable-value wrapper }
       PyPendLamPfx[PyPendLamCount] := PyNestPrefix;
+      PyPendLamSelf[PyPendLamCount] := CurSelfClass;
       Inc(PyPendLamCount);
 
       { pyboundfn_new(addr, nBound, a0var=1) — the own param is a variant and
@@ -7638,6 +7708,7 @@ begin
   PyPendLamProc[PyPendLamCount] := wrapPi;
   PyPendLamWrapReal[PyPendLamCount] := realPi;
   PyPendLamPfx[PyPendLamCount] := PyNestPrefix;
+  PyPendLamSelf[PyPendLamCount] := CurSelfClass;
   Inc(PyPendLamCount);
   Result := wrapPi;
 end;
@@ -13512,6 +13583,7 @@ begin
       Error('Nil Python: too many nested defs in one body');
     PyPendNestTok[PyPendNestCount] := defTok;
     PyPendNestPfx[PyPendNestCount] := PyNestPrefix;
+    PyPendNestSelf[PyPendNestCount] := CurSelfClass;
     Inc(PyPendNestCount);
   end;
   Result := -1;
@@ -15586,7 +15658,7 @@ end;
   follows, and for the same reason: a lambda inside a lifted lambda would queue
   onto this list too. }
 procedure PyDrainPendingLambdas(mark: Integer);
-var savedTok: Integer; savedPfx: AnsiString;
+var savedTok, savedSelf: Integer; savedPfx: AnsiString;
 begin
   while PyPendLamCount > mark do
   begin
@@ -15603,9 +15675,12 @@ begin
       top-level callee worked (bug-nilpy-lambda-over-a-capturing-nested-def-
       does-not-compile). }
     savedPfx := PyNestPrefix;
+    savedSelf := CurSelfClass;
     PyNestPrefix := PyPendLamPfx[PyPendLamCount];
+    CurSelfClass := PyPendLamSelf[PyPendLamCount];
     PyCompileLambdaBody(PyPendLamProc[PyPendLamCount], PyPendLamTok[PyPendLamCount],
                         PyPendLamWrapReal[PyPendLamCount]);
+    CurSelfClass := savedSelf;
     PyNestPrefix := savedPfx;
     TokPos := savedTok - 1;
     Next;
@@ -15615,7 +15690,7 @@ end;
 procedure PyParseDef;
 var name, savedPfx, savedPfx2: AnsiString;
     nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyNode: Integer;
-    savedNest, savedTok, savedLam, savedHoist: Integer;
+    savedNest, savedTok, savedLam, savedHoist, savedSelf2: Integer;
     savedDefGlobals: array[0..PY_MAX_DEF_GLOBALS-1] of AnsiString;
     savedDefGlobalCount, dgI: Integer;
     retType: TTypeKind; isProc, capByRef: Boolean;
@@ -15869,10 +15944,19 @@ begin
     Dec(PyPendNestCount);
     savedTok := TokPos;
     savedPfx2 := PyNestPrefix;
+    { ...and the CLASS `self` stands for. This drain runs after the enclosing
+      method's epilogue has already restored CurSelfClass, so without carrying
+      it a nested def's `self.<field>` had no class to resolve against and its
+      RETURN TYPE came out wrong — silently, and only for `self`: the same
+      nested def capturing a method LOCAL or PARAM was correct
+      (bug-nilpy-nested-def-capturing-self-called-from-a-sibling-returns-nothing). }
+    savedSelf2 := CurSelfClass;
     PyNestPrefix := PyPendNestPfx[PyPendNestCount];
+    CurSelfClass := PyPendNestSelf[PyPendNestCount];
     TokPos := PyPendNestTok[PyPendNestCount];
     Next;
     PyParseDef;
+    CurSelfClass := savedSelf2;
     PyNestPrefix := savedPfx2;
     TokPos := savedTok - 1;
     Next;
@@ -17567,7 +17651,7 @@ var savedHoist: Integer; clsAttrSeq: Integer;
     ptypes: array[0..15] of TTypeKind; pcis: array[0..15] of Integer;
     psigs: array[0..15] of Integer;   { Callable signature per parameter, or -1 }
     isCtor: Boolean; isKwP: Boolean; starCi: Integer;
-    savedNest, savedTok, savedLam: Integer; savedPfx, savedPfx2: AnsiString;
+    savedNest, savedTok, savedLam, savedSelf2: Integer; savedPfx, savedPfx2: AnsiString;
     savedDefGlobals: array[0..PY_MAX_DEF_GLOBALS-1] of AnsiString;
     savedDefGlobalCount, dgI: Integer;
 begin
@@ -17802,10 +17886,19 @@ begin
     Dec(PyPendNestCount);
     savedTok := TokPos;
     savedPfx2 := PyNestPrefix;
+    { ...and the CLASS `self` stands for. This drain runs after the enclosing
+      method's epilogue has already restored CurSelfClass, so without carrying
+      it a nested def's `self.<field>` had no class to resolve against and its
+      RETURN TYPE came out wrong — silently, and only for `self`: the same
+      nested def capturing a method LOCAL or PARAM was correct
+      (bug-nilpy-nested-def-capturing-self-called-from-a-sibling-returns-nothing). }
+    savedSelf2 := CurSelfClass;
     PyNestPrefix := PyPendNestPfx[PyPendNestCount];
+    CurSelfClass := PyPendNestSelf[PyPendNestCount];
     TokPos := PyPendNestTok[PyPendNestCount];
     Next;
     PyParseDef;
+    CurSelfClass := savedSelf2;
     PyNestPrefix := savedPfx2;
     TokPos := savedTok - 1;
     Next;
@@ -19047,6 +19140,7 @@ procedure ParsePyUnit(const uname: AnsiString);
 var stmt, seqNode, lastSeq, procIdx, patchPos, savedSC, savedFS: Integer;
     dbgI: Integer;
     savedScanLo, savedMainTok, savedNest, savedLam, savedHoist, savedFloor: Integer;
+    savedSelf2: Integer;
     savedExprMode: Boolean;
     dummyNames: array[0..0] of AnsiString;
     dummyTypes: array[0..0] of TTypeKind;
@@ -19196,10 +19290,13 @@ begin
   begin
     Dec(PyPendNestCount);
     stmt := TokPos;
+    savedSelf2 := CurSelfClass;
     PyNestPrefix := PyPendNestPfx[PyPendNestCount];
+    CurSelfClass := PyPendNestSelf[PyPendNestCount];
     TokPos := PyPendNestTok[PyPendNestCount];
     Next;
     PyParseDef;
+    CurSelfClass := savedSelf2;
     PyNestPrefix := '';
     TokPos := stmt - 1;
     Next;

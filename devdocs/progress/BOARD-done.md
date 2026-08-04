@@ -498,6 +498,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-module-level-name-bound-in-a-block-is-invisible-to-a-later-assignment | N | 55 | bug | nilpy: at module level, a name first bound inside if/for/with is 'undefined variable' on the RHS of a later top-level assignment | — |
 | bug-nilpy-ne-dunder-ignored-always-negates-eq | N | 50 | bug | NilPy: a user-defined __ne__ is never consulted — `!=` always negates __eq__, silently returning the wrong value when they differ | — |
 | bug-nilpy-nested-def-capture-sets-are-not-final | N | 85 | bug | A nested def's capture set is read before it is final | — |
+| bug-nilpy-nested-def-capturing-self-called-from-a-sibling-returns-nothing | N | 50 | bug | Inside a METHOD, a nested def that captures self returns nothing when called from a SIBLING nested def — `C().run()` prints an empty line where CPython prints 17. Pre-existing (identical on pinned), and needs no lambda to reproduce. | — |
 | bug-nilpy-nested-def-nonint-result-garbage | N | 75 | bug | A nested def's non-integer result is read as a number — silent garbage | — |
 | bug-nilpy-non-literal-class-attribute-corrupts-the-class-layout | N | 70 | bug | A class attribute with a NON-LITERAL initialiser (`g = 2 + 3`) corrupts the class: a method returning a tuple of two OTHER class attributes then prints nothing or segfaults. Deleting the unused attribute fixes it | — |
 | bug-nilpy-none-equals-zero-is-true | N | 65 | bug | `0 == None` is True, and `None == 0` does not parse | — |

@@ -1,0 +1,91 @@
+# A nested def inside a METHOD that reads `self.<field>` inferred its RETURN
+# TYPE from the RECEIVER instead of the field, so the caller read the field slot
+# as an object pointer and the program printed an empty line where CPython
+# printed 17 — silent, no diagnostic
+# (bug-nilpy-nested-def-capturing-self-called-from-a-sibling-returns-nothing).
+#
+# What it is NOT: the capture is fine (`print(self.n)` inside the same nested
+# def prints 7), and a nested def capturing a method LOCAL or PARAM was always
+# correct. `self` was special, and an explicit `-> int` made it work, which is
+# what identifies it as return-type inference.
+#
+# Cause: PyInferExprType's receiver-class branch required a '(' — it only ever
+# handled `obj.method(...)`, so a plain FIELD READ fell through and the
+# expression took its type from `self`. It now walks the whole `.field.field…`
+# chain, and a trailing `.method(...)` closing that chain.
+#
+# NOTE the nested defs are named per-method rather than all `draw`: two methods
+# of one class cannot both declare a nested def of the SAME name — a separate,
+# pre-existing defect
+# (bug-nilpy-same-named-nested-defs-in-two-methods-collide).
+#
+# Every expectation is CPython's.
+
+class Inner:
+    def __init__(self):
+        self.k = 3
+    def twice(self):
+        return self.k * 2
+
+class C:
+    def __init__(self):
+        self.n = 7
+        self.s = "hi"
+        self.inner = Inner()
+
+    def get(self):
+        return self.n
+
+    def direct(self):
+        def d5(v):
+            return v + self.n
+        return d5(10)
+
+    def bare(self):
+        def d6():
+            return self.n
+        return d6()
+
+    def via_local(self):
+        def d7(v):
+            x = self.n
+            return v + x
+        return d7(10)
+
+    def via_sibling(self):
+        def d8(v):
+            return v + self.n
+        def use():
+            return d8(10)
+        return use()
+
+    def via_lambda(self):
+        def d9(v):
+            return v + self.n
+        g = lambda: d9(10)
+        return g()
+
+    def str_field(self):
+        def d10():
+            return self.s
+        return d10()
+
+    def method_call(self):
+        def d11(v):
+            return v + self.get()
+        return d11(10)
+
+    def chained_field(self):
+        def d12():
+            return self.inner.k
+        return d12()
+
+    def chained_method(self):
+        def d13():
+            return self.inner.twice()
+        return d13()
+
+c = C()
+print(c.direct(), c.bare(), c.via_local(), c.via_sibling())
+print(c.via_lambda(), c.str_field(), c.method_call())
+print(c.chained_field(), c.chained_method())

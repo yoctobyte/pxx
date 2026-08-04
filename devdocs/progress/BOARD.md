@@ -59,7 +59,6 @@ _none_
 | bug-nilpy-missing-index-dunder-raises-indexerror-not-typeerror | N | 35 | bug | Indexing a sequence with an object that has no __index__ raises IndexError (the handle used as a position) where CPython raises TypeError — loud but misleading, and a small handle would index the wrong element instead | — |
 | bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch | N | 45 | bug | NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a user class — dispatch is compile-time only. Scalar-then-class rebinding is just one way to get a variant. | feature-nilpy-runtime-dunder-dispatch-on-variants |
 | bug-nilpy-multiple-inheritance-does-not-parse | N | 40 | bug | class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable | — |
-| bug-nilpy-nested-def-capturing-self-called-from-a-sibling-returns-nothing | N | 50 | bug | Inside a METHOD, a nested def that captures self returns nothing when called from a SIBLING nested def — `C().run()` prints an empty line where CPython prints 17. Pre-existing (identical on pinned), and needs no lambda to reproduce. | — |
 | bug-nilpy-nested-for-comprehension-not-supported | N | 45 | bug | A comprehension with TWO for-clauses — [c for r in rows for c in r] — fails with 'undefined variable (c)'; the flatten idiom is unavailable | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
@@ -69,6 +68,7 @@ _none_
 | bug-nilpy-pypow-integer-overflow-does-not-promote | N | 35 | bug | `pypow_v`'s integer path silently wraps past 64 bits instead of promoting | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
 | bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | decide-nilpy-set-as-a-distinct-type-or-a-list |
+| bug-nilpy-same-named-nested-defs-in-two-methods-collide | N | 45 | bug | Two methods of one class cannot both declare a nested def of the same name — the second call binds the first method's def and fails on arity. Pre-existing; loud. | — |
 | bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-nilpy-user-def-len-of-a-container-still-binds-the-builtin | N | 45 | bug | `def len(x)` shadows the builtin for a STRING argument but not for a list/dict — the container call still reaches pylib's len and prints its answer silently. Residue of bug-nilpy-user-def-does-not-shadow-a-pylib-builtin, which fixed 14 of 15 builtins. | — |
@@ -338,9 +338,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1311)
+## done (1312)
 
-1311 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1312 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -420,7 +420,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [U] decide-pxxpdf-ticket-obsolete (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
-- [p 50] [N] bug-nilpy-nested-def-capturing-self-called-from-a-sibling-returns-nothing
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
 - [p 50] [T] bug-tstate-xeon-cross-jobs-red-missing-corpora
 - [p 50] [D] docs-devnotes-ai-assisted-build
@@ -443,6 +442,7 @@ _none_
 - [p 45] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 45] [N] bug-nilpy-print-stringifies-container-args-eagerly
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
+- [p 45] [N] bug-nilpy-same-named-nested-defs-in-two-methods-collide
 - [p 45] [N] bug-nilpy-user-def-len-of-a-container-still-binds-the-builtin
 - [p 45] [P] bug-pascal-member-check-missing-on-the-lvalue-field-path
 - [p 45] [A] chore-makefile-testtmp-parameterize
