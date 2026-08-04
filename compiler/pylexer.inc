@@ -548,6 +548,10 @@ var
   lineSawColon: Boolean;     { ...and its depth-0 `:` has been passed }
   inlineSuite: Boolean;      { ...and an INDENT was synthesised, so a DEDENT is owed }
   peekP: Integer;
+  { where THIS lex started writing. Not always 0: PyLexAppend leaves the stream
+    in place and appends a `.py` module after it, so "no token emitted yet, hence
+    a line start" has to be asked about this invocation, not about the stream. }
+  streamBase: Integer;
   HasSpaceIndent: Boolean;
   HasTabIndent: Boolean;
   IndentWidth: Integer;
@@ -567,6 +571,7 @@ begin
     TokCount := 0;
     TokCharLen := 0;
   end;
+  streamBase := TokCount;
   P := 1;
   SrcLine := 1;
 
@@ -700,7 +705,8 @@ begin
           possible at all — `x = {1: 2}` must not be mistaken for a header }
         if (parenDepth = 0) and (not lineSawColon) and
            ((k = tkFunction) or (k = tkClass)) and
-           ((TokCount = 0) or (Tokens[TokCount - 1].Kind in [tkNewline, tkIndent, tkDedent])) then
+           ((TokCount = streamBase) or
+            (Tokens[TokCount - 1].Kind in [tkNewline, tkIndent, tkDedent])) then
           lineIsDefClass := True;
         PyEmitToken(k, 0, SrcLine, s);
         continue;

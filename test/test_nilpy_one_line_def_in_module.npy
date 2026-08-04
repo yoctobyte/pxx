@@ -1,0 +1,41 @@
+# bug-nilpy-one-line-def-and-class-bodies-do-not-parse — the IMPORTED-MODULE half.
+#
+# The main-file half landed in a843c17d4, which normalises Python's one-line
+# suite in the LEXER: when a logical line opens with `def`/`class` and its
+# depth-0 `:` is followed by real code, emit NEWLINE INDENT after the colon and
+# DEDENT after the line's newline, so every token-level body scanner
+# (PyRegisterDefShells, PyCollectModuleLocalsAST, PyScanDefGlobals) sees the
+# shape it already understands.
+#
+# That rule fires only when `def`/`class` opens the logical line, which was
+# tested as "TokCount = 0, or the previous token is a line break". Both clauses
+# are about the WHOLE token stream — but PyLexAppend lexes an imported `.py`
+# module on top of the importing program's tokens. At the module's first token
+# TokCount is not 0, and the previous token is the MAIN file's tkEOF, so a
+# one-line def on a module's first line was not recognised and the module failed
+# with a bare "unexpected token" (reported against the importing file's line
+# numbering, which is why it pointed at an unrelated line).
+#
+# Measured before fixing: the same one-line def one line FURTHER DOWN the module
+# compiled and ran correctly, which is what isolated the guard rather than the
+# normalisation itself.
+#
+# Diffed against CPython (tools/pydiff.py).
+
+import nilpy_onelinemod
+
+# the bug: a one-line def as the module's very first logical line
+print(nilpy_onelinemod.get())
+
+# controls — these already worked, and must keep working
+print(nilpy_onelinemod.CONST)
+print(nilpy_onelinemod.later())
+print(nilpy_onelinemod.indented())
+
+# a one-line `class C: pass` in a module, and an instance of it
+k = nilpy_onelinemod.mk()
+print(type(k).__name__)
+
+# one-line methods inside an ordinary indented class body in a module
+h = nilpy_onelinemod.Holder(21)
+print(h.v, h.doubled())

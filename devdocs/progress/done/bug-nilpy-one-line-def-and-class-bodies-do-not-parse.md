@@ -2,6 +2,8 @@
 track: N
 prio: 60
 type: bug
+status: done
+owner: claude-AN
 ---
 
 # One-line `def` and `class` bodies do not parse
@@ -183,3 +185,84 @@ body, which nothing above addresses.
 and reproduces on the indented spelling too, so it is not fallout; but it does
 mean the obvious next test to write for one-line classes (an exception hierarchy)
 hits a different bug first, which is worth knowing before writing it.
+
+## 2026-08-04 — the "What is left" list above is STALE; the real residue was the IMPORTED-MODULE half, now fixed
+
+**Read the section above with this correction in front of it.** Its five-site
+plan (`PyParseDefHeader` still ends `Expect(tkIndent)`, route `PyParseDef`
+through `PyParseSuite`, teach `PyRegisterDefShells` / `PyCollectModuleLocalsAST`
+/ `PyAllocModuleGlobals` a second body shape) describes work that was **never
+needed and never done**. `a843c17d4` (2026-08-03) solved the def half from the
+opposite end and the ticket was never updated.
+
+### What a843c17d4 actually did, and why the site list evaporated
+
+It normalises the one-line suite **in the LEXER**: when a logical line opens with
+`def`/`class` and its depth-0 `:` is followed by anything but a comment or the
+line end, `PyLexAll` emits `NEWLINE INDENT` after the colon and the owed `DEDENT`
+after that line's own newline (`compiler/pylexer.inc:531-550`, `1022-1036`,
+`1108-1112`). The `IndentStack` is untouched — the pair opens and closes inside
+one physical line.
+
+So the body **has** a real `tkIndent`, and every token-level scanner the ticket
+lists sees the shape it already understood. That is this ticket's own demand —
+"make the notion of a def BODY independent of INDENT everywhere it is currently
+inferred from INDENT" — met by making the INDENT exist rather than by teaching
+six consumers to live without it. Sites 1, 2, 3, 5 and 6 need no change, and
+site 3's premise is simply false at HEAD: `PyRegisterDefShells` does not walk
+`while Tokens[j].Kind <> tkIndent`.
+
+Measured at HEAD before touching anything (`make compiler/pascal26`,
+604f30b53 + the fix below): `def f(): return 5`, one-line methods in an
+indented class body, chained one-line defs, and a one-line def whose body is a
+bare call all match CPython. `def s(): y = 5` then reading `y` at module scope
+is reported as a compile-time `undefined variable (y)` where CPython raises
+`NameError` at run time — a static-vs-dynamic divergence, **not** the feared
+global-harvest: the name is not widened to a module global, which is what sites
+5 and 6 were about.
+
+### The one thing that WAS still broken: a one-line def as an imported module's FIRST line
+
+The 2026-08-02 sighting in this ticket (`helper.py`, imported by a `.npy`) was
+the live bug, and it was not a second body shape either — it was the lexer rule's
+**line-start guard being asked about the wrong stream**:
+
+```pascal
+((TokCount = 0) or (Tokens[TokCount - 1].Kind in [tkNewline, tkIndent, tkDedent]))
+```
+
+Both clauses are about the WHOLE token stream. `PyLexAppend` lexes an imported
+`.py` module **on top of** the importing program's tokens, so at the module's
+first token `TokCount` is not 0 and the previous token is the MAIN file's
+`tkEOF`. The rule never fired, and the module died on `unexpected token`.
+
+Isolated by measurement rather than reading: the *same* one-line def one line
+further down the module compiled and ran correctly. That is what pointed at the
+guard instead of at the normalisation.
+
+Fix: `PyLexAll` records `streamBase := TokCount` after the (conditional) reset,
+and the guard asks `TokCount = streamBase` — "has THIS lex emitted anything yet",
+which is the question that was always meant. It subsumes the old `TokCount = 0`
+(the non-appending path resets `TokCount` to 0, so `streamBase` is 0 there).
+
+Verified against CPython: a one-line `def` and a one-line `class` as a module's
+first line, a one-line method in a module's indented class body, and the
+already-working not-first-line forms as controls.
+`test/test_nilpy_one_line_def_in_module.npy` (+ `.expected`, + helper
+`test/nilpy_onelinemod.py`), wired into `make test-nilpy`.
+
+### Residue, filed separately rather than carried here
+
+- [[bug-nilpy-one-line-class-body-restraint-is-no-longer-enforced]] — the
+  `pass`-only restriction and the comments around it
+  (`compiler/pyparser.inc:18948-18977`, `18832-18843`) describe a branch the
+  lexer now makes unreachable for `def`/`class`. False comments in this file are
+  not cosmetic: they are the interface between passes, and they are what produced
+  this ticket's stale five-site plan in the first place.
+- [[bug-nilpy-def-body-scans-run-on-when-no-indent-is-found]] — five unguarded
+  `while ... <> tkIndent` body hunts that are now protected only by the lexer
+  synthesis, plus a producer/consumer divergence in the accepted preceding-token
+  set (`tkSemicolon`).
+
+## Log
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

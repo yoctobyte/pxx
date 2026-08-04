@@ -519,6 +519,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-numeric-builtin-gaps-min-max-sum-float-inf | N | 50 | bug | Numeric builtin gaps: `float("inf")`, variadic `min`/`max`, `sum(x, start)` | — |
 | bug-nilpy-object-reclamation-disabled-inside-py-modules | N | 65 | bug | NilPy object reclamation is switched off inside an imported `.py` module | — |
 | bug-nilpy-omitted-variant-default-segfaults | N | 65 | bug | nilpy: reading a DEFAULTED variant parameter segfaults (by-ref seen as by-value) | — |
+| bug-nilpy-one-line-def-and-class-bodies-do-not-parse | N | 60 | bug | One-line `def` and `class` bodies do not parse | — |
 | bug-nilpy-one-line-def-suite-does-not-parse | N | 55 | bug | `def f(x): return x + 1` on ONE line fails with 'unexpected token'. The compound-statement header requires a newline + INDENT suite; the inline form Python allows on the same line is not accepted for def (or class) | — |
 | bug-nilpy-param-spill-width | N | 60 | bug | NilPy: bool/char param spill wrote 4 bytes into a 1-byte slot (SILENT, then SIGSEGV) | — |
 | bug-nilpy-param-with-string-default-reads-garbage | N | 75 | bug | A parameter with a STRING default is read as garbage | — |

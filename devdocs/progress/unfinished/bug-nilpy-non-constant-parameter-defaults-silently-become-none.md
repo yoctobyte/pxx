@@ -278,3 +278,65 @@ reasoning about the arena.
 
 The change is reverted; the tree carries none of it. The METHOD half and the
 NESTED-def half (unchanged, see above) both remain open.
+
+## 2026-08-04 (later) — a named suspect for the two-class corruption: the `tkClass` branch never raises `ASTArenaFloor`
+
+The section above says "where to look next: whether the AST nodes of the FIRST
+class's queued initialiser survive the SECOND class's parse (`ASTArenaFloor` is
+raised at the class branch, which should protect them — verify that it actually
+does)".
+
+**Verified, and it does not.** In BOTH NilPy statement loops the class branch is
+the only one that does not raise the floor:
+
+| loop | branch | raises `ASTArenaFloor`? |
+| --- | --- | --- |
+| module (`pyparser.inc:19834`) | `if CurTok.Kind = tkClass then PyParseClass(False)` | **no** |
+| module | `@dataclass` -> `PyParseClass(True)` | **no** |
+| module | `tkFunction` -> `PyParseDef` | yes, `:19867` |
+| module | plain statement | yes, `:19883` |
+| program (`pyparser.inc:20105`) | `tkClass` / `@dataclass` | **no** |
+| program | `tkFunction` | yes, `:20128` |
+| program | plain statement | yes, `:20137`, `:20146` |
+
+So the premise the earlier note reasoned from was wrong, and that is why the
+hypothesis it *did* test ("evaluating from inside `PyParseClass`") came back
+identical either way — moving the evaluation out of `PyParseClass` changes
+nothing if the floor is unraised in both placements.
+
+### Why this matches the measured table exactly
+
+A class-time initialiser flushed at the class statement leaves its AST nodes
+ABOVE an unraised floor. `PyParseClass` compiles method bodies, and a per-body
+reset (`ASTNodeCount := ASTArenaFloor`, e.g. `parser.inc:20907`/`20915`, and the
+`savedAST` rollback in `PyCollectLocalsAST`) then hands those same node indices
+out again:
+
+| shape | predicted | measured |
+| --- | --- | --- |
+| one class, one container default | nothing parses after it -> survives | OK |
+| one class, TWO container defaults | same, both below the same unraised floor | OK |
+| two classes, CONSTANT defaults | nothing is queued at all | OK |
+| two classes, one container default each | class 2's bodies recycle class 1's nodes | **corrupt** |
+
+It also explains the otherwise odd blast radius — a module-level `def f1(b=[])`
+declared BEFORE either class printing as a pointer. Its initialiser nodes are
+below the *def* branch's floor, but the floor is lowered again by nothing; what
+recycles them is the same reset reaching indices the class branch never
+protected. "Values lost their container type" is what a reused AST node looks
+like.
+
+### Next step (measure, do not code first)
+
+The cheap experiment is the floor raise ALONE, with no evaluation added:
+append `ASTArenaFloor := ASTNodeCount;` to both `tkClass` branches (and the two
+`@dataclass` ones), self-host, and confirm nothing regresses. That is a
+standalone correctness fix on its own terms — the class branch is asymmetric with
+every sibling regardless of this ticket. THEN re-apply the reverted method-default
+evaluation on top and see whether the two-class shape is still corrupt.
+
+Second, independent defect in the reverted attempt, worth fixing at the same
+time: `PyEvalParamDefault` (`pyparser.inc:3964-3966`) builds the hidden global's
+name from `PyNestPrefix`/`PyHdrName`/param only, with no CLASS component, so
+`A.f.b` and `B.f.b` collide on one symbol. That is a second, sufficient cause of
+two-class breakage and would survive the arena fix.

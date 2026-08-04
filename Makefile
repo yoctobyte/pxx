@@ -599,6 +599,8 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_emptyexc26 | diff -u test/test_nilpy_empty_exception_subclass.expected -
 	./$(COMPILER) test/test_nilpy_one_line_class_body.npy /tmp/test_nilpy_onelineclass26
 	/tmp/test_nilpy_onelineclass26 | diff -u test/test_nilpy_one_line_class_body.expected -
+	./$(COMPILER) test/test_nilpy_one_line_def_in_module.npy /tmp/test_nilpy_onelinemod26
+	/tmp/test_nilpy_onelinemod26 | diff -u test/test_nilpy_one_line_def_in_module.expected -
 	./$(COMPILER) test/test_nilpy_str_mul_str_undefined.npy /tmp/test_nilpy_strmul26
 	/tmp/test_nilpy_strmul26 | diff -u test/test_nilpy_str_mul_str_undefined.expected -
 	./$(COMPILER) test/test_nilpy_parent_call_after_instantiation.npy /tmp/test_nilpy_parentcall26
