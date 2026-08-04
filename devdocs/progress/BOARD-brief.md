@@ -5,19 +5,20 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:6 unfinished:7 blocked:7 backlog:182 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1360 rejected:28`
+`urgent:7 unfinished:7 blocked:7 backlog:183 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1360 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## urgent (6) — jump the queue
+## urgent (7) — jump the queue
 
 - `bug-a-arm32-write-after-free-kills-four-lib-tests` [A]
 - `bug-a-i386-int64-arg-high-half-uninitialized` [A]
 - `bug-a-static-array-of-managed-whole-assign-loses-data` [A]
 - `bug-a-virtual-method-int64-in-and-out-32bit` [A]
 - `bug-c-int64-to-double-cast-truncates-on-32bit` [C]
+- `bug-p-program-function-does-not-shadow-used-unit` [P]
 - `bug-p-string-char-relational-compares-lengths` [A]
 
 ## unfinished (7) — parked mid-flight; re-claim, do not duplicate
@@ -40,7 +41,7 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 169, ranked
+## Ready — top 30 of 171, ranked
 
 - `[p 85] [A]` bug-a-virtual-method-int64-in-and-out-32bit
 - `[p 85] [A]` bug-p-string-char-relational-compares-lengths
@@ -48,6 +49,7 @@ _none — no lane is locked._
 - `[p 80] [C]` bug-c-int64-to-double-cast-truncates-on-32bit
 - `[p 75] [A]` bug-a-arm32-write-after-free-kills-four-lib-tests
 - `[p 75] [A]` bug-a-i386-int64-arg-high-half-uninitialized
+- `[p 70] [P]` bug-p-program-function-does-not-shadow-used-unit
 - `[p 70] [B]` regression-test-core-csocket-loopback-b88
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
@@ -71,7 +73,5 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [A]` bug-a-duplicate-definition-silently-accepted
 - `[p 55] [C]` bug-c-pthread-without-threadsafe-builds-then-dies-at-load
-- `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
-- `[p 55] [N]` bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
 
-_139 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_141 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

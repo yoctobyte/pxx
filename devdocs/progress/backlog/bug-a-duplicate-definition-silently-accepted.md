@@ -89,6 +89,71 @@ bug-hider rather than a bug, and it hid one for me tonight in under a minute.
 Worth pairing with the C-side observation that pxx also accepts a call whose
 arity does not match the visible definition; that may be the same missing check.
 
+## VERIFIED 2026-08-05 — the user's hypothesis, checked line by line
+
+The user proposed: (1) it comes from our lazy overloading, (2) `--strict-overload`
+would solve it, (3) what we actually want is a loud warning when an overload has
+the **same parameter types** as a previous definition. Measured:
+
+### (1) Lazy overloading — right neighbourhood, opposite mechanism
+
+It is the overload machinery, but the duplicate does not go *through* it — it
+slips *underneath* it. `parser.inc` does
+
+```pascal
+procIdx := FindProcOverloadRec(name, nparams, ptypes, ...);
+if procIdx < 0 then
+begin
+  if StrictOverload and (FindProc(name) >= 0) then ...   { the policing }
+  procIdx := RegisterProc(...);
+end;
+```
+
+An identical-signature duplicate is **found** by `FindProcOverloadRec`, so
+`procIdx >= 0`, so the whole `if` — including every overload check — is skipped
+and it takes the resolve-existing path. It is not treated as a new overload; it
+is treated as *the same routine being resolved again*.
+
+### (2) `--strict-overload` does NOT solve it — measured
+
+| case | default | `--strict-overload` |
+| --- | --- | --- |
+| two `function F: Integer` (identical signature) | accepted, prints 2 | **still accepted, prints 2** |
+| `F(a: Integer)` + `F(a: string)`, no directive | accepted | **error: overloaded routine requires overload directive** |
+
+The flag works exactly as designed and cannot reach this case, because the
+guard above means an identical signature never gets to the check. The flag
+polices *genuine* overloads; a duplicate is not one.
+
+### (3) The warning is the right fix — with a scope qualifier, because shadowing is legal
+
+Shadowing must keep working, and it is not hypothetical — **FPC accepts all of
+these**, and so must we:
+
+| what is shadowed | FPC | pxx |
+| --- | --- | --- |
+| a **builtin** (`UpCase`, `Length`) | accepted, user's wins | accepted, user's wins — agrees |
+| a **used unit's** routine (`sysutils.IntToStr`, `Trim`, `UpperCase`) | accepted, **user's wins** | accepted, **the UNIT's wins** — see below |
+| **same scope**, two bodies, identical signature | **3 errors** | accepted |
+
+So the rule cannot be "identical parameter types anywhere" — it has to be
+**identical parameter types in the same scope**. Cross-scope identical
+signatures are shadowing and are a first-class feature of the lax dialect. The
+existing `CurrentUnitIdx < 0` test in the StrictOverload branch shows the scope
+information is already to hand.
+
+The other half of the condition is distinguishing a legitimate
+forward-declaration → implementation pairing (which correctly resolves to the
+existing proc) from a real second body. `ProcBodyCompiled[]` in `defs.inc`
+already records exactly that — *"CompileAST ran for this proc (has a real
+body)"* — and `forward` + implementation is confirmed working today, so the test
+is: at the resolve-existing path, a body arriving for a proc that already has
+one, in the same scope, is a redefinition.
+
+That makes it error-worthy rather than warning-worthy, since FPC and gcc both
+reject it — but a warning first would be the safe landing, given the
+builtin-migration history that plausibly left duplicates around.
+
 ## Suggested gate
 
 A second definition of the same name at the same scope is a compile error, in
