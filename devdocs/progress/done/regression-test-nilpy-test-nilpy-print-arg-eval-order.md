@@ -51,4 +51,4 @@ as the same concern — "print arg eval order" vs "print evaluates args before
 writing" — so `ls test/ | grep <topic>` before creating a test file is worth
 more than it looks. A new test that needs a NEW Makefile recipe beside an
 existing one for the same file is the tell.
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 6d78481bb.
