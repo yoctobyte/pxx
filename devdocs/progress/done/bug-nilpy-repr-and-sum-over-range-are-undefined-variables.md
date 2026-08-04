@@ -47,4 +47,4 @@ Per-fix loop, plus a `.npy` test with each wrapper over `range` diffed against
 CPython. `ls test/ | grep -E 'range|repr'` before creating a file.
 
 ## Log
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 0fcca0610.
