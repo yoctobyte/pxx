@@ -407,3 +407,27 @@ Kept as a separate file from `crtl_libc_oracle.c` on purpose: `longjmp` unwinds
 out of the middle of the enclosing function, so folding it into a large `main()`
 with many live locals would make the test about that `main()` rather than about
 `longjmp`.
+
+## Batch filed 2026-08-05 — 10 declared-but-unimplemented, all needing PAL work
+
+Found by probing all 361 crtl declarations for an implementation (take the
+function's ADDRESS in a program including only its header; an unimplemented one
+shows up as a dynamic import). 361 declared, 343 implemented, 18 not — 8 of
+those were fixed in [[bug-b-crtl-basic-posix-io-not-implemented]] because the
+bridges already existed. These ten remain:
+
+| function | what it needs |
+| --- | --- |
+| `poll` | `PalPoll` exists; needs a `__pxx_poll` bridge in `pxxcio.pas` |
+| `ioctl` | `PalIoctl` exists; same, a bridge |
+| `clock_gettime` | no PAL entry; the syscall is already used internally for time |
+| `chmod`, `umask` | no PAL entry |
+| `msync`, `mremap` | no PAL entry (`sys/mman.h` has the rest) |
+| `pread`, `pwrite` | **want a real positional syscall.** A seek/read/seek emulation is silently non-atomic and would differ from every other libc under concurrency — worth doing properly or not at all |
+| `atexit` | runtime hook registration, not a syscall; `lib/rtl/atexit.pas` exists |
+
+Reproduce the probe any time: it is a dozen lines of shell over
+`lib/crtl/include/**`, and it is how a declared-but-unreachable function is found
+before a user finds it. The failure mode is always the same and always quiet —
+the program links against glibc, works on the dev box, and cannot run anywhere
+else.

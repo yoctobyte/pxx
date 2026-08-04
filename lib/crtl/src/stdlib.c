@@ -353,6 +353,46 @@ static void __crtl_swap(char *a, char *b, size_t n) {
   for (i = 0; i < n; i++) { char t = a[i]; a[i] = b[i]; b[i] = t; }
 }
 
+/* atof is strtod with the error reporting thrown away — C says exactly that,
+   so it is not an approximation. strtod here is already correctly rounded. */
+double atof(const char *s) { return strtod(s, 0); }
+
+/* bsearch: same comparator convention as qsort above (key first, then element),
+   NULL when absent. The loop is written with a half-open [lo,hi) window so the
+   midpoint cannot overflow and an empty range needs no special case. */
+void *bsearch(const void *key, const void *base, size_t nmemb, size_t size,
+              int (*cmp)(const void *, const void *)) {
+  size_t lo = 0, hi = nmemb;
+  while (lo < hi) {
+    size_t mid = lo + (hi - lo) / 2;
+    const char *p = (const char *)base + mid * size;
+    int c = cmp(key, p);
+    if (c == 0) return (void *)p;
+    if (c < 0) hi = mid; else lo = mid + 1;
+  }
+  return 0;
+}
+
+/* rand/srand.
+
+   The SEQUENCE is not portable and C does not fix it — this is the standard's
+   own example generator (C99 7.20.2.2), not glibc's. So a test must not diff
+   the numbers against a gcc build; it can only assert the properties C actually
+   promises: deterministic for a given seed, in [0, RAND_MAX], and srand(1) is
+   the default state. test/crand_props.c does exactly that, and says why.
+
+   Chosen deliberately over copying glibc's TYPE_3 additive-feedback generator:
+   matching a sequence nobody is entitled to rely on would buy a nicer diff and
+   an obligation to keep it. */
+static unsigned long __crtl_rand_state = 1;
+
+void srand(unsigned int seed) { __crtl_rand_state = seed; }
+
+int rand(void) {
+  __crtl_rand_state = __crtl_rand_state * 1103515245UL + 12345UL;
+  return (int)((__crtl_rand_state / 65536UL) % 32768UL);
+}
+
 void qsort(void *base, size_t nmemb, size_t size,
            int (*cmp)(const void *, const void *)) {
   char *a = (char *)base;

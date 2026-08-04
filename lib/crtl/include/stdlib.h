@@ -42,6 +42,11 @@ div_t div(int num, int den);
 ldiv_t ldiv(long num, long den);
 lldiv_t lldiv(long long num, long long den);
 
+/* the standard's minimum, and what our generator actually produces */
+#ifndef RAND_MAX
+#define RAND_MAX 32767
+#endif
+
 int rand(void);
 void srand(unsigned int seed);
 

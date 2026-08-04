@@ -7691,6 +7691,32 @@ lib-test: pxx-stable-check
 	    readelf -d /tmp/cerrno_strings | grep NEEDED; exit 1; }; \
 	  echo 'cerrno_strings: statically linked, no DT_NEEDED'; \
 	else echo 'cerrno_strings: linkage check SKIP (no readelf)'; fi
+	# read/write/close/lseek: declared by <unistd.h>, implemented nowhere until
+	# 2026-08-05, so raw I/O silently imported them from glibc. Diffed against
+	# gcc; the linkage is asserted too, since the diff passes either way here.
+	$(PXX_STABLE) test/cposix_io.c /tmp/cposix_io
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -w -o /tmp/cposix_io_gcc test/cposix_io.c 2>/dev/null; \
+	  /tmp/cposix_io_gcc > /tmp/cposix_io_gcc.out; /tmp/cposix_io > /tmp/cposix_io_pxx.out; \
+	  diff /tmp/cposix_io_gcc.out /tmp/cposix_io_pxx.out || \
+	    { echo 'FAIL: cposix_io differs from gcc'; exit 1; }; \
+	  echo 'cposix_io: identical to gcc'; \
+	else echo 'cposix_io: SKIP (no gcc)'; /tmp/cposix_io >/dev/null; fi
+	# atof/bsearch diffed against gcc; rand asserts only the PROPERTIES C fixes,
+	# since the sequence is deliberately not glibc's and must not be compared
+	$(PXX_STABLE) test/cstdlib_batch3.c /tmp/cstdlib_batch3
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -w -o /tmp/cstdlib_batch3_gcc test/cstdlib_batch3.c 2>/dev/null; \
+	  /tmp/cstdlib_batch3_gcc > /tmp/csb3_gcc.out; /tmp/cstdlib_batch3 > /tmp/csb3_pxx.out; \
+	  diff /tmp/csb3_gcc.out /tmp/csb3_pxx.out || \
+	    { echo 'FAIL: cstdlib_batch3 differs from gcc'; exit 1; }; \
+	  echo 'cstdlib_batch3: identical to gcc'; \
+	else echo 'cstdlib_batch3: SKIP (no gcc)'; /tmp/cstdlib_batch3 >/dev/null; fi
+	@if command -v readelf >/dev/null 2>&1; then \
+	  for b in /tmp/cposix_io /tmp/cstdlib_batch3; do \
+	    n=$$(readelf -d $$b 2>/dev/null | grep -c NEEDED); \
+	    test "$$n" = "0" || { echo "FAIL: $$b has $$n DT_NEEDED, want 0"; exit 1; }; \
+	  done; echo 'cposix_io/cstdlib_batch3: statically linked'; fi
 	# <wchar.h>/<wctype.h>: wcslen, the twelve isw* predicates, towlower/towupper.
 	# Whole output diffed against gcc -- no recorded expectations -- over the
 	# full range -1..255 plus four wide values, because the claim being tested

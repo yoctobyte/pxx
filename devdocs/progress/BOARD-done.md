@@ -83,6 +83,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-array-ctor-statement-arg-after-dynarray-record-param | A | 50 | bug | Array-constructor statement-arg fails differently when a preceding param has a dynarray field | — |
 | bug-as-cast-inline-method-call | A | 50 | bug | bug: method call on an inline `(expr as T)` is silently dropped | — |
 | bug-asmcore-fpc-bootstrap | A | 50 | bug | FPC bootstrap can't compile the asmcore units the compiler now `uses` | — |
+| bug-b-crtl-basic-posix-io-not-implemented | B | 60 | bug | read/write/close/lseek — plus atof, bsearch, rand/srand — were declared by crtl's headers and implemented nowhere; found by probing all 361 declarations for an implementation, not by reading them | — |
 | bug-b-crtl-host-header-and-arity-mismatches-building-pdfgen | B | 45 | bug | Building pdfgen: `strings.h` comes from the host, and `time`/`bcmp` bind at the wrong arity | — |
 | bug-b-crtl-math-constants-missing-silently-zero | B | 60 | bug | `math.h`'s `M_*` constants were absent, so `M_PI` silently evaluated to 0 | — |
 | bug-b-crtl-stat-nlink-hardcoded | B | 30 | bug | `struct stat.st_nlink` is hardcoded to 1 | — |

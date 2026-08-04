@@ -8,6 +8,10 @@
 #include <unistd.h>
 #include <errno.h>
 
+extern long long __pxx_read(int fd, void *buf, long long n);
+extern long long __pxx_write(int fd, void *buf, long long n);
+extern int __pxx_close(int fd);
+extern long long __pxx_seek(int fd, long long offset, int whence);
 extern int __pxx_fsync(int fd);
 extern int __pxx_dup(int oldFd);
 extern int __pxx_chdir(const char *path);
@@ -30,6 +34,38 @@ extern int __pxx_fchown(int fd, int owner, int group);
 extern int __pxx_geteuid(void);
 extern int __pxx_readlink(const char *path, void *buf, int bufsz);
 extern int __pxx_rmdir(const char *path);
+
+/* The four most basic POSIX calls, and they were DECLARED here and implemented
+   nowhere — so every C program doing raw I/O silently imported them from glibc
+   and stopped being statically linked. Same shape as the socket veneer
+   (bug-cfront-spurious-dt-needed-libc-with-no-imports); found by probing every
+   crtl declaration for an implementation rather than by reading the headers.
+
+   The PAL returns the byte count / 0 on success or -errno; C wants -1 with
+   errno set, which is the translation every function in this file does. */
+ssize_t read(int fd, void *buf, size_t count) {
+  long long rc = __pxx_read(fd, buf, (long long)count);
+  if (rc < 0) { errno = (int)-rc; return -1; }
+  return (ssize_t)rc;
+}
+
+ssize_t write(int fd, const void *buf, size_t count) {
+  long long rc = __pxx_write(fd, (void *)buf, (long long)count);
+  if (rc < 0) { errno = (int)-rc; return -1; }
+  return (ssize_t)rc;
+}
+
+int close(int fd) {
+  int rc = __pxx_close(fd);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}
+
+off_t lseek(int fd, off_t offset, int whence) {
+  long long rc = __pxx_seek(fd, (long long)offset, whence);
+  if (rc < 0) { errno = (int)-rc; return (off_t)-1; }
+  return (off_t)rc;
+}
 
 int fsync(int fd) { return __pxx_fsync(fd); }
 
