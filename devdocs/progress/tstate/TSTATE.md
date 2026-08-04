@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg **QUIET 3d17h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| xeon | `f718cf16f833` | 2026-08-04T11:40:48Z | GREEN (native) | 120.9s | `105cd8e4e832` GREEN |
+| xeon | `5d3ed64e15b3` | 2026-08-04T11:47:37Z | GREEN (native) | 118.4s | `105cd8e4e832` GREEN |
 
 ## Open regressions
 - none
