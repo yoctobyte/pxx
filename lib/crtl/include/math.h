@@ -148,6 +148,13 @@ extern float modff(float x, float *ip);
 /* HUGE_VAL: positive double overflow value used by lua for range checks. */
 #define HUGE_VAL (1e308 * 10.0)
 #define INFINITY (1e308 * 10.0)
-#define NAN      (0.0 / 0.0)
+/* A POSITIVE quiet NaN. `0.0 / 0.0` was the obvious spelling and it is the
+   wrong one: on x86 that produces a NaN with the SIGN BIT SET, so printf
+   rendered NAN as "-nan" where every other libc prints "nan" -- visible through
+   %f, %e and %g, not just %a. The bit pattern is explicit so it does not depend
+   on what the hardware happens to return for an invalid operation. */
+static const union { unsigned long long __crtl_i; double __crtl_d; }
+  __crtl_nan_bits = { 0x7ff8000000000000ULL };
+#define NAN      (__crtl_nan_bits.__crtl_d)
 
 #endif

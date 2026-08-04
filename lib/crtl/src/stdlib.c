@@ -291,6 +291,41 @@ static double __crtl_pow10e(int k) {
    bit-for-bit. Longer mantissas keep collecting into the integer (rounded
    once at bit 53+) and larger exponents scale in exact 1e22 chunks; those
    can be 1 ulp off, same class as before but strictly no worse. */
+/* hex digit value, or -1 */
+static int __crtl_hexval(int c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
+}
+
+/* m * 2^e, saturating at the ends the way ldexp does.
+
+   ONLY 2.0 and 0.5 are used as factors. The obvious optimisation -- stepping in
+   chunks of 2^1023 via a decimal constant like 8.98846567431158e307 -- makes
+   the result depend on that literal being correctly rounded, and it was off by
+   enough to flush 0x1p-1074 (the smallest subnormal) to ZERO instead of
+   producing it. 2.0 and 0.5 are exact in every rounding mode, and halving a
+   power of two stays exact all the way down through the subnormal range, so
+   this reaches 2^-1074 precisely. At most ~2100 iterations, which is nothing
+   next to being wrong.
+
+   (The literal in question is a known issue in its own right:
+   bug-a-float-literal-lexer-is-not-correctly-rounded.) */
+static double __crtl_ldexp_ull(unsigned long long m, int e) {
+  double v = (double)m;
+  if (v == 0.0) return 0.0;
+  while (e > 0) {
+    v *= 2.0; e--;
+    if (v > 1.7976931348623157e308) return v;      /* inf: stop, it is stable */
+  }
+  while (e < 0) {
+    v *= 0.5; e++;
+    if (v == 0.0) return 0.0;                      /* underflowed to zero */
+  }
+  return v;
+}
+
 double strtod(const char *s, char **end) {
   const char *p = s;
   double v, sign = 1.0;
@@ -299,6 +334,57 @@ double strtod(const char *s, char **end) {
   if (!p) { if (end) *end = (char *)s; return 0.0; }
   while (*p == ' ' || *p == '\t' || *p == '\n') p++;
   if (*p == '-') { sign = -1.0; p++; } else if (*p == '+') p++;
+
+  /* C99 hex float: 0x h* [. h*] [pP [+-] d+]. Missing entirely until
+     2026-08-05, so strtod("0x1.8p+1") returned 0 leaving "x1.8p+1" — and with
+     it atof, scanf's %f and %a. printf gained %a in the same batch, so without
+     this the library could PRINT a double exactly and not read it back.
+
+     Accumulated in binary rather than scaled in doubles: hex digits are exact
+     powers of two, so the only rounding is the final one. Digits past the
+     accumulator's room set a STICKY bit that is ORed into bit 0, which makes
+     the (double) conversion's round-to-nearest-even land the same way glibc
+     does on a tie — 0x1.00000000000008p+0 is 1.0 and ...18p+0 is the next
+     double up, both verified against gcc. */
+  if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+    const char *hp = p + 2;
+    unsigned long long hm = 0;
+    int hexp = 0, hany = 0, sticky = 0;
+    while (__crtl_hexval(*hp) >= 0) {
+      int d = __crtl_hexval(*hp);
+      if (hm <= 0x0FFFFFFFFFFFFFFFULL) hm = (hm << 4) | (unsigned long long)d;
+      else { hexp += 4; if (d) sticky = 1; }
+      hp++; hany = 1;
+    }
+    if (*hp == '.') {
+      hp++;
+      while (__crtl_hexval(*hp) >= 0) {
+        int d = __crtl_hexval(*hp);
+        if (hm <= 0x0FFFFFFFFFFFFFFFULL) { hm = (hm << 4) | (unsigned long long)d; hexp -= 4; }
+        else if (d) sticky = 1;
+        hp++; hany = 1;
+      }
+    }
+    /* No hex digits at all is NOT a hex float: glibc consumes just the '0' and
+       leaves "x...", which is what the caller's endptr must see. */
+    if (hany) {
+      if (*hp == 'p' || *hp == 'P') {
+        const char *ep = hp + 1;
+        int esign = 1, e = 0;
+        if (*ep == '-') { esign = -1; ep++; } else if (*ep == '+') ep++;
+        if (*ep >= '0' && *ep <= '9') {          /* an incomplete 'p' is not consumed */
+          while (*ep >= '0' && *ep <= '9') { if (e < 100000) e = e * 10 + (*ep - '0'); ep++; }
+          hexp += esign * e;
+          hp = ep;
+        }
+      }
+      if (sticky) hm |= 1ULL;
+      if (end) *end = (char *)hp;
+      return sign * __crtl_ldexp_ull(hm, hexp);
+    }
+    /* fall through: "0x" with no digits parses as the decimal 0 */
+  }
+
   while (*p >= '0' && *p <= '9') {
     if (mant < 1000000000000000000ULL) mant = mant * 10ULL + (unsigned long long)(*p - '0');
     else dexp++;                    /* >19 digits: keep magnitude, drop digit */

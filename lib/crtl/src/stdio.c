@@ -23,6 +23,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <errno.h>
+#include <unistd.h>   /* read/write/close/lseek/pread/pwrite live there now */
 /* vsscanf below delegates numeric conversions to strtol/strtod and skips
    whitespace with isspace. Include the crtl headers (not bare externs) so the
    auto-pull links their libc-free bodies (stdlib.c / ctype.c) — otherwise they
@@ -239,6 +240,106 @@ static void __crtl_dexp_sig(const struct __crtl_dexp *x, int want, int neg,
 /* IEEE double -> decimal in fixed ('f') notation with `prec` fraction digits.
    Returns the length written. Handles sign, nan, inf. Digits come from the
    exact expansion above (round-to-nearest, ties-to-even at the cut). */
+static void __crtl_memcpy_bits(void *d, const void *sp, unsigned long n) {
+  unsigned char *a = (unsigned char *)d; const unsigned char *b = (const unsigned char *)sp;
+  while (n--) *a++ = *b++;
+}
+
+/* %a / %A: the C99 hex-float form, [-]0xh.hhhhp[+-]d.
+
+   This existed as an UNKNOWN conversion, which did two bad things: it printed
+   the literal "%a", and -- much worse -- it did not consume the double. On
+   x86-64 that was invisible, because doubles arrive in their own register save
+   area, so the following %d and %s still read the right slots. On i386 and
+   arm32, where varargs walk the stack, the unconsumed double shifted everything
+   after it and `printf("[%a] %s", 0.5, "x")` SEGFAULTED on a garbage pointer.
+
+   Rules read off a gcc build rather than from the standard's prose, because
+   several are not what you would guess:
+     - the exponent is the BINARY one, always signed, never zero-padded: p+0
+     - zero is 0x0p+0 (and -0x0p+0), not 0x0p-1023
+     - a subnormal keeps a 0 leading digit and exponent -1022:
+       0x0.0000000000001p-1022 -- it is NOT renormalised
+     - with no precision, trailing zero nibbles are trimmed away entirely,
+       leaving 0x1p+0 rather than 0x1.0000000000000p+0
+     - with a precision, rounding can carry INTO the leading digit and it stays
+       there: %.0a of 0.1 is 0x2p-4, not 0x1p-3
+     - a precision past 13 pads with zeros (%.20a) */
+static int __crtl_atoa(char *out, double v, int prec, int upper, int alt) {
+  const char *digits = upper ? "0123456789ABCDEF" : "0123456789abcdef";
+  unsigned long long bits;
+  int i, o = 0, e2, lead, nib[13], keep, carry, any;
+  int expneg, ev;
+  char ebuf[8]; int en = 0;
+
+  __crtl_memcpy_bits(&bits, &v, sizeof bits);
+
+  if (bits >> 63) out[o++] = '-';
+  bits &= 0x7FFFFFFFFFFFFFFFull;
+
+  /* inf / nan keep the same spelling the other float conversions use */
+  if ((bits >> 52) == 0x7FF) {
+    const char *t = (bits & 0xFFFFFFFFFFFFFull) ? (upper ? "NAN" : "nan")
+                                                : (upper ? "INF" : "inf");
+    if (!(bits & 0xFFFFFFFFFFFFFull) || 1) { while (*t) out[o++] = *t++; }
+    out[o] = 0; return o;
+  }
+
+  e2 = (int)(bits >> 52);
+  if (e2 == 0) { lead = 0; e2 = -1022; }        /* zero and subnormals */
+  else         { lead = 1; e2 -= 1023; }
+  if (bits == 0) e2 = 0;                         /* exactly zero: 0x0p+0 */
+
+  for (i = 0; i < 13; i++) nib[i] = (int)((bits >> (48 - 4 * i)) & 0xF);
+
+  keep = (prec < 0) ? 13 : (prec > 13 ? 13 : prec);
+
+  if (prec >= 0 && keep < 13) {
+    /* round to `keep` nibbles, half-to-even on the exact remainder */
+    int up = 0;
+    if (nib[keep] > 8) up = 1;
+    else if (nib[keep] == 8) {
+      int rest = 0;
+      for (i = keep + 1; i < 13; i++) if (nib[i]) { rest = 1; break; }
+      up = rest ? 1 : ((keep > 0 ? nib[keep - 1] : lead) & 1);
+    }
+    if (up) {
+      carry = 1;
+      for (i = keep - 1; i >= 0 && carry; i--) {
+        nib[i] += 1;
+        if (nib[i] < 16) carry = 0; else nib[i] = 0;
+      }
+      /* a carry out of the fraction lands on the leading digit and STAYS
+         there -- glibc does not renormalise, so %.0a of 0.1 is 0x2p-4 */
+      if (carry) lead += 1;
+    }
+  }
+
+  out[o++] = '0'; out[o++] = upper ? 'X' : 'x';
+  out[o++] = digits[lead];
+
+  if (prec < 0) {                       /* trim trailing zero nibbles */
+    any = 0;
+    for (i = 12; i >= 0; i--) if (nib[i]) { any = i + 1; break; }
+    keep = any;
+  }
+  if (keep > 0 || alt) {
+    out[o++] = '.';
+    for (i = 0; i < keep; i++) out[o++] = digits[i < 13 ? nib[i] : 0];
+    if (prec > 13) for (i = 13; i < prec; i++) out[o++] = '0';
+  }
+
+  out[o++] = upper ? 'P' : 'p';
+  expneg = e2 < 0; ev = expneg ? -e2 : e2;
+  if (ev == 0) ebuf[en++] = '0';
+  while (ev) { ebuf[en++] = (char)('0' + ev % 10); ev /= 10; }
+  out[o++] = expneg ? '-' : '+';
+  while (en) out[o++] = ebuf[--en];
+
+  out[o] = 0;
+  return o;
+}
+
 static int __crtl_ftoa(char *out, double v, int prec) {
   static struct __crtl_dexp X;   /* ~1.5KB — keep off the stack */
   int n = 0, i, neg = 0, hi, p, d, carry;
@@ -492,6 +593,13 @@ static int __crtl_vformat(char *buf, size_t cap, const char *fmt, va_list ap) {
       if (prec >= 0 && prec < nl) nl = prec;   /* precision caps a string */
     } else if (k == '%') {
       one[0] = '%'; one[1] = 0; s = one; nl = 1;
+    } else if (k == 'a' || k == 'A') {
+      /* hex float. Consuming the double here is not optional: falling through
+         to the unknown-conversion path left it on the stack and crashed every
+         32-bit target on the NEXT specifier. */
+      double dv = va_arg(ap, double);
+      nl = __crtl_atoa(fbuf, dv, prec, k == 'A', alt);
+      s = fbuf;
     } else if (k == 'f' || k == 'F' || k == 'e' || k == 'E' || k == 'g' || k == 'G') {
       /* float: read the double vararg (now arrives via the GP save area) and
          render. %f fixed (default prec 6); %g significant digits (default 6),
@@ -513,6 +621,16 @@ static int __crtl_vformat(char *buf, size_t cap, const char *fmt, va_list ap) {
       if (o + 1 < cap) buf[o] = '%'; o++;
       if (o + 1 < cap) buf[o] = k; o++;
       continue;
+    }
+
+    /* '+' and ' ' apply to the SIGNED conversions, and the float ones were left
+       out: %+f printed "1.500000" where every other libc prints "+1.500000".
+       The float formatters emit their own '-', so the flag is applied only when
+       the rendered text does not already start with one. */
+    if ((k=='f'||k=='F'||k=='e'||k=='E'||k=='g'||k=='G'||k=='a'||k=='A')
+        && nl > 0 && s[0] != '-' && preflen == 0) {
+      if (plus) { prefix = "+"; preflen = 1; }
+      else if (space) { prefix = " "; preflen = 1; }
     }
 
     /* integer precision: minimum digit count (zero-pad the number, not the field) */
@@ -850,36 +968,11 @@ char *tmpnam(char *s) { (void)s; errno = EINVAL; return 0; }
 int remove(const char *path) { int rc = __pxx_remove(path); if (rc < 0) { errno = -rc; return -1; } return 0; }
 int rename(const char *oldp, const char *newp) { int rc = __pxx_rename(oldp, newp); if (rc < 0) { errno = -rc; return -1; } return 0; }
 
-int close(int fd) { int rc = __pxx_close(fd); if (rc < 0) { errno = -rc; return -1; } return 0; }
-long lseek(int fd, long offset, int whence) { long r = __pxx_seek(fd, offset, whence); if (r < 0) { errno = -r; return -1; } return r; }
-long read(int fd, void *buf, unsigned long count) { long r = __pxx_read(fd, buf, count); if (r < 0) { errno = -r; return -1; } return r; }
-long write(int fd, const void *buf, unsigned long count) { long r = __pxx_write(fd, buf, count); if (r < 0) { errno = -r; return -1; } return r; }
-
-/* Positioned I/O — no PAL pread/pwrite syscall, so emulate offset-preserving:
-   save the current offset, seek to `off`, do the read/write, restore. POSIX
-   requires pread/pwrite to leave the file offset unchanged; sqlite's USE_PREAD
-   path (os_unix seekAndRead/seekAndWrite) calls these directly. Not atomic wrt
-   concurrent access, but crtl sqlite runs SQLITE_THREADSAFE=0 / single-fd. */
-long pread(int fd, void *buf, unsigned long count, long off) {
-  long cur = __pxx_seek(fd, 0, 1 /* SEEK_CUR */);
-  if (cur < 0) { errno = -cur; return -1; }
-  long s = __pxx_seek(fd, off, 0 /* SEEK_SET */);
-  if (s < 0) { errno = -s; return -1; }
-  long r = __pxx_read(fd, buf, count);
-  __pxx_seek(fd, cur, 0);
-  if (r < 0) { errno = -r; return -1; }
-  return r;
-}
-long pwrite(int fd, const void *buf, unsigned long count, long off) {
-  long cur = __pxx_seek(fd, 0, 1 /* SEEK_CUR */);
-  if (cur < 0) { errno = -cur; return -1; }
-  long s = __pxx_seek(fd, off, 0 /* SEEK_SET */);
-  if (s < 0) { errno = -s; return -1; }
-  long r = __pxx_write(fd, buf, count);
-  __pxx_seek(fd, cur, 0);
-  if (r < 0) { errno = -r; return -1; }
-  return r;
-}
+/* read/write/close/lseek/pread/pwrite used to live here, which meant they were
+   reachable only by including <stdio.h> — a program that included just
+   <unistd.h> (where they are DECLARED) got a glibc import instead and stopped
+   being statically linked. They now live in src/unistd.c, and the include below
+   keeps this path working. */
 
 /* ---- buffering / status (unbuffered model: no-ops) ------------------------ */
 

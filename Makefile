@@ -7691,6 +7691,18 @@ lib-test: pxx-stable-check
 	    readelf -d /tmp/cerrno_strings | grep NEEDED; exit 1; }; \
 	  echo 'cerrno_strings: statically linked, no DT_NEEDED'; \
 	else echo 'cerrno_strings: linkage check SKIP (no readelf)'; fi
+	# printf %a/%A, the +/space flags on float conversions, and NAN's sign.
+	# %a was a CRASH off x86-64: it fell to the unknown-conversion path, which
+	# did not consume the double, so stack-based varargs shifted and the next
+	# %s read a garbage pointer. Diffed against gcc.
+	$(PXX_STABLE) test/cprintf_hexfloat.c /tmp/cprintf_hexfloat
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -w -o /tmp/cprintf_hexfloat_gcc test/cprintf_hexfloat.c -lm 2>/dev/null; \
+	  /tmp/cprintf_hexfloat_gcc > /tmp/chf_gcc.out; /tmp/cprintf_hexfloat > /tmp/chf_pxx.out; \
+	  diff /tmp/chf_gcc.out /tmp/chf_pxx.out || \
+	    { echo 'FAIL: cprintf_hexfloat differs from gcc'; exit 1; }; \
+	  echo 'cprintf_hexfloat: identical to gcc'; \
+	else echo 'cprintf_hexfloat: SKIP (no gcc)'; /tmp/cprintf_hexfloat >/dev/null; fi
 	# read/write/close/lseek: declared by <unistd.h>, implemented nowhere until
 	# 2026-08-05, so raw I/O silently imported them from glibc. Diffed against
 	# gcc; the linkage is asserted too, since the diff passes either way here.

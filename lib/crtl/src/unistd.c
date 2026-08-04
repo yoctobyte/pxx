@@ -67,6 +67,39 @@ off_t lseek(int fd, off_t offset, int whence) {
   return (off_t)rc;
 }
 
+/* Positioned I/O. There is no PAL pread/pwrite syscall, so this preserves the
+   file offset by hand: save it, seek, transfer, restore. POSIX requires exactly
+   that observable behaviour, and sqlite's USE_PREAD path (os_unix
+   seekAndRead/seekAndWrite) depends on it.
+
+   NOT atomic with respect to a concurrent reader on the same fd — a real
+   pread() is. crtl's sqlite runs SQLITE_THREADSAFE=0 on a single fd, so the
+   difference is unobservable there; anything relying on the atomicity wants a
+   real syscall, which is noted on feature-crtl-implement-libc-assumptions. */
+ssize_t pread(int fd, void *buf, size_t count, off_t off) {
+  long long cur = __pxx_seek(fd, 0, 1 /* SEEK_CUR */);
+  long long s, r;
+  if (cur < 0) { errno = (int)-cur; return -1; }
+  s = __pxx_seek(fd, (long long)off, 0 /* SEEK_SET */);
+  if (s < 0) { errno = (int)-s; return -1; }
+  r = __pxx_read(fd, buf, (long long)count);
+  __pxx_seek(fd, cur, 0);
+  if (r < 0) { errno = (int)-r; return -1; }
+  return (ssize_t)r;
+}
+
+ssize_t pwrite(int fd, const void *buf, size_t count, off_t off) {
+  long long cur = __pxx_seek(fd, 0, 1 /* SEEK_CUR */);
+  long long s, r;
+  if (cur < 0) { errno = (int)-cur; return -1; }
+  s = __pxx_seek(fd, (long long)off, 0 /* SEEK_SET */);
+  if (s < 0) { errno = (int)-s; return -1; }
+  r = __pxx_write(fd, (void *)buf, (long long)count);
+  __pxx_seek(fd, cur, 0);
+  if (r < 0) { errno = (int)-r; return -1; }
+  return (ssize_t)r;
+}
+
 int fsync(int fd) { return __pxx_fsync(fd); }
 
 int getpid(void) { return __pxx_getpid(); }
