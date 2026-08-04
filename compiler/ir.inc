@@ -5929,7 +5929,13 @@ begin
           (bug-nilpy-float-times-string-hangs). Hand those to pymul_v, which
           already raises the right TypeError, instead of bounding a count that
           should never have been accepted. }
-        if not TypeIsOrdinal(IntToTypeKind(ASTTk[item])) then
+        { A PROMOTABLE INT count is an integer count, not a "non-integer" one:
+          promo is deliberately not reported by TypeIsOrdinal, so
+          `"ab" * <wide literal>` fell into the pymul_v arm meant for floats and
+          produced an EMPTY string — silent. It narrows below instead, like any
+          other integer count. }
+        if (not TypeIsOrdinal(IntToTypeKind(ASTTk[item]))) and
+           (not TypeIsPromoInt(IntToTypeKind(ASTTk[item]))) then
         begin
           cpi := FindProc('pymul_v');
           if cpi < 0 then Error('Nil Python: pymul_v (pylib) not loaded');
@@ -5946,7 +5952,10 @@ begin
         if cpi < 0 then Error('Nil Python: pystr_repeat (pylib) not loaded');
         left := IRLowerCallArg(cpi, 0, argVal, Procs[cpi].Params[0].IsRef);
         first := IRAppend(IR_ARG, left, -1, -1, 0, ASTTk[argVal]);
-        right := IRLowerAST(item);
+        { IRLowerCallArg, not a raw IRLowerAST: parameter 1 is an Int64, so a
+          PROMO count narrows through PXXPromoToInt64Wrap there. Lowered raw it
+          would hand pystr_repeat the slot ADDRESS as the count. }
+        right := IRLowerCallArg(cpi, 1, item, Procs[cpi].Params[1].IsRef);
         last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyInt64));
         IRB[first] := last;
         ASTTk[node] := Ord(tyAnsiString);

@@ -235,3 +235,64 @@ rather than being absorbed: **[[decide-nilpy-int-promotion-costs-10x-on-ordinary
 recommending that `feature-a-promoint-check-elision` be funded first. Moving to
 `unfinished/` — the patches apply cleanly and the next session's work is
 whichever branch of that decision is taken, plus the three overloads.
+
+
+## 2026-08-04 (later) — the cost decision is MADE, but landing is blocked on a surface my earlier survey missed
+
+Rene decided the 10x is acceptable ("python wasn't meant for performant tight
+loops in the first place"), so `decide-nilpy-int-promotion-costs-10x-on-ordinary-loops`
+is settled in favour of option 1. The patches were re-applied to land it. **They
+do not land**, and the reason is a mistake in this ticket's own earlier findings.
+
+### My "blast radius is three builtins" was measured WRONG
+
+The 2026-08-04 survey said only `hex`, `bin` and `oct` broke out of seventeen
+builtins probed. That survey checked **whether the program COMPILED**, not what
+it printed. Re-run comparing OUTPUT against CPython, with the patches applied:
+
+| shape | with option 1 |
+| --- | --- |
+| `hex/bin/oct(promo)` | fixed separately (`762c7addf`) |
+| `str(i + 1)` | printed **5553064** — the slot address |
+| `round(i + 1)` | printed **5553112** — the slot address |
+| `"ab" * (i + 1)` | printed **empty** |
+| `[0] * (i + 1)` | raised `TypeError: unsupported operand type(s)` |
+
+`[0] * n` is how Python allocates a fixed-size list and appears in the existing
+test corpus, so this is not an edge case — it is a core idiom, and it is the one
+that makes landing impossible today.
+
+### Each is the same shape, and there are probably more
+
+A promotable int reaching a **hand-built call site or a static-type predicate
+that does not know about promo**. Promo is deliberately not reported by
+`TypeIsOrdinal` / `TypeIsPyNumeric`, and `FindProc` never consults overloads, so
+every such site needs its own arm:
+
+- `str`'s intrinsic hand-builds `pystr_of` via `FindProc` → **fixed and landed**
+  (it is reachable today with a wide literal: `str(1180591620717411303424)`
+  printed an empty line on `pinned`).
+- `pystr_repeat`'s count was lowered with a raw `IRLowerAST` and a promo count
+  was diverted into the float arm → **fixed and landed**.
+- `round`'s intrinsic — same `FindProc` shape, NOT fixed.
+- The list-repeat path goes through `IRPyStaticPairUndefined`, which classifies a
+  promo operand as kind 0 (unknown) and calls the pair provably-undefined.
+  Adding promo to `IRPyOperandKind` was tried and **made it worse** — the
+  TypeError became a garbage number — so that predicate is not the only thing
+  in the way. Reverted.
+
+The honest conclusion: **the promo surface has not been enumerated.** What is
+needed before this can land is a sweep that runs a large probe corpus with the
+patches applied and DIFFS THE OUTPUT, not a spot-check of a handful of builtins,
+and then an arm per site. That is a piece of work in its own right and should be
+a ticket, not a footnote here.
+
+### What landed anyway
+
+The two fixes above stand on their own — both are reachable today via a wide
+literal, both verified against CPython, both wrong on `pinned`. Refreshed
+patches for the promotion typing itself are in
+`devdocs/progress/patches/` and still apply.
+
+Remains `unfinished/`, no longer blocked on the decision — blocked on the surface
+sweep.

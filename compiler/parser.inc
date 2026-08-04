@@ -10439,6 +10439,31 @@ begin
       else if isNilPy and (name = 'str') and (not PyUserShadowsProc(name)) then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr;
+        { str() of an ARBITRARY-PRECISION int renders through the promo runtime.
+          This site hand-builds its call with FindProc, which returns ONE proc
+          and never consults overloads
+          (project_findproc_by_name_ignores_overloads) — so a promo argument
+          reached a pystr_of whose parameter is not an integer, nothing narrowed
+          or boxed it, and the SLOT ADDRESS was rendered as a number. Reachable
+          today with a wide literal: `str(1180591620717411303424)`.
+          PXXPromoToStr takes a Pointer, which IS the slot address, so the
+          promo->Pointer argument arm carries it across unchanged. }
+        if TypeIsPromoInt(IntToTypeKind(ASTTk[CurASTNode])) then
+        begin
+          procIdx := FindProc('PXXPromoToStr');
+          if procIdx < 0 then Error('Nil Python: promocore (PXXPromoToStr) not loaded');
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := CurASTNode;
+          ASTRight[argSeq] := -1;
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := procIdx;
+          ASTLeft[node] := argSeq;
+          ASTTk[node] := Ord(tyAnsiString);
+          Expect(tkRParen, ')');
+          CurASTNode := node;
+          LastExprTk := tyAnsiString;
+          Exit;
+        end;
         { str(e) of a built-in Exception (or subclass) is its message: rewrite
           the argument to a read of the `.msg` field, so str() returns the text
           rather than the instance pointer (feature-nilpy-exception-message). }

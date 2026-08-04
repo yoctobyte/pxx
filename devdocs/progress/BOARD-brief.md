@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:7 backlog:177 experimental:20 rainy-day:31 done-followup:3 decided:37 done:1328 rejected:28`
+`unfinished:10 blocked:7 backlog:177 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1328 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -44,7 +44,6 @@ _none — no lane is locked._
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [T]` bug-t-bench-timings-recorded-under-co-tenancy
 - `[p 60] [U]` decide-abi-portable-vs-target-split
-- `[p 60] [U]` decide-nilpy-int-promotion-costs-10x-on-ordinary-loops
 - `[p 60] [A]` feature-a-abi-oracle
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-float-exception-mask-control
@@ -57,6 +56,7 @@ _none — no lane is locked._
 - `[p 60] [T]` feature-t-bench-hardware-provenance
 - `[p 60] [T]` feature-t-testmgr-owns-pinning-interruptible
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
+- `[p 60] [N]` task-n-enumerate-the-promo-surface-by-output-diff
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)

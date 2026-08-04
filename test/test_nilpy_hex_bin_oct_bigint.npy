@@ -51,3 +51,13 @@ print(hex(d))
 # the result is an ordinary string
 s = hex(big)
 print(len(s), s[0:2], s[2:6])
+
+# str() of an arbitrary-precision int. Same cause as the hex/bin/oct gap: the
+# str intrinsic hand-builds its call with FindProc, which returns ONE proc and
+# never consults overloads, so a promo argument reached a pystr_of whose
+# parameter is not an integer and the SLOT ADDRESS was rendered as a number —
+# `str(1180591620717411303424)` printed an empty line on pinned.
+print(str(1180591620717411303424))
+print(str(-1180591620717411303424))
+print(str(255), str(0))
+print(len(str(1180591620717411303424)))

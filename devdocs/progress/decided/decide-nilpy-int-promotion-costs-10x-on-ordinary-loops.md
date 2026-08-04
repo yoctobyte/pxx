@@ -77,3 +77,22 @@ The option-1 patch is written, self-hosts, and gates GREEN
 `...-module-scope.patch`. With it, every row of the bug ticket's table matches
 CPython except the two that were already known-separate. Full findings, including
 the three regressions it exposes and their fixes, are on the bug ticket.
+
+## DECIDED 2026-08-04 (Rene) — accept the 10x, land option 1
+
+> "integer promotion, i think that's an optimization-like ticket. not a big
+> deal. python wasnt meant for performant tight loops in the first place."
+
+So the cost question is settled: correctness first, the 10x is acceptable, and
+`feature-a-promoint-check-elision` claws it back later on its own schedule
+rather than gating this.
+
+**Landing is a separate matter and is NOT done.** Attempting it immediately
+after this decision turned up four more wrong-value sites that the bug ticket's
+earlier survey had missed, because that survey checked whether programs COMPILED
+rather than what they PRINTED — including `[0] * n`, which is how Python
+allocates a fixed-size list. Details, and the two fixes that did land, are on
+[[bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps]].
+
+Moved to `decided/`: the question this ticket asked has an answer. What is left
+is implementation, tracked there.
