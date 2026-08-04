@@ -216,3 +216,30 @@ is every aggregate parameter in the codebase, not just promo ones. Nothing moved
 
 ## Log
 - 2026-08-04 — resolved, commit 7e5ea47c5.
+
+## Addendum, same day — the fix is 64-bit ONLY, and I had claimed otherwise
+
+The arm was written `TypeIsPromoInt(ptypes[i])` and described as "harmless but
+not size-optimal" on 32-bit, where `PromoInt` is the 8-byte `tyPromoInt32`.
+**That claim was never measured, and it was wrong.**
+
+Cross-compiled to i386 and run: reads, `+`, `*`, chaining and mutation of a promo
+parameter are all correct, but `n := n shr 4` **HANGS** — the by-ref indirection
+is not resolved on that backend, so the runtime reads the cell address as a tag
+word, `PromoShiftCount` returns a huge count and `BShr`'s doubling loop never
+finishes. It is the operators with no `PromoMixedHelper` form (they box their
+right operand into a promo temp) that fail.
+
+Not a regression — on `pinned` this program segfaults on x86-64 and does not
+compile at all on i386 — but it swapped a crash for a HANG, which is the worse
+failure: a hang eats a suite timeout slot and reads as infrastructure trouble.
+
+The arm is now `ptypes[i] = tyPromoInt64`, so 32-bit is left exactly as it was
+(promo parameters do not compile there, same as `pinned`) and the 64-bit fix
+stands verified. The 32-bit half is
+[[bug-a-promoint-parameter-32bit-by-ref-indirection-hangs]].
+
+The lesson is the one already written down in
+[[feedback_control_must_actually_remove_the_variable]], in its other form: an
+unmeasured "harmless" is a claim, and on the one axis this change could plausibly
+break — the cross-target one — it took a single `--target=i386` run to falsify.

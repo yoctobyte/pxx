@@ -27205,7 +27205,7 @@ begin
       Syms[idx].ElemType := tyRecord;
       Syms[idx].ElemRecName := ptypesRec[i];
     end
-    else if TypeIsPromoInt(ptypes[i]) then
+    else if ptypes[i] = tyPromoInt64 then
     begin
       { A PROMOTABLE INT parameter is an AGGREGATE — {tag, payload}, 16 bytes on
         a 64-bit target — so it travels the same way a large record does: by
@@ -27217,7 +27217,18 @@ begin
         addressed an unfilled 16-byte frame cell, so `@n` was a pointer to a
         pointer and `n + 0` read the caller's address as a TAG word and crashed
         in the runtime's heap branch
-        (bug-a-promoint-parameter-cannot-be-used-at-all). }
+        (bug-a-promoint-parameter-cannot-be-used-at-all).
+
+        tyPromoInt64 ONLY, not TypeIsPromoInt. On a 32-bit target `PromoInt` is
+        the 8-byte tyPromoInt32, and there this promotion does NOT work: the
+        by-ref indirection is not resolved the same way, so the runtime reads a
+        garbage tag, `PromoShiftCount` returns a huge count and `n shr 4` on a
+        parameter spins in BShr's doubling loop — a HANG, which is worse than
+        the crash it replaced. Measured on i386; 64-bit is verified correct.
+        Restricting the arm leaves 32-bit exactly as it was (promo parameters
+        unusable, as on `pinned`) instead of changing one failure mode for a
+        worse one. Tracked as
+        bug-a-promoint-parameter-32bit-by-ref-indirection-hangs. }
       Syms[idx].IsRef := True;
       if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then
         Procs[procIdx].Params[i].IsRef := True;
