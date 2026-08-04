@@ -103,9 +103,67 @@ would then be a second symptom rather than a second bug — but that must be
 MEASURED, not assumed. Both crashes appear and disappear together across every
 row of the table above, which is suggestive and not proof.
 
+## 2026-08-04 — the obvious fix was ATTEMPTED and REVERTED; it trades a crash for a WRONG VALUE
+
+Recording the negative result, because it rules out the first thing anyone will
+try and it names a second consumer nobody had located.
+
+### What was tried
+
+`pyparser.inc:18126` already carries a fix for the ANNOTATED form of this
+collision (`bug-nilpy-str-of-object-segfaults-when-dunder-builds-a-string`): the
+RHS is read as a header parameter *before* the type scanners see it, so
+`def __init__(self, node: int)` + `self.node = node` types the field `int`
+instead of class `Node`.
+
+That fix keys on the parameter having a **type**. `PyHeaderParamType` answers
+`tyUnknown` for an UNANNOTATED parameter, so `def __init__(self, a)` falls
+straight through to `PyTypeFromTokenIndex`, which maps the ident to `tyClass`
+case-insensitively. The obvious completion is to key on it being a **parameter**
+instead — skip the class-name reading when
+`PyHeaderHasParam(methodStart, j, rhsName)`, letting it fall to the
+unannotated-parameter branch that already assigns `tyVariant`.
+
+### It works, and it is still a net LOSS
+
+| shape | before | with the attempt |
+| --- | --- | --- |
+| `-g` compile of the repro | **SIGSEGV (compiler)** | ok |
+| runtime tuple crash | SIGSEGV | SIGSEGV (unchanged) |
+| `str(Node(5).node)`, unannotated param | `5` | **`1`** |
+| `str(self.node)` inside a method | `5` | **`1`** |
+| `str(Node(5).node)`, ANNOTATED param | `5` | `5` |
+
+So it fixes the compiler crash, does NOT fix the runtime crash, and turns a
+correct value into a silent wrong one across a much broader shape than the crash
+covers. Reverted rather than patched around, per CLAUDE.md. Verified against
+`stable_linux_amd64/default/pinned` and `acf63b84d` that the `5` is the
+pre-existing behaviour and the `1` was introduced by the attempt — the tree
+carries none of it.
+
+Why it goes wrong is the useful part: forcing the field to `tyVariant` is not
+free. The value stored is a machine int and something on the `str()` path then
+reads the variant's tag rather than its payload. Whatever the right answer is,
+"call it a variant and move on" is not it.
+
+### The runtime crash is a SECOND consumer, in a different place
+
+Located, since `-g` compiles under the attempt: the fault is
+`mov (%rax),%rax` inside **`pyvar_repr`** (`+352`, symbolised via the `.map`).
+So the tuple ELEMENT carries an object tag over an integer payload — printing it
+dereferences the value. The field's own typing is not the whole story, because
+the attempt corrected that and the crash survived unchanged.
+
+That means at least two sites consume this collision independently: the field
+registration (`pyparser.inc:18126-18140`) and whatever types the tuple element
+(`PyMakeTupleFrom`'s element path, ultimately `PyInferExprType`'s ident scan at
+`pyparser.inc:3059`). A fix has to cover both, and the `str()` regression above
+says the field half needs a real type rather than a variant.
+
 ## Gate
 
 `make test-nilpy` + self-host byte-identical. Extend
 `test/test_nilpy_local_named_like_a_class.npy` (it already pins the sibling bug)
 with the field-path rows, including the `-g` compile as a row of its own so the
-compiler crash cannot regress silently.
+compiler crash cannot regress silently — **and** `str()` of an unannotated
+field named like its class, which is the row the reverted attempt broke.
