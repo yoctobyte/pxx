@@ -2,14 +2,14 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg **QUIET 3d9h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| xeon | `c51086424657` | 2026-08-04T03:49:45Z | GREEN (native) | 116.3s | `2501060cf95b` GREEN |
+| borg **QUIET 3d10h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
+| xeon | `9305672dbcd5` | 2026-08-04T03:59:12Z | RED (native) | 116.6s | `2501060cf95b` GREEN |
 
 ## Open regressions
-- none
+- **test-core#src:test/test_nilpy_min_max_variadic.npy** — test/test_nilpy_min_max_variadic.npy (xeon): bad `9305672dbcd5`, last good `c51086424657`, 3 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
 A regression clears when a later run on THAT host passes the job. These hosts have stopped publishing, so nothing can clear them; they return to the list above by themselves if the host runs again.
 
-- **fpc-bootstrap#src:compiler/compiler.pas** (borg, quiet 3d9h): bad `b1976742df2c`, 1 commit(s) in range
+- **fpc-bootstrap#src:compiler/compiler.pas** (borg, quiet 3d10h): bad `b1976742df2c`, 1 commit(s) in range
