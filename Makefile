@@ -7679,6 +7679,18 @@ lib-test: pxx-stable-check
 	    { echo 'FAIL: cerrno_strings differs from gcc'; exit 1; }; \
 	  echo 'cerrno_strings: identical to gcc'; \
 	else echo 'cerrno_strings: SKIP (no gcc)'; /tmp/cerrno_strings >/dev/null 2>&1; fi
+	# LINKAGE, not just output: this file calls htons/ntohl, and the whole point
+	# of bug-cfront-spurious-dt-needed-libc-with-no-imports is that doing so used
+	# to make the binary pull a glibc DT_NEEDED for a function crtl implements.
+	# The output diff above cannot see that -- it passes either way on a glibc
+	# host -- so assert the linkage directly, or the fix regresses silently and
+	# only a cross target without a sysroot ever notices.
+	@if command -v readelf >/dev/null 2>&1; then \
+	  n=$$(readelf -d /tmp/cerrno_strings 2>/dev/null | grep -c NEEDED); \
+	  test "$$n" = "0" || { echo "FAIL: cerrno_strings has $$n DT_NEEDED, want 0"; \
+	    readelf -d /tmp/cerrno_strings | grep NEEDED; exit 1; }; \
+	  echo 'cerrno_strings: statically linked, no DT_NEEDED'; \
+	else echo 'cerrno_strings: linkage check SKIP (no readelf)'; fi
 	# strtol overflow clamping + ERANGE + base-0 octal, and limits.h's LONG_MAX
 	# matching the actual width of long. Assertions are target-independent
 	# booleans, so the same expected output holds on 32- and 64-bit targets.

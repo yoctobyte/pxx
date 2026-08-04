@@ -2,7 +2,8 @@
 track: B
 prio: 45
 type: bug
-owner: claude-AC
+owner: claude-B-night
+status: done
 ---
 
 # A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing
@@ -151,3 +152,77 @@ Measured with exactly that change in place:
 Re-laned to **Track B**. The gate stands as written, including restoring the
 byte-order assertions to `test/cerrno_strings.c` — with this fix that test is
 statically linked again and runs under qemu with no sysroot.
+
+
+## FIXED 2026-08-05 (Track B)
+
+The diagnosis above was right and the prescription needed one adjustment, which
+the first build found immediately.
+
+**`src/sys/socket.c` does not work** — that was the prescribed destination, and
+it fails to compile: the auto-pull fires the moment `<sys/socket.h>` COMPLETES,
+which is *before* `<netinet/in.h>` (whose first act is to include
+`<sys/socket.h>`) has defined `in_addr_t` and `struct sockaddr_in`, and too late
+to pull them since that header's guard is already set. Result:
+`stray token at top level: 'in_addr_t'`.
+
+**The impl therefore lives at `src/netinet/in.c`**, where `<netinet/in.h>` pulls
+it with every type it needs in scope. That alone fixes `<arpa/inet.h>` and
+`<netinet/in.h>` (which is how essentially all real socket code reaches these
+functions, since `sockaddr_in` comes from there).
+
+**`src/sys/socket.c` is now a small shim** so `#include <sys/socket.h>` *alone*
+still reaches the impl. It has to test the guard rather than include
+unconditionally:
+
+```c
+#ifndef PXX_CRTL_NETINET_IN_H
+#include <netinet/in.h>
+#endif
+```
+
+because **a guard-suppressed no-op include still triggers the sibling-impl
+pull** — an unconditional include here would pull `src/netinet/in.c` while
+`<netinet/in.h>`'s own body was unfinished, reproducing the exact failure it
+works around. The `#ifndef` distinguishes "we were included by netinet/in.h,
+which will pull the impl itself" from "we are first, so run it for real".
+
+### Measured
+
+| program | before | after |
+| --- | --- | --- |
+| `<arpa/inet.h>` + `htons`/`htonl` | dynamic, NEEDED libc.so.6, 2 imports | **static, 0 NEEDED, 0 imports** |
+| `<sys/socket.h>` + `socket()` | dynamic, NEEDED libc.so.6, 1 import | **static, 0 NEEDED, 0 imports** |
+| `htons(1)` / `htonl(1)` values | 256 / 16777216 | unchanged, = gcc |
+
+Include-order check: `<sys/socket.h>`, `<netinet/in.h>`, `<arpa/inet.h>` and
+`<netdb.h>` each compile standalone.
+
+### Gate — met, including the part the ticket asked for
+
+- `test/cerrno_strings.c` has its byte-order assertions back (htons/ntohs/htonl/
+  ntohl values plus round-trips), and is **byte-identical to a gcc build on
+  stdout and stderr separately**.
+- It is **statically linked on x86-64, i386, arm32, aarch64 AND riscv32**, with
+  identical output on all five — the cross runs that this bug used to make
+  impossible.
+- `make lib-test` now asserts the **linkage**, not just the output: the output
+  diff passes either way on a glibc host, so without that assertion the fix
+  would regress silently and only a sysroot-less cross target would notice.
+- C conformance re-run for the regression risk crtl changes carry:
+  **i386 219 pass / 0 fail**, **riscv32 219 pass / 0 fail** (1 skip, the known
+  VLA case).
+- `tools/gate.sh lib` GREEN.
+
+### Swept while here
+
+All 317 buildable `test/c*.c` programs were checked for a `DT_NEEDED`. Three
+have one, and none is this bug: `crtl_libc_oracle` links libc **by design**
+(it is the oracle), `cwide_string_literal` imports `wcslen` (crtl has
+`include/wchar.h` but no `src/wchar.c` — the same declared-but-not-implemented
+shape, filed separately), and `cquickjs_prereq` needs `--threadsafe`
+(filed separately: without that flag the binary builds clean and then dies at
+load with `undefined symbol: __pxx_pmutex_init`).
+
+## Log
+- 2026-08-05 — resolved, commit PENDING.

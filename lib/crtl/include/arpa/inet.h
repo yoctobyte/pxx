@@ -10,7 +10,7 @@ uint16_t ntohs(uint16_t netshort);
 uint32_t htonl(uint32_t hostlong);
 uint32_t ntohl(uint32_t netlong);
 
-/* textual IPv4 conversion — see src/socket.c (AF_INET only, no resolver) */
+/* textual IPv4 conversion — see src/netinet/in.c (AF_INET only, no resolver) */
 int inet_aton(const char *s, struct in_addr *out);
 in_addr_t inet_addr(const char *s);
 int inet_pton(int af, const char *src, void *dst);

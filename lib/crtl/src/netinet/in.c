@@ -4,6 +4,24 @@
  *
  * IPv4 first: C sees normal sockaddr_in in network byte order; this file
  * converts to the PAL's host-order IPv4 address/port primitives.
+ *
+ * WHY IT LIVES UNDER netinet/ AND NOT sys/, despite implementing <sys/socket.h>.
+ * crtl auto-pulls src/<x>.c when <x.h> completes. As src/sys/socket.c this file
+ * was pulled the moment <sys/socket.h> finished — which is BEFORE
+ * <netinet/in.h> (whose first act is to include <sys/socket.h>) has defined
+ * in_addr_t and struct sockaddr_in, and too late to pull them, since that
+ * header's guard is already set. Here it is pulled when <netinet/in.h>
+ * completes, with every type it needs in scope.
+ *
+ * As src/socket.c — where it used to be — NO header mapped to it at all
+ * (src/arpa/inet.c, src/netinet/in.c and src/sys/socket.c all did not exist),
+ * so it was never pulled, every prototype stayed external, and calls fell back
+ * to glibc dynamic imports. That worked on glibc and broke everywhere else:
+ * bug-cfront-spurious-dt-needed-libc-with-no-imports.
+ *
+ * src/sys/socket.c is now a small shim that reaches this file for programs
+ * including only <sys/socket.h>; see the comment there for why it has to test
+ * the guard rather than include unconditionally.
  */
 
 #include <errno.h>

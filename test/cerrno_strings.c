@@ -11,18 +11,23 @@
  * separately, since perror writes to stderr and comparing a merged stream
  * compares buffering behaviour rather than content.
  *
- * The byte-order helpers (htons and friends, now also declared by
- * <netinet/in.h>) are deliberately NOT exercised here: merely CALLING one pulls
- * lib/crtl/src/socket.c in and the binary stops being statically linked, which
- * would make this test unrunnable under qemu on targets with no sysroot. That
- * is pre-existing behaviour — the same happens through the older
- * <arpa/inet.h> path — and is filed separately. Header visibility is what my
- * change affected, and the compile-time probe covers that; the values come from
- * an implementation that was already there.
+ * The byte-order helpers ARE exercised here as of 2026-08-05. They were left
+ * out because calling one used to pull in an implementation the compiler then
+ * could not see, so the call fell back to a glibc import and the binary stopped
+ * being statically linked — which made this test unrunnable under qemu on a
+ * target with no sysroot. That was
+ * bug-cfront-spurious-dt-needed-libc-with-no-imports, now fixed: the impl moved
+ * to src/netinet/in.c, where the auto-pull convention actually reaches it.
+ *
+ * So their presence here is the end-to-end proof of that fix. If this file ever
+ * goes back to being dynamically linked, these are the lines that will say so —
+ * on every cross target, where the missing sysroot turns it into a hard failure
+ * rather than a silent dependency.
  */
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <netinet/in.h>
 
 int main(void) {
   char b[64];
@@ -35,6 +40,13 @@ int main(void) {
   /* XSI strerror_r: 0 on success, ERANGE when it does not fit */
   printf("r_ok=%d buf=[%s]\n", strerror_r(2, b, sizeof b), b);
   printf("r_small=%d\n", strerror_r(2, b, 2));
+
+  /* byte order: values against gcc, and the swap must be a real swap on a
+     little-endian host rather than an accidental identity */
+  printf("htons=%u ntohs=%u\n", (unsigned)htons(0x1234), (unsigned)ntohs(0x1234));
+  printf("htonl=%u ntohl=%u\n", (unsigned)htonl(0x12345678u), (unsigned)ntohl(0x12345678u));
+  printf("roundtrip=%d %d\n", ntohs(htons(0xBEEF)) == 0xBEEF,
+                               ntohl(htonl(0xDEADBEEFu)) == 0xDEADBEEFu);
 
   errno = 2;
   perror("myprog");

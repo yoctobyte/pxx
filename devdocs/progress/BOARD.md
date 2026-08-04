@@ -42,7 +42,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (181)
+## backlog (180)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -50,7 +50,6 @@ _none_
 | bug-a-promoint-parameter-32bit-by-ref-indirection-hangs | A | 40 | bug | On 32-bit targets a PromoInt parameter still does not work: it does not compile today, and simply extending the 64-bit by-ref fix makes it HANG — the by-ref indirection is not resolved, so PromoShiftCount reads a garbage tag and `n shr 4` spins in BShr's doubling loop | — |
 | bug-a-writeln-float-exponent-form-not-correctly-rounded | A | 60 | bug | writeln(Double) and Str(F,S) scale by repeated /10.0 and are wrong from the 16th digit; 1e200 even gets the wrong EXPONENT | — |
 | bug-a-writeln-nonfinite-float-aarch64-emitters-unchecked | A | 45 | bug | aarch64 has its own EmitWriteFloatSciA64 / EmitWriteFloatNatA64 emitters, not touched by the non-finite fix — very likely the same never-terminating normalise loop, unverified because no emulator run was done | — |
-| bug-cfront-spurious-dt-needed-libc-with-no-imports | B | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-container-membership-ignores-the-eq-dunder | N | 35 | bug | `x in [a, b]` compares boxed handles, so a class's __eq__ is ignored and membership is False for an equal-but-distinct object — the same runtime-dispatch gap as list.sort() ignoring __lt__ | — |
@@ -340,9 +339,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1356)
+## done (1357)
 
-1356 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1357 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -442,7 +441,6 @@ _none_
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] bug-a-promoint-function-result-crashes
 - [p 45] [A] bug-a-writeln-nonfinite-float-aarch64-emitters-unchecked
-- [p 45] [B] bug-cfront-spurious-dt-needed-libc-with-no-imports
 - [p 45] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [P] bug-pascal-member-check-missing-on-the-lvalue-field-path

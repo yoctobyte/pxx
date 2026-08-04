@@ -272,6 +272,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-cfront-silent-bind-to-pascal-proc-of-different-arity | A | 30 | bug | A C call binds to a Pascal routine of a DIFFERENT arity, silently | — |
 | bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size | C | 85 | bug | `sizeof(p->arr)` returns the POINTER size, not the array size — silent buffer overflow | — |
 | bug-cfront-sizeof-unparenthesised-subscript | C | 50 | bug | `sizeof a[0]` is a parse error — the array-length idiom does not compile | — |
+| bug-cfront-spurious-dt-needed-libc-with-no-imports | B | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
 | bug-cfront-undeclared-type-in-cast-treated-as-zero | C | 65 | bug | An undeclared TYPE NAME used in a cast is only a warning — cfront treats the name as the value 0, so `(SomeMissingType)fnptr` becomes an integer 0 and the call goes through a null pointer. gcc rejects it. Found in cpyext M5: a function-pointer cast silently became 0 and the program segfaulted far from the cast. | — |
 | bug-cfront-unit-globals-unregistered | C | 70 | bug | cfront: a file-scope global in a .c compiled as a UNIT is never reserved — arrays fail to lower, scalars silently read 0 | — |
 | bug-cfront-vla-stack-corruption | C | 65 | bug | C VLA (`int arr[n]` with runtime `n`) silently corrupts adjacent stack slots | — |
