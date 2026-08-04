@@ -4221,6 +4221,15 @@
   "verdict": "GREEN",
   "wall": 310.1
  },
+ "last_bench": {
+  "conf_rows": 550,
+  "date": "2026-08-04T23:58:56Z",
+  "hw_fp": "07ce4bf86a35",
+  "probe_ratio": 1.0,
+  "rc": 0,
+  "rows": 30,
+  "sha": "abcf66b0b308fdef5d6cbe3906756e91a70315dc"
+ },
  "last_full": {
   "date": "2026-08-04T23:44:27Z",
   "sha": "abcf66b0b308fdef5d6cbe3906756e91a70315dc",
