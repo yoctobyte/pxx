@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-03T17:56:26Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "3368e6fa62cc1d444ea783f660b562d54cc249a8",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-03T17:59:33Z",
    "fixed": [],
    "new_red": [],
@@ -403,6 +395,14 @@
     "test-core#src:test/test_nilpy_min_max_variadic.npy"
    ],
    "sha": "9305672dbcd5f66880058f28120d237032e6fedc",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-04T04:02:09Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "7d092ea55894ac91760983787b6fe7ffe446b3dc",
    "tier": "native",
    "verdict": "RED"
   }
@@ -4567,8 +4567,8 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-04T03:59:12Z",
-  "sha": "9305672dbcd5f66880058f28120d237032e6fedc",
+  "date": "2026-08-04T04:02:09Z",
+  "sha": "7d092ea55894ac91760983787b6fe7ffe446b3dc",
   "tier": "native",
   "verdict": "RED",
   "wall": 116.6
