@@ -8625,8 +8625,22 @@ end;
 
 function pyabs_v(const v: Variant): Variant;
 var t: Int64; d: Double; i: Int64;
+    ds: AnsiString; pa: array[0..1] of NativeInt;
 begin
   t := pyvartag(v);
+  { VT_PROMO_INT64: the payload IS the exact decimal, so the absolute value is
+    that text without its leading '-'. Reading it as a machine int first would
+    narrow mod 2^64 — the whole reason this tag exists. }
+  if t = 8193 then
+  begin
+    ds := PPyAnsiString(@PPyVarRec(@v)^.Payload)^;
+    if (Length(ds) > 0) and (ds[1] = '-') then ds := Copy(ds, 2, Length(ds) - 1);
+    PXXPromoInit(@pa);
+    PXXPromoFromStr(@pa, ds);
+    PXXPromoToVariant(@Result, @pa);
+    PXXPromoClear(@pa);
+    Exit;
+  end;
   if t = 3 then           { VT_DOUBLE }
   begin
     d := pyvar_to_float(v);

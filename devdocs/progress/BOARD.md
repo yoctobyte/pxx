@@ -38,13 +38,12 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (173)
+## backlog (172)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-promoint-shr-yields-nothing-and-a-machine-int-cast-yields-the-slot-address | A | 50 | bug | PromoInt in PASCAL: `n shr k` produces nothing (shl is fine), and Integer(n)/Int64(n) yields the SLOT ADDRESS instead of the value — both silent, both block writing base-conversion (hex/bin/oct) over a promotable int in Pascal | — |
 | bug-cfront-spurious-dt-needed-libc-with-no-imports | B | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
-| bug-nilpy-abs-of-a-negative-expression-returns-it-unchanged | N | 45 | bug | abs() of a negative INTEGER EXPRESSION returns the value unchanged — abs(0 - i) is -5, not 5 | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-container-membership-ignores-the-eq-dunder | N | 35 | bug | `x in [a, b]` compares boxed handles, so a class's __eq__ is ignored and membership is False for an equal-but-distinct object — the same runtime-dispatch gap as list.sort() ignoring __lt__ | — |
@@ -328,9 +327,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1337)
+## done (1338)
 
-1337 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1338 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -424,7 +423,6 @@ _none_
 - [p 45] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 3)
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [B] bug-cfront-spurious-dt-needed-libc-with-no-imports
-- [p 45] [N] bug-nilpy-abs-of-a-negative-expression-returns-it-unchanged
 - [p 45] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [P] bug-pascal-member-check-missing-on-the-lvalue-field-path

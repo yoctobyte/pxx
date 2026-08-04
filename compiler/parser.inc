@@ -12067,6 +12067,23 @@ begin
             Exit;
           end;
         end;
+        { A PROMOTABLE INT goes through pyabs_v too. The integer helper below
+          takes an Int64, and this site hand-builds its call, so a promo
+          argument arrived as its SLOT ADDRESS and `abs(0 - i)` answered -5:
+          the sign was simply never inspected. pyabs_v takes a Variant, which
+          the promo boxes into losslessly, and it has its own VT_PROMO_INT64
+          arm. }
+        if PyExprMode and CaseEqual(name, 'Abs') and
+           (TypeIsPromoInt(IntToTypeKind(ASTTk[node]))) and
+           (FindProc('pyabs_v') >= 0) then
+        begin
+          helperPi := FindProc('pyabs_v');
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
+          CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
+          ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyVariant);
+          LastExprTk := tyVariant;
+          Exit;
+        end;
         if PyExprMode and CaseEqual(name, 'Abs') and
            (IntToTypeKind(ASTTk[node]) = tyVariant) and
            (FindProc('pyabs_v') >= 0) then

@@ -121,3 +121,12 @@ print(2 ** 70)
 print(10 ** 30)
 print(3 ** 40)
 print(2 ** 10, 2 ** 0, 2 ** -1)
+
+# abs() of a promo: the Abs intrinsic hand-builds its call and picked the Int64
+# helper, so the argument arrived as its slot ADDRESS — a positive pointer — and
+# the sign was never inspected
+print(abs(0 - i), abs(i), abs(i - 5))
+b = 1
+for k in range(70):
+    b = b * 2
+print(abs(0 - b))

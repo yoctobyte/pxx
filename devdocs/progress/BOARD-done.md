@@ -388,6 +388,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nested-comment-breaks-fpc-brace | A | 50 | bug | bug: nested `{ }` comments break the FPC idiom `{ ... '{' ... }` | — |
 | bug-nested-dynarray-cross-segfault | A | 50 | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
 | bug-nested-proc-sibling-call-unresolved | A | 50 | bug | Nested procedure can't call its sibling (and capturing self-recursion breaks) | — |
+| bug-nilpy-abs-of-a-negative-expression-returns-it-unchanged | N | 45 | bug | abs() of a negative INTEGER EXPRESSION returns the value unchanged — abs(0 - i) is -5, not 5 | — |
 | bug-nilpy-ambiguous-dynamic-field-needs-runtime-dispatch | N | 70 | bug | `.field` on a dynamically-typed value is refused when two classes disagree | — |
 | bug-nilpy-and-or-evaluates-the-left-operand-twice | N | 70 | bug | `f() and x` / `f() or x` call f() TWICE — the left operand's side effects are duplicated. Silent, no error. Root cause read out of PyMakeBoolOpValue: the same AST node is used as both the condition and an arm, and the AST is a TREE | — |
 | bug-nilpy-annotated-assignment-single-token-only | N | 60 | bug | NilPy: an annotated assignment only accepted a SINGLE-TOKEN annotation | — |
