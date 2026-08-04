@@ -3,6 +3,8 @@ summary: "tstate: xeon's red set is PART missing-corpora and PART a real i386 re
 type: bug
 track: T
 prio: 50
+status: done
+owner: claude@xeon
 ---
 
 # xeon's red set looks like missing corpora, not a code regression
@@ -117,3 +119,43 @@ A job that cannot run because its corpus is absent should report **SKIP**, not
 missing, so the cross jobs are inconsistent with that. Reporting absent-input as
 failure is what turned a setup gap into an 18-job "cascade" with a bisect
 pointing at a bookkeeping commit.
+
+## Log
+- 2026-08-04 (`claude@xeon`) — every axis of this is now settled; checked one by
+  one rather than assumed.
+
+  **"Absent corpus should SKIP, not fail" — implemented.** testmgr self-skips a
+  job whose `library_candidates/` tree is missing and says so up front
+  (`!! CORPUS MISSING — N job(s) will SKIP, not run`). Today's
+  [[bug-t-corpus-regex-invents-phantom-tree]] fixed the two ways that mechanism
+  misfired: a phantom corpus name invented from prose in a SKIP message, and a
+  self-guarded probe dragging an unrelated regression test into its skip.
+
+  **The corpora question is answered on xeon.** The box has the trees; its job
+  map currently holds **zero** non-passing entries, and all five
+  `test-c-conformance*#shard2/6` variants (native + the four cross targets) are
+  green — see [[regression-test-c-conformance-shard2-6]], whose real cause
+  turned out to be a plain-`char` typing bug, fixed in `0816af23f`.
+
+  **The i386 half was split out and is fixed** —
+  [[bug-c-i386-crtl-growth-corrupts-main-exit-code]] is in `done/`, so the
+  reverted `lib/crtl` work can go back in.
+
+  **The TSTATE.md-vs-`xeon.json` mismatch cannot be reproduced.** Both now agree
+  exactly (`open_regressions = 0`, index section `- none`). It was a symptom of
+  the cascade bookkeeping of the day, and two fixes since bear directly on it:
+  quiet-host holding ([[task-t-borg-open-regression-is-permanently-stale]]) and
+  entries whose job key no longer exists
+  ([[bug-t-ledger-entry-outlives-the-job-key-it-names]]).
+
+  **One descendant stays open, deliberately:** a skipped job is still PUBLISHED
+  as `pass`, so a green verdict cannot be distinguished from one that actually
+  ran — [[bug-t-tstate-launders-skip-into-pass]]. That is this ticket's original
+  concern one level deeper, and it wants a tstate schema migration rather than a
+  drive-by.
+
+  Resolved as overtaken, not as wrong: the observation was correct when filed
+  and the reporting it complained about has since been fixed in three separate
+  places.
+
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

@@ -759,6 +759,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-tobject-destroy-not-virtual-override | A | 50 | bug | Built-in TObject has no virtual `Destroy`/`Create` to `override` — breaks the universal FPC idiom | — |
 | bug-tobject-param-truncated-32bit | A | 60 | bug | TObject-typed parameter is 32-bit-truncated in methods, unmatched in plain routines | — |
 | bug-transitive-dns_cache-import-corrupts-managed-strings | A | 54 | bug | Transitive `uses dns_cache` corrupts managed-string codegen in an importer | — |
+| bug-tstate-xeon-cross-jobs-red-missing-corpora | T | 50 | bug | tstate: xeon's red set is PART missing-corpora and PART a real i386 regression of mine (now reverted) — the corpora half still stands | — |
 | bug-tthread-execute-writeln-crash | A | 50 | bug | TThread Execute that writes (writeln) crashes nondeterministically | — |
 | bug-twatch-repro-line-job-number-drift | T | 55 | bug | bug: twatch repro lines rot — job numbers drift as tests are added | — |
 | bug-typed-const-array-of-string-broken | A | 50 | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
