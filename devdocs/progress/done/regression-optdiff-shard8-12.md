@@ -49,4 +49,4 @@ identified culprit commit to name, and nothing in the eight intervening commits
 is an obvious match. If it returns, the watcher will re-file it with a narrower
 range — which is the right way for it to come back, rather than keeping an
 unreproducible ticket open.
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 814f2abfe.

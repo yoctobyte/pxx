@@ -75,4 +75,4 @@ Per-fix loop. A field/recursion `.npy` test diffed against CPython; check
 `ls test/ | grep -E 'promo|bigint'` for an existing file to extend.
 
 ## Log
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 814f2abfe.

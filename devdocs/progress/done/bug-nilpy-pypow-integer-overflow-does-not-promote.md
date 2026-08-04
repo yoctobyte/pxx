@@ -112,4 +112,4 @@ priority and its gate. Note `pow(base, exp, mod)` (the three-argument modular
 form, added today) is unaffected either way — it never builds the full power.
 
 ## Log
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 814f2abfe.
