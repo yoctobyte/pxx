@@ -61,4 +61,4 @@ applied, plus the bug ticket's own table, plus a benchmark line recording the
 measured cost so the 10x figure stays honest as check-elision lands.
 
 ## Log
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit b3ccf2f61.

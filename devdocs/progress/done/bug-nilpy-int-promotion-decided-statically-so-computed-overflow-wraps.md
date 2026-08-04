@@ -298,4 +298,4 @@ Remains `unfinished/`, no longer blocked on the decision — blocked on the surf
 sweep.
 
 ## Log
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit b3ccf2f61.
