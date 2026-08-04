@@ -86,4 +86,4 @@ GREEN, self-host byte-identical.
 
 ## Log
 - 2026-08-04 — resolved.
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 3a540a4af.
