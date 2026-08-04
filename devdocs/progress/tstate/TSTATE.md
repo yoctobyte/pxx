@@ -2,8 +2,8 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg **QUIET 3d13h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| xeon | `fca6c8a87165` | 2026-08-04T07:49:36Z | GREEN (native) | 118.6s | `d8838b4c635d` GREEN |
+| borg **QUIET 3d14h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
+| xeon | `fca6c8a87165` | 2026-08-04T07:57:02Z | GREEN (full) | 415.3s | `fca6c8a87165` GREEN |
 
 ## Open regressions
 - none
@@ -12,4 +12,4 @@
 
 A regression clears when a later run on THAT host passes the job. These hosts have stopped publishing, so nothing can clear them; they return to the list above by themselves if the host runs again.
 
-- **fpc-bootstrap#src:compiler/compiler.pas** (borg, quiet 3d13h): bad `b1976742df2c`, 1 commit(s) in range
+- **fpc-bootstrap#src:compiler/compiler.pas** (borg, quiet 3d14h): bad `b1976742df2c`, 1 commit(s) in range
