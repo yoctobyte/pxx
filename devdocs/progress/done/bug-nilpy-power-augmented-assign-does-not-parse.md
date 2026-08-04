@@ -3,6 +3,8 @@ summary: "NilPy `x **= n` is a hard parse error — power is the one operator wi
 type: bug
 track: N
 prio: 30
+status: done
+owner: claude-AN
 ---
 
 # `x **= n` does not parse
@@ -66,3 +68,34 @@ class-typed name and field with `__ipow__` declared, with only `__pow__`
 declared (fall back and rebind), and with neither (catchable TypeError) —
 mirroring `test/test_nilpy_augmented_assign_class_field.npy`. Plus self-host
 byte-identical, since a new token kind touches `defs.inc`.
+
+
+## Resolved 2026-08-04 — fixed as part of the grouped statement-forms ticket
+
+Duplicate of item 2 of
+[[bug-nilpy-chained-assign-power-assign-and-semicolon-statements]], filed a day
+later from a different sweep. Both describe the same defect and, notably, the
+same diagnosis: power is the one operator with no token, so the token-keyed
+augmented-assignment machinery could not express it.
+
+Fixed in `cd948253b`:
+
+- **`tkPowEq`**, APPENDED at the tail of the token enum (never inserted — the
+  ordinals are frozen by the self-host discipline) and lexed before the plain
+  `*=` so the longer spelling wins;
+- **`PyMakePow`**, the `**` lowering factored out of `ParseFactor` so the
+  augmented spelling builds the IDENTICAL node. A second hand-built `pypow_v`
+  call would have compiled fine and silently dropped the `__pow__`/`__rpow__`
+  dunder dispatch;
+- the **result widens**: `2 ** 3` is an int and `2 ** -1` is a float, so the
+  target must not keep its type. Inside a def the trial parse notes that from
+  the lowered node; at MODULE scope it needed a token-shape arm beside the one
+  `/=` already had — measured, not assumed.
+
+Re-measured at HEAD: `x = 3; x **= 2` prints `9`, matching CPython. Covered by
+`test/test_nilpy_chained_assign_powassign.npy`, which exercises int, negative
+and float exponents at both module and def scope.
+
+## Log
+- 2026-08-04 — resolved (duplicate; fixed by cd948253b).
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

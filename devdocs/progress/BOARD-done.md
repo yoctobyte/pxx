@@ -519,6 +519,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-percent-e-and-g-silently-render-as-fixed-point | N | 55 | bug | `%e` and `%g` silently render as `%f` — a wrong answer to an EXPLICITLY requested format | — |
 | bug-nilpy-percent-r-renders-as-str-not-repr | N | 60 | bug | `%r` rendered as `%s` — silently, and only for strings | — |
 | bug-nilpy-percent-string-format-garbage | N | 60 | bug | nilpy: printf-style % on a string yields garbage instead of formatting (silent wrong output) | — |
+| bug-nilpy-power-augmented-assign-does-not-parse | N | 30 | bug | NilPy `x **= n` is a hard parse error — power is the one operator with no token, so the token-keyed augmented-assignment machinery cannot express it | — |
 | bug-nilpy-print-emits-arguments-before-evaluating-later-ones | N | 45 | bug | `print` writes each argument as it goes, so an exception mid-list leaves partial output | — |
 | bug-nilpy-print-of-a-float-bypasses-str-formatting | N | 60 | bug | `print(x)` and `print(str(x))` disagree for a float | — |
 | bug-nilpy-print-string-literal-reserves-8mb-of-bss | N | 65 | bug | Every `print("literal")` reserved 8 MiB of BSS | — |

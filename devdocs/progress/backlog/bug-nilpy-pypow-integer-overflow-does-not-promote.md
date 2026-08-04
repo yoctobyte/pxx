@@ -2,6 +2,8 @@
 track: N
 prio: 35
 type: bug
+status: working
+owner: claude-AN
 ---
 
 # `pypow_v`'s integer path silently wraps past 64 bits instead of promoting
@@ -60,3 +62,51 @@ verify).
 `make test-nilpy` + self-host byte-identical, plus `2 ** 70`, `2 ** 100`, and
 a negative-base odd/even exponent case (`(-2) ** 65`, `(-2) ** 66`) diffed
 against CPython, through BOTH the compiled `**` and `exec("... ** ...")`.
+
+
+## 2026-08-04 — the premise about `pymul_v` is WRONG, and the real fork is a size trade-off
+
+This ticket says `pypow_v` has no overflow check "unlike `pymul_v`/pyeval's own
+`PyIMul`, which detect an overflowing `*` … and promote". Half of that is false,
+and it is the half that would have made the fix cheap.
+
+**`pymul_v` does NOT promote.** Its numeric arm (`pylib.pas`) is a plain Int64
+multiply with no probe at all:
+
+```pascal
+r^.VType := 2;
+r^.Payload := pyvar_to_int(a) * pyvar_to_int(b);
+```
+
+Only **pyeval's** `PromoOp`/`PXXPromoMul` promote, and pyeval is the unit that
+`uses promoint`. Measured, not read: routing `pypow_v`'s squaring loop through
+`pymul_v` over variants was implemented and changed **nothing** — `2 ** 70`
+still printed 0. Reverted rather than left in, since an inert change is how a
+wrong premise gets a foothold.
+
+### So the fix costs something, and the choice is a real one
+
+1. **`pylib uses promoint`** and the probe goes in `pypow_v` as this ticket
+   describes. Correct and complete — it also fixes `pow(a, b)`, which routes to
+   the same place. But `promoint` is what the DCE note measures at **35KB → 92KB**
+   ([[project_promotable_int_stages123]]), and pylib is linked into EVERY NilPy
+   program, so every binary pays it whether or not it ever raises anything to a
+   large power. On a ~1.27MB NilPy binary that is roughly +4%.
+2. **Put the promoting power in pyeval** (which already uses `promoint`) and
+   point the `**` lowering at it — `PyMakePow` in `pyparser.inc` is now the ONE
+   place that chooses the callee, so this is a one-line redirect. Costs nothing
+   for programs that do not link pyeval. But `pow(a, b)` — pylib's function —
+   still wraps unless it is redirected too, and it cannot reach pyeval, so the
+   two spellings of the same operation would diverge. That asymmetry is worse
+   than the bug for anyone who hits it.
+3. **Raise OverflowError instead of promoting.** Cheap, honest, no new
+   dependency, and strictly better than silently printing 0 — but it is a
+   deliberate divergence from Python, where `2 ** 70` simply works.
+
+Route 2's asymmetry is the thing that makes this a judgement call rather than a
+task: option 1 is the only one where `2 ** 70` and `pow(2, 70)` agree, and it is
+the one that costs every program 57KB.
+
+**Not implemented.** Recorded here rather than guessed at; the ticket keeps its
+priority and its gate. Note `pow(base, exp, mod)` (the three-argument modular
+form, added today) is unaffected either way — it never builds the full power.
