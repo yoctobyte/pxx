@@ -9,6 +9,7 @@ prio: 50
 
 - **Type:** bug — Track B (library / crtl), tag `compat` (gcc/glibc parity)
 - **Status:** done
+- **Resolved:** 2026-08-05 in `570e72de3` (verified on origin/master after the rebase)
 - **Opened:** 2026-08-05
 - **Found by:** sweeping all 317 buildable `test/c*.c` for a spurious
   `DT_NEEDED` while fixing
