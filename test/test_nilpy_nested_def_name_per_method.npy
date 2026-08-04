@@ -1,0 +1,54 @@
+# Two methods of one class could not both declare a nested def of the SAME name
+# (bug-nilpy-same-named-nested-defs-in-two-methods-collide): the second method's
+# call bound the FIRST method's def and failed on arity —
+# "no overload of draw matches these arguments".
+#
+# Cause: the method body pre-pass (PyCollectLocalsAST) parses the body too, and
+# a nested def it meets registers under `PyNestPrefix + '.' + name`. A plain def
+# sets its prefix BEFORE calling that pre-pass; the method path set it AFTER, so
+# during the pre-pass the prefix was empty and every method's nested def
+# registered under its bare name. That asymmetry is also why the same two
+# nested defs in two plain FUNCTIONS never collided — the control below.
+#
+# Matching arities are included deliberately: with different arities the failure
+# hides behind overload matching, and with the same arity it would silently call
+# the WRONG def instead.
+#
+# Every expectation is CPython's.
+
+class C:
+    def a(self):
+        def draw(v):
+            return v + 1
+        return draw(10)
+
+    def b(self):
+        def draw():
+            return 99
+        return draw()
+
+    def c(self):
+        def draw(v):
+            return v * 2
+        return draw(10)
+
+    def d(self):
+        self.k = 5
+        def draw(v):
+            return v + self.k
+        return draw(10)
+
+# the control: two plain functions, which always worked
+def f():
+    def draw(v):
+        return v + 1
+    return draw(10)
+
+def g():
+    def draw():
+        return 99
+    return draw()
+
+o = C()
+print(o.a(), o.b(), o.c(), o.d())
+print(f(), g())

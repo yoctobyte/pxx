@@ -17828,6 +17828,23 @@ begin
     method was an Integer local silently holding a string handle — the same
     def/method asymmetry that made `-> str` methods a separate bug from `-> str`
     defs. One pre-pass now serves both. }
+  { SET THE NEST PREFIX FIRST — the pre-pass parses this body too, and a nested
+    def it meets registers under `PyNestPrefix + '.' + name`. With the prefix
+    still empty here, two methods of one class each declaring a nested def of
+    the SAME name both registered it as the bare name, so the second method's
+    call bound the FIRST method's def and failed on arity:
+
+        class C:
+            def a(self):
+                def draw(v): ...
+            def b(self):
+                def draw(): ...        -> no overload of draw matches
+
+    A plain def already sets its prefix before its own PyCollectLocalsAST call
+    (PyParseDef); the method path set it after, and that asymmetry was the whole
+    bug — which is also why two same-named nested defs in two plain FUNCTIONS
+    never collided (bug-nilpy-same-named-nested-defs-in-two-methods-collide). }
+  savedPfx := PyNestPrefix; PyNestPrefix := fullName;
   PyCollectLocalsAST(bodyStart);
   PyDbgDumpLocals(Procs[procIdx].Name);
   for i := 0 to PyLocalCount - 1 do
@@ -17846,7 +17863,6 @@ begin
     prefix (for capture + qualified registration) and drain the queue after its
     epilogue — otherwise the shells stay forward-declared and never link
     (feature-nilpy-nested-defs-in-methods). }
-  savedPfx := PyNestPrefix; PyNestPrefix := fullName;
   savedNest := PyPendNestCount;
   savedLam := PyPendLamCount;
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;

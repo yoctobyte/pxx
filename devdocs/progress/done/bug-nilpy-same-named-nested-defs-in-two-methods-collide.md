@@ -3,6 +3,8 @@ track: N
 prio: 45
 type: bug
 summary: "Two methods of one class cannot both declare a nested def of the same name — the second call binds the first method's def and fails on arity. Pre-existing; loud."
+status: done
+owner: claude-AN
 ---
 
 # Two methods of one class cannot both have a nested def of the same name
@@ -62,3 +64,51 @@ A `.npy` diffed against CPython: the repro; the same with matching arities (so
 the failure cannot hide behind overload matching); the two-plain-functions
 control; and a third method adding a same-named nested def, to confirm the fix
 scales past two.
+
+
+## Resolved 2026-08-04 — an ORDERING asymmetry between the def and method paths
+
+The ticket guessed the collision was in the LOOKUP (`PyQualifyNested` walking
+the prefix outward and reaching the other method's def). It is not — it is in
+the REGISTRATION, and the tell is in the `PXXDBG=n.caps` dump the ticket
+recommended taking first:
+
+```
+PXXDBG n.caps def draw       caps=      <- method a, PRE-PASS: prefix EMPTY
+PXXDBG n.caps def C.a.draw   caps=      <- method a, real parse
+PXXDBG n.caps def draw       caps=      <- method b, PRE-PASS: prefix EMPTY
+                                           ...and then the error, before b's
+                                           real parse ever ran
+```
+
+`PyCollectLocalsAST` parses the method body too, and a nested def it meets
+registers under `PyNestPrefix + '.' + name`. **A plain def sets its prefix
+BEFORE calling that pre-pass; the method path set it AFTER.** So during a
+method's pre-pass the prefix was empty, every method's nested def registered
+under its bare name, and the second method's `draw()` bound the first's
+`draw(v)`.
+
+That asymmetry also explains the control the ticket noted: two same-named nested
+defs in two plain FUNCTIONS never collided, because that path had the prefix all
+along.
+
+Fix: move `savedPfx := PyNestPrefix; PyNestPrefix := fullName;` above the
+`PyCollectLocalsAST` call in the method path, so it matches `PyParseDef`. One
+statement moved.
+
+### Verified
+
+`test/test_nilpy_nested_def_name_per_method.npy`, wired into `make test-nilpy`:
+four methods each with a nested `draw`, **including two of matching arity**
+(with different arities the failure hides behind overload matching, and with the
+same arity an unfixed compiler would silently call the wrong def rather than
+erroring), one of them reading `self.k`, plus the two-plain-functions control.
+Diffed against CPython, identical.
+
+The four tests landed earlier today that touch nested defs, lambdas and return
+types were re-run against CPython and are unchanged. `tools/gate.sh quick`
+GREEN, self-host byte-identical.
+
+## Log
+- 2026-08-04 — resolved.
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

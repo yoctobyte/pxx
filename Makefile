@@ -1375,6 +1375,12 @@ test-nilpy: $(COMPILER)
 	# decimal expansion. Every value here is now CPython's.
 	./$(COMPILER) test/test_nilpy_round.npy /tmp/test_nilpy_round26
 	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.67 2.67\n9.99 0.04 0.3 100.0\n1.0 0.0 -0.0 0.0')"
+	# Two methods of one class could not both declare a nested def of the SAME
+	# name: the method body pre-pass ran BEFORE the nest prefix was set, so every
+	# method's nested def registered under its bare name. A plain def already set
+	# its prefix first — which is why two plain functions never collided.
+	./$(COMPILER) test/test_nilpy_nested_def_name_per_method.npy /tmp/test_nilpy_ndpm26
+	test "$$(/tmp/test_nilpy_ndpm26)" = "$$(printf '%b' '11 99 20 15\n11 99')"
 	# A nested def in a METHOD reading self.<field> inferred its RETURN TYPE from
 	# the RECEIVER, not the field, so the caller read the field slot as an object
 	# pointer and printed an empty line. PyInferExprType's receiver branch required
