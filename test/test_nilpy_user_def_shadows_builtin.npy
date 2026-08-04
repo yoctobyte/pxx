@@ -14,12 +14,18 @@
 # Some builtins are additionally lowered by NAME in the parser, never
 # consulting the symbol table, and each of those dispatches is guarded too.
 #
-# `len` of a CONTAINER is deliberately NOT here — it has a further lowering and
-# still binds the builtin; see bug-nilpy-user-def-len-of-a-container-still-
-# binds-the-builtin. Every expectation below is CPython's.
+# `len` IS here now. It was the one straggler, and its cause was upstream of
+# everything above: PyRegisterDefShells skipped a def whose name FindProc
+# already resolved ANYWHERE, so a module-level `def len(x)` was never registered
+# at all and PyUserShadowsProc answered False for it. `def sorted(x)` worked
+# only by accident of registration ORDER — pylib (which declares len) is
+# registered before that pre-pass, pyeval (which declares sorted) after it.
+# Every expectation below is CPython's.
 
 def sorted(x):
     return "mine-sorted"
+def len(x):
+    return "mine-len"
 def abs(x):
     return "mine-abs"
 def Counter(x):
@@ -50,6 +56,11 @@ def enumerate(x):
 # an EXACT-match argument, the case that used to lose: pyeval declares
 # sorted(TPyList) and pylib declares Counter(TPyList)
 print(sorted([3, 1, 2]), Counter([1, 2]))
+# len: a string, a list, a dict, an int, and a for-in VARIANT — the last needs
+# the IR-level pylen_v rewrite (keyed on the proc NAME) to stand down too
+print(len("ab"), len([1, 2]), len({1: 2}), len(5))
+for _y in [[1, 2]]:
+    print(len(_y))
 print(abs(-3), str(1), min([1, 2]), max([1, 2]))
 print(sum([1, 2]), int("3"), list([1]), round(1.5))
 print(divmod(7, 3), hex(255), reversed([1, 2]), enumerate([1, 2]))

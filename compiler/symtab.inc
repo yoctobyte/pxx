@@ -4983,17 +4983,27 @@ function PyUserShadowsProc(const name: AnsiString): Boolean;
 var i: Integer;
 begin
   PyUserShadowsProc := False;
-  if not NilPyUserCode then Exit;
-  i := ProcChainHead(name);
-  while i >= 0 do
+  if NilPyUserCode then
   begin
-    if ProcNameMatches(i, name) and (ProcUnitIdx[i] = -1) then
+    i := ProcChainHead(name);
+    while i >= 0 do
     begin
-      PyUserShadowsProc := True;
-      Exit;
+      if ProcNameMatches(i, name) and (ProcUnitIdx[i] = -1) then
+      begin
+        PyUserShadowsProc := True;
+        Break;
+      end;
+      i := ProcHashNext[i];
     end;
-    i := ProcHashNext[i];
   end;
+  { PXXDBG=n.shadow — every shadow question and its answer. Worth having
+    permanently: this predicate gates BOTH the overload demote and each
+    name-keyed intrinsic's guard, so when a builtin is not being shadowed the
+    first thing to establish is whether the predicate even said so, and
+    reasoning about it from the call sites is what burned an hour. }
+  if PxxDbgEnabled('n.shadow') then
+    WriteLn('PXXDBG n.shadow ', name, ' user=', PyUserShadowsProc,
+            ' nilpyuser=', NilPyUserCode, ' curunit=', CurrentUnitIdx);
 end;
 
 { Human-readable spelling of a type kind, for diagnostics. A raw TTypeKind

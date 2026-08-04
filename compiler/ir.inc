@@ -7815,7 +7815,13 @@ begin
         since a for-in variable is always a variant. pylen_v dispatches on the
         tag (and, for VT_OBJECT, on the class via `is`).
         (bug-a-len-of-variant-picks-wrong-overload) }
-      if PyProgramMode and (cpi >= 0) and
+      { ProcUnitIdx <> -1: the call must have bound a UNIT routine. This rewrite
+        is keyed on the proc's NAME, so a module-level `def len(x)` that has
+        correctly won resolution would still be rewritten to pylib's pylen_v and
+        never run — the third name-keyed surface the shadowing work had to
+        cover, after the parser intrinsics and the overload demote
+        (bug-nilpy-user-def-len-of-a-container-still-binds-the-builtin). }
+      if PyProgramMode and (cpi >= 0) and (ProcUnitIdx[cpi] <> -1) and
          (ASTLeft[node] <> -1) and (ASTRight[ASTLeft[node]] = -1) and
          (IntToTypeKind(ASTTk[ASTLeft[ASTLeft[node]]]) = tyVariant) then
       begin

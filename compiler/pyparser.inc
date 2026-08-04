@@ -15471,7 +15471,25 @@ begin
       TokPos := i;
       Next;                      { CurTok = 'def' }
       PyParseDefHeader;
-      if FindProc(PyHdrName) < 0 then
+      { "has the MAIN PROGRAM already declared this name", not "does any proc of
+        this name exist anywhere". The old test was FindProc, which also sees
+        UNIT procs — so a module-level `def len(x)` was never registered at all,
+        because pylib already declares `len`. Everything downstream then behaved
+        as if the user had not written it: PyUserShadowsProc answered False, so
+        the name-keyed `len` intrinsic ran and the overload demote never fired,
+        and `len([1,2])` silently returned the builtin's answer.
+
+        `def sorted(x)` looked fine only by accident of REGISTRATION ORDER —
+        pylib (which declares `len`) is registered before this pre-pass and
+        pyeval (which declares `sorted`) after it, so FindProc('sorted') missed
+        and the shell went in. That accident is why the shadowing work landed
+        with `len` as its one straggler
+        (bug-nilpy-user-def-len-of-a-container-still-binds-the-builtin).
+
+        Registering the shell is exactly right for Python semantics: a
+        module-level def REPLACES the builtin, and MatchProcCall's userOnly
+        demote then drops the unit's overloads by name. }
+      if FindProcInUnit(PyHdrName, -1) < 0 then
       begin
         procIdx := RegisterProc(PyHdrName, not PyHdrIsProc, PyHdrRetType,
                                 PyHdrNParams, PyHdrPNames, PyHdrPTypes);
@@ -15748,7 +15766,14 @@ begin
   { A NESTED def registers under its enclosing def's qualifier, which is what
     PyParseStatement already put in the queue entry — see PyNestPrefix. }
   if PyNestPrefix <> '' then name := PyNestPrefix + '.' + name;
-  procIdx := FindProc(name);
+  { Look in the MAIN PROGRAM first. FindProc walks the whole table and returns
+    the OLDEST registration of a name, so for a def that shadows a builtin —
+    `def len(x)` against pylib's `len` — it answered the UNIT's proc, this
+    parse registered a second one, and the shell PyRegisterDefShells had made
+    was left bodyless: "unresolved forward: len". A def is a main-program
+    routine; its own shell is the one to reuse. }
+  procIdx := FindProcInUnit(name, -1);
+  if procIdx < 0 then procIdx := FindProc(name);
   if (procIdx >= 0) and (Procs[procIdx].BodyAddr >= 0) and
      (Procs[procIdx].ParamCount = nparams) then
   begin
