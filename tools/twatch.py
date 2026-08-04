@@ -1739,6 +1739,13 @@ BENCH_POLL_SECS = 30.0
 # genuinely quieter moment still pulls the reference back down.
 BENCH_SKIP_RELAX_AFTER = 12
 BENCH_RELAX_FACTOR = 1.05
+# In MEMORY, never in tstate. These are operational counters, not published
+# state, and writing them to a tracked file outside a publish left the clone
+# DIRTY — which the daemon's dirty-clone guard then treats as "pause every
+# cycle until a human intervenes". That wedged the watcher for 11 hours on
+# 2026-08-04 over a one-line `bench_skips: 0 -> 1` diff. Anything written to
+# the clone must ride a publish or not be written at all.
+_BENCH_RT = {}          # host -> {"skips": int, "probe_ref": float}
 
 
 def speed_probe(iters=BENCH_PROBE_ITERS):
@@ -1766,16 +1773,29 @@ def hours_since(iso):
         return None
 
 
-def box_speed(st):
+def box_speed(host):
     """(ratio, seconds) — how much slower than this host's best-ever probe.
 
     Min of several samples: one probe's noise spans ~10%, which is the same
     order as the contention worth detecting, and min is the right statistic —
     it is the least-interrupted sample rather than an average of interruptions.
+
+    The reference lives in memory (see _BENCH_RT): it is a calibration detail,
+    it self-recovers from the first probe after a restart, and persisting it
+    would mean writing to the clone outside a publish.
+
+    KNOWN LIMITATION: on a fresh store the first probe DEFINES the reference,
+    so it always reads 1.00 and the first bench after a daemon restart is
+    effectively ungated. Subsequent quieter probes pull the reference down and
+    the gate tightens by itself. Persisting the reference would fix it — but
+    only by writing to the clone outside a publish, which is what wedged the
+    watcher for 11 hours on 2026-08-04. A quiet-box calibration at startup is
+    the better fix if this ever matters.
     """
+    rt = _BENCH_RT.setdefault(host, {"skips": 0, "probe_ref": None})
     t = min(speed_probe() for _ in range(BENCH_PROBE_SAMPLES))
-    ref = min(st.get("bench_probe_ref") or t, t)
-    st["bench_probe_ref"] = ref
+    ref = min(rt["probe_ref"] or t, t)
+    rt["probe_ref"] = ref
     return t / ref, t
 
 
@@ -1800,27 +1820,24 @@ def run_bench_idle(clone, host, st, sha, abort_check=None):
     when the box was too loaded, because `did_work` skips the sleep: returning
     True there would spin the cycle, re-fetching and re-deciding as fast as the
     CPU allows, which is itself load."""
-    ratio, secs = box_speed(st)
+    rt = _BENCH_RT.setdefault(host, {"skips": 0, "probe_ref": None})
+    ratio, secs = box_speed(host)
     if ratio > BENCH_PROBE_TOL:
-        st["bench_skips"] = st.get("bench_skips", 0) + 1
-        if st["bench_skips"] >= BENCH_SKIP_RELAX_AFTER:
+        rt["skips"] += 1
+        if rt["skips"] >= BENCH_SKIP_RELAX_AFTER and rt["probe_ref"]:
             # Do not starve forever on an unreachable reference; a real quiet
             # moment still pulls it back down.
-            st["bench_probe_ref"] *= BENCH_RELAX_FACTOR
+            rt["probe_ref"] *= BENCH_RELAX_FACTOR
         since = hours_since((st.get("last_bench") or {}).get("date"))
         print("twatch: bench SKIPPED at %s — box %.2fx slower than its best "
               "(%.0fms probe, limit %.2fx); %d consecutive skip(s)%s. A "
               "contended timing is VOID, not slow."
-              % (sha[:12], ratio, secs * 1000, BENCH_PROBE_TOL,
-                 st["bench_skips"],
+              % (sha[:12], ratio, secs * 1000, BENCH_PROBE_TOL, rt["skips"],
                  ", none for %.0fh" % since if since and since >= 24 else ""),
               flush=True)
-        save_state(clone, host, st)
-        return False
+        return False          # NOTHING written: a skip must leave no trace
     print("twatch: bench %s (box at %.2fx of best)" % (sha[:12], ratio),
           flush=True)
-    # Provenance rides the same publish as the rows it describes.
-    record_host_epoch(clone, host)
     set_phase(clone, host, "bench", sha=sha)
     clone.checkout(sha)
     tmp_tsv = os.path.join(tempfile.gettempdir(),
@@ -1838,7 +1855,7 @@ def run_bench_idle(clone, host, st, sha, abort_check=None):
         # Sampled throughout, not just at the start: the load that spoiled the
         # 2026-08-04 batch ARRIVED mid-batch, which a start-only check would
         # have called a quiet box.
-        during, _secs = box_speed(st)
+        during, _secs = box_speed(host)
         if during > BENCH_PROBE_TOL:
             abandoned = "box slowed to %.2fx of its best" % during
         elif abort_check and abort_check():
@@ -1850,16 +1867,15 @@ def run_bench_idle(clone, host, st, sha, abort_check=None):
     if abandoned:
         # VOID, not partial: the rows already collected are indistinguishable
         # from the contaminated ones, so none of them are written.
-        st["bench_skips"] = st.get("bench_skips", 0) + 1
+        rt["skips"] += 1
         print("twatch: bench ABANDONED at %s — %s; rows discarded (%d "
-              "consecutive skip(s))" % (sha[:12], abandoned, st["bench_skips"]),
+              "consecutive skip(s))" % (sha[:12], abandoned, rt["skips"]),
               flush=True)
         if os.path.exists(tmp_tsv):
             os.unlink(tmp_tsv)
         clone_head_back(clone)
-        save_state(clone, host, st)
         return preempted        # a push must be tested NOW, not after a sleep
-    st["bench_skips"] = 0
+    rt["skips"] = 0
     # FPC conformance breakdown at this sha (feature-testmgr-fpc-compare-and-
     # web-dashboard): per-test TSV the dashboard reads. Uses the compiler --bench
     # just built at `sha`; the suite may be absent (runner SKIPs, empty report).
@@ -1901,6 +1917,10 @@ def run_bench_idle(clone, host, st, sha, abort_check=None):
                     os.path.join(clone.path, "tools/twatch_web.py"),
                     "--clone", clone.path, "--static"],
                    cwd=clone.path, stdout=subprocess.DEVNULL)
+    # Provenance rides the same publish as the rows it describes — written
+    # HERE, after the run survived, so an abandoned batch leaves the clone as
+    # clean as it found it.
+    record_host_epoch(clone, host)
     st["last_bench"] = {"sha": sha, "date": utcnow(), "rc": r,
                         "rows": rows, "conf_rows": conf_rows,
                         # what the box was doing while these numbers were taken:

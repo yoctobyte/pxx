@@ -34,7 +34,13 @@ import types
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import twatch  # noqa: E402
 
-NOW = 1785700000.0            # fixed clock: no Date.now()-style flakiness
+# Anchored to the REAL clock, deliberately. A hardcoded constant made the
+# fixtures age: `regen_index` reads the wall clock (it has no `now` parameter),
+# so a "live" host pinned to a fixed timestamp silently crossed
+# QUIET_HOST_SECS and this test began failing by CALENDAR rather than by code —
+# it passed on 2026-08-04 and failed on 2026-08-05. Sampled once at import, so
+# a single run is still internally consistent.
+NOW = time.time()
 
 
 def iso(secs_ago):

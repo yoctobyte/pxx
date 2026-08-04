@@ -98,29 +98,32 @@ def case_skip_counter_is_consecutive():
 def case_reference_is_self_calibrating():
     """No per-box constant: the reference is this host's fastest probe, and a
     faster one replaces it."""
-    st = {}
-    r1, t1 = twatch.box_speed(st)
-    assert r1 == 1.0, "the first probe on a fresh host must define the reference"
-    # a much FASTER best-ever reference => this same box now reads as slow
-    st["bench_probe_ref"] = t1 / 4
-    r2, _ = twatch.box_speed(st)
-    assert r2 > 2.0, f"a 4x-faster reference did not register as slow: {r2}"
-    # ...and a probe faster than the stored reference pulls the reference down
-    st["bench_probe_ref"] = t1 * 4
-    r3, _ = twatch.box_speed(st)
-    assert r3 == 1.0, f"a probe faster than the reference still read slow: {r3}"
-    assert st["bench_probe_ref"] < t1 * 4, "reference did not track downward"
-    return "min-so-far, updates downward"
+    twatch._BENCH_RT.clear()
+    try:
+        r1, t1 = twatch.box_speed("h")
+        assert r1 == 1.0, "the first probe on a fresh host must define the reference"
+        # a much FASTER best-ever reference => this same box now reads as slow
+        twatch._BENCH_RT["h"]["probe_ref"] = t1 / 4
+        r2, _ = twatch.box_speed("h")
+        assert r2 > 2.0, f"a 4x-faster reference did not register as slow: {r2}"
+        # ...and a probe faster than the stored reference pulls it back down
+        twatch._BENCH_RT["h"]["probe_ref"] = t1 * 4
+        r3, _ = twatch.box_speed("h")
+        assert r3 == 1.0, f"a probe faster than the reference still read slow: {r3}"
+        assert twatch._BENCH_RT["h"]["probe_ref"] < t1 * 4, "no downward tracking"
+    finally:
+        twatch._BENCH_RT.clear()
+    return "min-so-far, updates downward, per host, in memory"
 
 
 def case_reference_relaxes_rather_than_starving():
     """A reference that becomes unreachable — thermal throttling, a governor
     change, a Python upgrade — must not switch benching off permanently."""
-    st = {"bench_probe_ref": 0.001, "bench_skips": twatch.BENCH_SKIP_RELAX_AFTER}
-    before = st["bench_probe_ref"]
-    if st["bench_skips"] >= twatch.BENCH_SKIP_RELAX_AFTER:
-        st["bench_probe_ref"] *= twatch.BENCH_RELAX_FACTOR
-    assert st["bench_probe_ref"] > before, "reference never relaxes"
+    rt = {"probe_ref": 0.001, "skips": twatch.BENCH_SKIP_RELAX_AFTER}
+    before = rt["probe_ref"]
+    if rt["skips"] >= twatch.BENCH_SKIP_RELAX_AFTER and rt["probe_ref"]:
+        rt["probe_ref"] *= twatch.BENCH_RELAX_FACTOR
+    assert rt["probe_ref"] > before, "reference never relaxes"
     assert twatch.BENCH_RELAX_FACTOR < 1.2, "relaxation is too aggressive to trust"
     return f"+{(twatch.BENCH_RELAX_FACTOR - 1) * 100:.0f}% after "\
            f"{twatch.BENCH_SKIP_RELAX_AFTER} skips"
