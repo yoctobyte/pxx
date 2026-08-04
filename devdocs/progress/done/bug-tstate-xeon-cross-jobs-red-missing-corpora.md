@@ -158,4 +158,4 @@ pointing at a bookkeeping commit.
   and the reporting it complained about has since been fixed in three separate
   places.
 
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit 14e2d0911.
