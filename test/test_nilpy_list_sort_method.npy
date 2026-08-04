@@ -1,8 +1,24 @@
 # list.sort() -- the in-place METHOD -- did not exist at all ("TPyList has
 # no method sort"), while the standalone sorted() function already worked.
 # bug-nilpy-list-sort-method-missing
-# No key=/reverse= yet (needs the generic-callable dispatch that lives in a
-# different unit) -- refused at compile time rather than guessed at.
+#
+# reverse= added 2026-08-04
+# (bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error).
+# It needs no callable, only the opposite pyvar_gt comparison, so unlike key=
+# it is not blocked by pylib being unable to reach pyeval's PyCallKey1.
+#
+# Declaring the parameter IS the frontend fix: the method-call path in
+# parser.inc drives its argument loop off ParamCount, so while sort() took
+# nothing the loop body never ran, the keyword recognizer inside it never saw
+# `reverse`, and control fell to Expect(tkRParen) -- a missing FEATURE
+# surfacing as a bare "unexpected token" pointing at the keyword name.
+# `key=` now reports "TPyList.sort has no parameter named 'key'" instead,
+# which is the named refusal the ticket asked for.
+#
+# reverse=True is NOT "sort ascending, then reverse": Python's sort is stable
+# in BOTH directions, so equal elements keep their input order either way.
+# The duplicate rows below are what pin that.
+#
 # Every expectation is CPython's own output.
 
 xs = [3, 1, 4, 1, 5, 9, 2, 6]
@@ -16,3 +32,54 @@ print(xs)
 words = ["banana", "apple", "cherry"]
 words.sort()
 print(words)
+
+# --- reverse= ---
+
+rs = [3, 1, 4, 1, 5, 9, 2, 6]
+rs.sort(reverse=True)
+print(rs)
+
+# reverse=False is the default spelling, and must equal a plain sort()
+fs = [3, 1, 2]
+fs.sort(reverse=False)
+print(fs)
+
+rw = ["banana", "apple", "cherry"]
+rw.sort(reverse=True)
+print(rw)
+
+# in place through the same binding, descending
+a = [2, 8, 5]
+b = a
+b.sort(reverse=True)
+print(a)
+
+# the degenerate lengths
+empty = []
+empty.sort(reverse=True)
+print(empty)
+
+single = [7]
+single.sort(reverse=True)
+print(single)
+
+# duplicates, both directions
+dups = [2, 1, 2, 1]
+dups.sort(reverse=True)
+print(dups)
+dups.sort()
+print(dups)
+
+# returns None, like Python's
+print([3, 1, 2].sort(reverse=True))
+
+# a VARIANT receiver (element of a container) and a for-in variable take
+# different postfix routes in the frontend than a plain named receiver
+box = [[3, 1, 2]]
+box[0].sort(reverse=True)
+print(box[0])
+
+rows = [[3, 1], [9, 7]]
+for r in rows:
+    r.sort(reverse=True)
+print(rows)

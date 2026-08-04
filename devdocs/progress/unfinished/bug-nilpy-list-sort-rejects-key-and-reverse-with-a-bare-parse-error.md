@@ -179,3 +179,94 @@ of it rather than rewritten.
 2026-08-04 note describes: a pyeval in-place sort plus a frontend rewrite of the
 method call, done across all four NilPy postfix routes. Nothing about that
 changed.
+
+## 2026-08-04 (overnight) — `reverse=` is DONE, and it needed NO frontend work at all
+
+The remaining half was being sized as one indivisible job ("a pyeval in-place
+sort plus a frontend rewrite across all four postfix routes"). It splits, and
+the two halves have nothing in common:
+
+- **`reverse=` needs no callable**, so the pylib/pyeval layering that blocks
+  `key=` does not apply to it. It is the opposite `pyvar_gt` comparison, and
+  `pyvar_gt` is already in pylib (`max()`/`min()` use it).
+- **`key=` alone** is what needs PyCallKey1, hence the pyeval free function and
+  the frontend rewrite.
+
+### The parse error was never about keyword arguments
+
+Measured cause, and it reframes complaint 2 of this ticket. The method-call path
+in `parser.inc:6117` drives its argument loop off the callee's arity:
+
+```pascal
+while mai <= Procs[mpi].ParamCount-1 do
+```
+
+`TPyList.sort` declared no parameters, so `ParamCount-1 = 0`, the loop body
+never ran, and the keyword recognizer (`PyKwArgIndex`) that lives *inside* that
+loop never looked at `reverse` at all. Control fell straight to
+`Expect(tkRParen, ')')`. So the method form was not "rejecting keyword
+arguments" — it was rejecting arguments of any kind, and a missing FEATURE
+surfaced as a bare token error pointing at the keyword name.
+
+That is why **declaring the parameter is the entire fix**: with `ParamCount = 2`
+the loop runs once, `PyKwArgIndex` binds `reverse`, and the existing
+`PyBindKwArgs` orders it. No parser edit, and no rewrite across the postfix
+routes — the other two routes (`PyParseClassMethodCall`,
+`PyParseVariantMethod`) already fill trailing defaulted parameters via
+`ProcParamHasDefault` -> `DefaultArgValueNode`, so a plain `xs.sort()` keeps
+working through all of them. Verified on a variant receiver, a subscript
+receiver and a for-in variable.
+
+### Complaint 2 falls out for free
+
+`xs.sort(key=len)` now reports
+
+```
+Nil Python: TPyList.sort has no parameter named 'key'
+```
+
+instead of `unexpected token`. The named diagnostic the ticket asked for is a
+consequence of the callee having parameters at all, not something that had to be
+added.
+
+### Stability
+
+`reverse=True` is not "sort ascending, then reverse" — CPython's sort is stable
+in both directions, so equal elements keep their input order either way.
+Flipping which operand `pyvar_gt` receives keeps the comparison STRICT, so equal
+elements still do not swap. Pinned by the duplicate rows in the test.
+
+### Verified
+
+`test/test_nilpy_list_sort_method.npy` EXTENDED rather than a new file (it
+existed, and its header comment claiming "No key=/reverse= yet" was itself now
+false), converted to a `.expected` + `diff` wiring: both directions, the
+degenerate empty/single lengths, duplicates both ways, `reverse=False` equalling
+a plain sort, the `None` return, in-place mutation through a second binding, and
+the variant / for-in receiver routes. 14 rows byte-identical to CPython.
+
+`compiler/builtin/pylib.pas` is frozen into `stable_linux_amd64` but the
+compiler does not `use` pylib — only NilPy programs do — so this needs no
+re-pin for the self-host fixedpoint
+([[project_builtin_change_needs_repin_for_gate_fixedpoint]]). A `make pin` is
+still what makes it reach Track B's stable binary.
+
+### What is left, and the ticket stays open for it
+
+`xs.sort(key=...)` only. Its blocker is unchanged and real: `PyCallKey1`,
+`pyclosure_is` and `pyboundfn_is` are all in `pyeval.pas`, `pyeval uses pylib`
+and not the reverse, and no builtin unit has an `initialization` section to hang
+a hook var on. The shape stays as described above — a pyeval free function that
+sorts into a new list and copies back, plus a frontend rewrite — with one
+addition found while measuring this half: the Variant->Pointer coercion for a
+callable argument (`pyvar_callable_ptr`) exists ONLY in the free-call branch of
+`ParseFactorCore` (`parser.inc:13280`), so merely adding `key: Pointer` to the
+pylib method would hand the variant's TAG word to the callee as a code address.
+The rewrite to a free call gets that coercion for free, which is now a second
+independent reason to prefer it.
+
+Also filed from this work: [[decide-nilpy-builtin-keyword-only-parameters]] —
+`xs.sort(True)` is accepted positionally (measured), where CPython's
+`sort(*, key=None, reverse=False)` refuses it. Laxness, not a wrong answer, and
+the same latency already exists for `sorted`/`min`/`max`; parked on Track U
+rather than guessed at.

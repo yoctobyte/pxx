@@ -903,9 +903,9 @@ test-nilpy: $(COMPILER)
 	@# map()/filter() over a lambda and a named def, via list() and via for
 	./$(COMPILER) test/test_nilpy_map_filter_lambda_def.npy /tmp/test_nilpy_mapfilterld26
 	test "$$(/tmp/test_nilpy_mapfilterld26)" = "$$(printf '%b' '[2, 3, 4]\n[2, 3, 4]\n[2, 3]\n2\n4\n6\n2\n3')"
-	@# list.sort() -- the in-place method, not just the sorted() function
+	@# list.sort(reverse=) -- the in-place method, not just the sorted() function
 	./$(COMPILER) test/test_nilpy_list_sort_method.npy /tmp/test_nilpy_sortmethod26
-	test "$$(/tmp/test_nilpy_sortmethod26)" = "$$(printf '%b' '[1, 1, 2, 3, 4, 5, 6, 9]\n[1, 1, 2, 3, 4, 5, 6, 9, 0]\n'"['apple', 'banana', 'cherry']")"
+	/tmp/test_nilpy_sortmethod26 | diff -u test/test_nilpy_list_sort_method.expected -
 	@# d[k] = None stores a real None, and a def with no return annotation parses
 	./$(COMPILER) test/test_nilpy_none_variant_residuals.npy /tmp/test_nilpy_noneresid26
 	test "$$(/tmp/test_nilpy_noneresid26)" = "$$(printf 'None\nTrue\nhi')"
