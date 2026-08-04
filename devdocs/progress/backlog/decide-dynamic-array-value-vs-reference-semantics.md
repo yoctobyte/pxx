@@ -1,0 +1,80 @@
+---
+summary: "dynamic arrays: pxx gives b := a VALUE semantics (a copy), FPC/Delphi give REFERENCE semantics (an alias) — is ours deliberate?"
+type: decision
+track: U
+prio: 55
+---
+
+# Decide: are dynamic arrays references (FPC) or values (pxx today)?
+
+- **Type:** decision — **Track U**
+- **Status:** open
+- **Opened:** 2026-08-04
+- **Raised by:** Track B, `tools/fpc_diff_probe.sh` `str-dynarray-ref` case.
+
+## The fork
+
+```pascal
+var a, b: array of Integer;
+begin
+  SetLength(a, 2); a[0] := 1;
+  b := a;
+  b[0] := 9;
+  writeln(a[0], '|', b[0]);
+end.
+```
+
+    FPC/Delphi:  9|9     b and a are the SAME array; assignment aliases
+    pxx:         1|9     b is a copy
+
+Same for a `array of string`. Two related rows:
+
+| case | FPC | pxx |
+| --- | --- | --- |
+| `b := a` then `b[0] := 9` | `9\|9` (aliased) | `1\|9` (copied) |
+| `Copy(a,0,2)` then modify | detached | detached — **agree** |
+| `SetLength(b,3)` on an alias | detaches | detaches — **agree** |
+| open-array **value** param, callee writes `a[0]` | caller unaffected | **caller IS affected** |
+
+Note the last row runs the *opposite* way: FPC copies for a value parameter and
+we alias, while for assignment FPC aliases and we copy. Whatever is decided, those
+two should end up consistent with each other.
+
+## Why this is Track U and not a bug ticket
+
+Both designs are coherent. FPC/Delphi dynamic arrays are refcounted **reference**
+types with no copy-on-write — `b := a` aliases and only `Copy` detaches.
+Copy-on-write *value* semantics (what pxx appears to do, and what `AnsiString`
+genuinely does in both languages) is a defensible alternative, and this project
+has deliberately chosen its own dialect before. Nothing in `docs/language/**` or
+the dev docs states a decision either way; the only mention calls dynamic arrays
+"managed", which is true under both models.
+
+So this could be an intended dialect choice that was never written down, or an
+unintended divergence. I cannot settle it from the code, and guessing would
+either paper over a real bug or file a "fix" against a deliberate design.
+
+## Options
+
+1. **Match FPC — reference semantics.** Best for the mission of compiling
+   real-world Pascal as-is: any ported code that relies on aliasing (passing a
+   dynamic array around expecting the callee to see writes) is silently wrong
+   today. Cost: a real codegen change, and it makes dynamic arrays behave
+   differently from `string`, which surprises people the other way.
+2. **Keep value/COW semantics and document it.** Cheaper, arguably safer
+   (no spooky action at a distance), and consistent with `string`. Cost: an
+   FPC-parity divergence in a core type, which is exactly the class of thing
+   that makes ported code fail far from the cause. Would need a `compat-` note
+   and a mention in `docs/language/**`.
+3. **Match FPC and put value semantics behind a strict-mode-style flag** — the
+   inverse of how `--strict-*` flags work today.
+
+## Recommendation
+
+**Option 1**, on mission grounds: "compile real-world code as-is" is the north
+star, aliasing is observable, and a program that relies on it fails silently
+rather than loudly. But the open-array-parameter row should be settled in the
+same pass so the two stop contradicting each other.
+
+Whichever way it goes, it wants writing down in `docs/language/**` — the absence
+of any statement is what made this a question rather than a lookup.

@@ -648,6 +648,97 @@ uses sysutils; var y,mo,d: Word;
 begin DecodeDate(IncMonth(EncodeDate(2026,1,31),1),y,mo,d); writeln(y,'-',mo,'-',d); end.
 P
 
+# ---- managed strings: copy semantics, aliasing, refcount-visible behaviour ----
+probe str-cow        <<'P'
+var a, b: string;
+begin a := 'hello'; b := a; b[1] := 'J'; writeln(a,'|',b); end.
+P
+probe str-cow-setlen <<'P'
+var a, b: string;
+begin a := 'hello'; b := a; SetLength(b,3); writeln(a,'|',b,'|',Length(a)); end.
+P
+probe str-self-assign <<'P'
+var a: string; begin a := 'abc'; a := a + a; writeln(a); a := Copy(a,2,3); writeln(a); end.
+P
+probe str-in-record  <<'P'
+type TR = record s: string; n: Integer; end;
+var x, y: TR;
+begin x.s := 'one'; x.n := 1; y := x; y.s := 'two'; writeln(x.s,'|',y.s,'|',x.n); end.
+P
+# filed: URGENT bug-a-static-array-of-managed-whole-assign-loses-data
+probe str-in-array   known <<'P'
+var a, b: array[0..1] of string;
+begin a[0] := 'p'; a[1] := 'q'; b := a; b[0] := 'z'; writeln(a[0],a[1],'|',b[0],b[1]); end.
+P
+probe str-dynarray-copy <<'P'
+var a, b: array of string;
+begin SetLength(a,2); a[0]:='p'; a[1]:='q'; b := Copy(a,0,2); b[0]:='z';
+writeln(a[0],a[1],'|',b[0],b[1]); end.
+P
+# filed: decide-dynamic-array-value-vs-reference-semantics (Track U: value vs reference)
+probe str-dynarray-ref known <<'P'
+var a, b: array of string;
+begin SetLength(a,2); a[0]:='p'; a[1]:='q'; b := a; b[0]:='z';
+writeln(a[0],'|',b[0]); end.
+P
+# ---- parameter modes ----
+probe param-var      <<'P'
+procedure Bump(var x: Integer); begin x := x + 1; end;
+var i: Integer; begin i := 1; Bump(i); writeln(i); end.
+P
+probe param-out      <<'P'
+procedure Fill(out s: string); begin s := 'set'; end;
+var t: string; begin t := 'before'; Fill(t); writeln(t); end.
+P
+probe param-const-str <<'P'
+function F(const s: string): Integer; begin F := Length(s); end;
+var a: string; begin a := 'abcd'; writeln(F(a),'|',F('xy'),'|',F('')); end.
+P
+probe param-value-str <<'P'
+procedure P2(s: string); begin s := s + '!'; end;
+var a: string; begin a := 'x'; P2(a); writeln(a); end.
+P
+probe param-openarray <<'P'
+function Total(const a: array of Integer): Integer;
+var i: Integer; begin Total := 0; for i := Low(a) to High(a) do Total := Total + a[i]; end;
+var arr: array[0..2] of Integer;
+begin arr[0]:=1; arr[1]:=2; arr[2]:=3; writeln(Total(arr),'|',Total([10,20])); end.
+P
+# filed: Low()/High() of an empty array constructor -- part of the same Track U call
+probe param-openarray-empty known <<'P'
+function Count(const a: array of Integer): Integer; begin Count := Length(a); end;
+begin writeln(Count([]),'|',Low([1,2]),'|',High([1,2])); end.
+P
+# ---- records with managed fields returned from functions ----
+probe rec-func-result <<'P'
+type TR = record s: string; end;
+function Make(const v: string): TR; begin Make.s := v; end;
+var a, b: TR;
+begin a := Make('one'); b := Make('two'); writeln(a.s,'|',b.s); end.
+P
+probe str-func-result-reuse <<'P'
+function F(n: Integer): string; begin F := ''; while n > 0 do begin F := F + 'x'; n := n - 1; end; end;
+var i: Integer; begin for i := 1 to 3 do write(F(i),' '); writeln; end.
+P
+# ---- string building in a loop (the leak/corruption shape) ----
+probe str-concat-loop2 <<'P'
+var s: string; i: Integer;
+begin s := ''; for i := 1 to 50 do s := s + Chr(Ord('a') + (i mod 26)); writeln(Length(s),'|',s[1],s[50]); end.
+P
+probe str-nested-call <<'P'
+function Wrap(const s: string): string; begin Wrap := '[' + s + ']'; end;
+begin writeln(Wrap(Wrap(Wrap('x')))); end.
+P
+
+# filed URGENT: bug-a-virtual-method-int64-in-and-out-32bit. Correct on x86-64,
+# so this case cannot catch it -- the probe only ever runs native. Kept as the
+# reduced repro, next to the cases that led to it.
+probe virtual-int64  <<'P'
+type TB = class public function V(const x: Int64): Int64; virtual; end;
+function TB.V(const x: Int64): Int64; begin V := x + 1; end;
+var b: TB; begin b := TB.Create; writeln(b.V(5)); end.
+P
+
 echo "---"
 echo "new divergences: $new   known/filed: $known   no-oracle skips: $skipped"
 # A skip is not a pass. It is a case that silently compared nothing, so it is
