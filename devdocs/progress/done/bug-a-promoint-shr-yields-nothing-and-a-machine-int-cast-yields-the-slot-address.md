@@ -172,4 +172,4 @@ against the `div` answer, a heap-tier value shifted back down, every cast
 spelling, and `Pointer(n)` still reaching the runtime.
 
 ## Log
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit c8997361d.
