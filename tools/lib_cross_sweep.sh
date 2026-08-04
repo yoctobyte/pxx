@@ -38,9 +38,19 @@ for f in test/lib_*.pas; do
   b=$(basename "$f" .pas)
   $PX -Fulib/rtl "$f" "$OUT/${b}.x64" >/dev/null 2>&1 || { echo "SKIP $b (no native build)"; continue; }
   ref=$(timeout 60 "$OUT/${b}.x64" 2>&1); rrc=$?
-  # riscv32 is included because it is ESP32's core: a bug that only shows on a
-  # 32-bit RISC target is a bug on the hardware the project is aiming at.
-  for tgt in i386 arm32 aarch64 riscv32; do
+  # riscv32 is OPT-IN (SWEEP_RISCV32=1), not because it does not matter -- it is
+  # ESP32's core -- but because it is a documented STAGE 1 port with no heap
+  # allocator (`builtinheap` is skipped there; see feature-target-esp32). So the
+  # lib suite fails on it BY CONSTRUCTION: 18 of 101 tests do not even build
+  # ("standard builtin calls not supported in bare-metal stage 1", "unsupported
+  # node in IR codegen: atomic"), and several that do build then crash the
+  # moment they allocate. Those ~45 rows are expected incompleteness, and
+  # including them by default buries the handful of REAL divergences on the
+  # hosted targets, which is the whole point of this sweep.
+  # Turn it on when working the riscv32 port itself, not when hunting bugs.
+  targets="i386 arm32 aarch64"
+  [ "${SWEEP_RISCV32:-0}" = "1" ] && targets="$targets riscv32"
+  for tgt in $targets; do
     case $tgt in
       i386)    q=qemu-i386;;
       arm32)   q=qemu-arm;;
