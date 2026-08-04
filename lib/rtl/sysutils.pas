@@ -2048,7 +2048,10 @@ begin
     clamps at a minimum of two — `%.1g` of 1/3 is `0.33`, not `0.3`. Measured
     against an FPC build; the rule is the same for both specifiers. }
   if sig < 2 then sig := 2;
-  if sig > 15 then sig := 15;
+  { 17, not 15. FloatToStrSig hands anything past 15 to the exact expansion,
+    so the digits above 15 are correctly rounded rather than scaled -- the
+    thing compat-pascal-format-g-and-e-specifiers was waiting for. }
+  if sig > 17 then sig := 17;
   FmtGeneral := FloatToStrSig(v, sig);
 end;
 
@@ -2057,37 +2060,44 @@ end;
   always present, then at least three exponent digits —
   `3.3333333333333331E-001`. Measured against an FPC build, not assumed. }
 function FmtExponent(v: Double; sig: Integer): AnsiString;
-var neg: Boolean; e10, i, dec: Integer; m: Double; mant, es: AnsiString;
+var neg: Boolean; e10: Integer; ds, mant, es: AnsiString;
 begin
-  { `sig` is significant digits (FPC's rule, min 2); the mantissa carries one
-    before the point, so it needs sig-1 decimals. }
+  { `sig` is significant digits (FPC's rule, min 2); 17 is the most a Double
+    can carry, and the default. }
   if sig < 2 then sig := 2;
-  if sig > 15 then sig := 15;
-  dec := sig - 1;
+  if sig > 17 then sig := 17;
   if v <> v then begin FmtExponent := 'NaN'; Exit; end;
+  { Infinity BEFORE anything else: the old normalise loop divided by ten until
+    the value dropped below ten, and Inf/10.0 is Inf, so it never terminated. }
+  if v > 1.7976931348623157e308 then begin FmtExponent := 'Inf'; Exit; end;
+  if v < -1.7976931348623157e308 then begin FmtExponent := '-Inf'; Exit; end;
   neg := v < 0.0;
   if neg then v := -v;
-  e10 := 0;
-  if v <> 0.0 then
+  if v = 0.0 then
   begin
-    m := v;
-    while m >= 10.0 do begin m := m / 10.0; e10 := e10 + 1; end;
-    while m < 1.0 do begin m := m * 10.0; e10 := e10 - 1; end;
+    ds := '0'; e10 := 0;
   end
   else
-    m := 0.0;
-  mant := FmtFixed(m, dec);
-  { rounding the mantissa can carry it to 10.x — that is a shift, not a digit }
-  if (Length(mant) > 1) and (mant[1] = '1') and (mant[2] = '0') and (m <> 0.0) then
   begin
-    m := m / 10.0;
-    e10 := e10 + 1;
-    mant := FmtFixed(m, dec);
+    { The EXACT expansion, not a double scaled by powers of ten. The old code
+      normalised with `while m >= 10.0 do m := m / 10.0`, which is one rounding
+      per step -- a hundred of them for 1e100, and the error reached the 16th
+      digit: 1e100 printed as 1.0000000000000007E+100 where both FPC and
+      CPython give 1.0000000000000000E+100, and 1e200 came out with the wrong
+      EXPONENT (E+200 for a value just under it). ExDecDigits/ExDecRound do the
+      conversion in exact integer arithmetic and round half-to-even on a
+      genuine remainder. }
+    ExDecDigits(v, ds, e10);
+    ExDecRound(ds, e10, sig);
   end;
+  { the exponent form is fixed-width, so a short expansion pads out }
+  while Length(ds) < sig do ds := ds + '0';
+  mant := Copy(ds, 1, 1);
+  if sig > 1 then mant := mant + '.' + Copy(ds, 2, sig - 1);
+  if neg then mant := '-' + mant;
   es := IntToStr(Abs(e10));
   while Length(es) < 3 do es := '0' + es;
   if e10 < 0 then es := '-' + es else es := '+' + es;
-  if neg then mant := '-' + mant;
   FmtExponent := mant + 'E' + es;
 end;
 
@@ -2217,8 +2227,10 @@ begin
         begin
           if argIdx < Length(args) then
           begin
+            { no precision given -> FPC prints 17 significant digits
+              ('%g' of 1/3 is 0.33333333333333331), not FloatToStr's 15 }
             if hasPrec then piece := FmtGeneral(FmtArgFloat(args[argIdx]), prec)
-            else piece := FloatToStr(FmtArgFloat(args[argIdx]));
+            else piece := FmtGeneral(FmtArgFloat(args[argIdx]), 17);
           end;
           Inc(argIdx);
         end;
@@ -2226,8 +2238,13 @@ begin
         begin
           if argIdx < Length(args) then
           begin
+            { 17 significant digits, not 15: FPC's default '%e' is
+              3.1415900000000000E+000 -- one digit before the point and 16
+              after. FmtExponent's argument is a count of SIGNIFICANT digits
+              (which is why '%.4e' of 3.14159 is 3.142, four in total), so the
+              default has to be 17, the number that round-trips a Double. }
             if hasPrec then piece := FmtExponent(FmtArgFloat(args[argIdx]), prec)
-            else piece := FmtExponent(FmtArgFloat(args[argIdx]), 15);
+            else piece := FmtExponent(FmtArgFloat(args[argIdx]), 17);
           end;
           Inc(argIdx);
         end;

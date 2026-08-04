@@ -7808,7 +7808,7 @@ lib-test: pxx-stable-check
 	else echo "  pyexec: ok (no python3 for the CPython diff)"; fi
 	# Format's %g / %e, every row read off an FPC build of the same file
 	$(PXX_STABLE) -Fulib/rtl test/lib_format_ge.pas /tmp/lib_format_ge
-	test "$$(/tmp/lib_format_ge | grep -c '=ok')" = "20"
+	test "$$(/tmp/lib_format_ge | grep -c '=ok')" = "31"
 	test "$$(/tmp/lib_format_ge | tail -1)" = "FORMATGE OK"
 	# TStrings' Name=Value surface, every row read off an FPC build of the
 	# same file (it compiles under both)

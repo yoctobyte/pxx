@@ -5,14 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:7 blocked:7 backlog:180 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1354 rejected:28`
+`urgent:2 unfinished:7 blocked:7 backlog:181 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1354 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## urgent (1) — jump the queue
+## urgent (2) — jump the queue
 
+- `bug-a-i386-int64-arg-high-half-uninitialized` [A]
 - `bug-p-string-char-relational-compares-lengths` [A]
 
 ## unfinished (7) — parked mid-flight; re-claim, do not duplicate
@@ -35,13 +36,15 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 162, ranked
+## Ready — top 30 of 164, ranked
 
 - `[p 85] [A]` bug-p-string-char-relational-compares-lengths
+- `[p 75] [A]` bug-a-i386-int64-arg-high-half-uninitialized
 - `[p 70] [N]` bug-nilpy-tuple-of-a-field-from-an-omitted-default-segfaults
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
+- `[p 60] [A]` bug-a-writeln-float-exponent-form-not-correctly-rounded
 - `[p 60] [U]` decide-abi-portable-vs-target-split
 - `[p 60] [A]` feature-a-abi-oracle
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -65,7 +68,5 @@ _none — no lane is locked._
 - `[p 55] [P]` compat-pascal-assert-halts-instead-of-raising-eassertionfailed
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
-- `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
-- `[p 55] [N]` feature-nilpy-corpus-uforth
 
-_132 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_134 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

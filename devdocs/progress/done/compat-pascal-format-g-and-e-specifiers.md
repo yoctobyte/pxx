@@ -1,5 +1,5 @@
 ---
-summary: "compat: Format's %g ignores its precision and uses 15 digits where FPC uses 17; %e is not implemented at all"
+summary: "compat: Format's %g ignores its precision and uses 15 digits where FPC uses 17; %e is not implemented at all — fully closed 2026-08-04 once the exact dtoa existed"
 type: bug
 track: B
 prio: 25
@@ -120,3 +120,68 @@ here.
 
 ## Log
 - 2026-07-31 — resolved, commit 29035276a.
+
+
+## FULLY RESOLVED 2026-08-04 — the digit-count half, closed on its own terms
+
+The half left open above said: *"reopen it only if something needs
+round-trip-exact float text, at which point the answer is a dtoa and not a
+patch here."* That is exactly what happened, in that order.
+
+The dtoa arrived for a different reason — `ExDecDigits` / `ExDecRound` (exact
+base-10^9 expansion, half-to-even on a genuine remainder) were built for
+`FloatToStrExact` and correctly-rounded `StrToFloatDef`. `FloatToStrSig`
+already handed anything past 15 digits to it. So the blocker this ticket
+recorded had quietly stopped existing, and closing the gap was a rewrite of one
+function plus two constants — no new machinery at all.
+
+### Landed
+
+- **`FmtExponent` no longer scales a double.** It normalised with
+  `while m >= 10.0 do m := m / 10.0` — one rounding per step, **a hundred of
+  them for 1e100** — so the error reached the 16th significant digit, inside
+  the 17 being printed. It now uses the exact expansion.
+- **The caps went 15 -> 17** in `FmtExponent` and `FmtGeneral`, and `%g` with
+  no precision now asks for 17 instead of falling back to `FloatToStr`'s 15.
+- **A hang went with it.** The old normalise loop divided by ten until the
+  value dropped below ten, and `Inf / 10.0` is `Inf`, so `Format('%e', [Inf])`
+  never terminated. Infinity is now checked before any of it — the same defect,
+  in the same shape, that bug-a-writeln-of-a-non-finite-double-hangs fixed in
+  the builtin.
+
+### Measured
+
+`test/lib_format_ge.pas`, 20 -> 31 rows, compiling under FPC with every
+expectation read off an FPC build; 11 fail without the change. The new rows are
+the no-precision forms and the extreme magnitudes: 1e100, 2.5e100, 1e-100,
+1e200 (where the old code got the **exponent** wrong — the value is just under
+1e200 and printed as if just over), a 15-digit integer, a **subnormal**
+(1e-320, which has no normalised exponent for a scaling loop to converge on),
+zero and a negative.
+
+Two method notes worth keeping:
+
+- **Type the operands.** FPC types a bare real literal as `Extended`, so
+  `Format('%e', [3.14159])` compares an Extended against our Double and differs
+  for a reason that is not a bug. Every row now goes through a `Double`
+  variable. Reading that confound wrong is what made this look like a type
+  difference for a while.
+- **Two oracles, not one.** FPC and pxx disagreed on `1.0/3.0`, and CPython
+  settled it: FPC constant-folds that expression at **Single** precision
+  (3.3333334326744080E-001) while pxx and CPython both give the correct Double.
+  Computing the same quotient from runtime variables makes FPC agree, which
+  confirms it is FPC's folding and not our arithmetic. The oracle was wrong on
+  that row, and only a second oracle showed it.
+
+### Still open, and now genuinely elsewhere
+
+`writeln(Double)` and `Str(F, S)` have the **same** naive normalise loop, in
+`compiler/builtin/builtin.pas`, and are wrong in the same way — they even
+disagree with each other (`1.0000000000000007E+100` vs
+`...006E+100`). That file is Track A ground, so it is filed as
+[[bug-a-writeln-float-exponent-form-not-correctly-rounded]] rather than fixed
+here. The port is mechanical now that the exact expansion is proven.
+
+## Log
+- 2026-07-31 — resolved in part, commit 29035276a.
+- 2026-08-04 — fully resolved (see above).
