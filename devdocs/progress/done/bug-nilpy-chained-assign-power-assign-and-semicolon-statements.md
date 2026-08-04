@@ -120,4 +120,4 @@ byte-identical; Pascal is untouched (the new token is lexed only by pylexer).
 
 ## Log
 - 2026-08-04 — resolved.
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit cd948253b.
