@@ -9,6 +9,7 @@ prio: 60
 
 - **Type:** bug — Track B (`lib/crtl`), tag `compat`
 - **Status:** done
+- **Resolved:** 2026-08-05 in `539111860` (verified on origin/master after the rebase)
 - **Opened:** 2026-08-05
 - **Found by:** a systematic probe (below), after the same shape turned up twice
   by accident: [[bug-cfront-spurious-dt-needed-libc-with-no-imports]] and
