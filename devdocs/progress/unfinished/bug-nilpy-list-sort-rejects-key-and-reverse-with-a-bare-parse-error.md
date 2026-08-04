@@ -166,3 +166,16 @@ Both halves need something that is not in this ticket:
 Moved to `unfinished/`. The diagnostic complaint in the original report —
 `unexpected token` pointing at the keyword name, indistinguishable from a typo —
 is still true and is the cheapest independent improvement available here.
+
+### 2026-08-04 (later) — the `min`/`max` half is DONE
+
+[[bug-nilpy-keyword-arg-vs-overload-set]] was the blocker and is fixed: the
+keyword promoter now falls back across units, so `min(xs, key=len)` and
+`max(xs, key=len)` resolve to the pyeval list forms and match CPython
+(`4970562a5`). The implementation reverted earlier today was re-applied on top
+of it rather than rewritten.
+
+**Only `xs.sort(key=, reverse=)` remains on this ticket**, blocked on what the
+2026-08-04 note describes: a pyeval in-place sort plus a frontend rewrite of the
+method call, done across all four NilPy postfix routes. Nothing about that
+changed.
