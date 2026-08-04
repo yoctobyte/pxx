@@ -184,4 +184,4 @@ here. The port is mechanical now that the exact expansion is proven.
 
 ## Log
 - 2026-07-31 — resolved in part, commit 29035276a.
-- 2026-08-04 — fully resolved (see above).
+- 2026-08-04 — fully resolved, commit 5d5437a1d (verified on origin/master after the rebase).
