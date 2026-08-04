@@ -553,8 +553,41 @@ def job_key(j):
     return j.get("sel") or j["name"]
 
 
-def reg_open(r, fixed, authoritative):
+def gone_keys(st, now, tier):
+    """Job keys the ledger names that NO TIER HAS ANY MORE.
+
+    A key stops existing for two routine reasons: a test is renamed or deleted,
+    or `assign_selectors`' `@N` suffix shifts because a source's occurrence
+    count inside its target changed. The second is not the corner case its
+    docstring assumes — on 2026-08-04 one nilpy source sat in the Makefile three
+    times (an agent had overwritten an existing test with a same-named new one),
+    so its keys were `…npy@0/@1/@2`, and reverted to the bare key hours later
+    when the duplicates went. 110 of xeon's keys currently carry an `@N`.
+
+    Judged against TIER COVERAGE, never against one run: "this run could have
+    run that job and did not" is a statement about existence, while "not my
+    tier" says nothing at all. Confusing the two is what made a full run evict
+    opt's verdicts and re-report `optdiff#shard5/6` as NEW-RED once per cycle,
+    forever.
+    """
+    cov = covered_tiers(tier)
+    jt = st.get("job_tier", {})
+    named = set()
+    for r in st.get("open_regressions", []):
+        named.update(r.get("cascade") or [r["job"]])
+    return {k for k in named
+            if k not in now and jt.get(k, tier) in cov}
+
+
+def reg_open(r, fixed, authoritative, gone=frozenset()):
     """Is this ledger entry still an open regression after the latest run?
+
+    `gone` names keys no tier carries any more (see gone_keys). Such an entry
+    can never be closed the normal way — `fixed` can only name keys a run
+    REPORTED — so without this it stays open forever, asking agents to act on a
+    job that cannot be run. Same shape as a quiet host's immortal entries
+    (task-t-borg-open-regression-is-permanently-stale), reached through job
+    identity instead of host identity.
 
     A per-job entry closes when its job is in `fixed`.  A CASCADE entry names
     no single job (its "job" is a synthetic cascade@<sha> key that can never
@@ -578,7 +611,12 @@ def reg_open(r, fixed, authoritative):
     is what actually happened here.
     """
     if r.get("cascade"):
-        return any(authoritative.get(j, "red") != "pass" for j in r["cascade"])
+        # A swept job that no longer exists cannot pin the cascade open either;
+        # if every job it named is gone, the entry closes with them.
+        return any(authoritative.get(j, "red") != "pass"
+                   for j in r["cascade"] if j not in gone)
+    if r["job"] in gone:
+        return False
     return r["job"] not in fixed
 
 
@@ -862,12 +900,21 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # with what this run showed), so a cascade cannot close off one lucky run
     # while its jobs remain red in the persisted state. See reg_open.
     authoritative = dict(st["jobs"], **now)
-    regs = [r for r in st["open_regressions"] if reg_open(r, fixed, authoritative)]
+    gone = gone_keys(st, now, report["tier"])
+    if gone:
+        # Visible, never silent: an entry vanishing quietly is indistinguishable
+        # from one being FIXED, and the ledger's whole value is that its entries
+        # are actionable.
+        print("twatch: %d ledger key(s) no longer exist in any tier — closing "
+              "as GONE (renamed/removed test, or an @N selector shift): %s"
+              % (len(gone), ", ".join(sorted(gone)[:5])), flush=True)
+    regs = [r for r in st["open_regressions"]
+            if reg_open(r, fixed, authoritative, gone)]
     # The entries this filter DROPS are exactly the regressions the ledger
     # considers closed, so they are also exactly the stubs face 1 may retire —
     # one rule, not a second invented one that could disagree with it.
     closed_regs = [r for r in st["open_regressions"]
-                   if not reg_open(r, fixed, authoritative)]
+                   if not reg_open(r, fixed, authoritative, gone)]
     srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
     namemap = {job_key(j): j["name"] for j in report["jobs"]}
     rng = clone.commits_between(parent, sha) if parent else [sha]

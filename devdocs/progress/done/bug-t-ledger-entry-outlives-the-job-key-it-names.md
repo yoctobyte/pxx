@@ -3,6 +3,7 @@ summary: "An open regression closes only when its job key reappears as FIXED, so
 type: bug
 track: T
 prio: 55
+status: done
 ---
 
 # A ledger entry whose job key vanishes is immortal
@@ -81,3 +82,30 @@ should not silently widen it.
 still present and red stays open; a key present and passing closes as FIXED; a
 key absent from a covering run closes as GONE; a key absent from a run that does
 NOT cover its tier stays open.
+
+## Log
+- 2026-08-04 (`claude@xeon`) — fixed as specified, reusing the eviction
+  machinery rather than inventing a second notion of absence. `gone_keys()`
+  returns the ledger-named keys that a run's tier COVERS but that the run did
+  not report; `reg_open` closes those as GONE.
+
+  Both constraints in the fix shape are honoured and pinned by
+  `tools/twatch_gone_key_devtest.py`: a native run never gone-ifies a full-tier
+  key, and a full run never gone-ifies an `opt` key (opt is disjoint — the same
+  asymmetry behind the `optdiff#shard5/6` re-report-forever bug). A key with no
+  `job_tier` entry (state written before that map existed) counts as covered,
+  matching eviction exactly, so legacy keys cannot become sticky-forever.
+
+  `closed_regs` takes the same `gone` set. That call site's own comment warns
+  that it must be ONE rule — the stubs face 1 retires are exactly the entries
+  the ledger considers closed — so letting the two diverge would have retired
+  the wrong stubs.
+
+  Cascade entries filter gone members out of the pin: a vanished job neither
+  holds a cascade open nor hides a still-red sibling, and a cascade all of whose
+  jobs are gone closes with them.
+
+  Closing is announced (`N ledger key(s) no longer exist in any tier — closing
+  as GONE`), not silent: an entry vanishing quietly is indistinguishable from
+  one being FIXED, which would be a worse bug than the one being fixed.
+- 2026-08-04 — resolved, commit PENDING-COMMIT.
