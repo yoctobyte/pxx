@@ -127,6 +127,21 @@ var
     the value before the names it reads exist, and queue it at the wrong point
     in the statement stream. }
   PyDefaultEvalMode: Boolean;
+  { CLASS component of a hidden default global's name, or '' at module level.
+    Without it `$pdef.f.b` is shared by every class declaring `f(self, b=...)`,
+    so `class A` and `class B` both writing their own default collide on ONE
+    symbol and the second wins — which is a sufficient cause of two-class
+    breakage on its own, independent of anything else. }
+  PyDefaultClsName: AnsiString;
+  { The class statement just parsed, and its body token span, so the statement
+    loop can evaluate METHOD defaults AFTER PyParseClass returns. Python
+    evaluates a method default when the CLASS BODY executes, so the class
+    statement is the semantically correct point; keeping it outside PyParseClass
+    also keeps it clear of that routine's trial parses and symbol rollbacks.
+    ci = -1 when there is nothing to do. }
+  PyClsEvalCi: Integer;
+  PyClsEvalLo: Integer;
+  PyClsEvalHi: Integer;
   { Def-time parameter-default initialisers awaiting the enclosing statement
     stream. A queue of its OWN, not PyHoistHead: PyParseDef deliberately
     discards the hoist queue on the way out (a body's residue must not escape),
@@ -3962,6 +3977,7 @@ begin
     Exit;
   end;
   gname := '$pdef.';
+  if PyDefaultClsName <> '' then gname := gname + PyDefaultClsName + '.';
   if PyNestPrefix <> '' then gname := gname + PyNestPrefix + '.';
   gname := gname + PyHdrName + '.' + pname;
   gsym := FindSym(gname);
@@ -18950,6 +18966,104 @@ begin
   end;
 end;
 
+{ Evaluate the NON-CONSTANT parameter defaults of a class's methods.
+
+  Methods never reach PyParseDef, which is the single place PyDefaultEvalMode is
+  turned on, so `def go(self, b=[])` recorded no symbol and the call site built
+  None (bug-nilpy-non-constant-parameter-defaults-silently-become-none). The
+  member pre-pass cannot do it either: it runs from two places, one of them
+  hoisted well before the class statement's position in the stream, so the names
+  a default expression reads may not exist yet.
+
+  Run from the statement loop AFTER PyParseClass returns, which is where the
+  class body would execute in Python — that is when CPython evaluates a method
+  default, and it is why the initialiser belongs here rather than at the method.
+
+  Deliberately NOT a second header parser: the `=` is located mechanically and
+  the default itself goes through PyParamDefaultAt, the same routine the member
+  pre-pass uses, so the constant-vs-expression rule and the span skipping stay
+  in ONE place. A second parser that disagrees with the first is the recurring
+  failure mode in this frontend. }
+procedure PyEvalMethodDefaults(ci, lo, hi: Integer);
+var j, depth, pIdx, mmi, mpi, savedTok: Integer;
+    dSOff, dSLen: Integer;
+    dVal: Int64;
+    dIsStr: Boolean;
+    savedEval: Boolean;
+    savedHdr, savedCls, mname, pname: AnsiString;
+begin
+  if (ci < 0) or (lo < 0) or (hi <= lo) then Exit;
+  savedEval := PyDefaultEvalMode;
+  savedHdr := PyHdrName;
+  savedCls := PyDefaultClsName;
+  savedTok := TokPos;
+  PyDefaultClsName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
+  j := lo;
+  while j < hi do
+  begin
+    if (Tokens[j].Kind = tkFunction) and (j + 2 < hi) and
+       (Tokens[j + 1].Kind = tkIdent) and (Tokens[j + 2].Kind = tkLParen) then
+    begin
+      { PyMethodName, not the raw token: `__init__` is registered as `create`,
+        so looking the ctor up by its Python spelling finds nothing and
+        `def __init__(self, items=[])` kept the old None behaviour. }
+      mname := PyMethodName(GetTokenStr(j + 1));
+      mmi := FindUMeth(ci, mname);
+      mpi := -1;
+      if mmi >= 0 then mpi := UMthProc_[mmi];
+      PyHdrName := mname;
+      { parameter 0 is self, matching the index the member pre-pass records
+        under and the one parser.inc / ir.inc read back }
+      pIdx := 0;
+      pname := '';
+      depth := 0;
+      j := j + 2;
+      while j < hi do
+      begin
+        if Tokens[j].Kind = tkLParen then Inc(depth)
+        else if Tokens[j].Kind = tkRParen then
+        begin
+          Dec(depth);
+          if depth = 0 then begin Inc(j); Break; end;
+        end
+        else if (depth = 1) and (Tokens[j].Kind = tkComma) then
+        begin
+          Inc(pIdx);
+          pname := '';
+        end
+        else if (depth = 1) and (Tokens[j].Kind = tkIdent) and (pname = '') and
+                (Tokens[j - 1].Kind in [tkLParen, tkComma]) then
+          pname := GetTokenStr(j)
+        else if (depth = 1) and (Tokens[j].Kind = tkAssign) and (mpi >= 0) and
+                (pIdx < MAX_PROC_PARAMS) then
+        begin
+          Inc(j);
+          PyDefaultEvalMode := True;
+          dVal := PyParamDefaultAt(j, pname, dIsStr, dSOff, dSLen);
+          PyDefaultEvalMode := False;
+          if dVal = 0 then ;   { the ordinal is the pre-pass's business, not ours }
+          if PyDefaultSym >= 0 then
+          begin
+            ProcParamDefaultSym[mpi * MAX_PROC_PARAMS + pIdx] := PyDefaultSym;
+            ProcParamHasDefault[mpi * MAX_PROC_PARAMS + pIdx] := True;
+            { the pre-pass left this True for every non-constant default, and
+              the consumers check it before the symbol on some paths }
+            ProcParamDefaultIsNone[mpi * MAX_PROC_PARAMS + pIdx] := False;
+          end;
+          Continue;   { PyParamDefaultAt left j past the default }
+        end;
+        Inc(j);
+      end;
+      Continue;
+    end;
+    Inc(j);
+  end;
+  TokPos := savedTok;
+  PyDefaultClsName := savedCls;
+  PyHdrName := savedHdr;
+  PyDefaultEvalMode := savedEval;
+end;
+
 procedure PyParseClass(isDC: Boolean);
 var ci, bodyStart, bodyEnd, baseCi, k, clsEqAt: Integer;
     propName: AnsiString;
@@ -19032,6 +19146,7 @@ begin
     { An EMPTY member span rather than no call at all: PyRegisterClassMembers
       also computes the class SIZE and emits its VMT, so skipping it leaves the
       class unsized and every construction crashes. }
+    PyClsEvalCi := -1;   { a one-line body declares no methods to evaluate }
     bodyStart := TokPos - 1;
     if not PyMembersHoisted[ci] then
       PyRegisterClassMembers(ci, bodyStart, bodyStart, isDC, False);
@@ -19042,6 +19157,9 @@ begin
   end;
   Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
   bodyStart := TokPos - 1; bodyEnd := PyFindBodyEnd(bodyStart);
+  { hand the span to the statement loop, which evaluates this class's METHOD
+    parameter defaults once we return — see PyEvalMethodDefaults }
+  PyClsEvalCi := ci; PyClsEvalLo := bodyStart; PyClsEvalHi := bodyEnd;
   { The member pre-pass may have already done the FULL registration (methods
     + fields + PyDc* defaults) so the module-collect trial parse could resolve
     method calls; re-running it would duplicate the append-only defaults and
@@ -19880,6 +19998,8 @@ begin
     PyPreScanImports still parse with it off — ParseUnit saves/clears/restores. }
   PyExprMode := True;
   PyDefInitHead := -1;
+  PyDefaultClsName := '';
+  PyClsEvalCi := -1;
   PyRegisterClassShells;          { the class ROWS the field pre-pass fills in }
   PyPreScanImports;
   PyRegisterClassFieldsPrepass;
@@ -19898,7 +20018,28 @@ begin
   PySkipNewlines;
   while CurTok.Kind <> tkEOF do
   begin
-    if CurTok.Kind = tkClass then PyParseClass(False)
+    if CurTok.Kind = tkClass then
+    begin
+      PyClsEvalCi := -1;
+      PyParseClass(False);
+      PyEvalMethodDefaults(PyClsEvalCi, PyClsEvalLo, PyClsEvalHi);
+      PyClsEvalCi := -1;
+      { a METHOD default is evaluated when the CLASS BODY executes, so its
+        initialiser belongs at the class statement — the same shape the def
+        branch below uses for its own }
+      stmt := PyFlushDefInit(-1);
+      if stmt >= 0 then
+      begin
+        if ASTLeft[lastSeq] = -1 then ASTLeft[lastSeq] := stmt
+        else
+        begin
+          ASTRight[lastSeq] := AllocNode(AN_SEQ);
+          lastSeq := ASTRight[lastSeq];
+          ASTLeft[lastSeq] := stmt;
+        end;
+      end;
+      ASTArenaFloor := ASTNodeCount;
+    end
     else if CurTok.Kind = tkAt then
     begin
       Next;
@@ -19910,7 +20051,22 @@ begin
       PySkipNewlines;
       if CurTok.Kind <> tkClass then
         Error('Nil Python: @dataclass must precede a class');
+      PyClsEvalCi := -1;
       PyParseClass(True);
+      PyEvalMethodDefaults(PyClsEvalCi, PyClsEvalLo, PyClsEvalHi);
+      PyClsEvalCi := -1;
+      stmt := PyFlushDefInit(-1);
+      if stmt >= 0 then
+      begin
+        if ASTLeft[lastSeq] = -1 then ASTLeft[lastSeq] := stmt
+        else
+        begin
+          ASTRight[lastSeq] := AllocNode(AN_SEQ);
+          lastSeq := ASTRight[lastSeq];
+          ASTLeft[lastSeq] := stmt;
+        end;
+      end;
+      ASTArenaFloor := ASTNodeCount;
     end
     else if CurTok.Kind = tkFunction then
     begin
@@ -20125,6 +20281,8 @@ begin
   PyHoistHead := -1;    { no pending hoisted statements }
   PyDefInitHead := -1;
   PyDefaultEvalMode := False;
+  PyDefaultClsName := '';
+  PyClsEvalCi := -1;
   PySkipNewlines;
   { A leading module docstring may precede the imports; consume it. }
   if (CurTok.Kind = tkString) and (TokPos < TokCount) and
@@ -20169,7 +20327,17 @@ begin
   ASTArenaFloor := ASTNodeCount;
   while CurTok.Kind <> tkEOF do
   begin
-    if CurTok.Kind = tkClass then PyParseClass(False)
+    if CurTok.Kind = tkClass then
+    begin
+      PyClsEvalCi := -1;
+      PyParseClass(False);
+      PyEvalMethodDefaults(PyClsEvalCi, PyClsEvalLo, PyClsEvalHi);
+      PyClsEvalCi := -1;
+      { as in the def branch below — a method default runs when the class body
+        does, so its initialiser is queued at the class statement }
+      mainNode := PyFlushDefInit(mainNode);
+      ASTArenaFloor := ASTNodeCount;
+    end
     else if CurTok.Kind = tkAt then
     begin
       Next;
@@ -20181,7 +20349,12 @@ begin
       PySkipNewlines;
       if CurTok.Kind <> tkClass then
         Error('Nil Python: @dataclass must precede a class');
+      PyClsEvalCi := -1;
       PyParseClass(True);
+      PyEvalMethodDefaults(PyClsEvalCi, PyClsEvalLo, PyClsEvalHi);
+      PyClsEvalCi := -1;
+      mainNode := PyFlushDefInit(mainNode);
+      ASTArenaFloor := ASTNodeCount;
     end
     else if CurTok.Kind = tkFunction then
     begin

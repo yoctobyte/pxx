@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:7 blocked:7 backlog:175 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1347 rejected:28`
+`unfinished:7 blocked:7 backlog:176 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1347 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -31,12 +31,13 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 156, ranked
+## Ready — top 30 of 157, ranked
 
 - `[p 70] [N]` bug-nilpy-a-local-named-like-a-class-is-typed-as-that-class
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
+- `[p 60] [N]` bug-nilpy-constructor-parameter-defaults-are-ignored
 - `[p 60] [U]` decide-abi-portable-vs-target-split
 - `[p 60] [A]` feature-a-abi-oracle
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -62,6 +63,5 @@ _none — no lane is locked._
 - `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
 - `[p 55] [N]` feature-nilpy-corpus-uforth
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
-- `[p 55] [A]` feature-pascal-type-helpers
 
-_126 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_127 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

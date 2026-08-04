@@ -60,3 +60,79 @@ print(expr1(), expr2(), expr3())
 
 # an explicitly passed argument still wins over every default
 print(acc(3, [0]), expr1(99), f3(5))
+
+# --- METHOD defaults (2026-08-04) ---
+#
+# Methods never reach PyParseDef, the single place PyDefaultEvalMode is turned
+# on, so `def go(self, b=[])` recorded no symbol and the call site built None.
+# Evaluated now by PyEvalMethodDefaults, run from the statement loop AFTER
+# PyParseClass returns — which is where the class body executes, and therefore
+# when CPython evaluates a method default.
+#
+# The TWO-CLASS rows are the point. An earlier attempt at this was reverted
+# because a second class statement corrupted values compile-wide; that turned
+# out to be a different bug entirely (a parameter named `b` beside a `class B`,
+# bug-nilpy-a-local-named-like-a-class-is-typed-as-that-class). The hidden
+# global is now class-qualified as well, so `A.f.b` and `B.f.b` cannot collide
+# on one symbol — which was a second, independent cause of two-class breakage.
+
+class MA:
+    def f(self, b=[1]):
+        return b
+
+class MB:
+    def f(self, b=[2]):
+        return b
+
+print(MA().f(), MB().f())
+
+# every default KIND on a method, including the constants as controls
+class MK:
+    def a(self, b={}):
+        return b
+    def c(self, b=()):
+        return b
+    def d(self, b=1+2):
+        return b
+    def e(self, b=True):
+        return b
+    def g(self, b=None):
+        return b
+    def h(self, b="z"):
+        return b
+    def i(self, b=[4, 5]):
+        return b
+
+mk = MK()
+print(mk.a(), mk.c(), mk.d(), mk.e(), mk.g(), mk.h(), mk.i())
+
+# a method default over a module global
+mw = 7
+
+class MG:
+    def f(self, b=mw):
+        return b
+
+print(MG().f())
+
+# THE accumulator idiom on a method: evaluated ONCE at class-body time, so the
+# list is SHARED across calls and across instances — pins the Python semantics
+# rather than fresh-per-call
+class MAcc:
+    def add(self, v, bucket=[]):
+        bucket.append(v)
+        return bucket
+
+ma1 = MAcc()
+ma2 = MAcc()
+print(ma1.add(1), ma1.add(2), ma2.add(3))
+
+# an explicit argument still wins, and an inherited method keeps its default
+class MBase:
+    def f(self, b=[8]):
+        return b
+
+class MSub(MBase):
+    pass
+
+print(MA().f([9]), MBase().f(), MSub().f())

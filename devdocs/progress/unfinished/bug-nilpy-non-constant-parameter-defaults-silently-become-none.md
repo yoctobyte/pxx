@@ -395,3 +395,56 @@ time: `PyEvalParamDefault` (`pyparser.inc:3964-3966`) builds the hidden global's
 name from `PyNestPrefix`/`PyHdrName`/param only, with no CLASS component, so
 `A.f.b` and `B.f.b` collide on one symbol. That is a second, sufficient cause of
 two-class breakage and would survive the arena fix.
+
+## 2026-08-04 (overnight) — the METHOD half LANDED
+
+Re-applied after [[bug-nilpy-a-local-named-like-a-class-is-typed-as-that-class]]
+removed the wall. The plan in the reverted attempt was right; it was being
+measured through a bug that made every reading wrong.
+
+### What landed
+
+- **`PyEvalMethodDefaults(ci, lo, hi)`** — walks the class body's `def` headers
+  by token index and, at each top-level `=`, calls the existing
+  `PyParamDefaultAt` with `PyDefaultEvalMode` ON. Deliberately NOT a second
+  header parser: only the `=` is located mechanically, and the default's own
+  constant-vs-expression rule and span skipping stay in the one routine the
+  member pre-pass already uses. Two parsers that disagree is this frontend's
+  recurring failure mode.
+- **Run from the statement loop AFTER `PyParseClass` returns**, in both the
+  module and program loops, with `PyFlushDefInit` at the class statement
+  mirroring the `def` branch. That is where the class body executes, which is
+  when CPython evaluates a method default.
+- **The hidden global is class-qualified** — `$pdef.<Class>.<meth>.<param>`, via
+  a new `PyDefaultClsName`. Without it `A.f.b` and `B.f.b` share one symbol; the
+  earlier note called this a second sufficient cause of two-class breakage and
+  it was.
+- Both `tkClass` branches now also raise `ASTArenaFloor`, like every sibling
+  branch. Kept for symmetry, NOT as the fix — see the correction above.
+
+### Verified
+
+`test/test_nilpy_param_defaults_nonconstant.npy` EXTENDED (not a new file):
+the two-class shape that caused the revert, every default KIND on a method
+(`{}`, `()`, `1+2`, `True`, `None`, `"z"`, `[4,5]`), a method default over a
+module global, an explicit argument overriding a default, an inherited method
+keeping its base's default, and **the accumulator idiom across two instances**,
+which pins the SHARED once-at-class-body-time semantics rather than
+fresh-per-call. Byte-identical to CPython.
+
+### STILL OPEN on this ticket
+
+1. **`__init__` defaults** — split out as
+   [[bug-nilpy-constructor-parameter-defaults-are-ignored]], because it is a
+   different bug: it fires for CONSTANT defaults too (`def __init__(self, v=7)`
+   leaves `v` as None), and it reproduces on the PINNED pre-change binary, so it
+   is neither caused nor fixed by this work. A construction is not an ordinary
+   method call — it is built as a GetMem-shaped call with a negative proc id —
+   so the default-fill machinery the method path uses does not run for it.
+   Fixing the ctor's `FindUMeth` lookup (`__init__` is registered as `create`)
+   did NOT change the result, which is what points at the CALL path rather than
+   at registration.
+2. **NESTED defs** on the direct-call path — unchanged, and still out of scope
+   here. `def inner(b=q)` inside a method now evaluates its ENCLOSING method's
+   defaults correctly but its own remain None; the route is known
+   (`PyQueueNestedDef`, `pyparser.inc:13687`, where the enclosing scope is live).
