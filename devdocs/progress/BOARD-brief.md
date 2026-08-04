@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:7 backlog:179 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1327 rejected:28`
+`unfinished:10 blocked:7 backlog:180 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1327 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -41,10 +41,10 @@ _none — no lane is locked._
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [T]` task-t-worktree-is-not-current-state
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
+- `[p 60] [U]` decide-nilpy-int-promotion-costs-10x-on-ordinary-loops (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [T]` bug-t-bench-timings-recorded-under-co-tenancy
 - `[p 60] [U]` decide-abi-portable-vs-target-split
-- `[p 60] [U]` decide-nilpy-int-promotion-costs-10x-on-ordinary-loops
 - `[p 60] [A]` feature-a-abi-oracle
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-float-exception-mask-control
