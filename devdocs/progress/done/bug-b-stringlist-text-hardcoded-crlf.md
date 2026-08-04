@@ -2,6 +2,7 @@
 
 - **Type:** bug — Track B (library), tag `compat` (FPC parity)
 - **Status:** done
+- **Resolved:** 2026-08-04 in `622a8a055` (verified on origin/master after the rebase)
 - **Opened:** 2026-08-04
 - **Found by:** `tools/fpc_diff_probe.sh`, new `sl-text` case, after widening it
   into classes/TStringList.
