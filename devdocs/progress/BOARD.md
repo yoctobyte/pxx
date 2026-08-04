@@ -36,7 +36,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (176)
+## backlog (175)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -46,7 +46,6 @@ _none_
 | bug-cfront-spurious-dt-needed-libc-with-no-imports | B | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
-| bug-nilpy-constructor-parameter-defaults-are-ignored | N | 60 | bug | SILENT: __init__ parameter defaults are ignored entirely — `def __init__(self, v=7)` then `C()` leaves v as None, for CONSTANT defaults too. Ordinary methods honour their defaults; the constructor call path does not consult ProcParamDefault* at all. | — |
 | bug-nilpy-container-membership-ignores-the-eq-dunder | N | 35 | bug | `x in [a, b]` compares boxed handles, so a class's __eq__ is ignored and membership is False for an equal-but-distinct object — the same runtime-dispatch gap as list.sort() ignoring __lt__ | — |
 | bug-nilpy-def-body-scans-run-on-when-no-indent-is-found | N | 40 | bug | Five token-level scans locate a def/class BODY with an unbounded `while Tokens[j].Kind <> tkIndent` walk. Nothing makes them fail safe: with no INDENT they run on into the NEXT construct and attribute its body to this one. Latent today only because the lexer guarantees the INDENT exists. | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
@@ -329,9 +328,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1348)
+## done (1349)
 
-1348 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1349 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -372,7 +371,6 @@ _none_
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
-- [p 60] [N] bug-nilpy-constructor-parameter-defaults-are-ignored
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing

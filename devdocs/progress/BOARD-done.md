@@ -436,6 +436,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-comprehension-variable-leaks-and-clobbers-the-enclosing-scope | N | 60 | bug | A comprehension's loop variable leaks and OVERWRITES the enclosing binding — and can segfault | — |
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
 | bug-nilpy-constructor-call-in-unpack-rhs-fails-to-parse | N | 55 | bug | A constructor call in an unpacking right-hand side won't parse | — |
+| bug-nilpy-constructor-parameter-defaults-are-ignored | N | 60 | bug | SILENT: __init__ parameter defaults are ignored entirely — `def __init__(self, v=7)` then `C()` leaves v as None, for CONSTANT defaults too. Ordinary methods honour their defaults; the constructor call path does not consult ProcParamDefault* at all. | — |
 | bug-nilpy-container-literal-default-arg-segfaults | N | 65 | bug | `def f(a, b=[])` SEGFAULTS the moment the default is used as a container | — |
 | bug-nilpy-dataclass-no-generated-eq | N | 30 | bug | `@dataclass` gets no generated `__eq__` — compares by identity instead of fields | — |
 | bug-nilpy-def-local-assignment-widens-module-global-to-variant | N | 70 | bug | NilPy: a name assigned as a LOCAL inside a def widens the same-named module global to tyVariant, killing its class identity and every compile-time dunder dispatch | — |

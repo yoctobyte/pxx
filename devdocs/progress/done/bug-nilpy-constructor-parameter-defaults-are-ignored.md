@@ -3,6 +3,7 @@ prio: 60
 type: bug
 track: N
 summary: "SILENT: __init__ parameter defaults are ignored entirely — `def __init__(self, v=7)` then `C()` leaves v as None, for CONSTANT defaults too. Ordinary methods honour their defaults; the constructor call path does not consult ProcParamDefault* at all."
+status: done
 ---
 
 # `__init__` parameter defaults are ignored
@@ -120,3 +121,6 @@ Found while regression-testing this: [[bug-nilpy-tuple-of-a-field-from-an-omitte
 — a field assigned from an omitted defaulted variant parameter and returned
 inside a TUPLE segfaults. PRE-EXISTING (reproduces on the pinned binary and on
 `a87e8a224`), narrowed to four required conditions, filed separately.
+
+## Log
+- 2026-08-04 — resolved, commit PENDING-COMMIT.
