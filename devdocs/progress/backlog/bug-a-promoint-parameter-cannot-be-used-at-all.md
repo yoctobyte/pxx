@@ -2,7 +2,7 @@
 track: A
 prio: 45
 type: bug
-summary: "A PromoInt PARAMETER is unusable: @n and Pointer(n) both yield a pointer to the parameter CELL rather than the slot, and even `n + 0` on the parameter SEGFAULTS — so PromoInt is a type you can compute with but cannot write a function against"
+summary: "A PromoInt PARAMETER is unusable — @n, Pointer(n) and even `n + 0` are wrong or SEGFAULT — because promo was never joined to the aggregate-by-value parameter path every record already uses. Root cause and fix both confirmed by IR; no semantics decision needed."
 ---
 
 # A `PromoInt` parameter cannot be used at all
@@ -82,30 +82,56 @@ framing is what the fix has to choose between — the one-line `IRPromoAddrOf`
 change (emit `IR_LOAD_SYM` for a promo PARAMETER) simply commits to the caller's
 convention, which is option 1 and carries the aliasing question with it.
 
-## The decision it needs first — Track U
+## The decision it needed — RESOLVED by measurement, 2026-08-04
 
-Passing the caller's slot address makes a promo parameter **by reference**,
-so a callee assigning to `n` would mutate the caller's variable. Pascal's
-`value` parameter semantics say it must not. The options:
+This ticket first said the fix needs an ABI/semantics choice between
+const-by-reference, copy-on-entry, and slot-by-value. **That framing was wrong.**
+This compiler already has a settled convention for passing an AGGREGATE by
+value, and a `PromoInt` (TypeSize 16 = {tag, payload}) is an aggregate. Measured
+on a plain record:
 
-1. **Const-by-reference** (pass the address, forbid or ignore assignment to the
-   parameter). Cheapest, matches how every other promo site already works, and
-   is enough for the motivating use (library functions that only READ, e.g. a
-   hand-written base conversion). Diverges from Pascal value semantics.
-2. **Copy on entry** (pass the address, `PXXPromoCopy` into a fresh callee slot
-   in the prologue). Correct Pascal semantics; costs an allocation per call for
-   a heap-tier value, and needs the copy released in the epilogue.
-3. **Pass the two-word slot by value** and treat the parameter as a real slot.
-   Most Pascal-faithful, and note the CALLEE side is ALREADY written this way —
-   only the caller would change (push two words instead of an address), and
-   `IRPromoAddrOf` would need no change at all. The cost is a per-call copy of
-   the managed payload with the same lifetime question as option 2, plus a
-   parameter-ABI change for the type.
+```
+caller:  8: lea       temp            { a hidden temp }
+        10: copy_rec  temp, v, 16     { copy INTO it }
+        11: arg       temp            { pass its ADDRESS }
+callee:  0: lea       r               { resolves to the PASSED POINTER }
+```
 
-Recommendation: **2**, with 1 as an explicit `const PromoInt` fast path — a type
-whose parameters silently alias would be a worse surprise than the cost, and
-`const` already means "no assignment" in this dialect. Filing as a `decide-`
-item is warranted if that is not obviously right.
+and behaviourally:
+
+```
+caller @v  = 140727563660480
+callee @r  = 140727563660456     { the temp, NOT v }
+after the callee does r.a := 99, caller's v.a is still 1
+```
+
+So the convention is: **caller copies into a hidden temp and passes its address;
+`lea` of the parameter in the callee resolves to that pointer.** That already
+gives true Pascal value semantics, with one copy, over an address-passing ABI —
+no register-pair aggregate ABI anywhere, and nothing to decide.
+
+A promo parameter is simply NOT in that class today. The caller already passes an
+address (`slotaddr v`) — it just passes the ORIGINAL slot rather than a copy —
+and the callee's `lea n` does not resolve to the passed pointer, so it addresses
+an unfilled 16-byte frame cell. The two ends disagree only because promo was
+never joined to the aggregate path.
+
+### The fix
+
+1. Put `PromoInt` in the aggregate-parameter class, so `lea n` in the callee
+   resolves to the passed pointer exactly as it does for a record.
+2. Have the caller materialise a hidden promo temp and copy into it before
+   passing its address — with **`PXXPromoCopy`, not `copy_rec`**: the heap tier's
+   payload is a managed AnsiString and needs the retain (`dp^ := sp^`), which a
+   raw 16-byte byte-copy does not do. Check whether the by-value path for a
+   RECORD CONTAINING a managed field already solves this; if it does, reuse it.
+3. The temp needs the usual epilogue clear, the same as every other hidden
+   managed temp (cf. `SymIsHiddenArgTemp` in `IRPromoBoxedVariantAddr`).
+
+Value semantics fall out; there is no aliasing question, so no Track U item.
+The earlier "const-by-reference" and "copy-on-entry" options are both worse
+versions of this, and "slot-by-value (push two words)" would have invented a
+register-pair aggregate ABI this compiler does not have and does not need.
 
 ## Not on the critical path
 

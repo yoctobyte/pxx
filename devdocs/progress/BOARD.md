@@ -41,7 +41,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-promoint-parameter-cannot-be-used-at-all | A | 45 | bug | A PromoInt PARAMETER is unusable: @n and Pointer(n) both yield a pointer to the parameter CELL rather than the slot, and even `n + 0` on the parameter SEGFAULTS — so PromoInt is a type you can compute with but cannot write a function against | — |
+| bug-a-promoint-parameter-cannot-be-used-at-all | A | 45 | bug | A PromoInt PARAMETER is unusable — @n, Pointer(n) and even `n + 0` are wrong or SEGFAULT — because promo was never joined to the aggregate-by-value parameter path every record already uses. Root cause and fix both confirmed by IR; no semantics decision needed. | — |
 | bug-cfront-spurious-dt-needed-libc-with-no-imports | B | 45 | bug | A spurious `DT_NEEDED libc.so.6` is emitted for a binary that imports nothing | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
