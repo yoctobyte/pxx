@@ -39,18 +39,48 @@ is worse than that: **an ordinary promo OPERATOR applied to a parameter
 crashes**, so a promo parameter cannot be used even through the operators the
 frontend lowers for you.
 
-## Likely shape
+## CONFIRMED by IR on both sides (2026-08-04)
 
-A promo rvalue is the slot ADDRESS ([[decide-promoint-rvalue-representation]]).
-At a call site the argument therefore lowers to an address, and the callee's
-parameter CELL holds that address — so inside the routine, `@n` is the address
-*of the cell* (one level too many) and `IRPromoAddrOf`'s `IR_SLOTADDR` of the
-parameter symbol is likewise wrong. Confirm before acting: dump the call site
-and callee IR rather than trusting this paragraph
-([[project_debug_toolkit_playbook]]).
+Not a hypothesis — measured with `PXXDBG=a.ir` at each end.
 
-If that is right, the lowering fix is small — `IRPromoAddrOf` emits
-`IR_LOAD_SYM` instead of `IR_SLOTADDR` when the symbol is a promo PARAMETER.
+**Caller** (`writeln(callee(v))` with `v: PromoInt`):
+
+```
+5: slotaddr a=81            { &v }
+6: arg      a=5   tk=28     { passed as ONE machine word, tk 28 = tyPromoInt64 }
+7: call     a=251
+```
+
+**Callee** (`PXXPromoToStr(@n)`):
+
+```
+0: lea a=82 [sym=n]         { the address OF THE PARAMETER CELL }
+1: arg a=0
+2: call a=184
+```
+
+So the caller passes **the slot address**, and the callee takes **the address of
+the cell that holds it** — one indirection too many, on every single promo
+operation, because `IRPromoAddrOf` answers `IR_SLOTADDR` for any promo-typed
+symbol without asking whether it is a local or a parameter.
+
+That also explains `n + 0` crashing where `@n` merely printed a pointer:
+`PXXPromoAddInt(&cell, ...)` reads the tag word at `&cell`, which holds the
+caller's ADDRESS — neither `PROMO_TAG_INLINE` (0) nor `PROMO_TAG_HEAP` (1) — so
+the runtime takes the heap branch and dereferences that address as a managed
+`AnsiString` payload.
+
+`Pointer(n)` and `@n` lower IDENTICALLY (both to `lea n`), which is why the
+original ticket saw the same wrong number from both spellings and concluded a
+parameter is "neither a slot nor an address". It is a slot by the CALLEE's
+reckoning and an address by the CALLER's.
+
+**The two ends already disagree about the convention.** The callee lowering was
+written as though the slot lives in the callee's own frame (option 3 below); the
+caller implements option 1. Either end alone is coherent; the pair is not. That
+framing is what the fix has to choose between — the one-line `IRPromoAddrOf`
+change (emit `IR_LOAD_SYM` for a promo PARAMETER) simply commits to the caller's
+convention, which is option 1 and carries the aliasing question with it.
 
 ## The decision it needs first — Track U
 
@@ -66,7 +96,11 @@ so a callee assigning to `n` would mutate the caller's variable. Pascal's
    in the prologue). Correct Pascal semantics; costs an allocation per call for
    a heap-tier value, and needs the copy released in the epilogue.
 3. **Pass the two-word slot by value** and treat the parameter as a real slot.
-   Most Pascal-faithful, but changes the parameter ABI for the type.
+   Most Pascal-faithful, and note the CALLEE side is ALREADY written this way —
+   only the caller would change (push two words instead of an address), and
+   `IRPromoAddrOf` would need no change at all. The cost is a per-call copy of
+   the managed payload with the same lifetime question as option 2, plus a
+   parameter-ABI change for the type.
 
 Recommendation: **2**, with 1 as an explicit `const PromoInt` fast path — a type
 whose parameters silently alias would be a worse surprise than the cost, and
