@@ -1375,6 +1375,12 @@ test-nilpy: $(COMPILER)
 	# decimal expansion. Every value here is now CPython's.
 	./$(COMPILER) test/test_nilpy_round.npy /tmp/test_nilpy_round26
 	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.67 2.67\n9.99 0.04 0.3 100.0\n1.0 0.0 -0.0 0.0')"
+	# A SECOND for-clause in one comprehension — the flatten idiom — failed with
+	# "undefined variable (c)". The clauses nest left to right (a recursion), AND
+	# the loop variable's rename had to cover the whole remainder, because the next
+	# clause's ITERABLE names the previous clause's variable. See the test header.
+	./$(COMPILER) test/test_nilpy_comprehension_two_for.npy /tmp/test_nilpy_c2for26
+	/tmp/test_nilpy_c2for26 | diff -u test/test_nilpy_comprehension_two_for.expected -
 	# bytearray() had only () and (Integer) overloads, so no bytes could be put in
 	# one at construction. bytearray(bytes) is a COPY not an alias, and an element
 	# outside 0..255 raises ValueError rather than truncating. See the test header.

@@ -3,6 +3,8 @@ track: N
 prio: 45
 type: bug
 summary: "A comprehension with TWO for-clauses — [c for r in rows for c in r] — fails with 'undefined variable (c)'; the flatten idiom is unavailable"
+status: done
+owner: claude-AN
 ---
 
 # `[c for r in rows for c in r]` — a second `for` clause is not supported
@@ -72,3 +74,54 @@ A `.npy` diffed against CPython: the flatten idiom; two clauses with a filter on
 the outer, on the inner, and on both; a dict comprehension with two clauses;
 three clauses; and single-clause comprehensions plus comprehension-inside-a-
 comprehension as regression controls.
+
+
+## Resolved 2026-08-04 — a recursion, plus a rename range that had to widen
+
+Python's clauses NEST left to right, so `[c for r in rows for c in r]` is just
+`for r in rows: for c in r: append(c)`. The lowering already generates the loop
+by calling `PyParseFor` with `PyCompTarget` set, so the whole feature is: when
+the comprehension body position finds another `for`, **recurse into
+`PyParseFor`** instead of building the append. `PyCompTarget` and
+`PyCompExprStart` are still set, so the innermost clause re-parses the element
+expression with every loop variable in scope and appends there, and a trailing
+`if` filter is consumed by that innermost call.
+
+### The second half, which the ticket did not predict
+
+That alone still failed, with `undefined variable (r)` — one name further along.
+A comprehension's loop variable is re-spelled to a hidden name so it cannot leak
+(`bug-nilpy-comprehension-variable-leaks-and-clobbers-the-enclosing-scope`), and
+the rename covered exactly two regions: the element expression before the `for`,
+and the filter. **A second clause's ITERABLE is neither** — `for c in r` names
+the previous clause's variable, in a region nothing renamed, so it kept the
+user's spelling and resolved against nothing.
+
+The rename tail is now the whole remainder (`forTokIdx .. closerPos`) rather
+than just the filter, which is a superset of what it did before. Starting at
+`forTokIdx` also re-spells the clause's own target token; that is harmless
+because the header has already been read into `name` and the hidden name is
+derived from the token INDEX, not the spelling.
+
+The diagnostic complaint in the report is answered by construction: the shape
+compiles now, so there is no misleading message left to improve.
+
+### Verified against CPython
+
+Twelve rows: three two-clause forms (plain, with an element expression, with a
+filter), a cross-product of two independent iterables, a tuple element, a
+ragged flatten, `len`/`sum` over one, and the single-clause forms the ticket
+listed as working — including a comprehension nested in an element expression
+and the no-leak check. All identical. `tools/gate.sh quick` GREEN, self-host
+byte-identical.
+
+**Deliberately not covered:** `{c for r in rows for c in r}`. A set renders with
+list brackets in this frontend at ANY clause count — one sequence
+representation — so its value is right and only the display differs. That is
+[[bug-nilpy-set-is-a-list-not-a-set]] and the Track U
+[[decide-nilpy-set-as-a-distinct-type-or-a-list]], not this ticket; the test
+says so rather than quietly omitting the row.
+
+## Log
+- 2026-08-04 — resolved.
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

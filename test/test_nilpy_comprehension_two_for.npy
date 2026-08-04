@@ -1,0 +1,47 @@
+# `[c for r in rows for c in r]` — a SECOND for-clause, i.e. the flatten idiom
+# (bug-nilpy-nested-for-comprehension-not-supported). It used to fail with
+# "undefined variable (c)", which read as a scoping bug rather than a missing
+# feature: only the first clause was bound and the element expression was then
+# resolved against it alone.
+#
+# Two things had to change, and the second is the one that is easy to miss:
+#   * the clauses NEST left to right, so this loop's body is simply another
+#     loop and the append happens in the innermost one — a recursion;
+#   * the loop variable's hidden-name rename had to cover the whole remainder of
+#     the comprehension, not just the element expression and the filter. A
+#     second clause's ITERABLE names the previous clause's variable (`for c in
+#     r`), and with only the element range renamed that `r` kept the user's
+#     spelling and resolved against nothing.
+#
+# NOT covered here: `{c for r in rows for c in r}`. A set renders with list
+# brackets in this frontend regardless of clause count — one sequence
+# representation, tracked by bug-nilpy-set-is-a-list-not-a-set and the Track U
+# decide-nilpy-set-as-a-distinct-type-or-a-list. Its VALUE is right; only the
+# display differs, and that is not this ticket.
+#
+# Every expectation is CPython's.
+
+rows = [[1, 2], [3, 4]]
+l = [1, 2, 3]
+d = {"a": [1], "bb": [2, 3]}
+
+print([c for r in rows for c in r])
+print([c * 2 for r in rows for c in r])
+print([c for r in rows for c in r if c > 2])
+print([a + b for a in [1, 2] for b in [10, 20]])
+print([(a, b) for a in [1, 2] for b in [3]])
+
+tri = [[1], [2, 3], [4, 5, 6]]
+print([v for row in tri for v in row])
+print(len([c for r in rows for c in r]), sum([c for r in rows for c in r]))
+
+# single-clause forms, and a comprehension nested in an element expression,
+# which all worked before and must keep working
+print([x * 2 for x in l], [x for x in l if x > 1])
+print([[c * 2 for c in r] for r in rows])
+print({k: len(v) for k, v in d.items()})
+print([x for x in range(10) if x % 3 == 0])
+
+# the loop variable must not leak into the enclosing scope
+x = 99
+print([x for x in l], x)

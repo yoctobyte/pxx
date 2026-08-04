@@ -11667,21 +11667,32 @@ begin
     (bug-nilpy-comprehension-variable-leaks-and-clobbers-the-enclosing-scope). }
   if PyCompTarget >= 0 then
   begin
+    { The rename covers the element expression BEFORE the `for`, and everything
+      from this clause's `for` up to the closer. That tail used to be just the
+      filter (`filtIdx + 1 .. closerPos`); it has to be the whole remainder
+      because a SECOND for-clause's ITERABLE names this clause's variable —
+      `[c for r in rows for c in r]`, where the trailing `r` is the binding this
+      loop makes. With only the element range renamed, that `r` kept the user's
+      spelling, resolved against nothing, and reported "undefined variable (r)"
+      (bug-nilpy-nested-for-comprehension-not-supported). Starting AT forTokIdx
+      also re-spells this clause's own target token, which is harmless: the
+      header has already been read into `name`, and the hidden name is derived
+      from the token INDEX, not the spelling. }
     hName := PyCompHiddenLoopName(forTokIdx, 0);
     PyRenameIdentRange(PyCompExprStart, forTokIdx, name, hName);
-    if filtIdx >= 0 then PyRenameIdentRange(filtIdx + 1, closerPos, name, hName);
+    if closerPos > forTokIdx then PyRenameIdentRange(forTokIdx, closerPos, name, hName);
     if name2 <> '' then
     begin
       hName2 := PyCompHiddenLoopName(forTokIdx, 1);
       PyRenameIdentRange(PyCompExprStart, forTokIdx, name2, hName2);
-      if filtIdx >= 0 then PyRenameIdentRange(filtIdx + 1, closerPos, name2, hName2);
+      if closerPos > forTokIdx then PyRenameIdentRange(forTokIdx, closerPos, name2, hName2);
     end;
     for xi := 0 to PyForExtraCount - 1 do
     begin
       hExtraNames[xi] := PyCompHiddenLoopName(forTokIdx, 2 + xi);
       PyRenameIdentRange(PyCompExprStart, forTokIdx, PyForExtraName[xi], hExtraNames[xi]);
-      if filtIdx >= 0 then
-        PyRenameIdentRange(filtIdx + 1, closerPos, PyForExtraName[xi], hExtraNames[xi]);
+      if closerPos > forTokIdx then
+        PyRenameIdentRange(forTokIdx, closerPos, PyForExtraName[xi], hExtraNames[xi]);
     end;
   end;
   { `d.items()`: hide the suffix behind a fake ':' so the expression parser stops
@@ -12118,6 +12129,25 @@ begin
       (feature-nilpy-nested-comprehension). }
     savedHoist := PyHoistHead;
     PyHoistHead := -1;
+    { A SECOND `for` CLAUSE — `[c for r in rows for c in r]`, the flatten idiom.
+      Python's rule is that the clauses nest left to right, so this loop's BODY
+      is simply another loop and the append happens in the INNERMOST one. That
+      is what recursing into PyParseFor here builds: PyCompTarget and
+      PyCompExprStart are still set, so the inner clause re-parses the element
+      expression with BOTH loop variables in scope and appends there. Any `if`
+      filter after the last clause is consumed by that innermost call.
+
+      Before this, only the first clause was bound and the element expression
+      was then resolved against it alone — reported as "undefined variable (c)",
+      which read as a scoping bug rather than a missing feature
+      (bug-nilpy-nested-for-comprehension-not-supported). }
+    if PyIsIdent('for') then
+    begin
+      node := PyParseFor;
+      compSaved := -1;
+    end
+    else
+    begin
     compSaved := TokPos - 1;              { index of CurTok (the closing bracket) }
     TokPos := PyCompExprStart; Next;      { CurTok := first EXPR token }
     if PyCompIsDict then
@@ -12156,6 +12186,7 @@ begin
       ASTRight[filtPair] := -1;
       ASTRight[filtN] := filtPair;
       node := filtN;
+    end;
     end;
     { splice the element's own hoisted setup in FIRST, then restore the
       enclosing statement's queue }

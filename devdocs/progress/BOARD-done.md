@@ -501,6 +501,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-nested-def-capture-sets-are-not-final | N | 85 | bug | A nested def's capture set is read before it is final | — |
 | bug-nilpy-nested-def-capturing-self-called-from-a-sibling-returns-nothing | N | 50 | bug | Inside a METHOD, a nested def that captures self returns nothing when called from a SIBLING nested def — `C().run()` prints an empty line where CPython prints 17. Pre-existing (identical on pinned), and needs no lambda to reproduce. | — |
 | bug-nilpy-nested-def-nonint-result-garbage | N | 75 | bug | A nested def's non-integer result is read as a number — silent garbage | — |
+| bug-nilpy-nested-for-comprehension-not-supported | N | 45 | bug | A comprehension with TWO for-clauses — [c for r in rows for c in r] — fails with 'undefined variable (c)'; the flatten idiom is unavailable | — |
 | bug-nilpy-non-literal-class-attribute-corrupts-the-class-layout | N | 70 | bug | A class attribute with a NON-LITERAL initialiser (`g = 2 + 3`) corrupts the class: a method returning a tuple of two OTHER class attributes then prints nothing or segfaults. Deleting the unused attribute fixes it | — |
 | bug-nilpy-none-equals-zero-is-true | N | 65 | bug | `0 == None` is True, and `None == 0` does not parse | — |
 | bug-nilpy-nonlocal-write-never-reaches-the-enclosing-scope | N | 80 | bug | `nonlocal x` — the write never reaches the enclosing function | — |

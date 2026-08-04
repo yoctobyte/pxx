@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:7 backlog:182 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1315 rejected:28`
+`unfinished:10 blocked:7 backlog:182 experimental:20 rainy-day:30 done-followup:3 decided:36 done:1316 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -38,6 +38,7 @@ _none — no lane is locked._
 
 - `[p 70] [T]` regression-optdiff-shard8-12
 - `[p 70] [T]` regression-test-c-conformance-shard2-6
+- `[p 70] [T]` regression-test-core-test-nilpy-min-max-variadic
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [T]` task-t-worktree-is-not-current-state
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
@@ -65,6 +66,5 @@ _none — no lane is locked._
 - `[p 55] [P]` compat-pascal-assert-halts-instead-of-raising-eassertionfailed
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
-- `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
 
 _133 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
