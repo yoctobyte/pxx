@@ -147,4 +147,4 @@ identical. `tools/gate.sh quick` GREEN, self-host byte-identical.
 
 ## Log
 - 2026-08-04 — resolved.
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit c8093ef11.
