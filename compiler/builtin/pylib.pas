@@ -470,6 +470,16 @@ function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; over
   hook only because `set` IS a keyword.) }
 function bytearray: TPyBytes; overload;   { bytearray() — an EMPTY buffer }
 function bytearray(n: Integer): TPyBytes; overload;
+{ bytearray(b"abc") — a COPY of a bytes/bytearray, never an alias. The point of
+  the call is almost always to get a MUTABLE copy of an immutable bytes, so
+  returning the same object would be a silent aliasing bug rather than a missing
+  feature (bug-nilpy-bytearray-constructor-only-accepts-a-length). }
+function bytearray(b: TPyBytes): TPyBytes; overload;
+{ bytearray([1, 2, 3]) — an iterable of ints. An element outside 0..255 raises
+  ValueError as CPython does, rather than truncating to a byte: a truncation
+  here would be a wrong VALUE in a buffer, which is exactly the failure mode
+  this type is used to avoid. }
+function bytearray(l: TPyList): TPyBytes; overload;
 function bytes(b: TPyBytes): TPyBytes;
 { bytes([104, 105]) — from a LIST of codepoints. A REAL overload since
   bug-a-overload-resolution-ignores-class-identity: before that, a list
@@ -5249,6 +5259,28 @@ end;
 function bytearray(n: Integer): TPyBytes; overload;
 begin
   Result := TPyBytes.Create(n);
+end;
+
+function bytearray(b: TPyBytes): TPyBytes; overload;
+var i: Integer;
+begin
+  if b = nil then begin Result := TPyBytes.Create(0); Exit; end;
+  Result := TPyBytes.Create(b.FLen);
+  for i := 0 to b.FLen - 1 do Result.put(i, b.at(i));
+end;
+
+function bytearray(l: TPyList): TPyBytes; overload;
+var i: Integer; v: Int64;
+begin
+  if l = nil then begin Result := TPyBytes.Create(0); Exit; end;
+  Result := TPyBytes.Create(l.count);
+  for i := 0 to l.count - 1 do
+  begin
+    v := pyvar_to_int(l.at(i));
+    if (v < 0) or (v > 255) then
+      raise ValueError.Create('byte must be in range(0, 256)');
+    Result.put(i, Integer(v));
+  end;
 end;
 
 { Python's slice bound normalisation, shared by str, bytes and list so the

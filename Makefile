@@ -1375,6 +1375,11 @@ test-nilpy: $(COMPILER)
 	# decimal expansion. Every value here is now CPython's.
 	./$(COMPILER) test/test_nilpy_round.npy /tmp/test_nilpy_round26
 	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.67 2.67\n9.99 0.04 0.3 100.0\n1.0 0.0 -0.0 0.0')"
+	# bytearray() had only () and (Integer) overloads, so no bytes could be put in
+	# one at construction. bytearray(bytes) is a COPY not an alias, and an element
+	# outside 0..255 raises ValueError rather than truncating. See the test header.
+	./$(COMPILER) test/test_nilpy_bytearray_ctor.npy /tmp/test_nilpy_bactor26
+	test "$$(/tmp/test_nilpy_bactor26)" = "$$(printf '%b' '3 97 98 99\n122\n120 65\n3 1 3\n0\n3 0\n0\nValueError')"
 	# Two methods of one class could not both declare a nested def of the SAME
 	# name: the method body pre-pass ran BEFORE the nest prefix was set, so every
 	# method's nested def registered under its bare name. A plain def already set

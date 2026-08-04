@@ -1,0 +1,44 @@
+# bytearray() had only () and (Integer) overloads, so a bytearray could be
+# created EMPTY or ZERO-FILLED and no other way — every spelling that puts
+# actual bytes in one at construction was a compile error
+# (bug-nilpy-bytearray-constructor-only-accepts-a-length). `b"..."` literals
+# themselves always worked, so the natural `bytearray(b"...")` was exactly the
+# one that failed.
+#
+# Two things here are deliberate and are what the rows check:
+#   * bytearray(bytes) is a COPY, never an alias — the point of the call is
+#     usually to get a MUTABLE copy of an immutable bytes, so returning the same
+#     object would be a silent aliasing bug rather than a missing feature. The
+#     `src`/`b` pair pins that: mutating the copy must not move the source.
+#   * an element outside 0..255 RAISES ValueError as CPython does, rather than
+#     truncating to a byte — a truncation would be a wrong VALUE in a buffer,
+#     which is the failure mode this type exists to avoid.
+#
+# Every expectation is CPython's.
+
+a = bytearray(b"abc")
+print(len(a), a[0], a[1], a[2])
+a[0] = 122
+print(a[0])
+
+# COPY, not alias
+src = b"xy"
+b = bytearray(src)
+b[0] = 65
+print(src[0], b[0])
+
+# an iterable of ints, and the empty one
+c = bytearray([1, 2, 3])
+print(len(c), c[0], c[2])
+print(len(bytearray([])))
+
+# the two forms that already worked
+e = bytearray(3)
+print(len(e), e[0])
+print(len(bytearray()))
+
+try:
+    bad = bytearray([1, 300])
+    print("no raise")
+except ValueError:
+    print("ValueError")
