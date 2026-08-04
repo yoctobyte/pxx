@@ -18,6 +18,16 @@
 # is NOT by itself evidence -- reduce it to something syscall-free before
 # believing it. Compute-only divergences are the trustworthy ones.
 #
+# KNOWN-BENIGN divergences, checked and NOT bugs -- do not re-chase them:
+#   lib_platform_esp  sendto=-9 (x86-64) vs -14 (cross). The test calls
+#     PalSendToIpv4 on fd 0 with a nil buffer, i.e. deliberately invalid, and
+#     the kernels differ only in WHICH error they report first (EBADF vs
+#     EFAULT). A real UDP sendto/recvfrom round trip on loopback was verified
+#     byte-identical on x86-64, i386, arm32 and aarch64.
+#   lib_dns_* / lib_http* / lib_https_*  -- these need network or threads, and
+#     qemu-user is not a faithful host for either. Treat any divergence there
+#     as unproven until it reduces to something syscall-free.
+#
 # Usage: tools/lib_cross_sweep.sh   (no rebuild; uses the pinned stable)
 set -u
 cd /home/rene/frank2
