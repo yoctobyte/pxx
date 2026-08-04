@@ -467,6 +467,49 @@ def daemon_script(clone, local_code=False):
     return os.path.join(HERE, "twatch.py")
 
 
+def ensure_clone_on_branch(clone, branch="master"):
+    """Put the clone back on its branch before the daemon is launched from it.
+
+    `daemon_script` deliberately runs the CLONE's copy of twatch.py, so that
+    "restart to pick up a fix" means "pull, then restart" and the watcher runs
+    committed code. But the clone is DETACHED at the sha under test for most of
+    every cycle — and *always* after a crash, which is exactly when someone
+    restarts it. Launching then runs that sha's twatch.py: an arbitrary OLD
+    version of the watcher's own code, with none of the fix that prompted the
+    restart.
+
+    Measured 2026-08-04: a crash left the clone detached at `ac03897df`, so
+    `trackt up` relaunched the very code that had just crashed, which
+    re-created the file it crashed on. Two identical outages before the cause
+    was visible, because the log's traceback showed the CURRENT file's source
+    lines against the OLD file's line numbers.
+
+    Returns False when the clone cannot be made current — the caller should
+    refuse rather than start something arbitrary.
+    """
+    git = ["git", "-C", clone]
+    try:
+        detached = subprocess.run(git + ["symbolic-ref", "-q", "HEAD"],
+                                  capture_output=True, text=True,
+                                  timeout=30).returncode != 0
+        if detached:
+            print("trackt: clone is detached (mid-test, or a crash left it "
+                  "there) — returning it to %s so the daemon runs CURRENT "
+                  "code, not the tested sha's" % branch)
+            r = subprocess.run(git + ["checkout", branch], capture_output=True,
+                               text=True, timeout=60)
+            if r.returncode:
+                print("trackt: cannot check out %s in %s:\n%s"
+                      % (branch, clone, (r.stderr or "").strip()))
+                return False
+        subprocess.run(git + ["pull", "--ff-only", "--quiet", "origin", branch],
+                       capture_output=True, timeout=120)
+    except (subprocess.SubprocessError, OSError) as e:
+        print("trackt: could not verify the clone's checkout (%s) — starting "
+              "anyway, but the daemon may be running old code" % e)
+    return True
+
+
 def cmd_start(clone, remote=None, web=True, local_code=False):
     if not os.path.isdir(clone):
         if not remote:
@@ -477,6 +520,11 @@ def cmd_start(clone, remote=None, web=True, local_code=False):
     if pid:
         print("daemon already running (pid %d)" % pid)
         return 0
+    if not local_code and os.path.isdir(clone) and \
+            not ensure_clone_on_branch(clone):
+        print("trackt: refusing to start — the daemon would run whatever sha "
+              "the clone happens to be sitting on")
+        return 1
     lg = open(logpath(clone), "a")
     script = daemon_script(clone, local_code)
     if local_code:

@@ -724,6 +724,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-t-bench-sub-second-timings-quantized-to-50ms | T | 65 | bug | Benchmark timings under 1s are quantized to a 50 ms grid | — |
 | bug-t-bench-timings-recorded-under-co-tenancy | T | 60 | bug | bench records timings with no check that the box is quiet, so an agent's builds inflate the series up to +24% — and it is logged as SLOW, which reads as a performance regression | — |
 | bug-t-claim-silently-no-ops-owner-on-yaml-only-tickets | T | 45 | bug | `progress.sh claim`/`resolve` silently no-op Owner/Status on YAML-only tickets | — |
+| bug-t-daemon-restarts-into-the-tested-shas-code | T | 65 | bug | trackt start launches the clone's twatch.py, but the clone is detached at the sha under test — so a restart after a crash re-runs the crashing code, not the fix | — |
 | bug-t-etxtbsy-race-reds-single-shot-selfhost-jobs | T | 60 | bug | A one-off `Text file busy` on exec red the self-host chain job; selfhost is single-shot by policy, so a harness-level OS race is indistinguishable from real compiler nondeterminism | — |
 | bug-t-flaky-async-multithreaded-tests-false-newred | T | 45 | bug | Flaky async/multithreaded run-tests emit false NEW-REDs — reap() fails on first nonzero exit, no confirm-retry | — |
 | bug-t-full-run-evicts-opt-verdicts-perpetual-new-red | T | 75 | bug | DUPLICATE of bug-t-full-tier-wipes-other-tiers-job-status — "a full run replaces the whole job map and evicts opt-tier verdicts, so every opt-only red re-reports as NEW-RED forever" | — |
