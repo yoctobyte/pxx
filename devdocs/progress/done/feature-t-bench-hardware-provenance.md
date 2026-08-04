@@ -137,4 +137,4 @@ wrong number is more expensive than a missing one.
   `scale` stays out of it, per the ticket's warning: it read 1.0 on both boxes
   despite the 40-90% gap, and it is for timeouts.
 
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit fbaed24cc.
