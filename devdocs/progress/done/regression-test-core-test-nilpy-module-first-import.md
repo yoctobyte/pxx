@@ -61,4 +61,4 @@ would have caught it is `:=[^;]*\.(append|extend|sort|reverse)\(` over
 Verified: both tests match their Makefile expectations again, and
 `test_nilpy_list_mutators_return_none` is unchanged. `tools/gate.sh quick`
 GREEN, self-host byte-identical.
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit dc1545083.
