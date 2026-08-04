@@ -90,6 +90,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-b-dotfile-treated-as-extension | B | 50 | bug | A dotfile's name was treated as its extension — ChangeFileExt ate the filename | — |
 | bug-b-floattostrsig-caps-at-15-significant-digits | B | 65 | bug | `FloatToStrSig` caps at 15 significant digits, so no double round-trips | — |
 | bug-b-format-delphi-spec-parity | B | 50 | bug | SysUtils.Format parsed printf's spec, not Delphi's | — |
+| bug-b-o-directory-wrong-value-on-arm | B | 70 | bug | PAL_OPEN_DIRECTORY used the x86 value on every target, so the entire directory-listing surface was dead on arm32 and aarch64 — and opening a regular FILE with the flag wrongly SUCCEEDED there | — |
 | bug-b-pos-empty-substr-returns-1 | B | 50 | bug | SysUtils.Pos returned 1 for an empty substring | — |
 | bug-b-stringlist-text-hardcoded-crlf | B | 50 | bug | TStrings.Text hardcoded CRLF, so SaveToFile wrote DOS line endings on Linux | — |
 | bug-b-strtofloat-not-correctly-rounded | B | 60 | bug | `StrToFloat` is not correctly rounded, so exact decimals still do not read back | — |

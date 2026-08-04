@@ -58,6 +58,35 @@ begin
   else
     writeln('stat-dir=0');
 
+  { PAL_OPEN_DIRECTORY is one of the few open() flags Linux does NOT define
+    uniformly: it is $10000 on x86-64/i386/riscv32 and $4000 on arm/aarch64.
+    We had the x86 value everywhere, so the whole listing surface was dead on
+    ARM (bug-b-o-directory-wrong-value-on-arm).
+
+    These two rows are the guard, and they work on ANY target because they
+    assert BEHAVIOUR rather than the constant: opening a directory with the
+    flag must succeed, and opening a regular FILE with it must fail with
+    ENOTDIR. A wrong constant breaks one or the other on whatever machine the
+    test runs on -- which matters because lib-test only ever runs x86-64, so a
+    test that merely listed a directory would have stayed green through this
+    bug forever. }
+  fd := PalOpen(PChar('/tmp/pxx_dir_suite'), PAL_OPEN_READ or PAL_OPEN_DIRECTORY, 0);
+  if fd >= 0 then
+  begin
+    writeln('odir-dir=1');
+    PalClose(fd);
+  end
+  else
+    writeln('odir-dir=0');
+  fd := PalOpen(PChar('/tmp/pxx_dir_suite/alpha.txt'), PAL_OPEN_READ or PAL_OPEN_DIRECTORY, 0);
+  if fd < 0 then
+    writeln('odir-file-rejected=1')
+  else
+  begin
+    writeln('odir-file-rejected=0');
+    PalClose(fd);
+  end;
+
   PalDelete(PChar('/tmp/pxx_dir_suite/alpha.txt'));
   PalRmdir(PChar('/tmp/pxx_dir_suite/child'));
   PalRmdir(PChar('/tmp/pxx_dir_suite'));

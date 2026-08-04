@@ -61,7 +61,25 @@ const
   PAL_OPEN_EXCL   = $80;
   PAL_OPEN_TRUNC  = $200;
   PAL_OPEN_APPEND = $400;
+{ O_DIRECTORY is one of the few open() flags Linux does NOT define uniformly
+  across architectures: it is 0200000 ($10000) on x86-64 / i386 / riscv32 but
+  0100000... no -- 040000 ($4000) on arm and aarch64, which swap it with
+  O_DIRECT. Measured on each target rather than taken from a header, including
+  the negative control (opening a regular FILE with the correct flag must give
+  ENOTDIR).
+
+  Getting it wrong is wrong in BOTH directions, which is why it went unnoticed:
+  on ARM the x86 value made PalOpen return EINVAL for a real directory, and it
+  made opening a regular file SUCCEED where the flag should have rejected it.
+  The whole directory-listing surface was dead on arm32 and aarch64.
+
+  The other flags here (CREATE/EXCL/TRUNC/APPEND) are uniform on every Linux
+  target we build for, and were checked rather than assumed. }
+{$if defined(CPU_ARM32) or defined(CPU_AARCH64)}
+  PAL_OPEN_DIRECTORY = $4000;
+{$else}
   PAL_OPEN_DIRECTORY = $10000;
+{$endif}
 
   PAL_DIRENT_UNKNOWN = 0;
   PAL_DIRENT_FILE    = 8;
