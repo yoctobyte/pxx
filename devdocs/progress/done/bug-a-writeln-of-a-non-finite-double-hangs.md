@@ -137,4 +137,4 @@ emitters that were not touched and are very likely to have the identical loop.
 Filed as [[bug-a-writeln-nonfinite-float-aarch64-emitters-unchecked]].
 
 ## Log
-- 2026-08-04 — resolved, commit PENDING-COMMIT.
+- 2026-08-04 — resolved, commit c070516fd.
