@@ -13428,6 +13428,7 @@
 2026-08-04T10:47:37Z	xeon	105cd8e4e832	selfcompile	-O2	10413.4
 2026-08-04T10:47:37Z	xeon	105cd8e4e832	selfcompile	-O3	10802.0
 2026-08-04T10:47:37Z	xeon	105cd8e4e832	selfcompile	fpc	7454.6
+# 2026-08-04 abcf66b0b308 HOST RENAMED xeon -> plexus — rows below are the SAME physical box (Xeon E5-2620 v2, T7610) under a new name, not a new machine: join the two series across this line. The hosts.json epochs do NOT share a fingerprint (xeon 4426967897b7, plexus 07ce4bf86a35) but that is a defect, not evidence of a hardware change — mem_total_kb is hashed raw from /proc/meminfo MemTotal, which drifts a few kB per boot (63424932 -> 63424944 here); every other hardware field is identical. The plexus epoch carries renamed_from: xeon.
 2026-08-04T23:49:54Z	plexus	abcf66b0b308	mandelbrot	-O0	1849.7
 2026-08-04T23:49:54Z	plexus	abcf66b0b308	mandelbrot	-O2	1859.4
 2026-08-04T23:49:54Z	plexus	abcf66b0b308	mandelbrot	-O3	990.4
