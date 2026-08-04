@@ -75,7 +75,13 @@ type
       tuple printed with brackets (bug-nilpy-str-of-tuple-is-empty). }
     FIsTuple: Boolean;
     constructor Create;
-    function append(const v: Variant): TPyList;
+    { Python's list.append returns NONE. The Self-returning form the frontend
+      chains list literals through is append_self, a SEPARATE name — flipping
+      append itself would have broken `[a, b, c]`, which desugars to
+      TPyList.Create.append_self(a).append_self(b)...
+      (bug-nilpy-list-mutators-return-self-instead-of-none). }
+    function append(const v: Variant): Variant;
+    function append_self(const v: Variant): TPyList;
     { set-style insert: append only when the value is not already present.
       NilPy backs `set` with TPyList (see PyAnnTypeAt), and this is the whole
       set contract the corpus uses — `s.add(x)` then `x in s`. }
@@ -112,14 +118,14 @@ type
     { Python's `xs += ys` / xs.extend(ys): IN-PLACE, appending ys's elements.
       `+` on two lists would add the two class HANDLES
       (bug-a-nilpy-list-augmented-add-segfaults). }
-    function extend(other: TPyList): TPyList;
+    function extend(other: TPyList): Variant;
     procedure clear;
     { list.reverse() -- IN PLACE, unlike reversed()/[::-1] which both return a
       NEW sequence. Returns Self so the statement lowering can use it as a
       value node, the same shape sort() and extend() use. }
-    function reverse: TPyList;
-    { list.sort() -- in place, no key=/reverse= yet (see the implementation). }
-    function sort: TPyList;
+    function reverse: Variant;
+    { list.sort() -- in place, returns None. No key=/reverse= yet. }
+    function sort: Variant;
     { `with open(p, "r") as f: f.read()`. The read-slurp model makes open()
       yield the file's LINES, and each keeps its newline, so joining them
       reproduces the file byte for byte — which is what CPython's read()
@@ -2670,7 +2676,7 @@ begin
   l.FCap := newCap;
 end;
 
-function TPyList.append(const v: Variant): TPyList;
+function TPyList.append_self(const v: Variant): TPyList;
 var
   src, dst: PPyVarRec;
 begin
@@ -2682,12 +2688,18 @@ begin
   Result := Self;
 end;
 
-function TPyList.extend(other: TPyList): TPyList;
+function TPyList.append(const v: Variant): Variant;
+begin
+  Self.append_self(v);
+  Result := pynone;
+end;
+
+function TPyList.extend(other: TPyList): Variant;
 var
   i, n: Integer;
   src, dst: PPyVarRec;
 begin
-  Result := Self;
+  Result := pynone;   { Python returns None }
   if other = nil then Exit;
   { snapshot the source length FIRST: xs.extend(xs) must copy the ORIGINAL
     elements and terminate, not chase its own growth }
@@ -2793,7 +2805,7 @@ end;
   failed to compile: "TPyList has no method reverse"
   (bug-nilpy-list-reverse-method-missing). Swaps ends inward rather than building
   a copy, which is what "in place" is for. }
-function TPyList.reverse: TPyList;
+function TPyList.reverse: Variant;
 var i, j: Integer; tmp: Variant;
 begin
   i := 0;
@@ -2806,7 +2818,7 @@ begin
     Inc(i);
     Dec(j);
   end;
-  Result := Self;
+  Result := pynone;   { Python returns None }
 end;
 
 { Python's list.sort() — IN PLACE, unlike sorted() (pyeval.pas), which
@@ -2816,7 +2828,7 @@ end;
   than guessed at; a plain `.sort()` needs no callable at all, just the
   `pyvar_gt` content-order comparison this unit already has (see max()/min()
   above). bug-nilpy-list-sort-method-missing. }
-function TPyList.sort: TPyList;
+function TPyList.sort: Variant;
 var i, j: Integer; v: Variant; swapped: Boolean;
 begin
   for i := 1 to Self.count - 1 do
@@ -2835,7 +2847,7 @@ begin
       end;
     end;
   end;
-  Result := Self;
+  Result := pynone;   { Python returns None }
 end;
 
 function TPyList.read: AnsiString;

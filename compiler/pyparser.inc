@@ -9061,8 +9061,12 @@ begin
   ASTLeft[asgn] := PyMakeIdent(tmpSym);
   ASTRight[asgn] := node;
   PyHoistStmt(asgn);
-  mmi := FindUMeth(ci, 'append');
-  if mmi < 0 then Error('Nil Python: TPyList.append not found');
+  { append_self, not append: a list LITERAL desugars into a chain
+    (Create.append_self(a).append_self(b)...), so this one needs the Self
+    result. Python's append returns None
+    (bug-nilpy-list-mutators-return-self-instead-of-none). }
+  mmi := FindUMeth(ci, 'append_self');
+  if mmi < 0 then Error('Nil Python: TPyList.append_self not found');
   mpi := UMthProc_[mmi];
   elemNode := firstNode;
   while True do
@@ -9638,8 +9642,9 @@ begin
   end
   else
   begin
-    mmi := FindUMeth(ci, 'append');
-    if mmi < 0 then Error('Nil Python: TPyList.append not found');
+    { append_self — see the sibling literal desugar. }
+    mmi := FindUMeth(ci, 'append_self');
+    if mmi < 0 then Error('Nil Python: TPyList.append_self not found');
   end;
   mpi := UMthProc_[mmi];
   while CurTok.Kind <> closer do

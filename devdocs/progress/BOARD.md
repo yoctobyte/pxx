@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| bug-nilpy-list-mutators-return-self-instead-of-none | A | 50→40 | bug |  | — |
 
 ## unfinished (10)
 

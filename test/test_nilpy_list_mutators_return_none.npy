@@ -1,0 +1,42 @@
+# list.append/extend/sort/reverse returned SELF, so `x = l.sort()` yielded the
+# LIST where Python yields None (bug-nilpy-list-mutators-return-self-instead-of-none).
+#
+# Silent, and in the dangerous direction: `sorted_l = l.sort()` is one of the
+# most common Python mistakes there is, and here it appeared to WORK — code
+# written and tested against NilPy would then break under CPython. The falsiness
+# difference is the sharper edge, which is why `if l.append(x):` is a row.
+#
+# Asserted with `is None`, not by printing, so the test cannot pass on a
+# coincidence of how None renders.
+#
+# The return was load-bearing for exactly ONE thing: a list LITERAL desugars
+# into a chain, `TPyList.Create.append(a).append(b)...`. That chain now calls
+# append_self, a separate name that keeps the Self result; the Python-visible
+# append returns None. sort/reverse/extend needed no such split — every frontend
+# site that builds one uses the node as a STATEMENT. The literal, comprehension,
+# nested-comprehension, dict-comprehension and `+=` rows below are what pin
+# that.
+#
+# Every expectation is CPython's.
+
+l = [3, 1, 2]
+print(l.sort() is None)
+print(l)
+print(l.reverse() is None)
+print(l)
+print(l.extend([7]) is None)
+print(l)
+print(l.append(9) is None)
+print(l)
+if l.append(11):
+    print("truthy - WRONG")
+else:
+    print("falsy - correct")
+print(l)
+xs = [1, 2, 3]
+print(xs, [x * 2 for x in xs], [[c for c in r] for r in [[1], [2]]])
+print({k: v for k, v in {"a": 1}.items()})
+ys = []
+ys += [4]
+print(ys)
+print(sorted([3, 1, 2]))

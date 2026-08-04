@@ -1375,6 +1375,12 @@ test-nilpy: $(COMPILER)
 	# decimal expansion. Every value here is now CPython's.
 	./$(COMPILER) test/test_nilpy_round.npy /tmp/test_nilpy_round26
 	test "$$(/tmp/test_nilpy_round26)" = "$$(printf '%b' '0 2 2 4 0 -2\n1 -2\n0.12 2.0\n2.35 0.14 1.0\n3.142 3.1\n1200.0 1230.0 16000.0\n-1200.0\n2.67 2.67\n9.99 0.04 0.3 100.0\n1.0 0.0 -0.0 0.0')"
+	# list.append/extend/sort/reverse returned SELF, so `x = l.sort()` yielded the
+	# list where Python yields None — silent, and in the direction where NilPy
+	# looks correct and CPython breaks. The list-LITERAL desugar keeps a Self
+	# result under the separate name append_self. See the test's header.
+	./$(COMPILER) test/test_nilpy_list_mutators_return_none.npy /tmp/test_nilpy_lmut26
+	/tmp/test_nilpy_lmut26 | diff -u test/test_nilpy_list_mutators_return_none.expected -
 	# Chained assignment (`a = b = 5`, ONE evaluation of the RHS) and `**=` (its
 	# own token, desugared through the same PyMakePow so the __pow__ dunders still
 	# dispatch, and widening because 2 ** -1 is a float). See the test's header.
