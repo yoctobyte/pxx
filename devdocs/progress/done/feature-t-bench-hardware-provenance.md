@@ -3,6 +3,8 @@ summary: "bench.tsv records a hostname but no hardware — the series silently c
 type: feature
 track: T
 prio: 60
+status: done
+owner: claude@xeon
 ---
 
 # Benchmarks need hardware provenance, not just a hostname
@@ -89,3 +91,50 @@ cannot distinguish "we got 15% faster" from "we changed boxes" cannot report
 progress honestly — and this is the project that keeps a
 [claims-discipline table](../../../CLAUDE.md) precisely because a plausible
 wrong number is more expensive than a missing one.
+
+## Log
+- 2026-08-04 (`claude@xeon`) — implemented in the shape proposed, side file and
+  all.
+
+  `tstate/hosts.json` holds host -> hardware EPOCHS. `host_hardware()` reads
+  cpu model / sockets / cores / threads / max MHz / MemTotal / kernel / gcc /
+  governor / turbo from `/proc` and sysfs (no `lscpu` dependency), and the
+  fingerprint is a 12-char hash over all of it. On this box it reads:
+  `Intel(R) Xeon(R) CPU E5-2620 v2 @ 2.10GHz · 12t · schedutil · turbo`,
+  2600 MHz max — which matches the ticket's own numbers.
+
+  Governor and turbo are INSIDE the fingerprint, per the ticket's argument: 2.1
+  vs 2.6 GHz on this box is more than most optimisation work moves. A devtest
+  pins that specifically, because it is the field most likely to be dropped as
+  "not really hardware".
+
+  Epochs append, never rewrite: a changed fingerprint closes the previous entry
+  with `to` and opens a new one with `from`, so the old numbers keep their
+  context. Written from `publish()` (so a host that never benches still has an
+  identity on record) and again at bench start, riding the same commit as the
+  rows it describes. The unchanged case — every publish, all day — writes
+  nothing.
+
+  `bench.tsv` is untouched, exactly as the ticket asks: `read_bench()` indexes
+  columns positionally (6 = uforth_sha, 7 = rss_kb), so a (host, date) lookup
+  into the epochs is the change that costs nothing.
+
+  `twatch_web` labels each per-host bench table with its current hardware and,
+  when the history spans a change, prints a warn line naming what it was
+  before. Verified against a fixture of the real borg -> xeon transition:
+
+  > Intel(R) Xeon(R) CPU E5-2620 v2 @ 2.10GHz · 12t · schedutil · turbo
+  > **hardware changed 2026-07-31T16:56:10 — rows before that are NOT
+  > comparable with rows after (was: Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz)**
+
+  The "load at bench start" ask is served better than proposed: `last_bench`
+  now records `probe_ratio`, the speed-probe reading the batch was measured
+  under (see [[bug-t-bench-timings-recorded-under-co-tenancy]]), plus `hw_fp`
+  so a run is stamped with the epoch it belongs to. loadavg would have been the
+  wrong instrument — measured the same day, it read 17.22 on a QUIET box, being
+  a 1-minute decaying average.
+
+  `scale` stays out of it, per the ticket's warning: it read 1.0 on both boxes
+  despite the 40-90% gap, and it is for timeouts.
+
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

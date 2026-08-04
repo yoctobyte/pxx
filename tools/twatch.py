@@ -36,6 +36,7 @@ import argparse
 import calendar
 import datetime
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -997,6 +998,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                             "verdict": report["verdict"],
                             "wall": report["wall"], "new_red": new_red,
                             "fixed": fixed}, sort_keys=True) + "\n")
+    record_host_epoch(clone, host)
     regen_index(clone)
     msg = "tstate(%s): %s %s (%s)" % (host, sha[:12], report["verdict"],
                                       report["tier"])
@@ -1815,6 +1817,8 @@ def run_bench_idle(clone, host, st, sha, abort_check=None):
         return False
     print("twatch: bench %s (box at %.2fx of best)" % (sha[:12], ratio),
           flush=True)
+    # Provenance rides the same publish as the rows it describes.
+    record_host_epoch(clone, host)
     set_phase(clone, host, "bench", sha=sha)
     clone.checkout(sha)
     tmp_tsv = os.path.join(tempfile.gettempdir(),
@@ -1896,7 +1900,12 @@ def run_bench_idle(clone, host, st, sha, abort_check=None):
                     "--clone", clone.path, "--static"],
                    cwd=clone.path, stdout=subprocess.DEVNULL)
     st["last_bench"] = {"sha": sha, "date": utcnow(), "rc": r,
-                        "rows": rows, "conf_rows": conf_rows}
+                        "rows": rows, "conf_rows": conf_rows,
+                        # what the box was doing while these numbers were taken:
+                        # recorded, not merely gated on, so a series can be
+                        # audited after the fact instead of only suspected
+                        "probe_ratio": round(ratio, 3),
+                        "hw_fp": (host_hardware_fp() or "")}
     save_state(clone, host, st)
     clone.publish("tstate(%s): bench %s %s (%d bench rows, %d conf)"
                   % (host, sha[:12],
@@ -2003,6 +2012,113 @@ def debounce(clone, secs, cap=300):
 
 
 # ---------------------------------------------------------------- status ---
+HOSTS_REL = TSTATE_REL + "/hosts.json"
+# Facts that DEFINE a measurement epoch. A change in any of them means earlier
+# numbers are not comparable with later ones, so it opens a new epoch rather
+# than silently continuing the old series.
+_HW_CACHE = {}
+
+
+def _first(path, needle=None):
+    try:
+        with open(path) as f:
+            if needle is None:
+                return f.read().strip()
+            for ln in f:
+                if ln.startswith(needle):
+                    return ln.split(":", 1)[1].strip()
+    except (OSError, IndexError):
+        pass
+    return ""
+
+
+def host_hardware():
+    """What this box IS, for benchmark provenance.
+
+    A hostname is not a hardware identity: the same name survives a CPU swap, a
+    RAM upgrade, a governor change or a kernel update, and the numbers silently
+    stop being comparable. That is not hypothetical — the bench series moved
+    from borg (i7-6700 @3.4GHz) to xeon (E5-2620 v2 @2.1GHz) on 2026-07-31 and
+    got 40-90% slower on identical work, which reads as a 2x regression that
+    never happened.
+
+    Governor and turbo are identity, not trivia: on this Xeon that is the
+    difference between 2.1 and 2.6 GHz — a governor flip alone moves numbers
+    more than most optimisation work does. They are re-read every call for the
+    same reason (they change at runtime); the rest is cached, since a CPU does
+    not change under a running daemon.
+    """
+    if not _HW_CACHE:
+        cores = _first("/proc/cpuinfo", "cpu cores")
+        sockets = len({ln.split(":", 1)[1].strip()
+                       for ln in open("/proc/cpuinfo", errors="replace")
+                       if ln.startswith("physical id")}) or 1
+        mhz_max = _first("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq")
+        gcc = ""
+        try:
+            gcc = subprocess.run(["gcc", "-dumpfullversion"], capture_output=True,
+                                 text=True, timeout=10).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            pass
+        _HW_CACHE.update({
+            "cpu": _first("/proc/cpuinfo", "model name"),
+            "sockets": sockets,
+            "cores": int(cores) * sockets if cores.isdigit() else None,
+            "threads": os.cpu_count(),
+            "mhz_max": int(mhz_max) // 1000 if mhz_max.isdigit() else None,
+            "mem_total_kb": int((_first("/proc/meminfo", "MemTotal")
+                                 or "0 kB").split()[0] or 0),
+            "kernel": os.uname().release,
+            "gcc": gcc,
+        })
+    hw = dict(_HW_CACHE)
+    hw["governor"] = _first(
+        "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
+    no_turbo = _first("/sys/devices/system/cpu/intel_pstate/no_turbo")
+    hw["turbo"] = (no_turbo != "1") if no_turbo else None
+    return hw
+
+
+def host_hardware_fp():
+    """The current fingerprint, without touching the file — for stamping a run
+    with the epoch it belongs to."""
+    return hashlib.sha256(
+        json.dumps(host_hardware(), sort_keys=True).encode()).hexdigest()[:12]
+
+
+def record_host_epoch(clone, host):
+    """Append a hardware epoch for `host` when its fingerprint changes.
+
+    A SIDE FILE rather than more columns in bench.tsv: `read_bench()` indexes
+    columns positionally (6 = uforth_sha, 7 = rss_kb), so inserting one breaks
+    the uforth rows, while a (host, date) lookup into the epochs needs no schema
+    change at all. History is appended, never rewritten — the previous epoch
+    gets a `to`, so a step in the series can be shown as "new hardware here"
+    instead of being read as a regression.
+    """
+    hw = host_hardware()
+    fp = host_hardware_fp()
+    path = os.path.join(clone.path, HOSTS_REL)
+    try:
+        with open(path) as f:
+            doc = json.load(f)
+    except (OSError, ValueError):
+        doc = {}
+    epochs = doc.setdefault(host, [])
+    if epochs and epochs[-1].get("fp") == fp:
+        return False                       # unchanged: the common case
+    now = utcnow()
+    if epochs:
+        epochs[-1]["to"] = now
+        print("twatch: hardware fingerprint changed for %s (%s -> %s) — new "
+              "bench epoch; earlier rows are not comparable with later ones"
+              % (host, epochs[-1].get("fp"), fp), flush=True)
+    epochs.append(dict(hw, fp=fp, **{"from": now}))
+    doc[host] = epochs
+    write_json_atomic(path, doc)
+    return True
+
+
 def head_detached(repo):
     """Is this checkout standing on a sha rather than a branch?
 

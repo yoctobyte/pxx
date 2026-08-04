@@ -1182,6 +1182,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-sysutils-decodedate-missing | A | 50 | feature | SysUtils `DecodeDate` missing — next Synapse `synautil` wall | — |
 | feature-t-agent-side-tstate-watch | T | 65 | feature | An agent session has no way to hear Track T's verdict on a sha it just pushed; a small poll tool would deliver reds while the context that caused them is still warm | — |
 | feature-t-autoticket-must-close-its-own-stubs-when-fixed | T | 65 | feature | twatch auto-files a prio-70 stub on NEW-RED and never closes it when the job goes green again — the watcher's own ledger closes the regression, the ticket sits at the top of the ready queue forever | — |
+| feature-t-bench-hardware-provenance | T | 60 | feature | bench.tsv records a hostname but no hardware — the series silently changed machines today | — |
 | feature-t-bench-idle-must-be-preemptible | T | 55 | feature | Every idle phase yields to a new push except bench — so worst-case time-to-verdict is ~2-3 min of benchmarking, an order of magnitude above the poll interval anyone would tune | — |
 | feature-t-bench-portable-variants | T | 40 | feature | mandelbrot and raytracer have no FPC comparison — they depend on pxx-only units, not on dialect extensions | — |
 | feature-t-fuzz-findings-ledger | T | 70 | feature | Fuzz findings ledger: dedupe by signature, throttle fuzzing until the finding is fixed | — |

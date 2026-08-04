@@ -51,6 +51,7 @@ STYLE = """
  .bar{display:inline-block;height:.8em;background:#4c4;border-radius:2px;
       vertical-align:middle}
  .barf{background:#69f} .win{color:#4c4} .lose{color:#f80}
+ .warn{color:#f80;border-left:3px solid #f80;padding-left:.6em}
  input{background:#222;color:#ddd;border:1px solid #444;padding:.2em .4em}
 """
 
@@ -335,6 +336,43 @@ def render_uforth_bench(rows):
     return ("<h2>uforth — cross-runtime</h2>%s%s" % (note, tab))
 
 
+def read_hosts(tdir):
+    """Hardware epochs per host, or {} if the side file is absent (it is written
+    by the watcher, so a dev checkout that has never run one has none)."""
+    try:
+        with open(os.path.join(tdir, "hosts.json")) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def epoch_note(tdir, host):
+    """The hardware these numbers were taken on, and whether the box CHANGED
+    inside the history shown.
+
+    A hostname is not a hardware identity. The series moved from borg (i7-6700
+    @3.4GHz) to xeon (E5-2620 v2 @2.1GHz) and got 40-90% slower on identical
+    work — a 2x "regression" that never happened. Saying which box, and marking
+    the boundary, is what stops a reader drawing that conclusion
+    (feature-t-bench-hardware-provenance).
+    """
+    epochs = read_hosts(tdir).get(host) or []
+    if not epochs:
+        return ""
+    cur = epochs[-1]
+    bits = [b for b in (cur.get("cpu"), "%st" % cur["threads"] if cur.get("threads")
+                        else None, cur.get("governor"),
+                        "turbo" if cur.get("turbo") else None) if b]
+    note = "<p class=dim>%s</p>" % html.escape(" · ".join(bits))
+    if len(epochs) > 1:
+        prev = epochs[-2]
+        note += ("<p class=warn>hardware changed %s — rows before that are NOT "
+                 "comparable with rows after (was: %s)</p>"
+                 % (html.escape((cur.get("from") or "")[:19]),
+                    html.escape(prev.get("cpu") or prev.get("fp") or "?")))
+    return note
+
+
 def render_bench(tdir, links):
     rows = read_bench(tdir)
     # latest ms per (host, workload, level), preserving first-seen workload
@@ -399,9 +437,10 @@ def render_bench(tdir, links):
             tab += "<tr>" + "".join(cells) + "</tr>"
             nrows += 1
         if nrows:
-            tabs += ("<h3>%s <span class=dim>(last run %s)</span></h3>"
+            tabs += ("<h3>%s <span class=dim>(last run %s)</span></h3>%s"
                      "<table>%s</table>"
-                     % (html.escape(h), html.escape(hosts[h][:19]), tab))
+                     % (html.escape(h), html.escape(hosts[h][:19]),
+                        epoch_note(tdir, h), tab))
     # history (last 60 rows)
     hist = "<tr><th>date<th>host<th>sha<th>workload<th>level<th>ms</tr>"
     for r in rows[-60:][::-1]:
