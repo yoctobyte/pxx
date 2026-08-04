@@ -27,6 +27,7 @@ import argparse
 import html
 import json
 import os
+import sys
 
 TSTATE = "devdocs/progress/tstate"
 CLONE = "."
@@ -497,8 +498,36 @@ def render_conf(tdir, links):
 
 # ------------------------------------------------------------------ static ---
 
+def current_tstate_dir(clone):
+    """Where to read tstate for a "what is the state NOW" view.
+
+    A watcher clone is DETACHED at the sha under test for most of every cycle,
+    so its worktree is a point-in-time snapshot: newer reports do not exist
+    there yet and <host>.json holds that sha's verdicts. Rendering a dashboard
+    from it publishes history as if it were current — the same mistake that
+    made the health observer alert twice on an already-fixed red
+    (task-t-worktree-is-not-current-state).
+
+    So: read the git ref whenever HEAD is detached, and say which was used.
+    Falls back to the worktree if the ref has no tstate, because stale beats
+    silent — but never falls back by accident.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import twatch                                            # noqa: E402
+    if not twatch.head_detached(clone):
+        return os.path.join(clone, TSTATE)
+    root = twatch.materialize_tstate(clone)
+    if not root:
+        print("twatch_web: HEAD is detached and origin/master has no tstate — "
+              "rendering from the WORKTREE, which is the tested sha's snapshot")
+        return os.path.join(clone, TSTATE)
+    print("twatch_web: HEAD is detached (mid-test) — rendering from "
+          "origin/master, not the worktree snapshot")
+    return os.path.join(root, TSTATE)
+
+
 def export_static(clone, out):
-    tdir = os.path.join(clone, TSTATE)
+    tdir = current_tstate_dir(clone)
     os.makedirs(out, exist_ok=True)
     # BOARD.html is gitignored (generated); BOARD.md is the tracked, always-present
     # board that GitHub renders — link that so the static dashboard never 404s.

@@ -103,6 +103,41 @@ one — and it doesn't matter, because there's nothing it should have tested.
 - Idle watcher time narrows open regression ranges: midpoint commit, failing
   job only (`testmgr --job`) — lazy bisect toward a single SHA.
 
+## Rule: a watcher clone's worktree is HISTORY, not current state
+
+The clone is **detached at the sha under test** for most of every cycle, so its
+working tree is a point-in-time snapshot of an older commit:
+
+- newer `tstate/reports/*.md` **do not exist there yet**
+- `<host>.json` shows that sha's verdicts, not today's
+- file **mtimes** are rewritten by every checkout
+
+Measured 2026-08-02, minutes apart, same clone: the worktree's newest report was
+`210523Z-74a9251` with 1 failing job while `origin/master` had
+`212028Z-4d61f85` with 0. Four separate bugs in one day came from reading it —
+`make` trusting an mtime and testing the *pinned* binary, `--status` reporting a
+healthy watcher as DOWN, `--follow` hanging for the agent that just pushed, and
+the health observer alerting twice on an already-fixed red. The fourth
+reproduced the second a few hours after it was fixed, in a different tool.
+**Knowing the rule was not enough; nothing enforced it.**
+
+So, when you want to know what is true NOW:
+
+```python
+twatch.materialize_tstate(repo)      # whole tstate subtree out of origin/master
+twatch.states_at(repo, "origin/master")   # just the per-host json
+twatch.head_detached(repo)           # ...or decide for yourself
+```
+
+`tools/tstate_reader_devtest.py` enforces it: a tool that joins a clone path
+with the tstate directory must either route through those helpers or be added
+to its `ALLOWED` list **with a reason**. The list is short and argued on
+purpose — a guard that is muted as noisy is not a guard.
+
+Detaching is not the bug and is not going away: `twatch` checks out arbitrary
+shas to test them, which is why it demands its own clone and refuses a dirty
+one. The defect is only ever in readers that assume the tree reflects now.
+
 ## Triage rule: green on dev, red on the watcher ⇒ suspect HOST COUPLING first
 
 The boxes run different distros on purpose (dev Ubuntu 24.04, `xeon` 26.04,

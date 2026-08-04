@@ -3,6 +3,8 @@ summary: "In a watcher clone the working tree is a snapshot of the sha under tes
 type: task
 track: T
 prio: 65
+status: done
+owner: claude@xeon
 ---
 
 # The watcher's working tree is NOT current state — read `origin/master`
@@ -74,3 +76,45 @@ gate would do, since the correct call is always available.
 Detaching is correct and deliberate: `twatch` checks out arbitrary shas to test
 them, which is why it demands its own clone and refuses a dirty one. The defect
 is only in *readers* that assume the tree reflects now.
+
+## Log
+- 2026-08-04 (`claude@xeon`) — done as the ticket specifies: the shared helper
+  first, then the guard, because the ticket's own point is that knowing the rule
+  did not stop instance #4 from reproducing instance #2.
+
+  **`materialize_tstate(repo, ref)`** joins `states_at()` in `twatch.py`. It
+  brings the WHOLE subtree — `reports/`, `bench.tsv`, `conformance.tsv` — via
+  one `git archive`, because `states_at` covers only host json and the next
+  reader that needed more would have written its own and got it wrong again.
+  Returns None when the ref carries no tstate, so a caller falls back to the
+  worktree deliberately rather than by accident. `head_detached()` is the
+  predicate the whole rule turns on.
+
+  **The dashboard now uses it.** `twatch_web.export_static` read
+  `<clone>/devdocs/progress/tstate` directly, so `trackt dashboard` run while
+  the daemon was mid-test rendered the tested sha's snapshot as if it were
+  current — instance #4's family, in a shipped tool. It now reads the ref when
+  HEAD is detached and says which source it used. Verified against the live
+  watcher clone while it was detached: *"HEAD is detached (mid-test) —
+  rendering from origin/master, not the worktree snapshot"*.
+
+  **`tools/tstate_reader_devtest.py` is the teeth the ticket asked for.** A tool
+  that joins a clone path with the tstate directory must route through the
+  helpers or be added to `ALLOWED` with a reason. It found three files I had not
+  known about, and each got a different verdict rather than a blanket pass:
+  `testmgr.py` was a FALSE positive (it discusses tstate at length in comments
+  and touches none of it — so the pattern now requires real path construction,
+  or the guard becomes noise and gets muted, which is how enforcement dies);
+  `uforth_bench.py` is a writer running from a dev checkout; the close-stubs
+  devtest joins its own fixture's path.
+
+  Not changed, deliberately: `trackt.runs_files()` tails `runs-*.ndjson` from
+  the worktree. That one is correct — the live view wants rows the moment the
+  daemon appends them, which is before the publish that would put them on the
+  ref. It is in `ALLOWED` with that reason rather than silently exempt.
+
+  The rule itself is now in `devdocs/dev/track-t.md` with the measurement that
+  makes it concrete (worktree `210523Z-74a9251`, 1 failing; `origin/master`
+  `212028Z-4d61f85`, 0 failing, minutes apart in the same clone).
+
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

@@ -2003,6 +2003,56 @@ def debounce(clone, secs, cap=300):
 
 
 # ---------------------------------------------------------------- status ---
+def head_detached(repo):
+    """Is this checkout standing on a sha rather than a branch?
+
+    True for most of the watcher's cycle — twatch checks out arbitrary shas to
+    test them. Detaching is correct and deliberate; the defect is only ever in
+    READERS that assume the tree reflects now.
+    """
+    try:
+        return sh(["git", "symbolic-ref", "-q", "HEAD"], cwd=repo,
+                  check=False).strip() == ""
+    except (RuntimeError, OSError):
+        return False
+
+
+def materialize_tstate(repo, ref="origin/master", dst=None):
+    """Extract the whole tstate tree out of a git REF into a directory.
+
+    The one helper every "what is the state NOW" reader should share, instead of
+    each rediscovering that a clone's worktree is a point-in-time snapshot:
+    newer `tstate/reports/*.md` do not exist there yet, `<host>.json` shows the
+    tested sha's verdicts rather than today's, and file mtimes are rewritten by
+    every checkout. Four separate bugs in one day came from reading it, two of
+    them in shipped tools, and the fourth reproduced the second a few hours
+    after that one was fixed — knowing the rule was not enough
+    (task-t-worktree-is-not-current-state).
+
+    Unlike `states_at`, this brings the WHOLE subtree — reports/, bench.tsv,
+    conformance.tsv — so the dashboard and any future reader can use it too.
+    `git archive` in one shot rather than a `git show` per file.
+
+    Returns the directory holding `<dst>/devdocs/progress/tstate/...`, or None
+    when the ref has no tstate (fresh clone, no remote) so the caller can fall
+    back to the worktree deliberately rather than by accident.
+    """
+    dst = dst or tempfile.mkdtemp(prefix="tstate-at.")
+    try:
+        with subprocess.Popen(["git", "archive", ref, TSTATE_REL], cwd=repo,
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL) as ar:
+            rc = subprocess.run(["tar", "-x", "-C", dst], stdin=ar.stdout,
+                                stderr=subprocess.DEVNULL).returncode
+            ar.stdout.close()
+            ar.wait()
+        if rc != 0 or not os.path.isdir(os.path.join(dst, TSTATE_REL)):
+            return None
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return dst
+
+
 def states_at(repo, ref):
     """Per-host tstate documents read from a GIT REF, not the working tree.
 
