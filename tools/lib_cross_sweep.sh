@@ -28,8 +28,16 @@ for f in test/lib_*.pas; do
   b=$(basename "$f" .pas)
   $PX -Fulib/rtl "$f" "$OUT/${b}.x64" >/dev/null 2>&1 || { echo "SKIP $b (no native build)"; continue; }
   ref=$(timeout 60 "$OUT/${b}.x64" 2>&1); rrc=$?
-  for tgt in i386 arm32 aarch64; do
-    case $tgt in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; esac
+  # riscv32 is included because it is ESP32's core: a bug that only shows on a
+  # 32-bit RISC target is a bug on the hardware the project is aiming at.
+  for tgt in i386 arm32 aarch64 riscv32; do
+    case $tgt in
+      i386)    q=qemu-i386;;
+      arm32)   q=qemu-arm;;
+      aarch64) q=qemu-aarch64;;
+      riscv32) q=qemu-riscv32;;
+    esac
+    command -v "$q" >/dev/null || continue
     if ! $PX --target=$tgt -Fulib/rtl "$f" "$OUT/${b}.$tgt" >/dev/null 2>&1; then
       echo "BUILDFAIL $b $tgt"; continue
     fi

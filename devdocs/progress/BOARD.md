@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-arm32-second-call-write-after-free | A | 75 | bug | arm32: the SECOND call to EcdsaP256Verify segfaults — -dPXX_HEAP_DEBUG reports WRITE AFTER FREE; independent of input and of -O level, x86-64/aarch64 clean | — |
+| bug-a-arm32-write-after-free-kills-four-lib-tests | A | 75 | bug | arm32 only: WRITE AFTER FREE segfaults FOUR lib tests (ecdsa, rsa, rsa_pss, png); reduces to 'call EcdsaP256Verify twice'; -O-independent, x86-64/aarch64 clean | — |
 | bug-a-i386-int64-arg-high-half-uninitialized | A | 75 | bug | i386: widening a 32-bit value into an Int64 argument leaves the HIGH half uninitialized — silent garbage, and the garbage changes with surrounding code | — |
 | bug-a-static-array-of-managed-whole-assign-loses-data | A | 80 | bug | b := a on a static array with managed elements copies NOTHING — every element comes out empty, silently; elementwise copy and the same array inside a record both work | — |
 | bug-a-virtual-method-int64-in-and-out-32bit | A | 85 | bug | every 32-bit target: a VIRTUAL method taking an Int64 AND returning an Int64 returns garbage (arm32/riscv32) or crashes (i386) — hits TStream.Position, and riscv32 is ESP32 | — |
@@ -383,7 +383,7 @@ _none_
 - [urgent p 85] [A] bug-a-virtual-method-int64-in-and-out-32bit
 - [urgent p 85] [A] bug-p-string-char-relational-compares-lengths
 - [urgent p 80] [A] bug-a-static-array-of-managed-whole-assign-loses-data
-- [urgent p 75] [A] bug-a-arm32-second-call-write-after-free
+- [urgent p 75] [A] bug-a-arm32-write-after-free-kills-four-lib-tests
 - [urgent p 75] [A] bug-a-i386-int64-arg-high-half-uninitialized
 - [p 70] [N] bug-nilpy-tuple-of-a-field-from-an-omitted-default-segfaults
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source

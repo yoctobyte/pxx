@@ -13,7 +13,7 @@ _none — no lane is locked._
 
 ## urgent (5) — jump the queue
 
-- `bug-a-arm32-second-call-write-after-free` [A]
+- `bug-a-arm32-write-after-free-kills-four-lib-tests` [A]
 - `bug-a-i386-int64-arg-high-half-uninitialized` [A]
 - `bug-a-static-array-of-managed-whole-assign-loses-data` [A]
 - `bug-a-virtual-method-int64-in-and-out-32bit` [A]
@@ -44,7 +44,7 @@ _none — no lane is locked._
 - `[p 85] [A]` bug-a-virtual-method-int64-in-and-out-32bit
 - `[p 85] [A]` bug-p-string-char-relational-compares-lengths
 - `[p 80] [A]` bug-a-static-array-of-managed-whole-assign-loses-data
-- `[p 75] [A]` bug-a-arm32-second-call-write-after-free
+- `[p 75] [A]` bug-a-arm32-write-after-free-kills-four-lib-tests
 - `[p 75] [A]` bug-a-i386-int64-arg-high-half-uninitialized
 - `[p 70] [N]` bug-nilpy-tuple-of-a-field-from-an-omitted-default-segfaults
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source

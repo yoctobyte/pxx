@@ -739,6 +739,59 @@ function TB.V(const x: Int64): Int64; begin V := x + 1; end;
 var b: TB; begin b := TB.Create; writeln(b.V(5)); end.
 P
 
+# ---- sysutils string helpers not yet covered ----
+probe su-quotedstr   <<'P'
+uses sysutils; begin writeln(QuotedStr('ab'),'|',QuotedStr(''),'|',QuotedStr('a''b')); end.
+P
+probe su-stringofchar <<'P'
+uses sysutils; begin writeln('[',StringOfChar('x',3),']|[',StringOfChar('x',0),']|[',StringOfChar('x',-1),']'); end.
+P
+probe su-lastdelim   <<'P'
+uses sysutils; begin writeln(LastDelimiter('/','/a/b/c'),'|',LastDelimiter('/','abc'),'|',LastDelimiter('ab','xaybz')); end.
+P
+probe su-adjustlinebreaks <<'P'
+uses sysutils; begin writeln(Length(AdjustLineBreaks('a'#10'b'))); end.
+P
+probe su-comparemem  <<'P'
+uses sysutils; var a,b: array[0..3] of Byte;
+begin a[0]:=1;a[1]:=2;a[2]:=3;a[3]:=4; b:=a; writeln(CompareMem(@a[0],@b[0],4)); b[2]:=9; writeln(CompareMem(@a[0],@b[0],4)); end.
+P
+probe su-fillchar    <<'P'
+var a: array[0..3] of Byte; begin FillChar(a, 4, 7); writeln(a[0],a[1],a[2],a[3]); FillChar(a, 0, 9); writeln(a[0]); end.
+P
+probe su-move        <<'P'
+var a,b: array[0..3] of Byte; begin a[0]:=1;a[1]:=2;a[2]:=3;a[3]:=4; Move(a,b,4); writeln(b[0],b[1],b[2],b[3]); end.
+P
+probe su-move-overlap <<'P'
+var a: array[0..5] of Byte; i: Integer;
+begin for i:=0 to 5 do a[i]:=i; Move(a[0],a[2],4); for i:=0 to 5 do write(a[i]); writeln; end.
+P
+# ---- ordinal / type conversion edges ----
+probe chr-ord-high   <<'P'
+begin writeln(Ord(Chr(255)),'|',Ord(#0),'|',Ord(#255)); end.
+P
+probe byte-overflow  <<'P'
+var b: Byte; begin b := 255; b := b + 1; writeln(b); b := 0; b := b - 1; writeln(b); end.
+P
+probe shortint-wrap  <<'P'
+var s: ShortInt; begin s := 127; s := s + 1; writeln(s); end.
+P
+probe int-div-by-neg <<'P'
+begin writeln(7 div (-2),'|',(-7) div (-2),'|',(-8) div 2); end.
+P
+probe shl-shr-neg    <<'P'
+var i: Integer; begin i := -8; writeln(i shr 1,'|',i shl 1); end.
+P
+probe int64-shift    <<'P'
+var i: Int64; begin i := 1; writeln(i shl 40,'|',(i shl 62) shr 60); end.
+P
+probe and-or-xor-not <<'P'
+begin writeln(12 and 10,'|',12 or 10,'|',12 xor 10,'|',not 12); end.
+P
+probe boolean-ops    <<'P'
+begin writeln(True and False,'|',True or False,'|',not True,'|',True xor True); end.
+P
+
 echo "---"
 echo "new divergences: $new   known/filed: $known   no-oracle skips: $skipped"
 # A skip is not a pass. It is a case that silently compared nothing, so it is
