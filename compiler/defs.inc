@@ -1462,6 +1462,16 @@ var
   ProcNamedGP  : array[0..MAX_PROCS-1] of Integer; { count of named (non-variadic) GP params, for va_start's initial gp_offset }
   ProcNamedFP  : array[0..MAX_PROCS-1] of Integer; { count of named (non-variadic) FP/XMM params, for va_start's initial fp_offset }
   ProcUnitIdx : array[0..MAX_PROCS-1] of Integer; { Strs[] unit name, or -1 for main }
+  { The token index of a NilPy module-level `def` that SHADOWS a builtin, or 0.
+    Python rebinds the name when the `def` STATEMENT runs, so a call ABOVE it
+    still reaches the builtin — `print(min(3,1,2))` before a `def min(a,b,c,d,e)`
+    is the builtin's 1, and only the call below it is the user's. The shell that
+    makes the name visible at all has to be registered up front, so the POSITION
+    is carried here and PyUserShadowsProc compares it against the call site.
+    A parallel array rather than a TProc field, per project_tsymbol_field_landmine.
+    Deliberately NOT ProcHdrTok: that one is compared against CurBodyHdrTok under
+    RequireForward and means something else. }
+  ProcPyDefTok: array[0..MAX_PROCS-1] of Integer;
   ProcHdrTok  : array[0..MAX_PROCS-1] of Integer; { SOffset of a MAIN-program top-level header (pre-scan/forward stamp); 0 = always visible (builtins, units, interface, methods, nested). Compared against CurBodyHdrTok under RequireForward. }
   ProcRetRecId : array[0..MAX_PROCS-1] of Integer; { record id for tyRecord results }
   ProcAggregateDestSym : array[0..MAX_PROCS-1] of Integer; { hidden caller-result pointer local, or -1 }

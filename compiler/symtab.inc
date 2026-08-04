@@ -4988,7 +4988,11 @@ begin
     i := ProcChainHead(name);
     while i >= 0 do
     begin
-      if ProcNameMatches(i, name) and (ProcUnitIdx[i] = -1) then
+        { ...and, for a def that shadows a BUILTIN, only from its own `def`
+        statement onward — Python rebinds the name when that statement RUNS.
+        ProcPyDefTok is 0 for everything else, so this costs nothing there. }
+      if ProcNameMatches(i, name) and (ProcUnitIdx[i] = -1) and
+         ((ProcPyDefTok[i] = 0) or (ProcPyDefTok[i] <= TokPos)) then
       begin
         PyUserShadowsProc := True;
         Break;
@@ -5457,6 +5461,7 @@ begin
   ProcExtName[ProcCount]      := -1;
   ProcCdecl[ProcCount]        := False;
   ProcUnitIdx[ProcCount]      := CurrentUnitIdx;
+  ProcPyDefTok[ProcCount]     := 0;   { 0 = visible everywhere; see defs.inc }
   ProcHdrTok[ProcCount]       := 0;   { 0 = always visible; ParseSubroutine stamps main-program headers }
   ProcRetRecId[ProcCount]     := REC_NONE;
   ProcAggregateDestSym[ProcCount] := -1;

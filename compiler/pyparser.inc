@@ -15505,26 +15505,22 @@ begin
       { "has the MAIN PROGRAM already declared this name", not "does any proc of
         this name exist anywhere". The old test was FindProc, which also sees
         UNIT procs — so a module-level `def len(x)` was never registered at all,
-        because pylib already declares `len`. Everything downstream then behaved
-        as if the user had not written it: PyUserShadowsProc answered False, so
-        the name-keyed `len` intrinsic ran and the overload demote never fired,
-        and `len([1,2])` silently returned the builtin's answer.
-
-        `def sorted(x)` looked fine only by accident of REGISTRATION ORDER —
-        pylib (which declares `len`) is registered before this pre-pass and
-        pyeval (which declares `sorted`) after it, so FindProc('sorted') missed
-        and the shell went in. That accident is why the shadowing work landed
-        with `len` as its one straggler
-        (bug-nilpy-user-def-len-of-a-container-still-binds-the-builtin).
-
-        Registering the shell is exactly right for Python semantics: a
-        module-level def REPLACES the builtin, and MatchProcCall's userOnly
-        demote then drops the unit's overloads by name. }
+        because pylib already declares `len`, and everything downstream behaved
+        as if the user had not written it
+        (bug-nilpy-user-def-len-of-a-container-still-binds-the-builtin). }
       if FindProcInUnit(PyHdrName, -1) < 0 then
       begin
         procIdx := RegisterProc(PyHdrName, not PyHdrIsProc, PyHdrRetType,
                                 PyHdrNParams, PyHdrPNames, PyHdrPTypes);
         PyApplyDefSignature(procIdx);
+        { Record WHERE the def stands. The shell has to exist from the top of the
+          module or the name is not visible at all (that was the `len` bug), but
+          Python only rebinds a name when the `def` STATEMENT runs — so a call
+          ABOVE it must still reach whatever the name meant before, which for a
+          builtin is the builtin. test_nilpy_min_max_variadic pins exactly that:
+          `min(3, 1, 2)` above a `def min(a, b, c, d, e)` is the builtin's 1.
+          Only PyUserShadowsProc reads this, so it costs nothing anywhere else. }
+        ProcPyDefTok[procIdx] := i;
       end;
       { Resume at the body's INDENT, not past it. After PyParseDefHeader the
         cursor sits on the first BODY token, so TokPos-2 is the INDENT and the
