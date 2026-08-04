@@ -154,7 +154,7 @@ byte-order assertions to `test/cerrno_strings.c` — with this fix that test is
 statically linked again and runs under qemu with no sysroot.
 
 
-## FIXED 2026-08-05 (Track B)
+## FIXED 2026-08-05 (Track B) — commit `8d7c47f8f`, verified on origin/master
 
 The diagnosis above was right and the prescription needed one adjustment, which
 the first build found immediately.
