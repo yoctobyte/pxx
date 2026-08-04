@@ -2,7 +2,7 @@
 track: N
 prio: 60
 type: bug
-status: working
+status: done
 owner: claude-AN
 ---
 
@@ -296,3 +296,6 @@ patches for the promotion typing itself are in
 
 Remains `unfinished/`, no longer blocked on the decision — blocked on the surface
 sweep.
+
+## Log
+- 2026-08-04 — resolved, commit PENDING-COMMIT.

@@ -2115,6 +2115,30 @@ var procIdx, argNode, rec, lenNode, zeroNode, node: Integer;
     nilNode, guardNode, falseNode, pairNode, ternNode: Integer;
 begin
   Result := n;
+  { An ARBITRARY-PRECISION int tests against ZERO explicitly. Its rvalue IS the
+    slot address (decide-promoint-rvalue-representation), which is never nil —
+    so used raw as a condition every promo was TRUTHY, including 0: `x = i - 5`
+    with i=5 took the true arm. `bool(x)` was worse than wrong, it crashed,
+    because the fallback in ParseFactor built its zero literal with the promo's
+    own type kind.
+
+    `<> 0` against a plain Int64 literal is the shape the promo COMPARISON path
+    already lowers correctly (it is the same node an explicit `x != 0` builds),
+    so this needs no new runtime entry point — and unlike narrowing through
+    PXXPromoToInt64Wrap it cannot call a value that wraps to exactly 0 falsy. }
+  if TypeIsPromoInt(IntToTypeKind(ASTTk[n])) then
+  begin
+    zeroNode := AllocNode(AN_INT_LIT);
+    ASTIVal[zeroNode] := 0;
+    ASTTk[zeroNode] := Ord(tyInt64);
+    node := AllocNode(AN_BINOP);
+    ASTIVal[node] := Ord(tkNeq);
+    ASTLeft[node] := n;
+    ASTRight[node] := zeroNode;
+    ASTTk[node] := Ord(tyBoolean);
+    Result := node;
+    Exit;
+  end;
   { A STRING tests EMPTY, explicitly: a string cell used as a raw condition is a
     pointer, and an empty literal's pointer is not nil, so `"" or x` took the
     empty arm. `Length(s) <> 0` is the same shape `not s` already uses
@@ -10073,10 +10097,27 @@ begin
   Result := (dictCi >= 0) and (ResolveNodeRec(n) = REC_UCLASS_BASE + dictCi);
 end;
 
+{ A valid SEQUENCE REPEAT COUNT. Ordinal, or an ARBITRARY-PRECISION int — promo
+  is deliberately not reported by TypeIsOrdinal, so without this arm `[0] * n`
+  with a computed n was not recognised as a repeat at all and fell through to
+  the arithmetic path, which raised `TypeError: unsupported operand type(s)`.
+  That shape is how Python allocates a fixed-size list, so this is the case that
+  blocked the promotable-int default.
+
+  The count NARROWS for free: the repeat builders emit an ordinary AN_CALL to a
+  pylib routine whose parameter is an Int64, and IRLowerCallArg's promo arm
+  narrows it there. Do NOT instead teach IRPyOperandKind that promo is numeric —
+  that was tried and turned the TypeError into a garbage number, because it also
+  made `promo * list` look like a provable arithmetic pair. }
+function PyIsRepeatCountTk(tk: TTypeKind): Boolean;
+begin
+  PyIsRepeatCountTk := TypeIsOrdinal(tk) or TypeIsPromoInt(tk);
+end;
+
 function PyListRepeatPair(a, b: Integer): Boolean;
 begin
-  Result := (PyNodeIsPyList(a) and TypeIsOrdinal(IntToTypeKind(ASTTk[b]))) or
-            (PyNodeIsPyList(b) and TypeIsOrdinal(IntToTypeKind(ASTTk[a])));
+  Result := (PyNodeIsPyList(a) and PyIsRepeatCountTk(IntToTypeKind(ASTTk[b]))) or
+            (PyNodeIsPyList(b) and PyIsRepeatCountTk(IntToTypeKind(ASTTk[a])));
 end;
 
 function PyNodeIsPyBytes(n: Integer): Boolean;
@@ -10093,8 +10134,8 @@ end;
   `bytes([ch]) * u`). Same shape as the list-repeat pair. }
 function PyBytesRepeatPair(a, b: Integer): Boolean;
 begin
-  Result := (PyNodeIsPyBytes(a) and TypeIsOrdinal(IntToTypeKind(ASTTk[b]))) or
-            (PyNodeIsPyBytes(b) and TypeIsOrdinal(IntToTypeKind(ASTTk[a])));
+  Result := (PyNodeIsPyBytes(a) and PyIsRepeatCountTk(IntToTypeKind(ASTTk[b]))) or
+            (PyNodeIsPyBytes(b) and PyIsRepeatCountTk(IntToTypeKind(ASTTk[a])));
 end;
 
 { helper-call builder for bytes binary ops (concat, eq) }
@@ -12711,6 +12752,26 @@ var idx, argSeq, node: Integer;
 begin
   PyUnboxRangeBound := n;
   if n < 0 then Exit;
+  { An ARBITRARY-PRECISION bound NARROWS to Int64. The loop counter is a machine
+    int, so a promo bound left alone compared the counter against the SLOT
+    ADDRESS and `for k in range(i + 1)` ran an arbitrary number of times.
+    Narrowing is not a precision loss that can matter: a range whose bound does
+    not fit in Int64 has more iterations than any program can execute, and
+    CPython would not finish it either. }
+  if TypeIsPromoInt(IntToTypeKind(ASTTk[n])) then
+  begin
+    idx := FindProc('PXXPromoToInt64Wrap');
+    if idx < 0 then Exit;          { promocore not loaded — leave as-is }
+    argSeq := AllocNode(AN_ARG);
+    ASTLeft[argSeq] := n;
+    ASTRight[argSeq] := -1;
+    node := AllocNode(AN_CALL);
+    ASTIVal[node] := idx;
+    ASTTk[node] := Ord(tyInt64);
+    ASTLeft[node] := argSeq;
+    PyUnboxRangeBound := node;
+    Exit;
+  end;
   if IntToTypeKind(ASTTk[n]) <> tyVariant then Exit;
   idx := FindProc('pyvar_to_int');
   if idx < 0 then Exit;            { pylib not loaded — leave the old behaviour }
@@ -13638,7 +13699,17 @@ begin
             if nCaps >= PY_MAX_CAPS then
               Error('Nil Python: a nested def may capture at most 8 enclosing names');
             capNames[nCaps] := cname;
+            { A PROMOTABLE INT is captured as a VARIANT. Its rvalue is the
+              frame SLOT ADDRESS, so a by-value promo parameter hands the
+              callee a pointer into a frame it does not own — deep2's `bot`
+              captured `y = m + x` and returned a stack address. Boxing is the
+              same answer the promo RETURN path already reaches (inline ->
+              VT_INT64, heap -> VT_PROMO_INT64), and it is lossless, unlike
+              narrowing. A PromoInt PARAMETER cannot reach the runtime at all
+              today (bug-a-promoint-shr-yields-nothing-...), so this is also
+              the only shape that works. }
             capTypes[nCaps] := Syms[csym].TypeKind;
+            if TypeIsPromoInt(capTypes[nCaps]) then capTypes[nCaps] := tyVariant;
             { A captured CLASS/RECORD-ID object must keep its class identity, or
               inside the nested body `obj.field` cannot resolve and every value
               read off it defaults to Integer (slices/methods on it then fail to
@@ -13681,6 +13752,9 @@ begin
                       Error('Nil Python: a nested def may capture at most 8 enclosing names');
                     capNames[nCaps] := cn2;
                     capTypes[nCaps] := Syms[csym2].TypeKind;
+                    { promo -> variant, same reason as the site above }
+                    if TypeIsPromoInt(capTypes[nCaps]) then
+                      capTypes[nCaps] := tyVariant;
                     if Syms[csym2].TypeKind = tyClass then
                       capRecs[nCaps] := Syms[csym2].RecName
                     else
@@ -15015,6 +15089,120 @@ end;
   Rolls back the AST, the symbols, the frame and BSSSize: a module-level
   AllocVar allocates a BSS global, so without the BSSSize restore every
   iteration would leak the whole module's globals again. }
+{ Does this name already stand for an INTEGER at module scope? Asked by the
+  token-shape probe below, which may not parse and so cannot ask the AST. }
+function PyBlkIntName(const nm: AnsiString): Boolean;
+var ci, si: Integer;
+begin
+  PyBlkIntName := False;
+  ci := PyFindConstraint(nm);
+  if ci >= 0 then
+  begin
+    PyBlkIntName := PyIsMachineIntTk(PyLocals[ci].TypeKind) or
+                    TypeIsPromoInt(PyLocals[ci].TypeKind);
+    Exit;
+  end;
+  si := PyProgSym(nm);
+  if si >= 0 then
+    PyBlkIntName := PyIsMachineIntTk(Syms[si].TypeKind) or
+                    TypeIsPromoInt(Syms[si].TypeKind);
+end;
+
+{ The kind a module-scope name holds when that kind is INTEGER-ish, else
+  tyUnknown. Companion to PyBlkIntName, which only answers yes/no.
+
+  Used by the bare-name COPY shape (`a = b`), which otherwise types every
+  constrained source as a variant. That is safe for most kinds but it BREAKS
+  AN ACCUMULATOR CHAIN: Fibonacci is `c = a + b; a = b; b = c`, so once `a`
+  became a variant, PyBlkIntArith no longer saw `a + b` as integer arithmetic,
+  `c` stopped being promotable, and the module-scope loop wrapped at 2^63
+  while the same code inside a def was exact. Preserving the source's own
+  integer kind keeps the chain closed, and the pre-pass's fixpoint rounds then
+  carry promo backwards through it. }
+function PyBlkIntNameKind(const nm: AnsiString): TTypeKind;
+var ci, si: Integer;
+begin
+  PyBlkIntNameKind := tyUnknown;
+  ci := PyFindConstraint(nm);
+  if ci >= 0 then
+  begin
+    if PyIsMachineIntTk(PyLocals[ci].TypeKind) or
+       TypeIsPromoInt(PyLocals[ci].TypeKind) then
+      PyBlkIntNameKind := PyLocals[ci].TypeKind;
+    Exit;
+  end;
+  si := PyProgSym(nm);
+  if si >= 0 then
+    if PyIsMachineIntTk(Syms[si].TypeKind) or TypeIsPromoInt(Syms[si].TypeKind) then
+      PyBlkIntNameKind := Syms[si].TypeKind;
+end;
+
+{ `name = <integer arithmetic>` as the shape of a statement, read from TOKENS.
+
+  The module pre-pass may not trial-parse a right-hand side that sits inside a
+  control-flow block — the block has not run for real yet, so a reference to
+  anything the pre-pass cannot also see calls Error() and Halts the compile
+  (the landmine documented at both callers). So the shapes it trusts there are
+  recognised token by token, and this adds one more: an accumulator.
+
+  It exists because that is precisely where an accumulator LIVES. The headline
+  case of bug-nilpy-int-promotion-decided-statically is
+
+      n = 1
+      for i in range(70):
+          n = n * 2
+
+  and without this the loop body never widens `n`, so it stays the tyInteger
+  its initialiser made it and wraps at 2^63 in silence. Inside a def the AST
+  pre-pass sees the same statement and widens it correctly; only module scope
+  had the hole.
+
+  Recognises ONLY int literals, `+ - *`, GROUPING parens, and names already
+  known to be integers — no dots, no subscripts. A `(` is accepted only when
+  it does NOT directly follow an ident, which is what keeps the original
+  invariant that an ident here can never be a call: `f * (i + 1)` is grouping,
+  `f * g(1)` is not and bails. Anything else returns False and the caller
+  behaves exactly as before. At least one operator must appear, or this is a
+  plain copy and the existing bare-name arm types it better. }
+function PyBlkIntArith(j: Integer): Boolean;
+var k, depth: Integer; sawOp: Boolean;
+begin
+  PyBlkIntArith := False;
+  sawOp := False;
+  depth := 0;
+  k := j;
+  while (k < MainProgramTokCount) and
+        (not (Tokens[k].Kind in [tkNewline, tkDedent, tkSemicolon])) do
+  begin
+    if Tokens[k].Kind in [tkPlus, tkMinus, tkStar] then
+      sawOp := True
+    else if Tokens[k].Kind = tkInteger then
+      { an int literal — fine }
+    else if Tokens[k].Kind = tkLParen then
+    begin
+      { grouping only: a paren directly after an ident is a CALL, whose result
+        this probe cannot type, so bail exactly as it did before parens were
+        allowed at all. }
+      if (k > j) and (Tokens[k - 1].Kind = tkIdent) then Exit;
+      depth := depth + 1;
+    end
+    else if Tokens[k].Kind = tkRParen then
+    begin
+      depth := depth - 1;
+      if depth < 0 then Exit;
+    end
+    else if Tokens[k].Kind = tkIdent then
+    begin
+      if not PyBlkIntName(GetTokenStr(k)) then Exit;
+    end
+    else
+      Exit;
+    k := k + 1;
+  end;
+  if depth <> 0 then Exit;
+  PyBlkIntArith := sawOp;
+end;
+
 procedure PyCollectModuleLocalsAST;
 var rnd, i, si, depth, bodyIx, forJ, forCi: Integer;
     savedTok, savedAST, savedSC, savedCur, savedFS, savedBSS: Integer;
@@ -15123,11 +15311,20 @@ begin
         else if (blkJ < MainProgramTokCount) and
                 (Tokens[blkJ].Kind in [tkLBrack, tkBegin]) then
           blkTk := tyVariant
+        else if (blkJ < MainProgramTokCount) and PyBlkIntArith(blkJ) then
+          { an accumulator: `n = n * 2`, `total = total + i`. Arbitrary
+            precision, like every other NilPy int arithmetic — see
+            PyBlkIntArith. }
+          blkTk := tyPromoInt64
         else if (blkJ < MainProgramTokCount) and (Tokens[blkJ].Kind = tkIdent) and
                 (blkJ + 1 < MainProgramTokCount) and
                 (Tokens[blkJ + 1].Kind in [tkNewline, tkDedent]) then
         begin
-          if PyFindModuleConstraint(GetTokenStr(blkJ)) >= 0 then
+          { an INTEGER source keeps its own kind — see PyBlkIntNameKind for why
+            widening a copy to variant broke the Fibonacci accumulator chain }
+          if PyBlkIntNameKind(GetTokenStr(blkJ)) <> tyUnknown then
+            blkTk := PyBlkIntNameKind(GetTokenStr(blkJ))
+          else if PyFindModuleConstraint(GetTokenStr(blkJ)) >= 0 then
             blkTk := tyVariant
           else if PyProgSym(GetTokenStr(blkJ)) >= 0 then
           begin
@@ -15311,6 +15508,17 @@ begin
         else if (forJ < MainProgramTokCount) and
                 (Tokens[forJ].Kind in [tkLBrack, tkBegin]) then
           forElemTk := tyVariant
+        else if (forJ + 1 < MainProgramTokCount) and (Tokens[forJ].Kind = tkIdent) and
+                (GetTokenStr(forJ) = 'range') and
+                (Tokens[forJ + 1].Kind = tkLParen) and
+                (PyFindModuleConstraint('range') < 0) and (PyProgSym('range') < 0) then
+          { `for i in range(...)` — the induction variable is an int, and the
+            single most common loop in Python. Left unnoted before, so an
+            accumulator in the body could not be recognised as arithmetic over
+            known ints (PyBlkIntArith) and module-scope factorial kept wrapping.
+            Still a pure token peek: `range` is only trusted when nothing has
+            shadowed it. }
+          forElemTk := tyInt64
         else if (forJ < MainProgramTokCount) and (Tokens[forJ].Kind = tkIdent) and
                 (forJ + 1 < MainProgramTokCount) and
                 (Tokens[forJ + 1].Kind in [tkColon, tkNewline]) then

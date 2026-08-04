@@ -473,6 +473,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-int-equals-string-segfaults | N | 80 | bug | `3 == "ab"` SEGFAULTS | — |
 | bug-nilpy-int-parse-halts-instead-of-raising | N | 55 | bug | nilpy: int(\"abc\") halts the program instead of raising a catchable ValueError | — |
 | bug-nilpy-int-prints-as-float-when-the-name-is-widened-later | N | 50 | bug | An int prints as `5.0` because the SAME NAME is assigned a float later in the file | — |
+| bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps | N | 60 | bug | Promotion is chosen from the LITERAL's width, so an int that grows past 2^63 wraps silently | — |
 | bug-nilpy-is-on-two-lists-compares-contents | N | 55 | bug | `is` on two lists compares CONTENTS, so distinct lists are "identical" | — |
 | bug-nilpy-key-analysis-compiles-but-segfaults | N | 70 | bug | nilpy: songformatter's key_analysis.py COMPILES but segfaults at run time | — |
 | bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |
@@ -1322,6 +1323,7 @@ should not read it to find out what to do. Grep it freely._
 | task-conformance-retriage-33-newly-passing-skips | A | 40 | task | 33 skip-listed pascal-conformance tests now exit-code-pass after the 2026-07-14/15 night arcs — per-test re-triage to unskip the genuinely green ones | — |
 | task-fpc-skip-triage-wontfix-vs-gap | T | 20 | task | FPC conformance: triage the ~237 untriaged skips into gap: / wontfix: | — |
 | task-license-mpl2-rollout | A | 50 | task | Adopt MPL 2.0 (compiler) + zlib (runtime/libs) — licensing rollout | — |
+| task-n-enumerate-the-promo-surface-by-output-diff | N | 60 | task | Before the int-promotion default can land, enumerate every site where a promotable int reaches a hand-built call or a static-type predicate — by DIFFING OUTPUT over a corpus, not by checking that programs compile | — |
 | task-remove-sysutils-move-fillchar-copies | B | 50 | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
 | task-sqlite-libc-free-runtime-bringup | B | 64 | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | task-t-borg-open-regression-is-permanently-stale | T | 40 | task | borg's watcher was stopped 2026-07-31 with one open regression recorded; nothing will ever clear it, so every --status and gate.sh check reads a dead host's red as live | — |

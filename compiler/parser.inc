@@ -9948,6 +9948,17 @@ begin
           Exit;
         end;
         Expect(tkRParen, ')');
+        { int() of an ARBITRARY-PRECISION int is the IDENTITY in Python, and it
+          must STAY arbitrary precision — `int(2**70)` is 2**70, not a narrowed
+          one. The -200 intrinsic's parameter is not a promo, and this site
+          hand-builds its call (project_findproc_by_name_ignores_overloads), so
+          the promo arrived as its SLOT ADDRESS and printed as a small number.
+          Handing the argument straight back is both correct and free. }
+        if TypeIsPromoInt(IntToTypeKind(ASTTk[CurASTNode])) then
+        begin
+          LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+          Exit;
+        end;
         node := AllocNode(AN_CALL);
         { int(float) truncates toward zero, which is exactly the -203 Trunc
           intrinsic -- reuse it rather than duplicating its SSE lowering. Every
@@ -10638,6 +10649,19 @@ begin
           Exit;
         end;
         Expect(tkRParen, ')');
+        { round()/trunc() of an ARBITRARY-PRECISION int is the IDENTITY, same as
+          int() above: rounding an integer cannot change it, and narrowing it
+          would lose the precision that is the whole point. -203/-204 are raw
+          SSE conversions, so a promo argument had its SLOT ADDRESS converted —
+          `round(i + 1)` printed 5553816. Only the int-yielding pair: frac/int
+          (-205/-206) are the float intrinsics and NilPy's own `int` is handled
+          at its own site. }
+        if isNilPy and ((prevTok = -203) or (prevTok = -204)) and
+           TypeIsPromoInt(IntToTypeKind(ASTTk[CurASTNode])) then
+        begin
+          LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+          Exit;
+        end;
         node := AllocNode(AN_CALL); ASTIVal[node] := prevTok;
         if (prevTok = -203) or (prevTok = -204) then ASTTk[node] := Ord(tyInt64)
         else ASTTk[node] := Ord(tyDouble);
@@ -13874,6 +13898,45 @@ begin
     FloatBinopResultTk := tyDouble;
 end;
 
+{ Rewrite a PROMO operand of a float-typed binop into an explicit
+  PXXPromoToDouble call; anything else is handed back untouched.
+
+  A float binop lowers its operands as machine values, and a promo rvalue IS
+  the slot address (decide-promoint-rvalue-representation) — so `(i + 1) + 2.5`
+  added 2.5 to a POINTER and printed 5553978.5, and `(i + 1) / 2` was just as
+  wrong. Converting HERE, as an ordinary AN_CALL, is the same lever hex/bin/oct
+  and str() use: the promo->Pointer argument arm in IRLowerCallArg carries the
+  slot address to promocore without any hand-built IR.
+
+  PXXPromoToDouble reads the true value off the limbs rather than narrowing
+  first, so a bignum operand converts to a large float, not to an approximation
+  of its low 64 bits. }
+function PromoWidenToDouble(n: Integer): Integer;
+var pwProc, pwArg, pwCall: Integer;
+begin
+  PromoWidenToDouble := n;
+  if n < 0 then Exit;
+  if not TypeIsPromoInt(IntToTypeKind(ASTTk[n])) then Exit;
+  pwProc := FindProc('PXXPromoToDouble');
+  if pwProc < 0 then Exit;        { promocore not loaded — leave as-is }
+  pwArg := AllocNode(AN_ARG);
+  ASTLeft[pwArg] := n;
+  ASTRight[pwArg] := -1;
+  pwCall := AllocNode(AN_CALL);
+  ASTIVal[pwCall] := pwProc;
+  ASTTk[pwCall] := Ord(tyDouble);
+  ASTLeft[pwCall] := pwArg;
+  PromoWidenToDouble := pwCall;
+end;
+
+{ Apply PromoWidenToDouble to both operands of a float-typed binop, in place. }
+procedure PromoWidenBinopOperands(node: Integer);
+begin
+  if node < 0 then Exit;
+  ASTLeft[node] := PromoWidenToDouble(ASTLeft[node]);
+  ASTRight[node] := PromoWidenToDouble(ASTRight[node]);
+end;
+
 procedure ParseTerm;
 var op: TTokenKind; left, right, node, opSOffset, opSLen, opci: Integer;
     ixTry: Integer;   { a repeat count coerced through __index__ }
@@ -14012,7 +14075,10 @@ begin
     else if (ASTTk[left] = Ord(tySet)) or (ASTTk[right] = Ord(tySet)) then
       ASTTk[node] := Ord(tySet)
     else if op = tkSlash then
-      ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))  { '/' produces native-depth float }
+    begin
+      ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));  { '/' produces native-depth float }
+      PromoWidenBinopOperands(node);
+    end
     else if PyExprMode and ((op = tkDiv) or (op = tkMod)) and
             (TypeIsFloat(IntToTypeKind(ASTTk[left])) or
              TypeIsFloat(IntToTypeKind(ASTTk[right]))) then
@@ -14027,17 +14093,25 @@ begin
 
         PyExprMode-only: Pascal's own `div`/`mod` are integer spellings, so the
         Pascal dialect and the self-host binary are untouched. }
+    begin
       ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[left]),
-                                            IntToTypeKind(ASTTk[right])))
+                                            IntToTypeKind(ASTTk[right])));
+      PromoWidenBinopOperands(node);
+    end
     else if op = tkDiv then
-      ASTTk[node] := Ord(TypeDivideResult(IntToTypeKind(ASTTk[left])))
+      ASTTk[node] := Ord(TypeDivideResultPair(IntToTypeKind(ASTTk[left]),
+                                              IntToTypeKind(ASTTk[right])))
     else if op = tkMod then
-      ASTTk[node] := Ord(TypeDivideResult(IntToTypeKind(ASTTk[left])))
+      ASTTk[node] := Ord(TypeDivideResultPair(IntToTypeKind(ASTTk[left]),
+                                              IntToTypeKind(ASTTk[right])))
     else if (op = tkIdent) or (op = tkShl) then
       ASTTk[node] := ASTTk[left]
     else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or (ASTTk[left] = Ord(tyExtended)) or
             (ASTTk[right] = Ord(tySingle)) or (ASTTk[right] = Ord(tyDouble)) or (ASTTk[right] = Ord(tyExtended)) then
-      ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
+    begin
+      ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
+      PromoWidenBinopOperands(node);
+    end
     else if TypeIsPromoInt(IntToTypeKind(ASTTk[left])) or
             TypeIsPromoInt(IntToTypeKind(ASTTk[right])) then
       { Promotable int is infectious — see the twin arm in the other binop
@@ -14045,6 +14119,13 @@ begin
         TypeIsOrdinal. }
       ASTTk[node] := Ord(TypeArithmeticResult(IntToTypeKind(ASTTk[left]),
                                               IntToTypeKind(ASTTk[right])))
+    else if PyExprMode and PyIntGrowsOp(op) and
+            PyIsMachineIntTk(IntToTypeKind(ASTTk[left])) and
+            PyIsMachineIntTk(IntToTypeKind(ASTTk[right])) then
+      { NilPy: `*` over two NATIVE ints is still arbitrary precision — see
+        PyIntGrowsOp. Below the promo arm (which already covers the mixed
+        case) and above the ordinal one, which would type it tyInteger. }
+      ASTTk[node] := Ord(tyPromoInt64)
     else if TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then
       ASTTk[node] := Ord(TypeArithmeticResult(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
     else
@@ -14254,7 +14335,10 @@ begin
       ASTTk[node] := Ord(tyBoolean)
     else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or (ASTTk[left] = Ord(tyExtended)) or
             (ASTTk[right] = Ord(tySingle)) or (ASTTk[right] = Ord(tyDouble)) or (ASTTk[right] = Ord(tyExtended)) then
-      ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
+    begin
+      ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
+      PromoWidenBinopOperands(node);
+    end
     else if TypeIsPromoInt(IntToTypeKind(ASTTk[left])) or
             TypeIsPromoInt(IntToTypeKind(ASTTk[right])) then
       { A promotable int is infectious: mixing it with any ordinary integer
@@ -14266,6 +14350,13 @@ begin
         still resolves as float. }
       ASTTk[node] := Ord(TypeArithmeticResultOp(IntToTypeKind(ASTTk[left]),
                                                 IntToTypeKind(ASTTk[right]), op))
+    else if PyExprMode and PyIntGrowsOp(op) and
+            PyIsMachineIntTk(IntToTypeKind(ASTTk[left])) and
+            PyIsMachineIntTk(IntToTypeKind(ASTTk[right])) then
+      { NilPy: `+`/`-` over two NATIVE ints is still arbitrary precision — see
+        PyIntGrowsOp. Below the promo arm (which already covers the mixed case)
+        and above the ordinal one, which would type it tyInteger and wrap. }
+      ASTTk[node] := Ord(tyPromoInt64)
     else if TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then
     begin
       { FPC range-based constants: a NON-NEGATIVE integer literal paired with a

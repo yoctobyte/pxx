@@ -1,0 +1,95 @@
+# The promotable-int DEFAULT: every NilPy `int` binding is arbitrary precision,
+# so a value that starts small and GROWS past 2^63 must not wrap
+# (bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps,
+# decided as option 1).
+#
+# Every line here was WRONG before the default landed, and each covers a
+# different way a promotable value reaches code that used to assume a machine
+# int. Output must match CPython running this same file — the sites below were
+# found by diffing stdout, not by checking that the program compiled, which is
+# what an earlier survey did and why it missed four of them
+# (task-n-enumerate-the-promo-surface-by-output-diff).
+
+# the headline: a module-scope accumulator inside a control-flow block
+n = 1
+for k in range(70):
+    n = n * 2
+print(n)
+
+# ...and the same value through the renderers, each a separate call shape:
+# print (direct), str() (intrinsic), f-string (lexes to pystr_of), % (variant)
+print(str(n))
+print(f"{n}")
+print("%d" % n)
+print(hex(n))
+
+# int()/round() of an arbitrary-precision int are the IDENTITY — they used to
+# convert the SLOT ADDRESS and print a small number
+print(int(n))
+print(round(n))
+
+# a repeat COUNT: `[0] * n` is how Python allocates a fixed-size list, and it
+# raised TypeError because promo is deliberately not TypeIsOrdinal
+i = 5
+print([0] * (i + 1))
+print("x" * (i + 1))
+
+# truthiness — a promo rvalue is a slot address, which is never nil, so a ZERO
+# promo used to be truthy and bool() crashed
+z = i - 5
+if z:
+    print("zero was truthy")
+else:
+    print("zero is falsy")
+print(bool(i + 1), bool(z))
+
+# float mixing converts through the limbs, not through the low 64 bits
+print((i + 1) + 2.5)
+print((i + 1) / 2)
+
+# a def must accept its OWN result type: `n - 1` is arbitrary precision
+def fib(m: int) -> int:
+    if m < 2:
+        return m
+    return fib(m - 1) + fib(m - 2)
+print(fib(10))
+
+# a promo crossing the call boundary boxes to a variant, and arithmetic on the
+# variant stays exact
+def big():
+    v = 1
+    for j in range(70):
+        v = v * 2
+    return v
+print(big() + 1)
+
+# a nested def CAPTURING a promo local: a by-value promo parameter would hand
+# the callee a pointer into a frame it does not own
+def deep(a: int) -> int:
+    x = a + 1
+    def inner(k: int) -> int:
+        return k + x
+    return inner(2)
+print(deep(5))
+
+# Python's `//` and `%` FLOOR; Pascal's div/mod truncate. They differ only on
+# negatives, and differed SILENTLY.
+print((0 - n) % 26)
+print((0 - n) // 26)
+print((0 - 7) % 3)
+
+# a promo DIVISOR with a machine-int dividend: the node types from the dividend
+# alone, so this used to read the divisor's slot address as the number
+j = 3
+print(i // (j + 1))
+print(i % (j + 1))
+
+# the module-scope copy chain: `c = a + b; a = b; b = c` — widening a copy to a
+# variant broke the chain and Fibonacci wrapped
+a = 0
+b = 1
+for k in range(200):
+    c = a + b
+    a = b
+    b = c
+print(a)

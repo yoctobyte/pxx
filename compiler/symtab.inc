@@ -1956,6 +1956,38 @@ begin
   TypeIsPromoInt := (tk = tyPromoInt32) or (tk = tyPromoInt64);
 end;
 
+{ NilPy's `int` is arbitrary precision, so an ARITHMETIC result over machine
+  ints has to be promotable even when both operands are native — otherwise a
+  value that starts small and grows wraps at 2^63 with no diagnostic, which is
+  the wrong way round: the literal that overflows is the case a programmer
+  notices, and the accumulator is the case they do not
+  (bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps,
+  decided as decide-nilpy-int-promotion-default option 1).
+
+  Only the operators that can GROW a value are listed. `//`, `%`, `&`, `|`,
+  `^` and the comparisons cannot leave the range of their operands, so they
+  keep native codegen and cost nothing; `<<` already forces promo at its own
+  site in pyparser.inc for the same reason this exists. Division is absent
+  because Python's `/` is float.
+
+  This is asked for by NAME at the two binop typing sites rather than folded
+  into TypeArithmeticResult, because that routine is shared with Pascal and C,
+  where `Integer + Integer` must stay an Integer. }
+function PyIntGrowsOp(op: TTokenKind): Boolean;
+begin
+  PyIntGrowsOp := (op = tkPlus) or (op = tkMinus) or (op = tkStar);
+end;
+
+{ A native machine integer, i.e. the operand shape PyIntGrowsOp promotes.
+  Boolean is included because a Python bool IS an int and `True + 1` is 2. }
+function PyIsMachineIntTk(tk: TTypeKind): Boolean;
+begin
+  PyIsMachineIntTk := (tk = tyInteger) or (tk = tyInt64) or (tk = tyBoolean) or
+                      (tk = tyInt8) or (tk = tyUInt8) or (tk = tyInt16) or
+                      (tk = tyUInt16) or (tk = tyInt32) or (tk = tyUInt32) or
+                      (tk = tyUInt64) or (tk = tyNativeInt) or (tk = tyNativeUInt);
+end;
+
 { Usable inline width in bits, before the value spills to a heap bignum. The
   boundary is semantically unobservable — the type is arbitrary precision either
   way — so this only ever changes performance, never a result. }
@@ -2325,6 +2357,20 @@ begin
     Result := tyUInt64
   else
     Result := tyInt64;
+end;
+
+{ `div`/`mod` typed from BOTH operands. TypeDivideResult reads the dividend
+  alone, which is right for width but wrong for the promotable class: `5 // (j +
+  1)` has a machine-int dividend and an ARBITRARY-PRECISION divisor, so the node
+  typed Int64, the promo divisor's slot ADDRESS was used as the number, and the
+  answer was garbage (0 for `//`, the dividend itself for `%`). The divisor
+  cannot widen the RESULT, but it does decide which lowering must run. }
+function TypeDivideResultPair(dividend, divisor: TTypeKind): TTypeKind;
+begin
+  if TypeIsPromoInt(divisor) then
+    TypeDivideResultPair := tyPromoInt64
+  else
+    TypeDivideResultPair := TypeDivideResult(dividend);
 end;
 
 function TypeIsPointerSized(tk: TTypeKind): Boolean;
@@ -4690,6 +4736,22 @@ begin
     Result := (pType <> tyBoolean) or (aType = tyBoolean);
     Exit;
   end;
+  { An ARBITRARY-PRECISION int ARGUMENT matches an integer PARAMETER: it narrows
+    through IRLowerCallArg's promo arm, exactly as a wide ordinal does. Promo is
+    deliberately not reported by TypeIsOrdinal, so without this a routine could
+    not accept its OWN result type — `def fib(n: int)` calling `fib(n - 1)`
+    failed with "no overload of fib matches these arguments", because `n - 1` is
+    arbitrary precision under the promotable-int default.
+
+    tyPointer is included on purpose (it is an ordinal here): a Pointer formal
+    receives the SLOT ADDRESS via IRPromoAddrOf, which is precisely promocore's
+    calling convention (PXXPromoToStr and friends). Boolean is excluded for the
+    same reason an integer argument does not match a Boolean formal. }
+  if TypeIsOrdinal(pType) and TypeIsPromoInt(aType) then
+  begin
+    Result := pType <> tyBoolean;
+    Exit;
+  end;
   if (pType = tyString) and (aType = tyChar) then
   begin
     Result := True;
@@ -4733,7 +4795,10 @@ begin
     same-width float arg still wins. Requires the internal-call Single ABI
     (feature-single-first-class) — without it a Single param would silently
     receive 0.0, which is why this clause depends on the ABI fix. }
-  if TypeIsFloat(pType) and (TypeIsFloat(aType) or TypeIsOrdinal(aType)) then
+  { ...and a promo actual likewise: `math.sqrt(n - 1)` narrows then converts,
+    the same two steps an Int64 actual already takes. }
+  if TypeIsFloat(pType) and
+     (TypeIsFloat(aType) or TypeIsOrdinal(aType) or TypeIsPromoInt(aType)) then
   begin
     Result := True;
     Exit;
@@ -5057,6 +5122,34 @@ function ArgNarrowsInt(pType, aType: TTypeKind): Boolean;
   against — wrong VALUES, no diagnostic. Used to rank candidates, not to reject
   them: a narrowing candidate still wins when it is the only one that matches. }
 begin
+  { An ARBITRARY-PRECISION argument narrows into EVERY machine-int parameter —
+    there is no width that holds it — so a lossless candidate must be preferred
+    whatever the declaration order. `f"{n}"` lexes to `pystr_of(n)`, whose
+    Int64 overload was picked over the Variant one and wrapped mod 2^64: for
+    2**70 that is exactly 0, so a 22-digit number printed as "0". The Variant
+    overload is lossless (PXXPromoToVariant carries the exact decimal as tag
+    VT_PROMO_INT64), and Phase 1d now picks it.
+
+    This RANKS, it does not reject — Phase 2 still binds a promo to an Int64
+    parameter when that is the only candidate, which is what makes
+    `def fib(n: int)` accept `fib(n - 1)` under NilPy's documented 64-bit
+    narrowing of an int-annotated binding. }
+  if TypeIsPromoInt(aType) then
+  begin
+    { EVERY ordinal parameter narrows arbitrary precision, not just the ones
+      smaller than 64 bits — Char and Boolean included, or `f"{n}"` binds
+      pystr_of(Char) and prints a NUL byte. A FLOAT parameter narrows too: a
+      double carries 53 bits of mantissa, so a bignum loses digits (that bound
+      pystr_of(Double) and printed 1.1805916207174113e+21 where Python prints
+      all 22 digits).
+
+      tyPointer is the ONE lossless ordinal: it receives the slot ADDRESS via
+      IRPromoAddrOf, which is promocore's own calling convention. Ranking the
+      rest as narrowing is what leaves the VARIANT overload — lossless, since
+      PXXPromoToVariant carries the exact decimal — as the Phase 1d winner. }
+    Result := (TypeIsOrdinal(pType) and (pType <> tyPointer)) or TypeIsFloat(pType);
+    Exit;
+  end;
   Result := (pType in [tyInteger, tyInt8, tyUInt8, tyInt16, tyUInt16, tyInt32,
                        tyUInt32, tyInt64, tyUInt64, tyNativeInt, tyNativeUInt]) and
             (aType in [tyInteger, tyInt8, tyUInt8, tyInt16, tyUInt16, tyInt32,

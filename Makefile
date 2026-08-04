@@ -1381,6 +1381,13 @@ test-nilpy: $(COMPILER)
 	# promo-typed argument to promocore's PXXPromoToBase. See the test's header.
 	./$(COMPILER) test/test_nilpy_hex_bin_oct_bigint.npy /tmp/test_nilpy_hexbig26
 	/tmp/test_nilpy_hexbig26 | diff -u test/test_nilpy_hex_bin_oct_bigint.expected -
+	# The promotable-int DEFAULT: an int that GROWS past 2^63 stays exact. Every
+	# line of this test was wrong before it landed, each a different way a promo
+	# reaches code that assumed a machine int (renderers, repeat counts,
+	# truthiness, float mixing, call/return boundaries, captures, floor div/mod).
+	# .expected is CPython's own output for the same file.
+	./$(COMPILER) test/test_nilpy_int_promotion_default.npy /tmp/test_nilpy_intpromo26
+	/tmp/test_nilpy_intpromo26 | diff -u test/test_nilpy_int_promotion_default.expected -
 	# Mutating a dict while iterating it is NOT DETECTED — a DELIBERATE divergence
 	# (devdocs/dev/nilpy-semantics-divergences.md). These expectations are
 	# deliberately NOT CPython's: every program in that file is one CPython rejects,

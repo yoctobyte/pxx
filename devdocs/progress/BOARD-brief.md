@@ -5,15 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:7 backlog:175 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1330 rejected:28`
+`unfinished:9 blocked:7 backlog:177 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1332 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (10) — parked mid-flight; re-claim, do not duplicate
+## unfinished (9) — parked mid-flight; re-claim, do not duplicate
 
-- `bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps` [N]
 - `bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error` [N]
 - `bug-nilpy-non-constant-parameter-defaults-silently-become-none` [N]
 - `bug-nilpy-one-line-def-and-class-bodies-do-not-parse` [N]
@@ -34,7 +33,7 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 156, ranked
+## Ready — top 30 of 158, ranked
 
 - `[p 70] [T]` regression-optdiff-shard8-12
 - `[p 70] [T]` regression-test-c-conformance-shard2-6
@@ -55,16 +54,16 @@ _none — no lane is locked._
 - `[p 60] [T]` feature-t-bench-hardware-provenance
 - `[p 60] [T]` feature-t-testmgr-owns-pinning-interruptible
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
-- `[p 60] [N]` task-n-enumerate-the-promo-surface-by-output-diff
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
+- `[p 55] [N]` bug-nilpy-class-field-and-recursive-return-narrow-an-arbitrary-precision-int
 - `[p 55] [N]` bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
 - `[p 55] [P]` compat-pascal-assert-halts-instead-of-raising-eassertionfailed
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
 
-_126 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_128 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

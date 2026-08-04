@@ -1063,6 +1063,12 @@ begin
   if op = tkPlus then PromoOpHelper := 'PXXPromoAdd'
   else if op = tkMinus then PromoOpHelper := 'PXXPromoSub'
   else if op = tkStar then PromoOpHelper := 'PXXPromoMul'
+  { NilPy's `//` and `%` FLOOR; Pascal's `div`/`mod` truncate. The two disagree
+    only on negative operands, and disagreeing SILENTLY is exactly the failure
+    mode here — `-7 % 3` answered -1 where Python says 2. Chosen by language
+    mode at the one place every promo binop site already asks. }
+  else if (op = tkDiv) and PyProgramMode then PromoOpHelper := 'PXXPromoFloorDiv'
+  else if (op = tkMod) and PyProgramMode then PromoOpHelper := 'PXXPromoFloorMod'
   else if op = tkDiv then PromoOpHelper := 'PXXPromoDiv'
   else if op = tkMod then PromoOpHelper := 'PXXPromoMod'
   else if op = tkAnd then PromoOpHelper := 'PXXPromoAnd'
@@ -2355,6 +2361,19 @@ begin
      TypeIsOrdinal(Procs[cpi].Params[pathIdx].TypeKind) then
   begin
     Result := IRPromoCall('PXXPromoToInt64Wrap', IRPromoAddrOf(argAST), -1, -1, tyInt64);
+    Exit;
+  end;
+  { PROMO argument to a FLOAT parameter: widen through PXXPromoToDouble, which
+    reads the true value off the limbs. Narrowing first and converting would
+    approximate the value's LOW 64 BITS, so a bignum argument would arrive as a
+    small float rather than a large one — silent, and the wrong kind of wrong. }
+  if (cpi >= 0) and (pathIdx >= 0) and
+     (pathIdx < Procs[cpi].ParamCount) and
+     TypeIsPromoInt(IntToTypeKind(ASTTk[argAST])) and
+     (not Procs[cpi].Params[pathIdx].IsRef) and
+     TypeIsFloat(Procs[cpi].Params[pathIdx].TypeKind) then
+  begin
+    Result := IRPromoCall('PXXPromoToDouble', IRPromoAddrOf(argAST), -1, -1, tyDouble);
     Exit;
   end;
   { `@obj.Method` given directly to a method-pointer parameter (`of object`
@@ -6240,8 +6259,21 @@ begin
         Result := IRAppendCall(cpi, first, -1, Ord(tyDouble));
         Exit;
       end;
+      { ...but NOT when the result is an ARBITRARY-PRECISION int. pyfloordiv_i /
+        pyfloormod_i take and return Int64, while the parser typed this node
+        tyPromoInt64 (TypeDivideResult keeps promo) — so an enclosing promo
+        operator read the returned VALUE as a slot ADDRESS and dereferenced it:
+        `(o % 26) + 1` segfaulted in SlotTag for any o past Int64, while the
+        same `%` as a whole statement was fine because the assignment path
+        emits the helper directly. Falling through reaches the promo binop
+        branch below, whose PXXPromoFloorDiv/FloorMod carry Python's sign rule.
+        Both operands are checked, not just the node, so a promo operand cannot
+        be narrowed into the Int64 helper either. }
       if PyProgramMode and
-         ((Integer(ASTIVal[node]) = Ord(tkDiv)) or (Integer(ASTIVal[node]) = Ord(tkMod))) then
+         ((Integer(ASTIVal[node]) = Ord(tkDiv)) or (Integer(ASTIVal[node]) = Ord(tkMod))) and
+         (not TypeIsPromoInt(IntToTypeKind(ASTTk[node]))) and
+         (not TypeIsPromoInt(IntToTypeKind(ASTTk[ASTLeft[node]]))) and
+         (not TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]]))) then
       begin
         { Decide by the OPERANDS, not the node: `x // y` on floats is still
           tkDiv, which Pascal only ever spells for integers, so the node's own

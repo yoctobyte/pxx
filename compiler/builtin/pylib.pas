@@ -24,7 +24,12 @@ interface
 
 { NilPy's PAL — the one place a NilPy primitive reaches the kernel.
   See decide-runtime-primitive-layering. }
-uses pypal;
+{ promocore: the arbitrary-precision runtime. A Variant can HOLD a promotable
+  int (tag VT_PROMO_INT64, payload = the exact decimal), and the variant
+  arithmetic below must not narrow it — pyvar_to_int's mod-2^64 reading turns
+  2**70 into 0, so `v + 1` answered 1 for a 22-digit number. promocore has no
+  uses clause of its own, so this adds no cycle. }
+uses pypal, promocore;
 
 const
   { An omitted slice bound, as emitted by the frontend for `b[:hi]` / `b[lo:]`.
@@ -4509,6 +4514,9 @@ begin
   end
   else
   begin
+    { arbitrary precision stays exact — see pyadd_v. PXXPromoVarArithTry
+      answers 0 when neither side is promo-tagged. }
+    if PXXPromoVarArithTry(@Result, @a, @b, 3) <> 0 then Exit;
     r^.VType := 2;
     r^.Payload := pyvar_to_int(a) * pyvar_to_int(b);
   end;
@@ -4756,6 +4764,10 @@ begin
   end
   else
   begin
+    { An ARBITRARY-PRECISION operand stays exact: PXXPromoVarArithTry answers 0
+      when neither side is promo-tagged, so the machine-int path below is
+      untouched for ordinary variants. }
+    if PXXPromoVarArithTry(@Result, @a, @b, 1) <> 0 then Exit;
     r^.VType := 2;
     r^.Payload := pyvar_to_int(a) + pyvar_to_int(b);
   end;
@@ -4810,6 +4822,9 @@ begin
   end
   else
   begin
+    { arbitrary precision stays exact — see pyadd_v. PXXPromoVarArithTry
+      answers 0 when neither side is promo-tagged. }
+    if PXXPromoVarArithTry(@Result, @a, @b, 2) <> 0 then Exit;
     r^.VType := 2;
     r^.Payload := pyvar_to_int(a) - pyvar_to_int(b);
   end;
@@ -7766,7 +7781,16 @@ begin
   Result := sign + outS;
 end;
 
-function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
+{ The integer format spec, over EITHER a machine int or an arbitrary-precision
+  decimal. bigDec = '' means "use i"; otherwise bigDec is the exact decimal of a
+  VT_PROMO_INT64 payload and i is unused.
+
+  One body rather than two because the spec grammar (fill/align/sign/#/0/width/
+  grouping/type) is the same either way and a second copy would drift. Only the
+  DIGIT-PRODUCING step differs, and for a bignum only base 10 can be produced
+  here — pylib does not see promocore, so a base conversion is not available and
+  is REFUSED rather than answered with a wrapped machine int. }
+function PyFormatIntEx(i: Int64; const bigDec: AnsiString; const spec: AnsiString): AnsiString;
 var p, width, need, zi: Integer; zero, leftAlign, grouped, alt: Boolean;
     kind, fillCh, align, signCh, groupCh: Char;
     body, altPre, lead, zeros: AnsiString;
@@ -7833,6 +7857,9 @@ begin
     int is exactly representable, so hand it to the float formatter }
   if (p <= Length(spec)) and (spec[p] = '.') then
   begin
+    if bigDec <> '' then
+      raise ValueError.Create('float format spec "' + spec +
+                              '" on an arbitrary-precision int is not supported');
     Result := pyformat_of(pyfloat_ofint(i), spec);
     Exit;
   end;
@@ -7843,6 +7870,9 @@ begin
   end;
   if (kind = 'f') or (kind = 'F') or (kind = 'e') or (kind = 'E') then
   begin
+    if bigDec <> '' then
+      raise ValueError.Create('float format spec "' + spec +
+                              '" on an arbitrary-precision int is not supported');
     Result := pyformat_of(pyfloat_ofint(i), spec);
     Exit;
   end;
@@ -7852,6 +7882,17 @@ begin
       the call was lost — the same "must be catchable" rule already applied to
       missing operators (bug-nilpy-thousands-separator-format-spec-unsupported). }
     raise ValueError.Create('unsupported format spec "' + spec + '"');
+  if bigDec <> '' then
+  begin
+    { base 10 is the only base reachable without promocore; anything else would
+      have to narrow first, i.e. print a wrapped value for a number that does
+      not fit — exactly the silent-wrong-output case a spec exists to avoid }
+    if (kind <> 'd') and (kind <> 's') then
+      raise ValueError.Create('format spec "' + spec +
+                              '" on an arbitrary-precision int is not supported');
+    body := bigDec;
+  end
+  else
   case kind of
     'd': body := PyFmtBase(i, 10, False);
     'x': body := PyFmtBase(i, 16, False);
@@ -7901,6 +7942,11 @@ begin
   if align = '^' then Result := PyFmtPadEx(body, width, fillCh, '^')
   else if fillCh <> ' ' then Result := PyFmtPadEx(body, width, fillCh, align)
   else Result := PyFmtPad(body, width, zero, leftAlign);
+end;
+
+function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
+begin
+  Result := PyFormatIntEx(i, '', spec);
 end;
 
 function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; overload;
@@ -8192,6 +8238,15 @@ begin
   if tag = 3 then
   begin
     Result := pyformat_of(pyvar_to_float(v), spec);
+    Exit;
+  end;
+  { VT_PROMO_INT64: an arbitrary-precision int whose payload IS its exact
+    decimal. Formatting it as an integer is what `f"{n:d}"` and `"%d" % n` both
+    reach; without this arm the latter aborted the process on a value that
+    print() rendered perfectly well. }
+  if tag = 8193 then
+  begin
+    Result := PyFormatIntEx(0, PPyAnsiString(@PPyVarRec(@v)^.Payload)^, spec);
     Exit;
   end;
   WriteLn('Nil Python: f-string format spec "', spec,

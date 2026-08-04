@@ -78,6 +78,12 @@ procedure PXXPromoSubInt(dst, a: Pointer; b: Int64);
 procedure PXXPromoMulInt(dst, a: Pointer; b: Int64);
 procedure PXXPromoDiv(dst, a, b: Pointer);
 procedure PXXPromoMod(dst, a, b: Pointer);
+{ Python's `//` and `%`: quotient floored toward -infinity, remainder taking the
+  sign of the DIVISOR. Separate entry points rather than a mode flag, because
+  Pascal's own `div`/`mod` on a PromoInt must stay TRUNCATING — the two
+  languages genuinely disagree and one shared routine would have to guess. }
+procedure PXXPromoFloorDiv(dst, a, b: Pointer);
+procedure PXXPromoFloorMod(dst, a, b: Pointer);
 procedure PXXPromoAnd(dst, a, b: Pointer);
 procedure PXXPromoOr(dst, a, b: Pointer);
 procedure PXXPromoXor(dst, a, b: Pointer);
@@ -95,6 +101,7 @@ function  PXXPromoVarCmpTry(a, b: Pointer; op: Integer): Integer;
 function  PXXPromoFitsInt64(a: Pointer): Boolean;
 function  PXXPromoToInt64(a: Pointer): Int64;
 function  PXXPromoToInt64Wrap(a: Pointer): Int64;
+function  PXXPromoToDouble(a: Pointer): Double;
 
 implementation
 
@@ -1797,6 +1804,94 @@ begin
     PXXPromoToInt64Wrap := SlotInt(a)
   else
     PXXPromoToInt64Wrap := PromoWrapHeap(a);
+end;
+
+{ Slow path, split out for the same reason PromoWrapHeap is: naming TBig costs
+  a managed prologue on every call. Horner over the limbs in DOUBLE, which is
+  what makes the result an approximation of the true value rather than of its
+  low 64 bits — the wrapping narrowing above would turn 2**70 into a small
+  number and then into a small float, silently. Overflows to +/-Inf beyond
+  ~1.8e308, where CPython raises OverflowError; that difference is noted in
+  bug-nilpy-promo-to-float-overflows-to-inf-instead-of-raising rather than
+  guessed at here. }
+function PromoHeapToDouble(a: Pointer): Double;
+var bg: TBig; r: Double; i: Integer;
+begin
+  bg := SlotBig(a);
+  r := 0.0;
+  for i := Length(bg.limbs) - 1 downto 0 do
+    r := r * BIG_BASE + bg.limbs[i];
+  if bg.neg then r := -r;
+  PromoHeapToDouble := r;
+end;
+
+{ `a // b` with Python's flooring. Built on the truncating pair plus a
+  correction rather than a second BDivMod: the correction is exact (when the
+  remainder is non-zero and the operand signs differ, the truncated quotient is
+  one too high) and it keeps ONE division algorithm in the unit.
+
+  dst may alias a or b, so both are fully read before anything is written. }
+procedure PXXPromoFloorDiv(dst, a, b: Pointer);
+var q, r, zs: array[0..1] of NativeInt;
+    ai, bi, qi: Int64;
+    negA, negB: Boolean;
+begin
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+  begin
+    ai := SlotInt(a); bi := SlotInt(b);
+    qi := ai div bi;
+    if ((ai mod bi) <> 0) and ((ai < 0) <> (bi < 0)) then qi := qi - 1;
+    PXXPromoFromInt(dst, qi);
+    Exit;
+  end;
+  PXXPromoInit(@q); PXXPromoInit(@r); PXXPromoInit(@zs);
+  PXXPromoFromInt(@zs, 0);
+  PXXPromoDiv(@q, a, b);
+  PXXPromoMod(@r, a, b);
+  negA := PXXPromoCmp(a, @zs) < 0;
+  negB := PXXPromoCmp(b, @zs) < 0;
+  if (PXXPromoCmp(@r, @zs) <> 0) and (negA <> negB) then
+    PXXPromoSubInt(@q, @q, 1);
+  PXXPromoCopy(dst, @q);
+  PXXPromoClear(@q); PXXPromoClear(@r); PXXPromoClear(@zs);
+end;
+
+{ `a % b` with Python's sign rule: the remainder takes the sign of the DIVISOR,
+  so `-7 % 3` is 2, not -1. Same correction shape as PXXPromoFloorDiv. }
+procedure PXXPromoFloorMod(dst, a, b: Pointer);
+var r, zs: array[0..1] of NativeInt;
+    ai, bi, ri: Int64;
+    negR, negB: Boolean;
+begin
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+  begin
+    ai := SlotInt(a); bi := SlotInt(b);
+    ri := ai mod bi;
+    if (ri <> 0) and ((ri < 0) <> (bi < 0)) then ri := ri + bi;
+    PXXPromoFromInt(dst, ri);
+    Exit;
+  end;
+  PXXPromoInit(@r); PXXPromoInit(@zs);
+  PXXPromoFromInt(@zs, 0);
+  PXXPromoMod(@r, a, b);
+  negR := PXXPromoCmp(@r, @zs) < 0;
+  negB := PXXPromoCmp(b, @zs) < 0;
+  if (PXXPromoCmp(@r, @zs) <> 0) and (negR <> negB) then
+    PXXPromoAdd(@r, @r, b);
+  PXXPromoCopy(dst, @r);
+  PXXPromoClear(@r); PXXPromoClear(@zs);
+end;
+
+{ Widening to a float, for `promo + 2.5` and `promo / 2`. Python converts an
+  int operand to float for these, so this is the conversion that mixed
+  arithmetic needs; without it the promo's SLOT ADDRESS was converted instead
+  and `(i + 1) + 2.5` printed 5553978.5. }
+function PXXPromoToDouble(a: Pointer): Double;
+begin
+  if SlotTag(a) = PROMO_TAG_INLINE then
+    PXXPromoToDouble := SlotInt(a)
+  else
+    PXXPromoToDouble := PromoHeapToDouble(a);
 end;
 
 end.

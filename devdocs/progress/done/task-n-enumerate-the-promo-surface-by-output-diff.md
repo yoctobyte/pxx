@@ -3,6 +3,8 @@ track: N
 prio: 60
 type: task
 summary: "Before the int-promotion default can land, enumerate every site where a promotable int reaches a hand-built call or a static-type predicate — by DIFFING OUTPUT over a corpus, not by checking that programs compile"
+status: done
+owner: claude-AN
 ---
 
 # Enumerate the promo surface by output-diff, not compile-success
@@ -57,3 +59,6 @@ the list-repeat path has more than one thing in the way.
 The whole `.npy` suite diffing identical to CPython with the promotion patches
 applied, plus the bug ticket's own table, plus a benchmark line recording the
 measured cost so the 10x figure stays honest as check-elision lands.
+
+## Log
+- 2026-08-04 — resolved, commit PENDING-COMMIT.
