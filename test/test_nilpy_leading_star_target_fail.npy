@@ -1,0 +1,4 @@
+# feature-nilpy-starred-and-nested-unpacking — the leading-star spelling.
+# Reported `expected expression` before, pointing at the star.
+*init, last = [1, 2, 3]
+print(init, last)

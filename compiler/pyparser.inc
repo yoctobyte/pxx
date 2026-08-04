@@ -12946,6 +12946,18 @@ begin
   if CurTok.Kind = tkComma then
   begin
     Next;
+    { `for n, (p, q) in nested:` — a NESTED loop target. The target here is a
+      flat name list and the whole lowering is keyed on it, so this is a real
+      gap; what it must not do is report it as a MISSING variable, which is what
+      "expected a second loop variable" says while the user is looking straight
+      at one. feature-nilpy-starred-and-nested-unpacking. }
+    if CurTok.Kind = tkLParen then
+      Error('Nil Python: a NESTED loop target (`for n, (p, q) in ...`) is not '
+            + 'supported yet — loop over the outer level and unpack the inner '
+            + 'in the body');
+    if CurTok.Kind = tkStar then
+      Error('Nil Python: a STARRED loop target (`for a, *rest in ...`) is not '
+            + 'supported yet');
     if CurTok.Kind <> tkIdent then Error('Nil Python: expected a second loop variable');
     name2 := CurTok.SVal;
     Next;
@@ -14055,8 +14067,75 @@ begin
   end;
 end;
 
+{ An unpacking target we do not support YET — a STAR (`a, *rest = xs`) or a
+  NESTED group (`a, (b, c) = ...`). PyUnpackTargetAhead requires every element to
+  be a plain name, so these fall through to the ordinary expression statement and
+  die on the FIRST name with `undefined variable (first)` — a message pointing at
+  a perfectly good name, indistinguishable from a typo in the user's own code.
+  The forms are unsupported, not wrong; say so.
+
+  Deliberately narrow, because a false positive here would reject valid code: the
+  statement must OPEN the target (an ident or a leading star), there must be a
+  depth-0 `=` before the end of the logical line, and the star or `(` must sit
+  where a target element begins — at the start or straight after a depth-0 comma.
+  feature-nilpy-starred-and-nested-unpacking. }
+function PyUnsupportedUnpackTargetAhead(var isStar: Boolean): Boolean;
+var i, depth: Integer; atElem, sawComma: Boolean;
+begin
+  Result := False;
+  isStar := False;
+  if not (CurTok.Kind in [tkIdent, tkStar]) then Exit;
+  isStar := CurTok.Kind = tkStar;
+  if isStar then Result := True;
+  atElem := False;
+  sawComma := False;
+  depth := 0;
+  i := TokPos - 1;                { re-read the current token too }
+  while i < TokCount do
+  begin
+    { end of the logical line with no depth-0 `=` seen: not an assignment target
+      at all. Must clear Result, which a star or a group may already have set —
+      otherwise `for n, (p, q) in xs:` (no `=` anywhere) is reported as a nested
+      ASSIGNMENT target, stealing the for-loop's own diagnostic. }
+    if Tokens[i].Kind in [tkNewline, tkDedent, tkEOF, tkSemicolon] then
+    begin
+      Result := False;
+      Exit;
+    end;
+    if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then
+    begin
+      { a group where a target ELEMENT begins is a nested target }
+      if (depth = 0) and atElem and (Tokens[i].Kind = tkLParen) then Result := True;
+      Inc(depth);
+    end
+    else if Tokens[i].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(depth)
+    else if (depth = 0) and (Tokens[i].Kind = tkComma) then
+    begin
+      sawComma := True;
+      atElem := True;
+      Inc(i);
+      Continue;
+    end
+    else if (depth = 0) and (Tokens[i].Kind = tkStar) and atElem then
+    begin
+      Result := True;
+      isStar := True;
+    end
+    else if (depth = 0) and (Tokens[i].Kind = tkAssign) then
+    begin
+      { a plain `a = ...` is not an unpack at all }
+      Result := Result and sawComma;
+      Exit;
+    end;
+    atElem := False;
+    Inc(i);
+  end;
+  Result := False;   { no `=` on this line — not an assignment target }
+end;
+
 function PyParseStatement: Integer;
 var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integer; tk: TTypeKind;
+    unpStar: Boolean;   { the unsupported-unpack diagnostic below }
     annSig: Integer;   { Callable signature of an annotated target, or -1 }
     augTk: TTokenKind;
     mmi, mpi, selfArg, lastArg, argNode, kwIdx, j, k: Integer;   { inherited (super()) call }
@@ -14085,6 +14164,20 @@ begin
     Exit;
   end;
   if PyUnpackTargetAhead then begin Result := PyParseUnpackAssign; Exit; end;
+  { ...and if it is an unpacking target of a shape we do not support yet, say
+    which shape. Untouched, `first, *rest = xs` reached the ordinary expression
+    path and reported `undefined variable (first)` — pointing at a name that is
+    fine, and reading like a typo rather than a missing feature. }
+  if PyUnsupportedUnpackTargetAhead(unpStar) then
+  begin
+    if unpStar then
+      Error('Nil Python: a STARRED assignment target (`a, *rest = xs`) is not '
+            + 'supported yet — assign the sequence and slice it '
+            + '(`rest = xs[1:]`)')
+    else
+      Error('Nil Python: a NESTED assignment target (`a, (b, c) = ...`) is not '
+            + 'supported yet — unpack the outer level first, then the inner');
+  end;
   { Nested `def`: register the shell here (the enclosing body's calls resolve
     against it), remember where the body starts, and skip it — PyParseDef
     compiles the queued bodies after its own epilogue, because emitting one in

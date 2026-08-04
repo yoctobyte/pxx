@@ -60,3 +60,47 @@ A `.npy` diffed against CPython covering: `a, *b`, `*a, b`, a star that captures
 zero elements, nested targets one and two levels deep, nested inside a `for`,
 the mixed form `a, (b, c) = ...`, and a too-few-values case (CPython raises
 ValueError).
+
+## 2026-08-04 — the DIAGNOSTIC half landed; the feature itself is untouched
+
+Both forms are still unsupported. What changed is that they now say so, because
+the old messages accused the user's own code:
+
+| form | before | now |
+| --- | --- | --- |
+| `first, *rest = [1,2,3]` | `undefined variable (first)` | `a STARRED assignment target ... is not supported yet — assign the sequence and slice it (rest = xs[1:])` |
+| `*init, last = [1,2,3]` | `expected expression` | same STARRED message |
+| `a, (b, c) = ...` | `undefined variable (a)` | `a NESTED assignment target ... — unpack the outer level first, then the inner` |
+| `for n, (p, q) in xs:` | `expected a second loop variable` | `a NESTED loop target ... — loop over the outer level and unpack the inner in the body` |
+
+The first three pointed at a name that is perfectly fine, indistinguishable from
+a typo; the fourth claimed a variable was MISSING while the user is looking
+straight at one that is merely parenthesised. That is the shape this repo treats
+as worse than the gap itself.
+
+`PyUnpackTargetAhead` requires every target element to be a plain name, so these
+fall through to the ordinary expression statement — which is why the failure
+surfaced on the first NAME rather than on the construct. A new
+`PyUnsupportedUnpackTargetAhead` recognises the two shapes just after it, and the
+for-target gets its own check at the `tkLParen` / `tkStar` it currently rejects.
+
+Deliberately narrow, since a false positive would REJECT VALID CODE: the
+statement must open the target, there must be a depth-0 `=` before the end of the
+logical line, and the star or `(` must sit where a target element begins. One bug
+found while testing exactly that — the end-of-line exit returned the accumulated
+result instead of clearing it, so `for n, (p, q) in xs:` (which has no `=`
+anywhere) was reported as a nested ASSIGNMENT target and stole the loop's own
+message. Twelve valid shapes are checked against CPython as controls, including
+`a, b = b, a`, `for k, v in d.items()`, `def f(*args, **kw)`, slices, f-strings
+and comprehensions.
+
+Pinned by four `*_fail.npy` tests wired into `make test-nilpy`, each grepping for
+its own message so the two shapes cannot collapse into one.
+
+**Unchanged:** the Shape and Gate sections above still describe the real work.
+Starred needs a run-time surplus count; nested needs the target to become a TREE,
+and the for-target is a flat name list (`name`/`name2`/`PyForExtraName[]`) that
+the whole lowering is keyed on, so that is a bigger change than "make the scan
+recurse" suggests. A cheaper route worth weighing first: DESUGAR a nested target
+into a temp plus an inner unpack (`for n, __t in xs:` + `p, q = __t`), which
+reuses the flat machinery and the existing two-name assignment.

@@ -561,6 +561,16 @@ test-nilpy: $(COMPILER)
 	grep -q "inconsistent dedent" /tmp/test_nilpy_inconsistent_dedent_fail.log
 	! ./$(COMPILER) test/test_nilpy_mixed_indent_fail.npy /tmp/test_nilpy_mixed_indent_fail26 > /tmp/test_nilpy_mixed_indent_fail.log 2>&1
 	grep -q "mixing tabs and spaces for indentation" /tmp/test_nilpy_mixed_indent_fail.log
+	@# unsupported unpacking targets must NAME the shape, not report a good name
+	@# as undefined (feature-nilpy-starred-and-nested-unpacking)
+	! ./$(COMPILER) test/test_nilpy_starred_target_fail.npy /tmp/test_nilpy_starred_target_fail26 > /tmp/test_nilpy_starred_target_fail.log 2>&1
+	grep -q "STARRED assignment target" /tmp/test_nilpy_starred_target_fail.log
+	! ./$(COMPILER) test/test_nilpy_leading_star_target_fail.npy /tmp/test_nilpy_leading_star_target_fail26 > /tmp/test_nilpy_leading_star_target_fail.log 2>&1
+	grep -q "STARRED assignment target" /tmp/test_nilpy_leading_star_target_fail.log
+	! ./$(COMPILER) test/test_nilpy_nested_assign_target_fail.npy /tmp/test_nilpy_nested_assign_target_fail26 > /tmp/test_nilpy_nested_assign_target_fail.log 2>&1
+	grep -q "NESTED assignment target" /tmp/test_nilpy_nested_assign_target_fail.log
+	! ./$(COMPILER) test/test_nilpy_nested_for_target_fail.npy /tmp/test_nilpy_nested_for_target_fail26 > /tmp/test_nilpy_nested_for_target_fail.log 2>&1
+	grep -q "NESTED loop target" /tmp/test_nilpy_nested_for_target_fail.log
 	./$(COMPILER) test/test_nilpy_str_param.npy /tmp/test_nilpy_str_param26
 	test "$$(/tmp/test_nilpy_str_param26)" = "$$(printf '2\nb\ncd\nok!')"
 	./$(COMPILER) test/test_nilpy_forin.npy /tmp/test_nilpy_forin26
