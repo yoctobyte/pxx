@@ -890,15 +890,13 @@ begin
       digs := '00000000000000000'
     else
     begin
-      m := v;
-      while m >= 10.0 do begin m := m / 10.0; e := e + 1; end;
-      while m < 1.0 do begin m := m * 10.0; e := e - 1; end;
-      scaled := Round(m * 1e16);            { 17 significant digits }
-      if scaled >= 100000000000000000 then  { rounding carried into a new digit }
-      begin
-        scaled := scaled div 10;
-        e := e + 1;
-      end;
+      { EXACT digits, shared with the writeln path — this branch used to carry
+        its own normalise-by-repeated-division loop (the "third copy" its own
+        header names), which was adrift from the 16th digit AND disagreed with
+        writeln's copy: 1e100 printed ...006 here and ...007 there. Two
+        spellings of one conversion in one file, giving different answers.
+        bug-a-writeln-float-exponent-form-not-correctly-rounded }
+      PxxSciDigits17(v, scaled, e);
       digs := StrInt(scaled, 0);
       while Length(digs) < 17 do digs := '0' + digs;
     end;

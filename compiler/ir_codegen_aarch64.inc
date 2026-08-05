@@ -550,185 +550,23 @@ begin
 end;
 
 procedure EmitWriteFloatSciA64;
-var jnsOff, jnzNz, jmpDone, laTop, laJb, leTop, leJge, jnsOff2, jmpSignDone, jmpExpSignDone: Integer;
-    bdTop, clampB, roundB, ovB: Integer;
-    i: Integer;
+{ Double BITS in x0. Prints <' '|'-'>d.<16 digits>E<'+'|'-'>ddd (17 significant
+  digits, 3-digit exponent), matching FPC's Str(Double).
+
+  Was ~180 lines of hand-written aarch64 carrying the same normalise-by-repeated-
+  division loop as the x86-64 emitter, and wrong the same way: adrift from the
+  16th digit, and the wrong EXPONENT for 1e200. Now a shim onto
+  PXXWriteFloatSci, which does the exact decimal expansion — one implementation
+  instead of four.
+  bug-a-writeln-float-exponent-form-not-correctly-rounded }
+var procIdx: Integer;
 begin
-  EmitI32($F81F0FF3);                                           { str x19, [sp, #-16]! }
-  EmitI32($F81F0FF4);                                           { str x20, [sp, #-16]! }
-  EmitI32($F81F0FF5);                                           { str x21, [sp, #-16]! }
- 
-  EmitI32($937FFC01);                                           { asr x1, x0, #63 }
-  EmitI32($F100003F);                                           { cmp x1, #0 }
-  jnsOff := CodeLen;
-  EmitI32($5400000A);                                           { b.ge .pos }
-  
-  EmitLoadImmA64(1, $7FFFFFFFFFFFFFFF);
-  EmitI32($8A010000);                                           { and x0, x0, x1 }
-  EmitI32($F81F0FE0);                                           { str x0, [sp, #-16]! }
-  EmitLoadImmA64(0, Ord('-'));
-  EmitwriteCharA64;
-  EmitI32($F84107E0);                                           { ldr x0, [sp], #16 }
-  jmpSignDone := CodeLen;
-  EmitI32($14000000);                                           { b .sign_done (patched) }
-  
-  Patch32(jnsOff, $5400000A or (((CodeLen - jnsOff) div 4) and $7FFFF) shl 5);
-  EmitI32($F81F0FE0);                                           { str x0, [sp, #-16]! }
-  EmitLoadImmA64(0, Ord(' '));
-  EmitwriteCharA64;
-  EmitI32($F84107E0);                                           { ldr x0, [sp], #16 }
-  { .sign_done: }
-  Patch32(jmpSignDone, $14000000 or (((CodeLen - jmpSignDone) div 4) and $03FFFFFF));
-
-  EmitI32($F100001F);                                           { cmp x0, #0 }
-  jnzNz := CodeLen;
-  EmitI32($54000001);                                           { b.ne .nz }
-  
-  EmitLoadImmA64(0, Ord('0')); EmitwriteCharA64;
-  EmitLoadImmA64(0, Ord('.')); EmitwriteCharA64;
-  for i := 1 to 16 do
-  begin
-    EmitLoadImmA64(0, Ord('0')); EmitwriteCharA64;
-  end;
-  EmitLoadImmA64(0, Ord('E')); EmitwriteCharA64;
-  EmitLoadImmA64(0, Ord('+')); EmitwriteCharA64;
-  for i := 1 to 3 do
-  begin
-    EmitLoadImmA64(0, Ord('0')); EmitwriteCharA64;
-  end;
-  jmpDone := CodeLen;
-  EmitI32($14000000);                                           { b .done }
-
-  Patch32(jnzNz, $54000001 or (((CodeLen - jnzNz) div 4) and $7FFFF) shl 5);
-
-  EmitI32($9E670000);                                           { fmov d0, x0 }
-  EmitLoadImmA64(1, 10);
-  EmitI32($9E620021);                                           { scvtf d1, x1 }
-  EmitLoadImmA64(2, 1);
-  EmitI32($9E620042);                                           { scvtf d2, x2 }
-  
-  EmitI32($D2800013);                                           { movz x19, #0 }
-
-  laTop := CodeLen;
-  EmitI32($1E612000);                                           { fcmp d0, d1 }
-  laJb := CodeLen;
-  EmitI32($5400000B);                                           { b.lt .ea }
-  EmitI32($1E611800);                                           { fdiv d0, d0, d1 }
-  EmitI32($91000673);                                           { add x19, x19, #1 }
-  EmitI32($14000000 or (((laTop - CodeLen) div 4) and $03FFFFFF));
-
-  Patch32(laJb, $5400000B or (((CodeLen - laJb) div 4) and $7FFFF) shl 5);
-  
-  leTop := CodeLen;
-  EmitI32($1E622000);                                           { fcmp d0, d2 }
-  leJge := CodeLen;
-  EmitI32($5400000A);                                           { b.ge .val_done }
-  EmitI32($1E610800);                                           { fmul d0, d0, d1 }
-  EmitI32($D1000673);                                           { sub x19, x19, #1 }
-  EmitI32($14000000 or (((leTop - CodeLen) div 4) and $03FFFFFF));
-
-  Patch32(leJge, $5400000A or (((CodeLen - leJge) div 4) and $7FFFF) shl 5);
-
-  { Build the 17-digit mantissa integer in x20, MSD-first: each step truncates
-    a value in [0,10) (keeps ~17 accurate digits, unlike one fmul-by-1e16 which
-    overflows the 53-bit mantissa). x21 = remaining digit count. d1 holds 10.0. }
-  EmitI32($D2800014);                                           { movz x20, #0 }
-  EmitLoadImmA64(21, 17);
-  bdTop := CodeLen;
-  EmitI32($9E780000);                                           { fcvtzs x0, d0 }
-  EmitI32($F100241F);                                           { cmp x0, #9 }
-  clampB := CodeLen;
-  EmitI32($5400000D);                                           { b.le .ok }
-  EmitI32($D2800120);                                           { movz x0, #9 }
-  Patch32(clampB, $5400000D or (((CodeLen - clampB) div 4) and $7FFFF) shl 5);
-  EmitLoadImmA64(1, 10);
-  EmitI32($9B010294);                                           { madd x20, x20, x1, x0 }
-  EmitI32($9E620002);                                           { scvtf d2, x0 }
-  EmitI32($1E623800);                                           { fsub d0, d0, d2 }
-  EmitI32($1E610800);                                           { fmul d0, d0, d1 }
-  EmitI32($D10006B5);                                           { sub x21, x21, #1 }
-  EmitI32($F10002BF);                                           { cmp x21, #0 }
-  EmitI32($54000001 or ((((bdTop - CodeLen) div 4) and $7FFFF) shl 5)); { b.ne bdTop }
-
-  { guard digit: round half-up }
-  EmitI32($9E780000);                                           { fcvtzs x0, d0 }
-  EmitI32($F100141F);                                           { cmp x0, #5 }
-  roundB := CodeLen;
-  EmitI32($5400000B);                                           { b.lt .noround }
-  EmitI32($91000694);                                           { add x20, x20, #1 }
-  Patch32(roundB, $5400000B or (((CodeLen - roundB) div 4) and $7FFFF) shl 5);
-
-  { carry past the leading digit (9.99..->10.0): drop a digit, bump exponent }
-  EmitLoadImmA64(1, 100000000000000000);                        { 10^17 }
-  EmitI32($EB01029F);                                           { cmp x20, x1 }
-  ovB := CodeLen;
-  EmitI32($5400000B);                                           { b.lt .nov }
-  EmitLoadImmA64(1, 10);
-  EmitI32($9AC10C94);                                           { sdiv x20, x20, x1 }
-  EmitI32($91000673);                                           { add x19, x19, #1 }
-  Patch32(ovB, $5400000B or (((CodeLen - ovB) div 4) and $7FFFF) shl 5);
-
-  { print 17 digits from x20 as d.<16 digits>; x21 = divisor 10^16 down to 1 }
-  EmitLoadImmA64(21, 10000000000000000);                        { 10^16 }
-  for i := 0 to 16 do
-  begin
-    EmitI32($AA1403E0);                                         { mov x0, x20 }
-    EmitI32($AA1503E1);                                         { mov x1, x21 }
-    EmitI32($9AC10C02);                                         { sdiv x2, x0, x1 }
-    EmitI32($9B018054);                                         { msub x20, x2, x1, x0 }
-    EmitI32($9100C040);                                         { add x0, x2, #48 }
-    EmitwriteCharA64;
-    if i = 0 then
-    begin
-      EmitLoadImmA64(0, Ord('.'));
-      EmitwriteCharA64;
-    end;
-    if i < 16 then
-    begin
-      EmitLoadImmA64(1, 10);
-      EmitI32($9AC10EB5);                                       { sdiv x21, x21, x1 }
-    end;
-  end;
-
-  EmitLoadImmA64(0, Ord('E')); EmitwriteCharA64;
-
-  EmitI32($F100027F);                                           { cmp x19, #0 }
-  jnsOff2 := CodeLen;
-  EmitI32($5400000A);                                           { b.ge .exppos }
-  EmitLoadImmA64(0, Ord('-')); EmitwriteCharA64;
-  EmitI32($CB1303F3);                                           { neg x19, x19 }
-  jmpExpSignDone := CodeLen;
-  EmitI32($14000000);                                           { b .exp_sign_done (patched) }
-
-  Patch32(jnsOff2, $5400000A or (((CodeLen - jnsOff2) div 4) and $7FFFF) shl 5);
-  EmitLoadImmA64(0, Ord('+')); EmitwriteCharA64;
-  { .exp_sign_done: }
-  Patch32(jmpExpSignDone, $14000000 or (((CodeLen - jmpExpSignDone) div 4) and $03FFFFFF));
-
-  EmitLoadImmA64(1, 100);
-  EmitI32($AA1303E0);                                           { mov x0, x19 }
-  EmitI32($9AC10C02);                                           { sdiv x2, x0, x1 }
-  EmitI32($9B018053);                                           { msub x19, x2, x1, x0 }
-  EmitI32($9100C040);                                           { add x0, x2, #48 }
-  EmitwriteCharA64;
-
-  EmitLoadImmA64(1, 10);
-  EmitI32($AA1303E0);                                           { mov x0, x19 }
-  EmitI32($9AC10C02);                                           { sdiv x2, x0, x1 }
-  EmitI32($9B018053);                                           { msub x19, x2, x1, x0 }
-  EmitI32($9100C040);                                           { add x0, x2, #48 }
-  EmitwriteCharA64;
-
-  EmitI32($AA1303E0);                                           { mov x0, x19 }
-  EmitI32($9100C000);                                           { add x0, x0, #48 }
-  EmitwriteCharA64;
-
-  { .done: }
-  Patch32(jmpDone, $14000000 or (((CodeLen - jmpDone) div 4) and $03FFFFFF));
-
-  EmitI32($F84107F5);                                           { ldr x21, [sp], #16 }
-  EmitI32($F84107F4);                                           { ldr x20, [sp], #16 }
-  EmitI32($F84107F3);                                           { ldr x19, [sp], #16 }
+  EmitI32($F81F0FE0);        { str x0, [sp, #-16]!  — the double bits }
+  EmitI32($910003E0);        { mov x0, sp           — arg0 = &value   }
+  procIdx := FindProc('PXXWriteFloatSci');
+  if procIdx < 0 then Error('compiler error: PXXWriteFloatSci not found');
+  EmitCallProc(procIdx);
+  EmitI32($910043FF);        { add sp, sp, #16 }
 end;
 
 procedure EmitVariantClearA64;
