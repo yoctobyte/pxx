@@ -601,7 +601,15 @@ begin
 end.
 P
 # ---- sorting a TStringList with duplicates ----
-probe sl-sort-dups   <<'P'
+# TIE ORDER AMONG CASE-EQUAL STRINGS IS UNSPECIFIED — do not compare it.
+# Measured on FPC: ('a','A') sorts to "a A" and ('A','a') to "A a" (stable), but
+# ('b','a','b','A') gives "A a b b" — its quicksort is stable for a short run and
+# not for a longer one. This case used to compare that exact order and PASSED
+# only because pxx's Sort was case-SENSITIVE, which put 'A' before 'a' for an
+# unrelated reason; fixing Sort to be case-insensitive like FPC's exposed it.
+# Kept as a marker, with sl-sort-dups-stable-pairs below covering what IS
+# specified: the multiset and the case-insensitive ordering.
+probe sl-sort-dups known <<'P'
 uses classes; var l: TStringList; i: Integer;
 begin
   l:=TStringList.Create;
@@ -609,6 +617,32 @@ begin
   l.Sort;
   for i:=0 to l.Count-1 do write(l[i],' ');
   writeln('|',l.Count);
+  l.Free;
+end.
+P
+probe sl-sort-dups-defined <<'P'
+uses classes, sysutils; var l: TStringList; i: Integer; ok: Boolean;
+begin
+  l:=TStringList.Create;
+  l.Add('b'); l.Add('a'); l.Add('b'); l.Add('A');
+  l.Sort;
+  { what IS specified: the count, and a non-decreasing case-insensitive order }
+  ok := True;
+  for i:=1 to l.Count-1 do
+    if CompareText(l[i-1], l[i]) > 0 then ok := False;
+  writeln(l.Count, '|', ok, '|', LowerCase(l[0]), LowerCase(l[1]), LowerCase(l[2]), LowerCase(l[3]));
+  l.Free;
+end.
+P
+probe sl-sort-casesensitive <<'P'
+uses classes; var l: TStringList;
+begin
+  l:=TStringList.Create;
+  l.CaseSensitive := True;
+  l.Add('b'); l.Add('a'); l.Add('B'); l.Add('A');
+  l.Sort;
+  { unambiguous: no two entries compare equal, so tie order cannot matter }
+  writeln(l[0], l[1], l[2], l[3]);
   l.Free;
 end.
 P
@@ -791,6 +825,298 @@ P
 probe boolean-ops    <<'P'
 begin writeln(True and False,'|',True or False,'|',not True,'|',True xor True); end.
 P
+
+# ---- generics (objfpc: generic / specialize) ----
+# Generic CLASSES and RECORDS match FPC exactly. Only the inline specialization
+# of a generic ROUTINE diverges — pxx wants the declaration form
+# `specialize Max<Integer> as MaxInt;` — filed as
+# compat-pascal-inline-generic-specialization.
+probe gen-func-int   known <<'P'
+generic function MaxOf<T>(a, b: T): T;
+begin if a < b then Result := b else Result := a; end;
+begin
+  writeln(specialize MaxOf<Integer>(3, 9), '|', specialize MaxOf<Integer>(9, 3));
+end.
+P
+probe gen-func-string known <<'P'
+generic function MaxOf<T>(a, b: T): T;
+begin if a < b then Result := b else Result := a; end;
+begin
+  writeln(specialize MaxOf<string>('abc', 'abd'));
+end.
+P
+probe gen-swap-var   known <<'P'
+generic procedure Swp<T>(var a, b: T);
+var tmp: T;
+begin tmp := a; a := b; b := tmp; end;
+var x, y: Integer; s1, s2: string;
+begin
+  x := 1; y := 2; specialize Swp<Integer>(x, y);
+  s1 := 'p'; s2 := 'q'; specialize Swp<string>(s1, s2);
+  writeln(x, '|', y, '|', s1, '|', s2);
+end.
+P
+probe gen-class-box  <<'P'
+type
+  generic TBox<T> = class
+    Value: T;
+    procedure SetIt(v: T);
+    function GetIt: T;
+  end;
+procedure TBox.SetIt(v: T); begin Value := v; end;
+function TBox.GetIt: T; begin Result := Value; end;
+type TIntBox = specialize TBox<Integer>;
+var b: TIntBox;
+begin
+  b := TIntBox.Create; b.SetIt(41); writeln(b.GetIt + 1); b.Free;
+end.
+P
+probe gen-class-string <<'P'
+type
+  generic TBox<T> = class
+    Value: T;
+    procedure SetIt(v: T);
+    function GetIt: T;
+  end;
+procedure TBox.SetIt(v: T); begin Value := v; end;
+function TBox.GetIt: T; begin Result := Value; end;
+type TStrBox = specialize TBox<string>;
+var b: TStrBox;
+begin
+  b := TStrBox.Create; b.SetIt('hello'); writeln(b.GetIt, '|', Length(b.GetIt)); b.Free;
+end.
+P
+probe gen-two-specializations <<'P'
+type
+  generic TPair<T> = class
+    A, B: T;
+    function Sum: T;
+  end;
+function TPair.Sum: T; begin Result := A + B; end;
+type TI = specialize TPair<Integer>; TS = specialize TPair<string>;
+var i: TI; s: TS;
+begin
+  i := TI.Create; i.A := 2; i.B := 3;
+  s := TS.Create; s.A := 'ab'; s.B := 'cd';
+  writeln(i.Sum, '|', s.Sum);
+  i.Free; s.Free;
+end.
+P
+probe gen-record     <<'P'
+type
+  generic TCell<T> = record
+    V: T;
+  end;
+type TIC = specialize TCell<Integer>;
+var c, d: TIC;
+begin
+  c.V := 7; d := c; d.V := 9;
+  writeln(c.V, '|', d.V);
+end.
+P
+
+# ---- operator overloading ----
+probe op-overload-add <<'P'
+type TVec = record X, Y: Integer; end;
+operator + (const a, b: TVec): TVec;
+begin Result.X := a.X + b.X; Result.Y := a.Y + b.Y; end;
+var p, q, r: TVec;
+begin
+  p.X := 1; p.Y := 2; q.X := 10; q.Y := 20;
+  r := p + q;
+  writeln(r.X, '|', r.Y);
+end.
+P
+probe op-overload-mul-scalar <<'P'
+type TVec = record X, Y: Integer; end;
+operator * (const a: TVec; k: Integer): TVec;
+begin Result.X := a.X * k; Result.Y := a.Y * k; end;
+var p, r: TVec;
+begin
+  p.X := 3; p.Y := 4; r := p * 5;
+  writeln(r.X, '|', r.Y);
+end.
+P
+probe op-overload-equal <<'P'
+type TVec = record X, Y: Integer; end;
+operator = (const a, b: TVec): Boolean;
+begin Result := (a.X = b.X) and (a.Y = b.Y); end;
+var p, q: TVec;
+begin
+  p.X := 1; p.Y := 2; q.X := 1; q.Y := 2;
+  writeln(p = q);
+  q.Y := 3;
+  writeln(p = q);
+end.
+P
+probe op-overload-chain <<'P'
+type TVec = record X, Y: Integer; end;
+operator + (const a, b: TVec): TVec;
+begin Result.X := a.X + b.X; Result.Y := a.Y + b.Y; end;
+var p, q, r, t: TVec;
+begin
+  p.X := 1; p.Y := 1; q.X := 2; q.Y := 2; r.X := 4; r.Y := 4;
+  t := p + q + r;
+  writeln(t.X, '|', t.Y);
+end.
+P
+
+# ---- interfaces ----
+probe iface-basic <<'P'
+uses sysutils;
+type
+  IGreet = interface
+    ['{11111111-2222-3333-4444-555555555555}']
+    function Hello: string;
+  end;
+  TG = class(TInterfacedObject, IGreet)
+    function Hello: string;
+  end;
+function TG.Hello: string; begin Result := 'hi'; end;
+var g: IGreet;
+begin
+  g := TG.Create;
+  writeln(g.Hello);
+end.
+P
+probe iface-two-impls <<'P'
+uses sysutils;
+type
+  IShape = interface
+    ['{21111111-2222-3333-4444-555555555555}']
+    function Area: Integer;
+  end;
+  TSq = class(TInterfacedObject, IShape)
+    S: Integer;
+    function Area: Integer;
+  end;
+  TRe = class(TInterfacedObject, IShape)
+    W, H: Integer;
+    function Area: Integer;
+  end;
+function TSq.Area: Integer; begin Result := S * S; end;
+function TRe.Area: Integer; begin Result := W * H; end;
+var a, b: IShape; sq: TSq; re: TRe;
+begin
+  sq := TSq.Create; sq.S := 4; a := sq;
+  re := TRe.Create; re.W := 2; re.H := 5; b := re;
+  writeln(a.Area, '|', b.Area);
+end.
+P
+probe iface-as-cast <<'P'
+uses sysutils;
+type
+  IA = interface ['{31111111-2222-3333-4444-555555555555}'] function Who: string; end;
+  IB = interface ['{41111111-2222-3333-4444-555555555555}'] function Num: Integer; end;
+  TBoth = class(TInterfacedObject, IA, IB)
+    function Who: string;
+    function Num: Integer;
+  end;
+function TBoth.Who: string; begin Result := 'both'; end;
+function TBoth.Num: Integer; begin Result := 5; end;
+var a: IA; b: IB;
+begin
+  a := TBoth.Create;
+  b := a as IB;
+  writeln(a.Who, '|', b.Num);
+end.
+P
+probe iface-supports known <<'P'
+uses sysutils;
+type
+  IA = interface ['{51111111-2222-3333-4444-555555555555}'] function Who: string; end;
+  IB = interface ['{61111111-2222-3333-4444-555555555555}'] function Num: Integer; end;
+  TOnlyA = class(TInterfacedObject, IA)
+    function Who: string;
+  end;
+function TOnlyA.Who: string; begin Result := 'a'; end;
+var a: IA; b: IB;
+begin
+  a := TOnlyA.Create;
+  writeln(Supports(a, IB, b), '|', Supports(a, IA));
+end.
+P
+probe iface-param-and-result <<'P'
+uses sysutils;
+type
+  IV = interface ['{71111111-2222-3333-4444-555555555555}'] function V: Integer; end;
+  TV = class(TInterfacedObject, IV) N: Integer; function V: Integer; end;
+function TV.V: Integer; begin Result := N; end;
+function Make(n: Integer): IV;
+var t: TV;
+begin t := TV.Create; t.N := n; Result := t; end;
+function Twice(const x: IV): Integer;
+begin Result := x.V * 2; end;
+begin
+  writeln(Twice(Make(21)));
+end.
+P
+
+# ---- TStringList: Sorted / Duplicates ----
+probe sl-sorted-on <<'P'
+uses classes; var l: TStringList;
+begin
+  l := TStringList.Create;
+  l.Add('pear'); l.Add('apple'); l.Add('mango');
+  l.Sorted := True;
+  writeln(l.Count, '|', l[0], '|', l[1], '|', l[2]);
+  l.Free;
+end.
+P
+probe sl-sorted-insert-order <<'P'
+uses classes; var l: TStringList;
+begin
+  l := TStringList.Create;
+  l.Sorted := True;
+  l.Add('c'); l.Add('a'); l.Add('b');
+  writeln(l[0], l[1], l[2]);
+  l.Free;
+end.
+P
+probe sl-sorted-indexof <<'P'
+uses classes; var l: TStringList;
+begin
+  l := TStringList.Create;
+  l.Add('delta'); l.Add('alpha'); l.Add('charlie');
+  l.Sorted := True;
+  writeln(l.IndexOf('alpha'), '|', l.IndexOf('delta'), '|', l.IndexOf('zulu'));
+  l.Free;
+end.
+P
+probe sl-dup-ignore <<'P'
+uses classes; var l: TStringList;
+begin
+  l := TStringList.Create;
+  l.Sorted := True;
+  l.Duplicates := dupIgnore;
+  l.Add('a'); l.Add('b'); l.Add('a');
+  writeln(l.Count, '|', l[0], l[1]);
+  l.Free;
+end.
+P
+probe sl-sorted-off-keeps-order <<'P'
+uses classes; var l: TStringList;
+begin
+  l := TStringList.Create;
+  l.Add('z'); l.Add('y');
+  l.Sorted := True;
+  l.Sorted := False;
+  l.Add('x');
+  writeln(l[0], l[1], l[2]);
+  l.Free;
+end.
+P
+probe sl-sort-method <<'P'
+uses classes; var l: TStringList;
+begin
+  l := TStringList.Create;
+  l.Add('Banana'); l.Add('apple'); l.Add('Cherry');
+  l.Sort;
+  writeln(l[0], '|', l[1], '|', l[2]);
+  l.Free;
+end.
+P
+
 
 echo "---"
 echo "new divergences: $new   known/filed: $known   no-oracle skips: $skipped"

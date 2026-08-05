@@ -847,6 +847,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-assembler-first-class-citizen | A | 53 | feature | Assembler as a first-class citizen (umbrella) | — |
 | feature-async-coroutines | A | 50 | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
 | feature-b-crtl-asctime-ctime-timegm | B | 40 | feature | crtl had no asctime/asctime_r/ctime/ctime_r/timegm — ctime(&t) is the one-liner everyone reaches for and it was a 'call to undeclared function' | — |
+| feature-b-tstringlist-sorted-duplicates-casesensitive | B | 50 | feature | TStringList gained Sorted / Duplicates / CaseSensitive / Find, and Sort is now case-insensitive like FPC's — it had been comparing with CompareStr, so `Sort` on (Banana, apple, Cherry) gave ASCII order | — |
 | feature-bignum-library | B | 50 | feature | Bignum library — arbitrary-precision integers (deterministic test app) | — |
 | feature-binary-integer-literals | A | 50 | feature | feature: binary integer literals (`%1010`) | — |
 | feature-bochan-eduth | B | 50 | feature | bochan + eduth — headless test driver + validator for garin | — |

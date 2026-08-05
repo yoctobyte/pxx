@@ -268,21 +268,46 @@ type
     FObj: TObject;
   end;
 
+  { FPC's TStringList duplicate policy, meaningful only while Sorted:
+    dupIgnore drops a repeat, dupError raises, dupAccept keeps both. }
+  TDuplicates = (dupIgnore, dupAccept, dupError);
+
   TStringList = class(TStrings)
   private
     FList: array of TStringItem;
     FCount: Integer;
+    FSorted: Boolean;
+    FDuplicates: TDuplicates;
+    FCaseSensitive: Boolean;
+    procedure SetSorted(Value: Boolean);
+    procedure SetCaseSensitive(Value: Boolean);
+    procedure InsertItem(Index: Integer; const S: string);
   protected
     function Get(Index: Integer): string; override;
     function GetCount: Integer; override;
     function GetObject(Index: Integer): TObject; override;
     procedure Put(Index: Integer; const S: string); override;
     procedure PutObject(Index: Integer; AObject: TObject); override;
+    { The one place ordering is decided, so Sort, Find, IndexOf and the sorted
+      Add can never disagree about it. FPC compares case-INSENSITIVELY unless
+      CaseSensitive is set, which is why `Sort` on (Banana, apple, Cherry)
+      yields apple, Banana, Cherry and not the ASCII order. }
+    function CompareStrings(const S1, S2: string): Integer; virtual;
   public
+    constructor Create;
     procedure Clear; override;
     procedure Delete(Index: Integer); override;
     procedure Insert(Index: Integer; const S: string); override;
+    function Add(const S: string): Integer; override;
+    function IndexOf(const S: string): Integer; override;
+    { Binary search over a sorted list. Returns whether S is present; Index is
+      where it is, or where it WOULD be inserted when it is not — that second
+      use is what the sorted Add needs, so the two cannot drift apart. }
+    function Find(const S: string; var Index: Integer): Boolean;
     procedure Sort;
+    property Sorted: Boolean read FSorted write SetSorted;
+    property Duplicates: TDuplicates read FDuplicates write FDuplicates;
+    property CaseSensitive: Boolean read FCaseSensitive write SetCaseSensitive;
   end;
 
 implementation
@@ -907,6 +932,78 @@ begin
 end;
 
 procedure TStringList.Insert(Index: Integer; const S: string);
+begin
+  { Placing a string at a caller-chosen index would break the ordering Find's
+    binary search depends on, so FPC refuses it outright rather than silently
+    leaving the list unsorted-but-marked-sorted. Add is the sorted entry point. }
+  if FSorted then
+    raise Exception.Create('TStringList: Insert not allowed on a sorted list');
+  InsertItem(Index, S);
+end;
+
+constructor TStringList.Create;
+begin
+  inherited Create;
+  FSorted := False;
+  FDuplicates := dupIgnore;      { FPC's default }
+  FCaseSensitive := False;       { FPC's default: comparisons ignore case }
+end;
+
+function TStringList.CompareStrings(const S1, S2: string): Integer;
+begin
+  if FCaseSensitive then Result := CompareStr(S1, S2)
+  else Result := CompareText(S1, S2);
+end;
+
+procedure TStringList.SetCaseSensitive(Value: Boolean);
+begin
+  if Value = FCaseSensitive then Exit;
+  FCaseSensitive := Value;
+  { The ordering just changed underneath a sorted list, so it has to be
+    re-established or Find's binary search would walk a list that is no longer
+    ordered by the current comparison and report a miss for a present string. }
+  if FSorted then
+  begin
+    FSorted := False;
+    Sort;
+    FSorted := True;
+  end;
+end;
+
+procedure TStringList.SetSorted(Value: Boolean);
+begin
+  if Value = FSorted then Exit;
+  if Value then Sort;
+  { Clearing Sorted does NOT restore the original order — FPC leaves the list
+    as it stands and simply stops maintaining it. }
+  FSorted := Value;
+end;
+
+function TStringList.Find(const S: string; var Index: Integer): Boolean;
+var lo, hi, mid, c: Integer;
+begin
+  Result := False;
+  lo := 0;
+  hi := FCount - 1;
+  while lo <= hi do
+  begin
+    mid := lo + (hi - lo) div 2;
+    c := CompareStrings(FList[mid].FStr, S);
+    if c < 0 then lo := mid + 1
+    else if c > 0 then hi := mid - 1
+    else
+    begin
+      Index := mid;
+      Result := True;
+      Exit;
+    end;
+  end;
+  Index := lo;          { the insertion point when absent }
+end;
+
+{ The raw insert, with no sorted-list guard — Add uses it to place a string at
+  the position Find chose, which TStringList.Insert itself refuses to do. }
+procedure TStringList.InsertItem(Index: Integer; const S: string);
 var i: Integer;
 begin
   if (Index < 0) or (Index > FCount) then Exit;
@@ -921,15 +1018,53 @@ begin
   FCount := FCount + 1;
 end;
 
+function TStringList.Add(const S: string): Integer;
+var idx: Integer;
+begin
+  if not FSorted then
+  begin
+    Result := FCount;
+    InsertItem(Result, S);
+    Exit;
+  end;
+  idx := 0;
+  if Find(S, idx) then
+  begin
+    { Already present. dupIgnore hands back the EXISTING index rather than
+      adding — so AddObject on a duplicate retargets the object, as in FPC. }
+    if FDuplicates = dupIgnore then begin Result := idx; Exit; end;
+    if FDuplicates = dupError then
+      raise Exception.Create('TStringList: duplicate string ''' + S + '''');
+  end;
+  InsertItem(idx, S);
+  Result := idx;
+end;
+
+function TStringList.IndexOf(const S: string): Integer;
+var idx: Integer;
+begin
+  if FSorted then
+  begin
+    idx := 0;
+    if Find(S, idx) then Result := idx else Result := -1;
+    Exit;
+  end;
+  Result := inherited IndexOf(S);
+end;
+
 procedure TStringList.Sort;
 var i, j: Integer; tmp: TStringItem;
 begin
-  { insertion sort by string value }
+  { FPC does nothing here when the list is already Sorted — it is maintained
+    ordered on every Add, so re-sorting is at best wasted and at worst hides a
+    comparison change that should have gone through SetCaseSensitive. }
+  if FSorted then Exit;
+  { insertion sort, through CompareStrings so the ordering matches Find }
   for i := 1 to FCount - 1 do
   begin
     tmp := FList[i];
     j := i - 1;
-    while (j >= 0) and (CompareStr(FList[j].FStr, tmp.FStr) > 0) do
+    while (j >= 0) and (CompareStrings(FList[j].FStr, tmp.FStr) > 0) do
     begin
       FList[j + 1] := FList[j];
       j := j - 1;

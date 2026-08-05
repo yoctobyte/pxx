@@ -44,7 +44,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (188)
+## backlog (190)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -90,9 +90,11 @@ _none_
 | compat-pascal-binop-operand-eval-order | A | 15 | compat | pxx evaluates binary-operator operands left-to-right; FPC evaluates right-to-left | — |
 | compat-pascal-calling-convention-directives-uneven | P | 35 | compat | `stdcall`/`safecall`/`pascal`/`mwpascal` are accepted on a class METHOD declaration but are a parse ERROR on a plain routine, an `external`, or a procedural type — so FPC sources that spell a convention on a routine do not compile, and which spelling works depends on where it is written. | — |
 | compat-pascal-directive-in-comment-ignores-nested-comments-off | P | 25 | compat | With nested comments OFF (delphi mode), a {$...} sequence inside a brace comment does not end the comment in pxx, but does in FPC. Lax direction — pxx accepts sources FPC rejects | — |
+| compat-pascal-inline-generic-specialization | P | 35 | compat | pxx accepts only the declaration form `specialize Max<Integer> as MaxInt;` — FPC's inline `specialize Max<Integer>(a, b)` in an expression or statement is rejected with 'undefined variable' | — |
 | compat-pascal-math-intrinsics-not-in-the-system-unit | A | 45 | compat | sqrt/sin/cos/exp/ln/arctan require `uses math`; in FPC they are System-unit intrinsics available with no uses clause. Loud (undefined variable), but it breaks unmodified FPC/Delphi source on its first line | — |
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
 | compat-pascal-sqrt-requires-uses-math | A | 30 | compat | Sqrt (and friends) need `uses math`, where FPC has them as system intrinsics | — |
+| compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | decide-abi-portable-vs-target-split | U | 60 | decide |  | — |
@@ -349,9 +351,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1365)
+## done (1366)
 
-1365 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1366 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -520,6 +522,7 @@ _none_
 - [p 35] [N] bug-nilpy-one-line-class-body-restraint-is-no-longer-enforced
 - [p 35] [N] bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
+- [p 35] [P] compat-pascal-inline-generic-specialization
 - [p 35] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
 - [p 35] [B] feature-b-rtl-missing-fpc-surface-2026-08
 - [p 35] [S] feature-c-esp-conformance-coverage
@@ -533,6 +536,7 @@ _none_
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
 - [p 30] [A] compat-pascal-sqrt-requires-uses-math
+- [p 30] [P] compat-pascal-supports-three-arg-out-form
 - [p 30] [U] decide-builtin-and-library-code-sharing
 - [p 30] [B] feature-b-tstrings-commatext
 - [p 30] [N] feature-nilpy-list-sort-inplace-key-reverse
