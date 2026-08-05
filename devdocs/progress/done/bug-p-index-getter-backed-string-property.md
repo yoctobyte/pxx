@@ -1,8 +1,12 @@
+---
+owner: claude-A
+---
+
 # Indexing a getter-backed string property fails to lower (IR_UNSUPPORTED)
 
 - **Type:** bug — Track P (Pascal frontend); the fix likely lands in shared
   AST->IR lowering, which is Track A ground
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-04
 - **Found by:** Track B, writing a byte-level test for
   `TStrings.Text` (bug-b-stringlist-text-hardcoded-crlf). `l.Text[1]` would not
@@ -76,3 +80,54 @@ writeln(s[1]);
 printf 'program g; type TC=class private FS: string; function GetS: string; public property PG: string read GetS; end; function TC.GetS: string; begin GetS:=FS; end; var c: TC; begin c:=TC.Create; c.FS:=%s; writeln(c.PG[1]); end.' "'ab'" > /tmp/g.pas
 ./stable_linux_amd64/default/pinned /tmp/g.pas /tmp/g_out
 ```
+
+## Resolution (2026-08-05) — the shape is wider than the ticket, and simpler
+
+**Not property-specific.** `c.GetS[1]` — indexing any METHOD call result —
+fails identically:
+
+| construct | before |
+| --- | --- |
+| `c.PG[1]` getter-backed property | IR_UNSUPPORTED |
+| **`c.GetS[1]` method call, no property involved** | **IR_UNSUPPORTED** |
+| `Plain()[1]` explicit plain call | OK |
+| `WithArg(1)[1]` plain call with an argument | OK |
+
+The narrowing table above lists *"string function result, indexed — `F[1]` — OK"*,
+and that row is what made properties look special. It is not the same
+construct: a bare paramless function name in a value context is the **result
+variable**, not a call, so `F[1]` never exercised the failing path. Comparing
+`Plain()[1]` instead shows plain calls were always fine and the divergence is
+the METHOD call.
+
+### Cause — one condition
+
+`IRLowerAddress` accepted a call in address position only for `tyRecord` /
+`tyVariant` (the `RetViaHiddenDest` kinds), so a string-returning call fell
+through to the `IR_UNSUPPORTED` tail. Extended to `tyAnsiString` and the frozen
+kinds:
+
+- **managed string** — the call's value is the HANDLE, and a handle is exactly
+  what an index base wants (the same thing `IR_LEA` yields for a string variable
+  in read position), so lowering the call gives the right base;
+- **frozen string** — already returns a hidden-destination ADDRESS, so it fits
+  the original rule unchanged.
+
+### Verified
+
+Byte-identical to FPC on: field-backed and getter-backed properties, a direct
+method call, bare-name and explicit plain calls, an INDEXED property chained
+into a char index (`c.PI[0][3]`), a `for` loop indexing the getter every
+iteration, and `Length`/whole-value reads alongside.
+
+`testmgr --tier native` **1165/1165 pass**. Locked in as
+`test/test_index_getter_string_property.pas`.
+
+### Workaround can be retired
+
+`test/lib_strings_text.pas` assigns to a local first with a comment pointing
+here. That is now unnecessary — `lib/**` is Track B's lane, so it is left for
+them rather than edited from here.
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.

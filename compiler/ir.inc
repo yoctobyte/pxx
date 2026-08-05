@@ -1634,9 +1634,24 @@ begin
     Result := IRAppend(IR_LEA, IRMaterializeIntfCast(node, True), -1, -1, 0, Ord(tyPointer));
   end
   else if ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL)) and
-          ((ASTTk[node] = Ord(tyRecord)) or (ASTTk[node] = Ord(tyVariant))) then
+          ((ASTTk[node] = Ord(tyRecord)) or (ASTTk[node] = Ord(tyVariant)) or
+           (ASTTk[node] = Ord(tyAnsiString)) or
+           TypeIsFrozenString(IntToTypeKind(ASTTk[node]))) then
     { Aggregate/variant-returning call in an address position: its IR value IS
-      the hidden-destination address (RetViaHiddenDest), so lower the call. }
+      the hidden-destination address (RetViaHiddenDest), so lower the call.
+
+      STRING-returning calls join them. For a managed string the call's value is
+      the HANDLE, and a handle is exactly what an index base wants — the same
+      thing IR_LEA yields for a string variable in read position — so lowering
+      the call gives the right base. For a frozen string the call already
+      returns a hidden-destination ADDRESS, so it fits the original rule.
+
+      Without this, indexing a string-returning METHOD call fell through to the
+      IR_UNSUPPORTED tail: `c.GetS[1]`, and therefore `c.SomeStringProperty[1]`
+      whose read specifier is a getter, refused to compile with "frontend could
+      not lower AST node (kind 8)". A plain function call was already fine,
+      which is what made it look like a property bug rather than a call-shape
+      one. bug-p-index-getter-backed-string-property }
     Result := IRLowerAST(node)
   else
     Result := IRAppend(IR_UNSUPPORTED, ASTKind[node], ASTLeft[node], ASTRight[node], ASTIVal[node], ASTTk[node]);
