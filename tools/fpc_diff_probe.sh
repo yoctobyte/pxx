@@ -480,6 +480,24 @@ P
 probe char-vs-str    <<'P'
 var c: Char; s: string; begin c:='a'; s:='a'; writeln(s=c,'|',c<'b'); end.
 P
+# All four ORDERING operators in both operand orders, over pairs where content
+# order and length order disagree. The case above only covered `=` and
+# Char<Char, both of which were always right, which is how
+# bug-p-string-char-relational-compares-lengths hid: the mixed pair fell through
+# to an integer compare of the string HANDLE against the char ordinal.
+probe char-vs-str-order <<'P'
+var c: Char; s: string;
+procedure P(b: Boolean); begin if b then write('T') else write('F'); end;
+begin
+  s:='a';  c:='z'; P(s<c);P(s>c);P(s<=c);P(s>=c);P(c<s);P(c>s);P(c<=s);P(c>=s);
+  s:='ab'; c:='b'; P(s<c);P(s>c);P(s<=c);P(s>=c);P(c<s);P(c>s);
+  s:='';   c:='z'; P(s<c);P(s>c);
+  s:='z';  c:='z'; P(s<c);P(s<=c);P(s>=c);P(s>c);
+  s:='zzz';c:='b'; P(s<c);P(s>c);
+  s:='ab';         P(s<'b'); P(s>='b');
+  writeln;
+end.
+P
 # ---- for-loop and control flow edges ----
 probe for-downto-zero <<'P'
 var i, n: Integer; begin n:=0; for i:=3 downto 1 do n:=n*10+i; writeln(n); end.

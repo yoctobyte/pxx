@@ -1,8 +1,12 @@
+---
+owner: agent-ap-night4
+---
+
 # `<` `>` `<=` `>=` between a string and a Char compare LENGTHS, not content
 
 - **Type:** bug — Track P (Pascal frontend); lowering, so the fix may land on
   Track A ground
-- **Status:** urgent
+- **Status:** done
 - **Opened:** 2026-08-04
 - **Found by:** Track B, `tools/fpc_diff_probe.sh` `str-order` case.
 - **prio:** 85
@@ -84,3 +88,6 @@ actually receives; per the playbook, print it rather than infer it.
 only tested `=` and `Char < Char`, both of which are correct. The `str-order`
 case that caught this uses literals. Whoever fixes it should assert all four
 ordering operators in both operand orders.
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.

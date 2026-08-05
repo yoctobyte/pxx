@@ -5861,6 +5861,31 @@ begin
         ASTRight[node] := IRProcVarAutoCall(ASTRight[node], False);
       end;
 
+      { ORDERING a string against a Char: promote the Char to a 1-char string so
+        the pair reaches the lexicographic compare. `=`/`<>` have hand-emitted
+        mixed forms in every backend; `<` `<=` `>` `>=` never did, so the pair
+        fell through to the ordinary integer compare and compared the string
+        HANDLE (a heap pointer) against the char ordinal — always > for a
+        non-empty string, always < for an empty one. Silently wrong, and it
+        agreed with FPC often enough (nil handle <-> empty string) to look
+        right: `'ab' < 'b'` was FALSE where FPC says TRUE
+        (bug-p-string-char-relational-compares-lengths).
+        Doing it here rather than in each backend's compare emitter fixes every
+        target at once — WrapCharToStringExpr is the same `String(c)` desugar
+        that `+` concat and the explicit cast already use, so no backend code.
+        Pascal only: C compares chars as ints, and NilPy routes str ordering
+        through pylib. }
+      if (TTokenKind(ASTIVal[node]) in [tkLt, tkLe, tkGt, tkGe]) and
+         not CProgramMode and not NilPyUserCode then
+      begin
+        if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyChar) and
+           (IntToTypeKind(ASTTk[ASTRight[node]]) in [tyString, tyAnsiString]) then
+          ASTLeft[node] := WrapCharToStringExpr(ASTLeft[node])
+        else if (IntToTypeKind(ASTTk[ASTRight[node]]) = tyChar) and
+                (IntToTypeKind(ASTTk[ASTLeft[node]]) in [tyString, tyAnsiString]) then
+          ASTRight[node] := WrapCharToStringExpr(ASTRight[node]);
+      end;
+
       { Both operand types provable and the pair meaningless: say so now rather
         than letting the runtime helper raise when (and if) the line executes.
         A warning, not an error — see IRPyNumStrClash. }
