@@ -252,6 +252,16 @@ var
   TimeSeparator: Char;
   DateSeparator: Char;
   DecimalSeparator: Char;
+  { Grouping and currency, for Format's '%n' and '%m'. FPC's own defaults are
+    these regardless of the process locale (verified against fpc under both
+    LANG=C and en_US.UTF-8), so hardcoding them IS the parity answer, not a
+    stand-in for a locale layer. NegCurrFormat 5 is '-1$'; CurrencyFormat 1 is
+    '1$' — value first, symbol suffixed, no space. }
+  ThousandSeparator: Char;
+  CurrencyString: AnsiString;
+  CurrencyFormat: Byte;
+  NegCurrFormat: Byte;
+  CurrencyDecimals: Byte;
   { FPC's month/day name tables, 1-based (index 0 unused, as FPC declares them
     array[1..12] / array[1..7]). Synapse reads ShortMonthNames to build its RFC
     822 date parser's month table (synautil.pas), so the whole unit failed to
@@ -292,6 +302,13 @@ function FloatToStrShortest(value: Double): AnsiString;
 { String -> float. StrToFloatDef returns def on malformed; StrToFloat returns 0. }
 function StrToFloatDef(const s: AnsiString; def: Double): Double;
 function StrToFloat(const s: AnsiString): Double;
+
+{ Currency <-> string. CurrToStr has existed in the implementation since the
+  Currency type was added but was never declared here, so no caller outside
+  this unit could reach it — `CurrToStr(c)` was an "undefined variable". }
+function CurrToStr(C: Currency): AnsiString;
+function StrToCurr(const s: AnsiString): Currency;
+function StrToCurrDef(const s: AnsiString; def: Currency): Currency;
 
 { Return the position of substr in s, 1-based; 0 if not found. }
 function Pos(const substr, s: AnsiString): Integer;
@@ -1347,6 +1364,16 @@ begin
   Result := FloatToStr(C);
 end;
 
+function StrToCurrDef(const s: AnsiString; def: Currency): Currency;
+begin
+  Result := StrToFloatDef(s, def);
+end;
+
+function StrToCurr(const s: AnsiString): Currency;
+begin
+  Result := StrToFloat(s);
+end;
+
 function FloatToStrF(value: Double; precision: Integer): AnsiString;
 var scale: Double; intPart, fracPart: Int64; neg: Boolean; s, fs: AnsiString; i: Integer;
 begin
@@ -2137,6 +2164,67 @@ begin
   Result := (v.VType = vtInteger) or (v.VType = vtBoolean) or (v.VType = vtChar);
 end;
 
+{ Insert ThousandSeparator every three digits of the INTEGER part of an already
+  formatted fixed-point string. Grouping starts from the decimal point, so it
+  has to find that point first — grouping from the right end of the whole
+  string would put a separator inside the fraction ('1,234.50' vs '1,234.5,0').
+  A leading sign is kept out of the count for the same reason. }
+function FmtGroup(const s: AnsiString): AnsiString;
+var sign, ip, rest, g: AnsiString; k, dot, cnt: Integer;
+begin
+  sign := ''; ip := s;
+  if (Length(ip) > 0) and ((ip[1] = '-') or (ip[1] = '+')) then
+  begin sign := ip[1]; ip := Copy(ip, 2, Length(ip) - 1); end;
+  dot := 0;
+  for k := 1 to Length(ip) do
+    if ip[k] = DecimalSeparator then begin dot := k; Break; end;
+  if dot = 0 then begin rest := ''; end
+  else begin rest := Copy(ip, dot, Length(ip) - dot + 1); ip := Copy(ip, 1, dot - 1); end;
+  g := ''; cnt := 0;
+  for k := Length(ip) downto 1 do
+  begin
+    g := ip[k] + g;
+    Inc(cnt);
+    if (cnt mod 3 = 0) and (k > 1) then g := ThousandSeparator + g;
+  end;
+  Result := sign + g + rest;
+end;
+
+{ '%m': the value grouped to CurrencyDecimals places, then wrapped by the
+  CurrencyFormat / NegCurrFormat layout codes. Only the layouts FPC's defaults
+  select (1 and 5) plus their obvious siblings are laid out; anything else
+  falls back to value-then-symbol rather than dropping the symbol. }
+function FmtCurrency(v: Double; prec: Integer): AnsiString;
+var body: AnsiString; neg: Boolean;
+begin
+  neg := v < 0;
+  if neg then v := -v;
+  body := FmtGroup(FmtFixed(v, prec));
+  if neg then
+    case NegCurrFormat of
+      0: Result := '(' + CurrencyString + body + ')';
+      1: Result := '-' + CurrencyString + body;
+      2: Result := CurrencyString + '-' + body;
+      3: Result := CurrencyString + body + '-';
+      4: Result := '(' + body + CurrencyString + ')';
+      6: Result := body + '-' + CurrencyString;
+      7: Result := body + CurrencyString + '-';
+      8: Result := '-' + body + ' ' + CurrencyString;
+      9: Result := '-' + CurrencyString + ' ' + body;
+      10: Result := CurrencyString + ' ' + body + '-';
+    else
+      Result := '-' + body + CurrencyString;    { 5, and the default }
+    end
+  else
+    case CurrencyFormat of
+      0: Result := CurrencyString + body;
+      2: Result := CurrencyString + ' ' + body;
+      3: Result := body + ' ' + CurrencyString;
+    else
+      Result := body + CurrencyString;          { 1, and the default }
+    end;
+end;
+
 function Format(const fmt: AnsiString; const args: array of const): AnsiString;
 var
   i, j, n, argIdx, idxVal, width, prec: Integer;
@@ -2175,14 +2263,31 @@ begin
     leftAlign := False;
     while (i <= n) and (fmt[i] = '-') do begin leftAlign := True; Inc(i); end;
     width := 0;
-    while (i <= n) and (fmt[i] >= '0') and (fmt[i] <= '9') do
-    begin width := width * 10 + (Ord(fmt[i]) - Ord('0')); Inc(i); end;
+    { '*' takes the width from the argument list, consumed BEFORE the value it
+      applies to. FPC ignores the sign of a '*' width — '%*d' with -6 pads to
+      six on the right, it does not left-align — so take the magnitude. }
+    if (i <= n) and (fmt[i] = '*') then
+    begin
+      if argIdx < Length(args) then width := Integer(FmtArgInt(args[argIdx]));
+      if width < 0 then width := -width;
+      Inc(argIdx); Inc(i);
+    end
+    else
+      while (i <= n) and (fmt[i] >= '0') and (fmt[i] <= '9') do
+      begin width := width * 10 + (Ord(fmt[i]) - Ord('0')); Inc(i); end;
     hasPrec := False; prec := 0;
     if (i <= n) and (fmt[i] = '.') then
     begin
       Inc(i); hasPrec := True;
-      while (i <= n) and (fmt[i] >= '0') and (fmt[i] <= '9') do
-      begin prec := prec * 10 + (Ord(fmt[i]) - Ord('0')); Inc(i); end;
+      if (i <= n) and (fmt[i] = '*') then
+      begin
+        if argIdx < Length(args) then prec := Integer(FmtArgInt(args[argIdx]));
+        if prec < 0 then prec := 0;
+        Inc(argIdx); Inc(i);
+      end
+      else
+        while (i <= n) and (fmt[i] >= '0') and (fmt[i] <= '9') do
+        begin prec := prec * 10 + (Ord(fmt[i]) - Ord('0')); Inc(i); end;
     end;
     if i > n then Break;
     c := fmt[i]; Inc(i);
@@ -2248,6 +2353,30 @@ begin
           end;
           Inc(argIdx);
         end;
+      'n':
+        begin
+          { fixed-point with ThousandSeparator grouping; two decimals unless a
+            precision says otherwise }
+          if argIdx < Length(args) then
+          begin
+            if hasPrec then piece := FmtGroup(FmtFixed(FmtArgFloat(args[argIdx]), prec))
+            else piece := FmtGroup(FmtFixed(FmtArgFloat(args[argIdx]), 2));
+          end;
+          Inc(argIdx);
+        end;
+      'm':
+        begin
+          if argIdx < Length(args) then
+          begin
+            if hasPrec then piece := FmtCurrency(FmtArgFloat(args[argIdx]), prec)
+            else piece := FmtCurrency(FmtArgFloat(args[argIdx]), CurrencyDecimals);
+          end;
+          Inc(argIdx);
+        end;
+      { PXX EXTENSION, deliberately not FPC-parity: '%c' is not in the Delphi
+        spec, and FPC's handling of it is unspecified garbage (it re-emits the
+        previous conversion — '%x|%c' of [255,'q'] prints 'FF|FF'). Printing
+        the character, as C's printf does, is the useful reading. }
       'c':
         begin
           if argIdx < Length(args) then piece := Chr(Integer(FmtArgInt(args[argIdx])));
@@ -3017,6 +3146,11 @@ initialization
   TimeSeparator := ':';
   DateSeparator := '-';
   DecimalSeparator := '.';
+  ThousandSeparator := ',';
+  CurrencyString := '$';
+  CurrencyFormat := 1;
+  NegCurrFormat := 5;
+  CurrencyDecimals := 2;
   ShortMonthNames[1] := 'Jan';  ShortMonthNames[2] := 'Feb';
   ShortMonthNames[3] := 'Mar';  ShortMonthNames[4] := 'Apr';
   ShortMonthNames[5] := 'May';  ShortMonthNames[6] := 'Jun';

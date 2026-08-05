@@ -1445,6 +1445,241 @@ begin
 end.
 P
 
+# ---- array of const / TVarRec, and the Format() that rides on it ----
+probe aoc-vtypes <<'P'
+uses SysUtils;
+procedure Show(const a: array of const);
+var i: Integer;
+begin
+  for i := Low(a) to High(a) do
+    write(a[i].VType, ' ');
+  writeln('| n=', Length(a));
+end;
+begin
+  Show([1, 'str', 'c', True, 2.5]);
+  Show([]);
+end.
+P
+probe aoc-values <<'P'
+uses SysUtils;
+procedure Show(const a: array of const);
+var i: Integer;
+begin
+  for i := Low(a) to High(a) do
+    case a[i].VType of
+      vtInteger: write('i:', a[i].VInteger, ' ');
+      vtBoolean: write('b:', a[i].VBoolean, ' ');
+      vtChar:    write('c:', a[i].VChar, ' ');
+      vtAnsiString: write('s:', AnsiString(a[i].VAnsiString), ' ');
+      vtExtended: write('e:', a[i].VExtended^:0:2, ' ');
+    else write('?', a[i].VType, ' ');
+    end;
+  writeln;
+end;
+begin
+  Show([7, True, 'z', 'hello', 1.25]);
+end.
+P
+probe aoc-int64-and-pointer <<'P'
+uses SysUtils;
+procedure Show(const a: array of const);
+var i: Integer;
+begin
+  for i := Low(a) to High(a) do write(a[i].VType, ' ');
+  writeln;
+end;
+var p: Pointer;
+begin
+  p := nil;
+  Show([Int64(5), p, nil]);
+end.
+P
+probe format-basic <<'P'
+uses SysUtils;
+begin
+  writeln(Format('%d|%s|%x|%u', [42, 'ab', 255, 7]));
+end.
+P
+# '%c' is a PXX EXTENSION, not a parity gap. It is not in the Delphi/FPC Format
+# spec, and FPC's behaviour on it is unspecified garbage — it re-emits the
+# PREVIOUS conversion, so '%x|%c' of [255,'q'] prints 'FF|FF' while a lone '%c'
+# prints nothing at all. pxx prints the character, as C's printf does. Kept as a
+# [known] case so the divergence stays visible and cannot be "fixed" by accident.
+probe format-pct-c-extension known <<'P'
+uses SysUtils;
+begin
+  writeln(Format('%x|%c', [255, 'q']));
+end.
+P
+probe format-n-grouping <<'P'
+uses SysUtils;
+begin
+  writeln(Format('%n|%.0n|%.4n|%12n', [1234567.5, 1234.5, 1234.5, 1234.5]));
+  writeln(Format('%n|%n|%n|%n', [-1234.5, 1000000.0, 999.0, 0.0]));
+end.
+P
+probe format-currency <<'P'
+uses SysUtils;
+begin
+  writeln(Format('%m|%.0m|%m', [1234.5, 1234.5, -1234.5]));
+end.
+P
+probe format-star-width <<'P'
+uses SysUtils;
+begin
+  writeln(Format('%*d|%-*d|%.*d|%*s', [6, 42, 6, 42, 5, 42, 6, 'ab']));
+  writeln(Format('[%*d][%.*f][%*.*f]', [-6, 42, 3, 3.14159, 9, 2, 3.14159]));
+end.
+P
+probe format-settings-defaults <<'P'
+uses SysUtils;
+begin
+  writeln(ThousandSeparator, '|', CurrencyString, '|', CurrencyFormat, '|',
+          NegCurrFormat, '|', CurrencyDecimals);
+end.
+P
+probe format-width-and-precision <<'P'
+uses SysUtils;
+begin
+  writeln(Format('[%5d][%-5d][%05d]', [42, 42, 42]));
+  writeln(Format('[%8.3f][%s][%10s][%-10s]', [3.14159, 'x', 'r', 'l']));
+end.
+P
+probe format-arg-index <<'P'
+uses SysUtils;
+begin
+  writeln(Format('%1:s-%0:s', ['a', 'b']));
+  writeln(Format('%0:s%1:s', ['a', 'b']));
+end.
+P
+probe format-percent-and-exp <<'P'
+uses SysUtils;
+begin
+  writeln(Format('100%%|%e', [1.5]));
+end.
+P
+
+# ---- class helpers ----
+# All three [known]: pxx's parser rejects `class helper for` outright
+# (compat-pascal-class-helpers). Kept so the day it parses, the SEMANTICS are
+# already under test — a helper method shadows a virtual one non-virtually, and
+# an unqualified call inside a helper binds to the extended type's members.
+probe class-helper-method known <<'P'
+type
+  TBox = class
+    Value: Integer;
+  end;
+  TBoxHelper = class helper for TBox
+    function Doubled: Integer;
+  end;
+function TBoxHelper.Doubled: Integer; begin Result := Value * 2; end;
+var b: TBox;
+begin
+  b := TBox.Create;
+  b.Value := 21;
+  writeln(b.Doubled);
+  b.Free;
+end.
+P
+probe class-helper-shadowing known <<'P'
+type
+  TBase = class
+    function Name: string; virtual;
+  end;
+  TBaseHelper = class helper for TBase
+    function Name: string;
+  end;
+function TBase.Name: string; begin Result := 'base'; end;
+function TBaseHelper.Name: string; begin Result := 'helper'; end;
+var o: TBase;
+begin
+  o := TBase.Create;
+  writeln(o.Name);
+  writeln(TBase(o).Name);
+  o.Free;
+end.
+P
+probe class-helper-inherited known <<'P'
+type
+  TThing = class
+    function Tag: string;
+  end;
+  TThingHelper = class helper for TThing
+    function Tag2: string;
+  end;
+function TThing.Tag: string; begin Result := 'T'; end;
+function TThingHelper.Tag2: string; begin Result := Tag + '2'; end;
+var t: TThing;
+begin
+  t := TThing.Create;
+  writeln(t.Tag2);
+  t.Free;
+end.
+P
+
+# ---- Currency ----
+probe currency-arith <<'P'
+var a, b: Currency;
+begin
+  a := 10.05;
+  b := 3;
+  writeln(a + b:0:4);
+  writeln(a * b:0:4);
+  writeln(a / 4:0:4);
+  writeln(a - 20:0:4);
+end.
+P
+probe currency-tostr <<'P'
+uses SysUtils;
+var a: Currency;
+begin
+  a := 1234.5;
+  writeln(CurrToStr(a));
+  writeln(FloatToStr(a));
+  writeln(StrToCurr('12.25'):0:4);
+end.
+P
+probe currency-precision <<'P'
+var a: Currency;
+begin
+  a := 0.0001;
+  writeln(a:0:4);
+  a := 922337203685477.5;
+  writeln(a:0:1);
+end.
+P
+
+# ---- WideString / UnicodeString ----
+probe widestring-basic <<'P'
+var w: WideString; s: string;
+begin
+  w := 'hello';
+  writeln(Length(w));
+  s := w;
+  writeln(s, '|', Length(s));
+  w := w + ' there';
+  writeln(Length(w));
+end.
+P
+probe unicodestring-basic <<'P'
+var u: UnicodeString; s: string;
+begin
+  u := 'abc';
+  writeln(Length(u), '|', u[1], u[3]);
+  s := u;
+  writeln(s);
+  writeln(Copy(u, 2, 2));
+end.
+P
+probe widechar-ord <<'P'
+var c: WideChar;
+begin
+  c := 'A';
+  writeln(Ord(c));
+  c := WideChar(233);
+  writeln(Ord(c));
+end.
+P
 
 echo "---"
 echo "new divergences: $new   known/filed: $known   no-oracle skips: $skipped"
