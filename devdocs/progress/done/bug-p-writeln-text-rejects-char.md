@@ -97,4 +97,4 @@ written out.
 agrees with `compiler/pascal26`.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit 62e832ff3.
