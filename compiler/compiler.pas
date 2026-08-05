@@ -175,6 +175,7 @@ begin
   CrtlSrcPulledCount := 0;
   WarnSelfResult := True;   { on by default; --no-warn-self-result silences }
   WarnUsesLeak := False;
+  WarnIgnoredDirectives := False;
   UsesEdgeCount := 0;
   DumpRTTI := False;
   TargetArch := TARGET_X86_64;
@@ -515,6 +516,17 @@ begin
         Pascal uses rule. Opt-in and read-only — resolution itself is
         unchanged, this only counts what a real rule would break. }
       WarnUsesLeak := True;
+      Inc(i);
+    end
+    else if option = '--warn-ignored-directives' then
+    begin
+      { feature-pascal-warn-on-unfulfillable-directive: a routine directive that
+        is accepted but cannot be honored is silently dropped, so the source
+        keeps claiming something the build does not do. Opt-in and diagnostic
+        only — nothing about codegen changes. Deliberately NOT covering the hint
+        directives (deprecated/platform/...), which are meant to be inert until
+        usage warnings exist and would fire on ordinary FPC source. }
+      WarnIgnoredDirectives := True;
       Inc(i);
     end
     else if option = '--strict-overload' then

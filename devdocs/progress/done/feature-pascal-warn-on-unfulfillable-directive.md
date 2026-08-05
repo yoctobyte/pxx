@@ -3,6 +3,7 @@ track: P
 prio: 60
 type: feature
 summary: "A routine directive that is accepted but cannot be honored is silently ignored — `iram` on x86-64, `inline` anywhere (the flag is written and never read), `register`, `cdecl` on a routine. Warn: 'directive ignored here', so the source stops claiming something the build does not do."
+status: done
 ---
 
 # Warn when a routine directive is accepted but cannot be honored
@@ -92,3 +93,68 @@ changes no generated code.
 Each inert directive warns under the flag and stays silent without it; the
 corpora and `lib/rtl` build with no new warnings in the default mode; self-host
 fixedpoint byte-identical.
+
+
+## Implemented 2026-08-05 — `--warn-ignored-directives`
+
+Opt-in, diagnostic only, silent by default (these are all legal FPC source and
+warning unconditionally would fire on every ordinary unit). Follows the
+`--warn-uses-leak` pattern rather than going under `--strict-fpc`: this reports
+what the compiler *did*, it does not change what it accepts, so it does not
+belong in the FPC-parity umbrella.
+
+    $ pascal26 -O2 --warn-ignored-directives dir1.pas d1
+    dir1.pas:2: warning: directive 'cdecl' ignored here: the calling convention is
+      the target's and is not selectable per routine, so P already uses it; the
+      marker is documentation only
+    dir1.pas:3: warning: directive 'register' ignored here: ...
+    dir1.pas:4: warning: directive 'iram' ignored here: IRAM placement exists on
+      the ESP targets (xtensa, riscv32) only; this target has no separate
+      instruction RAM to place R in
+    dir1.pas:5: warning: directive 'stackful' ignored here: it is the default
+      strategy, so it selects nothing
+    dir1.pas:6: warning: directive 'inline' ignored here: the inliner takes at most
+      six by-value scalar parameters and Big has 7
+    dir1.pas:7: warning: directive 'inline' ignored here: only a function with a
+      scalar result is inlined, and NotFn is a procedure
+
+Covers `cdecl`, `register`, `iram` off the ESP targets, `stackful`,
+`reintroduce`, and `inline`. Each message says **why**, as the ticket asked —
+"the calling convention is the target's", not "dropped".
+
+Hint directives are excluded as specified.
+
+### `inline`: only causes that are actually established
+
+The ticket wanted "which rule it broke". The flag reports the four causes
+knowable **at the declaration** — optimisation level below -O2, a procedure
+rather than a function, assembler/generator/async/stackless, and more than six
+parameters. It deliberately does **not** claim "your body is too complex": the
+body has not been parsed at that point, and the eligibility gate is ~30 bare
+`Exit`s in three retention functions with no reason recorded. Threading a
+reason out of those is a real change to the inliner and is not worth risking
+for a diagnostic; asserting an unestablished cause would be exactly the failure
+this ticket exists to fix.
+
+So a routine that fails only on body shape gets no warning today. The control
+case in the test (`Ok`, one param, inlinable) correctly stays silent at -O2 and
+correctly warns at -O0 with the optimisation-level reason.
+
+### Verified
+
+- default build: zero warnings;
+- `-O0`: every `inline` warns with the level reason instead;
+- pulling sysutils under the flag: zero warnings, so the RTL is clean;
+- each warning fires once — suppressed during `PreScanPass`, which parses every
+  header a second time and made them all double initially.
+
+Test: `test/test_warn_ignored_directives.pas` — asserts silence without the
+flag, exactly 6 warnings with it, and that the program still runs.
+Docs are Track D's: [[task-d-document-warn-ignored-directives]].
+
+Gate: `testmgr --tier limited` 1587/1587 GREEN + self-host fixedpoint.
+
+**Resolved:** PENDING-COMMIT
+
+## Log
+- 2026-08-06 — resolved, commit PENDING-COMMIT.

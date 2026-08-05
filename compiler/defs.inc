@@ -1817,6 +1817,11 @@ var
                             global namespace today; this counts what a real
                             non-transitive rule would break, without changing
                             resolution. Opt-in: an ordinary build is unaffected. }
+  WarnIgnoredDirectives : Boolean; { --warn-ignored-directives: a routine
+                            directive that is accepted and then dropped is
+                            reported, with WHY it could not be honored, so the
+                            source stops claiming something the build does not
+                            do. Diagnostic only; codegen is unchanged. }
   { Declaration pre-scan (whole-section forward visibility): pass 1 registers
     every top-level routine header (and all types/consts/vars) with bodies
     skipped, so a routine may call another declared later (and mutual recursion

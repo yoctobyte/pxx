@@ -4010,6 +4010,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_writeln_float_exact26)" = "$$(printf ' 1.0000000000000000E+030\n 1.0000000000000000E+100\n 9.9999999999999997E+199\n 9.9999999999999995E-021\n 1.2345678901234500E+014\n 2.4999999999999999E+100\n 1.0000000000000000E+100\n 0.0000000000000000E+000\n 1.0000000000000000E+000\n-2.5000000000000000E+000\n 4.9406564584124654E-324\n 9.9998886718268301E-321\n 1.7976931348623157E+308\n 1.0000000000000001E-001\n 9.9999999999999982E+099\nOK')"
 	./$(COMPILER) test/test_writeln_float_width.pas /tmp/test_writeln_float_width26
 	test "$$(/tmp/test_writeln_float_width26)" = "$$(printf '[      3.1416]\n[     -3.1416]\n[  10.0]\n[    1]\n[   -1]\n[123456.0]\n[    0.00]\n[      100000000000000000000.00]\n[     -100000000000000000000.00]\n[3.14]\nOK')"
+	./$(COMPILER) -O2 test/test_warn_ignored_directives.pas /tmp/test_warn_ignored_directives26 2>/dev/null | grep -c warning | grep -qx 0
+	test "$$(./$(COMPILER) -O2 --warn-ignored-directives test/test_warn_ignored_directives.pas /tmp/test_warn_ignored_directives26 2>&1 | grep -c warning)" = "6"
+	test "$$(/tmp/test_warn_ignored_directives26)" = "$$(printf '1\n1')"
 	./$(COMPILER) test/test_shadow_program_over_unit.pas /tmp/test_shadow_program_over_unit26
 	test "$$(/tmp/test_shadow_program_over_unit26)" = "$$(printf 'mine\nmine-trim\nX\n7')"
 	./$(COMPILER) test/test_math_intrinsics_no_uses.pas /tmp/test_math_intrinsics_no_uses26

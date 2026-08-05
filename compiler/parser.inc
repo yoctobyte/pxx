@@ -26398,6 +26398,7 @@ var
   preScanBody: Boolean;
   isGenerator, isStackless, isAsync: Boolean;
   isIram, isInterrupt: Boolean;
+  sawIram, sawCdecl, sawRegister, sawStackful, sawReintroduce: Boolean;
   savedGenIsGen, savedGenSeen, savedGenStackless, savedProcIsAsync: Boolean;
   savedGenSelf, savedGenTry, savedGenStateCtr, savedGenSlotNext: Integer;
   genBodyAST, genStepAST, declElemTk: Integer;
@@ -26765,6 +26766,8 @@ begin
   declOverload := False;
   declFlexColumn := False;
   declInline := False;
+  sawIram := False; sawCdecl := False; sawRegister := False;
+  sawStackful := False; sawReintroduce := False;
   while ((CurTok.Kind = tkIdent) and
          ((CurTok.SVal = 'inline') or (CurTok.SVal = 'Inline') or (CurTok.SVal = 'INLINE') or
           (CurTok.SVal = 'register') or (CurTok.SVal = 'Register') or (CurTok.SVal = 'REGISTER') or
@@ -26793,7 +26796,12 @@ begin
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'async') then isAsync := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'stackless') then isStackless := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'inline') then declInline := True;
-    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'iram') then isIram := True;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'iram') then
+    begin isIram := True; sawIram := True; end;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'cdecl') then sawCdecl := True;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'register') then sawRegister := True;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'stackful') then sawStackful := True;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'reintroduce') then sawReintroduce := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'interrupt') then
     begin
       isInterrupt := True;
@@ -26807,6 +26815,51 @@ begin
       Next;   { consume 'deprecated'; the message string is eaten by the Next below }
     Next;
     Eat(tkSemicolon);
+  end;
+  { --warn-ignored-directives: say so when a directive was accepted and then
+    dropped, and say WHY. Silent by default — these are all legal FPC source and
+    warning unconditionally would fire on every ordinary unit. Hint directives
+    (deprecated/platform/...) are deliberately excluded: they are meant to be
+    inert until usage warnings exist. }
+  if WarnIgnoredDirectives and not PreScanPass then
+  begin
+    if sawIram and (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+      Warn('directive ''iram'' ignored here: IRAM placement exists on the ESP ' +
+           'targets (xtensa, riscv32) only; this target has no separate ' +
+           'instruction RAM to place ' + name + ' in');
+    if sawCdecl then
+      Warn('directive ''cdecl'' ignored here: the calling convention is the ' +
+           'target''s and is not selectable per routine, so ' + name +
+           ' already uses it; the marker is documentation only');
+    if sawRegister then
+      Warn('directive ''register'' ignored here: the calling convention is the ' +
+           'target''s and is not selectable per routine');
+    if sawStackful then
+      Warn('directive ''stackful'' ignored here: it is the default strategy, ' +
+           'so it selects nothing');
+    if sawReintroduce then
+      Warn('directive ''reintroduce'' ignored here: it only suppresses a ' +
+           'hidden-method warning, which is not emitted');
+    { `inline` is the one with real user value: ProcInline is written and never
+      read, and the -O2 inliner decides purely on shape. Report only the causes
+      that are knowable HERE, precisely — the body has not been parsed yet, so
+      "your body is too complex" cannot be claimed without measuring it. }
+    if declInline then
+    begin
+      if OptLevel < 2 then
+        Warn('directive ''inline'' ignored here: inlining runs at -O2 and ' +
+             'above, and this build is -O' + AIntToStr(OptLevel))
+      else if not isFunc then
+        Warn('directive ''inline'' ignored here: only a function with a scalar ' +
+             'result is inlined, and ' + name + ' is a procedure')
+      else if isAsmFunc or isGenerator or isAsync or isStackless then
+        Warn('directive ''inline'' ignored here: an assembler/generator/async/' +
+             'stackless routine is never inlined')
+      else if nparams > 6 then
+        Warn('directive ''inline'' ignored here: the inliner takes at most six ' +
+             'by-value scalar parameters and ' + name + ' has ' +
+             AIntToStr(nparams));
+    end;
   end;
   if isGenerator and not isFunc then
     Error('generator must be a function (its result type is the yielded element type)');

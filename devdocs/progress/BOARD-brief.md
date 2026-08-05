@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:7 blocked:7 backlog:202 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1415 rejected:28`
+`working:1 unfinished:7 blocked:7 backlog:202 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1416 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -56,12 +56,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 60] [P]` feature-pascal-corpus-oop
-- `[p 60] [P]` feature-pascal-warn-on-unfulfillable-directive
 - `[p 60] [T]` feature-t-testmgr-owns-pinning-interruptible
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
+- `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
 
 _152 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
