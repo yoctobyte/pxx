@@ -2291,6 +2291,87 @@ begin
   end;
 end;
 
+{ ===== 32-bit call argument marshalling: the shared DECISION =====
+
+  Every 32-bit backend (i386, arm32, riscv32) marshals by-value call arguments
+  with a ladder of special cases, and each writes that ladder out once per call
+  KIND: direct, indirect (proc-var), and virtual. Three backends x three kinds,
+  nine copies that were never meant to differ — and they drifted. IR_VIRTUAL_CALL
+  had no ladder AT ALL in any backend for years
+  (bug-a-virtual-method-int64-in-and-out-32bit), and once that was fixed a matrix
+  test found four more holes: i386's virtual path had no double and no single
+  case, arm32's had no single, i386's indirect path had no set, and riscv32's
+  indirect path had none of the three.
+
+  What unifies is the DECISION — "how many words does parameter i of proc p
+  occupy, and which marshalling shape does it need" — which is ABI logic and
+  identical across call kinds by definition. The instruction emission stays
+  per-arch. A backend that consults this cannot silently lack a case: it can only
+  fail loudly on a class it does not handle.
+
+  DELIBERATELY NOT HERE: the 5..8 byte by-value record. Only riscv32's direct
+  path treats it as a pair; every other path on every backend passes such a
+  record by ADDRESS, and test_call_arg_marshalling_32bit shows all of them agree
+  with FPC today. Folding it in would change working behaviour on eight paths to
+  match one. It stays out until someone decides which convention is right —
+  filed rather than guessed. }
+const
+  A32_WORD   = 0;   { one word — ordinals, pointers, handles, any by-ref param }
+  A32_PAIR64 = 1;   { two words — a 64-bit INTEGER by value; widen a 32-bit source }
+  A32_DOUBLE = 2;   { two words — a Double by value; the value is in the arch float reg }
+  A32_SINGLE = 3;   { one word — narrow the double-valued register to single first }
+  A32_SET    = 4;   { eight words — copied inline from the set's address }
+
+function Arg32Words(cls: Integer): Integer;
+{ Words occupied by an argument of the given class on a 32-bit target. }
+begin
+  if cls = A32_SET then Arg32Words := TypeSize(tySet) div 4
+  else if (cls = A32_PAIR64) or (cls = A32_DOUBLE) then Arg32Words := 2
+  else Arg32Words := 1;
+end;
+
+function Arg32Class(procIdx, paramIdx: Integer; argTk: TTypeKind): Integer;
+{ Classify one by-value call argument. `paramIdx` is the PARAMETER index (Self is
+  0 for a method, so a virtual path's counter starts there too); `argTk` is the
+  type of the value actually being passed, which matters both for the variadic
+  tail and for widening a 32-bit source into a 64-bit parameter.
+
+  A paramIdx at or past ParamCount is a VARIADIC TAIL argument: there is no
+  declared parameter to consult, so it classifies by the argument's own type. An
+  unknown signature (procIdx < 0) is treated the same way.
+
+  A Single in the tail deliberately stays ONE word rather than promoting to
+  double the way C varargs would. That is what every 32-bit path does today and
+  this helper was extracted to be behaviour-preserving; whether the promotion is
+  missing is a separate question from whether the ladders agree, and folding a
+  behaviour change into a de-duplication is how a refactor gets blamed for a bug
+  it did not cause. }
+var ptk: TTypeKind;
+begin
+  Arg32Class := A32_WORD;
+  if (procIdx < 0) or (paramIdx >= Procs[procIdx].ParamCount) then
+  begin
+    if (argTk = tyInt64) or (argTk = tyUInt64) then Arg32Class := A32_PAIR64
+    else if argTk = tyDouble then Arg32Class := A32_DOUBLE;
+    Exit;
+  end;
+  { A by-reference parameter is the ADDRESS: always one word, whatever it points
+    at. The IsArray exception is load-bearing and predates this helper — an open
+    array carries IsRef but its 64-bit ELEMENT type is still marshalled as a
+    pair by the direct path, so the two flags are not interchangeable. }
+  if Procs[procIdx].Params[paramIdx].IsRef and
+     (not Procs[procIdx].Params[paramIdx].IsArray) then Exit;
+  ptk := Procs[procIdx].Params[paramIdx].TypeKind;
+  if (ptk = tySet) and (not Procs[procIdx].Params[paramIdx].IsArray) then
+    Arg32Class := A32_SET
+  else if (ptk = tyInt64) or (ptk = tyUInt64) then
+    Arg32Class := A32_PAIR64
+  else if ptk = tyDouble then
+    Arg32Class := A32_DOUBLE
+  else if ptk = tySingle then
+    Arg32Class := A32_SINGLE;
+end;
+
 function TypeArithmeticResult(lhs, rhs: TTypeKind): TTypeKind;
 { Integer arithmetic is evaluated as an 8-byte value. Signedness follows the
   same widening rule as relational comparisons. }

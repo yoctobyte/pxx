@@ -41,7 +41,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (202)
+## backlog (201)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -118,7 +118,6 @@ _none_
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
 | feature-a-promoint-variant-esp-targets | S | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
-| feature-a-unify-32bit-call-argument-marshalling | A | 40 | feature | Each 32-bit backend has the by-value argument ladder (Int64, double, set, 5-8 byte record) written out separately per call KIND — direct, indirect, virtual — and the virtual copy was missing the Int64 case entirely for years | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-crtl-last-seven-unimplemented-declarations | B | 40 | feature | The crtl declarations still without bodies — now 2: atexit and poll (chmod, umask, msync, mremap and ioctl landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED | — |
 | feature-b-rtl-missing-fpc-surface-2026-08 | B | 35 | feature | Missing FPC surface found by the differential probe (Eoln, TSeekOrigin, Sorted, IncMonth) | — |
@@ -360,9 +359,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1377)
+## done (1378)
 
-1377 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1378 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -516,7 +515,6 @@ _none_
 - [p 40] [A] compat-pascal-write-fixed-huge-magnitude-differs-from-fpc
 - [p 40] [U] decide-nilpy-builtin-keyword-only-parameters
 - [p 40] [S] feature-a-promoint-variant-esp-targets
-- [p 40] [A] feature-a-unify-32bit-call-argument-marshalling
 - [p 40] [B] feature-b-crtl-last-seven-unimplemented-declarations
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue

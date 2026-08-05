@@ -1140,6 +1140,7 @@ end;
 procedure IREmitNodeArm32(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, j, wid, sz: Integer;
+  argCls: Integer;   { Arg32Class of the argument being marshalled (A32_*) }
   classIdx, elemSize, lo, nBlock: Integer;
   vaRevM, vaRevP, vaRevO1, vaRevO2: Integer;
   itemNode, hi, p1, p2: Integer;
@@ -2876,37 +2877,51 @@ begin
 
             Params[0] is Self, and nArgs counts from there, matching the direct
             path's indexing. The ladder is deliberately a mirror of the direct
-            path's — that duplication is what let the two drift apart in the
-            first place; unifying them is filed as
-            feature-a-unify-32bit-call-argument-marshalling. }
-          if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
-             ((Procs[procIdx].Params[nArgs].TypeKind = tyInt64) or
-              (Procs[procIdx].Params[nArgs].TypeKind = tyUInt64)) and
-             (not Procs[procIdx].Params[nArgs].IsRef) and
-             (not Procs[procIdx].Params[nArgs].IsArray) then
+            path's. The class decision is now Arg32Class in symtab.inc, shared
+            with the direct and indirect paths and with i386/riscv32 — the
+            duplicated ladders are what let these drift
+            (feature-a-unify-32bit-call-argument-marshalling). Only the emission
+            below is arm32-specific. }
+          argCls := Arg32Class(procIdx, nArgs, IntToTypeKind(IRTk[IRA[argNode]]));
+          { arm32 passes a by-value SET by ADDRESS on every path, caller and
+            callee agreeing, which is why it was the one backend the virtual-set
+            bug did not hit. Keep that convention rather than adopting i386's
+            inline 8-word copy: the shared helper decides the CLASS, each backend
+            still owns its ABI. }
+          if argCls = A32_SET then argCls := A32_WORD;
+          if argCls = A32_PAIR64 then
           begin
             EmitNode64Arm32(IRA[argNode]);             { r0=lo, r1=hi }
             EmitI32($E92D0001);                        { push {r0} (lo) }
             EmitI32($E92D0002);                        { push {r1} (hi) }
-            Inc(wid, 2);
           end
-          else if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
-                  (Procs[procIdx].Params[nArgs].TypeKind = tyDouble) and
-                  (not Procs[procIdx].Params[nArgs].IsRef) then
+          else if argCls = A32_DOUBLE then
           begin
             IREmitNodeArm32(IRA[argNode]);             { d0 }
             if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
               EmitIntToD0Arm32Tk(IntToTypeKind(IRTk[IRA[argNode]]));
             EmitI32($EC510B10);                        { vmov r0, r1, d0 }
             EmitI32($E92D0001); EmitI32($E92D0002);    { push lo, hi }
-            Inc(wid, 2);
+          end
+          else if argCls = A32_SINGLE then
+          begin
+            { The virtual path had no Single case: the value sits in d0 as a
+              DOUBLE and was pushed as one word of whatever r0 held, so
+              `o.VSgl(1, 6.0, 9)` gave 109 instead of 169. Narrow to single
+              first — the same thing the direct path does. }
+            IREmitNodeArm32(IRA[argNode]);             { d0 }
+            if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
+              EmitIntToD0Arm32Tk(IntToTypeKind(IRTk[IRA[argNode]]));
+            EmitI32($EEB70BC0);                        { vcvt.f32.f64 s0, d0 }
+            EmitI32($EE100A10);                        { vmov r0, s0 }
+            EmitI32($E92D0001);                        { push {r0} }
           end
           else
           begin
             IREmitNodeArm32(IRA[argNode]);
             EmitI32($E92D0001);                        { push {r0} }
-            Inc(wid, 1);
           end;
+          Inc(wid, Arg32Words(argCls));
           Inc(nArgs);
           argNode := IRB[argNode];
         end;

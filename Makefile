@@ -2421,6 +2421,15 @@ test-core: $(COMPILER)
 	# this line only guards the shape; the value is in the CROSS runs.
 	./$(COMPILER) test/test_virtual_int64_param_and_result.pas /tmp/test_tvi26
 	test "$$(/tmp/test_tvi26 | tail -1)" = "PASS"
+	# the full 32-bit call-argument MATRIX: every by-value shape that is not one
+	# word (Int64, Double, Single, set) crossed with every call KIND (direct,
+	# indirect, virtual). Each 32-bit backend wrote that ladder out once per kind
+	# and the copies drifted -- i386's virtual path had no double and no single
+	# case, arm32's had no single, i386's indirect had no set, riscv32's indirect
+	# had none of them (feature-a-unify-32bit-call-argument-marshalling). Like the
+	# line above, x86-64 only guards the SHAPE here; the values are in the CROSS runs.
+	./$(COMPILER) test/test_call_arg_marshalling_32bit.pas /tmp/test_cam26
+	test "$$(/tmp/test_cam26 | tail -1)" = "PASS"
 	# what a RECORD may legally contain (b347): no published, no protected (records don't
 	# inherit), a class method must be static, a ctor needs a mandatory parameter, and a
 	# local/anonymous record type gets FIELDS ONLY. All were parse-and-dropped before.

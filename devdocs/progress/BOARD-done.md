@@ -840,6 +840,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-a-promoint-wide-literals | A | 60 | feature | PromoInt cannot be initialised from a literal wider than Int64 | — |
 | feature-a-promotable-int | A | 85 | feature | Promotable int — a new arbitrary-precision integer type (fixnum + heap bignum) | — |
 | feature-a-typeref-handle | A | 65 | feature | TypeRef: one type handle, carried — not ten parallel tuples | — |
+| feature-a-unify-32bit-call-argument-marshalling | A | 40 | feature | Each 32-bit backend has the by-value argument ladder (Int64, double, set, 5-8 byte record) written out separately per call KIND — direct, indirect, virtual — and the virtual copy was missing the Int64 case entirely for years | — |
 | feature-aarch64-asm-emitter | A | 50 | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
 | feature-abs-sqr-intrinsics | A | 50 | feature | `Abs` / `Sqr` System intrinsics missing | — |
 | feature-adventure-scene-asset-pipeline | B | 50 | feature | Adventure scene asset pipeline | feature-image-ascii-renderer-library |

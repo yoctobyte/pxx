@@ -892,6 +892,59 @@ begin
   end;
 end;
 
+procedure EmitCallArgWordsRISCV32(procIdx, paramIdx, argNode: Integer; var nWords: Integer);
+{ Emit one call argument and push its words, advancing the running WORD count.
+  Shared by the direct, indirect and virtual call paths — each of them used to
+  carry its own copy of this ladder and they drifted apart: the indirect path had
+  no ladder at all ("scalar word args only"), so an Int64, a Double or a
+  by-value set through a proc-var was pushed as ONE word of whatever a0 held and
+  every following argument's slot shifted with it
+  (feature-a-unify-32bit-call-argument-marshalling).
+
+  The CLASS decision is Arg32Class in symtab.inc, shared with i386 and arm32;
+  what lives here is only riscv32's emission. Words go lo-then-hi, matching the
+  callee's spill. }
+var cls, i: Integer;
+begin
+  cls := Arg32Class(procIdx, paramIdx, IntToTypeKind(IRTk[IRA[argNode]]));
+  if cls = A32_SET then
+  begin
+    { By-value set: a0 is the 32-byte set's ADDRESS; push all 8 words inline so
+      the callee's spill can rebuild it. One address word left the callee reading
+      its own slot as set bytes — `CountSet([eA,eC,eD])` answered 0 here where
+      FPC says 3. }
+    IREmitNodeRISCV32(IRA[argNode]);                { a0 = set address }
+    for i := 0 to 7 do
+    begin
+      rv32_lw(reg_t1, reg_a0, i * 4);
+      rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_t1, reg_sp, 0);
+    end;
+  end
+  else if cls = A32_PAIR64 then
+  begin
+    EmitNode64RISCV32(IRA[argNode]);                { a0=lo, a1=hi }
+    rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { lo }
+    rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);  { hi }
+  end
+  else if cls = A32_DOUBLE then
+  begin
+    EmitFloatOperandRISCV32(IRA[argNode], tyDouble);
+    rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { lo }
+    rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);  { hi }
+  end
+  else if cls = A32_SINGLE then
+  begin
+    EmitFloatOperandRISCV32(IRA[argNode], tySingle);
+    rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+  end
+  else
+  begin
+    IREmitNodeRISCV32(IRA[argNode]);
+    rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+  end;
+  nWords := nWords + Arg32Words(cls);
+end;
+
 procedure EmitFloatBinopRISCV32(node: Integer);
 { Float arithmetic + comparison via the soft-float kernels. Result of an
   arithmetic op lands in a0 (single) / a0:a1 (double); a comparison lands as a
@@ -2667,23 +2720,44 @@ begin
         if IRCallDest[node] >= 0 then
           Error('target riscv32: aggregate/frozen-string result via an indirect call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
         { Indirect call through a proc-typed value (e.g. the PXXDivZeroHook
-          runtime hook). v1 mirrors arm32: scalar word args only (no by-value
-          Int64/float marshalling through a proc pointer yet). Push the callee
-          first (deepest), push arg words, load a0.. from the slots, load the
-          callee into t0, drop the block, jalr through t0. }
+          runtime hook). Push the callee first (deepest), push arg words, load
+          a0.. from the slots, load the callee into t0, drop the block, jalr
+          through t0.
+
+          This path used to be "scalar word args only" — one word per argument
+          unconditionally. That is the same omission IR_VIRTUAL_CALL had: an
+          Int64, a Double or a by-value set through a proc-var was pushed as one
+          word of whatever a0 held, and every following argument's slot shifted.
+          It now shares EmitCallArgWordsRISCV32 with the direct and virtual
+          paths, whose class decision is the target-independent Arg32Class. }
         IREmitNodeRISCV32(IRA[node]);      { a0 = callee address }
         rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+        procIdx := Integer(IRIVal[node]);  { signature proc index (-1 if unknown) }
         argNode := IRB[node];
-        nArgs := 0;
+        nArgs := 0;                        { WORD count }
+        j := 0;                            { PARAM index }
         while argNode <> -1 do
         begin
-          IREmitNodeRISCV32(IRA[argNode]);
-          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
-          Inc(nArgs);
+          EmitCallArgWordsRISCV32(procIdx, j, argNode, nArgs);
+          Inc(j);
           argNode := IRB[argNode];
         end;
         if nArgs > 8 then
-          Error('target riscv32: indirect call with more than 8 argument words not supported');
+        begin
+          { Words 8+ pass on the stack, exactly as the direct and virtual paths
+            do: keep the pushed block live across the call (the callee reads word
+            k >= 8 at [entry_sp + (nArgs-1-k)*4]), load a0..a7, free after the
+            return. The old code refused outright, which a by-value `set`
+            parameter reaches routinely — one scalar plus a set is nine words.
+            The callee word sits ABOVE the argument block, so it does not
+            disturb the offsets the callee computes from its entry sp. }
+          for i := 0 to 7 do
+            rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
+          rv32_lw(reg_t0, reg_sp, nArgs * 4);            { callee (deepest) }
+          rv32_jalr(reg_ra, reg_t0, 0);
+          rv32_addi(reg_sp, reg_sp, (nArgs + 1) * 4);    { drop args + callee }
+          Exit;
+        end;
         for i := 0 to nArgs - 1 do
           rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
         rv32_lw(reg_t0, reg_sp, nArgs * 4);              { callee (deepest) }
@@ -2855,62 +2929,11 @@ begin
             TStream.Position, whose Seek is virtual with exactly this signature.
 
             Params[0] is Self and j counts from there, matching the direct
-            path's indexing. The ladder mirrors the direct path's on purpose —
-            that duplication is what let them drift; unifying is filed as
-            feature-a-unify-32bit-call-argument-marshalling. }
-          if (procIdx >= 0) and (j < Procs[procIdx].ParamCount) and
-             (Procs[procIdx].Params[j].TypeKind = tySet) and
-             (not Procs[procIdx].Params[j].IsRef) and
-             (not Procs[procIdx].Params[j].IsArray) then
-          begin
-            { By-value set: a0 is the 32-byte set's ADDRESS; push all 8 words
-              inline so the callee's spill can rebuild it. One address word left
-              the callee reading its own slot as set bytes —
-              `b.CountSet([eA,eC,eD])` answered 0 here and 1 on i386 where FPC
-              says 3. Same omission as the Int64 case below. }
-            IREmitNodeRISCV32(IRA[argNode]);            { a0 = set address }
-            for i := 0 to 7 do
-            begin
-              rv32_lw(reg_t1, reg_a0, i * 4);
-              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_t1, reg_sp, 0);
-            end;
-            Inc(nArgs, 8);
-          end
-          else if (procIdx >= 0) and (j < Procs[procIdx].ParamCount) and
-             ((Procs[procIdx].Params[j].TypeKind = tyInt64) or
-              (Procs[procIdx].Params[j].TypeKind = tyUInt64)) and
-             (not Procs[procIdx].Params[j].IsRef) and
-             (not Procs[procIdx].Params[j].IsArray) then
-          begin
-            EmitNode64RISCV32(IRA[argNode]);            { a0=lo, a1=hi }
-            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { lo }
-            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);  { hi }
-            Inc(nArgs, 2);
-          end
-          else if (procIdx >= 0) and (j < Procs[procIdx].ParamCount) and
-                  IsFloatRISCV32(Procs[procIdx].Params[j].TypeKind) and
-                  (not Procs[procIdx].Params[j].IsRef) and
-                  (not Procs[procIdx].Params[j].IsArray) then
-          begin
-            EmitFloatOperandRISCV32(IRA[argNode], Procs[procIdx].Params[j].TypeKind);
-            if Procs[procIdx].Params[j].TypeKind = tyDouble then
-            begin
-              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { lo }
-              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);  { hi }
-              Inc(nArgs, 2);
-            end
-            else
-            begin
-              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
-              Inc(nArgs, 1);
-            end;
-          end
-          else
-          begin
-            IREmitNodeRISCV32(IRA[argNode]);
-            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
-            Inc(nArgs, 1);
-          end;
+            path's indexing. The class decision is now Arg32Class in symtab.inc,
+            shared with the direct and indirect paths and with i386/arm32
+            (feature-a-unify-32bit-call-argument-marshalling); only the emission
+            below is riscv32-specific. }
+          EmitCallArgWordsRISCV32(procIdx, j, argNode, nArgs);
           Inc(j);
           argNode := IRB[argNode];
         end;

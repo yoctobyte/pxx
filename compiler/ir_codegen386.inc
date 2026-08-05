@@ -1116,6 +1116,7 @@ end;
 procedure IREmitNode386(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, argBytes, wid, sz, i, j, base: Integer;
+  argCls: Integer;   { Arg32Class of the argument being marshalled (A32_*) }
   classIdx, elemSize, lo, hi, itemNode, p1, p2, pNil386, pDone386: Integer;
   vaNvw, vaK, vaO1, vaO2: Integer;
   vaTk: TTypeKind;   { holds IntToTypeKind(...) — keep it the enum so FPC's strict
@@ -3163,9 +3164,21 @@ begin
         begin
           if vaFwd then nArgs := vaNvw - 1 - vaK else nArgs := vaK;
           IREmitNode386(IRA[argNode]);
-          if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
-             Is64Bit386(Procs[procIdx].Params[nArgs].TypeKind) and
-             (not Procs[procIdx].Params[nArgs].IsRef) then
+          { Same shared decision as the direct and virtual paths (symtab.inc).
+            This copy of the ladder was missing the by-value SET case, so
+            `pS(1, [eA,eC,eD], 9)` through a proc-var pushed one address word and
+            answered 838829819 instead of 139. }
+          argCls := Arg32Class(procIdx, nArgs, IntToTypeKind(IRTk[IRA[argNode]]));
+          if argCls = A32_SET then
+          begin
+            { eax = the 32-byte set's address; push all 8 dwords, high first. }
+            for i := 7 downto 0 do
+            begin
+              EmitB($8B); EmitB($50); EmitB(i * 4);  { mov edx, [eax+i*4] }
+              EmitB($52);                            { push edx }
+            end;
+          end
+          else if argCls = A32_PAIR64 then
           begin
             { 64-bit by-value param: widen a 32-bit value to edx:eax, push hi then lo. }
             tk := IntToTypeKind(IRTk[IRA[argNode]]);
@@ -3176,53 +3189,25 @@ begin
             end;
             EmitB($52);                              { push edx (hi) }
             EmitB($50);                              { push eax (lo) }
-            Inc(argBytes, 8);
           end
-          else if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
-                  (Procs[procIdx].Params[nArgs].TypeKind = tyDouble) and
-                  (not Procs[procIdx].Params[nArgs].IsRef) then
+          else if argCls = A32_DOUBLE then
           begin
-            { double by-value param: value in xmm0 -> 8-byte stack slot. }
+            { double by-value param (or a variadic-tail double): xmm0 -> 8-byte slot. }
             if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
               EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]]));  { int -> xmm0 (64-bit/unsigned aware) }
-            EmitB($83); EmitB($EC); EmitB($08);                          { sub esp, 8 }
-            EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24);  { movsd [esp], xmm0 }
-            Inc(argBytes, 8);
+            EmitFloatSpill386;                       { sub esp,8; movsd [esp],xmm0 }
           end
-          else if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
-                  (Procs[procIdx].Params[nArgs].TypeKind = tySingle) and
-                  (not Procs[procIdx].Params[nArgs].IsRef) then
+          else if argCls = A32_SINGLE then
           begin
             if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
               EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]]));  { int -> xmm0 (64-bit/unsigned aware) }
             EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);              { cvtsd2ss xmm0, xmm0 }
             EmitB($83); EmitB($EC); EmitB($04);                          { sub esp, 4 }
             EmitB($F3); EmitB($0F); EmitB($11); EmitB($04); EmitB($24);  { movss [esp], xmm0 }
-            Inc(argBytes, 4);
-          end
-          else if (procIdx >= 0) and (nArgs >= Procs[procIdx].ParamCount) and
-                  (Is64Bit386(IntToTypeKind(IRTk[IRA[argNode]])) or
-                   (IntToTypeKind(IRTk[IRA[argNode]]) = tyDouble)) then
-          begin
-            { variadic tail 64-bit arg (int64/uint64 in edx:eax, double in xmm0):
-              push both dwords, lo at the lower address (mirrors direct IR_CALL). }
-            if IntToTypeKind(IRTk[IRA[argNode]]) = tyDouble then
-            begin
-              EmitB($83); EmitB($EC); EmitB($08);                         { sub esp, 8 }
-              EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [esp], xmm0 }
-            end
-            else
-            begin
-              EmitB($52);                            { push edx (hi) }
-              EmitB($50);                            { push eax (lo) }
-            end;
-            Inc(argBytes, 8);
           end
           else
-          begin
             EmitB($50);                              { push eax }
-            Inc(argBytes, 4);
-          end;
+          Inc(argBytes, Arg32Words(argCls) * 4);
           Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
         end;
         IREmitNode386(IRA[node]);                    { eax = callee addr }
@@ -3298,34 +3283,29 @@ begin
             it produced 21474836481 (= 5*2^32 + 1): the halves swapped. Running
             it is cheaper than reasoning about it.
 
-            Params[0] is Self and nArgs counts from there. The ladder mirrors the
-            direct path's on purpose; unifying them is filed as
-            feature-a-unify-32bit-call-argument-marshalling. }
-          if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
-             (Procs[procIdx].Params[nArgs].TypeKind = tySet) and
-             (not Procs[procIdx].Params[nArgs].IsRef) and
-             (not Procs[procIdx].Params[nArgs].IsArray) then
+            Params[0] is Self and nArgs counts from there. The class decision is
+            now Arg32Class in symtab.inc, shared with the direct and indirect
+            paths and with the other two 32-bit backends — the ladder used to be
+            copied here and drifted, which is what
+            feature-a-unify-32bit-call-argument-marshalling is about. Only the
+            emission below is i386-specific. }
+          IREmitNode386(IRA[argNode]);   { eax / edx:eax / xmm0 = arg value }
+          argCls := Arg32Class(procIdx, nArgs, IntToTypeKind(IRTk[IRA[argNode]]));
+          if argCls = A32_SET then
           begin
             { By-value set: eax is the 32-byte set's ADDRESS; push all 8 dwords
               inline so the callee's spill can rebuild the set in its own slot.
               One address word left the callee reading its own slot as set
               bytes — `b.CountSet([eA,eC,eD])` answered 1 on i386 and 0 on
-              riscv32 where FPC says 3. Same omission as the Int64 case below
-              and found by the same ticket. }
-            IREmitNode386(IRA[argNode]);             { eax = set address }
+              riscv32 where FPC says 3. }
             for i := 7 downto 0 do
             begin
               EmitB($8B); EmitB($50); EmitB(i * 4);  { mov edx, [eax+i*4] }
               EmitB($52);                            { push edx }
             end;
-            Inc(argBytes, TypeSize(tySet));
           end
-          else if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
-             Is64Bit386(Procs[procIdx].Params[nArgs].TypeKind) and
-             (Procs[procIdx].Params[nArgs].IsArray or
-              not Procs[procIdx].Params[nArgs].IsRef) then
+          else if argCls = A32_PAIR64 then
           begin
-            IREmitNode386(IRA[argNode]);             { edx:eax = value }
             tk := IntToTypeKind(IRTk[IRA[argNode]]);
             if not Is64Bit386(tk) then
             begin
@@ -3334,14 +3314,30 @@ begin
             end;
             EmitB($52);                              { push edx (hi) }
             EmitB($50);                              { push eax (lo) }
-            Inc(argBytes, 8);
+          end
+          else if argCls = A32_DOUBLE then
+          begin
+            { The virtual path had NO float case: a Double parameter was pushed
+              as ONE word of whatever happened to be in eax, so the value was
+              garbage AND every following argument's slot shifted.
+              `o.VDbl(1, 6.0, 9)` gave 840500009 instead of 169. }
+            if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
+              EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]]));
+            EmitFloatSpill386;                       { sub esp,8; movsd [esp],xmm0 }
+          end
+          else if argCls = A32_SINGLE then
+          begin
+            { xmm0 holds the value as DOUBLE bits; narrow before storing 4 bytes
+              (movss alone would store the low dword of the double = garbage). }
+            if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
+              EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]]));
+            EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);             { cvtsd2ss xmm0, xmm0 }
+            EmitB($83); EmitB($EC); EmitB($04);                         { sub esp, 4 }
+            EmitB($F3); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movss [esp], xmm0 }
           end
           else
-          begin
-            IREmitNode386(IRA[argNode]);             { eax = arg }
             EmitB($50);                              { push eax }
-            Inc(argBytes, 4);
-          end;
+          Inc(argBytes, Arg32Words(argCls) * 4);
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
