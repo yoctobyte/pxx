@@ -1,4 +1,6 @@
-#include "socket.c"
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
 
 int main(void) {
   int srv, cli, conn, udp_rx, udp_tx, one, got;
