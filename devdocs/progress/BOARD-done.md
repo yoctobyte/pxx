@@ -231,6 +231,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-static-init-cast-and-int-to-double | C | 90 | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
 | bug-c-static-local-initializer-reruns-every-call | A+C | 50 | bug | C `static` local with an initializer re-runs the initializer every call | — |
 | bug-c-stb-sprintf-float-empty | C | 40 | bug | stb_sprintf %f/%g produces empty output under pxx | — |
+| bug-c-string-h-compiles-stdlib-c-twice | C | 60 | bug | #include <string.h>, with nothing used, compiles lib/crtl/src/stdlib.c TWICE — 51 functions get two bodies each. #include <stdlib.h> alone does not | — |
 | bug-c-string-literal-binop-decay | C | 55 | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
 | bug-c-string-literal-to-pointer-prefix | C | 50 | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
 | bug-c-struct-byval-varargs-32bit | A | 50 | bug | bug: struct-by-value / varargs args truncated on 32-bit targets (00204.c) | — |

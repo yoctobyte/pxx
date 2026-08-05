@@ -8,7 +8,7 @@ prio: 60
 # `#include <string.h>` compiles `stdlib.c` twice
 
 - **Type:** bug — Track C (C frontend, crtl module auto-pull)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** the duplicate-definition warning added for
   [[bug-a-duplicate-definition-silently-accepted]]. The warning is correct; this
@@ -152,3 +152,91 @@ type (warns), and an ordinary crtl-using program (silent).
 
 `#include <string.h>` with nothing used compiles each crtl function once. Then
 enable the C-side check above and confirm the whole `test/c*.c` set is silent.
+
+---
+
+## RESOLVED 2026-08-05 — it was not the preprocessor, and not the dedup marker
+
+Both leads above were wrong, and the trace says so plainly. `--debug` shows
+`stdlib.c` auto-pulled **exactly once**:
+
+```
+C preprocessor: auto-pull crtl impl .../lib/crtl/src/stdlib.c     <- one line, one time
+```
+
+`CrtlSrcPulled[]`'s exact-string comparison is fine; the two spellings never
+differed. The macro-table reset is real (and does cause a *separate*, smaller
+bug — see below) but it is not what compiled `stdlib.c` twice.
+
+### The actual cause: pass 2 runs over the pulled region twice
+
+`CLexAppend` **strips the user's EOF token** and merges the pulled tokens into
+the same stream — deliberately, and `ParseCProgram`'s own comment says so
+("pass 1/2 walk straight into them"). But `ParseCProgram` then runs:
+
+1. `pass 2` from `firstIdx` to `tkEOF` — with the user EOF gone, this walks off
+   the end of the user program and straight into the appended crtl region,
+   compiling every pulled body. *(First copy.)*
+2. `pass 2 over the pulled crtl region` from `crtlStart` — the dedicated block,
+   which compiles them all again. *(Second copy.)*
+
+`string.c` escaped only because it is pulled *inline* during the main
+preprocess, so it sits in the user region and is compiled once.
+
+**Fix** (`cparser.inc`): bound the main pass-2 loop by `crtlStart`.
+
+```pascal
+while (CurTok.Kind <> tkEOF) and ((crtlStart < 0) or (TokPos - 1 < crtlStart)) do
+```
+
+Anything appended *before* the crtl pull (pxxcio) still falls inside the loop,
+exactly as it did.
+
+**Measured**, `#include <string.h>` + empty `main`:
+
+| | code | procs | dup warnings |
+| --- | --- | --- | --- |
+| before | 159754 B | 492 | 51 |
+| after | 132374 B | 487 | 0 |
+
+### The warning is now enabled
+
+The C-side duplicate-definition check landed at the `{ Otherwise, it has a
+body! }` site, as written above. `test/*.c` (373 files) and the 220-test
+c-testsuite conformance battery are silent apart from one ticketed file.
+
+### What it found on the way in — three real crtl duplicates, all fixed
+
+1. **`time` / `__crtl_time`** — `stdlib.c` carried a seed-only stub
+   `time(t) { if (t) *t = 0; return 0; }`. `time.h` does
+   `#define time(t) __crtl_time(t)`, so in any TU that saw `<time.h>` first the
+   stub *expanded to a second body for `__crtl_time`* — one that always returns
+   0 — competing with the real PAL clock in `time.c`. Removed; `time.c` owns it.
+2. **`gettimeofday`** — defined in both `sys/time.c` (microseconds, via
+   `__pxx_realtime`) and `time.c` (seconds only, `tv_usec` always 0), and
+   `time.c` includes `<sys/time.h>` so both landed in one TU. Whichever was
+   pulled last decided the precision. `time.c`'s removed.
+3. **`close`** — `netinet/in.c` defined a second `close` routing through
+   `__pxx_socket_close`, so in any program doing sockets *and* file I/O every
+   close went wherever pull order pointed. Removed; `unistd.c` owns it. Identical
+   on POSIX (same syscall); the ESP-IDF half is
+   [[bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file]].
+
+### What it found that is NOT fixed
+
+`stdarg.h`'s six `static __pxx_va_*` helper **bodies** still compile twice when
+a late pull re-includes the header past the macro-table reset — the reset lead
+above was right about *this*, just not about `stdlib.c`. Root-caused (there is a
+*third* `CPreprocess` invocation in between that clears the table) and filed as
+[[bug-c-header-with-a-body-compiles-twice-across-the-macro-reset]]. One file of
+373 warns.
+
+**Not done, still worth doing:** `CrtlSrcPulled[]` is still bounded by
+`MAX_C_INCLUDE_DIRS` (64, the wrong constant) — unreachable today, silent when
+reached. Left as noted above.
+
+Gate run: `gate.sh quick` GREEN, `gate.sh lib` GREEN, c-testsuite 219 pass /
+0 fail / 1 skip native and i386, self-host fixedpoint converges.
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.

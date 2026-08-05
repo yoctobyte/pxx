@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:7 unfinished:7 blocked:7 backlog:184 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1360 rejected:28`
+`urgent:7 unfinished:7 blocked:7 backlog:185 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1361 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -41,7 +41,7 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 172, ranked
+## Ready — top 30 of 173, ranked
 
 - `[p 85] [A]` bug-a-virtual-method-int64-in-and-out-32bit
 - `[p 85] [A]` bug-p-string-char-relational-compares-lengths
@@ -55,7 +55,6 @@ _none — no lane is locked._
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [A]` bug-a-writeln-float-exponent-form-not-correctly-rounded
-- `[p 60] [C]` bug-c-string-h-compiles-stdlib-c-twice
 - `[p 60] [U]` decide-abi-portable-vs-target-split
 - `[p 60] [A]` feature-a-abi-oracle
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -73,5 +72,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [A]` bug-a-duplicate-definition-silently-accepted
+- `[p 55] [C]` bug-c-pthread-without-threadsafe-builds-then-dies-at-load
 
-_142 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_143 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

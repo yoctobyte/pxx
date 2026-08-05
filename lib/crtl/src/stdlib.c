@@ -493,11 +493,13 @@ void qsort(void *base, size_t nmemb, size_t size,
   }
 }
 
-/* ---- minimal time (seed only) --------------------------------------------- */
-/* lua uses time(NULL) only to seed its hash; a constant is correct-but-fixed.
-   A real clock bridge (PAL monotonic) is a follow-up. */
-typedef long __crtl_time_t;
-__crtl_time_t time(__crtl_time_t *t) { if (t) *t = 0; return 0; }
+/* time() deliberately does NOT live here — it belongs to <time.h>/time.c, which
+   has the real PAL-backed clock (__crtl_time). A seed-only stub `time()` used to
+   sit here for lua, and it was a silent-wrong-value trap: time.h does
+   `#define time(t) __crtl_time(t)`, so in any TU that saw <time.h> first this
+   definition expanded to a SECOND body for __crtl_time — one that always returns
+   0 — and whichever module was pulled last won. Found by the C duplicate-
+   definition warning (bug-c-string-h-compiles-stdlib-c-twice). */
 
 /* long double == double in pxx: strtold forwards to strtod. */
 double strtold(const char *s, char **end) { return strtod(s, end); }

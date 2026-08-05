@@ -8405,10 +8405,17 @@ begin
     CHeaderMode := False;
   end;
 
-  { pass 2: compile function bodies; types/globals already done in pass 1 }
+  { pass 2: compile function bodies; types/globals already done in pass 1.
+    STOP at the pulled crtl region: CLexAppend strips the user EOF and merges the
+    pulled tokens into the same stream, so an unbounded walk runs straight into
+    them and compiles every pulled body — and the dedicated crtl pass 2 below
+    then compiles it a SECOND time. That is what made `#include <string.h>` emit
+    two bodies for each of stdlib.c's 51 functions
+    (bug-c-string-h-compiles-stdlib-c-twice). Anything appended BEFORE the crtl
+    pull (pxxcio) still falls inside this loop, as it always did. }
   TokPos := firstIdx; Next;
   CPackAlign := 0; CPackSP := 0;
-  while CurTok.Kind <> tkEOF do
+  while (CurTok.Kind <> tkEOF) and ((crtlStart < 0) or (TokPos - 1 < crtlStart)) do
   begin
     if CIsPackMarker then CApplyPackMarker
     else if CIsTopLevelTypeDecl then
@@ -8849,6 +8856,17 @@ begin
   end;
   
   { Otherwise, it has a body! }
+  { A second body for a proc that already has one, in the same translation unit.
+    All three terms matter: BodyAddr>=0 says a body was already COMPILED (a
+    prototype leaves it -1); CProcHasLocalDef keeps crtl's deliberate overrides
+    of Pascal builtins quiet (malloc/memcpy/strtod and dozens more are defined in
+    compiler/builtin/*.pas AND lib/crtl/src/*.c — without this term it fired 88
+    times per C program); the unit test keeps it to THIS unit. Mirrors the Pascal
+    side (bug-a-duplicate-definition-silently-accepted). }
+  if (Procs[procIdx].BodyAddr >= 0) and CProcHasLocalDef[procIdx]
+     and (ProcUnitIdx[procIdx] = CurrentUnitIdx) then
+    Warn('duplicate definition of ''' + Procs[procIdx].Name +
+         ''' in the same translation unit — the later body wins');
   ProcExternal[procIdx] := False;
   CProcHasLocalDef[procIdx] := True;
   Procs[procIdx].BodyAddr := CodeLen;

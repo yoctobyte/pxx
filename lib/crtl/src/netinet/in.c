@@ -164,9 +164,15 @@ int shutdown(int sockfd, int how) {
   return __crtl_sock_fail(__pxx_shutdown(sockfd, how));
 }
 
-int close(int fd) {
-  return __crtl_sock_fail(__pxx_socket_close(fd));
-}
+/* NO `close` here. POSIX has ONE close() over one fd namespace, and it is
+   unistd.c's — this file used to define a second body that routed every close in
+   the TU through __pxx_socket_close, so whether closing a regular FILE went to
+   the file or the socket PAL entry depended on which module was pulled last.
+   Found by the C duplicate-definition warning (bug-c-string-h-compiles-stdlib-c-
+   twice). On POSIX the two are the same syscall (PalBackendSocketClose calls
+   PalBackendClose), so unistd's close is correct for sockets too. On ESP-IDF
+   they genuinely differ (lwip_close vs fclose) and neither single body can serve
+   both without an fd registry — bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file. */
 
 int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen) {
   return __crtl_sock_fail(__pxx_setsockopt(sockfd, level, optname, (void *)optval, (int)optlen));

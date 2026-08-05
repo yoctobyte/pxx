@@ -320,14 +320,12 @@ done:
   return (size_t)(p - s);
 }
 
-/* gettimeofday: wall clock via the PAL. Second precision only (__pxx_time
-   discards sub-second), so tv_usec is always 0 — enough for Date.now()/VFS
-   timestamps, not a high-resolution timer. */
-int gettimeofday(struct timeval *tv, void *tz) {
-  (void)tz;
-  if (tv) { tv->tv_sec = (long)__pxx_time(); tv->tv_usec = 0; }
-  return 0;
-}
+/* gettimeofday lives in sys/time.c, which is where <sys/time.h> declares it and
+   where the microsecond-precision PAL bridge (__pxx_realtime) is. A second,
+   second-precision-only body used to sit here — tv_usec always 0 — and since
+   this file includes <sys/time.h> both were compiled into the same TU, so which
+   precision a caller got depended on pull order. Found by the C duplicate-
+   definition warning (bug-c-string-h-compiles-stdlib-c-twice). */
 
 /* --- strptime: parse a broken-down time from a string (POSIX). ------------ */
 
