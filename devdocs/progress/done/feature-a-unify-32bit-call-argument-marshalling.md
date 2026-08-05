@@ -111,4 +111,4 @@ Track A: `make test` + self-host fixedpoint (byte-identical), plus
 outputs, not a tail.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit caf09e540.
