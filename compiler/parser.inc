@@ -28623,7 +28623,7 @@ var
   savedCurTokIVal: Int64;
   savedCurTokLine: Integer;
   savedSrcBase, savedUnitDir, savedCurrentCLibrary: AnsiString;
-  cdir, bdir, rtldir, lcldir, asmdir: AnsiString;
+  cdir, bdir, rtldir, lcldir, asmdir, probeContent, probePath: AnsiString;
   basePath, ext, emsg: AnsiString;
   lastSlash, lastDot: Integer;
   isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
@@ -28826,7 +28826,20 @@ begin
     if ExeDir = '' then
       rtldir := 'lib/rtl/'
     else
+    begin
       ConcatThree(ExeDir, '../lib/rtl/', '', rtldir);
+      { same two-levels-down re-anchor as the main block below — see its note }
+      ConcatThree(rtldir, 'sysutils', '.pas', path);
+      LoadFileCI(path, probeContent);
+      if Length(probeContent) = 0 then
+      begin
+        ConcatThree(ExeDir, '../../lib/rtl/', '', probePath);
+        ConcatThree(probePath, 'sysutils', '.pas', path);
+        LoadFileCI(path, probeContent);
+        if Length(probeContent) > 0 then rtldir := probePath;
+      end;
+      probeContent := '';
+    end;
     ConcatThree(rtldir, lo, '.pas', path);
     LoadFileCI(path, UnitContent);
     if Length(UnitContent) = 0 then
@@ -28928,6 +28941,33 @@ begin
     ConcatThree(ExeDir, '../lib/rtl/', '', rtldir);
     ConcatThree(ExeDir, '../lib/pcl/', '', lcldir);
     ConcatThree(ExeDir, '../lib/asmcore/', '', asmdir);
+    { '../lib' assumes the binary sits at <root>/compiler/. The STABLE binary
+      does not — it lives at <root>/stable_linux_amd64/<profile>/, two levels
+      down — so its '../lib/rtl' does not exist and every RTL unit missed. In
+      the repo that went unnoticed because the CWD-relative fallbacks below
+      rescue it; run the stable binary from any other directory and
+      `uses SysUtils` silently resolved to nothing, then every symbol it should
+      have supplied failed one by one, far from the cause
+      (bug-a-uses-sysutils-silently-no-ops-when-the-rtl-is-not-on-the-search-path).
+
+      Probe for a unit that is certainly there rather than guess a depth: if
+      '../lib/rtl/sysutils.pas' does not load, re-anchor one level higher. Done
+      once, so every rtldir/lcldir/asmdir use below is fixed at the same time. }
+    ConcatThree(rtldir, 'sysutils', '.pas', path);
+    LoadFileCI(path, probeContent);
+    if Length(probeContent) = 0 then
+    begin
+      ConcatThree(ExeDir, '../../lib/rtl/', '', probePath);
+      ConcatThree(probePath, 'sysutils', '.pas', path);
+      LoadFileCI(path, probeContent);
+      if Length(probeContent) > 0 then
+      begin
+        rtldir := probePath;
+        ConcatThree(ExeDir, '../../lib/pcl/', '', lcldir);
+        ConcatThree(ExeDir, '../../lib/asmcore/', '', asmdir);
+      end;
+    end;
+    probeContent := '';
   end;
 
   if Length(UnitContent) = 0 then
@@ -29122,6 +29162,15 @@ begin
       builtin-only FPC code keeps compiling (the historical behavior). }
     if softMissOK then
     begin
+      { The no-op is load-bearing for FPC compat — code that says `uses SysUtils`
+        but only touches builtins must keep compiling — but it must not be
+        SILENT. When it fires, the `uses` clause simply vanishes and every symbol
+        it should have supplied fails one at a time, far from the cause, with a
+        message that accuses the program: `undefined variable (Format)` and
+        nothing anywhere naming sysutils.
+        bug-a-uses-sysutils-silently-no-ops-when-the-rtl-is-not-on-the-search-path }
+      Warn('uses ' + lo + ': no unit source on the search path; continuing with '
+           + 'builtins only — symbols it would supply will report as undefined');
       CurrentCLibrary := savedCurrentCLibrary;
       Exit;
     end;

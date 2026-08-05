@@ -782,7 +782,16 @@ begin
       latter covers the self-host tests, which run a /tmp copy of the compiler
       with CWD at the repo root, so ExeDir-relative ('/tmp/../lib/...') misses. }
     if ExeDir <> '' then
+    begin
       AddPasUnitDir(ExeDir + '../lib/rtl/platform/posix/');
+      { The STABLE binary lives at <root>/stable_linux_amd64/<profile>/, two
+        levels down, so its '../lib' misses. Add the two-levels-up spelling as
+        well rather than probe: an extra non-existent search dir costs one
+        failed open, and getting this wrong made `uses SysUtils` resolve and
+        then die on its own `uses platform_backend`
+        (bug-a-uses-sysutils-silently-no-ops-when-the-rtl-is-not-on-the-search-path). }
+      AddPasUnitDir(ExeDir + '../../lib/rtl/platform/posix/');
+    end;
     AddPasUnitDir('lib/rtl/platform/posix/');
   end;
   { lib/asmcore resolution (asmcore_base/asmcore_x64, both for the compiler's

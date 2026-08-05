@@ -3,12 +3,13 @@ summary: "`uses sysutils|baseunix|unix` degrades to a SILENT no-op when the unit
 type: bug
 track: A
 prio: 45
+owner: claude-A
 ---
 
 # `uses SysUtils` silently no-ops when the RTL is not reachable
 
 - **Type:** bug — Track A (`compiler/parser.inc`, the `uses` resolver)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** a Track B `fpc_diff_probe` session — as a *harness* failure,
   which is exactly the point: the diagnostic sent me looking for a missing
@@ -90,3 +91,52 @@ Track A: `make test` + self-host fixedpoint. The note goes to stdout like the
 shim note, so any expectation file capturing combined output for a build with
 a genuinely missing sysutils would need updating — in-tree there should be
 none, since in-tree builds find it.
+
+## Resolution (2026-08-05) — both halves, and the "orthogonal" note was the real fix
+
+The ticket suggested making the soft miss audible, and mentioned as an aside
+that "the RTL anchor should probably also try `ExeDir/../../lib/rtl/`". That
+aside is the actual repair; the note is the safety net.
+
+### 1. Re-anchor (fixes the reported symptom)
+
+The library roots were `ExeDir/../lib/...`, which assumes the binary sits at
+`<root>/compiler/`. The **stable** binary does not — it lives at
+`<root>/stable_linux_amd64/<profile>/`, two levels down — so its `../lib/rtl`
+does not exist. In the repo the CWD-relative fallbacks rescued it, which is
+exactly why this never showed up in-tree.
+
+`ParseUsesUnit` now **probes** rather than guessing a depth: if
+`../lib/rtl/sysutils.pas` does not load, it re-anchors `rtldir`/`lcldir`/`asmdir`
+to `../../lib/`. Done once, so every consumer below is fixed together. The
+`MimicFpc` block got the same probe.
+
+That was not sufficient on its own — `sysutils` then resolved and died on its
+own `uses platform_backend`, because `compiler.pas` adds the PAL search dir with
+the same one-level assumption. It now adds the two-levels-up spelling too (an
+extra non-existent dir costs one failed open, cheaper than a second probe).
+
+**Measured**, a binary AT the stable depth, run from `/tmp`:
+
+    before: error: undefined variable (Format)
+    after : ok — and the program prints 42
+
+### 2. The note (for when the RTL genuinely is absent)
+
+The soft miss is load-bearing for FPC compat and stays. It is no longer silent:
+
+    warning: uses sysutils: no unit source on the search path; continuing with
+             builtins only — symbols it would supply will report as undefined
+
+Verified not to be dead code: with `compiler/builtin/` present but no `lib/rtl`,
+a builtin-only `uses SysUtils` program warns once and still compiles and runs —
+which is precisely the compat case the no-op exists for. (With `builtin/` also
+missing the compiler fails earlier and louder on `builtinheap`, which is already
+a clear message.)
+
+**Gate:** in-tree behaviour unchanged (`Format` still works, no note);
+`testmgr --tier quick` green; `selfhost_fixedpoint.sh` converges and agrees with
+`compiler/pascal26`.
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.

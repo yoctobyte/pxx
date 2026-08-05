@@ -79,6 +79,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-str-boxed-into-variant-does-not-own-bytes | A | 80 | bug | A `str` boxed into a Variant does not OWN its bytes — silent wrong values | — |
 | bug-a-threadsafe-self-host-exceeds-max-globfix-by-121 | A | 75 | bug | The --threadsafe self-compile needs 65657 global fixups against a fixed cap of 65536 — over by 121. A GATED test-core job is red on master, and `make compiler/pascal26` is green, so the normal build masks it completely | — |
 | bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
+| bug-a-uses-sysutils-silently-no-ops-when-the-rtl-is-not-on-the-search-path | A | 45 | bug | `uses sysutils\|baseunix\|unix` degrades to a SILENT no-op when the unit is not on the search path, so a build outside the repo root reports `undefined variable (Format)` instead of naming the missing RTL | — |
 | bug-a-variant-class-boxing-missing-on-i386-aarch64 | A | 70 | bug | Storing a class into a Variant did not build on i386 or aarch64 | — |
 | bug-a-variant-fn-return-forward-nrvo-corruption | A | 55 | bug | Variant FUNCTION forwarding another Variant call's result corrupts the value | — |
 | bug-a-variant-unbox-wrong-on-32bit-and-unavailable-cross | A | 70 | bug | Variant -> scalar unbox is unavailable on cross targets | — |
