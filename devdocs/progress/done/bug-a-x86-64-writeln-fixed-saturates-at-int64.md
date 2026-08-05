@@ -97,4 +97,4 @@ fixedpoint). i386/arm32/aarch64 byte-identical to before — the change is
 confined to the x86-64 emitter.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit 0e3fd281e.
