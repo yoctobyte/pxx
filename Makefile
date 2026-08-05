@@ -1855,7 +1855,7 @@ test-core: $(COMPILER)
 	# did not hang but printed 9223372036854775809.000000. Run under a TIMEOUT — a
 	# regression here is a HANG, not a wrong line.
 	./$(COMPILER) test/test_writeln_nonfinite_float.pas /tmp/test_writeln_nonfinite26
-	test "$$(timeout 20 /tmp/test_writeln_nonfinite26)" = "$$(printf ' Inf\n Inf\n[ Inf]\n Inf\n Inf\n-Inf\n[-Inf]\n-Inf\n Nan\n[ Nan]\n Nan\n 1.0000000000000000E+000\n-2.5000000000000000E+000\n 0.0000000000000000E+000\n 1.0000000000000007E+300\n3.50\n  -0.125')"
+	test "$$(timeout 20 /tmp/test_writeln_nonfinite26)" = "$$(printf ' Inf\n Inf\n[ Inf]\n Inf\n Inf\n-Inf\n[-Inf]\n-Inf\n Nan\n[ Nan]\n Nan\n 1.0000000000000000E+000\n-2.5000000000000000E+000\n 0.0000000000000000E+000\n 1.0000000000000001E+300\n3.50\n  -0.125')"
 	./$(COMPILER) test/test_promoint_minint64_div.pas /tmp/test_promoint_minint26
 	test "$$(/tmp/test_promoint_minint26)" = "$$(printf '9223372036854775808\n9223372036854775808\n0\n-9223372036854775808\n0\n-9223372036854775808\n9223372036854775807\n9223372036854775807\n-1180591620717411303424')"
 	./$(COMPILER) test/test_promoint_parameter.pas /tmp/test_promoint_param26
@@ -4035,7 +4035,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_overloading.pas /tmp/test_overloading_ir26
 	test "$$(/tmp/test_overloading_ir26)" = "$$(printf 'Integer: 42\nChar: A\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
 	./$(COMPILER) test/test_float_write.pas /tmp/test_float_write_ir26
-	test "$$(/tmp/test_float_write_ir26)" = "$$(printf '3.50\n4\n-2.750\n1.0\n0.00\n10.5\n 1.0000000000000000E+000\n-2.0000000000000000E+000\n 0.0000000000000000E+000\n 3.5000000000000000E+000\n 1.2345000000000002E+003')"
+	test "$$(/tmp/test_float_write_ir26)" = "$$(printf '3.50\n4\n-2.750\n1.0\n0.00\n10.5\n 1.0000000000000000E+000\n-2.0000000000000000E+000\n 0.0000000000000000E+000\n 3.5000000000000000E+000\n 1.2345000000000000E+003')"
 	./$(COMPILER) test/test_shared_object.pas /tmp/shared_object26
 	test "$$(/tmp/shared_object26)" = "97"
 	./$(COMPILER) test/test_c_import.pas /tmp/c_import26
@@ -4779,7 +4779,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_float_literals.pas /tmp/test_float_literals26
 	test "$$(/tmp/test_float_literals26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_float_write.pas /tmp/test_float_write26
-	test "$$(/tmp/test_float_write26)" = "$$(printf '3.50\n4\n-2.750\n1.0\n0.00\n10.5\n 1.0000000000000000E+000\n-2.0000000000000000E+000\n 0.0000000000000000E+000\n 3.5000000000000000E+000\n 1.2345000000000002E+003')"
+	test "$$(/tmp/test_float_write26)" = "$$(printf '3.50\n4\n-2.750\n1.0\n0.00\n10.5\n 1.0000000000000000E+000\n-2.0000000000000000E+000\n 0.0000000000000000E+000\n 3.5000000000000000E+000\n 1.2345000000000000E+003')"
 	./$(COMPILER) test/test_float_width.pas /tmp/test_float_width26
 	test "$$(/tmp/test_float_width26)" = "$$(printf '[   3.142]\n[      1.50]\n[  -2.5]\n[   123.46]\n[  10.00]\n[3.1]\n[ 0.00]\n[1000]')"
 	./$(COMPILER) test/test_exceptions.pas /tmp/test_exceptions26

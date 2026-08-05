@@ -28,3 +28,35 @@ pascal26:33: error: compiler error: PXXWriteFloatSci not found
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Resolved (2026-08-05) — caused by e7d4f3336, repaired
+
+Mine, from the correctly-rounded-float fix. Two distinct causes:
+
+**1. Algol / Fortran skeletons: a dependency the shim introduced.** Collapsing
+the four float formatters into one made x86-64's `EmitWriteFloatSci` a SHIM onto
+the runtime's `PXXWriteFloatSci`. The esoteric skeleton frontends link no RTL and
+emit code immediately with no entry jump, so they cannot pull `builtinheap` —
+they died with `compiler error: PXXWriteFloatSci not found`. (Pulling the unit
+from `ParseGProgram` was tried: it compiles and then SEGFAULTS, because those
+frontends have no entry jump for unit bodies to land behind.)
+
+Repaired by keeping the original hand-written emitter as
+`EmitWriteFloatSciSelfContained`, used ONLY when `FindProc` says the RTL writer
+is absent. Every program that links the RTL — i.e. every real one — still gets
+the exact formatter. The fallback carries a comment saying precisely what would
+let someone delete it: give the probe frontends an entry jump.
+
+**2. test_float_write / test_writeln_nonfinite_float: stale expectations.** They
+encoded the OLD, WRONG digits:
+
+| expectation | was | correct | oracle |
+| --- | --- | --- | --- |
+| 1234.5 | `1.2345000000000002E+003` | `1.2345000000000000E+003` | CPython `f'{1234.5:.16e}'` |
+| 1e300 | `1.0000000000000007E+300` | `1.0000000000000001E+300` | FPC **and** CPython |
+
+1234.5 is exactly representable, so trailing `...0002` was never right. Updated
+against the oracles, not against pxx's own output.
+
+**Verified:** `testmgr --tier native` **1158/1158 pass** (includes the
+self-host fixedpoint and the fpc-bootstrap).

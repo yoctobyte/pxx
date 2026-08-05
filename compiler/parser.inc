@@ -29785,12 +29785,21 @@ begin
       needsHeap := True;
     if (Tokens[i].Kind = tkDiv) or (Tokens[i].Kind = tkMod) then
       needsDivStub := True;
-    { 32-bit cross targets write floats through the builtinheap Pascal
-      helpers (PXXWriteFloat*), so any float-producing token pulls the unit.
-      tkSlash counts: integer / integer yields a float. }
-    if ((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
-        (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32)) and
-       (Tokens[i].Kind in [tkFloat, tkSlash]) then
+    { EVERY target writes floats through the builtinheap Pascal helpers
+      (PXXWriteFloat*), so any float-producing token pulls the unit.
+      tkSlash counts: integer / integer yields a float.
+
+      This used to name only the 32-bit cross targets, because x86-64 and
+      aarch64 had self-contained hand-written emitters. They no longer do —
+      both now shim onto PXXWriteFloatSci/Nat/Fixed so there is ONE correctly
+      rounded formatter instead of four
+      (bug-a-writeln-float-exponent-form-not-correctly-rounded,
+      bug-a-writeln-nonfinite-float-aarch64-emitters-unchecked). A program that
+      writes a float but needs no heap — the Algol and Fortran skeletons are
+      exactly that — then failed with "compiler error: PXXWriteFloatSci not
+      found", because the whole registration block lives under `needHeapUnit`.
+      Shimming moved the dependency; this is where it has to be paid. }
+    if Tokens[i].Kind in [tkFloat, tkSlash] then
       needsHeap := True;
     if Tokens[i].Kind = tkUses then
       needsAnsiRuntime := True;

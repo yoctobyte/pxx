@@ -6152,31 +6152,235 @@ begin
   Patch32(nfEndNan, CodeLen - (nfEndNan + 4));
 end;
 
-procedure EmitWriteFloatSci;
+procedure EmitWriteFloatSciSelfContained;
+{ The ORIGINAL hand-written x86-64 formatter, kept ONLY as a fallback for
+  frontends that link no RTL (the esoteric skeleton probes: Algol, Fortran,
+  LOLCODE, Whitespace, Erlang — all x86-64-only). Those emit code immediately
+  with no entry jump, so they cannot pull builtinheap, and the shim below would
+  fail with "compiler error: PXXWriteFloatSci not found".
+
+  It is NOT correctly rounded — it normalises by repeated divide and drifts from
+  the 16th digit, and gets the EXPONENT wrong for 1e200
+  (bug-a-writeln-float-exponent-form-not-correctly-rounded). Every program that
+  links the RTL — i.e. every real one — takes the exact path instead. Do not
+  extend this; if a probe frontend ever needs correct digits, give it an entry
+  jump so it can pull builtinheap, and delete this. }
 { Double value in xmm0. Prints Pascal-style scientific notation:
   <' '|'-'>d.<16 digits>E<'+'|'-'>ddd  (17 significant digits, 3-digit exponent),
-  matching FPC's default Str(Double) field width.
+  matching FPC's default Str(Double) field width. Digit extraction uses double
+  arithmetic, so the last 1-2 digits may differ from a correctly-rounded bignum
+  formatter; adequate for general output. e10 kept in r12. }
+const FRAC = 16;
+var jncPos, jmpSignDone, jnzNz, jmpDone: Integer;
+    laTop, laJb, lbTop, lbJae, jnsPos2, jmpEd: Integer;
+    clampJle, bdLoop, roundJl, ovJb: Integer;
+    nfJne, nfJnz, nfJnc, nfJmpSign, nfDoneInf, nfDoneNan: Integer;
+    k, j: Integer; divisor: Int64;
+begin
+  EmitB($41); EmitB($54);                                       { push r12 }
 
-  This used to be ~200 lines of hand-written x86-64 that normalised into [1,10)
-  by repeated divide/multiply and extracted digits in double arithmetic. Its own
-  header admitted "the last 1-2 digits may differ from a correctly-rounded
-  bignum formatter" — in fact it was wrong from the 16th digit on every value
-  tested, and for 1e200 it produced the wrong EXPONENT (E+200 for a value just
-  under it). It was one of FOUR copies of the same flawed loop.
+  { ---- NON-FINITE first: Inf and NaN have no decimal normalisation ----
 
-  Now a thin shim onto PXXWriteFloatSci, which does the exact decimal expansion
-  (PxxSciDigits17). One implementation, not four — the same reason the aarch64
-  emitter and the i386/arm32/riscv32 backends all route here.
-  bug-a-writeln-float-exponent-form-not-correctly-rounded }
+    The two loops below normalise into [1,10) by repeated divide/multiply. For
+    +Inf, `Inf/10` is still Inf, so `.la` NEVER EXITS; a NaN compares UNORDERED,
+    which leaves `.lb`'s `jae` untaken and loops there instead. So `writeln` of a
+    non-finite Double emitted its sign and then SPUN FOREVER — a hang, the one
+    failure shape worse than a crash, and reachable from ordinary code because a
+    float divide by zero yields Inf BY DESIGN here rather than erroring
+    (bug-a-writeln-of-a-non-finite-double-hangs).
+
+    Checked BEFORE the sign block on purpose: everything here runs with no
+    syscall in between, so rax/rcx/rdx are free (EmitwriteChar issues a syscall,
+    which clobbers rcx and r11 — that is why the existing code parks live values
+    in r12/r13). It also lets NaN print WITHOUT a sign, which is what FPC does;
+    detecting after the sign block would have emitted the '-' that 0.0/0.0's
+    negative NaN carries.
+
+    Spelling matches sysutils' FloatToStr — `Inf` / `-Inf` — plus `Nan`. }
+  EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);   { movq rax, xmm0 }
+  EmitB($48); EmitB($BA); EmitI64($7FF0000000000000);           { mov rdx, expmask }
+  EmitB($48); EmitB($89); EmitB($C1);                           { mov rcx, rax }
+  EmitB($48); EmitB($21); EmitB($D1);                           { and rcx, rdx }
+  EmitB($48); EmitB($39); EmitB($D1);                           { cmp rcx, rdx }
+  { rel32 throughout this block, NOT rel8: each EmitwriteChar expands to a full
+    write syscall sequence, so these branches span far more than 127 bytes and a
+    byte displacement silently TRUNCATES — which is what made NaN still hang
+    after the Inf case was already right. }
+  EmitB($0F); EmitB($85); nfJne := CodeLen; EmitI32(0);         { jne .finite }
+  EmitB($48); EmitB($89); EmitB($C1);                           { mov rcx, rax (keep sign) }
+  EmitB($48); EmitB($BA); EmitI64($000FFFFFFFFFFFFF);           { mov rdx, mantmask }
+  EmitB($48); EmitB($21); EmitB($D0);                           { and rax, rdx }
+  EmitB($48); EmitB($85); EmitB($C0);                           { test rax, rax }
+  EmitB($0F); EmitB($85); nfJnz := CodeLen; EmitI32(0);          { jnz .nan }
+  { Inf: sign from the saved bits, then the magnitude spelling }
+  EmitB($48); EmitB($0F); EmitB($BA); EmitB($E1); EmitB($3F);   { bt rcx, 63 }
+  EmitB($0F); EmitB($83); nfJnc := CodeLen; EmitI32(0);          { jnc .posinf }
+  MovRaxImm(Ord('-')); EmitwriteChar;
+  EmitB($E9); nfJmpSign := CodeLen; EmitI32(0);                  { jmp .infbody }
+  Patch32(nfJnc, CodeLen - (nfJnc + 4));                        { .posinf: }
+  MovRaxImm(Ord(' ')); EmitwriteChar;
+  Patch32(nfJmpSign, CodeLen - (nfJmpSign + 4));                { .infbody: }
+  MovRaxImm(Ord('I')); EmitwriteChar;
+  MovRaxImm(Ord('n')); EmitwriteChar;
+  MovRaxImm(Ord('f')); EmitwriteChar;
+  EmitB($E9); nfDoneInf := CodeLen; EmitI32(0);                 { jmp .done }
+  Patch32(nfJnz, CodeLen - (nfJnz + 4));                        { .nan: }
+  MovRaxImm(Ord(' ')); EmitwriteChar;
+  MovRaxImm(Ord('N')); EmitwriteChar;
+  MovRaxImm(Ord('a')); EmitwriteChar;
+  MovRaxImm(Ord('n')); EmitwriteChar;
+  EmitB($E9); nfDoneNan := CodeLen; EmitI32(0);                 { jmp .done }
+  Patch32(nfJne, CodeLen - (nfJne + 4));                        { .finite: }
+
+  { ---- sign ---- }
+  EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);   { movq rax, xmm0 }
+  EmitB($48); EmitB($0F); EmitB($BA); EmitB($E0); EmitB($3F);   { bt rax, 63 }
+  EmitB($73); jncPos := CodeLen; EmitB(0);                      { jnc .pos }
+  EmitB($48); EmitB($0F); EmitB($BA); EmitB($F0); EmitB($3F);   { btr rax, 63 }
+  EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0);   { movq xmm0, rax }
+  MovRaxImm(Ord('-')); EmitwriteChar;
+  EmitB($EB); jmpSignDone := CodeLen; EmitB(0);                 { jmp .signdone }
+  Code[jncPos] := Byte(CodeLen - (jncPos + 1));                 { .pos: }
+  MovRaxImm(Ord(' ')); EmitwriteChar;
+  Code[jmpSignDone] := Byte(CodeLen - (jmpSignDone + 1));       { .signdone: }
+
+  { 10.0 -> xmm1, 1.0 -> xmm2 (preserved across syscalls) }
+  MovRaxImm(10); EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C8); { cvtsi2sd xmm1, rax }
+  MovRaxImm(1);  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($D0); { cvtsi2sd xmm2, rax }
+
+  { ---- zero special case ---- }
+  EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);   { movq rax, xmm0 }
+  EmitB($48); EmitB($85); EmitB($C0);                          { test rax, rax }
+  EmitB($0F); EmitB($85); jnzNz := CodeLen; EmitI32(0);        { jnz .nz }
+  MovRaxImm(Ord('0')); EmitwriteChar;
+  MovRaxImm(Ord('.')); EmitwriteChar;
+  for j := 1 to FRAC do begin MovRaxImm(Ord('0')); EmitwriteChar; end;
+  MovRaxImm(Ord('E')); EmitwriteChar;
+  MovRaxImm(Ord('+')); EmitwriteChar;
+  for j := 1 to 3 do begin MovRaxImm(Ord('0')); EmitwriteChar; end;
+  EmitB($E9); jmpDone := CodeLen; EmitI32(0);                  { jmp .done }
+  Patch32(jnzNz, CodeLen - (jnzNz + 4));                       { .nz: }
+
+  { ---- normalize value into [1,10), tracking decimal exponent in r12 ---- }
+  EmitB($4D); EmitB($31); EmitB($E4);                          { xor r12, r12 }
+  laTop := CodeLen;                                            { .la: while value>=10 }
+  EmitB($66); EmitB($0F); EmitB($2E); EmitB($C1);              { ucomisd xmm0, xmm1 }
+  EmitB($72); laJb := CodeLen; EmitB(0);                       { jb .ea }
+  EmitB($F2); EmitB($0F); EmitB($5E); EmitB($C1);              { divsd xmm0, xmm1 }
+  EmitB($49); EmitB($FF); EmitB($C4);                          { inc r12 }
+  EmitB($EB); EmitB(Byte(laTop - (CodeLen + 1)));              { jmp .la }
+  Code[laJb] := Byte(CodeLen - (laJb + 1));                    { .ea: }
+  lbTop := CodeLen;                                            { .lb: while value<1 }
+  EmitB($66); EmitB($0F); EmitB($2E); EmitB($C2);              { ucomisd xmm0, xmm2 }
+  EmitB($73); lbJae := CodeLen; EmitB(0);                      { jae .eb }
+  EmitB($F2); EmitB($0F); EmitB($59); EmitB($C1);              { mulsd xmm0, xmm1 }
+  EmitB($49); EmitB($FF); EmitB($CC);                          { dec r12 }
+  EmitB($EB); EmitB(Byte(lbTop - (CodeLen + 1)));              { jmp .lb }
+  Code[lbJae] := Byte(CodeLen - (lbJae + 1));                  { .eb: }
+
+  { m = round-to-nearest(value * 10^FRAC) built as a (FRAC+1)-digit integer in
+    rbx, extracted MSD-first by iteration so each step only truncates a value in
+    [0,10). This keeps ~17 accurate digits, unlike one (value*10^16) double
+    multiply which overflows the 53-bit mantissa and zeroes the low digits. rcx
+    counts the FRAC+1 leading digits; one extra guard digit then rounds half-up.
+    No syscalls here, so rax/rcx/rdx are free scratch; xmm1 still holds 10.0. }
+  EmitB($48); EmitB($31); EmitB($DB);                          { xor rbx, rbx }
+  EmitB($B9); EmitI32(FRAC + 1);                               { mov ecx, 17 }
+  bdLoop := CodeLen;                                           { .bd: }
+  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);  { cvttsd2si rax, xmm0 }
+  EmitB($48); EmitB($83); EmitB($F8); EmitB($09);              { cmp rax, 9 }
+  EmitB($7E); clampJle := CodeLen; EmitB(0);                   { jle .ok }
+  EmitB($B8); EmitI32(9);                                      { mov eax, 9 }
+  Code[clampJle] := Byte(CodeLen - (clampJle + 1));            { .ok: }
+  EmitB($48); EmitB($6B); EmitB($DB); EmitB($0A);              { imul rbx, rbx, 10 }
+  EmitB($48); EmitB($01); EmitB($C3);                          { add rbx, rax }
+  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($D8);  { cvtsi2sd xmm3, rax }
+  EmitB($F2); EmitB($0F); EmitB($5C); EmitB($C3);              { subsd xmm0, xmm3 }
+  EmitB($F2); EmitB($0F); EmitB($59); EmitB($C1);              { mulsd xmm0, xmm1 }
+  EmitB($48); EmitB($FF); EmitB($C9);                          { dec rcx }
+  EmitB($75); EmitB(Byte(bdLoop - (CodeLen + 1)));             { jnz .bd }
+  { guard digit: round half-up }
+  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);  { cvttsd2si rax, xmm0 }
+  EmitB($48); EmitB($83); EmitB($F8); EmitB($05);              { cmp rax, 5 }
+  EmitB($7C); roundJl := CodeLen; EmitB(0);                    { jl .noround }
+  EmitB($48); EmitB($FF); EmitB($C3);                          { inc rbx }
+  Code[roundJl] := Byte(CodeLen - (roundJl + 1));              { .noround: }
+  { carry past the leading digit (9.99..->10.0): drop a digit, bump exponent }
+  divisor := 1; for k := 0 to FRAC do divisor := divisor * 10;  { 10^(FRAC+1) }
+  EmitB($48); EmitB($B8); EmitI64(divisor);                    { mov rax, 10^17 }
+  EmitB($48); EmitB($39); EmitB($C3);                          { cmp rbx, rax }
+  EmitB($72); ovJb := CodeLen; EmitB(0);                       { jb .nov }
+  EmitB($48); EmitB($89); EmitB($D8);                          { mov rax, rbx }
+  EmitB($48); EmitB($31); EmitB($D2);                          { xor rdx, rdx }
+  EmitB($B9); EmitI32(10);                                     { mov ecx, 10 }
+  EmitB($48); EmitB($F7); EmitB($F1);                          { div rcx }
+  EmitB($48); EmitB($89); EmitB($C3);                          { mov rbx, rax }
+  EmitB($49); EmitB($FF); EmitB($C4);                          { inc r12 }
+  Code[ovJb] := Byte(CodeLen - (ovJb + 1));                    { .nov: }
+
+  { print m as d.<FRAC digits>, most significant first }
+  for k := FRAC downto 0 do
+  begin
+    divisor := 1; for j := 1 to k do divisor := divisor * 10;
+    EmitB($48); EmitB($89); EmitB($D8);                        { mov rax, rbx }
+    EmitB($48); EmitB($31); EmitB($D2);                        { xor rdx, rdx }
+    EmitB($48); EmitB($B9); EmitI64(divisor);                  { mov rcx, divisor }
+    EmitB($48); EmitB($F7); EmitB($F1);                        { div rcx }
+    EmitB($48); EmitB($89); EmitB($D3);                        { mov rbx, rdx }
+    EmitB($48); EmitB($83); EmitB($C0); EmitB($30);            { add rax, '0' }
+    EmitwriteChar;
+    if k = FRAC then begin MovRaxImm(Ord('.')); EmitwriteChar; end;
+  end;
+
+  { 'E', exponent sign, 3-digit exponent }
+  MovRaxImm(Ord('E')); EmitwriteChar;
+  EmitB($4C); EmitB($89); EmitB($E0);                          { mov rax, r12 }
+  EmitB($48); EmitB($85); EmitB($C0);                          { test rax, rax }
+  EmitB($79); jnsPos2 := CodeLen; EmitB(0);                    { jns .pos2 }
+  EmitB($48); EmitB($F7); EmitB($D8);                          { neg rax }
+  EmitB($48); EmitB($89); EmitB($C3);                          { mov rbx, rax }
+  MovRaxImm(Ord('-')); EmitwriteChar;
+  EmitB($EB); jmpEd := CodeLen; EmitB(0);                      { jmp .ed }
+  Code[jnsPos2] := Byte(CodeLen - (jnsPos2 + 1));              { .pos2: }
+  EmitB($48); EmitB($89); EmitB($C3);                          { mov rbx, rax }
+  MovRaxImm(Ord('+')); EmitwriteChar;
+  Code[jmpEd] := Byte(CodeLen - (jmpEd + 1));                  { .ed: }
+  for k := 2 downto 0 do
+  begin
+    divisor := 1; for j := 1 to k do divisor := divisor * 10;
+    EmitB($48); EmitB($89); EmitB($D8);                        { mov rax, rbx }
+    EmitB($48); EmitB($31); EmitB($D2);                        { xor rdx, rdx }
+    EmitB($48); EmitB($B9); EmitI64(divisor);                  { mov rcx, divisor }
+    EmitB($48); EmitB($F7); EmitB($F1);                        { div rcx }
+    EmitB($48); EmitB($89); EmitB($D3);                        { mov rbx, rdx }
+    EmitB($48); EmitB($83); EmitB($C0); EmitB($30);            { add rax, '0' }
+    EmitwriteChar;
+  end;
+
+  Patch32(jmpDone, CodeLen - (jmpDone + 4));                   { .done: }
+  Patch32(nfDoneInf, CodeLen - (nfDoneInf + 4));               { ...Inf joins here }
+  Patch32(nfDoneNan, CodeLen - (nfDoneNan + 4));               { ...and NaN }
+  EmitB($41); EmitB($5C);                                       { pop r12 }
+end;
+
+procedure EmitWriteFloatSci;
+{ Double value in xmm0 -> Pascal scientific notation, 17 significant digits.
+  Shims onto PXXWriteFloatSci (exact decimal expansion) when the RTL is linked,
+  which is the case for every ordinary program; falls back to the old
+  self-contained emitter for the RTL-less probe frontends. }
 var procIdx: Integer;
 begin
+  procIdx := FindProc('PXXWriteFloatSci');
+  if procIdx < 0 then
+  begin
+    EmitWriteFloatSciSelfContained;
+    Exit;
+  end;
   EmitAsmX64([
     'sub rsp, 16',
     'movsd [rsp], xmm0',
     'mov rdi, rsp'
   ]);
-  procIdx := FindProc('PXXWriteFloatSci');
-  if procIdx < 0 then Error('compiler error: PXXWriteFloatSci not found');
   EmitCallProc(procIdx);
   EmitAsmX64(['add rsp, 16']);
 end;
