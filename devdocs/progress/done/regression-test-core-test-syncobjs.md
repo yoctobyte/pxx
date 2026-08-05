@@ -25,3 +25,6 @@ ok: /tmp/testmgr-scratch-832624/test_syncobjs26  [code=75935B  data=2968B  bss=9
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-05 — auto-closed by the plexus watcher: `test-core#src:test/test_syncobjs.pas` passes at 7f635d4e13de (tier native); it was red at 9df868bf3680. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
