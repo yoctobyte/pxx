@@ -127,4 +127,4 @@ now names the mismatch.
 Track P: `make test` + self-host fixedpoint (byte-identical).
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit 6a7b1ee89.
