@@ -4010,6 +4010,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_writeln_float_width26)" = "$$(printf '[      3.1416]\n[     -3.1416]\n[  10.0]\n[    1]\n[   -1]\n[123456.0]\n[    0.00]\n[      100000000000000000000.00]\n[     -100000000000000000000.00]\n[3.14]\nOK')"
 	./$(COMPILER) test/test_static_array_managed_scope_exit.pas /tmp/test_static_array_managed_scope_exit26
 	test "$$(/tmp/test_static_array_managed_scope_exit26)" = "$$(printf '0\nOK')"
+	./$(COMPILER) test/test_string_array_element_charwrite.pas /tmp/test_string_array_element_charwrite26
+	test "$$(/tmp/test_string_array_element_charwrite26)" = "$$(printf '4x\n5x\n6x\n4y\n6z\nxyz\nOK')"
 	./$(COMPILER) test/test_ir_codegen_fail.pas /tmp/test_ir_codegen_fail26
 	test "$$(/tmp/test_ir_codegen_fail26)" = "$$(printf '15\nFAIL')"
 	./$(COMPILER) test/test_ir_unary.pas /tmp/test_ir_unary26

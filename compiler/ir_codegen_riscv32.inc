@@ -1362,12 +1362,32 @@ begin
         { Managed-string index: read position already has the handle (IR_LEA
           loaded it); write position holds the slot address -> clone-if-shared
           via PXXStrUnique to get a writable handle (COW). }
-        if (IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
-           not Syms[IRA[left]].IsArray and InLValueWrite then
+        { Two shapes reach here, and only the first was handled: a SCALAR
+          managed string (IR_LEA), and a managed string that is itself a FIELD
+          or an ARRAY ELEMENT (IR_FIELD / IR_INDEX with a 1-byte stride) —
+          `a[i][1] := 'x'` on an `array[0..N] of string`. For the second, a0
+          held the element's SLOT ADDRESS and neither the COW call nor the
+          deref ran, so the character store landed in the handle slot itself:
+          the string's length read back 0 and the handle was left malformed
+          (which then segfaulted when scope-exit tried to release it).
+          Mirrors the arm32 arm exactly.
+          bug-a-riscv32-setlength-on-string-array-element-loses-length }
+        if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
+            not Syms[IRA[left]].IsArray) or
+           (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX)) and
+            (IRTk[left] = Ord(tyAnsiString)) and (elemSize = 1)) then
         begin
-          procIdx := FindProc('PXXStrUnique');
-          if procIdx < 0 then Error('compiler error: PXXStrUnique not found');
-          EmitCallProc(procIdx);                   { a0 = unique handle }
+          if InLValueWrite then
+          begin
+            procIdx := FindProc('PXXStrUnique');
+            if procIdx < 0 then Error('compiler error: PXXStrUnique not found');
+            EmitCallProc(procIdx);                 { a0 = unique handle }
+          end
+          else if (IRKind[left] = IR_LEA) and (Syms[IRA[left]].Kind = skParam) and
+                  Syms[IRA[left]].IsRef then
+            rv32_lw(reg_a0, reg_a0, 0)             { &handle -> handle }
+          else if (IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX) then
+            rv32_lw(reg_a0, reg_a0, 0);            { slot -> handle }
         end;
         rv32_addi(reg_sp, reg_sp, -4);
         rv32_sw(reg_a0, reg_sp, 0);

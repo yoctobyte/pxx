@@ -196,3 +196,24 @@ exit crashes. Trading a pre-existing leak for a crash is the wrong direction, so
 the riscv32 branch of `EmitProcEpilog` carries an explicit comment and no arm.
 Filed as `bug-a-riscv32-setlength-on-string-array-element-loses-length`
 (prio 55), which unblocks it.
+
+
+## FOLLOW-UP (2026-08-05, same day) — riscv32 now joins the rest
+
+The correction above records riscv32 being left deliberately leaking, because
+adding the release arm there segfaulted on already-malformed array-element
+handles. That blocker is fixed
+(`bug-a-riscv32-setlength-on-string-array-element-loses-length` — it was the
+indexed CHAR WRITE, not `SetLength`: riscv32's `IR_INDEX` was missing the
+field/array-element shape arm32 has, so the character landed in the handle slot).
+
+The riscv32 arm is restored. **All five targets are now clean**, measured by
+heap-address growth:
+
+| target | pinned | now |
+| --- | --- | --- |
+| x86-64 | grew=1 | grew=0 |
+| i386 | grew=1 | grew=0 |
+| arm32 | grew=1 | grew=0 |
+| aarch64 | grew=1 | grew=0 |
+| riscv32 | grew=1 | **grew=0** |
