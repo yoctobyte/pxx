@@ -1824,6 +1824,222 @@ begin
 end.
 P
 
+# ---- signed vs unsigned-narrow comparison ----
+# Passes natively and is kept here anyway: the SAME expression is FALSE on
+# aarch64 in both frontends (bug-a-aarch64-signed-vs-unsigned-narrow-comparison-
+# is-wrong). This probe has no cross mode, so without a Pascal case on record
+# the Pascal half of that bug is only visible through the C probe.
+probe signed-vs-unsigned-narrow <<'P'
+var n: Integer; b: Byte; w: Word; sm: SmallInt;
+begin
+  n := -1; b := 1; w := 1; sm := -1;
+  writeln(n < b, '|', n < w, '|', sm < b, '|', n < 1, '|', b > n);
+end.
+P
+
+# ---- atomics ----
+probe interlocked-family <<'P'
+{$IFDEF PXX} uses palatomic; {$ENDIF}
+var n, r: LongInt; q, s: Int64;
+begin
+  n := 10;
+  r := InterLockedIncrement(n);   writeln(r, '|', n);
+  r := InterLockedDecrement(n);   writeln(r, '|', n);
+  r := InterLockedExchange(n, 99); writeln(r, '|', n);
+  r := InterLockedExchangeAdd(n, 5); writeln(r, '|', n);
+  r := InterLockedCompareExchange(n, 7, 104); writeln(r, '|', n);
+  r := InterLockedCompareExchange(n, 1, 999); writeln(r, '|', n);
+  q := 100;
+  s := InterLockedIncrement64(q);  writeln(s, '|', q);
+  s := InterLockedDecrement64(q);  writeln(s, '|', q);
+  s := InterLockedExchange64(q, 5000000000); writeln(s, '|', q);
+  s := InterLockedExchangeAdd64(q, -50); writeln(s, '|', q);
+  s := InterLockedCompareExchange64(q, 3, 4999999950); writeln(s, '|', q);
+end.
+P
+
+# ---- threads ----
+# Every case here prints only AFTER a join, and prints a total rather than an
+# interleaving, so the expected output is deterministic. A thread probe that
+# printed from inside the threads would report scheduling as a divergence.
+probe thread-tthread-waitfor <<'P'
+{$threadsafe on}
+uses {$IFDEF FPC} cthreads, Classes, {$ELSE} palthreadobj, {$ENDIF} SysUtils;
+type
+  TAdder = class(TThread)
+  public
+    Total: Integer;
+    procedure Execute; override;
+  end;
+procedure TAdder.Execute;
+var i: Integer;
+begin
+  Total := 0;
+  for i := 1 to 1000 do Total := Total + i;
+end;
+var t: TAdder;
+begin
+  t := TAdder.Create(True);
+  t.FreeOnTerminate := False;
+  t.Start;
+  t.WaitFor;
+  writeln(t.Total, '|', t.Finished);
+  t.Free;
+end.
+P
+# [known] on t[k].Free — bug-p-free-and-destroy-only-work-on-a-simple-variable
+# (freeing an object held in an ARRAY ELEMENT does not compile). The counter
+# itself is verified; only the teardown is blocked.
+probe thread-interlocked-counter known <<'P'
+{$threadsafe on}
+uses {$IFDEF FPC} cthreads, Classes, {$ELSE} palthreadobj, palatomic, {$ENDIF} SysUtils;
+var Counter: Integer;
+type
+  TBumper = class(TThread)
+  public
+    procedure Execute; override;
+  end;
+procedure TBumper.Execute;
+var i: Integer;
+begin
+  for i := 1 to 5000 do InterLockedIncrement(Counter);
+end;
+var t: array[0..3] of TBumper; k: Integer;
+begin
+  Counter := 0;
+  for k := 0 to 3 do
+  begin
+    t[k] := TBumper.Create(True);
+    t[k].FreeOnTerminate := False;
+    t[k].Start;
+  end;
+  for k := 0 to 3 do t[k].WaitFor;
+  writeln(Counter);
+  for k := 0 to 3 do t[k].Free;
+end.
+P
+# [known] on t[k].Free — bug-p-free-and-destroy-only-work-on-a-simple-variable.
+probe thread-critical-section known <<'P'
+{$threadsafe on}
+uses {$IFDEF FPC} cthreads, Classes, {$ELSE} palthreadobj, {$ENDIF} SysUtils, SyncObjs;
+var Counter: Integer; Lock: TCriticalSection;
+type
+  TBumper = class(TThread)
+  public
+    procedure Execute; override;
+  end;
+procedure TBumper.Execute;
+var i: Integer;
+begin
+  for i := 1 to 2000 do
+  begin
+    Lock.Acquire;
+    try Counter := Counter + 1; finally Lock.Release; end;
+  end;
+end;
+var t: array[0..3] of TBumper; k: Integer;
+begin
+  Lock := TCriticalSection.Create;
+  Counter := 0;
+  for k := 0 to 3 do
+  begin
+    t[k] := TBumper.Create(True);
+    t[k].FreeOnTerminate := False;
+    t[k].Start;
+  end;
+  for k := 0 to 3 do t[k].WaitFor;
+  writeln(Counter);
+  for k := 0 to 3 do t[k].Free;
+  Lock.Free;
+end.
+P
+# [known] TWICE OVER: pxx's WaitFor is a procedure where FPC's returns
+# LongWord (compat-pascal-thread-api-surface-differs-from-fpc), and reading a
+# procedure's non-existent result silently yields garbage instead of erroring
+# (bug-p-procedure-method-in-an-expression-yields-garbage). The second is why
+# this case reports a VALUE divergence rather than a compile failure.
+probe thread-returnvalue-and-terminate known <<'P'
+{$threadsafe on}
+uses {$IFDEF FPC} cthreads, Classes, {$ELSE} palthreadobj, {$ENDIF} SysUtils;
+type
+  TWorker = class(TThread)
+  public
+    procedure Execute; override;
+  end;
+procedure TWorker.Execute;
+var i: Integer;
+begin
+  i := 0;
+  while not Terminated do
+  begin
+    Inc(i);
+    if i >= 100 then Terminate;
+  end;
+  ReturnValue := i;
+end;
+var t: TWorker;
+begin
+  t := TWorker.Create(True);
+  t.FreeOnTerminate := False;
+  t.Start;
+  writeln(t.WaitFor, '|', t.ReturnValue, '|', t.Terminated);
+  t.Free;
+end.
+P
+# [known] BeginThread / TThreadID do not exist in the RTL
+# (compat-pascal-thread-api-surface-differs-from-fpc).
+probe thread-beginthread known <<'P'
+{$threadsafe on}
+uses {$IFDEF FPC} cthreads, {$ENDIF} SysUtils;
+var Done: Integer;
+function Body(p: Pointer): PtrInt;
+begin
+  Done := PtrInt(p) * 3;
+  Result := 0;
+end;
+var h: TThreadID;
+begin
+  Done := -1;
+  h := BeginThread(@Body, Pointer(PtrInt(14)));
+  WaitForThreadTerminate(h, 0);
+  writeln(Done);
+end.
+P
+# [known] on t[k].Free — bug-p-free-and-destroy-only-work-on-a-simple-variable.
+# Also the case that would catch a per-thread managed-string corruption, so it
+# is worth un-blocking early.
+probe thread-local-string-building known <<'P'
+{$threadsafe on}
+uses {$IFDEF FPC} cthreads, Classes, {$ELSE} palthreadobj, {$ENDIF} SysUtils;
+type
+  TBuilder = class(TThread)
+  public
+    Res: string;
+    Seed: Integer;
+    procedure Execute; override;
+  end;
+procedure TBuilder.Execute;
+var i: Integer;
+begin
+  Res := '';
+  for i := 1 to 200 do Res := Res + IntToStr(Seed);
+end;
+var t: array[0..2] of TBuilder; k: Integer;
+begin
+  for k := 0 to 2 do
+  begin
+    t[k] := TBuilder.Create(True);
+    t[k].FreeOnTerminate := False;
+    t[k].Seed := k + 1;
+    t[k].Start;
+  end;
+  for k := 0 to 2 do t[k].WaitFor;
+  for k := 0 to 2 do write(Length(t[k].Res), ':', Copy(t[k].Res, 1, 3), ' ');
+  writeln;
+  for k := 0 to 2 do t[k].Free;
+end.
+P
+
 echo "---"
 echo "new divergences: $new   known/filed: $known   no-oracle skips: $skipped"
 # A skip is not a pass. It is a case that silently compared nothing, so it is

@@ -87,10 +87,14 @@ vis() { sed -e 's/\r/<CR>/g' -e 's/\t/<TAB>/g' | awk 'NR>1{printf "<LF>"}{printf
 #            on EVERY target, native included.
 #   lp64  -- output depends on the data model; not judged in cross mode.
 #            atoi-family: atol("2147483648") overflows `long` on ILP32.
+#   charsign -- output depends on whether plain `char` is signed. It is on
+#            x86-64 (the oracle) and UNSIGNED in the ARM procedure call
+#            standard, so `(int)(char)0xFF` is legitimately -1 native and 255
+#            on arm32/aarch64. Not a divergence; not judged in cross mode.
 probe() {
   local name="$1"; local tag="${2:-}"
   if [ -n "$FILTER" ] && [ "${name#*$FILTER}" = "$name" ]; then cat >/dev/null; return; fi
-  if [ -n "$TARGET" ] && [ "$tag" = "lp64" ]; then
+  if [ -n "$TARGET" ] && { [ "$tag" = "lp64" ] || [ "$tag" = "charsign" ]; }; then
     cat >/dev/null
     printf 'MODEL       %-24s data-model dependent, not judged under --target\n' "$name"
     modelskip=$((modelskip+1)); return
@@ -1418,6 +1422,259 @@ int main(void) {
   /* whether literals are pooled is implementation-defined; only the VALUE is
      compared, never the pointers. */
   printf("%d %d\n", strcmp(a, b) == 0, (int)strlen(a));
+  return 0;
+}
+C
+
+probe bitfield-layout-and-truncate <<'C'
+#include <stdio.h>
+struct B { unsigned a : 3; unsigned b : 5; int c : 4; unsigned d : 1; };
+int main(void) {
+  struct B x;
+  x.a = 7; x.b = 31; x.c = -8; x.d = 1;
+  printf("%u %u %d %u %d\n", x.a, x.b, x.c, x.d, (int)sizeof(struct B));
+  x.a = 9;              /* 1001b -> keeps the low three bits */
+  x.c = 7;
+  printf("%u %d\n", x.a, x.c);
+  x.c = 8;              /* overflows a 4-bit signed field */
+  printf("%d\n", x.c);
+  return 0;
+}
+C
+probe bitfield-mixed-with-plain <<'C'
+#include <stdio.h>
+struct M { unsigned char tag; unsigned lo : 12; unsigned hi : 20; int n; };
+int main(void) {
+  struct M m;
+  m.tag = 200; m.lo = 4095; m.hi = 1048575; m.n = -5;
+  printf("%u %u %u %d\n", m.tag, m.lo, m.hi, m.n);
+  m.lo = 4096;
+  printf("%u %u\n", m.lo, m.hi);
+  return 0;
+}
+C
+probe union-type-punning <<'C'
+#include <stdio.h>
+#include <string.h>
+union U { unsigned int u; unsigned char b[4]; };
+int main(void) {
+  union U x;
+  x.u = 0x01020304u;
+  /* little-endian on every target this probe runs; assert the ORDER, which is
+     what a punning bug would scramble */
+  printf("%u %u %u %u %d\n", x.b[0], x.b[1], x.b[2], x.b[3], (int)sizeof(union U));
+  memset(&x, 0, sizeof x);
+  x.b[1] = 0xFF;
+  printf("%u\n", x.u);
+  return 0;
+}
+C
+probe struct-by-value-and-return <<'C'
+#include <stdio.h>
+struct P { int x, y; };
+struct Big { long a, b, c, d; char t[8]; };
+static struct P mk(int a, int b) { struct P p; p.x = a; p.y = b; return p; }
+static int sum(struct P p) { return p.x + p.y; }
+static struct Big mkbig(long s) {
+  struct Big g; g.a = s; g.b = s + 1; g.c = s + 2; g.d = s + 3;
+  g.t[0] = 'z'; g.t[1] = 0; return g;
+}
+static long bigsum(struct Big g) { return g.a + g.b + g.c + g.d; }
+int main(void) {
+  struct P p = mk(3, 4);
+  struct Big g = mkbig(100);
+  printf("%d %d %d\n", p.x, p.y, sum(p));
+  printf("%ld %s %ld\n", g.a, g.t, bigsum(g));
+  return 0;
+}
+C
+probe struct-assignment-copies <<'C'
+#include <stdio.h>
+struct S { int n; char s[6]; };
+int main(void) {
+  struct S a, b;
+  a.n = 1; a.s[0] = 'a'; a.s[1] = 0;
+  b = a;
+  b.n = 2; b.s[0] = 'b';
+  printf("%d %s %d %s\n", a.n, a.s, b.n, b.s);
+  return 0;
+}
+C
+# [known] under --target aarch64 ONLY, and it is the sharpest thing this probe
+# has found: `-1 < (unsigned char)1` is FALSE there, in BOTH frontends, at every
+# -O level (bug-a-aarch64-signed-vs-unsigned-narrow-comparison-is-wrong). Native,
+# i386, arm32 and riscv32 all agree with gcc.
+probe integer-promotion-in-comparison known <<'C'
+#include <stdio.h>
+int main(void) {
+  unsigned u = 1;
+  int i = -1;
+  signed char sc = -1;
+  unsigned char uc = 200;
+  short sh = -2;
+  /* the classic: i converts to unsigned, so i < u is FALSE */
+  printf("%d %d %d %d\n", i < u, sc < u, (int)(uc + uc), (int)(sh * sh));
+  printf("%d %d\n", (int)(sc + uc), -1 < (unsigned char)1);
+  return 0;
+}
+C
+probe shift-and-truncation-edges <<'C'
+#include <stdio.h>
+int main(void) {
+  unsigned int u = 0x80000000u;
+  int i = -16;
+  unsigned long long q = 1ULL << 40;
+  printf("%u %u\n", u >> 31, u << 1);
+  printf("%d %d\n", i >> 2, i / 4);          /* arithmetic shift vs division */
+  printf("%llu %llu\n", q >> 8, q << 8);
+  printf("%d %u\n", (int)(signed char)0xFF, (unsigned)(unsigned char)0xFF);
+  return 0;
+}
+C
+# Plain `char` is signed on x86-64 and UNSIGNED under the ARM procedure call
+# standard, so this case is right to differ under --target and is tagged rather
+# than fixed. Kept as a case because a target getting its OWN char signedness
+# wrong is still worth catching natively.
+probe plain-char-signedness charsign <<'C'
+#include <stdio.h>
+int main(void) {
+  char c = (char)0xFF;
+  printf("%d %d\n", (int)c, (int)(char)0x7F);
+  return 0;
+}
+C
+probe switch-fallthrough-and-default <<'C'
+#include <stdio.h>
+static int f(int k) {
+  int r = 0;
+  switch (k) {
+    case 1: r += 1;
+    case 2: r += 2; break;
+    case 5: case 6: r += 10; break;
+    default: r = -1;
+  }
+  return r;
+}
+int main(void) {
+  printf("%d %d %d %d %d %d\n", f(1), f(2), f(3), f(5), f(6), f(99));
+  return 0;
+}
+C
+probe switch-sparse-and-negative <<'C'
+#include <stdio.h>
+static const char *f(int k) {
+  switch (k) {
+    case -1000: return "a";
+    case 0: return "b";
+    case 1000000: return "c";
+    case -1: return "d";
+    default: return "?";
+  }
+}
+int main(void) {
+  printf("%s%s%s%s%s\n", f(-1000), f(0), f(1000000), f(-1), f(7));
+  return 0;
+}
+C
+probe designated-initializers <<'C'
+#include <stdio.h>
+struct D { int a, b, c; char t[4]; };
+int main(void) {
+  struct D d = { .c = 3, .a = 1, .t = "hi" };
+  int arr[6] = { [4] = 40, [1] = 10 };
+  printf("%d %d %d %s\n", d.a, d.b, d.c, d.t);
+  printf("%d %d %d %d %d %d\n", arr[0], arr[1], arr[2], arr[3], arr[4], arr[5]);
+  return 0;
+}
+C
+probe compound-literal <<'C'
+#include <stdio.h>
+struct P { int x, y; };
+static int sum(struct P p) { return p.x + p.y; }
+int main(void) {
+  int s = sum((struct P){ 3, 4 });
+  int *a = (int[]){ 7, 8, 9 };
+  printf("%d %d %d\n", s, a[0], a[2]);
+  return 0;
+}
+C
+probe varargs-mixed-widths <<'C'
+#include <stdio.h>
+#include <stdarg.h>
+static long long tally(int n, ...) {
+  va_list ap; long long t = 0; int i;
+  va_start(ap, n);
+  for (i = 0; i < n; i++) {
+    int k = va_arg(ap, int);
+    long long q = va_arg(ap, long long);
+    double d = va_arg(ap, double);
+    t += k + q + (long long)d;
+  }
+  va_end(ap);
+  return t;
+}
+int main(void) {
+  printf("%lld\n", tally(2, 1, 2LL, 3.0, 10, 20LL, 30.0));
+  return 0;
+}
+C
+probe qsort-and-bsearch <<'C'
+#include <stdio.h>
+#include <stdlib.h>
+static int cmp(const void *a, const void *b) {
+  int x = *(const int *)a, y = *(const int *)b;
+  return (x > y) - (x < y);
+}
+int main(void) {
+  int v[8] = { 5, -1, 9, 0, 3, 9, -7, 2 };
+  int key = 3, i;
+  int *hit;
+  qsort(v, 8, sizeof(int), cmp);
+  for (i = 0; i < 8; i++) printf("%d ", v[i]);
+  printf("\n");
+  hit = (int *)bsearch(&key, v, 8, sizeof(int), cmp);
+  printf("%d %d\n", hit != NULL, hit ? *hit : -1);
+  key = 100;
+  hit = (int *)bsearch(&key, v, 8, sizeof(int), cmp);
+  printf("%d\n", hit != NULL);
+  return 0;
+}
+C
+probe setjmp-longjmp <<'C'
+#include <stdio.h>
+#include <setjmp.h>
+static jmp_buf jb;
+static void deep(int k) { if (k > 0) deep(k - 1); else longjmp(jb, 7); }
+int main(void) {
+  int r = setjmp(jb);
+  if (r == 0) { printf("go\n"); deep(5); printf("unreachable\n"); }
+  else printf("back %d\n", r);
+  return 0;
+}
+C
+probe pointer-arith-on-struct-array <<'C'
+#include <stdio.h>
+struct E { int a; char b; };
+int main(void) {
+  struct E v[4];
+  struct E *p = v, *q;
+  long d;
+  int i;
+  for (i = 0; i < 4; i++) { v[i].a = i; v[i].b = (char)('A' + i); }
+  q = p + 3;
+  d = q - p;                       /* sequenced, then printed */
+  printf("%ld %d %c %d\n", d, q->a, q->b, (int)sizeof(struct E));
+  printf("%d %c\n", (p + 2)->a, (*(p + 1)).b);
+  return 0;
+}
+C
+probe const-and-static-locals <<'C'
+#include <stdio.h>
+static int tick(void) { static int n = 0; n++; return n; }
+int main(void) {
+  int a, b, c;
+  a = tick(); b = tick(); c = tick();   /* sequenced, never in one arg list */
+  printf("%d %d %d\n", a, b, c);
   return 0;
 }
 C
