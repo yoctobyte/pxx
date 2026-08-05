@@ -28,3 +28,6 @@ pascal26:2: error: C include file not found: "macro_soup_defs.h" (searched: /tmp
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-05 — auto-closed by the plexus watcher: `test-core#src:test/test_c_macro_soup.pas` passes at 8b9d08b64609 (tier native); it was red at 34c41bde6fd6. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.

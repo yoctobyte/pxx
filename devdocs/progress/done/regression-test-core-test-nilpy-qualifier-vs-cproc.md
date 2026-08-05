@@ -28,3 +28,6 @@ pascal26:8: error: uses: unit source not found: /lib/rtl/cprobe_c.c
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-05 — auto-closed by the plexus watcher: `test-core#src:test/test_nilpy_qualifier_vs_cproc.npy` passes at 8b9d08b64609 (tier native); it was red at 34c41bde6fd6. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
