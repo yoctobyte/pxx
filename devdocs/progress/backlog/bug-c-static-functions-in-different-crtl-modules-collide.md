@@ -3,12 +3,13 @@ track: C
 prio: 50
 type: bug
 summary: "`static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error"
+
 ---
 
 # `static` functions in different crtl modules are treated as one unit
 
 - **Type:** bug — Track C (C frontend, translation-unit identity)
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-08-05
 - **Found by:** Track A, scanning the tree before promoting
   `bug-a-duplicate-definition-silently-accepted`'s warning to an error.
@@ -56,6 +57,30 @@ risk, and it is silent.
 promote the warning to a hard error in both frontends, matching gcc and FPC.
 The Pascal side is clean tree-wide; the C side cannot be promoted while these
 five files warn on legal code.
+
+## Investigated 2026-08-05 — the concrete reason, and why it is not a one-liner
+
+`CPullCrtlForPrototypes`' own header says it: the pulled crtl module is appended
+as `#include` lines to the MAIN token stream and *"then goes through the same
+pass 1 / pass 2 as the main program."* So `fcntl.c` and `unistd.c` are not two
+translation units that happen to share a unit index — in pxx's model they **are**
+one translation unit. `CurrentUnitIdx` is correct; the model is what differs
+from C.
+
+That rules out the cheap fixes:
+
+- **No per-proc source-file provenance exists.** There is no `ProcSrcFile` /
+  `ProcDeclFile` field, so the duplicate check cannot compare originating files
+  instead of unit indices without new state.
+- **No internal-linkage flag exists.** `static` is not recorded per proc
+  (`CProcHasLocalDef` means "a body was seen in this TU", not "file-local"), so
+  the warning cannot simply skip statics.
+- **Skipping statics wholesale would be wrong anyway.** Within ONE genuine TU,
+  two same-named statics IS an error in C and gcc rejects it. Suppressing them
+  trades a false positive for a lost true positive.
+
+So the fix really is the structural one below: give each pulled `.c` its own
+unit identity. Recording this so the next attempt does not re-derive it.
 
 ## Fix direction
 
