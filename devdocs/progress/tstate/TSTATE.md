@@ -3,15 +3,10 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg **QUIET 5d0h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `d9b87522b3b1` | 2026-08-05T18:33:20Z | GREEN (opt) | 196.2s | `d9b87522b3b1` RED |
+| plexus | `1900bd633b44` | 2026-08-05T18:37:04Z | GREEN (native) | 123.6s | `d9b87522b3b1` RED |
 | xeon | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-core#src:test/test_algol_skeleton.alg** — test/test_algol_skeleton.alg (plexus): bad `ad8e212cf739`, last good `030b9a625d8c`, 4 commit(s) in range
-- **test-core#src:test/test_float_write.pas@1** — test/test_float_write.pas (plexus): bad `ad8e212cf739`, last good `030b9a625d8c`, 4 commit(s) in range
-- **test-core#src:test/test_float_write.pas@2** — test/test_float_write.pas (plexus): bad `ad8e212cf739`, last good `030b9a625d8c`, 4 commit(s) in range
-- **test-core#src:test/test_fortran_skeleton.f90** — test/test_fortran_skeleton.f90 (plexus): bad `ad8e212cf739`, last good `030b9a625d8c`, 4 commit(s) in range
-- **test-core#src:test/test_writeln_nonfinite_float.pas** — test/test_writeln_nonfinite_float.pas (plexus): bad `ad8e212cf739`, last good `030b9a625d8c`, 4 commit(s) in range
 - **test-core#src:test/csocket_loopback_b88.c** — test/csocket_loopback_b88.c (xeon): bad `330f62af78d0`, last good `7d8929633721`, 58 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
