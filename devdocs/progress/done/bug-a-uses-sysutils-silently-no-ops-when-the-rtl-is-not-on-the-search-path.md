@@ -139,4 +139,4 @@ a clear message.)
 `compiler/pascal26`.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit 70934e176.
