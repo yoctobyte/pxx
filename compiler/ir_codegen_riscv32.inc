@@ -1087,6 +1087,47 @@ begin
     IR_STORE_SYM:
       begin
         si := IRA[node];
+        if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
+        begin
+          { Whole DYNAMIC-array assignment (`b := a`) — this arm did not exist,
+            so the store fell through to the scalar path and published the wrong
+            one of IR_LEA's read/write results; `Length(b)` then dereferenced
+            garbage (bug-a-arm32-dynamic-array-assignment-has-no-store-arm; the
+            arm32 backend had the identical gap).
+
+            Retain the new handle, publish it, release the old one — element
+            aware via the symbol's layout descriptor. Must precede the
+            tyAnsiString arm: for `array of string` the symbol's TypeKind names
+            the ELEMENT and would wrongly claim the array. }
+          IREmitNodeRISCV32(IRB[node]);                { a0 = new data pointer }
+          { Move semantics: a fresh user-function result already carries the +1
+            for this owner; intrinsics (IRA < 0) keep the conservative retain. }
+          if not ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0)) then
+          begin
+            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+            procIdx := FindProc('PXXDynArrayIncRef');
+            if procIdx < 0 then Error('compiler error: PXXDynArrayIncRef not found');
+            EmitCallProc(procIdx);                     { a0 already = arg0 }
+            rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);
+          end;
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push new }
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          begin
+            EmitSlotAddrRISCV32(reg_a2, si);
+            rv32_lw(reg_a2, reg_a2, 0);                { a2 = &caller_slot }
+          end
+          else
+            EmitSlotAddrRISCV32(reg_a2, si);           { a2 = slot address }
+          rv32_lw(reg_a0, reg_a2, 0);                  { a0 = old handle }
+          rv32_lw(reg_a1, reg_sp, 0);                  { a1 = new }
+          rv32_sw(reg_a1, reg_a2, 0);                  { publish new }
+          EmitLoadDataRefRISCV32(reg_a1, GetOrAllocSymRTTI(si));      { a1 = desc }
+          procIdx := FindProc('PXXDynArrayRelease');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+          EmitCallProc(procIdx);                       { release(old, desc) }
+          rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop new }
+          Exit;
+        end;
         if TypeIsFrozenString(Syms[si].TypeKind) and not Syms[si].IsArray then
         begin
           { `f := 'hello'` where f is string[N]: riscv32 had NO frozen store, so the

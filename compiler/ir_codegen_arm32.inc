@@ -1258,6 +1258,65 @@ begin
     IR_STORE_SYM:
       begin
         si := IRA[node];
+        if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
+        begin
+          { Whole DYNAMIC-array assignment (`b := a`). This arm did not exist:
+            the store fell through to the scalar path, which published the
+            wrong one of IR_LEA's two read/write results, so `Length(b)`
+            dereferenced garbage and segfaulted
+            (bug-a-arm32-dynamic-array-assignment-has-no-store-arm — it took
+            lib_zlib and, through it, lib_png).
+
+            Mirrors the x86-64 arm exactly: retain the new handle, publish it,
+            release the old one. Element-aware release goes through
+            PXXDynArrayRelease with the symbol's layout descriptor, so a
+            managed-element array releases its elements too. The dynarray
+            header is a fixed 16 bytes on every target (PXXAlloc(16 + n*elSize)),
+            so the RTL helpers need no 32-bit variant — this calls them rather
+            than open-coding the refcount arithmetic.
+
+            MUST stay ahead of the tyAnsiString arm below: for an
+            `array of string` the symbol's TypeKind IS tyAnsiString (it names
+            the ELEMENT), so that arm would otherwise claim the array. }
+          IREmitNodeArm32(IRB[node]);        { r0 = new data pointer }
+          { Move semantics: a fresh user-function result already carries the +1
+            destined for this owner, so retaining again would leak one
+            reference. Intrinsic results (IRA < 0) keep the conservative
+            retain. Same discrimination as x86-64. }
+          if not ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0)) then
+          begin
+            EmitI32($E92D0001);              { push {r0} — the call clobbers it }
+            procIdx := FindProc('PXXDynArrayIncRef');
+            if procIdx < 0 then Error('compiler error: PXXDynArrayIncRef not found');
+            EmitCallProc(procIdx);           { r0 already = arg0 }
+            EmitI32($E8BD0001);              { pop {r0} }
+          end;
+          EmitI32($E92D0001);                { push {r0} new }
+          { r2 = the slot's own ADDRESS (global / frame local / by-ref param) }
+          if Syms[si].Kind = skGlobal then
+          begin
+            EmitI32($E59F2000); EmitI32($EA000000); EmitGlobRef(Syms[si].Offset);
+          end
+          else
+          begin
+            EmitLoadImmArm32(2, Syms[si].Offset);
+            EmitI32($E08B2002);              { add r2, fp, r2 }
+            if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+              EmitI32($E5922000);            { ldr r2, [r2] = &caller_slot }
+          end;
+          EmitI32($E5920000);                { ldr r0, [r2] = old handle }
+          EmitI32($E92D0001);                { push {r0} old }
+          EmitI32($E59D1004);                { ldr r1, [sp,#4] = new }
+          EmitI32($E5821000);                { str r1, [r2] — publish new }
+          EmitI32($E8BD0001);                { pop {r0} old }
+          { PXXDynArrayRelease(old, desc) — nil-safe in the RTL }
+          EmitLoadDataRefArm32(1, GetOrAllocSymRTTI(si));
+          procIdx := FindProc('PXXDynArrayRelease');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+          EmitCallProc(procIdx);
+          EmitI32($E8BD0001);                { pop {r0} new — the statement value }
+          Exit;
+        end;
         if Syms[si].TypeKind = tyAnsiString then
         begin
           valNode := IRB[node];
