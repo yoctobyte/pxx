@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-05T09:50:08Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "1b5f7c924744826247aaec8ab0f2e64ca76496e7",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-05T10:24:58Z",
    "fixed": [],
    "new_red": [],
@@ -429,6 +421,14 @@
    ],
    "new_red": [],
    "sha": "8b9d08b646097fddddfd5a0ea3510465e4b3ded9",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-05T19:52:08Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "ba058e66e761d42d740063463cccc51bf047e178",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1629,6 +1629,7 @@
   "test-core#src:test/test_promoint_minint64_div.pas": "native",
   "test-core#src:test/test_promoint_overflow.pas": "native",
   "test-core#src:test/test_promoint_parameter.pas": "native",
+  "test-core#src:test/test_promoint_parameter_32bit.pas": "native",
   "test-core#src:test/test_promoint_shr_and_casts.pas": "native",
   "test-core#src:test/test_property_index_b293.pas": "native",
   "test-core#src:test/test_property_redecl_b283.pas": "native",
@@ -3741,6 +3742,7 @@
   "test-core#src:test/test_promoint_minint64_div.pas": "pass",
   "test-core#src:test/test_promoint_overflow.pas": "pass",
   "test-core#src:test/test_promoint_parameter.pas": "pass",
+  "test-core#src:test/test_promoint_parameter_32bit.pas": "pass",
   "test-core#src:test/test_promoint_shr_and_casts.pas": "pass",
   "test-core#src:test/test_property_index_b293.pas": "pass",
   "test-core#src:test/test_property_redecl_b283.pas": "pass",
@@ -4659,11 +4661,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-05T19:42:56Z",
-  "sha": "8b9d08b646097fddddfd5a0ea3510465e4b3ded9",
+  "date": "2026-08-05T19:52:08Z",
+  "sha": "ba058e66e761d42d740063463cccc51bf047e178",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 124.0
+  "wall": 123.5
  },
  "last_bench": {
   "conf_rows": 550,
