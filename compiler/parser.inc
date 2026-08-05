@@ -27464,9 +27464,33 @@ begin
         a fat pointer ({IMT, instance}); on 64-bit that is 16 bytes (already >8),
         but on 32-bit targets it is only 8 bytes — force by-ref there too so the
         whole fat pointer crosses the call uniformly instead of being squeezed
-        into one machine word. (No-op on 64-bit, so self-host stays identical.) }
+        into one machine word. (No-op on 64-bit, so self-host stays identical.)
+
+        A record with MANAGED FIELDS joins them at any size. A <=8-byte record
+        travels INLINE in the param slot (see AllocParam) — a raw byte copy of
+        the caller's handles with no retain, so the callee's copy BORROWS them.
+        That is fine while the callee only reads, but a store into the parameter
+        (`a := q`, ordinary by-value mutation) lowers to IR_COPY_REC_MANAGED,
+        which RELEASES the destination's old fields — i.e. releases the CALLER's
+        handles, which nobody retained. The caller's dynarray is freed under it
+        and the next read gets a recycled block: silent wrong values, then a
+        write-after-free segfault far away
+        (bug-a-arm32-write-after-free-kills-four-lib-tests — ecdsa's
+        `BigToBytes(a: TBigInt; ...)` does exactly `a := q`).
+
+        By-ref puts them on the >8-byte path, which is already correct:
+        IRLowerCallArg makes a private temp and fills it with
+        IR_COPY_REC_MANAGED, so the copy OWNS its fields and the callee's
+        stores release the temp's handles, never the caller's.
+
+        Filed as arm32-only because the trigger is ptr-width dependent —
+        `TBigInt` (Boolean + dynarray handle) is 16 bytes on 64-bit, so it was
+        already by-ref there, but 8 bytes on 32-bit. The defect is not: a record
+        that is <=8 bytes on x86-64 too (a lone dynarray or string field)
+        corrupts identically. Measured on x86-64, arm32, aarch64 and riscv32. }
       if (ptypes[i] = tyRecord) and
          ((RecSize(ptypesRec[i]) > 8) or
+          RecordHasManagedFields(ptypesRec[i]) or
           ((ptypesRec[i] >= REC_UCLASS_BASE) and UClsIsInterface[ptypesRec[i] - REC_UCLASS_BASE])) then
       begin
         Syms[idx].IsRef := True;

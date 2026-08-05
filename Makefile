@@ -3992,6 +3992,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_fixed_array_copy26)" = "$$(printf '1 4\n10 20 30\n5000000000 7000000000\nOK')"
 	./$(COMPILER) test/test_fixed_array_copy_managed.pas /tmp/test_fixed_array_copy_managed26
 	test "$$(/tmp/test_fixed_array_copy_managed26)" = "$$(printf 'pqr\npqr\npqr\nxyzw\ngs0gs12\nabcd\nf0f1f2\nOK')"
+	./$(COMPILER) test/test_record_byvalue_managed_small.pas /tmp/test_record_byvalue_managed_small26
+	test "$$(/tmp/test_record_byvalue_managed_small26)" = "$$(printf '104 7 14\n204 9 18\n2 7\n104 7 14\n204 9 18\n2 7\n104 7 14\n204 9 18\n2 7\nOK')"
 	./$(COMPILER) test/test_ir_codegen_fail.pas /tmp/test_ir_codegen_fail26
 	test "$$(/tmp/test_ir_codegen_fail26)" = "$$(printf '15\nFAIL')"
 	./$(COMPILER) test/test_ir_unary.pas /tmp/test_ir_unary26

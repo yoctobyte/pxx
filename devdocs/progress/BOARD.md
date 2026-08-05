@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-arm32-write-after-free-kills-four-lib-tests | A | 75 | bug | arm32 only: WRITE AFTER FREE segfaults FOUR lib tests (ecdsa, rsa, rsa_pss, png); reduces to 'call EcdsaP256Verify twice'; -O-independent, x86-64/aarch64 clean | — |
+| bug-a-arm32-dynamic-array-assignment-has-no-store-arm | A | 75 | bug | arm32/riscv32: `b := a` on a DYNAMIC array segfaults — IR_STORE_SYM has no dyn-array arm in those backends, and they carry no dyn-array ARC machinery at all (no retain, no release, no scope-exit cleanup) | — |
 | bug-a-i386-int64-arg-high-half-uninitialized | A | 75 | bug | i386: widening a 32-bit value into an Int64 argument leaves the HIGH half uninitialized — silent garbage, and the garbage changes with surrounding code | — |
 | bug-p-program-function-does-not-shadow-used-unit | P | 70 | bug | SILENT: a function declared in the PROGRAM does not shadow a same-named routine from a used unit — the unit's version is called instead. FPC calls the program's. Verified on sysutils IntToStr, Trim and UpperCase | — |
 
@@ -360,9 +360,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1379)
+## done (1380)
 
-1379 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1380 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -399,7 +399,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [urgent p 75] [A] bug-a-arm32-write-after-free-kills-four-lib-tests
+- [urgent p 75] [A] bug-a-arm32-dynamic-array-assignment-has-no-store-arm
 - [urgent p 75] [A] bug-a-i386-int64-arg-high-half-uninitialized
 - [urgent p 70] [P] bug-p-program-function-does-not-shadow-used-unit
 - [p 70] [A] bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit
