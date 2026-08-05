@@ -92,4 +92,4 @@ testmgr: GREEN
 **Process note:** a watcher-filed regression outlives its fix unless someone
 closes it. This one had 58 commits in its bisect range and ranked above every
 real Track B item.
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit b56956102.
