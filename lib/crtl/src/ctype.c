@@ -161,7 +161,12 @@ int iscntrl(int c) { return _ct_test(c, _IS_CTL); }
 int isdigit(int c) { return _ct_test(c, _IS_DIG); }
 int isgraph(int c) { return _ct_test(c, _IS_DIG | _IS_UPP | _IS_LOW | _IS_PUN); }
 int islower(int c) { return _ct_test(c, _IS_LOW); }
-int isprint(int c) { return _ct_test(c, _IS_DIG | _IS_UPP | _IS_LOW | _IS_PUN | _IS_SPC); }
+/* isprint = isgraph plus the SPACE character, and space only (C99 7.4.1.8).
+   Not `| _IS_SPC`: that class also holds \t \n \v \f \r, so isprint('\t') came
+   back true and any "is this safe to echo / does it need escaping" test passed
+   the control characters straight through. gcc-oracle divergence, first run of
+   tools/gcc_diff_probe.sh. */
+int isprint(int c) { return _ct_test(c, _IS_DIG | _IS_UPP | _IS_LOW | _IS_PUN) || (c == ' '); }
 int ispunct(int c) { return _ct_test(c, _IS_PUN); }
 int isspace(int c) { return _ct_test(c, _IS_SPC); }
 int isupper(int c) { return _ct_test(c, _IS_UPP); }

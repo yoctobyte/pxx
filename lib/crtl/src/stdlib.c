@@ -181,13 +181,15 @@ unsigned long strtoul(const char *s, char **end, int base) {
 long long strtoll(const char *s, char **end, int base) {
   long long sign = 1, v = 0;
   const char *p = s;
-  int overflow = 0;
+  const char *digStart;
+  int overflow = 0, sawPrefix = 0;
   if (!p) { if (end) *end = (char *)s; return 0; }
   while (*p == ' ' || *p == '\t' || *p == '\n') p++;
   if (*p == '-') { sign = -1; p++; } else if (*p == '+') p++;
-  if ((base == 0 || base == 16) && p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) { p += 2; base = 16; }
+  if ((base == 0 || base == 16) && p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) { p += 2; base = 16; sawPrefix = 1; }
   else if (base == 0 && p[0] == '0') { base = 8; }
   if (base == 0) base = 10;
+  digStart = p;
   for (;;) {
     int d;
     char c = *p;
@@ -202,6 +204,15 @@ long long strtoll(const char *s, char **end, int base) {
     }
     p++;
   }
+  /* No digits => no conversion (C99 7.20.1.4p7): value 0 and endptr back at the
+     ORIGINAL string, not wherever whitespace/sign parsing left it. The `0x`
+     case is not "no conversion" though — the longest VALID prefix of "0x" is
+     "0", so the value is 0 and endptr points at the 'x'. Consuming the whole
+     "0x" made a caller scanning `0xg` skip a character it had not converted. */
+  if (p == digStart) {
+    if (sawPrefix) p = digStart - 1;
+    else { if (end) *end = (char *)s; return 0; }
+  }
   if (end) *end = (char *)p;
   if (overflow) {
     errno = ERANGE;            /* C requires it; callers distinguish clamp from a real value */
@@ -213,13 +224,15 @@ long long strtoll(const char *s, char **end, int base) {
 unsigned long long strtoull(const char *s, char **end, int base) {
   unsigned long long v = 0;
   const char *p = s;
-  int neg = 0, overflow = 0;
+  const char *digStart;
+  int neg = 0, overflow = 0, sawPrefix = 0;
   if (!p) { if (end) *end = (char *)s; return 0; }
   while (*p == ' ' || *p == '\t' || *p == '\n') p++;
   if (*p == '-') { neg = 1; p++; } else if (*p == '+') p++;
-  if ((base == 0 || base == 16) && p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) { p += 2; base = 16; }
+  if ((base == 0 || base == 16) && p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) { p += 2; base = 16; sawPrefix = 1; }
   else if (base == 0 && p[0] == '0') { base = 8; }
   if (base == 0) base = 10;
+  digStart = p;
   for (;;) {
     int d;
     char c = *p;
@@ -233,6 +246,10 @@ unsigned long long strtoull(const char *s, char **end, int base) {
       else v = v * (unsigned long long)base + (unsigned long long)d;
     }
     p++;
+  }
+  if (p == digStart) {          /* see the note in strtoll */
+    if (sawPrefix) p = digStart - 1;
+    else { if (end) *end = (char *)s; return 0; }
   }
   if (end) *end = (char *)p;
   if (overflow) { errno = ERANGE; return 18446744073709551615ULL; }

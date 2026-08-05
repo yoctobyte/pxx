@@ -797,12 +797,20 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     got = 1;
     if (total == 1) { if (size == 0) return 0; return (size_t)(got / (unsigned long)size); }
   }
-  r = __pxx_read(stream->fd, (unsigned char *)ptr + got, total - got);
-  if (r <= 0) {
-    if (got == 0) { stream->eof = 1; return 0; }
-    r = 0;                            /* pushback byte still counts */
+  /* LOOP until the request is satisfied or the source is exhausted. A single
+     read() call is not fread: a short read is normal on a pipe, socket or tty
+     and returning early there hands the caller fewer elements than were
+     available, with no error to distinguish it from real EOF. And a short read
+     that DID hit end-of-file must set the EOF indicator — without it a
+     `while (!feof(f))` loop over a file read in one gulp never terminated on
+     the flag it was written to test. gcc-oracle divergence, first run of
+     tools/gcc_diff_probe.sh. */
+  while (got < total) {
+    r = __pxx_read(stream->fd, (unsigned char *)ptr + got, total - got);
+    if (r < 0) { stream->err = 1; break; }
+    if (r == 0) { stream->eof = 1; break; }
+    got += (unsigned long)r;
   }
-  got += (unsigned long)r;
   if (size == 0) return 0;
   return (size_t)(got / (unsigned long)size);
 }

@@ -264,19 +264,29 @@ static const char *mon_full[12] =
   { "January","February","March","April","May","June","July","August",
     "September","October","November","December" };
 
-static char *put_str(char *p, char *end, const char *s) {
-  while (*s && p < end) *p++ = *s++;
+/* `trunc` is set when a byte could not be written. strftime must return 0 on
+   overflow (C99 7.23.3.5) rather than the truncated length, so every writer has
+   to say whether it dropped anything — silently stopping at `end` is what made
+   strftime(b, 4, "%Y", ...) return 3 and hand back "200" as if it were a year. */
+static char *put_str(char *p, char *end, const char *s, int *trunc) {
+  while (*s) {
+    if (p < end) *p++ = *s++;
+    else { *trunc = 1; return p; }
+  }
   return p;
 }
 
-static char *put_num(char *p, char *end, int v, int width) {
+static char *put_num(char *p, char *end, int v, int width, int *trunc) {
   char tmp[16];
   int n = 0, neg = v < 0;
   unsigned u = neg ? (unsigned)(-v) : (unsigned)v;
   do { tmp[n++] = (char)('0' + u % 10); u /= 10; } while (u);
   while (n < width) tmp[n++] = '0';
-  if (neg && p < end) *p++ = '-';
-  while (n > 0 && p < end) *p++ = tmp[--n];
+  if (neg) { if (p < end) *p++ = '-'; else { *trunc = 1; return p; } }
+  while (n > 0) {
+    if (p < end) *p++ = tmp[--n];
+    else { *trunc = 1; return p; }
+  }
   return p;
 }
 
@@ -284,39 +294,48 @@ size_t strftime(char *s, size_t max, const char *fmt, const struct tm *tm) {
   char *p = s;
   char *end = s + (max ? max - 1 : 0);
   int wd = tm->tm_wday & 7, mo = tm->tm_mon;
+  int trunc = 0;
   if (wd < 0 || wd > 6) wd = 0;
   if (mo < 0 || mo > 11) mo = 0;
+  if (max == 0) return 0;
 
   while (*fmt) {
-    if (*fmt != '%') { if (p < end) *p++ = *fmt; fmt++; continue; }
+    if (*fmt != '%') { if (p < end) *p++ = *fmt; else { trunc = 1; break; } fmt++; continue; }
     fmt++;
     switch (*fmt) {
-      case 'a': p = put_str(p, end, wday_abbr[wd]); break;
-      case 'A': p = put_str(p, end, wday_full[wd]); break;
-      case 'b': case 'h': p = put_str(p, end, mon_abbr[mo]); break;
-      case 'B': p = put_str(p, end, mon_full[mo]); break;
-      case 'd': p = put_num(p, end, tm->tm_mday, 2); break;
-      case 'e': p = put_num(p, end, tm->tm_mday, 0); break;
-      case 'H': p = put_num(p, end, tm->tm_hour, 2); break;
+      case 'a': p = put_str(p, end, wday_abbr[wd], &trunc); break;
+      case 'A': p = put_str(p, end, wday_full[wd], &trunc); break;
+      case 'b': case 'h': p = put_str(p, end, mon_abbr[mo], &trunc); break;
+      case 'B': p = put_str(p, end, mon_full[mo], &trunc); break;
+      case 'd': p = put_num(p, end, tm->tm_mday, 2, &trunc); break;
+      case 'e': p = put_num(p, end, tm->tm_mday, 0, &trunc); break;
+      case 'H': p = put_num(p, end, tm->tm_hour, 2, &trunc); break;
       case 'I': { int h = tm->tm_hour % 12; if (!h) h = 12;
-                  p = put_num(p, end, h, 2); } break;
-      case 'j': p = put_num(p, end, tm->tm_yday + 1, 3); break;
-      case 'm': p = put_num(p, end, tm->tm_mon + 1, 2); break;
-      case 'M': p = put_num(p, end, tm->tm_min, 2); break;
-      case 'p': p = put_str(p, end, tm->tm_hour < 12 ? "AM" : "PM"); break;
-      case 'S': p = put_num(p, end, tm->tm_sec, 2); break;
-      case 'w': p = put_num(p, end, wd, 0); break;
-      case 'y': p = put_num(p, end, (tm->tm_year + 1900) % 100, 2); break;
-      case 'Y': p = put_num(p, end, tm->tm_year + 1900, 0); break;
-      case '%': if (p < end) *p++ = '%'; break;
+                  p = put_num(p, end, h, 2, &trunc); } break;
+      case 'j': p = put_num(p, end, tm->tm_yday + 1, 3, &trunc); break;
+      case 'm': p = put_num(p, end, tm->tm_mon + 1, 2, &trunc); break;
+      case 'M': p = put_num(p, end, tm->tm_min, 2, &trunc); break;
+      case 'p': p = put_str(p, end, tm->tm_hour < 12 ? "AM" : "PM", &trunc); break;
+      case 'S': p = put_num(p, end, tm->tm_sec, 2, &trunc); break;
+      case 'w': p = put_num(p, end, wd, 0, &trunc); break;
+      case 'y': p = put_num(p, end, (tm->tm_year + 1900) % 100, 2, &trunc); break;
+      case 'Y': p = put_num(p, end, tm->tm_year + 1900, 0, &trunc); break;
+      case '%': if (p < end) *p++ = '%'; else trunc = 1; break;
       case '\0': goto done;
-      default: if (p < end) *p++ = '%';
-               if (p < end) *p++ = *fmt; break;
+      default: if (p < end) *p++ = '%'; else trunc = 1;
+               if (!trunc) { if (p < end) *p++ = *fmt; else trunc = 1; }
+               break;
     }
+    if (trunc) break;
     fmt++;
   }
 done:
-  if (max) *p = '\0';
+  /* C99 7.23.3.5: when the result including the terminating null does not fit
+     in `max`, return 0 — the array contents are then unspecified. Returning
+     (p - s) handed the caller a TRUNCATED string with a plausible length, so
+     `strftime(b, 4, "%Y", t)` looked like a successful 3-char year "200". */
+  if (trunc) { *s = '\0'; return 0; }
+  *p = '\0';
   return (size_t)(p - s);
 }
 

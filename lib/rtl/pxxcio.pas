@@ -262,13 +262,46 @@ begin
   Result := PXXRealloc(p, n, 8);
 end;
 
+{ exit_group's syscall number is PER TARGET, like SysClockGettimeNr below. It
+  was hardcoded to 231 — x86-64's number. On i386, 231 is fgetxattr: C's
+  `exit(3)` quietly failed an xattr call, returned, and the process wound up
+  exiting 0, so every i386 program that reported failure through exit() reported
+  SUCCESS instead. (`return 3` from main was unaffected — that path is the entry
+  stub's own exit, which is why nothing caught it.) arm32's 231 is fgetxattr
+  too; aarch64/riscv32 share 94. Found by tools/gcc_diff_probe.sh --target i386. }
+function SysExitGroupNr: Integer;
+begin
+  Result := -1;
+  {$ifdef CPUX86_64} Result := 231; {$endif}
+  {$ifdef CPU_I386}  Result := 252; {$endif}
+  {$ifdef CPU_AARCH64} Result := 94; {$endif}
+  {$ifdef CPU_ARM32} Result := 248; {$endif}
+  {$ifdef CPU_RISCV32} Result := 94; {$endif}
+end;
+
+{ Per-target `exit` syscall, the single-thread fallback when exit_group is not
+  known: x86-64 60, i386 1, arm32 1, aarch64/riscv32 93. }
+function SysExitNr: Integer;
+begin
+  Result := -1;
+  {$ifdef CPUX86_64} Result := 60; {$endif}
+  {$ifdef CPU_I386}  Result := 1; {$endif}
+  {$ifdef CPU_AARCH64} Result := 93; {$endif}
+  {$ifdef CPU_ARM32} Result := 1; {$endif}
+  {$ifdef CPU_RISCV32} Result := 93; {$endif}
+end;
+
 procedure __pxx_exit(code: Integer);
-var r: Int64;
+var r: Int64; n: Integer;
 begin
   { exit_group(code) — terminate the process directly (PAL posix). Assigned form
     because __pxxrawsyscall is intercepted in expression context; the syscall
-    never returns, so r is unused. }
-  r := __pxxrawsyscall(231, code, 0, 0, 0, 0, 0);
+    never returns, so r is unused. If exit_group somehow does return, fall back
+    to exit(2) rather than letting the caller run on with the process alive. }
+  n := SysExitGroupNr;
+  if n >= 0 then r := __pxxrawsyscall(n, code, 0, 0, 0, 0, 0);
+  n := SysExitNr;
+  if n >= 0 then r := __pxxrawsyscall(n, code, 0, 0, 0, 0, 0);
 end;
 
 { clock_gettime syscall number per target (mirrors baseunix.pas SysClockGettime).

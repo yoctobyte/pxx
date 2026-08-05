@@ -866,6 +866,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-c-designated-init-compound-literals | C | 45 | feature | C99 designated initializers + compound literals unsupported | — |
 | feature-c-desktop-lua-sqlite-path | C | 65 | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-c-forward-enum-decl | C | 45 | feature | C forward enum declaration `enum efoo;` (GCC extension, common in the wild) | — |
+| feature-c-gcc-oracle-differential-probe | B | 50 | feature | tools/gcc_diff_probe.sh — the gcc-oracle differential over crtl's EXISTING functions (the C mirror of fpc_diff_probe.sh), with a --target cross mode; found 6 bugs on its first two runs | — |
 | feature-c-generic-selection | C | 28 | feature | C11 _Generic selection | — |
 | feature-c-header-import-complex | C | 50 | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-c-pragma-push-pop-macro | C | 45 | feature | C preprocessor: #pragma push_macro / pop_macro | — |

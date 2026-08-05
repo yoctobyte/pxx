@@ -46,14 +46,20 @@ case "$arch" in
   i386)
     # x86-64 kernels usually exec i386 ELF natively (ia32 emulation);
     # prefer that, fall back to qemu-i386.
-    if "$bin" "$@" 2>/dev/null; then
-      exit 0
-    else
-      rc=$?
-      # ENOEXEC surfaces as 126 from sh; anything else is the program's
-      # own exit code — pass it through.
-      if [ "$rc" != 126 ]; then exit "$rc"; fi
-    fi
+    #
+    # stderr is NOT redirected. It used to go to /dev/null, so every i386 run
+    # silently dropped the program's own diagnostics — and callers that compare
+    # combined stdout+stderr byte-for-byte (tools/run_c_conformance.sh) were
+    # comparing output the program never got to produce. Capturing it to a file
+    # and replaying it afterwards is not equivalent either: that reorders it
+    # against buffered stdout, and the interleaving is part of what is compared.
+    # The cost is one "cannot execute binary file" line from the SHELL on a host
+    # that cannot exec i386 ELF, just before the qemu fallback — loud and
+    # diagnosable, unlike silently losing every program's stderr.
+    if "$bin" "$@"; then exit 0; else rc=$?; fi
+    # ENOEXEC surfaces as 126 from sh; anything else is the program's own exit
+    # code — pass it through.
+    if [ "$rc" != 126 ]; then exit "$rc"; fi
     need qemu-i386
     exec qemu-i386 "$bin" "$@"
     ;;
