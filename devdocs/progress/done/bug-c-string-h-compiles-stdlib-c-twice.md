@@ -239,4 +239,4 @@ Gate run: `gate.sh quick` GREEN, `gate.sh lib` GREEN, c-testsuite 219 pass /
 0 fail / 1 skip native and i386, self-host fixedpoint converges.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit 28a217c49.
