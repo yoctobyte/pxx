@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:7 blocked:7 backlog:198 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1414 rejected:28`
+`urgent:1 working:1 unfinished:7 blocked:7 backlog:200 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1414 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -35,7 +35,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 179, ranked
+## Ready — top 30 of 181, ranked
 
 - `[p 70] [P]` bug-p-program-function-does-not-shadow-used-unit
 - `[p 70] [T]` regression-cascade-aba953cae031
@@ -52,6 +52,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [T]` bug-t-gate-sh-fixedpoint-does-not-iterate
 - `[p 60] [U]` decide-abi-portable-vs-target-split
+- `[p 60] [U]` decide-when-to-move-the-pin-after-a-long-fix-run
 - `[p 60] [A]` feature-a-abi-oracle
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-float-exception-mask-control
@@ -66,6 +67,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
-- `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 
-_149 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_151 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

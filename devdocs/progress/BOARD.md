@@ -40,7 +40,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (198)
+## backlog (200)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -72,6 +72,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
 | bug-t-empty-range-regression-cannot-be-bisected | T | 55 | bug | When a run's parent_tested IS the tested sha, the regression's range is empty and idle bisect can never narrow it — so those tickets sit until a human bisects by hand | — |
+| bug-t-gate-quick-fixedpoint-goes-red-on-any-builtin-addition | T | 55 | bug | tools/gate.sh's fixedpoint seeds from PINNED and demands A==B==C, so it goes RED for every agent after any new builtin lands and stays red until re-pin — indistinguishable from the agent's own breakage | — |
 | bug-t-gate-sh-fixedpoint-does-not-iterate | T | 60 | bug | gate.sh's inline fixedpoint() demands convergence in ONE pass from pinned, so it reports RED for every change that alters the compiler's own emitted code — the exact mistake the Makefile documents as wrong | — |
 | bug-t-three-network-tests-flake-and-cost-real-debugging-time | T | 45 | bug | lib_net_v6only, lib_sockets and lib_platform_esp each pass or fail run-to-run with the SAME compiler, so a gate.sh lib RED and two cross-sweep A/B deltas in one night were all noise that had to be disproved by hand | — |
 | bug-t-tstate-launders-skip-into-pass | T | 50 | bug | tstate records a SKIPPED job as \"pass\", so a green published state cannot be distinguished from one that actually ran — cross-host coverage differences are invisible exactly when they matter | — |
@@ -98,6 +99,7 @@ lives in git, not in a timestamp._
 | decide-nilpy-runtime-dunder-dispatch-strategy | U | 45 | decide | Decide: how should NilPy dispatch dunders on a Variant-held instance? | — |
 | decide-nilpy-set-as-a-distinct-type-or-a-list | U | 55→60 | decide | pxx backs a Python set with TPyList. That makes set difference work, makes `list - list` unrejectable, and makes a set repr as [1, 3] instead of {1, 3}. Give sets their own row, or keep the alias and pay at run time? | — |
 | decide-pxxpdf-ticket-obsolete | U | 50 | decide | Close `feature-lib-pxxpdf-reportlab-compat` as obsolete, or keep it? | — |
+| decide-when-to-move-the-pin-after-a-long-fix-run | U | 60 | decide | 32 compiler fixes sit on master unpinned; Track B builds against pinned and has a workaround waiting on the move. Pin all at once, pin incrementally, or leave it — the brake is deliberate and this is a judgment call, not a default | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
@@ -409,6 +411,7 @@ lives in git, not in a timestamp._
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [T] bug-t-gate-sh-fixedpoint-does-not-iterate
 - [p 60] [U] decide-abi-portable-vs-target-split
+- [p 60] [U] decide-when-to-move-the-pin-after-a-long-fix-run
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
@@ -428,6 +431,7 @@ lives in git, not in a timestamp._
 - [p 55] [N] bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [T] bug-t-empty-range-regression-cannot-be-bisected
+- [p 55] [T] bug-t-gate-quick-fixedpoint-goes-red-on-any-builtin-addition
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
