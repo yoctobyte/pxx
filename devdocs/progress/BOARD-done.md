@@ -1331,7 +1331,9 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-sqlite-crud-lazy | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud_lazy.pas red at f913bd22ae30 (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud.pas red at ff90643ef2a3 (auto-filed by twatch) | — |
 | regression-test-core-test-static-array-length | T | 70 | regression | regression: test-core#src:test/test_static_array_length.pas red at fb9346bd4bce (auto-filed by twatch) | — |
+| regression-test-core-test-stmt-call-result-selector-b318 | T | 70 | regression | regression: test-core#src:test/test_stmt_call_result_selector_b318.pas red at 33cd0117f9f9 (auto-filed by twatch) | — |
 | regression-test-core-test-string-to-pchar-auto | A | 70 | regression | regression: test-core#src:test/test_string_to_pchar_auto.pas red at 8997639f144f (auto-filed by twatch) | — |
+| regression-test-core-test-syncobjs | T | 70 | regression | regression: test-core#src:test/test_syncobjs.pas red at 9df868bf3680 (auto-filed by twatch) | — |
 | regression-test-core-test-widechar-to-utf8-b319 | T | 70 | regression | regression: test-core#src:test/test_widechar_to_utf8_b319.pas red at d94db8d6b0cc (auto-filed by twatch) | — |
 | regression-test-emit-obj-02 | T | 70 | regression | regression: test-emit-obj#02 red at c53553f21214 (auto-filed by twatch) | — |
 | regression-test-i386-test-asyncecho | T | 70 | regression | regression: test-i386#src:test/test_asyncecho.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |

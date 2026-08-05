@@ -2817,17 +2817,96 @@ begin
           Word-push args (Self = word 0, deepest), load a0.., load the VMT
           pointer from [Self], call through [VMT + slot*8] (8-byte data slots,
           address in the low word — mirrors arm32). }
+        procIdx := IRC[node];
         argNode := IRA[node];
-        nArgs := 0;
+        nArgs := 0;                                     { WORD count }
+        j := 0;                                         { PARAM index }
         while argNode <> -1 do
         begin
-          IREmitNodeRISCV32(IRA[argNode]);
-          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
-          Inc(nArgs);
+          { A by-value 64-bit param is TWO words, lo then hi — what the direct
+            call path above already does. This loop pushed one word per arg
+            unconditionally, so the high half of an Int64 argument was dropped
+            and the callee read garbage for it. Invisible unless the RESULT was
+            also 64-bit: an Integer result truncated the garbage away on the way
+            back, which is why the bug needed both halves 64-bit before anything
+            showed (bug-a-virtual-method-int64-in-and-out-32bit). It reached
+            TStream.Position, whose Seek is virtual with exactly this signature.
+
+            Params[0] is Self and j counts from there, matching the direct
+            path's indexing. The ladder mirrors the direct path's on purpose —
+            that duplication is what let them drift; unifying is filed as
+            feature-a-unify-32bit-call-argument-marshalling. }
+          if (procIdx >= 0) and (j < Procs[procIdx].ParamCount) and
+             (Procs[procIdx].Params[j].TypeKind = tySet) and
+             (not Procs[procIdx].Params[j].IsRef) and
+             (not Procs[procIdx].Params[j].IsArray) then
+          begin
+            { By-value set: a0 is the 32-byte set's ADDRESS; push all 8 words
+              inline so the callee's spill can rebuild it. One address word left
+              the callee reading its own slot as set bytes —
+              `b.CountSet([eA,eC,eD])` answered 0 here and 1 on i386 where FPC
+              says 3. Same omission as the Int64 case below. }
+            IREmitNodeRISCV32(IRA[argNode]);            { a0 = set address }
+            for i := 0 to 7 do
+            begin
+              rv32_lw(reg_t1, reg_a0, i * 4);
+              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_t1, reg_sp, 0);
+            end;
+            Inc(nArgs, 8);
+          end
+          else if (procIdx >= 0) and (j < Procs[procIdx].ParamCount) and
+             ((Procs[procIdx].Params[j].TypeKind = tyInt64) or
+              (Procs[procIdx].Params[j].TypeKind = tyUInt64)) and
+             (not Procs[procIdx].Params[j].IsRef) and
+             (not Procs[procIdx].Params[j].IsArray) then
+          begin
+            EmitNode64RISCV32(IRA[argNode]);            { a0=lo, a1=hi }
+            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { lo }
+            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);  { hi }
+            Inc(nArgs, 2);
+          end
+          else if (procIdx >= 0) and (j < Procs[procIdx].ParamCount) and
+                  IsFloatRISCV32(Procs[procIdx].Params[j].TypeKind) and
+                  (not Procs[procIdx].Params[j].IsRef) and
+                  (not Procs[procIdx].Params[j].IsArray) then
+          begin
+            EmitFloatOperandRISCV32(IRA[argNode], Procs[procIdx].Params[j].TypeKind);
+            if Procs[procIdx].Params[j].TypeKind = tyDouble then
+            begin
+              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { lo }
+              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);  { hi }
+              Inc(nArgs, 2);
+            end
+            else
+            begin
+              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+              Inc(nArgs, 1);
+            end;
+          end
+          else
+          begin
+            IREmitNodeRISCV32(IRA[argNode]);
+            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+            Inc(nArgs, 1);
+          end;
+          Inc(j);
           argNode := IRB[argNode];
         end;
         if nArgs > 8 then
-          Error('target riscv32: virtual call with more than 8 parameter words not supported');
+        begin
+          { Words 8+ pass on the stack, exactly as the direct call above does:
+            keep the whole pushed block live across the call (the callee reads
+            word k >= 8 at [entry_sp + (nArgs-1-k)*4]), load a0..a7, free after
+            the return. The old code refused outright, which a by-value `set`
+            parameter now reaches routinely — Self plus a set is nine words. }
+          for i := 0 to 7 do
+            rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
+          rv32_lw(reg_t1, reg_a0, 0);                   { VMT pointer }
+          rv32_lw(reg_t1, reg_t1, Integer(IRIVal[node]) * 8);
+          rv32_jalr(reg_ra, reg_t1, 0);
+          rv32_addi(reg_sp, reg_sp, nArgs * 4);
+          Exit;
+        end;
         for i := 0 to nArgs - 1 do
           rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
         rv32_addi(reg_sp, reg_sp, nArgs * 4);

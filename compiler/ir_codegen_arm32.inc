@@ -2853,14 +2853,58 @@ begin
           EmitI32($E92D0001);                        { push {r0} (dest, deepest) }
         end;
         argNode := IRA[node];
-        nArgs := 0;                                  { total arg words }
+        nArgs := 0;                                  { PARAM index }
+        wid := 0;                                    { total arg WORDS — NOT `j`,
+                                                       which holds the VMT slot }
         while argNode <> -1 do
         begin
-          IREmitNodeArm32(IRA[argNode]);
-          EmitI32($E92D0001);                        { push {r0} }
+          { A by-value 64-bit param is TWO words, lo then hi — exactly what the
+            direct and indirect call paths above already do. This loop used to
+            push one word per arg unconditionally, so the high half of an Int64
+            argument was simply dropped and the callee read garbage for it.
+            Invisible unless the RESULT was also 64-bit: with an Integer result
+            the garbage high half was truncated away on the way back, which is
+            why the bug needed BOTH halves to be 64-bit before anything showed
+            (bug-a-virtual-method-int64-in-and-out-32bit). It reached
+            TStream.Position, whose Seek is virtual with exactly this signature.
+
+            Params[0] is Self, and nArgs counts from there, matching the direct
+            path's indexing. The ladder is deliberately a mirror of the direct
+            path's — that duplication is what let the two drift apart in the
+            first place; unifying them is filed as
+            feature-a-unify-32bit-call-argument-marshalling. }
+          if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+             ((Procs[procIdx].Params[nArgs].TypeKind = tyInt64) or
+              (Procs[procIdx].Params[nArgs].TypeKind = tyUInt64)) and
+             (not Procs[procIdx].Params[nArgs].IsRef) and
+             (not Procs[procIdx].Params[nArgs].IsArray) then
+          begin
+            EmitNode64Arm32(IRA[argNode]);             { r0=lo, r1=hi }
+            EmitI32($E92D0001);                        { push {r0} (lo) }
+            EmitI32($E92D0002);                        { push {r1} (hi) }
+            Inc(wid, 2);
+          end
+          else if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+                  (Procs[procIdx].Params[nArgs].TypeKind = tyDouble) and
+                  (not Procs[procIdx].Params[nArgs].IsRef) then
+          begin
+            IREmitNodeArm32(IRA[argNode]);             { d0 }
+            if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
+              EmitIntToD0Arm32Tk(IntToTypeKind(IRTk[IRA[argNode]]));
+            EmitI32($EC510B10);                        { vmov r0, r1, d0 }
+            EmitI32($E92D0001); EmitI32($E92D0002);    { push lo, hi }
+            Inc(wid, 2);
+          end
+          else
+          begin
+            IREmitNodeArm32(IRA[argNode]);
+            EmitI32($E92D0001);                        { push {r0} }
+            Inc(wid, 1);
+          end;
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
+        nArgs := wid;                                { the code below counts WORDS }
         if IRCallDest[node] >= 0 then nBlock := nArgs + 1 else nBlock := nArgs;
         if nArgs * 4 >= 4096 then
           Error('target arm32: too many virtual-call argument words');

@@ -2415,6 +2415,12 @@ test-core: $(COMPILER)
 	# TryEnter always True (bug-b-criticalsection-was-a-no-op-stub).
 	./$(COMPILER) test/test_criticalsection.pas /tmp/test_tcs26
 	test "$$(/tmp/test_tcs26 | tail -1)" = "PASS"
+	# a VIRTUAL method with a 64-bit param AND a 64-bit result: every 32-bit
+	# backend's virtual-call path pushed one word per arg, dropping the high half
+	# (bug-a-virtual-method-int64-in-and-out-32bit). x86-64 was never affected, so
+	# this line only guards the shape; the value is in the CROSS runs.
+	./$(COMPILER) test/test_virtual_int64_param_and_result.pas /tmp/test_tvi26
+	test "$$(/tmp/test_tvi26 | tail -1)" = "PASS"
 	# what a RECORD may legally contain (b347): no published, no protected (records don't
 	# inherit), a class method must be static, a ctor needs a mandatory parameter, and a
 	# local/anonymous record type gets FIELDS ONLY. All were parse-and-dropped before.

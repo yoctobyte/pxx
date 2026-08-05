@@ -3271,11 +3271,71 @@ begin
         j := Integer(IRIVal[node]);                  { VMT slot }
         argBytes := 0;
         argNode := IRA[node];
+        nArgs := 0;                                  { PARAM index }
         while argNode <> -1 do
         begin
-          IREmitNode386(IRA[argNode]);               { eax = arg }
-          EmitB($50);                                { push eax }
-          Inc(argBytes, 4);
+          { A by-value 64-bit param is TWO dwords — what the direct call path
+            above already does. This loop pushed one dword per arg
+            unconditionally, so the high half of an Int64 argument was dropped
+            and every later param word shifted. Invisible unless the RESULT was
+            also 64-bit: an Integer result truncated the damage away on the way
+            back, which is why the bug needed both halves 64-bit before anything
+            showed (bug-a-virtual-method-int64-in-and-out-32bit). It reached
+            TStream.Position, whose Seek is virtual with exactly this signature —
+            on i386 that segfaulted rather than returning a wrong number.
+
+            ORDER: push hi then lo, the same order the direct cdecl path uses
+            (`push edx; push eax`), so lo lands at the lower address. Measured,
+            not derived — the opposite order was tried first, on the theory that
+            this path's leftmost-DEEPEST layout should mirror the pair too, and
+            it produced 21474836481 (= 5*2^32 + 1): the halves swapped. Running
+            it is cheaper than reasoning about it.
+
+            Params[0] is Self and nArgs counts from there. The ladder mirrors the
+            direct path's on purpose; unifying them is filed as
+            feature-a-unify-32bit-call-argument-marshalling. }
+          if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+             (Procs[procIdx].Params[nArgs].TypeKind = tySet) and
+             (not Procs[procIdx].Params[nArgs].IsRef) and
+             (not Procs[procIdx].Params[nArgs].IsArray) then
+          begin
+            { By-value set: eax is the 32-byte set's ADDRESS; push all 8 dwords
+              inline so the callee's spill can rebuild the set in its own slot.
+              One address word left the callee reading its own slot as set
+              bytes — `b.CountSet([eA,eC,eD])` answered 1 on i386 and 0 on
+              riscv32 where FPC says 3. Same omission as the Int64 case below
+              and found by the same ticket. }
+            IREmitNode386(IRA[argNode]);             { eax = set address }
+            for i := 7 downto 0 do
+            begin
+              EmitB($8B); EmitB($50); EmitB(i * 4);  { mov edx, [eax+i*4] }
+              EmitB($52);                            { push edx }
+            end;
+            Inc(argBytes, TypeSize(tySet));
+          end
+          else if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+             Is64Bit386(Procs[procIdx].Params[nArgs].TypeKind) and
+             (Procs[procIdx].Params[nArgs].IsArray or
+              not Procs[procIdx].Params[nArgs].IsRef) then
+          begin
+            IREmitNode386(IRA[argNode]);             { edx:eax = value }
+            tk := IntToTypeKind(IRTk[IRA[argNode]]);
+            if not Is64Bit386(tk) then
+            begin
+              if TypeSigned(tk) then EmitB($99)              { cdq }
+              else begin EmitB($31); EmitB($D2); end;        { xor edx, edx }
+            end;
+            EmitB($52);                              { push edx (hi) }
+            EmitB($50);                              { push eax (lo) }
+            Inc(argBytes, 8);
+          end
+          else
+          begin
+            IREmitNode386(IRA[argNode]);             { eax = arg }
+            EmitB($50);                              { push eax }
+            Inc(argBytes, 4);
+          end;
+          Inc(nArgs);
           argNode := IRB[argNode];
         end;
         if IRCallDest[node] >= 0 then
