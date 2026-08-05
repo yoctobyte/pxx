@@ -264,6 +264,74 @@ static const char *mon_full[12] =
   { "January","February","March","April","May","June","July","August",
     "September","October","November","December" };
 
+/* ---- asctime / ctime / timegm ------------------------------------------- */
+
+/* timegm(3): the inverse of gmtime — a struct tm interpreted as UTC, with the
+   struct normalised in place. crtl's mktime is already UTC (there is no
+   local-time offset in the PAL), so this is the same computation under the name
+   that actually PROMISES UTC; code that means UTC should not have to rely on
+   mktime happening to be. Was missing entirely — a program calling it hit
+   "call to undeclared function". */
+time_t timegm(struct tm *tm) {
+  return mktime(tm);
+}
+
+/* asctime(3) / ctime(3), C99 7.23.3.1. The format is FIXED by the standard —
+   "Www Mmm dd hh:mm:ss yyyy\n", 26 bytes with the NUL, mday space-padded and
+   the time fields zero-padded — so this is written out literally rather than
+   through strftime, which has no %e-with-leading-space-in-a-fixed-layout form.
+   Both were missing; ctime(&t) is the one-liner everyone reaches for first. */
+static char asctime_buf[32];
+
+static char *two_digits(char *p, int v, char pad) {
+  if (v < 0 || v > 99) v = 0;
+  *p++ = (v < 10) ? pad : (char)('0' + v / 10);
+  *p++ = (char)('0' + v % 10);
+  return p;
+}
+
+char *asctime_r(const struct tm *tm, char *buf) {
+  int wd = tm->tm_wday, mo = tm->tm_mon, year = tm->tm_year + 1900;
+  char *p = buf;
+  int i, neg = 0;
+  char yb[16];
+  int yn = 0;
+  if (wd < 0 || wd > 6) wd = 0;
+  if (mo < 0 || mo > 11) mo = 0;
+  for (i = 0; i < 3; i++) *p++ = wday_abbr[wd][i];
+  *p++ = ' ';
+  for (i = 0; i < 3; i++) *p++ = mon_abbr[mo][i];
+  *p++ = ' ';
+  p = two_digits(p, tm->tm_mday, ' ');     /* SPACE-padded, not zero-padded */
+  *p++ = ' ';
+  p = two_digits(p, tm->tm_hour, '0');
+  *p++ = ':';
+  p = two_digits(p, tm->tm_min, '0');
+  *p++ = ':';
+  p = two_digits(p, tm->tm_sec, '0');
+  *p++ = ' ';
+  if (year < 0) { neg = 1; year = -year; }
+  do { yb[yn++] = (char)('0' + year % 10); year /= 10; } while (year);
+  while (yn < 4) yb[yn++] = '0';           /* the standard layout is 4 digits */
+  if (neg) *p++ = '-';
+  while (yn > 0) *p++ = yb[--yn];
+  *p++ = '\n';
+  *p = '\0';
+  return buf;
+}
+
+char *asctime(const struct tm *tm) {
+  return asctime_r(tm, asctime_buf);
+}
+
+char *ctime_r(const time_t *timer, char *buf) {
+  return asctime_r(localtime(timer), buf);
+}
+
+char *ctime(const time_t *timer) {
+  return asctime(localtime(timer));
+}
+
 /* `trunc` is set when a byte could not be written. strftime must return 0 on
    overflow (C99 7.23.3.5) rather than the truncated length, so every writer has
    to say whether it dropped anything — silently stopping at `end` is what made

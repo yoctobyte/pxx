@@ -82,6 +82,9 @@ vis() { sed -e 's/\r/<CR>/g' -e 's/\t/<TAB>/g' | awk 'NR>1{printf "<LF>"}{printf
 #            later argument (bug-a-pointer-difference-as-vararg-pushes-8-bytes-
 #            on-32bit). int64-to-double is bug-c-int64-to-double-cast-truncates-
 #            on-32bit. Both are native-clean and only fire under --target.
+#            bool-and-negative-zero-int is
+#            bug-a-bool-conversion-does-not-normalise-to-0-or-1 — that one fires
+#            on EVERY target, native included.
 #   lp64  -- output depends on the data model; not judged in cross mode.
 #            atoi-family: atol("2147483648") overflows `long` on ILP32.
 probe() {
@@ -92,10 +95,24 @@ probe() {
     printf 'MODEL       %-24s data-model dependent, not judged under --target\n' "$name"
     modelskip=$((modelskip+1)); return
   fi
-  cat > "$W/c.c"
+  # Cases that touch the filesystem write under the per-run scratch dir, never a
+  # fixed /tmp path. Two runs of this script (or a run alongside anything else
+  # using the same names) would otherwise share files — and a case that reads
+  # back what it just wrote turns into an intermittent divergence that does not
+  # reproduce. One arm32 run reported exactly that and the rerun was clean.
+  sed "s#@TMP@#$W#g" > "$W/c.c"
   ran=$((ran+1))
   local gr pr xr
-  if gcc -std=c99 -w -o "$W/g" "$W/c.c" -lm >/dev/null 2>&1; then
+  # -std=gnu99, not c99: under strict c99 the POSIX/BSD declarations (strsep,
+  # strtok_r, strcasecmp, timegm) are hidden, so gcc took them as implicit int
+  # and TRUNCATED the returned pointer to 32 bits — the oracle segfaulted and
+  # the probe reported it as a pxx divergence. crtl declares them, and real code
+  # uses them, so gnu99 is the honest oracle mode.
+  # -Werror=implicit-function-declaration survives the -w: an implicit
+  # declaration is never intentional in a probe and is exactly the shape that
+  # produced that phantom. It turns into a counted, printed SKIP instead.
+  if gcc -std=gnu99 -w -Werror=implicit-function-declaration \
+         -o "$W/g" "$W/c.c" -lm >/dev/null 2>&1; then
     gr="$("$W/g" 2>&1)"; gr="$gr|rc=$?"
   else gr="<gcc-compile-fail>"; fi
   if [ "$gr" = "<gcc-compile-fail>" ]; then
@@ -329,7 +346,7 @@ probe fread-short-and-eof <<'C'
 #include <stdio.h>
 #include <string.h>
 int main(void) {
-  const char *path = "/tmp/pxx_gdp_eof.txt";
+  const char *path = "@TMP@/gdp_eof.txt";
   char buf[64]; size_t n;
   FILE *f = fopen(path, "wb");
   fwrite("abcdef", 1, 6, f);
@@ -638,7 +655,7 @@ probe stdio-file-roundtrip <<'C'
 #include <stdio.h>
 #include <string.h>
 int main(void) {
-  const char *path = "/tmp/pxx_gdp_rt.txt";
+  const char *path = "@TMP@/gdp_rt.txt";
   char buf[32]; size_t n;
   FILE *f = fopen(path, "wb");
   if (!f) { printf("open-fail\n"); return 1; }
@@ -661,7 +678,7 @@ C
 probe stdio-seek-tell <<'C'
 #include <stdio.h>
 int main(void) {
-  const char *path = "/tmp/pxx_gdp_seek.txt";
+  const char *path = "@TMP@/gdp_seek.txt";
   FILE *f = fopen(path, "wb");
   fwrite("0123456789", 1, 10, f);
   fclose(f);
@@ -684,7 +701,7 @@ probe fopen-missing <<'C'
 #include <stdio.h>
 #include <errno.h>
 int main(void) {
-  FILE *f = fopen("/tmp/pxx_gdp_definitely_absent_9182", "rb");
+  FILE *f = fopen("@TMP@/gdp_definitely_absent_9182", "rb");
   int e = errno;
   printf("%d %d\n", f == 0, e == ENOENT);
   return 0;
@@ -769,7 +786,7 @@ probe unistd-write-read <<'C'
 #include <fcntl.h>
 #include <string.h>
 int main(void) {
-  const char *path = "/tmp/pxx_gdp_u.txt";
+  const char *path = "@TMP@/gdp_u.txt";
   char buf[16];
   int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
   printf("%d %d\n", fd >= 0, (int)write(fd, "abcd", 4));
@@ -963,7 +980,7 @@ probe stdio-rewind-and-flush <<'C'
 #include <stdio.h>
 #include <string.h>
 int main(void) {
-  const char *path = "/tmp/pxx_gdp_rw.txt";
+  const char *path = "@TMP@/gdp_rw.txt";
   char b[16];
   FILE *f = fopen(path, "w+b");
   fwrite("abcdef", 1, 6, f);
@@ -981,7 +998,7 @@ probe stdio-append-mode <<'C'
 #include <stdio.h>
 #include <string.h>
 int main(void) {
-  const char *path = "/tmp/pxx_gdp_ap.txt";
+  const char *path = "@TMP@/gdp_ap.txt";
   char b[16];
   FILE *f = fopen(path, "wb");  fwrite("ab", 1, 2, f); fclose(f);
   f = fopen(path, "ab");        fwrite("cd", 1, 2, f); fclose(f);
@@ -997,7 +1014,7 @@ probe stdio-fseek-past-eof <<'C'
 #include <stdio.h>
 #include <string.h>
 int main(void) {
-  const char *path = "/tmp/pxx_gdp_hole.txt";
+  const char *path = "@TMP@/gdp_hole.txt";
   char b[16];
   FILE *f = fopen(path, "wb");
   fwrite("ab", 1, 2, f);
@@ -1019,7 +1036,7 @@ probe errno-values <<'C'
 #include <unistd.h>
 int main(void) {
   int fd, e;
-  fd = open("/tmp/pxx_gdp_no_such_dir_9182/x", O_RDONLY); e = errno;
+  fd = open("@TMP@/gdp_no_such_dir_9182/x", O_RDONLY); e = errno;
   printf("%d %d\n", fd < 0, e == ENOENT);
   fd = open("/", O_WRONLY); e = errno;
   printf("%d %d\n", fd < 0, e == EISDIR);
@@ -1040,16 +1057,16 @@ int main(void) {
      hand back the kernel's raw negative errno. `if (rc < 0)` catches both, which
      is why this hid; `rc == -1` and perror() do not. errno is read on its own
      statement — never in the argument list of the call that sets it. */
-  errno=0; r = open("/tmp/pxx_nope_9182/x", O_RDONLY); e=errno; printf("open   %d %d\n", r, e);
+  errno=0; r = open("@TMP@/nope_9182/x", O_RDONLY); e=errno; printf("open   %d %d\n", r, e);
   errno=0; r = open("/", O_WRONLY);          e=errno; printf("isdir  %d %d\n", r, e);
   errno=0; r = fsync(4242);                  e=errno; printf("fsync  %d %d\n", r, e);
   errno=0; r = dup(4242);                    e=errno; printf("dup    %d %d\n", r, e);
-  errno=0; r = chdir("/tmp/pxx_nope_9182");  e=errno; printf("chdir  %d %d\n", r, e);
-  errno=0; r = mkdir("/tmp/pxx_nope_9182/x", 0755); e=errno; printf("mkdir  %d %d\n", r, e);
-  errno=0; r = link("/tmp/pxx_nope_9182", "/tmp/pxx_nope_9183"); e=errno; printf("link   %d %d\n", r, e);
-  errno=0; r = rmdir("/tmp/pxx_nope_9182");  e=errno; printf("rmdir  %d %d\n", r, e);
-  errno=0; r = unlink("/tmp/pxx_nope_9182"); e=errno; printf("unlink %d %d\n", r, e);
-  errno=0; r = access("/tmp/pxx_nope_9182", 0); e=errno; printf("access %d %d\n", r, e);
+  errno=0; r = chdir("@TMP@/nope_9182");  e=errno; printf("chdir  %d %d\n", r, e);
+  errno=0; r = mkdir("@TMP@/nope_9182/x", 0755); e=errno; printf("mkdir  %d %d\n", r, e);
+  errno=0; r = link("@TMP@/nope_9182", "@TMP@/nope_9183"); e=errno; printf("link   %d %d\n", r, e);
+  errno=0; r = rmdir("@TMP@/nope_9182");  e=errno; printf("rmdir  %d %d\n", r, e);
+  errno=0; r = unlink("@TMP@/nope_9182"); e=errno; printf("unlink %d %d\n", r, e);
+  errno=0; r = access("@TMP@/nope_9182", 0); e=errno; printf("access %d %d\n", r, e);
   return 0;
 }
 C
@@ -1058,12 +1075,12 @@ probe isatty-not-negative <<'C'
 #include <unistd.h>
 #include <fcntl.h>
 int main(void) {
-  int fd = open("/tmp/pxx_gdp_tty", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  int fd = open("@TMP@/gdp_tty", O_WRONLY | O_CREAT | O_TRUNC, 0644);
   /* isatty answers 0 or 1. A negative leaking out would make every
      `if (isatty(fd))` interactivity branch take the terminal path. */
   printf("%d %d\n", isatty(fd), isatty(fd) ? 1 : 0);
   printf("%d %d\n", isatty(4242), isatty(4242) ? 1 : 0);
-  close(fd); unlink("/tmp/pxx_gdp_tty");
+  close(fd); unlink("@TMP@/gdp_tty");
   return 0;
 }
 C
@@ -1150,6 +1167,221 @@ static int f(int v) {
   return r;
 }
 int main(void) { printf("%d %d %d %d\n", f(1), f(2), f(3), f(9)); return 0; }
+C
+
+
+# ------------------------------------------ batch 3: strings, time, semantics ---
+probe str-case-and-sep <<'C'
+#include <stdio.h>
+#include <string.h>
+#include <strings.h>
+int sgn(int v) { return v < 0 ? -1 : (v > 0 ? 1 : 0); }
+int main(void) {
+  char buf[] = "a:b::c";
+  char *rest = buf, *tok;
+  printf("%d %d %d\n", sgn(strcasecmp("ABC","abc")), sgn(strcasecmp("abd","ABC")),
+                       sgn(strncasecmp("ABCx","abcy",3)));
+  while ((tok = strsep(&rest, ":")) != 0) printf("[%s]", tok);  /* keeps empties */
+  printf("\n");
+  return 0;
+}
+C
+probe strtok-r-reentrant <<'C'
+#include <stdio.h>
+#include <string.h>
+int main(void) {
+  char a[] = "1,2,3";
+  char b[] = "x-y";
+  char *sa = 0, *sb = 0, *ta, *tb;
+  ta = strtok_r(a, ",", &sa);
+  tb = strtok_r(b, "-", &sb);
+  /* interleaved: the whole point of the _r form is that these do not collide */
+  while (ta || tb) {
+    if (ta) { printf("[%s]", ta); ta = strtok_r(0, ",", &sa); }
+    if (tb) { printf("(%s)", tb); tb = strtok_r(0, "-", &sb); }
+  }
+  printf("\n");
+  return 0;
+}
+C
+probe memccpy-and-mempcpy <<'C'
+#include <stdio.h>
+#include <string.h>
+int main(void) {
+  char d[8];
+  char *r;
+  memset(d, '#', 8);
+  r = memccpy(d, "abcXdef", 'X', 8);
+  printf("%d %d %d\n", r != 0, (int)(r - d), d[3] == 'X');
+  memset(d, '#', 8);
+  r = memccpy(d, "abc", 'X', 3);        /* not found within n */
+  printf("%d\n", r == 0);
+  return 0;
+}
+C
+probe strlen-strnlen-edges <<'C'
+#include <stdio.h>
+#include <string.h>
+int main(void) {
+  const char *s = "abcdef";
+  printf("%d %d %d %d\n", (int)strlen(""), (int)strlen(s),
+                          (int)strnlen(s, 3), (int)strnlen(s, 99));
+  return 0;
+}
+C
+probe time-difftime-clock <<'C'
+#include <stdio.h>
+#include <time.h>
+int main(void) {
+  time_t a = 1000000000, b = 1000000060;
+  printf("%d %d\n", (int)difftime(b, a), (int)difftime(a, b));
+  printf("%d\n", CLOCKS_PER_SEC == 1000000);
+  { clock_t c = clock(); printf("%d\n", c >= 0); }
+  return 0;
+}
+C
+probe ctime-asctime-shape <<'C'
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+int main(void) {
+  time_t t = 1000000000;
+  char *a = asctime(gmtime(&t));
+  /* the exact text is fixed by C99 7.23.3.1: "Sun Sep  9 01:46:40 2001\n" */
+  printf("[%s]", a ? a : "<null>");
+  printf("%d\n", a ? (int)strlen(a) : -1);
+  return 0;
+}
+C
+probe timegm-roundtrip <<'C'
+#include <stdio.h>
+#include <time.h>
+int main(void) {
+  time_t t = 1000000000;
+  struct tm g = *gmtime(&t);
+  time_t back = timegm(&g);
+  printf("%d\n", (long long)back == (long long)t);
+  return 0;
+}
+C
+probe integer-wraparound <<'C'
+#include <stdio.h>
+#include <limits.h>
+int main(void) {
+  unsigned int u = UINT_MAX;
+  unsigned char c = 255;
+  unsigned short h = 65535;
+  printf("%u %u %u\n", u + 1, (unsigned)(c + 1), (unsigned)(unsigned short)(h + 1));
+  printf("%d\n", (int)(unsigned char)(c * 3));
+  printf("%llu\n", (unsigned long long)-1);
+  return 0;
+}
+C
+probe bitfields <<'C'
+#include <stdio.h>
+struct B { unsigned a : 3; unsigned b : 5; signed c : 4; unsigned d : 20; };
+int main(void) {
+  struct B v;
+  v.a = 7; v.b = 31; v.c = -8; v.d = 1048575;
+  printf("%u %u %d %u %d\n", v.a, v.b, v.c, v.d, (int)sizeof(struct B));
+  v.a = 8;                       /* truncates to 3 bits */
+  v.c = 7;
+  printf("%u %d\n", v.a, v.c);
+  return 0;
+}
+C
+probe designated-and-compound <<'C'
+#include <stdio.h>
+struct P { int x, y, z; };
+int main(void) {
+  struct P a = { .z = 3, .x = 1 };            /* y zero-filled */
+  int arr[6] = { [4] = 9, [1] = 2 };
+  int i;
+  printf("%d %d %d\n", a.x, a.y, a.z);
+  for (i = 0; i < 6; i++) printf("%d ", arr[i]);
+  printf("\n");
+  return 0;
+}
+C
+probe bool-and-negative-zero-int known <<'C'
+#include <stdio.h>
+int main(void) {
+  _Bool t = 5, f = 0;
+  printf("%d %d %d\n", (int)t, (int)f, (int)(_Bool)2);
+  printf("%d %d\n", !5, !0);
+  printf("%d\n", (int)(0 == -0));
+  return 0;
+}
+C
+probe function-pointers <<'C'
+#include <stdio.h>
+static int add(int a, int b) { return a + b; }
+static int sub(int a, int b) { return a - b; }
+int main(void) {
+  int (*ops[2])(int, int) = { add, sub };
+  int (*p)(int, int) = add;
+  printf("%d %d %d\n", ops[0](7, 3), ops[1](7, 3), p(7, 3));
+  p = sub;
+  printf("%d\n", (*p)(7, 3));
+  return 0;
+}
+C
+probe long-long-arith <<'C'
+#include <stdio.h>
+int main(void) {
+  long long a = 9007199254740993LL;      /* not representable as double */
+  long long b = 3;
+  printf("%lld %lld %lld\n", a / b, a % b, a * 2);
+  printf("%lld\n", -9223372036854775807LL - 1);
+  printf("%d\n", (int)(a > 9007199254740992LL));
+  return 0;
+}
+C
+probe nested-struct-array-copy <<'C'
+#include <stdio.h>
+#include <string.h>
+struct Inner { int v[3]; };
+struct Outer { struct Inner in[2]; char tag[4]; };
+int main(void) {
+  struct Outer a, b;
+  memset(&a, 0, sizeof a);
+  a.in[0].v[1] = 5; a.in[1].v[2] = 9; strcpy(a.tag, "ok");
+  b = a;
+  printf("%d %d [%s] %d\n", b.in[0].v[1], b.in[1].v[2], b.tag,
+         (int)(memcmp(&a, &b, sizeof a) == 0));
+  return 0;
+}
+C
+probe goto-and-labels <<'C'
+#include <stdio.h>
+int main(void) {
+  int i, n = 0;
+  for (i = 0; i < 10; i++) { if (i == 3) goto out; n++; }
+out:
+  printf("%d %d\n", i, n);
+  return 0;
+}
+C
+probe recursion-depth <<'C'
+#include <stdio.h>
+static long long fib(int n) { return n < 2 ? n : fib(n-1) + fib(n-2); }
+static int depth(int n) { return n ? depth(n-1) + 1 : 0; }
+int main(void) {
+  printf("%lld %d\n", fib(24), depth(2000));
+  return 0;
+}
+C
+probe const-string-sharing <<'C'
+#include <stdio.h>
+#include <string.h>
+int main(void) {
+  const char *a = "shared";
+  const char *b = "shared";
+  /* whether literals are pooled is implementation-defined; only the VALUE is
+     compared, never the pointers. */
+  printf("%d %d\n", strcmp(a, b) == 0, (int)strlen(a));
+  return 0;
+}
 C
 
 printf '\ngcc_diff_probe%s: %d cases, %d NEW divergence(s), %d known, %d skipped, %d model-dependent\n' \

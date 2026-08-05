@@ -19,6 +19,7 @@ before assuming the workaround is still needed.
 | `lib/rtl/bignum.pas` (`BigFromStr`, `BigDivMod`), `examples/bignum/bigmath.pas` | managed-return calls bound to a temp before being passed as an arg (no `BigAdd(BigMulSmall(x,…),…)` nesting) | [[bug-managed-record-result-self-arg]] (aka `bug-nested-managed-return-call-arg`) | nest the calls directly |
 | `lib/rtl/chacha20poly1305.pas` (Poly1305) | native 5×26-bit limbs instead of `bignum` | [[bug-managed-record-result-self-arg]] — *partial:* limbs are the idiomatic choice anyway, so this is **not** a pure workaround; keep even after the fix | — (keep) |
 | `lib/rtl/aesgcm.pas` (`BlkCopy`, used in `EncryptBlk`, `GfMul`, `AesCtr`, `GcmSetup`, `GcmTag`) | whole static-array `:=` replaced by element-copy loops | [[bug-fixed-array-assignment-no-copy]] — **fixed generally (v72)**, but a full revert of *this unit* still segfaults at the GCM path (residual, NOT minimally reproducible — every isolated `array :=` pattern passes on v72). **Keep `BlkCopy` here** until the residual is understood. | (do not revert yet) |
+| `lib/rtl/pxxcio.pas` (`__pxx_clock`) | `Result := ts.Sec; Result := Result * 1000000 + …` (implicit widening) instead of `Int64(ts.Sec) * 1000000 + Int64(ts.Nsec) div 1000` | [[bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit]] — the EXPLICIT `Int64()` cast of a 4-byte `NativeInt` reinterprets 8 bytes on i386/arm32, so C's `clock()` returned a huge random number with a NEGATIVE delta between calls | the single-expression `Int64(...)` form |
 | `lib/rtl/ed25519.pas` (EC points) | a point's 4 field coords are **4 separate standalone TGf vars**, never an `array of TGf` or a record of TGf | [[bug-aggregate-member-array-as-var-param]] — passing an aggregate-member array by ref segfaults | a `TPoint = array[0..3] of TGf` / record |
 
 ### Coding-pattern landmines (no single site — avoid in new Track B code)
@@ -39,6 +40,12 @@ before assuming the workaround is still needed.
   than fixed limbs).
 - **`Read := x` / `Write := x`** (own-name result of an intrinsic-named **virtual**
   method) miscompiles — [[bug-virtual-keyword-name-result]]. Use `Result := x`.
+- **Explicit `Int64(n)` where `n` is `NativeInt`/`NativeUInt`** does not extend on
+  32-bit — it reinterprets 8 bytes and the high half is whatever was adjacent
+  ([[bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit]]). The
+  *implicit* widening (`q := n`) is correct, as is `Int64(@x)` / `Int64(ptr)`, so
+  assign through an Int64 local rather than casting. The garbage MOVES with stack
+  layout, so a passing site proves nothing about the one next to it.
 - **Aggregate-member array as a var/const param** (a 2D-array row `p[i]`, or an
   array-typed record field `p.a`) segfaults —
   [[bug-aggregate-member-array-as-var-param]]. Keep each sub-array a standalone

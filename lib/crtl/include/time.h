@@ -53,5 +53,10 @@ struct tm *gmtime_r(const time_t *timer, struct tm *result);
 struct tm *localtime_r(const time_t *timer, struct tm *result);
 size_t strftime(char *s, size_t max, const char *fmt, const struct tm *tm);
 char *strptime(const char *s, const char *fmt, struct tm *tm);
+time_t timegm(struct tm *tm);
+char *asctime(const struct tm *tm);
+char *asctime_r(const struct tm *tm, char *buf);
+char *ctime(const time_t *timer);
+char *ctime_r(const time_t *timer, char *buf);
 
 #endif

@@ -44,11 +44,13 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (186)
+## backlog (188)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-bool-conversion-does-not-normalise-to-0-or-1 | A | 60 | bug | _Bool is plain tyUInt8, so conversion to it truncates instead of normalising: `_Bool b = 256` is FALSE, `_Bool b = ptr` is the pointer's low byte, and `b == 1` is false after `b = 5` | — |
 | bug-a-duplicate-definition-silently-accepted | A | 55 | bug | two definitions of the same function (or global) are silently accepted in BOTH frontends — last one wins, except calls placed between them bind to the earlier, so identical source text calls different functions depending on position | — |
+| bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit | A | 70 | bug | On i386/arm32 the EXPLICIT cast Int64(n) where n is NativeInt/NativeUInt reinterprets 8 bytes instead of extending 4 — Int64(5) is 4294967301. The implicit widening q := n is correct, which is why it hid | — |
 | bug-a-pointer-difference-as-vararg-pushes-8-bytes-on-32bit | A | 65 | bug | On i386/arm32 a bare pointer-difference passed to a variadic function pushes 8 bytes instead of 4, so EVERY later argument reads the wrong slot — printf(\"%d %d\", p-q, 7) prints 3 0 | — |
 | bug-a-promoint-function-result-crashes | A | 45 | bug | A Pascal function RETURNING PromoInt crashes — `function mk: PromoInt; begin Result := 12 end` segfaults on writeln(mk). Confirmed on `pinned` too, so pre-existing; split out of the parameter ticket, which conflated the two | — |
 | bug-a-promoint-parameter-32bit-by-ref-indirection-hangs | A | 40 | bug | On 32-bit targets a PromoInt parameter still does not work: it does not compile today, and simply extending the 64-bit by-ref fix makes it HANG — the by-ref indirection is not resolved, so PromoShiftCount reads a garbage tag and `n shr 4` spins in BShr's doubling loop | — |
@@ -347,9 +349,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1364)
+## done (1365)
 
-1364 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1365 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -393,11 +395,13 @@ _none_
 - [urgent p 75] [A] bug-a-arm32-write-after-free-kills-four-lib-tests
 - [urgent p 75] [A] bug-a-i386-int64-arg-high-half-uninitialized
 - [urgent p 70] [P] bug-p-program-function-does-not-shadow-used-unit
+- [p 70] [A] bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit
 - [p 70] [B] regression-test-core-csocket-loopback-b88
 - [p 65] [A] bug-a-pointer-difference-as-vararg-pushes-8-bytes-on-32bit
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
+- [p 60] [A] bug-a-bool-conversion-does-not-normalise-to-0-or-1
 - [p 60] [A] bug-a-writeln-float-exponent-form-not-correctly-rounded
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [A] feature-a-abi-oracle
