@@ -111,4 +111,4 @@ need a variable. Both are real and both are separate from this bug, so they are
 left visible rather than folded into an unrelated commit.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit b611d51b3.
