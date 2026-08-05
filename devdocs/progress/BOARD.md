@@ -38,12 +38,12 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (199)
+## backlog (200)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-riscv32-and-xtensa-have-no-atomic-codegen | S | 45 | bug | riscv32 (and xtensa) reject every __pxxatomic_* op — 'unsupported node in IR codegen: atomic' — so any unit touching an atomic cannot be compiled for them at all, on the two targets whose OS gives real concurrent tasks | — |
-| bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing | A | 65 | bug | x86-64 only: `b := a` on a dynamic array copy-on-writes instead of ALIASING — writes through either name are invisible to the other. FPC, i386, arm32, aarch64 and riscv32 all alias. Dynamic arrays are reference types; this is silent wrong behaviour on the flagship target | decide-dynarray-cow-vs-fpc-reference-semantics |
+| bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing | A | 65 | bug | x86-64 only: `b := a` on a dynamic array copy-on-writes instead of ALIASING — writes through either name are invisible to the other. FPC, i386, arm32, aarch64 and riscv32 all alias. Dynamic arrays are reference types; this is silent wrong behaviour on the flagship target | decide-dynamic-array-value-vs-reference-semantics |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-futex-helpers-are-trapped-behind-pxxclone | B | 35 | bug | PalFutexWait/Wake live in palthread next to __pxxclone, so any unit wanting a blocking lock inherits the --threadsafe compile gate; that forced syncobjs' TCriticalSection to be a spinlock and palatomic to be a separate unit | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
@@ -89,9 +89,10 @@ _none_
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | decide-abi-portable-vs-target-split | U | 60 | decide |  | — |
+| decide-assertions-directive-and-message-format | U | 40 | decide | FPC compiles Assert OUT unless -Sa/{$ASSERTIONS ON} and appends '(file, line N)' to the message; pxx always evaluates and omits the position. Adopt both, neither, or one? | — |
 | decide-builtin-and-library-code-sharing | U | 30 | decide | A builtin unit and lib/rtl cannot share code today: moving the shared part down breaks library READABILITY (you must be able to step into sysutils and read it straight through), and letting a builtin use the library collides in NilPy's flat unit scope. The float core is being copied because of it. Review when the next clash lands — not a blocker for anything now. | — |
-| decide-dynamic-array-value-vs-reference-semantics | U | 55 | decide | dynamic arrays: pxx gives b := a VALUE semantics (a copy), FPC/Delphi give REFERENCE semantics (an alias) — is ours deliberate? | — |
-| decide-dynarray-cow-vs-fpc-reference-semantics | U | 65 | decide | pxx gives dynamic arrays COPY-ON-WRITE on x86-64 by deliberate design; FPC/Delphi make them reference types where writes through one alias ARE visible through another. Both cannot be true. Which one is pxx's dialect? | — |
+| decide-dynamic-array-value-vs-reference-semantics | U | 55→65 | decide | dynamic arrays: pxx gives b := a VALUE semantics (a copy), FPC/Delphi give REFERENCE semantics (an alias) — is ours deliberate? | — |
+| decide-float-fixed-output-exact-or-fpc-17-digit-cap | U | 45 | decide | writeln(d:0:1) of a huge double: pxx and CPython print the EXACT value (18446744073709551616.0), FPC caps at 17 significant digits and zero-pads (18446744073709552000.0). Which is pxx's rule? | — |
 | decide-nilpy-builtin-keyword-only-parameters | U | 40 | decide | Should NilPy builtins enforce Python's KEYWORD-ONLY parameters? | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-nilpy-runtime-dunder-dispatch-strategy | U | 45 | decide | Decide: how should NilPy dispatch dunders on a Variant-held instance? | — |
@@ -402,7 +403,7 @@ _none_
 - [p 70] [T] regression-test-nilpy-test-cpyext-markupsafe
 - [p 70] [T] regression-test-nilpy-test-nilpy-dotted-package-import
 - [p 70] [T] regression-test-nilpy-test-nilpy-qualifier-vs-cproc
-- [p 65] [U] decide-dynarray-cow-vs-fpc-reference-semantics (unblocks 1)
+- [p 65] [U] decide-dynamic-array-value-vs-reference-semantics (unblocks 1)
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
@@ -427,7 +428,6 @@ _none_
 - [p 55] [N] bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [T] bug-t-empty-range-regression-cannot-be-bisected
-- [p 55] [U] decide-dynamic-array-value-vs-reference-semantics
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
@@ -467,6 +467,7 @@ _none_
 - [p 45] [T] bug-t-three-network-tests-flake-and-cost-real-debugging-time
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [A] compat-pascal-math-intrinsics-not-in-the-system-unit
+- [p 45] [U] decide-float-fixed-output-exact-or-fpc-17-digit-cap
 - [p 45] [D] docs-canonical-domain
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [A] feature-cross-frontend-interop-contract
@@ -503,6 +504,7 @@ _none_
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
 - [p 40] [P] compat-pascal-index-a-function-call-result
 - [p 40] [A] compat-pascal-write-fixed-huge-magnitude-differs-from-fpc
+- [p 40] [U] decide-assertions-directive-and-message-format
 - [p 40] [U] decide-nilpy-builtin-keyword-only-parameters
 - [p 40] [S] feature-a-promoint-variant-esp-targets
 - [p 40] [B] feature-b-crtl-last-seven-unimplemented-declarations
@@ -581,7 +583,7 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — decide-nilpy-set-as-a-distinct-type-or-a-list
 - **2** — feature-web-track-w-bootstrap
-- **1** — decide-dynarray-cow-vs-fpc-reference-semantics
+- **1** — decide-dynamic-array-value-vs-reference-semantics
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-parallel-capture-semantics
 - **1** — decide-pxxpdf-ticket-obsolete

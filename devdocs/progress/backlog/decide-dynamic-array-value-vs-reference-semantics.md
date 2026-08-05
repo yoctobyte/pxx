@@ -78,3 +78,50 @@ same pass so the two stop contradicting each other.
 
 Whichever way it goes, it wants writing down in `docs/language/**` — the absence
 of any statement is what made this a question rather than a lookup.
+
+
+## Evidence added 2026-08-05 (Track A) — it is NOT uniform across targets, and the machinery IS deliberate
+
+A duplicate of this question was filed the next day as
+`decide-dynarray-cow-vs-fpc-reference-semantics` before this ticket was found.
+Merged here and the duplicate withdrawn; its evidence:
+
+### Only x86-64 copies — the other five targets already alias
+
+Measured, `b := a` then a write through each name:
+
+| | after `b[0]:=77` | after `a[1]:=88` |
+| --- | --- | --- |
+| **FPC** | a[0]=77 (visible) | b[1]=88 (visible) |
+| pxx i386 / arm32 / aarch64 / riscv32 | a[0]=77 | b[1]=88 |
+| **pxx x86-64** | **a[0]=1** | **b[1]=2** |
+
+So the divergence is one target, not the dialect. Reproduces with both plain
+(`Integer`) and managed (`string`) element types, so it is not the
+managed-element machinery. `pinned` behaves identically, so it is long-standing.
+
+**That materially changes the cost of option 1**: "match FPC" is not a
+whole-compiler change, it is removing the copy from ONE backend, and it brings
+x86-64 into line with the five targets that already do what FPC does. Option 2
+(keep COW) is the expensive one — it means implementing the copy on four more
+backends.
+
+### The COW is deliberate machinery, not an accident
+
+- `IR_DYNUNIQUE` exists specifically to "load the data pointer on a read and
+  clone-if-shared (copy-on-write) on a write, decided by `InLValueWrite`";
+- `PXXDynArrayUnique` is its RTL half;
+- `compiler/ir.inc` states the invariant outright: *"writing through one alias
+  never mutates another at any depth."*
+
+Meanwhile `ir_codegen_arm32.inc` says *"v1: no COW either way"* — so the cross
+targets are not implementing a rival design, they simply have not implemented
+this one. The split is an implementation gap sitting on top of an intentional
+divergence, which is why it reads as a bug from either side.
+
+### Recommendation unchanged, now cheaper
+
+Option 1. Whoever takes it should measure the blast radius first — build the
+corpora and `make test` with the x86-64 copy disabled — before committing.
+`bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing` is the
+implementation ticket and is already `blocked-by` this decision.

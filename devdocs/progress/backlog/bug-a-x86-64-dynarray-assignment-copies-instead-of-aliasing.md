@@ -3,7 +3,7 @@ summary: "x86-64 only: `b := a` on a dynamic array copy-on-writes instead of ALI
 type: bug
 track: A
 prio: 65
-blocked-by: decide-dynarray-cow-vs-fpc-reference-semantics
+blocked-by: decide-dynamic-array-value-vs-reference-semantics
 ---
 
 # x86-64: dynamic-array assignment copies instead of aliasing
@@ -70,7 +70,7 @@ Recommend (1). Filed as a `bug-` per CLAUDE.md's escape rule — a compat findin
 that produces *silent wrong behaviour* is a bug in the owning lane, not a parity
 nicety.
 
-**Blocked on `decide-dynarray-cow-vs-fpc-reference-semantics`.** Since filing
+**Blocked on `decide-dynamic-array-value-vs-reference-semantics`** (the pre-existing Track U ticket for this fork; a duplicate I filed was merged into it). Since filing
 this, the COW turned out to be DELIBERATE: `IR_DYNUNIQUE` + `PXXDynArrayUnique`
 exist for it and `compiler/ir.inc` states the invariant outright — *"writing
 through one alias never mutates another at any depth."* So fixing this to match
