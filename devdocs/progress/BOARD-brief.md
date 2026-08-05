@@ -5,15 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 unfinished:7 blocked:7 backlog:204 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1381 rejected:28`
+`urgent:1 unfinished:7 blocked:7 backlog:204 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1382 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## urgent (2) — jump the queue
+## urgent (1) — jump the queue
 
-- `bug-a-i386-int64-arg-high-half-uninitialized` [A]
 - `bug-p-program-function-does-not-shadow-used-unit` [P]
 
 ## unfinished (7) — parked mid-flight; re-claim, do not duplicate
@@ -36,9 +35,8 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 187, ranked
+## Ready — top 30 of 186, ranked
 
-- `[p 75] [A]` bug-a-i386-int64-arg-high-half-uninitialized
 - `[p 70] [P]` bug-p-program-function-does-not-shadow-used-unit
 - `[p 70] [A]` bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit
 - `[p 65] [A]` bug-a-pointer-difference-as-vararg-pushes-8-bytes-on-32bit
@@ -68,5 +66,6 @@ _none — no lane is locked._
 - `[p 55] [A]` bug-a-duplicate-definition-silently-accepted
 - `[p 55] [A]` bug-a-local-static-array-of-string-never-released-at-scope-exit
 - `[p 55] [A]` bug-a-x86-64-qword-to-double-assign-halves-above-2-63
+- `[p 55] [C]` bug-c-pthread-without-threadsafe-builds-then-dies-at-load
 
-_157 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_156 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

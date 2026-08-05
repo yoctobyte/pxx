@@ -4014,7 +4014,16 @@ begin
 
     IR_NEG:
       begin
-        IREmitNode386(IRA[node]);
+        { A 64-bit NEG over a still-32-bit OPERAND must widen first: the node's
+          type says Int64 but the operand may be a plain 32-bit load, and the
+          `neg eax / adc edx,0 / neg edx` sequence below would fold whatever was
+          left in edx into the result. `Abs(e)` on an Integer inlines to exactly
+          this (if e < 0 then -e else e, typed Int64).
+          bug-a-i386-int64-arg-high-half-uninitialized }
+        if Is64Bit386(IntToTypeKind(IRTk[node])) then
+          EmitNode64_386(IRA[node])
+        else
+          IREmitNode386(IRA[node]);
         if TypeIsFloat(IntToTypeKind(IRTk[node])) then
         begin
           { flip the sign bit: xmm0 ^= 0x8000000000000000 }
@@ -4037,7 +4046,12 @@ begin
 
     IR_NOT:
       begin
-        IREmitNode386(IRA[node]);
+        { Same widening rule as IR_NEG: `not edx` over a stale edx would invent
+          the high half out of leftovers. }
+        if Is64Bit386(IntToTypeKind(IRTk[node])) then
+          EmitNode64_386(IRA[node])
+        else
+          IREmitNode386(IRA[node]);
         if Is64Bit386(IntToTypeKind(IRTk[node])) then
         begin
           EmitB($F7); EmitB($D0);                    { not eax }
@@ -4119,8 +4133,18 @@ begin
           else if Is64Bit386(tk) then
           begin
             { 64-bit decimal. Field-width padding for 64-bit values is not yet
-              wired; emit the plain form. }
-            IREmitNode386(valNode);                  { edx:eax = value }
+              wired; emit the plain form.
+
+              EmitNode64_386, not IREmitNode386: `tk` is the WRITE node's type,
+              but the VALUE node may still be 32-bit — `writeln(F64(e))` with an
+              Int64-returning F64 inlined down to a bare 32-bit load is exactly
+              that shape. IREmitNode386 would leave edx holding whatever the
+              previous code left there and print `value | garbage shl 32`,
+              silently, with the garbage moving as surrounding code changed.
+              EmitNode64_386 widens from the VALUE's own type (cdq / xor edx),
+              which is what the call-argument paths already do.
+              bug-a-i386-int64-arg-high-half-uninitialized }
+            EmitNode64_386(valNode);                 { value -> edx:eax }
             if tk = tyUInt64 then EmitwriteUInt64_386
             else EmitwriteInt64_386;
           end
