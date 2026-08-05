@@ -44,6 +44,23 @@ disagree" shape as
 `bug-a-writeln-float-exponent-form-not-correctly-rounded`, which collapsed the
 Sci formatters from four copies to one.
 
+## Second, independent repro (2026-08-05)
+
+`bug-a-x86-64-qword-to-double-assign-halves-above-2-63` was filed believing the
+QWord→Double *conversion* halved. It does not — measured, `d := q` for
+QWord max produces exactly FPC's double and compares equal to the literal
+`18446744073709551616.0`. What it was actually seeing was THIS bug:
+
+```pascal
+q := 18446744073709551615; d := q;
+writeln(d);        { pxx  1.8446744073709552E+019   = FPC }
+writeln(d:0:1);    { pxx  9223372036854775809.0     FPC 18446744073709552000.0 }
+```
+
+Same double, two spellings, only the fixed one wrong. That ticket is closed as a
+duplicate of this one. Worth knowing because it means this bug has already
+cost one wrong diagnosis: it presents as an arithmetic fault somewhere else.
+
 ## Fix
 
 Shim `EmitWriteFloatFixed` onto `PXXWriteFloatFixed`, as the Sci emitter now
