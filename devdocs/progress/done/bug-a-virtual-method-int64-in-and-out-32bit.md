@@ -214,4 +214,4 @@ matrix — is untouched and still worth doing. `lib_ecdsa_p256` on arm32,
 `lib_directory`, and the remaining 34 sweep divergences are separate causes.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit fd99c8836.
