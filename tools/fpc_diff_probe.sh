@@ -1912,10 +1912,7 @@ begin
   t.Free;
 end.
 P
-# [known] on t[k].Free — bug-p-free-and-destroy-only-work-on-a-simple-variable
-# (freeing an object held in an ARRAY ELEMENT does not compile). The counter
-# itself is verified; only the teardown is blocked.
-probe thread-interlocked-counter known <<'P'
+probe thread-interlocked-counter <<'P'
 {$threadsafe on}
 uses {$IFDEF FPC} cthreads, Classes, {$ELSE} palthreadobj, palatomic, {$ENDIF} SysUtils;
 var Counter: Integer;
@@ -1943,8 +1940,13 @@ begin
   for k := 0 to 3 do t[k].Free;
 end.
 P
-# [known] on t[k].Free — bug-p-free-and-destroy-only-work-on-a-simple-variable.
-probe thread-critical-section known <<'P'
+# THIS CASE FOUND TWO BUGS, ONE BEHIND THE OTHER. It was [known] for the
+# t[k].Free compile failure (bug-p-free-and-destroy-only-work-on-a-simple-
+# variable); once that was fixed it ran, and reported 7403 where FPC says
+# 8000 — syncobjs.TCriticalSection was a NO-OP STUB
+# (bug-b-criticalsection-was-a-no-op-stub). A [known] tag can hide a second,
+# worse bug behind the first. Untagged now: both must stay fixed.
+probe thread-critical-section <<'P'
 {$threadsafe on}
 uses {$IFDEF FPC} cthreads, Classes, {$ELSE} palthreadobj, {$ENDIF} SysUtils, SyncObjs;
 var Counter: Integer; Lock: TCriticalSection;
@@ -2030,10 +2032,7 @@ begin
   writeln(Done);
 end.
 P
-# [known] on t[k].Free — bug-p-free-and-destroy-only-work-on-a-simple-variable.
-# Also the case that would catch a per-thread managed-string corruption, so it
-# is worth un-blocking early.
-probe thread-local-string-building known <<'P'
+probe thread-local-string-building <<'P'
 {$threadsafe on}
 uses {$IFDEF FPC} cthreads, Classes, {$ELSE} palthreadobj, {$ENDIF} SysUtils;
 type

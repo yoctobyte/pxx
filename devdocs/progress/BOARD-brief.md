@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:7 unfinished:7 blocked:7 backlog:199 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1369 rejected:28`
+`urgent:7 unfinished:7 blocked:7 backlog:199 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1371 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -59,7 +59,6 @@ _none — no lane is locked._
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [A]` bug-a-bool-conversion-does-not-normalise-to-0-or-1
 - `[p 60] [A]` bug-a-writeln-float-exponent-form-not-correctly-rounded
-- `[p 60] [P]` bug-p-free-and-destroy-only-work-on-a-simple-variable
 - `[p 60] [U]` decide-abi-portable-vs-target-split
 - `[p 60] [A]` feature-a-abi-oracle
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -73,5 +72,6 @@ _none — no lane is locked._
 - `[p 60] [T]` feature-t-testmgr-owns-pinning-interruptible
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [O]` feature-opt-o3-register-pressure
+- `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 
 _157 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

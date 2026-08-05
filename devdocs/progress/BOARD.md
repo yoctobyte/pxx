@@ -60,6 +60,7 @@ _none_
 | bug-a-writeln-float-exponent-form-not-correctly-rounded | A | 60 | bug | writeln(Double) and Str(F,S) scale by repeated /10.0 and are wrong from the 16th digit; 1e200 even gets the wrong EXPONENT | — |
 | bug-a-writeln-nonfinite-float-aarch64-emitters-unchecked | A | 45 | bug | aarch64 has its own EmitWriteFloatSciA64 / EmitWriteFloatNatA64 emitters, not touched by the non-finite fix — very likely the same never-terminating normalise loop, unverified because no emulator run was done | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
+| bug-b-futex-helpers-are-trapped-behind-pxxclone | B | 35 | bug | PalFutexWait/Wake live in palthread next to __pxxclone, so any unit wanting a blocking lock inherits the --threadsafe compile gate; that forced syncobjs' TCriticalSection to be a spinlock and palatomic to be a separate unit | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-pthread-without-threadsafe-builds-then-dies-at-load | C | 55 | bug | a C program using <pthread.h> without --threadsafe builds clean and then dies at load with `undefined symbol: __pxx_pmutex_init` — a pxx-internal symbol imported from glibc, which cannot possibly have it | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
@@ -82,7 +83,6 @@ _none_
 | bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
-| bug-p-free-and-destroy-only-work-on-a-simple-variable | P | 60 | bug | `.Free` is only accepted on a plain variable — `a[0].Free`, `r.f.Free`, `h.f.Free` are all `\"Free\": no such member on this record/class`, and `v.Destroy` fails even on a plain variable | — |
 | bug-p-index-getter-backed-string-property | A | 40 | bug | Indexing a getter-backed string property fails to lower (IR_UNSUPPORTED) | — |
 | bug-p-writeln-text-rejects-char | A | 55 | bug | write/writeln to a Text FILE rejects a Char (stdout accepts one) | — |
 | bug-pascal-member-check-missing-on-the-lvalue-field-path | P | 45 | bug | RequireRecMember has 3 call sites, all expression paths, and ~20 AN_FIELD construction sites exist. A breakpoint proved the statement-LVALUE path never calls it. No longer a silent wrong store (RecFieldType now rejects), but the guard is inconsistent and its coverage is unaudited. | — |
@@ -360,9 +360,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1369)
+## done (1371)
 
-1369 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1371 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -415,7 +415,6 @@ _none_
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [A] bug-a-bool-conversion-does-not-normalise-to-0-or-1
 - [p 60] [A] bug-a-writeln-float-exponent-form-not-correctly-rounded
-- [p 60] [P] bug-p-free-and-destroy-only-work-on-a-simple-variable
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
@@ -529,6 +528,7 @@ _none_
 - [p 40] [T] feature-twatch-full-tier-coverage-age
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [T] meta-t-dev-throughput-and-track-a-t-integration
+- [p 35] [B] bug-b-futex-helpers-are-trapped-behind-pxxclone
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
 - [p 35] [N] bug-nilpy-container-membership-ignores-the-eq-dunder
 - [p 35] [N] bug-nilpy-list-sort-ignores-lt-dunder-on-objects

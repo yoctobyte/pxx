@@ -3620,6 +3620,77 @@ begin
              (ASTKind[ASTLeft[n]] = AN_INDEX) or (ASTKind[ASTLeft[n]] = AN_DEREF));
 end;
 
+function PureDesignator(n: Integer): Boolean;
+{ A node that can be re-evaluated with no observable effect: a variable, a field
+  or element of one, a dereference, or a cast over any of those. Callers that
+  CloneAST an operand into several places need this — a call or an operator
+  expression would run more than once.
+
+  A cast recurses into its operand rather than being accepted outright: `(f() as
+  T)` is a cast, and re-evaluating it re-calls f(). An `as` cast also re-runs its
+  runtime type check per copy, which is wasteful but not observable. }
+var depth: Integer;
+begin
+  PureDesignator := False;
+  depth := 0;
+  while (n >= 0) and (depth < 32) do
+  begin
+    if (ASTKind[n] = AN_IDENT) or (ASTKind[n] = AN_FIELD) or
+       (ASTKind[n] = AN_INDEX) or (ASTKind[n] = AN_DEREF) then
+    begin
+      PureDesignator := True;
+      Exit;
+    end;
+    if (ASTKind[n] = AN_CLASS_CAST) or (ASTKind[n] = AN_PTR_CAST) or
+       (ASTKind[n] = AN_AS_CAST) then
+    begin
+      n := ASTLeft[n];
+      Inc(depth);
+    end
+    else
+      Exit;
+  end;
+end;
+
+function BuiltinFreeHere(node, recId: Integer; const fieldName: AnsiString;
+                        afterNameTok: Integer): Boolean;
+{ Is this `<designator>.Free;` — the built-in TObject.Free on a class instance
+  with no user-declared Free — reached through a general member-access path?
+
+  ParseStatementAST has recognised `obj.Free;` for a BARE IDENTIFIER for a long
+  time, by matching the literal token shape `ident . Free ;`. Anything with a
+  selector in front of it — `a[0].Free`, `d[0].Free`, `r.f.Free`, `h.f.Free`,
+  `(o as T).Free` — misses that shape, falls through to ordinary member lookup,
+  and dies as `"Free": no such member on this record/class`, because Free is
+  not a member of any class the frontend knows. `FList[i].Free` is everyday
+  Pascal, so that was a real hole
+  (bug-p-free-and-destroy-only-work-on-a-simple-variable).
+
+  The conditions, and why each is needed:
+    - the base is a user CLASS, not a record (records are not freed);
+    - the class declares no `Free` of its own — a user method named Free wins,
+      exactly as the bare-identifier case already decides;
+    - the token after the name ends a statement, so this is `x.Free;` and not
+      a value position or a call with arguments. Same guard the existing case
+      uses;
+    - the base is a plain DESIGNATOR. GenMakeFreeObjectExpr CloneASTs its
+      operand up to three times (nil test, Destroy, FreeMem), so a
+      side-effecting base would run three times. An ident/field/index/deref/cast
+      chain is a re-read, which is free.
+
+  Destroy is deliberately not included: `Free` is the nil-guarded wrapper, and
+  desugaring a direct `.Destroy` to the same thing would change its meaning. }
+begin
+  BuiltinFreeHere :=
+    (node >= 0) and (recId >= REC_UCLASS_BASE) and
+    (not UClsIsRecord[recId - REC_UCLASS_BASE]) and
+    CaseEqual(fieldName, 'Free') and
+    (FindUMeth(recId - REC_UCLASS_BASE, 'Free') < 0) and
+    (afterNameTok < TokCount) and
+    (Tokens[afterNameTok].Kind in [tkSemicolon, tkEnd, tkElse]) and
+    PureDesignator(node);
+end;
+
 procedure RequireRecMember(recId: Integer; const fieldName: AnsiString);
 { Guard on the AN_FIELD fallthrough paths: a member name that resolved to
   NOTHING on a user record/class (no field, no method/property/class var —
@@ -6254,6 +6325,15 @@ begin
       { Property-backed access: FPC checks the PROPERTY's visibility, and the
         backing field is read on the declaring class's behalf — a private FField
         behind a public Count property must stay accessible (test_tfplist_b259). }
+      { `<designator>.Free;` — see BuiltinFreeHere. Placed immediately before the
+        member check that would otherwise reject it, because Free is not a
+        member of anything. }
+      if BuiltinFreeHere(node, recName, fieldName, TokPos) then
+      begin
+        Next;                        { consume 'Free' }
+        Result := GenMakeFreeObjectExpr(node, recName - REC_UCLASS_BASE);
+        Exit;
+      end;
       if not viaProp then
       begin
         RequireRecMember(recName, fieldName);
@@ -7501,6 +7581,16 @@ begin
         Continue;
       end;
 
+      { `(o as T).Free;` and friends — see BuiltinFreeHere. Same reason and same
+        guard as the ParseLValueAST site; this is the path a `(`-led statement
+        takes. }
+      if BuiltinFreeHere(node, recId, fieldName, TokPos) then
+      begin
+        Next;                        { consume 'Free' }
+        outTk := tyInteger;
+        Result := GenMakeFreeObjectExpr(node, recId - REC_UCLASS_BASE);
+        Exit;
+      end;
       RequireRecMember(recId, fieldName);
       sub := AllocNode(AN_FIELD);
       ASTLeft[sub] := node;

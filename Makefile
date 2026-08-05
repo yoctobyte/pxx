@@ -2403,6 +2403,18 @@ test-core: $(COMPILER)
 	# there are the control: the same shape on a function result always worked.
 	./$(COMPILER) test/test_ctor_result_member.pas /tmp/test_tcrm26
 	test "$$(/tmp/test_tcrm26 | tail -1)" = "PASS"
+	# `.Free` off anything but a bare variable -- a[0].Free, d[0].Free, r.f.Free,
+	# h.f.Free, (o as T).Free all died as "no such member", because Free is not a
+	# member of any class the frontend knows and only the literal `ident . Free ;`
+	# token shape was recognised (bug-p-free-and-destroy-only-work-on-a-simple-
+	# variable). Asserts the SEMANTICS: destructor runs, a user Free wins, nil is
+	# a no-op.
+	./$(COMPILER) test/test_free_designator.pas /tmp/test_tfd26
+	test "$$(/tmp/test_tfd26 | tail -1)" = "PASS"
+	# syncobjs.TCriticalSection must actually exclude -- it was a no-op stub with
+	# TryEnter always True (bug-b-criticalsection-was-a-no-op-stub).
+	./$(COMPILER) test/test_criticalsection.pas /tmp/test_tcs26
+	test "$$(/tmp/test_tcs26 | tail -1)" = "PASS"
 	# what a RECORD may legally contain (b347): no published, no protected (records don't
 	# inherit), a class method must be static, a ctor needs a mandatory parameter, and a
 	# local/anonymous record type gets FIELDS ONLY. All were parse-and-dropped before.

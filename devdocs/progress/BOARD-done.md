@@ -84,6 +84,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-array-ctor-statement-arg-after-dynarray-record-param | A | 50 | bug | Array-constructor statement-arg fails differently when a preceding param has a dynarray field | — |
 | bug-as-cast-inline-method-call | A | 50 | bug | bug: method call on an inline `(expr as T)` is silently dropped | — |
 | bug-asmcore-fpc-bootstrap | A | 50 | bug | FPC bootstrap can't compile the asmcore units the compiler now `uses` | — |
+| bug-b-criticalsection-was-a-no-op-stub | B | 70 | bug | syncobjs.TCriticalSection had empty method bodies and a TryEnter that always returned True, so threaded code locked with nothing and lost updates silently — 4 threads x 2000 guarded increments summed to 7403, not 8000 | — |
 | bug-b-crtl-basic-posix-io-not-implemented | B | 60 | bug | read/write/close/lseek — plus atof, bsearch, rand/srand — were declared by crtl's headers and implemented nowhere; found by probing all 361 declarations for an implementation, not by reading them | — |
 | bug-b-crtl-host-header-and-arity-mismatches-building-pdfgen | B | 45 | bug | Building pdfgen: `strings.h` comes from the host, and `time`/`bcmp` bind at the wrong arity | — |
 | bug-b-crtl-math-constants-missing-silently-zero | B | 60 | bug | `math.h`'s `M_*` constants were absent, so `M_PI` silently evaluated to 0 | — |
@@ -628,6 +629,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-overload-mismatch-dumps-internals-to-stdout | A | 30 | bug | Overload-resolution failure dumps compiler internals to stdout | — |
 | bug-overload-resolution-by-type | A | 50 | bug | bug: overload resolution binds a string arg to an earlier integer-param overload | — |
 | bug-overload-resolution-record-identity | A | 45 | bug | overload resolution ignores record IDENTITY — wrong overload silently called | — |
+| bug-p-free-and-destroy-only-work-on-a-simple-variable | P | 60 | bug | `.Free` is only accepted on a plain variable — `a[0].Free`, `r.f.Free`, `h.f.Free` are all `\"Free\": no such member on this record/class`, and `v.Destroy` fails even on a plain variable | — |
 | bug-p-member-off-a-constructor-result-yields-garbage | P | 70 | bug | `TThing.Create(2).n` in an expression compiles and yields garbage; the same shape on an ordinary function result (`Make(4).n`) is correct, and in a writeln argument it is a parse error instead | — |
 | bug-p-procedure-method-in-an-expression-yields-garbage | P | 75 | bug | A METHOD declared as a procedure (no result) is accepted in an expression and silently yields garbage — `n := f.DoIt` assigns stack junk, `f.DoArg(3) + 1` evaluates to 4. FPC rejects all of it | — |
 | bug-parallel-for-captured-boolean-loses-type | A | 50 | bug | Captured Boolean loses its type inside a parallel-for body (overload resolution fails) | — |
