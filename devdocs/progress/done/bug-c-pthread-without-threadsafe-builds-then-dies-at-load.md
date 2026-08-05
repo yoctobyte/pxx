@@ -127,4 +127,4 @@ not fire across the 368-file C corpus, the concern with putting anything in
 `RegisterExternal`.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit b3ad53022.
