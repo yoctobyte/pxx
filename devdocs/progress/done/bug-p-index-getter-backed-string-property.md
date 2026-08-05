@@ -130,4 +130,4 @@ here. That is now unnecessary — `lib/**` is Track B's lane, so it is left for
 them rather than edited from here.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit ee4519c15.
