@@ -127,4 +127,4 @@ riscv32 declines with *"standard builtin calls not supported in bare-metal stage
 `test/test_promoint_parameter_32bit.pas`.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit f70294460.
