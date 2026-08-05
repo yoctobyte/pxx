@@ -9,7 +9,7 @@ owner: claude-b-night2
 # 32-bit: a virtual method with a 64-bit parameter **and** a 64-bit result is miscompiled
 
 - **Type:** bug — Track A (32-bit backends / virtual-call ABI)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-08-04
 - **Found by:** Track B, cross-target differential sweep of the lib tests
   (`lib_classes` SIGSEGVs on i386). Reduced from `TMemoryStream.Position` to
@@ -212,3 +212,6 @@ Both are covered by the same regression test.
 The ticket's "coverage gap" section — folding the lib cross sweep into Track T's
 matrix — is untouched and still worth doing. `lib_ecdsa_p256` on arm32,
 `lib_directory`, and the remaining 34 sweep divergences are separate causes.
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.

@@ -15,11 +15,9 @@ lives in git, not in a timestamp._
 | bug-p-program-function-does-not-shadow-used-unit | P | 70 | bug | SILENT: a function declared in the PROGRAM does not shadow a same-named routine from a used unit — the unit's version is called instead. FPC calls the program's. Verified on sysutils IntToStr, Trim and UpperCase | — |
 | bug-p-string-char-relational-compares-lengths | A | 85 | bug | `<` `>` `<=` `>=` between a string and a Char compare LENGTHS, not content | — |
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| bug-a-virtual-method-int64-in-and-out-32bit | A | 85 | bug | every 32-bit target: a VIRTUAL method taking an Int64 AND returning an Int64 returns garbage (arm32/riscv32) or crashes (i386) — hits TStream.Position, and riscv32 is ESP32 | — |
+_none_
 
 ## unfinished (7)
 
@@ -361,9 +359,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1373)
+## done (1374)
 
-1373 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1374 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 

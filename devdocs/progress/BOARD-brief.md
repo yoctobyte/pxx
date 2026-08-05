@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:6 working:1 unfinished:7 blocked:7 backlog:199 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1373 rejected:28`
+`urgent:6 unfinished:7 blocked:7 backlog:199 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1374 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-a-virtual-method-int64-in-and-out-32bit` [A] — owner: claude-b-night2
+_none — no lane is locked._
 
 ## urgent (6) — jump the queue
 
