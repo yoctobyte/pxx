@@ -76,3 +76,4 @@
 {"date": "2026-08-05T17:29:57Z", "fixed": [], "full": true, "new_red": [], "sha": "14ac6c9bf7eb1d31e335f64d630dbdc0460e11f8", "tier": "full", "verdict": "GREEN", "wall": 427.3}
 {"date": "2026-08-05T17:34:29Z", "fixed": [], "full": false, "new_red": [], "sha": "030b9a625d8c792d886681d3f95a4b0c40ecd178", "tier": "native", "verdict": "GREEN", "wall": 122.3}
 {"date": "2026-08-05T17:42:09Z", "fixed": [], "full": true, "new_red": [], "sha": "030b9a625d8c792d886681d3f95a4b0c40ecd178", "tier": "full", "verdict": "GREEN", "wall": 429.0}
+{"date": "2026-08-05T17:47:12Z", "fixed": [], "full": false, "new_red": ["test-core#src:test/test_algol_skeleton.alg", "test-core#src:test/test_float_write.pas@1", "test-core#src:test/test_float_write.pas@2", "test-core#src:test/test_fortran_skeleton.f90", "test-core#src:test/test_writeln_nonfinite_float.pas"], "sha": "ad8e212cf739231cf0055e382af45703a8de4407", "tier": "native", "verdict": "RED", "wall": 122.5}
