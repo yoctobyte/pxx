@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg **QUIET 5d0h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `d9b87522b3b1` | 2026-08-05T18:29:57Z | RED (full) | 431.1s | `d9b87522b3b1` RED |
+| plexus | `d9b87522b3b1` | 2026-08-05T18:33:20Z | GREEN (opt) | 196.2s | `d9b87522b3b1` RED |
 | xeon | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
