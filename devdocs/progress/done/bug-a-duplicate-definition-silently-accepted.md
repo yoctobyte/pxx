@@ -3,13 +3,14 @@ summary: "two definitions of the same function (or global) are silently accepted
 type: bug
 track: A
 prio: 55
+owner: claude-A
 ---
 
 # A duplicate definition is silently accepted, and binding is positional
 
 - **Type:** bug — Track A (shared declaration handling / symbol table).
   **Not** a frontend bug: C and Pascal behave identically, so it is below both.
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** Track B, while consolidating `read`/`write`/`close`/`lseek` into
   one file ([[bug-b-crtl-printf-hexfloat-and-float-sign-flags]]). I had briefly
@@ -224,3 +225,53 @@ A second definition of the same name at the same scope is a compile error, in
 both frontends, matching gcc and FPC. If some part of the bootstrap currently
 relies on redefinition (the builtin-migration history above makes that
 plausible), find it first — the error will say exactly where.
+
+## COMPLETED 2026-08-05 — both frontends warn; the error promotion is blocked
+
+**The C half is live.** It was held back on
+`bug-c-string-h-compiles-stdlib-c-twice`; that landed, and the check at
+`cparser.inc`'s `{ Otherwise, it has a body! }` site is now active. Verified on
+the ticket's own repro:
+
+```c
+int f(void) { return 1; }
+int f(void) { return 2; }
+```
+    pxx: warning: duplicate definition of 'f' in the same translation unit — the later body wins
+
+So the deliverable — a loud signal in BOTH frontends, matching what the user
+asked for ("start with a warning, decide the fix afterwards") — is done.
+
+### Tree scan for the suggested gate (promote to error)
+
+- **Pascal / the compiler's own self-build: 0 warnings.**
+- **C: 368 files scanned, 5 warn — and all 5 are FALSE POSITIVES.**
+
+| file(s) | name | why legal |
+| --- | --- | --- |
+| `cisatty.c`, `cposix_io.c`, `crtl_lfs64_aliases_b234.c`, `crtl_posix_io_leaf_b238.c` | `sysret` | `static` in both `fcntl.c` and `unistd.c` |
+| `cvariadic_struct_b208.c` (6x) | `__pxx_va_start_impl` &c. | `static` in the header `stdarg.h` |
+
+`static` at file scope is **internal linkage** — the same name in two
+translation units is two distinct functions, and gcc keeps them distinct
+(measured: two files each with a `static helper`, called from each, print
+`2 11`). pxx pulls crtl's modules into one unit identity, so they collide.
+
+Filed as `bug-c-static-functions-in-different-crtl-modules-collide`. **The error
+promotion is blocked on it** — turning the warning into an error today would
+reject five pieces of legal C.
+
+Not currently a miscompile: the two `sysret` bodies are byte-identical, so
+merging them is inert. It becomes one as soon as two crtl modules define a
+same-named `static` with different bodies, which nothing prevents — recorded in
+that ticket as the real risk.
+
+### Closing this ticket
+
+The bug as filed — *a duplicate definition is silently accepted* — is no longer
+silent in either frontend, which was the ask. The remaining step (error rather
+than warning) is a separate, gated decision and now has its own blocker, so it
+is tracked there rather than holding this open.
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.
