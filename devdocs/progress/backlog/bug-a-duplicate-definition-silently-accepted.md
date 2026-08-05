@@ -154,6 +154,70 @@ That makes it error-worthy rather than warning-worthy, since FPC and gcc both
 reject it — but a warning first would be the safe landing, given the
 builtin-migration history that plausibly left duplicates around.
 
+## PARTIALLY LANDED 2026-08-05 — the Pascal side warns
+
+Per the user: start with a warning, decide the fix afterwards.
+
+`compiler/parser.inc`, at the body-attach site, three conditions and none of
+them optional:
+
+```pascal
+if (Procs[procIdx].BodyAddr >= 0) and (not CProcHasLocalDef[procIdx])
+   and (ProcUnitIdx[procIdx] = CurrentUnitIdx) then
+  Warn('duplicate definition of ''' + Procs[procIdx].Name
+    + ''' with the same parameter types; the later body wins, but calls '
+    + 'written between the two bind to the earlier one');
+```
+
+- **`BodyAddr >= 0`** — `forward` leaves it at -1, so forward+implementation
+  does not warn.
+- **`not CProcHasLocalDef`** — the earlier body must not be a C one. crtl
+  deliberately overrides Pascal builtins (`malloc`, `memcpy`, `strtod` and
+  dozens more exist in `compiler/builtin/*.pas` **and** `lib/crtl/src/*.c`).
+  Without this term it fired **88 times per C program**.
+- **same `ProcUnitIdx`** — shadowing stays legal, which the measurements below
+  say it must be.
+
+A warning rather than an error, deliberately, for the reason the user gave: the
+function started hardcoded, became a builtin, and nothing ever rejected the
+leftover. `-Werror` promotes it, so a hard error is one flag away when the tree
+is known clean.
+
+### Verified silent where it must be
+
+| case | warns? |
+| --- | --- |
+| same scope, identical signature | **yes** — the target |
+| duplicate `procedure` (no result) | **yes** |
+| `forward` + implementation | no |
+| genuine overload (different parameter types) | no |
+| program routine shadowing a **builtin** | no |
+| program routine shadowing a **used unit's** | no |
+| two units exporting the same name (`uses ua, ub`) | no |
+
+Cross-unit shadowing had to be checked rather than assumed, and the user was
+right about it: **FPC accepts two units exporting the same routine and the last
+`uses` wins** — measured, `uses ua, ub` gives B and `uses ub, ua` gives A. (pxx
+picks the *first*, which is [[bug-p-program-function-does-not-shadow-used-unit]],
+filed separately.)
+
+### Tree-wide
+
+Zero warnings across the compiler itself, every `test/lib_*.pas`, and RTL-using
+programs. Self-host fixedpoint converged in one round; `tools/gate.sh quick`
+GREEN.
+
+### The C side is written but NOT enabled
+
+Same three-term condition in `cparser.inc`, verified correct on two C bodies
+(warns), prototype + definition (silent), `static` duplicate (warns), differing
+return type (warns), ordinary crtl program (silent). It is held back because it
+immediately found a **pre-existing** defect that would make it unusable noise:
+`#include <string.h>` with nothing used compiles `lib/crtl/src/stdlib.c` twice,
+51 functions getting two bodies each. Filed as
+[[bug-c-string-h-compiles-stdlib-c-twice]], with the exact diff to enable, and
+the C half lands the moment that is fixed.
+
 ## Suggested gate
 
 A second definition of the same name at the same scope is a compile error, in

@@ -27030,6 +27030,45 @@ begin
   if retIsDynArr then Procs[procIdx].RetType := tyPointer; { 8-byte heap handle ABI }
   if TargetArch = TARGET_XTENSA then
     while (CodeLen mod 4) <> 0 do xtensa_nop; { CALL0 targets must be 4-aligned }
+
+  { REDEFINITION: a second body for a routine that already has one, declared in
+    the SAME scope. Silently accepted until now, and the second body simply won
+    -- except for calls placed BETWEEN the two, which bound to the first, so two
+    identical call sites called different routines
+    (bug-a-duplicate-definition-silently-accepted).
+
+    It is a warning rather than an error deliberately: `write` grew a hardcoded
+    version, then a builtin, and nothing ever rejected the leftover, so there may
+    be duplicates in the tree that a hard error would turn into a broken build.
+    Promote it once the tree is known clean (-Werror already promotes it).
+
+    Both conditions matter and neither is optional:
+
+      BodyAddr >= 0   -- the existing entry already has a BODY. A `forward`
+                         declaration leaves it at -1, so forward+implementation
+                         (the normal, legal pairing) does not warn.
+
+      not CProcHasLocalDef -- the earlier body must not have come from the C
+                         frontend. crtl deliberately overrides Pascal builtins
+                         (malloc, memcpy, strtod, ...) with C versions of the
+                         same name, which is design, not duplication.
+
+      same ProcUnitIdx -- SHADOWING IS LEGAL AND MUST STAY SILENT. FPC accepts a
+                         program routine shadowing a builtin or a used unit's,
+                         and accepts two units exporting the same name (the last
+                         `uses` wins). Only a duplicate within one scope is the
+                         mistake; -1 is the main program, >= 0 a unit.
+
+    Only reached when FindProcOverloadRec matched an IDENTICAL signature, so a
+    genuine overload -- different parameter types -- never lands here. That is
+    also why --strict-overload cannot catch this case: its check sits under
+    `if procIdx < 0`, which a duplicate never satisfies. }
+  if (Procs[procIdx].BodyAddr >= 0) and (not CProcHasLocalDef[procIdx])
+     and (ProcUnitIdx[procIdx] = CurrentUnitIdx) then
+    Warn('duplicate definition of ''' + Procs[procIdx].Name
+      + ''' with the same parameter types; the later body wins, but calls '
+      + 'written between the two bind to the earlier one');
+
   Procs[procIdx].BodyAddr := CodeLen;
   if DebugTrace then writeln('PROC ', Procs[procIdx].Name, ' @', CodeLen);
   for i := 0 to nparams-1 do

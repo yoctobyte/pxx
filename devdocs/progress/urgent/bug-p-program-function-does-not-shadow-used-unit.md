@@ -55,6 +55,20 @@ So the scope machinery prefers a program declaration over a *builtin* but not
 over a *used unit*. That asymmetry is the shape of the defect and probably the
 place to look.
 
+## The same defect shows between two UNITS
+
+Two units exporting the same routine is legal Pascal — FPC accepts it silently
+and the **last** `uses` wins:
+
+```pascal
+uses ua, ub;   begin writeln(Who); end.    { FPC: B   pxx: A }
+uses ub, ua;   begin writeln(Who); end.    { FPC: A }
+```
+
+pxx picks the **first** unit where FPC picks the last. Same underlying rule
+missing — a later declaration must shadow an earlier one — so this is likely one
+fix, not two, and the unit-vs-unit case is the cheaper reproduction.
+
 ## Relationship to the Random bug
 
 [[bug-pascal-unqualified-call-binds-builtin-over-used-unit]] (done) is the
