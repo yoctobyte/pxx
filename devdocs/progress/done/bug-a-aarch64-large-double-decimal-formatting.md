@@ -105,4 +105,4 @@ the Int64 saturation in its still-hand-written fixed emitter — already filed a
 **Verified:** rows 1 and 3 identical on x86-64, aarch64, i386 and arm32.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit d6627c1ea.
