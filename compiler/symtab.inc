@@ -4518,9 +4518,10 @@ end;
   convert at the call site — full overload resolution lives in MatchProcCall
   and is not reachable from a name lookup. }
 function FindProc(const name: AnsiString): Integer;
-var i: Integer; lo: AnsiString;
+var i, own, last: Integer; lo: AnsiString;
 begin
   lo := name;
+  own := -1; last := -1;
   { Exact-case match first — always, and the only path for case-sensitive
     symbols (C imports, or Pascal in case-sensitive mode). Hash-chain walk
     (FIFO = registration order) replaces the full linear scan; same result. }
@@ -4533,12 +4534,37 @@ begin
     if (Procs[i].Name = lo) and
        not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) then
       begin
-        if WarnUsesLeak and (CurrentUnitIdx >= 0) and (ProcUnitIdx[i] <> CurrentUnitIdx) and
-           not VisibilityAllows(CurrentUnitIdx, ProcUnitIdx[i]) then
-          WarnUsesLeakHit('routine', name, CurrentUnitIdx, ProcUnitIdx[i]);
-        Result := i; Exit;
+        { LAST declaration wins, not first. The chain is FIFO = registration
+          order, and used units are registered before the compiling scope's own
+          routines — so first-wins made a unit's routine beat the program's own
+          same-named one, silently
+          (bug-p-program-function-does-not-shadow-used-unit). So a match in the
+          CURRENT scope beats one from elsewhere; everything else is unchanged,
+          first-in-chain.
+
+          Only the current-scope preference — NOT "last declaring scope wins",
+          which is FPC's `uses a, b` rule and which was measured to break the
+          NilPy stdlib. FindProc returns the *representative* of a same-named
+          set, and `pyparser.inc` reads `Procs[procIdx].RetType` off it to infer
+          expression types; handing back a different scope's entry inferred the
+          wrong type and segfaulted `sum(range(i))` at runtime. Same hazard bit
+          the Pascal side differently — the parser reads the representative's
+          signature to decide that `EmitAsmX64([...])` is an open-array
+          constructor rather than a SET, so preferring the last entry made the
+          compiler fail to compile itself. The unit-vs-unit half is filed
+          separately (bug-p-uses-order-does-not-decide-which-unit-wins). }
+        if (ProcUnitIdx[i] = CurrentUnitIdx) and (own < 0) then own := i;
+        if last < 0 then last := i;
       end;
     i := ProcHashNext[i];
+  end;
+  if own >= 0 then last := own;
+  if last >= 0 then
+  begin
+    if WarnUsesLeak and (CurrentUnitIdx >= 0) and (ProcUnitIdx[last] <> CurrentUnitIdx) and
+       not VisibilityAllows(CurrentUnitIdx, ProcUnitIdx[last]) then
+      WarnUsesLeakHit('routine', name, CurrentUnitIdx, ProcUnitIdx[last]);
+    Result := last; Exit;
   end;
   { Case-insensitive fallback for case-insensitive symbols only (default Pascal).
     First match wins; ambiguity refinement (warn) is future work. External
@@ -4553,12 +4579,18 @@ begin
        CaseEqual(Procs[i].Name, lo) and
        not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) then
     begin
-      if WarnUsesLeak and (CurrentUnitIdx >= 0) and (ProcUnitIdx[i] <> CurrentUnitIdx) and
-         not VisibilityAllows(CurrentUnitIdx, ProcUnitIdx[i]) then
-        WarnUsesLeakHit('routine', name, CurrentUnitIdx, ProcUnitIdx[i]);
-      Result := i; Exit;
+      if (ProcUnitIdx[i] = CurrentUnitIdx) and (own < 0) then own := i;
+      if last < 0 then last := i;
     end;
     i := ProcHashNext[i];
+  end;
+  if own >= 0 then last := own;
+  if last >= 0 then
+  begin
+    if WarnUsesLeak and (CurrentUnitIdx >= 0) and (ProcUnitIdx[last] <> CurrentUnitIdx) and
+       not VisibilityAllows(CurrentUnitIdx, ProcUnitIdx[last]) then
+      WarnUsesLeakHit('routine', name, CurrentUnitIdx, ProcUnitIdx[last]);
+    Result := last; Exit;
   end;
   { LAZYCASING fallback: only for C-import symbols (external), only when the
     switch is on, and only when EXACTLY ONE matches case-insensitively. Resolves
@@ -5292,7 +5324,7 @@ end;
 
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind; suppressBuiltin: Boolean): Integer;
 var i, j: Integer; match: Boolean; cn, nl: AnsiString; demote: Boolean; bIdx: Integer;
-    userOnly: Boolean;
+    userOnly: Boolean; ownM, anyM: Integer;
 begin
   { LAZYCASING: rebind a wrong-case C-import call to its exact declared spelling
     once, then match normally (the exact-name phases below then find it). }
@@ -5324,8 +5356,21 @@ begin
       i := ProcHashNext[i];
     end;
   end;
-  { Phase 1: Try exact match }
+  { Phase 1: Try exact match.
+
+    Two exact matches are INDISTINGUISHABLE by signature, so the only thing
+    left to rank them by is scope — and first-in-the-chain is registration
+    order, which puts used units ahead of the compiling scope's own routines.
+    That silently made `program s; uses sysutils; function IntToStr(...)` call
+    sysutils' version (bug-p-program-function-does-not-shadow-used-unit): the
+    user's own function was compiled, called by nothing, and ignored.
+
+    So among EXACT matches prefer one from the current scope. This is
+    deliberately narrow — only this phase, where the candidates tie on
+    everything else. The later compatible/lifting phases rank by argument fit,
+    and a better-fitting routine should still win regardless of where it lives. }
   i := ProcChainHead(name);
+  ownM := -1; anyM := -1;
   while i >= 0 do
   begin
     if MatchElig(i, name, demote, bIdx, userOnly) then
@@ -5342,13 +5387,15 @@ begin
         end;
         if match then
         begin
-          Result := i;
-          Exit;
+          if anyM < 0 then anyM := i;
+          if (ProcUnitIdx[i] = CurrentUnitIdx) and (ownM < 0) then ownM := i;
         end;
       end;
     end;
     i := ProcHashNext[i];
   end;
+  if ownM >= 0 then begin Result := ownM; Exit; end;
+  if anyM >= 0 then begin Result := anyM; Exit; end;
 
   { The literal-typed probe wants Phase 1 and nothing else: its argTypes carry a
     RE-TYPED integer literal (LiteralIntKind), which is a legitimate input to an

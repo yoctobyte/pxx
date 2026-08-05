@@ -9,7 +9,7 @@ prio: 70
 
 - **Type:** bug — **SILENT** wrong resolution. Track P (Pascal frontend name
   resolution).
-- **Status:** urgent
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** Track B, while checking that a proposed duplicate-definition
   check would not break legitimate shadowing
@@ -92,3 +92,73 @@ matching FPC; `sysutils.IntToStr(5)` still reaches the unit's version when
 qualified. Worth an entry in the Pascal frontend tests covering all three scopes
 at once — builtin, unit, program — since the builtin case already behaves and a
 fix must not regress it.
+
+
+## Fixed 2026-08-05 — the silent half; the other two are split out
+
+### Fixed: a program's own routine beats a used unit's
+
+    function IntToStr(v: Int64)        + IntToStr(Int64(5))  ->  mine
+    function Trim(const t: AnsiString) + Trim(a)             ->  mine-trim
+    sysutils.IntToStr(Int64(7))                              ->  7   (qualified still reaches the unit)
+    function UpCase(c: Char)                                 ->  X   (builtin shadowing unregressed)
+
+Two matches with the same signature are indistinguishable, so the only thing
+left to rank them by is scope — and the lookup chain is FIFO = **registration
+order**, which puts used units ahead of the compiling scope's own routines.
+Both resolvers now prefer a match in the **current scope**: `FindProc` (used
+for paramless calls, and as the representative of a same-named set) and
+`MatchProcCall`'s **exact-match phase**.
+
+Only that phase. The later compatible/lifting phases rank by argument *fit*,
+where a better-fitting routine should win wherever it lives.
+
+### Split out: `uses a, b` order (was this ticket's unit-vs-unit half)
+
+[[bug-p-uses-order-does-not-decide-which-unit-wins]], prio 35. The ticket's
+guess that this was "likely one fix, not two" was wrong — the two halves live
+in different resolvers, and the unit-vs-unit one is genuinely hard. See below.
+
+### Split out: arguments that need a conversion
+
+    IntToStr(5)   ->  '5'    (FPC: mine)
+    Trim(' x ')   ->  'x'    (FPC: mine)
+
+Not the same defect. sysutils declares exactly one `IntToStr` (`Int64`), so
+nothing wins on fit: `5` types as `tyInteger`, the exact-match phase misses
+*both*, and the compatible phases rightly see two equally convertible routines.
+The real difference is structural — **FPC hides, pxx competes**: an FPC inner
+declaration removes the outer same-named set from consideration entirely absent
+an explicit `overload`. That is a repo-wide resolution semantics change, parked
+as [[decide-inner-declaration-hides-or-competes-with-outer-overloads]] rather
+than guessed at.
+
+The ticket's practical motivation — patching an RTL routine locally — now works
+whenever the call site's argument types match the declaration, the ordinary case.
+
+## The two near-misses, recorded because the quick tier passed both
+
+The first version preferred the **last chain entry** outright, which is FPC's
+uses-order rule. It broke two unrelated things, and `gate.sh quick` was green
+for both:
+
+1. **The compiler could not compile itself** — `set item must be one character`
+   at `EmitAsmX64([...])`. That routine has `array of const` and `AnsiString`
+   overloads, and the parser reads the returned proc's **signature** to decide
+   whether `[...]` is an open-array constructor or a set.
+2. **The NilPy stdlib segfaulted** at `sum(range(i))`, caught only by
+   `--tier limited`. `pyparser.inc` infers expression types from
+   `Procs[procIdx].RetType` off whatever `FindProc` returns.
+
+Root of both: **`FindProc` returns a representative of a same-named set and
+callers read types and signatures off it** — it is not a pure "what does this
+call bind to" query. Any ranking change there needs the limited tier at
+minimum. That is the whole reason this landed as current-scope-only.
+
+Test: `test/test_shadow_program_over_unit.pas` — all four cases at once (unit,
+builtin, qualified, own).
+
+**Resolved:** PENDING-COMMIT
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.
