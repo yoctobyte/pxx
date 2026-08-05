@@ -4301,6 +4301,92 @@ begin
   IRLowerVariantAsScalar := IRAppendCall(vuProc, vuArg, -1, Ord(vuRet));
 end;
 
+{ Whole STATIC-array assignment whose elements are MANAGED (AnsiString, or a
+  record with managed fields): `b := a`, `rec.arr := other.arr`.
+
+  A plain IR_COPY_REC would duplicate the element handles without adjusting a
+  single refcount, and the scalar store path these arms used to fall back to
+  does not copy an array at all — `b := a` silently produced all-empty strings
+  and `a := a` destroyed a[0]
+  (bug-a-static-array-of-managed-whole-assign-loses-data).
+
+  Same ARC shape IR_COPY_REC_MANAGED uses for a record: retain the SOURCE's
+  element handles, release the DESTINATION's old ones, then bulk-copy.
+  Retain-before-release is what makes `a := a` and shared-handle elements safe.
+  A static array carries no [refcount][length] header, so the element walks are
+  the header-free PXXDynArrayRetainImmediate / PXXArrayReleaseImmediate pair
+  over a raw buffer + explicit count. N-D arrays are stored flat, so the
+  flattened element count is the right one.
+
+  baseKind: 1 = AnsiString elements, 3 = record elements (walked via elemRec's
+  layout descriptor). Returns the IR_COPY_REC node (the statement's value). }
+function IRManagedArrayCopy(dstAST, srcAST, count, elemSize, baseKind, elemRec: Integer): Integer;
+var maSrcTmp, maDstTmp, maFirst, maLast, maArg, maProc, maCall: Integer;
+
+  { The trailing (baseKind, baseRecDesc) argument pair, identical in both calls.
+    IR_CONST_DATA yields the layout blob's data address — the negative sentinel
+    resolves to UClsRTTIOff at link fixup, as in AN_DYN_DELETE. }
+  function AppendKindAndDesc(after: Integer): Integer;
+  var kArg: Integer;
+  begin
+    kArg := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, baseKind, Ord(tyInteger)),
+              -1, -1, 0, Ord(tyInteger));
+    IRB[after] := kArg;
+    if baseKind = 3 then
+      IRB[kArg] := IRAppend(IR_ARG,
+                     IRAppend(IR_CONST_DATA, -1, -1, -1,
+                       -(RECORD_RTTI_DATAREF_BASE + (elemRec - REC_UCLASS_BASE)),
+                       Ord(tyPointer)),
+                     -1, -1, 0, Ord(tyPointer))
+    else
+      IRB[kArg] := IRAppend(IR_ARG,
+                     IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+                     -1, -1, 0, Ord(tyPointer));
+    AppendKindAndDesc := kArg;
+  end;
+
+begin
+  { Both addresses are parked in pointer temps: each is needed three times
+    (retain, release, copy) and re-lowering an AN_INDEX/AN_FIELD base would
+    re-evaluate its subscript. }
+  maDstTmp := AllocVar('', tyPointer);
+  IRAppend(IR_STORE_SYM, maDstTmp, IRLowerAddress(dstAST), -1, 0, Ord(tyPointer));
+  maSrcTmp := AllocVar('', tyPointer);
+  IRAppend(IR_STORE_SYM, maSrcTmp, IRLowerAddress(srcAST), -1, 0, Ord(tyPointer));
+
+  { PXXDynArrayRetainImmediate(src, count, depth=1, baseKind, desc) }
+  maProc := FindProc('PXXDynArrayRetainImmediate');
+  if maProc < 0 then Error('compiler error: PXXDynArrayRetainImmediate not found');
+  maFirst := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, maSrcTmp, -1, -1, 0, Ord(tyPointer)),
+               -1, -1, 0, Ord(tyPointer));
+  maLast := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, count, Ord(tyInteger)),
+              -1, -1, 0, Ord(tyInteger));
+  IRB[maFirst] := maLast;
+  maArg := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+             -1, -1, 0, Ord(tyInteger));
+  IRB[maLast] := maArg;                                  { depth = 1 }
+  AppendKindAndDesc(maArg);
+  maCall := IRAppendCall(maProc, maFirst, -1, Ord(tyNativeInt));
+  IRIVal[maCall] := 1;   { statement-level: side-effect call }
+
+  { PXXArrayReleaseImmediate(dst, count, baseKind, desc) }
+  maProc := FindProc('PXXArrayReleaseImmediate');
+  if maProc < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
+  maFirst := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, maDstTmp, -1, -1, 0, Ord(tyPointer)),
+               -1, -1, 0, Ord(tyPointer));
+  maLast := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, count, Ord(tyInteger)),
+              -1, -1, 0, Ord(tyInteger));
+  IRB[maFirst] := maLast;
+  AppendKindAndDesc(maLast);
+  maCall := IRAppendCall(maProc, maFirst, -1, Ord(tyNativeInt));
+  IRIVal[maCall] := 1;
+
+  IRManagedArrayCopy := IRAppend(IR_COPY_REC,
+    IRAppend(IR_LOAD_SYM, maDstTmp, -1, -1, 0, Ord(tyPointer)),
+    IRAppend(IR_LOAD_SYM, maSrcTmp, -1, -1, 0, Ord(tyPointer)),
+    -1, count * elemSize, Ord(tyRecord));
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
@@ -4347,6 +4433,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     narrowSize: Integer; castIsSigned: Boolean;
     i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize: Integer;
     faFldRec, faFldIdx: Integer;   { whole static-array FIELD assignment }
+    waBaseKind: Integer;   { whole static-array assignment: 0 = plain bytes, else IRManagedArrayCopy }
 
     slTargetAST, slCountAST, slRootSym, slDepth, slTargetAddr, slCountNode: Integer;
     slFldRec, slFldDepth, slFldBaseRec: Integer; slFldName: AnsiString; slFldBaseTk: TTypeKind;
@@ -7230,34 +7317,50 @@ begin
                 scalar store path instead, which moved a single element's width
                 and left the rest garbage (bug-nd-array-assign-copies-garbage). }
               (SymElemDynDepth[ASTIVal[ASTLeft[node]]] = 0) and
-              (Syms[ASTIVal[ASTLeft[node]]].ElemType <> tyAnsiString) and
+              { tyString elements stay on the scalar path: their slot width is
+                decided at DECLARATION time (STRING_CAP+8 global vs
+                LOCAL_STR_CAP+8 local, see AllocArray) and is not recoverable
+                from the symbol here, so a byte count computed now would be
+                wrong. tyFixedString/tyShortString DO carry their capacity
+                (SymStrCap) and are handled below. }
               (Syms[ASTIVal[ASTLeft[node]]].ElemType <> tyString) and
-              not ((Syms[ASTIVal[ASTLeft[node]]].ElemType = tyRecord) and
-                   RecordHasManagedFields(Syms[ASTIVal[ASTLeft[node]]].ElemRecName)) and
               rhsIsLValue then
       begin
         { Whole static-array assignment (`b := a`). The scalar store path below
           moves only one element's width, leaving the rest of `b` as garbage
           (bug-fixed-array-assignment-no-copy). Copy the full ArrLen*elemSize
           via IR_COPY_REC, mirroring the whole-record path and the static-array
-          arg-copy idiom above. Managed-element arrays (string / managed-record
-          elements) need per-element ARC and are left to the scalar path. }
+          arg-copy idiom above. MANAGED elements used to be excluded here and
+          left to the scalar path, which does not copy an array at all — see
+          IRManagedArrayCopy for that bug and the ARC shape that replaces it. }
         i := ASTIVal[ASTLeft[node]];
         if Syms[i].ElemType = tyRecord then elemSize := RecSize(Syms[i].ElemRecName)
+        else if TypeIsFrozenString(Syms[i].ElemType) then
+          { `array[..] of string[N]`: the slot is a length word + N chars, not
+            TypeSize's default 8 — which copied only the first element. }
+          elemSize := FrozenStrSlotSize(Syms[i].ElemType, SymStrCap[i])
         else elemSize := TypeSize(Syms[i].ElemType);
-        leftAddr := IRLowerAddress(ASTLeft[node]);
-        right := IRLowerAddress(ASTRight[node]);
-        Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
-                           Syms[i].ArrLen * elemSize, Ord(tyRecord));
+        waBaseKind := 0;
+        if Syms[i].ElemType = tyAnsiString then waBaseKind := 1
+        else if (Syms[i].ElemType = tyRecord) and
+                RecordHasManagedFields(Syms[i].ElemRecName) then waBaseKind := 3;
+        if waBaseKind = 0 then
+        begin
+          leftAddr := IRLowerAddress(ASTLeft[node]);
+          right := IRLowerAddress(ASTRight[node]);
+          Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
+                             Syms[i].ArrLen * elemSize, Ord(tyRecord));
+        end
+        else
+          Result := IRManagedArrayCopy(ASTLeft[node], ASTRight[node],
+                      Syms[i].ArrLen, elemSize, waBaseKind, Syms[i].ElemRecName);
       end
       else if (ASTKind[ASTLeft[node]] = AN_FIELD) and rhsIsLValue and
               (faFldRecIdxHelper(ASTLeft[node], faFldRec, faFldIdx)) and
               UFldIsArray[faFldIdx] and (UFldArrLen[faFldIdx] >= 0) and
               (UFldDynDepth[faFldIdx] = 0) and
-              (UFldTk[faFldIdx] <> Ord(tyAnsiString)) and
-              (UFldTk[faFldIdx] <> Ord(tyString)) and
-              not ((UFldTk[faFldIdx] = Ord(tyRecord)) and
-                   RecordHasManagedFields(UFldRec_[faFldIdx])) then
+              { see the tyString note on the variable branch above }
+              (UFldTk[faFldIdx] <> Ord(tyString)) then
       begin
         { Whole static-array FIELD assignment (`rec.a := other.a`, or `Result.FArr
           := F` inside a record method). The AN_IDENT whole-array branch above only
@@ -7265,14 +7368,27 @@ begin
           to the scalar store, which moved a single element's width and left the
           rest of the destination array untouched (tforin25: a record enumerator's
           `Result.FArr := F` copied only element 0). Copy the full
-          ArrLen*elemSize via IR_COPY_REC, mirroring the variable path. Managed-
-          element arrays keep the per-element ARC scalar path. }
+          ArrLen*elemSize via IR_COPY_REC, mirroring the variable path — managed
+          elements through IRManagedArrayCopy, exactly as that branch does
+          (`y.arr := x.arr` on an array-of-string field gave `[f0][][]`). }
         if UFldTk[faFldIdx] = Ord(tyRecord) then elemSize := RecSize(UFldRec_[faFldIdx])
+        else if TypeIsFrozenString(IntToTypeKind(UFldTk[faFldIdx])) then
+          elemSize := FrozenStrSlotSize(IntToTypeKind(UFldTk[faFldIdx]), UFldStrCap[faFldIdx])
         else elemSize := TypeSize(IntToTypeKind(UFldTk[faFldIdx]));
-        leftAddr := IRLowerAddress(ASTLeft[node]);
-        right := IRLowerAddress(ASTRight[node]);
-        Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
-                           UFldArrLen[faFldIdx] * elemSize, Ord(tyRecord));
+        waBaseKind := 0;
+        if UFldTk[faFldIdx] = Ord(tyAnsiString) then waBaseKind := 1
+        else if (UFldTk[faFldIdx] = Ord(tyRecord)) and
+                RecordHasManagedFields(UFldRec_[faFldIdx]) then waBaseKind := 3;
+        if waBaseKind = 0 then
+        begin
+          leftAddr := IRLowerAddress(ASTLeft[node]);
+          right := IRLowerAddress(ASTRight[node]);
+          Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
+                             UFldArrLen[faFldIdx] * elemSize, Ord(tyRecord));
+        end
+        else
+          Result := IRManagedArrayCopy(ASTLeft[node], ASTRight[node],
+                      UFldArrLen[faFldIdx], elemSize, waBaseKind, UFldRec_[faFldIdx]);
       end
       else if (ASTKind[ASTLeft[node]] = AN_INDEX) and
               (ASTKind[ASTLeft[ASTLeft[node]]] = AN_IDENT) and

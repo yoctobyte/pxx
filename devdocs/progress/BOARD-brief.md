@@ -5,17 +5,16 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:4 unfinished:7 blocked:7 backlog:201 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1378 rejected:28`
+`urgent:3 unfinished:7 blocked:7 backlog:203 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1379 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## urgent (4) — jump the queue
+## urgent (3) — jump the queue
 
 - `bug-a-arm32-write-after-free-kills-four-lib-tests` [A]
 - `bug-a-i386-int64-arg-high-half-uninitialized` [A]
-- `bug-a-static-array-of-managed-whole-assign-loses-data` [A]
 - `bug-p-program-function-does-not-shadow-used-unit` [P]
 
 ## unfinished (7) — parked mid-flight; re-claim, do not duplicate
@@ -38,9 +37,8 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 186, ranked
+## Ready — top 30 of 187, ranked
 
-- `[p 80] [A]` bug-a-static-array-of-managed-whole-assign-loses-data
 - `[p 75] [A]` bug-a-arm32-write-after-free-kills-four-lib-tests
 - `[p 75] [A]` bug-a-i386-int64-arg-high-half-uninitialized
 - `[p 70] [P]` bug-p-program-function-does-not-shadow-used-unit
@@ -51,6 +49,7 @@ _none — no lane is locked._
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [A]` bug-a-bool-conversion-does-not-normalise-to-0-or-1
 - `[p 60] [A]` bug-a-writeln-float-exponent-form-not-correctly-rounded
+- `[p 60] [T]` bug-t-gate-sh-fixedpoint-does-not-iterate
 - `[p 60] [U]` decide-abi-portable-vs-target-split
 - `[p 60] [A]` feature-a-abi-oracle
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -68,7 +67,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [A]` bug-a-duplicate-definition-silently-accepted
+- `[p 55] [A]` bug-a-local-static-array-of-string-never-released-at-scope-exit
 - `[p 55] [A]` bug-a-x86-64-qword-to-double-assign-halves-above-2-63
-- `[p 55] [C]` bug-c-pthread-without-threadsafe-builds-then-dies-at-load
 
-_156 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_157 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

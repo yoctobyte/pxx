@@ -1997,6 +1997,46 @@ begin
   end;
 end;
 
+{ Element-aware release over a RAW element buffer of `len` elements — the exact
+  mirror of PXXDynArrayRetainImmediate, and deliberately header-free: a STATIC
+  array has no [refcount][length] prefix, so PXXDynArrayReleaseDepth (which
+  decrements a header and may free the block) cannot serve it. Used by whole
+  static-array assignment `b := a` to release the destination's old element
+  handles before the bulk byte copy overwrites them.
+  baseKind: 1 = AnsiString elements, 3 = record elements (walked via desc). }
+procedure PXXArrayReleaseImmediate(arrData: Pointer; len: NativeInt; baseKind: Integer; baseRecDesc: Pointer);
+var
+  i: Int64;
+  itemAddr: Pointer;
+  elSize: Int64;
+begin
+  if arrData = nil then Exit;
+  if baseKind = 1 then
+  begin
+    i := 0;
+    while i < len do
+    begin
+      itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+      PXXStrDecRef(Pointer(PWord(itemAddr)^));
+      i := i + 1;
+    end;
+  end
+  else if baseKind = 3 then
+  begin
+    if baseRecDesc <> nil then
+    begin
+      elSize := PInt32(Int64(baseRecDesc) + 4)^;
+      i := 0;
+      while i < len do
+      begin
+        itemAddr := Pointer(Int64(arrData) + i * elSize);
+        PXXRecordRelease(itemAddr, baseRecDesc);
+        i := i + 1;
+      end;
+    end;
+  end;
+end;
+
 procedure PXXRecordRetain(recAddr: Pointer; desc: Pointer);
 var
   memberCount, i, j: Integer;
