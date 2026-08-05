@@ -149,4 +149,4 @@ self-host is itself the strongest evidence the new enum member did not shift
 anything for the Pascal frontend.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit d7f68f782.
