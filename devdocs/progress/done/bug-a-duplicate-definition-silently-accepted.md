@@ -274,4 +274,4 @@ than warning) is a separate, gated decision and now has its own blocker, so it
 is tracked there rather than holding this open.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit ee0d2179f.
