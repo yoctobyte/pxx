@@ -3,6 +3,8 @@ track: P
 prio: 45
 type: bug
 summary: "RequireRecMember has 3 call sites, all expression paths, and ~20 AN_FIELD construction sites exist. A breakpoint proved the statement-LVALUE path never calls it. No longer a silent wrong store (RecFieldType now rejects), but the guard is inconsistent and its coverage is unaudited."
+status: done
+owner: claude-A
 ---
 
 # The member check is missing on the statement-lvalue field path
@@ -57,3 +59,61 @@ An unknown member on a user record errors identically whether it is written as
 an lvalue (`r.nope := 1`), read in an expression (`x := r.nope`), or passed as
 an argument; NilPy dynamic attribute access is unaffected (`test-nilpy` green);
 self-host fixedpoint byte-identical; `gate.sh quick` green.
+
+## Audited 2026-08-05 — no gap remains; closing on evidence, with no code change
+
+**The ticket's own gate is met.** An unknown member on a USER record errors
+identically however it is written:
+
+| form | |
+| --- | --- |
+| `r.nope := 1` (lvalue store) | rejected |
+| `x := r.nope` (expression) | rejected |
+| `Take(r.nope)` (argument) | rejected |
+| `writeln(r.nope)` | rejected |
+| `r.nope := r.nope + 1` (both sides) | rejected |
+| `Inc(r.nope)` | rejected |
+| `r.a := 1` (valid member, control) | accepted |
+
+Extended past the gate to every lvalue shape that reaches `AN_FIELD` by a
+different route — the audit item 1 asked for, done by behaviour rather than by
+counting sites:
+
+| lvalue shape | |
+| --- | --- |
+| nested record `r.inner.nope := 1` | rejected |
+| static array element `arr[0].nope := 1` | rejected |
+| pointer deref `p^.nope := 1` | rejected |
+| class field `c.nope := 1` | rejected |
+| `with r do nope := 1` | rejected |
+| dynamic array element `dyn[0].nope := 1` | rejected |
+| `var` parameter `q.nope := 1` | rejected |
+| valid nested `r.inner.b := 1` (control) | accepted |
+
+**NilPy dynamic attributes are unaffected** — item 3's constraint. `c.y = 2` on
+an instance that never declared `y` still compiles and prints, verified.
+
+### Why the ticket's measurement is stale
+
+It recorded **three** `RequireRecMember` call sites and a breakpoint that was
+never hit on the lvalue path. There are now **four**. The deduction needs no
+instrumentation: `RecFieldType` errors only in its BUILTIN-record branch — a
+user record whose field misses simply returns `tyUnknown` there — yet
+`r.nope := 1` on a user record IS rejected. So the lvalue path must now reach
+`RequireRecMember`. Something closed it between the ticket being written and
+now.
+
+### What is deliberately NOT done
+
+Item 4 — *"consider collapsing the call sites into the single place the field's
+type is resolved, so the count cannot drift again"*. It is a `consider`, it is a
+refactor of working code with no behavioural gap left to justify it, and the
+count it guards against (4 sites vs 27 `AllocNode(AN_FIELD)`) is a code-shape
+observation, not a defect. Filed thought, not filed ticket: if it is wanted, it
+wants its own change with its own gate, not a rider on an audit.
+
+**No code changed**, so no gate was run beyond the measurements above — there is
+nothing to regress.
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.

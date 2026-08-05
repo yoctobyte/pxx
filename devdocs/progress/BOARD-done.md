@@ -691,6 +691,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-pascal-ir-node-hard-limit-max-ir | A | 25 | bug | pxx rejects very large valid programs with 'IR overflow' — MAX_IR is a fixed 131072-node array, not dynamic | — |
 | bug-pascal-mainbody-ascast-temp-finalization-timing | A | 30 | bug | main-body interface as-cast temp is released at the wrong time vs FPC (destructor timing) — differing exit checksum, no crash | — |
 | bug-pascal-member-access-on-pointer-silently-accepted | A | 45 | bug | Member access on a plain Pointer is SILENTLY ACCEPTED and yields the pointer | — |
+| bug-pascal-member-check-missing-on-the-lvalue-field-path | P | 45 | bug | RequireRecMember has 3 call sites, all expression paths, and ~20 AN_FIELD construction sites exist. A breakpoint proved the statement-LVALUE path never calls it. No longer a silent wrong store (RecFieldType now rejects), but the guard is inconsistent and its coverage is unaudited. | — |
 | bug-pascal-member-visibility-unenforced | P | 55 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
 | bug-pascal-metaclass-array-element-not-a-receiver | P | 55 | bug | bug: a metaclass ARRAY ELEMENT is not accepted as a receiver — silent garbage | — |
 | bug-pascal-method-default-param-self-shift | P | 70 | bug | Method default parameters land on the WRONG slot (silent wrong values) | — |
