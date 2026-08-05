@@ -108,4 +108,4 @@ Third promo ticket closed today: results return through a hidden dest
 accept what every other numeric type accepts.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit c283b3a3a.
