@@ -3,6 +3,7 @@ prio: 70
 track: B
 type: bug
 summary: "csocket_loopback_b88.c includes \"socket.c\", which 8d7c47f8f moved to sys/socket.c — the test has not compiled since"
+status: done
 ---
 
 > **origin/master has advanced 1 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -64,3 +65,31 @@ matters.
 include path — one line, either `#include "sys/socket.c"` or an include-path
 adjustment). T files, never fixes.
 
+
+---
+
+## Resolved 2026-08-05
+
+Fixed by `110949bfe` before this ticket was noticed — the watcher auto-filed it
+against `330f62af78d0` while the fix was already in flight, so it sat at the
+head of Track B's ranked queue (prio 70) pointing at work that was done.
+
+Root cause was as the summary said: `8d7c47f8f` moved `lib/crtl/src/socket.c`
+to `src/netinet/in.c` (the path a header actually maps to, so the impl gets
+pulled), and the test reached in with `#include "socket.c"` through the
+Makefile's `-Ilib/crtl/src`. That include was itself a workaround for the very
+bug `8d7c47f8f` fixed — the veneer was never pulled, so the test compiled the
+impl itself. With the pull working, the ordinary headers suffice.
+
+Verified at HEAD:
+
+```
+tools/testmgr.py --tier native --job 'test-core#src:test/csocket_loopback_b88.c'
+  PASS  test-core#459  test/csocket_loopback_b88.c
+testmgr: GREEN
+```
+
+**Process note:** a watcher-filed regression outlives its fix unless someone
+closes it. This one had 58 commits in its bisect range and ranked above every
+real Track B item.
+- 2026-08-05 — resolved, commit PENDING-COMMIT.
