@@ -1,5 +1,5 @@
 ---
-summary: "The crtl declarations still without bodies — now 5: atexit, poll, ioctl, msync, mremap (chmod and umask landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED"
+summary: "The crtl declarations still without bodies — now 3: atexit, poll, ioctl (chmod, umask, msync and mremap landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED"
 type: feature
 track: B
 prio: 40
@@ -11,7 +11,8 @@ prio: 40
 - **Status:** backlog
 - **Opened:** 2026-08-05
 - **Found by:** `tools/crtl_decl_probe.sh`. Was 366 declared / 359 implemented;
-  **`chmod` and `umask` landed 2026-08-05**, so it is now 361 / 5 remaining.
+  **`chmod`, `umask`, `msync` and `mremap` landed 2026-08-05**, so it is now
+  363 / **3** remaining.
 
 ## Why a missing body is worse than a missing declaration
 
@@ -37,8 +38,8 @@ output** — that is what this probe is for.
 | **`ioctl`** | `sys/ioctl.h` | No general bridge. `__pxx_isatty` already does the one TCGETS case crtl needs; a generic `ioctl(fd, req, arg)` is a new PAL entry. Note ESP refuses it. |
 | ~~`chmod`~~ | `sys/stat.h` | **DONE 2026-08-05.** Goes through `fchmodat(AT_FDCWD, …)` — aarch64 and riscv have no legacy `chmod` syscall, same as `symlink`/`link`. |
 | ~~`umask`~~ | `sys/stat.h` | **DONE 2026-08-05.** The one syscall here with no error path: it always succeeds and returns the previous mask, so no -1/errno conversion. |
-| **`msync`** | `sys/mman.h` | mmap family; only worth it alongside a real mmap story. |
-| **`mremap`** | `sys/mman.h` | Same. Linux-specific. |
+| ~~`msync`~~ | `sys/mman.h` | **DONE 2026-08-05.** No-op success, matching munmap/mprotect in the same file — `mmap` there is a stub returning MAP_FAILED, so there is never a mapping to flush. |
+| ~~`mremap`~~ | `sys/mman.h` | **DONE 2026-08-05.** Must return a POINTER, so it cannot pretend: fails like `mmap` does (MAP_FAILED + ENOMEM). Linux-specific and variadic; the optional 5th arg is not read. |
 
 `chmod` and `umask` were the cheapest and are done. Their syscall numbers were
 added to all five arch tables in `platform_backend.pas` and **verified by running

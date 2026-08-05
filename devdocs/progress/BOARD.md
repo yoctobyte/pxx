@@ -119,7 +119,7 @@ _none_
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
 | feature-a-promoint-variant-esp-targets | S | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
-| feature-b-crtl-last-seven-unimplemented-declarations | B | 40 | feature | The crtl declarations still without bodies — now 5: atexit, poll, ioctl, msync, mremap (chmod and umask landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED | — |
+| feature-b-crtl-last-seven-unimplemented-declarations | B | 40 | feature | The crtl declarations still without bodies — now 3: atexit, poll, ioctl (chmod, umask, msync and mremap landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED | — |
 | feature-b-rtl-missing-fpc-surface-2026-08 | B | 35 | feature | Missing FPC surface found by the differential probe (Eoln, TSeekOrigin, Sorted, IncMonth) | — |
 | feature-b-tstrings-commatext | B | 30 | feature | TStrings.CommaText / DelimitedText are missing | — |
 | feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
