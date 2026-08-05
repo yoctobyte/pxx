@@ -8,7 +8,7 @@ summary: "x86-64 writeln(d:0:2) of a value past 2^63 prints 9223372036854775809.
 # x86-64: `writeln(d:w:n)` saturates at Int64 for large values
 
 - **Type:** bug — Track A (x86-64 native float emitter)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** Track A, comparing float output across targets while fixing
   `bug-a-writeln-nonfinite-float-aarch64-emitters-unchecked`. **Pre-existing**
@@ -95,3 +95,6 @@ would leave x86-64 with no hand-written float formatter at all.
 **Verified:** `testmgr --tier native` **1158/1158 pass** (includes the self-host
 fixedpoint). i386/arm32/aarch64 byte-identical to before — the change is
 confined to the x86-64 emitter.
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.
