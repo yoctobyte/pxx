@@ -3,10 +3,15 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg **QUIET 5d1h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `a03d31c2cd3c` | 2026-08-05T19:21:55Z | GREEN (native) | 124.1s | `596639e2aa6e` GREEN |
+| plexus | `34c41bde6fd6` | 2026-08-05T19:28:29Z | RED (native) | 123.4s | `596639e2aa6e` GREEN |
 | xeon | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
+- **test-core#src:test/test_c_macro_soup.pas** — test/test_c_macro_soup.pas (plexus): bad `34c41bde6fd6`, last good `a03d31c2cd3c`, 3 commit(s) in range
+- **test-core#src:test/test_c_preprocess.pas@1** — test/test_c_preprocess.pas (plexus): bad `34c41bde6fd6`, last good `a03d31c2cd3c`, 3 commit(s) in range
+- **test-core#src:test/test_c_preprocess.pas@2** — test/test_c_preprocess.pas (plexus): bad `34c41bde6fd6`, last good `a03d31c2cd3c`, 3 commit(s) in range
+- **test-core#src:test/test_nilpy_qualifier_vs_cproc.npy** — test/test_nilpy_qualifier_vs_cproc.npy (plexus): bad `34c41bde6fd6`, last good `a03d31c2cd3c`, 3 commit(s) in range
+- **test-core#src:test/test_relpath_uses.pas** — test/test_relpath_uses.pas (plexus): bad `34c41bde6fd6`, last good `a03d31c2cd3c`, 3 commit(s) in range
 - **test-core#src:test/csocket_loopback_b88.c** — test/csocket_loopback_b88.c (xeon): bad `330f62af78d0`, last good `7d8929633721`, 58 commit(s) in range
 
 ## Held — quiet hosts (not actionable)

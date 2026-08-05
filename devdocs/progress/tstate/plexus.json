@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-05T08:46:50Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "7f635d4e13deea06ee64857f9ebd2d49316ff10b",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-05T08:50:05Z",
    "fixed": [],
    "new_red": [],
@@ -411,6 +403,20 @@
    "sha": "a03d31c2cd3c1bd33f3df7176a04248515558c67",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-05T19:28:29Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_c_macro_soup.pas",
+    "test-core#src:test/test_c_preprocess.pas@1",
+    "test-core#src:test/test_c_preprocess.pas@2",
+    "test-core#src:test/test_nilpy_qualifier_vs_cproc.npy",
+    "test-core#src:test/test_relpath_uses.pas"
+   ],
+   "sha": "34c41bde6fd66529206b2891337066a5a9fae50c",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -3251,10 +3257,10 @@
   "test-core#src:test/test_c_gtk_window.pas": "pass",
   "test-core#src:test/test_c_header_case_sensitive_import.pas": "pass",
   "test-core#src:test/test_c_import.pas": "pass",
-  "test-core#src:test/test_c_macro_soup.pas": "pass",
+  "test-core#src:test/test_c_macro_soup.pas": "fail",
   "test-core#src:test/test_c_packed_aligned.pas": "pass",
-  "test-core#src:test/test_c_preprocess.pas@1": "pass",
-  "test-core#src:test/test_c_preprocess.pas@2": "pass",
+  "test-core#src:test/test_c_preprocess.pas@1": "fail",
+  "test-core#src:test/test_c_preprocess.pas@2": "fail",
   "test-core#src:test/test_c_slicea.pas": "pass",
   "test-core#src:test/test_c_struct_fields.pas": "pass",
   "test-core#src:test/test_c_struct_many.pas": "pass",
@@ -3642,7 +3648,7 @@
   "test-core#src:test/test_nilpy_pathlib.npy": "pass",
   "test-core#src:test/test_nilpy_py_module_import.npy": "pass",
   "test-core#src:test/test_nilpy_qualified_ctor.npy": "pass",
-  "test-core#src:test/test_nilpy_qualifier_vs_cproc.npy": "pass",
+  "test-core#src:test/test_nilpy_qualifier_vs_cproc.npy": "fail",
   "test-core#src:test/test_nilpy_raw_string_set.npy": "pass",
   "test-core#src:test/test_nilpy_re.npy": "pass",
   "test-core#src:test/test_nilpy_rebind_type.npy": "pass",
@@ -3756,7 +3762,7 @@
   "test-core#src:test/test_record_temp_byval_arg.pas": "pass",
   "test-core#src:test/test_record_typecast.pas": "pass",
   "test-core#src:test/test_ref.pas": "pass",
-  "test-core#src:test/test_relpath_uses.pas": "pass",
+  "test-core#src:test/test_relpath_uses.pas": "fail",
   "test-core#src:test/test_require_forward_strict.pas": "pass",
   "test-core#src:test/test_require_forward_strict_fail.pas": "pass",
   "test-core#src:test/test_resource.pas": "pass",
@@ -4637,11 +4643,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-05T19:21:55Z",
-  "sha": "a03d31c2cd3c1bd33f3df7176a04248515558c67",
+  "date": "2026-08-05T19:28:29Z",
+  "sha": "34c41bde6fd66529206b2891337066a5a9fae50c",
   "tier": "native",
-  "verdict": "GREEN",
-  "wall": 124.1
+  "verdict": "RED",
+  "wall": 123.4
  },
  "last_bench": {
   "conf_rows": 550,
@@ -4663,5 +4669,71 @@
   "date": "2026-08-05T18:33:24Z",
   "sha": "d9b87522b3b163b4712dc426d142bbb6cb10ce24"
  },
- "open_regressions": []
+ "open_regressions": [
+  {
+   "bad": "34c41bde6fd66529206b2891337066a5a9fae50c",
+   "good": "a03d31c2cd3c1bd33f3df7176a04248515558c67",
+   "job": "test-core#src:test/test_c_macro_soup.pas",
+   "name": "test-core#841",
+   "opened": "2026-08-05T19:28:29Z",
+   "range": [
+    "4bf38cfb33432ed8801ab59f459b21333be6eeef",
+    "70934e176ab32284e8a084e807f6c111b71c7c66",
+    "34c41bde6fd66529206b2891337066a5a9fae50c"
+   ],
+   "src": "test/test_c_macro_soup.pas"
+  },
+  {
+   "bad": "34c41bde6fd66529206b2891337066a5a9fae50c",
+   "good": "a03d31c2cd3c1bd33f3df7176a04248515558c67",
+   "job": "test-core#src:test/test_c_preprocess.pas@1",
+   "name": "test-core#839",
+   "opened": "2026-08-05T19:28:29Z",
+   "range": [
+    "4bf38cfb33432ed8801ab59f459b21333be6eeef",
+    "70934e176ab32284e8a084e807f6c111b71c7c66",
+    "34c41bde6fd66529206b2891337066a5a9fae50c"
+   ],
+   "src": "test/test_c_preprocess.pas"
+  },
+  {
+   "bad": "34c41bde6fd66529206b2891337066a5a9fae50c",
+   "good": "a03d31c2cd3c1bd33f3df7176a04248515558c67",
+   "job": "test-core#src:test/test_c_preprocess.pas@2",
+   "name": "test-core#840",
+   "opened": "2026-08-05T19:28:29Z",
+   "range": [
+    "4bf38cfb33432ed8801ab59f459b21333be6eeef",
+    "70934e176ab32284e8a084e807f6c111b71c7c66",
+    "34c41bde6fd66529206b2891337066a5a9fae50c"
+   ],
+   "src": "test/test_c_preprocess.pas"
+  },
+  {
+   "bad": "34c41bde6fd66529206b2891337066a5a9fae50c",
+   "good": "a03d31c2cd3c1bd33f3df7176a04248515558c67",
+   "job": "test-core#src:test/test_nilpy_qualifier_vs_cproc.npy",
+   "name": "test-core#1069",
+   "opened": "2026-08-05T19:28:29Z",
+   "range": [
+    "4bf38cfb33432ed8801ab59f459b21333be6eeef",
+    "70934e176ab32284e8a084e807f6c111b71c7c66",
+    "34c41bde6fd66529206b2891337066a5a9fae50c"
+   ],
+   "src": "test/test_nilpy_qualifier_vs_cproc.npy"
+  },
+  {
+   "bad": "34c41bde6fd66529206b2891337066a5a9fae50c",
+   "good": "a03d31c2cd3c1bd33f3df7176a04248515558c67",
+   "job": "test-core#src:test/test_relpath_uses.pas",
+   "name": "test-core#899",
+   "opened": "2026-08-05T19:28:29Z",
+   "range": [
+    "4bf38cfb33432ed8801ab59f459b21333be6eeef",
+    "70934e176ab32284e8a084e807f6c111b71c7c66",
+    "34c41bde6fd66529206b2891337066a5a9fae50c"
+   ],
+   "src": "test/test_relpath_uses.pas"
+  }
+ ]
 }
