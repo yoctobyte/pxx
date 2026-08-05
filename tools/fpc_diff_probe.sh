@@ -1681,6 +1681,149 @@ begin
 end.
 P
 
+# ---- dynamic arrays: SetLength, Copy, Insert/Delete, aliasing ----
+probe dynarray-setlength-grow <<'P'
+var a: array of Integer; i: Integer;
+begin
+  SetLength(a, 3);
+  for i := 0 to 2 do a[i] := i * i;
+  SetLength(a, 5);
+  writeln(Length(a), '|', a[0], a[1], a[2], '|', a[3], '|', a[4]);
+  SetLength(a, 2);
+  writeln(Length(a), '|', a[0], a[1], '|', High(a));
+end.
+P
+# [known] for the LAST line only: `Copy(a, 1, 2)[0]` — indexing a call result —
+# does not parse (compat-pascal-index-a-function-call-result). Everything above
+# it (dynamic-array aliasing vs Copy, an over-long Copy count) matches FPC.
+probe dynarray-copy-and-alias known <<'P'
+var a, b, c: array of Integer;
+begin
+  SetLength(a, 3); a[0] := 1; a[1] := 2; a[2] := 3;
+  b := a;            { alias: same buffer }
+  c := Copy(a, 0, 3);
+  b[0] := 99;
+  writeln(a[0], '|', b[0], '|', c[0]);
+  writeln(Length(Copy(a, 1, 10)), '|', Copy(a, 1, 2)[0]);
+end.
+P
+probe dynarray-insert-delete <<'P'
+var a: array of Integer; i: Integer;
+begin
+  SetLength(a, 3); a[0] := 1; a[1] := 2; a[2] := 3;
+  Insert(9, a, 1);
+  for i := 0 to High(a) do write(a[i], ' ');
+  writeln('| len=', Length(a));
+  Delete(a, 0, 2);
+  for i := 0 to High(a) do write(a[i], ' ');
+  writeln('| len=', Length(a));
+end.
+P
+probe dynarray-of-string <<'P'
+var a: array of string; i: Integer;
+begin
+  SetLength(a, 3);
+  a[0] := 'x'; a[1] := 'yy';
+  writeln('[', a[0], '][', a[1], '][', a[2], ']|', Length(a[2]));
+  SetLength(a, 1);
+  SetLength(a, 3);
+  writeln('[', a[1], ']|', Length(a[1]));
+  for i := 0 to High(a) do a[i] := a[i] + '!';
+  writeln('[', a[0], '][', a[1], ']');
+end.
+P
+probe dynarray-empty <<'P'
+var a: array of Integer;
+begin
+  writeln(Length(a), '|', High(a), '|', Low(a));
+  SetLength(a, 0);
+  writeln(Length(a), '|', High(a));
+end.
+P
+probe dynarray-index-call-result known <<'P'
+type TArr = array of Integer;
+function Make: TArr;
+begin SetLength(Result, 2); Result[0] := 7; Result[1] := 8; end;
+var s: string;
+begin
+  s := 'hello';
+  writeln(Copy(s, 2, 3)[1]);
+  writeln(Make[1]);
+end.
+P
+probe dynarray-index-method-result known <<'P'
+type
+  TArr = array of Integer;
+  TBag = class
+    function Arr: TArr;
+    function ArrP(k: Integer): TArr;
+  end;
+function TBag.Arr: TArr; begin SetLength(Result, 2); Result[0] := 5; Result[1] := 6; end;
+function TBag.ArrP(k: Integer): TArr; begin SetLength(Result, 2); Result[0] := k; Result[1] := k + 1; end;
+var b: TBag;
+begin
+  b := TBag.Create;
+  writeln(b.Arr[1]);       { this one works today }
+  writeln(b.ArrP(3)[0]);   { IR_UNSUPPORTED (AN_CALL) }
+end.
+P
+probe dynarray-2d <<'P'
+var g: array of array of Integer; i, j: Integer;
+begin
+  SetLength(g, 2);
+  for i := 0 to 1 do SetLength(g[i], 3);
+  for i := 0 to 1 do for j := 0 to 2 do g[i][j] := i * 10 + j;
+  writeln(Length(g), '|', Length(g[0]), '|', g[1][2], '|', g[0][1]);
+end.
+P
+
+# ---- sets ----
+probe set-of-char-ops <<'P'
+var s, t, u: set of Char; c: Char;
+begin
+  s := ['a'..'e'];
+  t := ['d'..'h'];
+  u := s * t;
+  for c := 'a' to 'j' do if c in u then write(c);
+  writeln('|');
+  u := s + t;
+  for c := 'a' to 'j' do if c in u then write(c);
+  writeln('|');
+  u := s - t;
+  for c := 'a' to 'j' do if c in u then write(c);
+  writeln;
+end.
+P
+probe set-relations <<'P'
+var a, b: set of Byte;
+begin
+  a := [1, 2, 3];
+  b := [1, 2, 3, 4];
+  writeln(a <= b, '|', b >= a, '|', a = b, '|', a <> b, '|', (a = [3, 2, 1]));
+end.
+P
+probe set-include-exclude <<'P'
+type TE = (eA, eB, eC, eD);
+var s: set of TE; e: TE;
+begin
+  s := [eA, eC];
+  Include(s, eB);
+  Exclude(s, eA);
+  for e := eA to eD do if e in s then write(Ord(e), ' ');
+  writeln('| empty=', s = []);
+end.
+P
+probe set-of-byte-full-range <<'P'
+var s: set of Byte; i, n: Integer;
+begin
+  s := [];
+  for i := 0 to 255 do if i mod 7 = 0 then Include(s, i);
+  n := 0;
+  for i := 0 to 255 do if i in s then Inc(n);
+  writeln(n, '|', 0 in s, '|', 254 in s, '|', 255 in s);
+end.
+P
+
 echo "---"
 echo "new divergences: $new   known/filed: $known   no-oracle skips: $skipped"
 # A skip is not a pass. It is a case that silently compared nothing, so it is
