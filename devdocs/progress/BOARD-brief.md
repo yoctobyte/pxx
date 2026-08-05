@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:7 blocked:7 backlog:199 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1412 rejected:28`
+`urgent:1 unfinished:7 blocked:7 backlog:199 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1413 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -38,6 +38,7 @@ _none — no lane is locked._
 ## Ready — top 30 of 180, ranked
 
 - `[p 70] [P]` bug-p-program-function-does-not-shadow-used-unit
+- `[p 70] [T]` regression-cascade-aba953cae031
 - `[p 70] [T]` regression-test-nilpy-test-cpyext-args-errors
 - `[p 70] [T]` regression-test-nilpy-test-cpyext-containers
 - `[p 70] [T]` regression-test-nilpy-test-cpyext-cython
@@ -66,6 +67,5 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
-- `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
 
 _150 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

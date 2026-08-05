@@ -177,6 +177,16 @@ function __pxxRorQWord(v: QWord; n: Integer): QWord;
   this hidden name), so NO real proc named Assert exists to shadow a user's own Assert or
   a method of the enclosing class. On failure it reports and halts with 227, FPC's
   assertion runtime error. The message is a defaulted parameter, so both arities work. }
+{ FPC's assertion mechanism is a HOOK, not a fixed action: System's
+  AssertErrorProc defaults to "print and run-error 227", and SysUtils REPLACES
+  it with one that raises EAssertionFailed. That single indirection is the whole
+  difference between `Assert` aborting and `Assert` being catchable, and it is
+  why a no-sysutils program must keep the 227 behaviour — that is FPC's too.
+  compat-pascal-assert-halts-instead-of-raising-eassertionfailed }
+type
+  TAssertErrorProc = procedure(const msg: AnsiString);
+var
+  AssertErrorProc: TAssertErrorProc;
 procedure __pxxAssert(cond: Boolean; const msg: AnsiString = '');
 
 procedure __pxxMove(const Source; var Dest; Count: Integer);
@@ -468,6 +478,15 @@ end;
 procedure __pxxAssert(cond: Boolean; const msg: AnsiString = '');
 begin
   if cond then Exit;
+  { Installed hook wins (sysutils installs one that RAISES EAssertionFailed, so
+    `try Assert(...) except` can run its handler). Unset — a program that does
+    not use sysutils — keeps the print + Halt(227) below, which is exactly what
+    FPC does in that case. }
+  if Assigned(AssertErrorProc) then
+  begin
+    AssertErrorProc(msg);
+    Exit;                          { a raising hook never returns; a print-only one may }
+  end;
   if msg = '' then
     writeln('Assertion failed')
   else

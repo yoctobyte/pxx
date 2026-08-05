@@ -4022,6 +4022,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_index_getter_string26)" = "$$(printf 'h\nh\no\ne\na\nb\ny\nhello\n5 hello\nOK')"
 	./$(COMPILER) test/test_interlocked_no_uses.pas /tmp/test_interlocked_no_uses26
 	test "$$(/tmp/test_interlocked_no_uses26)" = "$$(printf '6 6\n5 5\n5 42\n42 50\n50 99\n99 99\n101 101\n101 1001\nOK')"
+	./$(COMPILER) -Fulib/rtl test/test_assert_raises_with_sysutils.pas /tmp/test_assert_raises26
+	test "$$(/tmp/test_assert_raises26)" = "$$(printf 'passed\ncaught: EAssertionFailed: boom\nnomsg: EAssertionFailed: Assertion failed\nstill running\nOK')"
 	./$(COMPILER) test/test_static_array_managed_scope_exit.pas /tmp/test_static_array_managed_scope_exit26
 	test "$$(/tmp/test_static_array_managed_scope_exit26)" = "$$(printf '0\nOK')"
 	./$(COMPILER) test/test_string_array_element_charwrite.pas /tmp/test_string_array_element_charwrite26

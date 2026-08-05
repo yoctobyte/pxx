@@ -3106,6 +3106,19 @@ begin
   Result := __pxxExceptAddr;
 end;
 
+procedure SysAssertError(const msg: AnsiString);
+begin
+  { Installed into builtin's AssertErrorProc below, mirroring FPC: System's
+    default prints and run-errors 227, and SysUtils REPLACES it with one that
+    raises, which is what makes `try Assert(...) except` able to run its
+    handler. Same ErrorProc design as the overflow/div-zero/range hooks beside
+    this one. compat-pascal-assert-halts-instead-of-raising-eassertionfailed }
+  if msg = '' then
+    raise EAssertionFailed.Create('Assertion failed')
+  else
+    raise EAssertionFailed.Create(msg);
+end;
+
 procedure SysRaiseOverflow;
 begin
   { {$Q+} overflow trap upgraded to a catchable exception — installed into
@@ -3139,6 +3152,7 @@ end;
 initialization
   DefaultSystemCodePage := CP_UTF8;   { byte-transparent -- see the declaration }
   BackTraceStrFunc := @SysBackTraceStr;
+  AssertErrorProc := @SysAssertError;
   PXXOverflowHook := @SysRaiseOverflow;
   PXXDivZeroHook := @SysRaiseDivByZero;
   PXXRangeErrorHook := @SysRaiseRangeError;

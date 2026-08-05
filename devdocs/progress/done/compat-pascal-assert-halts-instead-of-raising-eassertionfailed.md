@@ -3,6 +3,8 @@ track: P
 prio: 55
 type: bug
 summary: "Pascal's Assert() halts with 227 even when sysutils is used, so `try Assert(...) except` cannot run — FPC raises a catchable EAssertionFailed, and our RTL already declares the class but nothing raises it"
+status: done
+owner: claude-A
 ---
 
 # `Assert()` halts instead of raising `EAssertionFailed`
@@ -84,3 +86,54 @@ regression, it is the frozen-builtin boundary — budget for the repin.
 
 Test: the program above, plus the no-sysutils case still halting with 227, plus
 `Assert` with no message, plus a passing assertion.
+
+## Resolution (2026-08-05)
+
+Implemented as the ticket prescribed — FPC's shape reproduced, not a new one:
+
+1. `TAssertErrorProc` + an `AssertErrorProc` variable beside `__pxxAssert`
+   (`compiler/builtin/builtin.pas`).
+2. `__pxxAssert` calls the hook when assigned; otherwise keeps today's
+   print + `Halt(227)`.
+3. `sysutils` installs `SysAssertError` at unit init, raising
+   `EAssertionFailed` — which the RTL already declared and nothing raised.
+
+Step 3 sits directly beside `PXXOverflowHook` / `PXXDivZeroHook` /
+`PXXRangeErrorHook` / `PXXIoErrorHook`, which are the same ErrorProc design
+already in the tree. That is what made this four lines rather than a redesign.
+
+### Measured against FPC — all four cases
+
+| case | FPC | pxx after |
+| --- | --- | --- |
+| failing assert, **no** sysutils | prints, exit **227** | prints, exit **227** |
+| passing assert, no sysutils | runs on, exit 0 | same |
+| passing assert, with sysutils | runs on, exit 0 | same |
+| failing assert, **with** sysutils | caught as `EAssertionFailed`, exit 0 | **caught as `EAssertionFailed`, exit 0** |
+
+The no-sysutils 227 is preserved deliberately: it is not a leftover, it is
+FPC's behaviour in that configuration, and the ticket was explicit that only the
+diverging case should change.
+
+### The pin note did not apply
+
+The ticket budgeted for a repin because `__pxxAssert` lives in
+`compiler/builtin/`. Not needed: `tools/selfhost_fixedpoint.sh` converges in 2
+rounds from `pinned` and agrees with `compiler/pascal26`. Recording that so the
+next builtin change does not assume a repin is automatic either way — it is
+worth measuring rather than budgeting for.
+
+### One cosmetic divergence left, deliberately
+
+FPC appends the source position to the message — `boom (a.pas, line 6)` — and
+pxx does not. That is message TEXT, not behaviour, and outside what this ticket
+asked for. Noted rather than folded in; it wants `{$ASSERTIONS}` and the
+compile-out semantics the ticket's own "second, smaller divergence" section
+describes, and the three are one piece of work.
+
+`testmgr --tier native` **1167/1167 pass**. Locked in as
+`test/test_assert_raises_with_sysutils.pas` (the halting half cannot be a test —
+the harness has no non-zero-exit form).
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.
