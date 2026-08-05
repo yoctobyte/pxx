@@ -38,12 +38,11 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (209)
+## backlog (204)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-interlocked-family-needs-a-uses-clause-unlike-fpc | A | 30 | bug | InterLockedIncrement and family now exist (lib/rtl/palatomic.pas) but need an explicit `uses palatomic`; FPC declares them in the `system` unit, so real code calls them with no uses line at all | — |
-| bug-a-promoint-parameter-32bit-by-ref-indirection-hangs | A | 40 | bug | On 32-bit targets a PromoInt parameter still does not work: it does not compile today, and simply extending the 64-bit by-ref fix makes it HANG — the by-ref indirection is not resolved, so PromoShiftCount reads a garbage tag and `n shr 4` spins in BShr's doubling loop | — |
 | bug-a-promoint-parameter-rejects-literals-and-call-results | A | 45 | bug | A PromoInt PARAMETER accepts only a variable: `f(12)` is 'no overload matches' and `f(g())` is 'by-reference argument must be a variable'. Every other numeric parameter takes both | — |
 | bug-a-riscv32-and-xtensa-have-no-atomic-codegen | S | 45 | bug | riscv32 (and xtensa) reject every __pxxatomic_* op — 'unsupported node in IR codegen: atomic' — so any unit touching an atomic cannot be compiled for them at all, on the two targets whose OS gives real concurrent tasks | — |
 | bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing | A | 65 | bug | x86-64 only: `b := a` on a dynamic array copy-on-writes instead of ALIASING — writes through either name are invisible to the other. FPC, i386, arm32, aarch64 and riscv32 all alias. Dynamic arrays are reference types; this is silent wrong behaviour on the flagship target | decide-dynarray-cow-vs-fpc-reference-semantics |
@@ -234,10 +233,6 @@ _none_
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
-| regression-test-core-test-c-macro-soup | T | 70 | regression | regression: test-core#src:test/test_c_macro_soup.pas red at 34c41bde6fd6 (auto-filed by twatch) | — |
-| regression-test-core-test-c-preprocess | T | 70 | regression | regression: test-core#src:test/test_c_preprocess.pas@1 red at 34c41bde6fd6 (auto-filed by twatch) | — |
-| regression-test-core-test-nilpy-qualifier-vs-cproc | T | 70 | regression | regression: test-core#src:test/test_nilpy_qualifier_vs_cproc.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
-| regression-test-core-test-relpath-uses | T | 70 | regression | regression: test-core#src:test/test_relpath_uses.pas red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-args-errors | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_args_errors.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-containers | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_containers.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-cython | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_cython.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
@@ -364,9 +359,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1402)
+## done (1407)
 
-1402 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1407 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -404,10 +399,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [urgent p 70] [P] bug-p-program-function-does-not-shadow-used-unit
-- [p 70] [T] regression-test-core-test-c-macro-soup
-- [p 70] [T] regression-test-core-test-c-preprocess
-- [p 70] [T] regression-test-core-test-nilpy-qualifier-vs-cproc
-- [p 70] [T] regression-test-core-test-relpath-uses
 - [p 70] [T] regression-test-nilpy-test-cpyext-args-errors
 - [p 70] [T] regression-test-nilpy-test-cpyext-containers
 - [p 70] [T] regression-test-nilpy-test-cpyext-cython
@@ -513,7 +504,6 @@ _none_
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
 - [p 40] [N] feature-nilpy-multi-arg-callback-bridges (unblocks 1)
-- [p 40] [A] bug-a-promoint-parameter-32bit-by-ref-indirection-hangs
 - [p 40] [N] bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter
 - [p 40] [N] bug-nilpy-def-body-scans-run-on-when-no-indent-is-found
 - [p 40] [N] bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module

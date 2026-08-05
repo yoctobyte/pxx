@@ -27453,7 +27453,7 @@ begin
       Syms[idx].ElemType := tyRecord;
       Syms[idx].ElemRecName := ptypesRec[i];
     end
-    else if ptypes[i] = tyPromoInt64 then
+    else if TypeIsPromoInt(ptypes[i]) then
     begin
       { A PROMOTABLE INT parameter is an AGGREGATE — {tag, payload}, 16 bytes on
         a 64-bit target — so it travels the same way a large record does: by

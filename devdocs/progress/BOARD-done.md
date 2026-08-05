@@ -69,6 +69,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
 | bug-a-pointer-difference-as-vararg-pushes-8-bytes-on-32bit | A | 65 | bug | On i386/arm32 a bare pointer-difference passed to a variadic function pushes 8 bytes instead of 4, so EVERY later argument reads the wrong slot — printf(\"%d %d\", p-q, 7) prints 3 0 | — |
 | bug-a-promoint-function-result-crashes | A | 45 | bug | A Pascal function RETURNING PromoInt crashes — `function mk: PromoInt; begin Result := 12 end` segfaults on writeln(mk). Confirmed on `pinned` too, so pre-existing; split out of the parameter ticket, which conflated the two | — |
+| bug-a-promoint-parameter-32bit-by-ref-indirection-hangs | A | 40 | bug | On 32-bit targets a PromoInt parameter still does not work: it does not compile today, and simply extending the 64-bit by-ref fix makes it HANG — the by-ref indirection is not resolved, so PromoShiftCount reads a garbage tag and `n shr 4` spins in BShr's doubling loop | — |
 | bug-a-promoint-parameter-cannot-be-used-at-all | A | 45 | bug | A PromoInt PARAMETER is unusable — @n, Pointer(n) and even `n + 0` are wrong or SEGFAULT — because promo was never joined to the aggregate-by-value parameter path every record already uses. Root cause and fix both confirmed by IR; no semantics decision needed. | — |
 | bug-a-promoint-shr-yields-nothing-and-a-machine-int-cast-yields-the-slot-address | A | 50 | bug | PromoInt in PASCAL: `n shr k` produces nothing (shl is fine), and Integer(n)/Int64(n) yields the SLOT ADDRESS instead of the value — both silent, both block writing base-conversion (hex/bin/oct) over a promotable int in Pascal | — |
 | bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c | A | 40 | bug | The caller side now follows the C ABI for 64-bit arguments to external functions, but a pxx routine CALLED FROM C still spills them with the internal packed convention — so on xtensa, where the C ABI skips to an even register, a C caller and a pxx callee would disagree. Latent: nothing crosses that way today. | — |
@@ -1344,7 +1345,9 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-facade-and-paths | T | 70 | regression | regression: test-core#src:examples/tk/facade_and_paths.npy red at d64a5d6a97b4 (auto-filed by twatch) | — |
 | regression-test-core-test-algol-skeleton | T | 70 | regression | regression: test-core#src:test/test_algol_skeleton.alg red at ad8e212cf739 (auto-filed by twatch) | — |
 | regression-test-core-test-basic-comprehensive | T | 70 | regression | regression: test-core#src:test/test_basic_comprehensive.bas red at 3f2828476c6c (auto-filed by twatch) | — |
+| regression-test-core-test-c-macro-soup | T | 70 | regression | regression: test-core#src:test/test_c_macro_soup.pas red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-core-test-c-packed-aligned | T | 70 | regression | regression: test-core#src:test/test_c_packed_aligned.pas red at 42786f141ea7 (auto-filed by twatch) | — |
+| regression-test-core-test-c-preprocess | T | 70 | regression | regression: test-core#src:test/test_c_preprocess.pas@1 red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-core-test-c-struct-fields | T | 70 | regression | regression: test-core#src:test/test_c_struct_fields.pas red at 42786f141ea7 (auto-filed by twatch) | — |
 | regression-test-core-test-float-write | T | 70 | regression | regression: test-core#src:test/test_float_write.pas@1 red at ad8e212cf739 (auto-filed by twatch) | — |
 | regression-test-core-test-fortran-skeleton | T | 70 | regression | regression: test-core#src:test/test_fortran_skeleton.f90 red at ad8e212cf739 (auto-filed by twatch) | — |
@@ -1354,8 +1357,10 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-nilpy-html-tempfile | T | 70 | regression | regression: test-core#src:test/test_nilpy_html_tempfile.npy red at 106a63cabbca (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-min-max-variadic | T | 70 | regression | regression: test-core#src:test/test_nilpy_min_max_variadic.npy red at 9305672dbcd5 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-module-first-import | T | 70 | regression | regression: test-core#src:test/test_nilpy_module_first_import.npy red at b9e334fbd649 (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-qualifier-vs-cproc | T | 70 | regression | regression: test-core#src:test/test_nilpy_qualifier_vs_cproc.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-re | T | 70 | regression | regression: test-core#src:test/test_nilpy_re.npy red at b9e334fbd649 (auto-filed by twatch) | — |
 | regression-test-core-test-platform-defines | T | 70 | regression | regression: test-core#src:test/test_platform_defines.pas@2 red at 96147f570d29 (auto-filed by twatch) | — |
+| regression-test-core-test-relpath-uses | T | 70 | regression | regression: test-core#src:test/test_relpath_uses.pas red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud-lazy | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud_lazy.pas red at f913bd22ae30 (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud.pas red at ff90643ef2a3 (auto-filed by twatch) | — |
 | regression-test-core-test-static-array-length | T | 70 | regression | regression: test-core#src:test/test_static_array_length.pas red at fb9346bd4bce (auto-filed by twatch) | — |
