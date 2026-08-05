@@ -184,7 +184,7 @@ one-pass fixedpoint false-REDs on any codegen change — see
 `bug-t-gate-sh-fixedpoint-does-not-iterate`.)
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit 7d8c4ce6c.
 
 ### Cross-sweep, before and after (record-param ABI = wide blast radius)
 
