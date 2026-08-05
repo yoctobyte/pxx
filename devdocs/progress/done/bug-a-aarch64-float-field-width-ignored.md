@@ -102,4 +102,4 @@ for Inf, x86-64 saturating at Int64, and this missing width. Four copies at the
 start, one now.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit 37f880f46.
