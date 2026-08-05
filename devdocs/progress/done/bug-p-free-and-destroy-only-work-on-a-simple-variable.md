@@ -107,4 +107,4 @@ user-declared `Free` wins (`U`), and `nil.Free` stays a no-op.
 Track P: `make test` + self-host fixedpoint (byte-identical).
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit 503f1e94b.
