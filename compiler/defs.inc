@@ -2117,6 +2117,13 @@ var
   IChecksVal : Boolean;      { current {$I±} / {$IOCHECKS} lexer state (default off — pxx-lax; FPC defaults ON, flip pending the user) }
   StmtRChecks : Boolean;     { {$R} state AT THE CURRENT STATEMENT'S FIRST TOKEN — a directive between the RHS and the statement end must NOT govern that assign (FPC semantics, trange4.pp: `x:=y {$R+} end`). Set on ParseStatementAST entry; AllocNode(AN_ASSIGN) reads it. }
   StmtIChecks : Boolean;     { {$I} state at the current statement's first token (same anchor rule as StmtRChecks) }
+  { Inside the `(`-led STATEMENT branch of ParseStatementAST, which parses a
+    call whose result is discarded (`(o as T).M;`) with the ordinary expression
+    parser. ParseFactor's no-result-call check must not fire there — the whole
+    point of that branch is a statement that looks like an expression. Nested
+    sub-expressions of such a statement lose the check too; that is the price of
+    a one-flag guard, and it is a rare shape (see the comment at the check). }
+  StmtParenCallDepth : Integer;
   CPMNameOff    : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMNameLen    : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMValueOff   : array[0..MAX_CPREP_MACROS-1] of Integer;

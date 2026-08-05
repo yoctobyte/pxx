@@ -661,6 +661,7 @@ begin
     {$I+} and can always turn it off — feature-pascal-io-checks-i-plus. }
   IChecksVal := True;
   StmtIChecks := False;
+  StmtParenCallDepth := 0;
   MaxStackFrameSize := MAX_STACK_FRAME_SIZE;
   LaxDeclOrder := False;
   ImplicitVars := False;   { default off; --auto-locals (parsed after this) or {$IMPLICITVARS ON} turns it on }

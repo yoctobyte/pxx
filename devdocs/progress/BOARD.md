@@ -13,7 +13,7 @@ lives in git, not in a timestamp._
 | bug-a-static-array-of-managed-whole-assign-loses-data | A | 80 | bug | b := a on a static array with managed elements copies NOTHING — every element comes out empty, silently; elementwise copy and the same array inside a record both work | — |
 | bug-a-virtual-method-int64-in-and-out-32bit | A | 85 | bug | every 32-bit target: a VIRTUAL method taking an Int64 AND returning an Int64 returns garbage (arm32/riscv32) or crashes (i386) — hits TStream.Position, and riscv32 is ESP32 | — |
 | bug-c-int64-to-double-cast-truncates-on-32bit | C | 80 | bug | i386/arm32: a C cast from a 64-bit integer to double/float TRUNCATES to the low 32 bits and sign-extends — (double)9007199254740991 is -1. Pascal is correct on the same targets, so it is the C cast lowering | — |
-| bug-p-procedure-method-in-an-expression-yields-garbage | P | 75 | bug | A METHOD declared as a procedure (no result) is accepted in an expression and silently yields garbage — `n := f.DoIt` assigns stack junk, `f.DoArg(3) + 1` evaluates to 4. FPC rejects all of it | — |
+| bug-p-member-off-a-constructor-result-yields-garbage | P | 70 | bug | `TThing.Create(2).n` in an expression compiles and yields garbage; the same shape on an ordinary function result (`Make(4).n`) is correct, and in a writeln argument it is a parse error instead | — |
 | bug-p-program-function-does-not-shadow-used-unit | P | 70 | bug | SILENT: a function declared in the PROGRAM does not shadow a same-named routine from a used unit — the unit's version is called instead. FPC calls the program's. Verified on sysutils IntToStr, Trim and UpperCase | — |
 | bug-p-string-char-relational-compares-lengths | A | 85 | bug | `<` `>` `<=` `>=` between a string and a Char compare LENGTHS, not content | — |
 
@@ -360,9 +360,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1367)
+## done (1368)
 
-1367 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1368 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -405,7 +405,7 @@ _none_
 - [urgent p 80] [C] bug-c-int64-to-double-cast-truncates-on-32bit
 - [urgent p 75] [A] bug-a-arm32-write-after-free-kills-four-lib-tests
 - [urgent p 75] [A] bug-a-i386-int64-arg-high-half-uninitialized
-- [urgent p 75] [P] bug-p-procedure-method-in-an-expression-yields-garbage
+- [urgent p 70] [P] bug-p-member-off-a-constructor-result-yields-garbage
 - [urgent p 70] [P] bug-p-program-function-does-not-shadow-used-unit
 - [p 70] [A] bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit
 - [p 70] [B] regression-test-core-csocket-loopback-b88

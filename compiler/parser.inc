@@ -13596,6 +13596,29 @@ end;
   Factor level is the ONLY correct level: a method binds tighter than `+`.
   Applying this after the additive layer made `"a" + "b".upper()` parse as
   `("a" + "b").upper()` and silently print AB where CPython prints aB. }
+function ProcIsConstructor(pi: Integer): Boolean;
+{ Does proc index pi belong to a method declared `constructor`? A constructor
+  is registered with IsFunc=False — its declaration keyword is neither
+  `function` nor `procedure` — so the no-result check below has to let it
+  through: `v := TFoo.Create` is the ordinary way to build an object and IS a
+  value. A `destructor` shares that IsFunc=False and is deliberately NOT
+  exempted: `x := v.Destroy` is not a value in any dialect.
+
+  A linear scan, deliberately: it only ever runs for a call whose proc is not a
+  function, which is a constructor call or the bug being caught, never a hot
+  path. UMthIsCtor is per-METHOD; the reverse map from a proc index does not
+  exist and is not worth adding for this. }
+var m: Integer;
+begin
+  ProcIsConstructor := False;
+  for m := 0 to UMthCount - 1 do
+    if UMthProc_[m] = pi then
+    begin
+      if UMthIsCtor[m] then ProcIsConstructor := True;
+      Exit;
+    end;
+end;
+
 procedure ParseFactor;
 var smNameTok, smBase, sdTok, tpObjNode, tpBlobNode, tpCallNode: Integer;
     sdName: AnsiString;
@@ -13982,6 +14005,38 @@ begin
     CurASTNode := PyMakePow(ppBase, ppExp);
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
   end;
+
+  { A PROCEDURE used as a VALUE. ParseFactor only ever runs in expression
+    position, so a call node reaching here whose proc has no result is the
+    error FPC reports as "Can't read or write variables of this type".
+
+    Without this the call COMPILED and yielded whatever happened to be in the
+    return register: `n := f.DoIt` assigned stack junk and `f.DoArg(3) + 1`
+    evaluated to 4 — the argument read back out
+    (bug-p-procedure-method-in-an-expression-yields-garbage). Silent, and it
+    also absorbed signature drift: it is what hid pxx's `WaitFor: procedure`
+    from a probe written to compare against FPC's `WaitFor: LongWord`.
+
+    METHOD calls are the shape that got here; a bare procedure name was already
+    rejected (as "undefined variable"), which is why only methods produced
+    garbage. Constructors are exempt — see ProcIsConstructor.
+
+    Pascal only. C has its own void-value diagnostics and NilPy's `None`-typed
+    calls are values by design, so neither goes through this.
+
+    StmtParenCallDepth: the `(`-led STATEMENT branch of ParseStatementAST runs
+    the expression parser over what is really a statement — `(o as T).M;` — so
+    the check stands down inside it. Sub-expressions of such a statement are
+    unchecked as a result; that shape is rare and the alternative is a false
+    error on every `(o as T).M;`. }
+  if (not isNilPy) and (not PyExprMode) and (not CProgramMode) and
+     (StmtParenCallDepth = 0) and (CurASTNode >= 0) and
+     ((ASTKind[CurASTNode] = AN_CALL) or (ASTKind[CurASTNode] = AN_VIRTUAL_CALL)) and
+     (ASTIVal[CurASTNode] >= 0) and (ASTIVal[CurASTNode] < ProcCount) and
+     (not Procs[ASTIVal[CurASTNode]].IsFunc) and
+     (not ProcIsConstructor(ASTIVal[CurASTNode])) then
+    Error('"' + Procs[ASTIVal[CurASTNode]].Name +
+          '" is a procedure and has no result to use in an expression');
 end;
 
 function FloatBinopResultTk(ltk, rtk: TTypeKind): TTypeKind;
@@ -20865,7 +20920,13 @@ begin
         `:=` makes it an assignment, otherwise it is a call whose result is
         discarded. Previously the default branch below skipped to `;`, silently
         dropping the statement. }
+      { A STATEMENT, parsed with the expression parser — so ParseFactor's
+        no-result-call check has to stand down here, or `(o as T).M;` on a
+        `procedure M` becomes an error. The probe case as-inline-call is
+        exactly that and caught this. }
+      Inc(StmtParenCallDepth);
       ParseExpr;
+      Dec(StmtParenCallDepth);
       valNode := CurASTNode;
       if CurTok.Kind = tkAssign then
       begin

@@ -1740,6 +1740,29 @@ begin
   writeln(Length(a), '|', High(a));
 end.
 P
+# [known] and SILENT — bug-p-member-off-a-constructor-result-yields-garbage.
+# The Make() half is correct today, and is in the same case on purpose: it is
+# what says the "member off a call result" machinery works and the CONSTRUCTOR
+# path is the broken one.
+probe member-off-a-constructor-result known <<'P'
+type
+  TThing = class
+    n: Integer;
+    constructor Create(k: Integer);
+    function Val: Integer;
+  end;
+constructor TThing.Create(k: Integer); begin n := k; end;
+function TThing.Val: Integer; begin Result := n; end;
+function Make(k: Integer): TThing; begin Result := TThing.Create(k); end;
+var a, b, c, d: Integer;
+begin
+  a := TThing.Create(2).n;
+  b := TThing.Create(3).Val;
+  c := Make(4).n;
+  d := Make(5).Val;
+  writeln(a, '|', b, '|', c, '|', d);
+end.
+P
 probe dynarray-index-call-result known <<'P'
 type TArr = array of Integer;
 function Make: TArr;

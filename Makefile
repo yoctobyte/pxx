@@ -2387,6 +2387,16 @@ test-core: $(COMPILER)
 	grep -q "an array variable has no members" /tmp/test_amf.log
 	! ./$(COMPILER) test/test_undefined_field_fail.pas /tmp/test_udf26 > /tmp/test_udf.log 2>&1
 	grep -q "no such member on this record/class" /tmp/test_udf.log
+	# A `procedure` method has no result and cannot be read as a value. It used to
+	# COMPILE and hand back whatever was in the return register
+	# (bug-p-procedure-method-in-an-expression-yields-garbage). The _ok half pins
+	# the three shapes the check must NOT reject -- a constructor as a value (also
+	# IsFunc=False), a `(`-led statement through an as-cast, and plain procedure
+	# call statements.
+	! ./$(COMPILER) test/test_procedure_as_value_fail.pas /tmp/test_pav26 > /tmp/test_pav.log 2>&1
+	grep -q "is a procedure and has no result" /tmp/test_pav.log
+	./$(COMPILER) test/test_procedure_as_value_ok.pas /tmp/test_pav_ok26
+	test "$$(/tmp/test_pav_ok26 | tail -1)" = "PASS"
 	# what a RECORD may legally contain (b347): no published, no protected (records don't
 	# inherit), a class method must be static, a ctor needs a mandatory parameter, and a
 	# local/anonymous record type gets FIELDS ONLY. All were parse-and-dropped before.

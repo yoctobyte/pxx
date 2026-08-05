@@ -3,12 +3,13 @@ summary: "A METHOD declared as a procedure (no result) is accepted in an express
 type: bug
 track: P
 prio: 75
+owner: claude-b-night2
 ---
 
 # A `procedure` method used as a value compiles and produces garbage
 
 - **Type:** bug — Track P (Pascal frontend, shared `compiler/parser.inc`)
-- **Status:** urgent — **silent wrong value**, no diagnostic at any stage
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** `tools/fpc_diff_probe.sh` — the `thread-returnvalue-and-terminate`
   case wrote `writeln(t.WaitFor, ...)`. pxx's `TThread.WaitFor` is a procedure
@@ -77,10 +78,53 @@ hid pxx's `WaitFor: procedure` vs FPC's `WaitFor: LongWord` from a probe that
 was written to catch it. Any code ported from FPC that reads a result pxx's
 version does not return compiles and returns junk.
 
+## Fix (landed)
+
+The check goes at the **tail of `ParseFactor`** — the one place that only ever
+runs in expression position. A call node arriving there whose proc is not a
+function is the error, unless it is a constructor.
+
+Two things it had to get right, and only one was obvious:
+
+1. **Constructors are `IsFunc = False` too.** Their declaration keyword is
+   neither `function` nor `procedure`, so `v := TFoo.Create` looks exactly like
+   the rejected case. `ProcIsConstructor` reverse-maps the proc index through
+   `UMthProc_`/`UMthIsCtor`; a linear scan, which only runs for a non-function
+   call and is therefore never hot. Destructors are deliberately NOT exempt.
+2. **`ParseFactor` is not purely an expression path.** `ParseStatementAST`'s
+   `(`-led branch parses a STATEMENT with the expression parser — `(o as T).M;`
+   — so the first attempt rejected that. `StmtParenCallDepth` stands the check
+   down inside that branch. Sub-expressions of such a statement lose the check;
+   that is the price of a one-flag guard, and the shape is rare. **The probe
+   case `as-inline-call` is what caught it** — the self-host gate, lib-test and
+   34 demos were all green with the false positive in place.
+
+Pascal only: C has its own void-value diagnostics, and NilPy's `None`-typed
+calls are values by design.
+
+## Verification
+
+```
+pascal26:12: error: "TFoo.DoIt" is a procedure and has no result to use in an expression
+pascal26:9:  error: "TThread.WaitFor" is a procedure and has no result to use in an expression
+```
+
+The second is the original sighting — the shape that printed `136616280589680`
+now names the mismatch.
+
+- self-host fixedpoint converged in one round (the compiler's own ~90k lines
+  contain no instance of the shape)
+- `tools/gate.sh quick` GREEN including the FPC seed canary
+- `tools/gate.sh lib` GREEN
+- `make demos` **34/34** rebuilt with the changed compiler
+- `tools/fpc_diff_probe.sh` — the set of firing `[known]` cases is byte-identical
+  to the pre-change run
+- new negative + positive pair in `make test`:
+  `test/test_procedure_as_value_fail.pas` and `..._ok.pas`
+
 ## Gate
 
-Track P: `make test` + self-host fixedpoint (byte-identical). Track P catch —
-the Pascal frontend lives in the shared `lexer.inc`/`parser.inc`, so this must
-not be edited concurrently with Track A. Expect fallout: a self-hosting tree
-that has been accepting this shape somewhere will start failing to compile, and
-that is the fix working.
+Track P: `make test` + self-host fixedpoint (byte-identical).
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.
