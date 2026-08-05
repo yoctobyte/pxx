@@ -100,4 +100,4 @@ The `{$IFDEF PXX} uses palatomic; {$ENDIF}` split in
 that file is Track T's lane, so it is left for them.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit fc75ba020.
