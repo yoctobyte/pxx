@@ -122,4 +122,4 @@ one-generation-stale seed. Filed as `bug-t-gate-sh-fixedpoint-does-not-iterate`.
 `testmgr --tier quick` is 15/15 green.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit c716e49d3.
