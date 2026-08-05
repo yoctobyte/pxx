@@ -404,149 +404,35 @@ begin
   EmitI32($D4000001);   { svc #0 }
 end;
 
-procedure EmitWriteFloatNatA64;
-var jnsOff, jbCarry, i, nJz: Integer;
-    endJz: array[0..15] of Integer;
+{ Double BITS in x0 -> the runtime float writers, which carry the non-finite
+  guards and (for Sci) the exact decimal expansion. These were three separate
+  hand-written aarch64 routines duplicating the portable helpers; the Nat and
+  Fixed pair still had the pre-guard normalise loops, so writeln(Inf:0:2) on
+  aarch64 printed 92233720368547758.07 and NaN printed 0.00 — silent wrong
+  numbers rather than a hang, which is the worse half of the same defect.
+  Shimming them matches what arm32/i386/riscv32 already do.
+  bug-a-writeln-nonfinite-float-aarch64-emitters-unchecked }
+procedure EmitFloatCallWriterA64(const name: AnsiString; decs: Integer);
+var procIdx: Integer;
 begin
-  EmitI32($F81F0FF3);                                           { str x19, [sp, #-16]! }
-  EmitI32($F81F0FF4);                                           { str x20, [sp, #-16]! }
-  EmitI32($F81F0FF5);                                           { str x21, [sp, #-16]! }
+  EmitI32($F81F0FE0);        { str x0, [sp, #-16]!  — the double bits }
+  EmitI32($910003E0);        { mov x0, sp           — arg0 = &value   }
+  if decs >= 0 then
+    EmitLoadImmA64(1, decs); { arg1 = decimals }
+  procIdx := FindProc(name);
+  if procIdx < 0 then Error('compiler error: float writer helper not found');
+  EmitCallProc(procIdx);
+  EmitI32($910043FF);        { add sp, sp, #16 }
+end;
 
-  EmitI32($937FFC01);                                           { asr x1, x0, #63 }
-  EmitI32($F100003F);                                           { cmp x1, #0 }
-  jnsOff := CodeLen;
-  EmitI32($5400000A);                                           { b.ge .pos }
-  
-  EmitLoadImmA64(1, $7FFFFFFFFFFFFFFF);
-  EmitI32($8A010000);                                           { and x0, x0, x1 }
-  EmitI32($F81F0FE0);                                           { str x0, [sp, #-16]! }
-  EmitLoadImmA64(0, Ord('-'));
-  EmitwriteCharA64;
-  EmitI32($F84107E0);                                           { ldr x0, [sp], #16 }
-  
-  Patch32(jnsOff, $5400000A or (((CodeLen - jnsOff) div 4) and $7FFFF) shl 5);
-
-  EmitI32($9E670000);                                           { fmov d0, x0 }
-  EmitI32($9E780001);                                           { fcvtzs x1, d0 }
-  EmitI32($9E620022);                                           { scvtf d2, x1 }
-  EmitI32($1E623800);                                           { fsub d0, d0, d2 }
-  
-  EmitLoadImmA64(3, 1000000000000000);                          { scale = 10^15 }
-  EmitI32($9E620063);                                           { scvtf d3, x3 }
-  EmitI32($1E630800);                                           { fmul d0, d0, d3 }
-  EmitI32($9E600002);                                           { fcvtns x2, d0 }
-  
-  EmitI32($EB03005F);                                           { cmp x2, x3 }
-  jbCarry := CodeLen;
-  EmitI32($5400000B);                                           { b.lt .nocarry }
-  
-  EmitI32($CB030042);                                           { sub x2, x2, x3 }
-  EmitI32($91000421);                                           { add x1, x1, #1 }
-  
-  Patch32(jbCarry, $5400000B or (((CodeLen - jbCarry) div 4) and $7FFFF) shl 5);
-
-  EmitI32($AA0103F3);                                           { mov x19, x1 }
-  EmitI32($AA0203F4);                                           { mov x20, x2 }
-
-  EmitI32($AA1303E0);                                           { mov x0, x19 }
-  EmitwriteUIntA64;
-  
-  EmitLoadImmA64(0, Ord('.'));
-  EmitwriteCharA64;
-
-  EmitLoadImmA64(21, 100000000000000);                          { divisor = 10^14 }
-  nJz := 0;
-  for i := 0 to 14 do
-  begin
-    EmitI32($AA1403E0);                                         { mov x0, x20 }
-    EmitI32($AA1503E1);                                         { mov x1, x21 }
-    EmitI32($9AC10C02);                                         { sdiv x2, x0, x1 }
-    EmitI32($9B018054);                                         { msub x20, x2, x1, x0 }
-    EmitI32($9100C040);                                         { add x0, x2, #48 }
-    EmitwriteCharA64;
-    
-    if i < 14 then
-    begin
-      EmitLoadImmA64(1, 10);
-      EmitI32($9AC10EB5);                                       { sdiv x21, x21, x1 }
-      
-      EmitI32($B4000014);                                       { cbz x20, .end }
-      endJz[nJz] := CodeLen - 4;
-      Inc(nJz);
-    end;
-  end;
-
-  for i := 0 to nJz - 1 do
-    Patch32(endJz[i], $B4000014 or ((((CodeLen - endJz[i]) div 4) and $7FFFF) shl 5));
-
-  EmitI32($F84107F5);                                           { ldr x21, [sp], #16 }
-  EmitI32($F84107F4);                                           { ldr x20, [sp], #16 }
-  EmitI32($F84107F3);                                           { ldr x19, [sp], #16 }
+procedure EmitWriteFloatNatA64;
+begin
+  EmitFloatCallWriterA64('PXXWriteFloatNat', -1);
 end;
 
 procedure EmitWriteFloatFixedA64(decimals: Integer);
-var jnsOff, jbCarry, loopStart, i: Integer;
-    pow10, divisor: Int64;
 begin
-  pow10 := 1;
-  for i := 1 to decimals do pow10 := pow10 * 10;
-
-  EmitI32($F81F0FF3);                                           { str x19, [sp, #-16]! }
-  EmitI32($F81F0FF4);                                           { str x20, [sp, #-16]! }
-
-  EmitI32($937FFC01);                                           { asr x1, x0, #63 }
-  EmitI32($F100003F);                                           { cmp x1, #0 }
-  jnsOff := CodeLen;
-  EmitI32($5400000A);                                           { b.ge .pos }
-  
-  EmitLoadImmA64(1, $7FFFFFFFFFFFFFFF);
-  EmitI32($8A010000);                                           { and x0, x0, x1 }
-  EmitI32($F81F0FE0);                                           { str x0, [sp, #-16]! }
-  EmitLoadImmA64(0, Ord('-'));
-  EmitwriteCharA64;
-  EmitI32($F84107E0);                                           { ldr x0, [sp], #16 }
-  
-  Patch32(jnsOff, $5400000A or (((CodeLen - jnsOff) div 4) and $7FFFF) shl 5);
-
-  EmitI32($9E670000);                                           { fmov d0, x0 }
-  EmitLoadImmA64(2, pow10);
-  EmitI32($9E620042);                                           { scvtf d2, x2 }
-  EmitI32($1E620800);                                           { fmul d0, d0, d2 }
-  EmitI32($9E600000);                                           { fcvtns x0, d0 }
-
-  if decimals <= 0 then
-  begin
-    EmitwriteUIntA64;
-    EmitI32($F84107F4);                                         { ldr x20, [sp], #16 }
-    EmitI32($F84107F3);                                         { ldr x19, [sp], #16 }
-    Exit;
-  end;
-
-  EmitLoadImmA64(2, pow10);
-  EmitI32($9AC20C01);                                           { sdiv x1, x0, x2 }
-  EmitI32($9B028034);                                           { msub x20, x1, x2, x0 }
-  EmitI32($AA0103F3);                                           { mov x19, x1 }
-
-  EmitI32($AA1303E0);                                           { mov x0, x19 }
-  EmitwriteUIntA64;
-
-  EmitLoadImmA64(0, Ord('.'));
-  EmitwriteCharA64;
-
-  for i := decimals - 1 downto 0 do
-  begin
-    divisor := 1;
-    for loopStart := 1 to i do divisor := divisor * 10;
-    EmitLoadImmA64(1, divisor);
-    EmitI32($AA1403E0);                                         { mov x0, x20 }
-    EmitI32($9AC10C02);                                         { sdiv x2, x0, x1 }
-    EmitI32($9B018054);                                         { msub x20, x2, x1, x0 }
-    EmitI32($9100C040);                                         { add x0, x2, #48 }
-    EmitwriteCharA64;
-  end;
-
-  EmitI32($F84107F4);                                           { ldr x20, [sp], #16 }
-  EmitI32($F84107F3);                                           { ldr x19, [sp], #16 }
+  EmitFloatCallWriterA64('PXXWriteFloatFixed', decimals);
 end;
 
 procedure EmitWriteFloatSciA64;
