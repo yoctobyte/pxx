@@ -28623,7 +28623,7 @@ var
   savedCurTokIVal: Int64;
   savedCurTokLine: Integer;
   savedSrcBase, savedUnitDir, savedCurrentCLibrary: AnsiString;
-  cdir, bdir, rtldir, lcldir, asmdir, probeContent, probePath: AnsiString;
+  cdir, bdir, rtldir, lcldir, asmdir, probeContent, probePath, probeFile: AnsiString;
   basePath, ext, emsg: AnsiString;
   lastSlash, lastDot: Integer;
   isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
@@ -28829,13 +28829,13 @@ begin
     begin
       ConcatThree(ExeDir, '../lib/rtl/', '', rtldir);
       { same two-levels-down re-anchor as the main block below — see its note }
-      ConcatThree(rtldir, 'sysutils', '.pas', path);
-      LoadFileCI(path, probeContent);
+      ConcatThree(rtldir, 'sysutils', '.pas', probeFile);
+      LoadFileCI(probeFile, probeContent);
       if Length(probeContent) = 0 then
       begin
         ConcatThree(ExeDir, '../../lib/rtl/', '', probePath);
-        ConcatThree(probePath, 'sysutils', '.pas', path);
-        LoadFileCI(path, probeContent);
+        ConcatThree(probePath, 'sysutils', '.pas', probeFile);
+        LoadFileCI(probeFile, probeContent);
         if Length(probeContent) > 0 then rtldir := probePath;
       end;
       probeContent := '';
@@ -28953,13 +28953,13 @@ begin
       Probe for a unit that is certainly there rather than guess a depth: if
       '../lib/rtl/sysutils.pas' does not load, re-anchor one level higher. Done
       once, so every rtldir/lcldir/asmdir use below is fixed at the same time. }
-    ConcatThree(rtldir, 'sysutils', '.pas', path);
-    LoadFileCI(path, probeContent);
+    ConcatThree(rtldir, 'sysutils', '.pas', probeFile);
+    LoadFileCI(probeFile, probeContent);
     if Length(probeContent) = 0 then
     begin
       ConcatThree(ExeDir, '../../lib/rtl/', '', probePath);
-      ConcatThree(probePath, 'sysutils', '.pas', path);
-      LoadFileCI(path, probeContent);
+      ConcatThree(probePath, 'sysutils', '.pas', probeFile);
+      LoadFileCI(probeFile, probeContent);
       if Length(probeContent) > 0 then
       begin
         rtldir := probePath;

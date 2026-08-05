@@ -3,6 +3,8 @@ track: A
 prio: 45
 type: bug
 summary: "A Pascal function RETURNING PromoInt crashes — `function mk: PromoInt; begin Result := 12 end` segfaults on writeln(mk). Confirmed on `pinned` too, so pre-existing; split out of the parameter ticket, which conflated the two"
+status: done
+owner: claude-A
 ---
 
 # A function returning `PromoInt` crashes
@@ -66,3 +68,47 @@ than a crash.
 BOTH tiers (inline and heap — only the heap tier has a managed payload, so only
 it can double-free), a result used directly as an argument, and a result
 assigned to a caller variable that is then mutated.
+
+## Resolution (2026-08-05)
+
+`RetViaHiddenDest` lists the return types whose ABI is a caller-owned
+destination — aggregates, frozen strings, `tyVariant`. **The promotable-int
+family was never added**, though a promo value is a `{tag, payload}` struct
+whose rvalue IS the slot address. So a promo-returning function handed back the
+address of its own dying `Result` local and the caller read freed stack.
+
+One term: `or TypeIsPromoInt(tk)`. `AggRetCopySize` already falls through to
+`TypeSize`, which is the right byte count for both widths, so nothing else
+needed changing.
+
+### What made it obvious
+
+    function mk: PromoInt; begin end;   { EMPTY body }
+    writeln(mk);                        { still segfaults }
+    mk;                                 { result discarded — fine }
+
+An empty body still crashing rules out `Result := 12` entirely, and discarding
+the result being fine rules out the call. That leaves the result TRANSFER, which
+is one predicate. The ticket's own guess was flagged "NOT verified, do not trust
+this paragraph" — right instinct: it reasoned about the rvalue representation,
+and the gap was in the ABI predicate.
+
+### Verified
+
+Inline tier (12), **heap tier** (10^40, byte-identical to Python's `10**40` —
+the tier boundary is where a naive fix would break), promo parameter + promo
+result together, the result used as an operand (`p + 1` = 13), and 500 doubling
+iterations to surface a use-after-free. All six existing `test_promoint*` suites
+still run. 200 000 calls stay flat at 264 KB, so no leak.
+`testmgr --tier native` **1162/1162 pass**. Locked in as
+`test/test_promoint_function_result.pas`.
+
+### Adjacent, NOT fixed here
+
+`viaOp(12)` is rejected — an integer literal does not convert to a promo
+parameter — and `viaOp(mk)` is rejected because promo parameters are by-ref and
+need a variable. Both are real and both are separate from this bug, so they are
+left visible rather than folded into an unrelated commit.
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.

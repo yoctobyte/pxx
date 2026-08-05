@@ -38,12 +38,11 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (198)
+## backlog (208)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-interlocked-family-needs-a-uses-clause-unlike-fpc | A | 30 | bug | InterLockedIncrement and family now exist (lib/rtl/palatomic.pas) but need an explicit `uses palatomic`; FPC declares them in the `system` unit, so real code calls them with no uses line at all | — |
-| bug-a-promoint-function-result-crashes | A | 45 | bug | A Pascal function RETURNING PromoInt crashes — `function mk: PromoInt; begin Result := 12 end` segfaults on writeln(mk). Confirmed on `pinned` too, so pre-existing; split out of the parameter ticket, which conflated the two | — |
 | bug-a-promoint-parameter-32bit-by-ref-indirection-hangs | A | 40 | bug | On 32-bit targets a PromoInt parameter still does not work: it does not compile today, and simply extending the 64-bit by-ref fix makes it HANG — the by-ref indirection is not resolved, so PromoShiftCount reads a garbage tag and `n shr 4` spins in BShr's doubling loop | — |
 | bug-a-riscv32-and-xtensa-have-no-atomic-codegen | S | 45 | bug | riscv32 (and xtensa) reject every __pxxatomic_* op — 'unsupported node in IR codegen: atomic' — so any unit touching an atomic cannot be compiled for them at all, on the two targets whose OS gives real concurrent tasks | — |
 | bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing | A | 65 | bug | x86-64 only: `b := a` on a dynamic array copy-on-writes instead of ALIASING — writes through either name are invisible to the other. FPC, i386, arm32, aarch64 and riscv32 all alias. Dynamic arrays are reference types; this is silent wrong behaviour on the flagship target | decide-dynarray-cow-vs-fpc-reference-semantics |
@@ -234,6 +233,17 @@ _none_
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
+| regression-test-core-test-c-macro-soup | T | 70 | regression | regression: test-core#src:test/test_c_macro_soup.pas red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-core-test-c-preprocess | T | 70 | regression | regression: test-core#src:test/test_c_preprocess.pas@1 red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-qualifier-vs-cproc | T | 70 | regression | regression: test-core#src:test/test_nilpy_qualifier_vs_cproc.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-core-test-relpath-uses | T | 70 | regression | regression: test-core#src:test/test_relpath_uses.pas red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-cpyext-args-errors | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_args_errors.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-cpyext-containers | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_containers.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-cpyext-cython | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_cython.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-cpyext-hello | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_hello.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-cpyext-markupsafe | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_markupsafe.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-dotted-package-import | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_dotted_package_import.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-qualifier-vs-cproc | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_qualifier_vs_cproc.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | task-b-revert-pxxcio-clock-int64-cast-workaround | B | 45 | task | Revert the __pxx_clock workaround in lib/rtl/pxxcio.pas — its blocker (the explicit Int64() cast of a NativeInt on 32-bit) is fixed, and the idiomatic one-liner is verified correct on x86-64, i386 and arm32 | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-drop-stale-known-tags-on-string-h-probes | T | 50 | task | Four gcc_diff_probe cases are still tagged `known` but no longer diverge — the compiler bug behind them is fixed, so the tag now hides future regressions in str-chr-nul / str-str-empty / mem-chr-miss | — |
@@ -353,9 +363,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1401)
+## done (1402)
 
-1401 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1402 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -393,6 +403,17 @@ _none_
 ## Ready (no unmet blocker)
 
 - [urgent p 70] [P] bug-p-program-function-does-not-shadow-used-unit
+- [p 70] [T] regression-test-core-test-c-macro-soup
+- [p 70] [T] regression-test-core-test-c-preprocess
+- [p 70] [T] regression-test-core-test-nilpy-qualifier-vs-cproc
+- [p 70] [T] regression-test-core-test-relpath-uses
+- [p 70] [T] regression-test-nilpy-test-cpyext-args-errors
+- [p 70] [T] regression-test-nilpy-test-cpyext-containers
+- [p 70] [T] regression-test-nilpy-test-cpyext-cython
+- [p 70] [T] regression-test-nilpy-test-cpyext-hello
+- [p 70] [T] regression-test-nilpy-test-cpyext-markupsafe
+- [p 70] [T] regression-test-nilpy-test-nilpy-dotted-package-import
+- [p 70] [T] regression-test-nilpy-test-nilpy-qualifier-vs-cproc
 - [p 65] [U] decide-dynarray-cow-vs-fpc-reference-semantics (unblocks 1)
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
@@ -454,7 +475,6 @@ _none_
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 3)
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [A] bug-a-promoint-function-result-crashes
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
 - [p 45] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position

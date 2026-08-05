@@ -2244,7 +2244,16 @@ begin
   { tyVariant added for Variant-returning functions (pylib TPyList.get/pop —
     the first in the codebase): 16-byte result via the same caller-owned
     hidden destination as records (feature-core-variant-function-return). }
-  Result := TypeIsAggregate(tk) or TypeIsFrozenString(tk) or (tk = tyVariant);
+  { The PROMOTABLE INT family joins them for the same reason tyVariant did: a
+    promo value is a {tag, payload} STRUCT (8 or 16 bytes), and its rvalue is the
+    SLOT ADDRESS. Returned the ordinary way, a promo-returning function handed
+    back the address of its own dying Result local, so the caller read freed
+    stack — `function mk: PromoInt; begin end;` + `writeln(mk)` segfaulted, with
+    an EMPTY body, so it was never about the assignment
+    (bug-a-promoint-function-result-crashes). AggRetCopySize already falls
+    through to TypeSize, which is the right byte count for both widths. }
+  Result := TypeIsAggregate(tk) or TypeIsFrozenString(tk) or (tk = tyVariant)
+            or TypeIsPromoInt(tk);
 end;
 
 function AggRetCopySize(retSymIdx: Integer): Integer;
