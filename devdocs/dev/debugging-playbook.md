@@ -27,7 +27,16 @@ tools/pydiff.py run    prog.py      # NilPy vs CPython: stdout + exit code
 tools/pydiff.py bisect prog.py      # names the first diverging statement
 tools/pydiff.py probe               # the standing corpus
 tools/fpc_diff_probe.sh             # Pascal vs FPC
+tools/gcc_diff_probe.sh             # C / crtl vs gcc's libc
+tools/gcc_diff_probe.sh --target i386|arm32|aarch64|riscv32   # ...and cross
+tools/lib_cross_sweep.sh            # a cross target vs our own x86-64 output
+tools/crtl_decl_probe.sh            # is a declared crtl fn IMPLEMENTED, or
+                                    # silently binding to libc.so.6?
 ```
+
+All five, plus the shared traps that make them lie to you, are indexed in
+**`devdocs/dev/differential-probes.md`**. Read that before adding cases — the
+rules there were each learned by chasing a phantom.
 
 First, always, for a wrong-answer bug. It is the only method that finds a bug
 with no crash, no error and confident output. `bisect` keeps every def/class and

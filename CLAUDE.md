@@ -415,7 +415,7 @@ cheap case. So reach for the tool that makes a wrong VALUE visible:
 
 | question | tool |
 | --- | --- |
-| does it disagree with the oracle? | `tools/pydiff.py run\|bisect\|probe` (CPython), `tools/fpc_diff_probe.sh` (FPC) |
+| does it disagree with the oracle? | `tools/pydiff.py run\|bisect\|probe` (CPython), `tools/fpc_diff_probe.sh` (FPC), `tools/gcc_diff_probe.sh` (gcc, `--target` for cross); all indexed in `devdocs/dev/differential-probes.md` |
 | is memory read after free? | `-dPXX_HEAP_DEBUG` — freed bytes become `$DD`, not a recycled neighbour's |
 | who retained/released it? | `-dPXX_OBJTRACE`, then `grep <addr>` |
 | step through it | `-g -O2` + gdb, `source tools/pxx-gdb.py`, `pxxrc <obj>` for the refcount |
