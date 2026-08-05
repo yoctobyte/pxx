@@ -650,6 +650,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-p-free-and-destroy-only-work-on-a-simple-variable | P | 60 | bug | `.Free` is only accepted on a plain variable — `a[0].Free`, `r.f.Free`, `h.f.Free` are all `\"Free\": no such member on this record/class`, and `v.Destroy` fails even on a plain variable | — |
 | bug-p-member-off-a-constructor-result-yields-garbage | P | 70 | bug | `TThing.Create(2).n` in an expression compiles and yields garbage; the same shape on an ordinary function result (`Make(4).n`) is correct, and in a writeln argument it is a parse error instead | — |
 | bug-p-procedure-method-in-an-expression-yields-garbage | P | 75 | bug | A METHOD declared as a procedure (no result) is accepted in an expression and silently yields garbage — `n := f.DoIt` assigns stack junk, `f.DoArg(3) + 1` evaluates to 4. FPC rejects all of it | — |
+| bug-p-read-text-file-into-a-char-segfaults | A | 55 | bug | read(f, c) for a Char destination on a Text file SEGFAULTS — the Char slot is handed to TextReadLn, which expects an AnsiString var, so a string handle is written into one byte. FPC reads the character | — |
 | bug-p-string-char-relational-compares-lengths | A | 85 | bug | `<` `>` `<=` `>=` between a string and a Char compare LENGTHS, not content | — |
 | bug-p-writeln-text-rejects-char | A | 55 | bug | write/writeln to a Text FILE rejects a Char (stdout accepts one) | — |
 | bug-parallel-for-captured-boolean-loses-type | A | 50 | bug | Captured Boolean loses its type inside a parallel-for body (overload resolution fails) | — |

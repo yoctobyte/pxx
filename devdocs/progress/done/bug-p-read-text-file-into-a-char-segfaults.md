@@ -9,7 +9,7 @@ owner: claude-A
 # `read(f, c)` into a Char from a Text file segfaults
 
 - **Type:** bug — Track A (builtin lowering) / Track P
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** Track A, immediately after fixing the write-side twin
   `bug-p-writeln-text-rejects-char`. **Pre-existing** — `pinned` segfaults
@@ -92,10 +92,17 @@ shape is right for the first read and wrong for the second, and a character loop
 — the main reason to read a Char — would silently skip the rest of every line.
 Turning memory corruption into a silent wrong answer is not an improvement.
 
-**The real fix stays open and is Track B's to land**: `TextReadChar(var f; var c)`
-with one-character pushback in `lib/rtl/textfile.pas`, then a Char arm here that
-routes to it. `lib/rtl/**` is Track B's lane, so this half was not taken.
-Ticket stays open for that; only the crash is closed.
+**The real fix is filed as `feature-b-textreadchar-with-pushback`** —
+`TextReadChar(var f; var c)` with one-character pushback in
+`lib/rtl/textfile.pas`, which is Track B's lane. When that lands, Track A adds
+the Char arm in `ParseTextReadRest` that routes to it and drops the error.
+
+This ticket is CLOSED: the bug as filed is the segfault, and the segfault is
+gone. The missing capability is tracked where its file lives rather than held
+open here, so no Track A ticket sits parked.
 
 String reads are unaffected (`readln(f, s)` verified working), and the numeric
 path is untouched.
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.

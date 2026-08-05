@@ -10,11 +10,9 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-p-program-function-does-not-shadow-used-unit | P | 70 | bug | SILENT: a function declared in the PROGRAM does not shadow a same-named routine from a used unit — the unit's version is called instead. FPC calls the program's. Verified on sysutils IntToStr, Trim and UpperCase | — |
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| bug-p-read-text-file-into-a-char-segfaults | A | 55 | bug | read(f, c) for a Char destination on a Text file SEGFAULTS — the Char slot is handed to TextReadLn, which expects an AnsiString var, so a string handle is written into one byte. FPC reads the character | — |
+_none_
 
 ## unfinished (7)
 
@@ -40,7 +38,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (198)
+## backlog (199)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -115,6 +113,7 @@ lives in git, not in a timestamp._
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-crtl-last-seven-unimplemented-declarations | B | 40 | feature | The crtl declarations still without bodies — now 2: atexit and poll (chmod, umask, msync, mremap and ioctl landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED | — |
 | feature-b-rtl-missing-fpc-surface-2026-08 | B | 35 | feature | Missing FPC surface found by the differential probe (Eoln, TSeekOrigin, Sorted, IncMonth) | — |
+| feature-b-textreadchar-with-pushback | B | 50 | feature | lib/rtl/textfile.pas needs TextReadChar(var f; var c) with one-character pushback, so read(f, c) can consume ONE character like FPC instead of a whole line | — |
 | feature-b-tstrings-commatext | B | 30 | feature | TStrings.CommaText / DelimitedText are missing | — |
 | feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-esp-conformance-coverage | S | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
@@ -355,9 +354,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1399)
+## done (1400)
 
-1399 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1400 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -441,6 +440,7 @@ lives in git, not in a timestamp._
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
 - [p 50] [D] docs-devnotes-ai-assisted-build
+- [p 50] [B] feature-b-textreadchar-with-pushback
 - [p 50] [C] feature-c-vla-via-alloca
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile
 - [p 50] [A] feature-nilpy-collections-and-string-methods
