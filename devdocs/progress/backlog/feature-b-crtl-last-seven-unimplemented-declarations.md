@@ -1,5 +1,5 @@
 ---
-summary: "The crtl declarations still without bodies — now 3: atexit, poll, ioctl (chmod, umask, msync and mremap landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED"
+summary: "The crtl declarations still without bodies — now 2: atexit and poll (chmod, umask, msync, mremap and ioctl landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED"
 type: feature
 track: B
 prio: 40
@@ -11,8 +11,8 @@ prio: 40
 - **Status:** backlog
 - **Opened:** 2026-08-05
 - **Found by:** `tools/crtl_decl_probe.sh`. Was 366 declared / 359 implemented;
-  **`chmod`, `umask`, `msync` and `mremap` landed 2026-08-05**, so it is now
-  363 / **3** remaining.
+  **`chmod`, `umask`, `msync`, `mremap` and `ioctl` landed 2026-08-05**, so it is
+  now 367 declared / 365 implemented / **2** remaining.
 
 ## Why a missing body is worse than a missing declaration
 
@@ -35,7 +35,7 @@ output** — that is what this probe is for.
 | --- | --- | --- |
 | **`atexit`** | `stdlib.h` | The awkward one — see below. Today it is a hard *runtime* link error (`undefined symbol: atexit`), so at least it is loud. |
 | **`poll`** | `poll.h` | `PalPoll` exists but is **per-handle** (`PalPoll(handle, events, timeoutMs)`); real `poll(fds[], nfds, timeout)` needs an array-shaped PAL bridge, not a loop over the existing one (a loop cannot block on the set). |
-| **`ioctl`** | `sys/ioctl.h` | No general bridge. `__pxx_isatty` already does the one TCGETS case crtl needs; a generic `ioctl(fd, req, arg)` is a new PAL entry. Note ESP refuses it. |
+| ~~`ioctl`~~ | `sys/ioctl.h` | **DONE 2026-08-05.** This row was WRONG: `PalIoctl` was already a fully general `syscall(SYS_ioctl, fd, cmd, argp)` — `__pxx_isatty` had been using it for the single TCGETS case all along. No new PAL entry was needed, only `__pxx_ioctl` exposing it and a crtl wrapper doing the -1/errno conversion. Measure before believing a scoping line. ESP: IDF routes to `lwip_ioctl`, bare answers PAL_ERR_UNSUPPORTED, which surfaces as -1/errno — a refusal, not a wrong answer. |
 | ~~`chmod`~~ | `sys/stat.h` | **DONE 2026-08-05.** Goes through `fchmodat(AT_FDCWD, …)` — aarch64 and riscv have no legacy `chmod` syscall, same as `symlink`/`link`. |
 | ~~`umask`~~ | `sys/stat.h` | **DONE 2026-08-05.** The one syscall here with no error path: it always succeeds and returns the previous mask, so no -1/errno conversion. |
 | ~~`msync`~~ | `sys/mman.h` | **DONE 2026-08-05.** No-op success, matching munmap/mprotect in the same file — `mmap` there is a stub returning MAP_FAILED, so there is never a mapping to flush. |

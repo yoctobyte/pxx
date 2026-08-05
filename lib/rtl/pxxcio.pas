@@ -102,6 +102,7 @@ function __pxx_ftruncate(fd: Integer; length: Int64): Integer;
 function __pxx_access(path: PChar; mode: Integer): Integer;
 function __pxx_fchown(fd, owner, group: Integer): Integer;
 function __pxx_isatty(fd: Integer): Integer;
+function __pxx_ioctl(fd: Integer; req: NativeInt; argp: Pointer): Integer;
 function __pxx_getuid: Integer;
 function __pxx_getgid: Integer;
 function __pxx_getegid: Integer;
@@ -481,6 +482,16 @@ function __pxx_isatty(fd: Integer): Integer;
 var termios: array[0..63] of Byte;   { struct termios is 60 bytes on Linux }
 begin
   if PalIoctl(fd, $5401, @termios[0]) = 0 then Result := 1 else Result := 0;
+end;
+
+function __pxx_ioctl(fd: Integer; req: NativeInt; argp: Pointer): Integer;
+{ The general form of what __pxx_isatty above does for the single TCGETS case.
+  PalIoctl has always been a fully general ioctl syscall bridge — the crtl
+  ticket's claim that a new PAL entry was needed was wrong, so measure before
+  believing a ticket's scoping line. Returns the raw PAL result (negative errno
+  on failure); the crtl wrapper does the -1/errno conversion. }
+begin
+  Result := PalIoctl(fd, req, argp);
 end;
 
 function __pxx_getuid: Integer;
