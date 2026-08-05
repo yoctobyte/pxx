@@ -2,15 +2,16 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg **QUIET 4d12h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `1787b2cf4b61` | 2026-08-05T06:50:25Z | GREEN (opt) | 187.5s | `1787b2cf4b61` GREEN |
+| borg **QUIET 4d13h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
+| plexus | `33cd0117f9f9` | 2026-08-05T07:40:28Z | RED (native) | 118.4s | `1787b2cf4b61` GREEN |
 | xeon | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
+- **test-core#src:test/test_stmt_call_result_selector_b318.pas** — test/test_stmt_call_result_selector_b318.pas (plexus): bad `33cd0117f9f9`, last good `1787b2cf4b61`, 7 commit(s) in range
 - **test-core#src:test/csocket_loopback_b88.c** — test/csocket_loopback_b88.c (xeon): bad `330f62af78d0`, last good `7d8929633721`, 58 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
 A regression clears when a later run on THAT host passes the job. These hosts have stopped publishing, so nothing can clear them; they return to the list above by themselves if the host runs again.
 
-- **fpc-bootstrap#src:compiler/compiler.pas** (borg, quiet 4d12h): bad `b1976742df2c`, 1 commit(s) in range
+- **fpc-bootstrap#src:compiler/compiler.pas** (borg, quiet 4d13h): bad `b1976742df2c`, 1 commit(s) in range
