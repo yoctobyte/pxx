@@ -69,3 +69,29 @@ x86-64's emitter does, so shimming it today would silently drop padding — the
 exact defect `bug-a-aarch64-float-field-width-ignored` describes on the other
 targets. Add the width to the helper first, then this becomes a two-line shim
 and the last hand-written float formatter goes away.
+
+## Resolution (2026-08-05) — fixed for the reachable cases
+
+`EmitWriteFloatFixed` now routes to the runtime `PXXWriteFloatFixed` **whenever
+there is no field width to honour** and the RTL is linked. That is the case in
+every repro on this ticket — `writeln(1e20:0:2)` and `d := QWordMax;
+writeln(d:0:1)` both pass width 0 — so both are fixed:
+
+    writeln(1e20:0:2)   9223372036854775809.00  ->  100000000000000000000.00   (= FPC)
+    writeln(1.23456789012345678e17:0:2)         ->  123456789012345680.00      (= FPC)
+
+The native emitter survives ONLY for `width > 0`, because the runtime helper
+still takes no field width and shimming those today would trade a wrong number
+for lost padding — the exact defect
+`bug-a-aarch64-float-field-width-ignored` describes on the other four targets.
+Padding is verified unchanged: `writeln(3.14159:10:4)` still prints
+`    3.1416` and `writeln(-2.5:8:3)` still prints `  -2.500`, both matching FPC.
+
+**To finish it:** give `PXXWriteFloatFixed` a `width` parameter (that is the
+other ticket), then delete `EmitWriteFloatFixedNative` entirely and the shim
+becomes unconditional — the same collapse `EmitWriteFloatSci` already had. That
+would leave x86-64 with no hand-written float formatter at all.
+
+**Verified:** `testmgr --tier native` **1158/1158 pass** (includes the self-host
+fixedpoint). i386/arm32/aarch64 byte-identical to before — the change is
+confined to the x86-64 emitter.
