@@ -105,4 +105,4 @@ String reads are unaffected (`readln(f, s)` verified working), and the numeric
 path is untouched.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit b1c1bad58.
