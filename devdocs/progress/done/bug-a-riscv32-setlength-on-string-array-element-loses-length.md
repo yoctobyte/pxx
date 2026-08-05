@@ -115,4 +115,4 @@ field, and read position), and byte-identical to FPC. `testmgr --tier native`
 `test/test_string_array_element_charwrite.pas`.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit e33cf842b.
