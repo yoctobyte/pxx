@@ -152,4 +152,4 @@ relying on eyeballed stdout. Exit 42 on x86-64, i386, arm32, aarch64 and gcc.
 in 2 rounds from `pinned` and agrees with `compiler/pascal26`.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit 1eec5831a.
